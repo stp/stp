@@ -492,6 +492,32 @@
     return n;
   }
 
+  // ((_ fp.to_ubv m) rm x) / ((_ fp.to_sbv m) rm x): round a float to an
+  // integer of width m. The result is a bitvector, not a float, so it gets no
+  // floating-point format. The value for the inputs SMT-LIB leaves
+  // unspecified is added later, by FpTotalise.
+  ASTNode* createFPToBV(Kind k, unsigned int target_width, ASTNode* rm,
+                        ASTNode* expr)
+  {
+    if (target_width == 0)
+      fatal_yyerror("fp.to_ubv/fp.to_sbv width must be positive.");
+
+    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
+      fatal_yyerror("expected a rounding mode.");
+
+    if (expr->GetType() != FLOATINGPOINT_TYPE)
+      fatal_yyerror("argument to fp.to_ubv/fp.to_sbv must be a float.");
+
+    ASTNode* n = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateTerm(
+            k, target_width,
+            stp::GlobalParserInterface->CreateBVConst(32, target_width), *rm,
+            *expr));
+    delete rm;
+    delete expr;
+    return n;
+  }
+
   // fp.abs/fp.neg: a float in, a float of the same format out.
   ASTNode* createFPUnary(Kind k, ASTNode* expr)
   {
@@ -2009,13 +2035,13 @@ an_fp_term:
 {
   $$ = createFPPredicate(FP_ISPOSITIVE, $2);
 }
-| LPAREN_TOK UNDERSCORE_TOK FP_TO_UBV_TOK NUMERAL_TOK RPAREN_TOK an_rounding_mode an_term an_term
+| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TO_UBV_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
 {
- std::cout << "Unsupported FP_TO_UBV_TOK" << std::endl;
+  $$ = createFPToBV(FP_TO_UBV, $5, $7, $8);
 }
-| LPAREN_TOK UNDERSCORE_TOK FP_TO_SBV_TOK NUMERAL_TOK RPAREN_TOK an_rounding_mode an_term an_term
+| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TO_SBV_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
 {
- std::cout << "Unsupported FP_TO_SBV_TOK" << std::endl;
+  $$ = createFPToBV(FP_TO_SBV, $5, $7, $8);
 }
 | LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term RPAREN_TOK
 {

@@ -1,0 +1,151 @@
+/********************************************************************
+ * AUTHORS: Andrew Teylu
+ *
+ * BEGIN DATE: July 2026
+ *
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+********************************************************************/
+
+#include "stp/FloatBlaster/FpTotalise.h"
+
+#include "stp/FloatBlaster/FloatBlaster.h"
+
+#include <string>
+
+namespace stp
+{
+
+FpTotalise::FpTotalise(STPMgr* bm_) : bm(bm_), nf(bm_->defaultNodeFactory) {}
+
+ASTNode FpTotalise::topLevel(const ASTNode& n)
+{
+  return visit(n);
+}
+
+ASTNode FpTotalise::rebuild(const ASTNode& n, const ASTVec& children)
+{
+  ASTNode out;
+
+  if (n.GetType() == BOOLEAN_TYPE)
+    out = nf->CreateNode(n.GetKind(), children);
+  else if (n.GetIndexWidth() > 0)
+    out = nf->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(),
+                              n.GetValueWidth(), children);
+  else
+    out = nf->CreateTerm(n.GetKind(), n.GetValueWidth(), children);
+
+  return FloatBlaster::withFormat(bm, out, n.GetExpWidth(), n.GetSigWidth());
+}
+
+ASTNode FpTotalise::unspecified(const char* tag, const ASTNode& prefix,
+                                const ASTVec& floats,
+                                unsigned int value_width)
+{
+  ASTNode index;
+  unsigned int width = 0;
+
+  if (!prefix.IsNull())
+  {
+    index = prefix;
+    width = prefix.GetValueWidth();
+  }
+
+  for (size_t i = 0; i < floats.size(); i++)
+  {
+    // Index on canonical bits, not raw ones. SMT-LIB equality on floats makes
+    // every NaN equal to every other, so operands that are equal may still
+    // differ in payload; indexing on raw bits would let them read different
+    // slots and answer differently, losing the very congruence this array
+    // exists to provide. Round-tripping through unpack/pack collapses the
+    // payloads while keeping +0 and -0 apart, which is exactly the relation
+    // SMT-LIB uses.
+    const ASTNode canonical = FloatBlaster::canonicalBits(floats[i]);
+
+    if (width == 0)
+    {
+      index = canonical;
+      width = canonical.GetValueWidth();
+    }
+    else
+    {
+      width += canonical.GetValueWidth();
+      index = bm->CreateTerm(BVCONCAT, width, index, canonical);
+    }
+  }
+
+  return FloatBlaster::unspecifiedValue(bm, tag, index, value_width);
+}
+
+ASTNode FpTotalise::visit(const ASTNode& n)
+{
+  if (n.Degree() == 0)
+    return n;
+
+  const ASTNodeMap::const_iterator it = cache.find(n);
+  if (it != cache.end())
+    return it->second;
+
+  ASTVec children;
+  children.reserve(n.Degree() + 1);
+
+  bool changed = false;
+  for (size_t i = 0; i < n.Degree(); i++)
+  {
+    const ASTNode c = visit(n[i]);
+    changed = changed || (c != n[i]);
+    children.push_back(c);
+  }
+
+  const Kind k = n.GetKind();
+
+  // fp.min/fp.max: which zero comes back for (+0, -0) is unspecified. Carried
+  // as a 1-bit bitvector rather than a Boolean, because every child of a term
+  // has to be a term -- the array transformer walks them all. The blaster
+  // turns it into a proposition.
+  if ((k == FP_MIN || k == FP_MAX) && children.size() == 2)
+  {
+    ASTVec floats;
+    floats.push_back(children[0]);
+    floats.push_back(children[1]);
+
+    children.push_back(unspecified(k == FP_MIN ? "min_zero" : "max_zero",
+                                   ASTNode(), floats, 1));
+    changed = true;
+  }
+  // fp.to_ubv/fp.to_sbv: unspecified for NaN, the infinities and anything out
+  // of range. Children are (m, rm, x); the rounding mode joins the float in
+  // the index, since the same float may convert differently under different
+  // modes.
+  else if ((k == FP_TO_UBV || k == FP_TO_SBV) && children.size() == 3)
+  {
+    ASTVec floats;
+    floats.push_back(children[2]);
+
+    children.push_back(unspecified(k == FP_TO_UBV ? "to_ubv" : "to_sbv",
+                                   children[1], floats, n.GetValueWidth()));
+    changed = true;
+  }
+
+  const ASTNode out = changed ? rebuild(n, children) : n;
+
+  cache[n] = out;
+  return out;
+}
+
+} // namespace stp

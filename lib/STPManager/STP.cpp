@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/STPManager/STP.h"
+#include "stp/FloatBlaster/FpTotalise.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/NodeToFixedBitsMap.h"
 #include "stp/ToSat/ToSATAIG.h"
@@ -168,6 +169,14 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   else
   {
     original_input = inputasserts;
+  }
+
+  // Make the partial floating-point operations total before the formula is
+  // used for anything: fp.min/fp.max and fp.to_ubv/fp.to_sbv gain a child
+  // supplying the results SMT-LIB leaves unspecified. See FpTotalise.
+  {
+    FpTotalise totalise(bm);
+    original_input = totalise.topLevel(original_input);
   }
 
   SATSolver* newS = get_new_sat_solver();

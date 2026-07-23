@@ -564,10 +564,15 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
           first_float = 1;
           break;
         case FP_REM:
-        case FP_MIN:
-        case FP_MAX:
         case FP_SMT_EQ:
           expected_args = 2;
+          first_float = 0;
+          break;
+        // fp.min/fp.max gain a third child -- the choice of zero -- once
+        // FpTotalise has run, so both arities are well formed.
+        case FP_MIN:
+        case FP_MAX:
+          expected_args = n.Degree() == 3 ? 3 : 2;
           first_float = 0;
           break;
         case FP_FMA:
@@ -594,7 +599,19 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
         failed = true;
       }
 
-      for (unsigned int i = first_float; !failed && i < n.Degree(); i++)
+      // The trailing choice-of-zero child is a 1-bit bitvector, not a float,
+      // so it is checked separately.
+      const bool has_choice = (k == FP_MIN || k == FP_MAX) && n.Degree() == 3;
+      const unsigned int last_float = has_choice ? n.Degree() - 1 : n.Degree();
+
+      if (!failed && has_choice &&
+          (n[2].GetType() != BITVECTOR_TYPE || n[2].GetValueWidth() != 1))
+      {
+        error_msg = "<fp> min/max's choice of zero is not a 1-bit bitvector";
+        failed = true;
+      }
+
+      for (unsigned int i = first_float; !failed && i < last_float; i++)
       {
         if (n[i].GetType() != FLOATINGPOINT_TYPE)
         {
@@ -705,10 +722,56 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
       break;
     }
 
+    // ((_ fp.to_ubv m) rm x): (m, rm, x), plus the unspecified value once
+    // FpTotalise has run. Yields a bitvector of width m.
     case FP_TO_UBV:
     case FP_TO_SBV:
-      // Not yet produced by the parser; nothing to check.
+    {
+      std::string error_msg("");
+      bool failed(false);
+
+      if (n.Degree() != 3 && n.Degree() != 4)
+      {
+        error_msg = "fp.to_ubv/fp.to_sbv should have 3 or 4 args";
+        failed = true;
+      }
+      else if (!n[0].isConstant())
+      {
+        error_msg = "fp.to_ubv/fp.to_sbv's width must be a constant";
+        failed = true;
+      }
+      else if (n.GetValueWidth() != n[0].GetUnsignedConst())
+      {
+        error_msg = "fp.to_ubv/fp.to_sbv's result width does not match";
+        failed = true;
+      }
+      else if (!isRoundingMode(n[1]))
+      {
+        error_msg =
+            "fp.to_ubv/fp.to_sbv's first argument is not a rounding mode";
+        failed = true;
+      }
+      else if (n[2].GetType() != FLOATINGPOINT_TYPE)
+      {
+        error_msg = "fp.to_ubv/fp.to_sbv's argument is not an fp";
+        failed = true;
+      }
+      else if (n.Degree() == 4 &&
+               (n[3].GetType() != BITVECTOR_TYPE ||
+                n[3].GetValueWidth() != n.GetValueWidth()))
+      {
+        error_msg =
+            "fp.to_ubv/fp.to_sbv's unspecified value has the wrong width";
+        failed = true;
+      }
+
+      if (failed)
+      {
+        cerr << error_msg << endl;
+        FatalError(error_msg.c_str(), n);
+      }
       break;
+    }
     case FP_CONST_NAN:
     case FP_CONST_POS_INF:
     case FP_CONST_NEG_INF:

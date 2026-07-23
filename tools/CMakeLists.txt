@@ -32,4 +32,5 @@ endif()
 
 # this should be an extra tool
 add_subdirectory(test_fpblast)
+add_subdirectory(test_fpbackend)
 

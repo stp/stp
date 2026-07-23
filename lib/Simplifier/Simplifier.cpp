@@ -2632,12 +2632,21 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
 
       output = SimplifyTerm(blasted);
 
-      if (output.GetKind() == BVCONST)
+      // Only re-make the result as a floating-point constant when the
+      // operation actually produces a float. fp.to_ubv/fp.to_sbv produce a
+      // bitvector, and CreateFPConst mints a fresh uninterned node, so doing
+      // it there replaces the folded integer with a different node carrying
+      // the same bits -- which then compares unequal to the identical
+      // constant written in the input.
+      if (inputterm.GetExpWidth() != 0)
       {
-        output = nf->CreateFPConst(output);
+        if (output.GetKind() == BVCONST)
+        {
+          output = nf->CreateFPConst(output);
+        }
+        output.SetExpWidth(inputterm.GetExpWidth());
+        output.SetSigWidth(inputterm.GetSigWidth());
       }
-      output.SetExpWidth(inputterm.GetExpWidth());
-      output.SetSigWidth(inputterm.GetSigWidth());
 
       break;
     }

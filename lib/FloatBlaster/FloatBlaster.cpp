@@ -27,6 +27,7 @@ THE SOFTWARE.
 #include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/Globals/Globals.h"
 #include <cassert>
+#include <string>
 #include <cmath>
 
 #include "symfpu/core/add.h"
@@ -98,6 +99,31 @@ ASTNode FloatBlaster::withFormat(STPMgr* bm, const ASTNode& n,
   return out;
 }
 
+ASTNode FloatBlaster::canonicalBits(const ASTNode& f)
+{
+  FloatBlaster::instance(); // ensure symfpu's backend is initialised
+  return symbolic_fp::blast_reinterpret(f, f.GetExpWidth(), f.GetSigWidth());
+}
+
+ASTNode FloatBlaster::unspecifiedValue(STPMgr* bm, const char* tag,
+                                       const ASTNode& index,
+                                       unsigned int value_width)
+{
+  const unsigned int index_width = index.GetValueWidth();
+
+  std::string name("_stp_fp_unspecified_");
+  name += tag;
+  name += "_";
+  name += std::to_string(index_width);
+  name += "_";
+  name += std::to_string(value_width);
+
+  const ASTNode array = bm->defaultNodeFactory->CreateSymbol(
+      name.c_str(), index_width, value_width);
+
+  return bm->CreateTerm(READ, value_width, array, index);
+}
+
 ASTNode FloatBlaster::BlastNode_TopLevel(const ASTNode& b)
 {
   ASTNode out = FloatBlaster::instance()->BlastNode(b);
@@ -148,12 +174,24 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
     case FP_REM:
       output = symbolic_fp::blast_fprem(inputterm[0], inputterm[1]);
       break;
+    // The choice of zero for (+0, -0) arrives as a third child, put there by
+    // FpTotalise before solving.
     case FP_MIN:
-      output = symbolic_fp::blast_fpmin(inputterm[0], inputterm[1]);
-      break;
     case FP_MAX:
-      output = symbolic_fp::blast_fpmax(inputterm[0], inputterm[1]);
+    {
+      assert(inputterm.Degree() == 3);
+
+      // Child 2 is a 1-bit bitvector; symfpu wants a proposition.
+      const ASTNode zero_case = stp::GlobalParserBM->CreateNode(
+          EQ, inputterm[2], stp::GlobalParserBM->CreateOneConst(1));
+
+      output = (k == FP_MIN)
+                   ? symbolic_fp::blast_fpmin(inputterm[0], inputterm[1],
+                                              zero_case)
+                   : symbolic_fp::blast_fpmax(inputterm[0], inputterm[1],
+                                              zero_case);
       break;
+    }
     case FP_ABS:
       output = symbolic_fp::blast_fpabs(inputterm[0]);
       break;
@@ -264,6 +302,15 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
       return FloatBlaster::withFormat(stp::GlobalParserBM, output, to_exp,
                                       to_sig);
     }
+    // (m, rm, x, unspecified). The result is a bitvector, not a float, so no
+    // floating-point format is stamped on it.
+    case FP_TO_UBV:
+    case FP_TO_SBV:
+      assert(inputterm.Degree() == 4);
+      return symbolic_fp::blast_fp_to_bv(
+          /* rm */ inputterm[1], /* x */ inputterm[2],
+          inputterm[0].GetUnsignedConst(), /* undef */ inputterm[3],
+          /* is_signed */ k == FP_TO_SBV);
     case FP_SMT_EQ:
       output = symbolic_fp::blast_smt_eq(inputterm[0], inputterm[1]);
       break;
@@ -278,12 +325,18 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
       break;
   };
 
-  if (output.GetKind() == BVCONST)
+  // As in the simplifier: only float-producing operations get their result
+  // re-made as a floating-point constant. A Boolean or bitvector result must
+  // be left exactly as it is.
+  if (actualInputterm.GetExpWidth() != 0)
   {
-    output = stp::GlobalParserBM->CreateFPConst(output);
+    if (output.GetKind() == BVCONST)
+    {
+      output = stp::GlobalParserBM->CreateFPConst(output);
+    }
+    output.SetExpWidth(actualInputterm.GetExpWidth());
+    output.SetSigWidth(actualInputterm.GetSigWidth());
   }
-  output.SetExpWidth(actualInputterm.GetExpWidth());
-  output.SetSigWidth(actualInputterm.GetSigWidth());
 
   // std::cout << output.GetExpWidth() << " " << output.GetKind() << std::endl;
 

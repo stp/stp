@@ -127,10 +127,10 @@ FP_REM                      2    2    Term
 FP_ROUNDTOINTEGRAL          2    2    Term
 
 # fp.min: fp, fp -> fp
-FP_MIN                      2    2    Term
+FP_MIN                      2    3    Term
 
 # fp.max: fp, fp -> fp
-FP_MAX                      2    2    Term
+FP_MAX                      2    3    Term
 
 # to_fp: eb, sb, bv -> fp
 # to_fp: eb, sb, rm, fp -> fp
@@ -141,10 +141,10 @@ FP_TOFP                     3   4    Term
 FP_TOFP_UNSIGNED            4    4    Term
 
 # fp.to_ubv: bw, rm, fp -> bv
-FP_TO_UBV                   3    3    Term
+FP_TO_UBV                   3    4    Term
 
 # fp.to_sbv: bw, rm, fp -> bv
-FP_TO_SBV                   3    3    Term
+FP_TO_SBV                   3    4    Term
 
 # Floating point _formulae_ (i.e., things that produce Booleans)
 

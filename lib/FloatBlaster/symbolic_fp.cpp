@@ -215,11 +215,14 @@ template <> bitVector<false> bitVector<false>::maxValue(const bitWidthType& w)
 
 template <> bitVector<true> bitVector<true>::minValue(const bitWidthType& w)
 {
-  bitVector<true> leadingZero(bitVector<true>::zero(1));
+  // The most negative two's-complement value is a set sign bit followed by
+  // zeros. This used to build a *clear* sign bit followed by zeros, which is
+  // simply 0 -- so the signed minimum compared equal to zero.
+  bitVector<true> leadingOne(bitVector<true>::one(1));
   bitVector<true> base(bitVector<true>::zero(w - 1));
 
   void* vs_leading =
-      reinterpret_cast<void*>(const_cast<bitVector<true>*>(&leadingZero));
+      reinterpret_cast<void*>(const_cast<bitVector<true>*>(&leadingOne));
   void* vs_base = reinterpret_cast<void*>(const_cast<bitVector<true>*>(&base));
   void* expr = vc_bvConcatExpr(vc, vs_leading, vs_base);
   Node* node = static_cast<Node*>(expr);
@@ -649,7 +652,7 @@ bitVector<false> bitVector<isSigned>::toUnsigned(void) const
 }
 
 template <>
-inline bitVector<true> bitVector<true>::extend(bitWidthType extension) const
+bitVector<true> bitVector<true>::extend(bitWidthType extension) const
 {
   void* vs_this = reinterpret_cast<void*>(const_cast<bitVector<true>*>(this));
   bitWidthType new_length = this->GetValueWidth() + extension;
@@ -661,7 +664,7 @@ inline bitVector<true> bitVector<true>::extend(bitWidthType extension) const
 }
 
 template <>
-inline bitVector<false> bitVector<false>::extend(bitWidthType extension) const
+bitVector<false> bitVector<false>::extend(bitWidthType extension) const
 {
   // Extending by nothing is the identity. Falling through would ask for a
   // zero-width constant to concatenate, which STP rejects. symfpu's
@@ -1069,7 +1072,8 @@ ASTNode blast_fprem(const ASTNode& lhs, const ASTNode& rhs)
 // choice as its `zeroCase` argument; passing false makes the tie resolve
 // towards the left operand, which is a conforming choice and, unlike an
 // unconstrained one, keeps the result deterministic.
-ASTNode blast_fpmin(const ASTNode& lhs, const ASTNode& rhs)
+ASTNode blast_fpmin(const ASTNode& lhs, const ASTNode& rhs,
+                    const ASTNode& zero_case)
 {
   assert(lhs.GetExpWidth() == rhs.GetExpWidth());
   assert(lhs.GetSigWidth() == rhs.GetSigWidth());
@@ -1078,14 +1082,15 @@ ASTNode blast_fpmin(const ASTNode& lhs, const ASTNode& rhs)
   uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
 
   uf result(symfpu::min<traits>(size, unpacked_lhs, unpacked_rhs,
-                                proposition(false)));
+                                proposition(zero_case)));
 
   ASTNode packed(symfpu::pack<traits>(size, result));
 
   return packed;
 }
 
-ASTNode blast_fpmax(const ASTNode& lhs, const ASTNode& rhs)
+ASTNode blast_fpmax(const ASTNode& lhs, const ASTNode& rhs,
+                    const ASTNode& zero_case)
 {
   assert(lhs.GetExpWidth() == rhs.GetExpWidth());
   assert(lhs.GetSigWidth() == rhs.GetSigWidth());
@@ -1094,11 +1099,26 @@ ASTNode blast_fpmax(const ASTNode& lhs, const ASTNode& rhs)
   uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
 
   uf result(symfpu::max<traits>(size, unpacked_lhs, unpacked_rhs,
-                                proposition(false)));
+                                proposition(zero_case)));
 
   ASTNode packed(symfpu::pack<traits>(size, result));
 
   return packed;
+}
+
+ASTNode blast_fp_to_bv(const ASTNode& rm, const ASTNode& expr,
+                       bitWidthType target_width, const ASTNode& undef,
+                       bool is_signed)
+{
+  floatingPointTypeInfo size(expr.GetExpWidth(), expr.GetSigWidth());
+  uf unpacked(symfpu::unpack<traits>(size, expr));
+
+  if (is_signed)
+    return symfpu::convertFloatToSBV<traits>(size, rm, unpacked, target_width,
+                                             traits::sbv(undef));
+
+  return symfpu::convertFloatToUBV<traits>(size, rm, unpacked, target_width,
+                                           traits::ubv(undef));
 }
 
 // fp.abs and fp.neg only touch the sign bit, but they go through unpack/pack
@@ -1294,6 +1314,12 @@ ASTNode blast_round_to_integral(const ASTNode& rm, const ASTNode& expr)
   ASTNode packed(symfpu::pack<traits>(size, unpacked_result));
   return packed;
 }
+
+// Instantiate both bit-vector flavours in full. symfpu only uses a subset of
+// the interface, so without this the rest is never emitted and cannot be
+// exercised from outside this file -- including by a test.
+template class bitVector<true>;
+template class bitVector<false>;
 
 } // namespace symbolic_fp
 

@@ -262,8 +262,19 @@ ASTNode blast_fpfma(const ASTNode& rm, const ASTNode& x, const ASTNode& y,
                     const ASTNode& z);
 ASTNode blast_fpsqrt(const ASTNode& rm, const ASTNode& expr);
 ASTNode blast_fprem(const ASTNode& lhs, const ASTNode& rhs);
-ASTNode blast_fpmin(const ASTNode& lhs, const ASTNode& rhs);
-ASTNode blast_fpmax(const ASTNode& lhs, const ASTNode& rhs);
+// zero_case says which zero fp.min/fp.max return given +0 and -0, where
+// SMT-LIB leaves the answer open. FpTotalise supplies it.
+ASTNode blast_fpmin(const ASTNode& lhs, const ASTNode& rhs,
+                    const ASTNode& zero_case);
+ASTNode blast_fpmax(const ASTNode& lhs, const ASTNode& rhs,
+                    const ASTNode& zero_case);
+// fp.to_ubv/fp.to_sbv. `undef` supplies the result for the inputs where
+// SMT-LIB leaves it unspecified: NaN, the infinities, and anything out of
+// range for the target width.
+ASTNode blast_fp_to_bv(const ASTNode& rm, const ASTNode& expr,
+                       bitWidthType target_width, const ASTNode& undef,
+                       bool is_signed);
+
 ASTNode blast_fpabs(const ASTNode& expr);
 ASTNode blast_fpneg(const ASTNode& expr);
 

@@ -67,6 +67,19 @@ public:
   // blaster silently computes against a format of (0, 0).
   static ASTNode withFormat(STPMgr* bm, const ASTNode& n,
                             unsigned int exp_width, unsigned int sig_width);
+
+  // The canonical packed bits of a float: pack(unpack(f)). Collapses the NaN
+  // payloads, which SMT-LIB equality does not distinguish, while keeping +0
+  // and -0 apart.
+  static ASTNode canonicalBits(const ASTNode& f);
+
+  // A read of the array supplying an operation's unspecified results. Identity
+  // is the name, so every occurrence of an operation at a given signature
+  // reads one and the same array -- which is what makes the result a function
+  // of the operands rather than an arbitrary value per use.
+  static ASTNode unspecifiedValue(STPMgr* bm, const char* tag,
+                                  const ASTNode& index,
+                                  unsigned int value_width);
 };
 } // namespace stp
 #endif

@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
+#include "stp/FloatBlaster/FpTotalise.h"
 #include "stp/Printer/printers.h"
 #include "stp/ToSat/ToSATAIG.h"
 
@@ -694,7 +695,19 @@ void AbsRefine_CounterExample::CheckCounterExample(bool t)
     FatalError("CheckCounterExample: "
                "No CounterExample to check",
                ASTUndefined);
-  const ASTVec c = bm->GetAsserts();
+  // The manager's assertions are a separate copy from the formula the solve
+  // ran on, and they arrive here as parsed -- so the partial floating-point
+  // operations still lack the child supplying their unspecified results.
+  // Totalise them the same way. The arrays are shared (their identity is
+  // their name), so the check sees exactly the operations the solve did.
+  ASTVec c;
+  {
+    FpTotalise totalise(bm);
+    const ASTVec stored = bm->GetAsserts();
+    c.reserve(stored.size());
+    for (size_t i = 0; i < stored.size(); i++)
+      c.push_back(totalise.topLevel(stored[i]));
+  }
 
   if (bm->UserFlags.stats_flag)
     printf("checking counterexample\n");

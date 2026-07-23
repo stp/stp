@@ -958,7 +958,15 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       // format onto that source would make a 32-bit integer argument look
       // like a Float32 and take the reformat path instead of the convert one.
       const bool format_children =
-          (k != FP_TOFP && k != FP_TOFP_UNSIGNED);
+          (k != FP_TOFP && k != FP_TOFP_UNSIGNED && k != FP_TO_UBV &&
+           k != FP_TO_SBV);
+
+      // fp.to_ubv/fp.to_sbv are the same story from the other side: their
+      // children are (m, rm, x, unspecified), of which only x is a float, and
+      // their *result* is a bitvector. Both the width argument and the result
+      // happen to be as wide as e + s in the common 32-bit case, so stamping
+      // a format on them would turn an integer into a Float32.
+      const bool format_result = (k != FP_TO_UBV && k != FP_TO_SBV);
 
       for (size_t i = 0; i < children.size(); i++)
       {
@@ -989,8 +997,9 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
 
       // And carry the format out, so that an enclosing operation sees a
       // formatted operand rather than a bare bitvector.
-      OutputNode =
-          FloatBlaster::withFormat(_bm, OutputNode, exp_width, sig_width);
+      if (format_result)
+        OutputNode =
+            FloatBlaster::withFormat(_bm, OutputNode, exp_width, sig_width);
       break;
     }
     case FP_CONST_NAN:
