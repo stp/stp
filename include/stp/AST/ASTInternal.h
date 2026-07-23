@@ -24,7 +24,10 @@ THE SOFTWARE.
 #ifndef ASTINTERNAL_H
 #define ASTINTERNAL_H
 
-#include "stp/AST/ASTNode.h"
+// NB: deliberately do NOT include ASTNode.h here. ASTInternal only needs
+// ASTVec and a forward declaration of ASTNode (both from UsefulDefs.h);
+// including ASTNode.h would create a circular include that forces the hot
+// ASTNode accessors (GetKind/GetNodeNum/...) to be defined out-of-line.
 #include "stp/AST/UsefulDefs.h"
 #include <iostream>
 

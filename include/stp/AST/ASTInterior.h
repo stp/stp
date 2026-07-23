@@ -25,6 +25,7 @@ THE SOFTWARE.
 #ifndef ASTINTERIOR_H
 #define ASTINTERIOR_H
 
+#include "ASTNode.h"
 #include "ASTInternal.h"
 #include "stp/NodeFactory/HashingNodeFactory.h"
 #include "UsefulDefs.h"

@@ -127,14 +127,16 @@ public:
   DLL_PUBLIC ASTNode& operator=(const ASTNode& n);
   DLL_PUBLIC ASTNode& operator=(ASTNode&& n);
 
-  // Access node number
-  unsigned GetNodeNum() const;
+  // Access node number. Inlined: ASTInternal is complete here (its header no
+  // longer includes this one), so these fold to direct field reads at the
+  // call sites. They are among the hottest calls in STP.
+  unsigned GetNodeNum() const { return _int_node_ptr->GetNodeNum(); }
 
   // Access kind.
-  Kind GetKind() const;
+  Kind GetKind() const { return _int_node_ptr->GetKind(); }
 
   // Access Children of this Node
-  const ASTVec& GetChildren() const;
+  const ASTVec& GetChildren() const { return _int_node_ptr->GetChildren(); }
 
   // Return the number of child nodes
   size_t Degree() const { return GetChildren().size(); };
@@ -175,8 +177,8 @@ public:
   void SetValueWidth(unsigned int vw) const;
   types GetType(void) const;
 
-  // Hash using pointer value of _int_node_ptr.
-  DLL_PUBLIC size_t Hash() const;
+  // Hash is the node's unique id. Inlined: used by every ==/</hash lookup.
+  size_t Hash() const { return _int_node_ptr ? _int_node_ptr->node_uid : 0; }
 
   void NFASTPrint(int l, int max, int prefix) const;
 
