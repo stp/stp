@@ -33,6 +33,8 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/Simplifier/UnsignedIntervalAnalysis.h"
+#include "stp/Simplifier/UnsignedIntervalSet.h"
+#include "stp/Simplifier/UnsignedIntervalSetAnalysis.h"
 #include "stp/Simplifier/ValueSetAnalysis.h"
 #include <iostream>
 #include <unordered_map>
@@ -43,6 +45,7 @@ using simplifier::constantBitP::FixedBits;
 
 using NodeToUnsignedIntervalMap = std::unordered_map<const ASTNode, UnsignedInterval*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
 using NodeToFixedBitsMap = std::unordered_map<const ASTNode, FixedBits*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
+using NodeToUnsignedIntervalSetMap = std::unordered_map<const ASTNode, UnsignedIntervalSet*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
 using NodeToValueSetMap = std::unordered_map<const ASTNode, ValueSet*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
 
 class NodeDomainAnalysis
@@ -64,9 +67,11 @@ class NodeDomainAnalysis
   
   NodeToFixedBitsMap toFixedBits;
   NodeToUnsignedIntervalMap toIntervals;
+  NodeToUnsignedIntervalSetMap toIntervalSets;
   NodeToValueSetMap toValueSets;
 
   UnsignedIntervalAnalysis intervalAnalysis;
+  UnsignedIntervalSetAnalysis setAnalysis;
   ValueSetAnalysis valueSetAnalysis;
 
   unsigned tighten = 0;
@@ -80,11 +85,13 @@ public:
   {
     FixedBits* bits;
     UnsignedInterval* interval;
+    UnsignedIntervalSet* intervalSet;
     ValueSet* set;
   };
 
   NodeDomainAnalysis(STPMgr* _bm)
-      : bm(*_bm), intervalAnalysis(*_bm), valueSetAnalysis(*_bm)
+      : bm(*_bm), intervalAnalysis(*_bm), setAnalysis(*_bm),
+        valueSetAnalysis(*_bm)
   {
     emptyBoolean = new FixedBits(1, true);
   }
@@ -109,6 +116,10 @@ public:
       if (it.second != NULL)
         delete it.second;
 
+    for (auto it : toIntervalSets)
+      if (it.second != NULL)
+        delete it.second;
+
     for (auto it : toValueSets)
       if (it.second != NULL)
         delete it.second;
@@ -119,6 +130,11 @@ public:
    NodeToUnsignedIntervalMap* getIntervalMap()
    {
       return &toIntervals;
+   }
+
+   NodeToUnsignedIntervalSetMap* getIntervalSetMap()
+   {
+      return &toIntervalSets;
    }
 
    NodeToFixedBitsMap* getCbitMap()
@@ -139,6 +155,7 @@ public:
     buildMap(top);
     bm.GetRunTimes()->stop(RunTimes::NodeDomainAnalysis);
     assert(toIntervals.size() == toFixedBits.size());
+    assert(toIntervalSets.size() == toFixedBits.size());
     assert(toValueSets.size() == toFixedBits.size());
   }
 
