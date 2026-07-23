@@ -576,6 +576,62 @@
     return n;
   }
 
+  // (fp sign exp sig) -- build a float from its three bitvector components:
+  // a one-bit sign, an e-bit exponent, and the (s-1)-bit stored significand
+  // (the hidden bit is implicit). SMT-LIB permits each component to be an
+  // arbitrary bitvector term, not just a literal, so concatenate them and
+  // reinterpret the packed bits -- folding to an interned float constant when
+  // every component is literal, exactly as the one-argument to_fp does.
+  ASTNode* createFPFromParts(ASTNode* sign, ASTNode* exp, ASTNode* sig)
+  {
+    if (sign->GetType() != BITVECTOR_TYPE || exp->GetType() != BITVECTOR_TYPE ||
+        sig->GetType() != BITVECTOR_TYPE)
+    {
+      fatal_yyerror("fp: the sign, exponent and significand must be bitvectors.");
+    }
+
+    unsigned int sign_bits = sign->GetValueWidth();
+    unsigned int exp_bits = exp->GetValueWidth();
+    unsigned int sig_bits = sig->GetValueWidth();
+
+    if (sign_bits != 1)
+    {
+      fatal_yyerror("fp: the sign must be a one-bit bitvector.");
+    }
+
+    ASTNode first(*stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT, sign_bits + exp_bits,
+                                                   *sign, *exp)));
+    ASTNode packed(*stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateTerm(
+            BVCONCAT, sign_bits + exp_bits + sig_bits, first, *sig)));
+
+    const unsigned int exp_width = exp_bits;
+    const unsigned int sig_width = sig_bits + sign_bits;
+
+    ASTNode* n;
+    if (packed.GetKind() == BVCONST)
+    {
+      n = stp::GlobalParserInterface->newNode(
+          stp::GlobalParserInterface->nf->CreateFPConst(packed));
+    }
+    else
+    {
+      n = stp::GlobalParserInterface->newNode(
+          stp::GlobalParserInterface->nf->CreateTerm(
+              FP_TOFP, sign_bits + exp_bits + sig_bits,
+              stp::GlobalParserInterface->CreateBVConst(32, exp_width),
+              stp::GlobalParserInterface->CreateBVConst(32, sig_width), packed));
+    }
+
+    setFPFormat(n, exp_width, sig_width);
+
+    stp::GlobalParserInterface->deleteNode(sign);
+    stp::GlobalParserInterface->deleteNode(exp);
+    stp::GlobalParserInterface->deleteNode(sig);
+    return n;
+  }
+
   // ((_ to_fp e s) rm f) -- reformat a float under a rounding mode.
   ASTNode* createFPToFP(unsigned int exp_width, unsigned int sig_width,
                         ASTNode* rm, ASTNode* expr)
@@ -1171,33 +1227,22 @@ STRING_TOK LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK
 |
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK an_term
 {
-  stp::GlobalParserInterface->unsupported();
+  // A nullary define-fun whose result is an array (bit-vector element). This
+  // is just a name for its body, stored like any other nullary function; the
+  // lexer resolves later references to it back to that body.
+  ASTVec empty;
+  stp::GlobalParserInterface->storeFunction(*$1, empty, *$17);
   delete $1;
   stp::GlobalParserInterface->deleteNode($17);
-
-#if 0
-  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
-  stp::GlobalParserInterface->addSymbol(s);
-  unsigned int index_len = $9;
-  unsigned int value_len = $14;
-  if(index_len > 0) {
-    s.SetIndexWidth($9);
-  }
-  else {
-    fatal_yyerror("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
-  }
-
-  if(value_len > 0) {
-    s.SetValueWidth($14);
-  }
-  else {
-    fatal_yyerror("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
-  }
-
+}
+|
+STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK an_fp_sort RPAREN_TOK an_term
+{
+  // As above, but the array's element type is a floating-point sort.
   ASTVec empty;
-  stp::GlobalParserInterface->storeFunction(*$1,empty, *$17);
-#endif
-
+  stp::GlobalParserInterface->storeFunction(*$1, empty, *$13);
+  delete $1;
+  stp::GlobalParserInterface->deleteNode($13);
 }
 ;
 
@@ -1899,29 +1944,9 @@ BVCONST_HEXIDECIMAL_TOK
   $$->SetValueWidth(width);
   delete $1;
 }
-| FP_TOK an_const an_const an_const
+| FP_TOK an_term an_term an_term
 {
-  unsigned int sign_bits = $2->GetValueWidth();
-  unsigned int exp_bits = $3->GetValueWidth();
-  unsigned int sig_bits = $4->GetValueWidth();
-
-  stp::ASTNode first(*stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT, sign_bits + exp_bits, *$2, *$3)));
-
-  stp::ASTNode second(*stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT, sign_bits + exp_bits + sig_bits, first, *$4)));
-
-  Kind k = second.GetKind();
-  assert(k == BVCONST);
-
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateFPConst(second));
-
-  $$->SetExpWidth(exp_bits);
-  $$->SetSigWidth(sig_bits + sign_bits);
-
-  assert($$->GetType() == FLOATINGPOINT_TYPE);
-
-  stp::GlobalParserInterface->deleteNode($2);
-  stp::GlobalParserInterface->deleteNode($3);
-  stp::GlobalParserInterface->deleteNode($4);
+  $$ = createFPFromParts($2, $3, $4);
 };
 
 an_rounding_mode:

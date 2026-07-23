@@ -120,6 +120,18 @@
           free (cleaned);
         return  FLOATINGPOINT_FUNCTIONID_TOK;
       }
+      else if (ft == stp::ARRAY_TYPE)
+      {
+        // A nullary define-fun whose body has array type. Resolve it to that
+        // body -- there are no parameters to substitute -- and hand it back
+        // through the ordinary term path, exactly as a declared array symbol
+        // would be. Arrays have no *_FUNCTIONID_TOK of their own, so without
+        // this a later reference to the name falls through to STRING_TOK and
+        // the parser rejects it.
+        stp::ASTVec empty;
+        nptr = stp::GlobalParserInterface->applyFunction(s, empty);
+        found = true;
+      }
       else if (stp::GlobalParserInterface->LookupSymbol(s,nptr)) // it's a symbol.
       {
         found = true;
