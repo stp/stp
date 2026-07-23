@@ -918,9 +918,65 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
     case FP_TO_SBV:
     case FP_SMT_EQ:
     {
-      ASTNode temp(_bm->CreateNode(k, children));
+      // A float's format is carried on the node, not implied by its kind, so
+      // it is lost every time a node is rebuilt -- and evaluating a nested
+      // operation rebuilds one. The inner operation's result comes back from
+      // NonMemberBVConstEvaluator as a bare BVCONST with no format, and the
+      // outer operation then blasts it against a format of (0, 0). That does
+      // not fail; it computes the wrong bits. Recover the format from
+      // whichever child still has one and put it back on the others.
+      unsigned int exp_width = 0;
+      unsigned int sig_width = 0;
+
+      if (k == FP_TOFP || k == FP_TOFP_UNSIGNED)
+      {
+        // to_fp names its target format in its first two children rather
+        // than inheriting it from an operand.
+        assert(children.size() >= 2);
+        exp_width = children[0].GetUnsignedConst();
+        sig_width = children[1].GetUnsignedConst();
+      }
+      else
+      {
+        for (size_t i = 0; i < children.size(); i++)
+        {
+          if (children[i].GetExpWidth() != 0)
+          {
+            exp_width = children[i].GetExpWidth();
+            sig_width = children[i].GetSigWidth();
+            break;
+          }
+        }
+      }
+
+      ASTVec formatted;
+      formatted.reserve(children.size());
+
+      for (size_t i = 0; i < children.size(); i++)
+      {
+        // Rounding modes and to_fp's format arguments are bitvectors that
+        // are not floats; leave them alone. A float operand is as wide as
+        // the format it is packed in.
+        //
+        // A plain BVCONST cannot carry a format at all -- ASTBVConst's
+        // getExpWidth() is hardwired to 0 and its setter asserts -- so the
+        // constant has to be re-made as an ASTFPConst first. That is what
+        // CreateFPConst is for, and what BlastNode does with its own result.
+        formatted.push_back(
+            FloatBlaster::withFormat(_bm, children[i], exp_width, sig_width));
+      }
+
+      ASTNode temp(_bm->CreateNode(k, formatted));
+      temp.SetExpWidth(exp_width);
+      temp.SetSigWidth(sig_width);
+
       ASTNode blasted(FloatBlaster::BlastNode_TopLevel(temp));
       OutputNode = NonMemberBVConstEvaluator(_bm, blasted);
+
+      // And carry the format out, so that an enclosing operation sees a
+      // formatted operand rather than a bare bitvector.
+      OutputNode =
+          FloatBlaster::withFormat(_bm, OutputNode, exp_width, sig_width);
       break;
     }
     case FP_CONST_NAN:

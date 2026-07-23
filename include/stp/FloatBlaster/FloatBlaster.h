@@ -55,6 +55,18 @@ public:
   virtual ~FloatBlaster() {}
 
   static ASTNode BlastNode_TopLevel(const ASTNode& b);
+
+  // Return `n` carrying the floating-point format (exp_width, sig_width).
+  //
+  // A float's format is per-node state, so it is lost whenever a node is
+  // rebuilt -- which every constant fold and every simplification does. Worse,
+  // it cannot simply be stamped back on: ASTBVConst has no room for it
+  // (getExpWidth() is hardwired to 0 and the setter asserts), so a folded
+  // constant has to be re-made as an ASTFPConst first. Anywhere that rebuilds
+  // a floating-point node has to put the format back through here, or the
+  // blaster silently computes against a format of (0, 0).
+  static ASTNode withFormat(STPMgr* bm, const ASTNode& n,
+                            unsigned int exp_width, unsigned int sig_width);
 };
 } // namespace stp
 #endif

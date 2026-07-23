@@ -213,6 +213,19 @@ bool isAtomic(Kind kind)
       BVUSUBO == kind || BVSSUBO == kind || SYMBOL == kind ||
       BOOLEXTRACT == kind)
     return true;
+
+  // The floating-point predicates belong here for the same reason as the
+  // bitvector ones: SimplifyFormula sorts a node's children before
+  // dispatching on its kind, and fp.lt/fp.leq/fp.gt/fp.geq are not
+  // commutative, so reordering their operands reverses what they mean. The
+  // equalities and the unary classification predicates are insensitive to
+  // it, but there is nothing for the sort to do to them either.
+  if (FP_LEQ == kind || FP_LT == kind || FP_GEQ == kind || FP_GT == kind ||
+      FP_EQ == kind || FP_SMT_EQ == kind || FP_ISNORMAL == kind ||
+      FP_ISSUBNORMAL == kind || FP_ISZERO == kind || FP_ISINFINITE == kind ||
+      FP_ISNAN == kind || FP_ISNEGATIVE == kind || FP_ISPOSITIVE == kind)
+    return true;
+
   return false;
 }
 

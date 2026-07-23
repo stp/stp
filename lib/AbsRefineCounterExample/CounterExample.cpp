@@ -374,10 +374,8 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
 
         ASTNode simp(TermToConstTermUsingModel(child));
         assert(simp.GetKind() == BVCONST);
-        ASTNode as_fp = bm->CreateFPConst(simp);
-        as_fp.SetExpWidth(child.GetExpWidth());
-        as_fp.SetSigWidth(child.GetSigWidth());
-        children.push_back(as_fp);
+        children.push_back(FloatBlaster::withFormat(
+            bm, simp, child.GetExpWidth(), child.GetSigWidth()));
       }
 
       ASTNode temp(
@@ -392,7 +390,13 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
       assert(blasted != temp);
       assert(blasted != term);
 
-      output = TermToConstTermUsingModel(blasted);
+      // Carry the format out with the result. Evaluating the blasted node
+      // yields a bare BVCONST, and an enclosing floating-point operation
+      // would then take it as an operand of format (0, 0) and compute the
+      // wrong bits rather than fail.
+      output = FloatBlaster::withFormat(bm, TermToConstTermUsingModel(blasted),
+                                        term.GetExpWidth(),
+                                        term.GetSigWidth());
       break;
     }
     default:
@@ -649,10 +653,8 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
       {
         ASTNode simp(TermToConstTermUsingModel(form[i]));
         assert(simp.GetKind() == BVCONST);
-        ASTNode as_fp = bm->CreateFPConst(simp);
-        as_fp.SetExpWidth(form[i].GetExpWidth());
-        as_fp.SetSigWidth(form[i].GetSigWidth());
-        operands.push_back(as_fp);
+        operands.push_back(FloatBlaster::withFormat(
+            bm, simp, form[i].GetExpWidth(), form[i].GetSigWidth()));
       }
 
       ASTNode temp(stp::GlobalParserBM->CreateNode(k, operands));

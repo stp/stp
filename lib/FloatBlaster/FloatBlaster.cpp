@@ -69,6 +69,35 @@ FloatBlaster::FloatBlaster()
   symbolic_fp::init_vc(stp::GlobalParserBM);
 }
 
+ASTNode FloatBlaster::withFormat(STPMgr* bm, const ASTNode& n,
+                                 unsigned int exp_width,
+                                 unsigned int sig_width)
+{
+  if (exp_width == 0 && sig_width == 0)
+    return n;
+
+  if (n.GetExpWidth() == exp_width && n.GetSigWidth() == sig_width)
+    return n;
+
+  // Only a float-shaped value can carry a float's format; a rounding mode or
+  // one of to_fp's format arguments must be left alone.
+  if (n.GetValueWidth() != exp_width + sig_width)
+    return n;
+
+  ASTNode out(n);
+
+  if (out.GetKind() == BVCONST)
+  {
+    // ASTBVConst cannot hold a format; ASTFPConst can. CreateFPConst makes a
+    // fresh node, so this never retypes a shared constant.
+    out = bm->CreateFPConst(out);
+  }
+
+  out.SetExpWidth(exp_width);
+  out.SetSigWidth(sig_width);
+  return out;
+}
+
 ASTNode FloatBlaster::BlastNode_TopLevel(const ASTNode& b)
 {
   ASTNode out = FloatBlaster::instance()->BlastNode(b);

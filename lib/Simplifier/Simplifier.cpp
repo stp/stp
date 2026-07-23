@@ -468,12 +468,9 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
       simplified.reserve(a.Degree());
 
       for (unsigned int i = 0; i < a.Degree(); i++)
-      {
-        ASTNode s(SimplifyTerm(a[i], VarConstMap));
-        s.SetExpWidth(a[i].GetExpWidth());
-        s.SetSigWidth(a[i].GetSigWidth());
-        simplified.push_back(s);
-      }
+        simplified.push_back(FloatBlaster::withFormat(
+            _bm, SimplifyTerm(a[i], VarConstMap), a[i].GetExpWidth(),
+            a[i].GetSigWidth()));
 
       ASTNode temp(nf->CreateNode(kind, simplified));
 
@@ -1496,6 +1493,8 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
           v.push_back(SimplifyTerm(toProcess[i], VarConstMap));
         else if (toProcess[i].GetType() == BOOLEAN_TYPE)
           v.push_back(SimplifyFormula(toProcess[i], VarConstMap));
+        else if (toProcess[i].GetType() == FLOATINGPOINT_TYPE)
+          v.push_back(SimplifyTerm(toProcess[i], VarConstMap));
         // A FLOATINGPOINT_TYPE child is deliberately not simplified here.
         // Simplifying it makes nested floating-point expressions terminate --
         // otherwise the "have the children been simplified?" check further
@@ -1513,6 +1512,15 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
       {
         output = nf->CreateArrayTerm(k, actualInputterm.GetIndexWidth(),
                                      inputValueWidth, v);
+
+        // Rebuilding drops the floating-point format, which is per-node state
+        // rather than something the kind implies. Carry it over: the rebuilt
+        // node has the same kind and children, so it denotes a float of the
+        // same format, and everything downstream (the blaster in particular)
+        // reads the format off the node.
+        output = FloatBlaster::withFormat(_bm, output,
+                                          actualInputterm.GetExpWidth(),
+                                          actualInputterm.GetSigWidth());
       }
       else
         output = actualInputterm;
@@ -2604,12 +2612,12 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
           continue;
         }
 
-        // As above: re-stamp the format, which the simplified node may have
-        // lost.
-        ASTNode s(SimplifyTerm(inputterm[i], VarConstMap));
-        s.SetExpWidth(inputterm[i].GetExpWidth());
-        s.SetSigWidth(inputterm[i].GetSigWidth());
-        simplified.push_back(s);
+        // As above: put the format back, which the simplified node may have
+        // lost -- and which a folded constant cannot hold without being
+        // re-made as an ASTFPConst.
+        simplified.push_back(FloatBlaster::withFormat(
+            _bm, SimplifyTerm(inputterm[i], VarConstMap),
+            inputterm[i].GetExpWidth(), inputterm[i].GetSigWidth()));
       }
 
       ASTNode temp(
