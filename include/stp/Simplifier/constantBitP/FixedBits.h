@@ -35,6 +35,10 @@ THE SOFTWARE.
 #include <iostream>
 #include <vector>
 
+#ifdef _MSC_VER
+#include <intrin.h>
+#endif
+
 class MTRand;
 
 namespace stp
@@ -55,6 +59,45 @@ namespace constantBitP
 #define LOCATION __FILE__ ":" CONSTANTBITP_UTILITY_XSTR(__LINE__) ": "
 
 static THREAD_LOCAL int staticUniqueId = 1;
+
+// MSVC has no __builtin_{ctz,clz,popcount}ll. The scan intrinsics it does
+// have are 64-bit-target only, and __popcnt64 needs a POPCNT-capable CPU,
+// so count bits in software instead of requiring that.
+inline unsigned countTrailingZeroes64(uint64_t v)
+{
+  assert(v != 0);
+#ifdef _MSC_VER
+  unsigned long index;
+  _BitScanForward64(&index, v);
+  return static_cast<unsigned>(index);
+#else
+  return static_cast<unsigned>(__builtin_ctzll(v));
+#endif
+}
+
+inline unsigned countLeadingZeroes64(uint64_t v)
+{
+  assert(v != 0);
+#ifdef _MSC_VER
+  unsigned long index;
+  _BitScanReverse64(&index, v);
+  return static_cast<unsigned>(63 - index);
+#else
+  return static_cast<unsigned>(__builtin_clzll(v));
+#endif
+}
+
+inline unsigned popCount64(uint64_t v)
+{
+#ifdef _MSC_VER
+  v = v - ((v >> 1) & 0x5555555555555555ULL);
+  v = (v & 0x3333333333333333ULL) + ((v >> 2) & 0x3333333333333333ULL);
+  v = (v + (v >> 4)) & 0x0f0f0f0f0f0f0f0fULL;
+  return static_cast<unsigned>((v * 0x0101010101010101ULL) >> 56);
+#else
+  return static_cast<unsigned>(__builtin_popcountll(v));
+#endif
+}
 
 // Bits can be fixed, or unfixed. Fixed bits are fixed to either zero or one.
 // Unfixed bits are marked as '*' when using operator[]
@@ -204,7 +247,7 @@ private:
     {
       const uint64_t t = (this->*wordFn)(w);
       if (t != 0)
-        return w * 64 + __builtin_ctzll(t);
+        return w * 64 + countTrailingZeroes64(t);
     }
     return width;
   }
@@ -225,7 +268,7 @@ public:
     {
       const uint64_t t = possibleOnes(w);
       if (t != 0)
-        return w * 64 + 63 - __builtin_clzll(t);
+        return w * 64 + 63 - countLeadingZeroes64(t);
     }
     return -1;
   }
@@ -259,7 +302,7 @@ public:
     {
       const uint64_t t = unfixedBits(w);
       if (t != 0)
-        return w * 64 + 63 - __builtin_clzll(t);
+        return w * 64 + 63 - countLeadingZeroes64(t);
     }
     return -1;
   }
@@ -338,7 +381,7 @@ public:
   {
     unsigned result = 0;
     for (unsigned w = 0; w < numWords(); w++)
-      result += __builtin_popcountll(fixedW_[w]);
+      result += popCount64(fixedW_[w]);
     return result;
   }
 
