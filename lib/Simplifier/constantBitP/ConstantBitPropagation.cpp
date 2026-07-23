@@ -149,6 +149,13 @@ ASTNodeMap ConstantBitPropagation::getAllFixed()
     if (BVCONCAT == node.GetKind())
       continue;
 
+    // Constant-bit propagation only reasons about Boolean and bit-vector
+    // values. A floating-point node has value width zero, so it is given a
+    // placeholder FixedBits that does not describe its packed contents; it must
+    // never be turned back into a constant here.
+    if (node.GetType() != BOOLEAN_TYPE && node.GetType() != BITVECTOR_TYPE)
+      continue;
+
     if (bits.isTotallyFixed())
     {
       toFrom.insert(make_pair(node, bitsToNode(node, bits)));
@@ -309,6 +316,11 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
     // other nodes will contain the same information (the extract doesn't change
     // the fixings).
     if (BVEXTRACT == node.GetKind() || BVCONCAT == node.GetKind())
+      continue;
+
+    // Only Boolean and bit-vector nodes can be replaced by a constant here; a
+    // floating-point node's FixedBits is a placeholder (see getAllFixed()).
+    if (node.GetType() != BOOLEAN_TYPE && node.GetType() != BITVECTOR_TYPE)
       continue;
 
     // toAssign: conjoin it with the top level.
