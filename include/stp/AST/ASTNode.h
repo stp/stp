@@ -49,8 +49,8 @@ class ASTNode
   friend class vector<ASTNode>;
   friend ASTNode HashingNodeFactory::CreateNode(const stp::Kind kind,
                                                 const ASTVec& back_children);
-  friend bool exprless(const ASTNode n1, const ASTNode n2);
-  friend bool arithless(const ASTNode n1, const ASTNode n2);
+  friend bool exprless(const ASTNode& n1, const ASTNode& n2);
+  friend bool arithless(const ASTNode& n1, const ASTNode& n2);
 
   // Ptr to the read data
   ASTInternal* _int_node_ptr;
