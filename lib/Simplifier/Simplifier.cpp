@@ -295,39 +295,17 @@ ASTNode Simplifier::SimplifyFormula(const ASTNode& b, bool pushNeg,
 
   if (b.isConstant())
   {
-    if (!pushNeg)
-      return b;
-    else
-    {
-      if (ASTTrue == b)
-        return ASTFalse;
-      else
-        return ASTTrue;
-    }
+    return pushNeg ? nf->CreateNode(NOT, b) : b;
   }
 
   ASTNode output;
   if (CheckSimplifyMap(b, output, pushNeg, VarConstMap))
     return output;
 
-  Kind kind = b.GetKind();
+  // pullUpITE can change the Kind of the node.
+  ASTNode a = PullUpITE(b);
 
-  ASTNode a = b;
-  ASTVec ca = toASTVec(a.GetChildren());
-  // AND/OR are excluded: SimplifyAndOrFormula flattens and re-sorts their
-  // children itself, so sorting (and rebuilding the node) here is wasted work.
-  if (!(IMPLIES == kind || ITE == kind || PARAMBOOL == kind || AND == kind ||
-        OR == kind || isAtomic(kind)))
-  {
-    SortByArith(ca);
-    if (ASTChildren(ca) != a.GetChildren())
-      a = nf->CreateNode(kind, ca);
-  }
-
-  a = PullUpITE(a);
-  kind = a.GetKind(); // pullUpITE can change the Kind of the node.
-
-  switch (kind)
+  switch (a.GetKind())
   {
     case AND:
     case OR:
@@ -363,20 +341,12 @@ ASTNode Simplifier::SimplifyFormula(const ASTNode& b, bool pushNeg,
   UpdateSimplifyMap(b, output, pushNeg, VarConstMap);
   UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
 
-  ASTNode input_with_not = pushNeg ? nf->CreateNode(NOT, a) : a;
-  if (input_with_not != output)
-  {
-    return SimplifyFormula(output, false, VarConstMap);
-  }
   return output;
 }
 
 ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
                                           ASTNodeMap* VarConstMap)
 {
-  //     if (!optimize_flag)
-  //       return a;
-
   ASTNode output;
   if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
   {
@@ -950,15 +920,15 @@ ASTNode Simplifier::SimplifyAndOrFormula(const ASTNode& a, bool pushNeg,
   // and a child that simplifies to the annihilator collapses the whole node.
   const ASTNode annihilator =
       isAnd ? (pushNeg ? ASTTrue : ASTFalse) : (pushNeg ? ASTFalse : ASTTrue);
+  const Kind outKind = (isAnd == !pushNeg) ? AND : OR;
 
-  // Flatten nested same-kind operands (the factory does not do this) and
-  // recursively simplify each child. Short-circuit as soon as a child is the
-  // annihilator, without simplifying the rest.
-  ASTVec c = FlattenKind(k, a.GetChildren());
-
+  // Recursively simplify each child; short-circuit as soon as one is the
+  // annihilator. We do NOT pre-flatten nested same-kind operands: simplifying
+  // such a child yields an outKind node, which the splice below flattens
+  // anyway, so a separate FlattenKind pass would be redundant work.
   ASTVec outvec;
-  outvec.reserve(c.size());
-  for (const ASTNode& child : c)
+  outvec.reserve(a.Degree());
+  for (const ASTNode& child : a.GetChildren())
   {
     const ASTNode aaa = SimplifyFormula(child, pushNeg, VarConstMap);
     if (aaa == annihilator)
@@ -966,13 +936,19 @@ ASTNode Simplifier::SimplifyAndOrFormula(const ASTNode& a, bool pushNeg,
       UpdateSimplifyMap(a, annihilator, pushNeg, VarConstMap);
       return annihilator;
     }
-    outvec.push_back(aaa);
+    // A child that simplified to the output connective (typically via De
+    // Morgan) would otherwise leave a nested same-kind node, which the factory
+    // does not flatten. Splice its already-simplified operands in so the
+    // result stays flat -- without this SimplifyFormula is not idempotent.
+    if (aaa.GetKind() == outKind)
+      outvec.insert(outvec.end(), aaa.begin(), aaa.end());
+    else
+      outvec.push_back(aaa);
   }
 
   // Hand the simplified children to the node factory. CreateSimpleAndOr
   // sorts them, drops identities, removes duplicates, detects complements
   // and unwraps singletons -- so none of that is repeated here.
-  const Kind outKind = (isAnd == !pushNeg) ? AND : OR;
   output = nf->CreateNode(outKind, outvec);
 
   UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
