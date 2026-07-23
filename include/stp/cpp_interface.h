@@ -174,6 +174,11 @@ public:
 
   DLL_PUBLIC bool isBitVectorFunction(const std::string& name);
   DLL_PUBLIC bool isBooleanFunction(const std::string& name);
+  // Classify a name in a single map probe: returns the function's return
+  // type (BITVECTOR_TYPE or BOOLEAN_TYPE), or UNKNOWN_TYPE when the name
+  // is not a stored function. Lets the lexer avoid a second probe that
+  // calling both isBitVectorFunction and isBooleanFunction would cost.
+  DLL_PUBLIC types functionReturnType(const std::string& name);
   bool hasFunctions() const { return !functions.empty(); }
 
   DLL_PUBLIC ASTNode LookupOrCreateSymbol(std::string name);

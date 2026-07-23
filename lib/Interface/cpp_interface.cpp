@@ -284,6 +284,15 @@ bool Cpp_interface::isBooleanFunction(const string& name)
   return found->second.function.GetType() == BOOLEAN_TYPE;
 }
 
+types Cpp_interface::functionReturnType(const string& name)
+{
+  const auto found = functions.find(name);
+  if (found == functions.end())
+    return UNKNOWN_TYPE;
+
+  return found->second.function.GetType();
+}
+
 ASTNode Cpp_interface::LookupOrCreateSymbol(string name)
 {
   return bm.LookupOrCreateSymbol(name.c_str());

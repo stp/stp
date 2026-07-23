@@ -89,22 +89,31 @@
     }
     // Checking the functions before the symbols saves a symbol-table
     // probe in files built almost entirely from define-funs. A name can't
-    // legally be both, so the order isn't observable on valid input.
-    else if (stp::GlobalParserInterface->hasFunctions() &&
-             stp::GlobalParserInterface->isBitVectorFunction(s))
+    // legally be both, so the order isn't observable on valid input. A
+    // single functionReturnType probe classifies the name, avoiding the
+    // second map lookup that separate isBitVector/isBooleanFunction calls
+    // would cost on boolean-function references.
+    else if (stp::GlobalParserInterface->hasFunctions())
     {
-      smt2lval.str = new std::string(s);
-      if (cleaned)
-        free (cleaned);
-      return  BITVECTOR_FUNCTIONID_TOK;
-    }
-    else if (stp::GlobalParserInterface->hasFunctions() &&
-             stp::GlobalParserInterface->isBooleanFunction(s))
-    {
-       smt2lval.str = new std::string(s);
-       if (cleaned)
-         free (cleaned);
-       return  BOOLEAN_FUNCTIONID_TOK;
+      const stp::types ft = stp::GlobalParserInterface->functionReturnType(s);
+      if (ft == stp::BITVECTOR_TYPE)
+      {
+        smt2lval.str = new std::string(s);
+        if (cleaned)
+          free (cleaned);
+        return  BITVECTOR_FUNCTIONID_TOK;
+      }
+      else if (ft == stp::BOOLEAN_TYPE)
+      {
+        smt2lval.str = new std::string(s);
+        if (cleaned)
+          free (cleaned);
+        return  BOOLEAN_FUNCTIONID_TOK;
+      }
+      else if (stp::GlobalParserInterface->LookupSymbol(s,nptr)) // it's a symbol.
+      {
+        found = true;
+      }
     }
     else if (stp::GlobalParserInterface->LookupSymbol(s,nptr)) // it's a symbol.
     {
