@@ -64,6 +64,12 @@ BVSLT		2	2	Form
 BVSLE		2	2	Form
 BVSGT		2	2	Form
 BVSGE		2	2	Form
+BVUADDO		2	2	Form
+BVSADDO		2	2	Form
+BVUMULO		2	2	Form
+BVSMULO		2	2	Form
+BVUSUBO		2	2	Form
+BVSSUBO		2	2	Form
 EQ		2	2	Form
 FALSE		0	0	Form
 TRUE		0	0	Form

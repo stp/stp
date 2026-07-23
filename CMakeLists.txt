@@ -501,6 +501,26 @@ if (USE_RISS)
 endif()
 
 # -----------------------------------------------------------------------------
+# Setup Cadical
+# -----------------------------------------------------------------------------
+option(USE_CADICAL "Try to use Cadical" OFF)
+add_feature_info(Cadical USE_CADICAL "Enables Cadical solver")
+
+if (USE_CADICAL)
+    set(CADICAL_DIR "" CACHE PATH "Path to a CaDiCaL checkout (the directory containing src/cadical.hpp and build/libcadical.a)")
+    find_path(CADICAL_INCLUDE_DIR NAMES src/cadical.hpp HINTS ${CADICAL_DIR})
+    find_library(CADICAL_LIBRARY NAMES cadical HINTS ${CADICAL_DIR}/build)
+    if (NOT CADICAL_INCLUDE_DIR OR NOT CADICAL_LIBRARY)
+        message(FATAL_ERROR "USE_CADICAL is set but CaDiCaL was not found. "
+                "Set CADICAL_DIR to a CaDiCaL checkout containing src/cadical.hpp and build/libcadical.a")
+    endif()
+    message(STATUS "Found CaDiCaL: ${CADICAL_LIBRARY}")
+    add_definitions(-DUSE_CADICAL)
+    include_directories(${CADICAL_INCLUDE_DIR})
+    link_libraries(${CADICAL_LIBRARY})
+endif()
+
+# -----------------------------------------------------------------------------
 # Find CryptoMiniSat
 # -----------------------------------------------------------------------------
 option(NOCRYPTOMINISAT "Don't try to use cryptominisat" OFF)

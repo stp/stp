@@ -47,37 +47,28 @@ ASTNode HashingNodeFactory::CreateNode(const Kind kind,
   if (back_children.size()  <= 1 || !isCommutative(kind))
   {
     // Don't create a new vector if it won't be sorted.
-    ASTInterior* n_ptr = new ASTInterior(&bm, kind, back_children);
-    ASTNode n(bm.LookupOrCreateInterior(n_ptr));
-    return n;    
+    return ASTNode(bm.LookupOrCreateInterior(kind, back_children));
   }
   else if (is_Form_kind(kind)) // formula and commutative.
   {
-    const bool isSorted =  std::is_sorted(back_children.begin(),back_children.end(),stp::exprless);
+    const bool isSorted =  std::is_sorted(back_children.begin(),back_children.end(),stp::ExprLess{});
     if (isSorted)
     {
-      ASTInterior* n_ptr = new ASTInterior(&bm, kind, back_children);
-      ASTNode n(bm.LookupOrCreateInterior(n_ptr));
-      return n;
+      return ASTNode(bm.LookupOrCreateInterior(kind, back_children));
     }
 
     ASTVec sorted_children = back_children;
-    SortByExprNum(sorted_children);  
-    ASTInterior* n_ptr = new ASTInterior(&bm, kind, sorted_children);
-    ASTNode n(bm.LookupOrCreateInterior(n_ptr));
-    return n;
+    SortByExprNum(sorted_children);
+    return ASTNode(bm.LookupOrCreateInterior(kind, std::move(sorted_children)));
   }
   else
   {
     ASTVec children(back_children);
     // The Bitvector solver seems to expect constants on the RHS, variables on the
-    // LHS. 
+    // LHS.
     SortByArith(children);
 
-    // Todo - we could move the children into the astinterior.
-    ASTInterior* n_ptr = new ASTInterior(&bm, kind, children);
-    ASTNode n(bm.LookupOrCreateInterior(n_ptr));
-    return n;
+    return ASTNode(bm.LookupOrCreateInterior(kind, std::move(children)));
   }
 }
 

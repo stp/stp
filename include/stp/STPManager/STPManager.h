@@ -35,6 +35,7 @@ THE SOFTWARE.
 #include "stp/STPManager/UserDefinedFlags.h"
 #include "stp/Sat/SATSolver.h"
 #include "stp/Util/Attributes.h"
+#include "extlib-unordered-dense/ankerl/unordered_dense.h"
 
 namespace stp
 {
@@ -52,18 +53,21 @@ class STPMgr
 
 private:
   // Typedef for unique Interior node table.
-  typedef std::unordered_set<ASTInterior*, ASTInterior::ASTInteriorHasher,
-                             ASTInterior::ASTInteriorEqual>
+  typedef ankerl::unordered_dense::set<ASTInterior*,
+                                       ASTInterior::ASTInteriorHasher,
+                                       ASTInterior::ASTInteriorEqual>
       ASTInteriorSet;
 
   // Typedef for unique Symbol node (leaf) table.
-  typedef std::unordered_set<ASTSymbol*, ASTSymbol::ASTSymbolHasher,
-                             ASTSymbol::ASTSymbolEqual>
+  typedef ankerl::unordered_dense::set<ASTSymbol*,
+                                       ASTSymbol::ASTSymbolHasher,
+                                       ASTSymbol::ASTSymbolEqual>
       ASTSymbolSet;
 
   // Typedef for unique BVConst node (leaf) table.
-  typedef std::unordered_set<ASTBVConst*, ASTBVConst::ASTBVConstHasher,
-                             ASTBVConst::ASTBVConstEqual>
+  typedef ankerl::unordered_dense::set<ASTBVConst*,
+                                       ASTBVConst::ASTBVConstHasher,
+                                       ASTBVConst::ASTBVConstEqual>
       ASTBVConstSet;
 
   // Unique node tables that enables common subexpression sharing
@@ -158,6 +162,19 @@ private:
 
   // Create unique ASTInterior node.
   ASTInterior* LookupOrCreateInterior(ASTInterior* n);
+
+  // As above, but probes the unique table with a stack node, so nothing
+  // is heap-allocated when an equivalent node already exists.
+  ASTInterior* LookupOrCreateInterior(Kind kind, const ASTVec& children);
+
+  // As above, but moves an owned children vector into the probe (and, on a
+  // miss, into the heap node), avoiding a copy when the caller has a
+  // temporary to give up — e.g. a freshly sorted vector.
+  ASTInterior* LookupOrCreateInterior(Kind kind, ASTVec&& children);
+
+  // Shared tail of the two overloads above: look the probe up, or move it
+  // onto the heap and insert it.
+  ASTInterior* insertOrReuseProbe(ASTInterior&& probe);
 
   // Create unique ASTSymbol node.
   ASTSymbol* LookupOrCreateSymbol(ASTSymbol& s);
@@ -382,8 +399,11 @@ public:
   ASTNode CreateFreshVariable(int indexWidth, int valueWidth,
                               std::string prefix)
   {
+    // The '@' prefix puts the name in the namespace SMT-LIB 2 reserves for
+    // solver use: symbols beginning with '@' (or '.') may not be declared by
+    // the user, so an introduced variable can never collide with an input one.
     char* d = (char*)alloca(sizeof(char) * (32 + prefix.length()));
-    sprintf(d, "%s_%d", prefix.c_str(), _symbol_count++);
+    sprintf(d, "@%s_%d", prefix.c_str(), _symbol_count++);
     assert(!LookupSymbol(d));
 
     ASTNode CurrentSymbol = CreateSymbol(d, indexWidth, valueWidth);

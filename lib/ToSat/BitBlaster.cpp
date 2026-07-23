@@ -539,9 +539,10 @@ BitBlaster<BBNode, BBNodeManagerT>::simplify_during_bb(ASTNode& term,
       // Add all the nodes to the worklist that have a constant as a child.
       cb->initWorkList(n_term);
 
-      simplifier::constantBitP::NodeToFixedBitsMap::NodeToFixedBitsMapType::
-          iterator it;
-      it = cb->fixedMap->map->find(n_term);
+      // The FixedBits are held by pointer rather than map iterator:
+      // propagate() inserts into the map, which invalidates iterators,
+      // while the pointed-to FixedBits are stable.
+      auto it = cb->fixedMap->map->find(n_term);
       FixedBits* nBits;
       if (it == cb->fixedMap->map->end())
       {
@@ -561,25 +562,31 @@ BitBlaster<BBNode, BBNodeManagerT>::simplify_during_bb(ASTNode& term,
         *nBits = FixedBits::concreteToAbstract(n_term);
       }
 
-      it = cb->fixedMap->map->find(term);
-      if (it != cb->fixedMap->map->end())
+      FixedBits* termBits = nullptr;
+      {
+        const auto term_it = cb->fixedMap->map->find(term);
+        if (term_it != cb->fixedMap->map->end())
+          termBits = term_it->second;
+      }
+
+      if (termBits != nullptr)
       {
         // Copy over to the (potentially) new node. Everything we know about
         // the old node.
-        nBits->mergeIn(*(it->second));
+        nBits->mergeIn(*termBits);
       }
 
       cb->scheduleUp(n_term);
       cb->scheduleNode(n_term);
       cb->propagate();
 
-      if (it != cb->fixedMap->map->end())
+      if (termBits != nullptr)
       {
         // Copy to the old node, all we know about the new node. This means
         // that
         // all the parents of the old node get the (potentially) updated
         // fixings.
-        it->second->mergeIn(*nBits);
+        termBits->mergeIn(*nBits);
       }
       // Propagate through all the parents of term.
       cb->scheduleUp(term);
@@ -631,7 +638,7 @@ const BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& _term,
   if (!is_Term_kind(k))
     FatalError("BBTerm: Illegal kind to BBTerm", term);
 
-  const ASTVec::const_iterator kids_end = term.end();
+  const auto kids_end = term.end();
   const unsigned int num_bits = term.GetValueWidth();
   switch (k)
   {
@@ -813,7 +820,7 @@ const BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& _term,
       {
         // Add children pairwise and accumulate in BBsum
 
-        ASTVec::const_iterator it = term.begin();
+        auto it = term.begin();
         BBNodeVec tmp_res = BBTerm(*it, support);
         for (++it; it < kids_end; it++)
         {
@@ -922,7 +929,7 @@ const BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& _term,
     case BVNAND:
     {
       // Add children pairwise and accumulate in BBsum
-      ASTVec::const_iterator it = term.begin();
+      auto it = term.begin();
       Kind bk = UNDEFINED; // Kind of individual bit op.
       switch (k)
       {
@@ -1126,8 +1133,8 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form,
     {
       BBNodeVec bbkids; // bit-blasted children (formulas)
 
-      ASTVec::const_iterator kids_end = form.end();
-      for (ASTVec::const_iterator it = form.begin(); it != kids_end; it++)
+      auto kids_end = form.end();
+      for (auto it = form.begin(); it != kids_end; it++)
       {
         bbkids.push_back(BBForm(*it, support));
       }
@@ -1155,6 +1162,17 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form,
     case BVSLT:
     {
       result = BBcompare(form, support);
+      break;
+    }
+
+    case BVUADDO:
+    case BVSADDO:
+    case BVUMULO:
+    case BVSMULO:
+    case BVUSUBO:
+    case BVSSUBO:
+    {
+      result = BBOverflow(form, support);
       break;
     }
     default:
@@ -2882,6 +2900,99 @@ BBNode BitBlaster<BBNode, BBNodeManagerT>::BBcompare(const ASTNode& form,
     }
     default:
       cerr << "BBCompare: Illegal kind" << form << endl;
+      FatalError("", form);
+      exit(-1);
+  }
+}
+
+// Return bit-blasted form for the overflow predicates BVUADDO, BVSADDO,
+// BVUMULO, BVSMULO. Each returns a single boolean.
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode, BBNodeManagerT>::BBOverflow(const ASTNode& form,
+                                                      BBNodeSet& support)
+{
+  const Kind k = form.GetKind();
+  const unsigned w = form[0].GetValueWidth();
+  assert(w > 0);
+
+  switch (k)
+  {
+    case BVUADDO:
+    {
+      // Overflow == carry-out of the unsigned addition. Zero-extend both
+      // operands by one bit, add, and return the top bit of the sum.
+      BBNodeVec l = BBTerm(form[0], support);
+      BBNodeVec r = BBTerm(form[1], support);
+      l.push_back(nf->getFalse());
+      r.push_back(nf->getFalse());
+      BBPlus2(l, r, nf->getFalse());
+      return l[w];
+    }
+    case BVSADDO:
+    {
+      // Sign-extend both operands by one bit, add, and check whether the two
+      // top bits of the (w+1)-bit sum disagree.
+      BBNodeVec l = BBTerm(form[0], support);
+      BBNodeVec r = BBTerm(form[1], support);
+      l.push_back(l[w - 1]);
+      r.push_back(r[w - 1]);
+      BBPlus2(l, r, nf->getFalse());
+      return nf->CreateNode(XOR, l[w], l[w - 1]);
+    }
+    case BVUSUBO:
+    {
+      // Overflow (borrow) of the unsigned subtraction. Zero-extend both
+      // operands by one bit, subtract, and return the top bit: it is set iff
+      // the true difference is negative, i.e. iff form[0] <u form[1].
+      BBNodeVec l = BBTerm(form[0], support);
+      BBNodeVec r = BBTerm(form[1], support);
+      l.push_back(nf->getFalse());
+      r.push_back(nf->getFalse());
+      BBSub(l, r, support);
+      return l[w];
+    }
+    case BVSSUBO:
+    {
+      // Sign-extend both operands by one bit, subtract, and check whether the
+      // two top bits of the (w+1)-bit difference disagree.
+      BBNodeVec l = BBTerm(form[0], support);
+      BBNodeVec r = BBTerm(form[1], support);
+      l.push_back(l[w - 1]);
+      r.push_back(r[w - 1]);
+      BBSub(l, r, support);
+      return nf->CreateNode(XOR, l[w], l[w - 1]);
+    }
+    case BVUMULO:
+    case BVSMULO:
+    {
+      // Build the exact 2w-bit product (via zero/sign-extended operands) and
+      // reuse the existing multiplier, then inspect the high bits.
+      const Kind ext = (k == BVUMULO) ? BVZX : BVSX;
+      const ASTNode widthConst = ASTNF->CreateBVConst(32, 2 * w);
+      const ASTNode xE = ASTNF->CreateTerm(ext, 2 * w, form[0], widthConst);
+      const ASTNode yE = ASTNF->CreateTerm(ext, 2 * w, form[1], widthConst);
+      const ASTNode prod = ASTNF->CreateTerm(BVMULT, 2 * w, xE, yE);
+      const BBNodeVec p = BBTerm(prod, support);
+
+      if (k == BVUMULO)
+      {
+        // Overflow iff any high bit is set.
+        BBNodeVec high(p.begin() + w, p.end());
+        return nf->CreateNode(OR, high);
+      }
+      else
+      {
+        // Overflow iff the product is not the sign-extension of its low w bits,
+        // i.e. some bit above w-1 differs from the sign bit p[w-1].
+        BBNodeVec diffs;
+        diffs.reserve(w);
+        for (unsigned i = w; i < 2 * w; i++)
+          diffs.push_back(nf->CreateNode(XOR, p[i], p[w - 1]));
+        return nf->CreateNode(OR, diffs);
+      }
+    }
+    default:
+      cerr << "BBOverflow: Illegal kind" << form << endl;
       FatalError("", form);
       exit(-1);
   }

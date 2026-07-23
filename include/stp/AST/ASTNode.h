@@ -49,8 +49,8 @@ class ASTNode
   friend class vector<ASTNode>;
   friend ASTNode HashingNodeFactory::CreateNode(const stp::Kind kind,
                                                 const ASTVec& back_children);
-  friend bool exprless(const ASTNode n1, const ASTNode n2);
-  friend bool arithless(const ASTNode n1, const ASTNode n2);
+  friend bool exprless(const ASTNode& n1, const ASTNode& n2);
+  friend bool arithless(const ASTNode& n1, const ASTNode& n2);
 
   // Ptr to the read data
   ASTInternal* _int_node_ptr;
@@ -115,7 +115,9 @@ public:
   {
     const Kind k = GetKind();
     return k == BVLT || k == BVLE || k == BVGT || k == BVGE || k == BVSLT ||
-           k == BVSLE || k == BVSGT || k == BVSGE || k == EQ;
+           k == BVSLE || k == BVSGT || k == BVSGE || k == BVUADDO ||
+           k == BVSADDO || k == BVUMULO || k == BVSMULO || k == BVUSUBO ||
+           k == BVSSUBO || k == EQ;
   }
 
   // delegates to the ASTInternal node.
@@ -125,14 +127,16 @@ public:
   DLL_PUBLIC ASTNode& operator=(const ASTNode& n);
   DLL_PUBLIC ASTNode& operator=(ASTNode&& n);
 
-  // Access node number
-  unsigned GetNodeNum() const;
+  // Access node number. Inlined: ASTInternal is complete here (its header no
+  // longer includes this one), so these fold to direct field reads at the
+  // call sites. They are among the hottest calls in STP.
+  unsigned GetNodeNum() const { return _int_node_ptr->GetNodeNum(); }
 
   // Access kind.
-  Kind GetKind() const;
+  Kind GetKind() const { return _int_node_ptr->GetKind(); }
 
   // Access Children of this Node
-  const ASTVec& GetChildren() const;
+  ASTChildren GetChildren() const { return _int_node_ptr->GetChildren(); }
 
   // Return the number of child nodes
   size_t Degree() const { return GetChildren().size(); };
@@ -144,10 +148,10 @@ public:
   };
 
   // Get begin() iterator for child nodes
-  ASTVec::const_iterator begin() const { return GetChildren().begin(); };
+  const ASTNode* begin() const { return GetChildren().begin(); };
 
   // Get end() iterator for child nodes
-  ASTVec::const_iterator end() const { return GetChildren().end(); };
+  const ASTNode* end() const { return GetChildren().end(); };
 
   // Get back() element for child nodes
   const ASTNode back() const { return GetChildren().back(); };
@@ -173,8 +177,8 @@ public:
   void SetValueWidth(unsigned int vw) const;
   types GetType(void) const;
 
-  // Hash using pointer value of _int_node_ptr.
-  DLL_PUBLIC size_t Hash() const;
+  // Hash is the node's unique id. Inlined: used by every ==/</hash lookup.
+  size_t Hash() const { return _int_node_ptr ? _int_node_ptr->node_uid : 0; }
 
   void NFASTPrint(int l, int max, int prefix) const;
 

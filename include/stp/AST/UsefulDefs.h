@@ -77,6 +77,52 @@ typedef vector<ASTNode> ASTVec;
 typedef unsigned int* CBV;
 DLL_PUBLIC extern ASTVec _empty_ASTVec;
 
+/******************************************************************
+ * A non-owning view over a contiguous run of elements — like     *
+ * std::span, but available under C++17. Returned by GetChildren()*
+ * so a node's children need not be stored in a std::vector.      *
+ * A template so its element-touching members are only checked on *
+ * instantiation, where ASTNode is complete.                      *
+ ******************************************************************/
+template <class T> class Span
+{
+  T* _data;
+  size_t _size;
+
+public:
+  Span() : _data(nullptr), _size(0) {}
+  Span(T* data, size_t size) : _data(data), _size(size) {}
+  // Implicit view over a std::vector<ASTNode> (the historical storage).
+  Span(const ASTVec& v) : _data(v.data()), _size(v.size()) {}
+
+  T* begin() const { return _data; }
+  T* end() const { return _data + _size; }
+  size_t size() const { return _size; }
+  bool empty() const { return _size == 0; }
+  T& operator[](size_t i) const { return _data[i]; }
+  T& front() const { return _data[0]; }
+  T& back() const { return _data[_size - 1]; }
+  T* data() const { return _data; }
+
+  bool operator==(const Span& o) const
+  {
+    if (_size != o._size)
+      return false;
+    for (size_t i = 0; i < _size; i++)
+      if (!(_data[i] == o._data[i]))
+        return false;
+    return true;
+  }
+  bool operator!=(const Span& o) const { return !(*this == o); }
+};
+
+// The children of an interior node, as a read-only view.
+typedef Span<const ASTNode> ASTChildren;
+
+// Materialise a children view into an owned vector (only where a mutable or
+// std::vector-typed copy is genuinely needed).
+DLL_PUBLIC ASTVec toASTVec(const ASTChildren& c);
+
 // Error handling function
 DLL_PUBLIC extern void (*vc_error_hdlr)(const char* err_msg);
 

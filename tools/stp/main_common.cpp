@@ -98,6 +98,12 @@ void Main::parse_file(ASTVec* AssertsQuery)
 
   GlobalParserInterface->startup();
 
+  if (bm->UserFlags.parse_only)
+  {
+    // The SMT2 parser runs commands (including check-sat) as it parses.
+    GlobalParserInterface->ignoreCheckSat();
+  }
+
   if (onePrintBack)
   {
     if (bm->UserFlags.smtlib2_parser_flag)
@@ -116,6 +122,11 @@ void Main::parse_file(ASTVec* AssertsQuery)
   }
   else if (bm->UserFlags.smtlib2_parser_flag)
   {
+    bool interactive = infile.empty(); // reading from stdin.
+    if (bm->UserFlags.interactive_read != -1)
+      interactive = bm->UserFlags.interactive_read != 0;
+    setSMT2Interactive(interactive);
+
     SMT2Parse();
     smt2lex_destroy();
   }
@@ -285,7 +296,14 @@ int Main::main(int argc, char** argv)
    *  language is smt2 then all the work has already been done, and all we need
    *  to do is cleanup...
    *    */
-  if (!bm->UserFlags.smtlib2_parser_flag)
+  if (bm->UserFlags.parse_only)
+  {
+    if (bm->UserFlags.quick_statistics_flag)
+    {
+      bm->GetRunTimes()->print();
+    }
+  }
+  else if (!bm->UserFlags.smtlib2_parser_flag)
   {
     if (AssertsQuery->empty())
       FatalError("Input is Empty. Please enter some asserts and query\n");

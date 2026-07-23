@@ -24,7 +24,10 @@ THE SOFTWARE.
 #ifndef ASTINTERNAL_H
 #define ASTINTERNAL_H
 
-#include "stp/AST/ASTNode.h"
+// NB: deliberately do NOT include ASTNode.h here. ASTInternal only needs
+// ASTVec and a forward declaration of ASTNode (both from UsefulDefs.h);
+// including ASTNode.h would create a circular include that forces the hot
+// ASTNode accessors (GetKind/GetNodeNum/...) to be defined out-of-line.
 #include "stp/AST/UsefulDefs.h"
 #include <iostream>
 
@@ -74,7 +77,7 @@ protected:
   // the are NOTs of.
   //
   uint64_t node_uid;
-  static THREAD_LOCAL uint64_t node_uid_cntr;
+  static THREAD_LOCAL_IE uint64_t node_uid_cntr;
 
   // reference counting for garbage collection
   uint32_t _ref_count;
@@ -127,11 +130,12 @@ protected:
   // is for printing hex. numbers that C compilers will accept
   virtual void nodeprint(ostream& os, bool /*c_friendly*/) { os << "*"; };
 
-  // Treat the result as const pleases
-  virtual Kind GetKind() const { return _kind; }
+  // Treat the result as const pleases.
+  // Non-virtual: no subclass overrides it, so this is just a field read.
+  Kind GetKind() const { return _kind; }
 
   // Get the child nodes of this node
-  virtual ASTVec const& GetChildren() const = 0;
+  virtual ASTChildren GetChildren() const = 0;
 
 public:
   // Constructor (kind only, empty children, int nodenum)

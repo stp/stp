@@ -225,29 +225,27 @@ void ExtraMain::create_options()
 
   po::options_description solver_options("SAT Solver options");
   solver_options.add_options()
+#ifdef USE_CADICAL
+      ("cadical", "use cadical as the solver")
+#endif
+
 #ifdef USE_CRYPTOMINISAT
       ("cryptominisat",
-       "use cryptominisat as the solver. Only use CryptoMiniSat 5.0 or above "
-       "(default).")("threads",
-                     po::value<int>(&bm->UserFlags.num_solver_threads)
-                         ->default_value(bm->UserFlags.num_solver_threads),
-                     "Number of threads for cryptominisat")
+       "use cryptominisat as the solver. Only use CryptoMiniSat 5.0 or above ")
+      ("threads",
+       po::value<int>(&bm->UserFlags.num_solver_threads)
+       ->default_value(bm->UserFlags.num_solver_threads),
+      "Number of threads for cryptominisat")
 #endif
 #ifdef USE_RISS
       ("riss",
        "use Riss as the solver"
-#ifndef USE_CRYPTOMINISAT
-       "(default)."
-#endif
       )
 #endif
          ("simplifying-minisat",
            "use installed simplifying minisat version as the solver")(
               "minisat", "use installed minisat version as the solver "
 #ifndef USE_CRYPTOMINISAT
-#ifndef USE_RISS
-                         "(default)"
-#endif
 #endif
               );
 
@@ -352,9 +350,19 @@ void ExtraMain::create_options()
 
   po::options_description misc_options("Output options");
   misc_options.add_options()
-      ("exit-after-CNF",
-       po::bool_switch(&(bm->UserFlags.exit_after_CNF)),
+
+      // exit-after-CNF
+      ("exit-after-CNF", po::bool_switch(&(bm->UserFlags.exit_after_CNF)),
        "exit after the CNF has been generated")
+
+      ("parse-only", po::bool_switch(&(bm->UserFlags.parse_only)),
+       "exit after parsing the input, without solving")
+
+      ("interactive", po::value<bool>(),
+       "read the input a character at a time, as needed when driving stp "
+       "interactively over a pipe. Off reads in blocks, which is faster. "
+       "Default: on when reading from stdin, off when reading from a file. "
+       "SMT-LIB2 only.")
 
       ("max-num-confl,max_num_confl,g", 
       INT64_ARG(bm->UserFlags.timeout_max_conflicts),
@@ -420,6 +428,11 @@ int ExtraMain::parse_options(int argc, char** argv)
     bm->UserFlags.bitConstantProp_flag = false;
   }
 
+  if (vm.count("interactive"))
+  {
+    bm->UserFlags.interactive_read = vm["interactive"].as<bool>() ? 1 : 0;
+  }
+
   int selected_type = 0;
   if (vm.count("CVC"))
   {
@@ -465,12 +478,16 @@ int ExtraMain::parse_options(int argc, char** argv)
     bm->UserFlags.solver_to_use = UserDefinedFlags::MINISAT_SOLVER;
   }
 
-#ifdef USE_CRYPTOMINISAT
   if (vm.count("cryptominisat"))
   {
     bm->UserFlags.solver_to_use = UserDefinedFlags::CRYPTOMINISAT5_SOLVER;
   }
-#endif
+
+  if (vm.count("cadical"))
+  {
+    bm->UserFlags.solver_to_use = UserDefinedFlags::CADICAL_SOLVER;
+  }
+
 
   if (vm.count("disable-simplifications"))
   {

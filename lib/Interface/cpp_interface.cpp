@@ -212,7 +212,7 @@ void Cpp_interface::removeSymbol(ASTNode to_remove)
     FatalError("Should have been removed...");
 }
 
-void Cpp_interface::storeFunction(const string name, const ASTVec& params,
+void Cpp_interface::storeFunction(const string& name, const ASTVec& params,
                                   const ASTNode& function)
 {
   Function f;
@@ -239,13 +239,24 @@ void Cpp_interface::storeFunction(const string name, const ASTVec& params,
   getCurrentFunctions().push_back(f.name);
 }
 
-ASTNode Cpp_interface::applyFunction(const string name, const ASTVec& params)
+ASTNode Cpp_interface::applyFunction(const string& name, const ASTVec& params)
 {
-  if (functions.find(name) == functions.end())
+  const auto found = functions.find(name);
+  if (found == functions.end())
     FatalError("Trying to apply function which has not been defined.");
 
-  Function f;
-  f = functions[string(name)];
+  const Function& f = found->second;
+
+  if (f.params.size() != params.size())
+    FatalError("Actual parameters differ in number from formal");
+
+  // A nullary function application is just its body: there is nothing to
+  // substitute, so skip building the (always empty) fromTo and cache maps
+  // and the replace() traversal. Files built from define-funs with no
+  // parameters (e.g. bit-blasted circuits) apply such functions millions
+  // of times, once each, so the per-call map churn dominated.
+  if (f.params.empty())
+    return f.function;
 
   ASTNodeMap fromTo;
   for (size_t i = 0, size = f.params.size(); i < size; ++i)
@@ -263,16 +274,31 @@ ASTNode Cpp_interface::applyFunction(const string name, const ASTVec& params)
   return SubstitutionMap::replace(f.function, fromTo, cache, nf);
 }
 
-bool Cpp_interface::isBitVectorFunction(const string name)
+bool Cpp_interface::isBitVectorFunction(const string& name)
 {
-  return ((functions.find(name) != functions.end()) &&
-          functions.find(name)->second.function.GetType() == BITVECTOR_TYPE);
+  const auto found = functions.find(name);
+  if (found == functions.end())
+    return false;
+
+  return found->second.function.GetType() == BITVECTOR_TYPE;
 }
 
-bool Cpp_interface::isBooleanFunction(const string name)
+bool Cpp_interface::isBooleanFunction(const string& name)
 {
-  return ((functions.find(name) != functions.end()) &&
-          functions.find(name)->second.function.GetType() == BOOLEAN_TYPE);
+  const auto found = functions.find(name);
+  if (found == functions.end())
+    return false;
+
+  return found->second.function.GetType() == BOOLEAN_TYPE;
+}
+
+types Cpp_interface::functionReturnType(const string& name)
+{
+  const auto found = functions.find(name);
+  if (found == functions.end())
+    return UNKNOWN_TYPE;
+
+  return found->second.function.GetType();
 }
 
 ASTNode Cpp_interface::LookupOrCreateSymbol(string name)
@@ -549,6 +575,12 @@ void Cpp_interface::cleanUp()
   letMgr->cleanupParserSymbolTable();
   cache.clear();
 
+  // Every frame is going away, so don't erase the functions from the
+  // map one at a time (files can define millions of functions).
+  functions.clear();
+  for (SolverFrame* frame : frames)
+    frame->getFunctions().clear();
+
   while (frames.size() > 0)
   {
     removeFrame();
@@ -664,7 +696,8 @@ void CNFClearMemory()
 }
 
 Cpp_interface::SolverFrame::SolverFrame(
-    std::unordered_map<std::string, Function>* global_function_context)
+    ankerl::unordered_dense::map<std::string, Function>*
+        global_function_context)
     : _global_function_context(global_function_context)
 {
 }

@@ -49,7 +49,6 @@ private:
   // value is simplified node.
   ASTNodeMap* SimplifyMap;
   ASTNodeMap* SimplifyNegMap;
-  std::unordered_set<int> AlwaysTrueHashSet;
   ASTNodeMap MultInverseMap;
 
   NodeFactory* nf;
@@ -87,8 +86,6 @@ public:
                         ASTNodeMap* VarConstMap = NULL);
   void UpdateSimplifyMap(const ASTNode& key, const ASTNode& value, bool pushNeg,
                          ASTNodeMap* VarConstMap = NULL);
-  bool CheckAlwaysTrueFormSet(const ASTNode& key, bool& result);
-  void UpdateAlwaysTrueFormSet(const ASTNode& val);
   bool CheckMultInverseMap(const ASTNode& key, ASTNode& output);
   void UpdateMultInverseMap(const ASTNode& key, const ASTNode& value);
 
@@ -170,7 +167,6 @@ public:
   {
     SimplifyMap->clear();
     SimplifyNegMap->clear();
-    AlwaysTrueHashSet.clear();
     MultInverseMap.clear();
     substitutionMap.clear();
   }
@@ -178,7 +174,6 @@ public:
   // These can be cleared (to save memory) without changing the answer.
   void ClearCaches()
   {
-    AlwaysTrueHashSet.clear();
     MultInverseMap.clear();
     SimplifyMap->clear();
     SimplifyNegMap->clear();

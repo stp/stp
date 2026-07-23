@@ -1885,7 +1885,7 @@ Expr getChild(Expr e, int i)
 {
   stp::ASTNode* a = (stp::ASTNode*)e;
 
-  stp::ASTVec c = a->GetChildren();
+  const stp::ASTChildren c = a->GetChildren();
   if (0 <= i && (unsigned)i < c.size())
   {
     stp::ASTNode o = c[i];

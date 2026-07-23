@@ -1,11 +1,11 @@
 /*%option reentrant
 %option bison-bridge*/
-%option always-interactive
 %option noyywrap
 %option nounput
 %option noreject
 %option noyymore
 %option yylineno
+%option full
 
 %{
 /********************************************************************
@@ -83,28 +83,42 @@
     stp::ASTNode nptr;
     bool found = false;
 
-    if (stp::GlobalParserInterface->letMgr->isLetDeclared(s)) // Lets shadow everything else.
+    if (const stp::ASTNode* let = stp::GlobalParserInterface->letMgr->lookupLet(s)) // Lets shadow everything else.
     {
-      nptr = stp::GlobalParserInterface->letMgr->resolveLet(s);
+      nptr = *let;
       found = true;
+    }
+    // Checking the functions before the symbols saves a symbol-table
+    // probe in files built almost entirely from define-funs. A name can't
+    // legally be both, so the order isn't observable on valid input. A
+    // single functionReturnType probe classifies the name, avoiding the
+    // second map lookup that separate isBitVector/isBooleanFunction calls
+    // would cost on boolean-function references.
+    else if (stp::GlobalParserInterface->hasFunctions())
+    {
+      const stp::types ft = stp::GlobalParserInterface->functionReturnType(s);
+      if (ft == stp::BITVECTOR_TYPE)
+      {
+        smt2lval.str = new std::string(s);
+        if (cleaned)
+          free (cleaned);
+        return  BITVECTOR_FUNCTIONID_TOK;
+      }
+      else if (ft == stp::BOOLEAN_TYPE)
+      {
+        smt2lval.str = new std::string(s);
+        if (cleaned)
+          free (cleaned);
+        return  BOOLEAN_FUNCTIONID_TOK;
+      }
+      else if (stp::GlobalParserInterface->LookupSymbol(s,nptr)) // it's a symbol.
+      {
+        found = true;
+      }
     }
     else if (stp::GlobalParserInterface->LookupSymbol(s,nptr)) // it's a symbol.
     {
       found = true;
-    }
-    else if (stp::GlobalParserInterface->isBitVectorFunction(s))
-    {
-      smt2lval.str = new std::string(s);
-      if (cleaned)
-        free (cleaned);
-      return  BITVECTOR_FUNCTIONID_TOK;
-    }
-    else if (stp::GlobalParserInterface->isBooleanFunction(s))
-    {
-       smt2lval.str = new std::string(s);
-       if (cleaned)
-         free (cleaned);
-       return  BOOLEAN_FUNCTIONID_TOK;
     }
 
     if (found)
@@ -277,6 +291,14 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 "repeat"        { return BVREPEAT_TOK;}
 "rotate_left"   { return BVROTATE_LEFT_TOK;}
 "rotate_right"  { return BVROTATE_RIGHT_TOK;}
+"bvnego"        { return BVNEGO_TOK;}
+"bvuaddo"       { return BVUADDO_TOK;}
+"bvsaddo"       { return BVSADDO_TOK;}
+"bvumulo"       { return BVUMULO_TOK;}
+"bvsmulo"       { return BVSMULO_TOK;}
+"bvusubo"       { return BVUSUBO_TOK;}
+"bvssubo"       { return BVSSUBO_TOK;}
+"bvsdivo"       { return BVSDIVO_TOK;}
 
  /* Functions for QF_AUFBV. */
 "select"        { return SELECT_TOK; }
@@ -299,5 +321,11 @@ namespace stp {
 
   void setSMT2In(FILE* file) {
     smt2in = file;
+  }
+
+  void setSMT2Interactive(bool enable) {
+    if (smt2in == NULL)
+      smt2in = stdin;
+    yy_set_interactive(enable ? 1 : 0);
   }
 }

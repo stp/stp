@@ -41,6 +41,7 @@ using simplifier::constantBitP::Dependencies;
 RemoveUnconstrained::RemoveUnconstrained(STPMgr& _bm) : bm(_bm)
 {
   nf = _bm.defaultNodeFactory;
+  simplifier = NULL;
 }
 
 ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier)
@@ -83,9 +84,6 @@ bool allChildrenAreUnconstrained(vector<MutableASTNode*> children)
   return true;
 }
 
-//Global variable TODO!! This is really bad.
-THREAD_LOCAL Simplifier* simplifier_convenient;
-
 ASTNode
 RemoveUnconstrained::replaceParentWithFresh(MutableASTNode& mute,
                                             vector<MutableASTNode*>& variables)
@@ -103,7 +101,7 @@ void RemoveUnconstrained::replace(const ASTNode& from, const ASTNode to)
 {
   assert(from.GetKind() == SYMBOL);
   assert(from.GetValueWidth() == to.GetValueWidth());
-  simplifier_convenient->UpdateSubstitutionMapFewChecks(from, to);
+  simplifier->UpdateSubstitutionMapFewChecks(from, to);
 }
 
 /* The most complicated handling is for EXTRACTS. If a variable has parents that
@@ -198,7 +196,7 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
   if (n.GetKind() == SYMBOL)
     return n; // top level is an unconstrained symbol/.
 
-  simplifier_convenient = simplifier;
+  this->simplifier = simplifier;
 
   MutableASTNode* topMutable = MutableASTNode::build(n);
 
@@ -595,13 +593,18 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
       break;
 
       case BVMOD:
+      case SBVREM:
+      case SBVMOD:
       {
         assert(numberOfChildren == 2);
         if (mutable_children[0]->isUnconstrained() &&
-            mutable_children[1]->isUnconstrained() &&
-            false) // TODO why don't we do it for bvmod??
+            mutable_children[1]->isUnconstrained())
         {
           assert(children[0] != children[1]);
+          // STP defines remainder-by-zero as the dividend: bvurem, bvsrem and
+          // bvsmod all return x when the divisor is 0 (see consteval.cpp). So
+          // (v rem 0) == v, and a fresh dividend with divisor 0 reproduces
+          // every value.
           ASTNode v = replaceParentWithFresh(muteParent, variable_array);
           replace(children[1], bm.CreateZeroConst(width));
           replace(children[0], v);
@@ -610,12 +613,16 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
       break;
 
       case BVDIV:
+      case SBVDIV:
       {
         assert(numberOfChildren == 2);
         if (mutable_children[0]->isUnconstrained() &&
             mutable_children[1]->isUnconstrained())
         {
           assert(children[0] != children[1]);
+          // (v / 1) == v for both signed and unsigned division (and 1 avoids
+          // the divide-by-zero result), so a fresh dividend with divisor 1
+          // reproduces every value.
           ASTNode v = replaceParentWithFresh(muteParent, variable_array);
           replace(children[1], bm.CreateOneConst(width));
           replace(children[0], v);
@@ -641,118 +648,124 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
           ASTNode rhs = nf->CreateTerm(BVMULT, width, inverse, v);
           replace(var, rhs);
         }
-
-        break;
-        case IFF:
-        {
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
-
-          ASTNode rhs =
-              nf->CreateNode(ITE, v, muteOther->toASTNode(&bm),
-                             nf->CreateNode(NOT, muteOther->toASTNode(&bm)));
-          replace(var, rhs);
-        }
-        break;
-        case EQ:
-        {
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
-
-          width = var.GetValueWidth();
-          ASTNode rhs = nf->CreateTerm(
-              ITE, width, v, muteOther->toASTNode(&bm),
-              nf->CreateTerm(BVPLUS, width, muteOther->toASTNode(&bm),
-                             bm.CreateOneConst(width)));
-
-          replace(var, rhs);
-        }
-        break;
-        case BVSUB:
-        {
-          assert(numberOfChildren == 2);
-
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
-
-          ASTNode rhs;
-
-          if (children[0] == var)
-            rhs = nf->CreateTerm(BVPLUS, width, v, muteOther->toASTNode(&bm));
-          if (children[1] == var)
-            rhs = nf->CreateTerm(BVSUB, width, muteOther->toASTNode(&bm), v);
-
-          replace(var, rhs);
-        }
-        break;
-
-        case BVPLUS:
-        {
-          ASTVec other;
-          for (size_t i = 0; i < children.size(); i++)
-            if (children[i] != var)
-              other.push_back(mutable_children[i]->toASTNode(&bm));
-
-          assert(other.size() == children.size() - 1);
-          assert(other.size() >= 1);
-
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
-
-          ASTNode rhs;
-          if (other.size() > 1)
-            rhs = nf->CreateTerm(BVSUB, width, v,
-                                 nf->CreateTerm(BVPLUS, width, other));
-          else
-            rhs = nf->CreateTerm(BVSUB, width, v, other[0]);
-
-          replace(var, rhs);
-        }
-        break;
-        case BVEXTRACT:
-        {
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
-
-          const unsigned operandWidth = var.GetValueWidth();
-          assert(children[0] == var); // It can't be anywhere else.
-
-          // Create Fresh variables to pad the LHS and RHS.
-          const unsigned high = children[1].GetUnsignedConst();
-          const unsigned low = children[2].GetUnsignedConst();
-          assert(high >= low);
-
-          const int rhsSize = low;
-          const int lhsSize = operandWidth - high - 1;
-
-          ASTNode current = v;
-          int newWidth = v.GetValueWidth();
-
-          if (lhsSize > 0)
-          {
-            ASTNode lhsFresh =
-                bm.CreateFreshVariable(0, lhsSize, "lhs_padding");
-            current =
-                nf->CreateTerm(BVCONCAT, newWidth + lhsSize, lhsFresh, current);
-            newWidth += lhsSize;
-          }
-
-          if (rhsSize > 0)
-          {
-            ASTNode rhsFresh =
-                bm.CreateFreshVariable(0, rhsSize, "rhs_padding");
-            current =
-                nf->CreateTerm(BVCONCAT, newWidth + rhsSize, current, rhsFresh);
-            newWidth += rhsSize;
-          }
-
-          assert(newWidth == (long int)operandWidth);
-          replace(var, current);
-        }
-        break;
-        default:
-        {
-          // cerr << "!!!!" << kind << endl;
-        }
-
-          //        cerr << var;
-          //      cerr << parent;
       }
+      break;
+
+      case IFF:
+      {
+        // Normally unreachable: the SimplifyingNodeFactory rewrites IFF(a,b)
+        // to NOT(XOR(a,b)) on creation, so the standard pipeline never feeds
+        // an IFF node to this pass (it's handled by the NOT and XOR cases
+        // instead). Kept as a defensive fallback for non-simplifying factories.
+        ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+
+        ASTNode rhs =
+            nf->CreateNode(ITE, v, muteOther->toASTNode(&bm),
+                           nf->CreateNode(NOT, muteOther->toASTNode(&bm)));
+        replace(var, rhs);
+      }
+      break;
+
+      case EQ:
+      {
+        ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+
+        width = var.GetValueWidth();
+        ASTNode rhs = nf->CreateTerm(
+            ITE, width, v, muteOther->toASTNode(&bm),
+            nf->CreateTerm(BVPLUS, width, muteOther->toASTNode(&bm),
+                           bm.CreateOneConst(width)));
+
+        replace(var, rhs);
+      }
+      break;
+
+      case BVSUB:
+      {
+        assert(numberOfChildren == 2);
+
+        ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+
+        ASTNode rhs;
+
+        if (children[0] == var)
+          rhs = nf->CreateTerm(BVPLUS, width, v, muteOther->toASTNode(&bm));
+        if (children[1] == var)
+          rhs = nf->CreateTerm(BVSUB, width, muteOther->toASTNode(&bm), v);
+
+        replace(var, rhs);
+      }
+      break;
+
+      case BVPLUS:
+      {
+        ASTVec other;
+        for (size_t i = 0; i < children.size(); i++)
+          if (children[i] != var)
+            other.push_back(mutable_children[i]->toASTNode(&bm));
+
+        assert(other.size() == children.size() - 1);
+        assert(other.size() >= 1);
+
+        ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+
+        ASTNode rhs;
+        if (other.size() > 1)
+          rhs = nf->CreateTerm(BVSUB, width, v,
+                               nf->CreateTerm(BVPLUS, width, other));
+        else
+          rhs = nf->CreateTerm(BVSUB, width, v, other[0]);
+
+        replace(var, rhs);
+      }
+      break;
+
+      case BVEXTRACT:
+      {
+        ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+
+        const unsigned operandWidth = var.GetValueWidth();
+        assert(children[0] == var); // It can't be anywhere else.
+
+        // Create Fresh variables to pad the LHS and RHS.
+        const unsigned high = children[1].GetUnsignedConst();
+        const unsigned low = children[2].GetUnsignedConst();
+        assert(high >= low);
+
+        const int rhsSize = low;
+        const int lhsSize = operandWidth - high - 1;
+
+        ASTNode current = v;
+        int newWidth = v.GetValueWidth();
+
+        if (lhsSize > 0)
+        {
+          ASTNode lhsFresh = bm.CreateFreshVariable(0, lhsSize, "lhs_padding");
+          current =
+              nf->CreateTerm(BVCONCAT, newWidth + lhsSize, lhsFresh, current);
+          newWidth += lhsSize;
+        }
+
+        if (rhsSize > 0)
+        {
+          ASTNode rhsFresh = bm.CreateFreshVariable(0, rhsSize, "rhs_padding");
+          current =
+              nf->CreateTerm(BVCONCAT, newWidth + rhsSize, current, rhsFresh);
+          newWidth += rhsSize;
+        }
+
+        assert(newWidth == (long int)operandWidth);
+        replace(var, current);
+      }
+      break;
+
+      default:
+      {
+        // cerr << "!!!!" << kind << endl;
+      }
+
+        //        cerr << var;
+        //      cerr << parent;
     }
   }
 

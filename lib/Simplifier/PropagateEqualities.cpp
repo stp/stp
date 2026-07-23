@@ -476,7 +476,7 @@ void PropagateEqualities::buildCandidateList(const ASTNode& a)
   }
   else if (IFF == k || EQ == k)
   {
-    const ASTVec& c = a.GetChildren();
+    const ASTChildren c = a.GetChildren();
     const auto width = c[0].GetValueWidth();
     bool added = false;
 
@@ -538,12 +538,7 @@ void PropagateEqualities::buildCandidateList(const ASTNode& a)
   else if (AND == k)
   {
     for (const auto& it : a)
-    {
-      if (always_true)
-        simp->UpdateAlwaysTrueFormSet(it);
-      
       buildCandidateList(it);
-    }
   }
 }
 

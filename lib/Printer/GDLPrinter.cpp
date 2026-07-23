@@ -70,14 +70,14 @@ void GDL_Print1(ostream& os, const ASTNode& n,
   os << "\"}" << endl;
 
   // print the edges to each child.
-  const ASTVec ch = n.GetChildren();
-  const ASTVec::const_iterator itend = ch.end();
+  const ASTChildren ch = n.GetChildren();
+  const auto itend = ch.end();
 
   // If a node has the child 'TRUE' twice, we only want to output one TRUE node.
   ASTNodeSet constantOutput;
 
   int i = 0;
-  for (ASTVec::const_iterator it = ch.begin(); it < itend; it++)
+  for (auto it = ch.begin(); it < itend; it++)
   {
     std::stringstream label;
 
@@ -112,7 +112,7 @@ void GDL_Print1(ostream& os, const ASTNode& n,
   }
 
   // print each of the children.
-  for (ASTVec::const_iterator it = ch.begin(); it < itend; it++)
+  for (auto it = ch.begin(); it < itend; it++)
   {
     if (!it->isConstant())
       GDL_Print1(os, *it, alreadyOutput, annotate);

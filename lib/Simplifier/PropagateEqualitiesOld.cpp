@@ -209,7 +209,7 @@ ASTNode PropagateEqualities::propagate(const ASTNode& a, ArrayTransformer* at)
   }
   else if (IFF == k || EQ == k)
   {
-    const ASTVec& c = a.GetChildren();
+    const ASTChildren c = a.GetChildren();
 
     if (c[0] == c[1])
       return ASTTrue;
@@ -341,15 +341,13 @@ ASTNode PropagateEqualities::propagate(const ASTNode& a, ArrayTransformer* at)
   }
   else if (AND == k)
   {
-    const ASTVec& c = a.GetChildren();
+    const ASTChildren c = a.GetChildren();
     ASTVec o;
     o.reserve(c.size());
 
     for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend;
          it++)
     {
-      if (always_true)
-        simp->UpdateAlwaysTrueFormSet(*it);
       ASTNode aaa = propagate(*it, at);
 
       if (ASTTrue != aaa)

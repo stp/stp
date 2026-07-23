@@ -46,13 +46,13 @@ ostream& Lisp_Print1(ostream& os, const ASTNode& n, int indentation)
   Kind kind = n.GetKind();
   // FIXME: figure out how to avoid symbols with same names as kinds.
   //    if (kind == READ) {
-  //      const ASTVec &children = GetChildren();
+  //      const ASTChildren children = GetChildren();
   //      children[0].LispPrint1(os, indentation);
   //  os << "[" << children[1] << "]";
   //    } else
   if (kind == BOOLEXTRACT)
   {
-    const ASTVec& children = n.GetChildren();
+    const ASTChildren children = n.GetChildren();
     // child 0 is a symbol.  Print without the NodeNum.
     os << n.GetNodeNum() << ":";
 
@@ -63,7 +63,7 @@ ostream& Lisp_Print1(ostream& os, const ASTNode& n, int indentation)
   }
   else if (kind == NOT)
   {
-    const ASTVec& children = n.GetChildren();
+    const ASTChildren children = n.GetChildren();
     os << n.GetNodeNum() << ":";
     os << "(NOT ";
     Lisp_Print1(os, children[0], indentation);
@@ -87,13 +87,13 @@ ostream& Lisp_Print1(ostream& os, const ASTNode& n, int indentation)
   else
   {
     Lisp_AlreadyPrintedSet.insert(n);
-    const ASTVec& children = n.GetChildren();
+    const ASTChildren children = n.GetChildren();
     os << n.GetNodeNum() << ":"
        //<< "(" << _int_node_ptr->_ref_count << ")"
        << "(" << kind << " ";
     // os << "{" << GetValueWidth() << "}";
-    ASTVec::const_iterator iend = children.end();
-    for (ASTVec::const_iterator i = children.begin(); i != iend; i++)
+    auto iend = children.end();
+    for (auto i = children.begin(); i != iend; i++)
     {
       Lisp_Print_indent(os, *i, indentation + 2);
     }

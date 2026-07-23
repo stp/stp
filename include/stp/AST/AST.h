@@ -36,8 +36,22 @@ DLL_PUBLIC ATTR_NORETURN void FatalError(const char* str, const ASTNode& a,
 DLL_PUBLIC ATTR_NORETURN void FatalError(const char* str);
 void SortByExprNum(ASTVec& c);
 void SortByArith(ASTVec& c);
-bool exprless(const ASTNode n1, const ASTNode n2);
-bool arithless(const ASTNode n1, const ASTNode n2);
+bool exprless(const ASTNode& n1, const ASTNode& n2);
+bool arithless(const ASTNode& n1, const ASTNode& n2);
+
+// Functor form of exprless. Passing a free function to std::sort/is_sorted
+// hands it a function pointer, which the algorithm cannot inline, so every
+// comparison is an indirect call. This functor's operator() inlines (and
+// GetNodeNum is itself inline), folding the comparison into the sort's inner
+// loop. Ordering is identical to exprless. Used on the node-creation hot
+// path, where sorting commutative children dominates parse time.
+struct ExprLess
+{
+  bool operator()(const ASTNode& n1, const ASTNode& n2) const
+  {
+    return n1.GetNodeNum() < n2.GetNodeNum();
+  }
+};
 bool isAtomic(Kind k);
 bool isCommutative(const Kind k);
 bool containsArrayOps(const ASTNode& n, STPMgr* stp);
@@ -58,7 +72,7 @@ bool BVTypeCheck(const ASTNode& n);
 
 long getCurrentTime();
 
-ASTVec FlattenKind(Kind k, const ASTVec& children, int maxDepth = INT_MAX);
+ASTVec FlattenKind(Kind k, const ASTChildren& children, int maxDepth = INT_MAX);
 
 // Checks recursively all the way down.
 bool BVTypeCheckRecursive(const ASTNode& n);
@@ -86,7 +100,7 @@ typedef std::unordered_map<ASTNode, ASTVec, ASTNode::ASTNodeHasher,
                            ASTNode::ASTNodeEqual>
     ASTNodeToVecMap;
 
-void FlattenKindNoDuplicates(const Kind k, const ASTVec& children,
+void FlattenKindNoDuplicates(const Kind k, const ASTChildren& children,
                              ASTVec& flat_children,
                              ASTNodeSet& alreadyFlattened);
 

@@ -136,6 +136,15 @@ public:
 
   bool exit_after_CNF = false;
 
+  // Stop after parsing the input, skipping any check-sat commands.
+  bool parse_only = false;
+
+  // Whether the SMT-LIB2 lexer reads a character at a time, as needed when
+  // stp is driven interactively over a pipe, rather than in blocks.
+  // -1: character at a time for stdin, blocks for files. 0: blocks. 1:
+  // character at a time.
+  int64_t interactive_read = -1;
+
   /* SAT solving options */
 
   int64_t timeout_max_conflicts = -1;
@@ -154,7 +163,8 @@ public:
     MINISAT_SOLVER = 0,
     SIMPLIFYING_MINISAT_SOLVER,
     CRYPTOMINISAT5_SOLVER,
-    RISS_SOLVER
+    RISS_SOLVER,
+    CADICAL_SOLVER
   };
 
   enum SATSolvers solver_to_use;
@@ -199,7 +209,9 @@ public:
 
   UserDefinedFlags()
   {
-
+#ifdef USE_CADICAL
+    solver_to_use = CADICAL_SOLVER;
+#else
 #ifdef USE_CRYPTOMINISAT
     solver_to_use = CRYPTOMINISAT5_SOLVER;
 #else
@@ -207,6 +219,7 @@ public:
     solver_to_use = RISS_SOLVER;
 #else
     solver_to_use = MINISAT_SOLVER;
+#endif
 #endif
 #endif
   }

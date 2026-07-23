@@ -25,6 +25,7 @@ THE SOFTWARE.
 #ifndef ASTINTERIOR_H
 #define ASTINTERIOR_H
 
+#include "ASTNode.h"
 #include "ASTInternal.h"
 #include "stp/NodeFactory/HashingNodeFactory.h"
 #include "UsefulDefs.h"
@@ -51,6 +52,12 @@ class ASTInterior : public ASTInternal
 
   // The vector of children
   ASTVec _children;
+
+  // Lazily computed by ASTInteriorHasher; 0 means not yet computed.
+  // Stays valid because the kind and children never change once set up,
+  // so the hash isn't recomputed on insertion or removal from the
+  // unique table.
+  mutable size_t _cached_hash = 0;
 
   /******************************************************************
    * Hasher for ASTInterior pointer nodes                           *
@@ -107,6 +114,17 @@ public:
       node_uid = children[0].GetNodeNum() + 1;
   }
 
+  // As above, but takes ownership of an already-owned children vector,
+  // avoiding a copy when the caller has a temporary to give up.
+  ASTInterior(STPMgr* mgr, Kind kind, ASTVec&& children)
+      : ASTInternal(mgr, kind), _children(std::move(children)), _value_width(0),
+        _index_width(0)
+  {
+    is_simplified = false;
+    if (kind == NOT)
+      node_uid = _children[0].GetNodeNum() + 1;
+  }
+
   // This copies the contents of the child nodes
   // array, along with everything else. Assigning the smart pointer,
   // ASTNode, does NOT invoke this.
@@ -117,11 +135,21 @@ public:
     is_simplified = false;
   }
 
+  // Steals the children of a probe node that was built on the stack to
+  // search the unique table, keeping its node number and cached hash.
+  ASTInterior(ASTInterior&& int_node)
+      : ASTInternal(int_node), _children(std::move(int_node._children)),
+        _cached_hash(int_node._cached_hash), _value_width(int_node._value_width),
+        _index_width(int_node._index_width)
+  {
+    is_simplified = false;
+  }
+
   ASTInterior& operator=(const ASTInterior& other) = delete;
 
   virtual ~ASTInterior();
 
-  virtual ASTVec const& GetChildren() const { return _children; }
+  virtual ASTChildren GetChildren() const { return _children; }
 
   bool isSimplified() const { return is_simplified; }
 

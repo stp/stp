@@ -661,6 +661,109 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       break;
     }
 
+    // Overflow predicates. These are Form nodes, so 'inputwidth' is 0; the
+    // operand width comes from the children.
+    case BVUADDO:
+    {
+      assert(2 == number_of_children);
+      const unsigned w = children[0].GetValueWidth();
+      CBV sum = CONSTANTBV::BitVector_Create(w, true);
+      bool carry = false;
+      CONSTANTBV::BitVector_add(sum, tmp0, tmp1, &carry);
+      CONSTANTBV::BitVector_Destroy(sum);
+      OutputNode = carry ? ASTTrue : ASTFalse;
+      break;
+    }
+    case BVSADDO:
+    {
+      assert(2 == number_of_children);
+      const unsigned w = children[0].GetValueWidth();
+      CBV sum = CONSTANTBV::BitVector_Create(w, true);
+      bool carry = false;
+      CONSTANTBV::BitVector_add(sum, tmp0, tmp1, &carry);
+      // Signed add overflows iff both operands share a sign that differs
+      // from the sign of the result.
+      const bool s0 = CONSTANTBV::BitVector_msb_(tmp0);
+      const bool s1 = CONSTANTBV::BitVector_msb_(tmp1);
+      const bool ss = CONSTANTBV::BitVector_msb_(sum);
+      CONSTANTBV::BitVector_Destroy(sum);
+      OutputNode = ((s0 == s1) && (s0 != ss)) ? ASTTrue : ASTFalse;
+      break;
+    }
+    case BVUMULO:
+    case BVSMULO:
+    {
+      assert(2 == number_of_children);
+      const unsigned w = children[0].GetValueWidth();
+      const bool isSigned = (k == BVSMULO);
+      // Extend both operands (zero- or sign-extend), multiply exactly, then
+      // inspect the high bits. BitVector_Multiply is a signed multiply that
+      // reports overflow once the product's magnitude reaches the
+      // destination's sign bit, so the intermediates need 2w+1 bits: an
+      // unsigned product can be up to (2^w-1)^2, which exceeds the signed
+      // 2w-bit maximum but fits in 2w+1 bits.
+      const unsigned ew = 2 * w + 1;
+      CBV y2 = CONSTANTBV::BitVector_Create(ew, true);
+      CBV z2 = CONSTANTBV::BitVector_Create(ew, true);
+      CBV prod = CONSTANTBV::BitVector_Create(ew, true);
+      if (isSigned && CONSTANTBV::BitVector_Sign(tmp0) < 0)
+        CONSTANTBV::BitVector_Fill(y2);
+      if (isSigned && CONSTANTBV::BitVector_Sign(tmp1) < 0)
+        CONSTANTBV::BitVector_Fill(z2);
+      CONSTANTBV::BitVector_Interval_Copy(y2, tmp0, 0, 0, w);
+      CONSTANTBV::BitVector_Interval_Copy(z2, tmp1, 0, 0, w);
+      CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Multiply(prod, y2, z2);
+      if (0 != e)
+        BVConstEvaluatorError(e);
+      bool overflow = false;
+      if (isSigned)
+      {
+        // Overflow iff the product is not the sign-extension of its low w bits.
+        const bool sign = CONSTANTBV::BitVector_bit_test(prod, w - 1);
+        for (unsigned i = w; i < ew; i++)
+          if (CONSTANTBV::BitVector_bit_test(prod, i) != sign)
+            overflow = true;
+      }
+      else
+      {
+        // Overflow iff any high bit is set.
+        for (unsigned i = w; i < ew; i++)
+          if (CONSTANTBV::BitVector_bit_test(prod, i))
+            overflow = true;
+      }
+      CONSTANTBV::BitVector_Destroy(y2);
+      CONSTANTBV::BitVector_Destroy(z2);
+      CONSTANTBV::BitVector_Destroy(prod);
+      OutputNode = overflow ? ASTTrue : ASTFalse;
+      break;
+    }
+    case BVUSUBO:
+    {
+      assert(2 == number_of_children);
+      // Unsigned subtraction overflows (borrows) iff tmp0 <u tmp1.
+      OutputNode =
+          (CONSTANTBV::BitVector_Lexicompare(tmp0, tmp1) < 0) ? ASTTrue
+                                                              : ASTFalse;
+      break;
+    }
+    case BVSSUBO:
+    {
+      assert(2 == number_of_children);
+      const unsigned w = children[0].GetValueWidth();
+      CBV diff = CONSTANTBV::BitVector_Create(w, true);
+      bool carry = false;
+      // diff = tmp0 - tmp1
+      CONSTANTBV::BitVector_sub(diff, tmp0, tmp1, &carry);
+      // Signed subtraction overflows iff the operands differ in sign and the
+      // result's sign differs from the minuend's sign.
+      const bool s0 = CONSTANTBV::BitVector_msb_(tmp0);
+      const bool s1 = CONSTANTBV::BitVector_msb_(tmp1);
+      const bool sd = CONSTANTBV::BitVector_msb_(diff);
+      CONSTANTBV::BitVector_Destroy(diff);
+      OutputNode = ((s0 != s1) && (s0 != sd)) ? ASTTrue : ASTFalse;
+      break;
+    }
+
     case TRUE:
       OutputNode = ASTTrue;
       break;
@@ -807,7 +910,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* mgr, const ASTNode& t)
   if (t.isConstant())
     return t;
 
-  return NonMemberBVConstEvaluator(mgr, t.GetKind(), t.GetChildren(),
+  return NonMemberBVConstEvaluator(mgr, t.GetKind(), toASTVec(t.GetChildren()),
                                    t.GetValueWidth());
 }
 

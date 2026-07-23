@@ -50,7 +50,7 @@ ASTNode createConstant(int bitWidth, int val, STPMgr* beev)
   CBV cbv = CONSTANTBV::BitVector_Create(bitWidth, true);
   int max = bitWidth > ((int)sizeof(int) * 8) ? sizeof(int) * 8 : bitWidth;
   for (int i = 0; i < max; i++)
-    if (val & (1 << i))
+    if (val & (1u << i))
       CONSTANTBV::BitVector_Bit_On(cbv, i);
   return beev->CreateBVConst(cbv, bitWidth);
 }
@@ -138,18 +138,13 @@ void concretise(const ASTNode& variable, const FixedBits& fixed,
 
     if (fixed.isFixed(0))
     {
-      if (!fixed.getValue(0)) // if it's false, try to find a true assignment.
-      {
-        assert(map.find(variable) != map.end());
-        int v = (map.find(variable)->second)[0];
-        satSolverClause.push(SATSolver::mkLit(v, false));
-      }
-      else
-      {
-        assert(map.find(variable) != map.end());
-        int v = (map.find(variable)->second)[0];
-        satSolverClause.push(SATSolver::mkLit(v, true));
-      }
+      assert(map.find(variable) != map.end());
+      const unsigned v = (map.find(variable)->second)[0];
+      // Bits that didn't get encoded into CNF have no SAT variable
+      // (marked with ~0 by ToCNFAIG::addVariables). Making a literal from
+      // that index corrupts the SAT solver's watch lists.
+      if (v != ~((unsigned)0))
+        satSolverClause.push(SATSolver::mkLit(v, fixed.getValue(0)));
     }
   }
   else
@@ -161,8 +156,9 @@ void concretise(const ASTNode& variable, const FixedBits& fixed,
       if (fixed.isFixed(i))
       {
         assert(map.find(variable) != map.end());
-        int v = (map.find(variable)->second)[i];
-        satSolverClause.push(SATSolver::mkLit(v, fixed.getValue(i)));
+        const unsigned v = (map.find(variable)->second)[i];
+        if (v != ~((unsigned)0)) // See above: the bit wasn't encoded.
+          satSolverClause.push(SATSolver::mkLit(v, fixed.getValue(i)));
       }
     }
   }
@@ -403,10 +399,15 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind,
   bool disabledProp = !beev->UserFlags.bitConstantProp_flag;
   bool printOutput = beev->UserFlags.print_output_flag;
   bool checkCounter = beev->UserFlags.check_counterexample_flag;
+  bool constructCounter = beev->UserFlags.construct_counterexample_flag;
 
   beev->UserFlags.bitConstantProp_flag = false;
   beev->UserFlags.print_output_flag = false;
   beev->UserFlags.check_counterexample_flag = false;
+  // The refinement loop reads each SAT model back via GetCounterExample;
+  // without this flag CallSAT_ResultCheck never constructs the model, every
+  // "model" reads as all-zero, and the loop cannot terminate.
+  beev->UserFlags.construct_counterexample_flag = true;
 
   ASTVec initialFixing;
 
@@ -551,6 +552,7 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind,
   beev->UserFlags.bitConstantProp_flag = !disabledProp;
   beev->UserFlags.print_output_flag = printOutput;
   beev->UserFlags.check_counterexample_flag = checkCounter;
+  beev->UserFlags.construct_counterexample_flag = constructCounter;
 
   return first;
 }

@@ -527,7 +527,7 @@ ASTNode BVSolver::TopLevelBVSolve(const ASTNode& _input,
   if (EQ == k)
     c.push_back(input);
   else
-    c = input.GetChildren();
+    c = toASTVec(input.GetChildren());
 
   ASTVec eveneqns;
   bool any_solved = false;
@@ -648,9 +648,9 @@ ASTNode BVSolver::CheckEvenEqn(const ASTNode& input, bool& evenflag)
   }
   //Now, LHS is BVPLUS and RHS is ZERO
 
-  const ASTVec& lhs_c = lhs.GetChildren();
+  const ASTChildren lhs_c = lhs.GetChildren();
   ASTNode savetheconst = rhs;
-  for (ASTVec::const_iterator it = lhs_c.begin(), itend = lhs_c.end();
+  for (auto it = lhs_c.begin(), itend = lhs_c.end();
        it != itend; it++)
   {
     const ASTNode aaa = *it;
@@ -718,7 +718,7 @@ ASTNode BVSolver::BVSolve_Even(const ASTNode& input)
   }
   else
   {
-    input_c = input.GetChildren();
+    input_c = toASTVec(input.GetChildren());
   }
 
   // power_of_2 holds the exponent of 2 in the coeff
@@ -744,8 +744,8 @@ ASTNode BVSolver::BVSolve_Even(const ASTNode& input)
       return input;
     }
 
-    const ASTVec& lhs_c = lhs.GetChildren();
-    for (ASTVec::const_iterator it = lhs_c.begin(), itend = lhs_c.end();
+    const ASTChildren lhs_c = lhs.GetChildren();
+    for (auto it = lhs_c.begin(), itend = lhs_c.end();
          it != itend; it++)
     {
       const ASTNode aaa = *it;
@@ -811,9 +811,9 @@ ASTNode BVSolver::BVSolve_Even(const ASTNode& input)
       two =
           _simp->BVConstEvaluator(_bm->CreateTerm(BVMULT, len, two_const, two));
     }
-    const ASTVec& lhs_c = lhs.GetChildren();
+    const ASTChildren lhs_c = lhs.GetChildren();
     ASTVec lhs_out;
-    for (ASTVec::const_iterator it = lhs_c.begin(), itend = lhs_c.end();
+    for (auto it = lhs_c.begin(), itend = lhs_c.end();
          it != itend; it++)
     {
       ASTNode aaa = *it;

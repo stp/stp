@@ -37,6 +37,11 @@ THE SOFTWARE.
 #include "stp/Sat/Riss.h"
 #endif
 
+#ifdef USE_CADICAL
+#include "stp/Sat/Cadical.h"
+#endif
+
+
 #include "stp/Sat/MinisatCore.h"
 #include "stp/Sat/SimplifyingMinisat.h"
 
@@ -97,6 +102,7 @@ SATSolver* STP::get_new_sat_solver()
     case UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER:
       newS = new SimplifyingMinisat;
       break;
+      
     case UserDefinedFlags::CRYPTOMINISAT5_SOLVER:
 #ifdef USE_CRYPTOMINISAT
       newS = new CryptoMiniSat5(bm->UserFlags.num_solver_threads);
@@ -118,6 +124,16 @@ SATSolver* STP::get_new_sat_solver()
     case UserDefinedFlags::MINISAT_SOLVER:
       newS = new MinisatCore;
       break;
+    
+    case UserDefinedFlags::CADICAL_SOLVER:
+#ifdef USE_CADICAL
+      newS = new Cadical();
+      break;
+#else
+      std::cerr << "Cadical support was not enabled at configure time."
+                << std::endl;
+      exit(-1);
+#endif
     default:
       std::cerr << "ERROR: Undefined solver to use." << endl;
       exit(-1);
@@ -588,6 +604,17 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
     if (bm->UserFlags.stats_flag)
       cerr << "simplification made the problem harder, reverting." << endl;
+
+    // Variable-to-constant assignments discovered during the discarded
+    // simplification can't make the problem harder, so they are re-applied
+    // to the reverted formula.
+    ASTNodeMap keptConstants;
+    for (const auto& e : *simp->Return_SolverMap())
+      if (e.first.GetKind() == SYMBOL && e.second.isConstant() &&
+          revert->initialSolverMap.find(e.first) ==
+              revert->initialSolverMap.end())
+        keptConstants.insert(e);
+
     inputToSat = revert->toRevertTo;
 
     // I do this to clear the substitution/solver map.
@@ -598,6 +625,19 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     simp->Return_SolverMap()->insert(revert->initialSolverMap.begin(),
                                      revert->initialSolverMap.end());
     revert->initialSolverMap.clear();
+
+    if (keptConstants.size() > 0)
+    {
+      if (bm->UserFlags.stats_flag)
+        cerr << "Re-applying " << keptConstants.size()
+             << " discovered constants." << endl;
+      ASTNodeMap cache;
+      inputToSat = SubstitutionMap::replace(inputToSat, keptConstants, cache,
+                                            bm->defaultNodeFactory);
+      simp->Return_SolverMap()->insert(keptConstants.begin(),
+                                       keptConstants.end());
+      bm->ASTNodeStats("after reverting: ", inputToSat);
+    }
 
     // Copy back what we knew about arrays at the start..
     arrayTransformer->arrayToIndexToRead.clear();

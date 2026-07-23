@@ -73,7 +73,7 @@ class AlwaysTrue
     }
 
     ASTNode result = n;
-    if (newChildren != n.GetChildren())
+    if (ASTChildren(newChildren) != n.GetChildren())
     {
       if (n.GetType() == BOOLEAN_TYPE)
         result = nf->CreateNode(n.GetKind(), newChildren);

@@ -140,9 +140,9 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
    // Making 4.4M strings took 1B instructions. So I split out the above case
    // which occurs >90% of the time (so avoiding turning the char* into a string).
    string str(yytext);
-   if (GlobalParserInterface->letMgr->isLetDeclared(str)) // a let.
+   if (const ASTNode* let = GlobalParserInterface->letMgr->lookupLet(str)) // a let.
    {
-     nptr= GlobalParserInterface->letMgr->resolveLet(str);
+     nptr= *let;
      cvclval.node = GlobalParserInterface->newNode(nptr);
 
      if ((cvclval.node)->GetType() == BOOLEAN_TYPE)

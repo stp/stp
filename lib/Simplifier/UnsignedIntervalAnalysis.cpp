@@ -36,7 +36,6 @@ THE SOFTWARE.
 #include "stp/Simplifier/StrengthReduction.h"
 #include <iostream>
 #include <map>
-#include <cmath>
 
 using std::map;
 
@@ -54,6 +53,956 @@ namespace stp
   }
 
   using std::make_pair;
+
+  namespace
+  {
+    // Reads a shift amount, capped at the width. Shifting by the width or
+    // more discards (or sign-fills) everything, so larger amounts behave the
+    // same as shifting by the width.
+    unsigned cappedShiftAmount(const CBV shift, unsigned width)
+    {
+      // Set_Max is the index of the highest set bit (negative if none).
+      if (CONSTANTBV::Set_Max(shift) >= (signed long)(8 * sizeof(unsigned)))
+        return width; // Too big to read out, so certainly >= the width.
+
+      const unsigned amount = *shift; // The value fits into the first word.
+      return std::min(amount, width);
+    }
+
+    // ---- The six bounds of the bitwise operations over the intervals
+    // x in [a, b] and y in [c, d], from section 4-3 of Hacker's Delight.
+    // Each scans candidate positions from the top, trying to raise a
+    // minimum (clearing every bit below) or lower a maximum (setting
+    // every bit below), keeping a candidate when it stays inside its
+    // operand's interval. The scans run on 64-bit chunks read straight
+    // from the bitvector storage: the whole-vector comparison a
+    // candidate needs factors into "are the chunks above still equal to
+    // the bound's" (the drivers track that) plus one word comparison in
+    // the current chunk, because the candidate's chunks above are
+    // untouched and its chunks below are all-zero against an upper
+    // bound or all-one against a lower bound. ----
+
+    // The 64 bits of x starting at any bit offset, as a machine word.
+    // Chunk_Read clamps at the vector's width and reads zero past it, so
+    // no guards are needed. Two 32-bit reads because Chunk_Read is
+    // capped at the bits of an unsigned long, which isn't 64 everywhere.
+    uint64_t chunkAt(const CBV x, unsigned offset)
+    {
+      uint64_t r = CONSTANTBV::BitVector_Chunk_Read(x, 32, offset);
+      r |= (uint64_t)CONSTANTBV::BitVector_Chunk_Read(x, 32, offset + 32)
+           << 32;
+      return r;
+    }
+
+    // Bits [64k, 64k+63] of x as a machine word.
+    uint64_t chunk64(const CBV x, unsigned k)
+    {
+      return chunkAt(x, 64 * k);
+    }
+
+    // The inverse of chunk64. The value's bits above the vector's width
+    // must be zero.
+    void setChunk64(CBV x, unsigned k, uint64_t value)
+    {
+      const unsigned offset = 64 * k;
+      CONSTANTBV::BitVector_Chunk_Store(x, 32, offset, value);
+      CONSTANTBV::BitVector_Chunk_Store(x, 32, offset + 32, value >> 32);
+    }
+
+    // Which operand a chunk kernel changed.
+    enum class Changed
+    {
+      None,
+      First,
+      Second
+    };
+
+    // One chunk of the minOR scan; a and c are the operands' chunks and
+    // cw the chunk's bit count. bEff/dEff are the accept bounds: the
+    // bound's own chunk while the chunks above are all equal to it,
+    // otherwise all-ones because a higher chunk already decided the
+    // comparison in the candidate's favour.
+    Changed minORChunk(uint64_t& a, uint64_t bEff, uint64_t& c,
+                       uint64_t dEff, unsigned cw)
+    {
+      for (unsigned i = cw; i-- > 0;)
+      {
+        const uint64_t m = (uint64_t)1 << i;
+        if (!(a & m) && (c & m))
+        {
+          // Raising a to supply this bit lets everything below it be zero.
+          const uint64_t raised = (a | m) & ~(m - 1);
+          if (raised <= bEff)
+          {
+            a = raised;
+            return Changed::First;
+          }
+        }
+        else if ((a & m) && !(c & m))
+        {
+          const uint64_t raised = (c | m) & ~(m - 1);
+          if (raised <= dEff)
+          {
+            c = raised;
+            return Changed::Second;
+          }
+        }
+      }
+      return Changed::None;
+    }
+
+    // For the maximums the accept bounds flip: aEff/cEff are the
+    // minimum's chunk while the chunks above are all equal, otherwise
+    // zero because the comparison is already won.
+    Changed maxORChunk(uint64_t& b, uint64_t aEff, uint64_t& d,
+                       uint64_t cEff, unsigned cw)
+    {
+      for (unsigned i = cw; i-- > 0;)
+      {
+        const uint64_t m = (uint64_t)1 << i;
+        if ((b & m) && (d & m))
+        {
+          // One operand can donate this bit; lowering the other one sets
+          // every bit below it.
+          uint64_t lowered = (b & ~m) | (m - 1);
+          if (lowered >= aEff)
+          {
+            b = lowered;
+            return Changed::First;
+          }
+          lowered = (d & ~m) | (m - 1);
+          if (lowered >= cEff)
+          {
+            d = lowered;
+            return Changed::Second;
+          }
+        }
+      }
+      return Changed::None;
+    }
+
+    Changed minANDChunk(uint64_t& a, uint64_t bEff, uint64_t& c,
+                        uint64_t dEff, unsigned cw)
+    {
+      for (unsigned i = cw; i-- > 0;)
+      {
+        const uint64_t m = (uint64_t)1 << i;
+        if (!(a & m) && !(c & m))
+        {
+          // The bit is zero in both minimums, so it is zero in the result;
+          // raising one minimum past it lets everything below be zero.
+          uint64_t raised = (a | m) & ~(m - 1);
+          if (raised <= bEff)
+          {
+            a = raised;
+            return Changed::First;
+          }
+          raised = (c | m) & ~(m - 1);
+          if (raised <= dEff)
+          {
+            c = raised;
+            return Changed::Second;
+          }
+        }
+      }
+      return Changed::None;
+    }
+
+    Changed maxANDChunk(uint64_t& b, uint64_t aEff, uint64_t& d,
+                        uint64_t cEff, unsigned cw)
+    {
+      for (unsigned i = cw; i-- > 0;)
+      {
+        const uint64_t m = (uint64_t)1 << i;
+        if ((b & m) && !(d & m))
+        {
+          // The bit can't survive the AND; giving it up sets every bit
+          // below it.
+          const uint64_t lowered = (b & ~m) | (m - 1);
+          if (lowered >= aEff)
+          {
+            b = lowered;
+            return Changed::First;
+          }
+        }
+        else if (!(b & m) && (d & m))
+        {
+          const uint64_t lowered = (d & ~m) | (m - 1);
+          if (lowered >= cEff)
+          {
+            d = lowered;
+            return Changed::Second;
+          }
+        }
+      }
+      return Changed::None;
+    }
+
+    // One chunk of the minXOR scan. Unlike OR/AND a kept candidate keeps
+    // helping at the lower bits, so the scan continues and the flags
+    // report which operands changed. Only positions where a and c differ
+    // can act, so the loop jumps between those with count-leading-zeros.
+    void minXORChunk(uint64_t& a, uint64_t bEff, uint64_t& c,
+                     uint64_t dEff, unsigned cw, bool& aChanged,
+                     bool& cChanged)
+    {
+      const uint64_t chunkMask =
+          (cw >= 64) ? ~(uint64_t)0 : (((uint64_t)1 << cw) - 1);
+      uint64_t candidates = (a ^ c) & chunkMask;
+      while (candidates != 0)
+      {
+        const uint64_t m = (uint64_t)1 << (63 - __builtin_clzll(candidates));
+        if (c & m) // and not a: raising a can cancel c's bit
+        {
+          const uint64_t raised = (a | m) & ~(m - 1);
+          if (raised <= bEff)
+          {
+            a = raised;
+            aChanged = true;
+            candidates = (a ^ c) & (m - 1);
+            continue;
+          }
+        }
+        else // a has the bit, c doesn't
+        {
+          const uint64_t raised = (c | m) & ~(m - 1);
+          if (raised <= dEff)
+          {
+            c = raised;
+            cChanged = true;
+            candidates = (a ^ c) & (m - 1);
+            continue;
+          }
+        }
+        candidates &= m - 1;
+      }
+    }
+
+    // Only positions where both maximums have the bit do anything: the
+    // shared bit cancels in the XOR, and giving it up in one operand
+    // sets everything below it.
+    void maxXORChunk(uint64_t& b, uint64_t aEff, uint64_t& d,
+                     uint64_t cEff, unsigned cw, bool& bChanged,
+                     bool& dChanged)
+    {
+      const uint64_t chunkMask =
+          (cw >= 64) ? ~(uint64_t)0 : (((uint64_t)1 << cw) - 1);
+      uint64_t candidates = b & d & chunkMask;
+      while (candidates != 0)
+      {
+        const uint64_t m = (uint64_t)1 << (63 - __builtin_clzll(candidates));
+        uint64_t lowered = (b & ~m) | (m - 1);
+        if (lowered >= aEff)
+        {
+          b = lowered;
+          bChanged = true;
+        }
+        else
+        {
+          lowered = (d & ~m) | (m - 1);
+          if (lowered >= cEff)
+          {
+            d = lowered;
+            dChanged = true;
+          }
+        }
+        candidates = b & d & (m - 1);
+      }
+    }
+
+    unsigned chunksOf(unsigned width)
+    {
+      return (width + 63) / 64;
+    }
+
+    // Chunk k of x << s, before any masking at the width: the target
+    // bits [64k, 64k+63] come from the source bits 64k-s upward, which
+    // is an offset read, a zero, or a partial low read shifted up.
+    uint64_t shlChunk(const CBV x, unsigned s, unsigned k)
+    {
+      const unsigned off = 64 * k;
+      if (off + 64 <= s)
+        return 0;
+      if (off >= s)
+        return chunkAt(x, off - s);
+      return chunkAt(x, 0) << (s - off);
+    }
+
+    // Chunk k of x >> s at the given width, filling the vacated top
+    // bits with ones when the value is negative (the stores clamp at
+    // the width, so bits set past it are harmless).
+    uint64_t shrChunk(const CBV x, unsigned s, unsigned k, unsigned width,
+                      bool negative)
+    {
+      uint64_t v = chunkAt(x, 64 * k + s);
+      if (negative)
+      {
+        const unsigned off = 64 * k;
+        const unsigned fillStart = width - s; // s is capped at the width
+        if (off >= fillStart)
+          v = ~(uint64_t)0;
+        else if (off + 64 > fillStart)
+          v |= ~(uint64_t)0 << (fillStart - off);
+      }
+      return v;
+    }
+
+    // Lexicographic comparison of two equal-length chunk arrays, most
+    // significant chunk first.
+    int compareChunks(const uint64_t* x, const uint64_t* y, unsigned K)
+    {
+      for (unsigned k = K; k-- > 0;)
+        if (x[k] != y[k])
+          return x[k] < y[k] ? -1 : 1;
+      return 0;
+    }
+
+    // Signed comparison of two width-bit vectors: flip the sign bit and
+    // compare unsigned, chunk-wise from the top.
+    int signedCompareCBV(const CBV x, const CBV y, unsigned width)
+    {
+      const unsigned K = chunksOf(width);
+      const uint64_t signBit = (uint64_t)1 << ((width - 1) % 64);
+      for (unsigned k = K; k-- > 0;)
+      {
+        uint64_t xk = chunk64(x, k), yk = chunk64(y, k);
+        if (k == K - 1)
+        {
+          xk ^= signBit;
+          yk ^= signBit;
+        }
+        if (xk != yk)
+          return xk < yk ? -1 : 1;
+      }
+      return 0;
+    }
+
+    // Is x the most negative (100..0) / most positive (011..1) value?
+    bool isTypeMin(const CBV x, unsigned width)
+    {
+      const unsigned K = chunksOf(width);
+      const uint64_t signBit = (uint64_t)1 << ((width - 1) % 64);
+      for (unsigned k = 0; k < K; k++)
+        if (chunk64(x, k) != (k == K - 1 ? signBit : 0))
+          return false;
+      return true;
+    }
+
+    bool isTypeMax(const CBV x, unsigned width)
+    {
+      const unsigned K = chunksOf(width);
+      const unsigned topBits = width - 64 * (K - 1);
+      const uint64_t topMask =
+          (topBits >= 64) ? ~(uint64_t)0 : (((uint64_t)1 << topBits) - 1);
+      const uint64_t signBit = (uint64_t)1 << ((width - 1) % 64);
+      for (unsigned k = 0; k < K; k++)
+        if (chunk64(x, k) !=
+            (k == K - 1 ? (topMask ^ signBit) : ~(uint64_t)0))
+          return false;
+      return true;
+    }
+
+    // ---- Bounds of the signed division family at widths up to 64.
+    // The operands split at the sign boundary into sign-consistent
+    // boxes, described by their magnitude ranges; within a box the
+    // quotient's magnitude is monotone in each argument, so its corners
+    // give exact per-box bounds, and the remainders are bounded by the
+    // divisor's and dividend's magnitudes. A possibly-zero divisor
+    // contributes the division-by-zero values. The result is the
+    // unsigned hull of all the pieces. ----
+
+    // Grows an unsigned hull piece by piece.
+    struct PieceHull
+    {
+      bool any = false;
+      uint64_t lo = 0, hi = 0;
+      void add(uint64_t l, uint64_t h)
+      {
+        if (!any)
+        {
+          lo = l;
+          hi = h;
+          any = true;
+          return;
+        }
+        if (l < lo)
+          lo = l;
+        if (h > hi)
+          hi = h;
+      }
+    };
+
+    // A sign-consistent part of an interval, as a magnitude range.
+    struct SignBox
+    {
+      bool negative;
+      uint64_t magLo, magHi;
+    };
+
+    // The value set {sign * m : m in [magLo, magHi]} as unsigned pieces.
+    void addSignedRange(PieceHull& out, bool negative, uint64_t magLo,
+                        uint64_t magHi, uint64_t mask)
+    {
+      if (!negative)
+      {
+        out.add(magLo, magHi);
+        return;
+      }
+      if (magLo == 0)
+      {
+        out.add(0, 0);
+        if (magHi == 0)
+          return;
+        magLo = 1;
+      }
+      out.add((~magHi + 1) & mask, (~magLo + 1) & mask);
+    }
+
+    // Splits the unsigned interval [lo, hi] at the sign boundary.
+    unsigned signBoxesOf(uint64_t lo, uint64_t hi, unsigned width,
+                         SignBox* boxes)
+    {
+      const uint64_t mask =
+          (width >= 64) ? ~(uint64_t)0 : (((uint64_t)1 << width) - 1);
+      const uint64_t signB = (uint64_t)1 << (width - 1);
+      unsigned count = 0;
+      if (lo < signB)
+        boxes[count++] = {false, lo, std::min(hi, signB - 1)};
+      if (hi >= signB)
+      {
+        const uint64_t nlo = std::max(lo, signB);
+        // Magnitudes flip the order: the biggest magnitude is the
+        // smallest unsigned value.
+        boxes[count++] = {true, (~hi + 1) & mask, (~nlo + 1) & mask};
+      }
+      return count;
+    }
+
+    // The unsigned hull of kind(x, y) over x in [av, bv], y in [cv, dv].
+    bool signedDivOpHull(Kind kind, uint64_t av, uint64_t bv, uint64_t cv,
+                         uint64_t dv, unsigned width, uint64_t& outLo,
+                         uint64_t& outHi)
+    {
+      const uint64_t mask =
+          (width >= 64) ? ~(uint64_t)0 : (((uint64_t)1 << width) - 1);
+
+      SignBox xs[2], ys[2];
+      const unsigned nx = signBoxesOf(av, bv, width, xs);
+      unsigned ny = signBoxesOf(cv, dv, width, ys);
+
+      // Zero is its own divisor case; drop it from the boxes.
+      const bool zeroDivisor = (cv == 0);
+      for (unsigned j = 0; j < ny; j++)
+        if (!ys[j].negative && ys[j].magLo == 0)
+        {
+          if (ys[j].magHi == 0)
+            ys[j] = ys[--ny]; // the box was only zero
+          else
+            ys[j].magLo = 1;
+        }
+
+      PieceHull out;
+
+      if (kind == SBVMOD)
+      {
+        // The sign and magnitude bound follow the divisor: the value
+        // lies in [0, y-1] for positive y and (y, 0] for negative y.
+        for (unsigned j = 0; j < ny; j++)
+          addSignedRange(out, ys[j].negative, 0, ys[j].magHi - 1, mask);
+      }
+
+      for (unsigned i = 0; i < nx; i++)
+      {
+        if (zeroDivisor)
+        {
+          if (kind == SBVDIV)
+          {
+            // Division by zero: all ones for a non-negative dividend,
+            // one for a negative one.
+            if (xs[i].negative)
+              out.add(1, 1);
+            else
+              out.add(mask, mask);
+          }
+          else // remainder and modulus by zero are the dividend
+            addSignedRange(out, xs[i].negative, xs[i].magLo, xs[i].magHi,
+                           mask);
+        }
+
+        if (kind == SBVMOD)
+          continue; // handled per divisor box above
+
+        for (unsigned j = 0; j < ny; j++)
+        {
+          if (kind == SBVDIV)
+          {
+            // The quotient magnitude is monotone in both magnitudes.
+            const uint64_t qLo = xs[i].magLo / ys[j].magHi;
+            const uint64_t qHi = xs[i].magHi / ys[j].magLo;
+            addSignedRange(out, xs[i].negative != ys[j].negative, qLo, qHi,
+                           mask);
+          }
+          else // SBVREM: the sign follows the dividend
+          {
+            uint64_t rLo = 0;
+            uint64_t rHi = std::min(ys[j].magHi - 1, xs[i].magHi);
+            if (ys[j].magLo == ys[j].magHi)
+            {
+              // A constant magnitude divisor: if the dividend magnitudes
+              // share a quotient the remainders run between theirs.
+              const uint64_t q1 = xs[i].magLo / ys[j].magLo;
+              const uint64_t q2 = xs[i].magHi / ys[j].magLo;
+              if (q1 == q2)
+              {
+                rLo = xs[i].magLo % ys[j].magLo;
+                rHi = xs[i].magHi % ys[j].magLo;
+              }
+            }
+            addSignedRange(out, xs[i].negative, rLo, rHi, mask);
+          }
+        }
+      }
+
+      outLo = out.lo;
+      outHi = out.hi;
+      return out.any;
+    }
+
+    // The smallest x | y. The caller owns the returned bitvector, as
+    // with all six drivers.
+    CBV minOR(const CBV a, const CBV b, const CBV c, const CBV d)
+    {
+      const unsigned width = bits_(a);
+      CBV result = CONSTANTBV::BitVector_Create(width, true);
+      bool eqAB = true, eqCD = true;
+      for (unsigned k = chunksOf(width); k-- > 0;)
+      {
+        const unsigned cw = std::min(64u, width - 64 * k);
+        const uint64_t aK = chunk64(a, k), bK = chunk64(b, k);
+        const uint64_t cK = chunk64(c, k), dK = chunk64(d, k);
+        uint64_t aM = aK, cM = cK;
+        const Changed changed =
+            minORChunk(aM, eqAB ? bK : ~(uint64_t)0, cM,
+                       eqCD ? dK : ~(uint64_t)0, cw);
+        setChunk64(result, k, aM | cM);
+        if (changed != Changed::None)
+        {
+          // The kept candidate cleared everything below it, so the
+          // changed operand contributes nothing to the lower chunks.
+          for (unsigned j = k; j-- > 0;)
+            setChunk64(result, j,
+                       changed == Changed::First ? chunk64(c, j)
+                                                 : chunk64(a, j));
+          return result;
+        }
+        eqAB = eqAB && (aK == bK);
+        eqCD = eqCD && (cK == dK);
+      }
+      return result;
+    }
+
+    // The biggest x | y.
+    CBV maxOR(const CBV a, const CBV b, const CBV c, const CBV d)
+    {
+      const unsigned width = bits_(a);
+      CBV result = CONSTANTBV::BitVector_Create(width, true);
+      bool eqBA = true, eqDC = true;
+      for (unsigned k = chunksOf(width); k-- > 0;)
+      {
+        const unsigned cw = std::min(64u, width - 64 * k);
+        const uint64_t aK = chunk64(a, k), bK = chunk64(b, k);
+        const uint64_t cK = chunk64(c, k), dK = chunk64(d, k);
+        uint64_t bM = bK, dM = dK;
+        const Changed changed =
+            maxORChunk(bM, eqBA ? aK : 0, dM, eqDC ? cK : 0, cw);
+        setChunk64(result, k, bM | dM);
+        if (changed != Changed::None)
+        {
+          // The kept candidate set everything below it: all ones. Only
+          // full 64-bit chunks can sit below another chunk.
+          for (unsigned j = k; j-- > 0;)
+            setChunk64(result, j, ~(uint64_t)0);
+          return result;
+        }
+        eqBA = eqBA && (bK == aK);
+        eqDC = eqDC && (dK == cK);
+      }
+      return result;
+    }
+
+    // The smallest x & y.
+    CBV minAND(const CBV a, const CBV b, const CBV c, const CBV d)
+    {
+      const unsigned width = bits_(a);
+      CBV result = CONSTANTBV::BitVector_Create(width, true);
+      bool eqAB = true, eqCD = true;
+      for (unsigned k = chunksOf(width); k-- > 0;)
+      {
+        const unsigned cw = std::min(64u, width - 64 * k);
+        const uint64_t aK = chunk64(a, k), bK = chunk64(b, k);
+        const uint64_t cK = chunk64(c, k), dK = chunk64(d, k);
+        uint64_t aM = aK, cM = cK;
+        const Changed changed =
+            minANDChunk(aM, eqAB ? bK : ~(uint64_t)0, cM,
+                        eqCD ? dK : ~(uint64_t)0, cw);
+        setChunk64(result, k, aM & cM);
+        if (changed != Changed::None)
+        {
+          // The changed operand is zero below this chunk, and so is the
+          // AND: the fresh result vector is already clear there.
+          return result;
+        }
+        eqAB = eqAB && (aK == bK);
+        eqCD = eqCD && (cK == dK);
+      }
+      return result;
+    }
+
+    // The biggest x & y.
+    CBV maxAND(const CBV a, const CBV b, const CBV c, const CBV d)
+    {
+      const unsigned width = bits_(a);
+      CBV result = CONSTANTBV::BitVector_Create(width, true);
+      bool eqBA = true, eqDC = true;
+      for (unsigned k = chunksOf(width); k-- > 0;)
+      {
+        const unsigned cw = std::min(64u, width - 64 * k);
+        const uint64_t aK = chunk64(a, k), bK = chunk64(b, k);
+        const uint64_t cK = chunk64(c, k), dK = chunk64(d, k);
+        uint64_t bM = bK, dM = dK;
+        const Changed changed =
+            maxANDChunk(bM, eqBA ? aK : 0, dM, eqDC ? cK : 0, cw);
+        setChunk64(result, k, bM & dM);
+        if (changed != Changed::None)
+        {
+          // The changed operand is all ones below this chunk, so the
+          // AND is the other operand there.
+          for (unsigned j = k; j-- > 0;)
+            setChunk64(result, j,
+                       changed == Changed::First ? chunk64(d, j)
+                                                 : chunk64(b, j));
+          return result;
+        }
+        eqBA = eqBA && (bK == aK);
+        eqDC = eqDC && (dK == cK);
+      }
+      return result;
+    }
+
+    // The smallest x ^ y. Like minOR, but a bit supplied to cancel one in
+    // the other operand keeps helping at the lower bits, so the scan
+    // continues; once an operand was raised its lower chunks are zero.
+    CBV minXOR(const CBV a, const CBV b, const CBV c, const CBV d)
+    {
+      const unsigned width = bits_(a);
+      CBV result = CONSTANTBV::BitVector_Create(width, true);
+      bool eqAB = true, eqCD = true;
+      bool aCleared = false, cCleared = false;
+      for (unsigned k = chunksOf(width); k-- > 0;)
+      {
+        const unsigned cw = std::min(64u, width - 64 * k);
+        const uint64_t aK = aCleared ? 0 : chunk64(a, k);
+        const uint64_t cK = cCleared ? 0 : chunk64(c, k);
+        const uint64_t bK = chunk64(b, k), dK = chunk64(d, k);
+        uint64_t aM = aK, cM = cK;
+        bool aChanged = false, cChanged = false;
+        minXORChunk(aM, eqAB ? bK : ~(uint64_t)0, cM,
+                    eqCD ? dK : ~(uint64_t)0, cw, aChanged, cChanged);
+        setChunk64(result, k, aM ^ cM);
+        aCleared = aCleared || aChanged;
+        cCleared = cCleared || cChanged;
+        // The prefixes compare against the operands as modified.
+        eqAB = eqAB && (aM == bK);
+        eqCD = eqCD && (cM == dK);
+      }
+      return result;
+    }
+
+    // The biggest x ^ y. Like maxOR, but a shared bit cancels out, so
+    // giving it up in one operand keeps helping at the lower bits; once
+    // an operand was lowered its lower chunks are all ones.
+    CBV maxXOR(const CBV a, const CBV b, const CBV c, const CBV d)
+    {
+      const unsigned width = bits_(a);
+      CBV result = CONSTANTBV::BitVector_Create(width, true);
+      bool eqBA = true, eqDC = true;
+      bool bFilled = false, dFilled = false;
+      for (unsigned k = chunksOf(width); k-- > 0;)
+      {
+        const unsigned cw = std::min(64u, width - 64 * k);
+        const uint64_t chunkMask =
+            (cw >= 64) ? ~(uint64_t)0 : (((uint64_t)1 << cw) - 1);
+        const uint64_t bK = bFilled ? chunkMask : chunk64(b, k);
+        const uint64_t dK = dFilled ? chunkMask : chunk64(d, k);
+        const uint64_t aK = chunk64(a, k), cK = chunk64(c, k);
+        uint64_t bM = bK, dM = dK;
+        bool bChanged = false, dChanged = false;
+        maxXORChunk(bM, eqBA ? aK : 0, dM, eqDC ? cK : 0, cw, bChanged,
+                    dChanged);
+        setChunk64(result, k, bM ^ dM);
+        bFilled = bFilled || bChanged;
+        dFilled = dFilled || dChanged;
+        // The prefixes compare against the operands as modified.
+        eqBA = eqBA && (bM == aK);
+        eqDC = eqDC && (dM == cK);
+      }
+      return result;
+    }
+
+    // ---- Helpers for the multiplication bounds. The bitvectors in this
+    // group share one width, chosen wide enough that nothing overflows. ----
+
+    CBV zeroOf(unsigned width)
+    {
+      return CONSTANTBV::BitVector_Create(width, true);
+    }
+
+    // A fresh copy of x at a bigger width.
+    CBV widenTo(const CBV x, unsigned width)
+    {
+      assert(width >= bits_(x));
+      CBV r = zeroOf(width);
+      CONSTANTBV::BitVector_Interval_Copy(r, x, 0, 0, bits_(x));
+      return r;
+    }
+
+    CBV mulFresh(const CBV x, const CBV y)
+    {
+      CBV r = zeroOf(bits_(x));
+      CBV tmp = CONSTANTBV::BitVector_Clone(x); // Mul_Pos destroys this one.
+      CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Mul_Pos(r, tmp, y, true);
+      assert(0 == e);
+      CONSTANTBV::BitVector_Destroy(tmp);
+      return r;
+    }
+
+#ifdef __SIZEOF_INT128__
+    // A type wide enough to hold the product of two word-path values.
+    typedef unsigned __int128 uwide;
+    static const unsigned wordPathMaxWidth = 64;
+#else
+    // No 128-bit type (e.g. 32-bit targets), so the word-level path
+    // runs at half scale; wider multiplications use the bignum
+    // fallback instead.
+    typedef uint64_t uwide;
+    static const unsigned wordPathMaxWidth = 32;
+#endif
+
+    // The low (up to 64) bits of x as a machine word.
+    uint64_t low64(const CBV x)
+    {
+      return chunk64(x, 0);
+    }
+
+    // A fresh CBV holding a machine word. Needs value < 2^width.
+    CBV cbvFromU64(unsigned width, uint64_t value)
+    {
+      CBV r = CONSTANTBV::BitVector_Create(width, true);
+      setChunk64(r, 0, value);
+      return r;
+    }
+
+    // The minimum of (a*i + b) mod m over 0 <= i < n; requires n >= 1,
+    // a < m and b < m, with m <= 2^wordPathMaxWidth so nothing here can
+    // overflow.
+    // Between wraps the values only grow, so the minimum is b or a
+    // post-wrap residue; the residues just after each wrap follow the
+    // progression b1 + j*((-m) mod a) inside [0, a), which the loop
+    // chases Euclid-style. A step above m/2 first flips to the same
+    // progression walked backwards, so the modulus at least halves
+    // every level: O(log m) iterations.
+    uwide minlin(uwide n, uwide m, uwide a, uwide b)
+    {
+      uwide best = b;
+      while (true)
+      {
+        if (b < best)
+          best = b; // the value at i = 0 of this level
+        if (a == 0 || n == 1)
+          return best;
+        if (a > m / 2)
+        {
+          // The same value set, traversed from its last element with
+          // the complementary step.
+          b = (b + (n - 1) * a) % m;
+          a = m - a;
+          continue;
+        }
+        const uwide firstWrap = (m - b + a - 1) / a;
+        if (firstWrap >= n)
+          return best; // never wraps, so the values only grow from b
+        const uwide wraps = (b + (n - 1) * a) / m;
+        const uwide afterWrap = b + firstWrap * a - m; // in [0, a)
+        n = wraps;
+        b = afterWrap;
+        const uwide step = (a - m % a) % a;
+        m = a;
+        a = step;
+      }
+    }
+
+    // The maximum, by reflection: max(v) = m-1 - min(m-1-v), and
+    // m-1-(a*i+b) mod m is the progression ((m-a)*i + (m-1-b)) mod m.
+    uwide maxlin(uwide n, uwide m, uwide a, uwide b)
+    {
+      return m - 1 - minlin(n, m, (m - a) % m, m - 1 - b);
+    }
+
+    // The exact bounds of the progression start, start + step, ...
+    // (count terms, mod m), where m is a power of two, step < m and
+    // start < m.
+    void progressionHull(uwide start, uwide step, uwide count,
+                         uwide m, uwide& mn, uwide& mx)
+    {
+      if (step == 0)
+      {
+        mn = mx = start;
+        return;
+      }
+      // The progression repeats with period m / gcd; a count covering a
+      // full period hits exactly the residues congruent to start modulo
+      // the gcd.
+      const uwide gcd = (uwide)1 << __builtin_ctzll((uint64_t)step);
+      if (count >= m / gcd)
+      {
+        mn = start & (gcd - 1);
+        mx = m - gcd + mn;
+      }
+      else
+      {
+        mn = minlin(count, m, step, start);
+        mx = maxlin(count, m, step, start);
+      }
+    }
+
+    // Enumerating one operand's values is exact but linear in how many
+    // it has, so only do it when that side is small.
+    const uint64_t smallSideLimit = 16;
+
+    // The bounds of x*y (mod 2^width) with x in [a, b] and y in [c, d],
+    // written into resultMin/resultMax; both stay null if nothing is
+    // known. Exact when the bound products land in the same 2^width block,
+    // and when either operand has at most smallSideLimit values (at
+    // widths up to wordPathMaxWidth).
+    void multiplyPair(const CBV a, const CBV b, const CBV c, const CBV d,
+                      unsigned width, CBV& resultMin, CBV& resultMax)
+    {
+      resultMin = nullptr;
+      resultMax = nullptr;
+
+      if (width <= wordPathMaxWidth)
+      {
+        const uint64_t aV = low64(a), bV = low64(b);
+        const uint64_t cV = low64(c), dV = low64(d);
+        const uwide m = (uwide)1 << width;
+
+        const uwide lowProduct = (uwide)aV * cV;
+        const uwide highProduct = (uwide)bV * dV;
+
+        uwide apMin, apMax;
+        bool known = false;
+
+        if ((lowProduct >> width) == (highProduct >> width))
+        {
+          // Every product sits between the bound products, which agree
+          // above the width, so the low bits run between the bounds' low
+          // bits without wrapping: exact.
+          apMin = lowProduct & (m - 1);
+          apMax = highProduct & (m - 1);
+          known = true;
+        }
+        else
+        {
+          // For each value of one operand the products form an arithmetic
+          // progression, so when either operand has few enough values the
+          // merge of their progressions' hulls is the exact hull of the
+          // product set. A constant operand is the one-progression case.
+          const bool xSmall = (bV - aV) <= (dV - cV);
+          const uint64_t fixedLo = xSmall ? aV : cV;
+          const uint64_t fixedHi = xSmall ? bV : dV;
+          const uint64_t movingLo = xSmall ? cV : aV;
+          const uwide movingCount =
+              (uwide)(xSmall ? dV - cV : bV - aV) + 1;
+
+          if (fixedHi - fixedLo < smallSideLimit)
+          {
+            apMin = m - 1;
+            apMax = 0;
+            for (uint64_t v = fixedLo;; v++)
+            {
+              uwide pmn, pmx;
+              progressionHull(((uwide)v * movingLo) & (m - 1), v,
+                              movingCount, m, pmn, pmx);
+              if (pmn < apMin)
+                apMin = pmn;
+              if (pmx > apMax)
+                apMax = pmx;
+              if (v == fixedHi)
+                break; // tested after the body: fixedHi may be the top value
+            }
+            known = true;
+          }
+          // Otherwise the products can wrap in ways intervals can't follow.
+        }
+
+        if (known)
+        {
+          resultMin = zeroOf(width);
+          resultMax = zeroOf(width);
+          for (unsigned i = 0; i < width; i++)
+          {
+            if ((apMin >> i) & 1)
+              CONSTANTBV::BitVector_Bit_On(resultMin, i);
+            if ((apMax >> i) & 1)
+              CONSTANTBV::BitVector_Bit_On(resultMax, i);
+          }
+        }
+        return;
+      }
+
+      // Bignum fallback for wider values: the same-block case only.
+      // Wide enough for the bound products.
+      const unsigned wide = 2 * width + 2;
+
+      CBV aW = widenTo(a, wide);
+      CBV bW = widenTo(b, wide);
+      CBV cW = widenTo(c, wide);
+      CBV dW = widenTo(d, wide);
+
+      CBV lowProduct = mulFresh(aW, cW);
+      CBV highProduct = mulFresh(bW, dW);
+
+      bool sameBlock = true;
+      for (unsigned i = width; i < wide && sameBlock; i++)
+        if (CONSTANTBV::BitVector_bit_test(lowProduct, i) !=
+            CONSTANTBV::BitVector_bit_test(highProduct, i))
+          sameBlock = false;
+
+      if (sameBlock)
+      {
+        // Every product sits between the bound products, which agree above
+        // the width, so the low bits run between the bounds' low bits
+        // without wrapping: exact.
+        resultMin = zeroOf(width);
+        resultMax = zeroOf(width);
+        for (unsigned i = 0; i < width; i++)
+        {
+          if (CONSTANTBV::BitVector_bit_test(lowProduct, i))
+            CONSTANTBV::BitVector_Bit_On(resultMin, i);
+          if (CONSTANTBV::BitVector_bit_test(highProduct, i))
+            CONSTANTBV::BitVector_Bit_On(resultMax, i);
+        }
+      }
+
+      CONSTANTBV::BitVector_Destroy(aW);
+      CONSTANTBV::BitVector_Destroy(bW);
+      CONSTANTBV::BitVector_Destroy(cW);
+      CONSTANTBV::BitVector_Destroy(dW);
+      CONSTANTBV::BitVector_Destroy(lowProduct);
+      CONSTANTBV::BitVector_Destroy(highProduct);
+    }
+
+  }
 
   UnsignedInterval* UnsignedIntervalAnalysis::freshUnsignedInterval(unsigned width)
   {
@@ -119,6 +1068,10 @@ namespace stp
     StrengthReduction sr(bm.defaultNodeFactory, &bm.UserFlags);
     ASTNode result = sr.topLevel(top, visited);
 
+    // The intervals are only read during strength reduction, delete them now.
+    for (const auto& pair : visited)
+      delete pair.second;
+
     bm.GetRunTimes()->stop(RunTimes::IntervalPropagation);
 
     return result;
@@ -126,13 +1079,14 @@ namespace stp
 
   UnsignedInterval* UnsignedIntervalAnalysis::dispatchToTransferFunctions(const ASTNode&n, const vector<const UnsignedInterval*>& _children)
   {
-    const auto number_children = n.Degree();    
+    const auto number_children = n.Degree();
     const auto width = n.GetValueWidth();
+
+    assert(number_children == _children.size());
+
     const bool knownC0 = number_children < 1 ? false : (_children[0] != NULL);
     const bool knownC1 = number_children < 2 ? false : (_children[1] != NULL);
     const bool knownC2 = number_children < 3 ? false : (_children[2] != NULL);
-
-    assert(number_children == _children.size());
 
     // Put in temporary null ones for any we're missing.
     auto children = _children;
@@ -208,117 +1162,259 @@ namespace stp
 
         break;
 
-      case BVSGT: 
+      case BVSGT:
         {
-          vector<UnsignedInterval*> a_vec, b_vec;
-          UnsignedInterval::split(children[0],a_vec); // split at the poles
-          UnsignedInterval::split(children[1],b_vec); 
-             
-          bool one = false;
-          bool zero = false;        
-          for (const auto& a : a_vec)
-            for (const auto& b : b_vec) /// compare all pairs.
-            {
-              if (CONSTANTBV::BitVector_Compare(a->minV, b->maxV) > 0) // signed comparison.
-                one = true;
-              else if (CONSTANTBV::BitVector_Compare(b->minV, a->maxV) >= 0)
-                zero = true;
-              else
-              {
-                one = true;
-                zero = true;
-                break;
-              }
-            }
+          // The attained signed extremes decide the comparison: always
+          // greater needs min_s(a) > max_s(b), never greater needs
+          // max_s(a) <= min_s(b). An interval crossing the sign boundary
+          // attains both of its width's most negative and most positive
+          // values.
+          const UnsignedInterval* A = children[0];
+          const UnsignedInterval* B = children[1];
+          const unsigned w = A->getWidth();
 
-          if (one && !zero)
+          const bool aCross =
+              !CONSTANTBV::BitVector_bit_test(A->minV, w - 1) &&
+              CONSTANTBV::BitVector_bit_test(A->maxV, w - 1);
+          const bool bCross =
+              !CONSTANTBV::BitVector_bit_test(B->minV, w - 1) &&
+              CONSTANTBV::BitVector_bit_test(B->maxV, w - 1);
+
+          // A crossing operand attains the type minimum (killing
+          // "always") and the type maximum (killing "never", unless the
+          // other operand is pinned to the matching extreme).
+          const bool one = !aCross && !bCross &&
+                           signedCompareCBV(A->minV, B->maxV, w) > 0;
+
+          bool zero;
+          if (aCross)
+            // max_s(A) is the type maximum: B's minimum must equal it.
+            zero = !bCross && isTypeMax(B->minV, w);
+          else if (bCross)
+            // min_s(B) is the type minimum: A's maximum must equal it.
+            zero = isTypeMin(A->maxV, w);
+          else
+            zero = signedCompareCBV(B->minV, A->maxV, w) >= 0;
+
+          if (one)
             result = createInterval(littleOne, littleOne);
-
-          if (!one && zero)
+          else if (zero)
             result = createInterval(littleZero, littleZero);
-
-          for (const auto& a : a_vec)
-            delete a;
-          for (const auto& b : b_vec)
-            delete b;     
         }
         break;
 
       case BVDIV:
       {
-        const UnsignedInterval* c1 =  children[1];
+        const UnsignedInterval* top = children[0];
+        const UnsignedInterval* c1 = children[1];
+
+        if (width <= 64)
+        {
+          const uint64_t av = low64(top->minV), bv = low64(top->maxV);
+          const uint64_t cv = low64(c1->minV), dv = low64(c1->maxV);
+          const uint64_t full =
+              (width >= 64) ? ~(uint64_t)0 : (((uint64_t)1 << width) - 1);
+          uint64_t mn, mx;
+          if (dv == 0)
+            mn = mx = full; // dividing by the constant zero gives all ones
+          else
+          {
+            // The minimum is the smallest dividend over the largest
+            // divisor; division by zero gives all ones, so it holds even
+            // if the divisor might be zero. The maximum needs a divisor
+            // that can't be zero.
+            mn = av / dv;
+            mx = (cv != 0) ? bv / cv : full;
+          }
+          // The interval takes ownership of the fresh bitvectors.
+          result = new UnsignedInterval(cbvFromU64(width, mn),
+                                        cbvFromU64(width, mx));
+          break;
+        }
 
         result = freshUnsignedInterval(width);
 
-        CBV c1Min = CONSTANTBV::BitVector_Clone(c1->minV);
-        bool bottomChanged = false;
-        if (CONSTANTBV::BitVector_is_empty(c1->minV))
+        if (CONSTANTBV::BitVector_is_empty(c1->maxV))
         {
-          if (CONSTANTBV::BitVector_is_empty(c1->maxV))
-          {
-            CONSTANTBV::BitVector_Fill(result->minV);
-            CONSTANTBV::BitVector_Fill(result->maxV);
-            CONSTANTBV::BitVector_Destroy(c1Min);
-            break; // result is [1111..111, 11...11111]
-          }
-
-          bottomChanged = true;
-          CONSTANTBV::BitVector_Destroy(c1Min);
-          break; // TODO fix so that it can run-on.
+          // Dividing by the constant zero gives all ones.
+          CONSTANTBV::BitVector_Fill(result->minV);
+          break; // result is [1111..111, 11...11111]
         }
-
-        const UnsignedInterval* top = children[0];
-        result->resetToComplete();
 
         CBV remainder = CONSTANTBV::BitVector_Create(width, true);
 
-        CBV tmp0 = CONSTANTBV::BitVector_Clone(top->minV);
+        // The minimum is the smallest dividend divided by the largest
+        // divisor. Division by zero gives all ones, so this lower bound
+        // holds even if the divisor might be zero.
+        CBV dividend = CONSTANTBV::BitVector_Clone(top->minV);
         CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(
-            result->minV, tmp0, c1->maxV, remainder);
+            result->minV, dividend, c1->maxV, remainder);
         assert(0 == e);
-        CONSTANTBV::BitVector_Destroy(tmp0);
+        CONSTANTBV::BitVector_Destroy(dividend);
 
-        tmp0 = CONSTANTBV::BitVector_Clone(top->maxV);
-        e = CONSTANTBV::BitVector_Div_Pos(result->maxV, tmp0, c1Min, remainder);
-        assert(0 == e);
-
-        CONSTANTBV::BitVector_Destroy(tmp0);
-        CONSTANTBV::BitVector_Destroy(remainder);
-
-        if (bottomChanged) // might have been zero.
+        if (!CONSTANTBV::BitVector_is_empty(c1->minV))
         {
-          if (CONSTANTBV::BitVector_Lexicompare(result->minV, c1Min) > 0)
-          {
-            CONSTANTBV::BitVector_Copy(result->minV,
-                                       c1Min); //c1 should still be 1
-          }
-
-          if (CONSTANTBV::BitVector_Lexicompare(result->maxV, c1Min) < 0)
-          {
-            CONSTANTBV::BitVector_Copy(result->maxV,
-                                       c1Min); //c1 should still be 1
-          }
+          // The divisor can't be zero, so the maximum is the largest
+          // dividend divided by the smallest divisor.
+          dividend = CONSTANTBV::BitVector_Clone(top->maxV);
+          e = CONSTANTBV::BitVector_Div_Pos(result->maxV, dividend, c1->minV,
+                                            remainder);
+          assert(0 == e);
+          CONSTANTBV::BitVector_Destroy(dividend);
         }
-        CONSTANTBV::BitVector_Destroy(c1Min);
+
+        CONSTANTBV::BitVector_Destroy(remainder);
 
         break;
       }
 
       case BVMOD: //OVER-APPROXIMATION
-        if (knownC1)
+        if (knownC1 && width <= 64)
         {
-          // When we're dividing by zero, we know nothing.
-          if (!CONSTANTBV::BitVector_is_empty(children[1]->minV))
+          const uint64_t av = low64(children[0]->minV);
+          const uint64_t bv = low64(children[0]->maxV);
+          const uint64_t cv = low64(children[1]->minV);
+          const uint64_t dv = low64(children[1]->maxV);
+          uint64_t mn = 0, mx = 0;
+          bool got = false;
+          if (dv == 0)
           {
-            result = freshUnsignedInterval(n.GetValueWidth());
-            CONSTANTBV::BitVector_Copy(result->maxV, children[1]->maxV);
-            CONSTANTBV::BitVector_decrement(result->maxV);
+            // Remainder by the constant zero is the identity.
+            if (knownC0)
+            {
+              mn = av;
+              mx = bv;
+              got = true;
+            }
+          }
+          else if (cv == dv)
+          {
+            // A constant non-zero divisor is exact: if the dividend's
+            // bounds share a quotient the remainders run between theirs,
+            // and otherwise a multiple of the divisor is crossed and
+            // every remainder is reachable.
+            got = true;
+            if (av / cv == bv / cv)
+            {
+              mn = av % cv;
+              mx = bv % cv;
+            }
+            else
+              mx = cv - 1;
+          }
+          else if (cv != 0)
+          {
+            // The divisor can't be zero.
+            got = true;
+            if (knownC0 && bv < cv)
+            {
+              // The dividend is always below the divisor.
+              mn = av;
+              mx = bv;
+            }
+            else
+            {
+              // Less than the largest divisor, never above the dividend.
+              mx = dv - 1;
+              if (knownC0 && bv < mx)
+                mx = bv;
+            }
+          }
+          else if (knownC0)
+          {
+            // The divisor might be zero; the remainder never exceeds the
+            // dividend, and division by zero reaches it.
+            got = true;
+            mx = bv;
+          }
+          if (got)
+            // The interval takes ownership of the fresh bitvectors.
+            result = new UnsignedInterval(cbvFromU64(width, mn),
+                                          cbvFromU64(width, mx));
+        }
+        else if (knownC1)
+        {
+          if (CONSTANTBV::BitVector_is_empty(children[1]->maxV))
+          {
+            // Remainder by the constant zero is the identity.
+            if (knownC0)
+              result = createInterval(children[0]->minV, children[0]->maxV);
+          }
+          else if (children[1]->isConstant())
+          {
+            // A constant non-zero divisor is exact: the dividend runs over
+            // every value between its bounds, so if the bounds have the
+            // same quotient the remainders run from one bound's to the
+            // other's, and otherwise a multiple of the divisor is crossed
+            // and every remainder is reachable.
+            const CBV divisor = children[1]->minV;
+            CBV remainderMin = CONSTANTBV::BitVector_Create(width, true);
+            CBV remainderMax = CONSTANTBV::BitVector_Create(width, true);
+            CBV quotientMin = CONSTANTBV::BitVector_Create(width, true);
+            CBV quotientMax = CONSTANTBV::BitVector_Create(width, true);
 
-            // If the top is known, and it's maximum is less, use that.
+            CBV dividend = CONSTANTBV::BitVector_Clone(children[0]->minV);
+            CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(
+                quotientMin, dividend, divisor, remainderMin);
+            assert(0 == e);
+            CONSTANTBV::BitVector_Destroy(dividend);
+
+            dividend = CONSTANTBV::BitVector_Clone(children[0]->maxV);
+            e = CONSTANTBV::BitVector_Div_Pos(quotientMax, dividend, divisor,
+                                              remainderMax);
+            assert(0 == e);
+            CONSTANTBV::BitVector_Destroy(dividend);
+
+            if (CONSTANTBV::BitVector_Lexicompare(quotientMin, quotientMax) ==
+                0)
+            {
+              result = createInterval(remainderMin, remainderMax);
+            }
+            else
+            {
+              CBV divisorLess1 = CONSTANTBV::BitVector_Clone(divisor);
+              CONSTANTBV::BitVector_decrement(divisorLess1);
+              result = createInterval(getEmptyCBV(width), divisorLess1);
+              CONSTANTBV::BitVector_Destroy(divisorLess1);
+            }
+
+            CONSTANTBV::BitVector_Destroy(remainderMin);
+            CONSTANTBV::BitVector_Destroy(remainderMax);
+            CONSTANTBV::BitVector_Destroy(quotientMin);
+            CONSTANTBV::BitVector_Destroy(quotientMax);
+          }
+          else if (!CONSTANTBV::BitVector_is_empty(children[1]->minV))
+          {
+            // The divisor can't be zero.
             if (knownC0 &&
                 CONSTANTBV::BitVector_Lexicompare(children[0]->maxV,
-                                                  result->maxV) < 0)
-              CONSTANTBV::BitVector_Copy(result->maxV, children[0]->maxV);
+                                                  children[1]->minV) < 0)
+            {
+              // The dividend is always below the divisor, so the remainder
+              // is the dividend.
+              result = createInterval(children[0]->minV, children[0]->maxV);
+            }
+            else
+            {
+              // The remainder is less than the largest divisor.
+              result = freshUnsignedInterval(width);
+              CONSTANTBV::BitVector_Copy(result->maxV, children[1]->maxV);
+              CONSTANTBV::BitVector_decrement(result->maxV);
+
+              // The remainder never exceeds the dividend.
+              if (knownC0 &&
+                  CONSTANTBV::BitVector_Lexicompare(children[0]->maxV,
+                                                    result->maxV) < 0)
+                CONSTANTBV::BitVector_Copy(result->maxV, children[0]->maxV);
+            }
+          }
+          else if (knownC0)
+          {
+            // The divisor might be zero. The remainder never exceeds the
+            // dividend, and dividing the biggest dividend by zero reaches
+            // that bound, so the maximum is the dividend's maximum.
+            result = freshUnsignedInterval(width);
+            CONSTANTBV::BitVector_Copy(result->maxV, children[0]->maxV);
           }
         }
         break;
@@ -326,28 +1422,28 @@ namespace stp
       case BVSX:
         if (knownC0)
         {
-          result = freshUnsignedInterval(n.GetValueWidth());
-          CONSTANTBV::BitVector_Empty(result->maxV);
+          // Copy the child's chunks and fill everything from its top bit
+          // up with its sign: an arithmetic shift by zero seen at the
+          // child's width, stored into the wider vector.
+          const unsigned childWidth = n[0].GetValueWidth();
+          const CBV childMin = children[0]->minV;
+          const CBV childMax = children[0]->maxV;
+          const bool minNegative =
+              CONSTANTBV::BitVector_bit_test(childMin, childWidth - 1);
+          const bool maxNegative =
+              CONSTANTBV::BitVector_bit_test(childMax, childWidth - 1);
 
-          // Copy the max/min into the new bigger answer.
-          for (unsigned i = 0; i < n[0].GetValueWidth(); i++)
+          CBV mn = CONSTANTBV::BitVector_Create(width, true);
+          CBV mx = CONSTANTBV::BitVector_Create(width, true);
+          for (unsigned k = 0; k < chunksOf(width); k++)
           {
-            if (CONSTANTBV::BitVector_bit_test(children[0]->maxV, i))
-              CONSTANTBV::BitVector_Bit_On(result->maxV, i);
-
-            if (CONSTANTBV::BitVector_bit_test(children[0]->minV, i))
-              CONSTANTBV::BitVector_Bit_On(result->minV, i);
+            setChunk64(mn, k,
+                       shrChunk(childMin, 0, k, childWidth, minNegative));
+            setChunk64(mx, k,
+                       shrChunk(childMax, 0, k, childWidth, maxNegative));
           }
-          for (unsigned i = n[0].GetValueWidth(); i < n.GetValueWidth(); i++)
-          {
-            if (CONSTANTBV::BitVector_bit_test(children[0]->maxV,
-                                               n[0].GetValueWidth() - 1))
-              CONSTANTBV::BitVector_Bit_On(result->maxV, i);
-
-            if (CONSTANTBV::BitVector_bit_test(children[0]->minV,
-                                               n[0].GetValueWidth() - 1))
-              CONSTANTBV::BitVector_Bit_On(result->minV, i);
-          }
+          // The interval takes ownership of the fresh bitvectors.
+          result = new UnsignedInterval(mn, mx);
         }
         break;
 
@@ -395,13 +1491,13 @@ namespace stp
         {
           result = freshUnsignedInterval(width);
           if (CONSTANTBV::BitVector_bit_test(children[0]->minV, 0) &&
-              children[1] != NULL)
+              knownC1)
           {
             CONSTANTBV::BitVector_Copy(result->minV, children[1]->minV);
             CONSTANTBV::BitVector_Copy(result->maxV, children[1]->maxV);
           }
           else if (!CONSTANTBV::BitVector_bit_test(children[0]->minV, 0) &&
-                   children[2] != NULL)
+                   knownC2)
           {
             CONSTANTBV::BitVector_Copy(result->minV, children[2]->minV);
             CONSTANTBV::BitVector_Copy(result->maxV, children[2]->maxV);
@@ -429,57 +1525,31 @@ namespace stp
         }
         break;
 
-      case BVMULT: //OVER-APPROXIMATION
-        if (knownC0 && knownC1)
+      case BVMULT: // OVER-APPROXIMATION
+      {
+        // Folded pairwise: exact for two children, sound beyond.
+        CBV min = CONSTANTBV::BitVector_Clone(children[0]->minV);
+        CBV max = CONSTANTBV::BitVector_Clone(children[0]->maxV);
+
+        for (unsigned i = 1; i < children.size() && min != nullptr; i++)
         {
-          //  >=2 arity.
-          CBV min, max;
-          min = CONSTANTBV::BitVector_Create(2 * width, true);
-          max = CONSTANTBV::BitVector_Create(2 * width, true);
-
-          // Make the result interval 1.
-          result = freshUnsignedInterval(width);
-          CONSTANTBV::BitVector_increment(result->minV);
-          CONSTANTBV::BitVector_Flip(result->maxV);
-          CONSTANTBV::BitVector_increment(result->maxV);
-
-          bool bad = false;
-          for (size_t i = 0; i < children.size(); i++)
-          {
-            if (children[i] == NULL)
-            {
-              bad = true;
-              break;
-            }
-            CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Multiply(
-                min, result->minV, children[i]->minV);
-            assert(0 == e);
-
-            e = CONSTANTBV::BitVector_Multiply(max, result->maxV,
-                                               children[i]->maxV);
-            assert(0 == e);
-
-            if (CONSTANTBV::Set_Max(max) >= width)
-              bad = true;
-
-            for (unsigned j = width; j < 2 * width; j++)
-            {
-              if (CONSTANTBV::BitVector_bit_test(min, j))
-                bad = true;
-            }
-
-            CONSTANTBV::BitVector_Interval_Copy(result->minV, min, 0, 0, width);
-            CONSTANTBV::BitVector_Interval_Copy(result->maxV, max, 0, 0, width);
-          }
+          CBV newMin, newMax;
+          multiplyPair(min, max, children[i]->minV, children[i]->maxV, width,
+                       newMin, newMax);
           CONSTANTBV::BitVector_Destroy(min);
           CONSTANTBV::BitVector_Destroy(max);
-          if (bad)
-            {
-              delete result;
-              result = NULL;
-            }
+          min = newMin;
+          max = newMax;
+        }
+
+        if (min != nullptr)
+        {
+          result = createInterval(min, max);
+          CONSTANTBV::BitVector_Destroy(min);
+          CONSTANTBV::BitVector_Destroy(max);
         }
         break;
+      }
 
       case AND:
       {
@@ -549,57 +1619,94 @@ namespace stp
         break;
       }
 
-      case BVAND: // OVER-APPROXIMATION
+      case BVAND:
+      case BVOR:
+      case BVXOR:
       {
-        if (knownC0 || knownC1)
+        // Hacker's Delight gives the exact bounds of the bitwise operations
+        // over intervals. Exact for two children; more children are folded
+        // in pairwise, which is sound but may over-approximate.
+        CBV min = children[0]->minV;
+        CBV max = children[0]->maxV;
+        CBV foldedMin = nullptr; // the fold's own intermediates
+        CBV foldedMax = nullptr;
+
+        for (unsigned i = 1; i < children.size(); i++)
         {
-          if (!knownC1)
+          CBV newMin, newMax;
+          if (n.GetKind() == BVAND)
           {
-            result = createInterval(getEmptyCBV(width), children[0]->maxV);
+            newMin = minAND(min, max, children[i]->minV, children[i]->maxV);
+            newMax = maxAND(min, max, children[i]->minV, children[i]->maxV);
           }
-          else if (!knownC0)
+          else if (n.GetKind() == BVOR)
           {
-            result = createInterval(getEmptyCBV(width), children[1]->maxV);
+            newMin = minOR(min, max, children[i]->minV, children[i]->maxV);
+            newMax = maxOR(min, max, children[i]->minV, children[i]->maxV);
           }
           else
           {
-            if (CONSTANTBV::BitVector_Lexicompare(children[0]->maxV,
-                                                  children[1]->maxV) > 0)
-            {
-              result = createInterval(getEmptyCBV(width), children[1]->maxV);
-            }
-            else
-              result = createInterval(getEmptyCBV(width), children[0]->maxV);
+            newMin = minXOR(min, max, children[i]->minV, children[i]->maxV);
+            newMax = maxXOR(min, max, children[i]->minV, children[i]->maxV);
           }
+
+          if (foldedMin != nullptr)
+          {
+            CONSTANTBV::BitVector_Destroy(foldedMin);
+            CONSTANTBV::BitVector_Destroy(foldedMax);
+          }
+          foldedMin = min = newMin;
+          foldedMax = max = newMax;
         }
+
+        if (foldedMin == nullptr) // a single child passes through
+        {
+          foldedMin = CONSTANTBV::BitVector_Clone(min);
+          foldedMax = CONSTANTBV::BitVector_Clone(max);
+        }
+
+        // The interval takes ownership of the fresh bitvectors.
+        result = new UnsignedInterval(foldedMin, foldedMax);
         break;
       }
 
-      case BVEXTRACT: // OVER-APPROXIMATION
-      break;
+      case BVEXTRACT:
       {
-        if (knownC0) // others are always known..
+        // The value is (child >> low) mod 2^width. This transfer function
+        // is exact. The index children are always constants; the guard
+        // matters because the shift amount must be the real one.
+        if (knownC2)
         {
-          unsigned shift_amount = *(children[2]->minV);
+          // The lowest bit of the extract is how far the child shifts right.
+          const unsigned shift = *(children[2]->minV);
+          const unsigned childWidth = n[0].GetValueWidth();
+          const CBV childMin = children[0]->minV;
+          const CBV childMax = children[0]->maxV;
 
-          CBV clone = CONSTANTBV::BitVector_Clone(children[0]->maxV);
-          while (shift_amount-- > 0)
+          // The shifted child takes every value between the shifted bounds,
+          // so if the bounds agree above the extract's width, the low bits
+          // run from the minimum's to the maximum's without wrapping.
+          // Otherwise the result wraps: it reaches both zero and all ones,
+          // and only the complete interval contains it.
+          bool sameBlock = true;
+          for (unsigned off = width; shift + off < childWidth && sameBlock;
+               off += 64)
+            if (chunkAt(childMin, shift + off) !=
+                chunkAt(childMax, shift + off))
+              sameBlock = false;
+
+          if (sameBlock)
           {
-            CONSTANTBV::BitVector_shift_right(clone, 0);
+            CBV mn = CONSTANTBV::BitVector_Create(width, true);
+            CBV mx = CONSTANTBV::BitVector_Create(width, true);
+            for (unsigned k = 0; k < chunksOf(width); k++)
+            {
+              setChunk64(mn, k, chunkAt(childMin, shift + 64 * k));
+              setChunk64(mx, k, chunkAt(childMax, shift + 64 * k));
+            }
+            // The interval takes ownership of the fresh bitvectors.
+            result = new UnsignedInterval(mn, mx);
           }
-
-          //  If the max bit of clone is greater than the width, ok to continue.
-          if (CONSTANTBV::Set_Max(clone) < width)
-          {
-            CBV max = getEmptyCBV(width); // new width.
-            for (unsigned i = 0; i < width; i++)
-              if (CONSTANTBV::BitVector_bit_test(clone, i))
-                CONSTANTBV::BitVector_Bit_On(max, i);
-
-            result = createInterval(getEmptyCBV(width), max);
-          }
-
-          CONSTANTBV::BitVector_Destroy(clone);
         }
         break;
       }
@@ -607,76 +1714,233 @@ namespace stp
       case BVRIGHTSHIFT:
         if (knownC0 || knownC1)
         {
-          result = freshUnsignedInterval(width);
-
           const UnsignedInterval* c0 = children[0];
           const UnsignedInterval* c1 = children[1];
 
-          // The maximum result is the maximum >> (minimum shift).
-          if (CONSTANTBV::Set_Max(c1->minV) > 1 + std::log2(width) ||
-              *(c1->minV) > width)
+          const unsigned minShift = cappedShiftAmount(c1->minV, width);
+          const unsigned maxShift = cappedShiftAmount(c1->maxV, width);
+
+          // The maximum result is the maximum >> (minimum shift), and
+          // the minimum result the minimum >> (maximum shift): the
+          // shifted chunks are offset reads.
+          CBV mn = CONSTANTBV::BitVector_Create(width, true);
+          CBV mx = CONSTANTBV::BitVector_Create(width, true);
+          for (unsigned k = 0; k < chunksOf(width); k++)
           {
-            // The maximum is zero.
-            CONSTANTBV::BitVector_Flip(result->maxV);
+            setChunk64(mn, k, shrChunk(c0->minV, maxShift, k, width, false));
+            setChunk64(mx, k, shrChunk(c0->maxV, minShift, k, width, false));
+          }
+          // The interval takes ownership of the fresh bitvectors.
+          result = new UnsignedInterval(mn, mx);
+        }
+        break;
+
+      case BVLEFTSHIFT:
+      {
+        // The value is (x << s) mod 2^width, which keeps the low
+        // (width - s) bits of x and shifts them up. This transfer function
+        // is exact: for each of the at most width+1 effective shift
+        // amounts, x's surviving low bits run contiguously (the same
+        // reasoning as BVEXTRACT), giving an exact hull per shift, and the
+        // result is the union over the reachable shifts.
+        const UnsignedInterval* c0 = children[0];
+        const UnsignedInterval* c1 = children[1];
+
+        const unsigned minShift = cappedShiftAmount(c1->minV, width);
+        const unsigned maxShift = cappedShiftAmount(c1->maxV, width);
+
+        const unsigned K = chunksOf(width);
+        const unsigned topBits = width - 64 * (K - 1);
+        const uint64_t topMask =
+            (topBits >= 64) ? ~(uint64_t)0 : (((uint64_t)1 << topBits) - 1);
+
+        // The highest bit where the child's bounds differ decides every
+        // shift's block test at once: the bounds agree on the bits that
+        // survive the shift exactly when this bit doesn't survive.
+        int highestDiff = -1;
+        for (unsigned k = K; k-- > 0 && highestDiff < 0;)
+        {
+          const uint64_t diff = chunk64(c0->minV, k) ^ chunk64(c0->maxV, k);
+          if (diff != 0)
+            highestDiff = 64 * k + 63 - __builtin_clzll(diff);
+        }
+
+        // Four chunk buffers; on the stack for widths up to 1024.
+        uint64_t stackBuf[64];
+        std::vector<uint64_t> heapBuf;
+        uint64_t* buf = stackBuf;
+        if (4 * K > 64)
+        {
+          heapBuf.resize(4 * K);
+          buf = heapBuf.data();
+        }
+        uint64_t* bestMin = buf;
+        uint64_t* bestMax = buf + K;
+        uint64_t* sMin = buf + 2 * K;
+        uint64_t* sMax = buf + 3 * K;
+
+        for (unsigned s = minShift; s <= maxShift; s++)
+        {
+          // The hull for this shift amount. Shifting by the width or more
+          // gives zero, so the capped amount stands in for all of those.
+          if (s >= width)
+          {
+            for (unsigned k = 0; k < K; k++)
+              sMin[k] = sMax[k] = 0;
+          }
+          else if (highestDiff < (int)(width - s))
+          {
+            // The bounds agree above the surviving bits, so the low bits
+            // run from the minimum's to the maximum's without wrapping.
+            for (unsigned k = 0; k < K; k++)
+            {
+              sMin[k] = shlChunk(c0->minV, s, k);
+              sMax[k] = shlChunk(c0->maxV, s, k);
+            }
+            sMin[K - 1] &= topMask;
+            sMax[K - 1] &= topMask;
           }
           else
           {
-            unsigned shift_amount = *(c1->minV);
-            CONSTANTBV::BitVector_Copy(result->maxV, c0->maxV);
-            while (shift_amount-- > 0)
+            // The surviving bits wrap: they reach both zero and all
+            // ones, so this shift contributes [0, 11..1 << s].
+            for (unsigned k = 0; k < K; k++)
             {
-              CONSTANTBV::BitVector_shift_right(result->maxV, 0);
+              const unsigned off = 64 * k;
+              sMin[k] = 0;
+              sMax[k] = (off + 64 <= s)
+                            ? 0
+                            : (off >= s) ? ~(uint64_t)0
+                                         : (~(uint64_t)0 << (s - off));
             }
+            sMax[K - 1] &= topMask;
           }
 
-          // The minimum result is the minimum >> (maximum shift).
-          if (CONSTANTBV::Set_Max(c1->maxV) > 1 + std::log2(width) ||
-              *(c1->maxV) > width)
+          if (s == minShift || compareChunks(sMin, bestMin, K) < 0)
+            std::swap(bestMin, sMin);
+          if (s == minShift || compareChunks(sMax, bestMax, K) > 0)
+            std::swap(bestMax, sMax);
+        }
+
+        CBV mn = CONSTANTBV::BitVector_Create(width, true);
+        CBV mx = CONSTANTBV::BitVector_Create(width, true);
+        for (unsigned k = 0; k < K; k++)
+        {
+          setChunk64(mn, k, bestMin[k]);
+          setChunk64(mx, k, bestMax[k]);
+        }
+        // The interval takes ownership of the fresh bitvectors.
+        result = new UnsignedInterval(mn, mx);
+        break;
+      }
+
+      case BVSRSHIFT:
+        if (knownC0 || knownC1)
+        {
+          const UnsignedInterval* c0 = children[0];
+          const UnsignedInterval* c1 = children[1];
+
+          const unsigned minShift = cappedShiftAmount(c1->minV, width);
+          const unsigned maxShift = cappedShiftAmount(c1->maxV, width);
+
+          // An arithmetic shift keeps the sign, and is monotone in the
+          // value, so the result's extremes come from shifting the bounds.
+          // Shifting moves values towards zero if the sign bit is clear
+          // (bigger shift, smaller result), and towards all ones if it is
+          // set (bigger shift, bigger result).
+          const bool minNegative =
+              CONSTANTBV::BitVector_bit_test(c0->minV, width - 1);
+          const bool maxNegative =
+              CONSTANTBV::BitVector_bit_test(c0->maxV, width - 1);
+
+          const unsigned minShifts = minNegative ? minShift : maxShift;
+          const unsigned maxShifts = maxNegative ? maxShift : minShift;
+
+          CBV mn = CONSTANTBV::BitVector_Create(width, true);
+          CBV mx = CONSTANTBV::BitVector_Create(width, true);
+          for (unsigned k = 0; k < chunksOf(width); k++)
           {
-            // The mimimum is zero. (which it's set to by default.).
+            setChunk64(mn, k,
+                       shrChunk(c0->minV, minShifts, k, width, minNegative));
+            setChunk64(mx, k,
+                       shrChunk(c0->maxV, maxShifts, k, width, maxNegative));
           }
-          else
-          {
-            unsigned shift_amount = *(c1->maxV);
-            CONSTANTBV::BitVector_Copy(result->minV, c0->minV);
-            while (shift_amount-- > 0)
-              CONSTANTBV::BitVector_shift_right(result->minV, 0);
-          }
+          // The interval takes ownership of the fresh bitvectors.
+          result = new UnsignedInterval(mn, mx);
         }
         break;
 
       case BVPLUS:
         if (knownC0 && knownC1)
         {
-          //  >=2 arity.
-          result = freshUnsignedInterval(width);
-          CONSTANTBV::BitVector_Flip(result->maxV); // make the max zero too.
+          //  >=2 arity. The sum of intervals takes every value between
+          // the total of the minimums and the total of the maximums, so
+          // when the totals lie in the same 2^width block the exact hull
+          // is their low bits, and otherwise the sums cross a block
+          // boundary and reach both zero and all ones. Comparing the
+          // totals (rather than the carries of each partial addition)
+          // keeps cases where a prefix crosses a boundary but the
+          // remaining children pull the bounds back into one block.
+          bool anyComplete = false;
+          for (unsigned i = 0; i < children.size() && !anyComplete; i++)
+            anyComplete = children[i]->isComplete();
+          if (anyComplete)
+            break; // the sums cover a whole block's worth of values
 
-          bool min_carry;
-          bool max_carry;
-
-          for (size_t i = 0; i < children.size(); i++)
+          const unsigned K = chunksOf(width);
+          uint64_t stackBuf[32];
+          std::vector<uint64_t> heapBuf;
+          uint64_t* buf = stackBuf;
+          if (2 * K > 32)
           {
-            if (children[i]->isComplete())
-            {
-              delete result;
-              result = nullptr;
-              break;
-            }
+            heapBuf.resize(2 * K);
+            buf = heapBuf.data();
+          }
+          uint64_t* mnSum = buf;
+          uint64_t* mxSum = buf + K;
 
-            max_carry = false;
-            min_carry = false;
-
-            CONSTANTBV::BitVector_add(result->maxV, result->maxV,
-                                      children[i]->maxV, &max_carry);
-            CONSTANTBV::BitVector_add(result->minV, result->minV,
-                                      children[i]->minV, &min_carry);
-            if (min_carry != max_carry)
+          // The carry out of a chunk is the number of times its 64-bit
+          // sum wrapped; counting the wraps keeps the totals exact
+          // without needing an integer type wider than the chunks.
+          uint64_t mnCarry = 0, mxCarry = 0;
+          for (unsigned k = 0; k < K; k++)
+          {
+            uint64_t mns = mnCarry, mxs = mxCarry;
+            mnCarry = 0;
+            mxCarry = 0;
+            for (unsigned i = 0; i < children.size(); i++)
             {
-              delete result;
-              result = nullptr;
-              break;
+              const uint64_t mnc = chunk64(children[i]->minV, k);
+              const uint64_t mxc = chunk64(children[i]->maxV, k);
+              mns += mnc;
+              if (mns < mnc)
+                mnCarry++;
+              mxs += mxc;
+              if (mxs < mxc)
+                mxCarry++;
             }
+            mnSum[k] = mns;
+            mxSum[k] = mxs;
+          }
+
+          // The totals share a block exactly when they agree above the
+          // width: in the carry out of the top chunk and in the top
+          // chunk's bits at and above the width.
+          const unsigned topBits = width - 64 * (K - 1);
+          const uint64_t excessMask =
+              (topBits >= 64) ? 0 : ~(((uint64_t)1 << topBits) - 1);
+          if (mnCarry == mxCarry &&
+              (mnSum[K - 1] & excessMask) == (mxSum[K - 1] & excessMask))
+          {
+            CBV mn = CONSTANTBV::BitVector_Create(width, true);
+            CBV mx = CONSTANTBV::BitVector_Create(width, true);
+            for (unsigned k = 0; k < K; k++)
+            {
+              setChunk64(mn, k, mnSum[k]);
+              setChunk64(mx, k, mxSum[k]);
+            }
+            // The interval takes ownership of the fresh bitvectors.
+            result = new UnsignedInterval(mn, mx);
           }
         }
         break;
@@ -697,14 +1961,24 @@ namespace stp
         }
         break;
 
-      // TODO
-      case BVXOR:
-      case BVOR:
       case SBVDIV:
       case SBVREM:
-      case BVLEFTSHIFT:
-      case BVSRSHIFT:
       case SBVMOD:
+        if (knownC0 && knownC1 && width <= 64)
+        {
+          uint64_t lo, hi;
+          if (signedDivOpHull(n.GetKind(), low64(children[0]->minV),
+                              low64(children[0]->maxV),
+                              low64(children[1]->minV),
+                              low64(children[1]->maxV), width, lo, hi))
+            // The interval takes ownership of the fresh bitvectors.
+            result = new UnsignedInterval(cbvFromU64(width, lo),
+                                          cbvFromU64(width, hi));
+        }
+        else
+          propagatorNotImplemented++;
+        break;
+
       default:
         propagatorNotImplemented++;
         break;
@@ -734,7 +2008,11 @@ namespace stp
     }
 
     if (n.GetKind() == SYMBOL || n.GetKind() == WRITE || n.GetKind() == READ)
-      return NULL; // Never know anything about these.
+    {
+      // Never know anything about these.
+      visited.insert({n, NULL});
+      return NULL;
+    }
 
     const auto number_children = n.Degree();
     vector<const UnsignedInterval*> children;

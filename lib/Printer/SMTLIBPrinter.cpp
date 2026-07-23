@@ -135,8 +135,8 @@ void LetizeNode(const ASTNode& n, ASTNodeSet& PLPrintNodeSet, bool smtlib1,
   if (n.isAtom())
     return;
 
-  const ASTVec& c = n.GetChildren();
-  for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend;
+  const ASTChildren c = n.GetChildren();
+  for (auto it = c.begin(), itend = c.end(); it != itend;
        it++)
   {
     const ASTNode& ccc = *it;
@@ -211,6 +211,12 @@ string functionToSMTLIBName(const Kind k, bool smtlib1)
     case BVSLE:
     case BVSLT:
     case BVSUB:
+    case BVUADDO:
+    case BVSADDO:
+    case BVUMULO:
+    case BVSMULO:
+    case BVUSUBO:
+    case BVSSUBO:
     case BVXOR:
     case ITE:
     case NAND:

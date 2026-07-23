@@ -66,17 +66,17 @@ void Dot_Print1(ostream& os, const ASTNode n,
   os << "\"];" << endl;
 
   // print the edges to each child.
-  ASTVec ch = n.GetChildren();
-  ASTVec::iterator itend = ch.end();
+  const ASTChildren ch = n.GetChildren();
+  auto itend = ch.end();
   int i = 0;
-  for (ASTVec::iterator it = ch.begin(); it < itend; it++)
+  for (auto it = ch.begin(); it < itend; it++)
   {
     os << "n" << n.GetNodeNum() << " -> "
        << "n" << it->GetNodeNum() << "[label=" << i++ << "];" << endl;
   }
 
   // print each of the children.
-  for (ASTVec::iterator it = ch.begin(); it < itend; it++)
+  for (auto it = ch.begin(); it < itend; it++)
   {
     Dot_Print1(os, *it, alreadyOutput);
   }

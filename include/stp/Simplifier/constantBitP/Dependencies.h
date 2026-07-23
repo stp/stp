@@ -26,6 +26,7 @@ THE SOFTWARE.
 #define DEPENDENCIES_H_
 
 #include "stp/AST/AST.h"
+#include "extlib-unordered-dense/ankerl/unordered_dense.h"
 namespace simplifier
 {
 namespace constantBitP
@@ -33,16 +34,22 @@ namespace constantBitP
 
 using std::cout;
 using std::endl;
-using stp::ASTNodeSet;
+using stp::ASTNode;
 
 // From a child, get the parents of that node.
 class Dependencies
 {
+public:
+  typedef ankerl::unordered_dense::set<ASTNode, ASTNode::ASTNodeHasher,
+                                       ASTNode::ASTNodeEqual>
+      DependentsSet;
+
 private:
-  typedef std::unordered_map<uint64_t, ASTNodeSet*>  NodeToDependentNodeMap;
+  typedef ankerl::unordered_dense::map<uint64_t, DependentsSet*>
+      NodeToDependentNodeMap;
   NodeToDependentNodeMap dependents;
 
-  const ASTNodeSet empty;
+  const DependentsSet empty;
 
   bool checkInvariant() const
   {
@@ -56,26 +63,33 @@ private:
     if (current.isConstant()) // don't care about what depends on constants.
       return;
 
-    ASTNodeSet* vec;
+    DependentsSet* vec;
+    bool firstVisit;
     const auto it = dependents.find(current.GetNodeNum());
     if (dependents.end() == it)
     {
       // add it in with a reference to the vector.
-      vec = new ASTNodeSet();
+      vec = new DependentsSet();
       dependents.insert({current.GetNodeNum(), vec});
+      firstVisit = true;
     }
     else
     {
       vec = it->second;
+      firstVisit = false;
     }
 
     if (prior != current) // initially called with both the same.
     {
-      if (vec->count(prior) == 0)
-        vec->insert(prior);
-      else
+      if (!vec->insert(prior).second)
         return; // already been added in.
     }
+
+    // On a repeat visit through a new parent, the edges to the children
+    // are already recorded; descending again would redo a hash find per
+    // child for every extra parent.
+    if (!firstVisit)
+      return;
 
     for (const auto &child: current)
     {
@@ -100,7 +114,7 @@ public:
       delete it.second;
   }
 
-  const ASTNodeSet* getDependents(const ASTNode& n) const
+  const DependentsSet* getDependents(const ASTNode& n) const
   {
     if (n.isConstant())
       return &empty;

@@ -175,14 +175,14 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
     return n;
   }
 
-  const ASTVec& children = n.GetChildren();
+  const ASTChildren children = n.GetChildren();
   assert(children.size() > 0);
   // Should have no leaves left here.
 
   ASTVec newChildren;
   bool changed = false;
 
-  for (ASTVec::const_iterator it = children.begin(); it != children.end(); it++)
+  for (auto it = children.begin(); it != children.end(); it++)
   {
     ASTNode newNode = replace(*it, fromTo, cache, nf, stopAtArrays, preventInfinite);
     if (!changed && newNode!=*it)

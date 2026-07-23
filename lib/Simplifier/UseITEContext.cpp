@@ -108,7 +108,7 @@ ASTNode UseITEContext::visit(const ASTNode& n, std::map<ASTNode, int>& visited,
   }
 
   ASTNode result;
-  if (new_children != n.GetChildren())
+  if (ASTChildren(new_children) != n.GetChildren())
     if (n.GetType() == BOOLEAN_TYPE)
       result = nf->CreateNode(n.GetKind(), new_children);
     else

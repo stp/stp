@@ -1086,6 +1086,12 @@ enum exprkind_t
   BVSLE,        //!< Signed bitvector less-equals
   BVSGT,        //!< Signed bitvector greater-than
   BVSGE,        //!< Signed bitvector greater-equals
+  BVUADDO,      //!< Unsigned addition overflow predicate
+  BVSADDO,      //!< Signed addition overflow predicate
+  BVUMULO,      //!< Unsigned multiplication overflow predicate
+  BVSMULO,      //!< Signed multiplication overflow predicate
+  BVUSUBO,      //!< Unsigned subtraction overflow predicate
+  BVSSUBO,      //!< Signed subtraction overflow predicate
   EQ,           //!< Equality comparator
   FALSE,        //!< Constant false boolean expression
   TRUE,         //!< Constant true boolean expression

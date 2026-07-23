@@ -188,6 +188,10 @@ class BitBlaster
   // Return bit-blasted form for BVLE, BVGE, BVGT, SBLE, etc.
   BBNode BBcompare(const ASTNode& form, BBNodeSet& support);
 
+  // Return bit-blasted form for the overflow predicates BVUADDO, BVSADDO,
+  // BVUMULO, BVSMULO, BVUSUBO, BVSSUBO.
+  BBNode BBOverflow(const ASTNode& form, BBNodeSet& support);
+
   void BBLShift(BBNodeVec& x, unsigned int shift);
   void BBRShift(BBNodeVec& x, unsigned int shift);
 

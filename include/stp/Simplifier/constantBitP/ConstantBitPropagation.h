@@ -70,8 +70,9 @@ class ConstantBitPropagation
 
   bool topFixed;
 
-  // A vector that's reused.
+  // Vectors that are reused.
   vector<unsigned> previousChildrenFixedCount;
+  vector<FixedBits*> childrenBits;
 
   void printNodeWithFixings();
 
@@ -90,6 +91,10 @@ public:
   // propagates.
   DLL_PUBLIC ConstantBitPropagation(stp::STPMgr* mgr, stp::Simplifier* _sm,
                          NodeFactory* _nf, const ASTNode& top);
+
+  // The destructor deletes the owned tables, so copying would double-delete.
+  ConstantBitPropagation(const ConstantBitPropagation&) = delete;
+  ConstantBitPropagation& operator=(const ConstantBitPropagation&) = delete;
 
   ~ConstantBitPropagation() { clearTables(); };
 

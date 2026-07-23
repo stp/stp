@@ -39,10 +39,10 @@ void LetMgr::LetExprMgr(const ASTNode& var, const ASTNode& letExpr)
   LetExprMgr(var.GetName(), letExpr);
 }
 
-//Creates a new binding.  
+//Creates a new binding.
 void LetMgr::LetExprMgr(string name, const ASTNode& letExpr)
 {
-  assert(stack.size() > 0);
+  assert(frames.size() > 0);
 
   // In CVC lets are available immediately. In SMTLIB2 it's only when the list of them has all been done.
   if (frameMode)
@@ -56,24 +56,33 @@ void LetMgr::LetExprMgr(string name, const ASTNode& letExpr)
   }
   else
   {
-    if (stack.back().find(name) != stack.back().end())
+    if (!insertIntoFrame(name, letExpr))
       {
         string msg = "Let already created:" + name;
         FatalError(msg.c_str());
       }
-
-    stack.back().insert(make_pair(name,letExpr));
   }
 }
 
-// We're ready for these bindings to participate. 
+bool LetMgr::insertIntoFrame(const string& name, const ASTNode& letExpr)
+{
+  auto& shadows = bindings[name];
+  if (!shadows.empty() && shadows.back().first == frames.size() - 1)
+    return false;
+
+  shadows.emplace_back(frames.size() - 1, letExpr);
+  frames.back().push_back(name);
+  return true;
+}
+
+// We're ready for these bindings to participate.
 void LetMgr::commit()
 {
   if (interim.size() == 0)
     return;
 
   for (const auto& k : interim)
-    stack.back().insert(k);
+    insertIntoFrame(k.first, k.second);
   interim.clear();
 }
 
@@ -81,15 +90,23 @@ void LetMgr::commit()
 void LetMgr::push()
 {
   commit();
-  stack.push_back(MapType());
+  frames.push_back(std::vector<string>());
 }
 
 void LetMgr::pop()
 {
-  if (stack.size() == 0)
+  if (frames.size() == 0)
     FatalError("Popping from empty let stack");
 
-  stack.erase(stack.end() - 1);
+  for (const string& name : frames.back())
+  {
+    auto it = bindings.find(name);
+    assert(it != bindings.end());
+    it->second.pop_back();
+    if (it->second.empty())
+      bindings.erase(it);
+  }
+  frames.erase(frames.end() - 1);
 }
 
 // this function looks up the symbols let-binding and returns the
@@ -103,31 +120,34 @@ ASTNode LetMgr::ResolveID(const ASTNode& v)
   }
 
   //Lets shadow other symbols, so check them first.
-  if (isLetDeclared(v.GetName()))
-    return resolveLet(v.GetName());
-  
+  const ASTNode* found = lookupLet(v.GetName());
+  if (found != nullptr)
+    return *found;
+
   return v;
 }
 
-ASTNode LetMgr::resolveLet(const string s)
+const ASTNode* LetMgr::lookupLet(const string& s) const
 {
-  assert(isLetDeclared(s));
+  const auto found = bindings.find(s);
+  if (found == bindings.end())
+    return nullptr;
 
-  // Searches backwards because they could be shadowed.
-  for (auto i = stack.rbegin(); i != stack.rend(); ++i ) 
-      if ((*i).find(s) != (*i).end())
-        return (*i).find(s)->second;
-  FatalError("never here...");
+  // The innermost binding shadows the others.
+  return &found->second.back().second;
 }
 
-bool LetMgr::isLetDeclared(const string s)
+ASTNode LetMgr::resolveLet(const string& s) const
 {
-  for (auto frame : stack )
-    if (frame.find(s) != frame.end())
-      return true;
+  const ASTNode* found = lookupLet(s);
+  if (found == nullptr)
+    FatalError("never here...");
+  return *found;
+}
 
-  return false;
-
+bool LetMgr::isLetDeclared(const string& s) const
+{
+  return lookupLet(s) != nullptr;
 }
 
 void LetMgr::cleanupParserSymbolTable() 
@@ -139,7 +159,8 @@ void LetMgr::cleanupParserSymbolTable()
 void LetMgr::CleanupLetIDMap(void)
 {
   interim.clear();
-  stack.clear();
+  bindings.clear();
+  frames.clear();
   push();
 }
 
