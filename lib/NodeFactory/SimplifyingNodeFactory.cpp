@@ -523,7 +523,7 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
   const ASTNode& identity = (IsAnd ? ASTTrue : ASTFalse);
 
   // Sorting these can be expensive, so we only sort it if it's not already sorted.
-  bool isSorted =  std::is_sorted(c.begin(),c.end(),stp::exprless);
+  bool isSorted =  std::is_sorted(c.begin(),c.end(),stp::ExprLess{});
   ASTVec sorted_children;
   const ASTVec& children = isSorted ? c: sorted_children;
   if (!isSorted)
@@ -1799,7 +1799,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
         for (unsigned i = 0; i < children.size(); i++)
           names.push_back(children[i]);
 
-        sort(names.begin(), names.end(), stp::exprless);
+        sort(names.begin(), names.end(), stp::ExprLess{});
 
         while (names.size() > 1)
         {

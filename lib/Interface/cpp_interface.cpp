@@ -250,6 +250,14 @@ ASTNode Cpp_interface::applyFunction(const string& name, const ASTVec& params)
   if (f.params.size() != params.size())
     FatalError("Actual parameters differ in number from formal");
 
+  // A nullary function application is just its body: there is nothing to
+  // substitute, so skip building the (always empty) fromTo and cache maps
+  // and the replace() traversal. Files built from define-funs with no
+  // parameters (e.g. bit-blasted circuits) apply such functions millions
+  // of times, once each, so the per-call map churn dominated.
+  if (f.params.empty())
+    return f.function;
+
   ASTNodeMap fromTo;
   for (size_t i = 0, size = f.params.size(); i < size; ++i)
   {
@@ -282,6 +290,15 @@ bool Cpp_interface::isBooleanFunction(const string& name)
     return false;
 
   return found->second.function.GetType() == BOOLEAN_TYPE;
+}
+
+types Cpp_interface::functionReturnType(const string& name)
+{
+  const auto found = functions.find(name);
+  if (found == functions.end())
+    return UNKNOWN_TYPE;
+
+  return found->second.function.GetType();
 }
 
 ASTNode Cpp_interface::LookupOrCreateSymbol(string name)
