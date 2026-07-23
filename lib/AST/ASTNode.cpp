@@ -133,8 +133,98 @@ void ASTNode::SetValueWidth(unsigned int vw) const
   _int_node_ptr->setValueWidth(vw);
 }
 
+// Work out an interior node's floating-point format from its kind and its
+// children, returning false when the node does not denote a float.
+//
+// The format used to be pure per-node state that whoever built the node was
+// expected to stamp on afterwards. That does not survive contact with the
+// preprocessing pipeline: dozens of places rebuild nodes, and any that
+// forgets leaves a float claiming a format of (0, 0), which the blaster does
+// not reject -- it computes the wrong bits, or underflows a width. Deriving
+// the format instead means a rebuilt node cannot lose it, because there is
+// nothing to lose.
+//
+// Leaves still have to store it: a symbol's format is declared, and a
+// constant's is fixed when it is made (see STPMgr::CreateFPConst). Interior
+// nodes are all covered here.
+static bool deriveFPFormat(const ASTNode& n, unsigned int& e, unsigned int& s)
+{
+  switch (n.GetKind())
+  {
+    // to_fp names its target format in its first two children, rather than
+    // inheriting one from an operand.
+    case FP_TOFP:
+    case FP_TOFP_UNSIGNED:
+    {
+      if (n.Degree() < 2 || !n[0].isConstant() || !n[1].isConstant())
+        return false;
+
+      e = n[0].GetUnsignedConst();
+      s = n[1].GetUnsignedConst();
+      return e != 0 && s != 0;
+    }
+
+    // The rest produce a float in the format of their float operand. Which
+    // child that is varies -- the arithmetic operations lead with a rounding
+    // mode -- and an operand that was folded to a constant may have lost its
+    // own format, so take the first child that has one.
+    case FP_ABS:
+    case FP_NEG:
+    case FP_ADD:
+    case FP_SUB:
+    case FP_MUL:
+    case FP_DIV:
+    case FP_FMA:
+    case FP_SQRT:
+    case FP_REM:
+    case FP_ROUNDTOINTEGRAL:
+    case FP_MIN:
+    case FP_MAX:
+    {
+      for (size_t i = 0; i < n.Degree(); i++)
+      {
+        const unsigned int child_exp = n[i].GetExpWidth();
+        if (child_exp != 0)
+        {
+          e = child_exp;
+          s = n[i].GetSigWidth();
+          return true;
+        }
+      }
+      return false;
+    }
+
+    default:
+      return false;
+  }
+}
+
+// Derive once and keep the answer. The fields are already mutable, and an
+// interior node can hold them, so this costs one walk per node rather than
+// one per query.
+void ASTNode::cacheFPFormat() const
+{
+  unsigned int e = 0;
+  unsigned int s = 0;
+
+  if (!deriveFPFormat(*this, e, s))
+    return;
+
+  // A BVCONST has nowhere to put it; those are made as ASTFPConst instead.
+  if (GetKind() == BVCONST)
+    return;
+
+  _int_node_ptr->setExpWidth(e);
+  _int_node_ptr->setSigWidth(s);
+}
+
 unsigned int ASTNode::GetExpWidth() const
 {
+  const unsigned int stored = _int_node_ptr->getExpWidth();
+  if (stored != 0)
+    return stored;
+
+  cacheFPFormat();
   return _int_node_ptr->getExpWidth();
 }
 
@@ -145,6 +235,11 @@ void ASTNode::SetExpWidth(unsigned int _ew) const
 
 unsigned int ASTNode::GetSigWidth() const
 {
+  const unsigned int stored = _int_node_ptr->getSigWidth();
+  if (stored != 0)
+    return stored;
+
+  cacheFPFormat();
   return _int_node_ptr->getSigWidth();
 }
 

@@ -180,6 +180,12 @@ public:
   // AVJ-FP
   unsigned int GetSigWidth() const;
   unsigned int GetExpWidth() const;
+
+  // Work the floating-point format out from this node's kind and children and
+  // remember it. Called on demand by GetExpWidth/GetSigWidth; the format of an
+  // interior node is derived rather than assigned, so that rebuilding a node
+  // cannot lose it.
+  void cacheFPFormat() const;
   void SetSigWidth(unsigned int sw) const;
   void SetExpWidth(unsigned int ew) const;
 
