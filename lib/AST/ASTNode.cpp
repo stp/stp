@@ -105,24 +105,8 @@ ASTNode& ASTNode::operator=(ASTNode&& n)
   return *this;
 }
 
-// ASTNode accessor function.
-Kind ASTNode::GetKind() const
-{
-  // cout << "GetKind: " << _int_node_ptr;
-  return _int_node_ptr->GetKind();
-}
-
-// Declared here because of same ordering problem as GetKind.
-const ASTVec& ASTNode::GetChildren() const
-{
-  return _int_node_ptr->GetChildren();
-}
-
-// Access node number
-unsigned ASTNode::GetNodeNum() const
-{
-  return _int_node_ptr->GetNodeNum();
-}
+// GetKind, GetChildren and GetNodeNum are now inlined in ASTNode.h (possible
+// since ASTInternal.h no longer includes ASTNode.h, breaking the old cycle).
 
 unsigned int ASTNode::GetIndexWidth() const
 {
@@ -240,10 +224,7 @@ unsigned int ASTNode::GetUnsignedConst() const
   return (unsigned int)*((unsigned int*)n.GetBVConst());
 }
 
-size_t ASTNode::Hash() const
-{
-  return (_int_node_ptr ? _int_node_ptr->node_uid : 0);
-}
+// Hash() is now inlined in ASTNode.h.
 
 void ASTNode::NFASTPrint(int l, int max, int prefix) const
 {
