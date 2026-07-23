@@ -38,10 +38,10 @@ THREAD_LOCAL enum inputStatus input_status = NOT_DECLARED;
 
 // Originally just used by the parser, now used elesewhere.
 THREAD_LOCAL STP* GlobalSTP;
-THREAD_LOCAL STPMgr* GlobalParserBM;
+THREAD_LOCAL_IE STPMgr* GlobalParserBM;
 
 // Used exclusively for parsing.
-THREAD_LOCAL Cpp_interface* GlobalParserInterface;
+THREAD_LOCAL_IE Cpp_interface* GlobalParserInterface;
 
 // FIXME: This isn't in Globals.h so how can anyone use this?
 void (*vc_error_hdlr)(const char* err_msg) = 0;

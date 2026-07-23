@@ -1,5 +1,5 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Windows build](https://ci.appveyor.com/api/projects/status/35983b7cnrg37whk?svg=true)](https://ci.appveyor.com/project/msoos/stp)
+[![CI](https://github.com/stp/stp/actions/workflows/ci.yml/badge.svg)](https://github.com/stp/stp/actions/workflows/ci.yml)
 [![Documentation](https://readthedocs.org/projects/stp/badge/?version=latest)](https://stp.readthedocs.io/en/latest/?badge=latest)
 [![Coverity](https://scan.coverity.com/projects/861/badge.svg)](https://scan.coverity.com/projects/861)
 
@@ -133,6 +133,27 @@ $ command -v ldconfig && sudo ldconfig
 
 Alternatively, these commands are pre-configused in `scripts/deps/setup-minisat.sh` and `scripts/deps/setup-cms.sh` (respectively).
 
+CaDiCaL is also supported, but is opt-in rather than auto-detected. It is
+consumed from a build tree rather than an installation, so point
+`CADICAL_DIR` at the checkout:
+
+```
+$ git clone https://github.com/arminbiere/cadical
+$ cd cadical
+$ git checkout rel-2.1.3
+$ ./configure -fPIC
+$ make
+```
+
+then configure STP with `-DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH=<path>`,
+where `<path>` is the checkout containing `src/cadical.hpp` and
+`build/libcadical.a`. `-fPIC` is required because `libcadical.a` is linked
+into STP's shared library. These commands are pre-configured in
+`scripts/deps/setup-cadical.sh`.
+
+When STP is built this way CaDiCaL becomes the *default* solver; `--minisat`
+or `--cryptominisat` select the others at runtime.
+
 #### Building against non-installed libraries
 
 If you wish to build STP's dependencies without installing them, you can tell CMake where to find the non-installed artefacts. For example:
@@ -191,7 +212,7 @@ To install run `make install` and to uninstall run `make uninstall`. The root of
 
 ### Building on Windows/Visual Studio
 
-You will need to install [cmake](https://cmake.org/download/) and follow the steps that AppVeyor [follows](https://github.com/stp/stp/blob/master/appveyor.yml). In case you need the static binary, you can always access it as a binary artifact at the [AppVeyor build page](https://ci.appveyor.com/project/msoos/stp). In case you still have trouble, please see the mini-HOWTO [at issue #319](https://github.com/stp/stp/issues/319).
+You will need to install [cmake](https://cmake.org/download/) and follow the steps that the `windows` job in [`.github/workflows/ci.yml`](https://github.com/stp/stp/blob/master/.github/workflows/ci.yml) runs: install flex and bison, build minisat, then configure STP against it with `-DNOCRYPTOMINISAT=ON` (CryptoMiniSat does not build with MSVC). In case you still have trouble, please see the mini-HOWTO [at issue #319](https://github.com/stp/stp/issues/319).
 
 ### Building Docker
 

@@ -34,6 +34,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/UnsignedIntervalAnalysis.h"
 #include "stp/Simplifier/UnsignedInterval.h"
 #include "stp/Simplifier/StrengthReduction.h"
+#include "stp/Util/BitOps.h"
 #include <iostream>
 #include <map>
 
@@ -251,7 +252,7 @@ namespace stp
       uint64_t candidates = (a ^ c) & chunkMask;
       while (candidates != 0)
       {
-        const uint64_t m = (uint64_t)1 << (63 - __builtin_clzll(candidates));
+        const uint64_t m = (uint64_t)1 << (63 - ::stp::countLeadingZeroes64(candidates));
         if (c & m) // and not a: raising a can cancel c's bit
         {
           const uint64_t raised = (a | m) & ~(m - 1);
@@ -290,7 +291,7 @@ namespace stp
       uint64_t candidates = b & d & chunkMask;
       while (candidates != 0)
       {
-        const uint64_t m = (uint64_t)1 << (63 - __builtin_clzll(candidates));
+        const uint64_t m = (uint64_t)1 << (63 - ::stp::countLeadingZeroes64(candidates));
         uint64_t lowered = (b & ~m) | (m - 1);
         if (lowered >= aEff)
         {
@@ -862,7 +863,7 @@ namespace stp
       // The progression repeats with period m / gcd; a count covering a
       // full period hits exactly the residues congruent to start modulo
       // the gcd.
-      const uwide gcd = (uwide)1 << __builtin_ctzll((uint64_t)step);
+      const uwide gcd = (uwide)1 << ::stp::countTrailingZeroes64((uint64_t)step);
       if (count >= m / gcd)
       {
         mn = start & (gcd - 1);
@@ -1762,7 +1763,7 @@ namespace stp
         {
           const uint64_t diff = chunk64(c0->minV, k) ^ chunk64(c0->maxV, k);
           if (diff != 0)
-            highestDiff = 64 * k + 63 - __builtin_clzll(diff);
+            highestDiff = 64 * k + 63 - ::stp::countLeadingZeroes64(diff);
         }
 
         // Four chunk buffers; on the stack for widths up to 1024.

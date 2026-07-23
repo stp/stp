@@ -29,7 +29,7 @@ if (USE_CRYPTOMINISAT)
 endif()
 
 if (USE_CADICAL)
-    include_directories(${CADICAL_INCLUDE_DIRS})
+    include_directories(${CADICAL_INCLUDE_DIR})
     set(sat_lib_to_add ${sat_lib_to_add} Cadical.cpp)
 endif()
 

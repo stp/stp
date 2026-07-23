@@ -26,6 +26,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
+#include "stp/Util/BitOps.h"
 #include <cstdint>
 #include <set>
 #include <stdexcept>
@@ -163,7 +164,7 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
       const bool under2 = d1 < borrow;
       borrow = (under1 || under2) ? 1 : 0;
       if (d != 0)
-        bitLen = w * 64 + 64 - (unsigned)__builtin_clzll(d);
+        bitLen = w * 64 + 64 - (unsigned)::stp::countLeadingZeroes64(d);
     }
     for (unsigned w = 0; w < words; w++)
     {
@@ -175,7 +176,7 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
       maxAdm[w] &= ~forced0;
       while (forced0)
       {
-        const unsigned bit = __builtin_ctzll(forced0);
+        const unsigned bit = ::stp::countTrailingZeroes64(forced0);
         forced0 &= forced0 - 1;
         b.setFixed(w * 64 + bit, true);
         b.setValue(w * 64 + bit, false);
@@ -204,7 +205,7 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
       const bool under2 = d1 < borrow;
       borrow = (under1 || under2) ? 1 : 0;
       if (d != 0)
-        bitLen = w * 64 + 64 - (unsigned)__builtin_clzll(d);
+        bitLen = w * 64 + 64 - (unsigned)::stp::countLeadingZeroes64(d);
     }
     for (unsigned w = 0; w < words; w++)
     {
@@ -216,7 +217,7 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
       bV[w] |= forced1;
       while (forced1)
       {
-        const unsigned bit = __builtin_ctzll(forced1);
+        const unsigned bit = ::stp::countTrailingZeroes64(forced1);
         forced1 &= forced1 - 1;
         b.setFixed(w * 64 + bit, true);
         b.setValue(w * 64 + bit, true);
@@ -232,7 +233,7 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
       const uint64_t d = (lowW[w] ^ highW[w]) & rangeBelow(w, width);
       if (d != 0)
       {
-        firstDiffer = w * 64 + 64 - (unsigned)__builtin_clzll(d);
+        firstDiffer = w * 64 + 64 - (unsigned)::stp::countLeadingZeroes64(d);
         break;
       }
     }
@@ -248,7 +249,7 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
       changed |= newFix != 0;
       while (newFix)
       {
-        const unsigned bit = __builtin_ctzll(newFix);
+        const unsigned bit = ::stp::countTrailingZeroes64(newFix);
         newFix &= newFix - 1;
         b.setFixed(w * 64 + bit, true);
         b.setValue(w * 64 + bit, (lowW[w] >> bit) & 1);
@@ -864,7 +865,7 @@ Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,
       const uint64_t ones = vo & range;
       const uint64_t add =
           ~fo & range &
-          (ones != 0 ? ~rangeBelow(w, w * 64 + 64 - __builtin_clzll(ones))
+          (ones != 0 ? ~rangeBelow(w, w * 64 + 64 - ::stp::countLeadingZeroes64(ones))
                      : ~(uint64_t)0);
       if (add != 0)
       {
@@ -873,7 +874,7 @@ Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,
       }
       if (ones != 0)
       {
-        conflictAt = w * 64 + 63 - __builtin_clzll(ones);
+        conflictAt = w * 64 + 63 - ::stp::countLeadingZeroes64(ones);
         break;
       }
     }
