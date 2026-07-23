@@ -1563,8 +1563,13 @@ FORMID_TOK
       it!=itend; it++)
   {
     for(ASTVec::const_iterator it2=it+1; it2!=itend; it2++) {
+      // Equality of floats is FP_SMT_EQ, not the generic EQ -- the same
+      // distinction the (= ...) rule makes. Building plain EQ over float
+      // operands produces a node the later passes reject as a non-formula.
+      const Kind eqk =
+        ((*it).GetType() == FLOATINGPOINT_TYPE) ? FP_SMT_EQ : EQ;
       ASTNode n =
-        stp::GlobalParserInterface->nf->CreateNode(NOT, stp::GlobalParserInterface->CreateNode(EQ, *it, *it2));
+        stp::GlobalParserInterface->nf->CreateNode(NOT, stp::GlobalParserInterface->CreateNode(eqk, *it, *it2));
 
       forms.push_back(n);
     }
@@ -1589,7 +1594,12 @@ FORMID_TOK
   for(ASTVec::const_iterator it=terms.begin(),itend=terms.end();
       it!=itend; it++) {
     for(ASTVec::const_iterator it2=it+1; it2!=itend; it2++) {
-      ASTNode n = (stp::GlobalParserInterface->nf->CreateNode(NOT, stp::GlobalParserInterface->CreateNode(IFF, *it, *it2)));
+      // Floats reach this (an_formulas) distinct rule too, since a
+      // floating-point function-id reduces as a formula. Their equality is
+      // FP_SMT_EQ, not IFF, which only holds between Booleans.
+      const Kind eqk =
+        ((*it).GetType() == FLOATINGPOINT_TYPE) ? FP_SMT_EQ : IFF;
+      ASTNode n = (stp::GlobalParserInterface->nf->CreateNode(NOT, stp::GlobalParserInterface->CreateNode(eqk, *it, *it2)));
       forms.push_back(n);
     }
   }
@@ -1768,19 +1778,27 @@ FORMID_TOK
 }
 | LPAREN_TOK FLOATINGPOINT_FUNCTIONID_TOK an_mixed RPAREN_TOK
 {
-/*
+  // A floating-point define-fun applied in formula position, e.g. as an
+  // operand of (= ...), which STP routes through an_formulas. The body was
+  // left unimplemented here, so $$ was never assigned and the garbage node
+  // crashed later; give it the same handling as the an_term form.
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$2,*$3));
+
+  if ($$->GetType() != FLOATINGPOINT_TYPE)
+      yyerror("Must be floating-point type");
+
   delete $2;
   delete $3;
-  */
 }
 | FLOATINGPOINT_FUNCTIONID_TOK
 {
-/*
   ASTVec empty;
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$1,empty));
+
+  if ($$->GetType() != FLOATINGPOINT_TYPE)
+    yyerror("Must be floating-point type");
+
   delete $1;
-  */
 }
 | LPAREN_TOK EXCLAIMATION_MARK_TOK an_formula NAMED_ATTRIBUTE_TOK STRING_TOK RPAREN_TOK
 {
