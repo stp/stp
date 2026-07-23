@@ -270,9 +270,9 @@ void ArrayTransformer::assertTransformPostConditions(const ASTNode& term,
   // There should be no nodes left of type array.
   assert(0 == term.GetIndexWidth());
 
-  const ASTVec& c = term.GetChildren();
-  ASTVec::const_iterator it = c.begin();
-  const ASTVec::const_iterator itend = c.end();
+  const ASTChildren c = term.GetChildren();
+  auto it = c.begin();
+  const auto itend = c.end();
   for (; it != itend; it++)
   {
     assertTransformPostConditions(*it, visited);
@@ -370,7 +370,7 @@ ASTNode ArrayTransformer::TransformFormula(const ASTNode& simpleForm)
       ASTVec vec;
       vec.reserve(simpleForm.Degree());
 
-      for (ASTVec::const_iterator it = simpleForm.begin(),
+      for (auto it = simpleForm.begin(),
                                   itend = simpleForm.end();
            it != itend; it++)
       {
@@ -467,9 +467,9 @@ ASTNode ArrayTransformer::TransformTerm(const ASTNode& term)
     }
     default:
     {
-      const ASTVec& c = term.GetChildren();
-      ASTVec::const_iterator it = c.begin();
-      ASTVec::const_iterator itend = c.end();
+      const ASTChildren c = term.GetChildren();
+      auto it = c.begin();
+      auto itend = c.end();
       const unsigned width = term.GetValueWidth();
       const unsigned indexwidth = term.GetIndexWidth();
       ASTVec o;

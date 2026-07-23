@@ -135,8 +135,8 @@ void LetizeNode(const ASTNode& n, ASTNodeSet& PLPrintNodeSet, bool smtlib1,
   if (n.isAtom())
     return;
 
-  const ASTVec& c = n.GetChildren();
-  for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend;
+  const ASTChildren c = n.GetChildren();
+  for (auto it = c.begin(), itend = c.end(); it != itend;
        it++)
   {
     const ASTNode& ccc = *it;

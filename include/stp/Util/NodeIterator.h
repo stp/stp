@@ -72,9 +72,9 @@ public:
 
     result.setIteration(iteration);
 
-    const ASTVec& c = result.GetChildren();
-    ASTVec::const_iterator itC = c.begin();
-    ASTVec::const_iterator itendC = c.end();
+    const ASTChildren c = result.GetChildren();
+    auto itC = c.begin();
+    auto itendC = c.end();
     for (; itC != itendC; itC++)
     {
       if (itC->getIteration() == iteration)

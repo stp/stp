@@ -251,8 +251,8 @@ void ASTNode::NFASTPrint(int l, int max, int prefix) const
   // recurse
   //****************************************
 
-  const ASTVec& children = GetChildren();
-  ASTVec::const_iterator it = children.begin();
+  const ASTChildren children = GetChildren();
+  auto it = children.begin();
   for (; it != children.end(); it++)
   {
     it->NFASTPrint(l + 1, max, prefix + 1);
@@ -276,8 +276,8 @@ void ASTNode::LetizeNode(STPMgr* bm) const
   if (isAtom())
     return;
 
-  const ASTVec& c = this->GetChildren();
-  for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend;
+  const ASTChildren c = this->GetChildren();
+  for (auto it = c.begin(), itend = c.end(); it != itend;
        it++)
   {
     ASTNode ccc = *it;

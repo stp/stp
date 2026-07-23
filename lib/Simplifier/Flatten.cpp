@@ -87,7 +87,7 @@ namespace stp
 
     ASTVec newChildren;
 
-    const ASTVec& children = n.GetChildren();
+    const ASTChildren children = n.GetChildren();
     auto it0 = children.begin();
 
     ASTVec nextChildren;

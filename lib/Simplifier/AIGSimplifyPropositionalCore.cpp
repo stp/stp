@@ -87,11 +87,11 @@ ASTNode AIGSimplifyPropositionalCore::theoryToFresh(const ASTNode& n,
     return fresh;
   }
 
-  const ASTVec& children = n.GetChildren();
+  const ASTChildren children = n.GetChildren();
   ASTVec new_children;
   new_children.reserve(children.size());
 
-  for (ASTVec::const_iterator it = children.begin(); it != children.end(); it++)
+  for (auto it = children.begin(); it != children.end(); it++)
     new_children.push_back(theoryToFresh(*it, fromTo));
 
   ASTNode result;

@@ -96,7 +96,7 @@ private:
   virtual uint32_t getValueWidth() const { return _value_width; }
 
 public:
-  virtual ASTVec const& GetChildren() const { return empty_children; }
+  virtual ASTChildren GetChildren() const { return empty_children; }
 
   // Constructor.  This does NOT copy its argument.
   ASTSymbol(STPMgr* mgr, const char* const name)

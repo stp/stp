@@ -149,7 +149,7 @@ public:
 
   virtual ~ASTInterior();
 
-  virtual ASTVec const& GetChildren() const { return _children; }
+  virtual ASTChildren GetChildren() const { return _children; }
 
   bool isSimplified() const { return is_simplified; }
 

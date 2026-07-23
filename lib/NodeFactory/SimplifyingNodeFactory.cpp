@@ -706,8 +706,8 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
   if ((k1 == BVPLUS && in1.Degree() <= 2) ||
       (k2 == BVPLUS && in2.Degree() <= 2))
   {
-    const ASTVec& c1 = (k1 == BVPLUS) ? in1.GetChildren() : ASTVec(1, in1);
-    const ASTVec& c2 = (k2 == BVPLUS) ? in2.GetChildren() : ASTVec(1, in2);
+    const ASTVec c1 = (k1 == BVPLUS) ? toASTVec(in1.GetChildren()) : ASTVec(1, in1);
+    const ASTVec c2 = (k2 == BVPLUS) ? toASTVec(in2.GetChildren()) : ASTVec(1, in2);
 
     if (c1.size() <= 2 && c2.size() <= 2)
     {

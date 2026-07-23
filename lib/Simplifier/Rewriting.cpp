@@ -92,7 +92,7 @@ namespace stp
 
     ASTNode result =n;
 
-    const ASTVec& children = n.GetChildren();
+    const ASTChildren children = n.GetChildren();
     ASTVec newChildren;
 
     // Copy on write.

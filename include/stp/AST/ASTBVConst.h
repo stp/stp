@@ -102,7 +102,7 @@ private:
   uint32_t getValueWidth() const { return bits_(_bvconst); }
 
 public:
-  virtual ASTVec const& GetChildren() const { return astbv_empty_children; }
+  virtual ASTChildren GetChildren() const { return astbv_empty_children; }
 
   virtual ~ASTBVConst()
   {

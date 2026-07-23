@@ -221,14 +221,14 @@ bool isAtomic(Kind kind)
 // typechecked.
 bool BVTypeCheckRecursive(const ASTNode& n)
 {
-  const ASTVec& c = n.GetChildren();
+  const ASTChildren c = n.GetChildren();
 
   if (!BVTypeCheck(n))
   {
     return false;
   }
 
-  for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend;
+  for (auto it = c.begin(), itend = c.end(); it != itend;
        it++)
   {
     if (!BVTypeCheckRecursive(*it))
@@ -257,9 +257,9 @@ void buildListOfSymbols(const ASTNode& n, ASTNodeSet& visited,
     buildListOfSymbols(n[i], visited, symbols);
 }
 
-void checkChildrenAreBV(const ASTVec& v, const ASTNode& n)
+void checkChildrenAreBV(const ASTChildren& v, const ASTNode& n)
 {
-  for (ASTVec::const_iterator it = v.begin(), itend = v.end(); it != itend;
+  for (auto it = v.begin(), itend = v.end(); it != itend;
        it++)
   {
     if (BITVECTOR_TYPE != it->GetType())
@@ -275,12 +275,17 @@ void checkChildrenAreBV(const ASTVec& v, const ASTNode& n)
  * AND,OR operations are not
  * flattened multiple times.
  */
-void FlattenKindNoDuplicates(const Kind k, const ASTVec& children,
+ASTVec toASTVec(const ASTChildren& c)
+{
+  return ASTVec(c.begin(), c.end());
+}
+
+void FlattenKindNoDuplicates(const Kind k, const ASTChildren& children,
                              ASTVec& flat_children,
                              ASTNodeSet& alreadyFlattened)
 {
-  const ASTVec::const_iterator ch_end = children.end();
-  for (ASTVec::const_iterator it = children.begin(); it != ch_end; it++)
+  const auto ch_end = children.end();
+  for (auto it = children.begin(); it != ch_end; it++)
   {
     const Kind ck = it->GetKind();
     if (k == ck)
@@ -299,10 +304,10 @@ void FlattenKindNoDuplicates(const Kind k, const ASTVec& children,
   }
 }
 
-void FlattenKind(const Kind k, const ASTVec& children, ASTVec& flat_children, int depth)
+void FlattenKind(const Kind k, const ASTChildren& children, ASTVec& flat_children, int depth)
 {
-  ASTVec::const_iterator ch_end = children.end();
-  for (ASTVec::const_iterator it = children.begin(); it != ch_end; it++)
+  auto ch_end = children.end();
+  for (auto it = children.begin(); it != ch_end; it++)
   {
     const Kind ck = it->GetKind();
     if (k == ck && depth >= 0 )
@@ -317,7 +322,7 @@ void FlattenKind(const Kind k, const ASTVec& children, ASTVec& flat_children, in
 }
 
 // Flatten (k ... (k ci cj) ...) to (k ... ci cj ...)
-ASTVec FlattenKind(Kind k, const ASTVec& children, int maxDepth)
+ASTVec FlattenKind(Kind k, const ASTChildren& children, int maxDepth)
 {
   ASTVec flat_children;
   if (k == OR || k == BVOR || k == BVAND || k == AND)
@@ -336,7 +341,7 @@ ASTVec FlattenKind(Kind k, const ASTVec& children, int maxDepth)
 bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
 {
   // The children of bitvector terms are in turn bitvectors.
-  const ASTVec& v = n.GetChildren();
+  const ASTChildren v = n.GetChildren();
 
   switch (k)
   {
@@ -434,7 +439,7 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
                    n);
 
       unsigned int width = n.GetValueWidth();
-      for (ASTVec::const_iterator it = v.begin(), itend = v.end(); it != itend;
+      for (auto it = v.begin(), itend = v.end(); it != itend;
            it++)
       {
         if (width != it->GetValueWidth())
@@ -512,7 +517,7 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
 bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
 {
   // The children of bitvector terms are in turn bitvectors.
-  const ASTVec& v = n.GetChildren();
+  const ASTChildren v = n.GetChildren();
 
   if (!(is_Form_kind(k) && BOOLEAN_TYPE == n.GetType()))
     FatalError("BVTypeCheck: not a formula:", n);

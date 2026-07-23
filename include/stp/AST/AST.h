@@ -72,7 +72,7 @@ bool BVTypeCheck(const ASTNode& n);
 
 long getCurrentTime();
 
-ASTVec FlattenKind(Kind k, const ASTVec& children, int maxDepth = INT_MAX);
+ASTVec FlattenKind(Kind k, const ASTChildren& children, int maxDepth = INT_MAX);
 
 // Checks recursively all the way down.
 bool BVTypeCheckRecursive(const ASTNode& n);
@@ -100,7 +100,7 @@ typedef std::unordered_map<ASTNode, ASTVec, ASTNode::ASTNodeHasher,
                            ASTNode::ASTNodeEqual>
     ASTNodeToVecMap;
 
-void FlattenKindNoDuplicates(const Kind k, const ASTVec& children,
+void FlattenKindNoDuplicates(const Kind k, const ASTChildren& children,
                              ASTVec& flat_children,
                              ASTNodeSet& alreadyFlattened);
 

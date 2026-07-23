@@ -910,7 +910,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* mgr, const ASTNode& t)
   if (t.isConstant())
     return t;
 
-  return NonMemberBVConstEvaluator(mgr, t.GetKind(), t.GetChildren(),
+  return NonMemberBVConstEvaluator(mgr, t.GetKind(), toASTVec(t.GetChildren()),
                                    t.GetValueWidth());
 }
 

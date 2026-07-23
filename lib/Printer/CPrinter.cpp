@@ -72,7 +72,7 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize,
 
   // otherwise print it normally
   Kind kind = n.GetKind();
-  const ASTVec& c = n.GetChildren();
+  const ASTChildren c = n.GetChildren();
   switch (kind)
   {
     case BOOLEXTRACT:
@@ -191,7 +191,7 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize,
     case BVMOD:
       os << kind << "(";
       os << n.GetValueWidth();
-      for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend;
+      for (auto it = c.begin(), itend = c.end(); it != itend;
            it++)
       {
         os << ", " << endl;
@@ -343,8 +343,8 @@ void C_Print1(ostream& os, const ASTNode n, int indentation, bool letize,
     {
       os << "(";
       C_Print1(os, c[0], indentation, letize, bm);
-      ASTVec::const_iterator it = c.begin();
-      ASTVec::const_iterator itend = c.end();
+      auto it = c.begin();
+      auto itend = c.end();
 
       it++;
       for (; it != itend; it++)

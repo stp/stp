@@ -58,9 +58,9 @@ operator()(const ASTInterior* int_node_ptr) const
     return int_node_ptr->_cached_hash;
 
   size_t hashval = ((size_t)int_node_ptr->GetKind());
-  const ASTVec& ch = int_node_ptr->GetChildren();
-  ASTVec::const_iterator iend = ch.end();
-  for (ASTVec::const_iterator i = ch.begin(); i != iend; i++)
+  const ASTChildren ch = int_node_ptr->GetChildren();
+  auto iend = ch.end();
+  for (auto i = ch.begin(); i != iend; i++)
   {
     hashval += i->Hash();
     hashval += (hashval << 10);
