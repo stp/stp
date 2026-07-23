@@ -59,7 +59,7 @@ ASTNode HashingNodeFactory::CreateNode(const Kind kind,
 
     ASTVec sorted_children = back_children;
     SortByExprNum(sorted_children);
-    return ASTNode(bm.LookupOrCreateInterior(kind, sorted_children));
+    return ASTNode(bm.LookupOrCreateInterior(kind, std::move(sorted_children)));
   }
   else
   {
@@ -68,7 +68,7 @@ ASTNode HashingNodeFactory::CreateNode(const Kind kind,
     // LHS.
     SortByArith(children);
 
-    return ASTNode(bm.LookupOrCreateInterior(kind, children));
+    return ASTNode(bm.LookupOrCreateInterior(kind, std::move(children)));
   }
 }
 
