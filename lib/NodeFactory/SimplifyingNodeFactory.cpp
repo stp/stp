@@ -1764,6 +1764,25 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                                            children[0]);
           result = NodeFactory::CreateTerm(BVUMINUS, width, result);
         }
+        // (t * (u << s)) == ((t * u) << s), for either operand order. A
+        // constant shift amount is already lowered to a concat, so this only
+        // fires for variable shift amounts.
+        else if (children[1].GetKind() == stp::BVLEFTSHIFT)
+        {
+          result = NodeFactory::CreateTerm(
+              stp::BVLEFTSHIFT, width,
+              NodeFactory::CreateTerm(stp::BVMULT, width, children[0],
+                                      children[1][0]),
+              children[1][1]);
+        }
+        else if (children[0].GetKind() == stp::BVLEFTSHIFT)
+        {
+          result = NodeFactory::CreateTerm(
+              stp::BVLEFTSHIFT, width,
+              NodeFactory::CreateTerm(stp::BVMULT, width, children[1],
+                                      children[0][0]),
+              children[0][1]);
+        }
         else
         {
           // (2^p * (k ++ y)) is a left shift by p; when p is the width of k,
@@ -2030,6 +2049,19 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       else if (children[0].GetKind() == BVMULT && children[0].Degree() == 2 &&
                children[0][0] == bm.CreateMaxConst(width))
         result = children[0][1];
+      else if (children[0].GetKind() == stp::BVAND && children[0].Degree() == 2)
+      {
+        // -(x & -x) == x | -x. (The dual -(x | -x) == x & -x never fires:
+        // BVOR is lowered to ~(~x & ~y) at creation, so no BVOR node survives
+        // as a BVUMINUS child.)
+        const ASTNode& inner = children[0];
+        if (inner[1].GetKind() == BVUMINUS && inner[1][0] == inner[0])
+          result =
+              NodeFactory::CreateTerm(stp::BVOR, width, inner[0], inner[1]);
+        else if (inner[0].GetKind() == BVUMINUS && inner[0][0] == inner[1])
+          result =
+              NodeFactory::CreateTerm(stp::BVOR, width, inner[1], inner[0]);
+      }
       break;
 
     case BVEXTRACT:
