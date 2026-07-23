@@ -127,7 +127,7 @@ SATSolver* STP::get_new_sat_solver()
     
     case UserDefinedFlags::CADICAL_SOLVER:
 #ifdef USE_CADICAL
-      newS = new Cadical();
+      newS = new Cadical(bm->UserFlags.cadical_config);
       break;
 #else
       std::cerr << "Cadical support was not enabled at configure time."

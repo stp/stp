@@ -24,6 +24,8 @@ THE SOFTWARE.
 #ifndef UDEFFLAGS_H
 #define UDEFFLAGS_H
 
+#include <string>
+
 namespace stp
 {
 
@@ -168,6 +170,10 @@ public:
   };
 
   enum SATSolvers solver_to_use;
+
+  // Optional CaDiCaL configuration profile (e.g. "unsat", "sat"). Empty means
+  // leave CaDiCaL at its default configuration.
+  std::string cadical_config = "";
 
   bool get_print_output_at_all() const
   {

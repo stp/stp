@@ -227,6 +227,9 @@ void ExtraMain::create_options()
   solver_options.add_options()
 #ifdef USE_CADICAL
       ("cadical", "use cadical as the solver")
+      ("cadical-config", po::value<std::string>(&bm->UserFlags.cadical_config),
+       "CaDiCaL configuration profile: 'unsat' (focused search, best for "
+       "unsatisfiable / verification workloads), 'sat', or 'default'")
 #endif
 
 #ifdef USE_CRYPTOMINISAT
