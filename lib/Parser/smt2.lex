@@ -5,6 +5,7 @@
 %option noreject
 %option noyymore
 %option yylineno
+%option full
 
 %{
 /********************************************************************
