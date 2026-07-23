@@ -56,7 +56,7 @@ class ASTInterior : public ASTInternal
   // Stays valid because the kind and children never change once set up,
   // so the hash isn't recomputed on insertion or removal from the
   // unique table.
-  mutable size_t _hash_cache = 0;
+  mutable size_t _cached_hash = 0;
 
   /******************************************************************
    * Hasher for ASTInterior pointer nodes                           *
@@ -127,7 +127,7 @@ public:
   // search the unique table, keeping its node number and cached hash.
   ASTInterior(ASTInterior&& int_node)
       : ASTInternal(int_node), _children(std::move(int_node._children)),
-        _hash_cache(int_node._hash_cache), _value_width(int_node._value_width),
+        _cached_hash(int_node._cached_hash), _value_width(int_node._value_width),
         _index_width(int_node._index_width)
   {
     is_simplified = false;

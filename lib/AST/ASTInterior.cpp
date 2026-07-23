@@ -54,8 +54,8 @@ void ASTInterior::nodeprint(ostream& os, bool /*c_friendly*/)
 size_t ASTInterior::ASTInteriorHasher::
 operator()(const ASTInterior* int_node_ptr) const
 {
-  if (int_node_ptr->_hash_cache != 0)
-    return int_node_ptr->_hash_cache;
+  if (int_node_ptr->_cached_hash != 0)
+    return int_node_ptr->_cached_hash;
 
   size_t hashval = ((size_t)int_node_ptr->GetKind());
   const ASTVec& ch = int_node_ptr->GetChildren();
@@ -73,7 +73,7 @@ operator()(const ASTInterior* int_node_ptr) const
 
   if (hashval == 0)
     hashval = 1; // 0 marks the hash as not yet computed.
-  int_node_ptr->_hash_cache = hashval;
+  int_node_ptr->_cached_hash = hashval;
   return hashval;
 }
 
