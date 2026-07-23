@@ -127,8 +127,9 @@ protected:
   // is for printing hex. numbers that C compilers will accept
   virtual void nodeprint(ostream& os, bool /*c_friendly*/) { os << "*"; };
 
-  // Treat the result as const pleases
-  virtual Kind GetKind() const { return _kind; }
+  // Treat the result as const pleases.
+  // Non-virtual: no subclass overrides it, so this is just a field read.
+  Kind GetKind() const { return _kind; }
 
   // Get the child nodes of this node
   virtual ASTVec const& GetChildren() const = 0;
