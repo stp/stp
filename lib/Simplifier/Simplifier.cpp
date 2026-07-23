@@ -1777,18 +1777,11 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
 
       const ASTNode& a0 = inputterm[0];
       const Kind k1 = a0.GetKind();
-      const ASTNode one = nf->CreateOneConst(inputValueWidth);
       assert(k1 != BVCONST);
       switch (k1)
       {
-        case BVUMINUS:
-          output = a0[0];
-          break;
-        case BVNOT:
-        {
-          output = nf->CreateTerm(BVPLUS, inputValueWidth, a0[0], one);
-          break;
-        }
+        // nb. -(-x) == x and -(~x) == x + 1 are done by the simplifying node
+        // factory, so those children never reach here.
         case BVMULT:
         {
           if (BVUMINUS == a0[0].GetKind())
@@ -1839,12 +1832,8 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
           output = nf->CreateTerm(BVPLUS, inputValueWidth, o);
           break;
         }
-        case BVSUB:
-        {
-          // BVUMINUS(BVSUB(x,y)) <=> BVSUB(y,x)
-          output = nf->CreateTerm(BVSUB, inputValueWidth, a0[1], a0[0]);
-          break;
-        }
+        // nb. BVUMINUS(BVSUB(x,y)) does not occur: BVSUB is lowered to a
+        // BVPLUS by the simplifying node factory.
         // nb. -(x & -x) == x | -x is done by the simplifying node factory.
         // (The -(x | -x) case here was dead: BVOR is lowered to ~(~x & ~y) at
         // creation, so no BVOR node ever reaches this switch.)
@@ -2176,16 +2165,11 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
     }
 
     case BVZX:
-    {
-      // a0 is the expr which is being zero-extended
-      ASTNode a0 = inputterm[0];
-
-      if (a0.GetValueWidth() == inputValueWidth)
-        output = a0; // nothing to zero-extend
-      else
-        output = inputterm;
+      // nb. BVZX is always lowered to a concat with zero (or its child when
+      // the widths match) by the simplifying node factory, so it never
+      // reaches here.
+      output = inputterm;
       break;
-    }
 
     case BVAND:
     case BVOR:
