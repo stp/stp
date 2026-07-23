@@ -81,4 +81,17 @@ THE SOFTWARE.
 #error "Cannot define THREAD_LOCAL"
 #endif
 
+// THREAD_LOCAL_IE: a thread-local requesting the initial-exec TLS model,
+// which is accessed by a fixed offset instead of a __tls_get_addr call.
+// Use only for hot thread-locals that libstp itself defines and that are
+// touched on the parse/node-creation fast path. Safe when libstp is in
+// the initial load set or dlopen'd before the using thread is created
+// (the normal cases: the stp binary and the Python bindings). glibc's
+// static-TLS surplus covers typical dlopen use too.
+#if USE_THREAD_LOCAL && (defined(__GNUC__) || defined(__clang__))
+#define THREAD_LOCAL_IE THREAD_LOCAL __attribute__((tls_model("initial-exec")))
+#else
+#define THREAD_LOCAL_IE THREAD_LOCAL
+#endif
+
 #endif //ATTRIBUTES_H_

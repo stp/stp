@@ -77,7 +77,7 @@ protected:
   // the are NOTs of.
   //
   uint64_t node_uid;
-  static THREAD_LOCAL uint64_t node_uid_cntr;
+  static THREAD_LOCAL_IE uint64_t node_uid_cntr;
 
   // reference counting for garbage collection
   uint32_t _ref_count;
