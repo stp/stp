@@ -108,6 +108,23 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
       output = symbolic_fp::blast_fpdiv(/* rm */ inputterm[0], inputterm[1],
                                         inputterm[2]);
       break;
+    case FP_FMA:
+      output = symbolic_fp::blast_fpfma(/* rm */ inputterm[0], inputterm[1],
+                                        inputterm[2], inputterm[3]);
+      break;
+    case FP_SQRT:
+      output = symbolic_fp::blast_fpsqrt(/* rm */ inputterm[0], inputterm[1]);
+      break;
+    // fp.rem, fp.min and fp.max take no rounding mode.
+    case FP_REM:
+      output = symbolic_fp::blast_fprem(inputterm[0], inputterm[1]);
+      break;
+    case FP_MIN:
+      output = symbolic_fp::blast_fpmin(inputterm[0], inputterm[1]);
+      break;
+    case FP_MAX:
+      output = symbolic_fp::blast_fpmax(inputterm[0], inputterm[1]);
+      break;
     case FP_ABS:
       output = symbolic_fp::blast_fpabs(inputterm[0]);
       break;

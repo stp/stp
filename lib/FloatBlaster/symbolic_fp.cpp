@@ -1011,6 +1011,90 @@ ASTNode blast_fpdiv(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs)
   return packed;
 }
 
+ASTNode blast_fpfma(const ASTNode& rm, const ASTNode& x, const ASTNode& y,
+                    const ASTNode& z)
+{
+  assert(x.GetExpWidth() == y.GetExpWidth());
+  assert(x.GetSigWidth() == y.GetSigWidth());
+  assert(x.GetExpWidth() == z.GetExpWidth());
+  assert(x.GetSigWidth() == z.GetSigWidth());
+  floatingPointTypeInfo size(x.GetExpWidth(), x.GetSigWidth());
+  uf unpacked_x(symfpu::unpack<traits>(size, x));
+  uf unpacked_y(symfpu::unpack<traits>(size, y));
+  uf unpacked_z(symfpu::unpack<traits>(size, z));
+
+  uf result(
+      symfpu::fma<traits>(size, rm, unpacked_x, unpacked_y, unpacked_z));
+
+  ASTNode packed(symfpu::pack<traits>(size, result));
+
+  return packed;
+}
+
+ASTNode blast_fpsqrt(const ASTNode& rm, const ASTNode& expr)
+{
+  floatingPointTypeInfo size(expr.GetExpWidth(), expr.GetSigWidth());
+  uf unpacked(symfpu::unpack<traits>(size, expr));
+  uf result(symfpu::sqrt<traits>(size, rm, unpacked));
+  ASTNode packed(symfpu::pack<traits>(size, result));
+  return packed;
+}
+
+// fp.rem takes no rounding mode: the remainder is always exact, so there is
+// nothing to round. symfpu's remainder() rounds with RNE internally only for
+// the intermediate quotient.
+ASTNode blast_fprem(const ASTNode& lhs, const ASTNode& rhs)
+{
+  assert(lhs.GetExpWidth() == rhs.GetExpWidth());
+  assert(lhs.GetSigWidth() == rhs.GetSigWidth());
+  floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
+  uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
+  uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
+
+  uf result(symfpu::remainder<traits>(size, unpacked_lhs, unpacked_rhs));
+
+  ASTNode packed(symfpu::pack<traits>(size, result));
+
+  return packed;
+}
+
+// fp.min/fp.max are unspecified when the arguments are +0 and -0: SMT-LIB
+// says either zero may be returned, as does IEEE-754. symfpu takes that
+// choice as its `zeroCase` argument; passing false makes the tie resolve
+// towards the left operand, which is a conforming choice and, unlike an
+// unconstrained one, keeps the result deterministic.
+ASTNode blast_fpmin(const ASTNode& lhs, const ASTNode& rhs)
+{
+  assert(lhs.GetExpWidth() == rhs.GetExpWidth());
+  assert(lhs.GetSigWidth() == rhs.GetSigWidth());
+  floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
+  uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
+  uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
+
+  uf result(symfpu::min<traits>(size, unpacked_lhs, unpacked_rhs,
+                                proposition(false)));
+
+  ASTNode packed(symfpu::pack<traits>(size, result));
+
+  return packed;
+}
+
+ASTNode blast_fpmax(const ASTNode& lhs, const ASTNode& rhs)
+{
+  assert(lhs.GetExpWidth() == rhs.GetExpWidth());
+  assert(lhs.GetSigWidth() == rhs.GetSigWidth());
+  floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
+  uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
+  uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
+
+  uf result(symfpu::max<traits>(size, unpacked_lhs, unpacked_rhs,
+                                proposition(false)));
+
+  ASTNode packed(symfpu::pack<traits>(size, result));
+
+  return packed;
+}
+
 // fp.abs and fp.neg only touch the sign bit, but they go through unpack/pack
 // anyway so that the NaN and infinity encodings stay canonical.
 ASTNode blast_fpabs(const ASTNode& expr)

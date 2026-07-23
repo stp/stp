@@ -1496,6 +1496,14 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
           v.push_back(SimplifyTerm(toProcess[i], VarConstMap));
         else if (toProcess[i].GetType() == BOOLEAN_TYPE)
           v.push_back(SimplifyFormula(toProcess[i], VarConstMap));
+        // A FLOATINGPOINT_TYPE child is deliberately not simplified here.
+        // Simplifying it makes nested floating-point expressions terminate --
+        // otherwise the "have the children been simplified?" check further
+        // down never comes true, and SimplifyTerm re-enters on the same term
+        // until the stack runs out -- but it also makes several of them
+        // answer *wrongly*, returning unsat for satisfiable QF_ABVFP queries.
+        // Until that is understood, the stack overflow is the lesser evil:
+        // nested floating-point expressions crash rather than lie.
         else
           v.push_back(toProcess[i]);
       }

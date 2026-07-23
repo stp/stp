@@ -376,6 +376,94 @@
     return n;
   }
 
+  // fp.rem/fp.min/fp.max: two floats of the same format in, one out. Unlike
+  // fp.add and friends these take no rounding mode.
+  ASTNode* createFPBinary(Kind k, ASTNode* lhs, ASTNode* rhs)
+  {
+    if (lhs->GetType() != FLOATINGPOINT_TYPE ||
+        rhs->GetType() != FLOATINGPOINT_TYPE)
+    {
+      fatal_yyerror("arguments to a floating-point operation must be floats.");
+    }
+
+    if (lhs->GetExpWidth() != rhs->GetExpWidth() ||
+        lhs->GetSigWidth() != rhs->GetSigWidth())
+    {
+      fatal_yyerror("floating-point operands must have the same format.");
+    }
+
+    ASTNode* n = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateTerm(k, lhs->GetValueWidth(),
+                                                   *lhs, *rhs));
+    setFPFormat(n, lhs->GetExpWidth(), lhs->GetSigWidth());
+    delete lhs;
+    delete rhs;
+    return n;
+  }
+
+  // fp.fma: a rounding mode and three floats of the same format.
+  ASTNode* createFPFma(ASTNode* rm, ASTNode* x, ASTNode* y, ASTNode* z)
+  {
+    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
+    {
+      fatal_yyerror("expected a rounding mode.");
+    }
+
+    if (x->GetType() != FLOATINGPOINT_TYPE ||
+        y->GetType() != FLOATINGPOINT_TYPE ||
+        z->GetType() != FLOATINGPOINT_TYPE)
+    {
+      fatal_yyerror("arguments to fp.fma must be floats.");
+    }
+
+    if (x->GetExpWidth() != y->GetExpWidth() ||
+        x->GetSigWidth() != y->GetSigWidth() ||
+        x->GetExpWidth() != z->GetExpWidth() ||
+        x->GetSigWidth() != z->GetSigWidth())
+    {
+      fatal_yyerror("arguments to fp.fma must have the same format.");
+    }
+
+    ASTVec children;
+    children.push_back(*rm);
+    children.push_back(*x);
+    children.push_back(*y);
+    children.push_back(*z);
+
+    ASTNode* n = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateTerm(FP_FMA, x->GetValueWidth(),
+                                                   children));
+    setFPFormat(n, x->GetExpWidth(), x->GetSigWidth());
+    delete rm;
+    delete x;
+    delete y;
+    delete z;
+    return n;
+  }
+
+  // fp.sqrt: a rounding mode and one float.
+  ASTNode* createFPSqrt(ASTNode* rm, ASTNode* expr)
+  {
+    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
+    {
+      fatal_yyerror("expected a rounding mode.");
+    }
+
+    if (expr->GetType() != FLOATINGPOINT_TYPE)
+    {
+      fatal_yyerror("argument to fp.sqrt must be a float.");
+    }
+
+    ASTNode* n = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateTerm(FP_SQRT,
+                                                   expr->GetValueWidth(), *rm,
+                                                   *expr));
+    setFPFormat(n, expr->GetExpWidth(), expr->GetSigWidth());
+    delete rm;
+    delete expr;
+    return n;
+  }
+
   // fp.abs/fp.neg: a float in, a float of the same format out.
   ASTNode* createFPUnary(Kind k, ASTNode* expr)
   {
@@ -1785,17 +1873,17 @@ an_fp_term:
 {
   $$ = createFPArith(FP_DIV, $3, $4, $5);
 }
-| FP_FMA_TOK an_rounding_mode an_term an_term an_term
+| LPAREN_TOK FP_FMA_TOK an_term an_term an_term an_term RPAREN_TOK
 {
- std::cout << "Unsupported FP_FMA_TOK" << std::endl;
+  $$ = createFPFma($3, $4, $5, $6);
 }
-| FP_SQRT_TOK an_rounding_mode an_term
+| LPAREN_TOK FP_SQRT_TOK an_term an_term RPAREN_TOK
 {
- std::cout << "Unsupported FP_SQRT_TOK" << std::endl;
+  $$ = createFPSqrt($3, $4);
 }
-| FP_REM_TOK an_term an_term
+| LPAREN_TOK FP_REM_TOK an_term an_term RPAREN_TOK
 {
- std::cout << "Unsupported FP_REM_TOK" << std::endl;
+  $$ = createFPBinary(FP_REM, $3, $4);
 }
 | LPAREN_TOK FP_ROUNDTOINTEGRAL_TOK an_rounding_mode an_term RPAREN_TOK
 {
@@ -1805,13 +1893,13 @@ an_fp_term:
   $$->SetSigWidth($4->GetSigWidth());
   assert($$->GetType() == FLOATINGPOINT_TYPE);
 }
-| FP_MIN_TOK an_term an_term
+| LPAREN_TOK FP_MIN_TOK an_term an_term RPAREN_TOK
 {
- std::cout << "Unsupported FP_MIN_TOK" << std::endl;
+  $$ = createFPBinary(FP_MIN, $3, $4);
 }
-| FP_MAX_TOK an_term an_term
+| LPAREN_TOK FP_MAX_TOK an_term an_term RPAREN_TOK
 {
- std::cout << "Unsupported FP_MAX_TOK" << std::endl;
+  $$ = createFPBinary(FP_MAX, $3, $4);
 }
 | FP_LEQ_TOK an_terms
 {
