@@ -258,9 +258,26 @@ ASTNode blast_zero(const ASTNode& orig, bool sign);
 ASTNode round_trip(const ASTNode& expr, ASTNode** side);
 ASTNode blast_round_to_integral(const ASTNode& rm, const ASTNode& expr);
 
+ASTNode blast_fpabs(const ASTNode& expr);
+ASTNode blast_fpneg(const ASTNode& expr);
+
 // Ordering predicates. These return Boolean-typed nodes, not floats.
 ASTNode blast_fplt(const ASTNode& lhs, const ASTNode& rhs);
 ASTNode blast_fpleq(const ASTNode& lhs, const ASTNode& rhs);
+ASTNode blast_fpeq(const ASTNode& lhs, const ASTNode& rhs);
+
+// Classification predicates, also Boolean-typed.
+ASTNode blast_is_normal(const ASTNode& expr);
+ASTNode blast_is_subnormal(const ASTNode& expr);
+ASTNode blast_is_zero(const ASTNode& expr);
+ASTNode blast_is_infinite(const ASTNode& expr);
+ASTNode blast_is_nan(const ASTNode& expr);
+ASTNode blast_is_negative(const ASTNode& expr);
+ASTNode blast_is_positive(const ASTNode& expr);
+
+// ((_ to_fp e s) bv) -- reinterpret a bitvector's bits as a float.
+ASTNode blast_reinterpret(const ASTNode& bits, bitWidthType exp_width,
+                          bitWidthType sig_width);
 
 // ((_ to_fp e s) rm f) -- reformat an existing float under a rounding mode.
 ASTNode blast_convert_float_to_float(const ASTNode& rm, const ASTNode& expr,

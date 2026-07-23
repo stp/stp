@@ -640,17 +640,22 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
     case FP_ISPOSITIVE:
     case FP_SMT_EQ:
     {
-      ASTNode lhs_simp(TermToConstTermUsingModel(form[0]));
-      assert(lhs_simp.GetKind() == BVCONST);
-      ASTNode lhs_fp = bm->CreateFPConst(lhs_simp);
-      lhs_fp.SetExpWidth(form[0].GetExpWidth());
-      lhs_fp.SetSigWidth(form[0].GetSigWidth());
-      ASTNode rhs_simp(TermToConstTermUsingModel(form[1]));
-      assert(rhs_simp.GetKind() == BVCONST);
-      ASTNode rhs_fp = bm->CreateFPConst(rhs_simp);
-      rhs_fp.SetExpWidth(form[1].GetExpWidth());
-      rhs_fp.SetSigWidth(form[1].GetSigWidth());
-      ASTNode temp(stp::GlobalParserBM->CreateNode(k, lhs_fp, rhs_fp));
+      // Rebuild at the node's real arity: the comparisons are binary but the
+      // classification predicates are unary.
+      ASTVec operands;
+      operands.reserve(form.Degree());
+
+      for (unsigned int i = 0; i < form.Degree(); i++)
+      {
+        ASTNode simp(TermToConstTermUsingModel(form[i]));
+        assert(simp.GetKind() == BVCONST);
+        ASTNode as_fp = bm->CreateFPConst(simp);
+        as_fp.SetExpWidth(form[i].GetExpWidth());
+        as_fp.SetSigWidth(form[i].GetSigWidth());
+        operands.push_back(as_fp);
+      }
+
+      ASTNode temp(stp::GlobalParserBM->CreateNode(k, operands));
 
       assert(temp != form);
 

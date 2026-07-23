@@ -108,6 +108,37 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
       output = symbolic_fp::blast_fpdiv(/* rm */ inputterm[0], inputterm[1],
                                         inputterm[2]);
       break;
+    case FP_ABS:
+      output = symbolic_fp::blast_fpabs(inputterm[0]);
+      break;
+    case FP_NEG:
+      output = symbolic_fp::blast_fpneg(inputterm[0]);
+      break;
+    case FP_ISNORMAL:
+      output = symbolic_fp::blast_is_normal(inputterm[0]);
+      break;
+    case FP_ISSUBNORMAL:
+      output = symbolic_fp::blast_is_subnormal(inputterm[0]);
+      break;
+    case FP_ISZERO:
+      output = symbolic_fp::blast_is_zero(inputterm[0]);
+      break;
+    case FP_ISINFINITE:
+      output = symbolic_fp::blast_is_infinite(inputterm[0]);
+      break;
+    case FP_ISNAN:
+      output = symbolic_fp::blast_is_nan(inputterm[0]);
+      break;
+    case FP_ISNEGATIVE:
+      output = symbolic_fp::blast_is_negative(inputterm[0]);
+      break;
+    case FP_ISPOSITIVE:
+      output = symbolic_fp::blast_is_positive(inputterm[0]);
+      break;
+    // fp.eq is IEEE equality; FP_SMT_EQ is SMT-LIB's `=` on floats.
+    case FP_EQ:
+      output = symbolic_fp::blast_fpeq(inputterm[0], inputterm[1]);
+      break;
     case FP_LT:
       output = symbolic_fp::blast_fplt(inputterm[0], inputterm[1]);
       break;
@@ -127,9 +158,9 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
     case FP_TOFP:
       if (inputterm.Degree() == 3)
       {
-        // Reinterpretation: floats are stored packed, so the bit pattern is
-        // already the answer.
-        output = inputterm[2];
+        output = symbolic_fp::blast_reinterpret(
+            /* bits */ inputterm[2], actualInputterm.GetExpWidth(),
+            actualInputterm.GetSigWidth());
       }
       else
       {

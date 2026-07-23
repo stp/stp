@@ -376,6 +376,36 @@
     return n;
   }
 
+  // fp.abs/fp.neg: a float in, a float of the same format out.
+  ASTNode* createFPUnary(Kind k, ASTNode* expr)
+  {
+    if (expr->GetType() != FLOATINGPOINT_TYPE)
+    {
+      fatal_yyerror("argument to a floating-point operation must be a float.");
+    }
+
+    ASTNode* n = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateTerm(k, expr->GetValueWidth(),
+                                                   *expr));
+    setFPFormat(n, expr->GetExpWidth(), expr->GetSigWidth());
+    delete expr;
+    return n;
+  }
+
+  // fp.isNaN and friends: a float in, a Boolean out.
+  ASTNode* createFPPredicate(Kind k, ASTNode* expr)
+  {
+    if (expr->GetType() != FLOATINGPOINT_TYPE)
+    {
+      fatal_yyerror("argument to a floating-point predicate must be a float.");
+    }
+
+    ASTNode* n = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateNode(k, *expr));
+    delete expr;
+    return n;
+  }
+
   // ((_ to_fp e s) bv) -- reinterpret a bitvector's bits as a float.
   ASTNode* createFPFromBits(unsigned int exp_width, unsigned int sig_width,
                             ASTNode* bits)
@@ -1731,13 +1761,13 @@ an_fp_const:
 ;
 
 an_fp_term:
-  FP_ABS_TOK an_term
+  LPAREN_TOK FP_ABS_TOK an_term RPAREN_TOK
 {
- std::cout << "Unsupported FP_ABS_TOK " << std::endl;
+  $$ = createFPUnary(FP_ABS, $3);
 }
-| FP_NEG_TOK an_term
+| LPAREN_TOK FP_NEG_TOK an_term RPAREN_TOK
 {
- std::cout << "Unsupported FP_NEG_TOK" << std::endl;
+  $$ = createFPUnary(FP_NEG, $3);
 }
 | LPAREN_TOK FP_ADD_TOK an_term an_term an_term RPAREN_TOK
 {
@@ -1825,31 +1855,31 @@ an_fp_term:
 }
 | FP_ISNORMAL_TOK an_term
 {
- std::cout << "Unsupported FP_ISNORMAL_TOK" << std::endl;
+  $$ = createFPPredicate(FP_ISNORMAL, $2);
 }
 | FP_ISSUBNORMAL_TOK an_term
 {
- std::cout << "Unsupported FP_ISSUBNORMAL_TOK" << std::endl;
+  $$ = createFPPredicate(FP_ISSUBNORMAL, $2);
 }
 | FP_ISZERO_TOK an_term
 {
- std::cout << "Unsupported FP_ISZERO_TOK" << std::endl;
+  $$ = createFPPredicate(FP_ISZERO, $2);
 }
 | FP_ISINFINITE_TOK an_term
 {
- std::cout << "Unsupported FP_ISINFINITE_TOK" << std::endl;
+  $$ = createFPPredicate(FP_ISINFINITE, $2);
 }
 | FP_ISNAN_TOK an_term
 {
- std::cout << "Unsupported FP_ISNAN_TOK" << std::endl;
+  $$ = createFPPredicate(FP_ISNAN, $2);
 }
 | FP_ISNEGATIVE_TOK an_term
 {
- std::cout << "Unsupported FP_ISNEGATIVE_TOK" << std::endl;
+  $$ = createFPPredicate(FP_ISNEGATIVE, $2);
 }
 | FP_ISPOSITIVE_TOK an_term
 {
- std::cout << "Unsupported FP_ISPOSITIVE_TOK" << std::endl;
+  $$ = createFPPredicate(FP_ISPOSITIVE, $2);
 }
 | LPAREN_TOK UNDERSCORE_TOK FP_TO_UBV_TOK NUMERAL_TOK RPAREN_TOK an_rounding_mode an_term an_term
 {

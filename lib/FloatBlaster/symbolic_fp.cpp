@@ -1011,6 +1011,64 @@ ASTNode blast_fpdiv(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs)
   return packed;
 }
 
+// fp.abs and fp.neg only touch the sign bit, but they go through unpack/pack
+// anyway so that the NaN and infinity encodings stay canonical.
+ASTNode blast_fpabs(const ASTNode& expr)
+{
+  floatingPointTypeInfo size(expr.GetExpWidth(), expr.GetSigWidth());
+  uf unpacked(symfpu::unpack<traits>(size, expr));
+  uf result(symfpu::absolute<traits>(size, unpacked));
+  ASTNode packed(symfpu::pack<traits>(size, result));
+  return packed;
+}
+
+ASTNode blast_fpneg(const ASTNode& expr)
+{
+  floatingPointTypeInfo size(expr.GetExpWidth(), expr.GetSigWidth());
+  uf unpacked(symfpu::unpack<traits>(size, expr));
+  uf result(symfpu::negate<traits>(size, unpacked));
+  ASTNode packed(symfpu::pack<traits>(size, result));
+  return packed;
+}
+
+// The classification predicates. Each returns a Boolean-typed node.
+#define STP_BLAST_CLASSIFY(name, symfpu_fn)                                    \
+  ASTNode name(const ASTNode& expr)                                            \
+  {                                                                            \
+    floatingPointTypeInfo size(expr.GetExpWidth(), expr.GetSigWidth());        \
+    uf unpacked(symfpu::unpack<traits>(size, expr));                           \
+    proposition result(symfpu::symfpu_fn<traits>(size, unpacked));             \
+    return result;                                                             \
+  }
+
+STP_BLAST_CLASSIFY(blast_is_normal, isNormal)
+STP_BLAST_CLASSIFY(blast_is_subnormal, isSubnormal)
+STP_BLAST_CLASSIFY(blast_is_zero, isZero)
+STP_BLAST_CLASSIFY(blast_is_infinite, isInfinite)
+STP_BLAST_CLASSIFY(blast_is_nan, isNaN)
+STP_BLAST_CLASSIFY(blast_is_negative, isNegative)
+STP_BLAST_CLASSIFY(blast_is_positive, isPositive)
+
+#undef STP_BLAST_CLASSIFY
+
+// fp.eq is IEEE-754 equality, which differs from SMT-LIB's `=` on floats:
+// NaN is equal to nothing including itself, and +0 equals -0. blast_smt_eq
+// implements the latter (bit-identical) relation.
+ASTNode blast_fpeq(const ASTNode& lhs, const ASTNode& rhs)
+{
+  assert(lhs.GetValueWidth() == rhs.GetValueWidth());
+  assert(lhs.GetExpWidth() == rhs.GetExpWidth());
+  assert(lhs.GetSigWidth() == rhs.GetSigWidth());
+  floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
+  uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
+  uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
+
+  proposition eq(
+      symfpu::ieee754Equal<traits>(size, unpacked_lhs, unpacked_rhs));
+
+  return eq;
+}
+
 // The ordering predicates are the IEEE-754 ones, so they are false whenever
 // either operand is NaN. symfpu's ordering() handles that; we just hand back
 // the resulting proposition, which is already a Boolean-typed node.
@@ -1042,6 +1100,22 @@ ASTNode blast_fpleq(const ASTNode& lhs, const ASTNode& rhs)
       symfpu::lessThanOrEqual<traits>(size, unpacked_lhs, unpacked_rhs));
 
   return leq;
+}
+
+// ((_ to_fp e s) bv) reinterprets a bitvector's bits as a float. Floats are
+// stored packed, so this is very nearly the identity -- but it must not
+// return the child node itself. The exponent/significand widths live on the
+// node, and the caller stamps them onto whatever comes back, which would
+// retype the shared bitvector for every other use of it. Round-tripping
+// through unpack/pack yields a distinct node, and canonicalises the NaN
+// payloads that SMT-LIB leaves unspecified here.
+ASTNode blast_reinterpret(const ASTNode& bits, bitWidthType exp_width,
+                          bitWidthType sig_width)
+{
+  floatingPointTypeInfo size(exp_width, sig_width);
+  uf unpacked(symfpu::unpack<traits>(size, bits));
+  ASTNode packed(symfpu::pack<traits>(size, unpacked));
+  return packed;
 }
 
 ASTNode blast_convert_float_to_float(const ASTNode& rm, const ASTNode& expr,

@@ -804,6 +804,20 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
         FatalError("BVTypeCheck:ITE must have exactly 3 ChildNodes", n);
       break;
 
+    // The classification predicates: one float in, a Boolean out.
+    case FP_ISNORMAL:
+    case FP_ISSUBNORMAL:
+    case FP_ISZERO:
+    case FP_ISINFINITE:
+    case FP_ISNAN:
+    case FP_ISNEGATIVE:
+    case FP_ISPOSITIVE:
+      if (n.Degree() != 1)
+        FatalError("BVTypeCheck: <fp> predicate takes exactly 1 arg", n);
+      if (n[0].GetType() != FLOATINGPOINT_TYPE)
+        FatalError("BVTypeCheck: argument of <fp> predicate is not an fp", n);
+      break;
+
     case FP_LEQ:
     case FP_LT:
     case FP_GEQ:
@@ -817,7 +831,6 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
 
       if (n.Degree() != 2)
       {
-        /* not actually true */
         error_msg = "<fp> should have exactly 2 args";
         failed = true;
       }

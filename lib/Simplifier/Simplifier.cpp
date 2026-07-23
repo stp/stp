@@ -456,9 +456,26 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
     case FP_ISPOSITIVE:
     case FP_SMT_EQ:
     {
-      ASTNode lhs_simp(SimplifyTerm(a[0], VarConstMap));
-      ASTNode rhs_simp(SimplifyTerm(a[1], VarConstMap));
-      ASTNode temp(nf->CreateNode(kind, lhs_simp, rhs_simp));
+      // Rebuild at the node's real arity: the comparisons are binary but the
+      // classification predicates are unary.
+      //
+      // The exponent/significand widths are carried on the node rather than
+      // implied by its kind, so a simplified operand can come back without
+      // them (a folded constant, say, which is just a bitvector). Copy the
+      // format across from the original child, or the blaster sees operands
+      // that disagree about their format.
+      ASTVec simplified;
+      simplified.reserve(a.Degree());
+
+      for (unsigned int i = 0; i < a.Degree(); i++)
+      {
+        ASTNode s(SimplifyTerm(a[i], VarConstMap));
+        s.SetExpWidth(a[i].GetExpWidth());
+        s.SetSigWidth(a[i].GetSigWidth());
+        simplified.push_back(s);
+      }
+
+      ASTNode temp(nf->CreateNode(kind, simplified));
 
       ASTNode blasted(FloatBlaster::BlastNode_TopLevel(temp));
 
@@ -2573,10 +2590,18 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
 
       for (unsigned int i = 0; i < inputterm.Degree(); i++)
       {
-        if (inputterm[i].GetType() == FLOATINGPOINT_TYPE)
-          simplified.push_back(SimplifyTerm(inputterm[i], VarConstMap));
-        else
+        if (inputterm[i].GetType() != FLOATINGPOINT_TYPE)
+        {
           simplified.push_back(inputterm[i]);
+          continue;
+        }
+
+        // As above: re-stamp the format, which the simplified node may have
+        // lost.
+        ASTNode s(SimplifyTerm(inputterm[i], VarConstMap));
+        s.SetExpWidth(inputterm[i].GetExpWidth());
+        s.SetSigWidth(inputterm[i].GetSigWidth());
+        simplified.push_back(s);
       }
 
       ASTNode temp(
