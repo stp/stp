@@ -1,6 +1,15 @@
 on: [push, pull_request]
 name: CI
 
+# A newer commit makes the runs still going for the previous one pointless.
+# A push to a branch with an open pull request fires both a push and a
+# pull_request run, so those are grouped separately rather than cancelling
+# each other. Pushes to master are left running, so every commit there
+# keeps a result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
 jobs:
   build:
     strategy:
