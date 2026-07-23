@@ -192,9 +192,6 @@ class BitBlaster
   // BVUMULO, BVSMULO, BVUSUBO, BVSSUBO.
   BBNode BBOverflow(const ASTNode& form, BBNodeSet& support);
 
-  void BBLShift(vector<BBNode>& x, unsigned int shift);
-  void BBRShift(vector<BBNode>& x, unsigned int shift);
-
   void BBLShift(BBNodeVec& x, unsigned int shift);
   void BBRShift(BBNodeVec& x, unsigned int shift);
 

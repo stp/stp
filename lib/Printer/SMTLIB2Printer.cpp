@@ -155,7 +155,7 @@ void outputFloatingPointSMTLIB2(const ASTNode n, ostream& os,
                                 const ASTNode term)
 {
   const Kind k = n.GetKind();
-  const ASTVec& c = n.GetChildren();
+  const ASTChildren c = n.GetChildren();
   ASTNode op;
 
   if (BVCONST != k)

@@ -30,7 +30,7 @@ else()
   set(FLEX_COMPATIBILITY_ARGS "--nounistd")
 endif()
 
-set(BISON_WARNING_FLAGS "-Wno-conflicts-rr" "-Wno-conflicts-sr" "-Werror")
+set(BISON_WARNING_FLAGS "-Wno-conflicts-rr" "-Wno-conflicts-sr")
 mark_as_advanced(BISON_WARNING_FLAGS)
 
 foreach(_file ${TOLEX})

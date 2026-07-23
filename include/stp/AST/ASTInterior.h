@@ -127,7 +127,7 @@ public:
   // avoiding a copy when the caller has a temporary to give up.
   ASTInterior(STPMgr* mgr, Kind kind, ASTVec&& children)
       : ASTInternal(mgr, kind), _children(std::move(children)), _value_width(0),
-        _index_width(0)
+        _index_width(0), _sig_width(0), _exp_width(0)
   {
     is_simplified = false;
     if (kind == NOT)
@@ -151,7 +151,8 @@ public:
   ASTInterior(ASTInterior&& int_node)
       : ASTInternal(int_node), _children(std::move(int_node._children)),
         _cached_hash(int_node._cached_hash), _value_width(int_node._value_width),
-        _index_width(int_node._index_width)
+        _index_width(int_node._index_width), _sig_width(int_node._sig_width),
+        _exp_width(int_node._exp_width)
   {
     is_simplified = false;
   }
