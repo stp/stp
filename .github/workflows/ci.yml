@@ -64,7 +64,7 @@ jobs:
 
   build-32bit:
     name: gcc (i386)
-    runs-on: [ubuntu-latest]
+    runs-on: ubuntu-latest
 
     steps:
 
