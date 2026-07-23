@@ -140,6 +140,7 @@ consumed from a build tree rather than an installation, so point
 ```
 $ git clone https://github.com/arminbiere/cadical
 $ cd cadical
+$ git checkout rel-2.1.3
 $ ./configure -fPIC
 $ make
 ```
