@@ -314,7 +314,10 @@ ASTNode Simplifier::SimplifyFormula(const ASTNode& b, bool pushNeg,
 
   ASTNode a = b;
   ASTVec ca = toASTVec(a.GetChildren());
-  if (!(IMPLIES == kind || ITE == kind || PARAMBOOL == kind || isAtomic(kind)))
+  // AND/OR are excluded: SimplifyAndOrFormula flattens and re-sorts their
+  // children itself, so sorting (and rebuilding the node) here is wasted work.
+  if (!(IMPLIES == kind || ITE == kind || PARAMBOOL == kind || AND == kind ||
+        OR == kind || isAtomic(kind)))
   {
     SortByArith(ca);
     if (ASTChildren(ca) != a.GetChildren())
