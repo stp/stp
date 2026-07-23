@@ -1,20 +1,32 @@
 on: [push, pull_request]
 name: CI
 
+# A newer commit makes the runs still going for the previous one pointless.
+# A push to a branch with an open pull request fires both a push and a
+# pull_request run, so those are grouped separately rather than cancelling
+# each other. Pushes to master are left running, so every commit there
+# keeps a result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
-        name: [clang]
-        #name: [gcc, clang]
+        name: [gcc, clang]
         include:
-          #- name: gcc
-          #  env: CC=gcc CXX=g++
+          - name: gcc
+            env: CC=gcc CXX=g++
           - name: clang
             env: CC=clang CXX=clang++
 
     name: ${{ matrix.name }}
-    runs-on: [ubuntu-latest]
+    runs-on: ubuntu-latest
+
+    env:
+      CCACHE_MAXSIZE: 800M
 
     steps:
 
@@ -28,6 +40,7 @@ jobs:
         sudo apt-get install -y \
           bison \
           build-essential \
+          ccache \
           clang \
           cmake \
           flex \
@@ -41,21 +54,136 @@ jobs:
           zlib1g-dev
         sudo pip3 install -U lit
 
+    # Most of these are cloned without a pinned revision, so the cache key
+    # tracks what their default branches currently point at: a new upstream
+    # commit gets a new key rather than a stale cache.
+    - name: Resolve dependency revisions
+      id: deps-key
+      run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
+
+    - name: Restore dependencies
+      id: deps-cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          deps/install
+          deps/gtest
+          deps/OutputCheck
+        key: deps-x86_64-${{ steps.deps-key.outputs.key }}
+
     - name: Dependencies
+      if: steps.deps-cache.outputs.cache-hit != 'true'
       run: |
         ./scripts/deps/setup-minisat.sh
         ./scripts/deps/setup-cms.sh
         ./scripts/deps/setup-gtest.sh
         ./scripts/deps/setup-outputcheck.sh
 
+    # Keyed per run so every build writes a fresh entry; restore-keys picks
+    # up the most recent one from this branch, or from the base branch.
+    - name: Compiler cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ccache
+        key: ccache-${{ matrix.name }}-${{ github.run_id }}
+        restore-keys: ccache-${{ matrix.name }}-
+
     - name: Configure
       run: |
         mkdir build
         cd build
-        ${{ matrix.env }} cmake -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -G Ninja ..
+        ${{ matrix.env }} cmake -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
-      run: cmake --build . --parallel "$(nproc)"
+      run: |
+        ccache --zero-stats
+        cmake --build . --parallel "$(nproc)"
+        ccache --show-stats
+      working-directory: build
+
+    - name: Test
+      run: ctest --parallel "$(nproc)" -VV --output-on-failure
+      working-directory: build
+
+  build-cadical:
+    name: gcc (cadical)
+    runs-on: ubuntu-latest
+
+    env:
+      CCACHE_MAXSIZE: 800M
+
+    steps:
+
+    - uses: actions/checkout@v7
+      with:
+          submodules: 'true'
+
+    - name: Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bison \
+          build-essential \
+          ccache \
+          cmake \
+          flex \
+          gcc \
+          git \
+          libboost-program-options-dev \
+          ninja-build \
+          python3 \
+          python3-pip \
+          python3-setuptools \
+          zlib1g-dev
+        sudo pip3 install -U lit
+
+    - name: Resolve dependency revisions
+      id: deps-key
+      run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
+
+    # A different set of dependencies to the job above, so a different key
+    # prefix: the key describes their revisions, not which of them are in
+    # the tree, and restoring the wrong set would skip the step that builds
+    # what is missing.
+    - name: Restore dependencies
+      id: deps-cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          deps/install
+          deps/cadical
+          deps/gtest
+          deps/OutputCheck
+        key: deps-x86_64-cadical-${{ steps.deps-key.outputs.key }}
+
+    # CryptoMiniSat is left out: USE_CADICAL makes CaDiCaL the default
+    # solver, so building CMS as well would only add build time.
+    - name: Dependencies
+      if: steps.deps-cache.outputs.cache-hit != 'true'
+      run: |
+        ./scripts/deps/setup-minisat.sh
+        ./scripts/deps/setup-cadical.sh
+        ./scripts/deps/setup-gtest.sh
+        ./scripts/deps/setup-outputcheck.sh
+
+    - name: Compiler cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ccache
+        key: ccache-cadical-${{ github.run_id }}
+        restore-keys: ccache-cadical-
+
+    - name: Configure
+      run: |
+        mkdir build
+        cd build
+        cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DNOCRYPTOMINISAT:BOOL=ON -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+
+    - name: Build
+      run: |
+        ccache --zero-stats
+        cmake --build . --parallel "$(nproc)"
+        ccache --show-stats
       working-directory: build
 
     - name: Test
@@ -64,7 +192,7 @@ jobs:
 
   build-32bit:
     name: gcc (i386)
-    runs-on: [ubuntu-latest]
+    runs-on: ubuntu-latest
 
     steps:
 
@@ -72,9 +200,101 @@ jobs:
       with:
           submodules: 'true'
 
+    - name: Resolve dependency revisions
+      id: deps-key
+      run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
+
+    - name: Restore dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          deps/install
+          deps/gtest
+          deps/OutputCheck
+        key: deps-i386-${{ steps.deps-key.outputs.key }}
+
+    # Inside the workspace so the bind mount carries it back out to the
+    # runner for the post-job save.
+    - name: Compiler cache
+      uses: actions/cache@v4
+      with:
+        path: .ccache
+        key: ccache-i386-${{ github.run_id }}
+        restore-keys: ccache-i386-
+
     - name: Build and test in a 32-bit container
       run: |
+        mkdir -p .ccache
         docker run --rm -v "$GITHUB_WORKSPACE":/stp -w /stp \
+          -e CCACHE_DIR=/stp/.ccache -e CCACHE_MAXSIZE=800M -e CCACHE_UMASK=022 \
           i386/debian:bookworm linux32 ./scripts/ci-32bit.sh
+
+    # The container writes as root; hand the cached trees back to the runner
+    # so the post-job save can read them.
+    - name: Reclaim ownership of cached trees
+      if: always()
+      run: |
+        mkdir -p .ccache deps
+        sudo chown -R "$(id -u):$(id -g)" .ccache deps
+
+  build-windows:
+    name: windows
+    runs-on: windows-2025
+
+    env:
+      MINISAT_ROOT: ${{ github.workspace }}\minisat\install
+      # Build ABC single-threaded: its pthread/atomics code paths don't
+      # compile with MSVC. ABC's Makefile (run during CMake configure to
+      # extract flags) reads this from the environment.
+      ABC_USE_NO_PTHREADS: 1
+      # minisat and STP both predate CMP0074, so ZLIB_ROOT is ignored;
+      # pass the include dir and library explicitly instead.
+      # ZLIB_LIBRARY is located after the vcpkg install (see below).
+      ZLIB_INCLUDE_DIR: C:\vcpkg\installed\x64-windows-static\include
+
+    steps:
+
+    - uses: actions/checkout@v7
+      with:
+          submodules: 'true'
+
+    - name: Install flex and bison
+      run: choco install winflexbison3 --no-progress
+
+    - name: Install zlib
+      run: |
+        vcpkg install zlib:x64-windows-static
+        dir C:\vcpkg\installed\x64-windows-static\lib
+        $lib = (Get-ChildItem C:\vcpkg\installed\x64-windows-static\lib -Filter *z*.lib | Select-Object -First 1).FullName
+        if (-not $lib) { throw "no zlib .lib found" }
+        "ZLIB_LIBRARY=$lib" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+    - name: Build minisat
+      run: |
+        git clone --depth 1 https://github.com/stp/minisat
+        cd minisat
+        cmake -B build -A x64 -DSTATICCOMPILE=ON "-DCMAKE_POLICY_VERSION_MINIMUM=3.12" "-DCMAKE_INSTALL_PREFIX=$env:MINISAT_ROOT" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
+        cmake --build build --config Release --target install
+
+    - name: Configure
+      # NOCRYPTOMINISAT: CryptoMiniSat does not build with MSVC (CaDiCaL
+      # and CMS's oracle use POSIX-only code); upstream CMS only supports
+      # MinGW on Windows.
+      run: cmake -B build -A x64 -DSTATICCOMPILE=ON -DNOCRYPTOMINISAT=ON -DENABLE_PYTHON_INTERFACE=OFF "-DMINISAT_LIBDIR=$env:MINISAT_ROOT" "-DMINISAT_INCLUDE_DIRS=$env:MINISAT_ROOT\include" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
+
+    - name: Build
+      run: cmake --build build --config Release
+
+    - name: Smoke test
+      run: |
+        dir build\bin
+        $stp = if (Test-Path build\bin\stp.exe) { "build\bin\stp.exe" } else { "build\bin\stp_simple.exe" }
+        "(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (= x #x2a))(check-sat)" | Out-File -Encoding ascii test.smt2
+        $out = & $stp test.smt2 2>&1 | Out-String
+        "solver output: '$($out.Trim())'"
+        # pwsh -Command collapses nonzero exit codes to 1, so log the real
+        # one (crash statuses like 0xC0000005 show up as large negatives).
+        "solver exit code: $LASTEXITCODE"
+        if ($out.Trim() -ne "sat") { exit 1 }
 
 # EOF

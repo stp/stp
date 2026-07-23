@@ -1,11 +1,9 @@
 name: "CodeQL"
 
 on:
-  #push:
-  #  branches: [master]
-  #pull_request:
-    # The branches below must be a subset of the branches above
-    #branches: [master]
+  push:
+    branches: [master]
+  workflow_dispatch:
   schedule:
     - cron: '0 0 * * 1'
 
@@ -24,29 +22,39 @@ jobs:
         # Override automatic language detection by changing the below list
         # Supported options are ['csharp', 'cpp', 'go', 'java', 'javascript', 'python']
         language: ['cpp']
-        # Learn more...
-        # https://docs.github.com/en/github/finding-security-vulnerabilities-and-errors-in-your-code/configuring-code-scanning#overriding-automatic-language-detection
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v7
+      with:
+        submodules: 'true'
 
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v4
       with:
-         languages: ${{ matrix.language }}
+        languages: ${{ matrix.language }}
 
-    - run: |
-       mkdir minisat_git && cd minisat_git
-       git clone --depth 1 https://github.com/stp/minisat
-       cd minisat
-       mkdir build && cd build
-       cmake ..
-       make
-       cd ../../..
-       mkdir build && cd build
-       cmake ..
-       make
+    - name: Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bison \
+          build-essential \
+          cmake \
+          flex \
+          git \
+          libboost-program-options-dev \
+          zlib1g-dev
+
+    - name: Dependencies
+      run: ./scripts/deps/setup-minisat.sh
+
+    - name: Build
+      run: |
+        mkdir build
+        cd build
+        cmake -DNOCRYPTOMINISAT:BOOL=ON ..
+        make -j"$(nproc)"
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v4

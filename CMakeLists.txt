@@ -453,10 +453,18 @@ include_directories(# For extlib-abc and extlib-constbv
 include(CheckTypeSize)
 # Check size of void pointer (void*)
 CHECK_TYPE_SIZE("void*" SIZEOF_VOID_P)
-if(SIZEOF_VOID_P EQUAL 8)
-    add_definitions(-DLIN64)
+# LIN/LIN64 select ABC's Linux code paths; on Windows abc_global.h
+# detects NT/NT64 by itself, and defining LIN* there breaks the build.
+if(NOT WIN32)
+    if(SIZEOF_VOID_P EQUAL 8)
+        add_definitions(-DLIN64)
+    else()
+        add_definitions(-DLIN)
+    endif()
 else()
-    add_definitions(-DLIN)
+    # ABC is linked statically; without this its headers declare the
+    # ABC API __declspec(dllimport), producing unresolved __imp_ symbols.
+    add_definitions(-DWIN32_NO_DLL)
 endif()
 add_definitions(-DSIZEOF_VOID_P=${SIZEOF_VOID_P})
 

@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
+#include "stp/Util/BitOps.h"
 
 // AND, OR, XOR, NOT Transfer functions.
 // Trevor Hansen. BSD License.
@@ -92,7 +93,7 @@ Result bvXorBothWays(vector<FixedBits*>& operands, FixedBits& output)
     {
       // The bit-at-a-time original still applies fixes below the first
       // conflicting bit before reporting the conflict.
-      const uint64_t below = (1ULL << __builtin_ctzll(conflict)) - 1;
+      const uint64_t below = (1ULL << ::stp::countTrailingZeroes64(conflict)) - 1;
       outFix &= below;
       childFix &= below;
     }
@@ -191,7 +192,7 @@ Result bvAndBothWays(vector<FixedBits*>& operands, FixedBits& output)
     {
       // The bit-at-a-time original still applies fixes below the first
       // conflicting bit before reporting the conflict.
-      const uint64_t below = (1ULL << __builtin_ctzll(conflict)) - 1;
+      const uint64_t below = (1ULL << ::stp::countTrailingZeroes64(conflict)) - 1;
       childTo1 &= below;
       childTo0 &= below;
       outTo0 &= below;
@@ -290,7 +291,7 @@ Result bvOrBothWays(vector<FixedBits*>& children, FixedBits& output)
     {
       // The bit-at-a-time original still applies fixes below the first
       // conflicting bit before reporting the conflict.
-      const uint64_t below = (1ULL << __builtin_ctzll(conflict)) - 1;
+      const uint64_t below = (1ULL << ::stp::countTrailingZeroes64(conflict)) - 1;
       childTo0 &= below;
       childTo1 &= below;
       outTo1 &= below;
@@ -443,7 +444,7 @@ Result bvNotBothWays(FixedBits& a, FixedBits& output)
     {
       // Match the bit-at-a-time original: bits below the first conflicting
       // one are still fixed before the conflict is reported.
-      const uint64_t below = (1ULL << __builtin_ctzll(conflict)) - 1;
+      const uint64_t below = (1ULL << ::stp::countTrailingZeroes64(conflict)) - 1;
       addOut &= below;
       addA &= below;
     }

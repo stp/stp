@@ -13,7 +13,9 @@ cd "${dep_dir}"
 git clone https://github.com/stp/minisat "${dep}"
 cd "${dep}"
 mkdir build && cd build
-cmake -DCMAKE_INSTALL_PREFIX:PATH="${install_dir}" ..
+# minisat's cmake_minimum_required predates 3.5, which CMake 4 removed
+# support for; the same floor is passed in the Windows CI job.
+cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.12 -DCMAKE_INSTALL_PREFIX:PATH="${install_dir}" ..
 cmake --build . --parallel "$(nproc)"
 cmake --install .
 cd ..

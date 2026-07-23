@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include <cstdint>
 #include <cstring>
 #include "stp/Util/Attributes.h"
+#include "stp/Util/BitOps.h"
 #include <stp/Util/Attributes.h>
 
 #include <algorithm>
@@ -204,7 +205,7 @@ private:
     {
       const uint64_t t = (this->*wordFn)(w);
       if (t != 0)
-        return w * 64 + __builtin_ctzll(t);
+        return w * 64 + ::stp::countTrailingZeroes64(t);
     }
     return width;
   }
@@ -225,7 +226,7 @@ public:
     {
       const uint64_t t = possibleOnes(w);
       if (t != 0)
-        return w * 64 + 63 - __builtin_clzll(t);
+        return w * 64 + 63 - ::stp::countLeadingZeroes64(t);
     }
     return -1;
   }
@@ -259,7 +260,7 @@ public:
     {
       const uint64_t t = unfixedBits(w);
       if (t != 0)
-        return w * 64 + 63 - __builtin_clzll(t);
+        return w * 64 + 63 - ::stp::countLeadingZeroes64(t);
     }
     return -1;
   }
@@ -338,7 +339,7 @@ public:
   {
     unsigned result = 0;
     for (unsigned w = 0; w < numWords(); w++)
-      result += __builtin_popcountll(fixedW_[w]);
+      result += ::stp::popCount64(fixedW_[w]);
     return result;
   }
 

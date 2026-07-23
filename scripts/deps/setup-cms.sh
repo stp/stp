@@ -11,28 +11,13 @@ dep="cms"
 
 cd "${dep_dir}"
 
-# Install cadical/cadiback first.
-
-git clone https://github.com/meelgroup/cadical
-cd cadical
-# branch: "mate-only-libraries-1.8.0" on 2024-04-22.
-git checkout c90592e
-./configure 
-make -j"$(nproc)"
-cd ..
-
-git clone https://github.com/meelgroup/cadiback
-cd cadiback
-# branch: "mate" on 2024-06-06.
-git checkout 12dac17
-./configure 
-make -j"$(nproc)"
-cd ..
+# CMS >= 5.14 builds its cadical/cadiback dependencies itself (via CMake
+# FetchContent), so they no longer need to be built here.
 
 git clone https://github.com/msoos/cryptominisat "${dep}"
 cd "${dep}"
 # We specify the tags/commits for the other repositories, so do for this too
-git checkout 5.11.22
+git checkout release/v5.14.7
 mkdir build && cd build
 cmake -DENABLE_ASSERTIONS=OFF -DCMAKE_INSTALL_PREFIX:PATH="${install_dir}" ..
 cmake --build . --parallel "$(nproc)"
