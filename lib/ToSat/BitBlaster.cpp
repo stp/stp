@@ -638,7 +638,7 @@ const BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& _term,
   if (!is_Term_kind(k))
     FatalError("BBTerm: Illegal kind to BBTerm", term);
 
-  const ASTVec::const_iterator kids_end = term.end();
+  const auto kids_end = term.end();
   const unsigned int num_bits = term.GetValueWidth();
   switch (k)
   {
@@ -820,7 +820,7 @@ const BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& _term,
       {
         // Add children pairwise and accumulate in BBsum
 
-        ASTVec::const_iterator it = term.begin();
+        auto it = term.begin();
         BBNodeVec tmp_res = BBTerm(*it, support);
         for (++it; it < kids_end; it++)
         {
@@ -929,7 +929,7 @@ const BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& _term,
     case BVNAND:
     {
       // Add children pairwise and accumulate in BBsum
-      ASTVec::const_iterator it = term.begin();
+      auto it = term.begin();
       Kind bk = UNDEFINED; // Kind of individual bit op.
       switch (k)
       {
@@ -1133,8 +1133,8 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form,
     {
       BBNodeVec bbkids; // bit-blasted children (formulas)
 
-      ASTVec::const_iterator kids_end = form.end();
-      for (ASTVec::const_iterator it = form.begin(); it != kids_end; it++)
+      auto kids_end = form.end();
+      for (auto it = form.begin(); it != kids_end; it++)
       {
         bbkids.push_back(BBForm(*it, support));
       }

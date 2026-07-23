@@ -56,7 +56,7 @@ namespace stp
     for (size_t i = 0; i < result.Degree(); i++)
       new_children.push_back(replace(result[i], fromTo, cache));
 
-    if (new_children == result.GetChildren())
+    if (ASTChildren(new_children) == result.GetChildren())
     {
       cache.insert(make_pair(n, result));
       return result;
@@ -433,7 +433,7 @@ namespace stp
         if (nonZero <= 1) // OK can reduce.
         {
           newN =
-              nf->CreateTerm(BVOR, n.GetValueWidth(), n.GetChildren());
+              nf->CreateTerm(BVOR, n.GetValueWidth(), toASTVec(n.GetChildren()));
           replaceWithSimpler++;
 
           // When the disjointness is a contiguous split, the OR is just

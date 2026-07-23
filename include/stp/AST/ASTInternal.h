@@ -135,7 +135,7 @@ protected:
   Kind GetKind() const { return _kind; }
 
   // Get the child nodes of this node
-  virtual ASTVec const& GetChildren() const = 0;
+  virtual ASTChildren GetChildren() const = 0;
 
 public:
   // Constructor (kind only, empty children, int nodenum)

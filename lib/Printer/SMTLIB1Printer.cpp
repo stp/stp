@@ -115,7 +115,7 @@ void printSMTLIB1VarDeclsToStream(ASTNodeSet& symbols, ostream& os)
 void outputBitVec(const ASTNode n, ostream& os)
 {
   const Kind k = n.GetKind();
-  const ASTVec& c = n.GetChildren();
+  const ASTChildren c = n.GetChildren();
   ASTNode op;
 
   if (BITVECTOR == k)
@@ -171,7 +171,7 @@ void SMTLIB1_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
 
   // otherwise print it normally
   const Kind kind = n.GetKind();
-  const ASTVec& c = n.GetChildren();
+  const ASTChildren c = n.GetChildren();
   switch (kind)
   {
     case BITVECTOR:
@@ -256,8 +256,8 @@ void SMTLIB1_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
       {
         os << "(" << functionToSMTLIBName(kind, true);
 
-        ASTVec::const_iterator iend = c.end();
-        for (ASTVec::const_iterator i = c.begin(); i != iend; i++)
+        auto iend = c.end();
+        for (auto i = c.begin(); i != iend; i++)
         {
           os << " ";
           SMTLIB1_Print1(os, *i, 0, letize);

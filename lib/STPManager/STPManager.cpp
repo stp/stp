@@ -599,7 +599,7 @@ bool STPMgr::VarSeenInTerm(const ASTNode& var, const ASTNode& term)
     return true;
   }
 
-  for (ASTVec::const_iterator it = term.begin(), itend = term.end();
+  for (auto it = term.begin(), itend = term.end();
        it != itend; it++)
   {
     if (VarSeenInTerm(var, *it))

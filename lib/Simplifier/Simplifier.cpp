@@ -313,11 +313,11 @@ ASTNode Simplifier::SimplifyFormula(const ASTNode& b, bool pushNeg,
   Kind kind = b.GetKind();
 
   ASTNode a = b;
-  ASTVec ca = a.GetChildren();
+  ASTVec ca = toASTVec(a.GetChildren());
   if (!(IMPLIES == kind || ITE == kind || PARAMBOOL == kind || isAtomic(kind)))
   {
     SortByArith(ca);
-    if (ca != a.GetChildren())
+    if (ASTChildren(ca) != a.GetChildren())
       a = nf->CreateNode(kind, ca);
   }
 
@@ -1508,7 +1508,7 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
     if (k != SYMBOL) // const and symbols need to be created specially.
     {
       ASTVec v;
-      ASTVec toProcess = actualInputterm.GetChildren();
+      ASTVec toProcess = toASTVec(actualInputterm.GetChildren());
       if (actualInputterm.GetKind() == BVAND ||
           actualInputterm.GetKind() == BVOR ||
           actualInputterm.GetKind() == BVPLUS)
@@ -1532,7 +1532,7 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
       }
 
       assert(v.size() > 0);
-      if (v != actualInputterm.GetChildren()) // short-cut.
+      if (ASTChildren(v) != actualInputterm.GetChildren()) // short-cut.
       {
         output = nf->CreateArrayTerm(k, actualInputterm.GetIndexWidth(),
                                      inputValueWidth, v);
@@ -1547,7 +1547,7 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
       }
     }
 
-    const ASTVec& children = inputterm.GetChildren();
+    const ASTChildren children = inputterm.GetChildren();
     k = inputterm.GetKind();
 
     // Perform constant propagation if possible.
@@ -1685,7 +1685,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
     {
       if (BVPLUS == k && inputterm.Degree() == 2 && inputterm[1].GetKind() == BVLEFTSHIFT && inputterm[0] == inputterm[1][1])
       {
-        ASTNode replacement = nf->CreateTerm(BVOR, inputValueWidth, inputterm.GetChildren());
+        ASTNode replacement = nf->CreateTerm(BVOR, inputValueWidth, toASTVec(inputterm.GetChildren()));
         return SimplifyTerm(replacement, VarConstMap);
       }
 
@@ -1798,7 +1798,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       // propagate bvuminus upwards through multiplies.
       if (BVMULT == output.GetKind())
       {
-        ASTVec d = output.GetChildren();
+        ASTVec d = toASTVec(output.GetChildren());
         int uminus = 0;
         for (unsigned i = 0; i < d.size(); i++)
         {
@@ -1828,11 +1828,11 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       }
       else if (BVMULT == output.GetKind())
       {
-        output = makeTower(BVMULT, output.GetChildren());
+        output = makeTower(BVMULT, toASTVec(output.GetChildren()));
       }
       else if (BVPLUS == output.GetKind())
       {
-        ASTVec d = output.GetChildren();
+        ASTVec d = toASTVec(output.GetChildren());
         SortByArith(d);
         output = nf->CreateTerm(output.GetKind(), output.GetValueWidth(), d);
       }
@@ -1917,9 +1917,9 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
           //
           // BVUMINUS(a1x1 + a2x2 + ...) <=> BVPLUS(BVUMINUS(a1x1) +
           // BVUMINUS(a2x2) + ...
-          const ASTVec& c = a0.GetChildren();
+          const ASTChildren c = a0.GetChildren();
           ASTVec o;
-          for (ASTVec::const_iterator it = c.begin(), itend = c.end();
+          for (auto it = c.begin(), itend = c.end();
                it != itend; it++)
           {
             // Simplify(BVUMINUS(a1x1))
@@ -2068,9 +2068,9 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         {
           // (BVMULT(n,t,u))[i:j] <==> BVMULT(i+1,t[i:0],u[i:0])[i:j]
           // similar rule for BVPLUS
-          ASTVec c = a0.GetChildren();
+          const ASTChildren c = a0.GetChildren();
           ASTVec o;
-          for (ASTVec::iterator jt = c.begin(), jtend = c.end(); jt != jtend;
+          for (auto jt = c.begin(), jtend = c.end(); jt != jtend;
                jt++)
           {
             ASTNode aaa = *jt;
@@ -2235,10 +2235,10 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         case BVAND:
         case BVOR:
         {
-          const ASTVec& c = a0.GetChildren();
+          const ASTChildren c = a0.GetChildren();
           ASTVec newChildren;
           newChildren.reserve(c.size());
-          for (ASTVec::const_iterator it = c.begin(), itend = c.end();
+          for (auto it = c.begin(), itend = c.end();
                it != itend; it++)
           {
             newChildren.push_back(
@@ -2251,9 +2251,9 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         {
           // BVSX(m,BVPLUS(n,BVSX(t1),BVSX(t2))) <==>
           // BVPLUS(m,BVSX(m,t1),BVSX(m,t2))
-          const ASTVec& c = a0.GetChildren();
+          const ASTChildren c = a0.GetChildren();
           bool returnflag = false;
-          for (ASTVec::const_iterator it = c.begin(), itend = c.end();
+          for (auto it = c.begin(), itend = c.end();
                it != itend; it++)
           {
             if (BVSX != it->GetKind())
@@ -2266,7 +2266,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
           {
             ASTVec o;
             o.reserve(c.size());
-            for (ASTVec::const_iterator it = c.begin(), itend = c.end();
+            for (auto it = c.begin(), itend = c.end();
                  it != itend; it++)
             {
               ASTNode aaa = SimplifyTerm(
@@ -2410,7 +2410,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       {
         assert(output.Degree() != 0);
         bool allconv = true;
-        for (ASTVec::const_iterator it = output.begin(), itend = output.end();
+        for (auto it = output.begin(), itend = output.end();
              it != itend; it++)
         {
           if (!isPropositionToTerm(*it))
@@ -2423,7 +2423,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         {
           const ASTNode zero = nf->CreateZeroConst(1);
           ASTVec children;
-          for (ASTVec::const_iterator it = output.begin(), itend = output.end();
+          for (auto it = output.begin(), itend = output.end();
                it != itend; it++)
           {
             const ASTNode& n = *it;
@@ -2541,7 +2541,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       const unsigned int width = a.GetValueWidth();
       if (BVCONST == b.GetKind()) // known shift amount.
       {
-        output = SimplifyingNodeFactory::convertKnownShiftAmount(k, inputterm.GetChildren(), *_bm, nf);
+        output = SimplifyingNodeFactory::convertKnownShiftAmount(k, toASTVec(inputterm.GetChildren()), *_bm, nf);
       }
       else if (a == nf->CreateZeroConst(width))
       {
@@ -2717,7 +2717,7 @@ ASTNode Simplifier::CombineLikeTerms(const ASTNode& a)
     return output;
   }
 
-  return CombineLikeTerms(a.GetChildren());
+  return CombineLikeTerms(toASTVec(a.GetChildren()));
 }
 
 ASTNode Simplifier::CombineLikeTerms(const ASTVec& c)
@@ -2769,7 +2769,7 @@ ASTNode Simplifier::CombineLikeTerms(const ASTVec& c)
     {
       //(-1*x)*(y) <==> -1*(xy)
       ASTNode cccc = nf->CreateTerm(BVMULT, len, aaa[0][0], aaa[1]);
-      ASTVec cNodes = cccc.GetChildren();
+      ASTVec cNodes = toASTVec(cccc.GetChildren());
       SortByArith(cNodes);
       vars_to_consts[cccc].push_back(max);
     }
@@ -2777,7 +2777,7 @@ ASTNode Simplifier::CombineLikeTerms(const ASTVec& c)
     {
       // x*(-1*y) <==> -1*(xy)
       ASTNode cccc = nf->CreateTerm(BVMULT, len, aaa[0], aaa[1][0]);
-      ASTVec cNodes = cccc.GetChildren();
+      ASTVec cNodes = toASTVec(cccc.GetChildren());
       SortByArith(cNodes);
       vars_to_consts[cccc].push_back(max);
     }
@@ -2908,8 +2908,8 @@ ASTNode Simplifier::LhsMinusRhs(const ASTNode& eq)
   // right is -1*(rhs): Simplify(-1*rhs)
   rhs = SimplifyTerm(nf->CreateTerm(BVUMINUS, len, rhs));
 
-  ASTVec lvec = lhs.GetChildren();
-  ASTVec rvec = rhs.GetChildren();
+  ASTVec lvec = toASTVec(lhs.GetChildren());
+  const ASTChildren rvec = rhs.GetChildren();
   ASTNode lhsplusrhs;
   if (BVPLUS != lhs.GetKind() && BVPLUS != rhs.GetKind())
   {
@@ -2940,7 +2940,7 @@ ASTNode Simplifier::LhsMinusRhs(const ASTNode& eq)
   // sort if BVPLUS
   if (BVPLUS == output.GetKind())
   {
-    ASTVec outv = output.GetChildren();
+    ASTVec outv = toASTVec(output.GetChildren());
     SortByArith(outv);
     output = nf->CreateTerm(BVPLUS, len, outv);
   }
@@ -3022,7 +3022,7 @@ ASTNode Simplifier::DistributeMultOverPlus(const ASTNode& a,
 
   // by this point we are gauranteed that right is a BVPLUS, but left
   // may not be
-  ASTVec rightnodes = right.GetChildren();
+  const ASTChildren rightnodes = right.GetChildren();
   ASTVec outputvec;
   unsigned len = a.GetValueWidth();
   ASTNode zero = nf->CreateZeroConst(len);
@@ -3041,7 +3041,7 @@ ASTNode Simplifier::DistributeMultOverPlus(const ASTNode& a,
     }
     else
     {
-      for (ASTVec::iterator j = rightnodes.begin(), jend = rightnodes.end();
+      for (auto j = rightnodes.begin(), jend = rightnodes.end();
            j != jend; j++)
       {
         ASTNode out = SimplifyTerm(nf->CreateTerm(BVMULT, len, left, *j));
@@ -3051,14 +3051,14 @@ ASTNode Simplifier::DistributeMultOverPlus(const ASTNode& a,
   }
   else
   {
-    ASTVec leftnodes = left.GetChildren();
+    const ASTChildren leftnodes = left.GetChildren();
     // (x1 + x2 + ... + xm)*(y1 + y2 + ...+ yn) <==> x1*y1 + x1*y2 +
     // ... + x2*y1 + ... + xm*yn
-    for (ASTVec::iterator i = leftnodes.begin(), iend = leftnodes.end();
+    for (auto i = leftnodes.begin(), iend = leftnodes.end();
          i != iend; i++)
     {
       ASTNode multiplier = *i;
-      for (ASTVec::iterator j = rightnodes.begin(), jend = rightnodes.end();
+      for (auto j = rightnodes.begin(), jend = rightnodes.end();
            j != jend; j++)
       {
         ASTNode out = SimplifyTerm(nf->CreateTerm(BVMULT, len, multiplier, *j));

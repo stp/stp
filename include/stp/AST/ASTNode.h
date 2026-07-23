@@ -136,7 +136,7 @@ public:
   Kind GetKind() const { return _int_node_ptr->GetKind(); }
 
   // Access Children of this Node
-  const ASTVec& GetChildren() const { return _int_node_ptr->GetChildren(); }
+  ASTChildren GetChildren() const { return _int_node_ptr->GetChildren(); }
 
   // Return the number of child nodes
   size_t Degree() const { return GetChildren().size(); };
@@ -148,10 +148,10 @@ public:
   };
 
   // Get begin() iterator for child nodes
-  ASTVec::const_iterator begin() const { return GetChildren().begin(); };
+  const ASTNode* begin() const { return GetChildren().begin(); };
 
   // Get end() iterator for child nodes
-  ASTVec::const_iterator end() const { return GetChildren().end(); };
+  const ASTNode* end() const { return GetChildren().end(); };
 
   // Get back() element for child nodes
   const ASTNode back() const { return GetChildren().back(); };

@@ -330,10 +330,10 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
     }
     default:
     {
-      const ASTVec& c = term.GetChildren();
+      const ASTChildren c = term.GetChildren();
       ASTVec o;
       o.reserve(c.size());
-      for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend;
+      for (auto it = c.begin(), itend = c.end(); it != itend;
            it++)
       {
         ASTNode ff = TermToConstTermUsingModel(*it, ArrayReadFlag);
@@ -510,7 +510,7 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
       ASTVec children;
       children.reserve(form.Degree());
 
-      for (ASTVec::const_iterator it = form.begin(), itend = form.end();
+      for (auto it = form.begin(), itend = form.end();
            it != itend; it++)
       {
         children.push_back(TermToConstTermUsingModel(*it, false));
@@ -532,7 +532,7 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
       ASTVec children;
       children.reserve(form.Degree());
 
-      for (ASTVec::const_iterator it = form.begin(), itend = form.end();
+      for (auto it = form.begin(), itend = form.end();
            it != itend; it++)
       {
         children.push_back(ComputeFormulaUsingModel(*it));
