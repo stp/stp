@@ -84,12 +84,6 @@ public:
   DLL_PUBLIC ~ASTNode();
   DLL_PUBLIC ASTNode(ASTNode&& other) noexcept;
 
-  // The parsers heap-allocate an ASTNode for almost every token, so
-  // single ASTNodes are served from a free list instead of the general
-  // allocator.
-  DLL_PUBLIC static void* operator new(size_t size);
-  DLL_PUBLIC static void operator delete(void* p);
-
   // Print the arguments in lisp format
   friend ostream& LispPrintVec(ostream& os, const ASTVec& v, int indentation);
 
