@@ -2598,6 +2598,50 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       }
       break;
 
+    // fp.fma(rm, x, y, z) computes round(x*y + z); the two multiplicands x
+    // and y (children 1 and 2) are symmetric, so order them, keeping the
+    // rounding mode (child 0) and the addend (child 3) in place.
+    case stp::FP_FMA:
+      if (children.size() == 4 &&
+          children[1].GetNodeNum() > children[2].GetNodeNum())
+      {
+        ASTVec reordered;
+        reordered.push_back(children[0]);
+        reordered.push_back(children[2]);
+        reordered.push_back(children[1]);
+        reordered.push_back(children[3]);
+        result = hashing.CreateTerm(stp::FP_FMA, width, reordered);
+      }
+      break;
+
+    // fp.rem(a, b) is exact, so several structural identities hold. Applied
+    // one per construction; the recursive calls re-simplify, so nested cases
+    // compose. Child 0 is the dividend a, child 1 the divisor b -- there is
+    // no rounding mode.
+    case stp::FP_REM:
+      if (children.size() == 2)
+      {
+        // rem(rem(a, b), b) = rem(a, b): a second remainder by the same
+        // divisor is a no-op.
+        if (children[0].GetKind() == stp::FP_REM &&
+            children[0][1] == children[1])
+          result = children[0];
+        // rem(a, -b) = rem(a, |b|) = rem(a, b): the divisor's sign is
+        // irrelevant.
+        else if (children[1].GetKind() == stp::FP_ABS ||
+                 children[1].GetKind() == stp::FP_NEG)
+          result = NodeFactory::CreateTerm(stp::FP_REM, width, children[0],
+                                           children[1][0]);
+        // rem(-a, b) = -rem(a, b): negating the dividend negates the result,
+        // so lift the negation out where it can meet another and cancel.
+        else if (children[0].GetKind() == stp::FP_NEG)
+          result = NodeFactory::CreateTerm(
+              stp::FP_NEG, width,
+              NodeFactory::CreateTerm(stp::FP_REM, width, children[0][0],
+                                      children[1]));
+      }
+      break;
+
     default: // quieten compiler.
       break;
   }
