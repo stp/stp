@@ -176,6 +176,25 @@ static bool deriveFPFormat(const ASTNode& n, unsigned int& e, unsigned int& s)
       return e != 0 && s != 0;
     }
 
+    // A float-valued ITE takes the format of its branches (children 1 and 2,
+    // which share it). Checked first and cheaply because bitvector ITEs are
+    // everywhere: for those the branch carries no format and this returns at
+    // once.
+    case ITE:
+    {
+      if (n.Degree() != 3)
+        return false;
+
+      e = n[1].GetExpWidth();
+      s = n[1].GetSigWidth();
+      if (e == 0)
+      {
+        e = n[2].GetExpWidth();
+        s = n[2].GetSigWidth();
+      }
+      return e != 0 && s != 0;
+    }
+
     // The rest produce a float in the format of their float operand. Which
     // child that is varies -- the arithmetic operations lead with a rounding
     // mode -- and an operand that was folded to a constant may have lost its

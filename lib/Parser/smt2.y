@@ -1249,9 +1249,14 @@ STRING_TOK LPAREN_TOK RPAREN_TOK an_fp_sort
 };
 
 an_fp_sort:
+  // float_size is (exponent bits, significand bits), where the significand
+  // includes the hidden bit -- the same (eb, sb) that (_ FloatingPoint eb sb)
+  // uses. The named sorts had their widths set by naively splitting the total
+  // in two (4+12, 16+48, 32+96) instead of using the IEEE fields, so every
+  // one but Float32 named the wrong format.
   FLOAT16_TOK
 {
-    $$ = new float_size(4, 12);
+    $$ = new float_size(5, 11);
 }
 | FLOAT32_TOK
 {
@@ -1259,11 +1264,11 @@ an_fp_sort:
 }
 | FLOAT64_TOK
 {
-    $$ = new float_size(16, 48);
+    $$ = new float_size(11, 53);
 }
-| FLOAT128_TOK 
+| FLOAT128_TOK
 {
-    $$ = new float_size(32, 96);
+    $$ = new float_size(15, 113);
 }
 | LPAREN_TOK UNDERSCORE_TOK FLOATINGPOINT_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK
 {
