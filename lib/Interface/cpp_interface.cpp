@@ -561,7 +561,6 @@ void Cpp_interface::cleanUp()
   // Every frame is going away, so don't erase the functions from the
   // map one at a time (files can define millions of functions).
   functions.clear();
-  last_found_function = nullptr;
   for (SolverFrame* frame : frames)
     frame->getFunctions().clear();
 
