@@ -661,6 +661,54 @@ TEST(SimplifyingNodeFactory_Test, mult_over_leftshift)
    ASSERT_EQ(n, c.mgr.ASTTrue);
 }
 
+TEST(SimplifyingNodeFactory_Test, bvneg_bvneg)
+{
+  // -(-x) == x
+  const std::string input = R"(
+    (assert (= (bvneg (bvneg v0)) v0 )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvneg_bvnot)
+{
+  // -(~x) == x + 1
+  const std::string input = R"(
+    (assert (= (bvneg (bvnot v0)) (bvadd v0 (_ bv1 20)) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvnot_bvnot)
+{
+  // ~(~x) == x
+  const std::string input = R"(
+    (assert (= (bvnot (bvnot v0)) v0 )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, zero_extend_to_concat)
+{
+  // ((_ zero_extend 3) x) == (0^3 ++ x)
+  const std::string input = R"(
+    (assert (= ((_ zero_extend 3) v0) (concat (_ bv0 3) v0) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
 TEST(SimplifyingNodeFactory_Test, ite_equal_branches)
 {
   // ITE(c, x, x) == x
