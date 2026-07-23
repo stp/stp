@@ -38,6 +38,20 @@ void SortByExprNum(ASTVec& c);
 void SortByArith(ASTVec& c);
 bool exprless(const ASTNode& n1, const ASTNode& n2);
 bool arithless(const ASTNode& n1, const ASTNode& n2);
+
+// Functor form of exprless. Passing a free function to std::sort/is_sorted
+// hands it a function pointer, which the algorithm cannot inline, so every
+// comparison is an indirect call. This functor's operator() inlines (and
+// GetNodeNum is itself inline), folding the comparison into the sort's inner
+// loop. Ordering is identical to exprless. Used on the node-creation hot
+// path, where sorting commutative children dominates parse time.
+struct ExprLess
+{
+  bool operator()(const ASTNode& n1, const ASTNode& n2) const
+  {
+    return n1.GetNodeNum() < n2.GetNodeNum();
+  }
+};
 bool isAtomic(Kind k);
 bool isCommutative(const Kind k);
 bool containsArrayOps(const ASTNode& n, STPMgr* stp);

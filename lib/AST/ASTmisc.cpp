@@ -196,7 +196,7 @@ ATTR_NORETURN void FatalError(const char* str)
 
 void SortByExprNum(ASTVec& v)
 {
-  sort(v.begin(), v.end(), exprless);
+  sort(v.begin(), v.end(), ExprLess{});
 }
 
 void SortByArith(ASTVec& v)

@@ -51,7 +51,7 @@ ASTNode HashingNodeFactory::CreateNode(const Kind kind,
   }
   else if (is_Form_kind(kind)) // formula and commutative.
   {
-    const bool isSorted =  std::is_sorted(back_children.begin(),back_children.end(),stp::exprless);
+    const bool isSorted =  std::is_sorted(back_children.begin(),back_children.end(),stp::ExprLess{});
     if (isSorted)
     {
       return ASTNode(bm.LookupOrCreateInterior(kind, back_children));
