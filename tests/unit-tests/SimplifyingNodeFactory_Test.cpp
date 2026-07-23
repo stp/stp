@@ -489,11 +489,243 @@ TEST(SimplifyingNodeFactory_Test, bvplus5)
 TEST(SimplifyingNodeFactory_Test, bvplus6)
 {
   const std::string input = R"(
-      (assert (= 
-                (bvadd (bvnot (bvnot (bvnot v1) ))  v1   )   
+      (assert (=
+                (bvadd (bvnot (bvnot (bvnot v1) ))  v1   )
                  (bvnot (_ bv0 20)  )
                )
       )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+// The following confirm rewrites that used to live in Simplifier.cpp are done
+// by the simplifying node factory (these queries are not run through the
+// Simplifier pass, only the factory).
+
+TEST(SimplifyingNodeFactory_Test, bvsub_self)
+{
+  // (x - x) == 0
+  const std::string input = R"(
+    (assert (= (bvsub v0 v0) (_ bv0 20) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvsub_zero)
+{
+  // (x - 0) == x
+  const std::string input = R"(
+    (assert (= (bvsub v0 (_ bv0 20)) v0 )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvsub_to_plus)
+{
+  // (x - y) == x + (-y)
+  const std::string input = R"(
+    (assert (= (bvsub v0 v1) (bvadd v0 (bvneg v1)) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, shift_by_zero)
+{
+  // (x << 0) == x
+  const std::string input = R"(
+    (assert (= (bvshl v0 (_ bv0 20)) v0 )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, shift_left_past_width)
+{
+  // (x << width) == 0
+  const std::string input = R"(
+    (assert (= (bvshl v0 (_ bv20 20)) (_ bv0 20) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, shift_right_past_width)
+{
+  // (x >> width) == 0
+  const std::string input = R"(
+    (assert (= (bvlshr v0 (_ bv20 20)) (_ bv0 20) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, shift_left_const_to_concat)
+{
+  // (x << 4) == (x[15:0] ++ 0000)
+  const std::string input = R"(
+    (assert (= (bvshl v0 (_ bv4 20)) (concat ((_ extract 15 0) v0) (_ bv0 4)) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, extract_over_extract)
+{
+  // ((x[10:1])[5:2]) == x[6:3]
+  const std::string input = R"(
+    (assert (= ((_ extract 5 2) ((_ extract 10 1) v0)) ((_ extract 6 3) v0) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, extract_over_bvnot)
+{
+  // (~x)[5:2] == ~(x[5:2])
+  const std::string input = R"(
+    (assert (= ((_ extract 5 2) (bvnot v0)) (bvnot ((_ extract 5 2) v0)) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvxor_self)
+{
+  // (x ^ x) == 0
+  const std::string input = R"(
+    (assert (= (bvxor v0 v0) (_ bv0 20) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvxor_zero)
+{
+  // (0 ^ x) == x
+  const std::string input = R"(
+    (assert (= (bvxor (_ bv0 20) v0) v0 )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvneg_and_self)
+{
+  // -(x & -x) == x | -x
+  const std::string input = R"(
+    (assert (= (bvneg (bvand v0 (bvneg v0))) (bvor v0 (bvneg v0)) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, mult_over_leftshift)
+{
+  // (x * (y << s)) == ((x * y) << s), for a variable shift amount.
+  const std::string input = R"(
+    (assert (= (bvmul v0 (bvshl v1 v2)) (bvshl (bvmul v0 v1) v2) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, ite_equal_branches)
+{
+  // ITE(c, x, x) == x
+  const std::string input = R"(
+    (assert (= (ite a b b) b )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, ite_then_true)
+{
+  // ITE(c, true, x) == (c or x)
+  const std::string input = R"(
+    (assert (= (ite a true b) (or a b) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, ite_then_false)
+{
+  // ITE(c, false, x) == ((not c) and x)
+  const std::string input = R"(
+    (assert (= (ite a false b) (and (not a) b) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, ite_else_true)
+{
+  // ITE(c, x, true) == ((not c) or x)
+  const std::string input = R"(
+    (assert (= (ite a b true) (or (not a) b) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, ite_else_false)
+{
+  // ITE(c, x, false) == (c and x)
+  const std::string input = R"(
+    (assert (= (ite a b false) (and a b) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, ite_true_false)
+{
+  // ITE(c, true, false) == c
+  const std::string input = R"(
+    (assert (= (ite a true false) a )  )
     )";
 
    Context c;

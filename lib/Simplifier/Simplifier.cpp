@@ -1259,6 +1259,12 @@ ASTNode Simplifier::SimplifyIteFormula(const ASTNode& b, bool pushNeg,
     t2 = SimplifyFormula(a[2], false, VarConstMap);
   }
 
+  // Every structural fold below - constant condition, equal branches, a
+  // constant branch collapsing to AND/OR - is done by the simplifying node
+  // factory when the ITE node is (re)created, so we just hand it the
+  // simplified children. The one exception is ITE(c, false, true): the factory
+  // would only give a shallow NOT(c), whereas pushing the negation into c
+  // exposes more simplifications.
   if (ASTTrue == t0)
   {
     output = t1;
@@ -1267,33 +1273,9 @@ ASTNode Simplifier::SimplifyIteFormula(const ASTNode& b, bool pushNeg,
   {
     output = t2;
   }
-  else if (t1 == t2)
-  {
-    output = t1;
-  }
-  else if (ASTTrue == t1 && ASTFalse == t2)
-  {
-    output = t0;
-  }
   else if (ASTFalse == t1 && ASTTrue == t2)
   {
     output = SimplifyFormula(t0, true, VarConstMap);
-  }
-  else if (ASTTrue == t1)
-  {
-    output = nf->CreateNode(OR, t0, t2);
-  }
-  else if (ASTFalse == t1)
-  {
-    output = nf->CreateNode(AND, nf->CreateNode(NOT, t0), t2);
-  }
-  else if (ASTTrue == t2)
-  {
-    output = nf->CreateNode(OR, nf->CreateNode(NOT, t0), t1);
-  }
-  else if (ASTFalse == t2)
-  {
-    output = nf->CreateNode(AND, t0, t1);
   }
   else
   {
@@ -1617,20 +1599,8 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       break;
 
     case BVMULT:
-    if (inputterm.Degree() == 2 && inputterm[1].GetKind() == BVLEFTSHIFT)
-    {
-      ASTNode replacement = nf->CreateTerm(BVMULT, inputValueWidth, {inputterm[0], inputterm[1][0]});
-      replacement = nf->CreateTerm(BVLEFTSHIFT, inputValueWidth, {replacement, inputterm[1][1]});
-      return SimplifyTerm(replacement, VarConstMap);
-    }
-
-    if (inputterm.Degree() == 2 && inputterm[0].GetKind() == BVLEFTSHIFT)
-    {
-      ASTNode replacement = nf->CreateTerm(BVMULT, inputValueWidth, {inputterm[1], inputterm[0][0]});
-      replacement = nf->CreateTerm(BVLEFTSHIFT, inputValueWidth, {replacement, inputterm[0][1]});
-      return SimplifyTerm(replacement, VarConstMap);
-    }
-
+    // nb. (t * (u << s)) == ((t * u) << s) is done by the simplifying node
+    // factory.
 
     // fall-through
     case BVPLUS:
@@ -1792,24 +1762,10 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
     }
 
     case BVSUB:
-    {
-      assert(inputterm.Degree() == 2);
-
-      const ASTNode& a0 = inputterm[0];
-      const ASTNode& a1 = inputterm[1];
-
-      if (a0 == a1)
-        output = nf->CreateZeroConst(inputValueWidth);
-      else
-      {
-        // covert x-y into x+(-y) and simplify. this transformation
-        // triggers more simplifications
-        //
-        output = nf->CreateTerm(BVPLUS, inputValueWidth, a0,
-                                nf->CreateTerm(BVUMINUS, inputValueWidth, a1));
-      }
+      // nb. (x - x) == 0, (x - 0) == x, and (x - y) == x + (-y) are done by
+      // the simplifying node factory.
+      output = inputterm;
       break;
-    }
 
     case BVUMINUS:
     {
@@ -1889,20 +1845,9 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
           output = nf->CreateTerm(BVSUB, inputValueWidth, a0[1], a0[0]);
           break;
         }
-        case BVAND:
-          if (a0.Degree() == 2 && (a0[1].GetKind() == BVUMINUS) &&
-              a0[1][0] == a0[0])
-          {
-            output = nf->CreateTerm(BVOR, inputValueWidth, a0[0], a0[1]);
-          }
-          break;
-        case BVOR:
-          if (a0.Degree() == 2 && (a0[1].GetKind() == BVUMINUS) &&
-              a0[1][0] == a0[0])
-          {
-            output = nf->CreateTerm(BVAND, inputValueWidth, a0[0], a0[1]);
-          }
-          break;
+        // nb. -(x & -x) == x | -x is done by the simplifying node factory.
+        // (The -(x | -x) case here was dead: BVOR is lowered to ~(~x & ~y) at
+        // creation, so no BVOR node ever reaches this switch.)
         case BVLEFTSHIFT:
           if (a0[0].GetKind() == BVCONST)
             output = nf->CreateTerm(
@@ -1960,18 +1905,8 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
 
       switch (k1)
       {
-        case BVEXTRACT:
-        {
-          const unsigned innerLow = a0[2].GetUnsignedConst();
-          // const unsigned innerHigh = a0[1].GetUnsignedConst();
-
-          output = nf->CreateTerm(BVEXTRACT, inputValueWidth, a0[0],
-                                  nf->CreateBVConst(32, i_val + innerLow),
-                                  nf->CreateBVConst(32, j_val + innerLow));
-          assert(BVTypeCheck(output));
-          break;
-        }
-
+        // nb. an extract over an extract is merged by the simplifying node
+        // factory.
         case BVCONCAT:
         {
           // assumes concatenation is binary
@@ -2072,15 +2007,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
               break;
             }
 #endif
-        case BVNOT:
-        {
-          // (~t)[i:j] <==> ~(t[i:j])
-          ASTNode t = a0[0];
-          t = SimplifyTerm(nf->CreateTerm(BVEXTRACT, inputValueWidth, t, i, j),
-                           VarConstMap);
-          output = nf->CreateTerm(BVNOT, inputValueWidth, t);
-          break;
-        }
+        // nb. (~t)[i:j] == ~(t[i:j]) is done by the simplifying node factory.
         // case BVSX:{ //(BVSX(t,n)[i:j] <==> BVSX(t,i+1), if n
         //        >= i+1 and j=0 ASTNode t = a0[0]; unsigned int
         //        bvsx_len = a0.GetValueWidth(); if(bvsx_len <
@@ -2486,33 +2413,15 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
 
     case BVLEFTSHIFT:
     case BVRIGHTSHIFT:
-    { // If the shift amount is known. Then replace it by an extract.
-      const ASTNode a = inputterm[0];
-      const ASTNode b = inputterm[1];
-
-      const unsigned int width = a.GetValueWidth();
-      if (BVCONST == b.GetKind()) // known shift amount.
-      {
-        output = SimplifyingNodeFactory::convertKnownShiftAmount(k, toASTVec(inputterm.GetChildren()), *_bm, nf);
-      }
-      else if (a == nf->CreateZeroConst(width))
-      {
-        output = nf->CreateZeroConst(width);
-      }
-      else
-      {
-        output = inputterm;
-      }
+      // nb. A known shift amount is lowered to an extract, and a zero shiftee
+      // is folded to zero, by the simplifying node factory.
+      output = inputterm;
       break;
-    }
 
     case BVXOR:
     {
-      if (inputterm.Degree() == 2 && inputterm[0] == inputterm[1])
-      {
-        output = nf->CreateZeroConst(inputterm.GetValueWidth());
-        break;
-      }
+      // nb. (x ^ x) == 0 and (0 ^ x) == x are done by the simplifying node
+      // factory.
       if (inputterm.Degree() == 2 && inputterm[0].GetKind() == BVCONCAT &&
           inputterm[1].GetKind() == BVCONCAT &&
           inputterm[0][0].GetValueWidth() == inputterm[1][0].GetValueWidth())
@@ -2523,12 +2432,6 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
                                           inputterm[0][0], inputterm[1][0]),
                            nf->CreateTerm(k, inputterm[0][1].GetValueWidth(),
                                           inputterm[0][1], inputterm[1][1]));
-        break;
-      }
-      if (inputterm.Degree() == 2 &&
-          inputterm[0] == nf->CreateZeroConst(inputterm.GetValueWidth()))
-      {
-        output = inputterm[1];
         break;
       }
     }
