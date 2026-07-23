@@ -224,6 +224,13 @@ void Cpp_interface::storeFunction(const string& name, const ASTVec& params,
     ASTNode p = bm.CreateFreshVariable(params[i].GetIndexWidth(),
                                        params[i].GetValueWidth(),
                                        "STP_INTERNAL_FUNCTION_NAME");
+    // A floating-point parameter carries its format in the exponent and
+    // significand widths, which CreateFreshVariable does not copy. Without
+    // this the placeholder is a formatless (in fact zero-width) symbol, and
+    // the function body -- e.g. (fp.isNormal f) -- fails to type-check when
+    // it is stored.
+    p.SetExpWidth(params[i].GetExpWidth());
+    p.SetSigWidth(params[i].GetSigWidth());
     fromTo.insert(std::make_pair(params[i], p));
     f.params.push_back(p);
   }
