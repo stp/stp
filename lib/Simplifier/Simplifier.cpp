@@ -939,94 +939,43 @@ ASTNode Simplifier::SimplifyAndOrFormula(const ASTNode& a, bool pushNeg,
                                          ASTNodeMap* VarConstMap)
 {
   ASTNode output;
-  // cerr << "input:\n" << a << endl;
 
   if (CheckSimplifyMap(a, output, pushNeg, VarConstMap))
     return output;
 
   const Kind k = a.GetKind();
-  ASTVec c = FlattenKind(k, a.GetChildren());
-  SortByArith(c);
+  const bool isAnd = (k == AND);
 
-  const bool isAnd = (k == AND) ? true : false;
-
+  // Under pushNeg we are simplifying NOT(a): De Morgan flips the connective,
+  // and a child that simplifies to the annihilator collapses the whole node.
   const ASTNode annihilator =
       isAnd ? (pushNeg ? ASTTrue : ASTFalse) : (pushNeg ? ASTFalse : ASTTrue);
 
-  const ASTNode identity =
-      isAnd ? (pushNeg ? ASTFalse : ASTTrue) : (pushNeg ? ASTTrue : ASTFalse);
+  // Flatten nested same-kind operands (the factory does not do this) and
+  // recursively simplify each child. Short-circuit as soon as a child is the
+  // annihilator, without simplifying the rest.
+  ASTVec c = FlattenKind(k, a.GetChildren());
 
   ASTVec outvec;
   outvec.reserve(c.size());
-
-  // do the work
-  ASTVec::const_iterator next_it;
-  for (ASTVec::const_iterator i = c.begin(), iend = c.end(); i != iend; i++)
+  for (const ASTNode& child : c)
   {
-    next_it = i + 1;
-    bool nextexists = (next_it < iend);
-
-    const ASTNode aaa = SimplifyFormula(*i, pushNeg, VarConstMap);
-    if (annihilator == aaa)
+    const ASTNode aaa = SimplifyFormula(child, pushNeg, VarConstMap);
+    if (aaa == annihilator)
     {
-      // memoize
-      UpdateSimplifyMap(*i, annihilator, pushNeg, VarConstMap);
       UpdateSimplifyMap(a, annihilator, pushNeg, VarConstMap);
-      // cerr << "annihilator1: output:\n" << annihilator << endl;
       return annihilator;
     }
-    ASTNode bbb;
-    if (nextexists)
-    {
-      bbb = SimplifyFormula(*next_it, pushNeg, VarConstMap);
-    }
-    if (nextexists && bbb == aaa)
-    {
-      // skip the duplicate aaa. *next_it will be included
-    }
-    else if (nextexists && ((bbb.GetKind() == NOT && bbb[0] == aaa)))
-    {
-      // memoize
-      UpdateSimplifyMap(a, annihilator, pushNeg, VarConstMap);
-      // cerr << "annihilator2: output:\n" << annihilator << endl;
-      return annihilator;
-    }
-    else if (identity == aaa)
-    {
-      // //drop identites
-    }
-    else
-    {
-      outvec.push_back(aaa);
-    }
+    outvec.push_back(aaa);
   }
 
-  switch (outvec.size())
-  {
-    case 0:
-    {
-      // only identities were dropped
-      output = identity;
-      break;
-    }
-    case 1:
-    {
-      output = outvec[0];
-      break;
-    }
-    default:
-    {
-      output = (isAnd) ? (pushNeg ? nf->CreateNode(OR, outvec)
-                                  : nf->CreateNode(AND, outvec))
-                       : (pushNeg ? nf->CreateNode(AND, outvec)
-                                  : nf->CreateNode(OR, outvec));
-      break;
-    }
-  }
+  // Hand the simplified children to the node factory. CreateSimpleAndOr
+  // sorts them, drops identities, removes duplicates, detects complements
+  // and unwraps singletons -- so none of that is repeated here.
+  const Kind outKind = (isAnd == !pushNeg) ? AND : OR;
+  output = nf->CreateNode(outKind, outvec);
 
-  // memoize
   UpdateSimplifyMap(a, output, pushNeg, VarConstMap);
-  // cerr << "output:\n" << output << endl;
   return output;
 }
 
