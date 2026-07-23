@@ -2563,9 +2563,26 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
     case FP_TO_UBV:
     case FP_TO_SBV:
     {
-      ASTNode lhs_simp(SimplifyTerm(inputterm[0], VarConstMap));
-      ASTNode rhs_simp(SimplifyTerm(inputterm[1], VarConstMap));
-      ASTNode temp(nf->CreateNode(k, lhs_simp, rhs_simp));
+      // Rebuild with the same kind and arity. Only the float operands are
+      // simplified: the other children -- the rounding mode of the arithmetic
+      // operations, and to_fp's format arguments -- are constants that the
+      // blaster reads directly, so simplifying them buys nothing and risks
+      // rewriting them into a form it does not recognise.
+      ASTVec simplified;
+      simplified.reserve(inputterm.Degree());
+
+      for (unsigned int i = 0; i < inputterm.Degree(); i++)
+      {
+        if (inputterm[i].GetType() == FLOATINGPOINT_TYPE)
+          simplified.push_back(SimplifyTerm(inputterm[i], VarConstMap));
+        else
+          simplified.push_back(inputterm[i]);
+      }
+
+      ASTNode temp(
+          nf->CreateTerm(k, inputterm.GetValueWidth(), simplified));
+      temp.SetExpWidth(inputterm.GetExpWidth());
+      temp.SetSigWidth(inputterm.GetSigWidth());
 
       ASTNode blasted(FloatBlaster::BlastNode_TopLevel(temp));
 

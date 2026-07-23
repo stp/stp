@@ -88,15 +88,71 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
 
   Kind k = inputterm.GetKind();
 
-  symbolic_fp::roundingMode default_rm(symbolic_fp::traits::RNE());
-
   switch (k)
   {
+    // The arithmetic operations all carry their rounding mode as child 0,
+    // matching their arity in ASTKind.kinds.
     case FP_ADD:
-      output = symbolic_fp::blast_fpadd(default_rm, inputterm[0], inputterm[1]);
+      output = symbolic_fp::blast_fpadd(/* rm */ inputterm[0], inputterm[1],
+                                        inputterm[2]);
+      break;
+    case FP_SUB:
+      output = symbolic_fp::blast_fpsub(/* rm */ inputterm[0], inputterm[1],
+                                        inputterm[2]);
+      break;
+    case FP_MUL:
+      output = symbolic_fp::blast_fpmul(/* rm */ inputterm[0], inputterm[1],
+                                        inputterm[2]);
+      break;
+    case FP_DIV:
+      output = symbolic_fp::blast_fpdiv(/* rm */ inputterm[0], inputterm[1],
+                                        inputterm[2]);
+      break;
+    case FP_LT:
+      output = symbolic_fp::blast_fplt(inputterm[0], inputterm[1]);
+      break;
+    case FP_LEQ:
+      output = symbolic_fp::blast_fpleq(inputterm[0], inputterm[1]);
+      break;
+    // fp.gt/fp.geq are the reversed forms; SMT-LIB defines them that way.
+    case FP_GT:
+      output = symbolic_fp::blast_fplt(inputterm[1], inputterm[0]);
+      break;
+    case FP_GEQ:
+      output = symbolic_fp::blast_fpleq(inputterm[1], inputterm[0]);
+      break;
+    // ((_ to_fp e s) [rm] f). Children are (e, s, bits) for the bitvector
+    // reinterpretation, or (e, s, rm, expr) for a float-to-float conversion.
+    // The target format is already recorded on the node itself.
+    case FP_TOFP:
+      if (inputterm.Degree() == 3)
+      {
+        // Reinterpretation: floats are stored packed, so the bit pattern is
+        // already the answer.
+        output = inputterm[2];
+      }
+      else
+      {
+        assert(inputterm.Degree() == 4);
+        output = symbolic_fp::blast_convert_float_to_float(
+            /* rm */ inputterm[2], /* expr */ inputterm[3],
+            actualInputterm.GetExpWidth(), actualInputterm.GetSigWidth());
+      }
       break;
     case FP_CONST_POS_INF:
       output = symbolic_fp::blast_pos_inf(actualInputterm);
+      break;
+    case FP_CONST_NEG_INF:
+      output = symbolic_fp::blast_neg_inf(actualInputterm);
+      break;
+    case FP_CONST_NAN:
+      output = symbolic_fp::blast_nan(actualInputterm);
+      break;
+    case FP_CONST_POS_ZERO:
+      output = symbolic_fp::blast_zero(actualInputterm, false);
+      break;
+    case FP_CONST_NEG_ZERO:
+      output = symbolic_fp::blast_zero(actualInputterm, true);
       break;
     case FP_SMT_EQ:
       output = symbolic_fp::blast_smt_eq(inputterm[0], inputterm[1]);

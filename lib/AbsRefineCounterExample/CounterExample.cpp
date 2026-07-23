@@ -355,17 +355,35 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
     case FP_TO_UBV:
     case FP_TO_SBV:
     {
-      ASTNode lhs_simp(TermToConstTermUsingModel(term[0]));
-      assert(lhs_simp.GetKind() == BVCONST);
-      ASTNode lhs_fp = bm->CreateFPConst(lhs_simp);
-      lhs_fp.SetExpWidth(term[0].GetExpWidth());
-      lhs_fp.SetSigWidth(term[0].GetSigWidth());
-      ASTNode rhs_simp(TermToConstTermUsingModel(term[1]));
-      assert(rhs_simp.GetKind() == BVCONST);
-      ASTNode rhs_fp = bm->CreateFPConst(rhs_simp);
-      rhs_fp.SetExpWidth(term[1].GetExpWidth());
-      rhs_fp.SetSigWidth(term[1].GetSigWidth());
-      ASTNode temp(stp::GlobalParserBM->CreateNode(k, lhs_fp, rhs_fp));
+      // Evaluate the float operands against the model and rebuild the node
+      // with the same kind and arity. Children that are not floats -- the
+      // rounding mode of the arithmetic operations, and to_fp's format
+      // arguments -- are already constants and are carried through unchanged.
+      ASTVec children;
+      children.reserve(term.Degree());
+
+      for (unsigned int i = 0; i < term.Degree(); i++)
+      {
+        const ASTNode& child = term[i];
+
+        if (child.GetType() != FLOATINGPOINT_TYPE)
+        {
+          children.push_back(child);
+          continue;
+        }
+
+        ASTNode simp(TermToConstTermUsingModel(child));
+        assert(simp.GetKind() == BVCONST);
+        ASTNode as_fp = bm->CreateFPConst(simp);
+        as_fp.SetExpWidth(child.GetExpWidth());
+        as_fp.SetSigWidth(child.GetSigWidth());
+        children.push_back(as_fp);
+      }
+
+      ASTNode temp(
+          stp::GlobalParserBM->CreateTerm(k, term.GetValueWidth(), children));
+      temp.SetExpWidth(term.GetExpWidth());
+      temp.SetSigWidth(term.GetSigWidth());
 
       assert(temp != term);
 

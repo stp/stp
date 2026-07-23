@@ -340,6 +340,14 @@ ASTVec FlattenKind(Kind k, const ASTChildren& children, int maxDepth)
   return flat_children;
 }
 
+// Rounding modes are carried as 5-bit one-hot bitvectors, so a well-formed
+// one is any 5-bit bitvector: a literal from the grammar, or a symbol of
+// SMT-LIB's RoundingMode sort.
+static bool isRoundingMode(const ASTNode& n)
+{
+  return n.GetType() == BITVECTOR_TYPE && n.GetValueWidth() == 5;
+}
+
 bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
 {
   // The children of bitvector terms are in turn bitvectors.
@@ -510,6 +518,9 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
                    "the bitwidth.\n",
                    n);
       break;
+    // The arithmetic operations take a rounding mode as their first child,
+    // then their float operands; the rest take only floats. A rounding mode
+    // is carried as a 5-bit one-hot bitvector (see symbolic_fp.h).
     case FP_ABS:
     case FP_NEG:
     case FP_ADD:
@@ -519,41 +530,119 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
     case FP_FMA:
     case FP_SQRT:
     case FP_REM:
+    case FP_ROUNDTOINTEGRAL:
     case FP_MIN:
     case FP_MAX:
-    case FP_TOFP:
-    case FP_TOFP_UNSIGNED:
-    case FP_TO_UBV:
-    case FP_TO_SBV:
     case FP_SMT_EQ:
+    {
+      unsigned int expected_args;
+      unsigned int first_float;
+
+      switch (k)
+      {
+        case FP_ABS:
+        case FP_NEG:
+          expected_args = 1;
+          first_float = 0;
+          break;
+        case FP_SQRT:
+        case FP_ROUNDTOINTEGRAL:
+          expected_args = 2;
+          first_float = 1;
+          break;
+        case FP_REM:
+        case FP_MIN:
+        case FP_MAX:
+        case FP_SMT_EQ:
+          expected_args = 2;
+          first_float = 0;
+          break;
+        case FP_FMA:
+          expected_args = 4;
+          first_float = 1;
+          break;
+        default: // FP_ADD, FP_SUB, FP_MUL, FP_DIV
+          expected_args = 3;
+          first_float = 1;
+          break;
+      }
+
+      std::string error_msg("");
+      bool failed(false);
+
+      if (n.Degree() != expected_args)
+      {
+        error_msg = "<fp> has the wrong number of arguments";
+        failed = true;
+      }
+      else if (first_float == 1 && !isRoundingMode(n[0]))
+      {
+        error_msg = "first argument to <fp> is not a rounding mode";
+        failed = true;
+      }
+
+      for (unsigned int i = first_float; !failed && i < n.Degree(); i++)
+      {
+        if (n[i].GetType() != FLOATINGPOINT_TYPE)
+        {
+          error_msg = "argument to <fp> is not an fp";
+          failed = true;
+        }
+        else if (n[i].GetSigWidth() != n[first_float].GetSigWidth() ||
+                 n[i].GetExpWidth() != n[first_float].GetExpWidth())
+        {
+          error_msg = "arguments to <fp> differ in format";
+          failed = true;
+        }
+      }
+
+      if (failed)
+      {
+        cerr << error_msg << endl;
+        FatalError(error_msg.c_str(), n);
+      }
+      break;
+    }
+
+    // ((_ to_fp e s) bv) is (e, s, bits); ((_ to_fp e s) rm f) is
+    // (e, s, rm, expr). The e/s children record the target format.
+    case FP_TOFP:
     {
       std::string error_msg("");
       bool failed(false);
 
-      if (n.Degree() != 2)
+      if (n.Degree() != 3 && n.Degree() != 4)
       {
-        /* not actually true */
-        error_msg = "<fp> should have exactly 2 args";
+        error_msg = "to_fp should have 3 or 4 args";
         failed = true;
       }
-      else if (n[0].GetType() != FLOATINGPOINT_TYPE)
+      else if (!n[0].isConstant() || !n[1].isConstant())
       {
-        error_msg = "lhs of <fp> is not an fp";
+        error_msg = "to_fp's format arguments must be constants";
         failed = true;
       }
-      else if (n[1].GetType() != FLOATINGPOINT_TYPE)
+      // The target format is checked against the e/s children rather than
+      // against the node's own exp/sig widths: the node factory type checks
+      // while creating the node, which is before the parser has had a chance
+      // to stamp the format onto it.
+      else if (n.Degree() == 3)
       {
-        error_msg = "rhs of <fp> is not an fp";
+        if (n[2].GetType() != BITVECTOR_TYPE ||
+            n[2].GetValueWidth() !=
+                n[0].GetUnsignedConst() + n[1].GetUnsignedConst())
+        {
+          error_msg = "to_fp's argument is not a bitvector of width e + s";
+          failed = true;
+        }
+      }
+      else if (!isRoundingMode(n[2]))
+      {
+        error_msg = "to_fp's second argument is not a rounding mode";
         failed = true;
       }
-      else if (n[0].GetSigWidth() != n[1].GetSigWidth())
+      else if (n[3].GetType() != FLOATINGPOINT_TYPE)
       {
-        error_msg = "arguments to <fp> differ in sig width";
-        failed = true;
-      }
-      else if (n[0].GetExpWidth() != n[1].GetExpWidth())
-      {
-        error_msg = "arguments to <fp> differ in exp width";
+        error_msg = "to_fp's argument is not an fp";
         failed = true;
       }
 
@@ -564,16 +653,17 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
       }
       break;
     }
+
+    case FP_TOFP_UNSIGNED:
+    case FP_TO_UBV:
+    case FP_TO_SBV:
+      // Not yet produced by the parser; nothing to check.
+      break;
     case FP_CONST_NAN:
     case FP_CONST_POS_INF:
     case FP_CONST_NEG_INF:
     case FP_CONST_POS_ZERO:
     case FP_CONST_NEG_ZERO:
-    {
-      break;
-    }
-
-    case FP_ROUNDTOINTEGRAL:
     {
       break;
     }

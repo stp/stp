@@ -536,6 +536,13 @@ bitVector<isSigned>::modularAdd(const bitVector<isSigned>& op) const
 }
 
 template <bool isSigned>
+bitVector<isSigned>
+bitVector<isSigned>::modularSubtract(const bitVector<isSigned>& op) const
+{
+  return *this - op;
+}
+
+template <bool isSigned>
 bitVector<isSigned> bitVector<isSigned>::modularNegate() const
 {
   return -(*this);
@@ -887,6 +894,21 @@ STPSYMITEDFN(symbolic_fp::traits::ubv);
 
 #undef STPSYMITEDFN
 
+// symfpu's divide path calls ITE with a literal bool condition rather than a
+// proposition (core/divide.h, computing the result-exponent bounds), so the
+// backend has to provide a bool-conditioned ITE as well. The condition is a
+// compile-time constant, so this just selects a branch.
+namespace symfpu
+{
+template <class T> struct ite<bool, T>
+{
+  static const T iteOp(const bool& cond, const T& l, const T& r)
+  {
+    return cond ? l : r;
+  }
+};
+}
+
 namespace stp
 {
 namespace symbolic_fp
@@ -936,11 +958,137 @@ ASTNode blast_fpadd(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs)
   return packed;
 }
 
+// fp.sub is fp.add with the isAdd flag cleared: symfpu negates the right
+// operand internally, which gets the -0/+0 and NaN corner cases right in a
+// way that blasting (add lhs (neg rhs)) would not.
+ASTNode blast_fpsub(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs)
+{
+  assert(lhs.GetValueWidth() == rhs.GetValueWidth());
+  assert(lhs.GetExpWidth() == rhs.GetExpWidth());
+  assert(lhs.GetSigWidth() == rhs.GetSigWidth());
+  floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
+  uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
+  uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
+
+  uf unpacked_sub(
+      symfpu::add<traits>(size, rm, unpacked_lhs, unpacked_rhs, false));
+
+  ASTNode packed(symfpu::pack<traits>(size, unpacked_sub));
+
+  return packed;
+}
+
+ASTNode blast_fpmul(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs)
+{
+  assert(lhs.GetValueWidth() == rhs.GetValueWidth());
+  assert(lhs.GetExpWidth() == rhs.GetExpWidth());
+  assert(lhs.GetSigWidth() == rhs.GetSigWidth());
+  floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
+  uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
+  uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
+
+  uf unpacked_mul(
+      symfpu::multiply<traits>(size, rm, unpacked_lhs, unpacked_rhs));
+
+  ASTNode packed(symfpu::pack<traits>(size, unpacked_mul));
+
+  return packed;
+}
+
+ASTNode blast_fpdiv(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs)
+{
+  assert(lhs.GetValueWidth() == rhs.GetValueWidth());
+  assert(lhs.GetExpWidth() == rhs.GetExpWidth());
+  assert(lhs.GetSigWidth() == rhs.GetSigWidth());
+  floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
+  uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
+  uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
+
+  uf unpacked_div(symfpu::divide<traits>(size, rm, unpacked_lhs, unpacked_rhs));
+
+  ASTNode packed(symfpu::pack<traits>(size, unpacked_div));
+
+  return packed;
+}
+
+// The ordering predicates are the IEEE-754 ones, so they are false whenever
+// either operand is NaN. symfpu's ordering() handles that; we just hand back
+// the resulting proposition, which is already a Boolean-typed node.
+ASTNode blast_fplt(const ASTNode& lhs, const ASTNode& rhs)
+{
+  assert(lhs.GetValueWidth() == rhs.GetValueWidth());
+  assert(lhs.GetExpWidth() == rhs.GetExpWidth());
+  assert(lhs.GetSigWidth() == rhs.GetSigWidth());
+  floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
+  uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
+  uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
+
+  proposition lt(
+      symfpu::lessThan<traits>(size, unpacked_lhs, unpacked_rhs));
+
+  return lt;
+}
+
+ASTNode blast_fpleq(const ASTNode& lhs, const ASTNode& rhs)
+{
+  assert(lhs.GetValueWidth() == rhs.GetValueWidth());
+  assert(lhs.GetExpWidth() == rhs.GetExpWidth());
+  assert(lhs.GetSigWidth() == rhs.GetSigWidth());
+  floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
+  uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
+  uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
+
+  proposition leq(
+      symfpu::lessThanOrEqual<traits>(size, unpacked_lhs, unpacked_rhs));
+
+  return leq;
+}
+
+ASTNode blast_convert_float_to_float(const ASTNode& rm, const ASTNode& expr,
+                                     bitWidthType target_exp,
+                                     bitWidthType target_sig)
+{
+  floatingPointTypeInfo source(expr.GetExpWidth(), expr.GetSigWidth());
+  floatingPointTypeInfo target(target_exp, target_sig);
+
+  uf unpacked(symfpu::unpack<traits>(source, expr));
+  uf converted(
+      symfpu::convertFloatToFloat<traits>(source, target, rm, unpacked));
+
+  ASTNode packed(symfpu::pack<traits>(target, converted));
+
+  return packed;
+}
+
 ASTNode blast_pos_inf(const ASTNode& orig)
 {
   floatingPointTypeInfo size(orig.GetExpWidth(), orig.GetSigWidth());
   uf unpacked_inf(uf::makeInf(size, false));
   ASTNode packed(symfpu::pack<traits>(size, unpacked_inf));
+  return packed;
+}
+
+ASTNode blast_neg_inf(const ASTNode& orig)
+{
+  floatingPointTypeInfo size(orig.GetExpWidth(), orig.GetSigWidth());
+  uf unpacked_inf(uf::makeInf(size, true));
+  ASTNode packed(symfpu::pack<traits>(size, unpacked_inf));
+  return packed;
+}
+
+ASTNode blast_nan(const ASTNode& orig)
+{
+  floatingPointTypeInfo size(orig.GetExpWidth(), orig.GetSigWidth());
+  uf unpacked_nan(uf::makeNaN(size));
+  ASTNode packed(symfpu::pack<traits>(size, unpacked_nan));
+  return packed;
+}
+
+ASTNode blast_zero(const ASTNode& orig, bool sign)
+{
+  floatingPointTypeInfo size(orig.GetExpWidth(), orig.GetSigWidth());
+  uf unpacked_zero(uf::makeZero(size, sign));
+  ASTNode packed(symfpu::pack<traits>(size, unpacked_zero));
   return packed;
 }
 

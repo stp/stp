@@ -203,6 +203,7 @@ public:
   bitVector<isSigned> modularIncrement() const;
   bitVector<isSigned> modularDecrement() const;
   bitVector<isSigned> modularAdd(const bitVector<isSigned>& op) const;
+  bitVector<isSigned> modularSubtract(const bitVector<isSigned>& op) const;
   bitVector<isSigned> modularNegate() const;
 
   proposition operator==(const bitVector<isSigned>& op) const;
@@ -247,9 +248,24 @@ void init_vc(STPMgr* _bm);
 
 ASTNode blast_smt_eq(const ASTNode& lhs, const ASTNode& rhs);
 ASTNode blast_fpadd(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs);
+ASTNode blast_fpsub(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs);
+ASTNode blast_fpmul(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs);
+ASTNode blast_fpdiv(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs);
 ASTNode blast_pos_inf(const ASTNode& orig);
+ASTNode blast_neg_inf(const ASTNode& orig);
+ASTNode blast_nan(const ASTNode& orig);
+ASTNode blast_zero(const ASTNode& orig, bool sign);
 ASTNode round_trip(const ASTNode& expr, ASTNode** side);
 ASTNode blast_round_to_integral(const ASTNode& rm, const ASTNode& expr);
+
+// Ordering predicates. These return Boolean-typed nodes, not floats.
+ASTNode blast_fplt(const ASTNode& lhs, const ASTNode& rhs);
+ASTNode blast_fpleq(const ASTNode& lhs, const ASTNode& rhs);
+
+// ((_ to_fp e s) rm f) -- reformat an existing float under a rounding mode.
+ASTNode blast_convert_float_to_float(const ASTNode& rm, const ASTNode& expr,
+                                     bitWidthType target_exp,
+                                     bitWidthType target_sig);
 
 } // namespace symbolic_fp
 

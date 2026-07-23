@@ -276,6 +276,164 @@
     return n;
   }
 
+  // Stamp an SMT-LIB floating-point format onto a node. Floats are carried as
+  // their packed bit pattern, so the value width is the total width and the
+  // exponent/significand widths record how to unpack it.
+  void setFPFormat(ASTNode* n, unsigned int exp_width, unsigned int sig_width)
+  {
+    n->SetExpWidth(exp_width);
+    n->SetSigWidth(sig_width);
+    assert(n->GetType() == FLOATINGPOINT_TYPE);
+  }
+
+  // fp.add/fp.sub/fp.mul/fp.div. Each is ternary -- the rounding mode is
+  // child 0, matching the arity declared in ASTKind.kinds -- so that the
+  // blaster rounds as the input asked rather than assuming RNE.
+  // The rounding-mode argument is taken as a plain an_term rather than an
+  // an_rounding_mode: an_term already derives an_rounding_mode, so using the
+  // narrower nonterminal here makes the position ambiguous and LALR resolves
+  // it by swallowing the rounding mode as the first operand. Checking the
+  // rounding mode here (and again in BVTypeCheck) costs nothing by comparison.
+  ASTNode* createFPArith(Kind k, ASTNode* rm, ASTNode* lhs, ASTNode* rhs)
+  {
+    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
+    {
+      fatal_yyerror("expected a rounding mode.");
+    }
+
+    if (lhs->GetType() != FLOATINGPOINT_TYPE ||
+        rhs->GetType() != FLOATINGPOINT_TYPE)
+    {
+      fatal_yyerror("arguments to a floating-point operation must be floats.");
+    }
+
+    if (lhs->GetExpWidth() != rhs->GetExpWidth() ||
+        lhs->GetSigWidth() != rhs->GetSigWidth())
+    {
+      fatal_yyerror("floating-point operands must have the same format.");
+    }
+
+    ASTNode* n = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateTerm(k, lhs->GetValueWidth(),
+                                                   *rm, *lhs, *rhs));
+    setFPFormat(n, lhs->GetExpWidth(), lhs->GetSigWidth());
+    delete rm;
+    delete lhs;
+    delete rhs;
+    return n;
+  }
+
+  // fp.leq/fp.lt/fp.geq/fp.gt. These are chainable in SMT-LIB, so (fp.lt x y z)
+  // means (and (fp.lt x y) (fp.lt y z)).
+  ASTNode* createFPChain(Kind k, ASTVec* terms, const char* name)
+  {
+    if (terms->size() < 2)
+    {
+      std::string msg("too few arguments to ");
+      msg += name;
+      msg += ".";
+      fatal_yyerror(msg.c_str());
+    }
+
+    for (size_t i = 0; i < terms->size(); i++)
+    {
+      if ((*terms)[i].GetType() != FLOATINGPOINT_TYPE)
+      {
+        std::string msg("arguments to ");
+        msg += name;
+        msg += " must be floats.";
+        fatal_yyerror(msg.c_str());
+      }
+      if ((*terms)[i].GetExpWidth() != (*terms)[0].GetExpWidth() ||
+          (*terms)[i].GetSigWidth() != (*terms)[0].GetSigWidth())
+      {
+        std::string msg("arguments to ");
+        msg += name;
+        msg += " must have the same format.";
+        fatal_yyerror(msg.c_str());
+      }
+    }
+
+    ASTNode* n;
+    if (terms->size() == 2)
+    {
+      n = stp::GlobalParserInterface->newNode(
+          stp::GlobalParserInterface->CreateNode(k, (*terms)[0], (*terms)[1]));
+    }
+    else
+    {
+      ASTVec result;
+      result.reserve(terms->size() - 1);
+      for (size_t i = 1; i < terms->size(); i++)
+      {
+        result.push_back(stp::GlobalParserInterface->CreateNode(
+            k, (*terms)[i - 1], (*terms)[i]));
+      }
+      n = stp::GlobalParserInterface->newNode(
+          stp::GlobalParserInterface->CreateNode(AND, result));
+    }
+    delete terms;
+    return n;
+  }
+
+  // ((_ to_fp e s) bv) -- reinterpret a bitvector's bits as a float.
+  ASTNode* createFPFromBits(unsigned int exp_width, unsigned int sig_width,
+                            ASTNode* bits)
+  {
+    if (bits->GetType() != BITVECTOR_TYPE)
+    {
+      fatal_yyerror("the one-argument form of to_fp takes a bitvector.");
+    }
+
+    if (bits->GetValueWidth() != exp_width + sig_width)
+    {
+      fatal_yyerror("to_fp bitvector width must equal e + s.");
+    }
+
+    // No conversion is needed, only a retyping, but the node has to be a
+    // distinct object from the bitvector it retypes: the widths are stored on
+    // the interned node, so stamping them onto the child directly would make
+    // every other use of that bitvector claim to be a float.
+    ASTNode* n = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateTerm(
+            FP_TOFP, bits->GetValueWidth(),
+            stp::GlobalParserInterface->CreateBVConst(32, exp_width),
+            stp::GlobalParserInterface->CreateBVConst(32, sig_width), *bits));
+    setFPFormat(n, exp_width, sig_width);
+    delete bits;
+    return n;
+  }
+
+  // ((_ to_fp e s) rm f) -- reformat a float under a rounding mode.
+  ASTNode* createFPToFP(unsigned int exp_width, unsigned int sig_width,
+                        ASTNode* rm, ASTNode* expr)
+  {
+    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
+    {
+      fatal_yyerror("expected a rounding mode.");
+    }
+
+    // The rm-taking form of to_fp also covers signed-bitvector and real
+    // sources. Those are genuinely different operations (and the real case
+    // cannot be represented exactly), so reject them rather than silently
+    // treating the argument as a float.
+    if (expr->GetType() != FLOATINGPOINT_TYPE)
+    {
+      fatal_yyerror("only the float-to-float form of to_fp is supported.");
+    }
+
+    ASTNode* n = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateTerm(
+            FP_TOFP, exp_width + sig_width,
+            stp::GlobalParserInterface->CreateBVConst(32, exp_width),
+            stp::GlobalParserInterface->CreateBVConst(32, sig_width), *rm,
+            ASTVec(1, *expr)));
+    setFPFormat(n, exp_width, sig_width);
+    delete rm;
+    delete expr;
+    return n;
+  }
+
   ASTNode* createTerm(Kind k, ASTVec * c)
   {
     assert(k != BVEXTRACT);
@@ -690,6 +848,7 @@ cmdi:
             0 == strcmp($2->c_str(),"QF_AUFBV") ||
             0 == strcmp($2->c_str(),"QF_FP") ||
             0 == strcmp($2->c_str(),"QF_BVFP") ||
+            0 == strcmp($2->c_str(),"QF_ABVFP") ||
             false
             )) {
         yyerror("Wrong input logic");
@@ -1580,26 +1739,21 @@ an_fp_term:
 {
  std::cout << "Unsupported FP_NEG_TOK" << std::endl;
 }
-| FP_ADD_TOK an_rounding_mode an_term an_term
+| LPAREN_TOK FP_ADD_TOK an_term an_term an_term RPAREN_TOK
 {
-  assert($3->GetType() == FLOATINGPOINT_TYPE);
-  assert($4->GetType() == FLOATINGPOINT_TYPE);
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(FP_ADD, $3->GetValueWidth(), *$3, *$4));
-  $$->SetExpWidth($3->GetExpWidth());
-  $$->SetSigWidth($3->GetSigWidth());
-  assert($$->GetType() == FLOATINGPOINT_TYPE);
+  $$ = createFPArith(FP_ADD, $3, $4, $5);
 }
-| FP_SUB_TOK an_rounding_mode an_term an_term
+| LPAREN_TOK FP_SUB_TOK an_term an_term an_term RPAREN_TOK
 {
- std::cout << "Unsupported FP_SUB_TOK" << std::endl;
+  $$ = createFPArith(FP_SUB, $3, $4, $5);
 }
-| FP_MUL_TOK an_rounding_mode an_term an_term
+| LPAREN_TOK FP_MUL_TOK an_term an_term an_term RPAREN_TOK
 {
- std::cout << "Unsupported FP_MUL_TOK" << std::endl;
+  $$ = createFPArith(FP_MUL, $3, $4, $5);
 }
-| FP_DIV_TOK an_rounding_mode an_term an_term
+| LPAREN_TOK FP_DIV_TOK an_term an_term an_term RPAREN_TOK
 {
- std::cout << "Unsupported FP_DIV_TOK" << std::endl;
+  $$ = createFPArith(FP_DIV, $3, $4, $5);
 }
 | FP_FMA_TOK an_rounding_mode an_term an_term an_term
 {
@@ -1631,19 +1785,19 @@ an_fp_term:
 }
 | FP_LEQ_TOK an_terms
 {
- std::cout << "Unsupported FP_LEQ_TOK" << std::endl;
+  $$ = createFPChain(FP_LEQ, $2, "fp.leq");
 }
 | FP_LT_TOK an_terms
 {
- std::cout << "Unsupported FP_LT_TOK" << std::endl;
+  $$ = createFPChain(FP_LT, $2, "fp.lt");
 }
 | FP_GEQ_TOK an_terms
 {
- std::cout << "Unsupported FP_GEQ_TOK" << std::endl;
+  $$ = createFPChain(FP_GEQ, $2, "fp.geq");
 }
 | FP_GT_TOK an_terms
 {
- std::cout << "Unsupported FP_GT_TOK" << std::endl;
+  $$ = createFPChain(FP_GT, $2, "fp.gt");
 }
 | FP_EQ_TOK an_terms
 {
@@ -1705,13 +1859,17 @@ an_fp_term:
 {
  std::cout << "Unsupported FP_TO_SBV_TOK" << std::endl;
 }
-| LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term
+| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term RPAREN_TOK
 {
- std::cout << "Unsupported FP_TOFP_TOK" << std::endl;
+  // ((_ to_fp e s) bv) reinterprets the bits of a bitvector as an IEEE-754
+  // float. STP already stores floats as their packed bit pattern, so this is
+  // purely a retyping: keep the child and stamp the format onto it.
+  $$ = createFPFromBits($5, $6, $8);
 }
-| LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_rounding_mode an_term
+| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
 {
- std::cout << "Unsupported FP_TOFP_TOK" << std::endl;
+  // ((_ to_fp e s) rm f) reformats an existing float under a rounding mode.
+  $$ = createFPToFP($5, $6, $8, $9);
 }
 | LPAREN_TOK UNDERSCORE_TOK FP_TOFP_UNSIGNED_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term
 {
@@ -2004,6 +2162,26 @@ TERMID_TOK
 
   delete $2;
   delete $3;
+}
+| LPAREN_TOK FLOATINGPOINT_FUNCTIONID_TOK an_mixed RPAREN_TOK
+{
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$2,*$3));
+
+  if ($$->GetType() != FLOATINGPOINT_TYPE)
+      yyerror("Must be floating-point type");
+
+  delete $2;
+  delete $3;
+}
+| FLOATINGPOINT_FUNCTIONID_TOK
+{
+  ASTVec empty;
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$1,empty));
+
+  if ($$->GetType() != FLOATINGPOINT_TYPE)
+    yyerror("Must be floating-point type");
+
+  delete $1;
 }
 | BITVECTOR_FUNCTIONID_TOK
 {
