@@ -24,11 +24,43 @@ THE SOFTWARE.
 
 #include "stp/AST/ASTInterior.h"
 #include "stp/STPManager/STPManager.h"
+#include <new>
 namespace stp
 {
 /******************************************************************
  * ASTInterior Member Functions                                   *
  ******************************************************************/
+
+// Allocate the node and its children as a single block, and copy-construct
+// the children into the tail (each copy takes a reference on the child).
+ASTInterior* ASTInterior::create(STPMgr* mgr, Kind kind, ASTChildren children)
+{
+  const uint32_t n = static_cast<uint32_t>(children.size());
+  void* mem = ::operator new(sizeof(ASTInterior) + n * sizeof(ASTNode));
+  // ::new so the global placement-new is used (the class's own operator new
+  // is deleted to forbid ordinary, wrongly-sized allocation).
+  ASTInterior* node = ::new (mem) ASTInterior(mgr, kind, n);
+
+  ASTNode* kids = node->childrenPtr();
+  for (uint32_t i = 0; i < n; i++)
+    new (&kids[i]) ASTNode(children[i]);
+
+  // (NOT alpha) is numbered alpha.nodenum + 1; needs the children in place.
+  if (kind == NOT)
+    node->node_uid = kids[0].GetNodeNum() + 1;
+
+  return node;
+}
+
+ASTInterior::~ASTInterior()
+{
+  // The children were placement-constructed in the tail; destroy them so
+  // their references are released. The block itself is freed by operator
+  // delete.
+  ASTNode* kids = childrenPtr();
+  for (uint32_t i = 0; i < _num_children; i++)
+    kids[i].~ASTNode();
+}
 
 // Call this when deleting a node that has been stored in the
 // the unique table
@@ -50,15 +82,11 @@ void ASTInterior::nodeprint(ostream& os, bool /*c_friendly*/)
  * ASTInteriorHasher and ASTInteriorEqual Member Functions        *
  ******************************************************************/
 
-// ASTInteriorHasher operator()
-size_t ASTInterior::ASTInteriorHasher::
-operator()(const ASTInterior* int_node_ptr) const
+// Shared hash of a (kind, children) pair -- the single source of truth so the
+// pointer and Probe overloads agree bit-for-bit.
+static size_t hashKindChildren(Kind kind, const ASTChildren& ch)
 {
-  if (int_node_ptr->_cached_hash != 0)
-    return int_node_ptr->_cached_hash;
-
-  size_t hashval = ((size_t)int_node_ptr->GetKind());
-  const ASTChildren ch = int_node_ptr->GetChildren();
+  size_t hashval = ((size_t)kind);
   auto iend = ch.end();
   for (auto i = ch.begin(); i != iend; i++)
   {
@@ -73,20 +101,25 @@ operator()(const ASTInterior* int_node_ptr) const
 
   if (hashval == 0)
     hashval = 1; // 0 marks the hash as not yet computed.
-  int_node_ptr->_cached_hash = hashval;
   return hashval;
 }
 
-// ASTInteriorEqual operator()
-bool ASTInterior::ASTInteriorEqual::
-operator()(const ASTInterior* int_node_ptr1,
-           const ASTInterior* int_node_ptr2) const
+// ASTInteriorHasher operator()
+size_t ASTInterior::ASTInteriorHasher::
+operator()(const ASTInterior* int_node_ptr) const
 {
-  return (*int_node_ptr1 == *int_node_ptr2);
+  if (int_node_ptr->_cached_hash != 0)
+    return int_node_ptr->_cached_hash;
+
+  int_node_ptr->_cached_hash =
+      hashKindChildren(int_node_ptr->GetKind(), int_node_ptr->GetChildren());
+  return int_node_ptr->_cached_hash;
 }
 
-ASTInterior::~ASTInterior()
+// Transparent overload: hash a borrowed (kind, children) probe the same way.
+size_t ASTInterior::ASTInteriorHasher::operator()(const Probe& probe) const
 {
+  return hashKindChildren(probe.kind, probe.children);
 }
 
 } // end of namespace
