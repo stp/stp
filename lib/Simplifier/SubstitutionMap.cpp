@@ -175,6 +175,12 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
     return n;
   }
 
+  // Floating-point special constants (NaN, +/-oo, +/-zero) are nullary leaves
+  // that the BVCONST/TRUE/FALSE test above does not cover, so they reach here
+  // with no children. They are values: there is nothing to substitute into.
+  if (n.Degree() == 0)
+    return n;
+
   const ASTChildren children = n.GetChildren();
   assert(children.size() > 0);
   // Should have no leaves left here.
