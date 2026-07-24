@@ -2136,6 +2136,14 @@ void process_argument(const char ch, VC vc)
     case 'w':
       bm->UserFlags.wordlevel_solve_flag = false;
       break;
+    case 'x':
+      // Decide whole-array equality/disequality (the extensional
+      // theory of arrays) with the lemmas-on-demand procedure of
+      // Brummayer & Biere. Array equalities are abstracted when the
+      // AST is built, so this must be set before any term of the
+      // query is created.
+      bm->UserFlags.enable_array_equality = true;
+      break;
     case 'y':
       bm->UserFlags.print_binary_flag = true;
       break;

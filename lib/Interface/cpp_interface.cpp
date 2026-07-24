@@ -134,10 +134,12 @@ void Cpp_interface::SetQuery(const ASTNode& q)
 
 ASTNode Cpp_interface::CreateNode(stp::Kind kind, const stp::ASTVec& children)
 {
-  if (kind == EQ && children.size() > 0 && children[0].GetIndexWidth() > 0 && !alreadyWarned)
+  if (kind == EQ && children.size() > 0 && children[0].GetIndexWidth() > 0 &&
+      !bm.UserFlags.enable_array_equality && !alreadyWarned)
   {
     cerr << "Warning: Parsing a term that uses array extensionality. "
-            "STP doesn't handle array extensionality."
+            "STP doesn't handle array extensionality (unless "
+            "--array-equality is given)."
          << endl;
     alreadyWarned = true;
   }
@@ -148,10 +150,12 @@ ASTNode Cpp_interface::CreateNode(stp::Kind kind, const stp::ASTVec& children)
 ASTNode Cpp_interface::CreateNode(stp::Kind kind, const stp::ASTNode n0,
                                   const stp::ASTNode n1)
 {
-  if (n0.GetIndexWidth() > 0 && !alreadyWarned)
+  if (n0.GetIndexWidth() > 0 && !bm.UserFlags.enable_array_equality &&
+      !alreadyWarned)
   {
     cerr << "Warning: Parsing a term that uses array extensionality. "
-            "STP doesn't handle array extensionality."
+            "STP doesn't handle array extensionality (unless "
+            "--array-equality is given)."
          << endl;
     alreadyWarned = true;
   }

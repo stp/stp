@@ -24,6 +24,7 @@ add_definitions(-D STP_EXPORTS)
 add_subdirectory(Globals)
 add_subdirectory(AST)
 add_subdirectory(AbsRefineCounterExample)
+add_subdirectory(Extensionality)
 add_subdirectory(Simplifier)
 add_subdirectory(Printer)
 add_subdirectory(Parser)
@@ -47,6 +48,7 @@ set(stp_lib_targets
     AST
     stpmgr
     abstractionrefinement
+    extensionality
     tosat
     sat
     simplifier

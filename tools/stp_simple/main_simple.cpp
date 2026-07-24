@@ -35,18 +35,25 @@ public:
 
 int SimpleMain::create_and_parse_options(int argc, char** argv)
 {
-  if (argc > 2)
-  {
-    std::cerr << "Only one option is allowed, the input file" << std::endl;
-    exit(0);
-  }
-
   bm->UserFlags.smtlib2_parser_flag = true;
 
-  if (argc > 1)
+  for (int i = 1; i < argc; i++)
   {
-    infile = argv[1];
-    check_infile_type();
+    if (std::string(argv[i]) == "--array-equality")
+    {
+      bm->UserFlags.enable_array_equality = true;
+    }
+    else if (infile.empty())
+    {
+      infile = argv[i];
+      check_infile_type();
+    }
+    else
+    {
+      std::cerr << "Only --array-equality and one input file are allowed"
+                << std::endl;
+      exit(0);
+    }
   }
 
   return 0;

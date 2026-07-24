@@ -252,7 +252,11 @@ void ExtraMain::create_options()
   po::options_description refinement_options("Refinement options");
   refinement_options.add_options()(
       "ackermanize,r", po::bool_switch(&(bm->UserFlags.ackermannisation)),
-      "eagerly encode array-read axioms (Ackermannistaion)");
+      "eagerly encode array-read axioms (Ackermannistaion)")(
+      "array-equality",
+      po::bool_switch(&(bm->UserFlags.enable_array_equality)),
+      "decide whole-array equality/disequality (extensional arrays) by "
+      "lemmas on demand");
 
   po::options_description print_options("Printing options");
   print_options.add_options()(
