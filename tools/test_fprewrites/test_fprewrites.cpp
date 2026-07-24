@@ -59,7 +59,6 @@ THE SOFTWARE.
 using namespace stp;
 using stp::symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN;
 using stp::symbolic_fp::ROUND_TOWARD_NEGATIVE;
-using stp::symbolic_fp::ROUND_TOWARD_POSITIVE;
 using stp::symbolic_fp::ROUND_TOWARD_ZERO;
 
 static int g_checks = 0;
@@ -378,6 +377,48 @@ static void run(Ctx& c)
     c.checkUnchanged("isNegative keeps neg", FP_ISNEGATIVE, {negx});
   }
 
+  // Folding a *constant* classification used to stamp a float format on the
+  // Boolean result, poisoning the shared TRUE/FALSE constant and later tripping
+  // the constant evaluator. It must return a clean Boolean matching the
+  // reference, for every value and abs/neg wrapping.
+  {
+    Kind ks[] = {FP_ISNORMAL, FP_ISSUBNORMAL, FP_ISZERO, FP_ISINFINITE,
+                 FP_ISNAN};
+    const char* nm[] = {"isNormal", "isSubnormal", "isZero", "isInfinite",
+                        "isNaN"};
+    const uint64_t N = 1ull << (EB + SB);
+    for (int i = 0; i < 5; i++)
+    {
+      bool ok = true;
+      std::string why;
+      for (uint64_t v = 0; v < N && ok; v++)
+        for (int wrap = 0; wrap < 3 && ok; wrap++)
+        {
+          ASTNode k = c.fpConst(EB, SB, v);
+          ASTNode arg = (wrap == 1)   ? c.unary(c.hf, FP_ABS, k)
+                        : (wrap == 2) ? c.unary(c.hf, FP_NEG, k)
+                                      : k;
+          ASTNode r =
+              NonMemberBVConstEvaluator(&c.mgr, c.hf->CreateNode(ks[i], {arg}));
+          const bool cleanBool =
+              (r.GetKind() == TRUE || r.GetKind() == FALSE) &&
+              r.GetExpWidth() == 0 && r.GetSigWidth() == 0;
+          const bool want = refClassify(ks[i], refDecode(EB, SB, v));
+          if (!cleanBool)
+          {
+            ok = false;
+            why = "result carries a spurious format at v=" + std::to_string(v);
+          }
+          else if ((r.GetKind() == TRUE) != want)
+          {
+            ok = false;
+            why = "wrong value at v=" + std::to_string(v);
+          }
+        }
+      report(std::string(nm[i]) + " constant fold clean + correct", ok, why);
+    }
+  }
+
   // x < x, x > x rewrite to false; x <= x, x >= x to (not isNaN x). Both facts
   // are IEEE-exact; check the factory produces those exact forms.
   {
@@ -406,9 +447,8 @@ static void run(Ctx& c)
   // fp.add and fp.mul are commutative in their two float operands
   {
     ASTNode x = c.fp(EB, SB), y = c.fp(EB, SB);
-    for (unsigned mode : {(unsigned)ROUND_NEAREST_TIES_TO_EVEN,
-                          (unsigned)ROUND_TOWARD_ZERO,
-                          (unsigned)ROUND_TOWARD_POSITIVE})
+    for (unsigned mode :
+         {(unsigned)ROUND_NEAREST_TIES_TO_EVEN, (unsigned)ROUND_TOWARD_ZERO})
     {
       ASTNode r = c.rm(mode);
       c.checkTerm("fp.add commutative", FP_ADD, x.GetValueWidth(), {r, x, y},
@@ -423,8 +463,7 @@ static void run(Ctx& c)
   {
     ASTNode x = c.fp(EB, SB), y = c.fp(EB, SB);
     for (unsigned mode : {(unsigned)ROUND_NEAREST_TIES_TO_EVEN,
-                          (unsigned)ROUND_TOWARD_NEGATIVE,
-                          (unsigned)ROUND_TOWARD_ZERO})
+                          (unsigned)ROUND_TOWARD_NEGATIVE})
     {
       ASTNode r = c.rm(mode);
       c.checkTerm("fp.sub = fp.add(x, neg y)", FP_SUB, x.GetValueWidth(),

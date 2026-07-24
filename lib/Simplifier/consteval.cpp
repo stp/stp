@@ -970,7 +970,6 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       // their *result* is a bitvector. Both the width argument and the result
       // happen to be as wide as e + s in the common 32-bit case, so stamping
       // a format on them would turn an integer into a Float32.
-      const bool format_result = (k != FP_TO_UBV && k != FP_TO_SBV);
 
       for (size_t i = 0; i < children.size(); i++)
       {
@@ -993,15 +992,27 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       }
 
       ASTNode temp(_bm->CreateNode(k, formatted));
-      temp.SetExpWidth(exp_width);
-      temp.SetSigWidth(sig_width);
+
+      // Only a floating-point *result* carries a floating-point format. The
+      // classifications and comparisons return a Boolean and to_ubv/to_sbv
+      // return a bit-vector; stamping a format on temp for those is wrong,
+      // because BlastNode then copies temp's format onto the blasted output --
+      // poisoning the shared Boolean constant, whose GetType() afterwards reads
+      // FLOATINGPOINT and sends the constant evaluator down its bit-vector
+      // (GetBVConst) path. temp's type already distinguishes the cases.
+      const bool float_result = (temp.GetType() == FLOATINGPOINT_TYPE);
+      if (float_result)
+      {
+        temp.SetExpWidth(exp_width);
+        temp.SetSigWidth(sig_width);
+      }
 
       ASTNode blasted(FloatBlaster::BlastNode_TopLevel(temp));
       OutputNode = NonMemberBVConstEvaluator(_bm, blasted);
 
-      // And carry the format out, so that an enclosing operation sees a
-      // formatted operand rather than a bare bitvector.
-      if (format_result)
+      // Carry the format out, so an enclosing operation sees a formatted
+      // operand rather than a bare bit-vector.
+      if (float_result)
         OutputNode =
             FloatBlaster::withFormat(_bm, OutputNode, exp_width, sig_width);
       break;
