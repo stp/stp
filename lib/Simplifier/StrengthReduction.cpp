@@ -314,7 +314,8 @@ namespace stp
       replaceWithConstant++;
     }
     else if (kind == BVSGT || kind == BVSGE || kind == SBVDIV ||
-             kind == SBVMOD || kind == SBVREM)
+             kind == SBVMOD || kind == SBVREM || kind == BVSADDO ||
+             kind == BVSSUBO)
     {
       if (visited.find(n[0]) != visited.end() &&
           visited.find(n[1]) != visited.end())
@@ -331,6 +332,22 @@ namespace stp
             {
               // replace with unsigned comparison.
               newN = nf->CreateNode(kind == BVSGT ? BVGT : BVGE, n[0], n[1]);
+              replaceWithSimpler++;
+            }
+            else if (kind == BVSADDO &&
+                     (l->getValue(bw - 1) != r->getValue(bw - 1)))
+            {
+              // Signed add overflow requires the operands to share a sign,
+              // so opposite sign bits prove no overflow.
+              newN = nf->getFalse();
+              replaceWithSimpler++;
+            }
+            else if (kind == BVSSUBO &&
+                     (l->getValue(bw - 1) == r->getValue(bw - 1)))
+            {
+              // Signed sub overflow requires the operands to differ in sign,
+              // so equal sign bits prove no overflow.
+              newN = nf->getFalse();
               replaceWithSimpler++;
             }
             else if (kind == SBVDIV || kind == SBVREM)

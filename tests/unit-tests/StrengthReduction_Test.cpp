@@ -313,6 +313,63 @@ TEST(StrengthReduction_Test , __LINE__)
   ASSERT_EQ(n, c.mgr.ASTTrue);
 }
 
+// Signed add overflow with operands of known-opposite sign folds to false:
+// overflow requires the operands to share a sign.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            (bvsaddo
+              (concat (_ bv0 1) v0)
+              (concat (_ bv1 1) v1)
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTFalse);
+}
+
+// Signed sub overflow with operands of known-equal sign folds to false:
+// overflow requires the operands to differ in sign.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            (bvssubo
+              (concat (_ bv1 1) v0)
+              (concat (_ bv1 1) v1)
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTFalse);
+}
+
+// Signed add overflow with matching sign bits is not decided: the node
+// still contains the overflow predicate.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            (bvsaddo
+              (concat (_ bv1 1) v0)
+              (concat (_ bv1 1) v1)
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_TRUE(c.present(stp::BVSADDO, n));
+}
+
 static bool presentWithWidth(const stp::Kind k, const ASTNode& n,
                              const unsigned width)
 {
