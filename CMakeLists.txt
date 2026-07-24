@@ -445,10 +445,14 @@ include_directories("${CMAKE_CURRENT_SOURCE_DIR}/include")
 include_directories("${CMAKE_CURRENT_BINARY_DIR}/include")
 
 # FIXME: External library includes
-include_directories(# For extlib-abc and extlib-constbv
+include_directories(# For extlib-constbv
                     ${PROJECT_SOURCE_DIR}/lib
-                    ${PROJECT_SOURCE_DIR}/lib/extlib-abc/src
                    )
+# ABC is a vendored upstream submodule (berkeley-abc/abc); mark its headers as
+# SYSTEM so their warnings (e.g. -Wpedantic zero-size arrays, -Wunused-parameter
+# in inline helpers) don't trip -Werror in the STP translation units that
+# include them.
+include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/lib/extlib-abc/src)
 # abc related word size check
 include(CheckTypeSize)
 # Check size of void pointer (void*)

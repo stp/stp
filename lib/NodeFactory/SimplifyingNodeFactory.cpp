@@ -1148,11 +1148,15 @@ ASTNode SimplifyingNodeFactory::plusRules(const ASTNode& n0, const ASTNode& n1)
     ASTNode constant = NonMemberBVConstEvaluator(&bm, BVPLUS, ch, width);
     result = NodeFactory::CreateTerm(BVPLUS, width, constant, n1[1]);
   }
-  else if (false && n1.GetKind() == BVUMINUS &&
+// Disabled (kept for reference): guarded out of the build rather than left as
+// `else if (false && ...)`, which trips -Wunreachable-code under -Werror.
+#if 0
+  else if (n1.GetKind() == BVUMINUS &&
            (n0.isConstant() && CONSTANTBV::BitVector_is_full(n0.GetBVConst())))
   {
     result = NodeFactory::CreateTerm(BVNOT, width, n1[0]);
   }
+#endif
   else if (n1.GetKind() == BVUMINUS && n0.GetKind() == BVUMINUS)
   {
     ASTNode r = NodeFactory::CreateTerm(BVPLUS, width, n0[0], n1[0]);
@@ -1338,7 +1342,10 @@ ASTNode SimplifyingNodeFactory::handle_bvand(unsigned int width, const ASTVec& n
   // i.e. 00011111111000000 & x , will be replaced by an extract of x just
   // where
   // there are one bits.
-  if (false && children.size() == 2 &&
+  // Disabled (kept for reference): guarded out of the build rather than left as
+  // `if (false && ...)`, which trips -Wunreachable-code under -Werror.
+#if 0
+  if (children.size() == 2 &&
       (children[0].isConstant() || children[1].isConstant()))
   {
     ASTNode c0 = children[0];
@@ -1394,6 +1401,7 @@ ASTNode SimplifyingNodeFactory::handle_bvand(unsigned int width, const ASTVec& n
       return result;
     }
   }
+#endif
 
   if (children.size() ==2 && children[1].GetKind() == stp::BVAND && children[0] == children[1][0])
   {

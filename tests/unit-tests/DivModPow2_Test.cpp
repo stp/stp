@@ -139,14 +139,20 @@ TEST(DivModPow2, exhaustive)
       ASTNode srem = c.nf->CreateTerm(SBVREM, w, x, div);
 
       if (udivFires)
+      {
         EXPECT_EQ(udiv.GetKind(), BVCONCAT)
             << "BVDIV by 2^" << k << " width " << w << " did not rewrite";
+      }
       if (uremFires)
+      {
         EXPECT_EQ(urem.GetKind(), BVCONCAT)
             << "BVMOD by 2^" << k << " width " << w << " did not rewrite";
+      }
       if (smodFires)
+      {
         EXPECT_EQ(smod.GetKind(), BVCONCAT)
             << "SBVMOD by 2^" << k << " width " << w << " did not rewrite";
+      }
 
       // SBVDIV / SBVREM must NOT be rewritten to an extract/concat form. For
       // a divisor that is neither 1 nor all-ones (true for k in [1, w-1] with

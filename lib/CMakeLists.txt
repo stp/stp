@@ -129,6 +129,18 @@ set(ABC_SKIP_TESTS ON CACHE BOOL "Skip ABC tests" FORCE)
 # Add ABC as a subdirectory
 add_subdirectory(extlib-abc)
 
+# ABC is a vendored, upstream submodule (berkeley-abc/abc) whose warnings we
+# don't control, so keep WERROR from turning them into build failures. The
+# -Wno-error comes after the global -Werror, so it wins for these targets only;
+# STP's own code stays gated on warnings.
+if (WERROR AND NOT MSVC)
+    foreach(_abc_target abc libabc libabc-pic)
+        if (TARGET ${_abc_target})
+            target_compile_options(${_abc_target} PRIVATE -Wno-error)
+        endif()
+    endforeach()
+endif()
+
 # Link to the ABC library target
 add_dependencies(stp libabc-pic)
 # Use the full path to the library instead of the target name for export compatibility
