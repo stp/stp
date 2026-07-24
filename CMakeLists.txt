@@ -208,7 +208,8 @@ if (NOT MSVC)
 
     add_compile_options("$<$<CONFIG:RELWITHDEBINFO>:-O2>")
 
-    add_compile_options("$<$<CONFIG:RELEASE>:-O2>")
+    add_compile_options("$<$<CONFIG:RELEASE>:-O3>")
+    add_compile_options("$<$<CONFIG:RELEASE>:-fno-tree-vectorize>")
     add_compile_options("$<$<CONFIG:RELEASE>:-g0>")
 
     add_compile_options("$<$<CONFIG:DEBUG>:-O0>")
