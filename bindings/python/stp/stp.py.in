@@ -28,6 +28,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 import ast
 from ctypes import cdll, POINTER, CFUNCTYPE
 from ctypes import c_char_p, c_void_p, c_int32, c_uint32, c_uint64, c_ulong, c_bool
+from ctypes import c_double, c_float
 import inspect
 import os.path
 import sys
@@ -203,6 +204,50 @@ _set_func('vc_printCounterExampleFile', None, _VC, c_int32)
 _set_func('exprName', c_char_p, _Expr)
 _set_func('getExprID', c_int32, _Expr)
 _set_func('vc_parseMemExpr', c_int32, _VC, c_char_p, POINTER(_Expr), POINTER(_Expr))
+
+# Floating point
+_set_func('vc_fpType', _Type, _VC, c_int32, c_int32)
+_set_func('vc_getExpWidth', c_int32, _Expr)
+_set_func('vc_getSigWidth', c_int32, _Expr)
+_set_func('vc_fpConstFromBits', _Expr, _VC, c_int32, c_int32, _Expr)
+_set_func('vc_fpEqExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_fpRoundingMode', _Expr, _VC, c_int32)
+_set_func('vc_fpAbsExpr', _Expr, _VC, _Expr)
+_set_func('vc_fpNegExpr', _Expr, _VC, _Expr)
+_set_func('vc_fpAddExpr', _Expr, _VC, _Expr, _Expr, _Expr)
+_set_func('vc_fpSubExpr', _Expr, _VC, _Expr, _Expr, _Expr)
+_set_func('vc_fpMulExpr', _Expr, _VC, _Expr, _Expr, _Expr)
+_set_func('vc_fpDivExpr', _Expr, _VC, _Expr, _Expr, _Expr)
+_set_func('vc_fpFMAExpr', _Expr, _VC, _Expr, _Expr, _Expr, _Expr)
+_set_func('vc_fpSqrtExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_fpRoundToIntegralExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_fpRemExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_fpMinExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_fpMaxExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_fpLtExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_fpLeqExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_fpGtExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_fpGeqExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_fpIsNormalExpr', _Expr, _VC, _Expr)
+_set_func('vc_fpIsSubnormalExpr', _Expr, _VC, _Expr)
+_set_func('vc_fpIsZeroExpr', _Expr, _VC, _Expr)
+_set_func('vc_fpIsInfiniteExpr', _Expr, _VC, _Expr)
+_set_func('vc_fpIsNaNExpr', _Expr, _VC, _Expr)
+_set_func('vc_fpIsNegativeExpr', _Expr, _VC, _Expr)
+_set_func('vc_fpIsPositiveExpr', _Expr, _VC, _Expr)
+_set_func('vc_fpNaN', _Expr, _VC, _Type)
+_set_func('vc_fpPlusInfinity', _Expr, _VC, _Type)
+_set_func('vc_fpMinusInfinity', _Expr, _VC, _Type)
+_set_func('vc_fpPlusZero', _Expr, _VC, _Type)
+_set_func('vc_fpMinusZero', _Expr, _VC, _Type)
+_set_func('vc_fpConstFromDouble', _Expr, _VC, _Type, _Expr, c_double)
+_set_func('vc_fpConstFromFloat', _Expr, _VC, _Type, _Expr, c_float)
+_set_func('vc_fpToFPFromIEEEBV', _Expr, _VC, c_int32, c_int32, _Expr)
+_set_func('vc_fpToFPFromFP', _Expr, _VC, c_int32, c_int32, _Expr, _Expr)
+_set_func('vc_fpToFPFromSignedBV', _Expr, _VC, c_int32, c_int32, _Expr, _Expr)
+_set_func('vc_fpToFPFromUnsignedBV', _Expr, _VC, c_int32, c_int32, _Expr, _Expr)
+_set_func('vc_fpToUBVExpr', _Expr, _VC, c_int32, _Expr, _Expr)
+_set_func('vc_fpToSBVExpr', _Expr, _VC, c_int32, _Expr, _Expr)
 
 
 class Solver(object):
