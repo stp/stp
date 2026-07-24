@@ -111,6 +111,16 @@
           free (cleaned);
         return  BOOLEAN_FUNCTIONID_TOK;
       }
+      // Array-sorted define-funs exist only with --array-equality;
+      // without it the accepted language is unchanged.
+      else if (ft == stp::ARRAY_TYPE &&
+               stp::GlobalParserInterface->getUserFlags().enable_array_equality)
+      {
+        smt2lval.str = new std::string(s);
+        if (cleaned)
+          free (cleaned);
+        return  ARRAY_FUNCTIONID_TOK;
+      }
       else if (stp::GlobalParserInterface->LookupSymbol(s,nptr)) // it's a symbol.
       {
         found = true;

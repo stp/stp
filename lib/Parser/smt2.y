@@ -330,7 +330,7 @@
 %token  DECIMAL_TOK
 
 %token <node> FORMID_TOK TERMID_TOK
-%token <str> STRING_TOK BITVECTOR_FUNCTIONID_TOK BOOLEAN_FUNCTIONID_TOK
+%token <str> STRING_TOK BITVECTOR_FUNCTIONID_TOK BOOLEAN_FUNCTIONID_TOK ARRAY_FUNCTIONID_TOK
 
 
  /* set-info tokens */
@@ -692,33 +692,32 @@ STRING_TOK LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK
 |
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK an_term
 {
-  stp::GlobalParserInterface->unsupported();
-  delete $1;
-  stp::GlobalParserInterface->deleteNode($17);
-
-#if 0
-  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
-  stp::GlobalParserInterface->addSymbol(s);
-  unsigned int index_len = $9;
-  unsigned int value_len = $14;
-  if(index_len > 0) {
-    s.SetIndexWidth($9);
+  // Nullary array-sorted define-fun: the body is an array term (a store
+  // chain, ITE, or another array); uses of the name expand to the body.
+  // Supported only with --array-equality; without it the previous
+  // unsupported() behavior is kept unchanged.
+  if (!stp::GlobalParserInterface->getUserFlags().enable_array_equality)
+  {
+    stp::GlobalParserInterface->unsupported();
+    delete $1;
+    stp::GlobalParserInterface->deleteNode($17);
   }
-  else {
-    fatal_yyerror("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
-  }
+  else
+  {
+    if ($17->GetIndexWidth() != $9 || $17->GetValueWidth() != $14)
+    {
+      char msg [100];
+      sprintf(msg, "Different array widths specified: (%d %d) vs (%d %d)",
+              $17->GetIndexWidth(), $17->GetValueWidth(), $9, $14);
+      yyerror(msg);
+    }
 
-  if(value_len > 0) {
-    s.SetValueWidth($14);
-  }
-  else {
-    fatal_yyerror("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
-  }
+    ASTVec empty;
+    stp::GlobalParserInterface->storeFunction(*$1,empty, *$17);
 
-  ASTVec empty;
-  stp::GlobalParserInterface->storeFunction(*$1,empty, *$17);
-#endif
-
+    delete $1;
+    stp::GlobalParserInterface->deleteNode($17);
+  }
 }
 ;
 
@@ -1235,6 +1234,13 @@ TERMID_TOK
 {
   $$ = stp::GlobalParserInterface->newNode((*$1));
   stp::GlobalParserInterface->deleteNode( $1);
+}
+| ARRAY_FUNCTIONID_TOK
+{
+  // A use of a nullary array-sorted define-fun expands to its body.
+  ASTVec empty;
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$1,empty));
+  delete $1;
 }
 | LPAREN_TOK an_term RPAREN_TOK
 {
