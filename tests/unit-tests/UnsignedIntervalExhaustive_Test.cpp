@@ -457,24 +457,26 @@ TEST(UnsignedIntervalExhaustive, Eq)
     checkPredicate(stp::EQ, w, EXACT);
 }
 
-// The unsigned overflow predicates only claim true/false when the operand
-// box decides them, so they over-approximate. Only soundness is required.
+// The unsigned overflow predicates are exact: the outcome is monotone in the
+// operand box, and an unknown operand is treated as the full range, so the
+// attained extremes decide the hull for every combination (including the cases
+// where only one operand is known, e.g. a * 0 or a + 0).
 TEST(UnsignedIntervalExhaustive, Bvuaddo)
 {
   for (unsigned w = 1; w <= 4; w++)
-    checkPredicate(stp::BVUADDO, w, OVERAPPROXIMATES);
+    checkPredicate(stp::BVUADDO, w, EXACT);
 }
 
 TEST(UnsignedIntervalExhaustive, Bvumulo)
 {
   for (unsigned w = 1; w <= 4; w++)
-    checkPredicate(stp::BVUMULO, w, OVERAPPROXIMATES);
+    checkPredicate(stp::BVUMULO, w, EXACT);
 }
 
 TEST(UnsignedIntervalExhaustive, Bvusubo)
 {
   for (unsigned w = 1; w <= 4; w++)
-    checkPredicate(stp::BVUSUBO, w, OVERAPPROXIMATES);
+    checkPredicate(stp::BVUSUBO, w, EXACT);
 }
 
 // Confirms the transfer functions actually fire (produce a constant verdict)

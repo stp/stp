@@ -1213,8 +1213,9 @@ namespace stp
       case BVUSUBO:
         // Unsigned subtraction overflows (borrows) iff a <u b, mirroring
         // BVGT(b, a). The comparison of the attained unsigned extremes decides
-        // it for every point in the operand box.
-        if (knownC0 && knownC1)
+        // it for every point in the operand box. An unknown operand is the
+        // full range [0, 2^w-1] (substituted above), so this stays exact even
+        // when only one side pins the result (e.g. a - 0 never borrows).
         {
           const UnsignedInterval* a = children[0];
           const UnsignedInterval* b = children[1];
@@ -1232,8 +1233,8 @@ namespace stp
         // Unsigned add overflows iff a + b >= 2^w, i.e. the width-w addition
         // carries out. The integer sum ranges over [minV+minV, maxV+maxV], so
         // if the maxes don't carry no point overflows, and if the mins carry
-        // every point overflows.
-        if (knownC0 && knownC1)
+        // every point overflows. An unknown operand is the full range (see
+        // above), so a + 0 is still resolved to "never overflows".
         {
           const unsigned w = children[0]->getWidth();
           CBV tmp = CONSTANTBV::BitVector_Create(w, true);
@@ -1261,8 +1262,8 @@ namespace stp
         // products are computed exactly by zero-extending both operands into a
         // 2w+1 bit buffer (BitVector_Multiply is a signed multiply, but the
         // zero-extended operands are non-negative in the wider width, so the
-        // product is the exact unsigned product).
-        if (knownC0 && knownC1)
+        // product is the exact unsigned product). An unknown operand is the
+        // full range (see above), so e.g. a * 0 resolves to "never overflows".
         {
           const unsigned w = children[0]->getWidth();
           const unsigned ew = 2 * w + 1;
