@@ -1204,6 +1204,123 @@ namespace stp
         }
         break;
 
+      // Unsigned overflow predicates. These are boolean (Form) nodes, so the
+      // operand width is read from the children, not from 'width' (which is 0
+      // for a boolean node). Only the three UNSIGNED predicates are handled:
+      // the unsigned interval domain carries no signed-range information, so it
+      // cannot soundly decide BVSADDO/BVSMULO/BVSSUBO.
+
+      case BVUSUBO:
+        // Unsigned subtraction overflows (borrows) iff a <u b, mirroring
+        // BVGT(b, a). The comparison of the attained unsigned extremes decides
+        // it for every point in the operand box. An unknown operand is the
+        // full range [0, 2^w-1] (substituted above), so this stays exact even
+        // when only one side pins the result (e.g. a - 0 never borrows).
+        {
+          const UnsignedInterval* a = children[0];
+          const UnsignedInterval* b = children[1];
+
+          if (CONSTANTBV::BitVector_Lexicompare(a->maxV, b->minV) < 0)
+            // even the largest a is below the smallest b: always borrows.
+            result = createInterval(littleOne, littleOne);
+          else if (CONSTANTBV::BitVector_Lexicompare(a->minV, b->maxV) >= 0)
+            // even the smallest a is at least the largest b: never borrows.
+            result = createInterval(littleZero, littleZero);
+        }
+        break;
+
+      case BVUADDO:
+        // Unsigned add overflows iff a + b >= 2^w, i.e. the width-w addition
+        // carries out. The integer sum ranges over [minV+minV, maxV+maxV], so
+        // if the maxes don't carry no point overflows, and if the mins carry
+        // every point overflows. An unknown operand is the full range (see
+        // above), so a + 0 is still resolved to "never overflows".
+        {
+          const unsigned w = children[0]->getWidth();
+          CBV tmp = CONSTANTBV::BitVector_Create(w, true);
+
+          bool carryMax = false;
+          CONSTANTBV::BitVector_add(tmp, children[0]->maxV, children[1]->maxV,
+                                    &carryMax);
+          bool carryMin = false;
+          CONSTANTBV::BitVector_add(tmp, children[0]->minV, children[1]->minV,
+                                    &carryMin);
+          CONSTANTBV::BitVector_Destroy(tmp);
+
+          if (!carryMax)
+            result = createInterval(littleZero, littleZero);
+          else if (carryMin)
+            result = createInterval(littleOne, littleOne);
+        }
+        break;
+
+      case BVUMULO:
+        // Unsigned multiply overflows iff a * b >= 2^w. The product is monotone
+        // in both operands, so it ranges over [minV*minV, maxV*maxV]: if the
+        // max-product doesn't overflow no point does, and if the min-product
+        // overflows every point does. An unknown operand is the full range
+        // (see above), so e.g. a * 0 resolves to "never overflows".
+        //
+        // Whether one product X*Y overflows is decided by a leading-zeros
+        // screen first (Hacker's Delight 2-13). With bit-lengths bx and by
+        // (highest set bit + 1) we have 2^(bx+by-2) <= X*Y < 2^(bx+by), so:
+        //   bx == 0 or by == 0  -> product is 0, no overflow
+        //   bx + by <= w        -> largest possible product < 2^w, no overflow
+        //   bx + by >= w + 2    -> smallest possible product >= 2^w, overflow
+        //   bx + by == w + 1    -> ambiguous; fall back to an exact multiply.
+        // The screen decides every case where the operands aren't both close to
+        // a power-of-two boundary (in particular all the fully-/half-unknown
+        // cases), so the expensive multiply is rarely reached.
+        {
+          const unsigned w = children[0]->getWidth();
+          const unsigned ew = 2 * w + 1;
+
+          // Exact fallback: zero-extend both operands into 2w+1 bits (so the
+          // signed BitVector_Multiply computes the unsigned product) and test
+          // for a set bit at index >= w.
+          auto exactOverflows = [&](CBV a, CBV b) -> bool {
+            CBV a2 = CONSTANTBV::BitVector_Create(ew, true);
+            CBV b2 = CONSTANTBV::BitVector_Create(ew, true);
+            CBV prod = CONSTANTBV::BitVector_Create(ew, true);
+            CONSTANTBV::BitVector_Interval_Copy(a2, a, 0, 0, w);
+            CONSTANTBV::BitVector_Interval_Copy(b2, b, 0, 0, w);
+            CONSTANTBV::BitVector_Multiply(prod, a2, b2);
+            bool of = false;
+            for (unsigned i = w; i < ew && !of; i++)
+              if (CONSTANTBV::BitVector_bit_test(prod, i))
+                of = true;
+            CONSTANTBV::BitVector_Destroy(a2);
+            CONSTANTBV::BitVector_Destroy(b2);
+            CONSTANTBV::BitVector_Destroy(prod);
+            return of;
+          };
+
+          auto productOverflows = [&](CBV a, CBV b) -> bool {
+            // Set_Max is the highest set bit's index, or negative if the value
+            // is zero; bit-length is that index + 1.
+            const signed long topA = CONSTANTBV::Set_Max(a);
+            const signed long topB = CONSTANTBV::Set_Max(b);
+            if (topA <= 0 || topB <= 0)
+              // a or b is 0 or 1 (Set_Max < 0 means 0, == 0 means 1), so the
+              // product is 0 or the other operand, which is below 2^w. This
+              // also keeps 1 * (full-width) out of the ambiguous band below.
+              return false;
+            const unsigned long bitsSum =
+                (unsigned long)topA + (unsigned long)topB + 2; // bx + by
+            if (bitsSum <= w)
+              return false;
+            if (bitsSum >= (unsigned long)w + 2)
+              return true;
+            return exactOverflows(a, b); // bx + by == w + 1
+          };
+
+          if (!productOverflows(children[0]->maxV, children[1]->maxV))
+            result = createInterval(littleZero, littleZero);
+          else if (productOverflows(children[0]->minV, children[1]->minV))
+            result = createInterval(littleOne, littleOne);
+        }
+        break;
+
       case BVDIV:
       {
         const UnsignedInterval* top = children[0];
