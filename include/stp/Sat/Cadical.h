@@ -31,6 +31,7 @@ THE SOFTWARE.
 #include "SATSolver.h"
 #include "src/cadical.hpp"
 #include <chrono>
+#include <string>
 
 namespace stp
 {
@@ -61,7 +62,7 @@ namespace stp
   int64_t max_time = -1; // seconds
 
 public:
-  Cadical();
+  explicit Cadical(const std::string& config = "");
 
   ~Cadical();
 

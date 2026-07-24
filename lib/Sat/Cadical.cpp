@@ -25,6 +25,7 @@ THE SOFTWARE.
 #include <unordered_set>
 #include <algorithm>
 #include <limits>
+#include <string>
 using std::vector;
 
 namespace stp
@@ -81,9 +82,17 @@ bool Cadical::solve(bool& timeout_expired)
   return ret == 10;
 }
 
-Cadical::Cadical()
+Cadical::Cadical(const std::string& config)
 {
   s = new CaDiCaL::Solver ();
+  // Apply an optional CaDiCaL configuration profile (e.g. "unsat", "sat"). This
+  // has to happen while the solver is still in its CONFIGURING state, i.e. before
+  // any other set()/add() call. "unsat" keeps CaDiCaL in focused/restarting
+  // search (no stabilising or local-search phases), which is much faster on
+  // unsatisfiable/verification workloads.
+  if (!config.empty() && !s->configure(config.c_str()))
+    std::cerr << "Warning: unknown CaDiCaL configuration '" << config
+              << "'; using CaDiCaL defaults." << std::endl;
   s->set("quiet",1);
 }
 

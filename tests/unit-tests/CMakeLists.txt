@@ -47,3 +47,7 @@ AddSTPGTest(ConstantBitPropagation_Test.cpp)
 AddSTPGTest(BitVector_from_Dec_Test.cpp)
 AddSTPGTest(ValueSet_Test.cpp)
 
+if(USE_CADICAL)
+    AddSTPGTest(CadicalConfig_Test.cpp)
+endif()
+
