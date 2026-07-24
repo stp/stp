@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/STPManager/STPManager.h"
 #include <cassert>
 #include <math.h>
@@ -36,13 +37,6 @@ using std::map;
 /******************************************************************
  * Abstraction Refinement related functions
  ******************************************************************/
-
-enum Polarity
-{
-  LEFT_ONLY,
-  RIGHT_ONLY,
-  BOTH
-};
 
 void getSatVariables(const ASTNode& a, vector<unsigned>& v_a,
                      SATSolver& SatSolver, ToSATBase::ASTNodeToSATVar& satVar)
@@ -71,8 +65,7 @@ void getSatVariables(const ASTNode& a, vector<unsigned>& v_a,
 // Because it's used to create array axionms (a=b)-> (c=d), it can be
 // used to only add one of the two polarities.
 Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
-                       ToSATBase::ASTNodeToSATVar& satVar,
-                       Polarity polary = BOTH)
+                       ToSATBase::ASTNodeToSATVar& satVar, Polarity polary)
 {
   const unsigned width = a.GetValueWidth();
   assert(width == b.GetValueWidth());
@@ -278,6 +271,9 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
                       ArrayTransform->arrayToIndexToRead.end());
   sort(arrayToIndex.begin(), arrayToIndex.end(), sortBySize);
 
+  ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  const bool extActive = ext != NULL && ext->active();
+
   // In these loops we try to construct Leibnitz axioms and add it to
   // the solve(). We add only those axioms that are false in the
   // current counterexample. we keep adding the axioms until there
@@ -289,6 +285,13 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
            iset_end = arrayToIndex.end();
        iset != iset_end; iset++)
   {
+    // The array-equality decision procedure owns all congruence
+    // reasoning for arrays connected to an abstracted array equality;
+    // generating the ordinary lazy Ackermann read axioms for them too
+    // would duplicate (and interfere with) its lemmas.
+    if (extActive && ext->inCone(iset->first))
+      continue;
+
     const map<ASTNode, ArrayTransformer::ArrayRead>& mapper = iset->second;
 
     vector<ASTNode> listOfIndices;
@@ -384,6 +387,10 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
 
         if (SOLVER_UNDECIDED != res2)
           return res2;
+        // An array-equality lemma is pending; hand control back to
+        // the combined refinement driver, which installs it first.
+        if (extActive && ext->hasPendingLemma())
+          return SOLVER_UNDECIDED;
         bm->GetRunTimes()->start(RunTimes::ArrayReadRefinement);
       }
     }

@@ -658,7 +658,12 @@ void Cpp_interface::getValue(const ASTVec& v)
 
   for (ASTNode n : v)
   {
-    if (n.GetKind() != SYMBOL)
+    // Array-valued get-value is explicitly unsupported when array
+    // equality is enabled; use (get-model), which prints the completed
+    // array interpretations. With the feature disabled the
+    // pre-extension behavior is preserved unchanged.
+    if (n.GetKind() != SYMBOL ||
+        (n.GetType() == ARRAY_TYPE && bm.UserFlags.enable_array_equality))
     {
       unsupported();
       return;

@@ -23,27 +23,36 @@ THE SOFTWARE.
 ********************************************************************/
 
 /*
- * The registry of abstracted array equalities for the lemmas-on-demand
- * decision procedure for the extensional theory of arrays
- * (Brummayer & Biere, JSAT 6 (2010)).
+ * Host-side state of the lemmas-on-demand decision procedure for the
+ * extensional theory of arrays (Brummayer & Biere, JSAT 6 (2010))
+ * inside STP:
  *
- * Whenever the feature is enabled, every equality between array terms
- * is replaced at node-creation time by a fresh Boolean abstraction
- * variable (the paper's formula abstraction, section 5), together with
- * the witness constraints of preprocessing step 1 (section 4). The
- * solving side of the procedure builds on this registry in later
- * commits.
+ *  - the registry of array equalities: whenever the feature is enabled,
+ *    every equality between array terms is replaced at node-creation
+ *    time by a fresh Boolean abstraction variable (the paper's formula
+ *    abstraction, section 5), together with the witness constraints of
+ *    preprocessing step 1 (section 4);
+ *  - the per-solve view of the array subgraph relevant to those
+ *    equalities (which arrays, writes and reads participate), frozen
+ *    just before STP's main array transformation;
+ *  - the pending refinement lemma between a failed candidate check and
+ *    the re-solve, and its encoding into the incremental SAT solver;
+ *  - the completed array model of an accepted candidate.
  *
  * Lifetime: one context per STPMgr, created lazily the first time an
  * array equality is built with --array-equality enabled. The registry
- * lives as long as the query AST: its abstraction variables are
- * embedded in the user's formula.
+ * lives as long as the query AST (its abstraction variables are
+ * embedded in the user's formula); everything model- or solve-specific
+ * is reset by beginSolve() at each top-level solve.
  */
 
 #ifndef EXTENSIONALITYCONTEXT_H
 #define EXTENSIONALITYCONTEXT_H
 
 #include "stp/AST/AST.h"
+#include "stp/Extensionality/ExtChecker.h"
+#include "stp/Sat/SATSolver.h"
+#include "stp/ToSat/ToSATBase.h"
 #include <map>
 #include <set>
 #include <vector>
@@ -52,6 +61,10 @@ namespace stp
 {
 
 class STPMgr;
+class Simplifier;
+class ArrayTransformer;
+class AbsRefine_CounterExample;
+class ToSATBase;
 
 class ExtensionalityContext
 {
@@ -68,8 +81,8 @@ public:
     ASTNode proxy;             // ordinary Boolean SYMBOL
     ASTNode constructionLeft;
     ASTNode constructionRight;
-    ASTNode canonicalLeft;     // per-solve, set at preparation time
-    ASTNode canonicalRight;    // per-solve, set at preparation time
+    ASTNode canonicalLeft;     // per-solve, set by prepare()
+    ASTNode canonicalRight;    // per-solve, set by prepare()
     ASTNode lambda;            // fresh witness index symbol
     ASTNode nameL, nameR;      // scalar names of the witness reads
     // Constraint bundle conjoined at the start of every solve. The
@@ -124,6 +137,133 @@ public:
     return possibleConeSymbols.find(arraySymbol) != possibleConeSymbols.end();
   }
 
+  //--------------------------------------------------------------------
+  // Per-solve pipeline (TopLevelSTPAux)
+  //--------------------------------------------------------------------
+
+  // Reset all per-solve state (cone, naming, pending lemma, model).
+  void beginSolve();
+
+  // Conjoin every record's constraint bundle (the witness clause of
+  // preprocessing step 1 plus the defining equations of its virtual
+  // reads) onto the input, before any of STP's preprocessing runs, so
+  // the bundles are simplified and substituted together with the rest
+  // of the formula.
+  ASTNode conjoinRecordConstraints(const ASTNode& root);
+
+  // Final preparation, run after STP's simplifications and immediately
+  // before its main array transformation:
+  //  - recover each record's canonical operands from its anchors;
+  //  - compute the "cone": the arrays connected to the abstracted
+  //    equalities (operands, the bases under their writes, and the
+  //    writes on top of them in the formula);
+  //  - eliminate array-valued if-then-else inside the cone, replacing
+  //    ite(c,a,b) by a fresh array d constrained by c -> d = a and
+  //    not(c) -> d = b (paper section 4.1), repeated to a fixed point
+  //    since the guarded equalities are themselves abstracted;
+  //  - inventory the cone's writes as accesses (paper section 11.4)
+  //    and give every compound write index/value a scalar name that
+  //    will be part of the initial bit-blast, so lemmas can later be
+  //    encoded over existing SAT variables.
+  // Returns the extended input to hand to the array transformation;
+  // after this point the cone must not change for the rest of the
+  // solve.
+  ASTNode prepare(const ASTNode& root);
+
+  bool coneFrozen() const { return coneIsFrozen; }
+  bool inCone(const ASTNode& arrayNode) const
+  {
+    return coneArrays.find(arrayNode) != coneArrays.end();
+  }
+
+  // Reads of cone arrays route their index through the transform's
+  // fresh-index-variable pass even when the index is already a plain
+  // variable: an index occurring only inside reads would otherwise
+  // vanish from the bit-blasted formula, leaving future lemmas over it
+  // without SAT variables.
+  bool needsIndexAnchor(const ASTNode& arrayNode) const
+  {
+    return coneIsFrozen && inCone(arrayNode);
+  }
+
+  // After the main array transformation: collect the checker's access
+  // inventory -- every cone read (including the witness reads) now has
+  // its read-abstraction variable and index variable, and every cone
+  // write its scalar names -- and freeze the graph handed to the
+  // consistency checker.
+  void bindAfterTransform(ArrayTransformer* at);
+
+  //--------------------------------------------------------------------
+  // Candidate checking and refinement (the loop of paper section 6)
+  //--------------------------------------------------------------------
+
+  enum CandidateOutcome
+  {
+    EXT_SKIPPED,
+    EXT_CONSISTENT,
+    EXT_CONFLICT,
+    EXT_WITNESS_ERROR
+  };
+
+  enum CertificationAction
+  {
+    RETURN_SAT,
+    ADD_EXT_LEMMA,
+    RUN_HOST_REFINEMENT,
+    INTERNAL_ERROR
+  };
+
+  // Decide what to do with a materialized candidate, given STP's own
+  // model evaluation and the array consistency check. An array conflict
+  // takes precedence over the ordinary result -- reads inside the cone
+  // are exempt from STP's ordinary read refinement, so only the array
+  // lemma can rule such a candidate out -- and a candidate is only ever
+  // reported satisfiable when both checks pass on the same assignment.
+  static CertificationAction decideCertification(bool ordinaryResult,
+                                                 bool registryNonempty,
+                                                 CandidateOutcome ext);
+
+  // Run the pure checker against the current candidate model. On
+  // conflict the certificate is stored as the pending lemma.
+  CandidateOutcome checkCandidate(AbsRefine_CounterExample* ce);
+
+  bool hasPendingLemma() const { return pendingLemmaValid; }
+
+  // Encode exactly the pending lemma into the persistent incremental
+  // SAT solver, then clear it. The lemma premise/conclusion atoms are
+  // reified over the SAT variables of already-encoded symbols -- the
+  // refinement is clauses over the existing CNF, never a fresh
+  // word-level formula handed back to the bit-blaster.
+  void encodePendingLemma(SATSolver& solver, ToSATBase* tosat);
+
+  // Validate one bit-vector lemma leaf: it must be a fixed-width
+  // constant, or a SYMBOL whose complete SAT-variable vector was
+  // encoded by the initial bit-blast (present, full width, every bit
+  // encoded). Returns NULL when valid, else a static reason string.
+  // Pure -- no allocation and no SAT mutation -- so lemma encoding
+  // reports a precise internal error instead of silently inventing
+  // fresh, unconstrained SAT variables for a term the candidate was
+  // never checked against.
+  static const char* checkPreencodedBV(const ASTNode& n,
+                                       const ToSATBase::ASTNodeToSATVar& satVar);
+
+  // Publish the conflict-free observed (index, value) pairs of every
+  // cone array -- including write nodes and the fresh arrays introduced
+  // for array if-then-else -- into the counterexample map, so model
+  // evaluation, the model APIs, and the printers all see the array
+  // contents the consistency check certified.
+  void publishObservations(AbsRefine_CounterExample* ce);
+
+  // Every symbol EXTCHK relies on keeps its SAT variables (frozen
+  // against backend variable elimination).
+  const std::set<ASTNode>& getFrozenSymbols() const
+  {
+    return protectedSymbols;
+  }
+
+  // Statistics for --stats.
+  int lemmasEmitted;
+
 private:
   STPMgr* bm;
 
@@ -133,7 +273,45 @@ private:
   std::set<ASTNode> protectedSymbols;
   std::set<ASTNode> possibleConeSymbols;
 
+  // Replacements for array-valued if-then-else (paper section 4.1):
+  // original ITE node -> its fresh array. Persistent across solves, so
+  // a repeated solve of the same query reuses the fresh array -- and,
+  // through the registry's operand-pair dedup, the same two guarded
+  // equality records -- instead of minting a new generation per solve.
+  // The guard implications themselves are rebuilt into every solve's
+  // prepared input, keeping each record and its defining guards
+  // together.
+  std::map<ASTNode, ASTNode> iteReplacements;
+
+  // ---- per-solve state ----
+  bool coneIsFrozen;
+  std::set<ASTNode> coneArrays;
+  std::map<ASTNode, ExtWriteNode> coneWrites; // write node -> info
+  std::map<ASTNode, std::vector<ASTNode>> coneWriteParents;
+  std::vector<ExtEqEdge> eqEdges;
+  std::map<ASTNode, std::vector<size_t>> eqAdjacency;
+  std::vector<ExtWitness> witnessObls;
+  std::map<ASTNode, ASTNode> scalarNames; // term -> name symbol
+  ExtGraph graph;                         // bound after transform
+  bool graphBound;
+
+  bool pendingLemmaValid;
+  ExtConflict pendingLemma;
+
+  // reified equality cache, scoped to the current SAT instance
+  std::map<std::pair<unsigned, unsigned>, int> eqLitCache;
+
+  // last consistent observations for model export
+  std::map<ASTNode, std::vector<std::pair<ASTNode, ASTNode>>> lastObserved;
+
+  // helpers
   void collectPossibleConeSymbols(const ASTNode& n);
+  ASTNode freshName(const ASTNode& term, ASTVec& namingConstraints);
+  void computeProvisionalCone(const ASTNode& root,
+                              std::set<ASTNode>& cone,
+                              std::map<ASTNode, std::vector<ASTNode>>& parents,
+                              std::vector<ASTNode>& coneITEs);
+  void locateCanonicalOperands(const ASTNode& root);
 };
 
 } // namespace stp

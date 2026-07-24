@@ -32,10 +32,13 @@ THE SOFTWARE.
  * indices, witness checking), and asserts the exact deterministic
  * outcome: the propagation event sequence, the rule application
  * counts, which two accesses conflict at which array, and the lemma's
- * canonical premise and conclusion.
+ * canonical premise and conclusion. A final test covers the decision
+ * table that combines the checker's verdict with STP's own model check
+ * inside the refinement loop.
  */
 
 #include "stp/Extensionality/ExtChecker.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/STPManager/STPManager.h"
 #include <gtest/gtest.h>
 #include <map>
@@ -615,6 +618,41 @@ TEST_F(ExtFixtureTest, WriteWriteEqualityConflict)
   EXPECT_EQ(2u, c.abstractPremise.size());
   EXPECT_EQ(e2, c.abstractConclusionA);
   EXPECT_EQ(e1, c.abstractConclusionB);
+}
+
+// The decision table combining STP's own model evaluation with the
+// array consistency check: an array conflict always takes priority
+// (only its lemma can rule the candidate out), and a candidate is
+// satisfiable only when both checks pass.
+TEST(ExtCertification, TruthTable)
+{
+  typedef ExtensionalityContext EC;
+  // registry empty: EXTCHK skipped; ordinary result decides
+  EXPECT_EQ(EC::RETURN_SAT,
+            EC::decideCertification(true, false, EC::EXT_SKIPPED));
+  EXPECT_EQ(EC::RUN_HOST_REFINEMENT,
+            EC::decideCertification(false, false, EC::EXT_SKIPPED));
+  EXPECT_EQ(EC::INTERNAL_ERROR,
+            EC::decideCertification(true, false, EC::EXT_CONFLICT));
+  EXPECT_EQ(EC::INTERNAL_ERROR,
+            EC::decideCertification(false, false, EC::EXT_WITNESS_ERROR));
+
+  // registry nonempty: EXTCHK conflict has priority over both ordinary
+  // results; SAT only for ordinary-true + consistent.
+  EXPECT_EQ(EC::RETURN_SAT,
+            EC::decideCertification(true, true, EC::EXT_CONSISTENT));
+  EXPECT_EQ(EC::ADD_EXT_LEMMA,
+            EC::decideCertification(true, true, EC::EXT_CONFLICT));
+  EXPECT_EQ(EC::RUN_HOST_REFINEMENT,
+            EC::decideCertification(false, true, EC::EXT_CONSISTENT));
+  EXPECT_EQ(EC::ADD_EXT_LEMMA,
+            EC::decideCertification(false, true, EC::EXT_CONFLICT));
+  EXPECT_EQ(EC::INTERNAL_ERROR,
+            EC::decideCertification(true, true, EC::EXT_WITNESS_ERROR));
+  EXPECT_EQ(EC::INTERNAL_ERROR,
+            EC::decideCertification(false, true, EC::EXT_WITNESS_ERROR));
+  EXPECT_EQ(EC::INTERNAL_ERROR,
+            EC::decideCertification(true, true, EC::EXT_SKIPPED));
 }
 
 } // namespace

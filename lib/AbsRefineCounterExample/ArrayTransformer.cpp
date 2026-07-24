@@ -29,6 +29,7 @@ THE SOFTWARE.
  * formula. Arrays are replaced by equivalent bit-vector variables
  */
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/Simplifier/Simplifier.h"
 #include <cassert>
 #include <cstdio>
@@ -68,6 +69,8 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
   {
     ASTNodeMap replaced;
 
+    ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+
     ASTVec equalsNodes;
     for (ArrayTransformer::ArrType::iterator
              iset = arrayToIndexToRead.begin(),
@@ -76,13 +79,24 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
     {
       std::map<ASTNode, ArrayTransformer::ArrayRead>& mapper = iset->second;
 
+      // With array equality active, the index of a read inside the
+      // equality cone must reach the bit-blaster even when it is a
+      // plain variable: once the read is replaced by its abstraction
+      // variable the index may occur nowhere else, yet future
+      // refinement lemmas will be encoded over its SAT variables. Such
+      // reads therefore take the fresh-index-variable path (which
+      // conjoins index = fresh) for every non-constant index.
+      const bool forceIndexAnchor =
+          ext != NULL && ext->active() && ext->needsIndexAnchor(iset->first);
+
       for (std::map<ASTNode, ArrayTransformer::ArrayRead>::iterator it =
                mapper.begin();
            it != mapper.end(); it++)
       {
         const ASTNode& the_index = it->first;
 
-        if (the_index.isConstant() || the_index.GetKind() == SYMBOL)
+        if (the_index.isConstant() ||
+            (the_index.GetKind() == SYMBOL && !forceIndexAnchor))
         {
           it->second.index_symbol = the_index;
         }
@@ -534,6 +548,47 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
   const ASTNode& readIndex = TransformTerm(term[1]);
 
   ASTNode result;
+
+  // With array equality active, a read of an array inside the equality
+  // cone always takes the direct read-abstraction path -- mint or reuse
+  // the fresh variable for the (array, index) pair -- whether the array
+  // is a variable or a write. Its write chain is never expanded into
+  // if-then-else here: the lemmas-on-demand consistency checker owns
+  // read-over-write reasoning for these arrays, and it needs the write
+  // structure and the abstraction variables intact.
+  {
+    ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+    if (ext != NULL && ext->active() && ext->coneFrozen() &&
+        ext->inCone(arrName))
+    {
+      if (ITE == arrName.GetKind())
+        FatalError("TransformArrayRead: an array-valued if-then-else "
+                   "survived inside the array-equality cone; it should "
+                   "have been eliminated during preparation",
+                   term);
+      assert(!bm->UserFlags.ackermannisation);
+
+      ArrType::const_iterator it;
+      if ((it = arrayToIndexToRead.find(arrName)) != arrayToIndexToRead.end())
+      {
+        std::map<ASTNode, ArrayRead>::const_iterator it2;
+        if ((it2 = it->second.find(readIndex)) != it->second.end())
+        {
+          result = it2->second.ite;
+          (*TransformMap)[term] = result;
+          return result;
+        }
+      }
+
+      ASTNode CurrentSymbol = bm->CreateFreshVariable(
+          term.GetIndexWidth(), term.GetValueWidth(), "ext_read");
+      result = CurrentSymbol;
+      arrayToIndexToRead[arrName].insert(
+          make_pair(readIndex, ArrayRead(result, CurrentSymbol)));
+      (*TransformMap)[term] = result;
+      return result;
+    }
+  }
 
   switch (arrName.GetKind())
   {

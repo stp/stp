@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/ToSat/ToSATAIG.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 
@@ -196,6 +197,26 @@ void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
         for (size_t i = 0, size = v.size(); i < size; ++i)
           satSolver.setFrozen(v[i]);
       }
+    }
+  }
+
+  // The array-equality procedure encodes its refinement lemmas over
+  // the SAT variables of its abstraction variables, witness symbols
+  // and scalar names; keep those variables from being eliminated.
+  ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  if (ext != NULL && ext->active())
+  {
+    const std::set<ASTNode>& symbols = ext->getFrozenSymbols();
+    for (std::set<ASTNode>::const_iterator it = symbols.begin();
+         it != symbols.end(); ++it)
+    {
+      ASTNodeToSATVar::iterator vit = nodeToSATVar.find(*it);
+      if (vit == nodeToSATVar.end())
+        continue;
+      const vector<unsigned>& v = vit->second;
+      for (size_t i = 0, size = v.size(); i < size; ++i)
+        if (v[i] != ~((unsigned)0))
+          satSolver.setFrozen(v[i]);
     }
   }
 }

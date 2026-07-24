@@ -22,14 +22,16 @@ THE SOFTWARE.
 
 // C API front end for the array-equality feature: with the 'x' flag,
 // vc_eqExpr over array operands returns a fresh Boolean abstraction
-// variable (the formula abstraction of Brummayer & Biere's
-// lemmas-on-demand procedure for extensional arrays); with the flag
-// off, the pre-existing warn-and-return-EQ behavior is preserved.
+// variable and the lemmas-on-demand procedure decides the query; with
+// the flag off, the pre-existing warn-and-return-EQ behavior is
+// preserved.
 
 #include "stp/c_interface.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/STPManager/STP.h"
 #include <gtest/gtest.h>
 
-TEST(array_extensionality, equality_abstracted_to_boolean_variable)
+TEST(array_extensionality, positive_equality_unsat)
 {
   VC vc = vc_createValidityChecker();
   vc_setFlag(vc, 'x'); // must precede creation of any term
@@ -40,19 +42,332 @@ TEST(array_extensionality, equality_abstracted_to_boolean_variable)
 
   Expr a = vc_varExpr(vc, "a", arrT);
   Expr b = vc_varExpr(vc, "b", arrT);
+  Expr i = vc_varExpr(vc, "i", bv4);
 
-  // The abstracted equality is an ordinary Boolean symbol, not an EQ
-  // node.
+  // The minted equality is an ordinary Boolean symbol, not an EQ node.
   Expr eq = vc_eqExpr(vc, a, b);
   ASSERT_EQ(SYMBOL, getExprKind(eq));
 
-  // Repeated requests reuse the same abstraction variable, in either
-  // operand order.
+  // Repeated requests reuse the same proxy, in either operand order,
+  // and a reflexive equality folds to true.
   ASSERT_EQ(getExprID(eq), getExprID(vc_eqExpr(vc, a, b)));
   ASSERT_EQ(getExprID(eq), getExprID(vc_eqExpr(vc, b, a)));
-
-  // A reflexive equality folds to true.
   ASSERT_EQ(TRUE, getExprKind(vc_eqExpr(vc, a, a)));
+
+  vc_assertFormula(vc, eq);
+  vc_assertFormula(
+      vc, vc_notExpr(vc, vc_eqExpr(vc, vc_readExpr(vc, a, i),
+                                   vc_readExpr(vc, b, i))));
+
+  // a = b and a[i] != b[i]: unsat, so FALSE is valid.
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+  vc_Destroy(vc);
+}
+
+TEST(array_extensionality, disequality_sat_with_witness)
+{
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv8 = vc_bvType(vc, 8);
+  Type bv4 = vc_bvType(vc, 4);
+  Type arrT = vc_arrayType(vc, bv4, bv8);
+
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr b = vc_varExpr(vc, "b", arrT);
+
+  vc_assertFormula(vc, vc_notExpr(vc, vc_eqExpr(vc, a, b)));
+
+  // distinct arrays: satisfiable, so FALSE is invalid.
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+
+  // The model exposes a concrete witness index where the two arrays
+  // differ.
+  Expr* aIdx;
+  Expr* aVal;
+  int aSize;
+  vc_getCounterExampleArray(vc, a, &aIdx, &aVal, &aSize);
+  Expr* bIdx;
+  Expr* bVal;
+  int bSize;
+  vc_getCounterExampleArray(vc, b, &bIdx, &bVal, &bSize);
+
+  bool differ = false;
+  for (int x = 0; x < aSize && !differ; x++)
+  {
+    for (int y = 0; y < bSize; y++)
+    {
+      if (getBVUnsigned(aIdx[x]) == getBVUnsigned(bIdx[y]) &&
+          getBVUnsigned(aVal[x]) != getBVUnsigned(bVal[y]))
+      {
+        differ = true;
+        break;
+      }
+    }
+  }
+  // Zero-default completion: a point present in one model with a
+  // nonzero value and absent from the other also distinguishes them.
+  for (int x = 0; x < aSize && !differ; x++)
+  {
+    bool present = false;
+    for (int y = 0; y < bSize; y++)
+      if (getBVUnsigned(aIdx[x]) == getBVUnsigned(bIdx[y]))
+        present = true;
+    if (!present && getBVUnsigned(aVal[x]) != 0)
+      differ = true;
+  }
+  for (int y = 0; y < bSize && !differ; y++)
+  {
+    bool present = false;
+    for (int x = 0; x < aSize; x++)
+      if (getBVUnsigned(aIdx[x]) == getBVUnsigned(bIdx[y]))
+        present = true;
+    if (!present && getBVUnsigned(bVal[y]) != 0)
+      differ = true;
+  }
+  ASSERT_TRUE(differ);
+  vc_Destroy(vc);
+}
+
+TEST(array_extensionality, write_congruence_unsat)
+{
+  // Equal writes at equal indices force equal values, with no explicit
+  // read anywhere -- writes are treated as accesses.
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv8 = vc_bvType(vc, 8);
+  Type bv4 = vc_bvType(vc, 4);
+  Type arrT = vc_arrayType(vc, bv4, bv8);
+
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr b = vc_varExpr(vc, "b", arrT);
+  Expr i = vc_varExpr(vc, "i", bv4);
+  Expr j = vc_varExpr(vc, "j", bv4);
+  Expr e1 = vc_varExpr(vc, "e1", bv8);
+  Expr e2 = vc_varExpr(vc, "e2", bv8);
+
+  vc_assertFormula(
+      vc, vc_eqExpr(vc, vc_writeExpr(vc, a, i, e1), vc_writeExpr(vc, b, j, e2)));
+  vc_assertFormula(vc, vc_eqExpr(vc, i, j));
+  vc_assertFormula(vc, vc_notExpr(vc, vc_eqExpr(vc, e1, e2)));
+
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+  vc_Destroy(vc);
+}
+
+TEST(array_extensionality, repeated_queries_do_not_leak_ite_records)
+{
+  // Regression for repeated solves over an array if-then-else: the
+  // condition is UNRESOLVED, so simplification cannot fold the ITE
+  // away and preparation must eliminate it into a fresh array with two
+  // guarded equalities (paper section 4.1). The first solve creates
+  // exactly the one user equality record plus those two; every
+  // repeated solve reuses them through the persistent replacement
+  // cache instead of minting a new generation. Both branches
+  // contradict c, so the query is unsat only while both guarded
+  // definitions are active -- a solve that lost either guard could
+  // flip the verdict.
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv8 = vc_bvType(vc, 8);
+  Type bv4 = vc_bvType(vc, 4);
+  Type arrT = vc_arrayType(vc, bv4, bv8);
+
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr b = vc_varExpr(vc, "b", arrT);
+  Expr c = vc_varExpr(vc, "c", arrT);
+  Expr p = vc_varExpr(vc, "p", vc_boolType(vc));
+  Expr i = vc_varExpr(vc, "i", bv4);
+
+  vc_assertFormula(vc, vc_eqExpr(vc, vc_iteExpr(vc, p, a, b), c));
+  vc_assertFormula(
+      vc, vc_notExpr(vc, vc_eqExpr(vc, vc_readExpr(vc, a, i),
+                                   vc_readExpr(vc, c, i))));
+  vc_assertFormula(
+      vc, vc_notExpr(vc, vc_eqExpr(vc, vc_readExpr(vc, b, i),
+                                   vc_readExpr(vc, c, i))));
+
+  stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  ASSERT_NE(nullptr, ext);
+
+  // Only the construction-time equality was minted so far.
+  ASSERT_EQ(1u, ext->getRecords().size());
+
+  for (int solve = 0; solve < 4; solve++)
+  {
+    ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc))) << "solve " << solve;
+    // user record + exactly two guarded-ITE records, on every solve
+    EXPECT_EQ(3u, ext->getRecords().size()) << "solve " << solve;
+  }
+
+  vc_Destroy(vc);
+}
+
+TEST(array_extensionality, nested_ite_fixed_point_is_stable)
+{
+  // A nested array if-then-else with unresolved conditions reaches the
+  // elimination fixed point once -- one user record plus two records
+  // per eliminated ITE -- and repeated solves reuse all of them.
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv8 = vc_bvType(vc, 8);
+  Type bv4 = vc_bvType(vc, 4);
+  Type arrT = vc_arrayType(vc, bv4, bv8);
+
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr b = vc_varExpr(vc, "b", arrT);
+  Expr c = vc_varExpr(vc, "c", arrT);
+  Expr d = vc_varExpr(vc, "d", arrT);
+  Expr p = vc_varExpr(vc, "p", vc_boolType(vc));
+  Expr q = vc_varExpr(vc, "q", vc_boolType(vc));
+  Expr i = vc_varExpr(vc, "i", bv4);
+
+  // (ite p (ite q a b) c) = d, with every leaf contradicting d at i:
+  // unsat for all values of p and q.
+  vc_assertFormula(
+      vc, vc_eqExpr(vc, vc_iteExpr(vc, p, vc_iteExpr(vc, q, a, b), c), d));
+  const Expr leaves[3] = {a, b, c};
+  for (int x = 0; x < 3; x++)
+    vc_assertFormula(
+        vc, vc_notExpr(vc, vc_eqExpr(vc, vc_readExpr(vc, leaves[x], i),
+                                     vc_readExpr(vc, d, i))));
+
+  stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  ASSERT_NE(nullptr, ext);
+  ASSERT_EQ(1u, ext->getRecords().size());
+
+  for (int solve = 0; solve < 3; solve++)
+  {
+    ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc))) << "solve " << solve;
+    // 1 construction + 2 per eliminated ITE (outer and inner)
+    EXPECT_EQ(5u, ext->getRecords().size()) << "solve " << solve;
+  }
+
+  vc_Destroy(vc);
+}
+
+TEST(array_extensionality, asserted_ite_condition_folds_before_fe03)
+{
+  // Companion coverage for permitted simplification: with the
+  // condition asserted true, ordinary preprocessing folds ite(p,a,b)
+  // to a before preparation ever sees it, so no guarded equalities are
+  // created and the registry keeps only the user's record.
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv8 = vc_bvType(vc, 8);
+  Type bv4 = vc_bvType(vc, 4);
+  Type arrT = vc_arrayType(vc, bv4, bv8);
+
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr b = vc_varExpr(vc, "b", arrT);
+  Expr c = vc_varExpr(vc, "c", arrT);
+  Expr p = vc_varExpr(vc, "p", vc_boolType(vc));
+  Expr i = vc_varExpr(vc, "i", bv4);
+
+  vc_assertFormula(vc, p);
+  vc_assertFormula(vc, vc_eqExpr(vc, vc_iteExpr(vc, p, a, b), c));
+  vc_assertFormula(
+      vc, vc_notExpr(vc, vc_eqExpr(vc, vc_readExpr(vc, a, i),
+                                   vc_readExpr(vc, c, i))));
+
+  stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  ASSERT_NE(nullptr, ext);
+
+  for (int solve = 0; solve < 2; solve++)
+  {
+    ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc))) << "solve " << solve;
+    EXPECT_EQ(1u, ext->getRecords().size()) << "solve " << solve;
+  }
+
+  vc_Destroy(vc);
+}
+
+TEST(array_extensionality, preencoded_leaf_validation)
+{
+  // The lemma-leaf validator must reject every shape that would
+  // otherwise make lemma encoding silently invent fresh, unconstrained
+  // SAT variables for a term the candidate was never checked against.
+  stp::STPMgr mgr;
+  stp::ToSATBase::ASTNodeToSATVar satVar;
+
+  stp::ASTNode sym = mgr.CreateSymbol("s", 0, 4);
+  stp::ASTNode cnst = mgr.CreateBVConst(4, 9);
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  stp::ASTNode compound = hf->CreateTerm(stp::BVPLUS, 4, sym, cnst);
+
+  typedef stp::ExtensionalityContext EC;
+
+  // constants need no encoding
+  EXPECT_EQ(nullptr, EC::checkPreencodedBV(cnst, satVar));
+
+  // a symbol with no SAT vector is an internal error, never a fresh
+  // allocation
+  EXPECT_NE(nullptr, EC::checkPreencodedBV(sym, satVar));
+
+  // wrong-width vector
+  satVar[sym] = std::vector<unsigned>(3, 7u);
+  EXPECT_NE(nullptr, EC::checkPreencodedBV(sym, satVar));
+
+  // full-width vector: valid
+  satVar[sym] = std::vector<unsigned>(4, 7u);
+  EXPECT_EQ(nullptr, EC::checkPreencodedBV(sym, satVar));
+
+  // one unencoded-bit sentinel poisons the vector
+  satVar[sym][2] = ~((unsigned)0);
+  EXPECT_NE(nullptr, EC::checkPreencodedBV(sym, satVar));
+
+  // compound terms are never legal lemma leaves
+  EXPECT_NE(nullptr, EC::checkPreencodedBV(compound, satVar));
+}
+
+TEST(array_extensionality, array_model_entries_ascending)
+{
+  // The programmatic array model is deterministic -- one entry per
+  // concrete index, ascending unsigned index order -- and stable
+  // across repeated calls.
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv8 = vc_bvType(vc, 8);
+  Type bv4 = vc_bvType(vc, 4);
+  Type arrT = vc_arrayType(vc, bv4, bv8);
+
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr b = vc_varExpr(vc, "b", arrT);
+
+  // Observations at deliberately nonascending indices, plus a
+  // disequality so a witness point is also published.
+  const int idxs[] = {11, 3, 0, 7};
+  for (int x = 0; x < 4; x++)
+  {
+    Expr rd = vc_readExpr(vc, a, vc_bvConstExprFromInt(vc, 4, idxs[x]));
+    vc_assertFormula(
+        vc, vc_eqExpr(vc, rd, vc_bvConstExprFromInt(vc, 8, 16 + idxs[x])));
+  }
+  vc_assertFormula(vc, vc_notExpr(vc, vc_eqExpr(vc, a, b)));
+
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+
+  for (int round = 0; round < 2; round++)
+  {
+    Expr* aIdx;
+    Expr* aVal;
+    int aSize;
+    vc_getCounterExampleArray(vc, a, &aIdx, &aVal, &aSize);
+    ASSERT_GE(aSize, 4) << "round " << round;
+    for (int x = 1; x < aSize; x++)
+    {
+      EXPECT_LT(getBVUnsigned(aIdx[x - 1]), getBVUnsigned(aIdx[x]))
+          << "round " << round << " position " << x;
+    }
+  }
 
   vc_Destroy(vc);
 }

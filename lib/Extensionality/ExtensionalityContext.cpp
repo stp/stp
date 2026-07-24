@@ -23,7 +23,12 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
+#include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include "stp/STPManager/STPManager.h"
+#include "stp/Simplifier/SubstitutionMap.h"
+#include "stp/ToSat/ToSATBase.h"
+#include <algorithm>
 
 namespace stp
 {
@@ -34,6 +39,11 @@ namespace
 bool isArrayType(const ASTNode& n)
 {
   return n.GetType() == ARRAY_TYPE;
+}
+
+bool nodeNumLess(const ASTNode& a, const ASTNode& b)
+{
+  return a.GetNodeNum() < b.GetNodeNum();
 }
 
 // Postorder DAG collection of every node beneath (and including) n.
@@ -47,7 +57,9 @@ void collectDag(const ASTNode& n, ASTNodeSet& visited)
 
 } // namespace
 
-ExtensionalityContext::ExtensionalityContext(STPMgr* bm_) : bm(bm_)
+ExtensionalityContext::ExtensionalityContext(STPMgr* bm_)
+    : lemmasEmitted(0), bm(bm_), coneIsFrozen(false), graphBound(false),
+      pendingLemmaValid(false)
 {
 }
 
@@ -133,6 +145,719 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
   proxyToRecord[r.proxy] = r.id;
   records.push_back(r);
   return records.back().proxy;
+}
+
+void ExtensionalityContext::beginSolve()
+{
+  coneIsFrozen = false;
+  coneArrays.clear();
+  coneWrites.clear();
+  coneWriteParents.clear();
+  eqEdges.clear();
+  eqAdjacency.clear();
+  witnessObls.clear();
+  scalarNames.clear();
+  graph = ExtGraph();
+  graphBound = false;
+  pendingLemmaValid = false;
+  eqLitCache.clear();
+  lastObserved.clear();
+  for (size_t i = 0; i < records.size(); i++)
+  {
+    records[i].canonicalLeft = ASTNode();
+    records[i].canonicalRight = ASTNode();
+  }
+}
+
+ASTNode ExtensionalityContext::conjoinRecordConstraints(const ASTNode& root)
+{
+  if (records.empty())
+    return root;
+  ASTVec conjuncts;
+  conjuncts.push_back(root);
+  for (size_t i = 0; i < records.size(); i++)
+  {
+    conjuncts.push_back(records[i].anchorL);
+    conjuncts.push_back(records[i].anchorR);
+    conjuncts.push_back(records[i].witnessClause);
+  }
+  return bm->defaultNodeFactory->CreateNode(AND, conjuncts);
+}
+
+// Recover each record's canonical operands from its anchor equations
+// in the current formula. The anchors were conjoined before STP's
+// simplifications ran, so they were rewritten by exactly the passes
+// that rewrote the rest of the formula; the array operand under each
+// witness read is therefore the current form of the recorded operand.
+// Fails loudly when an anchor is missing or malformed -- a protected
+// definition was eliminated, which the substitution guards should have
+// prevented.
+void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
+{
+  // name symbol -> the READ term it anchors
+  std::map<ASTNode, ASTNode> anchorReads;
+  ASTNodeSet visited;
+  collectDag(root, visited);
+  for (ASTNodeSet::const_iterator it = visited.begin(); it != visited.end();
+       ++it)
+  {
+    const ASTNode& n = *it;
+    if (n.GetKind() != EQ || n.Degree() != 2)
+      continue;
+    for (int side = 0; side < 2; side++)
+    {
+      const ASTNode& s = n[side];
+      const ASTNode& other = n[1 - side];
+      if (s.GetKind() == SYMBOL && isProtected(s) && other.GetKind() == READ)
+        anchorReads[s] = other;
+    }
+  }
+
+  for (size_t i = 0; i < records.size(); i++)
+  {
+    Record& r = records[i];
+    std::map<ASTNode, ASTNode>::const_iterator lit = anchorReads.find(r.nameL);
+    std::map<ASTNode, ASTNode>::const_iterator rit = anchorReads.find(r.nameR);
+    if (lit == anchorReads.end() || rit == anchorReads.end())
+      FatalError("array-equality: a witness-read defining equation was "
+                 "lost during preprocessing, so the current form of an "
+                 "equality operand cannot be recovered",
+                 r.proxy);
+    const ASTNode& readL = lit->second;
+    const ASTNode& readR = rit->second;
+    if (readL[1] != r.lambda || readR[1] != r.lambda)
+      FatalError("array-equality: a witness read's index was rewritten "
+                 "away, although witness indices are protected from "
+                 "substitution",
+                 r.proxy);
+    r.canonicalLeft = readL[0];
+    r.canonicalRight = readR[0];
+  }
+}
+
+// Compute the cone: the set of array terms the abstracted equalities
+// can constrain. Seed with every record's canonical operands, close
+// downward through write bases and if-then-else branches, and upward
+// through the writes and if-then-elses stacked on cone arrays in the
+// formula (upward closure is what makes extensional reasoning
+// complete; compare rule U in section 7.3 of the paper).
+void ExtensionalityContext::computeProvisionalCone(
+    const ASTNode& root, std::set<ASTNode>& cone,
+    std::map<ASTNode, std::vector<ASTNode>>& parents,
+    std::vector<ASTNode>& coneITEs)
+{
+  cone.clear();
+  parents.clear();
+  coneITEs.clear();
+
+  ASTNodeSet visited;
+  collectDag(root, visited);
+  for (size_t i = 0; i < records.size(); i++)
+  {
+    collectDag(records[i].canonicalLeft, visited);
+    collectDag(records[i].canonicalRight, visited);
+  }
+
+  // parent adjacency over every array node in sight
+  std::map<ASTNode, std::vector<ASTNode>> upEdges; // child array -> parents
+  for (ASTNodeSet::const_iterator it = visited.begin(); it != visited.end();
+       ++it)
+  {
+    const ASTNode& n = *it;
+    if (n.GetKind() == WRITE)
+      upEdges[n[0]].push_back(n);
+    else if (n.GetKind() == ITE && isArrayType(n))
+    {
+      upEdges[n[1]].push_back(n);
+      upEdges[n[2]].push_back(n);
+    }
+  }
+
+  std::vector<ASTNode> todo;
+  for (size_t i = 0; i < records.size(); i++)
+  {
+    todo.push_back(records[i].canonicalLeft);
+    todo.push_back(records[i].canonicalRight);
+  }
+
+  while (!todo.empty())
+  {
+    ASTNode n = todo.back();
+    todo.pop_back();
+    if (!cone.insert(n).second)
+      continue;
+    // downward
+    if (n.GetKind() == WRITE)
+      todo.push_back(n[0]);
+    else if (n.GetKind() == ITE && isArrayType(n))
+    {
+      todo.push_back(n[1]);
+      todo.push_back(n[2]);
+    }
+    // upward through parents in the prepared formula
+    std::map<ASTNode, std::vector<ASTNode>>::const_iterator pit =
+        upEdges.find(n);
+    if (pit != upEdges.end())
+      for (size_t i = 0; i < pit->second.size(); i++)
+        todo.push_back(pit->second[i]);
+  }
+
+  for (std::set<ASTNode>::const_iterator it = cone.begin(); it != cone.end();
+       ++it)
+  {
+    if (it->GetKind() == ITE && isArrayType(*it))
+      coneITEs.push_back(*it);
+    if (it->GetKind() == WRITE)
+      parents[(*it)[0]].push_back(*it);
+  }
+  for (std::map<ASTNode, std::vector<ASTNode>>::iterator it = parents.begin();
+       it != parents.end(); ++it)
+    std::sort(it->second.begin(), it->second.end(), nodeNumLess);
+  std::sort(coneITEs.begin(), coneITEs.end(), nodeNumLess);
+}
+
+// Create or reuse a scalar name for a checker-visible term and queue
+// its defining constraint name = term. The defining equation is
+// conjoined before bit-blasting, so the name has SAT variables and a
+// lemma mentioning the term can be encoded over them.
+ASTNode ExtensionalityContext::freshName(const ASTNode& term,
+                                         ASTVec& namingConstraints)
+{
+  if (term.isConstant())
+    return term;
+  std::map<ASTNode, ASTNode>::const_iterator it = scalarNames.find(term);
+  if (it != scalarNames.end())
+    return it->second;
+  ASTNode name = bm->CreateFreshVariable(0, term.GetValueWidth(), "ext_name");
+  protectedSymbols.insert(name);
+  namingConstraints.push_back(
+      bm->defaultNodeFactory->CreateNode(EQ, name, term));
+  scalarNames[term] = name;
+  return name;
+}
+
+// Final preparation before STP's main array transformation:
+// recover canonical operands, compute the cone, eliminate array-valued
+// if-then-else inside it to a fixed point (paper section 4.1), then
+// freeze the cone, inventory its writes as accesses (section 11.4),
+// and give every compound write index/value a scalar name.
+ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
+{
+  assert(active());
+  ASTNode root = root_;
+  ASTVec extraConstraints;
+
+  std::set<ASTNode> cone;
+  std::map<ASTNode, std::vector<ASTNode>> parents;
+  std::vector<ASTNode> coneITEs;
+
+  // Operand recovery and if-then-else elimination interleave to a
+  // fixed point: eliminating an ITE creates fresh guarded equalities,
+  // whose operands may expose further ITEs.
+  while (true)
+  {
+    locateCanonicalOperands(root);
+    computeProvisionalCone(root, cone, parents, coneITEs);
+    if (coneITEs.empty())
+      break;
+
+    const size_t recordsBefore = records.size();
+    ASTNodeMap iteMap;
+    ASTVec newConstraints;
+    for (size_t i = 0; i < coneITEs.size(); i++)
+    {
+      const ASTNode& t = coneITEs[i];
+      // Skip ITEs nested inside another mapped ITE: the outer
+      // replacement re-exposes them on the next iteration.
+      const ASTNode cond = t[0];
+      const ASTNode thn = t[1];
+      const ASTNode els = t[2];
+      // Reuse the persistent replacement for this ITE node if an
+      // earlier solve already created one; the registry key dedup then
+      // also reuses its two equality records, so repeated solves add
+      // no records and no fresh symbols.
+      ASTNode d;
+      std::map<ASTNode, ASTNode>::const_iterator cached =
+          iteReplacements.find(t);
+      if (cached != iteReplacements.end())
+      {
+        d = cached->second;
+      }
+      else
+      {
+        d = bm->CreateFreshVariable(t.GetIndexWidth(), t.GetValueWidth(),
+                                    "ext_ite");
+        iteReplacements[t] = d;
+        possibleConeSymbols.insert(d);
+      }
+      // Guarded equality proxies through the same early-minting funnel
+      // (section 4.1): c -> d = thn ; not(c) -> d = els. The
+      // equalities go through the ordinary abstraction, and the
+      // guards are
+      // conjoined into every solve's root, cached replacement or not,
+      // so a record is never active without its defining implication.
+      ASTNode eqThen = bm->defaultNodeFactory->CreateNode(EQ, d, thn);
+      ASTNode eqElse = bm->defaultNodeFactory->CreateNode(EQ, d, els);
+      newConstraints.push_back(bm->defaultNodeFactory->CreateNode(
+          OR, bm->defaultNodeFactory->CreateNode(NOT, cond), eqThen));
+      newConstraints.push_back(
+          bm->defaultNodeFactory->CreateNode(OR, cond, eqElse));
+      iteMap[t] = d;
+    }
+
+    // Records minted for the guarded equalities need their witness
+    // bundles in the
+    // formula too; no further simplification passes run, so conjoining
+    // them here is equivalent to the start-of-solve conjunction.
+    for (size_t i = recordsBefore; i < records.size(); i++)
+    {
+      newConstraints.push_back(records[i].anchorL);
+      newConstraints.push_back(records[i].anchorR);
+      newConstraints.push_back(records[i].witnessClause);
+    }
+
+    ASTNodeMap cache;
+    root = SubstitutionMap::replace(root, iteMap, cache,
+                                    bm->defaultNodeFactory);
+    for (size_t i = 0; i < newConstraints.size(); i++)
+    {
+      ASTNodeMap cache2;
+      newConstraints[i] = SubstitutionMap::replace(newConstraints[i], iteMap,
+                                                   cache2,
+                                                   bm->defaultNodeFactory);
+    }
+    root = bm->defaultNodeFactory->CreateNode(
+        AND, root, ASTVec(newConstraints.begin(), newConstraints.end()));
+  }
+
+  // No array-valued if-then-else may remain inside the cone.
+  assert(coneITEs.empty());
+
+  // Freeze the cone; it must not change for the rest of the solve.
+  coneArrays = cone;
+  coneWriteParents = parents;
+
+  // Inventory the cone's writes as accesses (a write is treated as a
+  // read of its own index yielding the written value, paper section
+  // 11.4), and give their indexes and values scalar names: writes occur
+  // only inside equality operands and witness reads, so their scalar
+  // children would otherwise never reach the bit-blaster.
+  std::vector<ASTNode> writeNodes;
+  for (std::set<ASTNode>::const_iterator it = cone.begin(); it != cone.end();
+       ++it)
+    if (it->GetKind() == WRITE)
+      writeNodes.push_back(*it);
+  std::sort(writeNodes.begin(), writeNodes.end(), nodeNumLess);
+
+  for (size_t i = 0; i < writeNodes.size(); i++)
+  {
+    const ASTNode& w = writeNodes[i];
+    ExtWriteNode info;
+    info.write = w;
+    info.base = w[0];
+    info.indexTerm = w[1];
+    info.indexName = freshName(w[1], extraConstraints);
+    coneWrites[w] = info;
+    // write value names are needed when the access list is built
+    freshName(w[2], extraConstraints);
+  }
+
+  // Equality edges over canonical operands + witness obligations.
+  for (size_t i = 0; i < records.size(); i++)
+  {
+    const Record& r = records[i];
+    ExtEqEdge e;
+    e.record = r.id;
+    e.left = r.canonicalLeft;
+    e.right = r.canonicalRight;
+    e.proxy = r.proxy;
+    eqEdges.push_back(e);
+
+    ExtWitness w;
+    w.record = r.id;
+    w.proxy = r.proxy;
+    w.index = r.lambda;
+    w.leftValue = r.nameL;
+    w.rightValue = r.nameR;
+    witnessObls.push_back(w);
+  }
+
+  // adjacency, sorted by (record, other endpoint) per source
+  {
+    std::map<ASTNode, std::vector<std::pair<std::pair<size_t, unsigned>,
+                                            size_t>>> adj;
+    for (size_t i = 0; i < eqEdges.size(); i++)
+    {
+      const ExtEqEdge& e = eqEdges[i];
+      adj[e.left].push_back(std::make_pair(
+          std::make_pair(e.record, e.right.GetNodeNum()), i));
+      if (!(e.left == e.right))
+        adj[e.right].push_back(std::make_pair(
+            std::make_pair(e.record, e.left.GetNodeNum()), i));
+    }
+    for (std::map<ASTNode,
+                  std::vector<std::pair<std::pair<size_t, unsigned>,
+                                        size_t>>>::iterator it = adj.begin();
+         it != adj.end(); ++it)
+    {
+      std::sort(it->second.begin(), it->second.end());
+      std::vector<size_t>& out = eqAdjacency[it->first];
+      for (size_t i = 0; i < it->second.size(); i++)
+        out.push_back(it->second[i].second);
+    }
+  }
+
+  coneIsFrozen = true;
+
+  if (extraConstraints.empty())
+    return root;
+  return bm->defaultNodeFactory->CreateNode(AND, root, extraConstraints);
+}
+
+// After the main ArrayTransformer pass: the read inventory (ordinary
+// cone reads plus witness reads) now carries its abstraction and index
+// symbols; bind everything into the immutable checker graph.
+void ExtensionalityContext::bindAfterTransform(ArrayTransformer* at)
+{
+  assert(coneIsFrozen);
+
+  graph = ExtGraph();
+
+  // reads, deterministically ordered by (array, index) node numbers
+  struct ReadRow
+  {
+    ASTNode array;
+    ASTNode index;
+    ASTNode symbol;
+    ASTNode indexSymbol;
+    bool operator<(const ReadRow& o) const
+    {
+      if (array.GetNodeNum() != o.array.GetNodeNum())
+        return array.GetNodeNum() < o.array.GetNodeNum();
+      return index.GetNodeNum() < o.index.GetNodeNum();
+    }
+  };
+  std::vector<ReadRow> reads;
+  for (ArrayTransformer::ArrType::const_iterator it =
+           at->arrayToIndexToRead.begin();
+       it != at->arrayToIndexToRead.end(); ++it)
+  {
+    if (!inCone(it->first))
+      continue;
+    for (std::map<ASTNode, ArrayTransformer::ArrayRead>::const_iterator it2 =
+             it->second.begin();
+         it2 != it->second.end(); ++it2)
+    {
+      ReadRow row;
+      row.array = it->first;
+      row.index = it2->first;
+      row.symbol = it2->second.symbol;
+      row.indexSymbol = it2->second.index_symbol;
+      reads.push_back(row);
+    }
+  }
+  std::sort(reads.begin(), reads.end());
+
+  for (size_t i = 0; i < reads.size(); i++)
+  {
+    const ReadRow& row = reads[i];
+    ExtAccess a;
+    a.id = graph.accesses.size();
+    a.isWrite = false;
+    a.site = row.array;
+    a.indexTerm = row.index;
+    NodeFactory* hf = bm->hashingNodeFactory;
+    a.valueTerm = hf->CreateTerm(READ, row.array.GetValueWidth(), row.array,
+                                 row.index);
+    a.indexName = row.indexSymbol.IsNull() ? row.index : row.indexSymbol;
+    a.valueName = row.symbol;
+    if (!(a.indexName.GetKind() == SYMBOL || a.indexName.isConstant()))
+      FatalError("array-equality: a read index inside the cone has no "
+                 "bit-blasted scalar name to encode lemmas over",
+                 row.index);
+    graph.accesses.push_back(a);
+  }
+
+  // writes, deterministically ordered by node number
+  std::vector<ASTNode> writeNodes;
+  for (std::map<ASTNode, ExtWriteNode>::const_iterator it = coneWrites.begin();
+       it != coneWrites.end(); ++it)
+    writeNodes.push_back(it->first);
+  std::sort(writeNodes.begin(), writeNodes.end(), nodeNumLess);
+  for (size_t i = 0; i < writeNodes.size(); i++)
+  {
+    const ExtWriteNode& info = coneWrites[writeNodes[i]];
+    ExtAccess a;
+    a.id = graph.accesses.size();
+    a.isWrite = true;
+    a.site = info.write;
+    a.indexTerm = info.indexTerm;
+    a.valueTerm = info.write[2];
+    a.indexName = info.indexName;
+    std::map<ASTNode, ASTNode>::const_iterator nit =
+        scalarNames.find(info.write[2]);
+    a.valueName = info.write[2].isConstant()
+                      ? info.write[2]
+                      : (nit != scalarNames.end() ? nit->second : ASTNode());
+    if (a.valueName.IsNull())
+      FatalError("array-equality: a write value inside the cone has no "
+                 "bit-blasted scalar name to encode lemmas over",
+                 info.write);
+    graph.accesses.push_back(a);
+  }
+
+  graph.writes = coneWrites;
+  graph.writeParents = coneWriteParents;
+  graph.eqEdges = eqEdges;
+  graph.eqAdjacency = eqAdjacency;
+  graph.witnesses = witnessObls;
+  graphBound = true;
+}
+
+namespace
+{
+// The candidate assignment sigma, read out of STP's materialized
+// counterexample.
+class CEModelView : public ExtModelView
+{
+  AbsRefine_CounterExample* ce;
+
+public:
+  explicit CEModelView(AbsRefine_CounterExample* ce_) : ce(ce_) {}
+
+  virtual ASTNode bvValue(const ASTNode& term)
+  {
+    ASTNode v = ce->ModelValueOfTerm(term);
+    if (v.IsNull() || !v.isConstant())
+      FatalError("array-equality: the candidate assignment has no "
+                 "concrete value for a term the consistency checker "
+                 "needs",
+                 term);
+    return v;
+  }
+
+  virtual bool boolValue(const ASTNode& term)
+  {
+    ASTNode v = ce->ModelValueOfFormula(term);
+    if (v.IsNull() || !(v.GetKind() == TRUE || v.GetKind() == FALSE))
+      FatalError("array-equality: the candidate assignment has no "
+                 "Boolean value for a term the consistency checker "
+                 "needs",
+                 term);
+    return v.GetKind() == TRUE;
+  }
+};
+} // namespace
+
+ExtensionalityContext::CertificationAction
+ExtensionalityContext::decideCertification(bool ordinaryResult,
+                                           bool registryNonempty,
+                                           CandidateOutcome ext)
+{
+  if (!registryNonempty)
+  {
+    if (!(ext == EXT_SKIPPED || ext == EXT_CONSISTENT))
+      return INTERNAL_ERROR;
+    return ordinaryResult ? RETURN_SAT : RUN_HOST_REFINEMENT;
+  }
+  if (ext == EXT_CONFLICT)
+    return ADD_EXT_LEMMA;
+  if (ext == EXT_WITNESS_ERROR)
+    return INTERNAL_ERROR;
+  if (ext != EXT_CONSISTENT)
+    return INTERNAL_ERROR;
+  return ordinaryResult ? RETURN_SAT : RUN_HOST_REFINEMENT;
+}
+
+ExtensionalityContext::CandidateOutcome
+ExtensionalityContext::checkCandidate(AbsRefine_CounterExample* ce)
+{
+  assert(graphBound);
+  pendingLemmaValid = false;
+  CEModelView view(ce);
+  ExtCheckResult res = ExtChecker::check(graph, view, false);
+  switch (res.status)
+  {
+    case ExtCheckResult::CONSISTENT:
+      lastObserved = res.observed;
+      return EXT_CONSISTENT;
+    case ExtCheckResult::CONFLICT:
+      pendingLemma = res.conflict;
+      pendingLemmaValid = true;
+      return EXT_CONFLICT;
+    case ExtCheckResult::WITNESS_VIOLATION:
+    default:
+      return EXT_WITNESS_ERROR;
+  }
+}
+
+// Encode the pending lemma into the persistent incremental SAT solver
+// as the clause
+//   NOT p1 OR ... OR NOT pk OR conclusion
+// over reified equality literals of already-encoded scalar symbols.
+// This is the abstraction alpha of the theory lemma (paper section 8);
+// adding it as clauses over the existing CNF is what makes each
+// refinement iteration incremental -- no new word-level formula is
+// ever handed back to the bit-blaster.
+// A lemma leaf is legal only as a constant or as a SYMBOL with a
+// stable, completely encoded SAT-variable vector. Anything else is an
+// internal error, never a reason to allocate fresh SAT variables in
+// the middle of refinement: a freshly invented variable would carry no
+// connection to the term the candidate assignment was checked against,
+// so the resulting clause could fail to rule the candidate out.
+const char*
+ExtensionalityContext::checkPreencodedBV(const ASTNode& n,
+                                         const ToSATBase::ASTNodeToSATVar& satVar)
+{
+  if (n.isConstant())
+    return NULL;
+  if (n.GetKind() != SYMBOL)
+    return "array-equality: lemma leaf is neither a constant nor a "
+           "variable";
+  ToSATBase::ASTNodeToSATVar::const_iterator it = satVar.find(n);
+  if (it == satVar.end())
+    return "array-equality: lemma leaf was never bit-blasted (it has no "
+           "SAT-variable vector)";
+  if (it->second.size() != n.GetValueWidth())
+    return "array-equality: lemma leaf's SAT-variable vector has the "
+           "wrong width";
+  for (size_t i = 0; i < it->second.size(); i++)
+    if (it->second[i] == ~((unsigned)0))
+      return "array-equality: lemma leaf has an unencoded SAT-variable "
+             "bit";
+  return NULL;
+}
+
+void ExtensionalityContext::encodePendingLemma(SATSolver& solver,
+                                               ToSATBase* tosat)
+{
+  assert(pendingLemmaValid);
+  ToSATBase::ASTNodeToSATVar& satVar = tosat->SATVar_to_SymbolIndexMap();
+
+  // Validate every bit-vector leaf of the lemma before any SAT
+  // mutation, so a violation is a localized internal error and
+  // getEquals below can never fall into its fresh-variable fallback.
+  {
+    std::vector<ASTNode> leaves;
+    for (size_t i = 0; i < pendingLemma.abstractPremise.size(); i++)
+    {
+      const ExtLemmaAtom& atom = pendingLemma.abstractPremise[i];
+      if (atom.op == ExtLemmaAtom::BV_EQ || atom.op == ExtLemmaAtom::BV_NE)
+      {
+        leaves.push_back(atom.a);
+        leaves.push_back(atom.b);
+      }
+    }
+    leaves.push_back(pendingLemma.abstractConclusionA);
+    leaves.push_back(pendingLemma.abstractConclusionB);
+    for (size_t i = 0; i < leaves.size(); i++)
+    {
+      const char* reason = checkPreencodedBV(leaves[i], satVar);
+      if (reason != NULL)
+        FatalError(reason, leaves[i]);
+    }
+  }
+
+  SATSolver::vec_literals clause;
+
+  // Returns -1 for an atom decided by constants (the caller drops the
+  // literal; the lemma self-check already fixed its polarity), else the
+  // reified equality variable q with q <-> (a = b), full equivalence in
+  // both directions.
+  struct EqLit
+  {
+    ExtensionalityContext* self;
+    SATSolver& solver;
+    ToSATBase::ASTNodeToSATVar& satVar;
+    EqLit(ExtensionalityContext* s, SATSolver& sol,
+          ToSATBase::ASTNodeToSATVar& sv)
+        : self(s), solver(sol), satVar(sv)
+    {
+    }
+    int operator()(const ASTNode& a, const ASTNode& b)
+    {
+      if (a.isConstant() && b.isConstant())
+        return -1;
+      const unsigned na = a.GetNodeNum(), nb = b.GetNodeNum();
+      const std::pair<unsigned, unsigned> key(std::min(na, nb),
+                                              std::max(na, nb));
+      std::map<std::pair<unsigned, unsigned>, int>::const_iterator it =
+          self->eqLitCache.find(key);
+      if (it != self->eqLitCache.end())
+        return it->second;
+      const int q = getEquals(solver, a, b, satVar, BOTH);
+      self->eqLitCache[key] = q;
+      return q;
+    }
+  } eqLit(this, solver, satVar);
+
+  for (size_t i = 0; i < pendingLemma.abstractPremise.size(); i++)
+  {
+    const ExtLemmaAtom& atom = pendingLemma.abstractPremise[i];
+    if (atom.op == ExtLemmaAtom::BV_EQ || atom.op == ExtLemmaAtom::BV_NE)
+    {
+      const int q = eqLit(atom.a, atom.b);
+      if (q < 0)
+        continue; // constant-decided premise, necessarily true; drop
+      // premise literal appears negated in the final clause
+      clause.push(SATSolver::mkLit(q, atom.op == ExtLemmaAtom::BV_EQ));
+    }
+    else
+    {
+      assert(atom.op == ExtLemmaAtom::BOOL_LIT);
+      ToSATBase::ASTNodeToSATVar::const_iterator vit =
+          satVar.find(atom.boolTerm);
+      if (vit == satVar.end() || vit->second.size() != 1 ||
+          vit->second[0] == ~((unsigned)0))
+        FatalError("array-equality: an equality abstraction variable "
+                   "was never bit-blasted, so the lemma cannot be "
+                   "encoded",
+                   atom.boolTerm);
+      clause.push(SATSolver::mkLit(vit->second[0], true));
+    }
+  }
+
+  {
+    const int q =
+        eqLit(pendingLemma.abstractConclusionA, pendingLemma.abstractConclusionB);
+    if (q >= 0)
+      clause.push(SATSolver::mkLit(q, false));
+    // A constant-decided conclusion is necessarily false (the lemma
+    // self-check verified it); the clause then consists of the negated
+    // premises alone.
+  }
+
+  if (clause.size() == 0)
+    FatalError("array-equality: refinement produced an empty clause "
+               "(the candidate should have been unsatisfiable already)");
+
+  solver.addClause(clause);
+  lemmasEmitted++;
+  pendingLemmaValid = false;
+}
+
+// Publish the conflict-free observed values of every cone array
+// (symbols, writes, and the fresh arrays standing for if-then-else
+// alike) into the counterexample map, so model evaluation, the model
+// APIs, and the printers see the array contents certified by the
+// consistency check. Indices with no observation default to zero at
+// lookup/print time.
+void ExtensionalityContext::publishObservations(AbsRefine_CounterExample* ce)
+{
+  for (std::map<ASTNode,
+                std::vector<std::pair<ASTNode, ASTNode>>>::const_iterator it =
+           lastObserved.begin();
+       it != lastObserved.end(); ++it)
+  {
+    const ASTNode& array = it->first;
+    NodeFactory* hf = bm->hashingNodeFactory;
+    for (size_t i = 0; i < it->second.size(); i++)
+    {
+      const ASTNode key = hf->CreateTerm(READ, array.GetValueWidth(), array,
+                                         it->second[i].first);
+      ce->InsertIntoCounterExampleMap(key, it->second[i].second);
+    }
+  }
 }
 
 } // namespace stp

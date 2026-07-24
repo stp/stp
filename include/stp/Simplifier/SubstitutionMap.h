@@ -61,6 +61,12 @@ class DLL_PUBLIC SubstitutionMap
                     std::set<ASTNode>& visited);
   bool loops(const ASTNode& n0, const ASTNode& n1);
 
+  // Array equality: refuse to orient a substitution that would delete
+  // a definition the array decision procedure depends on (an equality
+  // abstraction variable, witness symbol, or lemma-leaf name), or a
+  // read-equals-constant equation over an array it may reason about.
+  bool extensionalityProtected(const ASTNode& e0, const ASTNode& e1) const;
+
   size_t substitutionsLastApplied;
   VariablesInExpression vars;
 
@@ -125,6 +131,9 @@ public:
   {
     ASTNode var = (BVEXTRACT == key.GetKind()) ? key[0] : key;
 
+    if (extensionalityProtected(var, value))
+      return false;
+
     if (var.GetKind() == SYMBOL && loops(var, value))
       return false;
 
@@ -154,6 +163,8 @@ public:
   {
     assert(e0.GetKind() == SYMBOL);
     assert(!InsideSubstitutionMap(e0) && "e0 MUST NOT be in the SolverMap");
+    if (extensionalityProtected(e0, e1))
+      return false;
     (*SolverMap)[e0] = e1;
     return true;
   }
