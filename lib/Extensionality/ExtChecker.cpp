@@ -1,0 +1,492 @@
+/********************************************************************
+ * AUTHORS: Andrew V. Jones
+ *
+ * BEGIN DATE: July, 2026
+ *
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+********************************************************************/
+
+// The consistency checking and lemma generation algorithm of
+// Brummayer & Biere, "Lemmas on Demand for the Extensional Theory of
+// Arrays", JSAT 6 (2010), sections 7 and 8. See ExtChecker.h for an
+// overview of the rules and data model.
+
+#include "stp/Extensionality/ExtChecker.h"
+#include <algorithm>
+
+namespace stp
+{
+
+namespace
+{
+
+struct PathRecord
+{
+  ASTNode destination;
+  size_t access;
+  std::vector<ExtGuard> guards;
+  const char* rule;
+};
+
+typedef std::pair<ASTNode, size_t> PairKey;
+
+struct CheckerState
+{
+  const ExtGraph& graph;
+  ExtModelView& model;
+  const bool recordEvents;
+
+  std::map<PairKey, PathRecord> paths;
+  std::map<ASTNode, std::vector<size_t>> rho; // insertion order preserved
+  std::deque<PairKey> worklist;
+  ExtCheckResult result;
+  int seq;
+  bool conflictFound;
+
+  CheckerState(const ExtGraph& g, ExtModelView& m, bool ev)
+      : graph(g), model(m), recordEvents(ev), seq(0), conflictFound(false)
+  {
+  }
+
+  ASTNode accessIndex(size_t id)
+  {
+    return model.bvValue(graph.accesses[id].indexName);
+  }
+
+  ASTNode accessValue(size_t id)
+  {
+    return model.bvValue(graph.accesses[id].valueName);
+  }
+
+  void event(ExtEvent::Kind kind, const char* rule, const ASTNode& source,
+             const ASTNode& destination, size_t access,
+             const ASTNode& indexValue, const ASTNode& accessValue)
+  {
+    if (!recordEvents)
+    {
+      seq++;
+      return;
+    }
+    ExtEvent e;
+    e.seq = seq++;
+    e.kind = kind;
+    e.rule = rule;
+    e.source = source;
+    e.destination = destination;
+    e.access = access;
+    e.indexValue = indexValue;
+    e.accessValue = accessValue;
+    result.events.push_back(e);
+  }
+
+  // Congruence checking (rule C) runs on the fly, at insertion time,
+  // as suggested in section 11.2 of the paper; insertion is
+  // first-path-wins, so each (array, access) pair is processed once.
+  // Returns true iff a conflict was found (stored in result.conflict,
+  // without the lemmas, which buildLemmas adds).
+  bool insert(const ASTNode& destination, size_t accessId,
+              const std::vector<ExtGuard>& guards, const char* rule,
+              const ASTNode& source)
+  {
+    const PairKey key(destination, accessId);
+    if (paths.find(key) != paths.end())
+    {
+      result.stats["skipped_seen"]++;
+      event(ExtEvent::SKIP_SEEN, rule, source, destination, accessId,
+            ASTNode(), ASTNode());
+      return false;
+    }
+
+    const ASTNode idx = accessIndex(accessId);
+    const ASTNode val = accessValue(accessId);
+
+    const std::vector<size_t>& present = rho[destination];
+    for (size_t i = 0; i < present.size(); i++)
+    {
+      const size_t otherId = present[i];
+      if (otherId == accessId)
+        continue;
+      if (accessIndex(otherId) == idx && accessValue(otherId) != val)
+      {
+        ExtConflict& c = result.conflict;
+        c.commonArray = destination;
+        c.leftAccess = otherId;
+        c.rightAccess = accessId;
+        c.indexValue = idx;
+        c.leftValue = accessValue(otherId);
+        c.rightValue = val;
+        c.leftGuards = paths[PairKey(destination, otherId)].guards;
+        c.rightGuards = guards;
+        result.stats["conflicts"]++;
+        event(ExtEvent::CONFLICT, rule, source, destination, accessId, idx,
+              val);
+        conflictFound = true;
+        return true;
+      }
+    }
+
+    PathRecord pr;
+    pr.destination = destination;
+    pr.access = accessId;
+    pr.guards = guards;
+    pr.rule = rule;
+    paths[key] = pr;
+    rho[destination].push_back(accessId);
+    worklist.push_back(key);
+    result.stats["insertions"]++;
+
+    ExtEvent::Kind kind;
+    if (rule[0] == 'I' && rule[1] == '_')
+    {
+      result.stats["seeds"]++;
+      kind = ExtEvent::SEED;
+    }
+    else
+    {
+      result.stats["propagations"]++;
+      result.stats[std::string("rule_") + rule]++;
+      kind = ExtEvent::PROPAGATE;
+    }
+    event(kind, rule, source, destination, accessId, idx, val);
+    return false;
+  }
+};
+
+// Deterministic total order for premise atoms: rank by
+// atom op (bv_eq < bv_ne < array_eq < bool_lit, mirroring the
+// reference's rank table), then by operand node numbers.
+bool atomLess(const ExtLemmaAtom& x, const ExtLemmaAtom& y)
+{
+  if (x.op != y.op)
+    return x.op < y.op;
+  unsigned xa = x.a.IsNull() ? 0 : x.a.GetNodeNum();
+  unsigned ya = y.a.IsNull() ? 0 : y.a.GetNodeNum();
+  if (xa != ya)
+    return xa < ya;
+  unsigned xb = x.b.IsNull() ? 0 : x.b.GetNodeNum();
+  unsigned yb = y.b.IsNull() ? 0 : y.b.GetNodeNum();
+  if (xb != yb)
+    return xb < yb;
+  unsigned xt = x.boolTerm.IsNull() ? 0 : x.boolTerm.GetNodeNum();
+  unsigned yt = y.boolTerm.IsNull() ? 0 : y.boolTerm.GetNodeNum();
+  return xt < yt;
+}
+
+// Canonicalize a premise: drop reflexive equalities (an index compared
+// with itself contributes nothing), drop exact duplicate atoms, and
+// sort deterministically. No semantic subsumption is attempted (the
+// paper discusses stronger minimization in section 11.1).
+std::vector<ExtLemmaAtom> canonicalAtoms(const std::vector<ExtLemmaAtom>& in)
+{
+  std::vector<ExtLemmaAtom> out;
+  for (size_t i = 0; i < in.size(); i++)
+  {
+    const ExtLemmaAtom& a = in[i];
+    if (a.op == ExtLemmaAtom::BV_EQ && a.a == a.b)
+      continue;
+    bool dup = false;
+    for (size_t j = 0; j < out.size(); j++)
+      if (out[j] == a)
+      {
+        dup = true;
+        break;
+      }
+    if (!dup)
+      out.push_back(a);
+  }
+  std::sort(out.begin(), out.end(), atomLess);
+  return out;
+}
+
+void guardsToAtoms(const std::vector<ExtGuard>& guards, bool abstractLayer,
+                   std::vector<ExtLemmaAtom>& out)
+{
+  for (size_t i = 0; i < guards.size(); i++)
+  {
+    const ExtGuard& g = guards[i];
+    ExtLemmaAtom a;
+    if (g.kind == ExtGuard::INDEX_NE)
+    {
+      a.op = ExtLemmaAtom::BV_NE;
+      a.a = abstractLayer ? g.absA : g.theoryA;
+      a.b = abstractLayer ? g.absB : g.theoryB;
+      a.eqRecord = 0;
+    }
+    else if (abstractLayer)
+    {
+      a.op = ExtLemmaAtom::BOOL_LIT;
+      a.boolTerm = g.proxy;
+      a.eqRecord = g.eqRecord;
+    }
+    else
+    {
+      a.op = ExtLemmaAtom::ARRAY_EQ;
+      a.a = g.eqLeft;
+      a.b = g.eqRight;
+      a.eqRecord = g.eqRecord;
+    }
+    out.push_back(a);
+  }
+}
+
+// Self-check: a lemma is only worth adding if the candidate that
+// produced it falsifies it — every premise atom must be true and the
+// conclusion false under sigma. Otherwise adding it could not rule the
+// candidate out and refinement might not terminate; abort loudly.
+void validateAbstractLemma(const ExtConflict& c, ExtModelView& model)
+{
+  for (size_t i = 0; i < c.abstractPremise.size(); i++)
+  {
+    const ExtLemmaAtom& a = c.abstractPremise[i];
+    bool holds;
+    if (a.op == ExtLemmaAtom::BV_EQ)
+      holds = model.bvValue(a.a) == model.bvValue(a.b);
+    else if (a.op == ExtLemmaAtom::BV_NE)
+      holds = model.bvValue(a.a) != model.bvValue(a.b);
+    else if (a.op == ExtLemmaAtom::BOOL_LIT)
+      holds = model.boolValue(a.boolTerm);
+    else
+      holds = false; // ARRAY_EQ can't appear in the abstract lemma
+    if (!holds)
+      FatalError("array-equality: generated lemma premise is not true "
+                 "in the candidate assignment that produced it");
+  }
+  if (model.bvValue(c.abstractConclusionA) ==
+      model.bvValue(c.abstractConclusionB))
+    FatalError("array-equality: generated lemma is not false in the "
+               "candidate assignment that produced it");
+}
+
+// Build the lemma of paper section 8 for a conflict between accesses
+// x and y at common array d:
+//
+//   index(x) = index(y)
+//     and the write-index disequalities of both propagation paths
+//     and the array equalities crossed by both paths
+//   =>  value(x) = value(y)
+//
+// built once over the original terms (the theory lemma) and once over
+// abstraction variables and scalar names (the refinement actually
+// encoded into the SAT solver).
+void buildLemmas(ExtConflict& c, const ExtGraph& graph, ExtModelView& model)
+{
+  const ExtAccess& left = graph.accesses[c.leftAccess];
+  const ExtAccess& right = graph.accesses[c.rightAccess];
+
+  {
+    std::vector<ExtLemmaAtom> atoms;
+    ExtLemmaAtom indexEq;
+    indexEq.op = ExtLemmaAtom::BV_EQ;
+    indexEq.a = left.indexName;
+    indexEq.b = right.indexName;
+    indexEq.eqRecord = 0;
+    atoms.push_back(indexEq);
+    guardsToAtoms(c.leftGuards, true, atoms);
+    guardsToAtoms(c.rightGuards, true, atoms);
+    c.abstractPremise = canonicalAtoms(atoms);
+    c.abstractConclusionA = left.valueName;
+    c.abstractConclusionB = right.valueName;
+  }
+
+  {
+    std::vector<ExtLemmaAtom> atoms;
+    ExtLemmaAtom indexEq;
+    indexEq.op = ExtLemmaAtom::BV_EQ;
+    indexEq.a = left.indexTerm;
+    indexEq.b = right.indexTerm;
+    indexEq.eqRecord = 0;
+    atoms.push_back(indexEq);
+    guardsToAtoms(c.leftGuards, false, atoms);
+    guardsToAtoms(c.rightGuards, false, atoms);
+    c.theoryPremise = canonicalAtoms(atoms);
+    c.theoryConclusionA = left.valueTerm;
+    c.theoryConclusionB = right.valueTerm;
+  }
+
+  validateAbstractLemma(c, model);
+}
+
+} // namespace
+
+ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
+                                 bool recordEvents)
+{
+  CheckerState st(graph, model, recordEvents);
+
+  // Rule I: seed every access at its own array, with an empty
+  // propagation path, in the stable access order.
+  for (size_t i = 0; i < graph.accesses.size(); i++)
+  {
+    const ExtAccess& a = graph.accesses[i];
+    const char* rule = a.isWrite ? "I_WRITE" : "I_READ";
+    if (st.insert(a.site, a.id, std::vector<ExtGuard>(), rule, ASTNode()))
+    {
+      buildLemmas(st.result.conflict, graph, model);
+      st.result.status = ExtCheckResult::CONFLICT;
+      return st.result;
+    }
+  }
+
+  // Fixed-point computation over a FIFO work list (the "working queue
+  // that manages future read propagations" of section 7.3); for each
+  // pair the edges fire in the order D, U, then R/L.
+  while (!st.worklist.empty())
+  {
+    const PairKey cur = st.worklist.front();
+    st.worklist.pop_front();
+    const ASTNode source = cur.first;
+    const size_t accessId = cur.second;
+    // Copy: st.paths may rehash on insertion while we iterate edges.
+    const PathRecord sourcePath = st.paths[cur];
+    const ASTNode accessIdxVal = st.accessIndex(accessId);
+
+    bool conflict = false;
+
+    // Rule D: propagate down through a write whose index differs
+    // from the access index under sigma (axiom A3).
+    std::map<ASTNode, ExtWriteNode>::const_iterator wit =
+        graph.writes.find(source);
+    if (wit != graph.writes.end())
+    {
+      const ExtWriteNode& w = wit->second;
+      if (accessIdxVal != model.bvValue(w.indexName))
+      {
+        ExtGuard g;
+        g.kind = ExtGuard::INDEX_NE;
+        g.theoryA = graph.accesses[accessId].indexTerm;
+        g.theoryB = w.indexTerm;
+        g.absA = graph.accesses[accessId].indexName;
+        g.absB = w.indexName;
+        g.eqRecord = 0;
+        std::vector<ExtGuard> chi2 = sourcePath.guards;
+        chi2.push_back(g);
+        conflict = st.insert(w.base, accessId, chi2, "D_WRITE", source);
+      }
+    }
+
+    // Rule U: propagate up over every write on top of this array
+    // whose index differs from the access index under sigma. Upward
+    // propagation is what makes extensional reasoning complete
+    // (section 7.3).
+    if (!conflict)
+    {
+      std::map<ASTNode, std::vector<ASTNode>>::const_iterator pit =
+          graph.writeParents.find(source);
+      if (pit != graph.writeParents.end())
+      {
+        const std::vector<ASTNode>& parents = pit->second;
+        for (size_t i = 0; i < parents.size() && !conflict; i++)
+        {
+          const ExtWriteNode& w = graph.writes.find(parents[i])->second;
+          if (accessIdxVal != model.bvValue(w.indexName))
+          {
+            ExtGuard g;
+            g.kind = ExtGuard::INDEX_NE;
+            g.theoryA = graph.accesses[accessId].indexTerm;
+            g.theoryB = w.indexTerm;
+            g.absA = graph.accesses[accessId].indexName;
+            g.absB = w.indexName;
+            g.eqRecord = 0;
+            std::vector<ExtGuard> chi2 = sourcePath.guards;
+            chi2.push_back(g);
+            conflict = st.insert(w.write, accessId, chi2, "U_WRITE", source);
+          }
+        }
+      }
+    }
+
+    // Rules R and L: propagate across array equalities, in both
+    // directions, but only when sigma assigns the equality's Boolean
+    // abstraction variable true.
+    if (!conflict)
+    {
+      std::map<ASTNode, std::vector<size_t>>::const_iterator eit =
+          graph.eqAdjacency.find(source);
+      if (eit != graph.eqAdjacency.end())
+      {
+        const std::vector<size_t>& adj = eit->second;
+        for (size_t i = 0; i < adj.size() && !conflict; i++)
+        {
+          const ExtEqEdge& e = graph.eqEdges[adj[i]];
+          if (!model.boolValue(e.proxy))
+            continue;
+          const bool fromLeft = (e.left == source);
+          const ASTNode destination = fromLeft ? e.right : e.left;
+          const char* rule = fromLeft ? "R_EQ" : "L_EQ";
+          ExtGuard g;
+          g.kind = ExtGuard::EQ_PROXY;
+          g.proxy = e.proxy;
+          g.eqLeft = e.left;
+          g.eqRight = e.right;
+          g.eqRecord = e.record;
+          std::vector<ExtGuard> chi2 = sourcePath.guards;
+          chi2.push_back(g);
+          conflict = st.insert(destination, accessId, chi2, rule, source);
+        }
+      }
+    }
+
+    if (conflict)
+    {
+      buildLemmas(st.result.conflict, graph, model);
+      st.result.status = ExtCheckResult::CONFLICT;
+      return st.result;
+    }
+  }
+
+  // Verify the witnesses of preprocessing step 1, in record order: a
+  // false array equality must differ at its witness index lambda.
+  for (size_t i = 0; i < graph.witnesses.size(); i++)
+  {
+    const ExtWitness& w = graph.witnesses[i];
+    const bool proxyVal = model.boolValue(w.proxy);
+    const ASTNode leftVal = model.bvValue(w.leftValue);
+    const ASTNode rightVal = model.bvValue(w.rightValue);
+    st.event(ExtEvent::WITNESS_CHECK, "WITNESS", ASTNode(), ASTNode(),
+             w.record, model.bvValue(w.index), leftVal);
+    st.result.stats["witness_checks"]++;
+    if (!proxyVal && leftVal == rightVal)
+    {
+      st.result.status = ExtCheckResult::WITNESS_VIOLATION;
+      st.result.violatedRecord = w.record;
+      return st.result;
+    }
+  }
+
+  // Conflict-free: export the observed (index, value) pairs of every
+  // array; rho's fixed point defines the completed array contents
+  // (unobserved indices default to zero when a model is printed).
+  for (std::map<ASTNode, std::vector<size_t>>::const_iterator it =
+           st.rho.begin();
+       it != st.rho.end(); ++it)
+  {
+    std::vector<std::pair<ASTNode, ASTNode>>& obs =
+        st.result.observed[it->first];
+    for (size_t i = 0; i < it->second.size(); i++)
+    {
+      const size_t id = it->second[i];
+      obs.push_back(std::make_pair(st.accessIndex(id), st.accessValue(id)));
+    }
+  }
+
+  st.result.status = ExtCheckResult::CONSISTENT;
+  return st.result;
+}
+
+} // namespace stp

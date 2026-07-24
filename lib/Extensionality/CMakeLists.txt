@@ -19,6 +19,7 @@
 # THE SOFTWARE.
 
 add_library(extensionality OBJECT
+    ExtChecker.cpp
     ExtensionalityContext.cpp
 )
 
