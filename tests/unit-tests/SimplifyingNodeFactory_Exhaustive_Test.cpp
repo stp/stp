@@ -501,6 +501,27 @@ TEST(SimplifyingNodeFactory_Exhaustive, sgt_concat_shared_head)
   EXPECT_EQ(c.nf->CreateNode(BVSGT, l, r), c.nf->CreateNode(BVGT, x, y));
 }
 
+/* x sgt smallest --> NOT(x == smallest) and largest sgt x --> NOT(largest == x):
+   nothing is below the most-negative value or above the most-positive value */
+TEST(SimplifyingNodeFactory_Exhaustive, sgt_signed_boundaries)
+{
+  Context c;
+  for (unsigned w : {1u, 2u, 4u})
+  {
+    ASTNode x = c.bv(w);
+    ASTNode smallest = c.konst(1u << (w - 1), w);       // 100...0
+    ASTNode largest = c.konst((1u << (w - 1)) - 1, w);  // 011...1
+
+    c.checkNode(BVSGT, {x, smallest});
+    EXPECT_EQ(c.nf->CreateNode(BVSGT, x, smallest),
+              c.nf->CreateNode(NOT, c.nf->CreateNode(EQ, x, smallest)));
+
+    c.checkNode(BVSGT, {largest, x});
+    EXPECT_EQ(c.nf->CreateNode(BVSGT, largest, x),
+              c.nf->CreateNode(NOT, c.nf->CreateNode(EQ, largest, x)));
+  }
+}
+
 /* a 1-bit ITE choosing between 0 and 1 on a 1-bit equality collapses to
    the tested term or its complement */
 TEST(SimplifyingNodeFactory_Exhaustive, ite_width1_boolean_to_term)

@@ -399,6 +399,55 @@ TEST(SimplifyingNodeFactory_Test, bvgt)
 
 
 
+// x >s smallest  ->  NOT(x == smallest)   (#x80000 is the most-negative 20-bit value)
+TEST(SimplifyingNodeFactory_Test, bvsgt_smallest)
+{
+  const std::string input = R"(
+    (assert ( = (bvsgt v0 #x80000) (not (= v0 #x80000)))  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+// largest >s x  ->  NOT(largest == x)      (#x7ffff is the most-positive 20-bit value)
+TEST(SimplifyingNodeFactory_Test, bvsgt_largest)
+{
+  const std::string input = R"(
+    (assert ( = (bvsgt #x7ffff v0) (not (= #x7ffff v0)))  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+// The signed duals still fold the "always false" corners.
+TEST(SimplifyingNodeFactory_Test, bvsgt_false_corners)
+{
+  const std::string input = R"(
+    (assert (not (bvsgt v0 #x7ffff)) )
+    (assert (not (bvsgt #x80000 v0)) )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+// And BVSGE inherits the reduction: smallest >=s x  ->  x == smallest.
+TEST(SimplifyingNodeFactory_Test, bvsge_smallest)
+{
+  const std::string input = R"(
+    (assert ( = (bvsge #x80000 v0) (= v0 #x80000))  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
 TEST(SimplifyingNodeFactory_Test, bvplus0)
 {
   const std::string input = R"(
