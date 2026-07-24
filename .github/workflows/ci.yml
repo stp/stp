@@ -69,6 +69,7 @@ jobs:
           deps/install
           deps/gtest
           deps/OutputCheck
+          deps/symfpu
         key: deps-x86_64-${{ steps.deps-key.outputs.key }}
 
     - name: Dependencies
@@ -78,6 +79,7 @@ jobs:
         ./scripts/deps/setup-cms.sh
         ./scripts/deps/setup-gtest.sh
         ./scripts/deps/setup-outputcheck.sh
+        ./scripts/deps/setup-symfpu.sh
 
     # Keyed per run so every build writes a fresh entry; restore-keys picks
     # up the most recent one from this branch, or from the base branch.
@@ -92,7 +94,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        ${{ matrix.env }} cmake -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        ${{ matrix.env }} cmake -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DSYMFPU_INCLUDE_DIRS="$GITHUB_WORKSPACE/deps" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -154,6 +156,7 @@ jobs:
           deps/cadical
           deps/gtest
           deps/OutputCheck
+          deps/symfpu
         key: deps-x86_64-cadical-${{ steps.deps-key.outputs.key }}
 
     # CryptoMiniSat is left out: USE_CADICAL makes CaDiCaL the default
@@ -165,6 +168,7 @@ jobs:
         ./scripts/deps/setup-cadical.sh
         ./scripts/deps/setup-gtest.sh
         ./scripts/deps/setup-outputcheck.sh
+        ./scripts/deps/setup-symfpu.sh
 
     - name: Compiler cache
       uses: actions/cache@v4
@@ -177,7 +181,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DNOCRYPTOMINISAT:BOOL=ON -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DNOCRYPTOMINISAT:BOOL=ON -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DSYMFPU_INCLUDE_DIRS="$GITHUB_WORKSPACE/deps" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -211,6 +215,7 @@ jobs:
           deps/install
           deps/gtest
           deps/OutputCheck
+          deps/symfpu
         key: deps-i386-${{ steps.deps-key.outputs.key }}
 
     # Inside the workspace so the bind mount carries it back out to the
@@ -276,11 +281,16 @@ jobs:
         cmake -B build -A x64 -DSTATICCOMPILE=ON "-DCMAKE_POLICY_VERSION_MINIMUM=3.12" "-DCMAKE_INSTALL_PREFIX=$env:MINISAT_ROOT" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
         cmake --build build --config Release --target install
 
+    - name: Clone SymFPU
+      # Header-only; FindSymFPU looks for symfpu/core/unpackedFloat.h under
+      # SYMFPU_INCLUDE_DIRS, so clone it as deps/symfpu and point that at deps.
+      run: git clone --depth 1 https://github.com/martin-cs/symfpu deps/symfpu
+
     - name: Configure
       # NOCRYPTOMINISAT: CryptoMiniSat does not build with MSVC (CaDiCaL
       # and CMS's oracle use POSIX-only code); upstream CMS only supports
       # MinGW on Windows.
-      run: cmake -B build -A x64 -DSTATICCOMPILE=ON -DNOCRYPTOMINISAT=ON -DENABLE_PYTHON_INTERFACE=OFF "-DMINISAT_LIBDIR=$env:MINISAT_ROOT" "-DMINISAT_INCLUDE_DIRS=$env:MINISAT_ROOT\include" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
+      run: cmake -B build -A x64 -DSTATICCOMPILE=ON -DNOCRYPTOMINISAT=ON -DENABLE_PYTHON_INTERFACE=OFF "-DMINISAT_LIBDIR=$env:MINISAT_ROOT" "-DMINISAT_INCLUDE_DIRS=$env:MINISAT_ROOT\include" "-DSYMFPU_INCLUDE_DIRS=$env:GITHUB_WORKSPACE\deps" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
 
     - name: Build
       run: cmake --build build --config Release
