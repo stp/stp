@@ -280,7 +280,8 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
       kind == stp::FP_ROUNDTOINTEGRAL || kind == stp::FP_MIN ||
       kind == stp::FP_MAX || kind == stp::FP_TOFP ||
       kind == stp::FP_TOFP_UNSIGNED || kind == stp::FP_TO_UBV ||
-      kind == stp::FP_TO_SBV || kind == stp::FP_LEQ || kind == stp::FP_LT ||
+      kind == stp::FP_TO_SBV || kind == stp::FP_TO_IEEE_BV ||
+      kind == stp::FP_LEQ || kind == stp::FP_LT ||
       kind == stp::FP_GEQ || kind == stp::FP_GT || kind == stp::FP_EQ ||
       kind == stp::FP_ISNORMAL || kind == stp::FP_ISSUBNORMAL ||
       kind == stp::FP_ISZERO || kind == stp::FP_ISINFINITE ||
@@ -1739,7 +1740,8 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       kind == stp::FP_ROUNDTOINTEGRAL || kind == stp::FP_MIN ||
       kind == stp::FP_MAX || kind == stp::FP_TOFP ||
       kind == stp::FP_TOFP_UNSIGNED || kind == stp::FP_TO_UBV ||
-      kind == stp::FP_TO_SBV || kind == stp::FP_LEQ || kind == stp::FP_LT ||
+      kind == stp::FP_TO_SBV || kind == stp::FP_TO_IEEE_BV ||
+      kind == stp::FP_LEQ || kind == stp::FP_LT ||
       kind == stp::FP_GEQ || kind == stp::FP_GT || kind == stp::FP_EQ ||
       kind == stp::FP_ISNORMAL || kind == stp::FP_ISSUBNORMAL ||
       kind == stp::FP_ISZERO || kind == stp::FP_ISINFINITE ||

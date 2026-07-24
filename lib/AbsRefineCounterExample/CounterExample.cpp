@@ -356,6 +356,7 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
     case FP_TOFP_UNSIGNED:
     case FP_TO_UBV:
     case FP_TO_SBV:
+    case FP_TO_IEEE_BV:
     {
       // Evaluate the float operands against the model and rebuild the node
       // with the same kind and arity. Non-float children are often already

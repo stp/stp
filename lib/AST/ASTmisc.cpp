@@ -777,6 +777,20 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
       }
       break;
     }
+
+    // fp -> IEEE bits: one float in, an (eb + sb)-bit bitvector out.
+    case FP_TO_IEEE_BV:
+    {
+      if (n.Degree() != 1 || n[0].GetType() != FLOATINGPOINT_TYPE)
+      {
+        FatalError("fp -> IEEE bits takes one floating-point argument", n);
+      }
+      if (n.GetValueWidth() != n[0].GetExpWidth() + n[0].GetSigWidth())
+      {
+        FatalError("fp -> IEEE bits result width must be exp + sig width", n);
+      }
+      break;
+    }
     case FP_CONST_NAN:
     case FP_CONST_POS_INF:
     case FP_CONST_NEG_INF:

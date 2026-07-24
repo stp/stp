@@ -86,6 +86,11 @@ public:
   int exp_width() const { return eb_; }
   int sig_width() const { return sb_; }
 
+  // Reinterpret as packed IEEE bits: an (eb + sb)-bit bitvector Expr. Use the
+  // C API (vc_bvExtract) to pull out fields -- the exponent is bits
+  // [sb-1 .. sb+eb-2], the significand bits [0 .. sb-2].
+  Expr to_ieee_bits() const { return vc_fpToIEEEBV(vc_, e_); }
+
   // A constant of this expression's format from a Python-style double.
   Float constant(double d) const
   {

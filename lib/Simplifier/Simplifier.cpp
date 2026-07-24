@@ -2599,6 +2599,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
     case FP_TOFP_UNSIGNED:
     case FP_TO_UBV:
     case FP_TO_SBV:
+    case FP_TO_IEEE_BV:
     {
       // Rebuild with the same kind and arity. Only the float operands are
       // simplified: the other children -- the rounding mode of the arithmetic

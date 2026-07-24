@@ -920,6 +920,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
     case FP_TOFP_UNSIGNED:
     case FP_TO_UBV:
     case FP_TO_SBV:
+    case FP_TO_IEEE_BV:
     case FP_SMT_EQ:
     {
       // A float's format is carried on the node, not implied by its kind, so

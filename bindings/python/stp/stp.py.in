@@ -257,6 +257,7 @@ _set_func('vc_fpToFPFromSignedBV', _Expr, _VC, c_int32, c_int32, _Expr, _Expr)
 _set_func('vc_fpToFPFromUnsignedBV', _Expr, _VC, c_int32, c_int32, _Expr, _Expr)
 _set_func('vc_fpToUBVExpr', _Expr, _VC, c_int32, _Expr, _Expr)
 _set_func('vc_fpToSBVExpr', _Expr, _VC, c_int32, _Expr, _Expr)
+_set_func('vc_fpToIEEEBV', _Expr, _VC, _Expr)
 
 
 # Standard IEEE formats (eb, sb) that have a native Python float: half, single,
@@ -555,6 +556,30 @@ class Solver(object):
 
     # Allows easy access to the Counter Example.
     __getitem__ = model
+
+    def model_bits(self, key=None, expr=None):
+        """Like model(), but always returns the raw packed bits as an integer,
+        with no floating-point decoding, at any width (e.g. to inspect a float's
+        exponent/significand fields, or to read a value wider than 64 bits)."""
+        if expr and isinstance(expr, Expr):
+            expr = expr.expr
+        elif not expr and key is not None:
+            expr = self.keys[key]
+        if not expr:
+            return None
+
+        width = _lib.getVWidth(expr)
+        if width > 64:
+            value = 0
+            for i in range((width - 1) // 64 + 1):
+                part = _lib.vc_bvExtract(
+                    self.vc, expr, min((i + 1) * 64, width) - 1, i * 64)
+                bits = _lib.getBVUnsignedLongLong(
+                    _lib.vc_getCounterExample(self.vc, part))
+                value += bits << (64 * i)
+            return value
+        return _lib.getBVUnsignedLongLong(
+            _lib.vc_getCounterExample(self.vc, expr))
 
     def and_(self, *exprs):
         exprs, length = self._n_exprs(*exprs)
@@ -924,6 +949,13 @@ class FloatExpr(Expr):
     def is_subnormal(self): return self._pred1(_lib.vc_fpIsSubnormalExpr)
     def is_negative(self): return self._pred1(_lib.vc_fpIsNegativeExpr)
     def is_positive(self): return self._pred1(_lib.vc_fpIsPositiveExpr)
+
+    def to_ieee_bits(self):
+        """Reinterpret this float as its packed IEEE bits: a BitVector Expr of
+        width eb + sb. Use .extract(hi, lo) to pull out fields -- the exponent
+        is bits [sb-1 .. sb+eb-2], the significand bits [0 .. sb-2]."""
+        return Expr(self.s, self.eb + self.sb,
+                    _lib.vc_fpToIEEEBV(self.s.vc, self.expr))
 
     # Overriding __eq__ drops the inherited hash; keep instances hashable.
     __hash__ = Expr.__hash__

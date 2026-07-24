@@ -1201,6 +1201,15 @@ Expr vc_fpToSBVExpr(VC vc, int width, Expr rm, Expr f)
                 *(stp::ASTNode*)f);
 }
 
+Expr vc_fpToIEEEBV(VC vc, Expr f)
+{
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  stp::ASTNode* x = (stp::ASTNode*)f;
+  const unsigned width = x->GetExpWidth() + x->GetSigWidth();
+  // The result is a bitvector (the packed bits), so it carries no fp format.
+  return persistNode(vc, b->CreateTerm(stp::FP_TO_IEEE_BV, width, *x));
+}
+
 Expr vc_fpConstFromDouble(VC vc, Type target, Expr rm, double d)
 {
   uint64_t bits;

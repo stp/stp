@@ -315,6 +315,13 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
           /* rm */ inputterm[1], /* x */ inputterm[2],
           inputterm[0].GetUnsignedConst(), /* undef */ inputterm[3],
           /* is_signed */ k == FP_TO_SBV);
+    // A float reinterpreted as its packed IEEE bits (unpack then pack, which
+    // canonicalises NaN). Result is a bitvector, not a float.
+    case FP_TO_IEEE_BV:
+      output = symbolic_fp::blast_reinterpret(inputterm[0],
+                                              inputterm[0].GetExpWidth(),
+                                              inputterm[0].GetSigWidth());
+      break;
     case FP_SMT_EQ:
       output = symbolic_fp::blast_smt_eq(inputterm[0], inputterm[1]);
       break;

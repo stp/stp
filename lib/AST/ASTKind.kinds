@@ -146,6 +146,10 @@ FP_TO_UBV                   3    4    Term
 # fp.to_sbv: bw, rm, fp -> bv
 FP_TO_SBV                   3    4    Term
 
+# fp -> its packed IEEE bits (reinterpret, canonicalising NaN); API-only, no
+# SMT-LIB syntax. One float in, an (eb + sb)-bit bitvector out.
+FP_TO_IEEE_BV               1    1    Term
+
 # Floating point _formulae_ (i.e., things that produce Booleans)
 
 # fp.leq: fp, fp -> bool

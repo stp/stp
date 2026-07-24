@@ -759,6 +759,17 @@ DLL_PUBLIC Expr vc_fpToUBVExpr(VC vc, int width, Expr rm, Expr f);
 //!        (a bitvector) under `rm`.
 DLL_PUBLIC Expr vc_fpToSBVExpr(VC vc, int width, Expr rm, Expr f);
 
+//! \brief Reinterpret float `f` as its packed IEEE bits: a bitvector of width
+//!        exp_width + sig_width, laid out most-significant-first as
+//!        sign : exponent : trailing-significand.
+//!
+//! The inverse of vc_fpToFPFromIEEEBV. Use vc_bvExtract on the result to pull
+//! out the sign, exponent or significand field (e.g. the exponent is bits
+//! [sig_width-1 .. sig_width+exp_width-2]). NaN is canonicalised -- the payload
+//! is not preserved -- so every NaN yields the same bits.
+//!
+DLL_PUBLIC Expr vc_fpToIEEEBV(VC vc, Expr f);
+
 //Const expressions for string, int, long-long, etc
 
 //! \brief Parses the given string and returns an associated bitvector expression.
