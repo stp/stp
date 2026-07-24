@@ -107,6 +107,23 @@ ASTNode SimplifyingNodeFactory::get_largest_number(const unsigned width)
   return bm.CreateBVConst(max, width);
 }
 
+ASTNode SimplifyingNodeFactory::foldFPSign(const ASTNode& fpConst, bool flip)
+{
+  const unsigned width = fpConst.GetValueWidth(); // packed: sign is the top bit
+  stp::CBV bits = CONSTANTBV::BitVector_Clone(fpConst.GetBVConst());
+  if (!flip) // abs: clear the sign
+    CONSTANTBV::BitVector_Bit_Off(bits, width - 1);
+  else if (CONSTANTBV::BitVector_bit_test(bits, width - 1)) // neg: flip it
+    CONSTANTBV::BitVector_Bit_Off(bits, width - 1);
+  else
+    CONSTANTBV::BitVector_Bit_On(bits, width - 1);
+
+  ASTNode c = bm.CreateFPConst(bm.CreateBVConst(bits, width));
+  c.SetExpWidth(fpConst.GetExpWidth());
+  c.SetSigWidth(fpConst.GetSigWidth());
+  return c;
+}
+
 ASTNode SimplifyingNodeFactory::create_gt_node(const ASTVec& children)
 {
   if (children[0] == children[1])
@@ -2570,17 +2587,26 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
         result = children[0];
       break;
 
-    // abs(abs x) = abs(neg x) = abs x.
+    // abs(abs x) = abs(neg x) = abs x. On a constant, fold at construction --
+    // the cheap floating-point cases (unlike the arithmetic, which the
+    // constant evaluator folds by bit-blasting -- and would recurse through
+    // here) are pure sign-bit edits, so do them directly and keep the format.
+    // abs clears the sign; neg flips it. Both leave a NaN's payload alone,
+    // matching IEEE fp.abs/fp.neg (and SMT-LIB, where NaN is a single value).
     case stp::FP_ABS:
       if (children[0].GetKind() == stp::FP_ABS ||
           children[0].GetKind() == stp::FP_NEG)
         result = NodeFactory::CreateTerm(stp::FP_ABS, width, children[0][0]);
+      else if (children[0].GetKind() == stp::BVCONST)
+        result = foldFPSign(children[0], /*flip=*/false);
       break;
 
     // neg(neg x) = x.
     case stp::FP_NEG:
       if (children[0].GetKind() == stp::FP_NEG)
         result = children[0][0];
+      else if (children[0].GetKind() == stp::BVCONST)
+        result = foldFPSign(children[0], /*flip=*/true);
       break;
 
     // fp.add and fp.mul are commutative in their two float operands (child 0

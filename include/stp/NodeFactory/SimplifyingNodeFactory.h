@@ -104,6 +104,10 @@ private:
   ASTNode handle_bvand(unsigned int width, const ASTVec& children);
   ASTNode create_gt_node(const ASTVec& children);
 
+  // abs/neg of a constant float: clear (flip=false) or flip (flip=true) the
+  // sign bit, keeping the rest of the packed bits and the format.
+  ASTNode foldFPSign(const ASTNode& fpConst, bool flip);
+
   ASTNode plusRules(const ASTVec& oldChildren);
 
 };
