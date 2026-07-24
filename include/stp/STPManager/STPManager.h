@@ -153,28 +153,10 @@ private:
    * Private Member Functions                                     *
    ****************************************************************/
 
-  // Destructively appends back_child nodes to front_child nodes.
-  // If back_child nodes is NULL, no appending is done.  back_child
-  // nodes are not modified.  Then it returns the hashed copy of the
-  // node, which is created if necessary.
-  ASTInterior* CreateInteriorNode(Kind kind, ASTInterior* new_node,
-                                  const ASTVec& back_children = _empty_ASTVec);
-
-  // Create unique ASTInterior node.
-  ASTInterior* LookupOrCreateInterior(ASTInterior* n);
-
-  // As above, but probes the unique table with a stack node, so nothing
-  // is heap-allocated when an equivalent node already exists.
-  ASTInterior* LookupOrCreateInterior(Kind kind, const ASTVec& children);
-
-  // As above, but moves an owned children vector into the probe (and, on a
-  // miss, into the heap node), avoiding a copy when the caller has a
-  // temporary to give up — e.g. a freshly sorted vector.
-  ASTInterior* LookupOrCreateInterior(Kind kind, ASTVec&& children);
-
-  // Shared tail of the two overloads above: look the probe up, or move it
-  // onto the heap and insert it.
-  ASTInterior* insertOrReuseProbe(ASTInterior&& probe);
+  // Look up a unique interior node by (kind, children), creating it -- as a
+  // single tail-allocated block -- only on a miss. Probes with a non-owning
+  // key, so a cache hit builds nothing.
+  ASTInterior* LookupOrCreateInterior(Kind kind, ASTChildren children);
 
   // Create unique ASTSymbol node.
   ASTSymbol* LookupOrCreateSymbol(ASTSymbol& s);

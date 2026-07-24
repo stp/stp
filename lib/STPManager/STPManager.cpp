@@ -34,91 +34,26 @@ namespace stp
 using std::cout;
 using std::endl;
 
-ASTInterior* STPMgr::LookupOrCreateInterior(ASTInterior* n_ptr)
+// Probe the unique table with a non-owning (kind, borrowed children) key. On
+// a hit nothing is built; only on a miss is the tail-allocated node created.
+ASTInterior* STPMgr::LookupOrCreateInterior(Kind kind, ASTChildren children)
 {
-  ASTInteriorSet::iterator it = _interior_unique_table.find(n_ptr);
-  if (it == _interior_unique_table.end())
-  {
-    // Make a new ASTInterior node We want (NOT alpha) always to
-    // have alpha.nodenum + 1.
-    if (n_ptr->GetKind() == NOT)
-    {
-      // The internal node can't be a NOT, because then we'd add
-      // 1 to the NOT's node number, meaning we'd hit an even number,
-      // which could duplicate the next newNodeNum().
-      assert(n_ptr->GetChildren()[0].GetKind() != NOT);
-    }
-
-    std::pair<ASTInteriorSet::const_iterator, bool> p =
-        _interior_unique_table.insert(n_ptr);
-    return *(p.first);
-  }
-
-  // Delete the temporary node, and return the found node.
-  delete n_ptr;
-  return *it;
-}
-
-// Probe the unique table with an already-built stack node; on a miss, move
-// it onto the heap (stealing the probe's children, node number and hash).
-ASTInterior* STPMgr::insertOrReuseProbe(ASTInterior&& probe)
-{
-  const ASTInteriorSet::iterator it = _interior_unique_table.find(&probe);
+  const ASTInteriorSet::iterator it =
+      _interior_unique_table.find(ASTInterior::Probe{kind, children});
   if (it != _interior_unique_table.end())
     return *it;
 
-  if (probe.GetKind() == NOT)
+  if (kind == NOT)
   {
     // The internal node can't be a NOT, because then we'd add
     // 1 to the NOT's node number, meaning we'd hit an even number,
     // which could duplicate the next newNodeNum().
-    assert(probe.GetChildren()[0].GetKind() != NOT);
+    assert(children[0].GetKind() != NOT);
   }
 
-  ASTInterior* n_ptr = new ASTInterior(std::move(probe));
+  ASTInterior* n_ptr = ASTInterior::create(this, kind, children);
   _interior_unique_table.insert(n_ptr);
   return n_ptr;
-}
-
-ASTInterior* STPMgr::LookupOrCreateInterior(Kind kind, const ASTVec& children)
-{
-  ASTInterior probe(this, kind, children);
-  return insertOrReuseProbe(std::move(probe));
-}
-
-ASTInterior* STPMgr::LookupOrCreateInterior(Kind kind, ASTVec&& children)
-{
-  ASTInterior probe(this, kind, std::move(children));
-  return insertOrReuseProbe(std::move(probe));
-}
-
-ASTInterior* STPMgr::CreateInteriorNode(Kind /*kind*/,
-                                        // children array of this
-                                        // node will be modified.
-                                        ASTInterior* n_ptr,
-                                        const ASTVec& back_children)
-{
-
-  // insert back_children at end of front_children
-  ASTVec& front_children = n_ptr->_children;
-  front_children.reserve(front_children.size() + back_children.size());
-
-  front_children.insert(front_children.end(), back_children.begin(),
-                        back_children.end());
-
-  // check for undefined nodes.
-  ASTVec::const_iterator it_end = front_children.end();
-  for (ASTVec::const_iterator it = front_children.begin(); it != it_end; it++)
-  {
-    if (it->IsNull())
-    {
-      FatalError("CreateInteriorNode:"
-                 "Undefined childnode in CreateInteriorNode: ",
-                 ASTUndefined);
-    }
-  }
-
-  return LookupOrCreateInterior(n_ptr);
 }
 
 ostream& operator<<(ostream& os, const ASTNodeMap& nmap)
