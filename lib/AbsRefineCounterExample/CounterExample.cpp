@@ -357,9 +357,13 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
     case FP_TO_SBV:
     {
       // Evaluate the float operands against the model and rebuild the node
-      // with the same kind and arity. Children that are not floats -- the
-      // rounding mode of the arithmetic operations, and to_fp's format
-      // arguments -- are already constants and are carried through unchanged.
+      // with the same kind and arity. Non-float children are often already
+      // constant -- the rounding mode of the arithmetic operations and to_fp's
+      // format arguments -- and are carried through unchanged. But some are
+      // not: the bit-vector a to_fp reinterprets can be an array read or other
+      // term, and the array read that totalising adds to to_ubv/to_sbv/min/max
+      // is likewise non-constant. Resolve those against the model too, else the
+      // rebuilt node stays non-constant and cannot be evaluated.
       ASTVec children;
       children.reserve(term.Degree());
 
@@ -369,7 +373,10 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
 
         if (child.GetType() != FLOATINGPOINT_TYPE)
         {
-          children.push_back(child);
+          if (child.isConstant())
+            children.push_back(child);
+          else
+            children.push_back(TermToConstTermUsingModel(child));
           continue;
         }
 
