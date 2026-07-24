@@ -2226,6 +2226,24 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                children[1][0] == children[0][0])
         result = NodeFactory::CreateTerm(SBVMOD, width, max,
                                          children[1]); // 9807 -> 674
+      else if (children[1].isConstant() && hasSingleOneBit(children[1]) &&
+               lowestOneBit(children[1]) > 0 &&
+               lowestOneBit(children[1]) + 1 < width)
+      {
+        // (bvsmod x 2^n) --> (0^(width-n) ++ x[n-1:0]), for 2^n POSITIVE, i.e.
+        // n in [1, width-2] so the divisor's top bit is clear. For a positive
+        // modulus SMT-LIB's bvsmod is the mathematical modulo, whose value in
+        // [0, 2^n) equals the low n bits of x regardless of x's sign (two's
+        // complement preserves value mod 2^n). When n == width-1 the constant
+        // 2^n is NEGATIVE, so this rule must not fire and is excluded by the
+        // lowestOneBit + 1 < width guard.
+        const unsigned n = lowestOneBit(children[1]);
+        result = NodeFactory::CreateTerm(
+            BVCONCAT, width, bm.CreateZeroConst(width - n),
+            NodeFactory::CreateTerm(BVEXTRACT, n, children[0],
+                                    bm.CreateBVConst(32, n - 1),
+                                    bm.CreateBVConst(32, 0)));
+      }
     }
 
     break;
@@ -2315,6 +2333,10 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       break;
 
     case SBVDIV:
+      // NOTE: no power-of-two rewrite here. Signed division rounds toward zero,
+      // so (bvsdiv x 2^n) is NOT a plain arithmetic shift right (that would
+      // round toward -inf for negative x); it needs a sign correction. Left for
+      // the bit-blaster.
       if (children[1].isConstant() && children[1] == bm.CreateOneConst(width))
         result = children[0];
       if (children[1].isConstant() &&
@@ -2324,6 +2346,10 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
     case SBVREM:
     {
+      // NOTE: no power-of-two rewrite here. The signed remainder takes the sign
+      // of the dividend, so (bvsrem x 2^n) is NOT simply the low n bits of x
+      // (that is the unsigned/positive-modulus result); it needs a sign
+      // correction. Left for the bit-blaster.
       const ASTNode one = bm.CreateOneConst(width);
 
       if (children[0] == children[1])
