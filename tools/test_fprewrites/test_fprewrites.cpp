@@ -58,6 +58,7 @@ THE SOFTWARE.
 
 using namespace stp;
 using stp::symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN;
+using stp::symbolic_fp::ROUND_TOWARD_NEGATIVE;
 using stp::symbolic_fp::ROUND_TOWARD_POSITIVE;
 using stp::symbolic_fp::ROUND_TOWARD_ZERO;
 
@@ -414,6 +415,20 @@ static void run(Ctx& c)
                   false);
       c.checkTerm("fp.mul commutative", FP_MUL, x.GetValueWidth(), {r, x, y},
                   false);
+    }
+  }
+
+  // fp.sub(rm, x, y) = fp.add(rm, x, neg y): exact for every rounding mode and
+  // for signed zeros (round-toward-negative is the sensitive case).
+  {
+    ASTNode x = c.fp(EB, SB), y = c.fp(EB, SB);
+    for (unsigned mode : {(unsigned)ROUND_NEAREST_TIES_TO_EVEN,
+                          (unsigned)ROUND_TOWARD_NEGATIVE,
+                          (unsigned)ROUND_TOWARD_ZERO})
+    {
+      ASTNode r = c.rm(mode);
+      c.checkTerm("fp.sub = fp.add(x, neg y)", FP_SUB, x.GetValueWidth(),
+                  {r, x, y});
     }
   }
 

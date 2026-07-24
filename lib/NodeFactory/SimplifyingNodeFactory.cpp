@@ -2609,6 +2609,17 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
         result = foldFPSign(children[0], /*flip=*/true);
       break;
 
+    // fp.sub(rm, x, y) = fp.add(rm, x, fp.neg y). IEEE-754 defines subtraction
+    // as addition of the negation -- exact for every rounding mode and for
+    // signed zeros -- so lower it and reuse the add machinery (its constant
+    // folding, its commutative ordering, one adder to blast rather than two).
+    case stp::FP_SUB:
+      if (children.size() == 3)
+        result = NodeFactory::CreateTerm(
+            stp::FP_ADD, width, children[0], children[1],
+            NodeFactory::CreateTerm(stp::FP_NEG, width, children[2]));
+      break;
+
     // fp.add and fp.mul are commutative in their two float operands (child 0
     // is the rounding mode). Order them so x + y and y + x share a node.
     case stp::FP_ADD:
