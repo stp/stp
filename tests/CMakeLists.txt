@@ -67,7 +67,13 @@ if (MSVC)
 endif()
 
 set(PREV_CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+# GTest is a vendored third-party dependency; -Wno-error (which comes after the
+# global -Werror, so it wins) keeps WERROR from failing the build on GTest's own
+# warnings. STP's own test sources are still built with -Werror below.
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-format-nonliteral -Wno-missing-field-initializers")
+if (WERROR AND NOT MSVC)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error")
+endif()
 add_subdirectory(${GTEST_PREFIX} gtest)
 set(CMAKE_CXX_FLAGS "${PREV_CMAKE_CXX_FLAGS}")
 set(GTEST_BOTH_LIBRARIES gtest gtest_main)
