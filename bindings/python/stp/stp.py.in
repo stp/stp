@@ -957,6 +957,20 @@ class FloatExpr(Expr):
         return Expr(self.s, self.eb + self.sb,
                     _lib.vc_fpToIEEEBV(self.s.vc, self.expr))
 
+    def to_ubv(self, width, rm=None):
+        """Round to a `width`-bit unsigned integer (a BitVector Expr) under the
+        given rounding mode (default the solver's)."""
+        r = _lib.vc_fpRoundingMode(
+            self.s.vc, self.s.rounding_mode if rm is None else rm)
+        return Expr(self.s, width, _lib.vc_fpToUBVExpr(self.s.vc, width, r, self.expr))
+
+    def to_sbv(self, width, rm=None):
+        """Round to a `width`-bit signed integer (a BitVector Expr) under the
+        given rounding mode (default the solver's)."""
+        r = _lib.vc_fpRoundingMode(
+            self.s.vc, self.s.rounding_mode if rm is None else rm)
+        return Expr(self.s, width, _lib.vc_fpToSBVExpr(self.s.vc, width, r, self.expr))
+
     # Overriding __eq__ drops the inherited hash; keep instances hashable.
     __hash__ = Expr.__hash__
 

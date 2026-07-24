@@ -301,8 +301,7 @@ class TestSTP(unittest.TestCase):
     def test_floating_point(self):
         #
         # Build and solve a floating-point problem through the Pythonic layer,
-        # and read native Python floats back from the model. A single Solver is
-        # used throughout, as floating-point work must be within a process.
+        # and read a native Python float back from the model.
         #
         s = self.s
         a = s.fp("a", 5, 11)   # half precision
@@ -312,20 +311,88 @@ class TestSTP(unittest.TestCase):
         s.add(a > 2.0)         # ordered comparison
         s.add(a.is_normal())   # classification
 
-        # Rounding-mode-aware operators (default RNE).
-        prod = a * a
-        summ = a + a
-        rt = a.sqrt()
-
         self.assertTrue(s.check())
         self.assertEqual(s.model("a"), 4.0)
         self.assertIsInstance(s.model("a"), float)
         self.assertEqual(s.model("d"), 3.5)
-        self.assertEqual(prod.value, 16.0)
-        self.assertEqual(summ.value, 8.0)
-        self.assertEqual(rt.value, 2.0)
+        self.assertEqual(s.model_bits("a"), 0x4400)
+        self.assertEqual((a * a).value, 16.0)
+        self.assertEqual((a + a).value, 8.0)
+        self.assertEqual((a - 1.0).value, 3.0)
+        self.assertEqual((a / 2.0).value, 2.0)
+        self.assertEqual(a.sqrt().value, 2.0)
+        self.assertEqual((-a).value, -4.0)
         self.assertEqual(abs(-a).value, 4.0)
-        self.assertEqual(a.fp_min(2.0).value, 2.0)
+
+    def test_fp_operations(self):
+        # fp.rem, fp.min, fp.max, fp.roundToIntegral, fp.fma.
+        s = self.s
+        a, b = s.fp("a", 5, 11), s.fp("b", 5, 11)
+        s.add(a == 4.0, b == 2.0)
+        self.assertTrue(s.check())
+        self.assertEqual(a.fp_rem(b).value, 0.0)            # 4 rem 2
+        self.assertEqual(a.fp_min(b).value, 2.0)
+        self.assertEqual(a.fp_max(b).value, 4.0)
+        self.assertEqual(a.round_to_integral().value, 4.0)
+        self.assertEqual(a.fma(b, b).value, 10.0)           # 4*2 + 2
+
+    def test_fp_comparisons(self):
+        # The ordered comparisons and !=, all holding together.
+        s = self.s
+        a = s.fp("a", 5, 11)
+        s.add(a == 3.0, a < 4.0, a <= 3.0, a > 2.0, a >= 3.0, a != 5.0)
+        self.assertTrue(s.check())
+
+    def test_fp_comparison_unsat(self):
+        s = self.s
+        a = s.fp("a", 5, 11)
+        s.add(a == 3.0, a < 2.0)   # 3 < 2 is false
+        self.assertFalse(s.check())
+
+    def test_fp_classifications(self):
+        # The special-value constructors classify as claimed.
+        s = self.s
+        s.add(s.fp_nan(5, 11).is_nan(),
+              s.fp_inf(5, 11).is_infinite(),
+              s.fp_inf(5, 11).is_positive(),
+              s.fp_inf(5, 11, negative=True).is_negative(),
+              s.fp_zero(5, 11).is_zero(),
+              s.fp_zero(5, 11).is_positive(),
+              s.fp_zero(5, 11, negative=True).is_negative())
+        self.assertTrue(s.check())
+
+    def test_fp_classification_unsat(self):
+        s = self.s
+        x = s.fp("x", 5, 11)
+        s.add(x.is_nan(), x.is_zero())   # nothing is both
+        self.assertFalse(s.check())
+
+    def test_fp_subnormal(self):
+        s = self.s
+        x = s.fp("x", 5, 11)
+        s.add(x == s.fpval_from_bits(5, 11, 0x0001))   # smallest subnormal
+        s.add(x.is_subnormal())
+        self.assertTrue(s.check())
+
+    def test_fp_bits_and_conversions(self):
+        # to_ieee_bits + field extraction, model_bits, and fp.to_ubv.
+        s = self.s
+        x = s.fp("x", 5, 11)
+        s.add(x == 3.0)   # half 3.0 is 0x4200 = sign 0, exp 0b10000, sig 0x200
+        bits = x.to_ieee_bits()
+        self.assertTrue(s.check())
+        self.assertEqual(s.model_bits("x"), 0x4200)
+        self.assertEqual(s.model(expr=bits), 0x4200)
+        self.assertEqual(s.model(expr=bits.extract(14, 10)), 16)     # exponent
+        self.assertEqual(s.model(expr=bits.extract(9, 0)), 0x200)    # significand
+        self.assertEqual(s.model(expr=x.to_ubv(8)), 3)
+
+    def test_fp_to_sbv(self):
+        s = self.s
+        x = s.fp("x", 5, 11)
+        s.add(x == s.fpval_from_bits(5, 11, 0xC000))    # -2.0
+        self.assertTrue(s.check())
+        self.assertEqual(s.model(expr=x.to_sbv(8)), 0xFE)   # -2 in 8-bit two's complement
 
     def test_urem(self):
         #
