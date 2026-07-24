@@ -78,6 +78,89 @@ void ExtensionalityContext::collectPossibleConeSymbols(const ASTNode& n)
       possibleConeSymbols.insert(*it);
 }
 
+// An equality between a chain of writes and the chain's own base
+// array,
+//
+//   write(...write(base, i_n, v_n)..., i_1, v_1) = base
+//
+// (i_1 outermost), holds exactly when every written value is already
+// in the base at its index, unless an outer write shadows it:
+//
+//   AND_k [ i_k = i_1 OR ... OR i_k = i_{k-1}
+//           OR read(base, i_k) = v_k ]
+//
+// This dissolves the common "array unchanged except at a few indices"
+// frame-condition shape into plain bitvector-and-read constraints --
+// no abstraction variable, no witness, no refinement. The two-sided
+// variant, where both operands stack writes on a shared deeper base,
+// is deliberately not attempted: its guards grow quadratically, and
+// the general lemmas-on-demand procedure already covers that shape.
+//
+// Built with the plain hashing factory; the result is ordinary formula
+// content that STP's later passes simplify as usual. A conjunct whose
+// index term is identical to an outer write's index term is certainly
+// shadowed and is dropped here, since the hashing factory would not
+// fold the reflexive equality itself. The outermost write never has
+// outer writes, so the conjunction is never empty.
+ASTNode ExtensionalityContext::solveWriteChain(const ASTNode& a,
+                                               const ASTNode& b) const
+{
+  for (int orientation = 0; orientation < 2; orientation++)
+  {
+    const ASTNode& chain = (orientation == 0) ? a : b;
+    const ASTNode& base = (orientation == 0) ? b : a;
+
+    // Peel writes off the chain side, outermost first, until the base
+    // side appears; anything else is not this shape.
+    ASTVec writesOutermostFirst;
+    ASTNode cur = chain;
+    bool matched = false;
+    while (cur.GetKind() == WRITE)
+    {
+      writesOutermostFirst.push_back(cur);
+      cur = cur[0];
+      if (cur == base)
+      {
+        matched = true;
+        break;
+      }
+    }
+    if (!matched)
+      continue;
+
+    NodeFactory* hf = bm->hashingNodeFactory;
+    const unsigned ew = base.GetValueWidth();
+    ASTVec conjuncts;
+    for (size_t k = 0; k < writesOutermostFirst.size(); k++)
+    {
+      const ASTNode& indexK = writesOutermostFirst[k][1];
+      const ASTNode& valueK = writesOutermostFirst[k][2];
+      ASTVec disjuncts;
+      bool certainlyShadowed = false;
+      for (size_t m = 0; m < k; m++)
+      {
+        const ASTNode& indexM = writesOutermostFirst[m][1];
+        if (indexK == indexM)
+        {
+          certainlyShadowed = true;
+          break;
+        }
+        disjuncts.push_back(hf->CreateNode(EQ, indexK, indexM));
+      }
+      if (certainlyShadowed)
+        continue;
+      disjuncts.push_back(hf->CreateNode(
+          EQ, hf->CreateTerm(READ, ew, base, indexK), valueK));
+      conjuncts.push_back(disjuncts.size() == 1
+                              ? disjuncts[0]
+                              : hf->CreateNode(OR, disjuncts));
+    }
+    return conjuncts.size() == 1 ? conjuncts[0]
+                                 : hf->CreateNode(AND, conjuncts);
+  }
+  return ASTNode();
+}
+
 // Formula abstraction of an array equality (paper section 5): instead
 // of an EQ node, return a fresh Boolean abstraction variable, and
 // record the pair. Reflexive requests fold to true. The record's
@@ -100,6 +183,14 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
 
   if (a == b)
     return bm->ASTTrue;
+
+  // A chain of writes equated with its own base needs no abstraction
+  // at all; solve it by rewriting.
+  {
+    const ASTNode solved = solveWriteChain(a, b);
+    if (!solved.IsNull())
+      return solved;
+  }
 
   // The hashing factory sorts EQ children, so callers may present the
   // operands in either order; canonicalize the registry key the same

@@ -267,6 +267,12 @@ public:
 private:
   STPMgr* bm;
 
+  // Equality between a chain of writes and the chain's own base array,
+  // solved by rewriting instead of abstraction; returns the null node
+  // when the shape does not apply. See the definition for the
+  // equivalence.
+  ASTNode solveWriteChain(const ASTNode& a, const ASTNode& b) const;
+
   std::vector<Record> records;
   std::map<std::pair<ASTNode, ASTNode>, size_t> keyToRecord;
   std::map<ASTNode, size_t> proxyToRecord;

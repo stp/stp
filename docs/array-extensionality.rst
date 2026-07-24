@@ -66,6 +66,13 @@ solver playing ``DP_B``):
    simplifier, array transformer, or bit-blaster. Reads are abstracted
    by fresh variables by STP's existing machinery.
 
+   One shape skips abstraction entirely: a chain of writes equated
+   with its own base array (the frame condition ``store(a,i,v) = a``
+   and its nestings) is solved by rewriting into read equalities over
+   the base, each guarded by disequality with the indices of the
+   writes that shadow it. Such an equality contributes nothing to the
+   refinement loop at all.
+
 2. **Preprocessing** (paper §4). For each abstracted equality ``a = b``
    a fresh *witness index* λ and two *virtual reads* ``a[λ]``, ``b[λ]``
    are created, with the constraint ``a = b ∨ a[λ] ≠ b[λ]``: if the SAT

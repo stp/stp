@@ -372,6 +372,148 @@ TEST(array_extensionality, array_model_entries_ascending)
   vc_Destroy(vc);
 }
 
+TEST(array_extensionality, store_chain_equals_base_solved_by_rewrite)
+{
+  // An equality between a chain of writes and the chain's own base is
+  // solved by rewriting into read equalities over the base: no
+  // abstraction variable is minted, no record is created, and the
+  // query never needs the refinement loop.
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv8 = vc_bvType(vc, 8);
+  Type bv4 = vc_bvType(vc, 4);
+  Type arrT = vc_arrayType(vc, bv4, bv8);
+
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr i = vc_varExpr(vc, "i", bv4);
+  Expr v = vc_varExpr(vc, "v", bv8);
+
+  Expr eq = vc_eqExpr(vc, vc_writeExpr(vc, a, i, v), a);
+  // A single write rewrites to exactly read(a, i) = v.
+  ASSERT_EQ(EQ, getExprKind(eq));
+
+  stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  ASSERT_NE(nullptr, ext);
+  EXPECT_EQ(0u, ext->getRecords().size());
+
+  vc_assertFormula(vc, eq);
+  vc_assertFormula(
+      vc, vc_notExpr(vc, vc_eqExpr(vc, vc_readExpr(vc, a, i), v)));
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(0u, ext->getRecords().size());
+  vc_Destroy(vc);
+}
+
+TEST(array_extensionality, store_chain_shadowed_write_is_unconstrained)
+{
+  // In store(store(a,i,w),i,v) = a the inner write is shadowed by the
+  // outer write at the identical index term, so its value w is dropped
+  // from the rewrite entirely: only read(a,i) = v is forced.
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv8 = vc_bvType(vc, 8);
+  Type bv4 = vc_bvType(vc, 4);
+  Type arrT = vc_arrayType(vc, bv4, bv8);
+
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr i = vc_varExpr(vc, "i", bv4);
+  Expr v = vc_varExpr(vc, "v", bv8);
+  Expr w = vc_varExpr(vc, "w", bv8);
+
+  vc_assertFormula(
+      vc, vc_eqExpr(vc, vc_writeExpr(vc, vc_writeExpr(vc, a, i, w), i, v),
+                    a));
+  vc_assertFormula(
+      vc, vc_notExpr(vc, vc_eqExpr(vc, w, vc_readExpr(vc, a, i))));
+
+  stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  ASSERT_NE(nullptr, ext);
+  EXPECT_EQ(0u, ext->getRecords().size());
+
+  // w is unconstrained: satisfiable.
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+
+  // v is forced: contradicting read(a,i) = v flips the verdict.
+  vc_assertFormula(
+      vc, vc_notExpr(vc, vc_eqExpr(vc, vc_readExpr(vc, a, i), v)));
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(0u, ext->getRecords().size());
+  vc_Destroy(vc);
+}
+
+TEST(array_extensionality, store_chain_guarded_inner_write)
+{
+  // With distinct index terms the inner write is guarded, not dropped:
+  // store(store(a,j,w),i,v) = a forces read(a,j) = w whenever j != i.
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv8 = vc_bvType(vc, 8);
+  Type bv4 = vc_bvType(vc, 4);
+  Type arrT = vc_arrayType(vc, bv4, bv8);
+
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr i = vc_varExpr(vc, "i", bv4);
+  Expr j = vc_varExpr(vc, "j", bv4);
+  Expr v = vc_varExpr(vc, "v", bv8);
+  Expr w = vc_varExpr(vc, "w", bv8);
+
+  Expr eq = vc_eqExpr(
+      vc, vc_writeExpr(vc, vc_writeExpr(vc, a, j, w), i, v), a);
+  // Two live writes rewrite to a conjunction, with the inner conjunct
+  // guarded by the index equality with the outer write.
+  ASSERT_EQ(AND, getExprKind(eq));
+
+  vc_assertFormula(vc, eq);
+  vc_assertFormula(vc, vc_notExpr(vc, vc_eqExpr(vc, i, j)));
+  vc_assertFormula(
+      vc, vc_notExpr(vc, vc_eqExpr(vc, vc_readExpr(vc, a, j), w)));
+
+  stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  ASSERT_NE(nullptr, ext);
+  EXPECT_EQ(0u, ext->getRecords().size());
+
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+  vc_Destroy(vc);
+}
+
+TEST(array_extensionality, store_chain_over_write_base)
+{
+  // The chain's base may itself be a write: hashing makes the two
+  // occurrences of store(a,j,w) the same node, so the peel finds the
+  // base one write down and the rewrite still applies.
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv8 = vc_bvType(vc, 8);
+  Type bv4 = vc_bvType(vc, 4);
+  Type arrT = vc_arrayType(vc, bv4, bv8);
+
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr i = vc_varExpr(vc, "i", bv4);
+  Expr j = vc_varExpr(vc, "j", bv4);
+  Expr v = vc_varExpr(vc, "v", bv8);
+  Expr w = vc_varExpr(vc, "w", bv8);
+
+  Expr b = vc_writeExpr(vc, a, j, w);
+  vc_assertFormula(vc, vc_eqExpr(vc, vc_writeExpr(vc, b, i, v), b));
+  vc_assertFormula(
+      vc, vc_notExpr(vc, vc_eqExpr(vc, vc_readExpr(vc, b, i), v)));
+
+  stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  ASSERT_NE(nullptr, ext);
+  EXPECT_EQ(0u, ext->getRecords().size());
+
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+  vc_Destroy(vc);
+}
+
 TEST(array_extensionality, flag_off_preserves_eq_node)
 {
   // Default-off: an array equality still builds an ordinary EQ node
