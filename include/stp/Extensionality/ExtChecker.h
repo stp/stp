@@ -48,6 +48,14 @@ THE SOFTWARE.
  *         concrete value violates the (adapted) read-congruence axiom
  *         A1 and yields a conflict (section 7.2).
  *
+ * The work list is FIFO and rule I seeds every access before the
+ * fixed point starts, so discovery is breadth-first per access: the
+ * first arrival of an access at an array -- the one whose path gets
+ * recorded, and the one a conflict fires on -- came along a shortest
+ * propagation path. Conflict lemmas therefore use shortest paths on
+ * both sides (the minimization of section 11.1) without a separate
+ * post-conflict search.
+ *
  * Following section 11.2, rho keeps one representative access per
  * concrete index of each array, in a hash keyed by the index value: a
  * congruence lookup is a single probe rather than a scan, and an

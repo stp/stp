@@ -703,6 +703,60 @@ TEST_F(ExtFixtureTest, ConflictFiresAgainstRepresentative)
   EXPECT_EQ(r3, c.abstractConclusionB);
 }
 
+// The shortest-path property of section 11.1: because rule I seeds
+// every access before the fixed point starts and the work list is
+// FIFO, discovery is breadth-first per access, and a conflict always
+// fires at an access's first -- shortest -- arrival. The lemma premise
+// therefore uses shortest propagation paths without the separate
+// post-conflict BFS the paper describes (needed there because the
+// paper's working list is a stack, i.e. depth-first). This test pins the
+// property: two accesses can meet through a 2-edge route or a 4-edge
+// route, with the equality adjacency ordered so that a depth-first
+// work list would drive the resident access down the long route first
+// and produce a 5-atom premise; breadth-first order must produce
+// exactly the 3-atom premise of the short route.
+TEST_F(ExtFixtureTest, ConflictPremiseUsesShortestPaths)
+{
+  ASTNode S = arr("S"), A = arr("A"), T = arr("T");
+  ASTNode B1 = arr("B1"), B2 = arr("B2"), B3 = arr("B3");
+  ASTNode iX = bv("iX", 1), iT = bv("iT", 1);
+  ASTNode rX = bv("rX", 2), rT = bv("rT", 3);
+
+  // Short route S - A - T; long route S - B1 - B2 - B3 - T. The two
+  // T-incident edges are created so that the A edge precedes the B3
+  // edge in T's adjacency.
+  ASTNode e0 = eqEdge(S, A, "e0", true);
+  eqEdge(S, B1, "e1", true);
+  eqEdge(B1, B2, "e2", true);
+  eqEdge(B2, B3, "e3", true);
+  ASTNode e4 = eqEdge(A, T, "e4", true);
+  eqEdge(B3, T, "e5", true);
+
+  size_t aX = readAccess(S, iX, rX);
+  size_t aT = readAccess(T, iT, rT);
+
+  ExtCheckResult r = run();
+  ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
+
+  const ExtConflict& c = r.conflict;
+  // aX reaches A at distance 1 before aT's expansion begins; aT then
+  // meets it at A via its own 1-edge route.
+  EXPECT_EQ(A, c.commonArray);
+  EXPECT_EQ(aX, c.leftAccess);
+  EXPECT_EQ(aT, c.rightAccess);
+  ASSERT_EQ(1u, c.leftGuards.size());
+  ASSERT_EQ(1u, c.rightGuards.size());
+
+  // Premise: iX = iT plus the two short-route equalities, nothing from
+  // the long route.
+  ASSERT_EQ(3u, c.abstractPremise.size());
+  EXPECT_TRUE(hasEqGuard(c.abstractPremise, iX, iT));
+  EXPECT_TRUE(hasProxyGuard(c.abstractPremise, e0));
+  EXPECT_TRUE(hasProxyGuard(c.abstractPremise, e4));
+  EXPECT_EQ(rX, c.abstractConclusionA);
+  EXPECT_EQ(rT, c.abstractConclusionB);
+}
+
 // The decision table combining STP's own model evaluation with the
 // array consistency check: an array conflict always takes priority
 // (only its lemma can rule the candidate out), and a candidate is

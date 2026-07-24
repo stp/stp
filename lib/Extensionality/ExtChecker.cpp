@@ -204,8 +204,9 @@ bool atomLess(const ExtLemmaAtom& x, const ExtLemmaAtom& y)
 
 // Canonicalize a premise: drop reflexive equalities (an index compared
 // with itself contributes nothing), drop exact duplicate atoms, and
-// sort deterministically. No semantic subsumption is attempted (the
-// paper discusses stronger minimization in section 11.1).
+// sort deterministically. The guard paths feeding this are already
+// shortest (section 11.1, a property of the FIFO work list); beyond
+// that only exact duplicates are removed, no semantic subsumption.
 std::vector<ExtLemmaAtom> canonicalAtoms(const std::vector<ExtLemmaAtom>& in)
 {
   std::vector<ExtLemmaAtom> out;
@@ -360,6 +361,16 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
   // Fixed-point computation over a FIFO work list (the "working queue
   // that manages future read propagations" of section 7.3); for each
   // pair the edges fire in the order D, U, then R/L.
+  //
+  // The FIFO discipline is load-bearing: with every access seeded
+  // before the fixed point starts, discovery is breadth-first per
+  // access, so an access's recorded path to any array -- and in
+  // particular the arrival that fires a conflict -- is a shortest
+  // propagation path. That is the lemma minimization of section 11.1,
+  // obtained without the separate post-conflict search a depth-first
+  // (stack) working list would need. Pinned by the
+  // ConflictPremiseUsesShortestPaths unit test; do not replace the
+  // deque with a stack.
   while (!st.worklist.empty())
   {
     const PairKey cur = st.worklist.front();

@@ -108,7 +108,11 @@ solver playing ``DP_B``):
                           ∧ ⋀ crossed array equalities
         →  value(x) = value(y)
 
-   which is false in the candidate σ. It is encoded as clauses over
+   which is false in the candidate σ. Both propagation paths are
+   shortest paths (the minimization of §11.1): seeding every access
+   before the fixed point starts makes the FIFO work list breadth-first
+   per access, so the arrival that fires a conflict is the earliest —
+   shortest — one. The lemma is encoded as clauses over
    the SAT variables of the already-encoded names (equalities reified
    through fresh definitional literals) and added to the incremental
    SAT solver; the loop re-solves. Each lemma permanently excludes the
