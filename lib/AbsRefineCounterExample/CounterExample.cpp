@@ -393,7 +393,18 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
       temp.SetExpWidth(term.GetExpWidth());
       temp.SetSigWidth(term.GetSigWidth());
 
-      assert(temp != term);
+      // The factory may have folded the rebuilt operation to a constant once
+      // its children were resolved: abs/neg of a constant is a sign-bit edit,
+      // and x*1.0 / x/1.0 fold to x. That constant is the value -- blasting it
+      // would hand a constant to the blaster, which only handles operations.
+      // (This also subsumes the old expectation that rebuilding with resolved
+      // children always changes the node, which folding can break.)
+      if (temp.isConstant())
+      {
+        output = FloatBlaster::withFormat(bm, temp, term.GetExpWidth(),
+                                          term.GetSigWidth());
+        break;
+      }
 
       // Totalise the partial operations (min/max and to_ubv/to_sbv) so the
       // blaster sees the extra child they carry once made total. This is
@@ -699,7 +710,15 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
 
       ASTNode temp(stp::GlobalParserBM->CreateNode(k, operands));
 
-      assert(temp != form);
+      // When the operands were already constant, rebuilding the predicate can
+      // return the original node -- so the old `temp != form` expectation does
+      // not hold. And should the factory ever fold the predicate to true/false
+      // outright, that boolean is the answer and must not reach the blaster.
+      if (temp.isConstant())
+      {
+        output = temp;
+        break;
+      }
 
       ASTNode blasted(FloatBlaster::BlastNode_TopLevel(temp));
 

@@ -1008,6 +1008,19 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
         temp.SetSigWidth(sig_width);
       }
 
+      // The factory may have folded the operation to a constant already:
+      // abs/neg of a constant is a sign-bit edit, x*1.0/x/1.0 fold to x, and
+      // to_ubv/to_sbv of a constant folds too. That constant is the result --
+      // blasting it would hand a constant to the blaster, which only handles
+      // operations (and asserts on anything else).
+      if (temp.isConstant())
+      {
+        OutputNode = float_result ? FloatBlaster::withFormat(_bm, temp,
+                                                             exp_width, sig_width)
+                                  : temp;
+        break;
+      }
+
       ASTNode blasted(FloatBlaster::BlastNode_TopLevel(temp));
       OutputNode = NonMemberBVConstEvaluator(_bm, blasted);
 

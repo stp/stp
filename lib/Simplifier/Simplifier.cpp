@@ -2630,12 +2630,23 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       temp.SetExpWidth(inputterm.GetExpWidth());
       temp.SetSigWidth(inputterm.GetSigWidth());
 
-      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(temp));
+      // The factory may have folded the operation to a constant once its
+      // operands were simplified (abs/neg of a constant, x*1.0, x/1.0). That
+      // folded constant is the simplified term; otherwise blast the operation.
+      // The blaster only handles operations, so a constant must not reach it.
+      if (temp.isConstant())
+      {
+        output = temp;
+      }
+      else
+      {
+        ASTNode blasted(FloatBlaster::BlastNode_TopLevel(temp));
 
-      assert(blasted != temp);
-      assert(blasted != inputterm);
+        assert(blasted != temp);
+        assert(blasted != inputterm);
 
-      output = SimplifyTerm(blasted);
+        output = SimplifyTerm(blasted);
+      }
 
       // Only re-make the result as a floating-point constant when the
       // operation actually produces a float. fp.to_ubv/fp.to_sbv produce a
