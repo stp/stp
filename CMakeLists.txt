@@ -525,6 +525,27 @@ if (USE_CADICAL)
 endif()
 
 # -----------------------------------------------------------------------------
+# Optionally link a faster allocator (tcmalloc)
+# -----------------------------------------------------------------------------
+# STP is allocation-heavy during bit-blasting and CNF generation (the AIG and
+# CNF data structures churn a lot of memory). Replacing the C library allocator
+# with tcmalloc measurably speeds up the pre-SAT stages with no change to
+# results. Opt-in so we don't add a hard runtime dependency.
+option(USE_TCMALLOC "Link against tcmalloc for faster memory allocation" OFF)
+add_feature_info(TCMalloc USE_TCMALLOC "Links tcmalloc for faster allocation")
+
+if (USE_TCMALLOC)
+    find_library(TCMALLOC_LIBRARY NAMES tcmalloc_minimal tcmalloc)
+    if (NOT TCMALLOC_LIBRARY)
+        message(FATAL_ERROR "USE_TCMALLOC is set but tcmalloc was not found. "
+                "Install gperftools (e.g. libtcmalloc-minimal4 / gperftools-libs) "
+                "or unset USE_TCMALLOC.")
+    endif()
+    message(STATUS "Found tcmalloc: ${TCMALLOC_LIBRARY}")
+    link_libraries(${TCMALLOC_LIBRARY})
+endif()
+
+# -----------------------------------------------------------------------------
 # Find CryptoMiniSat
 # -----------------------------------------------------------------------------
 option(NOCRYPTOMINISAT "Don't try to use cryptominisat" OFF)
