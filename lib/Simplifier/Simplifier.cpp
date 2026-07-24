@@ -1514,11 +1514,7 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
           v.push_back(toProcess[i]);
       }
 
-      // A childless node here is one of the five floating-point constants
-      // (NaN, +/-oo, +/-zero), not just +oo.
-      assert(v.size() > 0 || k == FP_CONST_NAN || k == FP_CONST_POS_INF ||
-             k == FP_CONST_NEG_INF || k == FP_CONST_POS_ZERO ||
-             k == FP_CONST_NEG_ZERO);
+      assert(v.size() > 0);
       if (ASTChildren(v) != actualInputterm.GetChildren()) // short-cut.
       {
         output = nf->CreateArrayTerm(k, actualInputterm.GetIndexWidth(),
@@ -2667,17 +2663,6 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
                                           inputterm.GetSigWidth());
       }
 
-      break;
-    }
-    case FP_CONST_POS_INF:
-    {
-      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(inputterm));
-
-      assert(blasted != inputterm);
-
-      output = SimplifyTerm(blasted);
-      output = FloatBlaster::withFormat(_bm, output, inputterm.GetExpWidth(),
-                                        inputterm.GetSigWidth());
       break;
     }
     case WRITE:

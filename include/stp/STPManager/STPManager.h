@@ -40,6 +40,19 @@ THE SOFTWARE.
 
 namespace stp
 {
+
+// The five SMT-LIB floating-point special values. Their nodes are ordinary
+// packed interned constants (see STPMgr::CreateFPSpecialConst); a childless
+// special-value node would hash-cons every format's NaN to one mutable node.
+enum class FPSpecial
+{
+  NaN,
+  PlusInfinity,
+  MinusInfinity,
+  PlusZero,
+  MinusZero,
+};
+
 /*
  * STP Node Manager. Tools for managing AST nodes.
  */
@@ -264,6 +277,9 @@ public:
 
   DLL_PUBLIC ASTNode CreateFPConst(const stp::ASTNode& bvconst,
                                    unsigned exp_width, unsigned sig_width);
+
+  DLL_PUBLIC ASTNode CreateFPSpecialConst(FPSpecial which, unsigned exp_width,
+                                          unsigned sig_width);
 
   /****************************************************************
    * Create Node functions                                        *

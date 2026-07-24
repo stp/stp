@@ -1274,38 +1274,6 @@ ASTNode blast_convert_float_to_float(const ASTNode& rm, const ASTNode& expr,
   return packed;
 }
 
-ASTNode blast_pos_inf(const ASTNode& orig)
-{
-  floatingPointTypeInfo size(orig.GetExpWidth(), orig.GetSigWidth());
-  uf unpacked_inf(uf::makeInf(size, false));
-  ASTNode packed(symfpu::pack<traits>(size, unpacked_inf));
-  return packed;
-}
-
-ASTNode blast_neg_inf(const ASTNode& orig)
-{
-  floatingPointTypeInfo size(orig.GetExpWidth(), orig.GetSigWidth());
-  uf unpacked_inf(uf::makeInf(size, true));
-  ASTNode packed(symfpu::pack<traits>(size, unpacked_inf));
-  return packed;
-}
-
-ASTNode blast_nan(const ASTNode& orig)
-{
-  floatingPointTypeInfo size(orig.GetExpWidth(), orig.GetSigWidth());
-  uf unpacked_nan(uf::makeNaN(size));
-  ASTNode packed(symfpu::pack<traits>(size, unpacked_nan));
-  return packed;
-}
-
-ASTNode blast_zero(const ASTNode& orig, bool sign)
-{
-  floatingPointTypeInfo size(orig.GetExpWidth(), orig.GetSigWidth());
-  uf unpacked_zero(uf::makeZero(size, sign));
-  ASTNode packed(symfpu::pack<traits>(size, unpacked_zero));
-  return packed;
-}
-
 ASTNode round_trip(const ASTNode& expr, ASTNode** side)
 {
   floatingPointTypeInfo size(expr.GetExpWidth(), expr.GetSigWidth());

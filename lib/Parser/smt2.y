@@ -210,11 +210,6 @@
   using stp::FP_ISNEGATIVE;
   using stp::FP_ISPOSITIVE;
   using stp::FP_SMT_EQ;
-  using stp::FP_CONST_NAN;
-  using stp::FP_CONST_POS_INF;
-  using stp::FP_CONST_NEG_INF;
-  using stp::FP_CONST_POS_ZERO;
-  using stp::FP_CONST_NEG_ZERO;
 
   using stp::symbolic_fp::rounding_modes::ROUND_NEAREST_TIES_TO_EVEN;
   using stp::symbolic_fp::rounding_modes::ROUND_TOWARD_POSITIVE;
@@ -758,7 +753,7 @@
 
 
 %type <node> an_term  an_formula function_param an_const an_fp_term an_rounding_mode
-%type <kind> an_fp_const
+%type <uintval> an_fp_const
 
 %type <fp_size> an_fp_sort
 
@@ -2003,11 +1998,11 @@ an_rounding_mode:
 ;
 
 an_fp_const:
-  FP_NAN_TOK { $$ = FP_CONST_NAN; }
-| FP_POS_INF_TOK { $$ = FP_CONST_POS_INF; }
-| FP_NEG_INF_TOK { $$ = FP_CONST_NEG_INF; }
-| FP_POS_ZERO_TOK { $$ = FP_CONST_POS_ZERO; }
-| FP_NEG_ZERO_TOK { $$ = FP_CONST_NEG_ZERO; }
+  FP_NAN_TOK { $$ = (unsigned)stp::FPSpecial::NaN; }
+| FP_POS_INF_TOK { $$ = (unsigned)stp::FPSpecial::PlusInfinity; }
+| FP_NEG_INF_TOK { $$ = (unsigned)stp::FPSpecial::MinusInfinity; }
+| FP_POS_ZERO_TOK { $$ = (unsigned)stp::FPSpecial::PlusZero; }
+| FP_NEG_ZERO_TOK { $$ = (unsigned)stp::FPSpecial::MinusZero; }
 ;
 
 an_fp_term:
@@ -2157,13 +2152,18 @@ an_fp_term:
 }
 | UNDERSCORE_TOK an_fp_const NUMERAL_TOK NUMERAL_TOK
 {
- uint32_t exp_width($3);
- uint32_t sig_width($4);
- uint32_t total_width(sig_width + exp_width);
- ASTVec empty;
- $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm($2, total_width, empty));
- $$->SetExpWidth(exp_width);
- $$->SetSigWidth(sig_width);
+  // The special values are constants: build the packed interned constant
+  // directly. A childless special-value node would hash-cons every format
+  // of, say, NaN to one node, which whoever parsed last would re-stamp.
+  uint32_t exp_width($3);
+  uint32_t sig_width($4);
+  if (exp_width == 0 || sig_width == 0)
+  {
+    fatal_yyerror("a floating-point format needs nonzero widths");
+  }
+  $$ = stp::GlobalParserInterface->newNode(
+      stp::GlobalParserInterface->CreateFPSpecialConst(
+          (stp::FPSpecial)$2, exp_width, sig_width));
 }
 ;
 

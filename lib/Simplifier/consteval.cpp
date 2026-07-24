@@ -55,12 +55,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
 
   const size_t number_of_children = input_children.size();
 
-  // TODO: FIXME: FP constants have no children
-  // The only childless Term kinds are the five floating-point constants
-  // (NaN, +/-oo, +/-zero), not just +oo.
-  assert(number_of_children >= 1 || k == FP_CONST_NAN ||
-         k == FP_CONST_POS_INF || k == FP_CONST_NEG_INF ||
-         k == FP_CONST_POS_ZERO || k == FP_CONST_NEG_ZERO);
+  assert(number_of_children >= 1);
   assert(k != BVCONST);
 
   ASTVec children;
@@ -1036,18 +1031,6 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
             FloatBlaster::withFormat(_bm, OutputNode, exp_width, sig_width);
       break;
     }
-    case FP_CONST_NAN:
-    case FP_CONST_POS_INF:
-    case FP_CONST_NEG_INF:
-    case FP_CONST_POS_ZERO:
-    case FP_CONST_NEG_ZERO:
-    {
-      ASTNode temp(_bm->CreateNode(k, children));
-      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(temp));
-      OutputNode = NonMemberBVConstEvaluator(_bm, blasted);
-      break;
-    }
-
     default:
       FatalError("BVConstEvaluator: The input kind is not supported yet:");
       break;

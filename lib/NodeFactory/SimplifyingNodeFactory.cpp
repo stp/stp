@@ -284,10 +284,7 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
       kind == stp::FP_ISNORMAL || kind == stp::FP_ISSUBNORMAL ||
       kind == stp::FP_ISZERO || kind == stp::FP_ISINFINITE ||
       kind == stp::FP_ISNAN || kind == stp::FP_ISNEGATIVE ||
-      kind == stp::FP_ISPOSITIVE || kind == stp::FP_SMT_EQ ||
-      kind == stp::FP_CONST_NAN || kind == stp::FP_CONST_POS_INF ||
-      kind == stp::FP_CONST_NEG_INF || kind == stp::FP_CONST_POS_ZERO ||
-      kind == stp::FP_CONST_NEG_ZERO;
+      kind == stp::FP_ISPOSITIVE || kind == stp::FP_SMT_EQ;
 
   // If all the parameters are constant, return the constant value.
   // The bitblaster calls CreateNode with a boolean vector. We don't try to
@@ -1752,10 +1749,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       kind == stp::FP_ISNORMAL || kind == stp::FP_ISSUBNORMAL ||
       kind == stp::FP_ISZERO || kind == stp::FP_ISINFINITE ||
       kind == stp::FP_ISNAN || kind == stp::FP_ISNEGATIVE ||
-      kind == stp::FP_ISPOSITIVE || kind == stp::FP_SMT_EQ ||
-      kind == stp::FP_CONST_NAN || kind == stp::FP_CONST_POS_INF ||
-      kind == stp::FP_CONST_NEG_INF || kind == stp::FP_CONST_POS_ZERO ||
-      kind == stp::FP_CONST_NEG_ZERO;
+      kind == stp::FP_ISPOSITIVE || kind == stp::FP_SMT_EQ;
 
   // If all the parameters are constant, return the constant value.
   if (children_all_constants(children) && !is_fp_operation)

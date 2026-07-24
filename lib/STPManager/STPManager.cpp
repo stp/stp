@@ -377,6 +377,38 @@ ASTFPConst* STPMgr::LookupOrCreateFPConst(ASTFPConst& s)
   return s_copy;
 }
 
+ASTNode STPMgr::CreateFPSpecialConst(FPSpecial which, unsigned exp_width,
+                                     unsigned sig_width)
+{
+  if (exp_width == 0 || sig_width == 0)
+    FatalError("CreateFPSpecialConst: a floating-point format needs nonzero "
+               "exponent and significand widths");
+
+  const unsigned width = exp_width + sig_width;
+  const unsigned stored_sig = sig_width - 1; // the hidden bit is not stored
+
+  // Packed layout, LSB first: [significand | exponent | sign].
+  CBV bits = CONSTANTBV::BitVector_Create(width, true);
+
+  const bool negative =
+      which == FPSpecial::MinusInfinity || which == FPSpecial::MinusZero;
+  const bool exp_all_ones = which == FPSpecial::NaN ||
+                            which == FPSpecial::PlusInfinity ||
+                            which == FPSpecial::MinusInfinity;
+
+  if (negative)
+    CONSTANTBV::BitVector_Bit_On(bits, width - 1);
+  for (unsigned i = 0; exp_all_ones && i < exp_width; i++)
+    CONSTANTBV::BitVector_Bit_On(bits, stored_sig + i);
+  // symfpu's default NaN: exponent all ones, stored significand 1.
+  if (which == FPSpecial::NaN)
+    CONSTANTBV::BitVector_Bit_On(bits, 0);
+
+  // CreateBVConst destroys `bits`.
+  ASTNode packed = CreateBVConst(bits, width);
+  return CreateFPConst(packed, exp_width, sig_width);
+}
+
 ASTNode STPMgr::CreateZeroConst(unsigned width)
 {
   assert(width > 0);

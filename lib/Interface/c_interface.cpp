@@ -1095,36 +1095,33 @@ static void fpTypeWidths(Type fpType, unsigned& eb, unsigned& sb)
   sb = (*t)[1].GetUnsignedConst();
 }
 
-static Expr fpSpecial(VC vc, stp::Kind k, Type fpType)
+static Expr fpSpecial(VC vc, stp::FPSpecial which, Type fpType)
 {
   stp::STPMgr* b = ((stp::STP*)vc)->bm;
   unsigned eb, sb;
   fpTypeWidths(fpType, eb, sb);
-  stp::ASTNode r = b->CreateTerm(k, eb + sb, stp::ASTVec());
-  r.SetExpWidth(eb);
-  r.SetSigWidth(sb);
-  return persistNode(vc, r);
+  return persistNode(vc, b->CreateFPSpecialConst(which, eb, sb));
 }
 
 Expr vc_fpNaN(VC vc, Type fpType)
 {
-  return fpSpecial(vc, stp::FP_CONST_NAN, fpType);
+  return fpSpecial(vc, stp::FPSpecial::NaN, fpType);
 }
 Expr vc_fpPlusInfinity(VC vc, Type fpType)
 {
-  return fpSpecial(vc, stp::FP_CONST_POS_INF, fpType);
+  return fpSpecial(vc, stp::FPSpecial::PlusInfinity, fpType);
 }
 Expr vc_fpMinusInfinity(VC vc, Type fpType)
 {
-  return fpSpecial(vc, stp::FP_CONST_NEG_INF, fpType);
+  return fpSpecial(vc, stp::FPSpecial::MinusInfinity, fpType);
 }
 Expr vc_fpPlusZero(VC vc, Type fpType)
 {
-  return fpSpecial(vc, stp::FP_CONST_POS_ZERO, fpType);
+  return fpSpecial(vc, stp::FPSpecial::PlusZero, fpType);
 }
 Expr vc_fpMinusZero(VC vc, Type fpType)
 {
-  return fpSpecial(vc, stp::FP_CONST_NEG_ZERO, fpType);
+  return fpSpecial(vc, stp::FPSpecial::MinusZero, fpType);
 }
 
 // Build an FP_TOFP node: the (eb,sb) width children the blaster reads, an

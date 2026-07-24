@@ -42,6 +42,7 @@ namespace stp
 struct UserDefinedFlags;
 class STPMgr;
 class LetMgr;
+enum class FPSpecial; // see STPManager.h
 
 class Cpp_interface
 {
@@ -155,6 +156,10 @@ public:
   // TERMS//
   DLL_PUBLIC ASTNode CreateZeroConst(unsigned int width);
   DLL_PUBLIC ASTNode CreateOneConst(unsigned int width);
+  DLL_PUBLIC ASTNode CreateFPSpecialConst(stp::FPSpecial which,
+                                          unsigned exp_width,
+                                          unsigned sig_width);
+
   DLL_PUBLIC ASTNode CreateBVConst(std::string& strval, int base,
                                    int bit_width);
   DLL_PUBLIC ASTNode CreateBVConst(const char* const strval, int base);

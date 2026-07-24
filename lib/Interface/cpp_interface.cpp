@@ -168,6 +168,13 @@ ASTNode Cpp_interface::CreateOneConst(unsigned int width)
   return bm.CreateOneConst(width);
 }
 
+ASTNode Cpp_interface::CreateFPSpecialConst(stp::FPSpecial which,
+                                            unsigned exp_width,
+                                            unsigned sig_width)
+{
+  return bm.CreateFPSpecialConst(which, exp_width, sig_width);
+}
+
 ASTNode Cpp_interface::CreateBVConst(string& strval, int base, int bit_width)
 {
   return bm.CreateBVConst(strval, base, bit_width);

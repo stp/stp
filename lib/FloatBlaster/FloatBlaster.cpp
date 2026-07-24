@@ -277,21 +277,6 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
       return FloatBlaster::withFormat(stp::GlobalParserBM, output, to_exp,
                                       to_sig);
     }
-    case FP_CONST_POS_INF:
-      output = symbolic_fp::blast_pos_inf(actualInputterm);
-      break;
-    case FP_CONST_NEG_INF:
-      output = symbolic_fp::blast_neg_inf(actualInputterm);
-      break;
-    case FP_CONST_NAN:
-      output = symbolic_fp::blast_nan(actualInputterm);
-      break;
-    case FP_CONST_POS_ZERO:
-      output = symbolic_fp::blast_zero(actualInputterm, false);
-      break;
-    case FP_CONST_NEG_ZERO:
-      output = symbolic_fp::blast_zero(actualInputterm, true);
-      break;
     // ((_ to_fp_unsigned e s) rm bv): the source is always an unsigned
     // integer in a bitvector.
     case FP_TOFP_UNSIGNED:

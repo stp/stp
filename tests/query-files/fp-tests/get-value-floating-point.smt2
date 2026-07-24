@@ -13,10 +13,12 @@
 (assert (= y (fp #b1 #b010 #b0110)))
 ; CHECK: sat
 (check-sat)
-; get-model prints x in fp syntax, with its sort
-; CHECK: define-fun |x| () (_ FloatingPoint 3 5) (fp #b0 #b011 #b0000)
+; get-model prints x in fp syntax, with its sort. (CHECK-L: these patterns
+; hold regex metacharacters -- |, ( -- so the plain CHECK form would match
+; vacuously.)
+; CHECK-L: define-fun |x| () (_ FloatingPoint 3 5) (fp #b0 #b011 #b0000)
 (get-model)
 ; get-value prints in the requested order, both in fp syntax (not #x..)
-; CHECK: |x| (fp #b0 #b011 #b0000)
-; CHECK: |y| (fp #b1 #b010 #b0110)
+; CHECK-L: |x| (fp #b0 #b011 #b0000)
+; CHECK-L: |y| (fp #b1 #b010 #b0110)
 (get-value (x y))

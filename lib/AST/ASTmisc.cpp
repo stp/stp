@@ -793,14 +793,6 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
       }
       break;
     }
-    case FP_CONST_NAN:
-    case FP_CONST_POS_INF:
-    case FP_CONST_NEG_INF:
-    case FP_CONST_POS_ZERO:
-    case FP_CONST_NEG_ZERO:
-    {
-      break;
-    }
 
     default:
       cerr << _kind_names[k];
@@ -1002,14 +994,6 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
         cerr << error_msg << endl;
         FatalError(error_msg.c_str(), n);
       }
-      break;
-    }
-    case FP_CONST_NAN:
-    case FP_CONST_POS_INF:
-    case FP_CONST_NEG_INF:
-    case FP_CONST_POS_ZERO:
-    case FP_CONST_NEG_ZERO:
-    {
       break;
     }
 
