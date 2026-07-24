@@ -457,6 +457,75 @@ TEST(UnsignedIntervalExhaustive, Eq)
     checkPredicate(stp::EQ, w, EXACT);
 }
 
+// The unsigned overflow predicates are exact: the outcome is monotone in the
+// operand box, and an unknown operand is treated as the full range, so the
+// attained extremes decide the hull for every combination (including the cases
+// where only one operand is known, e.g. a * 0 or a + 0).
+TEST(UnsignedIntervalExhaustive, Bvuaddo)
+{
+  for (unsigned w = 1; w <= 4; w++)
+    checkPredicate(stp::BVUADDO, w, EXACT);
+}
+
+TEST(UnsignedIntervalExhaustive, Bvumulo)
+{
+  for (unsigned w = 1; w <= 4; w++)
+    checkPredicate(stp::BVUMULO, w, EXACT);
+}
+
+TEST(UnsignedIntervalExhaustive, Bvusubo)
+{
+  for (unsigned w = 1; w <= 4; w++)
+    checkPredicate(stp::BVUSUBO, w, EXACT);
+}
+
+// Confirms the transfer functions actually fire (produce a constant verdict)
+// at a realistic width where brute force is impossible, in both the "always"
+// and "never" directions.
+TEST(UnsignedIntervalExhaustive, OverflowFires)
+{
+  Context c;
+
+  const auto predicate = [&](stp::Kind k) {
+    stp::ASTVec symbols;
+    symbols.push_back(c.mgr.CreateSymbol("x", 0, 32));
+    symbols.push_back(c.mgr.CreateSymbol("y", 0, 32));
+    return c.mgr.hashingNodeFactory->CreateNode(k, symbols);
+  };
+
+  // Returns 0 (false), 1 (true), or -1 (unknown / no constant computed).
+  const auto run = [&](stp::Kind k, uint64_t aLo, uint64_t aHi, uint64_t bLo,
+                       uint64_t bHi) -> int {
+    const stp::ASTNode n = predicate(k);
+    std::vector<const stp::UnsignedInterval*> children = {
+        makeInterval(32, aLo, aHi), makeInterval(32, bLo, bHi)};
+    stp::UnsignedInterval* result =
+        c.analysis.dispatchToTransferFunctions(n, children);
+    int verdict = -1;
+    if (result != nullptr && result->isConstant())
+      verdict = (int)cbvValue(result->minV, 1);
+    cleanup(children, result);
+    return verdict;
+  };
+
+  // Add: x in [0,100] plus 5 can never carry out of 32 bits -> always false.
+  EXPECT_EQ(run(stp::BVUADDO, 0, 100, 5, 5), 0);
+  // Add: both operands at least 2^31 always carry -> always true.
+  EXPECT_EQ(run(stp::BVUADDO, (1ull << 31), (1ull << 31), (1ull << 31),
+                (1ull << 31) + 10),
+            1);
+  // Mul: small * small can't reach 2^32 -> always false.
+  EXPECT_EQ(run(stp::BVUMULO, 0, 100, 0, 100), 0);
+  // Mul: both operands at least 2^16 reach 2^32 -> always true.
+  EXPECT_EQ(run(stp::BVUMULO, (1ull << 16), (1ull << 20), (1ull << 16),
+                (1ull << 20)),
+            1);
+  // Sub: max(a) < min(b) means a <u b always borrows -> always true.
+  EXPECT_EQ(run(stp::BVUSUBO, 0, 10, 20, 30), 1);
+  // Sub: min(a) >= max(b) never borrows -> always false.
+  EXPECT_EQ(run(stp::BVUSUBO, 20, 30, 0, 10), 0);
+}
+
 TEST(UnsignedIntervalExhaustive, Bvnot)
 {
   for (unsigned w = 1; w <= 5; w++)

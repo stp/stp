@@ -123,7 +123,7 @@ bool Cadical::okay()
 
 bool Cadical::addClause(const vec_literals& ps) // Add a clause to the solver.
 {
-  for (unsigned i=0; i < ps.size(); i++)
+  for (int i=0; i < ps.size(); i++)
     {
       uint32_t var = ps[i].x >> 1;
       uint32_t polarity = ps[i].x & 1;

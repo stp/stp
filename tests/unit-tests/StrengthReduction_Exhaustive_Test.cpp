@@ -281,7 +281,7 @@ TEST(StrengthReduction_Exhaustive_Test, sgt_to_ugt_via_fixedbits)
     ASSERT_FALSE(c.present(stp::BVSGT, result));
     ASSERT_TRUE(c.present(stp::BVGT, result));
 
-    auto consistent = [sign, width](unsigned v) {
+    auto consistent = [sign](unsigned v) {
       return ((v >> (width - 1)) & 1) == sign;
     };
     c.checkEquivalent(n, result, x, y, width, consistent, consistent);
@@ -347,10 +347,10 @@ TEST(StrengthReduction_Exhaustive_Test, sdiv_to_udiv_via_fixedbits)
 
       c.checkEquivalent(
           n, result, x, y, width,
-          [xSign, width](unsigned v) {
+          [xSign](unsigned v) {
             return ((v >> (width - 1)) & 1) == xSign;
           },
-          [ySign, width](unsigned v) {
+          [ySign](unsigned v) {
             return ((v >> (width - 1)) & 1) == ySign;
           });
     }
@@ -384,10 +384,10 @@ TEST(StrengthReduction_Exhaustive_Test, srem_to_urem_via_fixedbits)
 
       c.checkEquivalent(
           n, result, x, y, width,
-          [xSign, width](unsigned v) {
+          [xSign](unsigned v) {
             return ((v >> (width - 1)) & 1) == xSign;
           },
-          [ySign, width](unsigned v) {
+          [ySign](unsigned v) {
             return ((v >> (width - 1)) & 1) == ySign;
           });
     }
@@ -424,7 +424,7 @@ TEST(StrengthReduction_Exhaustive_Test, sge_to_uge_via_fixedbits)
     ASSERT_FALSE(c.present(stp::BVSGT, result));
     ASSERT_TRUE(c.present(stp::BVGT, result));
 
-    auto consistent = [sign, width](unsigned v) {
+    auto consistent = [sign](unsigned v) {
       return ((v >> (width - 1)) & 1) == sign;
     };
     c.checkEquivalent(n, result, x, y, width, consistent, consistent);
@@ -461,10 +461,10 @@ TEST(StrengthReduction_Exhaustive_Test, smod_to_urem_via_fixedbits)
 
       c.checkEquivalent(
           n, result, x, y, width,
-          [xSign, width](unsigned v) {
+          [xSign](unsigned v) {
             return ((v >> (width - 1)) & 1) == xSign;
           },
-          [ySign, width](unsigned v) {
+          [ySign](unsigned v) {
             return ((v >> (width - 1)) & 1) == ySign;
           });
     }

@@ -418,7 +418,7 @@ TEST_F(ConstantBitP_TransferFunctions, unsignedDivisionExhaustiveWidth3)
         return bvUnsignedDivisionBothWays(children, out, &mgr);
       },
       // SMT-LIB semantics: bvudiv by zero gives all ones.
-      [mask](const std::vector<unsigned>& v) {
+      [](const std::vector<unsigned>& v) {
         return v[1] == 0 ? mask : v[0] / v[1];
       },
       bv3(2), out3(), OVERAPPROXIMATES);

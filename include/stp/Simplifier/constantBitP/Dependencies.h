@@ -110,7 +110,7 @@ public:
 
   ~Dependencies()
   {
-    for (const auto it : dependents)
+    for (const auto& it : dependents)
       delete it.second;
   }
 

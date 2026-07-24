@@ -65,27 +65,27 @@ public:
 
   ~Cadical();
 
-  bool addClause(const vec_literals& ps); // Add a clause to the solver.
+  bool addClause(const vec_literals& ps) override; // Add a clause to the solver.
 
-  bool okay() const; // FALSE means solver is in a conflicting state
+  bool okay() const override; // FALSE means solver is in a conflicting state
 
-  virtual void setMaxConflicts(int64_t max_confl); // set max solver conflicts
+  void setMaxConflicts(int64_t max_confl) override; // set max solver conflicts
 
-  virtual bool simplify(); // Removes already satisfied clauses.
+  bool simplify() override; // Removes already satisfied clauses.
 
-  virtual uint8_t modelValue(uint32_t x) const;
+  uint8_t modelValue(uint32_t x) const override;
 
-  virtual uint32_t newVar();
+  uint32_t newVar() override;
 
-  void setVerbosity(int v);
+  void setVerbosity(int v) override;
 
-  unsigned long nVars() const;
+  unsigned long nVars() const override;
 
-  void printStats() const;
+  void printStats() const override;
 
-  virtual lbool true_literal() const { return ((uint8_t)1); }
-  virtual lbool false_literal() const { return ((uint8_t)-1); }
-  virtual lbool undef_literal() const { return ((uint8_t)2); }
+  lbool true_literal() const override { return ((uint8_t)1); }
+  lbool false_literal() const override { return ((uint8_t)-1); }
+  lbool undef_literal() const override { return ((uint8_t)2); }
 
 protected:
   bool solveInternal(bool& timeout_expired) override;

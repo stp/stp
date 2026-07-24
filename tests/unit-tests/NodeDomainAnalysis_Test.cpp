@@ -284,7 +284,9 @@ static void checkIdempotent(Context& c, stp::FixedBits*& bits,
 
   ASSERT_EQ(bitsAfterFirst == nullptr, bits == nullptr) << msg;
   if (bits != nullptr)
+  {
     ASSERT_TRUE(stp::FixedBits::equals(*bitsAfterFirst, *bits)) << msg;
+  }
 
   ASSERT_EQ(minAfterFirst == nullptr, interval == nullptr) << msg;
   if (interval != nullptr)
@@ -434,8 +436,10 @@ TEST(NodeDomainAnalysis_Test, harmonise_tightens_maximally_exhaustive)
             const bool fixed = bits != nullptr && bits->isFixed(i);
             ASSERT_EQ(agree[i], fixed) << "bit " << i << " " << msg;
             if (fixed)
+            {
               ASSERT_EQ(agreedValue[i], bits->getValue(i))
                   << "bit " << i << " " << msg;
+            }
           }
 
           delete bits;

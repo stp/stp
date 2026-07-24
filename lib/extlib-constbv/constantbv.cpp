@@ -1514,7 +1514,7 @@ namespace CONSTANTBV {
         while (size-- > 0)
           {
             value = *addr++;
-            long int count = BITS;
+            unsigned int count = BITS;
             if (count > length) count = length;
             while (count-- > 0)
               {

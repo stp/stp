@@ -150,7 +150,9 @@ struct Context
     ASTNode plain = hf->CreateTerm(k, width, children);
     ASTNode simplified = nf->CreateTerm(k, width, children);
     if (expectFired)
+    {
       EXPECT_NE(plain, simplified);
+    }
     checkEquivalent(plain, simplified);
   }
 
@@ -159,7 +161,9 @@ struct Context
     ASTNode plain = hf->CreateNode(k, children);
     ASTNode simplified = nf->CreateNode(k, children);
     if (expectFired)
+    {
       EXPECT_NE(plain, simplified);
+    }
     checkEquivalent(plain, simplified);
   }
 };

@@ -43,6 +43,7 @@ cd build-32bit
 cmake \
   -DNOCRYPTOMINISAT:BOOL=ON \
   -DENABLE_TESTING:BOOL=ON \
+  -DWERROR:BOOL=ON \
   -DLIT_ARGS:STRING=-v \
   -DPYTHON_EXECUTABLE:PATH="$(which python3)" \
   -DSYMFPU_INCLUDE_DIRS="$(readlink -fm ../deps)" \

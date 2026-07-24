@@ -86,11 +86,14 @@ public:
   // To get its CNF variable number we get the node at the same position.
   int symbol_index;
 
-  BBNodeAIG() { n = NULL; }
+  // symbol_index is only meaningful for symbol nodes, where CreateSymbol
+  // sets it; initialise it to an invalid index here so every BBNodeAIG has
+  // a defined value (otherwise copying e.g. getTrue()/getFalse() reads an
+  // uninitialised member).
+  BBNodeAIG() : n(NULL), symbol_index(-1) {}
 
-  BBNodeAIG(Aig_Obj_t* _n)
+  BBNodeAIG(Aig_Obj_t* _n) : n(_n), symbol_index(-1)
   {
-    n = _n;
     assert(n != NULL);
     if (Aig_IsComplement(n))
     {

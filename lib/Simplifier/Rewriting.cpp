@@ -230,11 +230,11 @@ namespace stp
        )
        {
 
-        for (int matching =0 ; matching < c[1][0].Degree(); matching++)
+        for (size_t matching =0 ; matching < c[1][0].Degree(); matching++)
           if (c[1][0][matching] == c[0])
           {
             ASTVec others;
-            for (int i =0 ; i < c[1][0].Degree(); i++)
+            for (size_t i =0 ; i < c[1][0].Degree(); i++)
               if (i != matching)
                 others.push_back(c[1][0][i]);
 
