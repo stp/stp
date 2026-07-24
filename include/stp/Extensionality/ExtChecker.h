@@ -43,10 +43,21 @@ THE SOFTWARE.
  *         following the read-over-write axiom A3 (sections 7.2, 7.3);
  *   R / L propagate accesses across an array equality whose Boolean
  *         abstraction variable sigma assigns true (section 7.3);
- *   C     on every insertion, compare against the accesses already at
- *         the destination: equal concrete indices with different
- *         concrete values violate the (adapted) read-congruence axiom
- *         A1 and yield a conflict (section 7.2).
+ *   C     on every insertion, compare against the access already at
+ *         the destination for the same concrete index: a different
+ *         concrete value violates the (adapted) read-congruence axiom
+ *         A1 and yields a conflict (section 7.2).
+ *
+ * Following section 11.2, rho keeps one representative access per
+ * concrete index of each array, in a hash keyed by the index value: a
+ * congruence lookup is a single probe rather than a scan, and an
+ * access arriving with the same concrete index and the same concrete
+ * value as the representative is dropped without further propagation.
+ * Dropping it is complete: which arrays an access can reach from here
+ * depends only on its concrete index (write indices stepped over,
+ * equalities assigned true), so the representative reaches exactly the
+ * same arrays carrying the same value, and any conflict the duplicate
+ * would have found the representative finds too.
  *
  * On a conflict it builds the paper's lemma (section 8): the
  * conjunction of the index equality, the write-index disequalities
@@ -246,6 +257,8 @@ struct ExtEvent
     SEED,
     PROPAGATE,
     SKIP_SEEN,
+    SKIP_REPRESENTED, // section 11.2: same concrete index and value as
+                      // the representative already at the array
     CONFLICT,
     WITNESS_CHECK
   };

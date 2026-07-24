@@ -94,7 +94,11 @@ solver playing ``DP_B``):
    index under σ (rules *D*/*U*, axiom A3), and across array equalities
    that σ makes true (rules *R*/*L*). Two accesses meeting at one array
    with equal concrete indices but different values violate read
-   congruence (rule *C*, axiom A1).
+   congruence (rule *C*, axiom A1). Per §11.2 the checker keeps one
+   representative access per concrete index of each array, hashed by
+   index value: congruence is a single probe, and an access arriving
+   with the same index and value as its representative is dropped
+   without further propagation.
 
 4. **Lemmas on demand** (paper §8). A conflict yields the lemma
 

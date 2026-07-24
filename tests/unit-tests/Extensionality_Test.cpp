@@ -224,11 +224,15 @@ protected:
       EXPECT_EQ(expected[i].kind, r.events[i].kind) << "event " << i;
       EXPECT_STREQ(expected[i].rule, r.events[i].rule) << "event " << i;
       if (!expected[i].destination.IsNull())
+      {
         EXPECT_EQ(expected[i].destination, r.events[i].destination)
             << "event " << i;
+      }
       if (expected[i].access >= 0)
+      {
         EXPECT_EQ((size_t)expected[i].access, r.events[i].access)
             << "event " << i;
+      }
     }
   }
 };
@@ -545,14 +549,18 @@ TEST_F(ExtFixtureTest, UpEqualityDownConflict)
 
   ExtCheckResult r = run();
   ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
+  // The two witness reads carry equal concrete values, so each is a
+  // represented duplicate of the other side's witness read when it
+  // crosses the equality (section 11.2) and is dropped there.
   expectStats(r, {{"conflicts", 1},
-                  {"insertions", 14},
-                  {"propagations", 8},
+                  {"insertions", 12},
+                  {"propagations", 6},
                   {"rule_D_WRITE", 2},
-                  {"rule_L_EQ", 2},
-                  {"rule_R_EQ", 2},
+                  {"rule_L_EQ", 1},
+                  {"rule_R_EQ", 1},
                   {"rule_U_WRITE", 2},
                   {"seeds", 6},
+                  {"skipped_represented", 2},
                   {"skipped_seen", 1}});
   expectEvents(r, {{ExtEvent::SEED, "I_READ", A, (int)aA},
                    {ExtEvent::SEED, "I_READ", B, (int)aB},
@@ -565,9 +573,9 @@ TEST_F(ExtFixtureTest, UpEqualityDownConflict)
                    {ExtEvent::PROPAGATE, "R_EQ", w2, (int)aw1},
                    {ExtEvent::PROPAGATE, "L_EQ", w1, (int)aw2},
                    {ExtEvent::PROPAGATE, "D_WRITE", A, (int)aL},
-                   {ExtEvent::PROPAGATE, "R_EQ", w2, (int)aL},
+                   {ExtEvent::SKIP_REPRESENTED, "R_EQ", w2, (int)aL},
                    {ExtEvent::PROPAGATE, "D_WRITE", B, (int)aR},
-                   {ExtEvent::PROPAGATE, "L_EQ", w1, (int)aR},
+                   {ExtEvent::SKIP_REPRESENTED, "L_EQ", w1, (int)aR},
                    {ExtEvent::SKIP_SEEN, "D_WRITE", A, (int)aA},
                    {ExtEvent::CONFLICT, "R_EQ", w2, (int)aA}});
 
@@ -618,6 +626,81 @@ TEST_F(ExtFixtureTest, WriteWriteEqualityConflict)
   EXPECT_EQ(2u, c.abstractPremise.size());
   EXPECT_EQ(e2, c.abstractConclusionA);
   EXPECT_EQ(e1, c.abstractConclusionB);
+}
+
+// Section 11.2: an access arriving with the same concrete index and
+// the same concrete value as the representative already at the array
+// is dropped without insertion, so it never propagates onward -- here
+// the duplicate read never climbs the write stacked on A.
+TEST_F(ExtFixtureTest, RepresentedDuplicateIsPruned)
+{
+  ASTNode A = arr("A");
+  ASTNode i = bv("i", 1), j = bv("j", 1); // concretely equal indices
+  ASTNode x = bv("x", 2);
+  ASTNode e = bv("e", 2);
+  ASTNode w = write(A, x, e);
+  ASTNode r1 = bv("r1", 3), r2 = bv("r2", 3); // concretely equal values
+
+  size_t a1 = readAccess(A, i, r1);
+  size_t a2 = readAccess(A, j, r2);
+  size_t aw = writeAccess(w);
+
+  ExtCheckResult r = run();
+  ASSERT_EQ(ExtCheckResult::CONSISTENT, r.status);
+  // a1 seeds at A and climbs the write; a2 is represented by a1 at A
+  // and goes nowhere; the write access stays at its own node.
+  expectStats(r, {{"insertions", 3},
+                  {"propagations", 1},
+                  {"rule_U_WRITE", 1},
+                  {"seeds", 2},
+                  {"skipped_represented", 1},
+                  {"skipped_seen", 1}});
+  expectEvents(r, {{ExtEvent::SEED, "I_READ", A, (int)a1},
+                   {ExtEvent::SKIP_REPRESENTED, "I_READ", A, (int)a2},
+                   {ExtEvent::SEED, "I_WRITE", w, (int)aw},
+                   {ExtEvent::PROPAGATE, "U_WRITE", w, (int)a1},
+                   {ExtEvent::SKIP_SEEN, "D_WRITE", A, (int)a1}});
+  // The observed contents carry the representative's pair once.
+  ASSERT_EQ(1u, r.observed.count(A));
+  ASSERT_EQ(1u, r.observed.find(A)->second.size());
+  EXPECT_EQ(c2(1), r.observed.find(A)->second[0].first);
+  EXPECT_EQ(c2(3), r.observed.find(A)->second[0].second);
+}
+
+// A pruned duplicate leaves congruence checking to its representative:
+// a later access at the same concrete index with a different value
+// conflicts against the representative, and the lemma premise is the
+// index equality of exactly those two accesses.
+TEST_F(ExtFixtureTest, ConflictFiresAgainstRepresentative)
+{
+  ASTNode A = arr("A");
+  ASTNode i = bv("i", 1), j = bv("j", 1), k = bv("k", 1);
+  ASTNode r1 = bv("r1", 3), r2 = bv("r2", 3), r3 = bv("r3", 2);
+
+  size_t a1 = readAccess(A, i, r1);
+  readAccess(A, j, r2); // represented by a1, dropped
+  size_t a3 = readAccess(A, k, r3);
+
+  ExtCheckResult r = run();
+  ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
+  expectStats(r, {{"conflicts", 1},
+                  {"insertions", 1},
+                  {"seeds", 1},
+                  {"skipped_represented", 1}});
+
+  const ExtConflict& c = r.conflict;
+  EXPECT_EQ(A, c.commonArray);
+  EXPECT_EQ(a1, c.leftAccess);
+  EXPECT_EQ(a3, c.rightAccess);
+  EXPECT_EQ(c2(1), c.indexValue);
+  EXPECT_EQ(c2(3), c.leftValue);
+  EXPECT_EQ(c2(2), c.rightValue);
+  ASSERT_EQ(1u, c.abstractPremise.size());
+  EXPECT_EQ(ExtLemmaAtom::BV_EQ, c.abstractPremise[0].op);
+  EXPECT_EQ(i, c.abstractPremise[0].a);
+  EXPECT_EQ(k, c.abstractPremise[0].b);
+  EXPECT_EQ(r1, c.abstractConclusionA);
+  EXPECT_EQ(r3, c.abstractConclusionB);
 }
 
 // The decision table combining STP's own model evaluation with the

@@ -53,6 +53,11 @@ struct CheckerState
   const bool recordEvents;
 
   std::map<PairKey, PathRecord> paths;
+  // rho, split per section 11.2: one representative access per
+  // concrete index of each array, keyed by the index value so a
+  // congruence lookup is a single probe; plus the representatives in
+  // insertion order, for the observed-contents export.
+  std::map<ASTNode, std::map<ASTNode, size_t>> rhoByIndex;
   std::map<ASTNode, std::vector<size_t>> rho; // insertion order preserved
   std::deque<PairKey> worklist;
   ExtCheckResult result;
@@ -96,8 +101,13 @@ struct CheckerState
   }
 
   // Congruence checking (rule C) runs on the fly, at insertion time,
-  // as suggested in section 11.2 of the paper; insertion is
+  // against the one representative access per concrete index that rho
+  // keeps for each array (section 11.2); insertion is
   // first-path-wins, so each (array, access) pair is processed once.
+  // An access matching its representative in both concrete index and
+  // concrete value is dropped without insertion or further
+  // propagation: the representative reaches every array the duplicate
+  // could reach, carrying the same value (see ExtChecker.h).
   // Returns true iff a conflict was found (stored in result.conflict,
   // without the lemmas, which buildLemmas adds).
   bool insert(const ASTNode& destination, size_t accessId,
@@ -116,13 +126,12 @@ struct CheckerState
     const ASTNode idx = accessIndex(accessId);
     const ASTNode val = accessValue(accessId);
 
-    const std::vector<size_t>& present = rho[destination];
-    for (size_t i = 0; i < present.size(); i++)
+    std::map<ASTNode, size_t>& byIndex = rhoByIndex[destination];
+    const std::map<ASTNode, size_t>::const_iterator hit = byIndex.find(idx);
+    if (hit != byIndex.end())
     {
-      const size_t otherId = present[i];
-      if (otherId == accessId)
-        continue;
-      if (accessIndex(otherId) == idx && accessValue(otherId) != val)
+      const size_t otherId = hit->second;
+      if (accessValue(otherId) != val)
       {
         ExtConflict& c = result.conflict;
         c.commonArray = destination;
@@ -139,6 +148,10 @@ struct CheckerState
         conflictFound = true;
         return true;
       }
+      result.stats["skipped_represented"]++;
+      event(ExtEvent::SKIP_REPRESENTED, rule, source, destination, accessId,
+            idx, val);
+      return false;
     }
 
     PathRecord pr;
@@ -147,6 +160,7 @@ struct CheckerState
     pr.guards = guards;
     pr.rule = rule;
     paths[key] = pr;
+    byIndex[idx] = accessId;
     rho[destination].push_back(accessId);
     worklist.push_back(key);
     result.stats["insertions"]++;
