@@ -101,7 +101,8 @@ ASTNode FloatBlaster::withFormat(STPMgr* bm, const ASTNode& n,
 
 ASTNode FloatBlaster::canonicalBits(const ASTNode& f)
 {
-  FloatBlaster::instance(); // ensure symfpu's backend is initialised
+  // Point symfpu at the current manager before blasting (see init_vc).
+  symbolic_fp::init_vc(stp::GlobalParserBM);
   return symbolic_fp::blast_reinterpret(f, f.GetExpWidth(), f.GetSigWidth());
 }
 
@@ -126,6 +127,9 @@ ASTNode FloatBlaster::unspecifiedValue(STPMgr* bm, const char* tag,
 
 ASTNode FloatBlaster::BlastNode_TopLevel(const ASTNode& b)
 {
+  // Point symfpu's backend at the manager being blasted now, rather than
+  // whichever manager happened to blast first (see symbolic_fp::init_vc).
+  symbolic_fp::init_vc(stp::GlobalParserBM);
   ASTNode out = FloatBlaster::instance()->BlastNode(b);
   return out;
 }

@@ -559,6 +559,10 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_max_conflicts, int timeout_
   stp::ASTNode* a = (stp::ASTNode*)e;
   stp::STPMgr* b = stp_i->bm;
 
+  // Make this checker's manager current so floating-point blasting during the
+  // solve targets it, not whichever checker was created or solved last.
+  stp::GlobalParserBM = b;
+
   /*
    * -1 is the only negative value that means anything ("no limit"). Reject
    * the rest rather than silently running unlimited, which is the dangerous
@@ -682,6 +686,10 @@ Expr vc_getCounterExample(VC vc, Expr e)
 {
   stp::STP* stp_i = (stp::STP*)vc;
   stp::ASTNode* a = (stp::ASTNode*)e;
+
+  // Reading a floating-point value blasts the term, so this checker's manager
+  // must be current (see vc_query_with_timeout).
+  stp::GlobalParserBM = stp_i->bm;
 
   stp::AbsRefine_CounterExample* ce =
       (stp::AbsRefine_CounterExample*)(stp_i->Ctr_Example);

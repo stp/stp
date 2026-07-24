@@ -386,10 +386,6 @@ class Solver(object):
         sb counts the hidden significand bit, matching SMT-LIB's
         (_ FloatingPoint eb sb): fp('x', 11, 53) is an IEEE double, fp('x', 8,
         24) an IEEE single.
-
-        Note: floating point binds a process-global backend to the first Solver
-        that uses it, so use a single Solver for all floating-point work within a
-        process; floating point across several live Solvers is not yet supported.
         """
         name_conv = bytes(name, 'utf8') if Py3 else name
         fp_type = _lib.vc_fpType(self.vc, eb, sb)

@@ -28,6 +28,8 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/c_interface.h"
 
+#include <map>
+
 #include "symfpu/core/add.h"
 #include "symfpu/core/classify.h"
 #include "symfpu/core/compare.h"
@@ -925,12 +927,20 @@ namespace symbolic_fp
 
 void init_vc(STPMgr* _bm)
 {
-  static bool init = false;
-  if (!init)
+  // symfpu builds its blasted circuit through `vc`, so `vc` must wrap the
+  // manager currently being blasted. Cache one checker per manager and repoint
+  // `vc` at it, so independent managers -- e.g. separate validity checkers each
+  // using floating point -- do not blast into one another's manager. Called
+  // before every top-level blast (see FloatBlaster::BlastNode_TopLevel).
+  static std::map<STPMgr*, VC> vc_by_bm;
+  bm = _bm;
+  std::map<STPMgr*, VC>::iterator it = vc_by_bm.find(_bm);
+  if (it != vc_by_bm.end())
+    vc = it->second;
+  else
   {
-    init = true;
     vc = vc_createValidityCheckerReuse(_bm);
-    bm = _bm;
+    vc_by_bm[_bm] = vc;
   }
 }
 
