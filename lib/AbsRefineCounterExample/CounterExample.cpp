@@ -854,8 +854,14 @@ void AbsRefine_CounterExample::PrintSMTLIB2(std::ostream& os, const ASTNode& n)
     n.nodeprint(os);
     os << "| ";
 
-    if (n.GetType() == stp::BITVECTOR_TYPE ||
-        n.GetType() == stp::FLOATINGPOINT_TYPE)
+    if (n.GetType() == stp::FLOATINGPOINT_TYPE)
+      // A floating-point value must be printed in floating-point syntax
+      // (fp #bS #bE #bM), not as the raw packed bit-vector -- the get-model
+      // path (outputLine) does this; get-value must match, or it hands back a
+      // bit-vector literal where an operand of floating-point sort is expected.
+      printer::outputFloatingPointSMTLIB2(TermToConstTermUsingModel(n, false),
+                                          os, n);
+    else if (n.GetType() == stp::BITVECTOR_TYPE)
       printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(n, false), os);
     else
     {
