@@ -81,6 +81,12 @@ SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS,
   if (bm->UserFlags.stats_flag)
     NewSolver.setVerbosity(1);
 
+  /*
+   * STP spells "no limit" as a negative value, and every other value -- zero
+   * included -- is a budget to be honoured. Do that translation once, here,
+   * so that the backends are only ever handed a value >= 0 and cannot each
+   * decide for themselves what, say, zero means.
+   */
   if (bm->UserFlags.timeout_max_conflicts >= 0)
     newS->setMaxConflicts(bm->UserFlags.timeout_max_conflicts);
 

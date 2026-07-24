@@ -57,8 +57,6 @@ public:
 
   bool okay() const; // FALSE means solver is in a conflicting state
 
-  bool solve(bool& timeout_expired); // Search without assumptions.
-
   bool propagateWithAssumptions(const stp::SATSolver::vec_literals& assumps);
 
   virtual void setMaxConflicts(int64_t max_confl);
@@ -84,6 +82,9 @@ public:
   virtual int nClauses();
 
   //bool unitPropagate(const vec_literals& ps);
+
+protected:
+  bool solveInternal(bool& timeout_expired) override;
 };
 }
 

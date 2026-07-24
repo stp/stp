@@ -49,7 +49,7 @@ class TestSTP(unittest.TestCase):
     def setUp(self):
         self.s = stp.Solver()
         self.stp_solvers = set(
-            ["Minisat", "SimplifyingMinisat", "Cryptominisat", "Riss"]
+            ["Minisat", "SimplifyingMinisat", "Cryptominisat", "Riss", "Cadical"]
         )
 
     def test_long(self):
@@ -397,6 +397,93 @@ class TestSTP(unittest.TestCase):
         Checks that the underlying solver can be set to be riss
         """
         self._test_solver("Riss", is_default_solver=False)
+
+    def test_cadical(self):
+        """
+        Checks that the underlying solver can be set to be cadical
+        """
+        self._test_solver("Cadical", is_default_solver=False)
+
+    def _hard_instance(self):
+        """
+        Factoring a semiprime: hard enough that any answer we get while a test
+        is watching came from a budget running out, not from the search
+        finishing.
+
+        Both factors are held below 2^40 so that the multiply cannot wrap:
+        without that the constraint is satisfied modulo 2^96 by almost any
+        'a', and the instance is trivial rather than a factoring problem.
+
+        486579698794948075013401 == 703873773913 * 691288291777, both prime.
+        """
+        s = self.s
+        a = s.bitvec('a', 96)
+        b = s.bitvec('b', 96)
+        s.add(a * b == s.bitvecvalD(96, "486579698794948075013401"))
+        s.add(a > s.bitvecvalD(96, "1"))
+        s.add(b > s.bitvecvalD(96, "1"))
+        s.add(a < s.bitvecvalD(96, "1099511627776"))
+        s.add(b < s.bitvecvalD(96, "1099511627776"))
+        s.add(a <= b)
+
+    def test_negative_budgets_are_rejected(self):
+        """
+        -1 is the only negative budget with a meaning ("no limit"); the rest
+        are rejected rather than silently run as unlimited
+        """
+        s = self.s
+
+        for kwargs in ({'max_time': -2}, {'max_conflicts': -2},
+                       {'max_time': -100, 'max_conflicts': -100}):
+            with self.assertRaises(ValueError):
+                s.check_with_timeout(s.false(), **kwargs)
+
+        with self.assertRaises(TypeError):
+            s.check_with_timeout(s.false(), max_time="10")
+
+    def test_zero_time_budget_gives_up_immediately(self):
+        """
+        A budget of zero is a budget, not the absence of one: 3 is returned
+        without the solver being given a chance to search
+        """
+        self._hard_instance()
+        self.assertEqual(self.s.check_with_timeout(max_time=0), 3)
+
+    def test_zero_conflict_budget_gives_up_immediately(self):
+        self._hard_instance()
+        self.assertEqual(self.s.check_with_timeout(max_conflicts=0), 3)
+
+    def test_no_limit_reaches_the_solver(self):
+        """
+        An unlimited query must still reach the SAT solver and come back with
+        an answer: a backend that mistook "no budget configured" for a budget
+        of zero would report a timeout here.
+
+        60491 == 251 * 241, factored in milliseconds. Given a budget of zero
+        conflicts this same instance times out, so the answer really does
+        come from the SAT solver.
+        """
+        s = self.s
+        a = s.bitvec('a', 32)
+        b = s.bitvec('b', 32)
+        s.add(a * b == s.bitvecval(32, 60491))
+        s.add(a > s.bitvecval(32, 1))
+        s.add(b > s.bitvecval(32, 1))
+        s.add(a < s.bitvecval(32, 65536))
+        s.add(b < s.bitvecval(32, 65536))
+        s.add(a <= b)
+
+        # The assertions are satisfiable, so the query of FALSE is invalid.
+        self.assertEqual(s.check_with_timeout(), 0)
+
+    def test_no_limit_still_answers(self):
+        """
+        An unlimited query is unaffected by any of the above
+        """
+        s = self.s
+        a = s.bitvec('a', 32)
+        s.add(a == s.bitvecval(32, 42))
+        self.assertEqual(s.check_with_timeout(a == s.bitvecval(32, 42)), 0)
 
     def test_git_version_sha(self):
         """

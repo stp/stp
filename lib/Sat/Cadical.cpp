@@ -43,21 +43,19 @@ bool Cadical::simplify()
 
 void Cadical::setMaxConflicts(int64_t _max_confl)
 {
+  assert(_max_confl >= 0);
   max_confl = _max_confl;
-}
-
-void Cadical::setMaxTime(int64_t _max_time)
-{
-  max_time = _max_time;
 }
 
  //    0 = UNSOLVED     (limit reached or interrupted through 'terminate')
  //   10 = SATISFIABLE
  //   20 = UNSATISFIABLE
-bool Cadical::solve(bool& timeout_expired)
+bool Cadical::solveInternal(bool& timeout_expired)
 {
-  // Cadical's limits only apply to the next solve() call, so re-arm on
-  // every call. Each call gets the full budget.
+  // Cadical's conflict limit only applies to the next solve() call and is
+  // reset once it returns, so it has to be re-armed here. Cadical exposes no
+  // count of the conflicts it has used, so unlike the time budget this one
+  // cannot be made to span the whole query: each call gets the full figure.
   if (max_confl >= 0)
   {
     const int budget =
@@ -65,11 +63,10 @@ bool Cadical::solve(bool& timeout_expired)
     s->limit("conflicts", budget);
   }
 
-  if (max_time >= 0)
+  // The Terminator reads the query's deadline from the base class, so this
+  // only needs connecting -- there is nothing to re-arm.
+  if (hasTimeLimit())
   {
-    time_limit.deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(max_time);
-    time_limit.armed = true;
     s->connect_terminator(&time_limit);
   }
 
@@ -81,7 +78,7 @@ bool Cadical::solve(bool& timeout_expired)
   return ret == 10;
 }
 
-Cadical::Cadical()
+Cadical::Cadical() : time_limit(*this)
 {
   s = new CaDiCaL::Solver ();
   s->set("quiet",1);

@@ -59,6 +59,7 @@ RissCore::~RissCore()
 
 void RissCore::setMaxConflicts(int64_t max_confl)
 {
+  assert(max_confl >= 0);
   s->setConfBudget(max_confl);
 }
 
@@ -100,7 +101,7 @@ bool RissCore::propagateWithAssumptions(
   return ret != (Riss::lbool)l_False;
 }
 
-bool RissCore::solve(bool& timeout_expired) // Search without assumptions.
+bool RissCore::solveInternal(bool& timeout_expired)
 {
   if (!s->simplify())
     return false;

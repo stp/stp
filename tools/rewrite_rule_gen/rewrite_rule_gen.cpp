@@ -808,7 +808,12 @@ bool isConstantToSat(const ASTNode& query, int64_t timeout_max_confl)
 
   assert(ss->nClauses() == 0);
   mgr->SetQuery(mgr->ASTUndefined);
-  ss->setMaxConflicts(timeout_max_confl);
+
+  // A negative budget means "no limit", which is spelled by not configuring
+  // one: the SAT solvers are only ever handed a value >= 0.
+  if (timeout_max_confl >= 0)
+    ss->setMaxConflicts(timeout_max_confl);
+
   SOLVER_RETURN_TYPE r = GlobalSTP->Ctr_Example->CallSAT_ResultCheck(
       *ss, query2, query2, GlobalSTP->tosat, false);
 

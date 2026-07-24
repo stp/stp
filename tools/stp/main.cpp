@@ -364,15 +364,16 @@ void ExtraMain::create_options()
        "Default: on when reading from stdin, off when reading from a file. "
        "SMT-LIB2 only.")
 
-      ("max-num-confl,max_num_confl,g", 
+      ("max-num-confl,max_num_confl,g",
       INT64_ARG(bm->UserFlags.timeout_max_conflicts),
       "Number of conflicts after which the SAT solver gives up. "
-      "-1 means never")
+      "-1 means never, 0 means give up without searching.")
 
-      ("max-time,max_time,k", 
+      ("max-time,max_time,k",
       INT64_ARG(bm->UserFlags.timeout_max_time),
-      "Number of seconds after which the SAT solver gives up. "
-      "-1 means never.")
+      "Number of seconds after which the SAT solver gives up. The budget is "
+      "for the whole query, not for each call into the SAT solver. "
+      "-1 means never, 0 means give up without searching.")
 
       ("check-sanity,d", 
         po::bool_switch(&(bm->UserFlags.check_counterexample_flag)),
@@ -488,6 +489,23 @@ int ExtraMain::parse_options(int argc, char** argv)
     bm->UserFlags.solver_to_use = UserDefinedFlags::CADICAL_SOLVER;
   }
 
+
+  /*
+   * -1 is the only negative value with a meaning ("no limit"); anything more
+   * negative than that is a mistake, and silently treating it as unlimited
+   * hides it.
+   */
+  if (bm->UserFlags.timeout_max_conflicts < -1)
+  {
+    cout << "ERROR: --max-num-confl must be -1 (no limit) or greater" << endl;
+    std::exit(-1);
+  }
+
+  if (bm->UserFlags.timeout_max_time < -1)
+  {
+    cout << "ERROR: --max-time must be -1 (no limit) or greater" << endl;
+    std::exit(-1);
+  }
 
   if (vm.count("disable-simplifications"))
   {

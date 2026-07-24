@@ -46,8 +46,6 @@ public:
 
   bool okay() const; // FALSE means solver is in a conflicting state
 
-  bool solve(bool& timeout_expired); // Search without assumptions.
-
   bool simplify(); // Removes already satisfied clauses.
 
   virtual void setMaxConflicts(int64_t max_confl);
@@ -67,6 +65,9 @@ public:
   virtual lbool undef_literal() const { return ((uint8_t)2); }
 
   virtual void setFrozen(uint32_t x);
+
+protected:
+  bool solveInternal(bool& timeout_expired) override;
 };
 }
 

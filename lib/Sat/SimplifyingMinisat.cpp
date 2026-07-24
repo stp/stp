@@ -47,8 +47,11 @@ SimplifyingMinisat::~SimplifyingMinisat()
 
 void SimplifyingMinisat::setMaxConflicts(int64_t max_confl)
 {
-  if (max_confl > 0)
-    s->setConfBudget(max_confl);
+  // Zero is a budget of zero, so it is passed on like any other: Minisat
+  // then gives up during the first propagation. Guarding this with '> 0'
+  // would quietly turn the smallest budget into no budget at all.
+  assert(max_confl >= 0);
+  s->setConfBudget(max_confl);
 }
 
 bool SimplifyingMinisat::addClause(
@@ -63,8 +66,7 @@ bool SimplifyingMinisat::okay()
   return s->okay();
 }
 
-bool SimplifyingMinisat::solve(
-    bool& timeout_expired) // Search without assumptions.
+bool SimplifyingMinisat::solveInternal(bool& timeout_expired)
 {
   if (!s->simplify())
     return false;
