@@ -78,7 +78,10 @@ add_subdirectory(${GTEST_PREFIX} gtest)
 set(CMAKE_CXX_FLAGS "${PREV_CMAKE_CXX_FLAGS}")
 set(GTEST_BOTH_LIBRARIES gtest gtest_main)
 
-include_directories(${GTEST_PREFIX}/include)
+# SYSTEM so warnings surfacing inside GTest's headers/macros (e.g. a
+# -Wsign-compare in an EXPECT_EQ comparison helper) don't trip -Werror in
+# STP's own test translation units that include them.
+include_directories(SYSTEM ${GTEST_PREFIX}/include)
 
 # Add handy macros/functions
 include(AddSTPGTest)
