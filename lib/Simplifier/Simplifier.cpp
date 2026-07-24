@@ -248,7 +248,7 @@ ASTNodeMap Simplifier::FindConsts_TopLevel(const ASTNode& b, bool pushNeg,ASTNod
 
   ASTNodeMap constants;
   
-  for (const auto e: *SimplifyMap)
+  for (const auto& e: *SimplifyMap)
   {
     if (e.second.isConstant())
     {

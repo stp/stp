@@ -779,7 +779,7 @@ namespace stp
 
 #ifdef __SIZEOF_INT128__
     // A type wide enough to hold the product of two word-path values.
-    typedef unsigned __int128 uwide;
+    __extension__ typedef unsigned __int128 uwide;
     static const unsigned wordPathMaxWidth = 64;
 #else
     // No 128-bit type (e.g. 32-bit targets), so the word-level path

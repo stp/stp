@@ -569,7 +569,9 @@ TEST(ValueSet_Test, harmonise_threeway_exhaustive)
                   bits != nullptr && bits->isFixed(i);
               ASSERT_EQ(fixed, !(anyZero && anyOne));
               if (fixed)
+              {
                 ASSERT_EQ(bits->getValue(i), anyOne);
+              }
             }
 
             // Idempotent: a second call changes nothing.
@@ -590,7 +592,9 @@ TEST(ValueSet_Test, harmonise_threeway_exhaustive)
             ASSERT_EQ(members(set), setBefore);
             ASSERT_EQ(bits == nullptr, bitsWereNull);
             if (bits != nullptr)
+            {
               ASSERT_TRUE(FixedBits::equals(*bits, bitsBefore));
+            }
             ASSERT_EQ(interval == nullptr, intervalWasNull);
             if (interval != nullptr)
             {
