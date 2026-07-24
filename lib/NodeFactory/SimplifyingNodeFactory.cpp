@@ -294,7 +294,8 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
   // The bitblaster calls CreateNode with a boolean vector. We don't try to
   // simplify those.
   if (kind != stp::UNDEFINED && kind != stp::BOOLEAN &&
-      kind != stp::BITVECTOR && kind != stp::ARRAY && !is_fp_operation &&
+      kind != stp::BITVECTOR && kind != stp::ARRAY &&
+      kind != stp::FLOATINGPOINT && !is_fp_operation &&
       children_all_constants(children))
   {
     const ASTNode& hash = hashing.CreateNode(kind, children);

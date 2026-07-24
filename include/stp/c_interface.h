@@ -599,6 +599,49 @@ DLL_PUBLIC int vc_getValueSize(VC /* vc */, Type type);
 //!
 DLL_PUBLIC int vc_getIndexSize(VC /* vc */, Type type);
 
+/////////////////////////////////////////////////////////////////////////////
+/// FLOATING POINT OPERATIONS
+/////////////////////////////////////////////////////////////////////////////
+
+//! \brief Returns the IEEE-754 floating-point type with `exp_bits` exponent
+//!        bits and `sig_bits` significand bits.
+//!
+//! The significand width INCLUDES the hidden bit, matching SMT-LIB's
+//! `(_ FloatingPoint eb sb)`. For example `vc_fpType(vc, 11, 53)` is an IEEE
+//! double and `vc_fpType(vc, 8, 24)` an IEEE single. Use it anywhere a type is
+//! expected, e.g. `vc_varExpr(vc, "x", vc_fpType(vc, 11, 53))`.
+//!
+DLL_PUBLIC Type vc_fpType(VC vc, int exp_bits, int sig_bits);
+
+//! \brief Returns the exponent width of a floating-point expression, value or
+//!        type (0 if `e` is not floating-point).
+//!
+DLL_PUBLIC int vc_getExpWidth(Expr e);
+
+//! \brief Returns the significand width (including the hidden bit) of a
+//!        floating-point expression, value or type (0 if not floating-point).
+//!
+DLL_PUBLIC int vc_getSigWidth(Expr e);
+
+//! \brief Builds a floating-point constant of format (exp_bits, sig_bits) by
+//!        reinterpreting the bits of the bitvector constant `bv`.
+//!
+//! `bv`'s width must equal exp_bits + sig_bits, laid out most-significant-first
+//! as sign : exponent : trailing-significand (the hidden significand bit is not
+//! stored). This is the exact, format-generic primitive for floating-point
+//! constants; every value -- normals, subnormals, the zeros, the infinities and
+//! NaN -- has such a bit pattern.
+//!
+DLL_PUBLIC Expr vc_fpConstFromBits(VC vc, int exp_bits, int sig_bits, Expr bv);
+
+//! \brief Returns the IEEE floating-point equality `a == b` (fp.eq).
+//!
+//! True exactly when `a` and `b` are equal as numbers: +0 == -0, and any NaN
+//! operand makes it false. For bit-identical equality (NaN == NaN, +0 != -0)
+//! use vc_eqExpr instead.
+//!
+DLL_PUBLIC Expr vc_fpEqExpr(VC vc, Expr a, Expr b);
+
 //Const expressions for string, int, long-long, etc
 
 //! \brief Parses the given string and returns an associated bitvector expression.

@@ -71,6 +71,13 @@ std::pair<unsigned int, unsigned int> getTypeSizes(Type type)
       indexWidth = 0;
       valueWidth = 0;
       break;
+    case stp::FLOATINGPOINT:
+      // A floating-point type node carries its exponent and significand widths
+      // as its two children (see vc_fpType). The packed value width is their
+      // sum; exp/sig are stamped onto the symbol separately, in vc_varExpr.
+      indexWidth = 0;
+      valueWidth = (*a)[0].GetUnsignedConst() + (*a)[1].GetUnsignedConst();
+      break;
     default:
       stp::FatalError("CInterface: vc_varExpr: Unsupported type", *a);
       assert(false);
@@ -175,6 +182,13 @@ VC vc_createValidityCheckerReuse(void* _bm)
 
   bm->defaultNodeFactory =
       new SimplifyingNodeFactory(*(bm->hashingNodeFactory), *bm);
+
+  // Floating-point blasting reaches for GlobalParserBM (the FloatBlaster
+  // singleton reads its node factory and True/False nodes from it). The parser
+  // sets this; a C-API client that builds floating-point terms directly never
+  // goes through the parser, so point it at this manager now -- otherwise the
+  // first fp op to be blasted during a solve trips the singleton's assert.
+  stp::GlobalParserBM = bm;
 
   stp::STP* stpObj =
       new stp::STP(bm);
@@ -781,6 +795,15 @@ Expr vc_varExpr(VC vc, const char* name, Type type)
   unsigned int indexWidth = typeSizes.second;
   stp::ASTNode o = b->CreateSymbol(name, indexWidth, valueWidth);
 
+  // A floating-point variable additionally carries its format (exponent and
+  // significand widths); getTypeSizes above only gave the packed value width.
+  stp::ASTNode* typeNode = (stp::ASTNode*)type;
+  if (typeNode->GetKind() == stp::FLOATINGPOINT)
+  {
+    o.SetExpWidth((*typeNode)[0].GetUnsignedConst());
+    o.SetSigWidth((*typeNode)[1].GetUnsignedConst());
+  }
+
   stp::ASTNode* output = new stp::ASTNode(o);
   ////if(cinterface_exprdelete_on) created_exprs.push_back(output);
   assert(BVTypeCheck(*output));
@@ -814,6 +837,75 @@ Expr vc_boolType(VC vc)
   stp::STPMgr* b = stp_i->bm;
 
   stp::ASTNode output = b->CreateNode(stp::BOOLEAN);
+  return persistNode(vc, output);
+}
+
+// ---------------------------------------------------------------------------
+// Floating point
+// ---------------------------------------------------------------------------
+
+Type vc_fpType(VC vc, int exp_bits, int sig_bits)
+{
+  stp::STP* stp_i = (stp::STP*)vc;
+  stp::STPMgr* b = stp_i->bm;
+
+  if (exp_bits < 2 || sig_bits < 2)
+  {
+    stp::FatalError("CInterface: vc_fpType: a floating-point format needs at "
+                    "least 2 exponent and 2 significand bits");
+  }
+
+  // Mirror vc_bvType/vc_arrayType: a type is a node whose children hold the
+  // widths -- here the exponent and significand widths.
+  stp::ASTNode e = b->CreateBVConst(32, exp_bits);
+  stp::ASTNode s = b->CreateBVConst(32, sig_bits);
+  stp::ASTNode output = b->CreateNode(stp::FLOATINGPOINT, e, s);
+  return persistNode(vc, output);
+}
+
+int vc_getExpWidth(Expr e)
+{
+  return (int)((stp::ASTNode*)e)->GetExpWidth();
+}
+
+int vc_getSigWidth(Expr e)
+{
+  return (int)((stp::ASTNode*)e)->GetSigWidth();
+}
+
+Expr vc_fpConstFromBits(VC vc, int exp_bits, int sig_bits, Expr bv)
+{
+  stp::STP* stp_i = (stp::STP*)vc;
+  stp::STPMgr* b = stp_i->bm;
+  stp::ASTNode* bits = (stp::ASTNode*)bv;
+
+  if (bits->GetKind() != stp::BVCONST)
+  {
+    stp::FatalError("CInterface: vc_fpConstFromBits: the bits argument must be "
+                    "a bitvector constant: ",
+                    *bits);
+  }
+  if ((int)bits->GetValueWidth() != exp_bits + sig_bits)
+  {
+    stp::FatalError("CInterface: vc_fpConstFromBits: the bitvector width must "
+                    "equal exp_bits + sig_bits: ",
+                    *bits);
+  }
+
+  stp::ASTNode output = b->CreateFPConst(*bits);
+  output.SetExpWidth(exp_bits);
+  output.SetSigWidth(sig_bits);
+  return persistNode(vc, output);
+}
+
+Expr vc_fpEqExpr(VC vc, Expr a, Expr b)
+{
+  stp::STP* stp_i = (stp::STP*)vc;
+  stp::STPMgr* bm = stp_i->bm;
+  stp::ASTNode* l = (stp::ASTNode*)a;
+  stp::ASTNode* r = (stp::ASTNode*)b;
+
+  stp::ASTNode output = bm->CreateNode(stp::FP_EQ, *l, *r);
   return persistNode(vc, output);
 }
 
