@@ -56,7 +56,11 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
   const size_t number_of_children = input_children.size();
 
   // TODO: FIXME: FP constants have no children
-  assert(number_of_children >= 1 || k == FP_CONST_POS_INF);
+  // The only childless Term kinds are the five floating-point constants
+  // (NaN, +/-oo, +/-zero), not just +oo.
+  assert(number_of_children >= 1 || k == FP_CONST_NAN ||
+         k == FP_CONST_POS_INF || k == FP_CONST_NEG_INF ||
+         k == FP_CONST_POS_ZERO || k == FP_CONST_NEG_ZERO);
   assert(k != BVCONST);
 
   ASTVec children;
