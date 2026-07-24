@@ -346,7 +346,6 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
 
     bool changed = true;
 
-    int iteration = 0;
     while (changed)
     {
       changed = false;
@@ -552,9 +551,6 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
         log << "[" << *minQuotient << "," << *maxQuotient << "]";
         log << endl;
       }
-      iteration++;
-      // if (iteration==2 && changed)
-      // exit(1);
     }
 
     if (debug_division)
