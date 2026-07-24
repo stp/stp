@@ -131,7 +131,8 @@ void AbsRefine_CounterExample::ConstructCounterExample(
       // to a constant against the model
       ASTNode value = TermToConstTermUsingModel(value_ite);
       // save the result in the counter_example
-      if (!simp->InsideSubstitutionMap(key))
+      // As in TermToConstTermUsingModel: never record a read as its own value.
+      if (!simp->InsideSubstitutionMap(key) && key != value)
         CounterExampleMap[key] = value;
     }
   }
@@ -376,7 +377,7 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
           if (child.isConstant())
             children.push_back(child);
           else
-            children.push_back(TermToConstTermUsingModel(child));
+            children.push_back(TermToConstTermUsingModel(child, ArrayReadFlag));
           continue;
         }
 
@@ -402,9 +403,9 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
       // yields a bare BVCONST, and an enclosing floating-point operation
       // would then take it as an operand of format (0, 0) and compute the
       // wrong bits rather than fail.
-      output = FloatBlaster::withFormat(bm, TermToConstTermUsingModel(blasted),
-                                        term.GetExpWidth(),
-                                        term.GetSigWidth());
+      output = FloatBlaster::withFormat(
+          bm, TermToConstTermUsingModel(blasted, ArrayReadFlag),
+          term.GetExpWidth(), term.GetSigWidth());
       break;
     }
     default:
@@ -431,7 +432,16 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
   // datastructure
   // if (!ArrayReadFlag)
   {
-    CounterExampleMap[term] = output;
+    // Don't memoise a read as its own value. With ArrayReadFlag true, a read
+    // with no value in the model is returned unchanged (case 2 above) -- this
+    // happens for an unconstrained read, such as the array that totalising
+    // introduces for an out-of-range to_ubv/to_sbv. Caching term -> term would
+    // put the term in its own value slot, violating the invariant the lookups
+    // rely on: a later lookup then trips the "stored as-is" fatal error, or
+    // leaves the read unresolved and non-constant. Skipping the self-entry lets
+    // that later lookup fall through to the documented "no value -> return 0".
+    if (term != output)
+      CounterExampleMap[term] = output;
   }
 
   // cerr << "Output to TermToConstTermUsingModel: " << output << endl;
