@@ -88,11 +88,11 @@ void foo(STPMgr* bm)
   fp_const.SetExpWidth(exp_width);
   fp_const.SetSigWidth(sig_width);
 
+#if 0
   // create our zero/one constants
   Expr zero = vc_bvConstExprFromLL(vc, bw, 0);
   Expr one = vc_bvConstExprFromLL(vc, bw, 1);
 
-#if 0
   ASTNode blasted = blast_fpeq(blasted_add, fp_const);
 
   Expr x_zero = vc_eqExpr(vc, (Expr*)a_x, zero);
@@ -155,6 +155,7 @@ void foo(STPMgr* bm)
   // Interrogate the model
   unsigned int val_for_x = getBVUnsignedLongLong(vc_getCounterExample(vc, x));
   unsigned int val_for_y = getBVUnsignedLongLong(vc_getCounterExample(vc, y));
+  (void)val_for_y;
 
 #if 0
   std::cout << val_for_x << " " << val_for_y << std::endl;

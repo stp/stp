@@ -111,11 +111,11 @@ void traits::invariant(const bool b)
   assert(b);
 }
 
-void traits::precondition(const prop& p) {}
+void traits::precondition(const prop&) {}
 
-void traits::postcondition(const prop& p) {}
+void traits::postcondition(const prop&) {}
 
-void traits::invariant(const prop& p) {}
+void traits::invariant(const prop&) {}
 
 proposition::proposition(const Node n) : nodeWrapper(n)
 {

@@ -272,6 +272,8 @@ void buildListOfSymbols(const ASTNode& n, ASTNodeSet& visited,
 
 void checkChildrenAreBV(const ASTChildren& v, const ASTNode& n)
 {
+  (void)v;
+  (void)n;
   for (auto it = v.begin(), itend = v.end(); it != itend;
        it++)
   {
