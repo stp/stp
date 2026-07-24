@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Andrew V. Jones, Andrew Teylu
+ * AUTHORS: Andrew Teylu
  *
  * BEGIN DATE: July 2026
  *
