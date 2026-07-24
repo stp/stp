@@ -394,6 +394,15 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
 
       assert(temp != term);
 
+      // Totalise the partial operations (min/max and to_ubv/to_sbv) so the
+      // blaster sees the extra child they carry once made total. This is
+      // idempotent and a no-op for the total operations. A partial op reaches
+      // here un-totalised when it is evaluated directly rather than as part of
+      // the solved formula -- e.g. a term handed to get-value or built through
+      // the API -- since the totalising pass only runs over the assertions.
+      FpTotalise totalise(bm);
+      temp = totalise.topLevel(temp);
+
       ASTNode blasted(FloatBlaster::BlastNode_TopLevel(temp));
 
       assert(blasted != temp);

@@ -642,6 +642,77 @@ DLL_PUBLIC Expr vc_fpConstFromBits(VC vc, int exp_bits, int sig_bits, Expr bv);
 //!
 DLL_PUBLIC Expr vc_fpEqExpr(VC vc, Expr a, Expr b);
 
+//! \brief Rounding modes, matching SMT-LIB's RoundingMode. Pass one to
+//!        vc_fpRoundingMode to obtain a rounding-mode expression.
+//!
+enum VCRoundingMode
+{
+  VC_RM_RNE = 1,  //!< round nearest, ties to even  (roundNearestTiesToEven)
+  VC_RM_RTP = 2,  //!< round toward positive        (roundTowardPositive)
+  VC_RM_RTN = 4,  //!< round toward negative        (roundTowardNegative)
+  VC_RM_RTZ = 8,  //!< round toward zero            (roundTowardZero)
+  VC_RM_RNA = 16  //!< round nearest, ties to away  (roundNearestTiesToAway)
+};
+
+//! \brief Returns a rounding-mode expression for `mode`, to pass as the first
+//!        operand of the rounding operations (add, sub, mul, div, fma, sqrt and
+//!        roundToIntegral).
+//!
+DLL_PUBLIC Expr vc_fpRoundingMode(VC vc, enum VCRoundingMode mode);
+
+// Arithmetic. The result is a floating-point value with the same format as the
+// operands (which must all share that format).
+
+//! \brief fp.abs: the magnitude of `f` (clears the sign bit).
+DLL_PUBLIC Expr vc_fpAbsExpr(VC vc, Expr f);
+//! \brief fp.neg: `f` with its sign bit flipped.
+DLL_PUBLIC Expr vc_fpNegExpr(VC vc, Expr f);
+//! \brief fp.add of `a` and `b` under rounding mode `rm`.
+DLL_PUBLIC Expr vc_fpAddExpr(VC vc, Expr rm, Expr a, Expr b);
+//! \brief fp.sub of `a` and `b` under rounding mode `rm`.
+DLL_PUBLIC Expr vc_fpSubExpr(VC vc, Expr rm, Expr a, Expr b);
+//! \brief fp.mul of `a` and `b` under rounding mode `rm`.
+DLL_PUBLIC Expr vc_fpMulExpr(VC vc, Expr rm, Expr a, Expr b);
+//! \brief fp.div of `a` by `b` under rounding mode `rm`.
+DLL_PUBLIC Expr vc_fpDivExpr(VC vc, Expr rm, Expr a, Expr b);
+//! \brief fp.fma under rounding mode `rm`: round(a*b + c).
+DLL_PUBLIC Expr vc_fpFMAExpr(VC vc, Expr rm, Expr a, Expr b, Expr c);
+//! \brief fp.sqrt of `f` under rounding mode `rm`.
+DLL_PUBLIC Expr vc_fpSqrtExpr(VC vc, Expr rm, Expr f);
+//! \brief fp.roundToIntegral of `f` under rounding mode `rm`.
+DLL_PUBLIC Expr vc_fpRoundToIntegralExpr(VC vc, Expr rm, Expr f);
+//! \brief fp.rem: the IEEE remainder of `a` by `b` (exact; no rounding mode).
+DLL_PUBLIC Expr vc_fpRemExpr(VC vc, Expr a, Expr b);
+//! \brief fp.min of `a` and `b` (no rounding mode).
+DLL_PUBLIC Expr vc_fpMinExpr(VC vc, Expr a, Expr b);
+//! \brief fp.max of `a` and `b` (no rounding mode).
+DLL_PUBLIC Expr vc_fpMaxExpr(VC vc, Expr a, Expr b);
+
+// Predicates. The result is Boolean.
+
+//! \brief fp.lt: ordered less-than (false if either operand is NaN).
+DLL_PUBLIC Expr vc_fpLtExpr(VC vc, Expr a, Expr b);
+//! \brief fp.leq: ordered less-or-equal (false if either operand is NaN).
+DLL_PUBLIC Expr vc_fpLeqExpr(VC vc, Expr a, Expr b);
+//! \brief fp.gt: ordered greater-than (false if either operand is NaN).
+DLL_PUBLIC Expr vc_fpGtExpr(VC vc, Expr a, Expr b);
+//! \brief fp.geq: ordered greater-or-equal (false if either operand is NaN).
+DLL_PUBLIC Expr vc_fpGeqExpr(VC vc, Expr a, Expr b);
+//! \brief fp.isNormal: true when `f` is a normal number.
+DLL_PUBLIC Expr vc_fpIsNormalExpr(VC vc, Expr f);
+//! \brief fp.isSubnormal: true when `f` is subnormal.
+DLL_PUBLIC Expr vc_fpIsSubnormalExpr(VC vc, Expr f);
+//! \brief fp.isZero: true when `f` is +0 or -0.
+DLL_PUBLIC Expr vc_fpIsZeroExpr(VC vc, Expr f);
+//! \brief fp.isInfinite: true when `f` is +oo or -oo.
+DLL_PUBLIC Expr vc_fpIsInfiniteExpr(VC vc, Expr f);
+//! \brief fp.isNaN: true when `f` is NaN.
+DLL_PUBLIC Expr vc_fpIsNaNExpr(VC vc, Expr f);
+//! \brief fp.isNegative: true when `f` is negative (includes -oo and -0).
+DLL_PUBLIC Expr vc_fpIsNegativeExpr(VC vc, Expr f);
+//! \brief fp.isPositive: true when `f` is positive (includes +oo and +0).
+DLL_PUBLIC Expr vc_fpIsPositiveExpr(VC vc, Expr f);
+
 //Const expressions for string, int, long-long, etc
 
 //! \brief Parses the given string and returns an associated bitvector expression.

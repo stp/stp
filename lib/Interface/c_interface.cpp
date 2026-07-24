@@ -909,6 +909,176 @@ Expr vc_fpEqExpr(VC vc, Expr a, Expr b)
   return persistNode(vc, output);
 }
 
+// A floating-point operation returns a value of the same format as its
+// operands, so the result node carries the format taken from `fmt` (as the
+// parser's setFPFormat does).
+static Expr fpTermResult(VC vc, stp::Kind k, const stp::ASTNode& fmt,
+                         const stp::ASTVec& children)
+{
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  stp::ASTNode r = b->CreateTerm(k, fmt.GetValueWidth(), children);
+  r.SetExpWidth(fmt.GetExpWidth());
+  r.SetSigWidth(fmt.GetSigWidth());
+  return persistNode(vc, r);
+}
+
+// A floating-point predicate returns a Boolean and carries no format.
+static Expr fpPredResult(VC vc, stp::Kind k, const stp::ASTVec& children)
+{
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  return persistNode(vc, b->CreateNode(k, children));
+}
+
+Expr vc_fpRoundingMode(VC vc, enum VCRoundingMode mode)
+{
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  // A rounding mode is a 5-bit bitvector constant holding the mode value.
+  return persistNode(vc, b->CreateBVConst(5, (unsigned long long)mode));
+}
+
+Expr vc_fpAbsExpr(VC vc, Expr f)
+{
+  stp::ASTNode* x = (stp::ASTNode*)f;
+  return fpTermResult(vc, stp::FP_ABS, *x, {*x});
+}
+
+Expr vc_fpNegExpr(VC vc, Expr f)
+{
+  stp::ASTNode* x = (stp::ASTNode*)f;
+  return fpTermResult(vc, stp::FP_NEG, *x, {*x});
+}
+
+Expr vc_fpAddExpr(VC vc, Expr rm, Expr a, Expr b)
+{
+  stp::ASTNode* m = (stp::ASTNode*)rm;
+  stp::ASTNode* x = (stp::ASTNode*)a;
+  stp::ASTNode* y = (stp::ASTNode*)b;
+  return fpTermResult(vc, stp::FP_ADD, *x, {*m, *x, *y});
+}
+
+Expr vc_fpSubExpr(VC vc, Expr rm, Expr a, Expr b)
+{
+  stp::ASTNode* m = (stp::ASTNode*)rm;
+  stp::ASTNode* x = (stp::ASTNode*)a;
+  stp::ASTNode* y = (stp::ASTNode*)b;
+  return fpTermResult(vc, stp::FP_SUB, *x, {*m, *x, *y});
+}
+
+Expr vc_fpMulExpr(VC vc, Expr rm, Expr a, Expr b)
+{
+  stp::ASTNode* m = (stp::ASTNode*)rm;
+  stp::ASTNode* x = (stp::ASTNode*)a;
+  stp::ASTNode* y = (stp::ASTNode*)b;
+  return fpTermResult(vc, stp::FP_MUL, *x, {*m, *x, *y});
+}
+
+Expr vc_fpDivExpr(VC vc, Expr rm, Expr a, Expr b)
+{
+  stp::ASTNode* m = (stp::ASTNode*)rm;
+  stp::ASTNode* x = (stp::ASTNode*)a;
+  stp::ASTNode* y = (stp::ASTNode*)b;
+  return fpTermResult(vc, stp::FP_DIV, *x, {*m, *x, *y});
+}
+
+Expr vc_fpFMAExpr(VC vc, Expr rm, Expr a, Expr b, Expr c)
+{
+  stp::ASTNode* m = (stp::ASTNode*)rm;
+  stp::ASTNode* x = (stp::ASTNode*)a;
+  stp::ASTNode* y = (stp::ASTNode*)b;
+  stp::ASTNode* z = (stp::ASTNode*)c;
+  return fpTermResult(vc, stp::FP_FMA, *x, {*m, *x, *y, *z});
+}
+
+Expr vc_fpSqrtExpr(VC vc, Expr rm, Expr f)
+{
+  stp::ASTNode* m = (stp::ASTNode*)rm;
+  stp::ASTNode* x = (stp::ASTNode*)f;
+  return fpTermResult(vc, stp::FP_SQRT, *x, {*m, *x});
+}
+
+Expr vc_fpRoundToIntegralExpr(VC vc, Expr rm, Expr f)
+{
+  stp::ASTNode* m = (stp::ASTNode*)rm;
+  stp::ASTNode* x = (stp::ASTNode*)f;
+  return fpTermResult(vc, stp::FP_ROUNDTOINTEGRAL, *x, {*m, *x});
+}
+
+Expr vc_fpRemExpr(VC vc, Expr a, Expr b)
+{
+  stp::ASTNode* x = (stp::ASTNode*)a;
+  stp::ASTNode* y = (stp::ASTNode*)b;
+  return fpTermResult(vc, stp::FP_REM, *x, {*x, *y});
+}
+
+Expr vc_fpMinExpr(VC vc, Expr a, Expr b)
+{
+  stp::ASTNode* x = (stp::ASTNode*)a;
+  stp::ASTNode* y = (stp::ASTNode*)b;
+  return fpTermResult(vc, stp::FP_MIN, *x, {*x, *y});
+}
+
+Expr vc_fpMaxExpr(VC vc, Expr a, Expr b)
+{
+  stp::ASTNode* x = (stp::ASTNode*)a;
+  stp::ASTNode* y = (stp::ASTNode*)b;
+  return fpTermResult(vc, stp::FP_MAX, *x, {*x, *y});
+}
+
+Expr vc_fpLtExpr(VC vc, Expr a, Expr b)
+{
+  return fpPredResult(vc, stp::FP_LT, {*(stp::ASTNode*)a, *(stp::ASTNode*)b});
+}
+
+Expr vc_fpLeqExpr(VC vc, Expr a, Expr b)
+{
+  return fpPredResult(vc, stp::FP_LEQ, {*(stp::ASTNode*)a, *(stp::ASTNode*)b});
+}
+
+Expr vc_fpGtExpr(VC vc, Expr a, Expr b)
+{
+  return fpPredResult(vc, stp::FP_GT, {*(stp::ASTNode*)a, *(stp::ASTNode*)b});
+}
+
+Expr vc_fpGeqExpr(VC vc, Expr a, Expr b)
+{
+  return fpPredResult(vc, stp::FP_GEQ, {*(stp::ASTNode*)a, *(stp::ASTNode*)b});
+}
+
+Expr vc_fpIsNormalExpr(VC vc, Expr f)
+{
+  return fpPredResult(vc, stp::FP_ISNORMAL, {*(stp::ASTNode*)f});
+}
+
+Expr vc_fpIsSubnormalExpr(VC vc, Expr f)
+{
+  return fpPredResult(vc, stp::FP_ISSUBNORMAL, {*(stp::ASTNode*)f});
+}
+
+Expr vc_fpIsZeroExpr(VC vc, Expr f)
+{
+  return fpPredResult(vc, stp::FP_ISZERO, {*(stp::ASTNode*)f});
+}
+
+Expr vc_fpIsInfiniteExpr(VC vc, Expr f)
+{
+  return fpPredResult(vc, stp::FP_ISINFINITE, {*(stp::ASTNode*)f});
+}
+
+Expr vc_fpIsNaNExpr(VC vc, Expr f)
+{
+  return fpPredResult(vc, stp::FP_ISNAN, {*(stp::ASTNode*)f});
+}
+
+Expr vc_fpIsNegativeExpr(VC vc, Expr f)
+{
+  return fpPredResult(vc, stp::FP_ISNEGATIVE, {*(stp::ASTNode*)f});
+}
+
+Expr vc_fpIsPositiveExpr(VC vc, Expr f)
+{
+  return fpPredResult(vc, stp::FP_ISPOSITIVE, {*(stp::ASTNode*)f});
+}
+
 /////////////////////////////////////////////////////////////////////////////
 // BOOLEAN EXPR Creation methods                                           //
 /////////////////////////////////////////////////////////////////////////////
