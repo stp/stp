@@ -1255,20 +1255,30 @@ namespace stp
         break;
 
       case BVUMULO:
-        // Unsigned multiply overflows iff a * b >= 2^w. The unsigned product is
-        // monotone in both operands, so it ranges over [minV*minV, maxV*maxV].
-        // If the max-product has no bit at index >= w set, no point overflows;
-        // if the min-product has such a bit set, every point overflows. The
-        // products are computed exactly by zero-extending both operands into a
-        // 2w+1 bit buffer (BitVector_Multiply is a signed multiply, but the
-        // zero-extended operands are non-negative in the wider width, so the
-        // product is the exact unsigned product). An unknown operand is the
-        // full range (see above), so e.g. a * 0 resolves to "never overflows".
+        // Unsigned multiply overflows iff a * b >= 2^w. The product is monotone
+        // in both operands, so it ranges over [minV*minV, maxV*maxV]: if the
+        // max-product doesn't overflow no point does, and if the min-product
+        // overflows every point does. An unknown operand is the full range
+        // (see above), so e.g. a * 0 resolves to "never overflows".
+        //
+        // Whether one product X*Y overflows is decided by a leading-zeros
+        // screen first (Hacker's Delight 2-13). With bit-lengths bx and by
+        // (highest set bit + 1) we have 2^(bx+by-2) <= X*Y < 2^(bx+by), so:
+        //   bx == 0 or by == 0  -> product is 0, no overflow
+        //   bx + by <= w        -> largest possible product < 2^w, no overflow
+        //   bx + by >= w + 2    -> smallest possible product >= 2^w, overflow
+        //   bx + by == w + 1    -> ambiguous; fall back to an exact multiply.
+        // The screen decides every case where the operands aren't both close to
+        // a power-of-two boundary (in particular all the fully-/half-unknown
+        // cases), so the expensive multiply is rarely reached.
         {
           const unsigned w = children[0]->getWidth();
           const unsigned ew = 2 * w + 1;
 
-          auto productOverflows = [&](CBV a, CBV b) -> bool {
+          // Exact fallback: zero-extend both operands into 2w+1 bits (so the
+          // signed BitVector_Multiply computes the unsigned product) and test
+          // for a set bit at index >= w.
+          auto exactOverflows = [&](CBV a, CBV b) -> bool {
             CBV a2 = CONSTANTBV::BitVector_Create(ew, true);
             CBV b2 = CONSTANTBV::BitVector_Create(ew, true);
             CBV prod = CONSTANTBV::BitVector_Create(ew, true);
@@ -1283,6 +1293,25 @@ namespace stp
             CONSTANTBV::BitVector_Destroy(b2);
             CONSTANTBV::BitVector_Destroy(prod);
             return of;
+          };
+
+          auto productOverflows = [&](CBV a, CBV b) -> bool {
+            // Set_Max is the highest set bit's index, or negative if the value
+            // is zero; bit-length is that index + 1.
+            const signed long topA = CONSTANTBV::Set_Max(a);
+            const signed long topB = CONSTANTBV::Set_Max(b);
+            if (topA <= 0 || topB <= 0)
+              // a or b is 0 or 1 (Set_Max < 0 means 0, == 0 means 1), so the
+              // product is 0 or the other operand, which is below 2^w. This
+              // also keeps 1 * (full-width) out of the ambiguous band below.
+              return false;
+            const unsigned long bitsSum =
+                (unsigned long)topA + (unsigned long)topB + 2; // bx + by
+            if (bitsSum <= w)
+              return false;
+            if (bitsSum >= (unsigned long)w + 2)
+              return true;
+            return exactOverflows(a, b); // bx + by == w + 1
           };
 
           if (!productOverflows(children[0]->maxV, children[1]->maxV))
