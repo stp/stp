@@ -106,11 +106,22 @@ bool CryptoMiniSat5::solveInternal(bool& timeout_expired)
 
   /*
    * The budget belongs to the query rather than to this call, so hand over
-   * what is left of it rather than the original figure. A budget of zero is
-   * already dealt with by SATSolver::solve(), so what remains here is > 0.
+   * what is left of it rather than the original figure. SATSolver::solve()
+   * has already turned away a query whose deadline is in the past, but the
+   * clock moves on between that check and this one, and secondsRemaining()
+   * clamps a negative remainder to zero: give up here rather than handing a
+   * zero down and relying on how CryptoMiniSat reads it, exactly as the
+   * conflict budget above does.
    */
   if (hasTimeLimit()) {
-     s->set_max_time(secondsRemaining());
+     const double remaining = secondsRemaining();
+
+     if (remaining <= 0.0) {
+        timeout_expired = true;
+        return false;
+     }
+
+     s->set_max_time(remaining);
   }
 
   CMSat::lbool ret = s->solve();
