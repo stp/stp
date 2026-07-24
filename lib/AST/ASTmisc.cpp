@@ -177,21 +177,21 @@ ATTR_NORETURN void FatalError(const char* str, const ASTNode& a, int w)
     cerr << "Fatal Error: " << str << endl;
     cerr << w << endl;
   }
-  assert(false);
   if (vc_error_hdlr)
   {
     vc_error_hdlr(str);
   }
+  abort();
 }
 
 ATTR_NORETURN void FatalError(const char* str)
 {
   cerr << "Fatal Error: " << str << endl;
-  assert(false);
   if (vc_error_hdlr)
   {
     vc_error_hdlr(str);
   }
+  abort();
 }
 
 void SortByExprNum(ASTVec& v)
