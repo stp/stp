@@ -91,6 +91,11 @@ public:
   // [sb-1 .. sb+eb-2], the significand bits [0 .. sb-2].
   Expr to_ieee_bits() const { return vc_fpToIEEEBV(vc_, e_); }
 
+  // Round to a `width`-bit unsigned / signed integer (a bitvector Expr) under
+  // this expression's rounding mode.
+  Expr to_ubv(int width) const { return vc_fpToUBVExpr(vc_, width, rm(), e_); }
+  Expr to_sbv(int width) const { return vc_fpToSBVExpr(vc_, width, rm(), e_); }
+
   // A constant of this expression's format from a Python-style double.
   Float constant(double d) const
   {
