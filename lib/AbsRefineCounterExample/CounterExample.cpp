@@ -710,13 +710,15 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
 
       ASTNode temp(stp::GlobalParserBM->CreateNode(k, operands));
 
-      // When the operands were already constant, rebuilding the predicate can
-      // return the original node -- so the old `temp != form` expectation does
-      // not hold. And should the factory ever fold the predicate to true/false
-      // outright, that boolean is the answer and must not reach the blaster.
-      if (temp.isConstant())
+      // Rebuilding through the simplifying factory may rewrite the predicate
+      // rather than return it: constant operands fold to true/false outright,
+      // and the same-operand rules fire here because interned constants
+      // compare pointer-equal -- fp.leq of a value with itself comes back as
+      // (not (fp.isNaN ...)). Whatever came back that is not this operation
+      // is a formula; evaluate it, never blast it.
+      if (temp.GetKind() != k)
       {
-        output = temp;
+        output = ComputeFormulaUsingModel(temp);
         break;
       }
 

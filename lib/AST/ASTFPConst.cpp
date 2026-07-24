@@ -22,11 +22,24 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
+#include "stp/AST/ASTFPConst.h"
+
 #include "stp/AST/AST.h"
-#include "stp/STPManager/STP.h"
 
 namespace stp
 {
-ASTFPConst::ASTFPConst(const ASTBVConst& n) : ASTBVConst(n) {}
+
+ASTFPConst::ASTFPConst(STPMgr* mgr, CBV bv, uint32_t exp_width,
+                       uint32_t sig_width)
+    : ASTBVConst(mgr, bv, 0, /*managed_outside=*/true), _sig_width(sig_width),
+      _exp_width(exp_width)
+{
+}
+
+ASTFPConst::ASTFPConst(const ASTFPConst& other)
+    : ASTBVConst(other), _sig_width(other._sig_width),
+      _exp_width(other._exp_width)
+{
+}
 
 } // namespace stp

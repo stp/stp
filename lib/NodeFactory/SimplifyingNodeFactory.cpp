@@ -150,10 +150,8 @@ ASTNode SimplifyingNodeFactory::foldFPSign(const ASTNode& fpConst, bool flip)
   else
     CONSTANTBV::BitVector_Bit_On(bits, width - 1);
 
-  ASTNode c = bm.CreateFPConst(bm.CreateBVConst(bits, width));
-  c.SetExpWidth(fpConst.GetExpWidth());
-  c.SetSigWidth(fpConst.GetSigWidth());
-  return c;
+  return bm.CreateFPConst(bm.CreateBVConst(bits, width),
+                          fpConst.GetExpWidth(), fpConst.GetSigWidth());
 }
 
 ASTNode SimplifyingNodeFactory::create_gt_node(const ASTVec& children)

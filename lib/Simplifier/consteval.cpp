@@ -1008,16 +1008,21 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
         temp.SetSigWidth(sig_width);
       }
 
-      // The factory may have folded the operation to a constant already:
-      // abs/neg of a constant is a sign-bit edit, x*1.0/x/1.0 fold to x, and
-      // to_ubv/to_sbv of a constant folds too. That constant is the result --
-      // blasting it would hand a constant to the blaster, which only handles
-      // operations (and asserts on anything else).
-      if (temp.isConstant())
+      // The factory may have rewritten the operation as it was built:
+      // folded it to a constant (abs/neg of a constant is a sign-bit edit,
+      // x*1.0 folds to x), or into different structure entirely -- fp.leq of
+      // a term with itself becomes (not (fp.isNaN ...)). Interned constants
+      // compare pointer-equal, so the same-operand rules do fire here. In
+      // either case evaluate what came back rather than blasting it: the
+      // blaster only handles floating-point operations, and asserts on
+      // anything else.
+      if (temp.GetKind() != k)
       {
-        OutputNode = float_result ? FloatBlaster::withFormat(_bm, temp,
-                                                             exp_width, sig_width)
-                                  : temp;
+        OutputNode =
+            temp.isConstant() ? temp : NonMemberBVConstEvaluator(_bm, temp);
+        if (float_result)
+          OutputNode =
+              FloatBlaster::withFormat(_bm, OutputNode, exp_width, sig_width);
         break;
       }
 

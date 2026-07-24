@@ -120,10 +120,7 @@ struct Ctx
   ASTNode fpConst(unsigned eb, unsigned sb, uint64_t v)
   {
     ASTNode n = mgr.CreateBVConst(eb + sb, (unsigned long long)v);
-    n = mgr.CreateFPConst(n);
-    n.SetExpWidth(eb);
-    n.SetSigWidth(sb);
-    return n;
+    return mgr.CreateFPConst(n, eb, sb);
   }
 
   // A rounding-mode constant (a 5-bit bitvector, as the parser builds them).

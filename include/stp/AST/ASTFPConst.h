@@ -31,20 +31,40 @@ namespace stp
 {
 class STPMgr;
 
-//Class to represent internals of a bitvector constant
+// A bitvector constant that additionally carries a floating-point format.
+// Interned in the same unique table as plain bitvector constants: the
+// table's equality functor compares the format widths as well as the bits,
+// so 1.0f can never unify with the plain 32-bit pattern 0x3F800000, nor
+// with the same bits read at a different format.
 class ASTFPConst : public ASTBVConst
 {
+  friend class STPMgr;
+
   uint32_t _sig_width;
   uint32_t _exp_width;
 
-  virtual void setSigWidth(uint32_t sw) { _sig_width = sw; }
+  // The format is part of the node's identity in the unique table, so it is
+  // fixed at construction. The setters only accept the stored value, in the
+  // style of ASTBVConst::setValueWidth.
+  virtual void setSigWidth([[maybe_unused]] uint32_t sw)
+  {
+    assert(sw == _sig_width);
+  }
   virtual uint32_t getSigWidth() const { return _sig_width; }
 
-  virtual void setExpWidth(uint32_t ew) { _exp_width = ew; }
+  virtual void setExpWidth([[maybe_unused]] uint32_t ew)
+  {
+    assert(ew == _exp_width);
+  }
   virtual uint32_t getExpWidth() const { return _exp_width; }
 
+  // Temporary-key constructor: shares `bv` without cloning or freeing it.
+  ASTFPConst(STPMgr* mgr, CBV bv, uint32_t exp_width, uint32_t sig_width);
+
+  // Copying constructor, used when interning a temporary key: clones the CBV.
+  ASTFPConst(const ASTFPConst& other);
+
 public:
-  ASTFPConst(const ASTBVConst& n);
   virtual ~ASTFPConst() {}
 };
 

@@ -85,15 +85,13 @@ ASTNode FloatBlaster::withFormat(STPMgr* bm, const ASTNode& n,
   if (n.GetValueWidth() != exp_width + sig_width)
     return n;
 
+  // ASTBVConst cannot hold a format; ASTFPConst can. The float-stamped
+  // constant is a distinct interned node, so this never retypes the shared
+  // plain constant.
+  if (n.GetKind() == BVCONST)
+    return bm->CreateFPConst(n, exp_width, sig_width);
+
   ASTNode out(n);
-
-  if (out.GetKind() == BVCONST)
-  {
-    // ASTBVConst cannot hold a format; ASTFPConst can. CreateFPConst makes a
-    // fresh node, so this never retypes a shared constant.
-    out = bm->CreateFPConst(out);
-  }
-
   out.SetExpWidth(exp_width);
   out.SetSigWidth(sig_width);
   return out;
@@ -341,12 +339,9 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
   // be left exactly as it is.
   if (actualInputterm.GetExpWidth() != 0)
   {
-    if (output.GetKind() == BVCONST)
-    {
-      output = stp::GlobalParserBM->CreateFPConst(output);
-    }
-    output.SetExpWidth(actualInputterm.GetExpWidth());
-    output.SetSigWidth(actualInputterm.GetSigWidth());
+    output = FloatBlaster::withFormat(stp::GlobalParserBM, output,
+                                      actualInputterm.GetExpWidth(),
+                                      actualInputterm.GetSigWidth());
   }
 
   // std::cout << output.GetExpWidth() << " " << output.GetKind() << std::endl;

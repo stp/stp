@@ -613,7 +613,8 @@
     if (packed.GetKind() == BVCONST)
     {
       n = stp::GlobalParserInterface->newNode(
-          stp::GlobalParserInterface->nf->CreateFPConst(packed));
+          stp::GlobalParserInterface->nf->CreateFPConst(packed, exp_width,
+                                                        sig_width));
     }
     else
     {

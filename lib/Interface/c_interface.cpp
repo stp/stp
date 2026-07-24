@@ -902,9 +902,7 @@ Expr vc_fpConstFromBits(VC vc, int exp_bits, int sig_bits, Expr bv)
                     *bits);
   }
 
-  stp::ASTNode output = b->CreateFPConst(*bits);
-  output.SetExpWidth(exp_bits);
-  output.SetSigWidth(sig_bits);
+  stp::ASTNode output = b->CreateFPConst(*bits, exp_bits, sig_bits);
   return persistNode(vc, output);
 }
 

@@ -348,14 +348,33 @@ ASTNode STPMgr::CreateBVConst(CBV bv, unsigned width)
   return n;
 }
 
-ASTNode STPMgr::CreateFPConst(const stp::ASTNode bvconst)
+ASTNode STPMgr::CreateFPConst(const stp::ASTNode& bvconst,
+                              unsigned exp_width, unsigned sig_width)
 {
-  Kind k = bvconst.GetKind();
-  assert(k == BVCONST);
-  ASTFPConst* fpconst = new ASTFPConst(*(ASTBVConst*)bvconst._int_node_ptr);
-  ASTNode n(fpconst);
+  assert(bvconst.GetKind() == BVCONST);
+  assert(exp_width + sig_width == bvconst.GetValueWidth());
+
+  // Temporary key sharing the source's CBV; interning clones it.
+  ASTBVConst* src = (ASTBVConst*)bvconst._int_node_ptr;
+  ASTFPConst temp(this, src->GetBVConst(), exp_width, sig_width);
+
+  ASTNode n(LookupOrCreateFPConst(temp));
   assert(n.GetKind() == BVCONST);
   return n;
+}
+
+// As LookupOrCreateBVConst. The same table holds both flavours of constant:
+// the equality functor compares the format widths too, so a floating-point
+// constant never unifies with a plain bitvector constant of the same bits.
+ASTFPConst* STPMgr::LookupOrCreateFPConst(ASTFPConst& s)
+{
+  ASTBVConstSet::const_iterator it = _bvconst_unique_table.find(&s);
+  if (it != _bvconst_unique_table.end())
+    return static_cast<ASTFPConst*>(*it);
+
+  ASTFPConst* s_copy = new ASTFPConst(s);
+  _bvconst_unique_table.insert(s_copy);
+  return s_copy;
 }
 
 ASTNode STPMgr::CreateZeroConst(unsigned width)

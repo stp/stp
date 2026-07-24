@@ -95,10 +95,7 @@ static void check_width(const char* what, unsigned got, unsigned want)
 static ASTNode f32(uint32_t bits)
 {
   ASTNode n = bm->CreateBVConst(32, bits);
-  n = bm->CreateFPConst(n);
-  n.SetExpWidth(8);
-  n.SetSigWidth(24);
-  return n;
+  return bm->CreateFPConst(n, 8, 24);
 }
 
 static uint32_t bits_of(float f)

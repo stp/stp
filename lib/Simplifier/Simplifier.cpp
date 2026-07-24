@@ -474,6 +474,20 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
 
       ASTNode temp(nf->CreateNode(kind, simplified));
 
+      // The factory may have rewritten the predicate rather than built it:
+      // constant operands fold to true/false, and the same-operand rules
+      // fire (fp.leq of a term with itself comes back as (not (fp.isNaN
+      // ...))) -- interned constants compare pointer-equal, so equal values
+      // are the same operand. What came back is an ordinary formula:
+      // simplify it, never blast it.
+      if (temp.GetKind() != kind)
+      {
+        output = pushNeg
+                     ? SimplifyFormula(nf->CreateNode(NOT, temp), VarConstMap)
+                     : SimplifyFormula(temp, VarConstMap);
+        break;
+      }
+
       ASTNode blasted(FloatBlaster::BlastNode_TopLevel(temp));
 
       assert(blasted != temp);
@@ -487,13 +501,6 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
       {
         output = SimplifyFormula(blasted, VarConstMap);
       }
-
-      if (output.GetKind() == BVCONST)
-      {
-        output = nf->CreateFPConst(output);
-      }
-      output.SetExpWidth(a.GetExpWidth());
-      output.SetSigWidth(a.GetSigWidth());
 
       break;
     }
@@ -2650,18 +2657,14 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
 
       // Only re-make the result as a floating-point constant when the
       // operation actually produces a float. fp.to_ubv/fp.to_sbv produce a
-      // bitvector, and CreateFPConst mints a fresh uninterned node, so doing
-      // it there replaces the folded integer with a different node carrying
-      // the same bits -- which then compares unequal to the identical
-      // constant written in the input.
+      // bitvector, and a float-stamped constant is a distinct node from the
+      // plain constant with the same bits -- stamping there would make the
+      // folded integer compare unequal to the identical constant written in
+      // the input.
       if (inputterm.GetExpWidth() != 0)
       {
-        if (output.GetKind() == BVCONST)
-        {
-          output = nf->CreateFPConst(output);
-        }
-        output.SetExpWidth(inputterm.GetExpWidth());
-        output.SetSigWidth(inputterm.GetSigWidth());
+        output = FloatBlaster::withFormat(_bm, output, inputterm.GetExpWidth(),
+                                          inputterm.GetSigWidth());
       }
 
       break;
@@ -2673,13 +2676,8 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       assert(blasted != inputterm);
 
       output = SimplifyTerm(blasted);
-
-      if (output.GetKind() == BVCONST)
-      {
-        output = nf->CreateFPConst(output);
-      }
-      output.SetExpWidth(inputterm.GetExpWidth());
-      output.SetSigWidth(inputterm.GetSigWidth());
+      output = FloatBlaster::withFormat(_bm, output, inputterm.GetExpWidth(),
+                                        inputterm.GetSigWidth());
       break;
     }
     case WRITE:

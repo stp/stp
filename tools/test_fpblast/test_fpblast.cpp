@@ -84,9 +84,7 @@ void foo(STPMgr* bm)
   // Expr random = vc_bvConstExprFromLL(vc, bw, 689963008);
   Expr random = vc_bvConstExprFromLL(vc, bw, needle);
   ASTNode* a_random = (ASTNode*)random;
-  ASTNode fp_const(bm->CreateFPConst(*a_random));
-  fp_const.SetExpWidth(exp_width);
-  fp_const.SetSigWidth(sig_width);
+  ASTNode fp_const(bm->CreateFPConst(*a_random, exp_width, sig_width));
 
 #if 0
   // create our zero/one constants

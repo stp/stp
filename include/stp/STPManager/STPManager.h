@@ -187,6 +187,8 @@ private:
   // Called by ASTNode constructors to uniqueify ASTBVConst
   ASTBVConst* LookupOrCreateBVConst(ASTBVConst& s);
 
+  ASTFPConst* LookupOrCreateFPConst(ASTFPConst& s);
+
   // Cache of zero/one/max BVConsts of different widths.
   ASTVec zeroes;
   ASTVec ones;
@@ -260,7 +262,8 @@ public:
   ASTNode CreateBVConst(unsigned int width, unsigned long long int bvconst);
   ASTNode charToASTNode(unsigned char* strval, int base, int bit_width);
 
-  DLL_PUBLIC ASTNode CreateFPConst(const stp::ASTNode bvconst);
+  DLL_PUBLIC ASTNode CreateFPConst(const stp::ASTNode& bvconst,
+                                   unsigned exp_width, unsigned sig_width);
 
   /****************************************************************
    * Create Node functions                                        *
