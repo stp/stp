@@ -508,6 +508,34 @@ static void run(Ctx& c)
     c.checkTerm("rem(-a, b) = -rem(a, b)", FP_REM, a.GetValueWidth(),
                 {c.unary(c.hf, FP_NEG, a), b});
   }
+
+  // Identity operands: x * 1.0 = x, x * -1.0 = -x (either operand may be the
+  // constant, mul is commutative), and x / 1.0 = x (divisor only). All exact
+  // for every value and rounding mode. Checked across the rounding modes,
+  // including round-toward-negative, the one that pulls -x apart from x.
+  {
+    ASTNode x = c.fp(EB, SB);
+    const uint64_t bias = (1ull << (EB - 1)) - 1;
+    const uint64_t oneBits = bias << (SB - 1);                      // +1.0
+    const uint64_t negOneBits = oneBits | (1ull << (EB + SB - 1));  // -1.0
+    ASTNode one = c.fpConst(EB, SB, oneBits);
+    ASTNode negOne = c.fpConst(EB, SB, negOneBits);
+    const unsigned w = x.GetValueWidth();
+    for (unsigned mode : {(unsigned)ROUND_NEAREST_TIES_TO_EVEN,
+                          (unsigned)ROUND_TOWARD_ZERO,
+                          (unsigned)ROUND_TOWARD_NEGATIVE})
+    {
+      ASTNode r = c.rm(mode);
+      c.checkTerm("x * 1.0 = x", FP_MUL, w, {r, x, one});
+      c.checkTerm("1.0 * x = x", FP_MUL, w, {r, one, x});
+      c.checkTerm("x * -1.0 = neg x", FP_MUL, w, {r, x, negOne});
+      c.checkTerm("-1.0 * x = neg x", FP_MUL, w, {r, negOne, x});
+      c.checkTerm("x / 1.0 = x", FP_DIV, w, {r, x, one});
+      // 1.0 / x is not x: the divisor-only rule must leave this unchanged (and
+      // must not, in any case, change its meaning).
+      c.checkTerm("1.0 / x unchanged", FP_DIV, w, {r, one, x}, false);
+    }
+  }
 }
 
 int main()

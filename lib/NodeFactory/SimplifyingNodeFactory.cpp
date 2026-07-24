@@ -76,6 +76,38 @@ static unsigned lowestOneBit(const stp::ASTNode& n)
   return position;
 }
 
+// Recognise the packed floating-point constants +1.0 and -1.0 at any format:
+// returns 1 for +1.0, -1 for -1.0, and 0 otherwise. Both have an all-zero
+// significand and a biased exponent equal to the bias 2^(eb-1)-1 -- that is,
+// the exponent field is 0 1..1, its top bit clear and its remaining eb-1 bits
+// set -- and the sign bit selects between them. Read straight from the packed
+// representation, so it holds for every width.
+static int fpConstPlusMinusOne(const stp::ASTNode& c)
+{
+  if (c.GetKind() != stp::BVCONST)
+    return 0;
+  const unsigned eb = c.GetExpWidth();
+  const unsigned sb = c.GetSigWidth();
+  // A real IEEE format has eb, sb >= 2, and the packed width must be eb + sb
+  // for the bit indices below to be in range.
+  if (eb < 2 || sb < 2 || c.GetValueWidth() != eb + sb)
+    return 0;
+  stp::CBV bits = c.GetBVConst();
+  // Significand field: bits [0 .. sb-2] all zero.
+  for (unsigned i = 0; i + 1 < sb; i++)
+    if (CONSTANTBV::BitVector_bit_test(bits, i))
+      return 0;
+  // Exponent field is [sb-1 .. sb+eb-2]; the bias is 0 1..1, so its top bit
+  // (sb+eb-2) is clear and its lower eb-1 bits (sb-1 .. sb+eb-3) are all set.
+  if (CONSTANTBV::BitVector_bit_test(bits, sb + eb - 2))
+    return 0;
+  for (unsigned i = sb - 1; i + 1 < sb + eb - 1; i++)
+    if (!CONSTANTBV::BitVector_bit_test(bits, i))
+      return 0;
+  // Matched ±1.0; the sign bit (the top bit) chooses the sign.
+  return CONSTANTBV::BitVector_bit_test(bits, eb + sb - 1) ? -1 : 1;
+}
+
 bool SimplifyingNodeFactory::children_all_constants(
     const ASTVec& children) const
 {
@@ -2620,10 +2652,9 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             NodeFactory::CreateTerm(stp::FP_NEG, width, children[2]));
       break;
 
-    // fp.add and fp.mul are commutative in their two float operands (child 0
-    // is the rounding mode). Order them so x + y and y + x share a node.
+    // fp.add is commutative in its two float operands (child 0 is the rounding
+    // mode). Order them so x + y and y + x share a node.
     case stp::FP_ADD:
-    case stp::FP_MUL:
       if (children.size() == 3 &&
           children[1].GetNodeNum() > children[2].GetNodeNum())
       {
@@ -2631,8 +2662,47 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
         reordered.push_back(children[0]);
         reordered.push_back(children[2]);
         reordered.push_back(children[1]);
-        result = hashing.CreateTerm(kind, width, reordered);
+        result = hashing.CreateTerm(stp::FP_ADD, width, reordered);
       }
+      break;
+
+    // fp.mul is commutative, and has two exact identity operands: x * 1.0 = x
+    // and x * -1.0 = -x, for every value and every rounding mode. 1.0 is the
+    // multiplicative identity and -1.0 its negation, so the product is exactly
+    // x or -x and no rounding happens (NaN, the infinities and the signed zeros
+    // all carry through). Either float operand (child 1 or 2) may be the
+    // constant; child 0 is the rounding mode.
+    case stp::FP_MUL:
+      if (children.size() == 3)
+      {
+        for (unsigned k = 1; result.IsNull() && k <= 2; k++)
+        {
+          const int pm = fpConstPlusMinusOne(children[k]);
+          if (pm == 1)
+            result = children[3 - k];
+          else if (pm == -1)
+            result =
+                NodeFactory::CreateTerm(stp::FP_NEG, width, children[3 - k]);
+        }
+        // Otherwise order the operands so x * y and y * x share a node.
+        if (result.IsNull() &&
+            children[1].GetNodeNum() > children[2].GetNodeNum())
+        {
+          ASTVec reordered;
+          reordered.push_back(children[0]);
+          reordered.push_back(children[2]);
+          reordered.push_back(children[1]);
+          result = hashing.CreateTerm(stp::FP_MUL, width, reordered);
+        }
+      }
+      break;
+
+    // fp.div by 1.0 is exact: x / 1.0 = x. Only the divisor (child 2) folds --
+    // 1.0 / x is not x -- so the dividend is left alone. (-1.0 is deliberately
+    // not handled here; x / -1.0 -> -x could be added the same way.)
+    case stp::FP_DIV:
+      if (children.size() == 3 && fpConstPlusMinusOne(children[2]) == 1)
+        result = children[1];
       break;
 
     // fp.fma(rm, x, y, z) computes round(x*y + z); the two multiplicands x
