@@ -161,15 +161,18 @@ ASTNode ExtensionalityContext::solveWriteChain(const ASTNode& a,
   return ASTNode();
 }
 
-// Formula abstraction of an array equality (paper section 5): instead
-// of an EQ node, return a fresh Boolean abstraction variable, and
-// record the pair. Reflexive requests fold to true. The record's
-// constraint bundle -- the paper's preprocessing step 1: a fresh
-// witness index lambda, the two virtual reads read(a,lambda) and
-// read(b,lambda) (kept alive through named defining equations), and
-// the witness clause "proxy OR nameL != nameR" -- is built here over
-// the construction operands, with the plain hashing factory so no
-// simplifying rewrite can alter the recorded terms.
+// The equality arm of the paper's formula abstraction (section 5),
+// applied eagerly at construction: instead of an EQ node, return a
+// fresh Boolean abstraction variable, and record the pair. Reflexive
+// requests fold to true. The record's constraint bundle corresponds
+// to the paper's preprocessing step 1 -- a fresh witness index
+// lambda, the two virtual reads read(a,lambda) and read(b,lambda)
+// (kept alive through named defining equations), and the witness
+// clause "proxy OR nameL != nameR". The paper orders that
+// preprocessing before abstraction; here the bundle is built
+// alongside the variable, over the construction operands, with the
+// plain hashing factory so no simplifying rewrite can alter the
+// recorded terms, and enters the formula at solve time.
 ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
 {
   if (!isArrayType(a) || !isArrayType(b) ||

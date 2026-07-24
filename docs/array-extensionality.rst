@@ -8,7 +8,8 @@ warning.
 
 With the ``--array-equality`` option STP decides the quantifier-free
 *extensional* theory of arrays: equality and ``distinct`` between array
-terms become first-class atoms. The implementation follows
+terms become first-class atoms. The implementation is an STP-specific
+integration of the lemmas-on-demand procedure of
 
     Robert Brummayer and Armin Biere,
     *Lemmas on Demand for the Extensional Theory of Arrays*,
@@ -56,15 +57,20 @@ no nested array sorts), and there is no constant-array
 How it works
 ------------
 
-The procedure is an abstraction-refinement loop around STP's existing
-bit-vector core (the paper's ``DP_A``, with STP's bit-blaster and SAT
-solver playing ``DP_B``):
+The procedure is an abstraction-refinement loop. As a whole it plays
+the paper's ``DP_A``, the decision procedure for the theory of arrays;
+STP's existing bit-blaster and SAT solver provide ``DP_B``, the solver
+for each abstracted candidate formula:
 
-1. **Abstraction.** Every equality between array terms is replaced — at
+1. **Construction-time registration and abstraction.** Each equality
+   between a new canonical pair of array terms is replaced — at
    node-creation time, in the shared node factory — by a fresh Boolean
-   *abstraction variable*, so no array equality ever reaches STP's
-   simplifier, array transformer, or bit-blaster. Reads are abstracted
-   by fresh variables by STP's existing machinery.
+   *abstraction variable*; repeated or operand-swapped requests reuse
+   that variable, and a reflexive equality folds to true. No array
+   equality ever reaches STP's simplifier, array transformer, or
+   bit-blaster. The registry also eagerly records, per equality, the
+   witness constraints that the next stage places into the formula.
+   Reads are abstracted by fresh variables by STP's existing machinery.
 
    One shape skips abstraction entirely: a chain of writes equated
    with its own base array (the frame condition ``store(a,i,v) = a``
@@ -73,16 +79,26 @@ solver playing ``DP_B``):
    writes that shadow it. Such an equality contributes nothing to the
    refinement loop at all.
 
-2. **Preprocessing** (paper §4). For each abstracted equality ``a = b``
-   a fresh *witness index* λ and two *virtual reads* ``a[λ]``, ``b[λ]``
-   are created, with the constraint ``a = b ∨ a[λ] ≠ b[λ]``: if the SAT
+2. **Solve-time preparation.** Each registered equality ``a = b``
+   carries a fresh *witness index* λ and two *virtual reads* ``a[λ]``,
+   ``b[λ]``, with the constraint ``a = b ∨ a[λ] ≠ b[λ]``: if the SAT
    solver makes the equality false, the two arrays must visibly differ
-   at λ (axiom A4′). Array-valued ``ite(c, a, b)`` connected to an
-   equality is replaced by a fresh array ``d`` with ``c → d = a`` and
-   ``¬c → d = b`` (paper §4.1). Every index and value that could appear
-   in a future lemma is given a named variable inside the initial
-   formula, so refinement lemmas can later be encoded over SAT
+   at λ (axiom A4′, the paper's preprocessing step 1). These are
+   conjoined onto the formula before STP's ordinary simplification,
+   and the equality operands are recovered from them afterwards in
+   their simplified form. Array-valued ``ite(c, a, b)`` connected to
+   an equality is replaced by a fresh array ``d`` with ``c → d = a``
+   and ``¬c → d = b`` (paper §4.1). Every index and value that could
+   appear in a future lemma is given a named variable inside the
+   initial formula, so refinement lemmas can later be encoded over SAT
    variables that already exist.
+
+   These two stages realize the transformations of the paper's §4,
+   §4.1 and §5 in an STP-specific order: the paper presents array-ITE
+   elimination and witness preprocessing *before* formula abstraction,
+   while STP mints equality proxies and witness records eagerly at
+   construction, then recovers and prepares their array operands
+   during the solve.
 
 3. **Consistency checking** (paper §7, ``lib/Extensionality/``). When
    the SAT solver produces a satisfying assignment σ, a pure checker

@@ -303,9 +303,9 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   // Array equality (lemmas on demand, Brummayer & Biere JSAT 2010):
   // with at least one abstracted array equality, conjoin every
-  // record's witness constraints -- the paper's preprocessing step 1,
-  // a fresh index lambda with two virtual reads witnessing inequality
-  // -- before any preprocessing runs. The equality operands then ride
+  // record's witness constraints -- corresponding to the paper's
+  // preprocessing step 1, a fresh index lambda with two virtual reads
+  // witnessing inequality -- before any preprocessing runs. The equality operands then ride
   // through the same simplification and substitution as the rest of
   // the formula (so their current form can be recovered afterwards),
   // and stay reachable even where the equality was the only mention of

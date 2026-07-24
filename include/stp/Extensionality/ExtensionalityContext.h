@@ -28,10 +28,14 @@ THE SOFTWARE.
  * inside STP:
  *
  *  - the registry of array equalities: whenever the feature is enabled,
- *    every equality between array terms is replaced at node-creation
- *    time by a fresh Boolean abstraction variable (the paper's formula
- *    abstraction, section 5), together with the witness constraints of
- *    preprocessing step 1 (section 4);
+ *    an equality between a new canonical pair of array terms is
+ *    replaced at node-creation time by a fresh Boolean abstraction
+ *    variable -- the equality arm of the paper's formula abstraction
+ *    (section 5), applied eagerly -- together with the constraints
+ *    corresponding to preprocessing step 1 (section 4). The paper
+ *    orders preprocessing before abstraction; STP registers both per
+ *    equality at construction and completes the array-side
+ *    preparation per solve;
  *  - the per-solve view of the array subgraph relevant to those
  *    equalities (which arrays, writes and reads participate), frozen
  *    just before STP's main array transformation;
@@ -107,7 +111,10 @@ public:
   // equality between array terms while the feature is enabled, instead
   // of building an EQ node. Returns the fresh (or, for a repeated
   // operand pair, reused) Boolean abstraction variable; reflexive
-  // requests fold to true. Mixed index/element widths are an error.
+  // requests fold to true; and an equality between a chain of writes
+  // and the chain's own base is solved outright, returning the
+  // rewritten read-equality formula with no record minted (see
+  // solveWriteChain). Mixed index/element widths are an error.
   ASTNode makeEquality(const ASTNode& a, const ASTNode& b);
 
   bool enabled() const;
