@@ -24,8 +24,10 @@ THE SOFTWARE.
 #include "stp/c_interface.h"
 
 #include <cassert>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 #include "stp/Interface/fdstream.h"
 #include "stp/Parser/parser.h"
@@ -1077,6 +1079,144 @@ Expr vc_fpIsNegativeExpr(VC vc, Expr f)
 Expr vc_fpIsPositiveExpr(VC vc, Expr f)
 {
   return fpPredResult(vc, stp::FP_ISPOSITIVE, {*(stp::ASTNode*)f});
+}
+
+// Extract (eb, sb) from a floating-point type node (see vc_fpType).
+static void fpTypeWidths(Type fpType, unsigned& eb, unsigned& sb)
+{
+  stp::ASTNode* t = (stp::ASTNode*)fpType;
+  eb = (*t)[0].GetUnsignedConst();
+  sb = (*t)[1].GetUnsignedConst();
+}
+
+static Expr fpSpecial(VC vc, stp::Kind k, Type fpType)
+{
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  unsigned eb, sb;
+  fpTypeWidths(fpType, eb, sb);
+  stp::ASTNode r = b->CreateTerm(k, eb + sb, stp::ASTVec());
+  r.SetExpWidth(eb);
+  r.SetSigWidth(sb);
+  return persistNode(vc, r);
+}
+
+Expr vc_fpNaN(VC vc, Type fpType)
+{
+  return fpSpecial(vc, stp::FP_CONST_NAN, fpType);
+}
+Expr vc_fpPlusInfinity(VC vc, Type fpType)
+{
+  return fpSpecial(vc, stp::FP_CONST_POS_INF, fpType);
+}
+Expr vc_fpMinusInfinity(VC vc, Type fpType)
+{
+  return fpSpecial(vc, stp::FP_CONST_NEG_INF, fpType);
+}
+Expr vc_fpPlusZero(VC vc, Type fpType)
+{
+  return fpSpecial(vc, stp::FP_CONST_POS_ZERO, fpType);
+}
+Expr vc_fpMinusZero(VC vc, Type fpType)
+{
+  return fpSpecial(vc, stp::FP_CONST_NEG_ZERO, fpType);
+}
+
+// Build an FP_TOFP node: the (eb,sb) width children the blaster reads, an
+// optional rounding mode, then the source. The result is a float of (eb, sb).
+static Expr fpToFP(VC vc, int eb, int sb, const stp::ASTNode* rm,
+                   const stp::ASTNode& src)
+{
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  stp::ASTVec kids;
+  kids.push_back(b->CreateBVConst(32, eb));
+  kids.push_back(b->CreateBVConst(32, sb));
+  if (rm != NULL)
+    kids.push_back(*rm);
+  kids.push_back(src);
+  stp::ASTNode r = b->CreateTerm(stp::FP_TOFP, eb + sb, kids);
+  r.SetExpWidth(eb);
+  r.SetSigWidth(sb);
+  return persistNode(vc, r);
+}
+
+Expr vc_fpToFPFromIEEEBV(VC vc, int eb, int sb, Expr bv)
+{
+  return fpToFP(vc, eb, sb, NULL, *(stp::ASTNode*)bv);
+}
+
+Expr vc_fpToFPFromFP(VC vc, int eb, int sb, Expr rm, Expr f)
+{
+  return fpToFP(vc, eb, sb, (stp::ASTNode*)rm, *(stp::ASTNode*)f);
+}
+
+Expr vc_fpToFPFromSignedBV(VC vc, int eb, int sb, Expr rm, Expr bv)
+{
+  return fpToFP(vc, eb, sb, (stp::ASTNode*)rm, *(stp::ASTNode*)bv);
+}
+
+Expr vc_fpToFPFromUnsignedBV(VC vc, int eb, int sb, Expr rm, Expr bv)
+{
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  stp::ASTVec kids;
+  kids.push_back(b->CreateBVConst(32, eb));
+  kids.push_back(b->CreateBVConst(32, sb));
+  kids.push_back(*(stp::ASTNode*)rm);
+  kids.push_back(*(stp::ASTNode*)bv);
+  stp::ASTNode r = b->CreateTerm(stp::FP_TOFP_UNSIGNED, eb + sb, kids);
+  r.SetExpWidth(eb);
+  r.SetSigWidth(sb);
+  return persistNode(vc, r);
+}
+
+// fp.to_ubv / fp.to_sbv: a float in, a `width`-bit bitvector out. The result is
+// a bitvector, so it carries no floating-point format.
+static Expr fpToBV(VC vc, stp::Kind k, int width, const stp::ASTNode& rm,
+                   const stp::ASTNode& f)
+{
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  stp::ASTVec kids;
+  kids.push_back(b->CreateBVConst(32, width));
+  kids.push_back(rm);
+  kids.push_back(f);
+  return persistNode(vc, b->CreateTerm(k, width, kids));
+}
+
+Expr vc_fpToUBVExpr(VC vc, int width, Expr rm, Expr f)
+{
+  return fpToBV(vc, stp::FP_TO_UBV, width, *(stp::ASTNode*)rm,
+                *(stp::ASTNode*)f);
+}
+
+Expr vc_fpToSBVExpr(VC vc, int width, Expr rm, Expr f)
+{
+  return fpToBV(vc, stp::FP_TO_SBV, width, *(stp::ASTNode*)rm,
+                *(stp::ASTNode*)f);
+}
+
+Expr vc_fpConstFromDouble(VC vc, Type target, Expr rm, double d)
+{
+  uint64_t bits;
+  std::memcpy(&bits, &d, sizeof(bits)); // d is already IEEE-754 binary64
+  Expr dbl =
+      vc_fpConstFromBits(vc, 11, 53, vc_bvConstExprFromLL(vc, 64, bits));
+  unsigned eb, sb;
+  fpTypeWidths(target, eb, sb);
+  if (eb == 11 && sb == 53)
+    return dbl; // target is binary64: the reinterpret is exact
+  return vc_fpToFPFromFP(vc, eb, sb, rm, dbl);
+}
+
+Expr vc_fpConstFromFloat(VC vc, Type target, Expr rm, float f)
+{
+  uint32_t bits;
+  std::memcpy(&bits, &f, sizeof(bits)); // f is already IEEE-754 binary32
+  Expr single =
+      vc_fpConstFromBits(vc, 8, 24, vc_bvConstExprFromLL(vc, 32, bits));
+  unsigned eb, sb;
+  fpTypeWidths(target, eb, sb);
+  if (eb == 8 && sb == 24)
+    return single; // target is binary32: the reinterpret is exact
+  return vc_fpToFPFromFP(vc, eb, sb, rm, single);
 }
 
 /////////////////////////////////////////////////////////////////////////////

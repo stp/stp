@@ -713,6 +713,52 @@ DLL_PUBLIC Expr vc_fpIsNegativeExpr(VC vc, Expr f);
 //! \brief fp.isPositive: true when `f` is positive (includes +oo and +0).
 DLL_PUBLIC Expr vc_fpIsPositiveExpr(VC vc, Expr f);
 
+// Special-value constants of a given floating-point type.
+
+//! \brief The NaN of `fpType`.
+DLL_PUBLIC Expr vc_fpNaN(VC vc, Type fpType);
+//! \brief +oo of `fpType`.
+DLL_PUBLIC Expr vc_fpPlusInfinity(VC vc, Type fpType);
+//! \brief -oo of `fpType`.
+DLL_PUBLIC Expr vc_fpMinusInfinity(VC vc, Type fpType);
+//! \brief +0 of `fpType`.
+DLL_PUBLIC Expr vc_fpPlusZero(VC vc, Type fpType);
+//! \brief -0 of `fpType`.
+DLL_PUBLIC Expr vc_fpMinusZero(VC vc, Type fpType);
+
+//! \brief A constant of `target` floating-point type equal to the native
+//!        double `d`, rounded under `rm`.
+//!
+//! `d` is already an IEEE-754 binary64 value, so this reinterprets its bits as
+//! a (11,53) float and, when `target` differs, reformats with fp.to_fp under
+//! `rm` (exact when `target` is binary64, so `rm` is then irrelevant). Note: a
+//! literal such as 0.1 is rounded to the nearest double by the C compiler
+//! before it reaches here.
+//!
+DLL_PUBLIC Expr vc_fpConstFromDouble(VC vc, Type target, Expr rm, double d);
+//! \brief As vc_fpConstFromDouble, from a native float (IEEE-754 binary32).
+DLL_PUBLIC Expr vc_fpConstFromFloat(VC vc, Type target, Expr rm, float f);
+
+// Conversions.
+
+//! \brief One-argument (_ to_fp eb sb): reinterpret the bits of bitvector `bv`
+//!        (whose width must be eb+sb) as a float. No rounding.
+DLL_PUBLIC Expr vc_fpToFPFromIEEEBV(VC vc, int eb, int sb, Expr bv);
+//! \brief (_ to_fp eb sb) rm f: reformat float `f` to format (eb,sb) under `rm`.
+DLL_PUBLIC Expr vc_fpToFPFromFP(VC vc, int eb, int sb, Expr rm, Expr f);
+//! \brief (_ to_fp eb sb) rm bv: convert the signed integer in `bv` to a float
+//!        of format (eb,sb) under `rm`.
+DLL_PUBLIC Expr vc_fpToFPFromSignedBV(VC vc, int eb, int sb, Expr rm, Expr bv);
+//! \brief (_ to_fp_unsigned eb sb) rm bv: convert the unsigned integer in `bv`
+//!        to a float of format (eb,sb) under `rm`.
+DLL_PUBLIC Expr vc_fpToFPFromUnsignedBV(VC vc, int eb, int sb, Expr rm, Expr bv);
+//! \brief (_ fp.to_ubv m) rm f: round float `f` to an m-bit unsigned integer
+//!        (a bitvector) under `rm`.
+DLL_PUBLIC Expr vc_fpToUBVExpr(VC vc, int width, Expr rm, Expr f);
+//! \brief (_ fp.to_sbv m) rm f: round float `f` to an m-bit signed integer
+//!        (a bitvector) under `rm`.
+DLL_PUBLIC Expr vc_fpToSBVExpr(VC vc, int width, Expr rm, Expr f);
+
 //Const expressions for string, int, long-long, etc
 
 //! \brief Parses the given string and returns an associated bitvector expression.
