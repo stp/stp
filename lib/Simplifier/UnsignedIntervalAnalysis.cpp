@@ -1204,6 +1204,93 @@ namespace stp
         }
         break;
 
+      // Unsigned overflow predicates. These are boolean (Form) nodes, so the
+      // operand width is read from the children, not from 'width' (which is 0
+      // for a boolean node). Only the three UNSIGNED predicates are handled:
+      // the unsigned interval domain carries no signed-range information, so it
+      // cannot soundly decide BVSADDO/BVSMULO/BVSSUBO.
+
+      case BVUSUBO:
+        // Unsigned subtraction overflows (borrows) iff a <u b, mirroring
+        // BVGT(b, a). The comparison of the attained unsigned extremes decides
+        // it for every point in the operand box.
+        if (knownC0 && knownC1)
+        {
+          const UnsignedInterval* a = children[0];
+          const UnsignedInterval* b = children[1];
+
+          if (CONSTANTBV::BitVector_Lexicompare(a->maxV, b->minV) < 0)
+            // even the largest a is below the smallest b: always borrows.
+            result = createInterval(littleOne, littleOne);
+          else if (CONSTANTBV::BitVector_Lexicompare(a->minV, b->maxV) >= 0)
+            // even the smallest a is at least the largest b: never borrows.
+            result = createInterval(littleZero, littleZero);
+        }
+        break;
+
+      case BVUADDO:
+        // Unsigned add overflows iff a + b >= 2^w, i.e. the width-w addition
+        // carries out. The integer sum ranges over [minV+minV, maxV+maxV], so
+        // if the maxes don't carry no point overflows, and if the mins carry
+        // every point overflows.
+        if (knownC0 && knownC1)
+        {
+          const unsigned w = children[0]->getWidth();
+          CBV tmp = CONSTANTBV::BitVector_Create(w, true);
+
+          bool carryMax = false;
+          CONSTANTBV::BitVector_add(tmp, children[0]->maxV, children[1]->maxV,
+                                    &carryMax);
+          bool carryMin = false;
+          CONSTANTBV::BitVector_add(tmp, children[0]->minV, children[1]->minV,
+                                    &carryMin);
+          CONSTANTBV::BitVector_Destroy(tmp);
+
+          if (!carryMax)
+            result = createInterval(littleZero, littleZero);
+          else if (carryMin)
+            result = createInterval(littleOne, littleOne);
+        }
+        break;
+
+      case BVUMULO:
+        // Unsigned multiply overflows iff a * b >= 2^w. The unsigned product is
+        // monotone in both operands, so it ranges over [minV*minV, maxV*maxV].
+        // If the max-product has no bit at index >= w set, no point overflows;
+        // if the min-product has such a bit set, every point overflows. The
+        // products are computed exactly by zero-extending both operands into a
+        // 2w+1 bit buffer (BitVector_Multiply is a signed multiply, but the
+        // zero-extended operands are non-negative in the wider width, so the
+        // product is the exact unsigned product).
+        if (knownC0 && knownC1)
+        {
+          const unsigned w = children[0]->getWidth();
+          const unsigned ew = 2 * w + 1;
+
+          auto productOverflows = [&](CBV a, CBV b) -> bool {
+            CBV a2 = CONSTANTBV::BitVector_Create(ew, true);
+            CBV b2 = CONSTANTBV::BitVector_Create(ew, true);
+            CBV prod = CONSTANTBV::BitVector_Create(ew, true);
+            CONSTANTBV::BitVector_Interval_Copy(a2, a, 0, 0, w);
+            CONSTANTBV::BitVector_Interval_Copy(b2, b, 0, 0, w);
+            CONSTANTBV::BitVector_Multiply(prod, a2, b2);
+            bool of = false;
+            for (unsigned i = w; i < ew && !of; i++)
+              if (CONSTANTBV::BitVector_bit_test(prod, i))
+                of = true;
+            CONSTANTBV::BitVector_Destroy(a2);
+            CONSTANTBV::BitVector_Destroy(b2);
+            CONSTANTBV::BitVector_Destroy(prod);
+            return of;
+          };
+
+          if (!productOverflows(children[0]->maxV, children[1]->maxV))
+            result = createInterval(littleZero, littleZero);
+          else if (productOverflows(children[0]->minV, children[1]->minV))
+            result = createInterval(littleOne, littleOne);
+        }
+        break;
+
       case BVDIV:
       {
         const UnsignedInterval* top = children[0];
