@@ -417,6 +417,18 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
            it++)
       {
         ASTNode ff = TermToConstTermUsingModel(*it, ArrayReadFlag);
+        // NonMemberBVConstEvaluator below needs every child to be a constant.
+        // With ArrayReadFlag set, a read with no value in the model comes back
+        // as a symbolic READ over the array (case 2 above) rather than a
+        // constant -- this happens for the unconstrained array that totalising
+        // introduces for an out-of-range to_ubv/to_sbv, reached here when the
+        // enclosing ITE selects the unspecified branch and it feeds an ordinary
+        // bit-vector operation. Its value is genuinely arbitrary, so resolve it
+        // to a concrete constant rather than hand a non-constant to the
+        // evaluator (which cannot read arrays and would abort on the array
+        // symbol).
+        if (BVCONST != ff.GetKind())
+          ff = TermToConstTermUsingModel(*it, false);
         o.push_back(ff);
       }
 
