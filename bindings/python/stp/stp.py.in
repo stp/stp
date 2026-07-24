@@ -31,12 +31,21 @@ from ctypes import c_char_p, c_void_p, c_int32, c_uint32, c_uint64, c_ulong, c_b
 from ctypes import c_double, c_float
 import inspect
 import os.path
+import struct
 import sys
 
 __all__ = [
-    'Expr', 'Solver', 'stp', 'add', 'bitvec', 'bitvecs', 'check', 'model',
+    'Expr', 'FloatExpr', 'Solver', 'stp', 'add', 'bitvec', 'bitvecs', 'check',
+    'model', 'RNE', 'RTP', 'RTN', 'RTZ', 'RNA',
     'get_git_version_sha', 'get_git_version_tag', 'get_compilation_env', 'get_lib'
 ]
+
+# Rounding modes (SMT-LIB RoundingMode values, matching enum VCRoundingMode).
+RNE = 1   # round nearest, ties to even
+RTP = 2   # round toward positive
+RTN = 4   # round toward negative
+RTZ = 8   # round toward zero
+RNA = 16  # round nearest, ties to away
 
 Py3 = sys.version_info >= (3, 0, 0)
 
@@ -250,6 +259,26 @@ _set_func('vc_fpToUBVExpr', _Expr, _VC, c_int32, _Expr, _Expr)
 _set_func('vc_fpToSBVExpr', _Expr, _VC, c_int32, _Expr, _Expr)
 
 
+# Standard IEEE formats (eb, sb) that have a native Python float: half, single,
+# double -> (struct float code, struct unsigned-int code, byte count).
+_FP_NATIVE = {
+    (5, 11): ('<e', '<H', 2),
+    (8, 24): ('<f', '<I', 4),
+    (11, 53): ('<d', '<Q', 8),
+}
+
+
+def _decode_fp(bits, eb, sb):
+    """Decode the packed IEEE bits of a floating-point value. Returns a Python
+    float for the standard formats (half/single/double); for any other format
+    there is no native float, so the raw integer bits are returned unchanged."""
+    native = _FP_NATIVE.get((eb, sb))
+    if native is None:
+        return bits
+    fcode, icode, nbytes = native
+    return struct.unpack(fcode, struct.pack(icode, bits & ((1 << (8 * nbytes)) - 1)))[0]
+
+
 class Solver(object):
     current = None
 
@@ -257,6 +286,8 @@ class Solver(object):
         self.keys = {}
         self.vc = _lib.vc_createValidityChecker()
         assert self.vc is not None, 'Error creating validity checker'
+        # Rounding mode for the arithmetic operators of FloatExprs made here.
+        self.rounding_mode = RNE
 
     def __del__(self):
         # TODO We're not quite there yet.
@@ -344,6 +375,58 @@ class Solver(object):
      
         expr = _lib.vc_bvConstExprFromDecStr(self.vc, width, value_conv)
         return Expr(self, width, expr)
+
+    def rounding_mode_expr(self):
+        """The current rounding-mode expression (self.rounding_mode, default RNE)."""
+        return _lib.vc_fpRoundingMode(self.vc, self.rounding_mode)
+
+    def fp(self, name, eb, sb):
+        """Creates a new floating-point variable of format (eb, sb).
+
+        sb counts the hidden significand bit, matching SMT-LIB's
+        (_ FloatingPoint eb sb): fp('x', 11, 53) is an IEEE double, fp('x', 8,
+        24) an IEEE single.
+
+        Note: floating point binds a process-global backend to the first Solver
+        that uses it, so use a single Solver for all floating-point work within a
+        process; floating point across several live Solvers is not yet supported.
+        """
+        name_conv = bytes(name, 'utf8') if Py3 else name
+        fp_type = _lib.vc_fpType(self.vc, eb, sb)
+        self.keys[name] = _lib.vc_varExpr(self.vc, name_conv, fp_type)
+        return FloatExpr(self, eb, sb, self.keys[name], name=name)
+
+    def fpval(self, eb, sb, value):
+        """A floating-point constant of format (eb, sb) equal to the Python float
+        `value`, rounded under the solver's rounding mode. (A literal like 0.1 is
+        already rounded to the nearest double by Python before it gets here.)"""
+        fp_type = _lib.vc_fpType(self.vc, eb, sb)
+        expr = _lib.vc_fpConstFromDouble(
+            self.vc, fp_type, self.rounding_mode_expr(), value)
+        return FloatExpr(self, eb, sb, expr)
+
+    def fpval_from_bits(self, eb, sb, bits):
+        """A floating-point constant of format (eb, sb) from its packed IEEE bits."""
+        bv = _lib.vc_bvConstExprFromLL(self.vc, eb + sb, bits)
+        expr = _lib.vc_fpConstFromBits(self.vc, eb, sb, bv)
+        return FloatExpr(self, eb, sb, expr)
+
+    def fp_nan(self, eb, sb):
+        """The NaN of format (eb, sb)."""
+        t = _lib.vc_fpType(self.vc, eb, sb)
+        return FloatExpr(self, eb, sb, _lib.vc_fpNaN(self.vc, t))
+
+    def fp_inf(self, eb, sb, negative=False):
+        """+oo (or -oo) of format (eb, sb)."""
+        t = _lib.vc_fpType(self.vc, eb, sb)
+        e = (_lib.vc_fpMinusInfinity if negative else _lib.vc_fpPlusInfinity)(self.vc, t)
+        return FloatExpr(self, eb, sb, e)
+
+    def fp_zero(self, eb, sb, negative=False):
+        """+0 (or -0) of format (eb, sb)."""
+        t = _lib.vc_fpType(self.vc, eb, sb)
+        e = (_lib.vc_fpMinusZero if negative else _lib.vc_fpPlusZero)(self.vc, t)
+        return FloatExpr(self, eb, sb, e)
 
     def true(self):
         """Creates a True boolean."""
@@ -461,7 +544,13 @@ class Solver(object):
                 return extract
             else:
                 value = _lib.vc_getCounterExample(self.vc, expr)
-                return _lib.getBVUnsignedLongLong(value)
+                bits = _lib.getBVUnsignedLongLong(value)
+                eb = _lib.vc_getExpWidth(expr)
+                if eb:
+                    # A floating-point value: decode its packed bits (to a
+                    # Python float for the standard formats).
+                    return _decode_fp(bits, eb, _lib.vc_getSigWidth(expr))
+                return bits
         #
         # If no expression, return a model giving values to simple bitvectors
         # (but not, e.g., arrays)
@@ -729,6 +818,119 @@ class Expr(object):
     def value(self):
         """Returns the value of this BitVec in the current model."""
         return self.s.model(expr=self)
+
+
+class FloatExpr(Expr):
+    """A floating-point expression of format (eb, sb).
+
+    The arithmetic operators (+ - * / and abs, sqrt, ...) round under the
+    solver's rounding mode (solver.rounding_mode, default RNE). The comparison
+    operators <, <=, >, >= are the IEEE ordered comparisons, and == is fp.eq
+    (so +0 == -0, and any NaN operand makes it false). A Python number used as
+    an operand is coerced to a constant of this expression's format.
+    """
+
+    def __init__(self, s, eb, sb, expr, name=None):
+        Expr.__init__(self, s, eb + sb, expr, name=name)
+        self.eb = eb
+        self.sb = sb
+
+    def _coerce(self, other):
+        if isinstance(other, FloatExpr):
+            return other
+        if isinstance(other, (int, long, float)):
+            return self.s.fpval(self.eb, self.sb, float(other))
+        raise TypeError('operand must be a FloatExpr or a number')
+
+    def _rm(self):
+        return _lib.vc_fpRoundingMode(self.s.vc, self.s.rounding_mode)
+
+    def _fp1(self, cb):
+        return FloatExpr(self.s, self.eb, self.sb, cb(self.s.vc, self.expr))
+
+    def _fp1rm(self, cb):
+        return FloatExpr(self.s, self.eb, self.sb, cb(self.s.vc, self._rm(), self.expr))
+
+    def _fp2(self, cb, other):
+        other = self._coerce(other)
+        return FloatExpr(self.s, self.eb, self.sb, cb(self.s.vc, self.expr, other.expr))
+
+    def _fp2rm(self, cb, a, b):
+        a, b = self._coerce(a), self._coerce(b)
+        return FloatExpr(self.s, self.eb, self.sb,
+                         cb(self.s.vc, self._rm(), a.expr, b.expr))
+
+    def _pred(self, cb, other):
+        other = self._coerce(other)
+        return Expr(self.s, None, cb(self.s.vc, self.expr, other.expr))
+
+    def _pred1(self, cb):
+        return Expr(self.s, None, cb(self.s.vc, self.expr))
+
+    # Arithmetic (rounding-mode aware).
+    def add(self, other): return self._fp2rm(_lib.vc_fpAddExpr, self, other)
+    def sub(self, other): return self._fp2rm(_lib.vc_fpSubExpr, self, other)
+    def mul(self, other): return self._fp2rm(_lib.vc_fpMulExpr, self, other)
+    def div(self, other): return self._fp2rm(_lib.vc_fpDivExpr, self, other)
+
+    __add__ = add
+    __radd__ = lambda self, o: self._coerce(o).add(self)
+    __sub__ = sub
+    __rsub__ = lambda self, o: self._coerce(o).sub(self)
+    __mul__ = mul
+    __rmul__ = lambda self, o: self._coerce(o).mul(self)
+    __truediv__ = div
+    __rtruediv__ = lambda self, o: self._coerce(o).div(self)
+
+    def neg(self): return self._fp1(_lib.vc_fpNegExpr)
+    __neg__ = neg
+
+    def __pos__(self): return self
+    def __abs__(self): return self._fp1(_lib.vc_fpAbsExpr)
+
+    def sqrt(self): return self._fp1rm(_lib.vc_fpSqrtExpr)
+    def round_to_integral(self): return self._fp1rm(_lib.vc_fpRoundToIntegralExpr)
+    def fp_rem(self, other): return self._fp2(_lib.vc_fpRemExpr, other)
+    def fp_min(self, other): return self._fp2(_lib.vc_fpMinExpr, other)
+    def fp_max(self, other): return self._fp2(_lib.vc_fpMaxExpr, other)
+
+    def fma(self, b, c):
+        """round(self * b + c) under the solver's rounding mode."""
+        b, c = self._coerce(b), self._coerce(c)
+        return FloatExpr(self.s, self.eb, self.sb,
+                         _lib.vc_fpFMAExpr(self.s.vc, self._rm(), self.expr,
+                                           b.expr, c.expr))
+
+    # Comparisons: IEEE ordered comparisons; == is fp.eq, != its negation.
+    def eq(self, other): return self._pred(_lib.vc_fpEqExpr, other)
+    __eq__ = eq
+
+    def ne(self, other): return self.s.not_(self.eq(other))
+    __ne__ = ne
+
+    def lt(self, other): return self._pred(_lib.vc_fpLtExpr, other)
+    __lt__ = lt
+
+    def le(self, other): return self._pred(_lib.vc_fpLeqExpr, other)
+    __le__ = le
+
+    def gt(self, other): return self._pred(_lib.vc_fpGtExpr, other)
+    __gt__ = gt
+
+    def ge(self, other): return self._pred(_lib.vc_fpGeqExpr, other)
+    __ge__ = ge
+
+    # Classifications.
+    def is_nan(self): return self._pred1(_lib.vc_fpIsNaNExpr)
+    def is_infinite(self): return self._pred1(_lib.vc_fpIsInfiniteExpr)
+    def is_zero(self): return self._pred1(_lib.vc_fpIsZeroExpr)
+    def is_normal(self): return self._pred1(_lib.vc_fpIsNormalExpr)
+    def is_subnormal(self): return self._pred1(_lib.vc_fpIsSubnormalExpr)
+    def is_negative(self): return self._pred1(_lib.vc_fpIsNegativeExpr)
+    def is_positive(self): return self._pred1(_lib.vc_fpIsPositiveExpr)
+
+    # Overriding __eq__ drops the inherited hash; keep instances hashable.
+    __hash__ = Expr.__hash__
 
 
 class ASTtoSTP(ast.NodeVisitor):

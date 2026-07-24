@@ -298,6 +298,35 @@ class TestSTP(unittest.TestCase):
         value_from_model = solver.model(expr=expr_for_add)
         self.assertEqual(value_from_model, value_for_x + (value_for_bitvecval * 2))
 
+    def test_floating_point(self):
+        #
+        # Build and solve a floating-point problem through the Pythonic layer,
+        # and read native Python floats back from the model. A single Solver is
+        # used throughout, as floating-point work must be within a process.
+        #
+        s = self.s
+        a = s.fp("a", 5, 11)   # half precision
+        d = s.fp("d", 11, 53)  # IEEE double
+        s.add(a == 4.0)        # fp.eq; 4.0 is coerced to a (5, 11) constant
+        s.add(d == s.fpval(11, 53, 3.5))
+        s.add(a > 2.0)         # ordered comparison
+        s.add(a.is_normal())   # classification
+
+        # Rounding-mode-aware operators (default RNE).
+        prod = a * a
+        summ = a + a
+        rt = a.sqrt()
+
+        self.assertTrue(s.check())
+        self.assertEqual(s.model("a"), 4.0)
+        self.assertIsInstance(s.model("a"), float)
+        self.assertEqual(s.model("d"), 3.5)
+        self.assertEqual(prod.value, 16.0)
+        self.assertEqual(summ.value, 8.0)
+        self.assertEqual(rt.value, 2.0)
+        self.assertEqual(abs(-a).value, 4.0)
+        self.assertEqual(a.fp_min(2.0).value, 2.0)
+
     def test_urem(self):
         #
         # Validate the `urem` capability in STP -- note: `urem` == `mod`!
