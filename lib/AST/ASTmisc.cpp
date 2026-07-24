@@ -852,10 +852,16 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
       if (n.Degree() != 2)
         FatalError("BVTypeCheck: should have exactly 2 args\n", n);
 
-      if (!(((n[0].GetValueWidth() == n[1].GetValueWidth() &&
-              n[0].GetIndexWidth() == n[1].GetIndexWidth()) ||
-             (n[0].GetExpWidth() == n[1].GetExpWidth() &&
-              n[0].GetSigWidth() == n[1].GetSigWidth()))))
+      // The widths must always match. A blasted float keeps its bitvector
+      // shape, so a float-stamped node may be equated with a plain bitvector
+      // of the same width -- but two nodes that BOTH claim to be floats must
+      // agree on the format: (8, 24) and (24, 8) share a total width of 32
+      // yet are different sorts.
+      if (n[0].GetValueWidth() != n[1].GetValueWidth() ||
+          n[0].GetIndexWidth() != n[1].GetIndexWidth() ||
+          (n[0].GetExpWidth() != 0 && n[1].GetExpWidth() != 0 &&
+           (n[0].GetExpWidth() != n[1].GetExpWidth() ||
+            n[0].GetSigWidth() != n[1].GetSigWidth())))
       {
         cerr << "valuewidth of lhs of EQ: " << n[0].GetValueWidth() << endl;
         cerr << "valuewidth of rhs of EQ: " << n[1].GetValueWidth() << endl;

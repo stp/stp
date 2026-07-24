@@ -1574,8 +1574,20 @@ FORMID_TOK
 {
   const ASTVec& terms = *$3;
 
+  // Reject an ill-sorted = up front. The simplifying factory folds constant
+  // operands before any type check can see them, so a width mismatch here
+  // would otherwise be "solved" (to false) rather than diagnosed.
+  for (unsigned i = 1; i < terms.size();i++)
+  {
+    if (terms[i].GetValueWidth() != terms[0].GetValueWidth() ||
+        terms[i].GetIndexWidth() != terms[0].GetIndexWidth())
+    {
+      fatal_yyerror("= requires operands of the same sort");
+    }
+  }
+
   bool one_float = false;
-  for (unsigned i =1; i < terms.size();i++)
+  for (unsigned i = 0; i < terms.size();i++)
   {
     one_float |= (terms[i].GetType() == FLOATINGPOINT_TYPE);
   }
@@ -1780,8 +1792,20 @@ FORMID_TOK
 {
   const ASTVec& forms = *$3;
 
+  // As with = over terms: catch mismatched operands before the factory can
+  // fold them. A float can reach this rule too (parenthesised fp terms parse
+  // as formulas), in which case its width differs from a Boolean's zero.
+  for (unsigned i = 1; i < forms.size();i++)
+  {
+    if (forms[i].GetValueWidth() != forms[0].GetValueWidth() ||
+        forms[i].GetIndexWidth() != forms[0].GetIndexWidth())
+    {
+      fatal_yyerror("= requires operands of the same sort");
+    }
+  }
+
   bool one_float = false;
-  for (unsigned i =1; i < forms.size();i++)
+  for (unsigned i = 0; i < forms.size();i++)
   {
     one_float |= (forms[i].GetType() == FLOATINGPOINT_TYPE);
   }
