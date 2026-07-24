@@ -1,0 +1,467 @@
+/********************************************************************
+ * AUTHORS: Andrew V. Jones, Andrew Teylu
+ *
+ * BEGIN DATE: July, 2026
+ *
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+********************************************************************/
+
+// Exhaustive equivalence tests for the floating-point rewrite rules in the
+// SimplifyingNodeFactory (the "cheap FP rewrites, applied before bit-blasting"
+// in CreateNode/CreateTerm).
+//
+// The methodology follows tests/unit-tests/SimplifyingNodeFactory_Exhaustive_
+// Test.cpp: build the inputs with the hashing factory (nothing pre-simplified),
+// create the node through both the hashing and the simplifying factory, and
+// require the two to agree on *every* float of a small format -- all bit
+// patterns: zeros, subnormals, normals, infinities and NaNs. Where a rule is
+// guaranteed to apply, the simplifying result must also differ structurally
+// (the rule fired). It is a plain executable rather than a gtest, matching the
+// sibling test_fpbackend, because this environment has no gtest/lit.
+//
+// The oracle is independent of the rules under test. FP constant folding is
+// NOT done by the factory (is_fp_operation bypasses it), so
+// NonMemberBVConstEvaluator evaluates a fully-constant float operation by
+// bit-blasting it (consteval reduces every child to a constant first, then
+// blasts), never by re-applying a structural rewrite. Substituting the free
+// floats through the hashing factory keeps the tree un-rewritten on the way in,
+// so a wrong rewrite surfaces as a disagreeing blasted value.
+
+#include "stp/AST/AST.h"
+#include "stp/FloatBlaster/FpTotalise.h"
+#include "stp/FloatBlaster/symbolic_fp.h"
+#include "stp/NodeFactory/SimplifyingNodeFactory.h"
+#include "stp/STPManager/STPManager.h"
+#include "stp/Simplifier/Simplifier.h"
+#include "stp/Simplifier/SubstitutionMap.h"
+
+#include <cstdint>
+#include <cstdio>
+#include <string>
+#include <vector>
+
+using namespace stp;
+using stp::symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN;
+using stp::symbolic_fp::ROUND_TOWARD_POSITIVE;
+using stp::symbolic_fp::ROUND_TOWARD_ZERO;
+
+static int g_checks = 0;
+static int g_failures = 0;
+
+static void report(const std::string& name, bool ok, const std::string& why = "")
+{
+  g_checks++;
+  if (ok)
+  {
+    printf("  %-44s ok\n", name.c_str());
+  }
+  else
+  {
+    g_failures++;
+    printf("  %-44s ** FAIL ** %s\n", name.c_str(), why.c_str());
+  }
+}
+
+struct Ctx
+{
+  STPMgr mgr;
+  SimplifyingNodeFactory snf;
+  NodeFactory* nf; // simplifying factory: under test.
+  NodeFactory* hf; // hashing factory: builds inputs without simplifying.
+  unsigned counter = 0;
+
+  Ctx() : snf(*(mgr.hashingNodeFactory), mgr)
+  {
+    CONSTANTBV::BitVector_Boot();
+    nf = &snf;
+    hf = mgr.hashingNodeFactory;
+    // The default factory is used to blast a float op during folding, and by
+    // the blaster's singleton. Keep it the *hashing* factory: the simplifying
+    // factory folds the constant AND/OR nodes the blaster emits as it builds
+    // them, and a folded boolean there can carry a spurious float format that
+    // sends the constant evaluator down its bit-vector path (GetBVConst on a
+    // Boolean). Leaving the circuit un-folded lets the recursive evaluator
+    // reduce it correctly. The rules under test are still exercised: they are
+    // requested explicitly through `nf`.
+    mgr.defaultNodeFactory = hf;
+    // The float blaster's singleton reads GlobalParserBM (for ASTTrue and the
+    // node factory) when NonMemberBVConstEvaluator first folds a float op.
+    GlobalParserBM = &mgr;
+    symbolic_fp::init_vc(&mgr);
+  }
+
+  // A fresh float variable of format (eb, sb).
+  ASTNode fp(unsigned eb, unsigned sb)
+  {
+    ASTNode s =
+        mgr.CreateSymbol(("f" + std::to_string(counter++)).c_str(), 0, 0);
+    s.SetExpWidth(eb);
+    s.SetSigWidth(sb);
+    return s;
+  }
+
+  // The float of format (eb, sb) whose packed IEEE bits are `v`.
+  ASTNode fpConst(unsigned eb, unsigned sb, uint64_t v)
+  {
+    ASTNode n = mgr.CreateBVConst(eb + sb, (unsigned long long)v);
+    n = mgr.CreateFPConst(n);
+    n.SetExpWidth(eb);
+    n.SetSigWidth(sb);
+    return n;
+  }
+
+  // A rounding-mode constant (a 5-bit bitvector, as the parser builds them).
+  ASTNode rm(unsigned mode) { return mgr.CreateBVConst(5, mode); }
+
+  // A unary float op, built the way the parser does.
+  ASTNode unary(NodeFactory* f, Kind k, const ASTNode& x)
+  {
+    ASTNode n = f->CreateTerm(k, x.GetValueWidth(), x);
+    n.SetExpWidth(x.GetExpWidth());
+    n.SetSigWidth(x.GetSigWidth());
+    return n;
+  }
+
+  // Evaluate a fully-assigned node to a constant WITHOUT firing the rules
+  // under test: substitute through the hashing factory, then blast-fold.
+  ASTNode eval(const ASTNode& n, ASTNodeMap assignment /*consumed*/)
+  {
+    ASTNodeMap cache;
+    ASTNode s = SubstitutionMap::replace(n, assignment, cache, hf);
+    // Replace partial ops (min/max/to_ubv/to_sbv) with their total form, as
+    // the normal solve does before blasting; otherwise the blaster reaches for
+    // an unspecified-value child that a bare partial op does not carry.
+    FpTotalise totalise(&mgr);
+    s = totalise.topLevel(s);
+    if (s.isConstant())
+      return s;
+    return NonMemberBVConstEvaluator(&mgr, s);
+  }
+
+  // A comparable key for an evaluated result: Booleans get sentinels clear of
+  // any packed float value; float/bitvector constants get their bits.
+  static uint64_t key(const ASTNode& r)
+  {
+    const Kind rk = r.GetKind();
+    if (rk == TRUE)
+      return 1ull << 40;
+    if (rk == FALSE)
+      return 1ull << 41;
+    if (rk != BVCONST)
+      return 1ull << 43; // an unexpected non-constant fold: flag, don't crash
+    uint64_t v = 0;
+    const unsigned w = r.GetValueWidth();
+    for (unsigned i = 0; i < w && i < 64; i++)
+      if (CONSTANTBV::BitVector_bit_test(r.GetBVConst(), i))
+        v |= (1ull << i);
+
+    // SMT-LIB floating point has a single NaN value: all NaN bit patterns
+    // denote it, so they must compare equal. (Payloads are not observable and
+    // an operation may canonicalise them.) The five constants aside, +0 and -0
+    // are distinct SMT-LIB values and are NOT collapsed.
+    const unsigned eb = r.GetExpWidth(), sb = r.GetSigWidth();
+    if (eb != 0 && sb != 0 && eb + sb == w)
+    {
+      const unsigned storedSig = sb - 1;
+      const uint64_t expMask = (((1ull << eb) - 1) << storedSig);
+      const uint64_t sigMask = ((1ull << storedSig) - 1);
+      if ((v & expMask) == expMask && (v & sigMask) != 0)
+        return (1ull << 42); // any NaN
+    }
+    return v;
+  }
+
+  void collectSymbols(const ASTNode& n, ASTNodeSet& out)
+  {
+    if (n.GetKind() == SYMBOL)
+    {
+      out.insert(n);
+      return;
+    }
+    for (const auto& c : n)
+      collectSymbols(c, out);
+  }
+
+  unsigned long domain(const ASTNode& s)
+  {
+    if (s.GetType() == BOOLEAN_TYPE)
+      return 2;
+    if (s.GetType() == FLOATINGPOINT_TYPE)
+      return 1ul << (s.GetExpWidth() + s.GetSigWidth());
+    return 1ul << s.GetValueWidth();
+  }
+
+  ASTNode valueFor(const ASTNode& s, unsigned long v)
+  {
+    if (s.GetType() == BOOLEAN_TYPE)
+      return (v & 1) ? mgr.ASTTrue : mgr.ASTFalse;
+    if (s.GetType() == FLOATINGPOINT_TYPE)
+      return fpConst(s.GetExpWidth(), s.GetSigWidth(), v);
+    return mgr.CreateBVConst(s.GetValueWidth(), (unsigned)v);
+  }
+
+  // `before` and `after` must evaluate equal on every assignment of their free
+  // floats. Returns "" on success, else a description of the first mismatch.
+  std::string firstDisagreement(const ASTNode& before, const ASTNode& after)
+  {
+    ASTNodeSet symSet;
+    collectSymbols(before, symSet);
+    collectSymbols(after, symSet);
+    std::vector<ASTNode> syms(symSet.begin(), symSet.end());
+
+    unsigned long combos = 1;
+    for (const auto& s : syms)
+      combos *= domain(s);
+    if (combos > (1ul << 18))
+      return "too many assignments (" + std::to_string(combos) + ")";
+
+    for (unsigned long c = 0; c < combos; c++)
+    {
+      ASTNodeMap assignment;
+      unsigned long rest = c;
+      for (size_t i = 0; i < syms.size(); i++)
+      {
+        const unsigned long size = domain(syms[i]);
+        assignment.insert({syms[i], valueFor(syms[i], rest % size)});
+        rest /= size;
+      }
+      if (key(eval(before, assignment)) != key(eval(after, assignment)))
+        return "meaning changed at assignment " + std::to_string(c);
+    }
+    return "";
+  }
+
+  // Build a term through both factories; require equivalent, and (when
+  // expectFired) structurally different.
+  void checkTerm(const std::string& name, Kind k, unsigned width,
+                 const ASTVec& children, bool expectFired = true)
+  {
+    ASTNode plain = hf->CreateTerm(k, width, children);
+    ASTNode simplified = nf->CreateTerm(k, width, children);
+    if (expectFired && plain == simplified)
+    {
+      report(name, false, "rule did not fire");
+      return;
+    }
+    const std::string why = firstDisagreement(plain, simplified);
+    report(name, why.empty(), why);
+  }
+
+  // A rule that must NOT fire (the node is unchanged), but is trivially still
+  // equivalent to itself.
+  void checkUnchanged(const std::string& name, Kind k, const ASTVec& children)
+  {
+    ASTNode plain = hf->CreateNode(k, children);
+    ASTNode simplified = nf->CreateNode(k, children);
+    report(name, plain == simplified, "node was unexpectedly rewritten");
+  }
+};
+
+// Small formats that still contain zeros, subnormals, normals, infinities and
+// NaNs. (eb, sb): sb counts the hidden bit, packed = eb + sb.
+static const unsigned EB = 3, SB = 3;   // 64 values
+static const unsigned SEB = 2, SSB = 2; // 16 values, for the ternary FMA
+
+// A small, independent floating-point decoder. The Boolean rules are checked
+// against this rather than by folding a float predicate through the blaster:
+// the blaster's constant-folding of the Boolean circuit it emits is fragile
+// (that is a separate finding). The classification and self-comparison facts
+// it encodes are pure IEEE/SMT-LIB and easy to get right directly.
+struct RefFp
+{
+  bool sign, nan, inf, zero, sub, norm;
+};
+
+static RefFp refDecode(unsigned eb, unsigned sb, uint64_t v)
+{
+  const unsigned storedSig = sb - 1;
+  const uint64_t sig = v & ((1ull << storedSig) - 1);
+  const uint64_t exp = (v >> storedSig) & ((1ull << eb) - 1);
+  const bool allOnes = (exp == ((1ull << eb) - 1));
+  RefFp d;
+  d.sign = (v >> (eb + sb - 1)) & 1;
+  d.nan = allOnes && sig != 0;
+  d.inf = allOnes && sig == 0;
+  d.zero = (exp == 0 && sig == 0);
+  d.sub = (exp == 0 && sig != 0);
+  d.norm = !allOnes && exp != 0;
+  return d;
+}
+
+static bool refClassify(Kind k, const RefFp& d)
+{
+  switch (k)
+  {
+    case FP_ISNAN: return d.nan;
+    case FP_ISINFINITE: return d.inf;
+    case FP_ISZERO: return d.zero;
+    case FP_ISSUBNORMAL: return d.sub;
+    case FP_ISNORMAL: return d.norm;
+    default: return false;
+  }
+}
+
+static void run(Ctx& c)
+{
+  // abs(abs x) = abs(neg x) = abs x
+  {
+    ASTNode x = c.fp(EB, SB);
+    c.checkTerm("abs(abs x) = abs x", FP_ABS, x.GetValueWidth(),
+                {c.unary(c.hf, FP_ABS, x)});
+    c.checkTerm("abs(neg x) = abs x", FP_ABS, x.GetValueWidth(),
+                {c.unary(c.hf, FP_NEG, x)});
+  }
+
+  // neg(neg x) = x
+  {
+    ASTNode x = c.fp(EB, SB);
+    c.checkTerm("neg(neg x) = x", FP_NEG, x.GetValueWidth(),
+                {c.unary(c.hf, FP_NEG, x)});
+  }
+
+  // min(x, x) = max(x, x) = x
+  {
+    ASTNode x = c.fp(EB, SB);
+    c.checkTerm("min(x, x) = x", FP_MIN, x.GetValueWidth(), {x, x});
+    c.checkTerm("max(x, x) = x", FP_MAX, x.GetValueWidth(), {x, x});
+  }
+
+  // Classification predicates ignore the sign, so a wrapping abs/neg is
+  // dropped. Check that the factory drops it (the result equals the predicate
+  // on x) and, via the reference, that each predicate really is
+  // sign-independent over every float.
+  {
+    ASTNode x = c.fp(EB, SB);
+    ASTNode absx = c.unary(c.hf, FP_ABS, x);
+    ASTNode negx = c.unary(c.hf, FP_NEG, x);
+    const char* nm[] = {"isNormal", "isSubnormal", "isZero", "isInfinite",
+                        "isNaN"};
+    Kind ks[] = {FP_ISNORMAL, FP_ISSUBNORMAL, FP_ISZERO, FP_ISINFINITE,
+                 FP_ISNAN};
+    const uint64_t N = 1ull << (EB + SB);
+    const uint64_t signBit = 1ull << (EB + SB - 1);
+    for (int i = 0; i < 5; i++)
+    {
+      const ASTNode want = c.hf->CreateNode(ks[i], {x});
+      const bool fires = c.nf->CreateNode(ks[i], {absx}) == want &&
+                         c.nf->CreateNode(ks[i], {negx}) == want;
+      bool sound = true;
+      for (uint64_t v = 0; v < N && sound; v++)
+      {
+        const bool p = refClassify(ks[i], refDecode(EB, SB, v));
+        const bool pAbs = refClassify(ks[i], refDecode(EB, SB, v & ~signBit));
+        const bool pNeg = refClassify(ks[i], refDecode(EB, SB, v ^ signBit));
+        sound = (p == pAbs && p == pNeg);
+      }
+      report(std::string(nm[i]) + "(abs/neg x) = " + nm[i] + "(x)",
+             fires && sound);
+    }
+    // isPositive/isNegative DO depend on the sign: must not be rewritten.
+    c.checkUnchanged("isPositive keeps abs", FP_ISPOSITIVE, {absx});
+    c.checkUnchanged("isNegative keeps neg", FP_ISNEGATIVE, {negx});
+  }
+
+  // x < x, x > x rewrite to false; x <= x, x >= x to (not isNaN x). Both facts
+  // are IEEE-exact; check the factory produces those exact forms.
+  {
+    ASTNode x = c.fp(EB, SB);
+    report("x < x -> false", c.nf->CreateNode(FP_LT, {x, x}) == c.mgr.ASTFalse);
+    report("x > x -> false", c.nf->CreateNode(FP_GT, {x, x}) == c.mgr.ASTFalse);
+    const ASTNode notNan =
+        c.hf->CreateNode(NOT, {c.hf->CreateNode(FP_ISNAN, {x})});
+    report("x <= x -> not isNaN(x)",
+           c.nf->CreateNode(FP_LEQ, {x, x}) == notNan);
+    report("x >= x -> not isNaN(x)",
+           c.nf->CreateNode(FP_GEQ, {x, x}) == notNan);
+  }
+
+  // fp.eq / fp.smt_eq are symmetric; the factory canonicalises operand order so
+  // that x ~ y and y ~ x are the same node (and share a blasted circuit).
+  {
+    ASTNode x = c.fp(EB, SB), y = c.fp(EB, SB);
+    report("fp.eq operand order canonical",
+           c.nf->CreateNode(FP_EQ, {x, y}) == c.nf->CreateNode(FP_EQ, {y, x}));
+    report("fp.smt_eq operand order canonical",
+           c.nf->CreateNode(FP_SMT_EQ, {x, y}) ==
+               c.nf->CreateNode(FP_SMT_EQ, {y, x}));
+  }
+
+  // fp.add and fp.mul are commutative in their two float operands
+  {
+    ASTNode x = c.fp(EB, SB), y = c.fp(EB, SB);
+    for (unsigned mode : {(unsigned)ROUND_NEAREST_TIES_TO_EVEN,
+                          (unsigned)ROUND_TOWARD_ZERO,
+                          (unsigned)ROUND_TOWARD_POSITIVE})
+    {
+      ASTNode r = c.rm(mode);
+      c.checkTerm("fp.add commutative", FP_ADD, x.GetValueWidth(), {r, x, y},
+                  false);
+      c.checkTerm("fp.mul commutative", FP_MUL, x.GetValueWidth(), {r, x, y},
+                  false);
+    }
+  }
+
+  // fp.fma commutative in its two multiplicands (children 1 and 2)
+  {
+    ASTNode x = c.fp(SEB, SSB), y = c.fp(SEB, SSB), z = c.fp(SEB, SSB);
+    for (unsigned mode : {(unsigned)ROUND_NEAREST_TIES_TO_EVEN,
+                          (unsigned)ROUND_TOWARD_ZERO})
+    {
+      ASTNode r = c.rm(mode);
+      c.checkTerm("fp.fma multiplicands commute", FP_FMA, x.GetValueWidth(),
+                  {r, x, y, z}, false);
+    }
+  }
+
+  // rem(rem(a, b), b) = rem(a, b)
+  {
+    ASTNode a = c.fp(EB, SB), b = c.fp(EB, SB);
+    ASTNode inner = c.hf->CreateTerm(FP_REM, a.GetValueWidth(), a, b);
+    inner.SetExpWidth(EB);
+    inner.SetSigWidth(SB);
+    c.checkTerm("rem(rem(a, b), b) = rem(a, b)", FP_REM, a.GetValueWidth(),
+                {inner, b});
+  }
+
+  // rem(a, -b) = rem(a, |b|) = rem(a, b)
+  {
+    ASTNode a = c.fp(EB, SB), b = c.fp(EB, SB);
+    c.checkTerm("rem(a, -b) = rem(a, b)", FP_REM, a.GetValueWidth(),
+                {a, c.unary(c.hf, FP_NEG, b)});
+    c.checkTerm("rem(a, |b|) = rem(a, b)", FP_REM, a.GetValueWidth(),
+                {a, c.unary(c.hf, FP_ABS, b)});
+  }
+
+  // rem(-a, b) = -rem(a, b)
+  {
+    ASTNode a = c.fp(EB, SB), b = c.fp(EB, SB);
+    c.checkTerm("rem(-a, b) = -rem(a, b)", FP_REM, a.GetValueWidth(),
+                {c.unary(c.hf, FP_NEG, a), b});
+  }
+}
+
+int main()
+{
+  setbuf(stdout, nullptr);
+  printf("Exhaustive floating-point rewrite tests\n");
+  Ctx c;
+  run(c);
+  printf("\n%d checks, %d failures\n", g_checks, g_failures);
+  return g_failures == 0 ? 0 : 1;
+}
