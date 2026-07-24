@@ -114,3 +114,32 @@ TEST(fp_conversions, to_float)
             getBVUnsignedLongLong(vc_getCounterExample(vc, fromU))); // 5.0
   vc_Destroy(vc);
 }
+
+// vc_fpConstFromFloat: a native float into the single format is exact
+// (1.5f is 0x3FC00000).
+TEST(fp_constants, from_float)
+{
+  VC vc = vc_createValidityChecker();
+  Expr rne = vc_fpRoundingMode(vc, VC_RM_RNE);
+  Expr sv = vc_varExpr(vc, "sv", vc_fpType(vc, 8, 24));
+  vc_assertFormula(
+      vc, vc_fpEqExpr(vc, sv,
+                      vc_fpConstFromFloat(vc, vc_fpType(vc, 8, 24), rne, 1.5f)));
+  EXPECT_EQ((unsigned long long)0x3FC00000ULL, solveRead(vc, sv));
+  vc_Destroy(vc);
+}
+
+// vc_fpToFPFromFP: reformat a double to half precision (3.0 -> 0x4200).
+TEST(fp_conversions, reformat_double_to_half)
+{
+  VC vc = vc_createValidityChecker();
+  Expr rne = vc_fpRoundingMode(vc, VC_RM_RNE);
+  Expr d = vc_varExpr(vc, "d", vc_fpType(vc, 11, 53));
+  vc_assertFormula(
+      vc, vc_fpEqExpr(vc, d,
+                      vc_fpConstFromDouble(vc, vc_fpType(vc, 11, 53), rne, 3.0)));
+  Expr h = vc_varExpr(vc, "h", vc_fpType(vc, 5, 11));
+  vc_assertFormula(vc, vc_fpEqExpr(vc, h, vc_fpToFPFromFP(vc, 5, 11, rne, d)));
+  EXPECT_EQ((unsigned long long)0x4200, solveRead(vc, h));
+  vc_Destroy(vc);
+}

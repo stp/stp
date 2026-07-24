@@ -76,3 +76,69 @@ TEST(fp_arithmetic, predicates_constrain)
   EXPECT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   vc_Destroy(vc);
 }
+
+TEST(fp_arithmetic, sub_fma_rem_roundtointegral_abs)
+{
+  VC vc = vc_createValidityChecker();
+  Expr rne = vc_fpRoundingMode(vc, VC_RM_RNE);
+  Expr a = vc_varExpr(vc, "a", vc_fpType(vc, 5, 11));
+  vc_assertFormula(vc, vc_fpEqExpr(vc, a, half(vc, 0x4400))); // 4.0
+  Expr two = half(vc, 0x4000);
+
+  Expr sub = vc_fpSubExpr(vc, rne, a, two);        // 2.0
+  Expr fma = vc_fpFMAExpr(vc, rne, a, two, two);   // 4*2 + 2 = 10.0
+  Expr rem = vc_fpRemExpr(vc, a, two);             // 0.0
+  Expr rti = vc_fpRoundToIntegralExpr(vc, rne, half(vc, 0x4100)); // rti(2.5) = 2.0
+  Expr ab = vc_fpAbsExpr(vc, half(vc, 0xC000));    // |-2.0| = 2.0
+
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ((unsigned long long)0x4000,
+            getBVUnsignedLongLong(vc_getCounterExample(vc, sub)));
+  EXPECT_EQ((unsigned long long)0x4900,
+            getBVUnsignedLongLong(vc_getCounterExample(vc, fma)));
+  EXPECT_EQ((unsigned long long)0x0000,
+            getBVUnsignedLongLong(vc_getCounterExample(vc, rem)));
+  EXPECT_EQ((unsigned long long)0x4000,
+            getBVUnsignedLongLong(vc_getCounterExample(vc, rti)));
+  EXPECT_EQ((unsigned long long)0x4000,
+            getBVUnsignedLongLong(vc_getCounterExample(vc, ab)));
+  vc_Destroy(vc);
+}
+
+TEST(fp_arithmetic, ordered_comparisons)
+{
+  VC vc = vc_createValidityChecker();
+  Expr a = vc_varExpr(vc, "a", vc_fpType(vc, 5, 11));
+  vc_assertFormula(vc, vc_fpEqExpr(vc, a, half(vc, 0x4200))); // 3.0
+  vc_assertFormula(vc, vc_fpLtExpr(vc, a, half(vc, 0x4400))); // 3 < 4
+  vc_assertFormula(vc, vc_fpLeqExpr(vc, a, half(vc, 0x4200))); // 3 <= 3
+  vc_assertFormula(vc, vc_fpGtExpr(vc, a, half(vc, 0x4000))); // 3 > 2
+  vc_assertFormula(vc, vc_fpGeqExpr(vc, a, half(vc, 0x4200))); // 3 >= 3
+  EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc)));                // all hold
+  vc_Destroy(vc);
+}
+
+TEST(fp_arithmetic, ordered_comparison_unsat)
+{
+  VC vc = vc_createValidityChecker();
+  Expr a = vc_varExpr(vc, "a", vc_fpType(vc, 5, 11));
+  vc_assertFormula(vc, vc_fpEqExpr(vc, a, half(vc, 0x4000))); // 2.0
+  vc_assertFormula(vc, vc_fpGtExpr(vc, a, half(vc, 0x4400))); // 2 > 4
+  EXPECT_EQ(1, vc_query(vc, vc_falseExpr(vc)));               // unsatisfiable
+  vc_Destroy(vc);
+}
+
+TEST(fp_arithmetic, is_subnormal_and_normal)
+{
+  VC vc = vc_createValidityChecker();
+  Expr x = vc_varExpr(vc, "x", vc_fpType(vc, 5, 11));
+  vc_assertFormula(vc, vc_fpEqExpr(vc, x, half(vc, 0x0001))); // smallest subnormal
+  vc_assertFormula(vc, vc_fpIsSubnormalExpr(vc, x));
+
+  Expr y = vc_varExpr(vc, "y", vc_fpType(vc, 5, 11));
+  vc_assertFormula(vc, vc_fpEqExpr(vc, y, half(vc, 0x3C00))); // 1.0
+  vc_assertFormula(vc, vc_fpIsNormalExpr(vc, y));
+
+  EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  vc_Destroy(vc);
+}
