@@ -113,8 +113,14 @@ At the time of writing the following options are available
    available.
 -  ``TEST_C_API`` - If enabled the C API unit tests will be available
    for building/testing.
--  ``USE_VALGRIND`` - Checks that Valgrind is in your ``PATH`` so that
-   lit-driven GoogleTest suites can run under it.
+-  ``USE_VALGRIND`` - If enabled, every GoogleTest executable is run under
+   valgrind's memcheck rather than directly, and memory errors fail the
+   test. See :ref:`valgrind` below.
+-  ``VALGRIND_ARGS`` - The flags CTest passes to valgrind. See
+   :ref:`valgrind`.
+-  ``VALGRIND_TEST_TIMEOUT`` - Per-test CTest timeout in seconds when
+   ``USE_VALGRIND`` is on, three hours by default. The default timeout is
+   not enough for the exhaustive tests once valgrind's slowdown is applied.
 
 Running tests
 -------------
@@ -141,6 +147,51 @@ file becomes its own executable and its own CTest test, named after the
 source file with ``Tests-gtest`` appended -- so
 ``tests/unit-tests/SimplifyFormula_Test.cpp`` is run by the CTest test
 ``SimplifyFormula_TestTests-gtest``.
+
+.. _valgrind:
+
+Running the tests under valgrind
+--------------------------------
+
+Configure with ``USE_VALGRIND`` and every GoogleTest executable is run
+through valgrind's memcheck rather than being run directly, so ``ctest``
+covers them as usual. Valgrind has to be in your ``PATH`` or configuration
+fails.
+
+::
+
+    $ cmake -DENABLE_TESTING=ON -DUSE_VALGRIND=ON ..
+    $ make
+    $ ctest -j8
+
+The flags come from ``VALGRIND_ARGS``, which defaults to
+``--error-exitcode=1 --leak-check=full --errors-for-leak-kinds=none
+--track-origins=yes``. Memory errors -- invalid accesses, uninitialised
+values -- therefore fail a test, while leaks are reported in the output
+without failing it. That split is deliberate: the tests under
+``tests/api/C`` build ``Expr`` handles through the C API and mostly never
+call ``vc_DeleteExpr``, so about thirty of them leak a few bytes each by
+construction, and two of the unit tests drop what
+``NodeDomainAnalysis::harmonise`` and ``FixedBits::GetMinBVConst`` hand
+back. To make leaks fail as well, override the list -- remembering that
+CMake lists are semicolon separated:
+
+::
+
+    $ cmake -DVALGRIND_ARGS="--error-exitcode=1;--leak-check=full;--errors-for-leak-kinds=definite" ..
+
+Expect the suite to take well over an order of magnitude longer: 243
+seconds versus 8 seconds at ``-j6`` on the machine this was measured on.
+That is why the per-test CTest timeout is raised to
+``VALGRIND_TEST_TIMEOUT`` (three hours by default) -- the exhaustive tests
+do not fit in CTest's usual allowance once valgrind is in the way.
+
+The query file tests are deliberately left out of this. They drive the
+``stp`` binary, which links mimalloc by default, and mimalloc takes its
+memory from ``mmap`` rather than ``malloc``, so memcheck cannot see the
+individual allocations. Configure with ``-DSTP_ALLOCATOR=system`` if you
+want to run the binary itself under valgrind, and use lit's own ``--vg``
+flag for that.
 
 Notes for Query file tests
 --------------------------

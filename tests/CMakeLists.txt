@@ -92,6 +92,23 @@ include(AddGTestSuite)
 # -----------------------------------------------------------------------------
 option(USE_VALGRIND "Use Valgrind when running unit tests" OFF)
 
+# Leaks are reported but do not fail a test: the tests under tests/api/C
+# create Expr handles through the C API and mostly never call vc_DeleteExpr,
+# so about thirty of them leak a few bytes each by construction. Memory errors
+# -- invalid accesses, uninitialised values -- do fail. Add
+# --errors-for-leak-kinds=definite here if you want to hunt the leaks.
+set(VALGRIND_ARGS
+    --error-exitcode=1
+    --leak-check=full
+    --errors-for-leak-kinds=none
+    --track-origins=yes
+    CACHE STRING "Arguments passed to valgrind when USE_VALGRIND is on"
+   )
+
+set(VALGRIND_TEST_TIMEOUT 10800
+    CACHE STRING "Per-test CTest timeout in seconds when USE_VALGRIND is on"
+   )
+
 if(USE_VALGRIND)
     # Make sure valgrind is currently in PATH
     find_program(VALGRIND_TOOL valgrind
@@ -106,10 +123,11 @@ if(USE_VALGRIND)
         message(STATUS "Found valgrind : ${VALGRIND_TOOL}")
     endif()
 
-    # Note we don't use the VALGRIND_TOOL variable, we just
-    # want to make sure it in the user's PATH so that when
-    # lit tries to use it later it doesn't exit with an unhelpful
-    # error message
+    # AddSTPGTest runs each GoogleTest executable through this. Only those: the
+    # query-file tests drive the stp binary, which links mimalloc by default,
+    # and mimalloc gets its memory from mmap rather than malloc, so memcheck
+    # cannot see individual allocations there. Build with
+    # -DSTP_ALLOCATOR=system if you want to valgrind the binary itself.
 endif()
 
 # -----------------------------------------------------------------------------
