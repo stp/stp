@@ -32,6 +32,8 @@ if (BUILD_EXTRA_TOOLS)
 endif()
 
 # this should be an extra tool
-add_subdirectory(test_fpbackend)
-add_subdirectory(test_fprewrites)
+if (ENABLE_FLOATING_POINT)
+    add_subdirectory(test_fpbackend)
+    add_subdirectory(test_fprewrites)
+endif()
 
