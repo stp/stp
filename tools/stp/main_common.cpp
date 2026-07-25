@@ -326,7 +326,7 @@ int Main::main(int argc, char** argv)
       {
         bm->GetRunTimes()->print();
       }
-      stp->tosat->PrintOutput(ret);
+      ToSATBase::PrintOutput(bm, ret);
     }
 
     asserts = ASTNode();
