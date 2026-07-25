@@ -209,9 +209,14 @@ DLL_PUBLIC void make_division_total(VC vc);
 //!
 DLL_PUBLIC VC vc_createValidityChecker(void);
 
-/*
- * TODO: this is a hack -- it allows to create a VC reusing an existing STPMgr
- */
+//! \brief Creates a validity checker over an existing node manager.
+//!
+//! `_bm` must be a live stp::STPMgr* (the parameter is void* only so this C
+//! header need not name the C++ type). Lets a client that builds nodes
+//! through the C++ objects solve them through the C API. The manager keeps
+//! any node factory it was already given, and stays owned by the caller's
+//! vc_Destroy like any other checker's manager.
+//!
 DLL_PUBLIC VC vc_createValidityCheckerReuse(void* _bm);
 
 //! \brief Returns the boolean type for the given validity checker.

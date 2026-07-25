@@ -164,13 +164,21 @@ void make_division_total(VC /*vc*/)
 // Create a validity Checker.
 VC vc_createValidityChecker(void)
 {
-  stp::STPMgr* bm = new stp::STPMgr();
-  return vc_createValidityCheckerReuse(bm);
+  // Boot the bitvector library before allocating anything, so the failure
+  // path leaks nothing.
+  CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot();
+  if (0 != c)
+  {
+    cout << CONSTANTBV::BitVector_Error(c) << endl;
+    return 0;
+  }
+
+  return vc_createValidityCheckerReuse(new stp::STPMgr());
 }
 
-/*
- * TODO: this is a hack -- it allows to create a VC reusing an existing STPMgr
- */
+// Create a validity checker over an existing manager (an stp::STPMgr*), so a
+// client mixing the C API with the C++ objects can solve over nodes it built
+// directly.
 VC vc_createValidityCheckerReuse(void* _bm)
 {
   stp::STPMgr* bm = (stp::STPMgr*)_bm;
@@ -182,14 +190,17 @@ VC vc_createValidityCheckerReuse(void* _bm)
     return 0;
   }
 
-  bm->defaultNodeFactory =
-      new SimplifyingNodeFactory(*(bm->hashingNodeFactory), *bm);
+  // A fresh manager starts out with its plain hashing factory; upgrade it to
+  // the simplifying one. A reused manager that was already given a factory
+  // keeps it (this used to replace -- and leak -- whatever was installed).
+  if (bm->defaultNodeFactory == bm->hashingNodeFactory)
+    bm->defaultNodeFactory =
+        new SimplifyingNodeFactory(*(bm->hashingNodeFactory), *bm);
 
-  // Floating-point blasting reaches for GlobalParserBM (the FloatBlaster
-  // singleton reads its node factory and True/False nodes from it). The parser
-  // sets this; a C-API client that builds floating-point terms directly never
-  // goes through the parser, so point it at this manager now -- otherwise the
-  // first fp op to be blasted during a solve trips the singleton's assert.
+  // The parser-facing helpers read GlobalParserBM; point it at this manager
+  // so a C-API client that never parses still has it aimed at a live one.
+  // (Floating-point blasting itself takes the manager explicitly and does
+  // not consult this.)
   stp::GlobalParserBM = bm;
 
   stp::STP* stpObj =
@@ -2436,8 +2447,13 @@ void vc_Destroy(VC vc)
   vc_clearDecls(vc);
   stp_i->deleteObjects();
 
+  // Never leave the global aimed at a dead manager.
+  if (stp::GlobalParserBM == b)
+    stp::GlobalParserBM = NULL;
+
   delete stp_i;
-  delete b->defaultNodeFactory;
+  if (b->defaultNodeFactory != b->hashingNodeFactory)
+    delete b->defaultNodeFactory;
   delete b;
 }
 
