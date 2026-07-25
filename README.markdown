@@ -86,9 +86,13 @@ The system performs word-level preprocessing followed by translation to SAT whic
 
 ## Detailed Building and Installation
 
-STP is built with [CMake](https://cmake.org/), version 3.10 or newer. CMake is a
+STP is built with [CMake](https://cmake.org/), version 3.18 or newer. CMake is a
 meta build system that generates build files for other tools such as
 make(1), Visual Studio, Xcode, etc.
+
+The 3.18 floor comes from the vendored [mimalloc](lib/extlib-mimalloc), which
+is the default allocator. On an older CMake, configure with
+`-DSTP_ALLOCATOR=system` to skip it and use the C library's malloc instead.
 
 ### Configuration variables
 Here are a few interesting configuration variables. These apply to all

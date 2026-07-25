@@ -206,7 +206,7 @@ jobs:
         restore-keys: ccache-cadical-
 
     # CMAKE_INSTALL_PREFIX and PYTHON_LIB_INSTALL_DIR are set so that the
-    # install step below lands in the workspace rather than needing root.
+    # install steps below land in the workspace rather than needing root.
     # Both have to be settled here rather than at install time: the header
     # and Python destinations are absolute paths baked into the cache, and
     # so is the install RPATH this job checks. Neither affects what is built
@@ -263,6 +263,38 @@ jobs:
         mkdir lib && echo 'not an ELF file' > "lib/$soname"
         LD_LIBRARY_PATH="$deps" "$stp" --version > /dev/null
         echo "ok: ignored the decoy ./lib/$soname"
+
+    # examples/simple is not part of the main build - no add_subdirectory
+    # reaches it - so nothing used to compile it, and it sat at
+    # cmake_minimum_required(VERSION 2.8) until CMake 4 made that a hard
+    # error. Build it against an install tree, which is the arrangement its
+    # README documents and the one downstream users actually get: this
+    # exercises `cmake --install` and the installed STPConfig.cmake together.
+    # This job is the one to do it in because it configures with
+    # NOCRYPTOMINISAT, so the generated STPConfig.cmake has no
+    # find_dependency(cryptominisat5) to satisfy.
+    #
+    # The prefix comes from CMAKE_INSTALL_PREFIX at configure time rather than
+    # `cmake --install --prefix` here, because the latter does not relocate the
+    # headers: lib/CMakeLists.txt installs PUBLIC_HEADER to the absolute
+    # CMAKE_INSTALL_FULL_INCLUDEDIR, which is fixed when the cache is written.
+    #
+    # deps/install/lib appears on both the link and the run, for the same
+    # reason the step above needs it: libstp records minisat as a DT_NEEDED
+    # rather than naming it in its link interface, and this workspace keeps
+    # minisat in a prefix no default search path covers. -rpath-link lets the
+    # linker resolve that DT_NEEDED; LD_LIBRARY_PATH lets the loader find it.
+    # A consumer whose minisat came from a distro package needs neither.
+    - name: Build the example against the install tree
+      run: |
+        cmake --install build
+        cmake -S examples/simple -B build-example \
+          -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/install" \
+          -DCMAKE_EXE_LINKER_FLAGS="-Wl,-rpath-link,$GITHUB_WORKSPACE/deps/install/lib" \
+          -G Ninja
+        cmake --build build-example --parallel "$(nproc)"
+        LD_LIBRARY_PATH="$GITHUB_WORKSPACE/install/lib:$GITHUB_WORKSPACE/deps/install/lib" \
+          ./build-example/stp-example
 
   # Until this job existed, the only static build in CI was the Windows one,
   # so a break that only shows up when everything is linked into one

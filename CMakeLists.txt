@@ -18,27 +18,14 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
-
-if(POLICY CMP0048)
-    #policy for VERSION in cmake 3.0
-    cmake_policy(SET CMP0048 NEW)
-endif()
-
-if(POLICY CMP0074)
-    #policy for <PackageName>_ROOT variables
-    cmake_policy(SET CMP0074 NEW)
-endif()
-
-if(POLICY CMP0092)
-    # Disable passing /W3 by default on MSVC
-    cmake_policy(SET CMP0092 NEW)
-endif()
-
-if(POLICY CMP0077)
-    # Allow to override options via regular variables
-    cmake_policy(SET CMP0077 NEW)
-endif()
+# 3.18 is what lib/extlib-mimalloc requires, and mimalloc is the default
+# STP_ALLOCATOR, so a default build already needs it. Anyone on an older CMake
+# can configure with -DSTP_ALLOCATOR=system, which skips that subdirectory.
+#
+# Nothing here sets a policy explicitly: every policy STP cares about
+# (CMP0048, CMP0074, CMP0077, CMP0092 - the newest introduced in 3.15) is NEW
+# by default at this minimum.
+cmake_minimum_required(VERSION 3.18)
 
 project(STP)
 
