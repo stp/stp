@@ -484,12 +484,24 @@
     return n;
   }
 
+  // The indexed to_fp forms and the special values carry the format as
+  // numerals; apply the floor the sort rule enforces.
+  void checkFpFormatWidths(unsigned int exp_width, unsigned int sig_width)
+  {
+    if (exp_width < 2 || sig_width < 2)
+    {
+      fatal_yyerror("a floating-point format needs at least 2 exponent and "
+                    "2 significand bits");
+    }
+  }
+
   // ((_ to_fp_unsigned e s) rm bv) -- convert an unsigned integer held in a
   // bitvector to the nearest float.
   ASTNode* createFPFromUnsignedBV(unsigned int exp_width,
                                   unsigned int sig_width, ASTNode* rm,
                                   ASTNode* bits)
   {
+    checkFpFormatWidths(exp_width, sig_width);
     if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
     {
       fatal_yyerror("expected a rounding mode.");
@@ -572,6 +584,7 @@
   ASTNode* createFPFromBits(unsigned int exp_width, unsigned int sig_width,
                             ASTNode* bits)
   {
+    checkFpFormatWidths(exp_width, sig_width);
     if (bits->GetType() != BITVECTOR_TYPE)
     {
       fatal_yyerror("the one-argument form of to_fp takes a bitvector.");
@@ -619,12 +632,12 @@
       fatal_yyerror("fp: the sign must be a one-bit bitvector.");
     }
 
-    ASTNode first(*stp::GlobalParserInterface->newNode(
-        stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT, sign_bits + exp_bits,
-                                                   *sign, *exp)));
-    ASTNode packed(*stp::GlobalParserInterface->newNode(
-        stp::GlobalParserInterface->nf->CreateTerm(
-            BVCONCAT, sign_bits + exp_bits + sig_bits, first, *sig)));
+    // Plain stack nodes: newNode is only for values handed to bison, and
+    // wrapping the intermediates in it leaked two heap nodes per literal.
+    ASTNode first(stp::GlobalParserInterface->nf->CreateTerm(
+        BVCONCAT, sign_bits + exp_bits, *sign, *exp));
+    ASTNode packed(stp::GlobalParserInterface->nf->CreateTerm(
+        BVCONCAT, sign_bits + exp_bits + sig_bits, first, *sig));
 
     const unsigned int exp_width = exp_bits;
     const unsigned int sig_width = sig_bits + sign_bits;
@@ -657,6 +670,7 @@
   ASTNode* createFPToFP(unsigned int exp_width, unsigned int sig_width,
                         ASTNode* rm, ASTNode* expr)
   {
+    checkFpFormatWidths(exp_width, sig_width);
     if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
     {
       fatal_yyerror("expected a rounding mode.");
@@ -1145,6 +1159,7 @@ LPAREN_TOK STRING_TOK an_fp_sort RPAREN_TOK
   $$->SetIndexWidth(0);
   $$->SetValueWidth($3->exp_bits + $3->sig_bits);
   delete $2;
+  delete $3;
 };
 ;
 
@@ -1341,15 +1356,18 @@ SOURCE_TOK
 sort_decl:
 STRING_TOK LPAREN_TOK RPAREN_TOK an_fp_sort
 {
-  // AVJ-FP
+  // A define-sort alias is carried as an interned symbol holding the format,
+  // which declare-fun's alias branch copies from. (A real sort-alias table
+  // would also stop the alias name resolving as a term; see the notes in the
+  // review.)
   ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
   stp::GlobalParserInterface->addSymbol(s);
-  //Sort_symbs has the indexwidth/valuewidth. Set those fields in
-  //var
   s.SetExpWidth($4->exp_bits);
   s.SetSigWidth($4->sig_bits);
   s.SetIndexWidth(0);
   s.SetValueWidth($4->exp_bits + $4->sig_bits);
+  delete $1;
+  delete $4;
 };
 
 an_fp_sort:
@@ -1376,6 +1394,11 @@ an_fp_sort:
 }
 | LPAREN_TOK UNDERSCORE_TOK FLOATINGPOINT_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK
 {
+    if ($4 < 2 || $5 < 2)
+    {
+      fatal_yyerror("a floating-point format needs at least 2 exponent and "
+                    "2 significand bits");
+    }
     $$ = new float_size($4, $5);
 }
 ;
@@ -2138,27 +2161,9 @@ an_fp_term:
 }
 | FP_EQ_TOK an_terms
 {
-  const ASTVec& terms = *$2;
-
-  if (terms.size() ==2)
-  {
-    $$ = createNode(FP_EQ, $2);
-  }
-  else  if (terms.size() >2)
-  {
-    ASTVec result;
-    result.reserve(terms.size()-1);
-    for (unsigned i =1; i < terms.size();i++)
-    {
-        result.push_back(stp::GlobalParserInterface->CreateNode(FP_EQ, terms[i], terms[i-1]));
-    }
-    $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(AND, result));
-    delete $2;
-  }
-  else
-  {
-    fatal_yyerror("too few arguments to fp.eq.");
-  }
+  // Through the same helper as the other chainable comparisons, gaining its
+  // operand and format checks (the old inline version had none).
+  $$ = createFPChain(FP_EQ, $2, "fp.eq");
 }
 | FP_ISNORMAL_TOK an_term
 {
@@ -2219,10 +2224,7 @@ an_fp_term:
   // of, say, NaN to one node, which whoever parsed last would re-stamp.
   uint32_t exp_width($3);
   uint32_t sig_width($4);
-  if (exp_width == 0 || sig_width == 0)
-  {
-    fatal_yyerror("a floating-point format needs nonzero widths");
-  }
+  checkFpFormatWidths(exp_width, sig_width);
   $$ = stp::GlobalParserInterface->newNode(
       stp::GlobalParserInterface->CreateFPSpecialConst(
           (stp::FPSpecial)$2, exp_width, sig_width));
