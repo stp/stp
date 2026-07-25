@@ -48,28 +48,6 @@ THE SOFTWARE.
 namespace stp
 {
 
-FloatBlaster* FloatBlaster::_instance = nullptr;
-
-FloatBlaster* FloatBlaster::instance()
-{
-  if (_instance == nullptr)
-  {
-    assert(stp::GlobalParserBM != nullptr);
-    _instance = new FloatBlaster();
-  }
-  return _instance;
-}
-
-FloatBlaster::FloatBlaster()
-{
-  ASTTrue = stp::GlobalParserBM->CreateNode(TRUE);
-  ASTFalse = stp::GlobalParserBM->CreateNode(FALSE);
-  ASTUndefined = stp::GlobalParserBM->CreateNode(UNDEFINED);
-  nf = stp::GlobalParserBM->defaultNodeFactory;
-
-  symbolic_fp::init_vc(stp::GlobalParserBM);
-}
-
 ASTNode FloatBlaster::withFormat(STPMgr* bm, const ASTNode& n,
                                  unsigned int exp_width,
                                  unsigned int sig_width)
@@ -97,10 +75,10 @@ ASTNode FloatBlaster::withFormat(STPMgr* bm, const ASTNode& n,
   return out;
 }
 
-ASTNode FloatBlaster::canonicalBits(const ASTNode& f)
+ASTNode FloatBlaster::canonicalBits(STPMgr* bm, const ASTNode& f)
 {
-  // Point symfpu at the current manager before blasting (see init_vc).
-  symbolic_fp::init_vc(stp::GlobalParserBM);
+  // Point symfpu at the manager being blasted (see init_vc).
+  symbolic_fp::init_vc(bm);
   return symbolic_fp::blast_reinterpret(f, f.GetExpWidth(), f.GetSigWidth());
 }
 
@@ -123,16 +101,15 @@ ASTNode FloatBlaster::unspecifiedValue(STPMgr* bm, const char* tag,
   return bm->CreateTerm(READ, value_width, array, index);
 }
 
-ASTNode FloatBlaster::BlastNode_TopLevel(const ASTNode& b)
+ASTNode FloatBlaster::BlastNode_TopLevel(STPMgr* bm, const ASTNode& b)
 {
   // Point symfpu's backend at the manager being blasted now, rather than
   // whichever manager happened to blast first (see symbolic_fp::init_vc).
-  symbolic_fp::init_vc(stp::GlobalParserBM);
-  ASTNode out = FloatBlaster::instance()->BlastNode(b);
-  return out;
+  symbolic_fp::init_vc(bm);
+  return FloatBlaster::BlastNode(bm, b);
 }
 
-ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
+ASTNode FloatBlaster::BlastNode(STPMgr* bm, const ASTNode& actualInputterm)
 {
   ASTNode inputterm(actualInputterm);
 
@@ -184,8 +161,8 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
       assert(inputterm.Degree() == 3);
 
       // Child 2 is a 1-bit bitvector; symfpu wants a proposition.
-      const ASTNode zero_case = stp::GlobalParserBM->CreateNode(
-          EQ, inputterm[2], stp::GlobalParserBM->CreateOneConst(1));
+      const ASTNode zero_case =
+          bm->CreateNode(EQ, inputterm[2], bm->CreateOneConst(1));
 
       output = (k == FP_MIN)
                    ? symbolic_fp::blast_fpmin(inputterm[0], inputterm[1],
@@ -274,8 +251,7 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
       // The node may have arrived without its format for the same reason,
       // so hand the derived one back rather than the (possibly zero) stored
       // one that the tail below would otherwise apply.
-      return FloatBlaster::withFormat(stp::GlobalParserBM, output, to_exp,
-                                      to_sig);
+      return FloatBlaster::withFormat(bm, output, to_exp, to_sig);
     }
     // ((_ to_fp_unsigned e s) rm bv): the source is always an unsigned
     // integer in a bitvector.
@@ -286,8 +262,7 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
       output = symbolic_fp::blast_convert_bv_to_float(
           /* rm */ inputterm[2], /* bits */ inputterm[3], to_exp, to_sig,
           /* is_signed */ false);
-      return FloatBlaster::withFormat(stp::GlobalParserBM, output, to_exp,
-                                      to_sig);
+      return FloatBlaster::withFormat(bm, output, to_exp, to_sig);
     }
     // (m, rm, x, unspecified). The result is a bitvector, not a float, so no
     // floating-point format is stamped on it.
@@ -313,9 +288,11 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
                                                     /* expr */ inputterm[1]);
       break;
     default:
-      std::cerr << "FloatBlaster::BlastNode: Unhandled kind: " << k
-                << std::endl;
-      assert(false);
+      // Fail closed: falling through would return the term unblasted, and
+      // the callers would then loop or hand a floating-point node to the
+      // bitvector layers.
+      FatalError("FloatBlaster::BlastNode: unhandled kind: ", actualInputterm,
+                 k);
       break;
   };
 
@@ -324,7 +301,7 @@ ASTNode FloatBlaster::BlastNode(const ASTNode& actualInputterm)
   // be left exactly as it is.
   if (actualInputterm.GetExpWidth() != 0)
   {
-    output = FloatBlaster::withFormat(stp::GlobalParserBM, output,
+    output = FloatBlaster::withFormat(bm, output,
                                       actualInputterm.GetExpWidth(),
                                       actualInputterm.GetSigWidth());
   }

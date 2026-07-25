@@ -388,10 +388,9 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
             bm, simp, child.GetExpWidth(), child.GetSigWidth()));
       }
 
-      ASTNode temp(
-          stp::GlobalParserBM->CreateTerm(k, term.GetValueWidth(), children));
-      temp.SetExpWidth(term.GetExpWidth());
-      temp.SetSigWidth(term.GetSigWidth());
+      ASTNode temp(bm->CreateTerm(k, term.GetValueWidth(), children));
+      temp = FloatBlaster::withFormat(bm, temp, term.GetExpWidth(),
+                                      term.GetSigWidth());
 
       // The factory may have folded the rebuilt operation to a constant once
       // its children were resolved: abs/neg of a constant is a sign-bit edit,
@@ -415,7 +414,7 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
       FpTotalise totalise(bm);
       temp = totalise.topLevel(temp);
 
-      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(temp));
+      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(bm, temp));
 
       assert(blasted != temp);
       assert(blasted != term);
@@ -708,7 +707,7 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
             bm, simp, form[i].GetExpWidth(), form[i].GetSigWidth()));
       }
 
-      ASTNode temp(stp::GlobalParserBM->CreateNode(k, operands));
+      ASTNode temp(bm->CreateNode(k, operands));
 
       // Rebuilding through the simplifying factory may rewrite the predicate
       // rather than return it: constant operands fold to true/false outright,
@@ -722,7 +721,7 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
         break;
       }
 
-      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(temp));
+      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(bm, temp));
 
       assert(blasted != temp);
       assert(blasted != form);

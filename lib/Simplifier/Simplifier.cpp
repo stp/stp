@@ -488,7 +488,7 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
         break;
       }
 
-      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(temp));
+      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(_bm, temp));
 
       assert(blasted != temp);
       assert(blasted != a);
@@ -2644,7 +2644,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       }
       else
       {
-        ASTNode blasted(FloatBlaster::BlastNode_TopLevel(temp));
+        ASTNode blasted(FloatBlaster::BlastNode_TopLevel(_bm, temp));
 
         assert(blasted != temp);
         assert(blasted != inputterm);

@@ -75,7 +75,7 @@ ASTNode FpTotalise::unspecified(const char* tag, const ASTNode& prefix,
     // exists to provide. Round-tripping through unpack/pack collapses the
     // payloads while keeping +0 and -0 apart, which is exactly the relation
     // SMT-LIB uses.
-    const ASTNode canonical = FloatBlaster::canonicalBits(floats[i]);
+    const ASTNode canonical = FloatBlaster::canonicalBits(bm, floats[i]);
 
     if (width == 0)
     {

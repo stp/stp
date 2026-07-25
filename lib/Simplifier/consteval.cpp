@@ -1031,7 +1031,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
         break;
       }
 
-      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(temp));
+      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(_bm, temp));
       OutputNode = NonMemberBVConstEvaluator(_bm, blasted);
 
       // Carry the format out, so an enclosing operation sees a formatted
