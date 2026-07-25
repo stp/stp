@@ -972,6 +972,7 @@
 %token FP_GEQ_TOK;
 %token FP_GT_TOK;
 %token FP_EQ_TOK;
+%token FP_TO_REAL_TOK;
 %token FP_ISNORMAL_TOK;
 %token FP_ISSUBNORMAL_TOK;
 %token FP_ISZERO_TOK;
@@ -2148,6 +2149,27 @@ an_fp_term:
 | LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_UNSIGNED_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
 {
   $$ = createFPFromUnsignedBV($5, $6, $8, $9);
+}
+| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term DECIMAL_TOK RPAREN_TOK
+{
+  // ((_ to_fp e s) rm 1.5): conversion from a real literal. Deliberately
+  // unsupported -- no QF_FP/QF_BVFP/QF_ABVFP benchmark uses it -- but say
+  // so, rather than a bare syntax error at the literal.
+  fatal_yyerror("real literals are not supported (STP's floating point is "
+                "bit-precise); write the value as its packed bits, e.g. "
+                "((_ to_fp 8 24) #x3fc00000) for 1.5, or as a "
+                "(fp sign exponent significand) literal");
+}
+| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK DECIMAL_TOK RPAREN_TOK
+{
+  fatal_yyerror("real literals are not supported (STP's floating point is "
+                "bit-precise); write the value as its packed bits, e.g. "
+                "((_ to_fp 8 24) #x3fc00000) for 1.5, or as a "
+                "(fp sign exponent significand) literal");
+}
+| LPAREN_TOK FP_TO_REAL_TOK an_term RPAREN_TOK
+{
+  fatal_yyerror("fp.to_real is not supported: STP has no theory of reals");
 }
 | UNDERSCORE_TOK an_fp_const NUMERAL_TOK NUMERAL_TOK
 {
