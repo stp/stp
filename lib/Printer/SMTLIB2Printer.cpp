@@ -177,16 +177,20 @@ void outputFloatingPointSMTLIB2(const ASTNode n, ostream& os,
 
   unsigned char* str = CONSTANTBV::BitVector_to_Bin(n.GetBVConst());
   std::string as_str(reinterpret_cast<char*>(str));
+  CONSTANTBV::BitVector_Dispose(str);
 
   if (as_str.length() != underlying_size)
   {
     FatalError("String does not match size of FP");
   }
 
+  // The stored significand field is sb - 1 bits: the hidden bit is not
+  // packed. (This used to ask substr for sb characters and lean on substr's
+  // clamping at end-of-string.)
   std::string sign_bit = as_str.substr(0, 1);
   std::string exp_bits = as_str.substr(1, term.GetExpWidth());
   std::string sig_bits =
-      as_str.substr(1 + term.GetExpWidth(), term.GetSigWidth());
+      as_str.substr(1 + term.GetExpWidth(), term.GetSigWidth() - 1);
 
   std::string rejoined = sign_bit + exp_bits + sig_bits;
 
