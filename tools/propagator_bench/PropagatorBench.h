@@ -1,0 +1,278 @@
+/********************************************************************
+ * AUTHORS: Trevor Hansen
+ *
+ * BEGIN DATE: July, 2026
+ *
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+********************************************************************/
+
+// Shared types for the propagator benchmark. See README.md.
+
+#ifndef PROPAGATOR_BENCH_H_
+#define PROPAGATOR_BENCH_H_
+
+#include "stp/AST/AST.h"
+#include "stp/STPManager/STPManager.h"
+#include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
+#include "stp/Simplifier/constantBitP/FixedBits.h"
+#include "stp/Simplifier/constantBitP/MersenneTwister.h"
+
+#include <cstdint>
+#include <string>
+#include <vector>
+
+namespace propbench
+{
+using simplifier::constantBitP::FixedBits;
+using std::string;
+using std::vector;
+
+// ---------------------------------------------------------------------------
+// The abstract domains that STP propagates over.
+
+enum class Domain
+{
+  Cbitp,   // simplifier::constantBitP, the FixedBits transfer functions
+  Interval, // stp::UnsignedIntervalAnalysis
+  ValueSet  // stp::ValueSetAnalysis
+};
+
+// Which way information flows in the cases we hand the propagator. The
+// constant-bit transfer functions are all "both ways" functions, so the
+// direction here describes what is *seeded*, not what the code is able to
+// deduce:
+//   BottomUp  children partially known, result unknown
+//   TopDown   result partially known, children unknown
+//   BothWays  everything partially known
+// The interval and value-set analyses only ever run bottom up.
+enum class Direction
+{
+  BottomUp,
+  TopDown,
+  BothWays
+};
+
+const char* name(Domain d);
+const char* name(Direction d);
+bool parseDomain(const string& s, Domain& out);
+bool parseDirection(const string& s, Direction& out);
+
+// ---------------------------------------------------------------------------
+// Operations.
+
+// The shape of a node as a function of the benchmarked width w.
+enum class Shape
+{
+  Nary,      // (w, w, ...) -> w
+  Predicate, // (w, w) -> bool
+  Unary,     // (w) -> w
+  BoolNary,  // (bool, bool, ...) -> bool
+  BoolUnary, // (bool) -> bool
+  Ite,       // (bool, w, w) -> w
+  Concat,    // (w/2, w/2) -> w
+  Extract,   // (w, const, const) -> w/2
+  Extend     // (w/2, const) -> w
+};
+
+struct ChildSpec
+{
+  unsigned width = 0;      // 1 for booleans
+  bool isBoolean = false;
+  // Structural children -- the bounds of an extract, the width of an
+  // extend. They are always completely known and never propagated over.
+  bool isConstant = false;
+  uint64_t value = 0; // when isConstant
+};
+
+// One instance of an operation: the widths of its children and result.
+struct Layout
+{
+  vector<ChildSpec> children;
+  unsigned outWidth = 0;
+  bool outIsBoolean = false;
+  bool ok = false; // false when the operation can't be built at that width
+
+  // Indices of the children the harness varies (i.e. not structural).
+  vector<unsigned> varying() const;
+  // Total width of the varying children; the semantics table is indexed by
+  // their concatenated values, so this must stay small for the exhaustive
+  // phases.
+  unsigned packedBits() const;
+};
+
+struct OpSpec
+{
+  stp::Kind kind;
+  const char* name; // as in SMT-LIB, e.g. "bvsgt"
+  Shape shape;
+  bool nary;         // whether the transfer function takes more than 2 children
+  bool satCheckable; // maxPrecision() builds its node out of plain symbols,
+                     // so operations with structural children are excluded
+};
+
+const vector<OpSpec>& allOps();
+const OpSpec* findOp(const string& name);
+bool supports(Domain d, const OpSpec& op);
+
+// Builds the layout, expanding n-ary operations to `arity` children.
+Layout layoutFor(const OpSpec& op, unsigned width, unsigned arity);
+
+// A node of the right shape with a fresh symbol for every varying child.
+// The interval and value-set transfer functions dispatch on the node, and
+// the SAT-based precision check needs the same shape.
+stp::ASTNode buildNode(stp::STPMgr* mgr, const OpSpec& op, const Layout& l);
+
+// The reference semantics, from STP's constant evaluator. `values` holds one
+// entry per child, structural children included.
+uint64_t evaluate(stp::STPMgr* mgr, const OpSpec& op, const Layout& l,
+                  const vector<uint64_t>& values);
+
+// The same, for children that are already constant nodes. Widths above 64
+// bits go through here.
+stp::ASTNode evaluateNodes(stp::STPMgr* mgr, const OpSpec& op, const Layout& l,
+                           const stp::ASTVec& children);
+
+// evaluate() for every combination of the varying children's values, indexed
+// by their concatenated values (child 0 in the least significant position).
+// Only usable when packedBits() is small.
+vector<uint64_t> semanticsTable(stp::STPMgr* mgr, const OpSpec& op,
+                                const Layout& l);
+
+// ---------------------------------------------------------------------------
+// Results.
+
+// Exhaustive comparison against a brute-forced maximally precise reference at
+// a small width.
+struct PrecisionResult
+{
+  bool ran = false;
+  unsigned width = 0;
+  uint64_t cases = 0;
+  uint64_t precise = 0;         // cases where nothing more could be deduced
+  uint64_t unsound = 0;         // cases where a real solution was excluded
+  uint64_t missedConflict = 0;  // cases with no solution, not reported
+  uint64_t derivable = 0;       // bits an ideal propagator would have deduced
+  uint64_t gained = 0;          // bits this propagator deduced
+
+  bool maximallyPrecise() const
+  {
+    return ran && cases > 0 && precise == cases && unsound == 0;
+  }
+};
+
+// Spot check against maxPrecision() at the row's own width.
+struct SatCheck
+{
+  bool ran = false;
+  uint64_t cases = 0;
+  uint64_t precise = 0;
+  uint64_t unsound = 0;
+};
+
+struct Row
+{
+  Domain domain = Domain::Cbitp;
+  string op;
+  Direction direction = Direction::BottomUp;
+  unsigned width = 0;
+  unsigned arity = 2;
+  string input;         // how the case was seeded, e.g. "50% fixed"
+  unsigned prob = 0;    // percentage of bits seeded (cbitp, interval)
+  unsigned setSize = 0; // values per input set (value set)
+  bool implemented = true;
+
+  double nsPerCall = 0;
+  double opsPerSec = 0;
+  double bitsGained = 0; // information deduced per call, in bits
+  uint64_t calls = 0;
+  uint64_t conflicts = 0;
+  uint64_t witnessUnsound = 0; // cases whose known solution was excluded
+
+  PrecisionResult precision; // exhaustive, at a small width
+  SatCheck sat;              // at this row's width
+};
+
+struct Config
+{
+  vector<Domain> domains;
+  vector<string> ops; // empty means every operation
+  vector<unsigned> widths{8, 16, 32, 64};
+  vector<unsigned> probs{1, 50, 95};
+  vector<unsigned> setSizes{2, 4, 8};
+  vector<Direction> directions{Direction::BottomUp, Direction::BothWays};
+  unsigned arity = 2;
+  unsigned iterations = 20000;
+  double budgetSeconds = 0.25;
+  unsigned repeats = 3;
+  bool precision = true;
+  unsigned precisionWidth = 4;
+  uint64_t precisionCaseCap = 4000000;
+  unsigned satCases = 0;        // 0 disables the SAT spot check
+  double satBudgetSeconds = 5;  // it is thousands of times slower per case
+  unsigned seed = 42;
+  bool shiftBias = true; // draw half the shift amounts from [0, width)
+  bool verbose = false;
+  string html;
+  string csv;
+};
+
+// The measured cost of one configuration, in the units the runners share.
+struct Timing
+{
+  double nsPerCall = 0;
+  uint64_t calls = 0;
+  uint64_t conflicts = 0;
+  uint64_t unsound = 0;
+  double bitsGained = 0;
+};
+
+// ---------------------------------------------------------------------------
+// Per-domain runners. Each appends its rows to `out`.
+
+void runCbitp(stp::STPMgr* mgr, const Config& c, vector<Row>& out);
+void runInterval(stp::STPMgr* mgr, const Config& c, vector<Row>& out);
+void runValueSet(stp::STPMgr* mgr, const Config& c, vector<Row>& out);
+
+// The constant-bit transfer function for a kind, exactly as
+// ConstantBitPropagation::dispatchToTransferFunctions would call it.
+simplifier::constantBitP::Result cbitpTransfer(stp::STPMgr* mgr, stp::Kind k,
+                                               vector<FixedBits*>& children,
+                                               FixedBits& output);
+
+// ---------------------------------------------------------------------------
+// Reporting.
+
+void printText(const Config& c, const vector<Row>& rows);
+void writeCsv(const Config& c, const vector<Row>& rows, const string& path);
+void writeHtml(const Config& c, const vector<Row>& rows, const string& path);
+
+// ---------------------------------------------------------------------------
+// Small shared helpers.
+
+// A fully fixed FixedBits holding a random value (or the given one).
+FixedBits randomConcrete(const ChildSpec& spec, MTRand& rand);
+FixedBits concreteOf(const ChildSpec& spec, uint64_t value);
+// Unfixes every bit with probability (100 - percent)%.
+void unfixTo(FixedBits& bits, unsigned percent, MTRand& rand);
+uint64_t unsignedValue(const FixedBits& bits);
+
+double median(vector<double>& v);
+} // namespace propbench
+
+#endif
