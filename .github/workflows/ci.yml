@@ -104,7 +104,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        ${{ matrix.env }} cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DBUILD_EXTRA_TOOLS:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DSYMFPU_INCLUDE_DIRS="$GITHUB_WORKSPACE/deps" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        ${{ matrix.env }} cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DBUILD_EXTRA_TOOLS:BOOL=ON -DENABLE_FLOATING_POINT:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DSYMFPU_INCLUDE_DIRS="$GITHUB_WORKSPACE/deps" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -220,7 +220,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DNOCRYPTOMINISAT:BOOL=ON -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DSYMFPU_INCLUDE_DIRS="$GITHUB_WORKSPACE/deps" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DNOCRYPTOMINISAT:BOOL=ON -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DENABLE_FLOATING_POINT:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DSYMFPU_INCLUDE_DIRS="$GITHUB_WORKSPACE/deps" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -311,7 +311,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake -DSTATICCOMPILE:BOOL=ON -DNOCRYPTOMINISAT:BOOL=ON -DWERROR:BOOL=ON -DSYMFPU_INCLUDE_DIRS="$GITHUB_WORKSPACE/deps" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        cmake -DSTATICCOMPILE:BOOL=ON -DNOCRYPTOMINISAT:BOOL=ON -DWERROR:BOOL=ON -DENABLE_FLOATING_POINT:BOOL=ON -DSYMFPU_INCLUDE_DIRS="$GITHUB_WORKSPACE/deps" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -343,6 +343,63 @@ jobs:
           [ "$got" = "$expected" ] || exit 1
         done
       working-directory: build
+
+  # Floating-point support is opt-in (ENABLE_FLOATING_POINT defaults to
+  # OFF); every other job turns it on. This one deliberately configures
+  # with the default and without any symfpu clone, validating that the
+  # default build needs no symfpu and that floating-point input is
+  # refused with the "built without floating-point support" diagnostic.
+  build-nofp:
+    name: gcc (no-fp)
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - uses: actions/checkout@v7
+      with:
+          submodules: 'true'
+
+    - name: Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bison \
+          build-essential \
+          cmake \
+          flex \
+          git \
+          ninja-build \
+          zlib1g-dev
+
+    - name: Build minisat
+      run: ./scripts/deps/setup-minisat.sh
+
+    - name: Configure
+      run: |
+        mkdir build
+        cd build
+        cmake -DNOCRYPTOMINISAT:BOOL=ON -DWERROR:BOOL=ON -G Ninja ..
+
+    - name: Build
+      run: cmake --build build --parallel "$(nproc)"
+
+    - name: Smoke test
+      run: |
+        stp=$([ -x build/stp ] && echo build/stp || echo build/stp_simple)
+        echo '(set-logic QF_BV)(declare-fun a () (_ BitVec 8))(declare-fun b () (_ BitVec 8))(assert (= (bvmul a b) #x21))(assert (bvult a b))(check-sat)' > test.smt2
+        out=$("$stp" test.smt2)
+        echo "bv output: '$out'"
+        [ "$out" = "sat" ]
+        echo '(set-logic QF_FP)(declare-fun x () (_ FloatingPoint 8 24))(assert (fp.gt (fp.add RNE x x) x))(check-sat)' > testfp.smt2
+        if outfp=$("$stp" testfp.smt2 2>&1); then
+          echo "expected a nonzero exit for floating-point input, got: '$outfp'"
+          exit 1
+        fi
+        echo "fp output: '$outfp'"
+        case "$outfp" in
+          *"without floating-point support"*) echo "OK: unsupported diagnostic present" ;;
+          *) echo "the floating-point diagnostic is missing"; exit 1 ;;
+        esac
 
   build-32bit:
     name: gcc (i386)
@@ -442,7 +499,7 @@ jobs:
       # NOCRYPTOMINISAT: CryptoMiniSat does not build with MSVC (CaDiCaL
       # and CMS's oracle use POSIX-only code); upstream CMS only supports
       # MinGW on Windows.
-      run: cmake -B build -A x64 -DSTATICCOMPILE=ON -DNOCRYPTOMINISAT=ON -DENABLE_PYTHON_INTERFACE=OFF "-DMINISAT_LIBDIR=$env:MINISAT_ROOT" "-DMINISAT_INCLUDE_DIRS=$env:MINISAT_ROOT\include" "-DSYMFPU_INCLUDE_DIRS=$env:GITHUB_WORKSPACE\deps" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
+      run: cmake -B build -A x64 -DSTATICCOMPILE=ON -DNOCRYPTOMINISAT=ON -DENABLE_PYTHON_INTERFACE=OFF -DENABLE_FLOATING_POINT=ON "-DMINISAT_LIBDIR=$env:MINISAT_ROOT" "-DMINISAT_INCLUDE_DIRS=$env:MINISAT_ROOT\include" "-DSYMFPU_INCLUDE_DIRS=$env:GITHUB_WORKSPACE\deps" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
 
     - name: Build
       run: cmake --build build --config Release
