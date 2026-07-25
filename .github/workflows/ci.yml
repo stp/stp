@@ -193,6 +193,114 @@ jobs:
       run: ctest --parallel "$(nproc)" -VV --output-on-failure
       working-directory: build
 
+  # Until this job existed, the only static build in CI was the Windows one,
+  # so a break that only shows up when everything is linked into one
+  # executable could sit in master with every Linux job green.
+  build-static:
+    name: gcc (static)
+    runs-on: ubuntu-latest
+
+    env:
+      CCACHE_MAXSIZE: 800M
+
+    steps:
+
+    - uses: actions/checkout@v7
+      with:
+          submodules: 'true'
+
+    # No lit and no gtest here: STATICCOMPILE turns BUILD_SHARED_LIBS off, and
+    # the top-level CMakeLists forces ENABLE_TESTING off when it is off (the
+    # Python bindings and the test harness both want a shared libstp), so a
+    # static build has no tests to run. See the smoke test at the end.
+    - name: Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bison \
+          build-essential \
+          ccache \
+          cmake \
+          flex \
+          gcc \
+          git \
+          libboost-program-options-dev \
+          ninja-build \
+          zlib1g-dev
+
+    - name: Resolve dependency revisions
+      id: deps-key
+      run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
+
+    # A different set of dependencies to the jobs above, and a differently
+    # built minisat, so a different key prefix: the key describes their
+    # revisions, not which of them are in the tree or how they were
+    # configured, and restoring another job's cache would leave a minisat
+    # with no static library behind while skipping the step that builds one.
+    - name: Restore dependencies
+      id: deps-cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          deps/install
+          deps/minisat
+        key: deps-x86_64-static-${{ steps.deps-key.outputs.key }}
+
+    # A static STP links against libminisat.a, which minisat only produces
+    # when built with STATICCOMPILE; its default build installs the shared
+    # library alone.
+    - name: Dependencies
+      if: steps.deps-cache.outputs.cache-hit != 'true'
+      run: ./scripts/deps/setup-minisat.sh -DSTATICCOMPILE=ON
+
+    - name: Compiler cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ccache
+        key: ccache-static-${{ github.run_id }}
+        restore-keys: ccache-static-
+
+    # NOCRYPTOMINISAT: CryptoMiniSat's exported static link line pulls in GMP
+    # and its own dependencies, which are not reliably available as archives
+    # on the runner. The two SAT backends are interchangeable as far as
+    # linking STP statically is concerned.
+    - name: Configure
+      run: |
+        mkdir build
+        cd build
+        cmake -DSTATICCOMPILE:BOOL=ON -DNOCRYPTOMINISAT:BOOL=ON -DWERROR:BOOL=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+
+    - name: Build
+      run: |
+        ccache --zero-stats
+        cmake --build . --parallel "$(nproc)"
+        ccache --show-stats
+      working-directory: build
+
+    # Linking is most of the point of this job, but a binary that links and
+    # then dies on the first query would still pass, so solve something and
+    # check the answer rather than just the exit status. Also assert the
+    # executable really is static: if the -static link line quietly stopped
+    # taking effect the job would otherwise keep passing while testing
+    # nothing this job exists to test.
+    - name: Smoke test
+      run: |
+        stp=$([ -x ./stp ] && echo ./stp || echo ./stp_simple)
+        ls -l "$stp"
+        file "$stp"
+        if ldd "$stp"; then
+          echo "expected a static executable, but it has shared dependencies"
+          exit 1
+        fi
+        echo '(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (= x #x2a))(check-sat)' > sat.smt2
+        echo '(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (and (= x #x2a) (= x #x2b)))(check-sat)' > unsat.smt2
+        for expected in sat unsat; do
+          got=$("$stp" "$expected.smt2")
+          echo "$expected.smt2: '$got'"
+          [ "$got" = "$expected" ] || exit 1
+        done
+      working-directory: build
+
   build-32bit:
     name: gcc (i386)
     runs-on: ubuntu-latest
