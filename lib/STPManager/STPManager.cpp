@@ -351,6 +351,14 @@ ASTNode STPMgr::CreateBVConst(CBV bv, unsigned width)
 ASTNode STPMgr::CreateFPConst(const stp::ASTNode& bvconst,
                               unsigned exp_width, unsigned sig_width)
 {
+#ifndef STP_ENABLE_FLOATING_POINT
+  (void)bvconst;
+  (void)exp_width;
+  (void)sig_width;
+  FatalError("this STP was built without floating-point support; "
+             "reconfigure with -DENABLE_FLOATING_POINT=ON (needs the "
+             "SymFPU library, see scripts/deps/setup-symfpu.sh)");
+#else
   assert(bvconst.GetKind() == BVCONST);
   assert(exp_width + sig_width == bvconst.GetValueWidth());
 
@@ -363,6 +371,7 @@ ASTNode STPMgr::CreateFPConst(const stp::ASTNode& bvconst,
   ASTNode n(LookupOrCreateFPConst(temp));
   assert(n.GetKind() == BVCONST);
   return n;
+#endif
 }
 
 // As LookupOrCreateBVConst. The same table holds both flavours of constant:

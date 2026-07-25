@@ -22,13 +22,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "stp/FloatBlaster/symbolic_fp.h"
-
 #include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/Globals/Globals.h"
 #include <cassert>
 #include <string>
 #include <cmath>
+
+#ifdef STP_ENABLE_FLOATING_POINT
+#include "stp/FloatBlaster/symbolic_fp.h"
 
 #include "symfpu/core/add.h"
 #include "symfpu/core/classify.h"
@@ -44,6 +45,7 @@ THE SOFTWARE.
 #include "symfpu/core/sqrt.h"
 #include "symfpu/utils/numberOfRoundingModes.h"
 #include "symfpu/utils/properties.h"
+#endif
 
 namespace stp
 {
@@ -75,12 +77,14 @@ ASTNode FloatBlaster::withFormat(STPMgr* bm, const ASTNode& n,
   return out;
 }
 
+#ifdef STP_ENABLE_FLOATING_POINT
 ASTNode FloatBlaster::canonicalBits(STPMgr* bm, const ASTNode& f)
 {
   // Point symfpu at the manager being blasted (see symbolic_fp::init).
   symbolic_fp::init(bm);
   return symbolic_fp::blast_reinterpret(f, f.GetExpWidth(), f.GetSigWidth());
 }
+#endif
 
 ASTNode FloatBlaster::unspecifiedValue(STPMgr* bm, const char* tag,
                                        const ASTNode& index,
@@ -101,6 +105,7 @@ ASTNode FloatBlaster::unspecifiedValue(STPMgr* bm, const char* tag,
   return bm->CreateTerm(READ, value_width, array, index);
 }
 
+#ifdef STP_ENABLE_FLOATING_POINT
 ASTNode FloatBlaster::BlastNode_TopLevel(STPMgr* bm, const ASTNode& b)
 {
   // Point symfpu's backend at the manager being blasted now, rather than
@@ -310,5 +315,30 @@ ASTNode FloatBlaster::BlastNode(STPMgr* bm, const ASTNode& actualInputterm)
 
   return output;
 }
+
+#else
+
+// Fail-closed stubs so the link surface is identical with and without
+// floating-point support. The parser and the STPMgr funnels reject
+// floating-point input long before these could run (see checkFpSupported
+// in smt2.y and SetExpWidth/CreateFPConst), so reaching one means a caller
+// bypassed those checks. BlastNode needs no stub: it is only referenced
+// from BlastNode_TopLevel's real body.
+
+ASTNode FloatBlaster::canonicalBits(STPMgr*, const ASTNode&)
+{
+  FatalError("canonicalBits: this STP was built without floating-point "
+             "support; reconfigure with -DENABLE_FLOATING_POINT=ON (needs "
+             "the SymFPU library, see scripts/deps/setup-symfpu.sh)");
+}
+
+ASTNode FloatBlaster::BlastNode_TopLevel(STPMgr*, const ASTNode&)
+{
+  FatalError("BlastNode: this STP was built without floating-point "
+             "support; reconfigure with -DENABLE_FLOATING_POINT=ON (needs "
+             "the SymFPU library, see scripts/deps/setup-symfpu.sh)");
+}
+
+#endif
 
 } // namespace stp

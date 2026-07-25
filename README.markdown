@@ -118,11 +118,11 @@ generators.
   whatever application embeds it.
 
 ### Dependencies
-STP relies on : boost (program_options), flex, bison, perl, zlib, minisat and
--- for its floating-point support -- the header-only
-[SymFPU](https://github.com/martin-cs/symfpu) library. A python3 interpreter is
-needed for the python interface and for the test suite, and GMP is needed when
-building with CryptoMiniSat. You can install most of these by:
+STP relies on : boost (program_options), flex, bison, perl, zlib and minisat,
+plus -- only when the opt-in floating-point support is enabled -- the
+header-only [SymFPU](https://github.com/martin-cs/symfpu) library. A python3
+interpreter is needed for the python interface and for the test suite, and GMP
+is needed when building with CryptoMiniSat. You can install most of these by:
 
 ```
 $ sudo apt-get install build-essential cmake bison flex libboost-program-options-dev libgmp-dev zlib1g-dev python3 perl minisat
@@ -140,7 +140,9 @@ $ sudo cmake --install .
 $ command -v ldconfig && sudo ldconfig
 ```
 
-SymFPU needs no build: clone it (at the pinned revision) with
+Floating-point support is opt-in: configure with
+`-DENABLE_FLOATING_POINT=ON`, which needs SymFPU. SymFPU itself needs no
+build: clone it (at the pinned revision) with
 
 ```
 $ ./scripts/deps/setup-symfpu.sh
@@ -149,7 +151,10 @@ $ ./scripts/deps/setup-symfpu.sh
 and point cmake at the directory *containing* the clone, e.g.
 `-DSYMFPU_INCLUDE_DIRS=$(pwd)/deps`. With it, STP solves the SMT-LIB
 floating-point theory (QF_FP/QF_BVFP/QF_ABVFP) and exposes floating-point
-terms through the C, C++ (`stp/fp.hpp`) and Python APIs.
+terms through the C, C++ (`stp/fp.hpp`) and Python APIs. Without it, STP
+builds with no SymFPU present and rejects floating-point input with a
+clear "built without floating-point support" error; the library ABI is
+the same either way.
 
 STP uses minisat as its SAT solver when nothing else is available, but it also supports other SAT solvers including CryptoMiniSat as an optional extra. If installed, it will be detected during the cmake and becomes the default solver, with `--minisat` selecting minisat at runtime:
 

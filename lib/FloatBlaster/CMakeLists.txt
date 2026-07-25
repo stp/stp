@@ -18,9 +18,17 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-add_library(floatblaster OBJECT
+# FloatBlaster.cpp and FpTotalise.cpp always build: withFormat/FpTotalise
+# are SymFPU-free, and without ENABLE_FLOATING_POINT the blast entry points
+# become "built without floating-point support" stubs (the ifdefs are in
+# FloatBlaster.cpp). Only symbolic_fp.cpp -- the SymFPU backend -- needs
+# the library itself.
+set(floatblaster_sources
     FloatBlaster.cpp
     FpTotalise.cpp
-    symbolic_fp.cpp
 )
+if (ENABLE_FLOATING_POINT)
+    list(APPEND floatblaster_sources symbolic_fp.cpp)
+endif()
+add_library(floatblaster OBJECT ${floatblaster_sources})
 add_dependencies(floatblaster ASTKind_header)

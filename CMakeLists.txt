@@ -762,24 +762,39 @@ endif()
 find_package(Perl REQUIRED)
 
 # -----------------------------------------------------------------------------
-# Find SymFPU
+# Floating-point support (opt-in; needs the header-only SymFPU library)
 # -----------------------------------------------------------------------------
+# When OFF, everything floating-point stays out of the build except the
+# always-compiled AST/parser/API surface, which recognises floating-point
+# input and rejects it with a "built without floating-point support" error
+# (see FloatBlaster.cpp's stubs and checkFpSupported in smt2.y). The public
+# headers and the libstp ABI are identical either way.
 
-find_package(SymFPU)
+option(ENABLE_FLOATING_POINT
+       "SMT-LIB floating-point support (requires the SymFPU library)" OFF)
+add_feature_info(FloatingPoint ENABLE_FLOATING_POINT
+                 "Enables SMT-LIB floating-point support (via SymFPU)")
 
-if (SymFPU_FOUND)
-    message(STATUS "OK, found SymFPU include dirs under ${SYMFPU_INCLUDE_DIRS}")
-else()
-    message(FATAL_ERROR
-        "SymFPU (header-only, required for the floating-point support) was "
-        "not found. Clone it with ./scripts/deps/setup-symfpu.sh -- the "
-        "upstream is https://github.com/martin-cs/symfpu -- and configure "
-        "with -DSYMFPU_INCLUDE_DIRS=<directory that CONTAINS the symfpu "
-        "clone> (for the setup script, that is the deps/ directory).")
+if (ENABLE_FLOATING_POINT)
+    find_package(SymFPU)
+
+    if (SymFPU_FOUND)
+        message(STATUS "OK, found SymFPU include dirs under ${SYMFPU_INCLUDE_DIRS}")
+    else()
+        message(FATAL_ERROR
+            "SymFPU (header-only, required for the floating-point support) "
+            "was not found. Clone it with ./scripts/deps/setup-symfpu.sh -- "
+            "the upstream is https://github.com/martin-cs/symfpu -- and "
+            "configure with -DSYMFPU_INCLUDE_DIRS=<directory that CONTAINS "
+            "the symfpu clone> (for the setup script, that is the deps/ "
+            "directory).")
+    endif()
+
+    # Let's get clean builds ...
+    include_directories(SYSTEM ${SYMFPU_INCLUDE_DIRS})
+
+    add_definitions(-DSTP_ENABLE_FLOATING_POINT)
 endif()
-
-# Let's get clean builds ...
-include_directories(SYSTEM ${SYMFPU_INCLUDE_DIRS})
 
 # -----------------------------------------------------------------------------
 # Query definitions

@@ -873,6 +873,19 @@ Expr vc_boolType(VC vc)
 
 Type vc_fpType(VC vc, int exp_bits, int sig_bits)
 {
+#ifndef STP_ENABLE_FLOATING_POINT
+  // Refuse at the API's natural entry point. Anything that slips past --
+  // this is the only vc_fp* call that neither takes nor produces a
+  // floating-point term -- is caught when SetExpWidth/CreateFPConst first
+  // stamp a format.
+  (void)vc;
+  (void)exp_bits;
+  (void)sig_bits;
+  stp::FatalError("CInterface: vc_fpType: this STP was built without "
+                  "floating-point support; reconfigure with "
+                  "-DENABLE_FLOATING_POINT=ON (needs the SymFPU library, "
+                  "see scripts/deps/setup-symfpu.sh)");
+#else
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
 
@@ -888,6 +901,7 @@ Type vc_fpType(VC vc, int exp_bits, int sig_bits)
   stp::ASTNode s = b->CreateBVConst(32, sig_bits);
   stp::ASTNode output = b->CreateNode(stp::FLOATINGPOINT, e, s);
   return persistNode(vc, output);
+#endif
 }
 
 int vc_getExpWidth(Expr e)

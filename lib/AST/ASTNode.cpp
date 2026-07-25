@@ -301,11 +301,22 @@ void ASTNode::SetExpWidth(unsigned int _ew) const
   assert(_int_node_ptr->getExpWidth() == 0 ||
          _int_node_ptr->getExpWidth() == 0xFFFFFFFFu /* not-a-float cache */ ||
          _ew == 0 || _int_node_ptr->getExpWidth() == _ew);
-  _int_node_ptr->setExpWidth(_ew);
   // Every float acquires its format through here (or CreateFPConst), so
-  // this is where the manager learns that floats are in play.
+  // this is where the manager learns that floats are in play -- and, on a
+  // build without floating-point support, where the C API's floating-point
+  // entry points get refused. (The parser rejects floating-point input
+  // earlier, with a line number; see checkFpSupported in smt2.y.)
   if (_ew != 0)
+  {
+#ifndef STP_ENABLE_FLOATING_POINT
+    FatalError("this STP was built without floating-point support; "
+               "reconfigure with -DENABLE_FLOATING_POINT=ON (needs the "
+               "SymFPU library, see scripts/deps/setup-symfpu.sh)");
+#else
     _int_node_ptr->nodeManager->has_floating_point = true;
+#endif
+  }
+  _int_node_ptr->setExpWidth(_ew);
 }
 
 unsigned int ASTNode::GetSigWidth() const

@@ -54,7 +54,7 @@
 #include "stp/cpp_interface.h"
 #include "stp/Parser/LetMgr.h"
 #include "stp/Parser/parser.h"
-#include "stp/FloatBlaster/symbolic_fp.h"
+#include "stp/FloatBlaster/rounding_modes.h"
 #include "parsesmt2.tab.h"
 #include "smt2_flex_header.h"
 
@@ -484,10 +484,26 @@
     return n;
   }
 
+  // On a build without floating-point support, reject floating-point input
+  // at its first construct, with a line number and the fix. Called from
+  // every path that introduces a float: the sort and conversion forms (via
+  // checkFpFormatWidths), (fp ...) literals, and the QF_*FP* logics. The
+  // STPMgr funnels (SetExpWidth/CreateFPConst) back this up for input that
+  // arrives through the C API instead of the parser.
+  void checkFpSupported()
+  {
+#ifndef STP_ENABLE_FLOATING_POINT
+    fatal_yyerror("this STP was built without floating-point support; "
+                  "reconfigure with -DENABLE_FLOATING_POINT=ON (needs the "
+                  "SymFPU library, see scripts/deps/setup-symfpu.sh)");
+#endif
+  }
+
   // The indexed to_fp forms and the special values carry the format as
   // numerals; apply the floor the sort rule enforces.
   void checkFpFormatWidths(unsigned int exp_width, unsigned int sig_width)
   {
+    checkFpSupported();
     if (exp_width < 2 || sig_width < 2)
     {
       fatal_yyerror("a floating-point format needs at least 2 exponent and "
@@ -617,6 +633,7 @@
   // every component is literal, exactly as the one-argument to_fp does.
   ASTNode* createFPFromParts(ASTNode* sign, ASTNode* exp, ASTNode* sig)
   {
+    checkFpSupported();
     if (sign->GetType() != BITVECTOR_TYPE || exp->GetType() != BITVECTOR_TYPE ||
         sig->GetType() != BITVECTOR_TYPE)
     {
@@ -1125,6 +1142,13 @@ cmdi:
             )) {
         yyerror("Wrong input logic");
       }
+      // Fail a well-formed floating-point benchmark on its set-logic line,
+      // not at its first declaration.
+      if (0 == strcmp($2->c_str(),"QF_FP") ||
+          0 == strcmp($2->c_str(),"QF_BVFP") ||
+          0 == strcmp($2->c_str(),"QF_ABVFP")) {
+        checkFpSupported();
+      }
       stp::GlobalParserInterface->success();
       delete $2;
     }
@@ -1378,22 +1402,27 @@ an_fp_sort:
   // one but Float32 named the wrong format.
   FLOAT16_TOK
 {
+    checkFpSupported();
     $$ = new stp::float_size(5, 11);
 }
 | FLOAT32_TOK
 {
+    checkFpSupported();
     $$ = new stp::float_size(8, 24);
 }
 | FLOAT64_TOK
 {
+    checkFpSupported();
     $$ = new stp::float_size(11, 53);
 }
 | FLOAT128_TOK
 {
+    checkFpSupported();
     $$ = new stp::float_size(15, 113);
 }
 | LPAREN_TOK UNDERSCORE_TOK FLOATINGPOINT_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK
 {
+    checkFpSupported();
     if ($4 < 2 || $5 < 2)
     {
       fatal_yyerror("a floating-point format needs at least 2 exponent and "
