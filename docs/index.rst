@@ -83,7 +83,7 @@ Python usage
     s.check()
     >>> True
     s.model()
-    >>> {'a': 5L, 'b': 6L, 'c': 11L}
+    >>> {'a': 5, 'b': 6, 'c': 11}
 
 SMT-LIB2 Usage
 ===============

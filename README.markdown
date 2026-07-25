@@ -17,7 +17,7 @@ STP is a constraint solver (or SMT solver) aimed at solving constraints of bitve
 For a quick install:
 
 ```
-sudo apt-get install git cmake bison flex libboost-all-dev libgmp-dev python2 perl
+sudo apt-get install git cmake bison flex libboost-all-dev libgmp-dev python3 perl
 git clone https://github.com/stp/stp
 cd stp
 git submodule init && git submodule update
@@ -64,7 +64,7 @@ In [7]: a.add(y  > 10)
 In [8]: a.check()
 Out[8]: True
 In [9]: a.model()
-Out[9]: {'x': 4294967287L, 'y': 11L}
+Out[9]: {'x': 4294967287, 'y': 11}
 ```
 
 With Docker:
@@ -95,8 +95,8 @@ generators.
 - `CMAKE_INSTALL_PREFIX` - The prefix for install (e.g. /usr/local )
 - `ENABLE_ASSERTIONS` - If TRUE STP will be built with asserts.
 - `ENABLE_TESTING` - Enable running tests
-- `ENABLE_PYTHON_INTERFACE` - Enable building the Python interface
-- `PYTHON_EXECUTABLE` - Set python executable in case you have more than one python installed
+- `ENABLE_PYTHON_INTERFACE` - Enable building the Python interface (Python 3 only)
+- `PYTHON_EXECUTABLE` - Set the Python 3 executable in case you have more than one python installed
 - `SANITIZE` - Use Clang's sanitization checks
 - `STATICCOMPILE` - Build static libraries and binaries instead of dynamic
 - `STP_ALLOCATOR` - Which memory allocator the `stp` binary uses. STP is
@@ -111,7 +111,7 @@ generators.
 STP relies on : boost, flex, bison and minisat. You can install these by:
 
 ```
-$ sudo apt-get install cmake bison flex libboost-all-dev python perl minisat
+$ sudo apt-get install cmake bison flex libboost-all-dev python3 perl minisat
 ```
 
 If your distribution does not come with minisat, STP maintains an updated fork. It can be built as follows:

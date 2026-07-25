@@ -181,7 +181,7 @@ if [ "$STP_CONFIG" = "KLEE" ]; then
     wget -O - http://apt.llvm.org/llvm-snapshot.gpg.key|sudo apt-key add -
 
     sudo apt-get update
-    sudo apt-get install build-essential curl git bison flex bc libcap-dev git cmake libboost-all-dev libncurses5-dev python-minimal python-pip unzip
+    sudo apt-get install build-essential curl git bison flex bc libcap-dev git cmake libboost-all-dev libncurses5-dev python3-minimal python3-pip unzip
 
     sudo apt-get install gcc-4.8 g++-4.8 libcap-dev cmake
     # Make gcc4.8 the default gcc version
