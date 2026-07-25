@@ -295,6 +295,12 @@ unsigned int ASTNode::GetExpWidth() const
 
 void ASTNode::SetExpWidth(unsigned int _ew) const
 {
+  // A format may be set, re-set to the same value, or cleared -- never
+  // changed. Two contexts disagreeing about a shared node's format is the
+  // hash-consing corruption this trips on.
+  assert(_int_node_ptr->getExpWidth() == 0 ||
+         _int_node_ptr->getExpWidth() == 0xFFFFFFFFu /* not-a-float cache */ ||
+         _ew == 0 || _int_node_ptr->getExpWidth() == _ew);
   _int_node_ptr->setExpWidth(_ew);
   // Every float acquires its format through here (or CreateFPConst), so
   // this is where the manager learns that floats are in play.
@@ -317,6 +323,8 @@ unsigned int ASTNode::GetSigWidth() const
 
 void ASTNode::SetSigWidth(unsigned int _sw) const
 {
+  assert(_int_node_ptr->getSigWidth() == 0 || _sw == 0 ||
+         _int_node_ptr->getSigWidth() == _sw);
   _int_node_ptr->setSigWidth(_sw);
 }
 

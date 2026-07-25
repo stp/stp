@@ -204,31 +204,6 @@ void SortByArith(ASTVec& v)
   sort(v.begin(), v.end(), arithless);
 }
 
-bool isAtomic(Kind kind)
-{
-  if (TRUE == kind || FALSE == kind || EQ == kind || BVLT == kind ||
-      BVLE == kind || BVGT == kind || BVGE == kind || BVSLT == kind ||
-      BVSLE == kind || BVSGT == kind || BVSGE == kind || BVUADDO == kind ||
-      BVSADDO == kind || BVUMULO == kind || BVSMULO == kind ||
-      BVUSUBO == kind || BVSSUBO == kind || SYMBOL == kind ||
-      BOOLEXTRACT == kind)
-    return true;
-
-  // The floating-point predicates belong here for the same reason as the
-  // bitvector ones: SimplifyFormula sorts a node's children before
-  // dispatching on its kind, and fp.lt/fp.leq/fp.gt/fp.geq are not
-  // commutative, so reordering their operands reverses what they mean. The
-  // equalities and the unary classification predicates are insensitive to
-  // it, but there is nothing for the sort to do to them either.
-  if (FP_LEQ == kind || FP_LT == kind || FP_GEQ == kind || FP_GT == kind ||
-      FP_EQ == kind || FP_SMT_EQ == kind || FP_ISNORMAL == kind ||
-      FP_ISSUBNORMAL == kind || FP_ISZERO == kind || FP_ISINFINITE == kind ||
-      FP_ISNAN == kind || FP_ISNEGATIVE == kind || FP_ISPOSITIVE == kind)
-    return true;
-
-  return false;
-}
-
 // If there is a lot of sharing in the graph, this will take a long
 // time.  it doesn't mark subgraphs as already having been
 // typechecked.
@@ -272,19 +247,19 @@ void buildListOfSymbols(const ASTNode& n, ASTNodeSet& visited,
 
 void checkChildrenAreBV(const ASTChildren& v, const ASTNode& n)
 {
-  (void)v;
-  (void)n;
-  for (auto it = v.begin(), itend = v.end(); it != itend;
-       it++)
+  // A float is carried as its packed bits, so a float-typed child is bits
+  // too. (This check was fully disabled during the floating-point work
+  // because blasted circuits mix float-stamped and plain children; accepting
+  // both types restores it for the genuine errors.)
+  for (auto it = v.begin(), itend = v.end(); it != itend; it++)
   {
-#if 0
-    if (BITVECTOR_TYPE != it->GetType())
+    if (BITVECTOR_TYPE != it->GetType() &&
+        FLOATINGPOINT_TYPE != it->GetType())
     {
       cerr << "The type is: " << it->GetType() << endl;
       FatalError(
           "BVTypeCheck:ChildNodes of bitvector-terms must be bitvectors\n", n);
     }
-#endif
   }
 }
 
@@ -382,8 +357,11 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
     case ITE:
       if (n.Degree() != 3)
         FatalError("BVTypeCheck: should have exactly 3 args\n", n);
-      if (BOOLEAN_TYPE !=
-          n[0].GetType() /* || (n[1].GetType() != n[2].GetType()) */)
+      // The branches must be the same class of value; a float-stamped branch
+      // and a plain bitvector branch of one width are both bits, so those
+      // two types count as one class here.
+      if (BOOLEAN_TYPE != n[0].GetType() ||
+          (n[1].GetType() == BOOLEAN_TYPE) != (n[2].GetType() == BOOLEAN_TYPE))
         FatalError("BVTypeCheck: The term t does not typecheck, where t = \n",
                    n);
       if (n[1].GetValueWidth() != n[2].GetValueWidth())

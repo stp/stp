@@ -1022,6 +1022,7 @@ const BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& _term,
     case FP_TOFP_UNSIGNED:
     case FP_TO_UBV:
     case FP_TO_SBV:
+    case FP_TO_IEEE_BV:
     {
       FatalError("BBForm: FP terms should not reach the bit-blaster: ", term);
       break;
@@ -1209,6 +1210,7 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form,
     case FP_ISNAN:
     case FP_ISNEGATIVE:
     case FP_ISPOSITIVE:
+    case FP_SMT_EQ:
     {
       FatalError("BBForm: FP formulas should not reach the bit-blaster: ",
                  form);

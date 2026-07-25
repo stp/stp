@@ -2649,7 +2649,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         assert(blasted != temp);
         assert(blasted != inputterm);
 
-        output = SimplifyTerm(blasted);
+        output = SimplifyTerm(blasted, VarConstMap);
       }
 
       // Only re-make the result as a floating-point constant when the

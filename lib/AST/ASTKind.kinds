@@ -156,19 +156,19 @@ FP_TO_IEEE_BV               1    1    Term    FP
 # Floating point _formulae_ (i.e., things that produce Booleans)
 
 # fp.leq: fp, fp -> bool
-FP_LEQ              2    _    Form    FP
+FP_LEQ              2    2    Form    FP
 
 # fp.lt: fp, fp -> bool
-FP_LT               2    _    Form    FP
+FP_LT               2    2    Form    FP
 
 # fp.geq: fp, fp -> bool
-FP_GEQ              2    _    Form    FP
+FP_GEQ              2    2    Form    FP
 
 # fp.gt: fp, fp -> bool
-FP_GT               2    _    Form    FP
+FP_GT               2    2    Form    FP
 
 # fp.eq: fp, fp -> bool
-FP_EQ               2    _    Form    FP
+FP_EQ               2    2    Form    FP
 
 # fp.isNormal: fp -> bool
 FP_ISNORMAL         1    1    Form    FP

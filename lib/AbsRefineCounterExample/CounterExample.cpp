@@ -215,8 +215,7 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
       }
       else if (term.GetType() == FLOATINGPOINT_TYPE)
       {
-        unsigned int total_width = term.GetSigWidth() + term.GetExpWidth();
-        output = bm->CreateZeroConst(total_width);
+        output = bm->CreateZeroConst(term.GetValueWidth());
       }
       else
       {

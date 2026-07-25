@@ -173,6 +173,13 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
 
   if (bm->has_floating_point)
   {
+    // The whole lowering to bitvectors happens inside simplification, so
+    // there is no floating-point solving without it. Say so up front rather
+    // than dying deep in the bit-blaster on an unlowered node.
+    if (!bm->UserFlags.optimize_flag)
+      FatalError("floating-point input needs simplification: do not combine "
+                 "it with --disable-simplifications");
+
     // Make the partial floating-point operations total before the formula is
     // used for anything: fp.min/fp.max and fp.to_ubv/fp.to_sbv gain a child
     // supplying the results SMT-LIB leaves unspecified. See FpTotalise.

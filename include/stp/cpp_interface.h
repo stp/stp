@@ -179,7 +179,6 @@ public:
 
   DLL_PUBLIC bool isBitVectorFunction(const std::string& name);
   DLL_PUBLIC bool isBooleanFunction(const std::string& name);
-  DLL_PUBLIC bool isFloatingPointFunction(const std::string& name);
   // Classify a name in a single map probe: returns the function's return
   // type (BITVECTOR_TYPE, BOOLEAN_TYPE or FLOATINGPOINT_TYPE), or
   // UNKNOWN_TYPE when the name is not a stored function. Lets the lexer
