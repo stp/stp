@@ -459,6 +459,31 @@
     return n;
   }
 
+  // (fp.roundToIntegral rm f). The mode is an ordinary term, exactly as in
+  // fp.sqrt, so a RoundingMode variable is accepted as well as the five
+  // literal modes.
+  ASTNode* createFPRoundToIntegral(ASTNode* rm, ASTNode* expr)
+  {
+    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
+    {
+      fatal_yyerror("expected a rounding mode.");
+    }
+
+    if (expr->GetType() != FLOATINGPOINT_TYPE)
+    {
+      fatal_yyerror("argument to fp.roundToIntegral must be a float.");
+    }
+
+    ASTNode* n = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateTerm(FP_ROUNDTOINTEGRAL,
+                                                   expr->GetValueWidth(), *rm,
+                                                   *expr));
+    setFPFormat(n, expr->GetExpWidth(), expr->GetSigWidth());
+    delete rm;
+    delete expr;
+    return n;
+  }
+
   // ((_ to_fp_unsigned e s) rm bv) -- convert an unsigned integer held in a
   // bitvector to the nearest float.
   ASTNode* createFPFromUnsignedBV(unsigned int exp_width,
@@ -1184,18 +1209,57 @@ STRING_TOK LPAREN_TOK RPAREN_TOK BOOL_TOK an_formula
 |
 STRING_TOK LPAREN_TOK RPAREN_TOK ROUNDINGMODE_TOK an_term
 {
+  if ($5->GetType() != stp::BITVECTOR_TYPE || $5->GetValueWidth() != 5)
+  {
+    fatal_yyerror("define-fun: the body is not a rounding mode");
+  }
+
   ASTVec empty;
   stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
+
+  delete $1;
+  stp::GlobalParserInterface->deleteNode($5);
 }
 |
 STRING_TOK LPAREN_TOK RPAREN_TOK an_fp_sort an_term
 {
+  if ($5->GetExpWidth() != (unsigned)$4->exp_bits ||
+      $5->GetSigWidth() != (unsigned)$4->sig_bits)
+  {
+    fatal_yyerror("define-fun: the body's floating-point format does not "
+                  "match the declared result sort");
+  }
+
   ASTVec empty;
   stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
+
+  delete $1;
+  delete $4;
+  stp::GlobalParserInterface->deleteNode($5);
 }
 |
 STRING_TOK LPAREN_TOK function_params RPAREN_TOK an_fp_sort an_term
 {
+  // This action was empty: the function was silently dropped, and -- worse --
+  // its parameter symbols stayed interned, resolvable as free variables that
+  // were never declared.
+  if ($6->GetExpWidth() != (unsigned)$5->exp_bits ||
+      $6->GetSigWidth() != (unsigned)$5->sig_bits)
+  {
+    fatal_yyerror("define-fun: the body's floating-point format does not "
+                  "match the declared result sort");
+  }
+
+  stp::GlobalParserInterface->storeFunction(*$1, *$3, *$6);
+
+  // Next time the variable is used, we want it to be fresh.
+  for (size_t i = 0; i < $3->size(); i++)
+    stp::GlobalParserInterface->removeSymbol((*$3)[i]);
+
+  delete $1;
+  delete $3;
+  delete $5;
+  stp::GlobalParserInterface->deleteNode($6);
 }
 |
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK an_term
@@ -1395,17 +1459,14 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
 }
 | STRING_TOK LPAREN_TOK RPAREN_TOK an_fp_sort
 {
-  // AVJ-FP
   ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
   stp::GlobalParserInterface->addSymbol(s);
-  //Sort_symbs has the indexwidth/valuewidth. Set those fields in
-  //var
-  // FIXME
   s.SetExpWidth($4->exp_bits);
   s.SetSigWidth($4->sig_bits);
   s.SetIndexWidth(0);
   s.SetValueWidth(0);
   delete $1;
+  delete $4;
 }
 | STRING_TOK LPAREN_TOK RPAREN_TOK ROUNDINGMODE_TOK
 {
@@ -1464,11 +1525,17 @@ STRING_TOK  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
 }
 | STRING_TOK an_fp_sort
 {
+  // The format must land on the symbol, or it types as a Boolean and every
+  // use of the name is a syntax error (this branch used to forget it while
+  // declare-fun's twin set it).
   ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  s.SetExpWidth($2->exp_bits);
+  s.SetSigWidth($2->sig_bits);
   s.SetIndexWidth(0);
   s.SetValueWidth(0);
   stp::GlobalParserInterface->addSymbol(s);
   delete $1;
+  delete $2;
 }
 | STRING_TOK ROUNDINGMODE_TOK
 {
@@ -2042,13 +2109,9 @@ an_fp_term:
 {
   $$ = createFPBinary(FP_REM, $3, $4);
 }
-| LPAREN_TOK FP_ROUNDTOINTEGRAL_TOK an_rounding_mode an_term RPAREN_TOK
+| LPAREN_TOK FP_ROUNDTOINTEGRAL_TOK an_term an_term RPAREN_TOK
 {
-  assert($4->GetType() == FLOATINGPOINT_TYPE);
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(FP_ROUNDTOINTEGRAL, $4->GetValueWidth(), *$3, *$4));
-  $$->SetExpWidth($4->GetExpWidth());
-  $$->SetSigWidth($4->GetSigWidth());
-  assert($$->GetType() == FLOATINGPOINT_TYPE);
+  $$ = createFPRoundToIntegral($3, $4);
 }
 | LPAREN_TOK FP_MIN_TOK an_term an_term RPAREN_TOK
 {
