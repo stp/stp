@@ -1234,6 +1234,11 @@ DLL_PUBLIC void vc_deleteWholeCounterExample(WholeCounterExample cc);
 
 //! Covers all kinds of expressions that exist in STP.
 //!
+//! Mirrors the internal stp::Kind (generated from lib/AST/ASTKind.kinds) by
+//! numeric value: getExprKind is a direct cast, so the enumerators must stay
+//! in the same order. static_asserts next to getExprKind's implementation
+//! pin the correspondence.
+//!
 enum exprkind_t
 {
   UNDEFINED, //!< An undefined expression.
@@ -1312,6 +1317,7 @@ enum exprkind_t
   FP_TOFP_UNSIGNED,
   FP_TO_UBV,
   FP_TO_SBV,
+  FP_TO_IEEE_BV,
   FP_LEQ,
   FP_LT,
   FP_GEQ,
@@ -1324,6 +1330,7 @@ enum exprkind_t
   FP_ISNAN,
   FP_ISNEGATIVE,
   FP_ISPOSITIVE,
+  FP_SMT_EQ, //!< SMT-LIB '=' over floats: bit-identical (all NaNs equal).
 };
 
 //! \brief Returns the expression-kind of the given expression.

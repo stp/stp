@@ -97,6 +97,9 @@ FLOATINGPOINT   0       0
 # Floating point _terms_ (i.e., things that produce FPs)
 
 # fp.abs: fp -> fp
+# The public C API mirrors every kind below in include/stp/c_interface.h
+# (enum exprkind_t) by numeric value; keep the two in lockstep. Anchoring
+# static_asserts live next to getExprKind in lib/Interface/c_interface.cpp.
 FP_ABS                      1    1    Term
 
 # fp.neg: fp -> fp

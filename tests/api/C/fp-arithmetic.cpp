@@ -142,3 +142,26 @@ TEST(fp_arithmetic, is_subnormal_and_normal)
   EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
   vc_Destroy(vc);
 }
+
+// getExprKind must label floating-point nodes correctly: the C enum is a
+// numeric mirror of the internal kinds, and FP_TO_IEEE_BV was once missing
+// from it, mislabelling every kind from fp.leq onward.
+TEST(fp_arithmetic, expr_kinds)
+{
+  VC vc = vc_createValidityChecker();
+  Type f = vc_fpType(vc, 5, 11);
+  Expr rne = vc_fpRoundingMode(vc, VC_RM_RNE);
+  Expr x = vc_varExpr(vc, "x", f);
+  Expr y = vc_varExpr(vc, "y", f);
+
+  EXPECT_EQ(FP_ADD, getExprKind(vc_fpAddExpr(vc, rne, x, y)));
+  EXPECT_EQ(FP_LEQ, getExprKind(vc_fpLeqExpr(vc, x, y)));
+  EXPECT_EQ(FP_EQ, getExprKind(vc_fpEqExpr(vc, x, y)));
+  EXPECT_EQ(FP_ISNAN, getExprKind(vc_fpIsNaNExpr(vc, x)));
+  EXPECT_EQ(FP_TO_IEEE_BV, getExprKind(vc_fpToIEEEBV(vc, x)));
+  // The special values are packed constants, not operations.
+  EXPECT_EQ(BVCONST, getExprKind(vc_fpNaN(vc, f)));
+  EXPECT_EQ(BVCONST, getExprKind(vc_fpPlusInfinity(vc, f)));
+
+  vc_Destroy(vc);
+}

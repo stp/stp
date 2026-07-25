@@ -2447,6 +2447,20 @@ void vc_DeleteExpr(Expr e)
   delete input;
 }
 
+// exprkind_t mirrors stp::Kind, which is generated from ASTKind.kinds, and
+// getExprKind is a raw cast -- so the two enums must stay in numeric
+// lockstep. These anchors catch a kind added to one side but not the other.
+static_assert((int)UNDEFINED == (int)stp::UNDEFINED, "exprkind_t drift");
+static_assert((int)BVCONST == (int)stp::BVCONST, "exprkind_t drift");
+static_assert((int)FP_ABS == (int)stp::FP_ABS, "exprkind_t drift");
+static_assert((int)FP_TO_IEEE_BV == (int)stp::FP_TO_IEEE_BV,
+              "exprkind_t drift");
+static_assert((int)FP_SMT_EQ == (int)stp::FP_SMT_EQ, "exprkind_t drift");
+static_assert((int)BOOLEAN_TYPE == (int)stp::BOOLEAN_TYPE &&
+                  (int)FLOATINGPOINT_TYPE == (int)stp::FLOATINGPOINT_TYPE &&
+                  (int)UNKNOWN_TYPE == (int)stp::UNKNOWN_TYPE,
+              "type_t drift");
+
 exprkind_t getExprKind(Expr e)
 {
   stp::ASTNode* input = (stp::ASTNode*)e;
