@@ -171,18 +171,23 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
     original_input = inputasserts;
   }
 
-  // Make the partial floating-point operations total before the formula is
-  // used for anything: fp.min/fp.max and fp.to_ubv/fp.to_sbv gain a child
-  // supplying the results SMT-LIB leaves unspecified. See FpTotalise.
+  if (bm->has_floating_point)
   {
+    // Make the partial floating-point operations total before the formula is
+    // used for anything: fp.min/fp.max and fp.to_ubv/fp.to_sbv gain a child
+    // supplying the results SMT-LIB leaves unspecified. See FpTotalise.
     FpTotalise totalise(bm);
     original_input = totalise.topLevel(original_input);
+
+    // Difficulty reversion re-transforms the ORIGINAL input, which would
+    // resurrect un-blasted floating-point nodes after simplification had
+    // lowered them -- and those cannot reach the bitblaster. Give the
+    // heuristic up only when floats are actually present; it used to be
+    // disabled for every query.
+    bm->UserFlags.difficulty_reversion = false;
   }
 
   SATSolver* newS = get_new_sat_solver();
-
-  /* need this for FPs */
-  bm->UserFlags.difficulty_reversion = false;
 
   SOLVER_RETURN_TYPE result = solve_by_sat_solver(newS, original_input);
   delete newS;

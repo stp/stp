@@ -278,6 +278,12 @@ public:
   DLL_PUBLIC ASTNode CreateFPConst(const stp::ASTNode& bvconst,
                                    unsigned exp_width, unsigned sig_width);
 
+  // Whether a floating-point node has ever been created in this manager.
+  // Set by the format funnels (CreateFPConst and ASTNode::SetExpWidth), and
+  // gates the floating-point-only passes and pessimisations, so a pure
+  // bitvector problem pays nothing for the floating-point support.
+  bool has_floating_point = false;
+
   DLL_PUBLIC ASTNode CreateFPSpecialConst(FPSpecial which, unsigned exp_width,
                                           unsigned sig_width);
 

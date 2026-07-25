@@ -296,6 +296,10 @@ unsigned int ASTNode::GetExpWidth() const
 void ASTNode::SetExpWidth(unsigned int _ew) const
 {
   _int_node_ptr->setExpWidth(_ew);
+  // Every float acquires its format through here (or CreateFPConst), so
+  // this is where the manager learns that floats are in play.
+  if (_ew != 0)
+    _int_node_ptr->nodeManager->has_floating_point = true;
 }
 
 unsigned int ASTNode::GetSigWidth() const

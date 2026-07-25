@@ -358,6 +358,8 @@ ASTNode STPMgr::CreateFPConst(const stp::ASTNode& bvconst,
   ASTBVConst* src = (ASTBVConst*)bvconst._int_node_ptr;
   ASTFPConst temp(this, src->GetBVConst(), exp_width, sig_width);
 
+  has_floating_point = true;
+
   ASTNode n(LookupOrCreateFPConst(temp));
   assert(n.GetKind() == BVCONST);
   return n;
