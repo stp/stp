@@ -540,7 +540,7 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2)
     bm.GetRunTimes()->print();
   }
 
-  (GlobalSTP->tosat)->PrintOutput(last_run.result);
+  ToSATBase::PrintOutput(&bm, last_run.result);
 
   // User has specified -p option to print model.
    if (bm.UserFlags.print_counterexample_flag)

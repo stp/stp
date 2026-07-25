@@ -52,8 +52,10 @@ public:
 
   virtual ~ToSATBase() {}
 
-  // print the STP solver output
-  void PrintOutput(SOLVER_RETURN_TYPE ret);
+  // Print the STP solver output. Static because it needs no instance state:
+  // everything it touches is either the result passed in, the manager, or
+  // the thread-local input_status.
+  static void PrintOutput(STPMgr* bm, SOLVER_RETURN_TYPE ret);
 
   // Bitblasts, CNF conversion and calls toSATandSolve()
   virtual bool CallSAT(SATSolver& SatSolver, const ASTNode& input,
