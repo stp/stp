@@ -762,20 +762,29 @@ endif()
 find_package(Perl REQUIRED)
 
 # -----------------------------------------------------------------------------
-# Floating-point support (opt-in; needs the header-only SymFPU library)
+# Floating-point support (opt-out; uses the header-only SymFPU library)
 # -----------------------------------------------------------------------------
-# When OFF, everything floating-point stays out of the build except the
-# always-compiled AST/parser/API surface, which recognises floating-point
-# input and rejects it with a "built without floating-point support" error
-# (see FloatBlaster.cpp's stubs and checkFpSupported in smt2.y). The public
-# headers and the libstp ABI are identical either way.
+# SymFPU (BSD 3-Clause) is vendored as a pinned submodule, the same
+# arrangement as mimalloc above, so the default build has floating-point
+# support with nothing to install. When OFF, everything floating-point
+# stays out of the build except the always-compiled AST/parser/API surface,
+# which recognises floating-point input and rejects it with a "built
+# without floating-point support" error (see FloatBlaster.cpp's stubs and
+# checkFpSupported in smt2.y). The public headers and the libstp ABI are
+# identical either way.
 
 option(ENABLE_FLOATING_POINT
-       "SMT-LIB floating-point support (requires the SymFPU library)" OFF)
+       "SMT-LIB floating-point support (uses the vendored SymFPU library)" ON)
 add_feature_info(FloatingPoint ENABLE_FLOATING_POINT
                  "Enables SMT-LIB floating-point support (via SymFPU)")
 
 if (ENABLE_FLOATING_POINT)
+    # The vendored submodule is the default; -DSYMFPU_INCLUDE_DIRS=<dir
+    # that CONTAINS a symfpu clone> overrides it with an external copy.
+    if (NOT SYMFPU_INCLUDE_DIRS)
+        set(SYMFPU_INCLUDE_DIRS "${PROJECT_SOURCE_DIR}/lib/extlib-symfpu")
+    endif()
+
     find_package(SymFPU)
 
     if (SymFPU_FOUND)
@@ -783,11 +792,12 @@ if (ENABLE_FLOATING_POINT)
     else()
         message(FATAL_ERROR
             "SymFPU (header-only, required for the floating-point support) "
-            "was not found. Clone it with ./scripts/deps/setup-symfpu.sh -- "
-            "the upstream is https://github.com/martin-cs/symfpu -- and "
-            "configure with -DSYMFPU_INCLUDE_DIRS=<directory that CONTAINS "
-            "the symfpu clone> (for the setup script, that is the deps/ "
-            "directory).")
+            "was not found. It is vendored as a submodule: run "
+            "git submodule update --init lib/extlib-symfpu/symfpu. An "
+            "external clone of https://github.com/martin-cs/symfpu works "
+            "too, via -DSYMFPU_INCLUDE_DIRS=<directory that CONTAINS the "
+            "symfpu clone>. To build without floating-point support, "
+            "configure with -DENABLE_FLOATING_POINT=OFF.")
     endif()
 
     # Let's get clean builds ...

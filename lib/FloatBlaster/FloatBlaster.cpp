@@ -328,15 +328,13 @@ ASTNode FloatBlaster::BlastNode(STPMgr* bm, const ASTNode& actualInputterm)
 ASTNode FloatBlaster::canonicalBits(STPMgr*, const ASTNode&)
 {
   FatalError("canonicalBits: this STP was built without floating-point "
-             "support; reconfigure with -DENABLE_FLOATING_POINT=ON (needs "
-             "the SymFPU library, see scripts/deps/setup-symfpu.sh)");
+             "support; reconfigure with -DENABLE_FLOATING_POINT=ON");
 }
 
 ASTNode FloatBlaster::BlastNode_TopLevel(STPMgr*, const ASTNode&)
 {
   FatalError("BlastNode: this STP was built without floating-point "
-             "support; reconfigure with -DENABLE_FLOATING_POINT=ON (needs "
-             "the SymFPU library, see scripts/deps/setup-symfpu.sh)");
+             "support; reconfigure with -DENABLE_FLOATING_POINT=ON");
 }
 
 #endif

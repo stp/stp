@@ -310,8 +310,7 @@ void ASTNode::SetExpWidth(unsigned int _ew) const
   {
 #ifndef STP_ENABLE_FLOATING_POINT
     FatalError("this STP was built without floating-point support; "
-               "reconfigure with -DENABLE_FLOATING_POINT=ON (needs the "
-               "SymFPU library, see scripts/deps/setup-symfpu.sh)");
+               "reconfigure with -DENABLE_FLOATING_POINT=ON");
 #else
     _int_node_ptr->nodeManager->has_floating_point = true;
 #endif

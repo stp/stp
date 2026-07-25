@@ -883,8 +883,7 @@ Type vc_fpType(VC vc, int exp_bits, int sig_bits)
   (void)sig_bits;
   stp::FatalError("CInterface: vc_fpType: this STP was built without "
                   "floating-point support; reconfigure with "
-                  "-DENABLE_FLOATING_POINT=ON (needs the SymFPU library, "
-                  "see scripts/deps/setup-symfpu.sh)");
+                  "-DENABLE_FLOATING_POINT=ON");
 #else
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;

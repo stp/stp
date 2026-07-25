@@ -494,8 +494,7 @@
   {
 #ifndef STP_ENABLE_FLOATING_POINT
     fatal_yyerror("this STP was built without floating-point support; "
-                  "reconfigure with -DENABLE_FLOATING_POINT=ON (needs the "
-                  "SymFPU library, see scripts/deps/setup-symfpu.sh)");
+                  "reconfigure with -DENABLE_FLOATING_POINT=ON");
 #endif
   }
 

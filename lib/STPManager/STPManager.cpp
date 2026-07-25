@@ -356,8 +356,7 @@ ASTNode STPMgr::CreateFPConst(const stp::ASTNode& bvconst,
   (void)exp_width;
   (void)sig_width;
   FatalError("this STP was built without floating-point support; "
-             "reconfigure with -DENABLE_FLOATING_POINT=ON (needs the "
-             "SymFPU library, see scripts/deps/setup-symfpu.sh)");
+             "reconfigure with -DENABLE_FLOATING_POINT=ON");
 #else
   assert(bvconst.GetKind() == BVCONST);
   assert(exp_width + sig_width == bvconst.GetValueWidth());
