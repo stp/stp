@@ -37,8 +37,6 @@ namespace printer
 using std::string;
 using namespace stp;
 
-void SMTLIB2_Print1(ostream& os, const stp::ASTNode n, int indentation,
-                    bool letize);
 void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os);
 
 void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr,

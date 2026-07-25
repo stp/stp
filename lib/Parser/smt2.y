@@ -320,6 +320,7 @@
 
 
 %type <node> an_term  an_formula function_param
+%type <str> info_flag
 
 %token <uintval> NUMERAL_TOK
 %token <str> BVCONST_DECIMAL_TOK
@@ -430,9 +431,11 @@
 %token DECLARE_FUNCTION_TOK
 %token DECLARE_SORT_TOK
 %token DEFINE_FUNCTION_TOK
-%token DECLARE_FUN_REC_TOK
-%token DECLARE_FUNS_REC_TOK
+%token DEFINE_FUN_REC_TOK
+%token DEFINE_FUNS_REC_TOK
 %token DEFINE_SORT_TOK
+%token DECLARE_DATATYPE_TOK
+%token DECLARE_DATATYPES_TOK
 %token ECHO_TOK
 %token EXIT_TOK
 %token GET_ASSERTIONS_TOK
@@ -441,7 +444,7 @@
 %token GET_MODEL_TOK
 %token GET_OPTION_TOK
 %token GET_PROOF_TOK
-%token GET_UNSAT_ASSUMPTION_TOK
+%token GET_UNSAT_ASSUMPTIONS_TOK
 %token GET_UNSAT_CORE_TOK
 %token GET_VALUE_TOK
 %token POP_TOK
@@ -485,7 +488,16 @@ cmdi:
       stp::GlobalParserInterface->checkSat(stp::GlobalParserInterface->getAssertVector());
     }
 |
-     CHECK_SAT_ASSUMING_TOK LPAREN_TOK an_term RPAREN_TOK
+     CHECK_SAT_ASSUMING_TOK LPAREN_TOK an_formulas RPAREN_TOK
+    {
+      // The standard's argument is a list of prop_literals, i.e. boolean
+      // symbols or their negations. We accept any boolean formula, which is a
+      // superset, because the command is not supported either way.
+      stp::GlobalParserInterface->unsupported();
+      delete $3;
+    }
+|
+     CHECK_SAT_ASSUMING_TOK LPAREN_TOK RPAREN_TOK
     {
       stp::GlobalParserInterface->unsupported();
     }
@@ -549,6 +561,94 @@ cmdi:
        delete $3;
     }
 |
+     /* :random-seed, :verbosity and :reproducible-resource-limit take a
+        numeral. */
+     SET_OPTION_TOK COLON_TOK STRING_TOK NUMERAL_TOK
+    {
+       stp::GlobalParserInterface->setOption(*$3,std::to_string($4));
+       delete $3;
+    }
+|
+     GET_OPTION_TOK COLON_TOK STRING_TOK
+    {
+       stp::GlobalParserInterface->getOption(*$3);
+       delete $3;
+    }
+|
+     GET_INFO_TOK info_flag
+    {
+       stp::GlobalParserInterface->getInfo(*$2);
+       delete $2;
+    }
+|
+     GET_ASSERTIONS_TOK
+    {
+       stp::GlobalParserInterface->getAssertions();
+    }
+|
+     RESET_ASSERTIONS_TOK
+    {
+       stp::GlobalParserInterface->resetAssertions();
+       stp::GlobalParserInterface->success();
+    }
+|
+     /* Commands STP has no way to answer. The standard asks for the response
+        "unsupported" rather than an error, and for the rest of the script to
+        be processed regardless. */
+     GET_ASSIGNMENT_TOK
+    {
+       stp::GlobalParserInterface->unsupported();
+    }
+|
+     GET_PROOF_TOK
+    {
+       stp::GlobalParserInterface->unsupported();
+    }
+|
+     GET_UNSAT_CORE_TOK
+    {
+       stp::GlobalParserInterface->unsupported();
+    }
+|
+     GET_UNSAT_ASSUMPTIONS_TOK
+    {
+       stp::GlobalParserInterface->unsupported();
+    }
+|
+     /* STP's sorts are fixed: bitvectors, booleans and arrays of them. */
+     DECLARE_SORT_TOK STRING_TOK NUMERAL_TOK
+    {
+       stp::GlobalParserInterface->unsupported();
+       delete $2;
+    }
+|
+     /* The arguments of these are swallowed by the lexer, which leaves us the
+        parenthesis that closes the command. */
+     DEFINE_SORT_TOK
+    {
+       stp::GlobalParserInterface->unsupported();
+    }
+|
+     DEFINE_FUN_REC_TOK
+    {
+       stp::GlobalParserInterface->unsupported();
+    }
+|
+     DEFINE_FUNS_REC_TOK
+    {
+       stp::GlobalParserInterface->unsupported();
+    }
+|
+     DECLARE_DATATYPE_TOK
+    {
+       stp::GlobalParserInterface->unsupported();
+    }
+|
+     DECLARE_DATATYPES_TOK
+    {
+       stp::GlobalParserInterface->unsupported();
+    }
+|
      PUSH_TOK NUMERAL_TOK
     {
         for (unsigned i=0; i < $2;i++)
@@ -587,6 +687,11 @@ cmdi:
     }
 |
      NOTES_TOK attribute DECIMAL_TOK
+    {
+      stp::GlobalParserInterface->success();
+    }
+|
+     NOTES_TOK attribute NUMERAL_TOK
     {
       stp::GlobalParserInterface->success();
     }
@@ -740,6 +845,40 @@ STRING_TOK {
 }
 ;
 
+/* The argument of get-info. The standard flags all arrive as a colon followed
+   by an identifier; the keywords that the lexer gives a token of their own are
+   accepted too, since ⟨info_flag⟩ admits any ⟨keyword⟩. */
+info_flag:
+COLON_TOK STRING_TOK
+{
+  $$ = $2;
+}
+| SOURCE_TOK
+{
+  $$ = new std::string("source");
+}
+| CATEGORY_TOK
+{
+  $$ = new std::string("category");
+}
+| DIFFICULTY_TOK
+{
+  $$ = new std::string("difficulty");
+}
+| VERSION_TOK
+{
+  $$ = new std::string("smt-lib-version");
+}
+| STATUS_TOK
+{
+  $$ = new std::string("status");
+}
+| LICENSE_TOK
+{
+  $$ = new std::string("license");
+}
+;
+
 attribute:
 SOURCE_TOK
 {}
@@ -752,6 +891,13 @@ SOURCE_TOK
 | STATUS_TOK status
 {}
 | LICENSE_TOK
+{}
+| /* set-info accepts any keyword, not just the handful the lexer gives a
+     token of its own. Benchmarks carry things like :notes freely. */
+  COLON_TOK STRING_TOK
+{
+  delete $2;
+}
 ;
 
 
