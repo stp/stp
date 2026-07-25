@@ -269,6 +269,60 @@ string functionToSMTLIBName(const Kind k, bool smtlib1)
     case SBVMOD:
       return "bvsmod";
 
+    // Floating point (SMT-LIB 2 only; there is no SMT-LIB 1 FP theory).
+    // The indexed operators (to_fp, fp.to_ubv...) print through their own
+    // cases in SMTLIB2_Print1, not through this name map.
+    case FP_ABS:
+      return "fp.abs";
+    case FP_NEG:
+      return "fp.neg";
+    case FP_ADD:
+      return "fp.add";
+    case FP_SUB:
+      return "fp.sub";
+    case FP_MUL:
+      return "fp.mul";
+    case FP_DIV:
+      return "fp.div";
+    case FP_FMA:
+      return "fp.fma";
+    case FP_SQRT:
+      return "fp.sqrt";
+    case FP_REM:
+      return "fp.rem";
+    case FP_ROUNDTOINTEGRAL:
+      return "fp.roundToIntegral";
+    case FP_MIN:
+      return "fp.min";
+    case FP_MAX:
+      return "fp.max";
+    case FP_LEQ:
+      return "fp.leq";
+    case FP_LT:
+      return "fp.lt";
+    case FP_GEQ:
+      return "fp.geq";
+    case FP_GT:
+      return "fp.gt";
+    case FP_EQ:
+      return "fp.eq";
+    case FP_ISNORMAL:
+      return "fp.isNormal";
+    case FP_ISSUBNORMAL:
+      return "fp.isSubnormal";
+    case FP_ISZERO:
+      return "fp.isZero";
+    case FP_ISINFINITE:
+      return "fp.isInfinite";
+    case FP_ISNAN:
+      return "fp.isNaN";
+    case FP_ISNEGATIVE:
+      return "fp.isNegative";
+    case FP_ISPOSITIVE:
+      return "fp.isPositive";
+    case FP_SMT_EQ:
+      return "=";
+
     default:
     {
       std::cerr << "Unknown name when outputting:";
