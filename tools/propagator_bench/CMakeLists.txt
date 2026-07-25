@@ -1,4 +1,4 @@
-# AUTHORS: Dan Liew, Ryan Govostes, Mate Soos
+# AUTHORS: Trevor Hansen
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -18,15 +18,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-add_subdirectory(stp)
-add_subdirectory(stp_simple)
+add_executable(propagator_bench
+    main.cpp
+    Ops.cpp
+    Cbitp.cpp
+    Domains.cpp
+    Report.cpp
+)
 
-option(BUILD_EXTRA_TOOLS "Build extra tools" OFF)
-if (BUILD_EXTRA_TOOLS)
-  add_subdirectory(rewrite_rule_gen)
-  add_subdirectory(propagator_bench)
-  add_subdirectory(time_constantbitprop)
-  add_subdirectory(measure_constantbitprop)
-  add_subdirectory(test_constantbitprop)
-  add_subdirectory(cvc_to_c)
-endif()
+target_link_libraries(propagator_bench stp)

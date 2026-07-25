@@ -183,7 +183,14 @@ enum ifaceflag_t
   //!
   //! Currently simply forwards to MS.
   //!
-  MSP
+  MSP,
+
+  //! Use the SAT solver CaDiCaL.
+  //!
+  //! Note: this is last so that the values of the flags above are unchanged
+  //! from the releases before CaDiCaL was added.
+  //!
+  CADICAL
 
 };
 
@@ -311,6 +318,16 @@ DLL_PUBLIC Expr vc_orExprN(VC vc, Expr* children, int numOfChildNodes);
 //! \brief Creates a binary xor-expressions for the given boolean child expressions.
 //!
 DLL_PUBLIC Expr vc_xorExpr(VC vc, Expr left, Expr right);
+
+//! \brief Creates a binary not-and-expression that represents the negated
+//!        conjunction of the given boolean child expressions.
+//!
+DLL_PUBLIC Expr vc_nandExpr(VC vc, Expr left, Expr right);
+
+//! \brief Creates a binary not-or-expression that represents the negated
+//!        disjunction of the given boolean child expressions.
+//!
+DLL_PUBLIC Expr vc_norExpr(VC vc, Expr left, Expr right);
 
 //! \brief Creates an implies-expression for the given hyp (hypothesis) and
 //!        conc (conclusion) boolean expressions.
@@ -791,6 +808,48 @@ DLL_PUBLIC Expr vc_sbvGtExpr(VC vc, Expr left, Expr right);
 DLL_PUBLIC Expr vc_sbvGeExpr(VC vc, Expr left, Expr right);
 
 /////////////////////////////////////////////////////////////////////////////
+/// BITVECTOR OVERFLOW PREDICATES
+///
+/// Each of these returns a boolean expression that is true exactly when the
+/// corresponding operation on the two given bitvector expressions does not
+/// fit in their common bit-width, i.e. when the result of the same operation
+/// at that width would wrap.
+///
+/// The two given bitvector expressions must have the same bit-width.
+///
+/////////////////////////////////////////////////////////////////////////////
+
+//! \brief Returns a boolean expression that is true when the unsigned addition
+//!        '(left + right)' overflows.
+//!
+DLL_PUBLIC Expr vc_bvUnsignedAddOverflowExpr(VC vc, Expr left, Expr right);
+
+//! \brief Returns a boolean expression that is true when the signed addition
+//!        '(left + right)' overflows.
+//!
+DLL_PUBLIC Expr vc_bvSignedAddOverflowExpr(VC vc, Expr left, Expr right);
+
+//! \brief Returns a boolean expression that is true when the unsigned
+//!        subtraction '(left - right)' overflows.
+//!
+DLL_PUBLIC Expr vc_bvUnsignedSubOverflowExpr(VC vc, Expr left, Expr right);
+
+//! \brief Returns a boolean expression that is true when the signed
+//!        subtraction '(left - right)' overflows.
+//!
+DLL_PUBLIC Expr vc_bvSignedSubOverflowExpr(VC vc, Expr left, Expr right);
+
+//! \brief Returns a boolean expression that is true when the unsigned
+//!        multiplication '(left * right)' overflows.
+//!
+DLL_PUBLIC Expr vc_bvUnsignedMulOverflowExpr(VC vc, Expr left, Expr right);
+
+//! \brief Returns a boolean expression that is true when the signed
+//!        multiplication '(left * right)' overflows.
+//!
+DLL_PUBLIC Expr vc_bvSignedMulOverflowExpr(VC vc, Expr left, Expr right);
+
+/////////////////////////////////////////////////////////////////////////////
 /// BITVECTOR BITWISE OPERATIONS
 /////////////////////////////////////////////////////////////////////////////
 
@@ -826,6 +885,27 @@ DLL_PUBLIC Expr vc_bvXorExpr(VC vc, Expr left, Expr right);
 //! The given bitvector expressions must have the same bit-width.
 //!
 DLL_PUBLIC Expr vc_bvNotExpr(VC vc, Expr child);
+
+//! \brief Returns a bitvector expression representing the bitwise-not-and
+//!        operation '~(a & b)' for the given bitvector expressions.
+//!
+//! The given bitvector expressions must have the same bit-width.
+//!
+DLL_PUBLIC Expr vc_bvNandExpr(VC vc, Expr left, Expr right);
+
+//! \brief Returns a bitvector expression representing the bitwise-not-or
+//!        operation '~(a | b)' for the given bitvector expressions.
+//!
+//! The given bitvector expressions must have the same bit-width.
+//!
+DLL_PUBLIC Expr vc_bvNorExpr(VC vc, Expr left, Expr right);
+
+//! \brief Returns a bitvector expression representing the bitwise-not-xor
+//!        operation '~(a ^ b)' for the given bitvector expressions.
+//!
+//! The given bitvector expressions must have the same bit-width.
+//!
+DLL_PUBLIC Expr vc_bvXnorExpr(VC vc, Expr left, Expr right);
 
 /////////////////////////////////////////////////////////////////////////////
 /// BITVECTOR SHIFT OPERATIONS
@@ -963,6 +1043,18 @@ DLL_PUBLIC Expr vc_bvBoolExtract_One(VC vc, Expr x, int bit_no);
 //! Note: This operation retains the signedness of the bitvector is existant.
 //!
 DLL_PUBLIC Expr vc_bvSignExtend(VC vc, Expr child, int newWidth);
+
+//! \brief Returns a bitvector expression of bit-width 'newWidth' that holds the
+//!        given child zero-extended, i.e. padded with zeroes in the new
+//!        high bits.
+//!
+//! If 'newWidth' is at most the child's current bit-width then the child is
+//! truncated to 'newWidth' instead, matching how 'vc_bvSignExtend' behaves in
+//! that case.
+//!
+//! This function panics if 'newWidth' is not positive.
+//!
+DLL_PUBLIC Expr vc_bvZeroExtend(VC vc, Expr child, int newWidth);
 
 /////////////////////////////////////////////////////////////////////////////
 /// CONVENIENCE FUNCTIONS FOR ARRAYS
