@@ -175,6 +175,27 @@ ASTNode Cpp_interface::CreateFPSpecialConst(stp::FPSpecial which,
   return bm.CreateFPSpecialConst(which, exp_width, sig_width);
 }
 
+void Cpp_interface::addSortAlias(const std::string& name, unsigned exp_width,
+                                 unsigned sig_width)
+{
+  // SMT-LIB does not allow redefining a sort name.
+  if (sort_aliases.find(name) != sort_aliases.end())
+    FatalError("define-sort: the sort name is already defined");
+  sort_aliases[name] = std::make_pair(exp_width, sig_width);
+}
+
+bool Cpp_interface::lookupSortAlias(const std::string& name,
+                                    unsigned& exp_width,
+                                    unsigned& sig_width) const
+{
+  const auto found = sort_aliases.find(name);
+  if (found == sort_aliases.end())
+    return false;
+  exp_width = found->second.first;
+  sig_width = found->second.second;
+  return true;
+}
+
 ASTNode Cpp_interface::CreateBVConst(string& strval, int base, int bit_width)
 {
   return bm.CreateBVConst(strval, base, bit_width);

@@ -29,6 +29,7 @@ THE SOFTWARE.
 #include "stp/NodeFactory/NodeFactory.h"
 #include "stp/Util/Attributes.h"
 #include "extlib-unordered-dense/ankerl/unordered_dense.h"
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -44,9 +45,19 @@ class STPMgr;
 class LetMgr;
 enum class FPSpecial; // see STPManager.h
 
+// The (exponent bits, significand bits) of a parsed floating-point sort;
+// parser plumbing (bison's %union carries a pointer to one).
+struct float_size
+{
+  explicit float_size(int exp, int sig) : exp_bits(exp), sig_bits(sig) {}
+  int exp_bits;
+  int sig_bits;
+};
+
 class Cpp_interface
 {
   STPMgr& bm;
+  std::map<std::string, std::pair<unsigned, unsigned>> sort_aliases;
   bool alreadyWarned;
   bool print_success;
   bool ignoreCheckSatRequest;
@@ -160,6 +171,15 @@ public:
                                           unsigned exp_width,
                                           unsigned sig_width);
 
+  // define-sort aliases for floating-point sorts. A real table: the alias
+  // name is NOT interned as a symbol (the old scheme made the sort name
+  // resolvable as a term variable). Aliases are global, not frame-scoped.
+  DLL_PUBLIC void addSortAlias(const std::string& name, unsigned exp_width,
+                               unsigned sig_width);
+  DLL_PUBLIC bool lookupSortAlias(const std::string& name,
+                                  unsigned& exp_width,
+                                  unsigned& sig_width) const;
+
   DLL_PUBLIC ASTNode CreateBVConst(std::string& strval, int base,
                                    int bit_width);
   DLL_PUBLIC ASTNode CreateBVConst(const char* const strval, int base);
@@ -246,12 +266,6 @@ public:
 DLL_PUBLIC void CNFClearMemory();
 }
 
-struct float_size
-{
-public:
-  explicit float_size(int exp, int sig) : exp_bits(exp), sig_bits(sig) {}
-  int exp_bits;
-  int sig_bits;
-};
+
 
 #endif

@@ -782,7 +782,7 @@
 %union {
   unsigned uintval; /* for numerals in types. */
   stp::Kind kind;
-  float_size* fp_size;
+  stp::float_size* fp_size;
 
   //ASTNode,ASTVec
   stp::ASTNode *node;
@@ -1363,16 +1363,9 @@ SOURCE_TOK
 sort_decl:
 STRING_TOK LPAREN_TOK RPAREN_TOK an_fp_sort
 {
-  // A define-sort alias is carried as an interned symbol holding the format,
-  // which declare-fun's alias branch copies from. (A real sort-alias table
-  // would also stop the alias name resolving as a term; see the notes in the
-  // review.)
-  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
-  stp::GlobalParserInterface->addSymbol(s);
-  s.SetExpWidth($4->exp_bits);
-  s.SetSigWidth($4->sig_bits);
-  s.SetIndexWidth(0);
-  s.SetValueWidth($4->exp_bits + $4->sig_bits);
+  // A real alias table: the name maps to a format, and is NOT interned as a
+  // symbol -- the old scheme made the sort name usable as a term variable.
+  stp::GlobalParserInterface->addSortAlias(*$1, $4->exp_bits, $4->sig_bits);
   delete $1;
   delete $4;
 };
@@ -1385,19 +1378,19 @@ an_fp_sort:
   // one but Float32 named the wrong format.
   FLOAT16_TOK
 {
-    $$ = new float_size(5, 11);
+    $$ = new stp::float_size(5, 11);
 }
 | FLOAT32_TOK
 {
-    $$ = new float_size(8, 24);
+    $$ = new stp::float_size(8, 24);
 }
 | FLOAT64_TOK
 {
-    $$ = new float_size(11, 53);
+    $$ = new stp::float_size(11, 53);
 }
 | FLOAT128_TOK
 {
-    $$ = new float_size(15, 113);
+    $$ = new stp::float_size(15, 113);
 }
 | LPAREN_TOK UNDERSCORE_TOK FLOATINGPOINT_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK
 {
@@ -1406,7 +1399,7 @@ an_fp_sort:
       fatal_yyerror("a floating-point format needs at least 2 exponent and "
                     "2 significand bits");
     }
-    $$ = new float_size($4, $5);
+    $$ = new stp::float_size($4, $5);
 }
 ;
 
@@ -1422,17 +1415,24 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   s.SetValueWidth($7);
   delete $1;
 }
-| STRING_TOK LPAREN_TOK RPAREN_TOK TERMID_TOK
+| STRING_TOK LPAREN_TOK RPAREN_TOK STRING_TOK
 {
+  // The sort position holds a bare name: a define-sort alias. (This used to
+  // match any TERM symbol, so `(declare-fun y () x)` with x a variable
+  // "worked" as an alias use.)
+  unsigned eb, sb;
+  if (!stp::GlobalParserInterface->lookupSortAlias(*$4, eb, sb))
+  {
+    fatal_yyerror("unknown sort (not built in, and not a define-sort alias)");
+  }
   ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
   stp::GlobalParserInterface->addSymbol(s);
-  //Sort_symbs has the indexwidth/valuewidth. Set those fields in
-  //var
-  s.SetExpWidth($4->GetExpWidth());
-  s.SetSigWidth($4->GetSigWidth());
-  s.SetIndexWidth($4->GetIndexWidth());
-  s.SetValueWidth($4->GetValueWidth());
+  s.SetExpWidth(eb);
+  s.SetSigWidth(sb);
+  s.SetIndexWidth(0);
+  s.SetValueWidth(eb + sb);
   delete $1;
+  delete $4;
 }
 | STRING_TOK LPAREN_TOK RPAREN_TOK BOOL_TOK
 {
@@ -1562,6 +1562,23 @@ STRING_TOK  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
   s.SetSigWidth($2->sig_bits);
   s.SetIndexWidth(0);
   s.SetValueWidth($2->exp_bits + $2->sig_bits);
+  stp::GlobalParserInterface->addSymbol(s);
+  delete $1;
+  delete $2;
+}
+| STRING_TOK STRING_TOK
+{
+  // declare-const with a define-sort alias in sort position.
+  unsigned eb, sb;
+  if (!stp::GlobalParserInterface->lookupSortAlias(*$2, eb, sb))
+  {
+    fatal_yyerror("unknown sort (not built in, and not a define-sort alias)");
+  }
+  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  s.SetExpWidth(eb);
+  s.SetSigWidth(sb);
+  s.SetIndexWidth(0);
+  s.SetValueWidth(eb + sb);
   stp::GlobalParserInterface->addSymbol(s);
   delete $1;
   delete $2;
