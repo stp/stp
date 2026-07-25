@@ -564,9 +564,12 @@ if (STP_ALLOCATOR STREQUAL "mimalloc")
             "Run: git submodule update --init lib/extlib-mimalloc "
             "(or configure with -DSTP_ALLOCATOR=system).")
     endif()
-    # Only the static library, with the malloc/free/new/delete overrides on.
-    # Static keeps it self-contained: nothing extra to install or ship.
-    set(MI_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+    # The static library is what the executables link: it keeps them
+    # self-contained, with nothing extra to install or ship. The shared one is
+    # built too but not installed - it is there to be LD_PRELOADed by processes
+    # that embed libstp rather than run the stp binary, the Python (ctypes)
+    # interface being the one in tree. See tests/api/python/allocator_tests.py.
+    set(MI_BUILD_SHARED ON  CACHE BOOL "" FORCE)
     set(MI_BUILD_OBJECT OFF CACHE BOOL "" FORCE)
     set(MI_BUILD_TESTS  OFF CACHE BOOL "" FORCE)
     set(MI_BUILD_STATIC ON  CACHE BOOL "" FORCE)
@@ -575,8 +578,14 @@ if (STP_ALLOCATOR STREQUAL "mimalloc")
     # Vendored upstream code whose warnings we do not control.
     if (WERROR AND NOT MSVC)
         target_compile_options(mimalloc-static PRIVATE -Wno-error)
+        target_compile_options(mimalloc PRIVATE -Wno-error)
     endif()
     set(STP_ALLOCATOR_LIBRARY mimalloc-static)
+    # EXCLUDE_FROM_ALL above keeps mimalloc's other targets out of the build;
+    # the shared library is small and wanted by anyone preloading it, so opt it
+    # back in.
+    set_target_properties(mimalloc PROPERTIES EXCLUDE_FROM_ALL FALSE)
+    set(STP_ALLOCATOR_PRELOADABLE mimalloc)
     message(STATUS "Allocator: vendored mimalloc (lib/extlib-mimalloc)")
 
 elseif (STP_ALLOCATOR STREQUAL "tcmalloc")
