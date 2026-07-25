@@ -529,12 +529,8 @@ TEST(StrengthReduction_Exhaustive_Test, saddo_false_via_opposite_signs)
 
     c.checkEquivalent(
         n, result, x, y, width,
-        [xSign, width](unsigned v) {
-          return ((v >> (width - 1)) & 1) == xSign;
-        },
-        [ySign, width](unsigned v) {
-          return ((v >> (width - 1)) & 1) == ySign;
-        });
+        [xSign](unsigned v) { return ((v >> (width - 1)) & 1) == xSign; },
+        [ySign](unsigned v) { return ((v >> (width - 1)) & 1) == ySign; });
   }
 }
 
@@ -591,7 +587,7 @@ TEST(StrengthReduction_Exhaustive_Test, ssubo_false_via_equal_signs)
     ASTNode result = c.sr.topLevel(n, map);
     ASSERT_EQ(result, c.mgr.ASTFalse);
 
-    auto consistent = [sign, width](unsigned v) {
+    auto consistent = [sign](unsigned v) {
       return ((v >> (width - 1)) & 1) == sign;
     };
     c.checkEquivalent(n, result, x, y, width, consistent, consistent);
