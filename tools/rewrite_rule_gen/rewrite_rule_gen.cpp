@@ -91,8 +91,6 @@ int max_rules_wanted = -1;   // -1: unbounded
 
 const int bits = 6;
 const int widen_to = 10;
-const int values_in_hash = 64 / bits;
-const int mask = (1 << (bits)) - 1;
 //////////////////////////////////
 
 // Set by the signal handler to write out the rules that have been discovered.
