@@ -344,7 +344,8 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
       {
         if (SYMBOL == node.GetKind())
         {
-          bool r = simplifier->UpdateSubstitutionMap(node, constNode);
+          [[maybe_unused]] bool r =
+              simplifier->UpdateSubstitutionMap(node, constNode);
           assert(r);
           doAssign = false;
         }
@@ -366,7 +367,8 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
         assert(((unsigned)bits.getWidth()) == node.GetValueWidth());
         if (SYMBOL == node.GetKind())
         {
-          bool r = simplifier->UpdateSubstitutionMap(node, constNode);
+          [[maybe_unused]] bool r =
+              simplifier->UpdateSubstitutionMap(node, constNode);
           assert(r);
           doAssign = false;
         }

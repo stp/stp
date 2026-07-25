@@ -1389,7 +1389,7 @@ ASTNode Simplifier::pullUpBVSX(ASTNode output)
   assert(output.GetChildren().size() == 2);
   assert(output[0].GetKind() == BVSX);
   assert(output[1].GetKind() == BVSX);
-  const Kind k = output.GetKind();
+  [[maybe_unused]] const Kind k = output.GetKind();
 
   assert(BVMULT == k || SBVDIV == k || BVPLUS == k);
   const int inputValueWidth = output.GetValueWidth();

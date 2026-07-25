@@ -441,7 +441,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
           CBV tmp0b = CONSTANTBV::BitVector_Create(inputwidth, true);
           CONSTANTBV::BitVector_Negate(tmp0b, tmp0);
 
-          CONSTANTBV::ErrCode e =
+          [[maybe_unused]] CONSTANTBV::ErrCode e =
               CONSTANTBV::BitVector_Div_Pos(quotient, tmp0b, tmp1, remainder);
           assert(e == CONSTANTBV::ErrCode_Ok);
 
@@ -470,7 +470,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
           CBV tmp1b = CONSTANTBV::BitVector_Create(inputwidth, true);
           CONSTANTBV::BitVector_Negate(tmp1b, tmp1);
 
-          CONSTANTBV::ErrCode e =
+          [[maybe_unused]] CONSTANTBV::ErrCode e =
               CONSTANTBV::BitVector_Div_Pos(quotient, tmp0, tmp1b, remainder);
 
           assert(e == CONSTANTBV::ErrCode_Ok);
@@ -498,7 +498,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
           CONSTANTBV::BitVector_Negate(tmp0b, tmp0);
           CONSTANTBV::BitVector_Negate(tmp1b, tmp1);
 
-          CONSTANTBV::ErrCode e =
+          [[maybe_unused]] CONSTANTBV::ErrCode e =
               CONSTANTBV::BitVector_Div_Pos(quotient, tmp0b, tmp1b, remainder);
           assert(e == CONSTANTBV::ErrCode_Ok);
 
@@ -550,7 +550,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
         // the same as the copy belonging to an ASTNode input_children[0] this
         // must be copied.
         tmp0 = CONSTANTBV::BitVector_Clone(tmp0);
-        CONSTANTBV::ErrCode e =
+        [[maybe_unused]] CONSTANTBV::ErrCode e =
             CONSTANTBV::BitVector_Div_Pos(quotient, tmp0, tmp1, remainder);
         CONSTANTBV::BitVector_Destroy(tmp0);
 

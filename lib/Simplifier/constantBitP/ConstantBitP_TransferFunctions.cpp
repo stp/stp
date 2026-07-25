@@ -259,14 +259,14 @@ Result bvSignExtendBothWays(vector<FixedBits*>& children, FixedBits& output)
 
 Result bvExtractBothWays(vector<FixedBits*>& children, FixedBits& output)
 {
-  const size_t numberOfChildren = children.size();
+  [[maybe_unused]] const size_t numberOfChildren = children.size();
   const unsigned outputBitWidth = output.getWidth();
 
   Result result = NO_CHANGE;
 
   assert(3 == numberOfChildren);
 
-  unsigned top = children[1]->getUnsignedValue();
+  [[maybe_unused]] unsigned top = children[1]->getUnsignedValue();
   unsigned bottom = children[2]->getUnsignedValue();
 
   FixedBits& input = *(children[0]);
