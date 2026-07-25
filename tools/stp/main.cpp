@@ -55,6 +55,9 @@ public:
   po::options_description cmdline_options;
   po::options_description visible_options;
   po::positional_options_description pos_options;
+
+  // Held as text until parse_options() turns it into UserFlags.search_bias.
+  std::string search_bias;
 };
 
 int ExtraMain::create_and_parse_options(int argc, char** argv)
@@ -247,7 +250,12 @@ void ExtraMain::create_options()
               "minisat", "use installed minisat version as the solver "
 #ifndef USE_CRYPTOMINISAT
 #endif
-              );
+              )
+      ("search-bias", po::value<std::string>(&search_bias),
+       "tune the SAT search towards one answer: 'unsat' (best for "
+       "unsatisfiable / verification workloads), 'sat', or 'none' (the "
+       "default, leaving the solver at its own settings). Solvers with no "
+       "such setting ignore it");
 
   po::options_description refinement_options("Refinement options");
   refinement_options.add_options()(
@@ -355,6 +363,10 @@ void ExtraMain::create_options()
   po::options_description misc_options("Output options");
   misc_options.add_options()
 
+      ("cnf-generation-effort", po::value<string>()->default_value("medium"),
+       "effort spent minimising the CNF: very-low, low, medium, high, "
+       "very-high. Higher is slower to generate but yields a smaller CNF")
+
       // exit-after-CNF
       ("exit-after-CNF", po::bool_switch(&(bm->UserFlags.exit_after_CNF)),
        "exit after the CNF has been generated")
@@ -438,6 +450,28 @@ int ExtraMain::parse_options(int argc, char** argv)
     bm->UserFlags.interactive_read = vm["interactive"].as<bool>() ? 1 : 0;
   }
 
+  if (vm.count("cnf-generation-effort"))
+  {
+    const string effort = vm["cnf-generation-effort"].as<string>();
+    if (effort == "very-low")
+      bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_VERY_LOW;
+    else if (effort == "low")
+      bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_LOW;
+    else if (effort == "medium")
+      bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_MEDIUM;
+    else if (effort == "high")
+      bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_HIGH;
+    else if (effort == "very-high")
+      bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_VERY_HIGH;
+    else
+    {
+      std::cerr << "Unknown --cnf-generation-effort value '" << effort
+                << "'. Expected one of: very-low, low, medium, high, very-high."
+                << std::endl;
+      return -1;
+    }
+  }
+
   int selected_type = 0;
   if (vm.count("CVC"))
   {
@@ -491,6 +525,22 @@ int ExtraMain::parse_options(int argc, char** argv)
   if (vm.count("cadical"))
   {
     bm->UserFlags.solver_to_use = UserDefinedFlags::CADICAL_SOLVER;
+  }
+
+  if (vm.count("search-bias"))
+  {
+    if (search_bias == "sat")
+      bm->UserFlags.search_bias = SearchBias::SAT;
+    else if (search_bias == "unsat")
+      bm->UserFlags.search_bias = SearchBias::UNSAT;
+    else if (search_bias == "none")
+      bm->UserFlags.search_bias = SearchBias::NONE;
+    else
+    {
+      cout << "ERROR: --search-bias must be one of 'sat', 'unsat' or 'none'"
+           << endl;
+      std::exit(-1);
+    }
   }
 
 

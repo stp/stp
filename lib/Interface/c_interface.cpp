@@ -46,6 +46,9 @@ using std::string;
 using std::fdostream;
 using std::endl;
 
+// Defined further down, but used by the boolean expression builders above it.
+Expr createBinaryNode(VC vc, Kind k, Expr left, Expr right);
+
 namespace /* anonymous namespace for static */
 {
 
@@ -140,6 +143,9 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
     case MSP:
       //Array-based Minisat has been replaced with normal MiniSat
       b->UserFlags.solver_to_use = stp::UserDefinedFlags::MINISAT_SOLVER;
+      break;
+    case CADICAL:
+      b->UserFlags.solver_to_use = stp::UserDefinedFlags::CADICAL_SOLVER;
       break;
     default:
       stp::FatalError("C_interface: vc_setInterfaceFlags: Unrecognized flag\n");
@@ -892,6 +898,16 @@ Expr vc_xorExpr(VC vc, Expr left, Expr right)
   return output;
 }
 
+Expr vc_nandExpr(VC vc, Expr left, Expr right)
+{
+  return createBinaryNode(vc, stp::NAND, left, right);
+}
+
+Expr vc_norExpr(VC vc, Expr left, Expr right)
+{
+  return createBinaryNode(vc, stp::NOR, left, right);
+}
+
 Expr vc_andExprN(VC vc, Expr* cc, int n)
 {
   stp::STP* stp_i = (stp::STP*)vc;
@@ -1298,6 +1314,32 @@ Expr vc_sbvGeExpr(VC vc, Expr left, Expr right)
   return createBinaryNode(vc, stp::BVSGE, left, right);
 }
 
+// overflow predicates
+Expr vc_bvUnsignedAddOverflowExpr(VC vc, Expr left, Expr right)
+{
+  return createBinaryNode(vc, stp::BVUADDO, left, right);
+}
+Expr vc_bvSignedAddOverflowExpr(VC vc, Expr left, Expr right)
+{
+  return createBinaryNode(vc, stp::BVSADDO, left, right);
+}
+Expr vc_bvUnsignedSubOverflowExpr(VC vc, Expr left, Expr right)
+{
+  return createBinaryNode(vc, stp::BVUSUBO, left, right);
+}
+Expr vc_bvSignedSubOverflowExpr(VC vc, Expr left, Expr right)
+{
+  return createBinaryNode(vc, stp::BVSSUBO, left, right);
+}
+Expr vc_bvUnsignedMulOverflowExpr(VC vc, Expr left, Expr right)
+{
+  return createBinaryNode(vc, stp::BVUMULO, left, right);
+}
+Expr vc_bvSignedMulOverflowExpr(VC vc, Expr left, Expr right)
+{
+  return createBinaryNode(vc, stp::BVSMULO, left, right);
+}
+
 Expr vc_bvLeftShiftExprExpr(VC vc, int n_bits, Expr left, Expr right)
 {
   return createBinaryTerm(vc, n_bits, stp::BVLEFTSHIFT, left, right);
@@ -1347,6 +1389,24 @@ Expr vc_bvXorExpr(VC vc, Expr left, Expr right)
 {
   return createBinaryTerm(vc, (*((stp::ASTNode*)left)).GetValueWidth(),
                           stp::BVXOR, left, right);
+}
+
+Expr vc_bvNandExpr(VC vc, Expr left, Expr right)
+{
+  return createBinaryTerm(vc, (*((stp::ASTNode*)left)).GetValueWidth(),
+                          stp::BVNAND, left, right);
+}
+
+Expr vc_bvNorExpr(VC vc, Expr left, Expr right)
+{
+  return createBinaryTerm(vc, (*((stp::ASTNode*)left)).GetValueWidth(),
+                          stp::BVNOR, left, right);
+}
+
+Expr vc_bvXnorExpr(VC vc, Expr left, Expr right)
+{
+  return createBinaryTerm(vc, (*((stp::ASTNode*)left)).GetValueWidth(),
+                          stp::BVXNOR, left, right);
 }
 
 Expr vc_bvNotExpr(VC vc, Expr ccc)
@@ -1625,6 +1685,42 @@ Expr vc_bvSignExtend(VC vc, Expr ccc, int nbits)
     // sign extend
     stp::ASTNode width = b->CreateBVConst(32, nbits);
     n = b->CreateTerm(stp::BVSX, nbits, *a, width);
+  }
+
+  BVTypeCheck(n);
+  stp::ASTNode* output = new stp::ASTNode(n);
+  // if(cinterface_exprdelete_on) created_exprs.push_back(output);
+  return output;
+}
+
+Expr vc_bvZeroExtend(VC vc, Expr ccc, int nbits)
+{
+  stp::STP* stp_i = (stp::STP*)vc;
+  stp::STPMgr* b = stp_i->bm;
+  stp::ASTNode* a = (stp::ASTNode*)ccc;
+
+  // width of the expr which is being zero extended. nbits is the
+  // resulting length of the zeroextended expr
+  BVTypeCheck(*a);
+
+  if (nbits <= 0)
+    stp::FatalError("vc_bvZeroExtend: the new width must be positive");
+
+  unsigned exprlen = a->GetValueWidth();
+  unsigned outputlen = nbits;
+  stp::ASTNode n;
+  if (exprlen >= outputlen)
+  {
+    // extract
+    stp::ASTNode hi = b->CreateBVConst(32, outputlen - 1);
+    stp::ASTNode low = b->CreateBVConst(32, 0);
+    n = b->CreateTerm(stp::BVEXTRACT, nbits, *a, hi, low);
+  }
+  else
+  {
+    // zero extend
+    stp::ASTNode width = b->CreateBVConst(32, nbits);
+    n = b->CreateTerm(stp::BVZX, nbits, *a, width);
   }
 
   BVTypeCheck(n);

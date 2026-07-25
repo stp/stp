@@ -83,23 +83,21 @@ void runSimple(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
     children.push_back(&a);
     children.push_back(&b);
 
-    if (false)
-    {
-      std::cerr << a;
-      std::cerr << b;
-      std::cerr << output;
-      std::cerr << std::endl;
-    }
+#if 0
+    std::cerr << a;
+    std::cerr << b;
+    std::cerr << output;
+    std::cerr << std::endl;
+#endif
 
     Result r = transfer(children, output);
 
-    if (false)
-    {
-      std::cerr << "after" << a;
-      std::cerr << b;
-      std::cerr << output;
-      std::cerr << std::endl;
-    }
+#if 0
+    std::cerr << "after" << a;
+    std::cerr << b;
+    std::cerr << output;
+    std::cerr << std::endl;
+#endif
 
     if(r == CONFLICT)
     {

@@ -147,6 +147,17 @@ SATSolver* STP::get_new_sat_solver()
       break;
   };
 
+  // Before any clause reaches it, which is the only point some backends will
+  // accept a configuration at.
+  if (bm->UserFlags.search_bias != SearchBias::NONE &&
+      !newS->setSearchBias(bm->UserFlags.search_bias))
+  {
+    std::cerr << "Warning: the SAT solver in use has no '"
+              << searchBiasName(bm->UserFlags.search_bias)
+              << "' search bias to select; using its own settings instead."
+              << std::endl;
+  }
+
   return newS;
 }
 
@@ -769,7 +780,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   }
 
   ToSATAIG toSATAIG(bm, cb, arrayTransformer);
-  ToSATBase* satBase = bm->UserFlags.traditional_cnf ? tosat : &toSATAIG;
+  ToSATBase* satBase = &toSATAIG;
 
   if (bm->soft_timeout_expired)
     return SOLVER_TIMEOUT;

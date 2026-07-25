@@ -47,4 +47,6 @@ AddSTPGTest(ConstantBitPropagation_Test.cpp)
 AddSTPGTest(Extensionality_Test.cpp)
 AddSTPGTest(BitVector_from_Dec_Test.cpp)
 AddSTPGTest(ValueSet_Test.cpp)
+AddSTPGTest(ValueSet_Exhaustive_Test.cpp)
+AddSTPGTest(SearchBias_Test.cpp)
 

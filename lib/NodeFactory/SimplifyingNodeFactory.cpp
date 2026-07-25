@@ -278,6 +278,26 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
           result = ASTFalse;
       }
 
+      // x >s smallest -> NOT(x == smallest). Nothing is below the most-negative
+      // value, so the comparison holds for every x except smallest itself.
+      // (Signed dual of the "x > 0 -> NOT(x == 0)" rule in create_gt_node.)
+      if (result.IsNull() && children[1].GetKind() == stp::BVCONST &&
+          children[1] == get_smallest_number(children[0].GetValueWidth()))
+      {
+        result = NodeFactory::CreateNode(
+            stp::NOT, NodeFactory::CreateNode(EQ, children[0], children[1]));
+      }
+
+      // largest >s x -> NOT(largest == x). Nothing is above the most-positive
+      // value, so the comparison holds for every x except largest itself.
+      // (Signed dual of the "max > x -> NOT(max == x)" rule in create_gt_node.)
+      if (result.IsNull() && children[0].GetKind() == stp::BVCONST &&
+          children[0] == get_largest_number(children[0].GetValueWidth()))
+      {
+        result = NodeFactory::CreateNode(
+            stp::NOT, NodeFactory::CreateNode(EQ, children[0], children[1]));
+      }
+
       //2nd part is the same -> only care about 1st part
       if (children[0].GetKind() == BVCONCAT &&
           children[1].GetKind() == BVCONCAT && children[0][1] == children[1][1])

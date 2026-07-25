@@ -34,6 +34,7 @@ if(BUILD_EXECUTABLES)
     )
 
     target_link_libraries(stp_simple-bin
+        ${STP_ALLOCATOR_LIBRARY}
         stp
     )
 

@@ -24,6 +24,8 @@ THE SOFTWARE.
 #ifndef UDEFFLAGS_H
 #define UDEFFLAGS_H
 
+#include "stp/Sat/SearchBias.h"
+
 namespace stp
 {
 
@@ -73,9 +75,6 @@ public:
   
 
   bool simplify_to_constants_only = false;
-
-  // given a/b = c, propagates that c<=a even if b may be zero.
-  bool cBitP_propagateForDivisionByZero = true;
 
   bool array_difficulty_reversion = true;
   bool difficulty_reversion = true;
@@ -138,8 +137,27 @@ public:
 
 
   /* CNF Generation options */
-  bool traditional_cnf = false;
   bool simple_cnf = false; // don't use the good AIG based CNF conversion.
+
+  // How much work to spend turning the AIG into CNF. Higher levels take longer
+  // to generate but produce a smaller CNF, so the best setting depends on
+  // whether a problem's cost is dominated by CNF generation or by solving.
+  //
+  // MEDIUM is ABC's Cnf_Derive(), a cut-enumeration and technology-mapping
+  // pass. VERY_LOW is Cnf_DeriveFast(), which skips cut enumeration entirely.
+  // LOW, HIGH and VERY_HIGH use ABC's newer Mf_ManGenerateCnf() at LUT sizes
+  // 3, 6 and 8; its cost grows steeply with LUT size for little further gain
+  // past 6.
+  enum CNFEffort
+  {
+    CNF_EFFORT_VERY_LOW = 0,
+    CNF_EFFORT_LOW,
+    CNF_EFFORT_MEDIUM,
+    CNF_EFFORT_HIGH,
+    CNF_EFFORT_VERY_HIGH
+  };
+
+  enum CNFEffort cnf_effort = CNF_EFFORT_MEDIUM;
 
   bool exit_after_CNF = false;
 
@@ -175,6 +193,10 @@ public:
   };
 
   enum SATSolvers solver_to_use;
+
+  // Which answer to tune the SAT search towards. NONE, the default, leaves
+  // every backend at its own settings, so the option is opt-in.
+  SearchBias search_bias = SearchBias::NONE;
 
   bool get_print_output_at_all() const
   {

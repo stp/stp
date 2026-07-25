@@ -95,7 +95,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        ${{ matrix.env }} cmake -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        ${{ matrix.env }} cmake -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DBUILD_EXTRA_TOOLS:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -106,6 +106,35 @@ jobs:
 
     - name: Test
       run: ctest --parallel "$(nproc)" -VV --output-on-failure
+      working-directory: build
+
+    # BUILD_EXTRA_TOOLS is off by default and nothing else compiles these five
+    # tools, so all of them had quietly stopped building: headers that were
+    # never self-contained, and calls into APIs that had changed shape. Getting
+    # them compiled again is most of the value here, which is why this job now
+    # configures them -- it already enables CryptoMiniSat, which
+    # rewrite_rule_gen requires.
+    #
+    # On top of that, four rewrite_rule_gen invocations. unit-test and test check
+    # themselves and need no input; assertions are live because CI leaves
+    # CMAKE_BUILD_TYPE unset, giving RelWithDebInfo with NDEBUG filtered out, so
+    # they really do assert. verify SAT-checks a small committed rule set, and
+    # fails if the file cannot be read or yields no rules -- without that guard a
+    # mistyped path falls back to stdin and "verifies" nothing. generate is a
+    # bounded rule search, here purely as a regression test against the stack
+    # overflow an unbounded one hits; it is not expected to find rules.
+    #
+    # The tool's remaining modes are unsuitable: expand, rewrite and write-out
+    # want a rules_new.smt2 that is not in the tree and exit 0 immediately
+    # without one, and the default no-argument mode is an interactive, unbounded
+    # search that recurses until the stack is exhausted.
+    - name: Extra tools smoke test
+      run: |
+        ./tools/rewrite_rule_gen/rewrite_rule_gen unit-test
+        ./tools/rewrite_rule_gen/rewrite_rule_gen test
+        ./tools/rewrite_rule_gen/rewrite_rule_gen verify \
+          ../tools/rewrite_rule_gen/test-rules.smt2
+        ./tools/rewrite_rule_gen/rewrite_rule_gen generate 5 3
       working-directory: build
 
   build-cadical:
@@ -191,6 +220,114 @@ jobs:
 
     - name: Test
       run: ctest --parallel "$(nproc)" -VV --output-on-failure
+      working-directory: build
+
+  # Until this job existed, the only static build in CI was the Windows one,
+  # so a break that only shows up when everything is linked into one
+  # executable could sit in master with every Linux job green.
+  build-static:
+    name: gcc (static)
+    runs-on: ubuntu-latest
+
+    env:
+      CCACHE_MAXSIZE: 800M
+
+    steps:
+
+    - uses: actions/checkout@v7
+      with:
+          submodules: 'true'
+
+    # No lit and no gtest here: STATICCOMPILE turns BUILD_SHARED_LIBS off, and
+    # the top-level CMakeLists forces ENABLE_TESTING off when it is off (the
+    # Python bindings and the test harness both want a shared libstp), so a
+    # static build has no tests to run. See the smoke test at the end.
+    - name: Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bison \
+          build-essential \
+          ccache \
+          cmake \
+          flex \
+          gcc \
+          git \
+          libboost-program-options-dev \
+          ninja-build \
+          zlib1g-dev
+
+    - name: Resolve dependency revisions
+      id: deps-key
+      run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
+
+    # A different set of dependencies to the jobs above, and a differently
+    # built minisat, so a different key prefix: the key describes their
+    # revisions, not which of them are in the tree or how they were
+    # configured, and restoring another job's cache would leave a minisat
+    # with no static library behind while skipping the step that builds one.
+    - name: Restore dependencies
+      id: deps-cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          deps/install
+          deps/minisat
+        key: deps-x86_64-static-${{ steps.deps-key.outputs.key }}
+
+    # A static STP links against libminisat.a, which minisat only produces
+    # when built with STATICCOMPILE; its default build installs the shared
+    # library alone.
+    - name: Dependencies
+      if: steps.deps-cache.outputs.cache-hit != 'true'
+      run: ./scripts/deps/setup-minisat.sh -DSTATICCOMPILE=ON
+
+    - name: Compiler cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ccache
+        key: ccache-static-${{ github.run_id }}
+        restore-keys: ccache-static-
+
+    # NOCRYPTOMINISAT: CryptoMiniSat's exported static link line pulls in GMP
+    # and its own dependencies, which are not reliably available as archives
+    # on the runner. The two SAT backends are interchangeable as far as
+    # linking STP statically is concerned.
+    - name: Configure
+      run: |
+        mkdir build
+        cd build
+        cmake -DSTATICCOMPILE:BOOL=ON -DNOCRYPTOMINISAT:BOOL=ON -DWERROR:BOOL=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+
+    - name: Build
+      run: |
+        ccache --zero-stats
+        cmake --build . --parallel "$(nproc)"
+        ccache --show-stats
+      working-directory: build
+
+    # Linking is most of the point of this job, but a binary that links and
+    # then dies on the first query would still pass, so solve something and
+    # check the answer rather than just the exit status. Also assert the
+    # executable really is static: if the -static link line quietly stopped
+    # taking effect the job would otherwise keep passing while testing
+    # nothing this job exists to test.
+    - name: Smoke test
+      run: |
+        stp=$([ -x ./stp ] && echo ./stp || echo ./stp_simple)
+        ls -l "$stp"
+        file "$stp"
+        if ldd "$stp"; then
+          echo "expected a static executable, but it has shared dependencies"
+          exit 1
+        fi
+        echo '(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (= x #x2a))(check-sat)' > sat.smt2
+        echo '(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (and (= x #x2a) (= x #x2b)))(check-sat)' > unsat.smt2
+        for expected in sat unsat; do
+          got=$("$stp" "$expected.smt2")
+          echo "$expected.smt2: '$got'"
+          [ "$got" = "$expected" ] || exit 1
+        done
       working-directory: build
 
   build-32bit:
@@ -298,6 +435,15 @@ jobs:
         # pwsh -Command collapses nonzero exit codes to 1, so log the real
         # one (crash statuses like 0xC0000005 show up as large negatives).
         "solver exit code: $LASTEXITCODE"
+        if ($out.Trim() -ne "sat") { exit 1 }
+        # The query above is answered by the substitution solver during
+        # simplification, so it never reaches the SAT backend. This one
+        # cannot be simplified away: it is the only line here that
+        # exercises bitblasting, ABC's CNF generation and minisat.
+        "(set-logic QF_BV)(declare-fun a () (_ BitVec 8))(declare-fun b () (_ BitVec 8))(assert (= (bvmul a b) #x21))(assert (bvult a b))(check-sat)" | Out-File -Encoding ascii testsat.smt2
+        $out = & $stp testsat.smt2 2>&1 | Out-String
+        "sat-backend output: '$($out.Trim())'"
+        "sat-backend exit code: $LASTEXITCODE"
         if ($out.Trim() -ne "sat") { exit 1 }
 
 # EOF

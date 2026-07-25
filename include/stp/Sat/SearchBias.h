@@ -1,7 +1,7 @@
 /********************************************************************
  * AUTHORS: Trevor Hansen
  *
- * BEGIN DATE: Jul, 2010
+ * BEGIN DATE: July, 2026
  *
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,49 +22,43 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#ifndef TOSATBASE_H
-#define TOSATBASE_H
-
-#include "stp/AST/AST.h"
-#include "stp/STPManager/STPManager.h"
+#ifndef SEARCHBIAS_H_
+#define SEARCHBIAS_H_
 
 namespace stp
 {
-class DLL_PUBLIC ToSATBase // not copyable
+
+// Which answer to tune the SAT search towards.
+//
+// Modern CDCL solvers alternate between a mode that is good at finding models
+// and one that is good at closing off the search space, and several of them
+// let a caller pin one of the two. On a workload that is known to lean one way
+// -- verification conditions are usually unsatisfiable -- the time spent in the
+// other mode is wasted.
+//
+// This selects heuristics only. A correct SAT solver returns the same verdict
+// whatever bias it is given, so getting the bias wrong costs time, not
+// soundness. Each backend maps this onto whatever it happens to offer, and
+// backends with nothing to offer ignore it.
+enum class SearchBias
 {
-protected:
-  ASTNode ASTTrue, ASTFalse, ASTUndefined;
-
-  // Ptr to STPManager
-  STPMgr* bm;
-
-public:
-  typedef std::unordered_map<ASTNode, vector<unsigned>, ASTNode::ASTNodeHasher,
-                             ASTNode::ASTNodeEqual>
-      ASTNodeToSATVar;
-
-  ToSATBase(STPMgr* bm) : bm(bm)
-  {
-    ASTTrue = bm->CreateNode(TRUE);
-    ASTFalse = bm->CreateNode(FALSE);
-    ASTUndefined = bm->CreateNode(UNDEFINED);
-  }
-
-  virtual ~ToSATBase() {}
-
-  // Print the STP solver output. Static because it needs no instance state:
-  // everything it touches is either the result passed in, the manager, or
-  // the thread-local input_status.
-  static void PrintOutput(STPMgr* bm, SOLVER_RETURN_TYPE ret);
-
-  // Bitblasts, CNF conversion and calls toSATandSolve()
-  virtual bool CallSAT(SATSolver& SatSolver, const ASTNode& input,
-                       bool doesAbsRef) = 0;
-
-  virtual ASTNodeToSATVar& SATVar_to_SymbolIndexMap() = 0;
-
-  virtual void ClearAllTables(void) = 0;
+  NONE = 0, // leave the solver at its own defaults
+  SAT,      // tune for finding a model
+  UNSAT     // tune for proving that there isn't one
 };
+
+inline const char* searchBiasName(SearchBias bias)
+{
+  switch (bias)
+  {
+    case SearchBias::SAT:
+      return "sat";
+    case SearchBias::UNSAT:
+      return "unsat";
+    default:
+      return "none";
+  }
+}
 }
 
 #endif
