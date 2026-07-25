@@ -1,11 +1,11 @@
 # This Dockerfile builds a statically-compiled instance of STP with MiniSat and
 # CryptoMiniSat that evaluates SMTLIB2 inputs provided on standard input:
 #
-#     docker build --tag stp/stp .
+#     docker build --tag stp/stp --file Docker.ubuntu22 .
 #     cat example.smt2 | docker run --rm -i stp/stp
 
 
-FROM ubuntu:24.04 AS builder
+FROM ubuntu:22.04 AS builder
 
 # Install dependencies
 RUN apt-get update \
@@ -19,7 +19,7 @@ RUN apt-get update \
         libboost-program-options-dev \
         libgmp-dev \
         libm4ri-dev \
-        libncurses-dev \
+        libtinfo-dev \
         make \
         wget \
         zlib1g-dev \
