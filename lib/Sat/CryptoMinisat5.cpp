@@ -143,6 +143,37 @@ uint32_t CryptoMiniSat5::newVar()
   return s->nVars() - 1;
 }
 
+bool CryptoMiniSat5::setSearchBias(SearchBias bias)
+{
+  // CryptoMiniSat has no named configurations, so what it offers has to be
+  // picked out by hand. Turning off SLS is the piece that carries over: it is
+  // the local-search phase, it looks for models, and it is wasted work when
+  // there isn't one. On the QF_BV/20230221-oisc-gurtner family it came out
+  // ahead on all 18 interleaved A/B pairs measured, by 12% of wall clock at
+  // the median.
+  //
+  // Its other half-analogue was measured and rejected. CryptoMiniSat rotates
+  // its polarity strategy over {best, stable, best_inv, saved} as the search
+  // restarts, which looks like the stabilising mode that other solvers turn
+  // off for unsatisfiable instances -- but pinning the rotation to plain
+  // phase saving was *slower* on 8 of 9 of the same pairs, by 10-49%, so the
+  // rotation is evidently earning its keep here whatever the answer turns out
+  // to be. Its restart strategy is not reachable through the public API, so
+  // the stabilising side of the bias is simply left alone.
+  //
+  // Nothing is done for SAT: the defaults are already the satisfiable-leaning
+  // end of what is on offer, so say so rather than pretend to have applied
+  // something.
+  if (bias == SearchBias::NONE)
+    return true;
+
+  if (bias == SearchBias::SAT)
+    return false;
+
+  s->set_sls(0);
+  return true;
+}
+
 void CryptoMiniSat5::setVerbosity(int v)
 {
   s->set_verbosity(v);

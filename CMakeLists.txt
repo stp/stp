@@ -295,7 +295,7 @@ else()
     if (MSVC)
         # Windows compatibility includes
         set(STP_DEFS_COMM ${STP_DEFS_COMM} -D_CRT_SECURE_NO_WARNINGS)
-        set(STP_INCL_COMM windows/winports windows/winports/msc99hdr ${STP_INCL_COMM})
+        set(STP_INCL_COMM windows/winports ${STP_INCL_COMM})
         include_directories(${STP_INCL_COMM})
         add_subdirectory(windows)
         set(PLATFORM_COMPAT_LIBRARIES ${PLATFORM_COMPAT_LIBRARIES} windows_compat)

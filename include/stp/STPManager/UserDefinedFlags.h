@@ -24,6 +24,8 @@ THE SOFTWARE.
 #ifndef UDEFFLAGS_H
 #define UDEFFLAGS_H
 
+#include "stp/Sat/SearchBias.h"
+
 namespace stp
 {
 
@@ -73,9 +75,6 @@ public:
   
 
   bool simplify_to_constants_only = false;
-
-  // given a/b = c, propagates that c<=a even if b may be zero.
-  bool cBitP_propagateForDivisionByZero = true;
 
   bool array_difficulty_reversion = true;
   bool difficulty_reversion = true;
@@ -187,6 +186,10 @@ public:
   };
 
   enum SATSolvers solver_to_use;
+
+  // Which answer to tune the SAT search towards. NONE, the default, leaves
+  // every backend at its own settings, so the option is opt-in.
+  SearchBias search_bias = SearchBias::NONE;
 
   bool get_print_output_at_all() const
   {
