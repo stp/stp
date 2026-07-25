@@ -18,7 +18,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
+# 3.12 is the floor for FindPython3, which is used to locate the interpreter.
+cmake_minimum_required(VERSION 3.12 FATAL_ERROR)
 
 if(POLICY CMP0048)
     #policy for VERSION in cmake 3.0
@@ -815,11 +816,22 @@ set(STP_EXPORT_NAME "STPTargets")
 
 option(ENABLE_TESTING "Enable testing" OFF)
 
+# FindPython3 replaces the deprecated FindPythonInterp, which was happy to
+# select a python2 interpreter and leave the build to fail later on: both the
+# bindings and the test suite need python3. PYTHON_EXECUTABLE is the historical
+# way to point STP at an interpreter, so keep honouring it as a hint, and keep
+# setting it afterwards because the bindings, the test suites and lit all read
+# it.
+if(PYTHON_EXECUTABLE AND NOT Python3_EXECUTABLE)
+    set(Python3_EXECUTABLE "${PYTHON_EXECUTABLE}")
+endif()
+find_package(Python3 COMPONENTS Interpreter)
+set(PYTHON_EXECUTABLE "${Python3_EXECUTABLE}")
+
 # try finding python if the user did not explicitly said that
 # he/she does not want python bindings
 if((NOT DEFINED ENABLE_PYTHON_INTERFACE) OR ENABLE_PYTHON_INTERFACE)
-    find_package (PythonInterp)
-    if(PYTHON_EXECUTABLE AND BUILD_SHARED_LIBS)
+    if(Python3_Interpreter_FOUND AND BUILD_SHARED_LIBS)
         set(ENABLE_PYTHON_INTERFACE ON)
     else()
         set(ENABLE_PYTHON_INTERFACE OFF)
