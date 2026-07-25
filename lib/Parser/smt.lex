@@ -216,9 +216,6 @@ bit{DIGIT}+     {
 "rotate_left"   { return BVROTATE_LEFT_TOK;}
 "rotate_right"   { return BVROTATE_RIGHT_TOK;} 
 
-"boolextract"   { return BOOLEXTRACT_TOK;}
-"boolbv"        { return BOOL_TO_BV_TOK;}
-
 (({LETTER})|(_)({ANYTHING}))({ANYTHING})*	{
   string str(smttext);
    bool found = false;
