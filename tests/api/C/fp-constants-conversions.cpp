@@ -143,3 +143,70 @@ TEST(fp_conversions, reformat_double_to_half)
   EXPECT_EQ((unsigned long long)0x4200, solveRead(vc, h));
   vc_Destroy(vc);
 }
+
+// Every rounding mode end-to-end, distinguished pairwise: fp.to_sbv of 2.5,
+// -2.5 and 1.5 gives each mode a unique signature --
+//   RNE (2, -2, 2), RNA (3, -3, 2), RTP (3, -2, 2),
+//   RTN (2, -3, 1), RTZ (2, -2, 1).
+// A wrong encoding in vc_fpRoundingMode (or a mode falling through symfpu's
+// dispatch) breaks at least one probe.
+TEST(fp_conversions, every_rounding_mode)
+{
+  const struct
+  {
+    enum VCRoundingMode mode;
+    unsigned long long pos, neg, tie;
+  } probes[] = {
+      {VC_RM_RNE, 2, 0xFE, 2}, {VC_RM_RNA, 3, 0xFD, 2},
+      {VC_RM_RTP, 3, 0xFE, 2}, {VC_RM_RTN, 2, 0xFD, 1},
+      {VC_RM_RTZ, 2, 0xFE, 1},
+  };
+
+  for (const auto& p : probes)
+  {
+    VC vc = vc_createValidityChecker();
+    Expr rm = vc_fpRoundingMode(vc, p.mode);
+    Expr posHalf = vc_fpConstFromBits(vc, 5, 11,
+                                      vc_bvConstExprFromLL(vc, 16, 0x4100));
+    Expr negHalf = vc_fpConstFromBits(vc, 5, 11,
+                                      vc_bvConstExprFromLL(vc, 16, 0xC100));
+    Expr tieHalf = vc_fpConstFromBits(vc, 5, 11,
+                                      vc_bvConstExprFromLL(vc, 16, 0x3E00));
+
+    Expr a = vc_varExpr(vc, "a", vc_bvType(vc, 8));
+    Expr b = vc_varExpr(vc, "b", vc_bvType(vc, 8));
+    Expr c = vc_varExpr(vc, "c", vc_bvType(vc, 8));
+    vc_assertFormula(vc, vc_eqExpr(vc, a, vc_fpToSBVExpr(vc, 8, rm, posHalf)));
+    vc_assertFormula(vc, vc_eqExpr(vc, b, vc_fpToSBVExpr(vc, 8, rm, negHalf)));
+    vc_assertFormula(vc, vc_eqExpr(vc, c, vc_fpToSBVExpr(vc, 8, rm, tieHalf)));
+
+    EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+    EXPECT_EQ(p.pos, getBVUnsignedLongLong(vc_getCounterExample(vc, a)));
+    EXPECT_EQ(p.neg, getBVUnsignedLongLong(vc_getCounterExample(vc, b)));
+    EXPECT_EQ(p.tie, getBVUnsignedLongLong(vc_getCounterExample(vc, c)));
+    vc_Destroy(vc);
+  }
+}
+
+// SMT '=' vs fp.eq: +0 = -0 is false as bits but true as IEEE equality, and
+// NaN equals itself as bits but not as IEEE equality.
+TEST(fp_constants, eq_vs_smt_eq_semantics)
+{
+  {
+    VC vc = vc_createValidityChecker();
+    Type half = vc_fpType(vc, 5, 11);
+    // fp.eq(+0, -0) holds.
+    vc_assertFormula(
+        vc, vc_fpEqExpr(vc, vc_fpPlusZero(vc, half), vc_fpMinusZero(vc, half)));
+    // As raw values they differ.
+    vc_assertFormula(
+        vc, vc_notExpr(vc, vc_eqExpr(vc, vc_fpPlusZero(vc, half),
+                                     vc_fpMinusZero(vc, half))));
+    // fp.eq(NaN, NaN) does not hold.
+    vc_assertFormula(
+        vc, vc_notExpr(vc, vc_fpEqExpr(vc, vc_fpNaN(vc, half),
+                                       vc_fpNaN(vc, half))));
+    EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc))); // all consistent
+    vc_Destroy(vc);
+  }
+}

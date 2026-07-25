@@ -925,6 +925,7 @@ Expr vc_fpEqExpr(VC vc, Expr a, Expr b)
   stp::ASTNode* r = (stp::ASTNode*)b;
 
   stp::ASTNode output = bm->CreateNode(stp::FP_EQ, *l, *r);
+  assert(BVTypeCheck(output));
   return persistNode(vc, output);
 }
 
@@ -935,9 +936,16 @@ static Expr fpTermResult(VC vc, stp::Kind k, const stp::ASTNode& fmt,
                          const stp::ASTVec& children)
 {
   stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  if (fmt.GetType() != stp::FLOATINGPOINT_TYPE)
+  {
+    stp::FatalError("CInterface: floating-point operation applied to a "
+                    "non-float operand: ",
+                    fmt);
+  }
   stp::ASTNode r = b->CreateTerm(k, fmt.GetValueWidth(), children);
   r.SetExpWidth(fmt.GetExpWidth());
   r.SetSigWidth(fmt.GetSigWidth());
+  assert(BVTypeCheck(r));
   return persistNode(vc, r);
 }
 
@@ -945,13 +953,32 @@ static Expr fpTermResult(VC vc, stp::Kind k, const stp::ASTNode& fmt,
 static Expr fpPredResult(VC vc, stp::Kind k, const stp::ASTVec& children)
 {
   stp::STPMgr* b = ((stp::STP*)vc)->bm;
-  return persistNode(vc, b->CreateNode(k, children));
+  stp::ASTNode r = b->CreateNode(k, children);
+  assert(BVTypeCheck(r));
+  return persistNode(vc, r);
 }
 
 Expr vc_fpRoundingMode(VC vc, enum VCRoundingMode mode)
 {
   stp::STPMgr* b = ((stp::STP*)vc)->bm;
-  // A rounding mode is a 5-bit bitvector constant holding the mode value.
+
+  // The enum's values are one-hot (they mirror the internal encoding), so a
+  // plausible-looking OR of two modes is not a mode; anything but the five
+  // exact values would silently fall through symfpu's mode dispatch.
+  switch (mode)
+  {
+    case VC_RM_RNE:
+    case VC_RM_RTP:
+    case VC_RM_RTN:
+    case VC_RM_RTZ:
+    case VC_RM_RNA:
+      break;
+    default:
+      stp::FatalError("CInterface: vc_fpRoundingMode: not one of the five "
+                      "rounding modes");
+  }
+
+  // A rounding mode is a 5-bit one-hot bitvector constant.
   return persistNode(vc, b->CreateBVConst(5, (unsigned long long)mode));
 }
 
@@ -1098,10 +1125,28 @@ Expr vc_fpIsPositiveExpr(VC vc, Expr f)
   return fpPredResult(vc, stp::FP_ISPOSITIVE, {*(stp::ASTNode*)f});
 }
 
+// Some entry points take the format as raw ints rather than a type node;
+// apply vc_fpType's floor so they cannot produce degenerate widths.
+static void checkFpWidths(int eb, int sb)
+{
+  if (eb < 2 || sb < 2)
+  {
+    stp::FatalError("CInterface: a floating-point format needs at least 2 "
+                    "exponent and 2 significand bits");
+  }
+}
+
 // Extract (eb, sb) from a floating-point type node (see vc_fpType).
 static void fpTypeWidths(Type fpType, unsigned& eb, unsigned& sb)
 {
   stp::ASTNode* t = (stp::ASTNode*)fpType;
+  if (t->GetKind() != stp::FLOATINGPOINT)
+  {
+    // Reading children of, say, a bitvector type would index out of bounds.
+    stp::FatalError("CInterface: expected a floating-point type "
+                    "(from vc_fpType): ",
+                    *t);
+  }
   eb = (*t)[0].GetUnsignedConst();
   sb = (*t)[1].GetUnsignedConst();
 }
@@ -1141,6 +1186,7 @@ static Expr fpToFP(VC vc, int eb, int sb, const stp::ASTNode* rm,
                    const stp::ASTNode& src)
 {
   stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  checkFpWidths(eb, sb);
   stp::ASTVec kids;
   kids.push_back(b->CreateBVConst(32, eb));
   kids.push_back(b->CreateBVConst(32, sb));
@@ -1171,6 +1217,7 @@ Expr vc_fpToFPFromSignedBV(VC vc, int eb, int sb, Expr rm, Expr bv)
 Expr vc_fpToFPFromUnsignedBV(VC vc, int eb, int sb, Expr rm, Expr bv)
 {
   stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  checkFpWidths(eb, sb);
   stp::ASTVec kids;
   kids.push_back(b->CreateBVConst(32, eb));
   kids.push_back(b->CreateBVConst(32, sb));
@@ -1188,6 +1235,17 @@ static Expr fpToBV(VC vc, stp::Kind k, int width, const stp::ASTNode& rm,
                    const stp::ASTNode& f)
 {
   stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  if (width < 1)
+  {
+    stp::FatalError("CInterface: fp.to_ubv/fp.to_sbv need a positive "
+                    "target width");
+  }
+  if (f.GetType() != stp::FLOATINGPOINT_TYPE)
+  {
+    stp::FatalError("CInterface: fp.to_ubv/fp.to_sbv applied to a "
+                    "non-float: ",
+                    f);
+  }
   stp::ASTVec kids;
   kids.push_back(b->CreateBVConst(32, width));
   kids.push_back(rm);
@@ -1211,6 +1269,10 @@ Expr vc_fpToIEEEBV(VC vc, Expr f)
 {
   stp::STPMgr* b = ((stp::STP*)vc)->bm;
   stp::ASTNode* x = (stp::ASTNode*)f;
+  if (x->GetType() != stp::FLOATINGPOINT_TYPE)
+  {
+    stp::FatalError("CInterface: vc_fpToIEEEBV applied to a non-float: ", *x);
+  }
   const unsigned width = x->GetExpWidth() + x->GetSigWidth();
   // The result is a bitvector (the packed bits), so it carries no fp format.
   return persistNode(vc, b->CreateTerm(stp::FP_TO_IEEE_BV, width, *x));

@@ -652,6 +652,9 @@ DLL_PUBLIC Expr vc_fpEqExpr(VC vc, Expr a, Expr b);
 //!
 enum VCRoundingMode
 {
+  //! The values are one-hot because they mirror STP's internal rounding-mode
+  //! encoding. They are five DISTINCT modes, not flags: combining them with
+  //! bitwise-or does not name a mode, and vc_fpRoundingMode rejects it.
   VC_RM_RNE = 1,  //!< round nearest, ties to even  (roundNearestTiesToEven)
   VC_RM_RTP = 2,  //!< round toward positive        (roundTowardPositive)
   VC_RM_RTN = 4,  //!< round toward negative        (roundTowardNegative)
@@ -1221,6 +1224,11 @@ DLL_PUBLIC int vc_getHashQueryStateToBuffer(VC vc, Expr query);
 DLL_PUBLIC void vc_Destroy(VC vc);
 
 //! \brief Destroy the given expression, freeing its associated memory.
+//!
+//! Only for expressions the caller owns. Do NOT pass expressions returned by
+//! the vc_fp* constructors (or the type/true/false constructors): those are
+//! owned by the checker and freed by vc_Destroy -- deleting one here frees
+//! it twice.
 //!
 DLL_PUBLIC void vc_DeleteExpr(Expr e);
 
