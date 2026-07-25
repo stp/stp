@@ -128,8 +128,47 @@ endif()
 set(READLINE_FOUND FALSE CACHE BOOL "Disable readline for ABC" FORCE)
 set(ABC_SKIP_TESTS ON CACHE BOOL "Skip ABC tests" FORCE)
 
-# Add ABC as a subdirectory
-add_subdirectory(extlib-abc)
+# ABC has no CMake cache variables for the options below: its CMakeLists runs
+# ABC's own Makefile to extract the source list and flags, forwarding only the
+# readline and namespace settings. The Makefile gates these on ifndef, and make
+# honours the environment for that, which the inherited environment of ABC's
+# execute_process() reaches. So set them here rather than patching the submodule.
+#
+# CUDD: pulls in nine BDD modules (src/bdd/{cudd,extrab,dsd,epd,mtr,reo,cas,bbr,
+# llb}), 123 files and ~110k lines that STP never uses -- we only touch AIG
+# construction, Dar rewriting and CNF derivation. Safe for our include set:
+# ABC_USE_CUDD guards only Abc_Frame_t's DdManager field in base/main/mainInt.h
+# and three Kit_*ToBdd declarations in bool/kit/kit.h, and neither header is
+# reachable from aig/aig/aig.h, opt/dar/dar.h or sat/cnf/cnf.h.
+set(ENV{ABC_USE_NO_CUDD} 1)
+# pthreads: every ABC file we compile that calls pthread_* guards on
+# ABC_USE_PTHREADS (src/starter.c does not, but is in no module.make and is
+# never built). Dropping it also keeps the macro consistent between ABC's own
+# translation units and STP's, which include ABC headers without ABC's flags --
+# see the note on $<TARGET_FILE:libabc-pic> below.
+set(ENV{ABC_USE_NO_PTHREADS} 1)
+
+# EXCLUDE_FROM_ALL: ABC marks libabc and libabc-pic EXCLUDE_FROM_ALL but not its
+# abc executable, which links libabc (non-PIC) and so compiles all of ABC a
+# second time. STP only ever links libabc-pic, pulled in by the dependency
+# below; the executable is dead weight worth ~50% of ABC's build cost.
+#
+# BUILD_SHARED_LIBS: ABC's add_library() calls name neither STATIC nor SHARED,
+# so they follow BUILD_SHARED_LIBS, which defaults to ON. That made libabc-pic a
+# 17MB shared library which libstp.so recorded as a NEEDED entry even though ABC
+# has no install() rules, so an installed libstp.so named a library that was
+# never installed; only the build-tree RUNPATH kept it working. Building it as an
+# archive links the ABC code into libstp.so instead, which is self-contained and
+# installable. libabc-pic is already POSITION_INDEPENDENT_CODE, which is what
+# linking it into a shared library needs. Note the archive does not shrink the
+# result much: ABC is interconnected enough that our ~30 entry points transitively
+# pull in most of it either way -- what changes is that the symbols stop being
+# public, see --exclude-libs at the bottom of this file.
+# The normal variable shadows the cache entry for this scope only; unset()
+# restores the cached value for the rest of lib/.
+set(BUILD_SHARED_LIBS OFF)
+add_subdirectory(extlib-abc EXCLUDE_FROM_ALL)
+unset(BUILD_SHARED_LIBS)
 
 # ABC is a vendored, upstream submodule (berkeley-abc/abc) whose warnings we
 # don't control, so keep WERROR from turning them into build failures. The
@@ -143,9 +182,25 @@ if (WERROR AND NOT MSVC)
     endforeach()
 endif()
 
+# Give each ABC function and data object its own section so the --gc-sections
+# below can drop the ones we never call. Applied to ABC only: the dead weight is
+# all on this side, and confining it keeps STP's own codegen unchanged.
+if (NOT MSVC)
+    foreach(_abc_target libabc libabc-pic)
+        if (TARGET ${_abc_target})
+            target_compile_options(${_abc_target} PRIVATE
+                -ffunction-sections -fdata-sections)
+        endif()
+    endforeach()
+endif()
+
 # Link to the ABC library target
 add_dependencies(stp libabc-pic)
-# Use the full path to the library instead of the target name for export compatibility
+# Use the full path to the library instead of the target name for export
+# compatibility. Note this bypasses ABC's PUBLIC usage requirements, so the
+# flags ABC sets for its own translation units do not reach STP's: any ABC
+# option that changes a declaration in aig.h, dar.h or cnf.h would have to be
+# defined for STP's sources too.
 set(stp_link_libs ${MINISAT_LIBRARIES} $<TARGET_FILE:libabc-pic>)
 
 if (USE_CRYPTOMINISAT)
@@ -169,6 +224,26 @@ endif()
 target_link_libraries(stp
     LINK_PUBLIC ${stp_link_libs}
 )
+
+# ABC is interconnected enough that satisfying our ~30 entry points transitively
+# drags in most of the archive, including its vendored zlib and bzlib (gzopen,
+# inflate, deflate, crc32, BZ2_*). Left with default visibility those would be
+# exported from libstp.so, where they can serve requests that belong to the real
+# libz used by minisat and CryptoMiniSat. --exclude-libs makes symbols taken from
+# static archives local to the output, so libstp.so exports only STP's own API
+# and the ABC code it uses stays private. GNU ld and lld only; on Apple and
+# Windows this is skipped, and for a static libstp there is no link step to
+# apply it to.
+#
+# --gc-sections then discards the ABC sections nothing reaches. Linking ABC as an
+# archive puts its code inside libstp.so, and the transitive pull-in is most of
+# ABC, so without this the library grows from ~2MB to ~18MB; with it, ~3.4MB.
+# Hiding the symbols first is what makes the collection effective -- an exported
+# symbol is a GC root.
+if (BUILD_SHARED_LIBS AND NOT APPLE AND NOT WIN32 AND NOT MSVC)
+    set_property(TARGET stp APPEND_STRING PROPERTY
+        LINK_FLAGS " -Wl,--exclude-libs,ALL -Wl,--gc-sections")
+endif()
 
 install(TARGETS stp
     EXPORT ${STP_EXPORT_NAME}

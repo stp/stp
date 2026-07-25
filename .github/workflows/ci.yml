@@ -1,4 +1,7 @@
-on: [push, pull_request]
+# workflow_dispatch adds a "Run workflow" button on the Actions tab, so a run
+# can be started by hand against any branch — useful for re-running against a
+# branch whose last push predates a fix elsewhere.
+on: [push, pull_request, workflow_dispatch]
 name: CI
 
 # A newer commit makes the runs still going for the previous one pointless.
