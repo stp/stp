@@ -45,7 +45,6 @@ project(STP)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_CXX_STANDARD 17)
 
-include(GenerateExportHeader)
 include(GNUInstallDirs)
 include(FeatureSummary)
 
@@ -118,8 +117,6 @@ add_feature_info(Assertions ENABLE_ASSERTIONS "Enables assertions")
 macro(add_cxx_flag flagname)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flagname}")
 endmacro()
-
-include(MacroPushRequiredVars)
 
 option(SANITIZE "Use Clang sanitizers" OFF)
 if (SANITIZE)
@@ -287,10 +284,6 @@ else()
     # set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /INCREMENTAL:NO")
     # set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /PDBCOMPRESS")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /STACK:1572864")
-
-    #what does this do?
-    set(DEF_INSTALL_CMAKE_DIR CMake)
-
 
     if (MSVC)
         # Windows compatibility includes
