@@ -24,6 +24,8 @@ THE SOFTWARE.
 #ifndef UDEFFLAGS_H
 #define UDEFFLAGS_H
 
+#include "stp/Sat/SearchBias.h"
+
 namespace stp
 {
 
@@ -187,6 +189,10 @@ public:
   };
 
   enum SATSolvers solver_to_use;
+
+  // Which answer to tune the SAT search towards. NONE, the default, leaves
+  // every backend at its own settings, so the option is opt-in.
+  SearchBias search_bias = SearchBias::NONE;
 
   bool get_print_output_at_all() const
   {

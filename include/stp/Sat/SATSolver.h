@@ -25,6 +25,7 @@ THE SOFTWARE.
 #ifndef SATSOLVER_H_
 #define SATSOLVER_H_
 
+#include "SearchBias.h"
 #include "minisat/core/SolverTypes.h"
 #include "minisat/mtl/Vec.h"
 #include <cassert>
@@ -85,6 +86,15 @@ public:
     p.x = var + var + (int)sign;
     return p;
   }
+
+  // Ask the backend to tune its search towards satisfiable or unsatisfiable
+  // instances. Only ever called before the first clause is added, because a
+  // backend may only accept configuration while it is still empty.
+  //
+  // FALSE means this backend has nothing corresponding to the requested bias.
+  // That isn't an error: the bias is a hint about the workload, and a backend
+  // that ignores it is slower rather than wrong.
+  virtual bool setSearchBias(SearchBias /*bias*/) { return false; }
 
   // ---------------------------------------------------------------------
   // Resource budgets.
