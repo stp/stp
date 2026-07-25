@@ -45,6 +45,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/ValueSet.h"
 #include "stp/Simplifier/ValueSetAnalysis.h"
 #include <algorithm>
+#include <functional>
 #include <gtest/gtest.h>
 #include <string>
 #include <vector>
@@ -254,20 +255,30 @@ std::vector<unsigned> masksFor(const Child& c, unsigned maxSetSize)
   std::vector<unsigned> masks;
   if (c.isConstant)
   {
-    masks.push_back(1u << c.value);
+    masks.push_back(0); // unused: a constant child is always its own value
     return masks;
   }
 
   const unsigned values = 1u << c.width;
-  for (unsigned mask = 1; mask < (1u << values); mask++)
-  {
-    unsigned size = 0;
-    for (unsigned v = 0; v < values; v++)
-      size += (mask >> v) & 1;
-    if (size <= maxSetSize)
-      masks.push_back(mask);
-  }
-  masks.push_back((1u << values) - 1); // unknown: every value, no set
+  const unsigned wanted = std::min(maxSetSize, values);
+
+  // Built up a value at a time. Walking every mask instead would need
+  // 2^32 of them once a child has 32 values.
+  std::function<void(unsigned, unsigned, unsigned)> add =
+      [&](unsigned from, unsigned size, unsigned mask) {
+        if (size == 0)
+        {
+          masks.push_back(mask);
+          return;
+        }
+        for (unsigned v = from; v < values; v++)
+          add(v + 1, size - 1, mask | (1u << v));
+      };
+  for (unsigned size = 1; size <= wanted; size++)
+    add(0, size, 0);
+
+  // Unknown: every value, and no set at all to say so.
+  masks.push_back(values >= 32 ? ~0u : ((1u << values) - 1));
   return masks;
 }
 
