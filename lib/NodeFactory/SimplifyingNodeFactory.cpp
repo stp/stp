@@ -270,21 +270,9 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
   // These are created specially.
   //
 
-  /* we need to bypass the constant evaluation if we're creating an FP term */
-  bool is_fp_operation =
-      kind == stp::FP_ABS || kind == stp::FP_NEG || kind == stp::FP_ADD ||
-      kind == stp::FP_SUB || kind == stp::FP_MUL || kind == stp::FP_DIV ||
-      kind == stp::FP_FMA || kind == stp::FP_SQRT || kind == stp::FP_REM ||
-      kind == stp::FP_ROUNDTOINTEGRAL || kind == stp::FP_MIN ||
-      kind == stp::FP_MAX || kind == stp::FP_TOFP ||
-      kind == stp::FP_TOFP_UNSIGNED || kind == stp::FP_TO_UBV ||
-      kind == stp::FP_TO_SBV || kind == stp::FP_TO_IEEE_BV ||
-      kind == stp::FP_LEQ || kind == stp::FP_LT ||
-      kind == stp::FP_GEQ || kind == stp::FP_GT || kind == stp::FP_EQ ||
-      kind == stp::FP_ISNORMAL || kind == stp::FP_ISSUBNORMAL ||
-      kind == stp::FP_ISZERO || kind == stp::FP_ISINFINITE ||
-      kind == stp::FP_ISNAN || kind == stp::FP_ISNEGATIVE ||
-      kind == stp::FP_ISPOSITIVE || kind == stp::FP_SMT_EQ;
+  /* we need to bypass the constant evaluation if we're creating an FP term
+   * (a table lookup: the FP category comes from ASTKind.kinds) */
+  const bool is_fp_operation = is_FP_kind(kind);
 
   // If all the parameters are constant, return the constant value.
   // The bitblaster calls CreateNode with a boolean vector. We don't try to
@@ -1735,21 +1723,9 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
   assert(bm.hashingNodeFactory == &hashing);
 
-  /* we need to bypass the constant evaluation if we're creating an FP term */
-  bool is_fp_operation =
-      kind == stp::FP_ABS || kind == stp::FP_NEG || kind == stp::FP_ADD ||
-      kind == stp::FP_SUB || kind == stp::FP_MUL || kind == stp::FP_DIV ||
-      kind == stp::FP_FMA || kind == stp::FP_SQRT || kind == stp::FP_REM ||
-      kind == stp::FP_ROUNDTOINTEGRAL || kind == stp::FP_MIN ||
-      kind == stp::FP_MAX || kind == stp::FP_TOFP ||
-      kind == stp::FP_TOFP_UNSIGNED || kind == stp::FP_TO_UBV ||
-      kind == stp::FP_TO_SBV || kind == stp::FP_TO_IEEE_BV ||
-      kind == stp::FP_LEQ || kind == stp::FP_LT ||
-      kind == stp::FP_GEQ || kind == stp::FP_GT || kind == stp::FP_EQ ||
-      kind == stp::FP_ISNORMAL || kind == stp::FP_ISSUBNORMAL ||
-      kind == stp::FP_ISZERO || kind == stp::FP_ISINFINITE ||
-      kind == stp::FP_ISNAN || kind == stp::FP_ISNEGATIVE ||
-      kind == stp::FP_ISPOSITIVE || kind == stp::FP_SMT_EQ;
+  /* we need to bypass the constant evaluation if we're creating an FP term
+   * (a table lookup: the FP category comes from ASTKind.kinds) */
+  const bool is_fp_operation = is_FP_kind(kind);
 
   // If all the parameters are constant, return the constant value.
   if (children_all_constants(children) && !is_fp_operation)
