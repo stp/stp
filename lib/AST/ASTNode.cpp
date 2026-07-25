@@ -120,11 +120,14 @@ void ASTNode::SetIndexWidth(unsigned int _iw) const
 
 unsigned int ASTNode::GetValueWidth() const
 {
-  // TODO: FIXME: this is *horrible*
-  if (_int_node_ptr->getSigWidth() > 0)
-  {
-    return _int_node_ptr->getSigWidth() + _int_node_ptr->getExpWidth();
-  }
+  // Invariant: a float-formatted node stores its packed width as the value
+  // width like any other term (the declaration rules and node builders all
+  // maintain this). The format is never the width's only source -- this
+  // accessor used to derive sig + exp on every call, solver-wide, to paper
+  // over declaration sites that left the value width zero.
+  assert(_int_node_ptr->getSigWidth() == 0 ||
+         _int_node_ptr->getValueWidth() ==
+             _int_node_ptr->getExpWidth() + _int_node_ptr->getSigWidth());
   return _int_node_ptr->getValueWidth();
 }
 
@@ -167,6 +170,20 @@ static bool deriveFPFormat(const ASTNode& n, unsigned int& e, unsigned int& s)
     // A read from an array of floats yields a float in the element's format,
     // which the array node carries.
     case READ:
+    {
+      if (n.Degree() < 1)
+        return false;
+
+      e = n[0].GetExpWidth();
+      s = n[0].GetSigWidth();
+      return e != 0 && s != 0;
+    }
+
+    // A store to an array of floats is itself an array of floats: carry the
+    // element format from the array child, so a read over a store chain can
+    // derive its format (the recursion bottoms out at the array symbol,
+    // whose declaration set it).
+    case WRITE:
     {
       if (n.Degree() < 1)
         return false;
@@ -230,20 +247,34 @@ static bool deriveFPFormat(const ASTNode& n, unsigned int& e, unsigned int& s)
   }
 }
 
-// Derive once and keep the answer. The fields are already mutable, and an
-// interior node can hold them, so this costs one walk per node rather than
-// one per query.
+// Sentinel cached in _exp_width once derivation has concluded "not a
+// float". Without it every format query on a formatless node re-walks its
+// children -- quadratic on store chains and ITE spines, since WRITE and ITE
+// derive through their children. A later SetExpWidth (from a declaration or
+// the blaster stamping its output) simply overwrites it.
+static const uint32_t FP_NOT_A_FLOAT = 0xFFFFFFFFu;
+
+// Derive once and keep the answer -- positive or negative. The fields are
+// already mutable, and an interior node can hold them, so this costs one
+// walk per node rather than one per query.
 void ASTNode::cacheFPFormat() const
 {
   unsigned int e = 0;
   unsigned int s = 0;
 
-  if (!deriveFPFormat(*this, e, s))
-    return;
+  const bool is_float = deriveFPFormat(*this, e, s);
 
-  // A BVCONST has nowhere to put it; those are made as ASTFPConst instead.
+  // A BVCONST has nowhere to put either answer (its setters reject it);
+  // float constants are made as ASTFPConst instead, and re-deriving on a
+  // childless node is cheap.
   if (GetKind() == BVCONST)
     return;
+
+  if (!is_float)
+  {
+    _int_node_ptr->setExpWidth(FP_NOT_A_FLOAT);
+    return;
+  }
 
   _int_node_ptr->setExpWidth(e);
   _int_node_ptr->setSigWidth(s);
@@ -251,12 +282,15 @@ void ASTNode::cacheFPFormat() const
 
 unsigned int ASTNode::GetExpWidth() const
 {
-  const unsigned int stored = _int_node_ptr->getExpWidth();
+  unsigned int stored = _int_node_ptr->getExpWidth();
+  if (stored == FP_NOT_A_FLOAT)
+    return 0;
   if (stored != 0)
     return stored;
 
   cacheFPFormat();
-  return _int_node_ptr->getExpWidth();
+  stored = _int_node_ptr->getExpWidth();
+  return stored == FP_NOT_A_FLOAT ? 0 : stored;
 }
 
 void ASTNode::SetExpWidth(unsigned int _ew) const
@@ -266,6 +300,9 @@ void ASTNode::SetExpWidth(unsigned int _ew) const
 
 unsigned int ASTNode::GetSigWidth() const
 {
+  if (_int_node_ptr->getExpWidth() == FP_NOT_A_FLOAT)
+    return 0;
+
   const unsigned int stored = _int_node_ptr->getSigWidth();
   if (stored != 0)
     return stored;

@@ -91,6 +91,10 @@ RemoveUnconstrained::replaceParentWithFresh(MutableASTNode& mute,
   const ASTNode& parent = mute.n;
   ASTNode v =
       bm.CreateFreshVariable(0, parent.GetValueWidth(), "unconstrained");
+  // A float-valued parent's stand-in must carry the format too, or the
+  // blaster later meets a formatless bitvector where a float belongs.
+  v.SetExpWidth(parent.GetExpWidth());
+  v.SetSigWidth(parent.GetSigWidth());
   mute.replaceWithVar(v, variables);
   return v;
 }

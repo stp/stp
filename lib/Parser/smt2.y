@@ -1143,7 +1143,7 @@ LPAREN_TOK STRING_TOK an_fp_sort RPAREN_TOK
   $$->SetExpWidth($3->exp_bits);
   $$->SetSigWidth($3->sig_bits);
   $$->SetIndexWidth(0);
-  $$->SetValueWidth(0);
+  $$->SetValueWidth($3->exp_bits + $3->sig_bits);
   delete $2;
 };
 ;
@@ -1346,11 +1346,10 @@ STRING_TOK LPAREN_TOK RPAREN_TOK an_fp_sort
   stp::GlobalParserInterface->addSymbol(s);
   //Sort_symbs has the indexwidth/valuewidth. Set those fields in
   //var
-  // FIXME
   s.SetExpWidth($4->exp_bits);
   s.SetSigWidth($4->sig_bits);
   s.SetIndexWidth(0);
-  s.SetValueWidth(0);
+  s.SetValueWidth($4->exp_bits + $4->sig_bits);
 };
 
 an_fp_sort:
@@ -1464,7 +1463,7 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   s.SetExpWidth($4->exp_bits);
   s.SetSigWidth($4->sig_bits);
   s.SetIndexWidth(0);
-  s.SetValueWidth(0);
+  s.SetValueWidth($4->exp_bits + $4->sig_bits);
   delete $1;
   delete $4;
 }
@@ -1532,7 +1531,7 @@ STRING_TOK  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
   s.SetExpWidth($2->exp_bits);
   s.SetSigWidth($2->sig_bits);
   s.SetIndexWidth(0);
-  s.SetValueWidth(0);
+  s.SetValueWidth($2->exp_bits + $2->sig_bits);
   stp::GlobalParserInterface->addSymbol(s);
   delete $1;
   delete $2;

@@ -987,7 +987,17 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
             FloatBlaster::withFormat(_bm, children[i], exp_width, sig_width));
       }
 
-      ASTNode temp(_bm->CreateNode(k, formatted));
+      // The predicates are formulas; everything else is a term of the node's
+      // own width (which for to_ubv/to_sbv is the target width, not
+      // exp + sig). CreateNode would leave a term's value width zero.
+      const bool boolean_result =
+          k == FP_LEQ || k == FP_LT || k == FP_GEQ || k == FP_GT ||
+          k == FP_EQ || k == FP_SMT_EQ || k == FP_ISNORMAL ||
+          k == FP_ISSUBNORMAL || k == FP_ISZERO || k == FP_ISINFINITE ||
+          k == FP_ISNAN || k == FP_ISNEGATIVE || k == FP_ISPOSITIVE;
+
+      ASTNode temp(boolean_result ? _bm->CreateNode(k, formatted)
+                                  : _bm->CreateTerm(k, inputwidth, formatted));
 
       // Only a floating-point *result* carries a floating-point format. The
       // classifications and comparisons return a Boolean and to_ubv/to_sbv

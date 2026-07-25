@@ -109,8 +109,8 @@ struct Ctx
   // A fresh float variable of format (eb, sb).
   ASTNode fp(unsigned eb, unsigned sb)
   {
-    ASTNode s =
-        mgr.CreateSymbol(("f" + std::to_string(counter++)).c_str(), 0, 0);
+    ASTNode s = mgr.CreateSymbol(("f" + std::to_string(counter++)).c_str(), 0,
+                                 eb + sb);
     s.SetExpWidth(eb);
     s.SetSigWidth(sb);
     return s;
