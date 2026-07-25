@@ -278,13 +278,23 @@ jobs:
     # `cmake --install --prefix` here, because the latter does not relocate the
     # headers: lib/CMakeLists.txt installs PUBLIC_HEADER to the absolute
     # CMAKE_INSTALL_FULL_INCLUDEDIR, which is fixed when the cache is written.
+    #
+    # deps/install/lib appears on both the link and the run, for the same
+    # reason the step above needs it: libstp records minisat as a DT_NEEDED
+    # rather than naming it in its link interface, and this workspace keeps
+    # minisat in a prefix no default search path covers. -rpath-link lets the
+    # linker resolve that DT_NEEDED; LD_LIBRARY_PATH lets the loader find it.
+    # A consumer whose minisat came from a distro package needs neither.
     - name: Build the example against the install tree
       run: |
         cmake --install build
         cmake -S examples/simple -B build-example \
-          -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/install" -G Ninja
+          -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/install" \
+          -DCMAKE_EXE_LINKER_FLAGS="-Wl,-rpath-link,$GITHUB_WORKSPACE/deps/install/lib" \
+          -G Ninja
         cmake --build build-example --parallel "$(nproc)"
-        LD_LIBRARY_PATH="$GITHUB_WORKSPACE/install/lib" ./build-example/stp-example
+        LD_LIBRARY_PATH="$GITHUB_WORKSPACE/install/lib:$GITHUB_WORKSPACE/deps/install/lib" \
+          ./build-example/stp-example
 
   # Until this job existed, the only static build in CI was the Windows one,
   # so a break that only shows up when everything is linked into one
