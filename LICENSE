@@ -37,5 +37,7 @@ Also includes copyrighted software from:
     * ABC -- Copyright (c) The Regents of the University of California.
     * mimalloc -- Copyright (c) 2018-2025 Microsoft Corporation, Daan Leijen
     * ankerl::unordered_dense -- Copyright (c) 2022-2024 Martin Leitner-Ankerl
+    * Mersenne Twister -- Copyright (C) 1997 - 2002 Makoto Matsumoto and
+        Takuji Nishimura, Copyright (C) 2000 - 2003 Richard J. Wagner
 
 For licenses of these SW packages, please see LICENSE_COMPONENTS
