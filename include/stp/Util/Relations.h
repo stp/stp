@@ -76,14 +76,14 @@ struct Relations
       ASTNode result = stp::NonMemberBVConstEvaluator(beev, k, c, bitWidth);
       FixedBits output = FixedBits::concreteToAbstract(result);
 
-      for (int i = 0; i < a.getWidth(); i++)
+      for (unsigned i = 0; i < a.getWidth(); i++)
       {
         if (rand.randInt() % 100 >= probabilityOfFixing)
           a.setFixed(i, false);
         if (rand.randInt() % 100 >= probabilityOfFixing)
           b.setFixed(i, false);
       }
-      for (int i = 0; i < output.getWidth(); i++)
+      for (unsigned i = 0; i < output.getWidth(); i++)
         if (rand.randInt() % 100 >= probabilityOfFixing)
           output.setFixed(i, false);
 

@@ -344,7 +344,7 @@ void exhaustive(Result (*transfer)(vector<FixedBits*>&, FixedBits&),
 
   assert(signature.maxInputWidth > 0);
   if (signature.inputType == BOOL_TYPE)
-    assert(signature.maxInputWidth = 1);
+    assert(signature.maxInputWidth == 1);
 
   for (int length = 1; length <= signature.maxInputWidth; length++)
   {
@@ -687,8 +687,13 @@ void exhaustively_check(const int bitwidth, Kind k,
 
     BBAsProp BBP(k, mgr, bitwidth);
     BBP.fill_assumps_with(*children[0], *children[1], output);
-    bool bb_conflict = !BBP.unit_prop_with_assumps();
-    const int BBFixed = BBP.fixedCount();
+    // fixed_count_unit_prop_with_assumps() replaced the old
+    // unit_prop_with_assumps()/fixedCount() pair. It returns the count
+    // directly and asserts the instance is satisfiable
+    // (CryptoMiniSat5::getFixedCountWithAssumptions), so there is no longer a
+    // conflict for this harness to observe.
+    const int BBFixed = BBP.fixed_count_unit_prop_with_assumps();
+    const bool bb_conflict = false;
 
     bool transfer_conflict = (transfer(children, output) == CONFLICT);
     const int transferFixed = children[0]->countFixed() +
