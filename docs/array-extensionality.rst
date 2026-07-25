@@ -29,6 +29,12 @@ validity checker, *before any term is created* — array equalities are
 abstracted at node-creation time, so enabling the option later is
 unsupported.
 
+Python API: create the solver with ``stp.Solver(array_equality=True)``.
+Arrays are built with ``Solver.array(name, index_width, value_width)``,
+read with ``a[i]``, written with ``a.store(i, v)``, and compared whole
+with ``==``/``!=``; ``ArrayExpr.model()`` returns an array's entries in
+a satisfying assignment, in ascending index order.
+
 With the option enabled:
 
 * ``(= a b)`` and ``(distinct a b)`` over array terms are decided, as is
