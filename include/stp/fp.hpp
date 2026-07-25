@@ -29,22 +29,32 @@ THE SOFTWARE.
 //
 //     stp::fp::Solver s;
 //     stp::fp::Float x = s.fp("x", 11, 53);      // an IEEE double variable
-//     s.add(x * x == 2.0 && ...);                // (compose with s.add per Bool)
-//     s.add((x * x).eq(4.0));
 //     s.add(x > 0.0);
+//     s.add((x * x).eq(4.0));
 //     if (s.check())
 //         double v = s.model(x);                 // 2.0
 //
 // Anything not wrapped here is one .raw() away from the C API (Float::raw()
 // gives the Expr, Solver::raw() the VC), and the two interoperate freely.
+//
+// Error behaviour: conditions these wrappers detect themselves -- mixed
+// formats, widths they cannot decode, a solver error -- throw
+// std::invalid_argument/std::runtime_error. Misuse that reaches the C layer
+// (an invalid rounding mode, a non-float operand) aborts the process via
+// STP's FatalError, as the C API documents; it does not unwind.
+//
+// Lifetime: Float and Bool are lightweight handles into their Solver's
+// checker. They are freely copyable, but must not outlive the Solver.
 
 #ifndef STP_FP_HPP
 #define STP_FP_HPP
 
 #include "stp/c_interface.h"
 
+#include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -104,11 +114,11 @@ public:
                  eb_, sb_, rm_);
   }
 
-  // Arithmetic (rounding-mode aware).
-  Float operator+(const Float& o) const { return wrap(vc_fpAddExpr(vc_, rm(), e_, o.e_)); }
-  Float operator-(const Float& o) const { return wrap(vc_fpSubExpr(vc_, rm(), e_, o.e_)); }
-  Float operator*(const Float& o) const { return wrap(vc_fpMulExpr(vc_, rm(), e_, o.e_)); }
-  Float operator/(const Float& o) const { return wrap(vc_fpDivExpr(vc_, rm(), e_, o.e_)); }
+  // Arithmetic (rounding-mode aware). Mixed formats throw: convert first.
+  Float operator+(const Float& o) const { same(o); return wrap(vc_fpAddExpr(vc_, rm(), e_, o.e_)); }
+  Float operator-(const Float& o) const { same(o); return wrap(vc_fpSubExpr(vc_, rm(), e_, o.e_)); }
+  Float operator*(const Float& o) const { same(o); return wrap(vc_fpMulExpr(vc_, rm(), e_, o.e_)); }
+  Float operator/(const Float& o) const { same(o); return wrap(vc_fpDivExpr(vc_, rm(), e_, o.e_)); }
   Float operator+(double d) const { return *this + constant(d); }
   Float operator-(double d) const { return *this - constant(d); }
   Float operator*(double d) const { return *this * constant(d); }
@@ -118,22 +128,24 @@ public:
   Float abs() const { return wrap(vc_fpAbsExpr(vc_, e_)); }
   Float sqrt() const { return wrap(vc_fpSqrtExpr(vc_, rm(), e_)); }
   Float round_to_integral() const { return wrap(vc_fpRoundToIntegralExpr(vc_, rm(), e_)); }
-  Float rem(const Float& o) const { return wrap(vc_fpRemExpr(vc_, e_, o.e_)); }
-  Float min(const Float& o) const { return wrap(vc_fpMinExpr(vc_, e_, o.e_)); }
-  Float max(const Float& o) const { return wrap(vc_fpMaxExpr(vc_, e_, o.e_)); }
+  Float rem(const Float& o) const { same(o); return wrap(vc_fpRemExpr(vc_, e_, o.e_)); }
+  Float min(const Float& o) const { same(o); return wrap(vc_fpMinExpr(vc_, e_, o.e_)); }
+  Float max(const Float& o) const { same(o); return wrap(vc_fpMaxExpr(vc_, e_, o.e_)); }
   Float fma(const Float& b, const Float& c) const
   {
+    same(b);
+    same(c);
     return wrap(vc_fpFMAExpr(vc_, rm(), e_, b.e_, c.e_));
   }
 
   // Comparisons -> Bool. IEEE ordered comparisons (any NaN operand is false);
   // == is fp.eq (so +0 == -0), != its negation.
-  Bool operator<(const Float& o) const { return Bool(vc_, vc_fpLtExpr(vc_, e_, o.e_)); }
-  Bool operator<=(const Float& o) const { return Bool(vc_, vc_fpLeqExpr(vc_, e_, o.e_)); }
-  Bool operator>(const Float& o) const { return Bool(vc_, vc_fpGtExpr(vc_, e_, o.e_)); }
-  Bool operator>=(const Float& o) const { return Bool(vc_, vc_fpGeqExpr(vc_, e_, o.e_)); }
-  Bool eq(const Float& o) const { return Bool(vc_, vc_fpEqExpr(vc_, e_, o.e_)); }
-  Bool ne(const Float& o) const { return Bool(vc_, vc_notExpr(vc_, vc_fpEqExpr(vc_, e_, o.e_))); }
+  Bool operator<(const Float& o) const { same(o); return Bool(vc_, vc_fpLtExpr(vc_, e_, o.e_)); }
+  Bool operator<=(const Float& o) const { same(o); return Bool(vc_, vc_fpLeqExpr(vc_, e_, o.e_)); }
+  Bool operator>(const Float& o) const { same(o); return Bool(vc_, vc_fpGtExpr(vc_, e_, o.e_)); }
+  Bool operator>=(const Float& o) const { same(o); return Bool(vc_, vc_fpGeqExpr(vc_, e_, o.e_)); }
+  Bool eq(const Float& o) const { same(o); return Bool(vc_, vc_fpEqExpr(vc_, e_, o.e_)); }
+  Bool ne(const Float& o) const { same(o); return Bool(vc_, vc_notExpr(vc_, vc_fpEqExpr(vc_, e_, o.e_))); }
   Bool operator==(const Float& o) const { return eq(o); }
   Bool operator!=(const Float& o) const { return ne(o); }
   Bool operator<(double d) const { return *this < constant(d); }
@@ -157,6 +169,12 @@ public:
 private:
   Float wrap(Expr e) const { return Float(vc_, e, eb_, sb_, rm_); }
   Expr rm() const { return vc_fpRoundingMode(vc_, rm_); }
+  void same(const Float& o) const
+  {
+    if (eb_ != o.eb_ || sb_ != o.sb_)
+      throw std::invalid_argument(
+          "stp::fp: mixed floating-point formats; convert one operand first");
+  }
 
   VC vc_;
   Expr e_;
@@ -167,6 +185,19 @@ private:
 // Free-function spellings, found by argument-dependent lookup: abs(x), sqrt(x).
 inline Float abs(const Float& f) { return f.abs(); }
 inline Float sqrt(const Float& f) { return f.sqrt(); }
+
+// Mixed arithmetic and comparison with the double on the left, so 2.0 + x
+// works like x + 2.0.
+inline Float operator+(double d, const Float& f) { return f.constant(d) + f; }
+inline Float operator-(double d, const Float& f) { return f.constant(d) - f; }
+inline Float operator*(double d, const Float& f) { return f.constant(d) * f; }
+inline Float operator/(double d, const Float& f) { return f.constant(d) / f; }
+inline Bool operator<(double d, const Float& f) { return f > d; }
+inline Bool operator<=(double d, const Float& f) { return f >= d; }
+inline Bool operator>(double d, const Float& f) { return f < d; }
+inline Bool operator>=(double d, const Float& f) { return f <= d; }
+inline Bool operator==(double d, const Float& f) { return f == d; }
+inline Bool operator!=(double d, const Float& f) { return f != d; }
 
 // A validity checker that owns its VC (RAII). Non-copyable.
 class Solver
@@ -182,6 +213,23 @@ public:
   }
   Solver(const Solver&) = delete;
   Solver& operator=(const Solver&) = delete;
+  Solver(Solver&& o) noexcept : vc_(o.vc_), owned_(o.owned_), rm_(o.rm_)
+  {
+    o.owned_ = false;
+  }
+  Solver& operator=(Solver&& o) noexcept
+  {
+    if (this != &o)
+    {
+      if (owned_)
+        vc_Destroy(vc_);
+      vc_ = o.vc_;
+      owned_ = o.owned_;
+      rm_ = o.rm_;
+      o.owned_ = false;
+    }
+    return *this;
+  }
 
   VC raw() const { return vc_; }
   void set_rounding_mode(VCRoundingMode rm) { rm_ = rm; }
@@ -226,14 +274,32 @@ public:
                  sb, rm_);
   }
 
-  // Solving.
+  // Solving. check() is true iff the assertions are satisfiable; a solver
+  // error or timeout throws rather than masquerading as unsatisfiable.
   void add(const Bool& b) { vc_assertFormula(vc_, b.raw()); }
-  bool check() { return vc_query(vc_, vc_falseExpr(vc_)) == 0; }
+  bool check()
+  {
+    const int r = vc_query(vc_, vc_falseExpr(vc_));
+    if (r == 0)
+      return true;
+    if (r == 1)
+      return false;
+    throw std::runtime_error(
+        "stp::fp::Solver::check: solver error or timeout (vc_query returned " +
+        std::to_string(r) + ")");
+  }
 
-  // Model values. model() returns a native double for the single and double
-  // formats; model_bits() returns the packed IEEE bits for any format.
+  // Model values. model() returns a native double for the half, single and
+  // double formats (all exactly representable as a double); model_bits()
+  // returns the packed IEEE bits for formats up to 64 bits wide -- the C API
+  // reads the value through a 64-bit integer, and a wider format would
+  // silently saturate, so it is rejected instead.
   uint64_t model_bits(const Float& f)
   {
+    if (f.exp_width() + f.sig_width() > 64)
+      throw std::runtime_error(
+          "stp::fp::Solver::model_bits: format wider than 64 bits; read the "
+          "bits through to_ieee_bits() and vc_bvExtract");
     return getBVUnsignedLongLong(vc_getCounterExample(vc_, f.raw()));
   }
   double model(const Float& f)
@@ -252,9 +318,26 @@ public:
       std::memcpy(&x, &b, sizeof(x));
       return x;
     }
+    if (f.exp_width() == 5 && f.sig_width() == 11)
+    {
+      // Unpack binary16 by hand (C++ has no portable native type for it).
+      const uint32_t b = static_cast<uint32_t>(bits);
+      const bool sign = (b >> 15) & 1;
+      const int e = (b >> 10) & 0x1F;
+      const int m = b & 0x3FF;
+      double v;
+      if (e == 0x1F)
+        v = m ? std::numeric_limits<double>::quiet_NaN()
+              : std::numeric_limits<double>::infinity();
+      else if (e == 0)
+        v = std::ldexp(static_cast<double>(m), -24); // subnormal
+      else
+        v = std::ldexp(static_cast<double>(m + 1024), e - 25);
+      return sign ? -v : v;
+    }
     throw std::runtime_error(
-        "stp::fp::Solver::model: only the single and double formats decode to a "
-        "double; use model_bits() for other formats");
+        "stp::fp::Solver::model: only the half, single and double formats "
+        "decode to a double; use model_bits() for other formats");
   }
 
 private:

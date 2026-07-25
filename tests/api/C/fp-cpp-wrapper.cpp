@@ -105,3 +105,79 @@ TEST(fp_cpp_wrapper, bits_and_conversions)
   EXPECT_EQ((unsigned)0xFE,
             getBVUnsigned(vc_getCounterExample(s2.raw(), y.to_sbv(8))) & 0xFF);
 }
+
+// The double can be on either side of an operator.
+TEST(fp_cpp_wrapper, double_on_the_left)
+{
+  stp::fp::Solver s;
+  stp::fp::Float x = s.fp("dl_x", 8, 24);
+  s.add(2.0 * x == 3.0);
+  s.add(1.0 < x);
+  ASSERT_TRUE(s.check());
+  EXPECT_EQ(1.5, s.model(x));
+}
+
+// Half-precision models decode to native doubles (exactly representable).
+TEST(fp_cpp_wrapper, half_precision_model)
+{
+  stp::fp::Solver s;
+  stp::fp::Float h = s.fp("hp_h", 5, 11);
+  s.add(h.eq(s.fp_from_bits(5, 11, 0x4100))); // 2.5
+  ASSERT_TRUE(s.check());
+  EXPECT_EQ(2.5, s.model(h));
+}
+
+// Mixed formats throw instead of building a malformed node.
+TEST(fp_cpp_wrapper, mixed_formats_throw)
+{
+  stp::fp::Solver s;
+  stp::fp::Float a = s.fp("mf_a", 8, 24);
+  stp::fp::Float b = s.fp("mf_b", 11, 53);
+  EXPECT_THROW(a + b, std::invalid_argument);
+  EXPECT_THROW(a.eq(b), std::invalid_argument);
+}
+
+// A Solver can be moved (e.g. returned from a factory); the moved-from
+// object gives up ownership and destroys nothing.
+static stp::fp::Solver makeSolver()
+{
+  stp::fp::Solver s;
+  stp::fp::Float x = s.fp("mv_x", 8, 24);
+  s.add(x.eq(2.0));
+  return s;
+}
+
+TEST(fp_cpp_wrapper, solver_is_movable)
+{
+  stp::fp::Solver s = makeSolver();
+  ASSERT_TRUE(s.check());
+}
+
+// The non-owning constructor leaves the VC alive for its real owner.
+TEST(fp_cpp_wrapper, non_owning_wrap)
+{
+  VC vc = vc_createValidityChecker();
+  {
+    stp::fp::Solver s(vc);
+    stp::fp::Float x = s.fp("no_x", 8, 24);
+    s.set_rounding_mode(VC_RM_RTZ);
+    EXPECT_EQ(VC_RM_RTZ, s.rounding_mode());
+    s.add(x.is_normal() || !x.is_normal()); // exercises Bool || and !
+    ASSERT_TRUE(s.check());
+  }
+  // Still usable after the wrapper died: it did not destroy the VC.
+  vc_assertFormula(vc, vc_trueExpr(vc));
+  EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  vc_Destroy(vc);
+}
+
+// model() on an undecodable format throws; model_bits still works to 64 bits.
+TEST(fp_cpp_wrapper, model_throws_on_odd_format)
+{
+  stp::fp::Solver s;
+  stp::fp::Float t = s.fp("of_t", 3, 5);
+  s.add(t.eq(s.fp_zero(3, 5)));
+  ASSERT_TRUE(s.check());
+  EXPECT_THROW(s.model(t), std::runtime_error);
+  EXPECT_EQ(0u, s.model_bits(t));
+}
