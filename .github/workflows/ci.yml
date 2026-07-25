@@ -284,14 +284,17 @@ jobs:
         path: |
           deps/install
           deps/minisat
+          deps/symfpu
         key: deps-x86_64-static-${{ steps.deps-key.outputs.key }}
 
     # A static STP links against libminisat.a, which minisat only produces
     # when built with STATICCOMPILE; its default build installs the shared
-    # library alone.
+    # library alone. symfpu is header-only and needed by every build.
     - name: Dependencies
       if: steps.deps-cache.outputs.cache-hit != 'true'
-      run: ./scripts/deps/setup-minisat.sh -DSTATICCOMPILE=ON
+      run: |
+        ./scripts/deps/setup-minisat.sh -DSTATICCOMPILE=ON
+        ./scripts/deps/setup-symfpu.sh
 
     - name: Compiler cache
       uses: actions/cache@v4
@@ -308,7 +311,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake -DSTATICCOMPILE:BOOL=ON -DNOCRYPTOMINISAT:BOOL=ON -DWERROR:BOOL=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        cmake -DSTATICCOMPILE:BOOL=ON -DNOCRYPTOMINISAT:BOOL=ON -DWERROR:BOOL=ON -DSYMFPU_INCLUDE_DIRS="$GITHUB_WORKSPACE/deps" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
