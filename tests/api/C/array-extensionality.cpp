@@ -514,6 +514,54 @@ TEST(array_extensionality, store_chain_over_write_base)
   vc_Destroy(vc);
 }
 
+TEST(array_extensionality, lemma_atoms_fold_at_encoding)
+{
+  // Two write chains over the same base at provably distinct indices
+  // (i and i+1), in swapped order, denied equal: unsatisfiable, and
+  // only refinement lemmas can establish it. The write indices differ
+  // by a constant offset from the same pointer, so the lemma encoder
+  // decides those index comparisons from the defining terms instead
+  // of building 32-bit equality circuits for the SAT solver to search
+  // through.
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv8 = vc_bvType(vc, 8);
+  Type bv32 = vc_bvType(vc, 32);
+  Type arrT = vc_arrayType(vc, bv32, bv8);
+
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr i = vc_varExpr(vc, "i", bv32);
+  Expr idx[4];
+  Expr val[4];
+  for (int k = 0; k < 4; k++)
+  {
+    idx[k] = vc_bvPlusExpr(vc, 32, i, vc_bvConstExprFromInt(vc, 32, k));
+    char name[8];
+    snprintf(name, sizeof(name), "x%d", k);
+    val[k] = vc_varExpr(vc, name, bv8);
+  }
+
+  // The same four writes, applied in opposite orders.
+  Expr c1 = a;
+  Expr c2 = a;
+  for (int k = 0; k < 4; k++)
+  {
+    c1 = vc_writeExpr(vc, c1, idx[k], val[k]);
+    c2 = vc_writeExpr(vc, c2, idx[3 - k], val[3 - k]);
+  }
+  vc_assertFormula(vc, vc_notExpr(vc, vc_eqExpr(vc, c1, c2)));
+
+  stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  ASSERT_NE(nullptr, ext);
+
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_GT(ext->lemmasEmitted, 0);
+  EXPECT_GT(ext->lemmaAtomsFolded, 0);
+  vc_Destroy(vc);
+}
+
 TEST(array_extensionality, flag_off_preserves_eq_node)
 {
   // Default-off: an array equality still builds an ordinary EQ node

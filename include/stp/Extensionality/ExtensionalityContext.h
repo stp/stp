@@ -271,6 +271,11 @@ public:
   // Statistics for --stats.
   int lemmasEmitted;
 
+  // Lemma atoms the simplifier decided from their defining terms at
+  // encoding time (no equality circuit was built and no literal
+  // entered the clause). Cumulative over the context lifetime.
+  int lemmaAtomsFolded;
+
 private:
   STPMgr* bm;
 
@@ -305,6 +310,7 @@ private:
   std::map<ASTNode, std::vector<size_t>> eqAdjacency;
   std::vector<ExtWitness> witnessObls;
   std::map<ASTNode, ASTNode> scalarNames; // term -> name symbol
+  std::map<ASTNode, ASTNode> nameToTermMap; // name symbol -> its term
   ExtGraph graph;                         // bound after transform
   bool graphBound;
 

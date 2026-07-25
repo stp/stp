@@ -58,7 +58,8 @@ void collectDag(const ASTNode& n, ASTNodeSet& visited)
 } // namespace
 
 ExtensionalityContext::ExtensionalityContext(STPMgr* bm_)
-    : lemmasEmitted(0), bm(bm_), coneIsFrozen(false), graphBound(false),
+    : lemmasEmitted(0), lemmaAtomsFolded(0), bm(bm_), coneIsFrozen(false),
+      graphBound(false),
       pendingLemmaValid(false)
 {
 }
@@ -251,6 +252,7 @@ void ExtensionalityContext::beginSolve()
   eqAdjacency.clear();
   witnessObls.clear();
   scalarNames.clear();
+  nameToTermMap.clear();
   graph = ExtGraph();
   graphBound = false;
   pendingLemmaValid = false;
@@ -427,6 +429,7 @@ ASTNode ExtensionalityContext::freshName(const ASTNode& term,
   namingConstraints.push_back(
       bm->defaultNodeFactory->CreateNode(EQ, name, term));
   scalarNames[term] = name;
+  nameToTermMap[name] = term;
   return name;
 }
 
@@ -879,6 +882,33 @@ void ExtensionalityContext::encodePendingLemma(SATSolver& solver,
           self->eqLitCache.find(key);
       if (it != self->eqLitCache.end())
         return it->second;
+
+      // An atom the simplifier can decide from the defining terms
+      // needs no circuit: each name equals its term through the
+      // anchoring equations, and the lemma self-check verified the
+      // atom's polarity in the candidate, so a structurally decided
+      // atom sits on its satisfied side and its literal is redundant
+      // -- the same argument as the constant/constant case above.
+      // Write indices that are offsets from a shared pointer are the
+      // common win: the simplifying factory cancels the shared operand
+      // and decides the equality, sparing the SAT solver a 32-bit
+      // arithmetic case split per lemma.
+      {
+        const std::map<ASTNode, ASTNode>& n2t = self->nameToTermMap;
+        std::map<ASTNode, ASTNode>::const_iterator ta = n2t.find(a);
+        std::map<ASTNode, ASTNode>::const_iterator tb = n2t.find(b);
+        const ASTNode& termA = (ta == n2t.end()) ? a : ta->second;
+        const ASTNode& termB = (tb == n2t.end()) ? b : tb->second;
+        const ASTNode folded =
+            self->bm->defaultNodeFactory->CreateNode(EQ, termA, termB);
+        if (folded.GetKind() == TRUE || folded.GetKind() == FALSE)
+        {
+          self->lemmaAtomsFolded++;
+          self->eqLitCache[key] = -1;
+          return -1;
+        }
+      }
+
       const int q = getEquals(solver, a, b, satVar, BOTH);
       self->eqLitCache[key] = q;
       return q;

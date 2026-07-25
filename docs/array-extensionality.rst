@@ -136,8 +136,12 @@ for each abstracted candidate formula:
    per access, so the arrival that fires a conflict is the earliest —
    shortest — one. The lemma is encoded as clauses over
    the SAT variables of the already-encoded names (equalities reified
-   through fresh definitional literals) and added to the incremental
-   SAT solver; the loop re-solves. Each lemma permanently excludes the
+   through fresh definitional literals); an atom the simplifier can
+   decide from its defining terms — write indices that are distinct
+   constant offsets from one pointer are the common case — is dropped
+   at encoding time instead of becoming an equality circuit the SAT
+   solver would have to search through. The clause is added to the
+   incremental SAT solver; the loop re-solves. Each lemma permanently excludes the
    assignment that produced it, so the loop terminates.
 
 5. **Models.** When the checker finds no conflict, the fixed point of
