@@ -11,7 +11,6 @@ STP imports code from the following libraries:
 Our build system includes third-party CMake modules (these are not compiled
 into STP, but they are distributed with it):
 	* GetGitRevisionDescription.cmake Copyright Iowa State University 2009-2010.
-	* MacroPushRequiredVars.cmake Copyright (c) 2006 Alexander Neundorf.
 
 For testing purposes we also use (but do not compile STP with):
 	* llvm-lit Copyright (c) 2003-2014 University of Illinois at Urbana-Champaign.
@@ -206,12 +205,6 @@ GetGitRevisionDescription.cmake (cmake/modules)
 	FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
 	ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 	DEALINGS IN THE SOFTWARE.
-
-MacroPushRequiredVars.cmake (cmake/modules)
-	Copyright (c) 2006, Alexander Neundorf, <neundorf@kde.org>
-
-	Redistribution and use is allowed according to the terms of the BSD
-	license, which is reproduced in cmake/COPYING-CMAKE-SCRIPTS.
 
 LLVM integration tester (llvm-lit)
 	University of Illinois/NCSA

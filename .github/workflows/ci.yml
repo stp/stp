@@ -206,10 +206,11 @@ jobs:
         restore-keys: ccache-cadical-
 
     # CMAKE_INSTALL_PREFIX and PYTHON_LIB_INSTALL_DIR are set so that the
-    # example step below can install into the workspace. Both have to be
-    # settled here rather than at install time: the header and Python
-    # destinations are absolute paths baked into the cache. Neither affects
-    # what is built or tested - the Python tests run out of the build tree.
+    # install steps below land in the workspace rather than needing root.
+    # Both have to be settled here rather than at install time: the header
+    # and Python destinations are absolute paths baked into the cache, and
+    # so is the install RPATH this job checks. Neither affects what is built
+    # or tested - the Python tests run out of the build tree.
     - name: Configure
       run: |
         mkdir build
@@ -227,6 +228,41 @@ jobs:
     - name: Test
       run: ctest --parallel "$(nproc)" -VV --output-on-failure
       working-directory: build
+
+    # An installed binary has to find its own libraries whatever directory it
+    # is run from. The install RPATH used to be CMAKE_INSTALL_LIBDIR, which
+    # GNUInstallDirs leaves relative ("lib", or "lib64" where a distro sets
+    # it), so the loader resolved it against the *caller's* working directory:
+    # stp found libstp only when it happened to be run somewhere with a
+    # matching lib/ alongside, and preferred whatever was in there to its own
+    # install. Nothing caught it because the build tree links against absolute
+    # paths and every test ran from the build directory.
+    #
+    # LD_LIBRARY_PATH supplies the dependencies the install tree genuinely
+    # does not contain - minisat is installed under deps/ - and deliberately
+    # omits install/lib, since finding that is the property under test.
+    - name: Check the installed stp runs from an unrelated directory
+      run: |
+        cmake --install build
+
+        stp="$GITHUB_WORKSPACE/install/bin/stp"
+        deps="$GITHUB_WORKSPACE/deps/install/lib"
+        readelf -d "$stp" | grep -E 'R(UN)?PATH' || echo "(no RPATH/RUNPATH)"
+
+        soname=$(readelf -d "$stp" |
+                 sed -n 's/.*NEEDED.*\[\(libstp\.so[^]]*\)\]/\1/p')
+        test -n "$soname"
+
+        cd "$(mktemp -d)"
+        LD_LIBRARY_PATH="$deps" "$stp" --version > /dev/null
+        echo "ok: runs from $PWD"
+
+        # ...and must not be diverted by a decoy sitting in ./lib. Loading
+        # this one fails outright ("file too short"), so a pass here means the
+        # loader never consulted it rather than that it got away with it.
+        mkdir lib && echo 'not an ELF file' > "lib/$soname"
+        LD_LIBRARY_PATH="$deps" "$stp" --version > /dev/null
+        echo "ok: ignored the decoy ./lib/$soname"
 
     # examples/simple is not part of the main build - no add_subdirectory
     # reaches it - so nothing used to compile it, and it sat at
