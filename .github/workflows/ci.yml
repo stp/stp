@@ -21,6 +21,13 @@ jobs:
             env: CC=gcc CXX=g++
           - name: clang
             env: CC=clang CXX=clang++
+          # Release strips assertions -- the configuration users install.
+          # NB the floating-point tests run here without symfpu's internal
+          # checks; small significand widths stay unvalidated until
+          # martin-cs/symfpu#14.
+          - name: gcc-release
+            env: CC=gcc CXX=g++
+            build_type: Release
 
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
@@ -94,7 +101,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        ${{ matrix.env }} cmake -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DSYMFPU_INCLUDE_DIRS="$GITHUB_WORKSPACE/deps" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        ${{ matrix.env }} cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DSYMFPU_INCLUDE_DIRS="$GITHUB_WORKSPACE/deps" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -284,7 +291,9 @@ jobs:
     - name: Clone SymFPU
       # Header-only; FindSymFPU looks for symfpu/core/unpackedFloat.h under
       # SYMFPU_INCLUDE_DIRS, so clone it as deps/symfpu and point that at deps.
-      run: git clone --depth 1 https://github.com/martin-cs/symfpu deps/symfpu
+      run: |
+        git clone https://github.com/martin-cs/symfpu deps/symfpu
+        git -C deps/symfpu checkout --quiet 502cd63f7626d1f691c8df3869d76a37ae572556
 
     - name: Configure
       # NOCRYPTOMINISAT: CryptoMiniSat does not build with MSVC (CaDiCaL
@@ -306,5 +315,10 @@ jobs:
         # one (crash statuses like 0xC0000005 show up as large negatives).
         "solver exit code: $LASTEXITCODE"
         if ($out.Trim() -ne "sat") { exit 1 }
+        "(set-logic QF_FP)(declare-fun x () (_ FloatingPoint 8 24))(assert (fp.gt (fp.add RNE x x) x))(check-sat)" | Out-File -Encoding ascii testfp.smt2
+        $outfp = & $stp testfp.smt2 2>&1 | Out-String
+        "fp solver output: '$($outfp.Trim())'"
+        "fp solver exit code: $LASTEXITCODE"
+        if ($outfp.Trim() -ne "sat") { exit 1 }
 
 # EOF

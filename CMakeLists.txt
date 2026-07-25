@@ -686,19 +686,16 @@ find_package(Perl REQUIRED)
 # -----------------------------------------------------------------------------
 
 find_package(SymFPU)
-set(SYMFPU_INCLUDE_DIR "" CACHE PATH "SymFPU include directory")
 
 if (SymFPU_FOUND)
     message(STATUS "OK, found SymFPU include dirs under ${SYMFPU_INCLUDE_DIRS}")
 else()
-    message(STATUS "Not found using installed SymFPU, looking for built SymFPU")
-    find_package(SymFPU CONFIG)
-
-    if (SymFPU_FOUND)
-        message(STATUS "OK, found SymFPU include dirs under ${SYMFPU_INCLUDE_DIRS}")
-    else()
-        message(FATAL_ERROR "You must install SymFPU from https://github.com/stp/SymFPU")
-    endif()
+    message(FATAL_ERROR
+        "SymFPU (header-only, required for the floating-point support) was "
+        "not found. Clone it with ./scripts/deps/setup-symfpu.sh -- the "
+        "upstream is https://github.com/martin-cs/symfpu -- and configure "
+        "with -DSYMFPU_INCLUDE_DIRS=<directory that CONTAINS the symfpu "
+        "clone> (for the setup script, that is the deps/ directory).")
 endif()
 
 # Let's get clean builds ...

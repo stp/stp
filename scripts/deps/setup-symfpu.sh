@@ -3,10 +3,6 @@
 set -e -u -o pipefail
 
 dep_dir="deps"
-install_dir=$(readlink -fm "${dep_dir}"/install)
-
-[ ! -d "${install_dir}" ] && mkdir -p "${install_dir}"
-
 dep="symfpu"
 
 cd "${dep_dir}"
@@ -17,6 +13,10 @@ cd "${dep_dir}"
 # deps/symfpu means SYMFPU_INCLUDE_DIRS must point at deps/ (see the CI configure
 # steps).
 git clone https://github.com/martin-cs/symfpu "${dep}"
+# Pinned: an unpinned clone let any upstream push change what every build
+# used. Bump deliberately -- in particular once martin-cs/symfpu#14 (small
+# significand widths trip unpack's width invariant) is resolved.
+git -C "${dep}" checkout --quiet 502cd63f7626d1f691c8df3869d76a37ae572556
 cd ..
 
 # EOF

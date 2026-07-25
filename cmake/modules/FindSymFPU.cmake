@@ -26,12 +26,11 @@
 
 set(SYMFPU_DEFINITIONS "")
 
-message(STATUS "Finding SymFPU headers...")
-message(STATUS "looking at:  ${SYMFPU_INCLUDE_DIRS}")
+# The header is found as <hint>/symfpu/core/unpackedFloat.h, so the hint in
+# SYMFPU_INCLUDE_DIRS must be the directory CONTAINING the symfpu clone, not
+# the clone itself.
 find_path(SYMFPU_INCLUDE_DIR symfpu/core/unpackedFloat.h
-          HINTS ${SYMFPU_INCLUDE_DIRS}
-          PATH_SUFFIXES symfpu)
-message(STATUS "found: SYMFPU_INCLUDE_DIR: ${SYMFPU_INCLUDE_DIR}")
+          HINTS ${SYMFPU_INCLUDE_DIRS})
 
 set(SYMFPU_INCLUDE_DIRS ${SYMFPU_INCLUDE_DIR})
 

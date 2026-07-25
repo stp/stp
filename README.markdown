@@ -101,7 +101,9 @@ generators.
 - `STATICCOMPILE` - Build static libraries and binaries instead of dynamic
 
 ### Dependencies
-STP relies on : boost, flex, bison and minisat. You can install these by:
+STP relies on: boost, flex, bison, minisat, and -- for its floating-point
+support -- the header-only [SymFPU](https://github.com/martin-cs/symfpu)
+library. You can install most of these by:
 
 ```
 $ sudo apt-get install cmake bison flex libboost-all-dev python perl minisat
@@ -118,6 +120,17 @@ $ cmake --build .
 $ sudo cmake --install .
 $ command -v ldconfig && sudo ldconfig
 ```
+
+SymFPU needs no build: clone it (at the pinned revision) with
+
+```
+$ ./scripts/deps/setup-symfpu.sh
+```
+
+and point cmake at the directory *containing* the clone, e.g.
+`-DSYMFPU_INCLUDE_DIRS=$(pwd)/deps`. With it, STP solves the SMT-LIB
+floating-point theory (QF_FP/QF_BVFP/QF_ABVFP) and exposes floating-point
+terms through the C, C++ (`stp/fp.hpp`) and Python APIs.
 
 STP uses minisat as its SAT solver by default but it also supports other SAT solvers including CryptoMiniSat as an optional extra. If installed, it will be detected during the cmake and used:
 

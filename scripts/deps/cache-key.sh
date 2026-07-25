@@ -13,7 +13,8 @@ set -e -u -o pipefail
 
 hash=$(
   {
-    for repo in stp/minisat stp/googletest stp/OutputCheck martin-cs/symfpu; do
+    # (symfpu is pinned inside its setup script, which is hashed below.)
+    for repo in stp/minisat stp/googletest stp/OutputCheck; do
       git ls-remote "https://github.com/${repo}" HEAD
     done
     cat "$(dirname "$0")"/setup-*.sh
