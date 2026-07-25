@@ -205,11 +205,17 @@ jobs:
         key: ccache-cadical-${{ github.run_id }}
         restore-keys: ccache-cadical-
 
+    # CMAKE_INSTALL_PREFIX and PYTHON_LIB_INSTALL_DIR are set so that the
+    # example step below can install into the workspace. Both have to be
+    # settled here rather than at install time: the header and Python
+    # destinations are absolute paths baked into the cache. Neither affects
+    # what is built or tested - the Python tests run out of the build tree.
     - name: Configure
       run: |
         mkdir build
+        mkdir -p "$GITHUB_WORKSPACE/install/pylib"
         cd build
-        cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DNOCRYPTOMINISAT:BOOL=ON -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DNOCRYPTOMINISAT:BOOL=ON -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_INSTALL_PREFIX:PATH="$GITHUB_WORKSPACE/install" -DPYTHON_LIB_INSTALL_DIR:PATH="$GITHUB_WORKSPACE/install/pylib" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -221,6 +227,28 @@ jobs:
     - name: Test
       run: ctest --parallel "$(nproc)" -VV --output-on-failure
       working-directory: build
+
+    # examples/simple is not part of the main build - no add_subdirectory
+    # reaches it - so nothing used to compile it, and it sat at
+    # cmake_minimum_required(VERSION 2.8) until CMake 4 made that a hard
+    # error. Build it against an install tree, which is the arrangement its
+    # README documents and the one downstream users actually get: this
+    # exercises `cmake --install` and the installed STPConfig.cmake together.
+    # This job is the one to do it in because it configures with
+    # NOCRYPTOMINISAT, so the generated STPConfig.cmake has no
+    # find_dependency(cryptominisat5) to satisfy.
+    #
+    # The prefix comes from CMAKE_INSTALL_PREFIX at configure time rather than
+    # `cmake --install --prefix` here, because the latter does not relocate the
+    # headers: lib/CMakeLists.txt installs PUBLIC_HEADER to the absolute
+    # CMAKE_INSTALL_FULL_INCLUDEDIR, which is fixed when the cache is written.
+    - name: Build the example against the install tree
+      run: |
+        cmake --install build
+        cmake -S examples/simple -B build-example \
+          -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/install" -G Ninja
+        cmake --build build-example --parallel "$(nproc)"
+        LD_LIBRARY_PATH="$GITHUB_WORKSPACE/install/lib" ./build-example/stp-example
 
   # Until this job existed, the only static build in CI was the Windows one,
   # so a break that only shows up when everything is linked into one
