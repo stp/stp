@@ -82,6 +82,13 @@ int highestLevel = 0;
 int discarded = 0;
 
 //////////////////////////////////
+// Search bounds for the rule-finding modes. findRewrites() recurses once per
+// expression it separates out, so on a full function list it goes tens of
+// thousands of frames deep and exhausts the stack before finishing. These cap
+// it. Both default to "no limit", which is the historical behaviour.
+int max_search_depth = -1;   // -1: unbounded
+int max_rules_wanted = -1;   // -1: unbounded
+
 const int bits = 6;
 const int widen_to = 10;
 const int values_in_hash = 64 / bits;
@@ -269,7 +276,7 @@ ASTNode eval(const ASTNode& n, ASTNodeMap& map, int count = 0)
 
   // We have an array of arrays already created to store the children.
   // This reduces the number of objects created/destroyed.
-  if (count >= saved_array.size())
+  if ((size_t)count >= saved_array.size())
     saved_array.push_back(new ASTVec());
 
   ASTVec& new_children = *saved_array[count];
@@ -298,7 +305,7 @@ bool checkProp(const ASTNode& n)
   for (int i = 0; i < pow(2, symbols.size()); i++)
   {
     ASTNodeMap mapToVal;
-    for (int j = 0; j < symbols.size(); j++)
+    for (size_t j = 0; j < symbols.size(); j++)
       mapToVal.insert(make_pair(symbols[j],
                                 (0x1 & (i >> (j * bits))) == 0 ? mgr->ASTFalse
                                                                : mgr->ASTTrue));
@@ -319,7 +326,7 @@ bool checkProp(const ASTNode& n)
         if (value != (mgr->ASTFalse == nd ? 0 : 1))
           return false;
       }
-      else if (value != nd.GetUnsignedConst())
+      else if (value != (int)nd.GetUnsignedConst())
         return false;
     }
   }
@@ -348,7 +355,7 @@ bool isConstant(const ASTNode& n, VariableAssignment& different,
 
     for (size_t i = 0; i < symbols.size(); i++)
     {
-      assert(symbols[i].GetValueWidth() == bit_width);
+      assert(symbols[i].GetValueWidth() == (unsigned)bit_width);
 
       if (strncmp(symbols[i].GetName(), "v", 1) == 0)
         vN = GlobalSTP->Ctr_Example->GetCounterExample(symbols[i]);
@@ -426,7 +433,7 @@ ASTNode widen(const ASTNode& w, int width)
   }
 
   if (w.GetKind() == BVCONCAT &&
-      ((ch[0].GetValueWidth() + ch[1].GetValueWidth()) != width))
+      ((int)(ch[0].GetValueWidth() + ch[1].GetValueWidth()) != width))
     return mgr->ASTUndefined; // Didn't widen properly.
 
   // We got to the trouble below because sometimes we get 1-bit wide expressions
@@ -548,7 +555,8 @@ bool orderEquivalence_not_yet(ASTNode& from, ASTNode& to)
       s_from.begin(), s_from.end(), s_to.begin(), s_to.end(), result.begin());
   int intersection = it - result.begin();
 
-  if (intersection != s_from.size() && intersection != s_to.size())
+  if ((size_t)intersection != s_from.size() &&
+      (size_t)intersection != s_to.size())
     return false;
 
   if (to.isAtom() && from.isAtom())
@@ -728,7 +736,7 @@ void doIte(ASTNode a)
   }
 }
 
-void do_write_out(int ignore)
+void do_write_out(int /*ignore*/)
 {
   difficulty_cache.clear();
   force_writeout = true;
@@ -737,7 +745,7 @@ void do_write_out(int ignore)
 volatile bool debug_usr2 = false;
 
 // toggle.
-void do_usr2(int ignore)
+void do_usr2(int /*ignore*/)
 {
   debug_usr2 = !debug_usr2;
 }
@@ -942,6 +950,19 @@ void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
     return;
   }
 
+  if (max_search_depth >= 0 && depth >= max_search_depth)
+  {
+    discarded += expressions.size();
+    return;
+  }
+
+  if (max_rules_wanted >= 0 &&
+      (int)rewrite_system.size() >= max_rules_wanted)
+  {
+    discarded += expressions.size();
+    return;
+  }
+
   cout << '\n'
        << "depth:" << depth << ", size:" << expressions.size()
        << " values:" << values.size() << " found: " << rewrite_system.size()
@@ -1003,7 +1024,8 @@ void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
     // nb. I haven't rebuilt the map, it's done by writeOutRules().
     equiv[i] = rewrite_system.rewriteNode(equiv[i]);
 
-    for (int j = i + 1; j < equiv.size(); j++) /// commutative so skip some.
+    for (size_t j = i + 1; j < equiv.size();
+         j++) /// commutative so skip some.
     {
       if (equiv[i].GetKind() == UNDEFINED || equiv[j].GetKind() == UNDEFINED)
         continue;
@@ -1216,6 +1238,8 @@ void rule_to_string(const ASTNode& n, ASTNodeString& names, string& current,
     case BVOR:
     case BVAND:
       sofar += "&& " + current + ".Degree() ==2 ";
+      break;
+    default:
       break;
   }
 
@@ -1669,7 +1693,7 @@ ASTNode rewrite(const ASTNode& n, const Rewrite_rule& original_rule,
   assert(v.size() > 0);
   ASTNode n2;
 
-  if (v != n.GetChildren())
+  if (ASTChildren(v) != n.GetChildren())
   {
     if (n.GetType() != BOOLEAN_TYPE)
       n2 = mgr->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(),
@@ -1829,7 +1853,11 @@ void load_new_rules(const string fileName = "rules_new.smt2")
     bool done = false;
     while (true)
     {
-      fgets(line, sizeof line, in);
+      if (fgets(line, sizeof line, in) == NULL)
+      {
+        done = true;
+        break;
+      }
       if (first)
       {
         int rv = sscanf(line, ";id:%d\tverified_to:%d\ttime:%d\tfrom_"
@@ -2128,16 +2156,64 @@ int main(int argc, const char* argv[])
     rewrite_system.rewriteAll();
     writeOutRules();
   }
+  else if (argc == 4 && !strcmp("generate", argv[1]))
+  {
+    // Bounded, non-interactive form of the argc == 1 mode above, for smoke
+    // testing: "generate <max-depth> <max-rules>". Either bound may be -1 for
+    // no limit, though with both unbounded this is the mode that exhausts the
+    // stack. Rules found are written out as usual.
+    max_search_depth = atoi(argv[2]);
+    max_rules_wanted = atoi(argv[3]);
+    cout << "Bounded search: max depth " << max_search_depth << ", max rules "
+         << max_rules_wanted << endl;
+
+    load_new_rules();
+    createVariables();
+    rewrite_system.buildLookupTable();
+
+    Function_list functionList;
+    functionList.buildAll();
+
+    vector<VariableAssignment> values;
+    findRewrites(functionList.functions, values);
+
+    rewrite_system.rewriteAll();
+    writeOutRules();
+    cout << "Rules found: " << rewrite_system.size() << endl;
+  }
   else if (argc == 2 && !strcmp("unit-test", argv[1]))
   {
     load_new_rules();
     createVariables();
     unit_test();
   }
-  else if (argc == 2 && !strcmp("verify", argv[1]))
+  else if ((argc == 2 || argc == 3) && !strcmp("verify", argv[1]))
   {
-    load_new_rules();
+    // "verify [file]" -- SAT-check every loaded rule. Without a file the rules
+    // come from ./rules_new.smt2, or stdin when that does not exist.
+    if (argc == 3)
+    {
+      // Fail rather than verify nothing. load_new_rules() falls back to stdin
+      // when the file is missing, so a mistyped path would otherwise load zero
+      // rules and report success.
+      if (!ifstream(argv[2]))
+      {
+        cerr << "Cannot read rules file: " << argv[2] << endl;
+        return 1;
+      }
+      load_new_rules(argv[2]);
+      if (rewrite_system.size() == 0)
+      {
+        cerr << "No rules loaded from " << argv[2] << endl;
+        return 1;
+      }
+    }
+    else
+      load_new_rules();
+
+    cout << "Verifying " << rewrite_system.size() << " rules" << endl;
     rewrite_system.verifyAllwithSAT();
+    cout << "Verified " << rewrite_system.size() << " rules" << endl;
   }
   else if ((argc == 4 || argc == 3) && !strcmp("expand", argv[1]))
   {
@@ -2204,7 +2280,7 @@ matchNode(const ASTNode& n0, const ASTNode& n1, ASTNodeMap& fromTo, const int te
     if (n0 == n1)
     return true;
 
-    if (n0.GetKind() == SYMBOL && strlen(n0.GetName()) == term_variable_width)
+    if (n0.GetKind() == SYMBOL && strlen(n0.GetName()) == (size_t)term_variable_width)
       {
         if (fromTo.find(n0) != fromTo.end())
         return matchNode(fromTo.find(n0)->second, n1, fromTo, term_variable_width);
@@ -2255,7 +2331,7 @@ bool commutative_matchNode(const ASTNode& n0, const ASTNode& n1,
   if (n0.GetValueWidth() != n1.GetValueWidth())
     return false;
 
-  if (n0.GetKind() == SYMBOL && strlen(n0.GetName()) == term_variable_width)
+  if (n0.GetKind() == SYMBOL && strlen(n0.GetName()) == (size_t)term_variable_width)
   {
     if (n0.GetName()[0] == 'v')
     {
@@ -2362,8 +2438,9 @@ bool c_matchNode(const ASTNode& n0, const ASTNode& n1,
   pair<ASTNode, ASTNode> p = commutative_to_check.back();
   commutative_to_check.pop_back();
   assert(p.first.GetKind() == p.second.GetKind());
-  const ASTVec& f = p.first.GetChildren();
-  ASTVec s = p.second.GetChildren(); // non-const, needs to be sorted later.
+  const ASTChildren f = p.first.GetChildren();
+  // Materialised, not a view: sorted in place below.
+  ASTVec s = toASTVec(p.second.GetChildren());
 
   if (f.size() != s.size())
   {
@@ -2482,7 +2559,7 @@ bool commutative_matchNode(const ASTNode& n0, const ASTNode& n1,
     it = vars.begin();
     while (it != vars.end())
     {
-      assert(strlen(it->GetName()) == term_variable_width);
+      assert(strlen(it->GetName()) == (size_t)term_variable_width);
       it++;
     }
     assert(vars.size() <= 2);
@@ -2503,7 +2580,7 @@ bool commutative_matchNode(const ASTNode& n0, const ASTNode& n1,
     for (vector<ASTNode>::iterator it = s.begin(); it != s.end(); it++)
     {
       assert(it->GetKind() == SYMBOL);
-      assert(strlen(it->GetName()) == term_variable_width);
+      assert(strlen(it->GetName()) == (size_t)term_variable_width);
       if (it->GetName()[0] == 'v')
       {
         assert(vNode != mgr->ASTUndefined);

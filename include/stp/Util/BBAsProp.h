@@ -47,7 +47,7 @@ public:
 
   //input1, input2, result
   ASTNode i0, i1, r;
-  stp::ToSAT::ASTNodeToSATVar node_to_satvar_map;
+  stp::ToSATBase::ASTNodeToSATVar node_to_satvar_map;
 
   Cnf_Dat_t* cnf;
   ~BBAsProp() 
@@ -116,7 +116,7 @@ public:
     assumptions.clear();
 
 
-    for (int i = 0; i < a.getWidth(); i++)
+    for (unsigned i = 0; i < a.getWidth(); i++)
     {
       if (a[i] == '1')
       {
@@ -141,7 +141,7 @@ public:
       }
     }
 
-    for (int i = 0; i < output.getWidth(); i++)
+    for (unsigned i = 0; i < output.getWidth(); i++)
     {
       if (output[i] == '1')
       {
