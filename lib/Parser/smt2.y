@@ -773,6 +773,13 @@
 
 %}
 
+/* This grammar carries 216 shift/reduce and 99 reduce/reduce conflicts,
+   mostly from an_fp_term's dual routing into term and formula position.
+   They cannot be pinned with %expect: in a non-GLR parser any %expect makes
+   the (unpinnable) reduce/reduce count a hard error too. Until the routing
+   is restructured, the conflict warnings for this grammar stay suppressed
+   in lib/Parser/CMakeLists.txt; smt.y and cvc.y ARE pinned. */
+
 %union {
   unsigned uintval; /* for numerals in types. */
   stp::Kind kind;

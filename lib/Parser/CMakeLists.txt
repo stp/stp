@@ -30,6 +30,9 @@ else()
   set(FLEX_COMPATIBILITY_ARGS "--nounistd")
 endif()
 
+# smt.y and cvc.y pin their conflict counts with %expect, so changes there
+# fail loudly. smt2.y cannot be pinned until its term/formula routing is
+# restructured (see the note in smt2.y), so the warnings stay suppressed.
 set(BISON_WARNING_FLAGS "-Wno-conflicts-rr" "-Wno-conflicts-sr")
 mark_as_advanced(BISON_WARNING_FLAGS)
 
