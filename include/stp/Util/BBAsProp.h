@@ -47,7 +47,7 @@ public:
 
   //input1, input2, result
   ASTNode i0, i1, r;
-  stp::ToSAT::ASTNodeToSATVar node_to_satvar_map;
+  stp::ToSATBase::ASTNodeToSATVar node_to_satvar_map;
 
   Cnf_Dat_t* cnf;
   ~BBAsProp() 

@@ -1669,7 +1669,7 @@ ASTNode rewrite(const ASTNode& n, const Rewrite_rule& original_rule,
   assert(v.size() > 0);
   ASTNode n2;
 
-  if (v != n.GetChildren())
+  if (ASTChildren(v) != n.GetChildren())
   {
     if (n.GetType() != BOOLEAN_TYPE)
       n2 = mgr->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(),
@@ -2362,8 +2362,9 @@ bool c_matchNode(const ASTNode& n0, const ASTNode& n1,
   pair<ASTNode, ASTNode> p = commutative_to_check.back();
   commutative_to_check.pop_back();
   assert(p.first.GetKind() == p.second.GetKind());
-  const ASTVec& f = p.first.GetChildren();
-  ASTVec s = p.second.GetChildren(); // non-const, needs to be sorted later.
+  const ASTChildren f = p.first.GetChildren();
+  // Materialised, not a view: sorted in place below.
+  ASTVec s = toASTVec(p.second.GetChildren());
 
   if (f.size() != s.size())
   {

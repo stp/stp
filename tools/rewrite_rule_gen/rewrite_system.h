@@ -25,8 +25,8 @@ THE SOFTWARE.
 #ifndef REWRITESYSTEM_H
 #define REWRITESYSTEM_H
 
-// FIXME: This header might be dead
-//#include "stp/Util/find-rewrites/rewrite_rule.h"
+#include "VariableAssignment.h"
+#include "rewrite_rule.h"
 #include "stp/AST/AST.h"
 #include <list>
 

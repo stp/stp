@@ -95,7 +95,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        ${{ matrix.env }} cmake -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        ${{ matrix.env }} cmake -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DBUILD_EXTRA_TOOLS:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -106,6 +106,24 @@ jobs:
 
     - name: Test
       run: ctest --parallel "$(nproc)" -VV --output-on-failure
+      working-directory: build
+
+    # The extra tools are outside ctest, so nothing else compiles them. They had
+    # bit-rotted unnoticed -- headers that were not self-contained, and calls
+    # into APIs that had since changed shape -- so the build alone is most of
+    # the value here. rewrite_rule_gen additionally has two self-checking modes
+    # that need no input file and assert their results; assertions are live
+    # because CI does not set CMAKE_BUILD_TYPE, so it defaults to RelWithDebInfo
+    # with NDEBUG filtered out.
+    #
+    # Its other modes are deliberately not run: verify/expand/rewrite/write-out
+    # all need a rules_new.smt2 that is not in the repository and pass vacuously
+    # without one, and the default no-argument mode is an interactive, unbounded
+    # rule search that recurses until the stack runs out.
+    - name: Extra tools smoke test
+      run: |
+        ./tools/rewrite_rule_gen/rewrite_rule_gen unit-test
+        ./tools/rewrite_rule_gen/rewrite_rule_gen test
       working-directory: build
 
   build-cadical:

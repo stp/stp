@@ -28,4 +28,19 @@ if (BUILD_EXTRA_TOOLS)
   add_subdirectory(measure_constantbitprop)
   add_subdirectory(test_constantbitprop)
   add_subdirectory(cvc_to_c)
+
+  # These auxiliary tools currently produce ~78 warnings, mostly -Wswitch over
+  # Kind and -Wsign-compare, so they cannot be gated on WERROR without a
+  # cleanup out of proportion to simply keeping them compiling. Exempt them for
+  # now, the same way lib/CMakeLists.txt exempts the vendored ABC: the -Wno-error
+  # comes after the global -Werror, so it wins for these targets only and STP's
+  # own libraries stay gated. Worth removing once the warnings are fixed.
+  if (WERROR AND NOT MSVC)
+    foreach(_extra_tool rewrite_rule_gen time_constantbitprop measure
+                        test_constantbitprop cvc_to_c)
+      if (TARGET ${_extra_tool})
+        target_compile_options(${_extra_tool} PRIVATE -Wno-error)
+      endif()
+    endforeach()
+  endif()
 endif()
