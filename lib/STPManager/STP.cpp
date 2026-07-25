@@ -699,7 +699,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   }
 
   ToSATAIG toSATAIG(bm, cb, arrayTransformer);
-  ToSATBase* satBase = bm->UserFlags.traditional_cnf ? tosat : &toSATAIG;
+  ToSATBase* satBase = &toSATAIG;
 
   if (bm->soft_timeout_expired)
     return SOLVER_TIMEOUT;

@@ -131,7 +131,6 @@ public:
 
 
   /* CNF Generation options */
-  bool traditional_cnf = false;
   bool simple_cnf = false; // don't use the good AIG based CNF conversion.
 
   bool exit_after_CNF = false;
