@@ -77,7 +77,7 @@ int bvAndF(int a, int b)
 
 int rightSF(int a, int b)
 {
-  if (b >= sizeof(int) * 8)
+  if (b >= (int)(sizeof(int) * 8))
     return 0;
 
   return a >> b;
@@ -85,7 +85,7 @@ int rightSF(int a, int b)
 
 int leftSF(int a, int b)
 {
-  if (b >= sizeof(int) * 8)
+  if (b >= (int)(sizeof(int) * 8))
     return 0;
 
   return a << b;

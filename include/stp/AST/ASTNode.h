@@ -44,7 +44,6 @@ class ASTInternal;
 class ASTNode
 {
   friend class STPMgr;
-  friend class ASTtoCNF;
   friend class ASTInterior;
   friend class vector<ASTNode>;
   friend ASTNode HashingNodeFactory::CreateNode(const stp::Kind kind,

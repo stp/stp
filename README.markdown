@@ -99,6 +99,13 @@ generators.
 - `PYTHON_EXECUTABLE` - Set python executable in case you have more than one python installed
 - `SANITIZE` - Use Clang's sanitization checks
 - `STATICCOMPILE` - Build static libraries and binaries instead of dynamic
+- `STP_ALLOCATOR` - Which memory allocator the `stp` binary uses. STP is
+  allocation-heavy, and the C library allocator is a significant bottleneck, so
+  this defaults to `mimalloc`, which is vendored as a submodule and built as
+  part of STP. Set to `tcmalloc` to link a system gperftools instead, or to
+  `system` for plain `malloc` (roughly 14% slower, but the lowest peak memory).
+  Only the executables link the allocator; `libstp` leaves the choice to
+  whatever application embeds it.
 
 ### Dependencies
 STP relies on: boost, flex, bison, minisat, and -- for its floating-point

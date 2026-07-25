@@ -31,7 +31,7 @@ using std::cout;
 using std::endl;
 
 // This function prints the output of the STP solver
-void ToSATBase::PrintOutput(SOLVER_RETURN_TYPE ret)
+void ToSATBase::PrintOutput(STPMgr* bm, SOLVER_RETURN_TYPE ret)
 {
   if (ret == SOLVER_TIMEOUT || ret == SOLVER_UNDECIDED)
   {

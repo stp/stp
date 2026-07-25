@@ -50,9 +50,39 @@ class ValueSetAnalysis
   static const size_t PRODUCT_CAP =
       ValueSet::MAX_ELEMENTS * ValueSet::MAX_ELEMENTS;
 
+  // An unknown child of at most this many bits is cheap enough to stand in
+  // for by listing every value it could take.
+  static const unsigned SMALL_WIDTH = 6;
+
+  // What an unknown operand does to the result after the fact. The bitwise
+  // operations are handled by running the known children through the
+  // operation's identity and then expanding: anding against an unknown can
+  // clear any subset of the bits that are set, oring can set any subset of
+  // the bits that are clear.
+  enum class Expand
+  {
+    None,
+    Submask,
+    Supermask
+  };
+
   ValueSet* fresh(const ASTNode& n) const;
   ASTNode toNode(const ASTNode& child, const CBV member);
   static CBV toCBV(const ASTNode& evaluated);
+
+  // Values that stand in for an unknown child: evaluating over them gives
+  // exactly the results the child's whole width would give. False when
+  // there are too many of them, or the operation says nothing anyway.
+  bool standIns(const ASTNode& n, size_t index,
+                const vector<const ValueSet*>& children, vector<CBV>& out,
+                Expand& expand);
+  bool shiftStandIns(const ASTNode& n, size_t index,
+                     const vector<const ValueSet*>& children,
+                     vector<CBV>& out);
+
+  // Takes ownership of "set", returning the expanded set, or nullptr when
+  // the expansion is bigger than a set can hold.
+  ValueSet* expand(ValueSet* set, Expand how);
 
 public:
   ValueSetAnalysis(STPMgr& _bm) : bm(_bm) {}

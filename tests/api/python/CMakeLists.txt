@@ -37,3 +37,25 @@ add_test (
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
 )
 
+# Allocator behaviour of the ctypes interface. Unlike the stp binaries, which
+# link an allocator statically, a process embedding libstp picks the allocator
+# itself - so libstp must not carry one, and preloading one must reach it.
+if (STP_ALLOCATOR_PRELOADABLE AND TARGET ${STP_ALLOCATOR_PRELOADABLE})
+    set(STP_PRELOADABLE_ALLOCATOR "$<TARGET_FILE:${STP_ALLOCATOR_PRELOADABLE}>")
+else()
+    set(STP_PRELOADABLE_ALLOCATOR "")
+endif()
+
+configure_file(allocator_tests.py.in allocator_tests.py.in.g @ONLY)
+# file(GENERATE) rather than a second configure_file: the allocator path is a
+# generator expression and is only known at generate time.
+file(GENERATE
+     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/allocator_tests.py
+     INPUT ${CMAKE_CURRENT_BINARY_DIR}/allocator_tests.py.in.g)
+
+add_test (
+  NAME python-allocator-tests
+  COMMAND ${PYTHON_EXECUTABLE} allocator_tests.py
+  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+)
+

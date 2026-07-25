@@ -1,0 +1,169 @@
+"""
+AUTHORS: Trevor Hansen
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+Allocator behaviour of the Python (ctypes) interface.
+
+The stp executables link a fast allocator statically, which interposes malloc
+for the whole process. The Python interface is different: it dlopen()s libstp
+into an interpreter that has already been allocating with the C library, so the
+allocator has to be chosen for the process rather than baked into the library.
+
+These tests pin both halves of that contract:
+
+  * libstp must not embed an allocator of its own. If it did, memory could be
+    allocated by libstp's allocator and freed by the interpreter's (or the
+    reverse) and the mixed heaps would eventually corrupt.
+  * When an allocator *is* preloaded into the interpreter, libstp's allocations
+    must actually go through it, and results must be unchanged.
+"""
+
+import os
+import re
+import subprocess
+import sys
+import unittest
+
+sys.path.insert(0, "@PYTHON_INTERFACE_DIR@/stp")
+
+import stp
+# The package already knows where it loaded libstp from; reuse that rather than
+# second-guessing the library name and layout.
+from library_path import PATHS
+
+LIBSTP = next((p for p in PATHS if os.path.exists(p)), None)
+PRELOADABLE_ALLOCATOR = "@STP_PRELOADABLE_ALLOCATOR@"
+ALLOCATOR_NAME = "@STP_ALLOCATOR@"
+
+# Symbols an allocator would define if one were linked into libstp:
+# malloc/free/realloc/calloc plus operator new / operator delete.
+ALLOCATOR_SYMBOLS = {
+    "malloc", "free", "realloc", "calloc",
+    "_Znwm", "_Znam", "_ZdlPv", "_ZdaPv",
+}
+
+# A tiny query with a known unique answer, used to prove the solver still
+# produces correct results under whichever allocator is in play.
+SOLVE_SNIPPET = """
+import sys
+sys.path.insert(0, {interface!r})
+import stp
+s = stp.Solver()
+a = s.bitvec('a', 8)
+b = s.bitvec('b', 8)
+s.add(a + b == 10)
+s.add(a == 3)
+assert s.check(), "expected sat"
+print("RESULT", s.model()['b'])
+"""
+
+
+def _solve_in_child(env):
+    """Run a solve in a fresh interpreter and return (stdout, stderr)."""
+    code = SOLVE_SNIPPET.format(interface="@PYTHON_INTERFACE_DIR@/stp")
+    child = subprocess.run(
+        [sys.executable, "-c", code],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        env=dict(os.environ, **env), universal_newlines=True,
+    )
+    return child
+
+
+class TestPythonAllocator(unittest.TestCase):
+    def test_bindings_solve_correctly(self):
+        """The in-process ctypes interface works under the configured build."""
+        s = stp.Solver()
+        a = s.bitvec('a', 8)
+        b = s.bitvec('b', 8)
+        s.add(a + b == 10)
+        s.add(a == 3)
+        self.assertTrue(s.check())
+        self.assertEqual(s.model()['b'], 7)
+
+    def test_libstp_does_not_embed_an_allocator(self):
+        """libstp must leave the allocator to the process that loads it.
+
+        The allocator is linked into the stp executables, never into the
+        library. Linking it here instead would give a ctypes user two heaps in
+        one process.
+        """
+        if not sys.platform.startswith("linux"):
+            self.skipTest("symbol inspection is Linux-specific")
+        if not LIBSTP:
+            self.skipTest("could not locate libstp on any of %s" % PATHS)
+        try:
+            out = subprocess.check_output(
+                ["nm", "-D", "--defined-only", LIBSTP], universal_newlines=True)
+        except (OSError, subprocess.CalledProcessError):
+            self.skipTest("nm unavailable")
+
+        defined = set()
+        for line in out.splitlines():
+            parts = line.split()
+            # "<addr> <type> <name>", or "<type> <name>" for undefined-address
+            if len(parts) >= 2 and parts[-2] in ("T", "W", "i"):
+                defined.add(parts[-1])
+
+        clash = defined & ALLOCATOR_SYMBOLS
+        self.assertEqual(
+            clash, set(),
+            "libstp defines allocator symbols %s. The allocator belongs on the "
+            "executables (STP_ALLOCATOR_LIBRARY), not on the library: a ctypes "
+            "process would end up allocating with one heap and freeing with "
+            "another." % sorted(clash))
+
+    def test_preloaded_allocator_serves_libstp(self):
+        """With an allocator preloaded, libstp's allocations go through it.
+
+        This is what a Python user does to get the same allocator the stp
+        binary uses: LD_PRELOAD it into the interpreter.
+        """
+        if not sys.platform.startswith("linux"):
+            self.skipTest("LD_PRELOAD is Linux-specific")
+        if not PRELOADABLE_ALLOCATOR or not os.path.exists(PRELOADABLE_ALLOCATOR):
+            self.skipTest("no preloadable allocator was built (STP_ALLOCATOR=%s)"
+                          % ALLOCATOR_NAME)
+
+        # Correct answer under the preloaded allocator.
+        child = _solve_in_child({"LD_PRELOAD": PRELOADABLE_ALLOCATOR})
+        self.assertEqual(child.returncode, 0,
+                         "solve failed under LD_PRELOAD:\n%s" % child.stderr)
+        self.assertIn("RESULT 7", child.stdout)
+
+        # ...and it really was that allocator serving libstp, not the C library.
+        child = _solve_in_child({"LD_PRELOAD": PRELOADABLE_ALLOCATOR,
+                                 "LD_DEBUG": "bindings"})
+        if "symbol=" not in child.stderr and "binding file" not in child.stderr:
+            self.skipTest("loader diagnostics unavailable")
+
+        allocator = os.path.basename(PRELOADABLE_ALLOCATOR)
+        pattern = re.compile(
+            r"binding file \S*libstp\S* \[0\] to \S*" + re.escape(allocator)
+            + r"\S* \[0\]: normal symbol `(?:malloc|free|_Znwm)'")
+        self.assertTrue(
+            pattern.search(child.stderr),
+            "libstp did not bind malloc to the preloaded %s; something in the "
+            "build is defeating symbol interposition" % allocator)
+
+
+if __name__ == '__main__':
+    suite = unittest.TestLoader().loadTestsFromTestCase(TestPythonAllocator)
+    result = unittest.TextTestRunner(verbosity=2).run(suite)
+    sys.exit(0 if result.wasSuccessful() else 1)
