@@ -55,6 +55,9 @@ public:
   po::options_description cmdline_options;
   po::options_description visible_options;
   po::positional_options_description pos_options;
+
+  // Held as text until parse_options() turns it into UserFlags.search_bias.
+  std::string search_bias;
 };
 
 int ExtraMain::create_and_parse_options(int argc, char** argv)
@@ -247,7 +250,12 @@ void ExtraMain::create_options()
               "minisat", "use installed minisat version as the solver "
 #ifndef USE_CRYPTOMINISAT
 #endif
-              );
+              )
+      ("search-bias", po::value<std::string>(&search_bias),
+       "tune the SAT search towards one answer: 'unsat' (best for "
+       "unsatisfiable / verification workloads), 'sat', or 'none' (the "
+       "default, leaving the solver at its own settings). Solvers with no "
+       "such setting ignore it");
 
   po::options_description refinement_options("Refinement options");
   refinement_options.add_options()(
@@ -513,6 +521,22 @@ int ExtraMain::parse_options(int argc, char** argv)
   if (vm.count("cadical"))
   {
     bm->UserFlags.solver_to_use = UserDefinedFlags::CADICAL_SOLVER;
+  }
+
+  if (vm.count("search-bias"))
+  {
+    if (search_bias == "sat")
+      bm->UserFlags.search_bias = SearchBias::SAT;
+    else if (search_bias == "unsat")
+      bm->UserFlags.search_bias = SearchBias::UNSAT;
+    else if (search_bias == "none")
+      bm->UserFlags.search_bias = SearchBias::NONE;
+    else
+    {
+      cout << "ERROR: --search-bias must be one of 'sat', 'unsat' or 'none'"
+           << endl;
+      std::exit(-1);
+    }
   }
 
 

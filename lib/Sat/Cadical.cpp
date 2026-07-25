@@ -100,6 +100,34 @@ uint32_t Cadical::newVar()
   return ++next_variable;
 }
 
+bool Cadical::setSearchBias(SearchBias bias)
+{
+  // Cadical has named configurations of its own, so this is a straight
+  // translation. "unsat" turns off stabilising search and the local-search
+  // walker, keeping Cadical in focused, restart-heavy search; "sat" leaves it
+  // stabilising and spends more effort on elimination and subsumption.
+  //
+  // Cadical only accepts a configuration "right after initialization", which
+  // is why this is applied here rather than at solve time. Setting "quiet" in
+  // the constructor doesn't spoil that: quiet and verbose are exempt from
+  // Cadical's state check, and only adding a clause leaves the configuring
+  // state.
+  const char* config = nullptr;
+  switch (bias)
+  {
+    case SearchBias::SAT:
+      config = "sat";
+      break;
+    case SearchBias::UNSAT:
+      config = "unsat";
+      break;
+    case SearchBias::NONE:
+      return true; // nothing to do, which counts as honouring the request.
+  }
+
+  return s->configure(config);
+}
+
 void Cadical::setVerbosity(int v)
 {
   if (v ==0)

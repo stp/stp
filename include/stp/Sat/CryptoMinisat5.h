@@ -62,6 +62,8 @@ public:
 
   uint32_t newVar() override;
 
+  bool setSearchBias(SearchBias bias) override;
+
   void setVerbosity(int v) override;
 
   unsigned long nVars() const override;
