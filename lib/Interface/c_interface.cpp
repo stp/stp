@@ -1391,22 +1391,46 @@ Expr vc_bvXorExpr(VC vc, Expr left, Expr right)
                           stp::BVXOR, left, right);
 }
 
+/*
+ * The bitwise nand/nor/xnor below are built as a negated and/or/xor rather
+ * than as the BVNAND/BVNOR/BVXNOR kinds their names suggest. Those kinds are
+ * vestigial: no parser produces them -- the SMT-LIB2 grammar expands bvnand,
+ * bvnor and bvxnor exactly this way, see lib/Parser/smt2.y -- so while the
+ * bit-blaster handles them, constant folding (BVConstEvaluator) and printing
+ * (functionToSMTLIBName has no BVXNOR) do not. Building them here would make
+ * those kinds reachable for the first time and abort on a constant operand.
+ */
+static Expr createNegatedBinaryTerm(VC vc, Kind k, Expr left, Expr right)
+{
+  stp::STP* stp_i = (stp::STP*)vc;
+  stp::STPMgr* b = stp_i->bm;
+  stp::ASTNode* l = (stp::ASTNode*)left;
+  stp::ASTNode* r = (stp::ASTNode*)right;
+
+  assert(BVTypeCheck(*l));
+  assert(BVTypeCheck(*r));
+
+  const unsigned int width = l->GetValueWidth();
+  stp::ASTNode o =
+      b->CreateTerm(stp::BVNOT, width, b->CreateTerm(k, width, *l, *r));
+  assert(BVTypeCheck(o));
+  stp::ASTNode* output = new stp::ASTNode(o);
+  return output;
+}
+
 Expr vc_bvNandExpr(VC vc, Expr left, Expr right)
 {
-  return createBinaryTerm(vc, (*((stp::ASTNode*)left)).GetValueWidth(),
-                          stp::BVNAND, left, right);
+  return createNegatedBinaryTerm(vc, stp::BVAND, left, right);
 }
 
 Expr vc_bvNorExpr(VC vc, Expr left, Expr right)
 {
-  return createBinaryTerm(vc, (*((stp::ASTNode*)left)).GetValueWidth(),
-                          stp::BVNOR, left, right);
+  return createNegatedBinaryTerm(vc, stp::BVOR, left, right);
 }
 
 Expr vc_bvXnorExpr(VC vc, Expr left, Expr right)
 {
-  return createBinaryTerm(vc, (*((stp::ASTNode*)left)).GetValueWidth(),
-                          stp::BVXNOR, left, right);
+  return createNegatedBinaryTerm(vc, stp::BVXOR, left, right);
 }
 
 Expr vc_bvNotExpr(VC vc, Expr ccc)
