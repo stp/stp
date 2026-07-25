@@ -36,7 +36,6 @@ git config --global --add safe.directory '*'
 compgen -G 'deps/install/lib*/libminisat*' > /dev/null || ./scripts/deps/setup-minisat.sh
 [ -d deps/gtest ] || ./scripts/deps/setup-gtest.sh
 [ -d deps/OutputCheck ] || ./scripts/deps/setup-outputcheck.sh
-[ -d deps/symfpu ] || ./scripts/deps/setup-symfpu.sh
 
 mkdir -p build-32bit
 cd build-32bit
@@ -44,10 +43,8 @@ cmake \
   -DNOCRYPTOMINISAT:BOOL=ON \
   -DENABLE_TESTING:BOOL=ON \
   -DWERROR:BOOL=ON \
-  -DENABLE_FLOATING_POINT:BOOL=ON \
   -DLIT_ARGS:STRING=-v \
   -DPYTHON_EXECUTABLE:PATH="$(which python3)" \
-  -DSYMFPU_INCLUDE_DIRS="$(readlink -fm ../deps)" \
   -DCMAKE_C_COMPILER_LAUNCHER=ccache \
   -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
   -G Ninja ..
