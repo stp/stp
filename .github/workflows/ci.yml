@@ -124,6 +124,9 @@ jobs:
       run: |
         ./tools/rewrite_rule_gen/rewrite_rule_gen unit-test
         ./tools/rewrite_rule_gen/rewrite_rule_gen test
+        ./tools/rewrite_rule_gen/rewrite_rule_gen verify \
+          ../tools/rewrite_rule_gen/test-rules.smt2
+        ./tools/rewrite_rule_gen/rewrite_rule_gen generate 5 3
       working-directory: build
 
   build-cadical:
