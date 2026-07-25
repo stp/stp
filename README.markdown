@@ -36,6 +36,18 @@ Or, using [Homebrew](https://brew.sh):
 brew install stp
 ```
 
+Or, with Docker, which needs nothing installed but Docker itself and reads the
+problem on standard input:
+```
+git clone https://github.com/stp/stp
+cd stp
+docker build -t stp .
+echo "(set-logic QF_BV)
+(assert (= (bvsdiv (_ bv3 2) (_ bv2 2)) (_ bv0 2)))
+(check-sat)
+(exit)" | docker run --rm -i stp
+```
+
 For more detailed instructions, see towards the end of the page.
 
 
@@ -65,8 +77,7 @@ In [9]: a.model()
 Out[9]: {'x': 4294967287, 'y': 11}
 ```
 
-STP also reads from standard input, which is how the container image built by
-[Building Docker](#building-docker) is invoked.
+STP also reads from standard input, as in the Docker example above.
 
 ## Architecture
 
@@ -229,18 +240,6 @@ To install run `make install` and to uninstall run `make uninstall`. The root of
 ### Building on Windows/Visual Studio
 
 You will need to install [cmake](https://cmake.org/download/) and follow the steps that the `windows` job in [`.github/workflows/ci.yml`](https://github.com/stp/stp/blob/master/.github/workflows/ci.yml) runs: install flex and bison, build minisat, then configure STP against it with `-DNOCRYPTOMINISAT=ON` (CryptoMiniSat does not build with MSVC). In case you still have trouble, please see the mini-HOWTO [at issue #319](https://github.com/stp/stp/issues/319).
-
-### Building Docker
-
-```
-git clone https://github.com/stp/stp
-cd stp
-docker build -t stp .
-echo "(set-logic QF_BV)
-(assert (= (bvsdiv (_ bv3 2) (_ bv2 2)) (_ bv0 2)))
-(check-sat)
-(exit)" | docker run --rm -i stp
-```
 
 
 # Authors
