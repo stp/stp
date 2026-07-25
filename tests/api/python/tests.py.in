@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 The MIT License
 
@@ -26,8 +26,10 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 import sys
-# Make sure we can find the STP python package
-sys.path.insert(0, "@PYTHON_INTERFACE_DIR@/stp")
+# Make sure we can find the STP python package. Point at the directory holding
+# the package, not at the package itself, so that this exercises the same
+# import path as an installed `stp` package.
+sys.path.insert(0, "@PYTHON_INTERFACE_DIR@")
 
 import stp
 import unittest
