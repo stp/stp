@@ -407,5 +407,14 @@ jobs:
         # one (crash statuses like 0xC0000005 show up as large negatives).
         "solver exit code: $LASTEXITCODE"
         if ($out.Trim() -ne "sat") { exit 1 }
+        # The query above is answered by the substitution solver during
+        # simplification, so it never reaches the SAT backend. This one
+        # cannot be simplified away: it is the only line here that
+        # exercises bitblasting, ABC's CNF generation and minisat.
+        "(set-logic QF_BV)(declare-fun a () (_ BitVec 8))(declare-fun b () (_ BitVec 8))(assert (= (bvmul a b) #x21))(assert (bvult a b))(check-sat)" | Out-File -Encoding ascii testsat.smt2
+        $out = & $stp testsat.smt2 2>&1 | Out-String
+        "sat-backend output: '$($out.Trim())'"
+        "sat-backend exit code: $LASTEXITCODE"
+        if ($out.Trim() -ne "sat") { exit 1 }
 
 # EOF
