@@ -33,7 +33,12 @@ if(BUILD_EXECUTABLES AND NOT ONLY_SIMPLE)
         INSTALL_RPATH_USE_LINK_PATH TRUE
     )
 
+    # The allocator goes on the executable, not on libstp: it must interpose
+    # malloc for the whole process, and an embedder of libstp gets to keep
+    # whatever allocator it chose. Listing it first keeps its definitions ahead
+    # of libc for static archives.
     target_link_libraries(stp-bin
+        ${STP_ALLOCATOR_LIBRARY}
         stp
         Boost::program_options
     )
