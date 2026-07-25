@@ -361,11 +361,17 @@ void checkExhaustively(unsigned width, unsigned maxSetSize)
         const Child& child = op.children[i];
         owned[i] = new ValueSet(child.width, child.isBoolean);
         if (child.isConstant)
+        {
           EXPECT_TRUE(owned[i]->insert(makeCBV(child.width, child.value)));
+        }
         else
+        {
           for (unsigned v = 0; v < (1u << child.width); v++)
             if ((masks[i] >> v) & 1)
+            {
               EXPECT_TRUE(owned[i]->insert(makeCBV(child.width, v)));
+            }
+        }
         children[i] = owned[i];
       }
 
@@ -395,7 +401,9 @@ void checkExhaustively(unsigned width, unsigned maxSetSize)
 
       // Either the analysis widened completely, or it is exactly right.
       if (result != nullptr)
+      {
         EXPECT_EQ(members(result), ideal) << context;
+      }
 
       // The cheap operations have to be exact whenever the answer is
       // something a set can hold and is worth holding.
@@ -405,7 +413,9 @@ void checkExhaustively(unsigned width, unsigned maxSetSize)
       {
         EXPECT_NE(result, nullptr) << context;
         if (result != nullptr)
+        {
           EXPECT_EQ(members(result), ideal) << context;
+        }
       }
 
       delete result;
