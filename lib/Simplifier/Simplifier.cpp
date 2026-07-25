@@ -1500,16 +1500,17 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
           v.push_back(SimplifyTerm(toProcess[i], VarConstMap));
         else if (toProcess[i].GetType() == BOOLEAN_TYPE)
           v.push_back(SimplifyFormula(toProcess[i], VarConstMap));
+        // Simplifying a floating-point child lowers it to bitvectors, and
+        // is what makes nested floating-point expressions terminate: the
+        // rebuilt-children check below otherwise never fires, and
+        // SimplifyTerm re-enters on the same term until the stack runs out.
+        // Historically this same line made several satisfiable QF_ABVFP
+        // queries answer unsat; both causes -- rebuilds dropping the
+        // per-node float format, and the operand sort inverting the
+        // floating-point comparisons -- were fixed in fbb96cd8, and the
+        // nested-fp lit tests pin the behaviour.
         else if (toProcess[i].GetType() == FLOATINGPOINT_TYPE)
           v.push_back(SimplifyTerm(toProcess[i], VarConstMap));
-        // A FLOATINGPOINT_TYPE child is deliberately not simplified here.
-        // Simplifying it makes nested floating-point expressions terminate --
-        // otherwise the "have the children been simplified?" check further
-        // down never comes true, and SimplifyTerm re-enters on the same term
-        // until the stack runs out -- but it also makes several of them
-        // answer *wrongly*, returning unsat for satisfiable QF_ABVFP queries.
-        // Until that is understood, the stack overflow is the lesser evil:
-        // nested floating-point expressions crash rather than lie.
         else
           v.push_back(toProcess[i]);
       }
