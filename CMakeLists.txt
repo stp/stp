@@ -458,8 +458,13 @@ include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/lib/extlib-abc/src)
 include(CheckTypeSize)
 # Check size of void pointer (void*)
 CHECK_TYPE_SIZE("void*" SIZEOF_VOID_P)
-# LIN/LIN64 select ABC's Linux code paths; on Windows abc_global.h
-# detects NT/NT64 by itself, and defining LIN* there breaks the build.
+# LIN/LIN64 select ABC's Linux code paths, and NT64 the 64-bit Windows
+# ones. (abc_global.h only detects the platform by itself when
+# ABC_USE_STDINT_H is set; without NT64 its fallback ladder sees MSVC's
+# WIN32 and picks a 32-bit ABC_PTRUINT_T, whose tagged AIG pointers
+# (Aig_Not/Aig_Regular) truncate 64-bit heap pointers -- the first query
+# to reach ABC's CNF generation then dies with an access violation.
+# 32-bit Windows is already correct via the WIN32 fallback.)
 if(NOT WIN32)
     if(SIZEOF_VOID_P EQUAL 8)
         add_definitions(-DLIN64)
@@ -467,6 +472,9 @@ if(NOT WIN32)
         add_definitions(-DLIN)
     endif()
 else()
+    if(SIZEOF_VOID_P EQUAL 8)
+        add_definitions(-DNT64)
+    endif()
     # ABC is linked statically; without this its headers declare the
     # ABC API __declspec(dllimport), producing unresolved __imp_ symbols.
     add_definitions(-DWIN32_NO_DLL)

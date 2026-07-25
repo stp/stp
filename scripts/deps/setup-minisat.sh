@@ -15,7 +15,11 @@ cd "${dep}"
 mkdir build && cd build
 # minisat's cmake_minimum_required predates 3.5, which CMake 4 removed
 # support for; the same floor is passed in the Windows CI job.
-cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.12 -DCMAKE_INSTALL_PREFIX:PATH="${install_dir}" ..
+#
+# Extra arguments are forwarded to CMake, so a caller that needs a different
+# flavour of the library can ask for one: a static STP build looks for
+# libminisat.a, which only appears with -DSTATICCOMPILE=ON.
+cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.12 -DCMAKE_INSTALL_PREFIX:PATH="${install_dir}" "$@" ..
 cmake --build . --parallel "$(nproc)"
 cmake --install .
 cd ..

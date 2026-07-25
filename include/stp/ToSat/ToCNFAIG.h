@@ -35,8 +35,6 @@ THE SOFTWARE.
 
 namespace stp
 {
-class ASTtoCNF;
-
 class ToCNFAIG // not copyable
 {
   UserDefinedFlags& uf;
