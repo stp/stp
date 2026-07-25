@@ -773,12 +773,11 @@
 
 %}
 
-/* This grammar carries 216 shift/reduce and 99 reduce/reduce conflicts,
-   mostly from an_fp_term's dual routing into term and formula position.
-   They cannot be pinned with %expect: in a non-GLR parser any %expect makes
-   the (unpinnable) reduce/reduce count a hard error too. Until the routing
-   is restructured, the conflict warnings for this grammar stay suppressed
-   in lib/Parser/CMakeLists.txt; smt.y and cvc.y ARE pinned. */
+/* Conflict-free, and pinned that way: the floating-point productions were
+   once one nonterminal reachable from both term and formula position, which
+   alone accounted for 216 shift/reduce and 99 reduce/reduce conflicts. Any
+   grammar change that introduces a conflict now fails the build. */
+%expect 0
 
 %union {
   unsigned uintval; /* for numerals in types. */
@@ -798,7 +797,7 @@
 %type <vec> an_formulas an_terms function_params an_mixed
 
 
-%type <node> an_term  an_formula function_param an_const an_fp_term an_rounding_mode
+%type <node> an_term  an_formula function_param an_const an_fp_term an_fp_predicate an_rounding_mode
 %type <uintval> an_fp_const
 
 %type <fp_size> an_fp_sort
@@ -1658,7 +1657,7 @@ FORMID_TOK
   $$ = stp::GlobalParserInterface->newNode(*$1); //todo creating then deleting same?
   stp::GlobalParserInterface->deleteNode($1);
 }
-| LPAREN_TOK an_fp_term RPAREN_TOK
+| LPAREN_TOK an_fp_predicate RPAREN_TOK
 {
    $$ = $2;
 }
@@ -1942,30 +1941,6 @@ FORMID_TOK
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$1,empty));
   delete $1;
 }
-| LPAREN_TOK FLOATINGPOINT_FUNCTIONID_TOK an_mixed RPAREN_TOK
-{
-  // A floating-point define-fun applied in formula position, e.g. as an
-  // operand of (= ...), which STP routes through an_formulas. The body was
-  // left unimplemented here, so $$ was never assigned and the garbage node
-  // crashed later; give it the same handling as the an_term form.
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$2,*$3));
-
-  if ($$->GetType() != FLOATINGPOINT_TYPE)
-      yyerror("Must be floating-point type");
-
-  delete $2;
-  delete $3;
-}
-| FLOATINGPOINT_FUNCTIONID_TOK
-{
-  ASTVec empty;
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$1,empty));
-
-  if ($$->GetType() != FLOATINGPOINT_TYPE)
-    yyerror("Must be floating-point type");
-
-  delete $1;
-}
 | LPAREN_TOK EXCLAIMATION_MARK_TOK an_formula NAMED_ATTRIBUTE_TOK STRING_TOK RPAREN_TOK
 {
   /*
@@ -2150,7 +2125,52 @@ an_fp_term:
 {
   $$ = createFPBinary(FP_MAX, $3, $4);
 }
-| FP_LEQ_TOK an_terms
+| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TO_UBV_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
+{
+  $$ = createFPToBV(FP_TO_UBV, $5, $7, $8);
+}
+| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TO_SBV_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
+{
+  $$ = createFPToBV(FP_TO_SBV, $5, $7, $8);
+}
+| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term RPAREN_TOK
+{
+  // ((_ to_fp e s) bv) reinterprets the bits of a bitvector as an IEEE-754
+  // float. STP already stores floats as their packed bit pattern, so this is
+  // purely a retyping: keep the child and stamp the format onto it.
+  $$ = createFPFromBits($5, $6, $8);
+}
+| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
+{
+  // ((_ to_fp e s) rm f) reformats an existing float under a rounding mode.
+  $$ = createFPToFP($5, $6, $8, $9);
+}
+| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_UNSIGNED_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
+{
+  $$ = createFPFromUnsignedBV($5, $6, $8, $9);
+}
+| UNDERSCORE_TOK an_fp_const NUMERAL_TOK NUMERAL_TOK
+{
+  // The special values are constants: build the packed interned constant
+  // directly. A childless special-value node would hash-cons every format
+  // of, say, NaN to one node, which whoever parsed last would re-stamp.
+  uint32_t exp_width($3);
+  uint32_t sig_width($4);
+  checkFpFormatWidths(exp_width, sig_width);
+  $$ = stp::GlobalParserInterface->newNode(
+      stp::GlobalParserInterface->CreateFPSpecialConst(
+          (stp::FPSpecial)$2, exp_width, sig_width));
+}
+;
+
+// The Boolean-valued floating-point operations. Split from an_fp_term so
+// that formula position derives exactly these (parenthesised by
+// an_formula's rule) and term position derives exactly the float-valued
+// ones -- the shared nonterminal used to make every fp expression reachable
+// from both, which is where most of the grammar's reduce/reduce conflicts
+// came from.
+an_fp_predicate:
+  FP_LEQ_TOK an_terms
 {
   $$ = createFPChain(FP_LEQ, $2, "fp.leq");
 }
@@ -2199,42 +2219,6 @@ an_fp_term:
 | FP_ISPOSITIVE_TOK an_term
 {
   $$ = createFPPredicate(FP_ISPOSITIVE, $2);
-}
-| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TO_UBV_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
-{
-  $$ = createFPToBV(FP_TO_UBV, $5, $7, $8);
-}
-| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TO_SBV_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
-{
-  $$ = createFPToBV(FP_TO_SBV, $5, $7, $8);
-}
-| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term RPAREN_TOK
-{
-  // ((_ to_fp e s) bv) reinterprets the bits of a bitvector as an IEEE-754
-  // float. STP already stores floats as their packed bit pattern, so this is
-  // purely a retyping: keep the child and stamp the format onto it.
-  $$ = createFPFromBits($5, $6, $8);
-}
-| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
-{
-  // ((_ to_fp e s) rm f) reformats an existing float under a rounding mode.
-  $$ = createFPToFP($5, $6, $8, $9);
-}
-| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_UNSIGNED_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
-{
-  $$ = createFPFromUnsignedBV($5, $6, $8, $9);
-}
-| UNDERSCORE_TOK an_fp_const NUMERAL_TOK NUMERAL_TOK
-{
-  // The special values are constants: build the packed interned constant
-  // directly. A childless special-value node would hash-cons every format
-  // of, say, NaN to one node, which whoever parsed last would re-stamp.
-  uint32_t exp_width($3);
-  uint32_t sig_width($4);
-  checkFpFormatWidths(exp_width, sig_width);
-  $$ = stp::GlobalParserInterface->newNode(
-      stp::GlobalParserInterface->CreateFPSpecialConst(
-          (stp::FPSpecial)$2, exp_width, sig_width));
 }
 ;
 
