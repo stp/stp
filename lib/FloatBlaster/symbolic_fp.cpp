@@ -1274,15 +1274,6 @@ ASTNode blast_convert_float_to_float(const ASTNode& rm, const ASTNode& expr,
   return packed;
 }
 
-ASTNode round_trip(const ASTNode& expr, ASTNode** side)
-{
-  floatingPointTypeInfo size(expr.GetExpWidth(), expr.GetSigWidth());
-  uf unpacked(symfpu::unpack<traits>(size, expr));
-  *side = new ASTNode(unpacked.valid(size));
-  ASTNode packed(symfpu::pack<traits>(size, unpacked));
-  return packed;
-}
-
 ASTNode blast_round_to_integral(const ASTNode& rm, const ASTNode& expr)
 {
   floatingPointTypeInfo size(expr.GetExpWidth(), expr.GetSigWidth());

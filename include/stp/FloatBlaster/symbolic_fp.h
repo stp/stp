@@ -251,7 +251,6 @@ ASTNode blast_fpadd(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs);
 ASTNode blast_fpsub(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs);
 ASTNode blast_fpmul(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs);
 ASTNode blast_fpdiv(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs);
-ASTNode round_trip(const ASTNode& expr, ASTNode** side);
 ASTNode blast_round_to_integral(const ASTNode& rm, const ASTNode& expr);
 
 ASTNode blast_fpfma(const ASTNode& rm, const ASTNode& x, const ASTNode& y,
