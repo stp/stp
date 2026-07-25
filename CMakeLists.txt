@@ -818,8 +818,39 @@ option(ENABLE_TESTING "Enable testing" OFF)
 # try finding python if the user did not explicitly said that
 # he/she does not want python bindings
 if((NOT DEFINED ENABLE_PYTHON_INTERFACE) OR ENABLE_PYTHON_INTERFACE)
-    find_package (PythonInterp)
-    if(PYTHON_EXECUTABLE AND BUILD_SHARED_LIBS)
+    # Python 3 only. PYTHON_EXECUTABLE stays the documented way to choose the
+    # interpreter (the rest of the build and our CI use that name), so feed it
+    # to the finder and write the validated result back to it.
+    set(PYTHON_DOC_STRING "Python 3 interpreter for the bindings and the test suite")
+    if(CMAKE_VERSION VERSION_LESS 3.12)
+        # FindPython3 arrived in CMake 3.12; on older CMake ask the deprecated
+        # module for a Python 3 interpreter instead. It searches PYTHON_EXECUTABLE
+        # directly, so no hint needs forwarding.
+        find_package(PythonInterp 3)
+        set(Python3_EXECUTABLE "${PYTHON_EXECUTABLE}")
+        set(Python3_Interpreter_FOUND ${PYTHONINTERP_FOUND})
+    else()
+        if(PYTHON_EXECUTABLE)
+            set(Python3_EXECUTABLE "${PYTHON_EXECUTABLE}" CACHE FILEPATH
+                "${PYTHON_DOC_STRING}" FORCE)
+        endif()
+        find_package(Python3 COMPONENTS Interpreter)
+    endif()
+
+    # Publish the result in the cache so that subprojects looking for an
+    # interpreter of their own (e.g. gtest, which still uses the deprecated
+    # FindPythonInterp) pick up this Python 3 rather than finding a Python 2.
+    if(Python3_Interpreter_FOUND)
+        set(PYTHON_EXECUTABLE "${Python3_EXECUTABLE}" CACHE FILEPATH
+            "${PYTHON_DOC_STRING}" FORCE)
+    else()
+        set(PYTHON_EXECUTABLE "" CACHE FILEPATH "${PYTHON_DOC_STRING}" FORCE)
+        # Don't let a rejected interpreter stick in the cache, or every later
+        # reconfigure would keep re-testing the same unsuitable one.
+        unset(Python3_EXECUTABLE CACHE)
+    endif()
+
+    if(Python3_Interpreter_FOUND AND BUILD_SHARED_LIBS)
         set(ENABLE_PYTHON_INTERFACE ON)
     else()
         set(ENABLE_PYTHON_INTERFACE OFF)

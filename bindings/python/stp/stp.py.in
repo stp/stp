@@ -30,19 +30,13 @@ from ctypes import cdll, POINTER, CFUNCTYPE
 from ctypes import c_char_p, c_void_p, c_int32, c_uint32, c_uint64, c_ulong, c_bool
 import inspect
 import os.path
-import sys
+
+from .library_path import PATHS
 
 __all__ = [
     'Expr', 'Solver', 'stp', 'add', 'bitvec', 'bitvecs', 'check', 'model',
     'get_git_version_sha', 'get_git_version_tag', 'get_compilation_env', 'get_lib'
 ]
-
-Py3 = sys.version_info >= (3, 0, 0)
-
-if Py3:
-    long = int
-
-from library_path import PATHS
 
 for path in PATHS:
     if not os.path.exists(path):
@@ -274,8 +268,7 @@ class Solver(object):
         """Creates a new BitVector variable."""
         # TODO Sanitize the name or stp will segfault.
         # TODO Perhaps cache these calls per width?
-        # TODO Please, please, fix this terrible Py3 support.
-        name_conv = bytes(name, 'utf8') if Py3 else name
+        name_conv = name.encode('utf-8')
 
         bv_type = _lib.vc_bvType(self.vc, width)
         self.keys[name] = _lib.vc_varExpr(self.vc, name_conv, bv_type)
@@ -295,8 +288,8 @@ class Solver(object):
 
     def bitvecvalD(self, width, value):
         """Creates a new BitVector with a constant value."""
-        value_conv = bytes(value, 'utf8') if Py3 else value
-     
+        value_conv = value.encode('utf-8')
+
         expr = _lib.vc_bvConstExprFromDecStr(self.vc, width, value_conv)
         return Expr(self, width, expr)
 
@@ -382,8 +375,8 @@ class Solver(object):
             expr (Expr): to look up a value by expression
 
         Returns:
-            long (if expr or key is specified): the counterexample for the
-                                                expression or key
+            int (if expr or key is specified): the counterexample for the
+                                               expression or key
 
             dict (if no expr or key): the counterexample model for all named
                                       keys
@@ -479,7 +472,7 @@ class Expr(object):
         return Expr(self.s, self.width, expr)
 
     def _toexpr(self, other):
-        if isinstance(other, (int, long)):
+        if isinstance(other, int):
             return self.s.bitvecval(self.width, other)
 
         if isinstance(other, bool):
@@ -715,7 +708,7 @@ class ASTtoSTP(ast.NodeVisitor):
         self.func_name = node.name
 
         for idx, arg in enumerate(node.args.args):
-            arg = arg.arg if Py3 else arg.id
+            arg = arg.arg
             name = '%s_%d_%s' % (self.func_name, self.count, arg)
             if idx < len(self.args):
                 self.bitvecs[name] = self.args[idx]
@@ -846,13 +839,13 @@ def model(*args, **kwargs):
     return Solver.current.model(*args, **kwargs)
 
 def get_git_version_sha():
-    return _lib.get_git_version_sha()
+    return _lib.get_git_version_sha().decode('utf-8')
 
 def get_git_version_tag():
-    return _lib.get_git_version_tag()
+    return _lib.get_git_version_tag().decode('utf-8')
 
 def get_compilation_env():
-    return _lib.get_compilation_env()
+    return _lib.get_compilation_env().decode('utf-8')
 
 def get_lib():
     #

@@ -28,7 +28,7 @@ BuildRequires:  flex
 BuildRequires:  gcc-c++
 BuildRequires:  minisat-devel
 BuildRequires:  ninja
-BuildRequires:  python-devel
+BuildRequires:  python3-devel
 BuildRequires:  xz
 Summary:        Constraint Solver
 License:        MIT
@@ -126,6 +126,6 @@ Python bindings for stp library.
 
 %files python
 %defattr(-,root,root)
-%{python_sitelib}/*
+%{python3_sitelib}/*
 
 %changelog

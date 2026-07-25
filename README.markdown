@@ -98,8 +98,8 @@ generators.
 - `CMAKE_INSTALL_PREFIX` - The prefix for install (e.g. /usr/local )
 - `ENABLE_ASSERTIONS` - If TRUE STP will be built with asserts.
 - `ENABLE_TESTING` - Enable running tests
-- `ENABLE_PYTHON_INTERFACE` - Enable building the Python interface
-- `PYTHON_EXECUTABLE` - Set python executable in case you have more than one python installed
+- `ENABLE_PYTHON_INTERFACE` - Enable building the Python interface (Python 3 only)
+- `PYTHON_EXECUTABLE` - Set the Python 3 executable in case you have more than one python installed
 - `SANITIZE` - Use Clang's sanitization checks
 - `STATICCOMPILE` - Build static libraries and binaries instead of dynamic
 - `BUILD_SHARED_LIBS` - Build `libstp` as a shared library (default ON; forced
