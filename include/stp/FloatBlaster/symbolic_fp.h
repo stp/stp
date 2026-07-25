@@ -22,30 +22,29 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
+// STP's backend for symfpu: the value classes symfpu computes with
+// (propositions, signed/unsigned bitvectors, rounding modes) implemented as
+// thin wrappers over ASTNode, building circuits through the manager's node
+// factory. blast_* lower one floating-point operation each; FloatBlaster
+// dispatches to them.
+
 #ifndef SYMBOLIC_FP_H
 #define SYMBOLIC_FP_H
 
-#define STP_USE_SYMFPU
-
 #include "stp/AST/AST.h"
-#include "stp/NodeFactory/SimplifyingNodeFactory.h"
 #include "stp/STPManager/STPManager.h"
 
-#ifdef STP_USE_SYMFPU
 #include "symfpu/core/unpackedFloat.h"
-#endif
 
 namespace stp
 {
-
-typedef ASTNode Node;
-typedef ASTNode TNode;
-typedef ASTNode TypeNode;
-typedef ASTNode FloatingPointSize;
-
 namespace symbolic_fp
 {
 
+// A rounding mode is a one-hot 5-bit bitvector: one bit per IEEE mode, so
+// an invalid mode is representable (all-zero, or multiple bits) and
+// roundingMode::valid() can constrain a symbolic one. The public C API's
+// VCRoundingMode mirrors these values.
 enum rounding_modes
 {
   ROUND_NEAREST_TIES_TO_EVEN = 1,
@@ -88,23 +87,21 @@ public:
 typedef traits::bwt bwt;
 typedef symfpu::unpackedFloat<traits> uf;
 
-class nodeWrapper : public Node
+class nodeWrapper : public ASTNode
 {
 protected:
-  nodeWrapper(const Node& n);
+  nodeWrapper(const ASTNode& n);
 };
 
 class proposition : public nodeWrapper
 {
 protected:
-  bool checkNodeType(const TNode node);
+  bool checkNodeType(const ASTNode& node);
 
-#ifdef STP_USE_SYMFPU
   friend ::symfpu::ite<proposition, proposition>;
-#endif
 
 public:
-  proposition(const Node n);
+  proposition(const ASTNode n);
   proposition(bool v);
   proposition(const proposition& old);
 
@@ -118,14 +115,12 @@ public:
 class roundingMode : public nodeWrapper
 {
 protected:
-  bool checkNodeType(const TNode n);
+  bool checkNodeType(const ASTNode& n);
 
-#ifdef STP_USE_SYMFPU
   friend ::symfpu::ite<proposition, roundingMode>;
-#endif
 
 public:
-  roundingMode(const Node n);
+  roundingMode(const ASTNode n);
   roundingMode(const unsigned v);
   roundingMode(const roundingMode& old);
 
@@ -150,26 +145,17 @@ template <bool isSigned> class bitVector : public nodeWrapper
 protected:
   typedef typename signedToLiteralType<isSigned>::literalType literalType;
 
-  Node boolNodeToBV(Node node) const;
-  Node BVToBoolNode(Node node) const;
-
-  Node fromProposition(Node node) const;
-  Node toProposition(Node node) const;
-  bool checkNodeType(const TNode n);
+  ASTNode fromProposition(const ASTNode& node) const;
+  bool checkNodeType(const ASTNode& n);
   friend bitVector<!isSigned>;
 
-#ifdef STP_USE_SYMFPU
   friend ::symfpu::ite<proposition, bitVector<isSigned>>;
-#endif
 
 public:
-  bitVector(const Node n);
+  bitVector(const ASTNode n);
   bitVector(const bwt w, const unsigned v);
   bitVector(const proposition& p);
   bitVector(const bitVector<isSigned>& old);
-#if 0
-    bitVector(const BitVector &old);
-#endif
 
   bwt getWidth(void) const;
 
@@ -230,8 +216,6 @@ public:
   floatingPointTypeInfo(unsigned exp, unsigned sig);
   floatingPointTypeInfo(const floatingPointTypeInfo& old);
 
-  TypeNode getTypeNode(void) const;
-
   bitWidthType exponentWidth(void) const;
   bitWidthType significandWidth(void) const;
 
@@ -244,7 +228,11 @@ private:
   bitWidthType m_sig;
 };
 
-void init_vc(STPMgr* _bm);
+// Point the backend at the manager whose nodes are being blasted. symfpu
+// constructs backend values through static trait calls (traits::RNE() takes
+// no context), so the manager and factory have to live in file statics;
+// this repoints them, and is called before every top-level blast.
+void init(STPMgr* bm);
 
 ASTNode blast_smt_eq(const ASTNode& lhs, const ASTNode& rhs);
 ASTNode blast_fpadd(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs);
@@ -307,5 +295,3 @@ ASTNode blast_convert_float_to_float(const ASTNode& rm, const ASTNode& expr,
 } // namespace stp
 
 #endif
-
-// EOF

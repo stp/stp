@@ -116,7 +116,7 @@ int main()
   GlobalParserBM = bm;
   auto* nf = new SimplifyingNodeFactory(*bm->hashingNodeFactory, *bm);
   bm->defaultNodeFactory = nf;
-  init_vc(bm);
+  symbolic_fp::init(bm);
 
   printf("== constructors and constants ==\n");
   check("ubv(8, 5)", value_of(mk<false>(8, 5)), 5);

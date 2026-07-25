@@ -103,7 +103,7 @@ struct Ctx
     // The float blaster's singleton reads GlobalParserBM (for ASTTrue and the
     // node factory) when NonMemberBVConstEvaluator first folds a float op.
     GlobalParserBM = &mgr;
-    symbolic_fp::init_vc(&mgr);
+    symbolic_fp::init(&mgr);
   }
 
   // A fresh float variable of format (eb, sb).

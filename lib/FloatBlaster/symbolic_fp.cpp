@@ -24,11 +24,10 @@ THE SOFTWARE.
 
 #include "stp/FloatBlaster/symbolic_fp.h"
 
-#include "stp/NodeFactory/SimplifyingNodeFactory.h"
+#include "stp/NodeFactory/NodeFactory.h"
 #include "stp/STPManager/STPManager.h"
-#include "stp/c_interface.h"
 
-#include <map>
+#include <cassert>
 
 #include "symfpu/core/add.h"
 #include "symfpu/core/classify.h"
@@ -43,24 +42,53 @@ THE SOFTWARE.
 #include "symfpu/core/sign.h"
 #include "symfpu/core/sqrt.h"
 #include "symfpu/core/unpackedFloat.h"
-
-#define SYMFPUPROPISBOOL
+#include "symfpu/utils/numberOfRoundingModes.h"
 
 using namespace stp;
 using namespace stp::symbolic_fp;
 
-static VC vc;
-static STPMgr* bm;
+// The manager and factory the circuits are built into. symfpu constructs
+// backend values through static trait calls (traits::RNE() and friends take
+// no context), so the context has to live in file statics; init() repoints
+// them before every top-level blast (see FloatBlaster::BlastNode_TopLevel).
+// The factory is the manager's default (simplifying) factory: constant
+// operands fold as the circuit is built, which is what lets the constant
+// evaluator blast-fold floating-point operations on constants.
+static STPMgr* s_bm = nullptr;
+static NodeFactory* s_nf = nullptr;
 
-nodeWrapper::nodeWrapper(const Node& n) : Node(n) {}
+namespace stp
+{
+namespace symbolic_fp
+{
+void init(STPMgr* bm)
+{
+  assert(bm != nullptr);
+  s_bm = bm;
+  s_nf = bm->defaultNodeFactory;
+}
+} // namespace symbolic_fp
+} // namespace stp
+
+nodeWrapper::nodeWrapper(const ASTNode& n) : ASTNode(n) {}
+
+/****************************************************************
+ * roundingMode                                                 *
+ ****************************************************************/
 
 roundingMode::roundingMode(unsigned int v)
-    : nodeWrapper(*static_cast<Node*>(
-          vc_bvConstExprFromInt(vc, SYMFPU_NUMBER_OF_ROUNDING_MODES, v)))
+    : nodeWrapper(s_bm->CreateBVConst(SYMFPU_NUMBER_OF_ROUNDING_MODES, v))
 {
 }
 
-roundingMode::roundingMode(const Node n) : nodeWrapper(n) {}
+roundingMode::roundingMode(const ASTNode n) : nodeWrapper(n) {}
+
+roundingMode::roundingMode(const roundingMode& old) : nodeWrapper(old) {}
+
+proposition roundingMode::operator==(const roundingMode& op) const
+{
+  return proposition(s_nf->CreateNode(EQ, *this, op));
+}
 
 roundingMode traits::RNE(void)
 {
@@ -87,44 +115,42 @@ roundingMode traits::RTZ(void)
   return roundingMode(ROUND_TOWARD_ZERO);
 }
 
-proposition roundingMode::operator==(const roundingMode& op) const
-{
-  void* vs_this = reinterpret_cast<void*>(const_cast<roundingMode*>(this));
-  void* vs_op = reinterpret_cast<void*>(const_cast<roundingMode*>(&op));
-  void* expr = vc_eqExpr(vc, vs_this, vs_op);
-  Node* node = static_cast<Node*>(expr);
-  return proposition(*node);
-}
-
 void traits::precondition(const bool b)
 {
   assert(b);
+  (void)b;
 }
 
 void traits::postcondition(const bool b)
 {
   assert(b);
+  (void)b;
 }
 
 void traits::invariant(const bool b)
 {
   assert(b);
+  (void)b;
 }
 
+// Symbolic properties cannot be checked at blast time.
 void traits::precondition(const prop&) {}
 
 void traits::postcondition(const prop&) {}
 
 void traits::invariant(const prop&) {}
 
-proposition::proposition(const Node n) : nodeWrapper(n)
+/****************************************************************
+ * proposition                                                  *
+ ****************************************************************/
+
+proposition::proposition(const ASTNode n) : nodeWrapper(n)
 {
   assert(checkNodeType(*this));
 }
 
 proposition::proposition(bool v)
-    : nodeWrapper(v ? *static_cast<Node*>(vc_trueExpr(vc))
-                    : *static_cast<Node*>(vc_falseExpr(vc)))
+    : nodeWrapper(v ? s_bm->ASTTrue : s_bm->ASTFalse)
 {
   assert(checkNodeType(*this));
 }
@@ -134,132 +160,58 @@ proposition::proposition(const proposition& old) : nodeWrapper(old)
   assert(checkNodeType(*this));
 }
 
-bool proposition::checkNodeType(const TNode node)
+bool proposition::checkNodeType(const ASTNode& node)
 {
-  bool result(node.GetType() == stp::BOOLEAN_TYPE);
-  assert(result);
-  return result;
+  return node.GetType() == stp::BOOLEAN_TYPE;
 }
 
 proposition proposition::operator!(void) const
 {
-  void* vs_this = reinterpret_cast<void*>(const_cast<proposition*>(this));
-  void* expr = vc_notExpr(vc, vs_this);
-  Node* node = static_cast<Node*>(expr);
-  return proposition(*node);
+  return proposition(s_nf->CreateNode(NOT, *this));
 }
 
 proposition proposition::operator&&(const proposition& op) const
 {
-  void* vs_this = reinterpret_cast<void*>(const_cast<proposition*>(this));
-  void* vs_op = reinterpret_cast<void*>(const_cast<proposition*>(&op));
-  void* expr = vc_andExpr(vc, vs_this, vs_op);
-  Node* node = static_cast<Node*>(expr);
-  return proposition(*node);
+  return proposition(s_nf->CreateNode(AND, *this, op));
 }
 
 proposition proposition::operator||(const proposition& op) const
 {
-  void* vs_this = reinterpret_cast<void*>(const_cast<proposition*>(this));
-  void* vs_op = reinterpret_cast<void*>(const_cast<proposition*>(&op));
-  void* expr = vc_orExpr(vc, vs_this, vs_op);
-  Node* node = static_cast<Node*>(expr);
-  return proposition(*node);
+  return proposition(s_nf->CreateNode(OR, *this, op));
 }
 
 proposition proposition::operator==(const proposition& op) const
 {
-  assert(GetType() == stp::BOOLEAN_TYPE);
-  assert(op.GetType() == stp::BOOLEAN_TYPE);
-
-  void* one = vc_bvConstExprFromInt(vc, 1, 1);
-  void* zero = vc_bvConstExprFromInt(vc, 1, 0);
-
-  void* vs_this = reinterpret_cast<void*>(const_cast<proposition*>(this));
-  void* ite_this = vc_iteExpr(vc, vs_this, one, zero);
-
-  void* vs_op = reinterpret_cast<void*>(const_cast<proposition*>(&op));
-  void* ite_op = vc_iteExpr(vc, vs_op, one, zero);
-
-  void* expr = vc_eqExpr(vc, ite_this, ite_op);
-
-  Node* node = static_cast<Node*>(expr);
-  return proposition(*node);
+  return proposition(s_nf->CreateNode(IFF, *this, op));
 }
 
 proposition proposition::operator^(const proposition& op) const
 {
-  void* vs_this = reinterpret_cast<void*>(const_cast<proposition*>(this));
-  void* vs_op = reinterpret_cast<void*>(const_cast<proposition*>(&op));
-  void* expr = vc_xorExpr(vc, vs_this, vs_op);
-  Node* node = static_cast<Node*>(expr);
-  return proposition(*node);
+  return proposition(s_nf->CreateNode(XOR, *this, op));
 }
 
-template <> bitVector<true> bitVector<true>::maxValue(const bitWidthType& w)
-{
-  bitVector<true> leadingZero(bitVector<true>::zero(1));
-  bitVector<true> base(bitVector<true>::allOnes(w - 1));
-
-  void* vs_leading =
-      reinterpret_cast<void*>(const_cast<bitVector<true>*>(&leadingZero));
-  void* vs_base = reinterpret_cast<void*>(const_cast<bitVector<true>*>(&base));
-  void* expr = vc_bvConcatExpr(vc, vs_leading, vs_base);
-  Node* node = static_cast<Node*>(expr);
-  assert(node->GetValueWidth() == w);
-  return bitVector<true>(*node);
-}
-
-template <> bitVector<false> bitVector<false>::maxValue(const bitWidthType& w)
-{
-  return bitVector<false>::allOnes(w);
-}
-
-template <> bitVector<true> bitVector<true>::minValue(const bitWidthType& w)
-{
-  // The most negative two's-complement value is a set sign bit followed by
-  // zeros. This used to build a *clear* sign bit followed by zeros, which is
-  // simply 0 -- so the signed minimum compared equal to zero.
-  bitVector<true> leadingOne(bitVector<true>::one(1));
-  bitVector<true> base(bitVector<true>::zero(w - 1));
-
-  void* vs_leading =
-      reinterpret_cast<void*>(const_cast<bitVector<true>*>(&leadingOne));
-  void* vs_base = reinterpret_cast<void*>(const_cast<bitVector<true>*>(&base));
-  void* expr = vc_bvConcatExpr(vc, vs_leading, vs_base);
-  Node* node = static_cast<Node*>(expr);
-  assert(node->GetValueWidth() == w);
-  return bitVector<true>(*node);
-}
-
-template <> bitVector<false> bitVector<false>::minValue(const bitWidthType& w)
-{
-  return bitVector<false>::zero(w);
-}
+/****************************************************************
+ * bitVector                                                    *
+ ****************************************************************/
 
 template <bool isSigned>
-bitVector<isSigned>::bitVector(const Node n) : nodeWrapper(n)
+bitVector<isSigned>::bitVector(const ASTNode n) : nodeWrapper(n)
 {
   assert(checkNodeType(*this));
 }
 
-template <bool isSigned> bool bitVector<isSigned>::checkNodeType(const TNode n)
+template <bool isSigned>
+bool bitVector<isSigned>::checkNodeType(const ASTNode& n)
 {
-  bool result(n.GetType() == stp::BITVECTOR_TYPE ||
-              n.GetType() == stp::FLOATINGPOINT_TYPE);
-  if (!result)
-  {
-    std::cout << GetValueWidth() << std::endl;
-    std::cout << n << std::endl;
-  }
-  assert(result);
-  assert(GetValueWidth() > 0);
-  return result;
+  // Floats are carried packed, so a float-typed node is bits too.
+  return (n.GetType() == stp::BITVECTOR_TYPE ||
+          n.GetType() == stp::FLOATINGPOINT_TYPE) &&
+         n.GetValueWidth() > 0;
 }
 
 template <bool isSigned>
 bitVector<isSigned>::bitVector(const bitWidthType w, const unsigned v)
-    : nodeWrapper(*static_cast<Node*>(vc_bvConstExprFromInt(vc, w, v)))
+    : nodeWrapper(s_bm->CreateBVConst(w, v))
 {
   assert(checkNodeType(*this));
 }
@@ -277,17 +229,18 @@ bitVector<isSigned>::bitVector(const bitVector<isSigned>& old)
   assert(checkNodeType(*this));
 }
 
+// symfpu's propositions are Boolean nodes; where it stores one into a
+// bitvector, select a bit.
+template <bool isSigned>
+ASTNode bitVector<isSigned>::fromProposition(const ASTNode& node) const
+{
+  return s_nf->CreateTerm(ITE, 1, node, s_bm->CreateOneConst(1),
+                          s_bm->CreateZeroConst(1));
+}
+
 template <bool isSigned> bitWidthType bitVector<isSigned>::getWidth(void) const
 {
-  bitWidthType ret = 0;
-  if (GetType() == BOOLEAN_TYPE)
-  {
-    ret = 1;
-  }
-  else
-  {
-    ret = GetValueWidth();
-  }
+  const bitWidthType ret = GetValueWidth();
   assert(ret > 0);
   return ret;
 }
@@ -320,193 +273,135 @@ template <bool isSigned> proposition bitVector<isSigned>::isAllZeros() const
   return (*this == bitVector<isSigned>::zero(this->getWidth()));
 }
 
+template <> bitVector<true> bitVector<true>::maxValue(const bitWidthType& w)
+{
+  // A clear sign bit followed by ones.
+  bitVector<true> leadingZero(bitVector<true>::zero(1));
+  bitVector<true> base(bitVector<true>::allOnes(w - 1));
+  return bitVector<true>(s_nf->CreateTerm(BVCONCAT, w, leadingZero, base));
+}
+
+template <> bitVector<false> bitVector<false>::maxValue(const bitWidthType& w)
+{
+  return bitVector<false>::allOnes(w);
+}
+
+template <> bitVector<true> bitVector<true>::minValue(const bitWidthType& w)
+{
+  // The most negative two's-complement value is a set sign bit followed by
+  // zeros. This used to build a *clear* sign bit followed by zeros, which is
+  // simply 0 -- so the signed minimum compared equal to zero.
+  bitVector<true> leadingOne(bitVector<true>::one(1));
+  bitVector<true> base(bitVector<true>::zero(w - 1));
+  return bitVector<true>(s_nf->CreateTerm(BVCONCAT, w, leadingOne, base));
+}
+
+template <> bitVector<false> bitVector<false>::minValue(const bitWidthType& w)
+{
+  return bitVector<false>::zero(w);
+}
+
 template <bool isSigned>
 bitVector<isSigned>
 bitVector<isSigned>::operator<<(const bitVector<isSigned>& op) const
 {
-  void* vs_this =
-      reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(this));
-  void* vs_op = reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(&op));
-  void* expr = vc_bvLeftShiftExprExpr(vc, GetValueWidth(), vs_this, vs_op);
-  Node* node = static_cast<Node*>(expr);
-  return bitVector<isSigned>(*node);
+  return bitVector<isSigned>(
+      s_nf->CreateTerm(BVLEFTSHIFT, getWidth(), *this, op));
 }
 
 template <bool isSigned>
 bitVector<isSigned>
 bitVector<isSigned>::operator>>(const bitVector<isSigned>& op) const
 {
-  void* vs_this =
-      reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(this));
-  void* vs_op = reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(&op));
-  void* expr = nullptr;
-  if (isSigned)
-  {
-    expr = vc_bvSignedRightShiftExprExpr(vc, GetValueWidth(), vs_this, vs_op);
-  }
-  else
-  {
-    expr = vc_bvRightShiftExprExpr(vc, GetValueWidth(), vs_this, vs_op);
-  }
-  Node* node = static_cast<Node*>(expr);
-  return bitVector<isSigned>(*node);
+  return bitVector<isSigned>(s_nf->CreateTerm(
+      isSigned ? BVSRSHIFT : BVRIGHTSHIFT, getWidth(), *this, op));
 }
 
 template <bool isSigned>
 bitVector<isSigned>
 bitVector<isSigned>::operator|(const bitVector<isSigned>& op) const
 {
-  void* vs_this =
-      reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(this));
-  void* vs_op = reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(&op));
-  void* expr = vc_bvOrExpr(vc, vs_this, vs_op);
-  Node* node = static_cast<Node*>(expr);
-  return bitVector<isSigned>(*node);
+  return bitVector<isSigned>(s_nf->CreateTerm(BVOR, getWidth(), *this, op));
 }
 
 template <bool isSigned>
 bitVector<isSigned>
 bitVector<isSigned>::operator&(const bitVector<isSigned>& op) const
 {
-  void* vs_this =
-      reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(this));
-  void* vs_op = reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(&op));
-  void* expr = vc_bvAndExpr(vc, vs_this, vs_op);
-  Node* node = static_cast<Node*>(expr);
-  return bitVector<isSigned>(*node);
+  return bitVector<isSigned>(s_nf->CreateTerm(BVAND, getWidth(), *this, op));
 }
 
 template <bool isSigned>
 bitVector<isSigned>
 bitVector<isSigned>::operator+(const bitVector<isSigned>& op) const
 {
-  void* vs_this =
-      reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(this));
-  void* vs_op = reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(&op));
-  void* expr = vc_bvPlusExpr(vc, GetValueWidth(), vs_this, vs_op);
-  Node* node = static_cast<Node*>(expr);
-  return bitVector<isSigned>(*node);
+  return bitVector<isSigned>(s_nf->CreateTerm(BVPLUS, getWidth(), *this, op));
 }
 
 template <bool isSigned>
 bitVector<isSigned>
 bitVector<isSigned>::operator-(const bitVector<isSigned>& op) const
 {
-  void* vs_this =
-      reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(this));
-  void* vs_op = reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(&op));
-  void* expr = vc_bvMinusExpr(vc, GetValueWidth(), vs_this, vs_op);
-  Node* node = static_cast<Node*>(expr);
-  return bitVector<isSigned>(*node);
+  return bitVector<isSigned>(s_nf->CreateTerm(BVSUB, getWidth(), *this, op));
 }
 
 template <bool isSigned>
 bitVector<isSigned>
 bitVector<isSigned>::operator*(const bitVector<isSigned>& op) const
 {
-  void* vs_this =
-      reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(this));
-  void* vs_op = reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(&op));
-  void* expr = vc_bvMultExpr(vc, GetValueWidth(), vs_this, vs_op);
-  Node* node = static_cast<Node*>(expr);
-  return bitVector<isSigned>(*node);
+  return bitVector<isSigned>(s_nf->CreateTerm(BVMULT, getWidth(), *this, op));
 }
 
 template <bool isSigned>
 bitVector<isSigned>
 bitVector<isSigned>::operator/(const bitVector<isSigned>& op) const
 {
-  void* vs_this =
-      reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(this));
-  void* vs_op = reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(&op));
-  void* expr = nullptr;
-  if (isSigned)
-  {
-    expr = vc_sbvDivExpr(vc, GetValueWidth(), vs_this, vs_op);
-  }
-  else
-  {
-    expr = vc_bvDivExpr(vc, GetValueWidth(), vs_this, vs_op);
-  }
-  Node* node = static_cast<Node*>(expr);
-  return bitVector<isSigned>(*node);
+  return bitVector<isSigned>(
+      s_nf->CreateTerm(isSigned ? SBVDIV : BVDIV, getWidth(), *this, op));
 }
 
 template <bool isSigned>
 bitVector<isSigned>
 bitVector<isSigned>::operator%(const bitVector<isSigned>& op) const
 {
-  void* vs_this =
-      reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(this));
-  void* vs_op = reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(&op));
-  void* expr = nullptr;
-  if (isSigned)
-  {
-    expr = vc_sbvModExpr(vc, GetValueWidth(), vs_this, vs_op);
-  }
-  else
-  {
-    expr = vc_bvModExpr(vc, GetValueWidth(), vs_this, vs_op);
-  }
-  Node* node = static_cast<Node*>(expr);
-  return bitVector<isSigned>(*node);
+  return bitVector<isSigned>(
+      s_nf->CreateTerm(isSigned ? SBVMOD : BVMOD, getWidth(), *this, op));
 }
 
 template <bool isSigned>
 bitVector<isSigned> bitVector<isSigned>::operator-(void) const
 {
-  void* vs_this =
-      reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(this));
-  void* expr = vc_bvUMinusExpr(vc, vs_this);
-  Node* node = static_cast<Node*>(expr);
-  return bitVector<isSigned>(*node);
+  return bitVector<isSigned>(s_nf->CreateTerm(BVUMINUS, getWidth(), *this));
 }
 
 template <bool isSigned>
 bitVector<isSigned> bitVector<isSigned>::operator~(void) const
 {
-  void* vs_this =
-      reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(this));
-  void* expr = vc_bvNotExpr(vc, vs_this);
-  Node* node = static_cast<Node*>(expr);
-  return bitVector<isSigned>(*node);
+  return bitVector<isSigned>(s_nf->CreateTerm(BVNOT, getWidth(), *this));
 }
 
 template <bool isSigned>
 bitVector<isSigned> bitVector<isSigned>::increment() const
 {
-  void* vs_this =
-      reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(this));
-  void* one = vc_bvConstExprFromInt(vc, GetValueWidth(), 1);
-  void* expr = vc_bvPlusExpr(vc, GetValueWidth(), vs_this, one);
-  Node* node = static_cast<Node*>(expr);
-  return bitVector<isSigned>(*node);
+  return *this + one(getWidth());
 }
 
 template <bool isSigned>
 bitVector<isSigned> bitVector<isSigned>::decrement() const
 {
-  void* vs_this =
-      reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(this));
-  void* one = vc_bvConstExprFromInt(vc, GetValueWidth(), 1);
-  void* expr = vc_bvMinusExpr(vc, GetValueWidth(), vs_this, one);
-  Node* node = static_cast<Node*>(expr);
-  return bitVector<isSigned>(*node);
+  return *this - one(getWidth());
 }
 
 template <bool isSigned>
 bitVector<isSigned>
 bitVector<isSigned>::signExtendRightShift(const bitVector<isSigned>& op) const
 {
-  void* vs_this =
-      reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(this));
-  void* vs_op = reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(&op));
-  void* expr =
-      vc_bvSignedRightShiftExprExpr(vc, GetValueWidth(), vs_this, vs_op);
-  Node* node = static_cast<Node*>(expr);
-  return bitVector<isSigned>(*node);
+  return bitVector<isSigned>(
+      s_nf->CreateTerm(BVSRSHIFT, getWidth(), *this, op));
 }
 
+// symfpu distinguishes the modular operations (that may wrap) from the
+// plain ones (guarded by preconditions); on bitvectors they coincide.
 template <bool isSigned>
 bitVector<isSigned>
 bitVector<isSigned>::modularLeftShift(const bitVector<isSigned>& op) const
@@ -556,18 +451,25 @@ bitVector<isSigned> bitVector<isSigned>::modularNegate() const
 template <bool isSigned>
 proposition bitVector<isSigned>::operator==(const bitVector<isSigned>& op) const
 {
-  void* vs_this =
-      reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(this));
-  void* vs_op = reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(&op));
-  void* expr = vc_eqExpr(vc, vs_this, vs_op);
-  Node* node = static_cast<Node*>(expr);
-  return proposition(*node);
+  return proposition(s_nf->CreateNode(EQ, *this, op));
+}
+
+template <bool isSigned>
+proposition bitVector<isSigned>::operator<(const bitVector<isSigned>& op) const
+{
+  // symfpu compares values of different widths in a few places; bring the
+  // narrower operand up first.
+  const Kind k = isSigned ? BVSLT : BVLT;
+  if (getWidth() < op.getWidth())
+    return proposition(s_nf->CreateNode(k, matchWidth(op), op));
+  if (op.getWidth() < getWidth())
+    return proposition(s_nf->CreateNode(k, *this, op.matchWidth(*this)));
+  return proposition(s_nf->CreateNode(k, *this, op));
 }
 
 template <bool isSigned>
 proposition bitVector<isSigned>::operator<=(const bitVector<isSigned>& op) const
 {
-
   return (*this < op) || (*this == op);
 }
 
@@ -578,67 +480,10 @@ proposition bitVector<isSigned>::operator>=(const bitVector<isSigned>& op) const
 }
 
 template <bool isSigned>
-proposition bitVector<isSigned>::operator<(const bitVector<isSigned>& op) const
-{
-  const bitVector<isSigned> this_node(*this);
-  bitWidthType this_size = this_node.GetValueWidth();
-  const bitVector<isSigned> op_node(op);
-  bitWidthType op_size = op_node.GetValueWidth();
-
-  const bitVector<isSigned>* lhs = nullptr;
-  const bitVector<isSigned>* rhs = nullptr;
-
-  if (this_size > op_size)
-  {
-    lhs = this;
-    rhs = new bitVector<isSigned>(op_node.matchWidth(this_node));
-  }
-  else if (op_size > this_size)
-  {
-    lhs = new bitVector<isSigned>(this_node.matchWidth(op_node));
-    rhs = &op;
-  }
-  else
-  {
-    lhs = this;
-    rhs = &op;
-  }
-
-  assert(lhs->GetValueWidth() == rhs->GetValueWidth());
-
-  void* vs_this =
-      reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(lhs));
-  void* vs_op = reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(rhs));
-  void* expr = nullptr;
-  if (isSigned)
-  {
-    expr = vc_sbvLtExpr(vc, vs_this, vs_op);
-  }
-  else
-  {
-    expr = vc_bvLtExpr(vc, vs_this, vs_op);
-  }
-  Node* node = static_cast<Node*>(expr);
-  return proposition(*node);
-}
-
-template <bool isSigned>
 proposition bitVector<isSigned>::operator>(const bitVector<isSigned>& op) const
 {
-  void* vs_this =
-      reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(this));
-  void* vs_op = reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(&op));
-  void* expr = nullptr;
-  if (isSigned)
-  {
-    expr = vc_sbvLtExpr(vc, vs_op, vs_this);
-  }
-  else
-  {
-    expr = vc_bvLtExpr(vc, vs_op, vs_this);
-  }
-  Node* node = static_cast<Node*>(expr);
-  return proposition(*node);
+  return proposition(
+      s_nf->CreateNode(isSigned ? BVSLT : BVLT, op, *this));
 }
 
 template <bool isSigned>
@@ -656,13 +501,13 @@ bitVector<false> bitVector<isSigned>::toUnsigned(void) const
 template <>
 bitVector<true> bitVector<true>::extend(bitWidthType extension) const
 {
-  void* vs_this = reinterpret_cast<void*>(const_cast<bitVector<true>*>(this));
-  bitWidthType new_length = this->GetValueWidth() + extension;
-  void* expr = vc_bvSignExtend(vc, vs_this, new_length);
-  Node* node = static_cast<Node*>(expr);
-  bitVector<true> ret(*node);
-  assert(ret.GetValueWidth() == this->GetValueWidth() + extension);
-  return ret;
+  if (extension == 0)
+    return *this;
+
+  const bitWidthType new_length = getWidth() + extension;
+  return bitVector<true>(
+      s_nf->CreateTerm(BVSX, new_length, *this,
+                       s_bm->CreateBVConst(32, new_length)));
 }
 
 template <>
@@ -674,47 +519,29 @@ bitVector<false> bitVector<false>::extend(bitWidthType extension) const
   if (extension == 0)
     return *this;
 
-  void* vs_this = reinterpret_cast<void*>(const_cast<bitVector<false>*>(this));
-  void* zero = vc_bvConstExprFromInt(vc, extension, 0);
-  void* expr = vc_bvConcatExpr(vc, zero, vs_this);
-  Node* node = static_cast<Node*>(expr);
-  assert(node->GetValueWidth() > 0);
-  bitVector<false> ret(*node);
-  assert(ret.GetValueWidth() == this->GetValueWidth() + extension);
-  return ret;
+  const bitWidthType new_length = getWidth() + extension;
+  return bitVector<false>(
+      s_nf->CreateTerm(BVCONCAT, new_length,
+                       s_bm->CreateZeroConst(extension), *this));
 }
 
 template <bool isSigned>
 bitVector<isSigned> bitVector<isSigned>::contract(bitWidthType reduction) const
 {
   assert(this->getWidth() > reduction);
-
-  unsigned int width = (this->getWidth() - 1) - reduction;
-
-  void* vs_this =
-      reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(this));
-  void* expr = vc_bvExtract(vc, vs_this, width, 0);
-  Node* node = static_cast<Node*>(expr);
-  return bitVector<isSigned>(*node);
+  return extract((this->getWidth() - 1) - reduction, 0);
 }
 
 template <bool isSigned>
 bitVector<isSigned> bitVector<isSigned>::resize(bitWidthType newSize) const
 {
-  bitWidthType width = this->getWidth();
+  const bitWidthType width = this->getWidth();
 
   if (newSize > width)
-  {
     return this->extend(newSize - width);
-  }
-  else if (newSize < width)
-  {
+  if (newSize < width)
     return this->contract(width - newSize);
-  }
-  else
-  {
-    return *this;
-  }
+  return *this;
 }
 
 template <bool isSigned>
@@ -723,34 +550,16 @@ bitVector<isSigned>::matchWidth(const bitVector<isSigned>& op) const
 {
   assert(this->getWidth() <= op.getWidth());
   if (this->getWidth() == op.getWidth())
-  {
     return *this;
-  }
-  else
-  {
-    bitWidthType to_add = op.getWidth() - this->getWidth();
-    assert(op.getWidth() == to_add + this->getWidth());
-    bitVector<isSigned> ret(this->extend(to_add));
-    assert(ret.getWidth() == to_add + this->getWidth());
-    return ret;
-  }
+  return this->extend(op.getWidth() - this->getWidth());
 }
 
 template <bool isSigned>
 bitVector<isSigned>
 bitVector<isSigned>::append(const bitVector<isSigned>& op) const
 {
-  if (GetValueWidth() <= 0)
-  {
-    std::cout << *this << std::endl;
-    assert(false);
-  }
-  void* vs_this =
-      reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(this));
-  void* vs_op = reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(&op));
-  void* expr = vc_bvConcatExpr(vc, vs_this, vs_op);
-  Node* node = static_cast<Node*>(expr);
-  return bitVector<isSigned>(*node);
+  return bitVector<isSigned>(s_nf->CreateTerm(
+      BVCONCAT, getWidth() + op.getWidth(), *this, op));
 }
 
 template <bool isSigned>
@@ -758,31 +567,15 @@ bitVector<isSigned> bitVector<isSigned>::extract(bitWidthType upper,
                                                  bitWidthType lower) const
 {
   assert(upper >= lower);
-
-  void* vs_this =
-      reinterpret_cast<void*>(const_cast<bitVector<isSigned>*>(this));
-  void* expr = vc_bvExtract(vc, vs_this, upper, lower);
-  Node* node = static_cast<Node*>(expr);
-  bitVector<isSigned> ret(*node);
-  unsigned int expected_width = (upper - lower) + 1;
-  assert(ret.GetValueWidth() == expected_width);
-  return ret;
+  return bitVector<isSigned>(
+      s_nf->CreateTerm(BVEXTRACT, (upper - lower) + 1, *this,
+                       s_bm->CreateBVConst(32, upper),
+                       s_bm->CreateBVConst(32, lower)));
 }
 
-template <bool isSigned>
-Node bitVector<isSigned>::fromProposition(Node node) const
-{
-#ifdef SYMFPUPROPISBOOL
-  void* vs_node = reinterpret_cast<void*>(&node);
-  void* zero = vc_bvConstExprFromInt(vc, 1, 0);
-  void* one = vc_bvConstExprFromInt(vc, 1, 1);
-  void* expr = vc_iteExpr(vc, vs_node, one, zero);
-  Node* result = static_cast<Node*>(expr);
-  return bitVector<isSigned>(*result);
-#else
-  return node;
-#endif
-}
+/****************************************************************
+ * floatingPointTypeInfo                                        *
+ ****************************************************************/
 
 floatingPointTypeInfo::floatingPointTypeInfo(unsigned exp, unsigned sig)
     : m_exp(exp), m_sig(sig)
@@ -819,98 +612,44 @@ bitWidthType floatingPointTypeInfo::packedSignificandWidth(void) const
   return significandWidth() - 1;
 }
 
-#ifdef SYMFPUPROPISBOOL
-#define STPSYMITEDFN(T)                                                        \
-  template <> struct symfpu::ite<symbolic_fp::proposition, T>                  \
+/****************************************************************
+ * symfpu ITE dispatch                                          *
+ ****************************************************************/
+
+namespace symfpu
+{
+
+template <> struct ite<symbolic_fp::proposition, symbolic_fp::proposition>
+{
+  static const symbolic_fp::proposition
+  iteOp(const symbolic_fp::proposition& cond,
+        const symbolic_fp::proposition& l, const symbolic_fp::proposition& r)
+  {
+    return symbolic_fp::proposition(s_nf->CreateNode(stp::ITE, cond, l, r));
+  }
+};
+
+#define STP_SYM_ITE_TERM(T)                                                    \
+  template <> struct ite<symbolic_fp::proposition, T>                          \
   {                                                                            \
     static const T iteOp(const symbolic_fp::proposition& cond, const T& l,     \
                          const T& r)                                           \
     {                                                                          \
       assert(l.GetValueWidth() == r.GetValueWidth());                          \
-      Expr ite_expr = vc_iteExpr(vc, (Expr)&cond, (Expr)&l, (Expr)&r);         \
-      return *(T*)ite_expr;                                                    \
+      return T(s_nf->CreateTerm(stp::ITE, l.GetValueWidth(), cond, l, r));     \
     }                                                                          \
   }
 
-#else
-#define STPSYMITEDFN(T)                                                        \
-  template <> struct symfpu::ite<symbolic_fp::proposition, T>                  \
-  {                                                                            \
-    static const T iteOp(const symbolic_fp::proposition& _cond, const T& _l,   \
-                         const T& _r)                                          \
-    {                                                                          \
-      ASTNode cond = _cond;                                                    \
-      ASTNode l = _l;                                                          \
-      ASTNode r = _r;                                                          \
-                                                                               \
-      if (cond.GetKind() == stp::BVCONST)                                      \
-      {                                                                        \
-        if (cond == *(Node*)vc_bvConstExprFromInt(vc, 1, 1))                   \
-        {                                                                      \
-          return l;                                                            \
-        }                                                                      \
-        else                                                                   \
-        {                                                                      \
-          return r;                                                            \
-        }                                                                      \
-      }                                                                        \
-      else                                                                     \
-      {                                                                        \
-        if (l.GetKind() == stp::ITE)                                           \
-        {                                                                      \
-          if (l[1] == r)                                                       \
-          {                                                                    \
-            Expr not_expr = vc_bvNotExpr(vc, (Expr)&l[0]);                     \
-            Expr and_expr = vc_andExpr(vc, (Expr)&cond, not_expr);             \
-            Expr ite_expr = vc_iteExpr(vc, and_expr, (Expr)&l[2], (Expr)&r);   \
-            return *(T*)ite_expr;                                              \
-          }                                                                    \
-          else if (l[2] == r)                                                  \
-          {                                                                    \
-            Expr and_expr = vc_andExpr(vc, (Expr)&cond, (Expr)(&l[0]));        \
-            Expr ite_expr = vc_iteExpr(vc, and_expr, (Expr)&l[1], (Expr)&r);   \
-            return *(T*)ite_expr;                                              \
-          }                                                                    \
-        }                                                                      \
-        else if (r.GetKind() == stp::ITE)                                      \
-        {                                                                      \
-          if (r[1] == l)                                                       \
-          {                                                                    \
-            Expr not_cond = vc_bvNotExpr(vc, (Expr)&cond);                     \
-            Expr not_r = vc_bvNotExpr(vc, (Expr)&r[0]);                        \
-            Expr and_expr = vc_andExpr(vc, not_cond, not_r);                   \
-            Expr ite_expr = vc_iteExpr(vc, and_expr, (Expr)&r[2], (Expr)&l);   \
-            return *(T*)ite_expr;                                              \
-          }                                                                    \
-          else if (r[2] == l)                                                  \
-          {                                                                    \
-            Expr not_cond = vc_bvNotExpr(vc, (Expr)&cond);                     \
-            Expr and_expr = vc_andExpr(vc, not_cond, (Expr)&r[0]);             \
-            Expr ite_expr = vc_iteExpr(vc, and_expr, (Expr)&r[1], (Expr)&l);   \
-            return *(T*)ite_expr;                                              \
-          }                                                                    \
-        }                                                                      \
-      }                                                                        \
-      Expr ite_expr = vc_iteExpr(vc, (Expr)&cond, (Expr)&l, (Expr)&r);         \
-      return *(T*)ite_expr;                                                    \
-    }                                                                          \
-  }
+STP_SYM_ITE_TERM(symbolic_fp::traits::rm);
+STP_SYM_ITE_TERM(symbolic_fp::traits::sbv);
+STP_SYM_ITE_TERM(symbolic_fp::traits::ubv);
 
-#endif
-
-STPSYMITEDFN(symbolic_fp::traits::rm);
-STPSYMITEDFN(symbolic_fp::traits::prop);
-STPSYMITEDFN(symbolic_fp::traits::sbv);
-STPSYMITEDFN(symbolic_fp::traits::ubv);
-
-#undef STPSYMITEDFN
+#undef STP_SYM_ITE_TERM
 
 // symfpu's divide path calls ITE with a literal bool condition rather than a
 // proposition (core/divide.h, computing the result-exponent bounds), so the
 // backend has to provide a bool-conditioned ITE as well. The condition is a
 // compile-time constant, so this just selects a branch.
-namespace symfpu
-{
 template <class T> struct ite<bool, T>
 {
   static const T iteOp(const bool& cond, const T& l, const T& r)
@@ -918,37 +657,23 @@ template <class T> struct ite<bool, T>
     return cond ? l : r;
   }
 };
-}
+
+} // namespace symfpu
+
+/****************************************************************
+ * blast_*: one floating-point operation each                   *
+ ****************************************************************/
 
 namespace stp
 {
 namespace symbolic_fp
 {
 
-void init_vc(STPMgr* _bm)
-{
-  // symfpu builds its blasted circuit through `vc`, so `vc` must wrap the
-  // manager currently being blasted. Cache one checker per manager and repoint
-  // `vc` at it, so independent managers -- e.g. separate validity checkers each
-  // using floating point -- do not blast into one another's manager. Called
-  // before every top-level blast (see FloatBlaster::BlastNode_TopLevel).
-  static std::map<STPMgr*, VC> vc_by_bm;
-  bm = _bm;
-  std::map<STPMgr*, VC>::iterator it = vc_by_bm.find(_bm);
-  if (it != vc_by_bm.end())
-    vc = it->second;
-  else
-  {
-    vc = vc_createValidityCheckerReuse(_bm);
-    vc_by_bm[_bm] = vc;
-  }
-}
-
 ASTNode blast_smt_eq(const ASTNode& lhs, const ASTNode& rhs)
 {
   assert(lhs.GetValueWidth() == rhs.GetValueWidth());
   assert(lhs.GetExpWidth() == rhs.GetExpWidth());
-  assert(lhs.GetValueWidth() == rhs.GetValueWidth());
+  assert(lhs.GetSigWidth() == rhs.GetSigWidth());
 
   floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
   uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
@@ -964,7 +689,7 @@ ASTNode blast_fpadd(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs)
 {
   assert(lhs.GetValueWidth() == rhs.GetValueWidth());
   assert(lhs.GetExpWidth() == rhs.GetExpWidth());
-  assert(lhs.GetValueWidth() == rhs.GetValueWidth());
+  assert(lhs.GetSigWidth() == rhs.GetSigWidth());
   floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
   uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
   uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
@@ -1042,8 +767,7 @@ ASTNode blast_fpfma(const ASTNode& rm, const ASTNode& x, const ASTNode& y,
   uf unpacked_y(symfpu::unpack<traits>(size, y));
   uf unpacked_z(symfpu::unpack<traits>(size, z));
 
-  uf result(
-      symfpu::fma<traits>(size, rm, unpacked_x, unpacked_y, unpacked_z));
+  uf result(symfpu::fma<traits>(size, rm, unpacked_x, unpacked_y, unpacked_z));
 
   ASTNode packed(symfpu::pack<traits>(size, result));
 
@@ -1079,9 +803,8 @@ ASTNode blast_fprem(const ASTNode& lhs, const ASTNode& rhs)
 
 // fp.min/fp.max are unspecified when the arguments are +0 and -0: SMT-LIB
 // says either zero may be returned, as does IEEE-754. symfpu takes that
-// choice as its `zeroCase` argument; passing false makes the tie resolve
-// towards the left operand, which is a conforming choice and, unlike an
-// unconstrained one, keeps the result deterministic.
+// choice as its `zeroCase` argument; FpTotalise supplies it as an extra
+// child, which keeps the result a deterministic function of the operands.
 ASTNode blast_fpmin(const ASTNode& lhs, const ASTNode& rhs,
                     const ASTNode& zero_case)
 {
@@ -1183,8 +906,7 @@ ASTNode blast_fpeq(const ASTNode& lhs, const ASTNode& rhs)
   uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
   uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
 
-  proposition eq(
-      symfpu::ieee754Equal<traits>(size, unpacked_lhs, unpacked_rhs));
+  proposition eq(symfpu::ieee754Equal<traits>(size, unpacked_lhs, unpacked_rhs));
 
   return eq;
 }
@@ -1201,8 +923,7 @@ ASTNode blast_fplt(const ASTNode& lhs, const ASTNode& rhs)
   uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
   uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
 
-  proposition lt(
-      symfpu::lessThan<traits>(size, unpacked_lhs, unpacked_rhs));
+  proposition lt(symfpu::lessThan<traits>(size, unpacked_lhs, unpacked_rhs));
 
   return lt;
 }
@@ -1248,10 +969,11 @@ ASTNode blast_convert_bv_to_float(const ASTNode& rm, const ASTNode& bits,
 {
   floatingPointTypeInfo target(exp_width, sig_width);
 
-  uf converted(is_signed ? symfpu::convertSBVToFloat<traits>(
-                               target, rm, traits::sbv(bits))
-                         : symfpu::convertUBVToFloat<traits>(
-                               target, rm, traits::ubv(bits)));
+  uf converted(is_signed
+                   ? symfpu::convertSBVToFloat<traits>(target, rm,
+                                                       traits::sbv(bits))
+                   : symfpu::convertUBVToFloat<traits>(target, rm,
+                                                       traits::ubv(bits)));
 
   ASTNode packed(symfpu::pack<traits>(target, converted));
 
@@ -1278,8 +1000,7 @@ ASTNode blast_round_to_integral(const ASTNode& rm, const ASTNode& expr)
 {
   floatingPointTypeInfo size(expr.GetExpWidth(), expr.GetSigWidth());
   uf unpacked(symfpu::unpack<traits>(size, expr));
-  uf unpacked_result(
-      symfpu::roundToIntegral<traits>(size, rm, unpacked));
+  uf unpacked_result(symfpu::roundToIntegral<traits>(size, rm, unpacked));
   ASTNode packed(symfpu::pack<traits>(size, unpacked_result));
   return packed;
 }
@@ -1293,5 +1014,3 @@ template class bitVector<false>;
 } // namespace symbolic_fp
 
 } // namespace stp
-
-// EOF
