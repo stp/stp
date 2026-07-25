@@ -351,6 +351,10 @@ void ExtraMain::create_options()
   po::options_description misc_options("Output options");
   misc_options.add_options()
 
+      ("cnf-generation-effort", po::value<string>()->default_value("medium"),
+       "effort spent minimising the CNF: very-low, low, medium, high, "
+       "very-high. Higher is slower to generate but yields a smaller CNF")
+
       // exit-after-CNF
       ("exit-after-CNF", po::bool_switch(&(bm->UserFlags.exit_after_CNF)),
        "exit after the CNF has been generated")
@@ -432,6 +436,28 @@ int ExtraMain::parse_options(int argc, char** argv)
   if (vm.count("interactive"))
   {
     bm->UserFlags.interactive_read = vm["interactive"].as<bool>() ? 1 : 0;
+  }
+
+  if (vm.count("cnf-generation-effort"))
+  {
+    const string effort = vm["cnf-generation-effort"].as<string>();
+    if (effort == "very-low")
+      bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_VERY_LOW;
+    else if (effort == "low")
+      bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_LOW;
+    else if (effort == "medium")
+      bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_MEDIUM;
+    else if (effort == "high")
+      bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_HIGH;
+    else if (effort == "very-high")
+      bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_VERY_HIGH;
+    else
+    {
+      std::cerr << "Unknown --cnf-generation-effort value '" << effort
+                << "'. Expected one of: very-low, low, medium, high, very-high."
+                << std::endl;
+      return -1;
+    }
   }
 
   int selected_type = 0;

@@ -27,6 +27,8 @@ THE SOFTWARE.
 
 // From ABC
 #include "aig/aig/aig.h"
+#include "aig/gia/gia.h"
+#include "aig/gia/giaAig.h"
 #include "sat/cnf/cnf.h"
 #include "opt/dar/dar.h"
 
@@ -42,6 +44,10 @@ class ToCNFAIG // not copyable
   UserDefinedFlags& uf;
 
   void dag_aware_aig_rewrite(const bool needAbsRef, BBNodeManagerAIG& mgr);
+
+  // Turn the AIG into CNF, choosing the generator from uf.cnf_effort.
+  Cnf_Dat_t* derive_cnf(BBNodeManagerAIG& mgr);
+  Cnf_Dat_t* derive_cnf_mf(BBNodeManagerAIG& mgr, int nLutSize);
 
   void fill_node_to_var(Cnf_Dat_t* cnfData,
                         ToSATBase::ASTNodeToSATVar& nodeToVars,
