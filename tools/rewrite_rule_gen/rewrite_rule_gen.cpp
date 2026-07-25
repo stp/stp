@@ -82,6 +82,13 @@ int highestLevel = 0;
 int discarded = 0;
 
 //////////////////////////////////
+// Search bounds for the rule-finding modes. findRewrites() recurses once per
+// expression it separates out, so on a full function list it goes tens of
+// thousands of frames deep and exhausts the stack before finishing. These cap
+// it. Both default to "no limit", which is the historical behaviour.
+int max_search_depth = -1;   // -1: unbounded
+int max_rules_wanted = -1;   // -1: unbounded
+
 const int bits = 6;
 const int widen_to = 10;
 const int values_in_hash = 64 / bits;
@@ -937,6 +944,19 @@ void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
                   const int depth = 0)
 {
   if (expressions.size() < 2)
+  {
+    discarded += expressions.size();
+    return;
+  }
+
+  if (max_search_depth >= 0 && depth >= max_search_depth)
+  {
+    discarded += expressions.size();
+    return;
+  }
+
+  if (max_rules_wanted >= 0 &&
+      (int)rewrite_system.size() >= max_rules_wanted)
   {
     discarded += expressions.size();
     return;
@@ -2128,16 +2148,64 @@ int main(int argc, const char* argv[])
     rewrite_system.rewriteAll();
     writeOutRules();
   }
+  else if (argc == 4 && !strcmp("generate", argv[1]))
+  {
+    // Bounded, non-interactive form of the argc == 1 mode above, for smoke
+    // testing: "generate <max-depth> <max-rules>". Either bound may be -1 for
+    // no limit, though with both unbounded this is the mode that exhausts the
+    // stack. Rules found are written out as usual.
+    max_search_depth = atoi(argv[2]);
+    max_rules_wanted = atoi(argv[3]);
+    cout << "Bounded search: max depth " << max_search_depth << ", max rules "
+         << max_rules_wanted << endl;
+
+    load_new_rules();
+    createVariables();
+    rewrite_system.buildLookupTable();
+
+    Function_list functionList;
+    functionList.buildAll();
+
+    vector<VariableAssignment> values;
+    findRewrites(functionList.functions, values);
+
+    rewrite_system.rewriteAll();
+    writeOutRules();
+    cout << "Rules found: " << rewrite_system.size() << endl;
+  }
   else if (argc == 2 && !strcmp("unit-test", argv[1]))
   {
     load_new_rules();
     createVariables();
     unit_test();
   }
-  else if (argc == 2 && !strcmp("verify", argv[1]))
+  else if ((argc == 2 || argc == 3) && !strcmp("verify", argv[1]))
   {
-    load_new_rules();
+    // "verify [file]" -- SAT-check every loaded rule. Without a file the rules
+    // come from ./rules_new.smt2, or stdin when that does not exist.
+    if (argc == 3)
+    {
+      // Fail rather than verify nothing. load_new_rules() falls back to stdin
+      // when the file is missing, so a mistyped path would otherwise load zero
+      // rules and report success.
+      if (!ifstream(argv[2]))
+      {
+        cerr << "Cannot read rules file: " << argv[2] << endl;
+        return 1;
+      }
+      load_new_rules(argv[2]);
+      if (rewrite_system.size() == 0)
+      {
+        cerr << "No rules loaded from " << argv[2] << endl;
+        return 1;
+      }
+    }
+    else
+      load_new_rules();
+
+    cout << "Verifying " << rewrite_system.size() << " rules" << endl;
     rewrite_system.verifyAllwithSAT();
+    cout << "Verified " << rewrite_system.size() << " rules" << endl;
   }
   else if ((argc == 4 || argc == 3) && !strcmp("expand", argv[1]))
   {
