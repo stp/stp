@@ -681,9 +681,10 @@ void exhaustively_check(const int bitwidth, Kind k,
       }
     }
 
-    const int initialFixed = children[0]->countFixed() +
+    [[maybe_unused]] const int initialFixed = children[0]->countFixed() +
                              children[1]->countFixed() + output.countFixed();
-    const int maxFixed = c_a.countFixed() + c_b.countFixed() + c_o.countFixed();
+    [[maybe_unused]] const int maxFixed =
+        c_a.countFixed() + c_b.countFixed() + c_o.countFixed();
 
     BBAsProp BBP(k, mgr, bitwidth);
     BBP.fill_assumps_with(*children[0], *children[1], output);

@@ -99,7 +99,7 @@ void go(Kind k, Result (*t_fn)(vector<FixedBits*>&, FixedBits&), int prob)
     ch.push_back(&a);
     ch.push_back(&b);
     prop.start();
-    Result rr = t_fn(ch, output);
+    [[maybe_unused]] Result rr = t_fn(ch, output);
     assert(rr != CONFLICT);
     prop.stop();
 
