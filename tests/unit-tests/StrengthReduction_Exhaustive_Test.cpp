@@ -499,6 +499,161 @@ TEST(StrengthReduction_Exhaustive_Test, smod_to_urem_via_intervals)
       [](unsigned v) { return v <= 3; });
 }
 
+// bvsaddo folds to false when the fixed sign bits differ: signed add
+// overflow requires the operands to share a sign. Equivalent for every
+// assignment with those opposite signs.
+TEST(StrengthReduction_Exhaustive_Test, saddo_false_via_opposite_signs)
+{
+  const unsigned width = 3;
+
+  for (unsigned xSign = 0; xSign <= 1; xSign++)
+  {
+    const unsigned ySign = 1 - xSign;
+
+    Context c;
+    ASTNode x = c.symbol("x", width);
+    ASTNode y = c.symbol("y", width);
+    ASTNode n = c.nf->CreateNode(stp::BVSADDO, x, y);
+    ASSERT_EQ(n.GetKind(), stp::BVSADDO);
+
+    FixedBits xBits = msbFixed(width, xSign == 1);
+    FixedBits yBits = msbFixed(width, ySign == 1);
+
+    stp::NodeToFixedBitsMap map;
+    map.insert({n, nullptr});
+    map.insert({x, &xBits});
+    map.insert({y, &yBits});
+
+    ASTNode result = c.sr.topLevel(n, map);
+    ASSERT_EQ(result, c.mgr.ASTFalse);
+
+    c.checkEquivalent(
+        n, result, x, y, width,
+        [xSign, width](unsigned v) {
+          return ((v >> (width - 1)) & 1) == xSign;
+        },
+        [ySign, width](unsigned v) {
+          return ((v >> (width - 1)) & 1) == ySign;
+        });
+  }
+}
+
+// bvsaddo is left alone when the signs agree: overflow is possible there,
+// so no reduction is justified.
+TEST(StrengthReduction_Exhaustive_Test, saddo_unchanged_when_signs_agree)
+{
+  const unsigned width = 3;
+
+  for (unsigned sign = 0; sign <= 1; sign++)
+  {
+    Context c;
+    ASTNode x = c.symbol("x", width);
+    ASTNode y = c.symbol("y", width);
+    ASTNode n = c.nf->CreateNode(stp::BVSADDO, x, y);
+    ASSERT_EQ(n.GetKind(), stp::BVSADDO);
+
+    FixedBits xBits = msbFixed(width, sign == 1);
+    FixedBits yBits = msbFixed(width, sign == 1);
+
+    stp::NodeToFixedBitsMap map;
+    map.insert({n, nullptr});
+    map.insert({x, &xBits});
+    map.insert({y, &yBits});
+
+    ASTNode result = c.sr.topLevel(n, map);
+    ASSERT_EQ(result, n);
+  }
+}
+
+// bvssubo folds to false when the fixed sign bits agree: signed sub
+// overflow requires the operands to differ in sign. Equivalent for every
+// assignment with those equal signs.
+TEST(StrengthReduction_Exhaustive_Test, ssubo_false_via_equal_signs)
+{
+  const unsigned width = 3;
+
+  for (unsigned sign = 0; sign <= 1; sign++)
+  {
+    Context c;
+    ASTNode x = c.symbol("x", width);
+    ASTNode y = c.symbol("y", width);
+    ASTNode n = c.nf->CreateNode(stp::BVSSUBO, x, y);
+    ASSERT_EQ(n.GetKind(), stp::BVSSUBO);
+
+    FixedBits xBits = msbFixed(width, sign == 1);
+    FixedBits yBits = msbFixed(width, sign == 1);
+
+    stp::NodeToFixedBitsMap map;
+    map.insert({n, nullptr});
+    map.insert({x, &xBits});
+    map.insert({y, &yBits});
+
+    ASTNode result = c.sr.topLevel(n, map);
+    ASSERT_EQ(result, c.mgr.ASTFalse);
+
+    auto consistent = [sign, width](unsigned v) {
+      return ((v >> (width - 1)) & 1) == sign;
+    };
+    c.checkEquivalent(n, result, x, y, width, consistent, consistent);
+  }
+}
+
+// bvssubo is left alone when the signs differ: overflow is possible there,
+// so no reduction is justified.
+TEST(StrengthReduction_Exhaustive_Test, ssubo_unchanged_when_signs_differ)
+{
+  const unsigned width = 3;
+
+  for (unsigned xSign = 0; xSign <= 1; xSign++)
+  {
+    const unsigned ySign = 1 - xSign;
+
+    Context c;
+    ASTNode x = c.symbol("x", width);
+    ASTNode y = c.symbol("y", width);
+    ASTNode n = c.nf->CreateNode(stp::BVSSUBO, x, y);
+    ASSERT_EQ(n.GetKind(), stp::BVSSUBO);
+
+    FixedBits xBits = msbFixed(width, xSign == 1);
+    FixedBits yBits = msbFixed(width, ySign == 1);
+
+    stp::NodeToFixedBitsMap map;
+    map.insert({n, nullptr});
+    map.insert({x, &xBits});
+    map.insert({y, &yBits});
+
+    ASTNode result = c.sr.topLevel(n, map);
+    ASSERT_EQ(result, n);
+  }
+}
+
+// Neither overflow predicate reduces when a sign bit is unknown.
+TEST(StrengthReduction_Exhaustive_Test, signed_overflow_unchanged_when_sign_unknown)
+{
+  const unsigned width = 3;
+
+  for (const stp::Kind kind : {stp::BVSADDO, stp::BVSSUBO})
+  {
+    Context c;
+    ASTNode x = c.symbol("x", width);
+    ASTNode y = c.symbol("y", width);
+    ASTNode n = c.nf->CreateNode(kind, x, y);
+    ASSERT_EQ(n.GetKind(), kind);
+
+    // x's sign bit is fixed, y's is not.
+    FixedBits xBits = msbFixed(width, true);
+    FixedBits yBits(width, false);
+
+    stp::NodeToFixedBitsMap map;
+    map.insert({n, nullptr});
+    map.insert({x, &xBits});
+    map.insert({y, &yBits});
+
+    ASTNode result = c.sr.topLevel(n, map);
+    ASSERT_EQ(result, n);
+  }
+}
+
 // bvadd reduces to bvor when the fixed bits show the operands can't both
 // have a one in any position (no carries are possible).
 TEST(StrengthReduction_Exhaustive_Test, plus_to_or_via_fixedbits)
