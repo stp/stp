@@ -47,11 +47,6 @@ RTN = 4   # round toward negative
 RTZ = 8   # round toward zero
 RNA = 16  # round nearest, ties to away
 
-Py3 = sys.version_info >= (3, 0, 0)
-
-if Py3:
-    long = int
-
 from library_path import PATHS
 
 for path in PATHS:
@@ -352,7 +347,7 @@ class Solver(object):
         # TODO Sanitize the name or stp will segfault.
         # TODO Perhaps cache these calls per width?
         # TODO Please, please, fix this terrible Py3 support.
-        name_conv = bytes(name, 'utf8') if Py3 else name
+        name_conv = bytes(name, 'utf8')
 
         bv_type = _lib.vc_bvType(self.vc, width)
         self.keys[name] = _lib.vc_varExpr(self.vc, name_conv, bv_type)
@@ -372,7 +367,7 @@ class Solver(object):
 
     def bitvecvalD(self, width, value):
         """Creates a new BitVector with a constant value."""
-        value_conv = bytes(value, 'utf8') if Py3 else value
+        value_conv = bytes(value, 'utf8')
      
         expr = _lib.vc_bvConstExprFromDecStr(self.vc, width, value_conv)
         return Expr(self, width, expr)
@@ -388,7 +383,7 @@ class Solver(object):
         (_ FloatingPoint eb sb): fp('x', 11, 53) is an IEEE double, fp('x', 8,
         24) an IEEE single.
         """
-        name_conv = bytes(name, 'utf8') if Py3 else name
+        name_conv = bytes(name, 'utf8')
         fp_type = _lib.vc_fpType(self.vc, eb, sb)
         self.keys[name] = _lib.vc_varExpr(self.vc, name_conv, fp_type)
         return FloatExpr(self, eb, sb, self.keys[name], name=name)
@@ -634,7 +629,7 @@ class Expr(object):
         return Expr(self.s, self.width, expr)
 
     def _toexpr(self, other):
-        if isinstance(other, (int, long)):
+        if isinstance(other, int):
             return self.s.bitvecval(self.width, other)
 
         if isinstance(other, bool):
@@ -731,6 +726,10 @@ class Expr(object):
         return self._2(_lib.vc_eqExpr, other)
 
     __eq__ = eq
+
+    # Defining __eq__ suppresses the default hash. == builds a formula, so
+    # value hashing cannot exist; hash by identity (as z3py does).
+    __hash__ = object.__hash__
 
     def ne(self, other):
         return self.s.not_(self.eq(other))
@@ -857,9 +856,12 @@ class FloatExpr(Expr):
         self.sb = sb
 
     def _coerce(self, other):
+        """A FloatExpr passes through; a Python number becomes a constant of
+        this expression's format. (An int converts through float(), so
+        magnitudes beyond 2**53 round before they reach the solver.)"""
         if isinstance(other, FloatExpr):
             return other
-        if isinstance(other, (int, long, float)):
+        if isinstance(other, (int, float)):
             return self.s.fpval(self.eb, self.sb, float(other))
         raise TypeError('operand must be a FloatExpr or a number')
 
@@ -971,8 +973,37 @@ class FloatExpr(Expr):
             self.s.vc, self.s.rounding_mode if rm is None else rm)
         return Expr(self.s, width, _lib.vc_fpToSBVExpr(self.s.vc, width, r, self.expr))
 
-    # Overriding __eq__ drops the inherited hash; keep instances hashable.
-    __hash__ = Expr.__hash__
+    # Defining __eq__ suppresses the default hash; hash by identity. (This
+    # used to copy Expr.__hash__, which was itself None at the time.)
+    __hash__ = object.__hash__
+
+    # == and != build formulas for the operands they understand and defer
+    # politely for anything else, so containment tests over mixed lists work.
+    def __eq__(self, other):
+        if not isinstance(other, (FloatExpr, int, float)):
+            return NotImplemented
+        return self.eq(other)
+
+    def __ne__(self, other):
+        if not isinstance(other, (FloatExpr, int, float)):
+            return NotImplemented
+        return self.ne(other)
+
+    # The BitVector operations inherited from Expr are meaningless on a float
+    # and would build malformed nodes; refuse them. Bit-level work goes
+    # through to_ieee_bits().
+    def _fp_no_bv(self, *args, **kwargs):
+        raise TypeError('BitVector operations are not defined on a '
+                        'FloatExpr; use to_ieee_bits() for bit-level work')
+
+    mod = rmod = rem = rrem = sdiv = rsdiv = smod = rsmod = _fp_no_bv
+    srem = rsrem = slt = sle = sgt = sge = _fp_no_bv
+    and_ = or_ = xor = not_ = shl = rshl = shr = rshr = sar = rsar = _fp_no_bv
+    extract = _fp_no_bv
+    __mod__ = __rmod__ = __and__ = __rand__ = __or__ = __ror__ = _fp_no_bv
+    __xor__ = __rxor__ = __invert__ = _fp_no_bv
+    __lshift__ = __rlshift__ = __rshift__ = __rrshift__ = _fp_no_bv
+    __div__ = __rdiv__ = __floordiv__ = __rfloordiv__ = _fp_no_bv
 
 
 class ASTtoSTP(ast.NodeVisitor):
@@ -1004,7 +1035,7 @@ class ASTtoSTP(ast.NodeVisitor):
         self.func_name = node.name
 
         for idx, arg in enumerate(node.args.args):
-            arg = arg.arg if Py3 else arg.id
+            arg = arg.arg
             name = '%s_%d_%s' % (self.func_name, self.count, arg)
             if idx < len(self.args):
                 self.bitvecs[name] = self.args[idx]
