@@ -33,6 +33,7 @@ THE SOFTWARE.
 #include "stp/Parser/parser.h"
 #include "stp/Printer/printers.h"
 #include "stp/cpp_interface.h"
+#include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/Util/GitSHA1.h"
 
 // From ABC
@@ -1117,6 +1118,17 @@ Expr vc_fpRemExpr(VC vc, Expr a, Expr b)
 {
   stp::ASTNode* x = (stp::ASTNode*)a;
   stp::ASTNode* y = (stp::ASTNode*)b;
+  // The remainder circuit's unrolling is exponential in the exponent width;
+  // refuse at term creation, where the caller can see it, rather than
+  // during solving (the parser does the same for SMT-LIB input).
+  if (!stp::FloatBlaster::remSupported(x->GetExpWidth(), x->GetSigWidth()))
+  {
+    stp::FatalError("CInterface: vc_fpRemExpr: fp.rem is not supported at "
+                    "this format: its circuit unrolls one divide step per "
+                    "representable exponent difference, which is exponential "
+                    "in the exponent width; use a format no larger than "
+                    "binary64");
+  }
   return fpTermResult(vc, stp::FP_REM, *x, {*x, *y});
 }
 

@@ -54,6 +54,7 @@
 #include "stp/cpp_interface.h"
 #include "stp/Parser/LetMgr.h"
 #include "stp/Parser/parser.h"
+#include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/FloatBlaster/rounding_modes.h"
 #include "parsesmt2.tab.h"
 #include "smt2_flex_header.h"
@@ -398,6 +399,25 @@ namespace stp
         lhs->GetSigWidth() != rhs->GetSigWidth())
     {
       fatal_yyerror("floating-point operands must have the same format.");
+    }
+
+    // Refuse fp.rem where its circuit cannot be built (found by murxla as a
+    // stack-overflow SIGSEGV at Float128): the unrolling is exponential in
+    // the exponent width. Refused here, with the numbers, rather than deep
+    // in the blaster.
+    if (k == FP_REM && !stp::FloatBlaster::remSupported(lhs->GetExpWidth(),
+                                                        lhs->GetSigWidth()))
+    {
+      const std::string msg =
+          "fp.rem is not supported at this format: its circuit unrolls one "
+          "divide step per representable exponent difference (2^eb + sb - 4 "
+          "= " +
+          std::to_string(stp::FloatBlaster::remUnrollSteps(
+              lhs->GetExpWidth(), lhs->GetSigWidth())) +
+          " steps here, over the limit of " +
+          std::to_string(stp::FloatBlaster::REM_UNROLL_LIMIT) +
+          "); use a format no larger than binary64";
+      fatal_yyerror(msg.c_str());
     }
 
     ASTNode* n = stp::GlobalParserInterface->newNode(

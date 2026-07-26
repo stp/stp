@@ -27,6 +27,7 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
+#include <cstdint>
 
 namespace stp
 {
@@ -56,6 +57,18 @@ public:
   // payloads, which SMT-LIB equality does not distinguish, while keeping +0
   // and -0 apart.
   static ASTNode canonicalBits(STPMgr* bm, const ASTNode& f);
+
+  // fp.rem's circuit unrolls one divide step per representable exponent
+  // difference -- 2^eb + sb - 4 steps (symfpu's maximumExponentDifference)
+  // -- so its *depth* grows exponentially in the exponent width. Past
+  // roughly binary64 scale the circuit outruns both the recursive
+  // traversals (a stack overflow) and any hope of solving, so every
+  // entrance for fp.rem funnels through remSupported and refuses instead.
+  // binary64 needs 2097 steps; the limit leaves headroom for wide
+  // significands at eb = 11 while refusing every eb >= 12.
+  static const uint64_t REM_UNROLL_LIMIT = 2304;
+  static uint64_t remUnrollSteps(unsigned exp_width, unsigned sig_width);
+  static bool remSupported(unsigned exp_width, unsigned sig_width);
 
   // A read of the array supplying an operation's unspecified results. Identity
   // is the name, so every occurrence of an operation at a given signature

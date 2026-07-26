@@ -156,7 +156,10 @@ cloned without `--recursive`); an external SymFPU clone can be used
 instead via `-DSYMFPU_INCLUDE_DIRS=<directory containing the clone>`.
 With it, STP solves the SMT-LIB floating-point theory
 (QF_FP/QF_BVFP/QF_ABVFP) and exposes floating-point terms through the C,
-C++ (`stp/fp.hpp`) and Python APIs. Configuring with
+C++ (`stp/fp.hpp`) and Python APIs. One operation is format-bounded:
+`fp.rem` is refused past roughly binary64-sized formats (its circuit
+unrolls one divide step per representable exponent difference, so
+Float128's would be ~33000 steps deep). Configuring with
 `-DENABLE_FLOATING_POINT=OFF` builds without SymFPU entirely and rejects
 floating-point input with a clear "built without floating-point support"
 error; the library ABI is the same either way.

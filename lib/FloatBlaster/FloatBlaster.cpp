@@ -72,6 +72,21 @@ ASTNode FloatBlaster::canonicalBits(STPMgr* bm, const ASTNode& f)
 }
 #endif
 
+// Pure arithmetic, defined outside the feature gate: the parser refers to
+// it whenever it builds an fp.rem, including in builds without
+// floating-point support (where that path is unreachable but still links).
+uint64_t FloatBlaster::remUnrollSteps(unsigned exp_width, unsigned sig_width)
+{
+  if (exp_width >= 63)
+    return UINT64_MAX; // would overflow; certainly over any limit
+  return ((uint64_t)1 << exp_width) + sig_width - 4;
+}
+
+bool FloatBlaster::remSupported(unsigned exp_width, unsigned sig_width)
+{
+  return remUnrollSteps(exp_width, sig_width) <= REM_UNROLL_LIMIT;
+}
+
 ASTNode FloatBlaster::unspecifiedValue(STPMgr* bm, const char* tag,
                                        const ASTNode& index,
                                        unsigned int value_width)
@@ -145,6 +160,17 @@ ASTNode FloatBlaster::BlastNode(STPMgr* bm, const ASTNode& actualInputterm)
       break;
     // fp.rem, fp.min and fp.max take no rounding mode.
     case FP_REM:
+      // Backstop; the parser and the C API refuse earlier, with nicer
+      // messages.
+      if (!remSupported(inputterm[0].GetExpWidth(),
+                        inputterm[0].GetSigWidth()))
+      {
+        FatalError("FloatBlaster: fp.rem is not supported at this format: "
+                   "its circuit unrolls one divide step per representable "
+                   "exponent difference, which is exponential in the "
+                   "exponent width; use a format no larger than binary64",
+                   inputterm);
+      }
       output = symbolic_fp::blast_fprem(inputterm[0], inputterm[1]);
       break;
     // The choice of zero for (+0, -0) arrives as a third child, put there by
