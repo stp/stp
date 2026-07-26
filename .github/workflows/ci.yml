@@ -414,8 +414,11 @@ jobs:
   # Floating-point support defaults to ON, backed by the vendored SymFPU
   # submodule; every other job builds that default. This one opts out with
   # -DENABLE_FLOATING_POINT=OFF and validates that the build still solves
-  # (a SAT-requiring bitvector query) and that floating-point input is
-  # refused with the "built without floating-point support" diagnostic.
+  # (a SAT-requiring bitvector query), that floating-point input is
+  # refused with the "built without floating-point support" diagnostic,
+  # and -- with testing enabled -- that the whole test suite's
+  # feature-off gating actually holds (the floating-point gtest suites,
+  # lit tests and Python tests must all skip, not fail).
   build-nofp:
     name: gcc (no-fp)
     runs-on: ubuntu-latest
@@ -435,20 +438,32 @@ jobs:
           cmake \
           flex \
           git \
+          libboost-program-options-dev \
           ninja-build \
+          python3 \
+          python3-pip \
+          python3-setuptools \
           zlib1g-dev
+        sudo pip3 install -U lit
 
-    - name: Build minisat
-      run: ./scripts/deps/setup-minisat.sh
+    - name: Dependencies
+      run: |
+        ./scripts/deps/setup-minisat.sh
+        ./scripts/deps/setup-gtest.sh
+        ./scripts/deps/setup-outputcheck.sh
 
     - name: Configure
       run: |
         mkdir build
         cd build
-        cmake -DNOCRYPTOMINISAT:BOOL=ON -DWERROR:BOOL=ON -DENABLE_FLOATING_POINT:BOOL=OFF -G Ninja ..
+        cmake -DNOCRYPTOMINISAT:BOOL=ON -DWERROR:BOOL=ON -DENABLE_FLOATING_POINT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -G Ninja ..
 
     - name: Build
       run: cmake --build build --parallel "$(nproc)"
+
+    - name: Test
+      run: ctest --parallel "$(nproc)" -VV --output-on-failure
+      working-directory: build
 
     - name: Smoke test
       run: |

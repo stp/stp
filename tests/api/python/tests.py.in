@@ -35,6 +35,15 @@ import stp
 import unittest
 import ctypes
 
+# Whether libstp was built with -DENABLE_FLOATING_POINT (substituted at
+# configure time). The library keeps the same ABI either way, but the
+# floating-point entry points fail closed with a FatalError that aborts the
+# process -- so the floating-point tests must skip, not run and take the
+# whole unittest run down with them.
+STP_FLOATING_POINT = @STP_FLOATING_POINT_PYBOOL@
+needs_floating_point = unittest.skipUnless(
+    STP_FLOATING_POINT, "libstp was built without floating-point support")
+
 
 @stp.stp
 def test0_foo(a, b):
@@ -300,6 +309,7 @@ class TestSTP(unittest.TestCase):
         value_from_model = solver.model(expr=expr_for_add)
         self.assertEqual(value_from_model, value_for_x + (value_for_bitvecval * 2))
 
+    @needs_floating_point
     def test_floating_point(self):
         #
         # Build and solve a floating-point problem through the Pythonic layer,
@@ -326,6 +336,7 @@ class TestSTP(unittest.TestCase):
         self.assertEqual((-a).value, -4.0)
         self.assertEqual(abs(-a).value, 4.0)
 
+    @needs_floating_point
     def test_fp_operations(self):
         # fp.rem, fp.min, fp.max, fp.roundToIntegral, fp.fma.
         s = self.s
@@ -338,6 +349,7 @@ class TestSTP(unittest.TestCase):
         self.assertEqual(a.round_to_integral().value, 4.0)
         self.assertEqual(a.fma(b, b).value, 10.0)           # 4*2 + 2
 
+    @needs_floating_point
     def test_fp_comparisons(self):
         # The ordered comparisons and !=, all holding together.
         s = self.s
@@ -345,12 +357,14 @@ class TestSTP(unittest.TestCase):
         s.add(a == 3.0, a < 4.0, a <= 3.0, a > 2.0, a >= 3.0, a != 5.0)
         self.assertTrue(s.check())
 
+    @needs_floating_point
     def test_fp_comparison_unsat(self):
         s = self.s
         a = s.fp("a", 5, 11)
         s.add(a == 3.0, a < 2.0)   # 3 < 2 is false
         self.assertFalse(s.check())
 
+    @needs_floating_point
     def test_fp_classifications(self):
         # The special-value constructors classify as claimed.
         s = self.s
@@ -363,12 +377,14 @@ class TestSTP(unittest.TestCase):
               s.fp_zero(5, 11, negative=True).is_negative())
         self.assertTrue(s.check())
 
+    @needs_floating_point
     def test_fp_classification_unsat(self):
         s = self.s
         x = s.fp("x", 5, 11)
         s.add(x.is_nan(), x.is_zero())   # nothing is both
         self.assertFalse(s.check())
 
+    @needs_floating_point
     def test_fp_subnormal(self):
         s = self.s
         x = s.fp("x", 5, 11)
@@ -376,6 +392,7 @@ class TestSTP(unittest.TestCase):
         s.add(x.is_subnormal())
         self.assertTrue(s.check())
 
+    @needs_floating_point
     def test_fp_bits_and_conversions(self):
         # to_ieee_bits + field extraction, model_bits, and fp.to_ubv.
         s = self.s
@@ -389,6 +406,7 @@ class TestSTP(unittest.TestCase):
         self.assertEqual(s.model(expr=bits.extract(9, 0)), 0x200)    # significand
         self.assertEqual(s.model(expr=x.to_ubv(8)), 3)
 
+    @needs_floating_point
     def test_fp_to_sbv(self):
         s = self.s
         x = s.fp("x", 5, 11)
