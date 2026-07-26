@@ -1198,19 +1198,47 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
 
     const unsigned iw = array.GetIndexWidth();
     const unsigned vw = array.GetValueWidth();
+
+    // A float-element array prints its true element sort and its cells
+    // as (fp ...) literals -- the format lives on the array symbol --
+    // so the define-fun replays against the original declaration.
+    const unsigned eb = array.GetExpWidth();
+    const unsigned sb = array.GetSigWidth();
+    std::ostringstream sortText;
+    if (eb != 0)
+      sortText << "(Array (_ BitVec " << iw << ") (_ FloatingPoint " << eb
+               << " " << sb << "))";
+    else
+      sortText << "(Array (_ BitVec " << iw << ") (_ BitVec " << vw << "))";
+
     os << "( define-fun |";
     array.nodeprint(os);
-    os << "| () (Array (_ BitVec " << iw << ") (_ BitVec " << vw << "))";
+    os << "| () " << sortText.str();
     for (size_t i = 0; i < entries.size(); i++)
       os << " (store";
-    os << " ((as const (Array (_ BitVec " << iw << ") (_ BitVec " << vw
-       << ")))";
-    printer::outputBitVecSMTLIB2(bm->CreateZeroConst(vw), os);
+    os << " ((as const " << sortText.str() << ")";
+    if (eb != 0)
+    {
+      os << " ";
+      printer::outputFloatingPointSMTLIB2(bm->CreateZeroConst(vw), os, eb, sb);
+    }
+    else
+    {
+      printer::outputBitVecSMTLIB2(bm->CreateZeroConst(vw), os);
+    }
     os << " )";
     for (size_t i = 0; i < entries.size(); i++)
     {
       printer::outputBitVecSMTLIB2(entries[i].first, os);
-      printer::outputBitVecSMTLIB2(entries[i].second, os);
+      if (eb != 0)
+      {
+        os << " ";
+        printer::outputFloatingPointSMTLIB2(entries[i].second, os, eb, sb);
+      }
+      else
+      {
+        printer::outputBitVecSMTLIB2(entries[i].second, os);
+      }
       os << " )";
     }
     os << " )" << std::endl;
