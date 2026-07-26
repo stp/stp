@@ -96,45 +96,57 @@ void ExtraMain::try_parsing_options(
 
     po::notify(vm);
   }
-  catch (boost::exception_detail::clone_impl<
-         boost::exception_detail::error_info_injector<po::unknown_option>>& c)
+  /*
+   * Catch the program_options types themselves, not the wrapper that
+   * boost::throw_exception happens to build around them. That wrapper used to
+   * be clone_impl<error_info_injector<E>> and is wrapexcept<E> as of Boost
+   * 1.73, so naming it here silently stops catching anything when Boost is
+   * upgraded. Every one of these derives from po::error, and the final handler
+   * catches the ones we have no specific advice for -- missing arguments,
+   * ambiguous abbreviations, too many input files, and whatever future Boost
+   * versions add. Most-derived first.
+   */
+  catch (po::unknown_option& c)
   {
-    cout << "Some option you gave was wrong. Please give '--help' to get help"
+    cerr << "Some option you gave was wrong. Please give '--help' to get help"
          << endl;
-    cout << "Unknown option: " << c.what() << endl;
+    cerr << "Unknown option: " << c.what() << endl;
     exit(-1);
   }
   catch (boost::bad_any_cast& e)
   {
-    std::cerr << "ERROR! You probably gave a wrong argument type (Bad cast): "
-              << e.what() << endl;
+    cerr << "ERROR! You probably gave a wrong argument type (Bad cast): "
+         << e.what() << endl;
 
     exit(-1);
   }
-  catch (boost::exception_detail::clone_impl<
-         boost::exception_detail::error_info_injector<
-             po::invalid_option_value>>& what)
+  // The base of invalid_option_value and invalid_bool_value, which are
+  // siblings rather than one deriving from the other.
+  catch (po::validation_error& what)
   {
-    cerr << "Invalid value '" << what.what() << "'"
-         << " given to option '" << what.get_option_name() << "'" << endl;
+    cerr << "Invalid value given to option '" << what.get_option_name()
+         << "': " << what.what() << endl;
 
     exit(-1);
   }
-  catch (boost::exception_detail::clone_impl<
-         boost::exception_detail::error_info_injector<
-             po::multiple_occurrences>>& what)
+  catch (po::multiple_occurrences& what)
   {
     cerr << "Error: " << what.what() << " of option '" << what.get_option_name()
          << "'" << endl;
 
     exit(-1);
   }
-  catch (boost::exception_detail::clone_impl<
-         boost::exception_detail::error_info_injector<po::required_option>>&
-             what)
+  catch (po::required_option& what)
   {
     cerr << "You forgot to give a required option '" << what.get_option_name()
          << "'" << endl;
+
+    exit(-1);
+  }
+  catch (po::error& what)
+  {
+    cerr << "Error: " << what.what() << endl;
+    cerr << "Please give '--help' to get help" << endl;
 
     exit(-1);
   }
@@ -496,7 +508,7 @@ int ExtraMain::parse_options(int argc, char** argv)
 
   if (selected_type > 1)
   {
-    cout << "ERROR: You have selected more than one parsing option from"
+    cerr << "ERROR: You have selected more than one parsing option from "
             "CVC/SMTLIB1/SMTLIB2"
          << endl;
     std::exit(-1);
@@ -537,7 +549,7 @@ int ExtraMain::parse_options(int argc, char** argv)
       bm->UserFlags.search_bias = SearchBias::NONE;
     else
     {
-      cout << "ERROR: --search-bias must be one of 'sat', 'unsat' or 'none'"
+      cerr << "ERROR: --search-bias must be one of 'sat', 'unsat' or 'none'"
            << endl;
       std::exit(-1);
     }
@@ -551,13 +563,13 @@ int ExtraMain::parse_options(int argc, char** argv)
    */
   if (bm->UserFlags.timeout_max_conflicts < -1)
   {
-    cout << "ERROR: --max-num-confl must be -1 (no limit) or greater" << endl;
+    cerr << "ERROR: --max-num-confl must be -1 (no limit) or greater" << endl;
     std::exit(-1);
   }
 
   if (bm->UserFlags.timeout_max_time < -1)
   {
-    cout << "ERROR: --max-time must be -1 (no limit) or greater" << endl;
+    cerr << "ERROR: --max-time must be -1 (no limit) or greater" << endl;
     std::exit(-1);
   }
 

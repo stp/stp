@@ -23,7 +23,8 @@ For Debian-like platforms first install the prerequisites:
 
 .. code-block:: bash
 
-    apt-get install cmake g++ zlib1g-dev libboost-all-dev flex bison
+    apt-get install git build-essential cmake bison flex \
+        libboost-program-options-dev libgmp-dev zlib1g-dev perl
 
 Then install minisat:
 
@@ -36,21 +37,24 @@ Then install minisat:
     sudo make install
     cd ../..
 
-Then install STP:
+Then install STP. Note the submodule step: ABC and mimalloc are built as
+part of STP, and the build will not configure without them.
 
 .. code-block:: bash
 
     git clone https://github.com/stp/stp.git
-    cd stp && mkdir build && cd build
+    cd stp
+    git submodule update --init
+    mkdir build && cd build
     cmake ..
     make
     sudo make install
 
-For windows-like environments: you will need to first install the zlib
-library then install minisat and stp exactly like above, using cmake to
-create Visual Studio project files, e.g.
-``cmake .. -G "Visual Studio 10 Win64"`` and then building with Visual
-Studio.
+The `README <https://github.com/stp/stp/blob/master/README.markdown>`__
+covers the rest: the configuration variables, how to point STP at
+dependencies you have built but not installed, static builds, using
+CryptoMiniSat or CaDiCaL instead of MiniSat, and building on
+Windows/Visual Studio.
 
 
 Languages parsed
@@ -84,7 +88,7 @@ Python usage
     s.check()
     >>> True
     s.model()
-    >>> {'a': 5L, 'b': 6L, 'c': 11L}
+    >>> {'a': 5, 'b': 6, 'c': 11}
 
 SMT-LIB2 Usage
 ===============
@@ -101,7 +105,8 @@ Signed division of -1/-2 = 0, should be satisfiable.
 C library usage
 ===============
 
-When STP is built it generates a ``lib/libstp.a`` static library which
+When STP is built it generates the ``libstp`` library -- shared by
+default, or static if you configured with ``STATICCOMPILE=ON`` -- which
 can be used with one of two header files, depending on the preferred
 language:
 
@@ -152,6 +157,17 @@ STP as an external project. An example can be found in the sources under |exampl
 
 .. |examples| replace:: ``examples/simple``
 .. _examples: https://github.com/stp/stp/tree/master/examples/simple
+
+
+Working on STP
+==============
+
+.. toctree::
+   :maxdepth: 1
+
+   code-guide
+   testing
+   cnf-output-format
 
 
 Awards
@@ -225,10 +241,11 @@ terms, and array reads and writes. The predicates in the language
 include equality and (signed) comparators between bitvector terms.
 
 The basic architecture of STP essentially follows the idea of word-level
-preprocessing followed by translation to SAT (We use MINISAT and
-CRYPTOMINISAT). In particular, we introduce several new heuristics for
-the preprocessing step, including abstraction-refinement in the context
-of arrays, a new bitvector linear arithmetic equation solver, and some
+preprocessing followed by translation to SAT (MiniSat is the default SAT
+solver; CryptoMiniSat and CaDiCaL can be used instead). In particular, we
+introduce several new heuristics for the preprocessing step, including
+abstraction-refinement in the context of arrays, a new bitvector linear
+arithmetic equation solver, and some
 interesting simplifications. These heuristics help us achieve several
 magnitudes of order performance over other tools, and also over
 straight-forward translation to SAT. STP has been heavily tested on

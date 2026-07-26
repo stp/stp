@@ -5,11 +5,12 @@ STP imports code from the following libraries:
 	* ABC Copyright (c) The Regents of the University of California.
 	* mimalloc Copyright (c) 2018-2025 Microsoft Corporation, Daan Leijen.
 	* ankerl::unordered_dense Copyright (c) 2022-2024 Martin Leitner-Ankerl.
+	* Mersenne Twister Copyright (C) 1997 - 2002 Makoto Matsumoto and Takuji
+		Nishimura, Copyright (C) 2000 - 2003 Richard J. Wagner.
 
 Our build system includes third-party CMake modules (these are not compiled
 into STP, but they are distributed with it):
 	* GetGitRevisionDescription.cmake Copyright Iowa State University 2009-2010.
-	* MacroPushRequiredVars.cmake Copyright (c) 2006 Alexander Neundorf.
 
 For testing purposes we also use (but do not compile STP with):
 	* llvm-lit Copyright (c) 2003-2014 University of Illinois at Urbana-Champaign.
@@ -130,6 +131,51 @@ ankerl::unordered_dense
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 	SOFTWARE.
 
+Mersenne Twister
+	MersenneTwister.h
+	Mersenne Twister random number generator -- a C++ class MTRand
+	Based on code by Makoto Matsumoto, Takuji Nishimura, and Shawn Cokus
+	Richard J. Wagner  v1.0  15 May 2003  rjwagner@writeme.com
+
+	Copyright (C) 1997 - 2002, Makoto Matsumoto and Takuji Nishimura,
+	Copyright (C) 2000 - 2003, Richard J. Wagner
+	All rights reserved.
+
+	Redistribution and use in source and binary forms, with or without
+	modification, are permitted provided that the following conditions
+	are met:
+
+		1. Redistributions of source code must retain the above copyright
+			notice, this list of conditions and the following disclaimer.
+
+		2. Redistributions in binary form must reproduce the above copyright
+			notice, this list of conditions and the following disclaimer in the
+			documentation and/or other materials provided with the distribution.
+
+		3. The names of its contributors may not be used to endorse or promote
+			products derived from this software without specific prior written
+			permission.
+
+	THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+	"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+	LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+	A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER
+	OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+	EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+	PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+	PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+	LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+	NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+	SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+	The original code included the following notice:
+
+		When you use this, send an email to: matumoto@math.keio.ac.jp
+		with an appropriate reference to your work.
+
+	It would be nice to CC: rjwagner@writeme.com and Cokus@math.washington.edu
+	when you write.
+
 GetGitRevisionDescription.cmake (cmake/modules)
 	Original Author:
 	2009-2010 Ryan Pavlik <rpavlik@iastate.edu> <abiryan@ryand.net>
@@ -159,12 +205,6 @@ GetGitRevisionDescription.cmake (cmake/modules)
 	FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
 	ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 	DEALINGS IN THE SOFTWARE.
-
-MacroPushRequiredVars.cmake (cmake/modules)
-	Copyright (c) 2006, Alexander Neundorf, <neundorf@kde.org>
-
-	Redistribution and use is allowed according to the terms of the BSD
-	license, which is reproduced in cmake/COPYING-CMAKE-SCRIPTS.
 
 LLVM integration tester (llvm-lit)
 	University of Illinois/NCSA

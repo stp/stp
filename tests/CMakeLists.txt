@@ -51,10 +51,10 @@ set(LIT_ARGS -s CACHE STRING "Arguments to pass to lit")
 # Because of this, distros like Ubuntu don't provide a pre-built GTest library
 # so ``find_package(GTest REQUIRED)`` fails.
 #
-# Instead it is recommended that projects build their own copy of GTest. Detecting
-# the location of GTest source code is probably error prone so using a copy in the 
-# repository seems like the easiest thing to do. This also has the added benefit that
-# everyone uses the same version of GTest.
+# Instead it is recommended that projects build their own copy of GTest, which
+# is what happens here: scripts/deps/setup-gtest.sh clones upstream googletest
+# at a pinned tag into deps/gtest, and it is built from source as part of this
+# build. Everyone therefore compiles the same GTest with the same flags as STP.
 set(GTEST_PREFIX ${PROJECT_SOURCE_DIR}/deps/gtest)
 if (NOT EXISTS "${GTEST_PREFIX}/CMakeLists.txt")
     message(FATAL_ERROR "Could not find GTest. Did you run scripts/deps/setup-gtest.sh?")
@@ -65,6 +65,11 @@ if (MSVC)
   # static one, and they can't be mixed. Foring gtest to use the dynamic one.
   set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 endif()
+
+# STP uses GTest alone, and installs none of it: building GMock and adding
+# GTest to the install set would both be pure overhead.
+set(BUILD_GMOCK   OFF CACHE BOOL "" FORCE)
+set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
 
 set(PREV_CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 # GTest is a vendored third-party dependency; -Wno-error (which comes after the
@@ -80,8 +85,10 @@ set(GTEST_BOTH_LIBRARIES gtest gtest_main)
 
 # SYSTEM so warnings surfacing inside GTest's headers/macros (e.g. a
 # -Wsign-compare in an EXPECT_EQ comparison helper) don't trip -Werror in
-# STP's own test translation units that include them.
-include_directories(SYSTEM ${GTEST_PREFIX}/include)
+# STP's own test translation units that include them. The gtest target carries
+# the same directory as a SYSTEM INTERFACE include, so this is belt and braces
+# for any test target that includes the header without linking the library.
+include_directories(SYSTEM ${GTEST_PREFIX}/googletest/include)
 
 # Add handy macros/functions
 include(AddSTPGTest)
@@ -91,6 +98,23 @@ include(AddGTestSuite)
 # Provide option for running unit tests with valgrind
 # -----------------------------------------------------------------------------
 option(USE_VALGRIND "Use Valgrind when running unit tests" OFF)
+
+# Leaks are reported but do not fail a test: the tests under tests/api/C
+# create Expr handles through the C API and mostly never call vc_DeleteExpr,
+# so about thirty of them leak a few bytes each by construction. Memory errors
+# -- invalid accesses, uninitialised values -- do fail. Add
+# --errors-for-leak-kinds=definite here if you want to hunt the leaks.
+set(VALGRIND_ARGS
+    --error-exitcode=1
+    --leak-check=full
+    --errors-for-leak-kinds=none
+    --track-origins=yes
+    CACHE STRING "Arguments passed to valgrind when USE_VALGRIND is on"
+   )
+
+set(VALGRIND_TEST_TIMEOUT 10800
+    CACHE STRING "Per-test CTest timeout in seconds when USE_VALGRIND is on"
+   )
 
 if(USE_VALGRIND)
     # Make sure valgrind is currently in PATH
@@ -106,10 +130,11 @@ if(USE_VALGRIND)
         message(STATUS "Found valgrind : ${VALGRIND_TOOL}")
     endif()
 
-    # Note we don't use the VALGRIND_TOOL variable, we just
-    # want to make sure it in the user's PATH so that when
-    # lit tries to use it later it doesn't exit with an unhelpful
-    # error message
+    # AddSTPGTest runs each GoogleTest executable through this. Only those: the
+    # query-file tests drive the stp binary, which links mimalloc by default,
+    # and mimalloc gets its memory from mmap rather than malloc, so memcheck
+    # cannot see individual allocations there. Build with
+    # -DSTP_ALLOCATOR=system if you want to valgrind the binary itself.
 endif()
 
 # -----------------------------------------------------------------------------

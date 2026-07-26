@@ -555,7 +555,8 @@ Result bvUnaryMinusBothWays(vector<FixedBits*>& children, FixedBits& output)
   return changed ? CHANGED : NO_CHANGE;
 }
 
-Result bvConcatBothWays(vector<FixedBits*>& children, FixedBits& output)
+// One sweep, least significant operand first.
+static Result concatOnePass(vector<FixedBits*>& children, FixedBits& output)
 {
   Result r = NO_CHANGE;
   const size_t numberOfChildren = children.size();
@@ -589,6 +590,23 @@ Result bvConcatBothWays(vector<FixedBits*>& children, FixedBits& output)
     }
   }
   return r;
+}
+
+Result bvConcatBothWays(vector<FixedBits*>& children, FixedBits& output)
+{
+  const Result first = concatOnePass(children, output);
+
+  // When operands alias, one sweep is not enough: a bit written into the
+  // shared FixedBits through a low operand is not read back out through a
+  // high one until the next sweep. Two sweeps are always enough, though.
+  //
+  if (NO_CHANGE == first || CONFLICT == first || !operandsAlias(children))
+    return first;
+
+  // Merged, not just returned: the second sweep reports NO_CHANGE whenever it
+  // adds nothing, and returning that would tell propagate() nothing happened
+  // when the first sweep had already moved bits.
+  return merge(first, concatOnePass(children, output));
 }
 
 // If the guard is fixed, make equal the appropriate input and output.

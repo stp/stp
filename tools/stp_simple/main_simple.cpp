@@ -52,7 +52,7 @@ int SimpleMain::create_and_parse_options(int argc, char** argv)
     {
       std::cerr << "Only --array-equality and one input file are allowed"
                 << std::endl;
-      exit(0);
+      exit(-1);
     }
   }
 

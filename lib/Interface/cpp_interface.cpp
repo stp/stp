@@ -24,6 +24,8 @@ THE SOFTWARE.
 
 #include "stp/cpp_interface.h"
 #include "stp/Parser/LetMgr.h"
+#include "stp/Printer/printers.h"
+#include "stp/Util/GitSHA1.h"
 #include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/ToSat/ToSATAIG.h"
@@ -51,7 +53,11 @@ void Cpp_interface::init()
 
   addFrame();
 
-  if (bm.getVectorOfAsserts().size() == 0)
+  // Ask the stack how deep it is rather than for its contents:
+  // getVectorOfAsserts() fills empty levels with TRUE as a side effect, and
+  // two interfaces are constructed over the one STPMgr, so using it as an
+  // emptiness test left a stray TRUE asserted at the base level forever.
+  if (bm.getAssertLevel() == 0)
     bm.Push();
 
   print_success = false;
@@ -376,7 +382,7 @@ void Cpp_interface::success()
 //TODO escape string.
 void Cpp_interface::error(std::string msg)
 {
-  cout << "error(\"" << msg << "\")" << endl;
+  cout << "(error \"" << msg << "\")" << endl;
   flush(cout);
 }
 
@@ -426,6 +432,30 @@ void Cpp_interface::popToFirstLevel()
   // I don't understand why this is required.
   while (bm.getAssertLevel() > 0)
     bm.Pop();
+}
+
+// Weaker than reset(): the base level's declarations and the current options
+// survive, only the assertions go. Deliberately avoids popToFirstLevel(),
+// which leaves bm's assert level at zero and so breaks checkInvariant().
+void Cpp_interface::resetAssertions()
+{
+  // Discard every level above the base one, which also removes the symbols
+  // declared inside them.
+  while (frames.size() > 1)
+    pop();
+
+  // Empty the base level without removing it, so that the assertion stack,
+  // the result cache and the frame stack stay in step.
+  bm.Pop();
+  bm.Push();
+
+  // Whatever we last concluded no longer refers to these assertions.
+  cache.back() = Entry(SOLVER_UNDECIDED);
+
+  // These tables might hold references to the assertions just discarded.
+  resetSolver();
+
+  checkInvariant();
 }
 
 void Cpp_interface::pop()
@@ -645,9 +675,67 @@ void Cpp_interface::setOption(std::string option, std::string value)
     unsupported();
 }
 
-void Cpp_interface::getOption(std::string)
+// The options we report are exactly the ones setOption() honours; everything
+// else must answer "unsupported" rather than invent a value (SMT-LIB 2.6
+// 4.1.7).
+void Cpp_interface::getOption(std::string option)
 {
-  unsupported();
+  if (option == "print-success")
+    cout << (print_success ? "true" : "false") << endl;
+  else if (option == "produce-models")
+    cout << (produce_models ? "true" : "false") << endl;
+  else if (option == "diagnostic-output-channel")
+    cout << "\"stdout\"" << endl;
+  else
+  {
+    unsupported();
+    return;
+  }
+
+  flush(cout);
+}
+
+void Cpp_interface::getInfo(std::string flag)
+{
+  if (flag == "name")
+    cout << "(:name \"STP\")" << endl;
+  else if (flag == "version")
+    cout << "(:version \"" << get_git_version_tag() << "\")" << endl;
+  else if (flag == "error-behavior")
+  {
+    // FatalError() exits rather than unwinding to the next command.
+    cout << "(:error-behavior immediate-exit)" << endl;
+  }
+  else if (flag == "assertion-stack-levels")
+  {
+    // The base level is not an assertion level.
+    cout << "(:assertion-stack-levels "
+         << (frames.size() > 0 ? frames.size() - 1 : 0) << ")" << endl;
+  }
+  else
+  {
+    // :all-statistics, :authors and :reason-unknown are not reported.
+    unsupported();
+    return;
+  }
+
+  flush(cout);
+}
+
+void Cpp_interface::getAssertions()
+{
+  // GetAsserts() flattens the stack into the individual asserted formulas,
+  // unlike getAssertVector(), which conjoins each level.
+  const ASTVec v = GetAsserts();
+
+  cout << "(" << endl;
+  for (const ASTNode& n : v)
+  {
+    printer::SMTLIB2_Print1(cout, n, 0, false);
+    cout << endl;
+  }
+  cout << ")" << endl;
+  flush(cout);
 }
 
 void Cpp_interface::getValue(const ASTVec& v)

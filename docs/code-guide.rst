@@ -1,27 +1,66 @@
-The src/ directory is organized into subdirectories for each distinct
-component of STP.
+Source code layout
+==================
 
--  ``absrefine_counterexample``: Functions related to abstraction
+The ``lib/`` directory is organized into subdirectories for each distinct
+component of STP. The headers that go with them live under
+``include/stp/``.
+
+-  ``AbsRefineCounterExample``: Functions related to abstraction
    refinement and counterexample construction.
 -  ``AST``: Implements the abstract syntax tree for parsed solver
    inputs.
--  ``c_interface``: Defines a C interface for parsing input files,
-   constructing expressions, executing queries, etc.
--  ``cpp_interface``: Defines the C++ interface for invoking STP.
--  ``extlib-abc``: The
-   `ABC <http://www.eecs.berkeley.edu/~alanmi/abc/abc.htm>`__ package.
--  ``extlib-constbv``: A library that implements multi-word fixed-length
-   integers, based on Steffen Beyer’s
-   `Bit::Vector <http://guest.engelschall.com/~sb/download/>`__ perl
-   module.
--  ``main``: Implements the executable tool ``stp``
--  ``parser``: Contains the parsers for the CVC, SMT-LIB1, and SMT-LIB2
+-  ``Globals``: The handful of thread-local globals that the parser
+   shares with the rest of STP.
+-  ``Interface``: Defines the C interface (``stp/c_interface.h``) for
+   parsing input files, constructing expressions, executing queries,
+   etc., and the C++ interface (``stp/cpp_interface.h``) for invoking
+   STP.
+-  ``NodeFactory``: Creates AST nodes. Which factory a client asks for
+   decides how much work happens as nodes are built, from hash consing
+   alone up to the rewriting done by ``SimplifyingNodeFactory``.
+-  ``Parser``: Contains the parsers for the CVC, SMT-LIB1, and SMT-LIB2
    input formats.
--  ``printer``: Implements various output formatters.
--  ``Sat``: This is a copy of `MiniSat <http://minisat.se>`__, with
-   `CryptoMiniSat <http://www.msoos.org/cryptominisat2/>`__ and some
-   other files added.
--  ``simplifier``: Simplification algorithms for the AST
--  ``STPManager``: Class that hold all the components together
--  ``to-sat``: Conversion of AST to SAT
--  ``util``: Handy utilities for smaller tasks
+-  ``Printer``: Implements various output formatters.
+-  ``Sat``: Adapters presenting each supported SAT solver --
+   `MiniSat <https://github.com/stp/minisat>`__,
+   `CryptoMiniSat <https://github.com/msoos/cryptominisat>`__,
+   `CaDiCaL <https://github.com/arminbiere/cadical>`__ and
+   `Riss <https://github.com/nmanthey/riss-solver>`__ -- through STP's
+   common ``SATSolver`` interface. The solvers themselves are external;
+   only the wrappers live here.
+-  ``Simplifier``: Simplification algorithms for the AST, including the
+   constant bit propagator under ``constantBitP/``.
+-  ``STPManager``: Class that holds all the components together.
+-  ``ToSat``: Conversion of AST to SAT.
+-  ``Util``: Handy utilities for smaller tasks.
+
+Third-party code that is compiled into STP also lives under ``lib/``:
+
+-  ``extlib-abc``: The `ABC <https://github.com/berkeley-abc/abc>`__
+   package, used to build AIGs and convert them to CNF. A git submodule.
+-  ``extlib-constbv``: A library that implements multi-word fixed-length
+   integers, based on Steffen Beyer's
+   `Bit::Vector <https://metacpan.org/pod/Bit::Vector>`__ perl module.
+-  ``extlib-mimalloc``:
+   `mimalloc <https://github.com/microsoft/mimalloc>`__, the allocator
+   the STP executables link against by default. A git submodule; see
+   ``STP_ALLOCATOR`` in the README for the alternatives.
+-  ``extlib-unordered-dense``:
+   `ankerl::unordered_dense <https://github.com/martinus/unordered_dense>`__,
+   a densely stored hash map and set, used in place of
+   ``std::unordered_map`` where it pays off.
+
+The executables are built from ``tools/``:
+
+-  ``stp``: The main command-line solver.
+-  ``stp_simple``: A cut-down front end that accepts a single SMT-LIB2
+   file (or stdin) and no other options. Setting ``ONLY_SIMPLE`` builds
+   this instead of ``stp``, which drops the dependency on Boost.
+-  The rest are development aids, built only when ``BUILD_EXTRA_TOOLS``
+   is enabled: ``propagator_bench``, ``time_constantbitprop``,
+   ``measure_constantbitprop`` and ``test_constantbitprop`` exercise the
+   propagators, ``rewrite_rule_gen`` searches for rewrite rules, and
+   ``cvc_to_c`` turns a CVC file into a C program.
+
+The Python bindings are in ``bindings/python``, and the tests are in
+``tests/`` (see :doc:`testing`).

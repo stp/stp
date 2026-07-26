@@ -1008,7 +1008,7 @@ static Result shlCore(const unsigned bitWidth, PackedBits& packedOp,
   return NOT_IMPLEMENTED;
 }
 
-Result bvLeftShiftBothWays(vector<FixedBits*>& children, FixedBits& output)
+static Result leftShiftOnePass(vector<FixedBits*>& children, FixedBits& output)
 {
   const unsigned bitWidth = output.getWidth();
   assert(2 == children.size());
@@ -1041,6 +1041,42 @@ Result bvLeftShiftBothWays(vector<FixedBits*>& children, FixedBits& output)
   writeBack(shift, packedShift, origShift);
   writeBack(output, packedOut, origOut);
   return result;
+}
+
+Result bvLeftShiftBothWays(vector<FixedBits*>& children, FixedBits& output)
+{
+  Result r = leftShiftOnePass(children, output);
+
+  // Same shape as bvConcatBothWays: nothing derived or a conflict means a
+  // second pass would see exactly what this one did, and distinct operands
+  // never need one. NB the NO_CHANGE arm is inert here - shlCore ends in an
+  // unconditional `return NOT_IMPLEMENTED`, so this function never reports
+  // NO_CHANGE and the alias check runs on every call. It is two pointer
+  // compares, and the arm starts working the moment shlCore reports honestly.
+  if (NO_CHANGE == r || CONFLICT == r || !operandsAlias(children))
+    return r;
+
+  // x << x. shlCore snapshots the value and the amount into separate
+  // PackedBits and writes both back into the one FixedBits, so a bit it
+  // derives for the amount is not read as part of the value until the next
+  // call - and narrowing either one narrows the other again. Unlike concat
+  // there is no two-pass argument to lean on: random sweeps reach six passes
+  // by width 31, so iterate until nothing new is fixed.
+  unsigned fixed = totalFixedBits(children, output);
+  while (true)
+  {
+    const Result pass = leftShiftOnePass(children, output);
+
+    r = merge(r, pass);
+    if (NO_CHANGE == pass || CONFLICT == pass)
+      return r;
+
+    const unsigned now = totalFixedBits(children, output);
+    assert(now >= fixed); // Bits are only ever fixed, never unfixed.
+    if (now == fixed)
+      return r;
+    fixed = now;
+  }
 }
 }
 }
