@@ -22,7 +22,18 @@ if ( USE_CRYPTOMINISAT)
     add_executable(rewrite_rule_gen
         rewrite_rule_gen.cpp
     )
+    # rewrite_rule_gen calls ABC itself, not just through libstp:
+    # BBNodeManagerAIG's inline constructor and destructor reach Aig_ManStart
+    # and Aig_ManStop, and getDifficulty() calls Cnf_DataFree. It used to pick
+    # those up by accident, from libstp naming its own dependencies in its link
+    # interface; now that they are PRIVATE, and libstp.so localises the ABC
+    # symbols it links in (--exclude-libs, see lib/CMakeLists.txt), a direct
+    # user of ABC has to link it directly.
     target_link_libraries(rewrite_rule_gen
         stp
+        $<TARGET_FILE:libabc-pic>
     )
+    # $<TARGET_FILE:...> names a file rather than a target, so the build order
+    # has to be spelled out, exactly as lib/CMakeLists.txt does for libstp.
+    add_dependencies(rewrite_rule_gen libabc-pic)
 endif()

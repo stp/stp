@@ -241,6 +241,10 @@ public:
 
   // Reset STP back to "just started up" state.
   DLL_PUBLIC void reset();
+
+  // Empty the assertion stack, keeping the declarations and options of the
+  // base level. Weaker than reset(), per SMT-LIB 2.6 4.2.5.
+  DLL_PUBLIC void resetAssertions();
   DLL_PUBLIC void pop();
   DLL_PUBLIC void push();
   DLL_PUBLIC void popToFirstLevel(); // We can't pop off the zeroeth level
@@ -255,6 +259,8 @@ public:
 
   DLL_PUBLIC void setOption(std::string, std::string);
   DLL_PUBLIC void getOption(std::string);
+  DLL_PUBLIC void getInfo(std::string);
+  DLL_PUBLIC void getAssertions();
 
   DLL_PUBLIC void getModel();
   DLL_PUBLIC void getValue(const ASTVec& v);

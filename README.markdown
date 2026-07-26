@@ -86,9 +86,13 @@ The system performs word-level preprocessing followed by translation to SAT whic
 
 ## Detailed Building and Installation
 
-STP is built with [CMake](https://cmake.org/), version 3.10 or newer. CMake is a
+STP is built with [CMake](https://cmake.org/), version 3.18 or newer. CMake is a
 meta build system that generates build files for other tools such as
 make(1), Visual Studio, Xcode, etc.
+
+The 3.18 floor comes from the vendored [mimalloc](lib/extlib-mimalloc), which
+is the default allocator. On an older CMake, configure with
+`-DSTP_ALLOCATOR=system` to skip it and use the C library's malloc instead.
 
 ### Configuration variables
 Here are a few interesting configuration variables. These apply to all
@@ -98,8 +102,8 @@ generators.
 - `CMAKE_INSTALL_PREFIX` - The prefix for install (e.g. /usr/local )
 - `ENABLE_ASSERTIONS` - If TRUE STP will be built with asserts.
 - `ENABLE_TESTING` - Enable running tests
-- `ENABLE_PYTHON_INTERFACE` - Enable building the Python interface
-- `PYTHON_EXECUTABLE` - Set python executable in case you have more than one python installed
+- `ENABLE_PYTHON_INTERFACE` - Enable building the Python interface (Python 3 only)
+- `PYTHON_EXECUTABLE` - Set the Python 3 executable in case you have more than one python installed
 - `SANITIZE` - Use Clang's sanitization checks
 - `STATICCOMPILE` - Build static libraries and binaries instead of dynamic
 - `BUILD_SHARED_LIBS` - Build `libstp` as a shared library (default ON; forced
@@ -268,5 +272,5 @@ You will need to install [cmake](https://cmake.org/download/) and follow the ste
 * Mate Soos
 * Dan Liew
 * Ryan Govostes
-* Andrew V. Jones
+* Andrew V. Teylu
 * And many others...

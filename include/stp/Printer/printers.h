@@ -55,6 +55,12 @@ DLL_PUBLIC void SMTLIB1_PrintBack(ostream& os, const stp::ASTNode& n,
 DLL_PUBLIC void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* stp,
                                   bool definately_bv = false);
 
+// Prints just the expression, without the declarations that the "PrintBack"
+// functions emit. Used by get-assertions, which must print the asserted
+// formulas alone.
+DLL_PUBLIC void SMTLIB2_Print1(ostream& os, const stp::ASTNode n,
+                               int indentation, bool letize);
+
 void outputBitVecSMTLIB2(const ASTNode n, ostream& os);
 void outputFloatingPointSMTLIB2(const ASTNode n, ostream& os,
                                 const ASTNode term);

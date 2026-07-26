@@ -56,6 +56,10 @@
   // File-static (local to this file) variables and functions
   static thread_local std::string _string_lit;
 
+  // Nesting depth while skipping the arguments of a command we don't
+  // interpret. Zero means the next ')' closes the command itself.
+  static thread_local int skippedDepth = 0;
+
   static int lookup(char* s)
   {
     char * cleaned = NULL;
@@ -170,6 +174,7 @@
 %x  COMMENT
 %x  STRING_LITERAL
 %x  SYMBOL
+%x  SKIP_SEXPR
 
 LETTER  ([a-zA-Z])
 DIGIT  ([0-9])
@@ -231,9 +236,6 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 "declare-fun"             { return DECLARE_FUNCTION_TOK; }
 "declare-sort"            { return DECLARE_SORT_TOK;}
 "define-fun"              { return DEFINE_FUNCTION_TOK; }
-"define-fun-rec"          { return DECLARE_FUN_REC_TOK;}
-"define-funs-rec"         { return DECLARE_FUNS_REC_TOK;}
-"define-sort"             { return DEFINE_SORT_TOK;}
 "echo"                    { return ECHO_TOK;}
 "exit"                    { return EXIT_TOK;}
 "get-assertions"          { return GET_ASSERTIONS_TOK;}
@@ -242,7 +244,7 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 "get-model"               { return GET_MODEL_TOK;}
 "get-option"              { return GET_OPTION_TOK;}
 "get-proof"               { return GET_PROOF_TOK;}
-"get-unsat-assumption"    { return GET_UNSAT_ASSUMPTION_TOK;}
+"get-unsat-assumptions"   { return GET_UNSAT_ASSUMPTIONS_TOK;}
 "get-unsat-core"          { return GET_UNSAT_CORE_TOK;}
 "get-value"               { return GET_VALUE_TOK;}
 "pop"                     { return POP_TOK;}
@@ -252,6 +254,33 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 "set-info"                { return NOTES_TOK;  }
 "set-logic"               { return LOGIC_TOK; }
 "set-option"              { return SET_OPTION_TOK; }
+
+ /* Commands STP cannot interpret, but which must still parse so that the
+  * rest of the script survives. The standard requires the response
+  * "unsupported" rather than an error. Their arguments (sorts, recursive
+  * function bodies, datatype declarations) are of no use to us, so the
+  * lexer swallows the remainder of the s-expression and hands the parser
+  * the closing parenthesis. */
+"define-fun-rec"   { skippedDepth = 0; BEGIN SKIP_SEXPR; return DEFINE_FUN_REC_TOK;}
+"define-funs-rec"  { skippedDepth = 0; BEGIN SKIP_SEXPR; return DEFINE_FUNS_REC_TOK;}
+"define-sort"      { skippedDepth = 0; BEGIN SKIP_SEXPR; return DEFINE_SORT_TOK;}
+"declare-datatype" { skippedDepth = 0; BEGIN SKIP_SEXPR; return DECLARE_DATATYPE_TOK;}
+"declare-datatypes" { skippedDepth = 0; BEGIN SKIP_SEXPR; return DECLARE_DATATYPES_TOK;}
+
+ /* Consume a command's arguments without interpreting them, tracking nesting
+  * so that the parenthesis returned is the one that closes the command
+  * itself. String literals and quoted symbols are matched as units, since
+  * either may contain an unbalanced parenthesis. */
+<SKIP_SEXPR>"\""([^"]|"\"\"")*"\""  { /* string literal */ }
+<SKIP_SEXPR>"|"[^|]*"|"             { /* quoted symbol */ }
+<SKIP_SEXPR>";"[^\n]*               { /* comment */ }
+<SKIP_SEXPR>"("                     { skippedDepth++; }
+<SKIP_SEXPR>")"                     { if (skippedDepth == 0)
+                                        { BEGIN INITIAL; return RPAREN_TOK; }
+                                      skippedDepth--; }
+<SKIP_SEXPR>[^()|;\"]+              { /* uninteresting content */ }
+<SKIP_SEXPR>.                       { /* anything else */ }
+<SKIP_SEXPR><<EOF>>                 { BEGIN INITIAL; return 0; }
 
 
 

@@ -38,7 +38,7 @@ int SimpleMain::create_and_parse_options(int argc, char** argv)
   if (argc > 2)
   {
     std::cerr << "Only one option is allowed, the input file" << std::endl;
-    exit(0);
+    exit(-1);
   }
 
   bm->UserFlags.smtlib2_parser_flag = true;

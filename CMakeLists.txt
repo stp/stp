@@ -18,34 +18,20 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
-
-if(POLICY CMP0048)
-    #policy for VERSION in cmake 3.0
-    cmake_policy(SET CMP0048 NEW)
-endif()
-
-if(POLICY CMP0074)
-    #policy for <PackageName>_ROOT variables
-    cmake_policy(SET CMP0074 NEW)
-endif()
-
-if(POLICY CMP0092)
-    # Disable passing /W3 by default on MSVC
-    cmake_policy(SET CMP0092 NEW)
-endif()
-
-if(POLICY CMP0077)
-    # Allow to override options via regular variables
-    cmake_policy(SET CMP0077 NEW)
-endif()
+# 3.18 is what lib/extlib-mimalloc requires, and mimalloc is the default
+# STP_ALLOCATOR, so a default build already needs it. Anyone on an older CMake
+# can configure with -DSTP_ALLOCATOR=system, which skips that subdirectory.
+#
+# Nothing here sets a policy explicitly: every policy STP cares about
+# (CMP0048, CMP0074, CMP0077, CMP0092 - the newest introduced in 3.15) is NEW
+# by default at this minimum.
+cmake_minimum_required(VERSION 3.18)
 
 project(STP)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_CXX_STANDARD 17)
 
-include(GenerateExportHeader)
 include(GNUInstallDirs)
 include(FeatureSummary)
 
@@ -119,8 +105,6 @@ macro(add_cxx_flag flagname)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flagname}")
 endmacro()
 
-include(MacroPushRequiredVars)
-
 option(SANITIZE "Use Clang sanitizers" OFF)
 if (SANITIZE)
     # Set in Cache so user can tweak it later
@@ -181,16 +165,16 @@ else ()
     # (but later on when installing)
     SET(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 
-    SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_LIBDIR}")
+    SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_FULL_LIBDIR}")
 
     # add the automatically determined parts of the RPATH
     # which point to directories outside the build tree to the install RPATH
     SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
     # the RPATH to be used when installing, but only if it's not a system directory
-    LIST(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES "${CMAKE_INSTALL_LIBDIR}" isSystemDir)
+    LIST(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES "${CMAKE_INSTALL_FULL_LIBDIR}" isSystemDir)
     IF("${isSystemDir}" STREQUAL "-1")
-        SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_LIBDIR}")
+        SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_FULL_LIBDIR}")
     ENDIF("${isSystemDir}" STREQUAL "-1")
 
     if (APPLE)
@@ -287,10 +271,6 @@ else()
     # set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /INCREMENTAL:NO")
     # set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /PDBCOMPRESS")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /STACK:1572864")
-
-    #what does this do?
-    set(DEF_INSTALL_CMAKE_DIR CMake)
-
 
     if (MSVC)
         # Windows compatibility includes
@@ -863,8 +843,39 @@ option(ENABLE_TESTING "Enable testing" OFF)
 # try finding python if the user did not explicitly said that
 # he/she does not want python bindings
 if((NOT DEFINED ENABLE_PYTHON_INTERFACE) OR ENABLE_PYTHON_INTERFACE)
-    find_package (PythonInterp)
-    if(PYTHON_EXECUTABLE AND BUILD_SHARED_LIBS)
+    # Python 3 only. PYTHON_EXECUTABLE stays the documented way to choose the
+    # interpreter (the rest of the build and our CI use that name), so feed it
+    # to the finder and write the validated result back to it.
+    set(PYTHON_DOC_STRING "Python 3 interpreter for the bindings and the test suite")
+    if(CMAKE_VERSION VERSION_LESS 3.12)
+        # FindPython3 arrived in CMake 3.12; on older CMake ask the deprecated
+        # module for a Python 3 interpreter instead. It searches PYTHON_EXECUTABLE
+        # directly, so no hint needs forwarding.
+        find_package(PythonInterp 3)
+        set(Python3_EXECUTABLE "${PYTHON_EXECUTABLE}")
+        set(Python3_Interpreter_FOUND ${PYTHONINTERP_FOUND})
+    else()
+        if(PYTHON_EXECUTABLE)
+            set(Python3_EXECUTABLE "${PYTHON_EXECUTABLE}" CACHE FILEPATH
+                "${PYTHON_DOC_STRING}" FORCE)
+        endif()
+        find_package(Python3 COMPONENTS Interpreter)
+    endif()
+
+    # Publish the result in the cache so that subprojects looking for an
+    # interpreter of their own (e.g. gtest, which still uses the deprecated
+    # FindPythonInterp) pick up this Python 3 rather than finding a Python 2.
+    if(Python3_Interpreter_FOUND)
+        set(PYTHON_EXECUTABLE "${Python3_EXECUTABLE}" CACHE FILEPATH
+            "${PYTHON_DOC_STRING}" FORCE)
+    else()
+        set(PYTHON_EXECUTABLE "" CACHE FILEPATH "${PYTHON_DOC_STRING}" FORCE)
+        # Don't let a rejected interpreter stick in the cache, or every later
+        # reconfigure would keep re-testing the same unsuitable one.
+        unset(Python3_EXECUTABLE CACHE)
+    endif()
+
+    if(Python3_Interpreter_FOUND AND BUILD_SHARED_LIBS)
         set(ENABLE_PYTHON_INTERFACE ON)
     else()
         set(ENABLE_PYTHON_INTERFACE OFF)

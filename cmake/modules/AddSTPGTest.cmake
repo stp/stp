@@ -52,9 +52,20 @@ function(AddSTPGTest sourcefile)
     # Add dependency so that building the testsuite
     # will cause this test (testname) to be built
     #add_dependencies(${TESTSUITE} ${testname})
-    add_test(
-      NAME ${testname}-gtest
-      COMMAND ${testname}
-      WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-    )
+    if(USE_VALGRIND)
+        add_test(
+          NAME ${testname}-gtest
+          COMMAND ${VALGRIND_TOOL} ${VALGRIND_ARGS} $<TARGET_FILE:${testname}>
+          WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        )
+        # Valgrind costs roughly an order of magnitude in run time, which the
+        # exhaustive tests in particular do not fit into the default timeout.
+        set_tests_properties(${testname}-gtest PROPERTIES TIMEOUT ${VALGRIND_TEST_TIMEOUT})
+    else()
+        add_test(
+          NAME ${testname}-gtest
+          COMMAND ${testname}
+          WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        )
+    endif()
 endfunction()

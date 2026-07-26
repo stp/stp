@@ -82,6 +82,18 @@ void ToCNFAIG::dag_aware_aig_rewrite(const bool needAbsRef,
       Aig_ManStop(pTemp);
       Dar_ManRewrite(mgr.aigMgr, pPars);
 
+      // Rewriting can leave a node with no fanout behind. Dar_LibBuildBest()
+      // builds each replacement subgraph bottom up with Aig_And(), and a
+      // trivial simplification or a structural-hash hit further up can drop
+      // the reference to a node it has just created; nothing deletes it
+      // afterwards, since Dar_ManRewrite() only cleans up on entry.
+      //
+      // Such a node is unreachable from the CO, so Aig_ManDupDfs() does not
+      // copy it -- but it also asserts that it copied everything, and aborts
+      // an assertions build. Delete them here instead. Only unreferenced AND
+      // nodes go, so the CI order the symbol table indexes by is untouched.
+      Aig_ManCleanup(mgr.aigMgr);
+
       mgr.aigMgr = Aig_ManDupDfs(pTemp = mgr.aigMgr);
       Aig_ManStop(pTemp);
 

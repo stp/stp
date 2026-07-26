@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 The MIT License
 
@@ -26,8 +26,10 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 import sys
-# Make sure we can find the STP python package
-sys.path.insert(0, "@PYTHON_INTERFACE_DIR@/stp")
+# Make sure we can find the STP python package. Point at the directory holding
+# the package, not at the package itself, so that this exercises the same
+# import path as an installed `stp` package.
+sys.path.insert(0, "@PYTHON_INTERFACE_DIR@")
 
 import stp
 import unittest
@@ -612,6 +614,113 @@ class TestSTP(unittest.TestCase):
             callable(stp_cdll.vc_bvConcatExpr),
             "STP's CDLL object should have a method called 'vc_bvConcatExpr'",
         )
+
+    #
+    # Operators that were added to the C API for node kinds it could not
+    # previously build: the bitwise nand/nor/xnor, the boolean nand/nor, the
+    # six overflow predicates and zero-extend.
+    #
+
+    def test_bitwise_nand_nor_xnor(self):
+        s = self.s
+        width = 8
+        mask = 2 ** width - 1
+        A, B = 0xCA, 0x6C
+
+        a = s.bitvec('a', width)
+        b = s.bitvec('b', width)
+        c = s.bitvec('c', width)
+        s.add(a == A, b == B)
+
+        for method, expected in (('nand', ~(A & B) & mask),
+                                 ('nor', ~(A | B) & mask),
+                                 ('xnor', ~(A ^ B) & mask)):
+            self.assertTrue(s.check(c == getattr(a, method)(b)), method)
+            self.assertEqual(s.model()['c'], expected, method)
+
+    def test_boolean_nand_nor(self):
+        s = self.s
+        a, b = s.bitvecs('a b', 8)
+        p = a == 1
+        q = b == 1
+
+        # nand/nor agree with the negated and/or for every a and b, i.e. the
+        # two sides can never disagree.
+        self.assertFalse(s.check(s.xor(s.nand(p, q), s.not_(s.and_(p, q)))))
+        self.assertFalse(s.check(s.xor(s.nor(p, q), s.not_(s.or_(p, q)))))
+
+    def test_overflow_predicates_concrete(self):
+        s = self.s
+        width = 8
+
+        # (method, left, right, overflows?). Negative operands are given in
+        # two's complement: 0x80 is -128 and 0xFF is -1.
+        cases = [
+            ('uaddo', 200, 100, True),
+            ('uaddo', 100, 100, False),
+            ('saddo', 100, 100, True),   # 200 > 127
+            ('saddo', 100, 20, False),   # 120 fits
+            ('usubo', 100, 200, True),   # borrows
+            ('usubo', 200, 100, False),
+            ('ssubo', 0x80, 1, True),    # -128 - 1 does not fit
+            ('ssubo', 100, 100, False),
+            ('umulo', 16, 16, True),     # 256 > 255
+            ('umulo', 15, 15, False),    # 225 fits
+            ('smulo', 64, 2, True),      # 128 > 127
+            ('smulo', 63, 2, False),     # 126 fits
+            ('smulo', 0xFF, 0xFF, False) # -1 * -1 == 1
+        ]
+
+        for method, left, right, overflows in cases:
+            predicate = getattr(s.bitvecval(width, left), method)(
+                s.bitvecval(width, right))
+            label = '%s(%d, %d)' % (method, left, right)
+
+            self.assertEqual(s.check(predicate), overflows, label)
+
+    def test_unsigned_add_overflow_matches_a_wider_sum(self):
+        #
+        # The predicate holds exactly when the sum computed at one extra bit
+        # of width does not fit back into the original width -- for every
+        # input, not just the concrete ones above.
+        #
+        s = self.s
+        width = 4
+
+        a = s.bitvec('a', width)
+        b = s.bitvec('b', width)
+        exact = a.zero_extend(width + 1) + b.zero_extend(width + 1)
+        does_not_fit = exact >= s.bitvecval(width + 1, 2 ** width)
+
+        self.assertFalse(s.check(s.xor(a.uaddo(b), does_not_fit)))
+
+    def test_zero_extend_and_sign_extend(self):
+        s = self.s
+        a = s.bitvec('a', 8)
+        c = s.bitvec('c', 16)
+        s.add(a == 0xF0)
+
+        self.assertTrue(s.check(c == a.zero_extend(16)))
+        self.assertEqual(s.model()['c'], 0x00F0)
+
+        self.assertTrue(s.check(c == a.sign_extend(16)))
+        self.assertEqual(s.model()['c'], 0xFFF0)
+
+    def test_zero_extend_reports_its_new_width(self):
+        s = self.s
+        a = s.bitvec('a', 8)
+        s.add(a == 0xF5)
+
+        self.assertEqual(a.zero_extend(16).width, 16)
+        self.assertEqual(a.sign_extend(16).width, 16)
+
+        # Asking for fewer bits truncates rather than failing.
+        narrowed = a.zero_extend(4)
+        self.assertEqual(narrowed.width, 4)
+
+        c = s.bitvec('c', 4)
+        self.assertTrue(s.check(c == narrowed))
+        self.assertEqual(s.model()['c'], 0x5)
 
     # Check that wide values work.
     def test_wide0(self):

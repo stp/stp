@@ -1,5 +1,12 @@
+CNF output format
+=================
+
 This page describes the output format that STP uses when passed the
-``--output-cnf`` option. For example:
+``--output-CNF`` option. Each query STP sends to the SAT solver is written
+to ``output_<n>.cnf`` in the current directory, numbered from 0. Note that
+the CNF variables cannot be mapped back to the input problem, and that a
+problem the preprocessing simplifier solves on its own produces no file at
+all, because the SAT solver is never invoked. For example:
 
 ::
 
@@ -24,5 +31,6 @@ Each other line encodes one clause. Clauses are defined as a list of
 literals followed by a ``0``. Positive literals are 1, 2, …, and
 negative literals are -1, -2, ….
 
-The code that generates the output file is in
-extlib-abc/aig/cnf/cnfMan.c.
+STP calls ABC to do the conversion, from ``lib/ToSat/ToSATAIG.cpp``; the
+code that writes the file out is ABC's, in
+``lib/extlib-abc/src/sat/cnf/cnfMan.c``.

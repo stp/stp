@@ -221,8 +221,18 @@ if (USE_RISS)
         ${stp_link_libs} -lriss-coprocessor)
 endif()
 
+# PRIVATE, not LINK_PUBLIC: these are implementation details of libstp, and
+# naming them in the link interface put them in the exported STPTargets.cmake,
+# where they were unusable - $<TARGET_FILE:libabc-pic> names a target no
+# consumer has, and the minisat entry was an absolute path into whichever build
+# tree happened to produce the package. find_package(STP) failed outright on
+# the generator expression, so no external project could link STP at all; see
+# examples/simple. A shared libstp needs none of this propagated anyway: the
+# ABC archive is linked into the library (with its symbols localised, see
+# --exclude-libs below) and minisat is picked up transitively through
+# DT_NEEDED.
 target_link_libraries(stp
-    LINK_PUBLIC ${stp_link_libs}
+    PRIVATE ${stp_link_libs}
 )
 
 # ABC is interconnected enough that satisfying our ~30 entry points transitively

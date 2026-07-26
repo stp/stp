@@ -32,7 +32,8 @@ from ctypes import c_double, c_float
 import inspect
 import os.path
 import struct
-import sys
+
+from .library_path import PATHS
 
 __all__ = [
     'Expr', 'FloatExpr', 'Solver', 'stp', 'add', 'bitvec', 'bitvecs', 'check',
@@ -47,7 +48,6 @@ RTN = 4   # round toward negative
 RTZ = 8   # round toward zero
 RNA = 16  # round nearest, ties to away
 
-from library_path import PATHS
 
 for path in PATHS:
     if not os.path.exists(path):
@@ -101,6 +101,8 @@ _set_func('vc_andExpr', _Expr, _VC, _Expr, _Expr)
 _set_func('vc_andExprN', _Expr, _VC, POINTER(_Expr), c_int32)
 _set_func('vc_orExpr', _Expr, _VC, _Expr, _Expr)
 _set_func('vc_xorExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_nandExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_norExpr', _Expr, _VC, _Expr, _Expr)
 _set_func('vc_orExprN', _Expr, _VC, POINTER(_Expr), c_int32)
 _set_func('vc_impliesExpr', _Expr, _VC, _Expr, _Expr)
 _set_func('vc_iffExpr', _Expr, _VC, _Expr, _Expr)
@@ -165,10 +167,19 @@ _set_func('vc_sbvLtExpr', _Expr, _VC, _Expr, _Expr)
 _set_func('vc_sbvLeExpr', _Expr, _VC, _Expr, _Expr)
 _set_func('vc_sbvGtExpr', _Expr, _VC, _Expr, _Expr)
 _set_func('vc_sbvGeExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_bvUnsignedAddOverflowExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_bvSignedAddOverflowExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_bvUnsignedSubOverflowExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_bvSignedSubOverflowExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_bvUnsignedMulOverflowExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_bvSignedMulOverflowExpr', _Expr, _VC, _Expr, _Expr)
 _set_func('vc_bvUMinusExpr', _Expr, _VC, _Expr)
 _set_func('vc_bvAndExpr', _Expr, _VC, _Expr, _Expr)
 _set_func('vc_bvOrExpr', _Expr, _VC, _Expr, _Expr)
 _set_func('vc_bvXorExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_bvNandExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_bvNorExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_bvXnorExpr', _Expr, _VC, _Expr, _Expr)
 _set_func('vc_bvNotExpr', _Expr, _VC, _Expr)
 _set_func('vc_bvLeftShiftExprExpr', _Expr, _VC, c_int32, _Expr, _Expr)
 _set_func('vc_bvRightShiftExprExpr', _Expr, _VC, c_int32,  _Expr, _Expr)
@@ -185,6 +196,7 @@ _set_func('vc_bvBoolExtract', _Expr, _VC, _Expr, c_int32)
 _set_func('vc_bvBoolExtract_Zero', _Expr, _VC, _Expr, c_int32)
 _set_func('vc_bvBoolExtract_One', _Expr, _VC, _Expr, c_int32)
 _set_func('vc_bvSignExtend', _Expr, _VC, _Expr, c_int32)
+_set_func('vc_bvZeroExtend', _Expr, _VC, _Expr, c_int32)
 _set_func('vc_bvCreateMemoryArray', _Expr, _VC, c_char_p)
 _set_func('vc_bvReadMemoryArray', _Expr, _VC, _Expr, _Expr, c_int32)
 _set_func('vc_bvWriteToMemoryArray', _Expr, _VC, _Expr, _Expr, _Expr, c_int32)
@@ -346,8 +358,7 @@ class Solver(object):
         """Creates a new BitVector variable."""
         # TODO Sanitize the name or stp will segfault.
         # TODO Perhaps cache these calls per width?
-        # TODO Please, please, fix this terrible Py3 support.
-        name_conv = bytes(name, 'utf8')
+        name_conv = name.encode('utf-8')
 
         bv_type = _lib.vc_bvType(self.vc, width)
         self.keys[name] = _lib.vc_varExpr(self.vc, name_conv, bv_type)
@@ -367,8 +378,9 @@ class Solver(object):
 
     def bitvecvalD(self, width, value):
         """Creates a new BitVector with a constant value."""
-        value_conv = bytes(value, 'utf8')
-     
+        value_conv = value.encode('utf-8')
+
+
         expr = _lib.vc_bvConstExprFromDecStr(self.vc, width, value_conv)
         return Expr(self, width, expr)
 
@@ -383,7 +395,7 @@ class Solver(object):
         (_ FloatingPoint eb sb): fp('x', 11, 53) is an IEEE double, fp('x', 8,
         24) an IEEE single.
         """
-        name_conv = bytes(name, 'utf8')
+        name_conv = name.encode('utf-8')
         fp_type = _lib.vc_fpType(self.vc, eb, sb)
         self.keys[name] = _lib.vc_varExpr(self.vc, name_conv, fp_type)
         return FloatExpr(self, eb, sb, self.keys[name], name=name)
@@ -502,8 +514,8 @@ class Solver(object):
             expr (Expr): to look up a value by expression
 
         Returns:
-            long (if expr or key is specified): the counterexample for the
-                                                expression or key
+            int (if expr or key is specified): the counterexample for the
+                                               expression or key
 
             dict (if no expr or key): the counterexample model for all named
                                       keys
@@ -591,7 +603,21 @@ class Solver(object):
         assert isinstance(b, Expr), 'Object must be an Expression'
         expr = _lib.vc_xorExpr(self.vc, a.expr, b.expr)
         return Expr(self, None, expr)
-        
+
+    def nand(self, a, b):
+        """Boolean nand, i.e. not (a and b)."""
+        assert isinstance(a, Expr), 'Object must be an Expression'
+        assert isinstance(b, Expr), 'Object must be an Expression'
+        expr = _lib.vc_nandExpr(self.vc, a.expr, b.expr)
+        return Expr(self, None, expr)
+
+    def nor(self, a, b):
+        """Boolean nor, i.e. not (a or b)."""
+        assert isinstance(a, Expr), 'Object must be an Expression'
+        assert isinstance(b, Expr), 'Object must be an Expression'
+        expr = _lib.vc_norExpr(self.vc, a.expr, b.expr)
+        return Expr(self, None, expr)
+
     def ite(self, a, b, c):
         assert isinstance(a, Expr), 'Object must be an Expression'
         assert isinstance(b, Expr), 'Object must be an Expression'
@@ -643,6 +669,17 @@ class Expr(object):
         assert isinstance(other, Expr), 'Other object must be an Expr instance'
         expr = cb(self.s.vc, self.expr, other.expr)
         return Expr(self.s, self.width, expr)
+
+    def _2b(self, cb, other):
+        """Wrapper around double-expression STP functions returning a boolean.
+
+        Unlike _2 the result is not a bitvector, so it carries no width --
+        matching what Solver.true()/and_()/xor() produce.
+        """
+        other = self._toexpr(other)
+        assert isinstance(other, Expr), 'Other object must be an Expr instance'
+        expr = cb(self.s.vc, self.expr, other.expr)
+        return Expr(self.s, None, expr)
 
     def _2w(self, cb, a, b):
         """Wrapper around double-expression with width STP functions."""
@@ -786,6 +823,42 @@ class Expr(object):
     __xor__ = xor
     __rxor__ = xor
 
+    def nand(self, other):
+        """Bitwise nand, i.e. ~(self & other)."""
+        return self._2(_lib.vc_bvNandExpr, other)
+
+    def nor(self, other):
+        """Bitwise nor, i.e. ~(self | other)."""
+        return self._2(_lib.vc_bvNorExpr, other)
+
+    def xnor(self, other):
+        """Bitwise xnor, i.e. ~(self ^ other)."""
+        return self._2(_lib.vc_bvXnorExpr, other)
+
+    def uaddo(self, other):
+        """True when the unsigned addition self + other overflows."""
+        return self._2b(_lib.vc_bvUnsignedAddOverflowExpr, other)
+
+    def saddo(self, other):
+        """True when the signed addition self + other overflows."""
+        return self._2b(_lib.vc_bvSignedAddOverflowExpr, other)
+
+    def usubo(self, other):
+        """True when the unsigned subtraction self - other overflows."""
+        return self._2b(_lib.vc_bvUnsignedSubOverflowExpr, other)
+
+    def ssubo(self, other):
+        """True when the signed subtraction self - other overflows."""
+        return self._2b(_lib.vc_bvSignedSubOverflowExpr, other)
+
+    def umulo(self, other):
+        """True when the unsigned multiplication self * other overflows."""
+        return self._2b(_lib.vc_bvUnsignedMulOverflowExpr, other)
+
+    def smulo(self, other):
+        """True when the signed multiplication self * other overflows."""
+        return self._2b(_lib.vc_bvSignedMulOverflowExpr, other)
+
     def neg(self):
         return self._1(_lib.vc_bvUMinusExpr)
 
@@ -828,6 +901,24 @@ class Expr(object):
     def extract(self, high, low):
         expr = _lib.vc_bvExtract(self.s.vc, self.expr, high, low)
         return Expr(self.s, self.width, expr)
+
+    def zero_extend(self, width):
+        """Widen to 'width' by padding with zeroes.
+
+        A 'width' at or below the current one truncates instead, which is what
+        the underlying vc_bvZeroExtend does.
+        """
+        expr = _lib.vc_bvZeroExtend(self.s.vc, self.expr, width)
+        return Expr(self.s, width, expr)
+
+    def sign_extend(self, width):
+        """Widen to 'width' by replicating the sign bit.
+
+        A 'width' at or below the current one truncates instead, which is what
+        the underlying vc_bvSignExtend does.
+        """
+        expr = _lib.vc_bvSignExtend(self.s.vc, self.expr, width)
+        return Expr(self.s, width, expr)
 
     def simplify(self):
         """Simplify an expression."""
@@ -1166,13 +1257,13 @@ def model(*args, **kwargs):
     return Solver.current.model(*args, **kwargs)
 
 def get_git_version_sha():
-    return _lib.get_git_version_sha()
+    return _lib.get_git_version_sha().decode('utf-8')
 
 def get_git_version_tag():
-    return _lib.get_git_version_tag()
+    return _lib.get_git_version_tag().decode('utf-8')
 
 def get_compilation_env():
-    return _lib.get_compilation_env()
+    return _lib.get_compilation_env().decode('utf-8')
 
 def get_lib():
     #

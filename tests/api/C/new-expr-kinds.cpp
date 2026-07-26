@@ -420,28 +420,72 @@ TEST(new_expr_kinds, kinds_are_reported_correctly)
   EXPECT_EQ(getExprKind(vc_bvSignedSubOverflowExpr(f.vc, a, b)), BVSSUBO);
   EXPECT_EQ(getExprKind(vc_bvUnsignedMulOverflowExpr(f.vc, a, b)), BVUMULO);
   EXPECT_EQ(getExprKind(vc_bvSignedMulOverflowExpr(f.vc, a, b)), BVSMULO);
-
-  EXPECT_EQ(getExprKind(vc_bvNandExpr(f.vc, a, b)), BVNAND);
-  EXPECT_EQ(getExprKind(vc_bvNorExpr(f.vc, a, b)), BVNOR);
-  EXPECT_EQ(getExprKind(vc_bvXnorExpr(f.vc, a, b)), BVXNOR);
 }
 
 /*
- * A validity checker builds nodes through SimplifyingNodeFactory, so some of
- * these kinds never reach the caller: a zero-extend is canonicalised to a
- * concat with a zero constant, and the boolean nand/nor to a negated and/or.
- * That is the factory's business rather than the API's -- the equivalence
- * proofs above are what pin down what the constructors mean -- but a caller
- * inspecting getExprKind() should not expect to see the kind it asked for.
+ * The rest do not reach the caller as the kind its constructor is named for.
+ *
+ * BVNAND, BVNOR and BVXNOR are vestigial kinds: no parser produces them --
+ * SMT-LIB2 expands bvnand/bvnor/bvxnor into a negated and/or/xor, see
+ * lib/Parser/smt2.y -- so only the bit-blaster is complete for them, and
+ * BVConstEvaluator would abort on one with a constant operand. The
+ * constructors expand them the same way the parser does.
+ *
+ * The remaining three are canonicalised by SimplifyingNodeFactory, which is
+ * the factory a validity checker builds through: a zero-extend becomes a
+ * concat with a zero constant, and the boolean nand/nor a negated and/or.
+ *
+ * Either way the equivalence proofs above are what pin down what the
+ * constructors mean; a caller inspecting getExprKind() should not expect to
+ * see the kind it asked for.
  */
-TEST(new_expr_kinds, some_kinds_are_canonicalised_on_construction)
+TEST(new_expr_kinds, some_kinds_are_rewritten_on_construction)
 {
   Fixture f;
   Expr a = f.bv("a");
+  Expr b = f.bv("b");
   Expr p = f.boolean("p");
   Expr q = f.boolean("q");
+
+  // Which kind the negated form settles on is the simplifier's business -- it
+  // pushes the negation through with De Morgan, for instance -- so what
+  // matters is only that the vestigial kind is not what comes back.
+  EXPECT_NE(getExprKind(vc_bvNandExpr(f.vc, a, b)), BVNAND);
+  EXPECT_NE(getExprKind(vc_bvNorExpr(f.vc, a, b)), BVNOR);
+  EXPECT_NE(getExprKind(vc_bvXnorExpr(f.vc, a, b)), BVXNOR);
 
   EXPECT_EQ(getExprKind(vc_bvZeroExtend(f.vc, a, W + 1)), BVCONCAT);
   EXPECT_EQ(getExprKind(vc_nandExpr(f.vc, p, q)), NOT);
   EXPECT_EQ(getExprKind(vc_norExpr(f.vc, p, q)), NOT);
+}
+
+/*
+ * The point of expanding them: an operand that is constant sends the
+ * expression through BVConstEvaluator, which has no case for the BVNAND,
+ * BVNOR or BVXNOR kinds and calls FatalError on anything it does not know.
+ */
+TEST(new_expr_kinds, bitwise_negated_ops_fold_with_constant_operands)
+{
+  Fixture f;
+  Expr a = f.bv("a");
+
+  // Values chosen to fit in W bits.
+  const unsigned int K = 0x2A, J = 0x35;
+  const unsigned int MASK = (1u << W) - 1;
+  Expr k = vc_bvConstExprFromInt(f.vc, W, K);
+
+  f.expectEqual(vc_bvNandExpr(f.vc, a, k),
+                vc_bvNotExpr(f.vc, vc_bvAndExpr(f.vc, a, k)),
+                "vc_bvNandExpr with a constant operand");
+  f.expectEqual(vc_bvNorExpr(f.vc, a, k),
+                vc_bvNotExpr(f.vc, vc_bvOrExpr(f.vc, a, k)),
+                "vc_bvNorExpr with a constant operand");
+  f.expectEqual(vc_bvXnorExpr(f.vc, a, k),
+                vc_bvNotExpr(f.vc, vc_bvXorExpr(f.vc, a, k)),
+                "vc_bvXnorExpr with a constant operand");
+
+  // Both operands constant: the whole expression has to fold to a value.
+  Expr folded = vc_bvNandExpr(f.vc, vc_bvConstExprFromInt(f.vc, W, J), k);
+  EXPECT_EQ(getExprKind(folded), BVCONST);
+  EXPECT_EQ(getBVUnsigned(folded), (~(J & K)) & MASK);
 }
