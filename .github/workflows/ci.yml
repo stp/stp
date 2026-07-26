@@ -24,6 +24,13 @@ jobs:
             env: CC=gcc CXX=g++
           - name: clang
             env: CC=clang CXX=clang++
+          # Release strips assertions -- the configuration users install.
+          # NB the floating-point tests run here without symfpu's internal
+          # checks; small significand widths stay unvalidated until
+          # martin-cs/symfpu#14.
+          - name: gcc-release
+            env: CC=gcc CXX=g++
+            build_type: Release
 
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
@@ -95,7 +102,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        ${{ matrix.env }} cmake -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DBUILD_EXTRA_TOOLS:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        ${{ matrix.env }} cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DBUILD_EXTRA_TOOLS:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -404,6 +411,78 @@ jobs:
         done
       working-directory: build
 
+  # Floating-point support defaults to ON, backed by the vendored SymFPU
+  # submodule; every other job builds that default. This one opts out with
+  # -DENABLE_FLOATING_POINT=OFF and validates that the build still solves
+  # (a SAT-requiring bitvector query), that floating-point input is
+  # refused with the "built without floating-point support" diagnostic,
+  # and -- with testing enabled -- that the whole test suite's
+  # feature-off gating actually holds (the floating-point gtest suites,
+  # lit tests and Python tests must all skip, not fail).
+  build-nofp:
+    name: gcc (no-fp)
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - uses: actions/checkout@v7
+      with:
+          submodules: 'true'
+
+    - name: Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bison \
+          build-essential \
+          cmake \
+          flex \
+          git \
+          libboost-program-options-dev \
+          ninja-build \
+          python3 \
+          python3-pip \
+          python3-setuptools \
+          zlib1g-dev
+        sudo pip3 install -U lit
+
+    - name: Dependencies
+      run: |
+        ./scripts/deps/setup-minisat.sh
+        ./scripts/deps/setup-gtest.sh
+        ./scripts/deps/setup-outputcheck.sh
+
+    - name: Configure
+      run: |
+        mkdir build
+        cd build
+        cmake -DNOCRYPTOMINISAT:BOOL=ON -DWERROR:BOOL=ON -DENABLE_FLOATING_POINT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -G Ninja ..
+
+    - name: Build
+      run: cmake --build build --parallel "$(nproc)"
+
+    - name: Test
+      run: ctest --parallel "$(nproc)" -VV --output-on-failure
+      working-directory: build
+
+    - name: Smoke test
+      run: |
+        stp=$([ -x build/stp ] && echo build/stp || echo build/stp_simple)
+        echo '(set-logic QF_BV)(declare-fun a () (_ BitVec 8))(declare-fun b () (_ BitVec 8))(assert (= (bvmul a b) #x21))(assert (bvult a b))(check-sat)' > test.smt2
+        out=$("$stp" test.smt2)
+        echo "bv output: '$out'"
+        [ "$out" = "sat" ]
+        echo '(set-logic QF_FP)(declare-fun x () (_ FloatingPoint 8 24))(assert (fp.gt (fp.add RNE x x) x))(check-sat)' > testfp.smt2
+        if outfp=$("$stp" testfp.smt2 2>&1); then
+          echo "expected a nonzero exit for floating-point input, got: '$outfp'"
+          exit 1
+        fi
+        echo "fp output: '$outfp'"
+        case "$outfp" in
+          *"without floating-point support"*) echo "OK: unsupported diagnostic present" ;;
+          *) echo "the floating-point diagnostic is missing"; exit 1 ;;
+        esac
+
   build-32bit:
     name: gcc (i386)
     runs-on: ubuntu-latest
@@ -512,12 +591,17 @@ jobs:
         if ($out.Trim() -ne "sat") { exit 1 }
         # The query above is answered by the substitution solver during
         # simplification, so it never reaches the SAT backend. This one
-        # cannot be simplified away: it is the only line here that
-        # exercises bitblasting, ABC's CNF generation and minisat.
+        # cannot be simplified away, so it exercises bitblasting, ABC's
+        # CNF generation and minisat.
         "(set-logic QF_BV)(declare-fun a () (_ BitVec 8))(declare-fun b () (_ BitVec 8))(assert (= (bvmul a b) #x21))(assert (bvult a b))(check-sat)" | Out-File -Encoding ascii testsat.smt2
         $out = & $stp testsat.smt2 2>&1 | Out-String
         "sat-backend output: '$($out.Trim())'"
         "sat-backend exit code: $LASTEXITCODE"
         if ($out.Trim() -ne "sat") { exit 1 }
+        "(set-logic QF_FP)(declare-fun x () (_ FloatingPoint 8 24))(assert (fp.gt (fp.add RNE x x) x))(check-sat)" | Out-File -Encoding ascii testfp.smt2
+        $outfp = & $stp testfp.smt2 2>&1 | Out-String
+        "fp solver output: '$($outfp.Trim())'"
+        "fp solver exit code: $LASTEXITCODE"
+        if ($outfp.Trim() -ne "sat") { exit 1 }
 
 # EOF

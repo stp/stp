@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
+#include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/Simplifier/Simplifier.h"
 #include <cassert>
 
@@ -53,6 +54,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
   CBV tmp1 = NULL;
 
   const size_t number_of_children = input_children.size();
+
   assert(number_of_children >= 1);
   assert(k != BVCONST);
 
@@ -67,7 +69,8 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
   }
 
   if ((number_of_children == 2 || number_of_children == 1) &&
-      input_children[0].GetType() == BITVECTOR_TYPE)
+      (input_children[0].GetType() == BITVECTOR_TYPE ||
+       input_children[0].GetType() == FLOATINGPOINT_TYPE))
   {
     // saving some typing. BVPLUS does not use these variables. if the
     // input BVPLUS has two nodes, then we want to avoid setting these
@@ -438,7 +441,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
           CBV tmp0b = CONSTANTBV::BitVector_Create(inputwidth, true);
           CONSTANTBV::BitVector_Negate(tmp0b, tmp0);
 
-          CONSTANTBV::ErrCode e =
+          [[maybe_unused]] CONSTANTBV::ErrCode e =
               CONSTANTBV::BitVector_Div_Pos(quotient, tmp0b, tmp1, remainder);
           assert(e == CONSTANTBV::ErrCode_Ok);
 
@@ -467,7 +470,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
           CBV tmp1b = CONSTANTBV::BitVector_Create(inputwidth, true);
           CONSTANTBV::BitVector_Negate(tmp1b, tmp1);
 
-          CONSTANTBV::ErrCode e =
+          [[maybe_unused]] CONSTANTBV::ErrCode e =
               CONSTANTBV::BitVector_Div_Pos(quotient, tmp0, tmp1b, remainder);
 
           assert(e == CONSTANTBV::ErrCode_Ok);
@@ -495,7 +498,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
           CONSTANTBV::BitVector_Negate(tmp0b, tmp0);
           CONSTANTBV::BitVector_Negate(tmp1b, tmp1);
 
-          CONSTANTBV::ErrCode e =
+          [[maybe_unused]] CONSTANTBV::ErrCode e =
               CONSTANTBV::BitVector_Div_Pos(quotient, tmp0b, tmp1b, remainder);
           assert(e == CONSTANTBV::ErrCode_Ok);
 
@@ -547,7 +550,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
         // the same as the copy belonging to an ASTNode input_children[0] this
         // must be copied.
         tmp0 = CONSTANTBV::BitVector_Clone(tmp0);
-        CONSTANTBV::ErrCode e =
+        [[maybe_unused]] CONSTANTBV::ErrCode e =
             CONSTANTBV::BitVector_Div_Pos(quotient, tmp0, tmp1, remainder);
         CONSTANTBV::BitVector_Destroy(tmp0);
 
@@ -568,13 +571,14 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
     }
     case ITE:
     {
-      if (ASTTrue == input_children[0])
+      // As with NOT: the condition must be read after eager folding.
+      if (ASTTrue == children[0])
         OutputNode = children[1];
-      else if (ASTFalse == input_children[0])
+      else if (ASTFalse == children[0])
         OutputNode = children[2];
       else
       {
-        std::cerr << tmp0;
+        std::cerr << children[0];
         FatalError(
             "BVConstEvaluator: ITE condiional must be either TRUE or FALSE:");
       }
@@ -771,14 +775,17 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       OutputNode = ASTFalse;
       break;
     case NOT:
-      if (ASTTrue == input_children[0])
+      // Test the eagerly-folded child, like every other case: the raw
+      // input child may be an unsimplified formula that folds to a
+      // constant (e.g. when the caller built the tree with a
+      // non-simplifying factory).
+      if (ASTTrue == children[0])
         return ASTFalse;
-      else if (ASTFalse == input_children[0])
+      else if (ASTFalse == children[0])
         return ASTTrue;
       else
       {
-        std::cerr << ASTFalse;
-        std::cerr << input_children[0];
+        std::cerr << children[0];
         FatalError("BVConstEvaluator: unexpected not input");
       }
 
@@ -884,7 +891,160 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
         OutputNode = ASTFalse;
       break;
     }
+    case FP_LEQ:
+    case FP_LT:
+    case FP_GEQ:
+    case FP_GT:
+    case FP_EQ:
+    case FP_ISNORMAL:
+    case FP_ISSUBNORMAL:
+    case FP_ISZERO:
+    case FP_ISINFINITE:
+    case FP_ISNAN:
+    case FP_ISNEGATIVE:
+    case FP_ISPOSITIVE:
+    case FP_ABS:
+    case FP_NEG:
+    case FP_ADD:
+    case FP_SUB:
+    case FP_MUL:
+    case FP_DIV:
+    case FP_FMA:
+    case FP_SQRT:
+    case FP_REM:
+    case FP_ROUNDTOINTEGRAL:
+    case FP_MIN:
+    case FP_MAX:
+    case FP_TOFP:
+    case FP_TOFP_UNSIGNED:
+    case FP_TO_UBV:
+    case FP_TO_SBV:
+    case FP_TO_IEEE_BV:
+    case FP_SMT_EQ:
+    {
+      // A float's format is carried on the node, not implied by its kind, so
+      // it is lost every time a node is rebuilt -- and evaluating a nested
+      // operation rebuilds one. The inner operation's result comes back from
+      // NonMemberBVConstEvaluator as a bare BVCONST with no format, and the
+      // outer operation then blasts it against a format of (0, 0). That does
+      // not fail; it computes the wrong bits. Recover the format from
+      // whichever child still has one and put it back on the others.
+      unsigned int exp_width = 0;
+      unsigned int sig_width = 0;
 
+      if (k == FP_TOFP || k == FP_TOFP_UNSIGNED)
+      {
+        // to_fp names its target format in its first two children rather
+        // than inheriting it from an operand.
+        assert(children.size() >= 2);
+        exp_width = children[0].GetUnsignedConst();
+        sig_width = children[1].GetUnsignedConst();
+      }
+      else
+      {
+        for (size_t i = 0; i < children.size(); i++)
+        {
+          if (children[i].GetExpWidth() != 0)
+          {
+            exp_width = children[i].GetExpWidth();
+            sig_width = children[i].GetSigWidth();
+            break;
+          }
+        }
+      }
+
+      ASTVec formatted;
+      formatted.reserve(children.size());
+
+      // to_fp's operands are not floats to be re-formatted: children 0 and 1
+      // are the target format, and the source is either a float that already
+      // carries its own format or a bitvector that must stay one. Stamping a
+      // format onto that source would make a 32-bit integer argument look
+      // like a Float32 and take the reformat path instead of the convert one.
+      const bool format_children =
+          (k != FP_TOFP && k != FP_TOFP_UNSIGNED && k != FP_TO_UBV &&
+           k != FP_TO_SBV);
+
+      // fp.to_ubv/fp.to_sbv are the same story from the other side: their
+      // children are (m, rm, x, unspecified), of which only x is a float, and
+      // their *result* is a bitvector. Both the width argument and the result
+      // happen to be as wide as e + s in the common 32-bit case, so stamping
+      // a format on them would turn an integer into a Float32.
+
+      for (size_t i = 0; i < children.size(); i++)
+      {
+        if (!format_children)
+        {
+          formatted.push_back(children[i]);
+          continue;
+        }
+
+        // Rounding modes and to_fp's format arguments are bitvectors that
+        // are not floats; leave them alone. A float operand is as wide as
+        // the format it is packed in.
+        //
+        // A plain BVCONST cannot carry a format at all -- ASTBVConst's
+        // getExpWidth() is hardwired to 0 and its setter asserts -- so the
+        // constant has to be re-made as an ASTFPConst first. That is what
+        // CreateFPConst is for, and what BlastNode does with its own result.
+        formatted.push_back(
+            FloatBlaster::withFormat(_bm, children[i], exp_width, sig_width));
+      }
+
+      // The predicates are formulas; everything else is a term of the node's
+      // own width (which for to_ubv/to_sbv is the target width, not
+      // exp + sig). CreateNode would leave a term's value width zero.
+      const bool boolean_result =
+          k == FP_LEQ || k == FP_LT || k == FP_GEQ || k == FP_GT ||
+          k == FP_EQ || k == FP_SMT_EQ || k == FP_ISNORMAL ||
+          k == FP_ISSUBNORMAL || k == FP_ISZERO || k == FP_ISINFINITE ||
+          k == FP_ISNAN || k == FP_ISNEGATIVE || k == FP_ISPOSITIVE;
+
+      ASTNode temp(boolean_result ? _bm->CreateNode(k, formatted)
+                                  : _bm->CreateTerm(k, inputwidth, formatted));
+
+      // Only a floating-point *result* carries a floating-point format. The
+      // classifications and comparisons return a Boolean and to_ubv/to_sbv
+      // return a bit-vector; stamping a format on temp for those is wrong,
+      // because BlastNode then copies temp's format onto the blasted output --
+      // poisoning the shared Boolean constant, whose GetType() afterwards reads
+      // FLOATINGPOINT and sends the constant evaluator down its bit-vector
+      // (GetBVConst) path. temp's type already distinguishes the cases.
+      const bool float_result = (temp.GetType() == FLOATINGPOINT_TYPE);
+      if (float_result)
+      {
+        temp.SetExpWidth(exp_width);
+        temp.SetSigWidth(sig_width);
+      }
+
+      // The factory may have rewritten the operation as it was built:
+      // folded it to a constant (abs/neg of a constant is a sign-bit edit,
+      // x*1.0 folds to x), or into different structure entirely -- fp.leq of
+      // a term with itself becomes (not (fp.isNaN ...)). Interned constants
+      // compare pointer-equal, so the same-operand rules do fire here. In
+      // either case evaluate what came back rather than blasting it: the
+      // blaster only handles floating-point operations, and asserts on
+      // anything else.
+      if (temp.GetKind() != k)
+      {
+        OutputNode =
+            temp.isConstant() ? temp : NonMemberBVConstEvaluator(_bm, temp);
+        if (float_result)
+          OutputNode =
+              FloatBlaster::withFormat(_bm, OutputNode, exp_width, sig_width);
+        break;
+      }
+
+      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(_bm, temp));
+      OutputNode = NonMemberBVConstEvaluator(_bm, blasted);
+
+      // Carry the format out, so an enclosing operation sees a formatted
+      // operand rather than a bare bit-vector.
+      if (float_result)
+        OutputNode =
+            FloatBlaster::withFormat(_bm, OutputNode, exp_width, sig_width);
+      break;
+    }
     default:
       FatalError("BVConstEvaluator: The input kind is not supported yet:");
       break;

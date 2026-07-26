@@ -23,6 +23,8 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
+#include "stp/FloatBlaster/FloatBlaster.h"
+#include "stp/FloatBlaster/FpTotalise.h"
 #include "stp/Printer/printers.h"
 #include "stp/ToSat/ToSATAIG.h"
 
@@ -73,7 +75,8 @@ void AbsRefine_CounterExample::ConstructCounterExample(
         continue;
 
       // assemble the counterexample here
-      if (symbol.GetType() == BITVECTOR_TYPE)
+      if (symbol.GetType() == BITVECTOR_TYPE ||
+          symbol.GetType() == FLOATINGPOINT_TYPE)
       {
         // Collect the bits of 'symbol' and store in v. Store
         // in reverse order.
@@ -92,7 +95,8 @@ void AbsRefine_CounterExample::ConstructCounterExample(
       }
     }
 
-    if (symbol.GetType() == BITVECTOR_TYPE)
+    if (symbol.GetType() == BITVECTOR_TYPE ||
+        symbol.GetType() == FLOATINGPOINT_TYPE)
     {
       CounterExampleMap[symbol] =
           BoolVectoBVConst(&bitVector_array, symbol.GetValueWidth());
@@ -127,7 +131,8 @@ void AbsRefine_CounterExample::ConstructCounterExample(
       // to a constant against the model
       ASTNode value = TermToConstTermUsingModel(value_ite);
       // save the result in the counter_example
-      if (!simp->InsideSubstitutionMap(key))
+      // As in TermToConstTermUsingModel: never record a read as its own value.
+      if (!simp->InsideSubstitutionMap(key) && key != value)
         CounterExampleMap[key] = value;
     }
   }
@@ -208,9 +213,12 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
       {
         return term;
       }
-
-      // Has been simplified out. Can take any value.
-      output = bm->CreateZeroConst(term.GetValueWidth());
+      else
+      {
+        // Has been simplified out. Can take any value; all-zero bits, which
+        // for a float denotes +0.0.
+        output = bm->CreateZeroConst(term.GetValueWidth());
+      }
       break;
     }
     case READ:
@@ -328,6 +336,94 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
       }
       break;
     }
+    case FP_ABS:
+    case FP_NEG:
+    case FP_ADD:
+    case FP_SUB:
+    case FP_MUL:
+    case FP_DIV:
+    case FP_FMA:
+    case FP_SQRT:
+    case FP_REM:
+    case FP_ROUNDTOINTEGRAL:
+    case FP_MIN:
+    case FP_MAX:
+    case FP_TOFP:
+    case FP_TOFP_UNSIGNED:
+    case FP_TO_UBV:
+    case FP_TO_SBV:
+    case FP_TO_IEEE_BV:
+    {
+      // Evaluate the float operands against the model and rebuild the node
+      // with the same kind and arity. Non-float children are often already
+      // constant -- the rounding mode of the arithmetic operations and to_fp's
+      // format arguments -- and are carried through unchanged. But some are
+      // not: the bit-vector a to_fp reinterprets can be an array read or other
+      // term, and the array read that totalising adds to to_ubv/to_sbv/min/max
+      // is likewise non-constant. Resolve those against the model too, else the
+      // rebuilt node stays non-constant and cannot be evaluated.
+      ASTVec children;
+      children.reserve(term.Degree());
+
+      for (unsigned int i = 0; i < term.Degree(); i++)
+      {
+        const ASTNode& child = term[i];
+
+        if (child.GetType() != FLOATINGPOINT_TYPE)
+        {
+          if (child.isConstant())
+            children.push_back(child);
+          else
+            children.push_back(TermToConstTermUsingModel(child, ArrayReadFlag));
+          continue;
+        }
+
+        ASTNode simp(TermToConstTermUsingModel(child));
+        assert(simp.GetKind() == BVCONST);
+        children.push_back(FloatBlaster::withFormat(
+            bm, simp, child.GetExpWidth(), child.GetSigWidth()));
+      }
+
+      ASTNode temp(bm->CreateTerm(k, term.GetValueWidth(), children));
+      temp = FloatBlaster::withFormat(bm, temp, term.GetExpWidth(),
+                                      term.GetSigWidth());
+
+      // The factory may have folded the rebuilt operation to a constant once
+      // its children were resolved: abs/neg of a constant is a sign-bit edit,
+      // and x*1.0 / x/1.0 fold to x. That constant is the value -- blasting it
+      // would hand a constant to the blaster, which only handles operations.
+      // (This also subsumes the old expectation that rebuilding with resolved
+      // children always changes the node, which folding can break.)
+      if (temp.isConstant())
+      {
+        output = FloatBlaster::withFormat(bm, temp, term.GetExpWidth(),
+                                          term.GetSigWidth());
+        break;
+      }
+
+      // Totalise the partial operations (min/max and to_ubv/to_sbv) so the
+      // blaster sees the extra child they carry once made total. This is
+      // idempotent and a no-op for the total operations. A partial op reaches
+      // here un-totalised when it is evaluated directly rather than as part of
+      // the solved formula -- e.g. a term handed to get-value or built through
+      // the API -- since the totalising pass only runs over the assertions.
+      FpTotalise totalise(bm);
+      temp = totalise.topLevel(temp);
+
+      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(bm, temp));
+
+      assert(blasted != temp);
+      assert(blasted != term);
+
+      // Carry the format out with the result. Evaluating the blasted node
+      // yields a bare BVCONST, and an enclosing floating-point operation
+      // would then take it as an operand of format (0, 0) and compute the
+      // wrong bits rather than fail.
+      output = FloatBlaster::withFormat(
+          bm, TermToConstTermUsingModel(blasted, ArrayReadFlag),
+          term.GetExpWidth(), term.GetSigWidth());
+      break;
+    }
     default:
     {
       const ASTChildren c = term.GetChildren();
@@ -337,6 +433,18 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
            it++)
       {
         ASTNode ff = TermToConstTermUsingModel(*it, ArrayReadFlag);
+        // NonMemberBVConstEvaluator below needs every child to be a constant.
+        // With ArrayReadFlag set, a read with no value in the model comes back
+        // as a symbolic READ over the array (case 2 above) rather than a
+        // constant -- this happens for the unconstrained array that totalising
+        // introduces for an out-of-range to_ubv/to_sbv, reached here when the
+        // enclosing ITE selects the unspecified branch and it feeds an ordinary
+        // bit-vector operation. Its value is genuinely arbitrary, so resolve it
+        // to a concrete constant rather than hand a non-constant to the
+        // evaluator (which cannot read arrays and would abort on the array
+        // symbol).
+        if (BVCONST != ff.GetKind())
+          ff = TermToConstTermUsingModel(*it, false);
         o.push_back(ff);
       }
 
@@ -352,7 +460,16 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
   // datastructure
   // if (!ArrayReadFlag)
   {
-    CounterExampleMap[term] = output;
+    // Don't memoise a read as its own value. With ArrayReadFlag true, a read
+    // with no value in the model is returned unchanged (case 2 above) -- this
+    // happens for an unconstrained read, such as the array that totalising
+    // introduces for an out-of-range to_ubv/to_sbv. Caching term -> term would
+    // put the term in its own value slot, violating the invariant the lookups
+    // rely on: a later lookup then trips the "stored as-is" fatal error, or
+    // leaves the read unresolved and non-constant. Skipping the self-entry lets
+    // that later lookup fall through to the documented "no value -> return 0".
+    if (term != output)
+      CounterExampleMap[term] = output;
   }
 
   // cerr << "Output to TermToConstTermUsingModel: " << output << endl;
@@ -559,6 +676,55 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
       output = bm->NewParameterized_BooleanVar(form[0], form[1]);
       output = ComputeFormulaUsingModel(output);
       break;
+    case FP_LEQ:
+    case FP_LT:
+    case FP_GEQ:
+    case FP_GT:
+    case FP_EQ:
+    case FP_ISNORMAL:
+    case FP_ISSUBNORMAL:
+    case FP_ISZERO:
+    case FP_ISINFINITE:
+    case FP_ISNAN:
+    case FP_ISNEGATIVE:
+    case FP_ISPOSITIVE:
+    case FP_SMT_EQ:
+    {
+      // Rebuild at the node's real arity: the comparisons are binary but the
+      // classification predicates are unary.
+      ASTVec operands;
+      operands.reserve(form.Degree());
+
+      for (unsigned int i = 0; i < form.Degree(); i++)
+      {
+        ASTNode simp(TermToConstTermUsingModel(form[i]));
+        assert(simp.GetKind() == BVCONST);
+        operands.push_back(FloatBlaster::withFormat(
+            bm, simp, form[i].GetExpWidth(), form[i].GetSigWidth()));
+      }
+
+      ASTNode temp(bm->CreateNode(k, operands));
+
+      // Rebuilding through the simplifying factory may rewrite the predicate
+      // rather than return it: constant operands fold to true/false outright,
+      // and the same-operand rules fire here because interned constants
+      // compare pointer-equal -- fp.leq of a value with itself comes back as
+      // (not (fp.isNaN ...)). Whatever came back that is not this operation
+      // is a formula; evaluate it, never blast it.
+      if (temp.GetKind() != k)
+      {
+        output = ComputeFormulaUsingModel(temp);
+        break;
+      }
+
+      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(bm, temp));
+
+      assert(blasted != temp);
+      assert(blasted != form);
+
+      output = ComputeFormulaUsingModel(blasted);
+      break;
+    }
     default:
       cerr << _kind_names[k];
       FatalError(" ComputeFormulaUsingModel: "
@@ -584,7 +750,19 @@ void AbsRefine_CounterExample::CheckCounterExample(bool t)
     FatalError("CheckCounterExample: "
                "No CounterExample to check",
                ASTUndefined);
-  const ASTVec c = bm->GetAsserts();
+  // The manager's assertions are a separate copy from the formula the solve
+  // ran on, and they arrive here as parsed -- so the partial floating-point
+  // operations still lack the child supplying their unspecified results.
+  // Totalise them the same way. The arrays are shared (their identity is
+  // their name), so the check sees exactly the operations the solve did.
+  ASTVec c;
+  {
+    FpTotalise totalise(bm);
+    const ASTVec stored = bm->GetAsserts();
+    c.reserve(stored.size());
+    for (size_t i = 0; i < stored.size(); i++)
+      c.push_back(totalise.topLevel(stored[i]));
+  }
 
   if (bm->UserFlags.stats_flag)
     printf("checking counterexample\n");
@@ -674,7 +852,7 @@ AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
         f[1].GetKind() == BVCONST)
     {
       ASTNode rhs;
-      if (BITVECTOR_TYPE == se.GetType())
+      if (BITVECTOR_TYPE == se.GetType() || FLOATINGPOINT_TYPE == se.GetType())
       {
         rhs = TermToConstTermUsingModel(se, false);
       }
@@ -702,7 +880,27 @@ void AbsRefine_CounterExample::PrintSMTLIB2(std::ostream& os, const ASTNode& n)
     n.nodeprint(os);
     os << "| ";
 
-    if (n.GetType() == stp::BITVECTOR_TYPE)
+    if (bm->isRoundingModeSymbol(n))
+    {
+      // A RoundingMode value must print as a mode name -- a legal term of
+      // the sort -- not as its raw 5-bit carrier. The declaration pinned the
+      // symbol one-hot, so the model value always names a mode; anything
+      // else would be a bug, but print the bits rather than crash.
+      const ASTNode v = TermToConstTermUsingModel(n, false);
+      const char* name = printer::roundingModeName(v.GetUnsignedConst());
+      if (name != NULL)
+        os << name;
+      else
+        printer::outputBitVecSMTLIB2(v, os);
+    }
+    else if (n.GetType() == stp::FLOATINGPOINT_TYPE)
+      // A floating-point value must be printed in floating-point syntax
+      // (fp #bS #bE #bM), not as the raw packed bit-vector -- the get-model
+      // path (outputLine) does this; get-value must match, or it hands back a
+      // bit-vector literal where an operand of floating-point sort is expected.
+      printer::outputFloatingPointSMTLIB2(TermToConstTermUsingModel(n, false),
+                                          os, n);
+    else if (n.GetType() == stp::BITVECTOR_TYPE)
       printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(n, false), os);
     else
     {
@@ -733,12 +931,24 @@ void AbsRefine_CounterExample::outputLine(std::ostream& os, const ASTNode &f, AS
 
     if (f.GetKind() == SYMBOL)
     {
-      os << "( define-fun ";
+      os << "(define-fun ";
       os << "|";
       f.nodeprint(os);
       os << "|";
 
-      if (f.GetType() == stp::BITVECTOR_TYPE)
+      if (bm->isRoundingModeSymbol(f))
+      {
+        // As in PrintSMTLIB2: the sort and value are RoundingMode, not the
+        // 5-bit carrier.
+        os << " () RoundingMode ";
+        const ASTNode v = TermToConstTermUsingModel(se, false);
+        const char* name = printer::roundingModeName(v.GetUnsignedConst());
+        if (name != NULL)
+          os << name;
+        else
+          printer::outputBitVecSMTLIB2(v, os);
+      }
+      else if (f.GetType() == stp::BITVECTOR_TYPE)
       {
         os << " () (";
         os << "_ BitVec " << f.GetValueWidth() << ")";
@@ -750,12 +960,20 @@ void AbsRefine_CounterExample::outputLine(std::ostream& os, const ASTNode &f, AS
         assert (se == bm->ASTTrue || se == bm->ASTFalse);
         os << " () Bool " << ((se == bm->ASTTrue) ? "true" : "false");
       }
+      else if (f.GetType() == stp::FLOATINGPOINT_TYPE)
+      {
+        os << " () (";
+        os << "_ FloatingPoint " << f.GetExpWidth() << " " << f.GetSigWidth()
+           << ") ";
+        printer::outputFloatingPointSMTLIB2(
+            TermToConstTermUsingModel(se, false), os, f);
+      }
       else
       {
         FatalError("Wrong Type");
       }
 
-      os << " )" << std::endl;
+      os << ")" << std::endl;
     }
 
     //TODO completely the wrong format.
@@ -903,7 +1121,7 @@ void AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
       }
 
       ASTNode rhs;
-      if (BITVECTOR_TYPE == se.GetType())
+      if (BITVECTOR_TYPE == se.GetType() || FLOATINGPOINT_TYPE == se.GetType())
       {
         rhs = TermToConstTermUsingModel(se, false);
       }

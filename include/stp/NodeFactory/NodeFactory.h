@@ -102,6 +102,8 @@ public:
   ASTNode CreateSignedMinConst(unsigned width);
   
   ASTNode CreateBVConst(unsigned int width, unsigned long long int bvconst);
+  ASTNode CreateFPConst(const stp::ASTNode& bvconst, unsigned exp_width,
+                        unsigned sig_width);
 
   virtual std::string getName() = 0;
 };

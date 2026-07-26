@@ -149,17 +149,16 @@ TEST(SplitExtracts_Test , __LINE__)
   ASSERT_EQ(2, c.split.getIntroduced());
 }
 
-// One instance is unextracted
+// One instance is unextracted. (The reassembled side must be the full 20
+// bits: = between different widths is ill-sorted and now rejected at parse.)
 TEST(SplitExtracts_Test , __LINE__)
 {
   const std::string input = R"(
-    (assert 
-      (= 
-        (concat 
-         (concat 
-           (((_ extract 4 0 ) v1) )  
-           (((_ extract 8 5 ) v1) ))
-           (((_ extract 3 3 ) v1) ))  
+    (assert
+      (=
+        (concat
+           (((_ extract 4 0 ) v1) )
+           (((_ extract 19 5 ) v1) ))
           v1
        )
     )
@@ -170,18 +169,22 @@ TEST(SplitExtracts_Test , __LINE__)
   ASSERT_EQ(0, c.split.getIntroduced());
 }
 
-// The (8,5) doesn't intersect.
+// The (8,5) doesn't intersect. (The other side must match the concat's 10
+// bits -- = between different widths is ill-sorted and now rejected at
+// parse -- so compare against a fresh 10-bit variable, which contributes no
+// extracts of its own.)
 TEST(SplitExtracts_Test , __LINE__)
 {
   const std::string input = R"(
-    (assert 
-      (= 
-        (concat 
-         (concat 
-           (((_ extract 4 0 ) v1) )  
+    (declare-fun w10 () (_ BitVec 10))
+    (assert
+      (=
+        (concat
+         (concat
+           (((_ extract 4 0 ) v1) )
            (((_ extract 8 5 ) v1) ))
-           (((_ extract 3 3 ) v1) ))  
-          v0
+           (((_ extract 3 3 ) v1) ))
+          w10
        )
     )
   )";

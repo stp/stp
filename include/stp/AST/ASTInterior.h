@@ -98,16 +98,25 @@ class ASTInterior : public ASTInternal
   uint32_t _value_width;
   uint32_t _index_width;
 
+  uint32_t _sig_width;
+  uint32_t _exp_width;
+
   virtual void setIndexWidth(uint32_t i) { _index_width = i; }
   virtual uint32_t getIndexWidth() const { return _index_width; }
 
   virtual void setValueWidth(uint32_t v) { _value_width = v; }
   virtual uint32_t getValueWidth() const { return _value_width; }
 
+  virtual void setSigWidth(uint32_t sw) { _sig_width = sw; }
+  virtual uint32_t getSigWidth() const { return _sig_width; }
+
+  virtual void setExpWidth(uint32_t ew) { _exp_width = ew; }
+  virtual uint32_t getExpWidth() const { return _exp_width; }
+
 public:
   ASTInterior(STPMgr* mgr, Kind kind, const ASTVec& children)
       : ASTInternal(mgr, kind), _children(children), _value_width(0),
-        _index_width(0)
+        _index_width(0), _sig_width(0), _exp_width(0)
   {
     is_simplified = false;
     if (kind == NOT)
@@ -118,7 +127,7 @@ public:
   // avoiding a copy when the caller has a temporary to give up.
   ASTInterior(STPMgr* mgr, Kind kind, ASTVec&& children)
       : ASTInternal(mgr, kind), _children(std::move(children)), _value_width(0),
-        _index_width(0)
+        _index_width(0), _sig_width(0), _exp_width(0)
   {
     is_simplified = false;
     if (kind == NOT)
@@ -130,7 +139,9 @@ public:
   // ASTNode, does NOT invoke this.
   ASTInterior(const ASTInterior& int_node)
       : ASTInternal(int_node), _children(int_node._children),
-        _value_width(int_node._value_width), _index_width(int_node._index_width)
+        _value_width(int_node._value_width),
+        _index_width(int_node._index_width), _sig_width(int_node._sig_width),
+        _exp_width(int_node._exp_width)
   {
     is_simplified = false;
   }
@@ -140,7 +151,8 @@ public:
   ASTInterior(ASTInterior&& int_node)
       : ASTInternal(int_node), _children(std::move(int_node._children)),
         _cached_hash(int_node._cached_hash), _value_width(int_node._value_width),
-        _index_width(int_node._index_width)
+        _index_width(int_node._index_width), _sig_width(int_node._sig_width),
+        _exp_width(int_node._exp_width)
   {
     is_simplified = false;
   }

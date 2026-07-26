@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Andrew V. Jones
+ * AUTHORS: Vijay Ganesh, Andrew Teylu
  *
  * BEGIN DATE: November, 2005
  *
@@ -24,13 +24,16 @@ THE SOFTWARE.
 #include "stp/c_interface.h"
 
 #include <cassert>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
 #include "stp/Interface/fdstream.h"
 #include "stp/Parser/parser.h"
 #include "stp/Printer/printers.h"
 #include "stp/cpp_interface.h"
+#include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/Util/GitSHA1.h"
 
 // From ABC
@@ -73,6 +76,19 @@ std::pair<unsigned int, unsigned int> getTypeSizes(Type type)
     case stp::BOOLEAN:
       indexWidth = 0;
       valueWidth = 0;
+      break;
+    case stp::FLOATINGPOINT:
+      // A floating-point type node carries its exponent and significand widths
+      // as its two children (see vc_fpType). The packed value width is their
+      // sum; exp/sig are stamped onto the symbol separately, in vc_varExpr.
+      indexWidth = 0;
+      valueWidth = (*a)[0].GetUnsignedConst() + (*a)[1].GetUnsignedConst();
+      break;
+    case stp::ROUNDINGMODE:
+      // A rounding mode is carried as a 5-bit bitvector; vc_varExpr
+      // additionally pins the symbol to the five legal encodings.
+      indexWidth = 0;
+      valueWidth = 5;
       break;
     default:
       stp::FatalError("CInterface: vc_varExpr: Unsupported type", *a);
@@ -161,6 +177,8 @@ void make_division_total(VC /*vc*/)
 // Create a validity Checker.
 VC vc_createValidityChecker(void)
 {
+  // Boot the bitvector library before allocating anything, so the failure
+  // path leaks nothing.
   CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot();
   if (0 != c)
   {
@@ -168,10 +186,35 @@ VC vc_createValidityChecker(void)
     return 0;
   }
 
-  stp::STPMgr* bm = new stp::STPMgr();
+  return vc_createValidityCheckerReuse(new stp::STPMgr());
+}
 
-  bm->defaultNodeFactory =
-      new SimplifyingNodeFactory(*(bm->hashingNodeFactory), *bm);
+// Create a validity checker over an existing manager (an stp::STPMgr*), so a
+// client mixing the C API with the C++ objects can solve over nodes it built
+// directly.
+VC vc_createValidityCheckerReuse(void* _bm)
+{
+  stp::STPMgr* bm = (stp::STPMgr*)_bm;
+
+  CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot();
+  if (0 != c)
+  {
+    cout << CONSTANTBV::BitVector_Error(c) << endl;
+    return 0;
+  }
+
+  // A fresh manager starts out with its plain hashing factory; upgrade it to
+  // the simplifying one. A reused manager that was already given a factory
+  // keeps it (this used to replace -- and leak -- whatever was installed).
+  if (bm->defaultNodeFactory == bm->hashingNodeFactory)
+    bm->defaultNodeFactory =
+        new SimplifyingNodeFactory(*(bm->hashingNodeFactory), *bm);
+
+  // The parser-facing helpers read GlobalParserBM; point it at this manager
+  // so a C-API client that never parses still has it aimed at a live one.
+  // (Floating-point blasting itself takes the manager explicitly and does
+  // not consult this.)
+  stp::GlobalParserBM = bm;
 
   stp::STP* stpObj =
       new stp::STP(bm);
@@ -540,6 +583,10 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_max_conflicts, int timeout_
   stp::ASTNode* a = (stp::ASTNode*)e;
   stp::STPMgr* b = stp_i->bm;
 
+  // Make this checker's manager current so floating-point blasting during the
+  // solve targets it, not whichever checker was created or solved last.
+  stp::GlobalParserBM = b;
+
   /*
    * -1 is the only negative value that means anything ("no limit"). Reject
    * the rest rather than silently running unlimited, which is the dangerous
@@ -664,6 +711,10 @@ Expr vc_getCounterExample(VC vc, Expr e)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::ASTNode* a = (stp::ASTNode*)e;
 
+  // Reading a floating-point value blasts the term, so this checker's manager
+  // must be current (see vc_query_with_timeout).
+  stp::GlobalParserBM = stp_i->bm;
+
   stp::AbsRefine_CounterExample* ce =
       (stp::AbsRefine_CounterExample*)(stp_i->Ctr_Example);
   stp::ASTNode* output = new stp::ASTNode(ce->GetCounterExample(*a));
@@ -778,6 +829,25 @@ Expr vc_varExpr(VC vc, const char* name, Type type)
   unsigned int indexWidth = typeSizes.second;
   stp::ASTNode o = b->CreateSymbol(name, indexWidth, valueWidth);
 
+  // A floating-point variable additionally carries its format (exponent and
+  // significand widths); getTypeSizes above only gave the packed value width.
+  stp::ASTNode* typeNode = (stp::ASTNode*)type;
+  if (typeNode->GetKind() == stp::FLOATINGPOINT)
+  {
+    o.SetExpWidth((*typeNode)[0].GetUnsignedConst());
+    o.SetSigWidth((*typeNode)[1].GetUnsignedConst());
+  }
+
+  // A RoundingMode variable must range over exactly the five modes: pin the
+  // 5-bit carrier to the one-hot encodings (asserted at the current
+  // assertion level) and register the symbol so counterexamples print its
+  // value by mode name -- exactly as the parser declares one.
+  if (typeNode->GetKind() == stp::ROUNDINGMODE)
+  {
+    b->rounding_mode_symbols.insert(o);
+    b->AddAssert(b->roundingModeValidConstraint(o));
+  }
+
   stp::ASTNode* output = new stp::ASTNode(o);
   ////if(cinterface_exprdelete_on) created_exprs.push_back(output);
   assert(BVTypeCheck(*output));
@@ -798,7 +868,19 @@ Expr vc_eqExpr(VC vc, Expr ccc0, Expr ccc1)
   stp::ASTNode* aa = (stp::ASTNode*)ccc1;
   assert(BVTypeCheck(*a));
   assert(BVTypeCheck(*aa));
-  stp::ASTNode o = b->CreateNode(stp::EQ, *a, *aa);
+
+  // SMT-LIB '=' over floats is FP_SMT_EQ, not the generic EQ, mirroring the
+  // parser's (= ...) rule: +0 and -0 stay distinct, and every NaN equals
+  // every NaN. A plain EQ over floating-point operands is a node the later
+  // passes cannot discharge -- the solve died without a conclusion (found
+  // by murxla; vc_fpEqExpr's doc sends '=' callers here, so this is the
+  // documented route). With only one float operand, FP_SMT_EQ's typecheck
+  // then rejects the float/bitvector mix, exactly as the parser does.
+  const stp::Kind k = (a->GetType() == stp::FLOATINGPOINT_TYPE ||
+                       aa->GetType() == stp::FLOATINGPOINT_TYPE)
+                          ? stp::FP_SMT_EQ
+                          : stp::EQ;
+  stp::ASTNode o = b->CreateNode(k, *a, *aa);
 
   stp::ASTNode* output = new stp::ASTNode(o);
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
@@ -812,6 +894,502 @@ Expr vc_boolType(VC vc)
 
   stp::ASTNode output = b->CreateNode(stp::BOOLEAN);
   return persistNode(vc, output);
+}
+
+// ---------------------------------------------------------------------------
+// Floating point
+// ---------------------------------------------------------------------------
+
+Type vc_fpType(VC vc, int exp_bits, int sig_bits)
+{
+#ifndef STP_ENABLE_FLOATING_POINT
+  // Refuse at the API's natural entry point. Anything that slips past --
+  // this is the only vc_fp* call that neither takes nor produces a
+  // floating-point term -- is caught when SetExpWidth/CreateFPConst first
+  // stamp a format.
+  (void)vc;
+  (void)exp_bits;
+  (void)sig_bits;
+  stp::FatalError("CInterface: vc_fpType: this STP was built without "
+                  "floating-point support; reconfigure with "
+                  "-DENABLE_FLOATING_POINT=ON");
+#else
+  stp::STP* stp_i = (stp::STP*)vc;
+  stp::STPMgr* b = stp_i->bm;
+
+  if (exp_bits < 2 || sig_bits < 2)
+  {
+    stp::FatalError("CInterface: vc_fpType: a floating-point format needs at "
+                    "least 2 exponent and 2 significand bits");
+  }
+
+  // Mirror vc_bvType/vc_arrayType: a type is a node whose children hold the
+  // widths -- here the exponent and significand widths.
+  stp::ASTNode e = b->CreateBVConst(32, exp_bits);
+  stp::ASTNode s = b->CreateBVConst(32, sig_bits);
+  stp::ASTNode output = b->CreateNode(stp::FLOATINGPOINT, e, s);
+  return persistNode(vc, output);
+#endif
+}
+
+Type vc_fpRoundingModeType(VC vc)
+{
+#ifndef STP_ENABLE_FLOATING_POINT
+  // Refused at the entry point, like vc_fpType: a type node neither takes
+  // nor produces a floating-point term, so the STPMgr format funnels would
+  // never catch it.
+  (void)vc;
+  stp::FatalError("CInterface: vc_fpRoundingModeType: this STP was built "
+                  "without floating-point support; reconfigure with "
+                  "-DENABLE_FLOATING_POINT=ON");
+#else
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+
+  // The sort has no parameters, so the type node is childless; vc_varExpr
+  // recognises it and builds the constrained 5-bit variable.
+  return persistNode(vc, b->CreateNode(stp::ROUNDINGMODE));
+#endif
+}
+
+int vc_getExpWidth(Expr e)
+{
+  return (int)((stp::ASTNode*)e)->GetExpWidth();
+}
+
+int vc_getSigWidth(Expr e)
+{
+  return (int)((stp::ASTNode*)e)->GetSigWidth();
+}
+
+Expr vc_fpConstFromBits(VC vc, int exp_bits, int sig_bits, Expr bv)
+{
+  stp::STP* stp_i = (stp::STP*)vc;
+  stp::STPMgr* b = stp_i->bm;
+  stp::ASTNode* bits = (stp::ASTNode*)bv;
+
+  if (bits->GetKind() != stp::BVCONST)
+  {
+    stp::FatalError("CInterface: vc_fpConstFromBits: the bits argument must be "
+                    "a bitvector constant: ",
+                    *bits);
+  }
+  if ((int)bits->GetValueWidth() != exp_bits + sig_bits)
+  {
+    stp::FatalError("CInterface: vc_fpConstFromBits: the bitvector width must "
+                    "equal exp_bits + sig_bits: ",
+                    *bits);
+  }
+
+  stp::ASTNode output = b->CreateFPConst(*bits, exp_bits, sig_bits);
+  return persistNode(vc, output);
+}
+
+Expr vc_fpEqExpr(VC vc, Expr a, Expr b)
+{
+  stp::STP* stp_i = (stp::STP*)vc;
+  stp::STPMgr* bm = stp_i->bm;
+  stp::ASTNode* l = (stp::ASTNode*)a;
+  stp::ASTNode* r = (stp::ASTNode*)b;
+
+  stp::ASTNode output = bm->CreateNode(stp::FP_EQ, *l, *r);
+  assert(BVTypeCheck(output));
+  return persistNode(vc, output);
+}
+
+// A floating-point operation returns a value of the same format as its
+// operands, so the result node carries the format taken from `fmt` (as the
+// parser's setFPFormat does).
+static Expr fpTermResult(VC vc, stp::Kind k, const stp::ASTNode& fmt,
+                         const stp::ASTVec& children)
+{
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  if (fmt.GetType() != stp::FLOATINGPOINT_TYPE)
+  {
+    stp::FatalError("CInterface: floating-point operation applied to a "
+                    "non-float operand: ",
+                    fmt);
+  }
+  stp::ASTNode r = b->CreateTerm(k, fmt.GetValueWidth(), children);
+  r.SetExpWidth(fmt.GetExpWidth());
+  r.SetSigWidth(fmt.GetSigWidth());
+  assert(BVTypeCheck(r));
+  return persistNode(vc, r);
+}
+
+// A floating-point predicate returns a Boolean and carries no format.
+static Expr fpPredResult(VC vc, stp::Kind k, const stp::ASTVec& children)
+{
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  stp::ASTNode r = b->CreateNode(k, children);
+  assert(BVTypeCheck(r));
+  return persistNode(vc, r);
+}
+
+Expr vc_fpRoundingMode(VC vc, enum VCRoundingMode mode)
+{
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+
+  // The enum's values are one-hot (they mirror the internal encoding), so a
+  // plausible-looking OR of two modes is not a mode; anything but the five
+  // exact values would silently fall through symfpu's mode dispatch.
+  switch (mode)
+  {
+    case VC_RM_RNE:
+    case VC_RM_RTP:
+    case VC_RM_RTN:
+    case VC_RM_RTZ:
+    case VC_RM_RNA:
+      break;
+    default:
+      stp::FatalError("CInterface: vc_fpRoundingMode: not one of the five "
+                      "rounding modes");
+  }
+
+  // A rounding mode is a 5-bit one-hot bitvector constant.
+  return persistNode(vc, b->CreateBVConst(5, (unsigned long long)mode));
+}
+
+Expr vc_fpRoundingModeVar(VC vc, const char* name)
+{
+  // Convenience for vc_varExpr over vc_fpRoundingModeType, which does the
+  // real work: a 5-bit symbol pinned to the five one-hot encodings and
+  // registered so counterexamples print its value by mode name. (Without
+  // the constraint the carrier's 27 junk values would be satisfiable
+  // "modes", which is also why a plain 5-bit vc_varExpr is no substitute.)
+  return vc_varExpr(vc, name, vc_fpRoundingModeType(vc));
+}
+
+Expr vc_fpAbsExpr(VC vc, Expr f)
+{
+  stp::ASTNode* x = (stp::ASTNode*)f;
+  return fpTermResult(vc, stp::FP_ABS, *x, {*x});
+}
+
+Expr vc_fpNegExpr(VC vc, Expr f)
+{
+  stp::ASTNode* x = (stp::ASTNode*)f;
+  return fpTermResult(vc, stp::FP_NEG, *x, {*x});
+}
+
+Expr vc_fpAddExpr(VC vc, Expr rm, Expr a, Expr b)
+{
+  stp::ASTNode* m = (stp::ASTNode*)rm;
+  stp::ASTNode* x = (stp::ASTNode*)a;
+  stp::ASTNode* y = (stp::ASTNode*)b;
+  return fpTermResult(vc, stp::FP_ADD, *x, {*m, *x, *y});
+}
+
+Expr vc_fpSubExpr(VC vc, Expr rm, Expr a, Expr b)
+{
+  stp::ASTNode* m = (stp::ASTNode*)rm;
+  stp::ASTNode* x = (stp::ASTNode*)a;
+  stp::ASTNode* y = (stp::ASTNode*)b;
+  return fpTermResult(vc, stp::FP_SUB, *x, {*m, *x, *y});
+}
+
+Expr vc_fpMulExpr(VC vc, Expr rm, Expr a, Expr b)
+{
+  stp::ASTNode* m = (stp::ASTNode*)rm;
+  stp::ASTNode* x = (stp::ASTNode*)a;
+  stp::ASTNode* y = (stp::ASTNode*)b;
+  return fpTermResult(vc, stp::FP_MUL, *x, {*m, *x, *y});
+}
+
+Expr vc_fpDivExpr(VC vc, Expr rm, Expr a, Expr b)
+{
+  stp::ASTNode* m = (stp::ASTNode*)rm;
+  stp::ASTNode* x = (stp::ASTNode*)a;
+  stp::ASTNode* y = (stp::ASTNode*)b;
+  return fpTermResult(vc, stp::FP_DIV, *x, {*m, *x, *y});
+}
+
+Expr vc_fpFMAExpr(VC vc, Expr rm, Expr a, Expr b, Expr c)
+{
+  stp::ASTNode* m = (stp::ASTNode*)rm;
+  stp::ASTNode* x = (stp::ASTNode*)a;
+  stp::ASTNode* y = (stp::ASTNode*)b;
+  stp::ASTNode* z = (stp::ASTNode*)c;
+  return fpTermResult(vc, stp::FP_FMA, *x, {*m, *x, *y, *z});
+}
+
+Expr vc_fpSqrtExpr(VC vc, Expr rm, Expr f)
+{
+  stp::ASTNode* m = (stp::ASTNode*)rm;
+  stp::ASTNode* x = (stp::ASTNode*)f;
+  return fpTermResult(vc, stp::FP_SQRT, *x, {*m, *x});
+}
+
+Expr vc_fpRoundToIntegralExpr(VC vc, Expr rm, Expr f)
+{
+  stp::ASTNode* m = (stp::ASTNode*)rm;
+  stp::ASTNode* x = (stp::ASTNode*)f;
+  return fpTermResult(vc, stp::FP_ROUNDTOINTEGRAL, *x, {*m, *x});
+}
+
+Expr vc_fpRemExpr(VC vc, Expr a, Expr b)
+{
+  stp::ASTNode* x = (stp::ASTNode*)a;
+  stp::ASTNode* y = (stp::ASTNode*)b;
+  // The remainder circuit's unrolling is exponential in the exponent width;
+  // refuse at term creation, where the caller can see it, rather than
+  // during solving (the parser does the same for SMT-LIB input).
+  if (!stp::FloatBlaster::remSupported(x->GetExpWidth(), x->GetSigWidth()))
+  {
+    stp::FatalError("CInterface: vc_fpRemExpr: fp.rem is not supported at "
+                    "this format: its circuit unrolls one divide step per "
+                    "representable exponent difference, which is exponential "
+                    "in the exponent width; use a format no larger than "
+                    "binary64");
+  }
+  return fpTermResult(vc, stp::FP_REM, *x, {*x, *y});
+}
+
+Expr vc_fpMinExpr(VC vc, Expr a, Expr b)
+{
+  stp::ASTNode* x = (stp::ASTNode*)a;
+  stp::ASTNode* y = (stp::ASTNode*)b;
+  return fpTermResult(vc, stp::FP_MIN, *x, {*x, *y});
+}
+
+Expr vc_fpMaxExpr(VC vc, Expr a, Expr b)
+{
+  stp::ASTNode* x = (stp::ASTNode*)a;
+  stp::ASTNode* y = (stp::ASTNode*)b;
+  return fpTermResult(vc, stp::FP_MAX, *x, {*x, *y});
+}
+
+Expr vc_fpLtExpr(VC vc, Expr a, Expr b)
+{
+  return fpPredResult(vc, stp::FP_LT, {*(stp::ASTNode*)a, *(stp::ASTNode*)b});
+}
+
+Expr vc_fpLeqExpr(VC vc, Expr a, Expr b)
+{
+  return fpPredResult(vc, stp::FP_LEQ, {*(stp::ASTNode*)a, *(stp::ASTNode*)b});
+}
+
+Expr vc_fpGtExpr(VC vc, Expr a, Expr b)
+{
+  return fpPredResult(vc, stp::FP_GT, {*(stp::ASTNode*)a, *(stp::ASTNode*)b});
+}
+
+Expr vc_fpGeqExpr(VC vc, Expr a, Expr b)
+{
+  return fpPredResult(vc, stp::FP_GEQ, {*(stp::ASTNode*)a, *(stp::ASTNode*)b});
+}
+
+Expr vc_fpIsNormalExpr(VC vc, Expr f)
+{
+  return fpPredResult(vc, stp::FP_ISNORMAL, {*(stp::ASTNode*)f});
+}
+
+Expr vc_fpIsSubnormalExpr(VC vc, Expr f)
+{
+  return fpPredResult(vc, stp::FP_ISSUBNORMAL, {*(stp::ASTNode*)f});
+}
+
+Expr vc_fpIsZeroExpr(VC vc, Expr f)
+{
+  return fpPredResult(vc, stp::FP_ISZERO, {*(stp::ASTNode*)f});
+}
+
+Expr vc_fpIsInfiniteExpr(VC vc, Expr f)
+{
+  return fpPredResult(vc, stp::FP_ISINFINITE, {*(stp::ASTNode*)f});
+}
+
+Expr vc_fpIsNaNExpr(VC vc, Expr f)
+{
+  return fpPredResult(vc, stp::FP_ISNAN, {*(stp::ASTNode*)f});
+}
+
+Expr vc_fpIsNegativeExpr(VC vc, Expr f)
+{
+  return fpPredResult(vc, stp::FP_ISNEGATIVE, {*(stp::ASTNode*)f});
+}
+
+Expr vc_fpIsPositiveExpr(VC vc, Expr f)
+{
+  return fpPredResult(vc, stp::FP_ISPOSITIVE, {*(stp::ASTNode*)f});
+}
+
+// Some entry points take the format as raw ints rather than a type node;
+// apply vc_fpType's floor so they cannot produce degenerate widths.
+static void checkFpWidths(int eb, int sb)
+{
+  if (eb < 2 || sb < 2)
+  {
+    stp::FatalError("CInterface: a floating-point format needs at least 2 "
+                    "exponent and 2 significand bits");
+  }
+}
+
+// Extract (eb, sb) from a floating-point type node (see vc_fpType).
+static void fpTypeWidths(Type fpType, unsigned& eb, unsigned& sb)
+{
+  stp::ASTNode* t = (stp::ASTNode*)fpType;
+  if (t->GetKind() != stp::FLOATINGPOINT)
+  {
+    // Reading children of, say, a bitvector type would index out of bounds.
+    stp::FatalError("CInterface: expected a floating-point type "
+                    "(from vc_fpType): ",
+                    *t);
+  }
+  eb = (*t)[0].GetUnsignedConst();
+  sb = (*t)[1].GetUnsignedConst();
+}
+
+static Expr fpSpecial(VC vc, stp::FPSpecial which, Type fpType)
+{
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  unsigned eb, sb;
+  fpTypeWidths(fpType, eb, sb);
+  return persistNode(vc, b->CreateFPSpecialConst(which, eb, sb));
+}
+
+Expr vc_fpNaN(VC vc, Type fpType)
+{
+  return fpSpecial(vc, stp::FPSpecial::NaN, fpType);
+}
+Expr vc_fpPlusInfinity(VC vc, Type fpType)
+{
+  return fpSpecial(vc, stp::FPSpecial::PlusInfinity, fpType);
+}
+Expr vc_fpMinusInfinity(VC vc, Type fpType)
+{
+  return fpSpecial(vc, stp::FPSpecial::MinusInfinity, fpType);
+}
+Expr vc_fpPlusZero(VC vc, Type fpType)
+{
+  return fpSpecial(vc, stp::FPSpecial::PlusZero, fpType);
+}
+Expr vc_fpMinusZero(VC vc, Type fpType)
+{
+  return fpSpecial(vc, stp::FPSpecial::MinusZero, fpType);
+}
+
+// Build an FP_TOFP node: the (eb,sb) width children the blaster reads, an
+// optional rounding mode, then the source. The result is a float of (eb, sb).
+static Expr fpToFP(VC vc, int eb, int sb, const stp::ASTNode* rm,
+                   const stp::ASTNode& src)
+{
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  checkFpWidths(eb, sb);
+  stp::ASTVec kids;
+  kids.push_back(b->CreateBVConst(32, eb));
+  kids.push_back(b->CreateBVConst(32, sb));
+  if (rm != NULL)
+    kids.push_back(*rm);
+  kids.push_back(src);
+  stp::ASTNode r = b->CreateTerm(stp::FP_TOFP, eb + sb, kids);
+  r.SetExpWidth(eb);
+  r.SetSigWidth(sb);
+  return persistNode(vc, r);
+}
+
+Expr vc_fpToFPFromIEEEBV(VC vc, int eb, int sb, Expr bv)
+{
+  return fpToFP(vc, eb, sb, NULL, *(stp::ASTNode*)bv);
+}
+
+Expr vc_fpToFPFromFP(VC vc, int eb, int sb, Expr rm, Expr f)
+{
+  return fpToFP(vc, eb, sb, (stp::ASTNode*)rm, *(stp::ASTNode*)f);
+}
+
+Expr vc_fpToFPFromSignedBV(VC vc, int eb, int sb, Expr rm, Expr bv)
+{
+  return fpToFP(vc, eb, sb, (stp::ASTNode*)rm, *(stp::ASTNode*)bv);
+}
+
+Expr vc_fpToFPFromUnsignedBV(VC vc, int eb, int sb, Expr rm, Expr bv)
+{
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  checkFpWidths(eb, sb);
+  stp::ASTVec kids;
+  kids.push_back(b->CreateBVConst(32, eb));
+  kids.push_back(b->CreateBVConst(32, sb));
+  kids.push_back(*(stp::ASTNode*)rm);
+  kids.push_back(*(stp::ASTNode*)bv);
+  stp::ASTNode r = b->CreateTerm(stp::FP_TOFP_UNSIGNED, eb + sb, kids);
+  r.SetExpWidth(eb);
+  r.SetSigWidth(sb);
+  return persistNode(vc, r);
+}
+
+// fp.to_ubv / fp.to_sbv: a float in, a `width`-bit bitvector out. The result is
+// a bitvector, so it carries no floating-point format.
+static Expr fpToBV(VC vc, stp::Kind k, int width, const stp::ASTNode& rm,
+                   const stp::ASTNode& f)
+{
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  if (width < 1)
+  {
+    stp::FatalError("CInterface: fp.to_ubv/fp.to_sbv need a positive "
+                    "target width");
+  }
+  if (f.GetType() != stp::FLOATINGPOINT_TYPE)
+  {
+    stp::FatalError("CInterface: fp.to_ubv/fp.to_sbv applied to a "
+                    "non-float: ",
+                    f);
+  }
+  stp::ASTVec kids;
+  kids.push_back(b->CreateBVConst(32, width));
+  kids.push_back(rm);
+  kids.push_back(f);
+  return persistNode(vc, b->CreateTerm(k, width, kids));
+}
+
+Expr vc_fpToUBVExpr(VC vc, int width, Expr rm, Expr f)
+{
+  return fpToBV(vc, stp::FP_TO_UBV, width, *(stp::ASTNode*)rm,
+                *(stp::ASTNode*)f);
+}
+
+Expr vc_fpToSBVExpr(VC vc, int width, Expr rm, Expr f)
+{
+  return fpToBV(vc, stp::FP_TO_SBV, width, *(stp::ASTNode*)rm,
+                *(stp::ASTNode*)f);
+}
+
+Expr vc_fpToIEEEBV(VC vc, Expr f)
+{
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  stp::ASTNode* x = (stp::ASTNode*)f;
+  if (x->GetType() != stp::FLOATINGPOINT_TYPE)
+  {
+    stp::FatalError("CInterface: vc_fpToIEEEBV applied to a non-float: ", *x);
+  }
+  const unsigned width = x->GetExpWidth() + x->GetSigWidth();
+  // The result is a bitvector (the packed bits), so it carries no fp format.
+  return persistNode(vc, b->CreateTerm(stp::FP_TO_IEEE_BV, width, *x));
+}
+
+Expr vc_fpConstFromDouble(VC vc, Type target, Expr rm, double d)
+{
+  uint64_t bits;
+  std::memcpy(&bits, &d, sizeof(bits)); // d is already IEEE-754 binary64
+  Expr dbl =
+      vc_fpConstFromBits(vc, 11, 53, vc_bvConstExprFromLL(vc, 64, bits));
+  unsigned eb, sb;
+  fpTypeWidths(target, eb, sb);
+  if (eb == 11 && sb == 53)
+    return dbl; // target is binary64: the reinterpret is exact
+  return vc_fpToFPFromFP(vc, eb, sb, rm, dbl);
+}
+
+Expr vc_fpConstFromFloat(VC vc, Type target, Expr rm, float f)
+{
+  uint32_t bits;
+  std::memcpy(&bits, &f, sizeof(bits)); // f is already IEEE-754 binary32
+  Expr single =
+      vc_fpConstFromBits(vc, 8, 24, vc_bvConstExprFromLL(vc, 32, bits));
+  unsigned eb, sb;
+  fpTypeWidths(target, eb, sb);
+  if (eb == 8 && sb == 24)
+    return single; // target is binary32: the reinterpret is exact
+  return vc_fpToFPFromFP(vc, eb, sb, rm, single);
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1140,14 +1718,24 @@ Expr vc_bvConstExprFromInt(VC vc, int n_bits, unsigned int value)
   stp::STPMgr* b = stp_i->bm;
 
   unsigned long long int v = (unsigned long long int)value;
-  unsigned long long int max_n_bits = 0xFFFFFFFFFFFFFFFFULL >> (64 - n_bits);
-  // printf("%ull", max_n_bits);
-  if (v > max_n_bits)
+
+  // Only check that the value fits when the width is narrow enough for the
+  // question to be interesting. At 64 bits and above every unsigned int fits,
+  // and the shift below would be by a negative amount -- which is undefined,
+  // and in practice wraps to a small max, rejecting perfectly good constants.
+  // Widths above 64 are reachable: symfpu works internally at widths derived
+  // from the format, and the x87 extended format (15, 64) takes it past 64.
+  if (n_bits < 64)
   {
-    printf("CInterface: vc_bvConstExprFromInt: "
-           "Cannot construct a constant %llu >= %llu,\n",
-           v, max_n_bits);
-    stp::FatalError("FatalError");
+    const unsigned long long int max_n_bits =
+        0xFFFFFFFFFFFFFFFFULL >> (64 - n_bits);
+    if (v > max_n_bits)
+    {
+      printf("CInterface: vc_bvConstExprFromInt: "
+             "Cannot construct a constant %llu >= %llu,\n",
+             v, max_n_bits);
+      stp::FatalError("FatalError");
+    }
   }
   stp::ASTNode n = b->CreateBVConst(n_bits, v);
   assert(BVTypeCheck(n));
@@ -2123,8 +2711,13 @@ void vc_Destroy(VC vc)
   vc_clearDecls(vc);
   stp_i->deleteObjects();
 
+  // Never leave the global aimed at a dead manager.
+  if (stp::GlobalParserBM == b)
+    stp::GlobalParserBM = NULL;
+
   delete stp_i;
-  delete b->defaultNodeFactory;
+  if (b->defaultNodeFactory != b->hashingNodeFactory)
+    delete b->defaultNodeFactory;
   delete b;
 }
 
@@ -2133,6 +2726,20 @@ void vc_DeleteExpr(Expr e)
   stp::ASTNode* input = (stp::ASTNode*)e;
   delete input;
 }
+
+// exprkind_t mirrors stp::Kind, which is generated from ASTKind.kinds, and
+// getExprKind is a raw cast -- so the two enums must stay in numeric
+// lockstep. These anchors catch a kind added to one side but not the other.
+static_assert((int)UNDEFINED == (int)stp::UNDEFINED, "exprkind_t drift");
+static_assert((int)BVCONST == (int)stp::BVCONST, "exprkind_t drift");
+static_assert((int)FP_ABS == (int)stp::FP_ABS, "exprkind_t drift");
+static_assert((int)FP_TO_IEEE_BV == (int)stp::FP_TO_IEEE_BV,
+              "exprkind_t drift");
+static_assert((int)FP_SMT_EQ == (int)stp::FP_SMT_EQ, "exprkind_t drift");
+static_assert((int)BOOLEAN_TYPE == (int)stp::BOOLEAN_TYPE &&
+                  (int)FLOATINGPOINT_TYPE == (int)stp::FLOATINGPOINT_TYPE &&
+                  (int)UNKNOWN_TYPE == (int)stp::UNKNOWN_TYPE,
+              "type_t drift");
 
 exprkind_t getExprKind(Expr e)
 {

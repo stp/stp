@@ -175,6 +175,12 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
     return n;
   }
 
+  // Floating-point special constants (NaN, +/-oo, +/-zero) are nullary leaves
+  // that the BVCONST/TRUE/FALSE test above does not cover, so they reach here
+  // with no children. They are values: there is nothing to substitute into.
+  if (n.Degree() == 0)
+    return n;
+
   const ASTChildren children = n.GetChildren();
   assert(children.size() > 0);
   // Should have no leaves left here.
@@ -391,8 +397,15 @@ bool SubstitutionMap::UpdateSubstitutionMap(const ASTNode& e0,
     return false;
 
   assert(e0 != e1);
-  assert(e0.GetValueWidth() == e1.GetValueWidth());
-  assert(e0.GetIndexWidth() == e1.GetIndexWidth());
+  // A substituted pair must agree as bitvectors/arrays AND as floats. The
+  // format check is trivially true for non-floats (both report (0, 0)); for
+  // floats the widths agree whenever the formats do, since a float's value
+  // width is exp_width + sig_width. These used to be a disjunction, which
+  // any two non-float nodes satisfied through the vacuous format arm.
+  assert(e0.GetValueWidth() == e1.GetValueWidth() &&
+         e0.GetIndexWidth() == e1.GetIndexWidth());
+  assert(e0.GetExpWidth() == e1.GetExpWidth() &&
+         e0.GetSigWidth() == e1.GetSigWidth());
 
   if (e0.GetKind() == SYMBOL)
   {

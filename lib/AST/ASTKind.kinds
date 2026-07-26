@@ -18,7 +18,7 @@
 #
 #
 # name minkids maxkids category1 category2
-Categories:	Term	Form
+Categories:	Term	Form	FP
 
 # Leaf nodes.
 UNDEFINED	0	0
@@ -88,8 +88,113 @@ READ		2	2	Term
 WRITE		3	3	Term
 
 #Types: These kinds are used only in the API. Once processed inside
-#the API, they are never used again in the system 
+#the API, they are never used again in the system
 ARRAY           0       0
 BITVECTOR       0       0
 BOOLEAN         0       0
+FLOATINGPOINT   0       0
+ROUNDINGMODE    0       0
 
+# Floating point _terms_ (i.e., things that produce FPs)
+
+# fp.abs: fp -> fp
+# The public C API mirrors every kind below in include/stp/c_interface.h
+# (enum exprkind_t) by numeric value; keep the two in lockstep. Anchoring
+# static_asserts live next to getExprKind in lib/Interface/c_interface.cpp.
+FP_ABS                      1    1    Term    FP
+
+# fp.neg: fp -> fp
+FP_NEG                      1    1    Term    FP
+
+# fp.add: rm, fp, fp -> fp
+FP_ADD                      3    3    Term    FP
+
+# fp.sub: rm, fp, fp -> fp
+FP_SUB                      3    3    Term    FP
+
+# fp.mul: rm, fp, fp -> fp
+FP_MUL                      3    3    Term    FP
+
+# fp.div: rm, fp, fp -> fp
+FP_DIV                      3    3    Term    FP
+
+# fp.fma: rm, fp, fp, fp -> fp
+FP_FMA                      4    4    Term    FP
+
+# fp.sqrt: rm, fp -> fp
+FP_SQRT                     2    2    Term    FP
+
+# fp.rem: fp, fp -> fp
+FP_REM                      2    2    Term    FP
+
+# fp.roundToIntegral: rm, fp -> fp
+FP_ROUNDTOINTEGRAL          2    2    Term    FP
+
+# fp.min: fp, fp -> fp
+FP_MIN                      2    3    Term    FP
+
+# fp.max: fp, fp -> fp
+FP_MAX                      2    3    Term    FP
+
+# to_fp: eb, sb, bv -> fp
+# to_fp: eb, sb, rm, fp -> fp
+# to_fp: eb, sb, rm, bv -> fp
+FP_TOFP                     3   4    Term    FP
+
+# to_fp_unsigned: eb, sb, rm, bv -> fP
+FP_TOFP_UNSIGNED            4    4    Term    FP
+
+# fp.to_ubv: bw, rm, fp -> bv
+FP_TO_UBV                   3    4    Term    FP
+
+# fp.to_sbv: bw, rm, fp -> bv
+FP_TO_SBV                   3    4    Term    FP
+
+# fp -> its packed IEEE bits (reinterpret, canonicalising NaN); API-only, no
+# SMT-LIB syntax. One float in, an (eb + sb)-bit bitvector out.
+FP_TO_IEEE_BV               1    1    Term    FP
+
+# Floating point _formulae_ (i.e., things that produce Booleans)
+
+# fp.leq: fp, fp -> bool
+FP_LEQ              2    2    Form    FP
+
+# fp.lt: fp, fp -> bool
+FP_LT               2    2    Form    FP
+
+# fp.geq: fp, fp -> bool
+FP_GEQ              2    2    Form    FP
+
+# fp.gt: fp, fp -> bool
+FP_GT               2    2    Form    FP
+
+# fp.eq: fp, fp -> bool
+FP_EQ               2    2    Form    FP
+
+# fp.isNormal: fp -> bool
+FP_ISNORMAL         1    1    Form    FP
+
+# fp.isSubnormal: fp -> bool
+FP_ISSUBNORMAL      1    1    Form    FP
+
+# fp.isZero: fp -> bool
+FP_ISZERO           1    1    Form    FP
+
+# fp.isInfinite: fp -> bool
+FP_ISINFINITE       1    1    Form    FP
+
+# fp.isNaN: fp -> bool
+FP_ISNAN            1    1    Form    FP
+
+# fp.isNegative: fp -> bool
+FP_ISNEGATIVE       1    1    Form    FP
+
+# fp.isPositive: fp -> bool
+FP_ISPOSITIVE       1    1    Form    FP
+
+# FP `=`
+FP_SMT_EQ           2    2    Form    FP
+
+# The five special floating-point values (NaN, +/-oo, +/-zero) have no kinds
+# of their own: they are ordinary packed constants, built interned by
+# STPMgr::CreateFPSpecialConst so that the format is part of node identity.

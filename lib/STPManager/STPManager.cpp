@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 // to get the PRIu64 macro from inttypes, this needs to be defined.
 #include "stp/STPManager/STPManager.h"
+#include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/Printer/SMTLIBPrinter.h"
 #include "stp/Util/NodeIterator.h"
 #include <cmath>
@@ -248,7 +249,10 @@ ASTNode STPMgr::CreateBVConst(unsigned int width,
                                       c_val);
     if (shift_amount < (sizeof(bvconst) * 8))
     {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wshift-count-overflow"
       bvconst >>= shift_amount;
+#pragma GCC diagnostic pop
     }
     else
     {
@@ -343,6 +347,95 @@ ASTNode STPMgr::CreateBVConst(CBV bv, unsigned width)
   ASTNode n(LookupOrCreateBVConst(temp_bvconst));
   CONSTANTBV::BitVector_Destroy(bv);
   return n;
+}
+
+ASTNode STPMgr::CreateFPConst(const stp::ASTNode& bvconst,
+                              unsigned exp_width, unsigned sig_width)
+{
+#ifndef STP_ENABLE_FLOATING_POINT
+  (void)bvconst;
+  (void)exp_width;
+  (void)sig_width;
+  FatalError("this STP was built without floating-point support; "
+             "reconfigure with -DENABLE_FLOATING_POINT=ON");
+#else
+  assert(bvconst.GetKind() == BVCONST);
+  assert(exp_width + sig_width == bvconst.GetValueWidth());
+
+  // Temporary key sharing the source's CBV; interning clones it.
+  ASTBVConst* src = (ASTBVConst*)bvconst._int_node_ptr;
+  ASTFPConst temp(this, src->GetBVConst(), exp_width, sig_width);
+
+  has_floating_point = true;
+
+  ASTNode n(LookupOrCreateFPConst(temp));
+  assert(n.GetKind() == BVCONST);
+  return n;
+#endif
+}
+
+// As LookupOrCreateBVConst. The same table holds both flavours of constant:
+// the equality functor compares the format widths too, so a floating-point
+// constant never unifies with a plain bitvector constant of the same bits.
+ASTFPConst* STPMgr::LookupOrCreateFPConst(ASTFPConst& s)
+{
+  ASTBVConstSet::const_iterator it = _bvconst_unique_table.find(&s);
+  if (it != _bvconst_unique_table.end())
+    return static_cast<ASTFPConst*>(*it);
+
+  ASTFPConst* s_copy = new ASTFPConst(s);
+  _bvconst_unique_table.insert(s_copy);
+  return s_copy;
+}
+
+ASTNode STPMgr::roundingModeValidConstraint(const ASTNode& s)
+{
+  using namespace symbolic_fp;
+  ASTVec one_of;
+  for (const unsigned mode :
+       {ROUND_NEAREST_TIES_TO_EVEN, ROUND_TOWARD_POSITIVE,
+        ROUND_TOWARD_NEGATIVE, ROUND_TOWARD_ZERO, ROUND_NEAREST_TIES_TO_AWAY})
+  {
+    one_of.push_back(
+        defaultNodeFactory->CreateNode(EQ, s, CreateBVConst(5, mode)));
+  }
+  return defaultNodeFactory->CreateNode(OR, one_of);
+}
+
+ASTNode STPMgr::CreateFPSpecialConst(FPSpecial which, unsigned exp_width,
+                                     unsigned sig_width)
+{
+  if (exp_width == 0 || sig_width == 0)
+    FatalError("CreateFPSpecialConst: a floating-point format needs nonzero "
+               "exponent and significand widths");
+
+  const unsigned width = exp_width + sig_width;
+  const unsigned stored_sig = sig_width - 1; // the hidden bit is not stored
+
+  // Packed layout, LSB first: [significand | exponent | sign].
+  CBV bits = CONSTANTBV::BitVector_Create(width, true);
+
+  const bool negative =
+      which == FPSpecial::MinusInfinity || which == FPSpecial::MinusZero;
+  const bool exp_all_ones = which == FPSpecial::NaN ||
+                            which == FPSpecial::PlusInfinity ||
+                            which == FPSpecial::MinusInfinity;
+
+  if (negative)
+    CONSTANTBV::BitVector_Bit_On(bits, width - 1);
+  for (unsigned i = 0; exp_all_ones && i < exp_width; i++)
+    CONSTANTBV::BitVector_Bit_On(bits, stored_sig + i);
+  // symfpu's canonical NaN: exponent all ones and only the top stored-
+  // significand bit set (pack() emits nanPattern(packedSigWidth) =
+  // 1 << (stored_sig - 1), the quiet-bit convention). Matching it keeps the
+  // interned constant bit-identical to the NaN every blasted operation
+  // produces. Semantically either way is a NaN; bit-identical is tidier.
+  if (which == FPSpecial::NaN && stored_sig > 0)
+    CONSTANTBV::BitVector_Bit_On(bits, stored_sig - 1);
+
+  // CreateBVConst destroys `bits`.
+  ASTNode packed = CreateBVConst(bits, width);
+  return CreateFPConst(packed, exp_width, sig_width);
 }
 
 ASTNode STPMgr::CreateZeroConst(unsigned width)

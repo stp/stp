@@ -56,6 +56,9 @@ THE SOFTWARE.
 
 %parse-param {void* AssertsQuery}
 
+/* Pinned conflict count (see smt2.y). */
+%expect 0
+
 %union {
 
   unsigned int uintval;                 /* for numerals in types. */

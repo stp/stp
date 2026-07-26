@@ -1,7 +1,9 @@
 /* %define api.pure full */
 /*%lex-param {void *scanner}
 %parse-param {void *scanner}
-%define parse.error verbose*/
+*/
+
+%define parse.error verbose
 
 %{
   /********************************************************************
@@ -52,8 +54,24 @@
 #include "stp/cpp_interface.h"
 #include "stp/Parser/LetMgr.h"
 #include "stp/Parser/parser.h"
+#include "stp/FloatBlaster/FloatBlaster.h"
+#include "stp/FloatBlaster/rounding_modes.h"
 #include "parsesmt2.tab.h"
 #include "smt2_flex_header.h"
+
+#include <cctype>
+#include <cstdlib>
+#include <string>
+#include <vector>
+
+namespace stp
+{
+  // Defined in smt2.lex: the text SKIP_SEXPR swallowed for the current
+  // command, comments excluded. define-sort inspects it (see
+  // tryRegisterFpSortAlias below).
+  const std::string& smt2_skipped_text();
+}
+
 
   using std::cout;
   using std::cerr;
@@ -177,6 +195,42 @@
   using stp::BITVECTOR;    //!< Bitvector creation expression
   using stp::BOOLEAN;      //!< Boolean creation expression
 
+  using stp::FP_ABS;
+  using stp::FP_NEG;
+  using stp::FP_ADD;
+  using stp::FP_SUB;
+  using stp::FP_MUL;
+  using stp::FP_DIV;
+  using stp::FP_FMA;
+  using stp::FP_SQRT;
+  using stp::FP_REM;
+  using stp::FP_ROUNDTOINTEGRAL;
+  using stp::FP_MIN;
+  using stp::FP_MAX;
+  using stp::FP_TOFP;
+  using stp::FP_TOFP_UNSIGNED;
+  using stp::FP_TO_UBV;
+  using stp::FP_TO_SBV;
+  using stp::FP_LEQ;
+  using stp::FP_LT;
+  using stp::FP_GEQ;
+  using stp::FP_GT;
+  using stp::FP_EQ;
+  using stp::FP_ISNORMAL;
+  using stp::FP_ISSUBNORMAL;
+  using stp::FP_ISZERO;
+  using stp::FP_ISINFINITE;
+  using stp::FP_ISNAN;
+  using stp::FP_ISNEGATIVE;
+  using stp::FP_ISPOSITIVE;
+  using stp::FP_SMT_EQ;
+
+  using stp::symbolic_fp::rounding_modes::ROUND_NEAREST_TIES_TO_EVEN;
+  using stp::symbolic_fp::rounding_modes::ROUND_TOWARD_POSITIVE;
+  using stp::symbolic_fp::rounding_modes::ROUND_TOWARD_NEGATIVE;
+  using stp::symbolic_fp::rounding_modes::ROUND_TOWARD_ZERO;
+  using stp::symbolic_fp::rounding_modes::ROUND_NEAREST_TIES_TO_AWAY;
+
   using stp::NOT_DECLARED;
   using stp::TO_BE_SATISFIABLE;
   using stp::TO_BE_UNSATISFIABLE;
@@ -185,6 +239,7 @@
   using stp::BOOLEAN_TYPE;
   using stp::BITVECTOR_TYPE;
   using stp::ARRAY_TYPE;
+  using stp::FLOATINGPOINT_TYPE;
   using stp::UNKNOWN_TYPE;
 
   using stp::SOLVER_INVALID;
@@ -227,6 +282,558 @@
     ASTNode * n = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateNode(k, *c0, *c1));
     delete c0;
     delete c1;
+    return n;
+  }
+
+  // Stamp an SMT-LIB floating-point format onto a node. Floats are carried as
+  // their packed bit pattern, so the value width is the total width and the
+  // exponent/significand widths record how to unpack it.
+  void setFPFormat(ASTNode* n, unsigned int exp_width, unsigned int sig_width)
+  {
+    n->SetExpWidth(exp_width);
+    n->SetSigWidth(sig_width);
+    assert(n->GetType() == FLOATINGPOINT_TYPE);
+  }
+
+  // fp.add/fp.sub/fp.mul/fp.div. Each is ternary -- the rounding mode is
+  // child 0, matching the arity declared in ASTKind.kinds -- so that the
+  // blaster rounds as the input asked rather than assuming RNE.
+  // The rounding-mode argument is taken as a plain an_term rather than an
+  // an_rounding_mode: an_term already derives an_rounding_mode, so using the
+  // narrower nonterminal here makes the position ambiguous and LALR resolves
+  // it by swallowing the rounding mode as the first operand. Checking the
+  // rounding mode here (and again in BVTypeCheck) costs nothing by comparison.
+  ASTNode* createFPArith(Kind k, ASTNode* rm, ASTNode* lhs, ASTNode* rhs)
+  {
+    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
+    {
+      fatal_yyerror("expected a rounding mode.");
+    }
+
+    if (lhs->GetType() != FLOATINGPOINT_TYPE ||
+        rhs->GetType() != FLOATINGPOINT_TYPE)
+    {
+      fatal_yyerror("arguments to a floating-point operation must be floats.");
+    }
+
+    if (lhs->GetExpWidth() != rhs->GetExpWidth() ||
+        lhs->GetSigWidth() != rhs->GetSigWidth())
+    {
+      fatal_yyerror("floating-point operands must have the same format.");
+    }
+
+    ASTNode* n = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateTerm(k, lhs->GetValueWidth(),
+                                                   *rm, *lhs, *rhs));
+    setFPFormat(n, lhs->GetExpWidth(), lhs->GetSigWidth());
+    delete rm;
+    delete lhs;
+    delete rhs;
+    return n;
+  }
+
+  // fp.leq/fp.lt/fp.geq/fp.gt. These are chainable in SMT-LIB, so (fp.lt x y z)
+  // means (and (fp.lt x y) (fp.lt y z)).
+  ASTNode* createFPChain(Kind k, ASTVec* terms, const char* name)
+  {
+    if (terms->size() < 2)
+    {
+      std::string msg("too few arguments to ");
+      msg += name;
+      msg += ".";
+      fatal_yyerror(msg.c_str());
+    }
+
+    for (size_t i = 0; i < terms->size(); i++)
+    {
+      if ((*terms)[i].GetType() != FLOATINGPOINT_TYPE)
+      {
+        std::string msg("arguments to ");
+        msg += name;
+        msg += " must be floats.";
+        fatal_yyerror(msg.c_str());
+      }
+      if ((*terms)[i].GetExpWidth() != (*terms)[0].GetExpWidth() ||
+          (*terms)[i].GetSigWidth() != (*terms)[0].GetSigWidth())
+      {
+        std::string msg("arguments to ");
+        msg += name;
+        msg += " must have the same format.";
+        fatal_yyerror(msg.c_str());
+      }
+    }
+
+    ASTNode* n;
+    if (terms->size() == 2)
+    {
+      n = stp::GlobalParserInterface->newNode(
+          stp::GlobalParserInterface->CreateNode(k, (*terms)[0], (*terms)[1]));
+    }
+    else
+    {
+      ASTVec result;
+      result.reserve(terms->size() - 1);
+      for (size_t i = 1; i < terms->size(); i++)
+      {
+        result.push_back(stp::GlobalParserInterface->CreateNode(
+            k, (*terms)[i - 1], (*terms)[i]));
+      }
+      n = stp::GlobalParserInterface->newNode(
+          stp::GlobalParserInterface->CreateNode(AND, result));
+    }
+    delete terms;
+    return n;
+  }
+
+  // fp.rem/fp.min/fp.max: two floats of the same format in, one out. Unlike
+  // fp.add and friends these take no rounding mode.
+  ASTNode* createFPBinary(Kind k, ASTNode* lhs, ASTNode* rhs)
+  {
+    if (lhs->GetType() != FLOATINGPOINT_TYPE ||
+        rhs->GetType() != FLOATINGPOINT_TYPE)
+    {
+      fatal_yyerror("arguments to a floating-point operation must be floats.");
+    }
+
+    if (lhs->GetExpWidth() != rhs->GetExpWidth() ||
+        lhs->GetSigWidth() != rhs->GetSigWidth())
+    {
+      fatal_yyerror("floating-point operands must have the same format.");
+    }
+
+    // Refuse fp.rem where its circuit cannot be built (found by murxla as a
+    // stack-overflow SIGSEGV at Float128): the unrolling is exponential in
+    // the exponent width. Refused here, with the numbers, rather than deep
+    // in the blaster.
+    if (k == FP_REM && !stp::FloatBlaster::remSupported(lhs->GetExpWidth(),
+                                                        lhs->GetSigWidth()))
+    {
+      const std::string msg =
+          "fp.rem is not supported at this format: its circuit unrolls one "
+          "divide step per representable exponent difference (2^eb + sb - 4 "
+          "= " +
+          std::to_string(stp::FloatBlaster::remUnrollSteps(
+              lhs->GetExpWidth(), lhs->GetSigWidth())) +
+          " steps here, over the limit of " +
+          std::to_string(stp::FloatBlaster::REM_UNROLL_LIMIT) +
+          "); use a format no larger than binary64";
+      fatal_yyerror(msg.c_str());
+    }
+
+    ASTNode* n = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateTerm(k, lhs->GetValueWidth(),
+                                                   *lhs, *rhs));
+    setFPFormat(n, lhs->GetExpWidth(), lhs->GetSigWidth());
+    delete lhs;
+    delete rhs;
+    return n;
+  }
+
+  // fp.fma: a rounding mode and three floats of the same format.
+  ASTNode* createFPFma(ASTNode* rm, ASTNode* x, ASTNode* y, ASTNode* z)
+  {
+    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
+    {
+      fatal_yyerror("expected a rounding mode.");
+    }
+
+    if (x->GetType() != FLOATINGPOINT_TYPE ||
+        y->GetType() != FLOATINGPOINT_TYPE ||
+        z->GetType() != FLOATINGPOINT_TYPE)
+    {
+      fatal_yyerror("arguments to fp.fma must be floats.");
+    }
+
+    if (x->GetExpWidth() != y->GetExpWidth() ||
+        x->GetSigWidth() != y->GetSigWidth() ||
+        x->GetExpWidth() != z->GetExpWidth() ||
+        x->GetSigWidth() != z->GetSigWidth())
+    {
+      fatal_yyerror("arguments to fp.fma must have the same format.");
+    }
+
+    ASTVec children;
+    children.push_back(*rm);
+    children.push_back(*x);
+    children.push_back(*y);
+    children.push_back(*z);
+
+    ASTNode* n = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateTerm(FP_FMA, x->GetValueWidth(),
+                                                   children));
+    setFPFormat(n, x->GetExpWidth(), x->GetSigWidth());
+    delete rm;
+    delete x;
+    delete y;
+    delete z;
+    return n;
+  }
+
+  // fp.sqrt: a rounding mode and one float.
+  ASTNode* createFPSqrt(ASTNode* rm, ASTNode* expr)
+  {
+    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
+    {
+      fatal_yyerror("expected a rounding mode.");
+    }
+
+    if (expr->GetType() != FLOATINGPOINT_TYPE)
+    {
+      fatal_yyerror("argument to fp.sqrt must be a float.");
+    }
+
+    ASTNode* n = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateTerm(FP_SQRT,
+                                                   expr->GetValueWidth(), *rm,
+                                                   *expr));
+    setFPFormat(n, expr->GetExpWidth(), expr->GetSigWidth());
+    delete rm;
+    delete expr;
+    return n;
+  }
+
+  // (fp.roundToIntegral rm f). The mode is an ordinary term, exactly as in
+  // fp.sqrt, so a RoundingMode variable is accepted as well as the five
+  // literal modes.
+  ASTNode* createFPRoundToIntegral(ASTNode* rm, ASTNode* expr)
+  {
+    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
+    {
+      fatal_yyerror("expected a rounding mode.");
+    }
+
+    if (expr->GetType() != FLOATINGPOINT_TYPE)
+    {
+      fatal_yyerror("argument to fp.roundToIntegral must be a float.");
+    }
+
+    ASTNode* n = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateTerm(FP_ROUNDTOINTEGRAL,
+                                                   expr->GetValueWidth(), *rm,
+                                                   *expr));
+    setFPFormat(n, expr->GetExpWidth(), expr->GetSigWidth());
+    delete rm;
+    delete expr;
+    return n;
+  }
+
+  // On a build without floating-point support, reject floating-point input
+  // at its first construct, with a line number and the fix. Called from
+  // every path that introduces a float: the sort and conversion forms (via
+  // checkFpFormatWidths), (fp ...) literals, and the QF_*FP* logics. The
+  // STPMgr funnels (SetExpWidth/CreateFPConst) back this up for input that
+  // arrives through the C API instead of the parser.
+  void checkFpSupported()
+  {
+#ifndef STP_ENABLE_FLOATING_POINT
+    fatal_yyerror("this STP was built without floating-point support; "
+                  "reconfigure with -DENABLE_FLOATING_POINT=ON");
+#endif
+  }
+
+  // The indexed to_fp forms and the special values carry the format as
+  // numerals; apply the floor the sort rule enforces.
+  void checkFpFormatWidths(unsigned int exp_width, unsigned int sig_width)
+  {
+    checkFpSupported();
+    if (exp_width < 2 || sig_width < 2)
+    {
+      fatal_yyerror("a floating-point format needs at least 2 exponent and "
+                    "2 significand bits");
+    }
+  }
+
+  // (define-sort <name> () <floating-point sort>) is the one define-sort STP
+  // implements. The lexer swallows every define-sort's arguments (SKIP_SEXPR
+  // in smt2.lex), which is what lets the uninterpreted shapes -- parametric
+  // sorts, sorts STP lacks, parentheses hiding in comments -- be answered
+  // "unsupported" without parsing them; this inspects the swallowed text
+  // (comments already excluded) and registers the alias when it has the one
+  // implemented shape. Returns false to answer "unsupported" instead.
+  bool tryRegisterFpSortAlias(const std::string& text)
+  {
+    std::vector<std::string> toks;
+    std::string cur;
+    for (const char c : text)
+    {
+      if (c == '(' || c == ')')
+      {
+        if (!cur.empty())
+        {
+          toks.push_back(cur);
+          cur.clear();
+        }
+        toks.push_back(std::string(1, c));
+      }
+      else if (isspace(static_cast<unsigned char>(c)))
+      {
+        if (!cur.empty())
+        {
+          toks.push_back(cur);
+          cur.clear();
+        }
+      }
+      else
+      {
+        cur += c;
+      }
+    }
+    if (!cur.empty())
+      toks.push_back(cur);
+
+    // <name> ( ) followed by a named format or ( _ FloatingPoint eb sb ).
+    if (toks.size() < 4 || toks[0] == "(" || toks[0] == ")" ||
+        toks[1] != "(" || toks[2] != ")")
+      return false;
+
+    unsigned int exp_width, sig_width;
+    if (toks.size() == 4)
+    {
+      if (toks[3] == "Float16")
+      {
+        exp_width = 5; sig_width = 11;
+      }
+      else if (toks[3] == "Float32")
+      {
+        exp_width = 8; sig_width = 24;
+      }
+      else if (toks[3] == "Float64")
+      {
+        exp_width = 11; sig_width = 53;
+      }
+      else if (toks[3] == "Float128")
+      {
+        exp_width = 15; sig_width = 113;
+      }
+      else
+        return false;
+    }
+    else if (toks.size() == 9 && toks[3] == "(" && toks[4] == "_" &&
+             toks[5] == "FloatingPoint" && toks[8] == ")" &&
+             !toks[6].empty() && !toks[7].empty() &&
+             toks[6].find_first_not_of("0123456789") == std::string::npos &&
+             toks[7].find_first_not_of("0123456789") == std::string::npos)
+    {
+      exp_width = static_cast<unsigned int>(strtoul(toks[6].c_str(), NULL, 10));
+      sig_width = static_cast<unsigned int>(strtoul(toks[7].c_str(), NULL, 10));
+    }
+    else
+      return false;
+
+    checkFpFormatWidths(exp_width, sig_width);
+    // A real alias table: the name maps to a format, and is NOT interned as a
+    // symbol -- the old scheme made the sort name usable as a term variable.
+    stp::GlobalParserInterface->addSortAlias(toks[0], exp_width, sig_width);
+    return true;
+  }
+
+  // ((_ to_fp_unsigned e s) rm bv) -- convert an unsigned integer held in a
+  // bitvector to the nearest float.
+  ASTNode* createFPFromUnsignedBV(unsigned int exp_width,
+                                  unsigned int sig_width, ASTNode* rm,
+                                  ASTNode* bits)
+  {
+    checkFpFormatWidths(exp_width, sig_width);
+    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
+    {
+      fatal_yyerror("expected a rounding mode.");
+    }
+
+    if (bits->GetType() != BITVECTOR_TYPE)
+    {
+      fatal_yyerror("to_fp_unsigned's argument must be a bitvector.");
+    }
+
+    ASTNode* n = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateTerm(
+            FP_TOFP_UNSIGNED, exp_width + sig_width,
+            stp::GlobalParserInterface->CreateBVConst(32, exp_width),
+            stp::GlobalParserInterface->CreateBVConst(32, sig_width), *rm,
+            ASTVec(1, *bits)));
+    setFPFormat(n, exp_width, sig_width);
+    delete rm;
+    delete bits;
+    return n;
+  }
+
+  // ((_ fp.to_ubv m) rm x) / ((_ fp.to_sbv m) rm x): round a float to an
+  // integer of width m. The result is a bitvector, not a float, so it gets no
+  // floating-point format. The value for the inputs SMT-LIB leaves
+  // unspecified is added later, by FpTotalise.
+  ASTNode* createFPToBV(Kind k, unsigned int target_width, ASTNode* rm,
+                        ASTNode* expr)
+  {
+    if (target_width == 0)
+      fatal_yyerror("fp.to_ubv/fp.to_sbv width must be positive.");
+
+    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
+      fatal_yyerror("expected a rounding mode.");
+
+    if (expr->GetType() != FLOATINGPOINT_TYPE)
+      fatal_yyerror("argument to fp.to_ubv/fp.to_sbv must be a float.");
+
+    ASTNode* n = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateTerm(
+            k, target_width,
+            stp::GlobalParserInterface->CreateBVConst(32, target_width), *rm,
+            *expr));
+    delete rm;
+    delete expr;
+    return n;
+  }
+
+  // fp.abs/fp.neg: a float in, a float of the same format out.
+  ASTNode* createFPUnary(Kind k, ASTNode* expr)
+  {
+    if (expr->GetType() != FLOATINGPOINT_TYPE)
+    {
+      fatal_yyerror("argument to a floating-point operation must be a float.");
+    }
+
+    ASTNode* n = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateTerm(k, expr->GetValueWidth(),
+                                                   *expr));
+    setFPFormat(n, expr->GetExpWidth(), expr->GetSigWidth());
+    delete expr;
+    return n;
+  }
+
+  // fp.isNaN and friends: a float in, a Boolean out.
+  ASTNode* createFPPredicate(Kind k, ASTNode* expr)
+  {
+    if (expr->GetType() != FLOATINGPOINT_TYPE)
+    {
+      fatal_yyerror("argument to a floating-point predicate must be a float.");
+    }
+
+    ASTNode* n = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateNode(k, *expr));
+    delete expr;
+    return n;
+  }
+
+  // ((_ to_fp e s) bv) -- reinterpret a bitvector's bits as a float.
+  ASTNode* createFPFromBits(unsigned int exp_width, unsigned int sig_width,
+                            ASTNode* bits)
+  {
+    checkFpFormatWidths(exp_width, sig_width);
+    if (bits->GetType() != BITVECTOR_TYPE)
+    {
+      fatal_yyerror("the one-argument form of to_fp takes a bitvector.");
+    }
+
+    if (bits->GetValueWidth() != exp_width + sig_width)
+    {
+      fatal_yyerror("to_fp bitvector width must equal e + s.");
+    }
+
+    // No conversion is needed, only a retyping, but the node has to be a
+    // distinct object from the bitvector it retypes: the widths are stored on
+    // the interned node, so stamping them onto the child directly would make
+    // every other use of that bitvector claim to be a float.
+    ASTNode* n = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateTerm(
+            FP_TOFP, bits->GetValueWidth(),
+            stp::GlobalParserInterface->CreateBVConst(32, exp_width),
+            stp::GlobalParserInterface->CreateBVConst(32, sig_width), *bits));
+    setFPFormat(n, exp_width, sig_width);
+    delete bits;
+    return n;
+  }
+
+  // (fp sign exp sig) -- build a float from its three bitvector components:
+  // a one-bit sign, an e-bit exponent, and the (s-1)-bit stored significand
+  // (the hidden bit is implicit). SMT-LIB permits each component to be an
+  // arbitrary bitvector term, not just a literal, so concatenate them and
+  // reinterpret the packed bits -- folding to an interned float constant when
+  // every component is literal, exactly as the one-argument to_fp does.
+  ASTNode* createFPFromParts(ASTNode* sign, ASTNode* exp, ASTNode* sig)
+  {
+    checkFpSupported();
+    if (sign->GetType() != BITVECTOR_TYPE || exp->GetType() != BITVECTOR_TYPE ||
+        sig->GetType() != BITVECTOR_TYPE)
+    {
+      fatal_yyerror("fp: the sign, exponent and significand must be bitvectors.");
+    }
+
+    unsigned int sign_bits = sign->GetValueWidth();
+    unsigned int exp_bits = exp->GetValueWidth();
+    unsigned int sig_bits = sig->GetValueWidth();
+
+    if (sign_bits != 1)
+    {
+      fatal_yyerror("fp: the sign must be a one-bit bitvector.");
+    }
+
+    // Plain stack nodes: newNode is only for values handed to bison, and
+    // wrapping the intermediates in it leaked two heap nodes per literal.
+    ASTNode first(stp::GlobalParserInterface->nf->CreateTerm(
+        BVCONCAT, sign_bits + exp_bits, *sign, *exp));
+    ASTNode packed(stp::GlobalParserInterface->nf->CreateTerm(
+        BVCONCAT, sign_bits + exp_bits + sig_bits, first, *sig));
+
+    const unsigned int exp_width = exp_bits;
+    const unsigned int sig_width = sig_bits + sign_bits;
+
+    // The format implied by the component widths gets the same floor the
+    // sort rule enforces; without this, (fp #b0 #b1 #b1) built an
+    // eb = 1 format that every other entrance rejects.
+    checkFpFormatWidths(exp_width, sig_width);
+
+    ASTNode* n;
+    if (packed.GetKind() == BVCONST)
+    {
+      n = stp::GlobalParserInterface->newNode(
+          stp::GlobalParserInterface->nf->CreateFPConst(packed, exp_width,
+                                                        sig_width));
+    }
+    else
+    {
+      n = stp::GlobalParserInterface->newNode(
+          stp::GlobalParserInterface->nf->CreateTerm(
+              FP_TOFP, sign_bits + exp_bits + sig_bits,
+              stp::GlobalParserInterface->CreateBVConst(32, exp_width),
+              stp::GlobalParserInterface->CreateBVConst(32, sig_width), packed));
+    }
+
+    setFPFormat(n, exp_width, sig_width);
+
+    stp::GlobalParserInterface->deleteNode(sign);
+    stp::GlobalParserInterface->deleteNode(exp);
+    stp::GlobalParserInterface->deleteNode(sig);
+    return n;
+  }
+
+  // ((_ to_fp e s) rm f) -- reformat a float under a rounding mode.
+  ASTNode* createFPToFP(unsigned int exp_width, unsigned int sig_width,
+                        ASTNode* rm, ASTNode* expr)
+  {
+    checkFpFormatWidths(exp_width, sig_width);
+    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
+    {
+      fatal_yyerror("expected a rounding mode.");
+    }
+
+    // The rm-taking form of to_fp covers three different operations,
+    // distinguished by the source's sort: reformatting a float, converting a
+    // signed integer held in a bitvector, and converting a real. The first
+    // two are handled; a real cannot be represented here, and STP has no
+    // real sort to reach this rule with anyway.
+    if (expr->GetType() != FLOATINGPOINT_TYPE &&
+        expr->GetType() != BITVECTOR_TYPE)
+    {
+      fatal_yyerror("to_fp's argument must be a float or a bitvector.");
+    }
+
+    ASTNode* n = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->nf->CreateTerm(
+            FP_TOFP, exp_width + sig_width,
+            stp::GlobalParserInterface->CreateBVConst(32, exp_width),
+            stp::GlobalParserInterface->CreateBVConst(32, sig_width), *rm,
+            ASTVec(1, *expr)));
+    setFPFormat(n, exp_width, sig_width);
+    delete rm;
+    delete expr;
     return n;
   }
 
@@ -301,10 +908,19 @@
 #define YYERROR_VERBOSE 1
 #define YY_EXIT_FAILURE -1
 
+
 %}
+
+/* Conflict-free, and pinned that way: the floating-point productions were
+   once one nonterminal reachable from both term and formula position, which
+   alone accounted for 216 shift/reduce and 99 reduce/reduce conflicts. Any
+   grammar change that introduces a conflict now fails the build. */
+%expect 0
 
 %union {
   unsigned uintval; /* for numerals in types. */
+  stp::Kind kind;
+  stp::float_size* fp_size;
 
   //ASTNode,ASTVec
   stp::ASTNode *node;
@@ -319,8 +935,11 @@
 %type <vec> an_formulas an_terms function_params an_mixed
 
 
-%type <node> an_term  an_formula function_param
+%type <node> an_term  an_formula function_param an_const an_fp_term an_fp_predicate an_rounding_mode
+%type <uintval> an_fp_const
 %type <str> info_flag
+
+%type <fp_size> an_fp_sort
 
 %token <uintval> NUMERAL_TOK
 %token <str> BVCONST_DECIMAL_TOK
@@ -331,7 +950,7 @@
 %token  DECIMAL_TOK
 
 %token <node> FORMID_TOK TERMID_TOK
-%token <str> STRING_TOK BITVECTOR_FUNCTIONID_TOK BOOLEAN_FUNCTIONID_TOK
+%token <str> STRING_TOK BITVECTOR_FUNCTIONID_TOK BOOLEAN_FUNCTIONID_TOK FLOATINGPOINT_FUNCTIONID_TOK
 
 
  /* set-info tokens */
@@ -406,6 +1025,14 @@
 %token ARRAY_TOK
 %token BOOL_TOK
 
+/* Types for QF_FP and QF_BVFP. */
+%token FLOATINGPOINT_TOK
+%token ROUNDINGMODE_TOK
+%token FLOAT16_TOK
+%token FLOAT32_TOK
+%token FLOAT64_TOK
+%token FLOAT128_TOK
+
 /* CORE THEORY pg. 29 of the SMT-LIB2 standard 30-March-2010. */
 %token TRUE_TOK;
 %token FALSE_TOK;
@@ -458,6 +1085,56 @@
  /* Functions for QF_ABV. */
 %token SELECT_TOK;
 %token STORE_TOK;
+
+ /* generic FP token*/
+%token FP_TOK
+
+ /* FP conversions */
+%token FP_TOFP_TOK
+%token FP_TOFP_UNSIGNED_TOK
+%token FP_TO_UBV_TOK;
+%token FP_TO_SBV_TOK;
+
+ /* Functions for FP */
+%token FP_ABS_TOK;
+%token FP_NEG_TOK;
+%token FP_ADD_TOK;
+%token FP_SUB_TOK;
+%token FP_MUL_TOK;
+%token FP_DIV_TOK;
+%token FP_FMA_TOK;
+%token FP_SQRT_TOK;
+%token FP_REM_TOK;
+%token FP_ROUNDTOINTEGRAL_TOK;
+%token FP_MIN_TOK;
+%token FP_MAX_TOK;
+%token FP_LEQ_TOK;
+%token FP_LT_TOK;
+%token FP_GEQ_TOK;
+%token FP_GT_TOK;
+%token FP_EQ_TOK;
+%token FP_TO_REAL_TOK;
+%token FP_ISNORMAL_TOK;
+%token FP_ISSUBNORMAL_TOK;
+%token FP_ISZERO_TOK;
+%token FP_ISINFINITE_TOK;
+%token FP_ISNAN_TOK;
+%token FP_ISNEGATIVE_TOK;
+%token FP_ISPOSITIVE_TOK;
+
+ /* fp rounding modes */
+%token FP_RM_ROUNDTOWARDZERO_TOK;
+%token FP_RM_ROUNDNEARESTTIESTOEVEN_TOK;
+%token FP_RM_ROUNDNEARESTTIESTOAWAY_TOK;
+%token FP_RM_ROUNDTOWARDPOSITIVE_TOK;
+%token FP_RM_ROUNDTOWARDNEGATIVE_TOK;
+
+ /* fp constants */
+%token FP_NAN_TOK;
+%token FP_NEG_INF_TOK;
+%token FP_POS_INF_TOK;
+%token FP_NEG_ZERO_TOK;
+%token FP_POS_ZERO_TOK;
 
 %token END 0 "end of file"
 
@@ -623,10 +1300,16 @@ cmdi:
     }
 |
      /* The arguments of these are swallowed by the lexer, which leaves us the
-        parenthesis that closes the command. */
+        parenthesis that closes the command. define-sort is the one of them
+        STP partially implements: a nullary alias for a floating-point sort
+        is registered from the swallowed text; every other shape -- other
+        sorts, parameters -- is answered "unsupported". */
      DEFINE_SORT_TOK
     {
-       stp::GlobalParserInterface->unsupported();
+      if (tryRegisterFpSortAlias(stp::smt2_skipped_text()))
+        stp::GlobalParserInterface->success();
+      else
+        stp::GlobalParserInterface->unsupported();
     }
 |
      DEFINE_FUN_REC_TOK
@@ -666,16 +1349,34 @@ cmdi:
      RESET_TOK
     {
        stp::GlobalParserInterface->reset();
+       // reset clears the logic, and with it the floating-point keywords.
+       stp::SMT2SetFloatTokens(false);
        stp::GlobalParserInterface->success();
     }
 |
      LOGIC_TOK STRING_TOK
     {
-      if (!(0 == strcmp($2->c_str(),"QF_BV") ||
+      const bool fp_logic =
+            0 == strcmp($2->c_str(),"QF_FP") ||
+            0 == strcmp($2->c_str(),"QF_BVFP") ||
+            0 == strcmp($2->c_str(),"QF_ABVFP");
+      if (!(
+            0 == strcmp($2->c_str(),"QF_BV") ||
             0 == strcmp($2->c_str(),"QF_ABV") ||
-            0 == strcmp($2->c_str(),"QF_AUFBV"))) {
+            0 == strcmp($2->c_str(),"QF_AUFBV") ||
+            fp_logic
+            )) {
         yyerror("Wrong input logic");
       }
+      // Fail a well-formed floating-point benchmark on its set-logic line,
+      // not at its first declaration.
+      if (fp_logic) {
+        checkFpSupported();
+      }
+      // The floating-point keywords exist only inside the FP logics;
+      // everywhere else names like "fp" or "NaN" stay ordinary symbols,
+      // exactly as before floating-point support existed.
+      stp::SMT2SetFloatTokens(fp_logic);
       stp::GlobalParserInterface->success();
       delete $2;
     }
@@ -711,7 +1412,29 @@ LPAREN_TOK STRING_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TO
   $$->SetIndexWidth(0);
   $$->SetValueWidth($6);
   delete $2;
+}
+|
+LPAREN_TOK STRING_TOK an_fp_sort RPAREN_TOK
+{
+  $$ = new ASTNode(stp::GlobalParserInterface->LookupOrCreateSymbol($2->c_str()));
+  stp::GlobalParserInterface->addSymbol(*$$);
+  $$->SetExpWidth($3->exp_bits);
+  $$->SetSigWidth($3->sig_bits);
+  $$->SetIndexWidth(0);
+  $$->SetValueWidth($3->exp_bits + $3->sig_bits);
+  delete $2;
+  delete $3;
+}
+|
+LPAREN_TOK STRING_TOK ROUNDINGMODE_TOK RPAREN_TOK
+{
+  // Not implemented: applyFunction substitutes bitvector and float
+  // parameters only. Named here so the failure is this message rather
+  // than a bare syntax error.
+  fatal_yyerror("define-fun: RoundingMode parameters are not supported");
+  $$ = NULL; // fatal_yyerror does not return
 };
+;
 
 /* Returns a vector of parameters.*/
 function_params:
@@ -772,6 +1495,61 @@ STRING_TOK LPAREN_TOK RPAREN_TOK BOOL_TOK an_formula
   stp::GlobalParserInterface->deleteNode($5);
 }
 |
+STRING_TOK LPAREN_TOK RPAREN_TOK ROUNDINGMODE_TOK an_term
+{
+  if ($5->GetType() != stp::BITVECTOR_TYPE || $5->GetValueWidth() != 5)
+  {
+    fatal_yyerror("define-fun: the body is not a rounding mode");
+  }
+
+  ASTVec empty;
+  stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
+
+  delete $1;
+  stp::GlobalParserInterface->deleteNode($5);
+}
+|
+STRING_TOK LPAREN_TOK RPAREN_TOK an_fp_sort an_term
+{
+  if ($5->GetExpWidth() != (unsigned)$4->exp_bits ||
+      $5->GetSigWidth() != (unsigned)$4->sig_bits)
+  {
+    fatal_yyerror("define-fun: the body's floating-point format does not "
+                  "match the declared result sort");
+  }
+
+  ASTVec empty;
+  stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
+
+  delete $1;
+  delete $4;
+  stp::GlobalParserInterface->deleteNode($5);
+}
+|
+STRING_TOK LPAREN_TOK function_params RPAREN_TOK an_fp_sort an_term
+{
+  // This action was empty: the function was silently dropped, and -- worse --
+  // its parameter symbols stayed interned, resolvable as free variables that
+  // were never declared.
+  if ($6->GetExpWidth() != (unsigned)$5->exp_bits ||
+      $6->GetSigWidth() != (unsigned)$5->sig_bits)
+  {
+    fatal_yyerror("define-fun: the body's floating-point format does not "
+                  "match the declared result sort");
+  }
+
+  stp::GlobalParserInterface->storeFunction(*$1, *$3, *$6);
+
+  // Next time the variable is used, we want it to be fresh.
+  for (size_t i = 0; i < $3->size(); i++)
+    stp::GlobalParserInterface->removeSymbol((*$3)[i]);
+
+  delete $1;
+  delete $3;
+  delete $5;
+  stp::GlobalParserInterface->deleteNode($6);
+}
+|
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK an_term
 {
   if ($9->GetValueWidth() != $7)
@@ -797,33 +1575,22 @@ STRING_TOK LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK
 |
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK an_term
 {
-  stp::GlobalParserInterface->unsupported();
+  // A nullary define-fun whose result is an array (bit-vector element). This
+  // is just a name for its body, stored like any other nullary function; the
+  // lexer resolves later references to it back to that body.
+  ASTVec empty;
+  stp::GlobalParserInterface->storeFunction(*$1, empty, *$17);
   delete $1;
   stp::GlobalParserInterface->deleteNode($17);
-
-#if 0
-  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
-  stp::GlobalParserInterface->addSymbol(s);
-  unsigned int index_len = $9;
-  unsigned int value_len = $14;
-  if(index_len > 0) {
-    s.SetIndexWidth($9);
-  }
-  else {
-    fatal_yyerror("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
-  }
-
-  if(value_len > 0) {
-    s.SetValueWidth($14);
-  }
-  else {
-    fatal_yyerror("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
-  }
-
+}
+|
+STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK an_fp_sort RPAREN_TOK an_term
+{
+  // As above, but the array's element type is a floating-point sort.
   ASTVec empty;
-  stp::GlobalParserInterface->storeFunction(*$1,empty, *$17);
-#endif
-
+  stp::GlobalParserInterface->storeFunction(*$1, empty, *$13);
+  delete $1;
+  stp::GlobalParserInterface->deleteNode($13);
 }
 ;
 
@@ -900,6 +1667,43 @@ SOURCE_TOK
 }
 ;
 
+an_fp_sort:
+  // float_size is (exponent bits, significand bits), where the significand
+  // includes the hidden bit -- the same (eb, sb) that (_ FloatingPoint eb sb)
+  // uses. The named sorts had their widths set by naively splitting the total
+  // in two (4+12, 16+48, 32+96) instead of using the IEEE fields, so every
+  // one but Float32 named the wrong format.
+  FLOAT16_TOK
+{
+    checkFpSupported();
+    $$ = new stp::float_size(5, 11);
+}
+| FLOAT32_TOK
+{
+    checkFpSupported();
+    $$ = new stp::float_size(8, 24);
+}
+| FLOAT64_TOK
+{
+    checkFpSupported();
+    $$ = new stp::float_size(11, 53);
+}
+| FLOAT128_TOK
+{
+    checkFpSupported();
+    $$ = new stp::float_size(15, 113);
+}
+| LPAREN_TOK UNDERSCORE_TOK FLOATINGPOINT_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK
+{
+    checkFpSupported();
+    if ($4 < 2 || $5 < 2)
+    {
+      fatal_yyerror("a floating-point format needs at least 2 exponent and "
+                    "2 significand bits");
+    }
+    $$ = new stp::float_size($4, $5);
+}
+;
 
 
 var_decl:
@@ -912,6 +1716,25 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   s.SetIndexWidth(0);
   s.SetValueWidth($7);
   delete $1;
+}
+| STRING_TOK LPAREN_TOK RPAREN_TOK STRING_TOK
+{
+  // The sort position holds a bare name: a define-sort alias. (This used to
+  // match any TERM symbol, so `(declare-fun y () x)` with x a variable
+  // "worked" as an alias use.)
+  unsigned eb, sb;
+  if (!stp::GlobalParserInterface->lookupSortAlias(*$4, eb, sb))
+  {
+    fatal_yyerror("unknown sort (not built in, and not a define-sort alias)");
+  }
+  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  stp::GlobalParserInterface->addSymbol(s);
+  s.SetExpWidth(eb);
+  s.SetSigWidth(sb);
+  s.SetIndexWidth(0);
+  s.SetValueWidth(eb + sb);
+  delete $1;
+  delete $4;
 }
 | STRING_TOK LPAREN_TOK RPAREN_TOK BOOL_TOK
 {
@@ -940,6 +1763,54 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   else {
     fatal_yyerror("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
   }
+  delete $1;
+}
+| STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK an_fp_sort RPAREN_TOK
+{
+  // An array of floats. The element's format lives on the array node, in the
+  // same exponent/significand widths a float uses; a read off it inherits
+  // them (see deriveFPFormat). The value width is the element's packed width,
+  // so the array is laid out exactly like an array of bitvectors.
+  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  stp::GlobalParserInterface->addSymbol(s);
+
+  if ($9 == 0)
+    fatal_yyerror("array index must be of positive length.");
+
+  s.SetIndexWidth($9);
+  s.SetValueWidth($11->exp_bits + $11->sig_bits);
+  s.SetExpWidth($11->exp_bits);
+  s.SetSigWidth($11->sig_bits);
+
+  if (s.GetType() != ARRAY_TYPE)
+    fatal_yyerror("failed to declare an array of floats.");
+
+  delete $1;
+  delete $11;
+}
+| STRING_TOK LPAREN_TOK RPAREN_TOK an_fp_sort
+{
+  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  stp::GlobalParserInterface->addSymbol(s);
+  s.SetExpWidth($4->exp_bits);
+  s.SetSigWidth($4->sig_bits);
+  s.SetIndexWidth(0);
+  s.SetValueWidth($4->exp_bits + $4->sig_bits);
+  delete $1;
+  delete $4;
+}
+| STRING_TOK LPAREN_TOK RPAREN_TOK ROUNDINGMODE_TOK
+{
+  // A rounding mode is carried as a 5-bit one-hot bitvector, so a variable of
+  // that sort is a 5-bit symbol. Declaring it as anything else -- or, as
+  // before, not declaring it at all -- leaves every use of the name
+  // unresolved, and the lexer hands it back as a bare string.
+  // addRoundingModeSymbol also pins the symbol to the five legal encodings,
+  // without which the sort would have 32 values instead of 5.
+  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  s.SetIndexWidth(0);
+  s.SetValueWidth(5);
+  stp::GlobalParserInterface->addRoundingModeSymbol(s);
   delete $1;
 }
 ;
@@ -983,6 +1854,47 @@ STRING_TOK  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
   else {
     fatal_yyerror("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
   }
+  delete $1;
+}
+| STRING_TOK an_fp_sort
+{
+  // The format must land on the symbol, or it types as a Boolean and every
+  // use of the name is a syntax error (this branch used to forget it while
+  // declare-fun's twin set it).
+  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  s.SetExpWidth($2->exp_bits);
+  s.SetSigWidth($2->sig_bits);
+  s.SetIndexWidth(0);
+  s.SetValueWidth($2->exp_bits + $2->sig_bits);
+  stp::GlobalParserInterface->addSymbol(s);
+  delete $1;
+  delete $2;
+}
+| STRING_TOK STRING_TOK
+{
+  // declare-const with a define-sort alias in sort position.
+  unsigned eb, sb;
+  if (!stp::GlobalParserInterface->lookupSortAlias(*$2, eb, sb))
+  {
+    fatal_yyerror("unknown sort (not built in, and not a define-sort alias)");
+  }
+  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  s.SetExpWidth(eb);
+  s.SetSigWidth(sb);
+  s.SetIndexWidth(0);
+  s.SetValueWidth(eb + sb);
+  stp::GlobalParserInterface->addSymbol(s);
+  delete $1;
+  delete $2;
+}
+| STRING_TOK ROUNDINGMODE_TOK
+{
+  // As above: 5 bits, not 0 (a zero-width symbol would be a Boolean), and
+  // pinned to the five legal encodings.
+  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  s.SetIndexWidth(0);
+  s.SetValueWidth(5);
+  stp::GlobalParserInterface->addRoundingModeSymbol(s);
   delete $1;
 }
 ;
@@ -1062,18 +1974,43 @@ TRUE_TOK
   assert(0 == $$->GetIndexWidth());
   assert(0 == $$->GetValueWidth());
 }
-| FORMID_TOK
+|
+FORMID_TOK
 {
   $$ = stp::GlobalParserInterface->newNode(*$1); //todo creating then deleting same?
   stp::GlobalParserInterface->deleteNode($1);
+}
+| LPAREN_TOK an_fp_predicate RPAREN_TOK
+{
+   $$ = $2;
 }
 | LPAREN_TOK EQ_TOK an_terms RPAREN_TOK
 {
   const ASTVec& terms = *$3;
 
+  // Reject an ill-sorted = up front. The simplifying factory folds constant
+  // operands before any type check can see them, so a width mismatch here
+  // would otherwise be "solved" (to false) rather than diagnosed.
+  for (unsigned i = 1; i < terms.size();i++)
+  {
+    if (terms[i].GetValueWidth() != terms[0].GetValueWidth() ||
+        terms[i].GetIndexWidth() != terms[0].GetIndexWidth())
+    {
+      fatal_yyerror("= requires operands of the same sort");
+    }
+  }
+
+  bool one_float = false;
+  for (unsigned i = 0; i < terms.size();i++)
+  {
+    one_float |= (terms[i].GetType() == FLOATINGPOINT_TYPE);
+  }
+
+  Kind k = one_float ? FP_SMT_EQ : EQ;
+
   if (terms.size() ==2)
   {
-    $$ = createNode(EQ, $3);
+    $$ = createNode(k, $3);
   }
   else  if (terms.size() >2) 
   {
@@ -1081,7 +2018,7 @@ TRUE_TOK
     result.reserve(terms.size()-1);
     for (unsigned i =1; i < terms.size();i++)
     {
-        result.push_back(stp::GlobalParserInterface->CreateNode(EQ, terms[i], terms[i-1]));
+        result.push_back(stp::GlobalParserInterface->CreateNode(k, terms[i], terms[i-1]));
     }
     $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(AND, result));
     delete $3;
@@ -1102,8 +2039,13 @@ TRUE_TOK
       it!=itend; it++)
   {
     for(ASTVec::const_iterator it2=it+1; it2!=itend; it2++) {
+      // Equality of floats is FP_SMT_EQ, not the generic EQ -- the same
+      // distinction the (= ...) rule makes. Building plain EQ over float
+      // operands produces a node the later passes reject as a non-formula.
+      const Kind eqk =
+        ((*it).GetType() == FLOATINGPOINT_TYPE) ? FP_SMT_EQ : EQ;
       ASTNode n =
-        stp::GlobalParserInterface->nf->CreateNode(NOT, stp::GlobalParserInterface->CreateNode(EQ, *it, *it2));
+        stp::GlobalParserInterface->nf->CreateNode(NOT, stp::GlobalParserInterface->CreateNode(eqk, *it, *it2));
 
       forms.push_back(n);
     }
@@ -1128,7 +2070,12 @@ TRUE_TOK
   for(ASTVec::const_iterator it=terms.begin(),itend=terms.end();
       it!=itend; it++) {
     for(ASTVec::const_iterator it2=it+1; it2!=itend; it2++) {
-      ASTNode n = (stp::GlobalParserInterface->nf->CreateNode(NOT, stp::GlobalParserInterface->CreateNode(IFF, *it, *it2)));
+      // Floats reach this (an_formulas) distinct rule too, since a
+      // floating-point function-id reduces as a formula. Their equality is
+      // FP_SMT_EQ, not IFF, which only holds between Booleans.
+      const Kind eqk =
+        ((*it).GetType() == FLOATINGPOINT_TYPE) ? FP_SMT_EQ : IFF;
+      ASTNode n = (stp::GlobalParserInterface->nf->CreateNode(NOT, stp::GlobalParserInterface->CreateNode(eqk, *it, *it2)));
       forms.push_back(n);
     }
   }
@@ -1259,9 +2206,29 @@ TRUE_TOK
 {
   const ASTVec& forms = *$3;
 
+  // As with = over terms: catch mismatched operands before the factory can
+  // fold them. A float can reach this rule too (parenthesised fp terms parse
+  // as formulas), in which case its width differs from a Boolean's zero.
+  for (unsigned i = 1; i < forms.size();i++)
+  {
+    if (forms[i].GetValueWidth() != forms[0].GetValueWidth() ||
+        forms[i].GetIndexWidth() != forms[0].GetIndexWidth())
+    {
+      fatal_yyerror("= requires operands of the same sort");
+    }
+  }
+
+  bool one_float = false;
+  for (unsigned i = 0; i < forms.size();i++)
+  {
+    one_float |= (forms[i].GetType() == FLOATINGPOINT_TYPE);
+  }
+
+  Kind k = one_float ? FP_SMT_EQ : IFF;
+
   if (forms.size() ==2)
   {
-    $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(IFF, forms));
+    $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(k, forms));
     delete $3;
   }
   else  if (forms.size() >2) 
@@ -1270,7 +2237,7 @@ TRUE_TOK
     result.reserve(forms.size()-1);
     for (unsigned i =1; i < forms.size();i++)
     {
-        result.push_back(stp::GlobalParserInterface->CreateNode(IFF, forms[i], forms[i-1]));
+        result.push_back(stp::GlobalParserInterface->CreateNode(k, forms[i], forms[i-1]));
     }
     $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(AND, result));
     delete $3;
@@ -1376,6 +2343,229 @@ an_terms an_term
 }
 ;
 
+an_const:
+BVCONST_HEXIDECIMAL_TOK
+{
+  unsigned width = $1->length()*4;
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(*$1, 16, width));
+  $$->SetValueWidth(width);
+  delete $1;
+}
+| BVCONST_BINARY_TOK
+{
+  unsigned width = $1->length();
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(*$1, 2, width));
+  $$->SetValueWidth(width);
+  delete $1;
+}
+| FP_TOK an_term an_term an_term
+{
+  $$ = createFPFromParts($2, $3, $4);
+};
+
+an_rounding_mode:
+  FP_RM_ROUNDTOWARDZERO_TOK
+{
+  int width = 5;
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(width, ROUND_TOWARD_ZERO));
+}
+| FP_RM_ROUNDNEARESTTIESTOEVEN_TOK
+{
+  int width = 5;
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(width, ROUND_NEAREST_TIES_TO_EVEN));
+}
+| FP_RM_ROUNDNEARESTTIESTOAWAY_TOK
+{
+  int width = 5;
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(width, ROUND_NEAREST_TIES_TO_AWAY));
+}
+| FP_RM_ROUNDTOWARDPOSITIVE_TOK
+{
+  int width = 5;
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(width, ROUND_TOWARD_POSITIVE));
+}
+| FP_RM_ROUNDTOWARDNEGATIVE_TOK
+{
+  int width = 5;
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(width, ROUND_TOWARD_NEGATIVE));
+}
+;
+
+an_fp_const:
+  FP_NAN_TOK { $$ = (unsigned)stp::FPSpecial::NaN; }
+| FP_POS_INF_TOK { $$ = (unsigned)stp::FPSpecial::PlusInfinity; }
+| FP_NEG_INF_TOK { $$ = (unsigned)stp::FPSpecial::MinusInfinity; }
+| FP_POS_ZERO_TOK { $$ = (unsigned)stp::FPSpecial::PlusZero; }
+| FP_NEG_ZERO_TOK { $$ = (unsigned)stp::FPSpecial::MinusZero; }
+;
+
+an_fp_term:
+  LPAREN_TOK FP_ABS_TOK an_term RPAREN_TOK
+{
+  $$ = createFPUnary(FP_ABS, $3);
+}
+| LPAREN_TOK FP_NEG_TOK an_term RPAREN_TOK
+{
+  $$ = createFPUnary(FP_NEG, $3);
+}
+| LPAREN_TOK FP_ADD_TOK an_term an_term an_term RPAREN_TOK
+{
+  $$ = createFPArith(FP_ADD, $3, $4, $5);
+}
+| LPAREN_TOK FP_SUB_TOK an_term an_term an_term RPAREN_TOK
+{
+  $$ = createFPArith(FP_SUB, $3, $4, $5);
+}
+| LPAREN_TOK FP_MUL_TOK an_term an_term an_term RPAREN_TOK
+{
+  $$ = createFPArith(FP_MUL, $3, $4, $5);
+}
+| LPAREN_TOK FP_DIV_TOK an_term an_term an_term RPAREN_TOK
+{
+  $$ = createFPArith(FP_DIV, $3, $4, $5);
+}
+| LPAREN_TOK FP_FMA_TOK an_term an_term an_term an_term RPAREN_TOK
+{
+  $$ = createFPFma($3, $4, $5, $6);
+}
+| LPAREN_TOK FP_SQRT_TOK an_term an_term RPAREN_TOK
+{
+  $$ = createFPSqrt($3, $4);
+}
+| LPAREN_TOK FP_REM_TOK an_term an_term RPAREN_TOK
+{
+  $$ = createFPBinary(FP_REM, $3, $4);
+}
+| LPAREN_TOK FP_ROUNDTOINTEGRAL_TOK an_term an_term RPAREN_TOK
+{
+  $$ = createFPRoundToIntegral($3, $4);
+}
+| LPAREN_TOK FP_MIN_TOK an_term an_term RPAREN_TOK
+{
+  $$ = createFPBinary(FP_MIN, $3, $4);
+}
+| LPAREN_TOK FP_MAX_TOK an_term an_term RPAREN_TOK
+{
+  $$ = createFPBinary(FP_MAX, $3, $4);
+}
+| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TO_UBV_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
+{
+  $$ = createFPToBV(FP_TO_UBV, $5, $7, $8);
+}
+| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TO_SBV_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
+{
+  $$ = createFPToBV(FP_TO_SBV, $5, $7, $8);
+}
+| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term RPAREN_TOK
+{
+  // ((_ to_fp e s) bv) reinterprets the bits of a bitvector as an IEEE-754
+  // float. STP already stores floats as their packed bit pattern, so this is
+  // purely a retyping: keep the child and stamp the format onto it.
+  $$ = createFPFromBits($5, $6, $8);
+}
+| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
+{
+  // ((_ to_fp e s) rm f) reformats an existing float under a rounding mode.
+  $$ = createFPToFP($5, $6, $8, $9);
+}
+| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_UNSIGNED_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term an_term RPAREN_TOK
+{
+  $$ = createFPFromUnsignedBV($5, $6, $8, $9);
+}
+| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term DECIMAL_TOK RPAREN_TOK
+{
+  // ((_ to_fp e s) rm 1.5): conversion from a real literal. Deliberately
+  // unsupported -- no QF_FP/QF_BVFP/QF_ABVFP benchmark uses it -- but say
+  // so, rather than a bare syntax error at the literal.
+  fatal_yyerror("real literals are not supported (STP's floating point is "
+                "bit-precise); write the value as its packed bits, e.g. "
+                "((_ to_fp 8 24) #x3fc00000) for 1.5, or as a "
+                "(fp sign exponent significand) literal");
+}
+| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK DECIMAL_TOK RPAREN_TOK
+{
+  fatal_yyerror("real literals are not supported (STP's floating point is "
+                "bit-precise); write the value as its packed bits, e.g. "
+                "((_ to_fp 8 24) #x3fc00000) for 1.5, or as a "
+                "(fp sign exponent significand) literal");
+}
+| LPAREN_TOK FP_TO_REAL_TOK an_term RPAREN_TOK
+{
+  fatal_yyerror("fp.to_real is not supported: STP has no theory of reals");
+}
+| UNDERSCORE_TOK an_fp_const NUMERAL_TOK NUMERAL_TOK
+{
+  // The special values are constants: build the packed interned constant
+  // directly. A childless special-value node would hash-cons every format
+  // of, say, NaN to one node, which whoever parsed last would re-stamp.
+  uint32_t exp_width($3);
+  uint32_t sig_width($4);
+  checkFpFormatWidths(exp_width, sig_width);
+  $$ = stp::GlobalParserInterface->newNode(
+      stp::GlobalParserInterface->CreateFPSpecialConst(
+          (stp::FPSpecial)$2, exp_width, sig_width));
+}
+;
+
+// The Boolean-valued floating-point operations. Split from an_fp_term so
+// that formula position derives exactly these (parenthesised by
+// an_formula's rule) and term position derives exactly the float-valued
+// ones -- the shared nonterminal used to make every fp expression reachable
+// from both, which is where most of the grammar's reduce/reduce conflicts
+// came from.
+an_fp_predicate:
+  FP_LEQ_TOK an_terms
+{
+  $$ = createFPChain(FP_LEQ, $2, "fp.leq");
+}
+| FP_LT_TOK an_terms
+{
+  $$ = createFPChain(FP_LT, $2, "fp.lt");
+}
+| FP_GEQ_TOK an_terms
+{
+  $$ = createFPChain(FP_GEQ, $2, "fp.geq");
+}
+| FP_GT_TOK an_terms
+{
+  $$ = createFPChain(FP_GT, $2, "fp.gt");
+}
+| FP_EQ_TOK an_terms
+{
+  // Through the same helper as the other chainable comparisons, gaining its
+  // operand and format checks (the old inline version had none).
+  $$ = createFPChain(FP_EQ, $2, "fp.eq");
+}
+| FP_ISNORMAL_TOK an_term
+{
+  $$ = createFPPredicate(FP_ISNORMAL, $2);
+}
+| FP_ISSUBNORMAL_TOK an_term
+{
+  $$ = createFPPredicate(FP_ISSUBNORMAL, $2);
+}
+| FP_ISZERO_TOK an_term
+{
+  $$ = createFPPredicate(FP_ISZERO, $2);
+}
+| FP_ISINFINITE_TOK an_term
+{
+  $$ = createFPPredicate(FP_ISINFINITE, $2);
+}
+| FP_ISNAN_TOK an_term
+{
+  $$ = createFPPredicate(FP_ISNAN, $2);
+}
+| FP_ISNEGATIVE_TOK an_term
+{
+  $$ = createFPPredicate(FP_ISNEGATIVE, $2);
+}
+| FP_ISPOSITIVE_TOK an_term
+{
+  $$ = createFPPredicate(FP_ISPOSITIVE, $2);
+}
+;
+
 an_term:
 TERMID_TOK
 {
@@ -1385,6 +2575,21 @@ TERMID_TOK
 | LPAREN_TOK an_term RPAREN_TOK
 {
   $$ = $2;
+} 
+| an_const
+{
+  $$ = $1;
+}
+| an_fp_term
+{
+  $$ = $1;
+}
+| an_rounding_mode
+{
+  /* A rounding mode is a term: it appears in equalities ((= r RNE), and the
+     declaration constraint built from them), so it must be derivable here,
+     not only in the dedicated rounding-mode operand slots. */
+  $$ = $1;
 }
 | SELECT_TOK an_term an_term
 {
@@ -1625,20 +2830,6 @@ TERMID_TOK
   $$->SetValueWidth($3);
   delete $2;
 }
-| BVCONST_HEXIDECIMAL_TOK
-{
-  unsigned width = $1->length()*4;
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(*$1, 16, width));
-  $$->SetValueWidth(width);
-  delete $1;
-}
-| BVCONST_BINARY_TOK
-{
-  unsigned width = $1->length();
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(*$1, 2, width));
-  $$->SetValueWidth(width);
-  delete $1;
-}
 | LPAREN_TOK BITVECTOR_FUNCTIONID_TOK an_mixed RPAREN_TOK
 {
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$2,*$3));
@@ -1648,6 +2839,26 @@ TERMID_TOK
 
   delete $2;
   delete $3;
+}
+| LPAREN_TOK FLOATINGPOINT_FUNCTIONID_TOK an_mixed RPAREN_TOK
+{
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$2,*$3));
+
+  if ($$->GetType() != FLOATINGPOINT_TYPE)
+      yyerror("Must be floating-point type");
+
+  delete $2;
+  delete $3;
+}
+| FLOATINGPOINT_FUNCTIONID_TOK
+{
+  ASTVec empty;
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$1,empty));
+
+  if ($$->GetType() != FLOATINGPOINT_TYPE)
+    yyerror("Must be floating-point type");
+
+  delete $1;
 }
 | BITVECTOR_FUNCTIONID_TOK
 {
@@ -1689,6 +2900,9 @@ TERMID_TOK
 namespace stp {
   int SMT2Parse() {
     GlobalParserInterface->letMgr->frameMode = true;
+    // Each SMT2Parse is one script: the floating-point keywords start
+    // disabled and turn on at an FP set-logic.
+    SMT2SetFloatTokens(false);
     return smt2parse();
   }
 }

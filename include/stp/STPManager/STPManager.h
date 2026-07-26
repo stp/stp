@@ -26,6 +26,7 @@ THE SOFTWARE.
 #define STPMGR_H
 
 #include "stp/AST/ASTBVConst.h"
+#include "stp/AST/ASTFPConst.h"
 #include "stp/AST/ASTInterior.h"
 #include "stp/AST/ASTNode.h"
 #include "stp/AST/ASTSymbol.h"
@@ -39,6 +40,19 @@ THE SOFTWARE.
 
 namespace stp
 {
+
+// The five SMT-LIB floating-point special values. Their nodes are ordinary
+// packed interned constants (see STPMgr::CreateFPSpecialConst); a childless
+// special-value node would hash-cons every format's NaN to one mutable node.
+enum class FPSpecial
+{
+  NaN,
+  PlusInfinity,
+  MinusInfinity,
+  PlusZero,
+  MinusZero,
+};
+
 /*
  * STP Node Manager. Tools for managing AST nodes.
  */
@@ -186,6 +200,8 @@ private:
   // Called by ASTNode constructors to uniqueify ASTBVConst
   ASTBVConst* LookupOrCreateBVConst(ASTBVConst& s);
 
+  ASTFPConst* LookupOrCreateFPConst(ASTFPConst& s);
+
   // Cache of zero/one/max BVConsts of different widths.
   ASTVec zeroes;
   ASTVec ones;
@@ -258,6 +274,38 @@ public:
   ASTNode CreateBVConst(std::string strval, int base, int bit_width);
   ASTNode CreateBVConst(unsigned int width, unsigned long long int bvconst);
   ASTNode charToASTNode(unsigned char* strval, int base, int bit_width);
+
+  DLL_PUBLIC ASTNode CreateFPConst(const stp::ASTNode& bvconst,
+                                   unsigned exp_width, unsigned sig_width);
+
+  // Whether a floating-point node has ever been created in this manager.
+  // Set by the format funnels (CreateFPConst and ASTNode::SetExpWidth), and
+  // gates the floating-point-only passes and pessimisations, so a pure
+  // bitvector problem pays nothing for the floating-point support.
+  bool has_floating_point = false;
+
+  // Symbols declared with SMT-LIB's RoundingMode sort. They are ordinary
+  // 5-bit bitvector symbols everywhere else; the model printers consult
+  // this to print their values by mode name (RNE...) rather than as raw
+  // bits. Maintained by Cpp_interface as declarations go in and out of
+  // scope; C-API rounding-mode variables (vc_fpRoundingModeVar) stay for
+  // the manager's lifetime, like every other C-API symbol.
+  ASTNodeSet rounding_mode_symbols;
+
+  bool isRoundingModeSymbol(const ASTNode& n) const
+  {
+    return rounding_mode_symbols.find(n) != rounding_mode_symbols.end();
+  }
+
+  // The five-way one-hot validity constraint for a RoundingMode symbol:
+  // (or (= s RNE) ... (= s RNA)). Every path that introduces a
+  // RoundingMode variable must assert this (and register the symbol in
+  // rounding_mode_symbols): the sort has exactly five values, the 5-bit
+  // carrier thirty-two.
+  ASTNode roundingModeValidConstraint(const ASTNode& s);
+
+  DLL_PUBLIC ASTNode CreateFPSpecialConst(FPSpecial which, unsigned exp_width,
+                                          unsigned sig_width);
 
   /****************************************************************
    * Create Node functions                                        *

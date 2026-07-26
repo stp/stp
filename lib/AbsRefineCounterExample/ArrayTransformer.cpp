@@ -261,7 +261,8 @@ void ArrayTransformer::assertTransformPostConditions(const ASTNode& term,
   if (!p.second)
     return;
 
-  const Kind k = term.GetKind();
+  // Only consumed by the asserts, which an NDEBUG build compiles out.
+  [[maybe_unused]] const Kind k = term.GetKind();
 
   // Check the array reads / writes have been removed
   assert(READ != k);
@@ -396,6 +397,32 @@ ASTNode ArrayTransformer::TransformFormula(const ASTNode& simpleForm)
       {
         result = simpleForm;
       }
+      break;
+    }
+    case FP_LEQ:
+    case FP_LT:
+    case FP_GEQ:
+    case FP_GT:
+    case FP_EQ:
+    case FP_ISNORMAL:
+    case FP_ISSUBNORMAL:
+    case FP_ISZERO:
+    case FP_ISINFINITE:
+    case FP_ISNAN:
+    case FP_ISNEGATIVE:
+    case FP_ISPOSITIVE:
+    case FP_SMT_EQ:
+    {
+      ASTVec vec;
+      vec.reserve(simpleForm.Degree());
+
+      for (auto it = simpleForm.begin(), itend = simpleForm.end(); it != itend;
+           it++)
+      {
+        vec.push_back(TransformTerm(*it));
+      }
+
+      result = nf->CreateNode(k, vec);
       break;
     }
     default:
@@ -568,6 +595,14 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
       ASTNode CurrentSymbol =
           bm->CreateFreshVariable(term.GetIndexWidth(), term.GetValueWidth(),
                                   "array_" + std::string(arrName.GetName()));
+
+      // Reading an array of floats yields a float. The read node derived its
+      // format from the array, but this fresh variable stands in for the read
+      // from here on and is a leaf, so it has to carry the format itself --
+      // otherwise the element arrives at the blaster as a formatless
+      // bitvector.
+      CurrentSymbol.SetExpWidth(term.GetExpWidth());
+      CurrentSymbol.SetSigWidth(term.GetSigWidth());
 
       result = CurrentSymbol;
 

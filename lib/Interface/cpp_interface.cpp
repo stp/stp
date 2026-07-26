@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Trevor Hansen, Andrew V. Jones
+ * AUTHORS: Trevor Hansen, Andrew Teylu
  *
  * BEGIN DATE: Apr, 2010
  *
@@ -79,6 +79,11 @@ void Cpp_interface::removeFrame()
 {
     // obtain the last frame
     SolverFrame* last = frames.back();
+
+    // The frame's symbols go out of scope with it: drop any rounding-mode
+    // markers so the model printers and reset-assertions don't outlive them.
+    for (const ASTNode& s : last->getSymbols())
+      bm.rounding_mode_symbols.erase(s);
 
     // delete it
     delete last;
@@ -174,6 +179,34 @@ ASTNode Cpp_interface::CreateOneConst(unsigned int width)
   return bm.CreateOneConst(width);
 }
 
+ASTNode Cpp_interface::CreateFPSpecialConst(stp::FPSpecial which,
+                                            unsigned exp_width,
+                                            unsigned sig_width)
+{
+  return bm.CreateFPSpecialConst(which, exp_width, sig_width);
+}
+
+void Cpp_interface::addSortAlias(const std::string& name, unsigned exp_width,
+                                 unsigned sig_width)
+{
+  // SMT-LIB does not allow redefining a sort name.
+  if (sort_aliases.find(name) != sort_aliases.end())
+    FatalError("define-sort: the sort name is already defined");
+  sort_aliases[name] = std::make_pair(exp_width, sig_width);
+}
+
+bool Cpp_interface::lookupSortAlias(const std::string& name,
+                                    unsigned& exp_width,
+                                    unsigned& sig_width) const
+{
+  const auto found = sort_aliases.find(name);
+  if (found == sort_aliases.end())
+    return false;
+  exp_width = found->second.first;
+  sig_width = found->second.second;
+  return true;
+}
+
 ASTNode Cpp_interface::CreateBVConst(string& strval, int base, int bit_width)
 {
   return bm.CreateBVConst(strval, base, bit_width);
@@ -230,6 +263,13 @@ void Cpp_interface::storeFunction(const string& name, const ASTVec& params,
     ASTNode p = bm.CreateFreshVariable(params[i].GetIndexWidth(),
                                        params[i].GetValueWidth(),
                                        "STP_INTERNAL_FUNCTION_NAME");
+    // A floating-point parameter carries its format in the exponent and
+    // significand widths, which CreateFreshVariable does not copy. Without
+    // this the placeholder is a formatless (in fact zero-width) symbol, and
+    // the function body -- e.g. (fp.isNormal f) -- fails to type-check when
+    // it is stored.
+    p.SetExpWidth(params[i].GetExpWidth());
+    p.SetSigWidth(params[i].GetSigWidth());
     fromTo.insert(std::make_pair(params[i], p));
     f.params.push_back(p);
   }
@@ -307,6 +347,7 @@ types Cpp_interface::functionReturnType(const string& name)
   return found->second.function.GetType();
 }
 
+
 ASTNode Cpp_interface::LookupOrCreateSymbol(string name)
 {
   return bm.LookupOrCreateSymbol(name.c_str());
@@ -364,6 +405,22 @@ void Cpp_interface::deleteNode(ASTNode* n)
 void Cpp_interface::addSymbol(ASTNode& s)
 {
   getCurrentSymbols().push_back(s);
+}
+
+void Cpp_interface::addRoundingModeSymbol(ASTNode& s)
+{
+  addSymbol(s);
+  bm.rounding_mode_symbols.insert(s);
+  assertRoundingModeValid(s);
+}
+
+// SMT-LIB's RoundingMode sort has exactly five values; the 5-bit carrier has
+// 32. Pin a declared RoundingMode symbol to the five one-hot encodings.
+// Asserted (rather than built into the blaster) so that every route to a
+// query -- check-sat here, or a C-API query over a parsed file -- sees it.
+void Cpp_interface::assertRoundingModeValid(const ASTNode& s)
+{
+  AddAssert(bm.roundingModeValidConstraint(s));
 }
 
 void Cpp_interface::success()
@@ -444,6 +501,12 @@ void Cpp_interface::resetAssertions()
   // the result cache and the frame stack stay in step.
   bm.Pop();
   bm.Push();
+
+  // The base level's declarations survive reset-assertions, so the validity
+  // constraint attached to each RoundingMode declaration must survive too;
+  // the assertion carrying it was just discarded.
+  for (const ASTNode& s : bm.rounding_mode_symbols)
+    assertRoundingModeValid(s);
 
   // Whatever we last concluded no longer refers to these assertions.
   cache.back() = Entry(SOLVER_UNDECIDED);
@@ -770,8 +833,7 @@ void Cpp_interface::getModel()
     return;
   }
 
-  cout << "(model" << std::endl;
-
+  cout << "(" << std::endl;
   std::ostringstream os;
   GlobalSTP->Ctr_Example->PrintFullCounterExampleSMTLIB2(os);
   cout << os.str();

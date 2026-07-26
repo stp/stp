@@ -120,6 +120,14 @@ void ASTNode::SetIndexWidth(unsigned int _iw) const
 
 unsigned int ASTNode::GetValueWidth() const
 {
+  // Invariant: a float-formatted node stores its packed width as the value
+  // width like any other term (the declaration rules and node builders all
+  // maintain this). The format is never the width's only source -- this
+  // accessor used to derive sig + exp on every call, solver-wide, to paper
+  // over declaration sites that left the value width zero.
+  assert(_int_node_ptr->getSigWidth() == 0 ||
+         _int_node_ptr->getValueWidth() ==
+             _int_node_ptr->getExpWidth() + _int_node_ptr->getSigWidth());
   return _int_node_ptr->getValueWidth();
 }
 
@@ -128,11 +136,225 @@ void ASTNode::SetValueWidth(unsigned int vw) const
   _int_node_ptr->setValueWidth(vw);
 }
 
+// Work out an interior node's floating-point format from its kind and its
+// children, returning false when the node does not denote a float.
+//
+// The format used to be pure per-node state that whoever built the node was
+// expected to stamp on afterwards. That does not survive contact with the
+// preprocessing pipeline: dozens of places rebuild nodes, and any that
+// forgets leaves a float claiming a format of (0, 0), which the blaster does
+// not reject -- it computes the wrong bits, or underflows a width. Deriving
+// the format instead means a rebuilt node cannot lose it, because there is
+// nothing to lose.
+//
+// Leaves still have to store it: a symbol's format is declared, and a
+// constant's is fixed when it is made (see STPMgr::CreateFPConst). Interior
+// nodes are all covered here.
+static bool deriveFPFormat(const ASTNode& n, unsigned int& e, unsigned int& s)
+{
+  switch (n.GetKind())
+  {
+    // to_fp names its target format in its first two children, rather than
+    // inheriting one from an operand. So does the C API's floating-point
+    // *type* node (vc_fpType) -- covering it here is what makes
+    // vc_getExpWidth/vc_getSigWidth work on a type, as documented.
+    case FP_TOFP:
+    case FP_TOFP_UNSIGNED:
+    case FLOATINGPOINT:
+    {
+      if (n.Degree() < 2 || !n[0].isConstant() || !n[1].isConstant())
+        return false;
+
+      e = n[0].GetUnsignedConst();
+      s = n[1].GetUnsignedConst();
+      return e != 0 && s != 0;
+    }
+
+    // A read from an array of floats yields a float in the element's format,
+    // which the array node carries.
+    case READ:
+    {
+      if (n.Degree() < 1)
+        return false;
+
+      e = n[0].GetExpWidth();
+      s = n[0].GetSigWidth();
+      return e != 0 && s != 0;
+    }
+
+    // A store to an array of floats is itself an array of floats: carry the
+    // element format from the array child, so a read over a store chain can
+    // derive its format (the recursion bottoms out at the array symbol,
+    // whose declaration set it).
+    case WRITE:
+    {
+      if (n.Degree() < 1)
+        return false;
+
+      e = n[0].GetExpWidth();
+      s = n[0].GetSigWidth();
+      return e != 0 && s != 0;
+    }
+
+    // A float-valued ITE takes the format of its branches (children 1 and 2,
+    // which share it). Checked first and cheaply because bitvector ITEs are
+    // everywhere: for those the branch carries no format and this returns at
+    // once.
+    case ITE:
+    {
+      if (n.Degree() != 3)
+        return false;
+
+      e = n[1].GetExpWidth();
+      s = n[1].GetSigWidth();
+      if (e == 0)
+      {
+        e = n[2].GetExpWidth();
+        s = n[2].GetSigWidth();
+      }
+      return e != 0 && s != 0;
+    }
+
+    // The rest produce a float in the format of their float operand. Which
+    // child that is varies -- the arithmetic operations lead with a rounding
+    // mode -- and an operand that was folded to a constant may have lost its
+    // own format, so take the first child that has one.
+    case FP_ABS:
+    case FP_NEG:
+    case FP_ADD:
+    case FP_SUB:
+    case FP_MUL:
+    case FP_DIV:
+    case FP_FMA:
+    case FP_SQRT:
+    case FP_REM:
+    case FP_ROUNDTOINTEGRAL:
+    case FP_MIN:
+    case FP_MAX:
+    {
+      for (size_t i = 0; i < n.Degree(); i++)
+      {
+        const unsigned int child_exp = n[i].GetExpWidth();
+        if (child_exp != 0)
+        {
+          e = child_exp;
+          s = n[i].GetSigWidth();
+          return true;
+        }
+      }
+      return false;
+    }
+
+    default:
+      return false;
+  }
+}
+
+// Sentinel cached in _exp_width once derivation has concluded "not a
+// float". Without it every format query on a formatless node re-walks its
+// children -- quadratic on store chains and ITE spines, since WRITE and ITE
+// derive through their children. A later SetExpWidth (from a declaration or
+// the blaster stamping its output) simply overwrites it.
+static const uint32_t FP_NOT_A_FLOAT = 0xFFFFFFFFu;
+
+// Derive once and keep the answer -- positive or negative. The fields are
+// already mutable, and an interior node can hold them, so this costs one
+// walk per node rather than one per query.
+void ASTNode::cacheFPFormat() const
+{
+  unsigned int e = 0;
+  unsigned int s = 0;
+
+  const bool is_float = deriveFPFormat(*this, e, s);
+
+  // A BVCONST has nowhere to put either answer (its setters reject it);
+  // float constants are made as ASTFPConst instead, and re-deriving on a
+  // childless node is cheap.
+  if (GetKind() == BVCONST)
+    return;
+
+  if (!is_float)
+  {
+    _int_node_ptr->setExpWidth(FP_NOT_A_FLOAT);
+    return;
+  }
+
+  _int_node_ptr->setExpWidth(e);
+  _int_node_ptr->setSigWidth(s);
+}
+
+unsigned int ASTNode::GetExpWidth() const
+{
+  unsigned int stored = _int_node_ptr->getExpWidth();
+  if (stored == FP_NOT_A_FLOAT)
+    return 0;
+  if (stored != 0)
+    return stored;
+
+  cacheFPFormat();
+  stored = _int_node_ptr->getExpWidth();
+  return stored == FP_NOT_A_FLOAT ? 0 : stored;
+}
+
+void ASTNode::SetExpWidth(unsigned int _ew) const
+{
+  // A format may be set, re-set to the same value, or cleared -- never
+  // changed. Two contexts disagreeing about a shared node's format is the
+  // hash-consing corruption this trips on.
+  assert(_int_node_ptr->getExpWidth() == 0 ||
+         _int_node_ptr->getExpWidth() == 0xFFFFFFFFu /* not-a-float cache */ ||
+         _ew == 0 || _int_node_ptr->getExpWidth() == _ew);
+  // Every float acquires its format through here (or CreateFPConst), so
+  // this is where the manager learns that floats are in play -- and, on a
+  // build without floating-point support, where the C API's floating-point
+  // entry points get refused. (The parser rejects floating-point input
+  // earlier, with a line number; see checkFpSupported in smt2.y.)
+  if (_ew != 0)
+  {
+#ifndef STP_ENABLE_FLOATING_POINT
+    FatalError("this STP was built without floating-point support; "
+               "reconfigure with -DENABLE_FLOATING_POINT=ON");
+#else
+    _int_node_ptr->nodeManager->has_floating_point = true;
+#endif
+  }
+  _int_node_ptr->setExpWidth(_ew);
+}
+
+unsigned int ASTNode::GetSigWidth() const
+{
+  if (_int_node_ptr->getExpWidth() == FP_NOT_A_FLOAT)
+    return 0;
+
+  const unsigned int stored = _int_node_ptr->getSigWidth();
+  if (stored != 0)
+    return stored;
+
+  cacheFPFormat();
+  return _int_node_ptr->getSigWidth();
+}
+
+void ASTNode::SetSigWidth(unsigned int _sw) const
+{
+  assert(_int_node_ptr->getSigWidth() == 0 || _sw == 0 ||
+         _int_node_ptr->getSigWidth() == _sw);
+  _int_node_ptr->setSigWidth(_sw);
+}
+
 // return the type of the ASTNode:
 //
 // 0 iff BOOLEAN; 1 iff BITVECTOR; 2 iff ARRAY; 3 iff UNKNOWN;
 types ASTNode::GetType() const
 {
+  // Arrays first. An array of floats carries its *element's* format in the
+  // exponent and significand widths, so testing those first would call the
+  // array itself a float.
+  if ((GetIndexWidth() > 0) && (GetValueWidth() > 0))
+    return ARRAY_TYPE;
+
+  if (GetSigWidth() != 0 && GetExpWidth() != 0)
+    return FLOATINGPOINT_TYPE;
+
   if ((GetIndexWidth() == 0) && (GetValueWidth() == 0))
     return BOOLEAN_TYPE;
 

@@ -51,6 +51,15 @@ private:
   ASTNodeMap* SimplifyNegMap;
   ASTNodeMap MultInverseMap;
 
+  // For ArrayWrite Abstraction: map from read-over-write term to
+  // newname.
+  // ASTNodeMap * ReadOverWrite_NewName_Map;
+
+  // For ArrayWrite Refinement: Map new arraynames to
+  // Read-Over-Write terms
+  // ASTNodeMap NewName_ReadOverWrite_Map;
+
+
   NodeFactory* nf;
 
   SubstitutionMap& substitutionMap;

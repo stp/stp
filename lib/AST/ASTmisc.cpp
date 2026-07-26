@@ -204,18 +204,6 @@ void SortByArith(ASTVec& v)
   sort(v.begin(), v.end(), arithless);
 }
 
-bool isAtomic(Kind kind)
-{
-  if (TRUE == kind || FALSE == kind || EQ == kind || BVLT == kind ||
-      BVLE == kind || BVGT == kind || BVGE == kind || BVSLT == kind ||
-      BVSLE == kind || BVSGT == kind || BVSGE == kind || BVUADDO == kind ||
-      BVSADDO == kind || BVUMULO == kind || BVSMULO == kind ||
-      BVUSUBO == kind || BVSSUBO == kind || SYMBOL == kind ||
-      BOOLEXTRACT == kind)
-    return true;
-  return false;
-}
-
 // If there is a lot of sharing in the graph, this will take a long
 // time.  it doesn't mark subgraphs as already having been
 // typechecked.
@@ -259,10 +247,14 @@ void buildListOfSymbols(const ASTNode& n, ASTNodeSet& visited,
 
 void checkChildrenAreBV(const ASTChildren& v, const ASTNode& n)
 {
-  for (auto it = v.begin(), itend = v.end(); it != itend;
-       it++)
+  // A float is carried as its packed bits, so a float-typed child is bits
+  // too. (This check was fully disabled during the floating-point work
+  // because blasted circuits mix float-stamped and plain children; accepting
+  // both types restores it for the genuine errors.)
+  for (auto it = v.begin(), itend = v.end(); it != itend; it++)
   {
-    if (BITVECTOR_TYPE != it->GetType())
+    if (BITVECTOR_TYPE != it->GetType() &&
+        FLOATINGPOINT_TYPE != it->GetType())
     {
       cerr << "The type is: " << it->GetType() << endl;
       FatalError(
@@ -338,6 +330,14 @@ ASTVec FlattenKind(Kind k, const ASTChildren& children, int maxDepth)
   return flat_children;
 }
 
+// Rounding modes are carried as 5-bit one-hot bitvectors, so a well-formed
+// one is any 5-bit bitvector: a literal from the grammar, or a symbol of
+// SMT-LIB's RoundingMode sort.
+static bool isRoundingMode(const ASTNode& n)
+{
+  return n.GetType() == BITVECTOR_TYPE && n.GetValueWidth() == 5;
+}
+
 bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
 {
   // The children of bitvector terms are in turn bitvectors.
@@ -346,7 +346,7 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
   switch (k)
   {
     case BVCONST:
-      if (BITVECTOR_TYPE != n.GetType())
+      if (BITVECTOR_TYPE != n.GetType() && FLOATINGPOINT_TYPE != n.GetType())
         FatalError("BVTypeCheck: The term t does not typecheck, where t = \n",
                    n);
       break;
@@ -357,13 +357,19 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
     case ITE:
       if (n.Degree() != 3)
         FatalError("BVTypeCheck: should have exactly 3 args\n", n);
-      if (BOOLEAN_TYPE != n[0].GetType() || (n[1].GetType() != n[2].GetType()))
+      // The branches must be the same class of value; a float-stamped branch
+      // and a plain bitvector branch of one width are both bits, so those
+      // two types count as one class here.
+      if (BOOLEAN_TYPE != n[0].GetType() ||
+          (n[1].GetType() == BOOLEAN_TYPE) != (n[2].GetType() == BOOLEAN_TYPE))
         FatalError("BVTypeCheck: The term t does not typecheck, where t = \n",
                    n);
       if (n[1].GetValueWidth() != n[2].GetValueWidth())
+      {
         FatalError("BVTypeCheck: length of THENbranch != length of "
                    "ELSEbranch in the term t = \n",
                    n);
+      }
       if (n[1].GetIndexWidth() != n[2].GetIndexWidth())
         FatalError("BVTypeCheck: length of THENbranch != length of "
                    "ELSEbranch in the term t = \n",
@@ -404,8 +410,13 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
         FatalError("First parameter to read should be an array", n[0]);
       if (BITVECTOR_TYPE != n[1].GetType())
         FatalError("Second parameter to read should be a bitvector", n[1]);
-      if (BITVECTOR_TYPE != n[2].GetType())
-        FatalError("Third parameter to read should be a bitvector", n[2]);
+      // The element of an array of floats is a float. It is laid out exactly
+      // like a bitvector of the same width -- the array carries the format --
+      // so everything below this point treats the two alike.
+      if (BITVECTOR_TYPE != n[2].GetType() &&
+          FLOATINGPOINT_TYPE != n[2].GetType())
+        FatalError("Third parameter to write should be a bitvector or a float",
+                   n[2]);
       break;
 
     case BVDIV:
@@ -505,6 +516,259 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
                    "the bitwidth.\n",
                    n);
       break;
+    // The arithmetic operations take a rounding mode as their first child,
+    // then their float operands; the rest take only floats. A rounding mode
+    // is carried as a 5-bit one-hot bitvector (see symbolic_fp.h).
+    case FP_ABS:
+    case FP_NEG:
+    case FP_ADD:
+    case FP_SUB:
+    case FP_MUL:
+    case FP_DIV:
+    case FP_FMA:
+    case FP_SQRT:
+    case FP_REM:
+    case FP_ROUNDTOINTEGRAL:
+    case FP_MIN:
+    case FP_MAX:
+    {
+      unsigned int expected_args;
+      unsigned int first_float;
+
+      switch (k)
+      {
+        case FP_ABS:
+        case FP_NEG:
+          expected_args = 1;
+          first_float = 0;
+          break;
+        case FP_SQRT:
+        case FP_ROUNDTOINTEGRAL:
+          expected_args = 2;
+          first_float = 1;
+          break;
+        case FP_REM:
+          expected_args = 2;
+          first_float = 0;
+          break;
+        // fp.min/fp.max gain a third child -- the choice of zero -- once
+        // FpTotalise has run, so both arities are well formed.
+        case FP_MIN:
+        case FP_MAX:
+          expected_args = n.Degree() == 3 ? 3 : 2;
+          first_float = 0;
+          break;
+        case FP_FMA:
+          expected_args = 4;
+          first_float = 1;
+          break;
+        default: // FP_ADD, FP_SUB, FP_MUL, FP_DIV
+          expected_args = 3;
+          first_float = 1;
+          break;
+      }
+
+      std::string error_msg("");
+      bool failed(false);
+
+      if (n.Degree() != expected_args)
+      {
+        error_msg = "<fp> has the wrong number of arguments";
+        failed = true;
+      }
+      else if (first_float == 1 && !isRoundingMode(n[0]))
+      {
+        error_msg = "first argument to <fp> is not a rounding mode";
+        failed = true;
+      }
+
+      // The trailing choice-of-zero child is a 1-bit bitvector, not a float,
+      // so it is checked separately.
+      const bool has_choice = (k == FP_MIN || k == FP_MAX) && n.Degree() == 3;
+      const unsigned int last_float = has_choice ? n.Degree() - 1 : n.Degree();
+
+      if (!failed && has_choice &&
+          (n[2].GetType() != BITVECTOR_TYPE || n[2].GetValueWidth() != 1))
+      {
+        error_msg = "<fp> min/max's choice of zero is not a 1-bit bitvector";
+        failed = true;
+      }
+
+      for (unsigned int i = first_float; !failed && i < last_float; i++)
+      {
+        if (n[i].GetType() != FLOATINGPOINT_TYPE)
+        {
+          error_msg = "argument to <fp> is not an fp";
+          failed = true;
+        }
+        else if (n[i].GetSigWidth() != n[first_float].GetSigWidth() ||
+                 n[i].GetExpWidth() != n[first_float].GetExpWidth())
+        {
+          error_msg = "arguments to <fp> differ in format";
+          failed = true;
+        }
+      }
+
+      if (failed)
+      {
+        cerr << error_msg << endl;
+        FatalError(error_msg.c_str(), n);
+      }
+      break;
+    }
+
+    // ((_ to_fp e s) bv) is (e, s, bits); ((_ to_fp e s) rm f) is
+    // (e, s, rm, expr). The e/s children record the target format.
+    case FP_TOFP:
+    {
+      std::string error_msg("");
+      bool failed(false);
+
+      if (n.Degree() != 3 && n.Degree() != 4)
+      {
+        error_msg = "to_fp should have 3 or 4 args";
+        failed = true;
+      }
+      else if (!n[0].isConstant() || !n[1].isConstant())
+      {
+        error_msg = "to_fp's format arguments must be constants";
+        failed = true;
+      }
+      // The target format is checked against the e/s children rather than
+      // against the node's own exp/sig widths: the node factory type checks
+      // while creating the node, which is before the parser has had a chance
+      // to stamp the format onto it.
+      else if (n.Degree() == 3)
+      {
+        if (n[2].GetType() != BITVECTOR_TYPE ||
+            n[2].GetValueWidth() !=
+                n[0].GetUnsignedConst() + n[1].GetUnsignedConst())
+        {
+          error_msg = "to_fp's argument is not a bitvector of width e + s";
+          failed = true;
+        }
+      }
+      else if (!isRoundingMode(n[2]))
+      {
+        error_msg = "to_fp's second argument is not a rounding mode";
+        failed = true;
+      }
+      // With a rounding mode the source is either a float to reformat or a
+      // bitvector holding a signed integer to convert.
+      else if (n[3].GetType() != FLOATINGPOINT_TYPE &&
+               n[3].GetType() != BITVECTOR_TYPE)
+      {
+        error_msg = "to_fp's argument is not an fp or a bitvector";
+        failed = true;
+      }
+
+      if (failed)
+      {
+        cerr << error_msg << endl;
+        FatalError(error_msg.c_str(), n);
+      }
+      break;
+    }
+
+    // ((_ to_fp_unsigned e s) rm bv): (e, s, rm, bits).
+    case FP_TOFP_UNSIGNED:
+    {
+      std::string error_msg("");
+      bool failed(false);
+
+      if (n.Degree() != 4)
+      {
+        error_msg = "to_fp_unsigned should have 4 args";
+        failed = true;
+      }
+      else if (!n[0].isConstant() || !n[1].isConstant())
+      {
+        error_msg = "to_fp_unsigned's format arguments must be constants";
+        failed = true;
+      }
+      else if (!isRoundingMode(n[2]))
+      {
+        error_msg = "to_fp_unsigned's second argument is not a rounding mode";
+        failed = true;
+      }
+      else if (n[3].GetType() != BITVECTOR_TYPE)
+      {
+        error_msg = "to_fp_unsigned's argument is not a bitvector";
+        failed = true;
+      }
+
+      if (failed)
+      {
+        cerr << error_msg << endl;
+        FatalError(error_msg.c_str(), n);
+      }
+      break;
+    }
+
+    // ((_ fp.to_ubv m) rm x): (m, rm, x), plus the unspecified value once
+    // FpTotalise has run. Yields a bitvector of width m.
+    case FP_TO_UBV:
+    case FP_TO_SBV:
+    {
+      std::string error_msg("");
+      bool failed(false);
+
+      if (n.Degree() != 3 && n.Degree() != 4)
+      {
+        error_msg = "fp.to_ubv/fp.to_sbv should have 3 or 4 args";
+        failed = true;
+      }
+      else if (!n[0].isConstant())
+      {
+        error_msg = "fp.to_ubv/fp.to_sbv's width must be a constant";
+        failed = true;
+      }
+      else if (n.GetValueWidth() != n[0].GetUnsignedConst())
+      {
+        error_msg = "fp.to_ubv/fp.to_sbv's result width does not match";
+        failed = true;
+      }
+      else if (!isRoundingMode(n[1]))
+      {
+        error_msg =
+            "fp.to_ubv/fp.to_sbv's first argument is not a rounding mode";
+        failed = true;
+      }
+      else if (n[2].GetType() != FLOATINGPOINT_TYPE)
+      {
+        error_msg = "fp.to_ubv/fp.to_sbv's argument is not an fp";
+        failed = true;
+      }
+      else if (n.Degree() == 4 &&
+               (n[3].GetType() != BITVECTOR_TYPE ||
+                n[3].GetValueWidth() != n.GetValueWidth()))
+      {
+        error_msg =
+            "fp.to_ubv/fp.to_sbv's unspecified value has the wrong width";
+        failed = true;
+      }
+
+      if (failed)
+      {
+        cerr << error_msg << endl;
+        FatalError(error_msg.c_str(), n);
+      }
+      break;
+    }
+
+    // fp -> IEEE bits: one float in, an (eb + sb)-bit bitvector out.
+    case FP_TO_IEEE_BV:
+    {
+      if (n.Degree() != 1 || n[0].GetType() != FLOATINGPOINT_TYPE)
+      {
+        FatalError("fp -> IEEE bits takes one floating-point argument", n);
+      }
+      if (n.GetValueWidth() != n[0].GetExpWidth() + n[0].GetSigWidth())
+      {
+        FatalError("fp -> IEEE bits result width must be exp + sig width", n);
+      }
+      break;
+    }
 
     default:
       cerr << _kind_names[k];
@@ -556,13 +820,25 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
       if (n.Degree() != 2)
         FatalError("BVTypeCheck: should have exactly 2 args\n", n);
 
-      if (!(n[0].GetValueWidth() == n[1].GetValueWidth() &&
-            n[0].GetIndexWidth() == n[1].GetIndexWidth()))
+      // The widths must always match. A blasted float keeps its bitvector
+      // shape, so a float-stamped node may be equated with a plain bitvector
+      // of the same width -- but two nodes that BOTH claim to be floats must
+      // agree on the format: (8, 24) and (24, 8) share a total width of 32
+      // yet are different sorts.
+      if (n[0].GetValueWidth() != n[1].GetValueWidth() ||
+          n[0].GetIndexWidth() != n[1].GetIndexWidth() ||
+          (n[0].GetExpWidth() != 0 && n[1].GetExpWidth() != 0 &&
+           (n[0].GetExpWidth() != n[1].GetExpWidth() ||
+            n[0].GetSigWidth() != n[1].GetSigWidth())))
       {
         cerr << "valuewidth of lhs of EQ: " << n[0].GetValueWidth() << endl;
         cerr << "valuewidth of rhs of EQ: " << n[1].GetValueWidth() << endl;
         cerr << "indexwidth of lhs of EQ: " << n[0].GetIndexWidth() << endl;
         cerr << "indexwidth of rhs of EQ: " << n[1].GetIndexWidth() << endl;
+        cerr << "expwidth of lhs of EQ: " << n[0].GetExpWidth() << endl;
+        cerr << "expwidth of rhs of EQ: " << n[1].GetExpWidth() << endl;
+        cerr << "sigwidth of lhs of EQ: " << n[0].GetSigWidth() << endl;
+        cerr << "sigwidth of rhs of EQ: " << n[1].GetSigWidth() << endl;
         FatalError(
             "BVTypeCheck: terms in atomic formulas must be of equal length", n);
       }
@@ -590,8 +866,10 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
                    n);
       }
       if (n[0].GetValueWidth() != n[1].GetValueWidth())
+      {
         FatalError(
             "BVTypeCheck: terms in atomic formulas must be of equal length", n);
+      }
       if (n[0].GetIndexWidth() != n[1].GetIndexWidth())
       {
         FatalError(
@@ -634,7 +912,69 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
         FatalError("BVTypeCheck:ITE must have exactly 3 ChildNodes", n);
       break;
 
+    // The classification predicates: one float in, a Boolean out.
+    case FP_ISNORMAL:
+    case FP_ISSUBNORMAL:
+    case FP_ISZERO:
+    case FP_ISINFINITE:
+    case FP_ISNAN:
+    case FP_ISNEGATIVE:
+    case FP_ISPOSITIVE:
+      if (n.Degree() != 1)
+        FatalError("BVTypeCheck: <fp> predicate takes exactly 1 arg", n);
+      if (n[0].GetType() != FLOATINGPOINT_TYPE)
+        FatalError("BVTypeCheck: argument of <fp> predicate is not an fp", n);
+      break;
+
+    case FP_LEQ:
+    case FP_LT:
+    case FP_GEQ:
+    case FP_GT:
+    case FP_EQ:
+    case FP_SMT_EQ:
+    {
+
+      std::string error_msg("");
+      bool failed(false);
+
+      if (n.Degree() != 2)
+      {
+        error_msg = "<fp> should have exactly 2 args";
+        failed = true;
+      }
+      else if (n[0].GetType() != FLOATINGPOINT_TYPE)
+      {
+        error_msg = "lhs of <fp> is not an fp";
+        failed = true;
+      }
+      else if (n[1].GetType() != FLOATINGPOINT_TYPE)
+      {
+        error_msg = "rhs of <fp> is not an fp";
+        failed = true;
+      }
+      else if (n[0].GetSigWidth() != n[1].GetSigWidth())
+      {
+        error_msg = "arguments to <fp> differ in sig width";
+        cerr << n[0].GetSigWidth() << " " << n[1].GetSigWidth();
+        failed = true;
+      }
+      else if (n[0].GetExpWidth() != n[1].GetExpWidth())
+      {
+        error_msg = "arguments to <fp> differ in exp width";
+        cerr << n[0].GetExpWidth() << " " << n[1].GetExpWidth();
+        failed = true;
+      }
+
+      if (failed)
+      {
+        cerr << error_msg << endl;
+        FatalError(error_msg.c_str(), n);
+      }
+      break;
+    }
+
     default:
+      cerr << _kind_names[k];
       FatalError("BVTypeCheck: Unrecognized kind: ");
       break;
   }

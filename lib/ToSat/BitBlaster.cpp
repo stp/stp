@@ -382,7 +382,8 @@ void BitBlaster<BBNode, BBNodeManagerT>::updateTerm(const ASTNode& n,
   {
     if (bbFixed)
     {
-      b = new FixedBits(n.GetType() == BOOLEAN_TYPE ? 1 : n.GetValueWidth(),
+      const unsigned int num_bits = n.GetValueWidth();
+      b = new FixedBits(n.GetType() == BOOLEAN_TYPE ? 1 : num_bits,
                         n.GetType() == BOOLEAN_TYPE);
       cb->fixedMap->map->insert(std::pair<ASTNode, FixedBits*>(n, b));
       if (debug_bitblaster)
@@ -640,6 +641,7 @@ const BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& _term,
 
   const auto kids_end = term.end();
   const unsigned int num_bits = term.GetValueWidth();
+
   switch (k)
   {
     case BVNOT:
@@ -1004,11 +1006,32 @@ const BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& _term,
       result = tmp_res;
       break;
     }
+    case FP_ABS:
+    case FP_NEG:
+    case FP_ADD:
+    case FP_SUB:
+    case FP_MUL:
+    case FP_DIV:
+    case FP_FMA:
+    case FP_SQRT:
+    case FP_REM:
+    case FP_ROUNDTOINTEGRAL:
+    case FP_MIN:
+    case FP_MAX:
+    case FP_TOFP:
+    case FP_TOFP_UNSIGNED:
+    case FP_TO_UBV:
+    case FP_TO_SBV:
+    case FP_TO_IEEE_BV:
+    {
+      FatalError("BBForm: FP terms should not reach the bit-blaster: ", term);
+      break;
+    }
     default:
       FatalError("BBTerm: Illegal kind to BBTerm", term);
   }
 
-  assert(result.size() == term.GetValueWidth());
+  assert(result.size() == num_bits);
 
   if (debug_do_check)
     check(result, term);
@@ -1180,6 +1203,24 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form,
     case BVSSUBO:
     {
       result = BBOverflow(form, support);
+      break;
+    }
+    case FP_LEQ:
+    case FP_LT:
+    case FP_GEQ:
+    case FP_GT:
+    case FP_EQ:
+    case FP_ISNORMAL:
+    case FP_ISSUBNORMAL:
+    case FP_ISZERO:
+    case FP_ISINFINITE:
+    case FP_ISNAN:
+    case FP_ISNEGATIVE:
+    case FP_ISPOSITIVE:
+    case FP_SMT_EQ:
+    {
+      FatalError("BBForm: FP formulas should not reach the bit-blaster: ",
+                 form);
       break;
     }
     default:
@@ -2288,7 +2329,7 @@ BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::v9(vector<list<BBNode>>& products,
     vector<BBNode> sorted; // The current column (sorted) gets put into here.
     vector<BBNode> prior;  // Prior is always empty in this..
 
-    const unsigned size = products[column].size();
+    [[maybe_unused]] const unsigned size = products[column].size();
     sortingNetworkAdd(support, products[column], sorted, prior);
 
     assert(products[column].size() == 1);

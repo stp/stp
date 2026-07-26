@@ -1,0 +1,93 @@
+/********************************************************************
+ * AUTHORS: Andrew Teylu
+ *
+ * BEGIN DATE: July 2026
+ *
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+********************************************************************/
+
+#ifndef FPTOTALISE_H
+#define FPTOTALISE_H
+
+#include "stp/AST/AST.h"
+#include "stp/STPManager/STPManager.h"
+
+namespace stp
+{
+
+// Makes the partial floating-point operations total.
+//
+// SMT-LIB leaves four operations unspecified on some of their inputs:
+// fp.min and fp.max may return either zero given +0 and -0, and fp.to_ubv
+// and fp.to_sbv may return anything at all for NaN, the infinities, and
+// values out of range for the target width. The blaster needs a concrete
+// value to use in those cases, and it has to be one the solver is free to
+// choose -- but also a *function* of the operands, so that equal inputs give
+// equal results. An unconstrained value per occurrence would give the
+// freedom and lose the congruence, which is unsound for equality reasoning.
+//
+// STP has no uninterpreted functions, but an array is exactly a congruent
+// map: one array per operation and signature, read at an index built from
+// the operands. This pass rewrites each partial operation into a total one
+// carrying that read as an extra child.
+//
+// It has to be a pass rather than something done when the node is built or
+// when it is blasted. Introducing the array during blasting is too late --
+// the solver never sees it, so the counterexample evaluator cannot read a
+// value for it out of the model, and the refinement loop fails to converge.
+// Running here, before the array transformer and before the reads are
+// counted, puts the array in the problem like any other.
+//
+// A pleasant side effect: the extra child is not constant, so these nodes
+// stop being candidates for constant folding, which is what we want. Their
+// results genuinely are not constants even when their operands are.
+class FpTotalise // not copyable
+{
+public:
+  FpTotalise(STPMgr* bm_);
+
+  FpTotalise(const FpTotalise&) = delete;
+  FpTotalise& operator=(const FpTotalise&) = delete;
+
+  // Returns `n` with every partial floating-point operation replaced by its
+  // total form. Idempotent: operations that already carry an unspecified
+  // value are left alone.
+  ASTNode topLevel(const ASTNode& n);
+
+private:
+  ASTNode visit(const ASTNode& n);
+
+  // Rebuild `n` around new children, preserving its widths -- including the
+  // floating-point format, which is per-node state that rebuilding drops.
+  ASTNode rebuild(const ASTNode& n, const ASTVec& children);
+
+  // The array read supplying the unspecified value. `prefix`, when not null,
+  // is prepended to the index; `floats` are canonicalised before being
+  // concatenated into it.
+  ASTNode unspecified(const char* tag, const ASTNode& prefix,
+                      const ASTVec& floats, unsigned int value_width);
+
+  STPMgr* bm;
+  NodeFactory* nf;
+  ASTNodeMap cache;
+};
+
+} // namespace stp
+
+#endif

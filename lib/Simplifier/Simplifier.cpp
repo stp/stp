@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/Simplifier.h"
+#include "stp/FloatBlaster/FloatBlaster.h"
 #include <cassert>
 #include <cmath>
 
@@ -439,6 +440,68 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
       // factory) and honour pushNeg.
       output = nf->CreateNode(kind, left, right);
       output = pushNeg ? nf->CreateNode(NOT, output) : output;
+      break;
+    }
+    case FP_LEQ:
+    case FP_LT:
+    case FP_GEQ:
+    case FP_GT:
+    case FP_EQ:
+    case FP_ISNORMAL:
+    case FP_ISSUBNORMAL:
+    case FP_ISZERO:
+    case FP_ISINFINITE:
+    case FP_ISNAN:
+    case FP_ISNEGATIVE:
+    case FP_ISPOSITIVE:
+    case FP_SMT_EQ:
+    {
+      // Rebuild at the node's real arity: the comparisons are binary but the
+      // classification predicates are unary.
+      //
+      // The exponent/significand widths are carried on the node rather than
+      // implied by its kind, so a simplified operand can come back without
+      // them (a folded constant, say, which is just a bitvector). Copy the
+      // format across from the original child, or the blaster sees operands
+      // that disagree about their format.
+      ASTVec simplified;
+      simplified.reserve(a.Degree());
+
+      for (unsigned int i = 0; i < a.Degree(); i++)
+        simplified.push_back(FloatBlaster::withFormat(
+            _bm, SimplifyTerm(a[i], VarConstMap), a[i].GetExpWidth(),
+            a[i].GetSigWidth()));
+
+      ASTNode temp(nf->CreateNode(kind, simplified));
+
+      // The factory may have rewritten the predicate rather than built it:
+      // constant operands fold to true/false, and the same-operand rules
+      // fire (fp.leq of a term with itself comes back as (not (fp.isNaN
+      // ...))) -- interned constants compare pointer-equal, so equal values
+      // are the same operand. What came back is an ordinary formula:
+      // simplify it, never blast it.
+      if (temp.GetKind() != kind)
+      {
+        output = pushNeg
+                     ? SimplifyFormula(nf->CreateNode(NOT, temp), VarConstMap)
+                     : SimplifyFormula(temp, VarConstMap);
+        break;
+      }
+
+      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(_bm, temp));
+
+      assert(blasted != temp);
+      assert(blasted != a);
+
+      if (pushNeg)
+      {
+        output = SimplifyFormula(nf->CreateNode(NOT, blasted), VarConstMap);
+      }
+      else
+      {
+        output = SimplifyFormula(blasted, VarConstMap);
+      }
+
       break;
     }
     default:
@@ -1330,7 +1393,7 @@ ASTNode Simplifier::pullUpBVSX(ASTNode output)
   assert(output.GetChildren().size() == 2);
   assert(output[0].GetKind() == BVSX);
   assert(output[1].GetKind() == BVSX);
-  const Kind k = output.GetKind();
+  [[maybe_unused]] const Kind k = output.GetKind();
 
   assert(BVMULT == k || SBVDIV == k || BVPLUS == k);
   const int inputValueWidth = output.GetValueWidth();
@@ -1441,6 +1504,17 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
           v.push_back(SimplifyTerm(toProcess[i], VarConstMap));
         else if (toProcess[i].GetType() == BOOLEAN_TYPE)
           v.push_back(SimplifyFormula(toProcess[i], VarConstMap));
+        // Simplifying a floating-point child lowers it to bitvectors, and
+        // is what makes nested floating-point expressions terminate: the
+        // rebuilt-children check below otherwise never fires, and
+        // SimplifyTerm re-enters on the same term until the stack runs out.
+        // Historically this same line made several satisfiable QF_ABVFP
+        // queries answer unsat; both causes -- rebuilds dropping the
+        // per-node float format, and the operand sort inverting the
+        // floating-point comparisons -- were fixed in fbb96cd8, and the
+        // nested-fp lit tests pin the behaviour.
+        else if (toProcess[i].GetType() == FLOATINGPOINT_TYPE)
+          v.push_back(SimplifyTerm(toProcess[i], VarConstMap));
         else
           v.push_back(toProcess[i]);
       }
@@ -1450,6 +1524,15 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm,
       {
         output = nf->CreateArrayTerm(k, actualInputterm.GetIndexWidth(),
                                      inputValueWidth, v);
+
+        // Rebuilding drops the floating-point format, which is per-node state
+        // rather than something the kind implies. Carry it over: the rebuilt
+        // node has the same kind and children, so it denotes a float of the
+        // same format, and everything downstream (the blaster in particular)
+        // reads the format off the node.
+        output = FloatBlaster::withFormat(_bm, output,
+                                          actualInputterm.GetExpWidth(),
+                                          actualInputterm.GetSigWidth());
       }
       else
         output = actualInputterm;
@@ -2511,6 +2594,85 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
           output.GetChildren()[0].GetKind() == BVSX &&
           output.GetChildren()[1].GetKind() == BVSX)
         output = pullUpBVSX(output);
+
+      break;
+    }
+    case FP_ABS:
+    case FP_NEG:
+    case FP_ADD:
+    case FP_SUB:
+    case FP_MUL:
+    case FP_DIV:
+    case FP_FMA:
+    case FP_SQRT:
+    case FP_REM:
+    case FP_ROUNDTOINTEGRAL:
+    case FP_MIN:
+    case FP_MAX:
+    case FP_TOFP:
+    case FP_TOFP_UNSIGNED:
+    case FP_TO_UBV:
+    case FP_TO_SBV:
+    case FP_TO_IEEE_BV:
+    {
+      // Rebuild with the same kind and arity. Only the float operands are
+      // simplified: the other children -- the rounding mode of the arithmetic
+      // operations, and to_fp's format arguments -- are constants that the
+      // blaster reads directly, so simplifying them buys nothing and risks
+      // rewriting them into a form it does not recognise.
+      ASTVec simplified;
+      simplified.reserve(inputterm.Degree());
+
+      for (unsigned int i = 0; i < inputterm.Degree(); i++)
+      {
+        if (inputterm[i].GetType() != FLOATINGPOINT_TYPE)
+        {
+          simplified.push_back(inputterm[i]);
+          continue;
+        }
+
+        // As above: put the format back, which the simplified node may have
+        // lost -- and which a folded constant cannot hold without being
+        // re-made as an ASTFPConst.
+        simplified.push_back(FloatBlaster::withFormat(
+            _bm, SimplifyTerm(inputterm[i], VarConstMap),
+            inputterm[i].GetExpWidth(), inputterm[i].GetSigWidth()));
+      }
+
+      ASTNode temp(
+          nf->CreateTerm(k, inputterm.GetValueWidth(), simplified));
+      temp.SetExpWidth(inputterm.GetExpWidth());
+      temp.SetSigWidth(inputterm.GetSigWidth());
+
+      // The factory may have folded the operation to a constant once its
+      // operands were simplified (abs/neg of a constant, x*1.0, x/1.0). That
+      // folded constant is the simplified term; otherwise blast the operation.
+      // The blaster only handles operations, so a constant must not reach it.
+      if (temp.isConstant())
+      {
+        output = temp;
+      }
+      else
+      {
+        ASTNode blasted(FloatBlaster::BlastNode_TopLevel(_bm, temp));
+
+        assert(blasted != temp);
+        assert(blasted != inputterm);
+
+        output = SimplifyTerm(blasted, VarConstMap);
+      }
+
+      // Only re-make the result as a floating-point constant when the
+      // operation actually produces a float. fp.to_ubv/fp.to_sbv produce a
+      // bitvector, and a float-stamped constant is a distinct node from the
+      // plain constant with the same bits -- stamping there would make the
+      // folded integer compare unequal to the identical constant written in
+      // the input.
+      if (inputterm.GetExpWidth() != 0)
+      {
+        output = FloatBlaster::withFormat(_bm, output, inputterm.GetExpWidth(),
+                                          inputterm.GetSigWidth());
+      }
 
       break;
     }

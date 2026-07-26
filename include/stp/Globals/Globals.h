@@ -59,13 +59,18 @@ enum inputStatus
   TO_BE_UNKNOWN // Specified in the input file as unknown.
 };
 
-// return types for the GetType() function in ASTNode class
+// return types for the GetType() function in ASTNode class.
+// FLOATINGPOINT_TYPE is appended after UNKNOWN_TYPE, not slotted in
+// sort order: the C API's type_t mirrors these values numerically
+// (getType casts), and appending keeps the values compiled into
+// pre-floating-point clients valid.
 enum types
 {
   BOOLEAN_TYPE = 0,
   BITVECTOR_TYPE,
   ARRAY_TYPE,
-  UNKNOWN_TYPE
+  UNKNOWN_TYPE,
+  FLOATINGPOINT_TYPE
 };
 
 enum SOLVER_RETURN_TYPE

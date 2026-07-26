@@ -201,11 +201,10 @@ void CryptoMiniSat5::solveAndDump()
 // Count how many literals/bits get fixed subject to the assumptions..
 uint32_t CryptoMiniSat5::getFixedCountWithAssumptions(const stp::SATSolver::vec_literals& assumps, const std::unordered_set<unsigned>& literals )
 {
-  const uint64_t conf = s->get_sum_conflicts();
+  [[maybe_unused]] const uint64_t conf = s->get_sum_conflicts();
   assert(conf == 0);
 
-
-  const CMSat::lbool r = s->simplify();  
+  [[maybe_unused]] const CMSat::lbool r = s->simplify();
 
    
   // Add the assumptions are clauses.

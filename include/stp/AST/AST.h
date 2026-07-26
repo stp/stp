@@ -52,7 +52,6 @@ struct ExprLess
     return n1.GetNodeNum() < n2.GetNodeNum();
   }
 };
-bool isAtomic(Kind k);
 bool isCommutative(const Kind k);
 bool containsArrayOps(const ASTNode& n, STPMgr* stp);
 bool numberOfReadsLessThan(const ASTNode& n, int v);

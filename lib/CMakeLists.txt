@@ -24,6 +24,7 @@ add_definitions(-D STP_EXPORTS)
 add_subdirectory(Globals)
 add_subdirectory(AST)
 add_subdirectory(AbsRefineCounterExample)
+add_subdirectory(FloatBlaster)
 add_subdirectory(Simplifier)
 add_subdirectory(Printer)
 add_subdirectory(Parser)
@@ -49,6 +50,7 @@ set(stp_lib_targets
     abstractionrefinement
     tosat
     sat
+    floatblaster
     simplifier
     constantbv
     cinterface
@@ -91,7 +93,7 @@ add_library(stp
 
 # Set the public header so it will be installed
 set_target_properties(stp PROPERTIES
-    PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/c_interface.h"
+    PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/c_interface.h;${PROJECT_SOURCE_DIR}/include/stp/fp.hpp"
     VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     SOVERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
 )

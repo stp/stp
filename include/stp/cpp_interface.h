@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Trevor Hansen, Andrew V. Jones
+ * AUTHORS: Trevor Hansen, Andrew Teylu
  *
  * BEGIN DATE: Apr, 2010
  *
@@ -29,6 +29,7 @@ THE SOFTWARE.
 #include "stp/NodeFactory/NodeFactory.h"
 #include "stp/Util/Attributes.h"
 #include "extlib-unordered-dense/ankerl/unordered_dense.h"
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -42,10 +43,21 @@ namespace stp
 struct UserDefinedFlags;
 class STPMgr;
 class LetMgr;
+enum class FPSpecial; // see STPManager.h
+
+// The (exponent bits, significand bits) of a parsed floating-point sort;
+// parser plumbing (bison's %union carries a pointer to one).
+struct float_size
+{
+  explicit float_size(int exp, int sig) : exp_bits(exp), sig_bits(sig) {}
+  int exp_bits;
+  int sig_bits;
+};
 
 class Cpp_interface
 {
   STPMgr& bm;
+  std::map<std::string, std::pair<unsigned, unsigned>> sort_aliases;
   bool alreadyWarned;
   bool print_success;
   bool ignoreCheckSatRequest;
@@ -116,6 +128,7 @@ class Cpp_interface
   void init();
   void addFrame();
   void removeFrame();
+  void assertRoundingModeValid(const ASTNode& s);
 
   bool produce_models;
   bool changed_model_status;
@@ -155,6 +168,19 @@ public:
   // TERMS//
   DLL_PUBLIC ASTNode CreateZeroConst(unsigned int width);
   DLL_PUBLIC ASTNode CreateOneConst(unsigned int width);
+  DLL_PUBLIC ASTNode CreateFPSpecialConst(stp::FPSpecial which,
+                                          unsigned exp_width,
+                                          unsigned sig_width);
+
+  // define-sort aliases for floating-point sorts. A real table: the alias
+  // name is NOT interned as a symbol (the old scheme made the sort name
+  // resolvable as a term variable). Aliases are global, not frame-scoped.
+  DLL_PUBLIC void addSortAlias(const std::string& name, unsigned exp_width,
+                               unsigned sig_width);
+  DLL_PUBLIC bool lookupSortAlias(const std::string& name,
+                                  unsigned& exp_width,
+                                  unsigned& sig_width) const;
+
   DLL_PUBLIC ASTNode CreateBVConst(std::string& strval, int base,
                                    int bit_width);
   DLL_PUBLIC ASTNode CreateBVConst(const char* const strval, int base);
@@ -175,9 +201,10 @@ public:
   DLL_PUBLIC bool isBitVectorFunction(const std::string& name);
   DLL_PUBLIC bool isBooleanFunction(const std::string& name);
   // Classify a name in a single map probe: returns the function's return
-  // type (BITVECTOR_TYPE or BOOLEAN_TYPE), or UNKNOWN_TYPE when the name
-  // is not a stored function. Lets the lexer avoid a second probe that
-  // calling both isBitVectorFunction and isBooleanFunction would cost.
+  // type (BITVECTOR_TYPE, BOOLEAN_TYPE or FLOATINGPOINT_TYPE), or
+  // UNKNOWN_TYPE when the name is not a stored function. Lets the lexer
+  // avoid the extra probes that calling the individual is*Function
+  // predicates would cost.
   DLL_PUBLIC types functionReturnType(const std::string& name);
   bool hasFunctions() const { return !functions.empty(); }
 
@@ -204,6 +231,14 @@ public:
 
   DLL_PUBLIC void deleteNode(ASTNode* n);
   DLL_PUBLIC void addSymbol(ASTNode& s);
+
+  // Declare a symbol of SMT-LIB's RoundingMode sort: registers it like
+  // addSymbol, marks it for the model printers, and asserts that it takes
+  // one of the five one-hot mode encodings. The sort has exactly five
+  // values but the 5-bit carrier has 32; without the constraint a model
+  // can pick an encoding that denotes no rounding mode at all (e.g.
+  // "r differs from all five modes" used to answer sat).
+  DLL_PUBLIC void addRoundingModeSymbol(ASTNode& s);
 
   DLL_PUBLIC void success();
   DLL_PUBLIC void error(std::string msg);
@@ -245,5 +280,7 @@ public:
 /// Export version of Cnf_ClearMemory.
 DLL_PUBLIC void CNFClearMemory();
 }
+
+
 
 #endif

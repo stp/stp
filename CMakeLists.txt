@@ -742,6 +742,51 @@ endif()
 find_package(Perl REQUIRED)
 
 # -----------------------------------------------------------------------------
+# Floating-point support (opt-out; uses the header-only SymFPU library)
+# -----------------------------------------------------------------------------
+# SymFPU (BSD 3-Clause) is vendored as a pinned submodule, the same
+# arrangement as mimalloc above, so the default build has floating-point
+# support with nothing to install. When OFF, everything floating-point
+# stays out of the build except the always-compiled AST/parser/API surface,
+# which recognises floating-point input and rejects it with a "built
+# without floating-point support" error (see FloatBlaster.cpp's stubs and
+# checkFpSupported in smt2.y). The public headers and the libstp ABI are
+# identical either way.
+
+option(ENABLE_FLOATING_POINT
+       "SMT-LIB floating-point support (uses the vendored SymFPU library)" ON)
+add_feature_info(FloatingPoint ENABLE_FLOATING_POINT
+                 "Enables SMT-LIB floating-point support (via SymFPU)")
+
+if (ENABLE_FLOATING_POINT)
+    # The vendored submodule is the default; -DSYMFPU_INCLUDE_DIRS=<dir
+    # that CONTAINS a symfpu clone> overrides it with an external copy.
+    if (NOT SYMFPU_INCLUDE_DIRS)
+        set(SYMFPU_INCLUDE_DIRS "${PROJECT_SOURCE_DIR}/lib/extlib-symfpu")
+    endif()
+
+    find_package(SymFPU)
+
+    if (SymFPU_FOUND)
+        message(STATUS "OK, found SymFPU include dirs under ${SYMFPU_INCLUDE_DIRS}")
+    else()
+        message(FATAL_ERROR
+            "SymFPU (header-only, required for the floating-point support) "
+            "was not found. It is vendored as a submodule: run "
+            "git submodule update --init lib/extlib-symfpu/symfpu. An "
+            "external clone of https://github.com/martin-cs/symfpu works "
+            "too, via -DSYMFPU_INCLUDE_DIRS=<directory that CONTAINS the "
+            "symfpu clone>. To build without floating-point support, "
+            "configure with -DENABLE_FLOATING_POINT=OFF.")
+    endif()
+
+    # Let's get clean builds ...
+    include_directories(SYSTEM ${SYMFPU_INCLUDE_DIRS})
+
+    add_definitions(-DSTP_ENABLE_FLOATING_POINT)
+endif()
+
+# -----------------------------------------------------------------------------
 # Query definitions
 # -----------------------------------------------------------------------------
 get_directory_property( DirDefs DIRECTORY ${CMAKE_SOURCE_DIR} COMPILE_DEFINITIONS )
