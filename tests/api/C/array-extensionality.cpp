@@ -777,6 +777,25 @@ TEST(array_extensionality, flag_on_without_equalities_is_dormant)
   EXPECT_EQ(7u, values[0][3]);
 }
 
+TEST(array_extensionality, mixed_width_equality_dies_loudly)
+{
+  // vc_eqExpr over arrays of different index widths cannot be
+  // abstracted; with the option on the width check is a fatal error
+  // rather than a silently mistyped node the solve would trip over
+  // later.
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv8 = vc_bvType(vc, 8);
+  Type bv4 = vc_bvType(vc, 4);
+  Expr a = vc_varExpr(vc, "a", vc_arrayType(vc, bv4, bv8));
+  Expr b = vc_varExpr(vc, "b", vc_arrayType(vc, bv8, bv8));
+
+  EXPECT_DEATH(vc_eqExpr(vc, a, b),
+               "identical index and element widths");
+  vc_Destroy(vc);
+}
+
 TEST(array_extensionality, flag_off_preserves_eq_node)
 {
   // Default-off: an array equality still builds an ordinary EQ node

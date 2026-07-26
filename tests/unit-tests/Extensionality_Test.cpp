@@ -1136,25 +1136,66 @@ TEST_F(ExtPrepareTest, MissingAnchorFailsLoudly)
                "witness-read defining equation was lost");
 }
 
+// The other recovery refusal: the anchor still holds a read, but at
+// an index that is not this record's witness index. Witness indices
+// are protected from substitution, so the shape is unreachable in a
+// correct solve -- and must stay a loud error, never a guessed
+// operand.
+TEST_F(ExtPrepareTest, RewrittenWitnessIndexFailsLoudly)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b");
+  ASTNode mu = bv("mu");
+  ASTNode proxy = ext->makeEquality(a, b);
+  (void)proxy;
+  ASSERT_EQ(1u, ext->getRecords().size());
+  const ExtensionalityContext::Record r = ext->getRecords()[0];
+
+  ext->beginSolve();
+  // The left anchor's witness read rebuilt over a foreign index; the
+  // rest of the bundle intact.
+  ASTNode badRead = hf->CreateTerm(READ, 2, r.constructionLeft, mu);
+  ASTVec conjuncts;
+  conjuncts.push_back(hf->CreateNode(EQ, r.nameL, badRead));
+  conjuncts.push_back(r.anchorR);
+  conjuncts.push_back(r.witnessClause);
+  EXPECT_DEATH(ext->prepare(hf->CreateNode(AND, conjuncts)),
+               "witness read's index was rewritten away");
+}
+
 // The decision table combining STP's own model evaluation with the
 // array consistency check: an array conflict always takes priority
 // (only its lemma can rule the candidate out), and a candidate is
-// satisfiable only when both checks pass.
+// satisfiable only when both checks pass. All sixteen cells.
 TEST(ExtCertification, TruthTable)
 {
   typedef ExtensionalityContext EC;
-  // registry empty: EXTCHK skipped; ordinary result decides
+  // registry empty: EXTCHK skipped; ordinary result decides. (A
+  // consistent verdict without a registry is tolerated identically;
+  // conflict or witness trouble from a checker that had nothing to
+  // check is an internal error.)
   EXPECT_EQ(EC::RETURN_SAT,
             EC::decideCertification(true, false, EC::EXT_SKIPPED));
   EXPECT_EQ(EC::RUN_HOST_REFINEMENT,
             EC::decideCertification(false, false, EC::EXT_SKIPPED));
+  EXPECT_EQ(EC::RETURN_SAT,
+            EC::decideCertification(true, false, EC::EXT_CONSISTENT));
+  EXPECT_EQ(EC::RUN_HOST_REFINEMENT,
+            EC::decideCertification(false, false, EC::EXT_CONSISTENT));
   EXPECT_EQ(EC::INTERNAL_ERROR,
             EC::decideCertification(true, false, EC::EXT_CONFLICT));
+  EXPECT_EQ(EC::INTERNAL_ERROR,
+            EC::decideCertification(false, false, EC::EXT_CONFLICT));
+  EXPECT_EQ(EC::INTERNAL_ERROR,
+            EC::decideCertification(true, false, EC::EXT_WITNESS_ERROR));
   EXPECT_EQ(EC::INTERNAL_ERROR,
             EC::decideCertification(false, false, EC::EXT_WITNESS_ERROR));
 
   // registry nonempty: EXTCHK conflict has priority over both ordinary
-  // results; SAT only for ordinary-true + consistent.
+  // results; SAT only for ordinary-true + consistent; a skipped check
+  // despite a nonempty registry is an internal error whatever the
+  // ordinary result was, since cone reads are exempt from ordinary
+  // refinement and only the checker polices them.
   EXPECT_EQ(EC::RETURN_SAT,
             EC::decideCertification(true, true, EC::EXT_CONSISTENT));
   EXPECT_EQ(EC::ADD_EXT_LEMMA,
@@ -1169,6 +1210,8 @@ TEST(ExtCertification, TruthTable)
             EC::decideCertification(false, true, EC::EXT_WITNESS_ERROR));
   EXPECT_EQ(EC::INTERNAL_ERROR,
             EC::decideCertification(true, true, EC::EXT_SKIPPED));
+  EXPECT_EQ(EC::INTERNAL_ERROR,
+            EC::decideCertification(false, true, EC::EXT_SKIPPED));
 }
 
 } // namespace
