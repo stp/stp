@@ -30,6 +30,7 @@ THE SOFTWARE.
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/STPManager/STP.h"
 #include <gtest/gtest.h>
+#include <map>
 
 TEST(array_extensionality, positive_equality_unsat)
 {
@@ -727,6 +728,7 @@ TEST(array_extensionality, flag_on_without_equalities_is_dormant)
   // constraints leave free.
   unsigned values[2][4];
   int verdicts[2];
+  std::map<unsigned, unsigned> entries[2];
   for (int flag = 0; flag < 2; flag++)
   {
     VC vc = vc_createValidityChecker();
@@ -758,6 +760,25 @@ TEST(array_extensionality, flag_on_without_equalities_is_dormant)
     values[flag][3] = getBVUnsigned(vc_getCounterExample(
         vc, vc_readExpr(vc, a, vc_bvConstExprFromInt(vc, 4, 3))));
 
+    // Dormant array-model surface: with the option on but no equality
+    // anywhere, vc_getCounterExampleArray runs its sorted extraction
+    // against a counterexample populated purely by classic refinement.
+    // As a set of entries it must agree with the option-off surface
+    // (the ascending order is the one deliberate difference).
+    Expr* idxE;
+    Expr* valE;
+    int size = 0;
+    vc_getCounterExampleArray(vc, a, &idxE, &valE, &size);
+    for (int x = 0; x < size; x++)
+    {
+      entries[flag][getBVUnsigned(idxE[x])] = getBVUnsigned(valE[x]);
+      if (flag && x > 0)
+      {
+        EXPECT_LT(getBVUnsigned(idxE[x - 1]), getBVUnsigned(idxE[x]));
+      }
+    }
+    vc_deleteCounterExampleArray(idxE, valE, size);
+
     stp::STPMgr* bm = ((stp::STP*)vc)->bm;
     if (flag)
     {
@@ -775,6 +796,9 @@ TEST(array_extensionality, flag_on_without_equalities_is_dormant)
   }
   EXPECT_EQ(42u, values[0][0]);
   EXPECT_EQ(7u, values[0][3]);
+  EXPECT_EQ(entries[0], entries[1]);
+  EXPECT_EQ(1u, entries[0].count(3));
+  EXPECT_EQ(7u, entries[0][3]);
 }
 
 TEST(array_extensionality, mixed_width_equality_dies_loudly)

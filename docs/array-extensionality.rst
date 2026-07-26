@@ -43,7 +43,9 @@ With the option enabled:
 * ``(get-model)`` prints each array as a valid nullary ``define-fun``
   whose body is a constant-zero array with the observed writes stored on
   top, in ascending index order — the model replays in any conforming
-  SMT-LIB2 solver;
+  SMT-LIB2 solver. This form is used whenever the option is on, even for
+  a query containing no array equality; only with the option off does
+  the pre-feature array printer run;
 * ``vc_getCounterExampleArray`` returns one entry per concrete index in
   ascending index order;
 * nullary array-sorted ``define-fun`` is accepted by the SMT-LIB2
