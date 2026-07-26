@@ -57,6 +57,20 @@ struct stats
 Result merge(Result r1, Result r2);
 
 stats getStats(const vector<FixedBits*>& operands, const unsigned position);
+
+// True when one FixedBits feeds more than one operand slot. The propagator
+// holds one FixedBits per node, so a node that repeats a child hands the
+// transfer function the same pointer twice: ((_ repeat 2) x) is
+// BVCONCAT(x, x), and the hashing node factory builds BVPLUS(x, x) and
+// friends. A write through one slot is then already visible through the
+// others, which a single left-to-right pass does not expect.
+bool operandsAlias(const vector<FixedBits*>& operands);
+
+// Fixed bits over the operands and the output. Aliased operands are counted
+// once per slot; that is fine, because this only ever detects that something
+// became fixed, and fixing is monotone.
+unsigned totalFixedBits(const vector<FixedBits*>& operands,
+                        const FixedBits& output);
 }
 }
 

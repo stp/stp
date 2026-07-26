@@ -237,6 +237,24 @@ Result merge(Result r1, Result r2)
   return NOT_IMPLEMENTED;
 }
 
+bool operandsAlias(const vector<FixedBits*>& operands)
+{
+  for (size_t i = 1; i < operands.size(); i++)
+    for (size_t j = 0; j < i; j++)
+      if (operands[i] == operands[j])
+        return true;
+  return false;
+}
+
+unsigned totalFixedBits(const vector<FixedBits*>& operands,
+                        const FixedBits& output)
+{
+  unsigned count = output.countFixed();
+  for (const FixedBits* o : operands)
+    count += o->countFixed();
+  return count;
+}
+
 int toInt(const stp::CBV value)
 {
   return *((unsigned int*)value);
