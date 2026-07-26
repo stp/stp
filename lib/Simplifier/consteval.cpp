@@ -571,13 +571,14 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
     }
     case ITE:
     {
-      if (ASTTrue == input_children[0])
+      // As with NOT: the condition must be read after eager folding.
+      if (ASTTrue == children[0])
         OutputNode = children[1];
-      else if (ASTFalse == input_children[0])
+      else if (ASTFalse == children[0])
         OutputNode = children[2];
       else
       {
-        std::cerr << tmp0;
+        std::cerr << children[0];
         FatalError(
             "BVConstEvaluator: ITE condiional must be either TRUE or FALSE:");
       }
@@ -774,14 +775,17 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       OutputNode = ASTFalse;
       break;
     case NOT:
-      if (ASTTrue == input_children[0])
+      // Test the eagerly-folded child, like every other case: the raw
+      // input child may be an unsimplified formula that folds to a
+      // constant (e.g. when the caller built the tree with a
+      // non-simplifying factory).
+      if (ASTTrue == children[0])
         return ASTFalse;
-      else if (ASTFalse == input_children[0])
+      else if (ASTFalse == children[0])
         return ASTTrue;
       else
       {
-        std::cerr << ASTFalse;
-        std::cerr << input_children[0];
+        std::cerr << children[0];
         FatalError("BVConstEvaluator: unexpected not input");
       }
 
