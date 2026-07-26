@@ -87,6 +87,11 @@ private:
 // operators round under the rounding mode captured when it was made (the
 // solver's, default RNE). A double operand is coerced to a constant of this
 // expression's format.
+//
+// The wrapper works with the five concrete modes only, which is what
+// programs need. For a *symbolic* rounding mode, drop to the C API:
+// vc_fpRoundingModeVar makes a properly constrained RoundingMode variable,
+// and vc_fpAddExpr and friends accept it alongside raw() operands.
 class Float
 {
 public:

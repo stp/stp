@@ -642,6 +642,17 @@ DLL_PUBLIC int vc_getIndexSize(VC /* vc */, Type type);
 //!
 DLL_PUBLIC Type vc_fpType(VC vc, int exp_bits, int sig_bits);
 
+//! \brief The RoundingMode sort, for declaring rounding-mode variables with
+//!        vc_varExpr.
+//!
+//! A variable of this sort ranges over exactly the five modes: vc_varExpr
+//! asserts the validity constraint (at the current assertion level, so it
+//! scopes with vc_push/vc_pop like any assertion), and counterexamples
+//! print the variable's value by mode name. Read it from a model with
+//! vc_getCounterExample; the bits are the enum VCRoundingMode encoding.
+//! vc_fpRoundingModeVar is a one-call convenience for the same thing.
+DLL_PUBLIC Type vc_fpRoundingModeType(VC vc);
+
 //! \brief Returns the exponent width of a floating-point expression, value or
 //!        type (0 if `e` is not floating-point).
 //!
@@ -692,6 +703,14 @@ enum VCRoundingMode
 //!        roundToIntegral).
 //!
 DLL_PUBLIC Expr vc_fpRoundingMode(VC vc, enum VCRoundingMode mode);
+
+//! \brief A fresh variable of SMT-LIB's RoundingMode sort, usable wherever
+//!        vc_fpRoundingMode's constants are. Shorthand for vc_varExpr over
+//!        vc_fpRoundingModeType (see there for the semantics).
+//!
+//! Do NOT substitute a plain 5-bit variable: nothing would constrain it to
+//! denote one of the five modes.
+DLL_PUBLIC Expr vc_fpRoundingModeVar(VC vc, const char* name);
 
 // Arithmetic. The result is a floating-point value with the same format as the
 // operands (which must all share that format).
@@ -1414,6 +1433,7 @@ enum exprkind_t
   BITVECTOR,     //!< Bitvector creation expression
   BOOLEAN,       //!< Boolean creation expression
   FLOATINGPOINT, //!< Floating point creation expression
+  ROUNDINGMODE,  //!< RoundingMode type expression (vc_fpRoundingModeType)
   FP_ABS,
   FP_NEG,
   FP_ADD,

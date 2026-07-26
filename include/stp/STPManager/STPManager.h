@@ -288,13 +288,21 @@ public:
   // 5-bit bitvector symbols everywhere else; the model printers consult
   // this to print their values by mode name (RNE...) rather than as raw
   // bits. Maintained by Cpp_interface as declarations go in and out of
-  // scope.
+  // scope; C-API rounding-mode variables (vc_fpRoundingModeVar) stay for
+  // the manager's lifetime, like every other C-API symbol.
   ASTNodeSet rounding_mode_symbols;
 
   bool isRoundingModeSymbol(const ASTNode& n) const
   {
     return rounding_mode_symbols.find(n) != rounding_mode_symbols.end();
   }
+
+  // The five-way one-hot validity constraint for a RoundingMode symbol:
+  // (or (= s RNE) ... (= s RNA)). Every path that introduces a
+  // RoundingMode variable must assert this (and register the symbol in
+  // rounding_mode_symbols): the sort has exactly five values, the 5-bit
+  // carrier thirty-two.
+  ASTNode roundingModeValidConstraint(const ASTNode& s);
 
   DLL_PUBLIC ASTNode CreateFPSpecialConst(FPSpecial which, unsigned exp_width,
                                           unsigned sig_width);

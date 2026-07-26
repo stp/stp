@@ -88,11 +88,12 @@ READ		2	2	Term
 WRITE		3	3	Term
 
 #Types: These kinds are used only in the API. Once processed inside
-#the API, they are never used again in the system 
+#the API, they are never used again in the system
 ARRAY           0       0
 BITVECTOR       0       0
 BOOLEAN         0       0
 FLOATINGPOINT   0       0
+ROUNDINGMODE    0       0
 
 # Floating point _terms_ (i.e., things that produce FPs)
 

@@ -23,7 +23,6 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/cpp_interface.h"
-#include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/Parser/LetMgr.h"
 #include "stp/Printer/printers.h"
 #include "stp/Util/GitSHA1.h"
@@ -421,15 +420,7 @@ void Cpp_interface::addRoundingModeSymbol(ASTNode& s)
 // query -- check-sat here, or a C-API query over a parsed file -- sees it.
 void Cpp_interface::assertRoundingModeValid(const ASTNode& s)
 {
-  using namespace symbolic_fp;
-  ASTVec one_of;
-  for (const unsigned mode :
-       {ROUND_NEAREST_TIES_TO_EVEN, ROUND_TOWARD_POSITIVE,
-        ROUND_TOWARD_NEGATIVE, ROUND_TOWARD_ZERO, ROUND_NEAREST_TIES_TO_AWAY})
-  {
-    one_of.push_back(nf->CreateNode(EQ, s, bm.CreateBVConst(5, mode)));
-  }
-  AddAssert(nf->CreateNode(OR, one_of));
+  AddAssert(bm.roundingModeValidConstraint(s));
 }
 
 void Cpp_interface::success()

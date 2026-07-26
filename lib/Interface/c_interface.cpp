@@ -83,6 +83,12 @@ std::pair<unsigned int, unsigned int> getTypeSizes(Type type)
       indexWidth = 0;
       valueWidth = (*a)[0].GetUnsignedConst() + (*a)[1].GetUnsignedConst();
       break;
+    case stp::ROUNDINGMODE:
+      // A rounding mode is carried as a 5-bit bitvector; vc_varExpr
+      // additionally pins the symbol to the five legal encodings.
+      indexWidth = 0;
+      valueWidth = 5;
+      break;
     default:
       stp::FatalError("CInterface: vc_varExpr: Unsupported type", *a);
       assert(false);
@@ -831,6 +837,16 @@ Expr vc_varExpr(VC vc, const char* name, Type type)
     o.SetSigWidth((*typeNode)[1].GetUnsignedConst());
   }
 
+  // A RoundingMode variable must range over exactly the five modes: pin the
+  // 5-bit carrier to the one-hot encodings (asserted at the current
+  // assertion level) and register the symbol so counterexamples print its
+  // value by mode name -- exactly as the parser declares one.
+  if (typeNode->GetKind() == stp::ROUNDINGMODE)
+  {
+    b->rounding_mode_symbols.insert(o);
+    b->AddAssert(b->roundingModeValidConstraint(o));
+  }
+
   stp::ASTNode* output = new stp::ASTNode(o);
   ////if(cinterface_exprdelete_on) created_exprs.push_back(output);
   assert(BVTypeCheck(*output));
@@ -900,6 +916,25 @@ Type vc_fpType(VC vc, int exp_bits, int sig_bits)
   stp::ASTNode s = b->CreateBVConst(32, sig_bits);
   stp::ASTNode output = b->CreateNode(stp::FLOATINGPOINT, e, s);
   return persistNode(vc, output);
+#endif
+}
+
+Type vc_fpRoundingModeType(VC vc)
+{
+#ifndef STP_ENABLE_FLOATING_POINT
+  // Refused at the entry point, like vc_fpType: a type node neither takes
+  // nor produces a floating-point term, so the STPMgr format funnels would
+  // never catch it.
+  (void)vc;
+  stp::FatalError("CInterface: vc_fpRoundingModeType: this STP was built "
+                  "without floating-point support; reconfigure with "
+                  "-DENABLE_FLOATING_POINT=ON");
+#else
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+
+  // The sort has no parameters, so the type node is childless; vc_varExpr
+  // recognises it and builds the constrained 5-bit variable.
+  return persistNode(vc, b->CreateNode(stp::ROUNDINGMODE));
 #endif
 }
 
@@ -999,6 +1034,16 @@ Expr vc_fpRoundingMode(VC vc, enum VCRoundingMode mode)
 
   // A rounding mode is a 5-bit one-hot bitvector constant.
   return persistNode(vc, b->CreateBVConst(5, (unsigned long long)mode));
+}
+
+Expr vc_fpRoundingModeVar(VC vc, const char* name)
+{
+  // Convenience for vc_varExpr over vc_fpRoundingModeType, which does the
+  // real work: a 5-bit symbol pinned to the five one-hot encodings and
+  // registered so counterexamples print its value by mode name. (Without
+  // the constraint the carrier's 27 junk values would be satisfiable
+  // "modes", which is also why a plain 5-bit vc_varExpr is no substitute.)
+  return vc_varExpr(vc, name, vc_fpRoundingModeType(vc));
 }
 
 Expr vc_fpAbsExpr(VC vc, Expr f)

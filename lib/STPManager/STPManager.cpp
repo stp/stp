@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 // to get the PRIu64 macro from inttypes, this needs to be defined.
 #include "stp/STPManager/STPManager.h"
+#include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/Printer/SMTLIBPrinter.h"
 #include "stp/Util/NodeIterator.h"
 #include <cmath>
@@ -385,6 +386,20 @@ ASTFPConst* STPMgr::LookupOrCreateFPConst(ASTFPConst& s)
   ASTFPConst* s_copy = new ASTFPConst(s);
   _bvconst_unique_table.insert(s_copy);
   return s_copy;
+}
+
+ASTNode STPMgr::roundingModeValidConstraint(const ASTNode& s)
+{
+  using namespace symbolic_fp;
+  ASTVec one_of;
+  for (const unsigned mode :
+       {ROUND_NEAREST_TIES_TO_EVEN, ROUND_TOWARD_POSITIVE,
+        ROUND_TOWARD_NEGATIVE, ROUND_TOWARD_ZERO, ROUND_NEAREST_TIES_TO_AWAY})
+  {
+    one_of.push_back(
+        defaultNodeFactory->CreateNode(EQ, s, CreateBVConst(5, mode)));
+  }
+  return defaultNodeFactory->CreateNode(OR, one_of);
 }
 
 ASTNode STPMgr::CreateFPSpecialConst(FPSpecial which, unsigned exp_width,
