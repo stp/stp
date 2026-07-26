@@ -1,8 +1,9 @@
-; RUN: %solver %s 2>&1 | %OutputCheck %s
-; CHECK-L: unsupported
-; CHECK: error
-; Without --array-equality, a nullary array-sorted define-fun keeps the
-; pre-feature unsupported behavior.
+; RUN: %solver %s | %OutputCheck %s
+; CHECK-NEXT: ^sat
+; A nullary array-sorted define-fun is a pure name for its body, so it
+; is accepted with or without --array-equality (QF_ABVFP inputs use
+; them with no whole-array equality in sight); uses of the name expand
+; to the body.
 (set-logic QF_ABV)
 (declare-fun base () (Array (_ BitVec 2) (_ BitVec 2)))
 (define-fun A0 () (Array (_ BitVec 2) (_ BitVec 2)) (store base (_ bv0 2) (_ bv1 2)))
