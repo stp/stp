@@ -1,7 +1,6 @@
 /*%option reentrant
 %option bison-bridge*/
 %option noyywrap
-%option nounput
 %option noreject
 %option noyymore
 %option yylineno
@@ -59,6 +58,23 @@
   // Nesting depth while skipping the arguments of a command we don't
   // interpret. Zero means the next ')' closes the command itself.
   static thread_local int skippedDepth = 0;
+
+  // The skipped text, comments excluded, for the one command that is only
+  // MOSTLY uninterpreted: define-sort inspects it for the nullary
+  // floating-point alias shape (see tryRegisterFpSortAlias in smt2.y).
+  //
+  // define-sort's token is emitted AFTER the swallowing (deferredDefineSort
+  // below), not before like its neighbours': its parser action reads the
+  // captured text, and bison runs that action as a default reduction,
+  // without fetching the lookahead that would otherwise drive the lexer
+  // through the s-expression first.
+  static thread_local std::string skippedText;
+  static thread_local bool deferredDefineSort = false;
+
+namespace stp
+{
+  const std::string& smt2_skipped_text() { return skippedText; }
+}
 
   static int lookup(char* s)
   {
@@ -263,7 +279,8 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
   * the closing parenthesis. */
 "define-fun-rec"   { skippedDepth = 0; BEGIN SKIP_SEXPR; return DEFINE_FUN_REC_TOK;}
 "define-funs-rec"  { skippedDepth = 0; BEGIN SKIP_SEXPR; return DEFINE_FUNS_REC_TOK;}
-"define-sort"      { skippedDepth = 0; BEGIN SKIP_SEXPR; return DEFINE_SORT_TOK;}
+"define-sort"      { skippedDepth = 0; skippedText.clear();
+                     deferredDefineSort = true; BEGIN SKIP_SEXPR; }
 "declare-datatype" { skippedDepth = 0; BEGIN SKIP_SEXPR; return DECLARE_DATATYPE_TOK;}
 "declare-datatypes" { skippedDepth = 0; BEGIN SKIP_SEXPR; return DECLARE_DATATYPES_TOK;}
 
@@ -271,16 +288,28 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
   * so that the parenthesis returned is the one that closes the command
   * itself. String literals and quoted symbols are matched as units, since
   * either may contain an unbalanced parenthesis. */
-<SKIP_SEXPR>"\""([^"]|"\"\"")*"\""  { /* string literal */ }
-<SKIP_SEXPR>"|"[^|]*"|"             { /* quoted symbol */ }
-<SKIP_SEXPR>";"[^\n]*               { /* comment */ }
-<SKIP_SEXPR>"("                     { skippedDepth++; }
+<SKIP_SEXPR>"\""([^"]|"\"\"")*"\""  { skippedText += yytext; /* string literal */ }
+<SKIP_SEXPR>"|"[^|]*"|"             { skippedText += yytext; /* quoted symbol */ }
+<SKIP_SEXPR>";"[^\n]*               { /* comment: not captured */ }
+<SKIP_SEXPR>"("                     { skippedDepth++; skippedText += '('; }
 <SKIP_SEXPR>")"                     { if (skippedDepth == 0)
-                                        { BEGIN INITIAL; return RPAREN_TOK; }
-                                      skippedDepth--; }
-<SKIP_SEXPR>[^()|;\"]+              { /* uninteresting content */ }
-<SKIP_SEXPR>.                       { /* anything else */ }
-<SKIP_SEXPR><<EOF>>                 { BEGIN INITIAL; return 0; }
+                                        {
+                                          BEGIN INITIAL;
+                                          if (deferredDefineSort)
+                                          {
+                                            // Hand back the closer so it
+                                            // arrives as the next token.
+                                            deferredDefineSort = false;
+                                            unput(')');
+                                            return DEFINE_SORT_TOK;
+                                          }
+                                          return RPAREN_TOK;
+                                        }
+                                      skippedDepth--; skippedText += ')'; }
+<SKIP_SEXPR>[^()|;\"]+              { skippedText += yytext; }
+<SKIP_SEXPR>.                       { skippedText += yytext; }
+<SKIP_SEXPR><<EOF>>                 { BEGIN INITIAL; deferredDefineSort = false;
+                                      return 0; }
 
 
 

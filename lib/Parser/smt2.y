@@ -58,6 +58,19 @@
 #include "parsesmt2.tab.h"
 #include "smt2_flex_header.h"
 
+#include <cctype>
+#include <cstdlib>
+#include <string>
+#include <vector>
+
+namespace stp
+{
+  // Defined in smt2.lex: the text SKIP_SEXPR swallowed for the current
+  // command, comments excluded. define-sort inspects it (see
+  // tryRegisterFpSortAlias below).
+  const std::string& smt2_skipped_text();
+}
+
 
   using std::cout;
   using std::cerr;
@@ -508,6 +521,90 @@
       fatal_yyerror("a floating-point format needs at least 2 exponent and "
                     "2 significand bits");
     }
+  }
+
+  // (define-sort <name> () <floating-point sort>) is the one define-sort STP
+  // implements. The lexer swallows every define-sort's arguments (SKIP_SEXPR
+  // in smt2.lex), which is what lets the uninterpreted shapes -- parametric
+  // sorts, sorts STP lacks, parentheses hiding in comments -- be answered
+  // "unsupported" without parsing them; this inspects the swallowed text
+  // (comments already excluded) and registers the alias when it has the one
+  // implemented shape. Returns false to answer "unsupported" instead.
+  bool tryRegisterFpSortAlias(const std::string& text)
+  {
+    std::vector<std::string> toks;
+    std::string cur;
+    for (const char c : text)
+    {
+      if (c == '(' || c == ')')
+      {
+        if (!cur.empty())
+        {
+          toks.push_back(cur);
+          cur.clear();
+        }
+        toks.push_back(std::string(1, c));
+      }
+      else if (isspace(static_cast<unsigned char>(c)))
+      {
+        if (!cur.empty())
+        {
+          toks.push_back(cur);
+          cur.clear();
+        }
+      }
+      else
+      {
+        cur += c;
+      }
+    }
+    if (!cur.empty())
+      toks.push_back(cur);
+
+    // <name> ( ) followed by a named format or ( _ FloatingPoint eb sb ).
+    if (toks.size() < 4 || toks[0] == "(" || toks[0] == ")" ||
+        toks[1] != "(" || toks[2] != ")")
+      return false;
+
+    unsigned int exp_width, sig_width;
+    if (toks.size() == 4)
+    {
+      if (toks[3] == "Float16")
+      {
+        exp_width = 5; sig_width = 11;
+      }
+      else if (toks[3] == "Float32")
+      {
+        exp_width = 8; sig_width = 24;
+      }
+      else if (toks[3] == "Float64")
+      {
+        exp_width = 11; sig_width = 53;
+      }
+      else if (toks[3] == "Float128")
+      {
+        exp_width = 15; sig_width = 113;
+      }
+      else
+        return false;
+    }
+    else if (toks.size() == 9 && toks[3] == "(" && toks[4] == "_" &&
+             toks[5] == "FloatingPoint" && toks[8] == ")" &&
+             !toks[6].empty() && !toks[7].empty() &&
+             toks[6].find_first_not_of("0123456789") == std::string::npos &&
+             toks[7].find_first_not_of("0123456789") == std::string::npos)
+    {
+      exp_width = static_cast<unsigned int>(strtoul(toks[6].c_str(), NULL, 10));
+      sig_width = static_cast<unsigned int>(strtoul(toks[7].c_str(), NULL, 10));
+    }
+    else
+      return false;
+
+    checkFpFormatWidths(exp_width, sig_width);
+    // A real alias table: the name maps to a format, and is NOT interned as a
+    // symbol -- the old scheme made the sort name usable as a term variable.
+    stp::GlobalParserInterface->addSortAlias(toks[0], exp_width, sig_width);
+    return true;
   }
 
   // ((_ to_fp_unsigned e s) rm bv) -- convert an unsigned integer held in a
@@ -1072,10 +1169,6 @@ cmdi:
       stp::GlobalParserInterface->success();
     }
 |
-     DEFINE_SORT_TOK sort_decl
-     {
-     }
-|
      ECHO_TOK STRING_TOK
     {
       std::cout << "\"" << *$2  << "\"" << endl;
@@ -1182,10 +1275,16 @@ cmdi:
     }
 |
      /* The arguments of these are swallowed by the lexer, which leaves us the
-        parenthesis that closes the command. */
+        parenthesis that closes the command. define-sort is the one of them
+        STP partially implements: a nullary alias for a floating-point sort
+        is registered from the swallowed text; every other shape -- other
+        sorts, parameters -- is answered "unsupported". */
      DEFINE_SORT_TOK
     {
-       stp::GlobalParserInterface->unsupported();
+      if (tryRegisterFpSortAlias(stp::smt2_skipped_text()))
+        stp::GlobalParserInterface->success();
+      else
+        stp::GlobalParserInterface->unsupported();
     }
 |
      DEFINE_FUN_REC_TOK
@@ -1528,16 +1627,6 @@ SOURCE_TOK
   delete $2;
 }
 ;
-
-sort_decl:
-STRING_TOK LPAREN_TOK RPAREN_TOK an_fp_sort
-{
-  // A real alias table: the name maps to a format, and is NOT interned as a
-  // symbol -- the old scheme made the sort name usable as a term variable.
-  stp::GlobalParserInterface->addSortAlias(*$1, $4->exp_bits, $4->sig_bits);
-  delete $1;
-  delete $4;
-};
 
 an_fp_sort:
   // float_size is (exponent bits, significand bits), where the significand
