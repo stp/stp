@@ -1459,13 +1459,16 @@ DLL_PUBLIC int getBVLength(Expr e);
 
 //! Covers all kinds of types that exist in STP.
 //!
+//! FLOATINGPOINT_TYPE is appended after UNKNOWN_TYPE (mirroring the
+//! internal enum, which getType casts through) so that the values
+//! compiled into pre-floating-point clients stay valid.
 enum type_t
 {
   BOOLEAN_TYPE = 0,
   BITVECTOR_TYPE,
-  FLOATINGPOINT_TYPE,
   ARRAY_TYPE,
-  UNKNOWN_TYPE
+  UNKNOWN_TYPE,
+  FLOATINGPOINT_TYPE
 };
 
 //! \brief Returns the type-kind of the given expression.
