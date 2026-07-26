@@ -17,12 +17,20 @@
 # own. Putting it on a tmpfs (/dev/shm) keeps the generated files off disk.
 #
 # Environment:
-#   STP           STP binary. Default: the first of build/stp, build_debug/stp,
-#                 build_static_debug/stp in the source tree, else stp on PATH.
-#                 A build with assertions enabled finds more.
+#   STP           STP binary. Default: the first of build_static_debug/stp,
+#                 build/stp, build_debug/stp in the source tree, else stp on
+#                 PATH. A build with assertions enabled finds more.
 #   CHECKER       Reference solver, invoked as "$CHECKER file.smt2".
-#                 Default: bitwuzla. Anything that prints one sat/unsat line
-#                 per query works, e.g. boolector, cvc5, z3.
+#                 Default: z3. Anything that prints one sat/unsat line per
+#                 query and understands the bit-vector overflow predicates
+#                 works; z3 5.0.0 and bitwuzla 0.9.1 were both checked. This
+#                 is probed at startup, because a solver that gets it wrong
+#                 turns every iteration into a bogus mismatch -- z3 4.8.12 and
+#                 boolector 3.0.1 both fail it, the latter on bvnego.
+#
+#                 On a 2500-query QF_ABV batch, z3 5.0.0 took 6.8s where
+#                 bitwuzla 0.9.1 took 251s, so the checker is no longer the
+#                 bottleneck. Both gave identical answers.
 #   FUZZSMT_JAR   fuzzsmt.jar, from the FuzzSMT release of Brummayer and Biere,
 #                 "Fuzzing and Delta-Debugging SMT Solvers" (SMT'09).
 #                 Default: searched for next to the source tree and in $HOME.
@@ -51,7 +59,7 @@ if [ ! -x "${STP:-}" ]; then
 fi
 
 # Find the reference solver.
-CHECKER=${CHECKER:-bitwuzla}
+CHECKER=${CHECKER:-z3}
 if ! command -v "$CHECKER" > /dev/null && [ ! -x "$CHECKER" ]; then
   echo "Reference solver '$CHECKER' not found. Set CHECKER=/path/to/solver." >&2
   exit 1
@@ -89,6 +97,35 @@ echo "workdir: $path"
 echo "stp:     $STP"
 echo "checker: $CHECKER"
 echo "results: $FAIL_DIR"
+
+# FuzzSMT uses the bit-vector overflow predicates, which older solvers do not
+# know. z3 4.8.12 for instance answers the query anyway and prints an extra
+# (error ...) line, so it neither fails outright nor gives a usable answer --
+# every iteration would land in FAIL_DIR looking like an STP bug. Check the
+# checker before trusting a whole run to it.
+{
+  echo "(set-logic $LOGIC)"
+  echo "(declare-fun x () (_ BitVec 8))"
+  echo "(declare-fun y () (_ BitVec 8))"
+  for p in bvnego bvsaddo bvsdivo bvsmulo bvssubo bvuaddo bvumulo bvusubo; do
+    if [ "$p" = bvnego ]; then
+      echo "(assert (or (bvnego x) true))"
+    else
+      echo "(assert (or ($p x y) true))"
+    fi
+  done
+  echo "(check-sat)"
+} > probe.smt2
+probe_out=$(timeout 60 "$CHECKER" probe.smt2 2>&1)
+probe_rc=$?
+if [ "$probe_rc" -ne 0 ] || [ "$probe_out" != "sat" ]; then
+  echo "Reference solver '$CHECKER' failed the startup probe (exit $probe_rc):" >&2
+  echo "$probe_out" | sed 's/^/  /' >&2
+  echo "It must print exactly 'sat' for a query using the bit-vector overflow" >&2
+  echo "predicates. Upgrade it, or set CHECKER to one that does." >&2
+  exit 1
+fi
+rm -f probe.smt2
 
 # One entry is picked at random per iteration. Entries must be non-default,
 # otherwise they just re-run the baseline "" entry and waste a cycle: check
@@ -181,37 +218,80 @@ for e in "${arr[@]}"
     if [ $keep -eq 1 ]; then checked+=("$e"); fi
 done
 arr=("${checked[@]}")
+if [ "${#arr[@]}" -eq 0 ]; then
+  echo "No usable option settings, every entry was dropped." >&2
+  exit 1
+fi
 echo "${#arr[@]} option settings"
 
 #Don't want to fill up SHM.
 trap 'rm -f -- *.smt2 expression.txt first.txt second.txt' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+# ulimit -t raises SIGXCPU and then SIGKILL. Running out of CPU is itself worth
+# investigating -- these problems are small -- so a timeout is saved like any
+# other failure, just labelled so triage knows which kind it is without having
+# to re-run it.
+timed_out() { [ "$1" -eq 152 ] || [ "$1" -eq 137 ]; }
 
 while (true)
   do
     se=${arr[ $RANDOM % ${#arr[@]} ]}
 
-    java -jar "$FUZZSMT_JAR" "$LOGIC" -g -bulk-export "$QUERIES" \
-         -seed `od -A n -t d -N 3 /dev/urandom`
+    # Without this check a generation failure is silent: big.smt2 ends up
+    # holding just the header, both solvers print nothing, the comparison
+    # passes, and the loop spins at full speed testing nothing.
+    if ! java -jar "$FUZZSMT_JAR" "$LOGIC" -g -bulk-export "$QUERIES" \
+              -seed `od -A n -t d -N 3 /dev/urandom`; then
+      echo "fuzzsmt failed to generate $LOGIC problems" >&2
+      exit 1
+    fi
+    if ! compgen -G '_file*.smt2' > /dev/null; then
+      echo "fuzzsmt wrote no _file*.smt2, is -bulk-export supported?" >&2
+      exit 1
+    fi
+
     sed -i '1i (push 1)' _file*.smt2
     sed -i -e "\$a (pop 1)" _file*.smt2
 
-    #two spaces so the sed doesn't match it.
-    echo "(set-logic   $LOGIC)" >> big.smt2
+    # fuzzsmt writes (set-logic  LOGIC) with two spaces, once per generated
+    # file; strip those and keep a single header. The header uses three spaces
+    # so the sed below doesn't match it too.
+    echo "(set-logic   $LOGIC)" > big.smt2
     cat _file*.smt2 >> big.smt2
-    sed -i 's/(set-logic  QF_BV)//g' big.smt2
     sed -i "s/(set-logic  $LOGIC)//g" big.smt2
 
     echo "$se" > expression.txt
     (ulimit -t "$CPU_LIMIT"; "$CHECKER" big.smt2 > first.txt) &
+    checker_job=$!
     # $se is deliberately unquoted, some entries are two options.
     (ulimit -t "$CPU_LIMIT"; "$STP" $se -d big.smt2 > second.txt)
+    stp_rc=$?
+    wait "$checker_job"
+    checker_rc=$?
 
-    wait
-    if (! cmp -s first.txt second.txt ); then
-       cp -- * "$(mktemp -d "$FAIL_DIR/XXXXXX")"
-       echo -n "FAIL"
+    kind=""
+    if timed_out "$stp_rc"; then
+       kind="timeout-stp"
+    elif timed_out "$checker_rc"; then
+       kind="timeout-checker"
+    elif (! cmp -s first.txt second.txt ); then
+       kind="mismatch"
     fi
 
+    if [ -n "$kind" ]; then
+       failure=$(mktemp -d "$FAIL_DIR/XXXXXX")
+       cp -- * "$failure"
+       {
+         echo "kind:    $kind"
+         echo "options: $se"
+         echo "stp:     $STP (exit $stp_rc)"
+         echo "checker: $CHECKER (exit $checker_rc)"
+       } > "$failure/what-happened.txt"
+       echo -n "[$kind $failure]"
+    else
+       echo -n "#"
+    fi
     rm -f -- *.smt2 expression.txt first.txt second.txt
-    echo -n "#"
 done
