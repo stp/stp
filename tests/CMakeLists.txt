@@ -186,11 +186,15 @@ endif()
 # requires byte-identical output. Skips cleanly when the baseline commit
 # is unavailable (e.g. shallow CI clones). The baseline checkout/build is
 # cached inside the build tree, so only the first run pays for it.
+#
+# Opt-in (-DTEST_BASELINE_DIFFERENTIAL=ON): the first run configures and
+# compiles an entire second STP from git history, which a plain ctest
+# invocation should not pay for by surprise.
 # -----------------------------------------------------------------------------
 
 option(TEST_BASELINE_DIFFERENTIAL
        "Enable the default-off C API baseline differential test"
-       ON
+       OFF
       )
 
 if(TEST_BASELINE_DIFFERENTIAL AND BUILD_EXECUTABLES)
