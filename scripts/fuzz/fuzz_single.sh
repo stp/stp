@@ -37,8 +37,10 @@ source_root=$(cd -- "$script_dir/../.." && pwd)
 
 # Find STP.
 if [ -z "${STP:-}" ]; then
-  for candidate in "$source_root"/build/stp "$source_root"/build_debug/stp \
-                   "$source_root"/build_static_debug/stp; do
+  for candidate in  "$source_root"/build_static_debug/stp \
+                    "$source_root"/build/stp  \
+                    "$source_root"/build_debug/stp \
+                   ; do
     if [ -x "$candidate" ]; then STP=$candidate; break; fi
   done
 fi
@@ -181,6 +183,9 @@ done
 arr=("${checked[@]}")
 echo "${#arr[@]} option settings"
 
+#Don't want to fill up SHM.
+trap 'rm -f -- *.smt2 expression.txt first.txt second.txt' EXIT
+
 while (true)
   do
     se=${arr[ $RANDOM % ${#arr[@]} ]}
@@ -207,6 +212,6 @@ while (true)
        echo -n "FAIL"
     fi
 
-    rm -f -- *.smt2
+    rm -f -- *.smt2 expression.txt first.txt second.txt
     echo -n "#"
 done

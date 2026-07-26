@@ -24,25 +24,21 @@ if command -v nproc > /dev/null; then
 else
   cores=$(getconf _NPROCESSORS_ONLN 2> /dev/null || echo 2)
 fi
-jobs=${1:-${JOBS:-$(( cores / 2 ))}}
+jobs=${1:-${JOBS:-$(( cores / 4 ))}}
 [ "$jobs" -ge 1 ] 2> /dev/null || jobs=1
+
+export PARALLEL_PID=$$
 
 if [ -z "${FUZZ_DIR:-}" ]; then
   if [ -d /dev/shm ] && [ -w /dev/shm ]; then
-    FUZZ_DIR=/dev/shm/stp-fuzz
+    FUZZ_DIR=/dev/shm/stp-fuzz-${PARALLEL_PID}
   else
-    FUZZ_DIR=${TMPDIR:-/tmp}/stp-fuzz
+    FUZZ_DIR=${TMPDIR:-/tmp}/stp-fuzz-${PARALLEL_PID}
   fi
 fi
 
 echo "starting $jobs workers under $FUZZ_DIR"
 
-pids=()
-trap 'kill "${pids[@]}" 2> /dev/null' INT TERM
-
-for i in $(seq 1 "$jobs"); do
-  "$fuzzer" "$FUZZ_DIR/$i" &
-  pids+=($!)
-done
+seq 1 "$jobs" | parallel --ungroup -j "$jobs" "$fuzzer" "$FUZZ_DIR/{}"
 
 wait
