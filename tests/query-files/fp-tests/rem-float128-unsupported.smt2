@@ -8,8 +8,9 @@
 ; simplifier's recursive traversal (Float16/32/64 fit; Float128 does not).
 ; The RoundingMode variable and fp.roundToIntegral come from the original
 ; fuzzer input; plain fp.rem at this format is refused the same way.
-; CHECK: fp.rem is not supported at this format
-; CHECK-L: use a format no larger than binary64
+; (One directive: both phrases are on the one error line, and OutputCheck
+; matches each directive on a line after the previous directive's.)
+; CHECK: fp.rem is not supported at this format.*use a format no larger than binary64
 (set-logic QF_FP)
 (declare-const r RoundingMode)
 (declare-const x (_ FloatingPoint 15 113))
