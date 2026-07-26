@@ -91,6 +91,21 @@ mkdir -p "$FAIL_DIR" || exit 1
 path=${1:-$(mktemp -d "${TMPDIR:-/tmp}/stp-fuzz.XXXXXX")}
 mkdir -p "$path" || exit 1
 cd "$path" || exit 1
+
+# Everything below deletes *.smt2 from this directory, on startup and after
+# every iteration, so adopting the wrong one destroys its contents: pointed at
+# a corpus or at tests/query-files it would wipe the lot. Only take over a
+# directory that is empty or that a previous run left this marker in.
+marker=.stp-fuzz-workdir
+if [ ! -e "$marker" ] && [ -n "$(ls -A)" ]; then
+  echo "Refusing to use '$path' as a working directory." >&2
+  echo "It is not empty and no previous run of this script claimed it, and" >&2
+  echo "every *.smt2 in it would be deleted. Give the fuzzer a directory of" >&2
+  echo "its own, or pass no argument to get a fresh temporary one." >&2
+  exit 1
+fi
+touch "$marker" || exit 1
+
 rm -f -- *.smt2
 
 echo "workdir: $path"
@@ -296,7 +311,10 @@ done
 echo "$combinations combinations"
 
 #Don't want to fill up SHM.
-trap 'rm -f -- *.smt2 expression.txt first.txt second.txt' EXIT
+# The marker goes too, so a clean exit leaves the directory empty and fuzz.sh
+# can rmdir it. A run killed outright leaves the marker behind, which is what
+# lets the next run recognise the directory as its own and wipe it.
+trap 'rm -f -- *.smt2 expression.txt first.txt second.txt "$marker"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
@@ -360,7 +378,14 @@ while (true)
     fi
 
     if [ -n "$kind" ]; then
-       failure=$(mktemp -d "$FAIL_DIR/XXXXXX")
+       # Without this check a full or unwritable FAIL_DIR would leave $failure
+       # empty, cp would fail, and the evidence for a real bug would be gone
+       # by the next iteration.
+       if ! failure=$(mktemp -d "$FAIL_DIR/XXXXXX"); then
+         echo "Could not create a directory under $FAIL_DIR to save a" >&2
+         echo "$kind in. Stopping rather than discarding it." >&2
+         exit 1
+       fi
        cp -- * "$failure"
        {
          echo "kind:    $kind"
