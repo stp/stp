@@ -916,8 +916,12 @@ TEST_F(ExtFixtureTest, ConflictCarriesTheoryLemmaOverOriginalTerms)
   EXPECT_TRUE(hasEqGuard(c.theoryPremise, j, iTerm));
   EXPECT_TRUE(hasArrayEqGuard(c.theoryPremise, A, B));
   for (size_t x = 0; x < c.theoryPremise.size(); x++)
+  {
     if (c.theoryPremise[x].op == ExtLemmaAtom::ARRAY_EQ)
+    {
       EXPECT_EQ(0u, c.theoryPremise[x].eqRecord);
+    }
+  }
   EXPECT_EQ(readB, c.theoryConclusionA);
   EXPECT_EQ(readA, c.theoryConclusionB);
 }
