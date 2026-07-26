@@ -1324,29 +1324,34 @@ cmdi:
      RESET_TOK
     {
        stp::GlobalParserInterface->reset();
+       // reset clears the logic, and with it the floating-point keywords.
+       stp::SMT2SetFloatTokens(false);
        stp::GlobalParserInterface->success();
     }
 |
      LOGIC_TOK STRING_TOK
     {
+      const bool fp_logic =
+            0 == strcmp($2->c_str(),"QF_FP") ||
+            0 == strcmp($2->c_str(),"QF_BVFP") ||
+            0 == strcmp($2->c_str(),"QF_ABVFP");
       if (!(
             0 == strcmp($2->c_str(),"QF_BV") ||
             0 == strcmp($2->c_str(),"QF_ABV") ||
             0 == strcmp($2->c_str(),"QF_AUFBV") ||
-            0 == strcmp($2->c_str(),"QF_FP") ||
-            0 == strcmp($2->c_str(),"QF_BVFP") ||
-            0 == strcmp($2->c_str(),"QF_ABVFP") ||
-            false
+            fp_logic
             )) {
         yyerror("Wrong input logic");
       }
       // Fail a well-formed floating-point benchmark on its set-logic line,
       // not at its first declaration.
-      if (0 == strcmp($2->c_str(),"QF_FP") ||
-          0 == strcmp($2->c_str(),"QF_BVFP") ||
-          0 == strcmp($2->c_str(),"QF_ABVFP")) {
+      if (fp_logic) {
         checkFpSupported();
       }
+      // The floating-point keywords exist only inside the FP logics;
+      // everywhere else names like "fp" or "NaN" stay ordinary symbols,
+      // exactly as before floating-point support existed.
+      stp::SMT2SetFloatTokens(fp_logic);
       stp::GlobalParserInterface->success();
       delete $2;
     }
@@ -2859,6 +2864,9 @@ TERMID_TOK
 namespace stp {
   int SMT2Parse() {
     GlobalParserInterface->letMgr->frameMode = true;
+    // Each SMT2Parse is one script: the floating-point keywords start
+    // disabled and turn on at an FP set-logic.
+    SMT2SetFloatTokens(false);
     return smt2parse();
   }
 }

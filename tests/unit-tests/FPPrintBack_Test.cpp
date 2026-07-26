@@ -89,6 +89,7 @@ static void roundTrips(const std::string& input,
 TEST(FPPrintBack, arithmetic_and_modes)
 {
   roundTrips(R"(
+    (set-logic QF_BVFP)
     (declare-fun x () (_ FloatingPoint 8 24))
     (declare-fun y () (_ FloatingPoint 8 24))
     (declare-const r RoundingMode)
@@ -105,6 +106,7 @@ TEST(FPPrintBack, arithmetic_and_modes)
 TEST(FPPrintBack, constants_and_conversions)
 {
   roundTrips(R"(
+    (set-logic QF_BVFP)
     (declare-fun x () (_ FloatingPoint 5 11))
     (declare-fun b () (_ BitVec 16))
     (declare-fun w () (_ BitVec 8))
@@ -125,6 +127,7 @@ TEST(FPPrintBack, constants_and_conversions)
 TEST(FPPrintBack, specials_equality_and_classifications)
 {
   roundTrips(R"(
+    (set-logic QF_ABVFP)
     (declare-fun x () (_ FloatingPoint 3 5))
     (declare-fun y () (_ FloatingPoint 3 5))
     (declare-fun a () (Array (_ BitVec 4) (_ FloatingPoint 3 5)))

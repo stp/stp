@@ -46,6 +46,13 @@
   extern int smt2error (const char *msg);
   bool stringOnly = false;
 
+  // Whether the floating-point keywords are live. Off until the parser sees
+  // an FP set-logic: SMT-LIB reserves theory names per-logic, and QF_BV
+  // inputs legitimately declare symbols named "fp", "NaN", "RNE" and so on
+  // (they parsed before floating-point support existed, and must keep
+  // parsing). See fpKeyword() below and stp::SMT2SetFloatTokens.
+  static thread_local bool floatTokensActive = false;
+
 #ifdef _MSC_VER
   #include <io.h>
   // defining isatty to avoid dll symbol export inconsistencies
@@ -74,6 +81,8 @@
 namespace stp
 {
   const std::string& smt2_skipped_text() { return skippedText; }
+
+  void SMT2SetFloatTokens(bool enable) { floatTokensActive = enable; }
 }
 
   static int lookup(char* s)
@@ -184,6 +193,16 @@ namespace stp
         free (cleaned);
       return STRING_TOK;
     }
+  }
+
+  // A name that is a keyword only in the FP logics: outside them it takes
+  // the ordinary identifier path, resolving to a declared symbol or coming
+  // back as a plain string.
+  static int fpKeyword(int token)
+  {
+    if (floatTokensActive)
+      return token;
+    return lookup(smt2text);
   }
 %}
 
@@ -318,13 +337,15 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 "Array"         { return ARRAY_TOK;}
 "Bool"          { return BOOL_TOK;}
 
- /* Types for QF_FP and QF_BVFP. */
-"FloatingPoint" { return FLOATINGPOINT_TOK; }
-"RoundingMode" { return ROUNDINGMODE_TOK; }
-"Float16" { return FLOAT16_TOK; }
-"Float32" { return FLOAT32_TOK; }
-"Float64" { return FLOAT64_TOK; }
-"Float128" { return FLOAT128_TOK; }
+ /* Types for QF_FP and QF_BVFP. These and every other floating-point
+  * name go through fpKeyword(): they are keywords only while an FP logic
+  * is set, and ordinary identifiers otherwise. */
+"FloatingPoint" { return fpKeyword(FLOATINGPOINT_TOK); }
+"RoundingMode" { return fpKeyword(ROUNDINGMODE_TOK); }
+"Float16" { return fpKeyword(FLOAT16_TOK); }
+"Float32" { return fpKeyword(FLOAT32_TOK); }
+"Float64" { return fpKeyword(FLOAT64_TOK); }
+"Float128" { return fpKeyword(FLOAT128_TOK); }
 
 
  /* CORE THEORY pg. 29 of the SMT-LIB2 standard 30-March-2010. */
@@ -398,60 +419,60 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
   */
 
  /* generic FP token*/
-"fp" { return FP_TOK; }
+"fp" { return fpKeyword(FP_TOK); }
 
  /* FP conversions */
-"to_fp" { return FP_TOFP_TOK; }
-"to_fp_unsigned" { return FP_TOFP_UNSIGNED_TOK; }
-"fp.to_ubv" { return FP_TO_UBV_TOK; }
-"fp.to_sbv" { return FP_TO_SBV_TOK; }
+"to_fp" { return fpKeyword(FP_TOFP_TOK); }
+"to_fp_unsigned" { return fpKeyword(FP_TOFP_UNSIGNED_TOK); }
+"fp.to_ubv" { return fpKeyword(FP_TO_UBV_TOK); }
+"fp.to_sbv" { return fpKeyword(FP_TO_SBV_TOK); }
 
  /* Functions for FP */
-"fp.to_real" { return FP_TO_REAL_TOK; }
-"fp.abs" { return FP_ABS_TOK; }
-"fp.neg" { return FP_NEG_TOK; }
-"fp.add" { return FP_ADD_TOK; }
-"fp.sub" { return FP_SUB_TOK; }
-"fp.mul" { return FP_MUL_TOK; }
-"fp.div" { return FP_DIV_TOK; }
-"fp.fma" { return FP_FMA_TOK; }
-"fp.sqrt" { return FP_SQRT_TOK; }
-"fp.rem" { return FP_REM_TOK; }
-"fp.roundToIntegral" { return FP_ROUNDTOINTEGRAL_TOK; }
-"fp.min" { return FP_MIN_TOK; }
-"fp.max" { return FP_MAX_TOK; }
-"fp.leq" { return FP_LEQ_TOK; }
-"fp.lt" { return FP_LT_TOK; }
-"fp.geq" { return FP_GEQ_TOK; }
-"fp.gt" { return FP_GT_TOK; }
-"fp.eq" { return FP_EQ_TOK; }
-"fp.isNormal" { return FP_ISNORMAL_TOK; }
-"fp.isSubnormal" { return FP_ISSUBNORMAL_TOK; }
-"fp.isZero" { return FP_ISZERO_TOK; }
-"fp.isInfinite" { return FP_ISINFINITE_TOK; }
-"fp.isNaN" { return FP_ISNAN_TOK; }
-"fp.isNegative" { return FP_ISNEGATIVE_TOK; }
-"fp.isPositive" { return FP_ISPOSITIVE_TOK; }
+"fp.to_real" { return fpKeyword(FP_TO_REAL_TOK); }
+"fp.abs" { return fpKeyword(FP_ABS_TOK); }
+"fp.neg" { return fpKeyword(FP_NEG_TOK); }
+"fp.add" { return fpKeyword(FP_ADD_TOK); }
+"fp.sub" { return fpKeyword(FP_SUB_TOK); }
+"fp.mul" { return fpKeyword(FP_MUL_TOK); }
+"fp.div" { return fpKeyword(FP_DIV_TOK); }
+"fp.fma" { return fpKeyword(FP_FMA_TOK); }
+"fp.sqrt" { return fpKeyword(FP_SQRT_TOK); }
+"fp.rem" { return fpKeyword(FP_REM_TOK); }
+"fp.roundToIntegral" { return fpKeyword(FP_ROUNDTOINTEGRAL_TOK); }
+"fp.min" { return fpKeyword(FP_MIN_TOK); }
+"fp.max" { return fpKeyword(FP_MAX_TOK); }
+"fp.leq" { return fpKeyword(FP_LEQ_TOK); }
+"fp.lt" { return fpKeyword(FP_LT_TOK); }
+"fp.geq" { return fpKeyword(FP_GEQ_TOK); }
+"fp.gt" { return fpKeyword(FP_GT_TOK); }
+"fp.eq" { return fpKeyword(FP_EQ_TOK); }
+"fp.isNormal" { return fpKeyword(FP_ISNORMAL_TOK); }
+"fp.isSubnormal" { return fpKeyword(FP_ISSUBNORMAL_TOK); }
+"fp.isZero" { return fpKeyword(FP_ISZERO_TOK); }
+"fp.isInfinite" { return fpKeyword(FP_ISINFINITE_TOK); }
+"fp.isNaN" { return fpKeyword(FP_ISNAN_TOK); }
+"fp.isNegative" { return fpKeyword(FP_ISNEGATIVE_TOK); }
+"fp.isPositive" { return fpKeyword(FP_ISPOSITIVE_TOK); }
 
  /* rounding modes */
-"roundTowardZero" { return FP_RM_ROUNDTOWARDZERO_TOK; }
-"roundNearestTiesToEven" { return FP_RM_ROUNDNEARESTTIESTOEVEN_TOK; }
-"roundNearestTiesToAway" { return FP_RM_ROUNDNEARESTTIESTOAWAY_TOK; }
-"roundTowardPositive" { return FP_RM_ROUNDTOWARDPOSITIVE_TOK; }
-"roundTowardNegative" { return FP_RM_ROUNDTOWARDNEGATIVE_TOK; }
+"roundTowardZero" { return fpKeyword(FP_RM_ROUNDTOWARDZERO_TOK); }
+"roundNearestTiesToEven" { return fpKeyword(FP_RM_ROUNDNEARESTTIESTOEVEN_TOK); }
+"roundNearestTiesToAway" { return fpKeyword(FP_RM_ROUNDNEARESTTIESTOAWAY_TOK); }
+"roundTowardPositive" { return fpKeyword(FP_RM_ROUNDTOWARDPOSITIVE_TOK); }
+"roundTowardNegative" { return fpKeyword(FP_RM_ROUNDTOWARDNEGATIVE_TOK); }
 
-"RTZ" { return FP_RM_ROUNDTOWARDZERO_TOK; }
-"RNE" { return FP_RM_ROUNDNEARESTTIESTOEVEN_TOK; }
-"RNA" { return FP_RM_ROUNDNEARESTTIESTOAWAY_TOK; }
-"RTP" { return FP_RM_ROUNDTOWARDPOSITIVE_TOK; }
-"RTN" { return FP_RM_ROUNDTOWARDNEGATIVE_TOK; }
+"RTZ" { return fpKeyword(FP_RM_ROUNDTOWARDZERO_TOK); }
+"RNE" { return fpKeyword(FP_RM_ROUNDNEARESTTIESTOEVEN_TOK); }
+"RNA" { return fpKeyword(FP_RM_ROUNDNEARESTTIESTOAWAY_TOK); }
+"RTP" { return fpKeyword(FP_RM_ROUNDTOWARDPOSITIVE_TOK); }
+"RTN" { return fpKeyword(FP_RM_ROUNDTOWARDNEGATIVE_TOK); }
 
  /* fp constants */
-"NaN" { return FP_NAN_TOK; }
-"-oo" { return FP_NEG_INF_TOK; }
-"+oo" { return FP_POS_INF_TOK; }
-"-zero" { return FP_NEG_ZERO_TOK; }
-"+zero" { return FP_POS_ZERO_TOK; }
+"NaN" { return fpKeyword(FP_NAN_TOK); }
+"-oo" { return fpKeyword(FP_NEG_INF_TOK); }
+"+oo" { return fpKeyword(FP_POS_INF_TOK); }
+"-zero" { return fpKeyword(FP_NEG_ZERO_TOK); }
+"+zero" { return fpKeyword(FP_POS_ZERO_TOK); }
 
 
 ({LETTER}|{OPCHAR})({ANYTHING})*  {return lookup(smt2text);}
