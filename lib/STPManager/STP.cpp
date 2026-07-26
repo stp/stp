@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Trevor Hansen, Andrew V. Jones
+ * AUTHORS: Vijay Ganesh, Trevor Hansen, Andrew Teylu
  *
  * BEGIN DATE: November, 2005
  *

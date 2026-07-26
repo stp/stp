@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Trevor Hansen, Andrew V. Jones
+ * AUTHORS: Trevor Hansen, Andrew Teylu
  *
  * BEGIN DATE: Apr, 2010
  *
