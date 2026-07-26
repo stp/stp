@@ -51,11 +51,18 @@ With the option enabled:
 * array-valued ``(get-value ...)`` is rejected as unsupported (use
   ``(get-model)``).
 
-Without the option, STP behaves exactly as it did before the feature
-existed — output, accepted language, and model APIs included. A test
-(``default-off-capi-baseline-differential``) builds the pre-feature
-baseline from git history and compares the observable behavior byte for
-byte.
+Without the option, STP decides exactly what it decided before the
+feature existed. The C API surface is pinned byte for byte: an opt-in
+test (``default-off-capi-baseline-differential``, enabled with
+``-DTEST_BASELINE_DIFFERENTIAL=ON``) builds the pre-feature baseline
+from git history and compares every observation of an identical C API
+driver — verdicts, model values, counterexample-array entries and
+their order, stdout, stderr, exit status — across the two builds. Two
+diagnostic texts deliberately differ from the baseline and sit outside
+that comparison: the parser's array-extensionality warning now names
+the option (its full text and once-per-run latch are pinned by a lit
+test), and ``stp_simple``'s usage error mentions the flag it newly
+accepts.
 
 Limitations: arrays of arrays are not supported (STP's sort system has
 no nested array sorts), and there is no constant-array
