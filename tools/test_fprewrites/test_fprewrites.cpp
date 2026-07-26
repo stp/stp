@@ -32,24 +32,24 @@ THE SOFTWARE.
 // require the two to agree on *every* float of a small format -- all bit
 // patterns: zeros, subnormals, normals, infinities and NaNs. Where a rule is
 // guaranteed to apply, the simplifying result must also differ structurally
-// (the rule fired). It is a plain executable rather than a gtest, matching the
-// sibling test_fpbackend, because this environment has no gtest/lit.
+// (the rule fired). It is a plain executable that exits non-zero on failure,
+// matching the sibling test_fpbackend; both register directly with CTest.
 //
 // The oracle is independent of the rules under test. FP constant folding is
-// NOT done by the factory (is_fp_operation bypasses it), so
-// NonMemberBVConstEvaluator evaluates a fully-constant float operation by
-// bit-blasting it (consteval reduces every child to a constant first, then
-// blasts), never by re-applying a structural rewrite. Substituting the free
-// floats through the hashing factory keeps the tree un-rewritten on the way in,
-// so a wrong rewrite surfaces as a disagreeing blasted value.
+// NOT done by the factory (is_fp_operation bypasses it): each side is blasted
+// once, through the hashing factory so nothing is rewritten on the way in,
+// and the resulting pure bitvector/Boolean circuit is folded under every
+// assignment of the free floats. A wrong rewrite surfaces as a disagreeing
+// folded value. (Folding a pre-blasted circuit, rather than re-blasting a
+// substituted tree per assignment, is what makes exhaustive enumeration
+// affordable: circuit construction dwarfs circuit evaluation.)
 
 #include "stp/AST/AST.h"
-#include "stp/FloatBlaster/FpTotalise.h"
+#include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/FloatBlaster/symbolic_fp.h"
 #include "stp/NodeFactory/SimplifyingNodeFactory.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
-#include "stp/Simplifier/SubstitutionMap.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -135,25 +135,108 @@ struct Ctx
     return n;
   }
 
-  // Evaluate a fully-assigned node to a constant WITHOUT firing the rules
-  // under test: substitute through the hashing factory, then blast-fold.
-  ASTNode eval(const ASTNode& n, ASTNodeMap assignment /*consumed*/)
+  // Give bare fp.min/fp.max the (+0, -0) choice child the blaster expects,
+  // as FpTotalise does before a normal solve -- but as a *constant*, where
+  // the real pass introduces a free array read (the solver's congruent free
+  // choice), which the constant evaluator cannot fold. Pinning one choice is
+  // sound here: a rewrite must preserve meaning for every choice, and a
+  // constant is trivially congruent.
+  ASTNode pinPartialOps(const ASTNode& n)
   {
-    ASTNodeMap cache;
-    ASTNode s = SubstitutionMap::replace(n, assignment, cache, hf);
-    // Replace partial ops (min/max/to_ubv/to_sbv) with their total form, as
-    // the normal solve does before blasting; otherwise the blaster reaches for
-    // an unspecified-value child that a bare partial op does not carry.
-    FpTotalise totalise(&mgr);
-    s = totalise.topLevel(s);
-    if (s.isConstant())
-      return s;
-    return NonMemberBVConstEvaluator(&mgr, s);
+    ASTVec children;
+    children.reserve(n.Degree());
+    bool changed = false;
+    for (const ASTNode& ch : n)
+    {
+      const ASTNode nc = pinPartialOps(ch);
+      changed |= (nc != ch);
+      children.push_back(nc);
+    }
+    const Kind k = n.GetKind();
+    if ((k == FP_MIN || k == FP_MAX) && n.Degree() == 2)
+    {
+      children.push_back(mgr.CreateOneConst(1));
+      changed = true;
+    }
+    if (!changed)
+      return n;
+    ASTNode out = (n.GetType() == BOOLEAN_TYPE)
+                      ? hf->CreateNode(k, children)
+                      : hf->CreateTerm(k, n.GetValueWidth(), children);
+    if (n.GetExpWidth() != 0)
+    {
+      out.SetExpWidth(n.GetExpWidth());
+      out.SetSigWidth(n.GetSigWidth());
+    }
+    return out;
   }
 
-  // A comparable key for an evaluated result: Booleans get sentinels clear of
-  // any packed float value; float/bitvector constants get their bits.
-  static uint64_t key(const ASTNode& r)
+  // Blast a (possibly symbolic) tree to a pure bitvector/Boolean circuit,
+  // bottom-up, the way the simplifier's traversal does in a real solve:
+  // each floating-point operation is lowered after its children, with each
+  // child's format re-stamped first (a blasted float is a bare bitvector
+  // circuit and loses its format; withFormat is a no-op for non-floats).
+  // The blaster builds through the manager's default factory -- the
+  // *hashing* one here -- so no rewrite fires on the way.
+  ASTNode blastTree(const ASTNode& n)
+  {
+    if (n.Degree() == 0)
+      return n; // a float symbol or constant is already its packed bits
+    ASTVec kids;
+    kids.reserve(n.Degree());
+    for (const ASTNode& ch : n)
+      kids.push_back(FloatBlaster::withFormat(
+          &mgr, blastTree(ch), ch.GetExpWidth(), ch.GetSigWidth()));
+    const Kind k = n.GetKind();
+    ASTNode out = (n.GetType() == BOOLEAN_TYPE)
+                      ? hf->CreateNode(k, kids)
+                      : hf->CreateTerm(k, n.GetValueWidth(), kids);
+    if (!is_FP_kind(k))
+      return out;
+    if (n.GetExpWidth() != 0)
+    {
+      out.SetExpWidth(n.GetExpWidth());
+      out.SetSigWidth(n.GetSigWidth());
+    }
+    return FloatBlaster::BlastNode_TopLevel(&mgr, out);
+  }
+
+  ASTNode blastOnce(const ASTNode& n)
+  {
+    const ASTNode s = pinPartialOps(n);
+    if (s.isConstant())
+      return s;
+    return blastTree(s);
+  }
+
+  // Fold a blasted circuit to a constant under `memo`, which arrives seeded
+  // with the assignment (symbol -> packed constant) and memoises every
+  // shared subterm -- symfpu circuits are DAGs, and an uncached walk
+  // re-evaluates the shared spine exponentially often. Per node,
+  // NonMemberBVConstEvaluator does the arithmetic on the already-folded
+  // children.
+  ASTNode foldBlasted(const ASTNode& n, ASTNodeMap& memo)
+  {
+    if (n.isConstant())
+      return n;
+    const auto found = memo.find(n);
+    if (found != memo.end())
+      return found->second;
+    ASTVec kids;
+    kids.reserve(n.Degree());
+    for (const ASTNode& ch : n)
+      kids.push_back(foldBlasted(ch, memo));
+    const ASTNode r =
+        NonMemberBVConstEvaluator(&mgr, n.GetKind(), kids, n.GetValueWidth());
+    memo.insert({n, r});
+    return r;
+  }
+
+  // A comparable key for a folded result: Booleans get sentinels clear of
+  // any packed float value; float/bitvector constants get their bits. The
+  // format is passed in (a folded circuit's output is a bare bitvector and
+  // carries none): zero widths mean the result denotes no float.
+  static uint64_t key(const ASTNode& r, unsigned eb, unsigned sb)
   {
     const Kind rk = r.GetKind();
     if (rk == TRUE)
@@ -161,7 +244,10 @@ struct Ctx
     if (rk == FALSE)
       return 1ull << 41;
     if (rk != BVCONST)
-      return 1ull << 43; // an unexpected non-constant fold: flag, don't crash
+      // An unexpected non-constant fold: flag it without crashing. Mix in
+      // the node number so two *different* non-constant folds cannot
+      // silently compare equal (two identical ones are genuinely equal).
+      return (1ull << 43) | (uint64_t)(unsigned)r.GetNodeNum();
     uint64_t v = 0;
     const unsigned w = r.GetValueWidth();
     for (unsigned i = 0; i < w && i < 64; i++)
@@ -172,7 +258,6 @@ struct Ctx
     // denote it, so they must compare equal. (Payloads are not observable and
     // an operation may canonicalise them.) The five constants aside, +0 and -0
     // are distinct SMT-LIB values and are NOT collapsed.
-    const unsigned eb = r.GetExpWidth(), sb = r.GetSigWidth();
     if (eb != 0 && sb != 0 && eb + sb == w)
     {
       const unsigned storedSig = sb - 1;
@@ -217,6 +302,12 @@ struct Ctx
   // floats. Returns "" on success, else a description of the first mismatch.
   std::string firstDisagreement(const ASTNode& before, const ASTNode& after)
   {
+    // Node-identical terms are trivially equivalent; skip the enumeration
+    // (checkTerm calls this with expectFired=false checks where the factory
+    // may legitimately have left the node alone).
+    if (before == after)
+      return "";
+
     ASTNodeSet symSet;
     collectSymbols(before, symSet);
     collectSymbols(after, symSet);
@@ -228,6 +319,13 @@ struct Ctx
     if (combos > (1ul << 18))
       return "too many assignments (" + std::to_string(combos) + ")";
 
+    const ASTNode blastedBefore = blastOnce(before);
+    const ASTNode blastedAfter = blastOnce(after);
+
+    // For the NaN collapse in key(). A float term knows its format (derived
+    // if need be); a Boolean check reads 0s and collapses nothing.
+    const unsigned eb = before.GetExpWidth(), sb = before.GetSigWidth();
+
     for (unsigned long c = 0; c < combos; c++)
     {
       ASTNodeMap assignment;
@@ -238,7 +336,10 @@ struct Ctx
         assignment.insert({syms[i], valueFor(syms[i], rest % size)});
         rest /= size;
       }
-      if (key(eval(before, assignment)) != key(eval(after, assignment)))
+      ASTNodeMap memoBefore(assignment);
+      ASTNodeMap memoAfter(assignment);
+      if (key(foldBlasted(blastedBefore, memoBefore), eb, sb) !=
+          key(foldBlasted(blastedAfter, memoAfter), eb, sb))
         return "meaning changed at assignment " + std::to_string(c);
     }
     return "";
@@ -271,9 +372,11 @@ struct Ctx
 };
 
 // Small formats that still contain zeros, subnormals, normals, infinities and
-// NaNs. (eb, sb): sb counts the hidden bit, packed = eb + sb.
-static const unsigned EB = 3, SB = 3;   // 64 values
-static const unsigned SEB = 2, SSB = 2; // 16 values, for the ternary FMA
+// NaNs. (eb, sb): sb counts the hidden bit, packed = eb + sb. sb must be at
+// least 4: the pinned symfpu computes a too-small unpacked exponent width for
+// sb <= 3 and dies on an unpack invariant (symfpu issue #14).
+static const unsigned EB = 3, SB = 4;   // 128 values
+static const unsigned SEB = 2, SSB = 4; // 64 values, for the ternary FMA
 
 // A small, independent floating-point decoder. The Boolean rules are checked
 // against this rather than by folding a float predicate through the blaster:
@@ -468,15 +571,17 @@ static void run(Ctx& c)
     }
   }
 
-  // fp.fma commutative in its two multiplicands (children 1 and 2)
+  // fp.fma commutative in its two multiplicands (children 1 and 2). The
+  // addend reuses x so the exhaustive enumeration stays at two variables:
+  // three would be 2^18 assignments of a blasted FMA.
   {
-    ASTNode x = c.fp(SEB, SSB), y = c.fp(SEB, SSB), z = c.fp(SEB, SSB);
+    ASTNode x = c.fp(SEB, SSB), y = c.fp(SEB, SSB);
     for (unsigned mode : {(unsigned)ROUND_NEAREST_TIES_TO_EVEN,
                           (unsigned)ROUND_TOWARD_ZERO})
     {
       ASTNode r = c.rm(mode);
       c.checkTerm("fp.fma multiplicands commute", FP_FMA, x.GetValueWidth(),
-                  {r, x, y, z}, false);
+                  {r, x, y, x}, false);
     }
   }
 

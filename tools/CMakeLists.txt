@@ -31,8 +31,12 @@ if (BUILD_EXTRA_TOOLS)
   add_subdirectory(cvc_to_c)
 endif()
 
-# this should be an extra tool
-if (ENABLE_FLOATING_POINT)
+# The floating-point self-test tools: ordinary executables that exit
+# non-zero on failure. Built when testing needs them or when the extra
+# tools are asked for -- not in a default build. They are registered with
+# CTest from tests/CMakeLists.txt, which is processed after
+# enable_testing() and after the checks that can turn ENABLE_TESTING off.
+if (ENABLE_FLOATING_POINT AND (ENABLE_TESTING OR BUILD_EXTRA_TOOLS))
     add_subdirectory(test_fpbackend)
     add_subdirectory(test_fprewrites)
 endif()

@@ -176,3 +176,14 @@ option(TEST_UNITS
 if(TEST_UNITS)
     add_subdirectory(unit-tests)
 endif()
+
+# -----------------------------------------------------------------------------
+# The floating-point self-test tools (built under tools/ whenever
+# ENABLE_FLOATING_POINT and ENABLE_TESTING are on) exit non-zero on failure,
+# so they run as plain CTest tests.
+# -----------------------------------------------------------------------------
+
+if (ENABLE_FLOATING_POINT)
+    add_test(NAME test_fpbackend COMMAND test_fpbackend)
+    add_test(NAME test_fprewrites COMMAND test_fprewrites)
+endif()
