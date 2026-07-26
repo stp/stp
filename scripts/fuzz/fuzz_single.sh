@@ -127,15 +127,36 @@ if [ "$probe_rc" -ne 0 ] || [ "$probe_out" != "sat" ]; then
 fi
 rm -f probe.smt2
 
-# One entry is picked at random per iteration. Entries must be non-default,
-# otherwise they just re-run the baseline "" entry and waste a cycle: check
-# against the "arg (=N)" defaults in `stp --help` when adding to this list.
+# Options are grouped by what they affect. Each iteration draws one entry from
+# every group and concatenates the picks, so settings from different groups are
+# exercised together instead of one at a time. Every group carries an empty
+# entry, which is how it sits out an iteration; drawing empty from all of them
+# reproduces the default configuration.
+#
+# Entries within a group are alternatives to each other, so put mutually
+# exclusive options in the same group -- that is what stops --minisat and
+# --cadical being handed over together. Options that combine freely belong in
+# groups of their own.
+#
+# An entry has to be non-default AND has to actually change the output,
+# otherwise it silently re-runs the baseline and wastes the iteration. Check it
+# against the "arg (=N)" defaults in `stp --help`, then confirm the emitted CNF
+# really differs before adding it:
+#
+#   stp --output-CNF --exit-after-CNF f.smt2                  # baseline
+#   stp <entry> --output-CNF --exit-after-CNF f.smt2          # with the entry
+#
+# --bb.mult-v2=1 on its own looked reasonable and failed exactly that test:
+# byte-identical CNF on every one of 49 QF_BV and QF_ABV files, because each
+# site reading upper_multiplication_bound is gated behind constant-bit
+# propagation having produced MultiplicationStats, which does not happen under
+# the default multiplication variant. Paired with variant 5 it does bite, so
+# that is the form kept below.
 
-declare -a arr=(
-# Baseline.
+declare -a OPTION_GROUPS=(simplify mult bitblast cnf solver misc)
+
+declare -a g_simplify=(
 ""
-
-# Simplification.
 "--disable-simplifications"
 "--switch-word"
 "--disable-opt-inc"
@@ -160,16 +181,12 @@ declare -a arr=(
 # here rather than being trusted.
 "--unconstrained-variable-elimination=0"
 "--aig-rewrite-passes=1"
+)
 
-# Bit-blasting.
-"--bb.div-v1=0"
-"--bb.div-v2=0"
-"--bb.div-v3=1"
-"--bb.add-v1=0"
-"--bb.add-v2=0"
-"--bb.vle-v1=0"
-"--bb.conjoin-constant=1"
-"--bb.mult-v2=1"
+# Multiplication: the variants are alternative settings of one option, so they
+# have to share a group.
+declare -a g_mult=(
+""
 "--bb.mult-variant=3"
 "--bb.mult-variant=4"
 "--bb.mult-variant=5"
@@ -180,17 +197,38 @@ declare -a arr=(
 "--bb.mult-variant=13"
 # multWithBounds() is only reachable from variant 5, so pair them.
 "--bb.mult-variant=5 --bb.mult-v2=1"
+)
 
-# CNF generation and solvers.
+# The rest of bit-blasting. These are independent of each other, but keeping
+# them in one group bounds how far a single iteration strays from the default.
+declare -a g_bitblast=(
+""
+"--bb.div-v1=0"
+"--bb.div-v2=0"
+"--bb.div-v3=1"
+"--bb.add-v1=0"
+"--bb.add-v2=0"
+"--bb.vle-v1=0"
+"--bb.conjoin-constant=1"
+)
+
+declare -a g_cnf=(
+""
 "--cnf-generation-effort=very-low"
 "--cnf-generation-effort=very-high"
+)
+
+declare -a g_solver=(
+""
 "--cadical"
 "--cryptominisat"
 "--cryptominisat --threads=4"
 "--simplifying-minisat"
 "--minisat"
+)
 
-# Misc.
+declare -a g_misc=(
+""
 "--ackermanize"
 "--interactive=1"
 )
@@ -204,26 +242,31 @@ if [ -z "$supported" ]; then
   exit 1
 fi
 
-declare -a checked=()
 declare -a dropped=()
-offered=${#arr[@]}
-for e in "${arr[@]}"
-  do
-    keep=1
-    for opt in $(echo "$e" | grep -o -- '--[a-zA-Z0-9.][a-zA-Z0-9.-]*'); do
-      if ! echo "$supported" | grep -qx -- "$opt"; then
-        if [ "$e" = "$opt" ]; then
-          dropped+=("$e")
-        else
-          dropped+=("$e  ($opt is the missing one)")
+offered=0
+for gname in "${OPTION_GROUPS[@]}"; do
+  declare -n group="g_$gname"
+  offered=$(( offered + ${#group[@]} ))
+  declare -a checked=()
+  for e in "${group[@]}"
+    do
+      keep=1
+      for opt in $(echo "$e" | grep -o -- '--[a-zA-Z0-9.][a-zA-Z0-9.-]*'); do
+        if ! echo "$supported" | grep -qx -- "$opt"; then
+          if [ "$e" = "$opt" ]; then
+            dropped+=("$gname: $e")
+          else
+            dropped+=("$gname: $e  ($opt is the missing one)")
+          fi
+          keep=0
+          break
         fi
-        keep=0
-        break
-      fi
-    done
-    if [ $keep -eq 1 ]; then checked+=("$e"); fi
+      done
+      if [ $keep -eq 1 ]; then checked+=("$e"); fi
+  done
+  group=("${checked[@]}")
+  unset -n group
 done
-arr=("${checked[@]}")
 
 # Worth being loud about: a dropped entry is a code path that silently stops
 # being fuzzed, and the run otherwise looks perfectly healthy for hours.
@@ -236,11 +279,21 @@ if [ "${#dropped[@]}" -gt 0 ]; then
   echo "  that is not deliberate." >&2
   echo >&2
 fi
-if [ "${#arr[@]}" -eq 0 ]; then
-  echo "No usable option settings, every entry was dropped." >&2
-  exit 1
-fi
-echo "${#arr[@]} option settings"
+
+# The empty entry never matches the filter, so a group cannot come out of that
+# loop empty unless the group itself was written empty.
+combinations=1
+for gname in "${OPTION_GROUPS[@]}"; do
+  declare -n group="g_$gname"
+  if [ "${#group[@]}" -eq 0 ]; then
+    echo "Option group '$gname' is empty." >&2
+    exit 1
+  fi
+  printf '  %-10s %2d entries\n' "$gname" "${#group[@]}"
+  combinations=$(( combinations * ${#group[@]} ))
+  unset -n group
+done
+echo "$combinations combinations"
 
 #Don't want to fill up SHM.
 trap 'rm -f -- *.smt2 expression.txt first.txt second.txt' EXIT
@@ -255,7 +308,15 @@ timed_out() { [ "$1" -eq 152 ] || [ "$1" -eq 137 ]; }
 
 while (true)
   do
-    se=${arr[ $RANDOM % ${#arr[@]} ]}
+    # One pick per group, concatenated. Empty picks contribute nothing, so an
+    # all-empty draw leaves $se empty and tests the default configuration.
+    se=""
+    for gname in "${OPTION_GROUPS[@]}"; do
+      declare -n group="g_$gname"
+      pick=${group[ $RANDOM % ${#group[@]} ]}
+      if [ -n "$pick" ]; then se="${se:+$se }$pick"; fi
+      unset -n group
+    done
 
     # Without this check a generation failure is silent: big.smt2 ends up
     # holding just the header, both solvers print nothing, the comparison
