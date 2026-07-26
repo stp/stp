@@ -312,6 +312,70 @@ TEST_F(ExtFixtureTest, NegativeEqualityWitnessViolation)
   expectStats(r, {{"insertions", 2}, {"seeds", 2}, {"witness_checks", 1}});
 }
 
+// A true array equality on a satisfiable candidate: the checker
+// reaches CONSISTENT through the witness loop -- which must skip
+// records whose equality sigma assigns true, however their witness
+// values compare -- and the export carries the ordinary read across
+// the equality into both arrays' observed contents. Every other test
+// with a true equality conflicts before the witness loop runs, so
+// this is what pins the loop's proxy guard: treating a true
+// equality's (necessarily equal) witness reads as a violation would
+// abort every satisfiable query containing a true array equality.
+TEST_F(ExtFixtureTest, TrueEqualityConsistentAndExported)
+{
+  ASTNode A = arr("A"), B = arr("B");
+  ASTNode i = bv("i", 0);
+  ASTNode v = bv("v", 3);
+  ASTNode eqAB = eqEdge(A, B, "eqAB", true);
+  ASTNode lam = bv("z_lam_eqAB", 2);
+  // equal arrays agree everywhere, the witness index included
+  ASTNode wL = bv("z_wL_eqAB", 1), wR = bv("z_wR_eqAB", 1);
+  witness(eqAB, lam, wL, wR);
+
+  // reference seed order: v, z_wL_eqAB, z_wR_eqAB
+  size_t aX = readAccess(A, i, v);
+  size_t aL = readAccess(A, lam, wL);
+  size_t aR = readAccess(B, lam, wR);
+
+  ExtCheckResult r = run();
+  ASSERT_EQ(ExtCheckResult::CONSISTENT, r.status);
+  expectStats(r, {{"insertions", 4},
+                  {"propagations", 1},
+                  {"rule_R_EQ", 1},
+                  {"seeds", 3},
+                  {"skipped_represented", 2},
+                  {"skipped_seen", 1},
+                  {"witness_checks", 1}});
+  expectEvents(r, {{ExtEvent::SEED, "I_READ", A, (int)aX},
+                   {ExtEvent::SEED, "I_READ", A, (int)aL},
+                   {ExtEvent::SEED, "I_READ", B, (int)aR},
+                   {ExtEvent::PROPAGATE, "R_EQ", B, (int)aX},
+                   {ExtEvent::SKIP_REPRESENTED, "R_EQ", B, (int)aL},
+                   {ExtEvent::SKIP_REPRESENTED, "L_EQ", A, (int)aR},
+                   {ExtEvent::SKIP_SEEN, "L_EQ", A, (int)aX},
+                   {ExtEvent::WITNESS_CHECK, "WITNESS", ASTNode(), -1}});
+
+  // Both arrays observe both points: the ordinary read's pair arrived
+  // at B across the true equality, and each witness read represents
+  // the other side's at its own array.
+  ASSERT_EQ(1u, r.observed.count(A));
+  ASSERT_EQ(1u, r.observed.count(B));
+  const std::vector<std::pair<ASTNode, ASTNode>>& obsA =
+      r.observed.find(A)->second;
+  const std::vector<std::pair<ASTNode, ASTNode>>& obsB =
+      r.observed.find(B)->second;
+  ASSERT_EQ(2u, obsA.size());
+  EXPECT_EQ(c2(0), obsA[0].first);
+  EXPECT_EQ(c2(3), obsA[0].second);
+  EXPECT_EQ(c2(2), obsA[1].first);
+  EXPECT_EQ(c2(1), obsA[1].second);
+  ASSERT_EQ(2u, obsB.size());
+  EXPECT_EQ(c2(2), obsB[0].first);
+  EXPECT_EQ(c2(1), obsB[0].second);
+  EXPECT_EQ(c2(0), obsB[1].first);
+  EXPECT_EQ(c2(3), obsB[1].second);
+}
+
 // Examples 2/3 of the paper: reads propagate down through nested
 // writes (rule D), collecting the write-index disequalities that end
 // up in the lemma premise.
