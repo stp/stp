@@ -41,7 +41,10 @@ THE SOFTWARE.
 // formats, widths they cannot decode, a solver error -- throw
 // std::invalid_argument/std::runtime_error. Misuse that reaches the C layer
 // (an invalid rounding mode, a non-float operand) aborts the process via
-// STP's FatalError, as the C API documents; it does not unwind.
+// STP's FatalError, as the C API documents; it does not unwind. The same
+// applies on an STP built without floating-point support
+// (-DENABLE_FLOATING_POINT=OFF): this header still compiles and links, and
+// the first floating-point call aborts with an error naming the option.
 //
 // Lifetime: Float and Bool are lightweight handles into their Solver's
 // checker. They are freely copyable, but must not outlive the Solver.
