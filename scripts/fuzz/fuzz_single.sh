@@ -111,7 +111,15 @@ rm -f -- *.smt2
 echo "workdir: $path"
 echo "stp:     $STP"
 echo "checker: $CHECKER"
-echo "results: $FAIL_DIR"
+# Deliberately not cleared: it may hold findings from an earlier run that have
+# not been triaged yet, and several workers share it. Say how many are already
+# there so a directory found later is not mistaken for one this run produced.
+existing=$(find "$FAIL_DIR" -mindepth 1 -maxdepth 1 -type d 2> /dev/null | wc -l)
+if [ "$existing" -gt 0 ]; then
+  echo "results: $FAIL_DIR ($existing already there from earlier runs, kept)"
+else
+  echo "results: $FAIL_DIR"
+fi
 
 # FuzzSMT uses the bit-vector overflow predicates, which older solvers do not
 # know. z3 4.8.12 for instance answers the query anyway and prints an extra
@@ -389,6 +397,7 @@ while (true)
        cp -- * "$failure"
        {
          echo "kind:    $kind"
+         echo "when:    $(date '+%Y-%m-%d %H:%M:%S')"
          echo "options: $se"
          echo "stp:     $STP (exit $stp_rc)"
          echo "checker: $CHECKER (exit $checker_rc)"
