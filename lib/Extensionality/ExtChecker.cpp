@@ -377,7 +377,10 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
     st.worklist.pop_front();
     const ASTNode source = cur.first;
     const size_t accessId = cur.second;
-    // Copy: st.paths may rehash on insertion while we iterate edges.
+    // A copy, not a reference: st.insert adds entries to st.paths
+    // while this record's edges are explored. A std::map keeps
+    // existing elements stable, so a reference would work today; the
+    // copy keeps the loop correct under any container choice.
     const PathRecord sourcePath = st.paths[cur];
     const ASTNode accessIdxVal = st.accessIndex(accessId);
 

@@ -45,7 +45,13 @@ THE SOFTWARE.
 
 #include "stp/c_interface.h"
 #include <stdio.h>
+#include <stdlib.h>
 
+// Cleanup sticks to the API that exists at the baseline commit:
+// vc_DeleteExpr for the entry expressions, plain free for the strdup'd
+// strings and the malloc'd entry buffers (the newer
+// vc_deleteCounterExampleArray is not available in the baseline
+// library this same source is compiled against).
 static void dumpArray(VC vc, const char* label, Expr arr)
 {
   Expr* indices = 0;
@@ -58,6 +64,15 @@ static void dumpArray(VC vc, const char* label, Expr arr)
     char* is = exprString(indices[i]);
     char* vs = exprString(values[i]);
     printf("  [%d] index %s value %s\n", i, is, vs);
+    free(is);
+    free(vs);
+    vc_DeleteExpr(indices[i]);
+    vc_DeleteExpr(values[i]);
+  }
+  if (size != 0)
+  {
+    free(indices);
+    free(values);
   }
 }
 
@@ -66,6 +81,8 @@ static void dumpScalar(VC vc, const char* label, Expr e)
   Expr val = vc_getCounterExample(vc, e);
   char* s = exprString(val);
   printf("scalar %s = %s\n", label, s);
+  free(s);
+  vc_DeleteExpr(val);
 }
 
 // One observed index.

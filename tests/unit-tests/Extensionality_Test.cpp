@@ -297,7 +297,8 @@ TEST_F(ExtFixtureTest, NegativeEqualityConsistent)
                    {ExtEvent::SEED, "I_READ", B, (int)aR},
                    {ExtEvent::WITNESS_CHECK, "WITNESS", ASTNode(), -1}});
   // the consistent fixed point reports each array's observed contents
-  EXPECT_EQ(1u, r.observed.find(A)->second.size());
+  ASSERT_EQ(1u, r.observed.count(A));
+  ASSERT_EQ(1u, r.observed.find(A)->second.size());
   EXPECT_EQ(c2(2), r.observed.find(A)->second[0].first);
   EXPECT_EQ(c2(1), r.observed.find(A)->second[0].second);
 }

@@ -519,8 +519,12 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
     for (size_t i = 0; i < coneITEs.size(); i++)
     {
       const ASTNode& t = coneITEs[i];
-      // Skip ITEs nested inside another mapped ITE: the outer
-      // replacement re-exposes them on the next iteration.
+      // Nested if-then-elses are in coneITEs too: every one gets its
+      // replacement in this same round, and the substitution below
+      // rewrites the inner occurrences inside the outer ones' guarded
+      // equalities. The enclosing loop iterates only because the
+      // fresh guarded records may expose further if-then-elses when
+      // their operands are next recovered.
       const ASTNode cond = t[0];
       const ASTNode thn = t[1];
       const ASTNode els = t[2];

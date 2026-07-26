@@ -126,6 +126,8 @@ TEST(array_extensionality, disequality_sat_with_witness)
     if (!present && getBVUnsigned(bVal[y]) != 0)
       differ = true;
   }
+  vc_deleteCounterExampleArray(aIdx, aVal, aSize);
+  vc_deleteCounterExampleArray(bIdx, bVal, bSize);
   ASSERT_TRUE(differ);
   vc_Destroy(vc);
 }
@@ -368,6 +370,7 @@ TEST(array_extensionality, array_model_entries_ascending)
       EXPECT_LT(getBVUnsigned(aIdx[x - 1]), getBVUnsigned(aIdx[x]))
           << "round " << round << " position " << x;
     }
+    vc_deleteCounterExampleArray(aIdx, aVal, aSize);
   }
 
   vc_Destroy(vc);
