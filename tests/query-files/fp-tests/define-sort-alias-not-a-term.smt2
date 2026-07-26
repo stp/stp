@@ -5,6 +5,7 @@
 ; Float32 variable and this file was satisfiable. The parser error-recovers
 ; from the bad assert (SMT-LIB error responses) and exits zero, so the check
 ; is the error response itself, not the exit code.
+(set-logic QF_FP)
 (define-sort F () Float32)
 ; CHECK: syntax error
 (assert (fp.isNaN F))
