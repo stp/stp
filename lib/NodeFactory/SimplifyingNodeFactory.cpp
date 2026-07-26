@@ -205,11 +205,17 @@ ASTNode SimplifyingNodeFactory::create_gt_node(const ASTVec& children)
     const auto width = children[0].GetValueWidth();
     const auto zero =NodeFactory::CreateZeroConst(width);
 
+    // Named variables, so that the nodes aren't built in whatever order the
+    // compiler picks to evaluate the arguments in.
+    const ASTNode isZero = NodeFactory::CreateNode(EQ, children[1], zero);
+    const ASTNode isPositive =
+        NodeFactory::CreateNode(stp::BVGT, children[0][0], zero);
+
     return NodeFactory::CreateNode
     (
         stp::AND,
-        NodeFactory::CreateNode(EQ, children[1], zero ),
-        NodeFactory::CreateNode(stp::BVGT, children[0][0], zero)
+        isZero,
+        isPositive
     );
   }
 
@@ -713,9 +719,9 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
       in2[2].GetKind() == stp::BVCONST)
   {
 
-    ASTNode result = NodeFactory::CreateNode(
-        ITE, in2[0], NodeFactory::CreateNode(EQ, in1, in2[1]),
-        NodeFactory::CreateNode(EQ, in1, in2[2]));
+    const ASTNode thn = NodeFactory::CreateNode(EQ, in1, in2[1]);
+    const ASTNode els = NodeFactory::CreateNode(EQ, in1, in2[2]);
+    ASTNode result = NodeFactory::CreateNode(ITE, in2[0], thn, els);
 
     return result;
   }
@@ -2343,18 +2349,19 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
         }
         if (!t.IsNull())
         {
-          const ASTNode cond = NodeFactory::CreateNode(
-              stp::AND,
-              NodeFactory::CreateNode(
-                  EQ, NodeFactory::CreateTerm(stp::BVAND, width, s, t), s),
-              NodeFactory::CreateNode(stp::BVLT, s, t));
-          result = NodeFactory::CreateTerm(
-              ITE, width,
-              NodeFactory::CreateNode(EQ, s, bm.CreateZeroConst(width)),
-              bm.CreateMaxConst(width),
-              NodeFactory::CreateTerm(ITE, width, cond,
-                                      bm.CreateOneConst(width),
-                                      bm.CreateZeroConst(width)));
+          const ASTNode subsumes = NodeFactory::CreateNode(
+              EQ, NodeFactory::CreateTerm(stp::BVAND, width, s, t), s);
+          const ASTNode smaller = NodeFactory::CreateNode(stp::BVLT, s, t);
+          const ASTNode cond =
+              NodeFactory::CreateNode(stp::AND, subsumes, smaller);
+          const ASTNode sIsZero =
+              NodeFactory::CreateNode(EQ, s, bm.CreateZeroConst(width));
+          const ASTNode oneOrZero = NodeFactory::CreateTerm(
+              ITE, width, cond, bm.CreateOneConst(width),
+              bm.CreateZeroConst(width));
+          result =
+              NodeFactory::CreateTerm(ITE, width, sIsZero,
+                                      bm.CreateMaxConst(width), oneOrZero);
         }
       }
 

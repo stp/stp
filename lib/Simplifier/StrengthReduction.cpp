@@ -284,8 +284,11 @@ namespace stp
         {
           const ASTNode touch = nf->CreateConstant(
               CONSTANTBV::BitVector_Clone(lo), n[0].GetValueWidth());
-          newN = nf->CreateNode(AND, nf->CreateNode(EQ, touch, n[0]),
-                                nf->CreateNode(EQ, touch, n[1]));
+          // Named variables, so that the nodes aren't built in whatever order
+          // the compiler picks to evaluate the arguments in.
+          const ASTNode eq0 = nf->CreateNode(EQ, touch, n[0]);
+          const ASTNode eq1 = nf->CreateNode(EQ, touch, n[1]);
+          newN = nf->CreateNode(AND, eq0, eq1);
           replaceWithSimpler++;
         }
       }
@@ -476,14 +479,14 @@ namespace stp
 
               if (lowFits && k > 0 && k < width)
               {
-                newN = nf->CreateTerm(
-                    BVCONCAT, width,
-                    nf->CreateTerm(BVEXTRACT, width - k, n[i],
-                                   nf->CreateBVConst(32, width - 1),
-                                   nf->CreateBVConst(32, k)),
-                    nf->CreateTerm(BVEXTRACT, k, n[1 - i],
-                                   nf->CreateBVConst(32, k - 1),
-                                   nf->CreateBVConst(32, 0)));
+                const ASTNode top = nf->CreateTerm(
+                    BVEXTRACT, width - k, n[i],
+                    nf->CreateBVConst(32, width - 1),
+                    nf->CreateBVConst(32, k));
+                const ASTNode bottom = nf->CreateTerm(
+                    BVEXTRACT, k, n[1 - i], nf->CreateBVConst(32, k - 1),
+                    nf->CreateBVConst(32, 0));
+                newN = nf->CreateTerm(BVCONCAT, width, top, bottom);
                 break;
               }
             }
@@ -612,16 +615,17 @@ namespace stp
                              nf->CreateBVConst(32, width - 1),
                              nf->CreateBVConst(32, rest)));
 
-          const ASTNode narrowed = nf->CreateTerm(
-              BVCONCAT, width, nf->CreateZeroConst(nlz),
-              nf->CreateTerm(
-                  kind, rest,
-                  nf->CreateTerm(BVEXTRACT, rest, n[0],
-                                 nf->CreateBVConst(32, rest - 1),
-                                 nf->CreateBVConst(32, 0)),
-                  nf->CreateTerm(BVEXTRACT, rest, n[1],
-                                 nf->CreateBVConst(32, rest - 1),
-                                 nf->CreateBVConst(32, 0))));
+          const ASTNode lhs =
+              nf->CreateTerm(BVEXTRACT, rest, n[0],
+                             nf->CreateBVConst(32, rest - 1),
+                             nf->CreateBVConst(32, 0));
+          const ASTNode rhs =
+              nf->CreateTerm(BVEXTRACT, rest, n[1],
+                             nf->CreateBVConst(32, rest - 1),
+                             nf->CreateBVConst(32, 0));
+          const ASTNode narrowed =
+              nf->CreateTerm(BVCONCAT, width, nf->CreateZeroConst(nlz),
+                             nf->CreateTerm(kind, rest, lhs, rhs));
 
           const ASTNode otherwise =
               (kind == BVDIV) ? nf->CreateZeroConst(width) : n[0];
@@ -712,9 +716,9 @@ namespace stp
     const ASTNode commonNode = nf->CreateConstant(
         CONSTANTBV::BitVector_Clone(common), n[0].GetValueWidth());
 
-    ASTNode newN =
-        nf->CreateNode(AND, nf->CreateNode(EQ, commonNode, n[0]),
-                       nf->CreateNode(EQ, commonNode, n[1]));
+    const ASTNode eq0 = nf->CreateNode(EQ, commonNode, n[0]);
+    const ASTNode eq1 = nf->CreateNode(EQ, commonNode, n[1]);
+    ASTNode newN = nf->CreateNode(AND, eq0, eq1);
     replaceWithSimpler++;
     return newN;
   }

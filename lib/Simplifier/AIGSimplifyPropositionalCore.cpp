@@ -140,9 +140,12 @@ ASTNode AIGSimplifyPropositionalCore::convert(BBNodeManagerAIG& mgr,
     return nf->CreateNode(NOT, convert(mgr, Aig_Regular(obj), cache));
   else if (Aig_ObjIsAnd(obj))
   {
-    ASTNode result =
-        nf->CreateNode(AND, convert(mgr, Aig_ObjChild0(obj), cache),
-                       convert(mgr, Aig_ObjChild1(obj), cache));
+    // Argument evaluation order is unspecified, so convert each child into a
+    // named variable first, otherwise the nodes are built in a
+    // compiler-dependent order.
+    const ASTNode child0 = convert(mgr, Aig_ObjChild0(obj), cache);
+    const ASTNode child1 = convert(mgr, Aig_ObjChild1(obj), cache);
+    ASTNode result = nf->CreateNode(AND, child0, child1);
     cache.insert(make_pair(obj, result));
     return result;
   }
