@@ -755,6 +755,11 @@ namespace stp
     const unsigned int exp_width = exp_bits;
     const unsigned int sig_width = sig_bits + sign_bits;
 
+    // The format implied by the component widths gets the same floor the
+    // sort rule enforces; without this, (fp #b0 #b1 #b1) built an
+    // eb = 1 format that every other entrance rejects.
+    checkFpFormatWidths(exp_width, sig_width);
+
     ASTNode* n;
     if (packed.GetKind() == BVCONST)
     {
