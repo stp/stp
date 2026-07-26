@@ -120,6 +120,7 @@ _set_func('vc_query_with_timeout', c_int32, _VC, _Expr, c_int32, c_int32)
 _set_func('vc_query', c_int32, _VC, _Expr)
 _set_func('vc_getCounterExample', _Expr, _VC, _Expr)
 _set_func('vc_getCounterExampleArray', None, _VC, _Expr, POINTER(POINTER(_Expr)), POINTER(POINTER(_Expr)), POINTER(c_int32))
+_set_func('vc_deleteCounterExampleArray', None, POINTER(_Expr), POINTER(_Expr), c_int32)
 _set_func('vc_counterexample_size', c_int32, _VC)
 _set_func('vc_push', None, _VC)
 _set_func('vc_pop', None, _VC)
@@ -885,11 +886,14 @@ class ArrayExpr(Expr):
         _lib.vc_getCounterExampleArray(self.s.vc, self.expr,
                                        byref(indices), byref(values),
                                        byref(size))
-        out = {}
-        for k in range(size.value):
-            out[self._entry_int(indices[k], self.index_width)] = \
-                self._entry_int(values[k], self.value_width)
-        return out
+        try:
+            out = {}
+            for k in range(size.value):
+                out[self._entry_int(indices[k], self.index_width)] = \
+                    self._entry_int(values[k], self.value_width)
+            return out
+        finally:
+            _lib.vc_deleteCounterExampleArray(indices, values, size)
 
     value = property(model)
 

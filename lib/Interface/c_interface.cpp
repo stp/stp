@@ -700,6 +700,19 @@ void vc_getCounterExampleArray(VC vc, Expr e, Expr** indices, Expr** values,
   }
 }
 
+void vc_deleteCounterExampleArray(Expr* indices, Expr* values, int size)
+{
+  if (size <= 0)
+    return;
+  for (int i = 0; i < size; ++i)
+  {
+    delete (stp::ASTNode*)indices[i];
+    delete (stp::ASTNode*)values[i];
+  }
+  free(indices);
+  free(values);
+}
+
 int vc_counterexample_size(VC vc)
 {
   stp::STP* stp_i = (stp::STP*)vc;

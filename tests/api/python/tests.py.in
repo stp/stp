@@ -165,6 +165,24 @@ class TestSTP(unittest.TestCase):
         with self.assertRaises(TypeError):
             a & b
 
+    def test_array_model_repeated_calls(self):
+        # model() releases the entry buffers it receives on every call
+        # (they are malloc'd by libstp and freed there too); repeated
+        # calls must keep returning the same entries without corruption.
+        s = stp.Solver(array_equality=True)
+        a = s.array('a', 8, 8)
+        b = s.array('b', 8, 8)
+        s.add(a == b)
+        for i in range(20):
+            s.add(a[i] == i + 100)
+        self.assertTrue(s.check())
+        first = a.model()
+        for i in range(20):
+            self.assertEqual(first[i], i + 100)
+        for _ in range(200):
+            self.assertEqual(first, a.model())
+            self.assertEqual(first, b.value)
+
     def test_array_model_wide_entries(self):
         # Array model entries keep their exact values at any width:
         # getBVUnsignedLongLong alone saturates above 64 bits, and wide
