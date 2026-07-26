@@ -46,6 +46,27 @@ bool nodeNumLess(const ASTNode& a, const ASTNode& b)
   return a.GetNodeNum() < b.GetNodeNum();
 }
 
+// Whether the packed floating-point cell x of format (eb, sb) holds a NaN:
+// an all-ones exponent with a nonzero significand, the layout being
+// [sign | exponent eb | significand sb-1]. Built as a plain bitvector
+// circuit because witness clauses can be minted during preparation, after
+// the floating-point lowering has already run.
+ASTNode isPackedNaN(NodeFactory* hf, const ASTNode& x, unsigned eb,
+                    unsigned sb)
+{
+  const unsigned w = eb + sb;
+  const ASTNode exponent =
+      hf->CreateTerm(BVEXTRACT, eb, x, hf->CreateBVConst(32, w - 2),
+                     hf->CreateBVConst(32, sb - 1));
+  const ASTNode significand =
+      hf->CreateTerm(BVEXTRACT, sb - 1, x, hf->CreateBVConst(32, sb - 2),
+                     hf->CreateBVConst(32, 0));
+  return hf->CreateNode(
+      AND, hf->CreateNode(EQ, exponent, hf->CreateMaxConst(eb)),
+      hf->CreateNode(
+          NOT, hf->CreateNode(EQ, significand, hf->CreateZeroConst(sb - 1))));
+}
+
 // Postorder DAG collection of every node beneath (and including) n.
 void collectDag(const ASTNode& n, ASTNodeSet& visited)
 {
@@ -241,6 +262,19 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
                a);
   }
 
+  // Same packed width is not the same sort: a floating-point-element
+  // array and a bitvector-element array of one packed width (or two
+  // floating-point formats splitting one width differently) may not be
+  // equated, mirroring the parser's rejection of = between a float and
+  // a bitvector.
+  if (a.GetExpWidth() != b.GetExpWidth() ||
+      a.GetSigWidth() != b.GetSigWidth())
+  {
+    FatalError("array-equality: equality between arrays requires "
+               "identical element sorts",
+               a);
+  }
+
   if (a == b)
     return bm->ASTTrue;
 
@@ -282,8 +316,27 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
   ASTNode readR = hf->CreateTerm(READ, ew, right, r.lambda);
   r.anchorL = hf->CreateNode(EQ, r.nameL, readL);
   r.anchorR = hf->CreateNode(EQ, r.nameR, readR);
-  r.witnessClause = hf->CreateNode(
-      OR, r.proxy, hf->CreateNode(NOT, hf->CreateNode(EQ, r.nameL, r.nameR)));
+
+  // The witness disequality. Bitvector cells differ exactly when their
+  // bits differ. Packed floating-point cells denote the one NaN value
+  // under every NaN bit pattern (SMT-LIB = on floats is identity of
+  // values, and symfpu carries no payload), so differing bits witness
+  // a real difference only when the cells are not both NaN -- without
+  // that qualification a false equality between float arrays could be
+  // "witnessed" by two NaN payloads of pointwise-equal arrays.
+  ASTNode differ =
+      hf->CreateNode(NOT, hf->CreateNode(EQ, r.nameL, r.nameR));
+  const unsigned eb = left.GetExpWidth();
+  if (eb != 0)
+  {
+    const unsigned sb = left.GetSigWidth();
+    differ = hf->CreateNode(
+        AND, differ,
+        hf->CreateNode(NOT,
+                       hf->CreateNode(AND, isPackedNaN(hf, r.nameL, eb, sb),
+                                      isPackedNaN(hf, r.nameR, eb, sb))));
+  }
+  r.witnessClause = hf->CreateNode(OR, r.proxy, differ);
 
   protectedSymbols.insert(r.proxy);
   protectedSymbols.insert(r.lambda);
@@ -544,6 +597,14 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
       {
         d = bm->CreateFreshVariable(t.GetIndexWidth(), t.GetValueWidth(),
                                     "ext_ite");
+        // A replacement for a float-element array is itself a
+        // float-element array: the guarded equalities minted below
+        // need the element format for their witness clauses.
+        if (t.GetExpWidth() != 0)
+        {
+          d.SetExpWidth(t.GetExpWidth());
+          d.SetSigWidth(t.GetSigWidth());
+        }
         iteReplacements[t] = d;
         possibleConeSymbols.insert(d);
       }
