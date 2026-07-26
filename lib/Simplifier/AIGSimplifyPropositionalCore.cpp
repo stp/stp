@@ -208,6 +208,10 @@ ASTNode AIGSimplifyPropositionalCore::topLevel(const ASTNode& top)
     Aig_ManStop(pTemp);
     Dar_ManRewrite(mgr.aigMgr, pPars);
 
+    // Rewriting can leave nodes with no fanout behind, and Aig_ManDupDfs()
+    // asserts that it drops none. See the same call in ToCNFAIG.cpp.
+    Aig_ManCleanup(mgr.aigMgr);
+
     mgr.aigMgr = Aig_ManDupDfs(pTemp = mgr.aigMgr);
     Aig_ManStop(pTemp);
 
