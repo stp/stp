@@ -562,6 +562,79 @@ TEST(array_extensionality, lemma_atoms_fold_at_encoding)
   vc_Destroy(vc);
 }
 
+TEST(array_extensionality, equality_under_push_pops_away)
+{
+  // A record minted under a pushed scope survives the pop in the
+  // persistent registry, and every later solve re-conjoins its
+  // witness bundle. The bundle is satisfiability-preserving (fresh
+  // witness symbols, otherwise unconstrained; a true proxy satisfies
+  // the witness clause), so the pop must recover sat -- and
+  // re-asserting the same equality reuses the record, with no second
+  // one minted, and flips the verdict back.
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv8 = vc_bvType(vc, 8);
+  Type bv4 = vc_bvType(vc, 4);
+  Type arrT = vc_arrayType(vc, bv4, bv8);
+
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr b = vc_varExpr(vc, "b", arrT);
+  Expr zero = vc_bvConstExprFromInt(vc, 4, 0);
+
+  vc_assertFormula(
+      vc, vc_notExpr(vc, vc_eqExpr(vc, vc_readExpr(vc, a, zero),
+                                   vc_readExpr(vc, b, zero))));
+
+  stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+
+  vc_push(vc);
+  vc_assertFormula(vc, vc_eqExpr(vc, a, b));
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+
+  vc_pop(vc);
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+
+  vc_push(vc);
+  vc_assertFormula(vc, vc_eqExpr(vc, a, b));
+  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  ASSERT_NE(nullptr, ext);
+  EXPECT_EQ(1u, ext->getRecords().size());
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+
+  vc_pop(vc);
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  vc_Destroy(vc);
+}
+
+TEST(array_extensionality, equality_asserted_between_queries)
+{
+  // The first solve runs with an empty registry; the equality is
+  // asserted only after its answer, and the second solve must
+  // abstract, prepare, and refine it from scratch.
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv8 = vc_bvType(vc, 8);
+  Type bv4 = vc_bvType(vc, 4);
+  Type arrT = vc_arrayType(vc, bv4, bv8);
+
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr b = vc_varExpr(vc, "b", arrT);
+  Expr i = vc_varExpr(vc, "i", bv4);
+  Expr j = vc_varExpr(vc, "j", bv4);
+
+  vc_assertFormula(vc, vc_eqExpr(vc, i, j));
+  vc_assertFormula(
+      vc, vc_notExpr(vc, vc_eqExpr(vc, vc_readExpr(vc, a, i),
+                                   vc_readExpr(vc, b, j))));
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc))); // unrelated arrays differ
+
+  vc_assertFormula(vc, vc_eqExpr(vc, a, b));
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc))); // congruence across a = b
+  vc_Destroy(vc);
+}
+
 TEST(array_extensionality, interleaves_with_classic_read_refinement)
 {
   // One query, two refinement machines: the contradiction lives in
