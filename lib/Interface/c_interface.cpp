@@ -751,6 +751,19 @@ void vc_getCounterExampleArray(VC vc, Expr e, Expr** indices, Expr** values,
   }
 }
 
+void vc_deleteCounterExampleArray(Expr* indices, Expr* values, int size)
+{
+  if (size <= 0)
+    return;
+  for (int i = 0; i < size; ++i)
+  {
+    delete (stp::ASTNode*)indices[i];
+    delete (stp::ASTNode*)values[i];
+  }
+  free(indices);
+  free(values);
+}
+
 int vc_counterexample_size(VC vc)
 {
   stp::STP* stp_i = (stp::STP*)vc;
@@ -2862,6 +2875,14 @@ void process_argument(const char ch, VC vc)
       break;
     case 'w':
       bm->UserFlags.wordlevel_solve_flag = false;
+      break;
+    case 'x':
+      // Decide whole-array equality/disequality (the extensional
+      // theory of arrays) with the lemmas-on-demand procedure of
+      // Brummayer & Biere. Array equalities are abstracted when the
+      // AST is built, so this must be set before any term of the
+      // query is created.
+      bm->UserFlags.enable_array_equality = true;
       break;
     case 'y':
       bm->UserFlags.print_binary_flag = true;

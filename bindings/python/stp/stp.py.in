@@ -26,8 +26,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 import ast
-from ctypes import cdll, POINTER, CFUNCTYPE
-from ctypes import c_char_p, c_void_p, c_int32, c_uint32, c_uint64, c_ulong, c_bool
+from ctypes import cdll, POINTER, CFUNCTYPE, byref
+from ctypes import c_char, c_char_p, c_void_p, c_int32, c_uint32, c_uint64, c_ulong, c_bool
 from ctypes import c_double, c_float
 import inspect
 import os.path
@@ -36,8 +36,9 @@ import struct
 from .library_path import PATHS
 
 __all__ = [
-    'Expr', 'FloatExpr', 'Solver', 'stp', 'add', 'bitvec', 'bitvecs', 'check',
-    'model', 'RNE', 'RTP', 'RTN', 'RTZ', 'RNA',
+    'ArrayExpr', 'Expr', 'FloatExpr', 'Solver', 'stp', 'add', 'array',
+    'bitvec', 'bitvecs', 'check', 'model',
+    'RNE', 'RTP', 'RTN', 'RTZ', 'RNA',
     'get_git_version_sha', 'get_git_version_tag', 'get_compilation_env', 'get_lib'
 ]
 
@@ -130,6 +131,7 @@ _set_func('vc_query_with_timeout', c_int32, _VC, _Expr, c_int32, c_int32)
 _set_func('vc_query', c_int32, _VC, _Expr)
 _set_func('vc_getCounterExample', _Expr, _VC, _Expr)
 _set_func('vc_getCounterExampleArray', None, _VC, _Expr, POINTER(POINTER(_Expr)), POINTER(POINTER(_Expr)), POINTER(c_int32))
+_set_func('vc_deleteCounterExampleArray', None, POINTER(_Expr), POINTER(_Expr), c_int32)
 _set_func('vc_counterexample_size', c_int32, _VC)
 _set_func('vc_push', None, _VC)
 _set_func('vc_pop', None, _VC)
@@ -220,6 +222,7 @@ _set_func('vc_printCounterExampleFile', None, _VC, c_int32)
 _set_func('exprName', c_char_p, _Expr)
 _set_func('getExprID', c_int32, _Expr)
 _set_func('vc_parseMemExpr', c_int32, _VC, c_char_p, POINTER(_Expr), POINTER(_Expr))
+_set_func('vc_setFlag', None, _VC, c_char)
 
 # Floating point
 _set_func('vc_fpType', _Type, _VC, c_int32, c_int32)
@@ -290,12 +293,24 @@ def _decode_fp(bits, eb, sb):
 class Solver(object):
     current = None
 
-    def __init__(self):
+    def __init__(self, array_equality=False):
+        """Creates a solver.
+
+        With array_equality=True, equality between whole arrays (the
+        extensional theory of arrays) becomes available: build arrays
+        with Solver.array() and compare them with ==/!=. The option
+        must be chosen here, at construction, because array equalities
+        are handled at expression-creation time.
+        """
         self.keys = {}
+        self.arrays = {}
+        self.array_equality = bool(array_equality)
         self.vc = _lib.vc_createValidityChecker()
         assert self.vc is not None, 'Error creating validity checker'
         # Rounding mode for the arithmetic operators of FloatExprs made here.
         self.rounding_mode = RNE
+        if array_equality:
+            _lib.vc_setFlag(self.vc, b'x')
 
     def __del__(self):
         # TODO We're not quite there yet.
@@ -432,6 +447,25 @@ class Solver(object):
         e = (_lib.vc_fpMinusZero if negative else _lib.vc_fpPlusZero)(self.vc, t)
         return FloatExpr(self, eb, sb, e)
 
+    def array(self, name, index_width, value_width):
+        """Creates a new array variable from bitvectors of index_width
+        bits to bitvectors of value_width bits.
+
+        Arrays are read with a[i], written with a.store(i, v), and --
+        when the solver was created with array_equality=True -- compared
+        whole with ==/!=. They are deliberately not part of
+        Solver.model(); read an array's entries with ArrayExpr.model().
+        """
+        name_conv = name.encode('utf-8')
+
+        arr_type = _lib.vc_arrayType(self.vc,
+                                     _lib.vc_bvType(self.vc, index_width),
+                                     _lib.vc_bvType(self.vc, value_width))
+        expr = _lib.vc_varExpr(self.vc, name_conv, arr_type)
+        arr = ArrayExpr(self, index_width, value_width, expr, name=name)
+        self.arrays[name] = arr
+        return arr
+
     def true(self):
         """Creates a True boolean."""
         return Expr(self, None, _lib.vc_trueExpr(self.vc))
@@ -504,6 +538,21 @@ class Solver(object):
         assert ret == 0 or ret == 1, 'Error querying your input'
         return not ret
 
+    def _counterexample_int(self, expr, width):
+        """The unsigned value of an (unboxed) expression in the current
+        model, at any width. getBVUnsignedLongLong saturates at 64 bits,
+        so wider values are assembled from 64-bit extracts."""
+        if width <= 64:
+            value = _lib.vc_getCounterExample(self.vc, expr)
+            return _lib.getBVUnsignedLongLong(value)
+        extract = 0
+        for i in range((width - 1) // 64 + 1):
+            extractExpr = _lib.vc_bvExtract(self.vc, expr,
+                                            min((i+1)*64, width)-1, i*64)
+            bvExpr = _lib.vc_getCounterExample(self.vc, extractExpr)
+            extract += (_lib.getBVUnsignedLongLong(bvExpr) << (64 * i))
+        return extract
+
     def model(self, key=None, expr=None):
         """
         Returns the value for an expression (or a name), or a model for the
@@ -535,26 +584,13 @@ class Solver(object):
             expr = self.keys[key]
 
         if expr:
-            width = _lib.getVWidth(expr)
-            
-            #What if it's compiled for 32-bit?
-            if width > 64:
-                extract = 0
-                for i in range(( width - 1 ) // 64 + 1):
-                    extractExpr = _lib.vc_bvExtract(self.vc, expr, min ((i+1)*64, width)-1, i*64)
-                    #maybe extractExpr leaks?
-                    bvExpr = _lib.vc_getCounterExample(self.vc, extractExpr)
-                    extract +=  (_lib.getBVUnsignedLongLong(bvExpr) << (64 * i))
-                return extract
-            else:
-                value = _lib.vc_getCounterExample(self.vc, expr)
-                bits = _lib.getBVUnsignedLongLong(value)
-                eb = _lib.vc_getExpWidth(expr)
-                if eb:
-                    # A floating-point value: decode its packed bits (to a
-                    # Python float for the standard formats).
-                    return _decode_fp(bits, eb, _lib.vc_getSigWidth(expr))
-                return bits
+            bits = self._counterexample_int(expr, _lib.getVWidth(expr))
+            eb = _lib.vc_getExpWidth(expr)
+            if eb:
+                # A floating-point value: decode its packed bits (to a
+                # Python float for the standard formats).
+                return _decode_fp(bits, eb, _lib.vc_getSigWidth(expr))
+            return bits
         #
         # If no expression, return a model giving values to simple bitvectors
         # (but not, e.g., arrays)
@@ -1097,6 +1133,131 @@ class FloatExpr(Expr):
     __div__ = __rdiv__ = __floordiv__ = __rfloordiv__ = _fp_no_bv
 
 
+class ArrayExpr(Expr):
+    """An array-sorted expression: read with a[i], write with
+    a.store(i, v), and -- when the solver was created with
+    array_equality=True -- compare whole arrays with ==/!=.
+
+    Arrays are not part of Solver.model(); read an array's entries from
+    a satisfying assignment with ArrayExpr.model().
+    """
+
+    def __init__(self, s, index_width, value_width, expr, name=None):
+        Expr.__init__(self, s, value_width, expr, name=name)
+        self.index_width = index_width
+        self.value_width = value_width
+
+    def _index(self, index):
+        if isinstance(index, int):
+            index = self.s.bitvecval(self.index_width, index)
+        assert isinstance(index, Expr), 'Index must be an Expr or an int'
+        assert not isinstance(index, ArrayExpr), 'Index must be a bitvector'
+        return index
+
+    def _value(self, value):
+        if isinstance(value, int):
+            value = self.s.bitvecval(self.value_width, value)
+        assert isinstance(value, Expr), 'Value must be an Expr or an int'
+        assert not isinstance(value, ArrayExpr), 'Value must be a bitvector'
+        return value
+
+    def read(self, index):
+        """The value this array holds at index."""
+        index = self._index(index)
+        expr = _lib.vc_readExpr(self.s.vc, self.expr, index.expr)
+        return Expr(self.s, self.value_width, expr)
+
+    __getitem__ = read
+
+    def store(self, index, value):
+        """The array equal to this one except that index maps to value."""
+        index = self._index(index)
+        value = self._value(value)
+        expr = _lib.vc_writeExpr(self.s.vc, self.expr, index.expr,
+                                 value.expr)
+        return ArrayExpr(self.s, self.index_width, self.value_width, expr)
+
+    def eq(self, other):
+        """Equality between whole arrays. Requires a solver created
+        with array_equality=True; without it a RuntimeError is raised
+        here, where it can be caught -- historically the query only
+        failed much later, aborting the process from inside the
+        library."""
+        if not self.s.array_equality:
+            raise RuntimeError(
+                'whole-array equality requires the solver to be created '
+                'with Solver(array_equality=True)')
+        assert isinstance(other, ArrayExpr), \
+            'An array only compares against another array'
+        assert self.index_width == other.index_width and \
+            self.value_width == other.value_width, \
+            'Arrays must have identical index and value widths'
+        expr = _lib.vc_eqExpr(self.s.vc, self.expr, other.expr)
+        return Expr(self.s, None, expr)
+
+    __eq__ = eq
+
+    def ne(self, other):
+        return self.s.not_(self.eq(other))
+
+    __ne__ = ne
+
+    def _entry_int(self, entry, width):
+        """One counterexample entry (a constant expression) as an int.
+        Entries wider than 64 bits are assembled from 64-bit extracts,
+        as in Solver.model(); getBVUnsignedLongLong alone saturates."""
+        if width <= 64:
+            return _lib.getBVUnsignedLongLong(entry)
+        return self.s._counterexample_int(entry, width)
+
+    def model(self):
+        """The array's entries in the current satisfying assignment:
+        a dict from index to value, one entry per observed index, in
+        ascending index order."""
+        indices = POINTER(_Expr)()
+        values = POINTER(_Expr)()
+        size = c_int32()
+        _lib.vc_getCounterExampleArray(self.s.vc, self.expr,
+                                       byref(indices), byref(values),
+                                       byref(size))
+        try:
+            out = {}
+            for k in range(size.value):
+                out[self._entry_int(indices[k], self.index_width)] = \
+                    self._entry_int(values[k], self.value_width)
+            return out
+        finally:
+            _lib.vc_deleteCounterExampleArray(indices, values, size)
+
+    value = property(model)
+
+    # The BitVector operations inherited from Expr are meaningless on an
+    # array and would build malformed nodes; refuse them. Element-level
+    # work goes through reads and stores.
+    def _array_no_bv(self, *args, **kwargs):
+        raise TypeError('BitVector operations are not defined on an '
+                        'ArrayExpr; read elements with a[i] and write '
+                        'them with a.store(i, v)')
+
+    add = sub = rsub = mul = div = rdiv = _array_no_bv
+    mod = rmod = rem = rrem = _array_no_bv
+    sdiv = rsdiv = smod = rsmod = srem = rsrem = _array_no_bv
+    lt = le = gt = ge = slt = sle = sgt = sge = _array_no_bv
+    and_ = or_ = xor = nand = nor = xnor = neg = not_ = _array_no_bv
+    uaddo = saddo = usubo = ssubo = umulo = smulo = _array_no_bv
+    shl = rshl = shr = rshr = sar = rsar = extract = _array_no_bv
+    zero_extend = sign_extend = simplify = _array_no_bv
+    __add__ = __radd__ = __sub__ = __rsub__ = _array_no_bv
+    __mul__ = __rmul__ = _array_no_bv
+    __div__ = __floordiv__ = __rdiv__ = __rfloordiv__ = _array_no_bv
+    __mod__ = __rmod__ = _array_no_bv
+    __lt__ = __le__ = __gt__ = __ge__ = _array_no_bv
+    __and__ = __rand__ = __or__ = __ror__ = _array_no_bv
+    __xor__ = __rxor__ = _array_no_bv
+    __neg__ = __invert__ = _array_no_bv
+    __lshift__ = __rlshift__ = __rshift__ = __rrshift__ = _array_no_bv
+
+
 class ASTtoSTP(ast.NodeVisitor):
     def __init__(self, s, count, *args, **kwargs):
         ast.NodeVisitor.__init__(self)
@@ -1247,6 +1408,10 @@ def bitvec(*args, **kwargs):
 
 def bitvecs(*args, **kwargs):
     return Solver.current.bitvecs(*args, **kwargs)
+
+
+def array(*args, **kwargs):
+    return Solver.current.array(*args, **kwargs)
 
 
 def check(*args, **kwargs):

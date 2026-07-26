@@ -69,6 +69,7 @@ implemented.
    :maxdepth: 1
 
    smt-input-language
+   array-extensionality
 
 
 Python usage
@@ -258,7 +259,7 @@ History and authors
 The initial versions of STP were written primarily by Vijay Ganesh as
 part of his PhD thesis. STP was subsequently developed by Trevor
 Hansen during his PhD. The current authors are Trevor Hansen, Mate Soos, 
-Ryan Govostes and Andrew V. Teylu. STP is based on the
+Ryan Govostes and Andrew Teylu. STP is based on the
 following papers:
 
 -  `A Decision Procedure for Bit-Vectors and

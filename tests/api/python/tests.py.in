@@ -133,6 +133,127 @@ class TestSTP(unittest.TestCase):
         self.assertTrue(s.check(a * 2 + b * 2 == c * 2))
         self.assertEqual((s['a'] * 2 + s['b'] * 2)%2**32, s['c'] * 2 % 2**32)
 
+    def test_array_equality(self):
+        # Whole-array equality (the extensional theory of arrays) is
+        # available when the solver is created with array_equality=True.
+        s = stp.Solver(array_equality=True)
+        a = s.array('a', 4, 8)
+        b = s.array('b', 4, 8)
+        i = s.bitvec('i', 4)
+        v = s.bitvec('v', 8)
+
+        # Equal arrays cannot differ at any index.
+        self.assertFalse(s.check(a == b, a[i] != b[i]))
+
+        # A store chain equated with its own base forces the stored
+        # value to be in the base already.
+        self.assertFalse(s.check(a.store(i, v) == a, a[i] != v))
+
+        # Integer indices coerce to index-width constants.
+        self.assertFalse(s.check(a == b, a[2] != b[2]))
+
+        # Distinct arrays must differ somewhere.
+        self.assertTrue(s.check(a != b))
+
+        # A satisfying assignment gives each array its observed
+        # entries, in ascending index order, and equal arrays agree.
+        s2 = stp.Solver(array_equality=True)
+        c = s2.array('c', 4, 8)
+        d = s2.array('d', 4, 8)
+        s2.add(c == d, c[3] == 7, d[5] == 9)
+        self.assertTrue(s2.check())
+        cm = c.model()
+        self.assertEqual(cm[3], 7)
+        self.assertEqual(cm[5], 9)
+        self.assertEqual(cm, d.model())
+        self.assertEqual(list(cm.keys()), sorted(cm.keys()))
+
+        # BitVector operations are refused on arrays.
+        with self.assertRaises(TypeError):
+            a + b
+        with self.assertRaises(TypeError):
+            a & b
+
+    def test_array_equality_requires_the_flag(self):
+        # Without array_equality=True, whole-array equality raises a
+        # catchable error at construction time; historically the query
+        # only failed at solve time, aborting the interpreter from
+        # inside the library.
+        s = stp.Solver()
+        a = s.array('a', 4, 8)
+        b = s.array('b', 4, 8)
+        with self.assertRaises(RuntimeError):
+            a == b
+        with self.assertRaises(RuntimeError):
+            a != b
+        with self.assertRaises(RuntimeError):
+            a.eq(b)
+        # Element-level work stays available without the option.
+        self.assertTrue(s.check(a[1] == 5))
+
+    def test_array_refuses_all_bitvector_operations(self):
+        # Every BitVector operation inherited from Expr must raise
+        # TypeError on an array rather than build a malformed node --
+        # or, for the widening operations, abort the whole interpreter
+        # on a type-check failure inside the library.
+        s = stp.Solver(array_equality=True)
+        a = s.array('a', 4, 8)
+        b = s.array('b', 4, 8)
+
+        binary = ('add sub rsub mul div rdiv mod rmod rem rrem sdiv rsdiv '
+                  'smod rsmod srem rsrem lt le gt ge slt sle sgt sge and_ '
+                  'or_ xor nand nor xnor uaddo saddo usubo ssubo umulo '
+                  'smulo shl rshl shr rshr sar rsar').split()
+        for name in binary:
+            with self.assertRaises(TypeError, msg=name):
+                getattr(a, name)(b)
+
+        with self.assertRaises(TypeError):
+            a.extract(3, 0)
+        with self.assertRaises(TypeError):
+            a.zero_extend(16)
+        with self.assertRaises(TypeError):
+            a.sign_extend(16)
+        with self.assertRaises(TypeError):
+            a.neg()
+        with self.assertRaises(TypeError):
+            a.not_()
+        with self.assertRaises(TypeError):
+            a.simplify()
+
+    def test_array_model_repeated_calls(self):
+        # model() releases the entry buffers it receives on every call
+        # (they are malloc'd by libstp and freed there too); repeated
+        # calls must keep returning the same entries without corruption.
+        s = stp.Solver(array_equality=True)
+        a = s.array('a', 8, 8)
+        b = s.array('b', 8, 8)
+        s.add(a == b)
+        for i in range(20):
+            s.add(a[i] == i + 100)
+        self.assertTrue(s.check())
+        first = a.model()
+        for i in range(20):
+            self.assertEqual(first[i], i + 100)
+        for _ in range(200):
+            self.assertEqual(first, a.model())
+            self.assertEqual(first, b.value)
+
+    def test_array_model_wide_entries(self):
+        # Array model entries keep their exact values at any width:
+        # getBVUnsignedLongLong alone saturates above 64 bits, and wide
+        # indices would additionally collapse into a single dict key.
+        s = stp.Solver(array_equality=True)
+        a = s.array('a', 96, 128)
+        big_index = (1 << 90) + 7
+        big_value = (1 << 100) + 12345
+        s.add(a[big_index] == big_value, a[70] == 77)
+        self.assertTrue(s.check())
+        m = a.model()
+        self.assertEqual(m[big_index], big_value)
+        self.assertEqual(m[70], 77)
+        self.assertEqual(list(m.keys()), sorted(m.keys()))
+
     def test_boolean_expr(self):
         s = self.s
         a, b, c = s.bitvecs('a b c')

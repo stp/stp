@@ -33,6 +33,26 @@ THE SOFTWARE.
 
 namespace stp
 {
+// Polarity control for the reified bit-vector equality helper. LEFT_ONLY
+// constrains (bits equal -> literal), RIGHT_ONLY constrains
+// (literal -> bits equal), BOTH gives the full equivalence.
+enum Polarity
+{
+  LEFT_ONLY,
+  RIGHT_ONLY,
+  BOTH
+};
+
+// Resolve (or freshly allocate) the SAT variable vector of a SYMBOL.
+void getSatVariables(const ASTNode& a, vector<unsigned>& v_a,
+                     SATSolver& SatSolver, ToSATBase::ASTNodeToSATVar& satVar);
+
+// Adds clauses constraining a fresh SAT variable to (partially) reify
+// the bit-vector equality a = b, and returns that variable.
+Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a,
+                       const ASTNode& b, ToSATBase::ASTNodeToSATVar& satVar,
+                       Polarity polary = BOTH);
+
 class AbsRefine_CounterExample // not copyable
 {
 private:
@@ -102,6 +122,15 @@ public:
 
   void ClearComputeFormulaMap(void) { ComputeFormulaMap.clear(); }
 
+  // Publish an array observation certified by the array-equality
+  // consistency check: READ over a constant index mapped to its
+  // concrete value. Existing entries win.
+  void InsertIntoCounterExampleMap(const ASTNode& key, const ASTNode& value)
+  {
+    if (CounterExampleMap.find(key) == CounterExampleMap.end())
+      CounterExampleMap[key] = value;
+  }
+
   // Prints the counterexample to stdout
   void PrintCounterExample_InOrder(bool t);
 
@@ -109,9 +138,29 @@ public:
   // to e
   ASTNode GetCounterExample(const ASTNode& e);
 
+  // Model access for the array-equality consistency checker: must work
+  // mid-solve on the current candidate, regardless of the ValidFlag
+  // left over from an earlier query in incremental use.
+  ASTNode ModelValueOfTerm(const ASTNode& t)
+  {
+    return TermToConstTermUsingModel(t, false);
+  }
+  ASTNode ModelValueOfFormula(const ASTNode& f)
+  {
+    return ComputeFormulaUsingModel(f);
+  }
+
   // queries the counterexample, and returns a vector of index-value pairs for e
   vector<std::pair<ASTNode, ASTNode>> GetCounterExampleArray(bool t,
                                                              const ASTNode& e);
+
+  // The observed (index, value) model entries of one array symbol,
+  // deduplicated per concrete index and sorted in ascending unsigned
+  // index order. Shared by the programmatic model API and the SMT-LIB2
+  // model printer so both surfaces expose the same deterministic
+  // observations.
+  vector<std::pair<ASTNode, ASTNode>>
+  GetSortedArrayModelEntries(const ASTNode& arraySym);
 
   int CounterExampleSize(void) const { return CounterExampleMap.size(); }
 

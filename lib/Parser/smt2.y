@@ -950,7 +950,7 @@ namespace stp
 %token  DECIMAL_TOK
 
 %token <node> FORMID_TOK TERMID_TOK
-%token <str> STRING_TOK BITVECTOR_FUNCTIONID_TOK BOOLEAN_FUNCTIONID_TOK FLOATINGPOINT_FUNCTIONID_TOK
+%token <str> STRING_TOK BITVECTOR_FUNCTIONID_TOK BOOLEAN_FUNCTIONID_TOK FLOATINGPOINT_FUNCTIONID_TOK ARRAY_FUNCTIONID_TOK
 
 
  /* set-info tokens */
@@ -1575,9 +1575,18 @@ STRING_TOK LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK
 |
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK an_term
 {
-  // A nullary define-fun whose result is an array (bit-vector element). This
-  // is just a name for its body, stored like any other nullary function; the
-  // lexer resolves later references to it back to that body.
+  // Nullary array-sorted define-fun (bit-vector element): the body is an
+  // array term (a store chain, ITE, or another array); it is just a name
+  // for that body, stored like any other nullary function, and uses of the
+  // name expand to the body. Accepted with or without --array-equality.
+  if ($17->GetIndexWidth() != $9 || $17->GetValueWidth() != $14)
+  {
+    char msg [100];
+    sprintf(msg, "Different array widths specified: (%d %d) vs (%d %d)",
+            $17->GetIndexWidth(), $17->GetValueWidth(), $9, $14);
+    yyerror(msg);
+  }
+
   ASTVec empty;
   stp::GlobalParserInterface->storeFunction(*$1, empty, *$17);
   delete $1;
@@ -1586,10 +1595,22 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK 
 |
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK an_fp_sort RPAREN_TOK an_term
 {
-  // As above, but the array's element type is a floating-point sort.
+  // As above, but the array's element type is a floating-point sort; its
+  // packed width is what the body's value width must match.
+  if ($13->GetIndexWidth() != $9 ||
+      $13->GetValueWidth() != (unsigned int)($11->exp_bits + $11->sig_bits))
+  {
+    char msg [100];
+    sprintf(msg, "Different array widths specified: (%d %d) vs (%d %d)",
+            $13->GetIndexWidth(), $13->GetValueWidth(), $9,
+            $11->exp_bits + $11->sig_bits);
+    yyerror(msg);
+  }
+
   ASTVec empty;
   stp::GlobalParserInterface->storeFunction(*$1, empty, *$13);
   delete $1;
+  delete $11;
   stp::GlobalParserInterface->deleteNode($13);
 }
 ;
@@ -2571,6 +2592,13 @@ TERMID_TOK
 {
   $$ = stp::GlobalParserInterface->newNode((*$1));
   stp::GlobalParserInterface->deleteNode( $1);
+}
+| ARRAY_FUNCTIONID_TOK
+{
+  // A use of a nullary array-sorted define-fun expands to its body.
+  ASTVec empty;
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$1,empty));
+  delete $1;
 }
 | LPAREN_TOK an_term RPAREN_TOK
 {

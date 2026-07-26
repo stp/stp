@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/FloatBlaster/FpTotalise.h"
 #include "stp/Printer/printers.h"
@@ -124,8 +125,18 @@ void AbsRefine_CounterExample::ConstructCounterExample(
       // construct the appropriate array-read and store it in the
       // counterexample
       ASTNode arrayread_index = TermToConstTermUsingModel(index, false);
-      ASTNode key =
-          bm->CreateTerm(READ, array.GetValueWidth(), array, arrayread_index);
+      // With array equality active, recorded reads may sit on WRITE
+      // nodes; build their lookup keys with the plain hashing factory
+      // so no read-over-write rewrite can alter the key.
+      NodeFactory* keyFactory = bm->defaultNodeFactory;
+      {
+        ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+        if (ext != NULL && ext->active() && ext->coneFrozen() &&
+            ext->inCone(array))
+          keyFactory = bm->hashingNodeFactory;
+      }
+      ASTNode key = keyFactory->CreateTerm(READ, array.GetValueWidth(), array,
+                                           arrayread_index);
 
       // Get the ITE corresponding to the array-read and convert it
       // to a constant against the model
@@ -230,6 +241,64 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
         FatalError("TermToConstTermUsingModel: "
                    "array has 0 index width: ",
                    arrName);
+      }
+
+      // With array equality active, a read inside the equality cone is
+      // evaluated through its read-abstraction variable -- never by
+      // expanding its write chain against the model. The consistency
+      // checker, not the model-side expander, is the authority for
+      // these reads: the abstraction variable holds whatever the SAT
+      // solver assigned, and any disagreement with the array axioms is
+      // exactly what the checker turns into a lemma.
+      //
+      // A cone read with no recorded abstraction variable was
+      // simplified out of the formula before solving; it is evaluated
+      // from the certified array contents instead: the recorded
+      // observation at the concrete index if one exists at this level,
+      // else the concrete write-hit value, else recurse into the base
+      // array, defaulting to zero. This agrees with every recorded
+      // access whenever the checker certifies the candidate.
+      {
+        ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+        if (ext != NULL && ext->active() && ext->coneFrozen() &&
+            ext->inCone(arrName))
+        {
+          const ASTNode idxVal = TermToConstTermUsingModel(index, false);
+          NodeFactory* hf = bm->hashingNodeFactory;
+          ASTNode level = arrName;
+          ASTNode val;
+          while (true)
+          {
+            const ASTNode key = hf->CreateTerm(READ, level.GetValueWidth(),
+                                               level, idxVal);
+            ASTNodeMap::const_iterator cit = CounterExampleMap.find(key);
+            if (cit != CounterExampleMap.end())
+            {
+              val = cit->second;
+              if (BVCONST != val.GetKind())
+                val = TermToConstTermUsingModel(val, false);
+              break;
+            }
+            if (WRITE == level.GetKind())
+            {
+              const ASTNode writeIdx = TermToConstTermUsingModel(level[1],
+                                                                 false);
+              if (writeIdx == idxVal)
+              {
+                val = TermToConstTermUsingModel(level[2], false);
+                break;
+              }
+              level = level[0];
+              continue;
+            }
+            // base array with no observation: unobserved indices
+            // default to zero
+            val = bm->CreateZeroConst(term.GetValueWidth());
+            break;
+          }
+          CounterExampleMap[term] = val;
+          return val;
+        }
       }
 
       if (WRITE == arrName.GetKind()) // READ over a WRITE
@@ -805,6 +874,56 @@ ASTNode AbsRefine_CounterExample::GetCounterExample(const ASTNode& expr)
   return TermToConstTermUsingModel(expr, false);
 }
 
+// The observed (index, value) entries of one array symbol, evaluated to
+// constants, one entry per concrete index, in ascending unsigned index
+// order -- so the programmatic model API is deterministic and agrees
+// with the printed model. The CounterExampleMap is keyed by hash-consed
+// READ(array, index) nodes, so one index can only carry one entry;
+// conflicting duplicates would mean a broken model and fail loudly.
+vector<std::pair<ASTNode, ASTNode>>
+AbsRefine_CounterExample::GetSortedArrayModelEntries(const ASTNode& arraySym)
+{
+  vector<std::pair<ASTNode, ASTNode>> entries;
+
+  // Take a copy of the counterexample map, 'cause TermToConstTermUsingModel
+  // changes it. Which breaks the iterator otherwise.
+  const ASTNodeMap c(CounterExampleMap);
+
+  std::map<ASTNode, ASTNode> byIndex;
+  for (const auto& e : c)
+  {
+    const ASTNode& f = e.first;
+    if (f.GetKind() == READ && f[0] == arraySym && f[1].GetKind() == BVCONST)
+    {
+      ASTNode rhs;
+      if (BITVECTOR_TYPE == e.second.GetType() ||
+          FLOATINGPOINT_TYPE == e.second.GetType())
+      {
+        rhs = TermToConstTermUsingModel(e.second, false);
+      }
+      else
+      {
+        rhs = ComputeFormulaUsingModel(e.second);
+      }
+      assert(rhs.isConstant());
+      auto ins = byIndex.insert(std::make_pair(f[1], rhs));
+      if (!ins.second && ins.first->second != rhs)
+        FatalError("GetSortedArrayModelEntries: conflicting model values "
+                   "for one concrete array index",
+                   f);
+    }
+  }
+
+  entries.assign(byIndex.begin(), byIndex.end());
+  std::sort(entries.begin(), entries.end(),
+            [](const std::pair<ASTNode, ASTNode>& x,
+               const std::pair<ASTNode, ASTNode>& y) {
+              return CONSTANTBV::BitVector_Lexicompare(
+                         x.first.GetBVConst(), y.first.GetBVConst()) < 0;
+            });
+  return entries;
+}
+
 // FUNCTION: queries the counterexample, and returns the number of array
 // locations for e
 vector<std::pair<ASTNode, ASTNode>>
@@ -825,47 +944,61 @@ AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
     return entries;
   }
 
-  // Take a copy of the counterexample map, 'cause TermToConstTermUsingModel
-  // changes it. Which breaks the iterator otherwise.
-  const ASTNodeMap c(CounterExampleMap);
-
-  ASTNodeMap::const_iterator it = c.begin();
-  ASTNodeMap::const_iterator itend = c.end();
-  for (; it != itend; it++)
+  // With array equality disabled, keep the pre-extension extraction
+  // path -- including its unordered traversal -- byte for byte. The
+  // deterministic sorted path below applies only when the extension is
+  // enabled.
+  if (!bm->UserFlags.enable_array_equality)
   {
-    const ASTNode& f = it->first;
-    const ASTNode& se = it->second;
+    // Take a copy of the counterexample map, 'cause TermToConstTermUsingModel
+    // changes it. Which breaks the iterator otherwise.
+    const ASTNodeMap c(CounterExampleMap);
 
-    if (ARRAY_TYPE == se.GetType())
+    ASTNodeMap::const_iterator it = c.begin();
+    ASTNodeMap::const_iterator itend = c.end();
+    for (; it != itend; it++)
     {
-      FatalError("TermToConstTermUsingModel: "
-                 "entry in counterexample is an arraytype. bogus:",
-                 se);
+      const ASTNode& f = it->first;
+      const ASTNode& se = it->second;
+
+      if (ARRAY_TYPE == se.GetType())
+      {
+        FatalError("TermToConstTermUsingModel: "
+                   "entry in counterexample is an arraytype. bogus:",
+                   se);
+      }
+
+      // skip over introduced variables
+      if (f.GetKind() == SYMBOL && (bm->FoundIntroducedSymbolSet(f)))
+      {
+        continue;
+      }
+      if (f.GetKind() == READ && f[0] == e && f[0].GetKind() == SYMBOL &&
+          f[1].GetKind() == BVCONST)
+      {
+        ASTNode rhs;
+        if (BITVECTOR_TYPE == se.GetType() || FLOATINGPOINT_TYPE == se.GetType())
+        {
+          rhs = TermToConstTermUsingModel(se, false);
+        }
+        else
+        {
+          rhs = ComputeFormulaUsingModel(se);
+        }
+        assert(rhs.isConstant());
+        entries.push_back(std::make_pair(f[1], rhs));
+      }
     }
 
-    // skip over introduced variables
-    if (f.GetKind() == SYMBOL && (bm->FoundIntroducedSymbolSet(f)))
-    {
-      continue;
-    }
-    if (f.GetKind() == READ && f[0] == e && f[0].GetKind() == SYMBOL &&
-        f[1].GetKind() == BVCONST)
-    {
-      ASTNode rhs;
-      if (BITVECTOR_TYPE == se.GetType() || FLOATINGPOINT_TYPE == se.GetType())
-      {
-        rhs = TermToConstTermUsingModel(se, false);
-      }
-      else
-      {
-        rhs = ComputeFormulaUsingModel(se);
-      }
-      assert(rhs.isConstant());
-      entries.push_back(std::make_pair(f[1], rhs));
-    }
+    return entries;
   }
 
-  return entries;
+  if (e.GetKind() != SYMBOL)
+  {
+    return entries;
+  }
+
+  return GetSortedArrayModelEntries(e);
 }
 
 // TODO printing of expressions.
@@ -1009,24 +1142,80 @@ void AbsRefine_CounterExample::outputLine(std::ostream& os, const ASTNode &f, AS
 void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
 {
   const ASTNodeSet symbols = bm->getSymbols();
+
+  // With array equality disabled, follow the pre-extension output
+  // path byte for byte, legacy array format and all. The repaired
+  // printer below applies only when the extension is enabled.
+  if (!bm->UserFlags.enable_array_equality)
+  {
+    for (ASTNode f: symbols)
+    {
+        if (ARRAY_TYPE != f.GetType())
+          outputLine(os, f, f); // Can't do arrays because we need the reads.
+    }
+
+    ASTNodeMap c; // believe we need a copy because iterator gets invalidated?
+    for (const auto& e: CounterExampleMap)
+    {
+      if (READ == e.first.GetKind())
+          c.insert(e);
+    }
+
+    for (const auto& e: c)
+    {
+      outputLine(os, e.first, e.second);
+    }
+
+    os.flush();
+    return;
+  }
+
   for (ASTNode f: symbols)
   {
       if (ARRAY_TYPE != f.GetType())
-        outputLine(os, f, f); // Can't do arrays because we need the reads.
+        outputLine(os, f, f); // Arrays are printed below, from the reads.
   }
 
-  ASTNodeMap c; // believe we need a copy because iterator gets invalidated?
-  for (const auto& e: CounterExampleMap)
+  // Arrays: emit one valid nullary define-fun per array symbol whose
+  // body is a constant-zero array with every observed (index, value)
+  // pair stored on top, in ascending concrete-index order. The printed
+  // model replays in a conforming SMT-LIB2 solver.
+  vector<ASTNode> arrays;
+  for (ASTNode f : symbols)
+    if (ARRAY_TYPE == f.GetType() && !bm->FoundIntroducedSymbolSet(f))
+      arrays.push_back(f);
+  std::sort(arrays.begin(), arrays.end(),
+            [](const ASTNode& x, const ASTNode& y) {
+              return strcmp(x.GetName(), y.GetName()) < 0;
+            });
+
+  for (const ASTNode& array : arrays)
   {
-    if (READ == e.first.GetKind())
-        c.insert(e);
+    // Shared with GetCounterExampleArray, so the text and programmatic
+    // model surfaces expose identical deterministic observations.
+    vector<std::pair<ASTNode, ASTNode>> entries =
+        GetSortedArrayModelEntries(array);
+
+    const unsigned iw = array.GetIndexWidth();
+    const unsigned vw = array.GetValueWidth();
+    os << "( define-fun |";
+    array.nodeprint(os);
+    os << "| () (Array (_ BitVec " << iw << ") (_ BitVec " << vw << "))";
+    for (size_t i = 0; i < entries.size(); i++)
+      os << " (store";
+    os << " ((as const (Array (_ BitVec " << iw << ") (_ BitVec " << vw
+       << ")))";
+    printer::outputBitVecSMTLIB2(bm->CreateZeroConst(vw), os);
+    os << " )";
+    for (size_t i = 0; i < entries.size(); i++)
+    {
+      printer::outputBitVecSMTLIB2(entries[i].first, os);
+      printer::outputBitVecSMTLIB2(entries[i].second, os);
+      os << " )";
+    }
+    os << " )" << std::endl;
   }
 
-  for (const auto& e: c)
-  {
-    outputLine(os, e.first, e.second); 
-  }
-    
   os.flush();
 }
 
@@ -1309,6 +1498,35 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
       ToSATBase::ASTNodeToSATVar m = tosat->SATVar_to_SymbolIndexMap();
       PrintSATModel(SatSolver, m);
     }
+    // Array equality: the consistency checker runs on every candidate
+    // whenever at least one array equality was abstracted -- even when
+    // STP's ordinary model evaluation already failed -- and an array
+    // conflict takes priority. Reads inside the equality cone are
+    // exempt from STP's ordinary read refinement, so only the array
+    // lemma can rule such a candidate out; skipping the check on
+    // ordinary-false candidates could therefore loop without progress.
+    // A candidate is reported satisfiable only when both checks pass
+    // on the same assignment. (If the formula collapsed to a constant
+    // before preparation, no candidate model exists and no cone was
+    // frozen.)
+    //
+    // The checker runs before the ordinary evaluation so that its
+    // conflict-free fixed point can be published into the model first:
+    // a cone read that was simplified out of the transformed formula
+    // is evaluated from the certified array contents, which must agree
+    // with every observation the propagation derived (e.g. a read
+    // observing a value across a true array equality).
+    ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+    const bool extActive = ext != NULL && ext->active() && ext->coneFrozen();
+    ExtensionalityContext::CandidateOutcome extOutcome =
+        ExtensionalityContext::EXT_SKIPPED;
+    if (extActive)
+    {
+      extOutcome = ext->checkCandidate(this);
+      if (extOutcome == ExtensionalityContext::EXT_CONSISTENT)
+        ext->publishObservations(this);
+    }
+
     // check if the counterexample is good or not
     ASTNode orig_result = ComputeFormulaUsingModel(original_input);
     if (!(ASTTrue == orig_result || ASTFalse == orig_result))
@@ -1316,32 +1534,50 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
                  "true or false against model");
     bm->GetRunTimes()->stop(RunTimes::CounterExampleGeneration);
 
-    // if the counterexample is indeed a good one, then return
-    // invalid
-    if (ASTTrue == orig_result)
+    switch (ExtensionalityContext::decideCertification(
+        ASTTrue == orig_result, extActive, extOutcome))
     {
-      if (bm->UserFlags.check_counterexample_flag)
+      case ExtensionalityContext::ADD_EXT_LEMMA:
+        // the pending certificate is retained; the combined refinement
+        // driver installs its clause and re-solves
+        return SOLVER_UNDECIDED;
+
+      case ExtensionalityContext::INTERNAL_ERROR:
+        FatalError("CallSAT_ResultCheck: an array-inequality witness "
+                   "constraint is violated in the candidate model, "
+                   "although it was part of the bit-blasted formula -- "
+                   "the encoding is broken");
+        return SOLVER_ERROR; // unreachable
+
+      case ExtensionalityContext::RETURN_SAT:
       {
-        CheckCounterExample(SatSolver.okay());
+        if (bm->UserFlags.check_counterexample_flag)
+        {
+          CheckCounterExample(SatSolver.okay());
+        }
+
+        if ((bm->UserFlags.stats_flag ||
+             bm->UserFlags.print_counterexample_flag) &&
+            (!bm->UserFlags.smtlib2_parser_flag))
+        {
+          PrintCounterExample(SatSolver.okay());
+          PrintCounterExample_InOrder(SatSolver.okay());
+        }
+        return SOLVER_INVALID;
       }
 
-      if ((bm->UserFlags.stats_flag || bm->UserFlags.print_counterexample_flag) && (!bm->UserFlags.smtlib2_parser_flag))
+      case ExtensionalityContext::RUN_HOST_REFINEMENT:
+      default:
       {
-        PrintCounterExample(SatSolver.okay());
-        PrintCounterExample_InOrder(SatSolver.okay());
-      }
-      return SOLVER_INVALID;
-    }
-    // counterexample is bogus: flag it
-    else
-    {
-      if (bm->UserFlags.stats_flag && bm->UserFlags.print_nodes_flag)
-      {
-        cout << "Supposedly bogus one: \n";
-        PrintCounterExample(true);
-      }
+        // counterexample is bogus: flag it
+        if (bm->UserFlags.stats_flag && bm->UserFlags.print_nodes_flag)
+        {
+          cout << "Supposedly bogus one: \n";
+          PrintCounterExample(true);
+        }
 
-      return SOLVER_UNDECIDED;
+        return SOLVER_UNDECIDED;
+      }
     }
   }
   else

@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/NodeFactory/HashingNodeFactory.h"
 #include "stp/AST/AST.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/STPManager/STP.h"
 
 using namespace stp;
@@ -42,6 +43,19 @@ ASTNode HashingNodeFactory::CreateNode(const Kind kind,
   if (kind == NOT && back_children[0].GetKind() == NOT)
   {
     return back_children[0][0];
+  }
+
+  // Array equality: every front end's node creation bottoms out here,
+  // so this is the single place where an equality between array terms
+  // is replaced by a fresh Boolean abstraction variable (the formula
+  // abstraction of Brummayer & Biere's lemmas-on-demand procedure).
+  // While the feature is enabled no equality node over arrays is ever
+  // built, so none of STP's downstream transformations encounter one.
+  if (kind == EQ && bm.UserFlags.enable_array_equality &&
+      back_children.size() == 2 && back_children[0].GetIndexWidth() > 0)
+  {
+    return bm.getExtensionality()->makeEquality(back_children[0],
+                                                back_children[1]);
   }
   
   if (back_children.size()  <= 1 || !isCommutative(kind))

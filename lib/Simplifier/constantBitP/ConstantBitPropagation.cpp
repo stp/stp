@@ -344,9 +344,13 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
       {
         if (SYMBOL == node.GetKind())
         {
-          [[maybe_unused]] bool r =
-              simplifier->UpdateSubstitutionMap(node, constNode);
-          assert(r);
+          bool r = simplifier->UpdateSubstitutionMap(node, constNode);
+          // Symbols the array-equality procedure depends on refuse
+          // substitution; conjoin the derived fixing instead, so the
+          // information is kept and the symbol stays in the formula.
+          if (!r && conjoinToTop)
+            toConjoin.push_back(bits.getValue(0) ? node
+                                                 : nf->CreateNode(NOT, node));
           doAssign = false;
         }
         else if (conjoinToTop && bits.getValue(0))
@@ -367,9 +371,9 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
         assert(((unsigned)bits.getWidth()) == node.GetValueWidth());
         if (SYMBOL == node.GetKind())
         {
-          [[maybe_unused]] bool r =
-              simplifier->UpdateSubstitutionMap(node, constNode);
-          assert(r);
+          bool r = simplifier->UpdateSubstitutionMap(node, constNode);
+          if (!r && conjoinToTop)
+            toConjoin.push_back(nf->CreateNode(EQ, node, constNode));
           doAssign = false;
         }
         else if (conjoinToTop)

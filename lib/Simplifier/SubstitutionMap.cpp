@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/SubstitutionMap.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/Simplifier/Simplifier.h"
 
 namespace stp
@@ -389,11 +390,43 @@ bool SubstitutionMap::loops(const ASTNode& n0, const ASTNode& n1)
   return (loops);
 }
 
+// While array equality is active, the symbols the array decision
+// procedure relies on (equality abstraction variables, witness indices
+// and witness-read names, lemma-leaf names) must stay in the formula
+// until it is bit-blasted: their SAT variables carry the refinement
+// lemmas, and the witness-read equations are how the current form of
+// each equality operand is recovered after simplification. Likewise, an
+// equation-deleting read-equals-constant orientation over an array the
+// checker may reason about would silently discard an observation the
+// consistency check depends on.
+bool SubstitutionMap::extensionalityProtected(const ASTNode& e0,
+                                              const ASTNode& e1) const
+{
+  ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  if (ext == NULL || !ext->active())
+    return false;
+  if (e0.GetKind() == SYMBOL && ext->isProtected(e0))
+    return true;
+  if (e1.GetKind() == SYMBOL && ext->isProtected(e1))
+    return true;
+  // read-equals-constant deletion, either orientation
+  if (e0.GetKind() == READ && e0[0].GetKind() == SYMBOL &&
+      ext->mayBeConeArray(e0[0]))
+    return true;
+  if (e1.GetKind() == READ && e1[0].GetKind() == SYMBOL &&
+      ext->mayBeConeArray(e1[0]))
+    return true;
+  return false;
+}
+
 bool SubstitutionMap::UpdateSubstitutionMap(const ASTNode& e0,
                                             const ASTNode& e1)
 {
   int i = TermOrder(e0, e1);
   if (0 == i)
+    return false;
+
+  if (extensionalityProtected(e0, e1))
     return false;
 
   assert(e0 != e1);

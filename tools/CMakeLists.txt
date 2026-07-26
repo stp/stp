@@ -20,6 +20,7 @@
 
 add_subdirectory(stp)
 add_subdirectory(stp_simple)
+add_subdirectory(extdiff)
 
 option(BUILD_EXTRA_TOOLS "Build extra tools" OFF)
 if (BUILD_EXTRA_TOOLS)

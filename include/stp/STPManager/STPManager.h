@@ -40,6 +40,7 @@ THE SOFTWARE.
 
 namespace stp
 {
+class ExtensionalityContext;
 
 // The five SMT-LIB floating-point special values. Their nodes are ordinary
 // packed interned constants (see STPMgr::CreateFPSpecialConst); a childless
@@ -90,6 +91,8 @@ private:
   // Table for variable names, let names etc.
   ASTSymbolSet _symbol_unique_table;
 
+  ExtensionalityContext* extensionality = nullptr;
+
   // Table to uniquefy bvconst
   ASTBVConstSet _bvconst_unique_table;
 
@@ -98,6 +101,16 @@ private:
 public:
   HashingNodeFactory* hashingNodeFactory;
   NodeFactory* defaultNodeFactory;
+
+  // State of the array-equality (extensional arrays) decision
+  // procedure: the equality registry, per-solve array view, and
+  // pending refinement. Created lazily when the first array equality
+  // is abstracted.
+  DLL_PUBLIC ExtensionalityContext* getExtensionality();
+  ExtensionalityContext* getExtensionalityIfAny() const
+  {
+    return extensionality;
+  }
 
   // frequently used nodes
   ASTNode ASTFalse, ASTTrue, ASTUndefined;
