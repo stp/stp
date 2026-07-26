@@ -801,6 +801,47 @@ TEST(array_extensionality, flag_on_without_equalities_is_dormant)
   EXPECT_EQ(7u, entries[0][3]);
 }
 
+TEST(array_extensionality, refinement_on_the_cadical_backend)
+{
+  // Refinement adds lemma clauses to the incremental solver over
+  // variables it may already have eliminated; on the CaDiCaL backend
+  // correctness rests on clause restoration (setFrozen is a
+  // documented no-op there). A CaDiCaL upgrade with different restore
+  // behavior would surface here, not in production. Skipped when the
+  // backend is not compiled in.
+  VC vc = vc_createValidityChecker();
+  if (!vc_supportsCadical(vc))
+  {
+    vc_Destroy(vc);
+    GTEST_SKIP() << "CaDiCaL backend not compiled in";
+  }
+  vc_setFlag(vc, 'x');
+  ASSERT_TRUE(vc_useCadical(vc));
+
+  Type bv8 = vc_bvType(vc, 8);
+  Type arrT = vc_arrayType(vc, bv8, bv8);
+
+  // The same two writes applied in opposite orders at provably
+  // distinct indices: unsat, and only refinement lemmas can prove it.
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr i = vc_varExpr(vc, "i", bv8);
+  Expr i1 = vc_bvPlusExpr(vc, 8, i, vc_bvConstExprFromInt(vc, 8, 1));
+  Expr x = vc_varExpr(vc, "x", bv8);
+  Expr y = vc_varExpr(vc, "y", bv8);
+
+  Expr c1 = vc_writeExpr(vc, vc_writeExpr(vc, a, i, x), i1, y);
+  Expr c2 = vc_writeExpr(vc, vc_writeExpr(vc, a, i1, y), i, x);
+  vc_assertFormula(vc, vc_notExpr(vc, vc_eqExpr(vc, c1, c2)));
+
+  stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  ASSERT_NE(nullptr, ext);
+
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_GT(ext->lemmasEmitted, 0);
+  vc_Destroy(vc);
+}
+
 TEST(array_extensionality, mixed_width_equality_dies_loudly)
 {
   // vc_eqExpr over arrays of different index widths cannot be
