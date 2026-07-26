@@ -208,6 +208,15 @@ protected:
         return true;
     return false;
   }
+  static bool hasArrayEqGuard(const std::vector<ExtLemmaAtom>& premise,
+                              const ASTNode& a, const ASTNode& b)
+  {
+    for (size_t i = 0; i < premise.size(); i++)
+      if (premise[i].op == ExtLemmaAtom::ARRAY_EQ && premise[i].a == a &&
+          premise[i].b == b)
+        return true;
+    return false;
+  }
 
   void expectStats(const ExtCheckResult& r,
                    const std::map<std::string, int>& expected)
@@ -839,6 +848,77 @@ TEST_F(ExtFixtureTest, ConflictFiresAgainstRepresentative)
   EXPECT_EQ(k, c.abstractPremise[0].b);
   EXPECT_EQ(r1, c.abstractConclusionA);
   EXPECT_EQ(r3, c.abstractConclusionB);
+}
+
+// A conflict carries the lemma twice: the refinement form over
+// abstraction names, and the theory-level form over the original
+// terms -- the compound index term, the read terms themselves as the
+// conclusion, and the crossed array equality as an atom of its own.
+// The accesses are built by hand so the two layers hold different
+// nodes, as in production, where an access's value term is the
+// genuine read and its value name the read-abstraction symbol.
+TEST_F(ExtFixtureTest, ConflictCarriesTheoryLemmaOverOriginalTerms)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode A = arr("A"), B = arr("B");
+  ASTNode p = mgr.CreateSymbol("p", 0, 2);
+  ASTNode iTerm = hf->CreateTerm(BVPLUS, 2, p, c2(1));
+  ASTNode iName = bv("n_i", 0);
+  ASTNode j = bv("j", 0); // a plain symbolic index names itself
+  ASTNode rA = bv("rA", 1), rB = bv("rB", 2);
+  ASTNode readA = hf->CreateTerm(READ, 2, A, iTerm);
+  ASTNode readB = hf->CreateTerm(READ, 2, B, j);
+  ASTNode eqAB = eqEdge(A, B, "eqAB", true);
+  ASTNode lam = bv("z_lam_eqAB", 3);
+  ASTNode wL = bv("z_wL_eqAB", 0), wR = bv("z_wR_eqAB", 0);
+  witness(eqAB, lam, wL, wR);
+
+  ExtAccess onA;
+  onA.id = g.accesses.size();
+  onA.isWrite = false;
+  onA.site = A;
+  onA.indexTerm = iTerm;
+  onA.valueTerm = readA;
+  onA.indexName = iName;
+  onA.valueName = rA;
+  g.accesses.push_back(onA);
+  ExtAccess onB;
+  onB.id = g.accesses.size();
+  onB.isWrite = false;
+  onB.site = B;
+  onB.indexTerm = j;
+  onB.valueTerm = readB;
+  onB.indexName = j;
+  onB.valueName = rB;
+  g.accesses.push_back(onB);
+  readAccess(A, lam, wL);
+  readAccess(B, lam, wR);
+
+  ExtCheckResult r = run();
+  ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
+
+  const ExtConflict& c = r.conflict;
+  EXPECT_EQ(B, c.commonArray);
+  EXPECT_EQ(onB.id, c.leftAccess);
+  EXPECT_EQ(onA.id, c.rightAccess);
+
+  // abstract layer: scalar names and the proxy literal
+  ASSERT_EQ(2u, c.abstractPremise.size());
+  EXPECT_TRUE(hasEqGuard(c.abstractPremise, j, iName));
+  EXPECT_TRUE(hasProxyGuard(c.abstractPremise, eqAB));
+  EXPECT_EQ(rB, c.abstractConclusionA);
+  EXPECT_EQ(rA, c.abstractConclusionB);
+
+  // theory layer: the original index term, the equality itself as an
+  // atom carrying its record id, and the read terms as the conclusion
+  ASSERT_EQ(2u, c.theoryPremise.size());
+  EXPECT_TRUE(hasEqGuard(c.theoryPremise, j, iTerm));
+  EXPECT_TRUE(hasArrayEqGuard(c.theoryPremise, A, B));
+  for (size_t x = 0; x < c.theoryPremise.size(); x++)
+    if (c.theoryPremise[x].op == ExtLemmaAtom::ARRAY_EQ)
+      EXPECT_EQ(0u, c.theoryPremise[x].eqRecord);
+  EXPECT_EQ(readB, c.theoryConclusionA);
+  EXPECT_EQ(readA, c.theoryConclusionB);
 }
 
 // The shortest-path property of section 11.1: because rule I seeds
