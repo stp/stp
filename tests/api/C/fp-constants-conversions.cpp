@@ -2,10 +2,15 @@
 #include <stp/c_interface.h>
 #include <cstdint>
 
-// Solve (expecting satisfiable) and read the value of `v`.
+// Solve (expecting satisfiable) and read the value of `v`. ASSERT_* needs a
+// void function, so guard by hand: reading a counterexample after a failed
+// query is a FatalError, which would abort the whole test binary.
 static unsigned long long solveRead(VC vc, Expr v)
 {
-  EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  const int r = vc_query(vc, vc_falseExpr(vc));
+  EXPECT_EQ(0, r);
+  if (r != 0)
+    return (unsigned long long)-1;
   return getBVUnsignedLongLong(vc_getCounterExample(vc, v));
 }
 
@@ -75,7 +80,7 @@ TEST(fp_conversions, to_bitvector)
   vc_assertFormula(vc, vc_eqExpr(vc, ubv, vc_fpToUBVExpr(vc, 8, rne, two)));
   vc_assertFormula(vc, vc_eqExpr(vc, sbv, vc_fpToSBVExpr(vc, 8, rne, negtwo)));
 
-  EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
   EXPECT_EQ((unsigned long long)2, getBVUnsignedLongLong(vc_getCounterExample(vc, ubv)));
   EXPECT_EQ((unsigned long long)0xFE,
             getBVUnsignedLongLong(vc_getCounterExample(vc, sbv))); // -2, 8-bit
@@ -105,7 +110,7 @@ TEST(fp_conversions, to_float)
                                        vc, 5, 11, rne,
                                        vc_bvConstExprFromLL(vc, 8, 5))));
 
-  EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
   EXPECT_EQ((unsigned long long)0x4000,
             getBVUnsignedLongLong(vc_getCounterExample(vc, rein))); // 2.0
   EXPECT_EQ((unsigned long long)0x4200,
@@ -180,7 +185,7 @@ TEST(fp_conversions, every_rounding_mode)
     vc_assertFormula(vc, vc_eqExpr(vc, b, vc_fpToSBVExpr(vc, 8, rm, negHalf)));
     vc_assertFormula(vc, vc_eqExpr(vc, c, vc_fpToSBVExpr(vc, 8, rm, tieHalf)));
 
-    EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+    ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
     EXPECT_EQ(p.pos, getBVUnsignedLongLong(vc_getCounterExample(vc, a)));
     EXPECT_EQ(p.neg, getBVUnsignedLongLong(vc_getCounterExample(vc, b)));
     EXPECT_EQ(p.tie, getBVUnsignedLongLong(vc_getCounterExample(vc, c)));

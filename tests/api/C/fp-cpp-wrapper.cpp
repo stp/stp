@@ -176,7 +176,10 @@ TEST(fp_cpp_wrapper, model_throws_on_odd_format)
 {
   stp::fp::Solver s;
   stp::fp::Float t = s.fp("of_t", 3, 5);
+  // fp.eq alone would leave two legal models (fp.eq(+0, -0) holds); pin the
+  // sign too, or the expected bits depend on the solver's choice.
   s.add(t.eq(s.fp_zero(3, 5)));
+  s.add(t.is_positive());
   ASSERT_TRUE(s.check());
   EXPECT_THROW(s.model(t), std::runtime_error);
   EXPECT_EQ(0u, s.model_bits(t));
