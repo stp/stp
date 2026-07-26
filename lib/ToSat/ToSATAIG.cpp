@@ -218,6 +218,33 @@ void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
         if (v[i] != ~((unsigned)0))
           satSolver.setFrozen(v[i]);
     }
+
+    // A lemma-only symbol -- a cone read's abstraction variable or
+    // index -- may legally never have reached the bit-blast: the
+    // read's only occurrence can itself sit inside another abstracted
+    // term. Its semantics live entirely in future refinement lemmas,
+    // so fresh SAT variables allocated here, before the first solve,
+    // are exactly the unconstrained meaning the blasted formula gives
+    // it; the model loop then values them like any other symbol, and
+    // the lemmas constrain the same variables the candidate was
+    // checked against. Names defined by equations are deliberately
+    // not treated this way -- for them a missing vector still fails
+    // loudly at lemma encoding.
+    const std::set<ASTNode>& lemmaOnly = ext->getLemmaOnlySymbols();
+    for (std::set<ASTNode>::const_iterator it = lemmaOnly.begin();
+         it != lemmaOnly.end(); ++it)
+    {
+      if (nodeToSATVar.find(*it) != nodeToSATVar.end())
+        continue;
+      const unsigned width = it->GetValueWidth();
+      vector<unsigned> v(width);
+      for (unsigned i = 0; i < width; i++)
+      {
+        v[i] = satSolver.newVar();
+        satSolver.setFrozen(v[i]);
+      }
+      nodeToSATVar.insert(make_pair(*it, v));
+    }
   }
 }
 

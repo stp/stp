@@ -263,6 +263,22 @@ public:
 
   // Every symbol EXTCHK relies on keeps its SAT variables (frozen
   // against backend variable elimination).
+  // Lemma leaves whose semantics live entirely in future refinement
+  // lemmas: the abstraction variables of cone reads and their index
+  // symbols. Such a symbol can legally be absent from the bit-blasted
+  // formula -- a cone read's only occurrence may itself sit inside
+  // another abstracted term -- and the translator then allocates
+  // fresh SAT variables for it before the first solve, which is
+  // exactly the unconstrained semantics the blasted formula gives it.
+  // Names defined by equations (witness reads, scalar names) are
+  // deliberately not in this set: for them, absence from the
+  // bit-blast means a defining equation was lost, and lemma encoding
+  // must keep failing loudly.
+  const std::set<ASTNode>& getLemmaOnlySymbols() const
+  {
+    return lemmaOnlySymbols;
+  }
+
   const std::set<ASTNode>& getFrozenSymbols() const
   {
     return protectedSymbols;
@@ -295,6 +311,7 @@ private:
   std::map<std::pair<ASTNode, ASTNode>, size_t> keyToRecord;
   std::map<ASTNode, size_t> proxyToRecord;
   std::set<ASTNode> protectedSymbols;
+  std::set<ASTNode> lemmaOnlySymbols; // per-solve; see the accessor
   std::set<ASTNode> possibleConeSymbols;
 
   // Replacements for array-valued if-then-else (paper section 4.1):

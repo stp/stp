@@ -309,6 +309,7 @@ void ExtensionalityContext::beginSolve()
   witnessObls.clear();
   scalarNames.clear();
   nameToTermMap.clear();
+  lemmaOnlySymbols.clear();
   graph = ExtGraph();
   graphBound = false;
   pendingLemmaValid = false;
@@ -731,6 +732,14 @@ void ExtensionalityContext::bindAfterTransform(ArrayTransformer* at)
       FatalError("array-equality: a read index inside the cone has no "
                  "bit-blasted scalar name to encode lemmas over",
                  row.index);
+    // A cone read's semantics live entirely in refinement lemmas, so
+    // its abstraction variable and index may legally never reach the
+    // bit-blasted formula (the read's only occurrence can sit inside
+    // another abstracted term); the translator allocates fresh SAT
+    // variables for whichever of these it never saw.
+    lemmaOnlySymbols.insert(a.valueName);
+    if (a.indexName.GetKind() == SYMBOL)
+      lemmaOnlySymbols.insert(a.indexName);
     graph.accesses.push_back(a);
   }
 
