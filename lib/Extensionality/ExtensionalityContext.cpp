@@ -46,6 +46,24 @@ bool nodeNumLess(const ASTNode& a, const ASTNode& b)
   return a.GetNodeNum() < b.GetNodeNum();
 }
 
+// The plain bitvector twin of a constant. A floating-point constant
+// interns separately from the bitvector constant with the same bits
+// (the format is part of the identity), but this machinery works on
+// packed bits and compares model constants by node identity, so every
+// constant it keeps -- scalar names, checker model values, lemma
+// leaves -- must be the plain flavour: a float-element write value
+// held as a float constant would never compare equal to the same bits
+// read back from the SAT assignment, and the checker would report the
+// same phantom conflict on every refinement iteration.
+ASTNode plainConst(STPMgr* bm, const ASTNode& c)
+{
+  assert(c.isConstant());
+  if (c.GetExpWidth() == 0)
+    return c;
+  return bm->CreateBVConst(CONSTANTBV::BitVector_Clone(c.GetBVConst()),
+                           c.GetValueWidth());
+}
+
 // Whether the packed floating-point cell x of format (eb, sb) holds a NaN:
 // an all-ones exponent with a nonzero significand, the layout being
 // [sign | exponent eb | significand sb-1]. Built as a plain bitvector
@@ -529,7 +547,7 @@ ASTNode ExtensionalityContext::freshName(const ASTNode& term,
                                          ASTVec& namingConstraints)
 {
   if (term.isConstant())
-    return term;
+    return plainConst(bm, term);
   std::map<ASTNode, ASTNode>::const_iterator it = scalarNames.find(term);
   if (it != scalarNames.end())
     return it->second;
@@ -847,9 +865,13 @@ namespace
 class CEModelView : public ExtModelView
 {
   AbsRefine_CounterExample* ce;
+  STPMgr* bm;
 
 public:
-  explicit CEModelView(AbsRefine_CounterExample* ce_) : ce(ce_) {}
+  CEModelView(AbsRefine_CounterExample* ce_, STPMgr* bm_)
+      : ce(ce_), bm(bm_)
+  {
+  }
 
   virtual ASTNode bvValue(const ASTNode& term)
   {
@@ -859,7 +881,10 @@ public:
                  "concrete value for a term the consistency checker "
                  "needs",
                  term);
-    return v;
+    // Substitution entries can hand a float-element symbol back as a
+    // float constant; the checker compares constants by node identity,
+    // so give it the plain twin.
+    return plainConst(bm, v);
   }
 
   virtual bool boolValue(const ASTNode& term)
@@ -900,7 +925,7 @@ ExtensionalityContext::checkCandidate(AbsRefine_CounterExample* ce)
 {
   assert(graphBound);
   pendingLemmaValid = false;
-  CEModelView view(ce);
+  CEModelView view(ce, bm);
   ExtCheckResult res = ExtChecker::check(graph, view, false);
   switch (res.status)
   {
