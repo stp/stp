@@ -541,8 +541,10 @@ TEST_F(ExtFixtureTest, ReadWriteHitConflict)
   EXPECT_EQ(r1, c.abstractConclusionB);
 }
 
-// Two chained true equalities a = b and b = c: the work list must
-// carry an access across both edges to meet its counterpart.
+// Two chained true equalities a = b and b = c: breadth-first
+// discovery drives each access one edge inward, so they meet at the
+// middle array and the lemma still carries both equalities -- one
+// contributed by each side's path.
 TEST_F(ExtFixtureTest, TransitiveEqualityConflict)
 {
   ASTNode A = arr("A"), B = arr("B"), C = arr("C");
@@ -584,6 +586,78 @@ TEST_F(ExtFixtureTest, TransitiveEqualityConflict)
   EXPECT_EQ(rA, c.abstractConclusionA);
   EXPECT_EQ(rC, c.abstractConclusionB);
   EXPECT_STREQ("L_EQ", r.events.back().rule);
+}
+
+// One access crossing two successive equality edges before its
+// conflict fires -- the complement of the meet-in-the-middle shape
+// above, which breadth-first search produces whenever both ends are
+// plain reads. Here the far access reached C by stepping down out of
+// a write, so its equality expansion trails one hop behind and the
+// near access completes the whole two-edge chain itself: the
+// conflicting arrival carries both equality proxies on its own path,
+// the resident access only its write-index guard.
+TEST_F(ExtFixtureTest, OneAccessCrossesTwoEqualityEdges)
+{
+  ASTNode A = arr("A"), B = arr("B"), C = arr("C");
+  ASTNode ix = bv("ix", 0), iy = bv("iy", 0);
+  ASTNode jW = bv("jW", 1), eW = bv("eW", 3);
+  ASTNode rx = bv("rx", 1), ry = bv("ry", 2);
+  ASTNode w = write(C, jW, eW); // a write stacked on C
+  ASTNode eqAB = eqEdge(A, B, "eqAB", true);
+  ASTNode eqBC = eqEdge(B, C, "eqBC", true);
+  ASTNode lamAB = bv("z_lam_eqAB", 2);
+  ASTNode wLAB = bv("z_wL_eqAB", 0), wRAB = bv("z_wR_eqAB", 0);
+  ASTNode lamBC = bv("z_lam_eqBC", 3);
+  ASTNode wLBC = bv("z_wL_eqBC", 1), wRBC = bv("z_wR_eqBC", 1);
+  witness(eqAB, lamAB, wLAB, wRAB);
+  witness(eqBC, lamBC, wLBC, wRBC);
+
+  // reference seed order: rx, ry, w, then the witness reads
+  size_t aX = readAccess(A, ix, rx);
+  size_t aY = readAccess(w, iy, ry);
+  writeAccess(w);
+  readAccess(A, lamAB, wLAB);
+  readAccess(B, lamAB, wRAB);
+  readAccess(B, lamBC, wLBC);
+  readAccess(C, lamBC, wRBC);
+
+  ExtCheckResult r = run();
+  ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
+  expectStats(r, {{"conflicts", 1},
+                  {"insertions", 12},
+                  {"propagations", 5},
+                  {"rule_D_WRITE", 1},
+                  {"rule_L_EQ", 1},
+                  {"rule_R_EQ", 2},
+                  {"rule_U_WRITE", 1},
+                  {"seeds", 7},
+                  {"skipped_represented", 4},
+                  {"skipped_seen", 1}});
+
+  const ExtConflict& c = r.conflict;
+  EXPECT_EQ(C, c.commonArray);
+  EXPECT_EQ(aY, c.leftAccess);
+  EXPECT_EQ(aX, c.rightAccess);
+  // the arriving access's path is the two successive equality edges,
+  // in traversal order
+  ASSERT_EQ(2u, c.rightGuards.size());
+  EXPECT_EQ(ExtGuard::EQ_PROXY, c.rightGuards[0].kind);
+  EXPECT_EQ(eqAB, c.rightGuards[0].proxy);
+  EXPECT_EQ(ExtGuard::EQ_PROXY, c.rightGuards[1].kind);
+  EXPECT_EQ(eqBC, c.rightGuards[1].proxy);
+  // the resident access left its write with a single index guard
+  ASSERT_EQ(1u, c.leftGuards.size());
+  EXPECT_EQ(ExtGuard::INDEX_NE, c.leftGuards[0].kind);
+
+  EXPECT_TRUE(hasEqGuard(c.abstractPremise, iy, ix));
+  EXPECT_TRUE(hasNeGuard(c.abstractPremise, iy, jW));
+  EXPECT_TRUE(hasProxyGuard(c.abstractPremise, eqAB));
+  EXPECT_TRUE(hasProxyGuard(c.abstractPremise, eqBC));
+  EXPECT_EQ(4u, c.abstractPremise.size());
+  EXPECT_EQ(ry, c.abstractConclusionA);
+  EXPECT_EQ(rx, c.abstractConclusionB);
+  EXPECT_STREQ("R_EQ", r.events.back().rule);
+  EXPECT_EQ(ExtEvent::CONFLICT, r.events.back().kind);
 }
 
 // Example 5 of the paper: upward propagation over a write (rule U),
