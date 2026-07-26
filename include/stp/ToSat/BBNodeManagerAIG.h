@@ -45,6 +45,46 @@ class STPMgr; // we ignore this anyway.
 
 extern vector<BBNodeAIG> _empty_BBNodeAIGVec;
 
+/* ABC's Aig_Exor() and Aig_Mux2() both build their result with two Aig_And()
+ * calls sitting in a single Aig_Or() argument list. The order that function
+ * arguments are evaluated in is unspecified, so GCC (right to left) and Clang
+ * (left to right) create those two AIG nodes in opposite orders. The nodes get
+ * different Ids, and because Ids are what everything downstream sorts on, the
+ * CNF we emit isn't the same from one compiler to the next.
+ *
+ * These build the same nodes in a fixed order. Aside from the sequencing they
+ * match aigOper.c exactly, so use them in preference to ABC's versions.
+ */
+inline Aig_Obj_t* orderedAigExor(Aig_Man_t* p, Aig_Obj_t* p0, Aig_Obj_t* p1)
+{
+  // Aig_Exor()'s fCatchExor branch isn't reproduced here. Nothing in STP turns
+  // that on, and Aig_ManStart() leaves it off.
+  assert(!p->fCatchExor);
+
+  if (p0 == p1)
+    return Aig_ManConst0(p);
+  if (p0 == Aig_Not(p1))
+    return Aig_ManConst1(p);
+  if (Aig_Regular(p0) == Aig_ManConst1(p))
+    return Aig_NotCond(p1, p0 == Aig_ManConst1(p));
+  if (Aig_Regular(p1) == Aig_ManConst1(p))
+    return Aig_NotCond(p0, p1 == Aig_ManConst1(p));
+
+  Aig_Obj_t* const positive = Aig_And(p, p0, Aig_Not(p1));
+  Aig_Obj_t* const negative = Aig_And(p, Aig_Not(p0), p1);
+  return Aig_Or(p, positive, negative);
+}
+
+// Aig_Mux() hard-codes fUseMuxCanon to zero, so it always just hands over to
+// Aig_Mux2(). This is Aig_Mux2().
+inline Aig_Obj_t* orderedAigMux(Aig_Man_t* p, Aig_Obj_t* pC, Aig_Obj_t* p1,
+                                Aig_Obj_t* p0)
+{
+  Aig_Obj_t* const thn = Aig_And(p, pC, p1);
+  Aig_Obj_t* const els = Aig_And(p, Aig_Not(pC), p0);
+  return Aig_Or(p, thn, els);
+}
+
 // Creates AIG nodes with ABC and wraps them in BBNodeAIG's.
 class BBNodeManagerAIG
 {
@@ -199,14 +239,14 @@ public:
 
       case XOR:
         if (children.size() == 2)
-          pNode = Aig_Exor(aigMgr, children[0].n, children[1].n);
+          pNode = orderedAigExor(aigMgr, children[0].n, children[1].n);
         else
-          pNode = makeTower(Aig_Exor, children);
+          pNode = makeTower(orderedAigExor, children);
         break;
 
       case IFF:
         assert(children.size() == 2);
-        pNode = Aig_Exor(aigMgr, children[0].n, children[1].n);
+        pNode = orderedAigExor(aigMgr, children[0].n, children[1].n);
         pNode = Aig_Not(pNode);
         break;
 
@@ -217,7 +257,8 @@ public:
 
       case ITE:
         assert(children.size() == 3);
-        pNode = Aig_Mux(aigMgr, children[0].n, children[1].n, children[2].n);
+        pNode =
+            orderedAigMux(aigMgr, children[0].n, children[1].n, children[2].n);
         break;
 
       default:

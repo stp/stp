@@ -799,8 +799,11 @@ ASTNode Simplifier::CreateSimplifiedEQ(const ASTNode& in1, const ASTNode& in2)
   if (k1 == BVCONCAT && k2 == BVCONCAT &&
       in1[0].GetValueWidth() == in2[0].GetValueWidth())
   {
-    return nf->CreateNode(AND, nf->CreateNode(EQ, in1[0], in2[0]),
-                          nf->CreateNode(EQ, in1[1], in2[1]));
+    // Named variables, so that the nodes aren't built in whatever order the
+    // compiler picks to evaluate the arguments in.
+    const ASTNode topEq = nf->CreateNode(EQ, in1[0], in2[0]);
+    const ASTNode bottomEq = nf->CreateNode(EQ, in1[1], in2[1]);
+    return nf->CreateNode(AND, topEq, bottomEq);
   }
 
   // If the rhs is a concat, and the lhs is a constant. Split.
@@ -819,8 +822,9 @@ ASTNode Simplifier::CreateSimplifiedEQ(const ASTNode& in1, const ASTNode& in2)
     assert(BVTypeCheck(top));
     assert(BVTypeCheck(bottom));
 
-    ASTNode r = nf->CreateNode(AND, nf->CreateNode(EQ, top, in2[0]),
-                               nf->CreateNode(EQ, bottom, in2[1]));
+    const ASTNode topEq = nf->CreateNode(EQ, top, in2[0]);
+    const ASTNode bottomEq = nf->CreateNode(EQ, bottom, in2[1]);
+    ASTNode r = nf->CreateNode(AND, topEq, bottomEq);
 
     return r;
   }
@@ -2156,12 +2160,14 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
           inputterm[1].GetKind() == BVCONCAT &&
           inputterm[0][0].GetValueWidth() == inputterm[1][0].GetValueWidth())
       {
-        output =
-            nf->CreateTerm(BVCONCAT, inputterm.GetValueWidth(),
-                           nf->CreateTerm(k, inputterm[0][0].GetValueWidth(),
-                                          inputterm[0][0], inputterm[1][0]),
-                           nf->CreateTerm(k, inputterm[0][1].GetValueWidth(),
-                                          inputterm[0][1], inputterm[1][1]));
+        const ASTNode top =
+            nf->CreateTerm(k, inputterm[0][0].GetValueWidth(),
+                           inputterm[0][0], inputterm[1][0]);
+        const ASTNode bottom =
+            nf->CreateTerm(k, inputterm[0][1].GetValueWidth(),
+                           inputterm[0][1], inputterm[1][1]);
+        output = nf->CreateTerm(BVCONCAT, inputterm.GetValueWidth(), top,
+                                bottom);
         break;
       }
 
@@ -2286,18 +2292,20 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         {
           // i contains the number of leading zeroes.
           if (i < output.GetValueWidth())
-            output = nf->CreateTerm(
-                BVCONCAT, output.GetValueWidth(), nf->CreateZeroConst(i),
-                nf->CreateTerm(
-                    BVAND, output.GetValueWidth() - i,
-                    nf->CreateTerm(
-                        BVEXTRACT, output.GetValueWidth() - i, output[0],
-                        nf->CreateBVConst(32, output.GetValueWidth() - i - 1),
-                        nf->CreateBVConst(32, 0)),
-                    nf->CreateTerm(
-                        BVEXTRACT, output.GetValueWidth() - i, output[1],
-                        nf->CreateBVConst(32, output.GetValueWidth() - i - 1),
-                        nf->CreateBVConst(32, 0))));
+          {
+            const unsigned rest = output.GetValueWidth() - i;
+            const ASTNode lhs =
+                nf->CreateTerm(BVEXTRACT, rest, output[0],
+                               nf->CreateBVConst(32, rest - 1),
+                               nf->CreateBVConst(32, 0));
+            const ASTNode rhs =
+                nf->CreateTerm(BVEXTRACT, rest, output[1],
+                               nf->CreateBVConst(32, rest - 1),
+                               nf->CreateBVConst(32, 0));
+            output = nf->CreateTerm(BVCONCAT, output.GetValueWidth(),
+                                    nf->CreateZeroConst(i),
+                                    nf->CreateTerm(BVAND, rest, lhs, rhs));
+          }
 
           assert(BVTypeCheck(output));
         }
@@ -2386,12 +2394,14 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
           inputterm[1].GetKind() == BVCONCAT &&
           inputterm[0][0].GetValueWidth() == inputterm[1][0].GetValueWidth())
       {
-        output =
-            nf->CreateTerm(BVCONCAT, inputterm.GetValueWidth(),
-                           nf->CreateTerm(k, inputterm[0][0].GetValueWidth(),
-                                          inputterm[0][0], inputterm[1][0]),
-                           nf->CreateTerm(k, inputterm[0][1].GetValueWidth(),
-                                          inputterm[0][1], inputterm[1][1]));
+        const ASTNode top =
+            nf->CreateTerm(k, inputterm[0][0].GetValueWidth(),
+                           inputterm[0][0], inputterm[1][0]);
+        const ASTNode bottom =
+            nf->CreateTerm(k, inputterm[0][1].GetValueWidth(),
+                           inputterm[0][1], inputterm[1][1]);
+        output = nf->CreateTerm(BVCONCAT, inputterm.GetValueWidth(), top,
+                                bottom);
         break;
       }
     }

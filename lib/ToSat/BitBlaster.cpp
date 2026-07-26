@@ -1118,10 +1118,17 @@ const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form,
       break;
 
     case ITE:
-      result =
-          nf->CreateNode(ITE, BBForm(form[0], support),
-                         BBForm(form[1], support), BBForm(form[2], support));
+    {
+      // The order that arguments to a function are evaluated in is
+      // unspecified, so bit-blast each child into a named variable first.
+      // Otherwise the nodes are created in a compiler-dependent order, and
+      // the CNF that STP produces isn't the same across compilers.
+      const BBNode cond = BBForm(form[0], support);
+      const BBNode thn = BBForm(form[1], support);
+      const BBNode els = BBForm(form[2], support);
+      result = nf->CreateNode(ITE, cond, thn, els);
       break;
+    }
 
     case AND:
     case OR:
@@ -1284,8 +1291,13 @@ BBNode BitBlaster<BBNode, BBNodeManagerT>::Majority(const BBNode& a,
   // worth doing explicitly (e.g., a = b, a = ~b, etc.)
   else
   {
-    return nf->CreateNode(OR, nf->CreateNode(AND, a, b),
-                          nf->CreateNode(AND, b, c), nf->CreateNode(AND, a, c));
+    // Argument evaluation order is unspecified, so build each conjunction into
+    // a named variable first. Otherwise the AIG nodes are created in a
+    // compiler-dependent order, and the CNF isn't the same across compilers.
+    const BBNode ab = nf->CreateNode(AND, a, b);
+    const BBNode bc = nf->CreateNode(AND, b, c);
+    const BBNode ac = nf->CreateNode(AND, a, c);
+    return nf->CreateNode(OR, ab, bc, ac);
   }
 }
 
@@ -1493,9 +1505,13 @@ void BitBlaster<BBNode, BBNodeManagerT>::buildAdditionNetworkResult(
     }
     else
     {
-      carry =
-          nf->CreateNode(OR, nf->CreateNode(AND, a, b),
-                         nf->CreateNode(AND, b, c), nf->CreateNode(AND, a, c));
+      // As in Majority(), the conjunctions have to be built into named
+      // variables so that the order they're created in doesn't depend on the
+      // compiler's choice of argument evaluation order.
+      const BBNode ab = nf->CreateNode(AND, a, b);
+      const BBNode bc = nf->CreateNode(AND, b, c);
+      const BBNode ac = nf->CreateNode(AND, a, c);
+      carry = nf->CreateNode(OR, ab, bc, ac);
       sum = nf->CreateNode(XOR, nf->CreateNode(XOR, c, b), a);
     }
 
