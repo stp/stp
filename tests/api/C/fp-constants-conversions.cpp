@@ -193,25 +193,24 @@ TEST(fp_conversions, every_rounding_mode)
   }
 }
 
-// SMT '=' vs fp.eq: +0 = -0 is false as bits but true as IEEE equality, and
-// NaN equals itself as bits but not as IEEE equality.
+// SMT '=' vs fp.eq: '=' keeps +0 and -0 distinct where fp.eq identifies
+// them, and fp.eq(NaN, NaN) is false where '=' (which identifies every NaN
+// with every NaN) holds.
 TEST(fp_constants, eq_vs_smt_eq_semantics)
 {
-  {
-    VC vc = vc_createValidityChecker();
-    Type half = vc_fpType(vc, 5, 11);
-    // fp.eq(+0, -0) holds.
-    vc_assertFormula(
-        vc, vc_fpEqExpr(vc, vc_fpPlusZero(vc, half), vc_fpMinusZero(vc, half)));
-    // As raw values they differ.
-    vc_assertFormula(
-        vc, vc_notExpr(vc, vc_eqExpr(vc, vc_fpPlusZero(vc, half),
-                                     vc_fpMinusZero(vc, half))));
-    // fp.eq(NaN, NaN) does not hold.
-    vc_assertFormula(
-        vc, vc_notExpr(vc, vc_fpEqExpr(vc, vc_fpNaN(vc, half),
-                                       vc_fpNaN(vc, half))));
-    EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc))); // all consistent
-    vc_Destroy(vc);
-  }
+  VC vc = vc_createValidityChecker();
+  Type half = vc_fpType(vc, 5, 11);
+  // fp.eq(+0, -0) holds.
+  vc_assertFormula(
+      vc, vc_fpEqExpr(vc, vc_fpPlusZero(vc, half), vc_fpMinusZero(vc, half)));
+  // As SMT '=' they differ.
+  vc_assertFormula(
+      vc, vc_notExpr(vc, vc_eqExpr(vc, vc_fpPlusZero(vc, half),
+                                   vc_fpMinusZero(vc, half))));
+  // fp.eq(NaN, NaN) does not hold.
+  vc_assertFormula(
+      vc, vc_notExpr(vc, vc_fpEqExpr(vc, vc_fpNaN(vc, half),
+                                     vc_fpNaN(vc, half))));
+  EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc))); // all consistent
+  vc_Destroy(vc);
 }

@@ -50,7 +50,7 @@ TEST(fp_multi_checker, two_live_checkers)
 // the model-printing path must evaluate against its own manager. (The
 // blaster takes the manager explicitly; this pins that no path still leans
 // on whichever manager bound last.)
-TEST(fp_multi, print_counterexample_across_checkers)
+TEST(fp_multi_checker, print_counterexample_across_checkers)
 {
   VC v1 = vc_createValidityChecker();
   VC v2 = vc_createValidityChecker();
@@ -84,7 +84,7 @@ TEST(fp_multi, print_counterexample_across_checkers)
 
 // vc_createValidityCheckerReuse solves over nodes built through the C++
 // objects' manager, and vc_Destroy still tears the pair down.
-TEST(fp_multi, checker_reuse_over_existing_manager)
+TEST(fp_multi_checker, checker_reuse_over_existing_manager)
 {
   stp::STPMgr* bm = new stp::STPMgr();
   VC vc = vc_createValidityCheckerReuse(bm);

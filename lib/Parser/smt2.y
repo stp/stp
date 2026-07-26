@@ -1404,6 +1404,15 @@ LPAREN_TOK STRING_TOK an_fp_sort RPAREN_TOK
   $$->SetValueWidth($3->exp_bits + $3->sig_bits);
   delete $2;
   delete $3;
+}
+|
+LPAREN_TOK STRING_TOK ROUNDINGMODE_TOK RPAREN_TOK
+{
+  // Not implemented: applyFunction substitutes bitvector and float
+  // parameters only. Named here so the failure is this message rather
+  // than a bare syntax error.
+  fatal_yyerror("define-fun: RoundingMode parameters are not supported");
+  $$ = NULL; // fatal_yyerror does not return
 };
 ;
 
@@ -2557,7 +2566,9 @@ TERMID_TOK
 }
 | an_rounding_mode
 {
-  /* not really a term? */
+  /* A rounding mode is a term: it appears in equalities ((= r RNE), and the
+     declaration constraint built from them), so it must be derivable here,
+     not only in the dedicated rounding-mode operand slots. */
   $$ = $1;
 }
 | SELECT_TOK an_term an_term
