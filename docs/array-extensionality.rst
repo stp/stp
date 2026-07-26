@@ -33,7 +33,8 @@ Python API: create the solver with ``stp.Solver(array_equality=True)``.
 Arrays are built with ``Solver.array(name, index_width, value_width)``,
 read with ``a[i]``, written with ``a.store(i, v)``, and compared whole
 with ``==``/``!=``; ``ArrayExpr.model()`` returns an array's entries in
-a satisfying assignment, in ascending index order.
+a satisfying assignment, in ascending index order. Comparing whole
+arrays on a solver created without the option raises ``RuntimeError``.
 
 With the option enabled:
 

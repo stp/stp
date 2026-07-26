@@ -228,6 +228,7 @@ class Solver(object):
         """
         self.keys = {}
         self.arrays = {}
+        self.array_equality = bool(array_equality)
         self.vc = _lib.vc_createValidityChecker()
         assert self.vc is not None, 'Error creating validity checker'
         if array_equality:
@@ -851,8 +852,14 @@ class ArrayExpr(Expr):
 
     def eq(self, other):
         """Equality between whole arrays. Requires a solver created
-        with array_equality=True; without it, STP keeps its historic
-        behavior of warning and rejecting the query."""
+        with array_equality=True; without it a RuntimeError is raised
+        here, where it can be caught -- historically the query only
+        failed much later, aborting the process from inside the
+        library."""
+        if not self.s.array_equality:
+            raise RuntimeError(
+                'whole-array equality requires the solver to be created '
+                'with Solver(array_equality=True)')
         assert isinstance(other, ArrayExpr), \
             'An array only compares against another array'
         assert self.index_width == other.index_width and \

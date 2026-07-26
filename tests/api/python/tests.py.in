@@ -165,6 +165,23 @@ class TestSTP(unittest.TestCase):
         with self.assertRaises(TypeError):
             a & b
 
+    def test_array_equality_requires_the_flag(self):
+        # Without array_equality=True, whole-array equality raises a
+        # catchable error at construction time; historically the query
+        # only failed at solve time, aborting the interpreter from
+        # inside the library.
+        s = stp.Solver()
+        a = s.array('a', 4, 8)
+        b = s.array('b', 4, 8)
+        with self.assertRaises(RuntimeError):
+            a == b
+        with self.assertRaises(RuntimeError):
+            a != b
+        with self.assertRaises(RuntimeError):
+            a.eq(b)
+        # Element-level work stays available without the option.
+        self.assertTrue(s.check(a[1] == 5))
+
     def test_array_refuses_all_bitvector_operations(self):
         # Every BitVector operation inherited from Expr must raise
         # TypeError on an array rather than build a malformed node --
