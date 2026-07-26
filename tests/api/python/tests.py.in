@@ -165,6 +165,21 @@ class TestSTP(unittest.TestCase):
         with self.assertRaises(TypeError):
             a & b
 
+    def test_array_model_wide_entries(self):
+        # Array model entries keep their exact values at any width:
+        # getBVUnsignedLongLong alone saturates above 64 bits, and wide
+        # indices would additionally collapse into a single dict key.
+        s = stp.Solver(array_equality=True)
+        a = s.array('a', 96, 128)
+        big_index = (1 << 90) + 7
+        big_value = (1 << 100) + 12345
+        s.add(a[big_index] == big_value, a[70] == 77)
+        self.assertTrue(s.check())
+        m = a.model()
+        self.assertEqual(m[big_index], big_value)
+        self.assertEqual(m[70], 77)
+        self.assertEqual(list(m.keys()), sorted(m.keys()))
+
     def test_boolean_expr(self):
         s = self.s
         a, b, c = s.bitvecs('a b c')

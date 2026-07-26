@@ -409,6 +409,21 @@ class Solver(object):
         assert ret == 0 or ret == 1, 'Error querying your input'
         return not ret
 
+    def _counterexample_int(self, expr, width):
+        """The unsigned value of an (unboxed) expression in the current
+        model, at any width. getBVUnsignedLongLong saturates at 64 bits,
+        so wider values are assembled from 64-bit extracts."""
+        if width <= 64:
+            value = _lib.vc_getCounterExample(self.vc, expr)
+            return _lib.getBVUnsignedLongLong(value)
+        extract = 0
+        for i in range((width - 1) // 64 + 1):
+            extractExpr = _lib.vc_bvExtract(self.vc, expr,
+                                            min((i+1)*64, width)-1, i*64)
+            bvExpr = _lib.vc_getCounterExample(self.vc, extractExpr)
+            extract += (_lib.getBVUnsignedLongLong(bvExpr) << (64 * i))
+        return extract
+
     def model(self, key=None, expr=None):
         """
         Returns the value for an expression (or a name), or a model for the
@@ -440,20 +455,7 @@ class Solver(object):
             expr = self.keys[key]
 
         if expr:
-            width = _lib.getVWidth(expr)
-            
-            #What if it's compiled for 32-bit?
-            if width > 64:
-                extract = 0
-                for i in range(( width - 1 ) // 64 + 1):
-                    extractExpr = _lib.vc_bvExtract(self.vc, expr, min ((i+1)*64, width)-1, i*64)
-                    #maybe extractExpr leaks?
-                    bvExpr = _lib.vc_getCounterExample(self.vc, extractExpr)
-                    extract +=  (_lib.getBVUnsignedLongLong(bvExpr) << (64 * i))
-                return extract
-            else:
-                value = _lib.vc_getCounterExample(self.vc, expr)
-                return _lib.getBVUnsignedLongLong(value)
+            return self._counterexample_int(expr, _lib.getVWidth(expr))
         #
         # If no expression, return a model giving values to simple bitvectors
         # (but not, e.g., arrays)
@@ -865,6 +867,14 @@ class ArrayExpr(Expr):
 
     __ne__ = ne
 
+    def _entry_int(self, entry, width):
+        """One counterexample entry (a constant expression) as an int.
+        Entries wider than 64 bits are assembled from 64-bit extracts,
+        as in Solver.model(); getBVUnsignedLongLong alone saturates."""
+        if width <= 64:
+            return _lib.getBVUnsignedLongLong(entry)
+        return self.s._counterexample_int(entry, width)
+
     def model(self):
         """The array's entries in the current satisfying assignment:
         a dict from index to value, one entry per observed index, in
@@ -877,8 +887,8 @@ class ArrayExpr(Expr):
                                        byref(size))
         out = {}
         for k in range(size.value):
-            out[_lib.getBVUnsignedLongLong(indices[k])] = \
-                _lib.getBVUnsignedLongLong(values[k])
+            out[self._entry_int(indices[k], self.index_width)] = \
+                self._entry_int(values[k], self.value_width)
         return out
 
     value = property(model)
