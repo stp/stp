@@ -856,6 +856,57 @@ TEST_F(ExtPrepareTest, IteEliminationReachesFixedPointAndCaches)
   EXPECT_EQ(3u, ext->getRecords().size());
 }
 
+// STP's simplifier pushes a read through an array if-then-else, so a
+// witness anchor over an if-then-else operand can arrive at
+// preparation as
+//
+//   name = ite(c, read(a, lambda), read(b, lambda))
+//
+// instead of the recorded name = read(ite(c, a, b), lambda). Operand
+// recovery must accept the pushed shape, rebuild the array
+// if-then-else from the read leaves, and hand it to the usual
+// elimination -- not die claiming the defining equation was lost.
+TEST_F(ExtPrepareTest, RecoversAnchorPushedThroughArrayIte)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b"), d = arr("d");
+  ASTNode c = mgr.CreateSymbol("c", 0, 0);
+  ASTNode ite = hf->CreateArrayTerm(ITE, 2, 2, {c, a, b});
+
+  ext->makeEquality(ite, d);
+  ASSERT_EQ(1u, ext->getRecords().size());
+  const ExtensionalityContext::Record r = ext->getRecords()[0];
+  ASSERT_EQ(d, r.constructionLeft); // so the ite side is the R anchor
+
+  ext->beginSolve();
+  // Hand preparation the root the simplifier would produce: the L
+  // anchor and witness clause untouched, the R anchor's read pushed
+  // through the if-then-else.
+  ASTNode readA = hf->CreateTerm(READ, 2, a, r.lambda);
+  ASTNode readB = hf->CreateTerm(READ, 2, b, r.lambda);
+  ASTVec pushedChildren;
+  pushedChildren.push_back(c);
+  pushedChildren.push_back(readA);
+  pushedChildren.push_back(readB);
+  ASTNode pushed = hf->CreateTerm(ITE, 2, pushedChildren);
+  ASTVec conjuncts;
+  conjuncts.push_back(r.anchorL);
+  conjuncts.push_back(hf->CreateNode(EQ, r.nameR, pushed));
+  conjuncts.push_back(r.witnessClause);
+  ext->prepare(hf->CreateNode(AND, conjuncts));
+
+  // The operand came back in its current form -- the array
+  // if-then-else over the same branches -- and elimination replaced
+  // it as usual: one user record plus two guarded records, with both
+  // branches in the cone.
+  EXPECT_EQ(3u, ext->getRecords().size());
+  const ExtensionalityContext::Record& r0 = ext->getRecords()[0];
+  EXPECT_EQ(d, r0.canonicalLeft);
+  EXPECT_EQ(SYMBOL, r0.canonicalRight.GetKind());
+  EXPECT_TRUE(ext->inCone(a));
+  EXPECT_TRUE(ext->inCone(b));
+}
+
 TEST_F(ExtPrepareTest, MissingAnchorFailsLoudly)
 {
   ASTNode a = arr("a"), b = arr("b");

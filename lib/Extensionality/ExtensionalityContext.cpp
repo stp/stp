@@ -55,6 +55,62 @@ void collectDag(const ASTNode& n, ASTNodeSet& visited)
     collectDag(n[k], visited);
 }
 
+// The current form of an equality operand, read back from its witness
+// anchor. The anchor was recorded as name = read(operand, lambda), but
+// STP's simplifier pushes reads through array if-then-else, so by
+// preparation time the right-hand side may instead be an if-then-else
+// tree whose leaves are reads at lambda. A read leaf contributes its
+// array operand; an if-then-else contributes the array if-then-else
+// rebuilt (with the plain hashing factory) over the recovered
+// branches -- exactly the operand's current form, which the usual
+// elimination then replaces. Every read leaf must still read at this
+// record's witness index, and any other shape means the anchor was
+// rewritten beyond recognition: refuse loudly rather than guess.
+//
+// A rebuilt if-then-else that elimination already replaced (this
+// solve or an earlier one) recovers as its fresh replacement array.
+// That is what lets the elimination fixed point terminate: the pushed
+// anchor keeps its if-then-else shape inside the formula, where the
+// root substitution over array terms cannot rewrite it, so without
+// the cache lookup recovery would resurrect the same if-then-else on
+// every iteration.
+ASTNode recoverAnchoredOperand(const ASTNode& rhs, const ASTNode& lambda,
+                               const ASTNode& proxy, NodeFactory* hf,
+                               const std::map<ASTNode, ASTNode>& replacements)
+{
+  if (rhs.GetKind() == READ)
+  {
+    if (rhs[1] != lambda)
+      FatalError("array-equality: a witness read's index was rewritten "
+                 "away, although witness indices are protected from "
+                 "substitution",
+                 proxy);
+    return rhs[0];
+  }
+  if (rhs.GetKind() == ITE)
+  {
+    const ASTNode thenPart =
+        recoverAnchoredOperand(rhs[1], lambda, proxy, hf, replacements);
+    const ASTNode elsePart =
+        recoverAnchoredOperand(rhs[2], lambda, proxy, hf, replacements);
+    ASTVec children;
+    children.push_back(rhs[0]);
+    children.push_back(thenPart);
+    children.push_back(elsePart);
+    const ASTNode rebuilt =
+        hf->CreateArrayTerm(ITE, thenPart.GetIndexWidth(),
+                            thenPart.GetValueWidth(), children);
+    std::map<ASTNode, ASTNode>::const_iterator rep =
+        replacements.find(rebuilt);
+    return rep == replacements.end() ? rebuilt : rep->second;
+  }
+  FatalError("array-equality: a witness-read defining equation was "
+             "rewritten into a shape operand recovery does not "
+             "recognize",
+             proxy);
+  return rhs; // unreachable; FatalError does not return
+}
+
 } // namespace
 
 ExtensionalityContext::ExtensionalityContext(STPMgr* bm_)
@@ -290,8 +346,9 @@ ASTNode ExtensionalityContext::conjoinRecordConstraints(const ASTNode& root)
 // prevented.
 void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
 {
-  // name symbol -> the READ term it anchors
-  std::map<ASTNode, ASTNode> anchorReads;
+  // name symbol -> the anchored right-hand side: the witness read, or
+  // the if-then-else the simplifier pushed it into.
+  std::map<ASTNode, ASTNode> anchorRhs;
   ASTNodeSet visited;
   collectDag(root, visited);
   for (ASTNodeSet::const_iterator it = visited.begin(); it != visited.end();
@@ -304,30 +361,28 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
     {
       const ASTNode& s = n[side];
       const ASTNode& other = n[1 - side];
-      if (s.GetKind() == SYMBOL && isProtected(s) && other.GetKind() == READ)
-        anchorReads[s] = other;
+      if (s.GetKind() == SYMBOL && isProtected(s) &&
+          (other.GetKind() == READ || other.GetKind() == ITE))
+        anchorRhs[s] = other;
     }
   }
 
   for (size_t i = 0; i < records.size(); i++)
   {
     Record& r = records[i];
-    std::map<ASTNode, ASTNode>::const_iterator lit = anchorReads.find(r.nameL);
-    std::map<ASTNode, ASTNode>::const_iterator rit = anchorReads.find(r.nameR);
-    if (lit == anchorReads.end() || rit == anchorReads.end())
+    std::map<ASTNode, ASTNode>::const_iterator lit = anchorRhs.find(r.nameL);
+    std::map<ASTNode, ASTNode>::const_iterator rit = anchorRhs.find(r.nameR);
+    if (lit == anchorRhs.end() || rit == anchorRhs.end())
       FatalError("array-equality: a witness-read defining equation was "
                  "lost during preprocessing, so the current form of an "
                  "equality operand cannot be recovered",
                  r.proxy);
-    const ASTNode& readL = lit->second;
-    const ASTNode& readR = rit->second;
-    if (readL[1] != r.lambda || readR[1] != r.lambda)
-      FatalError("array-equality: a witness read's index was rewritten "
-                 "away, although witness indices are protected from "
-                 "substitution",
-                 r.proxy);
-    r.canonicalLeft = readL[0];
-    r.canonicalRight = readR[0];
+    r.canonicalLeft =
+        recoverAnchoredOperand(lit->second, r.lambda, r.proxy,
+                               bm->hashingNodeFactory, iteReplacements);
+    r.canonicalRight =
+        recoverAnchoredOperand(rit->second, r.lambda, r.proxy,
+                               bm->hashingNodeFactory, iteReplacements);
   }
 }
 
