@@ -26,25 +26,11 @@ THE SOFTWARE.
 #include "stp/Globals/Globals.h"
 #include <cassert>
 #include <string>
-#include <cmath>
 
 #ifdef STP_ENABLE_FLOATING_POINT
+// The symfpu circuits are built behind the blast_* entry points; nothing
+// here touches symfpu directly.
 #include "stp/FloatBlaster/symbolic_fp.h"
-
-#include "symfpu/core/add.h"
-#include "symfpu/core/classify.h"
-#include "symfpu/core/compare.h"
-#include "symfpu/core/convert.h"
-#include "symfpu/core/divide.h"
-#include "symfpu/core/fma.h"
-#include "symfpu/core/ite.h"
-#include "symfpu/core/multiply.h"
-#include "symfpu/core/packing.h"
-#include "symfpu/core/remainder.h"
-#include "symfpu/core/sign.h"
-#include "symfpu/core/sqrt.h"
-#include "symfpu/utils/numberOfRoundingModes.h"
-#include "symfpu/utils/properties.h"
 #endif
 
 namespace stp
@@ -92,7 +78,10 @@ ASTNode FloatBlaster::unspecifiedValue(STPMgr* bm, const char* tag,
 {
   const unsigned int index_width = index.GetValueWidth();
 
-  std::string name("_stp_fp_unspecified_");
+  // The '@' prefix puts the name in the namespace SMT-LIB 2 reserves for
+  // solver use (as CreateFreshVariable does), so it cannot collide with a
+  // conforming input's own symbols.
+  std::string name("@fp_unspecified_");
   name += tag;
   name += "_";
   name += std::to_string(index_width);

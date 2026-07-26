@@ -531,7 +531,6 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
     case FP_ROUNDTOINTEGRAL:
     case FP_MIN:
     case FP_MAX:
-    case FP_SMT_EQ:
     {
       unsigned int expected_args;
       unsigned int first_float;
@@ -549,7 +548,6 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
           first_float = 1;
           break;
         case FP_REM:
-        case FP_SMT_EQ:
           expected_args = 2;
           first_float = 0;
           break;

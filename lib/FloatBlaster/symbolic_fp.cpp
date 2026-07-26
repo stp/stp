@@ -451,6 +451,14 @@ bitVector<isSigned> bitVector<isSigned>::modularNegate() const
 template <bool isSigned>
 proposition bitVector<isSigned>::operator==(const bitVector<isSigned>& op) const
 {
+  // As with the orderings below: symfpu compares values, so a narrower
+  // operand is brought up to width rather than mis-typing the EQ. (symfpu
+  // only calls == width-matched today; <= and >= are built from < and ==,
+  // and would hand a width-mismatched pair straight through.)
+  if (getWidth() < op.getWidth())
+    return proposition(s_nf->CreateNode(EQ, matchWidth(op), op));
+  if (op.getWidth() < getWidth())
+    return proposition(s_nf->CreateNode(EQ, *this, op.matchWidth(*this)));
   return proposition(s_nf->CreateNode(EQ, *this, op));
 }
 

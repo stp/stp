@@ -213,13 +213,10 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
       {
         return term;
       }
-      else if (term.GetType() == FLOATINGPOINT_TYPE)
-      {
-        output = bm->CreateZeroConst(term.GetValueWidth());
-      }
       else
       {
-        // Has been simplified out. Can take any value.
+        // Has been simplified out. Can take any value; all-zero bits, which
+        // for a float denotes +0.0.
         output = bm->CreateZeroConst(term.GetValueWidth());
       }
       break;
