@@ -18,8 +18,9 @@
 #
 # Environment:
 #   STP           STP binary. Default: the first of build_static_debug/stp,
-#                 build/stp, build_debug/stp in the source tree, else stp on
-#                 PATH. A build with assertions enabled finds more.
+#                 build/stp, build_debug/stp, build-release/stp in the source
+#                 tree, else stp on PATH. A build with assertions enabled finds
+#                 more, which is why the release directory comes last.
 #   CHECKER       Reference solver, invoked as "$CHECKER file.smt2".
 #                 Default: z3. Anything that prints one sat/unsat line per
 #                 query and understands the bit-vector overflow predicates
@@ -34,7 +35,18 @@
 #   FUZZSMT_JAR   fuzzsmt.jar, from the FuzzSMT release of Brummayer and Biere,
 #                 "Fuzzing and Delta-Debugging SMT Solvers" (SMT'09).
 #                 Default: searched for next to the source tree and in $HOME.
-#   LOGIC         Logic to generate. Default: QF_ABV.
+#   LOGICS        Logics to generate, with the FuzzSMT options that go with
+#                 each and, after a '|', the STP options that logic needs.
+#                 One entry per line, or separated by ';'. Overrides the
+#                 built-in list below. For example
+#
+#                   LOGICS='QF_BV
+#                           QF_ABV -mxn 1 -Mxn 3 | --array-equality' ./fuzz_single.sh
+#
+#                 One entry is drawn at random per iteration. See the comment
+#                 on LOGIC_SETS below for the full syntax.
+#   LOGIC         A single entry, for the same purpose. Ignored if LOGICS is
+#                 set. Default: the built-in list.
 #   QUERIES       Queries per generated file. Default: 2500.
 #   CPU_LIMIT     Per-solver CPU seconds. Default: 3600.
 #   FAIL_DIR      Where mismatches are saved.
@@ -48,6 +60,7 @@ if [ -z "${STP:-}" ]; then
   for candidate in  "$source_root"/build_static_debug/stp \
                     "$source_root"/build/stp  \
                     "$source_root"/build_debug/stp \
+                    "$source_root"/build-release/stp \
                    ; do
     if [ -x "$candidate" ]; then STP=$candidate; break; fi
   done
@@ -82,7 +95,49 @@ if ! command -v java > /dev/null; then
   exit 1
 fi
 
-LOGIC=${LOGIC:-QF_ABV}
+# What to generate. One entry is drawn at random per iteration, so a run covers
+# several shapes of problem instead of one. An entry is
+#
+#   <logic> [FuzzSMT options] [| STP options]
+#
+# The part before the '|' is passed to the generator, with `-g` (unguarded
+# division) and `-bulk-export` appended, so entries need not repeat those. The
+# part after it is handed to STP on top of the options drawn from the groups
+# below -- that is for options a logic cannot be tested without, not for ones
+# that merely deserve coverage: those belong in a group, where they get
+# combined with everything else.
+#
+# The generator options are per-logic and FuzzSMT does not complain about ones
+# that do not apply -- `QF_BV -mxn 1` is accepted and quietly generates plain
+# QF_BV -- so check `java -jar fuzzsmt.jar` for the section belonging to the
+# logic before adding an entry, and confirm the generated file really contains
+# what the options were meant to add.
+declare -a LOGIC_SETS=(
+"QF_BV"
+"QF_ABV"
+# Array extensionality: -mxn/-Mxn are how many array pairs FuzzSMT compares
+# with = or distinct. Without them it never equates two arrays, so the whole
+# extensionality path goes unfuzzed -- and STP rejects such a file outright
+# unless --array-equality is given, hence the pairing.
+"QF_ABV -mxn 1 -Mxn 3 | --array-equality"
+# Writes are what make the extensional cases interesting, and the default
+# -Mw 5 is easily consumed by the reads.
+"QF_ABV -mxn 1 -Mxn 3 -mw 3 -Mw 10 -Mar 5 | --array-equality"
+)
+
+# LOGICS overrides the list, LOGIC gives a single entry. Split on both newlines
+# and ';' so a one-line environment variable works as well as a multi-line one.
+if [ -n "${LOGICS:-}" ]; then
+  mapfile -t LOGIC_SETS < <(printf '%s\n' "$LOGICS" | tr ';' '\n' \
+                            | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e '/^$/d')
+elif [ -n "${LOGIC:-}" ]; then
+  LOGIC_SETS=("$LOGIC")
+fi
+if [ "${#LOGIC_SETS[@]}" -eq 0 ]; then
+  echo "No logics to generate: LOGICS is set but empty." >&2
+  exit 1
+fi
+
 QUERIES=${QUERIES:-2500}
 CPU_LIMIT=${CPU_LIMIT:-3600}
 FAIL_DIR=${FAIL_DIR:-${TMPDIR:-/tmp}/stp-fuzz-failures}
@@ -121,33 +176,95 @@ else
   echo "results: $FAIL_DIR"
 fi
 
+supported=$($STP --help 2>&1 | grep -o -- '--[a-zA-Z0-9.][a-zA-Z0-9.-]*' | sort -u)
+if [ -z "$supported" ]; then
+  echo "Could not get the option list from $STP" >&2
+  exit 1
+fi
+
+# Check every entry actually generates what it says. A misspelt generator
+# option is rejected outright, but a misspelt *logic* is not: FuzzSMT prints
+# its usage text to stdout and exits 0, so without this the run would happily
+# compare two solvers on a file of banner text. Requiring the emitted header to
+# name the logic we asked for catches both.
+echo "logics:"
+declare -A logic_names=()
+declare -a kept_logics=()
+for entry in "${LOGIC_SETS[@]}"; do
+  # Generator part | STP part; logic_opts comes out empty when there is no '|'.
+  IFS='|' read -r gen logic_opts <<< "$entry"
+  read -r -a gen_args <<< "$gen"
+  gen_out=$(java -jar "$FUZZSMT_JAR" "${gen_args[@]}" -g -seed 1 2>&1)
+  gen_rc=$?
+  if [ "$gen_rc" -ne 0 ] || ! grep -q "^(set-logic  ${gen_args[0]})$" <<< "$gen_out"; then
+    echo >&2
+    echo "FuzzSMT cannot generate '$entry' (exit $gen_rc):" >&2
+    echo "$gen_out" | head -20 | sed 's/^/  /' >&2
+    echo "Check the logic name and the option list against" >&2
+    echo "  java -jar $FUZZSMT_JAR" >&2
+    exit 1
+  fi
+  # The whole entry goes if the binary lacks one of its options, not just the
+  # option: the logic was listed on the understanding that STP gets these with
+  # it, and generating it anyway makes every iteration a bogus mismatch.
+  keep=1
+  for opt in $(echo "$logic_opts" | grep -o -- '--[a-zA-Z0-9.][a-zA-Z0-9.-]*'); do
+    if ! echo "$supported" | grep -qx -- "$opt"; then
+      printf '  %s\n' "$entry  -- SKIPPED, $STP has no $opt" >&2
+      keep=0
+      break
+    fi
+  done
+  if [ "$keep" -eq 0 ]; then continue; fi
+  kept_logics+=("$entry")
+  logic_names[${gen_args[0]}]=1
+  printf '  %s\n' "$entry"
+done
+LOGIC_SETS=("${kept_logics[@]}")
+if [ "${#LOGIC_SETS[@]}" -eq 0 ]; then
+  echo "Every logic was skipped, there is nothing left to generate." >&2
+  exit 1
+fi
+
 # FuzzSMT uses the bit-vector overflow predicates, which older solvers do not
 # know. z3 4.8.12 for instance answers the query anyway and prints an extra
 # (error ...) line, so it neither fails outright nor gives a usable answer --
 # every iteration would land in FAIL_DIR looking like an STP bug. Check the
-# checker before trusting a whole run to it.
-{
-  echo "(set-logic $LOGIC)"
-  echo "(declare-fun x () (_ BitVec 8))"
-  echo "(declare-fun y () (_ BitVec 8))"
-  for p in bvnego bvsaddo bvsdivo bvsmulo bvssubo bvuaddo bvumulo bvusubo; do
-    if [ "$p" = bvnego ]; then
-      echo "(assert (or (bvnego x) true))"
-    else
-      echo "(assert (or ($p x y) true))"
-    fi
-  done
-  echo "(check-sat)"
-} > probe.smt2
-probe_out=$(timeout 60 "$CHECKER" probe.smt2 2>&1)
-probe_rc=$?
-if [ "$probe_rc" -ne 0 ] || [ "$probe_out" != "sat" ]; then
-  echo "Reference solver '$CHECKER' failed the startup probe (exit $probe_rc):" >&2
-  echo "$probe_out" | sed 's/^/  /' >&2
-  echo "It must print exactly 'sat' for a query using the bit-vector overflow" >&2
-  echo "predicates. Upgrade it, or set CHECKER to one that does." >&2
-  exit 1
-fi
+# checker before trusting a whole run to it. Once per logic, since what a
+# solver accepts depends on it.
+for logic in "${!logic_names[@]}"; do
+  {
+    echo "(set-logic $logic)"
+    # The overflow predicates only exist where bit-vectors do; the other logics
+    # get a trivial query, which still says whether the checker accepts them.
+    case $logic in
+      *BV*)
+        echo "(declare-fun x () (_ BitVec 8))"
+        echo "(declare-fun y () (_ BitVec 8))"
+        for p in bvnego bvsaddo bvsdivo bvsmulo bvssubo bvuaddo bvumulo bvusubo; do
+          if [ "$p" = bvnego ]; then
+            echo "(assert (or (bvnego x) true))"
+          else
+            echo "(assert (or ($p x y) true))"
+          fi
+        done
+        ;;
+      *)
+        echo "(assert true)"
+        ;;
+    esac
+    echo "(check-sat)"
+  } > probe.smt2
+  probe_out=$(timeout 60 "$CHECKER" probe.smt2 2>&1)
+  probe_rc=$?
+  if [ "$probe_rc" -ne 0 ] || [ "$probe_out" != "sat" ]; then
+    echo "Reference solver '$CHECKER' failed the startup probe for $logic (exit $probe_rc):" >&2
+    echo "$probe_out" | sed 's/^/  /' >&2
+    echo "It must print exactly 'sat' for a query using the bit-vector overflow" >&2
+    echo "predicates. Upgrade it, or set CHECKER to one that does." >&2
+    exit 1
+  fi
+done
 rm -f probe.smt2
 
 # Options are grouped by what they affect. Each iteration draws one entry from
@@ -258,13 +375,7 @@ declare -a g_misc=(
 
 # Drop entries this binary doesn't understand, rather than have boost reject
 # them and count every iteration as a mismatch. Catches both a stale build and
-# typos in the array above.
-supported=$($STP --help 2>&1 | grep -o -- '--[a-zA-Z0-9.][a-zA-Z0-9.-]*' | sort -u)
-if [ -z "$supported" ]; then
-  echo "Could not get the option list from $STP" >&2
-  exit 1
-fi
-
+# typos in the arrays above. ($supported was read from --help further up.)
 declare -a dropped=()
 offered=0
 for gname in "${OPTION_GROUPS[@]}"; do
@@ -316,6 +427,8 @@ for gname in "${OPTION_GROUPS[@]}"; do
   combinations=$(( combinations * ${#group[@]} ))
   unset -n group
 done
+printf '  %-10s %2d entries\n' "logics" "${#LOGIC_SETS[@]}"
+combinations=$(( combinations * ${#LOGIC_SETS[@]} ))
 echo "$combinations combinations"
 
 #Don't want to fill up SHM.
@@ -344,12 +457,22 @@ while (true)
       unset -n group
     done
 
+    # One logic per iteration, drawn the same way. Its own STP options join the
+    # ones just drawn, so e.g. an extensional entry always gets the option that
+    # lets STP read the file at all.
+    entry=${LOGIC_SETS[ $RANDOM % ${#LOGIC_SETS[@]} ]}
+    IFS='|' read -r gen logic_opts <<< "$entry"
+    read -r -a gen_args <<< "$gen"
+    read -r -a logic_args <<< "$logic_opts"
+    logic=${gen_args[0]}
+    if [ "${#logic_args[@]}" -gt 0 ]; then se="${se:+$se }${logic_args[*]}"; fi
+
     # Without this check a generation failure is silent: big.smt2 ends up
     # holding just the header, both solvers print nothing, the comparison
     # passes, and the loop spins at full speed testing nothing.
-    if ! java -jar "$FUZZSMT_JAR" "$LOGIC" -g -bulk-export "$QUERIES" \
+    if ! java -jar "$FUZZSMT_JAR" "${gen_args[@]}" -g -bulk-export "$QUERIES" \
               -seed `od -A n -t d -N 3 /dev/urandom`; then
-      echo "fuzzsmt failed to generate $LOGIC problems" >&2
+      echo "fuzzsmt failed to generate '$entry' problems" >&2
       exit 1
     fi
     if ! compgen -G '_file*.smt2' > /dev/null; then
@@ -363,9 +486,9 @@ while (true)
     # fuzzsmt writes (set-logic  LOGIC) with two spaces, once per generated
     # file; strip those and keep a single header. The header uses three spaces
     # so the sed below doesn't match it too.
-    echo "(set-logic   $LOGIC)" > big.smt2
+    echo "(set-logic   $logic)" > big.smt2
     cat _file*.smt2 >> big.smt2
-    sed -i "s/(set-logic  $LOGIC)//g" big.smt2
+    sed -i "s/(set-logic  $logic)//g" big.smt2
 
     echo "$se" > expression.txt
     (ulimit -t "$CPU_LIMIT"; "$CHECKER" big.smt2 > first.txt) &
@@ -398,6 +521,7 @@ while (true)
        {
          echo "kind:    $kind"
          echo "when:    $(date '+%Y-%m-%d %H:%M:%S')"
+         echo "logic:   $entry"
          echo "options: $se"
          echo "stp:     $STP (exit $stp_rc)"
          echo "checker: $CHECKER (exit $checker_rc)"
