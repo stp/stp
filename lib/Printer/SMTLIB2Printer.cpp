@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
+#include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/Printer/SMTLIBPrinter.h"
 #include "stp/Printer/printers.h"
 #include <cassert>
@@ -39,33 +40,37 @@ using namespace stp;
 
 void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os);
 
-// A rounding mode in operand position: the five constants print by name
-// (their values are the one-hot encoding from symbolic_fp's rounding_modes);
+const char* roundingModeName(unsigned encoding)
+{
+  using namespace stp::symbolic_fp;
+  switch (encoding)
+  {
+    case ROUND_NEAREST_TIES_TO_EVEN:
+      return "RNE";
+    case ROUND_TOWARD_POSITIVE:
+      return "RTP";
+    case ROUND_TOWARD_NEGATIVE:
+      return "RTN";
+    case ROUND_TOWARD_ZERO:
+      return "RTZ";
+    case ROUND_NEAREST_TIES_TO_AWAY:
+      return "RNA";
+    default:
+      return NULL; // not one-hot
+  }
+}
+
+// A rounding mode in operand position: the five constants print by name;
 // anything else -- a RoundingMode variable, an ite -- prints as itself.
 static void printRoundingModeSMTLIB2(ostream& os, const ASTNode& rm,
                                      bool letize)
 {
   if (rm.GetKind() == stp::BVCONST && rm.GetValueWidth() == 5)
   {
-    switch (rm.GetUnsignedConst())
+    if (const char* name = roundingModeName(rm.GetUnsignedConst()))
     {
-      case 1:
-        os << "RNE";
-        return;
-      case 2:
-        os << "RTP";
-        return;
-      case 4:
-        os << "RTN";
-        return;
-      case 8:
-        os << "RTZ";
-        return;
-      case 16:
-        os << "RNA";
-        return;
-      default:
-        break; // not one-hot; print the raw bits
+      os << name;
+      return;
     }
   }
   SMTLIB2_Print1(os, rm, 0, letize);

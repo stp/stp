@@ -284,6 +284,18 @@ public:
   // bitvector problem pays nothing for the floating-point support.
   bool has_floating_point = false;
 
+  // Symbols declared with SMT-LIB's RoundingMode sort. They are ordinary
+  // 5-bit bitvector symbols everywhere else; the model printers consult
+  // this to print their values by mode name (RNE...) rather than as raw
+  // bits. Maintained by Cpp_interface as declarations go in and out of
+  // scope.
+  ASTNodeSet rounding_mode_symbols;
+
+  bool isRoundingModeSymbol(const ASTNode& n) const
+  {
+    return rounding_mode_symbols.find(n) != rounding_mode_symbols.end();
+  }
+
   DLL_PUBLIC ASTNode CreateFPSpecialConst(FPSpecial which, unsigned exp_width,
                                           unsigned sig_width);
 

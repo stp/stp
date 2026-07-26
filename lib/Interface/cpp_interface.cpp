@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/cpp_interface.h"
+#include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/Parser/LetMgr.h"
 #include "stp/Printer/printers.h"
 #include "stp/Util/GitSHA1.h"
@@ -79,6 +80,11 @@ void Cpp_interface::removeFrame()
 {
     // obtain the last frame
     SolverFrame* last = frames.back();
+
+    // The frame's symbols go out of scope with it: drop any rounding-mode
+    // markers so the model printers and reset-assertions don't outlive them.
+    for (const ASTNode& s : last->getSymbols())
+      bm.rounding_mode_symbols.erase(s);
 
     // delete it
     delete last;
@@ -402,6 +408,30 @@ void Cpp_interface::addSymbol(ASTNode& s)
   getCurrentSymbols().push_back(s);
 }
 
+void Cpp_interface::addRoundingModeSymbol(ASTNode& s)
+{
+  addSymbol(s);
+  bm.rounding_mode_symbols.insert(s);
+  assertRoundingModeValid(s);
+}
+
+// SMT-LIB's RoundingMode sort has exactly five values; the 5-bit carrier has
+// 32. Pin a declared RoundingMode symbol to the five one-hot encodings.
+// Asserted (rather than built into the blaster) so that every route to a
+// query -- check-sat here, or a C-API query over a parsed file -- sees it.
+void Cpp_interface::assertRoundingModeValid(const ASTNode& s)
+{
+  using namespace symbolic_fp;
+  ASTVec one_of;
+  for (const unsigned mode :
+       {ROUND_NEAREST_TIES_TO_EVEN, ROUND_TOWARD_POSITIVE,
+        ROUND_TOWARD_NEGATIVE, ROUND_TOWARD_ZERO, ROUND_NEAREST_TIES_TO_AWAY})
+  {
+    one_of.push_back(nf->CreateNode(EQ, s, bm.CreateBVConst(5, mode)));
+  }
+  AddAssert(nf->CreateNode(OR, one_of));
+}
+
 void Cpp_interface::success()
 {
   if (print_success)
@@ -480,6 +510,12 @@ void Cpp_interface::resetAssertions()
   // the result cache and the frame stack stay in step.
   bm.Pop();
   bm.Push();
+
+  // The base level's declarations survive reset-assertions, so the validity
+  // constraint attached to each RoundingMode declaration must survive too;
+  // the assertion carrying it was just discarded.
+  for (const ASTNode& s : bm.rounding_mode_symbols)
+    assertRoundingModeValid(s);
 
   // Whatever we last concluded no longer refers to these assertions.
   cache.back() = Entry(SOLVER_UNDECIDED);

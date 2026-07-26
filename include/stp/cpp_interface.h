@@ -128,6 +128,7 @@ class Cpp_interface
   void init();
   void addFrame();
   void removeFrame();
+  void assertRoundingModeValid(const ASTNode& s);
 
   bool produce_models;
   bool changed_model_status;
@@ -230,6 +231,14 @@ public:
 
   DLL_PUBLIC void deleteNode(ASTNode* n);
   DLL_PUBLIC void addSymbol(ASTNode& s);
+
+  // Declare a symbol of SMT-LIB's RoundingMode sort: registers it like
+  // addSymbol, marks it for the model printers, and asserts that it takes
+  // one of the five one-hot mode encodings. The sort has exactly five
+  // values but the 5-bit carrier has 32; without the constraint a model
+  // can pick an encoding that denotes no rounding mode at all (e.g.
+  // "r differs from all five modes" used to answer sat).
+  DLL_PUBLIC void addRoundingModeSymbol(ASTNode& s);
 
   DLL_PUBLIC void success();
   DLL_PUBLIC void error(std::string msg);

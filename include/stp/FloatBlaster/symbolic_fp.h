@@ -100,11 +100,12 @@ public:
   proposition operator^(const proposition& op) const;
 };
 
+// A rounding mode needs no valid() here: a symbolic mode can only enter via
+// a declared RoundingMode symbol, and the declaration itself asserts the
+// one-hot validity constraint (Cpp_interface::addRoundingModeSymbol).
 class roundingMode : public nodeWrapper
 {
 protected:
-  bool checkNodeType(const ASTNode& n);
-
   friend ::symfpu::ite<proposition, roundingMode>;
 
 public:
@@ -112,7 +113,6 @@ public:
   roundingMode(const unsigned v);
   roundingMode(const roundingMode& old);
 
-  proposition valid(void) const;
   proposition operator==(const roundingMode& op) const;
 };
 

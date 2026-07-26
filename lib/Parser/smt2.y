@@ -1766,10 +1766,12 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   // that sort is a 5-bit symbol. Declaring it as anything else -- or, as
   // before, not declaring it at all -- leaves every use of the name
   // unresolved, and the lexer hands it back as a bare string.
+  // addRoundingModeSymbol also pins the symbol to the five legal encodings,
+  // without which the sort would have 32 values instead of 5.
   ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
   s.SetIndexWidth(0);
   s.SetValueWidth(5);
-  stp::GlobalParserInterface->addSymbol(s);
+  stp::GlobalParserInterface->addRoundingModeSymbol(s);
   delete $1;
 }
 ;
@@ -1848,11 +1850,12 @@ STRING_TOK  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
 }
 | STRING_TOK ROUNDINGMODE_TOK
 {
-  // As above: 5 bits, not 0. A zero-width symbol would be a Boolean.
+  // As above: 5 bits, not 0 (a zero-width symbol would be a Boolean), and
+  // pinned to the five legal encodings.
   ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
   s.SetIndexWidth(0);
   s.SetValueWidth(5);
-  stp::GlobalParserInterface->addSymbol(s);
+  stp::GlobalParserInterface->addRoundingModeSymbol(s);
   delete $1;
 }
 ;

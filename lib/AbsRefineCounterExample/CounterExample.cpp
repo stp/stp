@@ -883,7 +883,20 @@ void AbsRefine_CounterExample::PrintSMTLIB2(std::ostream& os, const ASTNode& n)
     n.nodeprint(os);
     os << "| ";
 
-    if (n.GetType() == stp::FLOATINGPOINT_TYPE)
+    if (bm->isRoundingModeSymbol(n))
+    {
+      // A RoundingMode value must print as a mode name -- a legal term of
+      // the sort -- not as its raw 5-bit carrier. The declaration pinned the
+      // symbol one-hot, so the model value always names a mode; anything
+      // else would be a bug, but print the bits rather than crash.
+      const ASTNode v = TermToConstTermUsingModel(n, false);
+      const char* name = printer::roundingModeName(v.GetUnsignedConst());
+      if (name != NULL)
+        os << name;
+      else
+        printer::outputBitVecSMTLIB2(v, os);
+    }
+    else if (n.GetType() == stp::FLOATINGPOINT_TYPE)
       // A floating-point value must be printed in floating-point syntax
       // (fp #bS #bE #bM), not as the raw packed bit-vector -- the get-model
       // path (outputLine) does this; get-value must match, or it hands back a
@@ -926,7 +939,19 @@ void AbsRefine_CounterExample::outputLine(std::ostream& os, const ASTNode &f, AS
       f.nodeprint(os);
       os << "|";
 
-      if (f.GetType() == stp::BITVECTOR_TYPE)
+      if (bm->isRoundingModeSymbol(f))
+      {
+        // As in PrintSMTLIB2: the sort and value are RoundingMode, not the
+        // 5-bit carrier.
+        os << " () RoundingMode ";
+        const ASTNode v = TermToConstTermUsingModel(se, false);
+        const char* name = printer::roundingModeName(v.GetUnsignedConst());
+        if (name != NULL)
+          os << name;
+        else
+          printer::outputBitVecSMTLIB2(v, os);
+      }
+      else if (f.GetType() == stp::BITVECTOR_TYPE)
       {
         os << " () (";
         os << "_ BitVec " << f.GetValueWidth() << ")";
