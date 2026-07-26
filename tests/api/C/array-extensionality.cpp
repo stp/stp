@@ -562,6 +562,89 @@ TEST(array_extensionality, lemma_atoms_fold_at_encoding)
   vc_Destroy(vc);
 }
 
+TEST(array_extensionality, interleaves_with_classic_read_refinement)
+{
+  // One query, two refinement machines: the contradiction lives in
+  // the equality cone (congruence across a = b), while the unrelated
+  // array c carries satisfiable constraints that classic lazy read
+  // refinement owns. Reads of a and b are exempt from the classic
+  // read axioms, so the unsat verdict must come through an equality
+  // lemma -- pinned by the emission counter -- with c's machinery
+  // interleaved in the same loop.
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv8 = vc_bvType(vc, 8);
+  Type bv4 = vc_bvType(vc, 4);
+  Type arrT = vc_arrayType(vc, bv4, bv8);
+
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr b = vc_varExpr(vc, "b", arrT);
+  Expr c = vc_varExpr(vc, "c", arrT);
+  Expr i = vc_varExpr(vc, "i", bv4);
+  Expr j = vc_varExpr(vc, "j", bv4);
+  Expr k = vc_varExpr(vc, "k", bv4);
+  Expr l = vc_varExpr(vc, "l", bv4);
+
+  vc_assertFormula(vc, vc_eqExpr(vc, a, b));
+  vc_assertFormula(vc, vc_eqExpr(vc, i, j));
+  vc_assertFormula(
+      vc, vc_notExpr(vc, vc_eqExpr(vc, vc_readExpr(vc, a, i),
+                                   vc_readExpr(vc, b, j))));
+  vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, c, k),
+                                 vc_bvConstExprFromInt(vc, 8, 7)));
+  vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, c, l),
+                                 vc_bvConstExprFromInt(vc, 8, 9)));
+
+  stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  ASSERT_NE(nullptr, ext);
+
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_GT(ext->lemmasEmitted, 0);
+  vc_Destroy(vc);
+}
+
+TEST(array_extensionality, mixed_sat_model_satisfies_both_machines)
+{
+  // Satisfiable only when both machines police the same assignment:
+  // v is forced to 42 through cross-array congruence over the true
+  // equality, w to 5 through same-array congruence on c under classic
+  // refinement. The concrete model values pin the cooperation, not
+  // just the verdict.
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv8 = vc_bvType(vc, 8);
+  Type bv4 = vc_bvType(vc, 4);
+  Type arrT = vc_arrayType(vc, bv4, bv8);
+
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr b = vc_varExpr(vc, "b", arrT);
+  Expr c = vc_varExpr(vc, "c", arrT);
+  Expr i = vc_varExpr(vc, "i", bv4);
+  Expr j = vc_varExpr(vc, "j", bv4);
+  Expr k = vc_varExpr(vc, "k", bv4);
+  Expr l = vc_varExpr(vc, "l", bv4);
+  Expr v = vc_varExpr(vc, "v", bv8);
+  Expr w = vc_varExpr(vc, "w", bv8);
+
+  vc_assertFormula(vc, vc_eqExpr(vc, a, b));
+  vc_assertFormula(vc, vc_eqExpr(vc, i, j));
+  vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, a, i),
+                                 vc_bvConstExprFromInt(vc, 8, 42)));
+  vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, b, j), v));
+  vc_assertFormula(vc, vc_eqExpr(vc, k, l));
+  vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, c, k),
+                                 vc_bvConstExprFromInt(vc, 8, 5)));
+  vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, c, l), w));
+
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(42u, getBVUnsigned(vc_getCounterExample(vc, v)));
+  EXPECT_EQ(5u, getBVUnsigned(vc_getCounterExample(vc, w)));
+  vc_Destroy(vc);
+}
+
 TEST(array_extensionality, flag_on_without_equalities_is_dormant)
 {
   // With the option on but no array equality anywhere in the query,
