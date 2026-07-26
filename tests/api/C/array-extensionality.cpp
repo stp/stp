@@ -562,6 +562,65 @@ TEST(array_extensionality, lemma_atoms_fold_at_encoding)
   vc_Destroy(vc);
 }
 
+TEST(array_extensionality, flag_on_without_equalities_is_dormant)
+{
+  // With the option on but no array equality anywhere in the query,
+  // the decision procedure must stay entirely dormant: no context is
+  // ever created, and the solve is the flag-off solve -- the same
+  // verdict and the same model values, including for terms the
+  // constraints leave free.
+  unsigned values[2][4];
+  int verdicts[2];
+  for (int flag = 0; flag < 2; flag++)
+  {
+    VC vc = vc_createValidityChecker();
+    if (flag)
+      vc_setFlag(vc, 'x');
+
+    Type bv8 = vc_bvType(vc, 8);
+    Type bv4 = vc_bvType(vc, 4);
+    Type arrT = vc_arrayType(vc, bv4, bv8);
+
+    Expr a = vc_varExpr(vc, "a", arrT);
+    Expr i = vc_varExpr(vc, "i", bv4);
+    Expr j = vc_varExpr(vc, "j", bv4);
+    Expr v = vc_varExpr(vc, "v", bv8);
+
+    vc_assertFormula(
+        vc, vc_eqExpr(vc,
+                      vc_readExpr(vc, vc_writeExpr(vc, a, i, v), j),
+                      vc_bvConstExprFromInt(vc, 8, 42)));
+    vc_assertFormula(vc, vc_eqExpr(vc, i, j));
+    vc_assertFormula(
+        vc, vc_eqExpr(vc, vc_readExpr(vc, a, vc_bvConstExprFromInt(vc, 4, 3)),
+                      vc_bvConstExprFromInt(vc, 8, 7)));
+
+    verdicts[flag] = vc_query(vc, vc_falseExpr(vc));
+    values[flag][0] = getBVUnsigned(vc_getCounterExample(vc, v));
+    values[flag][1] = getBVUnsigned(vc_getCounterExample(vc, i));
+    values[flag][2] = getBVUnsigned(vc_getCounterExample(vc, j));
+    values[flag][3] = getBVUnsigned(vc_getCounterExample(
+        vc, vc_readExpr(vc, a, vc_bvConstExprFromInt(vc, 4, 3))));
+
+    stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+    if (flag)
+    {
+      // No equality was ever abstracted, so no context exists at all.
+      EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
+    }
+    vc_Destroy(vc);
+  }
+
+  EXPECT_EQ(verdicts[0], verdicts[1]);
+  EXPECT_EQ(0, verdicts[0]); // satisfiable
+  for (int k = 0; k < 4; k++)
+  {
+    EXPECT_EQ(values[0][k], values[1][k]) << "value " << k;
+  }
+  EXPECT_EQ(42u, values[0][0]);
+  EXPECT_EQ(7u, values[0][3]);
+}
+
 TEST(array_extensionality, flag_off_preserves_eq_node)
 {
   // Default-off: an array equality still builds an ordinary EQ node
