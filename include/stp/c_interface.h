@@ -666,8 +666,9 @@ DLL_PUBLIC Expr vc_fpConstFromBits(VC vc, int exp_bits, int sig_bits, Expr bv);
 //! \brief Returns the IEEE floating-point equality `a == b` (fp.eq).
 //!
 //! True exactly when `a` and `b` are equal as numbers: +0 == -0, and any NaN
-//! operand makes it false. For bit-identical equality (NaN == NaN, +0 != -0)
-//! use vc_eqExpr instead.
+//! operand makes it false. For SMT-LIB's '=' -- which keeps +0 and -0
+//! distinct and makes every NaN equal to every NaN (payloads are not
+//! distinguished) -- use vc_eqExpr instead.
 //!
 DLL_PUBLIC Expr vc_fpEqExpr(VC vc, Expr a, Expr b);
 
@@ -1442,7 +1443,7 @@ enum exprkind_t
   FP_ISNAN,
   FP_ISNEGATIVE,
   FP_ISPOSITIVE,
-  FP_SMT_EQ, //!< SMT-LIB '=' over floats: bit-identical (all NaNs equal).
+  FP_SMT_EQ, //!< SMT-LIB '=' over floats: +0 and -0 distinct, all NaNs equal.
 };
 
 //! \brief Returns the expression-kind of the given expression.

@@ -20,6 +20,10 @@ TEST(fp_model_reading, small_format)
   EXPECT_EQ(3, vc_getExpWidth(x));
   EXPECT_EQ(5, vc_getSigWidth(x));
 
+  // The accessors are documented to work on the type itself as well.
+  EXPECT_EQ(3, vc_getExpWidth(f));
+  EXPECT_EQ(5, vc_getSigWidth(f));
+
   Expr one =
       vc_fpConstFromBits(vc, 3, 5, vc_bvConstExprFromLL(vc, 8, 0x30ULL));
   EXPECT_EQ(3, vc_getExpWidth(one));

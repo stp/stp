@@ -703,8 +703,10 @@ ASTNode blast_fpadd(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs)
 }
 
 // fp.sub is fp.add with the isAdd flag cleared: symfpu negates the right
-// operand internally, which gets the -0/+0 and NaN corner cases right in a
-// way that blasting (add lhs (neg rhs)) would not.
+// operand internally. IEEE subtraction is exactly addition of the negation
+// (signed zeros and NaNs included), which is also what lets the factory
+// lower FP_SUB to fp.add(rm, lhs, neg rhs) before blasting; this path
+// serves any FP_SUB built without that rewrite.
 ASTNode blast_fpsub(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs)
 {
   assert(lhs.GetValueWidth() == rhs.GetValueWidth());

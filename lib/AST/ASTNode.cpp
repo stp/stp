@@ -155,9 +155,12 @@ static bool deriveFPFormat(const ASTNode& n, unsigned int& e, unsigned int& s)
   switch (n.GetKind())
   {
     // to_fp names its target format in its first two children, rather than
-    // inheriting one from an operand.
+    // inheriting one from an operand. So does the C API's floating-point
+    // *type* node (vc_fpType) -- covering it here is what makes
+    // vc_getExpWidth/vc_getSigWidth work on a type, as documented.
     case FP_TOFP:
     case FP_TOFP_UNSIGNED:
+    case FLOATINGPOINT:
     {
       if (n.Degree() < 2 || !n[0].isConstant() || !n[1].isConstant())
         return false;
