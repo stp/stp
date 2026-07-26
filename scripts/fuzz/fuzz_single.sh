@@ -205,12 +205,18 @@ if [ -z "$supported" ]; then
 fi
 
 declare -a checked=()
+declare -a dropped=()
+offered=${#arr[@]}
 for e in "${arr[@]}"
   do
     keep=1
     for opt in $(echo "$e" | grep -o -- '--[a-zA-Z0-9.][a-zA-Z0-9.-]*'); do
       if ! echo "$supported" | grep -qx -- "$opt"; then
-        echo "dropping unsupported entry: $e ($opt not in this build)" >&2
+        if [ "$e" = "$opt" ]; then
+          dropped+=("$e")
+        else
+          dropped+=("$e  ($opt is the missing one)")
+        fi
         keep=0
         break
       fi
@@ -218,6 +224,18 @@ for e in "${arr[@]}"
     if [ $keep -eq 1 ]; then checked+=("$e"); fi
 done
 arr=("${checked[@]}")
+
+# Worth being loud about: a dropped entry is a code path that silently stops
+# being fuzzed, and the run otherwise looks perfectly healthy for hours.
+if [ "${#dropped[@]}" -gt 0 ]; then
+  echo >&2
+  echo "WARNING: ${#dropped[@]} of $offered option settings dropped, this build" >&2
+  echo "  does not support them:" >&2
+  printf '    %s\n' "${dropped[@]}" >&2
+  echo "  Those code paths are NOT being fuzzed. Rebuild with them enabled if" >&2
+  echo "  that is not deliberate." >&2
+  echo >&2
+fi
 if [ "${#arr[@]}" -eq 0 ]; then
   echo "No usable option settings, every entry was dropped." >&2
   exit 1
