@@ -13,10 +13,11 @@
 #             A directory we generate ourselves is removed on exit; one given
 #             here is left alone beyond rmdir'ing the empty worker directories.
 #
-# Everything fuzz_single.sh reads (STP, CHECKER, FUZZSMT_JAR, FAIL_DIR, ...) is
-# passed straight through, so e.g.
+# Everything fuzz_single.sh reads (STP, CHECKER, FUZZSMT_JAR, LOGICS, FAIL_DIR,
+# ...) is passed straight through, so e.g.
 #
-#   STP=~/stp/build_debug/stp CHECKER=boolector ./fuzz.sh 8
+#   STP=~/stp/build_debug/stp CHECKER=bitwuzla ./fuzz.sh 8
+#   LOGICS='QF_BV; QF_ABV -mxn 1 -Mxn 3' ./fuzz.sh 8
 
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 fuzzer="$script_dir/fuzz_single.sh"
