@@ -95,7 +95,6 @@ protected:
   virtual void setValueWidth(uint32_t) = 0;
   virtual uint32_t getValueWidth() const = 0;
 
-  // AVJ-FP
   virtual void setExpWidth(uint32_t) = 0;
   virtual uint32_t getExpWidth() const = 0;
 

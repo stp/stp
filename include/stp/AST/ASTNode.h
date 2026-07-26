@@ -176,7 +176,6 @@ public:
   void SetValueWidth(unsigned int vw) const;
   types GetType(void) const;
 
-  // AVJ-FP
   unsigned int GetSigWidth() const;
   unsigned int GetExpWidth() const;
 
