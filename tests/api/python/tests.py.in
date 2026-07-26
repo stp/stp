@@ -165,6 +165,36 @@ class TestSTP(unittest.TestCase):
         with self.assertRaises(TypeError):
             a & b
 
+    def test_array_refuses_all_bitvector_operations(self):
+        # Every BitVector operation inherited from Expr must raise
+        # TypeError on an array rather than build a malformed node --
+        # or, for the widening operations, abort the whole interpreter
+        # on a type-check failure inside the library.
+        s = stp.Solver(array_equality=True)
+        a = s.array('a', 4, 8)
+        b = s.array('b', 4, 8)
+
+        binary = ('add sub rsub mul div rdiv mod rmod rem rrem sdiv rsdiv '
+                  'smod rsmod srem rsrem lt le gt ge slt sle sgt sge and_ '
+                  'or_ xor nand nor xnor uaddo saddo usubo ssubo umulo '
+                  'smulo shl rshl shr rshr sar rsar').split()
+        for name in binary:
+            with self.assertRaises(TypeError, msg=name):
+                getattr(a, name)(b)
+
+        with self.assertRaises(TypeError):
+            a.extract(3, 0)
+        with self.assertRaises(TypeError):
+            a.zero_extend(16)
+        with self.assertRaises(TypeError):
+            a.sign_extend(16)
+        with self.assertRaises(TypeError):
+            a.neg()
+        with self.assertRaises(TypeError):
+            a.not_()
+        with self.assertRaises(TypeError):
+            a.simplify()
+
     def test_array_model_repeated_calls(self):
         # model() releases the entry buffers it receives on every call
         # (they are malloc'd by libstp and freed there too); repeated

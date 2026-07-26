@@ -909,8 +909,10 @@ class ArrayExpr(Expr):
     mod = rmod = rem = rrem = _array_no_bv
     sdiv = rsdiv = smod = rsmod = srem = rsrem = _array_no_bv
     lt = le = gt = ge = slt = sle = sgt = sge = _array_no_bv
-    and_ = or_ = xor = neg = not_ = _array_no_bv
+    and_ = or_ = xor = nand = nor = xnor = neg = not_ = _array_no_bv
+    uaddo = saddo = usubo = ssubo = umulo = smulo = _array_no_bv
     shl = rshl = shr = rshr = sar = rsar = extract = _array_no_bv
+    zero_extend = sign_extend = simplify = _array_no_bv
     __add__ = __radd__ = __sub__ = __rsub__ = _array_no_bv
     __mul__ = __rmul__ = _array_no_bv
     __div__ = __floordiv__ = __rdiv__ = __rfloordiv__ = _array_no_bv
