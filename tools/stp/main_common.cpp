@@ -27,7 +27,6 @@ THE SOFTWARE.
 // From ABC
 #include "sat/cnf/cnf.h"
 
-#include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/Parser/parser.h"
 #include "stp/ToSat/ToSATAIG.h"
 #include "stp/cpp_interface.h"
