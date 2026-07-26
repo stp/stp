@@ -120,8 +120,9 @@ TEST(FPPrintBack, constants_and_conversions)
              {"(fp #b0 #b10000 #b0000000001)", "((_ to_fp 5 11) |b|)",
               "((_ to_fp 5 11) RNE |x|)", "((_ to_fp_unsigned 5 11) RTN |w|)",
               "((_ fp.to_ubv 8) RTZ |x|)", "fp.isNormal", "fp.isNaN",
-              // The NaN special is a packed constant now.
-              "(fp #b0 #b11111 #b0000000001)"});
+              // The NaN special is a packed constant: symfpu's canonical
+              // quiet NaN, with the top stored-significand bit set.
+              "(fp #b0 #b11111 #b1000000000)"});
 }
 
 TEST(FPPrintBack, specials_equality_and_classifications)

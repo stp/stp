@@ -410,9 +410,13 @@ ASTNode STPMgr::CreateFPSpecialConst(FPSpecial which, unsigned exp_width,
     CONSTANTBV::BitVector_Bit_On(bits, width - 1);
   for (unsigned i = 0; exp_all_ones && i < exp_width; i++)
     CONSTANTBV::BitVector_Bit_On(bits, stored_sig + i);
-  // symfpu's default NaN: exponent all ones, stored significand 1.
-  if (which == FPSpecial::NaN)
-    CONSTANTBV::BitVector_Bit_On(bits, 0);
+  // symfpu's canonical NaN: exponent all ones and only the top stored-
+  // significand bit set (pack() emits nanPattern(packedSigWidth) =
+  // 1 << (stored_sig - 1), the quiet-bit convention). Matching it keeps the
+  // interned constant bit-identical to the NaN every blasted operation
+  // produces. Semantically either way is a NaN; bit-identical is tidier.
+  if (which == FPSpecial::NaN && stored_sig > 0)
+    CONSTANTBV::BitVector_Bit_On(bits, stored_sig - 1);
 
   // CreateBVConst destroys `bits`.
   ASTNode packed = CreateBVConst(bits, width);
