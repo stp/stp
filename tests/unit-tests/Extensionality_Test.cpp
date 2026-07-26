@@ -1168,6 +1168,107 @@ TEST_F(ExtPrepareTest, RewrittenWitnessIndexFailsLoudly)
                "witness read's index was rewritten away");
 }
 
+// A float-element record must not accept two NaN payloads as its
+// witness: every NaN bit pattern denotes the one NaN value, so the
+// witness clause carries "and not both cells NaN" next to the bitwise
+// disequality. A bitvector-element record keeps the plain bitwise
+// clause.
+TEST_F(ExtPrepareTest, FloatElementWitnessQuotientsNaN)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+
+  ASTNode p = arr("p"), q = arr("q");
+  ext->makeEquality(p, q);
+  ASSERT_EQ(1u, ext->getRecords().size());
+  {
+    const ExtensionalityContext::Record& r = ext->getRecords()[0];
+    const ASTNode plain = hf->CreateNode(
+        OR, r.proxy,
+        hf->CreateNode(NOT, hf->CreateNode(EQ, r.nameL, r.nameR)));
+    EXPECT_EQ(plain, r.witnessClause);
+  }
+
+  ASTNode fa = mgr.CreateSymbol("fa", 2, 32);
+  fa.SetExpWidth(8);
+  fa.SetSigWidth(24);
+  ASTNode fb = mgr.CreateSymbol("fb", 2, 32);
+  fb.SetExpWidth(8);
+  fb.SetSigWidth(24);
+  ext->makeEquality(fa, fb);
+  ASSERT_EQ(2u, ext->getRecords().size());
+  {
+    const ExtensionalityContext::Record& r = ext->getRecords()[1];
+    const ASTNode bitwise =
+        hf->CreateNode(NOT, hf->CreateNode(EQ, r.nameL, r.nameR));
+    ASSERT_EQ(OR, r.witnessClause.GetKind());
+    ASSERT_EQ(2u, r.witnessClause.Degree());
+    const ASTNode& differ = r.witnessClause[0] == r.proxy
+                                ? r.witnessClause[1]
+                                : r.witnessClause[0];
+    // Bitwise disequality and the NaN qualification side by side.
+    ASSERT_EQ(AND, differ.GetKind());
+    ASSERT_EQ(2u, differ.Degree());
+    const ASTNode& guard = differ[0] == bitwise ? differ[1] : differ[0];
+    EXPECT_TRUE(differ[0] == bitwise || differ[1] == bitwise);
+    EXPECT_EQ(NOT, guard.GetKind());
+    EXPECT_EQ(AND, guard[0].GetKind());
+  }
+}
+
+// The fresh replacement for an eliminated float-array if-then-else
+// keeps the element format, and the guarded equality records minted
+// over it therefore build NaN-qualified witnesses too.
+TEST_F(ExtPrepareTest, FloatArrayIteReplacementKeepsFormat)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode fa = mgr.CreateSymbol("fa", 2, 32);
+  fa.SetExpWidth(8);
+  fa.SetSigWidth(24);
+  ASTNode fb = mgr.CreateSymbol("fb", 2, 32);
+  fb.SetExpWidth(8);
+  fb.SetSigWidth(24);
+  ASTNode fd = mgr.CreateSymbol("fd", 2, 32);
+  fd.SetExpWidth(8);
+  fd.SetSigWidth(24);
+  ASTNode c = mgr.CreateSymbol("c", 0, 0);
+  ASTNode ite = hf->CreateArrayTerm(ITE, 2, 32, {c, fa, fb});
+
+  ASTNode proxy = ext->makeEquality(ite, fd);
+  ASSERT_EQ(1u, ext->getRecords().size());
+
+  ext->beginSolve();
+  ext->prepare(ext->conjoinRecordConstraints(proxy));
+
+  ASSERT_EQ(3u, ext->getRecords().size());
+  const ExtensionalityContext::Record& r0 = ext->getRecords()[0];
+  const ASTNode replacement =
+      r0.canonicalLeft == fd ? r0.canonicalRight : r0.canonicalLeft;
+  ASSERT_EQ(SYMBOL, replacement.GetKind());
+  EXPECT_EQ(8u, replacement.GetExpWidth());
+  EXPECT_EQ(24u, replacement.GetSigWidth());
+
+  for (size_t i = 1; i < 3; i++)
+  {
+    const ExtensionalityContext::Record& r = ext->getRecords()[i];
+    ASSERT_EQ(OR, r.witnessClause.GetKind());
+    const ASTNode& differ = r.witnessClause[0] == r.proxy
+                                ? r.witnessClause[1]
+                                : r.witnessClause[0];
+    EXPECT_EQ(AND, differ.GetKind());
+  }
+}
+
+// Same packed width, different element sorts: a float-element array
+// may not be equated with a bitvector-element array.
+TEST_F(ExtPrepareTest, MixedElementSortEqualityFailsLoudly)
+{
+  ASTNode fa = mgr.CreateSymbol("fa", 2, 32);
+  fa.SetExpWidth(8);
+  fa.SetSigWidth(24);
+  ASTNode b = mgr.CreateSymbol("b", 2, 32);
+  EXPECT_DEATH(ext->makeEquality(fa, b), "identical element sorts");
+}
+
 // The decision table combining STP's own model evaluation with the
 // array consistency check: an array conflict always takes priority
 // (only its lemma can rule the candidate out), and a candidate is
