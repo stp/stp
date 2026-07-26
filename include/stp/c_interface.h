@@ -274,6 +274,11 @@ DLL_PUBLIC int vc_getBVLength(VC vc, Expr e);
 //!
 //! Returns a boolean expression.
 //!
+//! On floating-point operands this is SMT-LIB's '=': +0 and -0 are
+//! distinct, and every NaN equals every NaN (payloads are not
+//! distinguished). For IEEE equality (+0 == -0, NaN unequal to
+//! everything) use vc_fpEqExpr.
+//!
 DLL_PUBLIC Expr vc_eqExpr(VC vc, Expr child0, Expr child1);
 
 /////////////////////////////////////////////////////////////////////////////

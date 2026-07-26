@@ -868,7 +868,19 @@ Expr vc_eqExpr(VC vc, Expr ccc0, Expr ccc1)
   stp::ASTNode* aa = (stp::ASTNode*)ccc1;
   assert(BVTypeCheck(*a));
   assert(BVTypeCheck(*aa));
-  stp::ASTNode o = b->CreateNode(stp::EQ, *a, *aa);
+
+  // SMT-LIB '=' over floats is FP_SMT_EQ, not the generic EQ, mirroring the
+  // parser's (= ...) rule: +0 and -0 stay distinct, and every NaN equals
+  // every NaN. A plain EQ over floating-point operands is a node the later
+  // passes cannot discharge -- the solve died without a conclusion (found
+  // by murxla; vc_fpEqExpr's doc sends '=' callers here, so this is the
+  // documented route). With only one float operand, FP_SMT_EQ's typecheck
+  // then rejects the float/bitvector mix, exactly as the parser does.
+  const stp::Kind k = (a->GetType() == stp::FLOATINGPOINT_TYPE ||
+                       aa->GetType() == stp::FLOATINGPOINT_TYPE)
+                          ? stp::FP_SMT_EQ
+                          : stp::EQ;
+  stp::ASTNode o = b->CreateNode(k, *a, *aa);
 
   stp::ASTNode* output = new stp::ASTNode(o);
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
