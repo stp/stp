@@ -327,7 +327,7 @@ class Solver(object):
         whole with ==/!=. They are deliberately not part of
         Solver.model(); read an array's entries with ArrayExpr.model().
         """
-        name_conv = bytes(name, 'utf8') if Py3 else name
+        name_conv = name.encode('utf-8')
 
         arr_type = _lib.vc_arrayType(self.vc,
                                      _lib.vc_bvType(self.vc, index_width),
@@ -817,14 +817,14 @@ class ArrayExpr(Expr):
         self.value_width = value_width
 
     def _index(self, index):
-        if isinstance(index, (int, long)):
+        if isinstance(index, int):
             index = self.s.bitvecval(self.index_width, index)
         assert isinstance(index, Expr), 'Index must be an Expr or an int'
         assert not isinstance(index, ArrayExpr), 'Index must be a bitvector'
         return index
 
     def _value(self, value):
-        if isinstance(value, (int, long)):
+        if isinstance(value, int):
             value = self.s.bitvecval(self.value_width, value)
         assert isinstance(value, Expr), 'Value must be an Expr or an int'
         assert not isinstance(value, ArrayExpr), 'Value must be a bitvector'
