@@ -33,6 +33,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/RemoveUnconstrained.h"
 #include "stp/AST/MutableASTNode.h"
 #include "stp/Simplifier/constantBitP/Dependencies.h"
+#include <algorithm>
 
 namespace stp
 {
@@ -140,6 +141,15 @@ void RemoveUnconstrained::splitExtractOnly(vector<MutableASTNode*> extracts)
     vector<MutableASTNode*> mut;
     mut.insert(mut.end(), extracts[i]->parents.begin(),
                extracts[i]->parents.end());
+
+    // 'parents' is hashed on the pointer, so it enumerates in an order that
+    // depends on where the allocator happened to put the nodes. We create a
+    // fresh variable per parent below, so that order ends up in the CNF. Sort
+    // on the node number to keep the output the same from run to run.
+    std::sort(mut.begin(), mut.end(),
+              [](const MutableASTNode* a, const MutableASTNode* b) {
+                return a->n.GetNodeNum() < b->n.GetNodeNum();
+              });
 
     for (vector<MutableASTNode*>::iterator it = mut.begin(); it != mut.end();
          it++)
