@@ -757,6 +757,116 @@ TEST_F(ExtFixtureTest, ConflictPremiseUsesShortestPaths)
   EXPECT_EQ(rT, c.abstractConclusionB);
 }
 
+// Direct tests for the solve-time preparation layer: recovering the
+// canonical equality operands from the witness anchors, computing the
+// cone, eliminating array-valued if-then-else with its persistent
+// replacement cache, scalar naming, and the loud failure when an
+// anchor is missing. These drive ExtensionalityContext directly,
+// without SAT or the array transformer, so a regression in
+// preparation fails here instead of as a distant fatal error inside a
+// full solve.
+class ExtPrepareTest : public ::testing::Test
+{
+protected:
+  STPMgr mgr;
+  ExtensionalityContext* ext;
+
+  ExtPrepareTest()
+  {
+    mgr.UserFlags.enable_array_equality = true;
+    ext = mgr.getExtensionality();
+  }
+
+  ASTNode arr(const char* name) { return mgr.CreateSymbol(name, 2, 2); }
+  ASTNode bv(const char* name) { return mgr.CreateSymbol(name, 0, 2); }
+};
+
+TEST_F(ExtPrepareTest, RecoversOperandsConeAndNames)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b");
+  ASTNode i = bv("i"), e = bv("e");
+  // A compound write index, so preparation must give it a scalar name.
+  ASTNode idx = hf->CreateTerm(BVPLUS, 2, i, mgr.CreateBVConst(2, 1));
+  ASTNode w = hf->CreateArrayTerm(WRITE, 2, 2, {a, idx, e});
+
+  ASTNode proxy = ext->makeEquality(w, b);
+  ASSERT_EQ(SYMBOL, proxy.GetKind());
+  ASSERT_EQ(1u, ext->getRecords().size());
+
+  ext->beginSolve();
+  ASTNode root = ext->conjoinRecordConstraints(proxy);
+  ext->prepare(root);
+
+  // Nothing rewrote the formula between construction and preparation,
+  // so anchor recovery must reproduce the construction operands
+  // exactly.
+  const ExtensionalityContext::Record& r = ext->getRecords()[0];
+  EXPECT_EQ(r.constructionLeft, r.canonicalLeft);
+  EXPECT_EQ(r.constructionRight, r.canonicalRight);
+
+  // The cone contains the operands and closes through the write to
+  // its base.
+  EXPECT_TRUE(ext->coneFrozen());
+  EXPECT_TRUE(ext->inCone(w));
+  EXPECT_TRUE(ext->inCone(b));
+  EXPECT_TRUE(ext->inCone(a));
+
+  // The compound index received a protected scalar name bound to it.
+  bool namedIdx = false;
+  const std::map<ASTNode, ASTNode>& n2t = ext->getNameToTerm();
+  for (std::map<ASTNode, ASTNode>::const_iterator it = n2t.begin();
+       it != n2t.end(); ++it)
+  {
+    EXPECT_TRUE(ext->isProtected(it->first));
+    if (it->second == idx)
+      namedIdx = true;
+  }
+  EXPECT_TRUE(namedIdx);
+}
+
+TEST_F(ExtPrepareTest, IteEliminationReachesFixedPointAndCaches)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b"), d = arr("d");
+  ASTNode c = mgr.CreateSymbol("c", 0, 0);
+  ASTNode ite = hf->CreateArrayTerm(ITE, 2, 2, {c, a, b});
+
+  ASTNode proxy = ext->makeEquality(ite, d);
+  ASSERT_EQ(1u, ext->getRecords().size());
+
+  ext->beginSolve();
+  ext->prepare(ext->conjoinRecordConstraints(proxy));
+
+  // The if-then-else operand was eliminated to a fresh array with two
+  // guarded equality records (paper section 4.1).
+  ASSERT_EQ(3u, ext->getRecords().size());
+  const ExtensionalityContext::Record& r = ext->getRecords()[0];
+  EXPECT_EQ(d, r.canonicalLeft);
+  EXPECT_EQ(SYMBOL, r.canonicalRight.GetKind());
+  EXPECT_TRUE(r.canonicalRight != ite);
+  // Both branches enter the cone through the guarded records.
+  EXPECT_TRUE(ext->inCone(a));
+  EXPECT_TRUE(ext->inCone(b));
+
+  // A repeated solve reuses the cached replacement instead of minting
+  // a new generation of records.
+  ext->beginSolve();
+  ext->prepare(ext->conjoinRecordConstraints(proxy));
+  EXPECT_EQ(3u, ext->getRecords().size());
+}
+
+TEST_F(ExtPrepareTest, MissingAnchorFailsLoudly)
+{
+  ASTNode a = arr("a"), b = arr("b");
+  ASTNode proxy = ext->makeEquality(a, b);
+  ext->beginSolve();
+  // The record constraints are deliberately not conjoined: operand
+  // recovery must refuse to guess.
+  EXPECT_DEATH(ext->prepare(proxy),
+               "witness-read defining equation was lost");
+}
+
 // The decision table combining STP's own model evaluation with the
 // array consistency check: an array conflict always takes priority
 // (only its lemma can rule the candidate out), and a candidate is

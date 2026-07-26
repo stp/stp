@@ -268,6 +268,12 @@ public:
     return protectedSymbols;
   }
 
+  // Scalar name -> the term its defining equation binds it to.
+  const std::map<ASTNode, ASTNode>& getNameToTerm() const
+  {
+    return nameToTermMap;
+  }
+
   // Statistics for --stats.
   int lemmasEmitted;
 
