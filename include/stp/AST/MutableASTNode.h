@@ -37,7 +37,7 @@ namespace stp
 {
 class MutableASTNode
 {
-  static THREAD_LOCAL vector<MutableASTNode*> all;
+  static THREAD_LOCAL_IE vector<MutableASTNode*> all;
 
 public:
   typedef std::unordered_set<MutableASTNode*> ParentsType;
