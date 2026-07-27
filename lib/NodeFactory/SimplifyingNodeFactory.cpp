@@ -603,43 +603,53 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
     SortByExprNum(sorted_children);  
   }
 
-  //TODO this would be better as copy on write.
+  // Copy on write. Usually nothing is dropped, so we only build up
+  // "new_children" once the first element is actually discarded; until then
+  // "children" itself is the answer.
   ASTVec new_children;
-  new_children.reserve(children.size());
+  bool materialised = false;
 
   const Kind node_kind = IsAnd ? stp::AND : stp::OR;
   bool nested_same_kind = false;
 
-  for (ASTVec::const_iterator it = children.begin(), it_end = children.end();
-       it != it_end; it++)
+  const size_t num_children = children.size();
+  for (size_t i = 0; i < num_children; i++)
   {
-    ASTVec::const_iterator next_it;
-
-    const bool nextexists = (it + 1 < it_end);
-    if (nextexists)
-      next_it = it + 1;
-    else
-      next_it = it_end;
+    const ASTNode& curr = children[i];
+    const bool nextexists = (i + 1 < num_children);
 
     if (nextexists)
-      if (next_it->GetKind() == stp::NOT && (*next_it)[0] == *it)
+    {
+      const ASTNode& next = children[i + 1];
+      if (next.GetKind() == stp::NOT && next[0] == curr)
         return annihilator;
+    }
 
-    if (*it == annihilator)
+    if (curr == annihilator)
     {
       return annihilator;
     }
-    else if (*it == identity || (nextexists && (*next_it == *it)))
+    else if (curr == identity || (nextexists && (children[i + 1] == curr)))
     {
-      // just drop it
+      // just drop it, copying across everything kept so far.
+      if (!materialised)
+      {
+        materialised = true;
+        new_children.reserve(num_children);
+        new_children.insert(new_children.end(), children.begin(),
+                            children.begin() + i);
+      }
     }
     else
     {
-      new_children.push_back(*it);
-      if (it->GetKind() == node_kind)
+      if (materialised)
+        new_children.push_back(curr);
+      if (curr.GetKind() == node_kind)
         nested_same_kind = true;
     }
   }
+
+  const ASTVec& out = materialised ? new_children : children;
 
   // A child of the same kind contributes its own children conjunctively
   // (resp. disjunctively), so a literal here and its negation one level
@@ -647,7 +657,7 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
   if (nested_same_kind)
   {
     stp::ASTNodeSet positive, negated;
-    for (const ASTNode& n : new_children)
+    for (const ASTNode& n : out)
     {
       if (n.GetKind() == node_kind)
       {
@@ -669,19 +679,19 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
 
   // If we get here, we saw no annihilators, and children should
   // be only the non-True nodes.
-  switch (new_children.size())
+  switch (out.size())
   {
     case 0:
       return identity;
       break;
 
     case 1:
-      return new_children[0];
+      return out[0];
       break;
 
     default:
       // 2 or more children.  Create a new node.
-      return hashing.CreateNode(IsAnd ? stp::AND : stp::OR, new_children);
+      return hashing.CreateNode(IsAnd ? stp::AND : stp::OR, out);
       break;
   }
   assert(false);
