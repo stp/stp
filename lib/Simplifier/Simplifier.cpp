@@ -708,6 +708,16 @@ ASTNode Simplifier::PullUpITE(const ASTNode& in)
     result = nf->CreateTerm(ITE, in.GetValueWidth(), in[0][0], l1, l2);
   }
 
+  // A rebuilt node cannot lose the input's floating-point format. The
+  // interesting case is not a float operation (those derive their format
+  // from their children) but a plain bitvector node carrying a format
+  // *stamp*: the canonicalised index of a float-indexed array is a
+  // bitvector circuit stamped with the index's format (see FpTotalise),
+  // and pulling an if-then-else out of, say, its concatenation must
+  // keep the stamp or the node changes type. No-op for everything else.
+  result = FloatBlaster::withFormat(_bm, result, in.GetExpWidth(),
+                                    in.GetSigWidth());
+
   assert(result.GetType() == in.GetType());
   assert(result.GetValueWidth() == in.GetValueWidth());
   assert(result.GetIndexWidth() == in.GetIndexWidth());
@@ -743,8 +753,9 @@ ASTNode Simplifier::ITEOpt_InEqs(const ASTNode& in, ASTNodeMap* VarConstMap)
   }
   else if (BVCONST == k1 && BVCONST == k2)
   {
-    assert(in1 != in2);
-    output = ASTFalse;
+    // Distinct constant nodes may still spell one value (a float
+    // constant interns apart from the plain constant with its bits).
+    output = constantsSameBits(in1, in2) ? ASTTrue : ASTFalse;
   }
   else if (ITE == k1 && BVCONST == in1[1].GetKind() &&
            BVCONST == in1[2].GetKind() && BVCONST == k2)
@@ -759,13 +770,17 @@ ASTNode Simplifier::ITEOpt_InEqs(const ASTNode& in, ASTNodeMap* VarConstMap)
     // c = ITE(cond,d,c) <=> NOT(cond)
     //
     // similarly ITE(cond,d,c) = d <=> NOT(cond)
+    // The "other branch differs" side conditions compare values, not
+    // nodes: with both branches spelling one value the equality holds
+    // whatever the condition, and folding to the condition would be
+    // wrong.
     ASTNode cond = in1[0];
-    if (in1[1] == in2 && (in2 != in1[2]))
+    if (in1[1] == in2 && !constantsSameBits(in2, in1[2]))
     {
       // ITE(cond, c, d) = c <=> cond
       output = cond;
     }
-    else if (in1[2] == in2 && (in2 != in1[1]))
+    else if (in1[2] == in2 && !constantsSameBits(in2, in1[1]))
     {
       cond = SimplifyFormula(cond, true, VarConstMap);
       output = cond;
@@ -780,12 +795,12 @@ ASTNode Simplifier::ITEOpt_InEqs(const ASTNode& in, ASTNodeMap* VarConstMap)
            BVCONST == in2[2].GetKind() && BVCONST == k1)
   {
     ASTNode cond = in2[0];
-    if (in2[1] == in1 && (in1 != in2[2]))
+    if (in2[1] == in1 && !constantsSameBits(in1, in2[2]))
     {
       // ITE(cond, c, d) = c <=> cond
       output = cond;
     }
-    else if (in2[2] == in1 && (in1 != in2[1]))
+    else if (in2[2] == in1 && !constantsSameBits(in1, in2[1]))
     {
       cond = SimplifyFormula(cond, true, VarConstMap);
       output = cond;
@@ -818,10 +833,11 @@ ASTNode Simplifier::CreateSimplifiedEQ(const ASTNode& in1, const ASTNode& in2)
     // terms are syntactically the same
     return ASTTrue;
 
-  // here the terms are definitely not syntactically equal but may be
-  // semantically equal.
+  // Two constant nodes still may be semantically equal: a float constant
+  // interns apart from the plain constant with its bits, so compare the
+  // bits, not the identities.
   if (BVCONST == k1 && BVCONST == k2)
-    return ASTFalse;
+    return constantsSameBits(in1, in2) ? ASTTrue : ASTFalse;
 
   // Check if some of the leading constant bits are different. Fancier code
   // would check

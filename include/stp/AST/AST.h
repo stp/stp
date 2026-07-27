@@ -56,6 +56,14 @@ bool isCommutative(const Kind k);
 bool containsArrayOps(const ASTNode& n, STPMgr* stp);
 bool numberOfReadsLessThan(const ASTNode& n, int v);
 
+// Whether two constants spell the same bits. Node identity understates
+// this: a floating-point constant interns apart from the plain bitvector
+// constant with its bits (the format is part of a constant's identity),
+// so two distinct constant nodes may denote one bitvector value. Any
+// rule that concludes "different value" from "different constant nodes"
+// must compare through here instead.
+bool constantsSameBits(const ASTNode& a, const ASTNode& b);
+
 // If (a > b) in the termorder, then return 1 elseif (a < b) in the
 // termorder, then return -1 else return 0
 int TermOrder(const ASTNode& a, const ASTNode& b);

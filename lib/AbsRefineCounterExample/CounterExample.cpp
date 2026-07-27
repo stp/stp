@@ -461,6 +461,17 @@ AbsRefine_CounterExample::TermToConstTermUsingModel_inner(const ASTNode& term,
         }
 
         ASTNode simp(TermToConstTermUsingModel(child));
+        // A float operand must resolve to a constant, like the bit-vector
+        // operands in the default case below: with ArrayReadFlag set, a
+        // read with no value in the model comes back as the symbolic READ
+        // (case 2 above), and rebuilding the operation over it is not
+        // evaluation. The blaster would mostly carry the read along, but an
+        // identity fold in the rebuild (x * 1.0 is x) can hand the bare
+        // READ back as the whole term, and the blaster has no case for
+        // that. The read is genuinely unconstrained here, so resolve it to
+        // a concrete value.
+        if (BVCONST != simp.GetKind())
+          simp = TermToConstTermUsingModel(child, false);
         assert(simp.GetKind() == BVCONST);
         children.push_back(FloatBlaster::withFormat(
             bm, simp, child.GetExpWidth(), child.GetSigWidth()));

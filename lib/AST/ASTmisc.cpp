@@ -122,6 +122,19 @@ bool numberOfReadsLessThan(const ASTNode& n, int limit)
   return reads < limit;
 }
 
+// See the declaration for why this exists: constants of one value need
+// not be one node, because a floating-point constant interns apart from
+// the plain constant with its bits.
+bool constantsSameBits(const ASTNode& a, const ASTNode& b)
+{
+  assert(a.GetKind() == BVCONST && b.GetKind() == BVCONST);
+  if (a == b)
+    return true;
+  return a.GetValueWidth() == b.GetValueWidth() &&
+         0 == CONSTANTBV::BitVector_Lexicompare(a.GetBVConst(),
+                                                b.GetBVConst());
+}
+
 // True if any descendants are arrays.
 bool containsArrayOps(const ASTNode& n, STPMgr* mgr)
 {
