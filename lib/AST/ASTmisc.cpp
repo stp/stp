@@ -340,6 +340,11 @@ ASTVec FlattenKind(Kind k, const ASTChildren& children, int maxDepth)
 
 bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
 {
+  // Symbols are a large share of the nodes built while parsing and have no
+  // children, so return before paying the virtual call that fetches them.
+  if (SYMBOL == k)
+    return true;
+
   // The children of bitvector terms are in turn bitvectors.
   const ASTChildren v = n.GetChildren();
 
@@ -350,9 +355,6 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
         FatalError("BVTypeCheck: The term t does not typecheck, where t = \n",
                    n);
       break;
-
-    case SYMBOL:
-      return true;
 
     case ITE:
       if (n.Degree() != 3)
