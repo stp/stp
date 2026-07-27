@@ -19,7 +19,12 @@ cd "${dep}"
 # We specify the tags/commits for the other repositories, so do for this too
 git checkout release/v5.14.7
 mkdir build && cd build
-cmake -DENABLE_ASSERTIONS=OFF -DCMAKE_INSTALL_PREFIX:PATH="${install_dir}" ..
+# Build a static (PIC) library. It gets linked into libstp, so the installed
+# stp/libstp do not depend on a libcryptominisat5.so that this script only
+# installs inside the source checkout. STATIC_BINARY=OFF because the fully
+# static cryptominisat5 executable needs static gmp/zlib, which we don't need.
+cmake -DENABLE_ASSERTIONS=OFF -DBUILD_SHARED_LIBS=OFF -DSTATIC_BINARY=OFF \
+      -DCMAKE_INSTALL_PREFIX:PATH="${install_dir}" ..
 cmake --build . --parallel "$(nproc)"
 cmake --install .
 cd ..
