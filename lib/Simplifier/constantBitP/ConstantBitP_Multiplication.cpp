@@ -29,6 +29,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/constantBitP/MultiplicationStats.h"
 #include "stp/Simplifier/constantBitP/multiplication/ColumnCounts.h"
 #include "stp/Simplifier/constantBitP/multiplication/ColumnStats.h"
+#include "stp/Util/BitOps.h"
 #include <cstdint>
 #include <cstring>
 #include <set>
@@ -66,7 +67,6 @@ std::ostream& log = std::cerr;
       }
 #endif
 
-static inline int popcount64(uint64_t v);
 static inline uint64_t rightShiftedWord(const uint64_t* m, unsigned words,
                                         unsigned s, unsigned j);
 static inline int convolutionAt(const uint64_t* a, const uint64_t* revB,
@@ -243,20 +243,6 @@ Result fixIfCanForMultiplication(vector<FixedBits*>& children,
   return result;
 }
 
-// Branch-free SWAR popcount for the convolution inner loop.  With USE_POPCNT
-// the compiler recognises this as a popcount and emits the instruction; with
-// USE_POPCNT off it is what runs, and it stays correct on a CPU that has no
-// POPCNT.  Counting in software here rather than calling __builtin_popcountll
-// avoids the out-of-line libgcc call that the builtin becomes when the target
-// ISA has no POPCNT.
-static inline int popcount64(uint64_t v)
-{
-  v -= (v >> 1) & 0x5555555555555555ULL;
-  v = (v & 0x3333333333333333ULL) + ((v >> 2) & 0x3333333333333333ULL);
-  v = (v + (v >> 4)) & 0x0F0F0F0F0F0F0F0FULL;
-  return (int)((v * 0x0101010101010101ULL) >> 56);
-}
-
 static inline uint64_t reverseBits64(uint64_t v)
 {
   v = ((v >> 1) & 0x5555555555555555ULL) | ((v & 0x5555555555555555ULL) << 1);
@@ -318,7 +304,7 @@ static inline int convolutionAt(const uint64_t* a, const uint64_t* revB,
   {
     const uint64_t aw = a[t];
     if (aw != 0)
-      count += popcount64(aw & rightShiftedWord(revB, words, s, t));
+      count += ::stp::popCount64(aw & rightShiftedWord(revB, words, s, t));
   }
   return count;
 }
@@ -401,14 +387,14 @@ Result adjustColumns(const FixedBits& x, const FixedBits& y, int* columnL,
         uint64_t win = revYFF[word] >> bit;
         if (bit != 0 && word + 1 < words)
           win |= revYFF[word + 1] << (64 - bit);
-        ffPairs += popcount64(xFF[t] & win);
+        ffPairs += ::stp::popCount64(xFF[t] & win);
       }
       if (onePairsPossible && xOne[t] != 0)
       {
         uint64_t win = revYOne[word] >> bit;
         if (bit != 0 && word + 1 < words)
           win |= revYOne[word + 1] << (64 - bit);
-        onePairs += popcount64(xOne[t] & win);
+        onePairs += ::stp::popCount64(xOne[t] & win);
       }
     }
 
