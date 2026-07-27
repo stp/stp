@@ -52,6 +52,16 @@ struct ExprLess
     return n1.GetNodeNum() < n2.GetNodeNum();
   }
 };
+
+// Functor form of arithless, for the same reason as ExprLess above. Ordering
+// is identical to arithless.
+struct ArithLess
+{
+  bool operator()(const ASTNode& n1, const ASTNode& n2) const
+  {
+    return arithless(n1, n2);
+  }
+};
 bool isAtomic(Kind k);
 bool isCommutative(const Kind k);
 bool containsArrayOps(const ASTNode& n, STPMgr* stp);

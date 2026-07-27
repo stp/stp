@@ -201,7 +201,7 @@ void SortByExprNum(ASTVec& v)
 
 void SortByArith(ASTVec& v)
 {
-  sort(v.begin(), v.end(), arithless);
+  sort(v.begin(), v.end(), ArithLess{});
 }
 
 bool isAtomic(Kind kind)
