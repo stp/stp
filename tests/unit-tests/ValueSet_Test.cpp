@@ -193,6 +193,52 @@ TEST(ValueSet_Test, transfer_pointwise_add)
   delete result;
 }
 
+// The native path converts members to and from 64-bit integers; values
+// with bits on both sides of 32 catch a conversion that only moves one
+// machine word (the constantbv chunk functions move at most an unsigned
+// long per call, which is 32 bits on some platforms).
+TEST(ValueSet_Test, transfer_straddles_word_boundary)
+{
+  boot();
+  Context c;
+  stp::ValueSetAnalysis analysis(c.mgr);
+
+  const unsigned w = 40;
+  const auto cbv40 = [](uint64_t v) {
+    stp::CBV result = CONSTANTBV::BitVector_Create(40, true);
+    for (unsigned i = 0; i < 40; i++)
+      if ((v >> i) & 1)
+        CONSTANTBV::BitVector_Bit_On(result, i);
+    return result;
+  };
+
+  ASTNode n = c.hashing()->CreateTerm(stp::BVPLUS, w, c.symbol("sx", w),
+                                      c.symbol("sy", w));
+
+  // {2^33 + 6} + {1, 2}: the high bits must survive the round trip.
+  stp::ValueSet* left = new stp::ValueSet(w, false);
+  ASSERT_TRUE(left->insert(cbv40((1ull << 33) + 6)));
+  stp::ValueSet* right = new stp::ValueSet(w, false);
+  ASSERT_TRUE(right->insert(cbv40(1)));
+  ASSERT_TRUE(right->insert(cbv40(2)));
+
+  stp::ValueSet* result =
+      analysis.dispatchToTransferFunctions(n, {left, right});
+  ASSERT_NE(result, nullptr);
+  ASSERT_EQ(result->size(), 2u);
+
+  for (const uint64_t expected : {(1ull << 33) + 7, (1ull << 33) + 8})
+  {
+    stp::CBV probe = cbv40(expected);
+    ASSERT_TRUE(result->in(probe));
+    CONSTANTBV::BitVector_Destroy(probe);
+  }
+
+  delete left;
+  delete right;
+  delete result;
+}
+
 // Nodes wider than 64 bits take the bit-vector evaluation path rather
 // than the native 64-bit one; check it end to end at width 72.
 TEST(ValueSet_Test, transfer_wide)
@@ -206,7 +252,9 @@ TEST(ValueSet_Test, transfer_wide)
   // makeCBV takes an unsigned, whose bits run out well short of 72.
   const auto wideCBV = [](uint64_t low, bool bit70) {
     stp::CBV result = CONSTANTBV::BitVector_Create(72, true);
-    CONSTANTBV::BitVector_Chunk_Store(result, 64, 0, low);
+    for (unsigned i = 0; i < 64; i++)
+      if ((low >> i) & 1)
+        CONSTANTBV::BitVector_Bit_On(result, i);
     if (bit70)
       CONSTANTBV::BitVector_Bit_On(result, 70);
     return result;

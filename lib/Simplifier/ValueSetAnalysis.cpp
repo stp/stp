@@ -164,17 +164,29 @@ namespace stp
       return width >= 64 ? ~0ull : (1ull << width) - 1;
     }
 
-    // The value of a bit-vector of at most 64 bits.
+    // The value of a bit-vector of at most 64 bits. The chunk functions
+    // move at most an unsigned long per call, which is 32 bits on some
+    // platforms, so go in two halves.
     uint64_t cbvToU64(const CBV v)
     {
-      assert(bits_(v) <= 64);
-      return CONSTANTBV::BitVector_Chunk_Read(v, bits_(v), 0);
+      const unsigned width = bits_(v);
+      assert(width <= 64);
+      uint64_t result =
+          CONSTANTBV::BitVector_Chunk_Read(v, std::min(width, 32u), 0);
+      if (width > 32)
+        result |= (uint64_t)CONSTANTBV::BitVector_Chunk_Read(v, width - 32, 32)
+                  << 32;
+      return result;
     }
 
     CBV u64ToCBV(uint64_t v, unsigned width)
     {
       CBV result = CONSTANTBV::BitVector_Create(width, true);
-      CONSTANTBV::BitVector_Chunk_Store(result, width, 0, v);
+      CONSTANTBV::BitVector_Chunk_Store(result, std::min(width, 32u), 0,
+                                        (unsigned long)(v & 0xffffffffull));
+      if (width > 32)
+        CONSTANTBV::BitVector_Chunk_Store(result, width - 32, 32,
+                                          (unsigned long)(v >> 32));
       return result;
     }
 
