@@ -54,6 +54,30 @@ struct float_size
   int sig_bits;
 };
 
+// One component -- index or element -- of a parsed (Array X Y) sort, and
+// the assembled pair; parser plumbing like float_size. `width` is the bit
+// width the sort is laid out on: the declared width for a bitvector, the
+// packed width for a float, five for a rounding mode.
+struct array_sort_component
+{
+  enum Kind
+  {
+    BITVECTOR,
+    FLOATINGPOINT,
+    ROUNDINGMODE
+  };
+  Kind kind;
+  unsigned width;
+  unsigned exp_bits; // FLOATINGPOINT only
+  unsigned sig_bits; // FLOATINGPOINT only
+};
+
+struct array_sort
+{
+  array_sort_component index;
+  array_sort_component elem;
+};
+
 class Cpp_interface
 {
   STPMgr& bm;
@@ -239,6 +263,20 @@ public:
   // can pick an encoding that denotes no rounding mode at all (e.g.
   // "r differs from all five modes" used to answer sat).
   DLL_PUBLIC void addRoundingModeSymbol(ASTNode& s);
+
+  // Declare an array symbol of the parsed (Array X Y) sort: registers it
+  // like addSymbol, lays the widths onto the node, stamps a float element's
+  // format there too, and records any float-index, RoundingMode-index or
+  // RoundingMode-element sort in the manager's array registries (the node
+  // itself cannot carry those -- see STPMgr). The registries are dropped
+  // with the symbol when its frame pops.
+  DLL_PUBLIC void addArraySymbol(ASTNode& s, const array_sort& sort);
+
+  // Whether an array-valued term's sorts -- base-symbol registries plus the
+  // element format on the node -- agree with a parsed (Array X Y) sort.
+  // Width agreement is the caller's (cheaper, better-reported) check; this
+  // answers for the sort classes that share one width.
+  DLL_PUBLIC bool arraySortsAgree(const ASTNode& arr, const array_sort& sort);
 
   DLL_PUBLIC void success();
   DLL_PUBLIC void error(std::string msg);

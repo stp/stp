@@ -233,7 +233,13 @@ DLL_PUBLIC Type vc_boolType(VC vc);
 //! \brief Returns an array type with the given index type and data type
 //!        for the given validity checker.
 //!
-//! Note that index type and data type must both be of bitvector (bv) type.
+//! Index type and data type may each be a bitvector type (vc_bvType), a
+//! floating-point type (vc_fpType) or the RoundingMode type
+//! (vc_fpRoundingModeType), matching SMT-LIB's (Array X Y) over those
+//! sorts. Reads and writes then expect (and vc_readExpr's result carries)
+//! the corresponding sorts; a float-indexed array follows SMT-LIB '='
+//! on its indexes, so every NaN addresses one cell while +0 and -0 stay
+//! distinct cells.
 //!
 DLL_PUBLIC Type vc_arrayType(VC vc, Type typeIndex, Type typeData);
 
@@ -383,14 +389,22 @@ DLL_PUBLIC Expr vc_paramBoolExpr(VC vc, Expr var, Expr param);
 //! \brief Returns an array-read-expression representing the reading of
 //!        the given array's entry of the given index.
 //!
-//! The array parameter must be of type array and index must be of type bitvector.
+//! The array parameter must be of type array, and the index must have the
+//! array's index sort: a bitvector for a bitvector-indexed array, a float
+//! of the declared format for a float-indexed one, a rounding mode for a
+//! RoundingMode-indexed one. The result carries the array's element sort
+//! (a read from a float-element array is a float of that format, usable
+//! anywhere a float is; a read from a RoundingMode-element array is a
+//! rounding mode, pinned to the five legal encodings at solve time).
 //!
 DLL_PUBLIC Expr vc_readExpr(VC vc, Expr array, Expr index);
 
 //! \brief Returns an array-write-expressions representing the writing of
 //!        the given new value into the given array at the given entry index.
 //!
-//! The array parameter must be of type array, and index and newValue of type bitvector.
+//! The array parameter must be of type array; the index must have the
+//! array's index sort and newValue the array's element sort, as for
+//! vc_readExpr.
 //!
 DLL_PUBLIC Expr vc_writeExpr(VC vc, Expr array, Expr index, Expr newValue);
 

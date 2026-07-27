@@ -903,6 +903,21 @@ namespace stp
     return n;
   }
 
+  // Declare an array symbol from a parsed (Array X Y) sort: the shared body
+  // of the declare-fun and declare-const productions. Frees both arguments.
+  void declareArraySymbol(std::string* name, stp::array_sort* sort)
+  {
+    ASTNode s =
+        stp::GlobalParserInterface->LookupOrCreateSymbol(name->c_str());
+    stp::GlobalParserInterface->addArraySymbol(s, *sort);
+
+    if (s.GetType() != ARRAY_TYPE)
+      fatal_yyerror("failed to declare an array.");
+
+    delete name;
+    delete sort;
+  }
+
 #define YYLTYPE_IS_TRIVIAL 1
 #define YYMAXDEPTH 104857600
 #define YYERROR_VERBOSE 1
@@ -921,6 +936,8 @@ namespace stp
   unsigned uintval; /* for numerals in types. */
   stp::Kind kind;
   stp::float_size* fp_size;
+  stp::array_sort_component* arr_component;
+  stp::array_sort* arr_sort;
 
   //ASTNode,ASTVec
   stp::ASTNode *node;
@@ -940,6 +957,8 @@ namespace stp
 %type <str> info_flag
 
 %type <fp_size> an_fp_sort
+%type <arr_component> an_array_sort_component
+%type <arr_sort> an_array_sort
 
 %token <uintval> NUMERAL_TOK
 %token <str> BVCONST_DECIMAL_TOK
@@ -1566,55 +1585,52 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   stp::GlobalParserInterface->deleteNode($9);
 }
 |
-STRING_TOK LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK an_term
+STRING_TOK LPAREN_TOK function_params RPAREN_TOK an_array_sort an_term
 {
   stp::GlobalParserInterface->unsupported();
+
+  // Match the other parameterised productions: leaving the parameter
+  // symbols interned would let later input resolve them as free variables
+  // that were never declared.
+  for (size_t i = 0; i < $3->size(); i++)
+    stp::GlobalParserInterface->removeSymbol((*$3)[i]);
+
   delete $1;
-  stp::GlobalParserInterface->deleteNode($18);
+  delete $3;
+  delete $5;
+  stp::GlobalParserInterface->deleteNode($6);
 }
 |
-STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK an_term
+STRING_TOK LPAREN_TOK RPAREN_TOK an_array_sort an_term
 {
-  // Nullary array-sorted define-fun (bit-vector element): the body is an
-  // array term (a store chain, ITE, or another array); it is just a name
-  // for that body, stored like any other nullary function, and uses of the
-  // name expand to the body. Accepted with or without --array-equality. A
-  // body whose widths disagree with the declared sort is reported --
-  // mirroring the sibling bitvector define-fun productions -- and still
-  // stored, so parsing continues.
-  if ($17->GetIndexWidth() != $9 || $17->GetValueWidth() != $14)
+  // A nullary define-fun whose result is an array. This is just a name for
+  // its body, stored like any other nullary function -- accepted with or
+  // without --array-equality; the lexer resolves later references to it
+  // back to that body. A body whose widths disagree with the declared sort
+  // is reported -- mirroring the sibling bitvector define-fun productions
+  // -- and still stored, so parsing continues. The sorts that share one
+  // bit layout (a float index or element format, RoundingMode on either
+  // side) get their own check: the widths cannot tell them apart.
+  if ($5->GetIndexWidth() != $4->index.width ||
+      $5->GetValueWidth() != $4->elem.width)
   {
     char msg [100];
     sprintf(msg, "Different array widths specified: (%d %d) vs (%d %d)",
-            $17->GetIndexWidth(), $17->GetValueWidth(), $9, $14);
+            $5->GetIndexWidth(), $5->GetValueWidth(), $4->index.width,
+            $4->elem.width);
     yyerror(msg);
   }
-
-  ASTVec empty;
-  stp::GlobalParserInterface->storeFunction(*$1, empty, *$17);
-  delete $1;
-  stp::GlobalParserInterface->deleteNode($17);
-}
-|
-STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK an_fp_sort RPAREN_TOK an_term
-{
-  // As above, but the array's element type is a floating-point sort; its
-  // packed width is what the body's value width must match.
-  if ($13->GetIndexWidth() != $9 ||
-      $13->GetValueWidth() != (unsigned int)($11->exp_bits + $11->sig_bits))
+  else if (!stp::GlobalParserInterface->arraySortsAgree(*$5, *$4))
   {
-    char msg [100];
-    sprintf(msg, "Different array widths specified: (%d %d) vs (%d %d)",
-            $13->GetIndexWidth(), $13->GetValueWidth(), $9,
-            $11->exp_bits + $11->sig_bits);
-    yyerror(msg);
+    yyerror("The body's array index or element sorts differ from the "
+            "declared ones");
   }
 
   ASTVec empty;
-  stp::GlobalParserInterface->storeFunction(*$1, empty, *$13);
+  stp::GlobalParserInterface->storeFunction(*$1, empty, *$5);
   delete $1;
-  delete $11;
-  stp::GlobalParserInterface->deleteNode($13);
+  delete $4;
+  stp::GlobalParserInterface->deleteNode($5);
 }
 ;
 
@@ -1729,6 +1745,42 @@ an_fp_sort:
 }
 ;
 
+an_array_sort_component:
+  // An index or element sort of an (Array X Y) sort: a bitvector, a
+  // floating-point sort, or RoundingMode. Widths are positive by
+  // construction, so the array declarations need no further checks.
+  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
+{
+  if ($4 == 0)
+    fatal_yyerror("BITVECTORS must be of positive length");
+  $$ = new stp::array_sort_component{stp::array_sort_component::BITVECTOR,
+                                     $4, 0, 0};
+}
+| an_fp_sort
+{
+  $$ = new stp::array_sort_component{
+      stp::array_sort_component::FLOATINGPOINT,
+      (unsigned)($1->exp_bits + $1->sig_bits), (unsigned)$1->exp_bits,
+      (unsigned)$1->sig_bits};
+  delete $1;
+}
+| ROUNDINGMODE_TOK
+{
+  // Carried as a 5-bit one-hot bitvector, like every rounding mode.
+  $$ = new stp::array_sort_component{stp::array_sort_component::ROUNDINGMODE,
+                                     5, 0, 0};
+}
+;
+
+an_array_sort:
+LPAREN_TOK ARRAY_TOK an_array_sort_component an_array_sort_component RPAREN_TOK
+{
+  $$ = new stp::array_sort{*$3, *$4};
+  delete $3;
+  delete $4;
+}
+;
+
 
 var_decl:
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
@@ -1768,49 +1820,15 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   stp::GlobalParserInterface->addSymbol(s);
   delete $1;
 }
-| STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK
+| STRING_TOK LPAREN_TOK RPAREN_TOK an_array_sort
 {
-  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
-  stp::GlobalParserInterface->addSymbol(s);
-  unsigned int index_len = $9;
-  unsigned int value_len = $14;
-  if(index_len > 0) {
-    s.SetIndexWidth($9);
-  }
-  else {
-    fatal_yyerror("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
-  }
-
-  if(value_len > 0) {
-    s.SetValueWidth($14);
-  }
-  else {
-    fatal_yyerror("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
-  }
-  delete $1;
-}
-| STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK an_fp_sort RPAREN_TOK
-{
-  // An array of floats. The element's format lives on the array node, in the
-  // same exponent/significand widths a float uses; a read off it inherits
-  // them (see deriveFPFormat). The value width is the element's packed width,
-  // so the array is laid out exactly like an array of bitvectors.
-  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
-  stp::GlobalParserInterface->addSymbol(s);
-
-  if ($9 == 0)
-    fatal_yyerror("array index must be of positive length.");
-
-  s.SetIndexWidth($9);
-  s.SetValueWidth($11->exp_bits + $11->sig_bits);
-  s.SetExpWidth($11->exp_bits);
-  s.SetSigWidth($11->sig_bits);
-
-  if (s.GetType() != ARRAY_TYPE)
-    fatal_yyerror("failed to declare an array of floats.");
-
-  delete $1;
-  delete $11;
+  // An array over any pairing of bitvector, floating-point and RoundingMode
+  // index/element sorts. A float element's format lives on the array node
+  // -- a read off it inherits the format (see deriveFPFormat) -- while a
+  // float index format and the RoundingMode sorts land in the manager's
+  // registries (see addArraySymbol). Either way the widths lay the array
+  // out exactly like an array of bitvectors.
+  declareArraySymbol($1, $4);
 }
 | STRING_TOK LPAREN_TOK RPAREN_TOK an_fp_sort
 {
@@ -1859,26 +1877,12 @@ STRING_TOK  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
   stp::GlobalParserInterface->addSymbol(s);
   delete $1;
 }
-| STRING_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK
+| STRING_TOK an_array_sort
 {
-  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
-  stp::GlobalParserInterface->addSymbol(s);
-  unsigned int index_len = $7;
-  unsigned int value_len = $12;
-  if(index_len > 0) {
-    s.SetIndexWidth($7);
-  }
-  else {
-    fatal_yyerror("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
-  }
-
-  if(value_len > 0) {
-    s.SetValueWidth($12);
-  }
-  else {
-    fatal_yyerror("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
-  }
-  delete $1;
+  // declare-const of an array: same surface as declare-fun's, including
+  // float and RoundingMode index/element sorts (the float-element form
+  // used to exist only for declare-fun).
+  declareArraySymbol($1, $2);
 }
 | STRING_TOK an_fp_sort
 {

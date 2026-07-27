@@ -55,6 +55,26 @@ Expr createBinaryNode(VC vc, Kind k, Expr left, Expr right);
 namespace /* anonymous namespace for static */
 {
 
+// The packed bit width laid under a scalar type node: the declared width of
+// a BITVECTOR, the packed width of a FLOATINGPOINT, five for ROUNDINGMODE.
+unsigned int scalarTypeNodeWidth(const stp::ASTNode& t)
+{
+  switch (t.GetKind())
+  {
+    case stp::BITVECTOR:
+      return t[0].GetUnsignedConst();
+    case stp::FLOATINGPOINT:
+      return t[0].GetUnsignedConst() + t[1].GetUnsignedConst();
+    case stp::ROUNDINGMODE:
+      return 5;
+    default:
+      stp::FatalError("CInterface: expected a bitvector, floating-point or "
+                      "RoundingMode type node: ",
+                      t);
+      return 0;
+  }
+}
+
 /* this method is purposefully not public! */
 std::pair<unsigned int, unsigned int> getTypeSizes(Type type)
 {
@@ -70,8 +90,10 @@ std::pair<unsigned int, unsigned int> getTypeSizes(Type type)
       valueWidth = (*a)[0].GetUnsignedConst();
       break;
     case stp::ARRAY:
-      indexWidth = (*a)[0].GetUnsignedConst();
-      valueWidth = (*a)[1].GetUnsignedConst();
+      // The children are the index and element type nodes themselves (see
+      // vc_arrayType), each BITVECTOR, FLOATINGPOINT or ROUNDINGMODE.
+      indexWidth = scalarTypeNodeWidth((*a)[0]);
+      valueWidth = scalarTypeNodeWidth((*a)[1]);
       break;
     case stp::BOOLEAN:
       indexWidth = 0;
@@ -485,21 +507,127 @@ Type vc_arrayType(VC vc, Type typeIndex, Type typeData)
   stp::ASTNode* ti = (stp::ASTNode*)typeIndex;
   stp::ASTNode* td = (stp::ASTNode*)typeData;
 
-  if (!(ti->GetKind() == stp::BITVECTOR && (*ti)[0].GetKind() == stp::BVCONST))
+  // Index and element may each be a bitvector, a floating-point format, or
+  // RoundingMode. The type node keeps the child type nodes whole, so
+  // vc_varExpr can lay the right widths and formats onto the symbol.
+  const auto scalar = [](const stp::ASTNode& t) {
+    return t.GetKind() == stp::BITVECTOR ||
+           t.GetKind() == stp::FLOATINGPOINT ||
+           t.GetKind() == stp::ROUNDINGMODE;
+  };
+  if (!scalar(*ti))
   {
-    stp::FatalError("Tyring to build array whose"
-                    "indextype i is not a BITVECTOR, where i = ",
+    stp::FatalError("CInterface: vc_arrayType: the index type must be a "
+                    "bitvector, floating-point or RoundingMode type: ",
                     *ti);
   }
-  if (!(td->GetKind() == stp::BITVECTOR && (*td)[0].GetKind() == stp::BVCONST))
+  if (!scalar(*td))
   {
-    stp::FatalError("Trying to build an array whose"
-                    "valuetype v is not a BITVECTOR. where a = ",
+    stp::FatalError("CInterface: vc_arrayType: the element type must be a "
+                    "bitvector, floating-point or RoundingMode type: ",
                     *td);
   }
-  stp::ASTNode output = b->CreateNode(stp::ARRAY, (*ti)[0], (*td)[0]);
+  stp::ASTNode output = b->CreateNode(stp::ARRAY, *ti, *td);
 
   return persistNode(vc, output);
+}
+
+// A rounding-mode-sorted term, for the array boundary checks. The sort has
+// no type index of its own -- the carrier is a plain 5-bit bitvector -- so
+// recognise the shapes that denote a mode: the five one-hot constants, a
+// declared RoundingMode symbol, a read from a RoundingMode-element array,
+// and an ite over those.
+static bool isRoundingModeSortedTerm(stp::STPMgr* b, const stp::ASTNode& n)
+{
+  if (n.GetValueWidth() != 5 || n.GetIndexWidth() != 0)
+    return false;
+
+  switch (n.GetKind())
+  {
+    case stp::BVCONST:
+    {
+      const unsigned v = n.GetUnsignedConst();
+      return v == 1 || v == 2 || v == 4 || v == 8 || v == 16;
+    }
+    case stp::SYMBOL:
+      return b->isRoundingModeSymbol(n);
+    case stp::READ:
+      return b->arrayHasRmElement(n[0]);
+    case stp::ITE:
+      return isRoundingModeSortedTerm(b, n[1]) &&
+             isRoundingModeSortedTerm(b, n[2]);
+    default:
+      return false;
+  }
+}
+
+// The index of an array access must have the array's declared index sort:
+// a float of the right format for a float-indexed array, a rounding mode
+// for a RoundingMode-indexed one, and a plain bitvector otherwise. Mixing
+// sorts of one width is not merely ill-sorted -- a raw index alongside
+// canonicalised ones would break the array's congruence (see FpTotalise).
+static void checkArrayIndexSort(const char* who, stp::STPMgr* b,
+                                const stp::ASTNode& arr,
+                                const stp::ASTNode& index)
+{
+  unsigned int exp_width = 0;
+  unsigned int sig_width = 0;
+  if (b->arrayHasFpIndex(arr, exp_width, sig_width))
+  {
+    if (index.GetType() != stp::FLOATINGPOINT_TYPE ||
+        index.GetExpWidth() != exp_width || index.GetSigWidth() != sig_width)
+      stp::FatalError((std::string("CInterface: ") + who +
+                       ": the array is indexed by a floating-point sort, but "
+                       "the index is not a float of that format: ")
+                          .c_str(),
+                      index);
+  }
+  else if (b->arrayHasRmIndex(arr))
+  {
+    if (!isRoundingModeSortedTerm(b, index))
+      stp::FatalError((std::string("CInterface: ") + who +
+                       ": the array is indexed by RoundingMode, but the index "
+                       "is not a rounding mode: ")
+                          .c_str(),
+                      index);
+  }
+  else if (index.GetType() == stp::FLOATINGPOINT_TYPE)
+  {
+    stp::FatalError((std::string("CInterface: ") + who +
+                     ": a float index over a bitvector-indexed array: ")
+                        .c_str(),
+                    index);
+  }
+}
+
+// The value stored by vc_writeExpr must have the array's element sort, by
+// the same reasoning.
+static void checkArrayValueSort(stp::STPMgr* b, const stp::ASTNode& arr,
+                                const stp::ASTNode& value)
+{
+  if (arr.GetExpWidth() != 0)
+  {
+    if (value.GetType() != stp::FLOATINGPOINT_TYPE ||
+        value.GetExpWidth() != arr.GetExpWidth() ||
+        value.GetSigWidth() != arr.GetSigWidth())
+      stp::FatalError("CInterface: vc_writeExpr: the array's elements are "
+                      "floats, but the stored value is not a float of that "
+                      "format: ",
+                      value);
+  }
+  else if (b->arrayHasRmElement(arr))
+  {
+    if (!isRoundingModeSortedTerm(b, value))
+      stp::FatalError("CInterface: vc_writeExpr: the array's elements are "
+                      "rounding modes, but the stored value is not one: ",
+                      value);
+  }
+  else if (value.GetType() == stp::FLOATINGPOINT_TYPE)
+  {
+    stp::FatalError("CInterface: vc_writeExpr: storing a float into a "
+                    "bitvector-element array: ",
+                    value);
+  }
 }
 
 //! Create an expression for the value of array at the given index
@@ -512,6 +640,7 @@ Expr vc_readExpr(VC vc, Expr array, Expr index)
 
   assert(BVTypeCheck(*a));
   assert(BVTypeCheck(*i));
+  checkArrayIndexSort("vc_readExpr", b, *a, *i);
   stp::ASTNode o = b->CreateTerm(stp::READ, a->GetValueWidth(), *a, *i);
   assert(BVTypeCheck(o));
 
@@ -532,6 +661,8 @@ Expr vc_writeExpr(VC vc, Expr array, Expr index, Expr newValue)
   assert(BVTypeCheck(*a));
   assert(BVTypeCheck(*i));
   assert(BVTypeCheck(*n));
+  checkArrayIndexSort("vc_writeExpr", b, *a, *i);
+  checkArrayValueSort(b, *a, *n);
   stp::ASTNode o = b->CreateTerm(stp::WRITE, a->GetValueWidth(), *a, *i, *n);
   o.SetIndexWidth(a->GetIndexWidth());
   assert(BVTypeCheck(o));
@@ -859,6 +990,32 @@ Expr vc_varExpr(VC vc, const char* name, Type type)
   {
     b->rounding_mode_symbols.insert(o);
     b->AddAssert(b->roundingModeValidConstraint(o));
+  }
+
+  // An array symbol records what its widths cannot say, exactly as the
+  // parser's declarations do: a float element's format rides on the node
+  // (reads inherit it -- see deriveFPFormat), while a float index format
+  // and RoundingMode on either side go into the manager's registries.
+  // Reads from a RoundingMode-element array are pinned to the five legal
+  // encodings at solve time (see FpTotalise), so no assertion is needed
+  // here.
+  if (typeNode->GetKind() == stp::ARRAY)
+  {
+    const stp::ASTNode& indexType = (*typeNode)[0];
+    const stp::ASTNode& dataType = (*typeNode)[1];
+
+    if (dataType.GetKind() == stp::FLOATINGPOINT)
+    {
+      o.SetExpWidth(dataType[0].GetUnsignedConst());
+      o.SetSigWidth(dataType[1].GetUnsignedConst());
+    }
+    if (dataType.GetKind() == stp::ROUNDINGMODE)
+      b->rm_element_arrays.insert(o);
+    if (indexType.GetKind() == stp::FLOATINGPOINT)
+      b->fp_index_arrays[o] = std::make_pair(
+          indexType[0].GetUnsignedConst(), indexType[1].GetUnsignedConst());
+    if (indexType.GetKind() == stp::ROUNDINGMODE)
+      b->rm_index_arrays.insert(o);
   }
 
   stp::ASTNode* output = new stp::ASTNode(o);
@@ -2663,6 +2820,8 @@ int vc_getHashQueryStateToBuffer(VC vc, Expr query)
 
 Type vc_getType(VC vc, Expr ex)
 {
+  stp::STP* stp_i = (stp::STP*)vc;
+  stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* e = (stp::ASTNode*)ex;
 
   switch (e->GetType())
@@ -2671,12 +2830,39 @@ Type vc_getType(VC vc, Expr ex)
       return vc_boolType(vc);
       break;
     case stp::BITVECTOR_TYPE:
+      // A rounding mode's carrier is a 5-bit bitvector; only a declared
+      // RoundingMode symbol can be told apart from one.
+      if (e->GetKind() == stp::SYMBOL && b->isRoundingModeSymbol(*e))
+        return vc_fpRoundingModeType(vc);
       return vc_bvType(vc, e->GetValueWidth());
+      break;
+    case stp::FLOATINGPOINT_TYPE:
+      return vc_fpType(vc, (int)e->GetExpWidth(), (int)e->GetSigWidth());
       break;
     case stp::ARRAY_TYPE:
     {
-      Type typeindex = vc_bvType(vc, e->GetIndexWidth());
-      Type typedata = vc_bvType(vc, e->GetValueWidth());
+      // Rebuild the index and element types the array was declared with:
+      // the element's float format is on the node, the rest comes from the
+      // manager's array registries.
+      unsigned int exp_width = 0;
+      unsigned int sig_width = 0;
+
+      Type typeindex;
+      if (b->arrayHasFpIndex(*e, exp_width, sig_width))
+        typeindex = vc_fpType(vc, (int)exp_width, (int)sig_width);
+      else if (b->arrayHasRmIndex(*e))
+        typeindex = vc_fpRoundingModeType(vc);
+      else
+        typeindex = vc_bvType(vc, e->GetIndexWidth());
+
+      Type typedata;
+      if (e->GetExpWidth() != 0)
+        typedata = vc_fpType(vc, (int)e->GetExpWidth(), (int)e->GetSigWidth());
+      else if (b->arrayHasRmElement(*e))
+        typedata = vc_fpRoundingModeType(vc);
+      else
+        typedata = vc_bvType(vc, e->GetValueWidth());
+
       return vc_arrayType(vc, typeindex, typedata);
       break;
     }

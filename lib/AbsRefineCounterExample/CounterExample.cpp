@@ -1113,22 +1113,80 @@ void AbsRefine_CounterExample::outputLine(std::ostream& os, const ASTNode &f, AS
     if ((f.GetKind() == READ && f[0].GetKind() == SYMBOL &&
          f[1].GetKind() == BVCONST))
     {
+      const ASTNode& array = f[0];
+
+      // The true sorts, so the line replays against the original
+      // declaration: a float element's format is on the array node, while
+      // a float index format and RoundingMode on either side come from the
+      // manager's array registries.
+      unsigned int idx_exp = 0;
+      unsigned int idx_sig = 0;
+      const bool fp_index = bm->arrayHasFpIndex(array, idx_exp, idx_sig);
+      const bool rm_index = bm->arrayHasRmIndex(array);
+      const bool rm_element = bm->arrayHasRmElement(array);
+      const bool fp_element = array.GetExpWidth() != 0;
 
       os << "( define-fun ";
 
       os << "|";
-      f[0].nodeprint(os);
+      array.nodeprint(os);
       os << "| ";
 
-      os << " (";
-      os << "_ BitVec " << f[0].GetIndexWidth() << ")";
+      if (fp_index)
+        os << " (_ FloatingPoint " << idx_exp << " " << idx_sig << ")";
+      else if (rm_index)
+        os << " RoundingMode";
+      else
+        os << " (_ BitVec " << array.GetIndexWidth() << ")";
 
-      os << " (";
-      os << "_ BitVec " << f[0].GetValueWidth() << ")";
+      if (fp_element)
+        os << " (_ FloatingPoint " << array.GetExpWidth() << " "
+           << array.GetSigWidth() << ")";
+      else if (rm_element)
+        os << " RoundingMode";
+      else
+        os << " (_ BitVec " << array.GetValueWidth() << ")";
 
-      printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(f[1], false), os);
+      // A RoundingMode cell or index prints by mode name when the bits name
+      // one (they always should; print the bits rather than crash), a float
+      // as an (fp ...) literal, exactly as scalar values of those sorts do.
+      const ASTNode index = TermToConstTermUsingModel(f[1], false);
+      if (fp_index)
+      {
+        os << " ";
+        printer::outputFloatingPointSMTLIB2(index, os, idx_exp, idx_sig);
+      }
+      else if (rm_index)
+      {
+        const char* name = printer::roundingModeName(index.GetUnsignedConst());
+        os << " ";
+        if (name != NULL)
+          os << name;
+        else
+          printer::outputBitVecSMTLIB2(index, os);
+      }
+      else
+        printer::outputBitVecSMTLIB2(index, os);
 
-      printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(se, false), os);
+      const ASTNode value = TermToConstTermUsingModel(se, false);
+      if (fp_element)
+      {
+        os << " ";
+        printer::outputFloatingPointSMTLIB2(value, os, array.GetExpWidth(),
+                                            array.GetSigWidth());
+      }
+      else if (rm_element)
+      {
+        const char* name = printer::roundingModeName(value.GetUnsignedConst());
+        os << " ";
+        if (name != NULL)
+          os << name;
+        else
+          printer::outputBitVecSMTLIB2(value, os);
+      }
+      else
+        printer::outputBitVecSMTLIB2(value, os);
+
       os << " )" << endl;
     }
 

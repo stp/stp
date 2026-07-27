@@ -192,18 +192,24 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
       FatalError("floating-point input needs simplification: do not combine "
                  "it with --disable-simplifications");
 
-    // Make the partial floating-point operations total before the formula is
-    // used for anything: fp.min/fp.max and fp.to_ubv/fp.to_sbv gain a child
-    // supplying the results SMT-LIB leaves unspecified. See FpTotalise.
-    FpTotalise totalise(bm);
-    original_input = totalise.topLevel(original_input);
-
     // Difficulty reversion re-transforms the ORIGINAL input, which would
     // resurrect un-blasted floating-point nodes after simplification had
     // lowered them -- and those cannot reach the bitblaster. Give the
     // heuristic up only when floats are actually present; it used to be
     // disabled for every query.
     bm->UserFlags.difficulty_reversion = false;
+  }
+
+  // Make the partial floating-point operations total, canonicalise the
+  // indexes of float-indexed arrays, and pin rounding-mode-element reads to
+  // the five legal encodings -- before the formula is used for anything.
+  // See FpTotalise. RoundingMode-element arrays can appear without a single
+  // float node in the formula, so has_floating_point alone does not cover
+  // the pass.
+  if (bm->has_floating_point || !bm->rm_element_arrays.empty())
+  {
+    FpTotalise totalise(bm);
+    original_input = totalise.topLevel(original_input);
   }
 
   SATSolver* newS = get_new_sat_solver();

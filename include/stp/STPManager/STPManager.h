@@ -320,6 +320,32 @@ public:
   DLL_PUBLIC ASTNode CreateFPSpecialConst(FPSpecial which, unsigned exp_width,
                                           unsigned sig_width);
 
+  // Arrays whose index or element sort is richer than the node can say. A
+  // node has one (exp, sig) slot and on an array it already holds the
+  // *element's* float format; a RoundingMode index or element is
+  // bit-identical to a plain 5-bit bitvector. So a float index sort and
+  // both RoundingMode sorts live here, keyed by the array symbol.
+  // Maintained like rounding_mode_symbols: Cpp_interface as declarations go
+  // in and out of scope, for the manager's lifetime when declared through
+  // the C API.
+  std::map<ASTNode, std::pair<unsigned, unsigned>> fp_index_arrays;
+  ASTNodeSet rm_index_arrays;
+  ASTNodeSet rm_element_arrays;
+
+  // The declared symbol under an array term. WRITE and ITE preserve their
+  // array operands' sorts, so the base symbol speaks for the whole term;
+  // an ITE whose branches disagree about the index sort is refused here,
+  // since the type checker cannot see the difference (the widths agree).
+  // Null when no symbol is underneath.
+  ASTNode arrayBaseSymbol(const ASTNode& arr) const;
+
+  // Index/element sort queries on an array term, answered from the
+  // registries above via arrayBaseSymbol.
+  bool arrayHasFpIndex(const ASTNode& arr, unsigned& exp_width,
+                       unsigned& sig_width) const;
+  bool arrayHasRmIndex(const ASTNode& arr) const;
+  bool arrayHasRmElement(const ASTNode& arr) const;
+
   /****************************************************************
    * Create Node functions                                        *
    ****************************************************************/

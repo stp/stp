@@ -365,6 +365,43 @@ ASTNode STPMgr::CreateFPConst(const stp::ASTNode& bvconst,
 
   // Temporary key sharing the source's CBV; interning clones it.
   ASTBVConst* src = (ASTBVConst*)bvconst._int_node_ptr;
+
+  // Every NaN pattern interns as the one canonical quiet NaN. SMT-LIB's
+  // FloatingPoint sort has a single NaN, and no operation can recover a
+  // payload (fp.to_ieee_bv canonicalises; symfpu carries none) -- but the
+  // node-creation-time simplifiers do compare constants by identity and by
+  // bit pattern (chaseRead's "definately different" skip, CreateSimpleEQ's
+  // constant case), and they run before any pass could quotient NaN. Two
+  // NaN literals with different payloads used as array indexes would be
+  // "proved" to address different cells. Baking the quotient into the
+  // constant itself makes those comparisons exact: distinct floating-point
+  // constants of one format now denote distinct values.
+  {
+    CBV b = src->GetBVConst();
+    const unsigned stored_sig = sig_width - 1; // the hidden bit is not stored
+    bool exp_all_ones = true;
+    for (unsigned i = 0; exp_all_ones && i < exp_width; i++)
+      exp_all_ones = CONSTANTBV::BitVector_bit_test(b, stored_sig + i);
+    bool sig_nonzero = false;
+    for (unsigned i = 0; !sig_nonzero && i < stored_sig; i++)
+      sig_nonzero = CONSTANTBV::BitVector_bit_test(b, i);
+
+    if (exp_all_ones && sig_nonzero)
+    {
+      // Already canonical -- positive, and only the quiet bit set -- means
+      // stop, or the CreateFPSpecialConst below would recurse forever.
+      bool low_payload_zero = true;
+      for (unsigned i = 0; low_payload_zero && i + 1 < stored_sig; i++)
+        low_payload_zero = !CONSTANTBV::BitVector_bit_test(b, i);
+      const bool canonical =
+          low_payload_zero &&
+          CONSTANTBV::BitVector_bit_test(b, stored_sig - 1) &&
+          !CONSTANTBV::BitVector_bit_test(b, exp_width + sig_width - 1);
+      if (!canonical)
+        return CreateFPSpecialConst(FPSpecial::NaN, exp_width, sig_width);
+    }
+  }
+
   ASTFPConst temp(this, src->GetBVConst(), exp_width, sig_width);
 
   has_floating_point = true;
@@ -401,6 +438,82 @@ ASTNode STPMgr::roundingModeValidConstraint(const ASTNode& s)
         defaultNodeFactory->CreateNode(EQ, s, CreateBVConst(5, mode)));
   }
   return defaultNodeFactory->CreateNode(OR, one_of);
+}
+
+ASTNode STPMgr::arrayBaseSymbol(const ASTNode& arr) const
+{
+  ASTNode n = arr;
+  while (true)
+  {
+    switch (n.GetKind())
+    {
+      case SYMBOL:
+        return n;
+      case WRITE:
+        n = n[0];
+        break;
+      case ITE:
+      {
+        // Both branches type as arrays of one bit layout; requiring one
+        // *sort* keeps a read from being canonicalised under one branch's
+        // index sort and taken raw under the other's.
+        const ASTNode left = arrayBaseSymbol(n[1]);
+        const ASTNode right = arrayBaseSymbol(n[2]);
+        if (left.IsNull())
+          return right;
+        if (!right.IsNull())
+        {
+          const auto l_fp = fp_index_arrays.find(left);
+          const auto r_fp = fp_index_arrays.find(right);
+          const bool fp_differs =
+              (l_fp == fp_index_arrays.end()) !=
+                  (r_fp == fp_index_arrays.end()) ||
+              (l_fp != fp_index_arrays.end() && l_fp->second != r_fp->second);
+          if (fp_differs ||
+              rm_index_arrays.count(left) != rm_index_arrays.count(right) ||
+              rm_element_arrays.count(left) != rm_element_arrays.count(right))
+            FatalError("arrayBaseSymbol: an if-then-else mixes arrays whose "
+                       "index or element sorts differ: ",
+                       n);
+        }
+        return left;
+      }
+      default:
+        return ASTNode();
+    }
+  }
+}
+
+bool STPMgr::arrayHasFpIndex(const ASTNode& arr, unsigned& exp_width,
+                             unsigned& sig_width) const
+{
+  if (fp_index_arrays.empty())
+    return false;
+  const ASTNode base = arrayBaseSymbol(arr);
+  if (base.IsNull())
+    return false;
+  const auto it = fp_index_arrays.find(base);
+  if (it == fp_index_arrays.end())
+    return false;
+  exp_width = it->second.first;
+  sig_width = it->second.second;
+  return true;
+}
+
+bool STPMgr::arrayHasRmIndex(const ASTNode& arr) const
+{
+  if (rm_index_arrays.empty())
+    return false;
+  const ASTNode base = arrayBaseSymbol(arr);
+  return !base.IsNull() && rm_index_arrays.count(base) != 0;
+}
+
+bool STPMgr::arrayHasRmElement(const ASTNode& arr) const
+{
+  if (rm_element_arrays.empty())
+    return false;
+  const ASTNode base = arrayBaseSymbol(arr);
+  return !base.IsNull() && rm_element_arrays.count(base) != 0;
 }
 
 ASTNode STPMgr::CreateFPSpecialConst(FPSpecial which, unsigned exp_width,

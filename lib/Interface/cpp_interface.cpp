@@ -81,9 +81,17 @@ void Cpp_interface::removeFrame()
     SolverFrame* last = frames.back();
 
     // The frame's symbols go out of scope with it: drop any rounding-mode
-    // markers so the model printers and reset-assertions don't outlive them.
+    // markers so the model printers and reset-assertions don't outlive
+    // them, and any array-sort registrations so a later same-name,
+    // same-widths declaration doesn't inherit this frame's index or
+    // element sorts (the symbol node would be the very same one).
     for (const ASTNode& s : last->getSymbols())
+    {
       bm.rounding_mode_symbols.erase(s);
+      bm.fp_index_arrays.erase(s);
+      bm.rm_index_arrays.erase(s);
+      bm.rm_element_arrays.erase(s);
+    }
 
     // delete it
     delete last;
@@ -425,6 +433,66 @@ void Cpp_interface::addRoundingModeSymbol(ASTNode& s)
 void Cpp_interface::assertRoundingModeValid(const ASTNode& s)
 {
   AddAssert(bm.roundingModeValidConstraint(s));
+}
+
+void Cpp_interface::addArraySymbol(ASTNode& s, const array_sort& sort)
+{
+  addSymbol(s);
+
+  s.SetIndexWidth(sort.index.width);
+  s.SetValueWidth(sort.elem.width);
+
+  // A float element's format rides on the array node itself, in the same
+  // exponent/significand widths a float term uses; a read off the array
+  // inherits it (see deriveFPFormat). Everything the node cannot say --
+  // a float *index* format, and RoundingMode on either side -- goes into
+  // the manager's registries instead.
+  if (sort.elem.kind == array_sort_component::FLOATINGPOINT)
+  {
+    s.SetExpWidth(sort.elem.exp_bits);
+    s.SetSigWidth(sort.elem.sig_bits);
+  }
+  if (sort.elem.kind == array_sort_component::ROUNDINGMODE)
+    bm.rm_element_arrays.insert(s);
+  if (sort.index.kind == array_sort_component::FLOATINGPOINT)
+    bm.fp_index_arrays[s] =
+        std::make_pair(sort.index.exp_bits, sort.index.sig_bits);
+  if (sort.index.kind == array_sort_component::ROUNDINGMODE)
+    bm.rm_index_arrays.insert(s);
+}
+
+bool Cpp_interface::arraySortsAgree(const ASTNode& arr, const array_sort& sort)
+{
+  unsigned eb = 0;
+  unsigned sb = 0;
+  const bool fp_index = bm.arrayHasFpIndex(arr, eb, sb);
+
+  if (sort.index.kind == array_sort_component::FLOATINGPOINT)
+  {
+    if (!fp_index || eb != sort.index.exp_bits || sb != sort.index.sig_bits)
+      return false;
+  }
+  else if (fp_index)
+    return false;
+
+  if ((sort.index.kind == array_sort_component::ROUNDINGMODE) !=
+      bm.arrayHasRmIndex(arr))
+    return false;
+
+  if (sort.elem.kind == array_sort_component::FLOATINGPOINT)
+  {
+    if (arr.GetExpWidth() != sort.elem.exp_bits ||
+        arr.GetSigWidth() != sort.elem.sig_bits)
+      return false;
+  }
+  else if (arr.GetExpWidth() != 0)
+    return false;
+
+  if ((sort.elem.kind == array_sort_component::ROUNDINGMODE) !=
+      bm.arrayHasRmElement(arr))
+    return false;
+
+  return true;
 }
 
 void Cpp_interface::success()

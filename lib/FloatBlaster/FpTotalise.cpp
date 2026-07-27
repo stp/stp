@@ -35,7 +35,71 @@ FpTotalise::FpTotalise(STPMgr* bm_) : bm(bm_), nf(bm_->defaultNodeFactory) {}
 
 ASTNode FpTotalise::topLevel(const ASTNode& n)
 {
-  return visit(n);
+  ASTNode out = visit(n);
+
+  // Pin every rounding-mode-element read in the final formula to the five
+  // legal encodings (see the class comment). The walk runs over the visited
+  // output so it also sees reads that visit() itself introduced or
+  // reshaped.
+  if (!bm->rm_element_arrays.empty())
+  {
+    ASTNodeSet seen;
+    ASTVec constraints;
+    collectRmElementReads(out, seen, constraints);
+    if (!constraints.empty())
+    {
+      constraints.push_back(out);
+      out = nf->CreateNode(AND, constraints);
+    }
+  }
+
+  return out;
+}
+
+ASTNode FpTotalise::canonicalIndex(const ASTNode& index, unsigned int exp_width,
+                                   unsigned int sig_width)
+{
+  if (index.GetKind() == BVCONST)
+  {
+    // A plain bitvector constant standing where a float belongs: re-intern
+    // it through the canonicalising constant funnel, which maps every NaN
+    // pattern to the canonical quiet NaN and hands non-NaN bits back
+    // unchanged (as a float constant, equally fine as an index).
+    if (index.GetExpWidth() == 0)
+      return bm->CreateFPConst(index, exp_width, sig_width);
+  }
+  else if (index.GetExpWidth() == 0)
+  {
+    // A non-constant plain bitvector in index position (the parsers are lax
+    // about sorts): treat it as the float its bits spell.
+    return FloatBlaster::canonicalBits(bm, index, exp_width, sig_width);
+  }
+
+  if (index.GetExpWidth() != exp_width || index.GetSigWidth() != sig_width)
+    FatalError("FpTotalise: a float array index disagrees with the array's "
+               "declared index format: ",
+               index);
+
+  // A float constant needs no circuit: constants intern canonically.
+  if (index.GetKind() == BVCONST)
+    return index;
+
+  return FloatBlaster::canonicalBits(bm, index);
+}
+
+void FpTotalise::collectRmElementReads(const ASTNode& n, ASTNodeSet& seen,
+                                       ASTVec& constraints)
+{
+  if (n.Degree() == 0)
+    return;
+  if (!seen.insert(n).second)
+    return;
+
+  if (n.GetKind() == READ && bm->arrayHasRmElement(n[0]))
+    constraints.push_back(bm->roundingModeValidConstraint(n));
+
+  for (size_t i = 0; i < n.Degree(); i++)
+    collectRmElementReads(n[i], seen, constraints);
 }
 
 ASTNode FpTotalise::rebuild(const ASTNode& n, const ASTVec& children)
@@ -140,6 +204,26 @@ ASTNode FpTotalise::visit(const ASTNode& n)
     children.push_back(unspecified(k == FP_TO_UBV ? "to_ubv" : "to_sbv",
                                    children[1], floats, n.GetValueWidth()));
     changed = true;
+  }
+  // An access over a float-indexed array addresses canonical bits (see the
+  // class comment). Each solve totalises the raw assertions afresh -- the
+  // rewritten formula is solve-local -- so a canonicalised index never
+  // comes back through here, and identical raw indexes hash-cons to
+  // identical canonical circuits across solves.
+  else if (k == READ || k == WRITE)
+  {
+    unsigned int index_exp = 0;
+    unsigned int index_sig = 0;
+    if (bm->arrayHasFpIndex(children[0], index_exp, index_sig))
+    {
+      const ASTNode canon =
+          canonicalIndex(children[1], index_exp, index_sig);
+      if (canon != children[1])
+      {
+        children[1] = canon;
+        changed = true;
+      }
+    }
   }
 
   const ASTNode out = changed ? rebuild(n, children) : n;
