@@ -104,6 +104,13 @@ public:
     // denoting patterns -- a "witness" at any other pattern would sit at
     // an index no select can reach. Null for plain bitvector indexes.
     ASTNode indexSortClause;
+    // One-hot pinnings for RoundingMode-element reads that occur inside
+    // the recorded operands. FpTotalise pins the reads of the input
+    // formula, but the operands were abstracted out of it before that
+    // pass ran; totalising them at record creation returns their read
+    // pinnings, which must be conjoined alongside the anchors. Null
+    // when the operands contain no such read.
+    ASTNode rmReadClause;
   };
 
   explicit ExtensionalityContext(STPMgr* bm);
@@ -329,6 +336,14 @@ private:
   // prepared input, keeping each record and its defining guards
   // together.
   std::map<ASTNode, ASTNode> iteReplacements;
+
+  // True while prepare() mints the guarded equalities of its
+  // if-then-else elimination: their operands come from the prepared
+  // formula, which is already totalised, and the index
+  // canonicalisation inside FpTotalise is not structurally idempotent
+  // -- re-totalising would wrap an already-canonical index in a second
+  // circuit and the machinery would treat the two as distinct indexes.
+  bool operandsAreTotalised;
 
   // ---- per-solve state ----
   bool coneIsFrozen;

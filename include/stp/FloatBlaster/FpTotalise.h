@@ -91,6 +91,12 @@ public:
   // value are left alone.
   ASTNode topLevel(const ASTNode& n);
 
+  // The same rewriting for a lone term. A term cannot absorb the
+  // RoundingMode-read pinnings topLevel would conjoin onto a formula,
+  // so they are appended to `sideConstraints` for the caller to
+  // conjoin wherever the term is used.
+  ASTNode topLevelTerm(const ASTNode& term, ASTVec& sideConstraints);
+
 private:
   ASTNode visit(const ASTNode& n);
 

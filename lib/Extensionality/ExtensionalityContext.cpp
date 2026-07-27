@@ -25,6 +25,7 @@ THE SOFTWARE.
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
+#include "stp/FloatBlaster/FpTotalise.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/SubstitutionMap.h"
 #include "stp/ToSat/ToSATBase.h"
@@ -169,8 +170,8 @@ ASTNode recoverAnchoredOperand(const ASTNode& rhs, const ASTNode& lambda,
 } // namespace
 
 ExtensionalityContext::ExtensionalityContext(STPMgr* bm_)
-    : lemmasEmitted(0), lemmaAtomsFolded(0), bm(bm_), coneIsFrozen(false),
-      graphBound(false),
+    : lemmasEmitted(0), lemmaAtomsFolded(0), bm(bm_),
+      operandsAreTotalised(false), coneIsFrozen(false), graphBound(false),
       pendingLemmaValid(false)
 {
 }
@@ -325,13 +326,34 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
     }
   }
 
-  if (a == b)
+  // The operands leave the input formula here -- the equality they sat
+  // in becomes the proxy variable -- so the FpTotalise pass that runs
+  // over the input at the start of each solve never sees them; the
+  // anchors re-introduce them only after it ran. Totalise them now
+  // instead: partial floating-point operations gain their
+  // unspecified-choice children, float array indexes are canonicalised,
+  // and RoundingMode-element reads inside them are pinned to the five
+  // modes (rmReadClause below). Operands handed over during prepare()
+  // come from the already-totalised formula and must be left alone --
+  // index canonicalisation is not structurally idempotent.
+  ASTNode ta = a;
+  ASTNode tb = b;
+  ASTVec rmReads;
+  if (!operandsAreTotalised &&
+      (bm->has_floating_point || !bm->rm_element_arrays.empty()))
+  {
+    FpTotalise totalise(bm);
+    ta = totalise.topLevelTerm(a, rmReads);
+    tb = totalise.topLevelTerm(b, rmReads);
+  }
+
+  if (ta == tb)
     return bm->ASTTrue;
 
   // A chain of writes equated with its own base needs no abstraction
   // at all; solve it by rewriting.
   {
-    const ASTNode solved = solveWriteChain(a, b);
+    const ASTNode solved = solveWriteChain(ta, tb);
     if (!solved.IsNull())
       return solved;
   }
@@ -339,9 +361,9 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
   // The hashing factory sorts EQ children, so callers may present the
   // operands in either order; canonicalize the registry key the same
   // way.
-  const bool ordered = a.GetNodeNum() < b.GetNodeNum();
-  const ASTNode& left = ordered ? a : b;
-  const ASTNode& right = ordered ? b : a;
+  const bool ordered = ta.GetNodeNum() < tb.GetNodeNum();
+  const ASTNode& left = ordered ? ta : tb;
+  const ASTNode& right = ordered ? tb : ta;
 
   const std::pair<ASTNode, ASTNode> key(left, right);
   std::map<std::pair<ASTNode, ASTNode>, size_t>::const_iterator it =
@@ -415,6 +437,13 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
     }
   }
 
+  if (!rmReads.empty())
+  {
+    r.rmReadClause = rmReads.size() == 1
+                         ? rmReads[0]
+                         : hf->CreateNode(AND, rmReads);
+  }
+
   protectedSymbols.insert(r.proxy);
   protectedSymbols.insert(r.lambda);
   protectedSymbols.insert(r.nameL);
@@ -465,6 +494,8 @@ ASTNode ExtensionalityContext::conjoinRecordConstraints(const ASTNode& root)
     conjuncts.push_back(records[i].witnessClause);
     if (!records[i].indexSortClause.IsNull())
       conjuncts.push_back(records[i].indexSortClause);
+    if (!records[i].rmReadClause.IsNull())
+      conjuncts.push_back(records[i].rmReadClause);
   }
   return bm->defaultNodeFactory->CreateNode(AND, conjuncts);
 }
@@ -638,7 +669,10 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
 
   // Operand recovery and if-then-else elimination interleave to a
   // fixed point: eliminating an ITE creates fresh guarded equalities,
-  // whose operands may expose further ITEs.
+  // whose operands may expose further ITEs. Their operands come from
+  // the prepared formula, already totalised; makeEquality must not
+  // totalise them again.
+  operandsAreTotalised = true;
   while (true)
   {
     locateCanonicalOperands(root);
@@ -724,6 +758,8 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
       newConstraints.push_back(records[i].witnessClause);
       if (!records[i].indexSortClause.IsNull())
         newConstraints.push_back(records[i].indexSortClause);
+      if (!records[i].rmReadClause.IsNull())
+        newConstraints.push_back(records[i].rmReadClause);
     }
 
     ASTNodeMap cache;
@@ -739,6 +775,7 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
     root = bm->defaultNodeFactory->CreateNode(
         AND, root, ASTVec(newConstraints.begin(), newConstraints.end()));
   }
+  operandsAreTotalised = false;
 
   // No array-valued if-then-else may remain inside the cone.
   assert(coneITEs.empty());

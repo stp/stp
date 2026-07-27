@@ -56,6 +56,19 @@ ASTNode FpTotalise::topLevel(const ASTNode& n)
   return out;
 }
 
+ASTNode FpTotalise::topLevelTerm(const ASTNode& term, ASTVec& sideConstraints)
+{
+  ASTNode out = visit(term);
+
+  if (!bm->rm_element_arrays.empty())
+  {
+    ASTNodeSet seen;
+    collectRmElementReads(out, seen, sideConstraints);
+  }
+
+  return out;
+}
+
 ASTNode FpTotalise::canonicalIndex(const ASTNode& index, unsigned int exp_width,
                                    unsigned int sig_width)
 {
