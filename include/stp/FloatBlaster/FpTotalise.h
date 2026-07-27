@@ -57,6 +57,27 @@ namespace stp
 // A pleasant side effect: the extra child is not constant, so these nodes
 // stop being candidates for constant folding, which is what we want. Their
 // results genuinely are not constants even when their operands are.
+//
+// The pass also adapts array accesses whose index or element sort is
+// floating-point or RoundingMode, for the same reason at the same moment:
+//
+//  - A read or write over a float-indexed array has its index rewritten to
+//    canonical bits. SMT-LIB '=' on floats identifies every NaN with every
+//    NaN, while everything downstream -- the simplifier's read-over-write
+//    rules, the array transformer's index equalities, refinement's
+//    bit-level congruence axioms -- compares raw index bits. Quotienting
+//    the index here, before any of them run, lets all of it stay purely
+//    bitvector. (Float *constants* already intern canonically, which is
+//    what keeps the node-creation-time constant comparisons sound before
+//    this pass gets its turn.)
+//
+//  - Every read from a RoundingMode-element array is pinned to the five
+//    legal encodings, exactly as declaring a RoundingMode variable pins
+//    it: a select is the other way a RoundingMode value enters the formula
+//    out of thin air, and without the constraint the carrier's 27 junk
+//    patterns would be satisfiable "modes". Conjoined at solve time rather
+//    than asserted at creation, so every route here -- parser or C API,
+//    before or after push/pop/reset-assertions -- is covered.
 class FpTotalise // not copyable
 {
 public:
@@ -72,6 +93,18 @@ public:
 
 private:
   ASTNode visit(const ASTNode& n);
+
+  // The canonical form of an index over a float-indexed array whose index
+  // format is (exp_width, sig_width): constants re-intern through the
+  // canonicalising constant funnel, everything else goes through
+  // FloatBlaster::canonicalBits.
+  ASTNode canonicalIndex(const ASTNode& index, unsigned int exp_width,
+                         unsigned int sig_width);
+
+  // Collect the validity constraint of every READ over a
+  // RoundingMode-element array in `n`.
+  void collectRmElementReads(const ASTNode& n, ASTNodeSet& seen,
+                             ASTVec& constraints);
 
   // Rebuild `n` around new children, preserving its widths -- including the
   // floating-point format, which is per-node state that rebuilding drops.

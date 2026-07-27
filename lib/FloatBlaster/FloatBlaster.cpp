@@ -66,9 +66,19 @@ ASTNode FloatBlaster::withFormat(STPMgr* bm, const ASTNode& n,
 #ifdef STP_ENABLE_FLOATING_POINT
 ASTNode FloatBlaster::canonicalBits(STPMgr* bm, const ASTNode& f)
 {
+  return canonicalBits(bm, f, f.GetExpWidth(), f.GetSigWidth());
+}
+
+// The format-taking form, for callers that know the format but hold a term
+// that does not carry it -- a plain bitvector standing where a float-sorted
+// value belongs (an array index over a float-indexed array, say).
+ASTNode FloatBlaster::canonicalBits(STPMgr* bm, const ASTNode& f,
+                                    unsigned int exp_width,
+                                    unsigned int sig_width)
+{
   // Point symfpu at the manager being blasted (see symbolic_fp::init).
   symbolic_fp::init(bm);
-  return symbolic_fp::blast_reinterpret(f, f.GetExpWidth(), f.GetSigWidth());
+  return symbolic_fp::blast_reinterpret(f, exp_width, sig_width);
 }
 #endif
 
@@ -341,6 +351,13 @@ ASTNode FloatBlaster::BlastNode(STPMgr* bm, const ASTNode& actualInputterm)
 // from BlastNode_TopLevel's real body.
 
 ASTNode FloatBlaster::canonicalBits(STPMgr*, const ASTNode&)
+{
+  FatalError("canonicalBits: this STP was built without floating-point "
+             "support; reconfigure with -DENABLE_FLOATING_POINT=ON");
+}
+
+ASTNode FloatBlaster::canonicalBits(STPMgr*, const ASTNode&, unsigned int,
+                                    unsigned int)
 {
   FatalError("canonicalBits: this STP was built without floating-point "
              "support; reconfigure with -DENABLE_FLOATING_POINT=ON");

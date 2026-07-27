@@ -55,8 +55,11 @@ public:
 
   // The canonical packed bits of a float: pack(unpack(f)). Collapses the NaN
   // payloads, which SMT-LIB equality does not distinguish, while keeping +0
-  // and -0 apart.
+  // and -0 apart. The format-taking form serves callers holding a term that
+  // does not carry the format itself.
   static ASTNode canonicalBits(STPMgr* bm, const ASTNode& f);
+  static ASTNode canonicalBits(STPMgr* bm, const ASTNode& f,
+                               unsigned int exp_width, unsigned int sig_width);
 
   // fp.rem's circuit unrolls one divide step per representable exponent
   // difference -- 2^eb + sb - 4 steps (symfpu's maximumExponentDifference)
