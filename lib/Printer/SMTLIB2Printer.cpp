@@ -235,6 +235,21 @@ void outputFloatingPointSMTLIB2(const ASTNode n, ostream& os,
     FatalError("Rejoined string does not match original string");
   }
 
+  // Every NaN pattern prints as the one canonical quiet NaN -- the spelling
+  // NaN constants intern to and blasted operations emit. SMT-LIB has a
+  // single NaN, so the sign and payload bits carry nothing at the value
+  // level; but a SAT model is free to pick any pattern for a float that is
+  // only known to be NaN, and printing those bits would leak the carrier's
+  // choice and make model text vary with solver internals. cvc5 and
+  // bitwuzla print this same spelling.
+  if (exp_bits.find('0') == std::string::npos &&
+      sig_bits.find('1') != std::string::npos)
+  {
+    sign_bit = "0";
+    sig_bits.assign(sig_bits.size(), '0');
+    sig_bits[0] = '1';
+  }
+
   os << "(fp ";
   os << "#b" << sign_bit << " ";
   os << "#b" << exp_bits << " ";

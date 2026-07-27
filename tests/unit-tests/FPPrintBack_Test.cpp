@@ -145,6 +145,34 @@ TEST(FPPrintBack, specials_equality_and_classifications)
               "(Array (_ BitVec 4) (_ FloatingPoint 3 5) )"});
 }
 
+// A SAT model may assign a float known only to be NaN any of the many NaN
+// bit patterns; the printer spells every one of them as the canonical quiet
+// NaN, so model text is deterministic at the value level (and matches what
+// cvc5 and bitwuzla print). The plain-bitvector inputs matter: model values
+// arrive at the printers as unstamped constants, whose bits the constant
+// funnel never canonicalised.
+TEST(FPPrintBack, nan_patterns_print_canonically)
+{
+  STPMgr mgr;
+
+  const uint64_t patterns[] = {0x7F800001ULL,  // payload, not quiet
+                               0xFFC00F00ULL,  // negative, quiet, payload
+                               0x7FC00000ULL}; // already canonical
+  for (const uint64_t bits : patterns)
+  {
+    std::ostringstream os;
+    printer::outputFloatingPointSMTLIB2(mgr.CreateBVConst(32, bits), os, 8,
+                                        24);
+    EXPECT_EQ("(fp #b0 #b11111111 #b10000000000000000000000)", os.str());
+  }
+
+  // Infinities have the NaN exponent but a zero significand: untouched.
+  std::ostringstream inf;
+  printer::outputFloatingPointSMTLIB2(mgr.CreateBVConst(32, 0xFF800000ULL),
+                                      inf, 8, 24);
+  EXPECT_EQ("(fp #b1 #b11111111 #b00000000000000000000000)", inf.str());
+}
+
 // The format-taking overload prints exactly what the term-taking one
 // prints. It exists for callers that know a value's format but hold no
 // float-typed term for it -- e.g. printing the packed cells of a
