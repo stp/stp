@@ -132,6 +132,35 @@ namespace stp
     return result;
   }
 
+  // True unless the product of the operands' interval maxima provably
+  // fits in `width` bits, i.e. the multiplication can't wrap. Both
+  // maxima are zero-extended into 2w+1 bits so the signed
+  // BitVector_Multiply computes the unsigned product.
+  static bool multMayOverflow(const UnsignedInterval* a,
+                              const UnsignedInterval* b, unsigned width)
+  {
+    if (a == nullptr || b == nullptr)
+      return true;
+
+    const unsigned ew = 2 * width + 1;
+    CBV a2 = CONSTANTBV::BitVector_Create(ew, true);
+    CBV b2 = CONSTANTBV::BitVector_Create(ew, true);
+    CBV product = CONSTANTBV::BitVector_Create(ew, true);
+    CONSTANTBV::BitVector_Interval_Copy(a2, a->maxV, 0, 0, width);
+    CONSTANTBV::BitVector_Interval_Copy(b2, b->maxV, 0, 0, width);
+    CONSTANTBV::BitVector_Multiply(product, a2, b2);
+
+    bool overflow = false;
+    for (unsigned i = width; i < ew && !overflow; i++)
+      if (CONSTANTBV::BitVector_bit_test(product, i))
+        overflow = true;
+
+    CONSTANTBV::BitVector_Destroy(a2);
+    CONSTANTBV::BitVector_Destroy(b2);
+    CONSTANTBV::BitVector_Destroy(product);
+    return overflow;
+  }
+
   // Lots of these rules are more nicely addressed by the fixedbits.
   // When information is transferred properly between domains, lots can be removed.
   ASTNode StrengthReduction::strengthReduction(const ASTNode& n, const NodeToUnsignedIntervalMap& visited)
@@ -301,6 +330,35 @@ namespace stp
           replaceWithSimpler++;
         }
       }
+
+      // (a * b) = (a * c) --> b = c, when a is provably non-zero and
+      // neither multiplication can wrap: without wrapping the products
+      // are integer products, and a non-zero common factor cancels.
+      if (newN == n && n[0].GetKind() == BVMULT && n[0].Degree() == 2 &&
+          n[1].GetKind() == BVMULT && n[1].Degree() == 2)
+      {
+        const auto get = [&visited](const ASTNode& m) -> const UnsignedInterval* {
+          const auto it = visited.find(m);
+          return it == visited.end() ? nullptr : it->second;
+        };
+
+        const unsigned width = n[0].GetValueWidth();
+
+        for (unsigned i = 0; i < 2 && newN == n; i++)
+          for (unsigned j = 0; j < 2 && newN == n; j++)
+            if (n[0][i] == n[1][j])
+            {
+              const UnsignedInterval* shared = get(n[0][i]);
+              if (shared != nullptr &&
+                  !CONSTANTBV::BitVector_is_empty(shared->minV) &&
+                  !multMayOverflow(get(n[0][0]), get(n[0][1]), width) &&
+                  !multMayOverflow(get(n[1][0]), get(n[1][1]), width))
+              {
+                newN = nf->CreateNode(EQ, n[0][1 - i], n[1][1 - j]);
+                replaceWithSimpler++;
+              }
+            }
+      }
     }
     return newN;
   }
@@ -428,6 +486,28 @@ namespace stp
             }
           }
         }
+    }
+    else if (kind == EQ)
+    {
+      // (a * x) = (a * y) --> x = y, when a's lowest bit is fixed to
+      // one: multiplication by an odd factor is a bijection mod 2^w,
+      // so the factor cancels with no overflow condition.
+      if (n[0].GetKind() == BVMULT && n[0].Degree() == 2 &&
+          n[1].GetKind() == BVMULT && n[1].Degree() == 2)
+      {
+        for (unsigned i = 0; i < 2 && newN == n; i++)
+          for (unsigned j = 0; j < 2 && newN == n; j++)
+            if (n[0][i] == n[1][j])
+            {
+              const auto it = visited.find(n[0][i]);
+              if (it != visited.end() && it->second != nullptr &&
+                  it->second->isFixed(0) && it->second->getValue(0))
+              {
+                newN = nf->CreateNode(EQ, n[0][1 - i], n[1][1 - j]);
+                replaceWithSimpler++;
+              }
+            }
+      }
     }
     else if (kind == BVPLUS || kind == BVXOR)
     {

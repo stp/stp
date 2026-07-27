@@ -1072,3 +1072,149 @@ TEST(StrengthReduction_Exhaustive_Test, plus_to_concat_via_fixedbits)
       n, result, x, y, width, [](unsigned v) { return (v & 7) == 0; },
       [](unsigned v) { return v < 8; });
 }
+
+// (a * x) = (a * y) --> x = y once a's lowest bit is fixed to one:
+// multiplication by an odd factor is a bijection mod 2^w, so the factor
+// cancels with no overflow condition. Equivalent for every odd a.
+TEST(StrengthReduction_Exhaustive_Test, eq_mult_cancelled_via_odd_fixedbit)
+{
+  const unsigned width = 3;
+
+  Context c;
+  ASTNode a = c.symbol("a", width);
+  ASTNode x = c.symbol("x", width);
+  ASTNode y = c.symbol("y", width);
+  ASTNode m0 = c.nf->CreateTerm(stp::BVMULT, width, a, x);
+  ASTNode m1 = c.nf->CreateTerm(stp::BVMULT, width, a, y);
+  ASTNode n = c.nf->CreateNode(stp::EQ, m0, m1);
+  ASSERT_EQ(n.GetKind(), stp::EQ);
+
+  FixedBits aBits(width, false);
+  aBits.setFixed(0, true);
+  aBits.setValue(0, true);
+
+  stp::NodeToFixedBitsMap map;
+  map.insert({n, nullptr});
+  map.insert({m0, nullptr});
+  map.insert({m1, nullptr});
+  map.insert({a, &aBits});
+
+  ASTNode result = c.sr.topLevel(n, map);
+  ASSERT_FALSE(c.present(stp::BVMULT, result));
+
+  for (unsigned av = 1; av < (1u << width); av += 2)
+    for (unsigned xv = 0; xv < (1u << width); xv++)
+      for (unsigned yv = 0; yv < (1u << width); yv++)
+      {
+        stp::ASTNodeMap assignment;
+        assignment.insert({a, c.constant(width, av)});
+        assignment.insert({x, c.constant(width, xv)});
+        assignment.insert({y, c.constant(width, yv)});
+        ASSERT_EQ(c.eval(n, assignment), c.eval(result, assignment))
+            << "differ on a=" << av << " x=" << xv << " y=" << yv;
+      }
+}
+
+// (a * x) = (a * y) --> x = y when a's interval excludes zero and the
+// operands' interval maxima prove neither product can wrap: overflow-free
+// products are integer products, and a non-zero common factor cancels.
+// Equivalent for every assignment inside the intervals.
+TEST(StrengthReduction_Exhaustive_Test, eq_mult_cancelled_via_intervals)
+{
+  const unsigned width = 4;
+
+  Context c;
+  ASTNode a = c.symbol("a", width);
+  ASTNode x = c.symbol("x", width);
+  ASTNode y = c.symbol("y", width);
+  ASTNode m0 = c.nf->CreateTerm(stp::BVMULT, width, a, x);
+  ASTNode m1 = c.nf->CreateTerm(stp::BVMULT, width, a, y);
+  ASTNode n = c.nf->CreateNode(stp::EQ, m0, m1);
+  ASSERT_EQ(n.GetKind(), stp::EQ);
+
+  stp::UnsignedInterval aInterval(makeCBV(width, 1), makeCBV(width, 2));
+  stp::UnsignedInterval xInterval(makeCBV(width, 0), makeCBV(width, 3));
+  stp::UnsignedInterval yInterval(makeCBV(width, 0), makeCBV(width, 3));
+
+  stp::NodeToUnsignedIntervalMap map;
+  map.insert({n, nullptr});
+  map.insert({m0, nullptr});
+  map.insert({m1, nullptr});
+  map.insert({a, &aInterval});
+  map.insert({x, &xInterval});
+  map.insert({y, &yInterval});
+
+  ASTNode result = c.sr.topLevel(n, map);
+  ASSERT_FALSE(c.present(stp::BVMULT, result));
+
+  for (unsigned av = 1; av <= 2; av++)
+    for (unsigned xv = 0; xv <= 3; xv++)
+      for (unsigned yv = 0; yv <= 3; yv++)
+      {
+        stp::ASTNodeMap assignment;
+        assignment.insert({a, c.constant(width, av)});
+        assignment.insert({x, c.constant(width, xv)});
+        assignment.insert({y, c.constant(width, yv)});
+        ASSERT_EQ(c.eval(n, assignment), c.eval(result, assignment))
+            << "differ on a=" << av << " x=" << xv << " y=" << yv;
+      }
+}
+
+// The interval cancellation must NOT fire when the shared factor may be
+// zero, or when a product may wrap.
+TEST(StrengthReduction_Exhaustive_Test, eq_mult_not_cancelled_without_proof)
+{
+  const unsigned width = 4;
+
+  // Shared factor may be zero.
+  {
+    Context c;
+    ASTNode a = c.symbol("a", width);
+    ASTNode x = c.symbol("x", width);
+    ASTNode y = c.symbol("y", width);
+    ASTNode m0 = c.nf->CreateTerm(stp::BVMULT, width, a, x);
+    ASTNode m1 = c.nf->CreateTerm(stp::BVMULT, width, a, y);
+    ASTNode n = c.nf->CreateNode(stp::EQ, m0, m1);
+
+    stp::UnsignedInterval aInterval(makeCBV(width, 0), makeCBV(width, 2));
+    stp::UnsignedInterval xInterval(makeCBV(width, 0), makeCBV(width, 3));
+    stp::UnsignedInterval yInterval(makeCBV(width, 0), makeCBV(width, 3));
+
+    stp::NodeToUnsignedIntervalMap map;
+    map.insert({n, nullptr});
+    map.insert({m0, nullptr});
+    map.insert({m1, nullptr});
+    map.insert({a, &aInterval});
+    map.insert({x, &xInterval});
+    map.insert({y, &yInterval});
+
+    ASTNode result = c.sr.topLevel(n, map);
+    ASSERT_EQ(result, n);
+  }
+
+  // Products may wrap: 6 * 3 exceeds 4 bits.
+  {
+    Context c;
+    ASTNode a = c.symbol("a", width);
+    ASTNode x = c.symbol("x", width);
+    ASTNode y = c.symbol("y", width);
+    ASTNode m0 = c.nf->CreateTerm(stp::BVMULT, width, a, x);
+    ASTNode m1 = c.nf->CreateTerm(stp::BVMULT, width, a, y);
+    ASTNode n = c.nf->CreateNode(stp::EQ, m0, m1);
+
+    stp::UnsignedInterval aInterval(makeCBV(width, 1), makeCBV(width, 6));
+    stp::UnsignedInterval xInterval(makeCBV(width, 0), makeCBV(width, 3));
+    stp::UnsignedInterval yInterval(makeCBV(width, 0), makeCBV(width, 3));
+
+    stp::NodeToUnsignedIntervalMap map;
+    map.insert({n, nullptr});
+    map.insert({m0, nullptr});
+    map.insert({m1, nullptr});
+    map.insert({a, &aInterval});
+    map.insert({x, &xInterval});
+    map.insert({y, &yInterval});
+
+    ASTNode result = c.sr.topLevel(n, map);
+    ASSERT_EQ(result, n);
+  }
+}
