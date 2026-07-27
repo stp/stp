@@ -713,6 +713,12 @@ if (NOT NOCRYPTOMINISAT)
   message(STATUS "GMP libraries: ${GMP_LIBRARIES}")
   include_directories(SYSTEM ${GMP_INCLUDE_DIRS})
   set(LIBS ${LIBS} ${GMP_LIBRARIES})
+  # A static CryptoMiniSat references cadical/cadiback imported targets but its
+  # config file does not find them itself; a shared CryptoMiniSat has no such
+  # packages, hence QUIET. cadical's export in turn references Threads::Threads.
+  find_package(Threads QUIET)
+  find_package(cadical CONFIG QUIET)
+  find_package(cadiback CONFIG QUIET)
   find_package(cryptominisat5 CONFIG)
   if (cryptominisat5_FOUND AND HAVE_FLAG_STD_CPP11 AND (NOT NOCRYPTOMINISAT))
     message(STATUS "CryptoMiniSat5 dynamic lib: ${CRYPTOMINISAT5_LIBRARIES}")
