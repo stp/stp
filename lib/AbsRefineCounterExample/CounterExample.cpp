@@ -1080,11 +1080,43 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
         c.insert(e);
   }
 
-  for (const auto& e: c)
+  // The map iterates in an order that follows interning history, which
+  // varies across configurations of the solver. Sort the observed reads
+  // by array name and then by index, so one query prints one model text
+  // everywhere. Solver-map entries can carry a read at a symbolic index
+  // next to the concrete observations, so indexes are only compared as
+  // bits when both are constants; symbolic ones sort after, by name
+  // when possible.
+  const auto nodeBefore = [](const ASTNode& a, const ASTNode& b) {
+    if (a.GetKind() == SYMBOL && b.GetKind() == SYMBOL)
+      return strcmp(a.GetName(), b.GetName()) < 0;
+    return a.GetNodeNum() < b.GetNodeNum();
+  };
+  std::vector<std::pair<ASTNode, ASTNode>> reads(c.begin(), c.end());
+  std::sort(reads.begin(), reads.end(),
+            [&nodeBefore](const std::pair<ASTNode, ASTNode>& x,
+                          const std::pair<ASTNode, ASTNode>& y) {
+              const ASTNode& ax = x.first[0];
+              const ASTNode& ay = y.first[0];
+              if (ax != ay)
+                return nodeBefore(ax, ay);
+              const ASTNode& ix = x.first[1];
+              const ASTNode& iy = y.first[1];
+              const bool cx = ix.isConstant();
+              const bool cy = iy.isConstant();
+              if (cx && cy)
+                return CONSTANTBV::BitVector_Lexicompare(ix.GetBVConst(),
+                                                         iy.GetBVConst()) < 0;
+              if (cx != cy)
+                return cx;
+              return nodeBefore(ix, iy);
+            });
+
+  for (const auto& e : reads)
   {
-    outputLine(os, e.first, e.second); 
+    outputLine(os, e.first, e.second);
   }
-    
+
   os.flush();
 }
 

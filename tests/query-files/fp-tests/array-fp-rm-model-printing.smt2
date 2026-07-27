@@ -20,8 +20,9 @@
 (assert (= (select ri RNE) #x11))
 ; CHECK: ^sat
 (check-sat)
-; CHECK-L: ( define-fun |re|  (_ BitVec 2) RoundingMode #b10 RTZ )
+; The observed reads print sorted by array name, then index.
 ; CHECK-L: ( define-fun |fe|  (_ BitVec 2) (_ FloatingPoint 8 24) #b01 (fp #b0 #b01111111 #b00000000000000000000000) )
 ; CHECK-L: ( define-fun |fi|  (_ FloatingPoint 8 24) (_ BitVec 8) (fp #b0 #b01111111 #b00000000000000000000000) #x2A )
+; CHECK-L: ( define-fun |re|  (_ BitVec 2) RoundingMode #b10 RTZ )
 ; CHECK-L: ( define-fun |ri|  RoundingMode (_ BitVec 8) RNE #x11 )
 (get-model)
