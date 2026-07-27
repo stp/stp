@@ -20,8 +20,6 @@ sudo apt-get install git build-essential cmake bison flex libboost-program-optio
 git clone https://github.com/stp/stp
 cd stp
 git submodule init && git submodule update
-./scripts/deps/setup-gtest.sh
-./scripts/deps/setup-outputcheck.sh
 ./scripts/deps/setup-cms.sh
 ./scripts/deps/setup-minisat.sh
 mkdir build

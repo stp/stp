@@ -16,6 +16,8 @@ dep="gtest"
 # whole job.
 gtest_tag="v1.17.0"
 
+[ ! -d "${dep_dir}" ] && mkdir -p "${dep_dir}"
+
 cd "${dep_dir}"
 git clone --depth 1 --branch "${gtest_tag}" \
     https://github.com/google/googletest "${dep}"

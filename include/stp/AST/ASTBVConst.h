@@ -114,5 +114,26 @@ public:
   CBV GetBVConst() const;
 };
 
+// Defined out of line because they dereference ASTBVConst, which is still
+// incomplete inside the nested class bodies above.  They must stay in the
+// header: they key STPMgr's bvconst unique table, so they run on every
+// hash-cons probe, and being inline keeps that path free of a call.
+inline size_t
+ASTBVConst::ASTBVConstHasher::operator()(const ASTBVConst* bvc) const
+{
+  return CONSTANTBV::BitVector_Hash(bvc->_bvconst);
+}
+
+inline bool
+ASTBVConst::ASTBVConstEqual::operator()(const ASTBVConst* bvc1,
+                                        const ASTBVConst* bvc2) const
+{
+  if (bvc1->getValueWidth() != bvc2->getValueWidth())
+  {
+    return false;
+  }
+  return (0 == CONSTANTBV::BitVector_Compare(bvc1->_bvconst, bvc2->_bvconst));
+}
+
 } // end of namespace
 #endif

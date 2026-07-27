@@ -220,11 +220,29 @@ public:
    *                                                                 *
    * Both indexwidth and valuewidth should never be less than 0      *
    *******************************************************************/
-  unsigned int GetIndexWidth() const;
-  DLL_PUBLIC unsigned int GetValueWidth() const;
+  // Inlined for the same reason as the ref-counting members: ASTInternal is
+  // complete here, so these fold to a single virtual dispatch at the call site
+  // instead of a call into the library that then dispatches.
+  unsigned int GetIndexWidth() const { return _int_node_ptr->getIndexWidth(); }
+  DLL_PUBLIC unsigned int GetValueWidth() const
+  {
+    return _int_node_ptr->getValueWidth();
+  }
   void SetIndexWidth(unsigned int iw) const;
   void SetValueWidth(unsigned int vw) const;
-  types GetType(void) const;
+
+  // Reads each width once. The previous form re-read them per branch, which
+  // cost up to six dispatches for what is two pieces of information.
+  types GetType(void) const
+  {
+    const unsigned int iw = GetIndexWidth();
+    const unsigned int vw = GetValueWidth();
+
+    if (0 == iw)
+      return (0 == vw) ? BOOLEAN_TYPE : BITVECTOR_TYPE;
+
+    return (vw > 0) ? ARRAY_TYPE : UNKNOWN_TYPE;
+  }
 
   // Hash is the node's unique id. Inlined: used by every ==/</hash lookup.
   size_t Hash() const { return _int_node_ptr ? _int_node_ptr->node_uid : 0; }
