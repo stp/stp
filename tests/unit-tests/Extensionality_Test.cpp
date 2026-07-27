@@ -1269,6 +1269,101 @@ TEST_F(ExtPrepareTest, MixedElementSortEqualityFailsLoudly)
   EXPECT_DEATH(ext->makeEquality(fa, b), "identical element sorts");
 }
 
+// Index sorts that quotient their bit patterns confine the witness
+// index: a float-indexed record's lambda is non-NaN or the canonical
+// quiet NaN, a RoundingMode-indexed record's lambda is one of the five
+// modes, and a plain bitvector-indexed record carries no clause.
+TEST_F(ExtPrepareTest, WitnessIndexConfinedToDenotingPatterns)
+{
+  ASTNode p = arr("p"), q = arr("q");
+  ext->makeEquality(p, q);
+  ASSERT_EQ(1u, ext->getRecords().size());
+  EXPECT_TRUE(ext->getRecords()[0].indexSortClause.IsNull());
+
+  ASTNode fa = mgr.CreateSymbol("fa", 32, 8);
+  ASTNode fb = mgr.CreateSymbol("fb", 32, 8);
+  mgr.fp_index_arrays[fa] = std::make_pair(8u, 24u);
+  mgr.fp_index_arrays[fb] = std::make_pair(8u, 24u);
+  ext->makeEquality(fa, fb);
+  ASSERT_EQ(2u, ext->getRecords().size());
+  {
+    const ExtensionalityContext::Record& r = ext->getRecords()[1];
+    ASSERT_FALSE(r.indexSortClause.IsNull());
+    EXPECT_EQ(OR, r.indexSortClause.GetKind());
+  }
+
+  ASTNode ra = mgr.CreateSymbol("ra", 5, 8);
+  ASTNode rb = mgr.CreateSymbol("rb", 5, 8);
+  mgr.rm_index_arrays.insert(ra);
+  mgr.rm_index_arrays.insert(rb);
+  ext->makeEquality(ra, rb);
+  ASSERT_EQ(3u, ext->getRecords().size());
+  {
+    const ExtensionalityContext::Record& r = ext->getRecords()[2];
+    ASSERT_FALSE(r.indexSortClause.IsNull());
+    EXPECT_EQ(mgr.roundingModeValidConstraint(r.lambda), r.indexSortClause);
+  }
+}
+
+// A RoundingMode-element record pins both witness cells to denote
+// modes next to the bitwise disequality.
+TEST_F(ExtPrepareTest, RoundingModeElementWitnessPinsCells)
+{
+  ASTNode ra = mgr.CreateSymbol("rea", 2, 5);
+  ASTNode rb = mgr.CreateSymbol("reb", 2, 5);
+  mgr.rm_element_arrays.insert(ra);
+  mgr.rm_element_arrays.insert(rb);
+  ext->makeEquality(ra, rb);
+  ASSERT_EQ(1u, ext->getRecords().size());
+  const ExtensionalityContext::Record& r = ext->getRecords()[0];
+  ASSERT_EQ(OR, r.witnessClause.GetKind());
+  const ASTNode& differ = r.witnessClause[0] == r.proxy ? r.witnessClause[1]
+                                                        : r.witnessClause[0];
+  ASSERT_EQ(AND, differ.GetKind());
+}
+
+// The replacement for an eliminated if-then-else over float-indexed
+// arrays registers the branches' index sort, and its guarded records
+// therefore confine their witness indexes too.
+TEST_F(ExtPrepareTest, IteReplacementInheritsIndexRegistries)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode fa = mgr.CreateSymbol("fia", 32, 8);
+  ASTNode fb = mgr.CreateSymbol("fib", 32, 8);
+  ASTNode fd = mgr.CreateSymbol("fid", 32, 8);
+  mgr.fp_index_arrays[fa] = std::make_pair(8u, 24u);
+  mgr.fp_index_arrays[fb] = std::make_pair(8u, 24u);
+  mgr.fp_index_arrays[fd] = std::make_pair(8u, 24u);
+  ASTNode c = mgr.CreateSymbol("c", 0, 0);
+  ASTNode ite = hf->CreateArrayTerm(ITE, 32, 8, {c, fa, fb});
+
+  ASTNode proxy = ext->makeEquality(ite, fd);
+  ext->beginSolve();
+  ext->prepare(ext->conjoinRecordConstraints(proxy));
+
+  ASSERT_EQ(3u, ext->getRecords().size());
+  const ExtensionalityContext::Record& r0 = ext->getRecords()[0];
+  const ASTNode replacement =
+      r0.canonicalLeft == fd ? r0.canonicalRight : r0.canonicalLeft;
+  ASSERT_EQ(SYMBOL, replacement.GetKind());
+  unsigned ieb = 0, isb = 0;
+  EXPECT_TRUE(mgr.arrayHasFpIndex(replacement, ieb, isb));
+  EXPECT_EQ(8u, ieb);
+  EXPECT_EQ(24u, isb);
+  for (size_t i = 1; i < 3; i++)
+    EXPECT_FALSE(ext->getRecords()[i].indexSortClause.IsNull());
+}
+
+// Same index width, different index sorts: a float-indexed array may
+// not be equated with a bitvector-indexed one.
+TEST_F(ExtPrepareTest, MixedIndexSortEqualityFailsLoudly)
+{
+  ASTNode fa = mgr.CreateSymbol("fa", 32, 8);
+  mgr.fp_index_arrays[fa] = std::make_pair(8u, 24u);
+  ASTNode b = mgr.CreateSymbol("b", 32, 8);
+  EXPECT_DEATH(ext->makeEquality(fa, b), "identical index sorts");
+}
+
 // The decision table combining STP's own model evaluation with the
 // array consistency check: an array conflict always takes priority
 // (only its lemma can rule the candidate out), and a candidate is
