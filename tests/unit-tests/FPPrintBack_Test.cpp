@@ -144,3 +144,21 @@ TEST(FPPrintBack, specials_equality_and_classifications)
               // The float-element array declares with its element sort.
               "(Array (_ BitVec 4) (_ FloatingPoint 3 5) )"});
 }
+
+// The format-taking overload prints exactly what the term-taking one
+// prints. It exists for callers that know a value's format but hold no
+// float-typed term for it -- e.g. printing the packed cells of a
+// float-element array from the array symbol's format.
+TEST(FPPrintBack, overload_by_format_matches_by_term)
+{
+  STPMgr mgr;
+  const ASTNode bits = mgr.CreateBVConst(32, 0x3F800000ULL); // 1.0f packed
+  const ASTNode fp = mgr.CreateFPConst(bits, 8, 24);
+
+  std::ostringstream byTerm, byFormat;
+  printer::outputFloatingPointSMTLIB2(fp, byTerm, fp);
+  printer::outputFloatingPointSMTLIB2(bits, byFormat, 8, 24);
+
+  EXPECT_EQ(byTerm.str(), byFormat.str());
+  EXPECT_EQ("(fp #b0 #b01111111 #b00000000000000000000000)", byFormat.str());
+}

@@ -1578,7 +1578,10 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK 
   // Nullary array-sorted define-fun (bit-vector element): the body is an
   // array term (a store chain, ITE, or another array); it is just a name
   // for that body, stored like any other nullary function, and uses of the
-  // name expand to the body. Accepted with or without --array-equality.
+  // name expand to the body. Accepted with or without --array-equality. A
+  // body whose widths disagree with the declared sort is reported --
+  // mirroring the sibling bitvector define-fun productions -- and still
+  // stored, so parsing continues.
   if ($17->GetIndexWidth() != $9 || $17->GetValueWidth() != $14)
   {
     char msg [100];
