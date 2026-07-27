@@ -85,6 +85,55 @@ TEST(fp_array_extensionality, rm_indexed_equal_stores_distinct_unsat)
   vc_Destroy(vc);
 }
 
+// (Array (_ FloatingPoint 5 11) (_ BitVec 5)): a store chain at float
+// indexes -- a -oo literal, a variable pinned to -oo by fp.geq, and
+// two fp.rem results that denote NaN -- under a three-way array
+// equality that the write-chain solver rewrites without minting a
+// record. Simplification substitutes the pinned variable, folding the
+// canonical index circuits to plain constants, while the -oo literal
+// stays a float-flavoured constant: two constant nodes, one value.
+// Every place that concluded "different constant nodes, different
+// value" then went wrong together -- the read-over-write rule skipped
+// a write it hits, the refinement's axiom shortcut dropped the pair,
+// and the loop fell off its end ("reached the end without proper
+// conclusion", on every backend).
+TEST(fp_array_extensionality, float_indexed_chain_equalities_converge)
+{
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type fp = vc_fpType(vc, 5, 11);
+  Type bv5 = vc_bvType(vc, 5);
+  Type arr = vc_arrayType(vc, fp, bv5);
+
+  Expr x1 = vc_varExpr(vc, "x1", bv5);
+  Expr x2 = vc_varExpr(vc, "x2", fp);
+  Expr moo = vc_fpMinusInfinity(vc, fp);
+  Expr x3 = vc_varExpr(vc, "x3", arr);
+  Expr x4 = vc_varExpr(vc, "x4", bv5);
+  Expr x10 = vc_varExpr(vc, "x10", arr);
+  Expr t14 = vc_readExpr(vc, x3, x2);
+  Expr t18 = vc_fpRemExpr(vc, x2, x2);
+  Expr t20 = vc_readExpr(vc, x10, x2);
+  Expr t27 = vc_readExpr(vc, x10, t18);
+  Expr t28 = vc_fpRemExpr(vc, t18, t18);
+  Expr t34 = vc_writeExpr(vc, x10, moo, t20);
+  Expr t35 = vc_writeExpr(vc, t34, x2, t27);
+  Expr t36 = vc_writeExpr(vc, t35, moo, x4);
+  Expr t37 = vc_writeExpr(vc, t36, x2, x4);
+  Expr t38 = vc_writeExpr(vc, t37, moo, x1);
+  Expr t39 = vc_writeExpr(vc, t38, t18, t14);
+  Expr t40 = vc_writeExpr(vc, t39, t28, x4);
+
+  vc_assertFormula(vc, vc_eqExpr(vc, t14, x4));
+  vc_assertFormula(vc, vc_fpGeqExpr(vc, moo, x2));
+  vc_assertFormula(vc, vc_andExpr(vc, vc_eqExpr(vc, t35, t40),
+                                  vc_eqExpr(vc, t40, t34)));
+  EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+
+  vc_Destroy(vc);
+}
+
 // (Array (_ FloatingPoint 8 24) (_ BitVec 8)): a guarded equality
 // between two stores of one base at one float index, under minisat.
 // The store index inside the abstracted operands used to stay raw
