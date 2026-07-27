@@ -439,6 +439,82 @@ ASTNode STPMgr::roundingModeValidConstraint(const ASTNode& s)
   return defaultNodeFactory->CreateNode(OR, one_of);
 }
 
+ASTNode STPMgr::arrayBaseSymbol(const ASTNode& arr) const
+{
+  ASTNode n = arr;
+  while (true)
+  {
+    switch (n.GetKind())
+    {
+      case SYMBOL:
+        return n;
+      case WRITE:
+        n = n[0];
+        break;
+      case ITE:
+      {
+        // Both branches type as arrays of one bit layout; requiring one
+        // *sort* keeps a read from being canonicalised under one branch's
+        // index sort and taken raw under the other's.
+        const ASTNode left = arrayBaseSymbol(n[1]);
+        const ASTNode right = arrayBaseSymbol(n[2]);
+        if (left.IsNull())
+          return right;
+        if (!right.IsNull())
+        {
+          const auto l_fp = fp_index_arrays.find(left);
+          const auto r_fp = fp_index_arrays.find(right);
+          const bool fp_differs =
+              (l_fp == fp_index_arrays.end()) !=
+                  (r_fp == fp_index_arrays.end()) ||
+              (l_fp != fp_index_arrays.end() && l_fp->second != r_fp->second);
+          if (fp_differs ||
+              rm_index_arrays.count(left) != rm_index_arrays.count(right) ||
+              rm_element_arrays.count(left) != rm_element_arrays.count(right))
+            FatalError("arrayBaseSymbol: an if-then-else mixes arrays whose "
+                       "index or element sorts differ: ",
+                       n);
+        }
+        return left;
+      }
+      default:
+        return ASTNode();
+    }
+  }
+}
+
+bool STPMgr::arrayHasFpIndex(const ASTNode& arr, unsigned& exp_width,
+                             unsigned& sig_width) const
+{
+  if (fp_index_arrays.empty())
+    return false;
+  const ASTNode base = arrayBaseSymbol(arr);
+  if (base.IsNull())
+    return false;
+  const auto it = fp_index_arrays.find(base);
+  if (it == fp_index_arrays.end())
+    return false;
+  exp_width = it->second.first;
+  sig_width = it->second.second;
+  return true;
+}
+
+bool STPMgr::arrayHasRmIndex(const ASTNode& arr) const
+{
+  if (rm_index_arrays.empty())
+    return false;
+  const ASTNode base = arrayBaseSymbol(arr);
+  return !base.IsNull() && rm_index_arrays.count(base) != 0;
+}
+
+bool STPMgr::arrayHasRmElement(const ASTNode& arr) const
+{
+  if (rm_element_arrays.empty())
+    return false;
+  const ASTNode base = arrayBaseSymbol(arr);
+  return !base.IsNull() && rm_element_arrays.count(base) != 0;
+}
+
 ASTNode STPMgr::CreateFPSpecialConst(FPSpecial which, unsigned exp_width,
                                      unsigned sig_width)
 {

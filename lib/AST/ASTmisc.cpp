@@ -391,8 +391,13 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
       }
       if (ARRAY_TYPE != n[0].GetType())
         FatalError("First parameter to read should be an array", n[0]);
-      if (BITVECTOR_TYPE != n[1].GetType())
-        FatalError("Second parameter to read should be a bitvector", n[1]);
+      // A float-indexed array's index is a float laid out as its packed
+      // bits, exactly as a float element is (see WRITE's value below). The
+      // pre-solve pass rewrites such indexes to canonical bits.
+      if (BITVECTOR_TYPE != n[1].GetType() &&
+          FLOATINGPOINT_TYPE != n[1].GetType())
+        FatalError("Second parameter to read should be a bitvector or a float",
+                   n[1]);
       break;
 
     case WRITE:
@@ -408,8 +413,11 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
                    n);
       if (ARRAY_TYPE != n[0].GetType())
         FatalError("First parameter to read should be an array", n[0]);
-      if (BITVECTOR_TYPE != n[1].GetType())
-        FatalError("Second parameter to read should be a bitvector", n[1]);
+      // As for READ: a float index rides as its packed bits.
+      if (BITVECTOR_TYPE != n[1].GetType() &&
+          FLOATINGPOINT_TYPE != n[1].GetType())
+        FatalError("Second parameter to write should be a bitvector or a float",
+                   n[1]);
       // The element of an array of floats is a float. It is laid out exactly
       // like a bitvector of the same width -- the array carries the format --
       // so everything below this point treats the two alike.

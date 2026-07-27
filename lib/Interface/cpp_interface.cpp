@@ -81,9 +81,17 @@ void Cpp_interface::removeFrame()
     SolverFrame* last = frames.back();
 
     // The frame's symbols go out of scope with it: drop any rounding-mode
-    // markers so the model printers and reset-assertions don't outlive them.
+    // markers so the model printers and reset-assertions don't outlive
+    // them, and any array-sort registrations so a later same-name,
+    // same-widths declaration doesn't inherit this frame's index or
+    // element sorts (the symbol node would be the very same one).
     for (const ASTNode& s : last->getSymbols())
+    {
       bm.rounding_mode_symbols.erase(s);
+      bm.fp_index_arrays.erase(s);
+      bm.rm_index_arrays.erase(s);
+      bm.rm_element_arrays.erase(s);
+    }
 
     // delete it
     delete last;
