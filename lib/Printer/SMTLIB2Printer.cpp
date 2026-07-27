@@ -194,7 +194,7 @@ void outputBitVecSMTLIB2(const ASTNode n, ostream& os)
 }
 
 void outputFloatingPointSMTLIB2(const ASTNode n, ostream& os,
-                                const ASTNode term)
+                                unsigned int exp_width, unsigned int sig_width)
 {
   const Kind k = n.GetKind();
 
@@ -203,14 +203,9 @@ void outputFloatingPointSMTLIB2(const ASTNode n, ostream& os,
     FatalError("Expecting BV const");
   }
 
-  if (term.GetType() != stp::FLOATINGPOINT_TYPE)
-  {
-    FatalError("Expecting FP term");
-  }
-
   unsigned int* const_bv = n.GetBVConst();
   uint32_t underlying_size = bits_(const_bv);
-  unsigned int fp_width = term.GetSigWidth() + term.GetExpWidth();
+  unsigned int fp_width = sig_width + exp_width;
 
   if (fp_width != underlying_size)
   {
@@ -230,9 +225,8 @@ void outputFloatingPointSMTLIB2(const ASTNode n, ostream& os,
   // packed. (This used to ask substr for sb characters and lean on substr's
   // clamping at end-of-string.)
   std::string sign_bit = as_str.substr(0, 1);
-  std::string exp_bits = as_str.substr(1, term.GetExpWidth());
-  std::string sig_bits =
-      as_str.substr(1 + term.GetExpWidth(), term.GetSigWidth() - 1);
+  std::string exp_bits = as_str.substr(1, exp_width);
+  std::string sig_bits = as_str.substr(1 + exp_width, sig_width - 1);
 
   std::string rejoined = sign_bit + exp_bits + sig_bits;
 
@@ -246,6 +240,17 @@ void outputFloatingPointSMTLIB2(const ASTNode n, ostream& os,
   os << "#b" << exp_bits << " ";
   os << "#b" << sig_bits << "";
   os << ")";
+}
+
+void outputFloatingPointSMTLIB2(const ASTNode n, ostream& os,
+                                const ASTNode term)
+{
+  if (term.GetType() != stp::FLOATINGPOINT_TYPE)
+  {
+    FatalError("Expecting FP term");
+  }
+
+  outputFloatingPointSMTLIB2(n, os, term.GetExpWidth(), term.GetSigWidth());
 }
 
 void SMTLIB2_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
