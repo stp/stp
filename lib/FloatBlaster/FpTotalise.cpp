@@ -41,7 +41,17 @@ ASTNode FpTotalise::topLevel(const ASTNode& n)
   // legal encodings (see the class comment). The walk runs over the visited
   // output so it also sees reads that visit() itself introduced or
   // reshaped.
-  if (!bm->rm_element_arrays.empty())
+  //
+  // Formulas only: the pinning is a side condition conjoined onto the
+  // result, and a term has nowhere to hold one. Model evaluation totalises
+  // bare floating-point terms before blasting them (see
+  // TermToConstTermUsingModel); wrapping such a term in an AND hands the
+  // blaster a formula kind it cannot blast. No pinning is needed there
+  // either -- a read the solve constrained resolves to its model value,
+  // which the pinned formula already held to a legal encoding, and a read
+  // the solve never saw is genuinely unconstrained: whatever encoding it
+  // resolves to, the blasted circuit behaves as one of the five modes.
+  if (n.GetType() == BOOLEAN_TYPE && !bm->rm_element_arrays.empty())
   {
     ASTNodeSet seen;
     ASTVec constraints;
