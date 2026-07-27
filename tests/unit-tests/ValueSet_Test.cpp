@@ -193,6 +193,65 @@ TEST(ValueSet_Test, transfer_pointwise_add)
   delete result;
 }
 
+// Nodes wider than 64 bits take the bit-vector evaluation path rather
+// than the native 64-bit one; check it end to end at width 72.
+TEST(ValueSet_Test, transfer_wide)
+{
+  boot();
+  Context c;
+  stp::ValueSetAnalysis analysis(c.mgr);
+
+  const unsigned w = 72;
+
+  // makeCBV takes an unsigned, whose bits run out well short of 72.
+  const auto wideCBV = [](uint64_t low, bool bit70) {
+    stp::CBV result = CONSTANTBV::BitVector_Create(72, true);
+    CONSTANTBV::BitVector_Chunk_Store(result, 64, 0, low);
+    if (bit70)
+      CONSTANTBV::BitVector_Bit_On(result, 70);
+    return result;
+  };
+
+  ASTNode n = c.hashing()->CreateTerm(stp::BVPLUS, w, c.symbol("wx", w),
+                                      c.symbol("wy", w));
+
+  // {1, 2^70} + {3} = {4, 2^70 + 3}
+  stp::ValueSet* left = new stp::ValueSet(w, false);
+  ASSERT_TRUE(left->insert(wideCBV(1, false)));
+  ASSERT_TRUE(left->insert(wideCBV(0, true)));
+  stp::ValueSet* right = new stp::ValueSet(w, false);
+  ASSERT_TRUE(right->insert(wideCBV(3, false)));
+
+  stp::ValueSet* result =
+      analysis.dispatchToTransferFunctions(n, {left, right});
+  ASSERT_NE(result, nullptr);
+  ASSERT_EQ(result->size(), 2u);
+
+  stp::CBV probe = wideCBV(4, false);
+  ASSERT_TRUE(result->in(probe));
+  CONSTANTBV::BitVector_Destroy(probe);
+
+  probe = wideCBV(3, true);
+  ASSERT_TRUE(result->in(probe));
+  CONSTANTBV::BitVector_Destroy(probe);
+
+  delete left;
+  delete right;
+  delete result;
+
+  // An unknown operand of a wide bitwise and: the known side's members
+  // expand to their submasks.
+  n = c.hashing()->CreateTerm(stp::BVAND, w, c.symbol("wx2", w),
+                              c.symbol("wy2", w));
+  left = new stp::ValueSet(w, false);
+  ASSERT_TRUE(left->insert(wideCBV(5, false)));
+  result = analysis.dispatchToTransferFunctions(n, {left, nullptr});
+  ASSERT_NE(result, nullptr);
+  ASSERT_EQ(members(result), std::vector<unsigned>({0, 1, 4, 5}));
+  delete left;
+  delete result;
+}
+
 TEST(ValueSet_Test, transfer_ite)
 {
   boot();

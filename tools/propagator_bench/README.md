@@ -108,9 +108,3 @@ which would be a bug in the propagator, not a precision result.
   possible results, past the 12 the domain can hold, so the analysis widens to
   "unknown" and the deduced bits drop to zero. That is the domain working as
   designed, not a measurement problem.
-* **`valueset` timings are noisy.** Every call evaluates through the constant
-  evaluator, which interns nodes, so the cost drifts upwards as the node table
-  fills: the same configuration has come out anywhere between 89k and 139k
-  calls a second in the same process. Take a difference of less than about
-  50% there as nothing at all, and compare two implementations by
-  alternating them, not by comparing two runs.

@@ -52,6 +52,21 @@ DLL_PUBLIC CBV NonMemberBVConstEvaluator(const Kind k,
 DLL_PUBLIC bool NonMemberBVConstPredicateEvaluator(const Kind k, const CBV a,
                                                    const CBV b);
 
+// The same two again, over values that fit in 64 bits, for callers that
+// evaluate in bulk. Each argument is masked to its width; argWidths gives
+// the width of each argument (used by the extends and concat -- the
+// other kinds take it from outputWidth or from the argument values).
+DLL_PUBLIC uint64_t NonMemberBVConstEvaluator64(
+    const Kind k, const std::vector<uint64_t>& args,
+    const std::vector<unsigned>& argWidths, unsigned outputWidth);
+
+// width is the width of a and b. BOOLEXTRACT's b is the bit index, and
+// the only predicate whose arguments' widths differ.
+DLL_PUBLIC bool NonMemberBVConstPredicateEvaluator64(const Kind k,
+                                                     const uint64_t a,
+                                                     const uint64_t b,
+                                                     const unsigned width);
+
 class Simplifier // not copyable
 {
   friend class counterexample;

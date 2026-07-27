@@ -35,6 +35,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/ValueSet.h"
+#include <cstdint>
 
 namespace stp
 {
@@ -79,6 +80,20 @@ class ValueSetAnalysis
   // Takes ownership of "set", returning the expanded set, or nullptr when
   // the expansion is bigger than a set can hold.
   ValueSet* expand(ValueSet* set, Expand how);
+
+  // The same analysis again, evaluated natively on uint64_t. Taken
+  // whenever the node and all its children fit in 64 bits, which leaves
+  // the bit-vector path above handling only the wide nodes.
+  ValueSet* dispatch64(const ASTNode& n,
+                       const vector<const ValueSet*>& children);
+  bool standIns64(const ASTNode& n, size_t index,
+                  const vector<const ValueSet*>& children, unsigned width,
+                  vector<uint64_t>& out, Expand& expand);
+  bool shiftStandIns64(const ASTNode& n, size_t index,
+                       const vector<const ValueSet*>& children,
+                       vector<uint64_t>& out);
+  static bool expand64(uint64_t* values, size_t& size, unsigned width,
+                       Expand how);
 
 public:
   ValueSetAnalysis(STPMgr&) {}

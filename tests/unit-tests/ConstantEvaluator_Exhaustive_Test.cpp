@@ -296,6 +296,7 @@ TEST(ConstantEvaluator_Exhaustive, terms)
         unsigned rw;
         EXPECT_EQ(expected, c.evalCBV(k, {x}, {w}, w, rw));
         EXPECT_EQ(w, rw);
+        EXPECT_EQ(expected, stp::NonMemberBVConstEvaluator64(k, {x}, {w}, w));
       }
 
       for (uint64_t y = 0; y <= mask(w); y++)
@@ -310,6 +311,9 @@ TEST(ConstantEvaluator_Exhaustive, terms)
           EXPECT_EQ(expected, c.evalCBV(k, {x, y}, {w, w}, w, rw))
               << k << " " << w << " " << x << " " << y;
           EXPECT_EQ(w, rw);
+          EXPECT_EQ(expected,
+                    stp::NonMemberBVConstEvaluator64(k, {x, y}, {w, w}, w))
+              << k << " " << w << " " << x << " " << y;
         }
 
         if (w <= 3)
@@ -324,6 +328,8 @@ TEST(ConstantEvaluator_Exhaustive, terms)
                   << k << " " << w << " " << x << " " << y << " " << z;
               unsigned rw;
               EXPECT_EQ(expected, c.evalCBV(k, {x, y, z}, {w, w, w}, w, rw));
+              EXPECT_EQ(expected, stp::NonMemberBVConstEvaluator64(
+                                      k, {x, y, z}, {w, w, w}, w));
             }
       }
     }
@@ -350,6 +356,8 @@ TEST(ConstantEvaluator_Exhaustive, extendsExtractConcat)
           unsigned rw;
           EXPECT_EQ(expected, c.evalCBV(k, {x, w2}, {w1, 32}, w2, rw));
           EXPECT_EQ(w2, rw);
+          EXPECT_EQ(expected, stp::NonMemberBVConstEvaluator64(
+                                  k, {x, w2}, {w1, 32}, w2));
         }
       }
 
@@ -371,6 +379,9 @@ TEST(ConstantEvaluator_Exhaustive, extendsExtractConcat)
           EXPECT_EQ(expected, c.evalCBV(stp::BVEXTRACT, {x, hi, low},
                                         {w, 32, 32}, len, rw));
           EXPECT_EQ(len, rw);
+          EXPECT_EQ(expected,
+                    stp::NonMemberBVConstEvaluator64(
+                        stp::BVEXTRACT, {x, hi, low}, {w, 32, 32}, len));
         }
 
   // Concatenation: the first child is the high part.
@@ -389,6 +400,8 @@ TEST(ConstantEvaluator_Exhaustive, extendsExtractConcat)
           EXPECT_EQ(expected,
                     c.evalCBV(stp::BVCONCAT, {x, y}, {w1, w2}, w1 + w2, rw));
           EXPECT_EQ(w1 + w2, rw);
+          EXPECT_EQ(expected, stp::NonMemberBVConstEvaluator64(
+                                  stp::BVCONCAT, {x, y}, {w1, w2}, w1 + w2));
         }
 }
 
@@ -413,6 +426,18 @@ TEST(ConstantEvaluator_Exhaustive, predicates)
               << k << " " << w << " " << x << " " << y;
           EXPECT_EQ(expected, c.predicateCBV(k, x, w, y, w))
               << k << " " << w << " " << x << " " << y;
+          // The 64-bit evaluator implements the comparisons but not the
+          // overflow tests.
+          const bool in64 = stp::EQ == k || stp::BVLT == k || stp::BVLE == k ||
+                            stp::BVGT == k || stp::BVGE == k ||
+                            stp::BVSLT == k || stp::BVSLE == k ||
+                            stp::BVSGT == k || stp::BVSGE == k;
+          if (in64)
+          {
+            EXPECT_EQ(expected,
+                      stp::NonMemberBVConstPredicateEvaluator64(k, x, y, w))
+                << k << " " << w << " " << x << " " << y;
+          }
         }
 
   // Boolean extraction of every bit.
@@ -425,7 +450,105 @@ TEST(ConstantEvaluator_Exhaustive, predicates)
                   c.evalNode(stp::BOOLEXTRACT,
                              {c.constant(w, x), c.constant(32, i)}, 0));
         EXPECT_EQ(expected, c.predicateCBV(stp::BOOLEXTRACT, x, w, i, 32));
+        EXPECT_EQ(expected, stp::NonMemberBVConstPredicateEvaluator64(
+                                stp::BOOLEXTRACT, x, i, w));
       }
+}
+
+// The 64-bit evaluator against the width-generic bit-vector one, at the
+// widths where its arithmetic is at the edge of the machine word: signed
+// overflow of INT64_MIN, shifts by 63 and beyond, sign bits in bit 63.
+// The bit-vector evaluator is the reference; the loops above prove it
+// against the oracle at the small widths.
+TEST(ConstantEvaluator_Exhaustive, sixtyFourBitEdges)
+{
+  Context c;
+
+  const std::vector<Kind> binary = {
+      stp::BVAND,       stp::BVOR,          stp::BVXOR,   stp::BVPLUS,
+      stp::BVSUB,       stp::BVMULT,        stp::BVDIV,   stp::BVMOD,
+      stp::SBVDIV,      stp::SBVREM,        stp::SBVMOD,  stp::BVLEFTSHIFT,
+      stp::BVRIGHTSHIFT, stp::BVSRSHIFT};
+  const std::vector<Kind> comparisons = {
+      stp::EQ,   stp::BVLT,  stp::BVLE,  stp::BVGT,  stp::BVGE,
+      stp::BVSLT, stp::BVSLE, stp::BVSGT, stp::BVSGE};
+
+  for (const unsigned w : {63u, 64u})
+  {
+    const uint64_t m = (w == 64) ? ~0ull : ((1ull << w) - 1);
+    const std::vector<uint64_t> edges = {
+        0,           1,           2,           3,
+        62,          63,          64,          65,
+        m,           m - 1,       m >> 1,      (m >> 1) - 1,
+        (m >> 1) + 1, (m >> 1) + 2, 0x5555555555555555ull & m,
+        0xaaaaaaaaaaaaaaaaull & m};
+
+    for (const uint64_t x : edges)
+    {
+      for (const Kind k : {stp::BVNOT, stp::BVUMINUS})
+      {
+        unsigned rw;
+        EXPECT_EQ(c.evalCBV(k, {x}, {w}, w, rw),
+                  stp::NonMemberBVConstEvaluator64(k, {x}, {w}, w))
+            << k << " " << w << " " << x;
+      }
+
+      for (const uint64_t y : edges)
+      {
+        for (const Kind k : binary)
+        {
+          unsigned rw;
+          EXPECT_EQ(c.evalCBV(k, {x, y}, {w, w}, w, rw),
+                    stp::NonMemberBVConstEvaluator64(k, {x, y}, {w, w}, w))
+              << k << " " << w << " " << x << " " << y;
+        }
+        for (const Kind k : comparisons)
+          EXPECT_EQ(c.predicateCBV(k, x, w, y, w),
+                    stp::NonMemberBVConstPredicateEvaluator64(k, x, y, w))
+              << k << " " << w << " " << x << " " << y;
+      }
+    }
+
+    // Sign- and zero-extension up to the boundary, and extraction and
+    // concatenation shapes that land on it.
+    for (const unsigned w1 : {1u, 31u, 32u, 33u, 63u})
+      if (w1 <= w)
+        for (const uint64_t seed : edges)
+        {
+          const uint64_t x = seed & ((1ull << w1) - 1);
+          for (const Kind k : {stp::BVZX, stp::BVSX})
+          {
+            unsigned rw;
+            EXPECT_EQ(c.evalCBV(k, {x, w}, {w1, 32}, w, rw),
+                      stp::NonMemberBVConstEvaluator64(k, {x, w}, {w1, 32}, w))
+                << k << " " << w1 << "->" << w << " " << x;
+          }
+        }
+
+    for (const uint64_t x : edges)
+      for (const unsigned low : {0u, 1u, 32u, w - 1})
+      {
+        const unsigned hi = w - 1;
+        const unsigned len = hi - low + 1;
+        unsigned rw;
+        EXPECT_EQ(c.evalCBV(stp::BVEXTRACT, {x, hi, low}, {w, 32, 32}, len, rw),
+                  stp::NonMemberBVConstEvaluator64(stp::BVEXTRACT, {x, hi, low},
+                                                   {w, 32, 32}, len))
+            << w << " " << x << " [" << hi << ":" << low << "]";
+      }
+  }
+
+  for (const unsigned w1 : {1u, 32u, 63u})
+  {
+    const unsigned w2 = 64 - w1;
+    const uint64_t x = ((1ull << w1) - 1) & 0xdeadbeefcafef00dull;
+    const uint64_t y = (w2 == 64 ? ~0ull : ((1ull << w2) - 1)) & ~0ull;
+    unsigned rw;
+    EXPECT_EQ(c.evalCBV(stp::BVCONCAT, {x, y}, {w1, w2}, 64, rw),
+              stp::NonMemberBVConstEvaluator64(stp::BVCONCAT, {x, y}, {w1, w2},
+                                               64))
+        << w1 << "+" << w2;
+  }
 }
 
 TEST(ConstantEvaluator_Exhaustive, booleansAndITE)
