@@ -342,7 +342,9 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
 
       if (CONSTANTBV::BitVector_is_empty(tmp1))
       {
-        // Expecting a division by zero. Just return one.
+        // Division by zero, which SMT-LIB defines rather than leaving
+        // undefined: (bvsrem s 0) is s, and (bvsdiv s 0) is 1 when s is
+        // negative and all ones (that is, -1) when it is not.
         if (k == SBVREM)
           OutputNode = children[0];
         else
@@ -528,12 +530,17 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       {
         // a = bq + r, where b!=0 implies r < b. q is quotient, r remainder.
         // i.e. a/b = q.
-        // It doesn't matter what q is when b=0, but r needs to be a.
+        //
+        // Division by zero is defined rather than undefined in SMT-LIB:
+        // (bvurem a 0) is a, which follows from the identity above, while
+        // (bvudiv a 0) is all ones, which does not. That asymmetry is why
+        // the bit-blaster guards BVDIV with an explicit divisor-is-zero
+        // test and needs nothing for BVMOD; see the BVDIV case of BBTerm
+        // in lib/ToSat/BitBlaster.cpp.
         if (k == BVMOD)
           OutputNode = children[0];
         else
           OutputNode = _bm->CreateMaxConst(outputwidth);
-        // Expecting a division by zero. Just return one.
       }
       else
       {
