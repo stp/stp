@@ -88,6 +88,8 @@ namespace constantBitP
 Result useLeadingZeroesToFix(FixedBits& x, FixedBits& y, FixedBits& output);
 Result trailingOneReasoning(FixedBits& x, FixedBits& y, FixedBits& output);
 Result trailingOneReasoning_OLD(FixedBits& x, FixedBits& y, FixedBits& output);
+Result multiplyCore(std::vector<FixedBits*>& children, FixedBits& output,
+                    MultiplicationStats* ms);
 }
 }
 
@@ -687,6 +689,106 @@ TEST_F(ConstantBitP_TransferFunctions, multiplicationThreeChildrenDoesNothing)
   EXPECT_EQ(NO_CHANGE, bvMultiplyBothWays(children, out, &mgr, NULL));
   EXPECT_TRUE(FixedBits::equals(out, fromString("***")));
   EXPECT_TRUE(FixedBits::equals(a, fromString("**1")));
+}
+
+// An odd operand c is invertible mod 2^k, so c * other == output can also be
+// read as inv(c) * output == other, and bvMultiplyBothWays runs the column
+// reasoning over that view too. Here 13 * <010*> can only be 0100 or 0001,
+// and the inverse view derives output bit 3 from y's bits — the original
+// view's column intervals can't see past y's unfixed bit 0, so multiplyCore
+// alone fixes only bit 1.
+TEST_F(ConstantBitP_TransferFunctions, multiplicationInverseFixesOutputHighBit)
+{
+  FixedBits x = fromString("1101");
+  FixedBits y = fromString("010*");
+  FixedBits out = fromString("****");
+
+  std::vector<FixedBits*> children = {&x, &y};
+  bvMultiplyBothWays(children, out, &mgr, NULL);
+
+  EXPECT_TRUE(FixedBits::equals(out, fromString("0*0*")));
+  EXPECT_TRUE(FixedBits::equals(x, fromString("1101")));
+  EXPECT_TRUE(FixedBits::equals(y, fromString("010*")));
+}
+
+// The inverse view only needs the *low* bits of an operand fixed (and odd):
+// x == <*011> gives x ≡ 3 (mod 8), so y ≡ 3 * output (mod 8), and y's fixed
+// zero at bit 2 pins output bit 2 through the inverse.
+TEST_F(ConstantBitP_TransferFunctions, multiplicationInverseUsesOddLowPrefix)
+{
+  FixedBits x = fromString("*011");
+  FixedBits y = fromString("*0**");
+  FixedBits out = fromString("**0*");
+
+  std::vector<FixedBits*> children = {&x, &y};
+  bvMultiplyBothWays(children, out, &mgr, NULL);
+
+  EXPECT_TRUE(FixedBits::equals(out, fromString("*00*")));
+  EXPECT_TRUE(FixedBits::equals(x, fromString("*011")));
+  EXPECT_TRUE(FixedBits::equals(y, fromString("*0**")));
+}
+
+// 13 * 14 = 6 and 13 * 15 = 3 (mod 16): output bit 3 must be zero, which
+// only the inverse view derives; asking for a one there is a conflict the
+// original view misses.
+TEST_F(ConstantBitP_TransferFunctions, multiplicationInverseFindsConflict)
+{
+  FixedBits x = fromString("1101");
+  FixedBits y = fromString("111*");
+  FixedBits out = fromString("1***");
+
+  std::vector<FixedBits*> children = {&x, &y};
+  EXPECT_EQ(CONFLICT, bvMultiplyBothWays(children, out, &mgr, NULL));
+}
+
+// Fully constant odd multiplier with a fully fixed output: the variable
+// operand is completely determined (5 * 3 == 15 mod 16).
+TEST_F(ConstantBitP_TransferFunctions, multiplicationInverseSolvesOperand)
+{
+  FixedBits x = fromString("0101");
+  FixedBits y = fromString("****");
+  FixedBits out = fromString("1111");
+
+  std::vector<FixedBits*> children = {&x, &y};
+  bvMultiplyBothWays(children, out, &mgr, NULL);
+
+  EXPECT_TRUE(FixedBits::equals(y, fromString("0011")));
+}
+
+// Aliased square with an odd low prefix: t ≡ 3 (mod 8) means t*t ≡ 1
+// (mod 8), fixing the output's low bits while t itself stays untouched.
+TEST_F(ConstantBitP_TransferFunctions, multiplicationInverseAliasedSquare)
+{
+  FixedBits t = fromString("*011");
+  FixedBits out = fromString("****");
+
+  std::vector<FixedBits*> children = {&t, &t};
+  bvMultiplyBothWays(children, out, &mgr, NULL);
+
+  EXPECT_TRUE(FixedBits::equals(out, fromString("*001")));
+  EXPECT_TRUE(FixedBits::equals(t, fromString("*011")));
+}
+
+// With no odd fixed low prefix on either operand the inverse view doesn't
+// apply, and bvMultiplyBothWays must behave exactly like the core column
+// reasoning.
+TEST_F(ConstantBitP_TransferFunctions, multiplicationEvenPrefixMatchesCore)
+{
+  FixedBits x = fromString("**10");
+  FixedBits y = fromString("***1");
+  FixedBits out = fromString("****");
+
+  FixedBits cx(x), cy(y), cout_(out);
+  std::vector<FixedBits*> coreChildren = {&cx, &cy};
+  multiplyCore(coreChildren, cout_, NULL);
+
+  std::vector<FixedBits*> children = {&x, &y};
+  bvMultiplyBothWays(children, out, &mgr, NULL);
+
+  EXPECT_TRUE(FixedBits::equals(x, cx));
+  EXPECT_TRUE(FixedBits::equals(y, cy));
+  EXPECT_TRUE(FixedBits::equals(out, cout_));
+  EXPECT_TRUE(FixedBits::equals(out, fromString("**10")));
 }
 
 TEST_F(ConstantBitP_TransferFunctions, additionExhaustiveWidth3)

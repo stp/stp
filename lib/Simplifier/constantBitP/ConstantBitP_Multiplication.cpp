@@ -23,7 +23,6 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/AST/AST.h"
-#include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
 #include "stp/Simplifier/constantBitP/MultiplicationStats.h"
@@ -634,102 +633,171 @@ Result useTrailingZeroesToFix(FixedBits& x, FixedBits& y, FixedBits& output)
   return NO_CHANGE;
 }
 
-Result useInversesToSolve(FixedBits& x, FixedBits& y, FixedBits& output,
-                          stp::STPMgr* bm)
+// 64x64 -> 128 multiply via 32-bit halves; the library builds for 32-bit
+// targets, so no compiler 128-bit support is assumed.
+static inline void mul64(uint64_t a, uint64_t b, uint64_t& hi, uint64_t& lo)
 {
-  // Position of the first unfixed value +1.
-  int xBottom = x.leastUnfixed();
-  int yBottom = y.leastUnfixed();
-  int outputBottom = output.leastUnfixed();
+  const uint64_t aL = (uint32_t)a, aH = a >> 32;
+  const uint64_t bL = (uint32_t)b, bH = b >> 32;
+  const uint64_t t0 = aL * bL;
+  const uint64_t t1 = aH * bL + (t0 >> 32);
+  const uint64_t t2 = aL * bH + (uint32_t)t1;
+  lo = (t2 << 32) | (uint32_t)t0;
+  hi = aH * bH + (t1 >> 32) + (t2 >> 32);
+}
 
-  int invertCount = std::min(std::max(xBottom, yBottom), outputBottom);
-
-  if (invertCount == 0)
-    return NO_CHANGE;
-
-  FixedBits* toInvert;
-  FixedBits* toSet;
-
-  if (xBottom > yBottom)
+// dst = (a * b) mod 2^(64*words). dst must not alias a or b.
+static void mulLowWords(uint64_t* dst, const uint64_t* a, const uint64_t* b,
+                        unsigned words)
+{
+  for (unsigned i = 0; i < words; i++)
+    dst[i] = 0;
+  for (unsigned i = 0; i < words; i++)
   {
-    toInvert = &x;
-    toSet = &y;
+    if (a[i] == 0)
+      continue;
+    uint64_t carry = 0;
+    for (unsigned j = 0; i + j < words; j++)
+    {
+      uint64_t hi, lo;
+      mul64(a[i], b[j], hi, lo);
+      // hi:lo + carry + dst[i+j] <= (2^64-1)^2 + 2*(2^64-1) = 2^128 - 1,
+      // so folding both carry-outs into hi cannot overflow.
+      const uint64_t s = lo + carry;
+      hi += (s < lo) ? 1 : 0;
+      const uint64_t s2 = dst[i + j] + s;
+      hi += (s2 < s) ? 1 : 0;
+      dst[i + j] = s2;
+      carry = hi;
+    }
   }
-  else
+}
+
+// a = (2 - a) mod 2^(64*words).
+static void twoMinus(uint64_t* a, unsigned words)
+{
+  uint64_t borrow = 0;
+  for (unsigned i = 0; i < words; i++)
   {
-    toInvert = &y;
-    toSet = &x;
+    const uint64_t lhs = (i == 0) ? (uint64_t)2 : 0;
+    const uint64_t sub = a[i] + borrow;
+    const uint64_t nextBorrow = ((sub < a[i]) || (lhs < sub)) ? 1 : 0;
+    a[i] = lhs - sub;
+    borrow = nextBorrow;
   }
+}
 
-  invertCount--; // position of the least fixed.
+// Length of the fixed low prefix when it is odd (bit zero fixed to one),
+// otherwise zero.
+static unsigned oddPrefixLength(const FixedBits& c)
+{
+  const unsigned k = c.leastUnfixed();
+  if (k == 0 || !c.getValue(0))
+    return 0;
+  return k;
+}
 
-  const unsigned int width = invertCount + 1;
-  stp::CBV toInvertCBV = toInvert->GetBVConst(invertCount, 0);
+// The multiplicative inverse mod 2^k of c's low k bits, as a fully fixed
+// width-k FixedBits. Those bits must be fixed, with bit zero one. Newton /
+// Hensel lifting: an odd number is its own inverse mod 8, and each
+// inv' = inv * (2 - c*inv) step doubles the number of correct low bits.
+FixedBits makeLowInverse(const FixedBits& c, unsigned k)
+{
+  assert(k >= 1 && k <= c.leastUnfixed());
+  assert(c.getValue(0));
 
-  // cerr << "value to invert:" << *toInvertCBV << " ";
-
-  Result status = NOT_IMPLEMENTED;
-
-  if (CONSTANTBV::BitVector_bit_test(toInvertCBV, 0))
+  const unsigned words = (k + 63) / 64;
+  const unsigned INLINE_WORDS = 8; // up to 512 bits on the stack.
+  uint64_t stackBuf[4 * INLINE_WORDS];
+  std::vector<uint64_t> heapBuf;
+  uint64_t* buf = stackBuf;
+  if (words > INLINE_WORDS)
   {
-
-    if (debug_multiply)
-      cerr << "Value to Invert:" << *toInvertCBV << endl;
-
-    SubstitutionMap sm (bm);
-    Simplifier simplifier(bm, &sm );
-
-    stp::CBV inverse =
-        simplifier.MultiplicativeInverse(bm->CreateBVConst(toInvertCBV, width))
-            .GetBVConst();
-    stp::CBV toMultiplyBy = output.GetBVConst(invertCount, 0);
-
-    stp::CBV toSetEqualTo = CONSTANTBV::BitVector_Create(2 * (width), true);
-
-    CONSTANTBV::ErrCode ec =
-        CONSTANTBV::BitVector_Multiply(toSetEqualTo, inverse, toMultiplyBy);
-    if (ec != CONSTANTBV::ErrCode_Ok)
-    {
-      assert(false);
-      throw 2314231;
-    }
-
-    if (false && debug_multiply)
-    {
-      cerr << x << "*" << y << "=" << output << endl;
-      cerr << "Invert bit count" << invertCount << endl;
-      cerr << "To set" << *toSet;
-      cerr << "To set equal to:" << *toSetEqualTo << endl;
-    }
-
-    // Write in the value.
-    for (int i = 0; i <= invertCount; i++)
-    {
-      bool expected = CONSTANTBV::BitVector_bit_test(toSetEqualTo, i);
-
-      if (toSet->isFixed(i) && (toSet->getValue(i) ^ expected))
-      {
-        status = CONFLICT;
-      }
-      else if (!toSet->isFixed(i))
-      {
-        toSet->setFixed(i, true);
-        toSet->setValue(i, expected);
-      }
-    }
-
-    // Don't delete the "inverse" because it's reference counted by the ASTNode.
-
-    CONSTANTBV::BitVector_Destroy(toSetEqualTo);
-    CONSTANTBV::BitVector_Destroy(toMultiplyBy);
-
-    // cerr << "result" << *toSet;
+    heapBuf.resize(4 * words);
+    buf = heapBuf.data();
   }
-  else
-    CONSTANTBV::BitVector_Destroy(toInvertCBV);
+  uint64_t* cw = buf;
+  uint64_t* inv = buf + words;
+  uint64_t* t1 = buf + 2 * words;
+  uint64_t* t2 = buf + 3 * words;
 
-  // cerr << endl;
-  return status;
+  const uint64_t topMask =
+      ((k & 63) != 0) ? (((uint64_t)1 << (k & 63)) - 1) : ~(uint64_t)0;
+
+  for (unsigned w = 0; w < words; w++)
+  {
+    uint64_t f, one;
+    c.fillPackedWord(w, f, one);
+    cw[w] = one;
+  }
+  cw[words - 1] &= topMask; // fixed bits above the hole at k don't belong.
+
+  memcpy(inv, cw, words * sizeof(uint64_t));
+  for (unsigned correct = 3; correct < k; correct *= 2)
+  {
+    mulLowWords(t1, cw, inv, words); // t1 = c * inv
+    twoMinus(t1, words);             // t1 = 2 - c * inv
+    mulLowWords(t2, inv, t1, words); // t2 = inv * (2 - c * inv)
+    std::swap(inv, t2);
+  }
+  inv[words - 1] &= topMask;
+
+#ifndef NDEBUG
+  { // c * inv == 1 (mod 2^k).
+    mulLowWords(t1, cw, inv, words);
+    t1[words - 1] &= topMask;
+    assert(t1[0] == 1);
+    for (unsigned w = 1; w < words; w++)
+      assert(t1[w] == 0);
+  }
+#endif
+
+  FixedBits d(k, false);
+  for (unsigned w = 0; w < words; w++)
+    d.fixWordBits(w, (w == words - 1) ? topMask : ~(uint64_t)0, inv[w]);
+  return d;
+}
+
+// A copy of the low k bits of `a`, as a width-k FixedBits.
+static FixedBits lowSlice(const FixedBits& a, unsigned k)
+{
+  assert(k >= 1 && k <= a.getWidth());
+  FixedBits r(k, false);
+  for (unsigned w = 0; w * 64 < k; w++)
+  {
+    uint64_t f, v;
+    a.fillPackedWord(w, f, v);
+    const unsigned rem = k - w * 64;
+    const uint64_t mask = (rem >= 64) ? ~(uint64_t)0 : (((uint64_t)1 << rem) - 1);
+    if ((f & mask) != 0)
+      r.fixWordBits(w, f & mask, v);
+  }
+  return r;
+}
+
+// Fix into `dst` any bits that `slice` (a low slice of dst that has since
+// gained bits) has fixed but dst hasn't. Returns whether any bit was newly
+// fixed. Disagreement is impossible: the slice started as a copy and a
+// sound propagator never unfixes or flips.
+static bool mergeLowSlice(FixedBits& dst, const FixedBits& slice)
+{
+  assert(slice.getWidth() <= dst.getWidth());
+  bool changed = false;
+  const unsigned k = slice.getWidth();
+  for (unsigned w = 0; w * 64 < k; w++)
+  {
+    uint64_t sf, sv, df, dv;
+    slice.fillPackedWord(w, sf, sv);
+    dst.fillPackedWord(w, df, dv);
+    assert((sf & df & (sv ^ dv)) == 0);
+    const uint64_t add = sf & ~df;
+    if (add != 0)
+    {
+      dst.fixWordBits(w, add, sv);
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 // Use trailing fixed to fix.
@@ -794,15 +862,13 @@ void printColumns(signed* sumL, signed* sumH, int bitWidth)
   log << endl;
 }
 
-Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
-                          stp::STPMgr* bm, MultiplicationStats* ms)
+// One run of the column-based reasoning over x * y == output, to its own
+// fixed point. The public bvMultiplyBothWays alternates this with
+// inverseRelationPass until neither derives anything further.
+Result multiplyCore(vector<FixedBits*>& children, FixedBits& output,
+                    MultiplicationStats* ms)
 {
-  // BVTypeCheck allows BVMULT nodes with more than two children, and the
-  // hashing node factory builds them (the simplifying factory binarises).
-  // The reasoning below is about exactly two operands; running it on the
-  // first two children of a wider multiply fixes bits unsoundly.
-  if (children.size() != 2)
-    return NO_CHANGE;
+  assert(children.size() == 2);
 
   FixedBits& x = *children[0];
   FixedBits& y = *children[1];
@@ -1000,7 +1066,6 @@ Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
     // These are subsumed by the consistency over the columns..
     useTrailingFixedToFix(x_c, y_c, o_c);
     useLeadingZeroesToFix(x_c, y_c, o_c);
-    useInversesToSolve(x_c, y_c, o_c, bm);
 
     // This one should have been called to fixed point!
     useTrailingZeroesToFix(x_c, y_c, o_c);
@@ -1014,6 +1079,78 @@ Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
     }
   }
 #endif
+
+  return NOT_IMPLEMENTED;
+}
+
+// For c * other == output where the low k bits of c are fixed and odd, c is
+// invertible mod 2^k, so the same constraint can also be read as
+//    inv(c) * (output mod 2^k)  ==  (other mod 2^k).
+// The column/interval reasoning isn't closed under multiplying through by
+// the inverse, so running the core propagator over this second view can fix
+// bits the original view can't express. One pass tries both orientations;
+// `progress` is set when a bit of x, y or the output was newly fixed.
+Result inverseRelationPass(FixedBits& x, FixedBits& y, FixedBits& output,
+                           bool& progress)
+{
+  const int sides = (&x == &y) ? 1 : 2; // for a square both views coincide.
+  for (int side = 0; side < sides; side++)
+  {
+    FixedBits& c = (side == 0) ? x : y;
+    FixedBits& other = (side == 0) ? y : x;
+
+    const unsigned k = oddPrefixLength(c);
+    if (k < 2) // the mod-2 relation is column zero, the core has it.
+      continue;
+
+    FixedBits outS = lowSlice(output, k);
+    FixedBits othS = lowSlice(other, k);
+
+    // With no fixed bit on either side of the derived relation there is
+    // nothing to feed through the bijection.
+    if (outS.isTotallyUnfixed() && othS.isTotallyUnfixed())
+      continue;
+
+    FixedBits d = makeLowInverse(c, k);
+    vector<FixedBits*> ch = {&d, &outS};
+    if (CONFLICT == multiplyCore(ch, othS, NULL))
+      return CONFLICT;
+
+    progress |= mergeLowSlice(other, othS);
+    progress |= mergeLowSlice(output, outS);
+  }
+  return NO_CHANGE;
+}
+
+Result bvMultiplyBothWays(vector<FixedBits*>& children, FixedBits& output,
+                          stp::STPMgr* /*bm*/, MultiplicationStats* ms)
+{
+  // BVTypeCheck allows BVMULT nodes with more than two children, and the
+  // hashing node factory builds them (the simplifying factory binarises).
+  // The reasoning below is about exactly two operands; running it on the
+  // first two children of a wider multiply fixes bits unsoundly.
+  if (children.size() != 2)
+    return NO_CHANGE;
+
+  assert(children[0]->getWidth() == children[1]->getWidth());
+  assert(children[0]->getWidth() == output.getWidth());
+
+  // Alternate the two views of the constraint until a joint fixed point.
+  // Each productive inverse pass fixes at least one previously unfixed
+  // bit, so this terminates; and the loop always ends with a core pass
+  // that found nothing further, keeping the `ms` snapshot current.
+  while (true)
+  {
+    if (CONFLICT == multiplyCore(children, output, ms))
+      return CONFLICT;
+
+    bool progress = false;
+    if (CONFLICT ==
+        inverseRelationPass(*children[0], *children[1], output, progress))
+      return CONFLICT;
+    if (!progress)
+      break;
+  }
 
   return NOT_IMPLEMENTED;
 }
