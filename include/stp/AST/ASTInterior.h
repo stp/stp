@@ -50,8 +50,10 @@ class ASTInterior : public ASTInternal
   HashingNodeFactory::CreateNode(const Kind kind,
                                  const stp::ASTVec& back_children);
 
-  // The vector of children
-  ASTVec _children;
+  // The children are stored in a flexible array immediately after this
+  // object -- node and children are one allocation, made by create(). This
+  // is just the count; childrenPtr() locates the array.
+  uint32_t _num_children;
 
   // Lazily computed by ASTInteriorHasher; 0 means not yet computed.
   // Stays valid because the kind and children never change once set up,
@@ -59,13 +61,69 @@ class ASTInterior : public ASTInternal
   // unique table.
   mutable size_t _cached_hash = 0;
 
+  uint32_t _value_width;
+  uint32_t _index_width;
+
+  // The children live immediately after the object in the same allocation.
+  ASTNode* childrenPtr() { return reinterpret_cast<ASTNode*>(this + 1); }
+  const ASTNode* childrenPtr() const
+  {
+    return reinterpret_cast<const ASTNode*>(this + 1);
+  }
+
+  // Nodes are variable-sized (they carry their children inline), so they are
+  // only ever built by create(); ordinary new/delete would size them wrong.
+  static void* operator new(std::size_t) = delete;
+
+  // Sets the header fields only; create() placement-constructs the children
+  // into the tail afterwards (and fixes up a NOT node's number).
+  ASTInterior(STPMgr* mgr, Kind kind, uint32_t num_children)
+      : ASTInternal(mgr, kind), _num_children(num_children), _value_width(0),
+        _index_width(0)
+  {
+    is_simplified = false;
+  }
+
+public:
+  // A non-owning search key for the unique table: lets us probe with a
+  // (kind, borrowed children) pair without building a whole node. Enabled by
+  // the transparent hasher/equality below.
+  struct Probe
+  {
+    Kind kind;
+    ASTChildren children;
+  };
+
+  // Build a node whose children are allocated inline with it, in one block.
+  static ASTInterior* create(STPMgr* mgr, Kind kind, ASTChildren children);
+
+  // Frees the single (over-sized) allocation. Paired with the raw
+  // ::operator new done inside create().
+  static void operator delete(void* p) { ::operator delete(p); }
+
+  ASTInterior(const ASTInterior&) = delete;
+  ASTInterior& operator=(const ASTInterior&) = delete;
+
+  virtual ~ASTInterior();
+
+  virtual ASTChildren GetChildren() const
+  {
+    return ASTChildren(childrenPtr(), _num_children);
+  }
+
+  bool isSimplified() const { return is_simplified; }
+
+  void hasBeenSimplified() const { is_simplified = true; }
+
   /******************************************************************
    * Hasher for ASTInterior pointer nodes                           *
    ******************************************************************/
   class ASTInteriorHasher
   {
   public:
+    using is_transparent = void; // enable heterogeneous (Probe) lookup
     size_t operator()(const ASTInterior* int_node_ptr) const;
+    size_t operator()(const Probe& probe) const;
   };
 
   /******************************************************************
@@ -74,18 +132,30 @@ class ASTInterior : public ASTInternal
   class ASTInteriorEqual
   {
   public:
-    bool operator()(const ASTInterior* int_node_ptr1,
-                    const ASTInterior* int_node_ptr2) const;
+    using is_transparent = void;
+    bool operator()(const ASTInterior* n1, const ASTInterior* n2) const
+    {
+      return *n1 == *n2;
+    }
+    bool operator()(const Probe& probe, const ASTInterior* n) const
+    {
+      return probe.kind == n->GetKind() && probe.children == n->GetChildren();
+    }
+    bool operator()(const ASTInterior* n, const Probe& probe) const
+    {
+      return operator()(probe, n);
+    }
   };
 
   // Used in Equality class for hash tables
   friend bool operator==(const ASTInterior& int_node1,
                          const ASTInterior& int_node2)
   {
-    return ((int_node1._kind == int_node2._kind) &&
-            (int_node1._children == int_node2._children));
+    return int_node1.GetKind() == int_node2.GetKind() &&
+           int_node1.GetChildren() == int_node2.GetChildren();
   }
 
+private:
   // Call this when deleting a node that has been stored in the
   // the unique table
   virtual void CleanUp();
@@ -95,66 +165,16 @@ class ASTInterior : public ASTInternal
   // compilers will accept)
   virtual void nodeprint(ostream& os, bool c_friendly = false);
 
-  uint32_t _value_width;
-  uint32_t _index_width;
-
   virtual void setIndexWidth(uint32_t i) { _index_width = i; }
   virtual uint32_t getIndexWidth() const { return _index_width; }
 
   virtual void setValueWidth(uint32_t v) { _value_width = v; }
   virtual uint32_t getValueWidth() const { return _value_width; }
-
-public:
-  ASTInterior(STPMgr* mgr, Kind kind, const ASTVec& children)
-      : ASTInternal(mgr, kind), _children(children), _value_width(0),
-        _index_width(0)
-  {
-    is_simplified = false;
-    if (kind == NOT)
-      node_uid = children[0].GetNodeNum() + 1;
-  }
-
-  // As above, but takes ownership of an already-owned children vector,
-  // avoiding a copy when the caller has a temporary to give up.
-  ASTInterior(STPMgr* mgr, Kind kind, ASTVec&& children)
-      : ASTInternal(mgr, kind), _children(std::move(children)), _value_width(0),
-        _index_width(0)
-  {
-    is_simplified = false;
-    if (kind == NOT)
-      node_uid = _children[0].GetNodeNum() + 1;
-  }
-
-  // This copies the contents of the child nodes
-  // array, along with everything else. Assigning the smart pointer,
-  // ASTNode, does NOT invoke this.
-  ASTInterior(const ASTInterior& int_node)
-      : ASTInternal(int_node), _children(int_node._children),
-        _value_width(int_node._value_width), _index_width(int_node._index_width)
-  {
-    is_simplified = false;
-  }
-
-  // Steals the children of a probe node that was built on the stack to
-  // search the unique table, keeping its node number and cached hash.
-  ASTInterior(ASTInterior&& int_node)
-      : ASTInternal(int_node), _children(std::move(int_node._children)),
-        _cached_hash(int_node._cached_hash), _value_width(int_node._value_width),
-        _index_width(int_node._index_width)
-  {
-    is_simplified = false;
-  }
-
-  ASTInterior& operator=(const ASTInterior& other) = delete;
-
-  virtual ~ASTInterior();
-
-  virtual ASTChildren GetChildren() const { return _children; }
-
-  bool isSimplified() const { return is_simplified; }
-
-  void hasBeenSimplified() const { is_simplified = true; }
 };
+
+static_assert(sizeof(ASTInterior) % alignof(ASTNode) == 0,
+              "children are tail-allocated after ASTInterior and must stay "
+              "aligned");
 
 } // end of namespace stp
 #endif
