@@ -352,6 +352,26 @@ if(TUNE_NATIVE)
   add_cxx_flag_if_supported("-mtune=native")
 endif()
 
+# Let the compiler emit the POPCNT instruction.  Without this, popCount64() in
+# include/stp/Util/BitOps.h counts in software, because gcc's default x86-64
+# target has no POPCNT and __builtin_popcountll would otherwise become an
+# out-of-line call into libgcc.  Note TUNE_NATIVE does not imply this: -mtune
+# only changes scheduling, not the instructions the compiler may emit.
+#
+# On by default -- POPCNT is on every x86-64 CPU since Nehalem (2008) and AMD
+# Barcelona (2007).  Turn it off when building for hardware older than that,
+# such as a distribution package targeting the baseline x86-64 ISA; the
+# software fallback in BitOps.h is then used and remains correct everywhere.
+option(USE_POPCNT "Use the POPCNT instruction (requires Nehalem/2008 or later)" ON)
+if(USE_POPCNT)
+  add_cxx_flag_if_supported("-mpopcnt")
+  # The vendored ABC sources are C.  There is no add_c_flag_if_supported, so
+  # reuse the check above and set CMAKE_C_FLAGS directly, as WERROR does.
+  if(HAVE_FLAG_-mpopcnt)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mpopcnt")
+  endif()
+endif()
+
 option(COVERAGE "Build with coverage check" OFF)
 if (COVERAGE)
     add_cxx_flag("--coverage")
