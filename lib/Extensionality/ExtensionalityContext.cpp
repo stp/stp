@@ -85,6 +85,22 @@ ASTNode isPackedNaN(NodeFactory* hf, const ASTNode& x, unsigned eb,
           NOT, hf->CreateNode(EQ, significand, hf->CreateZeroConst(sb - 1))));
 }
 
+// The packed bits of the one canonical quiet NaN of format (eb, sb):
+// positive sign, all-ones exponent, only the quiet bit of the stored
+// significand set -- exactly the pattern CreateFPConst interns every NaN
+// literal to and pack produces for a symbolic NaN, so pinning a witness
+// index to it keeps bit-level index congruence equal to value congruence.
+ASTNode canonicalQuietNaN(STPMgr* bm, unsigned eb, unsigned sb)
+{
+  const unsigned w = eb + sb;
+  const unsigned stored_sig = sb - 1; // the hidden bit is not stored
+  CBV bits = CONSTANTBV::BitVector_Create(w, true);
+  for (unsigned i = 0; i < eb; i++)
+    CONSTANTBV::BitVector_Bit_On(bits, stored_sig + i);
+  CONSTANTBV::BitVector_Bit_On(bits, stored_sig - 1);
+  return bm->CreateBVConst(bits, w);
+}
+
 // Postorder DAG collection of every node beneath (and including) n.
 void collectDag(const ASTNode& n, ASTNodeSet& visited)
 {
@@ -286,11 +302,27 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
   // equated, mirroring the parser's rejection of = between a float and
   // a bitvector.
   if (a.GetExpWidth() != b.GetExpWidth() ||
-      a.GetSigWidth() != b.GetSigWidth())
+      a.GetSigWidth() != b.GetSigWidth() ||
+      bm->arrayHasRmElement(a) != bm->arrayHasRmElement(b))
   {
     FatalError("array-equality: equality between arrays requires "
                "identical element sorts",
                a);
+  }
+
+  // The same for the index side, where the sorts richer than a width
+  // live in the manager's registries.
+  {
+    unsigned aie = 0, ais = 0, bie = 0, bis = 0;
+    const bool aFpIdx = bm->arrayHasFpIndex(a, aie, ais);
+    const bool bFpIdx = bm->arrayHasFpIndex(b, bie, bis);
+    if (aFpIdx != bFpIdx || (aFpIdx && (aie != bie || ais != bis)) ||
+        bm->arrayHasRmIndex(a) != bm->arrayHasRmIndex(b))
+    {
+      FatalError("array-equality: equality between arrays requires "
+                 "identical index sorts",
+                 a);
+    }
   }
 
   if (a == b)
@@ -354,7 +386,34 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
                        hf->CreateNode(AND, isPackedNaN(hf, r.nameL, eb, sb),
                                       isPackedNaN(hf, r.nameR, eb, sb))));
   }
+  else if (bm->arrayHasRmElement(left))
+  {
+    // RoundingMode cells denote only through the five one-hot patterns,
+    // so a witness difference must be a difference of modes: both cells
+    // are pinned valid. (The reads of the formula are pinned by
+    // FpTotalise; these virtual reads enter the formula after it ran.)
+    differ = hf->CreateNode(
+        AND, differ,
+        hf->CreateNode(AND, bm->roundingModeValidConstraint(r.nameL),
+                       bm->roundingModeValidConstraint(r.nameR)));
+  }
   r.witnessClause = hf->CreateNode(OR, r.proxy, differ);
+
+  // Where the index sort quotients its bit patterns, the witness index
+  // may only range over the denoting patterns; see indexSortClause.
+  {
+    unsigned ieb = 0, isb = 0;
+    if (bm->arrayHasFpIndex(left, ieb, isb))
+    {
+      r.indexSortClause = hf->CreateNode(
+          OR, hf->CreateNode(NOT, isPackedNaN(hf, r.lambda, ieb, isb)),
+          hf->CreateNode(EQ, r.lambda, canonicalQuietNaN(bm, ieb, isb)));
+    }
+    else if (bm->arrayHasRmIndex(left))
+    {
+      r.indexSortClause = bm->roundingModeValidConstraint(r.lambda);
+    }
+  }
 
   protectedSymbols.insert(r.proxy);
   protectedSymbols.insert(r.lambda);
@@ -404,6 +463,8 @@ ASTNode ExtensionalityContext::conjoinRecordConstraints(const ASTNode& root)
     conjuncts.push_back(records[i].anchorL);
     conjuncts.push_back(records[i].anchorR);
     conjuncts.push_back(records[i].witnessClause);
+    if (!records[i].indexSortClause.IsNull())
+      conjuncts.push_back(records[i].indexSortClause);
   }
   return bm->defaultNodeFactory->CreateNode(AND, conjuncts);
 }
@@ -615,13 +676,24 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
       {
         d = bm->CreateFreshVariable(t.GetIndexWidth(), t.GetValueWidth(),
                                     "ext_ite");
-        // A replacement for a float-element array is itself a
-        // float-element array: the guarded equalities minted below
-        // need the element format for their witness clauses.
+        // The replacement carries every sort the branches carried: the
+        // element format on the node itself, and the index/element
+        // sorts the node cannot say in the manager's registries -- the
+        // guarded equalities minted below build their witness bundles
+        // from them.
         if (t.GetExpWidth() != 0)
         {
           d.SetExpWidth(t.GetExpWidth());
           d.SetSigWidth(t.GetSigWidth());
+        }
+        {
+          unsigned ieb = 0, isb = 0;
+          if (bm->arrayHasFpIndex(t, ieb, isb))
+            bm->fp_index_arrays[d] = std::make_pair(ieb, isb);
+          if (bm->arrayHasRmIndex(t))
+            bm->rm_index_arrays.insert(d);
+          if (bm->arrayHasRmElement(t))
+            bm->rm_element_arrays.insert(d);
         }
         iteReplacements[t] = d;
         possibleConeSymbols.insert(d);
@@ -650,6 +722,8 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
       newConstraints.push_back(records[i].anchorL);
       newConstraints.push_back(records[i].anchorR);
       newConstraints.push_back(records[i].witnessClause);
+      if (!records[i].indexSortClause.IsNull())
+        newConstraints.push_back(records[i].indexSortClause);
     }
 
     ASTNodeMap cache;

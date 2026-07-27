@@ -1288,17 +1288,74 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
     const unsigned iw = array.GetIndexWidth();
     const unsigned vw = array.GetValueWidth();
 
-    // A float-element array prints its true element sort and its cells
-    // as (fp ...) literals -- the format lives on the array symbol --
-    // so the define-fun replays against the original declaration.
+    // The define-fun prints the array's true sorts -- the element float
+    // format lives on the symbol, a float index format and RoundingMode
+    // on either side in the manager's registries -- with (fp ...)
+    // literals for float cells and indexes and mode names for
+    // RoundingMode ones, so it replays against the original
+    // declaration.
     const unsigned eb = array.GetExpWidth();
     const unsigned sb = array.GetSigWidth();
+    unsigned ieb = 0, isb = 0;
+    const bool fpIndex = bm->arrayHasFpIndex(array, ieb, isb);
+    const bool rmIndex = bm->arrayHasRmIndex(array);
+    const bool rmElement = bm->arrayHasRmElement(array);
+
     std::ostringstream sortText;
-    if (eb != 0)
-      sortText << "(Array (_ BitVec " << iw << ") (_ FloatingPoint " << eb
-               << " " << sb << "))";
+    sortText << "(Array ";
+    if (fpIndex)
+      sortText << "(_ FloatingPoint " << ieb << " " << isb << ")";
+    else if (rmIndex)
+      sortText << "RoundingMode";
     else
-      sortText << "(Array (_ BitVec " << iw << ") (_ BitVec " << vw << "))";
+      sortText << "(_ BitVec " << iw << ")";
+    sortText << " ";
+    if (eb != 0)
+      sortText << "(_ FloatingPoint " << eb << " " << sb << ")";
+    else if (rmElement)
+      sortText << "RoundingMode";
+    else
+      sortText << "(_ BitVec " << vw << ")";
+    sortText << ")";
+
+    const auto printCell = [&](const ASTNode& cell) {
+      if (eb != 0)
+      {
+        os << " ";
+        printer::outputFloatingPointSMTLIB2(cell, os, eb, sb);
+        return;
+      }
+      if (rmElement)
+      {
+        const char* name = printer::roundingModeName(cell.GetUnsignedConst());
+        if (name == NULL)
+          FatalError("array-equality: a RoundingMode cell of the model "
+                     "is not one of the five modes",
+                     cell);
+        os << " " << name;
+        return;
+      }
+      printer::outputBitVecSMTLIB2(cell, os);
+    };
+    const auto printIndex = [&](const ASTNode& index) {
+      if (fpIndex)
+      {
+        os << " ";
+        printer::outputFloatingPointSMTLIB2(index, os, ieb, isb);
+        return;
+      }
+      if (rmIndex)
+      {
+        const char* name = printer::roundingModeName(index.GetUnsignedConst());
+        if (name == NULL)
+          FatalError("array-equality: a RoundingMode index of the model "
+                     "is not one of the five modes",
+                     index);
+        os << " " << name;
+        return;
+      }
+      printer::outputBitVecSMTLIB2(index, os);
+    };
 
     os << "( define-fun |";
     array.nodeprint(os);
@@ -1306,28 +1363,17 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
     for (size_t i = 0; i < entries.size(); i++)
       os << " (store";
     os << " ((as const " << sortText.str() << ")";
-    if (eb != 0)
-    {
-      os << " ";
-      printer::outputFloatingPointSMTLIB2(bm->CreateZeroConst(vw), os, eb, sb);
-    }
+    // The unobserved cells' value: zero is +zero for a float element
+    // but denotes no mode, so RoundingMode elements default to RNE.
+    if (rmElement)
+      os << " RNE";
     else
-    {
-      printer::outputBitVecSMTLIB2(bm->CreateZeroConst(vw), os);
-    }
+      printCell(bm->CreateZeroConst(vw));
     os << " )";
     for (size_t i = 0; i < entries.size(); i++)
     {
-      printer::outputBitVecSMTLIB2(entries[i].first, os);
-      if (eb != 0)
-      {
-        os << " ";
-        printer::outputFloatingPointSMTLIB2(entries[i].second, os, eb, sb);
-      }
-      else
-      {
-        printer::outputBitVecSMTLIB2(entries[i].second, os);
-      }
+      printIndex(entries[i].first);
+      printCell(entries[i].second);
       os << " )";
     }
     os << " )" << std::endl;

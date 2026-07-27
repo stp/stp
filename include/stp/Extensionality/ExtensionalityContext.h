@@ -98,6 +98,12 @@ public:
     //   nameR = read(constructionRight, lambda)
     //   proxy OR nameL != nameR
     ASTNode anchorL, anchorR, witnessClause;
+    // For arrays whose index sort quotients its bit patterns (a float
+    // index: every NaN pattern is one value; a RoundingMode index: only
+    // the five one-hot patterns denote), lambda must range over the
+    // denoting patterns -- a "witness" at any other pattern would sit at
+    // an index no select can reach. Null for plain bitvector indexes.
+    ASTNode indexSortClause;
   };
 
   explicit ExtensionalityContext(STPMgr* bm);
