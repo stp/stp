@@ -50,9 +50,10 @@ void VariablesInExpression::insert(const ASTNode& n, Symbols* s)
 // no new symbols are introduced.
 Symbols* VariablesInExpression::getSymbol(const ASTNode& n)
 {
-  if (symbol_graph.find(n.GetNodeNum()) != symbol_graph.end())
   {
-    return symbol_graph[n.GetNodeNum()];
+    const ASTNodeToNodes::const_iterator it = symbol_graph.find(n.GetNodeNum());
+    if (it != symbol_graph.end())
+      return it->second;
   }
 
   Symbols* node;

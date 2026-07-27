@@ -39,15 +39,21 @@ namespace stp
     if (n.isAtom())
       return n;
 
-    if (cache.find(n) != cache.end())
-      return (*(cache.find(n))).second;
+    {
+      const ASTNodeMap::const_iterator it = cache.find(n);
+      if (it != cache.end())
+        return it->second;
+    }
 
     ASTNode result = n;
 
-    if (fromTo.find(n) != fromTo.end())
     {
-      result = (*fromTo.find(n)).second;
-      fromTo.erase(n); // this is how it differs from the everyday replace.
+      const ASTNodeMap::iterator it = fromTo.find(n);
+      if (it != fromTo.end())
+      {
+        result = it->second;
+        fromTo.erase(it); // this is how it differs from the everyday replace.
+      }
     }
 
     ASTVec new_children;
@@ -84,8 +90,11 @@ namespace stp
     if (n.Degree() == 0 )
       return n;
 
-    if (cache.find(n) != cache.end())
-      return cache[n];
+    {
+      const ASTNodeMap::const_iterator it = cache.find(n);
+      if (it != cache.end())
+        return it->second;
+    }
 
     ASTVec children;
     children.reserve(n.Degree());
