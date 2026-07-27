@@ -233,6 +233,44 @@ TEST(fp_arrays, roundingmode_element_model_value)
   vc_Destroy(vc);
 }
 
+// Regression test: evaluating a floating-point operation whose rounding
+// mode is an array read that the solve never constrained.  The solve is
+// fine; reading the term's value back used to abort.  Model evaluation
+// re-totalises the term before blasting it, and the totalising pass
+// pinned the rounding-mode-element read to the five legal encodings by
+// conjoining a constraint onto its input -- sound for an asserted
+// formula, but here the input is a *term*, and the wrap handed the
+// blaster an AND it cannot blast:
+//   Fatal Error: FloatBlaster::BlastNode: unhandled kind: (AND ...)
+// The pinning must apply to formulas only.  The value itself is
+// unconstrained (the model says nothing about the read, and an
+// out-of-model read resolves arbitrarily), so only its shape is checked.
+//
+// Found by fuzzing with murxla driving the C API; delta-minimized.
+TEST(fp_arrays, roundingmode_element_read_as_mode_of_evaluated_term)
+{
+  VC vc = vc_createValidityChecker();
+
+  Type rm = vc_fpRoundingModeType(vc);
+  Expr a = vc_varExpr(vc, "a", vc_arrayType(vc, rm, rm));
+  Expr idx = vc_fpRoundingModeVar(vc, "x0");
+  Expr rd = vc_readExpr(vc, a, idx);
+  Expr b = vc_varExpr(vc, "b", vc_bvType(vc, 8));
+  Expr f = vc_fpNegExpr(vc, vc_fpToFPFromUnsignedBV(vc, 8, 24, rd, b));
+
+  // No assertions: FALSE is invalid, and the model leaves both the array
+  // and the term's operands entirely unconstrained.
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+
+  // The read-back must produce a constant of the term's width -- some
+  // float the term can take under a legal rounding mode -- not abort.
+  Expr cv = vc_getCounterExample(vc, f);
+  EXPECT_EQ(BVCONST, getExprKind(cv));
+  EXPECT_EQ(32, vc_getBVLength(vc, cv));
+
+  vc_Destroy(vc);
+}
+
 TEST(fp_arrays, roundingmode_index)
 {
   VC vc = vc_createValidityChecker();

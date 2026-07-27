@@ -312,7 +312,16 @@ namespace stp
           newN = nf->getFalse();
       }
       else
-        newN = nf->CreateConstant(b->GetBVConst(), n.GetValueWidth());
+      {
+        // The replaced node's floating-point format (if it has one) must be
+        // passed along: a constant is a leaf, so unlike the interior node it
+        // stands in for it cannot derive a format from children. A bare
+        // bitvector constant put where a float was makes the parent
+        // operation's rebuild abort -- fp.neg of a constant folds by making
+        // a floating-point constant, of format (0, 0) then.
+        newN = nf->CreateConstant(b->GetBVConst(), n.GetValueWidth(),
+                                  n.GetExpWidth(), n.GetSigWidth());
+      }
 
       replaceWithConstant++;
     }
