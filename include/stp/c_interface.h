@@ -689,7 +689,11 @@ DLL_PUBLIC int vc_getSigWidth(Expr e);
 //! as sign : exponent : trailing-significand (the hidden significand bit is not
 //! stored). This is the exact, format-generic primitive for floating-point
 //! constants; every value -- normals, subnormals, the zeros, the infinities and
-//! NaN -- has such a bit pattern.
+//! NaN -- has such a bit pattern. NaN payloads are not preserved: the sort has
+//! a single NaN, so every NaN pattern (any sign, any payload) interns as the
+//! one canonical quiet NaN -- the same bits every floating-point operation and
+//! vc_fpToIEEEBV produce. If exact NaN bits matter, keep them in a bitvector
+//! and reinterpret at the boundary.
 //!
 DLL_PUBLIC Expr vc_fpConstFromBits(VC vc, int exp_bits, int sig_bits, Expr bv);
 
