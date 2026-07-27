@@ -58,11 +58,11 @@ ASTNode::ASTNode(ASTInternal* in) : _int_node_ptr(in)
 //#define ASTNODE_COUNT_OPS
 
 #ifdef ASTNODE_COUNT_OPS
-THREAD_LOCAL int ASTNode::copy = 0;
-THREAD_LOCAL int ASTNode::move = 0;
-THREAD_LOCAL int ASTNode::assign = 0;
-THREAD_LOCAL int ASTNode::destroy = 0;
-THREAD_LOCAL int ASTNode::assign_move = 0;
+THREAD_LOCAL_IE int ASTNode::copy = 0;
+THREAD_LOCAL_IE int ASTNode::move = 0;
+THREAD_LOCAL_IE int ASTNode::assign = 0;
+THREAD_LOCAL_IE int ASTNode::destroy = 0;
+THREAD_LOCAL_IE int ASTNode::assign_move = 0;
 #endif
 
 //Maintain _ref_count
