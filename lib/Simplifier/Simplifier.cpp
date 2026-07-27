@@ -708,6 +708,16 @@ ASTNode Simplifier::PullUpITE(const ASTNode& in)
     result = nf->CreateTerm(ITE, in.GetValueWidth(), in[0][0], l1, l2);
   }
 
+  // A rebuilt node cannot lose the input's floating-point format. The
+  // interesting case is not a float operation (those derive their format
+  // from their children) but a plain bitvector node carrying a format
+  // *stamp*: the canonicalised index of a float-indexed array is a
+  // bitvector circuit stamped with the index's format (see FpTotalise),
+  // and pulling an if-then-else out of, say, its concatenation must
+  // keep the stamp or the node changes type. No-op for everything else.
+  result = FloatBlaster::withFormat(_bm, result, in.GetExpWidth(),
+                                    in.GetSigWidth());
+
   assert(result.GetType() == in.GetType());
   assert(result.GetValueWidth() == in.GetValueWidth());
   assert(result.GetIndexWidth() == in.GetIndexWidth());
