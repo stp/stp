@@ -555,4 +555,175 @@ TEST(SimplifyingNodeFactory_Exhaustive, ite_width1_boolean_to_term)
   }
 }
 
+/* 1-bit comparisons have a single satisfying assignment */
+TEST(SimplifyingNodeFactory_Exhaustive, gt_sgt_width1)
+{
+  Context c;
+  ASTNode a = c.bv(1);
+  ASTNode b = c.bv(1);
+  c.checkNode(BVGT, {a, b});
+  c.checkNode(BVSGT, {a, b});
+}
+
+/* ~a > ~b --> b > a */
+TEST(SimplifyingNodeFactory_Exhaustive, gt_of_bvnots)
+{
+  Context c;
+  ASTNode a = c.bv(3);
+  ASTNode b = c.bv(3);
+  ASTNode na = c.hf->CreateTerm(BVNOT, 3, a);
+  ASTNode nb = c.hf->CreateTerm(BVNOT, 3, b);
+  c.checkNode(BVGT, {na, nb});
+  EXPECT_EQ(c.nf->CreateNode(BVGT, na, nb), c.nf->CreateNode(BVGT, b, a));
+}
+
+/* x > (x + c) --> x > ~c, and (x + c) > x --> NOT(x > ~c) */
+TEST(SimplifyingNodeFactory_Exhaustive, gt_vs_plus_constant)
+{
+  Context c;
+  ASTNode x = c.bv(3);
+  for (unsigned k = 1; k <= 7; k++)
+  {
+    for (int constFirst = 0; constFirst < 2; constFirst++)
+    {
+      ASTNode plus = constFirst
+                         ? c.hf->CreateTerm(BVPLUS, 3, c.konst(k, 3), x)
+                         : c.hf->CreateTerm(BVPLUS, 3, x, c.konst(k, 3));
+      c.checkNode(BVGT, {x, plus});
+      c.checkNode(BVGT, {plus, x});
+    }
+  }
+}
+
+/* 1-bit (x = 1) --> NOT(x = 0), for both operand orders */
+TEST(SimplifyingNodeFactory_Exhaustive, eq_width1_normalised)
+{
+  Context c;
+  ASTNode x = c.bv(1);
+  ASTNode notZero =
+      c.nf->CreateNode(NOT, c.nf->CreateNode(EQ, x, c.konst(0, 1)));
+  c.checkNode(EQ, {x, c.konst(1, 1)});
+  EXPECT_EQ(c.nf->CreateNode(EQ, x, c.konst(1, 1)), notZero);
+  EXPECT_EQ(c.nf->CreateNode(EQ, c.konst(1, 1), x), notZero);
+}
+
+/* (c << s) with a negative constant c --> -((-c) << s); the most negative
+   constant is left alone */
+TEST(SimplifyingNodeFactory_Exhaustive, leftshift_negative_constant_base)
+{
+  Context c;
+  ASTNode s = c.bv(4);
+  for (unsigned k : {9u, 12u, 15u}) // negative 4-bit constants, not 8
+    c.checkTerm(BVLEFTSHIFT, 4, {c.konst(k, 4), s});
+  c.checkTerm(BVLEFTSHIFT, 4, {c.konst(8, 4), s}, false);
+}
+
+/* extracts entirely inside a sign-extension rebase onto the sign bit;
+   extracts entirely inside the original term drop the extension;
+   straddling extracts are left alone */
+TEST(SimplifyingNodeFactory_Exhaustive, extract_over_sx)
+{
+  Context c;
+  ASTNode x = c.bv(3);
+  ASTNode sx = c.hf->CreateTerm(BVSX, 6, x, c.mgr.CreateBVConst(32, 6));
+
+  // Inside the extension.
+  c.checkTerm(BVEXTRACT, 3,
+              {sx, c.mgr.CreateBVConst(32, 5), c.mgr.CreateBVConst(32, 3)});
+  // Inside the original.
+  c.checkTerm(BVEXTRACT, 2,
+              {sx, c.mgr.CreateBVConst(32, 1), c.mgr.CreateBVConst(32, 0)});
+  EXPECT_EQ(c.nf->CreateTerm(BVEXTRACT, 2, sx, c.mgr.CreateBVConst(32, 1),
+                             c.mgr.CreateBVConst(32, 0)),
+            c.nf->CreateTerm(BVEXTRACT, 2, x, c.mgr.CreateBVConst(32, 1),
+                             c.mgr.CreateBVConst(32, 0)));
+  // Straddling.
+  c.checkTerm(BVEXTRACT, 3,
+              {sx, c.mgr.CreateBVConst(32, 3), c.mgr.CreateBVConst(32, 1)},
+              false);
+}
+
+/* repeating a 1-bit term, directly or against its own sign-extension,
+   is a sign-extension */
+TEST(SimplifyingNodeFactory_Exhaustive, concat_repeated_bit_to_sx)
+{
+  Context c;
+  ASTNode t = c.bv(1);
+  ASTNode sx = c.hf->CreateTerm(BVSX, 3, t, c.mgr.CreateBVConst(32, 3));
+
+  c.checkTerm(BVCONCAT, 2, {t, t});
+  EXPECT_EQ(c.nf->CreateTerm(BVCONCAT, 2, t, t),
+            c.nf->CreateTerm(BVSX, 2, t, c.mgr.CreateBVConst(32, 2)));
+
+  c.checkTerm(BVCONCAT, 4, {t, sx});
+  c.checkTerm(BVCONCAT, 4, {sx, t});
+  EXPECT_EQ(c.nf->CreateTerm(BVCONCAT, 4, t, sx),
+            c.nf->CreateTerm(BVSX, 4, t, c.mgr.CreateBVConst(32, 4)));
+  EXPECT_EQ(c.nf->CreateTerm(BVCONCAT, 4, sx, t),
+            c.nf->CreateTerm(BVSX, 4, t, c.mgr.CreateBVConst(32, 4)));
+}
+
+/* x / x --> ite(x = 0, all-ones, 1) */
+TEST(SimplifyingNodeFactory_Exhaustive, udiv_self)
+{
+  Context c;
+  for (unsigned w : {1u, 3u})
+  {
+    ASTNode x = c.bv(w);
+    c.checkTerm(BVDIV, w, {x, x});
+  }
+}
+
+/* sdiv constant rules: by zero, of zero, and negative-constant
+   normalisation on either side (the most negative constant excluded) */
+TEST(SimplifyingNodeFactory_Exhaustive, sdiv_constant_rules)
+{
+  Context c;
+  ASTNode x = c.bv(3);
+  c.checkTerm(SBVDIV, 3, {x, c.konst(0, 3)});
+  c.checkTerm(SBVDIV, 3, {c.konst(0, 3), x});
+  c.checkTerm(SBVDIV, 3, {c.konst(6, 3), x}); // -2 / x
+  c.checkTerm(SBVDIV, 3, {x, c.konst(6, 3)}); // x / -2
+  c.checkTerm(SBVDIV, 3, {c.konst(4, 3), x}, false); // most negative
+  c.checkTerm(SBVDIV, 3, {x, c.konst(4, 3)}, false);
+}
+
+/* srem negative-constant normalisation on either side */
+TEST(SimplifyingNodeFactory_Exhaustive, srem_negative_constants)
+{
+  Context c;
+  ASTNode x = c.bv(3);
+  c.checkTerm(SBVREM, 3, {c.konst(6, 3), x}); // -2 rem x
+  c.checkTerm(SBVREM, 3, {x, c.konst(6, 3)}); // x rem -2
+  c.checkTerm(SBVREM, 3, {c.konst(4, 3), x}, false); // most negative
+  c.checkTerm(SBVREM, 3, {x, c.konst(4, 3)}, false);
+}
+
+/* a literal and its negation one level down a same-kind child annihilate */
+TEST(SimplifyingNodeFactory_Exhaustive, nested_complementary_literals)
+{
+  Context c;
+  ASTNode p = c.boolean();
+  ASTNode q = c.boolean();
+  ASTNode r = c.boolean();
+  ASTNode notP = c.hf->CreateNode(NOT, p);
+
+  ASTNode innerAnd = c.hf->CreateNode(AND, q, notP);
+  c.checkNode(AND, {p, innerAnd});
+  EXPECT_EQ(c.nf->CreateNode(AND, p, innerAnd), c.mgr.ASTFalse);
+
+  ASTNode innerOr = c.hf->CreateNode(OR, q, notP);
+  c.checkNode(OR, {p, innerOr});
+  EXPECT_EQ(c.nf->CreateNode(OR, p, innerOr), c.mgr.ASTTrue);
+
+  // Complements split across two nested same-kind children.
+  ASTNode andA = c.hf->CreateNode(AND, p, q);
+  ASTNode andB = c.hf->CreateNode(AND, r, notP);
+  c.checkNode(AND, {andA, andB});
+  EXPECT_EQ(c.nf->CreateNode(AND, andA, andB), c.mgr.ASTFalse);
+
+  // An AND nested inside an OR must NOT annihilate.
+  c.checkNode(OR, {p, innerAnd}, false);
+}
+
 } // namespace
