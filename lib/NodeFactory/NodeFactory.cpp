@@ -154,9 +154,13 @@ ASTNode NodeFactory::CreateSymbol(const char* const name, unsigned indexWidth,
   return n;
 }
 
-ASTNode NodeFactory::CreateConstant(stp::CBV cbv, unsigned width)
+ASTNode NodeFactory::CreateConstant(stp::CBV cbv, unsigned width,
+                                    unsigned exp_width, unsigned sig_width)
 {
-  return bm.CreateBVConst(cbv, width);
+  ASTNode c = bm.CreateBVConst(cbv, width);
+  if (exp_width != 0)
+    c = bm.CreateFPConst(c, exp_width, sig_width);
+  return c;
 }
 
 ASTNode NodeFactory::CreateOneConst(unsigned width)
