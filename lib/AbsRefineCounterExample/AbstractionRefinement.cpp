@@ -76,7 +76,6 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
 {
   const unsigned width = a.GetValueWidth();
   assert(width == b.GetValueWidth());
-  assert(!a.isConstant() || !b.isConstant());
 
   vector<unsigned> v_a;
   vector<unsigned> v_b;
@@ -171,6 +170,19 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
     }
     if (all.size() > 1)
       SatSolver.addClause(all);
+    return result;
+  }
+  else if (a.isConstant() && b.isConstant())
+  {
+    // A congruence axiom between two constant indexes (reachable when
+    // both spell one value under different constant nodes -- a float
+    // constant interns apart from the plain constant with its bits):
+    // the equality's truth is just their bits; pin a fresh variable to
+    // it.
+    const int result = SatSolver.newVar();
+    SATSolver::vec_literals unit;
+    unit.push(SATSolver::mkLit(result, !constantsSameBits(a, b)));
+    SatSolver.addClause(unit);
     return result;
   }
   else
@@ -348,11 +360,12 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
       {
         const ASTNode& index_j = listOfIndices[j];
 
-        // If the index is a constant, and different, then there's no reason to
-        // check.
-        // Sometimes we get the same index stored multiple times in the array.
-        // Not sure why...
-        if (BVCONST == iKind && jKind[j] == BVCONST && index_i != index_j)
+        // If the indexes are constants of different values, the cells are
+        // distinct and no congruence is needed. Compare bits, not nodes:
+        // a float constant interns apart from the plain constant with its
+        // bits, and skipping such a pair drops a needed axiom for good.
+        if (BVCONST == iKind && jKind[j] == BVCONST &&
+            !constantsSameBits(index_i, index_j))
           continue;
 
         if (ASTFalse == simp->CreateSimplifiedEQ(index_i, index_j))
@@ -516,11 +529,12 @@ void AbsRefine_CounterExample::applyAllCongruenceConstraints(
       {
         const ASTNode& index_j = listOfIndices[j];
 
-        // If the index is a constant, and different, then there's no reason to
-        // check.
-        // Sometimes we get the same index stored multiple times in the array.
-        // Not sure why...
-        if (BVCONST == iKind && jKind[j] == BVCONST && index_i != index_j)
+        // If the indexes are constants of different values, the cells are
+        // distinct and no congruence is needed. Compare bits, not nodes:
+        // a float constant interns apart from the plain constant with its
+        // bits, and skipping such a pair drops a needed axiom for good.
+        if (BVCONST == iKind && jKind[j] == BVCONST &&
+            !constantsSameBits(index_i, index_j))
           continue;
 
         if (ASTFalse == simp->CreateSimplifiedEQ(index_i, index_j))

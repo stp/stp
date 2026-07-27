@@ -736,10 +736,11 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
     // terms are syntactically the same
     return ASTTrue;
 
-  // here the terms are definitely not syntactically equal but may be
-  // semantically equal.
+  // Two constant nodes still may be semantically equal: a float constant
+  // interns apart from the plain constant with its bits, so compare the
+  // bits, not the identities.
   if (stp::BVCONST == k1 && stp::BVCONST == k2)
-    return ASTFalse;
+    return stp::constantsSameBits(in1, in2) ? ASTTrue : ASTFalse;
 
   if ((k1 == BVNOT && k2 == BVNOT) || (k1 == BVUMINUS && k2 == BVUMINUS))
     return NodeFactory::CreateNode(EQ, in1[0], in2[0]);
@@ -1204,9 +1205,13 @@ ASTNode SimplifyingNodeFactory::chaseRead(const ASTVec& children,
       // cerr << "-";
       return write[2];
     }
-    else if (read_is_const && stp::BVCONST == write_index.GetKind())
+    else if (read_is_const && stp::BVCONST == write_index.GetKind() &&
+             !stp::constantsSameBits(readIndex, write_index))
     {
-      // They are definately different. Ignore this.
+      // Different bits, so definately different. (Distinct constant
+      // nodes alone prove nothing: a float constant interns apart from
+      // the plain constant with its bits; skipping a write this read
+      // hits reads the wrong cell.)
       // cerr << "+";
     }
     else
