@@ -84,3 +84,39 @@ TEST(fp_array_extensionality, rm_indexed_equal_stores_distinct_unsat)
 
   vc_Destroy(vc);
 }
+
+// (Array (_ FloatingPoint 8 24) (_ BitVec 8)): a guarded equality
+// between two stores of one base at one float index, under minisat.
+// The store index inside the abstracted operands used to stay raw
+// while the formula's reads at the same index were canonicalised, so
+// refinement compared two structurally different index terms for one
+// index and the loop fell off its end ("reached the end without
+// proper conclusion"). The satisfying assignments need r2 != r1 at a
+// nonzero index, which minisat's model sequence used to walk into.
+TEST(fp_array_extensionality, float_indexed_refinement_converges)
+{
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+  vc_useMinisat(vc);
+
+  Type fp = vc_fpType(vc, 8, 24);
+  Type bv8 = vc_bvType(vc, 8);
+  Type arr = vc_arrayType(vc, fp, bv8);
+
+  Expr a0 = vc_varExpr(vc, "a0", arr);
+  Expr a1 = vc_varExpr(vc, "a1", arr);
+  Expr a2 = vc_varExpr(vc, "a2", arr);
+  Expr bits = vc_bvConstExprFromDecStr(vc, 32, "1542123083");
+  Expr idx = vc_fpToFPFromIEEEBV(vc, 8, 24, bits);
+  Expr r1 = vc_readExpr(vc, a2, idx);
+  Expr r2 = vc_readExpr(vc, a1, idx);
+  Expr s1 = vc_writeExpr(vc, a0, idx, r1);
+  Expr s2 = vc_writeExpr(vc, a0, idx, r2);
+
+  vc_assertFormula(vc, vc_bvLeExpr(vc, r2, r1));
+  vc_assertFormula(vc, vc_iffExpr(vc, vc_fpIsZeroExpr(vc, idx),
+                                  vc_eqExpr(vc, s2, s1)));
+  EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+
+  vc_Destroy(vc);
+}
