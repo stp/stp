@@ -566,10 +566,11 @@ namespace stp
       assert(emptyBoolean->isTotallyUnfixed());
       return emptyBoolean;
     }
-    if (emptyBitVector.find(n.GetValueWidth()) == emptyBitVector.end())
-      emptyBitVector[n.GetValueWidth()] = fresh(n);
+    auto it = emptyBitVector.find(n.GetValueWidth());
+    if (it == emptyBitVector.end())
+      it = emptyBitVector.emplace(n.GetValueWidth(), fresh(n)).first;
 
-    FixedBits* r = emptyBitVector[n.GetValueWidth()];
+    FixedBits* r = it->second;
     assert(r->isTotallyUnfixed());
     return r;
   }

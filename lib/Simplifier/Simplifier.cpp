@@ -311,7 +311,8 @@ ASTNode Simplifier::SimplifyFormula(const ASTNode& b, bool pushNeg)
   }
 
   UpdateSimplifyMap(b, output, pushNeg);
-  UpdateSimplifyMap(a, output, pushNeg);
+  if (a != b) // PullUpITE often returns its input unchanged.
+    UpdateSimplifyMap(a, output, pushNeg);
 
   return output;
 }

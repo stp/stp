@@ -119,8 +119,11 @@ long eval(const ASTNode& b)
 long DifficultyScore::score(const ASTNode& top, STPMgr* mgr)
 {
 
-  if (cache.find(top.GetNodeNum()) != cache.end())
-    return cache.find(top.GetNodeNum())->second;
+  {
+    const auto it = cache.find(top.GetNodeNum());
+    if (it != cache.end())
+      return it->second;
+  }
 
   NonAtomIterator ni(top, mgr->ASTUndefined, *mgr);
   ASTNode current;

@@ -59,9 +59,10 @@ public:
   static MutableASTNode* build(const ASTNode& n,
                                std::unordered_map<uint64_t, MutableASTNode*>& visited)
   {
-    if (visited.find(n.GetNodeNum()) != visited.end())
     {
-      return visited.find(n.GetNodeNum())->second;
+      const auto it = visited.find(n.GetNodeNum());
+      if (it != visited.end())
+        return it->second;
     }
 
     vector<MutableASTNode*> tempChildren;
