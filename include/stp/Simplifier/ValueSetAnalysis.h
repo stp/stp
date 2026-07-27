@@ -41,8 +41,6 @@ namespace stp
 
 class ValueSetAnalysis
 {
-  STPMgr& bm;
-
   unsigned propagated = 0;
   unsigned widened = 0;
 
@@ -67,8 +65,6 @@ class ValueSetAnalysis
   };
 
   ValueSet* fresh(const ASTNode& n) const;
-  ASTNode toNode(const ASTNode& child, const CBV member);
-  static CBV toCBV(const ASTNode& evaluated);
 
   // Values that stand in for an unknown child: evaluating over them gives
   // exactly the results the child's whole width would give. False when
@@ -85,7 +81,7 @@ class ValueSetAnalysis
   ValueSet* expand(ValueSet* set, Expand how);
 
 public:
-  ValueSetAnalysis(STPMgr& _bm) : bm(_bm) {}
+  ValueSetAnalysis(STPMgr&) {}
 
   ValueSetAnalysis(const ValueSetAnalysis&) = delete;
   ValueSetAnalysis& operator=(const ValueSetAnalysis&) = delete;

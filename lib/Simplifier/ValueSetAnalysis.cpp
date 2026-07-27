@@ -36,33 +36,6 @@ namespace stp
                         BOOLEAN_TYPE == n.GetType());
   }
 
-  // A constant node with the member's value, suitable as an argument of
-  // the constant evaluator.
-  ASTNode ValueSetAnalysis::toNode(const ASTNode& child, const CBV member)
-  {
-    if (BOOLEAN_TYPE == child.GetType())
-      return CONSTANTBV::BitVector_bit_test(member, 0) ? bm.ASTTrue
-                                                       : bm.ASTFalse;
-    return bm.CreateBVConst(CONSTANTBV::BitVector_Clone(member),
-                            child.GetValueWidth());
-  }
-
-  // The evaluated constant's value as a fresh CBV the caller owns.
-  CBV ValueSetAnalysis::toCBV(const ASTNode& evaluated)
-  {
-    if (TRUE == evaluated.GetKind())
-    {
-      CBV r = CONSTANTBV::BitVector_Create(1, true);
-      CONSTANTBV::BitVector_Bit_On(r, 0);
-      return r;
-    }
-    if (FALSE == evaluated.GetKind())
-      return CONSTANTBV::BitVector_Create(1, true);
-
-    assert(BVCONST == evaluated.GetKind());
-    return CONSTANTBV::BitVector_Clone(evaluated.GetBVConst());
-  }
-
   namespace
   {
     CBV valueOf(unsigned width, uint64_t value)
@@ -96,6 +69,94 @@ namespace stp
             return width;
         }
       return (unsigned)result;
+    }
+
+    CBV boolCBV(bool b)
+    {
+      CBV r = CONSTANTBV::BitVector_Create(1, true);
+      if (b)
+        CONSTANTBV::BitVector_Bit_On(r, 0);
+      return r;
+    }
+
+    bool isTrue(const CBV v) { return CONSTANTBV::BitVector_bit_test(v, 0); }
+
+    // What the analysis needs a node's kind evaluated over, straight on
+    // the bit-vectors -- the term and predicate evaluation itself is
+    // shared with NonMemberBVConstEvaluator (consteval.cpp); building a
+    // hash-consed constant node for every child member and every result
+    // here was most of what the analysis used to spend its time on.
+    // Booleans are width-1 vectors with bit zero as the truth value.
+    // Returns a fresh CBV the caller owns.
+    CBV evalOnCBVs(Kind k, const ASTNode& n, const vector<CBV>& args)
+    {
+      switch (k)
+      {
+        // The boolean connectives, over width-1 vectors.
+        case NOT:
+          return boolCBV(!isTrue(args[0]));
+
+        case OR:
+        case NOR:
+        {
+          bool any = false;
+          for (const CBV a : args)
+            if (isTrue(a))
+            {
+              any = true;
+              break;
+            }
+          return boolCBV(OR == k ? any : !any);
+        }
+
+        case AND:
+        case NAND:
+        {
+          bool all = true;
+          for (const CBV a : args)
+            if (!isTrue(a))
+            {
+              all = false;
+              break;
+            }
+          return boolCBV(AND == k ? all : !all);
+        }
+
+        case XOR:
+        {
+          bool parity = false;
+          for (const CBV a : args)
+            if (isTrue(a))
+              parity = !parity;
+          return boolCBV(parity);
+        }
+
+        case IFF:
+          return boolCBV(isTrue(args[0]) == isTrue(args[1]));
+
+        case IMPLIES:
+          return boolCBV(!isTrue(args[0]) || isTrue(args[1]));
+
+        // The predicates over two bit-vectors.
+        case BOOLEXTRACT:
+        case EQ:
+        case BVLT:
+        case BVLE:
+        case BVGT:
+        case BVGE:
+        case BVSLT:
+        case BVSLE:
+        case BVSGT:
+        case BVSGE:
+          return boolCBV(
+              NonMemberBVConstPredicateEvaluator(k, args[0], args[1]));
+
+        // The bit-vector terms. ITE is handled before evaluation is
+        // reached, and the evaluator rejects anything else that doesn't
+        // pass constEvaluable.
+        default:
+          return NonMemberBVConstEvaluator(k, args, n.GetValueWidth());
+      }
     }
 
     // Operations that are one-to-one in each argument (or, for equality,
@@ -461,26 +522,27 @@ namespace stp
       }
     }
 
-    // Constant nodes for every child's member, built once.
-    vector<vector<ASTNode>> constants(children.size());
-    for (size_t i = 0; i < children.size(); i++)
-      for (const CBV m : *members[i])
-        constants[i].push_back(toNode(n[i], m));
-
     // Evaluate the node over each combination of the children's values.
     ValueSet* result = fresh(n);
+    vector<CBV> combination(children.size());
     vector<size_t> odometer(children.size(), 0);
     for (size_t count = 0; count < combinations; count++)
     {
-      ASTVec combination;
-      combination.reserve(children.size());
       for (size_t i = 0; i < children.size(); i++)
-        combination.push_back(constants[i][odometer[i]]);
+        combination[i] = (*members[i])[odometer[i]];
 
-      const ASTNode evaluated =
-          NonMemberBVConstEvaluator(&bm, k, combination, n.GetValueWidth());
+      if (!result->insert(evalOnCBVs(k, n, combination)))
+      {
+        delete result;
+        widened++;
+        return nullptr;
+      }
 
-      if (!result->insert(toCBV(evaluated)))
+      // Holding every value of the width already, the set says exactly
+      // what a null pointer says, and the remaining combinations can't
+      // change that -- which is where an evaluation of a comparison
+      // usually ends up.
+      if (result->isComplete())
       {
         delete result;
         widened++;
