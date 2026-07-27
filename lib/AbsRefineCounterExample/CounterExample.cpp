@@ -173,6 +173,19 @@ void AbsRefine_CounterExample::ConstructCounterExample(
 ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
                                                             bool ArrayReadFlag)
 {
+  const ASTNode r = TermToConstTermUsingModel_inner(term, ArrayReadFlag);
+  // The plain twin of a float constant: same bits, the flavour every
+  // identity comparison in model evaluation expects.
+  if (r.GetKind() == BVCONST && r.GetExpWidth() != 0)
+    return bm->CreateBVConst(CONSTANTBV::BitVector_Clone(r.GetBVConst()),
+                             r.GetValueWidth());
+  return r;
+}
+
+ASTNode
+AbsRefine_CounterExample::TermToConstTermUsingModel_inner(const ASTNode& term,
+                                                          bool ArrayReadFlag)
+{
   if (term.GetKind() == BVCONST)
     return term;
 
