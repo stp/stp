@@ -61,9 +61,19 @@ private:
   void CheckCounterExample(bool t);
 
   // Accepts a term and turns it into a constant-term w.r.t
-  // counter_example
+  // counter_example. Always answers with a plain bitvector constant: a
+  // float constant interns separately from the bitvector constant with
+  // the same bits, and evaluation results are compared (write-hit
+  // tests, counterexample-map keys) by node identity, so bits equal
+  // must mean nodes equal.
   ASTNode TermToConstTermUsingModel(const ASTNode& term,
                                     bool ArrayReadFlag = true);
+
+private:
+  ASTNode TermToConstTermUsingModel_inner(const ASTNode& term,
+                                          bool ArrayReadFlag);
+
+public:
 
   ASTNode Expand_ReadOverWrite_UsingModel(const ASTNode& term,
                                           bool ArrayReadFlag = true);
