@@ -520,6 +520,199 @@ bool NonMemberBVConstPredicateEvaluator(const Kind k, const CBV a, const CBV b)
   }
 }
 
+static uint64_t mask64(unsigned width)
+{
+  return width >= 64 ? ~0ull : (1ull << width) - 1;
+}
+
+static int64_t toSigned64(uint64_t v, unsigned width)
+{
+  if (width >= 64)
+    return (int64_t)v;
+  if ((v >> (width - 1)) & 1)
+    return (int64_t)(v | ~mask64(width));
+  return (int64_t)v;
+}
+
+uint64_t NonMemberBVConstEvaluator64(const Kind k,
+                                     const std::vector<uint64_t>& args,
+                                     const std::vector<unsigned>& argWidths,
+                                     unsigned outputWidth)
+{
+  const unsigned width = outputWidth;
+  const uint64_t m = mask64(width);
+  const uint64_t x = args[0];
+  const uint64_t y = args.size() > 1 ? args[1] : 0;
+
+  switch (k)
+  {
+    case BVNOT:
+      return ~x & m;
+
+    case BVUMINUS:
+      return (0 - x) & m;
+
+    case BVSX:
+      return (uint64_t)toSigned64(x, argWidths[0]) & m;
+
+    case BVZX:
+      return x;
+
+    // Shifting by the width or more pushes everything out; an arithmetic
+    // shift then leaves the sign bit everywhere.
+    case BVLEFTSHIFT:
+      return y >= width ? 0 : (x << y) & m;
+    case BVRIGHTSHIFT:
+      return y >= width ? 0 : x >> y;
+    case BVSRSHIFT:
+    {
+      const int64_t sx = toSigned64(x, width);
+      if (y >= width)
+        return sx < 0 ? m : 0;
+      return (uint64_t)(sx >> y) & m;
+    }
+
+    case BVAND:
+    {
+      uint64_t r = m;
+      for (const uint64_t a : args)
+        r &= a;
+      return r;
+    }
+
+    case BVOR:
+    {
+      uint64_t r = 0;
+      for (const uint64_t a : args)
+        r |= a;
+      return r;
+    }
+
+    case BVXOR:
+    {
+      uint64_t r = 0;
+      for (const uint64_t a : args)
+        r ^= a;
+      return r;
+    }
+
+    case BVSUB:
+      return (x - y) & m;
+
+    case BVEXTRACT:
+    {
+      const uint64_t hi = args[1];
+      const uint64_t low = args[2];
+      return (x >> low) & mask64((unsigned)(hi - low + 1));
+    }
+
+    case BVCONCAT:
+      return (x << argWidths[1]) | y;
+
+    case BVMULT:
+    {
+      uint64_t r = 1;
+      for (const uint64_t a : args)
+        r = (r * a) & m;
+      return r;
+    }
+
+    case BVPLUS:
+    {
+      uint64_t r = 0;
+      for (const uint64_t a : args)
+        r += a;
+      return r & m;
+    }
+
+    // Division by zero is defined in SMT-LIB; see the CBV evaluator above
+    // for the details.
+    case BVDIV:
+      return y == 0 ? m : x / y;
+    case BVMOD:
+      return y == 0 ? x : x % y;
+
+    case SBVDIV:
+    {
+      const int64_t sx = toSigned64(x, width);
+      const int64_t sy = toSigned64(y, width);
+      if (sy == 0)
+        return sx < 0 ? 1 : m;
+      // The lone overflow, INT64_MIN / -1, wraps back to INT64_MIN.
+      if (sx == INT64_MIN && sy == -1)
+        return x;
+      return (uint64_t)(sx / sy) & m;
+    }
+
+    case SBVREM:
+    {
+      const int64_t sx = toSigned64(x, width);
+      const int64_t sy = toSigned64(y, width);
+      if (sy == 0)
+        return x;
+      if (sy == -1) // INT64_MIN % -1 overflows; the remainder is 0 anyway.
+        return 0;
+      return (uint64_t)(sx % sy) & m;
+    }
+
+    case SBVMOD:
+    {
+      // Truncated remainder, then pulled onto the divisor's side of zero:
+      // the result is either zero or has the divisor's sign.
+      const int64_t sx = toSigned64(x, width);
+      const int64_t sy = toSigned64(y, width);
+      if (sy == 0)
+        return x;
+      if (sy == -1)
+        return 0;
+      int64_t r = sx % sy;
+      if (r != 0 && (r < 0) != (sy < 0))
+        r += sy;
+      return (uint64_t)r & m;
+    }
+
+    default:
+      FatalError("BVConstEvaluator64: not a bit-vector term kind");
+      return 0;
+  }
+}
+
+bool NonMemberBVConstPredicateEvaluator64(const Kind k, const uint64_t a,
+                                          const uint64_t b,
+                                          const unsigned width)
+{
+  switch (k)
+  {
+    case BOOLEXTRACT:
+      return (a >> b) & 1;
+
+    case EQ:
+      return a == b;
+
+    case BVLT:
+      return a < b;
+    case BVLE:
+      return a <= b;
+    case BVGT:
+      return a > b;
+    case BVGE:
+      return a >= b;
+
+    case BVSLT:
+      return toSigned64(a, width) < toSigned64(b, width);
+    case BVSLE:
+      return toSigned64(a, width) <= toSigned64(b, width);
+    case BVSGT:
+      return toSigned64(a, width) > toSigned64(b, width);
+    case BVSGE:
+      return toSigned64(a, width) >= toSigned64(b, width);
+
+    default:
+      FatalError("BVConstEvaluator64: not a two-argument predicate kind");
+      return false;
+  }
+}
+
 // Const evaluator logical and arithmetic operations.
 ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
                                   const ASTVec& input_children,
