@@ -48,18 +48,6 @@ using std::set;
 const bool debug_multiply = false;
 std::ostream& log = std::cerr;
 
-// The convolution loops below are popcount-bound. The library builds for
-// generic targets, so resolve a POPCNT-instruction clone at load time where
-// the toolchain and platform support it; elsewhere (and on CPUs without
-// POPCNT) the portable SWAR popcount below is used.
-#if (defined(__x86_64__) || defined(__i386__)) && defined(__ELF__) &&          \
-    (defined(__GNUC__) && !defined(__clang__) && __GNUC__ >= 6 ||              \
-     defined(__clang__) && __clang_major__ >= 14)
-#define MULT_TARGET_CLONES __attribute__((target_clones("popcnt", "default")))
-#else
-#define MULT_TARGET_CLONES
-#endif
-
 #if 0
 // The maximum size of the carry into a column for MULTIPLICATION
     int
@@ -152,7 +140,6 @@ struct PairMasks
   unsigned widthCached;
 };
 
-MULT_TARGET_CLONES
 Result fixIfCanForMultiplication(vector<FixedBits*>& children,
                                  const unsigned index,
                                  const int aspirationalSum, PairMasks* pm)
@@ -256,9 +243,12 @@ Result fixIfCanForMultiplication(vector<FixedBits*>& children,
   return result;
 }
 
-// Branch-free SWAR popcount: the library builds for generic targets, where
-// __builtin_popcountll lowers to a libgcc call — too slow for the
-// convolution inner loop.
+// Branch-free SWAR popcount for the convolution inner loop.  With USE_POPCNT
+// the compiler recognises this as a popcount and emits the instruction; with
+// USE_POPCNT off it is what runs, and it stays correct on a CPU that has no
+// POPCNT.  Counting in software here rather than calling __builtin_popcountll
+// avoids the out-of-line libgcc call that the builtin becomes when the target
+// ISA has no POPCNT.
 static inline int popcount64(uint64_t v)
 {
   v -= (v >> 1) & 0x5555555555555555ULL;
@@ -339,7 +329,6 @@ static inline int convolutionAt(const uint64_t* a, const uint64_t* revB,
 //   columnL[j] += #{i + k == j : x[i] and y[k] both fixed to one}
 // The counts come from running prefix sums and two boolean convolutions
 // evaluated as shifted-window popcounts over packed words.
-MULT_TARGET_CLONES
 Result adjustColumns(const FixedBits& x, const FixedBits& y, int* columnL,
                      int* columnH)
 {
