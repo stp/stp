@@ -364,6 +364,43 @@ ASTNode STPMgr::CreateFPConst(const stp::ASTNode& bvconst,
 
   // Temporary key sharing the source's CBV; interning clones it.
   ASTBVConst* src = (ASTBVConst*)bvconst._int_node_ptr;
+
+  // Every NaN pattern interns as the one canonical quiet NaN. SMT-LIB's
+  // FloatingPoint sort has a single NaN, and no operation can recover a
+  // payload (fp.to_ieee_bv canonicalises; symfpu carries none) -- but the
+  // node-creation-time simplifiers do compare constants by identity and by
+  // bit pattern (chaseRead's "definately different" skip, CreateSimpleEQ's
+  // constant case), and they run before any pass could quotient NaN. Two
+  // NaN literals with different payloads used as array indexes would be
+  // "proved" to address different cells. Baking the quotient into the
+  // constant itself makes those comparisons exact: distinct floating-point
+  // constants of one format now denote distinct values.
+  {
+    CBV b = src->GetBVConst();
+    const unsigned stored_sig = sig_width - 1; // the hidden bit is not stored
+    bool exp_all_ones = true;
+    for (unsigned i = 0; exp_all_ones && i < exp_width; i++)
+      exp_all_ones = CONSTANTBV::BitVector_bit_test(b, stored_sig + i);
+    bool sig_nonzero = false;
+    for (unsigned i = 0; !sig_nonzero && i < stored_sig; i++)
+      sig_nonzero = CONSTANTBV::BitVector_bit_test(b, i);
+
+    if (exp_all_ones && sig_nonzero)
+    {
+      // Already canonical -- positive, and only the quiet bit set -- means
+      // stop, or the CreateFPSpecialConst below would recurse forever.
+      bool low_payload_zero = true;
+      for (unsigned i = 0; low_payload_zero && i + 1 < stored_sig; i++)
+        low_payload_zero = !CONSTANTBV::BitVector_bit_test(b, i);
+      const bool canonical =
+          low_payload_zero &&
+          CONSTANTBV::BitVector_bit_test(b, stored_sig - 1) &&
+          !CONSTANTBV::BitVector_bit_test(b, exp_width + sig_width - 1);
+      if (!canonical)
+        return CreateFPSpecialConst(FPSpecial::NaN, exp_width, sig_width);
+    }
+  }
+
   ASTFPConst temp(this, src->GetBVConst(), exp_width, sig_width);
 
   has_floating_point = true;
