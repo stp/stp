@@ -1577,7 +1577,18 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK 
 {
   // A nullary define-fun whose result is an array (bit-vector element). This
   // is just a name for its body, stored like any other nullary function; the
-  // lexer resolves later references to it back to that body.
+  // lexer resolves later references to it back to that body. A body whose
+  // widths disagree with the declared sort is reported -- mirroring the
+  // sibling bitvector define-fun productions -- and still stored, so
+  // parsing continues.
+  if ($17->GetIndexWidth() != $9 || $17->GetValueWidth() != $14)
+  {
+    char msg [100];
+    sprintf(msg, "Different array widths specified: (%d %d) vs (%d %d)",
+            $17->GetIndexWidth(), $17->GetValueWidth(), $9, $14);
+    yyerror(msg);
+  }
+
   ASTVec empty;
   stp::GlobalParserInterface->storeFunction(*$1, empty, *$17);
   delete $1;
@@ -1586,10 +1597,22 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK 
 |
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK an_fp_sort RPAREN_TOK an_term
 {
-  // As above, but the array's element type is a floating-point sort.
+  // As above, but the array's element type is a floating-point sort; its
+  // packed width is what the body's value width must match.
+  if ($13->GetIndexWidth() != $9 ||
+      $13->GetValueWidth() != (unsigned int)($11->exp_bits + $11->sig_bits))
+  {
+    char msg [100];
+    sprintf(msg, "Different array widths specified: (%d %d) vs (%d %d)",
+            $13->GetIndexWidth(), $13->GetValueWidth(), $9,
+            $11->exp_bits + $11->sig_bits);
+    yyerror(msg);
+  }
+
   ASTVec empty;
   stp::GlobalParserInterface->storeFunction(*$1, empty, *$13);
   delete $1;
+  delete $11;
   stp::GlobalParserInterface->deleteNode($13);
 }
 ;
