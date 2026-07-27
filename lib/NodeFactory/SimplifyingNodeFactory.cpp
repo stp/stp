@@ -137,6 +137,40 @@ ASTNode SimplifyingNodeFactory::create_gt_node(const ASTVec& children)
     return ASTFalse;
   }
 
+  // A 1-bit unsigned comparison has a single satisfying assignment: 1 > 0.
+  if (children[0].GetValueWidth() == 1)
+  {
+    const ASTNode a = NodeFactory::CreateNode(
+        EQ, children[0], bm.CreateOneConst(1));
+    const ASTNode b = NodeFactory::CreateNode(
+        EQ, children[1], bm.CreateZeroConst(1));
+    return NodeFactory::CreateNode(stp::AND, a, b);
+  }
+
+  // Bitwise complement reverses the unsigned order: ~a > ~b <=> b > a.
+  if (children[0].GetKind() == BVNOT && children[1].GetKind() == BVNOT)
+  {
+    return NodeFactory::CreateNode(stp::BVGT, children[1][0], children[0][0]);
+  }
+
+  // x > (x + c) <=> x > ~c, and (x + c) > x <=> NOT(x > ~c): the sum wraps
+  // past x exactly when x exceeds ~c.
+  for (unsigned side = 0; side < 2; side++)
+  {
+    const ASTNode& plus = children[side];
+    const ASTNode& x = children[1 - side];
+    if (plus.GetKind() != BVPLUS || plus.Degree() != 2)
+      continue;
+    for (unsigned i = 0; i < 2; i++)
+      if (plus[i].isConstant() && plus[1 - i] == x)
+      {
+        const ASTNode notC = NodeFactory::CreateTerm(
+            BVNOT, x.GetValueWidth(), plus[i]);
+        const ASTNode gt = NodeFactory::CreateNode(stp::BVGT, x, notC);
+        return side == 1 ? gt : NodeFactory::CreateNode(stp::NOT, gt);
+      }
+  }
+
   //2nd part is the same ->only care about 1st part
   if (children[0].GetKind() == BVCONCAT && children[1].GetKind() == BVCONCAT &&
       children[0][1] == children[1][1])
@@ -302,6 +336,17 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
       {
         result = NodeFactory::CreateNode(
             stp::NOT, NodeFactory::CreateNode(EQ, children[0], children[1]));
+      }
+
+      // A 1-bit signed comparison has a single satisfying assignment:
+      // 0 is the largest value and -1 (bit set) the smallest, so 0 >s 1.
+      if (result.IsNull() && children[0].GetValueWidth() == 1)
+      {
+        const ASTNode a = NodeFactory::CreateNode(
+            EQ, children[0], bm.CreateZeroConst(1));
+        const ASTNode b = NodeFactory::CreateNode(
+            EQ, children[1], bm.CreateOneConst(1));
+        result = NodeFactory::CreateNode(stp::AND, a, b);
       }
 
       //2nd part is the same -> only care about 1st part
@@ -562,6 +607,9 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
   ASTVec new_children;
   new_children.reserve(children.size());
 
+  const Kind node_kind = IsAnd ? stp::AND : stp::OR;
+  bool nested_same_kind = false;
+
   for (ASTVec::const_iterator it = children.begin(), it_end = children.end();
        it != it_end; it++)
   {
@@ -588,7 +636,35 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
     else
     {
       new_children.push_back(*it);
+      if (it->GetKind() == node_kind)
+        nested_same_kind = true;
     }
+  }
+
+  // A child of the same kind contributes its own children conjunctively
+  // (resp. disjunctively), so a literal here and its negation one level
+  // down annihilate just as two top-level complements do.
+  if (nested_same_kind)
+  {
+    stp::ASTNodeSet positive, negated;
+    for (const ASTNode& n : new_children)
+    {
+      if (n.GetKind() == node_kind)
+      {
+        for (const ASTNode& c : n.GetChildren())
+          if (c.GetKind() == stp::NOT)
+            negated.insert(c[0]);
+          else
+            positive.insert(c);
+      }
+      else if (n.GetKind() == stp::NOT)
+        negated.insert(n[0]);
+      else
+        positive.insert(n);
+    }
+    for (const ASTNode& n : negated)
+      if (positive.find(n) != positive.end())
+        return annihilator;
   }
 
   // If we get here, we saw no annihilators, and children should
@@ -652,6 +728,18 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
 
   if ((k1 == BVNOT && in1[0] == in2) || (k2 == BVNOT && in2[0] == in1))
     return ASTFalse;
+
+  // Normalise 1-bit equalities so both polarities of a test hash to the
+  // same node: (x = 1) becomes NOT(x = 0).
+  if (width == 1)
+  {
+    if (in1 == bm.CreateOneConst(1))
+      return NodeFactory::CreateNode(
+          stp::NOT, NodeFactory::CreateNode(EQ, in2, bm.CreateZeroConst(1)));
+    if (in2 == bm.CreateOneConst(1))
+      return NodeFactory::CreateNode(
+          stp::NOT, NodeFactory::CreateNode(EQ, in1, bm.CreateZeroConst(1)));
+  }
 
   if (k2 == stp::BVDIV && k1 == stp::BVCONST &&
       (in1 == bm.CreateZeroConst(width)))
@@ -1885,6 +1973,21 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             BVUMINUS, width,
             NodeFactory::CreateTerm(stp::BVLEFTSHIFT, width, children[0][0],
                                     children[1]));
+      else if (children[0].isConstant() &&
+               CONSTANTBV::BitVector_bit_test(children[0].GetBVConst(),
+                                              width - 1) &&
+               children[0] != get_smallest_number(width))
+      {
+        // Normalise a negative constant base to positive:
+        // (c << s) == -((-c) << s). Excludes the most negative constant,
+        // whose negation is itself.
+        result = NodeFactory::CreateTerm(
+            BVUMINUS, width,
+            NodeFactory::CreateTerm(
+                stp::BVLEFTSHIFT, width,
+                NodeFactory::CreateTerm(BVUMINUS, width, children[0]),
+                children[1]));
+      }
     }
     break;
 
@@ -2152,6 +2255,29 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             NodeFactory::CreateTerm(BVEXTRACT, width, children[0][0],
                                     children[1], children[2]));
       }
+      else if (stp::BVSX == children[0].GetKind())
+      {
+        const unsigned innerWidth = children[0][0].GetValueWidth();
+        const unsigned high = children[1].GetUnsignedConst();
+        const unsigned low = children[2].GetUnsignedConst();
+
+        if (low >= innerWidth)
+        {
+          // Entirely within the extension: every extracted bit is a copy of
+          // the sign bit, so rebase the extract to end at the sign bit.
+          // Extracts of different slices of the extension then share a node.
+          result = NodeFactory::CreateTerm(
+              BVEXTRACT, width, children[0],
+              bm.CreateBVConst(32, high - low + innerWidth - 1),
+              bm.CreateBVConst(32, innerWidth - 1));
+        }
+        else if (high < innerWidth)
+        {
+          // Entirely within the original term: the extension is irrelevant.
+          result = NodeFactory::CreateTerm(BVEXTRACT, width, children[0][0],
+                                           children[1], children[2]);
+        }
+      }
       else if (stp::BVMULT == children[0].GetKind() &&
                children[0].Degree() == 2 &&
                (children[0][0].GetKind() == stp::BVCONST ||
@@ -2209,6 +2335,28 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             children[0], children[1][0]);
         result =
             NodeFactory::CreateTerm(BVCONCAT, width, constants, children[1][1]);
+      }
+      // (t ++ t) with 1-bit t is t sign-extended: the top bit repeats.
+      else if (children[0] == children[1] && children[0].GetValueWidth() == 1)
+      {
+        result = NodeFactory::CreateTerm(stp::BVSX, width, children[0],
+                                         bm.CreateBVConst(32, width));
+      }
+      // (t ++ BVSX(t)) with 1-bit t is one more repetition of t.
+      else if (children[0].GetValueWidth() == 1 &&
+               children[1].GetKind() == stp::BVSX &&
+               children[1][0] == children[0])
+      {
+        result = NodeFactory::CreateTerm(stp::BVSX, width, children[0],
+                                         bm.CreateBVConst(32, width));
+      }
+      // (BVSX(t) ++ t) with 1-bit t likewise.
+      else if (children[1].GetValueWidth() == 1 &&
+               children[0].GetKind() == stp::BVSX &&
+               children[0][0] == children[1])
+      {
+        result = NodeFactory::CreateTerm(stp::BVSX, width, children[1],
+                                         bm.CreateBVConst(32, width));
       }
       break;
 
@@ -2317,6 +2465,12 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             ITE, width,
             NodeFactory::CreateNode(EQ, children[1], bm.CreateZeroConst(width)),
             bm.CreateMaxConst(width), bm.CreateZeroConst(width));
+      else if (children[0] == children[1])
+        // x / x is 1, except at 0 where the SMT-LIB quotient is all ones.
+        result = NodeFactory::CreateTerm(
+            ITE, width,
+            NodeFactory::CreateNode(EQ, children[1], bm.CreateZeroConst(width)),
+            bm.CreateMaxConst(width), bm.CreateOneConst(width));
 
       // ((s & t) mod t) / s  and  (t & (s mod t)) / s  both equal
       // ite(s = 0, max, ite((s & t) = s AND s < t, 1, 0)):
@@ -2374,9 +2528,47 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       // the bit-blaster.
       if (children[1].isConstant() && children[1] == bm.CreateOneConst(width))
         result = children[0];
-      if (children[1].isConstant() &&
-          CONSTANTBV::BitVector_is_full(children[1].GetBVConst()))
+      else if (children[1].isConstant() &&
+               CONSTANTBV::BitVector_is_full(children[1].GetBVConst()))
         result = NodeFactory::CreateTerm(BVUMINUS, width, children[0]);
+      else if (children[1].isConstant() &&
+               CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
+        // x / 0 is 1 for negative x, otherwise all ones.
+        result = NodeFactory::CreateTerm(
+            ITE, width,
+            NodeFactory::CreateNode(stp::BVSLT, children[0],
+                                    bm.CreateZeroConst(width)),
+            bm.CreateOneConst(width), bm.CreateMaxConst(width));
+      else if (children[0].isConstant() &&
+               CONSTANTBV::BitVector_is_empty(children[0].GetBVConst()))
+        // 0 / y is 0, except at y = 0 where the quotient is all ones.
+        result = NodeFactory::CreateTerm(
+            ITE, width,
+            NodeFactory::CreateNode(EQ, children[1], bm.CreateZeroConst(width)),
+            bm.CreateMaxConst(width), bm.CreateZeroConst(width));
+      else if (children[0].isConstant() &&
+               CONSTANTBV::BitVector_bit_test(children[0].GetBVConst(),
+                                              width - 1) &&
+               children[0] != get_smallest_number(width))
+        // Truncating division commutes with negation, so normalise a
+        // negative constant dividend to positive: c / y == -(-c / y).
+        // Excludes the most negative constant, whose negation is itself.
+        result = NodeFactory::CreateTerm(
+            BVUMINUS, width,
+            NodeFactory::CreateTerm(
+                SBVDIV, width,
+                NodeFactory::CreateTerm(BVUMINUS, width, children[0]),
+                children[1]));
+      else if (children[1].isConstant() &&
+               CONSTANTBV::BitVector_bit_test(children[1].GetBVConst(),
+                                              width - 1) &&
+               children[1] != get_smallest_number(width))
+        // Likewise for a negative constant divisor: x / c == -(x / -c).
+        result = NodeFactory::CreateTerm(
+            BVUMINUS, width,
+            NodeFactory::CreateTerm(
+                SBVDIV, width, children[0],
+                NodeFactory::CreateTerm(BVUMINUS, width, children[1])));
       break;
 
     case SBVREM:
@@ -2407,6 +2599,28 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       else if (children[0].GetKind() == BVUMINUS &&
                children[0][0] == children[1])
         result = bm.CreateZeroConst(width);
+      else if (children[1].isConstant() &&
+               CONSTANTBV::BitVector_bit_test(children[1].GetBVConst(),
+                                              width - 1) &&
+               children[1] != get_smallest_number(width))
+        // The remainder takes the dividend's sign, so a negative constant
+        // divisor can be normalised to positive: x rem c == x rem -c.
+        // Excludes the most negative constant, whose negation is itself.
+        result = NodeFactory::CreateTerm(
+            SBVREM, width, children[0],
+            NodeFactory::CreateTerm(BVUMINUS, width, children[1]));
+      else if (children[0].isConstant() &&
+               CONSTANTBV::BitVector_bit_test(children[0].GetBVConst(),
+                                              width - 1) &&
+               children[0] != get_smallest_number(width))
+        // Truncating remainder commutes with negating the dividend:
+        // c rem y == -(-c rem y).
+        result = NodeFactory::CreateTerm(
+            BVUMINUS, width,
+            NodeFactory::CreateTerm(
+                SBVREM, width,
+                NodeFactory::CreateTerm(BVUMINUS, width, children[0]),
+                children[1]));
       else if (children[0].GetKind() == BVNOT && children[1] == children[0][0])
         result = NodeFactory::CreateTerm(
             BVUMINUS, width,
