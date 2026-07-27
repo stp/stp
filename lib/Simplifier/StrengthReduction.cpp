@@ -329,13 +329,13 @@ namespace stp
              kind == SBVMOD || kind == SBVREM || kind == BVSADDO ||
              kind == BVSSUBO)
     {
-      if (visited.find(n[0]) != visited.end() &&
-          visited.find(n[1]) != visited.end())
-        if (visited.find(n[0])->second != nullptr &&
-            visited.find(n[1])->second != nullptr)
+      const auto lIt = visited.find(n[0]);
+      const auto rIt = visited.find(n[1]);
+      if (lIt != visited.end() && rIt != visited.end())
+        if (lIt->second != nullptr && rIt->second != nullptr)
         {
-          const FixedBits* l = visited.find(n[0])->second;
-          const FixedBits* r = visited.find(n[1])->second;
+          const FixedBits* l = lIt->second;
+          const FixedBits* r = rIt->second;
           const unsigned bw = n[0].GetValueWidth();
           if (l->isFixed(bw - 1) && r->isFixed(bw - 1))
           {
