@@ -48,19 +48,9 @@ STPMgr* ASTNode::GetSTPMgr() const
 // since ASTInternal.h no longer includes ASTNode.h, breaking the old cycle).
 // The ref-counting special members are inlined there too.
 
-unsigned int ASTNode::GetIndexWidth() const
-{
-  return _int_node_ptr->getIndexWidth();
-}
-
 void ASTNode::SetIndexWidth(unsigned int _iw) const
 {
   _int_node_ptr->setIndexWidth(_iw);
-}
-
-unsigned int ASTNode::GetValueWidth() const
-{
-  return _int_node_ptr->getValueWidth();
 }
 
 void ASTNode::SetValueWidth(unsigned int vw) const
@@ -71,20 +61,6 @@ void ASTNode::SetValueWidth(unsigned int vw) const
 // return the type of the ASTNode:
 //
 // 0 iff BOOLEAN; 1 iff BITVECTOR; 2 iff ARRAY; 3 iff UNKNOWN;
-types ASTNode::GetType() const
-{
-  if ((GetIndexWidth() == 0) && (GetValueWidth() == 0))
-    return BOOLEAN_TYPE;
-
-  if ((GetIndexWidth() == 0) && (GetValueWidth() > 0))
-    return BITVECTOR_TYPE;
-
-  if ((GetIndexWidth() > 0) && (GetValueWidth() > 0))
-    return ARRAY_TYPE;
-
-  return UNKNOWN_TYPE;
-}
-
 // Print the node
 void ASTNode::nodeprint(ostream& os, bool c_friendly) const
 {
