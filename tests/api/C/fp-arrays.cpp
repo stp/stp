@@ -78,6 +78,54 @@ TEST(fp_arrays, float_element_arithmetic_and_model)
   vc_Destroy(vc);
 }
 
+// Regression test: evaluating a floating-point operation over a
+// float-element array read that the solve never constrained.  Model
+// evaluation resolves the operation's float operands and rebuilds it,
+// but an out-of-model read used to come back as the symbolic READ
+// rather than a constant.  Rebuilding over it mostly "worked" -- the
+// blaster embeds a read like any term -- until an identity fold saw
+// through the rebuild: here idx evaluates to -1.0, so idx*idx is
+// exactly 1.0, and rebuilding (fp.mul rm 1.0 rd) folds to rd, the bare
+// READ, which went to the float blaster as the whole term:
+//   Fatal Error: FloatBlaster::BlastNode: unhandled kind: (READ ...)
+// An out-of-model float operand must resolve to a concrete constant,
+// as bit-vector operands already did.  The value itself is
+// unconstrained, so only its shape and stability are checked.
+//
+// Found by fuzzing with murxla driving the C API; delta-minimized.
+TEST(fp_arrays, float_element_read_as_operand_of_evaluated_term)
+{
+  VC vc = vc_createValidityChecker();
+
+  Type fp = vc_fpType(vc, 5, 11);
+  Expr a = vc_varExpr(vc, "a", vc_arrayType(vc, fp, fp));
+  Expr rne = vc_fpRoundingMode(vc, VC_RM_RNE);
+  Expr rm = vc_fpRoundingModeVar(vc, "rm");
+  Expr idx = vc_fpToFPFromSignedBV(vc, 5, 11, rm,
+                                   vc_bvConstExprFromStr(vc, "1"));
+  Expr rd = vc_readExpr(vc, a, idx);
+  Expr m1 = vc_fpMulExpr(vc, rm, idx, idx);
+  Expr m2 = vc_fpMulExpr(vc, rne, m1, rd);
+  Expr ad = vc_fpAddExpr(vc, rm, m2, rd);
+  Expr mn = vc_fpMinExpr(vc, ad, rd);
+  Expr f = vc_fpMulExpr(vc, rm, mn, rd);
+
+  // No assertions: FALSE is invalid, and nothing in the model constrains
+  // the array or the operands.
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+
+  Expr cv = vc_getCounterExample(vc, f);
+  EXPECT_EQ(BVCONST, getExprKind(cv));
+  EXPECT_EQ(16, vc_getBVLength(vc, cv));
+
+  // Evaluation is memoised against the model, so asking again gives the
+  // same value.
+  Expr again = vc_getCounterExample(vc, f);
+  EXPECT_EQ(getBVUnsignedLongLong(cv), getBVUnsignedLongLong(again));
+
+  vc_Destroy(vc);
+}
+
 TEST(fp_arrays, float_index_nan_payloads_share_one_cell)
 {
   VC vc = vc_createValidityChecker();
