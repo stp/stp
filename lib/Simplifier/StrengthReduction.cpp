@@ -427,11 +427,13 @@ namespace stp
       bool bad = false;
       for (ASTNode c : n.GetChildren())
       {
-        if (visited.find(c) == visited.end())
+        const auto it = visited.find(c);
+        if (it == visited.end() || it->second == nullptr)
+        {
           bad = true;
-        children.push_back(visited.find(c)->second);
-        if (children.back() == nullptr)
-          bad = true;
+          break;
+        }
+        children.push_back(it->second);
       }
       if (!bad)
       {
