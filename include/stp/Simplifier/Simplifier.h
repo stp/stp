@@ -37,6 +37,21 @@ DLL_PUBLIC ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
                                   const ASTVec& input_children,
                                   unsigned int inputwidth);
 
+// The two evaluators above, but straight on the bit-vectors, for callers
+// that don't want a hash-consed node built for the result.
+
+// The bit-vector term kinds. Only reads the arguments; returns a fresh
+// CBV the caller owns. outputWidth is the evaluated node's width, though
+// BVEXTRACT and BVCONCAT compute their own from the arguments.
+DLL_PUBLIC CBV NonMemberBVConstEvaluator(const Kind k,
+                                         const std::vector<CBV>& args,
+                                         unsigned outputWidth);
+
+// The predicate kinds over two bit-vector arguments: the comparisons,
+// equality, boolean extraction, and the overflow tests.
+DLL_PUBLIC bool NonMemberBVConstPredicateEvaluator(const Kind k, const CBV a,
+                                                   const CBV b);
+
 class Simplifier // not copyable
 {
   friend class counterexample;

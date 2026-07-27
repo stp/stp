@@ -81,356 +81,18 @@ namespace stp
 
     bool isTrue(const CBV v) { return CONSTANTBV::BitVector_bit_test(v, 0); }
 
-    // Mirrors ASTNode::GetUnsignedConst.
-    unsigned toUnsigned(const CBV v)
-    {
-      if (sizeof(unsigned) * 8 < bits_(v) &&
-          CONSTANTBV::Set_Max(v) >= ((signed long)sizeof(unsigned)) * 8)
-        FatalError("ValueSetAnalysis: constant doesn't fit an unsigned int");
-      return *(unsigned*)v;
-    }
-
-    // What NonMemberBVConstEvaluator (consteval.cpp) computes, case for
-    // case, but straight on the bit-vectors: building a hash-consed
-    // constant node for every child member and every result is most of
-    // what the analysis used to spend its time on. Booleans are width-1
-    // vectors with bit zero as the truth value. Returns a fresh CBV the
-    // caller owns.
+    // What the analysis needs a node's kind evaluated over, straight on
+    // the bit-vectors -- the term and predicate evaluation itself is
+    // shared with NonMemberBVConstEvaluator (consteval.cpp); building a
+    // hash-consed constant node for every child member and every result
+    // here was most of what the analysis used to spend its time on.
+    // Booleans are width-1 vectors with bit zero as the truth value.
+    // Returns a fresh CBV the caller owns.
     CBV evalOnCBVs(Kind k, const ASTNode& n, const vector<CBV>& args)
     {
-      const unsigned width = n.GetValueWidth(); // 0 for the boolean kinds.
-
       switch (k)
       {
-        case BOOLEXTRACT:
-          return boolCBV(
-              CONSTANTBV::BitVector_bit_test(args[0], toUnsigned(args[1])));
-
-        case BVNOT:
-        {
-          CBV output = CONSTANTBV::BitVector_Create(width, true);
-          CONSTANTBV::Set_Complement(output, args[0]);
-          return output;
-        }
-
-        case BVSX:
-        case BVZX:
-        {
-          CBV output = CONSTANTBV::BitVector_Create(width, true);
-          const unsigned child_width = n[0].GetValueWidth();
-          if (width == child_width)
-            CONSTANTBV::BitVector_Copy(output, args[0]);
-          else
-          {
-            if (BVSX == k && CONSTANTBV::BitVector_Sign(args[0]) < 0)
-              CONSTANTBV::BitVector_Fill(output);
-            CONSTANTBV::BitVector_Interval_Copy(output, args[0], 0, 0,
-                                                child_width);
-          }
-          return output;
-        }
-
-        case BVLEFTSHIFT:
-        case BVRIGHTSHIFT:
-        case BVSRSHIFT:
-        {
-          // The width as a bit-vector, to compare against the amount.
-          CBV widthCBV = CONSTANTBV::BitVector_Create(width, true);
-          for (unsigned i = 0; i < sizeof(width) * 8; i++)
-            if ((width & (1u << i)) != 0)
-              CONSTANTBV::BitVector_Bit_On(widthCBV, i);
-
-          CBV output = CONSTANTBV::BitVector_Create(width, true);
-          const bool msb = CONSTANTBV::BitVector_msb_(args[0]);
-
-          if (CONSTANTBV::BitVector_Lexicompare(widthCBV, args[1]) < 0)
-          {
-            // Shifted further than the width.
-            if (BVSRSHIFT == k && msb)
-              CONSTANTBV::Set_Complement(output, output);
-          }
-          else
-          {
-            CONSTANTBV::BitVector_Interval_Copy(output, args[0], 0, 0, width);
-            const unsigned shift = toUnsigned(args[1]);
-            if (BVLEFTSHIFT == k)
-              CONSTANTBV::BitVector_Move_Left(output, shift);
-            else
-              CONSTANTBV::BitVector_Move_Right(output, shift);
-
-            // A signed shift of an originally negative number.
-            if (BVSRSHIFT == k && msb)
-              for (unsigned i = 0; i < std::min(shift, width); i++)
-                CONSTANTBV::BitVector_Bit_On(output, width - 1 - i);
-          }
-          CONSTANTBV::BitVector_Destroy(widthCBV);
-          return output;
-        }
-
-        case BVAND:
-        {
-          CBV output = allOnes(width);
-          for (const CBV a : args)
-            CONSTANTBV::Set_Intersection(output, output, a);
-          return output;
-        }
-
-        case BVOR:
-        {
-          CBV output = CONSTANTBV::BitVector_Create(width, true);
-          for (const CBV a : args)
-            CONSTANTBV::Set_Union(output, output, a);
-          return output;
-        }
-
-        case BVXOR:
-        {
-          CBV output = CONSTANTBV::BitVector_Create(width, true);
-          for (const CBV a : args)
-            CONSTANTBV::Set_ExclusiveOr(output, output, a);
-          return output;
-        }
-
-        case BVSUB:
-        {
-          CBV output = CONSTANTBV::BitVector_Create(width, true);
-          bool carry = false;
-          CONSTANTBV::BitVector_sub(output, args[0], args[1], &carry);
-          return output;
-        }
-
-        case BVUMINUS:
-        {
-          CBV output = CONSTANTBV::BitVector_Create(width, true);
-          CONSTANTBV::BitVector_Negate(output, args[0]);
-          return output;
-        }
-
-        case BVEXTRACT:
-        {
-          const unsigned low = toUnsigned(args[2]);
-          assert(width == toUnsigned(args[1]) - low + 1);
-          CBV output = CONSTANTBV::BitVector_Create(width, false);
-          CONSTANTBV::BitVector_Interval_Copy(output, args[0], 0, low, width);
-          return output;
-        }
-
-        case BVCONCAT:
-          return CONSTANTBV::BitVector_Concat(args[0], args[1]);
-
-        case BVMULT:
-        {
-          CBV output = CONSTANTBV::BitVector_Create(width, true);
-          CONSTANTBV::BitVector_increment(output); // one.
-          CBV tmp = CONSTANTBV::BitVector_Create(2 * width, true);
-          for (const CBV a : args)
-          {
-            CONSTANTBV::ErrCode e =
-                CONSTANTBV::BitVector_Multiply(tmp, output, a);
-            if (0 != e)
-              FatalError((const char*)CONSTANTBV::BitVector_Error(e));
-            CONSTANTBV::BitVector_Interval_Copy(output, tmp, 0, 0, width);
-          }
-          CONSTANTBV::BitVector_Destroy(tmp);
-          return output;
-        }
-
-        case BVPLUS:
-        {
-          CBV output = CONSTANTBV::BitVector_Create(width, true);
-          bool carry = false;
-          for (const CBV a : args)
-          {
-            CONSTANTBV::BitVector_add(output, output, a, &carry);
-            carry = false;
-          }
-          return output;
-        }
-
-        case SBVDIV:
-        case SBVREM:
-        {
-          if (CONSTANTBV::BitVector_is_empty(args[1]))
-          {
-            // Division by zero, which SMT-LIB defines: (bvsrem s 0) is s,
-            // and (bvsdiv s 0) is 1 when s is negative and all ones (that
-            // is, -1) when it is not.
-            if (SBVREM == k)
-              return CONSTANTBV::BitVector_Clone(args[0]);
-            if (CONSTANTBV::BitVector_bit_test(args[0], width - 1))
-              return valueOf(width, 1);
-            return allOnes(width);
-          }
-
-          CBV quotient = CONSTANTBV::BitVector_Create(width, true);
-          CBV remainder = CONSTANTBV::BitVector_Create(width, true);
-          CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Divide(
-              quotient, args[0], args[1], remainder);
-          if (0 != e)
-            FatalError((const char*)CONSTANTBV::BitVector_Error(e));
-
-          if (SBVDIV == k)
-          {
-            CONSTANTBV::BitVector_Destroy(remainder);
-            return quotient;
-          }
-          CONSTANTBV::BitVector_Destroy(quotient);
-          return remainder;
-        }
-
-        case SBVMOD:
-        {
-          // See the SBVMOD case of consteval.cpp for the SMT-LIB
-          // definition this follows.
-          if (CONSTANTBV::BitVector_is_empty(args[1]))
-            return CONSTANTBV::BitVector_Clone(args[0]);
-
-          const bool isNegativeS = CONSTANTBV::BitVector_msb_(args[0]);
-          const bool isNegativeT = CONSTANTBV::BitVector_msb_(args[1]);
-
-          // Div_Pos destroys its second argument, so operate on copies.
-          CBV s = CONSTANTBV::BitVector_Clone(args[0]);
-          CBV t = CONSTANTBV::BitVector_Clone(args[1]);
-          CBV quotient = CONSTANTBV::BitVector_Create(width, true);
-          CBV remainder = CONSTANTBV::BitVector_Create(width, true);
-          CBV result = NULL;
-
-          if (!isNegativeS && !isNegativeT)
-          {
-            CONSTANTBV::ErrCode e =
-                CONSTANTBV::BitVector_Div_Pos(quotient, s, t, remainder);
-            assert(e == CONSTANTBV::ErrCode_Ok);
-            (void)e;
-            result = remainder;
-            remainder = NULL;
-          }
-          else if (isNegativeS && !isNegativeT)
-          {
-            CBV sb = CONSTANTBV::BitVector_Create(width, true);
-            CONSTANTBV::BitVector_Negate(sb, s);
-
-            CONSTANTBV::ErrCode e =
-                CONSTANTBV::BitVector_Div_Pos(quotient, sb, t, remainder);
-            assert(e == CONSTANTBV::ErrCode_Ok);
-            (void)e;
-
-            CBV remb = CONSTANTBV::BitVector_Create(width, true);
-            CONSTANTBV::BitVector_Negate(remb, remainder);
-
-            result = CONSTANTBV::BitVector_Create(width, true);
-            if (!CONSTANTBV::BitVector_is_empty(remb))
-            {
-              bool carry = false;
-              CONSTANTBV::BitVector_add(result, remb, t, &carry);
-            }
-
-            CONSTANTBV::BitVector_Destroy(remb);
-            CONSTANTBV::BitVector_Destroy(sb);
-          }
-          else if (!isNegativeS && isNegativeT)
-          {
-            CBV tb = CONSTANTBV::BitVector_Create(width, true);
-            CONSTANTBV::BitVector_Negate(tb, t);
-
-            CONSTANTBV::ErrCode e =
-                CONSTANTBV::BitVector_Div_Pos(quotient, s, tb, remainder);
-            assert(e == CONSTANTBV::ErrCode_Ok);
-            (void)e;
-
-            result = CONSTANTBV::BitVector_Create(width, true);
-            if (!CONSTANTBV::BitVector_is_empty(remainder))
-            {
-              bool carry = false;
-              CONSTANTBV::BitVector_add(result, remainder, t, &carry);
-            }
-
-            CONSTANTBV::BitVector_Destroy(tb);
-          }
-          else
-          {
-            // Signs are both negative.
-            CBV sb = CONSTANTBV::BitVector_Create(width, true);
-            CBV tb = CONSTANTBV::BitVector_Create(width, true);
-            CONSTANTBV::BitVector_Negate(sb, s);
-            CONSTANTBV::BitVector_Negate(tb, t);
-
-            CONSTANTBV::ErrCode e =
-                CONSTANTBV::BitVector_Div_Pos(quotient, sb, tb, remainder);
-            assert(e == CONSTANTBV::ErrCode_Ok);
-            (void)e;
-
-            result = CONSTANTBV::BitVector_Create(width, true);
-            CONSTANTBV::BitVector_Negate(result, remainder);
-
-            CONSTANTBV::BitVector_Destroy(sb);
-            CONSTANTBV::BitVector_Destroy(tb);
-          }
-
-          if (remainder != NULL)
-            CONSTANTBV::BitVector_Destroy(remainder);
-          CONSTANTBV::BitVector_Destroy(quotient);
-          CONSTANTBV::BitVector_Destroy(s);
-          CONSTANTBV::BitVector_Destroy(t);
-          return result;
-        }
-
-        case BVDIV:
-        case BVMOD:
-        {
-          if (CONSTANTBV::BitVector_is_empty(args[1]))
-          {
-            // (bvurem a 0) is a and (bvudiv a 0) is all ones; see the
-            // BVDIV case of consteval.cpp for why.
-            if (BVMOD == k)
-              return CONSTANTBV::BitVector_Clone(args[0]);
-            return allOnes(width);
-          }
-
-          CBV quotient = CONSTANTBV::BitVector_Create(width, true);
-          CBV remainder = CONSTANTBV::BitVector_Create(width, true);
-
-          // Div_Pos destroys its second argument, so pass a copy.
-          CBV dividend = CONSTANTBV::BitVector_Clone(args[0]);
-          CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(
-              quotient, dividend, args[1], remainder);
-          CONSTANTBV::BitVector_Destroy(dividend);
-          assert(0 == e);
-          (void)e;
-
-          if (BVDIV == k)
-          {
-            CONSTANTBV::BitVector_Destroy(remainder);
-            return quotient;
-          }
-          CONSTANTBV::BitVector_Destroy(quotient);
-          return remainder;
-        }
-
-        case EQ:
-          return boolCBV(CONSTANTBV::BitVector_equal(args[0], args[1]));
-
-        case BVLT:
-          return boolCBV(
-              CONSTANTBV::BitVector_Lexicompare(args[0], args[1]) < 0);
-        case BVLE:
-          return boolCBV(
-              CONSTANTBV::BitVector_Lexicompare(args[0], args[1]) <= 0);
-        case BVGT:
-          return boolCBV(
-              CONSTANTBV::BitVector_Lexicompare(args[0], args[1]) > 0);
-        case BVGE:
-          return boolCBV(
-              CONSTANTBV::BitVector_Lexicompare(args[0], args[1]) >= 0);
-
-        case BVSLT:
-          return boolCBV(CONSTANTBV::BitVector_Compare(args[0], args[1]) < 0);
-        case BVSLE:
-          return boolCBV(CONSTANTBV::BitVector_Compare(args[0], args[1]) <= 0);
-        case BVSGT:
-          return boolCBV(CONSTANTBV::BitVector_Compare(args[0], args[1]) > 0);
-        case BVSGE:
-          return boolCBV(CONSTANTBV::BitVector_Compare(args[0], args[1]) >= 0);
-
+        // The boolean connectives, over width-1 vectors.
         case NOT:
           return boolCBV(!isTrue(args[0]));
 
@@ -475,11 +137,25 @@ namespace stp
         case IMPLIES:
           return boolCBV(!isTrue(args[0]) || isTrue(args[1]));
 
+        // The predicates over two bit-vectors.
+        case BOOLEXTRACT:
+        case EQ:
+        case BVLT:
+        case BVLE:
+        case BVGT:
+        case BVGE:
+        case BVSLT:
+        case BVSLE:
+        case BVSGT:
+        case BVSGE:
+          return boolCBV(
+              NonMemberBVConstPredicateEvaluator(k, args[0], args[1]));
+
+        // The bit-vector terms. ITE is handled before evaluation is
+        // reached, and the evaluator rejects anything else that doesn't
+        // pass constEvaluable.
         default:
-          // ITE is handled before evaluation is reached; nothing else
-          // passes constEvaluable.
-          FatalError("ValueSetAnalysis: unexpected kind");
-          return NULL;
+          return NonMemberBVConstEvaluator(k, args, n.GetValueWidth());
       }
     }
 
