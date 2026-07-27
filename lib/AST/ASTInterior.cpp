@@ -46,44 +46,8 @@ void ASTInterior::nodeprint(ostream& os, bool /*c_friendly*/)
   os << _kind_names[_kind];
 }
 
-/******************************************************************
- * ASTInteriorHasher and ASTInteriorEqual Member Functions        *
- ******************************************************************/
-
-// ASTInteriorHasher operator()
-size_t ASTInterior::ASTInteriorHasher::
-operator()(const ASTInterior* int_node_ptr) const
-{
-  if (int_node_ptr->_cached_hash != 0)
-    return int_node_ptr->_cached_hash;
-
-  size_t hashval = ((size_t)int_node_ptr->GetKind());
-  const ASTChildren ch = int_node_ptr->GetChildren();
-  auto iend = ch.end();
-  for (auto i = ch.begin(); i != iend; i++)
-  {
-    hashval += i->Hash();
-    hashval += (hashval << 10);
-    hashval ^= (hashval >> 6);
-  }
-
-  hashval += (hashval << 3);
-  hashval ^= (hashval >> 11);
-  hashval += (hashval << 15);
-
-  if (hashval == 0)
-    hashval = 1; // 0 marks the hash as not yet computed.
-  int_node_ptr->_cached_hash = hashval;
-  return hashval;
-}
-
-// ASTInteriorEqual operator()
-bool ASTInterior::ASTInteriorEqual::
-operator()(const ASTInterior* int_node_ptr1,
-           const ASTInterior* int_node_ptr2) const
-{
-  return (*int_node_ptr1 == *int_node_ptr2);
-}
+// ASTInteriorHasher::operator() and ASTInteriorEqual::operator() are defined
+// inline in ASTInterior.h.
 
 ASTInterior::~ASTInterior()
 {
