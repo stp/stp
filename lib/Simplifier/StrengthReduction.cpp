@@ -110,13 +110,23 @@ namespace stp
     else
       newN = nf->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(),n.GetValueWidth(), children);
    
+    // buildMap memoises on the node, so it only needs redoing when the
+    // preceding reduction actually replaced the node.
     nda.buildMap(newN);
-    newN = strengthReduction(newN, *nda.getCbitMap());
+    ASTNode reduced = strengthReduction(newN, *nda.getCbitMap());
 
-    nda.buildMap(newN);
-    newN = strengthReduction(newN, *nda.getIntervalMap());
+    if (reduced != newN)
+    {
+      newN = reduced;
+      nda.buildMap(newN);
+    }
+    reduced = strengthReduction(newN, *nda.getIntervalMap());
 
-    nda.buildMap(newN);
+    if (reduced != newN)
+    {
+      newN = reduced;
+      nda.buildMap(newN);
+    }
     newN = strengthReduction(newN, *nda.getValueSetMap());
 
     cache.insert({n,newN});
