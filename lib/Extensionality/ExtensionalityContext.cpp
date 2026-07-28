@@ -667,6 +667,10 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
   std::map<ASTNode, std::vector<ASTNode>> parents;
   std::vector<ASTNode> coneITEs;
 
+  // The if-then-elses whose defining guards this solve has conjoined
+  // already, so that no round states one a second time.
+  std::set<ASTNode> definedITEs;
+
   // Operand recovery and if-then-else elimination interleave to a
   // fixed point: eliminating an ITE creates fresh guarded equalities,
   // whose operands may expose further ITEs. Their operands come from
@@ -677,15 +681,39 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
   {
     locateCanonicalOperands(root);
     computeProvisionalCone(root, cone, parents, coneITEs);
-    if (coneITEs.empty())
+
+    // An if-then-else a previous solve already replaced never turns up
+    // as a cone if-then-else again: operand recovery swaps the
+    // replacement in before the cone is computed, so the cone holds the
+    // replacement and no if-then-else. Its two guarded equality records
+    // are in the registry all the same, and every solve conjoins their
+    // witness bundles -- so every solve must conjoin their guards too.
+    // Without them the replacement is an array related to nothing,
+    // while the equality it stands for is still asserted: an
+    // unsatisfiable query answers satisfiable on the second solve.
+    std::vector<ASTNode> inheritedITEs;
+    for (std::map<ASTNode, ASTNode>::const_iterator it =
+             iteReplacements.begin();
+         it != iteReplacements.end(); ++it)
+      if (cone.count(it->second) != 0 && definedITEs.count(it->first) == 0)
+        inheritedITEs.push_back(it->first);
+    std::sort(inheritedITEs.begin(), inheritedITEs.end(), nodeNumLess);
+
+    if (coneITEs.empty() && inheritedITEs.empty())
       break;
+
+    // The cone's own if-then-elses first: they are the ones the
+    // formula still mentions, and the substitution below is theirs.
+    std::vector<ASTNode> toDefine(coneITEs);
+    toDefine.insert(toDefine.end(), inheritedITEs.begin(),
+                    inheritedITEs.end());
 
     const size_t recordsBefore = records.size();
     ASTNodeMap iteMap;
     ASTVec newConstraints;
-    for (size_t i = 0; i < coneITEs.size(); i++)
+    for (size_t i = 0; i < toDefine.size(); i++)
     {
-      const ASTNode& t = coneITEs[i];
+      const ASTNode& t = toDefine[i];
       // Nested if-then-elses are in coneITEs too: every one gets its
       // replacement in this same round, and the substitution below
       // rewrites the inner occurrences inside the outer ones' guarded
@@ -732,6 +760,15 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
         iteReplacements[t] = d;
         possibleConeSymbols.insert(d);
       }
+      // Only the if-then-elses the formula still mentions are
+      // substituted out of it; an inherited one left the operands when
+      // they were recovered and is not in the formula to rewrite.
+      if (i < coneITEs.size())
+        iteMap[t] = d;
+      // An if-then-else can be in both lists -- inherited, and back in
+      // the cone -- and then wants one copy of its guards, not two.
+      if (!definedITEs.insert(t).second)
+        continue;
       // Guarded equality proxies through the same early-minting funnel
       // (section 4.1): c -> d = thn ; not(c) -> d = els. The
       // equalities go through the ordinary abstraction, and the
@@ -744,7 +781,6 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
           OR, bm->defaultNodeFactory->CreateNode(NOT, cond), eqThen));
       newConstraints.push_back(
           bm->defaultNodeFactory->CreateNode(OR, cond, eqElse));
-      iteMap[t] = d;
     }
 
     // Records minted for the guarded equalities need their witness
@@ -762,15 +798,20 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
         newConstraints.push_back(records[i].rmReadClause);
     }
 
-    ASTNodeMap cache;
-    root = SubstitutionMap::replace(root, iteMap, cache,
-                                    bm->defaultNodeFactory);
-    for (size_t i = 0; i < newConstraints.size(); i++)
+    // A round that only re-states inherited guards has nothing to
+    // rewrite: those if-then-elses left the formula in an earlier solve.
+    if (!iteMap.empty())
     {
-      ASTNodeMap cache2;
-      newConstraints[i] = SubstitutionMap::replace(newConstraints[i], iteMap,
-                                                   cache2,
-                                                   bm->defaultNodeFactory);
+      ASTNodeMap cache;
+      root = SubstitutionMap::replace(root, iteMap, cache,
+                                      bm->defaultNodeFactory);
+      for (size_t i = 0; i < newConstraints.size(); i++)
+      {
+        ASTNodeMap cache2;
+        newConstraints[i] = SubstitutionMap::replace(newConstraints[i], iteMap,
+                                                     cache2,
+                                                     bm->defaultNodeFactory);
+      }
     }
     root = bm->defaultNodeFactory->CreateNode(
         AND, root, ASTVec(newConstraints.begin(), newConstraints.end()));
