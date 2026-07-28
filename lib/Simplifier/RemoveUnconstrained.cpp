@@ -38,7 +38,6 @@ THE SOFTWARE.
 #include "stp/AST/MutableASTNode.h"
 #include "stp/Simplifier/AchievableImage.h"
 #include "stp/Simplifier/constantBitP/Dependencies.h"
-#include <algorithm>
 
 namespace stp
 {
@@ -379,101 +378,6 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
   return true;
 }
 
-/* The most complicated handling is for EXTRACTS. If a variable has parents that
-*are all extracts and each of those extracts is disjoint (i.e. reads different
-* bits)
-*Then each of the extracts are replaced by a fresh variable. This is the only
-* case
-*where a variable with multiple distinct parents is replaced by a fresh
-* variable.
-*+ We perform this check upfront, so will miss any extra cases the the
-* unconstrained
-*  variable elimination introduces.
-*+ It's all or nothing. So even if there's an extract of [0:2] [1:2] and [3:5],
-* we wont
-*  replace the [3:5] (even though it could be).
-*/
-void RemoveUnconstrained::splitExtractOnly(vector<MutableASTNode*> extracts)
-{
-  assert(extracts.size() > 0);
-
-  // Going to be rebuilt later anyway, so discard.
-  vector<MutableASTNode*> variables;
-
-  for (size_t i = 0; i < extracts.size(); i++)
-  {
-    ASTNode& var = extracts[i]->n;
-    assert(var.GetKind() == SYMBOL);
-    const int size = var.GetValueWidth();
-    vector<ASTNode> toVar(size);
-
-    // Create a mutable copy that we can iterate over.
-    vector<MutableASTNode*> mut;
-    mut.insert(mut.end(), extracts[i]->parents.begin(),
-               extracts[i]->parents.end());
-
-    // 'parents' is hashed on the pointer, so it enumerates in an order that
-    // depends on where the allocator happened to put the nodes. We create a
-    // fresh variable per parent below, so that order ends up in the CNF. Sort
-    // on the node number to keep the output the same from run to run.
-    std::sort(mut.begin(), mut.end(),
-              [](const MutableASTNode* a, const MutableASTNode* b) {
-                return a->n.GetNodeNum() < b->n.GetNodeNum();
-              });
-
-    for (vector<MutableASTNode*>::iterator it = mut.begin(); it != mut.end();
-         it++)
-    {
-      ASTNode parent_node = (*it)->n;
-      assert(((**it)).children[0] == extracts[i]);
-      assert(!parent_node.IsNull());
-      assert(parent_node.GetKind() == BVEXTRACT);
-
-      int lb = parent_node[2].GetUnsignedConst();
-      // Replace each parent with a fresh.
-      toVar[lb] = replaceParentWithFresh(**it, variables);
-    }
-
-    ASTVec concatVec;
-    int empty = 0;
-    for (int j = 0; j < size; j++)
-    {
-      if (toVar[j].IsNull())
-      {
-        empty++;
-        continue;
-      }
-
-      if (empty > 0)
-      {
-        concatVec.push_back(bm.CreateFreshVariable(0, empty, "extract_unc"));
-        empty = 0;
-      }
-
-      concatVec.push_back(toVar[j]);
-      // cout << toVar[j];
-      assert(toVar[j].GetValueWidth() > 0);
-      j += toVar[j].GetValueWidth() - 1;
-    }
-
-    if (empty > 0)
-    {
-      concatVec.push_back(bm.CreateFreshVariable(0, empty, "extract_unc"));
-    }
-
-    ASTNode concat = concatVec[0];
-    for (size_t i = 1; i < concatVec.size(); i++)
-    {
-      assert(!concat.IsNull());
-      concat = bm.CreateTerm(
-          BVCONCAT, concat.GetValueWidth() + concatVec[i].GetValueWidth(),
-          concatVec[i], concat);
-    }
-
-    replace(var, concat);
-  }
-}
-
 ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
                                             Simplifier* simplifier)
 {
@@ -483,13 +387,6 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
   this->simplifier = simplifier;
 
   MutableASTNode* topMutable = MutableASTNode::build(n);
-
-  vector<MutableASTNode*> extracts;
-  topMutable->getDisjointExtractVariables(extracts);
-  if (extracts.size() > 0)
-  {
-    splitExtractOnly(extracts);
-  }
 
   vector<MutableASTNode*> variable_array;
   topMutable->getAllUnconstrainedVariables(variable_array);

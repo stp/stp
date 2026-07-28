@@ -247,7 +247,7 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
   if (bm->UserFlags.enable_split_extracts)
   {
     SplitExtracts se(*bm);
-    inputToSat = se.topLevel(inputToSat);
+    inputToSat = se.topLevel(inputToSat, simp);
     bm->ASTNodeStats(se_message.c_str(), inputToSat);
   }
 
