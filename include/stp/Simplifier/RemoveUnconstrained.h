@@ -33,6 +33,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/AST/MutableASTNode.h"
 #include "stp/STPManager/STPManager.h"
+#include "stp/Simplifier/AchievableImage.h"
 #include "stp/Simplifier/Simplifier.h"
 
 namespace stp
@@ -51,6 +52,14 @@ class RemoveUnconstrained
 
   bool tryGroundPathCollapse(MutableASTNode& muteNode,
                              vector<MutableASTNode*>& variables);
+
+  bool tryImageConstrainShared(const ASTNode& var, MutableASTNode& sharedNode,
+                               const GroundStep& step,
+                               vector<MutableASTNode*>& variables);
+
+  // Membership constraints produced by tryImageConstrainShared during a
+  // topLevel_other() run; conjoined onto the result before returning.
+  ASTVec imageConstraints;
 
   void replace(const ASTNode& from, const ASTNode to);
 
