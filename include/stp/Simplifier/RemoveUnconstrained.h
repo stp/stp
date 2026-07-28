@@ -47,7 +47,8 @@ class RemoveUnconstrained
 
   ASTNode topLevel_other(const ASTNode& n, Simplifier* simplifier);
 
-  void splitExtractOnly(vector<MutableASTNode*> extracts);
+  bool tryGroundPathCollapse(MutableASTNode& muteNode,
+                             vector<MutableASTNode*>& variables);
 
   void replace(const ASTNode& from, const ASTNode to);
 

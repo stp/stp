@@ -268,13 +268,6 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize,
       PL_Print1(os, c[2], indentation, letize, bm);
       os << endl << "ENDIF";
       break;
-    case PARAMBOOL:
-      PL_Print1(os, c[0], indentation, letize, bm);
-      os << "(";
-      PL_Print1(os, c[1], indentation, letize, bm);
-      os << ")";
-      break;
-
     case BVLT: // two arity, prefixed function name.
     case BVLE:
     case BVGT:

@@ -349,13 +349,6 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg)
       }
       output = pushNeg ? nf->CreateNode(NOT, output) : output;
       break;
-    case PARAMBOOL:
-    {
-      ASTNode term = SimplifyTerm(a[1]);
-      output = nf->CreateNode(PARAMBOOL, a[0], term);
-      output = pushNeg ? nf->CreateNode(NOT, output) : output;
-      break;
-    }
     case BOOLEXTRACT:
     {
       ASTNode term = SimplifyTerm(a[0]);

@@ -19,6 +19,7 @@
 # THE SOFTWARE.
 
 add_library(simplifier OBJECT
+    AchievableImage.cpp
     BVSolver.cpp
     consteval.cpp
     PropagateEqualities.cpp

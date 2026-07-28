@@ -24,9 +24,8 @@ THE SOFTWARE.
 
 /* Transform:
  *
- * Converts signed Div/signed remainder/signed modulus into their
- * unsigned counterparts. Removes array selects and stores from
- * formula. Arrays are replaced by equivalent bit-vector variables
+ * Removes array selects and stores from the formula. Arrays are
+ * replaced by equivalent bit-vector variables
  */
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include "stp/Simplifier/Simplifier.h"
@@ -118,139 +117,6 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
   }
 }
 
-// Translates signed BVDIV,BVMOD and BVREM into unsigned variety
-ASTNode ArrayTransformer::TranslateSignedDivModRem(const ASTNode& in,
-                                                   NodeFactory* nf)
-{
-  assert(in.GetChildren().size() == 2);
-
-  const ASTNode& dividend = in[0];
-  const ASTNode& divisor = in[1];
-  const unsigned len = in.GetValueWidth();
-
-  ASTNode hi1 = nf->CreateBVConst(32, len - 1);
-  ASTNode one = nf->CreateOneConst(1);
-  ASTNode zero = nf->CreateZeroConst(1);
-  // create the condition for the dividend
-  ASTNode cond_dividend =
-      nf->CreateNode(EQ, one, nf->CreateTerm(BVEXTRACT, 1, dividend, hi1, hi1));
-  // create the condition for the divisor
-  ASTNode cond_divisor =
-      nf->CreateNode(EQ, one, nf->CreateTerm(BVEXTRACT, 1, divisor, hi1, hi1));
-
-  if (SBVREM == in.GetKind())
-  {
-    // BVMOD is an expensive operation. So have the fewest bvmods
-    // possible. Just one.
-
-    // Take absolute value.
-    ASTNode pos_dividend =
-        nf->CreateTerm(ITE, len, cond_dividend,
-                       nf->CreateTerm(BVUMINUS, len, dividend), dividend);
-    ASTNode pos_divisor =
-        nf->CreateTerm(ITE, len, cond_divisor,
-                       nf->CreateTerm(BVUMINUS, len, divisor), divisor);
-
-    // create the modulus term
-    ASTNode modnode = nf->CreateTerm(BVMOD, len, pos_dividend, pos_divisor);
-
-    // If the dividend is <0 take the unary minus.
-    ASTNode n = nf->CreateTerm(ITE, len, cond_dividend,
-                               nf->CreateTerm(BVUMINUS, len, modnode), modnode);
-    return n;
-  }
-
-  // This is the modulus of dividing rounding to -infinity.
-  else if (SBVMOD == in.GetKind())
-  {
-
-    /*
-    (bvsmod s t) abbreviates
-        (let ((?msb_s ((_ extract |m-1| |m-1|) s))
-          (?msb_t ((_ extract |m-1| |m-1|) t)))
-        (let ((abs_s (ite (= ?msb_s #b0) s (bvneg s)))
-            (abs_t (ite (= ?msb_t #b0) t (bvneg t))))
-          (let ((u (bvurem abs_s abs_t)))
-          (ite (= u (_ bv0 m))
-             u
-          (ite (and (= ?msb_s #b0) (= ?msb_t #b0))
-             u
-          (ite (and (= ?msb_s #b1) (= ?msb_t #b0))
-             (bvadd (bvneg u) t)
-          (ite (and (= ?msb_s #b0) (= ?msb_t #b1))
-             (bvadd u t)
-             (bvneg u))))))))
-     */
-
-    // Take absolute value.
-    ASTNode pos_dividend =
-        nf->CreateTerm(ITE, len, cond_dividend,
-                       nf->CreateTerm(BVUMINUS, len, dividend), dividend);
-    ASTNode pos_divisor =
-        nf->CreateTerm(ITE, len, cond_divisor,
-                       nf->CreateTerm(BVUMINUS, len, divisor), divisor);
-
-    ASTNode urem_node = nf->CreateTerm(BVMOD, len, pos_dividend, pos_divisor);
-
-    // If the dividend is <0, then we negate the whole thing.
-    ASTNode rev_node =
-        nf->CreateTerm(ITE, len, cond_dividend,
-                       nf->CreateTerm(BVUMINUS, len, urem_node), urem_node);
-
-    // if It's XOR <0, and it doesn't perfectly divide, then add t (not its
-    // absolute value).
-    ASTNode xor_node = nf->CreateNode(XOR, cond_dividend, cond_divisor);
-    ASTNode neZ = nf->CreateNode(
-        NOT,
-        nf->CreateNode(EQ, rev_node,
-                       nf->CreateZeroConst(divisor.GetValueWidth())));
-    ASTNode cond = nf->CreateNode(AND, xor_node, neZ);
-    ASTNode n = nf->CreateTerm(ITE, len, cond,
-                               nf->CreateTerm(BVPLUS, len, rev_node, divisor),
-                               rev_node);
-
-    return n;
-  }
-  else if (SBVDIV == in.GetKind())
-  {
-    // now handle the BVDIV case
-    // if topBit(dividend) is 1 and topBit(divisor) is 0
-    //
-    // then output is -BVDIV(-dividend,divisor)
-    //
-    // elseif topBit(dividend) is 0 and topBit(divisor) is 1
-    //
-    // then output is -BVDIV(dividend,-divisor)
-    //
-    // elseif topBit(dividend) is 1 and topBit(divisor) is 1
-    //
-    // then output is BVDIV(-dividend,-divisor)
-    //
-    // else simply output BVDIV(dividend,divisor)
-
-    // Take absolute value.
-    ASTNode pos_dividend =
-        nf->CreateTerm(ITE, len, cond_dividend,
-                       nf->CreateTerm(BVUMINUS, len, dividend), dividend);
-    ASTNode pos_divisor =
-        nf->CreateTerm(ITE, len, cond_divisor,
-                       nf->CreateTerm(BVUMINUS, len, divisor), divisor);
-
-    ASTNode divnode = nf->CreateTerm(BVDIV, len, pos_dividend, pos_divisor);
-
-    // A little confusing. Only negate the result if they are XOR <0.
-    ASTNode xor_node = nf->CreateNode(XOR, cond_dividend, cond_divisor);
-    ASTNode n = nf->CreateTerm(ITE, len, xor_node,
-                               nf->CreateTerm(BVUMINUS, len, divnode), divnode);
-
-    return n;
-  }
-
-  FatalError("TranslateSignedDivModRem:"
-             "input must be signed DIV/MOD/REM",
-             in);
-}
-
 // Check that the transformations have occurred.
 void ArrayTransformer::assertTransformPostConditions(const ASTNode& term,
                                                      ASTNodeSet& visited)
@@ -283,7 +149,7 @@ void ArrayTransformer::assertTransformPostConditions(const ASTNode& term,
 /********************************************************
  * TransformFormula()
  *
- * Get rid of DIV/MODs, ARRAY read/writes, FOR constructs
+ * Get rid of ARRAY read/writes
  ********************************************************/
 ASTNode ArrayTransformer::TransformFormula(const ASTNode& simpleForm)
 {
@@ -379,24 +245,6 @@ ASTNode ArrayTransformer::TransformFormula(const ASTNode& simpleForm)
       }
 
       result = nf->CreateNode(k, vec);
-      break;
-    }
-    case PARAMBOOL:
-    {
-      // If the parameteric boolean variable is of the form
-      // VAR(const), then convert it into a Boolean variable of the
-      // form "VAR(const)".
-      //
-      // Else if the paramteric boolean variable is of the form
-      // VAR(expression), then simply return it
-      if (BVCONST == simpleForm[1].GetKind())
-      {
-        result = bm->NewParameterized_BooleanVar(simpleForm[0], simpleForm[1]);
-      }
-      else
-      {
-        result = simpleForm;
-      }
       break;
     }
     case FP_LEQ:

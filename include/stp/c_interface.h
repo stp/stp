@@ -377,8 +377,10 @@ DLL_PUBLIC Expr vc_iteExpr(VC vc, Expr conditional, Expr thenExpr,
 //!
 DLL_PUBLIC Expr vc_boolToBVExpr(VC vc, Expr form);
 
-//! \brief Creates a parameterized boolean expression with the given boolean
-//!        variable expression and the parameter param.
+//! \brief Creates a boolean variable named after the application of the
+//!        given boolean variable expression to the parameter, e.g. "p(0x3)".
+//!        Two applications denote the same variable exactly when the names
+//!        match. The parameter must be a constant bit-vector expression.
 //!
 DLL_PUBLIC Expr vc_paramBoolExpr(VC vc, Expr var, Expr param);
 
@@ -1463,8 +1465,9 @@ enum exprkind_t
   NOR,  //!< Logical-not-or boolean expression (TODO: Does this still exist?)
   XOR,  //!< Logical-xor (either-or) boolean expression
   IFF,  //!< If-and-only-if boolean expression
-  IMPLIES,       //!< Implication boolean expression
-  PARAMBOOL,     //!< Parameterized boolean expression
+  IMPLIES,   //!< Implication boolean expression
+  PARAMBOOL, //!< Parameterized boolean expression. No longer created;
+             //!< kept so that the later kind values don't change.
   READ,          //!< Array read expression
   WRITE,         //!< Array write expression
   ARRAY,         //!< Array creation expression

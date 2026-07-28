@@ -702,10 +702,6 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
                    form);
     }
     break;
-    case PARAMBOOL:
-      output = bm->NewParameterized_BooleanVar(form[0], form[1]);
-      output = ComputeFormulaUsingModel(output);
-      break;
     case FP_LEQ:
     case FP_LT:
     case FP_GEQ:

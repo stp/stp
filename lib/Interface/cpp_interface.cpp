@@ -237,6 +237,12 @@ ASTNode Cpp_interface::LookupOrCreateSymbol(const char* const name)
   return bm.LookupOrCreateSymbol(name);
 }
 
+ASTNode Cpp_interface::CreateParameterisedBooleanVar(const ASTNode& var,
+                                                     const ASTNode& constant)
+{
+  return bm.NewParameterized_BooleanVar(var, constant);
+}
+
 void Cpp_interface::removeSymbol(ASTNode to_remove)
 {
   bool removed = false;
