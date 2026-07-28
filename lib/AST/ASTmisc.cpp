@@ -545,15 +545,6 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
       }
       break;
 
-    case PARAMBOOL:
-      if (2 != n.Degree())
-      {
-        FatalError(
-            "BVTypeCheck: PARAMBOOL formula can have exactly two childNodes",
-            n);
-      }
-      break;
-
     case EQ:
       if (n.Degree() != 2)
         FatalError("BVTypeCheck: should have exactly 2 args\n", n);

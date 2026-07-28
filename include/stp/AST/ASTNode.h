@@ -66,7 +66,9 @@ class ASTNode
   // Equal iff ASTIntNode pointers are the same.
   friend bool operator==(const ASTNode& node1, const ASTNode& node2)
   {
-    return (node1.Hash() == node2.Hash());
+    // Nodes are hash-consed, so the pointer and the node number are in
+    // bijection; comparing pointers avoids dereferencing both nodes.
+    return (node1._int_node_ptr == node2._int_node_ptr);
   }
 
   friend bool operator!=(const ASTNode& node1, const ASTNode& node2)
@@ -302,7 +304,7 @@ public:
   public:
     bool operator()(const ASTNode& n1, const ASTNode& n2) const
     {
-      return (n1.Hash() == n2.Hash());
+      return (n1._int_node_ptr == n2._int_node_ptr);
     }
   };
 };
