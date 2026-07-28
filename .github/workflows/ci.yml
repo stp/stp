@@ -493,6 +493,7 @@ jobs:
         $dir = Join-Path $env:RUNNER_TEMP 'winflexbison'
 
         $attempts = 3
+        $backoff = @(15, 45)   # seconds, between attempts
         $ok = $false
         for ($i = 1; $i -le $attempts; $i++) {
           try {
@@ -509,8 +510,10 @@ jobs:
             break
           } catch {
             Write-Host "::warning::winflexbison download attempt $i failed: $_"
+            # Not sleeping after the final attempt: it only delays a failure
+            # that has already been decided.
             if ($i -lt $attempts) {
-              $delay = 15 * $i
+              $delay = $backoff[$i - 1]
               "Retrying in $delay s..."
               Start-Sleep -Seconds $delay
             }
