@@ -22,7 +22,6 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 #include "stp/ToSat/BitBlaster.h"
-#include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
@@ -67,6 +66,137 @@ vector<BBNodeAIG> _empty_BBNodeAIGVec;
 // that should have already been applied.
 const bool debug_do_check = false;
 const bool debug_bitblaster = false;
+
+// Translates signed BVDIV,BVMOD and BVREM into unsigned variety
+static ASTNode TranslateSignedDivModRem(const ASTNode& in, NodeFactory* nf)
+{
+  assert(in.GetChildren().size() == 2);
+
+  const ASTNode& dividend = in[0];
+  const ASTNode& divisor = in[1];
+  const unsigned len = in.GetValueWidth();
+
+  ASTNode hi1 = nf->CreateBVConst(32, len - 1);
+  ASTNode one = nf->CreateOneConst(1);
+  // create the condition for the dividend
+  ASTNode cond_dividend =
+      nf->CreateNode(EQ, one, nf->CreateTerm(BVEXTRACT, 1, dividend, hi1, hi1));
+  // create the condition for the divisor
+  ASTNode cond_divisor =
+      nf->CreateNode(EQ, one, nf->CreateTerm(BVEXTRACT, 1, divisor, hi1, hi1));
+
+  if (SBVREM == in.GetKind())
+  {
+    // BVMOD is an expensive operation. So have the fewest bvmods
+    // possible. Just one.
+
+    // Take absolute value.
+    ASTNode pos_dividend =
+        nf->CreateTerm(ITE, len, cond_dividend,
+                       nf->CreateTerm(BVUMINUS, len, dividend), dividend);
+    ASTNode pos_divisor =
+        nf->CreateTerm(ITE, len, cond_divisor,
+                       nf->CreateTerm(BVUMINUS, len, divisor), divisor);
+
+    // create the modulus term
+    ASTNode modnode = nf->CreateTerm(BVMOD, len, pos_dividend, pos_divisor);
+
+    // If the dividend is <0 take the unary minus.
+    ASTNode n = nf->CreateTerm(ITE, len, cond_dividend,
+                               nf->CreateTerm(BVUMINUS, len, modnode), modnode);
+    return n;
+  }
+
+  // This is the modulus of dividing rounding to -infinity.
+  else if (SBVMOD == in.GetKind())
+  {
+
+    /*
+    (bvsmod s t) abbreviates
+        (let ((?msb_s ((_ extract |m-1| |m-1|) s))
+          (?msb_t ((_ extract |m-1| |m-1|) t)))
+        (let ((abs_s (ite (= ?msb_s #b0) s (bvneg s)))
+            (abs_t (ite (= ?msb_t #b0) t (bvneg t))))
+          (let ((u (bvurem abs_s abs_t)))
+          (ite (= u (_ bv0 m))
+             u
+          (ite (and (= ?msb_s #b0) (= ?msb_t #b0))
+             u
+          (ite (and (= ?msb_s #b1) (= ?msb_t #b0))
+             (bvadd (bvneg u) t)
+          (ite (and (= ?msb_s #b0) (= ?msb_t #b1))
+             (bvadd u t)
+             (bvneg u))))))))
+     */
+
+    // Take absolute value.
+    ASTNode pos_dividend =
+        nf->CreateTerm(ITE, len, cond_dividend,
+                       nf->CreateTerm(BVUMINUS, len, dividend), dividend);
+    ASTNode pos_divisor =
+        nf->CreateTerm(ITE, len, cond_divisor,
+                       nf->CreateTerm(BVUMINUS, len, divisor), divisor);
+
+    ASTNode urem_node = nf->CreateTerm(BVMOD, len, pos_dividend, pos_divisor);
+
+    // If the dividend is <0, then we negate the whole thing.
+    ASTNode rev_node =
+        nf->CreateTerm(ITE, len, cond_dividend,
+                       nf->CreateTerm(BVUMINUS, len, urem_node), urem_node);
+
+    // if It's XOR <0, and it doesn't perfectly divide, then add t (not its
+    // absolute value).
+    ASTNode xor_node = nf->CreateNode(XOR, cond_dividend, cond_divisor);
+    ASTNode neZ = nf->CreateNode(
+        NOT,
+        nf->CreateNode(EQ, rev_node,
+                       nf->CreateZeroConst(divisor.GetValueWidth())));
+    ASTNode cond = nf->CreateNode(AND, xor_node, neZ);
+    ASTNode n = nf->CreateTerm(ITE, len, cond,
+                               nf->CreateTerm(BVPLUS, len, rev_node, divisor),
+                               rev_node);
+
+    return n;
+  }
+  else if (SBVDIV == in.GetKind())
+  {
+    // now handle the BVDIV case
+    // if topBit(dividend) is 1 and topBit(divisor) is 0
+    //
+    // then output is -BVDIV(-dividend,divisor)
+    //
+    // elseif topBit(dividend) is 0 and topBit(divisor) is 1
+    //
+    // then output is -BVDIV(dividend,-divisor)
+    //
+    // elseif topBit(dividend) is 1 and topBit(divisor) is 1
+    //
+    // then output is BVDIV(-dividend,-divisor)
+    //
+    // else simply output BVDIV(dividend,divisor)
+
+    // Take absolute value.
+    ASTNode pos_dividend =
+        nf->CreateTerm(ITE, len, cond_dividend,
+                       nf->CreateTerm(BVUMINUS, len, dividend), dividend);
+    ASTNode pos_divisor =
+        nf->CreateTerm(ITE, len, cond_divisor,
+                       nf->CreateTerm(BVUMINUS, len, divisor), divisor);
+
+    ASTNode divnode = nf->CreateTerm(BVDIV, len, pos_dividend, pos_divisor);
+
+    // A little confusing. Only negate the result if they are XOR <0.
+    ASTNode xor_node = nf->CreateNode(XOR, cond_dividend, cond_divisor);
+    ASTNode n = nf->CreateTerm(ITE, len, xor_node,
+                               nf->CreateTerm(BVUMINUS, len, divnode), divnode);
+
+    return n;
+  }
+
+  FatalError("TranslateSignedDivModRem:"
+             "input must be signed DIV/MOD/REM",
+             in);
+}
 
 //"Hash" (=add) first 5 node IDs together
 //TODO pretty bad hash
@@ -885,7 +1015,7 @@ const BBNodeVec BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& _term,
     case SBVMOD:
     case SBVDIV:
     {
-      ASTNode p = ArrayTransformer::TranslateSignedDivModRem(term, ASTNF);
+      ASTNode p = TranslateSignedDivModRem(term, ASTNF);
       result = BBTerm(p, support);
       break;
     }
