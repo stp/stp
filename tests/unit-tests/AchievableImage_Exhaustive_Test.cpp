@@ -40,7 +40,9 @@ THE SOFTWARE.
 #include "stp/Simplifier/AchievableImage.h"
 #include "stp/Simplifier/Simplifier.h"
 #include <algorithm>
+#include <cstdio>
 #include <gtest/gtest.h>
+#include <map>
 #include <set>
 #include <vector>
 
@@ -436,6 +438,87 @@ TEST(AchievableImage_Exhaustive, unhandled_kind_rejected)
   EXPECT_FALSE(AchievableImage::predicateKind(AND));
   EXPECT_TRUE(AchievableImage::predicateKind(EQ));
   EXPECT_TRUE(AchievableImage::predicateKind(BVSGE));
+}
+
+// How much does the sample fallback miss at a width where the domain
+// (256) far exceeds the sample budget? Mirrors production: a fresh
+// image per predicate constant, with the back-propagated hint chain.
+// Informational -- prints per-family miss rates; only soundness is
+// asserted.
+TEST(AchievableImage_Exhaustive, sample_coverage_width8_report)
+{
+  Ctx c;
+  const unsigned w = 8;
+
+  struct Config
+  {
+    const char* family;
+    GroundStep step;
+  };
+  std::vector<Config> configs;
+  for (uint64_t m : {0x55ull, 0xAAull, 0x81ull, 0x66ull, 0xF0ull})
+    configs.push_back({"and-mask", c.bin(BVAND, w, m, true)});
+  for (uint64_t m : {0x55ull, 0x0Full, 0x81ull})
+    configs.push_back({"or-mask", c.bin(BVOR, w, m, true)});
+  for (uint64_t m : {2ull, 6ull, 0x10ull, 0x30ull})
+    configs.push_back({"even-mult", c.bin(BVMULT, w, m, true)});
+  for (uint64_t k : {1ull, 2ull, 4ull})
+    configs.push_back({"shl", c.bin(BVLEFTSHIFT, w, k, true)});
+  for (uint64_t k : {1ull, 3ull})
+    configs.push_back({"srshift", c.bin(BVSRSHIFT, w, k, true)});
+  for (uint64_t d : {3ull, 5ull, 0xFDull})
+  {
+    configs.push_back({"sdiv-srem-smod", c.bin(SBVDIV, w, d, true)});
+    configs.push_back({"sdiv-srem-smod", c.bin(SBVREM, w, d, true)});
+    configs.push_back({"sdiv-srem-smod", c.bin(SBVMOD, w, d, true)});
+  }
+  configs.push_back({"square", c.same(BVMULT, w)});
+
+  struct Tally
+  {
+    size_t possible = 0, hit = 0;
+  };
+  std::map<std::string, Tally> eqTally, cmpTally;
+
+  for (const Config& cfg : configs)
+  {
+    std::set<uint64_t> image;
+    for (uint64_t x = 0; x < 256; x++)
+      image.insert(evalStep64(cfg.step, x));
+
+    for (const Kind pred : {EQ, BVGT, BVSLT})
+      for (uint64_t k = 0; k < 256; k++)
+      {
+        bool canTrue = false, canFalse = false;
+        for (const uint64_t v : image)
+          (evalPred64(pred, true, v, k, w) ? canTrue : canFalse) = true;
+        if (!canTrue || !canFalse)
+          continue; // constant predicate: correctly out of scope
+
+        AchievableImage img(c.mgr, w);
+        img.addHintChain({cfg.step}, c.konst(k, w));
+        ASSERT_TRUE(img.apply(cfg.step));
+        AchievableImage::Decision d = img.decide(pred, true, c.konst(k, w));
+
+        Tally& t = (pred == EQ ? eqTally : cmpTally)[cfg.family];
+        t.possible++;
+        t.hit += d.collapse;
+      }
+  }
+
+  std::cout << "[ width-8 coverage ]  family            EQ hit-rate     "
+               "CMP hit-rate\n";
+  for (const auto& e : eqTally)
+  {
+    const Tally& eq = e.second;
+    const Tally& cmp = cmpTally[e.first];
+    std::printf("[ width-8 coverage ]  %-16s %4zu/%-4zu %3.0f%%   "
+                "%4zu/%-4zu %3.0f%%\n",
+                e.first.c_str(), eq.hit, eq.possible,
+                100.0 * eq.hit / std::max<size_t>(1, eq.possible), cmp.hit,
+                cmp.possible,
+                100.0 * cmp.hit / std::max<size_t>(1, cmp.possible));
+  }
 }
 
 TEST(AchievableImage_Exhaustive, square_small_domain_is_complete)

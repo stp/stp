@@ -168,6 +168,39 @@ void AchievableImage::addHint(const ASTNode& k)
 
 namespace
 {
+// The low 64 bits of a CBV (which stores 32-bit words, low first).
+uint64_t low64(const CBV v)
+{
+  uint64_t r = ((unsigned*)v)[0];
+  if (bits_(v) > 32)
+    r |= ((uint64_t)((unsigned*)v)[1]) << 32;
+  return r;
+}
+
+// Deterministic integer square root (no libm: the result seeds samples,
+// and a last-ulp difference between platforms would change the CNF).
+uint64_t isqrt64(uint64_t n)
+{
+  if (n == 0)
+    return 0;
+  uint64_t x = n, y = (x + 1) / 2;
+  while (y < x)
+  {
+    x = y;
+    y = (x + n / x) / 2;
+  }
+  return x;
+}
+
+CBV mkNum64(unsigned width, uint64_t value)
+{
+  CBV v = mkZero(width);
+  for (unsigned i = 0; i < 64 && i < width; i++)
+    if ((value >> i) & 1)
+      CONSTANTBV::BitVector_Bit_On(v, i);
+  return v;
+}
+
 // Heuristic preimage of `out` under one step. Used only to generate
 // sample seeds -- witnesses are validated forward -- so it may be wrong,
 // just not useless. NULL when no sensible backward map exists.
@@ -177,7 +210,17 @@ CBV hintBackStep(const GroundStep& step, const CBV out)
   const unsigned W = step.outWidth;
 
   if (step.samePathAllOperands)
-    return NULL; // no closed-form root
+  {
+    if (step.kind == BVPLUS) // x + x: halve
+    {
+      CBV r = clone(out);
+      CONSTANTBV::BitVector_Move_Right(r, 1);
+      return r;
+    }
+    if (step.kind == BVMULT && W <= 64) // x * x: integer square root
+      return mkNum64(W, isqrt64(low64(out)));
+    return NULL;
+  }
 
   switch (step.kind)
   {
@@ -246,8 +289,25 @@ CBV hintBackStep(const GroundStep& step, const CBV out)
     }
     case BVAND:
       return op2(BVAND, out, step.constants[0].GetBVConst(), W);
+    case BVMULT:
+    {
+      // Divide out the constant: exact whenever it divides `out` with
+      // no overflow, a serviceable seed otherwise.
+      const CBV c = step.constants[0].GetBVConst();
+      return isZero(c) ? NULL : op2(BVDIV, out, c, W);
+    }
+    case SBVDIV:
+    {
+      const CBV c = step.constants[0].GetBVConst();
+      if (step.pathIndex != 0 || isZero(c))
+        return NULL;
+      return op2(BVMULT, out, c, W); // signed multiply == unsigned mod 2^w
+    }
+    case SBVREM:
+    case SBVMOD:
+      return step.pathIndex == 0 ? clone(out) : NULL;
     default:
-      return NULL; // BVMULT (even const), BVOR, the signed divides
+      return NULL; // BVOR, variable-position divides
   }
 }
 }
