@@ -26,5 +26,5 @@ THE SOFTWARE.
 namespace stp
 {
 
-THREAD_LOCAL vector<MutableASTNode*> MutableASTNode::all;
+THREAD_LOCAL_IE vector<MutableASTNode*> MutableASTNode::all;
 }

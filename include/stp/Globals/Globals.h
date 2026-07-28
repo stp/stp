@@ -87,11 +87,11 @@ enum SOLVER_RETURN_TYPE
 // Empty vector. Useful commonly used ASTNodes
 DLL_PUBLIC extern std::vector<ASTNode> _empty_ASTVec;
 
-extern THREAD_LOCAL enum inputStatus
+extern THREAD_LOCAL_IE enum inputStatus
     input_status; // Needed by the SMTLIB printer
 
 // Useful global variables. Use for parsing only
-DLL_PUBLIC extern THREAD_LOCAL STP* GlobalSTP;
+DLL_PUBLIC extern THREAD_LOCAL_IE STP* GlobalSTP;
 DLL_PUBLIC extern THREAD_LOCAL_IE STPMgr* GlobalParserBM;
 DLL_PUBLIC extern THREAD_LOCAL_IE Cpp_interface* GlobalParserInterface;
 

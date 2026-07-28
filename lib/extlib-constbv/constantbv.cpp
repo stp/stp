@@ -69,24 +69,24 @@ namespace CONSTANTBV {
 
   /* FIXME: use a thread-safe Singleton pattern instead */
 
-  static THREAD_LOCAL unsigned int BITS; /* = # of bits in machine word (must be power of 2) */
-  static THREAD_LOCAL unsigned int MODMASK; /* = BITS - 1 (mask for calculating modulo BITS) */
-  static THREAD_LOCAL unsigned int LOGBITS; /* = ld(BITS) (logarithmus dualis) */
-  static THREAD_LOCAL unsigned int FACTOR; /* = ld(BITS / 8) (ld of # of bytes) */
+  static THREAD_LOCAL_IE unsigned int BITS; /* = # of bits in machine word (must be power of 2) */
+  static THREAD_LOCAL_IE unsigned int MODMASK; /* = BITS - 1 (mask for calculating modulo BITS) */
+  static THREAD_LOCAL_IE unsigned int LOGBITS; /* = ld(BITS) (logarithmus dualis) */
+  static THREAD_LOCAL_IE unsigned int FACTOR; /* = ld(BITS / 8) (ld of # of bytes) */
 
-  static THREAD_LOCAL unsigned int LSB = 1; /* = mask for least significant bit */
-  static THREAD_LOCAL unsigned int MSB; /* = mask for most significant bit */
+  static THREAD_LOCAL_IE unsigned int LSB = 1; /* = mask for least significant bit */
+  static THREAD_LOCAL_IE unsigned int MSB; /* = mask for most significant bit */
 
-  static THREAD_LOCAL unsigned int LONGBITS; /* = # of bits in unsigned long */
+  static THREAD_LOCAL_IE unsigned int LONGBITS; /* = # of bits in unsigned long */
 
-  static THREAD_LOCAL unsigned int LOG10; /* = logarithm to base 10 of BITS - 1 */
-  static THREAD_LOCAL unsigned int EXP10; /* = largest possible power of 10 in signed int */
+  static THREAD_LOCAL_IE unsigned int LOG10; /* = logarithm to base 10 of BITS - 1 */
+  static THREAD_LOCAL_IE unsigned int EXP10; /* = largest possible power of 10 in signed int */
 
   /********************************************************************/
   /* global bit mask table for fast access (set by "BitVector_Boot"): */
   /********************************************************************/
 
-  static THREAD_LOCAL unsigned int BITMASKTAB[sizeof(unsigned int) << 3];
+  static THREAD_LOCAL_IE unsigned int BITMASKTAB[sizeof(unsigned int) << 3];
 
   /*****************************/
   /* global macro definitions: */

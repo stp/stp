@@ -78,7 +78,22 @@ class ConstantBitPropagation
 
   FixedBits* getUpdatedFixedBits(const ASTNode& n);
 
-  FixedBits* getCurrentFixedBits(const ASTNode& n);
+  // get the current value from the map. If no value is in the map. Make a new
+  // value. Almost all calls hit in the map, so that path is inlined here, and
+  // only the cold creation path is out of line.
+  FixedBits* getCurrentFixedBits(const ASTNode& n)
+  {
+    assert(NULL != fixedMap);
+
+    const NodeToFixedBitsMap::NodeToFixedBitsMapType::iterator it =
+        fixedMap->map->find(n);
+    if (it != fixedMap->map->end())
+      return it->second;
+
+    return createFixedBits(n);
+  }
+
+  FixedBits* createFixedBits(const ASTNode& n);
 
   void scheduleDown(const ASTNode& n);
 

@@ -168,5 +168,42 @@ public:
   void hasBeenSimplified() const { is_simplified = true; }
 };
 
+// Defined out of line because they dereference ASTInterior, which is still
+// incomplete inside the nested class bodies above.  They must stay in the
+// header: they key STPMgr's interior unique table, so they run on every
+// hash-cons probe, and being inline keeps that path free of a call.
+inline size_t
+ASTInterior::ASTInteriorHasher::operator()(const ASTInterior* int_node_ptr) const
+{
+  if (int_node_ptr->_cached_hash != 0)
+    return int_node_ptr->_cached_hash;
+
+  size_t hashval = ((size_t)int_node_ptr->GetKind());
+  const ASTChildren ch = int_node_ptr->GetChildren();
+  auto iend = ch.end();
+  for (auto i = ch.begin(); i != iend; i++)
+  {
+    hashval += i->Hash();
+    hashval += (hashval << 10);
+    hashval ^= (hashval >> 6);
+  }
+
+  hashval += (hashval << 3);
+  hashval ^= (hashval >> 11);
+  hashval += (hashval << 15);
+
+  if (hashval == 0)
+    hashval = 1; // 0 marks the hash as not yet computed.
+  int_node_ptr->_cached_hash = hashval;
+  return hashval;
+}
+
+inline bool
+ASTInterior::ASTInteriorEqual::operator()(const ASTInterior* int_node_ptr1,
+                                          const ASTInterior* int_node_ptr2) const
+{
+  return (*int_node_ptr1 == *int_node_ptr2);
+}
+
 } // end of namespace stp
 #endif

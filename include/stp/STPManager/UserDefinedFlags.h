@@ -64,7 +64,6 @@ public:
   bool enable_aig_core_simplify = false;
   bool enable_use_intervals = true;
   bool enable_pure_literals = true;
-  bool enable_always_true = false;
   bool enable_split_extracts = true;
   bool enable_sharing_aware_rewriting = true;
   bool enable_merge_same = false;
@@ -213,7 +212,6 @@ public:
     bitConstantProp_flag = false;
     enable_use_intervals = false;
     enable_pure_literals = false;
-    enable_always_true = false;
     wordlevel_solve_flag = false;
     propagate_equalities = false;
     enable_flatten = false;

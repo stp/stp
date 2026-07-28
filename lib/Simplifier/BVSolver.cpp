@@ -64,7 +64,7 @@ ASTNode BVSolver::simplifyNode(const ASTNode n)
     return n;
 
   if (n.GetType() == BOOLEAN_TYPE)
-    return _simp->SimplifyFormula(n, false, NULL);
+    return _simp->SimplifyFormula(n, false);
   else
     return _simp->SimplifyTerm(n);
 }
