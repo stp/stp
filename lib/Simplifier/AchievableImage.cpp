@@ -291,10 +291,47 @@ CBV hintBackStep(const GroundStep& step, const CBV out)
       return op2(BVAND, out, step.constants[0].GetBVConst(), W);
     case BVMULT:
     {
-      // Divide out the constant: exact whenever it divides `out` with
-      // no overflow, a serviceable seed otherwise.
+      // Solve c*x == out (mod 2^w) exactly: with c = 2^s * o (o odd),
+      // solutions exist iff 2^s divides out, and then
+      // x = (out >> s) * inverse(o). The inverse comes from Newton
+      // iteration (i' = i*(2 - o*i)), which doubles correct low bits
+      // each round starting from i = o (correct mod 8 for odd o).
       const CBV c = step.constants[0].GetBVConst();
-      return isZero(c) ? NULL : op2(BVDIV, out, c, W);
+      if (isZero(c))
+        return NULL;
+      const unsigned s = (unsigned)CONSTANTBV::Set_Min(c);
+      if (s > 0)
+      {
+        CBV lowMask = mkLowMask(s, W);
+        CBV masked = op2(BVAND, out, lowMask, W);
+        const bool divides = isZero(masked);
+        destroy(lowMask);
+        destroy(masked);
+        if (!divides) // no exact preimage; fall back to the quotient
+          return op2(BVDIV, out, c, W);
+      }
+      CBV sc = mkNum(W, s);
+      CBV odd = op2(BVRIGHTSHIFT, c, sc, W);
+      CBV shifted = op2(BVRIGHTSHIFT, out, sc, W);
+      destroy(sc);
+      CBV inv = clone(odd);
+      CBV two = mkNum(W, 2);
+      for (unsigned bits = 3; bits < W; bits *= 2)
+      {
+        CBV oi = op2(BVMULT, odd, inv, W);
+        CBV corr = op2(BVSUB, two, oi, W);
+        destroy(oi);
+        CBV next = op2(BVMULT, inv, corr, W);
+        destroy(corr);
+        destroy(inv);
+        inv = next;
+      }
+      destroy(two);
+      destroy(odd);
+      CBV r = op2(BVMULT, shifted, inv, W);
+      destroy(shifted);
+      destroy(inv);
+      return r;
     }
     case SBVDIV:
     {
