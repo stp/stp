@@ -20,9 +20,13 @@ THE SOFTWARE.
 
 #include "stp/cpp_interface.h"
 #include "stp/Parser/parser.h"
+#include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/SplitExtracts.h"
+#include "stp/Simplifier/SubstitutionMap.h"
 #include <gtest/gtest.h>
 #include <stdio.h>
+#include <string>
+#include <vector>
 
 
   const std::string start_input = R"(
@@ -68,18 +72,107 @@ struct Context
     stp::GlobalParserInterface = &interface;
    }
    
+   ASTNode pre; // the formula before the pass ran.
+
    ASTNode process(std::string input)
    {
       stp::SMT2ScanString((start_input + input).c_str());
       stp::SMT2Parse();
       // TODO assert it was parsed properly.
       smt2lex_destroy();
-      ASTNode n = mgr.CreateNode(stp::AND, mgr.GetAsserts());
-      std::cerr << "Pre split " << n;
-      n = split.topLevel(n);
+      pre = mgr.CreateNode(stp::AND, mgr.GetAsserts());
+      std::cerr << "Pre split " << pre;
+      ASTNode n = split.topLevel(pre, &simplifier);
       std::cerr << "Post split "<< n;
       return n;
     }
+
+   bool present(stp::Kind k, const ASTNode& n)
+   {
+     if (n.GetKind() == k)
+       return true;
+     for (const auto& c : n)
+       if (present(k, c))
+         return true;
+     return false;
+   }
+
+   void collectSymbols(const ASTNode& n, stp::ASTNodeSet& out)
+   {
+     if (n.GetKind() == stp::SYMBOL)
+     {
+       out.insert(n);
+       return;
+     }
+     for (const auto& c : n)
+       collectSymbols(c, out);
+   }
+
+   // Apply the substitution map produced by the pass to `n`. The pass
+   // defines each split symbol only in terms of fresh variables, so one
+   // application reaches the fixed point.
+   ASTNode backSubstitute(const ASTNode& n)
+   {
+     stp::ASTNodeMap fromTo = *simplifier.Return_SolverMap(); // replace() mutates it.
+     stp::ASTNodeMap cache;
+     return stp::SubstitutionMap::replace(n, fromTo, cache, &snf);
+   }
+
+   // Evaluate a fully-assigned node down to a constant.
+   ASTNode eval(const ASTNode& n, stp::ASTNodeMap assignment /*by value*/)
+   {
+     stp::ASTNodeMap cache;
+     ASTNode s = stp::SubstitutionMap::replace(n, assignment, cache, &snf);
+     if (s.isConstant())
+       return s;
+     return stp::NonMemberBVConstEvaluator(&mgr, s);
+   }
+
+   // The rewrite is a piecewise renaming of the split symbols, so the
+   // original formula with the definitions substituted back in must be the
+   // same function of the fresh variables as the pass's output. Check that
+   // exhaustively (the tests use widths small enough to enumerate).
+   void checkSound(const ASTNode& post)
+   {
+     const ASTNode back = backSubstitute(pre);
+
+     stp::ASTNodeSet symSet;
+     collectSymbols(back, symSet);
+     collectSymbols(post, symSet);
+     std::vector<ASTNode> syms(symSet.begin(), symSet.end());
+
+     unsigned long combos = 1;
+     for (const auto& s : syms)
+       combos *= (s.GetType() == stp::BOOLEAN_TYPE)
+                     ? 2u
+                     : (1u << s.GetValueWidth());
+     ASSERT_LE(combos, 1u << 16)
+         << "too many assignments (" << combos << ") -- lower the width";
+
+     for (unsigned long c = 0; c < combos; c++)
+     {
+       stp::ASTNodeMap assignment;
+       unsigned long rest = c;
+       for (const auto& s : syms)
+       {
+         if (s.GetType() == stp::BOOLEAN_TYPE)
+         {
+           assignment.insert({s, (rest & 1) ? mgr.ASTTrue : mgr.ASTFalse});
+           rest /= 2;
+         }
+         else
+         {
+           const unsigned size = 1u << s.GetValueWidth();
+           assignment.insert(
+               {s, mgr.CreateBVConst(s.GetValueWidth(), rest % size)});
+           rest /= size;
+         }
+       }
+       stp::ASTNodeMap a2 = assignment; // eval() consumes the map.
+       ASSERT_EQ(eval(back, assignment), eval(post, a2))
+           << "split changed the meaning at assignment " << c;
+     }
+   }
 };
 
 // intersect - dont replace.
@@ -192,6 +285,103 @@ TEST(SplitExtracts_Test , __LINE__)
   Context c;
   ASTNode n = c.process(input);
   ASSERT_EQ(1, c.split.getIntroduced());
+}
+
+// Splitting records a whole-width definition of the symbol in the
+// substitution map; that is what rebuilds its value during model
+// construction.
+TEST(SplitExtracts_Test, records_whole_width_definition)
+{
+  const std::string input = R"(
+    (assert
+      (=
+         (((_ extract 6 0 ) v1) )
+         (((_ extract 13 7 ) v1) )
+       )
+    ))";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(2, c.split.getIntroduced());
+
+  const auto& map = *c.simplifier.Return_SolverMap();
+  ASSERT_EQ(map.size(), 1u);
+  const auto& entry = *map.begin();
+  EXPECT_EQ(entry.first.GetKind(), stp::SYMBOL);
+  EXPECT_EQ(entry.second.GetValueWidth(), entry.first.GetValueWidth());
+  // Both extracts aligned with pieces of the definition, so none survive.
+  EXPECT_FALSE(c.present(stp::BVEXTRACT, n));
+}
+
+// Two disjoint extracts that together cover all of y. They must not appear
+// adjacent under one concat -- the simplifying factory would merge them
+// back into y.
+TEST(SplitExtracts_Test, sound_full_cover)
+{
+  const std::string input = R"(
+    (declare-fun y () (_ BitVec 4))
+    (assert (bvult ((_ extract 1 0) y) #b10))
+    (assert (bvugt ((_ extract 3 2) y) #b01))
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(2, c.split.getIntroduced());
+  EXPECT_FALSE(c.present(stp::BVEXTRACT, n));
+  c.checkSound(n);
+}
+
+// The extracts leave a gap (bit 2), exercising the filler branch.
+TEST(SplitExtracts_Test, sound_with_gap)
+{
+  const std::string input = R"(
+    (declare-fun y () (_ BitVec 4))
+    (assert
+      (bvult (concat ((_ extract 3 3) y) ((_ extract 1 0) y)) #b101)
+    ))";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(2, c.split.getIntroduced());
+  EXPECT_FALSE(c.present(stp::BVEXTRACT, n));
+  c.checkSound(n);
+}
+
+// The extracts cover the low bits but leave the top uncovered, exercising
+// the trailing filler branch.
+TEST(SplitExtracts_Test, sound_top_gap)
+{
+  const std::string input = R"(
+    (declare-fun y () (_ BitVec 5))
+    (assert (bvult ((_ extract 1 0) y) #b10))
+    (assert (bvugt ((_ extract 3 2) y) #b01))
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(2, c.split.getIntroduced());
+  EXPECT_FALSE(c.present(stp::BVEXTRACT, n));
+  c.checkSound(n);
+}
+
+// [2:0] and [2:1] overlap each other so they stay; [5:3] overlaps nothing
+// and is split out. The surviving extracts read the filler variable.
+TEST(SplitExtracts_Test, sound_partial_overlap)
+{
+  const std::string input = R"(
+    (declare-fun y () (_ BitVec 6))
+    (assert
+      (and
+        (bvult ((_ extract 2 0) y) (concat ((_ extract 2 1) y) #b1))
+        (bvult ((_ extract 5 3) y) #b101)
+      )
+    ))";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(1, c.split.getIntroduced());
+  EXPECT_TRUE(c.present(stp::BVEXTRACT, n));
+  c.checkSound(n);
 }
 
 

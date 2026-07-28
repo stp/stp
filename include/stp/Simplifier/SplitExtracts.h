@@ -30,8 +30,9 @@ THE SOFTWARE.
 namespace stp
 {
 
+class Simplifier;
 
-class SplitExtracts 
+class SplitExtracts
 {
   STPMgr& bm;
   ASTNode ASTUndefined;
@@ -55,7 +56,7 @@ public:
 	  ASTUndefined = bm.CreateNode(stp::UNDEFINED);
 	}
 
-	virtual ASTNode topLevel(const ASTNode& n);
+	virtual ASTNode topLevel(const ASTNode& n, Simplifier* simp);
 
 	auto getIntroduced()
 	{

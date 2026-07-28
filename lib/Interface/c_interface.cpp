@@ -1816,10 +1816,13 @@ Expr vc_paramBoolExpr(VC vc, Expr boolvar, Expr parameter)
 
   assert(BVTypeCheck(*c));
   assert(BVTypeCheck(*t));
-  stp::ASTNode o;
 
-  o = b->CreateNode(stp::PARAMBOOL, *c, *t);
-  // BVTypeCheck(o);
+  if (stp::BVCONST != t->GetKind())
+    stp::FatalError("vc_paramBoolExpr: the parameter must be a constant "
+                    "bit-vector",
+                    *t);
+
+  stp::ASTNode o = b->NewParameterized_BooleanVar(*c, *t);
   stp::ASTNode* output = new stp::ASTNode(o);
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
   return output;

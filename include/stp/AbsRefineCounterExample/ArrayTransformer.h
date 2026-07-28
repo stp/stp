@@ -105,8 +105,6 @@ private:
   ASTNode TransformFormula(const ASTNode& form);
 
 public:
-  static ASTNode TranslateSignedDivModRem(const ASTNode& in, NodeFactory* nf);
-
   // fill the arrayname_readindices vector if e0 is a READ(Arr,index)
   // and index is a BVCONST
   void FillUp_ArrReadIndex_Vec(const ASTNode& e0, const ASTNode& e1);

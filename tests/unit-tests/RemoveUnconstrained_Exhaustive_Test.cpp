@@ -43,11 +43,14 @@ THE SOFTWARE.
  *     A top-level boolean built only from single-use unconstrained variables
  *     collapses all the way to `true` iff every operator on the path has a
  *     rule. `EQ(op(x,y), constant)` collapses to `true` exactly when `op` has
- *     an unconstrained rule, so it's a direct probe for missing rules. The
- *     operators STP does NOT yet handle (bvurem, and the signed div/rem/mod
- *     family) are listed explicitly as expectNoCollapse -- if someone adds a
- *     rule, that test flips and is the reminder to move it up to the handled
- *     list.
+ *     an unconstrained rule, so it's a direct probe for missing rules.
+ *
+ *     Beyond the per-kind rules there is the generalised ground-path
+ *     collapse (tryGroundPathCollapse + AchievableImage): when a variable's
+ *     only use is a chain of operations against constants ending in a
+ *     predicate against a constant -- e.g. ((x mod 4) == 2) -- the predicate
+ *     is replaced by a fresh boolean when both its polarities are provably
+ *     achievable. Those cases are tested in the _GroundPath groups below.
  */
 
 #include "stp/NodeFactory/SimplifyingNodeFactory.h"
@@ -219,6 +222,17 @@ struct Context
   ASTNode anchorFor(const ASTNode& keep)
   {
     return hf->CreateNode(BVLT, keep, konst(1, keep.GetValueWidth()));
+  }
+
+  // Soundness of an arbitrary top-level formula, used as-is. The caller
+  // supplies any anchor needed; unlike checkSound there is no EQ(op, keep)
+  // wrapper, so a predicate whose other side is a constant stays ground and
+  // exercises the ground-path collapse.
+  void checkSoundTop(const ASTNode& top)
+  {
+    ASTNode result = run(top);
+    ASTNode back = backSubstitute(top);
+    checkEquivalent(back, result);
   }
 
   void checkSound(const ASTNode& opNode)
@@ -400,74 +414,6 @@ TEST(RemoveUnconstrained_Exhaustive, ite_then_branch)
   Context c;
   // condition + then-branch unconstrained.
   c.checkSound(c.hf->CreateTerm(ITE, W, c.boolean(), c.bv(), c.bv()));
-}
-
-// A variable all of whose uses are disjoint extracts goes through the separate
-// splitExtractOnly() path (getDisjointExtractVariables), not the ordinary
-// BVEXTRACT case. Build such a variable and check the whole rewrite is sound.
-TEST(RemoveUnconstrained_Exhaustive, disjoint_extracts_full_cover)
-{
-  Context c;
-  const unsigned w = 4;
-  ASTNode x = c.bv(w);
-  // Two disjoint extracts that together cover all of x: [1:0] and [3:2].
-  ASTNode lo =
-      c.hf->CreateTerm(BVEXTRACT, 2, x, c.konst(1, 32), c.konst(0, 32));
-  ASTNode hi =
-      c.hf->CreateTerm(BVEXTRACT, 2, x, c.konst(3, 32), c.konst(2, 32));
-  ASTNode top = c.hf->CreateNode(
-      BVLT, c.hf->CreateTerm(BVCONCAT, 4, hi, lo), c.konst(5, 4));
-
-  ASTNode result = c.run(top);
-  // Confirm the split actually fired: splitExtractOnly defines x := concat(...).
-  ASSERT_EQ(c.simp.Return_SolverMap()->count(x), 1u)
-      << "splitExtractOnly did not eliminate x";
-  ASTNode back = c.backSubstitute(top);
-  c.checkEquivalent(back, result);
-}
-
-// As above but the extracts leave a gap (bit 2), exercising the fresh-padding
-// branch of splitExtractOnly().
-TEST(RemoveUnconstrained_Exhaustive, disjoint_extracts_with_gap)
-{
-  Context c;
-  const unsigned w = 4;
-  ASTNode x = c.bv(w);
-  // [1:0] and [3:3]; bit 2 is never referenced.
-  ASTNode lo =
-      c.hf->CreateTerm(BVEXTRACT, 2, x, c.konst(1, 32), c.konst(0, 32));
-  ASTNode hi =
-      c.hf->CreateTerm(BVEXTRACT, 1, x, c.konst(3, 32), c.konst(3, 32));
-  ASTNode top = c.hf->CreateNode(
-      BVLT, c.hf->CreateTerm(BVCONCAT, 3, hi, lo), c.konst(5, 3));
-
-  ASTNode result = c.run(top);
-  ASSERT_EQ(c.simp.Return_SolverMap()->count(x), 1u)
-      << "splitExtractOnly did not eliminate x";
-  ASTNode back = c.backSubstitute(top);
-  c.checkEquivalent(back, result);
-}
-
-// The extracts cover the low bits but leave the top uncovered ([2:1] and
-// [0:0], bit 3 free), exercising the trailing fresh-padding branch of
-// splitExtractOnly() (padding appended after the last extracted piece).
-TEST(RemoveUnconstrained_Exhaustive, disjoint_extracts_top_gap)
-{
-  Context c;
-  const unsigned w = 4;
-  ASTNode x = c.bv(w);
-  ASTNode lo =
-      c.hf->CreateTerm(BVEXTRACT, 1, x, c.konst(0, 32), c.konst(0, 32));
-  ASTNode mid =
-      c.hf->CreateTerm(BVEXTRACT, 2, x, c.konst(2, 32), c.konst(1, 32));
-  ASTNode top = c.hf->CreateNode(
-      BVLT, c.hf->CreateTerm(BVCONCAT, 3, mid, lo), c.konst(5, 3));
-
-  ASTNode result = c.run(top);
-  ASSERT_EQ(c.simp.Return_SolverMap()->count(x), 1u)
-      << "splitExtractOnly did not eliminate x";
-  ASTNode back = c.backSubstitute(top);
-  c.checkEquivalent(back, result);
 }
 
 TEST(RemoveUnconstrained_Exhaustive, eq_term)
@@ -657,17 +603,351 @@ TEST(RemoveUnconstrained_Collapse, smod)
   });
 }
 
-// --- Known gaps: operators with no elimination rule. Sign-/zero-extension of
-//     an unconstrained variable is NOT itself unconstrained (the extended bits
-//     are determined), so there is deliberately no rule and the formula does
-//     not collapse. If a rule is ever added, this test flips and is the
-//     reminder to reclassify it. ---
+/////////////////////////////////////////////////////////////////////////////
+// 3) Ground-path collapse: no per-kind rule fires (or could -- the ops are
+//    not surjective), but the variable's only use is a chain of operations
+//    against constants under a predicate against a constant, so the whole
+//    predicate is replaced by a fresh boolean with
+//    var := ITE(v, w_true, w_false) recorded.
+/////////////////////////////////////////////////////////////////////////////
 
-TEST(RemoveUnconstrained_Collapse, sign_extend_gap)
+// A term-level `op` under EQ against `rhs`, collapse + soundness together.
+// The soundness check runs the same shape conjoined with an anchor so the
+// rewrite is exercised inside a surviving formula too.
+void checkGroundPath(std::function<ASTNode(Context&)> build)
 {
-  expectNoCollapse([](Context& c) {
-    ASTNode x = c.bv();
-    ASTNode sx = c.hf->CreateTerm(BVSX, 2 * W, x, c.konst(2 * W, 32));
+  expectCollapse(build);
+
+  Context c;
+  ASTNode pred = build(c);
+  ASTNode keep = c.bv();
+  c.checkSoundTop(c.hf->CreateNode(AND, pred, c.anchorFor(keep)));
+}
+
+TEST(RemoveUnconstrained_GroundPath, urem_by_constant)
+{
+  // The motivating case: (bvurem x 4) == 2. The BVMOD rule needs both
+  // operands unconstrained, and x mod 4 isn't surjective, so only the
+  // predicate-level collapse can eliminate x.
+  checkGroundPath([](Context& c) {
+    return c.hf->CreateNode(
+        EQ, c.hf->CreateTerm(BVMOD, W, c.bv(), c.konst(4)), c.konst(2));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, udiv_by_constant)
+{
+  checkGroundPath([](Context& c) {
+    return c.hf->CreateNode(
+        EQ, c.hf->CreateTerm(BVDIV, W, c.bv(), c.konst(2)), c.konst(1));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, srem_by_constant)
+{
+  // Signed remainder has no exact interval transfer; the sample fallback
+  // finds the witnesses.
+  checkGroundPath([](Context& c) {
+    return c.hf->CreateNode(
+        EQ, c.hf->CreateTerm(SBVREM, W, c.bv(), c.konst(3)), c.konst(1));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, chain_mod_plus_compare)
+{
+  // Two layers between the variable and the predicate:
+  // ((x mod 5) + 2) >u 4.
+  checkGroundPath([](Context& c) {
+    ASTNode t = c.hf->CreateTerm(BVMOD, W, c.bv(), c.konst(5));
+    t = c.hf->CreateTerm(BVPLUS, W, t, c.konst(2));
+    return c.hf->CreateNode(BVGT, t, c.konst(4));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, and_mask)
+{
+  // 5 isn't a low mask, so this goes through the sample fallback.
+  checkGroundPath([](Context& c) {
+    return c.hf->CreateNode(
+        EQ, c.hf->CreateTerm(BVAND, W, c.bv(), c.konst(5)), c.konst(4));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, shift_right_by_constant)
+{
+  checkGroundPath([](Context& c) {
+    return c.hf->CreateNode(
+        EQ, c.hf->CreateTerm(BVRIGHTSHIFT, W, c.bv(), c.konst(1)),
+        c.konst(2));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, shift_left_by_constant)
+{
+  checkGroundPath([](Context& c) {
+    return c.hf->CreateNode(
+        EQ, c.hf->CreateTerm(BVLEFTSHIFT, W, c.bv(), c.konst(1)),
+        c.konst(4));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, zero_extend_compare)
+{
+  checkGroundPath([](Context& c) {
+    ASTNode zx = c.hf->CreateTerm(BVZX, 2 * W, c.bv(), c.konst(2 * W, 32));
+    return c.hf->CreateNode(BVSGT, zx, c.konst(5, 2 * W));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, sign_extend)
+{
+  // Historically a known gap: sign-extension of an unconstrained variable
+  // is not itself unconstrained (the extended bits are determined), so
+  // there is no term-level rule -- but the predicate collapses.
+  checkGroundPath([](Context& c) {
+    ASTNode sx = c.hf->CreateTerm(BVSX, 2 * W, c.bv(), c.konst(2 * W, 32));
     return c.hf->CreateNode(EQ, sx, c.konst(1, 2 * W));
   });
+}
+
+TEST(RemoveUnconstrained_GroundPath, concat_constant_high)
+{
+  // (concat 2bits(2) x) at width 5: image is [16, 23].
+  checkGroundPath([](Context& c) {
+    ASTNode t = c.hf->CreateTerm(BVCONCAT, W + 2, c.konst(2, 2), c.bv());
+    return c.hf->CreateNode(EQ, t, c.konst(19, W + 2));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, width_one_comparison)
+{
+  // Width-1 comparisons used to be skipped ("hard to get right"); the
+  // ground-path collapse handles them.
+  checkGroundPath([](Context& c) {
+    return c.hf->CreateNode(BVGT, c.bv(1), c.konst(0, 1));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, cascade_through_not)
+{
+  // The fresh boolean from the collapse is itself unconstrained; the NOT
+  // rule then finishes the job.
+  checkGroundPath([](Context& c) {
+    ASTNode eq = c.hf->CreateNode(
+        EQ, c.hf->CreateTerm(BVMOD, W, c.bv(), c.konst(4)), c.konst(2));
+    return c.hf->CreateNode(NOT, eq);
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, square)
+{
+  // (zx(x) * zx(x)) == 4: the zero-extension is BOTH operands of the
+  // multiply -- a unary function of x through a duplicated operand.
+  // The dominant dup-path shape on the bench-hard set (Sage2 squaring).
+  checkGroundPath([](Context& c) {
+    ASTNode zx = c.hf->CreateTerm(BVZX, 2 * W, c.bv(), c.konst(2 * W, 32));
+    return c.hf->CreateNode(EQ, c.hf->CreateTerm(BVMULT, 2 * W, zx, zx),
+                            c.konst(4, 2 * W));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, hint_chain_through_wrapping_add)
+{
+  // (= 65515 (extract[15:0] (bvadd 0xFFFFFF75 (zx x)))): only x = 118
+  // works, reachable only via the back-propagated hint chain. This was
+  // a decline observed on Sage2/bench_14036.smt2.
+  checkGroundPath([](Context& c) {
+    ASTNode x = c.bv(8);
+    ASTNode zx = c.hf->CreateTerm(BVZX, 32, x, c.konst(32, 32));
+    ASTNode add =
+        c.hf->CreateTerm(BVPLUS, 32, c.mgr.CreateBVConst(32, 0xFFFFFF75ull), zx);
+    ASTNode ext = c.hf->CreateTerm(BVEXTRACT, 16, add, c.konst(15, 32),
+                                   c.konst(0, 32));
+    return c.hf->CreateNode(EQ, ext, c.konst(65515, 16));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, shared_predicate)
+{
+  // The predicate node itself may have several parents: every occurrence
+  // evaluates to the fresh boolean under the recorded definition.
+  Context c;
+  ASTNode pred = c.hf->CreateNode(
+      EQ, c.hf->CreateTerm(BVMOD, W, c.bv(), c.konst(4)), c.konst(2));
+  ASTNode keep = c.bv();
+  ASTNode top = c.hf->CreateNode(
+      AND, pred, c.hf->CreateNode(OR, pred, c.anchorFor(keep)));
+  c.checkSoundTop(top);
+}
+
+// --- ITE distribution: the predicate distributes over a single ITE on
+//     the path, P(g(ite(c, f(x), t))) => ite(c, v, P(g(t))). The result
+//     keeps the else side, so these check x's elimination and soundness
+//     rather than full collapse. ---
+
+TEST(RemoveUnconstrained_GroundPath, ite_distribution)
+{
+  // (= (ite (= y 0) (bvurem x 4) y) 2)  =>  ite((= y 0), v, (= y 2))
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode cond = c.hf->CreateNode(EQ, y, c.konst(0));
+  ASTNode ite = c.hf->CreateTerm(
+      ITE, W, cond, c.hf->CreateTerm(BVMOD, W, x, c.konst(4)), y);
+  ASTNode top = c.hf->CreateNode(EQ, ite, c.konst(2));
+
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_GroundPath, ite_distribution_with_suffix)
+{
+  // Ground steps above the ITE distribute too:
+  // (= (bvadd (ite c (bvurem x 4) y) 1) 3) => ite(c, v, (= (bvadd y 1) 3))
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode cond = c.hf->CreateNode(EQ, y, c.konst(1));
+  ASTNode ite = c.hf->CreateTerm(
+      ITE, W, cond, c.hf->CreateTerm(BVMOD, W, x, c.konst(4)), y);
+  ASTNode add = c.hf->CreateTerm(BVPLUS, W, ite, c.konst(1));
+  ASTNode top = c.hf->CreateNode(EQ, add, c.konst(3));
+
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_GroundPath, ite_distribution_else_branch)
+{
+  // x in the else branch: ite(c, y, chain(x)).
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode cond = c.hf->CreateNode(EQ, y, c.konst(0));
+  ASTNode ite = c.hf->CreateTerm(
+      ITE, W, cond, y, c.hf->CreateTerm(BVAND, W, x, c.konst(5)));
+  ASTNode top = c.hf->CreateNode(EQ, ite, c.konst(4));
+
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_GroundPath, ite_shared_no_distribution)
+{
+  // The ITE node is consumed twice: distributing from one consumer's
+  // viewpoint would be unsound, so x must survive.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode cond = c.hf->CreateNode(EQ, y, c.konst(0));
+  ASTNode ite = c.hf->CreateTerm(
+      ITE, W, cond, c.hf->CreateTerm(BVMOD, W, x, c.konst(4)), y);
+  ASTNode top =
+      c.hf->CreateNode(AND, c.hf->CreateNode(EQ, ite, c.konst(2)),
+                       c.hf->CreateNode(BVGT, ite, c.konst(0)));
+
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 0u)
+      << "x eliminated through a shared ITE";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_GroundPath, ite_nested_distributes)
+{
+  // Two ITE frames on one path: the predicate distributes over both,
+  //   ite((= z 1), ite((= y 0), v, (= y 2)), (= z 2)).
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode z = c.bv();
+  ASTNode inner = c.hf->CreateTerm(
+      ITE, W, c.hf->CreateNode(EQ, y, c.konst(0)),
+      c.hf->CreateTerm(BVMOD, W, x, c.konst(4)), y);
+  ASTNode outer = c.hf->CreateTerm(
+      ITE, W, c.hf->CreateNode(EQ, z, c.konst(1)), inner, z);
+  ASTNode top = c.hf->CreateNode(EQ, outer, c.konst(2));
+
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_GroundPath, ite_three_frames_with_suffixes)
+{
+  // Three frames, mixed then/else positions, with ground steps between
+  // them: each frame's else side gets the steps above it re-applied.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode z = c.bv();
+  ASTNode w2 = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVMOD, W, x, c.konst(4));
+  t = c.hf->CreateTerm(ITE, W, c.hf->CreateNode(EQ, y, c.konst(0)), t, y);
+  t = c.hf->CreateTerm(BVPLUS, W, t, c.konst(1));
+  t = c.hf->CreateTerm(ITE, W, c.hf->CreateNode(EQ, z, c.konst(1)), z, t);
+  t = c.hf->CreateTerm(ITE, W, c.hf->CreateNode(EQ, w2, c.konst(2)), t, w2);
+  ASTNode top = c.hf->CreateNode(EQ, t, c.konst(3));
+
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_GroundPath, ite_frame_cap_declines)
+{
+  // Five stacked frames exceed MAX_ITE_FRAMES: x must survive. One
+  // shared condition variable keeps the equivalence check enumerable.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVMOD, W, x, c.konst(4));
+  for (int i = 0; i < 5; i++)
+    t = c.hf->CreateTerm(ITE, W, c.hf->CreateNode(EQ, y, c.konst(i)), t,
+                         c.konst(7));
+  ASTNode top = c.hf->CreateNode(EQ, t, c.konst(2));
+
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 0u)
+      << "x eliminated past the frame cap";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+// --- Cases that must NOT collapse. ---
+
+TEST(RemoveUnconstrained_GroundPath, one_polarity_no_collapse)
+{
+  // (zero_extend x) == 63 is simply false: only one polarity is
+  // achievable, and this pass deliberately does no constant folding (it
+  // is purely under-approximating; over-approximating analyses prove
+  // constants). It must leave the formula alone.
+  expectNoCollapse([](Context& c) {
+    ASTNode zx = c.hf->CreateTerm(BVZX, 2 * W, c.bv(), c.konst(2 * W, 32));
+    return c.hf->CreateNode(EQ, zx, c.konst(63, 2 * W));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, shared_interior_no_collapse)
+{
+  // (x mod 4) is used twice: forcing x to witness values would change the
+  // second use, so the climb must refuse to step past a shared interior
+  // node. Also check the pass stays sound on this shape.
+  auto build = [](Context& c) {
+    ASTNode t = c.hf->CreateTerm(BVMOD, W, c.bv(), c.konst(4));
+    return c.hf->CreateNode(AND, c.hf->CreateNode(EQ, t, c.konst(2)),
+                            c.hf->CreateNode(BVGT, t, c.konst(1)));
+  };
+  expectNoCollapse(build);
+
+  Context c;
+  c.checkSoundTop(build(c));
 }

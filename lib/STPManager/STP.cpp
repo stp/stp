@@ -273,7 +273,7 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
   if (bm->UserFlags.enable_split_extracts)
   {
     SplitExtracts se(*bm);
-    inputToSat = se.topLevel(inputToSat);
+    inputToSat = se.topLevel(inputToSat, simp);
     bm->ASTNodeStats(se_message.c_str(), inputToSat);
   }
 
@@ -355,6 +355,11 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     }
   }
 
+  // The registry keeps its array operands live even when no array
+  // operation is reachable from the Boolean root, so an active registry
+  // counts as array operations for the refinement machinery.
+  bool arrayops = containsArrayOps(inputToSat, bm) || extActive;
+
   // If the number of array reads is small. We rewrite them through.
   // The bit-vector simplifications are more thorough than the array
   // simplifications. For example,
@@ -364,7 +369,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // introduced.
   // TODO: I chose the number of reads we perform this operation at randomly.
   bool removed = false;
-  if (!extActive && // array equality needs the refinement loop
+  if (arrayops &&
+      !extActive && // array equality needs the refinement loop
       ((bm->UserFlags.ackermannisation &&
         numberOfReadsLessThan(inputToSat, 50)) ||
        numberOfReadsLessThan(inputToSat, 10)))
@@ -377,15 +383,11 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
       cerr << "Have removed array operations" << endl;
     }
     removed = true;
-  }
 
-  // The registry keeps its array operands live even when no array
-  // operation is reachable from the Boolean root, so an active registry
-  // counts as array operations for the refinement machinery.
-  const bool arrayops = containsArrayOps(inputToSat, bm) || extActive;
-  if (removed)
-  {
-    assert(!arrayops);
+    // With ackermannisation on, the transform removes every array
+    // operation.
+    arrayops = false;
+    assert(!containsArrayOps(inputToSat, bm));
   }
 
   if (bm->UserFlags.check_counterexample_flag ||
@@ -774,8 +776,11 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     bm->ASTNodeStats("after extensionality preparation: ", inputToSat);
   }
 
-  inputToSat = arrayTransformer->TransformFormula_TopLevel(inputToSat);
-  bm->ASTNodeStats("after transformation: ", inputToSat);
+  if (arrayops)
+  {
+    inputToSat = arrayTransformer->TransformFormula_TopLevel(inputToSat);
+    bm->ASTNodeStats("after transformation: ", inputToSat);
+  }
   bm->TermsAlreadySeenMap_Clear();
 
   if (extPrepared)
