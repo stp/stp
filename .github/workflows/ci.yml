@@ -473,7 +473,17 @@ jobs:
           submodules: 'true'
 
     - name: Install flex and bison
-      run: choco install winflexbison3 --no-progress
+      # choco exits 0 even when the package feed is down ("installed 0/0
+      # packages"), which surfaces later as a confusing missing-BISON
+      # configure error. Retry the install and verify the tools landed.
+      run: |
+        foreach ($attempt in 1..5) {
+          choco install winflexbison3 --no-progress
+          if ((Get-Command win_bison -ErrorAction SilentlyContinue) -and (Get-Command win_flex -ErrorAction SilentlyContinue)) { exit 0 }
+          Write-Host "winflexbison3 not installed (attempt $attempt), retrying..."
+          Start-Sleep -Seconds (30 * $attempt)
+        }
+        throw "winflexbison3 install failed after 5 attempts"
 
     - name: Install zlib
       run: |
