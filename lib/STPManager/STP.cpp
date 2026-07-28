@@ -305,10 +305,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   bool arrayops = containsArrayOps(inputToSat, bm);
 
-  // The transformer also converts parameterised booleans (only the CVC
-  // parser creates them), so it can't be skipped while any are present.
-  bool needsTransform = arrayops || containsParamBool(inputToSat, bm);
-
   // If the number of array reads is small. We rewrite them through.
   // The bit-vector simplifications are more thorough than the array
   // simplifications. For example,
@@ -332,9 +328,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     removed = true;
 
     // With ackermannisation on, the transform removes every array
-    // operation, and it converts any parameterised booleans too.
+    // operation.
     arrayops = false;
-    needsTransform = false;
     assert(!containsArrayOps(inputToSat, bm));
   }
 
@@ -666,7 +661,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   }
   revert.reset(NULL);
 
-  if (needsTransform)
+  if (arrayops)
   {
     inputToSat = arrayTransformer->TransformFormula_TopLevel(inputToSat);
     bm->ASTNodeStats("after transformation: ", inputToSat);

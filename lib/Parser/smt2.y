@@ -110,7 +110,6 @@
   using stp::XOR;          //!< Logical-xor (either-or) boolean expression
   using stp::IFF;          //!< If-and-only-if boolean expression
   using stp::IMPLIES;      //!< Implication boolean expression
-  using stp::PARAMBOOL;    //!< Parameterized boolean expression
   using stp::READ;         //!< Array read expression
   using stp::WRITE;        //!< Array write expression
   using stp::ARRAY;        //!< Array creation expression
@@ -170,7 +169,6 @@
   using stp::XOR;          //!< Logical-xor (either-or) boolean expression
   using stp::IFF;          //!< If-and-only-if boolean expression
   using stp::IMPLIES;      //!< Implication boolean expression
-  using stp::PARAMBOOL;    //!< Parameterized boolean expression
   using stp::READ;         //!< Array read expression
   using stp::WRITE;        //!< Array write expression
   using stp::ARRAY;        //!< Array creation expression
