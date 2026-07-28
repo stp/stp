@@ -1130,6 +1130,111 @@ TEST_F(ExtPrepareTest, RecoversAnchorPushedThroughArrayIte)
   EXPECT_TRUE(ext->inCone(b));
 }
 
+// Is `needle` anywhere in the DAG rooted at `haystack`?
+bool mentions(const ASTNode& haystack, const ASTNode& needle,
+              ASTNodeSet& seen)
+{
+  if (haystack == needle)
+    return true;
+  if (!seen.insert(haystack).second)
+    return false;
+  for (unsigned i = 0; i < haystack.Degree(); i++)
+    if (mentions(haystack[i], needle, seen))
+      return true;
+  return false;
+}
+
+bool mentions(const ASTNode& haystack, const ASTNode& needle)
+{
+  ASTNodeSet seen;
+  return mentions(haystack, needle, seen);
+}
+
+// The guards that define an eliminated if-then-else's replacement
+// belong to every solve, not just the one that eliminated it. A
+// repeated solve recovers the operand from the same pushed anchor as
+// above, and recovery hands back the cached replacement -- so the
+// if-then-else is gone before the cone is computed and elimination has
+// nothing left to do. Its two guarded equality records are conjoined
+// all the same, and without their guards the replacement is an array
+// related to neither branch: the equality it stands for then holds for
+// free, and an unsatisfiable query answers satisfiable from the second
+// solve on.
+TEST_F(ExtPrepareTest, InheritedArrayIteRestatesItsGuards)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  NodeFactory* nf = mgr.defaultNodeFactory;
+  ASTNode a = arr("a"), b = arr("b"), d = arr("d");
+  ASTNode c = mgr.CreateSymbol("c", 0, 0);
+  ASTNode ite = hf->CreateArrayTerm(ITE, 2, 2, {c, a, b});
+
+  ext->makeEquality(ite, d);
+  ASSERT_EQ(1u, ext->getRecords().size());
+  const ExtensionalityContext::Record r = ext->getRecords()[0];
+  ASSERT_EQ(d, r.constructionLeft); // so the ite side is the R anchor
+
+  // The root of the test above: the witness read pushed through the
+  // array if-then-else.
+  ASTVec pushedChildren;
+  pushedChildren.push_back(c);
+  pushedChildren.push_back(hf->CreateTerm(READ, 2, a, r.lambda));
+  pushedChildren.push_back(hf->CreateTerm(READ, 2, b, r.lambda));
+  ASTVec conjuncts;
+  conjuncts.push_back(r.anchorL);
+  conjuncts.push_back(
+      hf->CreateNode(EQ, r.nameR, hf->CreateTerm(ITE, 2, pushedChildren)));
+  conjuncts.push_back(r.witnessClause);
+
+  ext->beginSolve();
+  const ASTNode first = ext->prepare(hf->CreateNode(AND, conjuncts));
+
+  ASSERT_EQ(3u, ext->getRecords().size());
+  const ASTNode replacement = ext->getRecords()[0].canonicalRight;
+  ASSERT_EQ(SYMBOL, replacement.GetKind());
+
+  // The guarded records name the two branches; which one is the
+  // then-branch decides which way its guard reads.
+  ASTNode proxyThen, proxyElse;
+  for (size_t i = 1; i < 3; i++)
+  {
+    const ExtensionalityContext::Record& g = ext->getRecords()[i];
+    const ASTNode branch = g.constructionLeft == replacement
+                               ? g.constructionRight
+                               : g.constructionLeft;
+    if (branch == a)
+      proxyThen = g.proxy;
+    else if (branch == b)
+      proxyElse = g.proxy;
+  }
+  ASSERT_FALSE(proxyThen.IsNull());
+  ASSERT_FALSE(proxyElse.IsNull());
+
+  const ASTNode guardThen =
+      nf->CreateNode(OR, nf->CreateNode(NOT, c), proxyThen);
+  const ASTNode guardElse = nf->CreateNode(OR, c, proxyElse);
+  EXPECT_TRUE(mentions(first, guardThen));
+  EXPECT_TRUE(mentions(first, guardElse));
+
+  // Solve again on the same query. The start-of-solve conjunction now
+  // carries the guarded records' own witness bundles as well.
+  for (size_t i = 1; i < 3; i++)
+  {
+    conjuncts.push_back(ext->getRecords()[i].anchorL);
+    conjuncts.push_back(ext->getRecords()[i].anchorR);
+    conjuncts.push_back(ext->getRecords()[i].witnessClause);
+  }
+
+  ext->beginSolve();
+  const ASTNode second = ext->prepare(hf->CreateNode(AND, conjuncts));
+
+  // The cached replacement came back, with no new generation of
+  // records -- and with both of its defining guards.
+  EXPECT_EQ(3u, ext->getRecords().size());
+  EXPECT_EQ(replacement, ext->getRecords()[0].canonicalRight);
+  EXPECT_TRUE(mentions(second, guardThen));
+  EXPECT_TRUE(mentions(second, guardElse));
+}
+
 TEST_F(ExtPrepareTest, MissingAnchorFailsLoudly)
 {
   ASTNode a = arr("a"), b = arr("b");

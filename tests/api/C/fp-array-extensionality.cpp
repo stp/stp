@@ -216,3 +216,74 @@ TEST(fp_array_extensionality, sorted_model_entries_carry_their_sorts)
   vc_deleteCounterExampleArray(indices, values, size);
   vc_Destroy(vc);
 }
+
+// An unsatisfiable query over (_ FloatingPoint 15 113), (_ BitVec 112)
+// and (Array (_ BitVec 112) (_ BitVec 1)) that must stay unsatisfiable
+// when it is solved again. Writing A for the array variable, x for the
+// 112-bit variable, k for the 112-bit constant, f for the float
+// variable and F for the float constant, the three assertions are
+//
+//   fp.leq(ite(fp.eq(f, f), f, F), ite(fp.eq(f, f), f, F))
+//   bvslt(read(W, k), read(W, k)) <-> bvsle(read(W, k), read(A, x))
+//   ite(fp.eq(f, f), A, W) = store(W, k, read(A, x))
+//
+// with W = store(A, bvsrem(x, k), read(A, x)). The first holds
+// always: fp.eq(f, f) is false exactly when f is NaN, so the
+// if-then-else never yields a NaN and fp.leq of a non-NaN with itself
+// is true. It is there to keep the float condition in the formula. The
+// second forces read(W, k) = 0 and read(A, x) = 1, because bvslt of a
+// term with itself is false and the only 1-bit signed pair that is not
+// bvsle-ordered is (0, 1). The third then fails in both branches of
+// its if-then-else: taking A demands read(A, k) = 1 and hence
+// read(W, k) = 1, taking W demands read(W, k) = read(A, x) = 1, and
+// both contradict read(W, k) = 0. So the query is unsatisfiable
+// whatever f is.
+//
+// Solving eliminates the array-valued if-then-else in favour of a
+// fresh array pinned to the branches by two guarded equalities, and
+// caches the replacement for later solves. The second solve inherited
+// the replacement, and its equality records, without restating the
+// guards -- an array related to nothing, which satisfies the third
+// assertion on its own.
+TEST(fp_array_extensionality, repeated_solve_restates_array_ite_guards)
+{
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type fp = vc_fpType(vc, 15, 113);
+  Type bv1 = vc_bvType(vc, 1);
+  Type bv112 = vc_bvType(vc, 112);
+  Type arr = vc_arrayType(vc, bv112, bv1);
+
+  Expr x = vc_varExpr(vc, "x", bv112);
+  Expr f = vc_varExpr(vc, "f", fp);
+  Expr a = vc_varExpr(vc, "a", arr);
+  // A negative normal float: sign 1, biased exponent 1, so not a NaN.
+  Expr fconst = vc_fpConstFromBits(
+      vc, 15, 113,
+      vc_bvConstExprFromStr(
+          vc, "10000000000000011110010000000010110010100000111011001001001110"
+              "011001011111111111001001100011111101011110110010001111010100"
+              "001100"));
+  Expr k = vc_bvConstExprFromStr(
+      vc, "01111101101111000000010011110111101111010011000001011000100100"
+          "01111100111010010010101100110011000111101001001011");
+
+  Expr notNaN = vc_fpEqExpr(vc, f, f);
+  Expr cell = vc_readExpr(vc, a, x);
+  Expr w = vc_writeExpr(vc, a, vc_sbvRemExpr(vc, 112, x, k), cell);
+  Expr chosen = vc_iteExpr(vc, notNaN, a, w);
+  Expr pickedFloat = vc_iteExpr(vc, notNaN, f, fconst);
+  Expr atK = vc_readExpr(vc, w, k);
+
+  vc_assertFormula(vc, vc_fpLeqExpr(vc, pickedFloat, pickedFloat));
+  vc_assertFormula(vc, vc_iffExpr(vc, vc_sbvLtExpr(vc, atK, atK),
+                                  vc_sbvLeExpr(vc, atK, cell)));
+  vc_assertFormula(vc, vc_eqExpr(vc, chosen, vc_writeExpr(vc, w, k, cell)));
+
+  EXPECT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+
+  vc_Destroy(vc);
+}
