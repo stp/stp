@@ -287,10 +287,19 @@ namespace stp
   // Stamp an SMT-LIB floating-point format onto a node. Floats are carried as
   // their packed bit pattern, so the value width is the total width and the
   // exponent/significand widths record how to unpack it.
+  //
+  // Through withFormat, which stamps only where the stamp is both needed and
+  // legal. The factory folds floating-point identities as the term is built --
+  // (fp.min x x) is x, (fp.mul rm x 1.0) is x -- so `n` may be an operand that
+  // already carries this format and whose kind is not a floating-point one at
+  // all (an ite, an array read, a symbol, a constant). Stamping one of those
+  // is at best redundant and, on a bitvector-kind interior node, forbidden:
+  // nodes are hash-consed and the format is per-node state, so it would retype
+  // every other use of the same bits (SetExpWidth asserts on it).
   void setFPFormat(ASTNode* n, unsigned int exp_width, unsigned int sig_width)
   {
-    n->SetExpWidth(exp_width);
-    n->SetSigWidth(sig_width);
+    *n = stp::FloatBlaster::withFormat(stp::GlobalParserBM, *n, exp_width,
+                                       sig_width);
     assert(n->GetType() == FLOATINGPOINT_TYPE);
   }
 

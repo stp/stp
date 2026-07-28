@@ -1169,6 +1169,16 @@ Expr vc_fpEqExpr(VC vc, Expr a, Expr b)
 // A floating-point operation returns a value of the same format as its
 // operands, so the result node carries the format taken from `fmt` (as the
 // parser's setFPFormat does).
+//
+// Through withFormat, because the operation need not have produced a node of
+// its own kind: the factory folds (fp.min x x) to x, (fp.mul rm x 1.0) to x,
+// (fp.neg (fp.neg x)) to x, and so hands back an operand that is already a
+// float of exactly this format and may be of any kind at all -- an ite, an
+// array read, a symbol, a constant. Stamping such a node is unnecessary, and
+// on a bitvector-kind interior node it is forbidden (SetExpWidth asserts):
+// the format is per-node state and nodes are hash-consed, so it would retype
+// every other use of the same bits. withFormat knows when the stamp is
+// needed and where it can go.
 static Expr fpTermResult(VC vc, stp::Kind k, const stp::ASTNode& fmt,
                          const stp::ASTVec& children)
 {
@@ -1179,10 +1189,11 @@ static Expr fpTermResult(VC vc, stp::Kind k, const stp::ASTNode& fmt,
                     "non-float operand: ",
                     fmt);
   }
-  stp::ASTNode r = b->CreateTerm(k, fmt.GetValueWidth(), children);
-  r.SetExpWidth(fmt.GetExpWidth());
-  r.SetSigWidth(fmt.GetSigWidth());
+  stp::ASTNode r = stp::FloatBlaster::withFormat(
+      b, b->CreateTerm(k, fmt.GetValueWidth(), children), fmt.GetExpWidth(),
+      fmt.GetSigWidth());
   assert(BVTypeCheck(r));
+  assert(r.GetType() == stp::FLOATINGPOINT_TYPE);
   return persistNode(vc, r);
 }
 
@@ -1456,9 +1467,10 @@ static Expr fpToFP(VC vc, stp::Kind k, int eb, int sb, const stp::ASTNode* rm,
   if (rm != NULL)
     kids.push_back(*rm);
   kids.push_back(src);
-  stp::ASTNode r = b->CreateTerm(k, eb + sb, kids);
-  r.SetExpWidth(eb);
-  r.SetSigWidth(sb);
+  // withFormat rather than a bare stamp, for the reason fpTermResult gives:
+  // what comes back need not be a fresh to_fp node.
+  stp::ASTNode r =
+      stp::FloatBlaster::withFormat(b, b->CreateTerm(k, eb + sb, kids), eb, sb);
   return persistNode(vc, r);
 }
 
@@ -1487,9 +1499,8 @@ Expr vc_fpToFPFromUnsignedBV(VC vc, int eb, int sb, Expr rm, Expr bv)
   kids.push_back(b->CreateBVConst(32, sb));
   kids.push_back(*(stp::ASTNode*)rm);
   kids.push_back(*(stp::ASTNode*)bv);
-  stp::ASTNode r = b->CreateTerm(stp::FP_TOFP_UNSIGNED, eb + sb, kids);
-  r.SetExpWidth(eb);
-  r.SetSigWidth(sb);
+  stp::ASTNode r = stp::FloatBlaster::withFormat(
+      b, b->CreateTerm(stp::FP_TOFP_UNSIGNED, eb + sb, kids), eb, sb);
   return persistNode(vc, r);
 }
 

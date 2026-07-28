@@ -350,6 +350,16 @@ ASTNode STPMgr::CreateBVConst(CBV bv, unsigned width)
   return n;
 }
 
+void STPMgr::noteFloatingPoint()
+{
+#ifndef STP_ENABLE_FLOATING_POINT
+  FatalError("this STP was built without floating-point support; "
+             "reconfigure with -DENABLE_FLOATING_POINT=ON");
+#else
+  has_floating_point = true;
+#endif
+}
+
 ASTNode STPMgr::CreateFPConst(const stp::ASTNode& bvconst,
                               unsigned exp_width, unsigned sig_width)
 {
@@ -404,7 +414,7 @@ ASTNode STPMgr::CreateFPConst(const stp::ASTNode& bvconst,
 
   ASTFPConst temp(this, src->GetBVConst(), exp_width, sig_width);
 
-  has_floating_point = true;
+  noteFloatingPoint();
 
   ASTNode n(LookupOrCreateFPConst(temp));
   assert(n.GetKind() == BVCONST);

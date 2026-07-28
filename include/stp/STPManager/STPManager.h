@@ -292,10 +292,22 @@ public:
                                    unsigned exp_width, unsigned sig_width);
 
   // Whether a floating-point node has ever been created in this manager.
-  // Set by the format funnels (CreateFPConst and ASTNode::SetExpWidth), and
-  // gates the floating-point-only passes and pessimisations, so a pure
-  // bitvector problem pays nothing for the floating-point support.
+  // Set by the format funnels (CreateFPConst, ASTNode::SetExpWidth and
+  // FloatBlaster::withFormat, all through noteFloatingPoint), and gates the
+  // floating-point-only passes and pessimisations, so a pure bitvector
+  // problem pays nothing for the floating-point support.
   bool has_floating_point = false;
+
+  // Record that a float of a real format has been built. Every float's format
+  // arrives through one of the funnels above, so calling this there is what
+  // makes has_floating_point complete -- and it must be called whether or not
+  // the format then needs storing on a node, since a node that derives its
+  // format from its kind and children still puts a float in the problem.
+  //
+  // It is also where a build without floating-point support refuses the C
+  // API's floating-point entry points. (The parser rejects floating-point
+  // input earlier, with a line number; see checkFpSupported in smt2.y.)
+  DLL_PUBLIC void noteFloatingPoint();
 
   // Symbols declared with SMT-LIB's RoundingMode sort. They are ordinary
   // 5-bit bitvector symbols everywhere else; the model printers consult

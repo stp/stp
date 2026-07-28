@@ -43,6 +43,13 @@ ASTNode FloatBlaster::withFormat(STPMgr* bm, const ASTNode& n,
   if (exp_width == 0 && sig_width == 0)
     return n;
 
+  // Asking for a real format means a float is in the problem, whatever this
+  // then does with `n`. Noted before the early returns below, because those
+  // are the cases where nothing is stamped and SetExpWidth -- the other place
+  // the manager hears about floats -- is never reached. Missing it leaves the
+  // floating-point passes switched off and the float reaches the bit-blaster.
+  bm->noteFloatingPoint();
+
   if (n.GetExpWidth() == exp_width && n.GetSigWidth() == sig_width)
     return n;
 
