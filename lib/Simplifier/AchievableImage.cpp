@@ -166,6 +166,110 @@ void AchievableImage::addHint(const ASTNode& k)
   hints.push_back(clone(k.GetBVConst()));
 }
 
+namespace
+{
+// Heuristic preimage of `out` under one step. Used only to generate
+// sample seeds -- witnesses are validated forward -- so it may be wrong,
+// just not useless. NULL when no sensible backward map exists.
+CBV hintBackStep(const GroundStep& step, const CBV out)
+{
+  const unsigned w = step.inWidth;
+  const unsigned W = step.outWidth;
+
+  if (step.samePathAllOperands)
+    return NULL; // no closed-form root
+
+  switch (step.kind)
+  {
+    case BVPLUS:
+      return op2(BVSUB, out, step.constants[0].GetBVConst(), W);
+    case BVSUB:
+      if (step.pathIndex == 0)
+        return op2(BVPLUS, out, step.constants[0].GetBVConst(), W);
+      return op2(BVSUB, step.constants[0].GetBVConst(), out, W);
+    case BVUMINUS:
+      return op1(BVUMINUS, out, W);
+    case BVNOT:
+      return op1(BVNOT, out, W);
+    case BVXOR:
+      return op2(BVXOR, out, step.constants[0].GetBVConst(), W);
+    case BVDIV:
+    {
+      if (step.pathIndex != 0)
+        return NULL;
+      const CBV c = step.constants[0].GetBVConst();
+      return isZero(c) ? NULL : op2(BVMULT, out, c, W);
+    }
+    case BVMOD:
+    {
+      if (step.pathIndex != 0)
+        return NULL;
+      const CBV c = step.constants[0].GetBVConst();
+      return isZero(c) ? clone(out) : op2(BVMOD, out, c, W);
+    }
+    case BVRIGHTSHIFT:
+    case BVSRSHIFT:
+      if (step.pathIndex != 0)
+        return NULL;
+      return op2(BVLEFTSHIFT, out, step.constants[0].GetBVConst(), W);
+    case BVLEFTSHIFT:
+      if (step.pathIndex != 0)
+        return NULL;
+      return op2(BVRIGHTSHIFT, out, step.constants[0].GetBVConst(), W);
+    case BVZX:
+    case BVSX:
+      return truncate(out, w);
+    case BVEXTRACT:
+    {
+      const unsigned j = step.constants[1].GetUnsignedConst();
+      CBV t = widen(out, w);
+      if (j == 0)
+        return t;
+      CBV jc = mkNum(w, j);
+      CBV r = op2(BVLEFTSHIFT, t, jc, w);
+      destroy(t);
+      destroy(jc);
+      return r;
+    }
+    case BVCONCAT:
+    {
+      if (step.pathIndex == 1) // c ++ x
+        return truncate(out, w);
+      // x ++ c: drop the constant's low bits.
+      const unsigned cw = step.constants[0].GetValueWidth();
+      CBV sc = mkNum(W, cw);
+      CBV t = op2(BVRIGHTSHIFT, out, sc, W);
+      destroy(sc);
+      CBV r = truncate(t, w);
+      destroy(t);
+      return r;
+    }
+    case BVAND:
+      return op2(BVAND, out, step.constants[0].GetBVConst(), W);
+    default:
+      return NULL; // BVMULT (even const), BVOR, the signed divides
+  }
+}
+}
+
+void AchievableImage::addHintChain(const std::vector<GroundStep>& steps,
+                                   const ASTNode& k)
+{
+  assert(k.isConstant());
+  CBV h = clone(k.GetBVConst());
+  hints.push_back(clone(h));
+  for (size_t i = steps.size(); i-- > 0;)
+  {
+    CBV next = hintBackStep(steps[i], h);
+    destroy(h);
+    if (next == NULL)
+      return;
+    h = next;
+    hints.push_back(clone(h));
+  }
+  destroy(h);
+}
+
 bool AchievableImage::handledKind(Kind k)
 {
   switch (k)
@@ -262,6 +366,11 @@ bool AchievableImage::applyExact(const GroundStep& step)
 {
   const unsigned w = curWidth;
   const unsigned W = step.outWidth;
+
+  // Both operands are the path (x*x, x+x): the images are scattered
+  // (squares) or strided (doubling) -- always go through samples.
+  if (step.samePathAllOperands)
+    return false;
 
   switch (step.kind)
   {
@@ -565,6 +674,44 @@ void AchievableImage::degradeToSamples(const GroundStep& degradingStep)
   const unsigned w = curWidth;
   std::vector<CBV> seeds; // owned members of [lo, hi]
 
+  // When the whole interval fits in the sample budget, enumerate it --
+  // the samples are then the COMPLETE image of the chain, not a
+  // heuristic under-approximation.
+  {
+    CBV d = op2(BVSUB, hi, lo, w);
+    // d fits a machine word iff its highest set bit is low enough;
+    // Set_Max is negative when d is zero.
+    const bool enumerable = CONSTANTBV::Set_Max(d) < 16 &&
+                            *(unsigned*)d <= MAX_SAMPLES - 1;
+    destroy(d);
+    if (enumerable)
+    {
+      CBV v = clone(lo);
+      while (true)
+      {
+        seeds.push_back(clone(v));
+        if (ucmp(v, hi) == 0)
+          break;
+        CONSTANTBV::BitVector_increment(v);
+      }
+      destroy(v);
+      for (CBV s : seeds)
+      {
+        CBV witness = invertPrefix(clone(s));
+        CBV value = evalStep(degradingStep, s);
+        destroy(s);
+        addSample(witness, value);
+      }
+      seeds.clear();
+      rep = Rep::Samples;
+      destroy(lo);
+      destroy(hi);
+      lo = hi = NULL;
+      curWidth = degradingStep.outWidth;
+      return;
+    }
+  }
+
   auto addSeed = [&](CBV v) {
     if (seeds.size() >= MAX_SAMPLES || ucmp(v, lo) < 0 || ucmp(v, hi) > 0)
     {
@@ -580,30 +727,24 @@ void AchievableImage::degradeToSamples(const GroundStep& degradingStep)
     seeds.push_back(v);
   };
 
-  // The hints first, so they are never crowded out: the predicate's
-  // constant is the single most likely value to separate the polarities.
-  {
-    CBV one = mkOne(w);
-    for (const CBV h : hints)
-    {
-      CBV adapted;
-      if (bits_(h) == w)
-        adapted = clone(h);
-      else if (bits_(h) > w)
-        adapted = truncate(h, w);
-      else
-        adapted = widen(h, w);
-      addSeed(clone(adapted));
-      addSeed(op2(BVPLUS, adapted, one, w));
-      addSeed(op2(BVSUB, adapted, one, w));
-      destroy(adapted);
-    }
-    destroy(one);
-  }
-
+  // Seed order is a priority order (addSeed stops at MAX_SAMPLES): the
+  // endpoints always survive; then hints already at this level's width
+  // -- with a back-propagated chain these are the closest thing to a
+  // known-good witness; then the standard members; width-adapted
+  // foreign hints take whatever room is left.
   addSeed(clone(lo));
   addSeed(clone(hi));
+
   CBV one = mkOne(w);
+  for (const CBV h : hints)
+  {
+    if (bits_(h) != w)
+      continue;
+    addSeed(clone(h));
+    addSeed(op2(BVPLUS, h, one, w));
+    addSeed(op2(BVSUB, h, one, w));
+  }
+
   addSeed(op2(BVPLUS, lo, one, w));
   addSeed(op2(BVSUB, hi, one, w));
   { // midpoint
@@ -635,6 +776,18 @@ void AchievableImage::degradeToSamples(const GroundStep& degradingStep)
     addSeed(clone(c));
     addSeed(op2(BVPLUS, c, one, w));
     addSeed(op2(BVSUB, c, one, w));
+  }
+
+  // Foreign-width hints, width-adapted, in whatever room is left.
+  for (const CBV h : hints)
+  {
+    if (bits_(h) == w)
+      continue;
+    CBV adapted = (bits_(h) > w) ? truncate(h, w) : widen(h, w);
+    addSeed(clone(adapted));
+    addSeed(op2(BVPLUS, adapted, one, w));
+    addSeed(op2(BVSUB, adapted, one, w));
+    destroy(adapted);
   }
   destroy(one);
 
@@ -810,7 +963,13 @@ CBV AchievableImage::invertStep(const GroundStep& step, const CBV inLo,
 CBV AchievableImage::evalStep(const GroundStep& step, const CBV in)
 {
   std::vector<CBV> args;
-  if (step.kind == BVSX || step.kind == BVZX)
+  if (step.samePathAllOperands)
+  {
+    assert(step.constants.empty());
+    args.push_back(in);
+    args.push_back(in);
+  }
+  else if (step.kind == BVSX || step.kind == BVZX)
   {
     // The evaluator takes the new width from outWidth.
     args.push_back(in);

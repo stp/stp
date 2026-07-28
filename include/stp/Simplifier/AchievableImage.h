@@ -57,12 +57,18 @@ class STPMgr;
 // order. n-ary kinds must be pre-folded to one constant; BVEXTRACT
 // keeps its two index constants; BVSX/BVZX store no constant (the
 // evaluator takes the new width from outWidth).
+//
+// samePathAllOperands marks a binary node whose operands are BOTH the
+// path -- (bvmul t t), squaring being the common case. Still a unary
+// function of the path value; `constants` is empty and the value is
+// placed in every operand slot.
 struct GroundStep
 {
   Kind kind;
   unsigned outWidth;
   unsigned inWidth;
   size_t pathIndex;
+  bool samePathAllOperands = false;
   ASTVec constants;
 };
 
@@ -91,6 +97,15 @@ public:
   // e.g. (x & 0x55) == 0x41 only finds the true-witness x = 0x41 this
   // way. Call before apply()ing the steps.
   void addHint(const ASTNode& k);
+
+  // Back-propagate the predicate constant `k` through the whole
+  // collected path with a per-operator heuristic preimage, recording a
+  // hint at every level it survives to. A degrade deep in the chain
+  // then has a same-width hint instead of a truncated top-level one --
+  // e.g. (extract[15:0] (bvadd C (zx x))) == k recovers x = k' exactly.
+  // The backward map is only a seed heuristic; witnesses are still
+  // validated forward. Call before apply()ing the steps.
+  void addHintChain(const std::vector<GroundStep>& steps, const ASTNode& k);
 
   // Whether the predicate `pred` between the chain's result and the
   // constant `k` can be made both true and false by choice of x. When

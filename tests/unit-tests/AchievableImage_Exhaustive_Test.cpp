@@ -120,6 +120,18 @@ struct Ctx
     s.constants.push_back(konst(c, cWidth));
     return s;
   }
+
+  // Both operands are the path: (op t t) -- squaring, doubling.
+  GroundStep same(Kind k, unsigned w)
+  {
+    GroundStep s;
+    s.kind = k;
+    s.inWidth = w;
+    s.outWidth = w;
+    s.pathIndex = 0;
+    s.samePathAllOperands = true;
+    return s;
+  }
 };
 
 // Independent oracle: evaluate one step with the 64-bit evaluator.
@@ -127,7 +139,12 @@ uint64_t evalStep64(const GroundStep& s, uint64_t x)
 {
   std::vector<uint64_t> args;
   std::vector<unsigned> widths;
-  if (s.kind == BVSX || s.kind == BVZX)
+  if (s.samePathAllOperands)
+  {
+    args = {x, x};
+    widths = {s.inWidth, s.inWidth};
+  }
+  else if (s.kind == BVSX || s.kind == BVZX)
   {
     args.push_back(x);
     widths.push_back(s.inWidth);
@@ -299,6 +316,10 @@ std::vector<std::vector<GroundStep>> allSingleSteps(Ctx& c, unsigned w)
       for (uint64_t cv = 0; cv < domain; cv++)
         chains.push_back({c.bin(k, w, cv, first)});
 
+  chains.push_back({c.same(BVMULT, w)});
+  chains.push_back({c.same(BVPLUS, w)});
+  chains.push_back({c.same(BVAND, w)});
+  chains.push_back({c.same(BVXOR, w)});
   chains.push_back({c.unary(BVUMINUS, w)});
   chains.push_back({c.unary(BVNOT, w)});
   chains.push_back({c.extend(BVZX, w, w + 2)});
@@ -372,6 +393,7 @@ TEST(AchievableImage_Exhaustive, two_step_chains_width3)
     pool.push_back(c.bin(BVOR, inW, 5 & m, true));
     pool.push_back(c.bin(BVXOR, inW, 3 & m, true));
     pool.push_back(c.bin(SBVREM, inW, 3 & m, true));
+    pool.push_back(c.same(BVMULT, inW));
     pool.push_back(c.unary(BVUMINUS, inW));
     pool.push_back(c.unary(BVNOT, inW));
     pool.push_back(c.extend(BVZX, inW, inW + 2));
@@ -414,6 +436,72 @@ TEST(AchievableImage_Exhaustive, unhandled_kind_rejected)
   EXPECT_FALSE(AchievableImage::predicateKind(AND));
   EXPECT_TRUE(AchievableImage::predicateKind(EQ));
   EXPECT_TRUE(AchievableImage::predicateKind(BVSGE));
+}
+
+TEST(AchievableImage_Exhaustive, square_small_domain_is_complete)
+{
+  // x*x at width 3: the domain (8 values) fits the sample budget, so
+  // the enumeration makes the samples the COMPLETE image {0,1,4} and
+  // every EQ probe decides exactly.
+  Ctx c;
+  AchievableImage img(c.mgr, 3);
+  ASSERT_TRUE(img.apply(c.same(BVMULT, 3)));
+  EXPECT_FALSE(img.isExact());
+  for (uint64_t k = 0; k < 8; k++)
+  {
+    const bool member = (k == 0 || k == 1 || k == 4);
+    AchievableImage::Decision d = img.decide(EQ, true, c.konst(k, 3));
+    EXPECT_EQ(d.collapse, member) << "k=" << k;
+  }
+}
+
+TEST(AchievableImage_Exhaustive, hint_backprop_through_extract_add)
+{
+  // (= 65515 (extract[15:0] (bvadd 0xFFFFFF75 (zx x)))) with x 8-bit:
+  // satisfied only by x = 118, which no heuristic seed reaches. The
+  // back-propagated hint chain recovers it exactly:
+  // 65515 -> widen -> subtract the addend -> truncate = 118.
+  Ctx c;
+  const std::vector<GroundStep> steps = {
+      c.extend(BVZX, 8, 32),
+      c.bin(BVPLUS, 32, 0xFFFFFF75ull, true),
+      c.extract(32, 15, 0),
+  };
+  AchievableImage img(c.mgr, 8);
+  img.addHintChain(steps, c.konst(65515, 16));
+  for (const GroundStep& s : steps)
+    ASSERT_TRUE(img.apply(s));
+  ASSERT_FALSE(img.isExact()); // the wrapping add degrades the interval
+
+  AchievableImage::Decision d = img.decide(EQ, true, c.konst(65515, 16));
+  ASSERT_TRUE(d.collapse);
+  EXPECT_EQ(evalChain64(steps, d.witnessTrue.GetUnsignedConst()), 65515u);
+  EXPECT_NE(evalChain64(steps, d.witnessFalse.GetUnsignedConst()), 65515u);
+}
+
+TEST(AchievableImage_Exhaustive, hint_backprop_through_shifted_window)
+{
+  // The testcase15 family: (bvugt (bvadd B ((extract[26:0] x) << 5)) K)
+  // where K - B = 160. The image is B + multiples of 32; values above K
+  // exist (x = 6 gives B + 192) but the heuristic seeds skip the small
+  // witnesses. The hint chain maps K back to 5, and the +-1 neighbours
+  // provide the winning 6.
+  Ctx c;
+  const uint64_t B = 3203227404ull, K = 3203227564ull;
+  const std::vector<GroundStep> steps = {
+      c.extract(32, 26, 0),
+      c.concat(27, 0, 5, true), // x ++ 0:5
+      c.bin(BVPLUS, 32, B, true),
+  };
+  AchievableImage img(c.mgr, 32);
+  img.addHintChain(steps, c.konst(K, 32));
+  for (const GroundStep& s : steps)
+    ASSERT_TRUE(img.apply(s));
+
+  AchievableImage::Decision d = img.decide(BVGT, true, c.konst(K, 32));
+  ASSERT_TRUE(d.collapse);
+  EXPECT_GT(evalChain64(steps, d.witnessTrue.GetUnsignedConst()), K);
+  EXPECT_LE(evalChain64(steps, d.witnessFalse.GetUnsignedConst()), K);
 }
 
 TEST(AchievableImage_Exhaustive, wide_chain_width128)

@@ -807,6 +807,34 @@ TEST(RemoveUnconstrained_GroundPath, cascade_through_not)
   });
 }
 
+TEST(RemoveUnconstrained_GroundPath, square)
+{
+  // (zx(x) * zx(x)) == 4: the zero-extension is BOTH operands of the
+  // multiply -- a unary function of x through a duplicated operand.
+  // The dominant dup-path shape on the bench-hard set (Sage2 squaring).
+  checkGroundPath([](Context& c) {
+    ASTNode zx = c.hf->CreateTerm(BVZX, 2 * W, c.bv(), c.konst(2 * W, 32));
+    return c.hf->CreateNode(EQ, c.hf->CreateTerm(BVMULT, 2 * W, zx, zx),
+                            c.konst(4, 2 * W));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, hint_chain_through_wrapping_add)
+{
+  // (= 65515 (extract[15:0] (bvadd 0xFFFFFF75 (zx x)))): only x = 118
+  // works, reachable only via the back-propagated hint chain. This was
+  // a decline observed on Sage2/bench_14036.smt2.
+  checkGroundPath([](Context& c) {
+    ASTNode x = c.bv(8);
+    ASTNode zx = c.hf->CreateTerm(BVZX, 32, x, c.konst(32, 32));
+    ASTNode add =
+        c.hf->CreateTerm(BVPLUS, 32, c.mgr.CreateBVConst(32, 0xFFFFFF75ull), zx);
+    ASTNode ext = c.hf->CreateTerm(BVEXTRACT, 16, add, c.konst(15, 32),
+                                   c.konst(0, 32));
+    return c.hf->CreateNode(EQ, ext, c.konst(65515, 16));
+  });
+}
+
 TEST(RemoveUnconstrained_GroundPath, shared_predicate)
 {
   // The predicate node itself may have several parents: every occurrence

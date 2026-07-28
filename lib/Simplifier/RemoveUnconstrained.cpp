@@ -186,7 +186,11 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
     }
     if (nonConstSibling)
       return false;
-    if (pathCount != 1)
+    // Both operands being the path -- (bvmul t t), squaring -- is still
+    // a unary function of the path value; anything else duplicated is
+    // not a chain.
+    const bool samePathAllOperands = (pathCount == 2 && kids.size() == 2);
+    if (pathCount != 1 && !samePathAllOperands)
       return false;
 
     GroundStep step;
@@ -194,7 +198,12 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
     step.outWidth = p.GetValueWidth();
     step.inWidth = cur->n.GetValueWidth();
 
-    if (kind == BVSX || kind == BVZX)
+    if (samePathAllOperands)
+    {
+      step.samePathAllOperands = true;
+      step.pathIndex = 0;
+    }
+    else if (kind == BVSX || kind == BVZX)
     {
       // The second child is the width constant; the evaluator takes the
       // width from outWidth instead.
@@ -253,7 +262,7 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
 
   // Phase 2: flow the achievable image up the collected path and decide.
   AchievableImage image(bm, var.GetValueWidth());
-  image.addHint(predConst);
+  image.addHintChain(steps, predConst);
   for (const GroundStep& step : steps)
     if (!image.apply(step))
       return false;
