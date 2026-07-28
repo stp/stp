@@ -43,11 +43,14 @@ THE SOFTWARE.
  *     A top-level boolean built only from single-use unconstrained variables
  *     collapses all the way to `true` iff every operator on the path has a
  *     rule. `EQ(op(x,y), constant)` collapses to `true` exactly when `op` has
- *     an unconstrained rule, so it's a direct probe for missing rules. The
- *     operators STP does NOT yet handle (bvurem, and the signed div/rem/mod
- *     family) are listed explicitly as expectNoCollapse -- if someone adds a
- *     rule, that test flips and is the reminder to move it up to the handled
- *     list.
+ *     an unconstrained rule, so it's a direct probe for missing rules.
+ *
+ *     Beyond the per-kind rules there is the generalised ground-path
+ *     collapse (tryGroundPathCollapse + AchievableImage): when a variable's
+ *     only use is a chain of operations against constants ending in a
+ *     predicate against a constant -- e.g. ((x mod 4) == 2) -- the predicate
+ *     is replaced by a fresh boolean when both its polarities are provably
+ *     achievable. Those cases are tested in the _GroundPath groups below.
  */
 
 #include "stp/NodeFactory/SimplifyingNodeFactory.h"
@@ -219,6 +222,17 @@ struct Context
   ASTNode anchorFor(const ASTNode& keep)
   {
     return hf->CreateNode(BVLT, keep, konst(1, keep.GetValueWidth()));
+  }
+
+  // Soundness of an arbitrary top-level formula, used as-is. The caller
+  // supplies any anchor needed; unlike checkSound there is no EQ(op, keep)
+  // wrapper, so a predicate whose other side is a constant stays ground and
+  // exercises the ground-path collapse.
+  void checkSoundTop(const ASTNode& top)
+  {
+    ASTNode result = run(top);
+    ASTNode back = backSubstitute(top);
+    checkEquivalent(back, result);
   }
 
   void checkSound(const ASTNode& opNode)
@@ -657,17 +671,209 @@ TEST(RemoveUnconstrained_Collapse, smod)
   });
 }
 
-// --- Known gaps: operators with no elimination rule. Sign-/zero-extension of
-//     an unconstrained variable is NOT itself unconstrained (the extended bits
-//     are determined), so there is deliberately no rule and the formula does
-//     not collapse. If a rule is ever added, this test flips and is the
-//     reminder to reclassify it. ---
+/////////////////////////////////////////////////////////////////////////////
+// 3) Ground-path collapse: no per-kind rule fires (or could -- the ops are
+//    not surjective), but the variable's only use is a chain of operations
+//    against constants under a predicate against a constant, so the whole
+//    predicate is replaced by a fresh boolean with
+//    var := ITE(v, w_true, w_false) recorded.
+/////////////////////////////////////////////////////////////////////////////
 
-TEST(RemoveUnconstrained_Collapse, sign_extend_gap)
+// A term-level `op` under EQ against `rhs`, collapse + soundness together.
+// The soundness check runs the same shape conjoined with an anchor so the
+// rewrite is exercised inside a surviving formula too.
+void checkGroundPath(std::function<ASTNode(Context&)> build)
 {
-  expectNoCollapse([](Context& c) {
-    ASTNode x = c.bv();
-    ASTNode sx = c.hf->CreateTerm(BVSX, 2 * W, x, c.konst(2 * W, 32));
+  expectCollapse(build);
+
+  Context c;
+  ASTNode pred = build(c);
+  ASTNode keep = c.bv();
+  c.checkSoundTop(c.hf->CreateNode(AND, pred, c.anchorFor(keep)));
+}
+
+TEST(RemoveUnconstrained_GroundPath, urem_by_constant)
+{
+  // The motivating case: (bvurem x 4) == 2. The BVMOD rule needs both
+  // operands unconstrained, and x mod 4 isn't surjective, so only the
+  // predicate-level collapse can eliminate x.
+  checkGroundPath([](Context& c) {
+    return c.hf->CreateNode(
+        EQ, c.hf->CreateTerm(BVMOD, W, c.bv(), c.konst(4)), c.konst(2));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, udiv_by_constant)
+{
+  checkGroundPath([](Context& c) {
+    return c.hf->CreateNode(
+        EQ, c.hf->CreateTerm(BVDIV, W, c.bv(), c.konst(2)), c.konst(1));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, srem_by_constant)
+{
+  // Signed remainder has no exact interval transfer; the sample fallback
+  // finds the witnesses.
+  checkGroundPath([](Context& c) {
+    return c.hf->CreateNode(
+        EQ, c.hf->CreateTerm(SBVREM, W, c.bv(), c.konst(3)), c.konst(1));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, chain_mod_plus_compare)
+{
+  // Two layers between the variable and the predicate:
+  // ((x mod 5) + 2) >u 4.
+  checkGroundPath([](Context& c) {
+    ASTNode t = c.hf->CreateTerm(BVMOD, W, c.bv(), c.konst(5));
+    t = c.hf->CreateTerm(BVPLUS, W, t, c.konst(2));
+    return c.hf->CreateNode(BVGT, t, c.konst(4));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, and_mask)
+{
+  // 5 isn't a low mask, so this goes through the sample fallback.
+  checkGroundPath([](Context& c) {
+    return c.hf->CreateNode(
+        EQ, c.hf->CreateTerm(BVAND, W, c.bv(), c.konst(5)), c.konst(4));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, shift_right_by_constant)
+{
+  checkGroundPath([](Context& c) {
+    return c.hf->CreateNode(
+        EQ, c.hf->CreateTerm(BVRIGHTSHIFT, W, c.bv(), c.konst(1)),
+        c.konst(2));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, shift_left_by_constant)
+{
+  checkGroundPath([](Context& c) {
+    return c.hf->CreateNode(
+        EQ, c.hf->CreateTerm(BVLEFTSHIFT, W, c.bv(), c.konst(1)),
+        c.konst(4));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, zero_extend_compare)
+{
+  checkGroundPath([](Context& c) {
+    ASTNode zx = c.hf->CreateTerm(BVZX, 2 * W, c.bv(), c.konst(2 * W, 32));
+    return c.hf->CreateNode(BVSGT, zx, c.konst(5, 2 * W));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, sign_extend)
+{
+  // Historically a known gap: sign-extension of an unconstrained variable
+  // is not itself unconstrained (the extended bits are determined), so
+  // there is no term-level rule -- but the predicate collapses.
+  checkGroundPath([](Context& c) {
+    ASTNode sx = c.hf->CreateTerm(BVSX, 2 * W, c.bv(), c.konst(2 * W, 32));
     return c.hf->CreateNode(EQ, sx, c.konst(1, 2 * W));
   });
+}
+
+TEST(RemoveUnconstrained_GroundPath, concat_constant_high)
+{
+  // (concat 2bits(2) x) at width 5: image is [16, 23].
+  checkGroundPath([](Context& c) {
+    ASTNode t = c.hf->CreateTerm(BVCONCAT, W + 2, c.konst(2, 2), c.bv());
+    return c.hf->CreateNode(EQ, t, c.konst(19, W + 2));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, width_one_comparison)
+{
+  // Width-1 comparisons used to be skipped ("hard to get right"); the
+  // ground-path collapse handles them.
+  checkGroundPath([](Context& c) {
+    return c.hf->CreateNode(BVGT, c.bv(1), c.konst(0, 1));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, cascade_through_not)
+{
+  // The fresh boolean from the collapse is itself unconstrained; the NOT
+  // rule then finishes the job.
+  checkGroundPath([](Context& c) {
+    ASTNode eq = c.hf->CreateNode(
+        EQ, c.hf->CreateTerm(BVMOD, W, c.bv(), c.konst(4)), c.konst(2));
+    return c.hf->CreateNode(NOT, eq);
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, square)
+{
+  // (zx(x) * zx(x)) == 4: the zero-extension is BOTH operands of the
+  // multiply -- a unary function of x through a duplicated operand.
+  // The dominant dup-path shape on the bench-hard set (Sage2 squaring).
+  checkGroundPath([](Context& c) {
+    ASTNode zx = c.hf->CreateTerm(BVZX, 2 * W, c.bv(), c.konst(2 * W, 32));
+    return c.hf->CreateNode(EQ, c.hf->CreateTerm(BVMULT, 2 * W, zx, zx),
+                            c.konst(4, 2 * W));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, hint_chain_through_wrapping_add)
+{
+  // (= 65515 (extract[15:0] (bvadd 0xFFFFFF75 (zx x)))): only x = 118
+  // works, reachable only via the back-propagated hint chain. This was
+  // a decline observed on Sage2/bench_14036.smt2.
+  checkGroundPath([](Context& c) {
+    ASTNode x = c.bv(8);
+    ASTNode zx = c.hf->CreateTerm(BVZX, 32, x, c.konst(32, 32));
+    ASTNode add =
+        c.hf->CreateTerm(BVPLUS, 32, c.mgr.CreateBVConst(32, 0xFFFFFF75ull), zx);
+    ASTNode ext = c.hf->CreateTerm(BVEXTRACT, 16, add, c.konst(15, 32),
+                                   c.konst(0, 32));
+    return c.hf->CreateNode(EQ, ext, c.konst(65515, 16));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, shared_predicate)
+{
+  // The predicate node itself may have several parents: every occurrence
+  // evaluates to the fresh boolean under the recorded definition.
+  Context c;
+  ASTNode pred = c.hf->CreateNode(
+      EQ, c.hf->CreateTerm(BVMOD, W, c.bv(), c.konst(4)), c.konst(2));
+  ASTNode keep = c.bv();
+  ASTNode top = c.hf->CreateNode(
+      AND, pred, c.hf->CreateNode(OR, pred, c.anchorFor(keep)));
+  c.checkSoundTop(top);
+}
+
+// --- Cases that must NOT collapse. ---
+
+TEST(RemoveUnconstrained_GroundPath, one_polarity_no_collapse)
+{
+  // (zero_extend x) == 63 is simply false: only one polarity is
+  // achievable, and this pass deliberately does no constant folding (it
+  // is purely under-approximating; over-approximating analyses prove
+  // constants). It must leave the formula alone.
+  expectNoCollapse([](Context& c) {
+    ASTNode zx = c.hf->CreateTerm(BVZX, 2 * W, c.bv(), c.konst(2 * W, 32));
+    return c.hf->CreateNode(EQ, zx, c.konst(63, 2 * W));
+  });
+}
+
+TEST(RemoveUnconstrained_GroundPath, shared_interior_no_collapse)
+{
+  // (x mod 4) is used twice: forcing x to witness values would change the
+  // second use, so the climb must refuse to step past a shared interior
+  // node. Also check the pass stays sound on this shape.
+  auto build = [](Context& c) {
+    ASTNode t = c.hf->CreateTerm(BVMOD, W, c.bv(), c.konst(4));
+    return c.hf->CreateNode(AND, c.hf->CreateNode(EQ, t, c.konst(2)),
+                            c.hf->CreateNode(BVGT, t, c.konst(1)));
+  };
+  expectNoCollapse(build);
+
+  Context c;
+  c.checkSoundTop(build(c));
 }

@@ -49,6 +49,9 @@ class RemoveUnconstrained
 
   void splitExtractOnly(vector<MutableASTNode*> extracts);
 
+  bool tryGroundPathCollapse(MutableASTNode& muteNode,
+                             vector<MutableASTNode*>& variables);
+
   void replace(const ASTNode& from, const ASTNode to);
 
   NodeFactory* nf;
