@@ -776,6 +776,12 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     bm->ASTNodeStats("after extensionality preparation: ", inputToSat);
   }
 
+  // extPrepared implies extActive, and an active registry counts as array
+  // operations above -- so a prepared registry always reaches this transform.
+  // bindAfterTransform below reads the map only this call populates, so
+  // skipping it for a prepared registry would silently bind no reads.
+  assert(!extPrepared || arrayops);
+
   if (arrayops)
   {
     inputToSat = arrayTransformer->TransformFormula_TopLevel(inputToSat);
