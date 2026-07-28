@@ -556,6 +556,11 @@ DLL_PUBLIC int vc_query(VC vc, Expr e);
 
 //! \brief Returns the counter example after an invalid query.
 //!
+//! The value has the sort of 'e': the value of a floating-point term is a
+//! floating-point constant of that term's format, not the bitvector of its
+//! packed bits. So it can be fed straight back -- vc_eqExpr(vc, e, value) is
+//! well sorted, and asserting it pins 'e' to the value.
+//!
 DLL_PUBLIC Expr vc_getCounterExample(VC vc, Expr e);
 
 //! \brief Returns an array from a counter example after an invalid query.
@@ -563,6 +568,10 @@ DLL_PUBLIC Expr vc_getCounterExample(VC vc, Expr e);
 //! The buffer for the array is allocated by STP and returned via the
 //! non-null expected out parameters 'outIndices' for the indices, 'outValues'
 //! for the values and 'outSize' for the size of the array.
+//!
+//! As for vc_getCounterExample, each index has the array's index sort and
+//! each value its element sort, so an entry can be fed back as
+//! vc_readExpr(vc, e, index) and vc_eqExpr with the value.
 //!
 //! It is the caller's responsibility to free the memory afterwards.
 //!
@@ -1379,6 +1388,12 @@ DLL_PUBLIC void vc_DeleteExpr(Expr e);
 DLL_PUBLIC WholeCounterExample vc_getWholeCounterExample(VC vc);
 
 //! \brief Returns the value of the given term expression from the given whole counter example.
+//!
+//! As for vc_getCounterExample, the value has the sort of 'e' -- a
+//! floating-point term's value is a floating-point constant of that term's
+//! format. Note that 'e' must be a variable or something the model already
+//! records: unlike vc_getCounterExample this does not evaluate a term
+//! against the model, and hands an unrecorded term straight back.
 //!
 DLL_PUBLIC Expr vc_getTermFromCounterExample(VC vc, Expr e,
                                              WholeCounterExample c);
