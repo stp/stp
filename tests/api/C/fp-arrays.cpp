@@ -130,6 +130,173 @@ TEST(fp_arrays, float_element_read_as_operand_of_evaluated_term)
   vc_Destroy(vc);
 }
 
+// Regression test: the same out-of-model float-element array read, but as
+// the operand of a floating-point *predicate* rather than of an operation.
+// Model evaluation of a predicate resolves its operands and rebuilds it too,
+// and had no tolerance at all for an operand that did not come back a
+// constant:
+//   CounterExample.cpp: ComputeFormulaUsingModel:
+//   Assertion `simp.GetKind() == BVCONST' failed.
+// The read-tolerant flag is on inside the walk, so a read the solve never
+// constrained arrives as the symbolic READ; it must be resolved to a value
+// exactly as the operation arm above already does.
+//
+// Found by fuzzing with murxla driving the C API; delta-minimized.  On the
+// branch that also has array extensionality the same defect aborts inside
+// check-sat, when the counterexample check evaluates an fp.geq / SMT '='
+// over array reads that the extensionality rewriting left out of the model.
+TEST(fp_arrays, float_element_read_as_operand_of_fp_predicate)
+{
+  VC vc = vc_createValidityChecker();
+
+  Type fp = vc_fpType(vc, 5, 11);
+  Expr a = vc_varExpr(vc, "a", vc_arrayType(vc, fp, fp));
+  Expr rm = vc_fpRoundingModeVar(vc, "rm");
+  Expr idx =
+      vc_fpToFPFromSignedBV(vc, 5, 11, rm, vc_bvConstExprFromStr(vc, "1"));
+  Expr rd = vc_readExpr(vc, a, idx);
+  Expr mzero = vc_fpMinusZero(vc, fp);
+  Expr geq = vc_fpGeqExpr(vc, rd, mzero);
+  Expr isNaN = vc_fpIsNaNExpr(vc, rd);
+
+  // No assertions: FALSE is invalid, and nothing constrains the array.
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+
+  // A predicate has a truth value under the model -- one of TRUE / FALSE,
+  // never a formula left standing over an unresolved read.
+  Expr geqValue = vc_getCounterExample(vc, geq);
+  Expr isNaNValue = vc_getCounterExample(vc, isNaN);
+  ASSERT_TRUE(getExprKind(geqValue) == TRUE || getExprKind(geqValue) == FALSE);
+  ASSERT_TRUE(getExprKind(isNaNValue) == TRUE ||
+              getExprKind(isNaNValue) == FALSE);
+
+  // The read itself resolves to a float of the element's format...
+  Expr cell = vc_getCounterExample(vc, rd);
+  ASSERT_EQ(BVCONST, getExprKind(cell));
+  ASSERT_EQ(FLOATINGPOINT_TYPE, getType(cell));
+  EXPECT_EQ(5, vc_getExpWidth(cell));
+  EXPECT_EQ(11, vc_getSigWidth(cell));
+
+  // ...and that is the value the predicates were evaluated over: asking the
+  // same questions of the constant folds them outright, and the answers must
+  // agree.  An arbitrary value is fine; an inconsistent one is not.
+  EXPECT_EQ(getExprKind(geqValue),
+            getExprKind(vc_getCounterExample(
+                vc, vc_fpGeqExpr(vc, cell, mzero))));
+  EXPECT_EQ(getExprKind(isNaNValue),
+            getExprKind(vc_getCounterExample(vc, vc_fpIsNaNExpr(vc, cell))));
+
+  // Evaluation is memoised against the model, so asking again agrees.
+  EXPECT_EQ(getExprKind(geqValue),
+            getExprKind(vc_getCounterExample(vc, geq)));
+
+  vc_Destroy(vc);
+}
+
+// Every floating-point predicate takes the same route through model
+// evaluation, so every one of them meets an out-of-model array read.  Walk
+// the lot: the binary comparisons, SMT-LIB '=' over floats (what 'distinct'
+// lowers to, and the kind the murxla trace tripped), fp.eq, and the seven
+// classification predicates.
+TEST(fp_arrays, fp_predicates_over_out_of_model_reads)
+{
+  VC vc = vc_createValidityChecker();
+
+  Type fp = vc_fpType(vc, 5, 11);
+  Expr a = vc_varExpr(vc, "a", vc_arrayType(vc, vc_bvType(vc, 10), fp));
+  Expr x = vc_readExpr(vc, a, vc_bvConstExprFromStr(vc, "1100001111"));
+  Expr y = vc_readExpr(vc, a, vc_bvConstExprFromStr(vc, "0001101011"));
+  Expr mzero = vc_fpMinusZero(vc, fp);
+
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+
+  Expr predicates[] = {
+      vc_fpLtExpr(vc, x, mzero),  vc_fpLeqExpr(vc, x, mzero),
+      vc_fpGtExpr(vc, x, mzero),  vc_fpGeqExpr(vc, x, mzero),
+      vc_fpEqExpr(vc, x, y),      vc_eqExpr(vc, x, y),
+      vc_fpIsNormalExpr(vc, x),   vc_fpIsSubnormalExpr(vc, x),
+      vc_fpIsZeroExpr(vc, x),     vc_fpIsInfiniteExpr(vc, x),
+      vc_fpIsNaNExpr(vc, x),      vc_fpIsNegativeExpr(vc, x),
+      vc_fpIsPositiveExpr(vc, x),
+  };
+
+  for (size_t i = 0; i < sizeof(predicates) / sizeof(predicates[0]); i++)
+  {
+    Expr value = vc_getCounterExample(vc, predicates[i]);
+    EXPECT_TRUE(getExprKind(value) == TRUE || getExprKind(value) == FALSE)
+        << "predicate " << i << " did not evaluate to a truth value";
+  }
+
+  vc_Destroy(vc);
+}
+
+// The shape murxla reduced the report to, transcribed from its trace: an
+// (Array (_ BitVec 10) Float16), a store chain over it, fp.geq of a read
+// against -zero, 'distinct' of two reads (SMT-LIB '=' over floats, negated)
+// where one index is a folded bvsdiv, and the disjunction of the two -- all
+// asserted together and solved.  The counterexample self-check is turned on
+// ('d'), so every assertion is evaluated against the model that comes back
+// and STP rejects its own answer if any of them is not satisfied.
+//
+// The trace's third conjunct, 'distinct' over two array *terms*, needs array
+// extensionality and cannot be built on this branch; what is left still
+// drives every floating-point predicate in the evaluator over array reads.
+TEST(fp_arrays, fp_predicates_over_array_reads_solve_and_self_check)
+{
+  VC vc = vc_createValidityChecker();
+  vc_setFlags(vc, 'd', 0); // construct and check the counterexample
+
+  Type fp = vc_fpType(vc, 5, 11);
+  Type bv10 = vc_bvType(vc, 10);
+  Expr a = vc_varExpr(vc, "a", vc_arrayType(vc, bv10, fp));
+
+  Expr i0 = vc_varExpr(vc, "i0", bv10);
+  Expr i1 = vc_varExpr(vc, "i1", bv10);
+  Expr c0 = vc_bvConstExprFromStr(vc, "1111101110");
+  Expr c1 = vc_bvConstExprFromStr(vc, "0001101011");
+  Expr c2 = vc_bvConstExprFromStr(vc, "1100001111");
+  Expr mzero = vc_fpMinusZero(vc, fp);
+
+  Expr read = vc_readExpr(vc, a, c2);
+
+  // A store chain over the array, at both constant and symbolic indexes.
+  Expr chain = vc_writeExpr(vc, a, i0, mzero);
+  chain = vc_writeExpr(vc, chain, c0, read);
+  chain = vc_writeExpr(vc, chain, c1, read);
+  chain = vc_writeExpr(vc, chain, i0, read);
+  chain = vc_writeExpr(vc, chain, i1, read);
+  chain = vc_writeExpr(vc, chain, c1, mzero);
+  chain = vc_writeExpr(vc, chain, c2, read);
+
+  Expr geq = vc_fpGeqExpr(vc, read, mzero);
+  // 'distinct' over floats is the negation of SMT-LIB '=', which is FP_SMT_EQ
+  // -- the kind the reported abort came through.
+  Expr sdiv = vc_sbvDivExpr(vc, 10, c1, c0);
+  Expr distinct = vc_notExpr(
+      vc, vc_eqExpr(vc, vc_readExpr(vc, a, i0), vc_readExpr(vc, a, sdiv)));
+
+  vc_assertFormula(vc, vc_orExpr(vc, geq, distinct));
+  vc_assertFormula(vc, geq);
+  // Keep the store chain live: what it reads back at c2 is what was stored.
+  vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, chain, c2), read));
+
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+
+  // The asserted predicate holds under the model that came back.
+  EXPECT_EQ(TRUE, getExprKind(vc_getCounterExample(vc, geq)));
+
+  // What array extensionality does to the trace's reads -- leave one of the
+  // operands of a float 'distinct' out of the model -- is reached here by
+  // asking about a cell no assertion mentions.  It still has to answer.
+  Expr elsewhere = vc_readExpr(vc, a, vc_bvConstExprFromStr(vc, "0101010101"));
+  Expr apart = vc_notExpr(vc, vc_eqExpr(vc, elsewhere, read));
+  Expr apartValue = vc_getCounterExample(vc, apart);
+  EXPECT_TRUE(getExprKind(apartValue) == TRUE ||
+              getExprKind(apartValue) == FALSE);
+
+  vc_Destroy(vc);
+}
+
 TEST(fp_arrays, float_index_nan_payloads_share_one_cell)
 {
   VC vc = vc_createValidityChecker();

@@ -722,6 +722,16 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
       for (unsigned int i = 0; i < form.Degree(); i++)
       {
         ASTNode simp(TermToConstTermUsingModel(form[i]));
+        // An operand must resolve to a constant, as in the float arm of
+        // TermToConstTermUsingModel: the read-tolerant flag is on inside the
+        // walk, so a float-element array read the solve never constrained
+        // comes back as the symbolic READ (case 2 there) rather than a
+        // value. Rebuilding the predicate over it is not evaluation -- the
+        // blaster would carry the read along, and the same-operand folds
+        // below can hand the bare READ back. The read is genuinely
+        // unconstrained here, so resolve it to a concrete value.
+        if (BVCONST != simp.GetKind())
+          simp = TermToConstTermUsingModel(form[i], false);
         assert(simp.GetKind() == BVCONST);
         operands.push_back(FloatBlaster::withFormat(
             bm, simp, form[i].GetExpWidth(), form[i].GetSigWidth()));
