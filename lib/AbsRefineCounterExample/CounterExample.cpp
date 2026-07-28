@@ -895,7 +895,15 @@ ASTNode AbsRefine_CounterExample::GetCounterExample(const ASTNode& expr)
     return ComputeFormulaUsingModel(expr);
   }
 
-  return TermToConstTermUsingModel(expr, false);
+  // Model evaluation works in plain bit-vector constants throughout (see
+  // TermToConstTermUsingModel, which strips the format off every result it
+  // returns), but this is where a value crosses back out to the caller. A
+  // float-sorted term's value has to be float-sorted again here: handed a
+  // bare bit-vector, asserting (= term value) builds a float/bit-vector mix
+  // that does not typecheck, so STP rejects its own model. Found by murxla's
+  // -C model check, which re-asserts every reported value.
+  return FloatBlaster::withFormat(bm, TermToConstTermUsingModel(expr, false),
+                                  expr.GetExpWidth(), expr.GetSigWidth());
 }
 
 // The observed (index, value) entries of one array symbol, evaluated to
@@ -1013,16 +1021,32 @@ AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
         entries.push_back(std::make_pair(f[1], rhs));
       }
     }
-
-    return entries;
   }
-
-  if (e.GetKind() != SYMBOL)
+  else if (e.GetKind() == SYMBOL)
   {
-    return entries;
+    entries = GetSortedArrayModelEntries(e);
   }
 
-  return GetSortedArrayModelEntries(e);
+  // Hand the pairs back at the array's declared sorts, for the reason
+  // GetCounterExample re-stamps its result: an index that is a bare
+  // bit-vector is not accepted back as an index of a float-indexed array,
+  // and a bare element cannot be equated with a read of a float-element
+  // one. Done here rather than in either extraction path, so the model
+  // printer keeps seeing GetSortedArrayModelEntries' raw constants.
+  unsigned index_exp = 0;
+  unsigned index_sig = 0;
+  // Stays (0, 0) unless the array is float-indexed, which withFormat reads
+  // as "no format to apply". The element format is the array's own.
+  bm->arrayHasFpIndex(e, index_exp, index_sig);
+  for (std::pair<ASTNode, ASTNode>& entry : entries)
+  {
+    entry.first =
+        FloatBlaster::withFormat(bm, entry.first, index_exp, index_sig);
+    entry.second = FloatBlaster::withFormat(bm, entry.second, e.GetExpWidth(),
+                                            e.GetSigWidth());
+  }
+
+  return entries;
 }
 
 // TODO printing of expressions.

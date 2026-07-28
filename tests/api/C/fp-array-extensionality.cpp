@@ -169,3 +169,50 @@ TEST(fp_array_extensionality, float_indexed_refinement_converges)
 
   vc_Destroy(vc);
 }
+
+// With the 'x' flag the array model comes out of the deterministic
+// sorted extraction rather than the pre-extension traversal. Both owe
+// the caller entries at the array's declared sorts, so that an entry
+// can be fed back -- see fp-model-roundtrip.cpp, which pins the same
+// obligation on the traversal path.
+TEST(fp_array_extensionality, sorted_model_entries_carry_their_sorts)
+{
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type f = vc_fpType(vc, 5, 11);
+  Expr a = vc_varExpr(vc, "a", vc_arrayType(vc, f, f));
+  Expr i = vc_varExpr(vc, "i", f);
+  Expr one =
+      vc_fpConstFromBits(vc, 5, 11, vc_bvConstExprFromLL(vc, 16, 0x3C00ULL));
+
+  vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, a, i), one));
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+
+  Expr* indices = NULL;
+  Expr* values = NULL;
+  int size = 0;
+  vc_getCounterExampleArray(vc, a, &indices, &values, &size);
+  ASSERT_GE(size, 1);
+
+  // Asserted, not expected: vc_readExpr below refuses an index that is
+  // not of the array's index sort, and takes the process down with it.
+  for (int x = 0; x < size; x++)
+  {
+    ASSERT_EQ(FLOATINGPOINT_TYPE, getType(indices[x])) << "entry " << x;
+    EXPECT_EQ(5, vc_getExpWidth(indices[x]));
+    EXPECT_EQ(11, vc_getSigWidth(indices[x]));
+    ASSERT_EQ(FLOATINGPOINT_TYPE, getType(values[x])) << "entry " << x;
+    EXPECT_EQ(5, vc_getExpWidth(values[x]));
+    EXPECT_EQ(11, vc_getSigWidth(values[x]));
+  }
+
+  // So every entry can be read back as an array access and re-asserted.
+  for (int x = 0; x < size; x++)
+    vc_assertFormula(vc,
+                     vc_eqExpr(vc, vc_readExpr(vc, a, indices[x]), values[x]));
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+
+  vc_deleteCounterExampleArray(indices, values, size);
+  vc_Destroy(vc);
+}

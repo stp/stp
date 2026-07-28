@@ -27,6 +27,7 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
+#include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/ToSat/ToSATBase.h"
@@ -238,7 +239,13 @@ public:
     }
     if (counterexample.find(e) != counterexample.end())
     {
-      return counterexample[e];
+      // The map is the raw model, holding the plain bitvector constants that
+      // model evaluation works in. A value handed out carries the sort of
+      // what was asked for, as from
+      // AbsRefine_CounterExample::GetCounterExample -- so a float term's
+      // value can be equated with the term again.
+      return FloatBlaster::withFormat(bv, counterexample[e], e.GetExpWidth(),
+                                      e.GetSigWidth());
     }
     else
     {
@@ -249,8 +256,11 @@ public:
 
       if (SYMBOL == e.GetKind())
       {
+        // Simplified out, so it can take any value; all-zero bits, which for
+        // a float denotes +0.0.
         ASTNode z = bv->CreateZeroConst(e.GetValueWidth());
-        return z;
+        return FloatBlaster::withFormat(bv, z, e.GetExpWidth(),
+                                        e.GetSigWidth());
       }
 
       return e;

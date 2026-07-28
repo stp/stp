@@ -116,7 +116,11 @@ TEST(fp_arrays, float_element_read_as_operand_of_evaluated_term)
 
   Expr cv = vc_getCounterExample(vc, f);
   EXPECT_EQ(BVCONST, getExprKind(cv));
-  EXPECT_EQ(16, vc_getBVLength(vc, cv));
+  // A model value carries the sort of the term it is a value of, so this is
+  // a float of the term's format (16 bits packed) rather than a bitvector.
+  EXPECT_EQ(FLOATINGPOINT_TYPE, getType(cv));
+  EXPECT_EQ(5, vc_getExpWidth(cv));
+  EXPECT_EQ(11, vc_getSigWidth(cv));
 
   // Evaluation is memoised against the model, so asking again gives the
   // same value.
@@ -310,11 +314,14 @@ TEST(fp_arrays, roundingmode_element_read_as_mode_of_evaluated_term)
   // and the term's operands entirely unconstrained.
   ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
 
-  // The read-back must produce a constant of the term's width -- some
-  // float the term can take under a legal rounding mode -- not abort.
+  // The read-back must produce a constant of the term's sort -- some float
+  // of the term's format that it can take under a legal rounding mode --
+  // not abort.
   Expr cv = vc_getCounterExample(vc, f);
   EXPECT_EQ(BVCONST, getExprKind(cv));
-  EXPECT_EQ(32, vc_getBVLength(vc, cv));
+  EXPECT_EQ(FLOATINGPOINT_TYPE, getType(cv));
+  EXPECT_EQ(8, vc_getExpWidth(cv));
+  EXPECT_EQ(24, vc_getSigWidth(cv));
 
   vc_Destroy(vc);
 }
