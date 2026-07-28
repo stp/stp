@@ -258,16 +258,25 @@ void buildListOfSymbols(const ASTNode& n, ASTNodeSet& visited,
     buildListOfSymbols(n[i], visited, symbols);
 }
 
+// A float is carried as its packed bits, so a float-typed node stands in for
+// a bitvector of the same width wherever bits are wanted. Blasted circuits
+// mix float-stamped and plain nodes -- and, because nodes are hash-consed
+// while the format is per-node state, the stamp a blasted float leaves
+// behind can land on a node the input already uses as a plain bitvector.
+static bool isBitsValued(const ASTNode& n)
+{
+  const types t = n.GetType();
+  return BITVECTOR_TYPE == t || FLOATINGPOINT_TYPE == t;
+}
+
 void checkChildrenAreBV(const ASTChildren& v, const ASTNode& n)
 {
-  // A float is carried as its packed bits, so a float-typed child is bits
-  // too. (This check was fully disabled during the floating-point work
-  // because blasted circuits mix float-stamped and plain children; accepting
-  // both types restores it for the genuine errors.)
+  // See isBitsValued. (This check was fully disabled during the
+  // floating-point work because blasted circuits mix float-stamped and plain
+  // children; accepting both types restores it for the genuine errors.)
   for (auto it = v.begin(), itend = v.end(); it != itend; it++)
   {
-    if (BITVECTOR_TYPE != it->GetType() &&
-        FLOATINGPOINT_TYPE != it->GetType())
+    if (!isBitsValued(*it))
     {
       cerr << "The type is: " << it->GetType() << endl;
       FatalError(
@@ -663,7 +672,14 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
       // to stamp the format onto it.
       else if (n.Degree() == 3)
       {
-        if (n[2].GetType() != BITVECTOR_TYPE ||
+        // The packed bits are judged by width, and a float is allowed to
+        // stand for them (see isBitsValued). Blasting ((_ to_fp e s) bits)
+        // yields those same bits stamped with the format -- and nodes are
+        // hash-consed, so the stamp can land on the very node 'bits' names,
+        // which reports FLOATINGPOINT_TYPE from then on. It holds the same
+        // e + s bits either way; insisting on BITVECTOR_TYPE aborted the
+        // re-solve of a formula that had just solved.
+        if (!isBitsValued(n[2]) ||
             n[2].GetValueWidth() !=
                 n[0].GetUnsignedConst() + n[1].GetUnsignedConst())
         {
@@ -714,7 +730,10 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
         error_msg = "to_fp_unsigned's second argument is not a rounding mode";
         failed = true;
       }
-      else if (n[3].GetType() != BITVECTOR_TYPE)
+      // As for to_fp above: the integer this converts rides in a bitvector,
+      // and a float-stamped node is one of those (see isBitsValued). The
+      // blaster reads it as an unsigned integer either way.
+      else if (!isBitsValued(n[3]))
       {
         error_msg = "to_fp_unsigned's argument is not a bitvector";
         failed = true;
