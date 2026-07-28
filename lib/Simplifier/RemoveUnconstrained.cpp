@@ -139,12 +139,14 @@ static ASTNode applyStepToNode(NodeFactory* nf, STPMgr& bm,
  * boolean v with var := ITE(v, w_true, w_false) recorded, exactly like the
  * direct EQ rule.
  *
- * One term-level ITE may sit on the path with a non-ground condition and
- * other branch: the predicate distributes over it,
+ * Term-level ITEs may sit on the path with non-ground conditions and
+ * other branches: the predicate distributes over each,
  *   P(g(ite(c, f(x), t)))  ==>  ite(c, v, P(g(t))),
- * where the x-branch P(g(f(x))) collapses to the fresh boolean v as
- * usual. x's definition is sound regardless of c, since x only
- * influences the formula when c selects its branch.
+ * applied per frame from the innermost out, so a stack of selects
+ * becomes a nest of boolean ITEs with one rebuilt predicate per frame
+ * (linear growth, capped). x's definition is sound regardless of the
+ * conditions, since x only influences the formula when every frame
+ * selects its branch.
  *
  * The interior nodes must be single-use: a second use of any node on the
  * path would survive the rewrite and be forced to the witness values,
@@ -168,12 +170,18 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
   bool pathFirst = false;
   ASTNode predConst;
 
-  // At most one ITE frame on the path (each one doubles the rebuilt else
-  // side). framePos counts the steps below it.
-  MutableASTNode* iteCond = NULL;
-  MutableASTNode* iteOther = NULL;
-  bool itePathThen = false;
-  size_t framePos = 0;
+  // ITE frames on the path, innermost first. Each frame costs one
+  // rebuilt predicate around its other branch, so growth is linear in
+  // the frame count; the cap bounds it.
+  struct IteFrame
+  {
+    MutableASTNode* cond;
+    MutableASTNode* other;
+    bool pathThen;
+    size_t stepsBelow;
+  };
+  const size_t MAX_ITE_FRAMES = 4;
+  std::vector<IteFrame> frames;
 
   MutableASTNode* cur = &muteNode;
   for (unsigned depth = 0; depth < AchievableImage::MAX_PATH; depth++)
@@ -207,15 +215,14 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
     {
       // Capture a distribution frame and keep climbing; the ITE
       // contributes no image step (on x's branch it is the identity).
-      if (iteCond != NULL || p.GetIndexWidth() != 0 || kids.size() != 3)
+      if (frames.size() >= MAX_ITE_FRAMES || p.GetIndexWidth() != 0 ||
+          kids.size() != 3)
         return false;
       const bool inThen = (kids[1] == cur);
       if ((!inThen && kids[2] != cur) || kids[1] == kids[2] || kids[0] == cur)
         return false;
-      iteCond = kids[0];
-      iteOther = inThen ? kids[2] : kids[1];
-      itePathThen = inThen;
-      framePos = steps.size();
+      frames.push_back(
+          {kids[0], inThen ? kids[2] : kids[1], inThen, steps.size()});
       if (parent.parents.size() != 1)
         return false;
       cur = &parent;
@@ -324,7 +331,7 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
   if (!d.collapse)
     return false;
 
-  if (iteCond == NULL)
+  if (frames.empty())
   {
     // The predicate has width 0, so this creates a fresh boolean and
     // prunes the whole path out of the mutable tree.
@@ -334,31 +341,37 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
     return true;
   }
 
-  // Distribute the predicate over the captured ITE frame:
-  //   P(g(ite(c, f(x), t)))  ==>  ite(c, v, P(g(t))).
+  // Distribute the predicate over the captured frames, innermost out:
+  //   P(...ite(c_i, path_i, t_i)...)
+  //     ==>  ite(c_k, ... ite(c_1, v, P(above_1(t_1))) ..., P(above_k(t_k)))
+  // where above_i re-applies every ground step recorded above frame i.
   ASTNode v = bm.CreateFreshVariable(0, 0, "unconstrained_ite");
-  ASTNode gt = iteOther->toASTNode(&bm);
-  for (size_t i = framePos; i < steps.size(); i++)
-    gt = applyStepToNode(nf, bm, steps[i], gt);
-  ASTNode elseP = pathFirst ? nf->CreateNode(predKind, gt, predConst)
-                            : nf->CreateNode(predKind, predConst, gt);
-  ASTNode newP = nf->CreateNode(ITE, iteCond->toASTNode(&bm),
-                                itePathThen ? v : elseP,
-                                itePathThen ? elseP : v);
+  vector<MutableASTNode*> vars;
+  std::unordered_set<MutableASTNode*> visited;
+  ASTNode inner = v;
+  for (const IteFrame& fr : frames)
+  {
+    ASTNode gt = fr.other->toASTNode(&bm);
+    for (size_t i = fr.stepsBelow; i < steps.size(); i++)
+      gt = applyStepToNode(nf, bm, steps[i], gt);
+    ASTNode elseP = pathFirst ? nf->CreateNode(predKind, gt, predConst)
+                              : nf->CreateNode(predKind, predConst, gt);
+    inner = nf->CreateNode(ITE, fr.cond->toASTNode(&bm),
+                           fr.pathThen ? inner : elseP,
+                           fr.pathThen ? elseP : inner);
+    fr.cond->getAllVariablesRecursively(vars, visited);
+    fr.other->getAllVariablesRecursively(vars, visited);
+  }
+  visited.clear();
 
   // Splice the new formula in, reusing the existing mutable nodes for the
   // variables it mentions (same mechanics as the comparison rule).
-  vector<MutableASTNode*> vars;
-  std::unordered_set<MutableASTNode*> visited;
-  iteCond->getAllVariablesRecursively(vars, visited);
-  iteOther->getAllVariablesRecursively(vars, visited);
-  visited.clear();
   std::unordered_map<uint64_t, MutableASTNode*> create;
   for (MutableASTNode* m : vars)
     create.insert(std::make_pair(m->n.GetNodeNum(), m));
   vars.clear();
 
-  MutableASTNode* newN = MutableASTNode::build(newP, create);
+  MutableASTNode* newN = MutableASTNode::build(inner, create);
   predicate->replaceWithAnotherNode(newN);
 
   replace(var, nf->CreateTerm(ITE, var.GetValueWidth(), v, d.witnessTrue,
