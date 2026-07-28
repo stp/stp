@@ -927,9 +927,10 @@ TEST(RemoveUnconstrained_GroundPath, ite_shared_no_distribution)
   c.checkEquivalent(back, result);
 }
 
-TEST(RemoveUnconstrained_GroundPath, ite_nested_declined)
+TEST(RemoveUnconstrained_GroundPath, ite_nested_distributes)
 {
-  // Two ITE frames on one path: version 1 declines (one frame only).
+  // Two ITE frames on one path: the predicate distributes over both,
+  //   ite((= z 1), ite((= y 0), v, (= y 2)), (= z 2)).
   Context c;
   ASTNode x = c.bv();
   ASTNode y = c.bv();
@@ -942,7 +943,49 @@ TEST(RemoveUnconstrained_GroundPath, ite_nested_declined)
   ASTNode top = c.hf->CreateNode(EQ, outer, c.konst(2));
 
   ASTNode result = c.run(top);
-  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 0u);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_GroundPath, ite_three_frames_with_suffixes)
+{
+  // Three frames, mixed then/else positions, with ground steps between
+  // them: each frame's else side gets the steps above it re-applied.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode z = c.bv();
+  ASTNode w2 = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVMOD, W, x, c.konst(4));
+  t = c.hf->CreateTerm(ITE, W, c.hf->CreateNode(EQ, y, c.konst(0)), t, y);
+  t = c.hf->CreateTerm(BVPLUS, W, t, c.konst(1));
+  t = c.hf->CreateTerm(ITE, W, c.hf->CreateNode(EQ, z, c.konst(1)), z, t);
+  t = c.hf->CreateTerm(ITE, W, c.hf->CreateNode(EQ, w2, c.konst(2)), t, w2);
+  ASTNode top = c.hf->CreateNode(EQ, t, c.konst(3));
+
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_GroundPath, ite_frame_cap_declines)
+{
+  // Five stacked frames exceed MAX_ITE_FRAMES: x must survive. One
+  // shared condition variable keeps the equivalence check enumerable.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVMOD, W, x, c.konst(4));
+  for (int i = 0; i < 5; i++)
+    t = c.hf->CreateTerm(ITE, W, c.hf->CreateNode(EQ, y, c.konst(i)), t,
+                         c.konst(7));
+  ASTNode top = c.hf->CreateNode(EQ, t, c.konst(2));
+
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 0u)
+      << "x eliminated past the frame cap";
   ASTNode back = c.backSubstitute(top);
   c.checkEquivalent(back, result);
 }
