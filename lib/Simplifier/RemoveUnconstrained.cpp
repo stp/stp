@@ -182,6 +182,17 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
   const size_t MAX_ITE_FRAMES = 4;
   std::vector<IteFrame> frames;
 
+  // Concat frames: BVCONCAT nodes with a possibly-symbolic sibling.
+  // Equality distributes over concatenation slice by slice, so these
+  // need no image -- but only pure concatenation may then sit between
+  // the variable and the predicate, and the predicate must be EQ.
+  struct ConcatFrame
+  {
+    MutableASTNode* sibling;
+    bool pathHigh; // the path is child 0 (the high part)
+  };
+  std::vector<ConcatFrame> cframes;
+
   MutableASTNode* cur = &muteNode;
   for (unsigned depth = 0; depth < AchievableImage::MAX_PATH; depth++)
   {
@@ -191,6 +202,80 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
 
     if (p.GetValueWidth() == 0)
     {
+      if (!cframes.empty())
+      {
+        // Slicing mode: an equality against ANY term splits by bit
+        // range. x is defined as its slice of the other side (falsity
+        // survives through the sibling slices' residual equalities, so
+        // no fresh boolean is needed).
+        if (p.GetKind() != EQ || kids.size() != 2)
+          return false;
+        const bool eqPathFirst = (kids[0] == cur);
+        if (kids[0] == kids[1] || (!eqPathFirst && kids[1] != cur))
+          return false;
+        MutableASTNode* otherM = eqPathFirst ? kids[1] : kids[0];
+        if (otherM->n.GetValueWidth() != cur->n.GetValueWidth())
+          return false;
+
+        // Unwrap the frames innermost-out into a high-to-low slice
+        // list; a NULL node marks the variable's own slice.
+        struct Slice
+        {
+          MutableASTNode* node;
+          unsigned width;
+        };
+        std::vector<Slice> slices;
+        slices.push_back({NULL, var.GetValueWidth()});
+        for (const ConcatFrame& cf : cframes)
+        {
+          const Slice s = {cf.sibling, cf.sibling->n.GetValueWidth()};
+          if (cf.pathHigh)
+            slices.push_back(s);
+          else
+            slices.insert(slices.begin(), s);
+        }
+
+        const ASTNode t = otherM->toASTNode(&bm);
+        ASTNode varDef;
+        ASTVec residuals;
+        vector<MutableASTNode*> vars;
+        std::unordered_set<MutableASTNode*> visited;
+        otherM->getAllVariablesRecursively(vars, visited);
+        long hiBit = (long)t.GetValueWidth() - 1;
+        for (const Slice& s : slices)
+        {
+          const long loBit = hiBit + 1 - (long)s.width;
+          ASTNode piece =
+              nf->CreateTerm(BVEXTRACT, s.width, t,
+                             bm.CreateBVConst(32, (unsigned long long)hiBit),
+                             bm.CreateBVConst(32, (unsigned long long)loBit));
+          if (s.node == NULL)
+            varDef = piece;
+          else
+          {
+            residuals.push_back(
+                nf->CreateNode(EQ, s.node->toASTNode(&bm), piece));
+            s.node->getAllVariablesRecursively(vars, visited);
+          }
+          hiBit = loBit - 1;
+        }
+        assert(hiBit == -1);
+        visited.clear();
+
+        ASTNode newP = (residuals.size() == 1)
+                           ? residuals[0]
+                           : nf->CreateNode(AND, residuals);
+
+        std::unordered_map<uint64_t, MutableASTNode*> create;
+        for (MutableASTNode* m : vars)
+          create.insert(std::make_pair(m->n.GetNodeNum(), m));
+        vars.clear();
+
+        parent.replaceWithAnotherNode(MutableASTNode::build(newP, create));
+        replace(var, varDef);
+        return true;
+      }
+
       // Boolean level: a predicate between the chain and a constant.
       if (!AchievableImage::predicateKind(p.GetKind()) || kids.size() != 2)
         return false;
@@ -209,6 +294,31 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
 
     // Term level: one path child, constants everywhere else.
     const Kind kind = p.GetKind();
+
+    // Once slicing has begun, only further concatenation can follow.
+    if (!cframes.empty() && kind != BVCONCAT)
+      return false;
+
+    if (kind == BVCONCAT && kids.size() == 2 &&
+        ((kids[0] == cur) != (kids[1] == cur)))
+    {
+      const bool pathHigh = (kids[0] == cur);
+      MutableASTNode* sib = pathHigh ? kids[1] : kids[0];
+      // Enter slicing mode at the first symbolic sibling, but only from
+      // the bare variable (no image steps or ITE frames below); once in
+      // it, constant siblings become frames too.
+      if (!cframes.empty() ||
+          (!sib->n.isConstant() && steps.empty() && frames.empty()))
+      {
+        cframes.push_back({sib, pathHigh});
+        if (parent.parents.size() != 1)
+          return false;
+        cur = &parent;
+        continue;
+      }
+      // Constant sibling outside slicing mode: the ordinary image step
+      // below handles it.
+    }
 
     if (kind == ITE && p.GetValueWidth() > 0)
     {

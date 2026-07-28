@@ -922,6 +922,128 @@ TEST(RemoveUnconstrained_GroundPath, ite_frame_cap_declines)
   c.checkEquivalent(back, result);
 }
 
+/////////////////////////////////////////////////////////////////////////////
+// Concat-frame equality slicing: (= (concat x y) t) with x single-use
+// splits by bit range -- x := its slice of t, one residual equality per
+// sibling slice. Pointwise sound (falsity survives through the sibling
+// residuals), so checkSoundTop applies.
+/////////////////////////////////////////////////////////////////////////////
+
+TEST(RemoveUnconstrained_ConcatSlice, basic)
+{
+  // (= (concat x y) t): x := extract_hi(t), residual (= y extract_lo(t)).
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode t = c.bv(2 * W);
+  ASTNode top = c.hf->CreateNode(
+      AND, c.hf->CreateNode(EQ, c.hf->CreateTerm(BVCONCAT, 2 * W, x, y), t),
+      c.anchorFor(y), c.anchorFor(t));
+
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_ConcatSlice, nested_with_constant_slice)
+{
+  // (= (concat 5:4 (concat x y)) t): the constant becomes a residual
+  // equality against t's high slice, y one against the low slice, and
+  // x := the middle slice.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode t = c.bv(4 + 2 * W);
+  ASTNode inner = c.hf->CreateTerm(BVCONCAT, 2 * W, x, y);
+  ASTNode outer = c.hf->CreateTerm(BVCONCAT, 4 + 2 * W, c.konst(5, 4), inner);
+  ASTNode top = c.hf->CreateNode(AND, c.hf->CreateNode(EQ, outer, t),
+                                 c.anchorFor(y), c.anchorFor(t));
+
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_ConcatSlice, free_sibling_cascades)
+{
+  // y is also single-use: the residual (= y extract_lo(t)) re-enters the
+  // worklist and the EQ rule introduces the fresh boolean there --
+  // exactly when falsity would otherwise be lost.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode t = c.bv(2 * W);
+  ASTNode top = c.hf->CreateNode(
+      AND, c.hf->CreateNode(EQ, c.hf->CreateTerm(BVCONCAT, 2 * W, x, y), t),
+      c.anchorFor(t));
+
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(y), 1u);
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_ConcatSlice, constant_other_side)
+{
+  // Built with the hashing factory, so the SimplifyingNodeFactory's own
+  // constant-splitting hasn't pre-empted the pass.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode top = c.hf->CreateNode(
+      AND,
+      c.hf->CreateNode(EQ, c.hf->CreateTerm(BVCONCAT, 2 * W, x, y),
+                       c.konst(37, 2 * W)),
+      c.anchorFor(y));
+
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u);
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_ConcatSlice, comparison_not_sliced)
+{
+  // Slicing distributes over equality only: a comparison must decline.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode t = c.bv(2 * W);
+  ASTNode top = c.hf->CreateNode(
+      AND, c.hf->CreateNode(BVGT, c.hf->CreateTerm(BVCONCAT, 2 * W, x, y), t),
+      c.anchorFor(y), c.anchorFor(t));
+
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 0u);
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_ConcatSlice, shared_concat_not_sliced)
+{
+  // The concat feeds two predicates: rewriting one context would be
+  // wrong, so the single-use check must refuse.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode t = c.bv(2 * W);
+  ASTNode cc = c.hf->CreateTerm(BVCONCAT, 2 * W, x, y);
+  ASTVec conj;
+  conj.push_back(c.hf->CreateNode(EQ, cc, t));
+  conj.push_back(c.hf->CreateNode(BVGT, cc, c.konst(1, 2 * W)));
+  conj.push_back(c.anchorFor(y));
+  conj.push_back(c.anchorFor(t));
+  ASTNode top = c.hf->CreateNode(AND, conj);
+
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 0u);
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
 // --- Cases that must NOT collapse. ---
 
 TEST(RemoveUnconstrained_GroundPath, one_polarity_no_collapse)
