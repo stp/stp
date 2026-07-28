@@ -34,10 +34,10 @@ THE SOFTWARE.
 
 namespace stp
 {
-THREAD_LOCAL enum inputStatus input_status = NOT_DECLARED;
+THREAD_LOCAL_IE enum inputStatus input_status = NOT_DECLARED;
 
 // Originally just used by the parser, now used elesewhere.
-THREAD_LOCAL STP* GlobalSTP;
+THREAD_LOCAL_IE STP* GlobalSTP;
 THREAD_LOCAL_IE STPMgr* GlobalParserBM;
 
 // Used exclusively for parsing.

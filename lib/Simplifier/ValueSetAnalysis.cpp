@@ -36,33 +36,6 @@ namespace stp
                         BOOLEAN_TYPE == n.GetType());
   }
 
-  // A constant node with the member's value, suitable as an argument of
-  // the constant evaluator.
-  ASTNode ValueSetAnalysis::toNode(const ASTNode& child, const CBV member)
-  {
-    if (BOOLEAN_TYPE == child.GetType())
-      return CONSTANTBV::BitVector_bit_test(member, 0) ? bm.ASTTrue
-                                                       : bm.ASTFalse;
-    return bm.CreateBVConst(CONSTANTBV::BitVector_Clone(member),
-                            child.GetValueWidth());
-  }
-
-  // The evaluated constant's value as a fresh CBV the caller owns.
-  CBV ValueSetAnalysis::toCBV(const ASTNode& evaluated)
-  {
-    if (TRUE == evaluated.GetKind())
-    {
-      CBV r = CONSTANTBV::BitVector_Create(1, true);
-      CONSTANTBV::BitVector_Bit_On(r, 0);
-      return r;
-    }
-    if (FALSE == evaluated.GetKind())
-      return CONSTANTBV::BitVector_Create(1, true);
-
-    assert(BVCONST == evaluated.GetKind());
-    return CONSTANTBV::BitVector_Clone(evaluated.GetBVConst());
-  }
-
   namespace
   {
     CBV valueOf(unsigned width, uint64_t value)
@@ -96,6 +69,202 @@ namespace stp
             return width;
         }
       return (unsigned)result;
+    }
+
+    CBV boolCBV(bool b)
+    {
+      CBV r = CONSTANTBV::BitVector_Create(1, true);
+      if (b)
+        CONSTANTBV::BitVector_Bit_On(r, 0);
+      return r;
+    }
+
+    bool isTrue(const CBV v) { return CONSTANTBV::BitVector_bit_test(v, 0); }
+
+    // What the analysis needs a node's kind evaluated over, straight on
+    // the bit-vectors -- the term and predicate evaluation itself is
+    // shared with NonMemberBVConstEvaluator (consteval.cpp); building a
+    // hash-consed constant node for every child member and every result
+    // here was most of what the analysis used to spend its time on.
+    // Booleans are width-1 vectors with bit zero as the truth value.
+    // Returns a fresh CBV the caller owns.
+    CBV evalOnCBVs(Kind k, const ASTNode& n, const vector<CBV>& args)
+    {
+      switch (k)
+      {
+        // The boolean connectives, over width-1 vectors.
+        case NOT:
+          return boolCBV(!isTrue(args[0]));
+
+        case OR:
+        case NOR:
+        {
+          bool any = false;
+          for (const CBV a : args)
+            if (isTrue(a))
+            {
+              any = true;
+              break;
+            }
+          return boolCBV(OR == k ? any : !any);
+        }
+
+        case AND:
+        case NAND:
+        {
+          bool all = true;
+          for (const CBV a : args)
+            if (!isTrue(a))
+            {
+              all = false;
+              break;
+            }
+          return boolCBV(AND == k ? all : !all);
+        }
+
+        case XOR:
+        {
+          bool parity = false;
+          for (const CBV a : args)
+            if (isTrue(a))
+              parity = !parity;
+          return boolCBV(parity);
+        }
+
+        case IFF:
+          return boolCBV(isTrue(args[0]) == isTrue(args[1]));
+
+        case IMPLIES:
+          return boolCBV(!isTrue(args[0]) || isTrue(args[1]));
+
+        // The predicates over two bit-vectors.
+        case BOOLEXTRACT:
+        case EQ:
+        case BVLT:
+        case BVLE:
+        case BVGT:
+        case BVGE:
+        case BVSLT:
+        case BVSLE:
+        case BVSGT:
+        case BVSGE:
+          return boolCBV(
+              NonMemberBVConstPredicateEvaluator(k, args[0], args[1]));
+
+        // The bit-vector terms. ITE is handled before evaluation is
+        // reached, and the evaluator rejects anything else that doesn't
+        // pass constEvaluable.
+        default:
+          return NonMemberBVConstEvaluator(k, args, n.GetValueWidth());
+      }
+    }
+
+    uint64_t mask64(unsigned width)
+    {
+      return width >= 64 ? ~0ull : (1ull << width) - 1;
+    }
+
+    // The value of a bit-vector of at most 64 bits. The chunk functions
+    // move at most an unsigned long per call, which is 32 bits on some
+    // platforms, so go in two halves.
+    uint64_t cbvToU64(const CBV v)
+    {
+      const unsigned width = bits_(v);
+      assert(width <= 64);
+      uint64_t result =
+          CONSTANTBV::BitVector_Chunk_Read(v, std::min(width, 32u), 0);
+      if (width > 32)
+        result |= (uint64_t)CONSTANTBV::BitVector_Chunk_Read(v, width - 32, 32)
+                  << 32;
+      return result;
+    }
+
+    CBV u64ToCBV(uint64_t v, unsigned width)
+    {
+      CBV result = CONSTANTBV::BitVector_Create(width, true);
+      CONSTANTBV::BitVector_Chunk_Store(result, std::min(width, 32u), 0,
+                                        (unsigned long)(v & 0xffffffffull));
+      if (width > 32)
+        CONSTANTBV::BitVector_Chunk_Store(result, width - 32, 32,
+                                          (unsigned long)(v >> 32));
+      return result;
+    }
+
+    size_t popcount64(uint64_t v)
+    {
+      size_t count = 0;
+      while (v != 0)
+      {
+        v &= v - 1;
+        count++;
+      }
+      return count;
+    }
+
+    // evalOnCBVs again, on values that fit in 64 bits. Booleans are 0 or 1.
+    uint64_t evalOnU64s(Kind k, const vector<uint64_t>& args,
+                        const vector<unsigned>& argWidths, unsigned outWidth)
+    {
+      switch (k)
+      {
+        // The boolean connectives, over 0 and 1.
+        case NOT:
+          return args[0] ^ 1;
+
+        case OR:
+        case NOR:
+        {
+          uint64_t any = 0;
+          for (const uint64_t a : args)
+            any |= a;
+          return OR == k ? any : any ^ 1;
+        }
+
+        case AND:
+        case NAND:
+        {
+          uint64_t all = 1;
+          for (const uint64_t a : args)
+            all &= a;
+          return AND == k ? all : all ^ 1;
+        }
+
+        case XOR:
+        {
+          uint64_t parity = 0;
+          for (const uint64_t a : args)
+            parity ^= a;
+          return parity;
+        }
+
+        case IFF:
+          return (args[0] == args[1]) ? 1 : 0;
+
+        case IMPLIES:
+          return (args[0] == 0 || args[1] == 1) ? 1 : 0;
+
+        // The predicates over two bit-vectors.
+        case BOOLEXTRACT:
+        case EQ:
+        case BVLT:
+        case BVLE:
+        case BVGT:
+        case BVGE:
+        case BVSLT:
+        case BVSLE:
+        case BVSGT:
+        case BVSGE:
+          return NonMemberBVConstPredicateEvaluator64(k, args[0], args[1],
+                                                      argWidths[0])
+                     ? 1
+                     : 0;
+
+        // The bit-vector terms. ITE is handled before evaluation is
+        // reached, and the evaluator rejects anything else that doesn't
+        // pass constEvaluable.
+        default:
+          return NonMemberBVConstEvaluator64(k, args, argWidths, outWidth);
+      }
     }
 
     // Operations that are one-to-one in each argument (or, for equality,
@@ -356,6 +525,276 @@ namespace stp
     return result;
   }
 
+  // standIns, on values that fit in 64 bits.
+  bool ValueSetAnalysis::standIns64(const ASTNode& n, size_t index,
+                                    const vector<const ValueSet*>& children,
+                                    unsigned width, vector<uint64_t>& out,
+                                    Expand& expandWith)
+  {
+    const Kind k = n.GetKind();
+
+    if (anythingWhenUnknown(k))
+      return false;
+
+    switch (k)
+    {
+      // Multiplication, division and modulus are left out on purpose:
+      // they are the expensive ones to evaluate, and an unknown operand
+      // rarely pins their result down.
+      case BVMULT:
+      case BVDIV:
+      case BVMOD:
+      case SBVDIV:
+      case SBVREM:
+      case SBVMOD:
+        return false;
+
+      case BVAND:
+        expandWith = Expand::Submask;
+        out.push_back(mask64(width));
+        return true;
+
+      case BVOR:
+        expandWith = Expand::Supermask;
+        out.push_back(0);
+        return true;
+
+      // The comparisons are monotone in each side, so whatever they can
+      // answer they already answer at the extremes of the unknown one.
+      case BVLT:
+      case BVLE:
+      case BVGT:
+      case BVGE:
+        out.push_back(0);
+        out.push_back(mask64(width));
+        return true;
+
+      case BVSLT:
+      case BVSLE:
+      case BVSGT:
+      case BVSGE:
+        out.push_back(1ull << (width - 1)); // signed minimum
+        out.push_back(mask64(width) >> 1);  // signed maximum
+        return true;
+
+      case BVLEFTSHIFT:
+      case BVRIGHTSHIFT:
+      case BVSRSHIFT:
+        return shiftStandIns64(n, index, children, out);
+
+      default:
+        break;
+    }
+
+    // Anything else: every value of the width, when there are few enough
+    // of them. A wider child would push the result past what a set holds.
+    if (width > SMALL_WIDTH)
+      return false;
+    for (uint64_t v = 0; v < (1ull << width); v++)
+      out.push_back(v);
+    return true;
+  }
+
+  bool ValueSetAnalysis::shiftStandIns64(
+      const ASTNode& n, size_t index, const vector<const ValueSet*>& children,
+      vector<uint64_t>& out)
+  {
+    const Kind k = n.GetKind();
+    const unsigned width = n.GetValueWidth();
+
+    if (index == 1)
+    {
+      // The amount. Shifting by the width or more always gives the same
+      // answer, so the amounts to try stop there.
+      if (children[0] == nullptr)
+        return false;
+      if ((width + 1) * children[0]->size() > PRODUCT_CAP)
+        return false;
+      for (unsigned s = 0; s <= width; s++)
+        out.push_back(s);
+      return true;
+    }
+
+    // The value being shifted. Only the bits that survive the smallest of
+    // the amounts can reach the result, so only those are worth varying.
+    if (children[1] == nullptr)
+      return false;
+
+    unsigned smallest = width;
+    for (const CBV s : children[1]->values)
+      smallest = (unsigned)std::min<uint64_t>(smallest, cbvToU64(s));
+
+    // Shifted all the way out, an arithmetic shift still copies the sign
+    // bit, so that bit always has to be varied.
+    if (BVSRSHIFT == k && smallest == width)
+      smallest = width - 1;
+
+    const unsigned survivors = width - smallest;
+    if (survivors > SMALL_WIDTH)
+      return false;
+
+    for (uint64_t v = 0; v < (1ull << survivors); v++)
+      out.push_back(BVLEFTSHIFT == k ? v : v << smallest);
+    return true;
+  }
+
+  // expand(), in place on a sorted array of at most MAX_ELEMENTS values.
+  // False when the expansion wouldn't fit.
+  bool ValueSetAnalysis::expand64(uint64_t* values, size_t& size,
+                                  unsigned width, Expand how)
+  {
+    uint64_t members[ValueSet::MAX_ELEMENTS];
+    const size_t count = size;
+    std::copy(values, values + count, members);
+    size = 0;
+
+    for (size_t i = 0; i < count; i++)
+    {
+      // The bits the unknown operand is free to change.
+      const uint64_t free = Expand::Submask == how
+                                ? members[i]
+                                : (~members[i] & mask64(width));
+
+      // Two to the power of that many members: past three bits it can't
+      // fit in a set anyway.
+      if (popcount64(free) > 31 ||
+          (1ull << popcount64(free)) > ValueSet::MAX_ELEMENTS)
+        return false;
+
+      // Every subset of the free bits, cleared from the member or set in
+      // it.
+      uint64_t subset = free;
+      while (true)
+      {
+        const uint64_t variant =
+            Expand::Submask == how ? subset : members[i] | subset;
+
+        uint64_t* end = values + size;
+        uint64_t* it = std::lower_bound(values, end, variant);
+        if (it == end || *it != variant)
+        {
+          if (size >= ValueSet::MAX_ELEMENTS)
+            return false;
+          std::copy_backward(it, end, end + 1);
+          *it = variant;
+          size++;
+        }
+
+        if (subset == 0)
+          break;
+        subset = (subset - 1) & free;
+      }
+    }
+    return true;
+  }
+
+  ValueSet* ValueSetAnalysis::dispatch64(const ASTNode& n,
+                                         const vector<const ValueSet*>& children)
+  {
+    const Kind k = n.GetKind();
+    const size_t degree = children.size();
+    const unsigned outWidth = n.GetValueWidth() > 0 ? n.GetValueWidth() : 1;
+
+    vector<unsigned> widths(degree);
+    for (size_t i = 0; i < degree; i++)
+      widths[i] = std::max(1u, n[i].GetValueWidth());
+
+    // What each child ranges over: its set's values, or values standing
+    // in for a child nothing is known about.
+    vector<vector<uint64_t>> members(degree);
+    Expand expandWith = Expand::None;
+    for (size_t i = 0; i < degree; i++)
+    {
+      if (children[i] != nullptr)
+      {
+        members[i].reserve(children[i]->size());
+        for (const CBV m : children[i]->values)
+          members[i].push_back(cbvToU64(m));
+      }
+      else if (!standIns64(n, i, children, widths[i], members[i], expandWith))
+      {
+        widened++;
+        return nullptr;
+      }
+    }
+
+    size_t combinations = 1;
+    for (size_t i = 0; i < degree; i++)
+    {
+      combinations *= members[i].size();
+      if (combinations > PRODUCT_CAP)
+      {
+        widened++;
+        return nullptr;
+      }
+    }
+
+    // Holding every value of the width, a set says exactly what a null
+    // pointer says, and the remaining combinations can't grow it -- which
+    // is where an evaluation of a comparison usually ends up.
+    const size_t complete =
+        outWidth < 4 ? ((size_t)1 << outWidth) : (size_t)-1;
+
+    // Evaluate the node over each combination of the children's values,
+    // into a sorted array.
+    uint64_t results[ValueSet::MAX_ELEMENTS];
+    size_t size = 0;
+
+    vector<uint64_t> combination(degree);
+    vector<size_t> odometer(degree, 0);
+    for (size_t count = 0; count < combinations; count++)
+    {
+      for (size_t i = 0; i < degree; i++)
+        combination[i] = members[i][odometer[i]];
+
+      const uint64_t r = evalOnU64s(k, combination, widths, outWidth);
+
+      uint64_t* end = results + size;
+      uint64_t* it = std::lower_bound(results, end, r);
+      if (it == end || *it != r)
+      {
+        if (size >= ValueSet::MAX_ELEMENTS || size + 1 >= complete)
+        {
+          widened++;
+          return nullptr;
+        }
+        std::copy_backward(it, end, end + 1);
+        *it = r;
+        size++;
+      }
+
+      for (size_t i = 0; i < odometer.size(); i++)
+      {
+        if (++odometer[i] < members[i].size())
+          break;
+        odometer[i] = 0;
+      }
+    }
+
+    if (Expand::None != expandWith &&
+        !expand64(results, size, outWidth, expandWith))
+    {
+      widened++;
+      return nullptr;
+    }
+
+    if (size >= complete)
+    {
+      widened++;
+      return nullptr;
+    }
+
+    // Only now build the bit-vectors, one per member that survived. The
+    // array is sorted ascending, which is the set's order.
+    ValueSet* result = fresh(n);
+    result->values.reserve(size);
+    for (size_t i = 0; i < size; i++)
+      result->values.push_back(u64ToCBV(results[i], outWidth));
+
+    propagated++;
+    return result;
+  }
+
   ValueSet* ValueSetAnalysis::dispatchToTransferFunctions(
       const ASTNode& n, const vector<const ValueSet*>& children)
   {
@@ -424,6 +863,16 @@ namespace stp
     if (!constEvaluable(k) || n.Degree() == 0)
       return nullptr;
 
+    // Nodes whose children and result all fit in 64 bits -- nearly all of
+    // them -- are evaluated natively instead of on the bit-vectors.
+    {
+      bool fits = n.GetValueWidth() <= 64;
+      for (size_t i = 0; fits && i < n.Degree(); i++)
+        fits = n[i].GetValueWidth() <= 64;
+      if (fits)
+        return dispatch64(n, children);
+    }
+
     // Values standing in for the children nothing is known about.
     struct Owned
     {
@@ -461,26 +910,27 @@ namespace stp
       }
     }
 
-    // Constant nodes for every child's member, built once.
-    vector<vector<ASTNode>> constants(children.size());
-    for (size_t i = 0; i < children.size(); i++)
-      for (const CBV m : *members[i])
-        constants[i].push_back(toNode(n[i], m));
-
     // Evaluate the node over each combination of the children's values.
     ValueSet* result = fresh(n);
+    vector<CBV> combination(children.size());
     vector<size_t> odometer(children.size(), 0);
     for (size_t count = 0; count < combinations; count++)
     {
-      ASTVec combination;
-      combination.reserve(children.size());
       for (size_t i = 0; i < children.size(); i++)
-        combination.push_back(constants[i][odometer[i]]);
+        combination[i] = (*members[i])[odometer[i]];
 
-      const ASTNode evaluated =
-          NonMemberBVConstEvaluator(&bm, k, combination, n.GetValueWidth());
+      if (!result->insert(evalOnCBVs(k, n, combination)))
+      {
+        delete result;
+        widened++;
+        return nullptr;
+      }
 
-      if (!result->insert(toCBV(evaluated)))
+      // Holding every value of the width already, the set says exactly
+      // what a null pointer says, and the remaining combinations can't
+      // change that -- which is where an evaluation of a comparison
+      // usually ends up.
+      if (result->isComplete())
       {
         delete result;
         widened++;

@@ -47,7 +47,6 @@ THE SOFTWARE.
 #include "stp/Sat/SimplifyingMinisat.h"
 
 #include "stp/Simplifier/AIGSimplifyPropositionalCore.h"
-#include "stp/Simplifier/AlwaysTrue.h"
 #include "stp/Simplifier/DifficultyScore.h"
 #include "stp/Simplifier/FindPureLiterals.h"
 #include "stp/Simplifier/RemoveUnconstrained.h"
@@ -281,13 +280,6 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
     SplitExtracts se(*bm);
     inputToSat = se.topLevel(inputToSat);
     bm->ASTNodeStats(se_message.c_str(), inputToSat);
-  }
-
-  if (bm->UserFlags.enable_always_true)
-  {
-    AlwaysTrue always(bm, bm->defaultNodeFactory);
-    inputToSat = always.topLevel(inputToSat);
-    bm->ASTNodeStats("After removing always true: ", inputToSat);
   }
 
   if (bm->UserFlags.enable_merge_same)
