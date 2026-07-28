@@ -65,6 +65,7 @@ struct ArithLess
 bool isAtomic(Kind k);
 bool isCommutative(const Kind k);
 bool containsArrayOps(const ASTNode& n, STPMgr* stp);
+bool containsParamBool(const ASTNode& n, STPMgr* stp);
 bool numberOfReadsLessThan(const ASTNode& n, int v);
 
 // If (a > b) in the termorder, then return 1 elseif (a < b) in the
