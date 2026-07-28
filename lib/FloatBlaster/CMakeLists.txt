@@ -25,6 +25,7 @@
 # the library itself.
 set(floatblaster_sources
     FloatBlaster.cpp
+    FloatBlast.cpp
     FpTotalise.cpp
 )
 if (ENABLE_FLOATING_POINT)

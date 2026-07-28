@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include <cstdint>
+#include <utility>
 
 namespace stp
 {
@@ -38,10 +39,43 @@ namespace stp
 class FloatBlaster
 {
 private:
-  static ASTNode BlastNode(STPMgr* bm, const ASTNode& inputterm);
+  static ASTNode BlastNode(STPMgr* bm, Kind k, const ASTVec& kids,
+                           unsigned int operand_exp, unsigned int operand_sig);
 
 public:
-  static ASTNode BlastNode_TopLevel(STPMgr* bm, const ASTNode& b);
+  // The format of an operation's floating-point *operands*, which is what
+  // symfpu needs to unpack them, and which is not always the result's format:
+  // fp.to_ubv yields a bitvector, and to_fp's four-argument form converts
+  // between two formats.
+  //
+  // Read it off the node the input built, before blasting has replaced its
+  // children with bits. Taking it from a blasted operand is what made the
+  // blaster depend on the format being stamped onto those bits -- a stamp
+  // that lands on a hash-consed node the input may still be using as a plain
+  // bitvector, which is a whole family of wrong answers and aborts.
+  //
+  // Follows the same rule as deriveFPFormat: the first child that carries a
+  // format. The others are rounding modes, widths and to_fp's format
+  // arguments, none of which do.
+  static std::pair<unsigned int, unsigned int> operandFormat(const ASTNode& n);
+  static std::pair<unsigned int, unsigned int>
+  operandFormat(const ASTVec& children);
+
+  // Lower one floating-point operation to its bitvector circuit. `kids` are
+  // its operands already blasted to bits, and operand_exp/operand_sig say
+  // what format those bits are in (see operandFormat); both are 0 for an
+  // operation with no float operand.
+  //
+  // The operation is passed as kind-plus-children rather than as a node
+  // because there is no well-formed node to pass: an FP_ADD whose children
+  // are bitvectors does not type check.
+  //
+  // What comes back is bits. It carries no floating-point format, and must
+  // not be given one -- nodes are hash-consed, so a format stamped on a
+  // blasted float lands on whatever else denotes the same bits.
+  static ASTNode BlastNode_TopLevel(STPMgr* bm, Kind k, const ASTVec& kids,
+                                    unsigned int operand_exp,
+                                    unsigned int operand_sig);
 
   // Return `n` carrying the floating-point format (exp_width, sig_width).
   //

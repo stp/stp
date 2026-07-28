@@ -172,11 +172,12 @@ struct Ctx
   }
 
   // Blast a (possibly symbolic) tree to a pure bitvector/Boolean circuit,
-  // bottom-up, the way the simplifier's traversal does in a real solve:
-  // each floating-point operation is lowered after its children, with each
-  // child's format re-stamped first (a blasted float is a bare bitvector
-  // circuit and loses its format; withFormat is a no-op for non-floats).
-  // The blaster builds through the manager's default factory -- the
+  // bottom-up, the way FloatBlast does in a real solve: each floating-point
+  // operation is lowered after its children, and its operand format comes
+  // from the node the caller built rather than from the bits its children
+  // lowered to. Nothing is stamped -- a lowered float is a bitvector, and
+  // saying otherwise on a hash-consed node is what FloatBlast exists to
+  // avoid. The blaster builds through the manager's default factory -- the
   // *hashing* one here -- so no rewrite fires on the way.
   ASTNode blastTree(const ASTNode& n)
   {
@@ -185,20 +186,19 @@ struct Ctx
     ASTVec kids;
     kids.reserve(n.Degree());
     for (const ASTNode& ch : n)
-      kids.push_back(FloatBlaster::withFormat(
-          &mgr, blastTree(ch), ch.GetExpWidth(), ch.GetSigWidth()));
+      kids.push_back(blastTree(ch));
+
     const Kind k = n.GetKind();
-    ASTNode out = (n.GetType() == BOOLEAN_TYPE)
-                      ? hf->CreateNode(k, kids)
-                      : hf->CreateTerm(k, n.GetValueWidth(), kids);
     if (!is_FP_kind(k))
-      return out;
-    if (n.GetExpWidth() != 0)
-    {
-      out.SetExpWidth(n.GetExpWidth());
-      out.SetSigWidth(n.GetSigWidth());
-    }
-    return FloatBlaster::BlastNode_TopLevel(&mgr, out);
+      return (n.GetType() == BOOLEAN_TYPE)
+                 ? hf->CreateNode(k, kids)
+                 : hf->CreateTerm(k, n.GetValueWidth(), kids);
+
+    // From `n`, not from `kids`: the operands are bits by now.
+    const std::pair<unsigned int, unsigned int> fmt =
+        FloatBlaster::operandFormat(n);
+    return FloatBlaster::BlastNode_TopLevel(&mgr, k, kids, fmt.first,
+                                            fmt.second);
   }
 
   ASTNode blastOnce(const ASTNode& n)

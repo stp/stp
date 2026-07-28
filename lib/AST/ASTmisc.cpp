@@ -259,14 +259,34 @@ void buildListOfSymbols(const ASTNode& n, ASTNodeSet& visited,
 }
 
 // A float is carried as its packed bits, so a float-typed node stands in for
-// a bitvector of the same width wherever bits are wanted. Blasted circuits
-// mix float-stamped and plain nodes -- and, because nodes are hash-consed
-// while the format is per-node state, the stamp a blasted float leaves
-// behind can land on a node the input already uses as a plain bitvector.
+// a bitvector of the same width wherever bits are wanted -- but only where it
+// is entitled to the format it claims. A leaf's is declared (a symbol) or
+// fixed when it is made (an ASTFPConst, which interns apart from the plain
+// constant with the same bits); a read, a store and an ITE derive theirs from
+// the array or the branches they carry; an operation's comes from its kind.
+// See deriveFPFormat: in every one of those cases the format follows from the
+// node, so nothing can disagree about it.
+//
+// A bitvector-kind interior node is entitled to none. Its format could only
+// have been stamped on by whoever lowered a float to those bits -- and nodes
+// are hash-consed, so that stamp retypes every other use of the same bits.
+// The input's own bitvectors start reporting FLOATINGPOINT_TYPE solver-wide.
+// That is what BVSRSHIFT and the comparison predicates used to abort on, and
+// what made to_fp read an integer source as a float and answer wrongly.
+// ASTNode::SetExpWidth now refuses such a stamp; this rejects the result of
+// one wherever the bits are used, so the two ends agree.
 static bool isBitsValued(const ASTNode& n)
 {
   const types t = n.GetType();
-  return BITVECTOR_TYPE == t || FLOATINGPOINT_TYPE == t;
+
+  if (BITVECTOR_TYPE == t)
+    return true;
+  if (FLOATINGPOINT_TYPE != t)
+    return false;
+
+  const Kind k = n.GetKind();
+  return 0 == n.Degree() || is_FP_kind(k) || READ == k || WRITE == k ||
+         ITE == k;
 }
 
 void checkChildrenAreBV(const ASTChildren& v, const ASTNode& n)
@@ -692,12 +712,11 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
         error_msg = "to_fp's second argument is not a rounding mode";
         failed = true;
       }
-      // With a rounding mode the source is either a float to reformat or a
-      // bitvector holding a signed integer to convert.
-      else if (n[3].GetType() != FLOATINGPOINT_TYPE &&
-               n[3].GetType() != BITVECTOR_TYPE)
+      // With a rounding mode this reformats a float. Converting a signed
+      // integer is FP_TOFP_SIGNED; the sorts differ, so the kinds do.
+      else if (n[3].GetType() != FLOATINGPOINT_TYPE)
       {
-        error_msg = "to_fp's argument is not an fp or a bitvector";
+        error_msg = "to_fp's argument is not an fp";
         failed = true;
       }
 
@@ -709,7 +728,9 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
       break;
     }
 
-    // ((_ to_fp_unsigned e s) rm bv): (e, s, rm, bits).
+    // ((_ to_fp e s) rm bv) over a signed integer, and its unsigned
+    // counterpart: (e, s, rm, bits) for both.
+    case FP_TOFP_SIGNED:
     case FP_TOFP_UNSIGNED:
     {
       std::string error_msg("");
@@ -717,25 +738,25 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
 
       if (n.Degree() != 4)
       {
-        error_msg = "to_fp_unsigned should have 4 args";
+        error_msg = "to_fp/to_fp_unsigned over an integer should have 4 args";
         failed = true;
       }
       else if (!n[0].isConstant() || !n[1].isConstant())
       {
-        error_msg = "to_fp_unsigned's format arguments must be constants";
+        error_msg = "to_fp's format arguments must be constants";
         failed = true;
       }
       else if (!isRoundingMode(n[2]))
       {
-        error_msg = "to_fp_unsigned's second argument is not a rounding mode";
+        error_msg = "to_fp's second argument is not a rounding mode";
         failed = true;
       }
-      // As for to_fp above: the integer this converts rides in a bitvector,
-      // and a float-stamped node is one of those (see isBitsValued). The
-      // blaster reads it as an unsigned integer either way.
+      // The integer this converts rides in a bitvector -- or in a float leaf,
+      // whose bits are just as good and which isBitsValued admits. What it
+      // must not be is a bitvector some lowering has stamped a format onto.
       else if (!isBitsValued(n[3]))
       {
-        error_msg = "to_fp_unsigned's argument is not a bitvector";
+        error_msg = "to_fp's integer argument is not a bitvector";
         failed = true;
       }
 

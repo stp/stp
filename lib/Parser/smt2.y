@@ -208,6 +208,7 @@ namespace stp
   using stp::FP_MIN;
   using stp::FP_MAX;
   using stp::FP_TOFP;
+  using stp::FP_TOFP_SIGNED;
   using stp::FP_TOFP_UNSIGNED;
   using stp::FP_TO_UBV;
   using stp::FP_TO_SBV;
@@ -825,9 +826,15 @@ namespace stp
       fatal_yyerror("to_fp's argument must be a float or a bitvector.");
     }
 
+    // Which of the two it is has to be recorded now, in the kind. The sort is
+    // only reliable here: a float is carried as its packed bits, so once the
+    // operand has been lowered it is indistinguishable from the integer.
+    const Kind k =
+        (expr->GetType() == FLOATINGPOINT_TYPE) ? FP_TOFP : FP_TOFP_SIGNED;
+
     ASTNode* n = stp::GlobalParserInterface->newNode(
         stp::GlobalParserInterface->nf->CreateTerm(
-            FP_TOFP, exp_width + sig_width,
+            k, exp_width + sig_width,
             stp::GlobalParserInterface->CreateBVConst(32, exp_width),
             stp::GlobalParserInterface->CreateBVConst(32, sig_width), *rm,
             ASTVec(1, *expr)));

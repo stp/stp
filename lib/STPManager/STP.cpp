@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/STPManager/STP.h"
+#include "stp/FloatBlaster/FloatBlast.h"
 #include "stp/FloatBlaster/FpTotalise.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/NodeToFixedBitsMap.h"
@@ -183,16 +184,9 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
 
   if (bm->has_floating_point)
   {
-    // The whole lowering to bitvectors happens inside simplification, so
-    // there is no floating-point solving without it. Say so up front rather
-    // than dying deep in the bit-blaster on an unlowered node.
-    if (!bm->UserFlags.optimize_flag)
-      FatalError("floating-point input needs simplification: do not combine "
-                 "it with --disable-simplifications");
-
     // Difficulty reversion re-transforms the ORIGINAL input, which would
-    // resurrect un-blasted floating-point nodes after simplification had
-    // lowered them -- and those cannot reach the bitblaster. Give the
+    // resurrect un-blasted floating-point nodes after the lowering pass had
+    // replaced them -- and those cannot reach the bitblaster. Give the
     // heuristic up only when floats are actually present; it used to be
     // disabled for every query.
     bm->UserFlags.difficulty_reversion = false;
@@ -483,6 +477,28 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // DAG is minimized as much as possibly, and ideally should
   // garuntee that all liketerms in BVPLUSes have been combined.
   bm->TermsAlreadySeenMap_Clear();
+
+  // Lower the floating-point layer to bitvectors. From here on the formula
+  // is pure bitvector: simplification, the array transformer and the
+  // bit-blaster never see a floating-point node.
+  //
+  // Here rather than earlier because this is exactly where the lowering used
+  // to happen -- SimplifyFormula_TopLevel below did it, one operation at a
+  // time, as it simplified. Every pass above therefore sees the same formula
+  // it always did, including RemoveUnconstrained, which treats a float
+  // symbol very differently before and after its bits are exposed.
+  //
+  // See FloatBlast for why this is a pass of its own: doing it inside
+  // simplification meant building floating-point nodes over bitvector
+  // children and stamping a float format on them to make them type check,
+  // and that stamp landed on hash-consed nodes the input still used as plain
+  // bitvectors.
+  if (bm->has_floating_point)
+  {
+    FloatBlast blast(bm);
+    inputToSat = blast.topLevel(inputToSat);
+    bm->ASTNodeStats("After floating-point lowering: ", inputToSat);
+  }
 
   ASTNode tmp_inputToSAT;
   do

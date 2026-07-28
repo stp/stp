@@ -970,6 +970,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
     case FP_MIN:
     case FP_MAX:
     case FP_TOFP:
+    case FP_TOFP_SIGNED:
     case FP_TOFP_UNSIGNED:
     case FP_TO_UBV:
     case FP_TO_SBV:
@@ -986,7 +987,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       unsigned int exp_width = 0;
       unsigned int sig_width = 0;
 
-      if (k == FP_TOFP || k == FP_TOFP_UNSIGNED)
+      if (k == FP_TOFP || k == FP_TOFP_SIGNED || k == FP_TOFP_UNSIGNED)
       {
         // to_fp names its target format in its first two children rather
         // than inheriting it from an operand.
@@ -1016,8 +1017,8 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       // format onto that source would make a 32-bit integer argument look
       // like a Float32 and take the reformat path instead of the convert one.
       const bool format_children =
-          (k != FP_TOFP && k != FP_TOFP_UNSIGNED && k != FP_TO_UBV &&
-           k != FP_TO_SBV);
+          (k != FP_TOFP && k != FP_TOFP_SIGNED && k != FP_TOFP_UNSIGNED &&
+           k != FP_TO_UBV && k != FP_TO_SBV);
 
       // fp.to_ubv/fp.to_sbv are the same story from the other side: their
       // children are (m, rm, x, unspecified), of which only x is a float, and
@@ -1089,7 +1090,12 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
         break;
       }
 
-      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(_bm, temp));
+      // The *operand* format, which for to_fp is not exp_width/sig_width
+      // above: those name the target it converts into.
+      const std::pair<unsigned int, unsigned int> fmt =
+          FloatBlaster::operandFormat(children);
+      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(
+          _bm, k, toASTVec(temp.GetChildren()), fmt.first, fmt.second));
       OutputNode = NonMemberBVConstEvaluator(_bm, blasted);
 
       // Carry the format out, so an enclosing operation sees a formatted

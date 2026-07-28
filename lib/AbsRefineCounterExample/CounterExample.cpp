@@ -362,6 +362,7 @@ AbsRefine_CounterExample::TermToConstTermUsingModel_inner(const ASTNode& term,
     case FP_MIN:
     case FP_MAX:
     case FP_TOFP:
+    case FP_TOFP_SIGNED:
     case FP_TOFP_UNSIGNED:
     case FP_TO_UBV:
     case FP_TO_SBV:
@@ -434,7 +435,12 @@ AbsRefine_CounterExample::TermToConstTermUsingModel_inner(const ASTNode& term,
       FpTotalise totalise(bm);
       temp = totalise.topLevel(temp);
 
-      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(bm, temp));
+      // From `term`, not `temp`: temp's operands are evaluated bits by now.
+      const std::pair<unsigned int, unsigned int> fmt =
+          FloatBlaster::operandFormat(term);
+      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(
+          bm, temp.GetKind(), toASTVec(temp.GetChildren()), fmt.first,
+          fmt.second));
 
       assert(blasted != temp);
       assert(blasted != term);
@@ -751,7 +757,12 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
         break;
       }
 
-      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(bm, temp));
+      // From `form`, not `temp`: temp's operands are evaluated bits by now.
+      const std::pair<unsigned int, unsigned int> fmt =
+          FloatBlaster::operandFormat(form);
+      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(
+          bm, temp.GetKind(), toASTVec(temp.GetChildren()), fmt.first,
+          fmt.second));
 
       assert(blasted != temp);
       assert(blasted != form);

@@ -81,6 +81,7 @@ static bool deriveFPFormat(const ASTNode& n, unsigned int& e, unsigned int& s)
     // *type* node (vc_fpType) -- covering it here is what makes
     // vc_getExpWidth/vc_getSigWidth work on a type, as documented.
     case FP_TOFP:
+    case FP_TOFP_SIGNED:
     case FP_TOFP_UNSIGNED:
     case FLOATINGPOINT:
     {
@@ -226,6 +227,26 @@ void ASTNode::SetExpWidth(unsigned int _ew) const
   assert(_int_node_ptr->getExpWidth() == 0 ||
          _int_node_ptr->getExpWidth() == 0xFFFFFFFFu /* not-a-float cache */ ||
          _ew == 0 || _int_node_ptr->getExpWidth() == _ew);
+
+  // A float's format may be stored only where it cannot be shared with a
+  // plain bitvector use of the same node:
+  //
+  //  - on a leaf, whose sort is declared (a symbol) or fixed when it is made
+  //    (an ASTFPConst, which interns apart from the plain constant holding
+  //    the same bits);
+  //  - on an interior node whose *kind* says it is a float, where it is
+  //    derived from the kind and children rather than assigned (see
+  //    deriveFPFormat) and so cannot disagree with anything.
+  //
+  // Never on a bitvector-kind interior node. Nodes are hash-consed and the
+  // format is per-node state, so a format stamped on the bits a float lowers
+  // to retypes everything else that denotes those bits: the input's own
+  // bitvectors start reporting FLOATINGPOINT_TYPE solver-wide, bitvector
+  // operations over them stop type checking, and to_fp reads an integer as a
+  // float. Lowering therefore hands its format to the blaster as an argument
+  // instead (see FloatBlaster::operandFormat and FloatBlast).
+  assert(_ew == 0 || Degree() == 0 || is_FP_kind(GetKind()) ||
+         GetKind() == FLOATINGPOINT || GetIndexWidth() > 0);
   // Every float acquires its format through here (or CreateFPConst), so
   // this is where the manager learns that floats are in play -- and, on a
   // build without floating-point support, where the C API's floating-point
