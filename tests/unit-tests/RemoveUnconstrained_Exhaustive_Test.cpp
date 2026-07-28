@@ -848,6 +848,148 @@ TEST(RemoveUnconstrained_GroundPath, shared_predicate)
   c.checkSoundTop(top);
 }
 
+// --- ITE distribution: the predicate distributes over a single ITE on
+//     the path, P(g(ite(c, f(x), t))) => ite(c, v, P(g(t))). The result
+//     keeps the else side, so these check x's elimination and soundness
+//     rather than full collapse. ---
+
+TEST(RemoveUnconstrained_GroundPath, ite_distribution)
+{
+  // (= (ite (= y 0) (bvurem x 4) y) 2)  =>  ite((= y 0), v, (= y 2))
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode cond = c.hf->CreateNode(EQ, y, c.konst(0));
+  ASTNode ite = c.hf->CreateTerm(
+      ITE, W, cond, c.hf->CreateTerm(BVMOD, W, x, c.konst(4)), y);
+  ASTNode top = c.hf->CreateNode(EQ, ite, c.konst(2));
+
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_GroundPath, ite_distribution_with_suffix)
+{
+  // Ground steps above the ITE distribute too:
+  // (= (bvadd (ite c (bvurem x 4) y) 1) 3) => ite(c, v, (= (bvadd y 1) 3))
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode cond = c.hf->CreateNode(EQ, y, c.konst(1));
+  ASTNode ite = c.hf->CreateTerm(
+      ITE, W, cond, c.hf->CreateTerm(BVMOD, W, x, c.konst(4)), y);
+  ASTNode add = c.hf->CreateTerm(BVPLUS, W, ite, c.konst(1));
+  ASTNode top = c.hf->CreateNode(EQ, add, c.konst(3));
+
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_GroundPath, ite_distribution_else_branch)
+{
+  // x in the else branch: ite(c, y, chain(x)).
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode cond = c.hf->CreateNode(EQ, y, c.konst(0));
+  ASTNode ite = c.hf->CreateTerm(
+      ITE, W, cond, y, c.hf->CreateTerm(BVAND, W, x, c.konst(5)));
+  ASTNode top = c.hf->CreateNode(EQ, ite, c.konst(4));
+
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_GroundPath, ite_shared_no_distribution)
+{
+  // The ITE node is consumed twice: distributing from one consumer's
+  // viewpoint would be unsound, so x must survive.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode cond = c.hf->CreateNode(EQ, y, c.konst(0));
+  ASTNode ite = c.hf->CreateTerm(
+      ITE, W, cond, c.hf->CreateTerm(BVMOD, W, x, c.konst(4)), y);
+  ASTNode top =
+      c.hf->CreateNode(AND, c.hf->CreateNode(EQ, ite, c.konst(2)),
+                       c.hf->CreateNode(BVGT, ite, c.konst(0)));
+
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 0u)
+      << "x eliminated through a shared ITE";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_GroundPath, ite_nested_distributes)
+{
+  // Two ITE frames on one path: the predicate distributes over both,
+  //   ite((= z 1), ite((= y 0), v, (= y 2)), (= z 2)).
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode z = c.bv();
+  ASTNode inner = c.hf->CreateTerm(
+      ITE, W, c.hf->CreateNode(EQ, y, c.konst(0)),
+      c.hf->CreateTerm(BVMOD, W, x, c.konst(4)), y);
+  ASTNode outer = c.hf->CreateTerm(
+      ITE, W, c.hf->CreateNode(EQ, z, c.konst(1)), inner, z);
+  ASTNode top = c.hf->CreateNode(EQ, outer, c.konst(2));
+
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_GroundPath, ite_three_frames_with_suffixes)
+{
+  // Three frames, mixed then/else positions, with ground steps between
+  // them: each frame's else side gets the steps above it re-applied.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode z = c.bv();
+  ASTNode w2 = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVMOD, W, x, c.konst(4));
+  t = c.hf->CreateTerm(ITE, W, c.hf->CreateNode(EQ, y, c.konst(0)), t, y);
+  t = c.hf->CreateTerm(BVPLUS, W, t, c.konst(1));
+  t = c.hf->CreateTerm(ITE, W, c.hf->CreateNode(EQ, z, c.konst(1)), z, t);
+  t = c.hf->CreateTerm(ITE, W, c.hf->CreateNode(EQ, w2, c.konst(2)), t, w2);
+  ASTNode top = c.hf->CreateNode(EQ, t, c.konst(3));
+
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_GroundPath, ite_frame_cap_declines)
+{
+  // Five stacked frames exceed MAX_ITE_FRAMES: x must survive. One
+  // shared condition variable keeps the equivalence check enumerable.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVMOD, W, x, c.konst(4));
+  for (int i = 0; i < 5; i++)
+    t = c.hf->CreateTerm(ITE, W, c.hf->CreateNode(EQ, y, c.konst(i)), t,
+                         c.konst(7));
+  ASTNode top = c.hf->CreateNode(EQ, t, c.konst(2));
+
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 0u)
+      << "x eliminated past the frame cap";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
 // --- Cases that must NOT collapse. ---
 
 TEST(RemoveUnconstrained_GroundPath, one_polarity_no_collapse)

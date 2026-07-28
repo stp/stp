@@ -470,9 +470,11 @@ Formula         :     '(' Formula ')'
 {  
   $$ = new ASTNode(GlobalParserInterface->letMgr->ResolveID(*$1)); delete $1;
 }
-|      FORMID_TOK '(' Expr ')' 
+|      FORMID_TOK '(' Expr ')'
 {
-  $$ = new ASTNode(GlobalParserInterface->nf->CreateNode(PARAMBOOL,*$1,*$3));
+  if (stp::BVCONST != $3->GetKind())
+    yyerror("Fatal Error: the argument of a parameterised boolean must be a constant");
+  $$ = new ASTNode(GlobalParserInterface->CreateParameterisedBooleanVar(*$1,*$3));
   delete $1;
   delete $3;
 }

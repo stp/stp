@@ -135,20 +135,6 @@ bool containsArrayOps(const ASTNode& n, STPMgr* mgr)
   return false;
 }
 
-// True if any descendants are parameterised booleans. Only the CVC
-// parser creates these; the ArrayTransformer converts them to
-// boolean variables.
-bool containsParamBool(const ASTNode& n, STPMgr* mgr)
-{
-  NodeIterator ni(n, mgr->ASTUndefined, *mgr);
-  ASTNode current;
-  while ((current = ni.next()) != ni.end())
-    if (PARAMBOOL == current.GetKind())
-      return true;
-
-  return false;
-}
-
 bool isCommutative(const Kind k)
 {
   switch (k)
@@ -556,15 +542,6 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
       {
         FatalError("BVTypeCheck: index is greater or equal to the bitwidth.\n",
                    n);
-      }
-      break;
-
-    case PARAMBOOL:
-      if (2 != n.Degree())
-      {
-        FatalError(
-            "BVTypeCheck: PARAMBOOL formula can have exactly two childNodes",
-            n);
       }
       break;
 

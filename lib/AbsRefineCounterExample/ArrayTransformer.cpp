@@ -246,24 +246,6 @@ ASTNode ArrayTransformer::TransformFormula(const ASTNode& simpleForm)
       result = nf->CreateNode(k, vec);
       break;
     }
-    case PARAMBOOL:
-    {
-      // If the parameteric boolean variable is of the form
-      // VAR(const), then convert it into a Boolean variable of the
-      // form "VAR(const)".
-      //
-      // Else if the paramteric boolean variable is of the form
-      // VAR(expression), then simply return it
-      if (BVCONST == simpleForm[1].GetKind())
-      {
-        result = bm->NewParameterized_BooleanVar(simpleForm[0], simpleForm[1]);
-      }
-      else
-      {
-        result = simpleForm;
-      }
-      break;
-    }
     default:
     {
       if (k == SYMBOL && BOOLEAN_TYPE == simpleForm.GetType())
