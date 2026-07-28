@@ -44,83 +44,13 @@ STPMgr* ASTNode::GetSTPMgr() const
   return _int_node_ptr->nodeManager;
 }
 
-// Constructor;
-//
-// creates a new pointer, increments refcount of pointed-to object.
-ASTNode::ASTNode(ASTInternal* in) : _int_node_ptr(in)
-{
-  if (in)
-  {
-    in->IncRef();
-  }
-}
-
-//#define ASTNODE_COUNT_OPS
-
-#ifdef ASTNODE_COUNT_OPS
-THREAD_LOCAL int ASTNode::copy = 0;
-THREAD_LOCAL int ASTNode::move = 0;
-THREAD_LOCAL int ASTNode::assign = 0;
-THREAD_LOCAL int ASTNode::destroy = 0;
-THREAD_LOCAL int ASTNode::assign_move = 0;
-#endif
-
-//Maintain _ref_count
-ASTNode::ASTNode(const ASTNode& n) : _int_node_ptr(n._int_node_ptr)
-{
-#ifdef ASTNODE_COUNT_OPS
-  if (++copy % 1000000 == 0)
-    std::cerr << "copy" << copy << std::endl;
-#endif
-
-  if (n._int_node_ptr)
-  {
-    n._int_node_ptr->IncRef();
-  }
-}
-
-ASTNode::ASTNode(ASTNode&& other) noexcept : _int_node_ptr(other._int_node_ptr)
-{
-#ifdef ASTNODE_COUNT_OPS
-  if (++move % 1000000 == 0)
-    std::cerr << "move" << move << std::endl;
-#endif
-
-  other._int_node_ptr = 0;
-}
-
-ASTNode& ASTNode::operator=(ASTNode&& n)
-{
-#ifdef ASTNODE_COUNT_OPS
-  if (++assign_move % 1000000 == 0)
-    std::cerr << "assign_move" << assign_move << std::endl;
-#endif
-
-  if (_int_node_ptr)
-    _int_node_ptr->DecRef();
-
-  _int_node_ptr = n._int_node_ptr;
-
-  n._int_node_ptr = 0;
-  return *this;
-}
-
 // GetKind, GetChildren and GetNodeNum are now inlined in ASTNode.h (possible
 // since ASTInternal.h no longer includes ASTNode.h, breaking the old cycle).
-
-unsigned int ASTNode::GetIndexWidth() const
-{
-  return _int_node_ptr->getIndexWidth();
-}
+// The ref-counting special members are inlined there too.
 
 void ASTNode::SetIndexWidth(unsigned int _iw) const
 {
   _int_node_ptr->setIndexWidth(_iw);
-}
-
-unsigned int ASTNode::GetValueWidth() const
-{
-  return _int_node_ptr->getValueWidth();
 }
 
 void ASTNode::SetValueWidth(unsigned int vw) const
@@ -131,50 +61,6 @@ void ASTNode::SetValueWidth(unsigned int vw) const
 // return the type of the ASTNode:
 //
 // 0 iff BOOLEAN; 1 iff BITVECTOR; 2 iff ARRAY; 3 iff UNKNOWN;
-types ASTNode::GetType() const
-{
-  if ((GetIndexWidth() == 0) && (GetValueWidth() == 0))
-    return BOOLEAN_TYPE;
-
-  if ((GetIndexWidth() == 0) && (GetValueWidth() > 0))
-    return BITVECTOR_TYPE;
-
-  if ((GetIndexWidth() > 0) && (GetValueWidth() > 0))
-    return ARRAY_TYPE;
-
-  return UNKNOWN_TYPE;
-}
-
-ASTNode& ASTNode::operator=(const ASTNode& n)
-{
-#ifdef ASTNODE_COUNT_OPS
-  if (++assign % 1000000 == 0)
-    std::cerr << "assign" << assign << std::endl;
-#endif
-
-  if (n._int_node_ptr)
-    n._int_node_ptr->IncRef();
-
-  if (_int_node_ptr)
-    _int_node_ptr->DecRef();
-
-  _int_node_ptr = n._int_node_ptr;
-  return *this;
-}
-
-ASTNode::~ASTNode()
-{
-#ifdef ASTNODE_COUNT_OPS
-  if (destroy++ % 1000000 == 0)
-    std::cerr << "destroy" << destroy << std::endl;
-#endif
-
-  if (_int_node_ptr)
-  {
-    _int_node_ptr->DecRef();
-  }
-}
-
 // Print the node
 void ASTNode::nodeprint(ostream& os, bool c_friendly) const
 {

@@ -52,11 +52,11 @@
 #endif
 
   // File-static (local to this file) variables and functions
-  static thread_local std::string _string_lit;
+  static THREAD_LOCAL_IE std::string _string_lit;
 
   // Nesting depth while skipping the arguments of a command we don't
   // interpret. Zero means the next ')' closes the command itself.
-  static thread_local int skippedDepth = 0;
+  static THREAD_LOCAL_IE int skippedDepth = 0;
 
   static int lookup(char* s)
   {

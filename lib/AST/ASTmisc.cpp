@@ -201,7 +201,7 @@ void SortByExprNum(ASTVec& v)
 
 void SortByArith(ASTVec& v)
 {
-  sort(v.begin(), v.end(), arithless);
+  sort(v.begin(), v.end(), ArithLess{});
 }
 
 bool isAtomic(Kind kind)
@@ -340,6 +340,11 @@ ASTVec FlattenKind(Kind k, const ASTChildren& children, int maxDepth)
 
 bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
 {
+  // Symbols are a large share of the nodes built while parsing and have no
+  // children, so return before paying the virtual call that fetches them.
+  if (SYMBOL == k)
+    return true;
+
   // The children of bitvector terms are in turn bitvectors.
   const ASTChildren v = n.GetChildren();
 
@@ -350,9 +355,6 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
         FatalError("BVTypeCheck: The term t does not typecheck, where t = \n",
                    n);
       break;
-
-    case SYMBOL:
-      return true;
 
     case ITE:
       if (n.Degree() != 3)
@@ -584,7 +586,7 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
     case BVSSUBO:
       if (n.Degree() != 2)
         FatalError("BVTypeCheck: should have exactly 2 args\n", n);
-      if (BITVECTOR_TYPE != n[0].GetType() && BITVECTOR_TYPE != n[1].GetType())
+      if (BITVECTOR_TYPE != n[0].GetType() || BITVECTOR_TYPE != n[1].GetType())
       {
         FatalError("BVTypeCheck: terms in atomic formulas must be bitvectors",
                    n);

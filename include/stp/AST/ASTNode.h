@@ -54,7 +54,14 @@ class ASTNode
   // Ptr to the read data
   ASTInternal* _int_node_ptr;
 
-  DLL_PUBLIC explicit ASTNode(ASTInternal* in);
+  // Creates a new pointer, increments refcount of pointed-to object.
+  DLL_PUBLIC explicit ASTNode(ASTInternal* in) : _int_node_ptr(in)
+  {
+    if (in)
+    {
+      in->IncRef();
+    }
+  }
 
   // Equal iff ASTIntNode pointers are the same.
   friend bool operator==(const ASTNode& node1, const ASTNode& node2)
@@ -78,10 +85,32 @@ public:
   uint8_t getIteration() const;
   void setIteration(uint8_t v) const;
 
+  // Inlined for the same reason as the accessors below: these are among the
+  // hottest calls in STP, and the refcount arithmetic is smaller than the
+  // call sequence needed to reach it.
   DLL_PUBLIC ASTNode() : _int_node_ptr(NULL){};
-  DLL_PUBLIC ASTNode(const ASTNode& n);
-  DLL_PUBLIC ~ASTNode();
-  DLL_PUBLIC ASTNode(ASTNode&& other) noexcept;
+
+  DLL_PUBLIC ASTNode(const ASTNode& n) : _int_node_ptr(n._int_node_ptr)
+  {
+    if (n._int_node_ptr)
+    {
+      n._int_node_ptr->IncRef();
+    }
+  }
+
+  DLL_PUBLIC ~ASTNode()
+  {
+    if (_int_node_ptr)
+    {
+      _int_node_ptr->DecRef();
+    }
+  }
+
+  DLL_PUBLIC ASTNode(ASTNode&& other) noexcept
+      : _int_node_ptr(other._int_node_ptr)
+  {
+    other._int_node_ptr = 0;
+  }
 
   // Print the arguments in lisp format
   friend ostream& LispPrintVec(ostream& os, const ASTVec& v, int indentation);
@@ -122,9 +151,30 @@ public:
   // delegates to the ASTInternal node.
   void nodeprint(ostream& os, bool c_friendly = false) const;
 
-  // Assignment (for ref counting)
-  DLL_PUBLIC ASTNode& operator=(const ASTNode& n);
-  DLL_PUBLIC ASTNode& operator=(ASTNode&& n);
+  // Assignment (for ref counting). The IncRef happens before the DecRef so
+  // that self-assignment is safe.
+  DLL_PUBLIC ASTNode& operator=(const ASTNode& n)
+  {
+    if (n._int_node_ptr)
+      n._int_node_ptr->IncRef();
+
+    if (_int_node_ptr)
+      _int_node_ptr->DecRef();
+
+    _int_node_ptr = n._int_node_ptr;
+    return *this;
+  }
+
+  DLL_PUBLIC ASTNode& operator=(ASTNode&& n)
+  {
+    if (_int_node_ptr)
+      _int_node_ptr->DecRef();
+
+    _int_node_ptr = n._int_node_ptr;
+
+    n._int_node_ptr = 0;
+    return *this;
+  }
 
   // Access node number. Inlined: ASTInternal is complete here (its header no
   // longer includes this one), so these fold to direct field reads at the
@@ -170,11 +220,29 @@ public:
    *                                                                 *
    * Both indexwidth and valuewidth should never be less than 0      *
    *******************************************************************/
-  unsigned int GetIndexWidth() const;
-  DLL_PUBLIC unsigned int GetValueWidth() const;
+  // Inlined for the same reason as the ref-counting members: ASTInternal is
+  // complete here, so these fold to a single virtual dispatch at the call site
+  // instead of a call into the library that then dispatches.
+  unsigned int GetIndexWidth() const { return _int_node_ptr->getIndexWidth(); }
+  DLL_PUBLIC unsigned int GetValueWidth() const
+  {
+    return _int_node_ptr->getValueWidth();
+  }
   void SetIndexWidth(unsigned int iw) const;
   void SetValueWidth(unsigned int vw) const;
-  types GetType(void) const;
+
+  // Reads each width once. The previous form re-read them per branch, which
+  // cost up to six dispatches for what is two pieces of information.
+  types GetType(void) const
+  {
+    const unsigned int iw = GetIndexWidth();
+    const unsigned int vw = GetValueWidth();
+
+    if (0 == iw)
+      return (0 == vw) ? BOOLEAN_TYPE : BITVECTOR_TYPE;
+
+    return (vw > 0) ? ARRAY_TYPE : UNKNOWN_TYPE;
+  }
 
   // Hash is the node's unique id. Inlined: used by every ==/</hash lookup.
   size_t Hash() const { return _int_node_ptr ? _int_node_ptr->node_uid : 0; }

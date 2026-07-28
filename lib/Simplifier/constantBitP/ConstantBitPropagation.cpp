@@ -57,7 +57,7 @@ namespace simplifier
 {
 namespace constantBitP
 {
-THREAD_LOCAL NodeToFixedBitsMap* PrintingHackfixedMap; // Used when debugging.
+THREAD_LOCAL_IE NodeToFixedBitsMap* PrintingHackfixedMap; // Used when debugging.
 
 const bool debug_cBitProp_messages = false;
 const bool output_mult_like = false;
@@ -580,19 +580,10 @@ void ConstantBitPropagation::propagate()
   }
 }
 
-// get the current value from the map. If no value is in the map. Make a new
-// value.
-FixedBits* ConstantBitPropagation::getCurrentFixedBits(const ASTNode& n)
+// No value is in the map yet, so make a new one. The lookup that discovered
+// the miss is inlined into getCurrentFixedBits.
+FixedBits* ConstantBitPropagation::createFixedBits(const ASTNode& n)
 {
-  assert(NULL != fixedMap);
-
-  NodeToFixedBitsMap::NodeToFixedBitsMapType::iterator it =
-      fixedMap->map->find(n);
-  if (it != fixedMap->map->end())
-  {
-    return it->second;
-  }
-
   int bw;
   if (0 == n.GetValueWidth())
   {

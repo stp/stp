@@ -77,6 +77,13 @@ ASTNode HashingNodeFactory::CreateNode(const Kind kind,
   }
   else
   {
+    if (std::is_sorted(back_children.begin(), back_children.end(),
+                       stp::ArithLess{}))
+    {
+      // Don't create a new vector if it's already sorted.
+      return ASTNode(bm.LookupOrCreateInterior(kind, back_children));
+    }
+
     ASTVec children(back_children);
     // The Bitvector solver seems to expect constants on the RHS, variables on the
     // LHS.

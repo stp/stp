@@ -555,4 +555,384 @@ TEST(SimplifyingNodeFactory_Exhaustive, ite_width1_boolean_to_term)
   }
 }
 
+/* 1-bit comparisons have a single satisfying assignment */
+TEST(SimplifyingNodeFactory_Exhaustive, gt_sgt_width1)
+{
+  Context c;
+  ASTNode a = c.bv(1);
+  ASTNode b = c.bv(1);
+  c.checkNode(BVGT, {a, b});
+  c.checkNode(BVSGT, {a, b});
+}
+
+/* ~a > ~b --> b > a */
+TEST(SimplifyingNodeFactory_Exhaustive, gt_of_bvnots)
+{
+  Context c;
+  ASTNode a = c.bv(3);
+  ASTNode b = c.bv(3);
+  ASTNode na = c.hf->CreateTerm(BVNOT, 3, a);
+  ASTNode nb = c.hf->CreateTerm(BVNOT, 3, b);
+  c.checkNode(BVGT, {na, nb});
+  EXPECT_EQ(c.nf->CreateNode(BVGT, na, nb), c.nf->CreateNode(BVGT, b, a));
+}
+
+/* x > (x + c) --> x > ~c, and (x + c) > x --> NOT(x > ~c) */
+TEST(SimplifyingNodeFactory_Exhaustive, gt_vs_plus_constant)
+{
+  Context c;
+  ASTNode x = c.bv(3);
+  for (unsigned k = 1; k <= 7; k++)
+  {
+    for (int constFirst = 0; constFirst < 2; constFirst++)
+    {
+      ASTNode plus = constFirst
+                         ? c.hf->CreateTerm(BVPLUS, 3, c.konst(k, 3), x)
+                         : c.hf->CreateTerm(BVPLUS, 3, x, c.konst(k, 3));
+      c.checkNode(BVGT, {x, plus});
+      c.checkNode(BVGT, {plus, x});
+    }
+  }
+}
+
+/* 1-bit (x = 1) --> NOT(x = 0), for both operand orders */
+TEST(SimplifyingNodeFactory_Exhaustive, eq_width1_normalised)
+{
+  Context c;
+  ASTNode x = c.bv(1);
+  ASTNode notZero =
+      c.nf->CreateNode(NOT, c.nf->CreateNode(EQ, x, c.konst(0, 1)));
+  c.checkNode(EQ, {x, c.konst(1, 1)});
+  EXPECT_EQ(c.nf->CreateNode(EQ, x, c.konst(1, 1)), notZero);
+  EXPECT_EQ(c.nf->CreateNode(EQ, c.konst(1, 1), x), notZero);
+}
+
+/* (c << s) with a negative constant c --> -((-c) << s); the most negative
+   constant is left alone */
+TEST(SimplifyingNodeFactory_Exhaustive, leftshift_negative_constant_base)
+{
+  Context c;
+  ASTNode s = c.bv(4);
+  for (unsigned k : {9u, 12u, 15u}) // negative 4-bit constants, not 8
+    c.checkTerm(BVLEFTSHIFT, 4, {c.konst(k, 4), s});
+  c.checkTerm(BVLEFTSHIFT, 4, {c.konst(8, 4), s}, false);
+}
+
+/* extracts entirely inside a sign-extension rebase onto the sign bit;
+   extracts entirely inside the original term drop the extension;
+   straddling extracts are left alone */
+TEST(SimplifyingNodeFactory_Exhaustive, extract_over_sx)
+{
+  Context c;
+  ASTNode x = c.bv(3);
+  ASTNode sx = c.hf->CreateTerm(BVSX, 6, x, c.mgr.CreateBVConst(32, 6));
+
+  // Inside the extension.
+  c.checkTerm(BVEXTRACT, 3,
+              {sx, c.mgr.CreateBVConst(32, 5), c.mgr.CreateBVConst(32, 3)});
+  // Inside the original.
+  c.checkTerm(BVEXTRACT, 2,
+              {sx, c.mgr.CreateBVConst(32, 1), c.mgr.CreateBVConst(32, 0)});
+  EXPECT_EQ(c.nf->CreateTerm(BVEXTRACT, 2, sx, c.mgr.CreateBVConst(32, 1),
+                             c.mgr.CreateBVConst(32, 0)),
+            c.nf->CreateTerm(BVEXTRACT, 2, x, c.mgr.CreateBVConst(32, 1),
+                             c.mgr.CreateBVConst(32, 0)));
+  // Straddling.
+  c.checkTerm(BVEXTRACT, 3,
+              {sx, c.mgr.CreateBVConst(32, 3), c.mgr.CreateBVConst(32, 1)},
+              false);
+}
+
+/* repeating a 1-bit term, directly or against its own sign-extension,
+   is a sign-extension */
+TEST(SimplifyingNodeFactory_Exhaustive, concat_repeated_bit_to_sx)
+{
+  Context c;
+  ASTNode t = c.bv(1);
+  ASTNode sx = c.hf->CreateTerm(BVSX, 3, t, c.mgr.CreateBVConst(32, 3));
+
+  c.checkTerm(BVCONCAT, 2, {t, t});
+  EXPECT_EQ(c.nf->CreateTerm(BVCONCAT, 2, t, t),
+            c.nf->CreateTerm(BVSX, 2, t, c.mgr.CreateBVConst(32, 2)));
+
+  c.checkTerm(BVCONCAT, 4, {t, sx});
+  c.checkTerm(BVCONCAT, 4, {sx, t});
+  EXPECT_EQ(c.nf->CreateTerm(BVCONCAT, 4, t, sx),
+            c.nf->CreateTerm(BVSX, 4, t, c.mgr.CreateBVConst(32, 4)));
+  EXPECT_EQ(c.nf->CreateTerm(BVCONCAT, 4, sx, t),
+            c.nf->CreateTerm(BVSX, 4, t, c.mgr.CreateBVConst(32, 4)));
+}
+
+/* x / x --> ite(x = 0, all-ones, 1) */
+TEST(SimplifyingNodeFactory_Exhaustive, udiv_self)
+{
+  Context c;
+  for (unsigned w : {1u, 3u})
+  {
+    ASTNode x = c.bv(w);
+    c.checkTerm(BVDIV, w, {x, x});
+  }
+}
+
+/* sdiv constant rules: by zero, of zero, and negative-constant
+   normalisation on either side (the most negative constant excluded) */
+TEST(SimplifyingNodeFactory_Exhaustive, sdiv_constant_rules)
+{
+  Context c;
+  ASTNode x = c.bv(3);
+  c.checkTerm(SBVDIV, 3, {x, c.konst(0, 3)});
+  c.checkTerm(SBVDIV, 3, {c.konst(0, 3), x});
+  c.checkTerm(SBVDIV, 3, {c.konst(6, 3), x}); // -2 / x
+  c.checkTerm(SBVDIV, 3, {x, c.konst(6, 3)}); // x / -2
+  c.checkTerm(SBVDIV, 3, {c.konst(4, 3), x}, false); // most negative
+  c.checkTerm(SBVDIV, 3, {x, c.konst(4, 3)}, false);
+}
+
+/* srem negative-constant normalisation on either side */
+TEST(SimplifyingNodeFactory_Exhaustive, srem_negative_constants)
+{
+  Context c;
+  ASTNode x = c.bv(3);
+  c.checkTerm(SBVREM, 3, {c.konst(6, 3), x}); // -2 rem x
+  c.checkTerm(SBVREM, 3, {x, c.konst(6, 3)}); // x rem -2
+  c.checkTerm(SBVREM, 3, {c.konst(4, 3), x}, false); // most negative
+  c.checkTerm(SBVREM, 3, {x, c.konst(4, 3)}, false);
+}
+
+/* a literal and its negation one level down a same-kind child annihilate */
+TEST(SimplifyingNodeFactory_Exhaustive, nested_complementary_literals)
+{
+  Context c;
+  ASTNode p = c.boolean();
+  ASTNode q = c.boolean();
+  ASTNode r = c.boolean();
+  ASTNode notP = c.hf->CreateNode(NOT, p);
+
+  ASTNode innerAnd = c.hf->CreateNode(AND, q, notP);
+  c.checkNode(AND, {p, innerAnd});
+  EXPECT_EQ(c.nf->CreateNode(AND, p, innerAnd), c.mgr.ASTFalse);
+
+  ASTNode innerOr = c.hf->CreateNode(OR, q, notP);
+  c.checkNode(OR, {p, innerOr});
+  EXPECT_EQ(c.nf->CreateNode(OR, p, innerOr), c.mgr.ASTTrue);
+
+  // Complements split across two nested same-kind children.
+  ASTNode andA = c.hf->CreateNode(AND, p, q);
+  ASTNode andB = c.hf->CreateNode(AND, r, notP);
+  c.checkNode(AND, {andA, andB});
+  EXPECT_EQ(c.nf->CreateNode(AND, andA, andB), c.mgr.ASTFalse);
+
+  // An AND nested inside an OR must NOT annihilate.
+  c.checkNode(OR, {p, innerAnd}, false);
+}
+
+/* (x umod s) >u x --> false, so (x umod s) <=u x --> true. */
+TEST(SimplifyingNodeFactory_Exhaustive, gt_urem_dividend)
+{
+  Context c;
+  for (unsigned w : {1u, 2u, 4u})
+  {
+    ASTNode x = c.bv(w);
+    ASTNode y = c.bv(w);
+    ASTNode rem = c.hf->CreateTerm(BVMOD, w, x, y);
+    c.checkNode(BVGT, {rem, x});
+    c.checkNode(BVLE, {rem, x});
+    ASTNode negRem =
+        c.hf->CreateTerm(BVMOD, w, x, c.hf->CreateTerm(BVUMINUS, w, y));
+    c.checkNode(BVLE, {negRem, x});
+    // The divisor's remainder is NOT bounded by the divisor this way.
+    c.checkNode(BVGT, {rem, y}, false);
+  }
+}
+
+/* (x udiv ~x) >u x --> false. */
+TEST(SimplifyingNodeFactory_Exhaustive, gt_udiv_by_not)
+{
+  Context c;
+  for (unsigned w : {1u, 2u, 4u})
+  {
+    ASTNode x = c.bv(w);
+    ASTNode div =
+        c.hf->CreateTerm(BVDIV, w, x, c.hf->CreateTerm(BVNOT, w, x));
+    c.checkNode(BVGT, {div, x});
+  }
+}
+
+/* Shifts never exceed the complement of the shift amount:
+   (t << s) >u ~s and (t >> s) >u ~s --> false, also with s = ~u. */
+TEST(SimplifyingNodeFactory_Exhaustive, gt_shift_vs_not_amount)
+{
+  Context c;
+  for (unsigned w : {2u, 4u})
+  {
+    ASTNode x = c.bv(w);
+    ASTNode y = c.bv(w);
+    ASTNode noty = c.hf->CreateTerm(BVNOT, w, y);
+    for (Kind k : {BVLEFTSHIFT, BVRIGHTSHIFT})
+    {
+      c.checkNode(BVGT, {c.hf->CreateTerm(k, w, x, y), noty});
+      c.checkNode(BVGT, {c.hf->CreateTerm(k, w, x, noty), y});
+      // The shifted value is not bounded by an unrelated term.
+      c.checkNode(BVGT, {c.hf->CreateTerm(k, w, x, y), x}, false);
+    }
+  }
+}
+
+/* x <=s (x umod ~x) --> true, both for the raw form and for the
+   (ones umod ~x) shape the BVMOD rules normalise it to. */
+TEST(SimplifyingNodeFactory_Exhaustive, sgt_urem_by_not)
+{
+  Context c;
+  for (unsigned w : {1u, 2u, 4u})
+  {
+    ASTNode x = c.bv(w);
+    ASTNode nt = c.hf->CreateTerm(BVNOT, w, x);
+    c.checkNode(BVSLE, {x, c.hf->CreateTerm(BVMOD, w, x, nt)});
+    c.checkNode(BVSLE, {x, c.nf->CreateTerm(BVMOD, w, x, nt)});
+  }
+}
+
+/* x <=s (x srem ~x) --> true, raw form and the -(1 smod ~x) normal form. */
+TEST(SimplifyingNodeFactory_Exhaustive, sgt_srem_by_not)
+{
+  Context c;
+  for (unsigned w : {1u, 2u, 4u})
+  {
+    ASTNode x = c.bv(w);
+    ASTNode nt = c.hf->CreateTerm(BVNOT, w, x);
+    c.checkNode(BVSLE, {x, c.hf->CreateTerm(SBVREM, w, x, nt)});
+    c.checkNode(BVSLE, {x, c.nf->CreateTerm(SBVREM, w, x, nt)});
+  }
+}
+
+/* x = (~x << x) and x = (~x sdiv x) --> false, in both argument orders. */
+TEST(SimplifyingNodeFactory_Exhaustive, eq_impossible_not_forms)
+{
+  Context c;
+  for (unsigned w : {1u, 2u, 4u})
+  {
+    ASTNode x = c.bv(w);
+    ASTNode nt = c.hf->CreateTerm(BVNOT, w, x);
+    for (Kind k : {BVLEFTSHIFT, SBVDIV})
+    {
+      ASTNode t = c.hf->CreateTerm(k, w, nt, x);
+      c.checkNode(EQ, {x, t});
+      c.checkNode(EQ, {t, x});
+    }
+  }
+}
+
+/* (t >> s) --> 0 when t is structurally <=u s: an AND containing s, or
+   s umod/lshr/ashr something. */
+TEST(SimplifyingNodeFactory_Exhaustive, rightshift_dominated_numerator)
+{
+  Context c;
+  for (unsigned w : {1u, 2u, 4u})
+  {
+    ASTNode x = c.bv(w);
+    ASTNode y = c.bv(w);
+    c.checkTerm(BVRIGHTSHIFT, w, {c.hf->CreateTerm(BVAND, w, x, y), x});
+    c.checkTerm(BVRIGHTSHIFT, w, {c.hf->CreateTerm(BVMOD, w, x, y), x});
+    c.checkTerm(BVRIGHTSHIFT, w, {c.hf->CreateTerm(BVRIGHTSHIFT, w, x, y), x});
+    c.checkTerm(BVRIGHTSHIFT, w, {c.hf->CreateTerm(BVSRSHIFT, w, x, y), x});
+    // Dominance runs the other way for the divisor: no rule.
+    c.checkTerm(BVRIGHTSHIFT, w, {c.hf->CreateTerm(BVMOD, w, x, y), y}, false);
+  }
+}
+
+/* (x >> (x | y)) --> 0. The OR arrives as ~(~x & ~y). */
+TEST(SimplifyingNodeFactory_Exhaustive, rightshift_by_or_containing_numerator)
+{
+  Context c;
+  for (unsigned w : {2u, 4u})
+  {
+    ASTNode x = c.bv(w);
+    ASTNode y = c.bv(w);
+    ASTNode amount = c.nf->CreateTerm(BVOR, w, x, y);
+    c.checkTerm(BVRIGHTSHIFT, w, {x, amount});
+    // An OR not containing the numerator must not fire.
+    ASTNode z = c.bv(w);
+    ASTNode other = c.nf->CreateTerm(BVOR, w, y, z);
+    c.checkTerm(BVRIGHTSHIFT, w, {x, other}, false);
+  }
+}
+
+/* ((x ashr x) << x) --> 0. The arithmetic shift arrives as the sign-spread
+   sx(x[msb:msb]). */
+TEST(SimplifyingNodeFactory_Exhaustive, leftshift_of_sign_spread)
+{
+  Context c;
+  for (unsigned w : {2u, 4u})
+  {
+    ASTNode x = c.bv(w);
+    ASTNode spread = c.nf->CreateTerm(BVSRSHIFT, w, x, x);
+    c.checkTerm(BVLEFTSHIFT, w, {spread, x});
+  }
+}
+
+/* x & (t << x) --> 0, in any operand order and with extra operands. */
+TEST(SimplifyingNodeFactory_Exhaustive, and_with_shift_by_operand)
+{
+  Context c;
+  for (unsigned w : {1u, 2u, 4u})
+  {
+    ASTNode x = c.bv(w);
+    ASTNode y = c.bv(w);
+    ASTNode shift = c.hf->CreateTerm(BVLEFTSHIFT, w, y, x);
+    c.checkTerm(BVAND, w, {x, shift});
+    c.checkTerm(BVAND, w, {shift, x});
+    ASTNode z = c.bv(w);
+    c.checkTerm(BVAND, w, {z, x, shift});
+    // Shift by an amount that isn't an operand: no rule.
+    c.checkTerm(BVAND, w, {z, shift}, false);
+  }
+}
+
+/* a ^ (a ^ b) --> b, including through a negated nested xor. */
+TEST(SimplifyingNodeFactory_Exhaustive, xor_nested_cancel)
+{
+  Context c;
+  for (unsigned w : {1u, 2u, 4u})
+  {
+    ASTNode x = c.bv(w);
+    ASTNode y = c.bv(w);
+    ASTNode inner = c.hf->CreateTerm(BVXOR, w, x, y);
+    EXPECT_EQ(c.nf->CreateTerm(BVXOR, w, x, inner), y);
+    EXPECT_EQ(c.nf->CreateTerm(BVXOR, w, inner, x), y);
+    c.checkTerm(BVXOR, w, {x, inner});
+    ASTNode notInner = c.hf->CreateTerm(BVNOT, w, inner);
+    c.checkTerm(BVXOR, w, {x, notInner});
+  }
+}
+
+/* a + -(a + b) --> -b; b - (a + b) and a - (a - b) reach it through the
+   plus/uminus rewrite of subtraction, and x - ~(-x) --> 1 falls out. */
+TEST(SimplifyingNodeFactory_Exhaustive, plus_cancels_negated_sum)
+{
+  Context c;
+  for (unsigned w : {1u, 2u, 4u})
+  {
+    ASTNode x = c.bv(w);
+    ASTNode y = c.bv(w);
+    ASTNode sum = c.hf->CreateTerm(BVPLUS, w, x, y);
+    ASTNode negSum = c.hf->CreateTerm(BVUMINUS, w, sum);
+    c.checkTerm(BVPLUS, w, {x, negSum});
+    c.checkTerm(BVPLUS, w, {negSum, y});
+    c.checkTerm(BVSUB, w, {x, sum});
+    c.checkTerm(BVSUB, w, {x, c.hf->CreateTerm(BVSUB, w, x, y)});
+    ASTNode notNeg =
+        c.hf->CreateTerm(BVNOT, w, c.hf->CreateTerm(BVUMINUS, w, x));
+    c.checkTerm(BVSUB, w, {x, notNeg});
+    if (w >= 2)
+    {
+      // At width 1 BVPLUS routes through the xor handler and the chain to
+      // these exact forms doesn't apply (the results are still equivalent).
+      EXPECT_EQ(c.nf->CreateTerm(BVSUB, w, x,
+                                 c.nf->CreateTerm(BVSUB, w, x, y)),
+                y);
+      EXPECT_EQ(c.nf->CreateTerm(BVSUB, w, x, notNeg), c.konst(1, w));
+    }
+  }
+}
+
 } // namespace

@@ -69,17 +69,19 @@ inline unsigned countLeadingZeroes64(uint64_t v)
 #endif
 }
 
-// MSVC's __popcnt64 is not used: it is emitted unconditionally, so it
-// faults on CPUs without POPCNT. Count in software instead.
 inline unsigned popCount64(uint64_t v)
 {
-#ifdef _MSC_VER
+#if defined(__POPCNT__)
+  return static_cast<unsigned>(__builtin_popcountll(v));
+#else
+  // Without POPCNT in the target ISA, __builtin_popcountll becomes an
+  // out-of-line call into libgcc; counting in software here is cheaper.
+  // MSVC's __popcnt64 is not used: it is emitted unconditionally, so it
+  // faults on CPUs without POPCNT.
   v = v - ((v >> 1) & 0x5555555555555555ULL);
   v = (v & 0x3333333333333333ULL) + ((v >> 2) & 0x3333333333333333ULL);
   v = (v + (v >> 4)) & 0x0f0f0f0f0f0f0f0fULL;
   return static_cast<unsigned>((v * 0x0101010101010101ULL) >> 56);
-#else
-  return static_cast<unsigned>(__builtin_popcountll(v));
 #endif
 }
 

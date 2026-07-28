@@ -295,6 +295,7 @@ endif()
 # Set the appropriate build flags
 # -----------------------------------------------------------------------------
 include(CheckCXXCompilerFlag)
+include(CheckLinkerFlag)
 
 macro(add_cxx_flag_if_supported flagname)
   check_cxx_compiler_flag("${flagname}" HAVE_FLAG_${flagname})
@@ -335,10 +336,45 @@ if(NOT MSVC)
     if (NOT CMAKE_BUILD_TYPE STREQUAL "Release")
         add_cxx_flag_if_supported("-fno-omit-frame-pointer")
     endif()
-    #if(NOT ENABLE_TESTING AND ${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-        # almost working
-        # add_cxx_flag_if_supported("-fvisibility=hidden")
+        # Cut the cost of dynamic symbol resolution, which is ~79% of STP's
+        # fixed 4.15M-instruction startup and so dominates easy queries.
+        #
+        # -fvisibility=hidden exports only what is explicitly annotated
+        # DLL_PUBLIC (see include/stp/Util/Attributes.h), which is the whole
+        # public C and C++ API.  Everything else becomes local, so the loader
+        # has far fewer symbols to look up.
+        #
+        # -Wl,-Bsymbolic-functions binds libstp's calls to its own exported
+        # functions at link time instead of going through the PLT.  The one
+        # consequence is that LD_PRELOAD can no longer interpose STP's own
+        # functions on calls made from inside libstp; that is not a use case
+        # for a solver library, and the flag is in Debian's default hardening
+        # set.  Neither flag changes behaviour: the emitted CNF is unchanged.
+        #
+        # -fvisibility=hidden is skipped for ENABLE_TESTING and
+        # BUILD_EXTRA_TOOLS builds.  The unit tests and the extra tools
+        # (propagator_bench and friends) link libstp and call directly into
+        # entry points that are not part of the public API (the simplifier
+        # passes, the domain analyses, STPMgr internals, SMT2ScanString), so
+        # they need the full export set.  This is why the flag was carried
+        # commented-out here.
+        if(NOT ENABLE_TESTING AND NOT BUILD_EXTRA_TOOLS)
+            add_cxx_flag_if_supported("-fvisibility=hidden")
+            # The vendored ABC sources are C.  There is no
+            # add_c_flag_if_supported, so reuse the check above and set
+            # CMAKE_C_FLAGS directly, as WERROR does.
+            if(HAVE_FLAG_-fvisibility=hidden)
+                set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
+            endif()
+        endif()
+
+        check_linker_flag(CXX "-Wl,-Bsymbolic-functions" HAVE_LINKER_FLAG_BSYMBOLIC_FUNCTIONS)
+        if(HAVE_LINKER_FLAG_BSYMBOLIC_FUNCTIONS)
+            set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-Bsymbolic-functions")
+            set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-Bsymbolic-functions")
+        endif()
+
         set(CMAKE_EXE_LINKER_FLAGS " ${CMAKE_EXE_LINKER_FLAGS} -Wl,--discard-all -Wl,--build-id=sha1")
     endif()
     # add_cxx_flag_if_supported("-flto") # slow compile and not enough benefits
@@ -350,6 +386,26 @@ add_definitions("-D__STDC_LIMIT_MACROS")
 option(TUNE_NATIVE "Use -mtune=native" OFF)
 if(TUNE_NATIVE)
   add_cxx_flag_if_supported("-mtune=native")
+endif()
+
+# Let the compiler emit the POPCNT instruction.  Without this, popCount64() in
+# include/stp/Util/BitOps.h counts in software, because gcc's default x86-64
+# target has no POPCNT and __builtin_popcountll would otherwise become an
+# out-of-line call into libgcc.  Note TUNE_NATIVE does not imply this: -mtune
+# only changes scheduling, not the instructions the compiler may emit.
+#
+# On by default -- POPCNT is on every x86-64 CPU since Nehalem (2008) and AMD
+# Barcelona (2007).  Turn it off when building for hardware older than that,
+# such as a distribution package targeting the baseline x86-64 ISA; the
+# software fallback in BitOps.h is then used and remains correct everywhere.
+option(USE_POPCNT "Use the POPCNT instruction (requires Nehalem/2008 or later)" ON)
+if(USE_POPCNT)
+  add_cxx_flag_if_supported("-mpopcnt")
+  # The vendored ABC sources are C.  There is no add_c_flag_if_supported, so
+  # reuse the check above and set CMAKE_C_FLAGS directly, as WERROR does.
+  if(HAVE_FLAG_-mpopcnt)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mpopcnt")
+  endif()
 endif()
 
 option(COVERAGE "Build with coverage check" OFF)
@@ -429,6 +485,47 @@ include_directories("${CMAKE_CURRENT_BINARY_DIR}/include")
 include_directories(# For extlib-constbv
                     ${PROJECT_SOURCE_DIR}/lib
                    )
+# ABC is a vendored upstream submodule, so local fixes cannot simply be
+# committed to it. Any patch in patches/ that touches ABC is applied here, at
+# configure time, before it is built.
+#
+# Applying is idempotent: a patch that reverse-applies cleanly is already in
+# the tree and is skipped, so re-running cmake, or configuring a second build
+# directory against the same source, does not double-apply. A patch that does
+# neither is a hard error rather than a silent miscompile -- that happens when
+# the submodule is bumped past the code the patch was written against, and the
+# patch then needs rebasing or, if upstream has taken it, deleting.
+file(GLOB STP_ABC_PATCHES "${PROJECT_SOURCE_DIR}/patches/*.patch")
+list(SORT STP_ABC_PATCHES)
+if(STP_ABC_PATCHES AND EXISTS "${PROJECT_SOURCE_DIR}/lib/extlib-abc/src/opt/dar/darCut.c")
+  if(NOT GIT_EXECUTABLE)
+    message(FATAL_ERROR
+            "patches/ contains patches for the vendored ABC but git was not "
+            "found to apply them. Install git, or remove the patches.")
+  endif()
+  foreach(_patch ${STP_ABC_PATCHES})
+    get_filename_component(_patch_name "${_patch}" NAME)
+    execute_process(COMMAND "${GIT_EXECUTABLE}" apply --reverse --check "${_patch}"
+                    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/lib/extlib-abc"
+                    RESULT_VARIABLE _already OUTPUT_QUIET ERROR_QUIET)
+    if(_already EQUAL 0)
+      message(STATUS "ABC patch already applied: ${_patch_name}")
+    else()
+      execute_process(COMMAND "${GIT_EXECUTABLE}" apply "${_patch}"
+                      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/lib/extlib-abc"
+                      RESULT_VARIABLE _rc ERROR_VARIABLE _err)
+      if(NOT _rc EQUAL 0)
+        message(FATAL_ERROR
+                "Failed to apply ${_patch_name} to lib/extlib-abc:\n${_err}"
+                "It neither applies nor is already applied. If the ABC "
+                "submodule was bumped, rebase the patch onto the new revision, "
+                "or delete it if upstream has taken the change.")
+      endif()
+      message(STATUS "Applied ABC patch: ${_patch_name}")
+    endif()
+  endforeach()
+endif()
+
 # ABC is a vendored upstream submodule (berkeley-abc/abc); mark its headers as
 # SYSTEM so their warnings (e.g. -Wpedantic zero-size arrays, -Wunused-parameter
 # in inline helpers) don't trip -Werror in the STP translation units that
@@ -618,6 +715,12 @@ if (NOT NOCRYPTOMINISAT)
   message(STATUS "GMP libraries: ${GMP_LIBRARIES}")
   include_directories(SYSTEM ${GMP_INCLUDE_DIRS})
   set(LIBS ${LIBS} ${GMP_LIBRARIES})
+  # A static CryptoMiniSat references cadical/cadiback imported targets but its
+  # config file does not find them itself; a shared CryptoMiniSat has no such
+  # packages, hence QUIET. cadical's export in turn references Threads::Threads.
+  find_package(Threads QUIET)
+  find_package(cadical CONFIG QUIET)
+  find_package(cadiback CONFIG QUIET)
   find_package(cryptominisat5 CONFIG)
   if (cryptominisat5_FOUND AND HAVE_FLAG_STD_CPP11 AND (NOT NOCRYPTOMINISAT))
     message(STATUS "CryptoMiniSat5 dynamic lib: ${CRYPTOMINISAT5_LIBRARIES}")
