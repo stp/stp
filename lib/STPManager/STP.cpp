@@ -303,6 +303,12 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   ASTNode inputToSat = original_input;
 
+  bool arrayops = containsArrayOps(inputToSat, bm);
+
+  // The transformer also converts parameterised booleans (only the CVC
+  // parser creates them), so it can't be skipped while any are present.
+  bool needsTransform = arrayops || containsParamBool(inputToSat, bm);
+
   // If the number of array reads is small. We rewrite them through.
   // The bit-vector simplifications are more thorough than the array
   // simplifications. For example,
@@ -312,9 +318,9 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // introduced.
   // TODO: I chose the number of reads we perform this operation at randomly.
   bool removed = false;
-  if ((bm->UserFlags.ackermannisation &&
-       numberOfReadsLessThan(inputToSat, 50)) ||
-      numberOfReadsLessThan(inputToSat, 10))
+  if (arrayops && ((bm->UserFlags.ackermannisation &&
+                    numberOfReadsLessThan(inputToSat, 50)) ||
+                   numberOfReadsLessThan(inputToSat, 10)))
   {
     // If the number of axioms that would be added it small. Remove them.
     bm->UserFlags.ackermannisation = true;
@@ -324,12 +330,12 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
       cerr << "Have removed array operations" << endl;
     }
     removed = true;
-  }
 
-  const bool arrayops = containsArrayOps(inputToSat, bm);
-  if (removed)
-  {
-    assert(!arrayops);
+    // With ackermannisation on, the transform removes every array
+    // operation, and it converts any parameterised booleans too.
+    arrayops = false;
+    needsTransform = false;
+    assert(!containsArrayOps(inputToSat, bm));
   }
 
   if (bm->UserFlags.check_counterexample_flag ||
@@ -660,8 +666,11 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   }
   revert.reset(NULL);
 
-  inputToSat = arrayTransformer->TransformFormula_TopLevel(inputToSat);
-  bm->ASTNodeStats("after transformation: ", inputToSat);
+  if (needsTransform)
+  {
+    inputToSat = arrayTransformer->TransformFormula_TopLevel(inputToSat);
+    bm->ASTNodeStats("after transformation: ", inputToSat);
+  }
   bm->TermsAlreadySeenMap_Clear();
 
   bm->UserFlags.optimize_flag = optimize_enabled;
