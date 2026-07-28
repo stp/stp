@@ -352,12 +352,14 @@ if(NOT MSVC)
         # for a solver library, and the flag is in Debian's default hardening
         # set.  Neither flag changes behaviour: the emitted CNF is unchanged.
         #
-        # -fvisibility=hidden is skipped for ENABLE_TESTING builds.  The unit
-        # tests link libstp and call directly into entry points that are not
-        # part of the public API (the simplifier passes, STPMgr internals,
-        # SMT2ScanString), so they need the full export set.  This is why the
-        # flag was carried commented-out here.
-        if(NOT ENABLE_TESTING)
+        # -fvisibility=hidden is skipped for ENABLE_TESTING and
+        # BUILD_EXTRA_TOOLS builds.  The unit tests and the extra tools
+        # (propagator_bench and friends) link libstp and call directly into
+        # entry points that are not part of the public API (the simplifier
+        # passes, the domain analyses, STPMgr internals, SMT2ScanString), so
+        # they need the full export set.  This is why the flag was carried
+        # commented-out here.
+        if(NOT ENABLE_TESTING AND NOT BUILD_EXTRA_TOOLS)
             add_cxx_flag_if_supported("-fvisibility=hidden")
             # The vendored ABC sources are C.  There is no
             # add_c_flag_if_supported, so reuse the check above and set
