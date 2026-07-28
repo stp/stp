@@ -247,20 +247,13 @@ void ASTNode::SetExpWidth(unsigned int _ew) const
   // instead (see FloatBlaster::operandFormat and FloatBlast).
   assert(_ew == 0 || Degree() == 0 || is_FP_kind(GetKind()) ||
          GetKind() == FLOATINGPOINT || GetIndexWidth() > 0);
-  // Every float acquires its format through here (or CreateFPConst), so
-  // this is where the manager learns that floats are in play -- and, on a
-  // build without floating-point support, where the C API's floating-point
-  // entry points get refused. (The parser rejects floating-point input
-  // earlier, with a line number; see checkFpSupported in smt2.y.)
+  // One of the funnels through which a float's format arrives, so this is
+  // where the manager learns that floats are in play. Not the only one:
+  // a node that derives its format needs no stamp and never reaches here,
+  // which is why withFormat -- the entry point that decides whether the
+  // stamp is needed -- notes it too.
   if (_ew != 0)
-  {
-#ifndef STP_ENABLE_FLOATING_POINT
-    FatalError("this STP was built without floating-point support; "
-               "reconfigure with -DENABLE_FLOATING_POINT=ON");
-#else
-    _int_node_ptr->nodeManager->has_floating_point = true;
-#endif
-  }
+    _int_node_ptr->nodeManager->noteFloatingPoint();
   _int_node_ptr->setExpWidth(_ew);
 }
 
