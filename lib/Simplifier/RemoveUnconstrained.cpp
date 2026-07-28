@@ -110,6 +110,24 @@ void RemoveUnconstrained::replace(const ASTNode& from, const ASTNode to)
   simplifier->UpdateSubstitutionMapFewChecks(from, to);
 }
 
+// Rebuild one collected step as an ASTNode around `in`. Used when a
+// distributed ITE's other branch gets the suffix steps re-applied.
+static ASTNode applyStepToNode(NodeFactory* nf, STPMgr& bm,
+                               const GroundStep& s, const ASTNode& in)
+{
+  if (s.kind == BVSX || s.kind == BVZX)
+    return nf->CreateTerm(s.kind, s.outWidth, in,
+                          bm.CreateBVConst(32, s.outWidth));
+  if (s.kind == BVEXTRACT)
+    return nf->CreateTerm(BVEXTRACT, s.outWidth, in, s.constants[0],
+                          s.constants[1]);
+  if (s.samePathAllOperands)
+    return nf->CreateTerm(s.kind, s.outWidth, in, in);
+  if (s.pathIndex == 0)
+    return nf->CreateTerm(s.kind, s.outWidth, in, s.constants[0]);
+  return nf->CreateTerm(s.kind, s.outWidth, s.constants[0], in);
+}
+
 /* When none of the per-kind rules fired for `var` (each detaches the
  * variable when it does), generalise: climb from the variable towards the
  * root while every node on the way is single-use and every sibling is a
@@ -121,10 +139,18 @@ void RemoveUnconstrained::replace(const ASTNode& from, const ASTNode to)
  * boolean v with var := ITE(v, w_true, w_false) recorded, exactly like the
  * direct EQ rule.
  *
+ * One term-level ITE may sit on the path with a non-ground condition and
+ * other branch: the predicate distributes over it,
+ *   P(g(ite(c, f(x), t)))  ==>  ite(c, v, P(g(t))),
+ * where the x-branch P(g(f(x))) collapses to the fresh boolean v as
+ * usual. x's definition is sound regardless of c, since x only
+ * influences the formula when c selects its branch.
+ *
  * The interior nodes must be single-use: a second use of any node on the
  * path would survive the rewrite and be forced to the witness values,
  * changing its meaning. The predicate node itself may be shared, since
- * under the recorded definition every occurrence of it evaluates to v.
+ * under the recorded definition every occurrence of it evaluates to v
+ * (or to the distributed ITE, which is a pure equivalence).
  */
 bool RemoveUnconstrained::tryGroundPathCollapse(
     MutableASTNode& muteNode, vector<MutableASTNode*>& variables)
@@ -141,6 +167,13 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
   Kind predKind = UNDEFINED;
   bool pathFirst = false;
   ASTNode predConst;
+
+  // At most one ITE frame on the path (each one doubles the rebuilt else
+  // side). framePos counts the steps below it.
+  MutableASTNode* iteCond = NULL;
+  MutableASTNode* iteOther = NULL;
+  bool itePathThen = false;
+  size_t framePos = 0;
 
   MutableASTNode* cur = &muteNode;
   for (unsigned depth = 0; depth < AchievableImage::MAX_PATH; depth++)
@@ -169,6 +202,26 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
 
     // Term level: one path child, constants everywhere else.
     const Kind kind = p.GetKind();
+
+    if (kind == ITE && p.GetValueWidth() > 0)
+    {
+      // Capture a distribution frame and keep climbing; the ITE
+      // contributes no image step (on x's branch it is the identity).
+      if (iteCond != NULL || p.GetIndexWidth() != 0 || kids.size() != 3)
+        return false;
+      const bool inThen = (kids[1] == cur);
+      if ((!inThen && kids[2] != cur) || kids[1] == kids[2] || kids[0] == cur)
+        return false;
+      iteCond = kids[0];
+      iteOther = inThen ? kids[2] : kids[1];
+      itePathThen = inThen;
+      framePos = steps.size();
+      if (parent.parents.size() != 1)
+        return false;
+      cur = &parent;
+      continue;
+    }
+
     if (!AchievableImage::handledKind(kind))
       return false;
 
@@ -271,9 +324,43 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
   if (!d.collapse)
     return false;
 
-  // The predicate has width 0, so this creates a fresh boolean and prunes
-  // the whole path out of the mutable tree.
-  ASTNode v = replaceParentWithFresh(*predicate, variables);
+  if (iteCond == NULL)
+  {
+    // The predicate has width 0, so this creates a fresh boolean and
+    // prunes the whole path out of the mutable tree.
+    ASTNode v = replaceParentWithFresh(*predicate, variables);
+    replace(var, nf->CreateTerm(ITE, var.GetValueWidth(), v, d.witnessTrue,
+                                d.witnessFalse));
+    return true;
+  }
+
+  // Distribute the predicate over the captured ITE frame:
+  //   P(g(ite(c, f(x), t)))  ==>  ite(c, v, P(g(t))).
+  ASTNode v = bm.CreateFreshVariable(0, 0, "unconstrained_ite");
+  ASTNode gt = iteOther->toASTNode(&bm);
+  for (size_t i = framePos; i < steps.size(); i++)
+    gt = applyStepToNode(nf, bm, steps[i], gt);
+  ASTNode elseP = pathFirst ? nf->CreateNode(predKind, gt, predConst)
+                            : nf->CreateNode(predKind, predConst, gt);
+  ASTNode newP = nf->CreateNode(ITE, iteCond->toASTNode(&bm),
+                                itePathThen ? v : elseP,
+                                itePathThen ? elseP : v);
+
+  // Splice the new formula in, reusing the existing mutable nodes for the
+  // variables it mentions (same mechanics as the comparison rule).
+  vector<MutableASTNode*> vars;
+  std::unordered_set<MutableASTNode*> visited;
+  iteCond->getAllVariablesRecursively(vars, visited);
+  iteOther->getAllVariablesRecursively(vars, visited);
+  visited.clear();
+  std::unordered_map<uint64_t, MutableASTNode*> create;
+  for (MutableASTNode* m : vars)
+    create.insert(std::make_pair(m->n.GetNodeNum(), m));
+  vars.clear();
+
+  MutableASTNode* newN = MutableASTNode::build(newP, create);
+  predicate->replaceWithAnotherNode(newN);
+
   replace(var, nf->CreateTerm(ITE, var.GetValueWidth(), v, d.witnessTrue,
                               d.witnessFalse));
   return true;
