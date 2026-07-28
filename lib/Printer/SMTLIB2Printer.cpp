@@ -414,6 +414,18 @@ void SMTLIB2_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
       os << ")";
     }
     break;
+    // Spelled `to_fp` -- SMT-LIB overloads the name on the operand's sort;
+    // the separate kind is ours, so that the sort survives blasting.
+    case FP_TOFP_SIGNED:
+    {
+      os << "((_ to_fp " << c[0].GetUnsignedConst() << " "
+         << c[1].GetUnsignedConst() << ") ";
+      printRoundingModeSMTLIB2(os, c[2], letize);
+      os << " ";
+      SMTLIB2_Print1(os, c[3], 0, letize);
+      os << ")";
+    }
+    break;
     case FP_TOFP_UNSIGNED:
     {
       os << "((_ to_fp_unsigned " << c[0].GetUnsignedConst() << " "

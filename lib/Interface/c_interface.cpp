@@ -1438,9 +1438,14 @@ Expr vc_fpMinusZero(VC vc, Type fpType)
   return fpSpecial(vc, stp::FPSpecial::MinusZero, fpType);
 }
 
-// Build an FP_TOFP node: the (eb,sb) width children the blaster reads, an
+// Build a to_fp node: the (eb,sb) width children the blaster reads, an
 // optional rounding mode, then the source. The result is a float of (eb, sb).
-static Expr fpToFP(VC vc, int eb, int sb, const stp::ASTNode* rm,
+// `k` is FP_TOFP for the bits and float-to-float forms and FP_TOFP_SIGNED for
+// the integer one. SMT-LIB spells all three `to_fp` and tells them apart by
+// the source's sort, but a float is carried as its packed bits, so the sort
+// stops being readable the moment the source is lowered. Each entry point
+// below knows which operation the caller asked for; the kind records it.
+static Expr fpToFP(VC vc, stp::Kind k, int eb, int sb, const stp::ASTNode* rm,
                    const stp::ASTNode& src)
 {
   stp::STPMgr* b = ((stp::STP*)vc)->bm;
@@ -1451,7 +1456,7 @@ static Expr fpToFP(VC vc, int eb, int sb, const stp::ASTNode* rm,
   if (rm != NULL)
     kids.push_back(*rm);
   kids.push_back(src);
-  stp::ASTNode r = b->CreateTerm(stp::FP_TOFP, eb + sb, kids);
+  stp::ASTNode r = b->CreateTerm(k, eb + sb, kids);
   r.SetExpWidth(eb);
   r.SetSigWidth(sb);
   return persistNode(vc, r);
@@ -1459,17 +1464,18 @@ static Expr fpToFP(VC vc, int eb, int sb, const stp::ASTNode* rm,
 
 Expr vc_fpToFPFromIEEEBV(VC vc, int eb, int sb, Expr bv)
 {
-  return fpToFP(vc, eb, sb, NULL, *(stp::ASTNode*)bv);
+  return fpToFP(vc, stp::FP_TOFP, eb, sb, NULL, *(stp::ASTNode*)bv);
 }
 
 Expr vc_fpToFPFromFP(VC vc, int eb, int sb, Expr rm, Expr f)
 {
-  return fpToFP(vc, eb, sb, (stp::ASTNode*)rm, *(stp::ASTNode*)f);
+  return fpToFP(vc, stp::FP_TOFP, eb, sb, (stp::ASTNode*)rm, *(stp::ASTNode*)f);
 }
 
 Expr vc_fpToFPFromSignedBV(VC vc, int eb, int sb, Expr rm, Expr bv)
 {
-  return fpToFP(vc, eb, sb, (stp::ASTNode*)rm, *(stp::ASTNode*)bv);
+  return fpToFP(vc, stp::FP_TOFP_SIGNED, eb, sb, (stp::ASTNode*)rm,
+                *(stp::ASTNode*)bv);
 }
 
 Expr vc_fpToFPFromUnsignedBV(VC vc, int eb, int sb, Expr rm, Expr bv)

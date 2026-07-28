@@ -1497,6 +1497,7 @@ enum exprkind_t
   FP_MIN,
   FP_MAX,
   FP_TOFP,
+  FP_TOFP_SIGNED,
   FP_TOFP_UNSIGNED,
   FP_TO_UBV,
   FP_TO_SBV,

@@ -136,10 +136,20 @@ FP_MIN                      2    3    Term    FP
 # fp.max: fp, fp -> fp
 FP_MAX                      2    3    Term    FP
 
-# to_fp: eb, sb, bv -> fp
-# to_fp: eb, sb, rm, fp -> fp
-# to_fp: eb, sb, rm, bv -> fp
+# to_fp: eb, sb, bv -> fp        (reinterpret the bits)
+# to_fp: eb, sb, rm, fp -> fp     (reformat a float)
 FP_TOFP                     3   4    Term    FP
+
+# to_fp: eb, sb, rm, bv -> fp     (convert a SIGNED integer)
+#
+# A kind of its own, rather than the four-argument FP_TOFP it is spelled as
+# in SMT-LIB, because nothing downstream could otherwise tell the two apart.
+# The distinction is in the source's *sort*, and a blasted float is its packed
+# bits -- so by the time the blaster sees the operand, a float and an integer
+# look identical. Asking the operand's type made an integer source get read as
+# a float and answer the wrong thing. The parser and the C API know which one
+# was written, so they record it here.
+FP_TOFP_SIGNED              4    4    Term    FP
 
 # to_fp_unsigned: eb, sb, rm, bv -> fP
 FP_TOFP_UNSIGNED            4    4    Term    FP

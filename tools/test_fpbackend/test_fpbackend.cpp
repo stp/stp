@@ -90,6 +90,9 @@ static void check_width(const char* what, unsigned got, unsigned want)
          ok ? "ok" : "** MISMATCH **");
 }
 
+// Every float here is a Float32; blast_fp_to_bv now takes that format
+// explicitly rather than reading it back off the operand node.
+static const floatingPointTypeInfo binary32(8, 24);
 
 // Build a Float32 constant from its IEEE bits.
 static ASTNode f32(uint32_t bits)
@@ -241,8 +244,9 @@ int main()
 
   for (const auto& c : ucases)
   {
-    const ASTNode r = blast_fp_to_bv(rtz, f32(bits_of(c.in)), 32, undef_u,
-                                     /* is_signed */ false);
+    const ASTNode r =
+        blast_fp_to_bv(binary32, rtz, f32(bits_of(c.in)), 32, undef_u,
+                       /* is_signed */ false);
     check(c.name, value_of(r), c.want);
   }
 
@@ -263,24 +267,27 @@ int main()
 
   for (const auto& c : scases)
   {
-    const ASTNode r = blast_fp_to_bv(rtz, f32(bits_of(c.in)), 32, undef_s,
-                                     /* is_signed */ true);
+    const ASTNode r =
+        blast_fp_to_bv(binary32, rtz, f32(bits_of(c.in)), 32, undef_s,
+                       /* is_signed */ true);
     check(c.name, value_of(r), c.want);
   }
 
   printf("== convertFloatToUBV (RNE) ==\n");
   {
-    const ASTNode r = blast_fp_to_bv(rne, f32(bits_of(7.5f)), 32, undef_u, false);
+    const ASTNode r =
+        blast_fp_to_bv(binary32, rne, f32(bits_of(7.5f)), 32, undef_u, false);
     check("to_ubv RNE(7.5) -> 8 (ties to even)", value_of(r), 8);
   }
   {
-    const ASTNode r = blast_fp_to_bv(rne, f32(bits_of(4.0f)), 32, undef_u, false);
+    const ASTNode r =
+        blast_fp_to_bv(binary32, rne, f32(bits_of(4.0f)), 32, undef_u, false);
     check("to_ubv RNE(4.0)", value_of(r), 4);
   }
 
   printf("== narrow target widths ==\n");
   {
-    const ASTNode r = blast_fp_to_bv(rtz, f32(bits_of(4.0f)), 8,
+    const ASTNode r = blast_fp_to_bv(binary32, rtz, f32(bits_of(4.0f)), 8,
                                      bitVector<false>(8, 0xAB), false);
     check("to_ubv(4.0) width 8", value_of(r), 4);
   }
@@ -292,7 +299,7 @@ int main()
     // sees. The result should still fold to the converted value, because the
     // "is it undefined?" condition is constant-false for 4.0.
     ASTNode sym = bm->defaultNodeFactory->CreateSymbol("undef_sym", 0, 32);
-    const ASTNode r = blast_fp_to_bv(rtz, f32(bits_of(4.0f)), 32,
+    const ASTNode r = blast_fp_to_bv(binary32, rtz, f32(bits_of(4.0f)), 32,
                                      bitVector<false>(sym), false);
     printf("  result kind = %s, width = %u\n",
            _kind_names[r.GetKind()], r.GetValueWidth());

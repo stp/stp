@@ -677,13 +677,12 @@ namespace stp
 namespace symbolic_fp
 {
 
-ASTNode blast_smt_eq(const ASTNode& lhs, const ASTNode& rhs)
+ASTNode blast_smt_eq(const floatingPointTypeInfo& size, const ASTNode& lhs,
+                     const ASTNode& rhs)
 {
-  assert(lhs.GetValueWidth() == rhs.GetValueWidth());
-  assert(lhs.GetExpWidth() == rhs.GetExpWidth());
-  assert(lhs.GetSigWidth() == rhs.GetSigWidth());
+  assert(lhs.GetValueWidth() == size.packedWidth());
+  assert(rhs.GetValueWidth() == size.packedWidth());
 
-  floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
   uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
   uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
 
@@ -693,12 +692,11 @@ ASTNode blast_smt_eq(const ASTNode& lhs, const ASTNode& rhs)
   return eq;
 }
 
-ASTNode blast_fpadd(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs)
+ASTNode blast_fpadd(const floatingPointTypeInfo& size, const ASTNode& rm,
+                    const ASTNode& lhs, const ASTNode& rhs)
 {
-  assert(lhs.GetValueWidth() == rhs.GetValueWidth());
-  assert(lhs.GetExpWidth() == rhs.GetExpWidth());
-  assert(lhs.GetSigWidth() == rhs.GetSigWidth());
-  floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
+  assert(lhs.GetValueWidth() == size.packedWidth());
+  assert(rhs.GetValueWidth() == size.packedWidth());
   uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
   uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
 
@@ -715,12 +713,11 @@ ASTNode blast_fpadd(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs)
 // (signed zeros and NaNs included), which is also what lets the factory
 // lower FP_SUB to fp.add(rm, lhs, neg rhs) before blasting; this path
 // serves any FP_SUB built without that rewrite.
-ASTNode blast_fpsub(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs)
+ASTNode blast_fpsub(const floatingPointTypeInfo& size, const ASTNode& rm,
+                    const ASTNode& lhs, const ASTNode& rhs)
 {
-  assert(lhs.GetValueWidth() == rhs.GetValueWidth());
-  assert(lhs.GetExpWidth() == rhs.GetExpWidth());
-  assert(lhs.GetSigWidth() == rhs.GetSigWidth());
-  floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
+  assert(lhs.GetValueWidth() == size.packedWidth());
+  assert(rhs.GetValueWidth() == size.packedWidth());
   uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
   uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
 
@@ -732,12 +729,11 @@ ASTNode blast_fpsub(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs)
   return packed;
 }
 
-ASTNode blast_fpmul(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs)
+ASTNode blast_fpmul(const floatingPointTypeInfo& size, const ASTNode& rm,
+                    const ASTNode& lhs, const ASTNode& rhs)
 {
-  assert(lhs.GetValueWidth() == rhs.GetValueWidth());
-  assert(lhs.GetExpWidth() == rhs.GetExpWidth());
-  assert(lhs.GetSigWidth() == rhs.GetSigWidth());
-  floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
+  assert(lhs.GetValueWidth() == size.packedWidth());
+  assert(rhs.GetValueWidth() == size.packedWidth());
   uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
   uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
 
@@ -749,12 +745,11 @@ ASTNode blast_fpmul(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs)
   return packed;
 }
 
-ASTNode blast_fpdiv(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs)
+ASTNode blast_fpdiv(const floatingPointTypeInfo& size, const ASTNode& rm,
+                    const ASTNode& lhs, const ASTNode& rhs)
 {
-  assert(lhs.GetValueWidth() == rhs.GetValueWidth());
-  assert(lhs.GetExpWidth() == rhs.GetExpWidth());
-  assert(lhs.GetSigWidth() == rhs.GetSigWidth());
-  floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
+  assert(lhs.GetValueWidth() == size.packedWidth());
+  assert(rhs.GetValueWidth() == size.packedWidth());
   uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
   uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
 
@@ -765,14 +760,12 @@ ASTNode blast_fpdiv(const ASTNode& rm, const ASTNode& lhs, const ASTNode& rhs)
   return packed;
 }
 
-ASTNode blast_fpfma(const ASTNode& rm, const ASTNode& x, const ASTNode& y,
-                    const ASTNode& z)
+ASTNode blast_fpfma(const floatingPointTypeInfo& size, const ASTNode& rm,
+                    const ASTNode& x, const ASTNode& y, const ASTNode& z)
 {
-  assert(x.GetExpWidth() == y.GetExpWidth());
-  assert(x.GetSigWidth() == y.GetSigWidth());
-  assert(x.GetExpWidth() == z.GetExpWidth());
-  assert(x.GetSigWidth() == z.GetSigWidth());
-  floatingPointTypeInfo size(x.GetExpWidth(), x.GetSigWidth());
+  assert(x.GetValueWidth() == size.packedWidth());
+  assert(y.GetValueWidth() == size.packedWidth());
+  assert(z.GetValueWidth() == size.packedWidth());
   uf unpacked_x(symfpu::unpack<traits>(size, x));
   uf unpacked_y(symfpu::unpack<traits>(size, y));
   uf unpacked_z(symfpu::unpack<traits>(size, z));
@@ -784,9 +777,10 @@ ASTNode blast_fpfma(const ASTNode& rm, const ASTNode& x, const ASTNode& y,
   return packed;
 }
 
-ASTNode blast_fpsqrt(const ASTNode& rm, const ASTNode& expr)
+ASTNode blast_fpsqrt(const floatingPointTypeInfo& size, const ASTNode& rm,
+                     const ASTNode& expr)
 {
-  floatingPointTypeInfo size(expr.GetExpWidth(), expr.GetSigWidth());
+  assert(expr.GetValueWidth() == size.packedWidth());
   uf unpacked(symfpu::unpack<traits>(size, expr));
   uf result(symfpu::sqrt<traits>(size, rm, unpacked));
   ASTNode packed(symfpu::pack<traits>(size, result));
@@ -796,11 +790,11 @@ ASTNode blast_fpsqrt(const ASTNode& rm, const ASTNode& expr)
 // fp.rem takes no rounding mode: the remainder is always exact, so there is
 // nothing to round. symfpu's remainder() rounds with RNE internally only for
 // the intermediate quotient.
-ASTNode blast_fprem(const ASTNode& lhs, const ASTNode& rhs)
+ASTNode blast_fprem(const floatingPointTypeInfo& size, const ASTNode& lhs,
+                    const ASTNode& rhs)
 {
-  assert(lhs.GetExpWidth() == rhs.GetExpWidth());
-  assert(lhs.GetSigWidth() == rhs.GetSigWidth());
-  floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
+  assert(lhs.GetValueWidth() == size.packedWidth());
+  assert(rhs.GetValueWidth() == size.packedWidth());
   uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
   uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
 
@@ -815,12 +809,11 @@ ASTNode blast_fprem(const ASTNode& lhs, const ASTNode& rhs)
 // says either zero may be returned, as does IEEE-754. symfpu takes that
 // choice as its `zeroCase` argument; FpTotalise supplies it as an extra
 // child, which keeps the result a deterministic function of the operands.
-ASTNode blast_fpmin(const ASTNode& lhs, const ASTNode& rhs,
-                    const ASTNode& zero_case)
+ASTNode blast_fpmin(const floatingPointTypeInfo& size, const ASTNode& lhs,
+                    const ASTNode& rhs, const ASTNode& zero_case)
 {
-  assert(lhs.GetExpWidth() == rhs.GetExpWidth());
-  assert(lhs.GetSigWidth() == rhs.GetSigWidth());
-  floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
+  assert(lhs.GetValueWidth() == size.packedWidth());
+  assert(rhs.GetValueWidth() == size.packedWidth());
   uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
   uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
 
@@ -832,12 +825,11 @@ ASTNode blast_fpmin(const ASTNode& lhs, const ASTNode& rhs,
   return packed;
 }
 
-ASTNode blast_fpmax(const ASTNode& lhs, const ASTNode& rhs,
-                    const ASTNode& zero_case)
+ASTNode blast_fpmax(const floatingPointTypeInfo& size, const ASTNode& lhs,
+                    const ASTNode& rhs, const ASTNode& zero_case)
 {
-  assert(lhs.GetExpWidth() == rhs.GetExpWidth());
-  assert(lhs.GetSigWidth() == rhs.GetSigWidth());
-  floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
+  assert(lhs.GetValueWidth() == size.packedWidth());
+  assert(rhs.GetValueWidth() == size.packedWidth());
   uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
   uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
 
@@ -849,11 +841,11 @@ ASTNode blast_fpmax(const ASTNode& lhs, const ASTNode& rhs,
   return packed;
 }
 
-ASTNode blast_fp_to_bv(const ASTNode& rm, const ASTNode& expr,
-                       bitWidthType target_width, const ASTNode& undef,
-                       bool is_signed)
+ASTNode blast_fp_to_bv(const floatingPointTypeInfo& size, const ASTNode& rm,
+                       const ASTNode& expr, bitWidthType target_width,
+                       const ASTNode& undef, bool is_signed)
 {
-  floatingPointTypeInfo size(expr.GetExpWidth(), expr.GetSigWidth());
+  assert(expr.GetValueWidth() == size.packedWidth());
   uf unpacked(symfpu::unpack<traits>(size, expr));
 
   if (is_signed)
@@ -866,18 +858,18 @@ ASTNode blast_fp_to_bv(const ASTNode& rm, const ASTNode& expr,
 
 // fp.abs and fp.neg only touch the sign bit, but they go through unpack/pack
 // anyway so that the NaN and infinity encodings stay canonical.
-ASTNode blast_fpabs(const ASTNode& expr)
+ASTNode blast_fpabs(const floatingPointTypeInfo& size, const ASTNode& expr)
 {
-  floatingPointTypeInfo size(expr.GetExpWidth(), expr.GetSigWidth());
+  assert(expr.GetValueWidth() == size.packedWidth());
   uf unpacked(symfpu::unpack<traits>(size, expr));
   uf result(symfpu::absolute<traits>(size, unpacked));
   ASTNode packed(symfpu::pack<traits>(size, result));
   return packed;
 }
 
-ASTNode blast_fpneg(const ASTNode& expr)
+ASTNode blast_fpneg(const floatingPointTypeInfo& size, const ASTNode& expr)
 {
-  floatingPointTypeInfo size(expr.GetExpWidth(), expr.GetSigWidth());
+  assert(expr.GetValueWidth() == size.packedWidth());
   uf unpacked(symfpu::unpack<traits>(size, expr));
   uf result(symfpu::negate<traits>(size, unpacked));
   ASTNode packed(symfpu::pack<traits>(size, result));
@@ -886,9 +878,9 @@ ASTNode blast_fpneg(const ASTNode& expr)
 
 // The classification predicates. Each returns a Boolean-typed node.
 #define STP_BLAST_CLASSIFY(name, symfpu_fn)                                    \
-  ASTNode name(const ASTNode& expr)                                            \
+  ASTNode name(const floatingPointTypeInfo& size, const ASTNode& expr)         \
   {                                                                            \
-    floatingPointTypeInfo size(expr.GetExpWidth(), expr.GetSigWidth());        \
+    assert(expr.GetValueWidth() == size.packedWidth());                        \
     uf unpacked(symfpu::unpack<traits>(size, expr));                           \
     proposition result(symfpu::symfpu_fn<traits>(size, unpacked));             \
     return result;                                                             \
@@ -907,12 +899,11 @@ STP_BLAST_CLASSIFY(blast_is_positive, isPositive)
 // fp.eq is IEEE-754 equality, which differs from SMT-LIB's `=` on floats:
 // NaN is equal to nothing including itself, and +0 equals -0. blast_smt_eq
 // implements the latter (bit-identical) relation.
-ASTNode blast_fpeq(const ASTNode& lhs, const ASTNode& rhs)
+ASTNode blast_fpeq(const floatingPointTypeInfo& size, const ASTNode& lhs,
+                   const ASTNode& rhs)
 {
-  assert(lhs.GetValueWidth() == rhs.GetValueWidth());
-  assert(lhs.GetExpWidth() == rhs.GetExpWidth());
-  assert(lhs.GetSigWidth() == rhs.GetSigWidth());
-  floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
+  assert(lhs.GetValueWidth() == size.packedWidth());
+  assert(rhs.GetValueWidth() == size.packedWidth());
   uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
   uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
 
@@ -924,12 +915,11 @@ ASTNode blast_fpeq(const ASTNode& lhs, const ASTNode& rhs)
 // The ordering predicates are the IEEE-754 ones, so they are false whenever
 // either operand is NaN. symfpu's ordering() handles that; we just hand back
 // the resulting proposition, which is already a Boolean-typed node.
-ASTNode blast_fplt(const ASTNode& lhs, const ASTNode& rhs)
+ASTNode blast_fplt(const floatingPointTypeInfo& size, const ASTNode& lhs,
+                   const ASTNode& rhs)
 {
-  assert(lhs.GetValueWidth() == rhs.GetValueWidth());
-  assert(lhs.GetExpWidth() == rhs.GetExpWidth());
-  assert(lhs.GetSigWidth() == rhs.GetSigWidth());
-  floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
+  assert(lhs.GetValueWidth() == size.packedWidth());
+  assert(rhs.GetValueWidth() == size.packedWidth());
   uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
   uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
 
@@ -938,12 +928,11 @@ ASTNode blast_fplt(const ASTNode& lhs, const ASTNode& rhs)
   return lt;
 }
 
-ASTNode blast_fpleq(const ASTNode& lhs, const ASTNode& rhs)
+ASTNode blast_fpleq(const floatingPointTypeInfo& size, const ASTNode& lhs,
+                    const ASTNode& rhs)
 {
-  assert(lhs.GetValueWidth() == rhs.GetValueWidth());
-  assert(lhs.GetExpWidth() == rhs.GetExpWidth());
-  assert(lhs.GetSigWidth() == rhs.GetSigWidth());
-  floatingPointTypeInfo size(lhs.GetExpWidth(), lhs.GetSigWidth());
+  assert(lhs.GetValueWidth() == size.packedWidth());
+  assert(rhs.GetValueWidth() == size.packedWidth());
   uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
   uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
 
@@ -990,11 +979,12 @@ ASTNode blast_convert_bv_to_float(const ASTNode& rm, const ASTNode& bits,
   return packed;
 }
 
-ASTNode blast_convert_float_to_float(const ASTNode& rm, const ASTNode& expr,
+ASTNode blast_convert_float_to_float(const floatingPointTypeInfo& source,
+                                     const ASTNode& rm, const ASTNode& expr,
                                      bitWidthType target_exp,
                                      bitWidthType target_sig)
 {
-  floatingPointTypeInfo source(expr.GetExpWidth(), expr.GetSigWidth());
+  assert(expr.GetValueWidth() == source.packedWidth());
   floatingPointTypeInfo target(target_exp, target_sig);
 
   uf unpacked(symfpu::unpack<traits>(source, expr));
@@ -1006,9 +996,10 @@ ASTNode blast_convert_float_to_float(const ASTNode& rm, const ASTNode& expr,
   return packed;
 }
 
-ASTNode blast_round_to_integral(const ASTNode& rm, const ASTNode& expr)
+ASTNode blast_round_to_integral(const floatingPointTypeInfo& size,
+                                const ASTNode& rm, const ASTNode& expr)
 {
-  floatingPointTypeInfo size(expr.GetExpWidth(), expr.GetSigWidth());
+  assert(expr.GetValueWidth() == size.packedWidth());
   uf unpacked(symfpu::unpack<traits>(size, expr));
   uf unpacked_result(symfpu::roundToIntegral<traits>(size, rm, unpacked));
   ASTNode packed(symfpu::pack<traits>(size, unpacked_result));

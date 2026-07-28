@@ -429,50 +429,22 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg)
     case FP_SMT_EQ:
     {
       // Rebuild at the node's real arity: the comparisons are binary but the
-      // classification predicates are unary.
-      //
-      // The exponent/significand widths are carried on the node rather than
-      // implied by its kind, so a simplified operand can come back without
-      // them (a folded constant, say, which is just a bitvector). Copy the
-      // format across from the original child, or the blaster sees operands
-      // that disagree about their format.
+      // classification predicates are unary. Nothing here lowers anything --
+      // see the floating-point arm of simplify_term_switch, and FloatBlast.
       ASTVec simplified;
       simplified.reserve(a.Degree());
 
       for (unsigned int i = 0; i < a.Degree(); i++)
-        simplified.push_back(FloatBlaster::withFormat(
-            _bm, SimplifyTerm(a[i]), a[i].GetExpWidth(),
-            a[i].GetSigWidth()));
+        simplified.push_back(SimplifyTerm(a[i]));
 
-      ASTNode temp(nf->CreateNode(kind, simplified));
-
-      // The factory may have rewritten the predicate rather than built it:
-      // constant operands fold to true/false, and the same-operand rules
-      // fire (fp.leq of a term with itself comes back as (not (fp.isNaN
-      // ...))) -- interned constants compare pointer-equal, so equal values
-      // are the same operand. What came back is an ordinary formula:
-      // simplify it, never blast it.
-      if (temp.GetKind() != kind)
-      {
-        output = pushNeg
-                     ? SimplifyFormula(nf->CreateNode(NOT, temp), false)
-                     : SimplifyFormula(temp, false);
-        break;
-      }
-
-      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(_bm, temp));
-
-      assert(blasted != temp);
-      assert(blasted != a);
-
+      // The factory may rewrite the predicate rather than build it: constant
+      // operands fold to true/false, and the same-operand rules fire (fp.leq
+      // of a term with itself comes back as (not (fp.isNaN ...))) -- interned
+      // constants compare pointer-equal, so equal values are the same
+      // operand.
+      output = nf->CreateNode(kind, simplified);
       if (pushNeg)
-      {
-        output = SimplifyFormula(nf->CreateNode(NOT, blasted), false);
-      }
-      else
-      {
-        output = SimplifyFormula(blasted, false);
-      }
+        output = nf->CreateNode(NOT, output);
 
       break;
     }
@@ -2575,6 +2547,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
     case FP_MIN:
     case FP_MAX:
     case FP_TOFP:
+    case FP_TOFP_SIGNED:
     case FP_TOFP_UNSIGNED:
     case FP_TO_UBV:
     case FP_TO_SBV:
@@ -2582,65 +2555,37 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
     {
       // Rebuild with the same kind and arity. Only the float operands are
       // simplified: the other children -- the rounding mode of the arithmetic
-      // operations, and to_fp's format arguments -- are constants that the
-      // blaster reads directly, so simplifying them buys nothing and risks
-      // rewriting them into a form it does not recognise.
+      // operations, and to_fp's format arguments -- are constants the blaster
+      // reads directly, so simplifying them buys nothing and risks rewriting
+      // them into a form it does not recognise.
+      //
+      // Nothing here lowers anything. A floating-point operation simplifies
+      // to a floating-point operation, with its format derived from its kind
+      // and children as always; FloatBlast replaces the whole layer with bits
+      // in one pass, before the formula ever reaches this code. Blasting from
+      // inside simplification meant rebuilding an FP_ADD over bitvector
+      // children -- a node that does not type check, and which only passed
+      // because a float format was stamped onto it and its blasted children.
+      // Nodes are hash-consed, so that stamp landed on whatever else denoted
+      // the same bits.
       ASTVec simplified;
       simplified.reserve(inputterm.Degree());
 
       for (unsigned int i = 0; i < inputterm.Degree(); i++)
       {
         if (inputterm[i].GetType() != FLOATINGPOINT_TYPE)
-        {
           simplified.push_back(inputterm[i]);
-          continue;
-        }
-
-        // As above: put the format back, which the simplified node may have
-        // lost -- and which a folded constant cannot hold without being
-        // re-made as an ASTFPConst.
-        simplified.push_back(FloatBlaster::withFormat(
-            _bm, SimplifyTerm(inputterm[i]),
-            inputterm[i].GetExpWidth(), inputterm[i].GetSigWidth()));
+        else
+          simplified.push_back(SimplifyTerm(inputterm[i]));
       }
 
-      ASTNode temp(
-          nf->CreateTerm(k, inputterm.GetValueWidth(), simplified));
-      temp.SetExpWidth(inputterm.GetExpWidth());
-      temp.SetSigWidth(inputterm.GetSigWidth());
-
-      // The factory may have folded the operation to a constant once its
-      // operands were simplified (abs/neg of a constant, x*1.0, x/1.0). That
-      // folded constant is the simplified term; otherwise blast the operation.
-      // The blaster only handles operations, so a constant must not reach it.
-      if (temp.isConstant())
-      {
-        output = temp;
-      }
-      else
-      {
-        ASTNode blasted(FloatBlaster::BlastNode_TopLevel(_bm, temp));
-
-        assert(blasted != temp);
-        assert(blasted != inputterm);
-
-        output = SimplifyTerm(blasted);
-      }
-
-      // Only re-make the result as a floating-point constant when the
-      // operation actually produces a float. fp.to_ubv/fp.to_sbv produce a
-      // bitvector, and a float-stamped constant is a distinct node from the
-      // plain constant with the same bits -- stamping there would make the
-      // folded integer compare unequal to the identical constant written in
-      // the input.
-      if (inputterm.GetExpWidth() != 0)
-      {
-        output = FloatBlaster::withFormat(_bm, output, inputterm.GetExpWidth(),
-                                          inputterm.GetSigWidth());
-      }
-
+      // The factory may fold the operation as it rebuilds it (abs/neg of a
+      // constant, x*1.0, x/1.0), which is the whole point of going back
+      // through it; whatever comes back is what this term simplifies to.
+      output = nf->CreateTerm(k, inputValueWidth, simplified);
       break;
     }
+
     case WRITE:
     default:
       FatalError("SimplifyTerm: Control should never reach here:", inputterm,
