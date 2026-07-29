@@ -64,7 +64,10 @@ diagnostic texts deliberately differ from the baseline and sit outside
 that comparison: the parser's array-extensionality warning now names
 the option (its full text and once-per-run latch are pinned by a lit
 test), and ``stp_simple``'s usage error mentions the flag it newly
-accepts.
+accepts. One behavioral corner also deliberately differs: when the
+soft timeout expires while lazy refinement is still undecided, the
+solve now reports a timeout where it previously aborted with an
+internal error.
 
 Limitations: arrays of arrays are not supported (STP's sort system has
 no nested array sorts), and there is no constant-array
