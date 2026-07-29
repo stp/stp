@@ -1171,3 +1171,72 @@ TEST(RemoveUnconstrained_SymbolicSide, shared_chain_refused)
   ASTNode back = c.backSubstitute(top);
   c.checkEquivalent(back, result);
 }
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_mult_odd_mid_chain)
+{
+  // (= (bvadd (bvmul x 5) 7) t): an odd multiplication is a bijection
+  // (modular inverse), so it may sit anywhere on the chain.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode mul = c.hf->CreateTerm(BVMULT, W, x, c.konst(5));
+  ASTNode chain = c.hf->CreateTerm(BVPLUS, W, mul, c.konst(7));
+  ASTNode pred = c.hf->CreateNode(EQ, chain, t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+  checkSymbolicFires(c, x, top);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_mult_even_bottom)
+{
+  // (= (bvmul x 6) t): 6 = 3 * 2, so the image is exactly the even
+  // values; condition t[0] == 0, witness x := inv(3) * (t >> 1).
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode pred =
+      c.hf->CreateNode(EQ, c.hf->CreateTerm(BVMULT, W, x, c.konst(6)), t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+  checkSymbolicFires(c, x, top);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_mult_even_above_refused)
+{
+  // (= (bvmul (bvurem x 5) 6) t): the even multiplication is not at the
+  // bottom (a bvnot inner step wouldn't do here: its per-kind rule fires
+  // first and legitimately leaves the mult at the bottom of the fresh
+  // variable's chain), so its free low preimage bits belong to the inner
+  // chain and the walk must refuse.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode chain = c.hf->CreateTerm(
+      BVMULT, W, c.hf->CreateTerm(BVMOD, W, x, c.konst(5)), c.konst(6));
+  ASTNode pred = c.hf->CreateNode(EQ, chain, t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+
+  ASTNode result = c.run(top);
+  ASTNodeSet syms;
+  c.collectSymbols(result, syms);
+  EXPECT_EQ(syms.count(x), 1u) << "walk stepped past a non-bottom even mult";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_mult_zero_refused)
+{
+  // (= (bvmul x 0) t): the image is {0}; leave it to constant folding.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode pred =
+      c.hf->CreateNode(EQ, c.hf->CreateTerm(BVMULT, W, x, c.konst(0)), t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+
+  ASTNode result = c.run(top);
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}

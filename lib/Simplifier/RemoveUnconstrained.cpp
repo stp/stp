@@ -169,7 +169,7 @@ static ASTNode mkExtract(NodeFactory* nf, STPMgr& bm, const ASTNode& u,
  * collapses the image to a single value (such chains are constants and
  * belong to the factory, not to this rule).
  */
-static bool invertStepSymbolic(NodeFactory* nf, STPMgr& bm,
+static bool invertStepSymbolic(NodeFactory* nf, STPMgr& bm, Simplifier* simp,
                                const GroundStep& s, bool isBottom, ASTNode& u,
                                ASTVec& conds)
 {
@@ -178,6 +178,37 @@ static bool invertStepSymbolic(NodeFactory* nf, STPMgr& bm,
   const unsigned w = s.outWidth;
   switch (s.kind)
   {
+    case BVMULT:
+    {
+      // c = odd * 2^k. The odd factor is a bijection (invert with the
+      // modular inverse, anywhere on the chain); the 2^k factor makes
+      // the image exactly the multiples of 2^k, with the k low bits of
+      // the preimage free -- so like the shifts it is bottom-only, with
+      // the condition that u's k low bits are zero.
+      const ASTNode& c = s.constants[0];
+      const CBV cv = c.GetBVConst();
+      if (CONSTANTBV::BitVector_is_empty(cv))
+        return false; // image is {0}.
+      unsigned k = 0;
+      while (!CONSTANTBV::BitVector_bit_test(cv, k))
+        k++;
+      ASTNode oddPart = c;
+      if (k > 0)
+      {
+        if (!isBottom)
+          return false;
+        CBV shifted = CONSTANTBV::BitVector_Create(w, true);
+        CONSTANTBV::BitVector_Interval_Copy(shifted, cv, 0, k, w - k);
+        oddPart = bm.CreateBVConst(shifted, w);
+        conds.push_back(nf->CreateNode(EQ, mkExtract(nf, bm, u, k - 1, 0),
+                                       bm.CreateZeroConst(k)));
+        u = nf->CreateTerm(BVCONCAT, w, bm.CreateZeroConst(k),
+                           mkExtract(nf, bm, u, w - 1, k));
+      }
+      u = nf->CreateTerm(BVMULT, w, simp->MultiplicativeInverse(oddPart), u);
+      return true;
+    }
+
     // Bijective: exact everywhere, no condition.
     case BVXOR:
       u = nf->CreateTerm(BVXOR, w, u, s.constants[0]);
@@ -676,8 +707,8 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
       ASTNode u = t;
       bool ok = true;
       for (size_t i = steps.size(); i-- > 0 && ok;)
-        ok = invertStepSymbolic(nf, bm, steps[i], /*isBottom=*/i == 0, u,
-                                conds);
+        ok = invertStepSymbolic(nf, bm, simplifier, steps[i],
+                                /*isBottom=*/i == 0, u, conds);
       ASTNode v1, x1, v2, x2;
       if (ok)
         ok = findTwoChainValues(steps, varW, bm, v1, x1, v2, x2);
