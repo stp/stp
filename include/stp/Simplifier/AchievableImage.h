@@ -115,6 +115,11 @@ public:
   static bool handledKind(Kind k);
   static bool predicateKind(Kind k);
 
+  // Evaluate one step at a concrete path value. Returns a fresh CBV.
+  // Shared with RemoveUnconstrained's symbolic-side collapse, which
+  // needs forward evaluation of a chain outside any image object.
+  static CBV evalStep(const GroundStep& step, const CBV in);
+
   // Whether the image is still tracked as an exact interval (rather
   // than under-approximating samples). Tests use this to know when
   // decide() must be complete, not just sound.
@@ -158,7 +163,6 @@ private:
   CBV invertPrefix(CBV value); // takes and returns ownership
   CBV invertStep(const GroundStep& step, const CBV inLo, const CBV inHi,
                  const CBV value);
-  CBV evalStep(const GroundStep& step, const CBV in);
   bool evalPredicate(Kind pred, bool pathIsFirstOperand, const CBV member,
                      const CBV k);
   bool validate(const CBV xWitness, Kind pred, bool pathIsFirstOperand,
