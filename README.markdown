@@ -25,7 +25,7 @@ git submodule init && git submodule update
 mkdir build
 cd build
 cmake ..
-cmake --build .
+cmake --build . -j$(nproc)
 sudo cmake --install .
 ```
 
@@ -61,18 +61,17 @@ stp myproblem.smt2
 ```
 
 Overflowing a 32-bit integer using the python interface:
-```
-In [1]: import stp
-In [2]: a = stp.Solver()
-In [3]: x = a.bitvec('x')
-In [4]: y = a.bitvec('y')
-In [5]: a.add(x + y < 20)
-In [6]: a.add(x  > 10)
-In [7]: a.add(y  > 10)
-In [8]: a.check()
-Out[8]: True
-In [9]: a.model()
-Out[9]: {'x': 4294967287, 'y': 11}
+```python
+import stp
+
+s = stp.Solver()
+x = s.bitvec('x')
+y = s.bitvec('y')
+s.add(x + y < 20)
+s.add(x > 10)
+s.add(y > 10)
+print(s.check())  # True
+print(s.model())  # e.g. {'x': 4294967287, 'y': 11}
 ```
 
 STP also reads from standard input, as in the Docker example above.
@@ -135,7 +134,7 @@ $ git clone https://github.com/stp/minisat
 $ cd minisat
 $ mkdir build && cd build
 $ cmake ..
-$ cmake --build .
+$ cmake --build . -j$(nproc)
 $ sudo cmake --install .
 $ command -v ldconfig && sudo ldconfig
 ```
@@ -147,7 +146,7 @@ $ git clone https://github.com/msoos/cryptominisat
 $ cd cryptominisat
 $ mkdir build && cd build
 $ cmake ..
-$ cmake --build .
+$ cmake --build . -j$(nproc)
 $ sudo cmake --install .
 $ command -v ldconfig && sudo ldconfig
 ```
@@ -189,7 +188,7 @@ If you did not install these development libraries, then `MINISAT_LIBDIR` can be
 ```
 $ mkdir build && cd build
 $ cmake -DSTATICCOMPILE=ON ..
-$ cmake --build .
+$ cmake --build . -j$(nproc)
 $ sudo cmake --install .
 $ command -v ldconfig && sudo ldconfig
 ```
@@ -230,7 +229,7 @@ pip install lit
 mkdir build
 cd build
 cmake -DENABLE_TESTING=ON ..
-make
+make -j$(nproc)
 make test
 ```
 
