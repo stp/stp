@@ -29,6 +29,7 @@ THE SOFTWARE.
 
 #include "stp/Extensionality/ExtChecker.h"
 #include <algorithm>
+#include <deque>
 
 namespace stp
 {
