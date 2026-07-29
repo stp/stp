@@ -1160,6 +1160,10 @@ bool mentions(const ASTNode& haystack, const ASTNode& needle)
 // related to neither branch: the equality it stands for then holds for
 // free, and an unsatisfiable query answers satisfiable from the second
 // solve on.
+//
+// They are restated where everything else a solve restates is stated,
+// at the start of it, so that STP's own passes rewrite a guard exactly
+// as they rewrite the formula it is about.
 TEST_F(ExtPrepareTest, InheritedArrayIteRestatesItsGuards)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
@@ -1215,24 +1219,30 @@ TEST_F(ExtPrepareTest, InheritedArrayIteRestatesItsGuards)
   EXPECT_TRUE(mentions(first, guardThen));
   EXPECT_TRUE(mentions(first, guardElse));
 
-  // Solve again on the same query. The start-of-solve conjunction now
-  // carries the guarded records' own witness bundles as well.
+  // Solve again on the same query. This solve eliminates nothing, so
+  // the guards come from the start-of-solve conjunction -- conjoined
+  // here onto nothing at all, to leave no doubt where they came from.
+  ext->beginSolve();
+  const ASTNode restated = ext->conjoinRecordConstraints(mgr.ASTTrue);
+  EXPECT_TRUE(mentions(restated, guardThen));
+  EXPECT_TRUE(mentions(restated, guardElse));
+
+  // And preparation over the pushed anchor -- with the guarded
+  // records' own witness bundles alongside, as that conjunction
+  // supplies them -- hands back the cached replacement, with no new
+  // generation of records.
   for (size_t i = 1; i < 3; i++)
   {
     conjuncts.push_back(ext->getRecords()[i].anchorL);
     conjuncts.push_back(ext->getRecords()[i].anchorR);
     conjuncts.push_back(ext->getRecords()[i].witnessClause);
   }
+  ext->prepare(hf->CreateNode(AND, conjuncts));
 
-  ext->beginSolve();
-  const ASTNode second = ext->prepare(hf->CreateNode(AND, conjuncts));
-
-  // The cached replacement came back, with no new generation of
-  // records -- and with both of its defining guards.
   EXPECT_EQ(3u, ext->getRecords().size());
   EXPECT_EQ(replacement, ext->getRecords()[0].canonicalRight);
-  EXPECT_TRUE(mentions(second, guardThen));
-  EXPECT_TRUE(mentions(second, guardElse));
+  EXPECT_TRUE(ext->inCone(a));
+  EXPECT_TRUE(ext->inCone(b));
 }
 
 TEST_F(ExtPrepareTest, MissingAnchorFailsLoudly)

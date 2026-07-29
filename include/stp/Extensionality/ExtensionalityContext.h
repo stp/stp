@@ -332,10 +332,17 @@ private:
   // a repeated solve of the same query reuses the fresh array -- and,
   // through the registry's operand-pair dedup, the same two guarded
   // equality records -- instead of minting a new generation per solve.
-  // The guard implications themselves are rebuilt into every solve's
-  // prepared input, keeping each record and its defining guards
-  // together.
   std::map<ASTNode, ASTNode> iteReplacements;
+
+  // The guard implications that define those fresh arrays -- two per
+  // replacement, minted with it. Persistent for the same reason the
+  // registry is: a solve that reuses a replacement eliminates no
+  // if-then-else and so states no guards of its own, while the guarded
+  // equality records are in the registry and asserted all the same.
+  // conjoinRecordConstraints restates them at the start of every
+  // solve, alongside those records' witness bundles, so that a record
+  // is never active without its defining implication.
+  ASTVec iteGuards;
 
   // True while prepare() mints the guarded equalities of its
   // if-then-else elimination: their operands come from the prepared

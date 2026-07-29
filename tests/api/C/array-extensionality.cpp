@@ -254,6 +254,79 @@ TEST(array_extensionality, nested_ite_fixed_point_is_stable)
   vc_Destroy(vc);
 }
 
+TEST(array_extensionality, second_solve_over_an_inherited_array_ite)
+{
+  // Two check-sat calls over Array (_ BitVec 10) (_ BitVec 1): the
+  // first assumes an array equality whose right operand stacks writes
+  // on an array-valued if-then-else, the second assumes that
+  // if-then-else's own condition. Both are satisfiable.
+  //
+  // The first solve eliminates the if-then-else in favour of a fresh
+  // array (paper section 4.1) and caches the replacement. The second
+  // solve inherits it -- operand recovery hands the replacement back
+  // before the cone is computed, so nothing is left to eliminate --
+  // and has to restate the guards that define it from elsewhere.
+  // Restated at the end of preparation, they spelled the condition the
+  // way the cached if-then-else did, and the second assumption is
+  // exactly what lets the substitution map solve that condition's
+  // variable away: bit-blasting the guard handed the variable free SAT
+  // variables again, and the model came back disagreeing with the
+  // substitution. Every candidate then failed STP's own model check
+  // while neither refinement machine had anything left to add, and the
+  // solve loop ran out of cases -- "a bug in STP".
+  //
+  // Found by fuzzing with murxla (--stp); delta-minimized.
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv1 = vc_bvType(vc, 1);
+  Type bv10 = vc_bvType(vc, 10);
+  Type arrT = vc_arrayType(vc, bv10, bv1);
+
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr i = vc_varExpr(vc, "i", bv10); // the chain's one symbolic index
+  Expr v = vc_varExpr(vc, "v", bv1);  // and its one symbolic value
+  Expr zero = vc_bvConstExprFromInt(vc, 1, 0);
+  Expr one = vc_bvConstExprFromInt(vc, 1, 1);
+  Expr p = vc_bvConstExprFromInt(vc, 10, 271);
+  Expr q = vc_bvConstExprFromInt(vc, 10, 205);
+  Expr r = vc_bvConstExprFromInt(vc, 10, 729);
+
+  Expr base = vc_writeExpr(vc, a, p, v);
+  // Signed 1-bit: bvsmod(v, v) is zero either way, so the condition
+  // holds exactly when v is zero -- but nothing folds it away while
+  // the query is being built.
+  Expr cond = vc_sbvLeExpr(vc, vc_sbvModExpr(vc, 1, v, v), v);
+  Expr chain = vc_iteExpr(vc, cond, a, base);
+
+  const Expr writes[15][2] = {{i, v},    {i, v},    {q, v},    {p, v},
+                              {r, zero}, {r, v},    {p, zero}, {p, v},
+                              {q, v},    {i, v},    {r, v},    {i, v},
+                              {q, v},    {i, v},    {p, one}};
+  for (int k = 0; k < 15; k++)
+    chain = vc_writeExpr(vc, chain, writes[k][0], writes[k][1]);
+
+  Expr eq = vc_eqExpr(vc, base, chain);
+  ASSERT_EQ(SYMBOL, getExprKind(eq));
+
+  // STP has no assumption interface, so a scope stands in for
+  // check-sat-assuming: the assumption goes away with the pop, which
+  // is what makes these two solves of two different formulas.
+  vc_push(vc);
+  vc_assertFormula(vc, eq);
+  EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc))); // 0 == INVALID == satisfiable
+  vc_pop(vc);
+
+  // The equality is out of the formula now; its record, and the
+  // replacement the first solve cached, are still in the registry.
+  vc_push(vc);
+  vc_assertFormula(vc, cond);
+  EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  vc_pop(vc);
+
+  vc_Destroy(vc);
+}
+
 TEST(array_extensionality, asserted_ite_condition_folds_before_fe03)
 {
   // Companion coverage for permitted simplification: with the
