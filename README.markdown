@@ -229,8 +229,8 @@ pip install lit
 mkdir build
 cd build
 cmake -DENABLE_TESTING=ON ..
-make -j$(nproc)
-make test
+cmake --build . -j$(nproc)
+ctest
 ```
 
 ### Installing
