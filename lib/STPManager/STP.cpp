@@ -889,13 +889,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
                                                       original_input, satBase);
     }
 
-    if (bm->soft_timeout_expired)
-    {
-      if (toSATAIG.cbIsDestructed())
-        cleaner.release();
-      return SOLVER_TIMEOUT;
-    }
-
     if (SOLVER_UNDECIDED != res)
     {
       if (toSATAIG.cbIsDestructed())
@@ -903,6 +896,16 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
       CountersAndStats("print_func_stats", bm);
       return res;
+    }
+
+    // Refinement reached no decision but the soft timeout has expired:
+    // report the timeout instead of iterating further (or falling into
+    // the fatal error below when nothing more is pending).
+    if (bm->soft_timeout_expired)
+    {
+      if (toSATAIG.cbIsDestructed())
+        cleaner.release();
+      return SOLVER_TIMEOUT;
     }
 
     if (!tookLemmaPath && !(extActive && ext->hasPendingLemma()))

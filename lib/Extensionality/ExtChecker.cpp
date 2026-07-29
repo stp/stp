@@ -29,6 +29,7 @@ THE SOFTWARE.
 
 #include "stp/Extensionality/ExtChecker.h"
 #include <algorithm>
+#include <deque>
 
 namespace stp
 {
@@ -182,9 +183,8 @@ struct CheckerState
   }
 };
 
-// Deterministic total order for premise atoms: rank by
-// atom op (bv_eq < bv_ne < array_eq < bool_lit, mirroring the
-// reference's rank table), then by operand node numbers.
+// Deterministic total order for premise atoms: rank by atom op
+// (bv_eq < bv_ne < array_eq < bool_lit), then by operand node numbers.
 bool atomLess(const ExtLemmaAtom& x, const ExtLemmaAtom& y)
 {
   if (x.op != y.op)

@@ -180,8 +180,10 @@ struct ExtWriteNode
 
 // The array subgraph of the preprocessed formula, frozen for one
 // solve: accesses, write edges, equality edges, and the witness
-// obligations of preprocessing step 1. All vectors carry the
-// deterministic reference ordering; the maps are used for lookup only.
+// obligations of preprocessing step 1. All vectors carry a fixed
+// deterministic order (noted per field below), so checker runs -- and
+// therefore lemmas and models -- are reproducible; the maps are used
+// for lookup only.
 struct ExtGraph
 {
   std::vector<ExtAccess> accesses; // in stable seed order
@@ -193,7 +195,7 @@ struct ExtGraph
   std::vector<ExtEqEdge> eqEdges;
   // array -> indices into eqEdges; per source sorted by
   // (record, destination node number, rule) where R_EQ sorts before
-  // L_EQ, mirroring the reference adjacency order.
+  // L_EQ, so each array's equality edges fire in a fixed order.
   std::map<ASTNode, std::vector<size_t>> eqAdjacency;
 
   std::vector<ExtWitness> witnesses; // sorted by record id

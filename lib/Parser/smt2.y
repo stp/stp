@@ -1629,9 +1629,10 @@ STRING_TOK LPAREN_TOK RPAREN_TOK an_array_sort an_term
       $5->GetValueWidth() != $4->elem.width)
   {
     char msg [100];
-    sprintf(msg, "Different array widths specified: (%d %d) vs (%d %d)",
-            $5->GetIndexWidth(), $5->GetValueWidth(), $4->index.width,
-            $4->elem.width);
+    snprintf(msg, sizeof(msg),
+             "Different array widths specified: (%u %u) vs (%u %u)",
+             $5->GetIndexWidth(), $5->GetValueWidth(), $4->index.width,
+             $4->elem.width);
     yyerror(msg);
   }
   else if (!stp::GlobalParserInterface->arraySortsAgree(*$5, *$4))

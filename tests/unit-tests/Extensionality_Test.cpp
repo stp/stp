@@ -342,7 +342,7 @@ TEST_F(ExtFixtureTest, TrueEqualityConsistentAndExported)
   ASTNode wL = bv("z_wL_eqAB", 1), wR = bv("z_wR_eqAB", 1);
   witness(eqAB, lam, wL, wR);
 
-  // reference seed order: v, z_wL_eqAB, z_wR_eqAB
+  // seed order: v, z_wL_eqAB, z_wR_eqAB
   size_t aX = readAccess(A, i, v);
   size_t aL = readAccess(A, lam, wL);
   size_t aR = readAccess(B, lam, wR);
@@ -400,7 +400,7 @@ TEST_F(ExtFixtureTest, NestedWriteDownConflict)
   ASTNode w3 = write(A, j3, e3);
   ASTNode r1 = bv("r1", 1), r2 = bv("r2", 2);
 
-  // reference seed order: r1, r2, w1, w2, w3
+  // seed order: r1, r2, w1, w2, w3
   size_t ar1 = readAccess(w2, i, r1);
   size_t ar2 = readAccess(w3, k, r2);
   size_t aw1 = writeAccess(w1);
@@ -454,7 +454,7 @@ TEST_F(ExtFixtureTest, PositiveReadEqualityConflict)
   ASTNode wL = bv("z_wL_eqAB", 0), wR = bv("z_wR_eqAB", 0);
   witness(eqAB, lam, wL, wR);
 
-  // reference seed order: rA, rB, z_wL_eqAB, z_wR_eqAB
+  // seed order: rA, rB, z_wL_eqAB, z_wR_eqAB
   size_t aA = readAccess(A, i, rA);
   size_t aB = readAccess(B, j, rB);
   readAccess(A, lam, wL);
@@ -493,7 +493,7 @@ TEST_F(ExtFixtureTest, ReadValuesWriteIndicesConflict)
   ASTNode wL = bv("z_wL_eqW", 0), wR = bv("z_wR_eqW", 0);
   witness(eqW, lam, wL, wR);
 
-  // reference seed order: r1, r2, w1, w2, z_wL_eqW, z_wR_eqW
+  // seed order: r1, r2, w1, w2, z_wL_eqW, z_wR_eqW
   readAccess(A, i1, r1);
   readAccess(A, i2, r2);
   size_t aw1 = writeAccess(w1);
@@ -531,7 +531,7 @@ TEST_F(ExtFixtureTest, ReadWriteHitConflict)
   ASTNode w2 = write(w1, j2, e2);
   ASTNode r1 = bv("r1", 0);
 
-  // reference seed order: r1, w1, w2
+  // seed order: r1, w1, w2
   size_t ar1 = readAccess(w2, i, r1);
   size_t aw1 = writeAccess(w1);
   writeAccess(w2);
@@ -569,7 +569,7 @@ TEST_F(ExtFixtureTest, TransitiveEqualityConflict)
   witness(eqAB, lamAB, wLAB, wRAB);
   witness(eqBC, lamBC, wLBC, wRBC);
 
-  // reference seed order: rA, rC, z_wL_eqAB, z_wL_eqBC, z_wR_eqAB, z_wR_eqBC
+  // seed order: rA, rC, z_wL_eqAB, z_wL_eqBC, z_wR_eqAB, z_wR_eqBC
   size_t aA = readAccess(A, i, rA);
   size_t aC = readAccess(C, j, rC);
   readAccess(A, lamAB, wLAB);
@@ -622,7 +622,7 @@ TEST_F(ExtFixtureTest, OneAccessCrossesTwoEqualityEdges)
   witness(eqAB, lamAB, wLAB, wRAB);
   witness(eqBC, lamBC, wLBC, wRBC);
 
-  // reference seed order: rx, ry, w, then the witness reads
+  // seed order: rx, ry, w, then the witness reads
   size_t aX = readAccess(A, ix, rx);
   size_t aY = readAccess(w, iy, ry);
   writeAccess(w);
@@ -687,7 +687,7 @@ TEST_F(ExtFixtureTest, UpEqualityDownConflict)
   ASTNode wL = bv("z_wL_eqW", 0), wR = bv("z_wR_eqW", 0);
   witness(eqW, lam, wL, wR);
 
-  // reference seed order: rA, rB, w1, w2, z_wL_eqW, z_wR_eqW
+  // seed order: rA, rB, w1, w2, z_wL_eqW, z_wR_eqW
   size_t aA = readAccess(A, k, rA);
   size_t aB = readAccess(B, k, rB);
   size_t aw1 = writeAccess(w1);
@@ -755,7 +755,7 @@ TEST_F(ExtFixtureTest, WriteWriteEqualityConflict)
   ASTNode wL = bv("z_wL_eqW", 0), wR = bv("z_wR_eqW", 0);
   witness(eqW, lam, wL, wR);
 
-  // reference seed order: w1, w2, z_wL_eqW, z_wR_eqW
+  // seed order: w1, w2, z_wL_eqW, z_wR_eqW
   size_t aw1 = writeAccess(w1);
   size_t aw2 = writeAccess(w2);
   readAccess(w1, lam, wL);
