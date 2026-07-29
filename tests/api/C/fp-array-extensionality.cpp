@@ -322,6 +322,69 @@ TEST(fp_array_extensionality, write_chain_over_float_cells_quotients_nan)
   vc_Destroy(vc);
 }
 
+// (Array (_ BitVec 64) (_ FloatingPoint 11 53)): a three-way equality
+// between an array variable and two store chains over it, alongside an
+// fp.isZero on the float the chains store. Writing A for the array
+// variable, x for the float variable and k for the all-ones index,
+//
+//   B = store(store(A, k, x), 0, x)      the shorter chain
+//   C = store(B, k, -oo)                 the longer one
+//
+// and the query asserts fp.isZero(x) and A = C = B. The last write at
+// an index decides the contents, so C = B needs B at k -- which is x,
+// since the store at 0 is elsewhere -- to be -oo. But fp.isZero(x)
+// holds only of the two zeroes, so the query is unsatisfiable.
+//
+// Solving abstracts the reads of A into fresh float-typed variables,
+// and pinning one of those to -oo leaves its significand half equated
+// to a constant. The word-level solver takes such an equation apart:
+// it eliminates the variable an extract from bit 0 is taken of, by
+// renaming the whole variable to a fresh variable concatenated with
+// the solved bits. That concatenation is an ordinary bitvector node
+// and carries no floating-point format, and the format is exactly what
+// the float blaster -- which runs after the solver, and reads an
+// operation's format off its operands -- needs to lower the fp.isZero
+// still standing over the renamed variable. It blasted against a
+// format of (0, 0):
+//
+//   symbolic_fp.cpp: blast_is_zero: Assertion
+//     `expr.GetValueWidth() == size.packedWidth()' failed.
+//
+// Found by fuzzing with murxla; delta-minimized, then transcribed term
+// for term (bar the assertions -- see below).
+TEST(fp_array_extensionality, float_cell_pinned_under_chain_equality_unsat)
+{
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x'); // must precede creation of any term
+
+  Type fp = vc_fpType(vc, 11, 53);
+  Type bv64 = vc_bvType(vc, 64);
+  Type arr = vc_arrayType(vc, bv64, fp);
+
+  Expr moo = vc_fpMinusInfinity(vc, fp);
+  Expr zero = vc_bvConstExprFromLL(vc, 64, 0);
+  Expr x = vc_varExpr(vc, "x", fp);
+  Expr a = vc_varExpr(vc, "a", arr);
+  Expr ones = vc_bvXnorExpr(vc, zero, zero);
+
+  vc_assertFormula(vc, vc_fpIsZeroExpr(vc, x));
+
+  Expr b = vc_writeExpr(vc, vc_writeExpr(vc, a, ones, x), zero, x);
+  Expr c = vc_writeExpr(vc, b, ones, moo);
+
+  // A = C = B. The trace states this as one three-way equality; here it
+  // is the two conjuncts that means, asserted separately. The shape
+  // matters -- conjoining them into a single assertion instead happens
+  // to simplify down a path that never reaches the equation this goes
+  // wrong on. BVSolver_Test pins the defect itself, equation in hand.
+  vc_assertFormula(vc, vc_eqExpr(vc, a, c));
+  vc_assertFormula(vc, vc_eqExpr(vc, c, b));
+
+  EXPECT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+
+  vc_Destroy(vc);
+}
+
 // The same defect as reached by fuzzing: three arrays over
 // (Array (_ BitVec 15) (_ FloatingPoint 5 11)), built by long store
 // chains off one base, asserted pairwise distinct.
