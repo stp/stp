@@ -32,7 +32,6 @@ THE SOFTWARE.
 #include "stp/cpp_interface.h"
 #include <memory>
 
-
 extern void errorHandler(const char* error_msg);
 
 using namespace stp;

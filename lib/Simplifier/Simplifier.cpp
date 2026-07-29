@@ -1448,15 +1448,18 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm)
           v.push_back(SimplifyTerm(toProcess[i]));
         else if (toProcess[i].GetType() == BOOLEAN_TYPE)
           v.push_back(SimplifyFormula(toProcess[i], false));
-        // Simplifying a floating-point child lowers it to bitvectors, and
-        // is what makes nested floating-point expressions terminate: the
-        // rebuilt-children check below otherwise never fires, and
-        // SimplifyTerm re-enters on the same term until the stack runs out.
-        // Historically this same line made several satisfiable QF_ABVFP
-        // queries answer unsat; both causes -- rebuilds dropping the
-        // per-node float format, and the operand sort inverting the
-        // floating-point comparisons -- were fixed in fbb96cd8, and the
-        // nested-fp lit tests pin the behaviour.
+        // A floating-point child is a term like any other: simplify it, so
+        // the floating-point identities and constant folds fire (see the
+        // matching arm of simplify_term_switch -- which, like everything
+        // here, lowers nothing; lowering is FloatBlast's own pass). It
+        // needs an arm of its own only because its type is neither
+        // BITVECTOR nor BOOLEAN, and the catch-all below would carry it
+        // through unsimplified. Historically -- when lowering still
+        // happened inside simplification -- this same line made several
+        // satisfiable QF_ABVFP queries answer unsat; both causes (rebuilds
+        // dropping the per-node float format, and the operand sort
+        // inverting the floating-point comparisons) were fixed in
+        // fbb96cd8, and the nested-fp lit tests pin the behaviour.
         else if (toProcess[i].GetType() == FLOATINGPOINT_TYPE)
           v.push_back(SimplifyTerm(toProcess[i]));
         else
