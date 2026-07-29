@@ -1292,17 +1292,15 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
     // a cone read that was simplified out of the transformed formula
     // is evaluated from the certified array contents, which must agree
     // with every observation the propagation derived (e.g. a read
-    // observing a value across a true array equality).
+    // observing a value across a true array equality). Publication and
+    // the verification of the scalar names against the completed model
+    // happen inside checkCandidate.
     ExtensionalityContext* ext = bm->getExtensionalityIfAny();
     const bool extActive = ext != NULL && ext->active() && ext->coneFrozen();
     ExtensionalityContext::CandidateOutcome extOutcome =
         ExtensionalityContext::EXT_SKIPPED;
     if (extActive)
-    {
       extOutcome = ext->checkCandidate(this);
-      if (extOutcome == ExtensionalityContext::EXT_CONSISTENT)
-        ext->publishObservations(this);
-    }
 
     // check if the counterexample is good or not
     ASTNode orig_result = ComputeFormulaUsingModel(original_input);

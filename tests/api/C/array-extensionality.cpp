@@ -845,6 +845,104 @@ TEST(array_extensionality, refinement_on_the_cadical_backend)
   vc_Destroy(vc);
 }
 
+TEST(array_extensionality, store_index_read_through_second_array_unsat)
+{
+  // Found by differential fuzzing (reported sat; the formula is
+  // unsat). The store index k = x11[x9[x0]] reaches the equality
+  // through a read of a second, unrelated array, and the asserted
+  // x9[x0] = C lets preprocessing rewrite that read's index to the
+  // constant C inside the recorded equality operand while the
+  // original compound form survives in the rest of the formula. The
+  // two occurrences of x11[C] are then abstracted as two independent
+  // read variables, and only the host's lazy read refinement links
+  // them; certifying a candidate before that link exists let the
+  // consistency check place the store and the read at different
+  // cells of the same array.
+  //
+  // Unsat by cases on x0 = k. If x0 = k, the equality forces
+  // x9[x0] = x0, so x0 = C, and the assumed read of the overwrite
+  // forces x0 = MIN, but C != MIN. If x0 != k, the equality forces
+  // x9[x0] = x0 sdiv C, whose magnitude is at most |x0|/|C| < |C|,
+  // so it can never equal C = x9[x0].
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv8 = vc_bvType(vc, 8);
+  Type arrT = vc_arrayType(vc, bv8, bv8);
+
+  Expr x0 = vc_varExpr(vc, "x0", bv8);
+  Expr x5 = vc_varExpr(vc, "x5", arrT);
+  Expr x9 = vc_varExpr(vc, "x9", arrT);
+  Expr x11 = vc_varExpr(vc, "x11", arrT);
+  Expr c = vc_bvConstExprFromLL(vc, 8, 0x9C);    // -100
+  Expr mins = vc_bvConstExprFromLL(vc, 8, 0x80); // min signed
+
+  Expr k = vc_readExpr(vc, x11, vc_readExpr(vc, x9, x0));
+  Expr q = vc_sbvDivExpr(vc, 8, x0, c);
+
+  vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, x9, x0), c));
+  vc_assertFormula(
+      vc, vc_eqExpr(vc, vc_readExpr(vc, vc_writeExpr(vc, x9, x0, mins), k),
+                    x0));
+  vc_assertFormula(
+      vc, vc_eqExpr(vc, x9,
+                    vc_writeExpr(vc, vc_writeExpr(vc, x5, x0, q), k, x0)));
+
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+  vc_Destroy(vc);
+}
+
+TEST(array_extensionality, store_index_read_through_second_array_bv120_unsat)
+{
+  // The same defect as store_index_read_through_second_array_unsat,
+  // as originally found: 120-bit words, and the contradictory
+  // constraints arriving as assumptions inside a pushed scope. The
+  // divisor's magnitude squared exceeds the signed range, so
+  // x0 sdiv C = C has no solution, and C != MIN closes the x0 = k
+  // case exactly as at width 8.
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv120 = vc_bvType(vc, 120);
+  Type arrT = vc_arrayType(vc, bv120, bv120);
+
+  Expr x0 = vc_varExpr(vc, "x0", bv120);
+  Expr c = vc_bvUMinusExpr(
+      vc, vc_bvConstExprFromDecStr(vc, 120,
+                                   "36288689616474043440116267750740073"));
+  Expr x5 = vc_varExpr(vc, "x5", arrT);
+  Expr mins = vc_bvConstExprFromStr(
+      vc, "10000000000000000000000000000000000000000000000000000000000000000"
+          "0000000000000000000000000000000000000000000000000000000");
+  Expr x9 = vc_varExpr(vc, "x9", arrT);
+  Expr x11 = vc_varExpr(vc, "x11", arrT);
+
+  Expr t20 = vc_sbvDivExpr(vc, 120, x0, c);
+  Expr t21 = vc_readExpr(vc, x9, x0);
+  Expr t22 = vc_readExpr(vc, x11, t21);
+  Expr t73 = vc_readExpr(vc, vc_writeExpr(vc, x9, x0, mins), t22);
+  Expr t84 = vc_eqExpr(vc, t73, x0);
+  Expr t111 =
+      vc_writeExpr(vc, vc_writeExpr(vc, x5, x0, t20), t22, x0);
+  Expr t132 = vc_eqExpr(vc, x9, t111);
+  Expr t134 = vc_eqExpr(vc, t21, c);
+
+  vc_assertFormula(vc, t134);
+
+  // check-sat-assuming (t84 t132 t84 t84), as a scope of assertions
+  vc_push(vc);
+  vc_assertFormula(vc, t84);
+  vc_assertFormula(vc, t132);
+  vc_assertFormula(vc, t84);
+  vc_assertFormula(vc, t84);
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+  vc_pop(vc);
+
+  // The base assertion alone is satisfiable.
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  vc_Destroy(vc);
+}
+
 TEST(array_extensionality, mixed_width_equality_dies_loudly)
 {
   // vc_eqExpr over arrays of different index widths cannot be
