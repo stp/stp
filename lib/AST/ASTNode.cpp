@@ -219,6 +219,30 @@ unsigned int ASTNode::GetExpWidth() const
   return stored == FP_NOT_A_FLOAT ? 0 : stored;
 }
 
+// A float's format may be stored only where it cannot be shared with a plain
+// bitvector use of the same node:
+//
+//  - on a leaf, whose sort is declared (a symbol) or fixed when it is made
+//    (an ASTFPConst, which interns apart from the plain constant holding the
+//    same bits);
+//  - on an interior node whose *kind* says it is a float, where it is derived
+//    from the kind and children rather than assigned (see deriveFPFormat) and
+//    so cannot disagree with anything;
+//  - on an array, where it describes the elements rather than the node.
+//
+// Never on a bitvector-kind interior node. Nodes are hash-consed and the
+// format is per-node state, so a format stamped on the bits a float lowers to
+// retypes everything else that denotes those bits: the input's own bitvectors
+// start reporting FLOATINGPOINT_TYPE solver-wide, bitvector operations over
+// them stop type checking, and to_fp reads an integer as a float. Lowering
+// therefore hands its format to the blaster as an argument instead (see
+// FloatBlaster::operandFormat and FloatBlast).
+bool ASTNode::canStoreFPFormat() const
+{
+  return Degree() == 0 || is_FP_kind(GetKind()) || GetKind() == FLOATINGPOINT ||
+         GetIndexWidth() > 0;
+}
+
 void ASTNode::SetExpWidth(unsigned int _ew) const
 {
   // A format may be set, re-set to the same value, or cleared -- never
@@ -228,25 +252,9 @@ void ASTNode::SetExpWidth(unsigned int _ew) const
          _int_node_ptr->getExpWidth() == 0xFFFFFFFFu /* not-a-float cache */ ||
          _ew == 0 || _int_node_ptr->getExpWidth() == _ew);
 
-  // A float's format may be stored only where it cannot be shared with a
-  // plain bitvector use of the same node:
-  //
-  //  - on a leaf, whose sort is declared (a symbol) or fixed when it is made
-  //    (an ASTFPConst, which interns apart from the plain constant holding
-  //    the same bits);
-  //  - on an interior node whose *kind* says it is a float, where it is
-  //    derived from the kind and children rather than assigned (see
-  //    deriveFPFormat) and so cannot disagree with anything.
-  //
-  // Never on a bitvector-kind interior node. Nodes are hash-consed and the
-  // format is per-node state, so a format stamped on the bits a float lowers
-  // to retypes everything else that denotes those bits: the input's own
-  // bitvectors start reporting FLOATINGPOINT_TYPE solver-wide, bitvector
-  // operations over them stop type checking, and to_fp reads an integer as a
-  // float. Lowering therefore hands its format to the blaster as an argument
-  // instead (see FloatBlaster::operandFormat and FloatBlast).
-  assert(_ew == 0 || Degree() == 0 || is_FP_kind(GetKind()) ||
-         GetKind() == FLOATINGPOINT || GetIndexWidth() > 0);
+  // Callers stamp only what can hold a stamp; withFormat is where that is
+  // decided, for the callers that do not already know.
+  assert(_ew == 0 || canStoreFPFormat());
   // One of the funnels through which a float's format arrives, so this is
   // where the manager learns that floats are in play. Not the only one:
   // a node that derives its format needs no stamp and never reaches here,
