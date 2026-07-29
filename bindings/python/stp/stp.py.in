@@ -1016,11 +1016,10 @@ class FloatExpr(Expr):
                                            b.expr, c.expr))
 
     # Comparisons: IEEE ordered comparisons; == is fp.eq, != its negation.
+    # (The operator spellings are defined below, with the isinstance guard.)
     def eq(self, other): return self._pred(_lib.vc_fpEqExpr, other)
-    __eq__ = eq
 
     def ne(self, other): return self.s.not_(self.eq(other))
-    __ne__ = ne
 
     def lt(self, other): return self._pred(_lib.vc_fpLtExpr, other)
     __lt__ = lt
