@@ -33,8 +33,10 @@ THE SOFTWARE.
 #include "stp/Simplifier/constantBitP/ConstantBitP_MaxPrecision.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
+#include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <vector>
 
 using std::endl;
 using std::cout;
@@ -287,9 +289,30 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
 
   ASTVec toConjoin;
 
-  // go through the fixedBits. If a node is entirely fixed.
-  // "and" it onto the top. Creates redundancy. Check that the
-  // node doesn't already depend on "top" directly.
+  // For each entirely fixed node: replace the node by its constant inside
+  // "top", and conjoin a fact that pins the node down, so the constraint
+  // isn't lost. The term-level facts are built from the original
+  // (pre-replacement) nodes, so they survive the replacement.
+  //
+  // The top-level conjuncts themselves are always fixed to true, so
+  // replacing each of them with TRUE and conjoining it back verbatim would
+  // rebuild the input and mask the term-level replacements underneath.
+  // Instead the boolean facts are collected first, rewritten with the term
+  // constants, and only acted on if that changed something or the fact
+  // isn't already part of "top".
+
+  // Term-level constants, later written into the boolean facts. Starts
+  // with the unconditionally fixed nodes.
+  ASTNodeMap termFacts(fromTo);
+
+  struct BoolFact
+  {
+    ASTNode node;
+    ASTNode proposition;
+    ASTNode constant;
+  };
+  std::vector<BoolFact> boolFacts;
+
   NodeToFixedBitsMap::NodeToFixedBitsMapType::iterator it, itEnd;
 
   // iterates through all the pairs of node->fixedBits.
@@ -311,77 +334,72 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
     if (BVEXTRACT == node.GetKind() || BVCONCAT == node.GetKind())
       continue;
 
-    // toAssign: conjoin it with the top level.
-    // toReplace: replace all references to it (except the one conjoined to the
-    // top) with this.
-    ASTNode propositionToAssert;
-    ASTNode constantToReplaceWith;
-    // skip the assigning and replacing.
-    bool doAssign = false;
+    // If it is already contained in the fromTo map, then it's one of the
+    // values that have fully been determined (previously). Not conjoined.
+    if (fromTo.find(node) != fromTo.end())
+      continue;
 
+    if (node.GetType() != BOOLEAN_TYPE && node.GetType() != BITVECTOR_TYPE)
+      FatalError("sadf234s");
+
+    ASTNode constNode = bitsToNode(node, bits);
+
+    if (SYMBOL == node.GetKind())
     {
-      // If it is already contained in the fromTo map, then it's one of the
-      // values
-      // that have fully been determined (previously). Not conjoined.
-      if (fromTo.find(node) != fromTo.end())
+      bool r = simplifier->UpdateSubstitutionMap(node, constNode);
+      assert(r);
+    }
+    else if (!conjoinToTop)
+    {
+      // Not allowed to strengthen the top, so the fact is unusable.
+    }
+    else if (node.GetType() == BOOLEAN_TYPE)
+    {
+      ASTNode prop = bits.getValue(0) ? node : nf->CreateNode(NOT, node);
+      boolFacts.push_back({node, prop, constNode});
+    }
+    else
+    {
+      assert(((unsigned)bits.getWidth()) == node.GetValueWidth());
+
+      ASTNode prop = nf->CreateNode(EQ, node, constNode);
+      if (top == prop)
         continue;
 
-      ASTNode constNode = bitsToNode(node, bits);
-
-      if (node.GetType() == BOOLEAN_TYPE)
-      {
-        if (SYMBOL == node.GetKind())
-        {
-          bool r = simplifier->UpdateSubstitutionMap(node, constNode);
-          assert(r);
-          doAssign = false;
-        }
-        else if (conjoinToTop && bits.getValue(0))
-        {
-          propositionToAssert = node;
-          constantToReplaceWith = constNode;
-          doAssign = true;
-        }
-        else if (conjoinToTop)
-        {
-          propositionToAssert = nf->CreateNode(NOT, node);
-          constantToReplaceWith = constNode;
-          doAssign = true;
-        }
-      }
-      else if (node.GetType() == BITVECTOR_TYPE)
-      {
-        assert(((unsigned)bits.getWidth()) == node.GetValueWidth());
-        if (SYMBOL == node.GetKind())
-        {
-          bool r = simplifier->UpdateSubstitutionMap(node, constNode);
-          assert(r);
-          doAssign = false;
-        }
-        else if (conjoinToTop)
-        {
-          propositionToAssert = nf->CreateNode(EQ, node, constNode);
-          constantToReplaceWith = constNode;
-          doAssign = true;
-        }
-      }
-      else
-        FatalError("sadf234s");
-    }
-
-    if (doAssign && top != propositionToAssert &&
-        !dependents->nodeDependsOn(top, propositionToAssert))
-    {
-      assert(!constantToReplaceWith.IsNull());
-      assert(constantToReplaceWith.isConstant());
-      assert(propositionToAssert.GetType() == BOOLEAN_TYPE);
-      assert(node.GetValueWidth() == constantToReplaceWith.GetValueWidth());
-
-      fromTo.insert(make_pair(node, constantToReplaceWith));
-      toConjoin.push_back(propositionToAssert);
-      assert(conjoinToTop);
+      fromTo.insert(make_pair(node, constNode));
+      termFacts.insert(make_pair(node, constNode));
+      if (nf->getTrue() != prop)
+        toConjoin.push_back(prop);
     }
   }
+
+  // Write the term constants into each boolean fact. A fact the constants
+  // don't change, and that "top" already contains, carries no new
+  // information: leave it (and the node's occurrences) alone.
+  {
+    ASTNodeMap propCache;
+    for (const auto& fact : boolFacts)
+    {
+      if (top == fact.proposition)
+        continue;
+
+      const ASTNode rewritten =
+          SubstitutionMap::replace(fact.proposition, termFacts, propCache, nf);
+
+      if (rewritten == fact.proposition &&
+          dependents->nodeDependsOn(top, fact.proposition))
+        continue;
+
+      fromTo.insert(make_pair(fact.node, fact.constant));
+      if (nf->getTrue() != rewritten)
+        toConjoin.push_back(rewritten);
+    }
+  }
+
+  // The fixedMap iteration order isn't defined; sort for determinism.
+  SortByExprNum(toConjoin);
+  toConjoin.erase(std::unique(toConjoin.begin(), toConjoin.end()),
+                  toConjoin.end());
 
   // Write the constants into the main graph.
   ASTNodeMap cache;
