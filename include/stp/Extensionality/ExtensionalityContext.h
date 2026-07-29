@@ -222,7 +222,21 @@ public:
     EXT_SKIPPED,
     EXT_CONSISTENT,
     EXT_CONFLICT,
-    EXT_WITNESS_ERROR
+    EXT_WITNESS_ERROR,
+    // The propagation reached a conflict-free fixed point, but some
+    // access's scalar name evaluates differently from the term it
+    // stands for in the completed candidate model. The anchoring
+    // equation ties the name to the term only as the term was
+    // bit-blasted; a read of an array outside the cone is abstracted
+    // lazily by the host, so until the host's read refinement links
+    // them, two abstractions of the same cell can be held apart, and
+    // preprocessing can leave two forms of one term that end up
+    // abstracted independently. Such a candidate must not be
+    // certified: the checker placed accesses at cells the completed
+    // model contradicts. It is also not refutable by an array lemma
+    // -- the missing fact is an ordinary read-congruence axiom, which
+    // is exactly what the host's refinement adds.
+    EXT_NAME_DIVERGENCE
   };
 
   enum CertificationAction
@@ -239,12 +253,21 @@ public:
   // are exempt from STP's ordinary read refinement, so only the array
   // lemma can rule such a candidate out -- and a candidate is only ever
   // reported satisfiable when both checks pass on the same assignment.
+  // A name divergence routes to the host's read refinement whatever
+  // the ordinary result was: the candidate is untrustworthy, and the
+  // missing fact is an ordinary read-congruence axiom, not an array
+  // lemma.
   static CertificationAction decideCertification(bool ordinaryResult,
                                                  bool registryNonempty,
                                                  CandidateOutcome ext);
 
   // Run the pure checker against the current candidate model. On
-  // conflict the certificate is stored as the pending lemma.
+  // conflict the certificate is stored as the pending lemma. On a
+  // conflict-free fixed point, publish the observed array contents
+  // into the counterexample map -- so model evaluation and the model
+  // APIs see the certified contents -- and then verify every access's
+  // scalar names against its terms evaluated in the completed model,
+  // reporting EXT_NAME_DIVERGENCE on disagreement.
   CandidateOutcome checkCandidate(AbsRefine_CounterExample* ce);
 
   bool hasPendingLemma() const { return pendingLemmaValid; }
@@ -266,13 +289,6 @@ public:
   // never checked against.
   static const char* checkPreencodedBV(const ASTNode& n,
                                        const ToSATBase::ASTNodeToSATVar& satVar);
-
-  // Publish the conflict-free observed (index, value) pairs of every
-  // cone array -- including write nodes and the fresh arrays introduced
-  // for array if-then-else -- into the counterexample map, so model
-  // evaluation, the model APIs, and the printers all see the array
-  // contents the consistency check certified.
-  void publishObservations(AbsRefine_CounterExample* ce);
 
   // Every symbol EXTCHK relies on keeps its SAT variables (frozen
   // against backend variable elimination).
@@ -375,6 +391,17 @@ private:
   std::map<ASTNode, std::vector<std::pair<ASTNode, ASTNode>>> lastObserved;
 
   // helpers
+  // Publish the conflict-free observed (index, value) pairs of every
+  // cone array -- including write nodes and the fresh arrays introduced
+  // for array if-then-else -- into the counterexample map, so model
+  // evaluation, the model APIs, and the printers all see the array
+  // contents the consistency check certified. Called by checkCandidate
+  // on every conflict-free fixed point, before the name verification.
+  void publishObservations(AbsRefine_CounterExample* ce);
+  // With the observations published, check that every access's scalar
+  // names evaluate exactly like the terms they stand for; false means
+  // EXT_NAME_DIVERGENCE.
+  bool namesAgreeWithCandidate(ExtModelView& view) const;
   void collectPossibleConeSymbols(const ASTNode& n);
   ASTNode freshName(const ASTNode& term, ASTVec& namingConstraints);
   void computeProvisionalCone(const ASTNode& root,

@@ -1528,14 +1528,14 @@ TEST_F(ExtPrepareTest, MixedIndexSortEqualityFailsLoudly)
 // The decision table combining STP's own model evaluation with the
 // array consistency check: an array conflict always takes priority
 // (only its lemma can rule the candidate out), and a candidate is
-// satisfiable only when both checks pass. All sixteen cells.
+// satisfiable only when both checks pass. All twenty cells.
 TEST(ExtCertification, TruthTable)
 {
   typedef ExtensionalityContext EC;
   // registry empty: EXTCHK skipped; ordinary result decides. (A
   // consistent verdict without a registry is tolerated identically;
-  // conflict or witness trouble from a checker that had nothing to
-  // check is an internal error.)
+  // conflict, witness trouble or a name divergence from a checker
+  // that had nothing to check is an internal error.)
   EXPECT_EQ(EC::RETURN_SAT,
             EC::decideCertification(true, false, EC::EXT_SKIPPED));
   EXPECT_EQ(EC::RUN_HOST_REFINEMENT,
@@ -1552,12 +1552,19 @@ TEST(ExtCertification, TruthTable)
             EC::decideCertification(true, false, EC::EXT_WITNESS_ERROR));
   EXPECT_EQ(EC::INTERNAL_ERROR,
             EC::decideCertification(false, false, EC::EXT_WITNESS_ERROR));
+  EXPECT_EQ(EC::INTERNAL_ERROR,
+            EC::decideCertification(true, false, EC::EXT_NAME_DIVERGENCE));
+  EXPECT_EQ(EC::INTERNAL_ERROR,
+            EC::decideCertification(false, false, EC::EXT_NAME_DIVERGENCE));
 
   // registry nonempty: EXTCHK conflict has priority over both ordinary
   // results; SAT only for ordinary-true + consistent; a skipped check
   // despite a nonempty registry is an internal error whatever the
   // ordinary result was, since cone reads are exempt from ordinary
-  // refinement and only the checker polices them.
+  // refinement and only the checker polices them. A name divergence
+  // hands the candidate to the host's read refinement in both cases:
+  // it is neither certifiable nor refutable by an array lemma, and the
+  // missing link is an ordinary read-congruence axiom.
   EXPECT_EQ(EC::RETURN_SAT,
             EC::decideCertification(true, true, EC::EXT_CONSISTENT));
   EXPECT_EQ(EC::ADD_EXT_LEMMA,
@@ -1574,6 +1581,10 @@ TEST(ExtCertification, TruthTable)
             EC::decideCertification(true, true, EC::EXT_SKIPPED));
   EXPECT_EQ(EC::INTERNAL_ERROR,
             EC::decideCertification(false, true, EC::EXT_SKIPPED));
+  EXPECT_EQ(EC::RUN_HOST_REFINEMENT,
+            EC::decideCertification(true, true, EC::EXT_NAME_DIVERGENCE));
+  EXPECT_EQ(EC::RUN_HOST_REFINEMENT,
+            EC::decideCertification(false, true, EC::EXT_NAME_DIVERGENCE));
 }
 
 } // namespace

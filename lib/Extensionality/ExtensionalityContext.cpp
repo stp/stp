@@ -1100,6 +1100,15 @@ ExtensionalityContext::decideCertification(bool ordinaryResult,
     return ADD_EXT_LEMMA;
   if (ext == EXT_WITNESS_ERROR)
     return INTERNAL_ERROR;
+  // A candidate whose scalar names disagree with their terms is
+  // untrustworthy in both directions -- neither certifiable as
+  // satisfiable nor refutable by an array lemma. The host's read
+  // refinement owns the missing fact: the disagreement exhibits two
+  // reads of an array outside the cone at equal evaluated indexes
+  // with different values, and their congruence axiom is precisely
+  // what it adds.
+  if (ext == EXT_NAME_DIVERGENCE)
+    return RUN_HOST_REFINEMENT;
   if (ext != EXT_CONSISTENT)
     return INTERNAL_ERROR;
   return ordinaryResult ? RETURN_SAT : RUN_HOST_REFINEMENT;
@@ -1116,6 +1125,12 @@ ExtensionalityContext::checkCandidate(AbsRefine_CounterExample* ce)
   {
     case ExtCheckResult::CONSISTENT:
       lastObserved = res.observed;
+      // Publishing first makes the certified array contents visible
+      // to term evaluation; only then can a cone read's term be
+      // compared against its name.
+      publishObservations(ce);
+      if (!namesAgreeWithCandidate(view))
+        return EXT_NAME_DIVERGENCE;
       return EXT_CONSISTENT;
     case ExtCheckResult::CONFLICT:
       pendingLemma = res.conflict;
@@ -1125,6 +1140,34 @@ ExtensionalityContext::checkCandidate(AbsRefine_CounterExample* ce)
     default:
       return EXT_WITNESS_ERROR;
   }
+}
+
+// The checker reads the candidate through scalar names, trusting each
+// name to equal its term because the anchoring equation was part of
+// the bit-blasted formula. That equation binds the name to the term
+// *as it was bit-blasted*: reads of arrays outside the cone are
+// abstracted lazily by the host, and until the host's read refinement
+// links them, two abstractions of the same cell can be held apart --
+// while preprocessing may leave two syntactic forms of one term, each
+// abstracted independently. A name then anchors to one abstraction
+// while evaluating the term resolves the other, the checker places
+// accesses at cells the completed model contradicts, and a
+// conflict-free fixed point certifies nothing. Verify, with the
+// observations published, that every access's names evaluate exactly
+// like their terms; constants stand for themselves and need no check.
+bool ExtensionalityContext::namesAgreeWithCandidate(ExtModelView& view) const
+{
+  for (size_t i = 0; i < graph.accesses.size(); i++)
+  {
+    const ExtAccess& a = graph.accesses[i];
+    if (!(a.indexName == a.indexTerm) &&
+        view.bvValue(a.indexName) != view.bvValue(a.indexTerm))
+      return false;
+    if (!(a.valueName == a.valueTerm) &&
+        view.bvValue(a.valueName) != view.bvValue(a.valueTerm))
+      return false;
+  }
+  return true;
 }
 
 // Encode the pending lemma into the persistent incremental SAT solver
