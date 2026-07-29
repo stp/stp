@@ -1055,11 +1055,13 @@ void AbsRefine_CounterExample::outputLine(std::ostream& os, const ASTNode &f, AS
       const bool rm_element = bm->arrayHasRmElement(array);
       const bool fp_element = array.GetExpWidth() != 0;
 
-      os << "( define-fun ";
+      os << "(define-fun ";
 
       os << "|";
       array.nodeprint(os);
-      os << "| ";
+      // No trailing space: the sorts and values below each supply their own
+      // leading one, exactly as in the scalar branch above.
+      os << "|";
 
       if (fp_index)
         os << " (_ FloatingPoint " << idx_exp << " " << idx_sig << ")";
@@ -1116,7 +1118,7 @@ void AbsRefine_CounterExample::outputLine(std::ostream& os, const ASTNode &f, AS
       else
         printer::outputBitVecSMTLIB2(value, os);
 
-      os << " )" << endl;
+      os << ")" << endl;
     }
 
 }

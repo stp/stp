@@ -20,5 +20,5 @@
 ; CHECK-L: ( |x| (fp #b0 #b11111111 #b10000000000000000000000) )
 (get-value (x))
 ; CHECK-L: (define-fun |x| () (_ FloatingPoint 8 24) (fp #b0 #b11111111 #b10000000000000000000000))
-; CHECK-L: ( define-fun |a|  (_ BitVec 2) (_ FloatingPoint 8 24) #b00 (fp #b0 #b11111111 #b10000000000000000000000) )
+; CHECK-L: (define-fun |a| (_ BitVec 2) (_ FloatingPoint 8 24) #b00 (fp #b0 #b11111111 #b10000000000000000000000))
 (get-model)
