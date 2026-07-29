@@ -2690,6 +2690,20 @@ TERMID_TOK
 
 |  ITE_TOK an_formula an_term an_term
 {
+  // Reject branches of different floating-point formats up front, as the
+  // (= ...) rule does for its operands: with a constant condition the
+  // factory folds the if-then-else to one branch before any type check can
+  // see the pair, and two formats can share one packed width -- (8, 24)
+  // and (24, 8) are both 32 bits -- so the width checks cannot tell them
+  // apart. (BVTypeCheck's ITE case backs this up for a symbolic
+  // condition.) One float branch and one plain bitvector branch stay
+  // legal, as everywhere bits stand for a float.
+  if ($3->GetExpWidth() != 0 && $4->GetExpWidth() != 0 &&
+      ($3->GetExpWidth() != $4->GetExpWidth() ||
+       $3->GetSigWidth() != $4->GetSigWidth()))
+  {
+    fatal_yyerror("ite branches differ in floating-point format");
+  }
   const unsigned int width = $3->GetValueWidth();
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateArrayTerm(ITE,$4->GetIndexWidth(), width,*$2, *$3, *$4));
   stp::GlobalParserInterface->deleteNode( $2);

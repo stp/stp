@@ -1728,6 +1728,27 @@ Expr vc_iteExpr(VC vc, Expr cond, Expr thenpart, Expr elsepart)
   assert(BVTypeCheck(*c));
   assert(BVTypeCheck(*t));
   assert(BVTypeCheck(*e));
+
+  // Branches that BOTH claim to be floats must agree on the format: two
+  // formats can share one packed width -- (8, 24) and (24, 8) are both 32
+  // bits -- so the width checks cannot tell them apart, and the node would
+  // derive whichever branch's format comes first (see deriveFPFormat) and
+  // silently read the other branch's bits at it. Checked here, not only in
+  // BVTypeCheck: the asserts above compile out of a release build, and a
+  // constant condition folds the if-then-else to one branch before any
+  // type check can see the pair. Covers arrays too, whose exponent and
+  // significand widths carry the element's format. One float branch and
+  // one plain bitvector branch stay legal, as everywhere bits stand for a
+  // float.
+  if (t->GetExpWidth() != 0 && e->GetExpWidth() != 0 &&
+      (t->GetExpWidth() != e->GetExpWidth() ||
+       t->GetSigWidth() != e->GetSigWidth()))
+  {
+    stp::FatalError("CInterface: vc_iteExpr: the then and else branches "
+                    "differ in floating-point format: ",
+                    *t);
+  }
+
   stp::ASTNode o;
   // if the user asks for a formula then produce a formula, else
   // prodcue a term

@@ -418,6 +418,26 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
         FatalError("BVTypeCheck: length of THENbranch != length of "
                    "ELSEbranch in the term t = \n",
                    n);
+      // Branches that BOTH claim to be floats must agree on the format, as
+      // for EQ below: two formats can share one packed width -- (8, 24) and
+      // (24, 8) are both 32 bits -- so the width checks cannot tell them
+      // apart, and the node would derive whichever branch's format comes
+      // first (see deriveFPFormat) and silently read the other branch's
+      // bits at it. One float branch and one plain bitvector branch stay
+      // legal: that mix is the one-class rule above, and arises routinely
+      // once lowering has replaced a branch with its circuit.
+      if (n[1].GetExpWidth() != 0 && n[2].GetExpWidth() != 0 &&
+          (n[1].GetExpWidth() != n[2].GetExpWidth() ||
+           n[1].GetSigWidth() != n[2].GetSigWidth()))
+      {
+        cerr << "expwidth of THENbranch: " << n[1].GetExpWidth() << endl;
+        cerr << "expwidth of ELSEbranch: " << n[2].GetExpWidth() << endl;
+        cerr << "sigwidth of THENbranch: " << n[1].GetSigWidth() << endl;
+        cerr << "sigwidth of ELSEbranch: " << n[2].GetSigWidth() << endl;
+        FatalError("BVTypeCheck: the THENbranch and ELSEbranch differ in "
+                   "floating-point format in the term t = \n",
+                   n);
+      }
       break;
 
     case READ:
