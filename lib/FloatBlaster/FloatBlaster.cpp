@@ -64,6 +64,25 @@ ASTNode FloatBlaster::withFormat(STPMgr* bm, const ASTNode& n,
   if (n.GetKind() == BVCONST)
     return bm->CreateFPConst(n, exp_width, sig_width);
 
+  // A bitvector-kind interior node has nowhere to put a format: nodes are
+  // hash-consed and the format is per-node state, so a stamp here would retype
+  // every other use of the same bits (see ASTNode::canStoreFPFormat). Leave it
+  // the bitvector it is.
+  //
+  // What reaches this is a caller carrying one node's format over to another
+  // -- a rebuild, a fold, a pull-up -- and meeting a node the format was never
+  // its to hold. Once the floating-point layer is lowered a float and its
+  // packed bits are the same node to everything but the format, and structure
+  // that survives lowering goes on deriving a format from the float symbol
+  // underneath it: (ite c (fp.abs x) x) over a Float64 x is an ordinary 64-bit
+  // if-then-else by then, and still answers 11/53, because its else branch is
+  // x and x's format is declared (see deriveFPFormat). Fold the condition, as
+  // the simplifier does once it turns out to be a tautology, and what is left
+  // is the circuit lowering built for (fp.abs x): bits, needing no format,
+  // with the blaster long finished with them.
+  if (!n.canStoreFPFormat())
+    return n;
+
   ASTNode out(n);
   out.SetExpWidth(exp_width);
   out.SetSigWidth(sig_width);

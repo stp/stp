@@ -271,6 +271,13 @@ public:
   void SetSigWidth(unsigned int sw) const;
   void SetExpWidth(unsigned int ew) const;
 
+  // Whether a floating-point format may be *stored* on this node, rather than
+  // derived from its kind and children or not carried at all. SetExpWidth
+  // asserts on it and FloatBlaster::withFormat -- the funnel that decides
+  // where a format goes -- consults it; the rule, and what stamping a node
+  // that fails it would do, are with the definition.
+  bool canStoreFPFormat() const;
+
   // Hash is the node's unique id. Inlined: used by every ==/</hash lookup.
   size_t Hash() const { return _int_node_ptr ? _int_node_ptr->node_uid : 0; }
 
