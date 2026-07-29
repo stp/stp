@@ -112,6 +112,13 @@ public:
   // it can, returns validated witnesses for x.
   Decision decide(Kind pred, bool pathIsFirstOperand, const ASTNode& k);
 
+  // Whether the predicate can be forced to `desired` by choice of x,
+  // with a validated witness. Weaker than decide(): the caller must
+  // separately establish that fixing this one outcome is sound (the
+  // predicate's global polarity only benefits from it).
+  bool decideOneSided(Kind pred, bool pathIsFirstOperand, const ASTNode& k,
+                      bool desired, ASTNode& witness);
+
   static bool handledKind(Kind k);
   static bool predicateKind(Kind k);
 

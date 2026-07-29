@@ -1216,4 +1216,98 @@ AchievableImage::Decision AchievableImage::decide(Kind pred,
   decision.witnessFalse = bm.CreateBVConst(xFalse, varWidth); // takes ownership
   return decision;
 }
+
+bool AchievableImage::decideOneSided(Kind pred, bool pathIsFirstOperand,
+                                     const ASTNode& kNode, bool desired,
+                                     ASTNode& witness)
+{
+  if (!predicateKind(pred))
+    return false;
+  assert(kNode.isConstant() && kNode.GetValueWidth() == curWidth);
+  const CBV k = kNode.GetBVConst();
+
+  CBV x = NULL;
+
+  if (rep == Rep::Exact)
+  {
+    CBV member = NULL; // owned member of [lo, hi]
+    if (pred == EQ)
+    {
+      if (desired)
+      {
+        if (ucmp(lo, k) <= 0 && ucmp(k, hi) <= 0)
+          member = clone(k);
+      }
+      else
+      {
+        // Any member != k; an endpoint works unless the interval is
+        // the single point k.
+        if (ucmp(lo, k) != 0)
+          member = clone(lo);
+        else if (ucmp(hi, k) != 0)
+          member = clone(hi);
+      }
+    }
+    else
+    {
+      // The best member for the wanted polarity is an extreme in the
+      // comparison's order; see decide() for the signed correction.
+      CBV mn, mx;
+      const bool isSigned =
+          (pred == BVSGT || pred == BVSGE || pred == BVSLT || pred == BVSLE);
+      const bool crossing =
+          !CONSTANTBV::BitVector_bit_test(lo, curWidth - 1) &&
+          CONSTANTBV::BitVector_bit_test(hi, curWidth - 1);
+      if (isSigned && crossing)
+      {
+        mx = mkOnes(curWidth);
+        CONSTANTBV::BitVector_Bit_Off(mx, curWidth - 1);
+        mn = mkZero(curWidth);
+        CONSTANTBV::BitVector_Bit_On(mn, curWidth - 1);
+      }
+      else
+      {
+        mn = clone(lo);
+        mx = clone(hi);
+      }
+      const bool greater =
+          (pred == BVGT || pred == BVGE || pred == BVSGT || pred == BVSGE);
+      const bool trueAtMax = (greater == pathIsFirstOperand);
+      CBV candidate = (desired == trueAtMax) ? mx : mn;
+      if (evalPredicate(pred, pathIsFirstOperand, candidate, k) == desired)
+        member = clone(candidate);
+      destroy(mn);
+      destroy(mx);
+    }
+    if (member == NULL)
+      return false;
+    x = invertPrefix(member);
+  }
+  else
+  {
+    for (const Sample& s : samples)
+    {
+      if (evalPredicate(pred, pathIsFirstOperand, s.value, k) == desired)
+      {
+        x = clone(s.witness);
+        break;
+      }
+    }
+    if (x == NULL)
+      return false;
+  }
+
+  // As in decide(): this forward check is what makes the rewrite
+  // sound. A failure here is a transfer/inversion bug.
+  const bool ok = validate(x, pred, pathIsFirstOperand, k, desired);
+  assert(ok);
+  if (!ok)
+  {
+    destroy(x);
+    return false;
+  }
+
+  witness = bm.CreateBVConst(x, varWidth); // takes ownership
+  return true;
+}
 }

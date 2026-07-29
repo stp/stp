@@ -235,6 +235,50 @@ struct Context
     checkEquivalent(back, result);
   }
 
+  // Exhaustively decide satisfiability of `n` over its free variables.
+  bool satisfiable(const ASTNode& n)
+  {
+    ASTNodeSet symSet;
+    collectSymbols(n, symSet);
+    std::vector<ASTNode> syms(symSet.begin(), symSet.end());
+
+    unsigned long combos = 1;
+    for (const auto& s : syms)
+      combos *= domainSize(s);
+    EXPECT_LE(combos, 1u << 16)
+        << "too many assignments (" << combos << ") -- lower the width";
+
+    for (unsigned long c = 0; c < combos; c++)
+    {
+      ASTNodeMap assignment;
+      unsigned long rest = c;
+      for (size_t i = 0; i < syms.size(); i++)
+      {
+        const unsigned size = domainSize(syms[i]);
+        assignment.insert({syms[i], valueFor(syms[i], rest % size)});
+        rest /= size;
+      }
+      if (eval(n, assignment) == mgr.ASTTrue)
+        return true;
+    }
+    return false;
+  }
+
+  // For the one-sided (polarity-gated) collapse. The back-substitution
+  // identity still holds -- the witness decides the predicate regardless
+  // of the other variables -- but it is NOT sufficient there: a rewrite
+  // gated on the WRONG polarity would pass it while changing
+  // satisfiability. So additionally check satisfiability is unchanged.
+  ASTNode checkEquisat(const ASTNode& top)
+  {
+    ASTNode result = run(top);
+    ASTNode back = backSubstitute(top);
+    checkEquivalent(back, result);
+    EXPECT_EQ(satisfiable(top), satisfiable(result))
+        << "rewrite changed satisfiability";
+    return result;
+  }
+
   void checkSound(const ASTNode& opNode)
   {
     ASTNode top;
@@ -1072,4 +1116,313 @@ TEST(RemoveUnconstrained_GroundPath, shared_interior_no_collapse)
 
   Context c;
   c.checkSoundTop(build(c));
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// 4) One-sided (polarity-gated) collapse. A symbolic sibling on the path
+//    ends image tracking, but forcing the path to the operator's absorbing
+//    element -- x := 0 through bvand/bvmul, ones through bvor -- fixes the
+//    chain's value regardless of the sibling. That single known outcome
+//    collapses the predicate to a constant, which is sound exactly when the
+//    predicate's global polarity is pure and prefers it. The same rule
+//    rescues all-constant chains where only one polarity is achievable.
+//
+//    Every test here goes through checkEquisat: the pointwise back-
+//    substitution check alone cannot catch a wrong-polarity rewrite.
+/////////////////////////////////////////////////////////////////////////////
+
+TEST(RemoveUnconstrained_OneSided, and_mask_zero_positive)
+{
+  // The motivating alignment-check idiom: (= (bvand x t) 0) with symbolic
+  // t, occurring positively. x := 0 forces it true.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode t = c.bv();
+  ASTNode p =
+      c.hf->CreateNode(EQ, c.hf->CreateTerm(BVAND, W, x, t), c.konst(0));
+  ASTNode top =
+      c.hf->CreateNode(AND, p, c.hf->CreateNode(BVGT, t, c.konst(1)));
+
+  c.checkEquisat(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+}
+
+TEST(RemoveUnconstrained_OneSided, and_mask_nonzero_positive_declines)
+{
+  // (= (bvand x t) 5) positively: the only known value (0) makes it
+  // FALSE, and forcing a positive occurrence false is not sound -- some
+  // other choice of x might satisfy it. Must decline.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode t = c.bv();
+  ASTNode p =
+      c.hf->CreateNode(EQ, c.hf->CreateTerm(BVAND, W, x, t), c.konst(5));
+  ASTNode top =
+      c.hf->CreateNode(AND, p, c.hf->CreateNode(BVGT, t, c.konst(1)));
+
+  c.checkEquisat(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 0u)
+      << "x eliminated against the polarity";
+}
+
+TEST(RemoveUnconstrained_OneSided, and_mask_nonzero_negative)
+{
+  // (not (= (bvand x t) 5)): the equality occurs negatively and x := 0
+  // forces it false -- exactly what a negative occurrence wants.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode t = c.bv();
+  ASTNode p =
+      c.hf->CreateNode(EQ, c.hf->CreateTerm(BVAND, W, x, t), c.konst(5));
+  ASTNode top = c.hf->CreateNode(AND, c.hf->CreateNode(NOT, p),
+                                 c.hf->CreateNode(BVGT, t, c.konst(1)));
+
+  c.checkEquisat(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+}
+
+TEST(RemoveUnconstrained_OneSided, and_mask_zero_negative_declines)
+{
+  // (not (= (bvand x t) 0)): forcing the equality TRUE under a negative
+  // occurrence would flip a satisfiable formula (t > 1, bvand x t != 0)
+  // to unsatisfiable. The polarity gate must refuse.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode t = c.bv();
+  ASTNode p =
+      c.hf->CreateNode(EQ, c.hf->CreateTerm(BVAND, W, x, t), c.konst(0));
+  ASTNode top = c.hf->CreateNode(AND, c.hf->CreateNode(NOT, p),
+                                 c.hf->CreateNode(BVGT, t, c.konst(1)));
+
+  c.checkEquisat(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 0u)
+      << "x eliminated against the polarity";
+}
+
+TEST(RemoveUnconstrained_OneSided, or_mask_ones_positive)
+{
+  // bvor's absorbing element is all-ones: x := 7 forces (bvor x t) = 7.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode t = c.bv();
+  ASTNode p =
+      c.hf->CreateNode(EQ, c.hf->CreateTerm(BVOR, W, x, t), c.konst(7));
+  ASTNode top =
+      c.hf->CreateNode(AND, p, c.hf->CreateNode(BVGT, t, c.konst(1)));
+
+  c.checkEquisat(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+}
+
+TEST(RemoveUnconstrained_OneSided, mult_symbolic_zero)
+{
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode t = c.bv();
+  ASTNode p =
+      c.hf->CreateNode(EQ, c.hf->CreateTerm(BVMULT, W, x, t), c.konst(0));
+  ASTNode top =
+      c.hf->CreateNode(AND, p, c.hf->CreateNode(BVGT, t, c.konst(1)));
+
+  c.checkEquisat(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+}
+
+TEST(RemoveUnconstrained_OneSided, shift_symbolic_zero)
+{
+  // A zero VALUE operand absorbs a symbolic shift amount.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode t = c.bv();
+  ASTNode p = c.hf->CreateNode(
+      EQ, c.hf->CreateTerm(BVLEFTSHIFT, W, x, t), c.konst(0));
+  ASTNode top =
+      c.hf->CreateNode(AND, p, c.hf->CreateNode(BVGT, t, c.konst(0)));
+
+  c.checkEquisat(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+}
+
+TEST(RemoveUnconstrained_OneSided, urem_symbolic_divisor)
+{
+  // A zero dividend gives zero for every divisor (STP defines
+  // remainder-by-zero as the dividend).
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode t = c.bv();
+  ASTNode p =
+      c.hf->CreateNode(EQ, c.hf->CreateTerm(BVMOD, W, x, t), c.konst(0));
+  ASTNode top =
+      c.hf->CreateNode(AND, p, c.hf->CreateNode(BVGT, t, c.konst(1)));
+
+  c.checkEquisat(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+}
+
+TEST(RemoveUnconstrained_OneSided, ground_steps_above_absorbing)
+{
+  // (= (bvadd (bvand x t) 3) 3): the known value 0 flows through the
+  // constant add by evaluation.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode t = c.bv();
+  ASTNode add = c.hf->CreateTerm(
+      BVPLUS, W, c.hf->CreateTerm(BVAND, W, x, t), c.konst(3));
+  ASTNode top =
+      c.hf->CreateNode(AND, c.hf->CreateNode(EQ, add, c.konst(3)),
+                       c.hf->CreateNode(BVGT, t, c.konst(1)));
+
+  c.checkEquisat(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+}
+
+TEST(RemoveUnconstrained_OneSided, ground_steps_below_absorbing)
+{
+  // (= (bvand (bvurem x 4) t) 0): the absorbing element must be reached
+  // THROUGH the prefix chain; the image supplies a witness with
+  // (x mod 4) = 0.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode t = c.bv();
+  ASTNode band = c.hf->CreateTerm(
+      BVAND, W, c.hf->CreateTerm(BVMOD, W, x, c.konst(4)), t);
+  ASTNode top =
+      c.hf->CreateNode(AND, c.hf->CreateNode(EQ, band, c.konst(0)),
+                       c.hf->CreateNode(BVGT, t, c.konst(1)));
+
+  c.checkEquisat(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+}
+
+TEST(RemoveUnconstrained_OneSided, ite_frame_above_absorbing)
+{
+  // (= (ite (= y 0) (bvand x t) y) 0) positively: the predicate
+  // distributes over the frame, ite((= y 0), true, (= y 0)), with
+  // x := 0 recorded unconditionally.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode t = c.bv();
+  ASTNode y = c.bv();
+  ASTNode ite =
+      c.hf->CreateTerm(ITE, W, c.hf->CreateNode(EQ, y, c.konst(0)),
+                       c.hf->CreateTerm(BVAND, W, x, t), y);
+  ASTNode top =
+      c.hf->CreateNode(AND, c.hf->CreateNode(EQ, ite, c.konst(0)),
+                       c.hf->CreateNode(BVGT, t, c.konst(1)));
+
+  c.checkEquisat(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+}
+
+TEST(RemoveUnconstrained_OneSided, ite_frame_below_absorbing_declines)
+{
+  // The frame's other branch would need the symbolic bvand re-applied
+  // around it, which the rebuild cannot express: a frame below the
+  // absorbing step must decline.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode t = c.bv();
+  ASTNode y = c.bv();
+  ASTNode ite =
+      c.hf->CreateTerm(ITE, W, c.hf->CreateNode(EQ, y, c.konst(0)),
+                       c.hf->CreateTerm(BVMOD, W, x, c.konst(4)), y);
+  ASTNode band = c.hf->CreateTerm(BVAND, W, ite, t);
+  ASTNode top =
+      c.hf->CreateNode(AND, c.hf->CreateNode(EQ, band, c.konst(0)),
+                       c.hf->CreateNode(BVGT, t, c.konst(1)));
+
+  c.checkEquisat(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 0u)
+      << "x eliminated past a frame below the absorbing step";
+}
+
+TEST(RemoveUnconstrained_OneSided, xor_polarity_declines)
+{
+  // Under XOR the predicate has both polarities: no forced outcome is
+  // safe.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode t = c.bv();
+  ASTNode p =
+      c.hf->CreateNode(EQ, c.hf->CreateTerm(BVAND, W, x, t), c.konst(0));
+  ASTNode top =
+      c.hf->CreateNode(XOR, p, c.hf->CreateNode(BVGT, t, c.konst(1)));
+
+  c.checkEquisat(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 0u)
+      << "x eliminated under mixed polarity";
+}
+
+TEST(RemoveUnconstrained_OneSided, shared_predicate_positive)
+{
+  // The predicate node has two parents, both positive: still pure, so
+  // both occurrences become true at once.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode t = c.bv();
+  ASTNode y = c.bv();
+  ASTNode z = c.bv();
+  ASTNode p =
+      c.hf->CreateNode(EQ, c.hf->CreateTerm(BVAND, W, x, t), c.konst(0));
+  ASTNode top = c.hf->CreateNode(
+      AND, c.hf->CreateNode(OR, p, c.anchorFor(y)),
+      c.hf->CreateNode(OR, p, c.anchorFor(z)),
+      c.hf->CreateNode(BVGT, t, c.konst(1)));
+
+  c.checkEquisat(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+}
+
+TEST(RemoveUnconstrained_OneSided, shared_predicate_mixed_declines)
+{
+  // One positive and one negative occurrence: no single forced outcome
+  // helps both.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode t = c.bv();
+  ASTNode y = c.bv();
+  ASTNode z = c.bv();
+  ASTNode p =
+      c.hf->CreateNode(EQ, c.hf->CreateTerm(BVAND, W, x, t), c.konst(0));
+  ASTNode top = c.hf->CreateNode(
+      AND, c.hf->CreateNode(OR, p, c.anchorFor(y)),
+      c.hf->CreateNode(OR, c.hf->CreateNode(NOT, p), c.anchorFor(z)),
+      c.hf->CreateNode(BVGT, t, c.konst(1)));
+
+  c.checkEquisat(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 0u)
+      << "x eliminated under mixed polarity";
+}
+
+TEST(RemoveUnconstrained_OneSided, image_only_false_achievable_negative)
+{
+  // All-constant chain, one achievable polarity: (= (zero_extend x) 63)
+  // can only be false. Positively that must decline (the existing
+  // one_polarity_no_collapse test); under a NOT the one-sided rule
+  // forces it false.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode zx = c.hf->CreateTerm(BVZX, 2 * W, x, c.konst(2 * W, 32));
+  ASTNode p = c.hf->CreateNode(EQ, zx, c.konst(63, 2 * W));
+  ASTNode top = c.hf->CreateNode(AND, c.hf->CreateNode(NOT, p),
+                                 c.anchorFor(y));
+
+  c.checkEquisat(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+}
+
+TEST(RemoveUnconstrained_OneSided, image_only_true_achievable_positive)
+{
+  // (bvult (zero_extend x) 20) is true for the whole image [0,7]: only
+  // one polarity achievable, and a positive occurrence wants it.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode y = c.bv();
+  ASTNode zx = c.hf->CreateTerm(BVZX, 2 * W, x, c.konst(2 * W, 32));
+  ASTNode p = c.hf->CreateNode(BVLT, zx, c.konst(20, 2 * W));
+  ASTNode top = c.hf->CreateNode(AND, p, c.anchorFor(y));
+
+  c.checkEquisat(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
 }

@@ -127,6 +127,111 @@ static ASTNode applyStepToNode(NodeFactory* nf, STPMgr& bm,
   return nf->CreateTerm(s.kind, s.outWidth, s.constants[0], in);
 }
 
+// Constant-evaluate one collected step on a known input value.
+static ASTNode evalStepOnConstant(STPMgr& bm, const GroundStep& s,
+                                  const ASTNode& in)
+{
+  std::vector<CBV> args;
+  if (s.samePathAllOperands)
+  {
+    args.push_back(in.GetBVConst());
+    args.push_back(in.GetBVConst());
+  }
+  else if (s.kind == BVSX || s.kind == BVZX)
+  {
+    // The evaluator takes the new width from outWidth.
+    args.push_back(in.GetBVConst());
+  }
+  else
+  {
+    const size_t arity = s.constants.size() + 1;
+    size_t ci = 0;
+    for (size_t i = 0; i < arity; i++)
+    {
+      if (i == s.pathIndex)
+        args.push_back(in.GetBVConst());
+      else
+        args.push_back(s.constants[ci++].GetBVConst());
+    }
+  }
+  return bm.CreateBVConst(NonMemberBVConstEvaluator(s.kind, args, s.outWidth),
+                          s.outWidth);
+}
+
+/* Global polarity of a boolean node within the live mutable tree: the
+ * union, over every occurrence and every path to the root, of the
+ * negation parity along it. POL_POS alone means the formula is monotone
+ * non-decreasing in the node (making it true can only help), POL_NEG
+ * the dual. ITE conditions, XOR/IFF operands and anything unrecognised
+ * get both. Only pure single-polarity predicates admit the one-sided
+ * collapse. */
+static const unsigned POL_POS = 1;
+static const unsigned POL_NEG = 2;
+
+static unsigned flipPolarity(unsigned p)
+{
+  return ((p & POL_POS) ? POL_NEG : 0u) | ((p & POL_NEG) ? POL_POS : 0u);
+}
+
+static unsigned
+polarityOf(MutableASTNode* node,
+           std::unordered_map<MutableASTNode*, unsigned>& memo)
+{
+  const auto it = memo.find(node);
+  if (it != memo.end())
+    return it->second;
+
+  // A parentless node is the root. (Pruned nodes are unlinked from
+  // their children's parent sets, so every parent seen here is live.)
+  unsigned pol = node->parents.empty() ? POL_POS : 0;
+  for (MutableASTNode* p : node->parents)
+  {
+    if (p->n.GetValueWidth() != 0 || p->n.GetIndexWidth() != 0)
+    {
+      pol |= POL_POS | POL_NEG; // a term-level ITE's condition
+      continue;
+    }
+    const unsigned pp = polarityOf(p, memo);
+    const vector<MutableASTNode*>& kids = p->children;
+    for (size_t i = 0; i < kids.size(); i++)
+    {
+      if (kids[i] != node)
+        continue;
+      switch (p->n.GetKind())
+      {
+        case AND:
+        case OR:
+          pol |= pp;
+          break;
+        case NOT:
+        case NAND:
+        case NOR:
+          pol |= flipPolarity(pp);
+          break;
+        case IMPLIES:
+          pol |= (i == 0) ? flipPolarity(pp) : pp;
+          break;
+        case ITE: // boolean-valued: branches follow it, the condition both.
+          pol |= (i == 0) ? (POL_POS | POL_NEG) : pp;
+          break;
+        default: // XOR, IFF, PARAMBOOL, ...: no monotonicity.
+          pol |= POL_POS | POL_NEG;
+          break;
+      }
+    }
+    if (pol == (POL_POS | POL_NEG))
+      break;
+  }
+  memo.insert(std::make_pair(node, pol));
+  return pol;
+}
+
+static unsigned polarityOf(MutableASTNode* node)
+{
+  std::unordered_map<MutableASTNode*, unsigned> memo;
+  return polarityOf(node, memo);
+}
+
 /* When none of the per-kind rules fired for `var` (each detaches the
  * variable when it does), generalise: climb from the variable towards the
  * root while every node on the way is single-use and every sibling is a
@@ -152,6 +257,18 @@ static ASTNode applyStepToNode(NodeFactory* nf, STPMgr& bm,
  * changing its meaning. The predicate node itself may be shared, since
  * under the recorded definition every occurrence of it evaluates to v
  * (or to the distributed ITE, which is a pure equivalence).
+ *
+ * A non-constant sibling makes the image unknowable, but one value can
+ * survive it: forcing the path to an absorbing element (0 through
+ * bvand/bvmul, ones through bvor) fixes the chain regardless of the
+ * sibling -- e.g. (= (bvand x t) 0) is forced true by x := 0. A single
+ * known outcome can only collapse the predicate one way, which is
+ * sound exactly when the predicate's global polarity is pure and
+ * prefers that outcome: any model of the original formula can flip the
+ * predicate to the preferred value without falsifying it (monotonicity),
+ * and any model of the rewrite extends with x := witness, which
+ * realises the value. The same one-sided rule also rescues all-constant
+ * chains where only one polarity is achievable.
  */
 bool RemoveUnconstrained::tryGroundPathCollapse(
     MutableASTNode& muteNode, vector<MutableASTNode*>& variables)
@@ -192,6 +309,16 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
     bool pathHigh; // the path is child 0 (the high part)
   };
   std::vector<ConcatFrame> cframes;
+
+  // Singleton mode: a symbolic sibling at an absorbing operator ends
+  // image tracking, but one value survives it -- forcing the path to
+  // the operator's absorbing element fixes the output regardless of
+  // the sibling, e.g. x := 0 makes (bvand x t) zero for every t. From
+  // there only that single value (and x's witness for it) is known, so
+  // only the one-sided, polarity-gated collapse can fire.
+  bool singleton = false;
+  ASTNode knownVal;         // constant at the chain's current width
+  ASTNode singletonWitness; // constant at var's width
 
   MutableASTNode* cur = &muteNode;
   for (unsigned depth = 0; depth < AchievableImage::MAX_PATH; depth++)
@@ -305,10 +432,11 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
       const bool pathHigh = (kids[0] == cur);
       MutableASTNode* sib = pathHigh ? kids[1] : kids[0];
       // Enter slicing mode at the first symbolic sibling, but only from
-      // the bare variable (no image steps or ITE frames below); once in
-      // it, constant siblings become frames too.
+      // the bare variable (no image steps, ITE frames or absorbing
+      // steps below); once in it, constant siblings become frames too.
       if (!cframes.empty() ||
-          (!sib->n.isConstant() && steps.empty() && frames.empty()))
+          (!sib->n.isConstant() && steps.empty() && frames.empty() &&
+           !singleton))
       {
         cframes.push_back({sib, pathHigh});
         if (parent.parents.size() != 1)
@@ -354,7 +482,71 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
         nonConstSibling = true;
     }
     if (nonConstSibling)
-      return false;
+    {
+      // Enter (or stay in) singleton mode if the path can be forced to
+      // this operator's absorbing element.
+      ASTNode absorbIn, absorbOut;
+      const unsigned inW = cur->n.GetValueWidth();
+      if ((kind == BVAND || kind == BVMULT) && pathCount == 1)
+      {
+        absorbIn = bm.CreateZeroConst(inW);
+        absorbOut = bm.CreateZeroConst(p.GetValueWidth());
+      }
+      else if (kind == BVOR && pathCount == 1)
+      {
+        absorbIn = bm.CreateMaxConst(inW);
+        absorbOut = bm.CreateMaxConst(p.GetValueWidth());
+      }
+      else if ((kind == BVLEFTSHIFT || kind == BVRIGHTSHIFT ||
+                kind == BVSRSHIFT || kind == BVMOD || kind == SBVREM ||
+                kind == SBVMOD) &&
+               pathCount == 1 && pathIdx == 0)
+      {
+        // Zero shifted by anything is zero; STP defines remainder-by-
+        // zero as the dividend, so a zero dividend gives zero for
+        // every divisor, including zero.
+        absorbIn = bm.CreateZeroConst(inW);
+        absorbOut = bm.CreateZeroConst(p.GetValueWidth());
+      }
+      else
+        return false;
+
+      // A frame's other branch gets the suffix steps re-applied as
+      // nodes, which a symbolic sibling can't be -- so no frame may
+      // sit below a symbolic step. (Frames captured above one are
+      // fine: their suffixes only hold the steps recorded after them.)
+      if (!frames.empty())
+        return false;
+
+      if (singleton)
+      {
+        if (knownVal != absorbIn)
+          return false;
+      }
+      else
+      {
+        // Ask the image of the steps so far for a witness reaching the
+        // absorbing element (trivially x itself when the variable
+        // feeds the operator directly).
+        AchievableImage prefix(bm, var.GetValueWidth());
+        prefix.addHint(absorbIn);
+        for (const GroundStep& s : steps)
+          if (!prefix.apply(s))
+            return false;
+        if (!prefix.decideOneSided(EQ, true, absorbIn, true,
+                                   singletonWitness))
+          return false;
+        singleton = true;
+      }
+      knownVal = absorbOut;
+
+      // The symbolic step is NOT recorded in `steps`: it never reaches
+      // an image, and later frames' suffixes must exclude it.
+      if (parent.parents.size() != 1)
+        return false;
+      cur = &parent;
+      continue;
+    }
     // Both operands being the path -- (bvmul t t), squaring -- is still
     // a unary function of the path value; anything else duplicated is
     // not a chain.
@@ -421,6 +613,10 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
 
     steps.push_back(step);
 
+    // In singleton mode the known value flows through by evaluation.
+    if (singleton)
+      knownVal = evalStepOnConstant(bm, step, knownVal);
+
     // Interior nodes must be single-use to step past them.
     if (parent.parents.size() != 1)
       return false;
@@ -429,35 +625,87 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
   if (predicate == NULL)
     return false; // too deep
 
-  // Phase 2: flow the achievable image up the collected path and decide.
-  AchievableImage image(bm, var.GetValueWidth());
-  image.addHintChain(steps, predConst);
-  for (const GroundStep& step : steps)
-    if (!image.apply(step))
-      return false;
+  // Phase 2: decide. Two-sided when both polarities of the predicate
+  // are achievable: it becomes a fresh boolean. Otherwise one-sided:
+  // when one forced outcome is achievable and the predicate's global
+  // polarity is pure and points the same way, fixing that outcome only
+  // helps, so the predicate becomes a constant and var its witness.
+  ASTNode inner;  // what the predicate becomes on the path branch
+  ASTNode varDef; // the recorded definition of var
+  bool twoSided = false;
+  AchievableImage::Decision d;
 
-  AchievableImage::Decision d = image.decide(predKind, pathFirst, predConst);
-  if (!d.collapse)
-    return false;
-
-  if (frames.empty())
+  if (!singleton)
   {
-    // The predicate has width 0, so this creates a fresh boolean and
-    // prunes the whole path out of the mutable tree.
-    ASTNode v = replaceParentWithFresh(*predicate, variables);
-    replace(var, nf->CreateTerm(ITE, var.GetValueWidth(), v, d.witnessTrue,
-                                d.witnessFalse));
+    // Flow the achievable image up the collected path.
+    AchievableImage image(bm, var.GetValueWidth());
+    image.addHintChain(steps, predConst);
+    for (const GroundStep& step : steps)
+      if (!image.apply(step))
+        return false;
+
+    d = image.decide(predKind, pathFirst, predConst);
+    if (d.collapse)
+      twoSided = true;
+    else
+    {
+      const unsigned pol = polarityOf(predicate);
+      if (pol == POL_POS &&
+          image.decideOneSided(predKind, pathFirst, predConst, true, varDef))
+        inner = bm.ASTTrue;
+      else if (pol == POL_NEG && image.decideOneSided(predKind, pathFirst,
+                                                      predConst, false,
+                                                      varDef))
+        inner = bm.ASTFalse;
+      else
+        return false;
+    }
+  }
+  else
+  {
+    // Singleton mode: exactly one outcome of the predicate is known.
+    const bool outcome =
+        pathFirst ? NonMemberBVConstPredicateEvaluator(
+                        predKind, knownVal.GetBVConst(), predConst.GetBVConst())
+                  : NonMemberBVConstPredicateEvaluator(
+                        predKind, predConst.GetBVConst(), knownVal.GetBVConst());
+    const unsigned pol = polarityOf(predicate);
+    if (outcome ? (pol != POL_POS) : (pol != POL_NEG))
+      return false;
+    inner = outcome ? bm.ASTTrue : bm.ASTFalse;
+    varDef = singletonWitness;
+  }
+
+  if (twoSided)
+  {
+    if (frames.empty())
+    {
+      // The predicate has width 0, so this creates a fresh boolean and
+      // prunes the whole path out of the mutable tree.
+      ASTNode v = replaceParentWithFresh(*predicate, variables);
+      replace(var, nf->CreateTerm(ITE, var.GetValueWidth(), v, d.witnessTrue,
+                                  d.witnessFalse));
+      return true;
+    }
+    inner = bm.CreateFreshVariable(0, 0, "unconstrained_ite");
+    varDef = nf->CreateTerm(ITE, var.GetValueWidth(), inner, d.witnessTrue,
+                            d.witnessFalse);
+  }
+  else if (frames.empty())
+  {
+    // One-sided, no frames: the predicate is simply the constant.
+    predicate->replaceWithAnotherNode(MutableASTNode::build(inner));
+    replace(var, varDef);
     return true;
   }
 
   // Distribute the predicate over the captured frames, innermost out:
   //   P(...ite(c_i, path_i, t_i)...)
   //     ==>  ite(c_k, ... ite(c_1, v, P(above_1(t_1))) ..., P(above_k(t_k)))
-  // where above_i re-applies every ground step recorded above frame i.
-  ASTNode v = bm.CreateFreshVariable(0, 0, "unconstrained_ite");
+  // where above_i re-applies every ground step recorded above frame i,
+  // and v is the fresh boolean (or, one-sided, the forced constant).
   vector<MutableASTNode*> vars;
   std::unordered_set<MutableASTNode*> visited;
-  ASTNode inner = v;
   for (const IteFrame& fr : frames)
   {
     ASTNode gt = fr.other->toASTNode(&bm);
@@ -483,8 +731,7 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
   MutableASTNode* newN = MutableASTNode::build(inner, create);
   predicate->replaceWithAnotherNode(newN);
 
-  replace(var, nf->CreateTerm(ITE, var.GetValueWidth(), v, d.witnessTrue,
-                              d.witnessFalse));
+  replace(var, varDef);
   return true;
 }
 
