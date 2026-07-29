@@ -810,8 +810,9 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK ARRAY_TOK LPAREN_TOK UNDERSCORE_TOK 
     if ($17->GetIndexWidth() != $9 || $17->GetValueWidth() != $14)
     {
       char msg [100];
-      sprintf(msg, "Different array widths specified: (%d %d) vs (%d %d)",
-              $17->GetIndexWidth(), $17->GetValueWidth(), $9, $14);
+      snprintf(msg, sizeof(msg),
+               "Different array widths specified: (%u %u) vs (%u %u)",
+               $17->GetIndexWidth(), $17->GetValueWidth(), $9, $14);
       yyerror(msg);
     }
 
