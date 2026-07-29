@@ -977,7 +977,7 @@ void ExtensionalityContext::encodePendingLemma(SATSolver& solver,
         }
       }
 
-      const int q = getEquals(solver, a, b, satVar, BOTH);
+      const int q = getEquals(solver, a, b, satVar, Polarity::BOTH);
       self->eqLitCache[key] = q;
       return q;
     }

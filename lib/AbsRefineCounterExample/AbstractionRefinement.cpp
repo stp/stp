@@ -88,7 +88,7 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
     {
       SATSolver::vec_literals s;
 
-      if (polary != RIGHT_ONLY)
+      if (polary != Polarity::RIGHT_ONLY)
       {
         int nv0 = SatSolver.newVar();
         s.push(SATSolver::mkLit(v_a[i], true));
@@ -106,7 +106,7 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
         all.push(SATSolver::mkLit(nv0, true));
       }
 
-      if (polary != LEFT_ONLY)
+      if (polary != Polarity::LEFT_ONLY)
       {
         s.push(SATSolver::mkLit(v_a[i], true));
         s.push(SATSolver::mkLit(v_b[i], false));
@@ -142,7 +142,7 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
     CBV v = constant.GetBVConst();
     for (unsigned i = 0; i < width; i++)
     {
-      if (polary != RIGHT_ONLY)
+      if (polary != Polarity::RIGHT_ONLY)
       {
         if (CONSTANTBV::BitVector_bit_test(v, i))
           all.push(SATSolver::mkLit(vec[i], true));
@@ -150,7 +150,7 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
           all.push(SATSolver::mkLit(vec[i], false));
       }
 
-      if (polary != LEFT_ONLY)
+      if (polary != Polarity::LEFT_ONLY)
       {
         SATSolver::vec_literals p;
         p.push(SATSolver::mkLit(result, true));
@@ -213,10 +213,10 @@ struct AxiomToBe
 void applyAxiomToSAT(SATSolver& SatSolver, AxiomToBe& toBe,
                      ToSATBase::ASTNodeToSATVar& satVar)
 {
-  Minisat::Var a =
-      getEquals(SatSolver, toBe.index0, toBe.index1, satVar, LEFT_ONLY);
-  Minisat::Var b =
-      getEquals(SatSolver, toBe.value0, toBe.value1, satVar, RIGHT_ONLY);
+  Minisat::Var a = getEquals(SatSolver, toBe.index0, toBe.index1, satVar,
+                             Polarity::LEFT_ONLY);
+  Minisat::Var b = getEquals(SatSolver, toBe.value0, toBe.value1, satVar,
+                             Polarity::RIGHT_ONLY);
   SATSolver::vec_literals satSolverClause;
   satSolverClause.push(SATSolver::mkLit(a, true));
   satSolverClause.push(SATSolver::mkLit(b, false));

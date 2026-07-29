@@ -36,7 +36,7 @@ namespace stp
 // Polarity control for the reified bit-vector equality helper. LEFT_ONLY
 // constrains (bits equal -> literal), RIGHT_ONLY constrains
 // (literal -> bits equal), BOTH gives the full equivalence.
-enum Polarity
+enum class Polarity
 {
   LEFT_ONLY,
   RIGHT_ONLY,
@@ -51,7 +51,7 @@ void getSatVariables(const ASTNode& a, vector<unsigned>& v_a,
 // the bit-vector equality a = b, and returns that variable.
 Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a,
                        const ASTNode& b, ToSATBase::ASTNodeToSATVar& satVar,
-                       Polarity polary = BOTH);
+                       Polarity polary = Polarity::BOTH);
 
 class AbsRefine_CounterExample // not copyable
 {
