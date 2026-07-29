@@ -1424,7 +1424,7 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
       printer::outputBitVecSMTLIB2(index, os);
     };
 
-    os << "( define-fun |";
+    os << "(define-fun |";
     array.nodeprint(os);
     os << "| () " << sortText.str();
     for (size_t i = 0; i < entries.size(); i++)
@@ -1436,14 +1436,14 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
       os << " RNE";
     else
       printCell(bm->CreateZeroConst(vw));
-    os << " )";
+    os << ")";
     for (size_t i = 0; i < entries.size(); i++)
     {
       printIndex(entries[i].first);
       printCell(entries[i].second);
-      os << " )";
+      os << ")";
     }
-    os << " )" << std::endl;
+    os << ")" << std::endl;
   }
 
   os.flush();
