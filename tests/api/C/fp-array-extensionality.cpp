@@ -490,3 +490,70 @@ TEST(fp_array_extensionality, distinct_float_arrays_off_a_shared_chain)
 
   vc_Destroy(vc);
 }
+
+// The same word-level-solver defect as
+// float_cell_pinned_under_chain_equality_unsat above, and closed by the
+// same fix, but reached a second way -- so that a regression that
+// re-breaks one trigger and not the other cannot pass unnoticed.
+//
+// There, the format-less float met the blaster through a classify
+// predicate (fp.isZero -> blast_is_zero). Here there is no classify
+// predicate at all. A chain equality pins a Float128 variable's bits to
+// a constant; the solver eliminates the variable by renaming it through
+// a concatenation, which carries no floating-point format; and the
+// renamed float, its (15, 113) format now gone, reaches constant
+// construction with a zero-width format instead:
+//
+//   STPManager.cpp: CreateFPConst: Assertion
+//     `exp_width + sig_width == bvconst.GetValueWidth()' failed.
+//
+// a different abort site (STPManager, not symbolic_fp) for one root
+// cause. Found by fuzzing with murxla over QF_ABVFP; delta-minimized,
+// then transcribed term for term, in the order the trace built them --
+// the assumption equality before the store chain -- because the defect
+// is sensitive to construction order and the SMT-LIB frontend, which
+// builds the asserted term first, does not reproduce it.
+//
+// Two writes to _x1: cell IDX holds +zero and cell 0 holds -_x3, while
+// the assumption holds _x1[IDX] = _x3. So _x3 is a +zero, _x1[0] a
+// -zero, and the query is satisfiable (bitwuzla agrees).
+TEST(fp_array_extensionality, float_cell_negated_under_chain_equality_sat)
+{
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x'); // must precede creation of any term
+
+  Type fp = vc_fpType(vc, 15, 113);
+  Type bv128 = vc_bvType(vc, 128);
+  Type arr = vc_arrayType(vc, bv128, fp);
+
+  Expr ones = vc_bvNotExpr(vc, vc_bvConstExprFromLL(vc, 128, 0));
+  Expr a = vc_varExpr(vc, "a", arr);
+  Expr idx = vc_bvConstExprFromStr(
+      vc,
+      "01101001011011110101001010000101111011011011101001100101101001101"
+      "111001100111100111101001100000001011011000111010111000110001010");
+  // 0x696f5285edba65a6f33cf4c05b1d718a
+  Expr x = vc_varExpr(vc, "x", fp);
+
+  // The assumption equality, built first as the trace does.
+  Expr assumption = vc_eqExpr(vc, vc_writeExpr(vc, a, idx, x), a);
+
+  Expr zero128 = vc_bvMinusExpr(vc, 128, ones, ones); // a second, constant index
+  Expr negx = vc_fpNegExpr(vc, x);
+  Expr pzero = vc_fpPlusZero(vc, fp);
+
+  Expr chain = vc_writeExpr(vc, a, idx, x);
+  chain = vc_writeExpr(vc, chain, idx, pzero);
+  chain = vc_writeExpr(vc, chain, zero128, pzero);
+  chain = vc_writeExpr(vc, chain, zero128, negx);
+
+  vc_assertFormula(vc, vc_eqExpr(vc, chain, a));
+
+  // The assumption enters its own scope, as check-sat-assuming does.
+  vc_push(vc);
+  vc_assertFormula(vc, assumption);
+  EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc))); // 0 == INVALID == satisfiable
+  vc_pop(vc);
+
+  vc_Destroy(vc);
+}
