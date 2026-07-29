@@ -1298,6 +1298,16 @@ Expr vc_fpRemExpr(VC vc, Expr a, Expr b)
 {
   stp::ASTNode* x = (stp::ASTNode*)a;
   stp::ASTNode* y = (stp::ASTNode*)b;
+  // A non-float operand gets its own diagnosis first (fpTermResult's, at
+  // the end, comes too late): asking remSupported about a format of (0, 0)
+  // underflows its step count and reported the format-limit message for
+  // what is really a sort error.
+  if (x->GetType() != stp::FLOATINGPOINT_TYPE)
+  {
+    stp::FatalError("CInterface: vc_fpRemExpr: fp.rem applied to a "
+                    "non-float operand: ",
+                    *x);
+  }
   // The remainder circuit's unrolling is exponential in the exponent width;
   // refuse at term creation, where the caller can see it, rather than
   // during solving (the parser does the same for SMT-LIB input).
