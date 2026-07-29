@@ -65,8 +65,8 @@ Overflowing a 32-bit integer using the python interface:
 import stp
 
 s = stp.Solver()
-x = s.bitvec('x')
-y = s.bitvec('y')
+x = s.bitvec('x', width=32)
+y = s.bitvec('y', width=32)
 s.add(x + y < 20)
 s.add(x > 10)
 s.add(y > 10)
