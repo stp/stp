@@ -361,7 +361,6 @@ types Cpp_interface::functionReturnType(const string& name)
   return found->second.function.GetType();
 }
 
-
 ASTNode Cpp_interface::LookupOrCreateSymbol(string name)
 {
   return bm.LookupOrCreateSymbol(name.c_str());

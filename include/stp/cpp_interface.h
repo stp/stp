@@ -324,6 +324,4 @@ public:
 DLL_PUBLIC void CNFClearMemory();
 }
 
-
-
 #endif
