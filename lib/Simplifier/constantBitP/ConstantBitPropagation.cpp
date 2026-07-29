@@ -228,6 +228,30 @@ ConstantBitPropagation::ConstantBitPropagation(stp::STPMgr* mgr_,
   topFixed = false;
 }
 
+// Rewrite the children of "n" with the map, then rebuild "n" on top of
+// them. Starting one level down means an entry for "n" itself in the map
+// can't fire: a node is never its own descendant, so the map can safely
+// hold a fact about "n" while "n"'s fact is being rebuilt.
+static ASTNode replaceChildren(const ASTNode& n, ASTNodeMap& fromTo,
+                               ASTNodeMap& cache, NodeFactory* nf)
+{
+  const ASTChildren originals = n.GetChildren();
+
+  ASTVec children;
+  children.reserve(n.Degree());
+  for (const auto& c : originals)
+    children.push_back(SubstitutionMap::replace(c, fromTo, cache, nf));
+
+  if (std::equal(children.begin(), children.end(), originals.begin(),
+                 originals.end()))
+    return n;
+
+  if (BOOLEAN_TYPE == n.GetType())
+    return nf->CreateNode(n.GetKind(), children);
+
+  return nf->CreateTerm(n.GetKind(), n.GetValueWidth(), children);
+}
+
 // Both way propagation. Initialising the top to "true".
 // The hardest thing to understand is the two cases:
 // 1) If we get the fixed bits of a node, without assuming the top node is true,
@@ -291,27 +315,23 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
 
   // For each entirely fixed node: replace the node by its constant inside
   // "top", and conjoin a fact that pins the node down, so the constraint
-  // isn't lost. The term-level facts are built from the original
-  // (pre-replacement) nodes, so they survive the replacement.
+  // isn't lost.
   //
-  // The top-level conjuncts themselves are always fixed to true, so
-  // replacing each of them with TRUE and conjoining it back verbatim would
-  // rebuild the input and mask the term-level replacements underneath.
-  // Instead the boolean facts are collected first, rewritten with the term
-  // constants, and only acted on if that changed something or the fact
-  // isn't already part of "top".
+  // Every fact is rewritten with every other fact's constant, so the
+  // constants discharge into the facts that pin them down. (The top-level
+  // conjuncts themselves are always fixed to true; without the rewriting,
+  // each conjunct would be erased by the replacement and then restored
+  // verbatim by its conjoined fact, putting the input back together.)
+  // All the rewriting shares one map and one cache: a fact's own map entry
+  // can't erase the fact, because the rewrite starts at the node's
+  // children, and a node is never its own descendant.
 
-  // Term-level constants, later written into the boolean facts. Starts
-  // with the unconditionally fixed nodes.
-  ASTNodeMap termFacts(fromTo);
-
-  struct BoolFact
+  struct Fact
   {
     ASTNode node;
-    ASTNode proposition;
     ASTNode constant;
   };
-  std::vector<BoolFact> boolFacts;
+  std::vector<Fact> facts;
 
   NodeToFixedBitsMap::NodeToFixedBitsMapType::iterator it, itEnd;
 
@@ -349,51 +369,32 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
       bool r = simplifier->UpdateSubstitutionMap(node, constNode);
       assert(r);
     }
-    else if (!conjoinToTop)
+    else if (conjoinToTop && node != top)
     {
-      // Not allowed to strengthen the top, so the fact is unusable.
-    }
-    else if (node.GetType() == BOOLEAN_TYPE)
-    {
-      ASTNode prop = bits.getValue(0) ? node : nf->CreateNode(NOT, node);
-      boolFacts.push_back({node, prop, constNode});
-    }
-    else
-    {
-      assert(((unsigned)bits.getWidth()) == node.GetValueWidth());
-
-      ASTNode prop = nf->CreateNode(EQ, node, constNode);
-      if (top == prop)
-        continue;
+      assert(node.GetType() == BOOLEAN_TYPE ||
+             ((unsigned)bits.getWidth()) == node.GetValueWidth());
 
       fromTo.insert(make_pair(node, constNode));
-      termFacts.insert(make_pair(node, constNode));
-      if (nf->getTrue() != prop)
-        toConjoin.push_back(prop);
+      facts.push_back({node, constNode});
     }
   }
 
-  // Write the term constants into each boolean fact. A fact the constants
-  // don't change, and that "top" already contains, carries no new
-  // information: leave it (and the node's occurrences) alone.
+  ASTNodeMap cache;
+
+  for (const auto& fact : facts)
   {
-    ASTNodeMap propCache;
-    for (const auto& fact : boolFacts)
-    {
-      if (top == fact.proposition)
-        continue;
+    const ASTNode rebuilt = replaceChildren(fact.node, fromTo, cache, nf);
 
-      const ASTNode rewritten =
-          SubstitutionMap::replace(fact.proposition, termFacts, propCache, nf);
+    ASTNode prop;
+    if (BOOLEAN_TYPE == fact.node.GetType())
+      prop = (nf->getTrue() == fact.constant) ? rebuilt
+                                              : nf->CreateNode(NOT, rebuilt);
+    else
+      prop = nf->CreateNode(EQ, rebuilt, fact.constant);
 
-      if (rewritten == fact.proposition &&
-          dependents->nodeDependsOn(top, fact.proposition))
-        continue;
-
-      fromTo.insert(make_pair(fact.node, fact.constant));
-      if (nf->getTrue() != rewritten)
-        toConjoin.push_back(rewritten);
-    }
+    // A fact that rewrites to true is implied by the others.
+    if (nf->getTrue() != prop)
+      toConjoin.push_back(prop);
   }
 
   // The fixedMap iteration order isn't defined; sort for determinism.
@@ -402,7 +403,6 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
                   toConjoin.end());
 
   // Write the constants into the main graph.
-  ASTNodeMap cache;
   ASTNode result = SubstitutionMap::replace(top, fromTo, cache, nf);
 
   if (0 != toConjoin.size())
