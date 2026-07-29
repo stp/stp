@@ -5,21 +5,18 @@
 //
 // The C API routes floating-point SMT-'=' through vc_eqExpr: the note on
 // vc_fpEqExpr in c_interface.h directs callers there for '=' (as opposed to
-// fp.eq). The SMT2 parser builds an FP_SMT_EQ node for '=' between
-// FLOATINGPOINT_TYPE operands (lib/Parser/smt2.y), giving the SMT-LIB
-// semantics: +0 and -0 are distinct, and every NaN equals every NaN.
+// fp.eq). vc_eqExpr builds an FP_SMT_EQ node when either operand is of
+// FLOATINGPOINT_TYPE, exactly as the parser does for '=' between floats
+// (lib/Parser/smt2.y), giving the SMT-LIB semantics: +0 and -0 are
+// distinct, and every NaN equals every NaN.
 //
-// vc_eqExpr, however, unconditionally builds a generic EQ node. A leaf-vs-leaf
-// equality (x = y) folds to a bit-vector comparison and behaves, but once an
-// operand is a composite floating-point term (here fp.neg x) the generic EQ
-// over floats is not discharged by the floating-point solver and the solve
-// aborts with:
+// Regression tests: vc_eqExpr used to build a generic EQ node
+// unconditionally. A leaf-vs-leaf equality (x = y) folded to a bit-vector
+// comparison and behaved, but once an operand was a composite
+// floating-point term (here fp.neg x) the generic EQ over floats was not
+// discharged by the floating-point solver, and the solve aborted with
 //   Fatal Error: TopLevelSTPAux: reached the end without proper conclusion.
-//
-// FIX: vc_eqExpr should emit FP_SMT_EQ when its operands are of
-// FLOATINGPOINT_TYPE (mirroring the parser); the distinct/ite paths that build
-// on it need the same treatment. Until then these two tests abort rather than
-// fail an EXPECT.
+// rather than fail an EXPECT here.
 
 // x = -x holds exactly for NaN under SMT '=' (NaN == NaN, and -NaN is NaN), so
 // the constraint is satisfiable and the query of 'false' is INVALID (0).
