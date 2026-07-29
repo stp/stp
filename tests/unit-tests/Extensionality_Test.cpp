@@ -1320,6 +1320,52 @@ TEST_F(ExtPrepareTest, FloatElementWitnessQuotientsNaN)
   }
 }
 
+// An equality between a chain of writes and the chain's own base is
+// rewritten into cell comparisons instead of being abstracted into a
+// record, so those comparisons owe the same NaN quotient the witness
+// clause carries: over a float-element array a cell of the base and
+// the value written over it are equal when their bits agree or both
+// are NaN. Comparing bits alone let a NaN payload held in the base and
+// a canonically packed NaN write "differ", so the negated equality --
+// the chain and its base are different arrays -- was satisfiable over
+// a single array. A bitvector-element chain keeps the plain bitwise
+// comparison.
+TEST_F(ExtPrepareTest, FloatCellWriteChainQuotientsNaN)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+
+  {
+    ASTNode a = arr("a"), i = bv("i"), v = bv("v");
+    ASTNode w = hf->CreateArrayTerm(WRITE, 2, 2, {a, i, v});
+    const ASTNode solved = ext->makeEquality(w, a);
+    EXPECT_TRUE(ext->getRecords().empty());
+    EXPECT_EQ(hf->CreateNode(EQ, hf->CreateTerm(READ, 2, a, i), v), solved);
+  }
+
+  {
+    ASTNode fa = mgr.CreateSymbol("fa", 2, 32);
+    fa.SetExpWidth(8);
+    fa.SetSigWidth(24);
+    ASTNode fv = mgr.CreateSymbol("fv", 0, 32);
+    fv.SetExpWidth(8);
+    fv.SetSigWidth(24);
+    ASTNode j = bv("j");
+    ASTNode w = hf->CreateArrayTerm(WRITE, 2, 32, {fa, j, fv});
+    const ASTNode solved = ext->makeEquality(w, fa);
+    EXPECT_TRUE(ext->getRecords().empty());
+
+    const ASTNode bitwise =
+        hf->CreateNode(EQ, hf->CreateTerm(READ, 32, fa, j), fv);
+    // Bitwise equality and the NaN quotient side by side.
+    ASSERT_EQ(OR, solved.GetKind());
+    ASSERT_EQ(2u, solved.Degree());
+    EXPECT_TRUE(solved[0] == bitwise || solved[1] == bitwise);
+    const ASTNode& bothNaN = solved[0] == bitwise ? solved[1] : solved[0];
+    EXPECT_EQ(AND, bothNaN.GetKind());
+    EXPECT_EQ(2u, bothNaN.Degree());
+  }
+}
+
 // The fresh replacement for an eliminated float-array if-then-else
 // keeps the element format, and the guarded equality records minted
 // over it therefore build NaN-qualified witnesses too.

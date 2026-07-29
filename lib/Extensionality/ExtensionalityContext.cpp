@@ -86,6 +86,20 @@ ASTNode isPackedNaN(NodeFactory* hf, const ASTNode& x, unsigned eb,
           NOT, hf->CreateNode(EQ, significand, hf->CreateZeroConst(sb - 1))));
 }
 
+// SMT-LIB's = between two packed floating-point cells of format (eb, sb).
+// Equal bits is too strong a test: every NaN bit pattern denotes the one
+// NaN value, so two cells holding different payloads hold the same value.
+// Every other value has exactly one packing, so the cells are equal
+// exactly when their bits agree or both are NaN. Built as a plain
+// bitvector circuit for the same reason isPackedNaN is.
+ASTNode packedFloatEq(NodeFactory* hf, const ASTNode& l, const ASTNode& r,
+                      unsigned eb, unsigned sb)
+{
+  return hf->CreateNode(OR, hf->CreateNode(EQ, l, r),
+                        hf->CreateNode(AND, isPackedNaN(hf, l, eb, sb),
+                                       isPackedNaN(hf, r, eb, sb)));
+}
+
 // The packed bits of the one canonical quiet NaN of format (eb, sb):
 // positive sign, all-ones exponent, only the quiet bit of the stored
 // significand set -- exactly the pattern CreateFPConst interns every NaN
@@ -209,6 +223,16 @@ void ExtensionalityContext::collectPossibleConeSymbols(const ASTNode& n)
 // is deliberately not attempted: its guards grow quadratically, and
 // the general lemmas-on-demand procedure already covers that shape.
 //
+// The cell comparison is the element sort's equality, not bit equality:
+// over a float-element array two cells are equal when their bits agree
+// or both are NaN (packedFloatEq). Comparing the bits alone lets a NaN
+// payload that the base holds and a written value that is the canonical
+// NaN -- what every symfpu-computed NaN packs to -- "differ", so the
+// chain and its base come apart when they hold the same array. The
+// index comparisons need no such qualification: an index sort that
+// quotients its bit patterns has had its indexes canonicalised by
+// FpTotalise before an equality over the array is built.
+//
 // Built with the plain hashing factory; the result is ordinary formula
 // content that STP's later passes simplify as usual. A conjunct whose
 // index term is identical to an outer write's index term is certainly
@@ -243,6 +267,8 @@ ASTNode ExtensionalityContext::solveWriteChain(const ASTNode& a,
 
     NodeFactory* hf = bm->hashingNodeFactory;
     const unsigned ew = base.GetValueWidth();
+    const unsigned eb = base.GetExpWidth();
+    const unsigned sb = base.GetSigWidth();
     ASTVec conjuncts;
     for (size_t k = 0; k < writesOutermostFirst.size(); k++)
     {
@@ -262,8 +288,9 @@ ASTNode ExtensionalityContext::solveWriteChain(const ASTNode& a,
       }
       if (certainlyShadowed)
         continue;
-      disjuncts.push_back(hf->CreateNode(
-          EQ, hf->CreateTerm(READ, ew, base, indexK), valueK));
+      const ASTNode cell = hf->CreateTerm(READ, ew, base, indexK);
+      disjuncts.push_back(eb != 0 ? packedFloatEq(hf, cell, valueK, eb, sb)
+                                  : hf->CreateNode(EQ, cell, valueK));
       conjuncts.push_back(disjuncts.size() == 1
                               ? disjuncts[0]
                               : hf->CreateNode(OR, disjuncts));

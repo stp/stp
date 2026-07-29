@@ -287,3 +287,143 @@ TEST(fp_array_extensionality, repeated_solve_restates_array_ite_guards)
 
   vc_Destroy(vc);
 }
+
+// (Array (_ BitVec 3) (_ FloatingPoint 5 11)): one store on top of the
+// array it stores into, written back the cell it already holds. A
+// conversion to the cell's own format is the identity on values, so
+// the store changes nothing and the two arrays are the same array.
+//
+// An equality whose two sides are a chain of writes and that chain's
+// own base is rewritten into cell comparisons rather than abstracted
+// into a record, so those comparisons carry the element sort's
+// equality, not bit equality. Compared as bits, a NaN payload held in
+// the cell and the canonical NaN the conversion packs "differ", and
+// the negated equality -- the store and its base are different arrays
+// -- came out satisfiable over a single array.
+TEST(fp_array_extensionality, write_chain_over_float_cells_quotients_nan)
+{
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type fp = vc_fpType(vc, 5, 11);
+  Type bv3 = vc_bvType(vc, 3);
+  Type arr = vc_arrayType(vc, bv3, fp);
+
+  Expr a = vc_varExpr(vc, "a", arr);
+  Expr i = vc_varExpr(vc, "i", bv3);
+  Expr cell = vc_readExpr(vc, a, i);
+  Expr same =
+      vc_fpToFPFromFP(vc, 5, 11, vc_fpRoundingMode(vc, VC_RM_RNE), cell);
+
+  vc_assertFormula(
+      vc, vc_notExpr(vc, vc_eqExpr(vc, vc_writeExpr(vc, a, i, same), a)));
+  EXPECT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+
+  vc_Destroy(vc);
+}
+
+// The same defect as reached by fuzzing: three arrays over
+// (Array (_ BitVec 15) (_ FloatingPoint 5 11)), built by long store
+// chains off one base, asserted pairwise distinct.
+//
+// Writing r for the RoundingMode variable, x for the (_ BitVec 15)
+// variable and A for the array variable, the terms are
+//
+//   k = #b011100111100100                  a constant index
+//   j = ite(r != RNE, k, x)                a second index
+//   d = bvadd(x, x)                        a third index
+//   n = ((_ to_fp 5 11) RNE x)             15 signed bits always fit, so
+//                                          n is finite and z below a zero
+//   z = fp.sub(r, n, n)                    -0 under RTN, +0 otherwise
+//   c = select(A, x)
+//   W = store(A, j, z)
+//   p = select(W, x)
+//   s = fp.add(r, p, z)
+//
+// and, writing B for store(store(W, k, p), x, n), the three arrays are
+//
+//   A1 = B then x:=n, x:=n, d:=z, x:=n, x:=z, x:=z
+//   A3 = B then x:=n five times, d:=c, x:=n, x:=z
+//   A2 = A3 then j:=n, k:=n, j:=n, k:=n, j:=n, d:=s,
+//                j:=n four times, k:=z, j:=n, j:=p
+//
+// Take r != RNE, so that j is the constant k, and take x != k, so that
+// p is c. The last write at an index decides the contents, so A1 and
+// A3 agree everywhere except at d, where A1 holds z and A3 holds c,
+// and A2 agrees with A3 except at d, where it holds s. If d is x or k
+// the writes at d are shadowed and two of the three arrays coincide,
+// so pairwise distinctness needs d to be an index of its own; then
+// A2 != A3 needs s != c. Now z is a zero, and adding a zero returns
+// its operand except when that operand is itself a zero of the other
+// sign: fp.add(r, c, z) differs from c only when c is a zero and z is
+// the opposite zero, and then it is z. So A2 != A3 forces s = z, which
+// is what A1 holds at d, making A1 and A2 the same array. Taking
+// r = RNE instead makes j the index x, so p and s are both z and A1
+// and A2 coincide again. The three cannot be pairwise distinct.
+//
+// A2 stacks its writes directly on A3, so that pair is exactly the
+// chain-and-its-base shape rewritten into cell comparisons. Compared
+// as bits, a NaN payload for c and the canonical NaN that fp.add packs
+// for s "differ" at d, and the query answered satisfiable with a model
+// whose A2 and A3 are one array.
+TEST(fp_array_extensionality, distinct_float_arrays_off_a_shared_chain)
+{
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type fp = vc_fpType(vc, 5, 11);
+  Type bv15 = vc_bvType(vc, 15);
+  Type arr = vc_arrayType(vc, bv15, fp);
+
+  Expr r = vc_fpRoundingModeVar(vc, "r");
+  Expr rne = vc_fpRoundingMode(vc, VC_RM_RNE);
+  Expr x = vc_varExpr(vc, "x", bv15);
+  Expr a = vc_varExpr(vc, "a", arr);
+
+  Expr k = vc_bvConstExprFromStr(vc, "011100111100100");
+  Expr j = vc_iteExpr(vc, vc_notExpr(vc, vc_eqExpr(vc, r, rne)), k, x);
+  Expr d = vc_bvPlusExpr(vc, 15, x, x);
+  Expr n = vc_fpToFPFromSignedBV(vc, 5, 11, rne, x);
+  Expr z = vc_fpSubExpr(vc, r, n, n);
+  Expr c = vc_readExpr(vc, a, x);
+  Expr w = vc_writeExpr(vc, a, j, z);
+  Expr p = vc_readExpr(vc, w, x);
+  Expr s = vc_fpAddExpr(vc, r, p, z);
+
+  Expr base = vc_writeExpr(vc, vc_writeExpr(vc, w, k, p), x, n);
+
+  Expr a1 = vc_writeExpr(vc, base, x, n);
+  a1 = vc_writeExpr(vc, a1, x, n);
+  a1 = vc_writeExpr(vc, a1, d, z);
+  a1 = vc_writeExpr(vc, a1, x, n);
+  a1 = vc_writeExpr(vc, a1, x, z);
+  a1 = vc_writeExpr(vc, a1, x, z);
+
+  Expr a3 = base;
+  for (int step = 0; step < 5; step++)
+    a3 = vc_writeExpr(vc, a3, x, n);
+  a3 = vc_writeExpr(vc, a3, d, c);
+  a3 = vc_writeExpr(vc, a3, x, n);
+  a3 = vc_writeExpr(vc, a3, x, z);
+
+  Expr a2 = vc_writeExpr(vc, a3, j, n);
+  a2 = vc_writeExpr(vc, a2, k, n);
+  a2 = vc_writeExpr(vc, a2, j, n);
+  a2 = vc_writeExpr(vc, a2, k, n);
+  a2 = vc_writeExpr(vc, a2, j, n);
+  a2 = vc_writeExpr(vc, a2, d, s);
+  for (int step = 0; step < 4; step++)
+    a2 = vc_writeExpr(vc, a2, j, n);
+  a2 = vc_writeExpr(vc, a2, k, z);
+  a2 = vc_writeExpr(vc, a2, j, n);
+  a2 = vc_writeExpr(vc, a2, j, p);
+
+  Expr distinct[3] = {vc_notExpr(vc, vc_eqExpr(vc, a1, a2)),
+                      vc_notExpr(vc, vc_eqExpr(vc, a1, a3)),
+                      vc_notExpr(vc, vc_eqExpr(vc, a2, a3))};
+  vc_assertFormula(vc, vc_andExprN(vc, distinct, 3));
+
+  EXPECT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+
+  vc_Destroy(vc);
+}
