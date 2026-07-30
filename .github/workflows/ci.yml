@@ -299,12 +299,14 @@ jobs:
   # Until this job existed, the only static build in CI was the Windows one,
   # so a break that only shows up when everything is linked into one
   # executable could sit in master with every Linux job green.
+  #
+  # The steps are in a composite action because the release workflow builds
+  # the published binary with the same ones. Keeping a single copy is what
+  # stops the binary people download from drifting away from the one CI
+  # tests -- if this job passes, the release build works.
   build-static:
     name: gcc (static)
     runs-on: ubuntu-latest
-
-    env:
-      CCACHE_MAXSIZE: 800M
 
     steps:
 
@@ -312,97 +314,7 @@ jobs:
       with:
           submodules: 'true'
 
-    # No lit and no gtest here: STATICCOMPILE turns BUILD_SHARED_LIBS off, and
-    # the top-level CMakeLists forces ENABLE_TESTING off when it is off (the
-    # Python bindings and the test harness both want a shared libstp), so a
-    # static build has no tests to run. See the smoke test at the end.
-    - name: Packages
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          bison \
-          build-essential \
-          ccache \
-          cmake \
-          flex \
-          gcc \
-          git \
-          libboost-program-options-dev \
-          ninja-build \
-          zlib1g-dev
-
-    - name: Resolve dependency revisions
-      id: deps-key
-      run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
-
-    # A different set of dependencies to the jobs above, and a differently
-    # built minisat, so a different key prefix: the key describes their
-    # revisions, not which of them are in the tree or how they were
-    # configured, and restoring another job's cache would leave a minisat
-    # with no static library behind while skipping the step that builds one.
-    - name: Restore dependencies
-      id: deps-cache
-      uses: actions/cache@v4
-      with:
-        path: |
-          deps/install
-          deps/minisat
-        key: deps-x86_64-static-${{ steps.deps-key.outputs.key }}
-
-    # A static STP links against libminisat.a, which minisat only produces
-    # when built with STATICCOMPILE; its default build installs the shared
-    # library alone.
-    - name: Dependencies
-      if: steps.deps-cache.outputs.cache-hit != 'true'
-      run: ./scripts/deps/setup-minisat.sh -DSTATICCOMPILE=ON
-
-    - name: Compiler cache
-      uses: actions/cache@v4
-      with:
-        path: ~/.cache/ccache
-        key: ccache-static-${{ github.run_id }}
-        restore-keys: ccache-static-
-
-    # NOCRYPTOMINISAT: CryptoMiniSat's exported static link line pulls in GMP
-    # and its own dependencies, which are not reliably available as archives
-    # on the runner. The two SAT backends are interchangeable as far as
-    # linking STP statically is concerned.
-    - name: Configure
-      run: |
-        mkdir build
-        cd build
-        cmake -DSTATICCOMPILE:BOOL=ON -DNOCRYPTOMINISAT:BOOL=ON -DWERROR:BOOL=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
-
-    - name: Build
-      run: |
-        ccache --zero-stats
-        cmake --build . --parallel "$(nproc)"
-        ccache --show-stats
-      working-directory: build
-
-    # Linking is most of the point of this job, but a binary that links and
-    # then dies on the first query would still pass, so solve something and
-    # check the answer rather than just the exit status. Also assert the
-    # executable really is static: if the -static link line quietly stopped
-    # taking effect the job would otherwise keep passing while testing
-    # nothing this job exists to test.
-    - name: Smoke test
-      run: |
-        stp=$([ -x ./stp ] && echo ./stp || echo ./stp_simple)
-        ls -l "$stp"
-        file "$stp"
-        if ldd "$stp"; then
-          echo "expected a static executable, but it has shared dependencies"
-          exit 1
-        fi
-        echo '(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (= x #x2a))(check-sat)' > sat.smt2
-        echo '(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (and (= x #x2a) (= x #x2b)))(check-sat)' > unsat.smt2
-        for expected in sat unsat; do
-          got=$("$stp" "$expected.smt2")
-          echo "$expected.smt2: '$got'"
-          [ "$got" = "$expected" ] || exit 1
-        done
-      working-directory: build
+    - uses: ./.github/actions/build-static-linux
 
   build-32bit:
     name: gcc (i386)
@@ -455,142 +367,14 @@ jobs:
     name: windows
     runs-on: windows-2025
 
-    env:
-      MINISAT_ROOT: ${{ github.workspace }}\minisat\install
-      # Build ABC single-threaded: its pthread/atomics code paths don't
-      # compile with MSVC. ABC's Makefile (run during CMake configure to
-      # extract flags) reads this from the environment.
-      ABC_USE_NO_PTHREADS: 1
-      # minisat and STP both predate CMP0074, so ZLIB_ROOT is ignored;
-      # pass the include dir and library explicitly instead.
-      # ZLIB_LIBRARY is located after the vcpkg install (see below).
-      ZLIB_INCLUDE_DIR: C:\vcpkg\installed\x64-windows-static\include
-
     steps:
 
     - uses: actions/checkout@v7
       with:
           submodules: 'true'
 
-    # Fetched straight from the upstream release rather than via
-    # 'choco install winflexbison3': community.chocolatey.org intermittently
-    # answers 503, and choco exits 0 when it does ("installed 0/0 packages"),
-    # so the miss surfaced minutes later as "Could NOT find BISON" during CMake
-    # configure. This also pins the toolchain, which the choco install did not.
-    #
-    # 2.5.24 is the version the choco package resolved to; the archive holds
-    # win_flex.exe, win_bison.exe and bison's data/ skeleton directory, which
-    # bison locates relative to its own path, so it is extracted as a unit.
-    - name: Install flex and bison
-      env:
-        WFB_VERSION: '2.5.24'
-        WFB_SHA256: '39c6086ce211d5415500acc5ed2d8939861ca1696aee48909c7f6daf5122b505'
-      run: |
-        $ErrorActionPreference = 'Continue'
-        $ProgressPreference = 'SilentlyContinue'
-        $url = "https://github.com/lexxmark/winflexbison/releases/download/v$env:WFB_VERSION/win_flex_bison-$env:WFB_VERSION.zip"
-        $zip = Join-Path $env:RUNNER_TEMP 'win_flex_bison.zip'
-        $dir = Join-Path $env:RUNNER_TEMP 'winflexbison'
-
-        $attempts = 3
-        $backoff = @(15, 45)   # seconds, between attempts
-        $ok = $false
-        for ($i = 1; $i -le $attempts; $i++) {
-          try {
-            "Downloading $url (attempt $i/$attempts)"
-            Remove-Item $zip -ErrorAction SilentlyContinue
-            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
-            # A truncated body or an error page served with a 200 shows up here
-            # rather than as a thrown exception, so retry on mismatch too.
-            $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
-            if ($hash -ne $env:WFB_SHA256.ToUpper()) {
-              throw "SHA256 mismatch: got $hash, expected $($env:WFB_SHA256.ToUpper())"
-            }
-            $ok = $true
-            break
-          } catch {
-            Write-Host "::warning::winflexbison download attempt $i failed: $_"
-            # Not sleeping after the final attempt: it only delays a failure
-            # that has already been decided.
-            if ($i -lt $attempts) {
-              $delay = $backoff[$i - 1]
-              "Retrying in $delay s..."
-              Start-Sleep -Seconds $delay
-            }
-          }
-        }
-        if (-not $ok) {
-          Write-Host "::error::Could not download winflexbison $env:WFB_VERSION after $attempts attempts."
-          exit 1
-        }
-
-        Expand-Archive -Path $zip -DestinationPath $dir -Force
-        # CMake's FindBISON/FindFLEX search for these names on Windows.
-        foreach ($exe in 'win_bison.exe', 'win_flex.exe') {
-          $path = Join-Path $dir $exe
-          if (-not (Test-Path $path)) {
-            Write-Host "::error::$exe missing from the extracted archive."
-            exit 1
-          }
-          # Also catches a binary that unpacked but cannot run at all. Both
-          # are cleared first: if the launch fails, the assignment never runs
-          # and $LASTEXITCODE is left untouched, so the previous binary's
-          # output and exit code would otherwise be read as this one's success.
-          $out = $null
-          $global:LASTEXITCODE = $null
-          try { $out = (& $path --version 2>&1 | Out-String).Trim() } catch { $out = $null }
-          if ($LASTEXITCODE -ne 0 -or -not $out) {
-            Write-Host "::error::$exe failed to run (exit $LASTEXITCODE): $out"
-            exit 1
-          }
-          ($out -split "`n")[0]
-        }
-        # Applies to subsequent steps only, hence the full paths just above.
-        $dir | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
-
-    - name: Install zlib
-      run: |
-        vcpkg install zlib:x64-windows-static
-        dir C:\vcpkg\installed\x64-windows-static\lib
-        $lib = (Get-ChildItem C:\vcpkg\installed\x64-windows-static\lib -Filter *z*.lib | Select-Object -First 1).FullName
-        if (-not $lib) { throw "no zlib .lib found" }
-        "ZLIB_LIBRARY=$lib" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-
-    - name: Build minisat
-      run: |
-        git clone --depth 1 https://github.com/stp/minisat
-        cd minisat
-        cmake -B build -A x64 -DSTATICCOMPILE=ON "-DCMAKE_POLICY_VERSION_MINIMUM=3.12" "-DCMAKE_INSTALL_PREFIX=$env:MINISAT_ROOT" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
-        cmake --build build --config Release --target install
-
-    - name: Configure
-      # NOCRYPTOMINISAT: CryptoMiniSat does not build with MSVC (CaDiCaL
-      # and CMS's oracle use POSIX-only code); upstream CMS only supports
-      # MinGW on Windows.
-      run: cmake -B build -A x64 -DSTATICCOMPILE=ON -DNOCRYPTOMINISAT=ON -DENABLE_PYTHON_INTERFACE=OFF "-DMINISAT_LIBDIR=$env:MINISAT_ROOT" "-DMINISAT_INCLUDE_DIRS=$env:MINISAT_ROOT\include" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
-
-    - name: Build
-      run: cmake --build build --config Release
-
-    - name: Smoke test
-      run: |
-        dir build\bin
-        $stp = if (Test-Path build\bin\stp.exe) { "build\bin\stp.exe" } else { "build\bin\stp_simple.exe" }
-        "(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (= x #x2a))(check-sat)" | Out-File -Encoding ascii test.smt2
-        $out = & $stp test.smt2 2>&1 | Out-String
-        "solver output: '$($out.Trim())'"
-        # pwsh -Command collapses nonzero exit codes to 1, so log the real
-        # one (crash statuses like 0xC0000005 show up as large negatives).
-        "solver exit code: $LASTEXITCODE"
-        if ($out.Trim() -ne "sat") { exit 1 }
-        # The query above is answered by the substitution solver during
-        # simplification, so it never reaches the SAT backend. This one
-        # cannot be simplified away: it is the only line here that
-        # exercises bitblasting, ABC's CNF generation and minisat.
-        "(set-logic QF_BV)(declare-fun a () (_ BitVec 8))(declare-fun b () (_ BitVec 8))(assert (= (bvmul a b) #x21))(assert (bvult a b))(check-sat)" | Out-File -Encoding ascii testsat.smt2
-        $out = & $stp testsat.smt2 2>&1 | Out-String
-        "sat-backend output: '$($out.Trim())'"
-        "sat-backend exit code: $LASTEXITCODE"
-        if ($out.Trim() -ne "sat") { exit 1 }
+    # As with build-static above, the steps are in a composite action so the
+    # release workflow can build the published .exe with exactly these.
+    - uses: ./.github/actions/build-static-windows
 
 # EOF
