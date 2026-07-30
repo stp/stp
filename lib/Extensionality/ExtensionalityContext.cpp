@@ -114,9 +114,9 @@ ASTNode recoverAnchoredOperand(const ASTNode& rhs, const ASTNode& lambda,
 } // namespace
 
 ExtensionalityContext::ExtensionalityContext(STPMgr* bm_)
-    : lemmasEmitted(0), lemmaAtomsFolded(0), bm(bm_), coneIsFrozen(false),
-      graphBound(false),
-      pendingLemmaValid(false)
+    : lemmasEmitted(0), lemmaAtomsFolded(0), nameDivergences(0), bm(bm_),
+      coneIsFrozen(false), graphBound(false), pendingLemmaValid(false),
+      divergedThisSolve(false)
 {
 }
 
@@ -313,6 +313,7 @@ void ExtensionalityContext::beginSolve()
   graph = ExtGraph();
   graphBound = false;
   pendingLemmaValid = false;
+  divergedThisSolve = false;
   eqLitCache.clear();
   lastObserved.clear();
   for (size_t i = 0; i < records.size(); i++)
@@ -859,7 +860,11 @@ ExtensionalityContext::checkCandidate(AbsRefine_CounterExample* ce)
       // compared against its name.
       publishObservations(ce);
       if (!namesAgreeWithCandidate(view))
+      {
+        nameDivergences++;
+        divergedThisSolve = true;
         return EXT_NAME_DIVERGENCE;
+      }
       return EXT_CONSISTENT;
     case ExtCheckResult::CONFLICT:
       pendingLemma = res.conflict;

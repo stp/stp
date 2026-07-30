@@ -888,7 +888,15 @@ TEST(array_extensionality, store_index_read_through_second_array_unsat)
       vc, vc_eqExpr(vc, x9,
                     vc_writeExpr(vc, vc_writeExpr(vc, x5, x0, q), k, x0)));
 
+  stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  ASSERT_NE(nullptr, ext);
+
   ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+  // This is the query the divergence refusal exists for, so it must
+  // actually take that route -- otherwise the refusal, and the
+  // driver's undecided fall-back that depends on it, are untested.
+  EXPECT_GT(ext->nameDivergences, 0);
   vc_Destroy(vc);
 }
 

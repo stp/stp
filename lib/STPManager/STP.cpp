@@ -856,7 +856,29 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     }
 
     if (!tookLemmaPath && !(extActive && ext->hasPendingLemma()))
-      break; // ordinary refinement made no progress and nothing pending
+    {
+      // Ordinary refinement made no progress and nothing is pending.
+      // With array equality that is not necessarily a solver bug: a
+      // candidate whose scalar names disagreed with their terms is
+      // neither certifiable nor refutable by an array lemma, so it is
+      // handed to the host's read refinement -- which owns the missing
+      // read-congruence axiom but is not guaranteed to find one to
+      // add. When that happens the solve has genuinely run out of
+      // moves without deciding anything, which is an incompleteness to
+      // report, not an invariant to abort on.
+      if (extActive && ext->sawNameDivergence())
+      {
+        cerr << "Warning: array-equality refinement could not decide this "
+                "query: a candidate model was rejected because a scalar "
+                "name disagreed with the term it stands for, and read "
+                "refinement had no axiom left to add."
+             << endl;
+        if (toSATAIG.cbIsDestructed())
+          cleaner.release();
+        return SOLVER_TIMEOUT;
+      }
+      break;
+    }
   }
 
   FatalError("TopLevelSTPAux: reached the end without proper conclusion:"

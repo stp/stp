@@ -314,6 +314,20 @@ public:
   // entered the clause). Cumulative over the context lifetime.
   int lemmaAtomsFolded;
 
+  // Candidates refused by EXT_NAME_DIVERGENCE. Cumulative over the
+  // context lifetime.
+  int nameDivergences;
+
+  // Whether any candidate of the current solve was refused that way.
+  // Such a candidate is handed to the host's read refinement, which is
+  // not guaranteed to have an axiom to add for it; if refinement then
+  // stalls, the solve has run out of moves without deciding anything.
+  // That is an incompleteness, not the solver bug the driver's
+  // fall-through otherwise reports, so the driver consults this to
+  // tell the two apart. Deliberately sticky for the whole solve: it
+  // errs towards reporting an undecided result rather than aborting.
+  bool sawNameDivergence() const { return divergedThisSolve; }
+
 private:
   STPMgr* bm;
 
@@ -354,6 +368,7 @@ private:
   bool graphBound;
 
   bool pendingLemmaValid;
+  bool divergedThisSolve;
   ExtConflict pendingLemma;
 
   // reified equality cache, scoped to the current SAT instance
