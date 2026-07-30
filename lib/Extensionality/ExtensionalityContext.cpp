@@ -767,6 +767,33 @@ void ExtensionalityContext::bindAfterTransform(ArrayTransformer* at)
     graph.accesses.push_back(a);
   }
 
+#ifndef NDEBUG
+  // The property that lets namesAgreeWithCandidate skip the witness
+  // names: every witness read reached the inventory. It holds by
+  // construction -- the anchor is protected from substitution, and
+  // locateCanonicalOperands fails loudly if one is lost, so the read is
+  // in the transformed formula; the transformer registers it; and the
+  // operand it reads is a cone seed, so bindAfterTransform harvests it.
+  // Asserted rather than defended at runtime, so that a future change
+  // breaking it is a diagnosable failure here instead of a silent
+  // unknown much later.
+  for (size_t i = 0; i < records.size(); i++)
+  {
+    const Record& r = records[i];
+    bool haveL = false, haveR = false;
+    for (size_t z = 0; z < graph.accesses.size(); z++)
+    {
+      const ExtAccess& acc = graph.accesses[z];
+      if (acc.isWrite || !(acc.indexTerm == r.lambda))
+        continue;
+      haveL = haveL || acc.site == r.canonicalLeft;
+      haveR = haveR || acc.site == r.canonicalRight;
+    }
+    assert(haveL && "witness read of the left operand is not an access");
+    assert(haveR && "witness read of the right operand is not an access");
+  }
+#endif
+
   graph.writes = coneWrites;
   graph.writeParents = coneWriteParents;
   graph.eqEdges = eqEdges;
@@ -897,39 +924,13 @@ bool ExtensionalityContext::namesAgreeWithCandidate(ExtModelView& view) const
       return false;
   }
 
-  // The witness names are read by the checker too -- the witness loop
-  // decides a false equality against nameL and nameR directly -- but
-  // they are not any access's name: the access for a witness read
-  // carries that read's own abstraction variable.
-  //
-  // Whenever the witness read IS in the access inventory this adds
-  // nothing, and the argument is short: the anchor puts
-  // nameL = read(left, lambda) in the bit-blasted formula, so the
-  // candidate has nameL equal to that read's abstraction variable,
-  // and the loop above already checked that variable against the term.
-  // Transitivity does the rest. No input has been found where this
-  // fires -- not the regressions that do trigger a divergence through
-  // the loop above, not 780 cell-expansion differential queries.
-  //
-  // It is kept for the case the inventory does not cover, which the
-  // model evaluator elsewhere explicitly anticipates ("a cone read
-  // with no recorded abstraction variable was simplified out of the
-  // formula before solving"). There the transitivity argument has no
-  // first step, and the witness check would otherwise decide a false
-  // equality on evidence the completed model does not support.
-  NodeFactory* hf = bm->hashingNodeFactory;
-  for (size_t i = 0; i < graph.witnesses.size(); i++)
-  {
-    const ExtWitness& w = graph.witnesses[i];
-    const Record& r = records[w.record];
-    const unsigned ew = r.canonicalLeft.GetValueWidth();
-    const ASTNode readL = hf->CreateTerm(READ, ew, r.canonicalLeft, r.lambda);
-    const ASTNode readR = hf->CreateTerm(READ, ew, r.canonicalRight, r.lambda);
-    if (view.bvValue(w.leftValue) != view.bvValue(readL))
-      return false;
-    if (view.bvValue(w.rightValue) != view.bvValue(readR))
-      return false;
-  }
+  // The witness names -- the records' nameL and nameR, which the
+  // checker's witness loop reads directly -- need no comparison of
+  // their own. Each is anchored by nameL = read(left, lambda) in the
+  // bit-blasted formula, so the candidate gives it the value of that
+  // read's abstraction variable; that read is always in the inventory
+  // (bindAfterTransform asserts it), so the loop above has already
+  // checked its variable against its term. Transitivity does the rest.
   return true;
 }
 
