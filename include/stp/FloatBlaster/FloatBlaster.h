@@ -107,6 +107,44 @@ public:
   static uint64_t remUnrollSteps(unsigned exp_width, unsigned sig_width);
   static bool remSupported(unsigned exp_width, unsigned sig_width);
 
+  // How wide symfpu makes the *unpacked* exponent for a format --
+  // unpackedFloat<t>::exponentWidth (symfpu/core/unpackedFloat.h), replicated
+  // here as remUnrollSteps replicates maximumExponentDifference, because the
+  // refusals below have to link in builds without floating-point support,
+  // where symfpu's headers are not compiled at all.
+  static unsigned unpackedExponentWidth(unsigned exp_width,
+                                        unsigned sig_width);
+
+  // Whether symfpu can build *any* circuit at this format. Every operation
+  // unpacks its operands, and symfpu::unpack asserts
+  //
+  //   INVARIANT(unpackedExWidth > exWidth)      // symfpu/core/packing.h
+  //
+  // to keep its exponent arithmetic from overflowing. exponentWidth returns
+  // the packed width unchanged once sb <= 3 -- the subnormals fit in the gap
+  // without a wider exponent -- so that reads eb > eb and the invariant does
+  // not hold. With assertions on the solve aborts; with them off (which is
+  // what CMAKE_BUILD_TYPE=Release forces) the widths underflow and the
+  // circuit builder walks off the end of a bitvector. Refuse instead, at the
+  // entrances, the way fp.rem is refused.
+  static bool formatSupported(unsigned exp_width, unsigned sig_width);
+
+  // Whether fp.roundToIntegral in particular can be built at this format.
+  // symfpu::roundToIntegral resizes a value of width unpackedExWidth + 1 to
+  // the unpacked significand width, choosing between matchWidth (which may
+  // only widen) and extract on
+  //
+  //   significandWidth >= exponentWidth         // symfpu/core/convert.h:122
+  //
+  // one short of the width it is actually resizing. When the two widths are
+  // *equal* the guard sends a value one bit too wide into matchWidth. The
+  // extract arm is what should run there and is already correct -- the collar
+  // above it bounds the value, which is why upstream's guard wants to read
+  // `>` -- so this refusal can go once the pinned submodule carries that
+  // one-character fix.
+  static bool roundToIntegralSupported(unsigned exp_width,
+                                       unsigned sig_width);
+
   // A read of the array supplying an operation's unspecified results. Identity
   // is the name, so every occurrence of an operation at a given signature
   // reads one and the same array -- which is what makes the result a function

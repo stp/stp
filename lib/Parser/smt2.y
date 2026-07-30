@@ -515,6 +515,18 @@ namespace stp
       fatal_yyerror("argument to fp.roundToIntegral must be a float.");
     }
 
+    // Every other operation works at these formats; only this one reaches
+    // symfpu's off-by-one guard. Refused per operation, as fp.rem is, rather
+    // than by taking the whole format away.
+    if (!stp::FloatBlaster::roundToIntegralSupported(expr->GetExpWidth(),
+                                                     expr->GetSigWidth()))
+    {
+      fatal_yyerror("fp.roundToIntegral is not supported at this format: "
+                    "symfpu resizes its rounding point with matchWidth, "
+                    "which may only widen, on a guard one bit short of the "
+                    "width being resized");
+    }
+
     ASTNode* n = stp::GlobalParserInterface->newNode(
         stp::GlobalParserInterface->nf->CreateTerm(FP_ROUNDTOINTEGRAL,
                                                    expr->GetValueWidth(), *rm,
@@ -548,6 +560,17 @@ namespace stp
     {
       fatal_yyerror("a floating-point format needs at least 2 exponent and "
                     "2 significand bits");
+    }
+
+    // SMT-LIB's own floor stops above; this one is symfpu's. Refused here
+    // rather than in the blaster, where the widths underflow into a
+    // segfault -- see FloatBlaster::formatSupported.
+    if (!stp::FloatBlaster::formatSupported(exp_width, sig_width))
+    {
+      fatal_yyerror("this floating-point format is not supported: symfpu "
+                    "needs an unpacked exponent wider than the format's own, "
+                    "which does not hold once the significand is 3 bits or "
+                    "fewer; use at least 4 significand bits");
     }
   }
 
@@ -1749,12 +1772,10 @@ an_fp_sort:
 }
 | LPAREN_TOK UNDERSCORE_TOK FLOATINGPOINT_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK
 {
-    checkFpSupported();
-    if ($4 < 2 || $5 < 2)
-    {
-      fatal_yyerror("a floating-point format needs at least 2 exponent and "
-                    "2 significand bits");
-    }
+    // Through the shared funnel: the sort rule used to carry its own copy of
+    // the floor, which is how the two came to disagree about what a usable
+    // format is.
+    checkFpFormatWidths($4, $5);
     $$ = new stp::float_size($4, $5);
 }
 ;

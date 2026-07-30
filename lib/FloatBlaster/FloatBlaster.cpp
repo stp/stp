@@ -147,6 +147,59 @@ bool FloatBlaster::remSupported(unsigned exp_width, unsigned sig_width)
   return remUnrollSteps(exp_width, sig_width) <= REM_UNROLL_LIMIT;
 }
 
+// symfpu's bitsToRepresent (symfpu/core/nondet.h and friends): how many bits
+// it takes to write `n`.
+static unsigned bitsToRepresent(uint64_t n)
+{
+  unsigned bits = 0;
+  while (n != 0)
+  {
+    bits++;
+    n >>= 1;
+  }
+  return bits;
+}
+
+// Kept line for line with symfpu's unpackedFloat<t>::exponentWidth so the two
+// can be diffed; see the header for why it is replicated rather than called.
+unsigned FloatBlaster::unpackedExponentWidth(unsigned exp_width,
+                                             unsigned sig_width)
+{
+  if (sig_width <= 3)
+  {
+    // Subnormals fit into the gap between the minimum normal exponent and
+    // what a signed number of this width can hold, so no widening is needed
+    // -- and, as formatSupported records, symfpu's own unpack then rejects
+    // the format.
+    return exp_width;
+  }
+
+  if (exp_width >= 63)
+    return UINT_MAX; // the shift below would overflow; certainly wide enough
+
+  if (bitsToRepresent(sig_width - 3) < exp_width - 1)
+  {
+    // Significand is short compared to the exponent range: one extra bit.
+    return exp_width + 1;
+  }
+
+  // Significand is long compared to the exponent range.
+  return bitsToRepresent(((uint64_t)1 << (exp_width - 1)) + sig_width - 3) + 1;
+}
+
+bool FloatBlaster::formatSupported(unsigned exp_width, unsigned sig_width)
+{
+  return unpackedExponentWidth(exp_width, sig_width) > exp_width;
+}
+
+bool FloatBlaster::roundToIntegralSupported(unsigned exp_width,
+                                            unsigned sig_width)
+{
+  // unpackedFloat<t>::significandWidth is the format's significand width
+  // unchanged, so sig_width is the width convert.h compares against.
+  return unpackedExponentWidth(exp_width, sig_width) != sig_width;
+}
+
 ASTNode FloatBlaster::unspecifiedValue(STPMgr* bm, const char* tag,
                                        const ASTVec& operands,
                                        const ASTNode& index,
@@ -198,6 +251,17 @@ ASTNode FloatBlaster::BlastNode_TopLevel(STPMgr* bm, Kind k, const ASTVec& kids,
                                          unsigned int operand_exp,
                                          unsigned int operand_sig)
 {
+  // Every operation unpacks its operands, so a format symfpu cannot unpack
+  // cannot be blasted at all. Backstop; the parser and the C API refuse
+  // earlier, with a line number and the format.
+  if (operand_exp != 0 && !formatSupported(operand_exp, operand_sig))
+  {
+    FatalError("FloatBlaster: this floating-point format is not supported: "
+               "symfpu needs an unpacked exponent wider than the format's "
+               "own, which does not hold once the significand is 3 bits or "
+               "fewer");
+  }
+
   // Point symfpu's backend at the manager being blasted now, rather than
   // whichever manager happened to blast first (see symbolic_fp::init).
   symbolic_fp::init(bm);
@@ -389,6 +453,15 @@ ASTNode FloatBlaster::BlastNode(STPMgr* bm, Kind k, const ASTVec& kids,
       output = symbolic_fp::blast_smt_eq(operands, kids[0], kids[1]);
       break;
     case FP_ROUNDTOINTEGRAL:
+      // Backstop; the parser and the C API refuse earlier, with nicer
+      // messages.
+      if (!roundToIntegralSupported(operand_exp, operand_sig))
+      {
+        FatalError("FloatBlaster: fp.roundToIntegral is not supported at "
+                   "this format: symfpu resizes its rounding point with "
+                   "matchWidth, which may only widen, on a guard one bit "
+                   "short of the width being resized");
+      }
       output = symbolic_fp::blast_round_to_integral(operands,
                                                     /* rm */ kids[0],
                                                     /* expr */ kids[1]);

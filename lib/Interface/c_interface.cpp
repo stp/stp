@@ -1057,6 +1057,29 @@ Expr vc_boolType(VC vc)
 // Floating point
 // ---------------------------------------------------------------------------
 
+// Every route by which a floating-point format enters through the C API --
+// vc_fpType's type node and the entry points that take the widths as raw
+// ints. One funnel: the parser's copy of this drifted from its sort rule's
+// once already.
+static void checkFpWidths(int eb, int sb)
+{
+  if (eb < 2 || sb < 2)
+  {
+    stp::FatalError("CInterface: a floating-point format needs at least 2 "
+                    "exponent and 2 significand bits");
+  }
+
+  // SMT-LIB's floor above, symfpu's here; see FloatBlaster::formatSupported.
+  if (!stp::FloatBlaster::formatSupported(eb, sb))
+  {
+    stp::FatalError("CInterface: this floating-point format is not "
+                    "supported: symfpu needs an unpacked exponent wider than "
+                    "the format's own, which does not hold once the "
+                    "significand is 3 bits or fewer; use at least 4 "
+                    "significand bits");
+  }
+}
+
 Type vc_fpType(VC vc, int exp_bits, int sig_bits)
 {
 #ifndef STP_ENABLE_FLOATING_POINT
@@ -1074,11 +1097,7 @@ Type vc_fpType(VC vc, int exp_bits, int sig_bits)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
 
-  if (exp_bits < 2 || sig_bits < 2)
-  {
-    stp::FatalError("CInterface: vc_fpType: a floating-point format needs at "
-                    "least 2 exponent and 2 significand bits");
-  }
+  checkFpWidths(exp_bits, sig_bits);
 
   // Mirror vc_bvType/vc_arrayType: a type is a node whose children hold the
   // widths -- here the exponent and significand widths.
@@ -1291,6 +1310,20 @@ Expr vc_fpRoundToIntegralExpr(VC vc, Expr rm, Expr f)
 {
   stp::ASTNode* m = (stp::ASTNode*)rm;
   stp::ASTNode* x = (stp::ASTNode*)f;
+  // Refused at term creation, where the caller can see it, rather than during
+  // solving -- as vc_fpRemExpr does, and for the same reason. A non-float
+  // operand gets fpTermResult's own diagnosis, so ask only about a real
+  // format.
+  if (x->GetType() == stp::FLOATINGPOINT_TYPE &&
+      !stp::FloatBlaster::roundToIntegralSupported(x->GetExpWidth(),
+                                                   x->GetSigWidth()))
+  {
+    stp::FatalError("CInterface: vc_fpRoundToIntegralExpr: "
+                    "fp.roundToIntegral is not supported at this format: "
+                    "symfpu resizes its rounding point with matchWidth, "
+                    "which may only widen, on a guard one bit short of the "
+                    "width being resized");
+  }
   return fpTermResult(vc, stp::FP_ROUNDTOINTEGRAL, *x, {*m, *x});
 }
 
@@ -1389,17 +1422,6 @@ Expr vc_fpIsNegativeExpr(VC vc, Expr f)
 Expr vc_fpIsPositiveExpr(VC vc, Expr f)
 {
   return fpPredResult(vc, stp::FP_ISPOSITIVE, {*(stp::ASTNode*)f});
-}
-
-// Some entry points take the format as raw ints rather than a type node;
-// apply vc_fpType's floor so they cannot produce degenerate widths.
-static void checkFpWidths(int eb, int sb)
-{
-  if (eb < 2 || sb < 2)
-  {
-    stp::FatalError("CInterface: a floating-point format needs at least 2 "
-                    "exponent and 2 significand bits");
-  }
 }
 
 // Extract (eb, sb) from a floating-point type node (see vc_fpType).
