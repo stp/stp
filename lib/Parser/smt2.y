@@ -303,6 +303,28 @@ namespace stp
     assert(n->GetType() == FLOATINGPOINT_TYPE);
   }
 
+  // The rounding-mode argument of a floating-point operation.
+  //
+  // Testing the carrier -- "a 5-bit bitvector" -- is not the same test.
+  // SMT-LIB's RoundingMode has five values and the carrier thirty-two, and
+  // symfpu's roundingDecision falls through to truncate, overflowing to the
+  // maximum and underflowing to the smallest subnormal, when every mode
+  // equality comes out false. That is a sixth mode, in no standard, and an
+  // input that reached it was answered rather than refused.
+  //
+  // BVTypeCheck still asks only about the carrier: it runs over nodes STP
+  // builds for itself as well as ones the input names, including the
+  // rebuilt operations of model evaluation, whose rounding mode may be a
+  // model value for a read the solve never constrained. This is the check
+  // for what the input asks for.
+  void checkRoundingMode(ASTNode* rm)
+  {
+    if (!stp::GlobalParserBM->isRoundingModeSortedTerm(*rm))
+    {
+      fatal_yyerror("expected a rounding mode.");
+    }
+  }
+
   // fp.add/fp.sub/fp.mul/fp.div. Each is ternary -- the rounding mode is
   // child 0, matching the arity declared in ASTKind.kinds -- so that the
   // blaster rounds as the input asked rather than assuming RNE.
@@ -313,10 +335,7 @@ namespace stp
   // rounding mode here (and again in BVTypeCheck) costs nothing by comparison.
   ASTNode* createFPArith(Kind k, ASTNode* rm, ASTNode* lhs, ASTNode* rhs)
   {
-    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
-    {
-      fatal_yyerror("expected a rounding mode.");
-    }
+    checkRoundingMode(rm);
 
     if (lhs->GetType() != FLOATINGPOINT_TYPE ||
         rhs->GetType() != FLOATINGPOINT_TYPE)
@@ -440,10 +459,7 @@ namespace stp
   // fp.fma: a rounding mode and three floats of the same format.
   ASTNode* createFPFma(ASTNode* rm, ASTNode* x, ASTNode* y, ASTNode* z)
   {
-    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
-    {
-      fatal_yyerror("expected a rounding mode.");
-    }
+    checkRoundingMode(rm);
 
     if (x->GetType() != FLOATINGPOINT_TYPE ||
         y->GetType() != FLOATINGPOINT_TYPE ||
@@ -480,10 +496,7 @@ namespace stp
   // fp.sqrt: a rounding mode and one float.
   ASTNode* createFPSqrt(ASTNode* rm, ASTNode* expr)
   {
-    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
-    {
-      fatal_yyerror("expected a rounding mode.");
-    }
+    checkRoundingMode(rm);
 
     if (expr->GetType() != FLOATINGPOINT_TYPE)
     {
@@ -505,10 +518,7 @@ namespace stp
   // literal modes.
   ASTNode* createFPRoundToIntegral(ASTNode* rm, ASTNode* expr)
   {
-    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
-    {
-      fatal_yyerror("expected a rounding mode.");
-    }
+    checkRoundingMode(rm);
 
     if (expr->GetType() != FLOATINGPOINT_TYPE)
     {
@@ -665,10 +675,7 @@ namespace stp
                                   ASTNode* bits)
   {
     checkFpFormatWidths(exp_width, sig_width);
-    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
-    {
-      fatal_yyerror("expected a rounding mode.");
-    }
+    checkRoundingMode(rm);
 
     if (bits->GetType() != BITVECTOR_TYPE)
     {
@@ -697,8 +704,7 @@ namespace stp
     if (target_width == 0)
       fatal_yyerror("fp.to_ubv/fp.to_sbv width must be positive.");
 
-    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
-      fatal_yyerror("expected a rounding mode.");
+    checkRoundingMode(rm);
 
     if (expr->GetType() != FLOATINGPOINT_TYPE)
       fatal_yyerror("argument to fp.to_ubv/fp.to_sbv must be a float.");
@@ -840,10 +846,7 @@ namespace stp
                         ASTNode* rm, ASTNode* expr)
   {
     checkFpFormatWidths(exp_width, sig_width);
-    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
-    {
-      fatal_yyerror("expected a rounding mode.");
-    }
+    checkRoundingMode(rm);
 
     // The rm-taking form of to_fp covers three different operations,
     // distinguished by the source's sort: reformatting a float, converting a

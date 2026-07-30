@@ -316,6 +316,19 @@ public:
   // carrier thirty-two.
   ASTNode roundingModeValidConstraint(const ASTNode& s);
 
+  // Whether `n` denotes a value of SMT-LIB's RoundingMode sort. The sort has
+  // no width of its own to test -- the carrier is a plain 5-bit bitvector --
+  // so this recognises the shapes that can denote a mode: the five one-hot
+  // constants, a declared RoundingMode symbol, a read from a
+  // RoundingMode-element array, and an ite over those.
+  //
+  // Everything that takes a rounding mode must ask this rather than test the
+  // carrier's width. The sort has five values and the carrier thirty-two, and
+  // symfpu's roundingDecision falls through to truncate-with-overflow-to-max
+  // when every mode equality is false -- a sixth, non-IEEE mode. Accepting a
+  // bare (_ BitVec 5) there let an input compute under it.
+  bool isRoundingModeSortedTerm(const ASTNode& n) const;
+
   DLL_PUBLIC ASTNode CreateFPSpecialConst(FPSpecial which, unsigned exp_width,
                                           unsigned sig_width);
 

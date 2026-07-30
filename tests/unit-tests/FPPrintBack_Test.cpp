@@ -100,7 +100,12 @@ TEST(FPPrintBack, arithmetic_and_modes)
   )",
              {"(set-logic QF_BVFP)", "fp.add RNE", "fp.mul RTZ", "fp.sqrt RNA",
               "fp.roundToIntegral |r|", "fp.fma RTP", "fp.rem", "fp.min",
-              "fp.max", "fp.lt", "fp.leq", "fp.geq", "fp.gt"});
+              "fp.max", "fp.lt", "fp.leq", "fp.geq", "fp.gt",
+              // The mode's declaration must name the sort, not the 5-bit
+              // carrier: the operations ask for the sort, so printing the
+              // carrier gives back something that no longer parses -- which
+              // is what the re-parse below would then hit.
+              "(declare-fun |r| () RoundingMode)"});
 }
 
 TEST(FPPrintBack, constants_and_conversions)

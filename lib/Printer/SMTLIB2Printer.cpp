@@ -38,7 +38,39 @@ namespace printer
 using std::string;
 using namespace stp;
 
-void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os);
+void printVarDeclsToStream(STPMgr* mgr, ASTNodeSet& symbols,
+                           const ASTNodeSet& rounding_modes, ostream& os);
+
+// The symbols this term uses as rounding modes.
+//
+// Read off the term rather than asked of the manager. STPMgr's registry of
+// declared RoundingMode symbols is frame-scoped, and the parser tears every
+// frame down when it reaches end of file -- so by the time anything prints a
+// whole formula back, the registry is empty and every mode would print as its
+// 5-bit carrier. The printed form then no longer parses, because the
+// operations ask for the sort rather than the width (see
+// STPMgr::isRoundingModeSortedTerm).
+//
+// No position table: inside a floating-point operation a 5-bit bitvector
+// symbol can only be a rounding mode. The float operands are
+// FLOATINGPOINT_TYPE, to_fp's and fp.to_ubv's width arguments are constants,
+// and fp.min/fp.max's totalisation child is one bit wide.
+static void collectRoundingModeSymbols(const ASTNode& n, ASTNodeSet& visited,
+                                       ASTNodeSet& out)
+{
+  if (!visited.insert(n).second)
+    return;
+
+  const bool fp_operation = is_FP_kind(n.GetKind());
+  for (size_t i = 0; i < n.Degree(); i++)
+  {
+    const ASTNode& c = n[i];
+    if (fp_operation && c.GetKind() == SYMBOL &&
+        c.GetType() == BITVECTOR_TYPE && c.GetValueWidth() == 5)
+      out.insert(c);
+    collectRoundingModeSymbols(c, visited, out);
+  }
+}
 
 const char* roundingModeName(unsigned encoding)
 {
@@ -101,7 +133,11 @@ void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr,
 
   ASTNodeSet visited, symbols;
   buildListOfSymbols(n, visited, symbols);
-  printVarDeclsToStream(symbols, os);
+
+  ASTNodeSet rm_visited, rounding_modes;
+  collectRoundingModeSymbols(n, rm_visited, rounding_modes);
+
+  printVarDeclsToStream(mgr, symbols, rounding_modes, os);
   os << "(assert ";
   SMTLIB_Print(os, mgr, n, 0, &SMTLIB2_Print1, false);
   os << ")\n";
@@ -109,7 +145,8 @@ void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr,
   // os << "(exit)\n";
 }
 
-void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os)
+void printVarDeclsToStream(STPMgr* mgr, ASTNodeSet& symbols,
+                           const ASTNodeSet& rounding_modes, ostream& os)
 {
   for (ASTNodeSet::const_iterator i = symbols.begin(), iend = symbols.end();
        i != iend; i++)
@@ -123,23 +160,49 @@ void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os)
     a.nodeprint(os);
     os << "|";
 
+    // The sorts the node cannot say for itself: a RoundingMode is a plain
+    // 5-bit bitvector, and an array's index sort is only ever a width. Print
+    // them and the declaration replays; print the carrier and it does not --
+    // every operation that takes a rounding mode asks for the sort, not the
+    // width (see STPMgr::isRoundingModeSortedTerm), so the printed form would
+    // no longer parse.
     switch (a.GetType())
     {
       case stp::BITVECTOR_TYPE:
+        if (mgr->isRoundingModeSymbol(a) ||
+            rounding_modes.find(a) != rounding_modes.end())
+        {
+          os << " () RoundingMode";
+          break;
+        }
         os << " () (";
         os << "_ BitVec " << a.GetValueWidth() << ")";
 
         break;
       case stp::ARRAY_TYPE:
+      {
+        unsigned int idx_exp = 0;
+        unsigned int idx_sig = 0;
+
         os << " () (";
-        os << "Array (_ BitVec " << a.GetIndexWidth() << ") ";
+        os << "Array ";
+        if (mgr->arrayHasFpIndex(a, idx_exp, idx_sig))
+          os << "(_ FloatingPoint " << idx_exp << " " << idx_sig << ") ";
+        else if (mgr->arrayHasRmIndex(a))
+          os << "RoundingMode ";
+        else
+          os << "(_ BitVec " << a.GetIndexWidth() << ") ";
+
         // An array of floats carries the element format on the array symbol.
-        if (a.GetExpWidth() != 0)
+        if (mgr->arrayHasRmElement(a))
+          os << "RoundingMode )";
+        else if (a.GetExpWidth() != 0)
           os << "(_ FloatingPoint " << a.GetExpWidth() << " " << a.GetSigWidth()
              << ") )";
         else
           os << "(_ BitVec " << a.GetValueWidth() << ") )";
         break;
+      }
       case stp::BOOLEAN_TYPE:
         os << " () Bool ";
         break;

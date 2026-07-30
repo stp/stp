@@ -449,6 +449,35 @@ ASTNode STPMgr::roundingModeValidConstraint(const ASTNode& s)
   return defaultNodeFactory->CreateNode(OR, one_of);
 }
 
+bool STPMgr::isRoundingModeSortedTerm(const ASTNode& n) const
+{
+  if (n.GetValueWidth() != 5 || n.GetIndexWidth() != 0)
+    return false;
+
+  switch (n.GetKind())
+  {
+    case BVCONST:
+    {
+      using namespace symbolic_fp;
+      const unsigned v = n.GetUnsignedConst();
+      return v == ROUND_NEAREST_TIES_TO_EVEN || v == ROUND_TOWARD_POSITIVE ||
+             v == ROUND_TOWARD_NEGATIVE || v == ROUND_TOWARD_ZERO ||
+             v == ROUND_NEAREST_TIES_TO_AWAY;
+    }
+    case SYMBOL:
+      // Declared RoundingMode symbols are pinned to the five encodings when
+      // they are declared, so the carrier cannot hold anything else.
+      return isRoundingModeSymbol(n);
+    case READ:
+      // Likewise pinned, by FpTotalise, for every read in the formula.
+      return arrayHasRmElement(n[0]);
+    case ITE:
+      return isRoundingModeSortedTerm(n[1]) && isRoundingModeSortedTerm(n[2]);
+    default:
+      return false;
+  }
+}
+
 ASTNode STPMgr::arrayBaseSymbol(const ASTNode& arr) const
 {
   ASTNode n = arr;
