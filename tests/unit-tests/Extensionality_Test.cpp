@@ -1284,6 +1284,63 @@ TEST_F(ExtPrepareTest, RewrittenWitnessIndexFailsLoudly)
                "witness read's index was rewritten away");
 }
 
+// Operand recovery walks the whole DAG for equations of the anchor's
+// shape and keeps what it finds in a hash-ordered container. Exactly
+// one such equation may exist per witness name -- the names are fresh,
+// substitution cannot move them and unconstrained removal cannot delete
+// them -- but that is a property of the passes in between, not of this
+// walk. A second one would otherwise be resolved by hash order, giving
+// a different equality operand from run to run.
+TEST_F(ExtPrepareTest, DuplicateAnchorFailsLoudly)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b"), c = arr("c");
+  ASTNode proxy = ext->makeEquality(a, b);
+  (void)proxy;
+  ASSERT_EQ(1u, ext->getRecords().size());
+  const ExtensionalityContext::Record r = ext->getRecords()[0];
+
+  ext->beginSolve();
+  // The intact bundle, plus a rival equation of the same shape for the
+  // same name over a different array.
+  ASTVec conjuncts;
+  conjuncts.push_back(r.anchorL);
+  conjuncts.push_back(r.anchorR);
+  conjuncts.push_back(r.witnessClause);
+  conjuncts.push_back(
+      hf->CreateNode(EQ, r.nameL, hf->CreateTerm(READ, 2, c, r.lambda)));
+  EXPECT_DEATH(ext->prepare(hf->CreateNode(AND, conjuncts)),
+               "occurs twice with different right-hand sides");
+}
+
+// possibleConeSymbols is collected from the operands as they were
+// built, and decides which reads are protected from the
+// read-equals-constant substitution; the cone is closed over the
+// operands as they are after simplification. If a pass ever rewrites an
+// operand to name an array symbol that was not under it before, that
+// symbol's reads were never protected, and an observation the
+// consistency check depends on may already have been substituted away.
+TEST_F(ExtPrepareTest, UnanticipatedConeSymbolFailsLoudly)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b"), z = arr("z");
+  ASTNode proxy = ext->makeEquality(a, b);
+  (void)proxy;
+  ASSERT_EQ(1u, ext->getRecords().size());
+  const ExtensionalityContext::Record r = ext->getRecords()[0];
+
+  ext->beginSolve();
+  // Stands in for a pass that rewrote the left operand into a term over
+  // z, an array the registry never saw when the equality was built.
+  ASTVec conjuncts;
+  conjuncts.push_back(
+      hf->CreateNode(EQ, r.nameL, hf->CreateTerm(READ, 2, z, r.lambda)));
+  conjuncts.push_back(r.anchorR);
+  conjuncts.push_back(r.witnessClause);
+  EXPECT_DEATH(ext->prepare(hf->CreateNode(AND, conjuncts)),
+               "entered the cone that was not anticipated");
+}
+
 // The decision table combining STP's own model evaluation with the
 // array consistency check: an array conflict always takes priority
 // (only its lemma can rule the candidate out), and a candidate is

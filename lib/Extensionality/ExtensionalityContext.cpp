@@ -505,8 +505,37 @@ ASTNode ExtensionalityContext::conjoinRecordConstraints(const ASTNode& root)
 // prevented.
 void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
 {
+  // Only the witness names are ever looked up below, so only they are
+  // collected: a protected lambda or proxy turning up in an equation of
+  // the same shape is none of this function's business.
+  std::set<ASTNode> witnessNames;
+  for (size_t i = 0; i < records.size(); i++)
+  {
+    witnessNames.insert(records[i].nameL);
+    witnessNames.insert(records[i].nameR);
+  }
+
   // name symbol -> the anchored right-hand side: the witness read, or
   // the if-then-else the simplifier pushed it into.
+  //
+  // Exactly one equation of this shape may exist per name. The names
+  // are fresh, so no user term mentions them; they occur only in their
+  // own anchor and in the witness clause, whose equality has the other
+  // NAME on its far side and so does not match here; substitution
+  // cannot move them (SubstitutionMap::extensionalityProtected refuses
+  // any pair with a protected symbol on either side) and unconstrained
+  // removal cannot delete them (MutableASTNode's untouchable set); and
+  // because nodes are immutable and hash-consed, a rewritten anchor's
+  // predecessor is no longer reachable from the root, so the walk
+  // cannot see both.
+  //
+  // That is a property of every pass that runs in between, not
+  // something this function can arrange, and the walk visits the whole
+  // DAG rather than the top-level conjuncts -- so a second equation of
+  // this shape would be believed even nested under a disjunction. The
+  // container is hash-ordered, so silently keeping the last one found
+  // would pick a different operand from run to run and certify the
+  // candidate against the wrong arrays. Refuse instead.
   std::map<ASTNode, ASTNode> anchorRhs;
   ASTNodeSet visited;
   collectDag(root, visited);
@@ -520,9 +549,18 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
     {
       const ASTNode& s = n[side];
       const ASTNode& other = n[1 - side];
-      if (s.GetKind() == SYMBOL && isProtected(s) &&
-          (other.GetKind() == READ || other.GetKind() == ITE))
-        anchorRhs[s] = other;
+      if (s.GetKind() != SYMBOL ||
+          witnessNames.find(s) == witnessNames.end() ||
+          !(other.GetKind() == READ || other.GetKind() == ITE))
+        continue;
+      const std::map<ASTNode, ASTNode>::const_iterator prev = anchorRhs.find(s);
+      if (prev != anchorRhs.end() && !(prev->second == other))
+        FatalError("array-equality: a witness read's defining equation "
+                   "occurs twice with different right-hand sides, so which "
+                   "one gives the equality operand's current form is not "
+                   "determined",
+                   s);
+      anchorRhs[s] = other;
     }
   }
 
@@ -666,6 +704,30 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
   // Guaranteed by construction-time replacement; if it ever fails, the
   // array transformer's own check below fires next and just as loudly.
   assert(coneITEs.empty());
+
+  // possibleConeSymbols decided, back when each equality was BUILT,
+  // which reads to protect from the read-equals-constant substitution.
+  // The cone is closed over the operands as they are NOW, after
+  // simplification. Nothing makes the first a superset of the second:
+  // it holds because the closure only reaches symbols that were already
+  // under the operand at construction (upward closure adds writes,
+  // which are not symbols, and array if-then-elses, which no longer
+  // exist), and because no pass rewrites an operand to name an array
+  // symbol that was not there. That second half is a claim about every
+  // pass that runs in between, and losing it is silent: an unanticipated
+  // cone symbol's reads were never protected, so the substitution may
+  // have deleted an observation the consistency check needs, and the
+  // check then certifies a candidate against contents it never saw.
+  // Cheap to verify, so verify it.
+  for (std::set<ASTNode>::const_iterator it = cone.begin(); it != cone.end();
+       ++it)
+  {
+    if (it->GetKind() == SYMBOL && !mayBeConeArray(*it))
+      FatalError("array-equality: an array symbol entered the cone that was "
+                 "not anticipated when the equalities were built, so reads "
+                 "over it were never protected from substitution",
+                 *it);
+  }
 
   // Freeze the cone; it must not change for the rest of the solve.
   coneArrays = cone;
