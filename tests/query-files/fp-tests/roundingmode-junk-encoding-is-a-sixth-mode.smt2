@@ -1,8 +1,12 @@
 ; RUN: not %solver %s 2>&1 | %OutputCheck %s
 ;
-; Why the rounding-mode check has to be the sort and not the carrier's width:
-; an encoding matching none of the five modes is not merely "some mode", it is
-; a behaviour no standard has.
+; A rounding mode is carried as a 5-bit bitvector, and every operation that
+; takes one used to check exactly that: "is it 5 bits wide". SMT-LIB's
+; RoundingMode has five values; the carrier has thirty-two. The check is now
+; the sort -- STPMgr::isRoundingModeSortedTerm.
+;
+; Why that has to be the sort and not the width: an encoding matching none of
+; the five is not merely "some mode", it is a behaviour no standard has.
 ;
 ; With every equality in symfpu's roundingDecision false (rounder.h:149-155)
 ; nothing ever rounds up, so it truncates and overflows to max, as RTZ does.
