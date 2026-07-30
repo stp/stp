@@ -39,7 +39,41 @@ class MutableASTNode
 {
   static THREAD_LOCAL_IE vector<MutableASTNode*> all;
 
+  // Symbols that must never be reported unconstrained, however few
+  // occurrences they have in this graph. Something outside the graph
+  // holds a definition for them -- currently the array-equality
+  // procedure, whose abstraction variables, witness symbols and lemma
+  // leaves carry their meaning in constraints it re-conjoins per solve
+  // and in the SAT variables its refinement lemmas are encoded over.
+  // A caller that rewrites the graph on the strength of
+  // isUnconstrained() would delete such a definition, and the
+  // substitution map's refusal to record the replacement comes too
+  // late to undo it. Installed for the duration of a pass; NULL means
+  // no restriction.
+  static THREAD_LOCAL_IE const std::set<ASTNode>* untouchable;
+
 public:
+  // Scoped installer for the untouchable set; restores the previous
+  // value so passes cannot leak the restriction into each other.
+  class UntouchableScope
+  {
+    const std::set<ASTNode>* saved;
+
+  public:
+    explicit UntouchableScope(const std::set<ASTNode>* s) : saved(untouchable)
+    {
+      untouchable = s;
+    }
+    ~UntouchableScope() { untouchable = saved; }
+    UntouchableScope(const UntouchableScope&) = delete;
+    UntouchableScope& operator=(const UntouchableScope&) = delete;
+  };
+
+  static bool isUntouchable(const ASTNode& n)
+  {
+    return untouchable != NULL && untouchable->find(n) != untouchable->end();
+  }
+
   typedef std::unordered_set<MutableASTNode*> ParentsType;
   ParentsType parents;
 
@@ -283,6 +317,11 @@ public:
   bool isUnconstrained()
   {
     if (!isSymbol())
+      return false;
+
+    // A protected symbol is never free to be given a value here, no
+    // matter how it occurs; see the untouchable declaration above.
+    if (isUntouchable(n))
       return false;
 
     return parents.size() == 1;
