@@ -987,3 +987,69 @@ TEST(array_extensionality, flag_off_preserves_eq_node)
   ASSERT_EQ(EQ, getExprKind(eq));
   vc_Destroy(vc);
 }
+
+TEST(array_extensionality, DISABLED_ite_replacement_survives_a_rewritten_condition)
+{
+  // Same property as repeated_queries_do_not_leak_ite_records above --
+  // a repeated solve must reuse the cached if-then-else replacement
+  // rather than mint a new generation of records -- but with a
+  // condition preprocessing REWRITES.
+  //
+  // That is the difference between the two tests, and it is the whole
+  // defect. Elimination runs after preprocessing, so it rebuilds the
+  // if-then-else from an anchor the simplifier has already pushed the
+  // read through, and keys the cache lookup on the *rewritten*
+  // condition. Give preprocessing something to rewrite -- here
+  // x <u 0x10 in the presence of x <u 0x08 -- and the lookup misses on
+  // every later solve: a fresh array, two equality records, two witness
+  // indices and four virtual reads leak per solve, and each is
+  // re-conjoined into every solve after that. Solve cost becomes
+  // quadratic in the number of solves.
+  //
+  // With the condition a plain Boolean symbol the lookup hits and the
+  // count is stable, which is why the sibling test does not see it. The
+  // unit test ExtPrepareTest.IteEliminationReachesFixedPointAndCaches
+  // asserts the same thing and cannot see it either: it calls prepare()
+  // directly, so no preprocessing runs between its two solves.
+  //
+  // DISABLED until the elimination moves to node construction, where
+  // the replacement is keyed on the if-then-else as the user built it
+  // and nothing can rewrite the key.
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv8 = vc_bvType(vc, 8);
+  Type bv4 = vc_bvType(vc, 4);
+  Type arrT = vc_arrayType(vc, bv4, bv8);
+
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr b = vc_varExpr(vc, "b", arrT);
+  Expr c = vc_varExpr(vc, "c", arrT);
+  Expr x = vc_varExpr(vc, "x", bv8);
+
+  // Undecided, so the if-then-else survives and must be eliminated,
+  // but not a bare Boolean symbol either: preprocessing normalises the
+  // comparison, and that rewritten form is what the rebuilt lookup key
+  // is made of.
+  Expr cond = vc_bvLtExpr(vc, x, vc_bvConstExprFromLL(vc, 8, 0x10));
+  vc_assertFormula(vc, vc_eqExpr(vc, vc_iteExpr(vc, cond, a, b), c));
+
+  stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  ASSERT_NE(nullptr, ext);
+
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  // one user equality plus the two guarded equalities of the
+  // replacement
+  const size_t afterFirstSolve = ext->getRecords().size();
+  EXPECT_EQ(3u, afterFirstSolve);
+
+  // An assertion between the solves is what forces the second one to
+  // prepare again rather than reuse the previous answer.
+  Expr t = vc_varExpr(vc, "t", bv8);
+  vc_assertFormula(vc, vc_bvLeExpr(vc, t, vc_bvConstExprFromLL(vc, 8, 0xFE)));
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+
+  EXPECT_EQ(afterFirstSolve, ext->getRecords().size());
+  vc_Destroy(vc);
+}
