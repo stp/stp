@@ -303,6 +303,28 @@ namespace stp
     assert(n->GetType() == FLOATINGPOINT_TYPE);
   }
 
+  // The rounding-mode argument of a floating-point operation.
+  //
+  // Testing the carrier -- "a 5-bit bitvector" -- is not the same test.
+  // SMT-LIB's RoundingMode has five values and the carrier thirty-two, and
+  // symfpu's roundingDecision falls through to truncate, overflowing to the
+  // maximum and underflowing to the smallest subnormal, when every mode
+  // equality comes out false. That is a sixth mode, in no standard, and an
+  // input that reached it was answered rather than refused.
+  //
+  // BVTypeCheck still asks only about the carrier: it runs over nodes STP
+  // builds for itself as well as ones the input names, including the
+  // rebuilt operations of model evaluation, whose rounding mode may be a
+  // model value for a read the solve never constrained. This is the check
+  // for what the input asks for.
+  void checkRoundingMode(ASTNode* rm)
+  {
+    if (!stp::GlobalParserBM->isRoundingModeSortedTerm(*rm))
+    {
+      fatal_yyerror("expected a rounding mode.");
+    }
+  }
+
   // fp.add/fp.sub/fp.mul/fp.div. Each is ternary -- the rounding mode is
   // child 0, matching the arity declared in ASTKind.kinds -- so that the
   // blaster rounds as the input asked rather than assuming RNE.
@@ -313,10 +335,7 @@ namespace stp
   // rounding mode here (and again in BVTypeCheck) costs nothing by comparison.
   ASTNode* createFPArith(Kind k, ASTNode* rm, ASTNode* lhs, ASTNode* rhs)
   {
-    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
-    {
-      fatal_yyerror("expected a rounding mode.");
-    }
+    checkRoundingMode(rm);
 
     if (lhs->GetType() != FLOATINGPOINT_TYPE ||
         rhs->GetType() != FLOATINGPOINT_TYPE)
@@ -440,10 +459,7 @@ namespace stp
   // fp.fma: a rounding mode and three floats of the same format.
   ASTNode* createFPFma(ASTNode* rm, ASTNode* x, ASTNode* y, ASTNode* z)
   {
-    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
-    {
-      fatal_yyerror("expected a rounding mode.");
-    }
+    checkRoundingMode(rm);
 
     if (x->GetType() != FLOATINGPOINT_TYPE ||
         y->GetType() != FLOATINGPOINT_TYPE ||
@@ -480,10 +496,7 @@ namespace stp
   // fp.sqrt: a rounding mode and one float.
   ASTNode* createFPSqrt(ASTNode* rm, ASTNode* expr)
   {
-    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
-    {
-      fatal_yyerror("expected a rounding mode.");
-    }
+    checkRoundingMode(rm);
 
     if (expr->GetType() != FLOATINGPOINT_TYPE)
     {
@@ -505,14 +518,23 @@ namespace stp
   // literal modes.
   ASTNode* createFPRoundToIntegral(ASTNode* rm, ASTNode* expr)
   {
-    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
-    {
-      fatal_yyerror("expected a rounding mode.");
-    }
+    checkRoundingMode(rm);
 
     if (expr->GetType() != FLOATINGPOINT_TYPE)
     {
       fatal_yyerror("argument to fp.roundToIntegral must be a float.");
+    }
+
+    // Every other operation works at these formats; only this one reaches
+    // symfpu's off-by-one guard. Refused per operation, as fp.rem is, rather
+    // than by taking the whole format away.
+    if (!stp::FloatBlaster::roundToIntegralSupported(expr->GetExpWidth(),
+                                                     expr->GetSigWidth()))
+    {
+      fatal_yyerror("fp.roundToIntegral is not supported at this format: "
+                    "symfpu resizes its rounding point with matchWidth, "
+                    "which may only widen, on a guard one bit short of the "
+                    "width being resized");
     }
 
     ASTNode* n = stp::GlobalParserInterface->newNode(
@@ -548,6 +570,17 @@ namespace stp
     {
       fatal_yyerror("a floating-point format needs at least 2 exponent and "
                     "2 significand bits");
+    }
+
+    // SMT-LIB's own floor stops above; this one is symfpu's. Refused here
+    // rather than in the blaster, where the widths underflow into a
+    // segfault -- see FloatBlaster::formatSupported.
+    if (!stp::FloatBlaster::formatSupported(exp_width, sig_width))
+    {
+      fatal_yyerror("this floating-point format is not supported: symfpu "
+                    "needs an unpacked exponent wider than the format's own, "
+                    "which does not hold once the significand is 3 bits or "
+                    "fewer; use at least 4 significand bits");
     }
   }
 
@@ -642,10 +675,7 @@ namespace stp
                                   ASTNode* bits)
   {
     checkFpFormatWidths(exp_width, sig_width);
-    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
-    {
-      fatal_yyerror("expected a rounding mode.");
-    }
+    checkRoundingMode(rm);
 
     if (bits->GetType() != BITVECTOR_TYPE)
     {
@@ -674,8 +704,7 @@ namespace stp
     if (target_width == 0)
       fatal_yyerror("fp.to_ubv/fp.to_sbv width must be positive.");
 
-    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
-      fatal_yyerror("expected a rounding mode.");
+    checkRoundingMode(rm);
 
     if (expr->GetType() != FLOATINGPOINT_TYPE)
       fatal_yyerror("argument to fp.to_ubv/fp.to_sbv must be a float.");
@@ -817,10 +846,7 @@ namespace stp
                         ASTNode* rm, ASTNode* expr)
   {
     checkFpFormatWidths(exp_width, sig_width);
-    if (!(rm->GetType() == BITVECTOR_TYPE && rm->GetValueWidth() == 5))
-    {
-      fatal_yyerror("expected a rounding mode.");
-    }
+    checkRoundingMode(rm);
 
     // The rm-taking form of to_fp covers three different operations,
     // distinguished by the source's sort: reformatting a float, converting a
@@ -1750,12 +1776,10 @@ an_fp_sort:
 }
 | LPAREN_TOK UNDERSCORE_TOK FLOATINGPOINT_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK
 {
-    checkFpSupported();
-    if ($4 < 2 || $5 < 2)
-    {
-      fatal_yyerror("a floating-point format needs at least 2 exponent and "
-                    "2 significand bits");
-    }
+    // Through the shared funnel: the sort rule used to carry its own copy of
+    // the floor, which is how the two came to disagree about what a usable
+    // format is.
+    checkFpFormatWidths($4, $5);
     $$ = new stp::float_size($4, $5);
 }
 ;

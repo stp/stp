@@ -27,6 +27,7 @@ THE SOFTWARE.
 #include "stp/Printer/printers.h"
 #include <cassert>
 #include <cctype>
+#include <map>
 
 // Outputs in the SMTLIB format. If you want something that can be parsed by
 // other tools call
@@ -38,7 +39,93 @@ namespace printer
 using std::string;
 using namespace stp;
 
-void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os);
+// The sorts a term uses that its nodes cannot state: which of its 5-bit
+// bitvectors are rounding modes, and what an array's index and element sorts
+// really are.
+//
+// Read off the term rather than asked of the manager. STPMgr does keep
+// registries of all four -- declared RoundingMode symbols and the three array
+// sorts -- but they are frame-scoped, and the parser tears every frame down
+// when it reaches end of file. By the time anything prints a whole formula
+// back they are empty, and every one of these would print as its carrier: a
+// mode as (_ BitVec 5), a RoundingMode-indexed array as (Array (_ BitVec 5)
+// ...), a float-indexed one as (Array (_ BitVec 32) ...). The printed form
+// then does not parse, because the operations ask for the sort and not the
+// width (STPMgr::isRoundingModeSortedTerm).
+//
+// A float *element* needs none of this: the array node carries the element
+// format itself.
+struct UsedSorts
+{
+  ASTNodeSet rounding_modes; // terms in rounding-mode position
+  ASTNodeSet rm_element_arrays;
+  ASTNodeSet rm_index_arrays;
+  std::map<ASTNode, std::pair<unsigned int, unsigned int>> fp_index_arrays;
+};
+
+// Pass one: what is used as a rounding mode. No position table needed --
+// inside a floating-point operation a 5-bit bitvector can only be a mode. The
+// float operands are FLOATINGPOINT_TYPE, to_fp's and fp.to_ubv's width
+// arguments are 32-bit constants, and fp.min/fp.max's totalisation child is
+// one bit wide.
+static void collectRoundingModeUses(const ASTNode& n, STPMgr* mgr,
+                                    ASTNodeSet& visited, UsedSorts& out)
+{
+  if (!visited.insert(n).second)
+    return;
+
+  const bool fp_operation = is_FP_kind(n.GetKind());
+  for (size_t i = 0; i < n.Degree(); i++)
+  {
+    const ASTNode& c = n[i];
+    if (fp_operation && c.GetType() == BITVECTOR_TYPE &&
+        c.GetValueWidth() == 5 && (c.GetKind() == SYMBOL || c.GetKind() == READ))
+    {
+      out.rounding_modes.insert(c);
+      // A mode read out of an array makes that array's elements modes.
+      if (c.GetKind() == READ)
+      {
+        const ASTNode base = mgr->arrayBaseSymbol(c[0]);
+        if (!base.IsNull())
+          out.rm_element_arrays.insert(base);
+      }
+    }
+    collectRoundingModeUses(c, mgr, visited, out);
+  }
+}
+
+// Pass two: what the arrays are indexed by. Needs pass one's answer, since a
+// RoundingMode index is only recognisable as a term already known to be a
+// mode. An index that is only ever a mode *literal* stays a plain 5-bit
+// constant here -- inherently ambiguous with a bitvector-indexed array, and
+// harmless, since the printed form still replays as the same constant.
+static void collectArrayIndexSorts(const ASTNode& n, STPMgr* mgr,
+                                   ASTNodeSet& visited, UsedSorts& out)
+{
+  if (!visited.insert(n).second)
+    return;
+
+  const Kind k = n.GetKind();
+  if ((k == READ || k == WRITE) && n.Degree() >= 2)
+  {
+    const ASTNode base = mgr->arrayBaseSymbol(n[0]);
+    const ASTNode& index = n[1];
+    if (!base.IsNull())
+    {
+      if (index.GetType() == FLOATINGPOINT_TYPE)
+        out.fp_index_arrays[base] =
+            std::make_pair(index.GetExpWidth(), index.GetSigWidth());
+      else if (out.rounding_modes.find(index) != out.rounding_modes.end())
+        out.rm_index_arrays.insert(base);
+    }
+  }
+
+  for (size_t i = 0; i < n.Degree(); i++)
+    collectArrayIndexSorts(n[i], mgr, visited, out);
+}
+
+void printVarDeclsToStream(STPMgr* mgr, ASTNodeSet& symbols,
+                           const UsedSorts& used, ostream& os);
 
 const char* roundingModeName(unsigned encoding)
 {
@@ -101,7 +188,18 @@ void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr,
 
   ASTNodeSet visited, symbols;
   buildListOfSymbols(n, visited, symbols);
-  printVarDeclsToStream(symbols, os);
+
+  UsedSorts used;
+  {
+    ASTNodeSet seen;
+    collectRoundingModeUses(n, mgr, seen, used);
+  }
+  {
+    ASTNodeSet seen;
+    collectArrayIndexSorts(n, mgr, seen, used);
+  }
+
+  printVarDeclsToStream(mgr, symbols, used, os);
   os << "(assert ";
   SMTLIB_Print(os, mgr, n, 0, &SMTLIB2_Print1, false);
   os << ")\n";
@@ -109,7 +207,8 @@ void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr,
   // os << "(exit)\n";
 }
 
-void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os)
+void printVarDeclsToStream(STPMgr* mgr, ASTNodeSet& symbols,
+                           const UsedSorts& used, ostream& os)
 {
   for (ASTNodeSet::const_iterator i = symbols.begin(), iend = symbols.end();
        i != iend; i++)
@@ -123,23 +222,55 @@ void printVarDeclsToStream(ASTNodeSet& symbols, ostream& os)
     a.nodeprint(os);
     os << "|";
 
+    // The sorts the node cannot say for itself: a RoundingMode is a plain
+    // 5-bit bitvector, and an array's index sort is only ever a width. Print
+    // them and the declaration replays; print the carrier and it does not --
+    // every operation that takes a rounding mode asks for the sort, not the
+    // width (see STPMgr::isRoundingModeSortedTerm), so the printed form would
+    // no longer parse.
     switch (a.GetType())
     {
       case stp::BITVECTOR_TYPE:
+        if (mgr->isRoundingModeSymbol(a) ||
+            used.rounding_modes.find(a) != used.rounding_modes.end())
+        {
+          os << " () RoundingMode";
+          break;
+        }
         os << " () (";
         os << "_ BitVec " << a.GetValueWidth() << ")";
 
         break;
       case stp::ARRAY_TYPE:
+      {
+        unsigned int idx_exp = 0;
+        unsigned int idx_sig = 0;
+        const auto fp_index = used.fp_index_arrays.find(a);
+
         os << " () (";
-        os << "Array (_ BitVec " << a.GetIndexWidth() << ") ";
+        os << "Array ";
+        if (fp_index != used.fp_index_arrays.end())
+          os << "(_ FloatingPoint " << fp_index->second.first << " "
+             << fp_index->second.second << ") ";
+        else if (mgr->arrayHasFpIndex(a, idx_exp, idx_sig))
+          os << "(_ FloatingPoint " << idx_exp << " " << idx_sig << ") ";
+        else if (mgr->arrayHasRmIndex(a) ||
+                 used.rm_index_arrays.find(a) != used.rm_index_arrays.end())
+          os << "RoundingMode ";
+        else
+          os << "(_ BitVec " << a.GetIndexWidth() << ") ";
+
         // An array of floats carries the element format on the array symbol.
-        if (a.GetExpWidth() != 0)
+        if (mgr->arrayHasRmElement(a) ||
+            used.rm_element_arrays.find(a) != used.rm_element_arrays.end())
+          os << "RoundingMode )";
+        else if (a.GetExpWidth() != 0)
           os << "(_ FloatingPoint " << a.GetExpWidth() << " " << a.GetSigWidth()
              << ") )";
         else
           os << "(_ BitVec " << a.GetValueWidth() << ") )";
         break;
+      }
       case stp::BOOLEAN_TYPE:
         os << " () Bool ";
         break;

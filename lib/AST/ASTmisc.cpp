@@ -375,6 +375,15 @@ ASTVec FlattenKind(Kind k, const ASTChildren& children, int maxDepth)
 // Rounding modes are carried as 5-bit one-hot bitvectors, so a well-formed
 // one is any 5-bit bitvector: a literal from the grammar, or a symbol of
 // SMT-LIB's RoundingMode sort.
+//
+// Deliberately the carrier's shape and not the sort. Whether a term really
+// denotes one of RoundingMode's five values is
+// STPMgr::isRoundingModeSortedTerm, and that is what the parser and the C
+// API ask before building an operation -- but this runs over nodes STP
+// builds for itself as well, including the operations model evaluation
+// rebuilds with their children resolved, whose rounding mode can be the
+// model's value for a read the solve never constrained. Those are
+// well-formed and must type check.
 static bool isRoundingMode(const ASTNode& n)
 {
   return n.GetType() == BITVECTOR_TYPE && n.GetValueWidth() == 5;

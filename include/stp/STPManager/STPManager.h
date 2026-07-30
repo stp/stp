@@ -329,6 +329,19 @@ public:
   // carrier thirty-two.
   ASTNode roundingModeValidConstraint(const ASTNode& s);
 
+  // Whether `n` denotes a value of SMT-LIB's RoundingMode sort. The sort has
+  // no width of its own to test -- the carrier is a plain 5-bit bitvector --
+  // so this recognises the shapes that can denote a mode: the five one-hot
+  // constants, a declared RoundingMode symbol, a read from a
+  // RoundingMode-element array, and an ite over those.
+  //
+  // Everything that takes a rounding mode must ask this rather than test the
+  // carrier's width. The sort has five values and the carrier thirty-two, and
+  // symfpu's roundingDecision falls through to truncate-with-overflow-to-max
+  // when every mode equality is false -- a sixth, non-IEEE mode. Accepting a
+  // bare (_ BitVec 5) there let an input compute under it.
+  bool isRoundingModeSortedTerm(const ASTNode& n) const;
+
   DLL_PUBLIC ASTNode CreateFPSpecialConst(FPSpecial which, unsigned exp_width,
                                           unsigned sig_width);
 
@@ -517,6 +530,29 @@ public:
       return true;
     }
     return false;
+  }
+
+  // Record a symbol STP introduced rather than the user declaring it, so the
+  // counterexample printers leave it out. CreateFreshVariable does this for
+  // the names it mints; this is the way in for an introduced symbol whose
+  // *name* is load-bearing and so cannot be minted there -- the arrays
+  // supplying the unspecified results of the partial floating-point
+  // operations, whose identity is their name (see
+  // FloatBlaster::unspecifiedValue).
+  void noteIntroducedSymbol(const ASTNode& in)
+  {
+    Introduced_SymbolsSet.insert(in);
+  }
+
+  // Whether a counterexample entry belongs to an introduced symbol. Entries
+  // for an introduced *array* are keyed on the read rather than on the array
+  // itself, so look through one: testing the key alone let every read of an
+  // introduced array print.
+  bool isIntroducedCounterExampleEntry(const ASTNode& in)
+  {
+    return FoundIntroducedSymbolSet(in) ||
+           (in.GetKind() == READ && in.Degree() > 0 &&
+            FoundIntroducedSymbolSet(in[0]));
   }
 
   bool VarSeenInTerm(const ASTNode& var, const ASTNode& term);

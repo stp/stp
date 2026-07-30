@@ -536,7 +536,14 @@ bitVector<false> bitVector<false>::extend(bitWidthType extension) const
 template <bool isSigned>
 bitVector<isSigned> bitVector<isSigned>::contract(bitWidthType reduction) const
 {
-  assert(this->getWidth() > reduction);
+  // Fail closed for the same reason as matchWidth: the subtraction below is
+  // unsigned, so an over-large reduction underflows into an extract of an
+  // absurd range rather than stopping.
+  if (this->getWidth() <= reduction)
+  {
+    FatalError("symbolic_fp: contract would remove every bit of a bitvector; "
+               "symfpu asked to narrow a value past its own width");
+  }
   return extract((this->getWidth() - 1) - reduction, 0);
 }
 
@@ -556,7 +563,22 @@ template <bool isSigned>
 bitVector<isSigned>
 bitVector<isSigned>::matchWidth(const bitVector<isSigned>& op) const
 {
-  assert(this->getWidth() <= op.getWidth());
+  // Fail closed rather than assert. bitWidthType is unsigned, so a violated
+  // precondition does not merely widen the wrong way -- the subtraction wraps
+  // to about 2^32, extend asks for a constant of that width, and the circuit
+  // builder walks off the end of a bitvector. An assert would catch it, but
+  // CMAKE_BUILD_TYPE=Release compiles asserts out (CMakeLists.txt forces
+  // ENABLE_ASSERTIONS off there), so the builds users ship are exactly the
+  // ones that would segfault. FloatBlaster::formatSupported and
+  // roundToIntegralSupported refuse the formats where symfpu is known to
+  // reach here; this catches any that were missed.
+  if (this->getWidth() > op.getWidth())
+  {
+    FatalError("symbolic_fp: matchWidth cannot narrow a bitvector; symfpu "
+               "asked to resize a value wider than its target, which means a "
+               "floating-point format reached the blaster that "
+               "FloatBlaster::formatSupported should have refused");
+  }
   if (this->getWidth() == op.getWidth())
     return *this;
   return this->extend(op.getWidth() - this->getWidth());

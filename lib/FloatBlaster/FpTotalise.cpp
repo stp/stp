@@ -46,11 +46,20 @@ ASTNode FpTotalise::topLevel(const ASTNode& n)
   // result, and a term has nowhere to hold one. Model evaluation totalises
   // bare floating-point terms before blasting them (see
   // TermToConstTermUsingModel); wrapping such a term in an AND hands the
-  // blaster a formula kind it cannot blast. No pinning is needed there
-  // either -- a read the solve constrained resolves to its model value,
-  // which the pinned formula already held to a legal encoding, and a read
-  // the solve never saw is genuinely unconstrained: whatever encoding it
-  // resolves to, the blasted circuit behaves as one of the five modes.
+  // blaster a formula kind it cannot blast.
+  //
+  // What makes that safe is that the terms reaching model evaluation come
+  // from the assertions, whose reads this pass has already pinned -- so each
+  // one resolves to a model value the pinned formula held to a legal
+  // encoding. It is *not* that an unpinned carrier would be harmless. An
+  // encoding matching none of the five leaves every equality in symfpu's
+  // roundingDecision false, which truncates and overflows to max like RTZ
+  // but, in makeRoundingResult, leaves returnZero false too -- so an
+  // underflow gives the minimum subnormal where RTZ gives zero. Truncating
+  // rules out RTP and underflowing to the minimum rules out RTZ: the
+  // combination is a sixth behaviour, in no standard, and a formula can tell
+  // it from all five. Everything that introduces a rounding mode has to pin
+  // it; nothing may rely on the junk encodings being equivalent to a mode.
   if (n.GetType() == BOOLEAN_TYPE && !bm->rm_element_arrays.empty())
   {
     ASTNodeSet seen;
@@ -176,7 +185,9 @@ ASTNode FpTotalise::unspecified(const char* tag, const ASTNode& prefix,
     }
   }
 
-  return FloatBlaster::unspecifiedValue(bm, tag, index, value_width);
+  // `floats` rather than the canonicalised bits: the bits are what the array
+  // is indexed *by*, the formats are part of what array it is.
+  return FloatBlaster::unspecifiedValue(bm, tag, floats, index, value_width);
 }
 
 ASTNode FpTotalise::visit(const ASTNode& n)

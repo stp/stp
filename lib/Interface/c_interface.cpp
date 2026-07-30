@@ -532,32 +532,27 @@ Type vc_arrayType(VC vc, Type typeIndex, Type typeData)
   return persistNode(vc, output);
 }
 
-// A rounding-mode-sorted term, for the array boundary checks. The sort has
-// no type index of its own -- the carrier is a plain 5-bit bitvector -- so
-// recognise the shapes that denote a mode: the five one-hot constants, a
-// declared RoundingMode symbol, a read from a RoundingMode-element array,
-// and an ite over those.
+// A rounding-mode-sorted term. Was a copy here; it is STPMgr's now, because
+// the operations that take a rounding mode need the same test and were making
+// do with the carrier's width.
 static bool isRoundingModeSortedTerm(stp::STPMgr* b, const stp::ASTNode& n)
 {
-  if (n.GetValueWidth() != 5 || n.GetIndexWidth() != 0)
-    return false;
+  return b->isRoundingModeSortedTerm(n);
+}
 
-  switch (n.GetKind())
+// The rounding-mode argument of a floating-point operation. SMT-LIB's
+// RoundingMode has five values; the carrier has thirty-two, and symfpu
+// computes under a sixth, non-IEEE mode if handed one of the other
+// twenty-seven.
+static void checkRoundingMode(const char* who, stp::STPMgr* b,
+                              const stp::ASTNode& rm)
+{
+  if (!b->isRoundingModeSortedTerm(rm))
   {
-    case stp::BVCONST:
-    {
-      const unsigned v = n.GetUnsignedConst();
-      return v == 1 || v == 2 || v == 4 || v == 8 || v == 16;
-    }
-    case stp::SYMBOL:
-      return b->isRoundingModeSymbol(n);
-    case stp::READ:
-      return b->arrayHasRmElement(n[0]);
-    case stp::ITE:
-      return isRoundingModeSortedTerm(b, n[1]) &&
-             isRoundingModeSortedTerm(b, n[2]);
-    default:
-      return false;
+    stp::FatalError((std::string("CInterface: ") + who +
+                     ": expected a rounding mode: ")
+                        .c_str(),
+                    rm);
   }
 }
 
@@ -1070,6 +1065,29 @@ Expr vc_boolType(VC vc)
 // Floating point
 // ---------------------------------------------------------------------------
 
+// Every route by which a floating-point format enters through the C API --
+// vc_fpType's type node and the entry points that take the widths as raw
+// ints. One funnel: the parser's copy of this drifted from its sort rule's
+// once already.
+static void checkFpWidths(int eb, int sb)
+{
+  if (eb < 2 || sb < 2)
+  {
+    stp::FatalError("CInterface: a floating-point format needs at least 2 "
+                    "exponent and 2 significand bits");
+  }
+
+  // SMT-LIB's floor above, symfpu's here; see FloatBlaster::formatSupported.
+  if (!stp::FloatBlaster::formatSupported(eb, sb))
+  {
+    stp::FatalError("CInterface: this floating-point format is not "
+                    "supported: symfpu needs an unpacked exponent wider than "
+                    "the format's own, which does not hold once the "
+                    "significand is 3 bits or fewer; use at least 4 "
+                    "significand bits");
+  }
+}
+
 Type vc_fpType(VC vc, int exp_bits, int sig_bits)
 {
 #ifndef STP_ENABLE_FLOATING_POINT
@@ -1087,11 +1105,7 @@ Type vc_fpType(VC vc, int exp_bits, int sig_bits)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
 
-  if (exp_bits < 2 || sig_bits < 2)
-  {
-    stp::FatalError("CInterface: vc_fpType: a floating-point format needs at "
-                    "least 2 exponent and 2 significand bits");
-  }
+  checkFpWidths(exp_bits, sig_bits);
 
   // Mirror vc_bvType/vc_arrayType: a type is a node whose children hold the
   // widths -- here the exponent and significand widths.
@@ -1257,6 +1271,7 @@ Expr vc_fpAddExpr(VC vc, Expr rm, Expr a, Expr b)
   stp::ASTNode* m = (stp::ASTNode*)rm;
   stp::ASTNode* x = (stp::ASTNode*)a;
   stp::ASTNode* y = (stp::ASTNode*)b;
+  checkRoundingMode("vc_fpAddExpr", ((stp::STP*)vc)->bm, *m);
   return fpTermResult(vc, stp::FP_ADD, *x, {*m, *x, *y});
 }
 
@@ -1265,6 +1280,7 @@ Expr vc_fpSubExpr(VC vc, Expr rm, Expr a, Expr b)
   stp::ASTNode* m = (stp::ASTNode*)rm;
   stp::ASTNode* x = (stp::ASTNode*)a;
   stp::ASTNode* y = (stp::ASTNode*)b;
+  checkRoundingMode("vc_fpSubExpr", ((stp::STP*)vc)->bm, *m);
   return fpTermResult(vc, stp::FP_SUB, *x, {*m, *x, *y});
 }
 
@@ -1273,6 +1289,7 @@ Expr vc_fpMulExpr(VC vc, Expr rm, Expr a, Expr b)
   stp::ASTNode* m = (stp::ASTNode*)rm;
   stp::ASTNode* x = (stp::ASTNode*)a;
   stp::ASTNode* y = (stp::ASTNode*)b;
+  checkRoundingMode("vc_fpMulExpr", ((stp::STP*)vc)->bm, *m);
   return fpTermResult(vc, stp::FP_MUL, *x, {*m, *x, *y});
 }
 
@@ -1281,6 +1298,7 @@ Expr vc_fpDivExpr(VC vc, Expr rm, Expr a, Expr b)
   stp::ASTNode* m = (stp::ASTNode*)rm;
   stp::ASTNode* x = (stp::ASTNode*)a;
   stp::ASTNode* y = (stp::ASTNode*)b;
+  checkRoundingMode("vc_fpDivExpr", ((stp::STP*)vc)->bm, *m);
   return fpTermResult(vc, stp::FP_DIV, *x, {*m, *x, *y});
 }
 
@@ -1290,6 +1308,7 @@ Expr vc_fpFMAExpr(VC vc, Expr rm, Expr a, Expr b, Expr c)
   stp::ASTNode* x = (stp::ASTNode*)a;
   stp::ASTNode* y = (stp::ASTNode*)b;
   stp::ASTNode* z = (stp::ASTNode*)c;
+  checkRoundingMode("vc_fpFMAExpr", ((stp::STP*)vc)->bm, *m);
   return fpTermResult(vc, stp::FP_FMA, *x, {*m, *x, *y, *z});
 }
 
@@ -1297,6 +1316,7 @@ Expr vc_fpSqrtExpr(VC vc, Expr rm, Expr f)
 {
   stp::ASTNode* m = (stp::ASTNode*)rm;
   stp::ASTNode* x = (stp::ASTNode*)f;
+  checkRoundingMode("vc_fpSqrtExpr", ((stp::STP*)vc)->bm, *m);
   return fpTermResult(vc, stp::FP_SQRT, *x, {*m, *x});
 }
 
@@ -1304,6 +1324,21 @@ Expr vc_fpRoundToIntegralExpr(VC vc, Expr rm, Expr f)
 {
   stp::ASTNode* m = (stp::ASTNode*)rm;
   stp::ASTNode* x = (stp::ASTNode*)f;
+  checkRoundingMode("vc_fpRoundToIntegralExpr", ((stp::STP*)vc)->bm, *m);
+  // Refused at term creation, where the caller can see it, rather than during
+  // solving -- as vc_fpRemExpr does, and for the same reason. A non-float
+  // operand gets fpTermResult's own diagnosis, so ask only about a real
+  // format.
+  if (x->GetType() == stp::FLOATINGPOINT_TYPE &&
+      !stp::FloatBlaster::roundToIntegralSupported(x->GetExpWidth(),
+                                                   x->GetSigWidth()))
+  {
+    stp::FatalError("CInterface: vc_fpRoundToIntegralExpr: "
+                    "fp.roundToIntegral is not supported at this format: "
+                    "symfpu resizes its rounding point with matchWidth, "
+                    "which may only widen, on a guard one bit short of the "
+                    "width being resized");
+  }
   return fpTermResult(vc, stp::FP_ROUNDTOINTEGRAL, *x, {*m, *x});
 }
 
@@ -1404,17 +1439,6 @@ Expr vc_fpIsPositiveExpr(VC vc, Expr f)
   return fpPredResult(vc, stp::FP_ISPOSITIVE, {*(stp::ASTNode*)f});
 }
 
-// Some entry points take the format as raw ints rather than a type node;
-// apply vc_fpType's floor so they cannot produce degenerate widths.
-static void checkFpWidths(int eb, int sb)
-{
-  if (eb < 2 || sb < 2)
-  {
-    stp::FatalError("CInterface: a floating-point format needs at least 2 "
-                    "exponent and 2 significand bits");
-  }
-}
-
 // Extract (eb, sb) from a floating-point type node (see vc_fpType).
 static void fpTypeWidths(Type fpType, unsigned& eb, unsigned& sb)
 {
@@ -1475,7 +1499,12 @@ static Expr fpToFP(VC vc, stp::Kind k, int eb, int sb, const stp::ASTNode* rm,
   kids.push_back(b->CreateBVConst(32, eb));
   kids.push_back(b->CreateBVConst(32, sb));
   if (rm != NULL)
+  {
+    // Covers vc_fpToFPFrom{FP,SignedBV,UnsignedBV} and, through them,
+    // vc_fpConstFrom{Double,Float}. The bits form takes no mode at all.
+    checkRoundingMode("to_fp", b, *rm);
     kids.push_back(*rm);
+  }
   kids.push_back(src);
   // withFormat rather than a bare stamp, for the reason fpTermResult gives:
   // what comes back need not be a fresh to_fp node.
@@ -1502,16 +1531,11 @@ Expr vc_fpToFPFromSignedBV(VC vc, int eb, int sb, Expr rm, Expr bv)
 
 Expr vc_fpToFPFromUnsignedBV(VC vc, int eb, int sb, Expr rm, Expr bv)
 {
-  stp::STPMgr* b = ((stp::STP*)vc)->bm;
-  checkFpWidths(eb, sb);
-  stp::ASTVec kids;
-  kids.push_back(b->CreateBVConst(32, eb));
-  kids.push_back(b->CreateBVConst(32, sb));
-  kids.push_back(*(stp::ASTNode*)rm);
-  kids.push_back(*(stp::ASTNode*)bv);
-  stp::ASTNode r = stp::FloatBlaster::withFormat(
-      b, b->CreateTerm(stp::FP_TOFP_UNSIGNED, eb + sb, kids), eb, sb);
-  return persistNode(vc, r);
+  // Through fpToFP like its signed sibling. It used to carry its own copy of
+  // that body -- identical but for the kind -- and so was the one to_fp form
+  // that never checked its rounding mode.
+  return fpToFP(vc, stp::FP_TOFP_UNSIGNED, eb, sb, (stp::ASTNode*)rm,
+                *(stp::ASTNode*)bv);
 }
 
 // fp.to_ubv / fp.to_sbv: a float in, a `width`-bit bitvector out. The result is
@@ -1531,6 +1555,7 @@ static Expr fpToBV(VC vc, stp::Kind k, int width, const stp::ASTNode& rm,
                     "non-float: ",
                     f);
   }
+  checkRoundingMode("fp.to_ubv/fp.to_sbv", b, rm);
   stp::ASTVec kids;
   kids.push_back(b->CreateBVConst(32, width));
   kids.push_back(rm);
