@@ -5,6 +5,24 @@ description: >
   linking working and the release workflow that ships the binary use this, so
   that what gets published is built exactly the way CI builds it.
 
+inputs:
+  build-type:
+    description: >
+      CMAKE_BUILD_TYPE to configure with. Left empty by CI, which wants STP's
+      own default of RelWithDebInfo with assertions live. The release workflow
+      passes Release: CMakeLists turns ENABLE_ASSERTIONS off only for an exact
+      "Release", and a published binary must not be asserting.
+    required: false
+    default: ''
+  werror:
+    description: >
+      Whether to build with WERROR. On for CI, where a new warning should fail
+      the build. Off for the release build, where it would mean a warning
+      introduced by the different optimisation level blocks a release that CI
+      has already passed.
+    required: false
+    default: 'ON'
+
 outputs:
   binary:
     description: Path to the static executable, relative to the workspace.
@@ -32,6 +50,7 @@ runs:
         gcc \
         git \
         libboost-program-options-dev \
+        libgmp-dev \
         ninja-build \
         zlib1g-dev
 
@@ -52,15 +71,19 @@ runs:
       path: |
         deps/install
         deps/minisat
-      key: deps-x86_64-static-${{ steps.deps-key.outputs.key }}
+        deps/cms
+      key: deps-x86_64-static-cms-${{ steps.deps-key.outputs.key }}
 
   # A static STP links against libminisat.a, which minisat only produces when
   # built with STATICCOMPILE; its default build installs the shared library
-  # alone.
+  # alone. setup-cms.sh already builds a static (PIC) CryptoMiniSat, so it
+  # needs no such argument.
   - name: Dependencies
     if: steps.deps-cache.outputs.cache-hit != 'true'
     shell: bash
-    run: ./scripts/deps/setup-minisat.sh -DSTATICCOMPILE=ON
+    run: |
+      ./scripts/deps/setup-minisat.sh -DSTATICCOMPILE=ON
+      ./scripts/deps/setup-cms.sh
 
   - name: Compiler cache
     uses: actions/cache@v4
@@ -69,20 +92,29 @@ runs:
       key: ccache-static-${{ github.run_id }}
       restore-keys: ccache-static-
 
-  # NOCRYPTOMINISAT: CryptoMiniSat's exported static link line pulls in GMP
-  # and its own dependencies, which are not reliably available as archives on
-  # the runner. The two SAT backends are interchangeable as far as linking STP
-  # statically is concerned.
+  # CryptoMiniSat is linked in rather than disabled, because UserDefinedFlags
+  # makes whichever solver is compiled in the default one, and MiniSat is not
+  # what STP should be solving with out of the box. That needs the static GMP
+  # archives (libgmp.a, libgmpxx.a) the CryptoMiniSat config asks for, hence
+  # libgmp-dev above -- the runner image supplies the shared library but a
+  # static link needs the archive.
   #
   # USE_POPCNT is left at its default (on). It emits -mpopcnt, which needs
   # Nehalem/2008 or later -- a safe floor for a release download, and the
   # reason a release binary is not built with anything narrower.
   - name: Configure
     shell: bash
+    env:
+      BUILD_TYPE: ${{ inputs.build-type }}
+      WERROR: ${{ inputs.werror }}
     run: |
       mkdir build
       cd build
-      cmake -DSTATICCOMPILE:BOOL=ON -DNOCRYPTOMINISAT:BOOL=ON -DWERROR:BOOL=ON -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+      args=()
+      if [ -n "$BUILD_TYPE" ]; then
+        args+=("-DCMAKE_BUILD_TYPE=$BUILD_TYPE")
+      fi
+      cmake -DSTATICCOMPILE:BOOL=ON -Dcryptominisat5_DIR:PATH="$GITHUB_WORKSPACE/deps/install/lib/cmake/cryptominisat5" -DWERROR:BOOL="$WERROR" "${args[@]}" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
   # ONLY_SIMPLE, or a runner without Boost, produces stp_simple rather than
   # stp. Report whichever was built so the caller does not have to guess.
@@ -114,6 +146,14 @@ runs:
       file "$stp"
       if ldd "$stp"; then
         echo "expected a static executable, but it has shared dependencies"
+        exit 1
+      fi
+      # Which solver got compiled in decides which one the binary uses by
+      # default, so check it rather than assuming the configure line took.
+      # The queries below then run on that default, with no --flag.
+      if ! "$stp" --version | grep -q 'USE_CRYPTOMINISAT'; then
+        echo "expected CryptoMiniSat to be compiled in; it is not"
+        "$stp" --version
         exit 1
       fi
       echo '(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (= x #x2a))(check-sat)' > sat.smt2

@@ -77,15 +77,28 @@ jobs:
       with:
           submodules: 'true'
 
+    # Release, not the RelWithDebInfo CI leaves it at: CMakeLists only turns
+    # ENABLE_ASSERTIONS off for an exact "Release", and a published binary
+    # must not be asserting. WERROR off -- CI already gates warnings, and a
+    # warning that only appears at -O3 should not block a release.
     - id: build
       uses: ./.github/actions/build-static-linux
+      with:
+        build-type: Release
+        werror: 'OFF'
 
+    # Stripped: the static CryptoMiniSat and CaDiCaL archives carry debug
+    # info that STP's own -g0 Release flags do not remove, and it is three
+    # quarters of the file (76M -> 22M). CI keeps the unstripped build, where
+    # a usable backtrace is worth more than the size.
     - name: Stage the asset
       shell: bash
       run: |
         mkdir assets
         cp "${{ steps.build.outputs.binary }}" \
            "assets/stp-${{ needs.check-version.outputs.version }}-linux-amd64"
+        strip "assets/stp-${{ needs.check-version.outputs.version }}-linux-amd64"
+        ls -l assets/
 
     - uses: actions/upload-artifact@v4
       with:
@@ -141,6 +154,30 @@ jobs:
           echo "::error::the asset reports '$got', expected '$expected'"
           exit 1
         fi
+
+        # Which solver is compiled in decides which one the binary uses with
+        # no flag given, so this is what makes it a CryptoMiniSat release
+        # rather than a MiniSat one.
+        if ! "./$stp" --version | grep -q 'USE_CRYPTOMINISAT'; then
+          echo "::error::the asset was not built with CryptoMiniSat"
+          "./$stp" --version
+          exit 1
+        fi
+
+        # -DNDEBUG is how ENABLE_ASSERTIONS=OFF shows up, and it only gets
+        # turned off by an exact "Release". Without this a published binary
+        # could quietly be asserting on every query.
+        if ! "./$stp" --version | grep -q '\-DNDEBUG'; then
+          echo "::error::the asset was built with assertions enabled"
+          "./$stp" --version
+          exit 1
+        fi
+
+        # And it still solves after being stripped.
+        echo '(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (= x #x2a))(check-sat)' > sat.smt2
+        got=$("./$stp" sat.smt2)
+        echo "sat.smt2: '$got'"
+        [ "$got" = "sat" ] || exit 1
 
     # A draft: the release is not visible and the assets are not downloadable
     # until it is published by hand from the Releases page. That leaves the

@@ -142,7 +142,8 @@ download one file and run it without a matching glibc or any STP
 libraries installed. The job asserts this (``ldd`` must fail on the
 result) rather than assuming it.
 
-The option that decides how portable it is is ``USE_POPCNT``, which is on by default and emits ``-mpopcnt``. That needs
+The option that decides how portable it is is ``USE_POPCNT``, which is on
+by default and emits ``-mpopcnt``. That needs
 Nehalem (2008) or Barcelona (2007) or later, which is a safe assumption
 for a release download; build with ``-DUSE_POPCNT=OFF`` if you want to
 support older hardware, and the software fallback in
@@ -152,11 +153,33 @@ scheduling rather than which instructions may be emitted, so it does not
 make a binary unrunnable elsewhere -- but there is no reason to turn it
 on for a build other people will run.
 
-The build configures with ``NOCRYPTOMINISAT``, because CryptoMiniSat's
-exported static link line pulls in GMP and other dependencies that are
-not reliably available as archives on a runner. The released binary
-therefore solves with MiniSat, which is worth being aware of: it is not
-the solver STP performs best with.
+The solver
+~~~~~~~~~~
+
+The release binary is linked against CryptoMiniSat, and solves with it by
+default. Which solver a binary uses with no flag given is decided at
+compile time, not at run time: ``UserDefinedFlags``'s constructor picks
+CaDiCaL, then CryptoMiniSat, then Riss, then MiniSat, by whichever
+``USE_*`` macro is defined. So linking CryptoMiniSat in is the whole of
+what makes this a CryptoMiniSat release -- there is no flag for users to
+remember. The ``publish`` job checks the macro is there rather than
+trusting the configure line.
+
+This costs the static link two GMP archives, ``libgmp.a`` and
+``libgmpxx.a``, which is why ``libgmp-dev`` is installed: the runner image
+supplies the shared library, and a static link needs the archive.
+``setup-cms.sh`` already builds CryptoMiniSat as a static PIC library, so
+it needs no extra argument. It also costs size -- CryptoMiniSat, CaDiCaL
+and cadiback bring debug info that STP's own ``-g0`` does not remove, so
+the asset is stripped during staging (76M to 22M). CI keeps the
+unstripped build, where a usable backtrace is worth more.
+
+The build type matters more than it looks. ``CMakeLists.txt`` turns
+``ENABLE_ASSERTIONS`` off only for an exact ``Release``, and the default
+when nothing is passed is ``RelWithDebInfo`` -- so a release build that
+does not say ``-DCMAKE_BUILD_TYPE=Release`` ships a binary that asserts on
+every query. The workflow passes it, and ``publish`` confirms it by
+looking for ``-DNDEBUG`` in what ``--version`` reports.
 
 Asset naming has not been consistent historically. 2.3.2 and 2.3.3 used
 ``stp-<version>-linux-amd64``, 2.3.3 also shipped a ``stp-win64.exe``,
@@ -194,17 +217,26 @@ build, or if Actions is unavailable:
 
 .. code-block:: bash
 
+    ./scripts/deps/setup-minisat.sh -DSTATICCOMPILE=ON
+    ./scripts/deps/setup-cms.sh
     mkdir build-static && cd build-static
-    cmake -DSTATICCOMPILE=ON -DNOCRYPTOMINISAT=ON -DCMAKE_BUILD_TYPE=Release ..
+    cmake -DSTATICCOMPILE=ON -DCMAKE_BUILD_TYPE=Release \
+          -Dcryptominisat5_DIR=$PWD/../deps/install/lib/cmake/cryptominisat5 ..
     cmake --build . -j$(nproc)
     ./stp --version          # should print the new version and the tagged SHA
     ldd ./stp                # should say "not a dynamic executable"
 
-Note that ``STATICCOMPILE`` needs a minisat built with ``STATICCOMPILE``
-too -- the default minisat build installs only the shared library, and
-the link then fails looking for ``libminisat.a``. Run
-``./scripts/deps/setup-minisat.sh -DSTATICCOMPILE=ON`` first if that is
-what you have.
+``STATICCOMPILE`` needs a minisat built with ``STATICCOMPILE`` too --
+minisat's default build installs only the shared library, and the link
+then fails looking for ``libminisat.a`` -- which is why the setup script
+is run with that argument above. STP links minisat in whether or not it
+is the solver being used.
+
+Leave out ``-DCMAKE_BUILD_TYPE=Release`` and you get assertions, per the
+section above; leave out ``cryptominisat5_DIR`` and you get a MiniSat
+binary. Neither failure is loud, so check ``--version`` afterwards:
+``COMPILE_DEFINES`` should contain both ``-DNDEBUG`` and
+``-DUSE_CRYPTOMINISAT``.
 
 Prefer the workflow for anything you intend to publish. It checks out the
 tag, so the binary provably comes from the released commit rather than
