@@ -117,6 +117,23 @@ public:
   // solveWriteChain). Mixed index/element widths are an error.
   ASTNode makeEquality(const ASTNode& a, const ASTNode& b);
 
+  // The array-if-then-else arm of the paper's preprocessing (section
+  // 4.1), applied at construction for the same reason the equality
+  // abstraction is: called from the shared node-creation funnel for
+  // every array-valued ITE while the feature is enabled, instead of
+  // building one. Returns a fresh array d and registers the two
+  // guarded equalities that define it, c -> d = thn and
+  // not(c) -> d = els; repeated requests for the same triple reuse d.
+  //
+  // So no array if-then-else ever exists while the feature is on. That
+  // is what the late elimination could not have: it ran after
+  // preprocessing, which pushes reads through array ITEs and rewrites
+  // their conditions, so it had to reconstruct the node it was keyed
+  // on -- losing the guards when the reconstruction hit the cache and
+  // leaking a fresh replacement per solve when it missed.
+  ASTNode makeArrayITE(const ASTNode& cond, const ASTNode& thn,
+                       const ASTNode& els);
+
   // Drop the whole registry once nothing can reach it any more, and
   // report whether that happened. Records are pinned to the manager's
   // lifetime because their abstraction variables are embedded in the
@@ -137,6 +154,28 @@ public:
   // if no proxy is reachable then no equality is, so nothing minted
   // on behalf of one can be either.
   bool retireIfUnreachable(const ASTVec& liveAssertions);
+
+  // Holds the registry seal for the duration of one solve and releases
+  // it however the solve exits. Minting between the point where a solve
+  // takes the registry's constraints and the point where it finishes is
+  // the hazard -- such a record would be active with nothing defining
+  // it. Minting once the solve is over is ordinary: the next solve
+  // conjoins it. Without the release, parsing an equality after a
+  // check-sat would trip the check.
+  class SolveScope
+  {
+    ExtensionalityContext* ctx;
+
+  public:
+    explicit SolveScope(ExtensionalityContext* c) : ctx(c) {}
+    ~SolveScope()
+    {
+      if (ctx != NULL)
+        ctx->registrySealed = false;
+    }
+    SolveScope(const SolveScope&) = delete;
+    SolveScope& operator=(const SolveScope&) = delete;
+  };
 
   bool enabled() const;
   // The decision procedure participates in a solve exactly when the
@@ -185,10 +224,6 @@ public:
   //  - compute the "cone": the arrays connected to the abstracted
   //    equalities (operands, the bases under their writes, and the
   //    writes on top of them in the formula);
-  //  - eliminate array-valued if-then-else inside the cone, replacing
-  //    ite(c,a,b) by a fresh array d constrained by c -> d = a and
-  //    not(c) -> d = b (paper section 4.1), repeated to a fixed point
-  //    since the guarded equalities are themselves abstracted;
   //  - inventory the cone's writes as accesses (paper section 11.4)
   //    and give every compound write index/value a scalar name that
   //    will be part of the initial bit-blast, so lemmas can later be
@@ -366,14 +401,24 @@ private:
   std::set<ASTNode> possibleConeSymbols;
 
   // Replacements for array-valued if-then-else (paper section 4.1):
-  // original ITE node -> its fresh array. Persistent across solves, so
-  // a repeated solve of the same query reuses the fresh array -- and,
-  // through the registry's operand-pair dedup, the same two guarded
-  // equality records -- instead of minting a new generation per solve.
-  // The guard implications themselves are rebuilt into every solve's
-  // prepared input, keeping each record and its defining guards
-  // together.
-  std::map<ASTNode, ASTNode> iteReplacements;
+  // the (condition, then, else) triple as the caller built it -> its
+  // fresh array. Keyed on the triple rather than on an ITE node
+  // because no ITE node is ever built; nothing downstream can rewrite
+  // a key that only ever exists here.
+  typedef std::pair<ASTNode, std::pair<ASTNode, ASTNode>> IteKey;
+  std::map<IteKey, ASTNode> iteReplacements;
+
+  // The guard implications of every replacement, in creation order.
+  // Registry content: conjoined by conjoinRecordConstraints on every
+  // solve, exactly like the witness bundles, so a replacement can
+  // never be live without its definition.
+  ASTVec iteGuards;
+
+  // Set once a solve has taken its copy of the registry's constraints.
+  // Minting a record or a replacement after that point would leave it
+  // active with nothing in the formula defining it, so refuse loudly
+  // rather than let it happen quietly. Cleared by beginSolve().
+  bool registrySealed;
 
   // ---- per-solve state ----
   bool coneIsFrozen;
@@ -410,10 +455,6 @@ private:
   // names evaluate exactly like the terms they stand for; false means
   // EXT_NAME_DIVERGENCE.
   bool namesAgreeWithCandidate(ExtModelView& view) const;
-  // Conjoin the section 4.1 guards of every live if-then-else
-  // replacement the elimination loop did not itself emit this solve.
-  ASTNode reattachIteGuards(const ASTNode& root, const std::set<ASTNode>& cone,
-                            const ASTNodeSet& alreadyGuarded);
   void collectPossibleConeSymbols(const ASTNode& n);
   ASTNode freshName(const ASTNode& term, ASTVec& namingConstraints);
   void computeProvisionalCone(const ASTNode& root,

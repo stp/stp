@@ -97,6 +97,23 @@ ASTNode HashingNodeFactory::CreateNode(const Kind kind,
 ASTNode HashingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                                        const ASTVec& children)
 {
+  // Array equality: the if-then-else arm of the same treatment given to
+  // EQ in CreateNode below. Every array-valued ITE is replaced here by
+  // a fresh array constrained by two guarded equalities (paper section
+  // 4.1), so while the feature is enabled no array if-then-else is ever
+  // built -- and nothing downstream, least of all preprocessing, can
+  // rewrite a structure the decision procedure depends on.
+  //
+  // It has to be CreateTerm rather than CreateNode: the array term is
+  // returned through CreateArrayTerm, and CreateNode's caller here
+  // stamps SetIndexWidth(0) on whatever comes back, which would clear
+  // the replacement array's index width.
+  if (kind == ITE && bm.UserFlags.enable_array_equality &&
+      children.size() == 3 && children[1].GetIndexWidth() > 0)
+  {
+    return bm.getExtensionality()->makeArrayITE(children[0], children[1],
+                                                children[2]);
+  }
 
   ASTNode n = CreateNode(kind, children);
   n.SetValueWidth(width);

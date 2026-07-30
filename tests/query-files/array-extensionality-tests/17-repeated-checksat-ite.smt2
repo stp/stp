@@ -2,11 +2,16 @@
 ; CHECK: ^unsat
 ; CHECK: ^unsat
 ; CHECK: ^unsat
-; The ite condition is unresolved, so the array if-then-else must be
-; eliminated into a fresh array with guarded equalities on every
-; preparation; both branches contradict c, so the query is unsat only
-; while both guarded definitions are active. A repeated solve that
-; lost either guard could answer sat.
+; The ite condition is unresolved, so the array if-then-else is
+; replaced by a fresh array with two guarded equalities; both branches
+; contradict c, so the query is unsat only while both definitions are
+; active.
+;
+; This cannot detect a lost guard, and never could: it asserts
+; everything before the first check-sat and then re-runs the identical
+; query, which is answered from cache without preparing again. Test 46
+; splits the assertions, which is what made the loss observable. Kept
+; as coverage that a repeated identical check-sat is stable.
 (set-logic QF_ABV)
 (declare-fun a () (Array (_ BitVec 2) (_ BitVec 2)))
 (declare-fun b () (Array (_ BitVec 2) (_ BitVec 2)))

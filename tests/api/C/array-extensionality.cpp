@@ -196,8 +196,10 @@ TEST(array_extensionality, repeated_queries_do_not_leak_ite_records)
   stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
   ASSERT_NE(nullptr, ext);
 
-  // Only the construction-time equality was minted so far.
-  ASSERT_EQ(1u, ext->getRecords().size());
+  // The replacement and its two guarded equalities are minted when the
+  // if-then-else is built, not when a solve prepares, so the count is
+  // already final before the first query and never moves.
+  ASSERT_EQ(3u, ext->getRecords().size());
 
   for (int solve = 0; solve < 4; solve++)
   {
@@ -211,9 +213,9 @@ TEST(array_extensionality, repeated_queries_do_not_leak_ite_records)
 
 TEST(array_extensionality, nested_ite_fixed_point_is_stable)
 {
-  // A nested array if-then-else with unresolved conditions reaches the
-  // elimination fixed point once -- one user record plus two records
-  // per eliminated ITE -- and repeated solves reuse all of them.
+  // A nested array if-then-else is replaced innermost-first as the
+  // terms are built -- one user record plus two records per replaced
+  // ITE -- and every solve reuses all of them.
   VC vc = vc_createValidityChecker();
   vc_setFlag(vc, 'x');
 
@@ -242,12 +244,13 @@ TEST(array_extensionality, nested_ite_fixed_point_is_stable)
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
   stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
   ASSERT_NE(nullptr, ext);
-  ASSERT_EQ(1u, ext->getRecords().size());
+  // 1 user equality + 2 per replaced ITE (outer and inner), all minted
+  // as the terms were built.
+  ASSERT_EQ(5u, ext->getRecords().size());
 
   for (int solve = 0; solve < 3; solve++)
   {
     ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc))) << "solve " << solve;
-    // 1 construction + 2 per eliminated ITE (outer and inner)
     EXPECT_EQ(5u, ext->getRecords().size()) << "solve " << solve;
   }
 
@@ -256,10 +259,16 @@ TEST(array_extensionality, nested_ite_fixed_point_is_stable)
 
 TEST(array_extensionality, asserted_ite_condition_folds_before_fe03)
 {
-  // Companion coverage for permitted simplification: with the
-  // condition asserted true, ordinary preprocessing folds ite(p,a,b)
-  // to a before preparation ever sees it, so no guarded equalities are
-  // created and the registry keeps only the user's record.
+  // The cost of replacing at construction, pinned deliberately.
+  //
+  // The condition is asserted true, so preprocessing could fold
+  // ite(p,a,b) to a -- and while elimination ran after preprocessing it
+  // did exactly that, leaving the registry with only the user's record.
+  // Replacing when the term is built happens before any assertion is
+  // known, so the two guarded equalities are minted regardless and the
+  // count is 3. That is the trade for a replacement key nothing can
+  // rewrite; the verdict is unaffected, which is what the query below
+  // checks.
   VC vc = vc_createValidityChecker();
   vc_setFlag(vc, 'x');
 
@@ -286,7 +295,7 @@ TEST(array_extensionality, asserted_ite_condition_folds_before_fe03)
   for (int solve = 0; solve < 2; solve++)
   {
     ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc))) << "solve " << solve;
-    EXPECT_EQ(1u, ext->getRecords().size()) << "solve " << solve;
+    EXPECT_EQ(3u, ext->getRecords().size()) << "solve " << solve;
   }
 
   vc_Destroy(vc);
@@ -988,7 +997,7 @@ TEST(array_extensionality, flag_off_preserves_eq_node)
   vc_Destroy(vc);
 }
 
-TEST(array_extensionality, DISABLED_ite_replacement_survives_a_rewritten_condition)
+TEST(array_extensionality, ite_replacement_survives_a_rewritten_condition)
 {
   // Same property as repeated_queries_do_not_leak_ite_records above --
   // a repeated solve must reuse the cached if-then-else replacement
@@ -1012,9 +1021,9 @@ TEST(array_extensionality, DISABLED_ite_replacement_survives_a_rewritten_conditi
   // asserts the same thing and cannot see it either: it calls prepare()
   // directly, so no preprocessing runs between its two solves.
   //
-  // DISABLED until the elimination moves to node construction, where
-  // the replacement is keyed on the if-then-else as the user built it
-  // and nothing can rewrite the key.
+  // Replacing at construction keys the replacement on the triple as the
+  // caller built it -- a key that exists nowhere else and so cannot be
+  // rewritten -- and the count is stable.
   VC vc = vc_createValidityChecker();
   vc_setFlag(vc, 'x');
 

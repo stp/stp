@@ -315,6 +315,9 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // an array.
   ExtensionalityContext* ext = bm->getExtensionalityIfAny();
   const bool extActive = ext != NULL && ext->active();
+  // Releases the registry seal on every exit from this function, so
+  // that terms built between solves are ordinary again.
+  ExtensionalityContext::SolveScope extScope(extActive ? ext : NULL);
   if (extActive)
   {
     ext->beginSolve();
