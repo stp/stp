@@ -1518,16 +1518,11 @@ Expr vc_fpToFPFromSignedBV(VC vc, int eb, int sb, Expr rm, Expr bv)
 
 Expr vc_fpToFPFromUnsignedBV(VC vc, int eb, int sb, Expr rm, Expr bv)
 {
-  stp::STPMgr* b = ((stp::STP*)vc)->bm;
-  checkFpWidths(eb, sb);
-  stp::ASTVec kids;
-  kids.push_back(b->CreateBVConst(32, eb));
-  kids.push_back(b->CreateBVConst(32, sb));
-  kids.push_back(*(stp::ASTNode*)rm);
-  kids.push_back(*(stp::ASTNode*)bv);
-  stp::ASTNode r = stp::FloatBlaster::withFormat(
-      b, b->CreateTerm(stp::FP_TOFP_UNSIGNED, eb + sb, kids), eb, sb);
-  return persistNode(vc, r);
+  // Through fpToFP like its signed sibling. It used to carry its own copy of
+  // that body -- identical but for the kind -- and so was the one to_fp form
+  // that never checked its rounding mode.
+  return fpToFP(vc, stp::FP_TOFP_UNSIGNED, eb, sb, (stp::ASTNode*)rm,
+                *(stp::ASTNode*)bv);
 }
 
 // fp.to_ubv / fp.to_sbv: a float in, a `width`-bit bitvector out. The result is
