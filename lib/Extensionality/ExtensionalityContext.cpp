@@ -691,6 +691,16 @@ void ExtensionalityContext::bindAfterTransform(ArrayTransformer* at)
     }
   };
   std::vector<ReadRow> reads;
+  // This walk is the other half of a safety-critical pair. The host's
+  // read refinement skips exactly the arrays this keeps
+  // (SATBased_ArrayReadRefinement, same map, same predicate,
+  // complementary branch), so every read whose Ackermann axioms are
+  // suppressed is a read the checker takes responsibility for. Changing
+  // either filter alone would open a gap that nothing constrains.
+  //
+  // A read that reached neither -- never registered here at all --
+  // would survive as a READ node into bit-blasting, which has no case
+  // for one and fails loudly. So the gap cannot open silently either.
   for (ArrayTransformer::ArrType::const_iterator it =
            at->arrayToIndexToRead.begin();
        it != at->arrayToIndexToRead.end(); ++it)

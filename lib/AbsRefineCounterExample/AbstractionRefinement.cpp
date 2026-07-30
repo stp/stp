@@ -289,6 +289,15 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
     // reasoning for arrays connected to an abstracted array equality;
     // generating the ordinary lazy Ackermann read axioms for them too
     // would duplicate (and interfere with) its lemmas.
+    //
+    // Skipping an array here is only safe because the checker really
+    // does cover every read of it, and that is not an assumption:
+    // ExtensionalityContext::bindAfterTransform builds its access
+    // inventory by walking THIS map with THIS predicate, taking the
+    // complementary branch. The two sets are therefore equal by
+    // construction, and a read cannot fall between them. Keep the two
+    // filters identical -- a read that neither side claimed would be
+    // constrained by nothing at all.
     if (extActive && ext->inCone(iset->first))
       continue;
 
