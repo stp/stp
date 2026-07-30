@@ -356,9 +356,12 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     original = ext->restoreArrayITEs(original);
   }
   const bool extActive = ext != NULL && ext->active();
-  // Releases the registry seal on every exit from this function, so
-  // that terms built between solves are ordinary again.
-  ExtensionalityContext::SolveScope extScope(extActive ? ext : NULL);
+  // Releases the registry seal and the replacement-hook bypass on every
+  // exit from this function, so that terms built between solves are
+  // ordinary again. Held whenever there is a context at all, not only
+  // when the procedure ran: restoreArrayITEs sets the bypass precisely
+  // when it did not.
+  ExtensionalityContext::SolveScope extScope(ext);
   if (extActive)
   {
     inputToSat = ext->conjoinRecordConstraints(inputToSat);

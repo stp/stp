@@ -488,6 +488,25 @@ ASTNode ExtensionalityContext::restoreArrayITEs(const ASTNode& root)
   if (iteReplacements.empty() || active())
     return root;
 
+  // Set for the whole of this function, and left set on the way out.
+  //
+  // Every array term built below is one some replacement stands for, so
+  // building it must not simply mint a replacement for it again. The
+  // substitution at the end is where that bites: it rebuilds any node
+  // whose children changed, so an if-then-else whose branch still
+  // mentions an inner replacement goes back through the node factory.
+  // Nothing would define the replacement minted there --
+  // conjoinRecordConstraints emits the guards only while the procedure
+  // is active, and this function runs only when it is not -- so the
+  // solved formula would carry a free array.
+  //
+  // It has to stay set for the rest of the solve as well, because
+  // preprocessing rebuilds array if-then-elses as it simplifies, and a
+  // replacement minted then would be undefined for the same reason.
+  // SolveScope clears it on every exit from the solve, so terms built
+  // between solves are replaced as usual.
+  bypassIteHook = true;
+
   NodeFactory* hf = bm->hashingNodeFactory;
   ASTNodeMap back;
   bool changed = true;
@@ -513,26 +532,14 @@ ASTNode ExtensionalityContext::restoreArrayITEs(const ASTNode& root)
       kids.push_back(cond);
       kids.push_back(t);
       kids.push_back(e);
-      bypassIteHook = true;
       back[it->second] =
           hf->CreateArrayTerm(ITE, t.GetIndexWidth(), t.GetValueWidth(), kids);
-      bypassIteHook = false;
       changed = true;
     }
   }
 
   ASTNodeMap cache;
-  const ASTNode out =
-      SubstitutionMap::replace(root, back, cache, bm->defaultNodeFactory);
-
-  // Leave the hook off for the rest of the solve. Preprocessing rebuilds
-  // array if-then-elses as it simplifies, and a replacement minted then
-  // would be an unconstrained array: the guards defining it are
-  // conjoined by conjoinRecordConstraints, which does not run while the
-  // procedure is inactive. SolveScope restores the hook on the way out,
-  // so terms built between solves are replaced as usual.
-  bypassIteHook = true;
-  return out;
+  return SubstitutionMap::replace(root, back, cache, bm->defaultNodeFactory);
 }
 
 bool ExtensionalityContext::isReplacement(const ASTNode& n) const
