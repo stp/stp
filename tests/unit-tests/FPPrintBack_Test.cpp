@@ -86,6 +86,39 @@ static void roundTrips(const std::string& input,
 
 } // namespace
 
+// Every sort a node cannot state for itself. The manager knows all of them,
+// but only inside the frame that declared them -- the parser tears its frames
+// down at end of file -- so by print time the printer has to read them off
+// the term. Getting one wrong is not a cosmetic matter: the operations ask
+// for the sort rather than the carrier's width, so the printed form stops
+// parsing, which is what roundTrips' re-parse catches.
+TEST(FPPrintBack, sorts_the_node_cannot_state)
+{
+  roundTrips(R"(
+    (set-logic QF_ABVFP)
+    (declare-const r RoundingMode)
+    (declare-const x (_ FloatingPoint 8 24))
+    (declare-const bv (_ BitVec 5))
+    (declare-const modes (Array (_ BitVec 2) RoundingMode))
+    (declare-const byfloat (Array (_ FloatingPoint 8 24) (_ BitVec 8)))
+    (declare-const byrm (Array RoundingMode (_ BitVec 8)))
+    (declare-const floats (Array (_ BitVec 3) (_ FloatingPoint 5 11)))
+    (assert (fp.isNormal (fp.add r x x)))
+    (assert (fp.isNormal (fp.mul (select modes #b01) x x)))
+    (assert (= (select byfloat x) #x01))
+    (assert (= (select byrm r) #x02))
+    (assert (fp.isNormal (select floats #b001)))
+    (assert (= bv #b00011))
+  )",
+             {"(declare-fun |r| () RoundingMode)",
+              "(declare-fun |modes| () (Array (_ BitVec 2) RoundingMode ))",
+              "(declare-fun |byrm| () (Array RoundingMode (_ BitVec 8) ))",
+              "(declare-fun |byfloat| () (Array (_ FloatingPoint 8 24) (_ BitVec 8) ))",
+              "(declare-fun |floats| () (Array (_ BitVec 3) (_ FloatingPoint 5 11) ))",
+              // Five bits wide and never used as a mode: still a bitvector.
+              "(declare-fun |bv| () (_ BitVec 5))"});
+}
+
 TEST(FPPrintBack, arithmetic_and_modes)
 {
   roundTrips(R"(
