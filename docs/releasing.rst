@@ -169,10 +169,23 @@ This costs the static link two GMP archives, ``libgmp.a`` and
 ``libgmpxx.a``, which is why ``libgmp-dev`` is installed: the runner image
 supplies the shared library, and a static link needs the archive.
 ``setup-cms.sh`` already builds CryptoMiniSat as a static PIC library, so
-it needs no extra argument. It also costs size -- CryptoMiniSat, CaDiCaL
-and cadiback bring debug info that STP's own ``-g0`` does not remove, so
-the asset is stripped during staging (76M to 22M). CI keeps the
-unstripped build, where a usable backtrace is worth more.
+it needs no extra argument.
+
+It builds it in ``Release``, which matters mostly for everything that is
+not the release. CMake's default of ``RelWithDebInfo`` left CryptoMiniSat
+compiling at ``-g -ggdb3``, and the resulting archives were enormous:
+``libcadical.a`` alone was 126M, against 2.0M without. The static ``stp``
+that links them went from 76M to 24M. ``setup-cadical.sh`` needs no
+equivalent change -- CaDiCaL uses its own ``configure``, which defaults to
+``-O3 -DNDEBUG`` and adds debug info only for ``-s``/``--symbols``.
+
+None of that changes the published asset, which is stripped during
+staging and comes to the same 22M either way -- stripping was already
+discarding the debug info. What it changes is the dependency tree, the CI
+cache, the link, and every unstripped build anyone makes. The cost is that
+a backtrace no longer resolves inside CryptoMiniSat, CaDiCaL or cadiback;
+debugging into the solver now means rebuilding it with
+``-DCMAKE_BUILD_TYPE=RelWithDebInfo``.
 
 The build type matters more than it looks. ``CMakeLists.txt`` turns
 ``ENABLE_ASSERTIONS`` off only for an exact ``Release``, and the default

@@ -76,8 +76,8 @@ runs:
 
   # A static STP links against libminisat.a, which minisat only produces when
   # built with STATICCOMPILE; its default build installs the shared library
-  # alone. setup-cms.sh already builds a static (PIC) CryptoMiniSat, so it
-  # needs no such argument.
+  # alone. setup-cms.sh already builds a static (PIC) CryptoMiniSat in
+  # Release, so it needs no such argument.
   - name: Dependencies
     if: steps.deps-cache.outputs.cache-hit != 'true'
     shell: bash
