@@ -1055,6 +1055,12 @@ void ExtensionalityContext::encodePendingLemma(SATSolver& solver,
       }
 
       const int q = getEquals(solver, a, b, satVar, Polarity::BOTH);
+      // Unlike the host's read axioms, which build their reified
+      // variables fresh for each clause, these are cached and reused by
+      // later refinement rounds -- with the solver's own simplification
+      // running in between. A backend that eliminates variables would
+      // be handed a dead one, so keep them.
+      solver.setFrozen(q);
       self->eqLitCache[key] = q;
       return q;
     }
