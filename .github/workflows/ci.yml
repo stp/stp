@@ -303,9 +303,32 @@ jobs:
   # The steps are in a composite action because the release workflow builds
   # the published binary with the same ones. Keeping a single copy is what
   # stops the binary people download from drifting away from the one CI
-  # tests -- if this job passes, the release build works.
+  # tests.
+  #
+  # Two configurations, because sharing the steps is not the same as building
+  # the same thing. The default one is what the rest of CI builds:
+  # RelWithDebInfo, -O2, assertions live. The release build is Release, which
+  # is -O3 -fno-tree-vectorize -g0 with ENABLE_ASSERTIONS off and so -DNDEBUG
+  # defined. No job here compiled that until now -- every Linux job leaves
+  # CMAKE_BUILD_TYPE unset and the Windows one configures without it too -- so
+  # anything that only breaks with assertions compiled out, or only at -O3,
+  # first got built when a release tag was pushed and it was too late to be
+  # cheap. Now a tag only has to rebuild what this job already proved.
   build-static:
-    name: gcc (static)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: static
+            build-type: ''
+            werror: 'ON'
+          # WERROR off to match the release exactly: see the composite
+          # action's input description for why the release does not use it.
+          - name: static, release
+            build-type: Release
+            werror: 'OFF'
+
+    name: gcc (${{ matrix.name }})
     runs-on: ubuntu-latest
 
     steps:
@@ -315,6 +338,9 @@ jobs:
           submodules: 'true'
 
     - uses: ./.github/actions/build-static-linux
+      with:
+        build-type: ${{ matrix.build-type }}
+        werror: ${{ matrix.werror }}
 
   build-32bit:
     name: gcc (i386)
