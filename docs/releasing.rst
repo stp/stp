@@ -183,9 +183,16 @@ None of that changes the published asset, which is stripped during
 staging and comes to the same 22M either way -- stripping was already
 discarding the debug info. What it changes is the dependency tree, the CI
 cache, the link, and every unstripped build anyone makes. The cost is that
-a backtrace no longer resolves inside CryptoMiniSat, CaDiCaL or cadiback;
-debugging into the solver now means rebuilding it with
-``-DCMAKE_BUILD_TYPE=RelWithDebInfo``.
+a backtrace no longer resolves inside CryptoMiniSat, CaDiCaL or cadiback.
+The script forwards its extra arguments to CMake, as ``setup-minisat.sh``
+does, so getting that back is:
+
+.. code-block:: bash
+
+    ./scripts/deps/setup-cms.sh -DCMAKE_BUILD_TYPE=RelWithDebInfo
+
+The forwarded arguments come last, so they override any of the script's
+own defaults, not just this one.
 
 The build type matters more than it looks. ``CMakeLists.txt`` turns
 ``ENABLE_ASSERTIONS`` off only for an exact ``Release``, and the default

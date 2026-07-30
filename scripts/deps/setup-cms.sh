@@ -33,9 +33,14 @@ mkdir build && cd build
 # -O2 for Release and RelWithDebInfo alike (see the -O2 add_compile_options
 # in its CMakeLists), a deliberate upstream choice; Release only adds -g0.
 # The cadical and cadiback it builds via FetchContent inherit both.
+#
+# Extra arguments are forwarded to CMake and come last, so every default above
+# can be overridden by the caller. The one worth knowing about is the build
+# type: pass -DCMAKE_BUILD_TYPE=RelWithDebInfo to get a solver a debugger can
+# see into, at the cost of the archive sizes described above.
 cmake -DENABLE_ASSERTIONS=OFF -DBUILD_SHARED_LIBS=OFF -DSTATIC_BINARY=OFF \
       -DCMAKE_BUILD_TYPE=Release \
-      -DCMAKE_INSTALL_PREFIX:PATH="${install_dir}" ..
+      -DCMAKE_INSTALL_PREFIX:PATH="${install_dir}" "$@" ..
 cmake --build . --parallel "$(nproc)"
 cmake --install .
 cd ..
