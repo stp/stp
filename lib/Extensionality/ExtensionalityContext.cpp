@@ -298,6 +298,30 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
   return records.back().proxy;
 }
 
+bool ExtensionalityContext::retireIfUnreachable(const ASTVec& liveAssertions)
+{
+  if (records.empty())
+    return false;
+
+  ASTNodeSet reachable;
+  for (size_t i = 0; i < liveAssertions.size(); i++)
+    collectDag(liveAssertions[i], reachable);
+
+  for (size_t i = 0; i < records.size(); i++)
+    if (reachable.find(records[i].proxy) != reachable.end())
+      return false; // an assertion still names this equality
+
+  records.clear();
+  keyToRecord.clear();
+  proxyToRecord.clear();
+  protectedSymbols.clear();
+  possibleConeSymbols.clear();
+  iteReplacements.clear();
+  // Every per-solve view describes records that no longer exist.
+  beginSolve();
+  return true;
+}
+
 void ExtensionalityContext::beginSolve()
 {
   coneIsFrozen = false;

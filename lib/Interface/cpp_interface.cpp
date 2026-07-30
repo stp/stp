@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/cpp_interface.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/Parser/LetMgr.h"
 #include "stp/Printer/printers.h"
 #include "stp/Util/GitSHA1.h"
@@ -404,6 +405,37 @@ void Cpp_interface::resetSolver()
   GlobalSTP->ClearAllTables();
 }
 
+// After assertions have been discarded, let the array-equality registry
+// go if nothing that can still be asserted names any of its abstraction
+// variables. Nothing else releases it: its records hold the operand
+// terms, so until it does, the symbols they mention stay in the
+// manager's unique table and every later solve re-conjoins their
+// constraint bundles.
+//
+// "Can still be asserted" is the assertion stack plus the bodies of the
+// define-funs still in scope -- an outer-level define-fun whose body
+// contains an array equality can be named by an assertion made after
+// this point, and retiring its record would leave that abstraction
+// variable an unconstrained Boolean, which answers sat on unsat
+// queries. Terms reachable only from the parser's let bindings need no
+// such care: pop() asserts that the let table is empty.
+//
+// Deliberately not called from the C API's vc_pop. There a caller holds
+// Expr handles across the pop and may assert one afterwards, so no
+// inspection of solver state can establish that a proxy is unreachable.
+void Cpp_interface::retireExtensionalityIfUnused()
+{
+  ExtensionalityContext* ext = bm.getExtensionalityIfAny();
+  if (ext == NULL)
+    return;
+
+  ASTVec live;
+  bm.collectAsserts(live);
+  for (const auto& f : functions)
+    live.push_back(f.second.function);
+  ext->retireIfUnreachable(live);
+}
+
 // Can clear away the base frame..
 void Cpp_interface::reset()
 {
@@ -422,6 +454,7 @@ void Cpp_interface::reset()
   // These tables might hold references to symbols that have been
   // removed.
   resetSolver();
+  retireExtensionalityIfUnused();
 
   cleanUp();
 
@@ -460,6 +493,7 @@ void Cpp_interface::resetAssertions()
 
   // These tables might hold references to the assertions just discarded.
   resetSolver();
+  retireExtensionalityIfUnused();
 
   checkInvariant();
 }
@@ -476,6 +510,7 @@ void Cpp_interface::pop()
   // These tables might hold references to symbols that have been
   // removed.
   resetSolver();
+  retireExtensionalityIfUnused();
 
   cache.erase(cache.end() - 1);
 

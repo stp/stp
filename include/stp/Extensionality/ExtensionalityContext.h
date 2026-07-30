@@ -117,6 +117,27 @@ public:
   // solveWriteChain). Mixed index/element widths are an error.
   ASTNode makeEquality(const ASTNode& a, const ASTNode& b);
 
+  // Drop the whole registry once nothing can reach it any more, and
+  // report whether that happened. Records are pinned to the manager's
+  // lifetime because their abstraction variables are embedded in the
+  // user's AST, but after a pop or a reset those assertions may be
+  // gone. Keeping dead records then costs a re-conjoined constraint
+  // bundle per record on every later solve, puts their arrays back in
+  // the cone, and -- because the registry holds ASTNode references to
+  // the operands -- pins their symbols in the manager's unique table,
+  // so a name declared inside a popped scope can never be declared
+  // again.
+  //
+  // All or nothing deliberately. A surviving record's operands can
+  // contain an array if-then-else whose replacement array is defined
+  // by two further records, and those are named by no assertion at
+  // all; retiring records one at a time would have to chase that
+  // closure, and getting it wrong turns an abstraction variable into
+  // an unconstrained Boolean. Whole-registry death needs no closure:
+  // if no proxy is reachable then no equality is, so nothing minted
+  // on behalf of one can be either.
+  bool retireIfUnreachable(const ASTVec& liveAssertions);
+
   bool enabled() const;
   // The decision procedure participates in a solve exactly when the
   // feature is on and at least one array equality was abstracted.

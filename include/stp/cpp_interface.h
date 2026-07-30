@@ -169,6 +169,10 @@ public:
 
   void removeSymbol(ASTNode to_remove);
 
+  // Called wherever assertions are discarded (pop, reset,
+  // reset-assertions); see the definition.
+  void retireExtensionalityIfUnused();
+
   // Declare a function. We can't keep references to the declared variables
   // though. So rename them..
   DLL_PUBLIC void storeFunction(const std::string& name, const ASTVec& params,
