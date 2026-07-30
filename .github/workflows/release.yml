@@ -1,0 +1,287 @@
+# Builds the binary a release ships and creates the GitHub release as a
+# draft, so the notes and the asset can be looked over before anyone can
+# download them. See docs/releasing.rst for the whole procedure.
+#
+# Linux x86-64 only. A Windows build exists in ci.yml and works, but MSVC
+# cannot compile CryptoMiniSat or CaDiCaL, so it can only be linked against
+# MiniSat -- too slow to be worth publishing as the Windows STP. Shipping one
+# again means getting a competitive solver to build there first.
+#
+# The tag pattern is the unprefixed MAJOR.MINOR.PATCH form used since 2.3.1.
+# The older stp-2.2.0 and the branch tags (smtcomp2020, 2.3.4_cadical)
+# deliberately do not match: pushing one of those should not cut a release.
+#
+# workflow_dispatch runs everything except the one step that creates the
+# release, so this file can be rehearsed against a branch. Without it the
+# first execution of any change here would be a real tag push, and the
+# documented recovery -- delete the tag, fix, push it again -- is a poor way
+# to debug a workflow. Run it from the Actions tab before touching this file
+# in anger.
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+name: Release
+
+# Read-only by default; only the job that creates the release needs more, so
+# the write is granted there rather than to every job in the file.
+permissions:
+  contents: read
+
+jobs:
+
+  # Cheap, and first: a version bump that was forgotten is much easier to deal
+  # with before the assets exist than after they have been published. Both
+  # files that carry the version by hand are checked, because they drift
+  # independently -- docs/conf.py is the one that gets missed.
+  check-version:
+    name: check version
+    runs-on: ubuntu-latest
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+
+    - uses: actions/checkout@v7
+
+    # An expression that matches nothing leaves the variable empty, which
+    # fails the comparison and reports the empty value -- so a renamed or
+    # moved setting surfaces here rather than silently passing.
+    #
+    # On a workflow_dispatch there is no tag to compare against, so the two
+    # files are only checked against each other and the version to build is
+    # taken from the tree. Everything downstream is then unchanged, which is
+    # the point: a dry run exercises the same asset naming and the same
+    # checks as a real release.
+    - name: The tag must match the version in the tree
+      id: version
+      shell: bash
+      env:
+        REF_TYPE: ${{ github.ref_type }}
+      run: |
+        cmake_version=$(sed -n 's/^set(STP_FULL_VERSION "\([^"]*\)").*/\1/p' CMakeLists.txt)
+        docs_version=$(sed -n "s/^release = '\([^']*\)'.*/\1/p" docs/conf.py)
+
+        if [ "$REF_TYPE" = tag ]; then
+          tag="$GITHUB_REF_NAME"
+        else
+          tag="$cmake_version"
+          echo "not a tag ($GITHUB_REF_NAME): dry run against the version in the tree"
+        fi
+
+        echo "expected:       '$tag'"
+        echo "CMakeLists.txt: '$cmake_version'"
+        echo "docs/conf.py:   '$docs_version'"
+
+        fail=0
+        if [ "$cmake_version" != "$tag" ]; then
+          echo "::error::STP_FULL_VERSION in CMakeLists.txt is '$cmake_version', expected '$tag'"
+          fail=1
+        fi
+        if [ "$docs_version" != "$tag" ]; then
+          echo "::error::release in docs/conf.py is '$docs_version', expected '$tag'"
+          fail=1
+        fi
+        [ "$fail" = 0 ] || exit 1
+
+        echo "version=$tag" >> "$GITHUB_OUTPUT"
+
+  linux:
+    name: linux-amd64
+    needs: check-version
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - uses: actions/checkout@v7
+      with:
+          submodules: 'true'
+
+    # Release, not the RelWithDebInfo most of CI leaves it at: CMakeLists only
+    # turns ENABLE_ASSERTIONS off for an exact "Release", and a published
+    # binary must not be asserting. WERROR off -- the assertions-live CI job
+    # gates warnings, and a warning that only appears at -O3 should not block
+    # a release.
+    #
+    # These are the same two inputs the "gcc (static, release)" CI job passes,
+    # so this configuration is built and smoke-tested on every push rather
+    # than being met for the first time here.
+    - id: build
+      uses: ./.github/actions/build-static-linux
+      with:
+        build-type: Release
+        werror: 'OFF'
+
+    # Stripped: worth ~1.7M (24M -> 22M) now that setup-cms.sh builds the
+    # solver stack in Release, which is where the bulk of the debug info used
+    # to come from. Kept because it still removes the symbol table, and
+    # because a release asset has no use for either.
+    - name: Stage the asset
+      shell: bash
+      run: |
+        mkdir assets
+        cp "${{ steps.build.outputs.binary }}" \
+           "assets/stp-${{ needs.check-version.outputs.version }}-linux-amd64"
+        strip "assets/stp-${{ needs.check-version.outputs.version }}-linux-amd64"
+        ls -l assets/
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: linux-amd64
+        path: assets/
+        if-no-files-found: error
+
+  publish:
+    name: publish
+    needs: [check-version, linux]
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+
+    # gh resolves the repository from the checkout, and --generate-notes needs
+    # the tag to exist on the remote, which it does by the time this runs.
+    - uses: actions/checkout@v7
+
+    # merge-multiple flattens artifacts into one directory, so the upload
+    # below stays a single glob if another platform is ever added.
+    - uses: actions/download-artifact@v4
+      with:
+        path: assets
+        merge-multiple: true
+
+    # The build job already smoke-tested this, but it tested what came out of
+    # the compiler rather than what came back out of an artifact, and the
+    # rename happened in between. This is the only check that the file about
+    # to be published is executable, static, built from the commit being
+    # released, and named for the version it reports.
+    #
+    # chmod because upload-artifact does not preserve the executable bit: the
+    # zip it produces carries no Unix mode, so everything downloads as 0644.
+    # It changes no bytes, so the checksums taken below still describe the
+    # file people download.
+    - name: Check the Linux asset before publishing it
+      shell: bash
+      run: |
+        ls -l assets/
+        stp="assets/stp-${{ needs.check-version.outputs.version }}-linux-amd64"
+        chmod +x "$stp"
+        file "$stp"
+        if ldd "$stp"; then
+          echo "::error::the asset is not a static executable"
+          exit 1
+        fi
+
+        # Once, into a variable: every check below reads the same output, and
+        # a pipeline into head would risk killing stp with SIGPIPE under the
+        # pipefail this shell runs with.
+        info=$("./$stp" --version)
+        echo "$info"
+
+        got=$(printf '%s\n' "$info" | sed -n 1p)
+        expected="STP version ${{ needs.check-version.outputs.version }}"
+        if [ "$got" != "$expected" ]; then
+          echo "::error::the asset reports '$got', expected '$expected'"
+          exit 1
+        fi
+
+        # The version string alone cannot tell one commit from another: every
+        # commit after the bump reports the same number. CMake captures the
+        # HEAD sha at configure time, so this is the check that the binary
+        # came from the commit being released rather than from some other
+        # point on master.
+        got=$(printf '%s\n' "$info" | sed -n 2p)
+        expected="STP version SHA string $GITHUB_SHA"
+        if [ "$got" != "$expected" ]; then
+          echo "::error::the asset reports '$got', expected '$expected'"
+          exit 1
+        fi
+
+        # Which solver is compiled in decides which one the binary uses with
+        # no flag given, so this is what makes it a CryptoMiniSat release
+        # rather than a MiniSat one.
+        if ! printf '%s\n' "$info" | grep -q 'USE_CRYPTOMINISAT'; then
+          echo "::error::the asset was not built with CryptoMiniSat"
+          exit 1
+        fi
+
+        # -DNDEBUG is how ENABLE_ASSERTIONS=OFF shows up, and it only gets
+        # turned off by an exact "Release". Without this a published binary
+        # could quietly be asserting on every query.
+        if ! printf '%s\n' "$info" | grep -q '\-DNDEBUG'; then
+          echo "::error::the asset was built with assertions enabled"
+          exit 1
+        fi
+
+        # And it still solves after being stripped.
+        echo '(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (= x #x2a))(check-sat)' > sat.smt2
+        got=$("./$stp" sat.smt2)
+        echo "sat.smt2: '$got'"
+        [ "$got" = "sat" ] || exit 1
+
+    # Published alongside the binary so a download can be checked against
+    # something this workflow recorded, rather than against nothing. Written
+    # after the checks above and from inside assets/, so it covers exactly
+    # the files being uploaded and names them the way they arrive:
+    #
+    #     sha256sum --check SHA256SUMS
+    #
+    # This is a checksum, not a signature -- it detects a corrupted or
+    # truncated download, and it lets a mirrored copy be compared against the
+    # release page. It is not evidence of origin on its own, since anyone who
+    # could replace the asset could replace the sums file with it.
+    - name: Checksum the assets
+      shell: bash
+      working-directory: assets
+      run: |
+        sha256sum stp-* > SHA256SUMS
+        cat SHA256SUMS
+        sha256sum --check SHA256SUMS
+
+    # A draft: the release is not visible and the assets are not downloadable
+    # until it is published by hand from the Releases page. That leaves the
+    # auto-generated notes open to editing, and a bad build discardable
+    # without anyone having fetched it. Drop --draft to publish directly.
+    #
+    # --generate-notes produces the "What's Changed" list of merged pull
+    # requests since the previous release, which is what the 2.3.4 notes are.
+    #
+    # Skipped on a workflow_dispatch, which is what makes a dry run safe:
+    # everything above -- the version check, the build, the smoke test, the
+    # artifact round-trip, the asset checks and the checksums -- has already
+    # run by this point, and only the irreversible step is left out. There is
+    # also no tag to hang a release off in that case.
+    - name: Create the draft release
+      if: github.ref_type == 'tag'
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        # gh's own message for this is a bare 422, so say what to do about it.
+        # Re-running this job over a tag that already has a release is the
+        # usual way to arrive here; delete the draft and re-run, rather than
+        # having assets from two builds land on one release.
+        if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+          echo "::error::a release already exists for $GITHUB_REF_NAME; delete it (gh release delete $GITHUB_REF_NAME) before re-running"
+          exit 1
+        fi
+
+        gh release create "$GITHUB_REF_NAME" \
+          --title "STP ${{ needs.check-version.outputs.version }}" \
+          --generate-notes \
+          --draft \
+          assets/*
+        gh release view "$GITHUB_REF_NAME" --json url --jq .url
+
+    - name: Dry run summary
+      if: github.ref_type != 'tag'
+      shell: bash
+      run: |
+        echo "Dry run: built, checked and checksummed the assets below, and"
+        echo "stopped before creating a release. Push a tag to cut one."
+        ls -l assets/
+
+# EOF

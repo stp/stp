@@ -167,6 +167,7 @@ Working on STP
    code-guide
    testing
    cnf-output-format
+   releasing
 
 
 Awards

@@ -12,6 +12,14 @@ dep="minisat"
 cd "${dep_dir}"
 git clone https://github.com/stp/minisat "${dep}"
 cd "${dep}"
+# We specify the tags/commits for the other repositories, so do for this too.
+# A commit rather than a tag: stp/minisat carries only the upstream 2.0/2.2.x
+# release tags, none of which name the fork's own history.
+#
+# This is what a released binary links against, so it should move because
+# someone chose to move it. Bumping it also changes the CI dependency cache
+# key, since cache-key.sh hashes this script.
+git checkout 14c78206cd12d1d36b7e042fa758747c135670a4
 mkdir build && cd build
 # minisat's cmake_minimum_required predates 3.5, which CMake 4 removed
 # support for; the same floor is passed in the Windows CI job.

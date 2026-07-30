@@ -1,0 +1,197 @@
+name: Build a static Linux stp
+description: >
+  Build a statically linked stp and smoke-test it. The repository, including
+  submodules, must already be checked out. The CI jobs that keep static
+  linking working and the release workflow that ships the binary all use
+  this, so that what gets published is built exactly the way CI builds it.
+  CI runs it in both configurations, including the one the release uses.
+
+inputs:
+  build-type:
+    description: >
+      CMAKE_BUILD_TYPE to configure with. Empty gives STP's own default of
+      RelWithDebInfo with assertions live, which is what the rest of CI
+      builds. The release passes Release: CMakeLists turns ENABLE_ASSERTIONS
+      off only for an exact "Release", and a published binary must not be
+      asserting. Release is a materially different compile -- -O3, -g0 and
+      -DNDEBUG -- so CI builds it too rather than meeting it first at a tag.
+    required: false
+    default: ''
+  werror:
+    description: >
+      Whether to build with WERROR. On for the assertions-live build, where a
+      new warning should fail the build. Off for Release, where a warning that
+      only the higher optimisation level produces should not block a release
+      that CI has already passed -- and off in CI's Release job too, so that
+      job stays a faithful rehearsal of the release rather than a stricter
+      one that fails on something the release would have tolerated.
+    required: false
+    default: 'ON'
+
+outputs:
+  binary:
+    description: Path to the static executable, relative to the workspace.
+    value: ${{ steps.build.outputs.binary }}
+
+runs:
+  using: composite
+
+  steps:
+
+  # No lit and no gtest here: STATICCOMPILE turns BUILD_SHARED_LIBS off, and
+  # the top-level CMakeLists forces ENABLE_TESTING off when it is off (the
+  # Python bindings and the test harness both want a shared libstp), so a
+  # static build has no tests to run. See the smoke test at the end.
+  - name: Packages
+    shell: bash
+    run: |
+      sudo apt-get update
+      sudo apt-get install -y \
+        bison \
+        build-essential \
+        ccache \
+        cmake \
+        flex \
+        gcc \
+        git \
+        libboost-program-options-dev \
+        libgmp-dev \
+        ninja-build \
+        zlib1g-dev
+
+  - name: Resolve dependency revisions
+    id: deps-key
+    shell: bash
+    run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
+
+  # A different set of dependencies to the other jobs, so a different key
+  # prefix: the key describes their revisions, not which of them are in the
+  # tree, and restoring a cache from a job that builds a different set would
+  # skip the step that builds what is missing. This is the only job that
+  # builds CryptoMiniSat into a static-linkable prefix, and the only one that
+  # needs neither gtest nor OutputCheck.
+  #
+  # Only deps/install: both setup scripts install self-contained CMake
+  # packages there -- archives and configs, with no path pointing back at
+  # deps/cms or deps/minisat -- so the source and build trees are worth
+  # nothing after the install and several hundred megabytes to carry. On a
+  # hit the step below is skipped and they are not wanted; on a miss they are
+  # cloned again. This is what every other job caches.
+  #
+  # Shared between the build types below, which differ only in how STP itself
+  # is compiled: the dependencies are identical either way. Two jobs racing
+  # to save it on a cold cache is expected -- the loser logs that the key
+  # already exists and carries on, exactly as the gcc/clang matrix does.
+  - name: Restore dependencies
+    id: deps-cache
+    uses: actions/cache@v4
+    with:
+      path: deps/install
+      key: deps-x86_64-static-cms-${{ steps.deps-key.outputs.key }}
+
+  # Neither script needs an argument here: both already build a static (PIC)
+  # library, which is what a static STP links against and what gets folded
+  # into a shared libstp otherwise. setup-cms.sh additionally builds
+  # CryptoMiniSat in Release.
+  - name: Dependencies
+    if: steps.deps-cache.outputs.cache-hit != 'true'
+    shell: bash
+    run: |
+      ./scripts/deps/setup-minisat.sh
+      ./scripts/deps/setup-cms.sh
+
+  # Keyed by build type as well: the two differ in optimisation level and in
+  # whether NDEBUG is defined, so they share no compilations. One key would
+  # have them evicting each other's entries inside the 800M budget while
+  # never producing a hit for one another.
+  - name: Compiler cache
+    uses: actions/cache@v4
+    with:
+      path: ~/.cache/ccache
+      key: ccache-static-${{ inputs.build-type || 'default' }}-${{ github.run_id }}
+      restore-keys: ccache-static-${{ inputs.build-type || 'default' }}-
+
+  # CryptoMiniSat is linked in rather than disabled, because UserDefinedFlags
+  # makes whichever solver is compiled in the default one, and MiniSat is not
+  # what STP should be solving with out of the box. CryptoMiniSat rather than
+  # CaDiCaL because its author has contributed to STP, so STP ships his
+  # solver by preference -- note that UserDefinedFlags would pick CaDiCaL
+  # ahead of it if both were compiled in, so this build deliberately does not
+  # enable USE_CADICAL. CryptoMiniSat uses CaDiCaL internally regardless.
+  #
+  # Linking it needs the static GMP archives (libgmp.a, libgmpxx.a) the
+  # CryptoMiniSat config asks for, hence libgmp-dev above -- the runner image
+  # supplies the shared library but a static link needs the archive.
+  #
+  # FORCE_CMS turns a CryptoMiniSat that was not found into a configure-time
+  # error. Without it find_package failing is silent: the build simply falls
+  # through to MiniSat and the mistake surfaces at the smoke test below,
+  # after a full build has been paid for. The smoke test stays anyway --
+  # this checks the intent, that checks the binary.
+  #
+  # USE_POPCNT is left at its default (on). It emits -mpopcnt, which needs
+  # Nehalem/2008 or later -- a safe floor for a release download, and the
+  # reason a release binary is not built with anything narrower.
+  - name: Configure
+    shell: bash
+    env:
+      BUILD_TYPE: ${{ inputs.build-type }}
+      WERROR: ${{ inputs.werror }}
+    run: |
+      mkdir build
+      cd build
+      args=()
+      if [ -n "$BUILD_TYPE" ]; then
+        args+=("-DCMAKE_BUILD_TYPE=$BUILD_TYPE")
+      fi
+      cmake -DSTATICCOMPILE:BOOL=ON -Dcryptominisat5_DIR:PATH="$GITHUB_WORKSPACE/deps/install/lib/cmake/cryptominisat5" -DFORCE_CMS:BOOL=ON -DWERROR:BOOL="$WERROR" "${args[@]}" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+
+  # ONLY_SIMPLE, or a runner without Boost, produces stp_simple rather than
+  # stp. Report whichever was built so the caller does not have to guess.
+  - name: Build
+    id: build
+    shell: bash
+    working-directory: build
+    env:
+      CCACHE_MAXSIZE: 800M
+    run: |
+      ccache --zero-stats
+      cmake --build . --parallel "$(nproc)"
+      ccache --show-stats
+      stp=$([ -x ./stp ] && echo stp || echo stp_simple)
+      echo "binary=build/$stp" >> "$GITHUB_OUTPUT"
+
+  # Linking is most of the point of this action, but a binary that links and
+  # then dies on the first query would still pass, so solve something and
+  # check the answer rather than just the exit status. Also assert the
+  # executable really is static: if the -static link line quietly stopped
+  # taking effect this would otherwise keep passing while testing nothing it
+  # exists to test.
+  - name: Smoke test
+    shell: bash
+    working-directory: build
+    run: |
+      stp="$GITHUB_WORKSPACE/${{ steps.build.outputs.binary }}"
+      ls -l "$stp"
+      file "$stp"
+      if ldd "$stp"; then
+        echo "expected a static executable, but it has shared dependencies"
+        exit 1
+      fi
+      # Which solver got compiled in decides which one the binary uses by
+      # default, so check it rather than assuming the configure line took.
+      # The queries below then run on that default, with no --flag.
+      if ! "$stp" --version | grep -q 'USE_CRYPTOMINISAT'; then
+        echo "expected CryptoMiniSat to be compiled in; it is not"
+        "$stp" --version
+        exit 1
+      fi
+      echo '(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (= x #x2a))(check-sat)' > sat.smt2
+      echo '(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (and (= x #x2a) (= x #x2b)))(check-sat)' > unsat.smt2
+      for expected in sat unsat; do
+        got=$("$stp" "$expected.smt2")
+        echo "$expected.smt2: '$got'"
+        [ "$got" = "$expected" ] || exit 1
+      done
+
+# EOF
