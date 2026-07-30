@@ -63,35 +63,95 @@ struct UsedSorts
   std::map<ASTNode, std::pair<unsigned int, unsigned int>> fp_index_arrays;
 };
 
-// Pass one: what is used as a rounding mode. No position table needed --
-// inside a floating-point operation a 5-bit bitvector can only be a mode. The
-// float operands are FLOATINGPOINT_TYPE, to_fp's and fp.to_ubv's width
-// arguments are 32-bit constants, and fp.min/fp.max's totalisation child is
-// one bit wide.
+// Which child of a floating-point operation carries its rounding mode, or -1
+// for the operations that take none.
+//
+// A position table, because "a 5-bit bitvector inside a floating-point
+// operation" is not the same test. The to_fp family converts *from a
+// bitvector*, of whatever width the input chose -- five included -- so in
+// ((_ to_fp_unsigned 8 24) RNE bv) the source operand is the same shape as
+// the mode beside it, and calling both modes declares bv as RoundingMode. The
+// printed form then re-parses with bv pinned to the five encodings, which is
+// a different formula from the one printed.
+static int roundingModeChild(const ASTNode& n)
+{
+  switch (n.GetKind())
+  {
+    case FP_ADD:
+    case FP_SUB:
+    case FP_MUL:
+    case FP_DIV:
+    case FP_FMA:
+    case FP_SQRT:
+    case FP_ROUNDTOINTEGRAL:
+      return 0;
+
+    // (m, rm, x) before totalisation, (m, rm, x, unspecified) after.
+    case FP_TO_UBV:
+    case FP_TO_SBV:
+      return 1;
+
+    // (e, s, rm, expr) with a mode; (e, s, bits), the bit-pattern
+    // reinterpretation, takes none.
+    case FP_TOFP:
+      return n.Degree() == 4 ? 2 : -1;
+
+    // (e, s, rm, bits) always: the source is an integer in a bitvector.
+    case FP_TOFP_SIGNED:
+    case FP_TOFP_UNSIGNED:
+      return 2;
+
+    default:
+      return -1;
+  }
+}
+
+// The shapes a mode can arrive in, mirroring STPMgr::isRoundingModeSortedTerm
+// so that what prints as a mode is exactly what re-parses as one: a symbol, a
+// read from a RoundingMode-element array, or an ite over either. A literal
+// needs nothing -- it prints by name. Walking into the ite is what the shape
+// test alone missed: the mode inside (ite c RTZ r) is not itself a child of
+// the operation, so r printed as (_ BitVec 5) and the printed form no longer
+// parsed. The ite is recorded too, so pass two can see it as an array index.
+static void noteRoundingMode(const ASTNode& rm, STPMgr* mgr, UsedSorts& out)
+{
+  switch (rm.GetKind())
+  {
+    case SYMBOL:
+      out.rounding_modes.insert(rm);
+      break;
+    case READ:
+    {
+      out.rounding_modes.insert(rm);
+      // A mode read out of an array makes that array's elements modes.
+      const ASTNode base = mgr->arrayBaseSymbol(rm[0]);
+      if (!base.IsNull())
+        out.rm_element_arrays.insert(base);
+      break;
+    }
+    case ITE:
+      out.rounding_modes.insert(rm);
+      noteRoundingMode(rm[1], mgr, out);
+      noteRoundingMode(rm[2], mgr, out);
+      break;
+    default:
+      break;
+  }
+}
+
+// Pass one: what is used as a rounding mode.
 static void collectRoundingModeUses(const ASTNode& n, STPMgr* mgr,
                                     ASTNodeSet& visited, UsedSorts& out)
 {
   if (!visited.insert(n).second)
     return;
 
-  const bool fp_operation = is_FP_kind(n.GetKind());
+  const int rm = roundingModeChild(n);
+  if (rm >= 0 && static_cast<size_t>(rm) < n.Degree())
+    noteRoundingMode(n[rm], mgr, out);
+
   for (size_t i = 0; i < n.Degree(); i++)
-  {
-    const ASTNode& c = n[i];
-    if (fp_operation && c.GetType() == BITVECTOR_TYPE &&
-        c.GetValueWidth() == 5 && (c.GetKind() == SYMBOL || c.GetKind() == READ))
-    {
-      out.rounding_modes.insert(c);
-      // A mode read out of an array makes that array's elements modes.
-      if (c.GetKind() == READ)
-      {
-        const ASTNode base = mgr->arrayBaseSymbol(c[0]);
-        if (!base.IsNull())
-          out.rm_element_arrays.insert(base);
-      }
-    }
-    collectRoundingModeUses(c, mgr, visited, out);
-  }
+    collectRoundingModeUses(n[i], mgr, visited, out);
 }
 
 // Pass two: what the arrays are indexed by. Needs pass one's answer, since a
