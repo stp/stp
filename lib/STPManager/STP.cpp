@@ -834,9 +834,11 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   // Combined refinement driver (the loop of the lemmas-on-demand
   // procedure, paper section 6, interleaved with STP's own read
-  // refinement). A pending array-equality lemma is installed first,
-  // one per iteration; otherwise ordinary read refinement runs for the
-  // arrays the array-equality procedure does not own. Progress stalls
+  // refinement). Pending array-equality lemmas are installed first --
+  // the whole batch the consistency check found, since one pass
+  // typically exposes many independent conflicts and each costs a
+  // solve-from-scratch if held back; otherwise ordinary read refinement
+  // runs for the arrays the array-equality procedure does not own. Progress stalls
   // only when the ordinary path had nothing to add and no lemma is
   // pending -- that is a solver bug.
   while (true)
@@ -844,7 +846,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     const bool tookLemmaPath = extActive && ext->hasPendingLemma();
     if (tookLemmaPath)
     {
-      ext->encodePendingLemma(NewSolver, satBase);
+      ext->encodePendingLemmas(NewSolver, satBase);
       res = Ctr_Example->CallSAT_ResultCheck(NewSolver, bm->ASTTrue,
                                              original, satBase, true);
     }

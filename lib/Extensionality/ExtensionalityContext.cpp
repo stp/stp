@@ -29,6 +29,8 @@ THE SOFTWARE.
 #include "stp/Simplifier/SubstitutionMap.h"
 #include "stp/ToSat/ToSATBase.h"
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
 
 namespace stp
 {
@@ -459,6 +461,7 @@ void ExtensionalityContext::beginSolve()
   graph = ExtGraph();
   graphBound = false;
   pendingLemmaValid = false;
+  pendingLemmas.clear();
   divergedThisSolve = false;
   eqLitCache.clear();
   lastObserved.clear();
@@ -977,7 +980,7 @@ ExtensionalityContext::checkCandidate(AbsRefine_CounterExample* ce)
       }
       return EXT_CONSISTENT;
     case ExtCheckResult::CONFLICT:
-      pendingLemma = res.conflict;
+      pendingLemmas = res.conflicts;
       pendingLemmaValid = true;
       return EXT_CONFLICT;
     case ExtCheckResult::WITNESS_VIOLATION:
@@ -1059,10 +1062,20 @@ ExtensionalityContext::checkPreencodedBV(const ASTNode& n,
   return NULL;
 }
 
-void ExtensionalityContext::encodePendingLemma(SATSolver& solver,
-                                               ToSATBase* tosat)
+void ExtensionalityContext::encodePendingLemmas(SATSolver& solver,
+                                                ToSATBase* tosat)
 {
   assert(pendingLemmaValid);
+  for (size_t i = 0; i < pendingLemmas.size(); i++)
+    encodeOneLemma(pendingLemmas[i], solver, tosat);
+  pendingLemmas.clear();
+  pendingLemmaValid = false;
+}
+
+void ExtensionalityContext::encodeOneLemma(const ExtConflict& pendingLemma,
+                                           SATSolver& solver,
+                                           ToSATBase* tosat)
+{
   ToSATBase::ASTNodeToSATVar& satVar = tosat->SATVar_to_SymbolIndexMap();
 
   // Validate every bit-vector leaf of the lemma before any SAT
@@ -1197,7 +1210,6 @@ void ExtensionalityContext::encodePendingLemma(SATSolver& solver,
 
   solver.addClause(clause);
   lemmasEmitted++;
-  pendingLemmaValid = false;
 }
 
 // Publish the conflict-free observed values of every cone array

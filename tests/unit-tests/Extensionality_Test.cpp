@@ -228,6 +228,29 @@ protected:
                     const std::vector<ExpectedEvent>& expected)
   {
     ASSERT_EQ(expected.size(), r.events.size());
+    matchEvents(r, expected);
+  }
+
+  // The pass runs its fixed point to completion, so the tail of the
+  // event log is whatever exploration remained after the first
+  // conflict -- incidental, and brittle to pin. What the order tests
+  // are about is the discovery order up to that conflict: the FIFO
+  // work list makes it breadth-first, so the conflict fires on a
+  // shortest propagation path (section 11.1). Pin exactly that prefix.
+  void expectEventPrefix(const ExtCheckResult& r,
+                         const std::vector<ExpectedEvent>& expected)
+  {
+    ASSERT_LE(expected.size(), r.events.size());
+    matchEvents(r, expected);
+    // The prefix must be the whole story up to the first conflict.
+    EXPECT_EQ(ExtEvent::CONFLICT, expected.back().kind);
+    for (size_t i = 0; i + 1 < expected.size(); i++)
+      EXPECT_NE(ExtEvent::CONFLICT, r.events[i].kind) << "event " << i;
+  }
+
+  void matchEvents(const ExtCheckResult& r,
+                   const std::vector<ExpectedEvent>& expected)
+  {
     for (size_t i = 0; i < expected.size(); i++)
     {
       EXPECT_EQ(expected[i].kind, r.events[i].kind) << "event " << i;
@@ -243,6 +266,15 @@ protected:
             << "event " << i;
       }
     }
+  }
+
+  // The rule that fired the first conflict.
+  static const char* firstConflictRule(const ExtCheckResult& r)
+  {
+    for (size_t i = 0; i < r.events.size(); i++)
+      if (r.events[i].kind == ExtEvent::CONFLICT)
+        return r.events[i].rule;
+    return "<no conflict event>";
   }
 };
 
@@ -276,6 +308,54 @@ TEST_F(ExtFixtureTest, ReadReadCongruenceOneArray)
   EXPECT_TRUE(hasEqGuard(c.abstractPremise, i, j));
   EXPECT_EQ(r1, c.abstractConclusionA);
   EXPECT_EQ(r2, c.abstractConclusionB);
+}
+
+// One pass reports every conflict it finds, not just the earliest.
+// Two unrelated arrays, each with its own read-read congruence
+// conflict: nothing connects them, so the two lemmas share no atom and
+// neither can be derived from the other. A pass that stopped at the
+// first would hand back one lemma and need a whole extra SAT solve to
+// discover the other -- which is what made refinement on
+// if-then-else-heavy queries spend thousands of rounds emitting one
+// clause each.
+TEST_F(ExtFixtureTest, IndependentConflictsAreAllReported)
+{
+  ASTNode A = arr("A"), B = arr("B");
+  ASTNode i = bv("i", 0), j = bv("j", 0);
+  ASTNode p = bv("p", 1), q = bv("q", 1);
+  ASTNode r1 = bv("r1", 1), r2 = bv("r2", 2);
+  ASTNode s1 = bv("s1", 1), s2 = bv("s2", 3);
+
+  size_t a1 = readAccess(A, i, r1);
+  size_t a2 = readAccess(A, j, r2);
+  size_t b1 = readAccess(B, p, s1);
+  size_t b2 = readAccess(B, q, s2);
+
+  ExtCheckResult r = run();
+  ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
+  ASSERT_EQ(2u, r.conflicts.size());
+
+  // conflicts[0] is what a first-conflict-wins pass would have returned
+  EXPECT_EQ(r.conflicts[0].commonArray, r.conflict.commonArray);
+  EXPECT_EQ(r.conflicts[0].leftAccess, r.conflict.leftAccess);
+
+  EXPECT_EQ(A, r.conflicts[0].commonArray);
+  EXPECT_EQ(a1, r.conflicts[0].leftAccess);
+  EXPECT_EQ(a2, r.conflicts[0].rightAccess);
+  EXPECT_EQ(r1, r.conflicts[0].abstractConclusionA);
+  EXPECT_EQ(r2, r.conflicts[0].abstractConclusionB);
+
+  EXPECT_EQ(B, r.conflicts[1].commonArray);
+  EXPECT_EQ(b1, r.conflicts[1].leftAccess);
+  EXPECT_EQ(b2, r.conflicts[1].rightAccess);
+  EXPECT_EQ(s1, r.conflicts[1].abstractConclusionA);
+  EXPECT_EQ(s2, r.conflicts[1].abstractConclusionB);
+
+  // Each lemma stands alone: its own index equality, nothing shared.
+  ASSERT_EQ(1u, r.conflicts[0].abstractPremise.size());
+  ASSERT_EQ(1u, r.conflicts[1].abstractPremise.size());
+  EXPECT_TRUE(hasEqGuard(r.conflicts[0].abstractPremise, i, j));
+  EXPECT_TRUE(hasEqGuard(r.conflicts[1].abstractPremise, p, q));
 }
 
 // A false array equality whose witness reads differ: a consistent
@@ -409,21 +489,27 @@ TEST_F(ExtFixtureTest, NestedWriteDownConflict)
 
   ExtCheckResult r = run();
   ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
-  expectStats(r, {{"conflicts", 1},
+  expectStats(r, {{"conflicts", 2},
                   {"insertions", 8},
                   {"propagations", 3},
                   {"rule_D_WRITE", 2},
                   {"rule_U_WRITE", 1},
-                  {"seeds", 5}});
-  expectEvents(r, {{ExtEvent::SEED, "I_READ", w2, (int)ar1},
-                   {ExtEvent::SEED, "I_READ", w3, (int)ar2},
-                   {ExtEvent::SEED, "I_WRITE", w1, (int)aw1},
-                   {ExtEvent::SEED, "I_WRITE", w2, (int)aw2},
-                   {ExtEvent::SEED, "I_WRITE", w3, (int)aw3},
-                   {ExtEvent::PROPAGATE, "D_WRITE", w1, (int)ar1},
-                   {ExtEvent::PROPAGATE, "D_WRITE", A, (int)ar2},
-                   {ExtEvent::PROPAGATE, "U_WRITE", w2, (int)aw1},
-                   {ExtEvent::CONFLICT, "D_WRITE", A, (int)ar1}});
+                  {"seeds", 5},
+                  {"skipped_seen", 3}});
+  // ar1 reaches A downward and collides with ar2 there; carrying on,
+  // ar2 reaches w2 upward and collides with ar1 from the other side.
+  // One contradiction, two lemmas -- their write-index disequalities
+  // differ, so neither clause subsumes the other.
+  EXPECT_EQ(2u, r.conflicts.size());
+  expectEventPrefix(r, {{ExtEvent::SEED, "I_READ", w2, (int)ar1},
+                        {ExtEvent::SEED, "I_READ", w3, (int)ar2},
+                        {ExtEvent::SEED, "I_WRITE", w1, (int)aw1},
+                        {ExtEvent::SEED, "I_WRITE", w2, (int)aw2},
+                        {ExtEvent::SEED, "I_WRITE", w3, (int)aw3},
+                        {ExtEvent::PROPAGATE, "D_WRITE", w1, (int)ar1},
+                        {ExtEvent::PROPAGATE, "D_WRITE", A, (int)ar2},
+                        {ExtEvent::PROPAGATE, "U_WRITE", w2, (int)aw1},
+                        {ExtEvent::CONFLICT, "D_WRITE", A, (int)ar1}});
 
   const ExtConflict& c = r.conflict;
   EXPECT_EQ(A, c.commonArray);
@@ -462,7 +548,13 @@ TEST_F(ExtFixtureTest, PositiveReadEqualityConflict)
 
   ExtCheckResult r = run();
   ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
-  expectStats(r, {{"conflicts", 1}, {"insertions", 4}, {"seeds", 4}});
+  // The collision is symmetric across the equality: each read crosses
+  // to the other array and meets the other read there.
+  expectStats(r, {{"conflicts", 2},
+                  {"insertions", 4},
+                  {"seeds", 4},
+                  {"skipped_represented", 2}});
+  EXPECT_EQ(2u, r.conflicts.size());
 
   const ExtConflict& c = r.conflict;
   EXPECT_EQ(B, c.commonArray);
@@ -474,8 +566,7 @@ TEST_F(ExtFixtureTest, PositiveReadEqualityConflict)
   EXPECT_EQ(rB, c.abstractConclusionA);
   EXPECT_EQ(rA, c.abstractConclusionB);
   // the conflict fires while seeding rA's R_EQ propagation
-  EXPECT_STREQ("R_EQ", r.events.back().rule);
-  EXPECT_EQ(ExtEvent::CONFLICT, r.events.back().kind);
+  EXPECT_STREQ("R_EQ", firstConflictRule(r));
 }
 
 // Example 7 of the paper: read values used as write indices/values;
@@ -503,7 +594,14 @@ TEST_F(ExtFixtureTest, ReadValuesWriteIndicesConflict)
 
   ExtCheckResult r = run();
   ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
-  expectStats(r, {{"conflicts", 1}, {"insertions", 6}, {"seeds", 6}});
+  expectStats(r, {{"conflicts", 2},
+                  {"insertions", 8},
+                  {"propagations", 2},
+                  {"rule_D_WRITE", 2},
+                  {"seeds", 6},
+                  {"skipped_represented", 2},
+                  {"skipped_seen", 2}});
+  EXPECT_EQ(2u, r.conflicts.size());
 
   const ExtConflict& c = r.conflict;
   EXPECT_EQ(w2, c.commonArray);
@@ -538,7 +636,12 @@ TEST_F(ExtFixtureTest, ReadWriteHitConflict)
 
   ExtCheckResult r = run();
   ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
-  expectStats(r, {{"conflicts", 1}, {"insertions", 3}, {"seeds", 3}});
+  // Found twice: the read propagates down through w2 onto w1, and w1's
+  // write access propagates up over w2 onto the read. The two lemmas
+  // carry different write-index disequalities (i != j2 against
+  // j1 != j2), so neither subsumes the other.
+  expectStats(r, {{"conflicts", 2}, {"insertions", 3}, {"seeds", 3}});
+  EXPECT_EQ(2u, r.conflicts.size());
 
   const ExtConflict& c = r.conflict;
   EXPECT_EQ(w1, c.commonArray);
@@ -579,11 +682,15 @@ TEST_F(ExtFixtureTest, TransitiveEqualityConflict)
 
   ExtCheckResult r = run();
   ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
-  expectStats(r, {{"conflicts", 1},
-                  {"insertions", 7},
-                  {"propagations", 1},
-                  {"rule_R_EQ", 1},
-                  {"seeds", 6}});
+  expectStats(r, {{"conflicts", 2},
+                  {"insertions", 9},
+                  {"propagations", 3},
+                  {"rule_L_EQ", 1},
+                  {"rule_R_EQ", 2},
+                  {"seeds", 6},
+                  {"skipped_represented", 4},
+                  {"skipped_seen", 3}});
+  EXPECT_EQ(2u, r.conflicts.size());
 
   const ExtConflict& c = r.conflict;
   EXPECT_EQ(B, c.commonArray);
@@ -633,16 +740,17 @@ TEST_F(ExtFixtureTest, OneAccessCrossesTwoEqualityEdges)
 
   ExtCheckResult r = run();
   ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
-  expectStats(r, {{"conflicts", 1},
-                  {"insertions", 12},
-                  {"propagations", 5},
+  expectStats(r, {{"conflicts", 2},
+                  {"insertions", 13},
+                  {"propagations", 6},
                   {"rule_D_WRITE", 1},
                   {"rule_L_EQ", 1},
                   {"rule_R_EQ", 2},
-                  {"rule_U_WRITE", 1},
+                  {"rule_U_WRITE", 2},
                   {"seeds", 7},
                   {"skipped_represented", 4},
-                  {"skipped_seen", 1}});
+                  {"skipped_seen", 6}});
+  EXPECT_EQ(2u, r.conflicts.size());
 
   const ExtConflict& c = r.conflict;
   EXPECT_EQ(C, c.commonArray);
@@ -666,8 +774,7 @@ TEST_F(ExtFixtureTest, OneAccessCrossesTwoEqualityEdges)
   EXPECT_EQ(4u, c.abstractPremise.size());
   EXPECT_EQ(ry, c.abstractConclusionA);
   EXPECT_EQ(rx, c.abstractConclusionB);
-  EXPECT_STREQ("R_EQ", r.events.back().rule);
-  EXPECT_EQ(ExtEvent::CONFLICT, r.events.back().kind);
+  EXPECT_STREQ("R_EQ", firstConflictRule(r));
 }
 
 // Example 5 of the paper: upward propagation over a write (rule U),
@@ -700,32 +807,36 @@ TEST_F(ExtFixtureTest, UpEqualityDownConflict)
   // The two witness reads carry equal concrete values, so each is a
   // represented duplicate of the other side's witness read when it
   // crosses the equality (section 11.2) and is dropped there.
-  expectStats(r, {{"conflicts", 1},
-                  {"insertions", 12},
-                  {"propagations", 6},
-                  {"rule_D_WRITE", 2},
+  expectStats(r, {{"conflicts", 2},
+                  {"insertions", 14},
+                  {"propagations", 8},
+                  {"rule_D_WRITE", 4},
                   {"rule_L_EQ", 1},
                   {"rule_R_EQ", 1},
                   {"rule_U_WRITE", 2},
                   {"seeds", 6},
                   {"skipped_represented", 2},
-                  {"skipped_seen", 1}});
-  expectEvents(r, {{ExtEvent::SEED, "I_READ", A, (int)aA},
-                   {ExtEvent::SEED, "I_READ", B, (int)aB},
-                   {ExtEvent::SEED, "I_WRITE", w1, (int)aw1},
-                   {ExtEvent::SEED, "I_WRITE", w2, (int)aw2},
-                   {ExtEvent::SEED, "I_READ", w1, (int)aL},
-                   {ExtEvent::SEED, "I_READ", w2, (int)aR},
-                   {ExtEvent::PROPAGATE, "U_WRITE", w1, (int)aA},
-                   {ExtEvent::PROPAGATE, "U_WRITE", w2, (int)aB},
-                   {ExtEvent::PROPAGATE, "R_EQ", w2, (int)aw1},
-                   {ExtEvent::PROPAGATE, "L_EQ", w1, (int)aw2},
-                   {ExtEvent::PROPAGATE, "D_WRITE", A, (int)aL},
-                   {ExtEvent::SKIP_REPRESENTED, "R_EQ", w2, (int)aL},
-                   {ExtEvent::PROPAGATE, "D_WRITE", B, (int)aR},
-                   {ExtEvent::SKIP_REPRESENTED, "L_EQ", w1, (int)aR},
-                   {ExtEvent::SKIP_SEEN, "D_WRITE", A, (int)aA},
-                   {ExtEvent::CONFLICT, "R_EQ", w2, (int)aA}});
+                  {"skipped_seen", 8}});
+  // aA crosses the equality rightward into w2 and collides with aB;
+  // the pass carries on and aB crosses leftward into w1, colliding
+  // with aA. Mirror-image lemmas over the same equality proxy.
+  EXPECT_EQ(2u, r.conflicts.size());
+  expectEventPrefix(r, {{ExtEvent::SEED, "I_READ", A, (int)aA},
+                        {ExtEvent::SEED, "I_READ", B, (int)aB},
+                        {ExtEvent::SEED, "I_WRITE", w1, (int)aw1},
+                        {ExtEvent::SEED, "I_WRITE", w2, (int)aw2},
+                        {ExtEvent::SEED, "I_READ", w1, (int)aL},
+                        {ExtEvent::SEED, "I_READ", w2, (int)aR},
+                        {ExtEvent::PROPAGATE, "U_WRITE", w1, (int)aA},
+                        {ExtEvent::PROPAGATE, "U_WRITE", w2, (int)aB},
+                        {ExtEvent::PROPAGATE, "R_EQ", w2, (int)aw1},
+                        {ExtEvent::PROPAGATE, "L_EQ", w1, (int)aw2},
+                        {ExtEvent::PROPAGATE, "D_WRITE", A, (int)aL},
+                        {ExtEvent::SKIP_REPRESENTED, "R_EQ", w2, (int)aL},
+                        {ExtEvent::PROPAGATE, "D_WRITE", B, (int)aR},
+                        {ExtEvent::SKIP_REPRESENTED, "L_EQ", w1, (int)aR},
+                        {ExtEvent::SKIP_SEEN, "D_WRITE", A, (int)aA},
+                        {ExtEvent::CONFLICT, "R_EQ", w2, (int)aA}});
 
   const ExtConflict& c = r.conflict;
   EXPECT_EQ(w2, c.commonArray);
@@ -763,7 +874,14 @@ TEST_F(ExtFixtureTest, WriteWriteEqualityConflict)
 
   ExtCheckResult r = run();
   ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
-  expectStats(r, {{"conflicts", 1}, {"insertions", 4}, {"seeds", 4}});
+  expectStats(r, {{"conflicts", 2},
+                  {"insertions", 6},
+                  {"propagations", 2},
+                  {"rule_D_WRITE", 2},
+                  {"seeds", 4},
+                  {"skipped_represented", 2},
+                  {"skipped_seen", 2}});
+  EXPECT_EQ(2u, r.conflicts.size());
 
   const ExtConflict& c = r.conflict;
   EXPECT_EQ(w2, c.commonArray);

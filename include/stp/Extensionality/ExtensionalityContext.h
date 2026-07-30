@@ -346,12 +346,18 @@ public:
 
   bool hasPendingLemma() const { return pendingLemmaValid; }
 
-  // Encode exactly the pending lemma into the persistent incremental
-  // SAT solver, then clear it. The lemma premise/conclusion atoms are
+  // Encode every pending lemma into the persistent incremental SAT
+  // solver, then clear them. The lemma premise/conclusion atoms are
   // reified over the SAT variables of already-encoded symbols -- the
   // refinement is clauses over the existing CNF, never a fresh
   // word-level formula handed back to the bit-blaster.
-  void encodePendingLemma(SATSolver& solver, ToSATBase* tosat);
+  //
+  // A round emits the whole batch the consistency check found, not just
+  // the earliest conflict. Each lemma is independently valid under the
+  // candidate that produced it, so the batch rules out that candidate
+  // by many more facts than one clause could, and the reified equality
+  // literals the lemmas share are built once.
+  void encodePendingLemmas(SATSolver& solver, ToSATBase* tosat);
 
   // Validate one bit-vector lemma leaf: it must be a fixed-width
   // constant, or a SYMBOL whose complete SAT-variable vector was
@@ -482,7 +488,13 @@ private:
 
   bool pendingLemmaValid;
   bool divergedThisSolve;
-  ExtConflict pendingLemma;
+  std::vector<ExtConflict> pendingLemmas;
+
+  // Encode one lemma as the clause NOT p1 OR ... OR NOT pk OR
+  // conclusion; the shared reified-literal cache means later lemmas in
+  // a batch reuse the equality variables the earlier ones built.
+  void encodeOneLemma(const ExtConflict& lemma, SATSolver& solver,
+                      ToSATBase* tosat);
 
   // reified equality cache, scoped to the current SAT instance
   std::map<std::pair<unsigned, unsigned>, int> eqLitCache;
