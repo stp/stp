@@ -2,14 +2,15 @@
 ; CHECK: ^unsat
 ; An array if-then-else with no array equality anywhere in the query.
 ;
-; This used to leave the registry empty, so the decision procedure was
-; never active and STP handled the if-then-else by pushing reads
-; through it. Replacing it where it is built means the query now mints
-; the replacement's two guarded equalities and runs the full procedure:
-; the arrays join the cone, the checker takes over their read
-; congruence, and refinement decides it. That is the cost of a
-; replacement key nothing can rewrite -- about 2.4x the CNF of the
-; classic encoding -- and this pins that the answer is unchanged.
+; Replacing every if-then-else where it is built means such a query
+; mints two guarded equalities and would otherwise run the whole
+; decision procedure for nothing -- measured at 2.4x the CNF and, worse,
+; 1023 SAT calls against 1 on a depth-8 if-then-else DAG, because each
+; replacement leaves one of its two proxies unconstrained for the solver
+; to guess and the checker to refute. restoreArrayITEs puts the
+; if-then-elses back when no user equality was ever built, so this ends
+; up on the classic path with a byte-identical encoding to --array-
+; equality being off. Pins that the answer is right either way.
 ;
 ; Unsat by cases on p: d is a if p and b otherwise, and both are made
 ; to differ from d at i.

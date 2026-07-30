@@ -171,7 +171,10 @@ public:
     ~SolveScope()
     {
       if (ctx != NULL)
+      {
         ctx->registrySealed = false;
+        ctx->bypassIteHook = false;
+      }
     }
     SolveScope(const SolveScope&) = delete;
     SolveScope& operator=(const SolveScope&) = delete;
@@ -180,7 +183,35 @@ public:
   bool enabled() const;
   // The decision procedure participates in a solve exactly when the
   // feature is on and at least one array equality was abstracted.
-  bool active() const { return enabled() && !records.empty(); }
+  // The procedure participates in a solve when the feature is on and
+  // the user actually asked for whole-array reasoning. Records minted
+  // only to define an if-then-else replacement do not count: a query
+  // whose sole array equalities are those guards gains nothing from the
+  // refinement loop and pays a great deal for it, so restoreArrayITEs
+  // puts the if-then-elses back and leaves the procedure switched off.
+  bool active() const { return enabled() && !userRequested.empty(); }
+
+  // Undo the construction-time replacement when no user equality was
+  // ever built, returning the formula with each replacement array
+  // rewritten back to the if-then-else it stands for. A no-op once the
+  // procedure is active, and once it is on for a later solve the
+  // replacements are used again -- this only decides how one solve
+  // encodes them.
+  //
+  // Section 4.1 gives each if-then-else two equality proxies, and one
+  // of the two is unconstrained under any given assignment of the
+  // condition: the solver guesses it and the checker refutes it, one
+  // lemma at a time. Measured on a shared if-then-else DAG of depth 8
+  // with no array equality at all, that is 1023 SAT calls against 1,
+  // and 20x the wall clock, for a query the classic encoding decides
+  // outright.
+  ASTNode restoreArrayITEs(const ASTNode& root);
+
+  // While set, the node factory builds an array if-then-else instead of
+  // replacing it. Only restoreArrayITEs sets it, so that rebuilding the
+  // term a replacement stands for does not simply return the
+  // replacement.
+  bool iteHookBypassed() const { return bypassIteHook; }
 
   const std::vector<Record>& getRecords() const { return records; }
 
@@ -414,6 +445,22 @@ private:
   // never be live without its definition.
   ASTVec iteGuards;
 
+  // Records the user asked for, as opposed to the pair minted to
+  // define each if-then-else replacement; see active(). Ids rather
+  // than a count because a user equality can COINCIDE with a guard --
+  // (= c (ite cond c a)) becomes (= c d) while the guard is (= d c),
+  // the same pair -- and then makeEquality returns the existing record
+  // instead of creating one. Counting creations would miss that and
+  // leave the procedure switched off with the user's proxy free.
+  std::set<size_t> userRequested;
+
+  // Set while makeArrayITE is minting those two, so makeEquality knows
+  // not to count them.
+  bool mintingIteGuards;
+
+  // See iteHookBypassed().
+  bool bypassIteHook;
+
   // Set once a solve has taken its copy of the registry's constraints.
   // Minting a record or a replacement after that point would leave it
   // active with nothing in the formula defining it, so refuse loudly
@@ -455,6 +502,7 @@ private:
   // names evaluate exactly like the terms they stand for; false means
   // EXT_NAME_DIVERGENCE.
   bool namesAgreeWithCandidate(ExtModelView& view) const;
+  bool isReplacement(const ASTNode& n) const;
   void collectPossibleConeSymbols(const ASTNode& n);
   ASTNode freshName(const ASTNode& term, ASTVec& namingConstraints);
   void computeProvisionalCone(const ASTNode& root,

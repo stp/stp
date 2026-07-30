@@ -90,6 +90,7 @@ ASTNode recoverAnchoredOperand(const ASTNode& rhs, const ASTNode& lambda,
 
 ExtensionalityContext::ExtensionalityContext(STPMgr* bm_)
     : lemmasEmitted(0), lemmaAtomsFolded(0), nameDivergences(0), bm(bm_),
+      mintingIteGuards(false), bypassIteHook(false),
       registrySealed(false), coneIsFrozen(false), graphBound(false),
       pendingLemmaValid(false), divergedThisSolve(false)
 {
@@ -238,7 +239,15 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
   std::map<std::pair<ASTNode, ASTNode>, size_t>::const_iterator it =
       keyToRecord.find(key);
   if (it != keyToRecord.end())
+  {
+    // A request that lands on an existing record still counts: a user
+    // equality can coincide with an if-then-else guard, and counting
+    // only creations would leave the procedure switched off with the
+    // user's proxy unconstrained.
+    if (!mintingIteGuards)
+      userRequested.insert(it->second);
     return records[it->second].proxy;
+  }
 
   if (registrySealed)
     FatalError("array-equality: an array equality was built during a "
@@ -275,8 +284,74 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
 
   keyToRecord[key] = r.id;
   proxyToRecord[r.proxy] = r.id;
+  if (!mintingIteGuards)
+    userRequested.insert(r.id);
   records.push_back(r);
   return records.back().proxy;
+}
+
+// See the header. Expands each replacement back to the if-then-else it
+// stands for, innermost first so a replacement sitting in another's
+// branch is resolved too, then rewrites the formula.
+ASTNode ExtensionalityContext::restoreArrayITEs(const ASTNode& root)
+{
+  if (iteReplacements.empty() || active())
+    return root;
+
+  NodeFactory* hf = bm->hashingNodeFactory;
+  ASTNodeMap back;
+  bool changed = true;
+  while (changed)
+  {
+    changed = false;
+    for (std::map<IteKey, ASTNode>::const_iterator it = iteReplacements.begin();
+         it != iteReplacements.end(); ++it)
+    {
+      if (back.find(it->second) != back.end())
+        continue;
+      const ASTNode& cond = it->first.first;
+      const ASTNode& thn = it->first.second.first;
+      const ASTNode& els = it->first.second.second;
+      if (back.find(thn) == back.end() && isReplacement(thn))
+        continue; // expand the inner one first
+      if (back.find(els) == back.end() && isReplacement(els))
+        continue;
+      ASTNodeMap c1, c2;
+      const ASTNode t = SubstitutionMap::replace(thn, back, c1, hf);
+      const ASTNode e = SubstitutionMap::replace(els, back, c2, hf);
+      ASTVec kids;
+      kids.push_back(cond);
+      kids.push_back(t);
+      kids.push_back(e);
+      bypassIteHook = true;
+      back[it->second] =
+          hf->CreateArrayTerm(ITE, t.GetIndexWidth(), t.GetValueWidth(), kids);
+      bypassIteHook = false;
+      changed = true;
+    }
+  }
+
+  ASTNodeMap cache;
+  const ASTNode out =
+      SubstitutionMap::replace(root, back, cache, bm->defaultNodeFactory);
+
+  // Leave the hook off for the rest of the solve. Preprocessing rebuilds
+  // array if-then-elses as it simplifies, and a replacement minted then
+  // would be an unconstrained array: the guards defining it are
+  // conjoined by conjoinRecordConstraints, which does not run while the
+  // procedure is inactive. SolveScope restores the hook on the way out,
+  // so terms built between solves are replaced as usual.
+  bypassIteHook = true;
+  return out;
+}
+
+bool ExtensionalityContext::isReplacement(const ASTNode& n) const
+{
+  for (std::map<IteKey, ASTNode>::const_iterator it = iteReplacements.begin();
+       it != iteReplacements.end(); ++it)
+    if (it->second == n)
+      return true;
+  return false;
 }
 
 bool ExtensionalityContext::retireIfUnreachable(const ASTVec& liveAssertions)
@@ -301,6 +376,7 @@ bool ExtensionalityContext::retireIfUnreachable(const ASTVec& liveAssertions)
       return false;
 
   records.clear();
+  userRequested.clear();
   keyToRecord.clear();
   proxyToRecord.clear();
   protectedSymbols.clear();
@@ -357,8 +433,10 @@ ASTNode ExtensionalityContext::makeArrayITE(const ASTNode& cond,
   // membership, checker edge. Built with the plain hashing factory so
   // no rewrite can alter what was registered.
   NodeFactory* hf = bm->hashingNodeFactory;
+  mintingIteGuards = true;
   const ASTNode eqThen = makeEquality(d, thn);
   const ASTNode eqElse = makeEquality(d, els);
+  mintingIteGuards = false;
   iteGuards.push_back(hf->CreateNode(OR, hf->CreateNode(NOT, cond), eqThen));
   iteGuards.push_back(hf->CreateNode(OR, cond, eqElse));
 

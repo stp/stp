@@ -109,7 +109,8 @@ ASTNode HashingNodeFactory::CreateTerm(Kind kind, unsigned int width,
   // stamps SetIndexWidth(0) on whatever comes back, which would clear
   // the replacement array's index width.
   if (kind == ITE && bm.UserFlags.enable_array_equality &&
-      children.size() == 3 && children[1].GetIndexWidth() > 0)
+      children.size() == 3 && children[1].GetIndexWidth() > 0 &&
+      !bm.getExtensionality()->iteHookBypassed())
   {
     return bm.getExtensionality()->makeArrayITE(children[0], children[1],
                                                 children[2]);

@@ -314,13 +314,28 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // and stay reachable even where the equality was the only mention of
   // an array.
   ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  // A query whose only array equalities are the guards defining an
+  // if-then-else replacement gains nothing from the decision procedure.
+  // Put the if-then-elses back and let the ordinary array machinery
+  // decide it, as it did before the replacement moved to construction.
+  // Both formulas have to be rewritten: the model check evaluates the
+  // original, which mentions the replacement arrays the solved formula
+  // no longer contains.
+  ASTNode original = original_input;
+  if (ext != NULL)
+  {
+    // Per-solve state has to be dropped whether or not the procedure
+    // runs, or a cone frozen by an earlier solve still answers inCone().
+    ext->beginSolve();
+    inputToSat = ext->restoreArrayITEs(inputToSat);
+    original = ext->restoreArrayITEs(original);
+  }
   const bool extActive = ext != NULL && ext->active();
   // Releases the registry seal on every exit from this function, so
   // that terms built between solves are ordinary again.
   ExtensionalityContext::SolveScope extScope(extActive ? ext : NULL);
   if (extActive)
   {
-    ext->beginSolve();
     inputToSat = ext->conjoinRecordConstraints(inputToSat);
     if (bm->UserFlags.ackermannisation)
     {
@@ -791,7 +806,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     bm->print_stats();
 
   // If it doesn't contain array operations, use ABC's CNF generation.
-  res = Ctr_Example->CallSAT_ResultCheck(NewSolver, inputToSat, original_input,
+  res = Ctr_Example->CallSAT_ResultCheck(NewSolver, inputToSat, original,
                                          satBase, maybeRefinement);
 
   if (bm->soft_timeout_expired)
@@ -831,12 +846,12 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     {
       ext->encodePendingLemma(NewSolver, satBase);
       res = Ctr_Example->CallSAT_ResultCheck(NewSolver, bm->ASTTrue,
-                                             original_input, satBase, true);
+                                             original, satBase, true);
     }
     else
     {
       res = Ctr_Example->SATBased_ArrayReadRefinement(NewSolver,
-                                                      original_input, satBase);
+                                                      original, satBase);
     }
 
     if (SOLVER_UNDECIDED != res)
