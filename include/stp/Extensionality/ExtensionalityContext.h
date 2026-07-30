@@ -410,6 +410,10 @@ private:
   // names evaluate exactly like the terms they stand for; false means
   // EXT_NAME_DIVERGENCE.
   bool namesAgreeWithCandidate(ExtModelView& view) const;
+  // Conjoin the section 4.1 guards of every live if-then-else
+  // replacement the elimination loop did not itself emit this solve.
+  ASTNode reattachIteGuards(const ASTNode& root, const std::set<ASTNode>& cone,
+                            const ASTNodeSet& alreadyGuarded);
   void collectPossibleConeSymbols(const ASTNode& n);
   ASTNode freshName(const ASTNode& term, ASTVec& namingConstraints);
   void computeProvisionalCone(const ASTNode& root,
