@@ -4,11 +4,11 @@ Making a release
 There is no release branch, no changelog file, and no packaging step in
 the build -- CPack was removed some time ago, so there is no
 ``make package`` target. A release is a version bump on master, a git
-tag, and a GitHub release with prebuilt binaries attached.
+tag, and a GitHub release with a prebuilt binary attached.
 
 Only the first of those is done by hand. Pushing the tag runs
 ``.github/workflows/release.yml``, which checks the version, builds the
-binaries and opens the release as a draft for you to look over and
+binary and opens the release as a draft for you to look over and
 publish. In short:
 
 #. Edit the version in the two files below, and commit to master.
@@ -86,7 +86,7 @@ commit beyond the version bump itself.
 
 Pushing such a tag is the whole release procedure. It matches the
 ``[0-9]+.[0-9]+.[0-9]+`` filter in ``.github/workflows/release.yml``,
-which builds the binaries and opens a draft release:
+which builds the binary and opens a draft release:
 
 .. code-block:: bash
 
@@ -102,23 +102,21 @@ The workflow runs four jobs:
    rather than a published binary with the wrong version in it. If it
    fails, fix the version, delete and re-push the tag.
 
-``linux-amd64`` and ``win64``
-   Build the static binaries and upload them as workflow artifacts named
-   ``stp-<version>-linux-amd64`` and ``stp-<version>-win64.exe``. Both use
-   the composite actions under ``.github/actions/``, which are the same
-   steps the ``gcc (static)`` and ``windows`` CI jobs run on every push --
-   so the binary that gets published is built the way CI has been testing
-   all along, and a break in either shows up in normal CI rather than at
-   release time.
+``linux-amd64``
+   Builds the static binary and uploads it as a workflow artifact named
+   ``stp-<version>-linux-amd64``. It uses the composite action under
+   ``.github/actions/build-static-linux``, which is the same set of steps
+   the ``gcc (static)`` CI job runs on every push -- so the binary that
+   gets published is built the way CI has been testing all along, and a
+   break in it shows up in normal CI rather than at release time.
 
 ``publish``
-   Re-checks the Linux asset after it has been through the artifact
-   round-trip -- that it is static, and that ``--version`` reports the
-   version being released -- then calls ``gh release create --draft
-   --generate-notes``.
+   Re-checks the asset after it has been through the artifact round-trip
+   -- that it is static, and that ``--version`` reports the version being
+   released -- then calls ``gh release create --draft --generate-notes``.
 
 Nothing is public at the end of this. The release is a **draft**: not
-listed, and the assets are not downloadable until you open it on the
+listed, and the asset is not downloadable until you open it on the
 Releases page and press publish. That is deliberate, and it is where the
 remaining manual steps live:
 
@@ -139,13 +137,12 @@ like that, so pushing a branch tag will not cut a release.
 What gets built
 ---------------
 
-Both assets are statically linked, so someone can download one file and
-run it without a matching glibc or any STP libraries installed. The
-Linux job asserts this (``ldd`` must fail on the result) rather than
-assuming it.
+One asset: a statically linked Linux x86-64 binary, so someone can
+download one file and run it without a matching glibc or any STP
+libraries installed. The job asserts this (``ldd`` must fail on the
+result) rather than assuming it.
 
-The option that decides how portable the Linux binary is is
-``USE_POPCNT``, which is on by default and emits ``-mpopcnt``. That needs
+The option that decides how portable it is is ``USE_POPCNT``, which is on by default and emits ``-mpopcnt``. That needs
 Nehalem (2008) or Barcelona (2007) or later, which is a safe assumption
 for a release download; build with ``-DUSE_POPCNT=OFF`` if you want to
 support older hardware, and the software fallback in
@@ -155,10 +152,11 @@ scheduling rather than which instructions may be emitted, so it does not
 make a binary unrunnable elsewhere -- but there is no reason to turn it
 on for a build other people will run.
 
-Both builds configure with ``NOCRYPTOMINISAT``: CryptoMiniSat's exported
-static link line pulls in GMP and other dependencies that are not
-reliably available as archives, and it does not build with MSVC at all.
-The released binaries therefore solve with MiniSat.
+The build configures with ``NOCRYPTOMINISAT``, because CryptoMiniSat's
+exported static link line pulls in GMP and other dependencies that are
+not reliably available as archives on a runner. The released binary
+therefore solves with MiniSat, which is worth being aware of: it is not
+the solver STP performs best with.
 
 Asset naming has not been consistent historically. 2.3.2 and 2.3.3 used
 ``stp-<version>-linux-amd64``, 2.3.3 also shipped a ``stp-win64.exe``,
@@ -166,12 +164,27 @@ and 2.3.4 shipped a bare ``stp`` plus a ``stp.tar`` containing just that
 same binary. The workflow standardises on the first form: it says what it
 is once it is in someone's downloads directory.
 
-Adding another platform is a job of about ten lines -- copy the
-``linux-amd64`` job, change ``runs-on`` to ``ubuntu-24.04-arm`` (free for
-public repositories) and the asset suffix to ``linux-arm64``. macOS is
-possible but cannot be linked fully statically, since it ships no static
-libc, so that asset would carry runtime dependencies the others do not;
-no STP release has shipped one.
+No Windows asset
+~~~~~~~~~~~~~~~~
+
+2.3.3 shipped a ``stp-win64.exe`` and the ``windows`` CI job still builds
+one on every push, so producing it is not the obstacle. Publishing it is
+the problem: MSVC compiles neither CryptoMiniSat nor CaDiCaL, both of
+which use POSIX-only code, so a Windows build can only be linked against
+MiniSat. That is slow enough that shipping it would misrepresent what STP
+does. Getting a competitive solver to build on Windows -- via MinGW, or by
+porting the POSIX-only parts -- comes before shipping a Windows binary
+again.
+
+Other platforms
+~~~~~~~~~~~~~~~
+
+Adding one is a job of about ten lines -- copy the ``linux-amd64`` job,
+change ``runs-on`` to ``ubuntu-24.04-arm`` (free for public repositories)
+and the asset suffix to ``linux-arm64``. macOS is possible but cannot be
+linked fully statically, since it ships no static libc, so that asset
+would carry runtime dependencies this one does not; no STP release has
+shipped one.
 
 Building it yourself
 --------------------

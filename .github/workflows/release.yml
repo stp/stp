@@ -1,6 +1,11 @@
-# Builds the binaries a release ships and creates the GitHub release as a
-# draft, so the notes and the assets can be looked over before anyone can
+# Builds the binary a release ships and creates the GitHub release as a
+# draft, so the notes and the asset can be looked over before anyone can
 # download them. See docs/releasing.rst for the whole procedure.
+#
+# Linux x86-64 only. A Windows build exists in ci.yml and works, but MSVC
+# cannot compile CryptoMiniSat or CaDiCaL, so it can only be linked against
+# MiniSat -- too slow to be worth publishing as the Windows STP. Shipping one
+# again means getting a competitive solver to build there first.
 #
 # The tag pattern is the unprefixed MAJOR.MINOR.PATCH form used since 2.3.1.
 # The older stp-2.2.0 and the branch tags (smtcomp2020, 2.3.4_cadical)
@@ -88,36 +93,9 @@ jobs:
         path: assets/
         if-no-files-found: error
 
-  windows:
-    name: win64
-    needs: check-version
-    runs-on: windows-2025
-
-    steps:
-
-    - uses: actions/checkout@v7
-      with:
-          submodules: 'true'
-
-    - id: build
-      uses: ./.github/actions/build-static-windows
-
-    - name: Stage the asset
-      shell: pwsh
-      run: |
-        mkdir assets
-        Copy-Item "${{ steps.build.outputs.binary }}" `
-                  "assets/stp-${{ needs.check-version.outputs.version }}-win64.exe"
-
-    - uses: actions/upload-artifact@v4
-      with:
-        name: win64
-        path: assets/
-        if-no-files-found: error
-
   publish:
     name: publish
-    needs: [check-version, linux, windows]
+    needs: [check-version, linux]
     runs-on: ubuntu-latest
 
     permissions:
@@ -129,15 +107,15 @@ jobs:
     # the tag to exist on the remote, which it does by the time this runs.
     - uses: actions/checkout@v7
 
-    # merge-multiple flattens both artifacts into one directory, so the upload
-    # below is a single glob.
+    # merge-multiple flattens artifacts into one directory, so the upload
+    # below stays a single glob if another platform is ever added.
     - uses: actions/download-artifact@v4
       with:
         path: assets
         merge-multiple: true
 
-    # The build jobs already smoke-tested these, but they tested what came out
-    # of the compiler rather than what came back out of an artifact, and the
+    # The build job already smoke-tested this, but it tested what came out of
+    # the compiler rather than what came back out of an artifact, and the
     # rename happened in between. This is the only check that the file about
     # to be published is executable, static, and names the version being
     # released -- which is what catches a build that was somehow made from the
