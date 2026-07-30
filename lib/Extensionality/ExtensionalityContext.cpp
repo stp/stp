@@ -896,6 +896,40 @@ bool ExtensionalityContext::namesAgreeWithCandidate(ExtModelView& view) const
         view.bvValue(a.valueName) != view.bvValue(a.valueTerm))
       return false;
   }
+
+  // The witness names are read by the checker too -- the witness loop
+  // decides a false equality against nameL and nameR directly -- but
+  // they are not any access's name: the access for a witness read
+  // carries that read's own abstraction variable.
+  //
+  // Whenever the witness read IS in the access inventory this adds
+  // nothing, and the argument is short: the anchor puts
+  // nameL = read(left, lambda) in the bit-blasted formula, so the
+  // candidate has nameL equal to that read's abstraction variable,
+  // and the loop above already checked that variable against the term.
+  // Transitivity does the rest. No input has been found where this
+  // fires -- not the regressions that do trigger a divergence through
+  // the loop above, not 780 cell-expansion differential queries.
+  //
+  // It is kept for the case the inventory does not cover, which the
+  // model evaluator elsewhere explicitly anticipates ("a cone read
+  // with no recorded abstraction variable was simplified out of the
+  // formula before solving"). There the transitivity argument has no
+  // first step, and the witness check would otherwise decide a false
+  // equality on evidence the completed model does not support.
+  NodeFactory* hf = bm->hashingNodeFactory;
+  for (size_t i = 0; i < graph.witnesses.size(); i++)
+  {
+    const ExtWitness& w = graph.witnesses[i];
+    const Record& r = records[w.record];
+    const unsigned ew = r.canonicalLeft.GetValueWidth();
+    const ASTNode readL = hf->CreateTerm(READ, ew, r.canonicalLeft, r.lambda);
+    const ASTNode readR = hf->CreateTerm(READ, ew, r.canonicalRight, r.lambda);
+    if (view.bvValue(w.leftValue) != view.bvValue(readL))
+      return false;
+    if (view.bvValue(w.rightValue) != view.bvValue(readR))
+      return false;
+  }
   return true;
 }
 
