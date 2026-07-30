@@ -111,8 +111,17 @@ public:
   // is the name, so every occurrence of an operation at a given signature
   // reads one and the same array -- which is what makes the result a function
   // of the operands rather than an arbitrary value per use.
+  //
+  // The name has to spell the operation's whole SMT-LIB signature, because
+  // that is all that separates one of these functions from another. `operands`
+  // are the floating-point operands *carrying their formats*, and each one's
+  // (exp, sig) goes into the name: a format is not recoverable from a packed
+  // width, and two formats of equal packed width -- (_ FloatingPoint 8 24) and
+  // (_ FloatingPoint 24 8), say -- are different sorts, so fp.min at each is a
+  // different function and may answer differently. Sharing one array between
+  // them equates two independent unspecified choices and loses models.
   static ASTNode unspecifiedValue(STPMgr* bm, const char* tag,
-                                  const ASTNode& index,
+                                  const ASTVec& operands, const ASTNode& index,
                                   unsigned int value_width);
 };
 } // namespace stp

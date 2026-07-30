@@ -163,7 +163,9 @@ ASTNode FpTotalise::unspecified(const char* tag, const ASTNode& prefix,
     }
   }
 
-  return FloatBlaster::unspecifiedValue(bm, tag, index, value_width);
+  // `floats` rather than the canonicalised bits: the bits are what the array
+  // is indexed *by*, the formats are part of what array it is.
+  return FloatBlaster::unspecifiedValue(bm, tag, floats, index, value_width);
 }
 
 ASTNode FpTotalise::visit(const ASTNode& n)

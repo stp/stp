@@ -148,6 +148,7 @@ bool FloatBlaster::remSupported(unsigned exp_width, unsigned sig_width)
 }
 
 ASTNode FloatBlaster::unspecifiedValue(STPMgr* bm, const char* tag,
+                                       const ASTVec& operands,
                                        const ASTNode& index,
                                        unsigned int value_width)
 {
@@ -158,6 +159,29 @@ ASTNode FloatBlaster::unspecifiedValue(STPMgr* bm, const char* tag,
   // conforming input's own symbols.
   std::string name("@fp_unspecified_");
   name += tag;
+
+  // Then the operand formats, which the packed widths below cannot stand in
+  // for -- see the header. Every caller holds format-carrying operands: the
+  // pass runs before lowering, and the model-evaluation route re-stamps its
+  // evaluated children through withFormat before totalising them. A caller
+  // that lost the format would quietly mint a *different* array from the one
+  // the solve constrained, so refuse rather than answer from the wrong one.
+  for (size_t i = 0; i < operands.size(); i++)
+  {
+    const unsigned int exp_width = operands[i].GetExpWidth();
+    const unsigned int sig_width = operands[i].GetSigWidth();
+
+    if (exp_width == 0 || sig_width == 0)
+      FatalError("unspecifiedValue: a partial floating-point operation's "
+                 "operand reached totalisation without its format: ",
+                 operands[i]);
+
+    name += "_";
+    name += std::to_string(exp_width);
+    name += "x";
+    name += std::to_string(sig_width);
+  }
+
   name += "_";
   name += std::to_string(index_width);
   name += "_";
