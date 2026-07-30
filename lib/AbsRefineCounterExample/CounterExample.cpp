@@ -892,8 +892,9 @@ AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
                  se);
     }
 
-    // skip over introduced variables
-    if (f.GetKind() == SYMBOL && (bm->FoundIntroducedSymbolSet(f)))
+    // skip over introduced variables, and over the reads of an introduced
+    // array -- those entries are keyed on the read, not on the array
+    if (bm->isIntroducedCounterExampleEntry(f))
     {
       continue;
     }
@@ -985,8 +986,9 @@ void AbsRefine_CounterExample::outputLine(std::ostream& os, const ASTNode &f, AS
                  se);
     }
 
-    // skip over introduced variables
-    if (f.GetKind() == SYMBOL && (bm->FoundIntroducedSymbolSet(f)))
+    // skip over introduced variables, and over the reads of an introduced
+    // array -- those entries are keyed on the read, not on the array
+    if (bm->isIntroducedCounterExampleEntry(f))
     {
       return;
     }
@@ -1252,8 +1254,9 @@ void AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
                  se);
     }
 
-    // skip over introduced variables
-    if (f.GetKind() == SYMBOL && (bm->FoundIntroducedSymbolSet(f)))
+    // skip over introduced variables, and over the reads of an introduced
+    // array -- those entries are keyed on the read, not on the array
+    if (bm->isIntroducedCounterExampleEntry(f))
     {
       continue;
     }

@@ -243,6 +243,14 @@ ASTNode FloatBlaster::unspecifiedValue(STPMgr* bm, const char* tag,
   const ASTNode array = bm->defaultNodeFactory->CreateSymbol(
       name.c_str(), index_width, value_width);
 
+  // Not CreateFreshVariable, whose minted names would differ between the
+  // solve and the two counterexample re-derivations and so would not be the
+  // same array; but introduced all the same, so say so, or the model answers
+  // with a symbol the user never declared and in a sort their signature does
+  // not have. The solver still gets the array -- only the printers skip it,
+  // and CheckCounterExample needs its cell values.
+  bm->noteIntroducedSymbol(array);
+
   return bm->CreateTerm(READ, value_width, array, index);
 }
 

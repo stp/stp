@@ -506,6 +506,29 @@ public:
     return false;
   }
 
+  // Record a symbol STP introduced rather than the user declaring it, so the
+  // counterexample printers leave it out. CreateFreshVariable does this for
+  // the names it mints; this is the way in for an introduced symbol whose
+  // *name* is load-bearing and so cannot be minted there -- the arrays
+  // supplying the unspecified results of the partial floating-point
+  // operations, whose identity is their name (see
+  // FloatBlaster::unspecifiedValue).
+  void noteIntroducedSymbol(const ASTNode& in)
+  {
+    Introduced_SymbolsSet.insert(in);
+  }
+
+  // Whether a counterexample entry belongs to an introduced symbol. Entries
+  // for an introduced *array* are keyed on the read rather than on the array
+  // itself, so look through one: testing the key alone let every read of an
+  // introduced array print.
+  bool isIntroducedCounterExampleEntry(const ASTNode& in)
+  {
+    return FoundIntroducedSymbolSet(in) ||
+           (in.GetKind() == READ && in.Degree() > 0 &&
+            FoundIntroducedSymbolSet(in[0]));
+  }
+
   bool VarSeenInTerm(const ASTNode& var, const ASTNode& term);
 
   ASTNode NewParameterized_BooleanVar(const ASTNode& var,
