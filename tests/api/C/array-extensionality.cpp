@@ -196,8 +196,10 @@ TEST(array_extensionality, repeated_queries_do_not_leak_ite_records)
   stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
   ASSERT_NE(nullptr, ext);
 
-  // Only the construction-time equality was minted so far.
-  ASSERT_EQ(1u, ext->getRecords().size());
+  // The replacement and its two guarded equalities are minted when the
+  // if-then-else is built, not when a solve prepares, so the count is
+  // already final before the first query and never moves.
+  ASSERT_EQ(3u, ext->getRecords().size());
 
   for (int solve = 0; solve < 4; solve++)
   {
@@ -211,9 +213,9 @@ TEST(array_extensionality, repeated_queries_do_not_leak_ite_records)
 
 TEST(array_extensionality, nested_ite_fixed_point_is_stable)
 {
-  // A nested array if-then-else with unresolved conditions reaches the
-  // elimination fixed point once -- one user record plus two records
-  // per eliminated ITE -- and repeated solves reuse all of them.
+  // A nested array if-then-else is replaced innermost-first as the
+  // terms are built -- one user record plus two records per replaced
+  // ITE -- and every solve reuses all of them.
   VC vc = vc_createValidityChecker();
   vc_setFlag(vc, 'x');
 
@@ -242,12 +244,13 @@ TEST(array_extensionality, nested_ite_fixed_point_is_stable)
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
   stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
   ASSERT_NE(nullptr, ext);
-  ASSERT_EQ(1u, ext->getRecords().size());
+  // 1 user equality + 2 per replaced ITE (outer and inner), all minted
+  // as the terms were built.
+  ASSERT_EQ(5u, ext->getRecords().size());
 
   for (int solve = 0; solve < 3; solve++)
   {
     ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc))) << "solve " << solve;
-    // 1 construction + 2 per eliminated ITE (outer and inner)
     EXPECT_EQ(5u, ext->getRecords().size()) << "solve " << solve;
   }
 
@@ -329,10 +332,16 @@ TEST(array_extensionality, second_solve_over_an_inherited_array_ite)
 
 TEST(array_extensionality, asserted_ite_condition_folds_before_fe03)
 {
-  // Companion coverage for permitted simplification: with the
-  // condition asserted true, ordinary preprocessing folds ite(p,a,b)
-  // to a before preparation ever sees it, so no guarded equalities are
-  // created and the registry keeps only the user's record.
+  // The cost of replacing at construction, pinned deliberately.
+  //
+  // The condition is asserted true, so preprocessing could fold
+  // ite(p,a,b) to a -- and while elimination ran after preprocessing it
+  // did exactly that, leaving the registry with only the user's record.
+  // Replacing when the term is built happens before any assertion is
+  // known, so the two guarded equalities are minted regardless and the
+  // count is 3. That is the trade for a replacement key nothing can
+  // rewrite; the verdict is unaffected, which is what the query below
+  // checks.
   VC vc = vc_createValidityChecker();
   vc_setFlag(vc, 'x');
 
@@ -359,7 +368,7 @@ TEST(array_extensionality, asserted_ite_condition_folds_before_fe03)
   for (int solve = 0; solve < 2; solve++)
   {
     ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc))) << "solve " << solve;
-    EXPECT_EQ(1u, ext->getRecords().size()) << "solve " << solve;
+    EXPECT_EQ(3u, ext->getRecords().size()) << "solve " << solve;
   }
 
   vc_Destroy(vc);
@@ -961,7 +970,15 @@ TEST(array_extensionality, store_index_read_through_second_array_unsat)
       vc, vc_eqExpr(vc, x9,
                     vc_writeExpr(vc, vc_writeExpr(vc, x5, x0, q), k, x0)));
 
+  stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  ASSERT_NE(nullptr, ext);
+
   ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+  // This is the query the divergence refusal exists for, so it must
+  // actually take that route -- otherwise the refusal, and the
+  // driver's undecided fall-back that depends on it, are untested.
+  EXPECT_GT(ext->nameDivergences, 0);
   vc_Destroy(vc);
 }
 
@@ -1050,5 +1067,71 @@ TEST(array_extensionality, flag_off_preserves_eq_node)
 
   Expr eq = vc_eqExpr(vc, a, b);
   ASSERT_EQ(EQ, getExprKind(eq));
+  vc_Destroy(vc);
+}
+
+TEST(array_extensionality, ite_replacement_survives_a_rewritten_condition)
+{
+  // Same property as repeated_queries_do_not_leak_ite_records above --
+  // a repeated solve must reuse the cached if-then-else replacement
+  // rather than mint a new generation of records -- but with a
+  // condition preprocessing REWRITES.
+  //
+  // That is the difference between the two tests, and it is the whole
+  // defect. Elimination runs after preprocessing, so it rebuilds the
+  // if-then-else from an anchor the simplifier has already pushed the
+  // read through, and keys the cache lookup on the *rewritten*
+  // condition. Give preprocessing something to rewrite -- here
+  // x <u 0x10 in the presence of x <u 0x08 -- and the lookup misses on
+  // every later solve: a fresh array, two equality records, two witness
+  // indices and four virtual reads leak per solve, and each is
+  // re-conjoined into every solve after that. Solve cost becomes
+  // quadratic in the number of solves.
+  //
+  // With the condition a plain Boolean symbol the lookup hits and the
+  // count is stable, which is why the sibling test does not see it. The
+  // unit test ExtPrepareTest.IteEliminationReachesFixedPointAndCaches
+  // asserts the same thing and cannot see it either: it calls prepare()
+  // directly, so no preprocessing runs between its two solves.
+  //
+  // Replacing at construction keys the replacement on the triple as the
+  // caller built it -- a key that exists nowhere else and so cannot be
+  // rewritten -- and the count is stable.
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv8 = vc_bvType(vc, 8);
+  Type bv4 = vc_bvType(vc, 4);
+  Type arrT = vc_arrayType(vc, bv4, bv8);
+
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr b = vc_varExpr(vc, "b", arrT);
+  Expr c = vc_varExpr(vc, "c", arrT);
+  Expr x = vc_varExpr(vc, "x", bv8);
+
+  // Undecided, so the if-then-else survives and must be eliminated,
+  // but not a bare Boolean symbol either: preprocessing normalises the
+  // comparison, and that rewritten form is what the rebuilt lookup key
+  // is made of.
+  Expr cond = vc_bvLtExpr(vc, x, vc_bvConstExprFromLL(vc, 8, 0x10));
+  vc_assertFormula(vc, vc_eqExpr(vc, vc_iteExpr(vc, cond, a, b), c));
+
+  stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  ASSERT_NE(nullptr, ext);
+
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  // one user equality plus the two guarded equalities of the
+  // replacement
+  const size_t afterFirstSolve = ext->getRecords().size();
+  EXPECT_EQ(3u, afterFirstSolve);
+
+  // An assertion between the solves is what forces the second one to
+  // prepare again rather than reuse the previous answer.
+  Expr t = vc_varExpr(vc, "t", bv8);
+  vc_assertFormula(vc, vc_bvLeExpr(vc, t, vc_bvConstExprFromLL(vc, 8, 0xFE)));
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+
+  EXPECT_EQ(afterFirstSolve, ext->getRecords().size());
   vc_Destroy(vc);
 }

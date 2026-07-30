@@ -228,6 +228,29 @@ protected:
                     const std::vector<ExpectedEvent>& expected)
   {
     ASSERT_EQ(expected.size(), r.events.size());
+    matchEvents(r, expected);
+  }
+
+  // The pass runs its fixed point to completion, so the tail of the
+  // event log is whatever exploration remained after the first
+  // conflict -- incidental, and brittle to pin. What the order tests
+  // are about is the discovery order up to that conflict: the FIFO
+  // work list makes it breadth-first, so the conflict fires on a
+  // shortest propagation path (section 11.1). Pin exactly that prefix.
+  void expectEventPrefix(const ExtCheckResult& r,
+                         const std::vector<ExpectedEvent>& expected)
+  {
+    ASSERT_LE(expected.size(), r.events.size());
+    matchEvents(r, expected);
+    // The prefix must be the whole story up to the first conflict.
+    EXPECT_EQ(ExtEvent::CONFLICT, expected.back().kind);
+    for (size_t i = 0; i + 1 < expected.size(); i++)
+      EXPECT_NE(ExtEvent::CONFLICT, r.events[i].kind) << "event " << i;
+  }
+
+  void matchEvents(const ExtCheckResult& r,
+                   const std::vector<ExpectedEvent>& expected)
+  {
     for (size_t i = 0; i < expected.size(); i++)
     {
       EXPECT_EQ(expected[i].kind, r.events[i].kind) << "event " << i;
@@ -243,6 +266,15 @@ protected:
             << "event " << i;
       }
     }
+  }
+
+  // The rule that fired the first conflict.
+  static const char* firstConflictRule(const ExtCheckResult& r)
+  {
+    for (size_t i = 0; i < r.events.size(); i++)
+      if (r.events[i].kind == ExtEvent::CONFLICT)
+        return r.events[i].rule;
+    return "<no conflict event>";
   }
 };
 
@@ -276,6 +308,54 @@ TEST_F(ExtFixtureTest, ReadReadCongruenceOneArray)
   EXPECT_TRUE(hasEqGuard(c.abstractPremise, i, j));
   EXPECT_EQ(r1, c.abstractConclusionA);
   EXPECT_EQ(r2, c.abstractConclusionB);
+}
+
+// One pass reports every conflict it finds, not just the earliest.
+// Two unrelated arrays, each with its own read-read congruence
+// conflict: nothing connects them, so the two lemmas share no atom and
+// neither can be derived from the other. A pass that stopped at the
+// first would hand back one lemma and need a whole extra SAT solve to
+// discover the other -- which is what made refinement on
+// if-then-else-heavy queries spend thousands of rounds emitting one
+// clause each.
+TEST_F(ExtFixtureTest, IndependentConflictsAreAllReported)
+{
+  ASTNode A = arr("A"), B = arr("B");
+  ASTNode i = bv("i", 0), j = bv("j", 0);
+  ASTNode p = bv("p", 1), q = bv("q", 1);
+  ASTNode r1 = bv("r1", 1), r2 = bv("r2", 2);
+  ASTNode s1 = bv("s1", 1), s2 = bv("s2", 3);
+
+  size_t a1 = readAccess(A, i, r1);
+  size_t a2 = readAccess(A, j, r2);
+  size_t b1 = readAccess(B, p, s1);
+  size_t b2 = readAccess(B, q, s2);
+
+  ExtCheckResult r = run();
+  ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
+  ASSERT_EQ(2u, r.conflicts.size());
+
+  // conflicts[0] is what a first-conflict-wins pass would have returned
+  EXPECT_EQ(r.conflicts[0].commonArray, r.conflict.commonArray);
+  EXPECT_EQ(r.conflicts[0].leftAccess, r.conflict.leftAccess);
+
+  EXPECT_EQ(A, r.conflicts[0].commonArray);
+  EXPECT_EQ(a1, r.conflicts[0].leftAccess);
+  EXPECT_EQ(a2, r.conflicts[0].rightAccess);
+  EXPECT_EQ(r1, r.conflicts[0].abstractConclusionA);
+  EXPECT_EQ(r2, r.conflicts[0].abstractConclusionB);
+
+  EXPECT_EQ(B, r.conflicts[1].commonArray);
+  EXPECT_EQ(b1, r.conflicts[1].leftAccess);
+  EXPECT_EQ(b2, r.conflicts[1].rightAccess);
+  EXPECT_EQ(s1, r.conflicts[1].abstractConclusionA);
+  EXPECT_EQ(s2, r.conflicts[1].abstractConclusionB);
+
+  // Each lemma stands alone: its own index equality, nothing shared.
+  ASSERT_EQ(1u, r.conflicts[0].abstractPremise.size());
+  ASSERT_EQ(1u, r.conflicts[1].abstractPremise.size());
+  EXPECT_TRUE(hasEqGuard(r.conflicts[0].abstractPremise, i, j));
+  EXPECT_TRUE(hasEqGuard(r.conflicts[1].abstractPremise, p, q));
 }
 
 // A false array equality whose witness reads differ: a consistent
@@ -409,21 +489,27 @@ TEST_F(ExtFixtureTest, NestedWriteDownConflict)
 
   ExtCheckResult r = run();
   ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
-  expectStats(r, {{"conflicts", 1},
+  expectStats(r, {{"conflicts", 2},
                   {"insertions", 8},
                   {"propagations", 3},
                   {"rule_D_WRITE", 2},
                   {"rule_U_WRITE", 1},
-                  {"seeds", 5}});
-  expectEvents(r, {{ExtEvent::SEED, "I_READ", w2, (int)ar1},
-                   {ExtEvent::SEED, "I_READ", w3, (int)ar2},
-                   {ExtEvent::SEED, "I_WRITE", w1, (int)aw1},
-                   {ExtEvent::SEED, "I_WRITE", w2, (int)aw2},
-                   {ExtEvent::SEED, "I_WRITE", w3, (int)aw3},
-                   {ExtEvent::PROPAGATE, "D_WRITE", w1, (int)ar1},
-                   {ExtEvent::PROPAGATE, "D_WRITE", A, (int)ar2},
-                   {ExtEvent::PROPAGATE, "U_WRITE", w2, (int)aw1},
-                   {ExtEvent::CONFLICT, "D_WRITE", A, (int)ar1}});
+                  {"seeds", 5},
+                  {"skipped_seen", 3}});
+  // ar1 reaches A downward and collides with ar2 there; carrying on,
+  // ar2 reaches w2 upward and collides with ar1 from the other side.
+  // One contradiction, two lemmas -- their write-index disequalities
+  // differ, so neither clause subsumes the other.
+  EXPECT_EQ(2u, r.conflicts.size());
+  expectEventPrefix(r, {{ExtEvent::SEED, "I_READ", w2, (int)ar1},
+                        {ExtEvent::SEED, "I_READ", w3, (int)ar2},
+                        {ExtEvent::SEED, "I_WRITE", w1, (int)aw1},
+                        {ExtEvent::SEED, "I_WRITE", w2, (int)aw2},
+                        {ExtEvent::SEED, "I_WRITE", w3, (int)aw3},
+                        {ExtEvent::PROPAGATE, "D_WRITE", w1, (int)ar1},
+                        {ExtEvent::PROPAGATE, "D_WRITE", A, (int)ar2},
+                        {ExtEvent::PROPAGATE, "U_WRITE", w2, (int)aw1},
+                        {ExtEvent::CONFLICT, "D_WRITE", A, (int)ar1}});
 
   const ExtConflict& c = r.conflict;
   EXPECT_EQ(A, c.commonArray);
@@ -462,7 +548,13 @@ TEST_F(ExtFixtureTest, PositiveReadEqualityConflict)
 
   ExtCheckResult r = run();
   ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
-  expectStats(r, {{"conflicts", 1}, {"insertions", 4}, {"seeds", 4}});
+  // The collision is symmetric across the equality: each read crosses
+  // to the other array and meets the other read there.
+  expectStats(r, {{"conflicts", 2},
+                  {"insertions", 4},
+                  {"seeds", 4},
+                  {"skipped_represented", 2}});
+  EXPECT_EQ(2u, r.conflicts.size());
 
   const ExtConflict& c = r.conflict;
   EXPECT_EQ(B, c.commonArray);
@@ -474,8 +566,7 @@ TEST_F(ExtFixtureTest, PositiveReadEqualityConflict)
   EXPECT_EQ(rB, c.abstractConclusionA);
   EXPECT_EQ(rA, c.abstractConclusionB);
   // the conflict fires while seeding rA's R_EQ propagation
-  EXPECT_STREQ("R_EQ", r.events.back().rule);
-  EXPECT_EQ(ExtEvent::CONFLICT, r.events.back().kind);
+  EXPECT_STREQ("R_EQ", firstConflictRule(r));
 }
 
 // Example 7 of the paper: read values used as write indices/values;
@@ -503,7 +594,14 @@ TEST_F(ExtFixtureTest, ReadValuesWriteIndicesConflict)
 
   ExtCheckResult r = run();
   ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
-  expectStats(r, {{"conflicts", 1}, {"insertions", 6}, {"seeds", 6}});
+  expectStats(r, {{"conflicts", 2},
+                  {"insertions", 8},
+                  {"propagations", 2},
+                  {"rule_D_WRITE", 2},
+                  {"seeds", 6},
+                  {"skipped_represented", 2},
+                  {"skipped_seen", 2}});
+  EXPECT_EQ(2u, r.conflicts.size());
 
   const ExtConflict& c = r.conflict;
   EXPECT_EQ(w2, c.commonArray);
@@ -538,7 +636,12 @@ TEST_F(ExtFixtureTest, ReadWriteHitConflict)
 
   ExtCheckResult r = run();
   ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
-  expectStats(r, {{"conflicts", 1}, {"insertions", 3}, {"seeds", 3}});
+  // Found twice: the read propagates down through w2 onto w1, and w1's
+  // write access propagates up over w2 onto the read. The two lemmas
+  // carry different write-index disequalities (i != j2 against
+  // j1 != j2), so neither subsumes the other.
+  expectStats(r, {{"conflicts", 2}, {"insertions", 3}, {"seeds", 3}});
+  EXPECT_EQ(2u, r.conflicts.size());
 
   const ExtConflict& c = r.conflict;
   EXPECT_EQ(w1, c.commonArray);
@@ -579,11 +682,15 @@ TEST_F(ExtFixtureTest, TransitiveEqualityConflict)
 
   ExtCheckResult r = run();
   ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
-  expectStats(r, {{"conflicts", 1},
-                  {"insertions", 7},
-                  {"propagations", 1},
-                  {"rule_R_EQ", 1},
-                  {"seeds", 6}});
+  expectStats(r, {{"conflicts", 2},
+                  {"insertions", 9},
+                  {"propagations", 3},
+                  {"rule_L_EQ", 1},
+                  {"rule_R_EQ", 2},
+                  {"seeds", 6},
+                  {"skipped_represented", 4},
+                  {"skipped_seen", 3}});
+  EXPECT_EQ(2u, r.conflicts.size());
 
   const ExtConflict& c = r.conflict;
   EXPECT_EQ(B, c.commonArray);
@@ -633,16 +740,17 @@ TEST_F(ExtFixtureTest, OneAccessCrossesTwoEqualityEdges)
 
   ExtCheckResult r = run();
   ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
-  expectStats(r, {{"conflicts", 1},
-                  {"insertions", 12},
-                  {"propagations", 5},
+  expectStats(r, {{"conflicts", 2},
+                  {"insertions", 13},
+                  {"propagations", 6},
                   {"rule_D_WRITE", 1},
                   {"rule_L_EQ", 1},
                   {"rule_R_EQ", 2},
-                  {"rule_U_WRITE", 1},
+                  {"rule_U_WRITE", 2},
                   {"seeds", 7},
                   {"skipped_represented", 4},
-                  {"skipped_seen", 1}});
+                  {"skipped_seen", 6}});
+  EXPECT_EQ(2u, r.conflicts.size());
 
   const ExtConflict& c = r.conflict;
   EXPECT_EQ(C, c.commonArray);
@@ -666,8 +774,7 @@ TEST_F(ExtFixtureTest, OneAccessCrossesTwoEqualityEdges)
   EXPECT_EQ(4u, c.abstractPremise.size());
   EXPECT_EQ(ry, c.abstractConclusionA);
   EXPECT_EQ(rx, c.abstractConclusionB);
-  EXPECT_STREQ("R_EQ", r.events.back().rule);
-  EXPECT_EQ(ExtEvent::CONFLICT, r.events.back().kind);
+  EXPECT_STREQ("R_EQ", firstConflictRule(r));
 }
 
 // Example 5 of the paper: upward propagation over a write (rule U),
@@ -700,32 +807,36 @@ TEST_F(ExtFixtureTest, UpEqualityDownConflict)
   // The two witness reads carry equal concrete values, so each is a
   // represented duplicate of the other side's witness read when it
   // crosses the equality (section 11.2) and is dropped there.
-  expectStats(r, {{"conflicts", 1},
-                  {"insertions", 12},
-                  {"propagations", 6},
-                  {"rule_D_WRITE", 2},
+  expectStats(r, {{"conflicts", 2},
+                  {"insertions", 14},
+                  {"propagations", 8},
+                  {"rule_D_WRITE", 4},
                   {"rule_L_EQ", 1},
                   {"rule_R_EQ", 1},
                   {"rule_U_WRITE", 2},
                   {"seeds", 6},
                   {"skipped_represented", 2},
-                  {"skipped_seen", 1}});
-  expectEvents(r, {{ExtEvent::SEED, "I_READ", A, (int)aA},
-                   {ExtEvent::SEED, "I_READ", B, (int)aB},
-                   {ExtEvent::SEED, "I_WRITE", w1, (int)aw1},
-                   {ExtEvent::SEED, "I_WRITE", w2, (int)aw2},
-                   {ExtEvent::SEED, "I_READ", w1, (int)aL},
-                   {ExtEvent::SEED, "I_READ", w2, (int)aR},
-                   {ExtEvent::PROPAGATE, "U_WRITE", w1, (int)aA},
-                   {ExtEvent::PROPAGATE, "U_WRITE", w2, (int)aB},
-                   {ExtEvent::PROPAGATE, "R_EQ", w2, (int)aw1},
-                   {ExtEvent::PROPAGATE, "L_EQ", w1, (int)aw2},
-                   {ExtEvent::PROPAGATE, "D_WRITE", A, (int)aL},
-                   {ExtEvent::SKIP_REPRESENTED, "R_EQ", w2, (int)aL},
-                   {ExtEvent::PROPAGATE, "D_WRITE", B, (int)aR},
-                   {ExtEvent::SKIP_REPRESENTED, "L_EQ", w1, (int)aR},
-                   {ExtEvent::SKIP_SEEN, "D_WRITE", A, (int)aA},
-                   {ExtEvent::CONFLICT, "R_EQ", w2, (int)aA}});
+                  {"skipped_seen", 8}});
+  // aA crosses the equality rightward into w2 and collides with aB;
+  // the pass carries on and aB crosses leftward into w1, colliding
+  // with aA. Mirror-image lemmas over the same equality proxy.
+  EXPECT_EQ(2u, r.conflicts.size());
+  expectEventPrefix(r, {{ExtEvent::SEED, "I_READ", A, (int)aA},
+                        {ExtEvent::SEED, "I_READ", B, (int)aB},
+                        {ExtEvent::SEED, "I_WRITE", w1, (int)aw1},
+                        {ExtEvent::SEED, "I_WRITE", w2, (int)aw2},
+                        {ExtEvent::SEED, "I_READ", w1, (int)aL},
+                        {ExtEvent::SEED, "I_READ", w2, (int)aR},
+                        {ExtEvent::PROPAGATE, "U_WRITE", w1, (int)aA},
+                        {ExtEvent::PROPAGATE, "U_WRITE", w2, (int)aB},
+                        {ExtEvent::PROPAGATE, "R_EQ", w2, (int)aw1},
+                        {ExtEvent::PROPAGATE, "L_EQ", w1, (int)aw2},
+                        {ExtEvent::PROPAGATE, "D_WRITE", A, (int)aL},
+                        {ExtEvent::SKIP_REPRESENTED, "R_EQ", w2, (int)aL},
+                        {ExtEvent::PROPAGATE, "D_WRITE", B, (int)aR},
+                        {ExtEvent::SKIP_REPRESENTED, "L_EQ", w1, (int)aR},
+                        {ExtEvent::SKIP_SEEN, "D_WRITE", A, (int)aA},
+                        {ExtEvent::CONFLICT, "R_EQ", w2, (int)aA}});
 
   const ExtConflict& c = r.conflict;
   EXPECT_EQ(w2, c.commonArray);
@@ -763,7 +874,14 @@ TEST_F(ExtFixtureTest, WriteWriteEqualityConflict)
 
   ExtCheckResult r = run();
   ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
-  expectStats(r, {{"conflicts", 1}, {"insertions", 4}, {"seeds", 4}});
+  expectStats(r, {{"conflicts", 2},
+                  {"insertions", 6},
+                  {"propagations", 2},
+                  {"rule_D_WRITE", 2},
+                  {"seeds", 4},
+                  {"skipped_represented", 2},
+                  {"skipped_seen", 2}});
+  EXPECT_EQ(2u, r.conflicts.size());
 
   const ExtConflict& c = r.conflict;
   EXPECT_EQ(w2, c.commonArray);
@@ -1048,84 +1166,82 @@ TEST_F(ExtPrepareTest, RecoversOperandsConeAndNames)
   EXPECT_TRUE(namedIdx);
 }
 
-TEST_F(ExtPrepareTest, IteEliminationReachesFixedPointAndCaches)
+TEST_F(ExtPrepareTest, ArrayIteIsReplacedWhenItIsBuilt)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
   ASTNode a = arr("a"), b = arr("b"), d = arr("d");
   ASTNode c = mgr.CreateSymbol("c", 0, 0);
-  ASTNode ite = hf->CreateArrayTerm(ITE, 2, 2, {c, a, b});
 
-  ASTNode proxy = ext->makeEquality(ite, d);
-  ASSERT_EQ(1u, ext->getRecords().size());
+  // Asking for an array-valued if-then-else does not produce one: the
+  // node factory funnels it to makeArrayITE, which hands back a fresh
+  // array defined by two guarded equalities (paper section 4.1).
+  ASTNode repl = hf->CreateArrayTerm(ITE, 2, 2, {c, a, b});
+  EXPECT_EQ(SYMBOL, repl.GetKind());
+  EXPECT_EQ(2u, repl.GetIndexWidth());
+  EXPECT_EQ(2u, repl.GetValueWidth());
+  ASSERT_EQ(2u, ext->getRecords().size());
+
+  // The same triple reuses it -- keyed on what the caller passed, which
+  // exists nowhere downstream and so can never be rewritten.
+  EXPECT_EQ(repl, hf->CreateArrayTerm(ITE, 2, 2, {c, a, b}));
+  EXPECT_EQ(2u, ext->getRecords().size());
+
+  // Degenerate shapes never reach the registry at all.
+  EXPECT_EQ(a, hf->CreateArrayTerm(ITE, 2, 2, {c, a, a}));
+  EXPECT_EQ(a, hf->CreateArrayTerm(ITE, 2, 2, {mgr.ASTTrue, a, b}));
+  EXPECT_EQ(b, hf->CreateArrayTerm(ITE, 2, 2, {mgr.ASTFalse, a, b}));
+  EXPECT_EQ(2u, ext->getRecords().size());
+
+  // An equality over the replacement is an ordinary record, and
+  // preparation has no if-then-else left to do anything about.
+  ASTNode proxy = ext->makeEquality(repl, d);
+  ASSERT_EQ(3u, ext->getRecords().size());
 
   ext->beginSolve();
   ext->prepare(ext->conjoinRecordConstraints(proxy));
-
-  // The if-then-else operand was eliminated to a fresh array with two
-  // guarded equality records (paper section 4.1).
-  ASSERT_EQ(3u, ext->getRecords().size());
-  const ExtensionalityContext::Record& r = ext->getRecords()[0];
-  EXPECT_EQ(d, r.canonicalLeft);
-  EXPECT_EQ(SYMBOL, r.canonicalRight.GetKind());
-  EXPECT_TRUE(r.canonicalRight != ite);
-  // Both branches enter the cone through the guarded records.
+  EXPECT_EQ(3u, ext->getRecords().size());
   EXPECT_TRUE(ext->inCone(a));
   EXPECT_TRUE(ext->inCone(b));
+  EXPECT_TRUE(ext->inCone(repl));
 
-  // A repeated solve reuses the cached replacement instead of minting
-  // a new generation of records.
+  // And a second solve moves nothing.
   ext->beginSolve();
   ext->prepare(ext->conjoinRecordConstraints(proxy));
   EXPECT_EQ(3u, ext->getRecords().size());
 }
 
-// STP's simplifier pushes a read through an array if-then-else, so a
-// witness anchor over an if-then-else operand can arrive at
-// preparation as
-//
-//   name = ite(c, read(a, lambda), read(b, lambda))
-//
-// instead of the recorded name = read(ite(c, a, b), lambda). Operand
-// recovery must accept the pushed shape, rebuild the array
-// if-then-else from the read leaves, and hand it to the usual
-// elimination -- not die claiming the defining equation was lost.
-TEST_F(ExtPrepareTest, RecoversAnchorPushedThroughArrayIte)
+TEST_F(ExtPrepareTest, NoAnchorCanBePushedThroughAnArrayIte)
 {
+  // The simplifier pushes a read through an array if-then-else, which
+  // used to leave a witness anchor as ite(c, read(a,l), read(b,l)) for
+  // preparation to reconstruct the operand from. Reconstructing from a
+  // rewritten formula is what lost the guards on a second solve and
+  // leaked a replacement per solve when the condition had been
+  // normalised. The shape is now unreachable: there is no array
+  // if-then-else for a read to be pushed through, so an anchor is
+  // always a plain read of an array term.
   NodeFactory* hf = mgr.hashingNodeFactory;
   ASTNode a = arr("a"), b = arr("b"), d = arr("d");
   ASTNode c = mgr.CreateSymbol("c", 0, 0);
-  ASTNode ite = hf->CreateArrayTerm(ITE, 2, 2, {c, a, b});
 
-  ext->makeEquality(ite, d);
-  ASSERT_EQ(1u, ext->getRecords().size());
-  const ExtensionalityContext::Record r = ext->getRecords()[0];
-  ASSERT_EQ(d, r.constructionLeft); // so the ite side is the R anchor
+  ASTNode repl = hf->CreateArrayTerm(ITE, 2, 2, {c, a, b});
+  ASTNode proxy = ext->makeEquality(repl, d);
+
+  for (size_t i = 0; i < ext->getRecords().size(); i++)
+  {
+    const ExtensionalityContext::Record& r = ext->getRecords()[i];
+    // Every anchor is name = READ(array, lambda); nothing in it is an
+    // if-then-else that a read could be distributed over.
+    ASSERT_EQ(EQ, r.anchorL.GetKind());
+    ASSERT_EQ(EQ, r.anchorR.GetKind());
+    EXPECT_EQ(READ, r.anchorL[1].GetKind());
+    EXPECT_EQ(READ, r.anchorR[1].GetKind());
+    EXPECT_NE(ITE, r.anchorL[1][0].GetKind());
+    EXPECT_NE(ITE, r.anchorR[1][0].GetKind());
+  }
 
   ext->beginSolve();
-  // Hand preparation the root the simplifier would produce: the L
-  // anchor and witness clause untouched, the R anchor's read pushed
-  // through the if-then-else.
-  ASTNode readA = hf->CreateTerm(READ, 2, a, r.lambda);
-  ASTNode readB = hf->CreateTerm(READ, 2, b, r.lambda);
-  ASTVec pushedChildren;
-  pushedChildren.push_back(c);
-  pushedChildren.push_back(readA);
-  pushedChildren.push_back(readB);
-  ASTNode pushed = hf->CreateTerm(ITE, 2, pushedChildren);
-  ASTVec conjuncts;
-  conjuncts.push_back(r.anchorL);
-  conjuncts.push_back(hf->CreateNode(EQ, r.nameR, pushed));
-  conjuncts.push_back(r.witnessClause);
-  ext->prepare(hf->CreateNode(AND, conjuncts));
-
-  // The operand came back in its current form -- the array
-  // if-then-else over the same branches -- and elimination replaced
-  // it as usual: one user record plus two guarded records, with both
-  // branches in the cone.
-  EXPECT_EQ(3u, ext->getRecords().size());
-  const ExtensionalityContext::Record& r0 = ext->getRecords()[0];
-  EXPECT_EQ(d, r0.canonicalLeft);
-  EXPECT_EQ(SYMBOL, r0.canonicalRight.GetKind());
+  ext->prepare(ext->conjoinRecordConstraints(proxy));
   EXPECT_TRUE(ext->inCone(a));
   EXPECT_TRUE(ext->inCone(b));
 }
@@ -1150,16 +1266,15 @@ bool mentions(const ASTNode& haystack, const ASTNode& needle)
   return mentions(haystack, needle, seen);
 }
 
-// The guards that define an eliminated if-then-else's replacement
-// belong to every solve, not just the one that eliminated it. A
-// repeated solve recovers the operand from the same pushed anchor as
-// above, and recovery hands back the cached replacement -- so the
-// if-then-else is gone before the cone is computed and elimination has
-// nothing left to do. Its two guarded equality records are conjoined
-// all the same, and without their guards the replacement is an array
-// related to neither branch: the equality it stands for then holds for
-// free, and an unsatisfiable query answers satisfiable from the second
-// solve on.
+// The guards that define an if-then-else's replacement belong to every
+// solve, not just the one that built it. Only the first solve sees the
+// if-then-else being replaced; every later solve inherits the
+// replacement and its two guarded equality records from the registry,
+// and conjoins those records' witness bundles all the same. A witness
+// bundle only ever forces the inequality direction, so without the
+// guards the replacement is an array related to neither branch: the
+// equality it stands for then holds for free, and an unsatisfiable
+// query answers satisfiable from the second solve on.
 //
 // They are restated where everything else a solve restates is stated,
 // at the start of it, so that STP's own passes rewrite a guard exactly
@@ -1170,36 +1285,20 @@ TEST_F(ExtPrepareTest, InheritedArrayIteRestatesItsGuards)
   NodeFactory* nf = mgr.defaultNodeFactory;
   ASTNode a = arr("a"), b = arr("b"), d = arr("d");
   ASTNode c = mgr.CreateSymbol("c", 0, 0);
-  ASTNode ite = hf->CreateArrayTerm(ITE, 2, 2, {c, a, b});
 
-  ext->makeEquality(ite, d);
-  ASSERT_EQ(1u, ext->getRecords().size());
-  const ExtensionalityContext::Record r = ext->getRecords()[0];
-  ASSERT_EQ(d, r.constructionLeft); // so the ite side is the R anchor
-
-  // The root of the test above: the witness read pushed through the
-  // array if-then-else.
-  ASTVec pushedChildren;
-  pushedChildren.push_back(c);
-  pushedChildren.push_back(hf->CreateTerm(READ, 2, a, r.lambda));
-  pushedChildren.push_back(hf->CreateTerm(READ, 2, b, r.lambda));
-  ASTVec conjuncts;
-  conjuncts.push_back(r.anchorL);
-  conjuncts.push_back(
-      hf->CreateNode(EQ, r.nameR, hf->CreateTerm(ITE, 2, pushedChildren)));
-  conjuncts.push_back(r.witnessClause);
-
-  ext->beginSolve();
-  const ASTNode first = ext->prepare(hf->CreateNode(AND, conjuncts));
-
-  ASSERT_EQ(3u, ext->getRecords().size());
-  const ASTNode replacement = ext->getRecords()[0].canonicalRight;
+  // Building it is what replaces it: the fresh array comes back, with
+  // its two guarded equality records already minted.
+  const ASTNode replacement = hf->CreateArrayTerm(ITE, 2, 2, {c, a, b});
   ASSERT_EQ(SYMBOL, replacement.GetKind());
+  ASSERT_EQ(2u, ext->getRecords().size());
+
+  const ASTNode proxy = ext->makeEquality(replacement, d);
+  ASSERT_EQ(3u, ext->getRecords().size());
 
   // The guarded records name the two branches; which one is the
   // then-branch decides which way its guard reads.
   ASTNode proxyThen, proxyElse;
-  for (size_t i = 1; i < 3; i++)
+  for (size_t i = 0; i < 2; i++)
   {
     const ExtensionalityContext::Record& g = ext->getRecords()[i];
     const ASTNode branch = g.constructionLeft == replacement
@@ -1216,33 +1315,30 @@ TEST_F(ExtPrepareTest, InheritedArrayIteRestatesItsGuards)
   const ASTNode guardThen =
       nf->CreateNode(OR, nf->CreateNode(NOT, c), proxyThen);
   const ASTNode guardElse = nf->CreateNode(OR, c, proxyElse);
+
+  ext->beginSolve();
+  const ASTNode first = ext->conjoinRecordConstraints(proxy);
   EXPECT_TRUE(mentions(first, guardThen));
   EXPECT_TRUE(mentions(first, guardElse));
+  ext->prepare(first);
+  ASSERT_EQ(3u, ext->getRecords().size());
 
-  // Solve again on the same query. This solve eliminates nothing, so
-  // the guards come from the start-of-solve conjunction -- conjoined
-  // here onto nothing at all, to leave no doubt where they came from.
+  // Solve again on the same query. This solve builds no if-then-else,
+  // so the guards can only come from the start-of-solve conjunction --
+  // taken here over nothing at all, to leave no doubt where they came
+  // from.
   ext->beginSolve();
   const ASTNode restated = ext->conjoinRecordConstraints(mgr.ASTTrue);
   EXPECT_TRUE(mentions(restated, guardThen));
   EXPECT_TRUE(mentions(restated, guardElse));
 
-  // And preparation over the pushed anchor -- with the guarded
-  // records' own witness bundles alongside, as that conjunction
-  // supplies them -- hands back the cached replacement, with no new
-  // generation of records.
-  for (size_t i = 1; i < 3; i++)
-  {
-    conjuncts.push_back(ext->getRecords()[i].anchorL);
-    conjuncts.push_back(ext->getRecords()[i].anchorR);
-    conjuncts.push_back(ext->getRecords()[i].witnessClause);
-  }
-  ext->prepare(hf->CreateNode(AND, conjuncts));
-
+  // And preparing that second solve reuses the same replacement, with
+  // no new generation of records.
+  ext->prepare(ext->conjoinRecordConstraints(proxy));
   EXPECT_EQ(3u, ext->getRecords().size());
-  EXPECT_EQ(replacement, ext->getRecords()[0].canonicalRight);
   EXPECT_TRUE(ext->inCone(a));
   EXPECT_TRUE(ext->inCone(b));
+  EXPECT_TRUE(ext->inCone(replacement));
 }
 
 TEST_F(ExtPrepareTest, MissingAnchorFailsLoudly)
@@ -1376,9 +1472,11 @@ TEST_F(ExtPrepareTest, FloatCellWriteChainQuotientsNaN)
   }
 }
 
-// The fresh replacement for an eliminated float-array if-then-else
-// keeps the element format, and the guarded equality records minted
-// over it therefore build NaN-qualified witnesses too.
+// The fresh replacement for a float-array if-then-else keeps the
+// element format, and the guarded equality records minted over it
+// therefore build NaN-qualified witnesses too. The format has to be
+// stamped before those records are built, since a record checks that
+// its two operands agree on it.
 TEST_F(ExtPrepareTest, FloatArrayIteReplacementKeepsFormat)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
@@ -1392,23 +1490,23 @@ TEST_F(ExtPrepareTest, FloatArrayIteReplacementKeepsFormat)
   fd.SetExpWidth(8);
   fd.SetSigWidth(24);
   ASTNode c = mgr.CreateSymbol("c", 0, 0);
-  ASTNode ite = hf->CreateArrayTerm(ITE, 2, 32, {c, fa, fb});
 
-  ASTNode proxy = ext->makeEquality(ite, fd);
-  ASSERT_EQ(1u, ext->getRecords().size());
-
-  ext->beginSolve();
-  ext->prepare(ext->conjoinRecordConstraints(proxy));
-
-  ASSERT_EQ(3u, ext->getRecords().size());
-  const ExtensionalityContext::Record& r0 = ext->getRecords()[0];
-  const ASTNode replacement =
-      r0.canonicalLeft == fd ? r0.canonicalRight : r0.canonicalLeft;
+  const ASTNode replacement = hf->CreateArrayTerm(ITE, 2, 32, {c, fa, fb});
   ASSERT_EQ(SYMBOL, replacement.GetKind());
   EXPECT_EQ(8u, replacement.GetExpWidth());
   EXPECT_EQ(24u, replacement.GetSigWidth());
+  ASSERT_EQ(2u, ext->getRecords().size());
 
-  for (size_t i = 1; i < 3; i++)
+  ASTNode proxy = ext->makeEquality(replacement, fd);
+  ASSERT_EQ(3u, ext->getRecords().size());
+
+  ext->beginSolve();
+  ext->prepare(ext->conjoinRecordConstraints(proxy));
+  ASSERT_EQ(3u, ext->getRecords().size());
+
+  // Every record here is over float-element arrays, the two guarded
+  // ones included, so every witness is NaN-qualified.
+  for (size_t i = 0; i < 3; i++)
   {
     const ExtensionalityContext::Record& r = ext->getRecords()[i];
     ASSERT_EQ(OR, r.witnessClause.GetKind());
@@ -1483,9 +1581,9 @@ TEST_F(ExtPrepareTest, RoundingModeElementWitnessPinsCells)
   ASSERT_EQ(AND, differ.GetKind());
 }
 
-// The replacement for an eliminated if-then-else over float-indexed
-// arrays registers the branches' index sort, and its guarded records
-// therefore confine their witness indexes too.
+// The replacement for an if-then-else over float-indexed arrays
+// registers the branches' index sort, and its guarded records therefore
+// confine their witness indexes too.
 TEST_F(ExtPrepareTest, IteReplacementInheritsIndexRegistries)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
@@ -1496,22 +1594,20 @@ TEST_F(ExtPrepareTest, IteReplacementInheritsIndexRegistries)
   mgr.fp_index_arrays[fb] = std::make_pair(8u, 24u);
   mgr.fp_index_arrays[fd] = std::make_pair(8u, 24u);
   ASTNode c = mgr.CreateSymbol("c", 0, 0);
-  ASTNode ite = hf->CreateArrayTerm(ITE, 32, 8, {c, fa, fb});
 
-  ASTNode proxy = ext->makeEquality(ite, fd);
-  ext->beginSolve();
-  ext->prepare(ext->conjoinRecordConstraints(proxy));
-
-  ASSERT_EQ(3u, ext->getRecords().size());
-  const ExtensionalityContext::Record& r0 = ext->getRecords()[0];
-  const ASTNode replacement =
-      r0.canonicalLeft == fd ? r0.canonicalRight : r0.canonicalLeft;
+  const ASTNode replacement = hf->CreateArrayTerm(ITE, 32, 8, {c, fa, fb});
   ASSERT_EQ(SYMBOL, replacement.GetKind());
   unsigned ieb = 0, isb = 0;
   EXPECT_TRUE(mgr.arrayHasFpIndex(replacement, ieb, isb));
   EXPECT_EQ(8u, ieb);
   EXPECT_EQ(24u, isb);
-  for (size_t i = 1; i < 3; i++)
+
+  ASTNode proxy = ext->makeEquality(replacement, fd);
+  ext->beginSolve();
+  ext->prepare(ext->conjoinRecordConstraints(proxy));
+
+  ASSERT_EQ(3u, ext->getRecords().size());
+  for (size_t i = 0; i < 3; i++)
     EXPECT_FALSE(ext->getRecords()[i].indexSortClause.IsNull());
 }
 
@@ -1523,6 +1619,63 @@ TEST_F(ExtPrepareTest, MixedIndexSortEqualityFailsLoudly)
   mgr.fp_index_arrays[fa] = std::make_pair(8u, 24u);
   ASTNode b = mgr.CreateSymbol("b", 32, 8);
   EXPECT_DEATH(ext->makeEquality(fa, b), "identical index sorts");
+}
+
+// Operand recovery walks the whole DAG for equations of the anchor's
+// shape and keeps what it finds in a hash-ordered container. Exactly
+// one such equation may exist per witness name -- the names are fresh,
+// substitution cannot move them and unconstrained removal cannot delete
+// them -- but that is a property of the passes in between, not of this
+// walk. A second one would otherwise be resolved by hash order, giving
+// a different equality operand from run to run.
+TEST_F(ExtPrepareTest, DuplicateAnchorFailsLoudly)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b"), c = arr("c");
+  ASTNode proxy = ext->makeEquality(a, b);
+  (void)proxy;
+  ASSERT_EQ(1u, ext->getRecords().size());
+  const ExtensionalityContext::Record r = ext->getRecords()[0];
+
+  ext->beginSolve();
+  // The intact bundle, plus a rival equation of the same shape for the
+  // same name over a different array.
+  ASTVec conjuncts;
+  conjuncts.push_back(r.anchorL);
+  conjuncts.push_back(r.anchorR);
+  conjuncts.push_back(r.witnessClause);
+  conjuncts.push_back(
+      hf->CreateNode(EQ, r.nameL, hf->CreateTerm(READ, 2, c, r.lambda)));
+  EXPECT_DEATH(ext->prepare(hf->CreateNode(AND, conjuncts)),
+               "occurs twice with different right-hand sides");
+}
+
+// possibleConeSymbols is collected from the operands as they were
+// built, and decides which reads are protected from the
+// read-equals-constant substitution; the cone is closed over the
+// operands as they are after simplification. If a pass ever rewrites an
+// operand to name an array symbol that was not under it before, that
+// symbol's reads were never protected, and an observation the
+// consistency check depends on may already have been substituted away.
+TEST_F(ExtPrepareTest, UnanticipatedConeSymbolFailsLoudly)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b"), z = arr("z");
+  ASTNode proxy = ext->makeEquality(a, b);
+  (void)proxy;
+  ASSERT_EQ(1u, ext->getRecords().size());
+  const ExtensionalityContext::Record r = ext->getRecords()[0];
+
+  ext->beginSolve();
+  // Stands in for a pass that rewrote the left operand into a term over
+  // z, an array the registry never saw when the equality was built.
+  ASTVec conjuncts;
+  conjuncts.push_back(
+      hf->CreateNode(EQ, r.nameL, hf->CreateTerm(READ, 2, z, r.lambda)));
+  conjuncts.push_back(r.anchorR);
+  conjuncts.push_back(r.witnessClause);
+  EXPECT_DEATH(ext->prepare(hf->CreateNode(AND, conjuncts)),
+               "entered the cone that was not anticipated");
 }
 
 // The decision table combining STP's own model evaluation with the

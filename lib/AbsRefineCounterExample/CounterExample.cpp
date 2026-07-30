@@ -396,6 +396,21 @@ AbsRefine_CounterExample::TermToConstTermUsingModel_inner(const ASTNode& term,
       {
         // Has been simplified out. Can take any value.
         output = bm->CreateMaxConst(modelentry.GetValueWidth());
+
+        // ... but having handed a value out, stand by it. The result is
+        // memoised below under "term", whose index may be symbolic;
+        // with array equality enabled the model surface prints a total
+        // interpretation per array built from the concrete-index READ
+        // keys alone, and fills every index it finds no key for with
+        // zero. Without this the printer would commit the cell to zero
+        // while the rest of the model was computed from the value
+        // invented here, and (get-model) could return an
+        // interpretation that falsifies the query it answered sat.
+        // Gated on the option: with it off the counterexample map, and
+        // so vc_getCounterExampleArray, must stay exactly as before.
+        if (bm->UserFlags.enable_array_equality &&
+            CounterExampleMap.find(modelentry) == CounterExampleMap.end())
+          CounterExampleMap[modelentry] = output;
       }
       break;
     }

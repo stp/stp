@@ -467,6 +467,15 @@ public:
   const ASTVec GetAsserts();
   const ASTVec getVectorOfAsserts();
 
+  // Every assertion currently on the stack, appended to out. Unlike
+  // getVectorOfAsserts() this does not collapse each level into a
+  // single conjunct, so it is safe to call outside a solve.
+  void collectAsserts(ASTVec& out) const
+  {
+    for (size_t i = 0; i < _asserts.size(); i++)
+      out.insert(out.end(), _asserts[i]->begin(), _asserts[i]->end());
+  }
+
   // add a query/assertion to the current logical context
   void AddAssert(const ASTNode& assert);
 

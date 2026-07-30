@@ -291,6 +291,15 @@ struct ExtCheckResult
     WITNESS_VIOLATION
   };
   Status status;
+  // Every independent congruence conflict the pass found, in discovery
+  // order; non-empty iff status == CONFLICT. The pass does not stop at
+  // the first, because each conflict yields a lemma that is valid on
+  // its own (its premise holds and its conclusion fails in the very
+  // same candidate), and emitting them together spares a whole
+  // solve-from-scratch per lemma.
+  std::vector<ExtConflict> conflicts;
+  // conflicts[0] -- the conflict a first-conflict-wins pass would have
+  // stopped at. Kept for callers that want just the earliest one.
   ExtConflict conflict;      // valid iff status == CONFLICT
   size_t violatedRecord;     // valid iff status == WITNESS_VIOLATION
 

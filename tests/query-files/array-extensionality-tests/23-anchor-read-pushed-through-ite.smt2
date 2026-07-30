@@ -2,9 +2,16 @@
 ; CHECK-NEXT: ^sat
 ; Reduced from an industrial benchmark. The equality's operand is an
 ; array if-then-else, and the assertion folds to true at parse time,
-; so only the record's witness bundle keeps the formula alive; the
-; simplifier then pushes the witness read through the if-then-else,
-; and operand recovery must accept that pushed anchor shape.
+; so only the record's witness bundle keeps the formula alive.
+;
+; The shape this was written for no longer arises. While elimination
+; ran after preprocessing, the simplifier pushed the witness read
+; through the if-then-else and operand recovery had to accept the
+; pushed anchor -- reconstructing the node it was keyed on, which is
+; what lost the guards and leaked a replacement per solve. Every array
+; if-then-else is now replaced where it is built, so the operand is a
+; plain array symbol before any read can be pushed through anything.
+; Kept as end-to-end coverage of the same benchmark shape.
 (declare-const __ (_ BitVec 16))
 (declare-const x Bool)
 (declare-fun p () (Array (_ BitVec 5) (_ BitVec 32)))

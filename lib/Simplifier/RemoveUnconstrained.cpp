@@ -36,6 +36,7 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/RemoveUnconstrained.h"
 #include "stp/AST/MutableASTNode.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/Simplifier/AchievableImage.h"
 #include "stp/Simplifier/constantBitP/Dependencies.h"
 
@@ -52,6 +53,18 @@ RemoveUnconstrained::RemoveUnconstrained(STPMgr& _bm) : bm(_bm)
 ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier)
 {
   ASTNode result(n);
+
+  // Symbols the array-equality procedure depends on must not be
+  // treated as unconstrained. Every rule below decides what to rewrite
+  // from isUnconstrained(), and each one mutates the graph before
+  // recording the variable's replacement -- so a substitution the map
+  // refuses (see SubstitutionMap::extensionalityProtected) cannot undo
+  // the rewrite that was made on its promise. Excluding the symbols
+  // from the predicate is what makes the protection a precondition
+  // instead of a return code nobody can act on.
+  ExtensionalityContext* ext = bm.getExtensionalityIfAny();
+  MutableASTNode::UntouchableScope protect(
+      (ext != NULL && ext->active()) ? &ext->getFrozenSymbols() : NULL);
 
   bm.GetRunTimes()->start(RunTimes::RemoveUnconstrained);
 
@@ -76,6 +89,16 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier)
       assert(result2 == result);
   }
 #endif
+
+  // Any definition the substitution map refused goes back as a
+  // conjunct, so the variable it defines is not left free.
+  if (!refusedDefinitions.empty())
+  {
+    refusedDefinitions.push_back(result);
+    result = nf->CreateNode(AND, refusedDefinitions);
+    refusedDefinitions.clear();
+  }
+
   bm.GetRunTimes()->stop(RunTimes::RemoveUnconstrained);
   return result;
 }
@@ -110,7 +133,17 @@ void RemoveUnconstrained::replace(const ASTNode& from, const ASTNode to)
 {
   assert(from.GetKind() == SYMBOL);
   assert(from.GetValueWidth() == to.GetValueWidth());
-  simplifier->UpdateSubstitutionMapFewChecks(from, to);
+  if (simplifier->UpdateSubstitutionMapFewChecks(from, to))
+    return;
+
+  // Refused (only SubstitutionMap::extensionalityProtected refuses).
+  // The caller has already rewritten the graph to remove whatever
+  // constrained "from", so dropping the definition here would leave it
+  // free. Keep it as an ordinary conjunct instead; topLevel() attaches
+  // these to the result.
+  refusedDefinitions.push_back(
+      from.GetType() == BOOLEAN_TYPE ? nf->CreateNode(IFF, from, to)
+                                     : nf->CreateNode(EQ, from, to));
 }
 
 // Rebuild one collected step as an ASTNode around `in`. Used when a

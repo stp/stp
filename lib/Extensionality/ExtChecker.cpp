@@ -63,10 +63,9 @@ struct CheckerState
   std::deque<PairKey> worklist;
   ExtCheckResult result;
   int seq;
-  bool conflictFound;
 
   CheckerState(const ExtGraph& g, ExtModelView& m, bool ev)
-      : graph(g), model(m), recordEvents(ev), seq(0), conflictFound(false)
+      : graph(g), model(m), recordEvents(ev), seq(0)
   {
   }
 
@@ -109,9 +108,10 @@ struct CheckerState
   // concrete value is dropped without insertion or further
   // propagation: the representative reaches every array the duplicate
   // could reach, carrying the same value (see ExtChecker.h).
-  // Returns true iff a conflict was found (stored in result.conflict,
-  // without the lemmas, which buildLemmas adds).
-  bool insert(const ASTNode& destination, size_t accessId,
+  // A conflict is appended to result.conflicts (without the lemmas,
+  // which buildLemmas adds) and the fixed point carries on, so one pass
+  // collects every independent conflict rather than only the earliest.
+  void insert(const ASTNode& destination, size_t accessId,
               const std::vector<ExtGuard>& guards, const char* rule,
               const ASTNode& source)
   {
@@ -121,7 +121,7 @@ struct CheckerState
       result.stats["skipped_seen"]++;
       event(ExtEvent::SKIP_SEEN, rule, source, destination, accessId,
             ASTNode(), ASTNode());
-      return false;
+      return;
     }
 
     const ASTNode idx = accessIndex(accessId);
@@ -134,7 +134,7 @@ struct CheckerState
       const size_t otherId = hit->second;
       if (accessValue(otherId) != val)
       {
-        ExtConflict& c = result.conflict;
+        ExtConflict c;
         c.commonArray = destination;
         c.leftAccess = otherId;
         c.rightAccess = accessId;
@@ -146,13 +146,27 @@ struct CheckerState
         result.stats["conflicts"]++;
         event(ExtEvent::CONFLICT, rule, source, destination, accessId, idx,
               val);
-        conflictFound = true;
-        return true;
+        result.conflicts.push_back(c);
+
+        // Record the pair as visited so a later path to it cannot report
+        // the same conflict twice, but keep the arriving access out of
+        // rho -- its value disagrees with the representative already
+        // there -- and out of the work list, so nothing propagates
+        // onward from a conflicting arrival. The representative keeps
+        // the array's slot for this index, exactly as when the pass
+        // stopped here.
+        PathRecord pr;
+        pr.destination = destination;
+        pr.access = accessId;
+        pr.guards = guards;
+        pr.rule = rule;
+        paths[key] = pr;
+        return;
       }
       result.stats["skipped_represented"]++;
       event(ExtEvent::SKIP_REPRESENTED, rule, source, destination, accessId,
             idx, val);
-      return false;
+      return;
     }
 
     PathRecord pr;
@@ -179,7 +193,6 @@ struct CheckerState
       kind = ExtEvent::PROPAGATE;
     }
     event(kind, rule, source, destination, accessId, idx, val);
-    return false;
   }
 };
 
@@ -350,12 +363,7 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
   {
     const ExtAccess& a = graph.accesses[i];
     const char* rule = a.isWrite ? "I_WRITE" : "I_READ";
-    if (st.insert(a.site, a.id, std::vector<ExtGuard>(), rule, ASTNode()))
-    {
-      buildLemmas(st.result.conflict, graph, model);
-      st.result.status = ExtCheckResult::CONFLICT;
-      return st.result;
-    }
+    st.insert(a.site, a.id, std::vector<ExtGuard>(), rule, ASTNode());
   }
 
   // Fixed-point computation over a FIFO work list (the "working queue
@@ -384,7 +392,9 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
     const PathRecord sourcePath = st.paths[cur];
     const ASTNode accessIdxVal = st.accessIndex(accessId);
 
-    bool conflict = false;
+    // Every rule fires for every pair: a conflict on one edge no longer
+    // cuts the remaining edges short, so the pass collects the
+    // independent conflicts an early return would have hidden.
 
     // Rule D: propagate down through a write whose index differs
     // from the access index under sigma (axiom A3).
@@ -404,7 +414,7 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
         g.eqRecord = 0;
         std::vector<ExtGuard> chi2 = sourcePath.guards;
         chi2.push_back(g);
-        conflict = st.insert(w.base, accessId, chi2, "D_WRITE", source);
+        st.insert(w.base, accessId, chi2, "D_WRITE", source);
       }
     }
 
@@ -412,14 +422,13 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
     // whose index differs from the access index under sigma. Upward
     // propagation is what makes extensional reasoning complete
     // (section 7.3).
-    if (!conflict)
     {
       std::map<ASTNode, std::vector<ASTNode>>::const_iterator pit =
           graph.writeParents.find(source);
       if (pit != graph.writeParents.end())
       {
         const std::vector<ASTNode>& parents = pit->second;
-        for (size_t i = 0; i < parents.size() && !conflict; i++)
+        for (size_t i = 0; i < parents.size(); i++)
         {
           const ExtWriteNode& w = graph.writes.find(parents[i])->second;
           if (accessIdxVal != model.bvValue(w.indexName))
@@ -433,7 +442,7 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
             g.eqRecord = 0;
             std::vector<ExtGuard> chi2 = sourcePath.guards;
             chi2.push_back(g);
-            conflict = st.insert(w.write, accessId, chi2, "U_WRITE", source);
+            st.insert(w.write, accessId, chi2, "U_WRITE", source);
           }
         }
       }
@@ -442,14 +451,13 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
     // Rules R and L: propagate across array equalities, in both
     // directions, but only when sigma assigns the equality's Boolean
     // abstraction variable true.
-    if (!conflict)
     {
       std::map<ASTNode, std::vector<size_t>>::const_iterator eit =
           graph.eqAdjacency.find(source);
       if (eit != graph.eqAdjacency.end())
       {
         const std::vector<size_t>& adj = eit->second;
-        for (size_t i = 0; i < adj.size() && !conflict; i++)
+        for (size_t i = 0; i < adj.size(); i++)
         {
           const ExtEqEdge& e = graph.eqEdges[adj[i]];
           if (!model.boolValue(e.proxy))
@@ -465,17 +473,24 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
           g.eqRecord = e.record;
           std::vector<ExtGuard> chi2 = sourcePath.guards;
           chi2.push_back(g);
-          conflict = st.insert(destination, accessId, chi2, rule, source);
+          st.insert(destination, accessId, chi2, rule, source);
         }
       }
     }
+  }
 
-    if (conflict)
-    {
-      buildLemmas(st.result.conflict, graph, model);
-      st.result.status = ExtCheckResult::CONFLICT;
-      return st.result;
-    }
+  // The fixed point ran to completion, so report every conflict it
+  // found. Each is a lemma in its own right: its premise holds and its
+  // conclusion fails under the one candidate sigma this pass ran
+  // against, which does not change while the pass runs, so a conflict
+  // found late is neither weakened nor invalidated by an earlier one.
+  if (!st.result.conflicts.empty())
+  {
+    for (size_t i = 0; i < st.result.conflicts.size(); i++)
+      buildLemmas(st.result.conflicts[i], graph, model);
+    st.result.conflict = st.result.conflicts[0];
+    st.result.status = ExtCheckResult::CONFLICT;
+    return st.result;
   }
 
   // Verify the witnesses of preprocessing step 1, in record order: a

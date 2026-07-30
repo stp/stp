@@ -339,10 +339,28 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // and stay reachable even where the equality was the only mention of
   // an array.
   ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  // A query whose only array equalities are the guards defining an
+  // if-then-else replacement gains nothing from the decision procedure.
+  // Put the if-then-elses back and let the ordinary array machinery
+  // decide it, as it did before the replacement moved to construction.
+  // Both formulas have to be rewritten: the model check evaluates the
+  // original, which mentions the replacement arrays the solved formula
+  // no longer contains.
+  ASTNode original = original_input;
+  if (ext != NULL)
+  {
+    // Per-solve state has to be dropped whether or not the procedure
+    // runs, or a cone frozen by an earlier solve still answers inCone().
+    ext->beginSolve();
+    inputToSat = ext->restoreArrayITEs(inputToSat);
+    original = ext->restoreArrayITEs(original);
+  }
   const bool extActive = ext != NULL && ext->active();
+  // Releases the registry seal on every exit from this function, so
+  // that terms built between solves are ordinary again.
+  ExtensionalityContext::SolveScope extScope(extActive ? ext : NULL);
   if (extActive)
   {
-    ext->beginSolve();
     inputToSat = ext->conjoinRecordConstraints(inputToSat);
     if (bm->UserFlags.ackermannisation)
     {
@@ -841,7 +859,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     bm->print_stats();
 
   // If it doesn't contain array operations, use ABC's CNF generation.
-  res = Ctr_Example->CallSAT_ResultCheck(NewSolver, inputToSat, original_input,
+  res = Ctr_Example->CallSAT_ResultCheck(NewSolver, inputToSat, original,
                                          satBase, maybeRefinement);
 
   if (bm->soft_timeout_expired)
@@ -869,9 +887,11 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   // Combined refinement driver (the loop of the lemmas-on-demand
   // procedure, paper section 6, interleaved with STP's own read
-  // refinement). A pending array-equality lemma is installed first,
-  // one per iteration; otherwise ordinary read refinement runs for the
-  // arrays the array-equality procedure does not own. Progress stalls
+  // refinement). Pending array-equality lemmas are installed first --
+  // the whole batch the consistency check found, since one pass
+  // typically exposes many independent conflicts and each costs a
+  // solve-from-scratch if held back; otherwise ordinary read refinement
+  // runs for the arrays the array-equality procedure does not own. Progress stalls
   // only when the ordinary path had nothing to add and no lemma is
   // pending -- that is a solver bug.
   while (true)
@@ -879,14 +899,14 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     const bool tookLemmaPath = extActive && ext->hasPendingLemma();
     if (tookLemmaPath)
     {
-      ext->encodePendingLemma(NewSolver, satBase);
+      ext->encodePendingLemmas(NewSolver, satBase);
       res = Ctr_Example->CallSAT_ResultCheck(NewSolver, bm->ASTTrue,
-                                             original_input, satBase, true);
+                                             original, satBase, true);
     }
     else
     {
       res = Ctr_Example->SATBased_ArrayReadRefinement(NewSolver,
-                                                      original_input, satBase);
+                                                      original, satBase);
     }
 
     if (SOLVER_UNDECIDED != res)
@@ -909,7 +929,29 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     }
 
     if (!tookLemmaPath && !(extActive && ext->hasPendingLemma()))
-      break; // ordinary refinement made no progress and nothing pending
+    {
+      // Ordinary refinement made no progress and nothing is pending.
+      // With array equality that is not necessarily a solver bug: a
+      // candidate whose scalar names disagreed with their terms is
+      // neither certifiable nor refutable by an array lemma, so it is
+      // handed to the host's read refinement -- which owns the missing
+      // read-congruence axiom but is not guaranteed to find one to
+      // add. When that happens the solve has genuinely run out of
+      // moves without deciding anything, which is an incompleteness to
+      // report, not an invariant to abort on.
+      if (extActive && ext->sawNameDivergence())
+      {
+        cerr << "Warning: array-equality refinement could not decide this "
+                "query: a candidate model was rejected because a scalar "
+                "name disagreed with the term it stands for, and read "
+                "refinement had no axiom left to add."
+             << endl;
+        if (toSATAIG.cbIsDestructed())
+          cleaner.release();
+        return SOLVER_TIMEOUT;
+      }
+      break;
+    }
   }
 
   FatalError("TopLevelSTPAux: reached the end without proper conclusion:"

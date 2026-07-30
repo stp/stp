@@ -98,6 +98,21 @@ for each abstracted candidate formula:
    writes that shadow it. Such an equality contributes nothing to the
    refinement loop at all.
 
+   Array-valued ``ite(c, a, b)`` goes through the same funnel and is
+   replaced, where it is built, by a fresh array ``d`` registered with
+   the two guarded equalities ``c → d = a`` and ``¬c → d = b`` (paper
+   §4.1). So no array if-then-else ever reaches STP's simplifier
+   either, and the two guards are ordinary registry content, conjoined
+   with the witness bundles on every solve. Eliminating it later would
+   mean reconstructing it after preprocessing has pushed reads through
+   it and rewritten its condition, keyed on a node that rewriting can
+   change — which loses the definition when the reconstruction matches
+   and leaks a fresh replacement per solve when it does not. The cost
+   of deciding this early is that a condition later found to be
+   constant no longer lets the if-then-else fold away: such a query
+   pays two records it would not otherwise need, measured at roughly
+   2.4x the CNF of the classic encoding on nested array if-then-else.
+
 2. **Solve-time preparation.** Each registered equality ``a = b``
    carries a fresh *witness index* λ and two *virtual reads* ``a[λ]``,
    ``b[λ]``, with the constraint ``a = b ∨ a[λ] ≠ b[λ]``: if the SAT
@@ -105,19 +120,21 @@ for each abstracted candidate formula:
    at λ (axiom A4′, the paper's preprocessing step 1). These are
    conjoined onto the formula before STP's ordinary simplification,
    and the equality operands are recovered from them afterwards in
-   their simplified form. Array-valued ``ite(c, a, b)`` connected to
-   an equality is replaced by a fresh array ``d`` with ``c → d = a``
-   and ``¬c → d = b`` (paper §4.1). Every index and value that could
-   appear in a future lemma is given a named variable inside the
-   initial formula, so refinement lemmas can later be encoded over SAT
-   variables that already exist.
+   their simplified form — always as a plain read of an array term,
+   since there is no array if-then-else left for a read to be pushed
+   through. Every index and value that could appear in a future lemma
+   is given a named variable inside the initial formula, so refinement
+   lemmas can later be encoded over SAT variables that already exist.
 
    These two stages realize the transformations of the paper's §4,
    §4.1 and §5 in an STP-specific order: the paper presents array-ITE
    elimination and witness preprocessing *before* formula abstraction,
-   while STP mints equality proxies and witness records eagerly at
-   construction, then recovers and prepares their array operands
-   during the solve.
+   while STP applies both arms of the abstraction at construction —
+   equality proxies, if-then-else replacements and witness records —
+   and then recovers and prepares their array operands during the
+   solve. Recovery has to be late because preprocessing rewrites write
+   chains; replacement has to be early because preprocessing dismantles
+   if-then-else structure.
 
 3. **Consistency checking** (paper §7, ``lib/Extensionality/``). When
    the SAT solver produces a satisfying assignment σ, a pure checker
