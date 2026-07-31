@@ -557,3 +557,49 @@ TEST(fp_array_extensionality, float_cell_negated_under_chain_equality_sat)
 
   vc_Destroy(vc);
 }
+
+// A RoundingMode *symbol* that occurs nowhere but inside an array equality's
+// operands.
+//
+// Declaring a mode pins its 5-bit carrier to the five one-hot encodings by
+// asserting the constraint, and an assertion belongs to the level current at
+// the time while the hash-consed symbol does not -- so building the mode in a
+// vc_push/vc_pop bracket leaves it alive and unpinned. FpTotalise re-pins
+// every mode the input formula names, which covers that; but an array
+// equality's operands are abstracted out of the input formula when the
+// equality is built, and the anchors put them back only after that pass has
+// run. A mode reachable only through them is one it never sees.
+//
+// So this is the single place the mode can be pinned at all: the totalisation
+// FpTotalise::topLevelTerm does over the recorded operands. Without it `r` is
+// free to take one of the carrier's 27 junk patterns, #b00011 among them, and
+// STP answers sat to an unsatisfiable query.
+//
+// The equality forces (select B #b00) == r, and B's cell is fixed to a
+// pattern that is not a mode, so a pinned `r` makes this unsat.
+TEST(fp_array_extensionality, rm_symbol_only_in_operands_stays_pinned)
+{
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x'); // must precede creation of any term
+
+  Type arr = vc_arrayType(vc, vc_bvType(vc, 2), vc_bvType(vc, 5));
+  Expr a = vc_varExpr(vc, "a", arr);
+  Expr b = vc_varExpr(vc, "b", arr);
+  Expr i0 = vc_bvConstExprFromLL(vc, 2, 0);
+  Expr notAMode = vc_bvConstExprFromLL(vc, 5, 3); // #b00011: no mode's encoding
+
+  // The bracket: `r`'s declaration constraint is asserted here and dies with
+  // the level. The equality is *built* here too, which is when its operands
+  // are recorded and totalised.
+  vc_push(vc);
+  Expr r = vc_fpRoundingModeVar(vc, "r");
+  Expr eq = vc_eqExpr(vc, vc_writeExpr(vc, a, i0, r), b);
+  vc_pop(vc);
+
+  vc_assertFormula(vc, eq);
+  vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, b, i0), notAMode));
+
+  EXPECT_EQ(1, vc_query(vc, vc_falseExpr(vc))); // 1 == VALID == unsatisfiable
+
+  vc_Destroy(vc);
+}
