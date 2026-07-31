@@ -452,6 +452,10 @@ void Cpp_interface::addRoundingModeSymbol(ASTNode& s)
 // 32. Pin a declared RoundingMode symbol to the five one-hot encodings.
 // Asserted (rather than built into the blaster) so that every route to a
 // query -- check-sat here, or a C-API query over a parsed file -- sees it.
+//
+// This is the pin for the level the symbol is declared at, not the guarantee:
+// an assertion belongs to a level and the symbol node does not, so FpTotalise
+// re-pins every mode the formula names at solve time. See its class comment.
 void Cpp_interface::assertRoundingModeValid(const ASTNode& s)
 {
   AddAssert(bm.roundingModeValidConstraint(s));

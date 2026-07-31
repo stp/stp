@@ -337,8 +337,11 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
   // anchors re-introduce them only after it ran. Totalise them now
   // instead: partial floating-point operations gain their
   // unspecified-choice children, float array indexes are canonicalised,
-  // and RoundingMode-element reads inside them are pinned to the five
-  // modes (rmReadClause below). Totalising here is safe exactly because
+  // and the rounding modes inside them -- declared symbols as much as
+  // RoundingMode-element reads -- are pinned to the five modes
+  // (rmReadClause below). A mode that occurs only here occurs nowhere the
+  // input-formula pass can reach, so this is its only pinning.
+  // Totalising here is safe exactly because
   // every caller reaches this at construction time, with operands the
   // pass has not touched: index canonicalisation is not structurally
   // idempotent, so a second application over an already-canonical index
@@ -347,7 +350,8 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
   ASTNode ta = a;
   ASTNode tb = b;
   ASTVec rmReads;
-  if (bm->has_floating_point || !bm->rm_element_arrays.empty())
+  if (bm->has_floating_point || !bm->rm_element_arrays.empty() ||
+      !bm->rounding_mode_symbols.empty())
   {
     FpTotalise totalise(bm);
     ta = totalise.topLevelTerm(a, rmReads);

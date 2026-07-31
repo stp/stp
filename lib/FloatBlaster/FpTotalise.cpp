@@ -37,10 +37,17 @@ ASTNode FpTotalise::topLevel(const ASTNode& n)
 {
   ASTNode out = visit(n);
 
-  // Pin every rounding-mode-element read in the final formula to the five
-  // legal encodings (see the class comment). The walk runs over the visited
-  // output so it also sees reads that visit() itself introduced or
-  // reshaped.
+  // Pin every rounding mode the final formula names -- declared symbols and
+  // rounding-mode-element reads alike -- to the five legal encodings (see the
+  // class comment). The walk runs over the visited output so it also sees
+  // reads that visit() itself introduced or reshaped.
+  //
+  // The symbols carry a constraint from their declaration too, but that one
+  // is asserted at whatever level was current then, and the node outlives the
+  // level: a symbol built inside a vc_push/vc_pop bracket comes out of it
+  // hash-consed and unpinned, and answers with a junk encoding. Re-pinning
+  // here is what makes the guarantee independent of the assertion stack; the
+  // repeat is a duplicate conjunct whenever the original survived.
   //
   // Formulas only: the pinning is a side condition conjoined onto the
   // result, and a term has nowhere to hold one. Model evaluation totalises
@@ -60,11 +67,12 @@ ASTNode FpTotalise::topLevel(const ASTNode& n)
   // combination is a sixth behaviour, in no standard, and a formula can tell
   // it from all five. Everything that introduces a rounding mode has to pin
   // it; nothing may rely on the junk encodings being equivalent to a mode.
-  if (n.GetType() == BOOLEAN_TYPE && !bm->rm_element_arrays.empty())
+  if (n.GetType() == BOOLEAN_TYPE &&
+      (!bm->rm_element_arrays.empty() || !bm->rounding_mode_symbols.empty()))
   {
     ASTNodeSet seen;
     ASTVec constraints;
-    collectRmElementReads(out, seen, constraints);
+    collectRoundingModeTerms(out, seen, constraints);
     if (!constraints.empty())
     {
       constraints.push_back(out);
@@ -79,10 +87,15 @@ ASTNode FpTotalise::topLevelTerm(const ASTNode& term, ASTVec& sideConstraints)
 {
   ASTNode out = visit(term);
 
-  if (!bm->rm_element_arrays.empty())
+  // Declared symbols as well as rounding-mode-element reads, for the reason
+  // topLevel gives -- and with more force here. A term reaching this function
+  // is on its way *out* of the input formula (see ExtensionalityContext), so
+  // topLevel will never run over it: if a mode appears only inside an array
+  // equality's operands, this is the one place that can pin it at all.
+  if (!bm->rm_element_arrays.empty() || !bm->rounding_mode_symbols.empty())
   {
     ASTNodeSet seen;
-    collectRmElementReads(out, seen, sideConstraints);
+    collectRoundingModeTerms(out, seen, sideConstraints);
   }
 
   return out;
@@ -119,19 +132,27 @@ ASTNode FpTotalise::canonicalIndex(const ASTNode& index, unsigned int exp_width,
   return FloatBlaster::canonicalBits(bm, index);
 }
 
-void FpTotalise::collectRmElementReads(const ASTNode& n, ASTNodeSet& seen,
-                                       ASTVec& constraints)
+void FpTotalise::collectRoundingModeTerms(const ASTNode& n, ASTNodeSet& seen,
+                                          ASTVec& constraints)
 {
-  if (n.Degree() == 0)
-    return;
   if (!seen.insert(n).second)
     return;
+
+  // Leaves are visited now, where they were skipped before: a declared
+  // RoundingMode symbol is a leaf, and it is exactly as much in need of
+  // pinning as a read is.
+  if (n.GetKind() == SYMBOL)
+  {
+    if (bm->isRoundingModeSymbol(n))
+      constraints.push_back(bm->roundingModeValidConstraint(n));
+    return;
+  }
 
   if (n.GetKind() == READ && bm->arrayHasRmElement(n[0]))
     constraints.push_back(bm->roundingModeValidConstraint(n));
 
   for (size_t i = 0; i < n.Degree(); i++)
-    collectRmElementReads(n[i], seen, constraints);
+    collectRoundingModeTerms(n[i], seen, constraints);
 }
 
 ASTNode FpTotalise::rebuild(const ASTNode& n, const ASTVec& children)

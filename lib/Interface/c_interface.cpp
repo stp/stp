@@ -981,6 +981,11 @@ Expr vc_varExpr(VC vc, const char* name, Type type)
   // 5-bit carrier to the one-hot encodings (asserted at the current
   // assertion level) and register the symbol so counterexamples print its
   // value by mode name -- exactly as the parser declares one.
+  //
+  // The assertion is the pin for this level, not the guarantee. vc_pop drops
+  // a level's assertions and the symbol node survives it hash-consed, so what
+  // actually holds the mode to five values is FpTotalise re-pinning every one
+  // the formula names at solve time.
   if (typeNode->GetKind() == stp::ROUNDINGMODE)
   {
     b->rounding_mode_symbols.insert(o);

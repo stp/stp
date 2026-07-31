@@ -119,6 +119,42 @@ TEST(FPPrintBack, sorts_the_node_cannot_state)
               "(declare-fun |bv| () (_ BitVec 5))"});
 }
 
+// Which of a term's 5-bit bitvectors are rounding modes. Shape cannot answer
+// it in either direction, so the printer goes by the operand position.
+//
+// A false positive loses a model silently: the to_fp family converts from a
+// bitvector of any width, so `unsigned`/`signed` below look exactly like the
+// mode beside them. Declaring one RoundingMode still re-parses -- and pins it
+// to five encodings where the input allowed thirty-two.
+//
+// A false negative is loud: a mode reached through an ite is not itself a
+// child of the operation, so `hidden` printed as (_ BitVec 5) and the printed
+// form stopped parsing at "expected a rounding mode".
+TEST(FPPrintBack, which_five_bit_bitvectors_are_modes)
+{
+  roundTrips(R"(
+    (set-logic QF_ABVFP)
+    (declare-const c Bool)
+    (declare-const x (_ FloatingPoint 8 24))
+    (declare-const hidden RoundingMode)
+    (declare-const unsigned (_ BitVec 5))
+    (declare-const signed (_ BitVec 5))
+    (declare-const modes (Array (_ BitVec 2) RoundingMode))
+    (assert (fp.isNormal (fp.div (ite c RTZ hidden) x x)))
+    (assert (fp.isNormal (fp.add (ite c (select modes #b01) RTP) x x)))
+    (assert (fp.isNormal ((_ to_fp_unsigned 8 24) RNE unsigned)))
+    (assert (fp.isNormal ((_ to_fp 8 24) RNE signed)))
+  )",
+             {// Reached only through an ite, and still a mode.
+              "(declare-fun |hidden| () RoundingMode)",
+              // An ite over a read makes the array's elements modes.
+              "(declare-fun |modes| () (Array (_ BitVec 2) RoundingMode ))",
+              // Five bits, inside a floating-point operation, and not modes:
+              // they are what to_fp converts *from*.
+              "(declare-fun |unsigned| () (_ BitVec 5))",
+              "(declare-fun |signed| () (_ BitVec 5))"});
+}
+
 TEST(FPPrintBack, arithmetic_and_modes)
 {
   roundTrips(R"(
