@@ -1644,6 +1644,59 @@ TEST_F(ExtPrepareTest, UnanticipatedConeSymbolFailsLoudly)
                "entered the cone that was not anticipated");
 }
 
+// An array reachable ONLY as the far branch of an array if-then-else
+// above an equality operand. Reduced from a murxla find:
+//
+//   (assert (bvuge x (select (ite (distinct b z') b a) x)))
+//
+// where the only equality is over b and z'. The cone seeds at the
+// operands, closes UPWARD onto the if-then-else that has b as a branch,
+// and then DOWNWARD into its other branch -- reaching a, which no
+// equality operand mentions.
+//
+// possibleConeSymbols is collected from the operands as they are built,
+// so it never saw a. Its reads were therefore not protected from the
+// read-equals-constant substitution, and the guard that checks the
+// containment aborted the solve. It aborted correctly: the alternative
+// is certifying a candidate against array contents the substitution had
+// already deleted.
+//
+// The stale half of the reasoning was "array if-then-elses, which no
+// longer exist" -- true only while they were rewritten away before the
+// cone was computed. Nothing can be anticipated at construction here,
+// because the if-then-else sits ABOVE the operand and need not exist
+// when the equality is built; in the query above it cannot, since the
+// equality is its own condition.
+TEST_F(ExtPrepareTest, ArrayReachableOnlyThroughAnIteBranchIsAnticipated)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b"), z = arr("z");
+  ASTNode i = bv("i");
+
+  // The equality is over b and z. Its own proxy is the if-then-else
+  // condition, so the if-then-else cannot exist before the equality.
+  ASTNode proxy = ext->makeEquality(b, z);
+  ASSERT_EQ(1u, ext->getRecords().size());
+  EXPECT_FALSE(ext->mayBeConeArray(a));
+
+  ASTNode ite = hf->CreateArrayTerm(ITE, 2, 2, {hf->CreateNode(NOT, proxy), b, a});
+  ASTNode read = hf->CreateTerm(READ, 2, ite, i);
+
+  ext->beginSolve();
+  ASTNode root = ext->conjoinRecordConstraints(
+      hf->CreateNode(EQ, read, mgr.CreateZeroConst(2)));
+
+  // Anticipated by the time any pass could delete a read over it.
+  EXPECT_TRUE(ext->mayBeConeArray(a));
+
+  // And it really does enter the cone, so the anticipation is needed
+  // rather than merely defensive.
+  ext->prepare(root);
+  EXPECT_TRUE(ext->inCone(a));
+  EXPECT_TRUE(ext->inCone(b));
+  EXPECT_TRUE(ext->inCone(ite));
+}
+
 // The decision table combining STP's own model evaluation with the
 // array consistency check: an array conflict always takes priority
 // (only its lemma can rule the candidate out), and a candidate is
