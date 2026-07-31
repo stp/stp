@@ -256,6 +256,17 @@ void guardsToAtoms(const std::vector<ExtGuard>& guards, bool abstractLayer,
       a.b = abstractLayer ? g.absB : g.theoryB;
       a.eqRecord = 0;
     }
+    else if (g.kind == ExtGuard::ITE_COND)
+    {
+      // The condition with the polarity sigma gave it. Unlike an array
+      // equality, an if-then-else guard can be either way round: both
+      // branches are selectable, and the rule fired on whichever one
+      // sigma selected.
+      a.op = g.condPositive ? ExtLemmaAtom::BOOL_LIT
+                            : ExtLemmaAtom::BOOL_LIT_NEG;
+      a.boolTerm = abstractLayer ? g.condName : g.condTerm;
+      a.eqRecord = 0;
+    }
     else if (abstractLayer)
     {
       a.op = ExtLemmaAtom::BOOL_LIT;
@@ -289,6 +300,8 @@ void validateAbstractLemma(const ExtConflict& c, ExtModelView& model)
       holds = model.bvValue(a.a) != model.bvValue(a.b);
     else if (a.op == ExtLemmaAtom::BOOL_LIT)
       holds = model.boolValue(a.boolTerm);
+    else if (a.op == ExtLemmaAtom::BOOL_LIT_NEG)
+      holds = !model.boolValue(a.boolTerm);
     else
       holds = false; // ARRAY_EQ can't appear in the abstract lemma
     if (!holds)
@@ -474,6 +487,65 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
           std::vector<ExtGuard> chi2 = sourcePath.guards;
           chi2.push_back(g);
           st.insert(destination, accessId, chi2, rule, source);
+        }
+      }
+    }
+
+    // Rules T-down and T-up: propagate across an array-valued
+    // if-then-else, in both directions, between it and whichever branch
+    // sigma selects. These are R and L with the equality proxy replaced
+    // by the condition literal and the destination chosen by sigma
+    // rather than fixed by the edge. Exactly one of the two branches is
+    // live per candidate, so unlike an equality there is no proxy left
+    // over for the solver to guess.
+    //
+    // The condition is read through its reified name, never re-evaluated
+    // from the counterexample: the value the rule branches on has to be
+    // the one the bit-blasted circuit took, or the wrong edge is live
+    // and a conflict-free fixed point certifies a model that does not
+    // satisfy the if-then-else axiom.
+    {
+      // T-down: source is the if-then-else, destination its branch.
+      std::map<ASTNode, ExtIteNode>::const_iterator dit =
+          graph.ites.find(source);
+      if (dit != graph.ites.end())
+      {
+        const ExtIteNode& t = dit->second;
+        const bool cond = model.boolValue(t.condName);
+        ExtGuard g;
+        g.kind = ExtGuard::ITE_COND;
+        g.condTerm = t.condTerm;
+        g.condName = t.condName;
+        g.condPositive = cond;
+        std::vector<ExtGuard> chi2 = sourcePath.guards;
+        chi2.push_back(g);
+        st.insert(cond ? t.thn : t.els, accessId, chi2, "T_DOWN", source);
+      }
+
+      // T-up: source is a branch, destination every if-then-else that
+      // selects it.
+      std::map<ASTNode, std::vector<ASTNode>>::const_iterator uit =
+          graph.iteParents.find(source);
+      if (uit != graph.iteParents.end())
+      {
+        const std::vector<ASTNode>& above = uit->second;
+        for (size_t i = 0; i < above.size(); i++)
+        {
+          const ExtIteNode& t = graph.ites.find(above[i])->second;
+          const bool cond = model.boolValue(t.condName);
+          // Only from the selected branch. A branch can be both, in
+          // which case either polarity carries the access up and the
+          // first match is taken.
+          if (!((cond && t.thn == source) || (!cond && t.els == source)))
+            continue;
+          ExtGuard g;
+          g.kind = ExtGuard::ITE_COND;
+          g.condTerm = t.condTerm;
+          g.condName = t.condName;
+          g.condPositive = cond;
+          std::vector<ExtGuard> chi2 = sourcePath.guards;
+          chi2.push_back(g);
+          st.insert(t.ite, accessId, chi2, "T_UP", source);
         }
       }
     }

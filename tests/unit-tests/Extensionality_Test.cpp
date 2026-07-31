@@ -1166,93 +1166,88 @@ TEST_F(ExtPrepareTest, RecoversOperandsConeAndNames)
   EXPECT_TRUE(namedIdx);
 }
 
-TEST_F(ExtPrepareTest, ArrayIteIsEliminatedWhenTheRegistryIsConjoined)
+TEST_F(ExtPrepareTest, ArrayIteIsKeptAndReasonedAboutDirectly)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
   ASTNode a = arr("a"), b = arr("b"), d = arr("d");
   ASTNode c = mgr.CreateSymbol("c", 0, 0);
 
   // Building an array-valued if-then-else builds one, and moves no
-  // solver state: at this point nobody can know whether the decision
-  // procedure will run at all, so there is nothing to decide yet.
+  // solver state.
   ASTNode ite = hf->CreateArrayTerm(ITE, 2, 2, {c, a, b});
   EXPECT_EQ(ITE, ite.GetKind());
   EXPECT_EQ(0u, ext->getRecords().size());
 
-  // An equality over it is one ordinary record. Its operand is the
-  // if-then-else, so it is the anchor equations that mention it, not
-  // the user's formula -- which is why the elimination has to run on
-  // the conjunction rather than on the input alone.
+  // An equality over it is one ordinary record -- and stays the only
+  // one. Section 4.1's rewriting would have charged a second array
+  // variable and two more equality records here, each with a witness
+  // index and two virtual reads; direct integration charges one
+  // reified Boolean.
   ASTNode proxy = ext->makeEquality(ite, d);
   ASSERT_EQ(1u, ext->getRecords().size());
 
-  // Conjoining the registry's constraints is where section 4.1 runs.
   ext->beginSolve();
   ext->prepare(ext->conjoinRecordConstraints(proxy));
-  ASSERT_EQ(3u, ext->getRecords().size()); // the user's, plus two guards
+  EXPECT_EQ(1u, ext->getRecords().size());
+
+  // The if-then-else is in the cone as itself, with both branches
+  // reachable through it -- that is what rules T-down and T-up walk.
+  EXPECT_TRUE(ext->inCone(ite));
   EXPECT_TRUE(ext->inCone(a));
   EXPECT_TRUE(ext->inCone(b));
 
-  // The operand the user's equality now stands over is the replacement:
-  // a fresh array symbol of the same sort, in the cone.
+  // The operand recovered for the user's equality is the if-then-else,
+  // not a stand-in for it.
   const ExtensionalityContext::Record& r = ext->getRecords()[0];
-  const ASTNode repl =
+  const ASTNode operand =
       (r.canonicalLeft == d) ? r.canonicalRight : r.canonicalLeft;
-  EXPECT_EQ(SYMBOL, repl.GetKind());
-  EXPECT_EQ(2u, repl.GetIndexWidth());
-  EXPECT_EQ(2u, repl.GetValueWidth());
-  EXPECT_TRUE(ext->inCone(repl));
+  EXPECT_EQ(ite, operand);
 
-  // A second solve reuses the replacement and its two records instead
-  // of minting a generation per solve. The lookup can be trusted
-  // because it is keyed on the if-then-else the caller built, and the
-  // elimination runs before any pass that could rewrite it.
+  // A second solve moves nothing.
   ext->beginSolve();
   ext->prepare(ext->conjoinRecordConstraints(proxy));
-  EXPECT_EQ(3u, ext->getRecords().size());
+  EXPECT_EQ(1u, ext->getRecords().size());
 }
 
-TEST_F(ExtPrepareTest, NoArrayIteReachesPreprocessing)
+TEST_F(ExtPrepareTest, IteConditionIsReifiedAsAProtectedName)
 {
-  // The simplifier pushes a read through an array if-then-else, which
-  // would leave a witness anchor as ite(c, read(a,l), read(b,l)) for
-  // preparation to reconstruct the operand from -- and reconstructing
-  // an operand out of an already-rewritten formula is what lost the
-  // guards on a second solve and leaked a replacement per solve when
-  // the condition had been normalised.
+  // The checker decides which branch is live from sigma(condition). It
+  // must read the value the SAT solver assigned, not one re-derived
+  // from the counterexample: a name that disagrees with its term makes
+  // the wrong branch live and can certify a model that does not satisfy
+  // the if-then-else axiom. That is the failure class that produced a
+  // sat answer on an unsatisfiable query once already on this branch.
   //
-  // It cannot arise, and this is the reason: the formula handed on to
-  // preprocessing has no array if-then-else in it, so there is nothing
-  // for a read to be pushed through. Checked over the whole DAG, not
-  // just the anchors, since a survivor anywhere would reach the
-  // simplifier.
+  // So the condition gets a reified Boolean of its own, protected from
+  // substitution like every other name the procedure depends on, and
+  // bound to the condition by the naming constraints preparation
+  // conjoins. It is also what a lemma premise names, since encoding
+  // needs one fully encoded literal.
   NodeFactory* hf = mgr.hashingNodeFactory;
   ASTNode a = arr("a"), b = arr("b"), d = arr("d");
-  ASTNode c = mgr.CreateSymbol("c", 0, 0);
+  ASTNode x = bv("x"), y = bv("y");
+  // A compound condition, so the name cannot merely be the term.
+  ASTNode cond = hf->CreateNode(EQ, x, y);
+  ASTNode ite = hf->CreateArrayTerm(ITE, 2, 2, {cond, a, b});
 
-  ASTNode ite = hf->CreateArrayTerm(ITE, 2, 2, {c, a, b});
   ASTNode proxy = ext->makeEquality(ite, d);
-
   ext->beginSolve();
-  const ASTNode toPreprocess = ext->conjoinRecordConstraints(proxy);
+  ext->prepare(ext->conjoinRecordConstraints(proxy));
 
-  std::set<ASTNode> seen;
-  std::vector<ASTNode> todo(1, toPreprocess);
-  while (!todo.empty())
+  const std::map<ASTNode, ASTNode>& n2t = ext->getNameToTerm();
+  bool named = false;
+  for (std::map<ASTNode, ASTNode>::const_iterator it = n2t.begin();
+       it != n2t.end(); ++it)
   {
-    const ASTNode n = todo.back();
-    todo.pop_back();
-    if (!seen.insert(n).second)
-      continue;
-    EXPECT_FALSE(n.GetKind() == ITE && n.GetIndexWidth() > 0)
-        << "an array if-then-else survived into preprocessing";
-    for (unsigned k = 0; k < n.Degree(); k++)
-      todo.push_back(n[k]);
+    EXPECT_TRUE(ext->isProtected(it->first));
+    if (it->second == cond)
+    {
+      named = true;
+      EXPECT_EQ(SYMBOL, it->first.GetKind());
+      EXPECT_EQ(0u, it->first.GetValueWidth()); // Boolean
+    }
   }
-
-  ext->prepare(toPreprocess);
-  EXPECT_TRUE(ext->inCone(a));
-  EXPECT_TRUE(ext->inCone(b));
+  EXPECT_TRUE(named);
 }
 
 TEST_F(ExtPrepareTest, MissingAnchorFailsLoudly)

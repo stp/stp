@@ -399,21 +399,17 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
 
   // With array equality active, a read of an array inside the equality
   // cone always takes the direct read-abstraction path -- mint or reuse
-  // the fresh variable for the (array, index) pair -- whether the array
-  // is a variable or a write. Its write chain is never expanded into
-  // if-then-else here: the lemmas-on-demand consistency checker owns
-  // read-over-write reasoning for these arrays, and it needs the write
-  // structure and the abstraction variables intact.
+  // the fresh variable for the (array, index) pair -- whatever the array
+  // term is: variable, write, or if-then-else. Neither its write chain
+  // nor its if-then-else structure is expanded here. The lemmas-on-
+  // demand consistency checker owns read-over-write and read-over-
+  // if-then-else reasoning for these arrays (rules D/U and T-down/T-up),
+  // and it needs the structure and the abstraction variables intact.
   {
     ExtensionalityContext* ext = bm->getExtensionalityIfAny();
     if (ext != NULL && ext->active() && ext->coneFrozen() &&
         ext->inCone(arrName))
     {
-      if (ITE == arrName.GetKind())
-        FatalError("TransformArrayRead: an array-valued if-then-else "
-                   "survived inside the array-equality cone; it should "
-                   "have been eliminated during preparation",
-                   term);
       assert(!bm->UserFlags.ackermannisation);
 
       ArrType::const_iterator it;

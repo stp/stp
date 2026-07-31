@@ -98,8 +98,9 @@ for each abstracted candidate formula:
    writes that shadow it. Such an equality contributes nothing to the
    refinement loop at all.
 
-   Array-valued ``ite(c, a, b)`` is *not* handled here: it is built as
-   an ordinary node, and stage 2 eliminates it.
+   Array-valued ``ite(c, a, b)`` is *not* abstracted at all: it is
+   built as an ordinary node and stays one, and the consistency checker
+   reasons about it directly (see stage 3).
 
 2. **Solve-time preparation.** Each registered equality ``a = b``
    carries a fresh *witness index* λ and two *virtual reads* ``a[λ]``,
@@ -114,38 +115,26 @@ for each abstracted candidate formula:
    is given a named variable inside the initial formula, so refinement
    lemmas can later be encoded over SAT variables that already exist.
 
-   On that same conjunction, and still before any simplification, the
-   array-valued ``ite(c, a, b)`` that the equalities can reach are
-   eliminated (paper §4.1): each is replaced by a fresh array ``d``
-   guarded by ``c → d = a`` and ``¬c → d = b``, repeated to a fixed
-   point since those guards are abstracted like any other equality.
-   The guards are emitted by the same loop that substitutes the
-   replacement in, so a replacement cannot reach the formula without
-   its definition. Two things fix this position in the pipeline. It
-   must be late enough that the whole formula is known, because a
-   query with no array equality gains nothing from the replacement and
-   pays a great deal for it — each one leaves a proxy unconstrained
-   under any assignment of the condition, so the solver guesses and
-   the checker refutes, measured at 1023 SAT calls against 1 on a
-   depth-8 if-then-else DAG. And it must be early enough that
-   preprocessing has not yet pushed reads through the if-then-elses or
-   normalised their conditions, because eliminating afterwards means
-   reconstructing the node the replacement was keyed on out of a
-   formula that has already been rewritten. The cost of being early is
-   that a condition later found to be constant no longer lets the
-   if-then-else fold away: such a query pays two records it would not
-   otherwise need.
+   Every array-valued ``ite(c, a, b)`` the equalities can reach also
+   has its condition *reified*: a fresh Boolean symbol ``n_c`` with
+   ``n_c ↔ c``. The checker decides which branch of an if-then-else is
+   live from ``σ(n_c)``, and that has to be the value the bit-blasted
+   circuit took — re-deriving it from the counterexample is how a
+   scalar name comes to disagree with the term it stands for, and here
+   it would make the wrong branch live and certify a model that does
+   not satisfy the if-then-else axiom. The same symbol is what a lemma
+   premise names, since encoding needs one fully encoded literal per
+   Boolean atom. Reads are not distributed over these if-then-elses,
+   by the simplifier or by the array transformer: the structure and
+   its read-abstraction variables have to reach the checker intact.
 
-   These two stages realize the transformations of the paper's §4,
-   §4.1 and §5 in an STP-specific order: the paper presents array-ITE
-   elimination and witness preprocessing *before* formula abstraction,
-   while STP mints equality proxies and witness records eagerly at
-   construction, then eliminates the if-then-elses and prepares the
-   array operands during the solve. Abstraction has to be early so
-   that no array equality reaches the rest of STP; elimination and
-   recovery have to be late, the first because whether it is wanted
-   depends on the whole formula, the second because preprocessing
-   rewrites write chains.
+   These two stages realize the transformations of the paper's §4 and
+   §5 in an STP-specific order: the paper presents witness
+   preprocessing *before* formula abstraction, while STP mints
+   equality proxies and witness records eagerly at construction and
+   prepares the array operands during the solve. Abstraction has to be
+   early so that no array equality reaches the rest of STP; recovery
+   has to be late because preprocessing rewrites write chains.
 
 3. **Consistency checking** (paper §7, ``lib/Extensionality/``). When
    the SAT solver produces a satisfying assignment σ, a pure checker
@@ -154,10 +143,41 @@ for each abstracted candidate formula:
    of themselves per §11.4, so write congruence needs no extra
    constraints), then propagates accesses to a fixed point: down
    through and up over writes whose index differs from the access
-   index under σ (rules *D*/*U*, axiom A3), and across array equalities
-   that σ makes true (rules *R*/*L*). Two accesses meeting at one array
+   index under σ (rules *D*/*U*, axiom A3), across array equalities
+   that σ makes true (rules *R*/*L*), and between an array-valued
+   if-then-else and whichever branch σ selects (rules *T-down*/*T-up*).
+   Two accesses meeting at one array
    with equal concrete indices but different values violate read
-   congruence (rule *C*, axiom A1). Per §11.2 the checker keeps one
+   congruence (rule *C*, axiom A1).
+
+   The *T* rules are the direct integration §4.1 mentions but declines
+   to present ("in principle, our approach supports a direct
+   integration of if-then-else on terms of sort Array without rewriting
+   it up front"). They are *R*/*L* with the equality proxy replaced by
+   the condition literal and the destination chosen by σ rather than
+   fixed by the edge, and their soundness case is Lemma 8.1's *R* case
+   with axiom A4 replaced by the if-then-else axiom. The model
+   construction of §9 needs one new obligation, the analogue of
+   Proposition 9.4 — and only its *positive* half, because the
+   if-then-else axiom is a pair of implications rather than a
+   biconditional: nothing ever requires an if-then-else to *differ*
+   from a branch, so no witness index and no virtual reads are needed
+   for one. Exactly one branch is live per candidate, so unlike an
+   array equality there is no proxy left unconstrained for the SAT
+   solver to guess and the checker to refute.
+
+   The alternative §4.1 does present — rewriting ``ite(c,a,b)`` up
+   front into a fresh array ``d`` with ``c → d = a`` and ``¬c → d = b``
+   — is what this replaced. It charges two array equalities, two
+   witness indices and four virtual reads per if-then-else where the
+   direct rules charge one Boolean literal, so it is worse on the
+   paper's own bound (Proposition 10.1), and each of its two proxies is
+   unconstrained under one of the two assignments of the condition. On
+   nested array if-then-else under an equality that cost 9.35s at
+   nesting depth 32 against 0.02s here, and it grew with depth where
+   the direct rules are flat.
+
+   Per §11.2 the checker keeps one
    representative access per concrete index of each array, hashed by
    index value: congruence is a single probe, and an access arriving
    with the same index and value as its representative is dropped
@@ -169,6 +189,7 @@ for each abstracted candidate formula:
 
       index(x) = index(y) ∧ ⋀ path write-index disequalities
                           ∧ ⋀ crossed array equalities
+                          ∧ ⋀ crossed if-then-else conditions
         →  value(x) = value(y)
 
    which is false in the candidate σ. Both propagation paths are

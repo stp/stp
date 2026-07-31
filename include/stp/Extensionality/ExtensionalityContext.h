@@ -411,21 +411,6 @@ private:
   std::set<ASTNode> lemmaOnlySymbols; // per-solve; see the accessor
   std::set<ASTNode> possibleConeSymbols;
 
-  // Replacements for array-valued if-then-else (paper section 4.1):
-  // the if-then-else node -> its fresh array. Kept across solves so a
-  // repeated solve of the same query reuses the array -- and, through
-  // the registry's operand-pair dedup, the same two guarded equality
-  // records -- instead of minting a generation per solve.
-  //
-  // The key is safe because of WHEN the elimination runs. It walks the
-  // assertions as they were built, before STP has rewritten anything,
-  // so the node it keys on is the one the parser produced; no pass has
-  // had the chance to normalise the condition out from under the
-  // lookup. The guards are not cached with it: the same loop that
-  // substitutes a replacement in emits them, every solve, so a
-  // replacement cannot reach the formula without its definition.
-  std::map<ASTNode, ASTNode> iteReplacements;
-
   // Set once a solve has taken its copy of the registry's constraints.
   // Minting a record after that point would leave it active with
   // nothing in the formula defining it, so refuse loudly rather than
@@ -437,6 +422,8 @@ private:
   std::set<ASTNode> coneArrays;
   std::map<ASTNode, ExtWriteNode> coneWrites; // write node -> info
   std::map<ASTNode, std::vector<ASTNode>> coneWriteParents;
+  std::map<ASTNode, ExtIteNode> coneItes; // ite node -> info
+  std::map<ASTNode, std::vector<ASTNode>> coneIteParents;
   std::vector<ExtEqEdge> eqEdges;
   std::map<ASTNode, std::vector<size_t>> eqAdjacency;
   std::vector<ExtWitness> witnessObls;
@@ -475,14 +462,13 @@ private:
   bool namesAgreeWithCandidate(ExtModelView& view) const;
   void collectPossibleConeSymbols(const ASTNode& n);
   ASTNode freshName(const ASTNode& term, ASTVec& namingConstraints);
-  // Section 4.1; see conjoinRecordConstraints, which is its only
-  // caller. Restricted to the cone because an if-then-else no equality
-  // can reach is none of this procedure's business: STP's own array
-  // machinery decides it, better and more cheaply.
-  ASTNode eliminateArrayITEs(const ASTNode& root);
-  // The cone closure, seeded from the operands the caller supplies:
-  // the elimination above seeds from the operands as they were BUILT,
-  // preparation from the ones it recovered after simplification.
+  // The Boolean analogue of freshName, for an if-then-else condition:
+  // a fresh symbol constrained equivalent to the condition, so that the
+  // checker branches on a value the SAT solver assigned rather than one
+  // re-derived from the counterexample, and so that a lemma premise has
+  // one encoded literal to name.
+  ASTNode conditionName(const ASTNode& cond, ASTVec& namingConstraints);
+  // The cone closure, seeded from the operands the caller supplies.
   void computeProvisionalCone(const ASTNode& root, const ASTVec& seeds,
                               std::set<ASTNode>& cone,
                               std::map<ASTNode, std::vector<ASTNode>>& parents,
