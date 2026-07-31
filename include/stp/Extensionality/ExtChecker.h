@@ -120,15 +120,20 @@ struct ExtAccess
 // One condition collected along an access's propagation path, and later
 // contributed to the lemma premise. Rules D and U contribute an
 // index disequality (the access index differs from the write index
-// stepped over); rules R and L contribute the array equality crossed.
+// stepped over); rules R and L contribute the array equality crossed;
+// rules T-down and T-up contribute the if-then-else condition under
+// which the branch they stepped over is the selected one.
 // Array equalities only ever appear positively in lemmas: R/L fire
-// only when sigma assigns the equality true (paper section 10.2).
+// only when sigma assigns the equality true (paper section 10.2). An
+// if-then-else condition appears with the polarity sigma gave it,
+// because both of its branches are selectable.
 struct ExtGuard
 {
   enum Kind
   {
     INDEX_NE,
-    EQ_PROXY
+    EQ_PROXY,
+    ITE_COND
   };
   Kind kind;
 
@@ -142,6 +147,30 @@ struct ExtGuard
   ASTNode proxy;
   ASTNode eqLeft, eqRight;
   size_t eqRecord;
+
+  // ITE_COND: theory, the condition term as the user wrote it;
+  // abstract, the reified Boolean naming it. condPositive is the value
+  // sigma gave the condition, which is the polarity the guard carries.
+  ASTNode condTerm;
+  ASTNode condName;
+  bool condPositive;
+};
+
+// A cone array-valued if-then-else, kept as a term rather than
+// eliminated (paper section 4.1 declines to do this "to simplify our
+// presentation"; the direct integration it mentions is what this is).
+// condName reifies the condition as a Boolean symbol, so that the
+// value the checker reads is the one the SAT solver assigned rather
+// than something re-evaluated from the counterexample -- the failure
+// class that made a scalar name disagree with its term -- and so that
+// a lemma premise has a single encoded literal to name.
+struct ExtIteNode
+{
+  ASTNode ite;
+  ASTNode condTerm;
+  ASTNode condName;
+  ASTNode thn;
+  ASTNode els;
 };
 
 struct ExtEqEdge
@@ -198,6 +227,11 @@ struct ExtGraph
   // L_EQ, so each array's equality edges fire in a fixed order.
   std::map<ASTNode, std::vector<size_t>> eqAdjacency;
 
+  std::map<ASTNode, ExtIteNode> ites;                 // ite node -> info
+  std::map<ASTNode, std::vector<ASTNode>> iteParents; // branch -> ites
+                                                      // (each sorted by
+                                                      // node number)
+
   std::vector<ExtWitness> witnesses; // sorted by record id
 };
 
@@ -219,7 +253,8 @@ public:
 // order). BV_EQ/BV_NE carry the
 // operand pair for the layer (abstract: scalar names; theory: original
 // terms). ARRAY_EQ appears only in the theory lemma; BOOL_LIT (a
-// positive proxy) only in the abstract lemma.
+// positive proxy, or a positively-taken if-then-else condition) and
+// BOOL_LIT_NEG (a negatively-taken one) only in the abstract lemma.
 struct ExtLemmaAtom
 {
   enum Op
@@ -227,7 +262,8 @@ struct ExtLemmaAtom
     BV_EQ = 0,
     BV_NE = 1,
     ARRAY_EQ = 2,
-    BOOL_LIT = 4
+    BOOL_LIT = 4,
+    BOOL_LIT_NEG = 5
   };
   Op op;
   ASTNode a, b;     // BV_EQ / BV_NE operands, or ARRAY_EQ array operands

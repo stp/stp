@@ -1166,84 +1166,88 @@ TEST_F(ExtPrepareTest, RecoversOperandsConeAndNames)
   EXPECT_TRUE(namedIdx);
 }
 
-TEST_F(ExtPrepareTest, ArrayIteIsReplacedWhenItIsBuilt)
+TEST_F(ExtPrepareTest, ArrayIteIsKeptAndReasonedAboutDirectly)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
   ASTNode a = arr("a"), b = arr("b"), d = arr("d");
   ASTNode c = mgr.CreateSymbol("c", 0, 0);
 
-  // Asking for an array-valued if-then-else does not produce one: the
-  // node factory funnels it to makeArrayITE, which hands back a fresh
-  // array defined by two guarded equalities (paper section 4.1).
-  ASTNode repl = hf->CreateArrayTerm(ITE, 2, 2, {c, a, b});
-  EXPECT_EQ(SYMBOL, repl.GetKind());
-  EXPECT_EQ(2u, repl.GetIndexWidth());
-  EXPECT_EQ(2u, repl.GetValueWidth());
-  ASSERT_EQ(2u, ext->getRecords().size());
+  // Building an array-valued if-then-else builds one, and moves no
+  // solver state.
+  ASTNode ite = hf->CreateArrayTerm(ITE, 2, 2, {c, a, b});
+  EXPECT_EQ(ITE, ite.GetKind());
+  EXPECT_EQ(0u, ext->getRecords().size());
 
-  // The same triple reuses it -- keyed on what the caller passed, which
-  // exists nowhere downstream and so can never be rewritten.
-  EXPECT_EQ(repl, hf->CreateArrayTerm(ITE, 2, 2, {c, a, b}));
-  EXPECT_EQ(2u, ext->getRecords().size());
-
-  // Degenerate shapes never reach the registry at all.
-  EXPECT_EQ(a, hf->CreateArrayTerm(ITE, 2, 2, {c, a, a}));
-  EXPECT_EQ(a, hf->CreateArrayTerm(ITE, 2, 2, {mgr.ASTTrue, a, b}));
-  EXPECT_EQ(b, hf->CreateArrayTerm(ITE, 2, 2, {mgr.ASTFalse, a, b}));
-  EXPECT_EQ(2u, ext->getRecords().size());
-
-  // An equality over the replacement is an ordinary record, and
-  // preparation has no if-then-else left to do anything about.
-  ASTNode proxy = ext->makeEquality(repl, d);
-  ASSERT_EQ(3u, ext->getRecords().size());
+  // An equality over it is one ordinary record -- and stays the only
+  // one. Section 4.1's rewriting would have charged a second array
+  // variable and two more equality records here, each with a witness
+  // index and two virtual reads; direct integration charges one
+  // reified Boolean.
+  ASTNode proxy = ext->makeEquality(ite, d);
+  ASSERT_EQ(1u, ext->getRecords().size());
 
   ext->beginSolve();
   ext->prepare(ext->conjoinRecordConstraints(proxy));
-  EXPECT_EQ(3u, ext->getRecords().size());
+  EXPECT_EQ(1u, ext->getRecords().size());
+
+  // The if-then-else is in the cone as itself, with both branches
+  // reachable through it -- that is what rules T-down and T-up walk.
+  EXPECT_TRUE(ext->inCone(ite));
   EXPECT_TRUE(ext->inCone(a));
   EXPECT_TRUE(ext->inCone(b));
-  EXPECT_TRUE(ext->inCone(repl));
 
-  // And a second solve moves nothing.
+  // The operand recovered for the user's equality is the if-then-else,
+  // not a stand-in for it.
+  const ExtensionalityContext::Record& r = ext->getRecords()[0];
+  const ASTNode operand =
+      (r.canonicalLeft == d) ? r.canonicalRight : r.canonicalLeft;
+  EXPECT_EQ(ite, operand);
+
+  // A second solve moves nothing.
   ext->beginSolve();
   ext->prepare(ext->conjoinRecordConstraints(proxy));
-  EXPECT_EQ(3u, ext->getRecords().size());
+  EXPECT_EQ(1u, ext->getRecords().size());
 }
 
-TEST_F(ExtPrepareTest, NoAnchorCanBePushedThroughAnArrayIte)
+TEST_F(ExtPrepareTest, IteConditionIsReifiedAsAProtectedName)
 {
-  // The simplifier pushes a read through an array if-then-else, which
-  // used to leave a witness anchor as ite(c, read(a,l), read(b,l)) for
-  // preparation to reconstruct the operand from. Reconstructing from a
-  // rewritten formula is what lost the guards on a second solve and
-  // leaked a replacement per solve when the condition had been
-  // normalised. The shape is now unreachable: there is no array
-  // if-then-else for a read to be pushed through, so an anchor is
-  // always a plain read of an array term.
+  // The checker decides which branch is live from sigma(condition). It
+  // must read the value the SAT solver assigned, not one re-derived
+  // from the counterexample: a name that disagrees with its term makes
+  // the wrong branch live and can certify a model that does not satisfy
+  // the if-then-else axiom. That is the failure class that produced a
+  // sat answer on an unsatisfiable query once already on this branch.
+  //
+  // So the condition gets a reified Boolean of its own, protected from
+  // substitution like every other name the procedure depends on, and
+  // bound to the condition by the naming constraints preparation
+  // conjoins. It is also what a lemma premise names, since encoding
+  // needs one fully encoded literal.
   NodeFactory* hf = mgr.hashingNodeFactory;
   ASTNode a = arr("a"), b = arr("b"), d = arr("d");
-  ASTNode c = mgr.CreateSymbol("c", 0, 0);
+  ASTNode x = bv("x"), y = bv("y");
+  // A compound condition, so the name cannot merely be the term.
+  ASTNode cond = hf->CreateNode(EQ, x, y);
+  ASTNode ite = hf->CreateArrayTerm(ITE, 2, 2, {cond, a, b});
 
-  ASTNode repl = hf->CreateArrayTerm(ITE, 2, 2, {c, a, b});
-  ASTNode proxy = ext->makeEquality(repl, d);
-
-  for (size_t i = 0; i < ext->getRecords().size(); i++)
-  {
-    const ExtensionalityContext::Record& r = ext->getRecords()[i];
-    // Every anchor is name = READ(array, lambda); nothing in it is an
-    // if-then-else that a read could be distributed over.
-    ASSERT_EQ(EQ, r.anchorL.GetKind());
-    ASSERT_EQ(EQ, r.anchorR.GetKind());
-    EXPECT_EQ(READ, r.anchorL[1].GetKind());
-    EXPECT_EQ(READ, r.anchorR[1].GetKind());
-    EXPECT_NE(ITE, r.anchorL[1][0].GetKind());
-    EXPECT_NE(ITE, r.anchorR[1][0].GetKind());
-  }
-
+  ASTNode proxy = ext->makeEquality(ite, d);
   ext->beginSolve();
   ext->prepare(ext->conjoinRecordConstraints(proxy));
-  EXPECT_TRUE(ext->inCone(a));
-  EXPECT_TRUE(ext->inCone(b));
+
+  const std::map<ASTNode, ASTNode>& n2t = ext->getNameToTerm();
+  bool named = false;
+  for (std::map<ASTNode, ASTNode>::const_iterator it = n2t.begin();
+       it != n2t.end(); ++it)
+  {
+    EXPECT_TRUE(ext->isProtected(it->first));
+    if (it->second == cond)
+    {
+      named = true;
+      EXPECT_EQ(SYMBOL, it->first.GetKind());
+      EXPECT_EQ(0u, it->first.GetValueWidth()); // Boolean
+    }
+  }
+  EXPECT_TRUE(named);
 }
 
 // Is `needle` anywhere in the DAG rooted at `haystack`?
@@ -1266,79 +1270,41 @@ bool mentions(const ASTNode& haystack, const ASTNode& needle)
   return mentions(haystack, needle, seen);
 }
 
-// The guards that define an if-then-else's replacement belong to every
-// solve, not just the one that built it. Only the first solve sees the
-// if-then-else being replaced; every later solve inherits the
-// replacement and its two guarded equality records from the registry,
-// and conjoins those records' witness bundles all the same. A witness
-// bundle only ever forces the inequality direction, so without the
-// guards the replacement is an array related to neither branch: the
-// equality it stands for then holds for free, and an unsatisfiable
-// query answers satisfiable from the second solve on.
+// An if-then-else an earlier solve already saw is still reasoned about
+// by every later one. While it was replaced by a fresh array, that
+// meant restating the guards defining the replacement on every solve --
+// only the first solve saw the replacement being made, and a witness
+// bundle alone forces just the inequality direction, so a later solve
+// that omitted the guards left the replacement related to neither
+// branch and an unsatisfiable query answered satisfiable from the
+// second solve on.
 //
-// They are restated where everything else a solve restates is stated,
-// at the start of it, so that STP's own passes rewrite a guard exactly
-// as they rewrite the formula it is about.
-TEST_F(ExtPrepareTest, InheritedArrayIteRestatesItsGuards)
+// Nothing is inherited now: the if-then-else is a term in the formula,
+// so every solve re-derives it from what it is handed. What has to hold
+// is that the second solve puts it and both its branches back in the
+// cone, which is what makes the T rules fire for it.
+TEST_F(ExtPrepareTest, InheritedArrayIteIsInTheConeOnEverySolve)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
-  NodeFactory* nf = mgr.defaultNodeFactory;
   ASTNode a = arr("a"), b = arr("b"), d = arr("d");
   ASTNode c = mgr.CreateSymbol("c", 0, 0);
 
-  // Building it is what replaces it: the fresh array comes back, with
-  // its two guarded equality records already minted.
-  const ASTNode replacement = hf->CreateArrayTerm(ITE, 2, 2, {c, a, b});
-  ASSERT_EQ(SYMBOL, replacement.GetKind());
-  ASSERT_EQ(2u, ext->getRecords().size());
+  const ASTNode ite = hf->CreateArrayTerm(ITE, 2, 2, {c, a, b});
+  ASSERT_EQ(ITE, ite.GetKind());
+  EXPECT_TRUE(ext->getRecords().empty());
 
-  const ASTNode proxy = ext->makeEquality(replacement, d);
-  ASSERT_EQ(3u, ext->getRecords().size());
+  const ASTNode proxy = ext->makeEquality(ite, d);
+  ASSERT_EQ(1u, ext->getRecords().size());
 
-  // The guarded records name the two branches; which one is the
-  // then-branch decides which way its guard reads.
-  ASTNode proxyThen, proxyElse;
-  for (size_t i = 0; i < 2; i++)
+  for (int solve = 0; solve < 2; solve++)
   {
-    const ExtensionalityContext::Record& g = ext->getRecords()[i];
-    const ASTNode branch = g.constructionLeft == replacement
-                               ? g.constructionRight
-                               : g.constructionLeft;
-    if (branch == a)
-      proxyThen = g.proxy;
-    else if (branch == b)
-      proxyElse = g.proxy;
+    ext->beginSolve();
+    ext->prepare(ext->conjoinRecordConstraints(proxy));
+    EXPECT_EQ(1u, ext->getRecords().size()) << "solve " << solve;
+    EXPECT_TRUE(ext->inCone(ite)) << "solve " << solve;
+    EXPECT_TRUE(ext->inCone(a)) << "solve " << solve;
+    EXPECT_TRUE(ext->inCone(b)) << "solve " << solve;
   }
-  ASSERT_FALSE(proxyThen.IsNull());
-  ASSERT_FALSE(proxyElse.IsNull());
-
-  const ASTNode guardThen =
-      nf->CreateNode(OR, nf->CreateNode(NOT, c), proxyThen);
-  const ASTNode guardElse = nf->CreateNode(OR, c, proxyElse);
-
-  ext->beginSolve();
-  const ASTNode first = ext->conjoinRecordConstraints(proxy);
-  EXPECT_TRUE(mentions(first, guardThen));
-  EXPECT_TRUE(mentions(first, guardElse));
-  ext->prepare(first);
-  ASSERT_EQ(3u, ext->getRecords().size());
-
-  // Solve again on the same query. This solve builds no if-then-else,
-  // so the guards can only come from the start-of-solve conjunction --
-  // taken here over nothing at all, to leave no doubt where they came
-  // from.
-  ext->beginSolve();
-  const ASTNode restated = ext->conjoinRecordConstraints(mgr.ASTTrue);
-  EXPECT_TRUE(mentions(restated, guardThen));
-  EXPECT_TRUE(mentions(restated, guardElse));
-
-  // And preparing that second solve reuses the same replacement, with
-  // no new generation of records.
-  ext->prepare(ext->conjoinRecordConstraints(proxy));
-  EXPECT_EQ(3u, ext->getRecords().size());
-  EXPECT_TRUE(ext->inCone(a));
-  EXPECT_TRUE(ext->inCone(b));
-  EXPECT_TRUE(ext->inCone(replacement));
 }
 
 TEST_F(ExtPrepareTest, MissingAnchorFailsLoudly)
@@ -1472,12 +1438,13 @@ TEST_F(ExtPrepareTest, FloatCellWriteChainQuotientsNaN)
   }
 }
 
-// The fresh replacement for a float-array if-then-else keeps the
-// element format, and the guarded equality records minted over it
-// therefore build NaN-qualified witnesses too. The format has to be
-// stamped before those records are built, since a record checks that
-// its two operands agree on it.
-TEST_F(ExtPrepareTest, FloatArrayIteReplacementKeepsFormat)
+// An equality over a float-element array if-then-else gets a
+// NaN-qualified witness, like any other float-element equality. The
+// if-then-else is not abstracted, so this depends on the node itself
+// carrying the element format its branches carry -- makeEquality
+// refuses operands whose formats disagree, so a bare if-then-else node
+// would be rejected outright.
+TEST_F(ExtPrepareTest, FloatArrayIteEqualityGetsNanQualifiedWitness)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
   ASTNode fa = mgr.CreateSymbol("fa", 2, 32);
@@ -1491,30 +1458,26 @@ TEST_F(ExtPrepareTest, FloatArrayIteReplacementKeepsFormat)
   fd.SetSigWidth(24);
   ASTNode c = mgr.CreateSymbol("c", 0, 0);
 
-  const ASTNode replacement = hf->CreateArrayTerm(ITE, 2, 32, {c, fa, fb});
-  ASSERT_EQ(SYMBOL, replacement.GetKind());
-  EXPECT_EQ(8u, replacement.GetExpWidth());
-  EXPECT_EQ(24u, replacement.GetSigWidth());
-  ASSERT_EQ(2u, ext->getRecords().size());
+  const ASTNode ite = hf->CreateArrayTerm(ITE, 2, 32, {c, fa, fb});
+  ASSERT_EQ(ITE, ite.GetKind());
+  EXPECT_EQ(8u, ite.GetExpWidth());
+  EXPECT_EQ(24u, ite.GetSigWidth());
+  EXPECT_TRUE(ext->getRecords().empty());
 
-  ASTNode proxy = ext->makeEquality(replacement, fd);
-  ASSERT_EQ(3u, ext->getRecords().size());
+  ASTNode proxy = ext->makeEquality(ite, fd);
+  ASSERT_EQ(1u, ext->getRecords().size());
 
   ext->beginSolve();
   ext->prepare(ext->conjoinRecordConstraints(proxy));
-  ASSERT_EQ(3u, ext->getRecords().size());
+  ASSERT_EQ(1u, ext->getRecords().size());
 
-  // Every record here is over float-element arrays, the two guarded
-  // ones included, so every witness is NaN-qualified.
-  for (size_t i = 0; i < 3; i++)
-  {
-    const ExtensionalityContext::Record& r = ext->getRecords()[i];
-    ASSERT_EQ(OR, r.witnessClause.GetKind());
-    const ASTNode& differ = r.witnessClause[0] == r.proxy
-                                ? r.witnessClause[1]
-                                : r.witnessClause[0];
-    EXPECT_EQ(AND, differ.GetKind());
-  }
+  // Float elements, so the witness is NaN-qualified rather than a bare
+  // bitwise disequality.
+  const ExtensionalityContext::Record& r = ext->getRecords()[0];
+  ASSERT_EQ(OR, r.witnessClause.GetKind());
+  const ASTNode& differ =
+      r.witnessClause[0] == r.proxy ? r.witnessClause[1] : r.witnessClause[0];
+  EXPECT_EQ(AND, differ.GetKind());
 }
 
 // Same packed width, different element sorts: a float-element array
@@ -1581,10 +1544,14 @@ TEST_F(ExtPrepareTest, RoundingModeElementWitnessPinsCells)
   ASSERT_EQ(AND, differ.GetKind());
 }
 
-// The replacement for an if-then-else over float-indexed arrays
-// registers the branches' index sort, and its guarded records therefore
-// confine their witness indexes too.
-TEST_F(ExtPrepareTest, IteReplacementInheritsIndexRegistries)
+// An if-then-else over float-indexed arrays resolves its index sort
+// through its branches (arrayBaseSymbol recurses into both and requires
+// them to agree), so an equality over it confines its witness index the
+// same way an equality over a plain float-indexed array does. Nothing
+// has to register the if-then-else node itself -- which is one hazard
+// fewer than the replacement array had, since that was a fresh symbol
+// with no branches to recurse into and had to be stamped by hand.
+TEST_F(ExtPrepareTest, IteOverFloatIndexedArraysConfinesItsWitnessIndex)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
   ASTNode fa = mgr.CreateSymbol("fia", 32, 8);
@@ -1595,20 +1562,19 @@ TEST_F(ExtPrepareTest, IteReplacementInheritsIndexRegistries)
   mgr.fp_index_arrays[fd] = std::make_pair(8u, 24u);
   ASTNode c = mgr.CreateSymbol("c", 0, 0);
 
-  const ASTNode replacement = hf->CreateArrayTerm(ITE, 32, 8, {c, fa, fb});
-  ASSERT_EQ(SYMBOL, replacement.GetKind());
+  const ASTNode ite = hf->CreateArrayTerm(ITE, 32, 8, {c, fa, fb});
+  ASSERT_EQ(ITE, ite.GetKind());
   unsigned ieb = 0, isb = 0;
-  EXPECT_TRUE(mgr.arrayHasFpIndex(replacement, ieb, isb));
+  EXPECT_TRUE(mgr.arrayHasFpIndex(ite, ieb, isb));
   EXPECT_EQ(8u, ieb);
   EXPECT_EQ(24u, isb);
 
-  ASTNode proxy = ext->makeEquality(replacement, fd);
+  ASTNode proxy = ext->makeEquality(ite, fd);
   ext->beginSolve();
   ext->prepare(ext->conjoinRecordConstraints(proxy));
 
-  ASSERT_EQ(3u, ext->getRecords().size());
-  for (size_t i = 0; i < 3; i++)
-    EXPECT_FALSE(ext->getRecords()[i].indexSortClause.IsNull());
+  ASSERT_EQ(1u, ext->getRecords().size());
+  EXPECT_FALSE(ext->getRecords()[0].indexSortClause.IsNull());
 }
 
 // Same index width, different index sorts: a float-indexed array may

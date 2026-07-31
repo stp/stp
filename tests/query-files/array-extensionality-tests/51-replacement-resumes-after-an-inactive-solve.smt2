@@ -3,16 +3,16 @@
 ; CHECK: ^unsat
 ; A solve with an array if-then-else and no array equality, followed by
 ; a solve whose array equality is over an if-then-else built after it.
+; The first must leave the second undisturbed: whether an if-then-else
+; is replaced is decided per solve, from the formula in front of it.
 ;
-; restoreArrayITEs deliberately leaves the factory hook bypassed when it
-; returns: preprocessing rebuilds array if-then-elses as it simplifies,
-; and a replacement minted then would have no guards. Putting the hook
-; back is SolveScope's job -- but it was armed only when the procedure
-; was active, which is precisely when restoreArrayITEs does nothing at
-; all. So one inactive solve left the bypass set for the rest of the
-; session, and the next array if-then-else was built as one instead of
-; being replaced. Preparation then met the shape that can no longer
-; exist, and the second query died on
+; This was the incremental hazard of deciding it at construction
+; instead. The undoing left the node factory bypassed on the way out --
+; it had to, since preprocessing rebuilds array if-then-elses as it
+; simplifies -- and the scope guard that put the factory back was armed
+; only when the procedure had run, which is exactly when the undoing
+; does nothing. One inactive solve therefore disabled replacement for
+; the rest of the session, and the second query died on
 ;   Assertion `coneITEs.empty()' failed
 ; or, with assertions off,
 ;   TransformArrayRead: an array-valued if-then-else survived inside the

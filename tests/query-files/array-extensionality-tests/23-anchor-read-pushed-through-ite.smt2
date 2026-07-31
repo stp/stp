@@ -8,10 +8,11 @@
 ; ran after preprocessing, the simplifier pushed the witness read
 ; through the if-then-else and operand recovery had to accept the
 ; pushed anchor -- reconstructing the node it was keyed on, which is
-; what lost the guards and leaked a replacement per solve. Every array
-; if-then-else is now replaced where it is built, so the operand is a
-; plain array symbol before any read can be pushed through anything.
-; Kept as end-to-end coverage of the same benchmark shape.
+; what lost the guards and leaked a replacement per solve. Elimination
+; now runs before preprocessing, on the conjunction the anchors are
+; part of, so the operand is a plain array symbol by the time any pass
+; could push a read through anything. Kept as end-to-end coverage of
+; the same benchmark shape.
 (declare-const __ (_ BitVec 16))
 (declare-const x Bool)
 (declare-fun p () (Array (_ BitVec 5) (_ BitVec 32)))

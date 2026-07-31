@@ -338,29 +338,21 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // the formula (so their current form can be recovered afterwards),
   // and stay reachable even where the equality was the only mention of
   // an array.
+  // That same call eliminates the array-valued if-then-else the
+  // equalities can reach (paper section 4.1). It is the one point in
+  // the pipeline where both of its timing requirements hold: the whole
+  // formula is known, so whether the procedure runs at all is decided,
+  // and none of the preprocessing that would dismantle an if-then-else
+  // has run yet. A query with no array equality reaches none of this
+  // and is decided by the ordinary array machinery.
   ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  // A query whose only array equalities are the guards defining an
-  // if-then-else replacement gains nothing from the decision procedure.
-  // Put the if-then-elses back and let the ordinary array machinery
-  // decide it, as it did before the replacement moved to construction.
-  // Both formulas have to be rewritten: the model check evaluates the
-  // original, which mentions the replacement arrays the solved formula
-  // no longer contains.
-  ASTNode original = original_input;
+  // Per-solve state has to be dropped whether or not the procedure
+  // runs, or a cone frozen by an earlier solve still answers inCone().
   if (ext != NULL)
-  {
-    // Per-solve state has to be dropped whether or not the procedure
-    // runs, or a cone frozen by an earlier solve still answers inCone().
     ext->beginSolve();
-    inputToSat = ext->restoreArrayITEs(inputToSat);
-    original = ext->restoreArrayITEs(original);
-  }
   const bool extActive = ext != NULL && ext->active();
-  // Releases the registry seal and the replacement-hook bypass on every
-  // exit from this function, so that terms built between solves are
-  // ordinary again. Held whenever there is a context at all, not only
-  // when the procedure ran: restoreArrayITEs sets the bypass precisely
-  // when it did not.
+  // Releases the registry seal on every exit from this function, so
+  // that equalities built between solves are ordinary again.
   ExtensionalityContext::SolveScope extScope(ext);
   if (extActive)
   {
@@ -862,7 +854,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     bm->print_stats();
 
   // If it doesn't contain array operations, use ABC's CNF generation.
-  res = Ctr_Example->CallSAT_ResultCheck(NewSolver, inputToSat, original,
+  res = Ctr_Example->CallSAT_ResultCheck(NewSolver, inputToSat, original_input,
                                          satBase, maybeRefinement);
 
   if (bm->soft_timeout_expired)
@@ -904,12 +896,12 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     {
       ext->encodePendingLemmas(NewSolver, satBase);
       res = Ctr_Example->CallSAT_ResultCheck(NewSolver, bm->ASTTrue,
-                                             original, satBase, true);
+                                             original_input, satBase, true);
     }
     else
     {
       res = Ctr_Example->SATBased_ArrayReadRefinement(NewSolver,
-                                                      original, satBase);
+                                                      original_input, satBase);
     }
 
     if (SOLVER_UNDECIDED != res)

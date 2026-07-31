@@ -130,23 +130,6 @@ public:
   // solveWriteChain). Mixed index/element widths are an error.
   ASTNode makeEquality(const ASTNode& a, const ASTNode& b);
 
-  // The array-if-then-else arm of the paper's preprocessing (section
-  // 4.1), applied at construction for the same reason the equality
-  // abstraction is: called from the shared node-creation funnel for
-  // every array-valued ITE while the feature is enabled, instead of
-  // building one. Returns a fresh array d and registers the two
-  // guarded equalities that define it, c -> d = thn and
-  // not(c) -> d = els; repeated requests for the same triple reuse d.
-  //
-  // So no array if-then-else ever exists while the feature is on. That
-  // is what the late elimination could not have: it ran after
-  // preprocessing, which pushes reads through array ITEs and rewrites
-  // their conditions, so it had to reconstruct the node it was keyed
-  // on -- losing the guards when the reconstruction hit the cache and
-  // leaking a fresh replacement per solve when it missed.
-  ASTNode makeArrayITE(const ASTNode& cond, const ASTNode& thn,
-                       const ASTNode& els);
-
   // Drop the whole registry once nothing can reach it any more, and
   // report whether that happened. Records are pinned to the manager's
   // lifetime because their abstraction variables are embedded in the
@@ -165,7 +148,9 @@ public:
   // closure, and getting it wrong turns an abstraction variable into
   // an unconstrained Boolean. Whole-registry death needs no closure:
   // if no proxy is reachable then no equality is, so nothing minted
-  // on behalf of one can be either.
+  // on behalf of one can be either -- including the if-then-else
+  // replacements, which stand only inside a solve's own rewriting and
+  // never in a term the user can still assert.
   bool retireIfUnreachable(const ASTVec& liveAssertions);
 
   // Holds the registry seal for the duration of one solve and releases
@@ -184,10 +169,7 @@ public:
     ~SolveScope()
     {
       if (ctx != NULL)
-      {
         ctx->registrySealed = false;
-        ctx->bypassIteHook = false;
-      }
     }
     SolveScope(const SolveScope&) = delete;
     SolveScope& operator=(const SolveScope&) = delete;
@@ -196,35 +178,11 @@ public:
   bool enabled() const;
   // The decision procedure participates in a solve exactly when the
   // feature is on and at least one array equality was abstracted.
-  // The procedure participates in a solve when the feature is on and
-  // the user actually asked for whole-array reasoning. Records minted
-  // only to define an if-then-else replacement do not count: a query
-  // whose sole array equalities are those guards gains nothing from the
-  // refinement loop and pays a great deal for it, so restoreArrayITEs
-  // puts the if-then-elses back and leaves the procedure switched off.
-  bool active() const { return enabled() && !userRequested.empty(); }
-
-  // Undo the construction-time replacement when no user equality was
-  // ever built, returning the formula with each replacement array
-  // rewritten back to the if-then-else it stands for. A no-op once the
-  // procedure is active, and once it is on for a later solve the
-  // replacements are used again -- this only decides how one solve
-  // encodes them.
-  //
-  // Section 4.1 gives each if-then-else two equality proxies, and one
-  // of the two is unconstrained under any given assignment of the
-  // condition: the solver guesses it and the checker refutes it, one
-  // lemma at a time. Measured on a shared if-then-else DAG of depth 8
-  // with no array equality at all, that is 1023 SAT calls against 1,
-  // and 20x the wall clock, for a query the classic encoding decides
-  // outright.
-  ASTNode restoreArrayITEs(const ASTNode& root);
-
-  // While set, the node factory builds an array if-then-else instead of
-  // replacing it. Only restoreArrayITEs sets it, so that rebuilding the
-  // term a replacement stands for does not simply return the
-  // replacement.
-  bool iteHookBypassed() const { return bypassIteHook; }
+  // Nothing else switches it on: a query with array if-then-elses but
+  // no equality mints no record, so it is decided by STP's ordinary
+  // array machinery at exactly the cost it would pay with the feature
+  // off.
+  bool active() const { return enabled() && !records.empty(); }
 
   const std::vector<Record>& getRecords() const { return records; }
 
@@ -259,7 +217,23 @@ public:
   // preprocessing step 1 plus the defining equations of its virtual
   // reads) onto the input, before any of STP's preprocessing runs, so
   // the bundles are simplified and substituted together with the rest
-  // of the formula.
+  // of the formula -- and, on the conjunction, eliminate the
+  // array-valued if-then-else the equalities can reach (paper section
+  // 4.1), replacing ite(c,a,b) by a fresh array d guarded by
+  // c -> d = a and not(c) -> d = b, repeated to a fixed point since
+  // the guarded equalities are themselves abstracted.
+  //
+  // Both jobs belong here, and here is the only place they can be. It
+  // has to be after the whole formula is known, because whether the
+  // procedure runs at all decides whether an if-then-else should be
+  // replaced -- a query with no array equality gains nothing from the
+  // replacement and pays a great deal for it, since each one leaves a
+  // proxy unconstrained for the solver to guess and the checker to
+  // refute. And it has to be before STP's preprocessing, which pushes
+  // reads through array if-then-elses and normalises their
+  // conditions: eliminating afterwards would mean reconstructing the
+  // node it was keyed on from a formula that has already been
+  // rewritten.
   ASTNode conjoinRecordConstraints(const ASTNode& root);
 
   // Final preparation, run after STP's simplifications and immediately
@@ -450,40 +424,10 @@ private:
   std::set<ASTNode> lemmaOnlySymbols; // per-solve; see the accessor
   std::set<ASTNode> possibleConeSymbols;
 
-  // Replacements for array-valued if-then-else (paper section 4.1):
-  // the (condition, then, else) triple as the caller built it -> its
-  // fresh array. Keyed on the triple rather than on an ITE node
-  // because no ITE node is ever built; nothing downstream can rewrite
-  // a key that only ever exists here.
-  typedef std::pair<ASTNode, std::pair<ASTNode, ASTNode>> IteKey;
-  std::map<IteKey, ASTNode> iteReplacements;
-
-  // The guard implications of every replacement, in creation order.
-  // Registry content: conjoined by conjoinRecordConstraints on every
-  // solve, exactly like the witness bundles, so a replacement can
-  // never be live without its definition.
-  ASTVec iteGuards;
-
-  // Records the user asked for, as opposed to the pair minted to
-  // define each if-then-else replacement; see active(). Ids rather
-  // than a count because a user equality can COINCIDE with a guard --
-  // (= c (ite cond c a)) becomes (= c d) while the guard is (= d c),
-  // the same pair -- and then makeEquality returns the existing record
-  // instead of creating one. Counting creations would miss that and
-  // leave the procedure switched off with the user's proxy free.
-  std::set<size_t> userRequested;
-
-  // Set while makeArrayITE is minting those two, so makeEquality knows
-  // not to count them.
-  bool mintingIteGuards;
-
-  // See iteHookBypassed().
-  bool bypassIteHook;
-
   // Set once a solve has taken its copy of the registry's constraints.
-  // Minting a record or a replacement after that point would leave it
-  // active with nothing in the formula defining it, so refuse loudly
-  // rather than let it happen quietly. Cleared by beginSolve().
+  // Minting a record after that point would leave it active with
+  // nothing in the formula defining it, so refuse loudly rather than
+  // let it happen quietly. Cleared by beginSolve().
   bool registrySealed;
 
   // ---- per-solve state ----
@@ -491,6 +435,8 @@ private:
   std::set<ASTNode> coneArrays;
   std::map<ASTNode, ExtWriteNode> coneWrites; // write node -> info
   std::map<ASTNode, std::vector<ASTNode>> coneWriteParents;
+  std::map<ASTNode, ExtIteNode> coneItes; // ite node -> info
+  std::map<ASTNode, std::vector<ASTNode>> coneIteParents;
   std::vector<ExtEqEdge> eqEdges;
   std::map<ASTNode, std::vector<size_t>> eqAdjacency;
   std::vector<ExtWitness> witnessObls;
@@ -527,10 +473,16 @@ private:
   // names evaluate exactly like the terms they stand for; false means
   // EXT_NAME_DIVERGENCE.
   bool namesAgreeWithCandidate(ExtModelView& view) const;
-  bool isReplacement(const ASTNode& n) const;
   void collectPossibleConeSymbols(const ASTNode& n);
   ASTNode freshName(const ASTNode& term, ASTVec& namingConstraints);
-  void computeProvisionalCone(const ASTNode& root,
+  // The Boolean analogue of freshName, for an if-then-else condition:
+  // a fresh symbol constrained equivalent to the condition, so that the
+  // checker branches on a value the SAT solver assigned rather than one
+  // re-derived from the counterexample, and so that a lemma premise has
+  // one encoded literal to name.
+  ASTNode conditionName(const ASTNode& cond, ASTVec& namingConstraints);
+  // The cone closure, seeded from the operands the caller supplies.
+  void computeProvisionalCone(const ASTNode& root, const ASTVec& seeds,
                               std::set<ASTNode>& cone,
                               std::map<ASTNode, std::vector<ASTNode>>& parents,
                               std::vector<ASTNode>& coneITEs);
