@@ -3,19 +3,24 @@
 ; w != v and v = 0 force w = 1, so (not (= w v)) is true, the
 ; if-then-else is c, and the assertion reduces to (not (= c c)).
 ;
-; The equality's own operand is the if-then-else, so replacing it makes
-; the user's assertion (= c d) -- while the guard defining d is
-; c -> d = c, the very same operand pair. makeEquality therefore hands
-; the guard's record straight back instead of creating one, and a
-; count of records CREATED on the user's behalf stays at zero. The
-; procedure then looks unused, restoreArrayITEs puts the if-then-else
-; back, no guards are conjoined, and the user's proxy is left an
-; unconstrained Boolean: sat, on an unsatisfiable query.
+; The equality's own operand is the if-then-else, so the operand pair
+; the user asked for can coincide with the pair a guard needs: the
+; guard defining the replacement d is c -> d = c, and an equality
+; between c and the replacement is that same pair. makeEquality then
+; hands the existing record back instead of creating one.
 ;
-; Found by differential fuzzing against a brute-force oracle, not by
-; reading. Fixed by recording which record ids the user asked for
-; rather than how many were created, so a request that lands on an
-; existing record still counts.
+; That used to matter, and cost an unsoundness. While the replacement
+; happened at construction, whether the procedure ran at all was
+; decided by counting the records created on the user's behalf; the
+; coincidence kept that count at zero, the if-then-elses were put back
+; with no guards conjoined, and the user's proxy was left a free
+; Boolean -- sat, on an unsatisfiable query. Found by differential
+; fuzzing against a brute-force oracle, not by reading.
+;
+; Nothing distinguishes the two kinds of record any more: the guards
+; are minted only once the procedure is known to be running, so
+; deciding that cannot depend on them. Kept as coverage of the
+; coinciding shape, which is delicate for its own sake.
 (set-logic QF_ABV)
 (declare-fun a () (Array (_ BitVec 1) (_ BitVec 1)))
 (declare-fun c () (Array (_ BitVec 1) (_ BitVec 1)))

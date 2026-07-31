@@ -1,30 +1,23 @@
 ; RUN: %solver --array-equality %s | %OutputCheck %s
 ; CHECK: ^unsat
 ; An array if-then-else nested inside a store inside another array
-; if-then-else, with no array equality anywhere -- so restoreArrayITEs
-; puts both back and the classic path decides the query.
+; if-then-else, with no array equality anywhere -- the same class as
+; test 47, at the nesting depth that made a defect visible.
 ;
-; Restoring expands each replacement into the if-then-else it stands
-; for and then substitutes those into the formula. The substitution
-; rebuilds any node whose children changed, and the outer if-then-else
-; still mentions the inner replacement whenever the registry hands the
-; outer one out first -- so the rebuilt node went back through the node
-; factory with the replacement hook still live and was replaced all
-; over again. Nothing defines a replacement minted there:
-; conjoinRecordConstraints emits the guards only while the procedure is
-; active, and the whole point of this path is that it is not. The
-; solved formula was left with a free array, and this query answered
-; sat.
+; While every if-then-else was replaced at construction, a query like
+; this one had to have the replacements undone again, and the undoing
+; re-entered the node factory: substituting the expansions back in
+; rebuilds any node whose children changed, and an if-then-else whose
+; branch still mentions an inner replacement is such a node, so it was
+; replaced all over again. Nothing defined the replacement minted
+; there, and the solved formula carried a free array: this query
+; answered sat. It depended on the order the replacements came out of
+; their map, which is why 250 queries of the class did not find it --
+; declaring q before p expanded the inner one first and the answer came
+; out right by luck.
 ;
-; The same root cause also aborted on assert(arrayops): the two
-; restorations of the same formula saw different registries, so the
-; candidate was judged against arrays the solved formula no longer
-; contained.
-;
-; Sensitive to the order the registry's map yields its replacements,
-; which is why 250 queries of this class did not find it -- declaring q
-; before p expands the inner one first, no rebuild happens, and the
-; answer is right by luck.
+; There is nothing to undo now, so there is no second rewriting to get
+; wrong. Kept as coverage of the shape.
 ;
 ; Unsat because select of the outer if-then-else at #x0 is #x11 when p
 ; (the store put it there) and b[#x0] otherwise, which is asserted to

@@ -1166,82 +1166,91 @@ TEST_F(ExtPrepareTest, RecoversOperandsConeAndNames)
   EXPECT_TRUE(namedIdx);
 }
 
-TEST_F(ExtPrepareTest, ArrayIteIsReplacedWhenItIsBuilt)
+TEST_F(ExtPrepareTest, ArrayIteIsEliminatedWhenTheRegistryIsConjoined)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
   ASTNode a = arr("a"), b = arr("b"), d = arr("d");
   ASTNode c = mgr.CreateSymbol("c", 0, 0);
 
-  // Asking for an array-valued if-then-else does not produce one: the
-  // node factory funnels it to makeArrayITE, which hands back a fresh
-  // array defined by two guarded equalities (paper section 4.1).
-  ASTNode repl = hf->CreateArrayTerm(ITE, 2, 2, {c, a, b});
+  // Building an array-valued if-then-else builds one, and moves no
+  // solver state: at this point nobody can know whether the decision
+  // procedure will run at all, so there is nothing to decide yet.
+  ASTNode ite = hf->CreateArrayTerm(ITE, 2, 2, {c, a, b});
+  EXPECT_EQ(ITE, ite.GetKind());
+  EXPECT_EQ(0u, ext->getRecords().size());
+
+  // An equality over it is one ordinary record. Its operand is the
+  // if-then-else, so it is the anchor equations that mention it, not
+  // the user's formula -- which is why the elimination has to run on
+  // the conjunction rather than on the input alone.
+  ASTNode proxy = ext->makeEquality(ite, d);
+  ASSERT_EQ(1u, ext->getRecords().size());
+
+  // Conjoining the registry's constraints is where section 4.1 runs.
+  ext->beginSolve();
+  ext->prepare(ext->conjoinRecordConstraints(proxy));
+  ASSERT_EQ(3u, ext->getRecords().size()); // the user's, plus two guards
+  EXPECT_TRUE(ext->inCone(a));
+  EXPECT_TRUE(ext->inCone(b));
+
+  // The operand the user's equality now stands over is the replacement:
+  // a fresh array symbol of the same sort, in the cone.
+  const ExtensionalityContext::Record& r = ext->getRecords()[0];
+  const ASTNode repl =
+      (r.canonicalLeft == d) ? r.canonicalRight : r.canonicalLeft;
   EXPECT_EQ(SYMBOL, repl.GetKind());
   EXPECT_EQ(2u, repl.GetIndexWidth());
   EXPECT_EQ(2u, repl.GetValueWidth());
-  ASSERT_EQ(2u, ext->getRecords().size());
-
-  // The same triple reuses it -- keyed on what the caller passed, which
-  // exists nowhere downstream and so can never be rewritten.
-  EXPECT_EQ(repl, hf->CreateArrayTerm(ITE, 2, 2, {c, a, b}));
-  EXPECT_EQ(2u, ext->getRecords().size());
-
-  // Degenerate shapes never reach the registry at all.
-  EXPECT_EQ(a, hf->CreateArrayTerm(ITE, 2, 2, {c, a, a}));
-  EXPECT_EQ(a, hf->CreateArrayTerm(ITE, 2, 2, {mgr.ASTTrue, a, b}));
-  EXPECT_EQ(b, hf->CreateArrayTerm(ITE, 2, 2, {mgr.ASTFalse, a, b}));
-  EXPECT_EQ(2u, ext->getRecords().size());
-
-  // An equality over the replacement is an ordinary record, and
-  // preparation has no if-then-else left to do anything about.
-  ASTNode proxy = ext->makeEquality(repl, d);
-  ASSERT_EQ(3u, ext->getRecords().size());
-
-  ext->beginSolve();
-  ext->prepare(ext->conjoinRecordConstraints(proxy));
-  EXPECT_EQ(3u, ext->getRecords().size());
-  EXPECT_TRUE(ext->inCone(a));
-  EXPECT_TRUE(ext->inCone(b));
   EXPECT_TRUE(ext->inCone(repl));
 
-  // And a second solve moves nothing.
+  // A second solve reuses the replacement and its two records instead
+  // of minting a generation per solve. The lookup can be trusted
+  // because it is keyed on the if-then-else the caller built, and the
+  // elimination runs before any pass that could rewrite it.
   ext->beginSolve();
   ext->prepare(ext->conjoinRecordConstraints(proxy));
   EXPECT_EQ(3u, ext->getRecords().size());
 }
 
-TEST_F(ExtPrepareTest, NoAnchorCanBePushedThroughAnArrayIte)
+TEST_F(ExtPrepareTest, NoArrayIteReachesPreprocessing)
 {
   // The simplifier pushes a read through an array if-then-else, which
-  // used to leave a witness anchor as ite(c, read(a,l), read(b,l)) for
-  // preparation to reconstruct the operand from. Reconstructing from a
-  // rewritten formula is what lost the guards on a second solve and
-  // leaked a replacement per solve when the condition had been
-  // normalised. The shape is now unreachable: there is no array
-  // if-then-else for a read to be pushed through, so an anchor is
-  // always a plain read of an array term.
+  // would leave a witness anchor as ite(c, read(a,l), read(b,l)) for
+  // preparation to reconstruct the operand from -- and reconstructing
+  // an operand out of an already-rewritten formula is what lost the
+  // guards on a second solve and leaked a replacement per solve when
+  // the condition had been normalised.
+  //
+  // It cannot arise, and this is the reason: the formula handed on to
+  // preprocessing has no array if-then-else in it, so there is nothing
+  // for a read to be pushed through. Checked over the whole DAG, not
+  // just the anchors, since a survivor anywhere would reach the
+  // simplifier.
   NodeFactory* hf = mgr.hashingNodeFactory;
   ASTNode a = arr("a"), b = arr("b"), d = arr("d");
   ASTNode c = mgr.CreateSymbol("c", 0, 0);
 
-  ASTNode repl = hf->CreateArrayTerm(ITE, 2, 2, {c, a, b});
-  ASTNode proxy = ext->makeEquality(repl, d);
-
-  for (size_t i = 0; i < ext->getRecords().size(); i++)
-  {
-    const ExtensionalityContext::Record& r = ext->getRecords()[i];
-    // Every anchor is name = READ(array, lambda); nothing in it is an
-    // if-then-else that a read could be distributed over.
-    ASSERT_EQ(EQ, r.anchorL.GetKind());
-    ASSERT_EQ(EQ, r.anchorR.GetKind());
-    EXPECT_EQ(READ, r.anchorL[1].GetKind());
-    EXPECT_EQ(READ, r.anchorR[1].GetKind());
-    EXPECT_NE(ITE, r.anchorL[1][0].GetKind());
-    EXPECT_NE(ITE, r.anchorR[1][0].GetKind());
-  }
+  ASTNode ite = hf->CreateArrayTerm(ITE, 2, 2, {c, a, b});
+  ASTNode proxy = ext->makeEquality(ite, d);
 
   ext->beginSolve();
-  ext->prepare(ext->conjoinRecordConstraints(proxy));
+  const ASTNode toPreprocess = ext->conjoinRecordConstraints(proxy);
+
+  std::set<ASTNode> seen;
+  std::vector<ASTNode> todo(1, toPreprocess);
+  while (!todo.empty())
+  {
+    const ASTNode n = todo.back();
+    todo.pop_back();
+    if (!seen.insert(n).second)
+      continue;
+    EXPECT_FALSE(n.GetKind() == ITE && n.GetIndexWidth() > 0)
+        << "an array if-then-else survived into preprocessing";
+    for (unsigned k = 0; k < n.Degree(); k++)
+      todo.push_back(n[k]);
+  }
+
+  ext->prepare(toPreprocess);
   EXPECT_TRUE(ext->inCone(a));
   EXPECT_TRUE(ext->inCone(b));
 }

@@ -98,20 +98,8 @@ for each abstracted candidate formula:
    writes that shadow it. Such an equality contributes nothing to the
    refinement loop at all.
 
-   Array-valued ``ite(c, a, b)`` goes through the same funnel and is
-   replaced, where it is built, by a fresh array ``d`` registered with
-   the two guarded equalities ``c → d = a`` and ``¬c → d = b`` (paper
-   §4.1). So no array if-then-else ever reaches STP's simplifier
-   either, and the two guards are ordinary registry content, conjoined
-   with the witness bundles on every solve. Eliminating it later would
-   mean reconstructing it after preprocessing has pushed reads through
-   it and rewritten its condition, keyed on a node that rewriting can
-   change — which loses the definition when the reconstruction matches
-   and leaks a fresh replacement per solve when it does not. The cost
-   of deciding this early is that a condition later found to be
-   constant no longer lets the if-then-else fold away: such a query
-   pays two records it would not otherwise need, measured at roughly
-   2.4x the CNF of the classic encoding on nested array if-then-else.
+   Array-valued ``ite(c, a, b)`` is *not* handled here: it is built as
+   an ordinary node, and stage 2 eliminates it.
 
 2. **Solve-time preparation.** Each registered equality ``a = b``
    carries a fresh *witness index* λ and two *virtual reads* ``a[λ]``,
@@ -126,15 +114,38 @@ for each abstracted candidate formula:
    is given a named variable inside the initial formula, so refinement
    lemmas can later be encoded over SAT variables that already exist.
 
+   On that same conjunction, and still before any simplification, the
+   array-valued ``ite(c, a, b)`` that the equalities can reach are
+   eliminated (paper §4.1): each is replaced by a fresh array ``d``
+   guarded by ``c → d = a`` and ``¬c → d = b``, repeated to a fixed
+   point since those guards are abstracted like any other equality.
+   The guards are emitted by the same loop that substitutes the
+   replacement in, so a replacement cannot reach the formula without
+   its definition. Two things fix this position in the pipeline. It
+   must be late enough that the whole formula is known, because a
+   query with no array equality gains nothing from the replacement and
+   pays a great deal for it — each one leaves a proxy unconstrained
+   under any assignment of the condition, so the solver guesses and
+   the checker refutes, measured at 1023 SAT calls against 1 on a
+   depth-8 if-then-else DAG. And it must be early enough that
+   preprocessing has not yet pushed reads through the if-then-elses or
+   normalised their conditions, because eliminating afterwards means
+   reconstructing the node the replacement was keyed on out of a
+   formula that has already been rewritten. The cost of being early is
+   that a condition later found to be constant no longer lets the
+   if-then-else fold away: such a query pays two records it would not
+   otherwise need.
+
    These two stages realize the transformations of the paper's §4,
    §4.1 and §5 in an STP-specific order: the paper presents array-ITE
    elimination and witness preprocessing *before* formula abstraction,
-   while STP applies both arms of the abstraction at construction —
-   equality proxies, if-then-else replacements and witness records —
-   and then recovers and prepares their array operands during the
-   solve. Recovery has to be late because preprocessing rewrites write
-   chains; replacement has to be early because preprocessing dismantles
-   if-then-else structure.
+   while STP mints equality proxies and witness records eagerly at
+   construction, then eliminates the if-then-elses and prepares the
+   array operands during the solve. Abstraction has to be early so
+   that no array equality reaches the rest of STP; elimination and
+   recovery have to be late, the first because whether it is wanted
+   depends on the whole formula, the second because preprocessing
+   rewrites write chains.
 
 3. **Consistency checking** (paper §7, ``lib/Extensionality/``). When
    the SAT solver produces a satisfying assignment σ, a pure checker

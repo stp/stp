@@ -60,9 +60,11 @@ void collectDag(const ASTNode& n, ASTNodeSet& visited)
 // The current form of an equality operand, read back from its witness
 // anchor. The anchor was recorded as name = read(operand, lambda), and
 // stays that shape: the only rewrite that could break it is the
-// simplifier pushing the read through an array if-then-else, and no
-// array if-then-else exists while the feature is on -- makeArrayITE
-// replaces every one at construction. Anything else means an anchor
+// simplifier pushing the read through an array if-then-else, and by
+// the time the simplifier runs the elimination has already replaced
+// every if-then-else the equalities can reach -- including the one in
+// this very anchor, since the elimination is applied to the whole
+// conjunction the anchors are part of. Anything else means an anchor
 // was rewritten beyond recognition: refuse loudly rather than guess.
 ASTNode recoverAnchoredOperand(const ASTNode& rhs, const ASTNode& lambda,
                                const ASTNode& proxy)
@@ -78,8 +80,9 @@ ASTNode recoverAnchoredOperand(const ASTNode& rhs, const ASTNode& lambda,
   }
   if (rhs.GetKind() == ITE)
     FatalError("array-equality: a witness read was pushed through an "
-               "array if-then-else, which cannot exist once every one is "
-               "replaced at construction",
+               "array if-then-else, although the elimination removed "
+               "every one the equalities can reach before preprocessing "
+               "ran",
                proxy);
   FatalError("array-equality: a witness-read defining equation was "
              "rewritten into a shape operand recovery does not "
@@ -92,7 +95,6 @@ ASTNode recoverAnchoredOperand(const ASTNode& rhs, const ASTNode& lambda,
 
 ExtensionalityContext::ExtensionalityContext(STPMgr* bm_)
     : lemmasEmitted(0), lemmaAtomsFolded(0), nameDivergences(0), bm(bm_),
-      mintingIteGuards(false), bypassIteHook(false),
       registrySealed(false), coneIsFrozen(false), graphBound(false),
       pendingLemmaValid(false), divergedThisSolve(false)
 {
@@ -241,15 +243,7 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
   std::map<std::pair<ASTNode, ASTNode>, size_t>::const_iterator it =
       keyToRecord.find(key);
   if (it != keyToRecord.end())
-  {
-    // A request that lands on an existing record still counts: a user
-    // equality can coincide with an if-then-else guard, and counting
-    // only creations would leave the procedure switched off with the
-    // user's proxy unconstrained.
-    if (!mintingIteGuards)
-      userRequested.insert(it->second);
     return records[it->second].proxy;
-  }
 
   if (registrySealed)
     FatalError("array-equality: an array equality was built during a "
@@ -286,81 +280,8 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
 
   keyToRecord[key] = r.id;
   proxyToRecord[r.proxy] = r.id;
-  if (!mintingIteGuards)
-    userRequested.insert(r.id);
   records.push_back(r);
   return records.back().proxy;
-}
-
-// See the header. Expands each replacement back to the if-then-else it
-// stands for, innermost first so a replacement sitting in another's
-// branch is resolved too, then rewrites the formula.
-ASTNode ExtensionalityContext::restoreArrayITEs(const ASTNode& root)
-{
-  if (iteReplacements.empty() || active())
-    return root;
-
-  // Set for the whole of this function, and left set on the way out.
-  //
-  // Every array term built below is one some replacement stands for, so
-  // building it must not simply mint a replacement for it again. The
-  // substitution at the end is where that bites: it rebuilds any node
-  // whose children changed, so an if-then-else whose branch still
-  // mentions an inner replacement goes back through the node factory.
-  // Nothing would define the replacement minted there --
-  // conjoinRecordConstraints emits the guards only while the procedure
-  // is active, and this function runs only when it is not -- so the
-  // solved formula would carry a free array.
-  //
-  // It has to stay set for the rest of the solve as well, because
-  // preprocessing rebuilds array if-then-elses as it simplifies, and a
-  // replacement minted then would be undefined for the same reason.
-  // SolveScope clears it on every exit from the solve, so terms built
-  // between solves are replaced as usual.
-  bypassIteHook = true;
-
-  NodeFactory* hf = bm->hashingNodeFactory;
-  ASTNodeMap back;
-  bool changed = true;
-  while (changed)
-  {
-    changed = false;
-    for (std::map<IteKey, ASTNode>::const_iterator it = iteReplacements.begin();
-         it != iteReplacements.end(); ++it)
-    {
-      if (back.find(it->second) != back.end())
-        continue;
-      const ASTNode& cond = it->first.first;
-      const ASTNode& thn = it->first.second.first;
-      const ASTNode& els = it->first.second.second;
-      if (back.find(thn) == back.end() && isReplacement(thn))
-        continue; // expand the inner one first
-      if (back.find(els) == back.end() && isReplacement(els))
-        continue;
-      ASTNodeMap c1, c2;
-      const ASTNode t = SubstitutionMap::replace(thn, back, c1, hf);
-      const ASTNode e = SubstitutionMap::replace(els, back, c2, hf);
-      ASTVec kids;
-      kids.push_back(cond);
-      kids.push_back(t);
-      kids.push_back(e);
-      back[it->second] =
-          hf->CreateArrayTerm(ITE, t.GetIndexWidth(), t.GetValueWidth(), kids);
-      changed = true;
-    }
-  }
-
-  ASTNodeMap cache;
-  return SubstitutionMap::replace(root, back, cache, bm->defaultNodeFactory);
-}
-
-bool ExtensionalityContext::isReplacement(const ASTNode& n) const
-{
-  for (std::map<IteKey, ASTNode>::const_iterator it = iteReplacements.begin();
-       it != iteReplacements.end(); ++it)
-    if (it->second == n)
-      return true;
-  return false;
 }
 
 bool ExtensionalityContext::retireIfUnreachable(const ASTVec& liveAssertions)
@@ -376,81 +297,133 @@ bool ExtensionalityContext::retireIfUnreachable(const ASTVec& liveAssertions)
     if (reachable.find(records[i].proxy) != reachable.end())
       return false; // an assertion still names this equality
 
-  // An if-then-else replacement stands in the user's own terms, so it
-  // can be live with none of the proxies live. Retiring then would
-  // strip its guards and leave a free array in an asserted formula.
-  for (std::map<IteKey, ASTNode>::const_iterator it = iteReplacements.begin();
-       it != iteReplacements.end(); ++it)
-    if (reachable.find(it->second) != reachable.end())
-      return false;
-
   records.clear();
-  userRequested.clear();
   keyToRecord.clear();
   proxyToRecord.clear();
   protectedSymbols.clear();
   possibleConeSymbols.clear();
   iteReplacements.clear();
-  iteGuards.clear();
   // Every per-solve view describes records that no longer exist.
   beginSolve();
   return true;
 }
 
-// Section 4.1, at construction. See the header for why this is the
-// funnel and not a preparation step.
-ASTNode ExtensionalityContext::makeArrayITE(const ASTNode& cond,
-                                            const ASTNode& thn,
-                                            const ASTNode& els)
+// The array-if-then-else arm of the paper's preprocessing (section
+// 4.1). Replace ite(c,a,b) inside the cone by a fresh array d
+// constrained by c -> d = a and not(c) -> d = b, to a fixed point,
+// since the guarded equalities are abstracted like any other and their
+// operands may expose further if-then-elses.
+//
+// Called from conjoinRecordConstraints, which is what fixes the two
+// things that matter: the whole formula is known (so the cone is), and
+// none of STP's preprocessing has run yet (so the if-then-elses are as
+// the parser built them).
+ASTNode ExtensionalityContext::eliminateArrayITEs(const ASTNode& root_)
 {
-  if (!isArrayType(thn) || !isArrayType(els) ||
-      thn.GetIndexWidth() != els.GetIndexWidth() ||
-      thn.GetValueWidth() != els.GetValueWidth())
+  ASTNode root = root_;
+  NodeFactory* nf = bm->defaultNodeFactory;
+
+  while (true)
   {
-    // Caught here rather than as a confusing complaint about one of the
-    // guarded equalities below.
-    FatalError("array-equality: the branches of an array if-then-else "
-               "require identical index and element widths",
-               thn);
+    // The simplifying factory can decide the whole conjunction on the
+    // spot -- one contradictory conjunct is enough -- and then the
+    // anchors are gone along with everything else. There is nothing to
+    // replace and no operand to recover, and the solve skips
+    // preparation for the same reason (see extPrepared in
+    // TopLevelSTPAux): no candidate model will ever be produced.
+    if (root.isConstant())
+      return root;
+
+    // Seed from the operands as this formula currently spells them,
+    // read back from the anchors, NOT from the operands the records
+    // were built with: substituting a replacement in rewrites the
+    // anchor, and seeding from the frozen construction operand would
+    // put the if-then-else back in the cone on every round and never
+    // terminate. Recovery is exact here -- no pass has touched the
+    // anchors yet, so each is still name = read(operand, lambda).
+    locateCanonicalOperands(root);
+    ASTVec seeds;
+    for (size_t i = 0; i < records.size(); i++)
+    {
+      seeds.push_back(records[i].canonicalLeft);
+      seeds.push_back(records[i].canonicalRight);
+    }
+
+    std::set<ASTNode> cone;
+    std::map<ASTNode, std::vector<ASTNode>> parents;
+    std::vector<ASTNode> coneITEs;
+    computeProvisionalCone(root, seeds, cone, parents, coneITEs);
+    if (coneITEs.empty())
+      return root;
+
+    const size_t recordsBefore = records.size();
+    ASTNodeMap iteMap;
+    ASTVec newConstraints;
+    for (size_t i = 0; i < coneITEs.size(); i++)
+    {
+      const ASTNode& t = coneITEs[i];
+      const ASTNode cond = t[0];
+      const ASTNode thn = t[1];
+      const ASTNode els = t[2];
+
+      // Nested if-then-elses are in coneITEs too, and all get their
+      // replacement in this same round; the substitution below rewrites
+      // the inner occurrences inside the outer ones' guarded
+      // equalities. The enclosing loop iterates only because the fresh
+      // records may put further if-then-elses in the cone.
+      ASTNode d;
+      std::map<ASTNode, ASTNode>::const_iterator cached =
+          iteReplacements.find(t);
+      if (cached != iteReplacements.end())
+      {
+        d = cached->second;
+      }
+      else
+      {
+        d = bm->CreateFreshVariable(t.GetIndexWidth(), t.GetValueWidth(),
+                                    "ext_ite");
+        iteReplacements[t] = d;
+        possibleConeSymbols.insert(d);
+      }
+
+      // The guarded equalities go through the ordinary abstraction, so
+      // they are records like any other -- witness bundle, cone
+      // membership, checker edge. Emitted here whether or not the
+      // replacement was cached: the guards are not registry state, so
+      // the only thing that can put a replacement into a formula is the
+      // same loop that puts its definition there.
+      const ASTNode eqThen = nf->CreateNode(EQ, d, thn);
+      const ASTNode eqElse = nf->CreateNode(EQ, d, els);
+      newConstraints.push_back(
+          nf->CreateNode(OR, nf->CreateNode(NOT, cond), eqThen));
+      newConstraints.push_back(nf->CreateNode(OR, cond, eqElse));
+      iteMap[t] = d;
+    }
+
+    // Records minted for the guarded equalities need their witness
+    // bundles in this formula too. No simplification runs between here
+    // and the caller's return, so conjoining them here is the same as
+    // conjoining them at the top.
+    for (size_t i = recordsBefore; i < records.size(); i++)
+    {
+      newConstraints.push_back(records[i].anchorL);
+      newConstraints.push_back(records[i].anchorR);
+      newConstraints.push_back(records[i].witnessClause);
+    }
+
+    ASTNodeMap cache;
+    root = SubstitutionMap::replace(root, iteMap, cache, nf);
+    for (size_t i = 0; i < newConstraints.size(); i++)
+    {
+      ASTNodeMap cache2;
+      newConstraints[i] =
+          SubstitutionMap::replace(newConstraints[i], iteMap, cache2, nf);
+    }
+    root = nf->CreateNode(AND, root,
+                          ASTVec(newConstraints.begin(), newConstraints.end()));
   }
-
-  // The simplifying factory folds these before reaching us, but the
-  // hashing factory is also called directly, so decide them here too.
-  if (cond == bm->ASTTrue || thn == els)
-    return thn;
-  if (cond == bm->ASTFalse)
-    return els;
-
-  const IteKey key(cond, std::make_pair(thn, els));
-  std::map<IteKey, ASTNode>::const_iterator it = iteReplacements.find(key);
-  if (it != iteReplacements.end())
-    return it->second;
-
-  if (registrySealed)
-    FatalError("array-equality: an array if-then-else was built during a "
-               "solve, after the registry's constraints were taken; its "
-               "definition could not reach the formula",
-               cond);
-
-  const ASTNode d = bm->CreateFreshVariable(thn.GetIndexWidth(),
-                                            thn.GetValueWidth(), "ext_ite");
-  iteReplacements[key] = d;
-  possibleConeSymbols.insert(d);
-
-  // The two guarded equalities go through the ordinary abstraction, so
-  // they are records like any other -- witness bundle, cone
-  // membership, checker edge. Built with the plain hashing factory so
-  // no rewrite can alter what was registered.
-  NodeFactory* hf = bm->hashingNodeFactory;
-  mintingIteGuards = true;
-  const ASTNode eqThen = makeEquality(d, thn);
-  const ASTNode eqElse = makeEquality(d, els);
-  mintingIteGuards = false;
-  iteGuards.push_back(hf->CreateNode(OR, hf->CreateNode(NOT, cond), eqThen));
-  iteGuards.push_back(hf->CreateNode(OR, cond, eqElse));
-
-  return d;
 }
+
 
 void ExtensionalityContext::beginSolve()
 {
@@ -491,15 +464,17 @@ ASTNode ExtensionalityContext::conjoinRecordConstraints(const ASTNode& root)
     conjuncts.push_back(records[i].anchorR);
     conjuncts.push_back(records[i].witnessClause);
   }
-  // The if-then-else guards are registry content on the same footing:
-  // a replacement is never live without its defining implication,
-  // because the same loop emits both, every solve.
-  conjuncts.insert(conjuncts.end(), iteGuards.begin(), iteGuards.end());
+  ASTNode out = bm->defaultNodeFactory->CreateNode(AND, conjuncts);
+
+  // Section 4.1, on the conjunction rather than on the input alone: an
+  // equality's own operand can be the if-then-else, in which case it is
+  // the anchor equations that mention it, not the user's formula.
+  out = eliminateArrayITEs(out);
 
   // Everything the decision procedure needs is now in this solve's
   // formula; anything minted after this point could not be.
   registrySealed = true;
-  return bm->defaultNodeFactory->CreateNode(AND, conjuncts);
+  return out;
 }
 
 // Recover each record's canonical operands from its anchor equations
@@ -587,13 +562,13 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
 }
 
 // Compute the cone: the set of array terms the abstracted equalities
-// can constrain. Seed with every record's canonical operands, close
+// can constrain. Seed with the operands the caller supplies, close
 // downward through write bases and if-then-else branches, and upward
 // through the writes and if-then-elses stacked on cone arrays in the
 // formula (upward closure is what makes extensional reasoning
 // complete; compare rule U in section 7.3 of the paper).
 void ExtensionalityContext::computeProvisionalCone(
-    const ASTNode& root, std::set<ASTNode>& cone,
+    const ASTNode& root, const ASTVec& seeds, std::set<ASTNode>& cone,
     std::map<ASTNode, std::vector<ASTNode>>& parents,
     std::vector<ASTNode>& coneITEs)
 {
@@ -603,11 +578,8 @@ void ExtensionalityContext::computeProvisionalCone(
 
   ASTNodeSet visited;
   collectDag(root, visited);
-  for (size_t i = 0; i < records.size(); i++)
-  {
-    collectDag(records[i].canonicalLeft, visited);
-    collectDag(records[i].canonicalRight, visited);
-  }
+  for (size_t i = 0; i < seeds.size(); i++)
+    collectDag(seeds[i], visited);
 
   // parent adjacency over every array node in sight
   std::map<ASTNode, std::vector<ASTNode>> upEdges; // child array -> parents
@@ -624,12 +596,7 @@ void ExtensionalityContext::computeProvisionalCone(
     }
   }
 
-  std::vector<ASTNode> todo;
-  for (size_t i = 0; i < records.size(); i++)
-  {
-    todo.push_back(records[i].canonicalLeft);
-    todo.push_back(records[i].canonicalRight);
-  }
+  std::vector<ASTNode> todo(seeds.begin(), seeds.end());
 
   while (!todo.empty())
   {
@@ -693,8 +660,8 @@ ASTNode ExtensionalityContext::freshName(const ASTNode& term,
 // as accesses (section 11.4), and give every compound write index/value
 // a scalar name.
 //
-// No if-then-else elimination happens here any more -- makeArrayITE
-// did it at construction, so the cone cannot contain one.
+// No if-then-else elimination happens here: conjoinRecordConstraints
+// did it before preprocessing ran, so the cone cannot contain one.
 ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
 {
   assert(active());
@@ -706,10 +673,17 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
   std::vector<ASTNode> coneITEs;
 
   locateCanonicalOperands(root);
-  computeProvisionalCone(root, cone, parents, coneITEs);
+  ASTVec seeds;
+  for (size_t i = 0; i < records.size(); i++)
+  {
+    seeds.push_back(records[i].canonicalLeft);
+    seeds.push_back(records[i].canonicalRight);
+  }
+  computeProvisionalCone(root, seeds, cone, parents, coneITEs);
 
-  // Guaranteed by construction-time replacement; if it ever fails, the
-  // array transformer's own check below fires next and just as loudly.
+  // Guaranteed by the elimination, which ran before any pass that could
+  // reintroduce one; if it ever fails, the array transformer's own
+  // check fires next and just as loudly.
   assert(coneITEs.empty());
 
   // possibleConeSymbols decided, back when each equality was BUILT,
