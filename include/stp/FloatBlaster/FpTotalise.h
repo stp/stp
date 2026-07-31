@@ -71,13 +71,20 @@ namespace stp
 //    what keeps the node-creation-time constant comparisons sound before
 //    this pass gets its turn.)
 //
-//  - Every read from a RoundingMode-element array is pinned to the five
-//    legal encodings, exactly as declaring a RoundingMode variable pins
-//    it: a select is the other way a RoundingMode value enters the formula
-//    out of thin air, and without the constraint the carrier's 27 junk
-//    patterns would be satisfiable "modes". Conjoined at solve time rather
-//    than asserted at creation, so every route here -- parser or C API,
-//    before or after push/pop/reset-assertions -- is covered.
+//  - Every rounding mode the formula names out of thin air -- a declared
+//    RoundingMode symbol, or a read from a RoundingMode-element array -- is
+//    pinned to the five legal encodings. Without the constraint the
+//    carrier's 27 junk patterns would be satisfiable "modes", and they are
+//    not merely unlikely: they are a sixth behaviour a formula can tell
+//    from all five (see topLevel).
+//
+//    Conjoined at solve time rather than asserted at creation, so every
+//    route here -- parser or C API, before or after push/pop/
+//    reset-assertions -- is covered. The symbols are also pinned where they
+//    are declared, which is the right thing whenever that assertion
+//    survives; it is not what makes them safe. Assertions are levelled and
+//    the nodes are not, so a symbol built inside a vc_push/vc_pop bracket
+//    outlives the constraint that was supposed to hold it.
 class FpTotalise // not copyable
 {
 public:
@@ -101,10 +108,11 @@ private:
   ASTNode canonicalIndex(const ASTNode& index, unsigned int exp_width,
                          unsigned int sig_width);
 
-  // Collect the validity constraint of every READ over a
-  // RoundingMode-element array in `n`.
-  void collectRmElementReads(const ASTNode& n, ASTNodeSet& seen,
-                             ASTVec& constraints);
+  // Collect the validity constraint of every term in `n` that denotes a
+  // rounding mode out of thin air: a declared RoundingMode symbol, or a READ
+  // over a RoundingMode-element array.
+  void collectRoundingModeTerms(const ASTNode& n, ASTNodeSet& seen,
+                                ASTVec& constraints);
 
   // Rebuild `n` around new children, preserving its widths -- including the
   // floating-point format, which is per-node state that rebuilding drops.
