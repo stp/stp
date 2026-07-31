@@ -3,8 +3,8 @@ Array extensionality
 
 By default STP implements the *non-extensional* theory of arrays: it can
 reason about array elements (``select``/``store``), but not about arrays
-as whole values. An equality between two array terms is rejected with a
-warning.
+as whole values. An equality between two array terms is refused, with an
+error, at the point the term is built.
 
 With the ``--array-equality`` option STP decides the quantifier-free
 *extensional* theory of arrays: equality and ``distinct`` between array
@@ -54,15 +54,20 @@ With the option enabled:
   ``(get-model)``).
 
 Without the option, STP decides exactly what it decided before the
-feature existed. The C API surface is pinned byte for byte: an opt-in
+feature existed, with one deliberate exception: an equality between whole
+array terms is now refused rather than warned about. It was never
+decided -- nothing eliminates the array-sorted operands, so the atom
+reached the solver unconstrained and the verdict could be wrong, and a
+build with assertions aborted instead of answering. Both behaviours
+reproduce on STP releases predating this feature. The C API surface is pinned byte for byte: an opt-in
 test (``default-off-capi-baseline-differential``, enabled with
 ``-DTEST_BASELINE_DIFFERENTIAL=ON``) builds the pre-feature baseline
 from git history and compares every observation of an identical C API
 driver — verdicts, model values, counterexample-array entries and
 their order, stdout, stderr, exit status — across the two builds. Two
 diagnostic texts deliberately differ from the baseline and sit outside
-that comparison: the parser's array-extensionality warning now names
-the option (its full text and once-per-run latch are pinned by a lit
+that comparison: whole-array equality is refused with an error naming
+the option, where the baseline warned and continued (pinned by a lit
 test), and ``stp_simple``'s usage error mentions the flag it newly
 accepts. One behavioral corner also deliberately differs: when the
 soft timeout expires while lazy refinement is still undecided, the

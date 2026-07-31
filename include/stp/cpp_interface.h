@@ -46,7 +46,6 @@ class LetMgr;
 class Cpp_interface
 {
   STPMgr& bm;
-  bool alreadyWarned;
   bool print_success;
   bool ignoreCheckSatRequest;
 
