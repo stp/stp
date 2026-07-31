@@ -976,10 +976,17 @@ TEST(array_extensionality, store_index_read_through_second_array_unsat)
   ASSERT_NE(nullptr, ext);
 
   ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
-  // This is the query the divergence refusal exists for, so it must
-  // actually take that route -- otherwise the refusal, and the
-  // driver's undecided fall-back that depends on it, are untested.
-  EXPECT_GT(ext->nameDivergences, 0);
+  // This query used to take the divergence route, and asserted that it
+  // did. Since constant bit propagation writes its derived constants
+  // back into the formula (upstream #698), the rewrite is no longer
+  // one-sided: both occurrences of x11[C] are folded, so the two
+  // abstracted read variables coincide and no candidate's names
+  // disagree with their terms. Neither this query nor its 120-bit
+  // sibling below reaches the refusal any more, so the refusal, and
+  // the driver's undecided fall-back that depends on it, are currently
+  // unexercised -- they stay as the guard for the same asymmetry
+  // arriving by another route.
+  EXPECT_EQ(0, ext->nameDivergences);
   vc_Destroy(vc);
 }
 
