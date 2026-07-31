@@ -60,12 +60,11 @@ void collectDag(const ASTNode& n, ASTNodeSet& visited)
 // The current form of an equality operand, read back from its witness
 // anchor. The anchor was recorded as name = read(operand, lambda), and
 // stays that shape: the only rewrite that could break it is the
-// simplifier pushing the read through an array if-then-else, and by
-// the time the simplifier runs the elimination has already replaced
-// every if-then-else the equalities can reach -- including the one in
-// this very anchor, since the elimination is applied to the whole
-// conjunction the anchors are part of. Anything else means an anchor
-// was rewritten beyond recognition: refuse loudly rather than guess.
+// simplifier distributing the read over an array if-then-else, which it
+// does not do while the procedure is active -- the checker reasons
+// about those directly and needs the read left where it stands.
+// Anything else means an anchor was rewritten beyond recognition:
+// refuse loudly rather than guess.
 ASTNode recoverAnchoredOperand(const ASTNode& rhs, const ASTNode& lambda,
                                const ASTNode& proxy)
 {
@@ -79,10 +78,9 @@ ASTNode recoverAnchoredOperand(const ASTNode& rhs, const ASTNode& lambda,
     return rhs[0];
   }
   if (rhs.GetKind() == ITE)
-    FatalError("array-equality: a witness read was pushed through an "
-               "array if-then-else, although the elimination removed "
-               "every one the equalities can reach before preprocessing "
-               "ran",
+    FatalError("array-equality: a witness read was distributed over an "
+               "array if-then-else, although that is suppressed while the "
+               "procedure is active",
                proxy);
   FatalError("array-equality: a witness-read defining equation was "
              "rewritten into a shape operand recovery does not "
@@ -350,6 +348,43 @@ ASTNode ExtensionalityContext::conjoinRecordConstraints(const ASTNode& root)
   }
   ASTNode out = bm->defaultNodeFactory->CreateNode(AND, conjuncts);
 
+  // Anticipate the cone before any pass can act on the answer.
+  //
+  // possibleConeSymbols decides which reads are protected from the
+  // read-equals-constant substitution, and it has to be a superset of
+  // the arrays the checker will reason about. Collecting it from the
+  // operands as they are built is not enough, because the cone closes
+  // UPWARD as well: an operand that is one branch of an array
+  // if-then-else pulls that if-then-else in, and the other branch
+  // comes with it. That branch can be an array no equality mentions,
+  // and nothing at construction time can anticipate it -- the
+  // if-then-else sits above the operand and need not exist yet, and in
+  // the query this was reduced from it cannot, because the equality is
+  // its own condition.
+  //
+  // Here it can be anticipated exactly. This is the one point where
+  // the whole formula and the whole registry are both known and no
+  // pass has run: the same closure preparation will perform, computed
+  // early enough that its answer can still protect anything. Operands
+  // are seeded in their construction form, which is how the formula
+  // still spells them.
+  {
+    ASTVec seeds;
+    for (size_t i = 0; i < records.size(); i++)
+    {
+      seeds.push_back(records[i].constructionLeft);
+      seeds.push_back(records[i].constructionRight);
+    }
+    std::set<ASTNode> cone;
+    std::map<ASTNode, std::vector<ASTNode>> parents;
+    std::vector<ASTNode> coneITEs;
+    computeProvisionalCone(out, seeds, cone, parents, coneITEs);
+    for (std::set<ASTNode>::const_iterator it = cone.begin(); it != cone.end();
+         ++it)
+      if (it->GetKind() == SYMBOL && isArrayType(*it))
+        possibleConeSymbols.insert(*it);
+  }
+
   // Everything the decision procedure needs is now in this solve's
   // formula; anything minted after this point could not be.
   registrySealed = true;
@@ -577,20 +612,25 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
   computeProvisionalCone(root, seeds, cone, parents, coneITEs);
 
 
-  // possibleConeSymbols decided, back when each equality was BUILT,
-  // which reads to protect from the read-equals-constant substitution.
-  // The cone is closed over the operands as they are NOW, after
-  // simplification. Nothing makes the first a superset of the second:
-  // it holds because the closure only reaches symbols that were already
-  // under the operand at construction (upward closure adds writes,
-  // which are not symbols, and array if-then-elses, which no longer
-  // exist), and because no pass rewrites an operand to name an array
-  // symbol that was not there. That second half is a claim about every
-  // pass that runs in between, and losing it is silent: an unanticipated
-  // cone symbol's reads were never protected, so the substitution may
-  // have deleted an observation the consistency check needs, and the
-  // check then certifies a candidate against contents it never saw.
-  // Cheap to verify, so verify it.
+  // possibleConeSymbols decided which reads to protect from the
+  // read-equals-constant substitution, and this cone is closed over the
+  // operands as they are NOW, after simplification. What makes the
+  // first a superset of the second is that conjoinRecordConstraints ran
+  // this same closure on this same formula before any pass touched it.
+  // What is left to assume is only that no pass in between rewrites an
+  // operand to name an array symbol that was not reachable then --
+  // a claim about every pass that runs, not something this code can
+  // arrange. Losing it is silent: an unanticipated cone symbol's reads
+  // were never protected, so the substitution may have deleted an
+  // observation the consistency check needs, and the check then
+  // certifies a candidate against contents it never saw. Cheap to
+  // verify, so verify it.
+  //
+  // The earlier version of this reasoning leaned on array if-then-elses
+  // no longer existing by now, which stopped being true when they
+  // stopped being rewritten away. An operand that is a branch of one
+  // pulls it into the cone upward, and the other branch descends from
+  // it -- an array no equality mentions.
   for (std::set<ASTNode>::const_iterator it = cone.begin(); it != cone.end();
        ++it)
   {
