@@ -82,7 +82,6 @@ class Cpp_interface
 {
   STPMgr& bm;
   std::map<std::string, std::pair<unsigned, unsigned>> sort_aliases;
-  bool alreadyWarned;
   bool print_success;
   bool ignoreCheckSatRequest;
 
