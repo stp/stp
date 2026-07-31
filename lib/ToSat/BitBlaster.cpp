@@ -1988,6 +1988,20 @@ void BitBlaster<BBNode, BBNodeManagerT>::mult_BubbleSorterWithBounds(
 
   if (uf->conjoin_to_top)
   {
+    // minTrue/maxTrue are the bounds constant bit propagation recorded for this
+    // node. They can ask for more true bits than the column has entries: the
+    // formula reaching the bit-blaster may have been rewritten since the bounds
+    // were taken, and nothing invalidates them when it is. Requiring more than
+    // 'height' ones, or at most a negative number of them, is unsatisfiable.
+    // Conjoining false settles the query, so the result bit is arbitrary - but
+    // one still has to be produced, because the caller consumes exactly one.
+    if (minTrue > height || maxTrue < 0)
+    {
+      support.insert(BBFalse);
+      current.push_back(BBFalse);
+      return;
+    }
+
     for (int j = 0; j < minTrue; j++)
     {
       support.insert(currentSorted[j]);
