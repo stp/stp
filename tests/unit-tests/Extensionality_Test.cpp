@@ -42,6 +42,7 @@ THE SOFTWARE.
 #include "stp/NodeFactory/SimplifyingNodeFactory.h"
 #include "stp/Printer/printers.h"
 #include "stp/STPManager/STPManager.h"
+#include "stp/cpp_interface.h"
 #include <gtest/gtest.h>
 #include <map>
 #include <sstream>
@@ -71,6 +72,37 @@ TEST(ArrayEqualityAstTest, OpaqueNodeIsTypedHashedAndPrintedAsEquality)
   std::ostringstream out;
   printer::SMTLIB2_Print1(out, eq, 0, false);
   EXPECT_EQ("(= |a| |b|)", out.str());
+}
+
+TEST(ArrayEqualityAstTest, FunctionApplicationSpecializesOpaqueOperands)
+{
+  STPMgr mgr;
+  SimplifyingNodeFactory simplifying(*mgr.hashingNodeFactory, mgr);
+  Cpp_interface interface(mgr, &simplifying);
+  NodeFactory* hf = mgr.hashingNodeFactory;
+
+  const ASTNode a = mgr.CreateSymbol("a", 1, 1);
+  const ASTNode b = mgr.CreateSymbol("b", 1, 1);
+  const ASTNode formal = mgr.CreateSymbol("i", 0, 1);
+  const ASTNode one = mgr.CreateOneConst(1);
+  const ASTNode body = hf->CreateNode(
+      ARRAY_EQ, hf->CreateArrayTerm(WRITE, 1, 1, a, formal, one), b);
+
+  interface.storeFunction("f", ASTVec{formal}, body);
+
+  const ASTNode zero = mgr.CreateZeroConst(1);
+  const ASTNode atZero = interface.applyFunction("f", ASTVec{zero});
+  const ASTNode atOne = interface.applyFunction("f", ASTVec{one});
+  const ASTNode expectedZero = hf->CreateNode(
+      ARRAY_EQ, hf->CreateArrayTerm(WRITE, 1, 1, a, zero, one), b);
+  const ASTNode expectedOne = hf->CreateNode(
+      ARRAY_EQ, hf->CreateArrayTerm(WRITE, 1, 1, a, one, one), b);
+
+  EXPECT_EQ(expectedZero, atZero);
+  EXPECT_EQ(expectedOne, atOne);
+  EXPECT_NE(atZero, atOne);
+  EXPECT_EQ(ARRAY_EQ, atZero.GetKind());
+  EXPECT_EQ(ARRAY_EQ, atOne.GetKind());
 }
 
 TEST(ExtGuardTest, PathPayloadRemainsCompact)
