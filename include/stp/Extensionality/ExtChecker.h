@@ -135,7 +135,7 @@ struct ExtGuard
     EQ_PROXY,
     ITE_COND
   };
-  Kind kind;
+  Kind kind = INDEX_NE;
 
   // INDEX_NE: theory "indexTerm != writeIndexTerm",
   //           abstract "indexName != writeIndexName".
@@ -146,14 +146,14 @@ struct ExtGuard
   // operands; abstract: the positive Boolean proxy literal.
   ASTNode proxy;
   ASTNode eqLeft, eqRight;
-  size_t eqRecord;
+  size_t eqRecord = 0;
 
   // ITE_COND: theory, the condition term as the user wrote it;
   // abstract, the reified Boolean naming it. condPositive is the value
   // sigma gave the condition, which is the polarity the guard carries.
   ASTNode condTerm;
   ASTNode condName;
-  bool condPositive;
+  bool condPositive = false;
 };
 
 // A cone array-valued if-then-else, kept as a term rather than
