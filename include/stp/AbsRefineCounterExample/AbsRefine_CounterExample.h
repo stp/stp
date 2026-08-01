@@ -35,6 +35,8 @@ THE SOFTWARE.
 
 namespace stp
 {
+class FpEncodingContext;
+
 class AbsRefine_CounterExample // not copyable
 {
 private:
@@ -56,6 +58,17 @@ private:
   // Ptr to ArrayTransformer
   ArrayTransformer* ArrayTransform;
 
+  // Non-owning observer of STP's solve-local source-to-carrier mapping.
+  // STP clears this before destroying or replacing the context.
+  FpEncodingContext* fpEncodingContext;
+
+  // Non-zero while an already-lowered source expression is being evaluated.
+  // Its descendants retain source-sort metadata, but must not be lowered a
+  // second time merely because of that metadata.
+  unsigned int fpEncodedEvaluationDepth;
+
+  FpEncodingContext& requireFpEncodingContext() const;
+
   // Checks if the counterexample is good. In order for the
   // counterexample to be ok, every assert must evaluate to true
   // w.r.t couner_example, and the query must evaluate to
@@ -73,7 +86,7 @@ private:
 
 private:
   ASTNode TermToConstTermUsingModel_inner(const ASTNode& term,
-                                          bool ArrayReadFlag);
+                                           bool ArrayReadFlag);
 
 public:
 
@@ -95,11 +108,17 @@ public:
 
 public:
   AbsRefine_CounterExample(STPMgr* b, Simplifier* s, ArrayTransformer* at)
-      : bm(b), simp(s), ArrayTransform(at)
+      : bm(b), simp(s), ArrayTransform(at), fpEncodingContext(NULL),
+        fpEncodedEvaluationDepth(0)
   {
     ASTTrue = bm->CreateNode(TRUE);
     ASTFalse = bm->CreateNode(FALSE);
     ASTUndefined = bm->CreateNode(UNDEFINED);
+  }
+
+  void setFpEncodingContext(FpEncodingContext* context)
+  {
+    fpEncodingContext = context;
   }
 
   // Prints the counterexample to stdout

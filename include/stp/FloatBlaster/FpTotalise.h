@@ -126,7 +126,13 @@ private:
 
   STPMgr* bm;
   NodeFactory* nf;
-  ASTNodeMap cache;
+  // `traversal_cache` preserves DAG sharing only for one topLevel walk and is
+  // released immediately afterwards. `persistent_cache` keeps just the
+  // source FP/array nodes whose encoding changed and may be requested again
+  // during model evaluation. Retaining every ordinary BV node here can keep
+  // enormous pre-simplification DAGs alive for the lifetime of the model.
+  ASTNodeMap traversal_cache;
+  ASTNodeMap persistent_cache;
 };
 
 } // namespace stp

@@ -35,6 +35,7 @@ FpTotalise::FpTotalise(STPMgr* bm_) : bm(bm_), nf(bm_->defaultNodeFactory) {}
 
 ASTNode FpTotalise::topLevel(const ASTNode& n)
 {
+  traversal_cache.clear();
   ASTNode out = visit(n);
 
   // Pin every rounding mode the final formula names -- declared symbols and
@@ -79,6 +80,7 @@ ASTNode FpTotalise::topLevel(const ASTNode& n)
     }
   }
 
+  traversal_cache.clear();
   return out;
 }
 
@@ -197,9 +199,12 @@ ASTNode FpTotalise::visit(const ASTNode& n)
   if (n.Degree() == 0)
     return n;
 
-  const ASTNodeMap::const_iterator it = cache.find(n);
-  if (it != cache.end())
-    return it->second;
+  const ASTNodeMap::const_iterator persistent = persistent_cache.find(n);
+  if (persistent != persistent_cache.end())
+    return persistent->second;
+  const ASTNodeMap::const_iterator current = traversal_cache.find(n);
+  if (current != traversal_cache.end())
+    return current->second;
 
   ASTVec children;
   children.reserve(n.Degree() + 1);
@@ -264,7 +269,17 @@ ASTNode FpTotalise::visit(const ASTNode& n)
 
   const ASTNode out = changed ? rebuild(n, children) : n;
 
-  cache[n] = out;
+  traversal_cache[n] = out;
+  const SourceSort source_sort = n.GetSourceSort();
+  const bool fp_array_access =
+      (k == READ || k == WRITE) && n.Degree() > 0 &&
+      n[0].GetSourceSort().kind() == SourceSort::Kind::Array &&
+      n[0].GetSourceSort().index().kind() ==
+          SourceSort::Kind::FloatingPoint;
+  if (out != n &&
+      (is_FP_kind(k) || fp_array_access ||
+       source_sort.kind() == SourceSort::Kind::FloatingPoint))
+    persistent_cache[n] = out;
   return out;
 }
 

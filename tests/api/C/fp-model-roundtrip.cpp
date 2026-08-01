@@ -187,3 +187,35 @@ TEST(fp_model_roundtrip, whole_counterexample_snapshot)
 
   vc_Destroy(vc);
 }
+
+// Partial operations introduce solve-local choices. Model evaluation must
+// follow the exact totalisation used by that solve, and a later solve must
+// replace (rather than retain) the old encoding/model context.
+TEST(fp_model_roundtrip, partial_choice_uses_current_solve_encoding)
+{
+  VC vc = vc_createValidityChecker();
+  vc_setFlags(vc, 'd', 0); // construct and validate each counterexample
+
+  Type f = vc_fpType(vc, 5, 11);
+  Expr plus_zero = vc_fpPlusZero(vc, f);
+  Expr minus_zero = vc_fpMinusZero(vc, f);
+  Expr minimum = vc_fpMinExpr(vc, plus_zero, minus_zero);
+
+  vc_push(vc);
+  vc_assertFormula(vc, vc_eqExpr(vc, minimum, plus_zero));
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  Expr first = vc_getCounterExample(vc, minimum);
+  ASSERT_EQ(FLOATINGPOINT_TYPE, getType(first));
+  EXPECT_EQ(0ULL, getBVUnsignedLongLong(first));
+  vc_pop(vc);
+
+  vc_push(vc); // clears the previous model and its encoding context
+  vc_assertFormula(vc, vc_eqExpr(vc, minimum, minus_zero));
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  Expr second = vc_getCounterExample(vc, minimum);
+  ASSERT_EQ(FLOATINGPOINT_TYPE, getType(second));
+  EXPECT_EQ(0x8000ULL, getBVUnsignedLongLong(second));
+  vc_pop(vc);
+
+  vc_Destroy(vc);
+}

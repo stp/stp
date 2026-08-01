@@ -26,6 +26,7 @@
 set(floatblaster_sources
     FloatBlaster.cpp
     FloatBlast.cpp
+    FpEncodingContext.cpp
     FpTotalise.cpp
 )
 if (ENABLE_FLOATING_POINT)

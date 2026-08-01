@@ -23,8 +23,6 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/STPManager/STP.h"
-#include "stp/FloatBlaster/FloatBlast.h"
-#include "stp/FloatBlaster/FpTotalise.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/NodeToFixedBitsMap.h"
 #include "stp/ToSat/ToSATAIG.h"
@@ -167,6 +165,13 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
                                     const ASTNode& query)
 {
 
+  // One encoding context per actual solve. Keep it after this function
+  // returns so counterexample/get-value requests reuse the exact mappings
+  // that introduced unspecified-value arrays and lowered the solved formula.
+  Ctr_Example->setFpEncodingContext(NULL);
+  fpEncodingContext.reset(new FpEncodingContext(bm));
+  Ctr_Example->setFpEncodingContext(fpEncodingContext.get());
+
   // Unfortunatey this is a global variable,which the aux function needs to
   // overwrite sometimes.
   bool saved_ack = bm->UserFlags.ackermannisation;
@@ -198,8 +203,7 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   // anything. See FpTotalise. RoundingMode-element arrays and RoundingMode
   // symbols can each appear without a single float node in the formula, so
   // has_floating_point alone does not cover the pass.
-  FpTotalise totalise(bm);
-  original_input = totalise.topLevel(original_input);
+  original_input = fpEncodingContext->prepare(original_input);
 
   SATSolver* newS = get_new_sat_solver();
 
@@ -424,8 +428,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // bitvectors.
   if (bm->has_floating_point)
   {
-    FloatBlast blast(bm);
-    inputToSat = blast.topLevel(inputToSat);
+    inputToSat = fpEncodingContext->lowerPrepared(inputToSat);
     bm->ASTNodeStats("After floating-point lowering: ", inputToSat);
 
     // The threshold controls the cost of bit-blasting the formula in its

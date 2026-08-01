@@ -84,7 +84,11 @@ private:
 
   STPMgr* bm;
   NodeFactory* nf;
-  ASTNodeMap cache;
+  // Ordinary traversal memoisation is solve-step-local. Only mappings at the
+  // FP source boundary survive for model queries; retaining every visited BV
+  // node would pin entire pre-simplification DAGs in memory.
+  ASTNodeMap traversal_cache;
+  ASTNodeMap persistent_cache;
 };
 
 } // namespace stp
