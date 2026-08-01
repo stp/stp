@@ -93,3 +93,7 @@ ARRAY           0       0
 BITVECTOR       0       0
 BOOLEAN         0       0
 
+# Opaque whole-array equality. Kept last so the numeric values exported by
+# c_interface.h remain stable. The extensionality prepass lowers this before
+# ordinary solving.
+ARRAY_EQ        2       2       Form

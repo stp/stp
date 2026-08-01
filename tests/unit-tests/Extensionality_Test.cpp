@@ -39,14 +39,39 @@ THE SOFTWARE.
 
 #include "stp/Extensionality/ExtChecker.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/NodeFactory/SimplifyingNodeFactory.h"
+#include "stp/Printer/printers.h"
 #include "stp/STPManager/STPManager.h"
 #include <gtest/gtest.h>
 #include <map>
+#include <sstream>
 
 using namespace stp;
 
 namespace
 {
+
+TEST(ArrayEqualityAstTest, OpaqueNodeIsTypedHashedAndPrintedAsEquality)
+{
+  STPMgr mgr;
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  const ASTNode a = mgr.CreateSymbol("a", 2, 3);
+  const ASTNode b = mgr.CreateSymbol("b", 2, 3);
+
+  const ASTNode eq = hf->CreateNode(ARRAY_EQ, a, b);
+  EXPECT_EQ(ARRAY_EQ, eq.GetKind());
+  EXPECT_EQ(eq, hf->CreateNode(ARRAY_EQ, b, a));
+  EXPECT_TRUE(eq.isPred());
+  EXPECT_TRUE(isAtomic(eq.GetKind()));
+  EXPECT_TRUE(BVTypeCheck(eq));
+
+  SimplifyingNodeFactory simplifying(*mgr.hashingNodeFactory, mgr);
+  EXPECT_EQ(mgr.ASTTrue, simplifying.CreateNode(ARRAY_EQ, ASTVec{a, a}));
+
+  std::ostringstream out;
+  printer::SMTLIB2_Print1(out, eq, 0, false);
+  EXPECT_EQ("(= |a| |b|)", out.str());
+}
 
 TEST(ExtGuardTest, PathPayloadRemainsCompact)
 {

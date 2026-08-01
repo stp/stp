@@ -2172,6 +2172,10 @@ void vc_DeleteExpr(Expr e)
 exprkind_t getExprKind(Expr e)
 {
   stp::ASTNode* input = (stp::ASTNode*)e;
+  // ARRAY_EQ is an internal, opaque representation of ordinary equality.
+  // Do not expose a new C API enum value (or shift the stable existing ones).
+  if (input->GetKind() == stp::ARRAY_EQ)
+    return EQ;
   return (exprkind_t)(input->GetKind());
 }
 
@@ -2523,4 +2527,3 @@ vc
   return false;
 #endif
 }
-

@@ -148,6 +148,7 @@ bool isCommutative(const Kind k)
     case BVPLUS:
     case BVMULT:
     case EQ:
+    case ARRAY_EQ:
     case AND:
     case OR:
     case NAND:
@@ -206,7 +207,8 @@ void SortByArith(ASTVec& v)
 
 bool isAtomic(Kind kind)
 {
-  if (TRUE == kind || FALSE == kind || EQ == kind || BVLT == kind ||
+  if (TRUE == kind || FALSE == kind || EQ == kind || ARRAY_EQ == kind ||
+      BVLT == kind ||
       BVLE == kind || BVGT == kind || BVGE == kind || BVSLT == kind ||
       BVSLE == kind || BVSGT == kind || BVSGE == kind || BVUADDO == kind ||
       BVSADDO == kind || BVUMULO == kind || BVSMULO == kind ||
@@ -558,6 +560,19 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
         cerr << "indexwidth of rhs of EQ: " << n[1].GetIndexWidth() << endl;
         FatalError(
             "BVTypeCheck: terms in atomic formulas must be of equal length", n);
+      }
+      break;
+
+    case ARRAY_EQ:
+      if (n.Degree() != 2)
+        FatalError("BVTypeCheck: ARRAY_EQ should have exactly 2 args\n", n);
+
+      if (n[0].GetType() != ARRAY_TYPE || n[1].GetType() != ARRAY_TYPE ||
+          n[0].GetValueWidth() != n[1].GetValueWidth() ||
+          n[0].GetIndexWidth() != n[1].GetIndexWidth())
+      {
+        FatalError("BVTypeCheck: ARRAY_EQ requires identically typed arrays",
+                   n);
       }
       break;
 
