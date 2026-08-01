@@ -32,9 +32,9 @@ THE SOFTWARE.
  *    substitution. Each reachable canonical operand pair is replaced by a
  *    fresh Boolean abstraction (paper section 5) and receives the witness
  *    constraints from preprocessing step 1 (section 4);
- *  - the per-solve view of the array subgraph relevant to those
- *    equalities (which arrays, writes and reads participate), frozen
- *    just before STP's main array transformation;
+ *  - the complete per-solve array graph reachable from the prepared root
+ *    (all participating arrays, writes and reads), frozen just before STP's
+ *    main array transformation;
  *  - the pending refinement lemma between a failed candidate check and
  *    the re-solve, and its encoding into the incremental SAT solver;
  *  - the completed array model of an accepted candidate.
@@ -69,12 +69,12 @@ class ToSATBase;
 class ExtensionalityContext
 {
 public:
-  // One abstracted array equality. The construction operands are the
-  // array terms as they were when the equality was built; because STP
-  // simplifies and substitutes before solving, the current (canonical)
-  // form of each operand is recovered at solve time from the record's
-  // anchor equations, which travel through the same rewriting as the
-  // rest of the formula.
+  // One solve-local abstracted array equality. The construction operands are
+  // the solve-specialized array terms seen by solve-boundary lowering, after
+  // function/let substitution has finished. Ordinary preprocessing may still
+  // rewrite them; prepare() recovers their current (canonical) forms from the
+  // anchor equations, which travel through the same rewriting as the rest of
+  // the formula.
   struct Record
   {
     size_t id;
@@ -85,7 +85,7 @@ public:
     ASTNode canonicalRight;    // per-solve, set by prepare()
     ASTNode lambda;            // fresh witness index symbol
     ASTNode nameL, nameR;      // scalar names of the witness reads
-    // Constraint bundle conjoined at the start of every solve. The
+    // Constraint bundle conjoined once into this record's solve. The
     // last conjunct is preprocessing step 1 of the paper -- the witness
     // for array inequality, a != b -> read(a,l) != read(b,l) -- and the
     // two defining equations name the virtual reads so they stay in
@@ -165,10 +165,10 @@ public:
     return protectedSymbols.find(s) != protectedSymbols.end();
   }
 
-  // Conservative pre-preprocessing inventory of the array symbols in
-  // an active solve. The final graph is built from the whole prepared
-  // formula, so this set must anticipate every array symbol whose reads
-  // the checker may later own.
+  // Conservative pre-preprocessing inventory of the array symbols in an
+  // active solve. The final graph is built from the whole prepared formula,
+  // so this set is a pre/post ownership tripwire: it must anticipate every
+  // array symbol the checker may later own.
   bool wasArrayAnticipated(const ASTNode& arraySymbol) const
   {
     return anticipatedArraySymbols.find(arraySymbol) !=

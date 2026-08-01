@@ -444,19 +444,17 @@ ASTNode ExtensionalityContext::conjoinRecordConstraints(const ASTNode& root)
   ASTNode out = bm->defaultNodeFactory->CreateNode(AND, conjuncts);
 
   // Anticipate the complete owned graph before any pass can act on the
-  // answer. Once an equality is active, the checker owns every array
-  // read in the solve: congruence connects otherwise unrelated arrays
-  // through shared scalar index expressions, so an equality-seeded
-  // subgraph is not a closed theory boundary.
+  // answer. Once an equality is active, the checker owns every array read in
+  // the solve: access indices and values may themselves contain reads of
+  // otherwise unrelated arrays, so a syntactic equality cone is not closed
+  // under scalar data dependencies.
   //
-  // anticipatedArraySymbols decides which reads are protected from the
-  // read-equals-constant substitution. It must come from the whole root,
-  // not just equality operands: an unrelated array or an array-ITE branch
-  // is owned too.
-  // This is the one point where the whole expanded formula and the
-  // active registry are known and no simplification has run, so it is
-  // also the point at which read-deleting substitutions can still be
-  // prevented.
+  // All READ-headed substitutions are suppressed while the procedure is
+  // active. anticipatedArraySymbols instead records this complete ownership
+  // boundary before preprocessing, so prepare() can reject any array symbol
+  // introduced later by a pass. It must therefore come from the whole root,
+  // not just equality operands: an unrelated array or an array-ITE branch is
+  // owned too.
   collectAnticipatedArraySymbols(out);
 
   // Everything the decision procedure needs is now in this solve's
@@ -647,27 +645,20 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
                  r.proxy);
   }
 
-  // anticipatedArraySymbols recorded which reads had to be protected
-  // from read-equals-constant substitution, and this graph contains all
-  // arrays as they are NOW, after simplification. What makes the first
-  // a superset of the second is that conjoinRecordConstraints walked
-  // the whole formula before any pass touched it.
-  // What is left to assume is only that no pass in between introduces an
-  // array symbol that was not reachable then --
-  // a claim about every pass that runs, not something this code can
-  // arrange. Losing it is silent: an unanticipated array symbol's reads
-  // were never protected, so the substitution may have deleted an
-  // observation the consistency check needs, and the check then
-  // certifies a candidate against contents it never saw. Cheap to
-  // verify, so verify it.
+  // anticipatedArraySymbols is the ownership inventory before preprocessing;
+  // this graph contains the arrays that remain afterwards. Because
+  // conjoinRecordConstraints walked the complete formula, the first set must
+  // cover every symbol in the second unless a pass introduced new array
+  // structure after the boundary. The checker graph is frozen here, so make
+  // that maintenance invariant explicit rather than silently accepting the
+  // new symbol.
   for (std::set<ASTNode>::const_iterator it = arrays.begin();
        it != arrays.end(); ++it)
   {
     if (it->GetKind() == SYMBOL && !wasArrayAnticipated(*it))
       FatalError("array-equality: an array symbol entered the prepared graph "
                  "without appearing at the pre-preprocessing ownership "
-                 "boundary, so its reads were never protected from "
-                 "substitution",
+                 "boundary",
                  *it);
   }
 

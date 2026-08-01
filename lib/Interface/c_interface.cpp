@@ -2298,9 +2298,9 @@ void process_argument(const char ch, VC vc)
     case 'x':
       // Decide whole-array equality/disequality (the extensional
       // theory of arrays) with the lemmas-on-demand procedure of
-      // Brummayer & Biere. Array equalities are abstracted when the
-      // AST is built, so this must be set before any term of the
-      // query is created.
+      // Brummayer & Biere. This must be set before a whole-array equality
+      // is built; construction preserves an opaque ARRAY_EQ until the
+      // completed query is lowered at the solve boundary.
       bm->UserFlags.enable_array_equality = true;
       break;
     case 'y':

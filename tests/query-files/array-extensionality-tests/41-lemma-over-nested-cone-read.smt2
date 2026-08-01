@@ -1,6 +1,6 @@
 ; RUN: %solver --array-equality %s | %OutputCheck %s
 ; CHECK-NEXT: ^unsat
-; A cone read whose abstraction variable appears only inside another
+; A checker-owned read whose abstraction variable appears only inside another
 ; read's index: the refinement lemma for the store congruence must be
 ; encodable over that variable even though nothing else carries it
 ; into the bit-blasted formula. The equality itself is false (the two

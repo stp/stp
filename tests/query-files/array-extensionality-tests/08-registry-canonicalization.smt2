@@ -1,8 +1,8 @@
 ; RUN: %solver --array-equality %s | %OutputCheck %s
 ; CHECK-NEXT: ^unsat
-; Ordinary preprocessing substitutes the write index after the
-; equality was abstracted; the decision procedure must reason over the
-; operands' current, post-substitution form.
+; Solve-boundary lowering records the write operands before ordinary
+; preprocessing substitutes the write index; preparation must recover and
+; reason over the operands' current, post-substitution form.
 (set-logic QF_ABV)
 (declare-fun a () (Array (_ BitVec 2) (_ BitVec 2)))
 (declare-fun b () (Array (_ BitVec 2) (_ BitVec 2)))

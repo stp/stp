@@ -1339,7 +1339,7 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
       PrintSATModel(SatSolver, m);
     }
     // Array equality: the consistency checker runs on every candidate
-    // whenever at least one array equality was abstracted -- even when
+    // whenever the current solve has an active lowered equality -- even when
     // STP's ordinary model evaluation already failed -- and an array
     // conflict takes priority. In an active solve every read belongs to
     // this checker, so only its array lemmas can rule such a candidate

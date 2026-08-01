@@ -24,10 +24,11 @@ Command line::
     stp --array-equality file.smt2
     stp_simple --array-equality file.smt2
 
-C API: call ``vc_setFlag(vc, 'x')`` immediately after creating the
-validity checker, *before any term is created* — array equalities are
-abstracted at node-creation time, so enabling the option later is
-unsupported.
+C API: call ``vc_setFlag(vc, 'x')`` before constructing any equality
+between whole arrays.
+The option controls whether construction of the dedicated opaque
+``ARRAY_EQ`` node is permitted; its abstraction is deferred until the
+completed query reaches the solver.
 
 Python API: create the solver with ``stp.Solver(array_equality=True)``.
 Arrays are built with ``Solver.array(name, index_width, value_width)``,
@@ -86,15 +87,18 @@ the paper's ``DP_A``, the decision procedure for the theory of arrays;
 STP's existing bit-blaster and SAT solver provide ``DP_B``, the solver
 for each abstracted candidate formula:
 
-1. **Construction-time registration and abstraction.** Each equality
-   between a new canonical pair of array terms is replaced — at
-   node-creation time, in the shared node factory — by a fresh Boolean
-   *abstraction variable*; repeated or operand-swapped requests reuse
-   that variable, and a reflexive equality folds to true. No array
-   equality ever reaches STP's simplifier, array transformer, or
-   bit-blaster. The registry also eagerly records, per equality, the
-   witness constraints that the next stage places into the formula.
-   Reads are abstracted by fresh variables by STP's existing machinery.
+1. **Opaque construction and solve-boundary lowering.** Construction of
+   an equality between whole arrays produces a dedicated, opaque
+   ``ARRAY_EQ`` node whose operands remain visible. Function, ``let`` and
+   query substitution therefore specialize the operands normally. Once
+   the complete query has been assembled, and before ordinary STP
+   preprocessing starts, a DAG traversal replaces every reachable
+   ``ARRAY_EQ`` with a fresh Boolean *abstraction variable* and creates
+   its witness record. Repeated or operand-swapped pairs reuse one record
+   within that solve, and a reflexive equality folds to true. Records,
+   proxies and witnesses are solve-local and are rebuilt for the next
+   query; only the opaque public AST persists. No opaque array equality
+   reaches STP's ordinary simplifier, array transformer, or bit-blaster.
 
    One shape skips abstraction entirely: a chain of writes equated
    with its own base array (the frame condition ``store(a,i,v) = a``
@@ -107,21 +111,26 @@ for each abstracted candidate formula:
    built as an ordinary node and stays one, and the consistency checker
    reasons about it directly (see stage 3).
 
-2. **Solve-time preparation.** Each registered equality ``a = b``
+2. **Solve-time preparation.** Each current-root equality ``a = b``
+   lowered in this solve
    carries a fresh *witness index* λ and two *virtual reads* ``a[λ]``,
    ``b[λ]``, with the constraint ``a = b ∨ a[λ] ≠ b[λ]``: if the SAT
    solver makes the equality false, the two arrays must visibly differ
    at λ (axiom A4′, the paper's preprocessing step 1). These are
    conjoined onto the formula before STP's ordinary simplification,
    and the equality operands are recovered from them afterwards in
-   their simplified form — always as a plain read of an array term,
-   since there is no array if-then-else left for a read to be pushed
-   through. Every index and value that could appear in a future lemma
+   their simplified form. Each anchor remains a plain read even when its
+   operand is an array-valued if-then-else, because read distribution is
+   suppressed while the procedure is active. Every index and value that
+   could appear in a future lemma
    is given a named variable inside the initial formula, so refinement
    lemmas can later be encoded over SAT variables that already exist.
 
-   Every array-valued ``ite(c, a, b)`` the equalities can reach also
-   has its condition *reified*: a fresh Boolean symbol ``n_c`` with
+   Once any equality is active, the checker owns the complete array graph
+   reachable from the prepared formula, rather than a syntactic cone
+   around the equality operands. Every surviving array-valued
+   ``ite(c, a, b)`` in that graph has its condition *reified*: a fresh
+   Boolean symbol ``n_c`` with
    ``n_c ↔ c``. The checker decides which branch of an if-then-else is
    live from ``σ(n_c)``, and that has to be the value the bit-blasted
    circuit took — re-deriving it from the counterexample is how a
@@ -134,12 +143,13 @@ for each abstracted candidate formula:
    its read-abstraction variables have to reach the checker intact.
 
    These two stages realize the transformations of the paper's §4 and
-   §5 in an STP-specific order: the paper presents witness
-   preprocessing *before* formula abstraction, while STP mints
-   equality proxies and witness records eagerly at construction and
-   prepares the array operands during the solve. Abstraction has to be
-   early so that no array equality reaches the rest of STP; recovery
-   has to be late because preprocessing rewrites write chains.
+   §5 in an STP-specific order: construction preserves a durable opaque
+   equality; the fully expanded solve root is then lowered to solve-local
+   proxies and witnesses; ordinary preprocessing rewrites the result;
+   and operand recovery plus complete-graph freezing happen immediately
+   before array transformation. Opacity permits function specialization
+   to finish before lowering while still ensuring that ordinary STP
+   processing never sees an array equality.
 
 3. **Consistency checking** (paper §7, ``lib/Extensionality/``). When
    the SAT solver produces a satisfying assignment σ, a pure checker
@@ -183,8 +193,8 @@ for each abstracted candidate formula:
    the direct rules are flat.
 
    Per §11.2 the checker keeps one
-   representative access per concrete index of each array, hashed by
-   index value: congruence is a single probe, and an access arriving
+   representative access per concrete index of each array, keyed by its
+   index value: congruence is a single lookup, and an access arriving
    with the same index and value as its representative is dropped
    without further propagation.
 
@@ -217,9 +227,12 @@ for each abstracted candidate formula:
    indices of false equalities — feed the model printer and the
    programmatic model APIs.
 
-The consistency checker interleaves with STP's ordinary lazy read
-refinement: arrays connected to an abstracted equality are owned by the
-checker (STP's Ackermann-style read axioms are skipped for them), all
-other arrays are refined exactly as before. A candidate is reported
-satisfiable only when STP's own model evaluation and the array
-consistency check both pass on the same assignment.
+When at least one equality is active, the consistency checker owns the
+complete reachable array graph and directly abstracts every read in it.
+STP's legacy lazy read refinement is not entered during such a solve. This
+single ownership boundary avoids candidates whose scalar dependencies
+crossed the former checker/legacy partition. When no equality is active,
+the extensionality checker remains dormant and STP's legacy array path runs
+unchanged. An active candidate is reported satisfiable only when both the
+array consistency check and STP's ordinary model evaluation pass on the
+same assignment.

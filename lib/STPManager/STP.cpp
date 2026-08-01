@@ -327,9 +327,9 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
       ext->beginSolve();
     }
   }
-  // An existing context may also recognize a cached proxy reachable through
-  // an internal handle. More importantly, the lowering pass computes an empty
-  // active set when none of its records are reachable from this root.
+  // Reuse an existing context object when present; beginSolve() above has
+  // cleared all generated records. The lowering pass builds fresh solve-local
+  // records and computes an empty active set when this root has no equality.
   if (ext != NULL && ext->enabled())
     semantic_input = ext->lowerArrayEqualities(original_input);
 

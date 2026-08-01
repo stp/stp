@@ -84,9 +84,9 @@ public:
 
   // Decide whole-array equality/disequality (the extensional theory of
   // arrays) with the lemmas-on-demand procedure of Brummayer & Biere
-  // (JSAT 2010). Runtime semantic option; array equalities are
-  // abstracted as the AST is built, so it must be set before any term
-  // of the query is created.
+  // (JSAT 2010). Runtime semantic option; it must be set before a
+  // whole-array equality is constructed. Construction preserves an opaque
+  // ARRAY_EQ, which is lowered only after the complete query is assembled.
   bool enable_array_equality = false;
 
   // construct the counterexample in terms of original variable based
