@@ -51,11 +51,14 @@ using namespace stp::symbolic_fp;
 // backend values through static trait calls (traits::RNE() and friends take
 // no context), so the context has to live in file statics; init() repoints
 // them before every top-level blast (see FloatBlaster::BlastNode_TopLevel).
+// Each thread needs its own pair: independent validity checkers may blast in
+// parallel, and a process-global pair would make one thread build through the
+// other thread's manager and concurrently mutate its hash-cons tables.
 // The factory is the manager's default (simplifying) factory: constant
 // operands fold as the circuit is built, which is what lets the constant
 // evaluator blast-fold floating-point operations on constants.
-static STPMgr* s_bm = nullptr;
-static NodeFactory* s_nf = nullptr;
+static THREAD_LOCAL_IE STPMgr* s_bm = nullptr;
+static THREAD_LOCAL_IE NodeFactory* s_nf = nullptr;
 
 namespace stp
 {
