@@ -309,6 +309,7 @@ ASTNode ExtensionalityContext::lowerArrayEqualities(const ASTNode& root)
     {
       assert(loweredChildren.size() == 2);
       result = makeEquality(loweredChildren[0], loweredChildren[1]);
+      currentLowerings[n] = result;
     }
     else if (!changed)
     {
@@ -345,6 +346,16 @@ ASTNode ExtensionalityContext::lowerArrayEqualities(const ASTNode& root)
   activateReachableRecords(lowered);
 
   return lowered;
+}
+
+bool ExtensionalityContext::getCurrentLowering(const ASTNode& opaque,
+                                               ASTNode& lowered) const
+{
+  const ASTNodeMap::const_iterator it = currentLowerings.find(opaque);
+  if (it == currentLowerings.end())
+    return false;
+  lowered = it->second;
+  return true;
 }
 
 void ExtensionalityContext::activateReachableRecords(
@@ -387,33 +398,15 @@ void ExtensionalityContext::activateReachableRecords(
   }
 }
 
-bool ExtensionalityContext::retireIfUnreachable(const ASTVec& liveAssertions)
-{
-  if (records.empty())
-    return false;
-
-  ASTNodeSet reachable;
-  for (size_t i = 0; i < liveAssertions.size(); i++)
-    collectDag(liveAssertions[i], reachable);
-
-  for (size_t i = 0; i < records.size(); i++)
-    if (reachable.find(records[i].proxy) != reachable.end())
-      return false; // an assertion still names this equality
-
-  records.clear();
-  keyToRecord.clear();
-  proxyToRecord.clear();
-  protectedSymbols.clear();
-  possibleConeSymbols.clear();
-  // Every per-solve view describes records that no longer exist.
-  beginSolve();
-  return true;
-}
-
 void ExtensionalityContext::beginSolve()
 {
   registrySealed = false;
+  records.clear();
+  keyToRecord.clear();
+  proxyToRecord.clear();
   activeRecordIds.clear();
+  currentLowerings.clear();
+  protectedSymbols.clear();
   possibleConeSymbols.clear();
   coneIsFrozen = false;
   coneArrays.clear();
@@ -425,12 +418,6 @@ void ExtensionalityContext::beginSolve()
   eqAdjacency.clear();
   witnessObls.clear();
   // Scalar and condition names are rebuilt for each preprocessed formula.
-  // Retire the previous solve's names from the persistent protection set
-  // before dropping the only map that identifies them. Record proxies and
-  // witness symbols are not in nameToTermMap and remain protected.
-  for (std::map<ASTNode, ASTNode>::const_iterator it = nameToTermMap.begin();
-       it != nameToTermMap.end(); ++it)
-    protectedSymbols.erase(it->first);
   scalarNames.clear();
   nameToTermMap.clear();
   lemmaOnlySymbols.clear();
@@ -441,11 +428,6 @@ void ExtensionalityContext::beginSolve()
   divergedThisSolve = false;
   eqLitCache.clear();
   lastObserved.clear();
-  for (size_t i = 0; i < records.size(); i++)
-  {
-    records[i].canonicalLeft = ASTNode();
-    records[i].canonicalRight = ASTNode();
-  }
 }
 
 ASTNode ExtensionalityContext::conjoinRecordConstraints(const ASTNode& root)

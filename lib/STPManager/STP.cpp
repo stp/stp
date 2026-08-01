@@ -349,23 +349,15 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   // Array equality (lemmas on demand, Brummayer & Biere JSAT 2010):
   // with at least one array equality reachable from the current root, conjoin
-  // exactly its active dependency closure's witness constraints -- corresponding to the paper's
-  // preprocessing step 1, a fresh index lambda with two virtual reads
-  // witnessing inequality -- before any preprocessing runs. The equality operands then ride
-  // through the same simplification and substitution as the rest of
-  // the formula (so their current form can be recovered afterwards),
-  // and stay reachable even where the equality was the only mention of
-  // an array.
-  // That same call eliminates the array-valued if-then-else the
-  // equalities can reach (paper section 4.1). It is the one point in
-  // the pipeline where both of its timing requirements hold: the whole
-  // formula is known, so whether the procedure runs at all is decided,
-  // and none of the preprocessing that would dismantle an if-then-else
-  // has run yet. A query with no array equality reaches none of this
-  // and is decided by the ordinary array machinery.
+  // exactly its active dependency closure's witness constraints. These are
+  // preprocessing step 1 of the paper: a fresh index lambda with two virtual
+  // reads witnessing inequality. The anchors keep each operand reachable and
+  // carry it through the same preprocessing as the rest of the formula so its
+  // current form can be recovered. Array-valued ITEs remain structural and
+  // are handled directly by the consistency checker's T rules. A query with
+  // no active array equality stays on STP's ordinary array path.
   const bool extActive = ext != NULL && ext->active();
-  // Releases the registry seal on every exit from this function, so
-  // that equalities built between solves are ordinary again.
+  // Releases the record-table seal on every exit from this function.
   ExtensionalityContext::SolveScope extScope(ext);
   if (extActive)
   {
@@ -381,8 +373,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     }
   }
 
-  // The registry keeps its array operands live even when no array
-  // operation is reachable from the Boolean root, so an active registry
+  // Record anchors keep equality operands live even when no array operation
+  // is reachable from the lowered Boolean root, so active extensionality
   // counts as array operations for the refinement machinery.
   bool arrayops = containsArrayOps(inputToSat, bm) || extActive;
 

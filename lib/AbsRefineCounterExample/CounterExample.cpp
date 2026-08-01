@@ -569,6 +569,17 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
         output = ASTFalse;
       }
       break;
+    case ARRAY_EQ:
+    {
+      ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+      ASTNode lowered;
+      if (ext == NULL || !ext->getCurrentLowering(form, lowered))
+        FatalError("array-equality: cannot evaluate an opaque equality that "
+                   "was not reachable in the most recent solve",
+                   form);
+      output = ComputeFormulaUsingModel(lowered);
+      break;
+    }
     case BOOLEXTRACT:
     {
       ASTNode t0 = TermToConstTermUsingModel(form[0]);

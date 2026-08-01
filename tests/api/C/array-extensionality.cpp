@@ -695,6 +695,32 @@ TEST(array_extensionality, active_equalities_follow_assertions_and_query)
   vc_Destroy(vc);
 }
 
+TEST(array_extensionality, opaque_equality_handle_uses_current_model_lowering)
+{
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv1 = vc_bvType(vc, 1);
+  Type arrT = vc_arrayType(vc, bv1, bv1);
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr b = vc_varExpr(vc, "b", arrT);
+  Expr eq = vc_eqExpr(vc, a, b);
+
+  vc_push(vc);
+  vc_assertFormula(vc, eq);
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(TRUE, getExprKind(vc_getCounterExample(vc, eq)));
+  vc_pop(vc);
+
+  vc_push(vc);
+  vc_assertFormula(vc, vc_notExpr(vc, eq));
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(FALSE, getExprKind(vc_getCounterExample(vc, eq)));
+  vc_pop(vc);
+
+  vc_Destroy(vc);
+}
+
 TEST(array_extensionality, interleaves_with_classic_read_refinement)
 {
   // One query, two refinement machines: the contradiction lives in

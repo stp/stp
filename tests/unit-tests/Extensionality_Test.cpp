@@ -134,7 +134,7 @@ TEST(ArrayEqualityAstTest, ActivationIsTheTransitiveClosureOfCurrentRoot)
   ext.beginSolve();
   const ASTNode lowered = ext.lowerArrayEqualities(outer);
   ASSERT_EQ(2u, ext.getActiveRecordCount());
-  ASSERT_EQ(3u, ext.getRecords().size());
+  ASSERT_EQ(2u, ext.getRecords().size());
   ASSERT_EQ(SYMBOL, lowered.GetKind());
 
   // The outer record hides its operand graph behind one proxy. Activation
@@ -169,11 +169,12 @@ TEST(ArrayEqualityAstTest, ActivationIsTheTransitiveClosureOfCurrentRoot)
   ext.beginSolve();
   ext.lowerArrayEqualities(mgr.ASTTrue);
   EXPECT_EQ(0u, ext.getActiveRecordCount());
+  EXPECT_EQ(0u, ext.getRecords().size());
 
   ext.beginSolve();
   ext.lowerArrayEqualities(dormant);
   EXPECT_EQ(1u, ext.getActiveRecordCount());
-  EXPECT_EQ(3u, ext.getRecords().size());
+  EXPECT_EQ(1u, ext.getRecords().size());
 }
 
 TEST(ExtGuardTest, PathPayloadRemainsCompact)

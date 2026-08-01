@@ -27,15 +27,11 @@ THE SOFTWARE.
  * extensional theory of arrays (Brummayer & Biere, JSAT 6 (2010))
  * inside STP:
  *
- *  - the registry of array equalities: whenever the feature is enabled,
- *    an equality between a new canonical pair of array terms is
- *    replaced at node-creation time by a fresh Boolean abstraction
- *    variable -- the equality arm of the paper's formula abstraction
- *    (section 5), applied eagerly -- together with the constraints
- *    corresponding to preprocessing step 1 (section 4). The paper
- *    orders preprocessing before abstraction; STP registers both per
- *    equality at construction and completes the array-side
- *    preparation per solve;
+ *  - query-local array-equality records: construction preserves an opaque
+ *    ARRAY_EQ, then the completed solve root is traversed after function
+ *    substitution. Each reachable canonical operand pair is replaced by a
+ *    fresh Boolean abstraction (paper section 5) and receives the witness
+ *    constraints from preprocessing step 1 (section 4);
  *  - the per-solve view of the array subgraph relevant to those
  *    equalities (which arrays, writes and reads participate), frozen
  *    just before STP's main array transformation;
@@ -43,11 +39,11 @@ THE SOFTWARE.
  *    the re-solve, and its encoding into the incremental SAT solver;
  *  - the completed array model of an accepted candidate.
  *
- * Lifetime: one context per STPMgr, created lazily the first time an
- * array equality is built with --array-equality enabled. The registry
- * lives as long as the query AST (its abstraction variables are
- * embedded in the user's formula); everything model- or solve-specific
- * is reset by beginSolve() at each top-level solve.
+ * Lifetime: one context per STPMgr, created lazily when a completed root first
+ * reaches array-equality lowering. Generated records, proxies and witness
+ * symbols are per-solve. The opaque public AST is durable; a current-solve
+ * opaque-to-lowered map remains only long enough to evaluate public handles
+ * in that solve's model.
  */
 
 #ifndef EXTENSIONALITYCONTEXT_H
@@ -103,14 +99,13 @@ public:
   explicit ExtensionalityContext(STPMgr* bm);
 
   //--------------------------------------------------------------------
-  // Durable record cache and query-local activation
+  // Query-local record table and activation
   //--------------------------------------------------------------------
 
-  // The formula abstraction of an array equality (paper section 5):
-  // called from the shared node-creation funnel for every well-typed
-  // equality between array terms while the feature is enabled, instead
-  // of building an EQ node. Returns the fresh (or, for a repeated
-  // operand pair, reused) Boolean abstraction variable; reflexive
+  // The formula abstraction of an array equality (paper section 5), called by
+  // solve-boundary lowering for each reachable well-typed equality. Returns
+  // the fresh (or, for a repeated pair in this solve, reused) Boolean
+  // abstraction variable; reflexive
   // requests fold to true; and an equality between a chain of writes
   // and the chain's own base is solved outright, returning the
   // rewritten read-equality formula with no record minted (see
@@ -123,36 +118,15 @@ public:
   // equality's operands before they disappear behind a proxy.
   ASTNode lowerArrayEqualities(const ASTNode& root);
 
-  // Drop the whole registry once nothing can reach it any more, and
-  // report whether that happened. Records are pinned to the manager's
-  // lifetime because their abstraction variables are embedded in the
-  // user's AST, but after a pop or a reset those assertions may be
-  // gone. Keeping dead records then costs a re-conjoined constraint
-  // bundle per record on every later solve, puts their arrays back in
-  // the cone, and -- because the registry holds ASTNode references to
-  // the operands -- pins their symbols in the manager's unique table,
-  // so a name declared inside a popped scope can never be declared
-  // again.
-  //
-  // All or nothing deliberately. A surviving record's operands can
-  // contain an array if-then-else whose replacement array is defined
-  // by two further records, and those are named by no assertion at
-  // all; retiring records one at a time would have to chase that
-  // closure, and getting it wrong turns an abstraction variable into
-  // an unconstrained Boolean. Whole-registry death needs no closure:
-  // if no proxy is reachable then no equality is, so nothing minted
-  // on behalf of one can be either -- including the if-then-else
-  // replacements, which stand only inside a solve's own rewriting and
-  // never in a term the user can still assert.
-  bool retireIfUnreachable(const ASTVec& liveAssertions);
+  // Look up the Boolean formula used for an opaque equality in the current
+  // solve. This is the sole metadata retained for public-handle model
+  // evaluation; generated proxies and witness records are never durable
+  // across solves.
+  bool getCurrentLowering(const ASTNode& opaque, ASTNode& lowered) const;
 
-  // Holds the registry seal for the duration of one solve and releases
-  // it however the solve exits. Minting between the point where a solve
-  // takes the registry's constraints and the point where it finishes is
-  // the hazard -- such a record would be active with nothing defining
-  // it. Minting once the solve is over is ordinary: the next solve
-  // conjoins it. Without the release, parsing an equality after a
-  // check-sat would trip the check.
+  // Holds the registry seal for the duration of one solve and releases it
+  // however the solve exits. Any record minted after the solve took its
+  // constraint snapshot would be active without a defining witness bundle.
   class SolveScope
   {
     ExtensionalityContext* ctx;
@@ -170,7 +144,7 @@ public:
 
   bool enabled() const;
   // The decision procedure participates in a solve exactly when the
-  // feature is on and at least one cached equality record is reachable from
+  // feature is on and at least one lowered equality record is reachable from
   // this solve's completed root (possibly through another active record).
   // Nothing else switches it on: a query with array if-then-elses but
   // no equality mints no record, so it is decided by STP's ordinary
@@ -192,7 +166,7 @@ public:
   }
 
   // Conservative over-approximation of the arrays the checker may
-  // reason about (every array symbol reachable from any registry
+  // reason about (every array symbol reachable from an active record's
   // operand), used to stop the substitution pass from deleting
   // read-equals-constant equations whose reads the checker needs to
   // observe.
@@ -205,7 +179,8 @@ public:
   // Per-solve pipeline (TopLevelSTPAux)
   //--------------------------------------------------------------------
 
-  // Reset all per-solve state (cone, naming, pending lemma, model).
+  // Reset all per-solve state (records, lowering map, cone, names, pending
+  // lemmas and model). Called immediately before lowering the next root.
   void beginSolve();
 
   // Conjoin every current-root-active record's constraint bundle (the witness clause of
@@ -415,10 +390,10 @@ private:
   std::vector<Record> records;
   std::map<std::pair<ASTNode, ASTNode>, size_t> keyToRecord;
   std::map<ASTNode, size_t> proxyToRecord;
-  // Sorted record ids reachable in the current solve. The cache above may
-  // outlive a scope or public handle; only these records contribute semantic
-  // constraints, protection and checker edges to this solve.
+  // Sorted record ids reachable in the current solve. Only these records
+  // contribute semantic constraints, protection and checker edges.
   std::vector<size_t> activeRecordIds;
+  ASTNodeMap currentLowerings; // opaque ARRAY_EQ -> current lowered formula
   std::set<ASTNode> protectedSymbols;
   std::set<ASTNode> lemmaOnlySymbols; // per-solve; see the accessor
   std::set<ASTNode> possibleConeSymbols;
