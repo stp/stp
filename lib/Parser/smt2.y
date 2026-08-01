@@ -264,6 +264,22 @@ namespace stp
     stp::FatalError("");
   }
 
+  // STP's lowering layer intentionally treats a float's packed
+  // representation as bits, but that is an internal implementation detail.
+  // At the SMT-LIB boundary a BV operator accepts only a BitVec-sorted term;
+  // callers must use fp.to_ieee_bv to expose a float's representation.
+  void checkBitVectorTerm(const ASTNode& n)
+  {
+    if (n.GetType() != BITVECTOR_TYPE)
+      fatal_yyerror("bitvector operator requires bitvector operands");
+  }
+
+  void checkBitVectorTerms(const ASTVec& terms)
+  {
+    for (const ASTNode& term : terms)
+      checkBitVectorTerm(term);
+  }
+
   ASTNode* createNode(Kind k, ASTVec * c)
   {
     if (c->size() < 2)
@@ -278,6 +294,10 @@ namespace stp
 
   ASTNode* createNode(Kind k, ASTNode* c0, ASTNode *c1)
   {
+    // Every binary call to this overload is a BV predicate/overflow
+    // production. Boolean connectives use the vector overload.
+    checkBitVectorTerm(*c0);
+    checkBitVectorTerm(*c1);
     ASTNode * n = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateNode(k, *c0, *c1));
     delete c0;
     delete c1;
@@ -887,6 +907,7 @@ namespace stp
       yyerror("Must be >=2 operands");
       exit(1);
     }
+    checkBitVectorTerms(*c);
     const unsigned int width = (*c)[0].GetValueWidth();
     ASTNode * n = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(k, width,  *c));
     delete c;
@@ -895,6 +916,8 @@ namespace stp
 
   ASTNode* createTerm(Kind k, ASTNode* c0, ASTNode *c1)
   {
+    checkBitVectorTerm(*c0);
+    checkBitVectorTerm(*c1);
     const unsigned int width = c0->GetValueWidth();
     ASTNode * n = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(k, width, *c0, *c1));
     delete c0;
@@ -906,6 +929,7 @@ namespace stp
   // minimum value INT_MIN (100...0). Desugar it to (= s INT_MIN).
   ASTNode* createNegOverflow(ASTNode* c0)
   {
+    checkBitVectorTerm(*c0);
     auto gi = stp::GlobalParserInterface;
     const unsigned int width = c0->GetValueWidth();
     ASTNode intMin;
@@ -923,6 +947,8 @@ namespace stp
   // only for INT_MIN / -1, so desugar it to (and (= s INT_MIN) (= t -1)).
   ASTNode* createSDivOverflow(ASTNode* c0, ASTNode* c1)
   {
+    checkBitVectorTerm(*c0);
+    checkBitVectorTerm(*c1);
     auto gi = stp::GlobalParserInterface;
     const unsigned int width = c0->GetValueWidth();
     ASTNode intMin;
@@ -1514,6 +1540,7 @@ function_param
 function_def:
 STRING_TOK LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK  an_term
 {
+  checkBitVectorTerm(*$10);
   if ($10->GetValueWidth() != $8)
   {
     char msg [100];
@@ -1611,6 +1638,7 @@ STRING_TOK LPAREN_TOK function_params RPAREN_TOK an_fp_sort an_term
 |
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK an_term
 {
+  checkBitVectorTerm(*$9);
   if ($9->GetValueWidth() != $7)
   {
     char msg [100];
@@ -2060,10 +2088,17 @@ FORMID_TOK
   // would otherwise be "solved" (to false) rather than diagnosed.
   for (unsigned i = 1; i < terms.size();i++)
   {
-    if (terms[i].GetValueWidth() != terms[0].GetValueWidth() ||
+    if (terms[i].GetType() != terms[0].GetType() ||
+        terms[i].GetValueWidth() != terms[0].GetValueWidth() ||
         terms[i].GetIndexWidth() != terms[0].GetIndexWidth())
     {
       fatal_yyerror("= requires operands of the same sort");
+    }
+    if (terms[i].GetType() == FLOATINGPOINT_TYPE &&
+        (terms[i].GetExpWidth() != terms[0].GetExpWidth() ||
+         terms[i].GetSigWidth() != terms[0].GetSigWidth()))
+    {
+      fatal_yyerror("= requires floating-point operands of the same format");
     }
   }
 
@@ -2102,6 +2137,18 @@ FORMID_TOK
   ASTVec terms = *$3;
   ASTVec forms;
 
+  for (size_t i = 1; i < terms.size(); i++)
+  {
+    if (terms[i].GetType() != terms[0].GetType() ||
+        terms[i].GetIndexWidth() != terms[0].GetIndexWidth() ||
+        terms[i].GetValueWidth() != terms[0].GetValueWidth())
+      fatal_yyerror("distinct requires operands of the same sort");
+    if (terms[i].GetType() == FLOATINGPOINT_TYPE &&
+        (terms[i].GetExpWidth() != terms[0].GetExpWidth() ||
+         terms[i].GetSigWidth() != terms[0].GetSigWidth()))
+      fatal_yyerror("distinct requires floating-point operands of the same format");
+  }
+
   for(ASTVec::const_iterator it=terms.begin(),itend=terms.end();
       it!=itend; it++)
   {
@@ -2133,6 +2180,18 @@ FORMID_TOK
 
   ASTVec terms = *$3;
   ASTVec forms;
+
+  for (size_t i = 1; i < terms.size(); i++)
+  {
+    if (terms[i].GetType() != terms[0].GetType() ||
+        terms[i].GetIndexWidth() != terms[0].GetIndexWidth() ||
+        terms[i].GetValueWidth() != terms[0].GetValueWidth())
+      fatal_yyerror("distinct requires operands of the same sort");
+    if (terms[i].GetType() == FLOATINGPOINT_TYPE &&
+        (terms[i].GetExpWidth() != terms[0].GetExpWidth() ||
+         terms[i].GetSigWidth() != terms[0].GetSigWidth()))
+      fatal_yyerror("distinct requires floating-point operands of the same format");
+  }
 
   for(ASTVec::const_iterator it=terms.begin(),itend=terms.end();
       it!=itend; it++) {
@@ -2278,10 +2337,17 @@ FORMID_TOK
   // as formulas), in which case its width differs from a Boolean's zero.
   for (unsigned i = 1; i < forms.size();i++)
   {
-    if (forms[i].GetValueWidth() != forms[0].GetValueWidth() ||
+    if (forms[i].GetType() != forms[0].GetType() ||
+        forms[i].GetValueWidth() != forms[0].GetValueWidth() ||
         forms[i].GetIndexWidth() != forms[0].GetIndexWidth())
     {
       fatal_yyerror("= requires operands of the same sort");
+    }
+    if (forms[i].GetType() == FLOATINGPOINT_TYPE &&
+        (forms[i].GetExpWidth() != forms[0].GetExpWidth() ||
+         forms[i].GetSigWidth() != forms[0].GetSigWidth()))
+    {
+      fatal_yyerror("= requires floating-point operands of the same format");
     }
   }
 
@@ -2691,6 +2757,7 @@ TERMID_TOK
 }
 | LPAREN_TOK UNDERSCORE_TOK BVEXTRACT_TOK  NUMERAL_TOK  NUMERAL_TOK RPAREN_TOK an_term
 {
+  checkBitVectorTerm(*$7);
   int width = $4 - $5 + 1;
   if (width < 0)
     yyerror("Negative width in extract");
@@ -2707,6 +2774,7 @@ TERMID_TOK
 }
 | LPAREN_TOK UNDERSCORE_TOK BVZX_TOK  NUMERAL_TOK  RPAREN_TOK an_term
 {
+  checkBitVectorTerm(*$6);
   unsigned w = $6->GetValueWidth() + $4;
   ASTNode width = stp::GlobalParserInterface->CreateBVConst(32,w);
   $$ =  stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVZX,w,*$6,width));
@@ -2714,6 +2782,7 @@ TERMID_TOK
 }
 |  LPAREN_TOK UNDERSCORE_TOK BVSX_TOK  NUMERAL_TOK  RPAREN_TOK an_term
 {
+  checkBitVectorTerm(*$6);
   unsigned w = $6->GetValueWidth() + $4;
   ASTNode width = stp::GlobalParserInterface->CreateBVConst(32,w);
   $$ =  stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVSX,w,*$6,width));
@@ -2728,9 +2797,13 @@ TERMID_TOK
   // see the pair, and two formats can share one packed width -- (8, 24)
   // and (24, 8) are both 32 bits -- so the width checks cannot tell them
   // apart. (BVTypeCheck's ITE case backs this up for a symbolic
-  // condition.) One float branch and one plain bitvector branch stay
-  // legal, as everywhere bits stand for a float.
-  if ($3->GetExpWidth() != 0 && $4->GetExpWidth() != 0 &&
+  // condition.) Packed bits are an internal representation, not a public
+  // coercion: a float branch and a BitVec branch are different sorts.
+  if ($3->GetType() != $4->GetType())
+  {
+    fatal_yyerror("ite branches must have the same sort");
+  }
+  if ($3->GetType() == FLOATINGPOINT_TYPE &&
       ($3->GetExpWidth() != $4->GetExpWidth() ||
        $3->GetSigWidth() != $4->GetSigWidth()))
   {
@@ -2744,6 +2817,8 @@ TERMID_TOK
 }
 |  BVCONCAT_TOK an_term an_term
 {
+  checkBitVectorTerm(*$2);
+  checkBitVectorTerm(*$3);
   const unsigned int width = $2->GetValueWidth() + $3->GetValueWidth();
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVCONCAT, width, *$2, *$3));
   stp::GlobalParserInterface->deleteNode( $2);
@@ -2751,6 +2826,7 @@ TERMID_TOK
 }
 |  BVNOT_TOK an_term
 {
+  checkBitVectorTerm(*$2);
   //this is the BVNEG (term) in the CVCL language
   unsigned int width = $2->GetValueWidth();
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVNOT, width, *$2));
@@ -2758,6 +2834,7 @@ TERMID_TOK
 }
 |  BVNEG_TOK an_term
 {
+  checkBitVectorTerm(*$2);
   //this is the BVUMINUS term in CVCL langauge
   unsigned width = $2->GetValueWidth();
   $$ =  stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVUMINUS,width,*$2));
@@ -2784,6 +2861,8 @@ TERMID_TOK
 }
 |  BVCOMP_TOK an_term an_term
 {
+  checkBitVectorTerm(*$2);
+  checkBitVectorTerm(*$3);
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(ITE, 1,
   stp::GlobalParserInterface->nf->CreateNode(EQ, *$2, *$3),
   stp::GlobalParserInterface->CreateOneConst(1),
@@ -2826,6 +2905,8 @@ TERMID_TOK
 }
 |  BVNAND_TOK an_term an_term
 {
+  checkBitVectorTerm(*$2);
+  checkBitVectorTerm(*$3);
   unsigned int width = $2->GetValueWidth();
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVNOT, width, stp::GlobalParserInterface->nf->CreateTerm(BVAND, width, *$2, *$3)));
   stp::GlobalParserInterface->deleteNode( $2);
@@ -2833,6 +2914,8 @@ TERMID_TOK
 }
 |  BVNOR_TOK an_term an_term
 {
+  checkBitVectorTerm(*$2);
+  checkBitVectorTerm(*$3);
   unsigned int width = $2->GetValueWidth();
   $$= stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(BVNOT, width, stp::GlobalParserInterface->nf->CreateTerm(BVOR, width, *$2, *$3)));
   stp::GlobalParserInterface->deleteNode( $2);
@@ -2852,6 +2935,7 @@ TERMID_TOK
 }
 | LPAREN_TOK UNDERSCORE_TOK BVROTATE_LEFT_TOK  NUMERAL_TOK  RPAREN_TOK an_term
 {
+  checkBitVectorTerm(*$6);
   ASTNode *n;
   unsigned width = $6->GetValueWidth();
   unsigned rotate = $4 % width;
@@ -2875,6 +2959,7 @@ TERMID_TOK
 }
 | LPAREN_TOK UNDERSCORE_TOK BVROTATE_RIGHT_TOK  NUMERAL_TOK  RPAREN_TOK an_term
 {
+  checkBitVectorTerm(*$6);
   ASTNode *n;
   unsigned width = $6->GetValueWidth();
   unsigned rotate = $4 % width;
@@ -2898,6 +2983,7 @@ TERMID_TOK
 }
 | LPAREN_TOK UNDERSCORE_TOK BVREPEAT_TOK  NUMERAL_TOK RPAREN_TOK an_term
 {
+  checkBitVectorTerm(*$6);
   unsigned count = $4;
   if (count < 1)
       fatal_yyerror("One or more repeats please");

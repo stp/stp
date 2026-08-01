@@ -55,6 +55,58 @@ Expr createBinaryNode(VC vc, Kind k, Expr left, Expr right);
 namespace /* anonymous namespace for static */
 {
 
+void requireBitVectorOperand(const char* operation, const stp::ASTNode& n)
+{
+  if (n.GetType() == stp::BITVECTOR_TYPE)
+    return;
+
+  std::string message("CInterface: ");
+  message += operation;
+  message += " requires bitvector operands";
+  if (n.GetType() == stp::FLOATINGPOINT_TYPE)
+    message += "; use vc_fpToIEEEBV to expose a float's packed bits";
+  message += ": ";
+  stp::FatalError(message.c_str(), n);
+}
+
+void requireSamePublicSort(const char* operation, stp::STPMgr* bm,
+                           const stp::ASTNode& left,
+                           const stp::ASTNode& right)
+{
+  bool same = left.GetType() == right.GetType() &&
+              left.GetIndexWidth() == right.GetIndexWidth() &&
+              left.GetValueWidth() == right.GetValueWidth();
+
+  if (same && left.GetType() == stp::FLOATINGPOINT_TYPE)
+    same = left.GetExpWidth() == right.GetExpWidth() &&
+           left.GetSigWidth() == right.GetSigWidth();
+
+  if (same && left.GetType() == stp::ARRAY_TYPE)
+  {
+    same = left.GetExpWidth() == right.GetExpWidth() &&
+           left.GetSigWidth() == right.GetSigWidth() &&
+           bm->arrayHasRmIndex(left) == bm->arrayHasRmIndex(right) &&
+           bm->arrayHasRmElement(left) == bm->arrayHasRmElement(right);
+
+    unsigned left_eb = 0, left_sb = 0, right_eb = 0, right_sb = 0;
+    const bool left_fp_index =
+        bm->arrayHasFpIndex(left, left_eb, left_sb);
+    const bool right_fp_index =
+        bm->arrayHasFpIndex(right, right_eb, right_sb);
+    same = same && left_fp_index == right_fp_index &&
+           (!left_fp_index ||
+            (left_eb == right_eb && left_sb == right_sb));
+  }
+
+  if (same)
+    return;
+
+  std::string message("CInterface: ");
+  message += operation;
+  message += " requires operands of the same sort: ";
+  stp::FatalError(message.c_str(), left);
+}
+
 // The packed bit width laid under a scalar type node: the declared width of
 // a BITVECTOR, the packed width of a FLOATINGPOINT, five for ROUNDINGMODE.
 unsigned int scalarTypeNodeWidth(const stp::ASTNode& t)
@@ -1038,6 +1090,7 @@ Expr vc_eqExpr(VC vc, Expr ccc0, Expr ccc1)
   stp::ASTNode* aa = (stp::ASTNode*)ccc1;
   assert(BVTypeCheck(*a));
   assert(BVTypeCheck(*aa));
+  requireSamePublicSort("vc_eqExpr", b, *a, *aa);
 
   // SMT-LIB '=' over floats is FP_SMT_EQ, not the generic EQ, mirroring the
   // parser's (= ...) rule: +0 and -0 stay distinct, and every NaN equals
@@ -1155,6 +1208,9 @@ Expr vc_fpConstFromBits(VC vc, int exp_bits, int sig_bits, Expr bv)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* bits = (stp::ASTNode*)bv;
+
+  checkFpWidths(exp_bits, sig_bits);
+  requireBitVectorOperand("vc_fpConstFromBits", *bits);
 
   if (bits->GetKind() != stp::BVCONST)
   {
@@ -1500,6 +1556,19 @@ static Expr fpToFP(VC vc, stp::Kind k, int eb, int sb, const stp::ASTNode* rm,
 {
   stp::STPMgr* b = ((stp::STP*)vc)->bm;
   checkFpWidths(eb, sb);
+
+  const bool expects_float = k == stp::FP_TOFP && rm != NULL;
+  if ((expects_float && src.GetType() != stp::FLOATINGPOINT_TYPE) ||
+      (!expects_float && src.GetType() != stp::BITVECTOR_TYPE))
+  {
+    stp::FatalError(expects_float
+                        ? "CInterface: float-to-float conversion requires a "
+                          "floating-point source: "
+                        : "CInterface: bitvector-to-float conversion requires "
+                          "a bitvector source: ",
+                    src);
+  }
+
   stp::ASTVec kids;
   kids.push_back(b->CreateBVConst(32, eb));
   kids.push_back(b->CreateBVConst(32, sb));
@@ -1760,7 +1829,10 @@ Expr vc_bvPlusExprN(VC vc, int n_bits, Expr* cc, int n)
   stp::ASTVec d;
 
   for (int i = 0; i < n; i++)
+  {
+    requireBitVectorOperand("vc_bvPlusExprN", *c[i]);
     d.push_back(*c[i]);
+  }
 
   stp::ASTNode o = b->CreateTerm(stp::BVPLUS, n_bits, d);
   assert(BVTypeCheck(o));
@@ -1782,6 +1854,12 @@ Expr vc_iteExpr(VC vc, Expr cond, Expr thenpart, Expr elsepart)
   assert(BVTypeCheck(*t));
   assert(BVTypeCheck(*e));
 
+  if (c->GetType() != stp::BOOLEAN_TYPE)
+  {
+    stp::FatalError("CInterface: vc_iteExpr requires a Boolean condition: ",
+                    *c);
+  }
+
   // Branches that BOTH claim to be floats must agree on the format: two
   // formats can share one packed width -- (8, 24) and (24, 8) are both 32
   // bits -- so the width checks cannot tell them apart, and the node would
@@ -1790,9 +1868,8 @@ Expr vc_iteExpr(VC vc, Expr cond, Expr thenpart, Expr elsepart)
   // BVTypeCheck: the asserts above compile out of a release build, and a
   // constant condition folds the if-then-else to one branch before any
   // type check can see the pair. Covers arrays too, whose exponent and
-  // significand widths carry the element's format. One float branch and
-  // one plain bitvector branch stay legal, as everywhere bits stand for a
-  // float.
+  // significand widths carry the element's format. The general sort check
+  // above rejects a float/BitVec pair even when their packed widths match.
   if (t->GetExpWidth() != 0 && e->GetExpWidth() != 0 &&
       (t->GetExpWidth() != e->GetExpWidth() ||
        t->GetSigWidth() != e->GetSigWidth()))
@@ -1801,6 +1878,7 @@ Expr vc_iteExpr(VC vc, Expr cond, Expr thenpart, Expr elsepart)
                     "differ in floating-point format: ",
                     *t);
   }
+  requireSamePublicSort("vc_iteExpr", b, *t, *e);
 
   stp::ASTNode o;
   // if the user asks for a formula then produce a formula, else
@@ -2012,6 +2090,9 @@ Expr vc_bvConcatExpr(VC vc, Expr left, Expr right)
   stp::ASTNode* l = (stp::ASTNode*)left;
   stp::ASTNode* r = (stp::ASTNode*)right;
 
+  requireBitVectorOperand("vc_bvConcatExpr", *l);
+  requireBitVectorOperand("vc_bvConcatExpr", *r);
+
   assert(BVTypeCheck(*l));
   assert(BVTypeCheck(*r));
   stp::ASTNode o = b->CreateTerm(
@@ -2028,6 +2109,9 @@ Expr createBinaryTerm(VC vc, int n_bits, Kind k, Expr left, Expr right)
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* l = (stp::ASTNode*)left;
   stp::ASTNode* r = (stp::ASTNode*)right;
+
+  requireBitVectorOperand("bitvector operation", *l);
+  requireBitVectorOperand("bitvector operation", *r);
 
   assert(BVTypeCheck(*l));
   assert(BVTypeCheck(*r));
@@ -2108,6 +2192,29 @@ Expr createBinaryNode(VC vc, Kind k, Expr left, Expr right)
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* l = (stp::ASTNode*)left;
   stp::ASTNode* r = (stp::ASTNode*)right;
+
+  switch (k)
+  {
+    case stp::BVLT:
+    case stp::BVLE:
+    case stp::BVGT:
+    case stp::BVGE:
+    case stp::BVSLT:
+    case stp::BVSLE:
+    case stp::BVSGT:
+    case stp::BVSGE:
+    case stp::BVUADDO:
+    case stp::BVSADDO:
+    case stp::BVUMULO:
+    case stp::BVSMULO:
+    case stp::BVUSUBO:
+    case stp::BVSSUBO:
+      requireBitVectorOperand("bitvector predicate", *l);
+      requireBitVectorOperand("bitvector predicate", *r);
+      break;
+    default:
+      break;
+  }
   assert(BVTypeCheck(*l));
   assert(BVTypeCheck(*r));
   stp::ASTNode o = b->CreateNode(k, *l, *r);
@@ -2200,6 +2307,7 @@ Expr vc_bvUMinusExpr(VC vc, Expr ccc)
   stp::STPMgr* b = stp_i->bm;
 
   stp::ASTNode* a = (stp::ASTNode*)ccc;
+  requireBitVectorOperand("vc_bvUMinusExpr", *a);
   assert(BVTypeCheck(*a));
 
   stp::ASTNode o = b->CreateTerm(stp::BVUMINUS, a->GetValueWidth(), *a);
@@ -2246,6 +2354,9 @@ static Expr createNegatedBinaryTerm(VC vc, Kind k, Expr left, Expr right)
   stp::ASTNode* l = (stp::ASTNode*)left;
   stp::ASTNode* r = (stp::ASTNode*)right;
 
+  requireBitVectorOperand("bitvector operation", *l);
+  requireBitVectorOperand("bitvector operation", *r);
+
   assert(BVTypeCheck(*l));
   assert(BVTypeCheck(*r));
 
@@ -2278,6 +2389,7 @@ Expr vc_bvNotExpr(VC vc, Expr ccc)
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* a = (stp::ASTNode*)ccc;
 
+  requireBitVectorOperand("vc_bvNotExpr", *a);
   assert(BVTypeCheck(*a));
   stp::ASTNode o = b->CreateTerm(stp::BVNOT, a->GetValueWidth(), *a);
   assert(BVTypeCheck(o));
@@ -2291,6 +2403,7 @@ Expr vc_bvLeftShiftExpr(VC vc, int sh_amt, Expr ccc)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* a = (stp::ASTNode*)ccc;
+  requireBitVectorOperand("vc_bvLeftShiftExpr", *a);
   assert(BVTypeCheck(*a));
 
   // convert leftshift to bvconcat
@@ -2313,6 +2426,7 @@ Expr vc_bvRightShiftExpr(VC vc, int sh_amt, Expr ccc)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* a = (stp::ASTNode*)ccc;
+  requireBitVectorOperand("vc_bvRightShiftExpr", *a);
   assert(BVTypeCheck(*a));
 
   unsigned int w = a->GetValueWidth();
@@ -2456,6 +2570,7 @@ Expr vc_bvExtract(VC vc, Expr ccc, int hi_num, int low_num)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* a = (stp::ASTNode*)ccc;
+  requireBitVectorOperand("vc_bvExtract", *a);
   BVTypeCheck(*a);
 
   stp::ASTNode hi = b->CreateBVConst(32, hi_num);
@@ -2473,6 +2588,7 @@ Expr vc_bvBoolExtract(VC vc, Expr ccc, int bit_num)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* a = (stp::ASTNode*)ccc;
+  requireBitVectorOperand("vc_bvBoolExtract", *a);
   BVTypeCheck(*a);
 
   stp::ASTNode bit = b->CreateBVConst(32, bit_num);
@@ -2491,6 +2607,7 @@ Expr vc_bvBoolExtract_Zero(VC vc, Expr ccc, int bit_num)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* a = (stp::ASTNode*)ccc;
+  requireBitVectorOperand("vc_bvBoolExtract_Zero", *a);
   BVTypeCheck(*a);
 
   stp::ASTNode bit = b->CreateBVConst(32, bit_num);
@@ -2509,6 +2626,7 @@ Expr vc_bvBoolExtract_One(VC vc, Expr ccc, int bit_num)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* a = (stp::ASTNode*)ccc;
+  requireBitVectorOperand("vc_bvBoolExtract_One", *a);
   BVTypeCheck(*a);
 
   stp::ASTNode bit = b->CreateBVConst(32, bit_num);
@@ -2527,6 +2645,8 @@ Expr vc_bvSignExtend(VC vc, Expr ccc, int nbits)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* a = (stp::ASTNode*)ccc;
+
+  requireBitVectorOperand("vc_bvSignExtend", *a);
 
   // width of the expr which is being sign extended. nbits is the
   // resulting length of the signextended expr
@@ -2561,6 +2681,8 @@ Expr vc_bvZeroExtend(VC vc, Expr ccc, int nbits)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* a = (stp::ASTNode*)ccc;
+
+  requireBitVectorOperand("vc_bvZeroExtend", *a);
 
   // width of the expr which is being zero extended. nbits is the
   // resulting length of the zeroextended expr
@@ -3375,4 +3497,3 @@ vc
   return false;
 #endif
 }
-

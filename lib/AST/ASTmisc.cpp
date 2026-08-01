@@ -258,9 +258,11 @@ void buildListOfSymbols(const ASTNode& n, ASTNodeSet& visited,
     buildListOfSymbols(n[i], visited, symbols);
 }
 
-// A float is carried as its packed bits, so a float-typed node stands in for
-// a bitvector of the same width wherever bits are wanted -- but only where it
-// is entitled to the format it claims. A leaf's is declared (a symbol) or
+// A float is carried internally as its packed bits, so after FloatBlast a
+// float-typed leaf may stand in a bitvector circuit -- but this is not public
+// subtyping. The parser and C API reject BV operations over FP terms; this
+// predicate exists for lowered and model-evaluation nodes built inside STP.
+// A leaf's format is declared (a symbol) or
 // fixed when it is made (an ASTFPConst, which interns apart from the plain
 // constant with the same bits); a read, a store and an ITE derive theirs from
 // the array or the branches they carry; an operation's comes from its kind.
@@ -410,9 +412,9 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
     case ITE:
       if (n.Degree() != 3)
         FatalError("BVTypeCheck: should have exactly 3 args\n", n);
-      // The branches must be the same class of value; a float-stamped branch
-      // and a plain bitvector branch of one width are both bits, so those
-      // two types count as one class here.
+      // At this internal checker boundary a lowered float branch and its
+      // packed-bit circuit are one class. Public construction has already
+      // required the source-level branches to have exactly the same sort.
       if (BOOLEAN_TYPE != n[0].GetType() ||
           (n[1].GetType() == BOOLEAN_TYPE) != (n[2].GetType() == BOOLEAN_TYPE))
         FatalError("BVTypeCheck: The term t does not typecheck, where t = \n",
@@ -432,9 +434,9 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
       // (24, 8) are both 32 bits -- so the width checks cannot tell them
       // apart, and the node would derive whichever branch's format comes
       // first (see deriveFPFormat) and silently read the other branch's
-      // bits at it. One float branch and one plain bitvector branch stay
-      // legal: that mix is the one-class rule above, and arises routinely
-      // once lowering has replaced a branch with its circuit.
+      // bits at it. A float branch and a plain bitvector branch remain legal
+      // only here: that mix arises once lowering replaces a branch with its
+      // circuit, after the public sort check.
       if (n[1].GetExpWidth() != 0 && n[2].GetExpWidth() != 0 &&
           (n[1].GetExpWidth() != n[2].GetExpWidth() ||
            n[1].GetSigWidth() != n[2].GetSigWidth()))

@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
+#include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/ToSat/ToSATBase.h"
@@ -256,9 +257,13 @@ public:
 
       if (SYMBOL == e.GetKind())
       {
-        // Simplified out, so it can take any value; all-zero bits, which for
-        // a float denotes +0.0.
-        ASTNode z = bv->CreateZeroConst(e.GetValueWidth());
+        // Simplified out, so it can take any value. RoundingMode has only five
+        // values in its 5-bit carrier, so use a legal deterministic default;
+        // ordinary bitvectors and floats retain the all-zero completion.
+        ASTNode z = bv->isRoundingModeSortedTerm(e)
+                        ? bv->CreateBVConst(
+                              5, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN)
+                        : bv->CreateZeroConst(e.GetValueWidth());
         return FloatBlaster::withFormat(bv, z, e.GetExpWidth(),
                                         e.GetSigWidth());
       }

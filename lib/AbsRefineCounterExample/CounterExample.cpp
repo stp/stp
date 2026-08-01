@@ -168,8 +168,9 @@ void AbsRefine_CounterExample::ConstructCounterExample(
 // 3. arrayread.
 //
 // 4. If (the boolean variable 'ArrayReadFlag' is false) && ArrayRead
-// 4. doesn't have a value in the counterexample then return 0 as the
-// 4. value of the arrayread.
+// 4. doesn't have a value in the counterexample then complete it with an
+// 4. arbitrary concrete value. RoundingMode reads use RNE, because junk
+// 4. patterns in their 5-bit carrier are not values of that sort.
 ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
                                                             bool ArrayReadFlag)
 {
@@ -239,9 +240,13 @@ AbsRefine_CounterExample::TermToConstTermUsingModel_inner(const ASTNode& term,
       }
       else
       {
-        // Has been simplified out. Can take any value; all-zero bits, which
-        // for a float denotes +0.0.
-        output = bm->CreateZeroConst(term.GetValueWidth());
+        // Has been simplified out and can take any value. A RoundingMode's
+        // 5-bit representation has 27 junk patterns, though, so complete that
+        // sort with a real value rather than the ordinary all-zero default.
+        output = bm->isRoundingModeSortedTerm(term)
+                     ? bm->CreateBVConst(
+                           5, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN)
+                     : bm->CreateZeroConst(term.GetValueWidth());
       }
       break;
     }
@@ -394,8 +399,14 @@ AbsRefine_CounterExample::TermToConstTermUsingModel_inner(const ASTNode& term,
       }
       else
       {
-        // Has been simplified out. Can take any value.
-        output = bm->CreateMaxConst(modelentry.GetValueWidth());
+        // Has been simplified out and can take any value. Keep the historical
+        // all-one completion for ordinary bitvectors, but not for
+        // RoundingMode: 0b11111 is not one of that sort's five values and can
+        // make SymFPU exhibit a non-IEEE sixth rounding behaviour.
+        output = bm->isRoundingModeSortedTerm(modelentry)
+                     ? bm->CreateBVConst(
+                           5, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN)
+                     : bm->CreateMaxConst(modelentry.GetValueWidth());
 
         // ... but having handed a value out, stand by it. The result is
         // memoised below under "term", whose index may be symbolic;
@@ -581,7 +592,7 @@ AbsRefine_CounterExample::TermToConstTermUsingModel_inner(const ASTNode& term,
     // put the term in its own value slot, violating the invariant the lookups
     // rely on: a later lookup then trips the "stored as-is" fatal error, or
     // leaves the read unresolved and non-constant. Skipping the self-entry lets
-    // that later lookup fall through to the documented "no value -> return 0".
+    // that later lookup fall through to the documented arbitrary completion.
     if (term != output)
       CounterExampleMap[term] = output;
   }

@@ -34,8 +34,9 @@ namespace stp
 {
 
 // Lowers one floating-point operation to the pure-bitvector circuit symfpu
-// builds for it. Stateless: every entry point takes the manager whose nodes
-// are being blasted, so independent managers never blast into one another.
+// builds for it. Every entry point takes the manager whose nodes are being
+// blasted, and the static-trait backend keeps that context thread-local, so
+// independent managers in different threads never blast into one another.
 class FloatBlaster
 {
 private:

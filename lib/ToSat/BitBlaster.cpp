@@ -274,7 +274,12 @@ void BitBlaster<BBNode, BBNodeManagerT>::getConsts(const ASTNode& form,
   for (auto it = BBTermMemo.begin(); it != BBTermMemo.end(); it++)
   {
     const ASTNode& n = it->first;
-    assert(n.GetType() == BITVECTOR_TYPE);
+    // FloatBlast removes FP operations but deliberately leaves float symbols
+    // and constants as their packed-bit leaves. They are bit-blaster terms at
+    // this internal boundary even though their public sort remains
+    // FLOATINGPOINT_TYPE for model reconstruction.
+    assert(n.GetType() == BITVECTOR_TYPE ||
+           n.GetType() == FLOATINGPOINT_TYPE);
 
     if (n.isConstant())
       continue;

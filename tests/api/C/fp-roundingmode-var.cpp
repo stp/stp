@@ -42,6 +42,32 @@ TEST(fp_roundingmode_var, declared_through_the_type)
   vc_Destroy(vc);
 }
 
+TEST(fp_roundingmode_var, model_completion_after_declaration_scope)
+{
+  VC vc = vc_createValidityChecker();
+
+  // Drop the declaration-time validity assertion without dropping the
+  // hash-consed symbol. With no use in the solved formula, the model must
+  // complete this RoundingMode value itself.
+  vc_push(vc);
+  Expr r = vc_fpRoundingModeVar(vc, "scoped_r");
+  vc_pop(vc);
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+
+  EXPECT_EQ((unsigned long long)VC_RM_RNE,
+            getBVUnsignedLongLong(vc_getCounterExample(vc, r)));
+
+  // The snapshot model API has its own completion path and must preserve the
+  // same sort invariant.
+  WholeCounterExample whole = vc_getWholeCounterExample(vc);
+  EXPECT_EQ((unsigned long long)VC_RM_RNE,
+            getBVUnsignedLongLong(
+                vc_getTermFromCounterExample(vc, r, whole)));
+  vc_deleteWholeCounterExample(whole);
+
+  vc_Destroy(vc);
+}
+
 TEST(fp_roundingmode_var, drives_an_operation_and_reads_back)
 {
   VC vc = vc_createValidityChecker();

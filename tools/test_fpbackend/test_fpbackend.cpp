@@ -137,6 +137,12 @@ int main()
   check("ubv 5 * 3", value_of(mk<false>(8, 5) * mk<false>(8, 3)), 15);
   check("ubv 15 / 3", value_of(mk<false>(8, 15) / mk<false>(8, 3)), 5);
   check("ubv 17 % 5", value_of(mk<false>(8, 17) % mk<false>(8, 5)), 2);
+  check("sbv -7 % 3 (remainder)",
+        value_of(mk<true>(8, 0xF9) % mk<true>(8, 3)), 0xFF);
+  check("sbv 7 % -3 (remainder)",
+        value_of(mk<true>(8, 7) % mk<true>(8, 0xFD)), 1);
+  check("sbv -7 % -3 (remainder)",
+        value_of(mk<true>(8, 0xF9) % mk<true>(8, 0xFD)), 0xFF);
   check("ubv -(5)", value_of(-mk<false>(8, 5)), 0xFB);
   check("ubv ~(5)", value_of(~mk<false>(8, 5)), 0xFA);
   check("ubv 5.increment()", value_of(mk<false>(8, 5).increment()), 6);
