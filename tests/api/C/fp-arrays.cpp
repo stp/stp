@@ -452,6 +452,38 @@ TEST(fp_arrays, roundingmode_element_model_value)
   vc_Destroy(vc);
 }
 
+TEST(fp_arrays, unobserved_roundingmode_element_defaults_to_rne)
+{
+  VC vc = vc_createValidityChecker();
+
+  Type arrayType =
+      vc_arrayType(vc, vc_bvType(vc, 2), vc_fpRoundingModeType(vc));
+  Expr a = vc_varExpr(vc, "a", arrayType);
+  Expr read = vc_readExpr(vc, a, vc_bvConstExprFromInt(vc, 2, 0));
+
+  // These two results distinguish the illegal 0b11111 carrier value from all
+  // five rounding modes: it underflows upward like RTP but rounds 1/3 downward
+  // like RTN/RTZ. Model completion chooses RNE, so both the reported mode and
+  // every operation evaluated through it must have RNE's behaviour.
+  Expr tiny = float32(vc, 0x0D800000ULL); // 2^-100
+  Expr underflow = vc_fpMulExpr(vc, read, tiny, tiny);
+  Expr third = vc_fpDivExpr(vc, read, float32(vc, 0x3F800000ULL),
+                            float32(vc, 0x40400000ULL));
+
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+
+  // Read the operations first so they cannot merely inherit a mode cached by
+  // the direct get-value below.
+  EXPECT_EQ((unsigned long long)0x00000000ULL,
+            getBVUnsignedLongLong(vc_getCounterExample(vc, underflow)));
+  EXPECT_EQ((unsigned long long)0x3EAAAAABULL,
+            getBVUnsignedLongLong(vc_getCounterExample(vc, third)));
+  EXPECT_EQ((unsigned long long)VC_RM_RNE,
+            getBVUnsignedLongLong(vc_getCounterExample(vc, read)));
+
+  vc_Destroy(vc);
+}
+
 // Regression test: evaluating a floating-point operation whose rounding
 // mode is an array read that the solve never constrained.  The solve is
 // fine; reading the term's value back used to abort.  Model evaluation
