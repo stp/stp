@@ -367,8 +367,11 @@ template <bool isSigned>
 bitVector<isSigned>
 bitVector<isSigned>::operator%(const bitVector<isSigned>& op) const
 {
+  // SymFPU's other symbolic backends map signed % to signed remainder (the
+  // quotient truncates toward zero, and the result follows the dividend's
+  // sign). SMT-LIB bvsmod follows the divisor's sign instead.
   return bitVector<isSigned>(
-      s_nf->CreateTerm(isSigned ? SBVMOD : BVMOD, getWidth(), *this, op));
+      s_nf->CreateTerm(isSigned ? SBVREM : BVMOD, getWidth(), *this, op));
 }
 
 template <bool isSigned>
