@@ -1308,6 +1308,14 @@ class ASTtoSTP(ast.NodeVisitor):
     def visit_Num(self, node):
         return node.n
 
+    def visit_Constant(self, node):
+        # Numeric literals have been represented by ast.Constant since
+        # Python 3.8.  NodeVisitor kept dispatching them through visit_Num
+        # for compatibility until Python 3.14 removed that fallback.
+        if isinstance(node.value, (int, float, complex)):
+            return node.value
+        return self.generic_visit(node)
+
     def visit_BoolOp(self, node):
         ops = {
             ast.And: self.s.and_,
