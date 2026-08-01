@@ -187,23 +187,18 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
     original_input = inputasserts;
   }
 
-  if (bm->has_floating_point)
-  {
-    // Difficulty reversion re-transforms the ORIGINAL input, which would
-    // resurrect un-blasted floating-point nodes after the lowering pass had
-    // replaced them -- and those cannot reach the bitblaster. Give the
-    // heuristic up only when floats are actually present; it used to be
-    // disabled for every query.
-    bm->UserFlags.difficulty_reversion = false;
-  }
+  const bool input_uses_floating_point_theory =
+      containsFloatingPointTheory(original_input, bm);
 
   // Make the partial floating-point operations total, canonicalise the
   // indexes of float-indexed arrays, and pin every rounding mode the formula
   // names to the five legal encodings -- before the formula is used for
-  // anything. See FpTotalise. RoundingMode-element arrays and RoundingMode
-  // symbols can each appear without a single float node in the formula, so
-  // has_floating_point alone does not cover the pass.
-  original_input = fpEncodingContext->prepare(original_input);
+  // anything. See FpTotalise. This is query-local: an unused or popped FP
+  // term must not send a later pure-BV query through an FP-only pass.
+  // RoundingMode-element arrays and RoundingMode symbols can each appear
+  // without a single float node, hence the broader source-theory test.
+  if (input_uses_floating_point_theory)
+    original_input = fpEncodingContext->prepare(original_input);
 
   SATSolver* newS = get_new_sat_solver();
 
@@ -317,6 +312,13 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 {
   bm->ASTNodeStats("input asserts and query: ", original_input);
 
+  // has_floating_point is deliberately only a manager-lifetime fast-negative
+  // hint. A float built in a popped scope (or never asserted at all) must not
+  // send this query through the lowering pass. Do not reset the hint on pop:
+  // public AST handles may retain the old node and use it in a later query.
+  const bool input_has_floating_point =
+      bm->has_floating_point && containsFloatingPoint(original_input, bm);
+
   DifficultyScore difficulty;
   if (bm->UserFlags.stats_flag)
     cerr << "Difficulty Initially:" << difficulty.score(original_input, bm)
@@ -426,7 +428,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // children and stamping a float format on them to make them type check,
   // and that stamp landed on hash-consed nodes the input still used as plain
   // bitvectors.
-  if (bm->has_floating_point)
+  if (input_has_floating_point)
   {
     inputToSat = fpEncodingContext->lowerPrepared(inputToSat);
     bm->ASTNodeStats("After floating-point lowering: ", inputToSat);

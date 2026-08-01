@@ -227,7 +227,10 @@ void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr,
                        const bool definately_bv)
 {
   const bool has_arrays = !definately_bv && containsArrayOps(n, mgr);
-  const bool has_fp = mgr->has_floating_point;
+  // Logic selection describes this expression, not every term ever interned
+  // by the manager. Include RoundingMode-only formulas: that source sort is
+  // part of the FP theory even when no FloatingPoint value occurs.
+  const bool has_fp = containsFloatingPointTheory(n, mgr);
   if (has_fp)
     os << (has_arrays ? "(set-logic QF_ABVFP)\n" : "(set-logic QF_BVFP)\n");
   else

@@ -148,6 +148,32 @@ bool containsArrayOps(const ASTNode& n, STPMgr* mgr)
   return false;
 }
 
+bool containsFloatingPoint(const ASTNode& n, STPMgr* mgr)
+{
+  NodeIterator ni(n, mgr->ASTUndefined, *mgr);
+  ASTNode current;
+  while ((current = ni.next()) != ni.end())
+  {
+    if (is_FP_kind(current.GetKind()) ||
+        current.GetSourceSort().containsFloatingPoint())
+      return true;
+  }
+  return false;
+}
+
+bool containsFloatingPointTheory(const ASTNode& n, STPMgr* mgr)
+{
+  NodeIterator ni(n, mgr->ASTUndefined, *mgr);
+  ASTNode current;
+  while ((current = ni.next()) != ni.end())
+  {
+    if (is_FP_kind(current.GetKind()) ||
+        current.GetSourceSort().usesFloatingPointTheory())
+      return true;
+  }
+  return false;
+}
+
 bool isCommutative(const Kind k)
 {
   switch (k)

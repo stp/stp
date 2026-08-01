@@ -20,6 +20,7 @@ class FpEncodingContext final
 {
 public:
   explicit FpEncodingContext(STPMgr* bm_);
+  DLL_PUBLIC ~FpEncodingContext();
 
   FpEncodingContext(const FpEncodingContext&) = delete;
   FpEncodingContext& operator=(const FpEncodingContext&) = delete;

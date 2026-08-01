@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <stp/AST/AST.h> // BVTypeCheck, the invariant these pin
+#include <stp/STPManager/STP.h>
 #include <stp/c_interface.h>
 
 // Regression tests: a floating-point query may be solved more than once.
@@ -122,6 +123,42 @@ TEST(fp_repeated_solve, to_fp_unsigned_over_the_same_bits)
   // the same bits are a zero either way, so this pins that the format left
   // on them has not changed how the integer conversion reads them.
   EXPECT_EQ(0, vc_query(vc, vc_fpIsZeroExpr(vc, g)));
+
+  vc_Destroy(vc);
+}
+
+// FP activation is determined from the current query DAG. Merely building a
+// float in a scope that is later popped must not change a subsequent BV-only
+// solve, while retaining and later asserting that node must activate lowering.
+// Neither solve may rewrite the user's preprocessing option permanently.
+TEST(fp_repeated_solve, floating_point_activation_is_query_local)
+{
+  VC vc = vc_createValidityChecker();
+  stp::STP* checker = reinterpret_cast<stp::STP*>(vc);
+
+  Expr bv = vc_varExpr(vc, "live_bv", vc_bvType(vc, 8));
+
+  vc_push(vc);
+  Expr fp = vc_varExpr(vc, "scoped_fp", vc_fpType(vc, 5, 11));
+  Expr fp_predicate = vc_fpIsNormalExpr(vc, fp);
+  vc_pop(vc);
+
+  vc_assertFormula(vc,
+                   vc_eqExpr(vc, bv, vc_bvConstExprFromLL(vc, 8, 0x2a)));
+  checker->bm->UserFlags.difficulty_reversion = true;
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_TRUE(checker->bm->UserFlags.difficulty_reversion);
+  EXPECT_EQ(0x2aULL,
+            getBVUnsignedLongLong(vc_getCounterExample(vc, bv)));
+
+  // C API expression handles keep the node alive after its parser-like scope
+  // is popped. Reachability from this query, not the old scope, is decisive.
+  vc_push(vc);
+  vc_assertFormula(vc, fp_predicate);
+  checker->bm->UserFlags.difficulty_reversion = true;
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_TRUE(checker->bm->UserFlags.difficulty_reversion);
+  vc_pop(vc);
 
   vc_Destroy(vc);
 }

@@ -44,6 +44,7 @@
 ; CHECK-NEXT: ^sat
 (check-sat)
 (reset-assertions)
+(declare-fun x () (_ BitVec 4))
 (assert (and (= x #x1) (= x #x2)))
 ; CHECK-NEXT: ^unsat
 (check-sat)

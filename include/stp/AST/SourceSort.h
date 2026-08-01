@@ -95,6 +95,19 @@ public:
             element().containsFloatingPoint());
   }
 
+  // RoundingMode belongs to the SMT floating-point theory even when no
+  // FloatingPoint value occurs. Printers and other source-level decisions
+  // need that broader question; lowering itself usually needs the narrower
+  // containsFloatingPoint() predicate above.
+  bool usesFloatingPointTheory() const
+  {
+    if (kind_ == Kind::FloatingPoint || kind_ == Kind::RoundingMode)
+      return true;
+    return kind_ == Kind::Array &&
+           (index().usesFloatingPointTheory() ||
+            element().usesFloatingPointTheory());
+  }
+
   unsigned bitVectorWidth() const
   {
     assert(kind_ == Kind::BitVector);

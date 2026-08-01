@@ -64,6 +64,10 @@ struct ArithLess
 };
 bool isCommutative(const Kind k);
 bool containsArrayOps(const ASTNode& n, STPMgr* stp);
+// Query-local source-theory checks. The first asks whether FP lowering is
+// needed; the second also includes RoundingMode-only syntax for printing.
+bool containsFloatingPoint(const ASTNode& n, STPMgr* stp);
+bool containsFloatingPointTheory(const ASTNode& n, STPMgr* stp);
 bool numberOfReadsLessThan(const ASTNode& n, int v);
 
 // Whether two constants spell the same bits. Node identity understates

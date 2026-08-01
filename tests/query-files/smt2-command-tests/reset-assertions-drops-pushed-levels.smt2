@@ -8,6 +8,7 @@
 ; CHECK-NEXT: ^unsat
 (check-sat)
 (reset-assertions)
+(declare-fun x () (_ BitVec 4))
 (assert (= x #x3))
 ; CHECK-NEXT: ^sat
 (check-sat)

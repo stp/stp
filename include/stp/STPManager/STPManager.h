@@ -291,18 +291,19 @@ public:
   DLL_PUBLIC ASTNode CreateSourceSymbol(const char* name,
                                         const SourceSort& source_sort);
 
-  // Whether a floating-point node has ever been created in this manager.
-  // Set by the format funnels (CreateFPConst, ASTNode::SetExpWidth and
-  // FloatBlaster::withFormat, all through noteFloatingPoint), and gates the
-  // floating-point-only passes and pessimisations, so a pure bitvector
-  // problem pays nothing for the floating-point support.
+  // Conservative manager-lifetime hint: whether a floating-point node has
+  // ever been created. Set by the format funnels (CreateFPConst,
+  // ASTNode::SetExpWidth and FloatBlaster::withFormat, all through
+  // noteFloatingPoint). False is a cheap proof that no query needs FP
+  // lowering; true is not query state -- an unused term or a popped scope may
+  // have set it -- so positive decisions must also inspect the current DAG.
   bool has_floating_point = false;
 
   // Record that a float of a real format has been built. Every float's format
   // arrives through one of the funnels above, so calling this there is what
-  // makes has_floating_point complete -- and it must be called whether or not
-  // the format then needs storing on a node, since a node that derives its
-  // format from its kind and children still puts a float in the problem.
+  // makes the fast-negative hint complete -- and it must be called whether or
+  // not the format then needs storing on a node, since a node that derives its
+  // format from its kind and children may later occur in a query.
   //
   // It is also where a build without floating-point support refuses the C
   // API's floating-point entry points. (The parser rejects floating-point

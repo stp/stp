@@ -11,6 +11,8 @@ FpEncodingContext::FpEncodingContext(STPMgr* bm_)
 {
 }
 
+FpEncodingContext::~FpEncodingContext() = default;
+
 void FpEncodingContext::requireOriginalNodeFactory() const
 {
   if (bm->defaultNodeFactory != node_factory)

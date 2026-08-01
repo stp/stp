@@ -69,7 +69,7 @@ void Cpp_interface::init()
 void Cpp_interface::addFrame()
 {
   // create a new frame
-  SolverFrame* new_frame = new SolverFrame(&functions);
+  SolverFrame* new_frame = new SolverFrame(&functions, &sort_aliases);
 
   // store the new frame
   frames.push_back(new_frame);
@@ -188,6 +188,7 @@ void Cpp_interface::addSortAlias(const std::string& name, unsigned exp_width,
   if (sort_aliases.find(name) != sort_aliases.end())
     FatalError("define-sort: the sort name is already defined");
   sort_aliases[name] = std::make_pair(exp_width, sig_width);
+  frames.back()->addSortAlias(name);
 }
 
 bool Cpp_interface::lookupSortAlias(const std::string& name,
@@ -502,35 +503,33 @@ void Cpp_interface::popToFirstLevel()
     bm.Pop();
 }
 
-// Weaker than reset(): the base level's declarations and the current options
-// survive, only the assertions go. Deliberately avoids popToFirstLevel(),
-// which leaves bm's assert level at zero and so breaks checkInvariant().
+// Weaker than reset(): retain options and the selected logic, but empty the
+// assertion stack. With the supported/default :global-declarations=false,
+// SMT-LIB requires this to discard declarations and definitions too.
 void Cpp_interface::resetAssertions()
 {
-  // Discard every level above the base one, which also removes the symbols
-  // declared inside them.
+  // Pop the ordinary levels through the ordinary path so the assertion stack,
+  // result cache, declarations and solver tables stay in lockstep.
   while (frames.size() > 1)
     pop();
 
-  // Empty the base level without removing it, so that the assertion stack,
-  // the result cache and the frame stack stay in step.
+  assert(frames.size() == 1);
+  assert(cache.size() == 1);
+  assert(bm.getAssertLevel() == 1);
+
+  // The base is an assertion level too for declaration lifetime. Rebuild it
+  // rather than merely replacing its assertions: destroying the frame drops
+  // its symbols, functions, and sort aliases together.
   bm.Pop();
-  bm.Push();
+  removeFrame();
+  cache.clear();
 
-  // The base level's declarations survive reset-assertions, so the validity
-  // constraint attached to each RoundingMode declaration must survive too;
-  // the assertion carrying it was just discarded.
-  for (const ASTNode& s : frames.front()->getSymbols())
-  {
-    if (s.GetSourceSort().kind() == SourceSort::Kind::RoundingMode)
-      assertRoundingModeValid(s);
-  }
-
-  // Whatever we last concluded no longer refers to these assertions.
-  cache.back() = Entry(SOLVER_UNDECIDED);
-
-  // These tables might hold references to the assertions just discarded.
+  // These tables may retain the discarded assertions or declarations.
   resetSolver();
+
+  cache.push_back(Entry(SOLVER_UNDECIDED));
+  addFrame();
+  bm.Push();
 
   checkInvariant();
 }
@@ -865,8 +864,11 @@ void CNFClearMemory()
 
 Cpp_interface::SolverFrame::SolverFrame(
     ankerl::unordered_dense::map<std::string, Function>*
-        global_function_context)
-    : _global_function_context(global_function_context)
+        global_function_context,
+    std::map<std::string, std::pair<unsigned, unsigned>>*
+        global_sort_alias_context)
+    : _global_function_context(global_function_context),
+      _global_sort_alias_context(global_sort_alias_context)
 {
 }
 
@@ -893,6 +895,18 @@ Cpp_interface::SolverFrame::~SolverFrame()
     // Remove our scope function from the global function context
     _global_function_context->erase(function_to_erase);
   }
+
+  // Sort declarations have the same SMT-LIB scope as symbols and functions:
+  // pop drops declarations made in that frame, while reset and
+  // reset-assertions drop every non-global declaration.
+  for (const auto& scoped_alias_name : _scoped_sort_aliases)
+  {
+    const auto alias_to_erase =
+        _global_sort_alias_context->find(scoped_alias_name);
+    if (alias_to_erase == _global_sort_alias_context->end())
+      FatalError("Trying to erase a sort alias which has not been defined.");
+    _global_sort_alias_context->erase(alias_to_erase);
+  }
 }
 
 vector<std::string>& Cpp_interface::SolverFrame::getFunctions()
@@ -903,6 +917,11 @@ vector<std::string>& Cpp_interface::SolverFrame::getFunctions()
 ASTVec& Cpp_interface::SolverFrame::getSymbols()
 {
   return _scoped_symbols;
+}
+
+void Cpp_interface::SolverFrame::addSortAlias(const std::string& name)
+{
+  _scoped_sort_aliases.push_back(name);
 }
 
 void Cpp_interface::SolverFrame::addSymbol(const ASTNode& symbol)
