@@ -87,32 +87,63 @@ ASTNode FpTotalise::topLevel(const ASTNode& n)
 ASTNode FpTotalise::canonicalIndex(const ASTNode& index, unsigned int exp_width,
                                    unsigned int sig_width)
 {
-  if (index.GetKind() == BVCONST)
+  // A second pass over prepared syntax must retain the explicit deferred
+  // boundary, rather than mistake its bit-vector result for a legacy raw
+  // carrier and eagerly expand another unpack/pack circuit around it.
+  if (index.GetKind() == FP_TO_IEEE_BV)
   {
-    // A plain bitvector constant standing where a float belongs: re-intern
-    // it through the canonicalising constant funnel, which maps every NaN
-    // pattern to the canonical quiet NaN and hands non-NaN bits back
-    // unchanged (as a float constant, equally fine as an index).
-    if (index.GetExpWidth() == 0)
-      return bm->CreateFPConst(index, exp_width, sig_width);
+    if (index.Degree() != 1 ||
+        index[0].GetSourceSort() !=
+            SourceSort::floatingPoint(exp_width, sig_width))
+      FatalError("FpTotalise: an existing canonical float array index has "
+                 "the wrong source format: ",
+                 index);
+    return index;
   }
-  else if (index.GetExpWidth() == 0)
+
+  const SourceSort source_sort = index.GetSourceSort();
+  if (source_sort.kind() == SourceSort::Kind::FloatingPoint)
   {
-    // A non-constant plain bitvector in index position (the parsers are lax
-    // about sorts): treat it as the float its bits spell.
+    if (source_sort.exponentWidth() != exp_width ||
+        source_sort.significandWidth() != sig_width)
+      FatalError("FpTotalise: a float array index disagrees with the array's "
+                 "declared index format: ",
+                 index);
+
+    return canonicalSourceBits(index);
+  }
+
+  // Compatibility for a plain bitvector standing where a float belongs (the
+  // legacy parsers accepted these). Constants can be re-interned through the
+  // typed FP funnel; a symbolic raw carrier still needs the old eager form,
+  // because it has no FP source sort with which to build FP_TO_IEEE_BV.
+  if (index.GetKind() == BVCONST)
+    return bm->CreateFPConst(index, exp_width, sig_width);
+
+  if (source_sort.kind() == SourceSort::Kind::BitVector ||
+      source_sort.kind() == SourceSort::Kind::Unknown)
+  {
     return FloatBlaster::canonicalBits(bm, index, exp_width, sig_width);
   }
 
-  if (index.GetExpWidth() != exp_width || index.GetSigWidth() != sig_width)
-    FatalError("FpTotalise: a float array index disagrees with the array's "
-               "declared index format: ",
-               index);
+  FatalError("FpTotalise: a float array index is not a scalar bitvector or "
+             "floating-point source value: ",
+             index);
+}
 
-  // A float constant needs no circuit: constants intern canonically.
-  if (index.GetKind() == BVCONST)
-    return index;
+ASTNode FpTotalise::canonicalSourceBits(const ASTNode& value)
+{
+  const SourceSort sort = value.GetSourceSort();
+  if (sort.kind() != SourceSort::Kind::FloatingPoint)
+    FatalError("FpTotalise expected a floating-point source value: ", value);
 
-  return FloatBlaster::canonicalBits(bm, index);
+  // Float constants are interned in canonical SMT form already. Keeping the
+  // constant avoids constructing an operation which constant evaluation
+  // would immediately fold back to the same node.
+  if (value.GetKind() == BVCONST)
+    return value;
+
+  return nf->CreateTerm(FP_TO_IEEE_BV, sort.packedWidth(), value);
 }
 
 void FpTotalise::collectRoundingModeTerms(const ASTNode& n, ASTNodeSet& seen,
@@ -172,10 +203,10 @@ ASTNode FpTotalise::unspecified(const char* tag, const ASTNode& prefix,
     // every NaN equal to every other, so operands that are equal may still
     // differ in payload; indexing on raw bits would let them read different
     // slots and answer differently, losing the very congruence this array
-    // exists to provide. Round-tripping through unpack/pack collapses the
-    // payloads while keeping +0 and -0 apart, which is exactly the relation
-    // SMT-LIB uses.
-    const ASTNode canonical = FloatBlaster::canonicalBits(bm, floats[i]);
+    // exists to provide. FP_TO_IEEE_BV records that round-trip as a source
+    // boundary; FloatBlast later collapses the payload while keeping +0 and
+    // -0 apart, and can reuse the same unpacked operand as the operation.
+    const ASTNode canonical = canonicalSourceBits(floats[i]);
 
     if (width == 0)
     {

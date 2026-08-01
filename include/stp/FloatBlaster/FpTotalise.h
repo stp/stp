@@ -103,10 +103,16 @@ private:
 
   // The canonical form of an index over a float-indexed array whose index
   // format is (exp_width, sig_width): constants re-intern through the
-  // canonicalising constant funnel, everything else goes through
-  // FloatBlaster::canonicalBits.
+  // canonicalising constant funnel, source FP expressions become an explicit
+  // FP_TO_IEEE_BV boundary, and legacy raw carriers use canonicalBits.
   ASTNode canonicalIndex(const ASTNode& index, unsigned int exp_width,
                          unsigned int sig_width);
+
+  // Make a source FP value's canonical carrier boundary explicit in the
+  // source DAG. FloatBlast can then share its cached unpacked value with the
+  // surrounding operation instead of this pass eagerly building a separate
+  // unpack/pack circuit.
+  ASTNode canonicalSourceBits(const ASTNode& value);
 
   // Collect the validity constraint of every term in `n` that denotes a
   // rounding mode out of thin air: a declared RoundingMode symbol, or a READ

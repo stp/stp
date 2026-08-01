@@ -65,6 +65,33 @@ TEST(fp_arithmetic, more_ops)
   vc_Destroy(vc);
 }
 
+// Each source fp.add is rounded before its result feeds the next operation.
+// In binary16, 2^-11 is exactly halfway between 1.0 and its successor. RNE
+// therefore rounds 1.0 + 2^-11 back to the even 1.0 on both additions. If a
+// lowering accidentally carried an unrounded intermediate across the chain,
+// the mathematical sum 1.0 + 2^-10 would instead be 0x3C01.
+TEST(fp_arithmetic, nested_add_rounds_after_each_operation)
+{
+  VC vc = vc_createValidityChecker();
+  Type f = vc_fpType(vc, 5, 11);
+  Expr rne = vc_fpRoundingMode(vc, VC_RM_RNE);
+  Expr x = vc_varExpr(vc, "x", f);
+  Expr y = vc_varExpr(vc, "y", f);
+
+  vc_assertFormula(vc, vc_fpEqExpr(vc, x, half(vc, 0x3C00))); // 1.0
+  vc_assertFormula(vc, vc_fpEqExpr(vc, y, half(vc, 0x1000))); // 2^-11
+
+  Expr once = vc_fpAddExpr(vc, rne, x, y);
+  Expr twice = vc_fpAddExpr(vc, rne, once, y);
+
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ((unsigned long long)0x3C00,
+            getBVUnsignedLongLong(vc_getCounterExample(vc, once)));
+  EXPECT_EQ((unsigned long long)0x3C00,
+            getBVUnsignedLongLong(vc_getCounterExample(vc, twice)));
+  vc_Destroy(vc);
+}
+
 // The predicates actually constrain the search: nothing is both NaN and zero,
 // so this is unsatisfiable (vc_query of false returns 1 = valid = unsat).
 TEST(fp_arithmetic, predicates_constrain)
