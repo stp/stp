@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/FloatBlaster/FpEncodingContext.h"
 #include "stp/Printer/printers.h"
 #include "stp/ToSat/ToSATAIG.h"
@@ -720,18 +721,14 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
     }
   }
 
-  if (fpEncodedEvaluationDepth == 0 && is_FP_kind(k))
-  {
-    const ASTNode encoded =
-        requireFpEncodingContext().encodeForModel(form);
-    if (encoded == form)
-      FatalError("floating-point model encoding made no progress: ", form);
-
-    const ScopedFpEncodedEvaluation evaluating(fpEncodedEvaluationDepth);
-    const ASTNode value = ComputeFormulaUsingModel(encoded);
-    ComputeFormulaMap[form] = value;
-    return value;
-  }
+  // Unlike the term arm (TermToConstTermUsingModel), floating-point *predicates*
+  // are not routed through encodeForModel. Encoding the whole predicate and
+  // re-entering the evaluator runs the recursion at fpEncodedEvaluationDepth > 0,
+  // where the term arm's own encode step is switched off -- so any float operand
+  // reached inside the encoded predicate would fall through to the term switch's
+  // default. Instead the FP_* predicate cases below resolve each operand to a
+  // constant at depth 0 (where the term arm does encode floats correctly) and
+  // fold the predicate over those constants.
 
   ASTNode output = ASTUndefined;
   switch (k)
@@ -844,6 +841,70 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
                    form);
     }
     break;
+    case FP_LEQ:
+    case FP_LT:
+    case FP_GEQ:
+    case FP_GT:
+    case FP_EQ:
+    case FP_ISNORMAL:
+    case FP_ISSUBNORMAL:
+    case FP_ISZERO:
+    case FP_ISINFINITE:
+    case FP_ISNAN:
+    case FP_ISNEGATIVE:
+    case FP_ISPOSITIVE:
+    case FP_SMT_EQ:
+    {
+      // Rebuild at the node's real arity: the comparisons are binary but the
+      // classification predicates are unary.
+      ASTVec operands;
+      operands.reserve(form.Degree());
+
+      for (unsigned int i = 0; i < form.Degree(); i++)
+      {
+        ASTNode simp(TermToConstTermUsingModel(form[i]));
+        // An operand must resolve to a constant, as in the float arm of
+        // TermToConstTermUsingModel: the read-tolerant flag is on inside the
+        // walk, so a float-element array read the solve never constrained
+        // comes back as the symbolic READ (case 2 there) rather than a
+        // value. Rebuilding the predicate over it is not evaluation -- the
+        // blaster would carry the read along, and the same-operand folds
+        // below can hand the bare READ back. The read is genuinely
+        // unconstrained here, so resolve it to a concrete value.
+        if (BVCONST != simp.GetKind())
+          simp = TermToConstTermUsingModel(form[i], false);
+        assert(simp.GetKind() == BVCONST);
+        operands.push_back(FloatBlaster::withFormat(
+            bm, simp, form[i].GetExpWidth(), form[i].GetSigWidth()));
+      }
+
+      ASTNode temp(bm->CreateNode(k, operands));
+
+      // Rebuilding through the simplifying factory may rewrite the predicate
+      // rather than return it: constant operands fold to true/false outright,
+      // and the same-operand rules fire here because interned constants
+      // compare pointer-equal -- fp.leq of a value with itself comes back as
+      // (not (fp.isNaN ...)). Whatever came back that is not this operation
+      // is a formula; evaluate it, never blast it.
+      if (temp.GetKind() != k)
+      {
+        output = ComputeFormulaUsingModel(temp);
+        break;
+      }
+
+      // From `form`, not `temp`: temp's operands are evaluated bits by now.
+      const std::pair<unsigned int, unsigned int> fmt =
+          FloatBlaster::operandFormat(form);
+      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(
+          bm, temp.GetKind(), toASTVec(temp.GetChildren()), fmt.first,
+          fmt.second));
+
+      assert(blasted != temp);
+      assert(blasted != form);
+
+      output = ComputeFormulaUsingModel(blasted);
+      break;
+    }
     default:
       cerr << _kind_names[k];
       FatalError(" ComputeFormulaUsingModel: "
