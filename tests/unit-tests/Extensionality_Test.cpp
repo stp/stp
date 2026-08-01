@@ -48,6 +48,13 @@ using namespace stp;
 namespace
 {
 
+TEST(ExtGuardTest, PathPayloadRemainsCompact)
+{
+  // Every propagation copies its complete guard path. Keep a regression
+  // ceiling below the old 96-byte variant-specific representation.
+  EXPECT_LE(sizeof(ExtGuard), 64u);
+}
+
 class MapModel : public ExtModelView
 {
 public:
@@ -117,6 +124,25 @@ protected:
     g.writes[w] = info;
     g.writeParents[base].push_back(w);
     return w;
+  }
+
+  ASTNode arrayIte(const ASTNode& condTerm, const ASTNode& condName,
+                   const ASTNode& thn, const ASTNode& els)
+  {
+    NodeFactory* hf = mgr.hashingNodeFactory;
+    ASTNode ite = hf->CreateArrayTerm(ITE, 2, 2,
+                                      {condTerm, thn, els});
+    ExtIteNode info;
+    info.ite = ite;
+    info.condTerm = condTerm;
+    info.condName = condName;
+    info.thn = thn;
+    info.els = els;
+    g.ites[ite] = info;
+    g.iteParents[thn].push_back(ite);
+    if (els != thn)
+      g.iteParents[els].push_back(ite);
+    return ite;
   }
 
   // Access value symbol doubles as the read-abstraction symbol.
@@ -208,6 +234,16 @@ protected:
         return true;
     return false;
   }
+  static bool hasBoolGuard(const std::vector<ExtLemmaAtom>& premise,
+                           const ASTNode& term, bool positive)
+  {
+    const ExtLemmaAtom::Op op = positive ? ExtLemmaAtom::BOOL_LIT
+                                         : ExtLemmaAtom::BOOL_LIT_NEG;
+    for (size_t i = 0; i < premise.size(); i++)
+      if (premise[i].op == op && premise[i].boolTerm == term)
+        return true;
+    return false;
+  }
   static bool hasArrayEqGuard(const std::vector<ExtLemmaAtom>& premise,
                               const ASTNode& a, const ASTNode& b)
   {
@@ -275,6 +311,56 @@ protected:
       if (r.events[i].kind == ExtEvent::CONFLICT)
         return r.events[i].rule;
     return "<no conflict event>";
+  }
+
+  void expectIteConflict(bool condition, bool downward)
+  {
+    ASTNode A = arr("A"), B = arr("B");
+    // Keep the source condition distinct from its reified name. MapModel
+    // intentionally knows only the latter, pinning the requirement that
+    // propagation follows the SAT assignment rather than re-evaluating
+    // the source term.
+    ASTNode condTerm = mgr.CreateSymbol("condition_term", 0, 0);
+    ASTNode condName = boolSym("condition_name", condition);
+    ASTNode ite = arrayIte(condTerm, condName, A, B);
+    const ASTNode& selected = condition ? A : B;
+    ASTNode index = bv("index", 0);
+    ASTNode iteValue = bv("ite_value", 1);
+    ASTNode branchValue = bv("branch_value", 2);
+
+    // All accesses are seeded before propagation. Whichever endpoint is
+    // seeded first processes first and therefore determines whether the
+    // first conflict is found by T-down or T-up.
+    if (downward)
+    {
+      readAccess(ite, index, iteValue);
+      readAccess(selected, index, branchValue);
+    }
+    else
+    {
+      readAccess(selected, index, branchValue);
+      readAccess(ite, index, iteValue);
+    }
+
+    ExtCheckResult r = run();
+    ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
+    EXPECT_STREQ(downward ? "T_DOWN" : "T_UP", firstConflictRule(r));
+
+    const ExtConflict& c = r.conflict;
+    ASSERT_EQ(1u, c.rightGuards.size());
+    EXPECT_TRUE(c.leftGuards.empty());
+    EXPECT_EQ(condition ? ExtGuard::ITE_COND_POS
+                        : ExtGuard::ITE_COND_NEG,
+              c.rightGuards[0].kind);
+
+    // The common index term is identical on both accesses, so
+    // canonicalization drops its reflexive equality. The branch condition
+    // is the complete premise, with the selected branch's polarity and
+    // the correct term for each layer.
+    ASSERT_EQ(1u, c.abstractPremise.size());
+    EXPECT_TRUE(hasBoolGuard(c.abstractPremise, condName, condition));
+    ASSERT_EQ(1u, c.theoryPremise.size());
+    EXPECT_TRUE(hasBoolGuard(c.theoryPremise, condTerm, condition));
   }
 };
 
@@ -760,9 +846,9 @@ TEST_F(ExtFixtureTest, OneAccessCrossesTwoEqualityEdges)
   // in traversal order
   ASSERT_EQ(2u, c.rightGuards.size());
   EXPECT_EQ(ExtGuard::EQ_PROXY, c.rightGuards[0].kind);
-  EXPECT_EQ(eqAB, c.rightGuards[0].proxy);
+  EXPECT_EQ(eqAB, c.rightGuards[0].absA);
   EXPECT_EQ(ExtGuard::EQ_PROXY, c.rightGuards[1].kind);
-  EXPECT_EQ(eqBC, c.rightGuards[1].proxy);
+  EXPECT_EQ(eqBC, c.rightGuards[1].absA);
   // the resident access left its write with a single index guard
   ASSERT_EQ(1u, c.leftGuards.size());
   EXPECT_EQ(ExtGuard::INDEX_NE, c.leftGuards[0].kind);
@@ -1098,6 +1184,49 @@ TEST_F(ExtFixtureTest, ConflictPremiseUsesShortestPaths)
   EXPECT_EQ(rT, c.abstractConclusionB);
 }
 
+TEST_F(ExtFixtureTest, IteTrueConditionPropagatesDownWithPositiveGuard)
+{
+  expectIteConflict(true, true);
+}
+
+TEST_F(ExtFixtureTest, IteFalseConditionPropagatesDownWithNegativeGuard)
+{
+  expectIteConflict(false, true);
+}
+
+TEST_F(ExtFixtureTest, IteTrueConditionPropagatesUpWithPositiveGuard)
+{
+  expectIteConflict(true, false);
+}
+
+TEST_F(ExtFixtureTest, IteFalseConditionPropagatesUpWithNegativeGuard)
+{
+  expectIteConflict(false, false);
+}
+
+TEST_F(ExtFixtureTest, IteDoesNotPropagateThroughUnselectedBranch)
+{
+  ASTNode A = arr("A"), B = arr("B");
+  ASTNode condTerm = mgr.CreateSymbol("condition_term", 0, 0);
+  ASTNode condName = boolSym("condition_name", true);
+  ASTNode ite = arrayIte(condTerm, condName, A, B);
+  ASTNode index = bv("index", 0);
+  ASTNode iteValue = bv("ite_value", 1);
+  ASTNode unselectedValue = bv("unselected_value", 2);
+
+  readAccess(ite, index, iteValue);
+  readAccess(B, index, unselectedValue);
+
+  ExtCheckResult r = run();
+  EXPECT_EQ(ExtCheckResult::CONSISTENT, r.status);
+  EXPECT_TRUE(r.conflicts.empty());
+  expectStats(r, {{"insertions", 3},
+                  {"propagations", 1},
+                  {"rule_T_DOWN", 1},
+                  {"seeds", 2},
+                  {"skipped_seen", 1}});
+}
+
 // Direct tests for the solve-time preparation layer: recovering the
 // canonical equality operands from the witness anchors, computing the
 // cone, eliminating array-valued if-then-else with its persistent
@@ -1189,6 +1318,7 @@ TEST_F(ExtPrepareTest, ArrayIteIsKeptAndReasonedAboutDirectly)
   ext->beginSolve();
   ext->prepare(ext->conjoinRecordConstraints(proxy));
   EXPECT_EQ(1u, ext->getRecords().size());
+  const size_t protectedAfterFirstSolve = ext->getFrozenSymbols().size();
 
   // The if-then-else is in the cone as itself, with both branches
   // reachable through it -- that is what rules T-down and T-up walk.
@@ -1207,6 +1337,7 @@ TEST_F(ExtPrepareTest, ArrayIteIsKeptAndReasonedAboutDirectly)
   ext->beginSolve();
   ext->prepare(ext->conjoinRecordConstraints(proxy));
   EXPECT_EQ(1u, ext->getRecords().size());
+  EXPECT_EQ(protectedAfterFirstSolve, ext->getFrozenSymbols().size());
 }
 
 TEST_F(ExtPrepareTest, IteConditionIsReifiedAsAProtectedName)

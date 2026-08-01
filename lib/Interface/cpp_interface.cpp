@@ -153,48 +153,12 @@ void Cpp_interface::SetQuery(const ASTNode& q)
 
 ASTNode Cpp_interface::CreateNode(stp::Kind kind, const stp::ASTVec& children)
 {
-  if (kind == EQ && children.size() > 0 && children[0].GetIndexWidth() > 0 &&
-      !bm.UserFlags.enable_array_equality)
-  {
-    // Refuse rather than warn. STP cannot decide an equality between
-    // whole arrays without --array-equality: nothing eliminates the
-    // array-sorted operands, so the transform leaves them in place and
-    // the solve proceeds as though the atom were unconstrained. That
-    // answers sat on
-    //   (assert (= a b)) (assert (distinct (select a i) (select b i)))
-    // which is unsatisfiable. A warning is not enough for a wrong
-    // answer, and a debug build did not survive the query anyway --
-    // it aborted on an assertion further down. The Python binding
-    // already refuses this at construction; this is the same refusal
-    // for the parser and the C API.
-    FatalError("STP cannot decide equality between whole array terms "
-               "without --array-equality (the C API's vc_setFlag(vc, "
-               "'x'), or Solver(array_equality=True) in Python).");
-  }
-
   return nf->CreateNode(kind, children);
 }
 
 ASTNode Cpp_interface::CreateNode(stp::Kind kind, const stp::ASTNode n0,
                                   const stp::ASTNode n1)
 {
-  if (n0.GetIndexWidth() > 0 && !bm.UserFlags.enable_array_equality)
-  {
-    // Refuse rather than warn. STP cannot decide an equality between
-    // whole arrays without --array-equality: nothing eliminates the
-    // array-sorted operands, so the transform leaves them in place and
-    // the solve proceeds as though the atom were unconstrained. That
-    // answers sat on
-    //   (assert (= a b)) (assert (distinct (select a i) (select b i)))
-    // which is unsatisfiable. A warning is not enough for a wrong
-    // answer, and a debug build did not survive the query anyway --
-    // it aborted on an assertion further down. The Python binding
-    // already refuses this at construction; this is the same refusal
-    // for the parser and the C API.
-    FatalError("STP cannot decide equality between whole array terms "
-               "without --array-equality (the C API's vc_setFlag(vc, "
-               "'x'), or Solver(array_equality=True) in Python).");
-  }
   return nf->CreateNode(kind, n0, n1);
 }
 

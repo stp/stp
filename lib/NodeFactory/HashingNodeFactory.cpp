@@ -47,15 +47,21 @@ ASTNode HashingNodeFactory::CreateNode(const Kind kind,
 
   // Array equality: every front end's node creation bottoms out here,
   // so this is the single place where an equality between array terms
-  // is replaced by a fresh Boolean abstraction variable (the formula
-  // abstraction of Brummayer & Biere's lemmas-on-demand procedure).
-  // While the feature is enabled no equality node over arrays is ever
-  // built, so none of STP's downstream transformations encounter one.
-  if (kind == EQ && bm.UserFlags.enable_array_equality &&
-      back_children.size() == 2 && back_children[0].GetIndexWidth() > 0)
+  // is either replaced by a fresh Boolean abstraction variable (the
+  // formula abstraction of Brummayer & Biere's lemmas-on-demand
+  // procedure), or refused when that decision procedure is disabled.
+  // No equality node over arrays is ever built, so none of STP's
+  // downstream transformations encounter one and answer it unsoundly.
+  if (kind == EQ && back_children.size() == 2 &&
+      back_children[0].GetIndexWidth() > 0)
   {
-    return bm.getExtensionality()->makeEquality(back_children[0],
-                                                back_children[1]);
+    if (bm.UserFlags.enable_array_equality)
+      return bm.getExtensionality()->makeEquality(back_children[0],
+                                                  back_children[1]);
+
+    FatalError("STP cannot decide equality between whole array terms "
+               "without --array-equality (the C API's vc_setFlag(vc, "
+               "'x'), or Solver(array_equality=True) in Python).");
   }
   
   if (back_children.size()  <= 1 || !isCommutative(kind))

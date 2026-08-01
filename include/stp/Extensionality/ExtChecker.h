@@ -133,27 +133,25 @@ struct ExtGuard
   {
     INDEX_NE,
     EQ_PROXY,
-    ITE_COND
+    ITE_COND_POS,
+    ITE_COND_NEG
   };
-  Kind kind;
+  Kind kind = INDEX_NE;
 
-  // INDEX_NE: theory "indexTerm != writeIndexTerm",
-  //           abstract "indexName != writeIndexName".
+  // Guards are copied whenever an access crosses an edge, so keep one
+  // shared four-node payload instead of reserving separate ASTNodes for
+  // all three variants:
+  //
+  // INDEX_NE: theoryA/theoryB are the original index terms;
+  //           absA/absB are their scalar names.
+  // EQ_PROXY: theoryA/theoryB are the canonical array operands;
+  //           absA is the Boolean equality proxy.
+  // ITE_COND_{POS,NEG}: theoryA is the original condition;
+  //                     absA is its reified Boolean name. The kind
+  //                     records the selected branch's polarity.
   ASTNode theoryA, theoryB;
   ASTNode absA, absB;
-
-  // EQ_PROXY: theory "left = right" over the original (canonical) array
-  // operands; abstract: the positive Boolean proxy literal.
-  ASTNode proxy;
-  ASTNode eqLeft, eqRight;
-  size_t eqRecord;
-
-  // ITE_COND: theory, the condition term as the user wrote it;
-  // abstract, the reified Boolean naming it. condPositive is the value
-  // sigma gave the condition, which is the polarity the guard carries.
-  ASTNode condTerm;
-  ASTNode condName;
-  bool condPositive;
+  size_t eqRecord = 0;
 };
 
 // A cone array-valued if-then-else, kept as a term rather than

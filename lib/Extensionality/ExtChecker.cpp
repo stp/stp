@@ -256,28 +256,29 @@ void guardsToAtoms(const std::vector<ExtGuard>& guards, bool abstractLayer,
       a.b = abstractLayer ? g.absB : g.theoryB;
       a.eqRecord = 0;
     }
-    else if (g.kind == ExtGuard::ITE_COND)
+    else if (g.kind == ExtGuard::ITE_COND_POS ||
+             g.kind == ExtGuard::ITE_COND_NEG)
     {
       // The condition with the polarity sigma gave it. Unlike an array
       // equality, an if-then-else guard can be either way round: both
       // branches are selectable, and the rule fired on whichever one
       // sigma selected.
-      a.op = g.condPositive ? ExtLemmaAtom::BOOL_LIT
-                            : ExtLemmaAtom::BOOL_LIT_NEG;
-      a.boolTerm = abstractLayer ? g.condName : g.condTerm;
+      a.op = g.kind == ExtGuard::ITE_COND_POS ? ExtLemmaAtom::BOOL_LIT
+                                              : ExtLemmaAtom::BOOL_LIT_NEG;
+      a.boolTerm = abstractLayer ? g.absA : g.theoryA;
       a.eqRecord = 0;
     }
     else if (abstractLayer)
     {
       a.op = ExtLemmaAtom::BOOL_LIT;
-      a.boolTerm = g.proxy;
+      a.boolTerm = g.absA;
       a.eqRecord = g.eqRecord;
     }
     else
     {
       a.op = ExtLemmaAtom::ARRAY_EQ;
-      a.a = g.eqLeft;
-      a.b = g.eqRight;
+      a.a = g.theoryA;
+      a.b = g.theoryB;
       a.eqRecord = g.eqRecord;
     }
     out.push_back(a);
@@ -480,9 +481,9 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
           const char* rule = fromLeft ? "R_EQ" : "L_EQ";
           ExtGuard g;
           g.kind = ExtGuard::EQ_PROXY;
-          g.proxy = e.proxy;
-          g.eqLeft = e.left;
-          g.eqRight = e.right;
+          g.theoryA = e.left;
+          g.theoryB = e.right;
+          g.absA = e.proxy;
           g.eqRecord = e.record;
           std::vector<ExtGuard> chi2 = sourcePath.guards;
           chi2.push_back(g);
@@ -513,10 +514,9 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
         const ExtIteNode& t = dit->second;
         const bool cond = model.boolValue(t.condName);
         ExtGuard g;
-        g.kind = ExtGuard::ITE_COND;
-        g.condTerm = t.condTerm;
-        g.condName = t.condName;
-        g.condPositive = cond;
+        g.kind = cond ? ExtGuard::ITE_COND_POS : ExtGuard::ITE_COND_NEG;
+        g.theoryA = t.condTerm;
+        g.absA = t.condName;
         std::vector<ExtGuard> chi2 = sourcePath.guards;
         chi2.push_back(g);
         st.insert(cond ? t.thn : t.els, accessId, chi2, "T_DOWN", source);
@@ -539,10 +539,9 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
           if (!((cond && t.thn == source) || (!cond && t.els == source)))
             continue;
           ExtGuard g;
-          g.kind = ExtGuard::ITE_COND;
-          g.condTerm = t.condTerm;
-          g.condName = t.condName;
-          g.condPositive = cond;
+          g.kind = cond ? ExtGuard::ITE_COND_POS : ExtGuard::ITE_COND_NEG;
+          g.theoryA = t.condTerm;
+          g.absA = t.condName;
           std::vector<ExtGuard> chi2 = sourcePath.guards;
           chi2.push_back(g);
           st.insert(t.ite, accessId, chi2, "T_UP", source);
