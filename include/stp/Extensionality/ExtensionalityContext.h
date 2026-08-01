@@ -208,6 +208,20 @@ public:
   // solve.
   ASTNode prepare(const ASTNode& root);
 
+  // The main array transform is the only operation allowed to consume the
+  // frozen read inventory.  It must start from the exact node returned by
+  // prepare(), account for every reachable READ either by recording the
+  // abstraction it produced or by identifying a branch made unreachable by
+  // constant term-ITE selection, and finish before the checker graph is
+  // bound.  These are integration tripwires: a future transformer shortcut
+  // may not silently leave part of the checker-owned graph unrepresented.
+  void beginReadTransform(const ASTNode& preparedRoot);
+  void noteAbstractedRead(const ASTNode& originalRead,
+                          const ASTNode& transformedIndex,
+                          const ASTNode& valueSymbol);
+  void noteEliminatedReadSubtree(const ASTNode& deadTerm);
+  void finishReadTransform();
+
   bool arrayGraphFrozen() const { return arrayGraphIsFrozen; }
   bool checkerReady() const { return graphBound; }
   bool ownsArray(const ASTNode& arrayNode) const
@@ -380,6 +394,38 @@ private:
   std::map<ASTNode, ASTNode> nameToTermMap; // name symbol -> its term
   ExtGraph graph;                         // bound after transform
   bool graphBound;
+
+  struct ReadBinding
+  {
+    ASTNode array;
+    ASTNode index;
+    ASTNode symbol;
+
+    bool operator==(const ReadBinding& other) const
+    {
+      return array == other.array && index == other.index &&
+             symbol == other.symbol;
+    }
+
+    bool operator<(const ReadBinding& other) const
+    {
+      if (array != other.array)
+        return array < other.array;
+      if (index != other.index)
+        return index < other.index;
+      return symbol < other.symbol;
+    }
+  };
+
+  // Exact solve-boundary handshake with ArrayTransformer.  preparedReads is
+  // collected from the final root including preparation's own naming
+  // equations, not from the earlier graph-discovery root.
+  ASTNode preparedTransformRoot;
+  std::set<ASTNode> preparedReads;
+  std::map<ASTNode, ReadBinding> transformedReads;
+  std::set<ASTNode> eliminatedReads;
+  bool readTransformInProgress;
+  bool readTransformComplete;
 
   bool pendingLemmaValid;
   std::vector<ExtConflict> pendingLemmas;

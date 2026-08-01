@@ -94,7 +94,9 @@ ASTNode recoverAnchoredOperand(const ASTNode& rhs, const ASTNode& lambda,
 
 ExtensionalityContext::ExtensionalityContext(STPMgr* bm_)
     : lemmasEmitted(0), lemmaAtomsFolded(0), bm(bm_), registrySealed(false),
-      arrayGraphIsFrozen(false), graphBound(false), pendingLemmaValid(false)
+      arrayGraphIsFrozen(false), graphBound(false),
+      readTransformInProgress(false), readTransformComplete(false),
+      pendingLemmaValid(false)
 {
 }
 
@@ -422,6 +424,12 @@ void ExtensionalityContext::beginSolve()
   lemmaOnlySymbols.clear();
   graph = ExtGraph();
   graphBound = false;
+  preparedTransformRoot = ASTNode();
+  preparedReads.clear();
+  transformedReads.clear();
+  eliminatedReads.clear();
+  readTransformInProgress = false;
+  readTransformComplete = false;
   pendingLemmaValid = false;
   pendingLemmas.clear();
   eqLitCache.clear();
@@ -777,11 +785,131 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
     }
   }
 
-  arrayGraphIsFrozen = true;
+  const ASTNode prepared =
+      extraConstraints.empty()
+          ? root
+          : bm->defaultNodeFactory->CreateNode(AND, root, extraConstraints);
 
-  if (extraConstraints.empty())
-    return root;
-  return bm->defaultNodeFactory->CreateNode(AND, root, extraConstraints);
+  // This is the last word-level root before the array transform.  Inventory
+  // that exact DAG, including the naming equations just added above.  Graph
+  // discovery alone is not a sufficient hand-off invariant: a later
+  // transformer shortcut could otherwise omit a checker-owned read while
+  // leaving all of its array nodes present.
+  ASTNodeSet finalDag;
+  collectDag(prepared, finalDag);
+  for (ASTNodeSet::const_iterator it = finalDag.begin(); it != finalDag.end();
+       ++it)
+  {
+    if (it->GetKind() == ARRAY_EQ)
+      FatalError("array-equality: an opaque equality reached the final "
+                 "prepared root",
+                 *it);
+    if (it->GetKind() != READ)
+      continue;
+    if (ownedArrays.find((*it)[0]) == ownedArrays.end())
+      FatalError("array-equality: a read in the final prepared root is "
+                 "outside the complete owned array graph",
+                 *it);
+    preparedReads.insert(*it);
+  }
+
+  preparedTransformRoot = prepared;
+  arrayGraphIsFrozen = true;
+  return prepared;
+}
+
+void ExtensionalityContext::beginReadTransform(const ASTNode& root)
+{
+  if (!arrayGraphIsFrozen || preparedTransformRoot.IsNull())
+    FatalError("array-equality: read transformation began before final "
+               "preparation");
+  if (readTransformInProgress || readTransformComplete)
+    FatalError("array-equality: the prepared read inventory was transformed "
+               "twice");
+  if (root != preparedTransformRoot)
+    FatalError("array-equality: the array transformer did not receive the "
+               "exact final prepared root",
+               root);
+  readTransformInProgress = true;
+}
+
+void ExtensionalityContext::noteAbstractedRead(
+    const ASTNode& originalRead, const ASTNode& transformedIndex,
+    const ASTNode& valueSymbol)
+{
+  if (!readTransformInProgress)
+    FatalError("array-equality: a read abstraction was reported outside the "
+               "prepared transform");
+  if (originalRead.GetKind() != READ ||
+      preparedReads.find(originalRead) == preparedReads.end())
+    FatalError("array-equality: the transformer abstracted a read absent "
+               "from the final prepared root",
+               originalRead);
+  if (!ownsArray(originalRead[0]))
+    FatalError("array-equality: the transformer abstracted a read outside "
+               "the complete owned array graph",
+               originalRead);
+  if (transformedIndex.GetValueWidth() != originalRead[1].GetValueWidth() ||
+      valueSymbol.GetValueWidth() != originalRead.GetValueWidth())
+    FatalError("array-equality: a read abstraction has incompatible scalar "
+               "widths",
+               originalRead);
+
+  ReadBinding binding;
+  binding.array = originalRead[0];
+  binding.index = transformedIndex;
+  binding.symbol = valueSymbol;
+  const std::map<ASTNode, ReadBinding>::const_iterator old =
+      transformedReads.find(originalRead);
+  if (old != transformedReads.end())
+  {
+    if (old->second.array != binding.array ||
+        old->second.index != binding.index ||
+        old->second.symbol != binding.symbol)
+      FatalError("array-equality: one prepared read acquired two different "
+                 "transformer bindings",
+                 originalRead);
+    return;
+  }
+  transformedReads[originalRead] = binding;
+}
+
+void ExtensionalityContext::noteEliminatedReadSubtree(
+    const ASTNode& deadTerm)
+{
+  if (!readTransformInProgress)
+    FatalError("array-equality: a dead read subtree was reported outside the "
+               "prepared transform");
+  ASTNodeSet deadDag;
+  collectDag(deadTerm, deadDag);
+  for (ASTNodeSet::const_iterator it = deadDag.begin(); it != deadDag.end();
+       ++it)
+  {
+    if (it->GetKind() != READ)
+      continue;
+    if (preparedReads.find(*it) == preparedReads.end())
+      FatalError("array-equality: constant term-ITE elimination reported a "
+                 "read absent from the final prepared root",
+                 *it);
+    eliminatedReads.insert(*it);
+  }
+}
+
+void ExtensionalityContext::finishReadTransform()
+{
+  if (!readTransformInProgress)
+    FatalError("array-equality: the prepared read transform was not in "
+               "progress");
+  for (std::set<ASTNode>::const_iterator it = preparedReads.begin();
+       it != preparedReads.end(); ++it)
+    if (transformedReads.find(*it) == transformedReads.end() &&
+        eliminatedReads.find(*it) == eliminatedReads.end())
+      FatalError("array-equality: a read in the final prepared root was "
+                 "neither abstracted nor eliminated by constant term-ITE "
+                 "selection",
+                 *it);
+  readTransformInProgress = false;
+  readTransformComplete = true;
 }
 
 // After the main ArrayTransformer pass: the complete read inventory
@@ -794,8 +922,19 @@ void ExtensionalityContext::bindAfterTransform(ArrayTransformer* at)
                "graph was frozen");
   if (graphBound)
     FatalError("array-equality: the complete array graph was bound twice");
+  if (!readTransformComplete || readTransformInProgress)
+    FatalError("array-equality: binding began before the exact prepared read "
+               "inventory was accounted for");
 
   graph = ExtGraph();
+
+  std::set<ReadBinding> reportedBindings;
+  for (std::map<ASTNode, ReadBinding>::const_iterator it =
+           transformedReads.begin();
+       it != transformedReads.end(); ++it)
+    reportedBindings.insert(it->second);
+
+  std::set<ReadBinding> tableBindings;
 
   // reads, deterministically ordered by (array, index) node numbers
   struct ReadRow
@@ -834,8 +973,17 @@ void ExtensionalityContext::bindAfterTransform(ArrayTransformer* at)
       row.symbol = it2->second.symbol;
       row.indexSymbol = it2->second.index_symbol;
       reads.push_back(row);
+
+      ReadBinding binding;
+      binding.array = row.array;
+      binding.index = row.index;
+      binding.symbol = row.symbol;
+      tableBindings.insert(binding);
     }
   }
+  if (reportedBindings != tableBindings)
+    FatalError("array-equality: the transformer's read table does not exactly "
+               "match the bindings reported for the final prepared root");
   std::sort(reads.begin(), reads.end());
 
   for (size_t i = 0; i < reads.size(); i++)

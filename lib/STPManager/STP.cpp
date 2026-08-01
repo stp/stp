@@ -771,6 +771,15 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     bm->ASTNodeStats("after extensionality preparation: ", inputToSat);
   }
 
+  // ARRAY_EQ is a user-facing, solve-boundary node only.  Check the exact
+  // root handed to the ordinary array transformer so that no future
+  // preparation rewrite can accidentally leak opaque equality semantics
+  // into code which has no case for it.
+  if (containsOpaqueArrayEquality(inputToSat))
+    FatalError("array-equality: an opaque equality reached the final array "
+               "transformation boundary",
+               inputToSat);
+
   // extPrepared implies extActive, and an active registry counts as array
   // operations above -- so a prepared registry always reaches this transform.
   // bindAfterTransform below reads the map only this call populates, so

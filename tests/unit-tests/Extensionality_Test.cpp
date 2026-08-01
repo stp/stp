@@ -39,9 +39,12 @@ THE SOFTWARE.
 
 #include "stp/Extensionality/ExtChecker.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include "stp/NodeFactory/SimplifyingNodeFactory.h"
 #include "stp/Printer/printers.h"
 #include "stp/STPManager/STPManager.h"
+#include "stp/Simplifier/Simplifier.h"
+#include "stp/Simplifier/SubstitutionMap.h"
 #include "stp/cpp_interface.h"
 #include <gtest/gtest.h>
 #include <map>
@@ -1397,11 +1400,10 @@ TEST_F(ExtFixtureTest, IteDoesNotPropagateThroughUnselectedBranch)
 // Direct tests for the solve-time preparation layer: recovering the
 // canonical equality operands from the witness anchors, collecting the
 // complete owned array graph, retaining array-valued if-then-else terms,
-// scalar naming, and the loud failure when an
-// anchor is missing. These drive ExtensionalityContext directly,
-// without SAT or the array transformer, so a regression in
-// preparation fails here instead of as a distant fatal error inside a
-// full solve.
+// scalar naming, the exact hand-off to ArrayTransformer, and loud failures
+// when a solve-boundary invariant is broken.  These avoid SAT, so a
+// preparation/transform integration regression fails here instead of as a
+// distant error inside a full solve.
 class ExtPrepareTest : public ::testing::Test
 {
 protected:
@@ -1700,6 +1702,111 @@ TEST_F(ExtPrepareTest, ArrayReachableOnlyThroughAnIteBranchIsAnticipated)
   EXPECT_TRUE(ext->ownsArray(a));
   EXPECT_TRUE(ext->ownsArray(b));
   EXPECT_TRUE(ext->ownsArray(ite));
+}
+
+TEST_F(ExtPrepareTest, ExactReadInventorySurvivesNamingAndIndexAliases)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b"), x = arr("x");
+  ASTNode i = bv("i"), j = bv("j"), k = bv("k");
+  ASTNode nested = hf->CreateTerm(READ, 2, x, i);
+
+  // The same nested read is both a write index and value.  The active
+  // transform deliberately does not descend through the array operand of a
+  // witness read; preparation's scalar naming equations are what expose this
+  // read to the transform, and the final-root inventory must include it.
+  ASTNode w = hf->CreateArrayTerm(WRITE, 2, 2, {a, nested, nested});
+
+  // These are distinct source READ nodes but their indices transform to the
+  // same j.  Both source nodes must be accounted for while the transformer
+  // table contains exactly one (x,j) row.
+  ASTNode selectedIndex =
+      hf->CreateTerm(ITE, 2, {mgr.ASTTrue, j, k});
+  ASTNode selectedRead = hf->CreateTerm(READ, 2, x, selectedIndex);
+  ASTNode directRead = hf->CreateTerm(READ, 2, x, j);
+
+  ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(hf->CreateNode(EQ, w, b));
+  ASTVec conjuncts;
+  conjuncts.push_back(proxy);
+  conjuncts.push_back(
+      hf->CreateNode(EQ, selectedRead, mgr.CreateZeroConst(2)));
+  conjuncts.push_back(
+      hf->CreateNode(EQ, directRead, mgr.CreateOneConst(2)));
+  ASTNode prepared = ext->prepare(
+      ext->conjoinRecordConstraints(hf->CreateNode(AND, conjuncts)));
+
+  SubstitutionMap substitutions(&mgr);
+  Simplifier simplifier(&mgr, &substitutions);
+  ArrayTransformer transformer(&mgr, &simplifier);
+  transformer.TransformFormula_TopLevel(prepared);
+  ext->bindAfterTransform(&transformer);
+
+  EXPECT_TRUE(ext->checkerReady());
+  ArrayTransformer::ArrType::const_iterator xRows =
+      transformer.arrayToIndexToRead.find(x);
+  ASSERT_NE(transformer.arrayToIndexToRead.end(), xRows);
+  EXPECT_EQ(2u, xRows->second.size()); // (x,i) and the shared (x,j)
+}
+
+TEST_F(ExtPrepareTest, ConstantTermIteAccountsForDeadReadSubtree)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b"), x = arr("x");
+  ASTNode i = bv("i");
+  ASTNode deadRead = hf->CreateTerm(READ, 2, x, i);
+  ASTNode selected = hf->CreateTerm(
+      ITE, 2, {mgr.ASTTrue, mgr.CreateZeroConst(2), deadRead});
+
+  ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(hf->CreateNode(EQ, a, b));
+  ASTNode root = ext->conjoinRecordConstraints(hf->CreateNode(
+      AND, proxy, hf->CreateNode(EQ, selected, mgr.CreateZeroConst(2))));
+  ASTNode prepared = ext->prepare(root);
+
+  SubstitutionMap substitutions(&mgr);
+  Simplifier simplifier(&mgr, &substitutions);
+  ArrayTransformer transformer(&mgr, &simplifier);
+  transformer.TransformFormula_TopLevel(prepared);
+  ext->bindAfterTransform(&transformer);
+
+  EXPECT_TRUE(ext->checkerReady());
+  EXPECT_EQ(transformer.arrayToIndexToRead.end(),
+            transformer.arrayToIndexToRead.find(x));
+}
+
+TEST_F(ExtPrepareTest, MissingPreparedReadDispositionFailsLoudly)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b");
+
+  ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(hf->CreateNode(EQ, a, b));
+  ASTNode prepared = ext->prepare(ext->conjoinRecordConstraints(proxy));
+  ext->beginReadTransform(prepared);
+
+  // Even the two mandatory witness reads have not been reported.  Binding a
+  // partial inventory must be impossible, rather than delegated to whichever
+  // refinement subsystem happens to see the missing read later.
+  EXPECT_DEATH(ext->finishReadTransform(),
+               "neither abstracted nor eliminated");
+}
+
+TEST_F(ExtPrepareTest, OpaqueEqualityAtFinalBoundaryFailsLoudly)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b"), x = arr("x"), y = arr("y");
+
+  ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(hf->CreateNode(EQ, a, b));
+
+  // Simulate a future pass reintroducing an opaque equality after the one
+  // authorized lowering traversal.  Preparation is the final word-level
+  // boundary and must reject it before ordinary simplification/transform.
+  ASTNode rogue = hf->CreateNode(ARRAY_EQ, x, y);
+  ASTNode root =
+      ext->conjoinRecordConstraints(hf->CreateNode(AND, proxy, rogue));
+  EXPECT_DEATH(ext->prepare(root), "opaque equality reached the final");
 }
 
 // The decision table combining STP's own model evaluation with the

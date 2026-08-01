@@ -47,7 +47,19 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
 
   assert(TransformMap == NULL);
   TransformMap = new ASTNodeMap(100);
+
+  ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  // Constant-bit propagation also creates local ArrayTransformers for
+  // scalar-only auxiliary formulas.  Only the transform of the frozen root
+  // participates in the extensionality hand-off; an early transform which
+  // actually encounters an owned READ still fails in TransformArrayRead.
+  const bool extPrepared =
+      ext != NULL && ext->active() && ext->arrayGraphFrozen();
+  if (extPrepared)
+    ext->beginReadTransform(form);
   ASTNode result = TransformFormula(form);
+  if (extPrepared)
+    ext->finishReadTransform();
 
 #if 0
     {
@@ -67,8 +79,6 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
   if (!bm->UserFlags.ackermannisation)
   {
     ASTNodeMap replaced;
-
-    ExtensionalityContext* ext = bm->getExtensionalityIfAny();
 
     ASTVec equalsNodes;
     for (ArrayTransformer::ArrType::iterator
@@ -312,9 +322,19 @@ ASTNode ArrayTransformer::TransformTerm(const ASTNode& term)
       ASTNode els = term[2];
       cond = TransformFormula(cond);
       if (ASTTrue == cond)
+      {
+        ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+        if (ext != NULL && ext->active())
+          ext->noteEliminatedReadSubtree(els);
         result = TransformTerm(thn);
+      }
       else if (ASTFalse == cond)
+      {
+        ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+        if (ext != NULL && ext->active())
+          ext->noteEliminatedReadSubtree(thn);
         result = TransformTerm(els);
+      }
       else
       {
         thn = TransformTerm(thn);
@@ -427,7 +447,12 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
         std::map<ASTNode, ArrayRead>::const_iterator it2;
         if ((it2 = it->second.find(readIndex)) != it->second.end())
         {
+          if (it2->second.ite != it2->second.symbol)
+            FatalError("array-equality: a whole-graph read reused a legacy "
+                       "nested-ITE transformer row",
+                       term);
           result = it2->second.ite;
+          ext->noteAbstractedRead(term, readIndex, it2->second.symbol);
           (*TransformMap)[term] = result;
           return result;
         }
@@ -438,6 +463,7 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
       result = CurrentSymbol;
       arrayToIndexToRead[arrName].insert(
           make_pair(readIndex, ArrayRead(result, CurrentSymbol)));
+      ext->noteAbstractedRead(term, readIndex, CurrentSymbol);
       (*TransformMap)[term] = result;
       return result;
     }
