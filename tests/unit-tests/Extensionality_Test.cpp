@@ -1196,6 +1196,7 @@ TEST_F(ExtPrepareTest, ArrayIteIsKeptAndReasonedAboutDirectly)
   ext->beginSolve();
   ext->prepare(ext->conjoinRecordConstraints(proxy));
   EXPECT_EQ(1u, ext->getRecords().size());
+  const size_t protectedAfterFirstSolve = ext->getFrozenSymbols().size();
 
   // The if-then-else is in the cone as itself, with both branches
   // reachable through it -- that is what rules T-down and T-up walk.
@@ -1214,6 +1215,7 @@ TEST_F(ExtPrepareTest, ArrayIteIsKeptAndReasonedAboutDirectly)
   ext->beginSolve();
   ext->prepare(ext->conjoinRecordConstraints(proxy));
   EXPECT_EQ(1u, ext->getRecords().size());
+  EXPECT_EQ(protectedAfterFirstSolve, ext->getFrozenSymbols().size());
 }
 
 TEST_F(ExtPrepareTest, IteConditionIsReifiedAsAProtectedName)

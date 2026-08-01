@@ -317,6 +317,13 @@ void ExtensionalityContext::beginSolve()
   eqEdges.clear();
   eqAdjacency.clear();
   witnessObls.clear();
+  // Scalar and condition names are rebuilt for each preprocessed formula.
+  // Retire the previous solve's names from the persistent protection set
+  // before dropping the only map that identifies them. Record proxies and
+  // witness symbols are not in nameToTermMap and remain protected.
+  for (std::map<ASTNode, ASTNode>::const_iterator it = nameToTermMap.begin();
+       it != nameToTermMap.end(); ++it)
+    protectedSymbols.erase(it->first);
   scalarNames.clear();
   nameToTermMap.clear();
   lemmaOnlySymbols.clear();
