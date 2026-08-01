@@ -106,6 +106,76 @@ TEST(ArrayEqualityAstTest, FunctionApplicationSpecializesOpaqueOperands)
   EXPECT_EQ(ARRAY_EQ, atOne.GetKind());
 }
 
+TEST(ArrayEqualityAstTest, ActivationIsTheTransitiveClosureOfCurrentRoot)
+{
+  STPMgr mgr;
+  mgr.UserFlags.enable_array_equality = true;
+  ExtensionalityContext ext(&mgr);
+  NodeFactory* hf = mgr.hashingNodeFactory;
+
+  const ASTNode a = mgr.CreateSymbol("a", 1, 1);
+  const ASTNode b = mgr.CreateSymbol("b", 1, 1);
+  const ASTNode c = mgr.CreateSymbol("c", 1, 1);
+  const ASTNode d = mgr.CreateSymbol("d", 1, 1);
+  const ASTNode e = mgr.CreateSymbol("e", 1, 1);
+  const ASTNode f = mgr.CreateSymbol("f", 1, 1);
+  const ASTNode g = mgr.CreateSymbol("g", 1, 1);
+
+  const ASTNode dormant = hf->CreateNode(EQ, f, g);
+  ext.beginSolve();
+  ext.lowerArrayEqualities(dormant);
+  ASSERT_EQ(1u, ext.getActiveRecordCount());
+
+  const ASTNode inner = hf->CreateNode(EQ, a, b);
+  const ASTNode choice =
+      hf->CreateArrayTerm(ITE, 1, 1, inner, c, d);
+  const ASTNode outer = hf->CreateNode(EQ, choice, e);
+
+  ext.beginSolve();
+  const ASTNode lowered = ext.lowerArrayEqualities(outer);
+  ASSERT_EQ(2u, ext.getActiveRecordCount());
+  ASSERT_EQ(3u, ext.getRecords().size());
+  ASSERT_EQ(SYMBOL, lowered.GetKind());
+
+  // The outer record hides its operand graph behind one proxy. Activation
+  // must nevertheless follow that operand and discover the inner proxy used
+  // as the reconstructed ITE condition.
+  const ExtensionalityContext::Record* outerRecord = nullptr;
+  for (const ExtensionalityContext::Record& r : ext.getRecords())
+    if (r.proxy == lowered)
+      outerRecord = &r;
+  ASSERT_NE(nullptr, outerRecord);
+  const ASTNode choiceOperand =
+      outerRecord->constructionLeft.GetKind() == ITE
+          ? outerRecord->constructionLeft
+          : outerRecord->constructionRight;
+  ASSERT_EQ(ITE, choiceOperand.GetKind());
+  EXPECT_EQ(SYMBOL, choiceOperand[0].GetKind());
+
+  const ASTNode constrained = ext.conjoinRecordConstraints(lowered);
+  ASTNodeSet visited;
+  ASTVec pending(1, constrained);
+  while (!pending.empty())
+  {
+    const ASTNode n = pending.back();
+    pending.pop_back();
+    if (!visited.insert(n).second)
+      continue;
+    EXPECT_NE(ARRAY_EQ, n.GetKind());
+    for (unsigned i = 0; i < n.Degree(); ++i)
+      pending.push_back(n[i]);
+  }
+
+  ext.beginSolve();
+  ext.lowerArrayEqualities(mgr.ASTTrue);
+  EXPECT_EQ(0u, ext.getActiveRecordCount());
+
+  ext.beginSolve();
+  ext.lowerArrayEqualities(dormant);
+  EXPECT_EQ(1u, ext.getActiveRecordCount());
+  EXPECT_EQ(3u, ext.getRecords().size());
+}
+
 TEST(ExtGuardTest, PathPayloadRemainsCompact)
 {
   // Every propagation copies its complete guard path. Keep a regression
@@ -1318,11 +1388,12 @@ TEST_F(ExtPrepareTest, RecoversOperandsConeAndNames)
   ASTNode idx = hf->CreateTerm(BVPLUS, 2, i, mgr.CreateBVConst(2, 1));
   ASTNode w = hf->CreateArrayTerm(WRITE, 2, 2, {a, idx, e});
 
-  ASTNode proxy = ext->makeEquality(w, b);
+  const ASTNode rawEquality = hf->CreateNode(EQ, w, b);
+  ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(rawEquality);
   ASSERT_EQ(SYMBOL, proxy.GetKind());
   ASSERT_EQ(1u, ext->getRecords().size());
 
-  ext->beginSolve();
   ASTNode root = ext->conjoinRecordConstraints(proxy);
   ext->prepare(root);
 
@@ -1370,10 +1441,11 @@ TEST_F(ExtPrepareTest, ArrayIteIsKeptAndReasonedAboutDirectly)
   // variable and two more equality records here, each with a witness
   // index and two virtual reads; direct integration charges one
   // reified Boolean.
-  ASTNode proxy = ext->makeEquality(ite, d);
+  const ASTNode rawEquality = hf->CreateNode(EQ, ite, d);
+  ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(rawEquality);
   ASSERT_EQ(1u, ext->getRecords().size());
 
-  ext->beginSolve();
   ext->prepare(ext->conjoinRecordConstraints(proxy));
   EXPECT_EQ(1u, ext->getRecords().size());
   const size_t protectedAfterFirstSolve = ext->getFrozenSymbols().size();
@@ -1393,6 +1465,7 @@ TEST_F(ExtPrepareTest, ArrayIteIsKeptAndReasonedAboutDirectly)
 
   // A second solve moves nothing.
   ext->beginSolve();
+  proxy = ext->lowerArrayEqualities(rawEquality);
   ext->prepare(ext->conjoinRecordConstraints(proxy));
   EXPECT_EQ(1u, ext->getRecords().size());
   EXPECT_EQ(protectedAfterFirstSolve, ext->getFrozenSymbols().size());
@@ -1419,8 +1492,9 @@ TEST_F(ExtPrepareTest, IteConditionIsReifiedAsAProtectedName)
   ASTNode cond = hf->CreateNode(EQ, x, y);
   ASTNode ite = hf->CreateArrayTerm(ITE, 2, 2, {cond, a, b});
 
-  ASTNode proxy = ext->makeEquality(ite, d);
   ext->beginSolve();
+  ASTNode proxy =
+      ext->lowerArrayEqualities(hf->CreateNode(EQ, ite, d));
   ext->prepare(ext->conjoinRecordConstraints(proxy));
 
   const std::map<ASTNode, ASTNode>& n2t = ext->getNameToTerm();
@@ -1442,8 +1516,9 @@ TEST_F(ExtPrepareTest, IteConditionIsReifiedAsAProtectedName)
 TEST_F(ExtPrepareTest, MissingAnchorFailsLoudly)
 {
   ASTNode a = arr("a"), b = arr("b");
-  ASTNode proxy = ext->makeEquality(a, b);
   ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(
+      mgr.hashingNodeFactory->CreateNode(EQ, ASTVec{a, b}));
   // The record constraints are deliberately not conjoined: operand
   // recovery must refuse to guess.
   EXPECT_DEATH(ext->prepare(proxy),
@@ -1460,12 +1535,12 @@ TEST_F(ExtPrepareTest, RewrittenWitnessIndexFailsLoudly)
   NodeFactory* hf = mgr.hashingNodeFactory;
   ASTNode a = arr("a"), b = arr("b");
   ASTNode mu = bv("mu");
-  ASTNode proxy = ext->makeEquality(a, b);
+  ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(hf->CreateNode(EQ, a, b));
   (void)proxy;
   ASSERT_EQ(1u, ext->getRecords().size());
   const ExtensionalityContext::Record r = ext->getRecords()[0];
 
-  ext->beginSolve();
   // The left anchor's witness read rebuilt over a foreign index; the
   // rest of the bundle intact.
   ASTNode badRead = hf->CreateTerm(READ, 2, r.constructionLeft, mu);
@@ -1488,12 +1563,12 @@ TEST_F(ExtPrepareTest, DuplicateAnchorFailsLoudly)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
   ASTNode a = arr("a"), b = arr("b"), c = arr("c");
-  ASTNode proxy = ext->makeEquality(a, b);
+  ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(hf->CreateNode(EQ, a, b));
   (void)proxy;
   ASSERT_EQ(1u, ext->getRecords().size());
   const ExtensionalityContext::Record r = ext->getRecords()[0];
 
-  ext->beginSolve();
   // The intact bundle, plus a rival equation of the same shape for the
   // same name over a different array.
   ASTVec conjuncts;
@@ -1517,12 +1592,12 @@ TEST_F(ExtPrepareTest, UnanticipatedConeSymbolFailsLoudly)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
   ASTNode a = arr("a"), b = arr("b"), z = arr("z");
-  ASTNode proxy = ext->makeEquality(a, b);
+  ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(hf->CreateNode(EQ, a, b));
   (void)proxy;
   ASSERT_EQ(1u, ext->getRecords().size());
   const ExtensionalityContext::Record r = ext->getRecords()[0];
 
-  ext->beginSolve();
   // Stands in for a pass that rewrote the left operand into a term over
   // z, an array the registry never saw when the equality was built.
   ASTVec conjuncts;
@@ -1565,14 +1640,14 @@ TEST_F(ExtPrepareTest, ArrayReachableOnlyThroughAnIteBranchIsAnticipated)
 
   // The equality is over b and z. Its own proxy is the if-then-else
   // condition, so the if-then-else cannot exist before the equality.
-  ASTNode proxy = ext->makeEquality(b, z);
+  ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(hf->CreateNode(EQ, b, z));
   ASSERT_EQ(1u, ext->getRecords().size());
   EXPECT_FALSE(ext->mayBeConeArray(a));
 
   ASTNode ite = hf->CreateArrayTerm(ITE, 2, 2, {hf->CreateNode(NOT, proxy), b, a});
   ASTNode read = hf->CreateTerm(READ, 2, ite, i);
 
-  ext->beginSolve();
   ASTNode root = ext->conjoinRecordConstraints(
       hf->CreateNode(EQ, read, mgr.CreateZeroConst(2)));
 

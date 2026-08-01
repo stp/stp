@@ -197,9 +197,9 @@ ASTNode ExtensionalityContext::solveWriteChain(const ASTNode& a,
   return ASTNode();
 }
 
-// The equality arm of the paper's formula abstraction (section 5),
-// applied eagerly at construction: instead of an EQ node, return a
-// fresh Boolean abstraction variable, and record the pair. Reflexive
+// The equality arm of the paper's formula abstraction (section 5), applied by
+// solve-boundary lowering: return a fresh Boolean abstraction variable and
+// cache the pair's witness bundle. Reflexive
 // requests fold to true. The record's constraint bundle corresponds
 // to the paper's preprocessing step 1 -- a fresh witness index
 // lambda, the two virtual reads read(a,lambda) and read(b,lambda)
@@ -274,9 +274,6 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
   protectedSymbols.insert(r.lambda);
   protectedSymbols.insert(r.nameL);
   protectedSymbols.insert(r.nameR);
-  collectPossibleConeSymbols(left);
-  collectPossibleConeSymbols(right);
-
   keyToRecord[key] = r.id;
   proxyToRecord[r.proxy] = r.id;
   records.push_back(r);
@@ -345,7 +342,49 @@ ASTNode ExtensionalityContext::lowerArrayEqualities(const ASTNode& root)
     if (it->GetKind() == ARRAY_EQ)
       FatalError("array-equality: query lowering left an opaque equality", *it);
 
+  activateReachableRecords(lowered);
+
   return lowered;
+}
+
+void ExtensionalityContext::activateReachableRecords(
+    const ASTNode& loweredRoot)
+{
+  std::set<size_t> activeIds;
+  ASTNodeSet visited;
+  ASTVec pending(1, loweredRoot);
+  while (!pending.empty())
+  {
+    const ASTNode node = pending.back();
+    pending.pop_back();
+    if (!visited.insert(node).second)
+      continue;
+
+    const std::map<ASTNode, size_t>::const_iterator proxy =
+        proxyToRecord.find(node);
+    if (proxy != proxyToRecord.end() && activeIds.insert(proxy->second).second)
+    {
+      const Record& r = records[proxy->second];
+      // An outer equality can hide an inner equality proxy in an array-ITE
+      // condition or another operand subterm. Follow cached operands so that
+      // activation is the transitive closure, not merely the proxies still
+      // visible at the Boolean root.
+      pending.push_back(r.constructionLeft);
+      pending.push_back(r.constructionRight);
+    }
+
+    for (unsigned i = 0; i < node.Degree(); ++i)
+      pending.push_back(node[i]);
+  }
+
+  activeRecordIds.assign(activeIds.begin(), activeIds.end());
+  possibleConeSymbols.clear();
+  for (size_t i = 0; i < activeRecordIds.size(); ++i)
+  {
+    const Record& r = records[activeRecordIds[i]];
+    collectPossibleConeSymbols(r.constructionLeft);
+    collectPossibleConeSymbols(r.constructionRight);
+  }
 }
 
 bool ExtensionalityContext::retireIfUnreachable(const ASTVec& liveAssertions)
@@ -374,6 +413,8 @@ bool ExtensionalityContext::retireIfUnreachable(const ASTVec& liveAssertions)
 void ExtensionalityContext::beginSolve()
 {
   registrySealed = false;
+  activeRecordIds.clear();
+  possibleConeSymbols.clear();
   coneIsFrozen = false;
   coneArrays.clear();
   coneWrites.clear();
@@ -409,15 +450,16 @@ void ExtensionalityContext::beginSolve()
 
 ASTNode ExtensionalityContext::conjoinRecordConstraints(const ASTNode& root)
 {
-  if (records.empty())
+  if (activeRecordIds.empty())
     return root;
   ASTVec conjuncts;
   conjuncts.push_back(root);
-  for (size_t i = 0; i < records.size(); i++)
+  for (size_t i = 0; i < activeRecordIds.size(); i++)
   {
-    conjuncts.push_back(records[i].anchorL);
-    conjuncts.push_back(records[i].anchorR);
-    conjuncts.push_back(records[i].witnessClause);
+    const Record& r = records[activeRecordIds[i]];
+    conjuncts.push_back(r.anchorL);
+    conjuncts.push_back(r.anchorR);
+    conjuncts.push_back(r.witnessClause);
   }
   ASTNode out = bm->defaultNodeFactory->CreateNode(AND, conjuncts);
 
@@ -443,10 +485,11 @@ ASTNode ExtensionalityContext::conjoinRecordConstraints(const ASTNode& root)
   // still spells them.
   {
     ASTVec seeds;
-    for (size_t i = 0; i < records.size(); i++)
+    for (size_t i = 0; i < activeRecordIds.size(); i++)
     {
-      seeds.push_back(records[i].constructionLeft);
-      seeds.push_back(records[i].constructionRight);
+      const Record& r = records[activeRecordIds[i]];
+      seeds.push_back(r.constructionLeft);
+      seeds.push_back(r.constructionRight);
     }
     std::set<ASTNode> cone;
     std::map<ASTNode, std::vector<ASTNode>> parents;
@@ -478,10 +521,11 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
   // collected: a protected lambda or proxy turning up in an equation of
   // the same shape is none of this function's business.
   std::set<ASTNode> witnessNames;
-  for (size_t i = 0; i < records.size(); i++)
+  for (size_t i = 0; i < activeRecordIds.size(); i++)
   {
-    witnessNames.insert(records[i].nameL);
-    witnessNames.insert(records[i].nameR);
+    const Record& r = records[activeRecordIds[i]];
+    witnessNames.insert(r.nameL);
+    witnessNames.insert(r.nameR);
   }
 
   // name symbol -> the anchored right-hand side: the witness read, or
@@ -533,9 +577,9 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
     }
   }
 
-  for (size_t i = 0; i < records.size(); i++)
+  for (size_t i = 0; i < activeRecordIds.size(); i++)
   {
-    Record& r = records[i];
+    Record& r = records[activeRecordIds[i]];
     std::map<ASTNode, ASTNode>::const_iterator lit = anchorRhs.find(r.nameL);
     std::map<ASTNode, ASTNode>::const_iterator rit = anchorRhs.find(r.nameR);
     if (lit == anchorRhs.end() || rit == anchorRhs.end())
@@ -677,10 +721,11 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
 
   locateCanonicalOperands(root);
   ASTVec seeds;
-  for (size_t i = 0; i < records.size(); i++)
+  for (size_t i = 0; i < activeRecordIds.size(); i++)
   {
-    seeds.push_back(records[i].canonicalLeft);
-    seeds.push_back(records[i].canonicalRight);
+    const Record& r = records[activeRecordIds[i]];
+    seeds.push_back(r.canonicalLeft);
+    seeds.push_back(r.canonicalRight);
   }
   computeProvisionalCone(root, seeds, cone, parents, coneITEs);
 
@@ -785,9 +830,9 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
     std::sort(it->second.begin(), it->second.end(), nodeNumLess);
 
   // Equality edges over canonical operands + witness obligations.
-  for (size_t i = 0; i < records.size(); i++)
+  for (size_t i = 0; i < activeRecordIds.size(); i++)
   {
-    const Record& r = records[i];
+    const Record& r = records[activeRecordIds[i]];
     ExtEqEdge e;
     e.record = r.id;
     e.left = r.canonicalLeft;
@@ -956,9 +1001,9 @@ void ExtensionalityContext::bindAfterTransform(ArrayTransformer* at)
   // Asserted rather than defended at runtime, so that a future change
   // breaking it is a diagnosable failure here instead of a silent
   // unknown much later.
-  for (size_t i = 0; i < records.size(); i++)
+  for (size_t i = 0; i < activeRecordIds.size(); i++)
   {
-    const Record& r = records[i];
+    const Record& r = records[activeRecordIds[i]];
     bool haveL = false, haveR = false;
     for (size_t z = 0; z < graph.accesses.size(); z++)
     {

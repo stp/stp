@@ -103,7 +103,7 @@ public:
   explicit ExtensionalityContext(STPMgr* bm);
 
   //--------------------------------------------------------------------
-  // Registry (persistent for the query AST lifetime)
+  // Durable record cache and query-local activation
   //--------------------------------------------------------------------
 
   // The formula abstraction of an array equality (paper section 5):
@@ -170,14 +170,16 @@ public:
 
   bool enabled() const;
   // The decision procedure participates in a solve exactly when the
-  // feature is on and at least one array equality was abstracted.
+  // feature is on and at least one cached equality record is reachable from
+  // this solve's completed root (possibly through another active record).
   // Nothing else switches it on: a query with array if-then-elses but
   // no equality mints no record, so it is decided by STP's ordinary
   // array machinery at exactly the cost it would pay with the feature
   // off.
-  bool active() const { return enabled() && !records.empty(); }
+  bool active() const { return enabled() && !activeRecordIds.empty(); }
 
   const std::vector<Record>& getRecords() const { return records; }
+  size_t getActiveRecordCount() const { return activeRecordIds.size(); }
 
   // Symbols the decision procedure depends on: abstraction variables,
   // witness indices and witness-read names, and the scalar names given
@@ -206,7 +208,7 @@ public:
   // Reset all per-solve state (cone, naming, pending lemma, model).
   void beginSolve();
 
-  // Conjoin every record's constraint bundle (the witness clause of
+  // Conjoin every current-root-active record's constraint bundle (the witness clause of
   // preprocessing step 1 plus the defining equations of its virtual
   // reads) onto the input, before any of STP's preprocessing runs, so
   // the bundles are simplified and substituted together with the rest
@@ -413,6 +415,10 @@ private:
   std::vector<Record> records;
   std::map<std::pair<ASTNode, ASTNode>, size_t> keyToRecord;
   std::map<ASTNode, size_t> proxyToRecord;
+  // Sorted record ids reachable in the current solve. The cache above may
+  // outlive a scope or public handle; only these records contribute semantic
+  // constraints, protection and checker edges to this solve.
+  std::vector<size_t> activeRecordIds;
   std::set<ASTNode> protectedSymbols;
   std::set<ASTNode> lemmaOnlySymbols; // per-solve; see the accessor
   std::set<ASTNode> possibleConeSymbols;
@@ -467,6 +473,7 @@ private:
   // EXT_NAME_DIVERGENCE.
   bool namesAgreeWithCandidate(ExtModelView& view) const;
   void collectPossibleConeSymbols(const ASTNode& n);
+  void activateReachableRecords(const ASTNode& loweredRoot);
   ASTNode freshName(const ASTNode& term, ASTVec& namingConstraints);
   // The Boolean analogue of freshName, for an if-then-else condition:
   // a fresh symbol constrained equivalent to the condition, so that the

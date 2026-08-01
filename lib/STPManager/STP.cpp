@@ -326,8 +326,12 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
       ext = bm->getExtensionality();
       ext->beginSolve();
     }
-    semantic_input = ext->lowerArrayEqualities(original_input);
   }
+  // An existing context may also recognize a cached proxy reachable through
+  // an internal handle. More importantly, the lowering pass computes an empty
+  // active set when none of its records are reachable from this root.
+  if (ext != NULL && ext->enabled())
+    semantic_input = ext->lowerArrayEqualities(original_input);
 
   bm->ASTNodeStats("input asserts and query: ", semantic_input);
 
@@ -344,8 +348,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   ASTNode inputToSat = semantic_input;
 
   // Array equality (lemmas on demand, Brummayer & Biere JSAT 2010):
-  // with at least one abstracted array equality, conjoin every
-  // record's witness constraints -- corresponding to the paper's
+  // with at least one array equality reachable from the current root, conjoin
+  // exactly its active dependency closure's witness constraints -- corresponding to the paper's
   // preprocessing step 1, a fresh index lambda with two virtual reads
   // witnessing inequality -- before any preprocessing runs. The equality operands then ride
   // through the same simplification and substitution as the rest of

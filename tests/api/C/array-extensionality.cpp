@@ -587,13 +587,9 @@ TEST(array_extensionality, lemma_atoms_fold_at_encoding)
 
 TEST(array_extensionality, equality_under_push_pops_away)
 {
-  // A record minted under a pushed scope survives the pop in the
-  // persistent registry, and every later solve re-conjoins its
-  // witness bundle. The bundle is satisfiability-preserving (fresh
-  // witness symbols, otherwise unconstrained; a true proxy satisfies
-  // the witness clause), so the pop must recover sat -- and
-  // re-asserting the same equality reuses the record, with no second
-  // one minted, and flips the verdict back.
+  // Activation follows the current assertion root. Popping the equality
+  // removes its witness bundle from the next solve; reasserting the same
+  // durable opaque handle activates it again.
   VC vc = vc_createValidityChecker();
   vc_setFlag(vc, 'x');
 
@@ -614,19 +610,22 @@ TEST(array_extensionality, equality_under_push_pops_away)
   vc_push(vc);
   vc_assertFormula(vc, vc_eqExpr(vc, a, b));
   ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  ASSERT_NE(nullptr, ext);
+  EXPECT_EQ(1u, ext->getActiveRecordCount());
 
   vc_pop(vc);
   ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(0u, ext->getActiveRecordCount());
 
   vc_push(vc);
   vc_assertFormula(vc, vc_eqExpr(vc, a, b));
-  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  ASSERT_NE(nullptr, ext);
-  EXPECT_EQ(1u, ext->getRecords().size());
   ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(1u, ext->getActiveRecordCount());
 
   vc_pop(vc);
   ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(0u, ext->getActiveRecordCount());
   vc_Destroy(vc);
 }
 
@@ -655,6 +654,44 @@ TEST(array_extensionality, equality_asserted_between_queries)
 
   vc_assertFormula(vc, vc_eqExpr(vc, a, b));
   ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc))); // congruence across a = b
+  vc_Destroy(vc);
+}
+
+TEST(array_extensionality, active_equalities_follow_assertions_and_query)
+{
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv1 = vc_bvType(vc, 1);
+  Type arrT = vc_arrayType(vc, bv1, bv1);
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr b = vc_varExpr(vc, "b", arrT);
+  Expr zero = vc_bvConstExprFromInt(vc, 1, 0);
+  Expr one = vc_bvConstExprFromInt(vc, 1, 1);
+  Expr eq = vc_eqExpr(vc, a, b);
+
+  vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, a, zero),
+                                 vc_readExpr(vc, b, zero)));
+  vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, a, one),
+                                 vc_readExpr(vc, b, one)));
+
+  stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+
+  // Merely retaining an opaque handle neither creates a context nor activates
+  // its witness bundle when it is absent from the completed solve root.
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
+
+  // The same handle used as the query is reachable through NOT(query). The
+  // complete one-bit domain makes the equality valid.
+  ASSERT_EQ(1, vc_query(vc, eq));
+  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  ASSERT_NE(nullptr, ext);
+  EXPECT_EQ(1u, ext->getActiveRecordCount());
+
+  // A later solve that omits the equality must not inherit its constraints.
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(0u, ext->getActiveRecordCount());
   vc_Destroy(vc);
 }
 
