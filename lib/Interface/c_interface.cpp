@@ -24,6 +24,8 @@ THE SOFTWARE.
 #include "stp/c_interface.h"
 
 #include <cassert>
+#include <cinttypes>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 
@@ -1142,14 +1144,31 @@ Expr vc_bvConstExprFromInt(VC vc, int n_bits, unsigned int value)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
 
-  unsigned long long int v = (unsigned long long int)value;
-  unsigned long long int max_n_bits = 0xFFFFFFFFFFFFFFFFULL >> (64 - n_bits);
-  // printf("%ull", max_n_bits);
+  if (n_bits <= 0)
+  {
+    printf("CInterface: vc_bvConstExprFromInt: "
+           "Bit width must be positive, got %d.\n",
+           n_bits);
+    stp::FatalError("FatalError");
+  }
+
+  const uint64_t v = value;
+
+  // The largest value representable in n_bits bits. Written as a branch
+  // because the shift that computed it, 0xFF..FF >> (64 - n_bits), has an
+  // operand that goes negative as soon as n_bits exceeds 64 -- undefined,
+  // and on x86-64 the count is masked to six bits, so the bound collapsed
+  // instead of growing: width 65 yielded a maximum of 1 and width 66 a
+  // maximum of 3, rejecting constants that fit with room to spare.
+  const uint64_t max_n_bits =
+      (n_bits >= 64) ? UINT64_MAX : ((UINT64_C(1) << n_bits) - 1);
+
   if (v > max_n_bits)
   {
     printf("CInterface: vc_bvConstExprFromInt: "
-           "Cannot construct a constant %llu >= %llu,\n",
-           v, max_n_bits);
+           "Cannot construct a constant %" PRIu64 " in %d bits, "
+           "the maximum is %" PRIu64 ".\n",
+           v, n_bits, max_n_bits);
     stp::FatalError("FatalError");
   }
   stp::ASTNode n = b->CreateBVConst(n_bits, v);
@@ -1157,7 +1176,7 @@ Expr vc_bvConstExprFromInt(VC vc, int n_bits, unsigned int value)
   return persistNode(vc, n);
 }
 
-Expr vc_bvConstExprFromLL(VC vc, int n_bits, unsigned long long value)
+Expr vc_bvConstExprFromLL(VC vc, int n_bits, uint64_t value)
 {
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
@@ -1784,8 +1803,8 @@ unsigned int getBVUnsigned(Expr e)
   return (unsigned int)a->GetUnsignedConst();
 }
 
-//! Return an unsigned long long int from a constant bitvector expression
-unsigned long long int getBVUnsignedLongLong(Expr e)
+//! Return a uint64_t from a constant bitvector expression
+uint64_t getBVUnsignedLongLong(Expr e)
 {
   stp::ASTNode* a = (stp::ASTNode*)e;
 
@@ -1796,7 +1815,7 @@ unsigned long long int getBVUnsignedLongLong(Expr e)
   unsigned* bv = a->GetBVConst();
 
   char* str_bv = (char*)CONSTANTBV::BitVector_to_Bin(bv);
-  unsigned long long int tmp = std::strtoull(str_bv, NULL, 2);
+  uint64_t tmp = std::strtoull(str_bv, NULL, 2);
   CONSTANTBV::BitVector_Dispose((unsigned char*)str_bv);
   return tmp;
 }

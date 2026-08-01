@@ -36,6 +36,7 @@ extern "C" {
 #endif
 
 #include <stdbool.h>
+#include <stdint.h>
 
 /////////////////////////////////////////////////////////////////////////////
 /// STP API INTERNAL MACROS FOR LINKING
@@ -572,13 +573,13 @@ DLL_PUBLIC int getBVInt(Expr e);
 //!
 DLL_PUBLIC unsigned int getBVUnsigned(Expr e);
 
-//! Return an unsigned long long int from a constant bitvector expressions
+//! Return a uint64_t from a constant bitvector expressions
 
-//! \brief Returns the associated unsigned long long integer from the given bitvector expression.
+//! \brief Returns the associated 64-bit unsigned integer from the given bitvector expression.
 //!
-//! Panics if the given bitvector cannot be represented by an 'unsigned long long int'.
+//! Panics if the given bitvector cannot be represented by a 'uint64_t'.
 //!
-DLL_PUBLIC unsigned long long int getBVUnsignedLongLong(Expr e);
+DLL_PUBLIC uint64_t getBVUnsignedLongLong(Expr e);
 
 //! \brief Prints the bit string for a a constant bitvector expression to a
 //!        buffer allocated by STP that is returned via output parameter 'buf'
@@ -636,12 +637,11 @@ DLL_PUBLIC Expr vc_bvConstExprFromStr(VC vc, const char* binaryInput);
 DLL_PUBLIC Expr vc_bvConstExprFromInt(VC vc, int bitWidth, unsigned int value);
 
 //! \brief Returns a bitvector with 'bitWidth' bit-width from the given
-//!        unsigned long long integer value.
+//!        64-bit unsigned integer value.
 //!
 //! The 'bitWidth' must be large enough to fully store the given value's bit representation.
 //!
-DLL_PUBLIC Expr vc_bvConstExprFromLL(VC vc, int bitWidth,
-                                     unsigned long long value);
+DLL_PUBLIC Expr vc_bvConstExprFromLL(VC vc, int bitWidth, uint64_t value);
 
 //! \brief Returns a bitvector with a bit-width of 32 from the given
 //!        unsigned integer value.
