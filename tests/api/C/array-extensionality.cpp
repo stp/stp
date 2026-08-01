@@ -1037,10 +1037,11 @@ TEST(array_extensionality, mixed_width_equality_dies_loudly)
   vc_Destroy(vc);
 }
 
-TEST(array_extensionality, flag_off_preserves_eq_node)
+TEST(array_extensionality, flag_off_refuses_array_equality)
 {
-  // Default-off: an array equality still builds an ordinary EQ node
-  // (with the existing warning), exactly as before.
+  // The C API constructs nodes through STPMgr rather than Cpp_interface.
+  // Refusal therefore belongs in the common node-factory path; otherwise
+  // this front end can still build an unsupported, unconstrained EQ node.
   VC vc = vc_createValidityChecker();
 
   Type bv8 = vc_bvType(vc, 8);
@@ -1050,8 +1051,15 @@ TEST(array_extensionality, flag_off_preserves_eq_node)
   Expr a = vc_varExpr(vc, "a", arrT);
   Expr b = vc_varExpr(vc, "b", arrT);
 
-  Expr eq = vc_eqExpr(vc, a, b);
-  ASSERT_EQ(EQ, getExprKind(eq));
+  EXPECT_DEATH(vc_eqExpr(vc, a, b),
+               "STP cannot decide equality between whole array terms");
+
+  // The central check is specific to arrays: ordinary equality remains
+  // available when the extension is disabled.
+  Expr x = vc_varExpr(vc, "x", bv8);
+  Expr y = vc_varExpr(vc, "y", bv8);
+  Expr eq = vc_eqExpr(vc, x, y);
+  EXPECT_EQ(EQ, getExprKind(eq));
   vc_Destroy(vc);
 }
 
