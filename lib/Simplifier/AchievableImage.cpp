@@ -183,11 +183,15 @@ uint64_t isqrt64(uint64_t n)
 {
   if (n == 0)
     return 0;
-  uint64_t x = n, y = (x + 1) / 2;
+  // The Newton seed is ceil(n/2), written so that it can't overflow:
+  // (n + 1) / 2 wraps to zero at n == UINT64_MAX, and the first
+  // iteration then divides by it. Every smaller n gets the same seed,
+  // so no other input's result moves.
+  uint64_t x = n, y = n / 2 + (n & 1);
   while (y < x)
   {
     x = y;
-    y = (x + n / x) / 2;
+    y = (x + n / x) / 2; // x >= isqrt(n) here, so n / x <= x: no overflow
   }
   return x;
 }
