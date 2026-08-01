@@ -144,6 +144,35 @@ jobs:
         ./tools/rewrite_rule_gen/rewrite_rule_gen generate 5 3
       working-directory: build
 
+    # The bindings walk the CPython AST, whose node types drift between
+    # releases: 3.14 removed NodeVisitor's visit_Num fallback, so every
+    # numeric literal in an @stp-decorated function began reaching
+    # ASTtoSTP.generic_visit and raising "Constant is not yet supported!".
+    # Nothing above catches that -- the build configures against whatever
+    # python3 the runner ships, which trails the newest release -- so run
+    # the binding tests once more against the newest one. stp.py.in has no
+    # configure-time substitutions, so the interpreter can be swapped
+    # under the same build tree; no second build is needed.
+    #
+    # Bump the version when a newer Python is released. The point is to be
+    # a step ahead of what the distributions ship, not to pin one version
+    # forever. Last on the gcc leg only: the interpreter is what is under
+    # test, not the compiler, and setup-python puts its own python3 first
+    # on PATH, which no later step should inherit.
+    - name: Set up the newest Python
+      if: matrix.name == 'gcc'
+      uses: actions/setup-python@v7
+      with:
+        python-version: '3.14'
+
+    - name: Python bindings against the newest Python
+      if: matrix.name == 'gcc'
+      run: |
+        python3 --version
+        python3 tests.py
+        python3 allocator_tests.py
+      working-directory: build/tests/api/python
+
   build-cadical:
     name: gcc (cadical)
     runs-on: ubuntu-latest
