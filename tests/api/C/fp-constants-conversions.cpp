@@ -236,3 +236,70 @@ TEST(fp_constants, eq_vs_smt_eq_semantics)
   EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc))); // all consistent
   vc_Destroy(vc);
 }
+
+// vc_simplify is another entrance to the source-level FP graph.  The partial
+// operations are built at their public arity and acquire their internal
+// unspecified-value child only when FpTotalise runs.  In particular, neither
+// the zero tie of min/max nor an undefined float-to-BV conversion may reach the
+// constant evaluator at its raw arity.
+TEST(fp_simplify, totalises_partial_operations)
+{
+  VC vc = vc_createValidityChecker();
+  Type half = vc_fpType(vc, 5, 11);
+  Expr plus_zero = vc_fpPlusZero(vc, half);
+  Expr minus_zero = vc_fpMinusZero(vc, half);
+
+  Expr minimum = vc_simplify(vc, vc_fpMinExpr(vc, plus_zero, minus_zero));
+  Expr maximum = vc_simplify(vc, vc_fpMaxExpr(vc, plus_zero, minus_zero));
+  EXPECT_EQ(FLOATINGPOINT_TYPE, getType(minimum));
+  EXPECT_EQ(FLOATINGPOINT_TYPE, getType(maximum));
+  EXPECT_EQ(5, vc_getExpWidth(minimum));
+  EXPECT_EQ(11, vc_getSigWidth(minimum));
+
+  // Each result must be one of the two zero values, while SMT-LIB leaves the
+  // choice between them unspecified.
+  Expr min_is_zero =
+      vc_orExpr(vc, vc_eqExpr(vc, minimum, plus_zero),
+                vc_eqExpr(vc, minimum, minus_zero));
+  vc_assertFormula(vc, vc_notExpr(vc, min_is_zero));
+  EXPECT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+
+  // Use a fresh context for max: the previous context is intentionally
+  // inconsistent.
+  vc_Destroy(vc);
+  vc = vc_createValidityChecker();
+  half = vc_fpType(vc, 5, 11);
+  plus_zero = vc_fpPlusZero(vc, half);
+  minus_zero = vc_fpMinusZero(vc, half);
+  maximum = vc_simplify(vc, vc_fpMaxExpr(vc, plus_zero, minus_zero));
+  Expr max_is_zero = vc_orExpr(vc, vc_eqExpr(vc, maximum, plus_zero),
+                               vc_eqExpr(vc, maximum, minus_zero));
+  vc_assertFormula(vc, vc_notExpr(vc, max_is_zero));
+  EXPECT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+
+  // Both undefined conversion forms must also remain usable after simplify.
+  Expr rne = vc_fpRoundingMode(vc, VC_RM_RNE);
+  Expr nan = vc_fpNaN(vc, half);
+  Expr ubv = vc_simplify(vc, vc_fpToUBVExpr(vc, 8, rne, nan));
+  Expr sbv = vc_simplify(vc, vc_fpToSBVExpr(vc, 8, rne, nan));
+  EXPECT_EQ(BITVECTOR_TYPE, getType(ubv));
+  EXPECT_EQ(BITVECTOR_TYPE, getType(sbv));
+  EXPECT_EQ(8, vc_getBVLength(vc, ubv));
+  EXPECT_EQ(8, vc_getBVLength(vc, sbv));
+  vc_Destroy(vc);
+}
+
+TEST(fp_simplify, preserves_defined_conversion_semantics)
+{
+  VC vc = vc_createValidityChecker();
+  Expr rne = vc_fpRoundingMode(vc, VC_RM_RNE);
+  Expr two = vc_fpConstFromBits(
+      vc, 5, 11, vc_bvConstExprFromLL(vc, 16, 0x4000));
+  Expr converted = vc_simplify(vc, vc_fpToUBVExpr(vc, 8, rne, two));
+
+  vc_assertFormula(
+      vc, vc_notExpr(vc, vc_eqExpr(vc, converted,
+                                   vc_bvConstExprFromLL(vc, 8, 2))));
+  EXPECT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+  vc_Destroy(vc);
+}

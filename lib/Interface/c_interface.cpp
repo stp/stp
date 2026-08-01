@@ -35,6 +35,7 @@ THE SOFTWARE.
 #include "stp/Printer/printers.h"
 #include "stp/cpp_interface.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
+#include "stp/FloatBlaster/FpTotalise.h"
 #include "stp/Util/GitSHA1.h"
 
 // From ABC
@@ -2799,10 +2800,20 @@ Expr vc_simplify(VC vc, Expr e)
   stp::Simplifier* simp = (stp::Simplifier*)(stp_i->simp);
   stp::ASTNode* a = (stp::ASTNode*)e;
 
-  if (stp::BOOLEAN_TYPE == a->GetType())
+  // Simplification is a public entrance to the same source-level FP graph as
+  // solving.  In particular, fp.min/fp.max and fp.to_{u,s}bv are deliberately
+  // built at their SMT-LIB arity; FpTotalise supplies the internal child that
+  // makes their otherwise-unspecified result a congruent total function.  The
+  // solve path already does this before any simplifier can constant-evaluate
+  // those nodes.  Do it here too, rather than letting the constant evaluator
+  // hand the raw node to FloatBlaster, which requires the internal child.
+  stp::FpTotalise totalise(stp_i->bm);
+  const stp::ASTNode totalised = totalise.topLevel(*a);
+
+  if (stp::BOOLEAN_TYPE == totalised.GetType())
   {
     stp::ASTNode* round1 =
-        new stp::ASTNode(simp->SimplifyFormula_TopLevel(*a, false));
+        new stp::ASTNode(simp->SimplifyFormula_TopLevel(totalised, false));
     stp::ASTNode* output =
         new stp::ASTNode(simp->SimplifyFormula_TopLevel(*round1, false));
     delete round1;
@@ -2810,7 +2821,7 @@ Expr vc_simplify(VC vc, Expr e)
   }
   else
   {
-    stp::ASTNode* round1 = new stp::ASTNode(simp->SimplifyTerm(*a));
+    stp::ASTNode* round1 = new stp::ASTNode(simp->SimplifyTerm(totalised));
     stp::ASTNode* output = new stp::ASTNode(simp->SimplifyTerm(*round1));
     delete round1;
     return output;
