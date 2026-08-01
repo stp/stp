@@ -1817,6 +1817,42 @@ TEST_F(ExtFixtureTest, IteFalseConditionPropagatesUpWithNegativeGuard)
   expectIteConflict(false, false);
 }
 
+// Two different array if-then-elses can use the same condition and select
+// the same branch. When disagreeing accesses propagate down from the two
+// roots, both shortest proof paths contain that one condition. The lemma
+// premise is a conjunction, so the shared guard must occur only once after
+// canonicalization; the common index equality is reflexive and disappears.
+TEST_F(ExtFixtureTest, SharedIteConditionGuardIsCanonicalizedOnce)
+{
+  ASTNode A = arr("A"), B = arr("B"), C = arr("C");
+  ASTNode condTerm = mgr.CreateSymbol("condition_term", 0, 0);
+  ASTNode condName = boolSym("condition_name", true);
+  ASTNode leftIte = arrayIte(condTerm, condName, A, B);
+  ASTNode rightIte = arrayIte(condTerm, condName, A, C);
+  ASTNode index = bv("index", 0);
+  ASTNode leftValue = bv("left_value", 1);
+  ASTNode rightValue = bv("right_value", 2);
+
+  size_t leftAccess = readAccess(leftIte, index, leftValue);
+  size_t rightAccess = readAccess(rightIte, index, rightValue);
+
+  ExtCheckResult r = run();
+  ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
+  const ExtConflict& conflict = r.conflict;
+  EXPECT_EQ(A, conflict.commonArray);
+  EXPECT_EQ(leftAccess, conflict.leftAccess);
+  EXPECT_EQ(rightAccess, conflict.rightAccess);
+  ASSERT_EQ(1u, conflict.leftGuards.size());
+  ASSERT_EQ(1u, conflict.rightGuards.size());
+  EXPECT_EQ(ExtGuard::ITE_COND_POS, conflict.leftGuards[0].kind);
+  EXPECT_EQ(ExtGuard::ITE_COND_POS, conflict.rightGuards[0].kind);
+
+  ASSERT_EQ(1u, conflict.abstractPremise.size());
+  EXPECT_TRUE(hasBoolGuard(conflict.abstractPremise, condName, true));
+  ASSERT_EQ(1u, conflict.theoryPremise.size());
+  EXPECT_TRUE(hasBoolGuard(conflict.theoryPremise, condTerm, true));
+}
+
 TEST_F(ExtFixtureTest, IteDoesNotPropagateThroughUnselectedBranch)
 {
   ASTNode A = arr("A"), B = arr("B");

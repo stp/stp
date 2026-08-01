@@ -30,6 +30,8 @@ THE SOFTWARE.
 #include "stp/Extensionality/ExtChecker.h"
 #include <algorithm>
 #include <deque>
+#include <unordered_map>
+#include <utility>
 
 namespace stp
 {
@@ -38,6 +40,10 @@ namespace
 {
 
 typedef std::pair<ASTNode, size_t> PairKey;
+
+typedef std::unordered_map<ASTNode, size_t, ASTNode::ASTNodeHasher,
+                           ASTNode::ASTNodeEqual>
+    RhoIndexMap;
 
 // One predecessor-linked shortest-path entry. A propagation stores exactly
 // one incoming guard and a key for its predecessor; complete guard vectors are
@@ -61,8 +67,10 @@ struct CheckerState
   // rho, split per section 11.2: one representative access per
   // concrete index of each array, keyed by the index value so a
   // congruence lookup is a single probe; plus the representatives in
-  // insertion order, for the observed-contents export.
-  std::map<ASTNode, std::map<ASTNode, size_t>> rhoByIndex;
+  // insertion order, for the observed-contents export. rhoByIndex is
+  // lookup-only: propagation, conflict, and model order must continue
+  // to come from the deterministic graph/work-list order and rho vectors.
+  std::map<ASTNode, RhoIndexMap> rhoByIndex;
   std::map<ASTNode, std::vector<size_t>> rho; // insertion order preserved
   std::deque<PairKey> worklist;
   ExtCheckResult result;
@@ -171,11 +179,12 @@ struct CheckerState
     const ASTNode idx = accessIndex(accessId);
     const ASTNode val = accessValue(accessId);
 
-    std::map<ASTNode, size_t>& byIndex = rhoByIndex[destination];
-    const std::map<ASTNode, size_t>::const_iterator hit = byIndex.find(idx);
-    if (hit != byIndex.end())
+    RhoIndexMap& byIndex = rhoByIndex[destination];
+    const std::pair<RhoIndexMap::iterator, bool> representative =
+        byIndex.emplace(idx, accessId);
+    if (!representative.second)
     {
-      const size_t otherId = hit->second;
+      const size_t otherId = representative.first->second;
       if (accessValue(otherId) != val)
       {
         ExtConflict c;
@@ -195,7 +204,7 @@ struct CheckerState
         result.stats["conflicts"]++;
         event(ExtEvent::CONFLICT, rule, source, destination, accessId, idx,
               val);
-        result.conflicts.push_back(c);
+        result.conflicts.push_back(std::move(c));
 
         // Record the pair as visited so a later path to it cannot report
         // the same conflict twice, but keep the arriving access out of
@@ -214,7 +223,6 @@ struct CheckerState
     }
 
     paths[key] = candidatePath;
-    byIndex[idx] = accessId;
     rho[destination].push_back(accessId);
     worklist.push_back(key);
     result.stats["insertions"]++;
@@ -262,22 +270,19 @@ bool atomLess(const ExtLemmaAtom& x, const ExtLemmaAtom& y)
 std::vector<ExtLemmaAtom> canonicalAtoms(const std::vector<ExtLemmaAtom>& in)
 {
   std::vector<ExtLemmaAtom> out;
+  out.reserve(in.size());
   for (size_t i = 0; i < in.size(); i++)
   {
     const ExtLemmaAtom& a = in[i];
     if (a.op == ExtLemmaAtom::BV_EQ && a.a == a.b)
       continue;
-    bool dup = false;
-    for (size_t j = 0; j < out.size(); j++)
-      if (out[j] == a)
-      {
-        dup = true;
-        break;
-      }
-    if (!dup)
-      out.push_back(a);
+    out.push_back(a);
   }
-  std::sort(out.begin(), out.end(), atomLess);
+  // Preserve which input occurrence survives when two logical atoms
+  // compare equal. ExtLemmaAtom carries proof metadata outside atomLess
+  // and operator==, so an unstable sort would make that choice incidental.
+  std::stable_sort(out.begin(), out.end(), atomLess);
+  out.erase(std::unique(out.begin(), out.end()), out.end());
   return out;
 }
 
@@ -586,7 +591,7 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
     st.result.conflict = st.result.conflicts[0];
     st.result.status = ExtCheckResult::CONFLICT;
     st.finishProofDiagnostics();
-    return st.result;
+    return std::move(st.result);
   }
 
   // Verify the witnesses of preprocessing step 1, in record order: a
@@ -605,7 +610,7 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
       st.result.status = ExtCheckResult::WITNESS_VIOLATION;
       st.result.violatedRecord = w.record;
       st.finishProofDiagnostics();
-      return st.result;
+      return std::move(st.result);
     }
   }
 
@@ -627,7 +632,7 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
 
   st.result.status = ExtCheckResult::CONSISTENT;
   st.finishProofDiagnostics();
-  return st.result;
+  return std::move(st.result);
 }
 
 } // namespace stp

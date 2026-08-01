@@ -1180,7 +1180,7 @@ ExtensionalityContext::checkCandidate(AbsRefine_CounterExample* ce)
       if (res.conflicts.empty())
         FatalError("array-equality: the checker reported a conflict without "
                    "a refinement certificate");
-      pendingLemmas = res.conflicts;
+      pendingLemmas.swap(res.conflicts);
       pendingLemmaValid = true;
       return EXT_CONFLICT;
     case ExtCheckResult::WITNESS_VIOLATION:
