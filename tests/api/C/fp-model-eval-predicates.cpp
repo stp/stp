@@ -106,3 +106,38 @@ TEST(fp_model_eval_predicates, fuzzed_iszero_over_ite_with_fp_eq_is_sat)
   EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
   vc_Destroy(vc);
 }
+
+// Regression: an FP *value* operation (a conversion, fp.sqrt, fp.max) reached
+// during model evaluation must keep its operand format. TermToConstTermUsingModel
+// strips formats; when the evaluator re-blasts such an op via
+// NonMemberBVConstEvaluator -> BlastNode, the operand format has to be restored
+// or SymFPU's decode asserts (packed width vs format's packed width,
+// symbolic_fp.cpp). The op reaches the evaluator the same way the predicates do:
+// kept live under a predicate so its node survives bit-blasting. This is the
+// fuzzer's minimized query: fp.to_sbv feeds fp.to_fp_unsigned into fp.max under
+// fp.isPositive; bitwuzla agrees it is sat, so the query of 'false' is 0.
+TEST(fp_model_eval_predicates, fp_value_op_reached_in_model_keeps_format)
+{
+  VC vc = vc_createValidityChecker();
+  Type fp = vc_fpType(vc, 8, 24);
+  Expr rna = vc_fpRoundingMode(vc, VC_RM_RNA);
+  Expr x4 = vc_varExpr(vc, "x4", fp);
+  Expr x5 = vc_fpRoundingModeVar(vc, "x5");
+  Expr x0 = vc_varExpr(vc, "x0", vc_bvType(vc, 23));
+  Expr x2 = vc_varExpr(vc, "x2", vc_bvType(vc, 32));
+  Expr neg = vc_bvUMinusExpr(vc, vc_bvConstExprFromDecStr(vc, 23, "1594224"));
+
+  Expr sq = vc_fpIsSubnormalExpr(vc, vc_fpSqrtExpr(vc, rna, x4));
+  Expr t12 = vc_fpToSBVExpr(vc, 63, x5, x4);          /* FP -> BV63 */
+  Expr cond = vc_iffExpr(vc, vc_sbvLtExpr(vc, neg, x0), sq);
+  Expr rm = vc_iteExpr(vc, cond, rna, x5);
+  Expr conv = vc_fpToFPFromUnsignedBV(vc, 8, 24, rm, t12); /* BV63 -> Float32 */
+  Expr pred = vc_fpIsPositiveExpr(vc, vc_fpMaxExpr(vc, conv, conv));
+  Expr t22 = vc_sbvGeExpr(vc, x2, x2);
+
+  vc_assertFormula(vc, t22);
+  vc_assertFormula(vc, vc_impliesExpr(vc, t22, pred));
+
+  EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  vc_Destroy(vc);
+}

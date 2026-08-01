@@ -594,6 +594,17 @@ AbsRefine_CounterExample::TermToConstTermUsingModel_inner(const ASTNode& term,
         // symbol).
         if (BVCONST != ff.GetKind())
           ff = TermToConstTermUsingModel(*it, false);
+        // A floating-point operand comes back as a bare bit-vector:
+        // TermToConstTermUsingModel strips the format off every result it
+        // returns. NonMemberBVConstEvaluator -> BlastNode reads the operand
+        // format off its operands (operandFormat) to decode them, so restore
+        // each float operand's own format here -- the same reattachment the
+        // FP-predicate arm of ComputeFormulaUsingModel makes before rebuilding
+        // a predicate. Non-float operands (bit-vectors, rounding modes) keep
+        // their bare form.
+        if (it->GetType() == FLOATINGPOINT_TYPE)
+          ff = FloatBlaster::withFormat(bm, ff, it->GetExpWidth(),
+                                        it->GetSigWidth());
         o.push_back(ff);
       }
 
