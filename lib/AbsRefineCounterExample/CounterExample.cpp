@@ -46,9 +46,14 @@ static bool isFpIndexedArrayAccess(const ASTNode& n)
 
 static ASTNode plainModelCarrier(STPMgr* bm, const ASTNode& value)
 {
-  // The plain twin of a float constant: same bits, the flavour every
-  // identity comparison in model evaluation expects.
-  if (value.GetKind() == BVCONST && value.GetExpWidth() != 0)
+  // The plain twin of a source-sorted carrier constant: same bits, the
+  // flavour every identity comparison in model evaluation expects.  SAT
+  // model constants are plain bit-vectors, so retaining FloatingPoint or
+  // RoundingMode decoration here would make equal carrier values distinct
+  // interned AST nodes.
+  const SourceSort::Kind sort = value.GetSourceSort().kind();
+  if (value.GetKind() == BVCONST &&
+      (value.GetExpWidth() != 0 || sort == SourceSort::Kind::RoundingMode))
     return bm->CreateBVConst(CONSTANTBV::BitVector_Clone(value.GetBVConst()),
                              value.GetValueWidth());
   return value;
