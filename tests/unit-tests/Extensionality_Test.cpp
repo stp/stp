@@ -1395,9 +1395,9 @@ TEST_F(ExtFixtureTest, IteDoesNotPropagateThroughUnselectedBranch)
 }
 
 // Direct tests for the solve-time preparation layer: recovering the
-// canonical equality operands from the witness anchors, computing the
-// cone, eliminating array-valued if-then-else with its persistent
-// replacement cache, scalar naming, and the loud failure when an
+// canonical equality operands from the witness anchors, collecting the
+// complete owned array graph, retaining array-valued if-then-else terms,
+// scalar naming, and the loud failure when an
 // anchor is missing. These drive ExtensionalityContext directly,
 // without SAT or the array transformer, so a regression in
 // preparation fails here instead of as a distant fatal error inside a
@@ -1443,12 +1443,11 @@ TEST_F(ExtPrepareTest, RecoversOperandsConeAndNames)
   EXPECT_EQ(r.constructionLeft, r.canonicalLeft);
   EXPECT_EQ(r.constructionRight, r.canonicalRight);
 
-  // The cone contains the operands and closes through the write to
-  // its base.
-  EXPECT_TRUE(ext->coneFrozen());
-  EXPECT_TRUE(ext->inCone(w));
-  EXPECT_TRUE(ext->inCone(b));
-  EXPECT_TRUE(ext->inCone(a));
+  // The complete graph contains both operands and the write's base.
+  EXPECT_TRUE(ext->arrayGraphFrozen());
+  EXPECT_TRUE(ext->ownsArray(w));
+  EXPECT_TRUE(ext->ownsArray(b));
+  EXPECT_TRUE(ext->ownsArray(a));
 
   // The compound index received a protected scalar name bound to it.
   bool namedIdx = false;
@@ -1461,6 +1460,27 @@ TEST_F(ExtPrepareTest, RecoversOperandsConeAndNames)
       namedIdx = true;
   }
   EXPECT_TRUE(namedIdx);
+}
+
+TEST_F(ExtPrepareTest, OwnsArraysDisconnectedFromTheActivatingEquality)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b"), x = arr("x");
+  ASTNode i = bv("i");
+
+  ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(hf->CreateNode(EQ, a, b));
+  ASTNode unrelatedRead = hf->CreateTerm(READ, 2, x, i);
+  ASTNode root = ext->conjoinRecordConstraints(hf->CreateNode(
+      AND, proxy, hf->CreateNode(EQ, unrelatedRead, mgr.CreateZeroConst(2))));
+
+  // Protection is computed before simplification, and final ownership is
+  // computed independently from equality reachability.
+  EXPECT_TRUE(ext->wasArrayAnticipated(x));
+  ext->prepare(root);
+  EXPECT_TRUE(ext->ownsArray(a));
+  EXPECT_TRUE(ext->ownsArray(b));
+  EXPECT_TRUE(ext->ownsArray(x));
 }
 
 TEST_F(ExtPrepareTest, ArrayIteIsKeptAndReasonedAboutDirectly)
@@ -1489,11 +1509,11 @@ TEST_F(ExtPrepareTest, ArrayIteIsKeptAndReasonedAboutDirectly)
   EXPECT_EQ(1u, ext->getRecords().size());
   const size_t protectedAfterFirstSolve = ext->getFrozenSymbols().size();
 
-  // The if-then-else is in the cone as itself, with both branches
+  // The if-then-else is in the graph as itself, with both branches
   // reachable through it -- that is what rules T-down and T-up walk.
-  EXPECT_TRUE(ext->inCone(ite));
-  EXPECT_TRUE(ext->inCone(a));
-  EXPECT_TRUE(ext->inCone(b));
+  EXPECT_TRUE(ext->ownsArray(ite));
+  EXPECT_TRUE(ext->ownsArray(a));
+  EXPECT_TRUE(ext->ownsArray(b));
 
   // The operand recovered for the user's equality is the if-then-else,
   // not a stand-in for it.
@@ -1620,14 +1640,11 @@ TEST_F(ExtPrepareTest, DuplicateAnchorFailsLoudly)
                "occurs twice with different right-hand sides");
 }
 
-// possibleConeSymbols is collected from the operands as they were
-// built, and decides which reads are protected from the
-// read-equals-constant substitution; the cone is closed over the
-// operands as they are after simplification. If a pass ever rewrites an
-// operand to name an array symbol that was not under it before, that
-// symbol's reads were never protected, and an observation the
-// consistency check depends on may already have been substituted away.
-TEST_F(ExtPrepareTest, UnanticipatedConeSymbolFailsLoudly)
+// The pre-preprocessing boundary snapshots every array symbol in the
+// complete root. If the prepared graph contains a symbol absent from that
+// snapshot, its reads may already have been substituted away. This test
+// deliberately bypasses conjoinRecordConstraints and supplies such a graph.
+TEST_F(ExtPrepareTest, UnanticipatedArraySymbolFailsLoudly)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
   ASTNode a = arr("a"), b = arr("b"), z = arr("z");
@@ -1637,15 +1654,14 @@ TEST_F(ExtPrepareTest, UnanticipatedConeSymbolFailsLoudly)
   ASSERT_EQ(1u, ext->getRecords().size());
   const ExtensionalityContext::Record r = ext->getRecords()[0];
 
-  // Stands in for a pass that rewrote the left operand into a term over
-  // z, an array the registry never saw when the equality was built.
+  // Stands in for a pass that introduced z after the ownership boundary.
   ASTVec conjuncts;
   conjuncts.push_back(
       hf->CreateNode(EQ, r.nameL, hf->CreateTerm(READ, 2, z, r.lambda)));
   conjuncts.push_back(r.anchorR);
   conjuncts.push_back(r.witnessClause);
   EXPECT_DEATH(ext->prepare(hf->CreateNode(AND, conjuncts)),
-               "entered the cone that was not anticipated");
+               "entered the prepared graph without appearing");
 }
 
 // An array reachable ONLY as the far branch of an array if-then-else
@@ -1653,24 +1669,10 @@ TEST_F(ExtPrepareTest, UnanticipatedConeSymbolFailsLoudly)
 //
 //   (assert (bvuge x (select (ite (distinct b z') b a) x)))
 //
-// where the only equality is over b and z'. The cone seeds at the
-// operands, closes UPWARD onto the if-then-else that has b as a branch,
-// and then DOWNWARD into its other branch -- reaching a, which no
-// equality operand mentions.
-//
-// possibleConeSymbols is collected from the operands as they are built,
-// so it never saw a. Its reads were therefore not protected from the
-// read-equals-constant substitution, and the guard that checks the
-// containment aborted the solve. It aborted correctly: the alternative
-// is certifying a candidate against array contents the substitution had
-// already deleted.
-//
-// The stale half of the reasoning was "array if-then-elses, which no
-// longer exist" -- true only while they were rewritten away before the
-// cone was computed. Nothing can be anticipated at construction here,
-// because the if-then-else sits ABOVE the operand and need not exist
-// when the equality is built; in the query above it cannot, since the
-// equality is its own condition.
+// where the only equality is over b and z'. No equality operand mentions a,
+// and it cannot exist when that equality is built because the equality is
+// the if-then-else condition. The complete-root ownership snapshot must
+// nevertheless anticipate a before preprocessing begins.
 TEST_F(ExtPrepareTest, ArrayReachableOnlyThroughAnIteBranchIsAnticipated)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
@@ -1682,7 +1684,7 @@ TEST_F(ExtPrepareTest, ArrayReachableOnlyThroughAnIteBranchIsAnticipated)
   ext->beginSolve();
   ASTNode proxy = ext->lowerArrayEqualities(hf->CreateNode(EQ, b, z));
   ASSERT_EQ(1u, ext->getRecords().size());
-  EXPECT_FALSE(ext->mayBeConeArray(a));
+  EXPECT_FALSE(ext->wasArrayAnticipated(a));
 
   ASTNode ite = hf->CreateArrayTerm(ITE, 2, 2, {hf->CreateNode(NOT, proxy), b, a});
   ASTNode read = hf->CreateTerm(READ, 2, ite, i);
@@ -1691,27 +1693,26 @@ TEST_F(ExtPrepareTest, ArrayReachableOnlyThroughAnIteBranchIsAnticipated)
       hf->CreateNode(EQ, read, mgr.CreateZeroConst(2)));
 
   // Anticipated by the time any pass could delete a read over it.
-  EXPECT_TRUE(ext->mayBeConeArray(a));
+  EXPECT_TRUE(ext->wasArrayAnticipated(a));
 
-  // And it really does enter the cone, so the anticipation is needed
-  // rather than merely defensive.
+  // And it really is owned after preparation.
   ext->prepare(root);
-  EXPECT_TRUE(ext->inCone(a));
-  EXPECT_TRUE(ext->inCone(b));
-  EXPECT_TRUE(ext->inCone(ite));
+  EXPECT_TRUE(ext->ownsArray(a));
+  EXPECT_TRUE(ext->ownsArray(b));
+  EXPECT_TRUE(ext->ownsArray(ite));
 }
 
 // The decision table combining STP's own model evaluation with the
 // array consistency check: an array conflict always takes priority
 // (only its lemma can rule the candidate out), and a candidate is
-// satisfiable only when both checks pass. All twenty cells.
+// satisfiable only when both checks pass. All sixteen cells.
 TEST(ExtCertification, TruthTable)
 {
   typedef ExtensionalityContext EC;
-  // registry empty: EXTCHK skipped; ordinary result decides. (A
-  // consistent verdict without a registry is tolerated identically;
-  // conflict, witness trouble or a name divergence from a checker
-  // that had nothing to check is an internal error.)
+  // checker inactive: EXTCHK skipped; ordinary result decides. (A
+  // consistent verdict without an active checker is tolerated identically;
+  // conflict or witness trouble from a checker that had nothing to
+  // check is an internal error.)
   EXPECT_EQ(EC::RETURN_SAT,
             EC::decideCertification(true, false, EC::EXT_SKIPPED));
   EXPECT_EQ(EC::RUN_HOST_REFINEMENT,
@@ -1728,24 +1729,17 @@ TEST(ExtCertification, TruthTable)
             EC::decideCertification(true, false, EC::EXT_WITNESS_ERROR));
   EXPECT_EQ(EC::INTERNAL_ERROR,
             EC::decideCertification(false, false, EC::EXT_WITNESS_ERROR));
-  EXPECT_EQ(EC::INTERNAL_ERROR,
-            EC::decideCertification(true, false, EC::EXT_NAME_DIVERGENCE));
-  EXPECT_EQ(EC::INTERNAL_ERROR,
-            EC::decideCertification(false, false, EC::EXT_NAME_DIVERGENCE));
-
-  // registry nonempty: EXTCHK conflict has priority over both ordinary
+  // checker active: EXTCHK conflict has priority over both ordinary
   // results; SAT only for ordinary-true + consistent; a skipped check
-  // despite a nonempty registry is an internal error whatever the
-  // ordinary result was, since cone reads are exempt from ordinary
-  // refinement and only the checker polices them. A name divergence
-  // hands the candidate to the host's read refinement in both cases:
-  // it is neither certifiable nor refutable by an array lemma, and the
-  // missing link is an ordinary read-congruence axiom.
+  // despite an active checker is an internal error whatever the
+  // ordinary result was. A consistent checker paired with ordinary
+  // false is likewise an internal error: the checker owns every array
+  // read, so there is no host-refinement partition left to repair it.
   EXPECT_EQ(EC::RETURN_SAT,
             EC::decideCertification(true, true, EC::EXT_CONSISTENT));
   EXPECT_EQ(EC::ADD_EXT_LEMMA,
             EC::decideCertification(true, true, EC::EXT_CONFLICT));
-  EXPECT_EQ(EC::RUN_HOST_REFINEMENT,
+  EXPECT_EQ(EC::INTERNAL_ERROR,
             EC::decideCertification(false, true, EC::EXT_CONSISTENT));
   EXPECT_EQ(EC::ADD_EXT_LEMMA,
             EC::decideCertification(false, true, EC::EXT_CONFLICT));
@@ -1757,10 +1751,6 @@ TEST(ExtCertification, TruthTable)
             EC::decideCertification(true, true, EC::EXT_SKIPPED));
   EXPECT_EQ(EC::INTERNAL_ERROR,
             EC::decideCertification(false, true, EC::EXT_SKIPPED));
-  EXPECT_EQ(EC::RUN_HOST_REFINEMENT,
-            EC::decideCertification(true, true, EC::EXT_NAME_DIVERGENCE));
-  EXPECT_EQ(EC::RUN_HOST_REFINEMENT,
-            EC::decideCertification(false, true, EC::EXT_NAME_DIVERGENCE));
 }
 
 } // namespace

@@ -124,11 +124,26 @@ public:
 
   // Publish an array observation certified by the array-equality
   // consistency check: READ over a constant index mapped to its
-  // concrete value. Existing entries win.
+  // concrete value. A different existing value is an integration
+  // error, never a choice between two model authorities.
   void InsertIntoCounterExampleMap(const ASTNode& key, const ASTNode& value)
   {
-    if (CounterExampleMap.find(key) == CounterExampleMap.end())
-      CounterExampleMap[key] = value;
+    ASTNodeMap::const_iterator it = CounterExampleMap.find(key);
+    if (it != CounterExampleMap.end() && !(it->second == value))
+      FatalError("array-equality: certified array observation conflicts with "
+                 "an existing counterexample entry",
+                 key);
+    CounterExampleMap[key] = value;
+  }
+
+  // Exact lookup in the materialized SAT assignment. Unlike the general
+  // model evaluator, this never invents a default for a symbol that was
+  // absent from the bit-blast. The extensionality checker uses it for
+  // every scalar name on which a refinement certificate depends.
+  ASTNode LookupAssignedValue(const ASTNode& key) const
+  {
+    ASTNodeMap::const_iterator it = CounterExampleMap.find(key);
+    return it == CounterExampleMap.end() ? ASTNode() : it->second;
   }
 
   // Prints the counterexample to stdout

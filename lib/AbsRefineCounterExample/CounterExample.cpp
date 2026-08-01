@@ -100,6 +100,53 @@ void AbsRefine_CounterExample::ConstructCounterExample(
     }
   }
 
+  // In an active array-equality solve the consistency checker owns the
+  // complete array graph. Its input is the scalar SAT assignment above;
+  // do not pre-populate concrete READ(array, value(index)) entries here.
+  // Two syntactically different indexes can have the same candidate value,
+  // and collapsing their read abstractions into one map key before rule C
+  // runs loses exactly the disagreement the checker must turn into a lemma.
+  // A conflict-free check publishes one validated observation batch later.
+  {
+    ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+    if (ext != NULL && ext->active())
+    {
+      if (!ext->checkerReady())
+        FatalError("array-equality: a SAT candidate was materialized before "
+                   "the complete array graph was bound");
+      // SAT backends may leave a don't-care Boolean literal undefined.
+      // Complete such directly encoded symbols with false, just as the BV
+      // loop above completes undefined bits with zero. Preserve any concrete
+      // value copied from the solver map.
+      for (ToSATBase::ASTNodeToSATVar::const_iterator it =
+               satVarToSymbol.begin();
+           it != satVarToSymbol.end(); ++it)
+      {
+        const ASTNode& symbol = it->first;
+        if (symbol.GetType() != BOOLEAN_TYPE)
+          continue;
+        ASTNodeMap::const_iterator assigned = CounterExampleMap.find(symbol);
+        if (assigned == CounterExampleMap.end())
+          CounterExampleMap[symbol] = ASTFalse;
+        else if (ext->isProtected(symbol) &&
+                 !(assigned->second.GetKind() == TRUE ||
+                   assigned->second.GetKind() == FALSE))
+          FatalError("array-equality: a protected Boolean SAT name has a "
+                     "non-Boolean counterexample value",
+                     symbol);
+      }
+
+      for (ASTNodeMap::const_iterator it = CounterExampleMap.begin();
+           it != CounterExampleMap.end(); ++it)
+        if (it->first.GetKind() == READ)
+          FatalError("array-equality: preprocessing placed an array-read "
+                     "observation in the candidate before the complete "
+                     "graph was checked",
+                     it->first);
+      return;
+    }
+  }
+
   for (ArrayTransformer::ArrType::const_iterator
            it = ArrayTransform->arrayToIndexToRead.begin(),
            itend = ArrayTransform->arrayToIndexToRead.end();
@@ -121,18 +168,8 @@ void AbsRefine_CounterExample::ConstructCounterExample(
       // construct the appropriate array-read and store it in the
       // counterexample
       ASTNode arrayread_index = TermToConstTermUsingModel(index, false);
-      // With array equality active, recorded reads may sit on WRITE
-      // nodes; build their lookup keys with the plain hashing factory
-      // so no read-over-write rewrite can alter the key.
-      NodeFactory* keyFactory = bm->defaultNodeFactory;
-      {
-        ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-        if (ext != NULL && ext->active() && ext->coneFrozen() &&
-            ext->inCone(array))
-          keyFactory = bm->hashingNodeFactory;
-      }
-      ASTNode key = keyFactory->CreateTerm(READ, array.GetValueWidth(), array,
-                                           arrayread_index);
+      ASTNode key = bm->defaultNodeFactory->CreateTerm(
+          READ, array.GetValueWidth(), array, arrayread_index);
 
       // Get the ITE corresponding to the array-read and convert it
       // to a constant against the model
@@ -235,7 +272,7 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
                    arrName);
       }
 
-      // With array equality active, a read inside the equality cone is
+      // With array equality active, every read in the solve is
       // evaluated through its read-abstraction variable -- never by
       // expanding its write chain against the model. The consistency
       // checker, not the model-side expander, is the authority for
@@ -243,7 +280,7 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
       // solver assigned, and any disagreement with the array axioms is
       // exactly what the checker turns into a lemma.
       //
-      // A cone read with no recorded abstraction variable was
+      // An owned read with no recorded abstraction variable was
       // simplified out of the formula before solving; it is evaluated
       // from the certified array contents instead: the recorded
       // observation at the concrete index if one exists at this level,
@@ -252,8 +289,8 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
       // access whenever the checker certifies the candidate.
       {
         ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-        if (ext != NULL && ext->active() && ext->coneFrozen() &&
-            ext->inCone(arrName))
+        if (ext != NULL && ext->active() && ext->arrayGraphFrozen() &&
+            ext->ownsArray(arrName))
         {
           const ASTNode idxVal = TermToConstTermUsingModel(index, false);
           NodeFactory* hf = bm->hashingNodeFactory;
@@ -281,6 +318,19 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
                 break;
               }
               level = level[0];
+              continue;
+            }
+            if (ITE == level.GetKind() && level.GetType() == ARRAY_TYPE)
+            {
+              const ASTNode cond = ComputeFormulaUsingModel(level[0]);
+              if (cond == ASTTrue)
+                level = level[1];
+              else if (cond == ASTFalse)
+                level = level[2];
+              else
+                FatalError("array-equality: an owned array if-then-else "
+                           "condition has no concrete model value",
+                           level[0]);
               continue;
             }
             // base array with no observation: unobserved indices
@@ -1291,29 +1341,47 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
     // Array equality: the consistency checker runs on every candidate
     // whenever at least one array equality was abstracted -- even when
     // STP's ordinary model evaluation already failed -- and an array
-    // conflict takes priority. Reads inside the equality cone are
-    // exempt from STP's ordinary read refinement, so only the array
-    // lemma can rule such a candidate out; skipping the check on
-    // ordinary-false candidates could therefore loop without progress.
+    // conflict takes priority. In an active solve every read belongs to
+    // this checker, so only its array lemmas can rule such a candidate
+    // out; skipping an ordinary-false candidate could therefore loop
+    // without progress.
     // A candidate is reported satisfiable only when both checks pass
-    // on the same assignment. (If the formula collapsed to a constant
-    // before preparation, no candidate model exists and no cone was
-    // frozen.)
+    // on the same assignment. Any active satisfiable candidate is
+    // required below to have a fully bound graph.
     //
     // The checker runs before the ordinary evaluation so that its
     // conflict-free fixed point can be published into the model first:
-    // a cone read that was simplified out of the transformed formula
+    // an owned read that was simplified out of the transformed formula
     // is evaluated from the certified array contents, which must agree
     // with every observation the propagation derived (e.g. a read
     // observing a value across a true array equality). Publication and
     // the verification of the scalar names against the completed model
     // happen inside checkCandidate.
     ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-    const bool extActive = ext != NULL && ext->active() && ext->coneFrozen();
+    const bool extRegistered = ext != NULL && ext->active();
+    if (extRegistered && !ext->checkerReady())
+      FatalError("array-equality: a SAT candidate reached model checking "
+                 "before the complete array graph was bound");
+    const bool extActive = extRegistered;
     ExtensionalityContext::CandidateOutcome extOutcome =
         ExtensionalityContext::EXT_SKIPPED;
     if (extActive)
       extOutcome = ext->checkCandidate(this);
+
+    // A conflicting candidate has no certified array model. Its complete
+    // checker certificate is already pending, so do not run ordinary model
+    // evaluation: that path is allowed to fill defaults and caches for a
+    // completed model, which this candidate deliberately is not.
+    if (extOutcome == ExtensionalityContext::EXT_CONFLICT)
+    {
+      if (!ext->hasPendingLemma())
+        FatalError("array-equality: a checker conflict has no pending lemma");
+      bm->GetRunTimes()->stop(RunTimes::CounterExampleGeneration);
+      return SOLVER_UNDECIDED;
+    }
+    if (extActive && extOutcome != ExtensionalityContext::EXT_CONSISTENT)
+      FatalError("array-equality: the checker could neither certify nor "
+                 "refute a materialized candidate");
 
     // check if the counterexample is good or not
     ASTNode orig_result = ComputeFormulaUsingModel(original_input);
@@ -1326,15 +1394,15 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
         ASTTrue == orig_result, extActive, extOutcome))
     {
       case ExtensionalityContext::ADD_EXT_LEMMA:
-        // the pending certificate is retained; the combined refinement
+        // the pending certificate is retained; the extensionality refinement
         // driver installs its clause and re-solves
         return SOLVER_UNDECIDED;
 
       case ExtensionalityContext::INTERNAL_ERROR:
-        FatalError("CallSAT_ResultCheck: an array-inequality witness "
-                   "constraint is violated in the candidate model, "
-                   "although it was part of the bit-blasted formula -- "
-                   "the encoding is broken");
+        FatalError("CallSAT_ResultCheck: the complete array checker and "
+                   "the bit-blasted/model-evaluation path disagree on the "
+                   "same candidate -- the array-equality integration is "
+                   "broken");
         return SOLVER_ERROR; // unreachable
 
       case ExtensionalityContext::RETURN_SAT:

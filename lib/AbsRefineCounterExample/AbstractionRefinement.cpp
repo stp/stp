@@ -273,6 +273,9 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
 
   ExtensionalityContext* ext = bm->getExtensionalityIfAny();
   const bool extActive = ext != NULL && ext->active();
+  if (extActive)
+    FatalError("array-equality: legacy array-read refinement was invoked "
+               "during a solve owned by the extensionality checker");
 
   // In these loops we try to construct Leibnitz axioms and add it to
   // the solve(). We add only those axioms that are false in the
@@ -285,22 +288,6 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
            iset_end = arrayToIndex.end();
        iset != iset_end; iset++)
   {
-    // The array-equality decision procedure owns all congruence
-    // reasoning for arrays connected to an abstracted array equality;
-    // generating the ordinary lazy Ackermann read axioms for them too
-    // would duplicate (and interfere with) its lemmas.
-    //
-    // Skipping an array here is only safe because the checker really
-    // does cover every read of it, and that is not an assumption:
-    // ExtensionalityContext::bindAfterTransform builds its access
-    // inventory by walking THIS map with THIS predicate, taking the
-    // complementary branch. The two sets are therefore equal by
-    // construction, and a read cannot fall between them. Keep the two
-    // filters identical -- a read that neither side claimed would be
-    // constrained by nothing at all.
-    if (extActive && ext->inCone(iset->first))
-      continue;
-
     const map<ASTNode, ArrayTransformer::ArrayRead>& mapper = iset->second;
 
     vector<ASTNode> listOfIndices;
@@ -396,10 +383,6 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
 
         if (SOLVER_UNDECIDED != res2)
           return res2;
-        // An array-equality lemma is pending; hand control back to
-        // the combined refinement driver, which installs it first.
-        if (extActive && ext->hasPendingLemma())
-          return SOLVER_UNDECIDED;
         bm->GetRunTimes()->start(RunTimes::ArrayReadRefinement);
       }
     }

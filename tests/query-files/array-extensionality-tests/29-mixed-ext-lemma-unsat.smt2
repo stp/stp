@@ -1,11 +1,9 @@
 ; RUN: %solver --array-equality %s | %OutputCheck %s
 ; CHECK-NEXT: ^unsat
 ; The mirror image of the previous test: the contradiction lives in
-; the equality cone (congruence across a = b), while the unrelated
-; array c carries satisfiable read constraints that classic refinement
-; handles. Reads of a and b are exempt from the classic read axioms,
-; so only an equality lemma can conclude unsat with c's machinery
-; interleaved in the same refinement loop.
+; congruence across a = b, while unrelated array c carries satisfiable
+; read constraints. Both components are owned by the active checker,
+; and only an extensionality lemma can conclude unsat.
 (set-logic QF_ABV)
 (declare-fun a () (Array (_ BitVec 4) (_ BitVec 8)))
 (declare-fun b () (Array (_ BitVec 4) (_ BitVec 8)))

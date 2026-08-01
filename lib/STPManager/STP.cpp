@@ -756,18 +756,17 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   }
   revert.reset(NULL);
 
-  // A pre-view pass may already have collapsed the formula to a
-  // constant (e.g. constant-bit propagation proving UNSAT); the view
-  // point is then moot — no candidate model will ever be produced.
+  // A pre-view pass may already have proved the formula false. In that
+  // case no candidate or bound graph is needed; any satisfiable active
+  // candidate is required below to have passed preparation and binding.
   const bool extPrepared = extActive && !inputToSat.isConstant();
   if (extPrepared)
   {
     // Array equality: final preparation, immediately before the one
-    // main array transform. Recover the current form of each equality
-    // operand, eliminate array-valued if-then-else connected to the
-    // equalities, freeze the set of participating arrays, and conjoin
-    // the naming equations that give future lemma leaves SAT
-    // variables.
+    // main array transform. Recover the current equality operands,
+    // collect and freeze the complete array graph (including retained
+    // array-valued if-then-elses), and conjoin the naming equations that
+    // give future lemma leaves SAT variables.
     inputToSat = ext->prepare(inputToSat);
     bm->ASTNodeStats("after extensionality preparation: ", inputToSat);
   }
@@ -863,20 +862,18 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   assert(arrayops);
   assert(!bm->UserFlags.ackermannisation); // Refinement must be enabled too.
 
-  // Combined refinement driver (the loop of the lemmas-on-demand
-  // procedure, paper section 6, interleaved with STP's own read
-  // refinement). Pending array-equality lemmas are installed first --
-  // the whole batch the consistency check found, since one pass
-  // typically exposes many independent conflicts and each costs a
-  // solve-from-scratch if held back; otherwise ordinary read refinement
-  // runs for the arrays the array-equality procedure does not own. Progress stalls
-  // only when the ordinary path had nothing to add and no lemma is
-  // pending -- that is a solver bug.
+  // Refinement driver. In an active equality solve the extensionality
+  // checker owns the complete array graph, so each undecided candidate
+  // must carry a pending theory lemma and legacy read refinement is
+  // never entered. Without an active equality, retain STP's ordinary
+  // read-refinement path unchanged.
   while (true)
   {
-    const bool tookLemmaPath = extActive && ext->hasPendingLemma();
-    if (tookLemmaPath)
+    if (extActive)
     {
+      if (!ext->hasPendingLemma())
+        FatalError("array-equality: an active refinement round has neither "
+                   "a decision nor a pending theory lemma");
       ext->encodePendingLemmas(NewSolver, satBase);
       res = Ctr_Example->CallSAT_ResultCheck(NewSolver, bm->ASTTrue,
                                              semantic_input, satBase, true);
@@ -906,30 +903,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
       return SOLVER_TIMEOUT;
     }
 
-    if (!tookLemmaPath && !(extActive && ext->hasPendingLemma()))
-    {
-      // Ordinary refinement made no progress and nothing is pending.
-      // With array equality that is not necessarily a solver bug: a
-      // candidate whose scalar names disagreed with their terms is
-      // neither certifiable nor refutable by an array lemma, so it is
-      // handed to the host's read refinement -- which owns the missing
-      // read-congruence axiom but is not guaranteed to find one to
-      // add. When that happens the solve has genuinely run out of
-      // moves without deciding anything, which is an incompleteness to
-      // report, not an invariant to abort on.
-      if (extActive && ext->sawNameDivergence())
-      {
-        cerr << "Warning: array-equality refinement could not decide this "
-                "query: a candidate model was rejected because a scalar "
-                "name disagreed with the term it stands for, and read "
-                "refinement had no axiom left to add."
-             << endl;
-        if (toSATAIG.cbIsDestructed())
-          cleaner.release();
-        return SOLVER_TIMEOUT;
-      }
+    if (!extActive)
       break;
-    }
   }
 
   FatalError("TopLevelSTPAux: reached the end without proper conclusion:"

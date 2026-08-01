@@ -154,7 +154,7 @@ struct ExtGuard
   size_t eqRecord = 0;
 };
 
-// A cone array-valued if-then-else, kept as a term rather than
+// An owned array-valued if-then-else, kept as a term rather than
 // eliminated (paper section 4.1 declines to do this "to simplify our
 // presentation"; the direct integration it mentions is what this is).
 // condName reifies the condition as a Boolean symbol, so that the

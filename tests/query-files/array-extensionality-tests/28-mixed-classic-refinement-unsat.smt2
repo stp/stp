@@ -1,10 +1,10 @@
 ; RUN: %solver --array-equality %s | %OutputCheck %s
 ; CHECK-NEXT: ^unsat
-; A consistent equality cone (a, b) side by side with an array c that
-; is not connected to any equality: c stays with STP's classic lazy
-; read refinement, whose congruence axiom k = l -> c[k] = c[l] is the
-; only route to unsat here. Pins that cone ownership exempts exactly
-; the cone -- a skip that swallowed c's reads would answer sat.
+; A consistent equality component (a, b) side by side with an array c
+; that is not connected to any equality. Once a = b activates the
+; extensionality checker, c is nevertheless in its complete graph; its
+; rule-C congruence step is the only route to unsat. Legacy read
+; refinement must not be entered in this active solve.
 (set-logic QF_ABV)
 (declare-fun a () (Array (_ BitVec 4) (_ BitVec 8)))
 (declare-fun b () (Array (_ BitVec 4) (_ BitVec 8)))

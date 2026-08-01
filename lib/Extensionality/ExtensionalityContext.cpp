@@ -93,9 +93,8 @@ ASTNode recoverAnchoredOperand(const ASTNode& rhs, const ASTNode& lambda,
 } // namespace
 
 ExtensionalityContext::ExtensionalityContext(STPMgr* bm_)
-    : lemmasEmitted(0), lemmaAtomsFolded(0), nameDivergences(0), bm(bm_),
-      registrySealed(false), coneIsFrozen(false), graphBound(false),
-      pendingLemmaValid(false), divergedThisSolve(false)
+    : lemmasEmitted(0), lemmaAtomsFolded(0), bm(bm_), registrySealed(false),
+      arrayGraphIsFrozen(false), graphBound(false), pendingLemmaValid(false)
 {
 }
 
@@ -104,14 +103,14 @@ bool ExtensionalityContext::enabled() const
   return bm->UserFlags.enable_array_equality;
 }
 
-void ExtensionalityContext::collectPossibleConeSymbols(const ASTNode& n)
+void ExtensionalityContext::collectAnticipatedArraySymbols(const ASTNode& n)
 {
   ASTNodeSet visited;
   collectDag(n, visited);
   for (ASTNodeSet::const_iterator it = visited.begin(); it != visited.end();
        ++it)
     if (it->GetKind() == SYMBOL && isArrayType(*it))
-      possibleConeSymbols.insert(*it);
+      anticipatedArraySymbols.insert(*it);
 }
 
 // An equality between a chain of writes and the chain's own base
@@ -389,12 +388,12 @@ void ExtensionalityContext::activateReachableRecords(
   }
 
   activeRecordIds.assign(activeIds.begin(), activeIds.end());
-  possibleConeSymbols.clear();
+  anticipatedArraySymbols.clear();
   for (size_t i = 0; i < activeRecordIds.size(); ++i)
   {
     const Record& r = records[activeRecordIds[i]];
-    collectPossibleConeSymbols(r.constructionLeft);
-    collectPossibleConeSymbols(r.constructionRight);
+    collectAnticipatedArraySymbols(r.constructionLeft);
+    collectAnticipatedArraySymbols(r.constructionRight);
   }
 }
 
@@ -407,13 +406,13 @@ void ExtensionalityContext::beginSolve()
   activeRecordIds.clear();
   currentLowerings.clear();
   protectedSymbols.clear();
-  possibleConeSymbols.clear();
-  coneIsFrozen = false;
-  coneArrays.clear();
-  coneWrites.clear();
-  coneWriteParents.clear();
-  coneItes.clear();
-  coneIteParents.clear();
+  anticipatedArraySymbols.clear();
+  arrayGraphIsFrozen = false;
+  ownedArrays.clear();
+  ownedWrites.clear();
+  ownedWriteParents.clear();
+  ownedItes.clear();
+  ownedIteParents.clear();
   eqEdges.clear();
   eqAdjacency.clear();
   witnessObls.clear();
@@ -425,7 +424,6 @@ void ExtensionalityContext::beginSolve()
   graphBound = false;
   pendingLemmaValid = false;
   pendingLemmas.clear();
-  divergedThisSolve = false;
   eqLitCache.clear();
   lastObserved.clear();
 }
@@ -445,43 +443,21 @@ ASTNode ExtensionalityContext::conjoinRecordConstraints(const ASTNode& root)
   }
   ASTNode out = bm->defaultNodeFactory->CreateNode(AND, conjuncts);
 
-  // Anticipate the cone before any pass can act on the answer.
+  // Anticipate the complete owned graph before any pass can act on the
+  // answer. Once an equality is active, the checker owns every array
+  // read in the solve: congruence connects otherwise unrelated arrays
+  // through shared scalar index expressions, so an equality-seeded
+  // subgraph is not a closed theory boundary.
   //
-  // possibleConeSymbols decides which reads are protected from the
-  // read-equals-constant substitution, and it has to be a superset of
-  // the arrays the checker will reason about. Collecting it from the
-  // operands as they are built is not enough, because the cone closes
-  // UPWARD as well: an operand that is one branch of an array
-  // if-then-else pulls that if-then-else in, and the other branch
-  // comes with it. That branch can be an array no equality mentions,
-  // and nothing at construction time can anticipate it -- the
-  // if-then-else sits above the operand and need not exist yet, and in
-  // the query this was reduced from it cannot, because the equality is
-  // its own condition.
-  //
-  // Here it can be anticipated exactly. This is the one point where
-  // the whole formula and the whole registry are both known and no
-  // pass has run: the same closure preparation will perform, computed
-  // early enough that its answer can still protect anything. Operands
-  // are seeded in their construction form, which is how the formula
-  // still spells them.
-  {
-    ASTVec seeds;
-    for (size_t i = 0; i < activeRecordIds.size(); i++)
-    {
-      const Record& r = records[activeRecordIds[i]];
-      seeds.push_back(r.constructionLeft);
-      seeds.push_back(r.constructionRight);
-    }
-    std::set<ASTNode> cone;
-    std::map<ASTNode, std::vector<ASTNode>> parents;
-    std::vector<ASTNode> coneITEs;
-    computeProvisionalCone(out, seeds, cone, parents, coneITEs);
-    for (std::set<ASTNode>::const_iterator it = cone.begin(); it != cone.end();
-         ++it)
-      if (it->GetKind() == SYMBOL && isArrayType(*it))
-        possibleConeSymbols.insert(*it);
-  }
+  // anticipatedArraySymbols decides which reads are protected from the
+  // read-equals-constant substitution. It must come from the whole root,
+  // not just equality operands: an unrelated array or an array-ITE branch
+  // is owned too.
+  // This is the one point where the whole expanded formula and the
+  // active registry are known and no simplification has run, so it is
+  // also the point at which read-deleting substitutions can still be
+  // prevented.
+  collectAnticipatedArraySymbols(out);
 
   // Everything the decision procedure needs is now in this solve's
   // formula; anything minted after this point could not be.
@@ -574,77 +550,31 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
   }
 }
 
-// Compute the cone: the set of array terms the abstracted equalities
-// can constrain. Seed with the operands the caller supplies, close
-// downward through write bases and if-then-else branches, and upward
-// through the writes and if-then-elses stacked on cone arrays in the
-// formula (upward closure is what makes extensional reasoning
-// complete; compare rule U in section 7.3 of the paper).
-void ExtensionalityContext::computeProvisionalCone(
-    const ASTNode& root, const ASTVec& seeds, std::set<ASTNode>& cone,
-    std::map<ASTNode, std::vector<ASTNode>>& parents,
-    std::vector<ASTNode>& coneITEs)
+// Compute the owned array-term graph directly from every array-valued
+// node reachable in the prepared root. Record write parenthood at the
+// same time; array-if-then-else parenthood is populated with its reified
+// condition below, after scalar naming.
+void ExtensionalityContext::computeArrayGraph(
+    const ASTNode& root, std::set<ASTNode>& arrays,
+    std::map<ASTNode, std::vector<ASTNode>>& parents)
 {
-  cone.clear();
+  arrays.clear();
   parents.clear();
-  coneITEs.clear();
 
   ASTNodeSet visited;
   collectDag(root, visited);
-  for (size_t i = 0; i < seeds.size(); i++)
-    collectDag(seeds[i], visited);
-
-  // parent adjacency over every array node in sight
-  std::map<ASTNode, std::vector<ASTNode>> upEdges; // child array -> parents
   for (ASTNodeSet::const_iterator it = visited.begin(); it != visited.end();
        ++it)
   {
     const ASTNode& n = *it;
+    if (isArrayType(n))
+      arrays.insert(n);
     if (n.GetKind() == WRITE)
-      upEdges[n[0]].push_back(n);
-    else if (n.GetKind() == ITE && isArrayType(n))
-    {
-      upEdges[n[1]].push_back(n);
-      upEdges[n[2]].push_back(n);
-    }
-  }
-
-  std::vector<ASTNode> todo(seeds.begin(), seeds.end());
-
-  while (!todo.empty())
-  {
-    ASTNode n = todo.back();
-    todo.pop_back();
-    if (!cone.insert(n).second)
-      continue;
-    // downward
-    if (n.GetKind() == WRITE)
-      todo.push_back(n[0]);
-    else if (n.GetKind() == ITE && isArrayType(n))
-    {
-      todo.push_back(n[1]);
-      todo.push_back(n[2]);
-    }
-    // upward through parents in the prepared formula
-    std::map<ASTNode, std::vector<ASTNode>>::const_iterator pit =
-        upEdges.find(n);
-    if (pit != upEdges.end())
-      for (size_t i = 0; i < pit->second.size(); i++)
-        todo.push_back(pit->second[i]);
-  }
-
-  for (std::set<ASTNode>::const_iterator it = cone.begin(); it != cone.end();
-       ++it)
-  {
-    if (it->GetKind() == ITE && isArrayType(*it))
-      coneITEs.push_back(*it);
-    if (it->GetKind() == WRITE)
-      parents[(*it)[0]].push_back(*it);
+      parents[n[0]].push_back(n);
   }
   for (std::map<ASTNode, std::vector<ASTNode>>::iterator it = parents.begin();
        it != parents.end(); ++it)
     std::sort(it->second.begin(), it->second.end(), nodeNumLess);
-  std::sort(coneITEs.begin(), coneITEs.end(), nodeNumLess);
 }
 
 // Create or reuse a scalar name for a checker-visible term and queue
@@ -685,74 +615,74 @@ ASTNode ExtensionalityContext::conditionName(const ASTNode& cond,
 }
 
 // Final preparation before STP's main array transformation: recover
-// canonical operands, compute the cone, freeze it, inventory its writes
-// as accesses (section 11.4), and give every compound write index/value
-// a scalar name.
+// canonical operands, collect and freeze the complete array graph,
+// inventory its writes as accesses (section 11.4), and give every
+// compound write index/value a scalar name.
 //
-// No if-then-else elimination happens here: conjoinRecordConstraints
-// did it before preprocessing ran, so the cone cannot contain one.
+// Array-valued if-then-elses remain structural and are inventoried here;
+// the consistency checker's T-up/T-down rules reason about the selected
+// branch directly.
 ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
 {
-  assert(active());
+  if (!active())
+    FatalError("array-equality: preparation ran without an active equality");
+  if (arrayGraphIsFrozen || graphBound)
+    FatalError("array-equality: the complete array graph was prepared twice");
   ASTNode root = root_;
   ASTVec extraConstraints;
 
-  std::set<ASTNode> cone;
+  std::set<ASTNode> arrays;
   std::map<ASTNode, std::vector<ASTNode>> parents;
-  std::vector<ASTNode> coneITEs;
 
   locateCanonicalOperands(root);
-  ASTVec seeds;
-  for (size_t i = 0; i < activeRecordIds.size(); i++)
+  computeArrayGraph(root, arrays, parents);
+
+  for (size_t i = 0; i < activeRecordIds.size(); ++i)
   {
     const Record& r = records[activeRecordIds[i]];
-    seeds.push_back(r.canonicalLeft);
-    seeds.push_back(r.canonicalRight);
+    if (arrays.find(r.canonicalLeft) == arrays.end() ||
+        arrays.find(r.canonicalRight) == arrays.end())
+      FatalError("array-equality: a canonical equality operand is absent "
+                 "from the complete prepared array graph",
+                 r.proxy);
   }
-  computeProvisionalCone(root, seeds, cone, parents, coneITEs);
 
-
-  // possibleConeSymbols decided which reads to protect from the
-  // read-equals-constant substitution, and this cone is closed over the
-  // operands as they are NOW, after simplification. What makes the
-  // first a superset of the second is that conjoinRecordConstraints ran
-  // this same closure on this same formula before any pass touched it.
-  // What is left to assume is only that no pass in between rewrites an
-  // operand to name an array symbol that was not reachable then --
+  // anticipatedArraySymbols recorded which reads had to be protected
+  // from read-equals-constant substitution, and this graph contains all
+  // arrays as they are NOW, after simplification. What makes the first
+  // a superset of the second is that conjoinRecordConstraints walked
+  // the whole formula before any pass touched it.
+  // What is left to assume is only that no pass in between introduces an
+  // array symbol that was not reachable then --
   // a claim about every pass that runs, not something this code can
-  // arrange. Losing it is silent: an unanticipated cone symbol's reads
+  // arrange. Losing it is silent: an unanticipated array symbol's reads
   // were never protected, so the substitution may have deleted an
   // observation the consistency check needs, and the check then
   // certifies a candidate against contents it never saw. Cheap to
   // verify, so verify it.
-  //
-  // The earlier version of this reasoning leaned on array if-then-elses
-  // no longer existing by now, which stopped being true when they
-  // stopped being rewritten away. An operand that is a branch of one
-  // pulls it into the cone upward, and the other branch descends from
-  // it -- an array no equality mentions.
-  for (std::set<ASTNode>::const_iterator it = cone.begin(); it != cone.end();
-       ++it)
+  for (std::set<ASTNode>::const_iterator it = arrays.begin();
+       it != arrays.end(); ++it)
   {
-    if (it->GetKind() == SYMBOL && !mayBeConeArray(*it))
-      FatalError("array-equality: an array symbol entered the cone that was "
-                 "not anticipated when the equalities were built, so reads "
-                 "over it were never protected from substitution",
+    if (it->GetKind() == SYMBOL && !wasArrayAnticipated(*it))
+      FatalError("array-equality: an array symbol entered the prepared graph "
+                 "without appearing at the pre-preprocessing ownership "
+                 "boundary, so its reads were never protected from "
+                 "substitution",
                  *it);
   }
 
-  // Freeze the cone; it must not change for the rest of the solve.
-  coneArrays = cone;
-  coneWriteParents = parents;
+  // Freeze the complete graph; it must not change for the rest of the solve.
+  ownedArrays = arrays;
+  ownedWriteParents = parents;
 
-  // Inventory the cone's writes as accesses (a write is treated as a
+  // Inventory the owned graph's writes as accesses (a write is treated as a
   // read of its own index yielding the written value, paper section
   // 11.4), and give their indexes and values scalar names: writes occur
-  // only inside equality operands and witness reads, so their scalar
-  // children would otherwise never reach the bit-blaster.
+  // inside array terms, so their scalar children can otherwise disappear
+  // when every read of the array is directly abstracted.
   std::vector<ASTNode> writeNodes;
-  for (std::set<ASTNode>::const_iterator it = cone.begin(); it != cone.end();
-       ++it)
+  for (std::set<ASTNode>::const_iterator it = arrays.begin();
+       it != arrays.end(); ++it)
     if (it->GetKind() == WRITE)
       writeNodes.push_back(*it);
   std::sort(writeNodes.begin(), writeNodes.end(), nodeNumLess);
@@ -765,12 +695,12 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
     info.base = w[0];
     info.indexTerm = w[1];
     info.indexName = freshName(w[1], extraConstraints);
-    coneWrites[w] = info;
+    ownedWrites[w] = info;
     // write value names are needed when the access list is built
     freshName(w[2], extraConstraints);
   }
 
-  // Inventory the cone's array-valued if-then-elses. Unlike section
+  // Inventory the owned graph's array-valued if-then-elses. Unlike section
   // 4.1's elimination, these stay as terms: the checker reasons about
   // them directly with rules T-down/T-up, which fire on whichever
   // branch sigma selects. That costs one Boolean literal per
@@ -786,8 +716,8 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
   // live and certify a model that does not satisfy the if-then-else
   // axiom. The same symbol is what a lemma premise names.
   std::vector<ASTNode> iteNodes;
-  for (std::set<ASTNode>::const_iterator it = cone.begin(); it != cone.end();
-       ++it)
+  for (std::set<ASTNode>::const_iterator it = arrays.begin();
+       it != arrays.end(); ++it)
     if (it->GetKind() == ITE && isArrayType(*it))
       iteNodes.push_back(*it);
   std::sort(iteNodes.begin(), iteNodes.end(), nodeNumLess);
@@ -801,14 +731,14 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
     info.condName = conditionName(t[0], extraConstraints);
     info.thn = t[1];
     info.els = t[2];
-    coneItes[t] = info;
-    coneIteParents[t[1]].push_back(t);
+    ownedItes[t] = info;
+    ownedIteParents[t[1]].push_back(t);
     if (t[2] != t[1])
-      coneIteParents[t[2]].push_back(t);
+      ownedIteParents[t[2]].push_back(t);
   }
   for (std::map<ASTNode, std::vector<ASTNode>>::iterator it =
-           coneIteParents.begin();
-       it != coneIteParents.end(); ++it)
+           ownedIteParents.begin();
+       it != ownedIteParents.end(); ++it)
     std::sort(it->second.begin(), it->second.end(), nodeNumLess);
 
   // Equality edges over canonical operands + witness obligations.
@@ -856,19 +786,23 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
     }
   }
 
-  coneIsFrozen = true;
+  arrayGraphIsFrozen = true;
 
   if (extraConstraints.empty())
     return root;
   return bm->defaultNodeFactory->CreateNode(AND, root, extraConstraints);
 }
 
-// After the main ArrayTransformer pass: the read inventory (ordinary
-// cone reads plus witness reads) now carries its abstraction and index
+// After the main ArrayTransformer pass: the complete read inventory
+// (ordinary reads plus witness reads) now carries its abstraction and index
 // symbols; bind everything into the immutable checker graph.
 void ExtensionalityContext::bindAfterTransform(ArrayTransformer* at)
 {
-  assert(coneIsFrozen);
+  if (!arrayGraphIsFrozen)
+    FatalError("array-equality: binding began before the complete array "
+               "graph was frozen");
+  if (graphBound)
+    FatalError("array-equality: the complete array graph was bound twice");
 
   graph = ExtGraph();
 
@@ -887,22 +821,18 @@ void ExtensionalityContext::bindAfterTransform(ArrayTransformer* at)
     }
   };
   std::vector<ReadRow> reads;
-  // This walk is the other half of a safety-critical pair. The host's
-  // read refinement skips exactly the arrays this keeps
-  // (SATBased_ArrayReadRefinement, same map, same predicate,
-  // complementary branch), so every read whose Ackermann axioms are
-  // suppressed is a read the checker takes responsibility for. Changing
-  // either filter alone would open a gap that nothing constrains.
-  //
-  // A read that reached neither -- never registered here at all --
-  // would survive as a READ node into bit-blasting, which has no case
-  // for one and fails loudly. So the gap cannot open silently either.
+  // The transformer must have put every read into the complete graph.
+  // There is deliberately no complementary host-refinement partition:
+  // sharing scalar indexes across such a partition was the source of
+  // candidates that neither subsystem could prove or refute.
   for (ArrayTransformer::ArrType::const_iterator it =
            at->arrayToIndexToRead.begin();
        it != at->arrayToIndexToRead.end(); ++it)
   {
-    if (!inCone(it->first))
-      continue;
+    if (!ownsArray(it->first))
+      FatalError("array-equality: the transformer registered a read outside "
+                 "the complete owned array graph",
+                 it->first);
     for (std::map<ASTNode, ArrayTransformer::ArrayRead>::const_iterator it2 =
              it->second.begin();
          it2 != it->second.end(); ++it2)
@@ -931,10 +861,10 @@ void ExtensionalityContext::bindAfterTransform(ArrayTransformer* at)
     a.indexName = row.indexSymbol.IsNull() ? row.index : row.indexSymbol;
     a.valueName = row.symbol;
     if (!(a.indexName.GetKind() == SYMBOL || a.indexName.isConstant()))
-      FatalError("array-equality: a read index inside the cone has no "
+      FatalError("array-equality: an owned read index has no "
                  "bit-blasted scalar name to encode lemmas over",
                  row.index);
-    // A cone read's semantics live entirely in refinement lemmas, so
+    // An owned read's semantics live entirely in refinement lemmas, so
     // its abstraction variable and index may legally never reach the
     // bit-blasted formula (the read's only occurrence can sit inside
     // another abstracted term); the translator allocates fresh SAT
@@ -947,13 +877,13 @@ void ExtensionalityContext::bindAfterTransform(ArrayTransformer* at)
 
   // writes, deterministically ordered by node number
   std::vector<ASTNode> writeNodes;
-  for (std::map<ASTNode, ExtWriteNode>::const_iterator it = coneWrites.begin();
-       it != coneWrites.end(); ++it)
+  for (std::map<ASTNode, ExtWriteNode>::const_iterator it = ownedWrites.begin();
+       it != ownedWrites.end(); ++it)
     writeNodes.push_back(it->first);
   std::sort(writeNodes.begin(), writeNodes.end(), nodeNumLess);
   for (size_t i = 0; i < writeNodes.size(); i++)
   {
-    const ExtWriteNode& info = coneWrites[writeNodes[i]];
+    const ExtWriteNode& info = ownedWrites[writeNodes[i]];
     ExtAccess a;
     a.id = graph.accesses.size();
     a.isWrite = true;
@@ -967,22 +897,21 @@ void ExtensionalityContext::bindAfterTransform(ArrayTransformer* at)
                       ? info.write[2]
                       : (nit != scalarNames.end() ? nit->second : ASTNode());
     if (a.valueName.IsNull())
-      FatalError("array-equality: a write value inside the cone has no "
+      FatalError("array-equality: an owned write value has no "
                  "bit-blasted scalar name to encode lemmas over",
                  info.write);
     graph.accesses.push_back(a);
   }
 
-#ifndef NDEBUG
   // The property that lets namesAgreeWithCandidate skip the witness
   // names: every witness read reached the inventory. It holds by
   // construction -- the anchor is protected from substitution, and
   // locateCanonicalOperands fails loudly if one is lost, so the read is
   // in the transformed formula; the transformer registers it; and the
-  // operand it reads is a cone seed, so bindAfterTransform harvests it.
-  // Asserted rather than defended at runtime, so that a future change
-  // breaking it is a diagnosable failure here instead of a silent
-  // unknown much later.
+  // operand it reads is in the owned graph, so bindAfterTransform harvests
+  // it.
+  // Defend it at runtime so release builds cannot silently certify an
+  // incomplete graph.
   for (size_t i = 0; i < activeRecordIds.size(); i++)
   {
     const Record& r = records[activeRecordIds[i]];
@@ -995,15 +924,16 @@ void ExtensionalityContext::bindAfterTransform(ArrayTransformer* at)
       haveL = haveL || acc.site == r.canonicalLeft;
       haveR = haveR || acc.site == r.canonicalRight;
     }
-    assert(haveL && "witness read of the left operand is not an access");
-    assert(haveR && "witness read of the right operand is not an access");
+    if (!haveL || !haveR)
+      FatalError("array-equality: a witness read is absent from the complete "
+                 "owned access graph",
+                 r.proxy);
   }
-#endif
 
-  graph.writes = coneWrites;
-  graph.writeParents = coneWriteParents;
-  graph.ites = coneItes;
-  graph.iteParents = coneIteParents;
+  graph.writes = ownedWrites;
+  graph.writeParents = ownedWriteParents;
+  graph.ites = ownedItes;
+  graph.iteParents = ownedIteParents;
   graph.eqEdges = eqEdges;
   graph.eqAdjacency = eqAdjacency;
   graph.witnesses = witnessObls;
@@ -1023,22 +953,35 @@ public:
 
   virtual ASTNode bvValue(const ASTNode& term)
   {
-    ASTNode v = ce->ModelValueOfTerm(term);
-    if (v.IsNull() || !v.isConstant())
-      FatalError("array-equality: the candidate assignment has no "
-                 "concrete value for a term the consistency checker "
-                 "needs",
+    if (term.GetKind() == BVCONST)
+      return term;
+    if (term.GetKind() != SYMBOL)
+      FatalError("array-equality: the checker requested a bit-vector term "
+                 "instead of its scalar SAT name",
+                 term);
+    ASTNode v = ce->LookupAssignedValue(term);
+    if (v.IsNull() || v.GetKind() != BVCONST ||
+        v.GetValueWidth() != term.GetValueWidth())
+      FatalError("array-equality: the materialized SAT assignment has no "
+                 "concrete value for a scalar name the consistency checker "
+                 "depends on",
                  term);
     return v;
   }
 
   virtual bool boolValue(const ASTNode& term)
   {
-    ASTNode v = ce->ModelValueOfFormula(term);
+    if (term.GetKind() == TRUE || term.GetKind() == FALSE)
+      return term.GetKind() == TRUE;
+    if (term.GetKind() != SYMBOL)
+      FatalError("array-equality: the checker requested a Boolean term "
+                 "instead of its scalar SAT name",
+                 term);
+    ASTNode v = ce->LookupAssignedValue(term);
     if (v.IsNull() || !(v.GetKind() == TRUE || v.GetKind() == FALSE))
-      FatalError("array-equality: the candidate assignment has no "
-                 "Boolean value for a term the consistency checker "
-                 "needs",
+      FatalError("array-equality: the materialized SAT assignment has no "
+                 "Boolean value for a scalar name the consistency checker "
+                 "depends on",
                  term);
     return v.GetKind() == TRUE;
   }
@@ -1047,10 +990,10 @@ public:
 
 ExtensionalityContext::CertificationAction
 ExtensionalityContext::decideCertification(bool ordinaryResult,
-                                           bool registryNonempty,
+                                           bool checkerActive,
                                            CandidateOutcome ext)
 {
-  if (!registryNonempty)
+  if (!checkerActive)
   {
     if (!(ext == EXT_SKIPPED || ext == EXT_CONSISTENT))
       return INTERNAL_ERROR;
@@ -1060,25 +1003,25 @@ ExtensionalityContext::decideCertification(bool ordinaryResult,
     return ADD_EXT_LEMMA;
   if (ext == EXT_WITNESS_ERROR)
     return INTERNAL_ERROR;
-  // A candidate whose scalar names disagree with their terms is
-  // untrustworthy in both directions -- neither certifiable as
-  // satisfiable nor refutable by an array lemma. The host's read
-  // refinement owns the missing fact: the disagreement exhibits two
-  // reads of an array outside the cone at equal evaluated indexes
-  // with different values, and their congruence axiom is precisely
-  // what it adds.
-  if (ext == EXT_NAME_DIVERGENCE)
-    return RUN_HOST_REFINEMENT;
   if (ext != EXT_CONSISTENT)
     return INTERNAL_ERROR;
-  return ordinaryResult ? RETURN_SAT : RUN_HOST_REFINEMENT;
+  // With the complete array graph owned here, a conflict-free fixed
+  // point must make the semantic input true on the same scalar
+  // assignment. There is no second array-refinement subsystem to hand
+  // a disagreement to.
+  return ordinaryResult ? RETURN_SAT : INTERNAL_ERROR;
 }
 
 ExtensionalityContext::CandidateOutcome
 ExtensionalityContext::checkCandidate(AbsRefine_CounterExample* ce)
 {
-  assert(graphBound);
-  pendingLemmaValid = false;
+  if (!graphBound)
+    FatalError("array-equality: candidate checking began before the complete "
+               "array graph was bound");
+  if (pendingLemmaValid || !pendingLemmas.empty())
+    FatalError("array-equality: a new candidate was checked before the prior "
+               "conflict certificates were encoded");
+  lastObserved.clear();
   CEModelView view(ce);
   ExtCheckResult res = ExtChecker::check(graph, view, false);
   switch (res.status)
@@ -1086,17 +1029,18 @@ ExtensionalityContext::checkCandidate(AbsRefine_CounterExample* ce)
     case ExtCheckResult::CONSISTENT:
       lastObserved = res.observed;
       // Publishing first makes the certified array contents visible
-      // to term evaluation; only then can a cone read's term be
+      // to term evaluation; only then can an owned read's term be
       // compared against its name.
       publishObservations(ce);
-      if (!namesAgreeWithCandidate(view))
-      {
-        nameDivergences++;
-        divergedThisSolve = true;
-        return EXT_NAME_DIVERGENCE;
-      }
+      if (!namesAgreeWithCandidate(view, ce))
+        FatalError("array-equality: a scalar name disagrees with its term "
+                   "after the complete array graph reached a conflict-free "
+                   "fixed point");
       return EXT_CONSISTENT;
     case ExtCheckResult::CONFLICT:
+      if (res.conflicts.empty())
+        FatalError("array-equality: the checker reported a conflict without "
+                   "a refinement certificate");
       pendingLemmas = res.conflicts;
       pendingLemmaValid = true;
       return EXT_CONFLICT;
@@ -1106,30 +1050,41 @@ ExtensionalityContext::checkCandidate(AbsRefine_CounterExample* ce)
   }
 }
 
-// The checker reads the candidate through scalar names, trusting each
-// name to equal its term because the anchoring equation was part of
-// the bit-blasted formula. That equation binds the name to the term
-// *as it was bit-blasted*: reads of arrays outside the cone are
-// abstracted lazily by the host, and until the host's read refinement
-// links them, two abstractions of the same cell can be held apart --
-// while preprocessing may leave two syntactic forms of one term, each
-// abstracted independently. A name then anchors to one abstraction
-// while evaluating the term resolves the other, the checker places
-// accesses at cells the completed model contradicts, and a
-// conflict-free fixed point certifies nothing. Verify, with the
-// observations published, that every access's names evaluate exactly
-// like their terms; constants stand for themselves and need no check.
-bool ExtensionalityContext::namesAgreeWithCandidate(ExtModelView& view) const
+// The checker reads the candidate through scalar names whose defining
+// equations were part of the initial bit-blast. Verify, with certified
+// observations published, that every name still evaluates exactly like
+// its term. Since every read abstraction is in this graph, a mismatch
+// is an ownership/encoding invariant violation rather than a third
+// refinement outcome; equal concrete indexes with different values
+// must already have produced a rule-C conflict.
+bool ExtensionalityContext::namesAgreeWithCandidate(
+    ExtModelView& view, AbsRefine_CounterExample* ce) const
 {
   for (size_t i = 0; i < graph.accesses.size(); i++)
   {
     const ExtAccess& a = graph.accesses[i];
-    if (!(a.indexName == a.indexTerm) &&
-        view.bvValue(a.indexName) != view.bvValue(a.indexTerm))
-      return false;
-    if (!(a.valueName == a.valueTerm) &&
-        view.bvValue(a.valueName) != view.bvValue(a.valueTerm))
-      return false;
+    if (!(a.indexName == a.indexTerm))
+    {
+      const ASTNode termValue = ce->ModelValueOfTerm(a.indexTerm);
+      if (termValue.IsNull() || termValue.GetKind() != BVCONST ||
+          termValue.GetValueWidth() != a.indexTerm.GetValueWidth())
+        FatalError("array-equality: an access index has no concrete value in "
+                   "the certified model",
+                   a.indexTerm);
+      if (view.bvValue(a.indexName) != termValue)
+        return false;
+    }
+    if (!(a.valueName == a.valueTerm))
+    {
+      const ASTNode termValue = ce->ModelValueOfTerm(a.valueTerm);
+      if (termValue.IsNull() || termValue.GetKind() != BVCONST ||
+          termValue.GetValueWidth() != a.valueTerm.GetValueWidth())
+        FatalError("array-equality: an access value has no concrete value in "
+                   "the certified model",
+                   a.valueTerm);
+      if (view.bvValue(a.valueName) != termValue)
+        return false;
+    }
   }
 
   // Each reified if-then-else condition against the condition it names.
@@ -1138,11 +1093,16 @@ bool ExtensionalityContext::namesAgreeWithCandidate(ExtModelView& view) const
   // certify a model that does not satisfy the if-then-else axiom. This
   // is the same guard the access names get, for the same reason, and it
   // is the failure class the direct integration reopened.
-  for (std::map<ASTNode, ExtIteNode>::const_iterator it = coneItes.begin();
-       it != coneItes.end(); ++it)
+  for (std::map<ASTNode, ExtIteNode>::const_iterator it = ownedItes.begin();
+       it != ownedItes.end(); ++it)
   {
-    if (view.boolValue(it->second.condName) !=
-        view.boolValue(it->second.condTerm))
+    const ASTNode termValue = ce->ModelValueOfFormula(it->second.condTerm);
+    if (termValue.IsNull() ||
+        !(termValue.GetKind() == TRUE || termValue.GetKind() == FALSE))
+      FatalError("array-equality: an array-if-then-else condition has no "
+                 "concrete value in the certified model",
+                 it->second.condTerm);
+    if (view.boolValue(it->second.condName) != (termValue.GetKind() == TRUE))
       return false;
   }
 
@@ -1196,7 +1156,9 @@ ExtensionalityContext::checkPreencodedBV(const ASTNode& n,
 void ExtensionalityContext::encodePendingLemmas(SATSolver& solver,
                                                 ToSATBase* tosat)
 {
-  assert(pendingLemmaValid);
+  if (!pendingLemmaValid || pendingLemmas.empty())
+    FatalError("array-equality: lemma encoding began without a pending "
+               "certificate");
   for (size_t i = 0; i < pendingLemmas.size(); i++)
     encodeOneLemma(pendingLemmas[i], solver, tosat);
   pendingLemmas.clear();
@@ -1347,14 +1309,15 @@ void ExtensionalityContext::encodeOneLemma(const ExtConflict& pendingLemma,
   lemmasEmitted++;
 }
 
-// Publish the conflict-free observed values of every cone array
-// (symbols, writes, and the fresh arrays standing for if-then-else
-// alike) into the counterexample map, so model evaluation, the model
+// Publish the conflict-free observed values of every owned array
+// (symbols, writes, and array-if-then-else terms alike) into the
+// counterexample map, so model evaluation, the model
 // APIs, and the printers see the array contents certified by the
 // consistency check. Indices with no observation default to zero at
 // lookup/print time.
 void ExtensionalityContext::publishObservations(AbsRefine_CounterExample* ce)
 {
+  ASTNodeMap batch;
   for (std::map<ASTNode,
                 std::vector<std::pair<ASTNode, ASTNode>>>::const_iterator it =
            lastObserved.begin();
@@ -1366,9 +1329,33 @@ void ExtensionalityContext::publishObservations(AbsRefine_CounterExample* ce)
     {
       const ASTNode key = hf->CreateTerm(READ, array.GetValueWidth(), array,
                                          it->second[i].first);
-      ce->InsertIntoCounterExampleMap(key, it->second[i].second);
+      ASTNodeMap::const_iterator prior = batch.find(key);
+      if (prior != batch.end() && !(prior->second == it->second[i].second))
+        FatalError("array-equality: a conflict-free checker result assigns "
+                   "two values to one concrete array cell",
+                   key);
+      batch[key] = it->second[i].second;
     }
   }
+
+  // Validate the entire batch before mutating the public model. Active
+  // candidates normally have no READ entries yet; this check also makes
+  // that ownership boundary fail closed if a future preprocessing path
+  // introduces one.
+  for (ASTNodeMap::const_iterator it = batch.begin(); it != batch.end(); ++it)
+  {
+    const ASTNode prior = ce->LookupAssignedValue(it->first);
+    if (!prior.IsNull() && !(prior == it->second))
+      FatalError("array-equality: certified array observation conflicts with "
+                 "an existing counterexample entry",
+                 it->first);
+  }
+  for (ASTNodeMap::const_iterator it = batch.begin(); it != batch.end(); ++it)
+    ce->InsertIntoCounterExampleMap(it->first, it->second);
+
+  // No model evaluation should precede certification, but clearing the
+  // cache here makes publication an explicit phase boundary.
+  ce->ClearComputeFormulaMap();
 }
 
 } // namespace stp

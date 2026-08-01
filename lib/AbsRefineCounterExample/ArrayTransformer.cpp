@@ -78,8 +78,8 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
     {
       std::map<ASTNode, ArrayTransformer::ArrayRead>& mapper = iset->second;
 
-      // With array equality active, the index of a read inside the
-      // equality cone must reach the bit-blaster even when it is a
+      // With array equality active, the index of a read in the owned
+      // graph must reach the bit-blaster even when it is a
       // plain variable: once the read is replaced by its abstraction
       // variable the index may occur nowhere else, yet future
       // refinement lemmas will be encoded over its SAT variables. Such
@@ -397,9 +397,9 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
 
   ASTNode result;
 
-  // With array equality active, a read of an array inside the equality
-  // cone always takes the direct read-abstraction path -- mint or reuse
-  // the fresh variable for the (array, index) pair -- whatever the array
+  // With array equality active, every read takes the direct
+  // read-abstraction path: mint or reuse the fresh variable for the
+  // (array, index) pair, whatever the array
   // term is: variable, write, or if-then-else. Neither its write chain
   // nor its if-then-else structure is expanded here. The lemmas-on-
   // demand consistency checker owns read-over-write and read-over-
@@ -407,10 +407,19 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
   // and it needs the structure and the abstraction variables intact.
   {
     ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-    if (ext != NULL && ext->active() && ext->coneFrozen() &&
-        ext->inCone(arrName))
+    if (ext != NULL && ext->active())
     {
-      assert(!bm->UserFlags.ackermannisation);
+      if (!ext->arrayGraphFrozen())
+        FatalError("array-equality: the array transform ran before the "
+                   "complete array graph was frozen",
+                   term);
+      if (!ext->ownsArray(arrName))
+        FatalError("array-equality: a transformed read is absent from the "
+                   "complete owned array graph",
+                   term);
+      if (bm->UserFlags.ackermannisation)
+        FatalError("array-equality: eager Ackermannization reached the "
+                   "whole-graph read transform");
 
       ArrType::const_iterator it;
       if ((it = arrayToIndexToRead.find(arrName)) != arrayToIndexToRead.end())

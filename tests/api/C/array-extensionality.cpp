@@ -216,11 +216,10 @@ TEST(array_extensionality, repeated_queries_do_not_leak_ite_records)
 
 TEST(array_extensionality, nested_ite_fixed_point_is_stable)
 {
-  // A nested array if-then-else: the elimination replaces every one in
-  // the cone in a single round, and iterates only because the guarded
-  // records it mints can put further if-then-elses in the cone. One
-  // user record plus two per replaced ITE, and every later solve
-  // reuses all of them.
+  // Nested array if-then-elses remain in the owned graph and are handled
+  // directly by the T rules. They mint no equality records, and repeated
+  // solves must rebuild the same one-record graph without accumulating
+  // state.
   VC vc = vc_createValidityChecker();
   vc_setFlag(vc, 'x');
 
@@ -721,15 +720,12 @@ TEST(array_extensionality, opaque_equality_handle_uses_current_model_lowering)
   vc_Destroy(vc);
 }
 
-TEST(array_extensionality, interleaves_with_classic_read_refinement)
+TEST(array_extensionality, active_checker_owns_complete_array_graph)
 {
-  // One query, two refinement machines: the contradiction lives in
-  // the equality cone (congruence across a = b), while the unrelated
-  // array c carries satisfiable constraints that classic lazy read
-  // refinement owns. Reads of a and b are exempt from the classic
-  // read axioms, so the unsat verdict must come through an equality
-  // lemma -- pinned by the emission counter -- with c's machinery
-  // interleaved in the same loop.
+  // The contradiction lives in congruence across a = b, while unrelated
+  // array c carries satisfiable constraints. Once the equality activates
+  // the checker, both components belong to its complete graph; the unsat
+  // verdict must come through its lemma path, pinned by the counter.
   VC vc = vc_createValidityChecker();
   vc_setFlag(vc, 'x');
 
@@ -763,13 +759,12 @@ TEST(array_extensionality, interleaves_with_classic_read_refinement)
   vc_Destroy(vc);
 }
 
-TEST(array_extensionality, mixed_sat_model_satisfies_both_machines)
+TEST(array_extensionality, whole_graph_checker_publishes_mixed_sat_model)
 {
-  // Satisfiable only when both machines police the same assignment:
   // v is forced to 42 through cross-array congruence over the true
-  // equality, w to 5 through same-array congruence on c under classic
-  // refinement. The concrete model values pin the cooperation, not
-  // just the verdict.
+  // equality and w to 5 through same-array congruence on disconnected c.
+  // The concrete values pin complete-graph certification and publication,
+  // not just the satisfiable verdict.
   VC vc = vc_createValidityChecker();
   vc_setFlag(vc, 'x');
 
@@ -792,7 +787,10 @@ TEST(array_extensionality, mixed_sat_model_satisfies_both_machines)
   vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, a, i),
                                  vc_bvConstExprFromInt(vc, 8, 42)));
   vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, b, j), v));
-  vc_assertFormula(vc, vc_eqExpr(vc, k, l));
+  // Say k = l without a substitutable equality, so the two read
+  // abstractions remain syntactically distinct until checker rule C.
+  vc_assertFormula(vc, vc_notExpr(vc, vc_bvLtExpr(vc, k, l)));
+  vc_assertFormula(vc, vc_notExpr(vc, vc_bvLtExpr(vc, l, k)));
   vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, c, k),
                                  vc_bvConstExprFromInt(vc, 8, 5)));
   vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, c, l), w));
@@ -800,6 +798,15 @@ TEST(array_extensionality, mixed_sat_model_satisfies_both_machines)
   ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
   EXPECT_EQ(42u, getBVUnsigned(vc_getCounterExample(vc, v)));
   EXPECT_EQ(5u, getBVUnsigned(vc_getCounterExample(vc, w)));
+
+  Expr* cIdx;
+  Expr* cVal;
+  int cSize = 0;
+  vc_getCounterExampleArray(vc, c, &cIdx, &cVal, &cSize);
+  ASSERT_EQ(1, cSize);
+  EXPECT_EQ(getBVUnsigned(vc_getCounterExample(vc, k)), getBVUnsigned(cIdx[0]));
+  EXPECT_EQ(5u, getBVUnsigned(cVal[0]));
+  vc_deleteCounterExampleArray(cIdx, cVal, cSize);
   vc_Destroy(vc);
 }
 
@@ -933,11 +940,11 @@ TEST(array_extensionality, store_index_read_through_second_array_unsat)
   // x9[x0] = C lets preprocessing rewrite that read's index to the
   // constant C inside the recorded equality operand while the
   // original compound form survives in the rest of the formula. The
-  // two occurrences of x11[C] are then abstracted as two independent
-  // read variables, and only the host's lazy read refinement links
-  // them; certifying a candidate before that link exists let the
-  // consistency check place the store and the read at different
-  // cells of the same array.
+  // two occurrences of x11[C] were then abstracted as two independent
+  // read variables outside the old equality cone. Certifying before
+  // legacy refinement linked them let the consistency check place the
+  // store and the read at different cells. Whole-graph ownership makes
+  // their disagreement a checker conflict instead.
   //
   // Unsat by cases on x0 = k. If x0 = k, the equality forces
   // x9[x0] = x0, so x0 = C, and the assumed read of the overwrite
@@ -978,26 +985,26 @@ TEST(array_extensionality, store_index_read_through_second_array_unsat)
   // on, so both occurrences of x11[C] are rewritten alike and are
   // abstracted as one read. What is left here is the ordinary lemma
   // loop over the same formula, which still has to answer unsat.
-  // unlinked_read_abstractions_diverge_and_are_refused covers the
-  // refusal route directly.
+  // unlinked_reads_are_owned_by_the_extensionality_checker covers the
+  // formerly split ownership route directly.
   vc_Destroy(vc);
 }
 
-TEST(array_extensionality, unlinked_read_abstractions_diverge_and_are_refused)
+TEST(array_extensionality,
+     unlinked_reads_are_owned_by_the_extensionality_checker)
 {
-  // The divergence refusal, built from what it guards rather than
-  // reduced from a fuzz report.
+  // A regression built from the former name-divergence route rather
+  // than reduced from a fuzz report.
   //
-  // x11 is never equated to anything, so it stays outside the cone and
-  // its reads are abstracted one variable per syntactic read; only the
-  // host's lazy read refinement ever links two of them. i = j is said
+  // x11 is never equated to anything. Even so, an active equality solve
+  // must put its reads in the same complete checker graph. i = j is said
   // as a pair of unsigned comparisons so that nothing substitutes one
   // index for the other and collapses x11[i] and x11[j] into a single
   // read. The recorded equality then stores at x11[i] while the read
   // goes through x11[j]: a candidate in which the two abstractions hold
-  // different values is conflict-free for the checker, and certifying
-  // it would answer sat. Removing the name check makes this query do
-  // exactly that.
+  // different values must now be a rule-C conflict and produce an
+  // extensionality lemma; it must never be handed to host refinement as
+  // a scalar-name divergence.
   //
   // Unsat: i = j forces x11[i] = x11[j], so the read lands on the cell
   // the store just set to 1.
@@ -1029,9 +1036,7 @@ TEST(array_extensionality, unlinked_read_abstractions_diverge_and_are_refused)
   ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
   ASSERT_NE(nullptr, ext);
-  // The route has to be taken, or the refusal and the driver's
-  // fall-back to host refinement are both untested.
-  EXPECT_GT(ext->nameDivergences, 0);
+  EXPECT_GT(ext->lemmasEmitted, 0);
   vc_Destroy(vc);
 }
 

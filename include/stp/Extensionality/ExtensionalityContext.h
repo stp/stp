@@ -165,81 +165,69 @@ public:
     return protectedSymbols.find(s) != protectedSymbols.end();
   }
 
-  // Conservative over-approximation of the arrays the checker may
-  // reason about (every array symbol reachable from an active record's
-  // operand), used to stop the substitution pass from deleting
-  // read-equals-constant equations whose reads the checker needs to
-  // observe.
-  bool mayBeConeArray(const ASTNode& arraySymbol) const
+  // Conservative pre-preprocessing inventory of the array symbols in
+  // an active solve. The final graph is built from the whole prepared
+  // formula, so this set must anticipate every array symbol whose reads
+  // the checker may later own.
+  bool wasArrayAnticipated(const ASTNode& arraySymbol) const
   {
-    return possibleConeSymbols.find(arraySymbol) != possibleConeSymbols.end();
+    return anticipatedArraySymbols.find(arraySymbol) !=
+           anticipatedArraySymbols.end();
   }
 
   //--------------------------------------------------------------------
   // Per-solve pipeline (TopLevelSTPAux)
   //--------------------------------------------------------------------
 
-  // Reset all per-solve state (records, lowering map, cone, names, pending
+  // Reset all per-solve state (records, lowering map, graph, names, pending
   // lemmas and model). Called immediately before lowering the next root.
   void beginSolve();
 
-  // Conjoin every current-root-active record's constraint bundle (the witness clause of
-  // preprocessing step 1 plus the defining equations of its virtual
-  // reads) onto the input, before any of STP's preprocessing runs, so
-  // the bundles are simplified and substituted together with the rest
-  // of the formula -- and, on the conjunction, eliminate the
-  // array-valued if-then-else the equalities can reach (paper section
-  // 4.1), replacing ite(c,a,b) by a fresh array d guarded by
-  // c -> d = a and not(c) -> d = b, repeated to a fixed point since
-  // the guarded equalities are themselves abstracted.
-  //
-  // Both jobs belong here, and here is the only place they can be. It
-  // has to be after the whole formula is known, because whether the
-  // procedure runs at all decides whether an if-then-else should be
-  // replaced -- a query with no array equality gains nothing from the
-  // replacement and pays a great deal for it, since each one leaves a
-  // proxy unconstrained for the solver to guess and the checker to
-  // refute. And it has to be before STP's preprocessing, which pushes
-  // reads through array if-then-elses and normalises their
-  // conditions: eliminating afterwards would mean reconstructing the
-  // node it was keyed on from a formula that has already been
-  // rewritten.
+  // Conjoin every current-root-active record's constraint bundle (the
+  // witness clause of preprocessing step 1 plus the defining equations
+  // of its virtual reads) before STP preprocessing, so the bundles are
+  // simplified together with the rest of the formula. At this same
+  // boundary, inventory the complete expanded root while read-deleting
+  // substitutions can still be prevented. Array-valued if-then-elses
+  // remain structural and are handled by the checker's T rules.
   ASTNode conjoinRecordConstraints(const ASTNode& root);
 
   // Final preparation, run after STP's simplifications and immediately
   // before its main array transformation:
   //  - recover each record's canonical operands from its anchors;
-  //  - compute the "cone": the arrays connected to the abstracted
-  //    equalities (operands, the bases under their writes, and the
-  //    writes on top of them in the formula);
-  //  - inventory the cone's writes as accesses (paper section 11.4)
+  //  - inventory the complete array graph reachable from the prepared
+  //    formula. Once an equality activates the procedure, it owns every
+  //    read in that graph; splitting congruence reasoning between it and
+  //    STP's legacy refinement is not closed under shared scalar indexes;
+  //  - inventory the graph's writes as accesses (paper section 11.4)
   //    and give every compound write index/value a scalar name that
   //    will be part of the initial bit-blast, so lemmas can later be
   //    encoded over existing SAT variables.
   // Returns the extended input to hand to the array transformation;
-  // after this point the cone must not change for the rest of the
+  // after this point the graph must not change for the rest of the
   // solve.
   ASTNode prepare(const ASTNode& root);
 
-  bool coneFrozen() const { return coneIsFrozen; }
-  bool inCone(const ASTNode& arrayNode) const
+  bool arrayGraphFrozen() const { return arrayGraphIsFrozen; }
+  bool checkerReady() const { return graphBound; }
+  bool ownsArray(const ASTNode& arrayNode) const
   {
-    return coneArrays.find(arrayNode) != coneArrays.end();
+    return ownedArrays.find(arrayNode) != ownedArrays.end();
   }
 
-  // Reads of cone arrays route their index through the transform's
+  // Reads in the owned graph route their index through the transform's
   // fresh-index-variable pass even when the index is already a plain
   // variable: an index occurring only inside reads would otherwise
   // vanish from the bit-blasted formula, leaving future lemmas over it
   // without SAT variables.
   bool needsIndexAnchor(const ASTNode& arrayNode) const
   {
-    return coneIsFrozen && inCone(arrayNode);
+    return arrayGraphIsFrozen && ownsArray(arrayNode);
   }
 
   // After the main array transformation: collect the checker's access
-  // inventory -- every cone read (including the witness reads) now has
-  // its read-abstraction variable and index variable, and every cone
+  // inventory -- every owned read (including the witness reads) now has
+  // its read-abstraction variable and index variable, and every owned
   // write its scalar names -- and freeze the graph handed to the
   // consistency checker.
   void bindAfterTransform(ArrayTransformer* at);
@@ -253,21 +241,7 @@ public:
     EXT_SKIPPED,
     EXT_CONSISTENT,
     EXT_CONFLICT,
-    EXT_WITNESS_ERROR,
-    // The propagation reached a conflict-free fixed point, but some
-    // access's scalar name evaluates differently from the term it
-    // stands for in the completed candidate model. The anchoring
-    // equation ties the name to the term only as the term was
-    // bit-blasted; a read of an array outside the cone is abstracted
-    // lazily by the host, so until the host's read refinement links
-    // them, two abstractions of the same cell can be held apart, and
-    // preprocessing can leave two forms of one term that end up
-    // abstracted independently. Such a candidate must not be
-    // certified: the checker placed accesses at cells the completed
-    // model contradicts. It is also not refutable by an array lemma
-    // -- the missing fact is an ordinary read-congruence axiom, which
-    // is exactly what the host's refinement adds.
-    EXT_NAME_DIVERGENCE
+    EXT_WITNESS_ERROR
   };
 
   enum CertificationAction
@@ -280,16 +254,16 @@ public:
 
   // Decide what to do with a materialized candidate, given STP's own
   // model evaluation and the array consistency check. An array conflict
-  // takes precedence over the ordinary result -- reads inside the cone
-  // are exempt from STP's ordinary read refinement, so only the array
+  // takes precedence over the ordinary result -- active solves never
+  // enter STP's ordinary read refinement, so only the array
   // lemma can rule such a candidate out -- and a candidate is only ever
   // reported satisfiable when both checks pass on the same assignment.
-  // A name divergence routes to the host's read refinement whatever
-  // the ordinary result was: the candidate is untrustworthy, and the
-  // missing fact is an ordinary read-congruence axiom, not an array
-  // lemma.
+  // When the checker is active, ordinary read refinement is not a
+  // fallback: the checker owns the complete graph. Consequently a
+  // conflict-free checker result paired with ordinary model failure is
+  // an integration invariant violation, not an undecided outcome.
   static CertificationAction decideCertification(bool ordinaryResult,
-                                                 bool registryNonempty,
+                                                 bool checkerActive,
                                                  CandidateOutcome ext);
 
   // Run the pure checker against the current candidate model. On
@@ -297,8 +271,10 @@ public:
   // conflict-free fixed point, publish the observed array contents
   // into the counterexample map -- so model evaluation and the model
   // APIs see the certified contents -- and then verify every access's
-  // scalar names against its terms evaluated in the completed model,
-  // reporting EXT_NAME_DIVERGENCE on disagreement.
+  // scalar names against its terms evaluated in the completed model.
+  // A mismatch is an internal ownership/encoding error: with the whole
+  // graph registered, read congruence must already have produced a
+  // checker conflict.
   CandidateOutcome checkCandidate(AbsRefine_CounterExample* ce);
 
   bool hasPendingLemma() const { return pendingLemmaValid; }
@@ -330,9 +306,9 @@ public:
   // Every symbol EXTCHK relies on keeps its SAT variables (frozen
   // against backend variable elimination).
   // Lemma leaves whose semantics live entirely in future refinement
-  // lemmas: the abstraction variables of cone reads and their index
+  // lemmas: the abstraction variables of owned reads and their index
   // symbols. Such a symbol can legally be absent from the bit-blasted
-  // formula -- a cone read's only occurrence may itself sit inside
+  // formula -- an owned read's only occurrence may itself sit inside
   // another abstracted term -- and the translator then allocates
   // fresh SAT variables for it before the first solve, which is
   // exactly the unconstrained semantics the blasted formula gives it.
@@ -364,20 +340,6 @@ public:
   // entered the clause). Cumulative over the context lifetime.
   int lemmaAtomsFolded;
 
-  // Candidates refused by EXT_NAME_DIVERGENCE. Cumulative over the
-  // context lifetime.
-  int nameDivergences;
-
-  // Whether any candidate of the current solve was refused that way.
-  // Such a candidate is handed to the host's read refinement, which is
-  // not guaranteed to have an axiom to add for it; if refinement then
-  // stalls, the solve has run out of moves without deciding anything.
-  // That is an incompleteness, not the solver bug the driver's
-  // fall-through otherwise reports, so the driver consults this to
-  // tell the two apart. Deliberately sticky for the whole solve: it
-  // errs towards reporting an undecided result rather than aborting.
-  bool sawNameDivergence() const { return divergedThisSolve; }
-
 private:
   STPMgr* bm;
 
@@ -396,7 +358,7 @@ private:
   ASTNodeMap currentLowerings; // opaque ARRAY_EQ -> current lowered formula
   std::set<ASTNode> protectedSymbols;
   std::set<ASTNode> lemmaOnlySymbols; // per-solve; see the accessor
-  std::set<ASTNode> possibleConeSymbols;
+  std::set<ASTNode> anticipatedArraySymbols;
 
   // Set once a solve has taken its copy of the registry's constraints.
   // Minting a record after that point would leave it active with
@@ -405,12 +367,12 @@ private:
   bool registrySealed;
 
   // ---- per-solve state ----
-  bool coneIsFrozen;
-  std::set<ASTNode> coneArrays;
-  std::map<ASTNode, ExtWriteNode> coneWrites; // write node -> info
-  std::map<ASTNode, std::vector<ASTNode>> coneWriteParents;
-  std::map<ASTNode, ExtIteNode> coneItes; // ite node -> info
-  std::map<ASTNode, std::vector<ASTNode>> coneIteParents;
+  bool arrayGraphIsFrozen;
+  std::set<ASTNode> ownedArrays;
+  std::map<ASTNode, ExtWriteNode> ownedWrites; // write node -> info
+  std::map<ASTNode, std::vector<ASTNode>> ownedWriteParents;
+  std::map<ASTNode, ExtIteNode> ownedItes; // ite node -> info
+  std::map<ASTNode, std::vector<ASTNode>> ownedIteParents;
   std::vector<ExtEqEdge> eqEdges;
   std::map<ASTNode, std::vector<size_t>> eqAdjacency;
   std::vector<ExtWitness> witnessObls;
@@ -420,7 +382,6 @@ private:
   bool graphBound;
 
   bool pendingLemmaValid;
-  bool divergedThisSolve;
   std::vector<ExtConflict> pendingLemmas;
 
   // Encode one lemma as the clause NOT p1 OR ... OR NOT pk OR
@@ -437,17 +398,17 @@ private:
 
   // helpers
   // Publish the conflict-free observed (index, value) pairs of every
-  // cone array -- including write nodes and the fresh arrays introduced
-  // for array if-then-else -- into the counterexample map, so model
+  // owned array -- including write and array-if-then-else nodes -- into
+  // the counterexample map, so model
   // evaluation, the model APIs, and the printers all see the array
   // contents the consistency check certified. Called by checkCandidate
   // on every conflict-free fixed point, before the name verification.
   void publishObservations(AbsRefine_CounterExample* ce);
   // With the observations published, check that every access's scalar
-  // names evaluate exactly like the terms they stand for; false means
-  // EXT_NAME_DIVERGENCE.
-  bool namesAgreeWithCandidate(ExtModelView& view) const;
-  void collectPossibleConeSymbols(const ASTNode& n);
+  // names evaluate exactly like the terms they stand for.
+  bool namesAgreeWithCandidate(ExtModelView& view,
+                               AbsRefine_CounterExample* ce) const;
+  void collectAnticipatedArraySymbols(const ASTNode& n);
   void activateReachableRecords(const ASTNode& loweredRoot);
   ASTNode freshName(const ASTNode& term, ASTVec& namingConstraints);
   // The Boolean analogue of freshName, for an if-then-else condition:
@@ -456,11 +417,9 @@ private:
   // re-derived from the counterexample, and so that a lemma premise has
   // one encoded literal to name.
   ASTNode conditionName(const ASTNode& cond, ASTVec& namingConstraints);
-  // The cone closure, seeded from the operands the caller supplies.
-  void computeProvisionalCone(const ASTNode& root, const ASTVec& seeds,
-                              std::set<ASTNode>& cone,
-                              std::map<ASTNode, std::vector<ASTNode>>& parents,
-                              std::vector<ASTNode>& coneITEs);
+  // Collect every array-valued node reachable from the prepared root.
+  void computeArrayGraph(const ASTNode& root, std::set<ASTNode>& arrays,
+                         std::map<ASTNode, std::vector<ASTNode>>& parents);
   void locateCanonicalOperands(const ASTNode& root);
 };
 
