@@ -11,7 +11,7 @@ Only the bump is done by hand. Pushing the tag runs
 binary and opens the release as a draft:
 
 #. Edit the version in the two files below, and commit to master.
-#. ``git tag 2.4.1 && git push origin 2.4.1``.
+#. ``git tag 2.4.2 && git push origin 2.4.2``.
 #. Read the draft the workflow leaves behind, then publish it.
 
 Where the version lives
@@ -19,8 +19,8 @@ Where the version lives
 
 Two files carry it, both edited by hand:
 
--  ``CMakeLists.txt`` -- ``set(STP_FULL_VERSION "2.4.0")``
--  ``docs/conf.py`` -- ``release = '2.4.0'``
+-  ``CMakeLists.txt`` -- ``set(STP_FULL_VERSION "2.4.1")``
+-  ``docs/conf.py`` -- ``release = '2.4.1'``
 
 Everything else derives from ``STP_FULL_VERSION``: ``include/stp/config.h``,
 ``STPConfigVersion.cmake``, the ``stp.1`` man page, the ``SOVERSION`` of
@@ -61,8 +61,8 @@ them, so pushing a branch tag will not cut a release.
 
 .. code-block:: bash
 
-    git tag 2.4.1
-    git push origin 2.4.1
+    git tag 2.4.2
+    git push origin 2.4.2
 
 That is the whole procedure. Three jobs follow:
 
@@ -232,4 +232,4 @@ After the release
 -  Bump the version again only when the next release is cut. Master carries
    the last released version between releases, so a build from master
    reports the release it followed rather than something like
-   ``2.4.1-dev``. That is the existing convention, not an oversight.
+   ``2.4.2-dev``. That is the existing convention, not an oversight.
