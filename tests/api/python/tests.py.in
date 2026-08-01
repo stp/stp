@@ -349,6 +349,11 @@ class TestSTP(unittest.TestCase):
         self.assertEqual(a.round_to_integral().value, 4.0)
         self.assertEqual(a.fma(b, b).value, 10.0)           # 4*2 + 2
 
+        simplified = s.fp_zero(5, 11).fp_min(
+            s.fp_zero(5, 11, negative=True)).simplify()
+        self.assertIsInstance(simplified, stp.FloatExpr)
+        self.assertEqual((simplified.eb, simplified.sb), (5, 11))
+
     @needs_floating_point
     def test_fp_comparisons(self):
         # The ordered comparisons and !=, all holding together.
@@ -363,6 +368,25 @@ class TestSTP(unittest.TestCase):
         a = s.fp("a", 5, 11)
         s.add(a == 3.0, a < 2.0)   # 3 < 2 is false
         self.assertFalse(s.check())
+
+    @needs_floating_point
+    def test_fp_mixed_formats_rejected(self):
+        # Equal packed widths do not make distinct FP formats interchangeable.
+        # This check belongs in the Python layer as well as the C boundary: in a
+        # Release library the old assertion-only check interpreted the right
+        # operand under the left operand's format.
+        s = self.s
+        single = s.fp("single", 8, 24)
+        other32 = s.fp("other32", 11, 21)
+        with self.assertRaisesRegex(ValueError, "same format"):
+            single + other32
+        with self.assertRaisesRegex(ValueError, "same format"):
+            single < other32
+
+        another = stp.Solver()
+        foreign = another.fp("foreign", 8, 24)
+        with self.assertRaisesRegex(ValueError, "different solvers"):
+            single == foreign
 
     @needs_floating_point
     def test_fp_classifications(self):

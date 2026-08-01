@@ -1225,6 +1225,14 @@ Expr vc_fpEqExpr(VC vc, Expr a, Expr b)
   stp::ASTNode* l = (stp::ASTNode*)a;
   stp::ASTNode* r = (stp::ASTNode*)b;
 
+  if (l->GetType() != stp::FLOATINGPOINT_TYPE ||
+      r->GetType() != stp::FLOATINGPOINT_TYPE)
+  {
+    stp::FatalError("CInterface: vc_fpEqExpr requires floating-point operands: ",
+                    l->GetType() == stp::FLOATINGPOINT_TYPE ? *r : *l);
+  }
+  requireSamePublicSort("vc_fpEqExpr", bm, *l, *r);
+
   stp::ASTNode output = bm->CreateNode(stp::FP_EQ, *l, *r);
   assert(BVTypeCheck(output));
   return persistNode(vc, output);
@@ -1253,6 +1261,30 @@ static Expr fpTermResult(VC vc, stp::Kind k, const stp::ASTNode& fmt,
                     "non-float operand: ",
                     fmt);
   }
+
+  // Every operation built through this helper has only floating-point value
+  // operands, except that rounded operations carry their RoundingMode first.
+  // Check the complete public signature here, in ordinary Release code.  The
+  // assertion below protects STP's internal construction; it is not an API
+  // contract check because Release deliberately compiles it out.
+  size_t first_float = 0;
+  switch (k)
+  {
+    case stp::FP_ADD:
+    case stp::FP_SUB:
+    case stp::FP_MUL:
+    case stp::FP_DIV:
+    case stp::FP_FMA:
+    case stp::FP_SQRT:
+    case stp::FP_ROUNDTOINTEGRAL:
+      first_float = 1;
+      break;
+    default:
+      break;
+  }
+  for (size_t i = first_float; i < children.size(); i++)
+    requireSamePublicSort("floating-point operation", b, fmt, children[i]);
+
   stp::ASTNode r = stp::FloatBlaster::withFormat(
       b, b->CreateTerm(k, fmt.GetValueWidth(), children), fmt.GetExpWidth(),
       fmt.GetSigWidth());
@@ -1265,6 +1297,16 @@ static Expr fpTermResult(VC vc, stp::Kind k, const stp::ASTNode& fmt,
 static Expr fpPredResult(VC vc, stp::Kind k, const stp::ASTVec& children)
 {
   stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  if (children.empty() ||
+      children[0].GetType() != stp::FLOATINGPOINT_TYPE)
+  {
+    stp::FatalError("CInterface: floating-point predicate requires a "
+                    "floating-point operand");
+  }
+  for (size_t i = 1; i < children.size(); i++)
+    requireSamePublicSort("floating-point predicate", b, children[0],
+                          children[i]);
+
   stp::ASTNode r = b->CreateNode(k, children);
   assert(BVTypeCheck(r));
   return persistNode(vc, r);

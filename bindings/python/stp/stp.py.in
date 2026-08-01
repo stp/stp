@@ -951,6 +951,13 @@ class FloatExpr(Expr):
         this expression's format. (An int converts through float(), so
         magnitudes beyond 2**53 round before they reach the solver.)"""
         if isinstance(other, FloatExpr):
+            if other.s is not self.s:
+                raise ValueError('floating-point operands belong to different solvers')
+            if (other.eb, other.sb) != (self.eb, self.sb):
+                raise ValueError(
+                    'floating-point operands must have the same format: '
+                    '({}, {}) != ({}, {})'.format(
+                        self.eb, self.sb, other.eb, other.sb))
             return other
         if isinstance(other, (int, float)):
             return self.s.fpval(self.eb, self.sb, float(other))
@@ -964,6 +971,11 @@ class FloatExpr(Expr):
 
     def _fp1rm(self, cb):
         return FloatExpr(self.s, self.eb, self.sb, cb(self.s.vc, self._rm(), self.expr))
+
+    def simplify(self):
+        """Simplify without erasing this expression's floating-point sort."""
+        expr = _lib.vc_simplify(self.s.vc, self.expr)
+        return FloatExpr(self.s, self.eb, self.sb, expr)
 
     def _fp2(self, cb, other):
         other = self._coerce(other)

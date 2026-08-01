@@ -303,3 +303,36 @@ TEST(fp_simplify, preserves_defined_conversion_semantics)
   EXPECT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   vc_Destroy(vc);
 }
+
+TEST(fp_sort_checks, release_api_rejects_mixed_formats)
+{
+  // These formats have the same 32-bit packed carrier.  Width-only checks
+  // therefore cannot distinguish them; the public source sorts must.
+  EXPECT_DEATH(
+      {
+        VC vc = vc_createValidityChecker();
+        Expr x = vc_varExpr(vc, "x", vc_fpType(vc, 8, 24));
+        Expr y = vc_varExpr(vc, "y", vc_fpType(vc, 11, 21));
+        Expr rne = vc_fpRoundingMode(vc, VC_RM_RNE);
+        (void)vc_fpAddExpr(vc, rne, x, y);
+      },
+      "requires operands of the same sort");
+
+  EXPECT_DEATH(
+      {
+        VC vc = vc_createValidityChecker();
+        Expr x = vc_varExpr(vc, "x", vc_fpType(vc, 8, 24));
+        Expr y = vc_varExpr(vc, "y", vc_fpType(vc, 11, 21));
+        (void)vc_fpLtExpr(vc, x, y);
+      },
+      "requires operands of the same sort");
+
+  EXPECT_DEATH(
+      {
+        VC vc = vc_createValidityChecker();
+        Expr x = vc_varExpr(vc, "x", vc_fpType(vc, 8, 24));
+        Expr y = vc_varExpr(vc, "y", vc_fpType(vc, 11, 21));
+        (void)vc_fpEqExpr(vc, x, y);
+      },
+      "requires operands of the same sort");
+}

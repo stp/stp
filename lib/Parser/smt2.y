@@ -345,6 +345,68 @@ namespace stp
     }
   }
 
+  // Source-sort checks for select/store.  The central BV type checker sees
+  // only the packed carrier widths, while floating-point and RoundingMode
+  // index/element sorts are recorded by STPMgr.  Enforce those richer sorts
+  // before constructing a READ/WRITE; FpTotalise's later canonicalisation is
+  // an encoding step, not an implicit source-language coercion.
+  void checkArrayIndexSort(const ASTNode& array, const ASTNode& index)
+  {
+    if (array.GetType() != ARRAY_TYPE)
+      fatal_yyerror("select/store expects an array as its first argument");
+    if (array.GetIndexWidth() != index.GetValueWidth())
+      fatal_yyerror("array index width does not match the declared index sort");
+
+    unsigned int exp_width = 0;
+    unsigned int sig_width = 0;
+    if (stp::GlobalParserBM->arrayHasFpIndex(array, exp_width, sig_width))
+    {
+      if (index.GetType() != FLOATINGPOINT_TYPE ||
+          index.GetExpWidth() != exp_width || index.GetSigWidth() != sig_width)
+        fatal_yyerror("array index is not a float of the declared format");
+      return;
+    }
+
+    if (stp::GlobalParserBM->arrayHasRmIndex(array))
+    {
+      if (!stp::GlobalParserBM->isRoundingModeSortedTerm(index))
+        fatal_yyerror("array index is not of sort RoundingMode");
+      return;
+    }
+
+    if (index.GetType() != BITVECTOR_TYPE ||
+        (index.GetKind() != BVCONST &&
+         stp::GlobalParserBM->isRoundingModeSortedTerm(index)))
+      fatal_yyerror("array index is not of the declared bitvector sort");
+  }
+
+  void checkArrayValueSort(const ASTNode& array, const ASTNode& value)
+  {
+    if (array.GetValueWidth() != value.GetValueWidth())
+      fatal_yyerror("stored value width does not match the array element sort");
+
+    if (array.GetExpWidth() != 0)
+    {
+      if (value.GetType() != FLOATINGPOINT_TYPE ||
+          value.GetExpWidth() != array.GetExpWidth() ||
+          value.GetSigWidth() != array.GetSigWidth())
+        fatal_yyerror("stored value is not a float of the declared format");
+      return;
+    }
+
+    if (stp::GlobalParserBM->arrayHasRmElement(array))
+    {
+      if (!stp::GlobalParserBM->isRoundingModeSortedTerm(value))
+        fatal_yyerror("stored value is not of sort RoundingMode");
+      return;
+    }
+
+    if (value.GetType() != BITVECTOR_TYPE ||
+        (value.GetKind() != BVCONST &&
+         stp::GlobalParserBM->isRoundingModeSortedTerm(value)))
+      fatal_yyerror("stored value is not of the declared bitvector sort");
+  }
+
   // fp.add/fp.sub/fp.mul/fp.div. Each is ternary -- the rounding mode is
   // child 0, matching the arity declared in ASTKind.kinds -- so that the
   // blaster rounds as the input asked rather than assuming RNE.
@@ -2729,6 +2791,7 @@ TERMID_TOK
   // valuewidth is same as array, indexwidth is 0.
   ASTNode array = *$2;
   ASTNode index = *$3;
+  checkArrayIndexSort(array, index);
   unsigned int width = array.GetValueWidth();
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(READ, width, array, index));
   stp::GlobalParserInterface->deleteNode( $2);
@@ -2741,6 +2804,8 @@ TERMID_TOK
   ASTNode array = *$2;
   ASTNode index = *$3;
   ASTNode writeval = *$4;
+  checkArrayIndexSort(array, index);
+  checkArrayValueSort(array, writeval);
   ASTNode write_term = stp::GlobalParserInterface->nf->CreateArrayTerm(WRITE,$2->GetIndexWidth(),width,array,index,writeval);
   $$ = stp::GlobalParserInterface->newNode(write_term);
   stp::GlobalParserInterface->deleteNode( $2);
