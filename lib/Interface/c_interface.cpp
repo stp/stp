@@ -1176,7 +1176,7 @@ Expr vc_bvConstExprFromInt(VC vc, int n_bits, unsigned int value)
   return persistNode(vc, n);
 }
 
-Expr vc_bvConstExprFromLL(VC vc, int n_bits, unsigned long long value)
+Expr vc_bvConstExprFromLL(VC vc, int n_bits, uint64_t value)
 {
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
@@ -1803,8 +1803,8 @@ unsigned int getBVUnsigned(Expr e)
   return (unsigned int)a->GetUnsignedConst();
 }
 
-//! Return an unsigned long long int from a constant bitvector expression
-unsigned long long int getBVUnsignedLongLong(Expr e)
+//! Return a uint64_t from a constant bitvector expression
+uint64_t getBVUnsignedLongLong(Expr e)
 {
   stp::ASTNode* a = (stp::ASTNode*)e;
 
@@ -1815,7 +1815,7 @@ unsigned long long int getBVUnsignedLongLong(Expr e)
   unsigned* bv = a->GetBVConst();
 
   char* str_bv = (char*)CONSTANTBV::BitVector_to_Bin(bv);
-  unsigned long long int tmp = std::strtoull(str_bv, NULL, 2);
+  uint64_t tmp = std::strtoull(str_bv, NULL, 2);
   CONSTANTBV::BitVector_Dispose((unsigned char*)str_bv);
   return tmp;
 }
