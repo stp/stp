@@ -26,80 +26,542 @@ THE SOFTWARE.
 
 #include "stp/FloatBlaster/FloatBlaster.h"
 
+#ifdef STP_ENABLE_FLOATING_POINT
+#include "stp/FloatBlaster/symbolic_fp.h"
+
+#include <cassert>
+#include <unordered_map>
+#endif
+
 namespace stp
 {
 
-FloatBlast::FloatBlast(STPMgr* bm_) : bm(bm_), nf(bm_->defaultNodeFactory) {}
+#ifdef STP_ENABLE_FLOATING_POINT
 
-ASTNode FloatBlast::topLevel(const ASTNode& n)
+class FloatBlast::Impl
 {
-  return visit(n);
-}
+public:
+  explicit Impl(STPMgr* bm_)
+      : bm(bm_), node_factory(bm_->defaultNodeFactory)
+  {
+  }
 
-ASTNode FloatBlast::rebuild(const ASTNode& n, const ASTVec& children)
+  ASTNode topLevel(const ASTNode& n)
+  {
+    if (bm->defaultNodeFactory != node_factory)
+      FatalError("FloatBlast reused after the node factory changed");
+
+    // SymFPU's STP backend is thread-local rather than object-local. Another
+    // checker may have used this thread since our previous model query.
+    symbolic_fp::init(bm);
+
+    traversal_cache.clear();
+    const ASTNode out = lower(n);
+    traversal_cache.clear();
+    return out;
+  }
+
+  const FloatBlast::Statistics& statistics() const noexcept { return stats; }
+
+private:
+  typedef std::unordered_map<ASTNode, std::unique_ptr<symbolic_fp::uf>,
+                             ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
+      UnpackedMap;
+
+  symbolic_fp::floatingPointTypeInfo formatOf(const ASTNode& n) const
+  {
+    const SourceSort sort = n.GetSourceSort();
+    if (sort.kind() != SourceSort::Kind::FloatingPoint)
+      FatalError("FloatBlast expected a floating-point source expression: ",
+                 n);
+
+    const unsigned int exponent = sort.exponentWidth();
+    const unsigned int significand = sort.significandWidth();
+    if (!FloatBlaster::formatSupported(exponent, significand))
+      FatalError("FloatBlast: this floating-point format is not supported: "
+                 "SymFPU needs an unpacked exponent wider than the source "
+                 "format's exponent");
+
+    return symbolic_fp::floatingPointTypeInfo(exponent, significand);
+  }
+
+  void requireSameFormat(const ASTNode& left, const ASTNode& right) const
+  {
+    if (left.GetSourceSort() != right.GetSourceSort())
+      FatalError("FloatBlast received floating-point operands of different "
+                 "source sorts");
+  }
+
+  ASTNode rebuild(const ASTNode& n, const ASTVec& children)
+  {
+    if (n.GetType() == BOOLEAN_TYPE)
+      return node_factory->CreateNode(n.GetKind(), children);
+
+    if (n.GetIndexWidth() > 0)
+      return node_factory->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(),
+                                           n.GetValueWidth(), children);
+
+    return node_factory->CreateTerm(n.GetKind(), n.GetValueWidth(), children);
+  }
+
+  // Target-language view. Source FP values are packed only if their caller
+  // genuinely needs an AST carrier; FP predicates and conversions bypass
+  // this function and consume the unpacked view directly.
+  ASTNode lower(const ASTNode& n)
+  {
+    if (n.GetSourceSort().kind() == SourceSort::Kind::FloatingPoint)
+      return asPacked(n);
+
+    if (n.Degree() == 0)
+      return n;
+
+    const ASTNodeMap::const_iterator persistent = terminal_cache.find(n);
+    if (persistent != terminal_cache.end())
+      return persistent->second;
+
+    const ASTNodeMap::const_iterator current = traversal_cache.find(n);
+    if (current != traversal_cache.end())
+      return current->second;
+
+    ASTNode out;
+    if (is_FP_kind(n.GetKind()))
+    {
+      out = lowerFpTerminal(n);
+      terminal_cache[n] = out;
+    }
+    else
+    {
+      ASTVec children;
+      children.reserve(n.Degree());
+      bool changed = false;
+      for (size_t i = 0; i < n.Degree(); ++i)
+      {
+        const ASTNode child = lower(n[i]);
+        changed = changed || child != n[i];
+        children.push_back(child);
+      }
+      out = changed ? rebuild(n, children) : n;
+    }
+
+    traversal_cache[n] = out;
+    return out;
+  }
+
+  // Ordinary packed view. Leaves and structural carrier nodes already are
+  // the bits that store the source value, so preserve them (and any NaN
+  // payload they happen to contain). A genuine FP operation has no such
+  // target representation and is encoded lazily from its cached UF.
+  ASTNode asPacked(const ASTNode& n)
+  {
+    const ASTNodeMap::const_iterator cached = packed_cache.find(n);
+    if (cached != packed_cache.end())
+      return cached->second;
+
+    (void)formatOf(n); // exact source-sort/format validation at the boundary
+
+    ASTNode out;
+    if (n.Degree() == 0)
+    {
+      out = n;
+    }
+    else if (n.GetKind() == READ)
+    {
+      ASTVec children;
+      children.reserve(n.Degree());
+      bool changed = false;
+      for (size_t i = 0; i < n.Degree(); ++i)
+      {
+        const ASTNode child = lower(n[i]);
+        changed = changed || child != n[i];
+        children.push_back(child);
+      }
+      out = changed ? rebuild(n, children) : n;
+    }
+    else if (n.GetKind() == ITE)
+    {
+      assert(n.Degree() == 3);
+      ASTVec children;
+      children.reserve(3);
+      children.push_back(lower(n[0]));
+      children.push_back(asPacked(n[1]));
+      children.push_back(asPacked(n[2]));
+      out = (children[0] == n[0] && children[1] == n[1] &&
+             children[2] == n[2])
+                ? n
+                : rebuild(n, children);
+    }
+    else if (!is_FP_kind(n.GetKind()))
+    {
+      // Compatibility for legacy carrier expressions which were explicitly
+      // declared/stamped as FP. Rebuild their carrier children first, then
+      // leave the operation itself in the target language.
+      ASTVec children;
+      children.reserve(n.Degree());
+      bool changed = false;
+      for (size_t i = 0; i < n.Degree(); ++i)
+      {
+        const ASTNode child = lower(n[i]);
+        changed = changed || child != n[i];
+        children.push_back(child);
+      }
+      out = changed ? rebuild(n, children) : n;
+    }
+    else
+    {
+      const ASTNodeMap::const_iterator canonical = canonical_packed_cache.find(n);
+      if (canonical != canonical_packed_cache.end())
+        out = canonical->second;
+      else
+      {
+        out = symbolic_fp::unpacked::encode(formatOf(n), asUnpacked(n));
+        ++stats.pack_builds;
+        canonical_packed_cache[n] = out;
+      }
+    }
+
+    packed_cache[n] = out;
+    return out;
+  }
+
+  // Canonical packed view. This is deliberately distinct from asPacked:
+  // SMT FP equality identifies all NaNs, so semantic quotient boundaries
+  // (FP_TO_IEEE_BV and totalisation/array indexes) must collapse payloads.
+  ASTNode canonicalPacked(const ASTNode& n)
+  {
+    const ASTNodeMap::const_iterator cached = canonical_packed_cache.find(n);
+    if (cached != canonical_packed_cache.end())
+      return cached->second;
+
+    const ASTNode out =
+        symbolic_fp::unpacked::encode(formatOf(n), asUnpacked(n));
+    ++stats.pack_builds;
+    canonical_packed_cache[n] = out;
+
+    // A real FP operation's ordinary packed representation is the same
+    // SymFPU encoding. Raw leaves/READs/ITEs intentionally remain distinct.
+    if (is_FP_kind(n.GetKind()))
+      packed_cache[n] = out;
+    return out;
+  }
+
+  const symbolic_fp::uf& remember(const ASTNode& n,
+                                   std::unique_ptr<symbolic_fp::uf> value)
+  {
+    const std::pair<UnpackedMap::iterator, bool> inserted =
+        unpacked_cache.emplace(n, std::move(value));
+    assert(inserted.second);
+    return *inserted.first->second;
+  }
+
+  const symbolic_fp::uf& decodeCarrier(const ASTNode& n,
+                                        const ASTNode& carrier)
+  {
+    ++stats.unpack_builds;
+    return remember(n, std::unique_ptr<symbolic_fp::uf>(
+                           new symbolic_fp::uf(symbolic_fp::unpacked::decode(
+                               formatOf(n), carrier))));
+  }
+
+  // Unpacked source view. Every entry is either one actual decode of an
+  // opaque carrier or the final (already rounded) result of exactly one
+  // source FP operation. References remain stable because values are owned
+  // separately from the hash table's buckets.
+  const symbolic_fp::uf& asUnpacked(const ASTNode& n)
+  {
+    const UnpackedMap::const_iterator cached = unpacked_cache.find(n);
+    if (cached != unpacked_cache.end())
+    {
+      ++stats.unpacked_cache_hits;
+      return *cached->second;
+    }
+
+    const symbolic_fp::floatingPointTypeInfo result_format = formatOf(n);
+    const Kind kind = n.GetKind();
+
+    if (n.Degree() == 0)
+      return decodeCarrier(n, n);
+
+    if (kind == READ)
+    {
+      // Break the asPacked/asUnpacked recursion explicitly: a READ is an
+      // opaque packed cell, but its array and index may still need lowering.
+      ASTVec children;
+      children.reserve(n.Degree());
+      bool changed = false;
+      for (size_t i = 0; i < n.Degree(); ++i)
+      {
+        const ASTNode child = lower(n[i]);
+        changed = changed || child != n[i];
+        children.push_back(child);
+      }
+      const ASTNode carrier = changed ? rebuild(n, children) : n;
+      packed_cache[n] = carrier;
+      return decodeCarrier(n, carrier);
+    }
+
+    std::unique_ptr<symbolic_fp::uf> result;
+    switch (kind)
+    {
+      case ITE:
+        assert(n.Degree() == 3);
+        requireSameFormat(n[1], n[2]);
+        result.reset(new symbolic_fp::uf(symbolic_fp::unpacked::select(
+            lower(n[0]), asUnpacked(n[1]), asUnpacked(n[2]))));
+        break;
+
+      case FP_ABS:
+        result.reset(new symbolic_fp::uf(
+            symbolic_fp::unpacked::abs(result_format, asUnpacked(n[0]))));
+        break;
+      case FP_NEG:
+        result.reset(new symbolic_fp::uf(
+            symbolic_fp::unpacked::neg(result_format, asUnpacked(n[0]))));
+        break;
+
+      case FP_ADD:
+      case FP_SUB:
+      case FP_MUL:
+      case FP_DIV:
+        requireSameFormat(n[1], n[2]);
+        if (kind == FP_ADD)
+          result.reset(new symbolic_fp::uf(symbolic_fp::unpacked::add(
+              result_format, lower(n[0]), asUnpacked(n[1]),
+              asUnpacked(n[2]))));
+        else if (kind == FP_SUB)
+          result.reset(new symbolic_fp::uf(symbolic_fp::unpacked::sub(
+              result_format, lower(n[0]), asUnpacked(n[1]),
+              asUnpacked(n[2]))));
+        else if (kind == FP_MUL)
+          result.reset(new symbolic_fp::uf(symbolic_fp::unpacked::mul(
+              result_format, lower(n[0]), asUnpacked(n[1]),
+              asUnpacked(n[2]))));
+        else
+          result.reset(new symbolic_fp::uf(symbolic_fp::unpacked::div(
+              result_format, lower(n[0]), asUnpacked(n[1]),
+              asUnpacked(n[2]))));
+        break;
+
+      case FP_FMA:
+        requireSameFormat(n[1], n[2]);
+        requireSameFormat(n[1], n[3]);
+        result.reset(new symbolic_fp::uf(symbolic_fp::unpacked::fma(
+            result_format, lower(n[0]), asUnpacked(n[1]), asUnpacked(n[2]),
+            asUnpacked(n[3]))));
+        break;
+
+      case FP_SQRT:
+        result.reset(new symbolic_fp::uf(symbolic_fp::unpacked::sqrt(
+            result_format, lower(n[0]), asUnpacked(n[1]))));
+        break;
+
+      case FP_REM:
+      {
+        const SourceSort sort = n.GetSourceSort();
+        if (!FloatBlaster::remSupported(sort.exponentWidth(),
+                                        sort.significandWidth()))
+          FatalError("FloatBlast: fp.rem is not supported at this format: "
+                     "its circuit is exponential in the exponent width");
+        requireSameFormat(n[0], n[1]);
+        result.reset(new symbolic_fp::uf(symbolic_fp::unpacked::rem(
+            result_format, asUnpacked(n[0]), asUnpacked(n[1]))));
+        break;
+      }
+
+      case FP_MIN:
+      case FP_MAX:
+      {
+        assert(n.Degree() == 3);
+        requireSameFormat(n[0], n[1]);
+        const ASTNode choice = node_factory->CreateNode(
+            EQ, lower(n[2]), bm->CreateOneConst(1));
+        result.reset(new symbolic_fp::uf(
+            kind == FP_MIN
+                ? symbolic_fp::unpacked::min(result_format, asUnpacked(n[0]),
+                                             asUnpacked(n[1]), choice)
+                : symbolic_fp::unpacked::max(result_format, asUnpacked(n[0]),
+                                             asUnpacked(n[1]), choice)));
+        break;
+      }
+
+      case FP_ROUNDTOINTEGRAL:
+      {
+        const SourceSort sort = n.GetSourceSort();
+        if (!FloatBlaster::roundToIntegralSupported(sort.exponentWidth(),
+                                                    sort.significandWidth()))
+          FatalError("FloatBlast: fp.roundToIntegral is not supported at "
+                     "this format");
+        result.reset(new symbolic_fp::uf(
+            symbolic_fp::unpacked::roundToIntegral(
+                result_format, lower(n[0]), asUnpacked(n[1]))));
+        break;
+      }
+
+      case FP_TOFP:
+        if (n.Degree() == 3)
+        {
+          ++stats.unpack_builds;
+          result.reset(new symbolic_fp::uf(symbolic_fp::unpacked::decode(
+              result_format, lower(n[2]))));
+        }
+        else
+        {
+          assert(n.Degree() == 4);
+          result.reset(new symbolic_fp::uf(
+              symbolic_fp::unpacked::convertFloatToFloat(
+                  formatOf(n[3]), result_format, lower(n[2]),
+                  asUnpacked(n[3]))));
+        }
+        break;
+
+      case FP_TOFP_SIGNED:
+      case FP_TOFP_UNSIGNED:
+        assert(n.Degree() == 4);
+        result.reset(new symbolic_fp::uf(
+            symbolic_fp::unpacked::convertBVToFloat(
+                result_format, lower(n[2]), lower(n[3]),
+                kind == FP_TOFP_SIGNED)));
+        break;
+
+      default:
+      {
+        // A legacy non-FP carrier node may still have a declared/stored FP
+        // source sort. Decode the rebuilt carrier once rather than guessing
+        // an operation from its width.
+        if (is_FP_kind(kind))
+          FatalError("FloatBlast: unhandled floating-point result kind: ", n);
+
+        ASTVec children;
+        children.reserve(n.Degree());
+        bool changed = false;
+        for (size_t i = 0; i < n.Degree(); ++i)
+        {
+          const ASTNode child = lower(n[i]);
+          changed = changed || child != n[i];
+          children.push_back(child);
+        }
+        const ASTNode carrier = changed ? rebuild(n, children) : n;
+        packed_cache[n] = carrier;
+        return decodeCarrier(n, carrier);
+      }
+    }
+
+    assert(result.get() != nullptr);
+    if (kind != ITE)
+      ++stats.unpacked_operation_builds;
+    return remember(n, std::move(result));
+  }
+
+  ASTNode lowerFpTerminal(const ASTNode& n)
+  {
+    const Kind kind = n.GetKind();
+    switch (kind)
+    {
+      case FP_TO_UBV:
+      case FP_TO_SBV:
+        assert(n.Degree() == 4);
+        return symbolic_fp::unpacked::toBV(
+            formatOf(n[2]), lower(n[1]), asUnpacked(n[2]),
+            n[0].GetUnsignedConst(), lower(n[3]), kind == FP_TO_SBV);
+
+      case FP_TO_IEEE_BV:
+        assert(n.Degree() == 1);
+        return canonicalPacked(n[0]);
+
+      case FP_SMT_EQ:
+        requireSameFormat(n[0], n[1]);
+        return symbolic_fp::unpacked::smtEqual(
+            formatOf(n[0]), asUnpacked(n[0]), asUnpacked(n[1]));
+
+      case FP_EQ:
+        requireSameFormat(n[0], n[1]);
+        return symbolic_fp::unpacked::ieeeEqual(
+            formatOf(n[0]), asUnpacked(n[0]), asUnpacked(n[1]));
+      case FP_LT:
+        requireSameFormat(n[0], n[1]);
+        return symbolic_fp::unpacked::lessThan(
+            formatOf(n[0]), asUnpacked(n[0]), asUnpacked(n[1]));
+      case FP_LEQ:
+        requireSameFormat(n[0], n[1]);
+        return symbolic_fp::unpacked::lessThanOrEqual(
+            formatOf(n[0]), asUnpacked(n[0]), asUnpacked(n[1]));
+      case FP_GT:
+        requireSameFormat(n[0], n[1]);
+        return symbolic_fp::unpacked::lessThan(
+            formatOf(n[0]), asUnpacked(n[1]), asUnpacked(n[0]));
+      case FP_GEQ:
+        requireSameFormat(n[0], n[1]);
+        return symbolic_fp::unpacked::lessThanOrEqual(
+            formatOf(n[0]), asUnpacked(n[1]), asUnpacked(n[0]));
+
+      case FP_ISNORMAL:
+        return symbolic_fp::unpacked::isNormal(formatOf(n[0]),
+                                               asUnpacked(n[0]));
+      case FP_ISSUBNORMAL:
+        return symbolic_fp::unpacked::isSubnormal(formatOf(n[0]),
+                                                  asUnpacked(n[0]));
+      case FP_ISZERO:
+        return symbolic_fp::unpacked::isZero(formatOf(n[0]),
+                                             asUnpacked(n[0]));
+      case FP_ISINFINITE:
+        return symbolic_fp::unpacked::isInfinite(formatOf(n[0]),
+                                                 asUnpacked(n[0]));
+      case FP_ISNAN:
+        return symbolic_fp::unpacked::isNaN(formatOf(n[0]),
+                                            asUnpacked(n[0]));
+      case FP_ISNEGATIVE:
+        return symbolic_fp::unpacked::isNegative(formatOf(n[0]),
+                                                 asUnpacked(n[0]));
+      case FP_ISPOSITIVE:
+        return symbolic_fp::unpacked::isPositive(formatOf(n[0]),
+                                                 asUnpacked(n[0]));
+
+      default:
+        FatalError("FloatBlast: unhandled target-valued floating-point kind: ",
+                   n);
+    }
+  }
+
+  STPMgr* bm;
+  NodeFactory* node_factory;
+  FloatBlast::Statistics stats;
+
+  // Only the source/target FP boundary survives between calls. Generic BV
+  // traversal state is released after every root to avoid retaining whole
+  // pre-simplification DAGs for the lifetime of a model.
+  ASTNodeMap traversal_cache;
+  ASTNodeMap terminal_cache;
+  ASTNodeMap packed_cache;
+  ASTNodeMap canonical_packed_cache;
+  UnpackedMap unpacked_cache;
+};
+
+#else
+
+// Floating-point syntax is rejected before solving in this configuration.
+// Keeping the pass as an identity gives FpEncodingContext the same link and
+// ownership surface in both builds without exposing SymFPU in the header.
+class FloatBlast::Impl
 {
-  if (n.GetType() == BOOLEAN_TYPE)
-    return nf->CreateNode(n.GetKind(), children);
+public:
+  explicit Impl(STPMgr*) {}
+  ASTNode topLevel(const ASTNode& n) { return n; }
+  const FloatBlast::Statistics& statistics() const noexcept { return stats; }
 
-  if (n.GetIndexWidth() > 0)
-    return nf->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(),
-                               n.GetValueWidth(), children);
+private:
+  FloatBlast::Statistics stats;
+};
 
-  return nf->CreateTerm(n.GetKind(), n.GetValueWidth(), children);
-}
+#endif
 
-ASTNode FloatBlast::visit(const ASTNode& n)
+FloatBlast::FloatBlast(STPMgr* bm_) : impl(new Impl(bm_)) {}
+
+FloatBlast::~FloatBlast() = default;
+
+ASTNode FloatBlast::topLevel(const ASTNode& n) { return impl->topLevel(n); }
+
+const FloatBlast::Statistics& FloatBlast::statistics() const noexcept
 {
-  // A leaf is already the bits it denotes: a float symbol is a bitvector of
-  // exp + sig bits carrying its declared format, and a float constant is an
-  // interned ASTFPConst holding its packed bits. Neither is shared with a
-  // plain bitvector use -- a declaration names one entity, and float
-  // constants intern apart from the plain constant with the same bits -- so
-  // the format they carry retypes nothing.
-  if (n.Degree() == 0)
-    return n;
-
-  const ASTNodeMap::const_iterator it = cache.find(n);
-  if (it != cache.end())
-    return it->second;
-
-  ASTVec children;
-  children.reserve(n.Degree());
-
-  bool changed = false;
-  for (size_t i = 0; i < n.Degree(); i++)
-  {
-    const ASTNode c = visit(n[i]);
-    changed = changed || (c != n[i]);
-    children.push_back(c);
-  }
-
-  const Kind k = n.GetKind();
-  ASTNode out;
-
-  if (is_FP_kind(k))
-  {
-    // The operand format comes from `n`, whose children still say what sort
-    // they are; `children` are bits by now and could only be guessed at.
-    // This is the whole reason the pass walks the floating-point graph
-    // rather than blasting whatever the simplifier happens to hand it.
-    const std::pair<unsigned int, unsigned int> fmt =
-        FloatBlaster::operandFormat(n);
-
-    out = FloatBlaster::BlastNode_TopLevel(bm, k, children, fmt.first,
-                                           fmt.second);
-  }
-  else if (changed)
-  {
-    out = rebuild(n, children);
-  }
-  else
-  {
-    out = n;
-  }
-
-  cache[n] = out;
-  return out;
+  return impl->statistics();
 }
 
 } // namespace stp

@@ -8,9 +8,10 @@
 # history with the same toolchain and configuration as the candidate
 # build, compiles the identical tools/extdiff driver into both trees,
 # runs both with array equality disabled, and requires the serialized
-# observations (query status, entry counts, every (index, value) pair
-# in returned order, stdout, stderr, exit status) to match byte for
-# byte.
+# observations (query status, entry counts, every exact (index, value) pair,
+# stdout, stderr, exit status) to match byte for byte. The common driver
+# canonicalizes counterexample-array pairs first because their returned order
+# is unspecified and depends on internal node-creation IDs.
 #
 # Usage: extdiff-baseline-differential.sh <source_dir> <candidate_build_dir> [baseline_sha]
 #
@@ -138,5 +139,5 @@ if [ "$fail" -ne 0 ]; then
   exit 1
 fi
 
-log "default-off C API observations are byte-identical to baseline $BASELINE_SHA"
+log "canonicalized default-off C API observations are byte-identical to baseline $BASELINE_SHA"
 exit 0

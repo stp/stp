@@ -595,6 +595,23 @@ TEST(fp_array_extensionality, float_cell_negated_under_chain_equality_sat)
   vc_Destroy(vc);
 }
 
+// RoundingMode is a five-value source sort, not a synonym for its 5-bit
+// implementation carrier.  Keep the public array boundary honest even though
+// the packed widths happen to agree.
+TEST(fp_array_extensionality, rm_value_is_rejected_by_bv5_array)
+{
+  EXPECT_DEATH(
+      {
+        VC vc = vc_createValidityChecker();
+        Type arr = vc_arrayType(vc, vc_bvType(vc, 1), vc_bvType(vc, 5));
+        Expr a = vc_varExpr(vc, "a", arr);
+        Expr i = vc_bvConstExprFromLL(vc, 1, 0);
+        Expr r = vc_fpRoundingModeVar(vc, "r");
+        (void)vc_writeExpr(vc, a, i, r);
+      },
+      "stored value sort differs from the array's bitvector element sort");
+}
+
 // A RoundingMode *symbol* that occurs nowhere but inside an array equality's
 // operands.
 //
@@ -604,34 +621,58 @@ TEST(fp_array_extensionality, float_cell_negated_under_chain_equality_sat)
 // vc_push/vc_pop bracket leaves it alive and unpinned. FpTotalise re-pins
 // every mode the completed input formula names. An opaque array equality must
 // therefore retain and expose its operands until that whole-formula pass:
-// otherwise `r` is free to take one of the carrier's 27 junk patterns,
-// #b00011 among them, and STP answers sat to an unsatisfiable query.
+// otherwise `r` is free to take one of the carrier's 27 junk patterns and STP
+// answers sat to an unsatisfiable query.
 //
-// The equality forces (select B #b00) == r, and B's cell is fixed to a
-// pattern that is not a mode, so a pinned `r` makes this unsat.
+// The equality compares two well-typed (Array (_ BitVec 1)
+// (_ FloatingPoint 8 24)) store chains.  Its left-hand cells are
+//
+//   fp.mul(r, 2^-100, 2^-100)  and  fp.div(r, 1.0, 3.0),
+//
+// while its right-hand cells are the minimum positive subnormal and the lower
+// binary32 approximation to 1/3.  No legal mode produces that pair: only RTP
+// rounds the positive underflow up to the minimum subnormal, but RTP rounds
+// 1/3 to the upper approximation; RTN and RTZ produce the requested lower
+// approximation to 1/3, but round the underflow to +zero.  A junk carrier,
+// however, matches none of SymFPU's five mode tests and exhibits exactly this
+// non-IEEE combination.  The equality is therefore unsatisfiable precisely
+// when whole-formula preparation reaches its operands and re-pins `r`.
 TEST(fp_array_extensionality, rm_symbol_only_in_operands_stays_pinned)
 {
   VC vc = vc_createValidityChecker();
   vc_setFlag(vc, 'x'); // must precede creation of any term
 
-  Type arr = vc_arrayType(vc, vc_bvType(vc, 2), vc_bvType(vc, 5));
+  Type fp = vc_fpType(vc, 8, 24);
+  Type arr = vc_arrayType(vc, vc_bvType(vc, 1), fp);
   Expr a = vc_varExpr(vc, "a", arr);
-  Expr b = vc_varExpr(vc, "b", arr);
-  Expr i0 = vc_bvConstExprFromLL(vc, 2, 0);
-  Expr notAMode = vc_bvConstExprFromLL(vc, 5, 3); // #b00011: no mode's encoding
+  Expr i0 = vc_bvConstExprFromLL(vc, 1, 0);
+  Expr i1 = vc_bvConstExprFromLL(vc, 1, 1);
+  Expr tiny = vc_fpConstFromBits(
+      vc, 8, 24, vc_bvConstExprFromLL(vc, 32, 0x0D800000ULL)); // 2^-100
+  Expr one = vc_fpConstFromBits(
+      vc, 8, 24, vc_bvConstExprFromLL(vc, 32, 0x3F800000ULL));
+  Expr three = vc_fpConstFromBits(
+      vc, 8, 24, vc_bvConstExprFromLL(vc, 32, 0x40400000ULL));
+  Expr minSubnormal = vc_fpConstFromBits(
+      vc, 8, 24, vc_bvConstExprFromLL(vc, 32, 0x00000001ULL));
+  Expr thirdDown = vc_fpConstFromBits(
+      vc, 8, 24, vc_bvConstExprFromLL(vc, 32, 0x3EAAAAAAULL));
 
   // The bracket: `r`'s declaration constraint is asserted here and dies with
   // the level. The opaque equality is built here too, but remains traversable
   // when it is asserted and solved outside the bracket.
   vc_push(vc);
   Expr r = vc_fpRoundingModeVar(vc, "r");
-  Expr eq = vc_eqExpr(vc, vc_writeExpr(vc, a, i0, r), b);
+  Expr actual = vc_writeExpr(
+      vc, vc_writeExpr(vc, a, i0, vc_fpMulExpr(vc, r, tiny, tiny)), i1,
+      vc_fpDivExpr(vc, r, one, three));
+  Expr impossible = vc_writeExpr(
+      vc, vc_writeExpr(vc, a, i0, minSubnormal), i1, thirdDown);
+  Expr eq = vc_eqExpr(vc, actual, impossible);
   vc_pop(vc);
 
   vc_assertFormula(vc, eq);
-  vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, b, i0), notAMode));
-
-  EXPECT_EQ(1, vc_query(vc, vc_falseExpr(vc))); // 1 == VALID == unsatisfiable
+  EXPECT_EQ(1, vc_query(vc, vc_falseExpr(vc))); // unsatisfiable
 
   vc_Destroy(vc);
 }

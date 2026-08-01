@@ -42,6 +42,73 @@ TEST(fp_roundingmode_var, declared_through_the_type)
   vc_Destroy(vc);
 }
 
+TEST(fp_roundingmode_var, source_sort_survives_public_expression_shapes)
+{
+  VC vc = vc_createValidityChecker();
+  Expr rne = vc_fpRoundingMode(vc, VC_RM_RNE);
+  Expr r = vc_fpRoundingModeVar(vc, "r");
+  Expr c = vc_varExpr(vc, "c", vc_boolType(vc));
+  Expr choice = vc_iteExpr(vc, c, rne, r);
+  Expr array = vc_varExpr(
+      vc, "a",
+      vc_arrayType(vc, vc_bvType(vc, 1), vc_fpRoundingModeType(vc)));
+  Expr read = vc_readExpr(vc, array, vc_bvConstExprFromInt(vc, 1, 0));
+
+  EXPECT_EQ(ROUNDINGMODE_TYPE, getType(rne));
+  EXPECT_EQ(ROUNDINGMODE_TYPE, getType(r));
+  EXPECT_EQ(ROUNDINGMODE_TYPE, getType(choice));
+  EXPECT_EQ(ROUNDINGMODE_TYPE, getType(read));
+  EXPECT_EQ(ROUNDINGMODE, getExprKind(vc_getType(vc, rne)));
+
+  vc_Destroy(vc);
+}
+
+TEST(fp_roundingmode_var, release_api_rejects_carrier_source_mixes)
+{
+  EXPECT_DEATH(
+      {
+        VC vc = vc_createValidityChecker();
+        Expr rne = vc_fpRoundingMode(vc, VC_RM_RNE);
+        Expr bits = vc_bvConstExprFromInt(vc, 5, 1);
+        (void)vc_eqExpr(vc, rne, bits);
+      },
+      "requires operands of the same sort");
+
+  EXPECT_DEATH(
+      {
+        VC vc = vc_createValidityChecker();
+        Expr rne = vc_fpRoundingMode(vc, VC_RM_RNE);
+        (void)vc_bvNotExpr(vc, rne);
+      },
+      "requires bitvector operands");
+
+  EXPECT_DEATH(
+      {
+        VC vc = vc_createValidityChecker();
+        Type fp = vc_fpType(vc, 8, 24);
+        Expr x = vc_varExpr(vc, "x", fp);
+        Expr bits = vc_bvConstExprFromInt(vc, 5, 1);
+        (void)vc_fpAddExpr(vc, bits, x, x);
+      },
+      "expected a rounding mode");
+
+  EXPECT_DEATH(
+      {
+        VC vc = vc_createValidityChecker();
+        Expr rne = vc_fpRoundingMode(vc, VC_RM_RNE);
+        (void)vc_varExpr(vc, "not_a_type", (Type)rne);
+      },
+      "expects a type node");
+
+  EXPECT_DEATH(
+      {
+        VC vc = vc_createValidityChecker();
+        (void)vc_fpRoundingModeVar(vc, "same_name");
+        (void)vc_varExpr(vc, "same_name", vc_bvType(vc, 5));
+      },
+      "cannot be redeclared");
+}
+
 TEST(fp_roundingmode_var, model_completion_after_declaration_scope)
 {
   VC vc = vc_createValidityChecker();
@@ -56,6 +123,7 @@ TEST(fp_roundingmode_var, model_completion_after_declaration_scope)
 
   EXPECT_EQ((unsigned long long)VC_RM_RNE,
             getBVUnsignedLongLong(vc_getCounterExample(vc, r)));
+  EXPECT_EQ(ROUNDINGMODE_TYPE, getType(vc_getCounterExample(vc, r)));
 
   // The snapshot model API has its own completion path and must preserve the
   // same sort invariant.
@@ -63,6 +131,8 @@ TEST(fp_roundingmode_var, model_completion_after_declaration_scope)
   EXPECT_EQ((unsigned long long)VC_RM_RNE,
             getBVUnsignedLongLong(
                 vc_getTermFromCounterExample(vc, r, whole)));
+  EXPECT_EQ(ROUNDINGMODE_TYPE,
+            getType(vc_getTermFromCounterExample(vc, r, whole)));
   vc_deleteWholeCounterExample(whole);
 
   vc_Destroy(vc);

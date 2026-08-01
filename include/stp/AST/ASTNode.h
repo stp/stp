@@ -260,6 +260,11 @@ public:
     return (0 == vw) ? BOOLEAN_TYPE : BITVECTOR_TYPE;
   }
 
+  // The immutable source-language sort. This is deliberately separate from
+  // GetType(), which remains the packed carrier classification consumed by
+  // STP's bit-vector pipeline.
+  SourceSort GetSourceSort() const;
+
   unsigned int GetSigWidth() const;
   unsigned int GetExpWidth() const;
 

@@ -29,23 +29,26 @@ THE SOFTWARE.
  * The array-equality feature promises that STP with --array-equality
  * DISABLED behaves exactly like STP before the feature existed. This
  * program exercises vc_getCounterExampleArray and neighboring model
- * APIs with the feature disabled, and serializes every observable to
- * stdout: query status, entry counts, and each (index, value) pair in
- * the exact returned order. It deliberately uses only the C API that
- * exists at the pre-feature baseline commit, so the identical source
- * builds against both the pinned baseline and the candidate tree; the
- * driver's byte-for-byte output equality then witnesses runtime
- * compatibility of the default-off surface.
+ * APIs with the feature disabled, and serializes every documented
+ * observation to stdout: query status, entry counts, and each exact
+ * (index, value) pair. It deliberately uses only the C API that exists at
+ * the pre-feature baseline commit, so the identical source builds against
+ * both the pinned baseline and the candidate tree.
  *
- * Determinism note: CounterExampleMap is an unordered_map hashed on
- * node_uid, a creation-order counter, so for one driver source and one
- * toolchain the returned order is reproducible and comparable across
- * the two builds.
+ * vc_getCounterExampleArray does not specify an entry order when array
+ * equality is disabled. Its legacy implementation iterates an unordered_map
+ * hashed by node_uid, so unrelated changes in AST-node creation can permute
+ * an otherwise identical model. Canonicalize the returned pairs here before
+ * comparing the two builds; entry count and contents remain exact.
  */
 
 #include "stp/c_interface.h"
+#include <algorithm>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string>
+#include <utility>
+#include <vector>
 
 // Cleanup sticks to the API that exists at the baseline commit:
 // vc_DeleteExpr for the entry expressions, plain free for the strdup'd
@@ -59,16 +62,24 @@ static void dumpArray(VC vc, const char* label, Expr arr)
   int size = 0;
   vc_getCounterExampleArray(vc, arr, &indices, &values, &size);
   printf("array %s entries %d\n", label, size);
+
+  std::vector<std::pair<std::string, std::string>> entries;
+  entries.reserve(size);
   for (int i = 0; i < size; i++)
   {
     char* is = exprString(indices[i]);
     char* vs = exprString(values[i]);
-    printf("  [%d] index %s value %s\n", i, is, vs);
+    entries.push_back(std::make_pair(std::string(is), std::string(vs)));
     free(is);
     free(vs);
     vc_DeleteExpr(indices[i]);
     vc_DeleteExpr(values[i]);
   }
+  std::sort(entries.begin(), entries.end());
+  for (int i = 0; i < size; i++)
+    printf("  [%d] index %s value %s\n", i, entries[i].first.c_str(),
+           entries[i].second.c_str());
+
   if (size != 0)
   {
     free(indices);

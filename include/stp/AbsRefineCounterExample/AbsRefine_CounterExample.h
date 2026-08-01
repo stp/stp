@@ -55,6 +55,8 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a,
                        const ASTNode& b, ToSATBase::ASTNodeToSATVar& satVar,
                        Polarity polary = Polarity::BOTH);
 
+class FpEncodingContext;
+
 class AbsRefine_CounterExample // not copyable
 {
 private:
@@ -76,6 +78,17 @@ private:
   // Ptr to ArrayTransformer
   ArrayTransformer* ArrayTransform;
 
+  // Non-owning observer of STP's solve-local source-to-carrier mapping.
+  // STP clears this before destroying or replacing the context.
+  FpEncodingContext* fpEncodingContext;
+
+  // Non-zero while an already-lowered source expression is being evaluated.
+  // Its descendants retain source-sort metadata, but must not be lowered a
+  // second time merely because of that metadata.
+  unsigned int fpEncodedEvaluationDepth;
+
+  FpEncodingContext& requireFpEncodingContext() const;
+
   // Checks the exact semantic formula submitted for this solve.  This must
   // not reconstruct the formula from STPMgr's assertion/query registry:
   // solve-boundary passes (notably opaque array-equality lowering) are local
@@ -93,7 +106,7 @@ private:
 
 private:
   ASTNode TermToConstTermUsingModel_inner(const ASTNode& term,
-                                          bool ArrayReadFlag);
+                                           bool ArrayReadFlag);
 
 public:
 
@@ -115,11 +128,17 @@ public:
 
 public:
   AbsRefine_CounterExample(STPMgr* b, Simplifier* s, ArrayTransformer* at)
-      : bm(b), simp(s), ArrayTransform(at)
+      : bm(b), simp(s), ArrayTransform(at), fpEncodingContext(NULL),
+        fpEncodedEvaluationDepth(0)
   {
     ASTTrue = bm->CreateNode(TRUE);
     ASTFalse = bm->CreateNode(FALSE);
     ASTUndefined = bm->CreateNode(UNDEFINED);
+  }
+
+  void setFpEncodingContext(FpEncodingContext* context)
+  {
+    fpEncodingContext = context;
   }
 
   // Prints the counterexample to stdout
@@ -260,8 +279,7 @@ public:
       // what was asked for, as from
       // AbsRefine_CounterExample::GetCounterExample -- so a float term's
       // value can be equated with the term again.
-      return FloatBlaster::withFormat(bv, counterexample[e], e.GetExpWidth(),
-                                      e.GetSigWidth());
+      return bv->LiftSourceValue(counterexample[e], e.GetSourceSort());
     }
     else
     {
@@ -279,8 +297,7 @@ public:
                         ? bv->CreateBVConst(
                               5, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN)
                         : bv->CreateZeroConst(e.GetValueWidth());
-        return FloatBlaster::withFormat(bv, z, e.GetExpWidth(),
-                                        e.GetSigWidth());
+        return bv->LiftSourceValue(z, e.GetSourceSort());
       }
 
       return e;

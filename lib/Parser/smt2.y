@@ -270,7 +270,7 @@ namespace stp
   // callers must use fp.to_ieee_bv to expose a float's representation.
   void checkBitVectorTerm(const ASTNode& n)
   {
-    if (n.GetType() != BITVECTOR_TYPE)
+    if (n.GetSourceSort().kind() != stp::SourceSort::Kind::BitVector)
       fatal_yyerror("bitvector operator requires bitvector operands");
   }
 
@@ -278,6 +278,20 @@ namespace stp
   {
     for (const ASTNode& term : terms)
       checkBitVectorTerm(term);
+  }
+
+  void checkSameSourceSort(const ASTVec& terms, const char* message)
+  {
+    if (terms.empty())
+      return;
+    const stp::SourceSort expected = terms[0].GetSourceSort();
+    if (!expected.isKnown())
+      fatal_yyerror(message);
+    for (size_t i = 1; i < terms.size(); ++i)
+    {
+      if (terms[i].GetSourceSort() != expected)
+        fatal_yyerror(message);
+    }
   }
 
   ASTNode* createNode(Kind k, ASTVec * c)
@@ -339,10 +353,54 @@ namespace stp
   // for what the input asks for.
   void checkRoundingMode(ASTNode* rm)
   {
-    if (!stp::GlobalParserBM->isRoundingModeSortedTerm(*rm))
+    if (rm->GetSourceSort().kind() != stp::SourceSort::Kind::RoundingMode)
     {
       fatal_yyerror("expected a rounding mode.");
     }
+  }
+
+  // Source-sort checks for select/store.  The central BV type checker sees
+  // only the packed carrier widths, while floating-point and RoundingMode
+  // index/element sorts are recorded by STPMgr.  Enforce those richer sorts
+  // before constructing a READ/WRITE; FpTotalise's later canonicalisation is
+  // an encoding step, not an implicit source-language coercion.
+  void checkArrayIndexSort(const ASTNode& array, const ASTNode& index)
+  {
+    const stp::SourceSort array_sort = array.GetSourceSort();
+    if (array_sort.kind() != stp::SourceSort::Kind::Array)
+      fatal_yyerror("select/store expects an array as its first argument");
+    if (index.GetSourceSort() == array_sort.index())
+      return;
+
+    if (array_sort.index().kind() == stp::SourceSort::Kind::FloatingPoint)
+    {
+      fatal_yyerror("array index is not a float of the declared format");
+    }
+    if (array_sort.index().kind() == stp::SourceSort::Kind::RoundingMode)
+    {
+      fatal_yyerror("array index is not of sort RoundingMode");
+    }
+    fatal_yyerror("array index is not of the declared bitvector sort");
+  }
+
+  void checkArrayValueSort(const ASTNode& array, const ASTNode& value)
+  {
+    const stp::SourceSort array_sort = array.GetSourceSort();
+    if (array_sort.kind() != stp::SourceSort::Kind::Array)
+      fatal_yyerror("store expects an array as its first argument");
+    if (value.GetSourceSort() == array_sort.element())
+      return;
+
+    if (array_sort.element().kind() ==
+        stp::SourceSort::Kind::FloatingPoint)
+    {
+      fatal_yyerror("stored value is not a float of the declared format");
+    }
+    if (array_sort.element().kind() == stp::SourceSort::Kind::RoundingMode)
+    {
+      fatal_yyerror("stored value is not of sort RoundingMode");
+    }
+    fatal_yyerror("stored value is not of the declared bitvector sort");
   }
 
   // fp.add/fp.sub/fp.mul/fp.div. Each is ternary -- the rounding mode is
@@ -357,8 +415,10 @@ namespace stp
   {
     checkRoundingMode(rm);
 
-    if (lhs->GetType() != FLOATINGPOINT_TYPE ||
-        rhs->GetType() != FLOATINGPOINT_TYPE)
+    if (lhs->GetSourceSort().kind() !=
+            stp::SourceSort::Kind::FloatingPoint ||
+        rhs->GetSourceSort().kind() !=
+            stp::SourceSort::Kind::FloatingPoint)
     {
       fatal_yyerror("arguments to a floating-point operation must be floats.");
     }
@@ -393,7 +453,8 @@ namespace stp
 
     for (size_t i = 0; i < terms->size(); i++)
     {
-      if ((*terms)[i].GetType() != FLOATINGPOINT_TYPE)
+      if ((*terms)[i].GetSourceSort().kind() !=
+          stp::SourceSort::Kind::FloatingPoint)
       {
         std::string msg("arguments to ");
         msg += name;
@@ -436,8 +497,10 @@ namespace stp
   // fp.add and friends these take no rounding mode.
   ASTNode* createFPBinary(Kind k, ASTNode* lhs, ASTNode* rhs)
   {
-    if (lhs->GetType() != FLOATINGPOINT_TYPE ||
-        rhs->GetType() != FLOATINGPOINT_TYPE)
+    if (lhs->GetSourceSort().kind() !=
+            stp::SourceSort::Kind::FloatingPoint ||
+        rhs->GetSourceSort().kind() !=
+            stp::SourceSort::Kind::FloatingPoint)
     {
       fatal_yyerror("arguments to a floating-point operation must be floats.");
     }
@@ -481,9 +544,12 @@ namespace stp
   {
     checkRoundingMode(rm);
 
-    if (x->GetType() != FLOATINGPOINT_TYPE ||
-        y->GetType() != FLOATINGPOINT_TYPE ||
-        z->GetType() != FLOATINGPOINT_TYPE)
+    if (x->GetSourceSort().kind() !=
+            stp::SourceSort::Kind::FloatingPoint ||
+        y->GetSourceSort().kind() !=
+            stp::SourceSort::Kind::FloatingPoint ||
+        z->GetSourceSort().kind() !=
+            stp::SourceSort::Kind::FloatingPoint)
     {
       fatal_yyerror("arguments to fp.fma must be floats.");
     }
@@ -518,7 +584,8 @@ namespace stp
   {
     checkRoundingMode(rm);
 
-    if (expr->GetType() != FLOATINGPOINT_TYPE)
+    if (expr->GetSourceSort().kind() !=
+        stp::SourceSort::Kind::FloatingPoint)
     {
       fatal_yyerror("argument to fp.sqrt must be a float.");
     }
@@ -540,7 +607,8 @@ namespace stp
   {
     checkRoundingMode(rm);
 
-    if (expr->GetType() != FLOATINGPOINT_TYPE)
+    if (expr->GetSourceSort().kind() !=
+        stp::SourceSort::Kind::FloatingPoint)
     {
       fatal_yyerror("argument to fp.roundToIntegral must be a float.");
     }
@@ -697,7 +765,8 @@ namespace stp
     checkFpFormatWidths(exp_width, sig_width);
     checkRoundingMode(rm);
 
-    if (bits->GetType() != BITVECTOR_TYPE)
+    if (bits->GetSourceSort().kind() !=
+        stp::SourceSort::Kind::BitVector)
     {
       fatal_yyerror("to_fp_unsigned's argument must be a bitvector.");
     }
@@ -726,7 +795,8 @@ namespace stp
 
     checkRoundingMode(rm);
 
-    if (expr->GetType() != FLOATINGPOINT_TYPE)
+    if (expr->GetSourceSort().kind() !=
+        stp::SourceSort::Kind::FloatingPoint)
       fatal_yyerror("argument to fp.to_ubv/fp.to_sbv must be a float.");
 
     ASTNode* n = stp::GlobalParserInterface->newNode(
@@ -742,7 +812,8 @@ namespace stp
   // fp.abs/fp.neg: a float in, a float of the same format out.
   ASTNode* createFPUnary(Kind k, ASTNode* expr)
   {
-    if (expr->GetType() != FLOATINGPOINT_TYPE)
+    if (expr->GetSourceSort().kind() !=
+        stp::SourceSort::Kind::FloatingPoint)
     {
       fatal_yyerror("argument to a floating-point operation must be a float.");
     }
@@ -758,7 +829,8 @@ namespace stp
   // fp.isNaN and friends: a float in, a Boolean out.
   ASTNode* createFPPredicate(Kind k, ASTNode* expr)
   {
-    if (expr->GetType() != FLOATINGPOINT_TYPE)
+    if (expr->GetSourceSort().kind() !=
+        stp::SourceSort::Kind::FloatingPoint)
     {
       fatal_yyerror("argument to a floating-point predicate must be a float.");
     }
@@ -774,7 +846,8 @@ namespace stp
                             ASTNode* bits)
   {
     checkFpFormatWidths(exp_width, sig_width);
-    if (bits->GetType() != BITVECTOR_TYPE)
+    if (bits->GetSourceSort().kind() !=
+        stp::SourceSort::Kind::BitVector)
     {
       fatal_yyerror("the one-argument form of to_fp takes a bitvector.");
     }
@@ -807,8 +880,9 @@ namespace stp
   ASTNode* createFPFromParts(ASTNode* sign, ASTNode* exp, ASTNode* sig)
   {
     checkFpSupported();
-    if (sign->GetType() != BITVECTOR_TYPE || exp->GetType() != BITVECTOR_TYPE ||
-        sig->GetType() != BITVECTOR_TYPE)
+    if (sign->GetSourceSort().kind() != stp::SourceSort::Kind::BitVector ||
+        exp->GetSourceSort().kind() != stp::SourceSort::Kind::BitVector ||
+        sig->GetSourceSort().kind() != stp::SourceSort::Kind::BitVector)
     {
       fatal_yyerror("fp: the sign, exponent and significand must be bitvectors.");
     }
@@ -873,8 +947,9 @@ namespace stp
     // signed integer held in a bitvector, and converting a real. The first
     // two are handled; a real cannot be represented here, and STP has no
     // real sort to reach this rule with anyway.
-    if (expr->GetType() != FLOATINGPOINT_TYPE &&
-        expr->GetType() != BITVECTOR_TYPE)
+    const stp::SourceSort::Kind source_kind = expr->GetSourceSort().kind();
+    if (source_kind != stp::SourceSort::Kind::FloatingPoint &&
+        source_kind != stp::SourceSort::Kind::BitVector)
     {
       fatal_yyerror("to_fp's argument must be a float or a bitvector.");
     }
@@ -883,7 +958,9 @@ namespace stp
     // only reliable here: a float is carried as its packed bits, so once the
     // operand has been lowered it is indistinguishable from the integer.
     const Kind k =
-        (expr->GetType() == FLOATINGPOINT_TYPE) ? FP_TOFP : FP_TOFP_SIGNED;
+        (source_kind == stp::SourceSort::Kind::FloatingPoint)
+            ? FP_TOFP
+            : FP_TOFP_SIGNED;
 
     ASTNode* n = stp::GlobalParserInterface->newNode(
         stp::GlobalParserInterface->nf->CreateTerm(
@@ -973,8 +1050,8 @@ namespace stp
   // of the declare-fun and declare-const productions. Frees both arguments.
   void declareArraySymbol(std::string* name, stp::array_sort* sort)
   {
-    ASTNode s =
-        stp::GlobalParserInterface->LookupOrCreateSymbol(name->c_str());
+    ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
+        name->c_str(), sort->sourceSort());
     stp::GlobalParserInterface->addArraySymbol(s, *sort);
 
     if (s.GetType() != ARRAY_TYPE)
@@ -1113,6 +1190,7 @@ namespace stp
 /* Types for QF_FP and QF_BVFP. */
 %token FLOATINGPOINT_TOK
 %token ROUNDINGMODE_TOK
+%token <str> ROUNDINGMODE_FUNCTIONID_TOK
 %token FLOAT16_TOK
 %token FLOAT32_TOK
 %token FLOAT64_TOK
@@ -1492,32 +1570,28 @@ cmdi:
 function_param:
 LPAREN_TOK STRING_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK
 {
-  $$ = new ASTNode(stp::GlobalParserInterface->LookupOrCreateSymbol($2->c_str()));
+  $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol(
+      $2->c_str(), stp::SourceSort::bitVector($6)));
   stp::GlobalParserInterface->addSymbol(*$$);
-  $$->SetIndexWidth(0);
-  $$->SetValueWidth($6);
   delete $2;
 }
 |
 LPAREN_TOK STRING_TOK an_fp_sort RPAREN_TOK
 {
-  $$ = new ASTNode(stp::GlobalParserInterface->LookupOrCreateSymbol($2->c_str()));
+  $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol(
+      $2->c_str(),
+      stp::SourceSort::floatingPoint($3->exp_bits, $3->sig_bits)));
   stp::GlobalParserInterface->addSymbol(*$$);
-  $$->SetExpWidth($3->exp_bits);
-  $$->SetSigWidth($3->sig_bits);
-  $$->SetIndexWidth(0);
-  $$->SetValueWidth($3->exp_bits + $3->sig_bits);
   delete $2;
   delete $3;
 }
 |
 LPAREN_TOK STRING_TOK ROUNDINGMODE_TOK RPAREN_TOK
 {
-  // Not implemented: applyFunction substitutes bitvector and float
-  // parameters only. Named here so the failure is this message rather
-  // than a bare syntax error.
-  fatal_yyerror("define-fun: RoundingMode parameters are not supported");
-  $$ = NULL; // fatal_yyerror does not return
+  $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol(
+      $2->c_str(), stp::SourceSort::roundingMode()));
+  stp::GlobalParserInterface->addSymbol(*$$);
+  delete $2;
 };
 ;
 
@@ -1583,7 +1657,7 @@ STRING_TOK LPAREN_TOK RPAREN_TOK BOOL_TOK an_formula
 |
 STRING_TOK LPAREN_TOK RPAREN_TOK ROUNDINGMODE_TOK an_term
 {
-  if ($5->GetType() != stp::BITVECTOR_TYPE || $5->GetValueWidth() != 5)
+  if ($5->GetSourceSort().kind() != stp::SourceSort::Kind::RoundingMode)
   {
     fatal_yyerror("define-fun: the body is not a rounding mode");
   }
@@ -1595,10 +1669,24 @@ STRING_TOK LPAREN_TOK RPAREN_TOK ROUNDINGMODE_TOK an_term
   stp::GlobalParserInterface->deleteNode($5);
 }
 |
+STRING_TOK LPAREN_TOK function_params RPAREN_TOK ROUNDINGMODE_TOK an_term
+{
+  if ($6->GetSourceSort().kind() != stp::SourceSort::Kind::RoundingMode)
+    fatal_yyerror("define-fun: the body is not a rounding mode");
+
+  stp::GlobalParserInterface->storeFunction(*$1, *$3, *$6);
+  for (size_t i = 0; i < $3->size(); i++)
+    stp::GlobalParserInterface->removeSymbol((*$3)[i]);
+
+  delete $1;
+  delete $3;
+  stp::GlobalParserInterface->deleteNode($6);
+}
+|
 STRING_TOK LPAREN_TOK RPAREN_TOK an_fp_sort an_term
 {
-  if ($5->GetExpWidth() != (unsigned)$4->exp_bits ||
-      $5->GetSigWidth() != (unsigned)$4->sig_bits)
+  if ($5->GetSourceSort() != stp::SourceSort::floatingPoint(
+                                  $4->exp_bits, $4->sig_bits))
   {
     fatal_yyerror("define-fun: the body's floating-point format does not "
                   "match the declared result sort");
@@ -1617,8 +1705,8 @@ STRING_TOK LPAREN_TOK function_params RPAREN_TOK an_fp_sort an_term
   // This action was empty: the function was silently dropped, and -- worse --
   // its parameter symbols stayed interned, resolvable as free variables that
   // were never declared.
-  if ($6->GetExpWidth() != (unsigned)$5->exp_bits ||
-      $6->GetSigWidth() != (unsigned)$5->sig_bits)
+  if ($6->GetSourceSort() != stp::SourceSort::floatingPoint(
+                                  $5->exp_bits, $5->sig_bits))
   {
     fatal_yyerror("define-fun: the body's floating-point format does not "
                   "match the declared result sort");
@@ -1852,12 +1940,9 @@ LPAREN_TOK ARRAY_TOK an_array_sort_component an_array_sort_component RPAREN_TOK
 var_decl:
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
 {
-  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
+      $1->c_str(), stp::SourceSort::bitVector($7));
   stp::GlobalParserInterface->addSymbol(s);
-  //Sort_symbs has the indexwidth/valuewidth. Set those fields in
-  //var
-  s.SetIndexWidth(0);
-  s.SetValueWidth($7);
   delete $1;
 }
 | STRING_TOK LPAREN_TOK RPAREN_TOK STRING_TOK
@@ -1870,20 +1955,16 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   {
     fatal_yyerror("unknown sort (not built in, and not a define-sort alias)");
   }
-  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
+      $1->c_str(), stp::SourceSort::floatingPoint(eb, sb));
   stp::GlobalParserInterface->addSymbol(s);
-  s.SetExpWidth(eb);
-  s.SetSigWidth(sb);
-  s.SetIndexWidth(0);
-  s.SetValueWidth(eb + sb);
   delete $1;
   delete $4;
 }
 | STRING_TOK LPAREN_TOK RPAREN_TOK BOOL_TOK
 {
-  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
-  s.SetIndexWidth(0);
-  s.SetValueWidth(0);
+  ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
+      $1->c_str(), stp::SourceSort::boolean());
   stp::GlobalParserInterface->addSymbol(s);
   delete $1;
 }
@@ -1899,12 +1980,10 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
 }
 | STRING_TOK LPAREN_TOK RPAREN_TOK an_fp_sort
 {
-  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
+      $1->c_str(), stp::SourceSort::floatingPoint($4->exp_bits,
+                                                   $4->sig_bits));
   stp::GlobalParserInterface->addSymbol(s);
-  s.SetExpWidth($4->exp_bits);
-  s.SetSigWidth($4->sig_bits);
-  s.SetIndexWidth(0);
-  s.SetValueWidth($4->exp_bits + $4->sig_bits);
   delete $1;
   delete $4;
 }
@@ -1916,9 +1995,8 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
   // unresolved, and the lexer hands it back as a bare string.
   // addRoundingModeSymbol also pins the symbol to the five legal encodings,
   // without which the sort would have 32 values instead of 5.
-  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
-  s.SetIndexWidth(0);
-  s.SetValueWidth(5);
+  ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
+      $1->c_str(), stp::SourceSort::roundingMode());
   stp::GlobalParserInterface->addRoundingModeSymbol(s);
   delete $1;
 }
@@ -1928,19 +2006,15 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
 const_decl:
 STRING_TOK  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
 {
-  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
+  ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
+      $1->c_str(), stp::SourceSort::bitVector($5));
   stp::GlobalParserInterface->addSymbol(s);
-  //Sort_symbs has the indexwidth/valuewidth. Set those fields in
-  //var
-  s.SetIndexWidth(0);
-  s.SetValueWidth($5);
   delete $1;
 }
 | STRING_TOK BOOL_TOK
 {
-  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
-  s.SetIndexWidth(0);
-  s.SetValueWidth(0);
+  ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
+      $1->c_str(), stp::SourceSort::boolean());
   stp::GlobalParserInterface->addSymbol(s);
   delete $1;
 }
@@ -1956,11 +2030,9 @@ STRING_TOK  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
   // The format must land on the symbol, or it types as a Boolean and every
   // use of the name is a syntax error (this branch used to forget it while
   // declare-fun's twin set it).
-  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
-  s.SetExpWidth($2->exp_bits);
-  s.SetSigWidth($2->sig_bits);
-  s.SetIndexWidth(0);
-  s.SetValueWidth($2->exp_bits + $2->sig_bits);
+  ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
+      $1->c_str(), stp::SourceSort::floatingPoint($2->exp_bits,
+                                                   $2->sig_bits));
   stp::GlobalParserInterface->addSymbol(s);
   delete $1;
   delete $2;
@@ -1973,11 +2045,8 @@ STRING_TOK  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
   {
     fatal_yyerror("unknown sort (not built in, and not a define-sort alias)");
   }
-  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
-  s.SetExpWidth(eb);
-  s.SetSigWidth(sb);
-  s.SetIndexWidth(0);
-  s.SetValueWidth(eb + sb);
+  ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
+      $1->c_str(), stp::SourceSort::floatingPoint(eb, sb));
   stp::GlobalParserInterface->addSymbol(s);
   delete $1;
   delete $2;
@@ -1986,9 +2055,8 @@ STRING_TOK  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
 {
   // As above: 5 bits, not 0 (a zero-width symbol would be a Boolean), and
   // pinned to the five legal encodings.
-  ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol($1->c_str());
-  s.SetIndexWidth(0);
-  s.SetValueWidth(5);
+  ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
+      $1->c_str(), stp::SourceSort::roundingMode());
   stp::GlobalParserInterface->addRoundingModeSymbol(s);
   delete $1;
 }
@@ -2086,26 +2154,13 @@ FORMID_TOK
   // Reject an ill-sorted = up front. The simplifying factory folds constant
   // operands before any type check can see them, so a width mismatch here
   // would otherwise be "solved" (to false) rather than diagnosed.
-  for (unsigned i = 1; i < terms.size();i++)
-  {
-    if (terms[i].GetType() != terms[0].GetType() ||
-        terms[i].GetValueWidth() != terms[0].GetValueWidth() ||
-        terms[i].GetIndexWidth() != terms[0].GetIndexWidth())
-    {
-      fatal_yyerror("= requires operands of the same sort");
-    }
-    if (terms[i].GetType() == FLOATINGPOINT_TYPE &&
-        (terms[i].GetExpWidth() != terms[0].GetExpWidth() ||
-         terms[i].GetSigWidth() != terms[0].GetSigWidth()))
-    {
-      fatal_yyerror("= requires floating-point operands of the same format");
-    }
-  }
+  checkSameSourceSort(terms, "= requires operands of the same sort");
 
   bool one_float = false;
   for (unsigned i = 0; i < terms.size();i++)
   {
-    one_float |= (terms[i].GetType() == FLOATINGPOINT_TYPE);
+    one_float |= (terms[i].GetSourceSort().kind() ==
+                  stp::SourceSort::Kind::FloatingPoint);
   }
 
   Kind k = one_float ? FP_SMT_EQ : EQ;
@@ -2137,17 +2192,7 @@ FORMID_TOK
   ASTVec terms = *$3;
   ASTVec forms;
 
-  for (size_t i = 1; i < terms.size(); i++)
-  {
-    if (terms[i].GetType() != terms[0].GetType() ||
-        terms[i].GetIndexWidth() != terms[0].GetIndexWidth() ||
-        terms[i].GetValueWidth() != terms[0].GetValueWidth())
-      fatal_yyerror("distinct requires operands of the same sort");
-    if (terms[i].GetType() == FLOATINGPOINT_TYPE &&
-        (terms[i].GetExpWidth() != terms[0].GetExpWidth() ||
-         terms[i].GetSigWidth() != terms[0].GetSigWidth()))
-      fatal_yyerror("distinct requires floating-point operands of the same format");
-  }
+  checkSameSourceSort(terms, "distinct requires operands of the same sort");
 
   for(ASTVec::const_iterator it=terms.begin(),itend=terms.end();
       it!=itend; it++)
@@ -2157,7 +2202,8 @@ FORMID_TOK
       // distinction the (= ...) rule makes. Building plain EQ over float
       // operands produces a node the later passes reject as a non-formula.
       const Kind eqk =
-        ((*it).GetType() == FLOATINGPOINT_TYPE) ? FP_SMT_EQ : EQ;
+        ((*it).GetSourceSort().kind() ==
+         stp::SourceSort::Kind::FloatingPoint) ? FP_SMT_EQ : EQ;
       ASTNode n =
         stp::GlobalParserInterface->nf->CreateNode(NOT, stp::GlobalParserInterface->CreateNode(eqk, *it, *it2));
 
@@ -2181,17 +2227,7 @@ FORMID_TOK
   ASTVec terms = *$3;
   ASTVec forms;
 
-  for (size_t i = 1; i < terms.size(); i++)
-  {
-    if (terms[i].GetType() != terms[0].GetType() ||
-        terms[i].GetIndexWidth() != terms[0].GetIndexWidth() ||
-        terms[i].GetValueWidth() != terms[0].GetValueWidth())
-      fatal_yyerror("distinct requires operands of the same sort");
-    if (terms[i].GetType() == FLOATINGPOINT_TYPE &&
-        (terms[i].GetExpWidth() != terms[0].GetExpWidth() ||
-         terms[i].GetSigWidth() != terms[0].GetSigWidth()))
-      fatal_yyerror("distinct requires floating-point operands of the same format");
-  }
+  checkSameSourceSort(terms, "distinct requires operands of the same sort");
 
   for(ASTVec::const_iterator it=terms.begin(),itend=terms.end();
       it!=itend; it++) {
@@ -2200,7 +2236,8 @@ FORMID_TOK
       // floating-point function-id reduces as a formula. Their equality is
       // FP_SMT_EQ, not IFF, which only holds between Booleans.
       const Kind eqk =
-        ((*it).GetType() == FLOATINGPOINT_TYPE) ? FP_SMT_EQ : IFF;
+        ((*it).GetSourceSort().kind() ==
+         stp::SourceSort::Kind::FloatingPoint) ? FP_SMT_EQ : IFF;
       ASTNode n = (stp::GlobalParserInterface->nf->CreateNode(NOT, stp::GlobalParserInterface->CreateNode(eqk, *it, *it2)));
       forms.push_back(n);
     }
@@ -2311,6 +2348,9 @@ FORMID_TOK
 }
 | LPAREN_TOK ITE_TOK an_formula an_formula an_formula RPAREN_TOK
 {
+  if (!$4->GetSourceSort().isKnown() ||
+      $4->GetSourceSort() != $5->GetSourceSort())
+    fatal_yyerror("ite branches must have the same sort");
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateNode(ITE, *$3, *$4, *$5));
   stp::GlobalParserInterface->deleteNode( $3);
   stp::GlobalParserInterface->deleteNode( $4);
@@ -2335,26 +2375,13 @@ FORMID_TOK
   // As with = over terms: catch mismatched operands before the factory can
   // fold them. A float can reach this rule too (parenthesised fp terms parse
   // as formulas), in which case its width differs from a Boolean's zero.
-  for (unsigned i = 1; i < forms.size();i++)
-  {
-    if (forms[i].GetType() != forms[0].GetType() ||
-        forms[i].GetValueWidth() != forms[0].GetValueWidth() ||
-        forms[i].GetIndexWidth() != forms[0].GetIndexWidth())
-    {
-      fatal_yyerror("= requires operands of the same sort");
-    }
-    if (forms[i].GetType() == FLOATINGPOINT_TYPE &&
-        (forms[i].GetExpWidth() != forms[0].GetExpWidth() ||
-         forms[i].GetSigWidth() != forms[0].GetSigWidth()))
-    {
-      fatal_yyerror("= requires floating-point operands of the same format");
-    }
-  }
+  checkSameSourceSort(forms, "= requires operands of the same sort");
 
   bool one_float = false;
   for (unsigned i = 0; i < forms.size();i++)
   {
-    one_float |= (forms[i].GetType() == FLOATINGPOINT_TYPE);
+    one_float |= (forms[i].GetSourceSort().kind() ==
+                  stp::SourceSort::Kind::FloatingPoint);
   }
 
   Kind k = one_float ? FP_SMT_EQ : IFF;
@@ -2405,9 +2432,8 @@ FORMID_TOK
   */
 
   // TODO, will fail if name is already defined?
-  ASTNode s(stp::GlobalParserInterface->LookupOrCreateSymbol($5->c_str()));
-  s.SetIndexWidth($3->GetIndexWidth());
-  s.SetValueWidth($3->GetValueWidth());
+  ASTNode s(stp::GlobalParserInterface->CreateSourceSymbol(
+      $5->c_str(), stp::SourceSort::boolean()));
 
   stp::GlobalParserInterface->addSymbol(s);
 
@@ -2499,28 +2525,28 @@ BVCONST_HEXIDECIMAL_TOK
 an_rounding_mode:
   FP_RM_ROUNDTOWARDZERO_TOK
 {
-  int width = 5;
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(width, ROUND_TOWARD_ZERO));
+  $$ = stp::GlobalParserInterface->newNode(
+      stp::GlobalParserInterface->CreateRMConst(ROUND_TOWARD_ZERO));
 }
 | FP_RM_ROUNDNEARESTTIESTOEVEN_TOK
 {
-  int width = 5;
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(width, ROUND_NEAREST_TIES_TO_EVEN));
+  $$ = stp::GlobalParserInterface->newNode(
+      stp::GlobalParserInterface->CreateRMConst(ROUND_NEAREST_TIES_TO_EVEN));
 }
 | FP_RM_ROUNDNEARESTTIESTOAWAY_TOK
 {
-  int width = 5;
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(width, ROUND_NEAREST_TIES_TO_AWAY));
+  $$ = stp::GlobalParserInterface->newNode(
+      stp::GlobalParserInterface->CreateRMConst(ROUND_NEAREST_TIES_TO_AWAY));
 }
 | FP_RM_ROUNDTOWARDPOSITIVE_TOK
 {
-  int width = 5;
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(width, ROUND_TOWARD_POSITIVE));
+  $$ = stp::GlobalParserInterface->newNode(
+      stp::GlobalParserInterface->CreateRMConst(ROUND_TOWARD_POSITIVE));
 }
 | FP_RM_ROUNDTOWARDNEGATIVE_TOK
 {
-  int width = 5;
-  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateBVConst(width, ROUND_TOWARD_NEGATIVE));
+  $$ = stp::GlobalParserInterface->newNode(
+      stp::GlobalParserInterface->CreateRMConst(ROUND_TOWARD_NEGATIVE));
 }
 ;
 
@@ -2737,6 +2763,7 @@ TERMID_TOK
   // valuewidth is same as array, indexwidth is 0.
   ASTNode array = *$2;
   ASTNode index = *$3;
+  checkArrayIndexSort(array, index);
   unsigned int width = array.GetValueWidth();
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateTerm(READ, width, array, index));
   stp::GlobalParserInterface->deleteNode( $2);
@@ -2749,6 +2776,8 @@ TERMID_TOK
   ASTNode array = *$2;
   ASTNode index = *$3;
   ASTNode writeval = *$4;
+  checkArrayIndexSort(array, index);
+  checkArrayValueSort(array, writeval);
   ASTNode write_term = stp::GlobalParserInterface->nf->CreateArrayTerm(WRITE,$2->GetIndexWidth(),width,array,index,writeval);
   $$ = stp::GlobalParserInterface->newNode(write_term);
   stp::GlobalParserInterface->deleteNode( $2);
@@ -2799,15 +2828,10 @@ TERMID_TOK
   // apart. (BVTypeCheck's ITE case backs this up for a symbolic
   // condition.) Packed bits are an internal representation, not a public
   // coercion: a float branch and a BitVec branch are different sorts.
-  if ($3->GetType() != $4->GetType())
+  if (!$3->GetSourceSort().isKnown() ||
+      $3->GetSourceSort() != $4->GetSourceSort())
   {
     fatal_yyerror("ite branches must have the same sort");
-  }
-  if ($3->GetType() == FLOATINGPOINT_TYPE &&
-      ($3->GetExpWidth() != $4->GetExpWidth() ||
-       $3->GetSigWidth() != $4->GetSigWidth()))
-  {
-    fatal_yyerror("ite branches differ in floating-point format");
   }
   const unsigned int width = $3->GetValueWidth();
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->nf->CreateArrayTerm(ITE,$4->GetIndexWidth(), width,*$2, *$3, *$4));
@@ -3044,19 +3068,39 @@ TERMID_TOK
 
   delete $1;
 }
+| LPAREN_TOK ROUNDINGMODE_FUNCTIONID_TOK an_mixed RPAREN_TOK
+{
+  $$ = stp::GlobalParserInterface->newNode(
+      stp::GlobalParserInterface->applyFunction(*$2, *$3));
+  if ($$->GetSourceSort().kind() != stp::SourceSort::Kind::RoundingMode)
+    yyerror("Must be RoundingMode type");
+  delete $2;
+  delete $3;
+}
+| ROUNDINGMODE_FUNCTIONID_TOK
+{
+  ASTVec empty;
+  $$ = stp::GlobalParserInterface->newNode(
+      stp::GlobalParserInterface->applyFunction(*$1, empty));
+  if ($$->GetSourceSort().kind() != stp::SourceSort::Kind::RoundingMode)
+    yyerror("Must be RoundingMode type");
+  delete $1;
+}
 | LPAREN_TOK EXCLAIMATION_MARK_TOK an_term NAMED_ATTRIBUTE_TOK STRING_TOK RPAREN_TOK
 {
   /* This implements (! <an_term> :named foo) */
 
-  ASTNode s(stp::GlobalParserInterface->LookupOrCreateSymbol($5->c_str()));
+  ASTNode s(stp::GlobalParserInterface->CreateSourceSymbol(
+      $5->c_str(), $3->GetSourceSort()));
   delete $5;
-
-  s.SetIndexWidth($3->GetIndexWidth());
-  s.SetValueWidth($3->GetValueWidth());
 
   stp::GlobalParserInterface->addSymbol(s);
 
-  ASTNode n = stp::GlobalParserInterface->CreateNode(EQ,s, *$3);
+  const Kind equality =
+      $3->GetSourceSort().kind() == stp::SourceSort::Kind::FloatingPoint
+          ? FP_SMT_EQ
+          : EQ;
+  ASTNode n = stp::GlobalParserInterface->CreateNode(equality, s, *$3);
 
   stp::GlobalParserInterface->AddAssert(n);
 

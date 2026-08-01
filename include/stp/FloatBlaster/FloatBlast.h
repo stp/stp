@@ -28,11 +28,14 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 
+#include <cstddef>
+#include <memory>
+
 namespace stp
 {
 
 // Lowers every floating-point operation in a formula to its bitvector
-// circuit, in one bottom-up traversal.
+// circuit.
 //
 // This used to happen inside simplification: SimplifyTerm's floating-point
 // arm simplified each float child -- which blasted it -- then rebuilt the
@@ -51,12 +54,17 @@ namespace stp
 //
 // Separating the two passes removes the need for the stamp rather than
 // working around it. Simplification now sees floating-point operations as
-// floating-point operations, with formats derived from their kinds and
-// children as they always were; this pass then replaces the whole
-// floating-point layer with bits in one go, taking each operation's operand
-// format from the node the input built rather than from the bits it lowered
-// to. Nothing downstream of it is floating-point, and no bitvector node
-// carries a float's format.
+// floating-point operations, with formats derived from their source sorts;
+// this pass then replaces the whole floating-point layer with bits.
+//
+// The source graph and the bit-vector graph deliberately have different
+// views here. A floating-point source node is represented internally by one
+// cached SymFPU unpacked value. FP operations and predicates consume that
+// value directly, so a chain is not packed after every operation only to be
+// unpacked by the next one. Packing is delayed until a real carrier boundary:
+// an explicit IEEE-bit conversion, an array element, or a floating-point
+// term returned for model evaluation. This preserves one rounding per source
+// operation while avoiding representation round-trips between operations.
 //
 // Runs after FpTotalise -- which supplies the extra child the partial
 // operations need -- and before the formula reaches the simplifier, so the
@@ -64,7 +72,20 @@ namespace stp
 class FloatBlast // not copyable
 {
 public:
+  struct Statistics
+  {
+    // Actual SymFPU decode/encode constructions (cache misses only).
+    size_t unpack_builds = 0;
+    size_t pack_builds = 0;
+
+    // Unpacked results built for source FP operations and conversions. Each
+    // arithmetic entry is the operation's final, rounded SymFPU result.
+    size_t unpacked_operation_builds = 0;
+    size_t unpacked_cache_hits = 0;
+  };
+
   FloatBlast(STPMgr* bm_);
+  ~FloatBlast();
 
   FloatBlast(const FloatBlast&) = delete;
   FloatBlast& operator=(const FloatBlast&) = delete;
@@ -73,18 +94,16 @@ public:
   // computes. Idempotent: a formula with none left is returned unchanged.
   ASTNode topLevel(const ASTNode& n);
 
+  // Cumulative, context-local counters. Besides diagnostics, these make the
+  // intended lazy boundary directly testable instead of inferring it from a
+  // hash-consed output DAG in which redundant construction can be hidden.
+  const Statistics& statistics() const noexcept;
+
 private:
-  ASTNode visit(const ASTNode& n);
-
-  // Rebuild `n` around new children, preserving its widths. Unlike
-  // FpTotalise's rebuild this does *not* put a floating-point format back:
-  // by the time a node is rebuilt here its floating-point children are bits,
-  // so it no longer denotes a float.
-  ASTNode rebuild(const ASTNode& n, const ASTVec& children);
-
-  STPMgr* bm;
-  NodeFactory* nf;
-  ASTNodeMap cache;
+  // SymFPU types stay out of this public header, and therefore out of builds
+  // configured without floating-point support.
+  class Impl;
+  std::unique_ptr<Impl> impl;
 };
 
 } // namespace stp

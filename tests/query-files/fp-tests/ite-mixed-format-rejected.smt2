@@ -10,7 +10,7 @@
 ; The condition is deliberately a constant: the factory folds such an
 ; if-then-else to one branch as the term is built, so only the parser's
 ; up-front check (not the type check on the built node) can see the pair.
-; CHECK: differ in floating-point format
+; CHECK: ite branches must have the same sort
 (set-logic QF_FP)
 (declare-fun x () (_ FloatingPoint 8 24))
 (declare-fun y () (_ FloatingPoint 24 8))

@@ -61,7 +61,9 @@ bool nodeNumLess(const ASTNode& a, const ASTNode& b)
 ASTNode plainConst(STPMgr* bm, const ASTNode& c)
 {
   assert(c.isConstant());
-  if (c.GetExpWidth() == 0)
+  const SourceSort::Kind sort = c.GetSourceSort().kind();
+  if (c.GetKind() != BVCONST ||
+      (c.GetExpWidth() == 0 && sort != SourceSort::Kind::RoundingMode))
     return c;
   return bm->CreateBVConst(CONSTANTBV::BitVector_Clone(c.GetBVConst()),
                            c.GetValueWidth());
@@ -246,8 +248,13 @@ ASTNode ExtensionalityContext::solveWriteChain(const ASTNode& a,
 
     NodeFactory* hf = bm->hashingNodeFactory;
     const unsigned ew = base.GetValueWidth();
-    const unsigned eb = base.GetExpWidth();
-    const unsigned sb = base.GetSigWidth();
+    const SourceSort baseSort = base.GetSourceSort();
+    assert(baseSort.kind() == SourceSort::Kind::Array);
+    const SourceSort elementSort = baseSort.element();
+    const bool floatElements =
+        elementSort.kind() == SourceSort::Kind::FloatingPoint;
+    const unsigned eb = floatElements ? elementSort.exponentWidth() : 0;
+    const unsigned sb = floatElements ? elementSort.significandWidth() : 0;
     ASTVec conjuncts;
     for (size_t k = 0; k < writesOutermostFirst.size(); k++)
     {
@@ -294,7 +301,11 @@ ASTNode ExtensionalityContext::solveWriteChain(const ASTNode& a,
 // recorded terms, and enters the formula at solve time.
 ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
 {
+  const SourceSort aSort = a.GetSourceSort();
+  const SourceSort bSort = b.GetSourceSort();
   if (!isArrayType(a) || !isArrayType(b) ||
+      aSort.kind() != SourceSort::Kind::Array ||
+      bSort.kind() != SourceSort::Kind::Array ||
       a.GetIndexWidth() != b.GetIndexWidth() ||
       a.GetValueWidth() != b.GetValueWidth())
   {
@@ -308,29 +319,17 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
   // floating-point formats splitting one width differently) may not be
   // equated, mirroring the parser's rejection of = between a float and
   // a bitvector.
-  if (a.GetExpWidth() != b.GetExpWidth() ||
-      a.GetSigWidth() != b.GetSigWidth() ||
-      bm->arrayHasRmElement(a) != bm->arrayHasRmElement(b))
+  if (aSort.element() != bSort.element())
   {
     FatalError("array-equality: equality between arrays requires "
                "identical element sorts",
                a);
   }
 
-  // The same for the index side, where the sorts richer than a width
-  // live in the manager's registries.
-  {
-    unsigned aie = 0, ais = 0, bie = 0, bis = 0;
-    const bool aFpIdx = bm->arrayHasFpIndex(a, aie, ais);
-    const bool bFpIdx = bm->arrayHasFpIndex(b, bie, bis);
-    if (aFpIdx != bFpIdx || (aFpIdx && (aie != bie || ais != bis)) ||
-        bm->arrayHasRmIndex(a) != bm->arrayHasRmIndex(b))
-    {
-      FatalError("array-equality: equality between arrays requires "
-                 "identical index sorts",
-                 a);
-    }
-  }
+  if (aSort.index() != bSort.index())
+    FatalError("array-equality: equality between arrays requires "
+               "identical index sorts",
+               a);
 
   // TopLevelSTP totalises the complete formula while ARRAY_EQ is still an
   // opaque, traversable node, before solve-boundary lowering calls here.
@@ -396,17 +395,20 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
   // "witnessed" by two NaN payloads of pointwise-equal arrays.
   ASTNode differ =
       hf->CreateNode(NOT, hf->CreateNode(EQ, r.nameL, r.nameR));
-  const unsigned eb = left.GetExpWidth();
-  if (eb != 0)
+  const SourceSort arraySort = left.GetSourceSort();
+  assert(arraySort.kind() == SourceSort::Kind::Array);
+  const SourceSort elementSort = arraySort.element();
+  if (elementSort.kind() == SourceSort::Kind::FloatingPoint)
   {
-    const unsigned sb = left.GetSigWidth();
+    const unsigned eb = elementSort.exponentWidth();
+    const unsigned sb = elementSort.significandWidth();
     differ = hf->CreateNode(
         AND, differ,
         hf->CreateNode(NOT,
                        hf->CreateNode(AND, isPackedNaN(hf, r.nameL, eb, sb),
                                       isPackedNaN(hf, r.nameR, eb, sb))));
   }
-  else if (bm->arrayHasRmElement(left))
+  else if (elementSort.kind() == SourceSort::Kind::RoundingMode)
   {
     // RoundingMode cells denote only through the five one-hot patterns,
     // so a witness difference must be a difference of modes: both cells
@@ -422,14 +424,16 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
   // Where the index sort quotients its bit patterns, the witness index
   // may only range over the denoting patterns; see indexSortClause.
   {
-    unsigned ieb = 0, isb = 0;
-    if (bm->arrayHasFpIndex(left, ieb, isb))
+    const SourceSort indexSort = arraySort.index();
+    if (indexSort.kind() == SourceSort::Kind::FloatingPoint)
     {
+      const unsigned ieb = indexSort.exponentWidth();
+      const unsigned isb = indexSort.significandWidth();
       r.indexSortClause = hf->CreateNode(
           OR, hf->CreateNode(NOT, isPackedNaN(hf, r.lambda, ieb, isb)),
           hf->CreateNode(EQ, r.lambda, canonicalQuietNaN(bm, ieb, isb)));
     }
-    else if (bm->arrayHasRmIndex(left))
+    else if (indexSort.kind() == SourceSort::Kind::RoundingMode)
     {
       r.indexSortClause = bm->roundingModeValidConstraint(r.lambda);
     }

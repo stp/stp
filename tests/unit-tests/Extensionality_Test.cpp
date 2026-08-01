@@ -2149,12 +2149,10 @@ TEST_F(ExtPrepareTest, FloatElementWitnessQuotientsNaN)
     EXPECT_EQ(plain, r.witnessClause);
   }
 
-  ASTNode fa = mgr.CreateSymbol("fa", 2, 32);
-  fa.SetExpWidth(8);
-  fa.SetSigWidth(24);
-  ASTNode fb = mgr.CreateSymbol("fb", 2, 32);
-  fb.SetExpWidth(8);
-  fb.SetSigWidth(24);
+  const SourceSort fpElements = SourceSort::array(
+      SourceSort::bitVector(2), SourceSort::floatingPoint(8, 24));
+  ASTNode fa = mgr.CreateSourceSymbol("fa", fpElements);
+  ASTNode fb = mgr.CreateSourceSymbol("fb", fpElements);
   ext->makeEquality(fa, fb);
   ASSERT_EQ(2u, ext->getRecords().size());
   {
@@ -2199,12 +2197,11 @@ TEST_F(ExtPrepareTest, FloatCellWriteChainQuotientsNaN)
   }
 
   {
-    ASTNode fa = mgr.CreateSymbol("fa", 2, 32);
-    fa.SetExpWidth(8);
-    fa.SetSigWidth(24);
-    ASTNode fv = mgr.CreateSymbol("fv", 0, 32);
-    fv.SetExpWidth(8);
-    fv.SetSigWidth(24);
+    ASTNode fa = mgr.CreateSourceSymbol(
+        "fa", SourceSort::array(SourceSort::bitVector(2),
+                                SourceSort::floatingPoint(8, 24)));
+    ASTNode fv = mgr.CreateSourceSymbol(
+        "fv", SourceSort::floatingPoint(8, 24));
     ASTNode j = bv("j");
     ASTNode w = hf->CreateArrayTerm(WRITE, 2, 32, {fa, j, fv});
     const ASTNode solved = ext->makeEquality(w, fa);
@@ -2231,15 +2228,11 @@ TEST_F(ExtPrepareTest, FloatCellWriteChainQuotientsNaN)
 TEST_F(ExtPrepareTest, FloatArrayIteEqualityGetsNanQualifiedWitness)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
-  ASTNode fa = mgr.CreateSymbol("fa", 2, 32);
-  fa.SetExpWidth(8);
-  fa.SetSigWidth(24);
-  ASTNode fb = mgr.CreateSymbol("fb", 2, 32);
-  fb.SetExpWidth(8);
-  fb.SetSigWidth(24);
-  ASTNode fd = mgr.CreateSymbol("fd", 2, 32);
-  fd.SetExpWidth(8);
-  fd.SetSigWidth(24);
+  const SourceSort fpElements = SourceSort::array(
+      SourceSort::bitVector(2), SourceSort::floatingPoint(8, 24));
+  ASTNode fa = mgr.CreateSourceSymbol("fa", fpElements);
+  ASTNode fb = mgr.CreateSourceSymbol("fb", fpElements);
+  ASTNode fd = mgr.CreateSourceSymbol("fd", fpElements);
   ASTNode c = mgr.CreateSymbol("c", 0, 0);
 
   const ASTNode ite = hf->CreateArrayTerm(ITE, 2, 32, {c, fa, fb});
@@ -2267,9 +2260,9 @@ TEST_F(ExtPrepareTest, FloatArrayIteEqualityGetsNanQualifiedWitness)
 // may not be equated with a bitvector-element array.
 TEST_F(ExtPrepareTest, MixedElementSortEqualityFailsLoudly)
 {
-  ASTNode fa = mgr.CreateSymbol("fa", 2, 32);
-  fa.SetExpWidth(8);
-  fa.SetSigWidth(24);
+  ASTNode fa = mgr.CreateSourceSymbol(
+      "fa", SourceSort::array(SourceSort::bitVector(2),
+                              SourceSort::floatingPoint(8, 24)));
   ASTNode b = mgr.CreateSymbol("b", 2, 32);
   EXPECT_DEATH(ext->makeEquality(fa, b), "identical element sorts");
 }
@@ -2285,10 +2278,10 @@ TEST_F(ExtPrepareTest, WitnessIndexConfinedToDenotingPatterns)
   ASSERT_EQ(1u, ext->getRecords().size());
   EXPECT_TRUE(ext->getRecords()[0].indexSortClause.IsNull());
 
-  ASTNode fa = mgr.CreateSymbol("fa", 32, 8);
-  ASTNode fb = mgr.CreateSymbol("fb", 32, 8);
-  mgr.fp_index_arrays[fa] = std::make_pair(8u, 24u);
-  mgr.fp_index_arrays[fb] = std::make_pair(8u, 24u);
+  const SourceSort fpIndex = SourceSort::array(
+      SourceSort::floatingPoint(8, 24), SourceSort::bitVector(8));
+  ASTNode fa = mgr.CreateSourceSymbol("fa", fpIndex);
+  ASTNode fb = mgr.CreateSourceSymbol("fb", fpIndex);
   ext->makeEquality(fa, fb);
   ASSERT_EQ(2u, ext->getRecords().size());
   {
@@ -2297,10 +2290,10 @@ TEST_F(ExtPrepareTest, WitnessIndexConfinedToDenotingPatterns)
     EXPECT_EQ(OR, r.indexSortClause.GetKind());
   }
 
-  ASTNode ra = mgr.CreateSymbol("ra", 5, 8);
-  ASTNode rb = mgr.CreateSymbol("rb", 5, 8);
-  mgr.rm_index_arrays.insert(ra);
-  mgr.rm_index_arrays.insert(rb);
+  const SourceSort rmIndex = SourceSort::array(
+      SourceSort::roundingMode(), SourceSort::bitVector(8));
+  ASTNode ra = mgr.CreateSourceSymbol("ra", rmIndex);
+  ASTNode rb = mgr.CreateSourceSymbol("rb", rmIndex);
   ext->makeEquality(ra, rb);
   ASSERT_EQ(3u, ext->getRecords().size());
   {
@@ -2314,10 +2307,10 @@ TEST_F(ExtPrepareTest, WitnessIndexConfinedToDenotingPatterns)
 // modes next to the bitwise disequality.
 TEST_F(ExtPrepareTest, RoundingModeElementWitnessPinsCells)
 {
-  ASTNode ra = mgr.CreateSymbol("rea", 2, 5);
-  ASTNode rb = mgr.CreateSymbol("reb", 2, 5);
-  mgr.rm_element_arrays.insert(ra);
-  mgr.rm_element_arrays.insert(rb);
+  const SourceSort rmElements = SourceSort::array(
+      SourceSort::bitVector(2), SourceSort::roundingMode());
+  ASTNode ra = mgr.CreateSourceSymbol("rea", rmElements);
+  ASTNode rb = mgr.CreateSourceSymbol("reb", rmElements);
   ext->makeEquality(ra, rb);
   ASSERT_EQ(1u, ext->getRecords().size());
   const ExtensionalityContext::Record& r = ext->getRecords()[0];
@@ -2337,12 +2330,11 @@ TEST_F(ExtPrepareTest, RoundingModeElementWitnessPinsCells)
 TEST_F(ExtPrepareTest, IteOverFloatIndexedArraysConfinesItsWitnessIndex)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
-  ASTNode fa = mgr.CreateSymbol("fia", 32, 8);
-  ASTNode fb = mgr.CreateSymbol("fib", 32, 8);
-  ASTNode fd = mgr.CreateSymbol("fid", 32, 8);
-  mgr.fp_index_arrays[fa] = std::make_pair(8u, 24u);
-  mgr.fp_index_arrays[fb] = std::make_pair(8u, 24u);
-  mgr.fp_index_arrays[fd] = std::make_pair(8u, 24u);
+  const SourceSort fpIndex = SourceSort::array(
+      SourceSort::floatingPoint(8, 24), SourceSort::bitVector(8));
+  ASTNode fa = mgr.CreateSourceSymbol("fia", fpIndex);
+  ASTNode fb = mgr.CreateSourceSymbol("fib", fpIndex);
+  ASTNode fd = mgr.CreateSourceSymbol("fid", fpIndex);
   ASTNode c = mgr.CreateSymbol("c", 0, 0);
 
   const ASTNode ite = hf->CreateArrayTerm(ITE, 32, 8, {c, fa, fb});
@@ -2365,8 +2357,9 @@ TEST_F(ExtPrepareTest, IteOverFloatIndexedArraysConfinesItsWitnessIndex)
 // not be equated with a bitvector-indexed one.
 TEST_F(ExtPrepareTest, MixedIndexSortEqualityFailsLoudly)
 {
-  ASTNode fa = mgr.CreateSymbol("fa", 32, 8);
-  mgr.fp_index_arrays[fa] = std::make_pair(8u, 24u);
+  ASTNode fa = mgr.CreateSourceSymbol(
+      "fa", SourceSort::array(SourceSort::floatingPoint(8, 24),
+                              SourceSort::bitVector(8)));
   ASTNode b = mgr.CreateSymbol("b", 32, 8);
   EXPECT_DEATH(ext->makeEquality(fa, b), "identical index sorts");
 }

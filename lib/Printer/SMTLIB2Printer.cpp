@@ -227,7 +227,10 @@ void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr,
                        const bool definately_bv)
 {
   const bool has_arrays = !definately_bv && containsArrayOps(n, mgr);
-  const bool has_fp = mgr->has_floating_point;
+  // Logic selection describes this expression, not every term ever interned
+  // by the manager. Include RoundingMode-only formulas: that source sort is
+  // part of the FP theory even when no FloatingPoint value occurs.
+  const bool has_fp = containsFloatingPointTheory(n, mgr);
   if (has_fp)
     os << (has_arrays ? "(set-logic QF_ABVFP)\n" : "(set-logic QF_BVFP)\n");
   else
@@ -495,7 +498,14 @@ void SMTLIB2_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
     case BVCONST:
       // A float constant is stored as its packed bits, but denotes a float:
       // print it in (fp ...) syntax, not as a bitvector literal.
-      if (n.GetType() == stp::FLOATINGPOINT_TYPE)
+      if (n.GetSourceSort().kind() == stp::SourceSort::Kind::RoundingMode)
+      {
+        const char* name = roundingModeName(n.GetUnsignedConst());
+        if (name == NULL)
+          FatalError("invalid RoundingMode literal", n);
+        os << name;
+      }
+      else if (n.GetType() == stp::FLOATINGPOINT_TYPE)
         outputFloatingPointSMTLIB2(n, os, n);
       else
         outputBitVecSMTLIB2(n, os);

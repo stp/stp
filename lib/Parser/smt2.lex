@@ -127,6 +127,15 @@ namespace stp
     // would cost on boolean-function references.
     else if (stp::GlobalParserInterface->hasFunctions())
     {
+      const stp::SourceSort source_sort =
+          stp::GlobalParserInterface->functionReturnSourceSort(s);
+      if (source_sort.kind() == stp::SourceSort::Kind::RoundingMode)
+      {
+        smt2lval.str = new std::string(s);
+        if (cleaned)
+          free(cleaned);
+        return ROUNDINGMODE_FUNCTIONID_TOK;
+      }
       const stp::types ft = stp::GlobalParserInterface->functionReturnType(s);
       if (ft == stp::BITVECTOR_TYPE)
       {

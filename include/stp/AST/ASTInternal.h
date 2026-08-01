@@ -29,6 +29,7 @@ THE SOFTWARE.
 // including ASTNode.h would create a circular include that forces the hot
 // ASTNode accessors (GetKind/GetNodeNum/...) to be defined out-of-line.
 #include "stp/AST/UsefulDefs.h"
+#include "stp/AST/SourceSort.h"
 #include <iostream>
 
 using std::ostream;
@@ -100,6 +101,13 @@ protected:
 
   virtual void setSigWidth(uint32_t) = 0;
   virtual uint32_t getSigWidth() const = 0;
+
+  // Source-language identity carried by leaves. Interior-node sorts are
+  // derived by ASTNode::GetSourceSort from their operator and children.
+  virtual SourceSort getDeclaredSourceSort() const
+  {
+    return SourceSort::unknown();
+  }
 
   /*******************************************************************
    * ASTNode is of type BV      <==> ((indexwidth=0)&&(valuewidth>0))*

@@ -219,11 +219,11 @@ ASTNode FloatBlaster::unspecifiedValue(STPMgr* bm, const char* tag,
   name += tag;
 
   // Then the operand formats, which the packed widths below cannot stand in
-  // for -- see the header. Every caller holds format-carrying operands: the
-  // pass runs before lowering, and the model-evaluation route re-stamps its
-  // evaluated children through withFormat before totalising them. A caller
-  // that lost the format would quietly mint a *different* array from the one
-  // the solve constrained, so refuse rather than answer from the wrong one.
+  // for -- see the header. Every caller holds format-carrying source operands:
+  // the pass runs before lowering, and model evaluation reuses that same pass
+  // through the solve's encoding context. A caller that lost the format would
+  // quietly mint a *different* array from the one the solve constrained, so
+  // refuse rather than answer from the wrong one.
   for (size_t i = 0; i < operands.size(); i++)
   {
     const unsigned int exp_width = operands[i].GetExpWidth();

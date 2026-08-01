@@ -705,35 +705,228 @@ namespace stp
 namespace symbolic_fp
 {
 
+namespace
+{
+void assertUnpackedFormat(const floatingPointTypeInfo& size, const uf& value)
+{
+  assert(value.getExponent().getWidth() == uf::exponentWidth(size));
+  assert(value.getSignificand().getWidth() == uf::significandWidth(size));
+  (void)size;
+  (void)value;
+}
+} // namespace
+
+namespace unpacked
+{
+
+uf decode(const floatingPointTypeInfo& size, const ASTNode& packed)
+{
+  assert(packed.GetValueWidth() == size.packedWidth());
+  return symfpu::unpack<traits>(size, packed);
+}
+
+ASTNode encode(const floatingPointTypeInfo& size, const uf& value)
+{
+  assertUnpackedFormat(size, value);
+  return symfpu::pack<traits>(size, value);
+}
+
+uf select(const ASTNode& condition, const uf& when_true,
+          const uf& when_false)
+{
+  assert(condition.GetType() == BOOLEAN_TYPE);
+  assert(when_true.getExponent().getWidth() ==
+         when_false.getExponent().getWidth());
+  assert(when_true.getSignificand().getWidth() ==
+         when_false.getSignificand().getWidth());
+  return symfpu::ite<proposition, uf>::iteOp(
+      proposition(condition), when_true, when_false);
+}
+
+ASTNode smtEqual(const floatingPointTypeInfo& size, const uf& lhs,
+                 const uf& rhs)
+{
+  assertUnpackedFormat(size, lhs);
+  assertUnpackedFormat(size, rhs);
+  return symfpu::smtlibEqual<traits>(size, lhs, rhs);
+}
+
+uf add(const floatingPointTypeInfo& size, const ASTNode& rm, const uf& lhs,
+       const uf& rhs)
+{
+  assertUnpackedFormat(size, lhs);
+  assertUnpackedFormat(size, rhs);
+  return symfpu::add<traits>(size, rm, lhs, rhs, true);
+}
+
+uf sub(const floatingPointTypeInfo& size, const ASTNode& rm, const uf& lhs,
+       const uf& rhs)
+{
+  assertUnpackedFormat(size, lhs);
+  assertUnpackedFormat(size, rhs);
+  return symfpu::add<traits>(size, rm, lhs, rhs, false);
+}
+
+uf mul(const floatingPointTypeInfo& size, const ASTNode& rm, const uf& lhs,
+       const uf& rhs)
+{
+  assertUnpackedFormat(size, lhs);
+  assertUnpackedFormat(size, rhs);
+  return symfpu::multiply<traits>(size, rm, lhs, rhs);
+}
+
+uf div(const floatingPointTypeInfo& size, const ASTNode& rm, const uf& lhs,
+       const uf& rhs)
+{
+  assertUnpackedFormat(size, lhs);
+  assertUnpackedFormat(size, rhs);
+  return symfpu::divide<traits>(size, rm, lhs, rhs);
+}
+
+uf fma(const floatingPointTypeInfo& size, const ASTNode& rm, const uf& x,
+       const uf& y, const uf& z)
+{
+  assertUnpackedFormat(size, x);
+  assertUnpackedFormat(size, y);
+  assertUnpackedFormat(size, z);
+  return symfpu::fma<traits>(size, rm, x, y, z);
+}
+
+uf sqrt(const floatingPointTypeInfo& size, const ASTNode& rm, const uf& value)
+{
+  assertUnpackedFormat(size, value);
+  return symfpu::sqrt<traits>(size, rm, value);
+}
+
+uf rem(const floatingPointTypeInfo& size, const uf& lhs, const uf& rhs)
+{
+  assertUnpackedFormat(size, lhs);
+  assertUnpackedFormat(size, rhs);
+  return symfpu::remainder<traits>(size, lhs, rhs);
+}
+
+uf min(const floatingPointTypeInfo& size, const uf& lhs, const uf& rhs,
+       const ASTNode& zero_case)
+{
+  assertUnpackedFormat(size, lhs);
+  assertUnpackedFormat(size, rhs);
+  return symfpu::min<traits>(size, lhs, rhs, proposition(zero_case));
+}
+
+uf max(const floatingPointTypeInfo& size, const uf& lhs, const uf& rhs,
+       const ASTNode& zero_case)
+{
+  assertUnpackedFormat(size, lhs);
+  assertUnpackedFormat(size, rhs);
+  return symfpu::max<traits>(size, lhs, rhs, proposition(zero_case));
+}
+
+uf abs(const floatingPointTypeInfo& size, const uf& value)
+{
+  assertUnpackedFormat(size, value);
+  return symfpu::absolute<traits>(size, value);
+}
+
+uf neg(const floatingPointTypeInfo& size, const uf& value)
+{
+  assertUnpackedFormat(size, value);
+  return symfpu::negate<traits>(size, value);
+}
+
+uf roundToIntegral(const floatingPointTypeInfo& size, const ASTNode& rm,
+                   const uf& value)
+{
+  assertUnpackedFormat(size, value);
+  return symfpu::roundToIntegral<traits>(size, rm, value);
+}
+
+ASTNode toBV(const floatingPointTypeInfo& size, const ASTNode& rm,
+             const uf& value, bitWidthType target_width,
+             const ASTNode& undef, bool is_signed)
+{
+  assertUnpackedFormat(size, value);
+  if (is_signed)
+    return symfpu::convertFloatToSBV<traits>(size, rm, value, target_width,
+                                             traits::sbv(undef));
+
+  return symfpu::convertFloatToUBV<traits>(size, rm, value, target_width,
+                                           traits::ubv(undef));
+}
+
+ASTNode ieeeEqual(const floatingPointTypeInfo& size, const uf& lhs,
+                  const uf& rhs)
+{
+  assertUnpackedFormat(size, lhs);
+  assertUnpackedFormat(size, rhs);
+  return symfpu::ieee754Equal<traits>(size, lhs, rhs);
+}
+
+ASTNode lessThan(const floatingPointTypeInfo& size, const uf& lhs,
+                 const uf& rhs)
+{
+  assertUnpackedFormat(size, lhs);
+  assertUnpackedFormat(size, rhs);
+  return symfpu::lessThan<traits>(size, lhs, rhs);
+}
+
+ASTNode lessThanOrEqual(const floatingPointTypeInfo& size, const uf& lhs,
+                        const uf& rhs)
+{
+  assertUnpackedFormat(size, lhs);
+  assertUnpackedFormat(size, rhs);
+  return symfpu::lessThanOrEqual<traits>(size, lhs, rhs);
+}
+
+#define STP_UNPACKED_CLASSIFY(name, symfpu_fn)                                 \
+  ASTNode name(const floatingPointTypeInfo& size, const uf& value)             \
+  {                                                                            \
+    assertUnpackedFormat(size, value);                                          \
+    return symfpu::symfpu_fn<traits>(size, value);                              \
+  }
+
+STP_UNPACKED_CLASSIFY(isNormal, isNormal)
+STP_UNPACKED_CLASSIFY(isSubnormal, isSubnormal)
+STP_UNPACKED_CLASSIFY(isZero, isZero)
+STP_UNPACKED_CLASSIFY(isInfinite, isInfinite)
+STP_UNPACKED_CLASSIFY(isNaN, isNaN)
+STP_UNPACKED_CLASSIFY(isNegative, isNegative)
+STP_UNPACKED_CLASSIFY(isPositive, isPositive)
+
+#undef STP_UNPACKED_CLASSIFY
+
+uf convertBVToFloat(const floatingPointTypeInfo& target, const ASTNode& rm,
+                    const ASTNode& bits, bool is_signed)
+{
+  return is_signed
+             ? symfpu::convertSBVToFloat<traits>(target, rm, traits::sbv(bits))
+             : symfpu::convertUBVToFloat<traits>(target, rm, traits::ubv(bits));
+}
+
+uf convertFloatToFloat(const floatingPointTypeInfo& source,
+                       const floatingPointTypeInfo& target,
+                       const ASTNode& rm, const uf& value)
+{
+  assertUnpackedFormat(source, value);
+  return symfpu::convertFloatToFloat<traits>(source, target, rm, value);
+}
+
+} // namespace unpacked
+
 ASTNode blast_smt_eq(const floatingPointTypeInfo& size, const ASTNode& lhs,
                      const ASTNode& rhs)
 {
-  assert(lhs.GetValueWidth() == size.packedWidth());
-  assert(rhs.GetValueWidth() == size.packedWidth());
-
-  uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
-  uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
-
-  proposition eq =
-      symfpu::smtlibEqual<traits>(size, unpacked_lhs, unpacked_rhs);
-
-  return eq;
+  const uf unpacked_lhs(unpacked::decode(size, lhs));
+  const uf unpacked_rhs(unpacked::decode(size, rhs));
+  return unpacked::smtEqual(size, unpacked_lhs, unpacked_rhs);
 }
 
 ASTNode blast_fpadd(const floatingPointTypeInfo& size, const ASTNode& rm,
                     const ASTNode& lhs, const ASTNode& rhs)
 {
-  assert(lhs.GetValueWidth() == size.packedWidth());
-  assert(rhs.GetValueWidth() == size.packedWidth());
-  uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
-  uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
-
-  uf unpacked_add(
-      symfpu::add<traits>(size, rm, unpacked_lhs, unpacked_rhs, true));
-
-  ASTNode packed(symfpu::pack<traits>(size, unpacked_add));
-
-  return packed;
+  const uf unpacked_lhs(unpacked::decode(size, lhs));
+  const uf unpacked_rhs(unpacked::decode(size, rhs));
+  const uf result(unpacked::add(size, rm, unpacked_lhs, unpacked_rhs));
+  return unpacked::encode(size, result);
 }
 
 // fp.sub is fp.add with the isAdd flag cleared: symfpu negates the right
@@ -744,75 +937,47 @@ ASTNode blast_fpadd(const floatingPointTypeInfo& size, const ASTNode& rm,
 ASTNode blast_fpsub(const floatingPointTypeInfo& size, const ASTNode& rm,
                     const ASTNode& lhs, const ASTNode& rhs)
 {
-  assert(lhs.GetValueWidth() == size.packedWidth());
-  assert(rhs.GetValueWidth() == size.packedWidth());
-  uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
-  uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
-
-  uf unpacked_sub(
-      symfpu::add<traits>(size, rm, unpacked_lhs, unpacked_rhs, false));
-
-  ASTNode packed(symfpu::pack<traits>(size, unpacked_sub));
-
-  return packed;
+  const uf unpacked_lhs(unpacked::decode(size, lhs));
+  const uf unpacked_rhs(unpacked::decode(size, rhs));
+  const uf result(unpacked::sub(size, rm, unpacked_lhs, unpacked_rhs));
+  return unpacked::encode(size, result);
 }
 
 ASTNode blast_fpmul(const floatingPointTypeInfo& size, const ASTNode& rm,
                     const ASTNode& lhs, const ASTNode& rhs)
 {
-  assert(lhs.GetValueWidth() == size.packedWidth());
-  assert(rhs.GetValueWidth() == size.packedWidth());
-  uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
-  uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
-
-  uf unpacked_mul(
-      symfpu::multiply<traits>(size, rm, unpacked_lhs, unpacked_rhs));
-
-  ASTNode packed(symfpu::pack<traits>(size, unpacked_mul));
-
-  return packed;
+  const uf unpacked_lhs(unpacked::decode(size, lhs));
+  const uf unpacked_rhs(unpacked::decode(size, rhs));
+  const uf result(unpacked::mul(size, rm, unpacked_lhs, unpacked_rhs));
+  return unpacked::encode(size, result);
 }
 
 ASTNode blast_fpdiv(const floatingPointTypeInfo& size, const ASTNode& rm,
                     const ASTNode& lhs, const ASTNode& rhs)
 {
-  assert(lhs.GetValueWidth() == size.packedWidth());
-  assert(rhs.GetValueWidth() == size.packedWidth());
-  uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
-  uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
-
-  uf unpacked_div(symfpu::divide<traits>(size, rm, unpacked_lhs, unpacked_rhs));
-
-  ASTNode packed(symfpu::pack<traits>(size, unpacked_div));
-
-  return packed;
+  const uf unpacked_lhs(unpacked::decode(size, lhs));
+  const uf unpacked_rhs(unpacked::decode(size, rhs));
+  const uf result(unpacked::div(size, rm, unpacked_lhs, unpacked_rhs));
+  return unpacked::encode(size, result);
 }
 
 ASTNode blast_fpfma(const floatingPointTypeInfo& size, const ASTNode& rm,
                     const ASTNode& x, const ASTNode& y, const ASTNode& z)
 {
-  assert(x.GetValueWidth() == size.packedWidth());
-  assert(y.GetValueWidth() == size.packedWidth());
-  assert(z.GetValueWidth() == size.packedWidth());
-  uf unpacked_x(symfpu::unpack<traits>(size, x));
-  uf unpacked_y(symfpu::unpack<traits>(size, y));
-  uf unpacked_z(symfpu::unpack<traits>(size, z));
-
-  uf result(symfpu::fma<traits>(size, rm, unpacked_x, unpacked_y, unpacked_z));
-
-  ASTNode packed(symfpu::pack<traits>(size, result));
-
-  return packed;
+  const uf unpacked_x(unpacked::decode(size, x));
+  const uf unpacked_y(unpacked::decode(size, y));
+  const uf unpacked_z(unpacked::decode(size, z));
+  const uf result(
+      unpacked::fma(size, rm, unpacked_x, unpacked_y, unpacked_z));
+  return unpacked::encode(size, result);
 }
 
 ASTNode blast_fpsqrt(const floatingPointTypeInfo& size, const ASTNode& rm,
                      const ASTNode& expr)
 {
-  assert(expr.GetValueWidth() == size.packedWidth());
-  uf unpacked(symfpu::unpack<traits>(size, expr));
-  uf result(symfpu::sqrt<traits>(size, rm, unpacked));
-  ASTNode packed(symfpu::pack<traits>(size, result));
-  return packed;
+  const uf value(unpacked::decode(size, expr));
+  const uf result(unpacked::sqrt(size, rm, value));
+  return unpacked::encode(size, result);
 }
 
 // fp.rem takes no rounding mode: the remainder is always exact, so there is
@@ -821,16 +986,10 @@ ASTNode blast_fpsqrt(const floatingPointTypeInfo& size, const ASTNode& rm,
 ASTNode blast_fprem(const floatingPointTypeInfo& size, const ASTNode& lhs,
                     const ASTNode& rhs)
 {
-  assert(lhs.GetValueWidth() == size.packedWidth());
-  assert(rhs.GetValueWidth() == size.packedWidth());
-  uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
-  uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
-
-  uf result(symfpu::remainder<traits>(size, unpacked_lhs, unpacked_rhs));
-
-  ASTNode packed(symfpu::pack<traits>(size, result));
-
-  return packed;
+  const uf unpacked_lhs(unpacked::decode(size, lhs));
+  const uf unpacked_rhs(unpacked::decode(size, rhs));
+  const uf result(unpacked::rem(size, unpacked_lhs, unpacked_rhs));
+  return unpacked::encode(size, result);
 }
 
 // fp.min/fp.max are unspecified when the arguments are +0 and -0: SMT-LIB
@@ -840,78 +999,53 @@ ASTNode blast_fprem(const floatingPointTypeInfo& size, const ASTNode& lhs,
 ASTNode blast_fpmin(const floatingPointTypeInfo& size, const ASTNode& lhs,
                     const ASTNode& rhs, const ASTNode& zero_case)
 {
-  assert(lhs.GetValueWidth() == size.packedWidth());
-  assert(rhs.GetValueWidth() == size.packedWidth());
-  uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
-  uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
-
-  uf result(symfpu::min<traits>(size, unpacked_lhs, unpacked_rhs,
-                                proposition(zero_case)));
-
-  ASTNode packed(symfpu::pack<traits>(size, result));
-
-  return packed;
+  const uf unpacked_lhs(unpacked::decode(size, lhs));
+  const uf unpacked_rhs(unpacked::decode(size, rhs));
+  const uf result(
+      unpacked::min(size, unpacked_lhs, unpacked_rhs, zero_case));
+  return unpacked::encode(size, result);
 }
 
 ASTNode blast_fpmax(const floatingPointTypeInfo& size, const ASTNode& lhs,
                     const ASTNode& rhs, const ASTNode& zero_case)
 {
-  assert(lhs.GetValueWidth() == size.packedWidth());
-  assert(rhs.GetValueWidth() == size.packedWidth());
-  uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
-  uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
-
-  uf result(symfpu::max<traits>(size, unpacked_lhs, unpacked_rhs,
-                                proposition(zero_case)));
-
-  ASTNode packed(symfpu::pack<traits>(size, result));
-
-  return packed;
+  const uf unpacked_lhs(unpacked::decode(size, lhs));
+  const uf unpacked_rhs(unpacked::decode(size, rhs));
+  const uf result(
+      unpacked::max(size, unpacked_lhs, unpacked_rhs, zero_case));
+  return unpacked::encode(size, result);
 }
 
 ASTNode blast_fp_to_bv(const floatingPointTypeInfo& size, const ASTNode& rm,
                        const ASTNode& expr, bitWidthType target_width,
                        const ASTNode& undef, bool is_signed)
 {
-  assert(expr.GetValueWidth() == size.packedWidth());
-  uf unpacked(symfpu::unpack<traits>(size, expr));
-
-  if (is_signed)
-    return symfpu::convertFloatToSBV<traits>(size, rm, unpacked, target_width,
-                                             traits::sbv(undef));
-
-  return symfpu::convertFloatToUBV<traits>(size, rm, unpacked, target_width,
-                                           traits::ubv(undef));
+  const uf value(unpacked::decode(size, expr));
+  return unpacked::toBV(size, rm, value, target_width, undef, is_signed);
 }
 
 // fp.abs and fp.neg only touch the sign bit, but they go through unpack/pack
 // anyway so that the NaN and infinity encodings stay canonical.
 ASTNode blast_fpabs(const floatingPointTypeInfo& size, const ASTNode& expr)
 {
-  assert(expr.GetValueWidth() == size.packedWidth());
-  uf unpacked(symfpu::unpack<traits>(size, expr));
-  uf result(symfpu::absolute<traits>(size, unpacked));
-  ASTNode packed(symfpu::pack<traits>(size, result));
-  return packed;
+  const uf value(unpacked::decode(size, expr));
+  const uf result(unpacked::abs(size, value));
+  return unpacked::encode(size, result);
 }
 
 ASTNode blast_fpneg(const floatingPointTypeInfo& size, const ASTNode& expr)
 {
-  assert(expr.GetValueWidth() == size.packedWidth());
-  uf unpacked(symfpu::unpack<traits>(size, expr));
-  uf result(symfpu::negate<traits>(size, unpacked));
-  ASTNode packed(symfpu::pack<traits>(size, result));
-  return packed;
+  const uf value(unpacked::decode(size, expr));
+  const uf result(unpacked::neg(size, value));
+  return unpacked::encode(size, result);
 }
 
 // The classification predicates. Each returns a Boolean-typed node.
-#define STP_BLAST_CLASSIFY(name, symfpu_fn)                                    \
+#define STP_BLAST_CLASSIFY(name, unpacked_fn)                                  \
   ASTNode name(const floatingPointTypeInfo& size, const ASTNode& expr)         \
   {                                                                            \
-    assert(expr.GetValueWidth() == size.packedWidth());                        \
-    uf unpacked(symfpu::unpack<traits>(size, expr));                           \
-    proposition result(symfpu::symfpu_fn<traits>(size, unpacked));             \
-    return result;                                                             \
+    const uf value(unpacked::decode(size, expr));                              \
+    return unpacked::unpacked_fn(size, value);                                 \
   }
 
 STP_BLAST_CLASSIFY(blast_is_normal, isNormal)
@@ -930,14 +1064,9 @@ STP_BLAST_CLASSIFY(blast_is_positive, isPositive)
 ASTNode blast_fpeq(const floatingPointTypeInfo& size, const ASTNode& lhs,
                    const ASTNode& rhs)
 {
-  assert(lhs.GetValueWidth() == size.packedWidth());
-  assert(rhs.GetValueWidth() == size.packedWidth());
-  uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
-  uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
-
-  proposition eq(symfpu::ieee754Equal<traits>(size, unpacked_lhs, unpacked_rhs));
-
-  return eq;
+  const uf unpacked_lhs(unpacked::decode(size, lhs));
+  const uf unpacked_rhs(unpacked::decode(size, rhs));
+  return unpacked::ieeeEqual(size, unpacked_lhs, unpacked_rhs);
 }
 
 // The ordering predicates are the IEEE-754 ones, so they are false whenever
@@ -946,28 +1075,17 @@ ASTNode blast_fpeq(const floatingPointTypeInfo& size, const ASTNode& lhs,
 ASTNode blast_fplt(const floatingPointTypeInfo& size, const ASTNode& lhs,
                    const ASTNode& rhs)
 {
-  assert(lhs.GetValueWidth() == size.packedWidth());
-  assert(rhs.GetValueWidth() == size.packedWidth());
-  uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
-  uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
-
-  proposition lt(symfpu::lessThan<traits>(size, unpacked_lhs, unpacked_rhs));
-
-  return lt;
+  const uf unpacked_lhs(unpacked::decode(size, lhs));
+  const uf unpacked_rhs(unpacked::decode(size, rhs));
+  return unpacked::lessThan(size, unpacked_lhs, unpacked_rhs);
 }
 
 ASTNode blast_fpleq(const floatingPointTypeInfo& size, const ASTNode& lhs,
                     const ASTNode& rhs)
 {
-  assert(lhs.GetValueWidth() == size.packedWidth());
-  assert(rhs.GetValueWidth() == size.packedWidth());
-  uf unpacked_lhs(symfpu::unpack<traits>(size, lhs));
-  uf unpacked_rhs(symfpu::unpack<traits>(size, rhs));
-
-  proposition leq(
-      symfpu::lessThanOrEqual<traits>(size, unpacked_lhs, unpacked_rhs));
-
-  return leq;
+  const uf unpacked_lhs(unpacked::decode(size, lhs));
+  const uf unpacked_rhs(unpacked::decode(size, rhs));
+  return unpacked::lessThanOrEqual(size, unpacked_lhs, unpacked_rhs);
 }
 
 // ((_ to_fp e s) bv) reinterprets a bitvector's bits as a float. Floats are
@@ -980,10 +1098,9 @@ ASTNode blast_fpleq(const floatingPointTypeInfo& size, const ASTNode& lhs,
 ASTNode blast_reinterpret(const ASTNode& bits, bitWidthType exp_width,
                           bitWidthType sig_width)
 {
-  floatingPointTypeInfo size(exp_width, sig_width);
-  uf unpacked(symfpu::unpack<traits>(size, bits));
-  ASTNode packed(symfpu::pack<traits>(size, unpacked));
-  return packed;
+  const floatingPointTypeInfo size(exp_width, sig_width);
+  const uf value(unpacked::decode(size, bits));
+  return unpacked::encode(size, value);
 }
 
 // ((_ to_fp e s) rm bv) reads the bitvector as a two's-complement integer,
@@ -994,17 +1111,9 @@ ASTNode blast_convert_bv_to_float(const ASTNode& rm, const ASTNode& bits,
                                   bitWidthType exp_width,
                                   bitWidthType sig_width, bool is_signed)
 {
-  floatingPointTypeInfo target(exp_width, sig_width);
-
-  uf converted(is_signed
-                   ? symfpu::convertSBVToFloat<traits>(target, rm,
-                                                       traits::sbv(bits))
-                   : symfpu::convertUBVToFloat<traits>(target, rm,
-                                                       traits::ubv(bits)));
-
-  ASTNode packed(symfpu::pack<traits>(target, converted));
-
-  return packed;
+  const floatingPointTypeInfo target(exp_width, sig_width);
+  const uf converted(unpacked::convertBVToFloat(target, rm, bits, is_signed));
+  return unpacked::encode(target, converted);
 }
 
 ASTNode blast_convert_float_to_float(const floatingPointTypeInfo& source,
@@ -1012,26 +1121,19 @@ ASTNode blast_convert_float_to_float(const floatingPointTypeInfo& source,
                                      bitWidthType target_exp,
                                      bitWidthType target_sig)
 {
-  assert(expr.GetValueWidth() == source.packedWidth());
-  floatingPointTypeInfo target(target_exp, target_sig);
-
-  uf unpacked(symfpu::unpack<traits>(source, expr));
-  uf converted(
-      symfpu::convertFloatToFloat<traits>(source, target, rm, unpacked));
-
-  ASTNode packed(symfpu::pack<traits>(target, converted));
-
-  return packed;
+  const floatingPointTypeInfo target(target_exp, target_sig);
+  const uf value(unpacked::decode(source, expr));
+  const uf converted(
+      unpacked::convertFloatToFloat(source, target, rm, value));
+  return unpacked::encode(target, converted);
 }
 
 ASTNode blast_round_to_integral(const floatingPointTypeInfo& size,
                                 const ASTNode& rm, const ASTNode& expr)
 {
-  assert(expr.GetValueWidth() == size.packedWidth());
-  uf unpacked(symfpu::unpack<traits>(size, expr));
-  uf unpacked_result(symfpu::roundToIntegral<traits>(size, rm, unpacked));
-  ASTNode packed(symfpu::pack<traits>(size, unpacked_result));
-  return packed;
+  const uf value(unpacked::decode(size, expr));
+  const uf result(unpacked::roundToIntegral(size, rm, value));
+  return unpacked::encode(size, result);
 }
 
 // Instantiate both bit-vector flavours in full. symfpu only uses a subset of

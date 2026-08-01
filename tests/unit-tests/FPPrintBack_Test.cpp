@@ -264,3 +264,42 @@ TEST(FPPrintBack, overload_by_format_matches_by_term)
   EXPECT_EQ(byTerm.str(), byFormat.str());
   EXPECT_EQ("(fp #b0 #b01111111 #b00000000000000000000000)", byFormat.str());
 }
+
+// Logic selection is a property of the expression being printed, not of all
+// terms that have ever been built in its manager. The C-API test below this
+// suite covers the popped-scope case; an entirely unused float is the smaller
+// direct regression for the printer's manager-history leak.
+TEST(FPPrintBack, logic_selection_is_expression_local)
+{
+  STPMgr mgr;
+  (void)mgr.CreateSourceSymbol("unused_fp",
+                               SourceSort::floatingPoint(5, 11));
+  const ASTNode live =
+      mgr.CreateSourceSymbol("live", SourceSort::bitVector(8));
+  const ASTNode formula =
+      mgr.CreateNode(EQ, live, mgr.CreateBVConst(8, 0x2a));
+
+  ASSERT_TRUE(mgr.has_floating_point); // the conservative hint is sticky
+  EXPECT_FALSE(containsFloatingPoint(formula, &mgr));
+  EXPECT_FALSE(containsFloatingPointTheory(formula, &mgr));
+
+  std::ostringstream os;
+  printer::SMTLIB2_PrintBack(os, formula, &mgr, false);
+  const std::string printed = os.str();
+  EXPECT_EQ(0U, printed.find("(set-logic QF_BV)\n")) << printed;
+  EXPECT_EQ(std::string::npos, printed.find("FloatingPoint")) << printed;
+}
+
+// RoundingMode by itself still belongs to the floating-point theory. It does
+// not need FP arithmetic lowering, but its declaration cannot be printed
+// under a bitvector-only logic.
+TEST(FPPrintBack, rounding_mode_only_selects_fp_logic)
+{
+  roundTrips(R"(
+    (set-logic QF_BVFP)
+    (declare-const r RoundingMode)
+    (assert (= r RNE))
+  )",
+             {"(set-logic QF_BVFP)",
+              "(declare-fun |r| () RoundingMode)", "(= |r| RNE)"});
+}

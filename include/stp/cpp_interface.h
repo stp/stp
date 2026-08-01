@@ -70,12 +70,31 @@ struct array_sort_component
   unsigned width;
   unsigned exp_bits; // FLOATINGPOINT only
   unsigned sig_bits; // FLOATINGPOINT only
+
+  SourceSort sourceSort() const
+  {
+    switch (kind)
+    {
+      case BITVECTOR:
+        return SourceSort::bitVector(width);
+      case FLOATINGPOINT:
+        return SourceSort::floatingPoint(exp_bits, sig_bits);
+      case ROUNDINGMODE:
+        return SourceSort::roundingMode();
+    }
+    return SourceSort::unknown();
+  }
 };
 
 struct array_sort
 {
   array_sort_component index;
   array_sort_component elem;
+
+  SourceSort sourceSort() const
+  {
+    return SourceSort::array(index.sourceSort(), elem.sourceSort());
+  }
 };
 
 class Cpp_interface
@@ -124,7 +143,9 @@ class Cpp_interface
     // Functions are (currently) managed at global scope; we need a pointer to
     // the global functions to be able to remove functions when we pop
     SolverFrame(ankerl::unordered_dense::map<std::string, Function>*
-                    global_function_context);
+                    global_function_context,
+                std::map<std::string, std::pair<unsigned, unsigned>>*
+                    global_sort_alias_context);
     virtual ~SolverFrame();
 
     // Obtain the functions for the current frame
@@ -133,11 +154,20 @@ class Cpp_interface
     // Obtain the symbols for the current frame
     ASTVec& getSymbols();
 
+    void addSortAlias(const std::string& name);
+    void addSymbol(const ASTNode& symbol);
+    bool removeSymbol(const ASTNode& symbol);
+    bool lookupSymbol(const std::string& name, ASTNode& output) const;
+
   private:
     vector<std::string> _scoped_functions;
+    vector<std::string> _scoped_sort_aliases;
     ASTVec _scoped_symbols;
+    std::map<std::string, std::vector<ASTNode>> _symbol_bindings;
     ankerl::unordered_dense::map<std::string, Function>*
         _global_function_context;
+    std::map<std::string, std::pair<unsigned, unsigned>>*
+        _global_sort_alias_context;
   };
 
   // The vector of all frames that have been created by calling push
@@ -197,7 +227,8 @@ public:
 
   // define-sort aliases for floating-point sorts. A real table: the alias
   // name is NOT interned as a symbol (the old scheme made the sort name
-  // resolvable as a term variable). Aliases are global, not frame-scoped.
+  // resolvable as a term variable). Aliases follow assertion-frame scope;
+  // STP does not support global declarations.
   DLL_PUBLIC void addSortAlias(const std::string& name, unsigned exp_width,
                                unsigned sig_width);
   DLL_PUBLIC bool lookupSortAlias(const std::string& name,
@@ -209,6 +240,9 @@ public:
   DLL_PUBLIC ASTNode CreateBVConst(const char* const strval, int base);
   DLL_PUBLIC ASTNode CreateBVConst(unsigned int width,
                                    unsigned long long int bvconst);
+  DLL_PUBLIC ASTNode CreateRMConst(unsigned mode);
+  DLL_PUBLIC ASTNode CreateSourceSymbol(const char* name,
+                                        const SourceSort& source_sort);
   DLL_PUBLIC ASTNode LookupOrCreateSymbol(const char* const name);
 
   // A boolean variable applied to a constant, e.g. p(0x3), names an
@@ -232,12 +266,11 @@ public:
 
   DLL_PUBLIC bool isBitVectorFunction(const std::string& name);
   DLL_PUBLIC bool isBooleanFunction(const std::string& name);
-  // Classify a name in a single map probe: returns the function's return
-  // type (BITVECTOR_TYPE, BOOLEAN_TYPE or FLOATINGPOINT_TYPE), or
-  // UNKNOWN_TYPE when the name is not a stored function. Lets the lexer
-  // avoid the extra probes that calling the individual is*Function
-  // predicates would cost.
+  // Classify a name by its carrier return type, or UNKNOWN_TYPE when the name
+  // is not stored. Source-only distinctions are available from
+  // functionReturnSourceSort().
   DLL_PUBLIC types functionReturnType(const std::string& name);
+  DLL_PUBLIC SourceSort functionReturnSourceSort(const std::string& name);
   bool hasFunctions() const { return !functions.empty(); }
 
   DLL_PUBLIC ASTNode LookupOrCreateSymbol(std::string name);
@@ -297,8 +330,9 @@ public:
   // Reset STP back to "just started up" state.
   DLL_PUBLIC void reset();
 
-  // Empty the assertion stack, keeping the declarations and options of the
-  // base level. Weaker than reset(), per SMT-LIB 2.6 4.2.5.
+  // Empty the assertion stack and discard its declarations/definitions,
+  // while retaining solver options and the selected logic. STP does not
+  // support :global-declarations, so its required default is false.
   DLL_PUBLIC void resetAssertions();
   DLL_PUBLIC void pop();
   DLL_PUBLIC void push();

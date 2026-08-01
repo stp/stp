@@ -361,6 +361,79 @@ TEST(fp_arrays, float_index_symbolic_congruence)
   vc_Destroy(vc);
 }
 
+// The solve addresses a floating-point-indexed array through the canonical
+// representative of the index. Model evaluation must use that same address:
+// a symbolic NaN can have non-canonical carrier bits in the SAT model even
+// though every NaN denotes the array sort's single NaN index value.
+TEST(fp_arrays, float_index_model_uses_canonical_nan_cell)
+{
+  VC vc = vc_createValidityChecker();
+  vc_setFlags(vc, 'd', 0); // construct and validate the counterexample
+
+  Type fp = vc_fpType(vc, 5, 11);
+  Expr a = vc_varExpr(vc, "a", vc_arrayType(vc, fp, vc_bvType(vc, 8)));
+  Expr x = vc_varExpr(vc, "x", fp);
+  Expr read = vc_readExpr(vc, a, x);
+  Expr expected = vc_bvConstExprFromInt(vc, 8, 0x2A);
+
+  vc_assertFormula(vc, vc_fpIsNaNExpr(vc, x));
+  vc_assertFormula(vc, vc_eqExpr(vc, read, expected));
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+
+  EXPECT_EQ(0x2AULL,
+            static_cast<unsigned long long>(
+                getBVUnsignedLongLong(vc_getCounterExample(vc, read))));
+
+  vc_Destroy(vc);
+}
+
+// Carrier reads nested below the encoded root still retain the array's source
+// sort. Treat the whole encoded DAG as target language while evaluating it;
+// otherwise expanding this read-over-write redispatches its canonical child
+// as though it were a fresh source access and canonicalises forever.
+TEST(fp_arrays, float_index_model_read_over_write_is_lowered_once)
+{
+  VC vc = vc_createValidityChecker();
+
+  Type fp = vc_fpType(vc, 5, 11);
+  Expr a = vc_varExpr(vc, "a", vc_arrayType(vc, fp, vc_bvType(vc, 8)));
+  Expr x = vc_varExpr(vc, "x", fp);
+  Expr y = vc_varExpr(vc, "y", fp);
+  Expr expected = vc_bvConstExprFromInt(vc, 8, 0x2A);
+  Expr stored = vc_writeExpr(vc, a, x, expected);
+  Expr read = vc_readExpr(vc, stored, y);
+
+  vc_assertFormula(vc, vc_fpIsNaNExpr(vc, x));
+  vc_assertFormula(vc, vc_fpIsNaNExpr(vc, y));
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+
+  EXPECT_EQ(0x2AULL,
+            static_cast<unsigned long long>(
+                getBVUnsignedLongLong(vc_getCounterExample(vc, read))));
+
+  vc_Destroy(vc);
+}
+
+TEST(fp_arrays, float_index_constant_model_cell)
+{
+  VC vc = vc_createValidityChecker();
+
+  Type fp = vc_fpType(vc, 5, 11);
+  Expr a = vc_varExpr(vc, "a", vc_arrayType(vc, fp, vc_bvType(vc, 8)));
+  Expr index =
+      vc_fpConstFromBits(vc, 5, 11, vc_bvConstExprFromLL(vc, 16, 0x3C00));
+  Expr read = vc_readExpr(vc, a, index);
+  Expr expected = vc_bvConstExprFromInt(vc, 8, 0x2A);
+
+  vc_assertFormula(vc, vc_eqExpr(vc, read, expected));
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(0x2AULL,
+            static_cast<unsigned long long>(
+                getBVUnsignedLongLong(vc_getCounterExample(vc, read))));
+
+  vc_Destroy(vc);
+}
+
 TEST(fp_arrays, float_index_float_element_combined)
 {
   VC vc = vc_createValidityChecker();
@@ -554,6 +627,38 @@ TEST(fp_arrays, roundingmode_index)
   vc_assertFormula(vc, vc_eqExpr(vc, r, vc_fpRoundingMode(vc, VC_RM_RNE)));
   ASSERT_EQ(1, vc_query(vc, vc_eqExpr(vc, read,
                                       vc_bvConstExprFromInt(vc, 8, 0x11))));
+
+  vc_Destroy(vc);
+}
+
+// Model evaluation must compare array indexes by their carrier value, not by
+// the source-sort decoration on the constant node.  The SAT model supplies a
+// plain five-bit value for r, whereas the WRITE index is the source-sorted RNE
+// constant.  Those denote the same RoundingMode even though they are not the
+// same interned AST node.
+TEST(fp_arrays, roundingmode_index_read_over_write_model)
+{
+  VC vc = vc_createValidityChecker();
+
+  Type arrayType =
+      vc_arrayType(vc, vc_fpRoundingModeType(vc), vc_bvType(vc, 8));
+  Expr a = vc_varExpr(vc, "a", arrayType);
+  Expr stored = vc_writeExpr(vc, a, vc_fpRoundingMode(vc, VC_RM_RNE),
+                             vc_bvConstExprFromInt(vc, 8, 0x11));
+  Expr r = vc_fpRoundingModeVar(vc, "r");
+  Expr read = vc_readExpr(vc, stored, r);
+
+  // Pin r to RNE without asserting r = RNE directly: direct substitution can
+  // hide the typed/plain constant boundary exercised by model evaluation.
+  const VCRoundingMode otherModes[4] = {VC_RM_RNA, VC_RM_RTP, VC_RM_RTN,
+                                        VC_RM_RTZ};
+  for (const VCRoundingMode mode : otherModes)
+    vc_assertFormula(
+        vc, vc_notExpr(vc, vc_eqExpr(vc, r, vc_fpRoundingMode(vc, mode))));
+
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ((unsigned long long)0x11,
+            getBVUnsignedLongLong(vc_getCounterExample(vc, read)));
 
   vc_Destroy(vc);
 }

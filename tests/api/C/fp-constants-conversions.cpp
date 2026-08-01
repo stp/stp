@@ -64,6 +64,29 @@ TEST(fp_constants, plus_infinity_is_not_nan)
 
 // vc_fpConstFromDouble is exact when the target is binary64 (3.5 is 0x400C...),
 // and rounds through fp.to_fp otherwise (2.0 in half precision is 0x4000).
+TEST(fp_constants, native_exact_conversion_checks_rounding_mode_sort)
+{
+  // Exact native-format conversions do not use the rounding mode
+  // numerically, but it is still a required, source-sorted API operand.
+  EXPECT_DEATH(
+      {
+        VC vc = vc_createValidityChecker();
+        Type binary64 = vc_fpType(vc, 11, 53);
+        Expr bv5 = vc_bvConstExprFromInt(vc, 5, 0);
+        (void)vc_fpConstFromDouble(vc, binary64, bv5, 1.0);
+      },
+      "expected a rounding mode");
+
+  EXPECT_DEATH(
+      {
+        VC vc = vc_createValidityChecker();
+        Type binary32 = vc_fpType(vc, 8, 24);
+        Expr bv5 = vc_bvConstExprFromInt(vc, 5, 0);
+        (void)vc_fpConstFromFloat(vc, binary32, bv5, 1.0f);
+      },
+      "expected a rounding mode");
+}
+
 TEST(fp_constants, from_double_exact)
 {
   VC vc = vc_createValidityChecker();
@@ -235,4 +258,104 @@ TEST(fp_constants, eq_vs_smt_eq_semantics)
                                      vc_fpNaN(vc, half))));
   EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc))); // all consistent
   vc_Destroy(vc);
+}
+
+// vc_simplify is another entrance to the source-level FP graph.  The partial
+// operations are built at their public arity and acquire their internal
+// unspecified-value child only when FpTotalise runs.  In particular, neither
+// the zero tie of min/max nor an undefined float-to-BV conversion may reach the
+// constant evaluator at its raw arity.
+TEST(fp_simplify, totalises_partial_operations)
+{
+  VC vc = vc_createValidityChecker();
+  Type half = vc_fpType(vc, 5, 11);
+  Expr plus_zero = vc_fpPlusZero(vc, half);
+  Expr minus_zero = vc_fpMinusZero(vc, half);
+
+  Expr minimum = vc_simplify(vc, vc_fpMinExpr(vc, plus_zero, minus_zero));
+  Expr maximum = vc_simplify(vc, vc_fpMaxExpr(vc, plus_zero, minus_zero));
+  EXPECT_EQ(FLOATINGPOINT_TYPE, getType(minimum));
+  EXPECT_EQ(FLOATINGPOINT_TYPE, getType(maximum));
+  EXPECT_EQ(5, vc_getExpWidth(minimum));
+  EXPECT_EQ(11, vc_getSigWidth(minimum));
+
+  // Each result must be one of the two zero values, while SMT-LIB leaves the
+  // choice between them unspecified.
+  Expr min_is_zero =
+      vc_orExpr(vc, vc_eqExpr(vc, minimum, plus_zero),
+                vc_eqExpr(vc, minimum, minus_zero));
+  vc_assertFormula(vc, vc_notExpr(vc, min_is_zero));
+  EXPECT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+
+  // Use a fresh context for max: the previous context is intentionally
+  // inconsistent.
+  vc_Destroy(vc);
+  vc = vc_createValidityChecker();
+  half = vc_fpType(vc, 5, 11);
+  plus_zero = vc_fpPlusZero(vc, half);
+  minus_zero = vc_fpMinusZero(vc, half);
+  maximum = vc_simplify(vc, vc_fpMaxExpr(vc, plus_zero, minus_zero));
+  Expr max_is_zero = vc_orExpr(vc, vc_eqExpr(vc, maximum, plus_zero),
+                               vc_eqExpr(vc, maximum, minus_zero));
+  vc_assertFormula(vc, vc_notExpr(vc, max_is_zero));
+  EXPECT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+
+  // Both undefined conversion forms must also remain usable after simplify.
+  Expr rne = vc_fpRoundingMode(vc, VC_RM_RNE);
+  Expr nan = vc_fpNaN(vc, half);
+  Expr ubv = vc_simplify(vc, vc_fpToUBVExpr(vc, 8, rne, nan));
+  Expr sbv = vc_simplify(vc, vc_fpToSBVExpr(vc, 8, rne, nan));
+  EXPECT_EQ(BITVECTOR_TYPE, getType(ubv));
+  EXPECT_EQ(BITVECTOR_TYPE, getType(sbv));
+  EXPECT_EQ(8, vc_getBVLength(vc, ubv));
+  EXPECT_EQ(8, vc_getBVLength(vc, sbv));
+  vc_Destroy(vc);
+}
+
+TEST(fp_simplify, preserves_defined_conversion_semantics)
+{
+  VC vc = vc_createValidityChecker();
+  Expr rne = vc_fpRoundingMode(vc, VC_RM_RNE);
+  Expr two = vc_fpConstFromBits(
+      vc, 5, 11, vc_bvConstExprFromLL(vc, 16, 0x4000));
+  Expr converted = vc_simplify(vc, vc_fpToUBVExpr(vc, 8, rne, two));
+
+  vc_assertFormula(
+      vc, vc_notExpr(vc, vc_eqExpr(vc, converted,
+                                   vc_bvConstExprFromLL(vc, 8, 2))));
+  EXPECT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+  vc_Destroy(vc);
+}
+
+TEST(fp_sort_checks, release_api_rejects_mixed_formats)
+{
+  // These formats have the same 32-bit packed carrier.  Width-only checks
+  // therefore cannot distinguish them; the public source sorts must.
+  EXPECT_DEATH(
+      {
+        VC vc = vc_createValidityChecker();
+        Expr x = vc_varExpr(vc, "x", vc_fpType(vc, 8, 24));
+        Expr y = vc_varExpr(vc, "y", vc_fpType(vc, 11, 21));
+        Expr rne = vc_fpRoundingMode(vc, VC_RM_RNE);
+        (void)vc_fpAddExpr(vc, rne, x, y);
+      },
+      "requires operands of the same sort");
+
+  EXPECT_DEATH(
+      {
+        VC vc = vc_createValidityChecker();
+        Expr x = vc_varExpr(vc, "x", vc_fpType(vc, 8, 24));
+        Expr y = vc_varExpr(vc, "y", vc_fpType(vc, 11, 21));
+        (void)vc_fpLtExpr(vc, x, y);
+      },
+      "requires operands of the same sort");
+
+  EXPECT_DEATH(
+      {
+        VC vc = vc_createValidityChecker();
+        Expr x = vc_varExpr(vc, "x", vc_fpType(vc, 8, 24));
+        Expr y = vc_varExpr(vc, "y", vc_fpType(vc, 11, 21));
+        (void)vc_fpEqExpr(vc, x, y);
+      },
+      "requires operands of the same sort");
 }

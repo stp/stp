@@ -193,7 +193,9 @@ void ASTNode::cacheFPFormat() const
   // A BVCONST has nowhere to put either answer (its setters reject it);
   // float constants are made as ASTFPConst instead, and re-deriving on a
   // childless node is cheap.
-  if (GetKind() == BVCONST)
+  if (GetKind() == BVCONST ||
+      (Degree() == 0 &&
+       _int_node_ptr->getDeclaredSourceSort().isKnown()))
     return;
 
   if (!is_float)
@@ -302,6 +304,94 @@ const char* ASTNode::GetName() const
     FatalError("GetName: Called GetName on a non-symbol: ", *this);
 
   return ((ASTSymbol*)_int_node_ptr)->GetName();
+}
+
+SourceSort ASTNode::GetSourceSort() const
+{
+  if (IsNull())
+    return SourceSort::unknown();
+  if (GetKind() == UNDEFINED)
+    return SourceSort::unknown();
+
+  // API type nodes denote the corresponding source sort even though they
+  // are not themselves value-bearing terms.
+  switch (GetKind())
+  {
+    case BOOLEAN:
+      return SourceSort::boolean();
+    case BITVECTOR:
+      if (Degree() == 1 && (*this)[0].GetKind() == BVCONST)
+        return SourceSort::bitVector((*this)[0].GetUnsignedConst());
+      break;
+    case FLOATINGPOINT:
+      if (Degree() == 2 && (*this)[0].GetKind() == BVCONST &&
+          (*this)[1].GetKind() == BVCONST)
+        return SourceSort::floatingPoint((*this)[0].GetUnsignedConst(),
+                                         (*this)[1].GetUnsignedConst());
+      break;
+    case ROUNDINGMODE:
+      return SourceSort::roundingMode();
+    case ARRAY:
+      if (Degree() == 2)
+      {
+        const SourceSort index = (*this)[0].GetSourceSort();
+        const SourceSort element = (*this)[1].GetSourceSort();
+        if (index.isScalar() && element.isScalar())
+          return SourceSort::array(index, element);
+      }
+      break;
+    default:
+      break;
+  }
+
+  // Typed constants and symbols carry their sort as immutable identity.
+  const SourceSort declared = _int_node_ptr->getDeclaredSourceSort();
+  if (declared.isKnown())
+    return declared;
+
+  // The only source expressions whose carrier does not identify the result
+  // sort are the structural ones below. Derive them from their children.
+  if (GetKind() == READ && Degree() >= 1)
+  {
+    const SourceSort array = (*this)[0].GetSourceSort();
+    return array.kind() == SourceSort::Kind::Array
+               ? array.element()
+               : SourceSort::unknown();
+  }
+
+  if (GetKind() == WRITE && Degree() >= 1)
+    return (*this)[0].GetSourceSort();
+
+  if (GetKind() == ITE && Degree() == 3)
+  {
+    const SourceSort then_sort = (*this)[1].GetSourceSort();
+    const SourceSort else_sort = (*this)[2].GetSourceSort();
+    return then_sort == else_sort ? then_sort : SourceSort::unknown();
+  }
+
+  // Compatibility for internal and legacy leaves that predate typed source
+  // symbols. New public declarations do not take this path.
+  switch (GetType())
+  {
+    case BOOLEAN_TYPE:
+      return SourceSort::boolean();
+    case BITVECTOR_TYPE:
+      return GetValueWidth() == 0 ? SourceSort::unknown()
+                                  : SourceSort::bitVector(GetValueWidth());
+    case FLOATINGPOINT_TYPE:
+      return SourceSort::floatingPoint(GetExpWidth(), GetSigWidth());
+    case ARRAY_TYPE:
+    {
+      const SourceSort index = SourceSort::bitVector(GetIndexWidth());
+      const SourceSort element =
+          GetExpWidth() == 0
+              ? SourceSort::bitVector(GetValueWidth())
+              : SourceSort::floatingPoint(GetExpWidth(), GetSigWidth());
+      return SourceSort::array(index, element);
+    }
+    default:
+      return SourceSort::unknown();
+  }
 }
 
 // Get the value of bvconst from a bvconst.  It's an error if kind

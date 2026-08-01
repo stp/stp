@@ -222,6 +222,70 @@ private:
 // this repoints them, and is called before every top-level blast.
 void init(STPMgr* bm);
 
+// Operations over SymFPU's unpacked representation.  FloatBlast uses these
+// to keep a floating-point DAG unpacked across consecutive operations and
+// materialise packed IEEE bits only at a real carrier boundary.  The packed
+// blast_* facade below remains for callers that lower one operation at a
+// time (notably the constant evaluator).
+namespace unpacked
+{
+uf decode(const floatingPointTypeInfo& size, const ASTNode& packed);
+ASTNode encode(const floatingPointTypeInfo& size, const uf& value);
+
+// A floating-point-valued source ITE is an ITE over every component of the
+// unpacked representation.  `condition` is a Boolean ASTNode.
+uf select(const ASTNode& condition, const uf& when_true,
+          const uf& when_false);
+
+ASTNode smtEqual(const floatingPointTypeInfo& size, const uf& lhs,
+                 const uf& rhs);
+
+uf add(const floatingPointTypeInfo& size, const ASTNode& rm, const uf& lhs,
+       const uf& rhs);
+uf sub(const floatingPointTypeInfo& size, const ASTNode& rm, const uf& lhs,
+       const uf& rhs);
+uf mul(const floatingPointTypeInfo& size, const ASTNode& rm, const uf& lhs,
+       const uf& rhs);
+uf div(const floatingPointTypeInfo& size, const ASTNode& rm, const uf& lhs,
+       const uf& rhs);
+uf fma(const floatingPointTypeInfo& size, const ASTNode& rm, const uf& x,
+       const uf& y, const uf& z);
+uf sqrt(const floatingPointTypeInfo& size, const ASTNode& rm, const uf& value);
+uf rem(const floatingPointTypeInfo& size, const uf& lhs, const uf& rhs);
+uf min(const floatingPointTypeInfo& size, const uf& lhs, const uf& rhs,
+       const ASTNode& zero_case);
+uf max(const floatingPointTypeInfo& size, const uf& lhs, const uf& rhs,
+       const ASTNode& zero_case);
+uf abs(const floatingPointTypeInfo& size, const uf& value);
+uf neg(const floatingPointTypeInfo& size, const uf& value);
+uf roundToIntegral(const floatingPointTypeInfo& size, const ASTNode& rm,
+                   const uf& value);
+
+// Floating-point consumers whose result is already in the target language.
+ASTNode toBV(const floatingPointTypeInfo& size, const ASTNode& rm,
+             const uf& value, bitWidthType target_width,
+             const ASTNode& undef, bool is_signed);
+ASTNode ieeeEqual(const floatingPointTypeInfo& size, const uf& lhs,
+                  const uf& rhs);
+ASTNode lessThan(const floatingPointTypeInfo& size, const uf& lhs,
+                 const uf& rhs);
+ASTNode lessThanOrEqual(const floatingPointTypeInfo& size, const uf& lhs,
+                        const uf& rhs);
+ASTNode isNormal(const floatingPointTypeInfo& size, const uf& value);
+ASTNode isSubnormal(const floatingPointTypeInfo& size, const uf& value);
+ASTNode isZero(const floatingPointTypeInfo& size, const uf& value);
+ASTNode isInfinite(const floatingPointTypeInfo& size, const uf& value);
+ASTNode isNaN(const floatingPointTypeInfo& size, const uf& value);
+ASTNode isNegative(const floatingPointTypeInfo& size, const uf& value);
+ASTNode isPositive(const floatingPointTypeInfo& size, const uf& value);
+
+uf convertBVToFloat(const floatingPointTypeInfo& target, const ASTNode& rm,
+                    const ASTNode& bits, bool is_signed);
+uf convertFloatToFloat(const floatingPointTypeInfo& source,
+                       const floatingPointTypeInfo& target,
+                       const ASTNode& rm, const uf& value);
+} // namespace unpacked
+
 ASTNode blast_smt_eq(const floatingPointTypeInfo& size, const ASTNode& lhs,
                      const ASTNode& rhs);
 ASTNode blast_fpadd(const floatingPointTypeInfo& size, const ASTNode& rm,

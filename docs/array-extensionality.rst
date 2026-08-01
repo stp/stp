@@ -60,12 +60,16 @@ array terms is now refused rather than warned about. It was never
 decided -- nothing eliminates the array-sorted operands, so the atom
 reached the solver unconstrained and the verdict could be wrong, and a
 build with assertions aborted instead of answering. Both behaviours
-reproduce on STP releases predating this feature. The C API surface is pinned byte for byte: an opt-in
-test (``default-off-capi-baseline-differential``, enabled with
-``-DTEST_BASELINE_DIFFERENTIAL=ON``) builds the pre-feature baseline
+reproduce on STP releases predating this feature. The documented C API
+surface is pinned by an opt-in test
+(``default-off-capi-baseline-differential``, enabled with
+``-DTEST_BASELINE_DIFFERENTIAL=ON``), which builds the pre-feature baseline
 from git history and compares every observation of an identical C API
-driver — verdicts, model values, counterexample-array entries and
-their order, stdout, stderr, exit status — across the two builds. Two
+driver — verdicts, model values, every counterexample-array entry, stdout,
+stderr and exit status — across the two builds. The driver canonicalizes the
+entry order before comparison: the default-off API does not specify one, and
+the legacy order comes from an unordered map keyed by internal node-creation
+IDs. Two
 diagnostic texts deliberately differ from the baseline and sit outside
 that comparison: whole-array equality is refused with an error naming
 the option, where the baseline warned and continued (pinned by a lit

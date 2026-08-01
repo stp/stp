@@ -194,9 +194,10 @@ endif()
 # Builds the pinned pre-extension baseline commit from repository history
 # with the candidate's toolchain, runs the identical C API observation
 # driver (tools/extdiff) against both with array equality disabled, and
-# requires byte-identical output. Skips cleanly when the baseline commit
-# is unavailable (e.g. shallow CI clones). The baseline checkout/build is
-# cached inside the build tree, so only the first run pays for it.
+# requires byte-identical output after canonicalizing the API's unspecified
+# counterexample-array entry order. Skips cleanly when the baseline commit is
+# unavailable (e.g. shallow CI clones). The baseline checkout/build is cached
+# inside the build tree, so only the first run pays for it.
 #
 # Opt-in (-DTEST_BASELINE_DIFFERENTIAL=ON): the first run configures and
 # compiles an entire second STP from git history, which a plain ctest

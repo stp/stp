@@ -337,6 +337,11 @@ VarDecl         :      FORM_IDs ':' Type
     ASTNode s = stp::GlobalParserInterface->LookupOrCreateSymbol(*i);
     s.SetIndexWidth($3.indexwidth);
     s.SetValueWidth($3.valuewidth);
+    // Keep declaration lookup in the same frame-local binding table used by
+    // the SMT parsers. The manager's interning table may now contain the same
+    // printed name at multiple immutable source sorts, so it is not a symbol
+    // table by itself.
+    GlobalParserInterface->addSymbol(s);
     GlobalParserInterface->letMgr->_parser_symbol_table.insert(s);
     GlobalParserBM->ListOfDeclaredVars.push_back(s);
   }

@@ -24,8 +24,7 @@ THE SOFTWARE.
 
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
-#include "stp/FloatBlaster/FloatBlaster.h"
-#include "stp/FloatBlaster/FpTotalise.h"
+#include "stp/FloatBlaster/FpEncodingContext.h"
 #include "stp/Printer/printers.h"
 #include "stp/ToSat/ToSATAIG.h"
 
@@ -34,6 +33,59 @@ const bool debug_counterexample = false;
 namespace stp
 {
 using std::cout;
+
+static bool isFpIndexedArrayAccess(const ASTNode& n)
+{
+  if ((n.GetKind() != READ && n.GetKind() != WRITE) || n.Degree() < 2 ||
+      n[1].GetKind() == BVCONST)
+    return false;
+
+  const SourceSort array_sort = n[0].GetSourceSort();
+  return array_sort.kind() == SourceSort::Kind::Array &&
+         array_sort.index().kind() == SourceSort::Kind::FloatingPoint;
+}
+
+static ASTNode plainModelCarrier(STPMgr* bm, const ASTNode& value)
+{
+  // The plain twin of a source-sorted carrier constant: same bits, the
+  // flavour every identity comparison in model evaluation expects.  SAT
+  // model constants are plain bit-vectors, so retaining FloatingPoint or
+  // RoundingMode decoration here would make equal carrier values distinct
+  // interned AST nodes.
+  const SourceSort::Kind sort = value.GetSourceSort().kind();
+  if (value.GetKind() == BVCONST &&
+      (value.GetExpWidth() != 0 || sort == SourceSort::Kind::RoundingMode))
+    return bm->CreateBVConst(CONSTANTBV::BitVector_Clone(value.GetBVConst()),
+                             value.GetValueWidth());
+  return value;
+}
+
+class ScopedFpEncodedEvaluation final
+{
+public:
+  explicit ScopedFpEncodedEvaluation(unsigned int& depth_) : depth(depth_)
+  {
+    ++depth;
+  }
+
+  ~ScopedFpEncodedEvaluation()
+  {
+    assert(depth > 0);
+    --depth;
+  }
+
+private:
+  unsigned int& depth;
+};
+
+FpEncodingContext&
+AbsRefine_CounterExample::requireFpEncodingContext() const
+{
+  if (fpEncodingContext == NULL)
+    FatalError("floating-point model evaluation has no solve encoding "
+               "context");
+  return *fpEncodingContext;
+}
 
 /*FUNCTION: constructs counterexample from MINISAT counterexample
  * step1 : iterate through MINISAT counterexample and assemble the
@@ -211,13 +263,8 @@ void AbsRefine_CounterExample::ConstructCounterExample(
 ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
                                                             bool ArrayReadFlag)
 {
-  const ASTNode r = TermToConstTermUsingModel_inner(term, ArrayReadFlag);
-  // The plain twin of a float constant: same bits, the flavour every
-  // identity comparison in model evaluation expects.
-  if (r.GetKind() == BVCONST && r.GetExpWidth() != 0)
-    return bm->CreateBVConst(CONSTANTBV::BitVector_Clone(r.GetBVConst()),
-                             r.GetValueWidth());
-  return r;
+  return plainModelCarrier(
+      bm, TermToConstTermUsingModel_inner(term, ArrayReadFlag));
 }
 
 ASTNode
@@ -260,6 +307,37 @@ AbsRefine_CounterExample::TermToConstTermUsingModel_inner(const ASTNode& term,
     else
     {
       return val;
+    }
+  }
+
+  // FP source operations are evaluated through the solve-owned lowering
+  // context. This is deliberately before the target-language switch below:
+  // counterexample evaluation must not maintain a second implementation of
+  // totalisation, operand reconstruction, and SymFPU lowering.
+  if (fpEncodedEvaluationDepth == 0 &&
+      (is_FP_kind(k) || isFpIndexedArrayAccess(term)))
+  {
+    const ASTNode encoded =
+        requireFpEncodingContext().encodeForModel(term);
+    if (encoded == term && is_FP_kind(k))
+      FatalError("floating-point model encoding made no progress: ", term);
+
+    // A constant FP index is already canonical, so the access may require no
+    // rewrite. Symbolic indices, including NaNs whose SAT carrier is not the
+    // canonical NaN, must be looked up through the encoded access used by the
+    // solve rather than through their raw model bits.
+    if (encoded != term)
+    {
+      // The lowered DAG retains source-sort metadata on carrier reads and
+      // leaves. Keep the entire recursive evaluation in target mode so a
+      // nested read-over-write cannot mistake that metadata for a fresh
+      // source boundary and canonicalise it repeatedly.
+      const ScopedFpEncodedEvaluation evaluating(fpEncodedEvaluationDepth);
+      const ASTNode value =
+          TermToConstTermUsingModel(encoded, ArrayReadFlag);
+      if (term != value)
+        CounterExampleMap[term] = value;
+      return value;
     }
   }
 
@@ -494,111 +572,6 @@ AbsRefine_CounterExample::TermToConstTermUsingModel_inner(const ASTNode& term,
       }
       break;
     }
-    case FP_ABS:
-    case FP_NEG:
-    case FP_ADD:
-    case FP_SUB:
-    case FP_MUL:
-    case FP_DIV:
-    case FP_FMA:
-    case FP_SQRT:
-    case FP_REM:
-    case FP_ROUNDTOINTEGRAL:
-    case FP_MIN:
-    case FP_MAX:
-    case FP_TOFP:
-    case FP_TOFP_SIGNED:
-    case FP_TOFP_UNSIGNED:
-    case FP_TO_UBV:
-    case FP_TO_SBV:
-    case FP_TO_IEEE_BV:
-    {
-      // Evaluate the float operands against the model and rebuild the node
-      // with the same kind and arity. Non-float children are often already
-      // constant -- the rounding mode of the arithmetic operations and to_fp's
-      // format arguments -- and are carried through unchanged. But some are
-      // not: the bit-vector a to_fp reinterprets can be an array read or other
-      // term, and the array read that totalising adds to to_ubv/to_sbv/min/max
-      // is likewise non-constant. Resolve those against the model too, else the
-      // rebuilt node stays non-constant and cannot be evaluated.
-      ASTVec children;
-      children.reserve(term.Degree());
-
-      for (unsigned int i = 0; i < term.Degree(); i++)
-      {
-        const ASTNode& child = term[i];
-
-        if (child.GetType() != FLOATINGPOINT_TYPE)
-        {
-          if (child.isConstant())
-            children.push_back(child);
-          else
-            children.push_back(TermToConstTermUsingModel(child, ArrayReadFlag));
-          continue;
-        }
-
-        ASTNode simp(TermToConstTermUsingModel(child));
-        // A float operand must resolve to a constant, like the bit-vector
-        // operands in the default case below: with ArrayReadFlag set, a
-        // read with no value in the model comes back as the symbolic READ
-        // (case 2 above), and rebuilding the operation over it is not
-        // evaluation. The blaster would mostly carry the read along, but an
-        // identity fold in the rebuild (x * 1.0 is x) can hand the bare
-        // READ back as the whole term, and the blaster has no case for
-        // that. The read is genuinely unconstrained here, so resolve it to
-        // a concrete value.
-        if (BVCONST != simp.GetKind())
-          simp = TermToConstTermUsingModel(child, false);
-        assert(simp.GetKind() == BVCONST);
-        children.push_back(FloatBlaster::withFormat(
-            bm, simp, child.GetExpWidth(), child.GetSigWidth()));
-      }
-
-      ASTNode temp(bm->CreateTerm(k, term.GetValueWidth(), children));
-      temp = FloatBlaster::withFormat(bm, temp, term.GetExpWidth(),
-                                      term.GetSigWidth());
-
-      // The factory may have folded the rebuilt operation to a constant once
-      // its children were resolved: abs/neg of a constant is a sign-bit edit,
-      // and x*1.0 / x/1.0 fold to x. That constant is the value -- blasting it
-      // would hand a constant to the blaster, which only handles operations.
-      // (This also subsumes the old expectation that rebuilding with resolved
-      // children always changes the node, which folding can break.)
-      if (temp.isConstant())
-      {
-        output = FloatBlaster::withFormat(bm, temp, term.GetExpWidth(),
-                                          term.GetSigWidth());
-        break;
-      }
-
-      // Totalise the partial operations (min/max and to_ubv/to_sbv) so the
-      // blaster sees the extra child they carry once made total. This is
-      // idempotent and a no-op for the total operations. A partial op reaches
-      // here un-totalised when it is evaluated directly rather than as part of
-      // the solved formula -- e.g. a term handed to get-value or built through
-      // the API -- since the totalising pass only runs over the assertions.
-      FpTotalise totalise(bm);
-      temp = totalise.topLevel(temp);
-
-      // From `term`, not `temp`: temp's operands are evaluated bits by now.
-      const std::pair<unsigned int, unsigned int> fmt =
-          FloatBlaster::operandFormat(term);
-      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(
-          bm, temp.GetKind(), toASTVec(temp.GetChildren()), fmt.first,
-          fmt.second));
-
-      assert(blasted != temp);
-      assert(blasted != term);
-
-      // Carry the format out with the result. Evaluating the blasted node
-      // yields a bare BVCONST, and an enclosing floating-point operation
-      // would then take it as an operand of format (0, 0) and compute the
-      // wrong bits rather than fail.
-      output = FloatBlaster::withFormat(
-          bm, TermToConstTermUsingModel(blasted, ArrayReadFlag),
-          term.GetExpWidth(), term.GetSigWidth());
-      break;
-    }
     default:
     {
       const ASTChildren c = term.GetChildren();
@@ -747,6 +720,19 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
     }
   }
 
+  if (fpEncodedEvaluationDepth == 0 && is_FP_kind(k))
+  {
+    const ASTNode encoded =
+        requireFpEncodingContext().encodeForModel(form);
+    if (encoded == form)
+      FatalError("floating-point model encoding made no progress: ", form);
+
+    const ScopedFpEncodedEvaluation evaluating(fpEncodedEvaluationDepth);
+    const ASTNode value = ComputeFormulaUsingModel(encoded);
+    ComputeFormulaMap[form] = value;
+    return value;
+  }
+
   ASTNode output = ASTUndefined;
   switch (k)
   {
@@ -858,70 +844,6 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
                    form);
     }
     break;
-    case FP_LEQ:
-    case FP_LT:
-    case FP_GEQ:
-    case FP_GT:
-    case FP_EQ:
-    case FP_ISNORMAL:
-    case FP_ISSUBNORMAL:
-    case FP_ISZERO:
-    case FP_ISINFINITE:
-    case FP_ISNAN:
-    case FP_ISNEGATIVE:
-    case FP_ISPOSITIVE:
-    case FP_SMT_EQ:
-    {
-      // Rebuild at the node's real arity: the comparisons are binary but the
-      // classification predicates are unary.
-      ASTVec operands;
-      operands.reserve(form.Degree());
-
-      for (unsigned int i = 0; i < form.Degree(); i++)
-      {
-        ASTNode simp(TermToConstTermUsingModel(form[i]));
-        // An operand must resolve to a constant, as in the float arm of
-        // TermToConstTermUsingModel: the read-tolerant flag is on inside the
-        // walk, so a float-element array read the solve never constrained
-        // comes back as the symbolic READ (case 2 there) rather than a
-        // value. Rebuilding the predicate over it is not evaluation -- the
-        // blaster would carry the read along, and the same-operand folds
-        // below can hand the bare READ back. The read is genuinely
-        // unconstrained here, so resolve it to a concrete value.
-        if (BVCONST != simp.GetKind())
-          simp = TermToConstTermUsingModel(form[i], false);
-        assert(simp.GetKind() == BVCONST);
-        operands.push_back(FloatBlaster::withFormat(
-            bm, simp, form[i].GetExpWidth(), form[i].GetSigWidth()));
-      }
-
-      ASTNode temp(bm->CreateNode(k, operands));
-
-      // Rebuilding through the simplifying factory may rewrite the predicate
-      // rather than return it: constant operands fold to true/false outright,
-      // and the same-operand rules fire here because interned constants
-      // compare pointer-equal -- fp.leq of a value with itself comes back as
-      // (not (fp.isNaN ...)). Whatever came back that is not this operation
-      // is a formula; evaluate it, never blast it.
-      if (temp.GetKind() != k)
-      {
-        output = ComputeFormulaUsingModel(temp);
-        break;
-      }
-
-      // From `form`, not `temp`: temp's operands are evaluated bits by now.
-      const std::pair<unsigned int, unsigned int> fmt =
-          FloatBlaster::operandFormat(form);
-      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(
-          bm, temp.GetKind(), toASTVec(temp.GetChildren()), fmt.first,
-          fmt.second));
-
-      assert(blasted != temp);
-      assert(blasted != form);
-
-      output = ComputeFormulaUsingModel(blasted);
-      break;
-    }
     default:
       cerr << _kind_names[k];
       FatalError(" ComputeFormulaUsingModel: "
@@ -948,7 +870,6 @@ void AbsRefine_CounterExample::CheckCounterExample(
     FatalError("CheckCounterExample: "
                "No CounterExample to check",
                ASTUndefined);
-
   // Check the exact semantic root used by this solve. TopLevelSTP has already
   // totalised its floating-point operations and CallSAT_ResultCheck has kept
   // this root aligned with solve-boundary array-equality lowering; rebuilding
@@ -986,8 +907,8 @@ ASTNode AbsRefine_CounterExample::GetCounterExample(const ASTNode& expr)
   // bare bit-vector, asserting (= term value) builds a float/bit-vector mix
   // that does not typecheck, so STP rejects its own model. Found by murxla's
   // -C model check, which re-asserts every reported value.
-  return FloatBlaster::withFormat(bm, TermToConstTermUsingModel(expr, false),
-                                  expr.GetExpWidth(), expr.GetSigWidth());
+  return bm->LiftSourceValue(TermToConstTermUsingModel(expr, false),
+                             expr.GetSourceSort());
 }
 
 // The observed (index, value) entries of one array symbol, evaluated to
@@ -1118,17 +1039,12 @@ AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
   // and a bare element cannot be equated with a read of a float-element
   // one. Done here rather than in either extraction path, so the model
   // printer keeps seeing GetSortedArrayModelEntries' raw constants.
-  unsigned index_exp = 0;
-  unsigned index_sig = 0;
-  // Stays (0, 0) unless the array is float-indexed, which withFormat reads
-  // as "no format to apply". The element format is the array's own.
-  bm->arrayHasFpIndex(e, index_exp, index_sig);
+  const SourceSort array_sort = e.GetSourceSort();
+  assert(array_sort.kind() == SourceSort::Kind::Array);
   for (std::pair<ASTNode, ASTNode>& entry : entries)
   {
-    entry.first =
-        FloatBlaster::withFormat(bm, entry.first, index_exp, index_sig);
-    entry.second = FloatBlaster::withFormat(bm, entry.second, e.GetExpWidth(),
-                                            e.GetSigWidth());
+    entry.first = bm->LiftSourceValue(entry.first, array_sort.index());
+    entry.second = bm->LiftSourceValue(entry.second, array_sort.element());
   }
 
   return entries;

@@ -37,6 +37,7 @@ class ASTBVConst : public ASTInternal
   friend class STPMgr;
   friend class ASTNode;
   friend class ASTFPConst;
+  friend class ASTRMConst;
   friend class ASTNodeHasher;
   friend class ASTNodeEqual;
 
@@ -80,7 +81,7 @@ private:
   // friend equality operator
   friend bool operator==(const ASTBVConst& bvc1, const ASTBVConst& bvc2)
   {
-    if (bvc1.getValueWidth() != bvc2.getValueWidth())
+    if (bvc1.getDeclaredSourceSort() != bvc2.getDeclaredSourceSort())
       return false;
     return (0 == CONSTANTBV::BitVector_Compare(bvc1._bvconst, bvc2._bvconst));
   }
@@ -108,6 +109,11 @@ private:
   virtual void setSigWidth(uint32_t) { assert(false); }
   virtual uint32_t getSigWidth() const { return 0; }
 
+  SourceSort getDeclaredSourceSort() const override
+  {
+    return SourceSort::bitVector(getValueWidth());
+  }
+
 public:
   virtual ASTChildren GetChildren() const { return astbv_empty_children; }
 
@@ -128,16 +134,15 @@ public:
 inline size_t
 ASTBVConst::ASTBVConstHasher::operator()(const ASTBVConst* bvc) const
 {
-  return CONSTANTBV::BitVector_Hash(bvc->_bvconst);
+  return CONSTANTBV::BitVector_Hash(bvc->_bvconst) ^
+         (bvc->getDeclaredSourceSort().hash() * 0x9e3779b97f4a7c15ULL);
 }
 
 inline bool
 ASTBVConst::ASTBVConstEqual::operator()(const ASTBVConst* bvc1,
                                         const ASTBVConst* bvc2) const
 {
-  if (bvc1->getValueWidth() != bvc2->getValueWidth() ||
-      bvc1->getSigWidth() != bvc2->getSigWidth() ||
-      bvc1->getExpWidth() != bvc2->getExpWidth())
+  if (bvc1->getDeclaredSourceSort() != bvc2->getDeclaredSourceSort())
   {
     return false;
   }

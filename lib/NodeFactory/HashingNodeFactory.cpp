@@ -49,10 +49,15 @@ ASTNode HashingNodeFactory::CreateNode(const Kind kind,
   // the operands visible in an opaque node until query construction and
   // function/let substitution are complete; TopLevelSTPAux lowers ARRAY_EQ
   // before any ordinary preprocessing can encounter it.
-  if (kind == EQ && back_children.size() == 2 &&
-      back_children[0].GetIndexWidth() > 0)
+  const bool array_eq_from_source =
+      kind == EQ && back_children.size() == 2 &&
+      back_children[0].GetIndexWidth() > 0;
+  if (array_eq_from_source || kind == ARRAY_EQ)
   {
-    if (!bm.UserFlags.enable_array_equality)
+    if (back_children.size() != 2)
+      FatalError("array-equality: expected exactly two operands");
+
+    if (array_eq_from_source && !bm.UserFlags.enable_array_equality)
       FatalError("STP cannot decide equality between whole array terms "
                  "without --array-equality (the C API's vc_setFlag(vc, "
                  "'x'), or Solver(array_equality=True) in Python).");
@@ -66,7 +71,15 @@ ASTNode HashingNodeFactory::CreateNode(const Kind kind,
       FatalError("array-equality: operands must have identical index and "
                  "element widths");
 
-    return CreateNode(ARRAY_EQ, back_children);
+    const SourceSort left_sort = back_children[0].GetSourceSort();
+    const SourceSort right_sort = back_children[1].GetSourceSort();
+    if (left_sort.kind() != SourceSort::Kind::Array ||
+        right_sort.kind() != SourceSort::Kind::Array ||
+        left_sort != right_sort)
+      FatalError("array-equality: operands must have identical source sorts");
+
+    if (array_eq_from_source)
+      return CreateNode(ARRAY_EQ, back_children);
   }
   
   if (back_children.size()  <= 1 || !isCommutative(kind))
