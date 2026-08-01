@@ -48,6 +48,13 @@ using namespace stp;
 namespace
 {
 
+TEST(ExtGuardTest, PathPayloadRemainsCompact)
+{
+  // Every propagation copies its complete guard path. Keep a regression
+  // ceiling below the old 96-byte variant-specific representation.
+  EXPECT_LE(sizeof(ExtGuard), 64u);
+}
+
 class MapModel : public ExtModelView
 {
 public:
@@ -760,9 +767,9 @@ TEST_F(ExtFixtureTest, OneAccessCrossesTwoEqualityEdges)
   // in traversal order
   ASSERT_EQ(2u, c.rightGuards.size());
   EXPECT_EQ(ExtGuard::EQ_PROXY, c.rightGuards[0].kind);
-  EXPECT_EQ(eqAB, c.rightGuards[0].proxy);
+  EXPECT_EQ(eqAB, c.rightGuards[0].absA);
   EXPECT_EQ(ExtGuard::EQ_PROXY, c.rightGuards[1].kind);
-  EXPECT_EQ(eqBC, c.rightGuards[1].proxy);
+  EXPECT_EQ(eqBC, c.rightGuards[1].absA);
   // the resident access left its write with a single index guard
   ASSERT_EQ(1u, c.leftGuards.size());
   EXPECT_EQ(ExtGuard::INDEX_NE, c.leftGuards[0].kind);
