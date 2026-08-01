@@ -496,7 +496,14 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
       result = CreateSimpleFormITE(children);
       break;
     case EQ:
-      result = CreateSimpleEQ(children);
+      // Whole-array equality is opaque until the solve-boundary lowering
+      // pass. Do not run bit-vector equality rewrites over array operands.
+      if (children.size() == 2 && children[0].GetIndexWidth() > 0)
+        result = children[0] == children[1]
+                     ? bm.ASTTrue
+                     : hashing.CreateNode(EQ, children);
+      else
+        result = CreateSimpleEQ(children);
       break;
     case ARRAY_EQ:
       assert(children.size() == 2);

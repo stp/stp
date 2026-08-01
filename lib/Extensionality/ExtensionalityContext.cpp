@@ -31,6 +31,7 @@ THE SOFTWARE.
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
+#include <functional>
 
 namespace stp
 {
@@ -280,6 +281,71 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
   proxyToRecord[r.proxy] = r.id;
   records.push_back(r);
   return records.back().proxy;
+}
+
+ASTNode ExtensionalityContext::lowerArrayEqualities(const ASTNode& root)
+{
+  if (!enabled())
+    FatalError("array-equality: opaque equality reached lowering while the "
+               "decision procedure is disabled");
+
+  ASTNodeMap cache;
+  NodeFactory* hf = bm->hashingNodeFactory;
+  std::function<ASTNode(const ASTNode&)> lower = [&](const ASTNode& n) {
+    ASTNodeMap::const_iterator found = cache.find(n);
+    if (found != cache.end())
+      return found->second;
+
+    const ASTChildren children = n.GetChildren();
+    ASTVec loweredChildren;
+    bool changed = false;
+    loweredChildren.reserve(children.size());
+    for (const ASTNode& originalChild : children)
+    {
+      const ASTNode child = lower(originalChild);
+      loweredChildren.push_back(child);
+      changed = changed || child != originalChild;
+    }
+
+    ASTNode result;
+    if (n.GetKind() == ARRAY_EQ)
+    {
+      assert(loweredChildren.size() == 2);
+      result = makeEquality(loweredChildren[0], loweredChildren[1]);
+    }
+    else if (!changed)
+    {
+      result = n;
+    }
+    else if (n.GetValueWidth() == 0)
+    {
+      result = hf->CreateNode(n.GetKind(), loweredChildren);
+    }
+    else if (n.GetIndexWidth() > 0)
+    {
+      result = hf->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(),
+                                   n.GetValueWidth(), loweredChildren);
+    }
+    else
+    {
+      result = hf->CreateTerm(n.GetKind(), n.GetValueWidth(), loweredChildren);
+    }
+
+    cache.insert(std::make_pair(n, result));
+    return result;
+  };
+
+  const ASTNode lowered = lower(root);
+
+  // ARRAY_EQ is legal only in the user-facing AST. Ordinary simplification,
+  // array transformation and bit-blasting intentionally have no case for it.
+  ASTNodeSet nodes;
+  collectDag(lowered, nodes);
+  for (ASTNodeSet::const_iterator it = nodes.begin(); it != nodes.end(); ++it)
+    if (it->GetKind() == ARRAY_EQ)
+      FatalError("array-equality: query lowering left an opaque equality", *it);
+
+  return lowered;
 }
 
 bool ExtensionalityContext::retireIfUnreachable(const ASTVec& liveAssertions)

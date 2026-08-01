@@ -74,11 +74,11 @@ private:
   // Ptr to ArrayTransformer
   ArrayTransformer* ArrayTransform;
 
-  // Checks if the counterexample is good. In order for the
-  // counterexample to be ok, every assert must evaluate to true
-  // w.r.t couner_example, and the query must evaluate to
-  // false. Otherwise we know that the counter_example is bogus.
-  void CheckCounterExample(bool t);
+  // Checks the exact semantic formula submitted for this solve.  This must
+  // not reconstruct the formula from STPMgr's assertion/query registry:
+  // solve-boundary passes (notably opaque array-equality lowering) are local
+  // to checked_input and deliberately do not mutate that public registry.
+  void CheckCounterExample(bool t, const ASTNode& checked_input);
 
   // Accepts a term and turns it into a constant-term w.r.t
   // counter_example

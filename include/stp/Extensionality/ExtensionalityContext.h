@@ -117,6 +117,12 @@ public:
   // solveWriteChain). Mixed index/element widths are an error.
   ASTNode makeEquality(const ASTNode& a, const ASTNode& b);
 
+  // Replace every reachable opaque ARRAY_EQ in a completed query by its
+  // Boolean abstraction and witness record. This is deliberately a solve-
+  // boundary operation: function/let substitution must have specialized the
+  // equality's operands before they disappear behind a proxy.
+  ASTNode lowerArrayEqualities(const ASTNode& root);
+
   // Drop the whole registry once nothing can reach it any more, and
   // report whether that happened. Records are pinned to the manager's
   // lifetime because their abstraction variables are embedded in the

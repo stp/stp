@@ -653,7 +653,8 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
   return output;
 }
 
-void AbsRefine_CounterExample::CheckCounterExample(bool t)
+void AbsRefine_CounterExample::CheckCounterExample(
+    bool t, const ASTNode& checked_input)
 {
   // input is valid, no counterexample to check
   if (bm->ValidFlag)
@@ -664,31 +665,17 @@ void AbsRefine_CounterExample::CheckCounterExample(bool t)
     FatalError("CheckCounterExample: "
                "No CounterExample to check",
                ASTUndefined);
-  const ASTVec c = bm->GetAsserts();
-
   if (bm->UserFlags.stats_flag)
     printf("checking counterexample\n");
 
-  for (ASTVec::const_iterator it = c.begin(), itend = c.end(); it != itend;
-       it++)
-  {
-    if (debug_counterexample)
-      cerr << "checking" << *it;
+  if (debug_counterexample)
+    cerr << "checking " << checked_input;
 
-    if (ASTFalse == ComputeFormulaUsingModel(*it))
-      FatalError("CheckCounterExample:counterexample bogus:"
-                 "assert evaluates to FALSE under counterexample: "
-                 "NOT OK",
-                 *it);
-  }
-
-  // The smtlib ones don't have a query defined.
-  if ((bm->GetQuery() != ASTUndefined) &&
-      ASTTrue == ComputeFormulaUsingModel(bm->GetQuery()))
-    FatalError("CheckCounterExample:counterexample bogus:"
-               "query evaluates to TRUE under counterexample: "
-               "NOT OK",
-               bm->GetQuery());
+  if (ASTFalse == ComputeFormulaUsingModel(checked_input))
+    FatalError("CheckCounterExample:counterexample bogus: "
+               "the solve's semantic input evaluates to FALSE under the "
+               "counterexample: NOT OK",
+               checked_input);
 }
 
 /* FUNCTION: queries the value of expr given the current counterexample.
@@ -1343,7 +1330,7 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
       {
         if (bm->UserFlags.check_counterexample_flag)
         {
-          CheckCounterExample(SatSolver.okay());
+          CheckCounterExample(SatSolver.okay(), original_input);
         }
 
         if ((bm->UserFlags.stats_flag ||

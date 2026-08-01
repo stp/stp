@@ -45,23 +45,28 @@ ASTNode HashingNodeFactory::CreateNode(const Kind kind,
     return back_children[0][0];
   }
 
-  // Array equality: every front end's node creation bottoms out here,
-  // so this is the single place where an equality between array terms
-  // is either replaced by a fresh Boolean abstraction variable (the
-  // formula abstraction of Brummayer & Biere's lemmas-on-demand
-  // procedure), or refused when that decision procedure is disabled.
-  // No equality node over arrays is ever built, so none of STP's
-  // downstream transformations encounter one and answer it unsoundly.
+  // Array equality: every front end's node creation bottoms out here. Keep
+  // the operands visible in an opaque node until query construction and
+  // function/let substitution are complete; TopLevelSTPAux lowers ARRAY_EQ
+  // before any ordinary preprocessing can encounter it.
   if (kind == EQ && back_children.size() == 2 &&
       back_children[0].GetIndexWidth() > 0)
   {
-    if (bm.UserFlags.enable_array_equality)
-      return bm.getExtensionality()->makeEquality(back_children[0],
-                                                  back_children[1]);
+    if (!bm.UserFlags.enable_array_equality)
+      FatalError("STP cannot decide equality between whole array terms "
+                 "without --array-equality (the C API's vc_setFlag(vc, "
+                 "'x'), or Solver(array_equality=True) in Python).");
 
-    FatalError("STP cannot decide equality between whole array terms "
-               "without --array-equality (the C API's vc_setFlag(vc, "
-               "'x'), or Solver(array_equality=True) in Python).");
+    if (back_children[0].GetType() != ARRAY_TYPE ||
+        back_children[1].GetType() != ARRAY_TYPE ||
+        back_children[0].GetIndexWidth() !=
+            back_children[1].GetIndexWidth() ||
+        back_children[0].GetValueWidth() !=
+            back_children[1].GetValueWidth())
+      FatalError("array-equality: operands must have identical index and "
+                 "element widths");
+
+    return CreateNode(ARRAY_EQ, back_children);
   }
   
   if (back_children.size()  <= 1 || !isCommutative(kind))

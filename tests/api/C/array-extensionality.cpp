@@ -21,10 +21,9 @@ THE SOFTWARE.
 **********************/
 
 // C API front end for the array-equality feature: with the 'x' flag,
-// vc_eqExpr over array operands returns a fresh Boolean abstraction
-// variable and the lemmas-on-demand procedure decides the query; with
-// the flag off, the pre-existing warn-and-return-EQ behavior is
-// preserved.
+// vc_eqExpr over array operands remains an opaque equality until the complete
+// query is lowered at solve time.  The lemmas-on-demand procedure then decides
+// it; with the flag off, the pre-existing refusal behavior is preserved.
 
 #include "stp/c_interface.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
@@ -45,9 +44,11 @@ TEST(array_extensionality, positive_equality_unsat)
   Expr b = vc_varExpr(vc, "b", arrT);
   Expr i = vc_varExpr(vc, "i", bv4);
 
-  // The minted equality is an ordinary Boolean symbol, not an EQ node.
+  // Publicly this remains equality, and internally ARRAY_EQ preserves both
+  // operands until solve-boundary lowering.
   Expr eq = vc_eqExpr(vc, a, b);
-  ASSERT_EQ(SYMBOL, getExprKind(eq));
+  ASSERT_EQ(EQ, getExprKind(eq));
+  ASSERT_EQ(stp::ARRAY_EQ, static_cast<stp::ASTNode*>(eq)->GetKind());
 
   // Repeated requests reuse the same proxy, in either operand order,
   // and a reflexive equality folds to true.
@@ -193,16 +194,15 @@ TEST(array_extensionality, repeated_queries_do_not_leak_ite_records)
                                    vc_readExpr(vc, c, i))));
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
-  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  ASSERT_NE(nullptr, ext);
-
-  // The user's equality, and it stays the only one: an array
-  // if-then-else is not abstracted at all.
-  ASSERT_EQ(1u, ext->getRecords().size());
+  stp::ExtensionalityContext* ext = nullptr;
+  EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
 
   for (int solve = 0; solve < 4; solve++)
   {
     ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc))) << "solve " << solve;
+    if (ext == nullptr)
+      ext = bm->getExtensionalityIfAny();
+    ASSERT_NE(nullptr, ext);
     // The user's equality and nothing else, on every solve. The
     // if-then-else is reasoned about directly by the checker's T rules,
     // so it costs one Boolean literal per solve rather than an array
@@ -247,14 +247,15 @@ TEST(array_extensionality, nested_ite_fixed_point_is_stable)
                                      vc_readExpr(vc, d, i))));
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
-  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  ASSERT_NE(nullptr, ext);
-  // The user's equality, and it stays the only one.
-  ASSERT_EQ(1u, ext->getRecords().size());
+  stp::ExtensionalityContext* ext = nullptr;
+  EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
 
   for (int solve = 0; solve < 3; solve++)
   {
     ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc))) << "solve " << solve;
+    if (ext == nullptr)
+      ext = bm->getExtensionalityIfAny();
+    ASSERT_NE(nullptr, ext);
     // Both if-then-elses, nested, still cost no record at all.
     EXPECT_EQ(1u, ext->getRecords().size()) << "solve " << solve;
   }
@@ -290,12 +291,15 @@ TEST(array_extensionality, asserted_ite_condition_folds_before_fe03)
                                    vc_readExpr(vc, c, i))));
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
-  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  ASSERT_NE(nullptr, ext);
+  stp::ExtensionalityContext* ext = nullptr;
+  EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
 
   for (int solve = 0; solve < 2; solve++)
   {
     ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc))) << "solve " << solve;
+    if (ext == nullptr)
+      ext = bm->getExtensionalityIfAny();
+    ASSERT_NE(nullptr, ext);
     EXPECT_EQ(1u, ext->getRecords().size()) << "solve " << solve;
   }
 
@@ -404,18 +408,20 @@ TEST(array_extensionality, store_chain_equals_base_solved_by_rewrite)
   Expr v = vc_varExpr(vc, "v", bv8);
 
   Expr eq = vc_eqExpr(vc, vc_writeExpr(vc, a, i, v), a);
-  // A single write rewrites to exactly read(a, i) = v.
+  // The complete handle remains opaque; solve-boundary lowering rewrites a
+  // single write to exactly read(a, i) = v.
   ASSERT_EQ(EQ, getExprKind(eq));
+  ASSERT_EQ(stp::ARRAY_EQ, static_cast<stp::ASTNode*>(eq)->GetKind());
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
-  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  ASSERT_NE(nullptr, ext);
-  EXPECT_EQ(0u, ext->getRecords().size());
+  EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
 
   vc_assertFormula(vc, eq);
   vc_assertFormula(
       vc, vc_notExpr(vc, vc_eqExpr(vc, vc_readExpr(vc, a, i), v)));
   ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  ASSERT_NE(nullptr, ext);
   EXPECT_EQ(0u, ext->getRecords().size());
   vc_Destroy(vc);
 }
@@ -444,12 +450,13 @@ TEST(array_extensionality, store_chain_shadowed_write_is_unconstrained)
       vc, vc_notExpr(vc, vc_eqExpr(vc, w, vc_readExpr(vc, a, i))));
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
-  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  ASSERT_NE(nullptr, ext);
-  EXPECT_EQ(0u, ext->getRecords().size());
+  EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
 
   // w is unconstrained: satisfiable.
   ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  ASSERT_NE(nullptr, ext);
+  EXPECT_EQ(0u, ext->getRecords().size());
 
   // v is forced: contradicting read(a,i) = v flips the verdict.
   vc_assertFormula(
@@ -478,9 +485,10 @@ TEST(array_extensionality, store_chain_guarded_inner_write)
 
   Expr eq = vc_eqExpr(
       vc, vc_writeExpr(vc, vc_writeExpr(vc, a, j, w), i, v), a);
-  // Two live writes rewrite to a conjunction, with the inner conjunct
-  // guarded by the index equality with the outer write.
-  ASSERT_EQ(AND, getExprKind(eq));
+  // Two live writes are still one opaque equality here. Lowering rewrites it
+  // to a conjunction whose inner conjunct is guarded by index equality.
+  ASSERT_EQ(EQ, getExprKind(eq));
+  ASSERT_EQ(stp::ARRAY_EQ, static_cast<stp::ASTNode*>(eq)->GetKind());
 
   vc_assertFormula(vc, eq);
   vc_assertFormula(vc, vc_notExpr(vc, vc_eqExpr(vc, i, j)));
@@ -488,11 +496,12 @@ TEST(array_extensionality, store_chain_guarded_inner_write)
       vc, vc_notExpr(vc, vc_eqExpr(vc, vc_readExpr(vc, a, j), w)));
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
+
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
   ASSERT_NE(nullptr, ext);
   EXPECT_EQ(0u, ext->getRecords().size());
-
-  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   vc_Destroy(vc);
 }
 
@@ -520,11 +529,12 @@ TEST(array_extensionality, store_chain_over_write_base)
       vc, vc_notExpr(vc, vc_eqExpr(vc, vc_readExpr(vc, b, i), v)));
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
+
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
   ASSERT_NE(nullptr, ext);
   EXPECT_EQ(0u, ext->getRecords().size());
-
-  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   vc_Destroy(vc);
 }
 
@@ -567,10 +577,9 @@ TEST(array_extensionality, lemma_atoms_fold_at_encoding)
   vc_assertFormula(vc, vc_notExpr(vc, vc_eqExpr(vc, c1, c2)));
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
   ASSERT_NE(nullptr, ext);
-
-  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   EXPECT_GT(ext->lemmasEmitted, 0);
   EXPECT_GT(ext->lemmaAtomsFolded, 0);
   vc_Destroy(vc);
@@ -684,10 +693,9 @@ TEST(array_extensionality, interleaves_with_classic_read_refinement)
                                  vc_bvConstExprFromInt(vc, 8, 9)));
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
   ASSERT_NE(nullptr, ext);
-
-  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   EXPECT_GT(ext->lemmasEmitted, 0);
   vc_Destroy(vc);
 }
@@ -847,10 +855,9 @@ TEST(array_extensionality, refinement_on_the_cadical_backend)
   vc_assertFormula(vc, vc_notExpr(vc, vc_eqExpr(vc, c1, c2)));
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
   ASSERT_NE(nullptr, ext);
-
-  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   EXPECT_GT(ext->lemmasEmitted, 0);
   vc_Destroy(vc);
 }
@@ -899,10 +906,9 @@ TEST(array_extensionality, store_index_read_through_second_array_unsat)
                     vc_writeExpr(vc, vc_writeExpr(vc, x5, x0, q), k, x0)));
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
   ASSERT_NE(nullptr, ext);
-
-  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   // This input no longer reaches the divergence refusal it was reduced
   // from: constant bit propagation now writes every fully fixed node
   // back into the graph, not only the ones the top node does not depend
@@ -957,10 +963,9 @@ TEST(array_extensionality, unlinked_read_abstractions_diverge_and_are_refused)
                              one)));
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
   ASSERT_NE(nullptr, ext);
-
-  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   // The route has to be taken, or the refusal and the driver's
   // fall-back to host refinement are both untested.
   EXPECT_GT(ext->nameDivergences, 0);
@@ -1111,10 +1116,9 @@ TEST(array_extensionality, ite_replacement_survives_a_rewritten_condition)
   vc_assertFormula(vc, vc_eqExpr(vc, vc_iteExpr(vc, cond, a, b), c));
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
   stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
   ASSERT_NE(nullptr, ext);
-
-  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
   // The user's equality, and nothing minted for the if-then-else.
   const size_t afterFirstSolve = ext->getRecords().size();
   EXPECT_EQ(1u, afterFirstSolve);

@@ -74,6 +74,24 @@ const static string pe_message = "After Propagating Equalities. ";
 const static string domain_message = "After Domain Analysis. ";
 const static string se_message = "After Split Extracts. ";
 
+static bool containsOpaqueArrayEquality(const ASTNode& root)
+{
+  ASTNodeSet visited;
+  ASTVec pending(1, root);
+  while (!pending.empty())
+  {
+    const ASTNode node = pending.back();
+    pending.pop_back();
+    if (!visited.insert(node).second)
+      continue;
+    if (node.GetKind() == ARRAY_EQ)
+      return true;
+    for (unsigned i = 0; i < node.Degree(); ++i)
+      pending.push_back(node[i]);
+  }
+  return false;
+}
+
 SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS,
                                             ASTNode original_input)
 {
@@ -290,11 +308,32 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
 SOLVER_RETURN_TYPE
 STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 {
-  bm->ASTNodeStats("input asserts and query: ", original_input);
+  // ARRAY_EQ remains a normal, traversable AST node through query assembly
+  // and macro/function substitution. Lower it only now, at the complete-query
+  // boundary and before any ordinary simplifier or array transform runs.
+  ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  if (ext != NULL)
+    ext->beginSolve();
+
+  ASTNode semantic_input = original_input;
+  if (containsOpaqueArrayEquality(original_input))
+  {
+    if (!bm->UserFlags.enable_array_equality)
+      FatalError("array-equality: opaque equality reached solve while the "
+                 "decision procedure is disabled");
+    if (ext == NULL)
+    {
+      ext = bm->getExtensionality();
+      ext->beginSolve();
+    }
+    semantic_input = ext->lowerArrayEqualities(original_input);
+  }
+
+  bm->ASTNodeStats("input asserts and query: ", semantic_input);
 
   DifficultyScore difficulty;
   if (bm->UserFlags.stats_flag)
-    cerr << "Difficulty Initially:" << difficulty.score(original_input, bm)
+    cerr << "Difficulty Initially:" << difficulty.score(semantic_input, bm)
          << endl;
 
   // A heap object so I can easily control its lifetime.
@@ -302,7 +341,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   std::unique_ptr<PropagateEqualities> pe(
       new PropagateEqualities(simp, bm->defaultNodeFactory, bm));
 
-  ASTNode inputToSat = original_input;
+  ASTNode inputToSat = semantic_input;
 
   // Array equality (lemmas on demand, Brummayer & Biere JSAT 2010):
   // with at least one abstracted array equality, conjoin every
@@ -320,11 +359,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // and none of the preprocessing that would dismantle an if-then-else
   // has run yet. A query with no array equality reaches none of this
   // and is decided by the ordinary array machinery.
-  ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  // Per-solve state has to be dropped whether or not the procedure
-  // runs, or a cone frozen by an earlier solve still answers inCone().
-  if (ext != NULL)
-    ext->beginSolve();
   const bool extActive = ext != NULL && ext->active();
   // Releases the registry seal on every exit from this function, so
   // that equalities built between solves are ordinary again.
@@ -807,7 +841,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     bm->print_stats();
 
   // If it doesn't contain array operations, use ABC's CNF generation.
-  res = Ctr_Example->CallSAT_ResultCheck(NewSolver, inputToSat, original_input,
+  res = Ctr_Example->CallSAT_ResultCheck(NewSolver, inputToSat, semantic_input,
                                          satBase, maybeRefinement);
 
   if (bm->soft_timeout_expired)
@@ -849,12 +883,12 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     {
       ext->encodePendingLemmas(NewSolver, satBase);
       res = Ctr_Example->CallSAT_ResultCheck(NewSolver, bm->ASTTrue,
-                                             original_input, satBase, true);
+                                             semantic_input, satBase, true);
     }
     else
     {
       res = Ctr_Example->SATBased_ArrayReadRefinement(NewSolver,
-                                                      original_input, satBase);
+                                                      semantic_input, satBase);
     }
 
     if (SOLVER_UNDECIDED != res)
