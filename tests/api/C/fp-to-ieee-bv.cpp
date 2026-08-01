@@ -40,3 +40,38 @@ TEST(fp_to_ieee_bv, exponent_constrains_classification)
   EXPECT_EQ(1, vc_query(vc, vc_falseExpr(vc))); // unsatisfiable
   vc_Destroy(vc);
 }
+
+TEST(fp_to_ieee_bv, bitvector_operator_rejects_float_without_conversion)
+{
+  EXPECT_DEATH(
+      {
+        VC vc = vc_createValidityChecker();
+        Expr x = vc_varExpr(vc, "x", vc_fpType(vc, 8, 24));
+        (void)vc_bvNotExpr(vc, x);
+      },
+      "requires bitvector operands");
+}
+
+TEST(fp_to_ieee_bv, ite_rejects_float_and_bitvector_branches)
+{
+  EXPECT_DEATH(
+      {
+        VC vc = vc_createValidityChecker();
+        Expr x = vc_varExpr(vc, "x", vc_fpType(vc, 8, 24));
+        Expr bits = vc_bvConstExprFromLL(vc, 32, 0);
+        (void)vc_iteExpr(vc, vc_trueExpr(vc), x, bits);
+      },
+      "requires operands of the same sort");
+}
+
+TEST(fp_to_ieee_bv, equality_rejects_float_and_bitvector_operands)
+{
+  EXPECT_DEATH(
+      {
+        VC vc = vc_createValidityChecker();
+        Expr x = vc_varExpr(vc, "x", vc_fpType(vc, 8, 24));
+        Expr bits = vc_bvConstExprFromLL(vc, 32, 0);
+        (void)vc_eqExpr(vc, x, bits);
+      },
+      "requires operands of the same sort");
+}

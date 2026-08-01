@@ -321,11 +321,19 @@ ASTNode Cpp_interface::applyFunction(const string& name, const ASTVec& params)
   ASTNodeMap fromTo;
   for (size_t i = 0, size = f.params.size(); i < size; ++i)
   {
+    if (f.params[i].GetType() != params[i].GetType())
+      FatalError("Actual parameter sort differs from formal");
+
     if (f.params[i].GetValueWidth() != params[i].GetValueWidth())
       FatalError("Actual parameters differ from formal");
 
     if (f.params[i].GetIndexWidth() != params[i].GetIndexWidth())
       FatalError("Actual parameters differ from formal");
+
+    if (f.params[i].GetType() == FLOATINGPOINT_TYPE &&
+        (f.params[i].GetExpWidth() != params[i].GetExpWidth() ||
+         f.params[i].GetSigWidth() != params[i].GetSigWidth()))
+      FatalError("Actual floating-point parameter format differs from formal");
 
     fromTo.insert(std::make_pair(f.params[i], params[i]));
   }
