@@ -1196,6 +1196,7 @@ Expr vc_fpConstFromBits(VC vc, int exp_bits, int sig_bits, Expr bv)
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* bits = (stp::ASTNode*)bv;
 
+  checkFpWidths(exp_bits, sig_bits);
   requireBitVectorOperand("vc_fpConstFromBits", *bits);
 
   if (bits->GetKind() != stp::BVCONST)

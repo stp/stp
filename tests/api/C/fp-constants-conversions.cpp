@@ -14,6 +14,28 @@ static unsigned long long solveRead(VC vc, Expr v)
   return getBVUnsignedLongLong(vc_getCounterExample(vc, v));
 }
 
+TEST(fp_constants, from_bits_rejects_invalid_smt_format)
+{
+  EXPECT_DEATH(
+      {
+        VC vc = vc_createValidityChecker();
+        Expr bits = vc_bvConstExprFromLL(vc, 5, 0);
+        (void)vc_fpConstFromBits(vc, 1, 4, bits);
+      },
+      "at least 2 exponent and 2 significand bits");
+}
+
+TEST(fp_constants, from_bits_rejects_unsupported_symfpu_format)
+{
+  EXPECT_DEATH(
+      {
+        VC vc = vc_createValidityChecker();
+        Expr bits = vc_bvConstExprFromLL(vc, 5, 0);
+        (void)vc_fpConstFromBits(vc, 2, 3, bits);
+      },
+      "this floating-point format is not supported");
+}
+
 // The special-value constructors produce values that classify as claimed.
 TEST(fp_constants, special_values)
 {
