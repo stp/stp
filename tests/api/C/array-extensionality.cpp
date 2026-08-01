@@ -1093,10 +1093,9 @@ TEST(array_extensionality, store_index_read_through_second_array_bv120_unsat)
 
 TEST(array_extensionality, mixed_width_equality_dies_loudly)
 {
-  // vc_eqExpr over arrays of different index widths cannot be
-  // abstracted; with the option on the width check is a fatal error
-  // rather than a silently mistyped node the solve would trip over
-  // later.
+  // vc_eqExpr over arrays of different index widths cannot be abstracted.
+  // Reject it at the public sort boundary rather than building a silently
+  // mistyped node that the solve would trip over later.
   VC vc = vc_createValidityChecker();
   vc_setFlag(vc, 'x');
 
@@ -1105,8 +1104,7 @@ TEST(array_extensionality, mixed_width_equality_dies_loudly)
   Expr a = vc_varExpr(vc, "a", vc_arrayType(vc, bv4, bv8));
   Expr b = vc_varExpr(vc, "b", vc_arrayType(vc, bv8, bv8));
 
-  EXPECT_DEATH(vc_eqExpr(vc, a, b),
-               "identical index and element widths");
+  EXPECT_DEATH(vc_eqExpr(vc, a, b), "requires operands of the same sort");
   vc_Destroy(vc);
 }
 
