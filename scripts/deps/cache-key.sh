@@ -2,18 +2,19 @@
 
 # Print "key=<hash>" for use as a CI cache key for the deps directory.
 #
-# The setup scripts clone most dependencies without pinning a revision, so
-# hashing the scripts alone would keep serving a cache built from whatever
-# those repositories happened to contain the first time. Fold in the commit
-# their default branches currently point at, so upstream movement produces a
-# new key. CryptoMiniSat, CaDiCaL and GTest are pinned to tags inside their
-# scripts, which the script hash already covers.
+# A setup script that clones without pinning a revision would keep being
+# served a cache built from whatever that repository happened to contain the
+# first time, so for those the commit the default branch currently points at
+# is folded in: upstream movement then produces a new key. CryptoMiniSat,
+# CaDiCaL, GTest and minisat are pinned to a tag or commit inside their
+# scripts, which the script hash already covers -- OutputCheck, a test-only
+# dependency that is never linked into anything, is the one that is not.
 
 set -e -u -o pipefail
 
 hash=$(
   {
-    for repo in stp/minisat stp/OutputCheck; do
+    for repo in stp/OutputCheck; do
       git ls-remote "https://github.com/${repo}" HEAD
     done
     cat "$(dirname "$0")"/setup-*.sh

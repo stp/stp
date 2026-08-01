@@ -903,9 +903,66 @@ TEST(array_extensionality, store_index_read_through_second_array_unsat)
   ASSERT_NE(nullptr, ext);
 
   ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
-  // This is the query the divergence refusal exists for, so it must
-  // actually take that route -- otherwise the refusal, and the
-  // driver's undecided fall-back that depends on it, are untested.
+  // This input no longer reaches the divergence refusal it was reduced
+  // from: constant bit propagation now writes every fully fixed node
+  // back into the graph, not only the ones the top node does not depend
+  // on, so both occurrences of x11[C] are rewritten alike and are
+  // abstracted as one read. What is left here is the ordinary lemma
+  // loop over the same formula, which still has to answer unsat.
+  // unlinked_read_abstractions_diverge_and_are_refused covers the
+  // refusal route directly.
+  vc_Destroy(vc);
+}
+
+TEST(array_extensionality, unlinked_read_abstractions_diverge_and_are_refused)
+{
+  // The divergence refusal, built from what it guards rather than
+  // reduced from a fuzz report.
+  //
+  // x11 is never equated to anything, so it stays outside the cone and
+  // its reads are abstracted one variable per syntactic read; only the
+  // host's lazy read refinement ever links two of them. i = j is said
+  // as a pair of unsigned comparisons so that nothing substitutes one
+  // index for the other and collapses x11[i] and x11[j] into a single
+  // read. The recorded equality then stores at x11[i] while the read
+  // goes through x11[j]: a candidate in which the two abstractions hold
+  // different values is conflict-free for the checker, and certifying
+  // it would answer sat. Removing the name check makes this query do
+  // exactly that.
+  //
+  // Unsat: i = j forces x11[i] = x11[j], so the read lands on the cell
+  // the store just set to 1.
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv8 = vc_bvType(vc, 8);
+  Type arrT = vc_arrayType(vc, bv8, bv8);
+
+  Expr i = vc_varExpr(vc, "i", bv8);
+  Expr j = vc_varExpr(vc, "j", bv8);
+  Expr x5 = vc_varExpr(vc, "x5", arrT);
+  Expr x9 = vc_varExpr(vc, "x9", arrT);
+  Expr x11 = vc_varExpr(vc, "x11", arrT);
+  Expr one = vc_bvConstExprFromLL(vc, 8, 1);
+
+  vc_assertFormula(vc, vc_notExpr(vc, vc_bvLtExpr(vc, i, j)));
+  vc_assertFormula(vc, vc_notExpr(vc, vc_bvLtExpr(vc, j, i)));
+
+  vc_assertFormula(
+      vc, vc_eqExpr(vc, x9,
+                    vc_writeExpr(vc, x5, vc_readExpr(vc, x11, i), one)));
+  vc_assertFormula(
+      vc, vc_notExpr(vc, vc_eqExpr(
+                             vc, vc_readExpr(vc, x9, vc_readExpr(vc, x11, j)),
+                             one)));
+
+  stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  ASSERT_NE(nullptr, ext);
+
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+  // The route has to be taken, or the refusal and the driver's
+  // fall-back to host refinement are both untested.
   EXPECT_GT(ext->nameDivergences, 0);
   vc_Destroy(vc);
 }
