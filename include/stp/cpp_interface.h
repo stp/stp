@@ -70,12 +70,31 @@ struct array_sort_component
   unsigned width;
   unsigned exp_bits; // FLOATINGPOINT only
   unsigned sig_bits; // FLOATINGPOINT only
+
+  SourceSort sourceSort() const
+  {
+    switch (kind)
+    {
+      case BITVECTOR:
+        return SourceSort::bitVector(width);
+      case FLOATINGPOINT:
+        return SourceSort::floatingPoint(exp_bits, sig_bits);
+      case ROUNDINGMODE:
+        return SourceSort::roundingMode();
+    }
+    return SourceSort::unknown();
+  }
 };
 
 struct array_sort
 {
   array_sort_component index;
   array_sort_component elem;
+
+  SourceSort sourceSort() const
+  {
+    return SourceSort::array(index.sourceSort(), elem.sourceSort());
+  }
 };
 
 class Cpp_interface
@@ -134,9 +153,14 @@ class Cpp_interface
     // Obtain the symbols for the current frame
     ASTVec& getSymbols();
 
+    void addSymbol(const ASTNode& symbol);
+    bool removeSymbol(const ASTNode& symbol);
+    bool lookupSymbol(const std::string& name, ASTNode& output) const;
+
   private:
     vector<std::string> _scoped_functions;
     ASTVec _scoped_symbols;
+    std::map<std::string, std::vector<ASTNode>> _symbol_bindings;
     ankerl::unordered_dense::map<std::string, Function>*
         _global_function_context;
   };
@@ -210,6 +234,9 @@ public:
   DLL_PUBLIC ASTNode CreateBVConst(const char* const strval, int base);
   DLL_PUBLIC ASTNode CreateBVConst(unsigned int width,
                                    unsigned long long int bvconst);
+  DLL_PUBLIC ASTNode CreateRMConst(unsigned mode);
+  DLL_PUBLIC ASTNode CreateSourceSymbol(const char* name,
+                                        const SourceSort& source_sort);
   DLL_PUBLIC ASTNode LookupOrCreateSymbol(const char* const name);
 
   // A boolean variable applied to a constant, e.g. p(0x3), names an
@@ -229,12 +256,11 @@ public:
 
   DLL_PUBLIC bool isBitVectorFunction(const std::string& name);
   DLL_PUBLIC bool isBooleanFunction(const std::string& name);
-  // Classify a name in a single map probe: returns the function's return
-  // type (BITVECTOR_TYPE, BOOLEAN_TYPE or FLOATINGPOINT_TYPE), or
-  // UNKNOWN_TYPE when the name is not a stored function. Lets the lexer
-  // avoid the extra probes that calling the individual is*Function
-  // predicates would cost.
+  // Classify a name by its carrier return type, or UNKNOWN_TYPE when the name
+  // is not stored. Source-only distinctions are available from
+  // functionReturnSourceSort().
   DLL_PUBLIC types functionReturnType(const std::string& name);
+  DLL_PUBLIC SourceSort functionReturnSourceSort(const std::string& name);
   bool hasFunctions() const { return !functions.empty(); }
 
   DLL_PUBLIC ASTNode LookupOrCreateSymbol(std::string name);

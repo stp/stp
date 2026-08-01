@@ -30,6 +30,7 @@ AddSTPGTest(NodeDomainAnalysis_Test.cpp)
 AddSTPGTest(SplitExtracts_Test.cpp)
 if (ENABLE_FLOATING_POINT)
     AddSTPGTest(FPPrintBack_Test.cpp)
+    AddSTPGTest(SourceSort_Test.cpp)
     # Builds float-typed symbols, so it needs the floating-point funnels
     # (SetExpWidth) to be more than a fatal error.
     AddSTPGTest(BVSolver_Test.cpp)
@@ -55,4 +56,3 @@ AddSTPGTest(BitVector_from_Dec_Test.cpp)
 AddSTPGTest(ValueSet_Test.cpp)
 AddSTPGTest(ValueSet_Exhaustive_Test.cpp)
 AddSTPGTest(SearchBias_Test.cpp)
-

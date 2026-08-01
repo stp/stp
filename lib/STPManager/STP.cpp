@@ -198,12 +198,8 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   // anything. See FpTotalise. RoundingMode-element arrays and RoundingMode
   // symbols can each appear without a single float node in the formula, so
   // has_floating_point alone does not cover the pass.
-  if (bm->has_floating_point || !bm->rm_element_arrays.empty() ||
-      !bm->rounding_mode_symbols.empty())
-  {
-    FpTotalise totalise(bm);
-    original_input = totalise.topLevel(original_input);
-  }
+  FpTotalise totalise(bm);
+  original_input = totalise.topLevel(original_input);
 
   SATSolver* newS = get_new_sat_solver();
 

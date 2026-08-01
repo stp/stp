@@ -138,9 +138,27 @@ ostream& operator<<(ostream& os, const ASTNodeMap& nmap)
 ////////////////////////////////////////////////////////////////
 ASTNode STPMgr::LookupOrCreateSymbol(const char* const name)
 {
+  // This legacy entry point has no sort parameter. Preserve its historical
+  // name lookup semantics for internal clients, while all typed public
+  // declarations go through CreateSourceSymbol instead.
+  ASTNode existing;
+  if (LookupSymbol(name, existing))
+    return existing;
+
   ASTSymbol temp_sym(this, name);
   ASTNode n(LookupOrCreateSymbol(temp_sym));
   return n;
+}
+
+ASTNode STPMgr::CreateSourceSymbol(const char* const name,
+                                   const SourceSort& source_sort)
+{
+  if (!source_sort.isKnown())
+    FatalError("CreateSourceSymbol requires a known source sort");
+  if (source_sort.containsFloatingPoint())
+    noteFloatingPoint();
+  ASTSymbol temp_sym(this, name, source_sort);
+  return ASTNode(LookupOrCreateSymbol(temp_sym));
 }
 
 // FIXME: _name is now a constant field, and this assigns to it
@@ -168,8 +186,12 @@ ASTSymbol* STPMgr::LookupOrCreateSymbol(ASTSymbol& s)
     // _name because it's const).  Can cast the iterator to
     // non-const -- carefully.
     // std::string strname(s_ptr->GetName());
-    ASTSymbol* s_ptr1 = new ASTSymbol(this, strdup(s_ptr->GetName()));
+    ASTSymbol* s_ptr1 =
+        new ASTSymbol(this, strdup(s_ptr->GetName()), s_ptr->_source_sort);
     s_ptr1->_value_width = s_ptr->_value_width;
+    s_ptr1->_index_width = s_ptr->_index_width;
+    s_ptr1->_exp_width = s_ptr->_exp_width;
+    s_ptr1->_sig_width = s_ptr->_sig_width;
     std::pair<ASTSymbolSet::const_iterator, bool> p =
         _symbol_unique_table.insert(s_ptr1);
     return *p.first;
@@ -193,23 +215,23 @@ bool STPMgr::LookupSymbol(ASTSymbol& s)
 
 bool STPMgr::LookupSymbol(const char* const name)
 {
-  ASTSymbol s(this, name);
-  ASTSymbol* s_ptr = &s; // it's a temporary key.
-
-  if (_symbol_unique_table.find(s_ptr) == _symbol_unique_table.end())
-    return false;
-  else
-    return true;
+  for (const ASTSymbol* symbol : _symbol_unique_table)
+  {
+    if (strcmp(symbol->GetName(), name) == 0)
+      return true;
+  }
+  return false;
 }
 
 bool STPMgr::LookupSymbol(const char* const name, ASTNode& output)
 {
-  ASTSymbol temp_sym(this, name);
-  ASTSymbolSet::const_iterator it = _symbol_unique_table.find(&temp_sym);
-  if (it != _symbol_unique_table.end())
+  for (ASTSymbol* symbol : _symbol_unique_table)
   {
-    output = ASTNode(*it);
-    return true;
+    if (strcmp(symbol->GetName(), name) == 0)
+    {
+      output = ASTNode(symbol);
+      return true;
+    }
   }
   return false;
 }
@@ -435,6 +457,74 @@ ASTFPConst* STPMgr::LookupOrCreateFPConst(ASTFPConst& s)
   return s_copy;
 }
 
+ASTNode STPMgr::CreateRMConst(unsigned mode)
+{
+#ifndef STP_ENABLE_FLOATING_POINT
+  (void)mode;
+  FatalError("this STP was built without floating-point support; "
+             "reconfigure with -DENABLE_FLOATING_POINT=ON");
+#else
+  using namespace symbolic_fp;
+  switch (mode)
+  {
+    case ROUND_NEAREST_TIES_TO_EVEN:
+    case ROUND_TOWARD_POSITIVE:
+    case ROUND_TOWARD_NEGATIVE:
+    case ROUND_TOWARD_ZERO:
+    case ROUND_NEAREST_TIES_TO_AWAY:
+      break;
+    default:
+      FatalError("CreateRMConst requires one of the five rounding modes");
+  }
+
+  const ASTNode bits = CreateBVConst(5, mode);
+  ASTBVConst* src = static_cast<ASTBVConst*>(bits._int_node_ptr);
+  ASTRMConst temp(this, src->GetBVConst());
+  return ASTNode(LookupOrCreateRMConst(temp));
+#endif
+}
+
+ASTRMConst* STPMgr::LookupOrCreateRMConst(ASTRMConst& s)
+{
+  const ASTBVConstSet::const_iterator it = _bvconst_unique_table.find(&s);
+  if (it != _bvconst_unique_table.end())
+    return static_cast<ASTRMConst*>(*it);
+
+  ASTRMConst* copy = new ASTRMConst(s);
+  _bvconst_unique_table.insert(copy);
+  return copy;
+}
+
+ASTNode STPMgr::LiftSourceValue(const ASTNode& carrier,
+                                const SourceSort& source_sort)
+{
+  switch (source_sort.kind())
+  {
+    case SourceSort::Kind::FloatingPoint:
+      if (carrier.GetKind() != BVCONST ||
+          carrier.GetValueWidth() != source_sort.packedWidth())
+        FatalError("LiftSourceValue: invalid floating-point carrier: ",
+                   carrier);
+      return CreateFPConst(carrier, source_sort.exponentWidth(),
+                           source_sort.significandWidth());
+    case SourceSort::Kind::RoundingMode:
+      if (carrier.GetKind() != BVCONST || carrier.GetValueWidth() != 5)
+        FatalError("LiftSourceValue: invalid RoundingMode carrier: ", carrier);
+      return CreateRMConst(carrier.GetUnsignedConst());
+    case SourceSort::Kind::Bool:
+      if (carrier != ASTTrue && carrier != ASTFalse)
+        FatalError("LiftSourceValue: invalid Boolean carrier: ", carrier);
+      return carrier;
+    case SourceSort::Kind::BitVector:
+      if (carrier.GetKind() != BVCONST ||
+          carrier.GetValueWidth() != source_sort.bitVectorWidth())
+        FatalError("LiftSourceValue: invalid bitvector carrier: ", carrier);
+      return carrier;
+    default:
+      FatalError("LiftSourceValue: cannot lift this source sort");
+  }
+}
+
 ASTNode STPMgr::roundingModeValidConstraint(const ASTNode& s)
 {
   using namespace symbolic_fp;
@@ -444,38 +534,14 @@ ASTNode STPMgr::roundingModeValidConstraint(const ASTNode& s)
         ROUND_TOWARD_NEGATIVE, ROUND_TOWARD_ZERO, ROUND_NEAREST_TIES_TO_AWAY})
   {
     one_of.push_back(
-        defaultNodeFactory->CreateNode(EQ, s, CreateBVConst(5, mode)));
+        defaultNodeFactory->CreateNode(EQ, s, CreateRMConst(mode)));
   }
   return defaultNodeFactory->CreateNode(OR, one_of);
 }
 
 bool STPMgr::isRoundingModeSortedTerm(const ASTNode& n) const
 {
-  if (n.GetValueWidth() != 5 || n.GetIndexWidth() != 0)
-    return false;
-
-  switch (n.GetKind())
-  {
-    case BVCONST:
-    {
-      using namespace symbolic_fp;
-      const unsigned v = n.GetUnsignedConst();
-      return v == ROUND_NEAREST_TIES_TO_EVEN || v == ROUND_TOWARD_POSITIVE ||
-             v == ROUND_TOWARD_NEGATIVE || v == ROUND_TOWARD_ZERO ||
-             v == ROUND_NEAREST_TIES_TO_AWAY;
-    }
-    case SYMBOL:
-      // Declared RoundingMode symbols are pinned to the five encodings when
-      // they are declared, so the carrier cannot hold anything else.
-      return isRoundingModeSymbol(n);
-    case READ:
-      // Likewise pinned, by FpTotalise, for every read in the formula.
-      return arrayHasRmElement(n[0]);
-    case ITE:
-      return isRoundingModeSortedTerm(n[1]) && isRoundingModeSortedTerm(n[2]);
-    default:
-      return false;
-  }
+  return n.GetSourceSort().kind() == SourceSort::Kind::RoundingMode;
 }
 
 ASTNode STPMgr::arrayBaseSymbol(const ASTNode& arr) const
@@ -499,21 +565,10 @@ ASTNode STPMgr::arrayBaseSymbol(const ASTNode& arr) const
         const ASTNode right = arrayBaseSymbol(n[2]);
         if (left.IsNull())
           return right;
-        if (!right.IsNull())
-        {
-          const auto l_fp = fp_index_arrays.find(left);
-          const auto r_fp = fp_index_arrays.find(right);
-          const bool fp_differs =
-              (l_fp == fp_index_arrays.end()) !=
-                  (r_fp == fp_index_arrays.end()) ||
-              (l_fp != fp_index_arrays.end() && l_fp->second != r_fp->second);
-          if (fp_differs ||
-              rm_index_arrays.count(left) != rm_index_arrays.count(right) ||
-              rm_element_arrays.count(left) != rm_element_arrays.count(right))
-            FatalError("arrayBaseSymbol: an if-then-else mixes arrays whose "
-                       "index or element sorts differ: ",
-                       n);
-        }
+        if (!right.IsNull() && left.GetSourceSort() != right.GetSourceSort())
+          FatalError("arrayBaseSymbol: an if-then-else mixes arrays whose "
+                     "index or element sorts differ: ",
+                     n);
         return left;
       }
       default:
@@ -525,33 +580,27 @@ ASTNode STPMgr::arrayBaseSymbol(const ASTNode& arr) const
 bool STPMgr::arrayHasFpIndex(const ASTNode& arr, unsigned& exp_width,
                              unsigned& sig_width) const
 {
-  if (fp_index_arrays.empty())
+  const SourceSort sort = arr.GetSourceSort();
+  if (sort.kind() != SourceSort::Kind::Array ||
+      sort.index().kind() != SourceSort::Kind::FloatingPoint)
     return false;
-  const ASTNode base = arrayBaseSymbol(arr);
-  if (base.IsNull())
-    return false;
-  const auto it = fp_index_arrays.find(base);
-  if (it == fp_index_arrays.end())
-    return false;
-  exp_width = it->second.first;
-  sig_width = it->second.second;
+  exp_width = sort.index().exponentWidth();
+  sig_width = sort.index().significandWidth();
   return true;
 }
 
 bool STPMgr::arrayHasRmIndex(const ASTNode& arr) const
 {
-  if (rm_index_arrays.empty())
-    return false;
-  const ASTNode base = arrayBaseSymbol(arr);
-  return !base.IsNull() && rm_index_arrays.count(base) != 0;
+  const SourceSort sort = arr.GetSourceSort();
+  return sort.kind() == SourceSort::Kind::Array &&
+         sort.index().kind() == SourceSort::Kind::RoundingMode;
 }
 
 bool STPMgr::arrayHasRmElement(const ASTNode& arr) const
 {
-  if (rm_element_arrays.empty())
-    return false;
-  const ASTNode base = arrayBaseSymbol(arr);
-  return !base.IsNull() && rm_element_arrays.count(base) != 0;
+  const SourceSort sort = arr.GetSourceSort();
+  return sort.kind() == SourceSort::Kind::Array &&
+         sort.element().kind() == SourceSort::Kind::RoundingMode;
 }
 
 ASTNode STPMgr::CreateFPSpecialConst(FPSpecial which, unsigned exp_width,

@@ -58,6 +58,11 @@ class ASTFPConst : public ASTBVConst
   }
   virtual uint32_t getExpWidth() const { return _exp_width; }
 
+  SourceSort getDeclaredSourceSort() const override
+  {
+    return SourceSort::floatingPoint(_exp_width, _sig_width);
+  }
+
   // Temporary-key constructor: shares `bv` without cloning or freeing it.
   ASTFPConst(STPMgr* mgr, CBV bv, uint32_t exp_width, uint32_t sig_width);
 

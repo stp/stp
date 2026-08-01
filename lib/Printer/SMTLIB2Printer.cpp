@@ -495,7 +495,14 @@ void SMTLIB2_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
     case BVCONST:
       // A float constant is stored as its packed bits, but denotes a float:
       // print it in (fp ...) syntax, not as a bitvector literal.
-      if (n.GetType() == stp::FLOATINGPOINT_TYPE)
+      if (n.GetSourceSort().kind() == stp::SourceSort::Kind::RoundingMode)
+      {
+        const char* name = roundingModeName(n.GetUnsignedConst());
+        if (name == NULL)
+          FatalError("invalid RoundingMode literal", n);
+        os << name;
+      }
+      else if (n.GetType() == stp::FLOATINGPOINT_TYPE)
         outputFloatingPointSMTLIB2(n, os, n);
       else
         outputBitVecSMTLIB2(n, os);

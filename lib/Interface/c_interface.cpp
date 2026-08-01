@@ -57,9 +57,32 @@ Expr createBinaryNode(VC vc, Kind k, Expr left, Expr right);
 namespace /* anonymous namespace for static */
 {
 
+void requireBooleanOperand(const char* operation, const stp::ASTNode& n)
+{
+  if (n.GetSourceSort().kind() == stp::SourceSort::Kind::Bool)
+    return;
+  std::string message("CInterface: ");
+  message += operation;
+  message += " requires Boolean operands: ";
+  stp::FatalError(message.c_str(), n);
+}
+
+stp::ASTNode createPublicSourceSymbol(stp::STPMgr* bm, const char* name,
+                                      const stp::SourceSort& source_sort)
+{
+  const auto found = bm->c_api_source_sorts.find(name);
+  if (found != bm->c_api_source_sorts.end() && found->second != source_sort)
+  {
+    stp::FatalError("CInterface: a symbol cannot be redeclared with a "
+                    "different source sort");
+  }
+  bm->c_api_source_sorts[name] = source_sort;
+  return bm->CreateSourceSymbol(name, source_sort);
+}
+
 void requireBitVectorOperand(const char* operation, const stp::ASTNode& n)
 {
-  if (n.GetType() == stp::BITVECTOR_TYPE)
+  if (n.GetSourceSort().kind() == stp::SourceSort::Kind::BitVector)
     return;
 
   std::string message("CInterface: ");
@@ -75,32 +98,9 @@ void requireSamePublicSort(const char* operation, stp::STPMgr* bm,
                            const stp::ASTNode& left,
                            const stp::ASTNode& right)
 {
-  bool same = left.GetType() == right.GetType() &&
-              left.GetIndexWidth() == right.GetIndexWidth() &&
-              left.GetValueWidth() == right.GetValueWidth();
-
-  if (same && left.GetType() == stp::FLOATINGPOINT_TYPE)
-    same = left.GetExpWidth() == right.GetExpWidth() &&
-           left.GetSigWidth() == right.GetSigWidth();
-
-  if (same && left.GetType() == stp::ARRAY_TYPE)
-  {
-    same = left.GetExpWidth() == right.GetExpWidth() &&
-           left.GetSigWidth() == right.GetSigWidth() &&
-           bm->arrayHasRmIndex(left) == bm->arrayHasRmIndex(right) &&
-           bm->arrayHasRmElement(left) == bm->arrayHasRmElement(right);
-
-    unsigned left_eb = 0, left_sb = 0, right_eb = 0, right_sb = 0;
-    const bool left_fp_index =
-        bm->arrayHasFpIndex(left, left_eb, left_sb);
-    const bool right_fp_index =
-        bm->arrayHasFpIndex(right, right_eb, right_sb);
-    same = same && left_fp_index == right_fp_index &&
-           (!left_fp_index ||
-            (left_eb == right_eb && left_sb == right_sb));
-  }
-
-  if (same)
+  (void)bm;
+  const stp::SourceSort left_sort = left.GetSourceSort();
+  if (left_sort.isKnown() && left_sort == right.GetSourceSort())
     return;
 
   std::string message("CInterface: ");
@@ -589,11 +589,6 @@ Type vc_arrayType(VC vc, Type typeIndex, Type typeData)
 // A rounding-mode-sorted term. Was a copy here; it is STPMgr's now, because
 // the operations that take a rounding mode need the same test and were making
 // do with the carrier's width.
-static bool isRoundingModeSortedTerm(stp::STPMgr* b, const stp::ASTNode& n)
-{
-  return b->isRoundingModeSortedTerm(n);
-}
-
 // The rounding-mode argument of a floating-point operation. SMT-LIB's
 // RoundingMode has five values; the carrier has thirty-two, and symfpu
 // computes under a sixth, non-IEEE mode if handed one of the other
@@ -619,34 +614,35 @@ static void checkArrayIndexSort(const char* who, stp::STPMgr* b,
                                 const stp::ASTNode& arr,
                                 const stp::ASTNode& index)
 {
-  unsigned int exp_width = 0;
-  unsigned int sig_width = 0;
-  if (b->arrayHasFpIndex(arr, exp_width, sig_width))
-  {
-    if (index.GetType() != stp::FLOATINGPOINT_TYPE ||
-        index.GetExpWidth() != exp_width || index.GetSigWidth() != sig_width)
-      stp::FatalError((std::string("CInterface: ") + who +
-                       ": the array is indexed by a floating-point sort, but "
-                       "the index is not a float of that format: ")
-                          .c_str(),
-                      index);
-  }
-  else if (b->arrayHasRmIndex(arr))
-  {
-    if (!isRoundingModeSortedTerm(b, index))
-      stp::FatalError((std::string("CInterface: ") + who +
-                       ": the array is indexed by RoundingMode, but the index "
-                       "is not a rounding mode: ")
-                          .c_str(),
-                      index);
-  }
-  else if (index.GetType() == stp::FLOATINGPOINT_TYPE)
+  (void)b;
+  const stp::SourceSort array_sort = arr.GetSourceSort();
+  if (array_sort.kind() != stp::SourceSort::Kind::Array)
+    stp::FatalError("CInterface: select/store expects an array: ", arr);
+  const stp::SourceSort expected = array_sort.index();
+  if (index.GetSourceSort() == expected)
+    return;
+
+  if (expected.kind() == stp::SourceSort::Kind::FloatingPoint)
   {
     stp::FatalError((std::string("CInterface: ") + who +
-                     ": a float index over a bitvector-indexed array: ")
+                     ": the array is indexed by a floating-point sort, but "
+                     "the index is not a float of that format: ")
                         .c_str(),
                     index);
   }
+  if (expected.kind() == stp::SourceSort::Kind::RoundingMode)
+  {
+    stp::FatalError((std::string("CInterface: ") + who +
+                     ": the array is indexed by RoundingMode, but the index "
+                     "is not a rounding mode: ")
+                        .c_str(),
+                    index);
+  }
+  stp::FatalError((std::string("CInterface: ") + who +
+                   ": index sort differs from the array's bitvector index "
+                   "sort: ")
+                      .c_str(),
+                  index);
 }
 
 // The value stored by vc_writeExpr must have the array's element sort, by
@@ -654,29 +650,30 @@ static void checkArrayIndexSort(const char* who, stp::STPMgr* b,
 static void checkArrayValueSort(stp::STPMgr* b, const stp::ASTNode& arr,
                                 const stp::ASTNode& value)
 {
-  if (arr.GetExpWidth() != 0)
+  (void)b;
+  const stp::SourceSort array_sort = arr.GetSourceSort();
+  if (array_sort.kind() != stp::SourceSort::Kind::Array)
+    stp::FatalError("CInterface: vc_writeExpr expects an array: ", arr);
+  const stp::SourceSort expected = array_sort.element();
+  if (value.GetSourceSort() == expected)
+    return;
+
+  if (expected.kind() == stp::SourceSort::Kind::FloatingPoint)
   {
-    if (value.GetType() != stp::FLOATINGPOINT_TYPE ||
-        value.GetExpWidth() != arr.GetExpWidth() ||
-        value.GetSigWidth() != arr.GetSigWidth())
-      stp::FatalError("CInterface: vc_writeExpr: the array's elements are "
-                      "floats, but the stored value is not a float of that "
-                      "format: ",
-                      value);
-  }
-  else if (b->arrayHasRmElement(arr))
-  {
-    if (!isRoundingModeSortedTerm(b, value))
-      stp::FatalError("CInterface: vc_writeExpr: the array's elements are "
-                      "rounding modes, but the stored value is not one: ",
-                      value);
-  }
-  else if (value.GetType() == stp::FLOATINGPOINT_TYPE)
-  {
-    stp::FatalError("CInterface: vc_writeExpr: storing a float into a "
-                    "bitvector-element array: ",
+    stp::FatalError("CInterface: vc_writeExpr: the array's elements are "
+                    "floats, but the stored value is not a float of that "
+                    "format: ",
                     value);
   }
+  if (expected.kind() == stp::SourceSort::Kind::RoundingMode)
+  {
+    stp::FatalError("CInterface: vc_writeExpr: the array's elements are "
+                    "rounding modes, but the stored value is not one: ",
+                    value);
+  }
+  stp::FatalError("CInterface: vc_writeExpr: stored value sort differs from "
+                  "the array's bitvector element sort: ",
+                  value);
 }
 
 //! Create an expression for the value of array at the given index
@@ -732,7 +729,8 @@ void vc_assertFormula(VC vc, Expr e)
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* a = (stp::ASTNode*)e;
 
-  if (!stp::is_Form_kind(a->GetKind()))
+  if (a->GetSourceSort().kind() != stp::SourceSort::Kind::Bool ||
+      !stp::is_Form_kind(a->GetKind()))
     stp::FatalError("Trying to assert a NON formula: ", *a);
 
   assert(BVTypeCheck(*a));
@@ -787,7 +785,8 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_max_conflicts, int timeout_
     return 2;
   }
 
-  if (!stp::is_Form_kind(a->GetKind()))
+  if (a->GetSourceSort().kind() != stp::SourceSort::Kind::Bool ||
+      !stp::is_Form_kind(a->GetKind()))
   {
     stp::FatalError("CInterface: Trying to QUERY a NON formula: ", *a);
   }
@@ -971,7 +970,7 @@ int vc_getBVLength(VC /*vc*/, Expr ex)
 {
   stp::ASTNode* e = (stp::ASTNode*)ex;
 
-  if (stp::BITVECTOR_TYPE != e->GetType())
+  if (e->GetSourceSort().kind() != stp::SourceSort::Kind::BitVector)
   {
     stp::FatalError("c_interface: vc_GetBVLength: "
                     "Input expression must be a bit-vector");
@@ -989,7 +988,16 @@ Expr vc_varExpr1(VC vc, const char* name, int indexwidth, int valuewidth)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
 
-  stp::ASTNode o = b->CreateSymbol(name, indexwidth, valuewidth);
+  stp::SourceSort source_sort;
+  if (indexwidth > 0)
+    source_sort = stp::SourceSort::array(
+        stp::SourceSort::bitVector(indexwidth),
+        stp::SourceSort::bitVector(valuewidth));
+  else if (valuewidth > 0)
+    source_sort = stp::SourceSort::bitVector(valuewidth);
+  else
+    source_sort = stp::SourceSort::boolean();
+  stp::ASTNode o = createPublicSourceSymbol(b, name, source_sort);
 
   stp::ASTNode* output = new stp::ASTNode(o);
   ////if(cinterface_exprdelete_on) created_exprs.push_back(output);
@@ -1004,19 +1012,24 @@ Expr vc_varExpr(VC vc, const char* name, Type type)
 {
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
-  std::pair<unsigned int, unsigned int> typeSizes(getTypeSizes(type));
-  unsigned int valueWidth = typeSizes.first;
-  unsigned int indexWidth = typeSizes.second;
-  stp::ASTNode o = b->CreateSymbol(name, indexWidth, valueWidth);
-
-  // A floating-point variable additionally carries its format (exponent and
-  // significand widths); getTypeSizes above only gave the packed value width.
   stp::ASTNode* typeNode = (stp::ASTNode*)type;
-  if (typeNode->GetKind() == stp::FLOATINGPOINT)
+  switch (typeNode->GetKind())
   {
-    o.SetExpWidth((*typeNode)[0].GetUnsignedConst());
-    o.SetSigWidth((*typeNode)[1].GetUnsignedConst());
+    case stp::BOOLEAN:
+    case stp::BITVECTOR:
+    case stp::FLOATINGPOINT:
+    case stp::ROUNDINGMODE:
+    case stp::ARRAY:
+      break;
+    default:
+      stp::FatalError("CInterface: vc_varExpr expects a type node: ",
+                      *typeNode);
   }
+  const stp::SourceSort source_sort = typeNode->GetSourceSort();
+  if (!source_sort.isKnown())
+    stp::FatalError("CInterface: vc_varExpr: unsupported source sort: ",
+                    *typeNode);
+  stp::ASTNode o = createPublicSourceSymbol(b, name, source_sort);
 
   // A RoundingMode variable must range over exactly the five modes: pin the
   // 5-bit carrier to the one-hot encodings (asserted at the current
@@ -1029,34 +1042,7 @@ Expr vc_varExpr(VC vc, const char* name, Type type)
   // the formula names at solve time.
   if (typeNode->GetKind() == stp::ROUNDINGMODE)
   {
-    b->rounding_mode_symbols.insert(o);
     b->AddAssert(b->roundingModeValidConstraint(o));
-  }
-
-  // An array symbol records what its widths cannot say, exactly as the
-  // parser's declarations do: a float element's format rides on the node
-  // (reads inherit it -- see deriveFPFormat), while a float index format
-  // and RoundingMode on either side go into the manager's registries.
-  // Reads from a RoundingMode-element array are pinned to the five legal
-  // encodings at solve time (see FpTotalise), so no assertion is needed
-  // here.
-  if (typeNode->GetKind() == stp::ARRAY)
-  {
-    const stp::ASTNode& indexType = (*typeNode)[0];
-    const stp::ASTNode& dataType = (*typeNode)[1];
-
-    if (dataType.GetKind() == stp::FLOATINGPOINT)
-    {
-      o.SetExpWidth(dataType[0].GetUnsignedConst());
-      o.SetSigWidth(dataType[1].GetUnsignedConst());
-    }
-    if (dataType.GetKind() == stp::ROUNDINGMODE)
-      b->rm_element_arrays.insert(o);
-    if (indexType.GetKind() == stp::FLOATINGPOINT)
-      b->fp_index_arrays[o] = std::make_pair(
-          indexType[0].GetUnsignedConst(), indexType[1].GetUnsignedConst());
-    if (indexType.GetKind() == stp::ROUNDINGMODE)
-      b->rm_index_arrays.insert(o);
   }
 
   stp::ASTNode* output = new stp::ASTNode(o);
@@ -1088,8 +1074,9 @@ Expr vc_eqExpr(VC vc, Expr ccc0, Expr ccc1)
   // by murxla; vc_fpEqExpr's doc sends '=' callers here, so this is the
   // documented route). With only one float operand, FP_SMT_EQ's typecheck
   // then rejects the float/bitvector mix, exactly as the parser does.
-  const stp::Kind k = (a->GetType() == stp::FLOATINGPOINT_TYPE ||
-                       aa->GetType() == stp::FLOATINGPOINT_TYPE)
+  const stp::Kind k =
+      (a->GetSourceSort().kind() == stp::SourceSort::Kind::FloatingPoint ||
+       aa->GetSourceSort().kind() == stp::SourceSort::Kind::FloatingPoint)
                           ? stp::FP_SMT_EQ
                           : stp::EQ;
   stp::ASTNode o = b->CreateNode(k, *a, *aa);
@@ -1225,8 +1212,8 @@ Expr vc_fpEqExpr(VC vc, Expr a, Expr b)
   stp::ASTNode* l = (stp::ASTNode*)a;
   stp::ASTNode* r = (stp::ASTNode*)b;
 
-  if (l->GetType() != stp::FLOATINGPOINT_TYPE ||
-      r->GetType() != stp::FLOATINGPOINT_TYPE)
+  if (l->GetSourceSort().kind() != stp::SourceSort::Kind::FloatingPoint ||
+      r->GetSourceSort().kind() != stp::SourceSort::Kind::FloatingPoint)
   {
     stp::FatalError("CInterface: vc_fpEqExpr requires floating-point operands: ",
                     l->GetType() == stp::FLOATINGPOINT_TYPE ? *r : *l);
@@ -1255,7 +1242,7 @@ static Expr fpTermResult(VC vc, stp::Kind k, const stp::ASTNode& fmt,
                          const stp::ASTVec& children)
 {
   stp::STPMgr* b = ((stp::STP*)vc)->bm;
-  if (fmt.GetType() != stp::FLOATINGPOINT_TYPE)
+  if (fmt.GetSourceSort().kind() != stp::SourceSort::Kind::FloatingPoint)
   {
     stp::FatalError("CInterface: floating-point operation applied to a "
                     "non-float operand: ",
@@ -1298,7 +1285,8 @@ static Expr fpPredResult(VC vc, stp::Kind k, const stp::ASTVec& children)
 {
   stp::STPMgr* b = ((stp::STP*)vc)->bm;
   if (children.empty() ||
-      children[0].GetType() != stp::FLOATINGPOINT_TYPE)
+      children[0].GetSourceSort().kind() !=
+          stp::SourceSort::Kind::FloatingPoint)
   {
     stp::FatalError("CInterface: floating-point predicate requires a "
                     "floating-point operand");
@@ -1333,7 +1321,7 @@ Expr vc_fpRoundingMode(VC vc, enum VCRoundingMode mode)
   }
 
   // A rounding mode is a 5-bit one-hot bitvector constant.
-  return persistNode(vc, b->CreateBVConst(5, (unsigned long long)mode));
+  return persistNode(vc, b->CreateRMConst((unsigned)mode));
 }
 
 Expr vc_fpRoundingModeVar(VC vc, const char* name)
@@ -1421,7 +1409,7 @@ Expr vc_fpRoundToIntegralExpr(VC vc, Expr rm, Expr f)
   // solving -- as vc_fpRemExpr does, and for the same reason. A non-float
   // operand gets fpTermResult's own diagnosis, so ask only about a real
   // format.
-  if (x->GetType() == stp::FLOATINGPOINT_TYPE &&
+  if (x->GetSourceSort().kind() == stp::SourceSort::Kind::FloatingPoint &&
       !stp::FloatBlaster::roundToIntegralSupported(x->GetExpWidth(),
                                                    x->GetSigWidth()))
   {
@@ -1442,7 +1430,7 @@ Expr vc_fpRemExpr(VC vc, Expr a, Expr b)
   // the end, comes too late): asking remSupported about a format of (0, 0)
   // underflows its step count and reported the format-limit message for
   // what is really a sort error.
-  if (x->GetType() != stp::FLOATINGPOINT_TYPE)
+  if (x->GetSourceSort().kind() != stp::SourceSort::Kind::FloatingPoint)
   {
     stp::FatalError("CInterface: vc_fpRemExpr: fp.rem applied to a "
                     "non-float operand: ",
@@ -1589,8 +1577,10 @@ static Expr fpToFP(VC vc, stp::Kind k, int eb, int sb, const stp::ASTNode* rm,
   checkFpWidths(eb, sb);
 
   const bool expects_float = k == stp::FP_TOFP && rm != NULL;
-  if ((expects_float && src.GetType() != stp::FLOATINGPOINT_TYPE) ||
-      (!expects_float && src.GetType() != stp::BITVECTOR_TYPE))
+  const stp::SourceSort::Kind source_kind = src.GetSourceSort().kind();
+  if ((expects_float &&
+       source_kind != stp::SourceSort::Kind::FloatingPoint) ||
+      (!expects_float && source_kind != stp::SourceSort::Kind::BitVector))
   {
     stp::FatalError(expects_float
                         ? "CInterface: float-to-float conversion requires a "
@@ -1654,7 +1644,7 @@ static Expr fpToBV(VC vc, stp::Kind k, int width, const stp::ASTNode& rm,
     stp::FatalError("CInterface: fp.to_ubv/fp.to_sbv need a positive "
                     "target width");
   }
-  if (f.GetType() != stp::FLOATINGPOINT_TYPE)
+  if (f.GetSourceSort().kind() != stp::SourceSort::Kind::FloatingPoint)
   {
     stp::FatalError("CInterface: fp.to_ubv/fp.to_sbv applied to a "
                     "non-float: ",
@@ -1684,7 +1674,7 @@ Expr vc_fpToIEEEBV(VC vc, Expr f)
 {
   stp::STPMgr* b = ((stp::STP*)vc)->bm;
   stp::ASTNode* x = (stp::ASTNode*)f;
-  if (x->GetType() != stp::FLOATINGPOINT_TYPE)
+  if (x->GetSourceSort().kind() != stp::SourceSort::Kind::FloatingPoint)
   {
     stp::FatalError("CInterface: vc_fpToIEEEBV applied to a non-float: ", *x);
   }
@@ -1751,6 +1741,7 @@ Expr vc_notExpr(VC vc, Expr ccc)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* a = (stp::ASTNode*)ccc;
+  requireBooleanOperand("vc_notExpr", *a);
 
   stp::ASTNode o = b->CreateNode(stp::NOT, *a);
   assert(BVTypeCheck(o));
@@ -1766,6 +1757,8 @@ Expr vc_andExpr(VC vc, Expr left, Expr right)
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* l = (stp::ASTNode*)left;
   stp::ASTNode* r = (stp::ASTNode*)right;
+  requireBooleanOperand("vc_andExpr", *l);
+  requireBooleanOperand("vc_andExpr", *r);
 
   stp::ASTNode o = b->CreateNode(stp::AND, *l, *r);
   assert(BVTypeCheck(o));
@@ -1781,6 +1774,8 @@ Expr vc_orExpr(VC vc, Expr left, Expr right)
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* l = (stp::ASTNode*)left;
   stp::ASTNode* r = (stp::ASTNode*)right;
+  requireBooleanOperand("vc_orExpr", *l);
+  requireBooleanOperand("vc_orExpr", *r);
 
   stp::ASTNode o = b->CreateNode(stp::OR, *l, *r);
   assert(BVTypeCheck(o));
@@ -1795,6 +1790,8 @@ Expr vc_xorExpr(VC vc, Expr left, Expr right)
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* l = (stp::ASTNode*)left;
   stp::ASTNode* r = (stp::ASTNode*)right;
+  requireBooleanOperand("vc_xorExpr", *l);
+  requireBooleanOperand("vc_xorExpr", *r);
 
   stp::ASTNode o = b->CreateNode(stp::XOR, *l, *r);
   assert(BVTypeCheck(o));
@@ -1823,6 +1820,7 @@ Expr vc_andExprN(VC vc, Expr* cc, int n)
   stp::ASTVec d;
   for (int i = 0; i < n; i++)
   {
+    requireBooleanOperand("vc_andExprN", *c[i]);
     d.push_back(*c[i]);
   }
 
@@ -1842,7 +1840,10 @@ Expr vc_orExprN(VC vc, Expr* cc, int n)
   stp::ASTVec d;
 
   for (int i = 0; i < n; i++)
+  {
+    requireBooleanOperand("vc_orExprN", *c[i]);
     d.push_back(*c[i]);
+  }
 
   stp::ASTNode o = b->CreateNode(stp::OR, d);
   assert(BVTypeCheck(o));
@@ -1885,7 +1886,7 @@ Expr vc_iteExpr(VC vc, Expr cond, Expr thenpart, Expr elsepart)
   assert(BVTypeCheck(*t));
   assert(BVTypeCheck(*e));
 
-  if (c->GetType() != stp::BOOLEAN_TYPE)
+  if (c->GetSourceSort().kind() != stp::SourceSort::Kind::Bool)
   {
     stp::FatalError("CInterface: vc_iteExpr requires a Boolean condition: ",
                     *c);
@@ -1933,6 +1934,8 @@ Expr vc_impliesExpr(VC vc, Expr antecedent, Expr consequent)
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* c = (stp::ASTNode*)antecedent;
   stp::ASTNode* t = (stp::ASTNode*)consequent;
+  requireBooleanOperand("vc_impliesExpr", *c);
+  requireBooleanOperand("vc_impliesExpr", *t);
 
   assert(BVTypeCheck(*c));
   assert(BVTypeCheck(*t));
@@ -1951,6 +1954,8 @@ Expr vc_iffExpr(VC vc, Expr e0, Expr e1)
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* c = (stp::ASTNode*)e0;
   stp::ASTNode* t = (stp::ASTNode*)e1;
+  requireBooleanOperand("vc_iffExpr", *c);
+  requireBooleanOperand("vc_iffExpr", *t);
 
   assert(BVTypeCheck(*c));
   assert(BVTypeCheck(*t));
@@ -1968,6 +1973,7 @@ Expr vc_boolToBVExpr(VC vc, Expr form)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* c = (stp::ASTNode*)form;
+  requireBooleanOperand("vc_boolToBVExpr", *c);
 
   assert(BVTypeCheck(*c));
   if (!is_Form_kind(c->GetKind()))
@@ -1994,6 +2000,9 @@ Expr vc_paramBoolExpr(VC vc, Expr boolvar, Expr parameter)
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* c = (stp::ASTNode*)boolvar;
   stp::ASTNode* t = (stp::ASTNode*)parameter;
+
+  requireBooleanOperand("vc_paramBoolExpr", *c);
+  requireBitVectorOperand("vc_paramBoolExpr", *t);
 
   assert(BVTypeCheck(*c));
   assert(BVTypeCheck(*t));
@@ -2249,6 +2258,11 @@ Expr createBinaryNode(VC vc, Kind k, Expr left, Expr right)
     case stp::BVSSUBO:
       requireBitVectorOperand("bitvector predicate", *l);
       requireBitVectorOperand("bitvector predicate", *r);
+      break;
+    case stp::NAND:
+    case stp::NOR:
+      requireBooleanOperand("Boolean connective", *l);
+      requireBooleanOperand("Boolean connective", *r);
       break;
     default:
       break;
@@ -3071,52 +3085,34 @@ int vc_getHashQueryStateToBuffer(VC vc, Expr query)
 
 Type vc_getType(VC vc, Expr ex)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* e = (stp::ASTNode*)ex;
-
-  switch (e->GetType())
-  {
-    case stp::BOOLEAN_TYPE:
-      return vc_boolType(vc);
-      break;
-    case stp::BITVECTOR_TYPE:
-      // A rounding mode's carrier is a 5-bit bitvector; only a declared
-      // RoundingMode symbol can be told apart from one.
-      if (e->GetKind() == stp::SYMBOL && b->isRoundingModeSymbol(*e))
-        return vc_fpRoundingModeType(vc);
-      return vc_bvType(vc, e->GetValueWidth());
-      break;
-    case stp::FLOATINGPOINT_TYPE:
-      return vc_fpType(vc, (int)e->GetExpWidth(), (int)e->GetSigWidth());
-      break;
-    case stp::ARRAY_TYPE:
+  const stp::SourceSort sort = e->GetSourceSort();
+  const auto scalar_type = [vc](const stp::SourceSort& scalar) -> Type {
+    switch (scalar.kind())
     {
-      // Rebuild the index and element types the array was declared with:
-      // the element's float format is on the node, the rest comes from the
-      // manager's array registries.
-      unsigned int exp_width = 0;
-      unsigned int sig_width = 0;
-
-      Type typeindex;
-      if (b->arrayHasFpIndex(*e, exp_width, sig_width))
-        typeindex = vc_fpType(vc, (int)exp_width, (int)sig_width);
-      else if (b->arrayHasRmIndex(*e))
-        typeindex = vc_fpRoundingModeType(vc);
-      else
-        typeindex = vc_bvType(vc, e->GetIndexWidth());
-
-      Type typedata;
-      if (e->GetExpWidth() != 0)
-        typedata = vc_fpType(vc, (int)e->GetExpWidth(), (int)e->GetSigWidth());
-      else if (b->arrayHasRmElement(*e))
-        typedata = vc_fpRoundingModeType(vc);
-      else
-        typedata = vc_bvType(vc, e->GetValueWidth());
-
-      return vc_arrayType(vc, typeindex, typedata);
-      break;
+      case stp::SourceSort::Kind::BitVector:
+        return vc_bvType(vc, scalar.bitVectorWidth());
+      case stp::SourceSort::Kind::FloatingPoint:
+        return vc_fpType(vc, scalar.exponentWidth(),
+                         scalar.significandWidth());
+      case stp::SourceSort::Kind::RoundingMode:
+        return vc_fpRoundingModeType(vc);
+      default:
+        stp::FatalError("c_interface: vc_GetType: expected scalar sort");
     }
+  };
+
+  switch (sort.kind())
+  {
+    case stp::SourceSort::Kind::Bool:
+      return vc_boolType(vc);
+    case stp::SourceSort::Kind::BitVector:
+    case stp::SourceSort::Kind::FloatingPoint:
+    case stp::SourceSort::Kind::RoundingMode:
+      return scalar_type(sort);
+    case stp::SourceSort::Kind::Array:
+      return vc_arrayType(vc, scalar_type(sort.index()),
+                          scalar_type(sort.element()));
     default:
       stp::FatalError("c_interface: vc_GetType: "
                       "expression with bad typing: "
@@ -3207,7 +3203,7 @@ int getBVLength(Expr ex)
 {
   stp::ASTNode* e = (stp::ASTNode*)ex;
 
-  if (stp::BITVECTOR_TYPE != e->GetType())
+  if (e->GetSourceSort().kind() != stp::SourceSort::Kind::BitVector)
   {
     stp::FatalError("c_interface: vc_GetBVLength: "
                     "Input expression must be a bit-vector");
@@ -3219,7 +3215,21 @@ int getBVLength(Expr ex)
 type_t getType(Expr ex)
 {
   stp::ASTNode* e = (stp::ASTNode*)ex;
-  return (type_t)(e->GetType());
+  switch (e->GetSourceSort().kind())
+  {
+    case stp::SourceSort::Kind::Bool:
+      return BOOLEAN_TYPE;
+    case stp::SourceSort::Kind::BitVector:
+      return BITVECTOR_TYPE;
+    case stp::SourceSort::Kind::Array:
+      return ARRAY_TYPE;
+    case stp::SourceSort::Kind::FloatingPoint:
+      return FLOATINGPOINT_TYPE;
+    case stp::SourceSort::Kind::RoundingMode:
+      return ROUNDINGMODE_TYPE;
+    default:
+      return UNKNOWN_TYPE;
+  }
 }
 
 int getVWidth(Expr ex)

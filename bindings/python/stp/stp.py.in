@@ -622,6 +622,15 @@ class Solver(object):
         assert isinstance(a, Expr), 'Object must be an Expression'
         assert isinstance(b, Expr), 'Object must be an Expression'
         assert isinstance(c, Expr), 'Object must be an Expression'
+        if a.s is not self or b.s is not self or c.s is not self:
+            raise ValueError('ite expressions belong to different solvers')
+        if isinstance(b, FloatExpr) or isinstance(c, FloatExpr):
+            if not isinstance(b, FloatExpr) or not isinstance(c, FloatExpr):
+                raise ValueError('ite branches must have the same source sort')
+            if (b.eb, b.sb) != (c.eb, c.sb):
+                raise ValueError('ite floating-point branches must have the same format')
+            expr = _lib.vc_iteExpr(self.vc, a.expr, b.expr, c.expr)
+            return FloatExpr(self, b.eb, b.sb, expr)
         assert b.width == c.width, 'Objects must have the same width' # compound expressions have width None or 0
         expr = _lib.vc_iteExpr(self.vc, a.expr, b.expr, c.expr)
         return Expr(self, b.width, expr)   

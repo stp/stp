@@ -67,8 +67,7 @@ ASTNode FpTotalise::topLevel(const ASTNode& n)
   // combination is a sixth behaviour, in no standard, and a formula can tell
   // it from all five. Everything that introduces a rounding mode has to pin
   // it; nothing may rely on the junk encodings being equivalent to a mode.
-  if (n.GetType() == BOOLEAN_TYPE &&
-      (!bm->rm_element_arrays.empty() || !bm->rounding_mode_symbols.empty()))
+  if (n.GetType() == BOOLEAN_TYPE)
   {
     ASTNodeSet seen;
     ASTVec constraints;

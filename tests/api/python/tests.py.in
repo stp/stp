@@ -382,6 +382,8 @@ class TestSTP(unittest.TestCase):
             single + other32
         with self.assertRaisesRegex(ValueError, "same format"):
             single < other32
+        with self.assertRaisesRegex(ValueError, "same format"):
+            s.ite(s.true(), single, other32)
 
         another = stp.Solver()
         foreign = another.fp("foreign", 8, 24)

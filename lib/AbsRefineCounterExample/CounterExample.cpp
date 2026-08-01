@@ -861,8 +861,8 @@ ASTNode AbsRefine_CounterExample::GetCounterExample(const ASTNode& expr)
   // bare bit-vector, asserting (= term value) builds a float/bit-vector mix
   // that does not typecheck, so STP rejects its own model. Found by murxla's
   // -C model check, which re-asserts every reported value.
-  return FloatBlaster::withFormat(bm, TermToConstTermUsingModel(expr, false),
-                                  expr.GetExpWidth(), expr.GetSigWidth());
+  return bm->LiftSourceValue(TermToConstTermUsingModel(expr, false),
+                             expr.GetSourceSort());
 }
 
 // FUNCTION: queries the counterexample, and returns the number of array
@@ -928,14 +928,11 @@ AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
       // bit-vector is not accepted back as an index of a float-indexed
       // array, and a bare element cannot be equated with a read of a
       // float-element one.
-      unsigned index_exp = 0;
-      unsigned index_sig = 0;
-      // Stays (0, 0) unless the array is float-indexed, which withFormat
-      // reads as "no format to apply". The element format is the array's own.
-      bm->arrayHasFpIndex(e, index_exp, index_sig);
+      const SourceSort array_sort = e.GetSourceSort();
+      assert(array_sort.kind() == SourceSort::Kind::Array);
       entries.push_back(std::make_pair(
-          FloatBlaster::withFormat(bm, f[1], index_exp, index_sig),
-          FloatBlaster::withFormat(bm, rhs, e.GetExpWidth(), e.GetSigWidth())));
+          bm->LiftSourceValue(f[1], array_sort.index()),
+          bm->LiftSourceValue(rhs, array_sort.element())));
     }
   }
 

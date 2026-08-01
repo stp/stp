@@ -25,6 +25,7 @@
 
 from .stp import (
     Expr,
+    FloatExpr,
     Solver,
     stp,
     add,

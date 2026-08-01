@@ -27,6 +27,7 @@ THE SOFTWARE.
 
 #include "stp/AST/ASTBVConst.h"
 #include "stp/AST/ASTFPConst.h"
+#include "stp/AST/ASTRMConst.h"
 #include "stp/AST/ASTInterior.h"
 #include "stp/AST/ASTNode.h"
 #include "stp/AST/ASTSymbol.h"
@@ -201,6 +202,7 @@ private:
   ASTBVConst* LookupOrCreateBVConst(ASTBVConst& s);
 
   ASTFPConst* LookupOrCreateFPConst(ASTFPConst& s);
+  ASTRMConst* LookupOrCreateRMConst(ASTRMConst& s);
 
   // Cache of zero/one/max BVConsts of different widths.
   ASTVec zeroes;
@@ -277,6 +279,17 @@ public:
 
   DLL_PUBLIC ASTNode CreateFPConst(const stp::ASTNode& bvconst,
                                    unsigned exp_width, unsigned sig_width);
+  DLL_PUBLIC ASTNode CreateRMConst(unsigned mode);
+
+  // Restore a model carrier value to the immutable sort of the source term
+  // it answers. The solver itself continues to evaluate plain bitvectors.
+  ASTNode LiftSourceValue(const ASTNode& carrier,
+                          const SourceSort& source_sort);
+
+  // Create a source-language leaf atomically. Its complete sort participates
+  // in hash-consing and cannot subsequently be changed by width setters.
+  DLL_PUBLIC ASTNode CreateSourceSymbol(const char* name,
+                                        const SourceSort& source_sort);
 
   // Whether a floating-point node has ever been created in this manager.
   // Set by the format funnels (CreateFPConst, ASTNode::SetExpWidth and
@@ -296,31 +309,19 @@ public:
   // input earlier, with a line number; see checkFpSupported in smt2.y.)
   DLL_PUBLIC void noteFloatingPoint();
 
-  // Symbols declared with SMT-LIB's RoundingMode sort. They are ordinary
-  // 5-bit bitvector symbols everywhere else; the model printers consult
-  // this to print their values by mode name (RNE...) rather than as raw
-  // bits. Maintained by Cpp_interface as declarations go in and out of
-  // scope; C-API rounding-mode variables (vc_fpRoundingModeVar) stay for
-  // the manager's lifetime, like every other C-API symbol.
-  ASTNodeSet rounding_mode_symbols;
-
   bool isRoundingModeSymbol(const ASTNode& n) const
   {
-    return rounding_mode_symbols.find(n) != rounding_mode_symbols.end();
+    return n.GetKind() == SYMBOL &&
+           n.GetSourceSort().kind() == SourceSort::Kind::RoundingMode;
   }
 
   // The five-way one-hot validity constraint for a RoundingMode symbol:
   // (or (= s RNE) ... (= s RNA)). Every path that introduces a
-  // RoundingMode variable must assert this (and register the symbol in
-  // rounding_mode_symbols): the sort has exactly five values, the 5-bit
-  // carrier thirty-two.
+  // RoundingMode variable must assert this: the sort has exactly five values,
+  // while the 5-bit carrier has thirty-two.
   ASTNode roundingModeValidConstraint(const ASTNode& s);
 
-  // Whether `n` denotes a value of SMT-LIB's RoundingMode sort. The sort has
-  // no width of its own to test -- the carrier is a plain 5-bit bitvector --
-  // so this recognises the shapes that can denote a mode: the five one-hot
-  // constants, a declared RoundingMode symbol, a read from a
-  // RoundingMode-element array, and an ite over those.
+  // Whether `n` denotes a value of SMT-LIB's RoundingMode source sort.
   //
   // Everything that takes a rounding mode must ask this rather than test the
   // carrier's width. The sort has five values and the carrier thirty-two, and
@@ -332,27 +333,12 @@ public:
   DLL_PUBLIC ASTNode CreateFPSpecialConst(FPSpecial which, unsigned exp_width,
                                           unsigned sig_width);
 
-  // Arrays whose index or element sort is richer than the node can say. A
-  // node has one (exp, sig) slot and on an array it already holds the
-  // *element's* float format; a RoundingMode index or element is
-  // bit-identical to a plain 5-bit bitvector. So a float index sort and
-  // both RoundingMode sorts live here, keyed by the array symbol.
-  // Maintained like rounding_mode_symbols: Cpp_interface as declarations go
-  // in and out of scope, for the manager's lifetime when declared through
-  // the C API.
-  std::map<ASTNode, std::pair<unsigned, unsigned>> fp_index_arrays;
-  ASTNodeSet rm_index_arrays;
-  ASTNodeSet rm_element_arrays;
-
-  // The declared symbol under an array term. WRITE and ITE preserve their
-  // array operands' sorts, so the base symbol speaks for the whole term;
-  // an ITE whose branches disagree about the index sort is refused here,
-  // since the type checker cannot see the difference (the widths agree).
+  // The declared symbol under an array term. Complete index/element sorts
+  // live immutably on source symbols; WRITE and ITE derive them.
   // Null when no symbol is underneath.
   ASTNode arrayBaseSymbol(const ASTNode& arr) const;
 
-  // Index/element sort queries on an array term, answered from the
-  // registries above via arrayBaseSymbol.
+  // Compatibility queries over the immutable SourceSort representation.
   bool arrayHasFpIndex(const ASTNode& arr, unsigned& exp_width,
                        unsigned& sig_width) const;
   bool arrayHasRmIndex(const ASTNode& arr) const;
@@ -470,6 +456,11 @@ public:
   // Note, not maintained properly wrt push/pops
   vector<stp::ASTNode> decls;
 
+  // C API declarations have manager lifetime and no lexical binding frame.
+  // Keep their printed names unambiguous even if the caller clears the list
+  // used only for printing declarations.
+  std::map<std::string, SourceSort> c_api_source_sorts;
+
   // Nodes seen so far
   ASTNodeSet PLPrintNodeSet;
 
@@ -508,6 +499,16 @@ public:
     ASTNode CurrentSymbol = CreateSymbol(d, indexWidth, valueWidth);
     Introduced_SymbolsSet.insert(CurrentSymbol);
     return CurrentSymbol;
+  }
+
+  ASTNode CreateFreshSourceVariable(const SourceSort& source_sort,
+                                    std::string prefix)
+  {
+    char* d = (char*)alloca(sizeof(char) * (32 + prefix.length()));
+    sprintf(d, "@%s_%d", prefix.c_str(), _symbol_count++);
+    ASTNode current = CreateSourceSymbol(d, source_sort);
+    Introduced_SymbolsSet.insert(current);
+    return current;
   }
 
   bool FoundIntroducedSymbolSet(const ASTNode& in)

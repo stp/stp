@@ -1522,16 +1522,18 @@ DLL_PUBLIC int getBVLength(Expr e);
 
 //! Covers all kinds of types that exist in STP.
 //!
-//! FLOATINGPOINT_TYPE is appended after UNKNOWN_TYPE (mirroring the
-//! internal enum, which getType casts through) so that the values
-//! compiled into pre-floating-point clients stay valid.
+//! FLOATINGPOINT_TYPE and ROUNDINGMODE_TYPE are appended after the legacy
+//! values so that values compiled into older clients stay valid. This public
+//! enum describes source sorts; STP's internal carrier enum has no separate
+//! RoundingMode entry.
 enum type_t
 {
   BOOLEAN_TYPE = 0,
   BITVECTOR_TYPE,
   ARRAY_TYPE,
   UNKNOWN_TYPE,
-  FLOATINGPOINT_TYPE
+  FLOATINGPOINT_TYPE,
+  ROUNDINGMODE_TYPE
 };
 
 //! \brief Returns the type-kind of the given expression.

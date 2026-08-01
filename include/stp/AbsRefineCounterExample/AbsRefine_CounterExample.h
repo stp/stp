@@ -196,8 +196,7 @@ public:
       // what was asked for, as from
       // AbsRefine_CounterExample::GetCounterExample -- so a float term's
       // value can be equated with the term again.
-      return FloatBlaster::withFormat(bv, counterexample[e], e.GetExpWidth(),
-                                      e.GetSigWidth());
+      return bv->LiftSourceValue(counterexample[e], e.GetSourceSort());
     }
     else
     {
@@ -215,8 +214,7 @@ public:
                         ? bv->CreateBVConst(
                               5, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN)
                         : bv->CreateZeroConst(e.GetValueWidth());
-        return FloatBlaster::withFormat(bv, z, e.GetExpWidth(),
-                                        e.GetSigWidth());
+        return bv->LiftSourceValue(z, e.GetSourceSort());
       }
 
       return e;
