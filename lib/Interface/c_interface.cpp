@@ -1685,6 +1685,8 @@ Expr vc_fpToIEEEBV(VC vc, Expr f)
 
 Expr vc_fpConstFromDouble(VC vc, Type target, Expr rm, double d)
 {
+  checkRoundingMode("vc_fpConstFromDouble", ((stp::STP*)vc)->bm,
+                    *(stp::ASTNode*)rm);
   uint64_t bits;
   std::memcpy(&bits, &d, sizeof(bits)); // d is already IEEE-754 binary64
   Expr dbl =
@@ -1698,6 +1700,8 @@ Expr vc_fpConstFromDouble(VC vc, Type target, Expr rm, double d)
 
 Expr vc_fpConstFromFloat(VC vc, Type target, Expr rm, float f)
 {
+  checkRoundingMode("vc_fpConstFromFloat", ((stp::STP*)vc)->bm,
+                    *(stp::ASTNode*)rm);
   uint32_t bits;
   std::memcpy(&bits, &f, sizeof(bits)); // f is already IEEE-754 binary32
   Expr single =

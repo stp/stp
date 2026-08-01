@@ -64,6 +64,29 @@ TEST(fp_constants, plus_infinity_is_not_nan)
 
 // vc_fpConstFromDouble is exact when the target is binary64 (3.5 is 0x400C...),
 // and rounds through fp.to_fp otherwise (2.0 in half precision is 0x4000).
+TEST(fp_constants, native_exact_conversion_checks_rounding_mode_sort)
+{
+  // Exact native-format conversions do not use the rounding mode
+  // numerically, but it is still a required, source-sorted API operand.
+  EXPECT_DEATH(
+      {
+        VC vc = vc_createValidityChecker();
+        Type binary64 = vc_fpType(vc, 11, 53);
+        Expr bv5 = vc_bvConstExprFromInt(vc, 5, 0);
+        (void)vc_fpConstFromDouble(vc, binary64, bv5, 1.0);
+      },
+      "expected a rounding mode");
+
+  EXPECT_DEATH(
+      {
+        VC vc = vc_createValidityChecker();
+        Type binary32 = vc_fpType(vc, 8, 24);
+        Expr bv5 = vc_bvConstExprFromInt(vc, 5, 0);
+        (void)vc_fpConstFromFloat(vc, binary32, bv5, 1.0f);
+      },
+      "expected a rounding mode");
+}
+
 TEST(fp_constants, from_double_exact)
 {
   VC vc = vc_createValidityChecker();
