@@ -209,6 +209,449 @@ public:
   }
 };
 
+// An independent finite-semantics oracle for the complete checker. With
+// one-bit indexes and one-bit elements, an array has only four possible
+// interpretations, so every candidate assignment can be compared against
+// every genuine array model. The oracle below deliberately does not walk an
+// ExtGraph or reproduce I/D/U/R/L/T/C: each test evaluates its concrete
+// READ/WRITE/ITE/equality expression directly.
+class OneBitModel : public ExtModelView
+{
+public:
+  std::map<ASTNode, ASTNode> bvVals;
+  std::map<ASTNode, bool> boolVals;
+
+  virtual ASTNode bvValue(const ASTNode& term)
+  {
+    if (term.GetKind() == BVCONST)
+      return term;
+    std::map<ASTNode, ASTNode>::const_iterator it = bvVals.find(term);
+    if (it == bvVals.end())
+      FatalError("OneBitModel: missing bv value", term);
+    return it->second;
+  }
+
+  virtual bool boolValue(const ASTNode& term)
+  {
+    if (term.GetKind() == TRUE || term.GetKind() == FALSE)
+      return term.GetKind() == TRUE;
+    std::map<ASTNode, bool>::const_iterator it = boolVals.find(term);
+    if (it == boolVals.end())
+      FatalError("OneBitModel: missing bool value", term);
+    return it->second;
+  }
+};
+
+class ExtCheckerOneBitOracleTest : public ::testing::Test
+{
+protected:
+  typedef unsigned ConcreteArray;
+
+  STPMgr mgr;
+  ExtGraph graph;
+  OneBitModel model;
+  size_t nextRecord = 0;
+
+  static unsigned candidateBit(unsigned mask, unsigned position)
+  {
+    return (mask >> position) & 1u;
+  }
+
+  static unsigned readCell(ConcreteArray array, unsigned index)
+  {
+    return (array >> index) & 1u;
+  }
+
+  static ConcreteArray writeCell(ConcreteArray array, unsigned index,
+                                 unsigned value)
+  {
+    return (array & ~(1u << index)) | (value << index);
+  }
+
+  ASTNode arraySymbol(const char* name)
+  {
+    return mgr.CreateSymbol(name, 1, 1);
+  }
+
+  ASTNode bitSymbol(const char* name)
+  {
+    return mgr.CreateSymbol(name, 0, 1);
+  }
+
+  ASTNode boolSymbol(const char* name)
+  {
+    return mgr.CreateSymbol(name, 0, 0);
+  }
+
+  ASTNode bitConstant(unsigned value)
+  {
+    return mgr.CreateBVConst(1, value);
+  }
+
+  void assignBit(const ASTNode& symbol, unsigned value)
+  {
+    model.bvVals[symbol] = bitConstant(value);
+  }
+
+  void assignBool(const ASTNode& symbol, bool value)
+  {
+    model.boolVals[symbol] = value;
+  }
+
+  ASTNode writeNode(const ASTNode& base, const ASTNode& index,
+                    const ASTNode& value)
+  {
+    ASTNode write = mgr.hashingNodeFactory->CreateArrayTerm(
+        WRITE, 1, 1, {base, index, value});
+    ExtWriteNode info;
+    info.write = write;
+    info.base = base;
+    info.indexTerm = index;
+    info.indexName = index;
+    graph.writes[write] = info;
+    graph.writeParents[base].push_back(write);
+    return write;
+  }
+
+  ASTNode iteNode(const ASTNode& condition, const ASTNode& thn,
+                  const ASTNode& els)
+  {
+    ASTNode ite = mgr.hashingNodeFactory->CreateArrayTerm(
+        ITE, 1, 1, {condition, thn, els});
+    ExtIteNode info;
+    info.ite = ite;
+    info.condTerm = condition;
+    info.condName = condition;
+    info.thn = thn;
+    info.els = els;
+    graph.ites[ite] = info;
+    graph.iteParents[thn].push_back(ite);
+    if (els != thn)
+      graph.iteParents[els].push_back(ite);
+    return ite;
+  }
+
+  ASTNode equalityEdge(const ASTNode& left, const ASTNode& right,
+                       const char* proxyName)
+  {
+    const ASTNode proxy = boolSymbol(proxyName);
+    ExtEqEdge edge;
+    edge.record = nextRecord++;
+    edge.left = left;
+    edge.right = right;
+    edge.proxy = proxy;
+    const size_t edgeIndex = graph.eqEdges.size();
+    graph.eqEdges.push_back(edge);
+    graph.eqAdjacency[left].push_back(edgeIndex);
+    if (left != right)
+      graph.eqAdjacency[right].push_back(edgeIndex);
+    return proxy;
+  }
+
+  void witness(const ASTNode& proxy, const ASTNode& index,
+               const ASTNode& leftValue, const ASTNode& rightValue)
+  {
+    ExtWitness obligation;
+    obligation.record = graph.witnesses.size();
+    obligation.proxy = proxy;
+    obligation.index = index;
+    obligation.leftValue = leftValue;
+    obligation.rightValue = rightValue;
+    graph.witnesses.push_back(obligation);
+  }
+
+  void readAccess(const ASTNode& array, const ASTNode& index,
+                  const ASTNode& value)
+  {
+    ExtAccess access;
+    access.id = graph.accesses.size();
+    access.isWrite = false;
+    access.site = array;
+    access.indexTerm = index;
+    access.valueTerm = value;
+    access.indexName = index;
+    access.valueName = value;
+    graph.accesses.push_back(access);
+  }
+
+  void writeAccess(const ASTNode& write)
+  {
+    ExtAccess access;
+    access.id = graph.accesses.size();
+    access.isWrite = true;
+    access.site = write;
+    access.indexTerm = write[1];
+    access.valueTerm = write[2];
+    access.indexName = write[1];
+    access.valueName = write[2];
+    graph.accesses.push_back(access);
+  }
+
+  template <class AssignCandidate, class FiniteOracle>
+  void compareEveryCandidate(const char* scenario, unsigned candidateBits,
+                             AssignCandidate assignCandidate,
+                             FiniteOracle finiteOracle)
+  {
+    const unsigned candidateCount = 1u << candidateBits;
+    for (unsigned mask = 0; mask < candidateCount; ++mask)
+    {
+      SCOPED_TRACE(::testing::Message()
+                   << scenario << " candidate mask " << mask);
+      assignCandidate(mask);
+      const ExtCheckResult result = ExtChecker::check(graph, model, false);
+      const bool checkerAccepts = result.status == ExtCheckResult::CONSISTENT;
+      EXPECT_EQ(finiteOracle(mask), checkerAccepts)
+          << "checker status " << result.status;
+    }
+  }
+};
+
+TEST_F(ExtCheckerOneBitOracleTest, ReadMatchesFiniteDenotationalSemantics)
+{
+  const ASTNode array = arraySymbol("oracle_read_array");
+  const ASTNode i = bitSymbol("oracle_read_i");
+  const ASTNode j = bitSymbol("oracle_read_j");
+  const ASTNode ri = bitSymbol("oracle_read_ri");
+  const ASTNode rj = bitSymbol("oracle_read_rj");
+  readAccess(array, i, ri);
+  readAccess(array, j, rj);
+
+  compareEveryCandidate(
+      "READ", 4,
+      [&](unsigned mask) {
+        assignBit(i, candidateBit(mask, 0));
+        assignBit(j, candidateBit(mask, 1));
+        assignBit(ri, candidateBit(mask, 2));
+        assignBit(rj, candidateBit(mask, 3));
+      },
+      [&](unsigned mask) {
+        const unsigned indexI = candidateBit(mask, 0);
+        const unsigned indexJ = candidateBit(mask, 1);
+        const unsigned valueI = candidateBit(mask, 2);
+        const unsigned valueJ = candidateBit(mask, 3);
+        for (ConcreteArray concrete = 0; concrete < 4; ++concrete)
+          if (readCell(concrete, indexI) == valueI &&
+              readCell(concrete, indexJ) == valueJ)
+            return true;
+        return false;
+      });
+}
+
+TEST_F(ExtCheckerOneBitOracleTest, WriteMatchesFiniteDenotationalSemantics)
+{
+  const ASTNode array = arraySymbol("oracle_write_array");
+  const ASTNode writeIndex = bitSymbol("oracle_write_k");
+  const ASTNode writeValue = bitSymbol("oracle_write_v");
+  const ASTNode writeReadIndex = bitSymbol("oracle_write_i");
+  const ASTNode writeReadValue = bitSymbol("oracle_write_rw");
+  const ASTNode baseReadIndex = bitSymbol("oracle_write_j");
+  const ASTNode baseReadValue = bitSymbol("oracle_write_ra");
+  const ASTNode write = writeNode(array, writeIndex, writeValue);
+  writeAccess(write);
+  readAccess(write, writeReadIndex, writeReadValue);
+  readAccess(array, baseReadIndex, baseReadValue);
+
+  compareEveryCandidate(
+      "WRITE", 6,
+      [&](unsigned mask) {
+        assignBit(writeIndex, candidateBit(mask, 0));
+        assignBit(writeValue, candidateBit(mask, 1));
+        assignBit(writeReadIndex, candidateBit(mask, 2));
+        assignBit(writeReadValue, candidateBit(mask, 3));
+        assignBit(baseReadIndex, candidateBit(mask, 4));
+        assignBit(baseReadValue, candidateBit(mask, 5));
+      },
+      [&](unsigned mask) {
+        const unsigned k = candidateBit(mask, 0);
+        const unsigned v = candidateBit(mask, 1);
+        const unsigned i = candidateBit(mask, 2);
+        const unsigned rw = candidateBit(mask, 3);
+        const unsigned j = candidateBit(mask, 4);
+        const unsigned ra = candidateBit(mask, 5);
+        for (ConcreteArray concrete = 0; concrete < 4; ++concrete)
+        {
+          const ConcreteArray updated = writeCell(concrete, k, v);
+          if (readCell(updated, i) == rw && readCell(concrete, j) == ra)
+            return true;
+        }
+        return false;
+      });
+}
+
+TEST_F(ExtCheckerOneBitOracleTest,
+       EqualityAndWitnessMatchFiniteDenotationalSemantics)
+{
+  const ASTNode left = arraySymbol("oracle_eq_left");
+  const ASTNode right = arraySymbol("oracle_eq_right");
+  const ASTNode proxy = equalityEdge(left, right, "oracle_eq_proxy");
+  const ASTNode lambda = bitSymbol("oracle_eq_lambda");
+  const ASTNode witnessLeft = bitSymbol("oracle_eq_witness_left");
+  const ASTNode witnessRight = bitSymbol("oracle_eq_witness_right");
+  const ASTNode i = bitSymbol("oracle_eq_i");
+  const ASTNode readLeft = bitSymbol("oracle_eq_read_left");
+  const ASTNode j = bitSymbol("oracle_eq_j");
+  const ASTNode readRight = bitSymbol("oracle_eq_read_right");
+  witness(proxy, lambda, witnessLeft, witnessRight);
+  readAccess(left, lambda, witnessLeft);
+  readAccess(right, lambda, witnessRight);
+  readAccess(left, i, readLeft);
+  readAccess(right, j, readRight);
+
+  compareEveryCandidate(
+      "EQUALITY", 8,
+      [&](unsigned mask) {
+        assignBool(proxy, candidateBit(mask, 0) != 0);
+        assignBit(lambda, candidateBit(mask, 1));
+        assignBit(witnessLeft, candidateBit(mask, 2));
+        assignBit(witnessRight, candidateBit(mask, 3));
+        assignBit(i, candidateBit(mask, 4));
+        assignBit(readLeft, candidateBit(mask, 5));
+        assignBit(j, candidateBit(mask, 6));
+        assignBit(readRight, candidateBit(mask, 7));
+      },
+      [&](unsigned mask) {
+        const bool proxyValue = candidateBit(mask, 0) != 0;
+        const unsigned witnessIndex = candidateBit(mask, 1);
+        const unsigned wl = candidateBit(mask, 2);
+        const unsigned wr = candidateBit(mask, 3);
+        const unsigned indexLeft = candidateBit(mask, 4);
+        const unsigned valueLeft = candidateBit(mask, 5);
+        const unsigned indexRight = candidateBit(mask, 6);
+        const unsigned valueRight = candidateBit(mask, 7);
+        for (ConcreteArray concreteLeft = 0; concreteLeft < 4;
+             ++concreteLeft)
+          for (ConcreteArray concreteRight = 0; concreteRight < 4;
+               ++concreteRight)
+            if (readCell(concreteLeft, witnessIndex) == wl &&
+                readCell(concreteRight, witnessIndex) == wr &&
+                readCell(concreteLeft, indexLeft) == valueLeft &&
+                readCell(concreteRight, indexRight) == valueRight &&
+                proxyValue == (concreteLeft == concreteRight) &&
+                (proxyValue || wl != wr))
+              return true;
+        return false;
+      });
+}
+
+TEST_F(ExtCheckerOneBitOracleTest, IteMatchesFiniteDenotationalSemantics)
+{
+  const ASTNode left = arraySymbol("oracle_ite_left");
+  const ASTNode right = arraySymbol("oracle_ite_right");
+  const ASTNode condition = boolSymbol("oracle_ite_condition");
+  const ASTNode ite = iteNode(condition, left, right);
+  const ASTNode i = bitSymbol("oracle_ite_i");
+  const ASTNode readIte = bitSymbol("oracle_ite_read");
+  const ASTNode j = bitSymbol("oracle_ite_j");
+  const ASTNode readLeft = bitSymbol("oracle_ite_read_left");
+  const ASTNode k = bitSymbol("oracle_ite_k");
+  const ASTNode readRight = bitSymbol("oracle_ite_read_right");
+  readAccess(ite, i, readIte);
+  readAccess(left, j, readLeft);
+  readAccess(right, k, readRight);
+
+  compareEveryCandidate(
+      "ITE", 7,
+      [&](unsigned mask) {
+        assignBool(condition, candidateBit(mask, 0) != 0);
+        assignBit(i, candidateBit(mask, 1));
+        assignBit(readIte, candidateBit(mask, 2));
+        assignBit(j, candidateBit(mask, 3));
+        assignBit(readLeft, candidateBit(mask, 4));
+        assignBit(k, candidateBit(mask, 5));
+        assignBit(readRight, candidateBit(mask, 6));
+      },
+      [&](unsigned mask) {
+        const bool conditionValue = candidateBit(mask, 0) != 0;
+        const unsigned iteIndex = candidateBit(mask, 1);
+        const unsigned iteValue = candidateBit(mask, 2);
+        const unsigned leftIndex = candidateBit(mask, 3);
+        const unsigned leftValue = candidateBit(mask, 4);
+        const unsigned rightIndex = candidateBit(mask, 5);
+        const unsigned rightValue = candidateBit(mask, 6);
+        for (ConcreteArray concreteLeft = 0; concreteLeft < 4;
+             ++concreteLeft)
+          for (ConcreteArray concreteRight = 0; concreteRight < 4;
+               ++concreteRight)
+          {
+            const ConcreteArray selected =
+                conditionValue ? concreteLeft : concreteRight;
+            if (readCell(selected, iteIndex) == iteValue &&
+                readCell(concreteLeft, leftIndex) == leftValue &&
+                readCell(concreteRight, rightIndex) == rightValue)
+              return true;
+          }
+        return false;
+      });
+}
+
+TEST_F(ExtCheckerOneBitOracleTest,
+       MixedGraphMatchesFiniteDenotationalSemantics)
+{
+  const ASTNode arrayA = arraySymbol("oracle_mixed_a");
+  const ASTNode arrayB = arraySymbol("oracle_mixed_b");
+  const ASTNode arrayC = arraySymbol("oracle_mixed_c");
+  const ASTNode writeIndex = bitSymbol("oracle_mixed_k");
+  const ASTNode writeValue = bitSymbol("oracle_mixed_v");
+  const ASTNode write = writeNode(arrayA, writeIndex, writeValue);
+  const ASTNode condition = boolSymbol("oracle_mixed_condition");
+  const ASTNode ite = iteNode(condition, write, arrayB);
+  const ASTNode proxy = equalityEdge(ite, arrayC, "oracle_mixed_proxy");
+  const ASTNode lambda = bitSymbol("oracle_mixed_lambda");
+  const ASTNode witnessIte = bitSymbol("oracle_mixed_witness_ite");
+  const ASTNode witnessC = bitSymbol("oracle_mixed_witness_c");
+  const ASTNode readAZero = bitSymbol("oracle_mixed_read_a_zero");
+  const ASTNode readCOne = bitSymbol("oracle_mixed_read_c_one");
+  const ASTNode zero = bitConstant(0);
+  const ASTNode one = bitConstant(1);
+  witness(proxy, lambda, witnessIte, witnessC);
+  writeAccess(write);
+  readAccess(ite, lambda, witnessIte);
+  readAccess(arrayC, lambda, witnessC);
+  readAccess(arrayA, zero, readAZero);
+  readAccess(arrayC, one, readCOne);
+
+  compareEveryCandidate(
+      "MIXED", 9,
+      [&](unsigned mask) {
+        assignBit(writeIndex, candidateBit(mask, 0));
+        assignBit(writeValue, candidateBit(mask, 1));
+        assignBool(condition, candidateBit(mask, 2) != 0);
+        assignBool(proxy, candidateBit(mask, 3) != 0);
+        assignBit(lambda, candidateBit(mask, 4));
+        assignBit(witnessIte, candidateBit(mask, 5));
+        assignBit(witnessC, candidateBit(mask, 6));
+        assignBit(readAZero, candidateBit(mask, 7));
+        assignBit(readCOne, candidateBit(mask, 8));
+      },
+      [&](unsigned mask) {
+        const unsigned k = candidateBit(mask, 0);
+        const unsigned v = candidateBit(mask, 1);
+        const bool conditionValue = candidateBit(mask, 2) != 0;
+        const bool proxyValue = candidateBit(mask, 3) != 0;
+        const unsigned witnessIndex = candidateBit(mask, 4);
+        const unsigned witnessIteValue = candidateBit(mask, 5);
+        const unsigned witnessCValue = candidateBit(mask, 6);
+        const unsigned aZeroValue = candidateBit(mask, 7);
+        const unsigned cOneValue = candidateBit(mask, 8);
+        for (ConcreteArray concreteA = 0; concreteA < 4; ++concreteA)
+          for (ConcreteArray concreteB = 0; concreteB < 4; ++concreteB)
+            for (ConcreteArray concreteC = 0; concreteC < 4; ++concreteC)
+            {
+              const ConcreteArray updated = writeCell(concreteA, k, v);
+              const ConcreteArray selected =
+                  conditionValue ? updated : concreteB;
+              if (readCell(selected, witnessIndex) == witnessIteValue &&
+                  readCell(concreteC, witnessIndex) == witnessCValue &&
+                  readCell(concreteA, 0) == aZeroValue &&
+                  readCell(concreteC, 1) == cOneValue &&
+                  proxyValue == (selected == concreteC) &&
+                  (proxyValue || witnessIteValue != witnessCValue))
+                return true;
+            }
+        return false;
+      });
+}
+
 struct ExpectedEvent
 {
   ExtEvent::Kind kind;
