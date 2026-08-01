@@ -161,6 +161,7 @@ bool isCommutative(const Kind k)
     case BVPLUS:
     case BVMULT:
     case EQ:
+    case ARRAY_EQ:
     case AND:
     case OR:
     case NAND:
@@ -926,6 +927,19 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
         cerr << "sigwidth of rhs of EQ: " << n[1].GetSigWidth() << endl;
         FatalError(
             "BVTypeCheck: terms in atomic formulas must be of equal length", n);
+      }
+      break;
+
+    case ARRAY_EQ:
+      if (n.Degree() != 2)
+        FatalError("BVTypeCheck: ARRAY_EQ should have exactly 2 args\n", n);
+
+      if (n[0].GetType() != ARRAY_TYPE || n[1].GetType() != ARRAY_TYPE ||
+          n[0].GetValueWidth() != n[1].GetValueWidth() ||
+          n[0].GetIndexWidth() != n[1].GetIndexWidth())
+      {
+        FatalError("BVTypeCheck: ARRAY_EQ requires identically typed arrays",
+                   n);
       }
       break;
 

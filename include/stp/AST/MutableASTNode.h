@@ -40,11 +40,10 @@ class MutableASTNode
   static THREAD_LOCAL_IE vector<MutableASTNode*> all;
 
   // Symbols that must never be reported unconstrained, however few
-  // occurrences they have in this graph. Something outside the graph
-  // holds a definition for them -- currently the array-equality
-  // procedure, whose abstraction variables, witness symbols and lemma
-  // leaves carry their meaning in constraints it re-conjoins per solve
-  // and in the SAT variables its refinement lemmas are encoded over.
+  // occurrences they have in this graph. The active array-equality solve
+  // uses them as proxy/witness/name anchors or as leaves of future
+  // refinement lemmas, whose meanings and SAT variables must survive this
+  // pass.
   // A caller that rewrites the graph on the strength of
   // isUnconstrained() would delete such a definition, and the
   // substitution map's refusal to record the replacement comes too

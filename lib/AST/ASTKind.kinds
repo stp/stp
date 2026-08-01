@@ -208,3 +208,8 @@ FP_SMT_EQ           2    2    Form    FP
 # The five special floating-point values (NaN, +/-oo, +/-zero) have no kinds
 # of their own: they are ordinary packed constants, built interned by
 # STPMgr::CreateFPSpecialConst so that the format is part of node identity.
+
+# Opaque whole-array equality. Kept last so the numeric values exported by
+# c_interface.h remain stable. The extensionality prepass lowers this before
+# ordinary solving.
+ARRAY_EQ        2       2       Form

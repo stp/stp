@@ -76,11 +76,11 @@ private:
   // Ptr to ArrayTransformer
   ArrayTransformer* ArrayTransform;
 
-  // Checks if the counterexample is good. In order for the
-  // counterexample to be ok, every assert must evaluate to true
-  // w.r.t couner_example, and the query must evaluate to
-  // false. Otherwise we know that the counter_example is bogus.
-  void CheckCounterExample(bool t);
+  // Checks the exact semantic formula submitted for this solve.  This must
+  // not reconstruct the formula from STPMgr's assertion/query registry:
+  // solve-boundary passes (notably opaque array-equality lowering) are local
+  // to checked_input and deliberately do not mutate that public registry.
+  void CheckCounterExample(bool t, const ASTNode& checked_input);
 
   // Accepts a term and turns it into a constant-term w.r.t
   // counter_example. Always answers with a plain bitvector constant: a
@@ -136,11 +136,26 @@ public:
 
   // Publish an array observation certified by the array-equality
   // consistency check: READ over a constant index mapped to its
-  // concrete value. Existing entries win.
+  // concrete value. A different existing value is an integration
+  // error, never a choice between two model authorities.
   void InsertIntoCounterExampleMap(const ASTNode& key, const ASTNode& value)
   {
-    if (CounterExampleMap.find(key) == CounterExampleMap.end())
-      CounterExampleMap[key] = value;
+    ASTNodeMap::const_iterator it = CounterExampleMap.find(key);
+    if (it != CounterExampleMap.end() && !(it->second == value))
+      FatalError("array-equality: certified array observation conflicts with "
+                 "an existing counterexample entry",
+                 key);
+    CounterExampleMap[key] = value;
+  }
+
+  // Exact lookup in the materialized SAT assignment. Unlike the general
+  // model evaluator, this never invents a default for a symbol that was
+  // absent from the bit-blast. The extensionality checker uses it for
+  // every scalar name on which a refinement certificate depends.
+  ASTNode LookupAssignedValue(const ASTNode& key) const
+  {
+    ASTNodeMap::const_iterator it = CounterExampleMap.find(key);
+    return it == CounterExampleMap.end() ? ASTNode() : it->second;
   }
 
   // Prints the counterexample to stdout

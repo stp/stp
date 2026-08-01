@@ -6,7 +6,8 @@
 ; satisfiable on their own and do nothing but keep preprocessing from
 ; taking the shortcut that hides the defect.
 ;
-; The array if-then-else is eliminated into a fresh array d defined by
+; Historically, the array if-then-else was eliminated into a fresh array d
+; defined by
 ; c -> d = a and not(c) -> d = b, and d is cached across solves so a
 ; repeated solve reuses it and its two equality records. The guards
 ; were not cached with it: they were emitted only for if-then-elses the

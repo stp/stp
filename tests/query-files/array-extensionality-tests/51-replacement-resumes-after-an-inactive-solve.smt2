@@ -3,11 +3,13 @@
 ; CHECK: ^unsat
 ; A solve with an array if-then-else and no array equality, followed by
 ; a solve whose array equality is over an if-then-else built after it.
-; The first must leave the second undisturbed: whether an if-then-else
-; is replaced is decided per solve, from the formula in front of it.
+; The first uses the legacy array path and must leave the second undisturbed;
+; the active second solve preserves the if-then-else and handles it with the
+; checker's direct T-up/T-down rules.
 ;
-; This was the incremental hazard of deciding it at construction
-; instead. The undoing left the node factory bypassed on the way out --
+; Historically this exposed the incremental hazard of deciding ITE
+; replacement at construction. The undoing left the node factory bypassed on
+; the way out --
 ; it had to, since preprocessing rebuilds array if-then-elses as it
 ; simplifies -- and the scope guard that put the factory back was armed
 ; only when the procedure had run, which is exactly when the undoing

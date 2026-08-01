@@ -47,7 +47,19 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
 
   assert(TransformMap == NULL);
   TransformMap = new ASTNodeMap(100);
+
+  ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  // Constant-bit propagation also creates local ArrayTransformers for
+  // scalar-only auxiliary formulas.  Only the transform of the frozen root
+  // participates in the extensionality hand-off; an early transform which
+  // actually encounters an owned READ still fails in TransformArrayRead.
+  const bool extPrepared =
+      ext != NULL && ext->active() && ext->arrayGraphFrozen();
+  if (extPrepared)
+    ext->beginReadTransform(form);
   ASTNode result = TransformFormula(form);
+  if (extPrepared)
+    ext->finishReadTransform();
 
 #if 0
     {
@@ -68,8 +80,6 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
   {
     ASTNodeMap replaced;
 
-    ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-
     ASTVec equalsNodes;
     for (ArrayTransformer::ArrType::iterator
              iset = arrayToIndexToRead.begin(),
@@ -78,8 +88,8 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
     {
       std::map<ASTNode, ArrayTransformer::ArrayRead>& mapper = iset->second;
 
-      // With array equality active, the index of a read inside the
-      // equality cone must reach the bit-blaster even when it is a
+      // With array equality active, the index of a read in the owned
+      // graph must reach the bit-blaster even when it is a
       // plain variable: once the read is replaced by its abstraction
       // variable the index may occur nowhere else, yet future
       // refinement lemmas will be encoded over its SAT variables. Such
@@ -339,9 +349,19 @@ ASTNode ArrayTransformer::TransformTerm(const ASTNode& term)
       ASTNode els = term[2];
       cond = TransformFormula(cond);
       if (ASTTrue == cond)
+      {
+        ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+        if (ext != NULL && ext->active())
+          ext->noteEliminatedReadSubtree(els);
         result = TransformTerm(thn);
+      }
       else if (ASTFalse == cond)
+      {
+        ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+        if (ext != NULL && ext->active())
+          ext->noteEliminatedReadSubtree(thn);
         result = TransformTerm(els);
+      }
       else
       {
         thn = TransformTerm(thn);
@@ -424,9 +444,9 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
 
   ASTNode result;
 
-  // With array equality active, a read of an array inside the equality
-  // cone always takes the direct read-abstraction path -- mint or reuse
-  // the fresh variable for the (array, index) pair -- whatever the array
+  // With array equality active, every read takes the direct
+  // read-abstraction path: mint or reuse the fresh variable for the
+  // (array, index) pair, whatever the array
   // term is: variable, write, or if-then-else. Neither its write chain
   // nor its if-then-else structure is expanded here. The lemmas-on-
   // demand consistency checker owns read-over-write and read-over-
@@ -434,10 +454,19 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
   // and it needs the structure and the abstraction variables intact.
   {
     ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-    if (ext != NULL && ext->active() && ext->coneFrozen() &&
-        ext->inCone(arrName))
+    if (ext != NULL && ext->active())
     {
-      assert(!bm->UserFlags.ackermannisation);
+      if (!ext->arrayGraphFrozen())
+        FatalError("array-equality: the array transform ran before the "
+                   "complete array graph was frozen",
+                   term);
+      if (!ext->ownsArray(arrName))
+        FatalError("array-equality: a transformed read is absent from the "
+                   "complete owned array graph",
+                   term);
+      if (bm->UserFlags.ackermannisation)
+        FatalError("array-equality: eager Ackermannization reached the "
+                   "whole-graph read transform");
 
       ArrType::const_iterator it;
       if ((it = arrayToIndexToRead.find(arrName)) != arrayToIndexToRead.end())
@@ -445,7 +474,12 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
         std::map<ASTNode, ArrayRead>::const_iterator it2;
         if ((it2 = it->second.find(readIndex)) != it->second.end())
         {
+          if (it2->second.ite != it2->second.symbol)
+            FatalError("array-equality: a whole-graph read reused a legacy "
+                       "nested-ITE transformer row",
+                       term);
           result = it2->second.ite;
+          ext->noteAbstractedRead(term, readIndex, it2->second.symbol);
           (*TransformMap)[term] = result;
           return result;
         }
@@ -456,6 +490,7 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
       result = CurrentSymbol;
       arrayToIndexToRead[arrName].insert(
           make_pair(readIndex, ArrayRead(result, CurrentSymbol)));
+      ext->noteAbstractedRead(term, readIndex, CurrentSymbol);
       (*TransformMap)[term] = result;
       return result;
     }

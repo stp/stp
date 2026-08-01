@@ -299,8 +299,9 @@ class Solver(object):
         With array_equality=True, equality between whole arrays (the
         extensional theory of arrays) becomes available: build arrays
         with Solver.array() and compare them with ==/!=. The option
-        must be chosen here, at construction, because array equalities
-        are handled at expression-creation time.
+        must be chosen here because construction of a whole-array equality
+        is flag-gated. Such equalities remain opaque until the completed
+        query is lowered at solve time.
         """
         self.keys = {}
         self.arrays = {}

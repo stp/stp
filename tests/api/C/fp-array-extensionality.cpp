@@ -22,10 +22,10 @@ THE SOFTWARE.
 
 // Array equality ('x' flag) over arrays whose index or element sorts
 // are floating-point or RoundingMode, built through the C API. The
-// equality operands are abstracted out of the formula when the
-// equality is built, so every lowering the input formula receives
-// (totalising partial operations, canonicalising float indexes,
-// pinning RoundingMode reads) must also reach the recorded operands.
+// equality stays opaque and traversable until the solve boundary, so
+// whole-formula preparation (totalising partial operations, canonicalising
+// float indexes, and pinning RoundingMode reads) reaches its operands before
+// extensionality replaces it with a proxy and witness bundle.
 
 #include "stp/c_interface.h"
 #include <gtest/gtest.h>
@@ -81,6 +81,43 @@ TEST(fp_array_extensionality, rm_indexed_equal_stores_distinct_unsat)
 
   vc_assertFormula(vc, vc_notExpr(vc, vc_eqExpr(vc, s1, s2)));
   EXPECT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+
+  vc_Destroy(vc);
+}
+
+// FpTotalise rewrites the nonconstant floating-point index in `stored` to
+// its canonical bit representation before extensionality lowers `eq`. The C
+// API handle still denotes the original opaque ARRAY_EQ, however, so model
+// evaluation must follow that original node to the solve-local lowering of
+// its rewritten counterpart. Exercise both Boolean values across scopes.
+TEST(fp_array_extensionality,
+     original_opaque_equality_handle_uses_totalised_model_lowering)
+{
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type fp = vc_fpType(vc, 5, 11);
+  Type bv1 = vc_bvType(vc, 1);
+  Type arr = vc_arrayType(vc, fp, bv1);
+
+  Expr a = vc_varExpr(vc, "a", arr);
+  Expr b = vc_varExpr(vc, "b", arr);
+  Expr i = vc_varExpr(vc, "i", fp);
+  Expr one = vc_bvConstExprFromLL(vc, 1, 1);
+  Expr stored = vc_writeExpr(vc, a, i, one);
+  Expr eq = vc_eqExpr(vc, stored, b);
+
+  vc_push(vc);
+  vc_assertFormula(vc, eq);
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(TRUE, getExprKind(vc_getCounterExample(vc, eq)));
+  vc_pop(vc);
+
+  vc_push(vc);
+  vc_assertFormula(vc, vc_notExpr(vc, eq));
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(FALSE, getExprKind(vc_getCounterExample(vc, eq)));
+  vc_pop(vc);
 
   vc_Destroy(vc);
 }
@@ -565,15 +602,10 @@ TEST(fp_array_extensionality, float_cell_negated_under_chain_equality_sat)
 // asserting the constraint, and an assertion belongs to the level current at
 // the time while the hash-consed symbol does not -- so building the mode in a
 // vc_push/vc_pop bracket leaves it alive and unpinned. FpTotalise re-pins
-// every mode the input formula names, which covers that; but an array
-// equality's operands are abstracted out of the input formula when the
-// equality is built, and the anchors put them back only after that pass has
-// run. A mode reachable only through them is one it never sees.
-//
-// So this is the single place the mode can be pinned at all: the totalisation
-// FpTotalise::topLevelTerm does over the recorded operands. Without it `r` is
-// free to take one of the carrier's 27 junk patterns, #b00011 among them, and
-// STP answers sat to an unsatisfiable query.
+// every mode the completed input formula names. An opaque array equality must
+// therefore retain and expose its operands until that whole-formula pass:
+// otherwise `r` is free to take one of the carrier's 27 junk patterns,
+// #b00011 among them, and STP answers sat to an unsatisfiable query.
 //
 // The equality forces (select B #b00) == r, and B's cell is fixed to a
 // pattern that is not a mode, so a pinned `r` makes this unsat.
@@ -589,8 +621,8 @@ TEST(fp_array_extensionality, rm_symbol_only_in_operands_stays_pinned)
   Expr notAMode = vc_bvConstExprFromLL(vc, 5, 3); // #b00011: no mode's encoding
 
   // The bracket: `r`'s declaration constraint is asserted here and dies with
-  // the level. The equality is *built* here too, which is when its operands
-  // are recorded and totalised.
+  // the level. The opaque equality is built here too, but remains traversable
+  // when it is asserted and solved outside the bracket.
   vc_push(vc);
   Expr r = vc_fpRoundingModeVar(vc, "r");
   Expr eq = vc_eqExpr(vc, vc_writeExpr(vc, a, i0, r), b);

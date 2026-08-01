@@ -39,19 +39,150 @@ THE SOFTWARE.
 
 #include "stp/Extensionality/ExtChecker.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/AbsRefineCounterExample/ArrayTransformer.h"
+#include "stp/NodeFactory/SimplifyingNodeFactory.h"
+#include "stp/Printer/printers.h"
 #include "stp/STPManager/STPManager.h"
+#include "stp/Simplifier/Simplifier.h"
+#include "stp/Simplifier/SubstitutionMap.h"
+#include "stp/cpp_interface.h"
 #include <gtest/gtest.h>
 #include <map>
+#include <sstream>
 
 using namespace stp;
 
 namespace
 {
 
+TEST(ArrayEqualityAstTest, OpaqueNodeIsTypedHashedAndPrintedAsEquality)
+{
+  STPMgr mgr;
+  mgr.UserFlags.enable_array_equality = true;
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  const ASTNode a = mgr.CreateSymbol("a", 2, 3);
+  const ASTNode b = mgr.CreateSymbol("b", 2, 3);
+
+  const ASTNode eq = hf->CreateNode(EQ, a, b);
+  EXPECT_EQ(ARRAY_EQ, eq.GetKind());
+  EXPECT_EQ(eq, hf->CreateNode(EQ, b, a));
+  EXPECT_TRUE(eq.isPred());
+  EXPECT_TRUE(BVTypeCheck(eq));
+
+  SimplifyingNodeFactory simplifying(*mgr.hashingNodeFactory, mgr);
+  EXPECT_EQ(mgr.ASTTrue, simplifying.CreateNode(EQ, ASTVec{a, a}));
+
+  std::ostringstream out;
+  printer::SMTLIB2_Print1(out, eq, 0, false);
+  EXPECT_EQ("(= |a| |b|)", out.str());
+}
+
+TEST(ArrayEqualityAstTest, FunctionApplicationSpecializesOpaqueOperands)
+{
+  STPMgr mgr;
+  SimplifyingNodeFactory simplifying(*mgr.hashingNodeFactory, mgr);
+  Cpp_interface interface(mgr, &simplifying);
+  NodeFactory* hf = mgr.hashingNodeFactory;
+
+  const ASTNode a = mgr.CreateSymbol("a", 1, 1);
+  const ASTNode b = mgr.CreateSymbol("b", 1, 1);
+  const ASTNode formal = mgr.CreateSymbol("i", 0, 1);
+  const ASTNode one = mgr.CreateOneConst(1);
+  const ASTNode body = hf->CreateNode(
+      ARRAY_EQ, hf->CreateArrayTerm(WRITE, 1, 1, a, formal, one), b);
+
+  interface.storeFunction("f", ASTVec{formal}, body);
+
+  const ASTNode zero = mgr.CreateZeroConst(1);
+  const ASTNode atZero = interface.applyFunction("f", ASTVec{zero});
+  const ASTNode atOne = interface.applyFunction("f", ASTVec{one});
+  const ASTNode expectedZero = hf->CreateNode(
+      ARRAY_EQ, hf->CreateArrayTerm(WRITE, 1, 1, a, zero, one), b);
+  const ASTNode expectedOne = hf->CreateNode(
+      ARRAY_EQ, hf->CreateArrayTerm(WRITE, 1, 1, a, one, one), b);
+
+  EXPECT_EQ(expectedZero, atZero);
+  EXPECT_EQ(expectedOne, atOne);
+  EXPECT_NE(atZero, atOne);
+  EXPECT_EQ(ARRAY_EQ, atZero.GetKind());
+  EXPECT_EQ(ARRAY_EQ, atOne.GetKind());
+}
+
+TEST(ArrayEqualityAstTest, ActivationIsTheTransitiveClosureOfCurrentRoot)
+{
+  STPMgr mgr;
+  mgr.UserFlags.enable_array_equality = true;
+  ExtensionalityContext ext(&mgr);
+  NodeFactory* hf = mgr.hashingNodeFactory;
+
+  const ASTNode a = mgr.CreateSymbol("a", 1, 1);
+  const ASTNode b = mgr.CreateSymbol("b", 1, 1);
+  const ASTNode c = mgr.CreateSymbol("c", 1, 1);
+  const ASTNode d = mgr.CreateSymbol("d", 1, 1);
+  const ASTNode e = mgr.CreateSymbol("e", 1, 1);
+  const ASTNode f = mgr.CreateSymbol("f", 1, 1);
+  const ASTNode g = mgr.CreateSymbol("g", 1, 1);
+
+  const ASTNode dormant = hf->CreateNode(EQ, f, g);
+  ext.beginSolve();
+  ext.lowerArrayEqualities(dormant);
+  ASSERT_EQ(1u, ext.getActiveRecordCount());
+
+  const ASTNode inner = hf->CreateNode(EQ, a, b);
+  const ASTNode choice =
+      hf->CreateArrayTerm(ITE, 1, 1, inner, c, d);
+  const ASTNode outer = hf->CreateNode(EQ, choice, e);
+
+  ext.beginSolve();
+  const ASTNode lowered = ext.lowerArrayEqualities(outer);
+  ASSERT_EQ(2u, ext.getActiveRecordCount());
+  ASSERT_EQ(2u, ext.getRecords().size());
+  ASSERT_EQ(SYMBOL, lowered.GetKind());
+
+  // The outer record hides its operand graph behind one proxy. Activation
+  // must nevertheless follow that operand and discover the inner proxy used
+  // as the reconstructed ITE condition.
+  const ExtensionalityContext::Record* outerRecord = nullptr;
+  for (const ExtensionalityContext::Record& r : ext.getRecords())
+    if (r.proxy == lowered)
+      outerRecord = &r;
+  ASSERT_NE(nullptr, outerRecord);
+  const ASTNode choiceOperand =
+      outerRecord->constructionLeft.GetKind() == ITE
+          ? outerRecord->constructionLeft
+          : outerRecord->constructionRight;
+  ASSERT_EQ(ITE, choiceOperand.GetKind());
+  EXPECT_EQ(SYMBOL, choiceOperand[0].GetKind());
+
+  const ASTNode constrained = ext.conjoinRecordConstraints(lowered);
+  ASTNodeSet visited;
+  ASTVec pending(1, constrained);
+  while (!pending.empty())
+  {
+    const ASTNode n = pending.back();
+    pending.pop_back();
+    if (!visited.insert(n).second)
+      continue;
+    EXPECT_NE(ARRAY_EQ, n.GetKind());
+    for (unsigned i = 0; i < n.Degree(); ++i)
+      pending.push_back(n[i]);
+  }
+
+  ext.beginSolve();
+  ext.lowerArrayEqualities(mgr.ASTTrue);
+  EXPECT_EQ(0u, ext.getActiveRecordCount());
+  EXPECT_EQ(0u, ext.getRecords().size());
+
+  ext.beginSolve();
+  ext.lowerArrayEqualities(dormant);
+  EXPECT_EQ(1u, ext.getActiveRecordCount());
+  EXPECT_EQ(1u, ext.getRecords().size());
+}
+
 TEST(ExtGuardTest, PathPayloadRemainsCompact)
 {
-  // Every propagation copies its complete guard path. Keep a regression
-  // ceiling below the old 96-byte variant-specific representation.
+  // A predecessor entry stores exactly one guard. Keep its payload below the
+  // old 96-byte variant-specific representation.
   EXPECT_LE(sizeof(ExtGuard), 64u);
 }
 
@@ -76,6 +207,449 @@ public:
     return it->second;
   }
 };
+
+// An independent finite-semantics oracle for the complete checker. With
+// one-bit indexes and one-bit elements, an array has only four possible
+// interpretations, so every candidate assignment can be compared against
+// every genuine array model. The oracle below deliberately does not walk an
+// ExtGraph or reproduce I/D/U/R/L/T/C: each test evaluates its concrete
+// READ/WRITE/ITE/equality expression directly.
+class OneBitModel : public ExtModelView
+{
+public:
+  std::map<ASTNode, ASTNode> bvVals;
+  std::map<ASTNode, bool> boolVals;
+
+  virtual ASTNode bvValue(const ASTNode& term)
+  {
+    if (term.GetKind() == BVCONST)
+      return term;
+    std::map<ASTNode, ASTNode>::const_iterator it = bvVals.find(term);
+    if (it == bvVals.end())
+      FatalError("OneBitModel: missing bv value", term);
+    return it->second;
+  }
+
+  virtual bool boolValue(const ASTNode& term)
+  {
+    if (term.GetKind() == TRUE || term.GetKind() == FALSE)
+      return term.GetKind() == TRUE;
+    std::map<ASTNode, bool>::const_iterator it = boolVals.find(term);
+    if (it == boolVals.end())
+      FatalError("OneBitModel: missing bool value", term);
+    return it->second;
+  }
+};
+
+class ExtCheckerOneBitOracleTest : public ::testing::Test
+{
+protected:
+  typedef unsigned ConcreteArray;
+
+  STPMgr mgr;
+  ExtGraph graph;
+  OneBitModel model;
+  size_t nextRecord = 0;
+
+  static unsigned candidateBit(unsigned mask, unsigned position)
+  {
+    return (mask >> position) & 1u;
+  }
+
+  static unsigned readCell(ConcreteArray array, unsigned index)
+  {
+    return (array >> index) & 1u;
+  }
+
+  static ConcreteArray writeCell(ConcreteArray array, unsigned index,
+                                 unsigned value)
+  {
+    return (array & ~(1u << index)) | (value << index);
+  }
+
+  ASTNode arraySymbol(const char* name)
+  {
+    return mgr.CreateSymbol(name, 1, 1);
+  }
+
+  ASTNode bitSymbol(const char* name)
+  {
+    return mgr.CreateSymbol(name, 0, 1);
+  }
+
+  ASTNode boolSymbol(const char* name)
+  {
+    return mgr.CreateSymbol(name, 0, 0);
+  }
+
+  ASTNode bitConstant(unsigned value)
+  {
+    return mgr.CreateBVConst(1, value);
+  }
+
+  void assignBit(const ASTNode& symbol, unsigned value)
+  {
+    model.bvVals[symbol] = bitConstant(value);
+  }
+
+  void assignBool(const ASTNode& symbol, bool value)
+  {
+    model.boolVals[symbol] = value;
+  }
+
+  ASTNode writeNode(const ASTNode& base, const ASTNode& index,
+                    const ASTNode& value)
+  {
+    ASTNode write = mgr.hashingNodeFactory->CreateArrayTerm(
+        WRITE, 1, 1, {base, index, value});
+    ExtWriteNode info;
+    info.write = write;
+    info.base = base;
+    info.indexTerm = index;
+    info.indexName = index;
+    graph.writes[write] = info;
+    graph.writeParents[base].push_back(write);
+    return write;
+  }
+
+  ASTNode iteNode(const ASTNode& condition, const ASTNode& thn,
+                  const ASTNode& els)
+  {
+    ASTNode ite = mgr.hashingNodeFactory->CreateArrayTerm(
+        ITE, 1, 1, {condition, thn, els});
+    ExtIteNode info;
+    info.ite = ite;
+    info.condTerm = condition;
+    info.condName = condition;
+    info.thn = thn;
+    info.els = els;
+    graph.ites[ite] = info;
+    graph.iteParents[thn].push_back(ite);
+    if (els != thn)
+      graph.iteParents[els].push_back(ite);
+    return ite;
+  }
+
+  ASTNode equalityEdge(const ASTNode& left, const ASTNode& right,
+                       const char* proxyName)
+  {
+    const ASTNode proxy = boolSymbol(proxyName);
+    ExtEqEdge edge;
+    edge.record = nextRecord++;
+    edge.left = left;
+    edge.right = right;
+    edge.proxy = proxy;
+    const size_t edgeIndex = graph.eqEdges.size();
+    graph.eqEdges.push_back(edge);
+    graph.eqAdjacency[left].push_back(edgeIndex);
+    if (left != right)
+      graph.eqAdjacency[right].push_back(edgeIndex);
+    return proxy;
+  }
+
+  void witness(const ASTNode& proxy, const ASTNode& index,
+               const ASTNode& leftValue, const ASTNode& rightValue)
+  {
+    ExtWitness obligation;
+    obligation.record = graph.witnesses.size();
+    obligation.proxy = proxy;
+    obligation.index = index;
+    obligation.leftValue = leftValue;
+    obligation.rightValue = rightValue;
+    graph.witnesses.push_back(obligation);
+  }
+
+  void readAccess(const ASTNode& array, const ASTNode& index,
+                  const ASTNode& value)
+  {
+    ExtAccess access;
+    access.id = graph.accesses.size();
+    access.isWrite = false;
+    access.site = array;
+    access.indexTerm = index;
+    access.valueTerm = value;
+    access.indexName = index;
+    access.valueName = value;
+    graph.accesses.push_back(access);
+  }
+
+  void writeAccess(const ASTNode& write)
+  {
+    ExtAccess access;
+    access.id = graph.accesses.size();
+    access.isWrite = true;
+    access.site = write;
+    access.indexTerm = write[1];
+    access.valueTerm = write[2];
+    access.indexName = write[1];
+    access.valueName = write[2];
+    graph.accesses.push_back(access);
+  }
+
+  template <class AssignCandidate, class FiniteOracle>
+  void compareEveryCandidate(const char* scenario, unsigned candidateBits,
+                             AssignCandidate assignCandidate,
+                             FiniteOracle finiteOracle)
+  {
+    const unsigned candidateCount = 1u << candidateBits;
+    for (unsigned mask = 0; mask < candidateCount; ++mask)
+    {
+      SCOPED_TRACE(::testing::Message()
+                   << scenario << " candidate mask " << mask);
+      assignCandidate(mask);
+      const ExtCheckResult result = ExtChecker::check(graph, model, false);
+      const bool checkerAccepts = result.status == ExtCheckResult::CONSISTENT;
+      EXPECT_EQ(finiteOracle(mask), checkerAccepts)
+          << "checker status " << result.status;
+    }
+  }
+};
+
+TEST_F(ExtCheckerOneBitOracleTest, ReadMatchesFiniteDenotationalSemantics)
+{
+  const ASTNode array = arraySymbol("oracle_read_array");
+  const ASTNode i = bitSymbol("oracle_read_i");
+  const ASTNode j = bitSymbol("oracle_read_j");
+  const ASTNode ri = bitSymbol("oracle_read_ri");
+  const ASTNode rj = bitSymbol("oracle_read_rj");
+  readAccess(array, i, ri);
+  readAccess(array, j, rj);
+
+  compareEveryCandidate(
+      "READ", 4,
+      [&](unsigned mask) {
+        assignBit(i, candidateBit(mask, 0));
+        assignBit(j, candidateBit(mask, 1));
+        assignBit(ri, candidateBit(mask, 2));
+        assignBit(rj, candidateBit(mask, 3));
+      },
+      [&](unsigned mask) {
+        const unsigned indexI = candidateBit(mask, 0);
+        const unsigned indexJ = candidateBit(mask, 1);
+        const unsigned valueI = candidateBit(mask, 2);
+        const unsigned valueJ = candidateBit(mask, 3);
+        for (ConcreteArray concrete = 0; concrete < 4; ++concrete)
+          if (readCell(concrete, indexI) == valueI &&
+              readCell(concrete, indexJ) == valueJ)
+            return true;
+        return false;
+      });
+}
+
+TEST_F(ExtCheckerOneBitOracleTest, WriteMatchesFiniteDenotationalSemantics)
+{
+  const ASTNode array = arraySymbol("oracle_write_array");
+  const ASTNode writeIndex = bitSymbol("oracle_write_k");
+  const ASTNode writeValue = bitSymbol("oracle_write_v");
+  const ASTNode writeReadIndex = bitSymbol("oracle_write_i");
+  const ASTNode writeReadValue = bitSymbol("oracle_write_rw");
+  const ASTNode baseReadIndex = bitSymbol("oracle_write_j");
+  const ASTNode baseReadValue = bitSymbol("oracle_write_ra");
+  const ASTNode write = writeNode(array, writeIndex, writeValue);
+  writeAccess(write);
+  readAccess(write, writeReadIndex, writeReadValue);
+  readAccess(array, baseReadIndex, baseReadValue);
+
+  compareEveryCandidate(
+      "WRITE", 6,
+      [&](unsigned mask) {
+        assignBit(writeIndex, candidateBit(mask, 0));
+        assignBit(writeValue, candidateBit(mask, 1));
+        assignBit(writeReadIndex, candidateBit(mask, 2));
+        assignBit(writeReadValue, candidateBit(mask, 3));
+        assignBit(baseReadIndex, candidateBit(mask, 4));
+        assignBit(baseReadValue, candidateBit(mask, 5));
+      },
+      [&](unsigned mask) {
+        const unsigned k = candidateBit(mask, 0);
+        const unsigned v = candidateBit(mask, 1);
+        const unsigned i = candidateBit(mask, 2);
+        const unsigned rw = candidateBit(mask, 3);
+        const unsigned j = candidateBit(mask, 4);
+        const unsigned ra = candidateBit(mask, 5);
+        for (ConcreteArray concrete = 0; concrete < 4; ++concrete)
+        {
+          const ConcreteArray updated = writeCell(concrete, k, v);
+          if (readCell(updated, i) == rw && readCell(concrete, j) == ra)
+            return true;
+        }
+        return false;
+      });
+}
+
+TEST_F(ExtCheckerOneBitOracleTest,
+       EqualityAndWitnessMatchFiniteDenotationalSemantics)
+{
+  const ASTNode left = arraySymbol("oracle_eq_left");
+  const ASTNode right = arraySymbol("oracle_eq_right");
+  const ASTNode proxy = equalityEdge(left, right, "oracle_eq_proxy");
+  const ASTNode lambda = bitSymbol("oracle_eq_lambda");
+  const ASTNode witnessLeft = bitSymbol("oracle_eq_witness_left");
+  const ASTNode witnessRight = bitSymbol("oracle_eq_witness_right");
+  const ASTNode i = bitSymbol("oracle_eq_i");
+  const ASTNode readLeft = bitSymbol("oracle_eq_read_left");
+  const ASTNode j = bitSymbol("oracle_eq_j");
+  const ASTNode readRight = bitSymbol("oracle_eq_read_right");
+  witness(proxy, lambda, witnessLeft, witnessRight);
+  readAccess(left, lambda, witnessLeft);
+  readAccess(right, lambda, witnessRight);
+  readAccess(left, i, readLeft);
+  readAccess(right, j, readRight);
+
+  compareEveryCandidate(
+      "EQUALITY", 8,
+      [&](unsigned mask) {
+        assignBool(proxy, candidateBit(mask, 0) != 0);
+        assignBit(lambda, candidateBit(mask, 1));
+        assignBit(witnessLeft, candidateBit(mask, 2));
+        assignBit(witnessRight, candidateBit(mask, 3));
+        assignBit(i, candidateBit(mask, 4));
+        assignBit(readLeft, candidateBit(mask, 5));
+        assignBit(j, candidateBit(mask, 6));
+        assignBit(readRight, candidateBit(mask, 7));
+      },
+      [&](unsigned mask) {
+        const bool proxyValue = candidateBit(mask, 0) != 0;
+        const unsigned witnessIndex = candidateBit(mask, 1);
+        const unsigned wl = candidateBit(mask, 2);
+        const unsigned wr = candidateBit(mask, 3);
+        const unsigned indexLeft = candidateBit(mask, 4);
+        const unsigned valueLeft = candidateBit(mask, 5);
+        const unsigned indexRight = candidateBit(mask, 6);
+        const unsigned valueRight = candidateBit(mask, 7);
+        for (ConcreteArray concreteLeft = 0; concreteLeft < 4;
+             ++concreteLeft)
+          for (ConcreteArray concreteRight = 0; concreteRight < 4;
+               ++concreteRight)
+            if (readCell(concreteLeft, witnessIndex) == wl &&
+                readCell(concreteRight, witnessIndex) == wr &&
+                readCell(concreteLeft, indexLeft) == valueLeft &&
+                readCell(concreteRight, indexRight) == valueRight &&
+                proxyValue == (concreteLeft == concreteRight) &&
+                (proxyValue || wl != wr))
+              return true;
+        return false;
+      });
+}
+
+TEST_F(ExtCheckerOneBitOracleTest, IteMatchesFiniteDenotationalSemantics)
+{
+  const ASTNode left = arraySymbol("oracle_ite_left");
+  const ASTNode right = arraySymbol("oracle_ite_right");
+  const ASTNode condition = boolSymbol("oracle_ite_condition");
+  const ASTNode ite = iteNode(condition, left, right);
+  const ASTNode i = bitSymbol("oracle_ite_i");
+  const ASTNode readIte = bitSymbol("oracle_ite_read");
+  const ASTNode j = bitSymbol("oracle_ite_j");
+  const ASTNode readLeft = bitSymbol("oracle_ite_read_left");
+  const ASTNode k = bitSymbol("oracle_ite_k");
+  const ASTNode readRight = bitSymbol("oracle_ite_read_right");
+  readAccess(ite, i, readIte);
+  readAccess(left, j, readLeft);
+  readAccess(right, k, readRight);
+
+  compareEveryCandidate(
+      "ITE", 7,
+      [&](unsigned mask) {
+        assignBool(condition, candidateBit(mask, 0) != 0);
+        assignBit(i, candidateBit(mask, 1));
+        assignBit(readIte, candidateBit(mask, 2));
+        assignBit(j, candidateBit(mask, 3));
+        assignBit(readLeft, candidateBit(mask, 4));
+        assignBit(k, candidateBit(mask, 5));
+        assignBit(readRight, candidateBit(mask, 6));
+      },
+      [&](unsigned mask) {
+        const bool conditionValue = candidateBit(mask, 0) != 0;
+        const unsigned iteIndex = candidateBit(mask, 1);
+        const unsigned iteValue = candidateBit(mask, 2);
+        const unsigned leftIndex = candidateBit(mask, 3);
+        const unsigned leftValue = candidateBit(mask, 4);
+        const unsigned rightIndex = candidateBit(mask, 5);
+        const unsigned rightValue = candidateBit(mask, 6);
+        for (ConcreteArray concreteLeft = 0; concreteLeft < 4;
+             ++concreteLeft)
+          for (ConcreteArray concreteRight = 0; concreteRight < 4;
+               ++concreteRight)
+          {
+            const ConcreteArray selected =
+                conditionValue ? concreteLeft : concreteRight;
+            if (readCell(selected, iteIndex) == iteValue &&
+                readCell(concreteLeft, leftIndex) == leftValue &&
+                readCell(concreteRight, rightIndex) == rightValue)
+              return true;
+          }
+        return false;
+      });
+}
+
+TEST_F(ExtCheckerOneBitOracleTest,
+       MixedGraphMatchesFiniteDenotationalSemantics)
+{
+  const ASTNode arrayA = arraySymbol("oracle_mixed_a");
+  const ASTNode arrayB = arraySymbol("oracle_mixed_b");
+  const ASTNode arrayC = arraySymbol("oracle_mixed_c");
+  const ASTNode writeIndex = bitSymbol("oracle_mixed_k");
+  const ASTNode writeValue = bitSymbol("oracle_mixed_v");
+  const ASTNode write = writeNode(arrayA, writeIndex, writeValue);
+  const ASTNode condition = boolSymbol("oracle_mixed_condition");
+  const ASTNode ite = iteNode(condition, write, arrayB);
+  const ASTNode proxy = equalityEdge(ite, arrayC, "oracle_mixed_proxy");
+  const ASTNode lambda = bitSymbol("oracle_mixed_lambda");
+  const ASTNode witnessIte = bitSymbol("oracle_mixed_witness_ite");
+  const ASTNode witnessC = bitSymbol("oracle_mixed_witness_c");
+  const ASTNode readAZero = bitSymbol("oracle_mixed_read_a_zero");
+  const ASTNode readCOne = bitSymbol("oracle_mixed_read_c_one");
+  const ASTNode zero = bitConstant(0);
+  const ASTNode one = bitConstant(1);
+  witness(proxy, lambda, witnessIte, witnessC);
+  writeAccess(write);
+  readAccess(ite, lambda, witnessIte);
+  readAccess(arrayC, lambda, witnessC);
+  readAccess(arrayA, zero, readAZero);
+  readAccess(arrayC, one, readCOne);
+
+  compareEveryCandidate(
+      "MIXED", 9,
+      [&](unsigned mask) {
+        assignBit(writeIndex, candidateBit(mask, 0));
+        assignBit(writeValue, candidateBit(mask, 1));
+        assignBool(condition, candidateBit(mask, 2) != 0);
+        assignBool(proxy, candidateBit(mask, 3) != 0);
+        assignBit(lambda, candidateBit(mask, 4));
+        assignBit(witnessIte, candidateBit(mask, 5));
+        assignBit(witnessC, candidateBit(mask, 6));
+        assignBit(readAZero, candidateBit(mask, 7));
+        assignBit(readCOne, candidateBit(mask, 8));
+      },
+      [&](unsigned mask) {
+        const unsigned k = candidateBit(mask, 0);
+        const unsigned v = candidateBit(mask, 1);
+        const bool conditionValue = candidateBit(mask, 2) != 0;
+        const bool proxyValue = candidateBit(mask, 3) != 0;
+        const unsigned witnessIndex = candidateBit(mask, 4);
+        const unsigned witnessIteValue = candidateBit(mask, 5);
+        const unsigned witnessCValue = candidateBit(mask, 6);
+        const unsigned aZeroValue = candidateBit(mask, 7);
+        const unsigned cOneValue = candidateBit(mask, 8);
+        for (ConcreteArray concreteA = 0; concreteA < 4; ++concreteA)
+          for (ConcreteArray concreteB = 0; concreteB < 4; ++concreteB)
+            for (ConcreteArray concreteC = 0; concreteC < 4; ++concreteC)
+            {
+              const ConcreteArray updated = writeCell(concreteA, k, v);
+              const ConcreteArray selected =
+                  conditionValue ? updated : concreteB;
+              if (readCell(selected, witnessIndex) == witnessIteValue &&
+                  readCell(concreteC, witnessIndex) == witnessCValue &&
+                  readCell(concreteA, 0) == aZeroValue &&
+                  readCell(concreteC, 1) == cOneValue &&
+                  proxyValue == (selected == concreteC) &&
+                  (proxyValue || witnessIteValue != witnessCValue))
+                return true;
+            }
+        return false;
+      });
+}
 
 struct ExpectedEvent
 {
@@ -394,6 +968,38 @@ TEST_F(ExtFixtureTest, ReadReadCongruenceOneArray)
   EXPECT_TRUE(hasEqGuard(c.abstractPremise, i, j));
   EXPECT_EQ(r1, c.abstractConclusionA);
   EXPECT_EQ(r2, c.abstractConclusionB);
+}
+
+TEST_F(ExtFixtureTest, LongPropagationChainStoresLinksWithoutMaterializingPaths)
+{
+  const size_t length = 96;
+  std::vector<ASTNode> arrays;
+  arrays.reserve(length);
+  for (size_t i = 0; i < length; ++i)
+  {
+    const std::string name = "chain_array_" + std::to_string(i);
+    arrays.push_back(mgr.CreateSymbol(name.c_str(), 2, 2));
+  }
+  for (size_t i = 0; i + 1 < length; ++i)
+  {
+    const std::string name = "chain_eq_" + std::to_string(i);
+    eqEdge(arrays[i], arrays[i + 1], name.c_str(), true);
+  }
+
+  readAccess(arrays[0], bv("chain_index", 1), bv("chain_value", 2));
+  const ExtCheckResult r = run();
+  ASSERT_EQ(ExtCheckResult::CONSISTENT, r.status);
+
+  // One constant-size path record per reached pair. With no conflict, no
+  // complete guard vector is ever reconstructed; the old copied-vector
+  // representation retained 1+2+...+(length-1) guards here.
+  EXPECT_EQ(length, r.proofPathEntries);
+  EXPECT_EQ(0u, r.materializedGuardCount);
+  expectStats(r, {{"insertions", static_cast<int>(length)},
+                  {"propagations", static_cast<int>(length - 1)},
+                  {"rule_R_EQ", static_cast<int>(length - 1)},
+                  {"seeds", 1},
+                  {"skipped_seen", static_cast<int>(length - 1)}});
 }
 
 // One pass reports every conflict it finds, not just the earliest.
@@ -1182,6 +1788,12 @@ TEST_F(ExtFixtureTest, ConflictPremiseUsesShortestPaths)
   EXPECT_TRUE(hasProxyGuard(c.abstractPremise, e4));
   EXPECT_EQ(rX, c.abstractConclusionA);
   EXPECT_EQ(rT, c.abstractConclusionB);
+
+  size_t guardsInCertificates = 0;
+  for (const ExtConflict& conflict : r.conflicts)
+    guardsInCertificates +=
+        conflict.leftGuards.size() + conflict.rightGuards.size();
+  EXPECT_EQ(guardsInCertificates, r.materializedGuardCount);
 }
 
 TEST_F(ExtFixtureTest, IteTrueConditionPropagatesDownWithPositiveGuard)
@@ -1202,6 +1814,42 @@ TEST_F(ExtFixtureTest, IteTrueConditionPropagatesUpWithPositiveGuard)
 TEST_F(ExtFixtureTest, IteFalseConditionPropagatesUpWithNegativeGuard)
 {
   expectIteConflict(false, false);
+}
+
+// Two different array if-then-elses can use the same condition and select
+// the same branch. When disagreeing accesses propagate down from the two
+// roots, both shortest proof paths contain that one condition. The lemma
+// premise is a conjunction, so the shared guard must occur only once after
+// canonicalization; the common index equality is reflexive and disappears.
+TEST_F(ExtFixtureTest, SharedIteConditionGuardIsCanonicalizedOnce)
+{
+  ASTNode A = arr("A"), B = arr("B"), C = arr("C");
+  ASTNode condTerm = mgr.CreateSymbol("condition_term", 0, 0);
+  ASTNode condName = boolSym("condition_name", true);
+  ASTNode leftIte = arrayIte(condTerm, condName, A, B);
+  ASTNode rightIte = arrayIte(condTerm, condName, A, C);
+  ASTNode index = bv("index", 0);
+  ASTNode leftValue = bv("left_value", 1);
+  ASTNode rightValue = bv("right_value", 2);
+
+  size_t leftAccess = readAccess(leftIte, index, leftValue);
+  size_t rightAccess = readAccess(rightIte, index, rightValue);
+
+  ExtCheckResult r = run();
+  ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
+  const ExtConflict& conflict = r.conflict;
+  EXPECT_EQ(A, conflict.commonArray);
+  EXPECT_EQ(leftAccess, conflict.leftAccess);
+  EXPECT_EQ(rightAccess, conflict.rightAccess);
+  ASSERT_EQ(1u, conflict.leftGuards.size());
+  ASSERT_EQ(1u, conflict.rightGuards.size());
+  EXPECT_EQ(ExtGuard::ITE_COND_POS, conflict.leftGuards[0].kind);
+  EXPECT_EQ(ExtGuard::ITE_COND_POS, conflict.rightGuards[0].kind);
+
+  ASSERT_EQ(1u, conflict.abstractPremise.size());
+  EXPECT_TRUE(hasBoolGuard(conflict.abstractPremise, condName, true));
+  ASSERT_EQ(1u, conflict.theoryPremise.size());
+  EXPECT_TRUE(hasBoolGuard(conflict.theoryPremise, condTerm, true));
 }
 
 TEST_F(ExtFixtureTest, IteDoesNotPropagateThroughUnselectedBranch)
@@ -1228,13 +1876,12 @@ TEST_F(ExtFixtureTest, IteDoesNotPropagateThroughUnselectedBranch)
 }
 
 // Direct tests for the solve-time preparation layer: recovering the
-// canonical equality operands from the witness anchors, computing the
-// cone, eliminating array-valued if-then-else with its persistent
-// replacement cache, scalar naming, and the loud failure when an
-// anchor is missing. These drive ExtensionalityContext directly,
-// without SAT or the array transformer, so a regression in
-// preparation fails here instead of as a distant fatal error inside a
-// full solve.
+// canonical equality operands from the witness anchors, collecting the
+// complete owned array graph, retaining array-valued if-then-else terms,
+// scalar naming, the exact hand-off to ArrayTransformer, and loud failures
+// when a solve-boundary invariant is broken.  These avoid SAT, so a
+// preparation/transform integration regression fails here instead of as a
+// distant error inside a full solve.
 class ExtPrepareTest : public ::testing::Test
 {
 protected:
@@ -1260,11 +1907,12 @@ TEST_F(ExtPrepareTest, RecoversOperandsConeAndNames)
   ASTNode idx = hf->CreateTerm(BVPLUS, 2, i, mgr.CreateBVConst(2, 1));
   ASTNode w = hf->CreateArrayTerm(WRITE, 2, 2, {a, idx, e});
 
-  ASTNode proxy = ext->makeEquality(w, b);
+  const ASTNode rawEquality = hf->CreateNode(EQ, w, b);
+  ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(rawEquality);
   ASSERT_EQ(SYMBOL, proxy.GetKind());
   ASSERT_EQ(1u, ext->getRecords().size());
 
-  ext->beginSolve();
   ASTNode root = ext->conjoinRecordConstraints(proxy);
   ext->prepare(root);
 
@@ -1275,12 +1923,11 @@ TEST_F(ExtPrepareTest, RecoversOperandsConeAndNames)
   EXPECT_EQ(r.constructionLeft, r.canonicalLeft);
   EXPECT_EQ(r.constructionRight, r.canonicalRight);
 
-  // The cone contains the operands and closes through the write to
-  // its base.
-  EXPECT_TRUE(ext->coneFrozen());
-  EXPECT_TRUE(ext->inCone(w));
-  EXPECT_TRUE(ext->inCone(b));
-  EXPECT_TRUE(ext->inCone(a));
+  // The complete graph contains both operands and the write's base.
+  EXPECT_TRUE(ext->arrayGraphFrozen());
+  EXPECT_TRUE(ext->ownsArray(w));
+  EXPECT_TRUE(ext->ownsArray(b));
+  EXPECT_TRUE(ext->ownsArray(a));
 
   // The compound index received a protected scalar name bound to it.
   bool namedIdx = false;
@@ -1293,6 +1940,27 @@ TEST_F(ExtPrepareTest, RecoversOperandsConeAndNames)
       namedIdx = true;
   }
   EXPECT_TRUE(namedIdx);
+}
+
+TEST_F(ExtPrepareTest, OwnsArraysDisconnectedFromTheActivatingEquality)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b"), x = arr("x");
+  ASTNode i = bv("i");
+
+  ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(hf->CreateNode(EQ, a, b));
+  ASTNode unrelatedRead = hf->CreateTerm(READ, 2, x, i);
+  ASTNode root = ext->conjoinRecordConstraints(hf->CreateNode(
+      AND, proxy, hf->CreateNode(EQ, unrelatedRead, mgr.CreateZeroConst(2))));
+
+  // Protection is computed before simplification, and final ownership is
+  // computed independently from equality reachability.
+  EXPECT_TRUE(ext->wasArrayAnticipated(x));
+  ext->prepare(root);
+  EXPECT_TRUE(ext->ownsArray(a));
+  EXPECT_TRUE(ext->ownsArray(b));
+  EXPECT_TRUE(ext->ownsArray(x));
 }
 
 TEST_F(ExtPrepareTest, ArrayIteIsKeptAndReasonedAboutDirectly)
@@ -1312,19 +1980,20 @@ TEST_F(ExtPrepareTest, ArrayIteIsKeptAndReasonedAboutDirectly)
   // variable and two more equality records here, each with a witness
   // index and two virtual reads; direct integration charges one
   // reified Boolean.
-  ASTNode proxy = ext->makeEquality(ite, d);
+  const ASTNode rawEquality = hf->CreateNode(EQ, ite, d);
+  ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(rawEquality);
   ASSERT_EQ(1u, ext->getRecords().size());
 
-  ext->beginSolve();
   ext->prepare(ext->conjoinRecordConstraints(proxy));
   EXPECT_EQ(1u, ext->getRecords().size());
   const size_t protectedAfterFirstSolve = ext->getFrozenSymbols().size();
 
-  // The if-then-else is in the cone as itself, with both branches
+  // The if-then-else is in the graph as itself, with both branches
   // reachable through it -- that is what rules T-down and T-up walk.
-  EXPECT_TRUE(ext->inCone(ite));
-  EXPECT_TRUE(ext->inCone(a));
-  EXPECT_TRUE(ext->inCone(b));
+  EXPECT_TRUE(ext->ownsArray(ite));
+  EXPECT_TRUE(ext->ownsArray(a));
+  EXPECT_TRUE(ext->ownsArray(b));
 
   // The operand recovered for the user's equality is the if-then-else,
   // not a stand-in for it.
@@ -1335,6 +2004,7 @@ TEST_F(ExtPrepareTest, ArrayIteIsKeptAndReasonedAboutDirectly)
 
   // A second solve moves nothing.
   ext->beginSolve();
+  proxy = ext->lowerArrayEqualities(rawEquality);
   ext->prepare(ext->conjoinRecordConstraints(proxy));
   EXPECT_EQ(1u, ext->getRecords().size());
   EXPECT_EQ(protectedAfterFirstSolve, ext->getFrozenSymbols().size());
@@ -1361,8 +2031,9 @@ TEST_F(ExtPrepareTest, IteConditionIsReifiedAsAProtectedName)
   ASTNode cond = hf->CreateNode(EQ, x, y);
   ASTNode ite = hf->CreateArrayTerm(ITE, 2, 2, {cond, a, b});
 
-  ASTNode proxy = ext->makeEquality(ite, d);
   ext->beginSolve();
+  ASTNode proxy =
+      ext->lowerArrayEqualities(hf->CreateNode(EQ, ite, d));
   ext->prepare(ext->conjoinRecordConstraints(proxy));
 
   const std::map<ASTNode, ASTNode>& n2t = ext->getNameToTerm();
@@ -1381,26 +2052,6 @@ TEST_F(ExtPrepareTest, IteConditionIsReifiedAsAProtectedName)
   EXPECT_TRUE(named);
 }
 
-// Is `needle` anywhere in the DAG rooted at `haystack`?
-bool mentions(const ASTNode& haystack, const ASTNode& needle,
-              ASTNodeSet& seen)
-{
-  if (haystack == needle)
-    return true;
-  if (!seen.insert(haystack).second)
-    return false;
-  for (unsigned i = 0; i < haystack.Degree(); i++)
-    if (mentions(haystack[i], needle, seen))
-      return true;
-  return false;
-}
-
-bool mentions(const ASTNode& haystack, const ASTNode& needle)
-{
-  ASTNodeSet seen;
-  return mentions(haystack, needle, seen);
-}
-
 // An if-then-else an earlier solve already saw is still reasoned about
 // by every later one. While it was replaced by a fresh array, that
 // meant restating the guards defining the replacement on every solve --
@@ -1413,8 +2064,8 @@ bool mentions(const ASTNode& haystack, const ASTNode& needle)
 // Nothing is inherited now: the if-then-else is a term in the formula,
 // so every solve re-derives it from what it is handed. What has to hold
 // is that the second solve puts it and both its branches back in the
-// cone, which is what makes the T rules fire for it.
-TEST_F(ExtPrepareTest, InheritedArrayIteIsInTheConeOnEverySolve)
+// complete owned graph, which is what makes the T rules fire for it.
+TEST_F(ExtPrepareTest, ArrayIteIsOwnedOnEverySolve)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
   ASTNode a = arr("a"), b = arr("b"), d = arr("d");
@@ -1424,25 +2075,27 @@ TEST_F(ExtPrepareTest, InheritedArrayIteIsInTheConeOnEverySolve)
   ASSERT_EQ(ITE, ite.GetKind());
   EXPECT_TRUE(ext->getRecords().empty());
 
-  const ASTNode proxy = ext->makeEquality(ite, d);
-  ASSERT_EQ(1u, ext->getRecords().size());
+  const ASTNode rawEquality = hf->CreateNode(EQ, ite, d);
+  ASSERT_EQ(ARRAY_EQ, rawEquality.GetKind());
 
   for (int solve = 0; solve < 2; solve++)
   {
     ext->beginSolve();
+    const ASTNode proxy = ext->lowerArrayEqualities(rawEquality);
     ext->prepare(ext->conjoinRecordConstraints(proxy));
     EXPECT_EQ(1u, ext->getRecords().size()) << "solve " << solve;
-    EXPECT_TRUE(ext->inCone(ite)) << "solve " << solve;
-    EXPECT_TRUE(ext->inCone(a)) << "solve " << solve;
-    EXPECT_TRUE(ext->inCone(b)) << "solve " << solve;
+    EXPECT_TRUE(ext->ownsArray(ite)) << "solve " << solve;
+    EXPECT_TRUE(ext->ownsArray(a)) << "solve " << solve;
+    EXPECT_TRUE(ext->ownsArray(b)) << "solve " << solve;
   }
 }
 
 TEST_F(ExtPrepareTest, MissingAnchorFailsLoudly)
 {
   ASTNode a = arr("a"), b = arr("b");
-  ASTNode proxy = ext->makeEquality(a, b);
   ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(
+      mgr.hashingNodeFactory->CreateNode(EQ, ASTVec{a, b}));
   // The record constraints are deliberately not conjoined: operand
   // recovery must refuse to guess.
   EXPECT_DEATH(ext->prepare(proxy),
@@ -1459,12 +2112,12 @@ TEST_F(ExtPrepareTest, RewrittenWitnessIndexFailsLoudly)
   NodeFactory* hf = mgr.hashingNodeFactory;
   ASTNode a = arr("a"), b = arr("b");
   ASTNode mu = bv("mu");
-  ASTNode proxy = ext->makeEquality(a, b);
+  ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(hf->CreateNode(EQ, a, b));
   (void)proxy;
   ASSERT_EQ(1u, ext->getRecords().size());
   const ExtensionalityContext::Record r = ext->getRecords()[0];
 
-  ext->beginSolve();
   // The left anchor's witness read rebuilt over a foreign index; the
   // rest of the bundle intact.
   ASTNode badRead = hf->CreateTerm(READ, 2, r.constructionLeft, mu);
@@ -1595,10 +2248,9 @@ TEST_F(ExtPrepareTest, FloatArrayIteEqualityGetsNanQualifiedWitness)
   EXPECT_EQ(24u, ite.GetSigWidth());
   EXPECT_TRUE(ext->getRecords().empty());
 
-  ASTNode proxy = ext->makeEquality(ite, fd);
-  ASSERT_EQ(1u, ext->getRecords().size());
-
+  const ASTNode rawEquality = hf->CreateNode(EQ, ite, fd);
   ext->beginSolve();
+  const ASTNode proxy = ext->lowerArrayEqualities(rawEquality);
   ext->prepare(ext->conjoinRecordConstraints(proxy));
   ASSERT_EQ(1u, ext->getRecords().size());
 
@@ -1700,8 +2352,9 @@ TEST_F(ExtPrepareTest, IteOverFloatIndexedArraysConfinesItsWitnessIndex)
   EXPECT_EQ(8u, ieb);
   EXPECT_EQ(24u, isb);
 
-  ASTNode proxy = ext->makeEquality(ite, fd);
+  const ASTNode rawEquality = hf->CreateNode(EQ, ite, fd);
   ext->beginSolve();
+  const ASTNode proxy = ext->lowerArrayEqualities(rawEquality);
   ext->prepare(ext->conjoinRecordConstraints(proxy));
 
   ASSERT_EQ(1u, ext->getRecords().size());
@@ -1729,12 +2382,12 @@ TEST_F(ExtPrepareTest, DuplicateAnchorFailsLoudly)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
   ASTNode a = arr("a"), b = arr("b"), c = arr("c");
-  ASTNode proxy = ext->makeEquality(a, b);
+  ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(hf->CreateNode(EQ, a, b));
   (void)proxy;
   ASSERT_EQ(1u, ext->getRecords().size());
   const ExtensionalityContext::Record r = ext->getRecords()[0];
 
-  ext->beginSolve();
   // The intact bundle, plus a rival equation of the same shape for the
   // same name over a different array.
   ASTVec conjuncts;
@@ -1747,32 +2400,28 @@ TEST_F(ExtPrepareTest, DuplicateAnchorFailsLoudly)
                "occurs twice with different right-hand sides");
 }
 
-// possibleConeSymbols is collected from the operands as they were
-// built, and decides which reads are protected from the
-// read-equals-constant substitution; the cone is closed over the
-// operands as they are after simplification. If a pass ever rewrites an
-// operand to name an array symbol that was not under it before, that
-// symbol's reads were never protected, and an observation the
-// consistency check depends on may already have been substituted away.
-TEST_F(ExtPrepareTest, UnanticipatedConeSymbolFailsLoudly)
+// The pre-preprocessing boundary snapshots every array symbol in the
+// complete root. If the prepared graph contains a symbol absent from that
+// snapshot, its reads may already have been substituted away. This test
+// deliberately bypasses conjoinRecordConstraints and supplies such a graph.
+TEST_F(ExtPrepareTest, UnanticipatedArraySymbolFailsLoudly)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
   ASTNode a = arr("a"), b = arr("b"), z = arr("z");
-  ASTNode proxy = ext->makeEquality(a, b);
+  ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(hf->CreateNode(EQ, a, b));
   (void)proxy;
   ASSERT_EQ(1u, ext->getRecords().size());
   const ExtensionalityContext::Record r = ext->getRecords()[0];
 
-  ext->beginSolve();
-  // Stands in for a pass that rewrote the left operand into a term over
-  // z, an array the registry never saw when the equality was built.
+  // Stands in for a pass that introduced z after the ownership boundary.
   ASTVec conjuncts;
   conjuncts.push_back(
       hf->CreateNode(EQ, r.nameL, hf->CreateTerm(READ, 2, z, r.lambda)));
   conjuncts.push_back(r.anchorR);
   conjuncts.push_back(r.witnessClause);
   EXPECT_DEATH(ext->prepare(hf->CreateNode(AND, conjuncts)),
-               "entered the cone that was not anticipated");
+               "entered the prepared graph without appearing");
 }
 
 // An array reachable ONLY as the far branch of an array if-then-else
@@ -1780,24 +2429,10 @@ TEST_F(ExtPrepareTest, UnanticipatedConeSymbolFailsLoudly)
 //
 //   (assert (bvuge x (select (ite (distinct b z') b a) x)))
 //
-// where the only equality is over b and z'. The cone seeds at the
-// operands, closes UPWARD onto the if-then-else that has b as a branch,
-// and then DOWNWARD into its other branch -- reaching a, which no
-// equality operand mentions.
-//
-// possibleConeSymbols is collected from the operands as they are built,
-// so it never saw a. Its reads were therefore not protected from the
-// read-equals-constant substitution, and the guard that checks the
-// containment aborted the solve. It aborted correctly: the alternative
-// is certifying a candidate against array contents the substitution had
-// already deleted.
-//
-// The stale half of the reasoning was "array if-then-elses, which no
-// longer exist" -- true only while they were rewritten away before the
-// cone was computed. Nothing can be anticipated at construction here,
-// because the if-then-else sits ABOVE the operand and need not exist
-// when the equality is built; in the query above it cannot, since the
-// equality is its own condition.
+// where the only equality is over b and z'. No equality operand mentions a,
+// and it cannot exist when that equality is built because the equality is
+// the if-then-else condition. The complete-root ownership snapshot must
+// nevertheless anticipate a before preprocessing begins.
 TEST_F(ExtPrepareTest, ArrayReachableOnlyThroughAnIteBranchIsAnticipated)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
@@ -1806,39 +2441,143 @@ TEST_F(ExtPrepareTest, ArrayReachableOnlyThroughAnIteBranchIsAnticipated)
 
   // The equality is over b and z. Its own proxy is the if-then-else
   // condition, so the if-then-else cannot exist before the equality.
-  ASTNode proxy = ext->makeEquality(b, z);
+  ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(hf->CreateNode(EQ, b, z));
   ASSERT_EQ(1u, ext->getRecords().size());
-  EXPECT_FALSE(ext->mayBeConeArray(a));
+  EXPECT_FALSE(ext->wasArrayAnticipated(a));
 
   ASTNode ite = hf->CreateArrayTerm(ITE, 2, 2, {hf->CreateNode(NOT, proxy), b, a});
   ASTNode read = hf->CreateTerm(READ, 2, ite, i);
 
-  ext->beginSolve();
   ASTNode root = ext->conjoinRecordConstraints(
       hf->CreateNode(EQ, read, mgr.CreateZeroConst(2)));
 
   // Anticipated by the time any pass could delete a read over it.
-  EXPECT_TRUE(ext->mayBeConeArray(a));
+  EXPECT_TRUE(ext->wasArrayAnticipated(a));
 
-  // And it really does enter the cone, so the anticipation is needed
-  // rather than merely defensive.
+  // And it really is owned after preparation.
   ext->prepare(root);
-  EXPECT_TRUE(ext->inCone(a));
-  EXPECT_TRUE(ext->inCone(b));
-  EXPECT_TRUE(ext->inCone(ite));
+  EXPECT_TRUE(ext->ownsArray(a));
+  EXPECT_TRUE(ext->ownsArray(b));
+  EXPECT_TRUE(ext->ownsArray(ite));
+}
+
+TEST_F(ExtPrepareTest, ExactReadInventorySurvivesNamingAndIndexAliases)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b"), x = arr("x");
+  ASTNode i = bv("i"), j = bv("j"), k = bv("k");
+  ASTNode nested = hf->CreateTerm(READ, 2, x, i);
+
+  // The same nested read is both a write index and value.  The active
+  // transform deliberately does not descend through the array operand of a
+  // witness read; preparation's scalar naming equations are what expose this
+  // read to the transform, and the final-root inventory must include it.
+  ASTNode w = hf->CreateArrayTerm(WRITE, 2, 2, {a, nested, nested});
+
+  // These are distinct source READ nodes but their indices transform to the
+  // same j.  Both source nodes must be accounted for while the transformer
+  // table contains exactly one (x,j) row.
+  ASTNode selectedIndex =
+      hf->CreateTerm(ITE, 2, {mgr.ASTTrue, j, k});
+  ASTNode selectedRead = hf->CreateTerm(READ, 2, x, selectedIndex);
+  ASTNode directRead = hf->CreateTerm(READ, 2, x, j);
+
+  ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(hf->CreateNode(EQ, w, b));
+  ASTVec conjuncts;
+  conjuncts.push_back(proxy);
+  conjuncts.push_back(
+      hf->CreateNode(EQ, selectedRead, mgr.CreateZeroConst(2)));
+  conjuncts.push_back(
+      hf->CreateNode(EQ, directRead, mgr.CreateOneConst(2)));
+  ASTNode prepared = ext->prepare(
+      ext->conjoinRecordConstraints(hf->CreateNode(AND, conjuncts)));
+
+  SubstitutionMap substitutions(&mgr);
+  Simplifier simplifier(&mgr, &substitutions);
+  ArrayTransformer transformer(&mgr, &simplifier);
+  transformer.TransformFormula_TopLevel(prepared);
+  ext->bindAfterTransform(&transformer);
+
+  EXPECT_TRUE(ext->checkerReady());
+  ArrayTransformer::ArrType::const_iterator xRows =
+      transformer.arrayToIndexToRead.find(x);
+  ASSERT_NE(transformer.arrayToIndexToRead.end(), xRows);
+  EXPECT_EQ(2u, xRows->second.size()); // (x,i) and the shared (x,j)
+}
+
+TEST_F(ExtPrepareTest, ConstantTermIteAccountsForDeadReadSubtree)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b"), x = arr("x");
+  ASTNode i = bv("i");
+  ASTNode deadRead = hf->CreateTerm(READ, 2, x, i);
+  ASTNode selected = hf->CreateTerm(
+      ITE, 2, {mgr.ASTTrue, mgr.CreateZeroConst(2), deadRead});
+
+  ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(hf->CreateNode(EQ, a, b));
+  ASTNode root = ext->conjoinRecordConstraints(hf->CreateNode(
+      AND, proxy, hf->CreateNode(EQ, selected, mgr.CreateZeroConst(2))));
+  ASTNode prepared = ext->prepare(root);
+
+  SubstitutionMap substitutions(&mgr);
+  Simplifier simplifier(&mgr, &substitutions);
+  ArrayTransformer transformer(&mgr, &simplifier);
+  transformer.TransformFormula_TopLevel(prepared);
+  ext->bindAfterTransform(&transformer);
+
+  EXPECT_TRUE(ext->checkerReady());
+  EXPECT_EQ(transformer.arrayToIndexToRead.end(),
+            transformer.arrayToIndexToRead.find(x));
+}
+
+TEST_F(ExtPrepareTest, MissingPreparedReadDispositionFailsLoudly)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b");
+
+  ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(hf->CreateNode(EQ, a, b));
+  ASTNode prepared = ext->prepare(ext->conjoinRecordConstraints(proxy));
+  ext->beginReadTransform(prepared);
+
+  // Even the two mandatory witness reads have not been reported.  Binding a
+  // partial inventory must be impossible, rather than delegated to whichever
+  // refinement subsystem happens to see the missing read later.
+  EXPECT_DEATH(ext->finishReadTransform(),
+               "neither abstracted nor eliminated");
+}
+
+TEST_F(ExtPrepareTest, OpaqueEqualityAtFinalBoundaryFailsLoudly)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b"), x = arr("x"), y = arr("y");
+
+  ext->beginSolve();
+  ASTNode proxy = ext->lowerArrayEqualities(hf->CreateNode(EQ, a, b));
+
+  // Simulate a future pass reintroducing an opaque equality after the one
+  // authorized lowering traversal.  Preparation is the final word-level
+  // boundary and must reject it before ordinary simplification/transform.
+  ASTNode rogue = hf->CreateNode(ARRAY_EQ, x, y);
+  ASTNode root =
+      ext->conjoinRecordConstraints(hf->CreateNode(AND, proxy, rogue));
+  EXPECT_DEATH(ext->prepare(root), "opaque equality reached the final");
 }
 
 // The decision table combining STP's own model evaluation with the
 // array consistency check: an array conflict always takes priority
 // (only its lemma can rule the candidate out), and a candidate is
-// satisfiable only when both checks pass. All twenty cells.
+// satisfiable only when both checks pass. All sixteen cells.
 TEST(ExtCertification, TruthTable)
 {
   typedef ExtensionalityContext EC;
-  // registry empty: EXTCHK skipped; ordinary result decides. (A
-  // consistent verdict without a registry is tolerated identically;
-  // conflict, witness trouble or a name divergence from a checker
-  // that had nothing to check is an internal error.)
+  // checker inactive: EXTCHK skipped; ordinary result decides. (A
+  // consistent verdict without an active checker is tolerated identically;
+  // conflict or witness trouble from a checker that had nothing to
+  // check is an internal error.)
   EXPECT_EQ(EC::RETURN_SAT,
             EC::decideCertification(true, false, EC::EXT_SKIPPED));
   EXPECT_EQ(EC::RUN_HOST_REFINEMENT,
@@ -1855,24 +2594,17 @@ TEST(ExtCertification, TruthTable)
             EC::decideCertification(true, false, EC::EXT_WITNESS_ERROR));
   EXPECT_EQ(EC::INTERNAL_ERROR,
             EC::decideCertification(false, false, EC::EXT_WITNESS_ERROR));
-  EXPECT_EQ(EC::INTERNAL_ERROR,
-            EC::decideCertification(true, false, EC::EXT_NAME_DIVERGENCE));
-  EXPECT_EQ(EC::INTERNAL_ERROR,
-            EC::decideCertification(false, false, EC::EXT_NAME_DIVERGENCE));
-
-  // registry nonempty: EXTCHK conflict has priority over both ordinary
+  // checker active: EXTCHK conflict has priority over both ordinary
   // results; SAT only for ordinary-true + consistent; a skipped check
-  // despite a nonempty registry is an internal error whatever the
-  // ordinary result was, since cone reads are exempt from ordinary
-  // refinement and only the checker polices them. A name divergence
-  // hands the candidate to the host's read refinement in both cases:
-  // it is neither certifiable nor refutable by an array lemma, and the
-  // missing link is an ordinary read-congruence axiom.
+  // despite an active checker is an internal error whatever the
+  // ordinary result was. A consistent checker paired with ordinary
+  // false is likewise an internal error: the checker owns every array
+  // read, so there is no host-refinement partition left to repair it.
   EXPECT_EQ(EC::RETURN_SAT,
             EC::decideCertification(true, true, EC::EXT_CONSISTENT));
   EXPECT_EQ(EC::ADD_EXT_LEMMA,
             EC::decideCertification(true, true, EC::EXT_CONFLICT));
-  EXPECT_EQ(EC::RUN_HOST_REFINEMENT,
+  EXPECT_EQ(EC::INTERNAL_ERROR,
             EC::decideCertification(false, true, EC::EXT_CONSISTENT));
   EXPECT_EQ(EC::ADD_EXT_LEMMA,
             EC::decideCertification(false, true, EC::EXT_CONFLICT));
@@ -1884,10 +2616,6 @@ TEST(ExtCertification, TruthTable)
             EC::decideCertification(true, true, EC::EXT_SKIPPED));
   EXPECT_EQ(EC::INTERNAL_ERROR,
             EC::decideCertification(false, true, EC::EXT_SKIPPED));
-  EXPECT_EQ(EC::RUN_HOST_REFINEMENT,
-            EC::decideCertification(true, true, EC::EXT_NAME_DIVERGENCE));
-  EXPECT_EQ(EC::RUN_HOST_REFINEMENT,
-            EC::decideCertification(false, true, EC::EXT_NAME_DIVERGENCE));
 }
 
 } // namespace

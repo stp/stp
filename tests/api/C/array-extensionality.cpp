@@ -21,10 +21,9 @@ THE SOFTWARE.
 **********************/
 
 // C API front end for the array-equality feature: with the 'x' flag,
-// vc_eqExpr over array operands returns a fresh Boolean abstraction
-// variable and the lemmas-on-demand procedure decides the query; with
-// the flag off, the pre-existing warn-and-return-EQ behavior is
-// preserved.
+// vc_eqExpr over array operands remains an opaque equality until the complete
+// query is lowered at solve time.  The lemmas-on-demand procedure then decides
+// it; with the flag off, the pre-existing refusal behavior is preserved.
 
 #include "stp/c_interface.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
@@ -45,9 +44,11 @@ TEST(array_extensionality, positive_equality_unsat)
   Expr b = vc_varExpr(vc, "b", arrT);
   Expr i = vc_varExpr(vc, "i", bv4);
 
-  // The minted equality is an ordinary Boolean symbol, not an EQ node.
+  // Publicly this remains equality, and internally ARRAY_EQ preserves both
+  // operands until solve-boundary lowering.
   Expr eq = vc_eqExpr(vc, a, b);
-  ASSERT_EQ(SYMBOL, getExprKind(eq));
+  ASSERT_EQ(EQ, getExprKind(eq));
+  ASSERT_EQ(stp::ARRAY_EQ, static_cast<stp::ASTNode*>(eq)->GetKind());
 
   // Repeated requests reuse the same proxy, in either operand order,
   // and a reflexive equality folds to true.
@@ -193,16 +194,15 @@ TEST(array_extensionality, repeated_queries_do_not_leak_ite_records)
                                    vc_readExpr(vc, c, i))));
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
-  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  ASSERT_NE(nullptr, ext);
-
-  // The user's equality, and it stays the only one: an array
-  // if-then-else is not abstracted at all.
-  ASSERT_EQ(1u, ext->getRecords().size());
+  stp::ExtensionalityContext* ext = nullptr;
+  EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
 
   for (int solve = 0; solve < 4; solve++)
   {
     ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc))) << "solve " << solve;
+    if (ext == nullptr)
+      ext = bm->getExtensionalityIfAny();
+    ASSERT_NE(nullptr, ext);
     // The user's equality and nothing else, on every solve. The
     // if-then-else is reasoned about directly by the checker's T rules,
     // so it costs one Boolean literal per solve rather than an array
@@ -216,11 +216,10 @@ TEST(array_extensionality, repeated_queries_do_not_leak_ite_records)
 
 TEST(array_extensionality, nested_ite_fixed_point_is_stable)
 {
-  // A nested array if-then-else: the elimination replaces every one in
-  // the cone in a single round, and iterates only because the guarded
-  // records it mints can put further if-then-elses in the cone. One
-  // user record plus two per replaced ITE, and every later solve
-  // reuses all of them.
+  // Nested array if-then-elses remain in the owned graph and are handled
+  // directly by the T rules. They mint no equality records, and repeated
+  // solves must rebuild the same one-record graph without accumulating
+  // state.
   VC vc = vc_createValidityChecker();
   vc_setFlag(vc, 'x');
 
@@ -247,14 +246,15 @@ TEST(array_extensionality, nested_ite_fixed_point_is_stable)
                                      vc_readExpr(vc, d, i))));
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
-  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  ASSERT_NE(nullptr, ext);
-  // The user's equality, and it stays the only one.
-  ASSERT_EQ(1u, ext->getRecords().size());
+  stp::ExtensionalityContext* ext = nullptr;
+  EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
 
   for (int solve = 0; solve < 3; solve++)
   {
     ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc))) << "solve " << solve;
+    if (ext == nullptr)
+      ext = bm->getExtensionalityIfAny();
+    ASSERT_NE(nullptr, ext);
     // Both if-then-elses, nested, still cost no record at all.
     EXPECT_EQ(1u, ext->getRecords().size()) << "solve " << solve;
   }
@@ -262,26 +262,20 @@ TEST(array_extensionality, nested_ite_fixed_point_is_stable)
   vc_Destroy(vc);
 }
 
-TEST(array_extensionality, second_solve_over_an_inherited_array_ite)
+TEST(array_extensionality, second_solve_does_not_inherit_array_ite_state)
 {
   // Two check-sat calls over Array (_ BitVec 10) (_ BitVec 1): the
   // first assumes an array equality whose right operand stacks writes
   // on an array-valued if-then-else, the second assumes that
   // if-then-else's own condition. Both are satisfiable.
   //
-  // The first solve eliminates the if-then-else in favour of a fresh
-  // array (paper section 4.1) and caches the replacement. The second
-  // solve inherits it -- operand recovery hands the replacement back
-  // before the cone is computed, so nothing is left to eliminate --
-  // and has to restate the guards that define it from elsewhere.
-  // Restated at the end of preparation, they spelled the condition the
-  // way the cached if-then-else did, and the second assumption is
-  // exactly what lets the substitution map solve that condition's
-  // variable away: bit-blasting the guard handed the variable free SAT
-  // variables again, and the model came back disagreeing with the
-  // substitution. Every candidate then failed STP's own model check
-  // while neither refinement machine had anything left to add, and the
-  // solve loop ran out of cases -- "a bug in STP".
+  // The old construction-time registry eliminated the if-then-else in the
+  // first solve and cached its replacement. The second solve inherited that
+  // replacement without a sound way to recover all of its defining guards;
+  // model checking then failed while neither refinement path had a lemma to
+  // add. The current design keeps the equality opaque through construction
+  // and rebuilds all equality records and array-graph state from each solve's
+  // completed root, so the second solve must inherit nothing.
   //
   // Found by fuzzing with murxla (--stp); delta-minimized.
   VC vc = vc_createValidityChecker();
@@ -315,7 +309,8 @@ TEST(array_extensionality, second_solve_over_an_inherited_array_ite)
     chain = vc_writeExpr(vc, chain, writes[k][0], writes[k][1]);
 
   Expr eq = vc_eqExpr(vc, base, chain);
-  ASSERT_EQ(SYMBOL, getExprKind(eq));
+  ASSERT_EQ(EQ, getExprKind(eq));
+  ASSERT_EQ(stp::ARRAY_EQ, static_cast<stp::ASTNode*>(eq)->GetKind());
 
   // STP has no assumption interface, so a scope stands in for
   // check-sat-assuming: the assumption goes away with the pop, which
@@ -325,8 +320,8 @@ TEST(array_extensionality, second_solve_over_an_inherited_array_ite)
   EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc))); // 0 == INVALID == satisfiable
   vc_pop(vc);
 
-  // The equality is out of the formula now; its record, and the
-  // replacement the first solve cached, are still in the registry.
+  // The equality is out of the second formula. Its solve-local record and
+  // graph must have been discarded rather than affecting this solve.
   vc_push(vc);
   vc_assertFormula(vc, cond);
   EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
@@ -363,12 +358,15 @@ TEST(array_extensionality, asserted_ite_condition_folds_before_fe03)
                                    vc_readExpr(vc, c, i))));
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
-  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  ASSERT_NE(nullptr, ext);
+  stp::ExtensionalityContext* ext = nullptr;
+  EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
 
   for (int solve = 0; solve < 2; solve++)
   {
     ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc))) << "solve " << solve;
+    if (ext == nullptr)
+      ext = bm->getExtensionalityIfAny();
+    ASSERT_NE(nullptr, ext);
     EXPECT_EQ(1u, ext->getRecords().size()) << "solve " << solve;
   }
 
@@ -477,18 +475,20 @@ TEST(array_extensionality, store_chain_equals_base_solved_by_rewrite)
   Expr v = vc_varExpr(vc, "v", bv8);
 
   Expr eq = vc_eqExpr(vc, vc_writeExpr(vc, a, i, v), a);
-  // A single write rewrites to exactly read(a, i) = v.
+  // The complete handle remains opaque; solve-boundary lowering rewrites a
+  // single write to exactly read(a, i) = v.
   ASSERT_EQ(EQ, getExprKind(eq));
+  ASSERT_EQ(stp::ARRAY_EQ, static_cast<stp::ASTNode*>(eq)->GetKind());
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
-  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  ASSERT_NE(nullptr, ext);
-  EXPECT_EQ(0u, ext->getRecords().size());
+  EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
 
   vc_assertFormula(vc, eq);
   vc_assertFormula(
       vc, vc_notExpr(vc, vc_eqExpr(vc, vc_readExpr(vc, a, i), v)));
   ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  ASSERT_NE(nullptr, ext);
   EXPECT_EQ(0u, ext->getRecords().size());
   vc_Destroy(vc);
 }
@@ -517,12 +517,13 @@ TEST(array_extensionality, store_chain_shadowed_write_is_unconstrained)
       vc, vc_notExpr(vc, vc_eqExpr(vc, w, vc_readExpr(vc, a, i))));
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
-  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  ASSERT_NE(nullptr, ext);
-  EXPECT_EQ(0u, ext->getRecords().size());
+  EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
 
   // w is unconstrained: satisfiable.
   ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  ASSERT_NE(nullptr, ext);
+  EXPECT_EQ(0u, ext->getRecords().size());
 
   // v is forced: contradicting read(a,i) = v flips the verdict.
   vc_assertFormula(
@@ -551,9 +552,10 @@ TEST(array_extensionality, store_chain_guarded_inner_write)
 
   Expr eq = vc_eqExpr(
       vc, vc_writeExpr(vc, vc_writeExpr(vc, a, j, w), i, v), a);
-  // Two live writes rewrite to a conjunction, with the inner conjunct
-  // guarded by the index equality with the outer write.
-  ASSERT_EQ(AND, getExprKind(eq));
+  // Two live writes are still one opaque equality here. Lowering rewrites it
+  // to a conjunction whose inner conjunct is guarded by index equality.
+  ASSERT_EQ(EQ, getExprKind(eq));
+  ASSERT_EQ(stp::ARRAY_EQ, static_cast<stp::ASTNode*>(eq)->GetKind());
 
   vc_assertFormula(vc, eq);
   vc_assertFormula(vc, vc_notExpr(vc, vc_eqExpr(vc, i, j)));
@@ -561,11 +563,12 @@ TEST(array_extensionality, store_chain_guarded_inner_write)
       vc, vc_notExpr(vc, vc_eqExpr(vc, vc_readExpr(vc, a, j), w)));
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
+
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
   ASSERT_NE(nullptr, ext);
   EXPECT_EQ(0u, ext->getRecords().size());
-
-  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   vc_Destroy(vc);
 }
 
@@ -593,11 +596,12 @@ TEST(array_extensionality, store_chain_over_write_base)
       vc, vc_notExpr(vc, vc_eqExpr(vc, vc_readExpr(vc, b, i), v)));
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
+
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
   ASSERT_NE(nullptr, ext);
   EXPECT_EQ(0u, ext->getRecords().size());
-
-  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   vc_Destroy(vc);
 }
 
@@ -640,10 +644,9 @@ TEST(array_extensionality, lemma_atoms_fold_at_encoding)
   vc_assertFormula(vc, vc_notExpr(vc, vc_eqExpr(vc, c1, c2)));
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
   ASSERT_NE(nullptr, ext);
-
-  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   EXPECT_GT(ext->lemmasEmitted, 0);
   EXPECT_GT(ext->lemmaAtomsFolded, 0);
   vc_Destroy(vc);
@@ -651,13 +654,9 @@ TEST(array_extensionality, lemma_atoms_fold_at_encoding)
 
 TEST(array_extensionality, equality_under_push_pops_away)
 {
-  // A record minted under a pushed scope survives the pop in the
-  // persistent registry, and every later solve re-conjoins its
-  // witness bundle. The bundle is satisfiability-preserving (fresh
-  // witness symbols, otherwise unconstrained; a true proxy satisfies
-  // the witness clause), so the pop must recover sat -- and
-  // re-asserting the same equality reuses the record, with no second
-  // one minted, and flips the verdict back.
+  // Activation follows the current assertion root. Popping the equality
+  // removes its witness bundle from the next solve; reasserting the same
+  // durable opaque handle activates it again.
   VC vc = vc_createValidityChecker();
   vc_setFlag(vc, 'x');
 
@@ -678,19 +677,22 @@ TEST(array_extensionality, equality_under_push_pops_away)
   vc_push(vc);
   vc_assertFormula(vc, vc_eqExpr(vc, a, b));
   ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  ASSERT_NE(nullptr, ext);
+  EXPECT_EQ(1u, ext->getActiveRecordCount());
 
   vc_pop(vc);
   ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(0u, ext->getActiveRecordCount());
 
   vc_push(vc);
   vc_assertFormula(vc, vc_eqExpr(vc, a, b));
-  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  ASSERT_NE(nullptr, ext);
-  EXPECT_EQ(1u, ext->getRecords().size());
   ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(1u, ext->getActiveRecordCount());
 
   vc_pop(vc);
   ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(0u, ext->getActiveRecordCount());
   vc_Destroy(vc);
 }
 
@@ -722,15 +724,76 @@ TEST(array_extensionality, equality_asserted_between_queries)
   vc_Destroy(vc);
 }
 
-TEST(array_extensionality, interleaves_with_classic_read_refinement)
+TEST(array_extensionality, active_equalities_follow_assertions_and_query)
 {
-  // One query, two refinement machines: the contradiction lives in
-  // the equality cone (congruence across a = b), while the unrelated
-  // array c carries satisfiable constraints that classic lazy read
-  // refinement owns. Reads of a and b are exempt from the classic
-  // read axioms, so the unsat verdict must come through an equality
-  // lemma -- pinned by the emission counter -- with c's machinery
-  // interleaved in the same loop.
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv1 = vc_bvType(vc, 1);
+  Type arrT = vc_arrayType(vc, bv1, bv1);
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr b = vc_varExpr(vc, "b", arrT);
+  Expr zero = vc_bvConstExprFromInt(vc, 1, 0);
+  Expr one = vc_bvConstExprFromInt(vc, 1, 1);
+  Expr eq = vc_eqExpr(vc, a, b);
+
+  vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, a, zero),
+                                 vc_readExpr(vc, b, zero)));
+  vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, a, one),
+                                 vc_readExpr(vc, b, one)));
+
+  stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+
+  // Merely retaining an opaque handle neither creates a context nor activates
+  // its witness bundle when it is absent from the completed solve root.
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
+
+  // The same handle used as the query is reachable through NOT(query). The
+  // complete one-bit domain makes the equality valid.
+  ASSERT_EQ(1, vc_query(vc, eq));
+  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  ASSERT_NE(nullptr, ext);
+  EXPECT_EQ(1u, ext->getActiveRecordCount());
+
+  // A later solve that omits the equality must not inherit its constraints.
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(0u, ext->getActiveRecordCount());
+  vc_Destroy(vc);
+}
+
+TEST(array_extensionality, opaque_equality_handle_uses_current_model_lowering)
+{
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type bv1 = vc_bvType(vc, 1);
+  Type arrT = vc_arrayType(vc, bv1, bv1);
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr b = vc_varExpr(vc, "b", arrT);
+  Expr eq = vc_eqExpr(vc, a, b);
+
+  vc_push(vc);
+  vc_assertFormula(vc, eq);
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(TRUE, getExprKind(vc_getCounterExample(vc, eq)));
+  vc_pop(vc);
+
+  vc_push(vc);
+  vc_assertFormula(vc, vc_notExpr(vc, eq));
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+  EXPECT_EQ(FALSE, getExprKind(vc_getCounterExample(vc, eq)));
+  vc_pop(vc);
+
+  vc_Destroy(vc);
+}
+
+TEST(array_extensionality, active_checker_owns_complete_array_graph)
+{
+  // The contradiction lives in congruence across a = b, while unrelated
+  // array c carries satisfiable constraints. Once the equality activates
+  // the checker, both components belong to its complete graph; the unsat
+  // verdict must come through its lemma path, pinned by the counter.
   VC vc = vc_createValidityChecker();
   vc_setFlag(vc, 'x');
 
@@ -757,21 +820,19 @@ TEST(array_extensionality, interleaves_with_classic_read_refinement)
                                  vc_bvConstExprFromInt(vc, 8, 9)));
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
   ASSERT_NE(nullptr, ext);
-
-  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   EXPECT_GT(ext->lemmasEmitted, 0);
   vc_Destroy(vc);
 }
 
-TEST(array_extensionality, mixed_sat_model_satisfies_both_machines)
+TEST(array_extensionality, whole_graph_checker_publishes_mixed_sat_model)
 {
-  // Satisfiable only when both machines police the same assignment:
   // v is forced to 42 through cross-array congruence over the true
-  // equality, w to 5 through same-array congruence on c under classic
-  // refinement. The concrete model values pin the cooperation, not
-  // just the verdict.
+  // equality and w to 5 through same-array congruence on disconnected c.
+  // The concrete values pin complete-graph certification and publication,
+  // not just the satisfiable verdict.
   VC vc = vc_createValidityChecker();
   vc_setFlag(vc, 'x');
 
@@ -794,7 +855,10 @@ TEST(array_extensionality, mixed_sat_model_satisfies_both_machines)
   vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, a, i),
                                  vc_bvConstExprFromInt(vc, 8, 42)));
   vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, b, j), v));
-  vc_assertFormula(vc, vc_eqExpr(vc, k, l));
+  // Say k = l without a substitutable equality, so the two read
+  // abstractions remain syntactically distinct until checker rule C.
+  vc_assertFormula(vc, vc_notExpr(vc, vc_bvLtExpr(vc, k, l)));
+  vc_assertFormula(vc, vc_notExpr(vc, vc_bvLtExpr(vc, l, k)));
   vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, c, k),
                                  vc_bvConstExprFromInt(vc, 8, 5)));
   vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, c, l), w));
@@ -802,6 +866,15 @@ TEST(array_extensionality, mixed_sat_model_satisfies_both_machines)
   ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
   EXPECT_EQ(42u, getBVUnsigned(vc_getCounterExample(vc, v)));
   EXPECT_EQ(5u, getBVUnsigned(vc_getCounterExample(vc, w)));
+
+  Expr* cIdx;
+  Expr* cVal;
+  int cSize = 0;
+  vc_getCounterExampleArray(vc, c, &cIdx, &cVal, &cSize);
+  ASSERT_EQ(1, cSize);
+  EXPECT_EQ(getBVUnsigned(vc_getCounterExample(vc, k)), getBVUnsigned(cIdx[0]));
+  EXPECT_EQ(5u, getBVUnsigned(cVal[0]));
+  vc_deleteCounterExampleArray(cIdx, cVal, cSize);
   vc_Destroy(vc);
 }
 
@@ -920,10 +993,9 @@ TEST(array_extensionality, refinement_on_the_cadical_backend)
   vc_assertFormula(vc, vc_notExpr(vc, vc_eqExpr(vc, c1, c2)));
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
   ASSERT_NE(nullptr, ext);
-
-  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   EXPECT_GT(ext->lemmasEmitted, 0);
   vc_Destroy(vc);
 }
@@ -936,11 +1008,11 @@ TEST(array_extensionality, store_index_read_through_second_array_unsat)
   // x9[x0] = C lets preprocessing rewrite that read's index to the
   // constant C inside the recorded equality operand while the
   // original compound form survives in the rest of the formula. The
-  // two occurrences of x11[C] are then abstracted as two independent
-  // read variables, and only the host's lazy read refinement links
-  // them; certifying a candidate before that link exists let the
-  // consistency check place the store and the read at different
-  // cells of the same array.
+  // two occurrences of x11[C] were then abstracted as two independent
+  // read variables outside the old equality cone. Certifying before
+  // legacy refinement linked them let the consistency check place the
+  // store and the read at different cells. Whole-graph ownership makes
+  // their disagreement a checker conflict instead.
   //
   // Unsat by cases on x0 = k. If x0 = k, the equality forces
   // x9[x0] = x0, so x0 = C, and the assumed read of the overwrite
@@ -972,36 +1044,35 @@ TEST(array_extensionality, store_index_read_through_second_array_unsat)
                     vc_writeExpr(vc, vc_writeExpr(vc, x5, x0, q), k, x0)));
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
   ASSERT_NE(nullptr, ext);
-
-  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   // This input no longer reaches the divergence refusal it was reduced
   // from: constant bit propagation now writes every fully fixed node
   // back into the graph, not only the ones the top node does not depend
   // on, so both occurrences of x11[C] are rewritten alike and are
   // abstracted as one read. What is left here is the ordinary lemma
   // loop over the same formula, which still has to answer unsat.
-  // unlinked_read_abstractions_diverge_and_are_refused covers the
-  // refusal route directly.
+  // unlinked_reads_are_owned_by_the_extensionality_checker covers the
+  // formerly split ownership route directly.
   vc_Destroy(vc);
 }
 
-TEST(array_extensionality, unlinked_read_abstractions_diverge_and_are_refused)
+TEST(array_extensionality,
+     unlinked_reads_are_owned_by_the_extensionality_checker)
 {
-  // The divergence refusal, built from what it guards rather than
-  // reduced from a fuzz report.
+  // A regression built from the former name-divergence route rather
+  // than reduced from a fuzz report.
   //
-  // x11 is never equated to anything, so it stays outside the cone and
-  // its reads are abstracted one variable per syntactic read; only the
-  // host's lazy read refinement ever links two of them. i = j is said
+  // x11 is never equated to anything. Even so, an active equality solve
+  // must put its reads in the same complete checker graph. i = j is said
   // as a pair of unsigned comparisons so that nothing substitutes one
   // index for the other and collapses x11[i] and x11[j] into a single
   // read. The recorded equality then stores at x11[i] while the read
   // goes through x11[j]: a candidate in which the two abstractions hold
-  // different values is conflict-free for the checker, and certifying
-  // it would answer sat. Removing the name check makes this query do
-  // exactly that.
+  // different values must now be a rule-C conflict and produce an
+  // extensionality lemma; it must never be handed to host refinement as
+  // a scalar-name divergence.
   //
   // Unsat: i = j forces x11[i] = x11[j], so the read lands on the cell
   // the store just set to 1.
@@ -1030,13 +1101,10 @@ TEST(array_extensionality, unlinked_read_abstractions_diverge_and_are_refused)
                              one)));
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
   stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
   ASSERT_NE(nullptr, ext);
-
-  ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
-  // The route has to be taken, or the refusal and the driver's
-  // fall-back to host refinement are both untested.
-  EXPECT_GT(ext->nameDivergences, 0);
+  EXPECT_GT(ext->lemmasEmitted, 0);
   vc_Destroy(vc);
 }
 
@@ -1182,10 +1250,9 @@ TEST(array_extensionality, ite_replacement_survives_a_rewritten_condition)
   vc_assertFormula(vc, vc_eqExpr(vc, vc_iteExpr(vc, cond, a, b), c));
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
   stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
   ASSERT_NE(nullptr, ext);
-
-  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
   // The user's equality, and nothing minted for the if-then-else.
   const size_t afterFirstSolve = ext->getRecords().size();
   EXPECT_EQ(1u, afterFirstSolve);

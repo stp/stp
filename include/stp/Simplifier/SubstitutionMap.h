@@ -61,10 +61,10 @@ class DLL_PUBLIC SubstitutionMap
                     std::set<ASTNode>& visited);
   bool loops(const ASTNode& n0, const ASTNode& n1);
 
-  // Array equality: refuse to orient a substitution that would delete
-  // a definition the array decision procedure depends on (an equality
-  // abstraction variable, witness symbol, or lemma-leaf name), or a
-  // read-equals-constant equation over an array it may reason about.
+  // Array equality: while the complete-graph checker is active, refuse
+  // either orientation if it would delete a protected scalar definition or
+  // any READ-headed equation. Every read is checker-owned, independently of
+  // its other operand's shape or its connectivity to an equality operand.
   bool extensionalityProtected(const ASTNode& e0, const ASTNode& e1) const;
 
   size_t substitutionsLastApplied;

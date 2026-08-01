@@ -218,9 +218,9 @@ public:
 
   void removeSymbol(ASTNode to_remove);
 
-  // Called wherever assertions are discarded (pop, reset,
-  // reset-assertions); see the definition.
-  void retireExtensionalityIfUnused();
+  // Release query-local generated state whenever assertions/scoped symbols
+  // are discarded; durable user expressions contain opaque ARRAY_EQ nodes.
+  void discardExtensionalitySolveState();
 
   // Declare a function. We can't keep references to the declared variables
   // though. So rename them..

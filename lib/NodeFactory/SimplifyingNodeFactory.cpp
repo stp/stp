@@ -39,6 +39,7 @@ using stp::BVUMINUS;
 using stp::BVMULT;
 using stp::ITE;
 using stp::EQ;
+using stp::ARRAY_EQ;
 using stp::BVSRSHIFT;
 using stp::SBVREM;
 using stp::SBVMOD;
@@ -551,7 +552,23 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
       result = CreateSimpleFormITE(children);
       break;
     case EQ:
-      result = CreateSimpleEQ(children);
+      // Whole-array equality is opaque until the solve-boundary lowering
+      // pass. Do not run bit-vector equality rewrites over array operands.
+      if (children.size() == 2 && children[0].GetIndexWidth() > 0)
+        result = children[0] == children[1]
+                     ? bm.ASTTrue
+                     : hashing.CreateNode(EQ, children);
+      else
+        result = CreateSimpleEQ(children);
+      break;
+    case ARRAY_EQ:
+      assert(children.size() == 2);
+      // ARRAY_EQ is deliberately opaque to ordinary simplification. The one
+      // theory-independent reduction is reflexivity; every other instance
+      // must survive until the extensionality lowering pass.
+      result = children[0] == children[1]
+                   ? bm.ASTTrue
+                   : hashing.CreateNode(ARRAY_EQ, children);
       break;
     case stp::IFF:
     {
@@ -3173,4 +3190,3 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
   return result;
 }
-

@@ -257,6 +257,7 @@ string functionToSMTLIBName(const Kind k, bool smtlib1)
     case BVUMINUS:
       return "bvneg";
     case EQ:
+    case ARRAY_EQ:
       return "=";
     case READ:
       return "select";

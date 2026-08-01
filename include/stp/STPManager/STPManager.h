@@ -102,10 +102,10 @@ public:
   HashingNodeFactory* hashingNodeFactory;
   NodeFactory* defaultNodeFactory;
 
-  // State of the array-equality (extensional arrays) decision
-  // procedure: the equality registry, per-solve array view, and
-  // pending refinement. Created lazily when the first array equality
-  // is abstracted.
+  // State of the array-equality (extensional arrays) decision procedure:
+  // solve-local equality records, the complete per-solve array graph, and
+  // pending refinement. Created lazily when a completed solve root containing
+  // an opaque equality first reaches lowering.
   DLL_PUBLIC ExtensionalityContext* getExtensionality();
   ExtensionalityContext* getExtensionalityIfAny() const
   {

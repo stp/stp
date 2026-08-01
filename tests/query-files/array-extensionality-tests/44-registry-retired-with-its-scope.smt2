@@ -15,7 +15,7 @@
 ; The same retention made every later solve re-conjoin the constraint
 ; bundle of every equality ever built: 640 popped-and-discarded array
 ; equalities followed by one trivial query took 34s, and 0.13s once the
-; registry is released.
+; records are made solve-local.
 (set-logic QF_ABV)
 (push 1)
 (declare-fun p () (Array (_ BitVec 4) (_ BitVec 8)))

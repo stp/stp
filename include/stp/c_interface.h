@@ -1416,7 +1416,8 @@ DLL_PUBLIC Expr vc_getTermFromCounterExample(VC vc, Expr e,
 //!
 DLL_PUBLIC void vc_deleteWholeCounterExample(WholeCounterExample cc);
 
-//! Covers all kinds of expressions that exist in STP.
+//! Covers the expression kinds exposed by the public C API. Internal kinds
+//! may be represented by their corresponding public kind.
 //!
 //! Mirrors the internal stp::Kind (generated from lib/AST/ASTKind.kinds) by
 //! numeric value: getExprKind is a direct cast, so the enumerators must stay

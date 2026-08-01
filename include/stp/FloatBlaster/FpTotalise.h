@@ -93,18 +93,19 @@ public:
   FpTotalise(const FpTotalise&) = delete;
   FpTotalise& operator=(const FpTotalise&) = delete;
 
-  // Returns `n` with every partial floating-point operation replaced by its
-  // total form. Idempotent: operations that already carry an unspecified
-  // value are left alone.
+  // Returns one unprocessed solve root with every partial floating-point
+  // operation replaced by its total form. Operations that already carry an
+  // unspecified value are left alone, but the complete pass is deliberately
+  // not structurally idempotent: feeding its output back through it would
+  // canonicalise float-array indexes a second time.
   ASTNode topLevel(const ASTNode& n);
 
-  // The same rewriting for a lone term. A term cannot absorb the
-  // rounding-mode pinnings topLevel would conjoin onto a formula, so they
-  // are appended to `sideConstraints` for the caller to conjoin wherever
-  // the term is used. The caller must actually do so: a term routed through
-  // here has left the input formula, so topLevel does not see it, and these
-  // constraints are the only thing holding its modes to five values.
-  ASTNode topLevelTerm(const ASTNode& term, ASTVec& sideConstraints);
+  // Copy the opaque array equalities rebuilt by the most recent topLevel()
+  // call. Public expression handles retain the pre-totalisation node, while
+  // solve-boundary array lowering sees the rebuilt node; the solve pipeline
+  // uses these aliases to keep model evaluation of the public handle tied to
+  // the exact formula that was solved.
+  void copyArrayEqualityRewrites(ASTNodeMap& out) const;
 
 private:
   ASTNode visit(const ASTNode& n);

@@ -13,8 +13,9 @@
 ; Refusing at construction means it does not matter where the equality
 ; sits: both of these are under a true disjunct and could never affect
 ; the verdict, and both are still refused. That is deliberate -- the
-; equality abstraction is a construction-time decision, and the Python
-; binding already refuses there.
+; option decides whether an opaque equality may be constructed, and the
+; Python binding already refuses at that boundary. Abstraction itself is
+; deferred until a completed query reaches the solver.
 (set-logic QF_ABV)
 (declare-fun a () (Array (_ BitVec 2) (_ BitVec 2)))
 (declare-fun b () (Array (_ BitVec 2) (_ BitVec 2)))

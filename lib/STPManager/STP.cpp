@@ -76,8 +76,28 @@ const static string pe_message = "After Propagating Equalities. ";
 const static string domain_message = "After Domain Analysis. ";
 const static string se_message = "After Split Extracts. ";
 
+static bool containsOpaqueArrayEquality(const ASTNode& root)
+{
+  ASTNodeSet visited;
+  ASTVec pending(1, root);
+  while (!pending.empty())
+  {
+    const ASTNode node = pending.back();
+    pending.pop_back();
+    if (!visited.insert(node).second)
+      continue;
+    if (node.GetKind() == ARRAY_EQ)
+      return true;
+    for (unsigned i = 0; i < node.Degree(); ++i)
+      pending.push_back(node[i]);
+  }
+  return false;
+}
+
 SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS,
-                                            ASTNode original_input)
+                                            ASTNode original_input,
+                                            const ASTNodeMap&
+                                                arrayEqualityRewrites)
 {
   SATSolver& NewSolver = *newS;
   if (bm->UserFlags.stats_flag)
@@ -98,7 +118,8 @@ SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS,
   // reset the timeout expired flag for the new check
   bm->soft_timeout_expired = false;
 
-  SOLVER_RETURN_TYPE result = TopLevelSTPAux(NewSolver, original_input);
+  SOLVER_RETURN_TYPE result =
+      TopLevelSTPAux(NewSolver, original_input, arrayEqualityRewrites);
   return result;
 }
 
@@ -173,6 +194,7 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   bool saved_ack = bm->UserFlags.ackermannisation;
 
   ASTNode original_input;
+  ASTNodeMap arrayEqualityRewrites;
   if (query != bm->ASTFalse)
   {
     original_input =
@@ -204,11 +226,13 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   {
     FpTotalise totalise(bm);
     original_input = totalise.topLevel(original_input);
+    totalise.copyArrayEqualityRewrites(arrayEqualityRewrites);
   }
 
   SATSolver* newS = get_new_sat_solver();
 
-  SOLVER_RETURN_TYPE result = solve_by_sat_solver(newS, original_input);
+  SOLVER_RETURN_TYPE result =
+      solve_by_sat_solver(newS, original_input, arrayEqualityRewrites);
   delete newS;
 
   bm->UserFlags.ackermannisation = saved_ack;
@@ -314,13 +338,41 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
 // if returned 0 then input is INVALID if returned 1 then input is
 // VALID if returned 2 then UNDECIDED
 SOLVER_RETURN_TYPE
-STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
+STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
+                    const ASTNodeMap& arrayEqualityRewrites)
 {
-  bm->ASTNodeStats("input asserts and query: ", original_input);
+  // ARRAY_EQ remains a normal, traversable AST node through query assembly
+  // and macro/function substitution. Lower it only now, at the complete-query
+  // boundary and before any ordinary simplifier or array transform runs.
+  ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  if (ext != NULL)
+    ext->beginSolve();
+
+  ASTNode semantic_input = original_input;
+  if (containsOpaqueArrayEquality(original_input) ||
+      !arrayEqualityRewrites.empty())
+  {
+    if (!bm->UserFlags.enable_array_equality)
+      FatalError("array-equality: opaque equality reached solve while the "
+                 "decision procedure is disabled");
+    if (ext == NULL)
+    {
+      ext = bm->getExtensionality();
+      ext->beginSolve();
+    }
+  }
+  // Reuse an existing context object when present; beginSolve() above has
+  // cleared all generated records. The lowering pass builds fresh solve-local
+  // records and computes an empty active set when this root has no equality.
+  if (ext != NULL && ext->enabled())
+    semantic_input =
+        ext->lowerArrayEqualities(original_input, arrayEqualityRewrites);
+
+  bm->ASTNodeStats("input asserts and query: ", semantic_input);
 
   DifficultyScore difficulty;
   if (bm->UserFlags.stats_flag)
-    cerr << "Difficulty Initially:" << difficulty.score(original_input, bm)
+    cerr << "Difficulty Initially:" << difficulty.score(semantic_input, bm)
          << endl;
 
   // A heap object so I can easily control its lifetime.
@@ -328,32 +380,19 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   std::unique_ptr<PropagateEqualities> pe(
       new PropagateEqualities(simp, bm->defaultNodeFactory, bm));
 
-  ASTNode inputToSat = original_input;
+  ASTNode inputToSat = semantic_input;
 
   // Array equality (lemmas on demand, Brummayer & Biere JSAT 2010):
-  // with at least one abstracted array equality, conjoin every
-  // record's witness constraints -- corresponding to the paper's
-  // preprocessing step 1, a fresh index lambda with two virtual reads
-  // witnessing inequality -- before any preprocessing runs. The equality operands then ride
-  // through the same simplification and substitution as the rest of
-  // the formula (so their current form can be recovered afterwards),
-  // and stay reachable even where the equality was the only mention of
-  // an array.
-  // That same call eliminates the array-valued if-then-else the
-  // equalities can reach (paper section 4.1). It is the one point in
-  // the pipeline where both of its timing requirements hold: the whole
-  // formula is known, so whether the procedure runs at all is decided,
-  // and none of the preprocessing that would dismantle an if-then-else
-  // has run yet. A query with no array equality reaches none of this
-  // and is decided by the ordinary array machinery.
-  ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  // Per-solve state has to be dropped whether or not the procedure
-  // runs, or a cone frozen by an earlier solve still answers inCone().
-  if (ext != NULL)
-    ext->beginSolve();
+  // with at least one array equality reachable from the current root, conjoin
+  // exactly its active dependency closure's witness constraints. These are
+  // preprocessing step 1 of the paper: a fresh index lambda with two virtual
+  // reads witnessing inequality. The anchors keep each operand reachable and
+  // carry it through the same preprocessing as the rest of the formula so its
+  // current form can be recovered. Array-valued ITEs remain structural and
+  // are handled directly by the consistency checker's T rules. A query with
+  // no active array equality stays on STP's ordinary array path.
   const bool extActive = ext != NULL && ext->active();
-  // Releases the registry seal on every exit from this function, so
-  // that equalities built between solves are ordinary again.
+  // Releases the record-table seal on every exit from this function.
   ExtensionalityContext::SolveScope extScope(ext);
   if (extActive)
   {
@@ -369,8 +408,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     }
   }
 
-  // The registry keeps its array operands live even when no array
-  // operation is reachable from the Boolean root, so an active registry
+  // Record anchors keep equality operands live even when no array operation
+  // is reachable from the lowered Boolean root, so active extensionality
   // counts as array operations for the refinement machinery.
   bool arrayops = containsArrayOps(inputToSat, bm) || extActive;
 
@@ -780,21 +819,29 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   }
   revert.reset(NULL);
 
-  // A pre-view pass may already have collapsed the formula to a
-  // constant (e.g. constant-bit propagation proving UNSAT); the view
-  // point is then moot — no candidate model will ever be produced.
+  // A pre-view pass may already have proved the formula false. In that
+  // case no candidate or bound graph is needed; any satisfiable active
+  // candidate is required below to have passed preparation and binding.
   const bool extPrepared = extActive && !inputToSat.isConstant();
   if (extPrepared)
   {
     // Array equality: final preparation, immediately before the one
-    // main array transform. Recover the current form of each equality
-    // operand, eliminate array-valued if-then-else connected to the
-    // equalities, freeze the set of participating arrays, and conjoin
-    // the naming equations that give future lemma leaves SAT
-    // variables.
+    // main array transform. Recover the current equality operands,
+    // collect and freeze the complete array graph (including retained
+    // array-valued if-then-elses), and conjoin the naming equations that
+    // give future lemma leaves SAT variables.
     inputToSat = ext->prepare(inputToSat);
     bm->ASTNodeStats("after extensionality preparation: ", inputToSat);
   }
+
+  // ARRAY_EQ is a user-facing, solve-boundary node only.  Check the exact
+  // root handed to the ordinary array transformer so that no future
+  // preparation rewrite can accidentally leak opaque equality semantics
+  // into code which has no case for it.
+  if (containsOpaqueArrayEquality(inputToSat))
+    FatalError("array-equality: an opaque equality reached the final array "
+               "transformation boundary",
+               inputToSat);
 
   // extPrepared implies extActive, and an active registry counts as array
   // operations above -- so a prepared registry always reaches this transform.
@@ -861,7 +908,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     bm->print_stats();
 
   // If it doesn't contain array operations, use ABC's CNF generation.
-  res = Ctr_Example->CallSAT_ResultCheck(NewSolver, inputToSat, original_input,
+  res = Ctr_Example->CallSAT_ResultCheck(NewSolver, inputToSat, semantic_input,
                                          satBase, maybeRefinement);
 
   if (bm->soft_timeout_expired)
@@ -887,28 +934,26 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   assert(arrayops);
   assert(!bm->UserFlags.ackermannisation); // Refinement must be enabled too.
 
-  // Combined refinement driver (the loop of the lemmas-on-demand
-  // procedure, paper section 6, interleaved with STP's own read
-  // refinement). Pending array-equality lemmas are installed first --
-  // the whole batch the consistency check found, since one pass
-  // typically exposes many independent conflicts and each costs a
-  // solve-from-scratch if held back; otherwise ordinary read refinement
-  // runs for the arrays the array-equality procedure does not own. Progress stalls
-  // only when the ordinary path had nothing to add and no lemma is
-  // pending -- that is a solver bug.
+  // Refinement driver. In an active equality solve the extensionality
+  // checker owns the complete array graph, so each undecided candidate
+  // must carry a pending theory lemma and legacy read refinement is
+  // never entered. Without an active equality, retain STP's ordinary
+  // read-refinement path unchanged.
   while (true)
   {
-    const bool tookLemmaPath = extActive && ext->hasPendingLemma();
-    if (tookLemmaPath)
+    if (extActive)
     {
+      if (!ext->hasPendingLemma())
+        FatalError("array-equality: an active refinement round has neither "
+                   "a decision nor a pending theory lemma");
       ext->encodePendingLemmas(NewSolver, satBase);
       res = Ctr_Example->CallSAT_ResultCheck(NewSolver, bm->ASTTrue,
-                                             original_input, satBase, true);
+                                             semantic_input, satBase, true);
     }
     else
     {
       res = Ctr_Example->SATBased_ArrayReadRefinement(NewSolver,
-                                                      original_input, satBase);
+                                                      semantic_input, satBase);
     }
 
     if (SOLVER_UNDECIDED != res)
@@ -930,30 +975,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
       return SOLVER_TIMEOUT;
     }
 
-    if (!tookLemmaPath && !(extActive && ext->hasPendingLemma()))
-    {
-      // Ordinary refinement made no progress and nothing is pending.
-      // With array equality that is not necessarily a solver bug: a
-      // candidate whose scalar names disagreed with their terms is
-      // neither certifiable nor refutable by an array lemma, so it is
-      // handed to the host's read refinement -- which owns the missing
-      // read-congruence axiom but is not guaranteed to find one to
-      // add. When that happens the solve has genuinely run out of
-      // moves without deciding anything, which is an incompleteness to
-      // report, not an invariant to abort on.
-      if (extActive && ext->sawNameDivergence())
-      {
-        cerr << "Warning: array-equality refinement could not decide this "
-                "query: a candidate model was rejected because a scalar "
-                "name disagreed with the term it stands for, and read "
-                "refinement had no axiom left to add."
-             << endl;
-        if (toSATAIG.cbIsDestructed())
-          cleaner.release();
-        return SOLVER_TIMEOUT;
-      }
+    if (!extActive)
       break;
-    }
   }
 
   FatalError("TopLevelSTPAux: reached the end without proper conclusion:"

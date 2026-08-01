@@ -219,7 +219,7 @@ void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
           satSolver.setFrozen(v[i]);
     }
 
-    // A lemma-only symbol -- a cone read's abstraction variable or
+    // A lemma-only symbol -- an owned read's abstraction variable or
     // index -- may legally never have reached the bit-blast: the
     // read's only occurrence can itself sit inside another abstracted
     // term. Its semantics live entirely in future refinement lemmas,

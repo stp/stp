@@ -396,9 +396,10 @@ bool SubstitutionMap::loops(const ASTNode& n0, const ASTNode& n1)
 // until it is bit-blasted: their SAT variables carry the refinement
 // lemmas, and the witness-read equations are how the current form of
 // each equality operand is recovered after simplification. Likewise, an
-// equation-deleting read-equals-constant orientation over an array the
-// checker may reason about would silently discard an observation the
-// consistency check depends on.
+// equation-deleting orientation headed by any read would silently
+// discard an observation the consistency check depends on. Once an
+// array equality is active the checker owns the complete array graph,
+// not only the arrays connected to that equality.
 bool SubstitutionMap::extensionalityProtected(const ASTNode& e0,
                                               const ASTNode& e1) const
 {
@@ -409,12 +410,8 @@ bool SubstitutionMap::extensionalityProtected(const ASTNode& e0,
     return true;
   if (e1.GetKind() == SYMBOL && ext->isProtected(e1))
     return true;
-  // read-equals-constant deletion, either orientation
-  if (e0.GetKind() == READ && e0[0].GetKind() == SYMBOL &&
-      ext->mayBeConeArray(e0[0]))
-    return true;
-  if (e1.GetKind() == READ && e1[0].GetKind() == SYMBOL &&
-      ext->mayBeConeArray(e1[0]))
+  // read-headed deletion, either orientation and over any array term
+  if (e0.GetKind() == READ || e1.GetKind() == READ)
     return true;
   return false;
 }

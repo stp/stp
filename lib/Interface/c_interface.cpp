@@ -3154,6 +3154,10 @@ static_assert((int)BOOLEAN_TYPE == (int)stp::BOOLEAN_TYPE &&
 exprkind_t getExprKind(Expr e)
 {
   stp::ASTNode* input = (stp::ASTNode*)e;
+  // ARRAY_EQ is an internal, opaque representation of ordinary equality.
+  // Do not expose a new C API enum value (or shift the stable existing ones).
+  if (input->GetKind() == stp::ARRAY_EQ)
+    return EQ;
   return (exprkind_t)(input->GetKind());
 }
 
@@ -3276,9 +3280,9 @@ void process_argument(const char ch, VC vc)
     case 'x':
       // Decide whole-array equality/disequality (the extensional
       // theory of arrays) with the lemmas-on-demand procedure of
-      // Brummayer & Biere. Array equalities are abstracted when the
-      // AST is built, so this must be set before any term of the
-      // query is created.
+      // Brummayer & Biere. This must be set before a whole-array equality
+      // is built; construction preserves an opaque ARRAY_EQ until the
+      // completed query is lowered at the solve boundary.
       bm->UserFlags.enable_array_equality = true;
       break;
     case 'y':

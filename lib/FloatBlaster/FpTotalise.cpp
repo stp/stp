@@ -33,8 +33,21 @@ namespace stp
 
 FpTotalise::FpTotalise(STPMgr* bm_) : bm(bm_), nf(bm_->defaultNodeFactory) {}
 
+void FpTotalise::copyArrayEqualityRewrites(ASTNodeMap& out) const
+{
+  for (ASTNodeMap::const_iterator it = cache.begin(); it != cache.end(); ++it)
+  {
+    if (it->first.GetKind() == ARRAY_EQ && it->first != it->second)
+      out[it->first] = it->second;
+  }
+}
+
 ASTNode FpTotalise::topLevel(const ASTNode& n)
 {
+  // The rewrite cache also supplies the public-handle aliases copied after
+  // this call. Keep both notions scoped to this root if a caller reuses the
+  // pass object.
+  cache.clear();
   ASTNode out = visit(n);
 
   // Pin every rounding mode the final formula names -- declared symbols and
@@ -78,24 +91,6 @@ ASTNode FpTotalise::topLevel(const ASTNode& n)
       constraints.push_back(out);
       out = nf->CreateNode(AND, constraints);
     }
-  }
-
-  return out;
-}
-
-ASTNode FpTotalise::topLevelTerm(const ASTNode& term, ASTVec& sideConstraints)
-{
-  ASTNode out = visit(term);
-
-  // Declared symbols as well as rounding-mode-element reads, for the reason
-  // topLevel gives -- and with more force here. A term reaching this function
-  // is on its way *out* of the input formula (see ExtensionalityContext), so
-  // topLevel will never run over it: if a mode appears only inside an array
-  // equality's operands, this is the one place that can pin it at all.
-  if (!bm->rm_element_arrays.empty() || !bm->rounding_mode_symbols.empty())
-  {
-    ASTNodeSet seen;
-    collectRoundingModeTerms(out, seen, sideConstraints);
   }
 
   return out;
