@@ -138,9 +138,9 @@ struct ExtGuard
   };
   Kind kind = INDEX_NE;
 
-  // Guards are copied whenever an access crosses an edge, so keep one
-  // shared four-node payload instead of reserving separate ASTNodes for
-  // all three variants:
+  // Each predecessor link stores one shared four-node payload instead of
+  // reserving separate ASTNodes for all variants. Complete paths are
+  // materialized only when a conflict certificate is emitted:
   //
   // INDEX_NE: theoryA/theoryB are the original index terms;
   //           absA/absB are their scalar names.
@@ -344,6 +344,12 @@ struct ExtCheckResult
 
   std::vector<ExtEvent> events;
   std::map<std::string, int> stats;
+
+  // Proof-storage diagnostics. The fixed point stores one constant-size
+  // predecessor entry per reached (array, access) pair; guards are copied
+  // into complete vectors only for emitted conflict certificates.
+  size_t proofPathEntries = 0;
+  size_t materializedGuardCount = 0;
 };
 
 class ExtChecker

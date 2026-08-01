@@ -37,15 +37,19 @@ namespace stp
 namespace
 {
 
+typedef std::pair<ASTNode, size_t> PairKey;
+
+// One predecessor-linked shortest-path entry. A propagation stores exactly
+// one incoming guard and a key for its predecessor; complete guard vectors are
+// materialized only for the two paths of an emitted conflict. This preserves
+// the FIFO/first-arrival shortest-path proof while making fixed-point storage
+// linear in the number of reached (array, access) pairs.
 struct PathRecord
 {
-  ASTNode destination;
-  size_t access;
-  std::vector<ExtGuard> guards;
-  const char* rule;
+  bool hasPredecessor = false;
+  PairKey predecessor;
+  ExtGuard incomingGuard;
 };
-
-typedef std::pair<ASTNode, size_t> PairKey;
 
 struct CheckerState
 {
@@ -63,9 +67,11 @@ struct CheckerState
   std::deque<PairKey> worklist;
   ExtCheckResult result;
   int seq;
+  size_t materializedGuardCount;
 
   CheckerState(const ExtGraph& g, ExtModelView& m, bool ev)
-      : graph(g), model(m), recordEvents(ev), seq(0)
+      : graph(g), model(m), recordEvents(ev), seq(0),
+        materializedGuardCount(0)
   {
   }
 
@@ -111,8 +117,32 @@ struct CheckerState
   // A conflict is appended to result.conflicts (without the lemmas,
   // which buildLemmas adds) and the fixed point carries on, so one pass
   // collects every independent conflict rather than only the earliest.
+  std::vector<ExtGuard> materializeGuards(const PathRecord& tail)
+  {
+    std::vector<ExtGuard> reversed;
+    const PathRecord* current = &tail;
+    while (current->hasPredecessor)
+    {
+      reversed.push_back(current->incomingGuard);
+      materializedGuardCount++;
+      const std::map<PairKey, PathRecord>::const_iterator predecessor =
+          paths.find(current->predecessor);
+      if (predecessor == paths.end())
+        FatalError("array-equality: a proof path lost its predecessor");
+      current = &predecessor->second;
+    }
+    std::reverse(reversed.begin(), reversed.end());
+    return reversed;
+  }
+
+  void finishProofDiagnostics()
+  {
+    result.proofPathEntries = paths.size();
+    result.materializedGuardCount = materializedGuardCount;
+  }
+
   void insert(const ASTNode& destination, size_t accessId,
-              const std::vector<ExtGuard>& guards, const char* rule,
+              const ExtGuard* incomingGuard, const char* rule,
               const ASTNode& source)
   {
     const PairKey key(destination, accessId);
@@ -122,6 +152,20 @@ struct CheckerState
       event(ExtEvent::SKIP_SEEN, rule, source, destination, accessId,
             ASTNode(), ASTNode());
       return;
+    }
+
+    PathRecord candidatePath;
+    if (incomingGuard != NULL)
+    {
+      if (source.IsNull())
+        FatalError("array-equality: a guarded proof step has no source");
+      candidatePath.hasPredecessor = true;
+      candidatePath.predecessor = PairKey(source, accessId);
+      candidatePath.incomingGuard = *incomingGuard;
+    }
+    else if (!source.IsNull())
+    {
+      FatalError("array-equality: a non-seed proof step has no guard", source);
     }
 
     const ASTNode idx = accessIndex(accessId);
@@ -141,8 +185,13 @@ struct CheckerState
         c.indexValue = idx;
         c.leftValue = accessValue(otherId);
         c.rightValue = val;
-        c.leftGuards = paths[PairKey(destination, otherId)].guards;
-        c.rightGuards = guards;
+        const std::map<PairKey, PathRecord>::const_iterator otherPath =
+            paths.find(PairKey(destination, otherId));
+        if (otherPath == paths.end())
+          FatalError("array-equality: rho representative has no proof path",
+                     destination);
+        c.leftGuards = materializeGuards(otherPath->second);
+        c.rightGuards = materializeGuards(candidatePath);
         result.stats["conflicts"]++;
         event(ExtEvent::CONFLICT, rule, source, destination, accessId, idx,
               val);
@@ -155,12 +204,7 @@ struct CheckerState
         // onward from a conflicting arrival. The representative keeps
         // the array's slot for this index, exactly as when the pass
         // stopped here.
-        PathRecord pr;
-        pr.destination = destination;
-        pr.access = accessId;
-        pr.guards = guards;
-        pr.rule = rule;
-        paths[key] = pr;
+        paths[key] = candidatePath;
         return;
       }
       result.stats["skipped_represented"]++;
@@ -169,12 +213,7 @@ struct CheckerState
       return;
     }
 
-    PathRecord pr;
-    pr.destination = destination;
-    pr.access = accessId;
-    pr.guards = guards;
-    pr.rule = rule;
-    paths[key] = pr;
+    paths[key] = candidatePath;
     byIndex[idx] = accessId;
     rho[destination].push_back(accessId);
     worklist.push_back(key);
@@ -377,7 +416,7 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
   {
     const ExtAccess& a = graph.accesses[i];
     const char* rule = a.isWrite ? "I_WRITE" : "I_READ";
-    st.insert(a.site, a.id, std::vector<ExtGuard>(), rule, ASTNode());
+    st.insert(a.site, a.id, NULL, rule, ASTNode());
   }
 
   // Fixed-point computation over a FIFO work list (the "working queue
@@ -399,11 +438,6 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
     st.worklist.pop_front();
     const ASTNode source = cur.first;
     const size_t accessId = cur.second;
-    // A copy, not a reference: st.insert adds entries to st.paths
-    // while this record's edges are explored. A std::map keeps
-    // existing elements stable, so a reference would work today; the
-    // copy keeps the loop correct under any container choice.
-    const PathRecord sourcePath = st.paths[cur];
     const ASTNode accessIdxVal = st.accessIndex(accessId);
 
     // Every rule fires for every pair: a conflict on one edge no longer
@@ -426,9 +460,7 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
         g.absA = graph.accesses[accessId].indexName;
         g.absB = w.indexName;
         g.eqRecord = 0;
-        std::vector<ExtGuard> chi2 = sourcePath.guards;
-        chi2.push_back(g);
-        st.insert(w.base, accessId, chi2, "D_WRITE", source);
+        st.insert(w.base, accessId, &g, "D_WRITE", source);
       }
     }
 
@@ -454,9 +486,7 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
             g.absA = graph.accesses[accessId].indexName;
             g.absB = w.indexName;
             g.eqRecord = 0;
-            std::vector<ExtGuard> chi2 = sourcePath.guards;
-            chi2.push_back(g);
-            st.insert(w.write, accessId, chi2, "U_WRITE", source);
+            st.insert(w.write, accessId, &g, "U_WRITE", source);
           }
         }
       }
@@ -485,9 +515,7 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
           g.theoryB = e.right;
           g.absA = e.proxy;
           g.eqRecord = e.record;
-          std::vector<ExtGuard> chi2 = sourcePath.guards;
-          chi2.push_back(g);
-          st.insert(destination, accessId, chi2, rule, source);
+          st.insert(destination, accessId, &g, rule, source);
         }
       }
     }
@@ -517,9 +545,7 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
         g.kind = cond ? ExtGuard::ITE_COND_POS : ExtGuard::ITE_COND_NEG;
         g.theoryA = t.condTerm;
         g.absA = t.condName;
-        std::vector<ExtGuard> chi2 = sourcePath.guards;
-        chi2.push_back(g);
-        st.insert(cond ? t.thn : t.els, accessId, chi2, "T_DOWN", source);
+        st.insert(cond ? t.thn : t.els, accessId, &g, "T_DOWN", source);
       }
 
       // T-up: source is a branch, destination every if-then-else that
@@ -542,9 +568,7 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
           g.kind = cond ? ExtGuard::ITE_COND_POS : ExtGuard::ITE_COND_NEG;
           g.theoryA = t.condTerm;
           g.absA = t.condName;
-          std::vector<ExtGuard> chi2 = sourcePath.guards;
-          chi2.push_back(g);
-          st.insert(t.ite, accessId, chi2, "T_UP", source);
+          st.insert(t.ite, accessId, &g, "T_UP", source);
         }
       }
     }
@@ -561,6 +585,7 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
       buildLemmas(st.result.conflicts[i], graph, model);
     st.result.conflict = st.result.conflicts[0];
     st.result.status = ExtCheckResult::CONFLICT;
+    st.finishProofDiagnostics();
     return st.result;
   }
 
@@ -579,6 +604,7 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
     {
       st.result.status = ExtCheckResult::WITNESS_VIOLATION;
       st.result.violatedRecord = w.record;
+      st.finishProofDiagnostics();
       return st.result;
     }
   }
@@ -600,6 +626,7 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
   }
 
   st.result.status = ExtCheckResult::CONSISTENT;
+  st.finishProofDiagnostics();
   return st.result;
 }
 

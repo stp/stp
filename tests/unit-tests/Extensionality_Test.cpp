@@ -179,8 +179,8 @@ TEST(ArrayEqualityAstTest, ActivationIsTheTransitiveClosureOfCurrentRoot)
 
 TEST(ExtGuardTest, PathPayloadRemainsCompact)
 {
-  // Every propagation copies its complete guard path. Keep a regression
-  // ceiling below the old 96-byte variant-specific representation.
+  // A predecessor entry stores exactly one guard. Keep its payload below the
+  // old 96-byte variant-specific representation.
   EXPECT_LE(sizeof(ExtGuard), 64u);
 }
 
@@ -523,6 +523,38 @@ TEST_F(ExtFixtureTest, ReadReadCongruenceOneArray)
   EXPECT_TRUE(hasEqGuard(c.abstractPremise, i, j));
   EXPECT_EQ(r1, c.abstractConclusionA);
   EXPECT_EQ(r2, c.abstractConclusionB);
+}
+
+TEST_F(ExtFixtureTest, LongPropagationChainStoresLinksWithoutMaterializingPaths)
+{
+  const size_t length = 96;
+  std::vector<ASTNode> arrays;
+  arrays.reserve(length);
+  for (size_t i = 0; i < length; ++i)
+  {
+    const std::string name = "chain_array_" + std::to_string(i);
+    arrays.push_back(mgr.CreateSymbol(name.c_str(), 2, 2));
+  }
+  for (size_t i = 0; i + 1 < length; ++i)
+  {
+    const std::string name = "chain_eq_" + std::to_string(i);
+    eqEdge(arrays[i], arrays[i + 1], name.c_str(), true);
+  }
+
+  readAccess(arrays[0], bv("chain_index", 1), bv("chain_value", 2));
+  const ExtCheckResult r = run();
+  ASSERT_EQ(ExtCheckResult::CONSISTENT, r.status);
+
+  // One constant-size path record per reached pair. With no conflict, no
+  // complete guard vector is ever reconstructed; the old copied-vector
+  // representation retained 1+2+...+(length-1) guards here.
+  EXPECT_EQ(length, r.proofPathEntries);
+  EXPECT_EQ(0u, r.materializedGuardCount);
+  expectStats(r, {{"insertions", static_cast<int>(length)},
+                  {"propagations", static_cast<int>(length - 1)},
+                  {"rule_R_EQ", static_cast<int>(length - 1)},
+                  {"seeds", 1},
+                  {"skipped_seen", static_cast<int>(length - 1)}});
 }
 
 // One pass reports every conflict it finds, not just the earliest.
@@ -1311,6 +1343,12 @@ TEST_F(ExtFixtureTest, ConflictPremiseUsesShortestPaths)
   EXPECT_TRUE(hasProxyGuard(c.abstractPremise, e4));
   EXPECT_EQ(rX, c.abstractConclusionA);
   EXPECT_EQ(rT, c.abstractConclusionB);
+
+  size_t guardsInCertificates = 0;
+  for (const ExtConflict& conflict : r.conflicts)
+    guardsInCertificates +=
+        conflict.leftGuards.size() + conflict.rightGuards.size();
+  EXPECT_EQ(guardsInCertificates, r.materializedGuardCount);
 }
 
 TEST_F(ExtFixtureTest, IteTrueConditionPropagatesDownWithPositiveGuard)
