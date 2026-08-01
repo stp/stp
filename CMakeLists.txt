@@ -457,7 +457,7 @@ if (GIT_EXECUTABLE)
 else()
   set(GIT_SHA "GIT-hash-notfound")
 endif()
-set(STP_FULL_VERSION "2.4.0")
+set(STP_FULL_VERSION "2.4.1")
 
 string(REPLACE "." ";" STP_FULL_VERSION_LIST ${STP_FULL_VERSION})
 SetVersionNumber("PROJECT" ${STP_FULL_VERSION_LIST})
