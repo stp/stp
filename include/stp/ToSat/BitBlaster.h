@@ -27,6 +27,7 @@ THE SOFTWARE.
 
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/constantBitP/MultiplicationStats.h"
+#include "stp/ToSat/BBNodeManagerAIG.h"
 #include <cassert>
 #include <cmath>
 #include <list>
@@ -52,10 +53,14 @@ class ASTNode;
 
 using ASTVec = vector<ASTNode>;
 
-template <class BBNode, class BBNodeManagerT> 
-class BitBlaster 
+// BitBlaster used to be a template over the node representation and its
+// manager. The AIG backend is the only one that remains, so these are the
+// only types it is ever used with.
+using BBNode = BBNodeAIG;
+using BBNodeVec = std::vector<BBNodeAIG>;
+
+class BitBlaster
 {
-  using BBNodeVec = vector<BBNode>;
   using BBNodeSet = std::unordered_set<BBNode>;
 
   BBNode BBTrue, BBFalse;
@@ -218,7 +223,7 @@ class BitBlaster
   UserDefinedFlags* uf;
   NodeFactory* ASTNF;
   Simplifier* simp;
-  BBNodeManagerT* nf;
+  BBNodeManagerAIG* nf;
 
   ASTNodeSet booth_recoded; // Nodes that have been recoded.
 
@@ -234,10 +239,10 @@ public:
   // representing the boolean formula.
   const BBNodeVec BBTerm(const ASTNode& term, BBNodeSet& support);
   
-  typename std::unordered_map<ASTNode, BBNodeVec, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>::iterator
+  std::unordered_map<ASTNode, BBNodeVec, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>::iterator
   simplify_during_bb(ASTNode& term, BBNodeSet& support);
 
-  BitBlaster(BBNodeManagerT* bnm, Simplifier* _simp, NodeFactory* astNodeF,
+  BitBlaster(BBNodeManagerAIG* bnm, Simplifier* _simp, NodeFactory* astNodeF,
              UserDefinedFlags* _uf,
              simplifier::constantBitP::ConstantBitPropagation* cb_ = NULL)
       : uf(_uf)

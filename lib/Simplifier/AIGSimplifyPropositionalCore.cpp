@@ -181,8 +181,7 @@ ASTNode AIGSimplifyPropositionalCore::topLevel(const ASTNode& top)
   SubstitutionMap sm (bm);
   Simplifier simplifier(bm, &sm );
   BBNodeManagerAIG mgr;
-  BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(
-      &mgr, &simplifier, bm->defaultNodeFactory, &bm->UserFlags);
+  BitBlaster bb(&mgr, &simplifier, bm->defaultNodeFactory, &bm->UserFlags);
   BBNodeAIG blasted = bb.BBForm(replaced);
 
   Aig_ObjCreateCo(mgr.aigMgr, blasted.n);
