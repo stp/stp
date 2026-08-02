@@ -359,6 +359,11 @@ void ExtraMain::create_options()
     ("bb.conjoin-constant", 
       BOOL_ARG(bm->UserFlags.conjoin_to_top),
       "When constant-bit propagation detects a constant bit during AIG construction, assert the AIG node and replace it, in the AIG, by the constant bit"
+      )
+
+    ("bb.simplify-during-bb",
+      BOOL_ARG(bm->UserFlags.simplify_during_BB_flag),
+      "When bit-blasting discovers that a non-constant child of a term blasts to an all-constant vector, rebuild the term with that constant and re-run the word-level term simplifier on it. Has no effect unless the rewriting simplifier is also on, i.e. not with --disable-opt-inc or --disable-simplifications"
       );
 
 
