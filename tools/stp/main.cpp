@@ -319,9 +319,7 @@ void ExtraMain::create_options()
       "output-CNF", po::bool_switch(&(bm->UserFlags.output_CNF_flag)),
       "Save the CNF into output_[0..n].cnf. NOTE: variables cannot be mapped "
       "back, and problems solved by the preprocessing simplifier alone will "
-      "not generate any CNF as the SAT solver is never invoked")(
-      "output-bench", po::bool_switch(&(bm->UserFlags.output_bench_flag)),
-      "save in ABC's bench format to output.bench");
+      "not generate any CNF as the SAT solver is never invoked");
 
 
   po::options_description bb_options("Bit-blasting options");
