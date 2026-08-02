@@ -262,11 +262,7 @@ public:
     return PL_Print(os, GetSTPMgr(), 0);
   }
 
-  // Construct let variables for shared subterms
-  void LetizeNode(STPMgr* bm) const;
-
   // Attempt to define something that will work in the gdb
-  friend void lp(ASTNode& node);
   friend void lpvec(const ASTVec& vec);
 
   // Printing to stream

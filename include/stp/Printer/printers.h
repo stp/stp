@@ -36,6 +36,29 @@ THE SOFTWARE.
 namespace printer
 {
 using std::ostream;
+
+// State for the letize pass, which walks a node and gives a let variable to
+// every non-atomic subterm that occurs more than once. Each printer keeps its
+// own storage for the result -- the SMT-LIB printers use file-scope
+// thread-locals, the Presentation Language printer uses STPMgr members -- so
+// the pass borrows it rather than owning it.
+struct LetizeState
+{
+  // Subterms already visited.
+  stp::ASTNodeSet& seen;
+  // Subterm -> the let variable standing for it.
+  stp::ASTNodeMap& letVarMap;
+  // The same pairs, in creation order, so the bindings print in a stable order.
+  vector<std::pair<stp::ASTNode, stp::ASTNode>>& letVarVec;
+  // Name prefix for the generated variables.
+  const char* prefix;
+  // When set, only BITVECTOR_TYPE subterms are letized: SMT-LIB1 can bind
+  // terms but not formulas.
+  bool termsOnly;
+};
+
+void LetizeNode(const stp::ASTNode& n, LetizeState& st, STPMgr*);
+
 DLL_PUBLIC ostream& Dot_Print(ostream& os, const stp::ASTNode n);
 DLL_PUBLIC ostream& PL_Print(ostream& os, const stp::ASTNode& n, STPMgr* bm,
                              int indentation = 0);
@@ -59,6 +82,10 @@ DLL_PUBLIC void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* stp,
 DLL_PUBLIC void SMTLIB2_Print1(ostream& os, const stp::ASTNode n,
                                int indentation, bool letize);
 
+// Emitters for a BVCONST (or a BITVECTOR wrapping one). outputBitVec writes
+// the SMT-LIB1 spelling, "bv<decimal>[<width>]"; the dot and GDL printers use
+// it too, so their node labels are in SMT-LIB1 syntax.
+void outputBitVec(const ASTNode n, ostream& os);
 void outputBitVecSMTLIB2(const ASTNode n, ostream& os);
 
 DLL_PUBLIC ostream& GDL_Print(ostream& os, const stp::ASTNode n);
