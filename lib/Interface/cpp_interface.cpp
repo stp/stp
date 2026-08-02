@@ -286,24 +286,6 @@ ASTNode Cpp_interface::applyFunction(const string& name, const ASTVec& params)
   return SubstitutionMap::replace(f.function, fromTo, cache, nf);
 }
 
-bool Cpp_interface::isBitVectorFunction(const string& name)
-{
-  const auto found = functions.find(name);
-  if (found == functions.end())
-    return false;
-
-  return found->second.function.GetType() == BITVECTOR_TYPE;
-}
-
-bool Cpp_interface::isBooleanFunction(const string& name)
-{
-  const auto found = functions.find(name);
-  if (found == functions.end())
-    return false;
-
-  return found->second.function.GetType() == BOOLEAN_TYPE;
-}
-
 types Cpp_interface::functionReturnType(const string& name)
 {
   const auto found = functions.find(name);
@@ -498,15 +480,6 @@ void Cpp_interface::push()
 void Cpp_interface::ignoreCheckSat()
 {
   ignoreCheckSatRequest = true;
-}
-
-void Cpp_interface::printStatus()
-{
-  for (size_t i = 0, size = cache.size(); i < size; ++i)
-  {
-    cache[i].print();
-  }
-  cerr << endl;
 }
 
 // Does some simple caching of prior results.

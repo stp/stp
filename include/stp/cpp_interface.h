@@ -61,16 +61,6 @@ class Cpp_interface
 
     SOLVER_RETURN_TYPE result;
     int node_number; // a weak pointer.
-
-    void print()
-    {
-      if (result == SOLVER_UNSATISFIABLE)
-        std::cerr << "u";
-      else if (result == SOLVER_SATISFIABLE)
-        std::cerr << "s";
-      else if (result == SOLVER_UNDECIDED)
-        std::cerr << "?";
-    }
   };
   vector<Entry> cache;
 
@@ -177,12 +167,9 @@ public:
   DLL_PUBLIC ASTNode applyFunction(const std::string& name,
                                    const ASTVec& params);
 
-  DLL_PUBLIC bool isBitVectorFunction(const std::string& name);
-  DLL_PUBLIC bool isBooleanFunction(const std::string& name);
   // Classify a name in a single map probe: returns the function's return
   // type (BITVECTOR_TYPE or BOOLEAN_TYPE), or UNKNOWN_TYPE when the name
-  // is not a stored function. Lets the lexer avoid a second probe that
-  // calling both isBitVectorFunction and isBooleanFunction would cost.
+  // is not a stored function.
   DLL_PUBLIC types functionReturnType(const std::string& name);
   bool hasFunctions() const { return !functions.empty(); }
 
@@ -230,7 +217,6 @@ public:
 
   // Useful when printing back, so that you can parse, but ignore the request.
   DLL_PUBLIC void ignoreCheckSat();
-  DLL_PUBLIC void printStatus();
   DLL_PUBLIC void checkSat(const ASTVec& assertionsSMT2);
 
   DLL_PUBLIC void deleteGlobal();
