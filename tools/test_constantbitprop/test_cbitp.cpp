@@ -1124,9 +1124,20 @@ void exhaustive_checks()
 
 int main(void)
 {
-  stp::STPMgr stp;
-  mgr = &stp;
+  stp::STPMgr localMgr;
+  mgr = &localMgr;
   mgr->UserFlags.disableSimplifications();
+
+  // GlobalSTP is borrowed, never owned by the interface: this tool allocates
+  // the STP and frees it. BBAsProp dereferences GlobalSTP->arrayTransformer,
+  // so it has to be set before any test that builds one.
+  //
+  // Declaration order matters. These are destroyed in reverse -- interface,
+  // then solver, then localMgr -- and an STP outliving its STPMgr is a
+  // use-after-free, because ~STP drops ASTNode references back into the
+  // manager's node tables.
+  stp::STP solver(mgr);
+  GlobalSTP = &solver;
   Cpp_interface interface(*mgr);
 
   random_tests();
@@ -1137,5 +1148,6 @@ int main(void)
   //exhaustive_checks();
   cout << "Done" << endl;
 
+  GlobalSTP = NULL;
   return 1;
 }

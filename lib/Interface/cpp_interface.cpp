@@ -562,6 +562,12 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2)
 }
 
 // This method sets up some of the globally required data.
+//
+// NB it does not create the STP that GlobalSTP points at. Every writer of
+// GlobalSTP borrows: whoever allocates the STP frees it, and the pointer is
+// only ever a non-owning view. Callers that need one (because they reach
+// something which dereferences GlobalSTP, such as BBAsProp) construct the STP
+// themselves and assign it before that point.
 Cpp_interface::Cpp_interface(STPMgr& bm_)
     : bm(bm_), letMgr(new LetMgr(bm.ASTUndefined)), nf(bm_.defaultNodeFactory)
 {
@@ -569,14 +575,7 @@ Cpp_interface::Cpp_interface(STPMgr& bm_)
   startup();
   stp::GlobalParserInterface = this;
   stp::GlobalParserBM = &bm_;
-  GlobalSTP = new STP(&bm);
   init();
-}
-
-void Cpp_interface::deleteGlobal()
-{
-  GlobalSTP->deleteObjects();
-  delete GlobalSTP;
 }
 
 void Cpp_interface::cleanUp()

@@ -219,7 +219,6 @@ public:
   DLL_PUBLIC void ignoreCheckSat();
   DLL_PUBLIC void checkSat(const ASTVec& assertionsSMT2);
 
-  DLL_PUBLIC void deleteGlobal();
   DLL_PUBLIC void cleanUp();
 
   DLL_PUBLIC void setOption(std::string, std::string);

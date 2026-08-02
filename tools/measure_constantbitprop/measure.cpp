@@ -26,6 +26,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define __STDC_FORMAT_MACROS
 #include "minisat/core/Solver.h"
 #include "stp/Printer/printers.h"
+#include "stp/STPManager/STP.h"
 #include "stp/Sat/MinisatCore.h"
 #include "stp/ToSat/ToSATAIG.h"
 #include "stp/Util/BBAsProp.h"
@@ -169,7 +170,19 @@ void work(int p)
 
 int main()
 {
-  mgr = new STPMgr;
+  STPMgr localMgr;
+  mgr = &localMgr;
+
+  // GlobalSTP is borrowed, never owned by the interface: this tool allocates
+  // the STP and frees it. go() constructs a BBAsProp, which dereferences
+  // GlobalSTP->arrayTransformer, so it has to be set before work() runs.
+  //
+  // Declaration order matters. These are destroyed in reverse -- interface,
+  // then solver, then localMgr -- and an STP outliving its STPMgr is a
+  // use-after-free, because ~STP drops ASTNode references back into the
+  // manager's node tables.
+  STP solver(mgr);
+  GlobalSTP = &solver;
   Cpp_interface interface(*mgr);
   // mgr->UserFlags.set("simple-cnf","1");
 
@@ -181,5 +194,5 @@ int main()
   out << "\\end{subtables}" << endl;
 
   out << "% Iterations:" << iterations << " bit-width:" << bits << endl;
-  delete mgr;
+  GlobalSTP = NULL;
 }
