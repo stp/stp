@@ -84,10 +84,7 @@ namespace stp
     {
       typedef CBV Value;
 
-      static Value zero(unsigned width)
-      {
-        return CONSTANTBV::BitVector_Create(width, true);
-      }
+      static Value zero(unsigned width) { return mkZero(width); }
 
       static Value ones(unsigned width) { return allOnes(width); }
 
@@ -100,7 +97,7 @@ namespace stp
       // that still fit in the width once shifted.
       static Value ofU64Shifted(unsigned width, uint64_t v, unsigned shift)
       {
-        Value result = CONSTANTBV::BitVector_Create(width, true);
+        Value result = mkZero(width);
         for (unsigned i = 0; i < 64 && i + shift < width; i++)
           if ((v >> i) & 1)
             CONSTANTBV::BitVector_Bit_On(result, i + shift);
