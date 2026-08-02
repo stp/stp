@@ -52,7 +52,6 @@ class StrengthReduction
   unsigned replaceWithSimpler =0;
 
   CBV littleOne;
-  CBV littleZero;
   NodeFactory* nf;
   UserDefinedFlags* uf;
 

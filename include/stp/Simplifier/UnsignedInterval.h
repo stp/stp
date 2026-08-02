@@ -30,6 +30,7 @@ THE SOFTWARE.
 #define UNSIGNEDINTERVAL_H_
 
 #include "stp/AST/AST.h"
+#include "stp/Util/CBVOps.h"
 #include <iostream>
 
 namespace stp
@@ -51,9 +52,8 @@ struct UnsignedInterval
 
   UnsignedInterval(unsigned width)
   {
-    minV = CONSTANTBV::BitVector_Create(width, true);
-    maxV = CONSTANTBV::BitVector_Create(width, true);
-    CONSTANTBV::BitVector_Fill(maxV);
+    minV = mkZero(width);
+    maxV = allOnes(width);
   }
 
   ~UnsignedInterval()
@@ -148,16 +148,17 @@ struct UnsignedInterval
   {
     const unsigned width = a->getWidth(); 
 
-    CBV zero = CONSTANTBV::BitVector_Create(width, true); 
-    
+    CBV zero = mkZero(width);
+
     if (CONSTANTBV::BitVector_is_empty(a->minV) && !CONSTANTBV::BitVector_is_empty(a->maxV))
     {
       // Split zero into it's own segment if it's the minimum.
        UnsignedInterval * split0 = new UnsignedInterval(CONSTANTBV::BitVector_Clone(zero), CONSTANTBV::BitVector_Clone(zero));
        a_vec.push_back(split0);
+       CONSTANTBV::BitVector_Destroy(zero);
 
-       CONSTANTBV::BitVector_increment(zero);
-       UnsignedInterval * split1 = new UnsignedInterval(zero, CONSTANTBV::BitVector_Clone(a->maxV));
+       // What's left runs from one up to the maximum.
+       UnsignedInterval * split1 = new UnsignedInterval(mkOne(width), CONSTANTBV::BitVector_Clone(a->maxV));
        split(split1,a_vec);
        delete split1;
        return;
@@ -168,9 +169,11 @@ struct UnsignedInterval
        // Split zero into it's own segment if it's the maximum.
        UnsignedInterval * split0 = new UnsignedInterval(CONSTANTBV::BitVector_Clone(zero), CONSTANTBV::BitVector_Clone(zero));
        a_vec.push_back(split0);
+       CONSTANTBV::BitVector_Destroy(zero);
 
-       CONSTANTBV::BitVector_decrement(zero);
-       UnsignedInterval * split1 = new UnsignedInterval(CONSTANTBV::BitVector_Clone(a->minV), zero);
+       // What's left runs from the minimum up to the last value before
+       // the wrap, which is all ones.
+       UnsignedInterval * split1 = new UnsignedInterval(CONSTANTBV::BitVector_Clone(a->minV), allOnes(width));
        split(split1,a_vec);
        delete split1;
        return;
@@ -179,8 +182,7 @@ struct UnsignedInterval
     if (a->in(zero) && !CONSTANTBV::BitVector_is_empty(a->minV))
     {
       // Split at zero if it's in the middle somewhere.
-       CBV negativeOne = CONSTANTBV::BitVector_Create(width, true);
-       CONSTANTBV::BitVector_Fill(negativeOne);
+       CBV negativeOne = allOnes(width);
 
        UnsignedInterval * split0 = new UnsignedInterval(CONSTANTBV::BitVector_Clone(a->minV), negativeOne);
        UnsignedInterval * split1 = new UnsignedInterval(zero, CONSTANTBV::BitVector_Clone(a->maxV));

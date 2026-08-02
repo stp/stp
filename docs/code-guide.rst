@@ -57,10 +57,11 @@ The executables are built from ``tools/``:
    file (or stdin) and no other options. Setting ``ONLY_SIMPLE`` builds
    this instead of ``stp``, which drops the dependency on Boost.
 -  The rest are development aids, built only when ``BUILD_EXTRA_TOOLS``
-   is enabled: ``propagator_bench``, ``time_constantbitprop``,
-   ``measure_constantbitprop`` and ``test_constantbitprop`` exercise the
-   propagators, ``rewrite_rule_gen`` searches for rewrite rules, and
-   ``cvc_to_c`` turns a CVC file into a C program.
+   is enabled: ``propagator_bench`` times the propagators and checks how
+   much they deduce, ``measure_constantbitprop`` compares that against
+   what unit propagation on the bit-blasted encoding deduces,
+   ``rewrite_rule_gen`` searches for rewrite rules, and ``cvc_to_c``
+   turns a CVC file into a C program.
 
 The Python bindings are in ``bindings/python``, and the tests are in
 ``tests/`` (see :doc:`testing`).

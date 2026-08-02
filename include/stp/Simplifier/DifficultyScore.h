@@ -35,7 +35,7 @@ class DifficultyScore // not copyable
 {
 private:
   // maps from nodeNumber to the previously calculated difficulty score..
-  std::map<int, long> cache;
+  std::map<uint64_t, long> cache;
   long evalCount = 0;
 
 public:

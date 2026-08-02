@@ -181,7 +181,7 @@ public:
   // Access node number. Inlined: ASTInternal is complete here (its header no
   // longer includes this one), so these fold to direct field reads at the
   // call sites. They are among the hottest calls in STP.
-  unsigned GetNodeNum() const { return _int_node_ptr->GetNodeNum(); }
+  uint64_t GetNodeNum() const { return _int_node_ptr->GetNodeNum(); }
 
   // Access kind.
   Kind GetKind() const { return _int_node_ptr->GetKind(); }

@@ -24,13 +24,14 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // unit propagation deduces.
 
 #define __STDC_FORMAT_MACROS
+#include "Relations.h"
 #include "minisat/core/Solver.h"
 #include "stp/Printer/printers.h"
 #include "stp/Sat/MinisatCore.h"
+#include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
+#include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/ToSat/ToSATAIG.h"
 #include "stp/Util/BBAsProp.h"
-#include "stp/Util/Functions.h"
-#include "stp/Util/Relations.h"
 #include "stp/Util/StopWatch.h"
 #include "stp/cpp_interface.h"
 #include <cstdint>
@@ -45,6 +46,22 @@ ostream& out = cout;
 STPMgr* mgr = NULL;
 
 bool debug = false;
+
+// The transfer functions to compare against the bit-blasted encoding. Each
+// entry costs a bit-blast and one unit-propagation call per case, and the
+// comparison is per-operation, so widening the table is the way to widen the
+// measurement.
+struct Function
+{
+  Kind k;
+  const char* name;
+  Result (*fn)(vector<FixedBits*>&, FixedBits&);
+};
+
+const Function functions[] = {
+    {BVSGE, "signed greater than equals",
+     &bvSignedGreaterThanEqualsBothWays},
+};
 
 
 void go(Kind k, Result (*t_fn)(vector<FixedBits*>&, FixedBits&), int prob)
@@ -147,14 +164,10 @@ void work(int p)
   out << "& UP time & prop. time &  UP bits & prop. bits &  \\% \\\\" << endl;
   out << "\\hline" << endl;
 
-  Functions f;
-  std::list<Functions::Function>::iterator it = f.l.begin();
-  while (it != f.l.end())
+  for (const Function& f : functions)
   {
-    Functions::Function& f = *it;
     out << f.name << endl;
     go(f.k, f.fn, p);
-    it++;
   }
 
   out << "\\hline" << endl;

@@ -71,8 +71,10 @@ THE SOFTWARE.
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <functional>
 #include <memory>
+#include <random>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -87,7 +89,6 @@ namespace constantBitP
 {
 Result useLeadingZeroesToFix(FixedBits& x, FixedBits& y, FixedBits& output);
 Result trailingOneReasoning(FixedBits& x, FixedBits& y, FixedBits& output);
-Result trailingOneReasoning_OLD(FixedBits& x, FixedBits& y, FixedBits& output);
 Result multiplyCore(std::vector<FixedBits*>& children, FixedBits& output,
                     MultiplicationStats* ms);
 }
@@ -1113,35 +1114,280 @@ TEST_F(ConstantBitP_TransferFunctions, leadingZeroesConflictDoesNotLeak)
   EXPECT_EQ(CONFLICT, useLeadingZeroesToFix(x, y, out));
 }
 
-// trailingOneReasoning checks in debug builds that trailingOneReasoning_OLD
-// finds nothing further. That is only safe if the old reasoning is subsumed
-// by the new and never mutates its arguments afterwards. Verify both,
-// exhaustively, at width 3.
+// ---------------------------------------------------------------------------
+// Superseded multiply propagators, and the proof that the current ones
+// subsume them.
+//
+// These two functions used to live in ConstantBitP_Multiplication.cpp purely
+// so that the current implementations could run them on copies inside
+// #ifndef NDEBUG and assert that the new result fixed at least as much. That
+// put ~150 lines of dead-in-Release code in the shipped translation unit and
+// paid an extra propagator run on every invocation of an assertions build.
+//
+// The property is real and worth keeping, so both the old implementations and
+// the subsumption checks moved here. What changed is *which inputs* the
+// property is checked against: the in-line assert saw whatever states real
+// formulas drove the propagator into, whereas these tests enumerate the
+// input space directly - exhaustively at small widths, randomly at larger
+// ones. At any width covered exhaustively that is strictly stronger, since
+// every reachable state at that width is among the triples enumerated. Above
+// that bound it is a sample rather than a sweep.
+// ---------------------------------------------------------------------------
+
+// Superseded by useLeadingZeroesToFix. Bounds the product's leading one by
+// the sum of the operands' leading-one positions plus one, and zeroes the
+// output bits above it. The current version multiplies out the two largest
+// admitted values instead, which is never a weaker bound: with x < 2^(xTop+1)
+// and y < 2^(yTop+1) the product is below 2^(xTop+yTop+2), so its leading one
+// sits at or below xTop+yTop+1.
+Result useLeadingZeroesToFix_OLD(FixedBits& x, FixedBits& y, FixedBits& output)
+{
+  // Count the leading zeroes on x & y.
+  // Output should have about that many..
+  int xTop = x.topmostPossibleLeadingOne();
+  int yTop = y.topmostPossibleLeadingOne();
+
+  int maxOutputOneFromInputs = xTop + yTop + 1;
+
+  for (int i = output.getWidth() - 1; i > maxOutputOneFromInputs; i--)
+    if (!output.isFixed(i))
+    {
+      output.setFixed(i, true);
+      output.setValue(i, false);
+    }
+    else
+    {
+      if (output.getValue(i))
+        return CONFLICT;
+    }
+
+  return NOT_IMPLEMENTED;
+}
+
+// Superseded by trailingOneReasoning. Same idea - clear a trailing unfixed
+// bit of x that has no support in y and the output - but the scan starts at
+// x's minimum trailing-one position and stops at the first bit it cannot
+// clear. The current version scans from bit zero.
+Result trailingOneReasoning_OLD(FixedBits& x, FixedBits& y, FixedBits& output)
+{
+  Result r = NO_CHANGE;
+
+  const int bitwidth = output.getWidth();
+
+  const int x_min = x.minimum_trailingOne();
+  const int x_max = x.maximum_trailingOne();
+
+  const int y_min = y.minimum_trailingOne();
+  const int y_max = y.maximum_trailingOne();
+
+  int output_max = output.maximum_trailingOne();
+
+  bool done = false;
+  for (int i = x_min; i <= std::min(x_max, bitwidth - 1); i++)
+  {
+    if (x[i] == '1')
+      break;
+
+    if (x[i] == '0')
+      continue;
+
+    assert(!done);
+    for (int j = y_min; j <= std::min(y_max, output_max); j++)
+    {
+      if (j + i >= bitwidth || (y[j] != '0' && output[i + j] != '0'))
+      {
+        done = true;
+        break;
+      }
+    }
+    if (!done)
+    {
+      x.setFixed(i, true);
+      x.setValue(i, false);
+      r = CHANGED;
+    }
+    else
+      break;
+  }
+  return r;
+}
+
+// A width-`width` FixedBits with each bit independently unfixed, zero or one,
+// then - half the time each - a run of leading bits and a run of trailing
+// bits forced to zero.
+//
+// The bias matters. Both propagators reason about runs of zeroes at the ends
+// of an operand, and under a uniform trit draw at width 48 the top bit is
+// unfixed or one about two thirds of the time, so the leading-zero reasoning
+// has nothing to work with on almost every sample. Without the bias the
+// random arm of these tests contributes essentially nothing.
+FixedBits randomFixedBits(unsigned width, std::mt19937& rng)
+{
+  FixedBits result(width, false);
+  std::uniform_int_distribution<int> trit(0, 2);
+  for (unsigned i = 0; i < width; i++)
+  {
+    const int t = trit(rng);
+    if (t != 0)
+    {
+      result.setFixed(i, true);
+      result.setValue(i, t == 2);
+    }
+  }
+
+  std::uniform_int_distribution<unsigned> coin(0, 1);
+  std::uniform_int_distribution<unsigned> runLength(0, width);
+
+  if (coin(rng) == 1)
+  {
+    const unsigned lead = runLength(rng);
+    for (unsigned i = width - lead; i < width; i++)
+    {
+      result.setFixed(i, true);
+      result.setValue(i, false);
+    }
+  }
+
+  if (coin(rng) == 1)
+  {
+    const unsigned trail = std::min(runLength(rng), width);
+    for (unsigned i = 0; i < trail; i++)
+    {
+      result.setFixed(i, true);
+      result.setValue(i, false);
+    }
+  }
+
+  return result;
+}
+
+// Widths enumerated exhaustively. 3^4 = 81 assignments per operand, so 81^3
+// triples at the top width; going one wider is 27x that.
+const unsigned EXHAUSTIVE_UPTO = 4;
+
+// Widths sampled, and how many triples at each.
+const unsigned RANDOM_FROM = 5;
+const unsigned RANDOM_UPTO = 48;
+const unsigned RANDOM_TRIPLES = 3000;
+
+// Run `check` over every (x, y, output) triple at widths 1..EXHAUSTIVE_UPTO,
+// then over RANDOM_TRIPLES sampled triples at each larger width.
+void forEachTriple(
+    const std::function<void(FixedBits&, FixedBits&, FixedBits&)>& check)
+{
+  for (unsigned width = 1; width <= EXHAUSTIVE_UPTO; width++)
+  {
+    unsigned combinations = 1;
+    for (unsigned i = 0; i < width; i++)
+      combinations *= 3;
+
+    for (unsigned i = 0; i < combinations; i++)
+      for (unsigned j = 0; j < combinations; j++)
+        for (unsigned k = 0; k < combinations; k++)
+        {
+          FixedBits x = fromTernary(width, i);
+          FixedBits y = fromTernary(width, j);
+          FixedBits out = fromTernary(width, k);
+          check(x, y, out);
+          if (::testing::Test::HasFatalFailure())
+            return;
+        }
+  }
+
+  std::mt19937 rng(20240607); // fixed seed: a failure must be reproducible.
+  for (unsigned width = RANDOM_FROM; width <= RANDOM_UPTO; width++)
+    for (unsigned n = 0; n < RANDOM_TRIPLES; n++)
+    {
+      FixedBits x = randomFixedBits(width, rng);
+      FixedBits y = randomFixedBits(width, rng);
+      FixedBits out = randomFixedBits(width, rng);
+      check(x, y, out);
+      if (::testing::Test::HasFatalFailure())
+        return;
+    }
+}
+
+// trailingOneReasoning must leave trailingOneReasoning_OLD nothing to find,
+// and the old reasoning must not mutate its arguments once the new one has
+// run. This replaces an assert that ran inside trailingOneReasoning itself.
 TEST_F(ConstantBitP_TransferFunctions, trailingOneReasoningSubsumesOld)
 {
-  const unsigned width = 3;
-  unsigned combinations = 1;
-  for (unsigned i = 0; i < width; i++)
-    combinations *= 3;
+  // Triples on which the old reasoning fixes something when run first. If
+  // this stays at zero the subsumption below holds trivially and the test is
+  // worthless, so it is checked at the end. It was 129382 when written; the
+  // floor is deliberately far below that so retuning the generator does not
+  // turn into a spurious failure.
+  unsigned oldFiresAlone = 0;
 
-  for (unsigned i = 0; i < combinations; i++)
-    for (unsigned j = 0; j < combinations; j++)
-      for (unsigned k = 0; k < combinations; k++)
-      {
-        FixedBits x = fromTernary(width, i);
-        FixedBits y = fromTernary(width, j);
-        FixedBits out = fromTernary(width, k);
-        trailingOneReasoning(x, y, out);
+  forEachTriple([&](FixedBits& x, FixedBits& y, FixedBits& out) {
+    FixedBits xa(x), ya(y), outa(out);
+    if (trailingOneReasoning_OLD(xa, ya, outa) == CHANGED)
+      oldFiresAlone++;
 
-        FixedBits x2(x), y2(y), out2(out);
-        const Result old = trailingOneReasoning_OLD(x2, y2, out2);
+    trailingOneReasoning(x, y, out);
 
-        ASSERT_EQ(NO_CHANGE, old)
-            << "old reasoning fired after new on " << str(x) << " * " << str(y)
-            << " = " << str(out);
-        ASSERT_TRUE(FixedBits::equals(x, x2))
-            << "old reasoning mutated " << str(x) << " to " << str(x2);
-      }
+    FixedBits x2(x), y2(y), out2(out);
+    const Result old = trailingOneReasoning_OLD(x2, y2, out2);
+
+    ASSERT_EQ(NO_CHANGE, old)
+        << "old reasoning fired after new on " << str(x) << " * " << str(y)
+        << " = " << str(out);
+    ASSERT_TRUE(FixedBits::equals(x, x2))
+        << "old reasoning mutated " << str(x) << " to " << str(x2);
+  });
+
+  EXPECT_GT(oldFiresAlone, 1000u)
+      << "the old reasoning almost never fires on these inputs, so the "
+         "subsumption check above is close to vacuous";
+}
+
+// useLeadingZeroesToFix must fix at least every bit useLeadingZeroesToFix_OLD
+// fixes, and must report CONFLICT whenever the old one does. This replaces
+// asserts that ran inside useLeadingZeroesToFix itself.
+TEST_F(ConstantBitP_TransferFunctions, leadingZeroesSubsumesOld)
+{
+  // Triples on which the old version fixes an output bit or reports a
+  // conflict. Where it does neither, "the new one fixed at least as much" is
+  // trivially true, so the count is checked at the end. It was 23986 when
+  // written.
+  //
+  // This is the reason the check is worth more here than it was as an in-line
+  // assert. There the old version ran on states the column reasoning had
+  // already saturated: over 11504 invocations of useLeadingZeroesToFix across
+  // a 2501-file corpus it fixed a bit on exactly none of them, so the
+  // assertion it guarded was vacuous every single time.
+  unsigned oldFires = 0;
+
+  forEachTriple([&](FixedBits& x, FixedBits& y, FixedBits& out) {
+    FixedBits x_p(x), y_p(y), o_p(out);
+    const Result old = useLeadingZeroesToFix_OLD(x_p, y_p, o_p);
+    if (old == CONFLICT || !FixedBits::equals(o_p, out))
+      oldFires++;
+
+    const Result now = useLeadingZeroesToFix(x, y, out);
+
+    if (old == CONFLICT)
+    {
+      ASSERT_EQ(CONFLICT, now)
+          << "old found a conflict the new one missed on " << str(x_p) << " * "
+          << str(y_p) << " = " << str(o_p);
+      return; // both bailed early, so neither is at its fixed point.
+    }
+
+    if (now == CONFLICT)
+      return; // the new one stops mid-scan, as it did when this was an assert.
+
+    ASSERT_TRUE(FixedBits::in(x, x_p))
+        << "new fixed less of x: " << str(x) << " vs " << str(x_p);
+    ASSERT_TRUE(FixedBits::in(y, y_p))
+        << "new fixed less of y: " << str(y) << " vs " << str(y_p);
+    ASSERT_TRUE(FixedBits::in(out, o_p))
+        << "new fixed less of the output: " << str(out) << " vs " << str(o_p);
+  });
+
+  EXPECT_GT(oldFires, 1000u)
+      << "the old version almost never fixes anything on these inputs, so "
+         "the subsumption check above is close to vacuous";
 }
 
 // ---------------------------------------------------------------------------
