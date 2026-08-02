@@ -762,7 +762,7 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
 
   // adjacency, sorted by (record, other endpoint) per source
   {
-    std::map<ASTNode, std::vector<std::pair<std::pair<size_t, unsigned>,
+    std::map<ASTNode, std::vector<std::pair<std::pair<size_t, uint64_t>,
                                             size_t>>> adj;
     for (size_t i = 0; i < eqEdges.size(); i++)
     {
@@ -774,7 +774,7 @@ ASTNode ExtensionalityContext::prepare(const ASTNode& root_)
             std::make_pair(e.record, e.left.GetNodeNum()), i));
     }
     for (std::map<ASTNode,
-                  std::vector<std::pair<std::pair<size_t, unsigned>,
+                  std::vector<std::pair<std::pair<size_t, uint64_t>,
                                         size_t>>>::iterator it = adj.begin();
          it != adj.end(); ++it)
     {
@@ -1354,10 +1354,10 @@ void ExtensionalityContext::encodeOneLemma(const ExtConflict& pendingLemma,
     {
       if (a.isConstant() && b.isConstant())
         return -1;
-      const unsigned na = a.GetNodeNum(), nb = b.GetNodeNum();
-      const std::pair<unsigned, unsigned> key(std::min(na, nb),
+      const uint64_t na = a.GetNodeNum(), nb = b.GetNodeNum();
+      const std::pair<uint64_t, uint64_t> key(std::min(na, nb),
                                               std::max(na, nb));
-      std::map<std::pair<unsigned, unsigned>, int>::const_iterator it =
+      std::map<std::pair<uint64_t, uint64_t>, int>::const_iterator it =
           self->eqLitCache.find(key);
       if (it != self->eqLitCache.end())
         return it->second;

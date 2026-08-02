@@ -249,16 +249,16 @@ bool atomLess(const ExtLemmaAtom& x, const ExtLemmaAtom& y)
 {
   if (x.op != y.op)
     return x.op < y.op;
-  unsigned xa = x.a.IsNull() ? 0 : x.a.GetNodeNum();
-  unsigned ya = y.a.IsNull() ? 0 : y.a.GetNodeNum();
+  uint64_t xa = x.a.IsNull() ? 0 : x.a.GetNodeNum();
+  uint64_t ya = y.a.IsNull() ? 0 : y.a.GetNodeNum();
   if (xa != ya)
     return xa < ya;
-  unsigned xb = x.b.IsNull() ? 0 : x.b.GetNodeNum();
-  unsigned yb = y.b.IsNull() ? 0 : y.b.GetNodeNum();
+  uint64_t xb = x.b.IsNull() ? 0 : x.b.GetNodeNum();
+  uint64_t yb = y.b.IsNull() ? 0 : y.b.GetNodeNum();
   if (xb != yb)
     return xb < yb;
-  unsigned xt = x.boolTerm.IsNull() ? 0 : x.boolTerm.GetNodeNum();
-  unsigned yt = y.boolTerm.IsNull() ? 0 : y.boolTerm.GetNodeNum();
+  uint64_t xt = x.boolTerm.IsNull() ? 0 : x.boolTerm.GetNodeNum();
+  uint64_t yt = y.boolTerm.IsNull() ? 0 : y.boolTerm.GetNodeNum();
   return xt < yt;
 }
 

@@ -437,7 +437,7 @@ private:
                       ToSATBase* tosat);
 
   // reified equality cache, scoped to the current SAT instance
-  std::map<std::pair<unsigned, unsigned>, int> eqLitCache;
+  std::map<std::pair<uint64_t, uint64_t>, int> eqLitCache;
 
   // last consistent observations for model export
   std::map<ASTNode, std::vector<std::pair<ASTNode, ASTNode>>> lastObserved;
