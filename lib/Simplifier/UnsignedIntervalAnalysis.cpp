@@ -35,6 +35,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/UnsignedInterval.h"
 #include "stp/Simplifier/StrengthReduction.h"
 #include "stp/Util/BitOps.h"
+#include "stp/Util/CBVOps.h"
 #include <iostream>
 #include <map>
 
@@ -83,32 +84,8 @@ namespace stp
     // untouched and its chunks below are all-zero against an upper
     // bound or all-one against a lower bound. ----
 
-    // The 64 bits of x starting at any bit offset, as a machine word.
-    // Chunk_Read clamps at the vector's width and reads zero past it, so
-    // no guards are needed. Two 32-bit reads because Chunk_Read is
-    // capped at the bits of an unsigned long, which isn't 64 everywhere.
-    uint64_t chunkAt(const CBV x, unsigned offset)
-    {
-      uint64_t r = CONSTANTBV::BitVector_Chunk_Read(x, 32, offset);
-      r |= (uint64_t)CONSTANTBV::BitVector_Chunk_Read(x, 32, offset + 32)
-           << 32;
-      return r;
-    }
-
-    // Bits [64k, 64k+63] of x as a machine word.
-    uint64_t chunk64(const CBV x, unsigned k)
-    {
-      return chunkAt(x, 64 * k);
-    }
-
-    // The inverse of chunk64. The value's bits above the vector's width
-    // must be zero.
-    void setChunk64(CBV x, unsigned k, uint64_t value)
-    {
-      const unsigned offset = 64 * k;
-      CONSTANTBV::BitVector_Chunk_Store(x, 32, offset, value);
-      CONSTANTBV::BitVector_Chunk_Store(x, 32, offset + 32, value >> 32);
-    }
+    // chunkAt / chunk64 / setChunk64, which the drivers below run over,
+    // are shared: see Util/CBVOps.h.
 
     // Which operand a chunk kernel changed.
     enum class Changed
@@ -789,19 +766,7 @@ namespace stp
     static const unsigned wordPathMaxWidth = 32;
 #endif
 
-    // The low (up to 64) bits of x as a machine word.
-    uint64_t low64(const CBV x)
-    {
-      return chunk64(x, 0);
-    }
-
-    // A fresh CBV holding a machine word. Needs value < 2^width.
-    CBV cbvFromU64(unsigned width, uint64_t value)
-    {
-      CBV r = CONSTANTBV::BitVector_Create(width, true);
-      setChunk64(r, 0, value);
-      return r;
-    }
+    // low64 and cbvFromU64 are shared: see Util/CBVOps.h.
 
     // The minimum of (a*i + b) mod m over 0 <= i < n; requires n >= 1,
     // a < m and b < m, with m <= 2^wordPathMaxWidth so nothing here can

@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/ValueSetAnalysis.h"
 #include "stp/Simplifier/Simplifier.h"
+#include "stp/Util/CBVOps.h"
 
 namespace stp
 {
@@ -38,21 +39,8 @@ namespace stp
 
   namespace
   {
-    CBV valueOf(unsigned width, uint64_t value)
-    {
-      CBV result = CONSTANTBV::BitVector_Create(width, true);
-      for (unsigned i = 0; i < width && i < 64; i++)
-        if ((value >> i) & 1)
-          CONSTANTBV::BitVector_Bit_On(result, i);
-      return result;
-    }
-
-    CBV allOnes(unsigned width)
-    {
-      CBV result = CONSTANTBV::BitVector_Create(width, true);
-      CONSTANTBV::BitVector_Fill(result);
-      return result;
-    }
+    // The conversions between vectors and machine words -- allOnes,
+    // mask64, low64 and cbvFromU64 -- are shared: see Util/CBVOps.h.
 
     // The shift amount, saturated at the width: shifting by the width or
     // more always gives the same answer.
@@ -157,37 +145,6 @@ namespace stp
         default:
           return NonMemberBVConstEvaluator(k, args, n.GetValueWidth());
       }
-    }
-
-    uint64_t mask64(unsigned width)
-    {
-      return width >= 64 ? ~0ull : (1ull << width) - 1;
-    }
-
-    // The value of a bit-vector of at most 64 bits. The chunk functions
-    // move at most an unsigned long per call, which is 32 bits on some
-    // platforms, so go in two halves.
-    uint64_t cbvToU64(const CBV v)
-    {
-      const unsigned width = bits_(v);
-      assert(width <= 64);
-      uint64_t result =
-          CONSTANTBV::BitVector_Chunk_Read(v, std::min(width, 32u), 0);
-      if (width > 32)
-        result |= (uint64_t)CONSTANTBV::BitVector_Chunk_Read(v, width - 32, 32)
-                  << 32;
-      return result;
-    }
-
-    CBV u64ToCBV(uint64_t v, unsigned width)
-    {
-      CBV result = CONSTANTBV::BitVector_Create(width, true);
-      CONSTANTBV::BitVector_Chunk_Store(result, std::min(width, 32u), 0,
-                                        (unsigned long)(v & 0xffffffffull));
-      if (width > 32)
-        CONSTANTBV::BitVector_Chunk_Store(result, width - 32, 32,
-                                          (unsigned long)(v >> 32));
-      return result;
     }
 
     size_t popcount64(uint64_t v)
@@ -417,7 +374,7 @@ namespace stp
     if (width > SMALL_WIDTH)
       return false;
     for (uint64_t v = 0; v < (1ull << width); v++)
-      out.push_back(valueOf(width, v));
+      out.push_back(cbvFromU64(width, v));
     return true;
   }
 
@@ -437,7 +394,7 @@ namespace stp
       if ((width + 1) * children[0]->size() > PRODUCT_CAP)
         return false;
       for (unsigned s = 0; s <= width; s++)
-        out.push_back(valueOf(width, s));
+        out.push_back(cbvFromU64(width, s));
       return true;
     }
 
@@ -622,7 +579,7 @@ namespace stp
 
     unsigned smallest = width;
     for (const CBV s : children[1]->values)
-      smallest = (unsigned)std::min<uint64_t>(smallest, cbvToU64(s));
+      smallest = (unsigned)std::min<uint64_t>(smallest, low64(s));
 
     // Shifted all the way out, an arithmetic shift still copies the sign
     // bit, so that bit always has to be varied.
@@ -709,7 +666,7 @@ namespace stp
       {
         members[i].reserve(children[i]->size());
         for (const CBV m : children[i]->values)
-          members[i].push_back(cbvToU64(m));
+          members[i].push_back(low64(m));
       }
       else if (!standIns64(n, i, children, widths[i], members[i], expandWith))
       {
@@ -789,7 +746,7 @@ namespace stp
     ValueSet* result = fresh(n);
     result->values.reserve(size);
     for (size_t i = 0; i < size; i++)
-      result->values.push_back(u64ToCBV(results[i], outWidth));
+      result->values.push_back(cbvFromU64(outWidth, results[i]));
 
     propagated++;
     return result;
