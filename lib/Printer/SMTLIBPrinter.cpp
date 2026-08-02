@@ -26,7 +26,9 @@ THE SOFTWARE.
 #include "stp/Printer/printers.h"
 #include <cassert>
 
-// Functions used by both the version1 and version2 STMLIB printers.
+// Functions shared between the printers: the letize pass used by all of
+// them, and the traversal shared by the version1 and version2 SMT-LIB
+// printers.
 
 namespace printer
 {
@@ -214,8 +216,10 @@ ostream& SMTLIB_Print(ostream& os, STPMgr* mgr, const ASTNode n,
 
   // pass 1: letize the node
   {
-    ASTNodeSet PLPrintNodeSet;
-    LetizeNode(n, PLPrintNodeSet, smtlib1, mgr);
+    ASTNodeSet seen;
+    // The last argument: SMT-LIB1 can only let-bind terms, not formulas.
+    LetizeState st = {seen, NodeLetVarMap, NodeLetVarVec, "?let_k_", smtlib1};
+    LetizeNode(n, st, mgr);
   }
 
   // pass 2:
@@ -278,8 +282,7 @@ ostream& SMTLIB_Print(ostream& os, STPMgr* mgr, const ASTNode n,
   return os;
 }
 
-void LetizeNode(const ASTNode& n, ASTNodeSet& PLPrintNodeSet, bool smtlib1,
-                STPMgr* stp)
+void LetizeNode(const ASTNode& n, LetizeState& st, STPMgr* stp)
 {
   if (n.isAtom())
     return;
@@ -292,34 +295,35 @@ void LetizeNode(const ASTNode& n, ASTNodeSet& PLPrintNodeSet, bool smtlib1,
     if (ccc.isAtom())
       continue;
 
-    if (PLPrintNodeSet.find(ccc) == PLPrintNodeSet.end())
+    if (st.seen.find(ccc) == st.seen.end())
     {
       // If branch: if *it is not in NodeSet then,
       //
       // 1. add it to NodeSet
       //
       // 2. Letize its childNodes
-      PLPrintNodeSet.insert(ccc);
-      LetizeNode(ccc, PLPrintNodeSet, smtlib1, stp);
+      st.seen.insert(ccc);
+      LetizeNode(ccc, st, stp);
     }
     else
     {
       // 0. Else branch: Node has been seen before
       //
       // 1. Check if the node has a corresponding letvar in the
-      // 1. NodeLetVarMap.
+      // 1. letVarMap.
       //
       // 2. if no, then create a new var and add it to the
-      // 2. NodeLetVarMap
-      if ((!smtlib1 || ccc.GetType() == BITVECTOR_TYPE) &&
-          NodeLetVarMap.find(ccc) == NodeLetVarMap.end())
+      // 2. letVarMap
+      if ((!st.termsOnly || ccc.GetType() == BITVECTOR_TYPE) &&
+          st.letVarMap.find(ccc) == st.letVarMap.end())
       {
         // Create a new symbol. Get some name. if it conflicts with a
         // declared name, too bad.
-        int sz = NodeLetVarMap.size();
+        int sz = st.letVarMap.size();
         std::ostringstream oss;
-        oss << "?let_k_" << sz;
+        oss << st.prefix << sz;
 
+        // Note the widths come from the parent, not from ccc.
         ASTNode CurrentSymbol = stp->CreateSymbol(
             oss.str().c_str(), n.GetIndexWidth(), n.GetValueWidth());
         /* If for some reason the variable being created here is
@@ -328,9 +332,9 @@ void LetizeNode(const ASTNode& n, ASTNodeSet& PLPrintNodeSet, bool smtlib1,
          * check for this.  [Vijay is the author of this comment.]
          */
 
-        NodeLetVarMap[ccc] = CurrentSymbol;
+        st.letVarMap[ccc] = CurrentSymbol;
         std::pair<ASTNode, ASTNode> node_letvar_pair(CurrentSymbol, ccc);
-        NodeLetVarVec.push_back(node_letvar_pair);
+        st.letVarVec.push_back(node_letvar_pair);
       }
     }
   }

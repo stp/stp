@@ -43,9 +43,6 @@ extern THREAD_LOCAL_IE stp::ASTNodeMap NodeLetVarMap1;
 
 std::string functionToSMTLIBName(const Kind k, bool smtlib1);
 
-void LetizeNode(const ASTNode& n, stp::ASTNodeSet& PLPrintNodeSet, bool smtlib1,
-                STPMgr*);
-
 // Prints one node in SMT-LIB1 (smtlib1 == true) or SMT-LIB2 syntax. Both
 // dialects share this one traversal.
 void SMTLIB_Print1(ostream& os, const stp::ASTNode n, int indentation,
