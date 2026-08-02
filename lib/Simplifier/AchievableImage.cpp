@@ -33,18 +33,6 @@ namespace stp
 namespace
 {
 
-CBV mkZero(unsigned width)
-{
-  return CONSTANTBV::BitVector_Create(width, true);
-}
-
-CBV mkOne(unsigned width)
-{
-  CBV v = mkZero(width);
-  CONSTANTBV::BitVector_increment(v);
-  return v;
-}
-
 // The bottom `bits` bits set, at the given width.
 CBV mkLowMask(unsigned bits, unsigned width)
 {

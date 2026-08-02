@@ -25,6 +25,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/StrengthReduction.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
+#include "stp/Util/CBVOps.h"
 #include <iostream>
 
 namespace stp
@@ -916,9 +917,7 @@ namespace stp
 
   StrengthReduction::StrengthReduction(NodeFactory* _nf, UserDefinedFlags * _uf)
   {
-    littleOne = CONSTANTBV::BitVector_Create(1, true);
-    littleZero = CONSTANTBV::BitVector_Create(1, true);
-    CONSTANTBV::BitVector_Fill(littleOne);
+    littleOne = mkOne(1);
     nf = _nf;
     uf = _uf;
 
@@ -929,7 +928,6 @@ namespace stp
   StrengthReduction::~StrengthReduction()
   {
     CONSTANTBV::BitVector_Destroy(littleOne);
-    CONSTANTBV::BitVector_Destroy(littleZero);
   }
 
   void StrengthReduction::stats(string name)

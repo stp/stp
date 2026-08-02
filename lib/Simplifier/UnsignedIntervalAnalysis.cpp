@@ -730,23 +730,18 @@ namespace stp
     // ---- Helpers for the multiplication bounds. The bitvectors in this
     // group share one width, chosen wide enough that nothing overflows. ----
 
-    CBV zeroOf(unsigned width)
-    {
-      return CONSTANTBV::BitVector_Create(width, true);
-    }
-
     // A fresh copy of x at a bigger width.
     CBV widenTo(const CBV x, unsigned width)
     {
       assert(width >= bits_(x));
-      CBV r = zeroOf(width);
+      CBV r = mkZero(width);
       CONSTANTBV::BitVector_Interval_Copy(r, x, 0, 0, bits_(x));
       return r;
     }
 
     CBV mulFresh(const CBV x, const CBV y)
     {
-      CBV r = zeroOf(bits_(x));
+      CBV r = mkZero(bits_(x));
       CBV tmp = CONSTANTBV::BitVector_Clone(x); // Mul_Pos destroys this one.
       CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Mul_Pos(r, tmp, y, true);
       assert(0 == e);
@@ -913,8 +908,8 @@ namespace stp
 
         if (known)
         {
-          resultMin = zeroOf(width);
-          resultMax = zeroOf(width);
+          resultMin = mkZero(width);
+          resultMax = mkZero(width);
           for (unsigned i = 0; i < width; i++)
           {
             if ((apMin >> i) & 1)
@@ -949,8 +944,8 @@ namespace stp
         // Every product sits between the bound products, which agree above
         // the width, so the low bits run between the bounds' low bits
         // without wrapping: exact.
-        resultMin = zeroOf(width);
-        resultMax = zeroOf(width);
+        resultMin = mkZero(width);
+        resultMax = mkZero(width);
         for (unsigned i = 0; i < width; i++)
         {
           if (CONSTANTBV::BitVector_bit_test(lowProduct, i))
@@ -992,7 +987,7 @@ namespace stp
 
     if (emptyCBV.find(width) == emptyCBV.end())
     {
-      emptyCBV[width] = CONSTANTBV::BitVector_Create(width, true);
+      emptyCBV[width] = mkZero(width);
     }
     
     assert(CONSTANTBV::BitVector_is_empty(emptyCBV[width]));  
@@ -1006,10 +1001,7 @@ namespace stp
 
     if (emptyIntervals.find(width) == emptyIntervals.end())
     {
-      stp::CBV min = CONSTANTBV::BitVector_Create(width, true);
-      stp::CBV max = CONSTANTBV::BitVector_Create(width, true);
-      CONSTANTBV::BitVector_Fill(max);
-      emptyIntervals[width] = new UnsignedInterval(min,max);
+      emptyIntervals[width] = new UnsignedInterval(mkZero(width), allOnes(width));
     }
 
     UnsignedInterval* r = emptyIntervals[width];
@@ -2121,9 +2113,8 @@ namespace stp
 
   UnsignedIntervalAnalysis::UnsignedIntervalAnalysis(STPMgr& _bm) : bm(_bm)
   {
-    littleZero = getEmptyCBV(1);
-    littleOne = CONSTANTBV::BitVector_Create(1, true);
-    CONSTANTBV::BitVector_Fill(littleOne);
+    littleZero = getEmptyCBV(1); // owned by emptyCBV, not by us.
+    littleOne = mkOne(1);
   }
 
   UnsignedIntervalAnalysis::~UnsignedIntervalAnalysis()
