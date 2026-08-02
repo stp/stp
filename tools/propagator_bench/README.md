@@ -109,17 +109,18 @@ the known bits as unit clauses and counts what comes out fixed at decision
 level zero:
 
 ```
-bvudiv  both-ways 16  50% fixed  ... vs bit-blasted: 0.24 vs 6.43 bits (26.8x)
-concat  both-ways 16  50% fixed  ... vs bit-blasted: 8.15 vs 8.15 bits (1.0x)
+bvsrem  both-ways 16  50% fixed  ... vs bit-blasted: 0.69 vs 2.56 bits (3.7x)
+bvand   both-ways 16  50% fixed  ... vs bit-blasted: 6.95 vs 6.95 bits (1.0x)
 ```
 
 The multiplier is the propagator's bits over unit propagation's. `1.0x` means
-the SAT solver would have found exactly the same bits without it, which is
-what the pure wiring operations -- `concat`, `extract`, both extends and
-`bvnot` -- all report, since bit-blasting them is little more than renaming
-wires. The division and shift families are where the propagator pulls
-furthest ahead. `all new` is printed when unit propagation deduced nothing at
-all, so there is no ratio to take.
+the SAT solver would have found exactly the same bits without it, and most
+operations report it: the bitwise ones, `eq`, `ite`, `concat`, `extract` and
+both extends are identical, and `bvudiv` and `bvmul` are within a rounding
+error. The signed division family is the one real margin -- `bvsrem` 3.7x,
+`bvsmod` 3.5x, `bvsdiv` 2.6x -- with addition and the shifts at 1.1x to 1.35x.
+`all new` is printed when unit propagation deduced nothing at all, so there is
+no ratio to take.
 
 `--cnf` picks how that CNF is generated -- `simple` (plain Tseitin), or the
 five `cnf_effort` levels `very-low`, `low`, `medium` (STP's default), `high`,
@@ -128,7 +129,31 @@ the encoding and its propagation strength can be read together. For `bvand`
 the setting changes the size by up to 2.1x and the deduced bits hardly at
 all; see `bench-hard/reports/2026-08-02-cnf-effort-vs-propagation.md`.
 
-This needs a CryptoMiniSat build (`-DNOCRYPTOMINISAT=OFF`); the option is
+### Is the encoding arc-consistent?
+
+`--bcp-check` samples, and every case it draws is built from a solution, so it
+never asks whether propagation *detects a contradiction*. `--bcp-exhaustive W`
+does both halves at a small width: every combination of fixed and unfixed bits
+over the varying children and the result, contradictory ones included, against
+a brute-forced ideal.
+
+```
+bvand   ... encoding arc-consistent w=4: yes (531441/531441 cases, 336960 contradictory)
+bvadd   ... encoding arc-consistent w=3: NO (18851/19683 cases, 820 incomplete, 12 MISSED CONFLICTS)
+```
+
+`yes` requires all three: nothing left underived, no contradiction missed, and
+nothing fixed that the ideal does not fix. Width 4 is 3^12 cases and takes
+about 45 seconds; each step costs a fresh solver and a CNF load, so the cost
+is 3^(children+result bits).
+
+Operations whose bits are independent -- `bvand`, `bvor`, `bvxor`, `bvnot` --
+come out arc-consistent under every `--cnf` setting. Ones with a carry chain
+or a global relation -- `bvadd`, `bvmul`, `bvudiv`, `bvult` -- do not, which
+is where the propagator earns its keep. `concat`, `extract` and the extends
+need an even width, so choose W accordingly.
+
+Both options need a CryptoMiniSat build (`-DNOCRYPTOMINISAT=OFF`); they are
 refused otherwise rather than quietly reporting nothing. It is much slower
 per case than the propagator it measures -- a fresh solver and a full CNF
 load each time -- so `--bcp-budget` caps it, and the reported per-case cost

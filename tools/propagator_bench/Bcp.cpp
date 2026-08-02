@@ -115,9 +115,10 @@ struct BcpEncoding
       aig.release_cnf_memory(cnf);
   }
 
-  // Counts the variables fixed at level zero once `bits` are asserted. `bits`
-  // is the varying children followed by the result, matching vars.
-  unsigned fixedCount(const vector<const FixedBits*>& bits) const
+  // Counts the variables fixed at level zero once `bits` are asserted, or
+  // reports that unit propagation refuted them. `bits` is the varying children
+  // followed by the result, matching vars.
+  bool propagate(const vector<const FixedBits*>& bits, unsigned& fixed) const
   {
     CryptoMiniSat5 solver(1);
     aig.add_cnf_to_solver(solver, cnf);
@@ -132,7 +133,9 @@ struct BcpEncoding
             SATSolver::mkLit(vars[s][i], !bits[s]->getValue(i)));
       }
 
-    return solver.getFixedCountWithAssumptions(assumps, interesting);
+    bool conflict = false;
+    fixed = solver.getFixedCountWithAssumptions(assumps, interesting, conflict);
+    return !conflict;
   }
 
   // How many of the given bits this encoding can see at all. Bits that never
@@ -207,10 +210,10 @@ void destroyBcpEncoding(BcpEncoding* e)
   delete e;
 }
 
-unsigned bcpFixedCount(const BcpEncoding* e,
-                       const vector<const FixedBits*>& bits)
+bool bcpPropagate(const BcpEncoding* e, const vector<const FixedBits*>& bits,
+                  unsigned& fixed)
 {
-  return e->fixedCount(bits);
+  return e->propagate(bits, fixed);
 }
 
 unsigned bcpVisibleFixed(const BcpEncoding* e,
@@ -248,9 +251,11 @@ BcpEncoding* makeBcpEncoding(stp::STPMgr*, const OpSpec&, const Layout&)
 
 void destroyBcpEncoding(BcpEncoding*) {}
 
-unsigned bcpFixedCount(const BcpEncoding*, const vector<const FixedBits*>&)
+bool bcpPropagate(const BcpEncoding*, const vector<const FixedBits*>&,
+                  unsigned& fixed)
 {
-  return 0;
+  fixed = 0;
+  return true;
 }
 
 unsigned bcpVisibleFixed(const BcpEncoding*, const vector<const FixedBits*>&)

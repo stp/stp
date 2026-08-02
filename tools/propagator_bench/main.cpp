@@ -95,6 +95,9 @@ void usage()
       << "                      propagator (CryptoMiniSat builds only)\n"
       << "  --bcp-budget SECS   time limit for that comparison, per row\n"
       << "                      (default 5)\n"
+      << "  --bcp-exhaustive W  check the bit-blasted encoding for arc\n"
+      << "                      consistency at width W: every combination of\n"
+      << "                      fixed bits, contradictory ones included\n"
       << "  --cnf HOW           how to generate the CNF --bcp-check\n"
       << "                      propagates over: simple, very-low, low,\n"
       << "                      medium (STP's default), high, very-high.\n"
@@ -213,6 +216,8 @@ int main(int argc, char** argv)
     else if (arg == "--bcp-check") { cfg.bcpCases = atoi(value.c_str()); i++; }
     else if (arg == "--bcp-budget")
     { cfg.bcpBudgetSeconds = atof(value.c_str()); i++; }
+    else if (arg == "--bcp-exhaustive")
+    { cfg.bcpExhaustiveWidth = atoi(value.c_str()); i++; }
     else if (arg == "--cnf") { cfg.cnf = value; i++; }
     else if (arg == "--seed") { cfg.seed = atoi(value.c_str()); i++; }
     else if (arg == "--html") { cfg.html = value; i++; }
@@ -232,11 +237,11 @@ int main(int argc, char** argv)
     return 1;
   }
 
-  if (cfg.bcpCases > 0 && !bcpAvailable())
+  if ((cfg.bcpCases > 0 || cfg.bcpExhaustiveWidth > 0) && !bcpAvailable())
   {
     // Refuse rather than silently report nothing: the whole point of the
     // option is the comparison it makes.
-    std::cerr << "propagator_bench: --bcp-check needs a build with "
+    std::cerr << "propagator_bench: --bcp-check/--bcp-exhaustive need a build with "
                  "CryptoMiniSat (configure with -DNOCRYPTOMINISAT=OFF)\n";
     return 1;
   }

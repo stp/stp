@@ -542,8 +542,11 @@ BcpCheck bcpCompare(STPMgr* mgr, const OpSpec& op, const Layout& l,
         bcpView(l, cases[i].children, cases[i].output);
     const unsigned initial = bcpVisibleFixed(enc, before);
 
-    // What boolean constraint propagation gets on its own.
-    const unsigned afterBcp = bcpFixedCount(enc, before);
+    // What boolean constraint propagation gets on its own. The sampled cases
+    // are all built from a solution, so a refutation here would be a bug.
+    unsigned afterBcp = 0;
+    if (!bcpPropagate(enc, before, afterBcp))
+      continue;
 
     // What the transfer function gets, counted over the same variables.
     vector<FixedBits> got(cases[i].children);
@@ -571,6 +574,169 @@ BcpCheck bcpCompare(STPMgr* mgr, const OpSpec& op, const Layout& l,
   return check;
 }
 
+// ---------------------------------------------------------------------------
+// Exhaustive arc-consistency check of the bit-blasted encoding.
+//
+// Every combination of fixed/unfixed bits over the varying children and the
+// result, contradictory ones included -- which is the half the sampled check
+// above cannot reach, since its cases are all drawn from a solution. For each
+// one the ideal is brute-forced from the operation's truth table, and unit
+// propagation is asked to match it: derive every bit that follows, and refute
+// the case outright when nothing follows because there is no solution.
+
+BcpExhaustive bcpExhaustiveCheck(STPMgr* mgr, const OpSpec& op,
+                                 const Config& cfg)
+{
+  BcpExhaustive res;
+
+  const unsigned width = cfg.bcpExhaustiveWidth;
+  const Layout l = layoutFor(op, width, cfg.arity);
+  if (!l.ok || l.packedBits() > 24)
+    return res;
+
+  BcpEncoding* enc = makeBcpEncoding(mgr, op, l);
+  if (enc == NULL)
+    return res;
+
+  res.ran = true;
+  res.width = width;
+
+  const vector<unsigned> varying = l.varying();
+  const vector<uint64_t> table = semanticsTable(mgr, op, l);
+  const uint64_t packedCount = 1ull << l.packedBits();
+
+  // Where each varying child sits in the packed value.
+  vector<unsigned> shift(varying.size(), 0);
+  {
+    unsigned s = 0;
+    for (size_t i = 0; i < varying.size(); i++)
+    {
+      shift[i] = s;
+      s += l.children[varying[i]].width;
+    }
+  }
+
+  ChildSpec outSpec;
+  outSpec.width = l.outWidth;
+  outSpec.isBoolean = l.outIsBoolean;
+
+  vector<FixedBits> children;
+  for (const ChildSpec& spec : l.children)
+    children.push_back(FixedBits(spec.width, spec.isBoolean));
+
+  vector<uint64_t> childPatterns(varying.size(), 0);
+  const uint64_t outLimit = pow3(l.outWidth);
+
+  bool done = false;
+  while (!done)
+  {
+    for (unsigned i = 0; i < l.children.size(); i++)
+      if (l.children[i].isConstant)
+        children[i] = concreteOf(l.children[i], l.children[i].value);
+    for (size_t i = 0; i < varying.size(); i++)
+      children[varying[i]] =
+          fromTernary(l.children[varying[i]], childPatterns[i]);
+
+    for (uint64_t outPattern = 0; outPattern < outLimit; outPattern++)
+    {
+      const FixedBits output = fromTernary(outSpec, outPattern);
+      res.cases++;
+
+      // The ideal: the join of every solution this case still admits.
+      vector<FixedBits> ideal(children);
+      FixedBits idealOut(output);
+      bool anySolution = false;
+      for (uint64_t packed = 0; packed < packedCount; packed++)
+      {
+        bool ok = true;
+        for (size_t i = 0; i < varying.size() && ok; i++)
+        {
+          const unsigned w = l.children[varying[i]].width;
+          ok = admitsValue(children[varying[i]],
+                           (packed >> shift[i]) & ((1ull << w) - 1));
+        }
+        if (!ok || !admitsValue(output, table[packed]))
+          continue;
+
+        if (!anySolution)
+        {
+          for (size_t i = 0; i < varying.size(); i++)
+          {
+            const unsigned w = l.children[varying[i]].width;
+            ideal[varying[i]] = concreteOf(l.children[varying[i]],
+                                           (packed >> shift[i]) &
+                                               ((1ull << w) - 1));
+          }
+          idealOut = concreteOf(outSpec, table[packed]);
+          anySolution = true;
+        }
+        else
+        {
+          for (size_t i = 0; i < varying.size(); i++)
+          {
+            const unsigned w = l.children[varying[i]].width;
+            ideal[varying[i]].join((packed >> shift[i]) &
+                                   ((1ull << w) - 1));
+          }
+          idealOut.join(table[packed]);
+        }
+      }
+
+      unsigned fixed = 0;
+      const bool propagated =
+          bcpPropagate(enc, bcpView(l, children, output), fixed);
+
+      if (!anySolution)
+      {
+        res.contradictory++;
+        if (propagated)
+          res.missedConflict++;
+        else
+          res.complete++;
+        continue;
+      }
+
+      if (!propagated)
+      {
+        res.unsound++; // refused a case that has a solution
+        continue;
+      }
+
+      const unsigned initial =
+          bcpVisibleFixed(enc, bcpView(l, children, output));
+      const unsigned idealFixed = bcpVisibleFixed(enc, bcpView(l, ideal, idealOut));
+
+      if (fixed > idealFixed)
+        res.unsound++;
+      else
+      {
+        res.derivable += idealFixed - initial;
+        res.gained += fixed - initial;
+        if (fixed == idealFixed)
+          res.complete++;
+        else
+          res.incomplete++;
+      }
+    }
+
+    done = true;
+    for (size_t i = 0; i < varying.size(); i++)
+    {
+      if (++childPatterns[i] < pow3(l.children[varying[i]].width))
+      {
+        done = false;
+        break;
+      }
+      childPatterns[i] = 0;
+    }
+    if (varying.empty())
+      done = true;
+  }
+
+  destroyBcpEncoding(enc);
+  return res;
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -583,6 +749,14 @@ void runCbitp(STPMgr* mgr, const Config& cfg, vector<Row>& out)
         std::find(cfg.ops.begin(), cfg.ops.end(), string(op.name)) ==
             cfg.ops.end())
       continue;
+
+    BcpExhaustive bcpEx;
+    if (cfg.bcpExhaustiveWidth > 0)
+    {
+      if (cfg.verbose)
+        std::cerr << "bcp arc-consistency " << op.name << std::endl;
+      bcpEx = bcpExhaustiveCheck(mgr, op, cfg);
+    }
 
     const bool isBoolean =
         op.shape == Shape::BoolNary || op.shape == Shape::BoolUnary;
@@ -632,6 +806,7 @@ void runCbitp(STPMgr* mgr, const Config& cfg, vector<Row>& out)
           row.conflicts = t.conflicts;
           row.witnessUnsound = t.unsound;
           row.precision = precision;
+          row.bcpExhaustive = bcpEx;
 
           if (cfg.satCases > 0 && op.satCheckable)
           {

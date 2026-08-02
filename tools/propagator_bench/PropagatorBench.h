@@ -209,6 +209,33 @@ struct BcpCheck
   }
 };
 
+// Exhaustive arc-consistency check of the bit-blasted encoding at a small
+// width: every combination of fixed/unfixed input bits, contradictory ones
+// included, against a brute-forced ideal. This is the half the sampled
+// --bcp-check cannot reach, because its cases are all built from a solution
+// and so are never contradictory.
+struct BcpExhaustive
+{
+  bool ran = false;
+  unsigned width = 0;
+  uint64_t cases = 0;
+  uint64_t complete = 0;       // deduced everything that follows
+  uint64_t incomplete = 0;     // left something on the table
+  uint64_t missedConflict = 0; // no solution, and propagation did not say so
+  uint64_t unsound = 0;        // fixed more than the ideal: would be a bug
+  uint64_t contradictory = 0;  // cases with no solution at all
+  uint64_t derivable = 0;
+  uint64_t gained = 0;
+
+  // Arc consistent means both halves: everything implied is derived, and
+  // every contradiction is detected.
+  bool arcConsistent() const
+  {
+    return ran && cases > 0 && incomplete == 0 && missedConflict == 0 &&
+           unsound == 0;
+  }
+};
+
 struct Row
 {
   Domain domain = Domain::Cbitp;
@@ -231,6 +258,7 @@ struct Row
   PrecisionResult precision; // exhaustive, at a small width
   SatCheck sat;              // at this row's width
   BcpCheck bcp;              // against the bit-blasted encoding
+  BcpExhaustive bcpExhaustive; // arc consistency of that encoding
 };
 
 struct Config
@@ -252,6 +280,7 @@ struct Config
   double satBudgetSeconds = 5;  // it is thousands of times slower per case
   unsigned bcpCases = 0;        // 0 disables the bit-blasted comparison
   double bcpBudgetSeconds = 5;  // a fresh solver and CNF load per case
+  unsigned bcpExhaustiveWidth = 0; // 0 disables the arc-consistency check
   unsigned seed = 42;
   // How the CNF that --bcp-check propagates over is generated. Empty leaves
   // STP's default (medium) alone. A different encoding of the same circuit
@@ -299,9 +328,11 @@ bool bcpAvailable();
 BcpEncoding* makeBcpEncoding(stp::STPMgr* mgr, const OpSpec& op,
                              const Layout& l);
 void destroyBcpEncoding(BcpEncoding* e);
-// Variables fixed at decision level zero once the known bits are asserted.
-unsigned bcpFixedCount(const BcpEncoding* e,
-                       const vector<const FixedBits*>& bits);
+// Asserts the known bits and propagates. Returns false when unit propagation
+// refutes them -- the conflict-detection half of arc consistency -- and
+// otherwise sets `fixed` to the variables fixed at decision level zero.
+bool bcpPropagate(const BcpEncoding* e, const vector<const FixedBits*>& bits,
+                  unsigned& fixed);
 // Of the known bits, how many the encoding represents at all.
 unsigned bcpVisibleFixed(const BcpEncoding* e,
                          const vector<const FixedBits*>& bits);

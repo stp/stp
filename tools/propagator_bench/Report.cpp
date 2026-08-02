@@ -108,6 +108,20 @@ string precisionDetail(const Row& r)
     o << ", " << r.bcp.cases << " cases, " << r.bcp.clauses << " clauses/"
       << r.bcp.variables << " vars)";
   }
+  if (r.bcpExhaustive.ran && r.bcpExhaustive.cases > 0)
+  {
+    const BcpExhaustive& e = r.bcpExhaustive;
+    o << "; encoding arc-consistent w=" << e.width << ": "
+      << (e.arcConsistent() ? "yes" : "NO") << " (" << e.complete << "/"
+      << e.cases << " cases, " << e.contradictory << " contradictory";
+    if (e.incomplete > 0)
+      o << ", " << e.incomplete << " incomplete";
+    if (e.missedConflict > 0)
+      o << ", " << e.missedConflict << " MISSED CONFLICTS";
+    if (e.unsound > 0)
+      o << ", " << e.unsound << " UNSOUND";
+    o << ")";
+  }
   if (r.witnessUnsound > 0)
     o << "; " << r.witnessUnsound << " timed cases lost their solution";
   if (r.conflicts > 0)
