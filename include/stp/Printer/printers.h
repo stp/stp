@@ -59,6 +59,10 @@ DLL_PUBLIC void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* stp,
 DLL_PUBLIC void SMTLIB2_Print1(ostream& os, const stp::ASTNode n,
                                int indentation, bool letize);
 
+// Emitters for a BVCONST (or a BITVECTOR wrapping one). outputBitVec writes
+// the SMT-LIB1 spelling, "bv<decimal>[<width>]"; the dot and GDL printers use
+// it too, so their node labels are in SMT-LIB1 syntax.
+void outputBitVec(const ASTNode n, ostream& os);
 void outputBitVecSMTLIB2(const ASTNode n, ostream& os);
 
 DLL_PUBLIC ostream& GDL_Print(ostream& os, const stp::ASTNode n);

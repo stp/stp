@@ -35,8 +35,6 @@ using std::string;
 using std::endl;
 using namespace stp;
 
-void outputBitVec(const ASTNode n, ostream& os);
-
 void Dot_Print1(ostream& os, const ASTNode n,
                 std::unordered_set<uint64_t>* alreadyOutput)
 {
