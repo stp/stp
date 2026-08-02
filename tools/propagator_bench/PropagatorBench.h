@@ -185,6 +185,28 @@ struct SatCheck
   uint64_t unsound = 0;
 };
 
+// Comparison against unit propagation on the bit-blasted encoding: not what
+// an ideal propagator could deduce, but what the SAT solver would have
+// deduced from the same inputs without the propagator's help. Both figures
+// are bits newly fixed, averaged per case, over the varying children and the
+// result.
+struct BcpCheck
+{
+  bool ran = false;
+  uint64_t cases = 0;
+  double bcpBits = 0;   // fixed by boolean constraint propagation
+  double cbitpBits = 0; // fixed by the transfer function, same cases
+
+  // What the propagator adds over the encoding. Above 1 it is earning its
+  // keep; at 1 the SAT solver would have found the same bits anyway.
+  double ratio() const
+  {
+    if (!ran || bcpBits <= 0)
+      return cbitpBits > 0 ? 0 : 1; // 0 stands for "infinite", printed as such
+    return cbitpBits / bcpBits;
+  }
+};
+
 struct Row
 {
   Domain domain = Domain::Cbitp;
@@ -206,6 +228,7 @@ struct Row
 
   PrecisionResult precision; // exhaustive, at a small width
   SatCheck sat;              // at this row's width
+  BcpCheck bcp;              // against the bit-blasted encoding
 };
 
 struct Config
@@ -225,6 +248,8 @@ struct Config
   uint64_t precisionCaseCap = 4000000;
   unsigned satCases = 0;        // 0 disables the SAT spot check
   double satBudgetSeconds = 5;  // it is thousands of times slower per case
+  unsigned bcpCases = 0;        // 0 disables the bit-blasted comparison
+  double bcpBudgetSeconds = 5;  // a fresh solver and CNF load per case
   unsigned seed = 42;
   bool shiftBias = true; // draw half the shift amounts from [0, width)
   bool verbose = false;
@@ -254,6 +279,25 @@ void runValueSet(stp::STPMgr* mgr, const Config& c, vector<Row>& out);
 simplifier::constantBitP::Result cbitpTransfer(stp::STPMgr* mgr, stp::Kind k,
                                                vector<FixedBits*>& children,
                                                FixedBits& output);
+
+// ---------------------------------------------------------------------------
+// The bit-blasted encoding, as a propagator. See Bcp.cpp. Built once per
+// (operation, layout) because bit-blasting dwarfs the propagation; NULL when
+// the operation cannot be encoded, or in a build without CryptoMiniSat.
+// `bits` is always the varying children in layout order, then the result.
+
+struct BcpEncoding;
+
+bool bcpAvailable();
+BcpEncoding* makeBcpEncoding(stp::STPMgr* mgr, const OpSpec& op,
+                             const Layout& l);
+void destroyBcpEncoding(BcpEncoding* e);
+// Variables fixed at decision level zero once the known bits are asserted.
+unsigned bcpFixedCount(const BcpEncoding* e,
+                       const vector<const FixedBits*>& bits);
+// Of the known bits, how many the encoding represents at all.
+unsigned bcpVisibleFixed(const BcpEncoding* e,
+                         const vector<const FixedBits*>& bits);
 
 // ---------------------------------------------------------------------------
 // Reporting.

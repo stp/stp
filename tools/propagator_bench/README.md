@@ -33,6 +33,10 @@ Build Release. A Debug build measures the assertions, not the propagators.
 # One question, quickly.
 ./propagator_bench --domains cbitp --ops bvsgt --widths 64 --probs 50 \
                    --directions bottom-up
+
+# Is the propagator deducing more than the bit-blasted encoding would?
+./propagator_bench --domains cbitp --widths 16 --probs 50 --no-precision \
+                   --bcp-check 200
 ```
 
 `--list` shows the operations and which domains implement them, `--help` the
@@ -91,6 +95,41 @@ plain SAT variables.
 A row is `yes` only when both checks that ran agree, `no` when either found
 something more to deduce, and `unsound` when a real solution was excluded --
 which would be a bug in the propagator, not a precision result.
+
+## Against the bit-blasted encoding
+
+The precision verdict asks whether a *better* propagator could exist.
+`--bcp-check N` asks the other question: whether this one is worth running at
+all. STP bit-blasts to CNF and calls a SAT solver anyway, so a word-level
+propagator only earns its keep by fixing bits that boolean constraint
+propagation over the same circuit would not have fixed on its own.
+
+The check encodes `op(children) = result` once per row, then per case asserts
+the known bits as unit clauses and counts what comes out fixed at decision
+level zero:
+
+```
+bvudiv  both-ways 16  50% fixed  ... vs bit-blasted: 0.24 vs 6.43 bits (26.8x)
+concat  both-ways 16  50% fixed  ... vs bit-blasted: 8.15 vs 8.15 bits (1.0x)
+```
+
+The multiplier is the propagator's bits over unit propagation's. `1.0x` means
+the SAT solver would have found exactly the same bits without it, which is
+what the pure wiring operations -- `concat`, `extract`, both extends and
+`bvnot` -- all report, since bit-blasting them is little more than renaming
+wires. The division and shift families are where the propagator pulls
+furthest ahead. `all new` is printed when unit propagation deduced nothing at
+all, so there is no ratio to take.
+
+This needs a CryptoMiniSat build (`-DNOCRYPTOMINISAT=OFF`); the option is
+refused otherwise rather than quietly reporting nothing. It is much slower
+per case than the propagator it measures -- a fresh solver and a full CNF
+load each time -- so `--bcp-budget` caps it, and the reported per-case cost
+in the `ns/call` column is the propagator's, never this.
+
+Read the ratios at `--probs 50`. At 95% only a handful of bits per case are
+unknown, so unit propagation's side of the comparison is a very small number
+and the ratio swings widely with the seed.
 
 ## Caveats worth knowing before quoting a number
 

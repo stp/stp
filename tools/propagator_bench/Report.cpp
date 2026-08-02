@@ -97,6 +97,16 @@ string precisionDetail(const Row& r)
     if (r.sat.unsound > 0)
       o << " (" << r.sat.unsound << " UNSOUND)";
   }
+  if (r.bcp.ran && r.bcp.cases > 0)
+  {
+    o << "; vs bit-blasted: " << fixed(r.bcp.bcpBits, 2) << " vs "
+      << fixed(r.bcp.cbitpBits, 2) << " bits (";
+    if (r.bcp.bcpBits <= 0 && r.bcp.cbitpBits > 0)
+      o << "all new";
+    else
+      o << fixed(r.bcp.ratio(), 1) << "x";
+    o << ", " << r.bcp.cases << " cases)";
+  }
   if (r.witnessUnsound > 0)
     o << "; " << r.witnessUnsound << " timed cases lost their solution";
   if (r.conflicts > 0)
@@ -180,7 +190,8 @@ void writeCsv(const Config& cfg, const vector<Row>& rows, const string& path)
        "bits_gained_per_call,calls,conflicts,maximally_precise,"
        "exhaustive_width,exhaustive_cases,exhaustive_precise,"
        "exhaustive_unsound,exhaustive_missed_conflicts,deducible_bits,"
-       "gained_bits,sat_cases,sat_precise,sat_unsound\n";
+       "gained_bits,sat_cases,sat_precise,sat_unsound,"
+       "bcp_cases,bcp_bits,bcp_cbitp_bits\n";
   for (const Row& r : rows)
   {
     f << name(r.domain) << "," << r.op << "," << name(r.direction) << ","
@@ -191,7 +202,8 @@ void writeCsv(const Config& cfg, const vector<Row>& rows, const string& path)
       << "," << r.precision.precise << "," << r.precision.unsound << ","
       << r.precision.missedConflict << "," << r.precision.derivable << ","
       << r.precision.gained << "," << r.sat.cases << "," << r.sat.precise
-      << "," << r.sat.unsound << "\n";
+      << "," << r.sat.unsound << "," << r.bcp.cases << ","
+      << fixed(r.bcp.bcpBits, 4) << "," << fixed(r.bcp.cbitpBits, 4) << "\n";
   }
   (void)cfg;
   std::cout << "wrote " << path << std::endl;
@@ -266,6 +278,13 @@ void writeHtml(const Config& cfg, const vector<Row>& rows, const string& path)
     f << " and spot-checked at the benchmarked width against the SAT-based "
          "maximally precise propagator";
   f << ".</p>\n";
+  if (cfg.bcpCases > 0)
+    f << "<p class=\"note\"><em>vs bit-blasted</em> is the other comparison: "
+         "how many bits unit propagation over the CNF encoding of the same "
+         "operation fixes, against how many the transfer function fixes, on "
+         "the same cases. STP bit-blasts and calls a SAT solver anyway, so "
+         "the multiplier is what the word-level propagator adds over what "
+         "the solver would have found without it.</p>\n";
 
   for (Domain d : {Domain::Cbitp, Domain::Interval, Domain::ValueSet})
   {

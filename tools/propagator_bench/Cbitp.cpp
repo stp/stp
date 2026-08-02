@@ -502,6 +502,73 @@ SatCheck satSpotCheck(STPMgr* mgr, const OpSpec& op, const vector<Case>& cases,
   return check;
 }
 
+// ---------------------------------------------------------------------------
+// Comparison against unit propagation on the bit-blasted encoding, at the
+// width being benchmarked.
+
+// The varying children then the result, which is the order Bcp.cpp expects.
+vector<const FixedBits*> bcpView(const Layout& l, const vector<FixedBits>& ch,
+                                 const FixedBits& out)
+{
+  vector<const FixedBits*> v;
+  for (unsigned i : l.varying())
+    v.push_back(&ch[i]);
+  v.push_back(&out);
+  return v;
+}
+
+BcpCheck bcpCompare(STPMgr* mgr, const OpSpec& op, const Layout& l,
+                    const vector<Case>& cases, unsigned howMany,
+                    double budgetSeconds)
+{
+  BcpEncoding* enc = makeBcpEncoding(mgr, op, l);
+  if (enc == NULL)
+    return BcpCheck(); // not encodable; leave the row's check unrun
+
+  BcpCheck check;
+  check.ran = true;
+  uint64_t bcpGained = 0, cbitpGained = 0;
+  const auto start = Clock::now();
+
+  for (size_t i = 0; i < cases.size() && check.cases < howMany; i++)
+  {
+    if (std::chrono::duration<double>(Clock::now() - start).count() >
+        budgetSeconds)
+      break; // a fresh solver and a full CNF load per case is not cheap
+
+    const vector<const FixedBits*> before =
+        bcpView(l, cases[i].children, cases[i].output);
+    const unsigned initial = bcpVisibleFixed(enc, before);
+
+    // What boolean constraint propagation gets on its own.
+    const unsigned afterBcp = bcpFixedCount(enc, before);
+
+    // What the transfer function gets, counted over the same variables.
+    vector<FixedBits> got(cases[i].children);
+    FixedBits gotOut(cases[i].output);
+    vector<FixedBits*> ptrs;
+    for (FixedBits& f : got)
+      ptrs.push_back(&f);
+    if (cbitpTransfer(mgr, op.kind, ptrs, gotOut) == CONFLICT)
+      continue; // can't happen: the cases are built from a solution
+    const unsigned afterCbitp =
+        bcpVisibleFixed(enc, bcpView(l, got, gotOut));
+
+    check.cases++;
+    bcpGained += (afterBcp > initial) ? afterBcp - initial : 0;
+    cbitpGained += (afterCbitp > initial) ? afterCbitp - initial : 0;
+  }
+
+  if (check.cases > 0)
+  {
+    check.bcpBits = double(bcpGained) / check.cases;
+    check.cbitpBits = double(cbitpGained) / check.cases;
+  }
+
+  destroyBcpEncoding(enc);
+  return check;
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -570,6 +637,14 @@ void runCbitp(STPMgr* mgr, const Config& cfg, vector<Row>& out)
               std::cerr << "  sat check" << std::endl;
             row.sat =
                 satSpotCheck(mgr, op, cases, cfg.satCases, cfg.satBudgetSeconds);
+          }
+
+          if (cfg.bcpCases > 0)
+          {
+            if (cfg.verbose)
+              std::cerr << "  bcp check" << std::endl;
+            row.bcp = bcpCompare(mgr, op, l, cases, cfg.bcpCases,
+                                 cfg.bcpBudgetSeconds);
           }
 
           out.push_back(row);

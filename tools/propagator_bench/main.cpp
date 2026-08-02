@@ -89,6 +89,12 @@ void usage()
       << "  --sat-budget SECS   time limit for that check, per row\n"
       << "                      (default 5); fewer cases are run if it\n"
       << "                      doesn't fit\n"
+      << "  --bcp-check N       also compare N cases per row against unit\n"
+      << "                      propagation on the bit-blasted encoding --\n"
+      << "                      what the SAT solver deduces without the\n"
+      << "                      propagator (CryptoMiniSat builds only)\n"
+      << "  --bcp-budget SECS   time limit for that comparison, per row\n"
+      << "                      (default 5)\n"
       << "  --no-shift-bias     draw shift amounts uniformly, instead of\n"
       << "                      half of them from [0, width)\n"
       << "  --seed N            random seed (default 42)\n"
@@ -199,6 +205,9 @@ int main(int argc, char** argv)
     else if (arg == "--sat-check") { cfg.satCases = atoi(value.c_str()); i++; }
     else if (arg == "--sat-budget")
     { cfg.satBudgetSeconds = atof(value.c_str()); i++; }
+    else if (arg == "--bcp-check") { cfg.bcpCases = atoi(value.c_str()); i++; }
+    else if (arg == "--bcp-budget")
+    { cfg.bcpBudgetSeconds = atof(value.c_str()); i++; }
     else if (arg == "--seed") { cfg.seed = atoi(value.c_str()); i++; }
     else if (arg == "--html") { cfg.html = value; i++; }
     else if (arg == "--csv") { cfg.csv = value; i++; }
@@ -214,6 +223,15 @@ int main(int argc, char** argv)
   {
     std::cerr << "propagator_bench: --iterations and --repeats must be "
                  "positive\n";
+    return 1;
+  }
+
+  if (cfg.bcpCases > 0 && !bcpAvailable())
+  {
+    // Refuse rather than silently report nothing: the whole point of the
+    // option is the comparison it makes.
+    std::cerr << "propagator_bench: --bcp-check needs a build with "
+                 "CryptoMiniSat (configure with -DNOCRYPTOMINISAT=OFF)\n";
     return 1;
   }
 
