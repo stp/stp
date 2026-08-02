@@ -196,6 +196,8 @@ struct BcpCheck
   uint64_t cases = 0;
   double bcpBits = 0;   // fixed by boolean constraint propagation
   double cbitpBits = 0; // fixed by the transfer function, same cases
+  unsigned clauses = 0; // size of the encoding propagated over
+  unsigned variables = 0;
 
   // What the propagator adds over the encoding. Above 1 it is earning its
   // keep; at 1 the SAT solver would have found the same bits anyway.
@@ -251,6 +253,11 @@ struct Config
   unsigned bcpCases = 0;        // 0 disables the bit-blasted comparison
   double bcpBudgetSeconds = 5;  // a fresh solver and CNF load per case
   unsigned seed = 42;
+  // How the CNF that --bcp-check propagates over is generated. Empty leaves
+  // STP's default (medium) alone. A different encoding of the same circuit
+  // can have different unit-propagation strength, which is the point of
+  // being able to set it here.
+  string cnf;
   bool shiftBias = true; // draw half the shift amounts from [0, width)
   bool verbose = false;
   string html;
@@ -298,6 +305,9 @@ unsigned bcpFixedCount(const BcpEncoding* e,
 // Of the known bits, how many the encoding represents at all.
 unsigned bcpVisibleFixed(const BcpEncoding* e,
                          const vector<const FixedBits*>& bits);
+// The size of the CNF being propagated over, which is what --cnf changes.
+unsigned bcpClauses(const BcpEncoding* e);
+unsigned bcpVariables(const BcpEncoding* e);
 
 // ---------------------------------------------------------------------------
 // Reporting.

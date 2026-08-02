@@ -527,6 +527,8 @@ BcpCheck bcpCompare(STPMgr* mgr, const OpSpec& op, const Layout& l,
 
   BcpCheck check;
   check.ran = true;
+  check.clauses = bcpClauses(enc);
+  check.variables = bcpVariables(enc);
   uint64_t bcpGained = 0, cbitpGained = 0;
   const auto start = Clock::now();
 

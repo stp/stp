@@ -121,6 +121,13 @@ wires. The division and shift families are where the propagator pulls
 furthest ahead. `all new` is printed when unit propagation deduced nothing at
 all, so there is no ratio to take.
 
+`--cnf` picks how that CNF is generated -- `simple` (plain Tseitin), or the
+five `cnf_effort` levels `very-low`, `low`, `medium` (STP's default), `high`,
+`very-high`. The row reports the clause and variable counts, so the size of
+the encoding and its propagation strength can be read together. For `bvand`
+the setting changes the size by up to 2.1x and the deduced bits hardly at
+all; see `bench-hard/reports/2026-08-02-cnf-effort-vs-propagation.md`.
+
 This needs a CryptoMiniSat build (`-DNOCRYPTOMINISAT=OFF`); the option is
 refused otherwise rather than quietly reporting nothing. It is much slower
 per case than the propagator it measures -- a fresh solver and a full CNF

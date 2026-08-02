@@ -149,6 +149,8 @@ struct BcpEncoding
   }
 
   bool usable() const { return ok; }
+  unsigned clauses() const { return cnf == NULL ? 0 : (unsigned)cnf->nClauses; }
+  unsigned variables() const { return cnf == NULL ? 0 : (unsigned)cnf->nVars; }
 
 private:
   // constexpr, not const: resize() below binds it by reference, which needs
@@ -217,6 +219,16 @@ unsigned bcpVisibleFixed(const BcpEncoding* e,
   return e->visibleFixed(bits);
 }
 
+unsigned bcpClauses(const BcpEncoding* e)
+{
+  return e->clauses();
+}
+
+unsigned bcpVariables(const BcpEncoding* e)
+{
+  return e->variables();
+}
+
 } // namespace propbench
 
 #else // !USE_CRYPTOMINISAT
@@ -242,6 +254,16 @@ unsigned bcpFixedCount(const BcpEncoding*, const vector<const FixedBits*>&)
 }
 
 unsigned bcpVisibleFixed(const BcpEncoding*, const vector<const FixedBits*>&)
+{
+  return 0;
+}
+
+unsigned bcpClauses(const BcpEncoding*)
+{
+  return 0;
+}
+
+unsigned bcpVariables(const BcpEncoding*)
 {
   return 0;
 }

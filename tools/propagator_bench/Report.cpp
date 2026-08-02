@@ -105,7 +105,8 @@ string precisionDetail(const Row& r)
       o << "all new";
     else
       o << fixed(r.bcp.ratio(), 1) << "x";
-    o << ", " << r.bcp.cases << " cases)";
+    o << ", " << r.bcp.cases << " cases, " << r.bcp.clauses << " clauses/"
+      << r.bcp.variables << " vars)";
   }
   if (r.witnessUnsound > 0)
     o << "; " << r.witnessUnsound << " timed cases lost their solution";
@@ -136,6 +137,9 @@ string configSummary(const Config& c)
     << "s budget each, arity " << c.arity << ", seed " << c.seed;
   if (c.satCases > 0)
     o << ", " << c.satCases << " SAT-checked cases per row";
+  if (c.bcpCases > 0)
+    o << ", " << c.bcpCases << " cases per row against the bit-blasted "
+      << "encoding (CNF: " << (c.cnf.empty() ? "medium" : c.cnf) << ")";
   return o.str();
 }
 
@@ -191,7 +195,7 @@ void writeCsv(const Config& cfg, const vector<Row>& rows, const string& path)
        "exhaustive_width,exhaustive_cases,exhaustive_precise,"
        "exhaustive_unsound,exhaustive_missed_conflicts,deducible_bits,"
        "gained_bits,sat_cases,sat_precise,sat_unsound,"
-       "bcp_cases,bcp_bits,bcp_cbitp_bits\n";
+       "bcp_cases,bcp_bits,bcp_cbitp_bits,bcp_clauses,bcp_vars\n";
   for (const Row& r : rows)
   {
     f << name(r.domain) << "," << r.op << "," << name(r.direction) << ","
@@ -203,7 +207,8 @@ void writeCsv(const Config& cfg, const vector<Row>& rows, const string& path)
       << r.precision.missedConflict << "," << r.precision.derivable << ","
       << r.precision.gained << "," << r.sat.cases << "," << r.sat.precise
       << "," << r.sat.unsound << "," << r.bcp.cases << ","
-      << fixed(r.bcp.bcpBits, 4) << "," << fixed(r.bcp.cbitpBits, 4) << "\n";
+      << fixed(r.bcp.bcpBits, 4) << "," << fixed(r.bcp.cbitpBits, 4) << ","
+      << r.bcp.clauses << "," << r.bcp.variables << "\n";
   }
   (void)cfg;
   std::cout << "wrote " << path << std::endl;

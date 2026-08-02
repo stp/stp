@@ -95,6 +95,11 @@ void usage()
       << "                      propagator (CryptoMiniSat builds only)\n"
       << "  --bcp-budget SECS   time limit for that comparison, per row\n"
       << "                      (default 5)\n"
+      << "  --cnf HOW           how to generate the CNF --bcp-check\n"
+      << "                      propagates over: simple, very-low, low,\n"
+      << "                      medium (STP's default), high, very-high.\n"
+      << "                      Different encodings of the same circuit can\n"
+      << "                      propagate differently\n"
       << "  --no-shift-bias     draw shift amounts uniformly, instead of\n"
       << "                      half of them from [0, width)\n"
       << "  --seed N            random seed (default 42)\n"
@@ -208,6 +213,7 @@ int main(int argc, char** argv)
     else if (arg == "--bcp-check") { cfg.bcpCases = atoi(value.c_str()); i++; }
     else if (arg == "--bcp-budget")
     { cfg.bcpBudgetSeconds = atof(value.c_str()); i++; }
+    else if (arg == "--cnf") { cfg.cnf = value; i++; }
     else if (arg == "--seed") { cfg.seed = atoi(value.c_str()); i++; }
     else if (arg == "--html") { cfg.html = value; i++; }
     else if (arg == "--csv") { cfg.csv = value; i++; }
@@ -239,6 +245,30 @@ int main(int argc, char** argv)
   stp::Cpp_interface interface(*mgr, mgr->defaultNodeFactory);
   interface.startup();
   stp::GlobalParserBM = mgr;
+
+  if (!cfg.cnf.empty())
+  {
+    typedef stp::UserDefinedFlags UF;
+    UF& uf = mgr->UserFlags;
+    if (cfg.cnf == "simple")
+      uf.simple_cnf = true;
+    else if (cfg.cnf == "very-low")
+      uf.cnf_effort = UF::CNF_EFFORT_VERY_LOW;
+    else if (cfg.cnf == "low")
+      uf.cnf_effort = UF::CNF_EFFORT_LOW;
+    else if (cfg.cnf == "medium")
+      uf.cnf_effort = UF::CNF_EFFORT_MEDIUM;
+    else if (cfg.cnf == "high")
+      uf.cnf_effort = UF::CNF_EFFORT_HIGH;
+    else if (cfg.cnf == "very-high")
+      uf.cnf_effort = UF::CNF_EFFORT_VERY_HIGH;
+    else
+    {
+      std::cerr << "propagator_bench: unknown --cnf value '" << cfg.cnf
+                << "' (simple, very-low, low, medium, high, very-high)\n";
+      return 1;
+    }
+  }
 
   vector<Row> rows;
   for (Domain d : cfg.domains)
