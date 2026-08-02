@@ -395,10 +395,6 @@ DLL_PUBLIC Expr vc_parseExpr(VC vc, const char* filepath);
 //!
 DLL_PUBLIC void vc_printExpr(VC vc, Expr e);
 
-//! \brief Prints the given expression to stdout as C code.
-//!
-DLL_PUBLIC void vc_printExprCCode(VC vc, Expr e);
-
 //! \brief Prints the given expression to stdout in the STMLib2 format.
 //!
 DLL_PUBLIC char* vc_printSMTLIB(VC vc, Expr e);
