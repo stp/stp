@@ -395,10 +395,6 @@ DLL_PUBLIC Expr vc_parseExpr(VC vc, const char* filepath);
 //!
 DLL_PUBLIC void vc_printExpr(VC vc, Expr e);
 
-//! \brief Prints the given expression to stdout as C code.
-//!
-DLL_PUBLIC void vc_printExprCCode(VC vc, Expr e);
-
 //! \brief Prints the given expression to stdout in the STMLib2 format.
 //!
 DLL_PUBLIC char* vc_printSMTLIB(VC vc, Expr e);
@@ -1267,7 +1263,7 @@ DLL_PUBLIC const char* exprName(Expr e);
 
 //! \brief Returns the internal node ID of the given expression.
 //!
-DLL_PUBLIC int getExprID(Expr ex);
+DLL_PUBLIC uint64_t getExprID(Expr ex);
 
 //! \brief Parses the given string in CVC or SMTLib1.0 format and extracts
 //!        query and assertion information into the 'outQuery' and 'outAsserts'

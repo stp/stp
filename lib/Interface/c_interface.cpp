@@ -215,40 +215,6 @@ char* vc_printSMTLIB(VC vc, Expr e)
   return copy;
 }
 
-// prints Expr 'e' to stdout as C code
-void vc_printExprCCode(VC vc, Expr e)
-{
-  stp::STPMgr* b = mgr(vc);
-  stp::ASTNode q = (*(stp::ASTNode*)e);
-
-  // print variable declarations
-  stp::ASTVec declsFromParser = (stp::ASTVec)b->decls;
-
-  for (stp::ASTVec::iterator it = declsFromParser.begin(),
-                             itend = declsFromParser.end();
-       it != itend; it++)
-  {
-    if (stp::BITVECTOR_TYPE == it->GetType())
-    {
-      const char* name = it->GetName();
-      unsigned int bitWidth = it->GetValueWidth();
-      assert(bitWidth % 8 == 0);
-      unsigned int byteWidth = bitWidth / 8;
-      cout << "unsigned char " << name << "[" << byteWidth << "];" << endl;
-    }
-    else
-    {
-      // vc_printExprCCode: unsupported decl. type
-      assert(0);
-    }
-  }
-
-  cout << endl;
-
-  // print constraints and assert
-  printer::C_Print(cout, q, b);
-}
-
 void vc_printExprFile(VC vc, Expr e, int fd)
 {
   stp::STPMgr* b = mgr(vc);
@@ -2102,7 +2068,7 @@ const char* exprName(Expr e)
   return ((stp::ASTNode*)e)->GetName();
 }
 
-int getExprID(Expr ex)
+uint64_t getExprID(Expr ex)
 {
   stp::ASTNode q = (*(stp::ASTNode*)ex);
   return q.GetNodeNum();

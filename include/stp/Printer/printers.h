@@ -37,8 +37,6 @@ namespace printer
 {
 using std::ostream;
 DLL_PUBLIC ostream& Dot_Print(ostream& os, const stp::ASTNode n);
-DLL_PUBLIC ostream& C_Print(ostream& os, const stp::ASTNode n, STPMgr*,
-                            const int indentation = 0);
 DLL_PUBLIC ostream& PL_Print(ostream& os, const stp::ASTNode& n, STPMgr* bm,
                              int indentation = 0);
 DLL_PUBLIC void PL_Print1(ostream& os, const ASTNode& n, int indentation,

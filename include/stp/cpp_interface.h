@@ -53,14 +53,17 @@ class Cpp_interface
   // Used to cache prior queries.
   struct Entry
   {
+    // No node has this number, so it marks "nothing recorded yet".
+    static constexpr uint64_t NO_NODE = UINT64_MAX;
+
     explicit Entry(SOLVER_RETURN_TYPE result_)
     {
       result = result_;
-      node_number = -1;
+      node_number = NO_NODE;
     }
 
     SOLVER_RETURN_TYPE result;
-    int node_number; // a weak pointer.
+    uint64_t node_number; // a weak pointer.
   };
   vector<Entry> cache;
 
@@ -219,7 +222,6 @@ public:
   DLL_PUBLIC void ignoreCheckSat();
   DLL_PUBLIC void checkSat(const ASTVec& assertionsSMT2);
 
-  DLL_PUBLIC void deleteGlobal();
   DLL_PUBLIC void cleanUp();
 
   DLL_PUBLIC void setOption(std::string, std::string);
