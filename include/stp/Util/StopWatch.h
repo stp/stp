@@ -25,32 +25,11 @@ THE SOFTWARE.
 #ifndef STOPWATCH_H_
 #define STOPWATCH_H_
 
+#include <cassert>
 #include <ctime>
-#include <iostream>
 
-using std::cerr;
-using std::endl;
-
-class Stopwatch
-{
-public:
-  Stopwatch() : start(std::clock()) {}
-  void stop()
-  {
-    clock_t total = clock() - start;
-    cerr << "ticks: " << total << " " << (float(total) / CLOCKS_PER_SEC) << "s"
-         << endl;
-  }
-  clock_t stop2()
-  {
-    clock_t total = clock() - start;
-    return total;
-  }
-
-private:
-  std::clock_t start;
-};
-
+// Accumulates across several start()/stop() pairs, so one instance can time
+// the same phase over many iterations.
 struct Stopwatch2
 {
   Stopwatch2() : elapsed(0), start_t(0) {}

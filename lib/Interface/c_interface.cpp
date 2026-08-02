@@ -2102,7 +2102,7 @@ const char* exprName(Expr e)
   return ((stp::ASTNode*)e)->GetName();
 }
 
-int getExprID(Expr ex)
+uint64_t getExprID(Expr ex)
 {
   stp::ASTNode q = (*(stp::ASTNode*)ex);
   return q.GetNodeNum();
