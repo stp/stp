@@ -1020,19 +1020,12 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term,
       BBDivMod(dvdd, dvsr, q, r, num_bits, support);
       if (k == BVDIV)
       {
-        if (true) // todo. apparently this is not required.
-        {
-          BBNodeVec zero(term.GetValueWidth(), BBFalse);
+        BBNodeVec zero(term.GetValueWidth(), BBFalse);
 
-          BBNode eq = BBEQ(zero, dvsr);
-          BBNodeVec max(term.GetValueWidth(), BBTrue);
+        BBNode eq = BBEQ(zero, dvsr);
+        BBNodeVec max(term.GetValueWidth(), BBTrue);
 
-          result = BBITE(eq, max, q);
-        }
-        else
-        {
-          result = q;
-        }
+        result = BBITE(eq, max, q);
       }
       else
         result = r;
@@ -3008,7 +3001,6 @@ BBNode BitBlaster::BBcompare(const ASTNode& form,
     default:
       cerr << "BBCompare: Illegal kind" << form << endl;
       FatalError("", form);
-      exit(-1);
   }
 }
 
@@ -3100,7 +3092,6 @@ BBNode BitBlaster::BBOverflow(const ASTNode& form,
     default:
       cerr << "BBOverflow: Illegal kind" << form << endl;
       FatalError("", form);
-      exit(-1);
   }
 }
 
