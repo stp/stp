@@ -501,7 +501,7 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2)
   }
 
   Entry& last_run = cache.back();
-  if (((unsigned)last_run.node_number != assertionsSMT2.back().GetNodeNum()) &&
+  if ((last_run.node_number != assertionsSMT2.back().GetNodeNum()) &&
       (last_run.result == SOLVER_SATISFIABLE))
   {
     // extra asserts might have been added to it,
