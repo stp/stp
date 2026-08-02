@@ -48,24 +48,6 @@ using std::set;
 const bool debug_multiply = false;
 std::ostream& log = std::cerr;
 
-#if 0
-// The maximum size of the carry into a column for MULTIPLICATION
-    int
-    maximumCarryInForMultiplication(int column)
-      {
-      int result = 0;
-      int currIndex = 0;
-
-      while (currIndex < column)
-        {
-        currIndex++;
-        result = (result + currIndex) / 2;
-        }
-
-      return result;
-      }
-#endif
-
 static inline uint64_t rightShiftedWord(const uint64_t* m, unsigned words,
                                         unsigned s, unsigned j);
 static inline int convolutionAt(const uint64_t* a, const uint64_t* revB,
@@ -846,20 +828,6 @@ Result useTrailingFixedToFix(FixedBits& x, FixedBits& y, FixedBits& output)
   CONSTANTBV::BitVector_Destroy(result);
 
   return status;
-}
-
-void printColumns(signed* sumL, signed* sumH, int bitWidth)
-{
-  for (int i = 0; i < bitWidth; i++)
-  {
-    log << sumL[bitWidth - 1 - i] << " ";
-  }
-  log << endl;
-  for (int i = 0; i < bitWidth; i++)
-  {
-    log << sumH[bitWidth - 1 - i] << " ";
-  }
-  log << endl;
 }
 
 // One run of the column-based reasoning over x * y == output, to its own
