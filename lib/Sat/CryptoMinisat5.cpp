@@ -205,7 +205,13 @@ uint32_t CryptoMiniSat5::getFixedCountWithAssumptions(const stp::SATSolver::vec_
   assert(conf == 0);
 
 
-  const CMSat::lbool r = s->simplify();  
+  // Bounded variable elimination would remove variables this count is about
+  // to look for, so a bit that is implied but whose variable was eliminated
+  // reads as not deduced. The caller wants what unit propagation derives over
+  // the encoding it asked for, not over whatever CMS rewrote it into.
+  s->set_no_bve();
+
+  const CMSat::lbool r = s->simplify();
 
    
   // Add the assumptions are clauses.
