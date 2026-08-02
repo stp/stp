@@ -2211,13 +2211,27 @@ void test()
 // Substitutes concrete values for the variables. Every leaf is a constant
 // afterwards, so the factory folds the result -- unless it is missing a fold,
 // which is what this mode hunts, so the caller checks rather than assumes.
-ASTNode evalAt(const ASTNode& n, const ASTNode& vVal, const ASTNode& wVal)
+// The variables the enumeration is over, and a disjoint copy of each. The
+// copies are what makes constancy decidable without guessing a value: n is
+// constant exactly when it agrees with itself over fresh variables.
+vector<ASTNode> mcVars;
+vector<ASTNode> mcFresh;
+
+// Substitutes concrete values for the variables. Every leaf is a constant
+// afterwards, so the factory folds the result -- unless it is missing a fold,
+// which is what this mode hunts, so the caller checks rather than assumes.
+ASTNode evalAt(const ASTNode& n, const vector<ASTNode>& values)
 {
   ASTNodeMap ft;
-  ft.insert(make_pair(v, vVal));
-  ft.insert(make_pair(w, wVal));
+  for (size_t i = 0; i < mcVars.size(); i++)
+    ft.insert(make_pair(mcVars[i], values[i]));
   ASTNodeMap cache;
   return SubstitutionMap::replace(n, ft, cache, nf);
+}
+
+bool isFolded(const ASTNode& n)
+{
+  return n.isConstant() || n == mgr->ASTTrue || n == mgr->ASTFalse;
 }
 
 // Distinct nodes in the DAG; used only to report the smallest findings first.
@@ -2237,33 +2251,32 @@ size_t nodeCount(const ASTNode& n)
   return nodeCount(n, seen);
 }
 
-bool isFolded(const ASTNode& n)
-{
-  return n.isConstant() || n == mgr->ASTTrue || n == mgr->ASTFalse;
-}
-
 // True when n takes the same value at every sample. Wrong only in the safe
 // direction: it can pass a node that is not constant, never reject one that
 // is.
-bool sameAtEverySample(const ASTNode& n,
-                       const vector<std::pair<ASTNode, ASTNode>>& samples,
+bool sameAtEverySample(const ASTNode& n, const vector<vector<ASTNode>>& samples,
                        ASTNode& value)
 {
-  value = evalAt(n, samples[0].first, samples[0].second);
+  value = evalAt(n, samples[0]);
   if (!isFolded(value))
     return false; // not folded even fully applied; not what this looks for
 
   for (size_t i = 1; i < samples.size(); i++)
-    if (evalAt(n, samples[i].first, samples[i].second) != value)
+    if (evalAt(n, samples[i]) != value)
       return false;
   return true;
 }
 
 // n is constant exactly when it agrees with a copy of itself over fresh
-// variables, whatever the two are assigned.
+// variables, whatever they are assigned.
 bool provablyConstant(const ASTNode& n)
 {
-  const ASTNode other = renameVars(n);
+  ASTNodeMap ft;
+  for (size_t i = 0; i < mcVars.size(); i++)
+    ft.insert(make_pair(mcVars[i], mcFresh[i]));
+  ASTNodeMap cache;
+  const ASTNode other = SubstitutionMap::replace(n, ft, cache, nf);
+
   const ASTNode agree = (n.GetType() == BOOLEAN_TYPE)
                             ? nf->CreateNode(IFF, n, other)
                             : nf->CreateNode(EQ, n, other);
@@ -2273,18 +2286,23 @@ bool provablyConstant(const ASTNode& n)
 }
 
 // One more level of operators over `fromTerms`, appending to `terms` and
-// `preds`. Unary and binary, no constants introduced anywhere.
-void addLevel(const ASTVec& fromTerms, ASTVec& terms, ASTVec& preds)
+// `preds`. Unary, binary, and up to `maxArity` children for the kinds the AST
+// lets take more than two. No constants are introduced anywhere.
+void addLevel(const ASTVec& fromTerms, ASTVec& terms, ASTVec& preds,
+              unsigned maxArity)
 {
   static const Kind termUnary[] = {stp::BVNOT, stp::BVUMINUS};
   static const Kind termBinary[] = {
-      stp::BVPLUS,  stp::BVSUB,        stp::BVMULT,       stp::BVDIV,
-      stp::BVMOD,   stp::SBVDIV,       stp::SBVREM,       stp::SBVMOD,
-      stp::BVAND,   stp::BVOR,         stp::BVXOR,        stp::BVLEFTSHIFT,
+      stp::BVPLUS,       stp::BVSUB,   stp::BVMULT, stp::BVDIV,
+      stp::BVMOD,        stp::SBVDIV,  stp::SBVREM, stp::SBVMOD,
+      stp::BVAND,        stp::BVOR,    stp::BVXOR,  stp::BVLEFTSHIFT,
       stp::BVRIGHTSHIFT, stp::BVSRSHIFT};
-  static const Kind predBinary[] = {stp::EQ,   stp::BVLT,  stp::BVLE,
-                                    stp::BVGT, stp::BVGE,  stp::BVSLT,
+  static const Kind predBinary[] = {stp::EQ,    stp::BVLT,  stp::BVLE,
+                                    stp::BVGT,  stp::BVGE,  stp::BVSLT,
                                     stp::BVSLE, stp::BVSGT, stp::BVSGE};
+  // The kinds that take a variable number of children.
+  static const Kind termNary[] = {stp::BVPLUS, stp::BVAND, stp::BVOR,
+                                  stp::BVXOR};
 
   for (size_t i = 0; i < fromTerms.size(); i++)
   {
@@ -2303,43 +2321,87 @@ void addLevel(const ASTVec& fromTerms, ASTVec& terms, ASTVec& preds)
         preds.push_back(create(predBinary[b], fromTerms[i], fromTerms[j]));
     }
   }
+
+  // Three and more children, for the kinds that allow it. These are all
+  // commutative and associative, so only non-decreasing index tuples are
+  // built: any other order is the same node.
+  for (unsigned arity = 3; arity <= maxArity; arity++)
+  {
+    vector<size_t> idx(arity, 0);
+    while (true)
+    {
+      ASTVec c;
+      for (unsigned a = 0; a < arity; a++)
+        c.push_back(fromTerms[idx[a]]);
+      for (size_t b = 0; b < sizeof(termNary) / sizeof(Kind); b++)
+        terms.push_back(create(termNary[b], c));
+
+      // Odometer over non-decreasing tuples.
+      int a = (int)arity - 1;
+      while (a >= 0 && ++idx[a] >= fromTerms.size())
+        a--;
+      if (a < 0)
+        break;
+      for (unsigned f = a + 1; f < arity; f++)
+        idx[f] = idx[a];
+    }
+  }
 }
 
-void findMissedConstants()
+void findMissedConstants(unsigned numVars, unsigned maxArity)
 {
-  createVariables();
+  mcVars.clear();
+  mcFresh.clear();
+  for (unsigned i = 0; i < numVars; i++)
+  {
+    std::stringstream a, b;
+    a << "x" << i;
+    b << "x" << i << "_fresh";
+    ASTNode s0 = mgr->LookupOrCreateSymbol(a.str().c_str());
+    s0.SetValueWidth(bits);
+    ASTNode s1 = mgr->LookupOrCreateSymbol(b.str().c_str());
+    s1.SetValueWidth(bits);
+    mcVars.push_back(s0);
+    mcFresh.push_back(s1);
+  }
 
-  vector<std::pair<ASTNode, ASTNode>> samples;
-  samples.push_back(
-      std::make_pair(mgr->CreateZeroConst(bits), mgr->CreateZeroConst(bits)));
-  samples.push_back(
-      std::make_pair(mgr->CreateOneConst(bits), mgr->CreateZeroConst(bits)));
-  samples.push_back(
-      std::make_pair(mgr->CreateZeroConst(bits), mgr->CreateOneConst(bits)));
-  samples.push_back(
-      std::make_pair(mgr->CreateMaxConst(bits), mgr->CreateOneConst(bits)));
-  samples.push_back(
-      std::make_pair(mgr->CreateMaxConst(bits), mgr->CreateMaxConst(bits)));
-  for (int i = 0; i < 8; i++)
-    samples.push_back(
-        std::make_pair(mgr->CreateBVConst(bits, rand() % (1 << bits)),
-                       mgr->CreateBVConst(bits, rand() % (1 << bits))));
+  // Corners first, then random: the corners are where the shift and division
+  // edge cases live.
+  vector<vector<ASTNode>> samples;
+  const ASTNode corner[] = {mgr->CreateZeroConst(bits),
+                            mgr->CreateOneConst(bits),
+                            mgr->CreateMaxConst(bits)};
+  for (size_t c = 0; c < 3; c++)
+  {
+    samples.push_back(vector<ASTNode>(numVars, corner[c]));
+    for (unsigned i = 0; i < numVars; i++)
+    {
+      vector<ASTNode> one(numVars, mgr->CreateZeroConst(bits));
+      one[i] = corner[c];
+      samples.push_back(one);
+    }
+  }
+  for (int r = 0; r < 12; r++)
+  {
+    vector<ASTNode> vals;
+    for (unsigned i = 0; i < numVars; i++)
+      vals.push_back(mgr->CreateBVConst(bits, rand() % (1 << bits)));
+    samples.push_back(vals);
+  }
 
   // No constant leaves: a fold that only fires because a constant was passed
   // in is not what this is looking for.
-  ASTVec leaves;
-  leaves.push_back(v);
-  leaves.push_back(w);
+  ASTVec leaves(mcVars.begin(), mcVars.end());
 
   ASTVec terms(leaves), preds;
-  addLevel(leaves, terms, preds);
+  addLevel(leaves, terms, preds, maxArity);
   removeDuplicates(terms);
   removeDuplicates(preds);
   cout << "one level:  " << terms.size() << " terms, " << preds.size()
        << " predicates" << endl;
 
   const ASTVec firstLevel(terms);
-  addLevel(firstLevel, terms, preds);
+  addLevel(firstLevel, terms, preds, maxArity);
   removeDuplicates(terms);
   removeDuplicates(preds);
   cout << "two levels: " << terms.size() << " terms, " << preds.size()
@@ -2348,10 +2410,20 @@ void findMissedConstants()
   ASTVec all(terms);
   all.insert(all.end(), preds.begin(), preds.end());
 
+  // The second level pairs the first with itself, so this grows fast enough
+  // to be worth saying out loud before it runs for half an hour.
+  if (all.size() > 1000000)
+    cout << "note: " << all.size()
+         << " expressions. Measured: 4 variables at arity 3 takes about half "
+            "an hour and 1.2GB, and finds exactly what 2 variables at arity 3 "
+            "finds in twenty seconds."
+         << endl;
+
   unsigned candidates = 0, found = 0;
 
-  // (op v v) and (op w w) are the same finding twice. Reporting is keyed on
-  // the expression with every variable mapped to v, which collapses them.
+  // (op x0 x0) and (op x1 x1) are the same finding twice. Reporting is keyed
+  // on the expression with every variable mapped to the first, which
+  // collapses them.
   std::set<string> seen;
   vector<std::pair<size_t, string>> hits; // node count, text
 
@@ -2371,9 +2443,11 @@ void findMissedConstants()
       continue;
 
     ASTNodeMap ft;
-    ft.insert(make_pair(w, v));
+    for (size_t k = 1; k < mcVars.size(); k++)
+      ft.insert(make_pair(mcVars[k], mcVars[0]));
     ASTNodeMap cache;
-    const ASTNode canonical = SubstitutionMap::replace(n, ft, cache, nf);
+    const ASTNode canonical =
+        ft.empty() ? n : SubstitutionMap::replace(n, ft, cache, nf);
 
     std::stringstream key;
     printer::SMTLIB2_Print1(key, canonical, 0, false);
@@ -2395,8 +2469,10 @@ void findMissedConstants()
     cout << "\n" << hits[i].second << endl;
 
   cout << "\nchecked " << all.size() << " expressions at " << bits
-       << " bits; " << candidates << " constant at every sample, " << found
-       << " distinct shapes confirmed constant but not folded" << endl;
+       << " bits over " << numVars << " variables, n-ary arity up to "
+       << maxArity << "; " << candidates << " constant at every sample, "
+       << found << " distinct shapes confirmed constant but not folded"
+       << endl;
 }
 
 void createVariables()
@@ -2462,10 +2538,13 @@ void usage()
       "                        spending at most MS milliseconds on each.\n"
       "  rewrite               apply the rule set to itself and write it back.\n"
       "  write-out             re-emit the rule set, including its C++ form.\n"
-      "  missed-constants      build every two-level function and predicate\n"
-      "                        over the variables, with no constant leaves,\n"
-      "                        and report the ones the node factory left as\n"
+      "  missed-constants [V A]\n"
+      "                        build every two-level function and predicate\n"
+      "                        over V variables, with no constant leaves and\n"
+      "                        up to A children for the n-ary kinds, and\n"
+      "                        report the ones the node factory left as\n"
       "                        expressions that can only take one value.\n"
+      "                        Defaults to 4 variables and arity 3.\n"
       "  unit-test             check the commutative matcher. Needs no input.\n"
       "  test                  check the rule properties. Needs no input.\n"
       "\n"
@@ -2628,9 +2707,18 @@ int main(int argc, const char* argv[])
     load_new_rules();
     t2();
   }
-  else if (argc == 2 && !strcmp("missed-constants", argv[1]))
+  else if ((argc == 2 || argc == 4) && !strcmp("missed-constants", argv[1]))
   {
-    findMissedConstants();
+    const unsigned numVars = (argc == 4) ? atoi(argv[2]) : 4;
+    const unsigned maxArity = (argc == 4) ? atoi(argv[3]) : 3;
+    if (numVars < 1 || maxArity < 2)
+    {
+      cerr << "rewrite_rule_gen: missed-constants needs at least 1 variable "
+              "and arity 2"
+           << endl;
+      return 1;
+    }
+    findMissedConstants(numVars, maxArity);
   }
   else
   {
