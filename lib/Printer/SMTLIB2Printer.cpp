@@ -64,7 +64,7 @@ void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr,
   buildListOfSymbols(n, visited, symbols);
   printVarDeclsToStream(symbols, os);
   os << "(assert ";
-  SMTLIB_Print(os, mgr, n, 0, &SMTLIB2_Print1, false);
+  SMTLIB_Print(os, mgr, n, 0, false);
   os << ")\n";
   // os << "(check-sat)" << endl;
   // os << "(exit)\n";
@@ -142,132 +142,10 @@ void outputBitVecSMTLIB2(const ASTNode n, ostream& os)
   }
 }
 
+// Thin wrapper over the shared traversal. Declared in printers.h because
+// get-assertions prints the asserted formulas through it.
 void SMTLIB2_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
 {
-  // os << spaces(indentation);
-  // os << endl << spaces(indentation);
-  if (!n.IsDefined())
-  {
-    FatalError("<undefined>");
-    return;
-  }
-
-  // if this node is present in the letvar Map, then print the letvar
-  // this is to print letvars for shared subterms inside the printing
-  // of "(LET v0 = term1, v1=term1@term2,...
-  if ((NodeLetVarMap1.find(n) != NodeLetVarMap1.end()) && !letize)
-  {
-    SMTLIB2_Print1(os, (NodeLetVarMap1[n]), indentation, letize);
-    return;
-  }
-
-  // this is to print letvars for shared subterms inside the actual
-  // term to be printed
-  if ((NodeLetVarMap.find(n) != NodeLetVarMap.end()) && letize)
-  {
-    SMTLIB2_Print1(os, (NodeLetVarMap[n]), indentation, letize);
-    return;
-  }
-
-  // otherwise print it normally
-  const Kind kind = n.GetKind();
-  const ASTChildren c = n.GetChildren();
-  switch (kind)
-  {
-    case BITVECTOR:
-    case BVCONST:
-      outputBitVecSMTLIB2(n, os);
-      break;
-    case SYMBOL:
-      os << "|";
-      n.nodeprint(os);
-      os << "|";
-      break;
-    case FALSE:
-      os << "false";
-      break;
-    case NAND: // No NAND, NOR in smtlib format.
-    case NOR:
-      assert(c.size() == 2);
-      os << "("
-         << "not ";
-      if (NAND == kind)
-        os << "("
-           << "and ";
-      else
-        os << "("
-           << "or ";
-      SMTLIB2_Print1(os, c[0], 0, letize);
-      os << " ";
-      SMTLIB2_Print1(os, c[1], 0, letize);
-      os << "))";
-      break;
-    case TRUE:
-      os << "true";
-      break;
-    case BVSX:
-    case BVZX:
-    {
-      unsigned int amount = c[1].GetUnsignedConst();
-      if (BVZX == kind)
-        os << "((_ zero_extend ";
-      else
-        os << "((_ sign_extend ";
-
-      os << (amount - c[0].GetValueWidth()) << ") ";
-      SMTLIB2_Print1(os, c[0], indentation, letize);
-      os << ")";
-    }
-    break;
-    case BVEXTRACT:
-    {
-      unsigned int upper = c[1].GetUnsignedConst();
-      unsigned int lower = c[2].GetUnsignedConst();
-      assert(upper >= lower);
-      os << "((_ extract " << upper << " " << lower << ") ";
-      SMTLIB2_Print1(os, c[0], indentation, letize);
-      os << ")";
-    }
-    break;
-    default:
-    {
-      if ((kind == AND || kind == OR || kind == XOR) && n.Degree() == 1)
-      {
-        FatalError("Wrong number of arguments to operation (must be >1).", n);
-      }
-
-      // SMT-LIB only allows these functions to have two parameters.
-      if ((kind == AND || kind == OR || kind == XOR || BVPLUS == kind ||
-           kind == BVOR || kind == BVAND) &&
-          n.Degree() > 2)
-      {
-        string close = "";
-
-        for (long int i = 0; i < (long int)c.size() - 1; i++)
-        {
-          os << "(" << functionToSMTLIBName(kind, false);
-          os << " ";
-          SMTLIB2_Print1(os, c[i], 0, letize);
-          os << " ";
-          close += ")";
-        }
-        SMTLIB2_Print1(os, c[c.size() - 1], 0, letize);
-        os << close;
-      }
-      else
-      {
-        os << "(" << functionToSMTLIBName(kind, false);
-
-        auto iend = c.end();
-        for (auto i = c.begin(); i != iend; i++)
-        {
-          os << " ";
-          SMTLIB2_Print1(os, *i, 0, letize);
-        }
-
-        os << ")";
-      }
-    }
-  }
+  SMTLIB_Print1(os, n, indentation, letize, false);
 }
 }

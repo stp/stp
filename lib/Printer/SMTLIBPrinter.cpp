@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/Printer/SMTLIBPrinter.h"
 #include "stp/Printer/printers.h"
+#include <cassert>
 
 // Functions used by both the version1 and version2 STMLIB printers.
 
@@ -32,6 +33,7 @@ namespace printer
 using namespace stp;
 using std::pair;
 using std::endl;
+using std::string;
 
 static string tolower(const char* name)
 {
@@ -52,11 +54,158 @@ THREAD_LOCAL_IE vector<pair<ASTNode, ASTNode>> NodeLetVarVec;
 // correctly print shared subterms inside the LET itself
 THREAD_LOCAL_IE stp::ASTNodeMap NodeLetVarMap1;
 
+// Prints one node, in SMT-LIB1 syntax when smtlib1 is set and in SMT-LIB2
+// syntax otherwise. The two dialects share the whole traversal; they differ
+// in exactly five places, each marked "dialect:" below.
+void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize,
+                   bool smtlib1)
+{
+  if (!n.IsDefined())
+  {
+    FatalError("<undefined>");
+    return;
+  }
+
+  // if this node is present in the letvar Map, then print the letvar
+  // this is to print letvars for shared subterms inside the printing
+  // of "(LET v0 = term1, v1=term1@term2,...
+  if ((NodeLetVarMap1.find(n) != NodeLetVarMap1.end()) && !letize)
+  {
+    SMTLIB_Print1(os, (NodeLetVarMap1[n]), indentation, letize, smtlib1);
+    return;
+  }
+
+  // this is to print letvars for shared subterms inside the actual
+  // term to be printed
+  if ((NodeLetVarMap.find(n) != NodeLetVarMap.end()) && letize)
+  {
+    SMTLIB_Print1(os, (NodeLetVarMap[n]), indentation, letize, smtlib1);
+    return;
+  }
+
+  // otherwise print it normally
+  const Kind kind = n.GetKind();
+  const ASTChildren c = n.GetChildren();
+  switch (kind)
+  {
+    case BITVECTOR:
+    case BVCONST:
+      // dialect 1: the bitvector constant spelling.
+      if (smtlib1)
+        outputBitVec(n, os);
+      else
+        outputBitVecSMTLIB2(n, os);
+      break;
+    case SYMBOL:
+      // dialect 2: SMT-LIB2 quotes symbols so that STP's names, which can
+      // contain characters SMT-LIB2 reserves, survive a round trip.
+      if (smtlib1)
+        n.nodeprint(os);
+      else
+      {
+        os << "|";
+        n.nodeprint(os);
+        os << "|";
+      }
+      break;
+    case FALSE:
+      os << "false";
+      break;
+    case NAND: // No NAND, NOR in smtlib format.
+    case NOR:
+      assert(c.size() == 2);
+      os << "("
+         << "not ";
+      if (NAND == kind)
+        os << "("
+           << "and ";
+      else
+        os << "("
+           << "or ";
+      SMTLIB_Print1(os, c[0], 0, letize, smtlib1);
+      os << " ";
+      SMTLIB_Print1(os, c[1], 0, letize, smtlib1);
+      os << "))";
+      break;
+    case TRUE:
+      os << "true";
+      break;
+    case BVSX:
+    case BVZX:
+    {
+      unsigned int amount = c[1].GetUnsignedConst();
+      // dialect 3: indexed identifier syntax.
+      if (smtlib1)
+        os << (BVZX == kind ? "(zero_extend[" : "(sign_extend[");
+      else
+        os << (BVZX == kind ? "((_ zero_extend " : "((_ sign_extend ");
+
+      os << (amount - c[0].GetValueWidth()) << (smtlib1 ? "]" : ") ");
+      SMTLIB_Print1(os, c[0], indentation, letize, smtlib1);
+      os << ")";
+    }
+    break;
+    case BVEXTRACT:
+    {
+      unsigned int upper = c[1].GetUnsignedConst();
+      unsigned int lower = c[2].GetUnsignedConst();
+      assert(upper >= lower);
+      // dialect 4: indexed identifier syntax.
+      if (smtlib1)
+        os << "(extract[" << upper << ":" << lower << "] ";
+      else
+        os << "((_ extract " << upper << " " << lower << ") ";
+      SMTLIB_Print1(os, c[0], indentation, letize, smtlib1);
+      os << ")";
+    }
+    break;
+    default:
+    {
+      // dialect 5: a handful of operators were renamed between the versions,
+      // which functionToSMTLIBName() takes care of.
+      if ((kind == AND || kind == OR || kind == XOR) && n.Degree() == 1)
+      {
+        FatalError("Wrong number of arguments to operation (must be >1).", n);
+      }
+
+      // SMT-LIB only allows these functions to have two parameters.
+      if ((kind == AND || kind == OR || kind == XOR || BVPLUS == kind ||
+           kind == BVOR || kind == BVAND) &&
+          n.Degree() > 2)
+      {
+        string close = "";
+
+        for (long int i = 0; i < (long int)c.size() - 1; i++)
+        {
+          os << "(" << functionToSMTLIBName(kind, smtlib1);
+          os << " ";
+          SMTLIB_Print1(os, c[i], 0, letize, smtlib1);
+          os << " ";
+          close += ")";
+        }
+        SMTLIB_Print1(os, c[c.size() - 1], 0, letize, smtlib1);
+        os << close;
+      }
+      else
+      {
+        os << "(" << functionToSMTLIBName(kind, smtlib1);
+
+        auto iend = c.end();
+        for (auto i = c.begin(); i != iend; i++)
+        {
+          os << " ";
+          SMTLIB_Print1(os, *i, 0, letize, smtlib1);
+        }
+
+        os << ")";
+      }
+    }
+  }
+}
+
 // copied from Presentation Langauge printer.
-ostream&
-SMTLIB_Print(ostream& os, STPMgr* mgr, const ASTNode n, const int indentation,
-             void (*SMTLIB1_Print1)(ostream&, const ASTNode, int, bool),
-             bool smtlib1)
+ostream& SMTLIB_Print(ostream& os, STPMgr* mgr, const ASTNode n,
+                      const int indentation, bool smtlib1)
 {
   // Clear the maps
   NodeLetVarMap.clear();
@@ -86,10 +235,10 @@ SMTLIB_Print(ostream& os, STPMgr* mgr, const ASTNode n, const int indentation,
     if (!smtlib1)
       os << "(";
     // print the let var first
-    SMTLIB1_Print1(os, it->first, indentation, false);
+    SMTLIB_Print1(os, it->first, indentation, false, smtlib1);
     os << " ";
     // print the expr
-    SMTLIB1_Print1(os, it->second, indentation, false);
+    SMTLIB_Print1(os, it->second, indentation, false, smtlib1);
     os << " )";
     if (!smtlib1)
       os << ")";
@@ -105,10 +254,10 @@ SMTLIB_Print(ostream& os, STPMgr* mgr, const ASTNode n, const int indentation,
       if (!smtlib1)
         os << "(";
       // print the let var first
-      SMTLIB1_Print1(os, it->first, indentation, false);
+      SMTLIB_Print1(os, it->first, indentation, false, smtlib1);
       os << " ";
       // print the expr
-      SMTLIB1_Print1(os, it->second, indentation, false);
+      SMTLIB_Print1(os, it->second, indentation, false, smtlib1);
       os << ")";
       if (!smtlib1)
         os << ")";
@@ -118,12 +267,12 @@ SMTLIB_Print(ostream& os, STPMgr* mgr, const ASTNode n, const int indentation,
       closing += ")";
     }
     os << endl;
-    SMTLIB1_Print1(os, n, indentation, true);
+    SMTLIB_Print1(os, n, indentation, true, smtlib1);
     os << closing;
     os << " )  ";
   }
   else
-    SMTLIB1_Print1(os, n, indentation, false);
+    SMTLIB_Print1(os, n, indentation, false, smtlib1);
 
   os << endl;
   return os;

@@ -46,10 +46,13 @@ std::string functionToSMTLIBName(const Kind k, bool smtlib1);
 void LetizeNode(const ASTNode& n, stp::ASTNodeSet& PLPrintNodeSet, bool smtlib1,
                 STPMgr*);
 
+// Prints one node in SMT-LIB1 (smtlib1 == true) or SMT-LIB2 syntax. Both
+// dialects share this one traversal.
+void SMTLIB_Print1(ostream& os, const stp::ASTNode n, int indentation,
+                   bool letize, bool smtlib1);
+
 ostream& SMTLIB_Print(ostream& os, STPMgr*, const ASTNode n,
-                      const int indentation,
-                      void (*SMTLIB_Print1)(ostream&, const ASTNode, int, bool),
-                      bool smtlib1);
+                      const int indentation, bool smtlib1);
 }
 
 #endif
