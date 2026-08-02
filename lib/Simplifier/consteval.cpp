@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/Simplifier.h"
+#include "stp/Util/CBVOps.h"
 #include <cassert>
 
 namespace stp
@@ -43,13 +44,6 @@ static unsigned cbvToUnsigned(const CBV v)
       CONSTANTBV::Set_Max(v) >= ((signed long)sizeof(unsigned)) * 8)
     FatalError("BVConstEvaluator: constant doesn't fit an unsigned int");
   return *(unsigned*)v;
-}
-
-static CBV allOnes(unsigned width)
-{
-  CBV result = CONSTANTBV::BitVector_Create(width, true);
-  CONSTANTBV::BitVector_Fill(result);
-  return result;
 }
 
 CBV NonMemberBVConstEvaluator(const Kind k, const std::vector<CBV>& args,
@@ -518,11 +512,6 @@ bool NonMemberBVConstPredicateEvaluator(const Kind k, const CBV a, const CBV b)
       FatalError("BVConstEvaluator: not a two-argument predicate kind");
       return false;
   }
-}
-
-static uint64_t mask64(unsigned width)
-{
-  return width >= 64 ? ~0ull : (1ull << width) - 1;
 }
 
 static int64_t toSigned64(uint64_t v, unsigned width)

@@ -66,8 +66,6 @@ void outputBitVecSMTLIB2(const ASTNode n, ostream& os);
 DLL_PUBLIC ostream& GDL_Print(ostream& os, const stp::ASTNode n);
 DLL_PUBLIC ostream& GDL_Print(ostream& os, const ASTNode n,
                               std::string (*annotate)(const ASTNode&));
-
-ostream& Bench_Print(ostream& os, const ASTNode n);
 }
 
 #endif /* PRINTERS_H_ */

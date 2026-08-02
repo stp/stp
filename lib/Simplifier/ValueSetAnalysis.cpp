@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/ValueSetAnalysis.h"
 #include "stp/Simplifier/Simplifier.h"
+#include "stp/Util/CBVOps.h"
 
 namespace stp
 {
@@ -38,21 +39,8 @@ namespace stp
 
   namespace
   {
-    CBV valueOf(unsigned width, uint64_t value)
-    {
-      CBV result = CONSTANTBV::BitVector_Create(width, true);
-      for (unsigned i = 0; i < width && i < 64; i++)
-        if ((value >> i) & 1)
-          CONSTANTBV::BitVector_Bit_On(result, i);
-      return result;
-    }
-
-    CBV allOnes(unsigned width)
-    {
-      CBV result = CONSTANTBV::BitVector_Create(width, true);
-      CONSTANTBV::BitVector_Fill(result);
-      return result;
-    }
+    // The conversions between vectors and machine words -- allOnes,
+    // mask64, low64 and cbvFromU64 -- are shared: see Util/CBVOps.h.
 
     // The shift amount, saturated at the width: shifting by the width or
     // more always gives the same answer.
@@ -81,37 +69,6 @@ namespace stp
 
     bool isTrue(const CBV v) { return CONSTANTBV::BitVector_bit_test(v, 0); }
 
-    uint64_t mask64(unsigned width)
-    {
-      return width >= 64 ? ~0ull : (1ull << width) - 1;
-    }
-
-    // The value of a bit-vector of at most 64 bits. The chunk functions
-    // move at most an unsigned long per call, which is 32 bits on some
-    // platforms, so go in two halves.
-    uint64_t cbvToU64(const CBV v)
-    {
-      const unsigned width = bits_(v);
-      assert(width <= 64);
-      uint64_t result =
-          CONSTANTBV::BitVector_Chunk_Read(v, std::min(width, 32u), 0);
-      if (width > 32)
-        result |= (uint64_t)CONSTANTBV::BitVector_Chunk_Read(v, width - 32, 32)
-                  << 32;
-      return result;
-    }
-
-    CBV u64ToCBV(uint64_t v, unsigned width)
-    {
-      CBV result = CONSTANTBV::BitVector_Create(width, true);
-      CONSTANTBV::BitVector_Chunk_Store(result, std::min(width, 32u), 0,
-                                        (unsigned long)(v & 0xffffffffull));
-      if (width > 32)
-        CONSTANTBV::BitVector_Chunk_Store(result, width - 32, 32,
-                                          (unsigned long)(v >> 32));
-      return result;
-    }
-
     // The analysis is written once, over whichever of the two
     // representations of a value below it's instantiated with. WideRep
     // holds a value as a CONSTANTBV bit-vector of any width, NarrowRep
@@ -136,7 +93,7 @@ namespace stp
 
       static Value ofU64(unsigned width, uint64_t v)
       {
-        return valueOf(width, v);
+        return cbvFromU64(width, v);
       }
 
       // v moved up by "shift" bits. The caller only ever passes values
@@ -262,11 +219,14 @@ namespace stp
       {
         owned.reserve(child->size());
         for (const CBV m : child->values)
-          owned.push_back(cbvToU64(m));
+          owned.push_back(low64(m));
         return &owned;
       }
 
-      static CBV toCBV(Value v, unsigned width) { return u64ToCBV(v, width); }
+      static CBV toCBV(Value v, unsigned width)
+      {
+        return cbvFromU64(width, v);
+      }
     };
 
     // What the analysis needs a node's kind evaluated over, straight on
