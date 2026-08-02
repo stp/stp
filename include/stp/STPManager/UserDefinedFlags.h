@@ -107,7 +107,6 @@ public:
 
   // output flags
   bool output_CNF_flag = false;
-  bool output_bench_flag = false;
 
   /* Bitblasting options */
 
