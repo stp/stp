@@ -1523,13 +1523,15 @@ static void collectConjuncts(const ASTNode& n, stp::ASTNodeSet& out)
   if (out.size() >= MAX_CONJUNCTS)
     return;
 
+  // A nested BVAND is a conjunct in its own right *and* contributes its own
+  // children, so both go in. Recording only the children would miss the case
+  // where what gets negated is the nested node itself: in A & (y & ~A) with
+  // A = (v0 & v1), decomposing A into v0 and v1 leaves ~A with no partner.
+  out.insert(n);
+
   if (n.GetKind() == stp::BVAND)
-  {
     for (size_t i = 0; i < n.Degree(); i++)
       collectConjuncts(n[i], out);
-  }
-  else
-    out.insert(n);
 }
 
 ASTNode SimplifyingNodeFactory::handle_bvand(unsigned int width, const ASTVec& new_children) 

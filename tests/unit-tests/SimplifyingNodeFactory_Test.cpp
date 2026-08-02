@@ -960,3 +960,50 @@ TEST(SimplifyingNodeFactory_Test, bool_or_complement_nested_once)
   ASTNode n = c.process(input);
   ASSERT_EQ(n, c.mgr.ASTTrue);
 }
+
+TEST(SimplifyingNodeFactory_Test, bvand_complement_of_a_nested_and)
+{
+  // The negated conjunct is itself a BVAND, and the one it negates appears
+  // higher up:  A & (v2 & ~A)  with  A = (v0 & v1).
+  const std::string input = R"(
+    (assert (= (bvand (bvand v0 v1) (bvand v2 (bvnot (bvand v0 v1))))
+               (_ bv0 20)) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvor_complement_of_a_nested_or)
+{
+  // The same shape through the OR lowering:  A | (v2 | ~A)  with
+  // A = (v0 | v1), which reaches the factory as a BVAND question.
+  const std::string input = R"(
+    (assert (= (bvor (bvor v0 v1) (bvor v2 (bvnot (bvor v0 v1))))
+               (bvnot (_ bv0 20))) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvand_nested_and_without_its_negation)
+{
+  // The guard for the case above: a nested BVAND is present and so is the
+  // negation of a BVAND, but not of that one, so nothing may be annihilated.
+  // Disjoint variables on purpose -- (v0 & v1 & v2 & ~(v3 & v4)) is not the
+  // zero constant, so a rule that fired here would be unsound rather than
+  // merely eager. (v0 & v1 & v2 & ~(v0 & v2)) would not do: that one really
+  // is always zero, just not for a reason this rule knows.
+  const std::string input = R"(
+    (assert (= (bvand (bvand v0 v1) (bvand v2 (bvnot (bvand v3 v4))))
+               (_ bv0 20)) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_NE(n, c.mgr.ASTTrue);
+  ASSERT_NE(n, c.mgr.ASTFalse);
+}
