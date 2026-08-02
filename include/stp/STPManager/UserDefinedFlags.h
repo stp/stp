@@ -103,7 +103,6 @@ public:
 
   // print the input back
   bool print_STPinput_back_flag = false;
-  bool print_STPinput_back_C_flag = false;
   bool print_STPinput_back_SMTLIB2_flag = false;
   bool print_STPinput_back_SMTLIB1_flag = false;
   bool print_STPinput_back_CVC_flag = false;
@@ -114,7 +113,6 @@ public:
 
   // output flags
   bool output_CNF_flag = false;
-  bool output_bench_flag = false;
 
   /* Bitblasting options */
 
@@ -199,8 +197,7 @@ public:
 
   bool get_print_output_at_all() const
   {
-    return print_STPinput_back_flag || print_STPinput_back_C_flag ||
-           print_STPinput_back_SMTLIB2_flag ||
+    return print_STPinput_back_flag || print_STPinput_back_SMTLIB2_flag ||
            print_STPinput_back_SMTLIB1_flag || print_STPinput_back_CVC_flag ||
            print_STPinput_back_dot_flag || print_STPinput_back_GDL_flag;
   }

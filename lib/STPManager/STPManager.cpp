@@ -27,6 +27,7 @@ THE SOFTWARE.
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/Printer/SMTLIBPrinter.h"
+#include "stp/Util/CBVOps.h"
 #include "stp/Util/NodeIterator.h"
 #include <cmath>
 #include <cstdint>
@@ -654,7 +655,7 @@ ASTNode STPMgr::CreateZeroConst(unsigned width)
     return zeroes[width];
   else
   {
-    CBV z = CONSTANTBV::BitVector_Create(width, true);
+    CBV z = mkZero(width);
     return CreateBVConst(z, width);
   }
 }
@@ -673,8 +674,7 @@ ASTNode STPMgr::CreateOneConst(unsigned width)
     return ones[width];
   else
   {
-    CBV o = CONSTANTBV::BitVector_Create(width, true);
-    CONSTANTBV::BitVector_increment(o);
+    CBV o = mkOne(width);
 
     return CreateBVConst(o, width);
   }
@@ -682,9 +682,8 @@ ASTNode STPMgr::CreateOneConst(unsigned width)
 
 ASTNode STPMgr::CreateTwoConst(unsigned width)
 {
-  CBV two = CONSTANTBV::BitVector_Create(width, true);
-  CONSTANTBV::BitVector_increment(two);
-  CONSTANTBV::BitVector_increment(two);
+  // Truncating, as the repeated increments were: two is zero at width 1.
+  CBV two = cbvFromU64(width, 2);
 
   return CreateBVConst(two, width);
 }
@@ -703,8 +702,7 @@ ASTNode STPMgr::CreateMaxConst(unsigned width)
     return max[width];
   else
   {
-    CBV max = CONSTANTBV::BitVector_Create(width, false);
-    CONSTANTBV::BitVector_Fill(max);
+    CBV max = allOnes(width);
 
     return CreateBVConst(max, width);
   }

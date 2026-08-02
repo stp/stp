@@ -198,23 +198,40 @@ void CryptoMiniSat5::solveAndDump()
 
 
 
-// Count how many literals/bits get fixed subject to the assumptions..
-uint32_t CryptoMiniSat5::getFixedCountWithAssumptions(const stp::SATSolver::vec_literals& assumps, const std::unordered_set<unsigned>& literals )
+// Count how many literals/bits get fixed subject to the assumptions. Sets
+// `conflict` when unit propagation refutes them instead, in which case the
+// return value carries no information.
+uint32_t CryptoMiniSat5::getFixedCountWithAssumptions(const stp::SATSolver::vec_literals& assumps, const std::unordered_set<unsigned>& literals, bool& conflict )
 {
   [[maybe_unused]] const uint64_t conf = s->get_sum_conflicts();
   assert(conf == 0);
 
-  [[maybe_unused]] const CMSat::lbool r = s->simplify();
 
-   
-  // Add the assumptions are clauses.
+  // Bounded variable elimination would remove variables this count is about
+  // to look for, so a bit that is implied but whose variable was eliminated
+  // reads as not deduced. The caller wants what unit propagation derives over
+  // the encoding it asked for, not over whatever CMS rewrote it into.
+  s->set_no_bve();
+
+  bool bad = (CMSat::l_False == s->simplify());
+
+
+  // Add the assumptions are clauses. add_clause() propagates a unit at level
+  // zero as it adds it, so a false return is unit propagation deriving the
+  // empty clause -- the conflict this is asked to report. Once that has
+  // happened every later add_clause() returns false too, which is harmless.
   vector<CMSat::Lit>& real_temp_cl = *(vector<CMSat::Lit>*)temp_cl;
   for (int i = 0; i < assumps.size(); i++)
   {
     real_temp_cl.clear();
     real_temp_cl.push_back(CMSat::Lit(var(assumps[i]), sign(assumps[i])));
-    s->add_clause(real_temp_cl);
+    if (!s->add_clause(real_temp_cl))
+      bad = true;
   }
+
+  conflict = bad;
+  if (bad)
+    return 0; // nothing meaningful to count in an unsatisfiable solver
 
 
   //std::cerr << assumps.size() << " assumptions" << std::endl;
@@ -233,10 +250,8 @@ uint32_t CryptoMiniSat5::getFixedCountWithAssumptions(const stp::SATSolver::vec_
 
   // The assumptions are each single literals (corresponding to bits) that are true/false. 
   // so in the result they should be all be set
-  assert(assumps.size() >= 0);
   assert(assigned >= static_cast<uint32_t>(assumps.size()));
   assert(s->get_sum_conflicts() == conf ); // no searching, so no conflicts.
-  assert(CMSat::l_False != r); // always satisfiable.
 
   return assigned;
 }

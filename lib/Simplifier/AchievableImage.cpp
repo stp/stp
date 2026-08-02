@@ -25,40 +25,13 @@ THE SOFTWARE.
 #include "stp/Simplifier/AchievableImage.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/STPManager/STPManager.h"
+#include "stp/Util/CBVOps.h"
 
 namespace stp
 {
 
 namespace
 {
-
-CBV mkZero(unsigned width)
-{
-  return CONSTANTBV::BitVector_Create(width, true);
-}
-
-CBV mkOnes(unsigned width)
-{
-  CBV v = mkZero(width);
-  CONSTANTBV::BitVector_Fill(v);
-  return v;
-}
-
-CBV mkOne(unsigned width)
-{
-  CBV v = mkZero(width);
-  CONSTANTBV::BitVector_increment(v);
-  return v;
-}
-
-CBV mkNum(unsigned width, unsigned value)
-{
-  CBV v = mkZero(width);
-  for (unsigned i = 0; i < sizeof(unsigned) * 8 && i < width; i++)
-    if ((value & (1u << i)) != 0)
-      CONSTANTBV::BitVector_Bit_On(v, i);
-  return v;
-}
 
 // The bottom `bits` bits set, at the given width.
 CBV mkLowMask(unsigned bits, unsigned width)
@@ -135,7 +108,7 @@ CBV umaxTake(const CBV a, CBV t)
 
 AchievableImage::AchievableImage(STPMgr& _bm, unsigned _varWidth)
     : bm(_bm), varWidth(_varWidth), rep(Rep::Exact), lo(mkZero(_varWidth)),
-      hi(mkOnes(_varWidth)), curWidth(_varWidth)
+      hi(allOnes(_varWidth)), curWidth(_varWidth)
 {
   assert(varWidth > 0);
 }
@@ -168,15 +141,6 @@ void AchievableImage::addHint(const ASTNode& k)
 
 namespace
 {
-// The low 64 bits of a CBV (which stores 32-bit words, low first).
-uint64_t low64(const CBV v)
-{
-  uint64_t r = ((unsigned*)v)[0];
-  if (bits_(v) > 32)
-    r |= ((uint64_t)((unsigned*)v)[1]) << 32;
-  return r;
-}
-
 // Deterministic integer square root (no libm: the result seeds samples,
 // and a last-ulp difference between platforms would change the CNF).
 uint64_t isqrt64(uint64_t n)
@@ -196,15 +160,6 @@ uint64_t isqrt64(uint64_t n)
   return x;
 }
 
-CBV mkNum64(unsigned width, uint64_t value)
-{
-  CBV v = mkZero(width);
-  for (unsigned i = 0; i < 64 && i < width; i++)
-    if ((value >> i) & 1)
-      CONSTANTBV::BitVector_Bit_On(v, i);
-  return v;
-}
-
 // Heuristic preimage of `out` under one step. Used only to generate
 // sample seeds -- witnesses are validated forward -- so it may be wrong,
 // just not useless. NULL when no sensible backward map exists.
@@ -222,7 +177,7 @@ CBV hintBackStep(const GroundStep& step, const CBV out)
       return r;
     }
     if (step.kind == BVMULT && W <= 64) // x * x: integer square root
-      return mkNum64(W, isqrt64(low64(out)));
+      return cbvFromU64(W, isqrt64(low64(out)));
     return NULL;
   }
 
@@ -272,7 +227,7 @@ CBV hintBackStep(const GroundStep& step, const CBV out)
       CBV t = widen(out, w);
       if (j == 0)
         return t;
-      CBV jc = mkNum(w, j);
+      CBV jc = cbvFromU64(w, j);
       CBV r = op2(BVLEFTSHIFT, t, jc, w);
       destroy(t);
       destroy(jc);
@@ -284,7 +239,7 @@ CBV hintBackStep(const GroundStep& step, const CBV out)
         return truncate(out, w);
       // x ++ c: drop the constant's low bits.
       const unsigned cw = step.constants[0].GetValueWidth();
-      CBV sc = mkNum(W, cw);
+      CBV sc = cbvFromU64(W, cw);
       CBV t = op2(BVRIGHTSHIFT, out, sc, W);
       destroy(sc);
       CBV r = truncate(t, w);
@@ -314,12 +269,12 @@ CBV hintBackStep(const GroundStep& step, const CBV out)
         if (!divides) // no exact preimage; fall back to the quotient
           return op2(BVDIV, out, c, W);
       }
-      CBV sc = mkNum(W, s);
+      CBV sc = cbvFromU64(W, s);
       CBV odd = op2(BVRIGHTSHIFT, c, sc, W);
       CBV shifted = op2(BVRIGHTSHIFT, out, sc, W);
       destroy(sc);
       CBV inv = clone(odd);
-      CBV two = mkNum(W, 2);
+      CBV two = cbvFromU64(W, 2);
       for (unsigned bits = 3; bits < W; bits *= 2)
       {
         CBV oi = op2(BVMULT, odd, inv, W);
@@ -573,7 +528,7 @@ bool AchievableImage::applyExact(const GroundStep& step)
       if (isZero(c))
       {
         // x / 0 is all-ones for every x.
-        CBV ones = mkOnes(w);
+        CBV ones = allOnes(w);
         setExact(clone(ones), ones, W);
         return true;
       }
@@ -652,7 +607,7 @@ bool AchievableImage::applyExact(const GroundStep& step)
       // i-j+1 bits; the truncation behaves like mod 2^(i-j+1).
       const unsigned j = step.constants[1].GetUnsignedConst();
       const unsigned len = W;
-      CBV jc = mkNum(w, j);
+      CBV jc = cbvFromU64(w, j);
       CBV ta = op2(BVRIGHTSHIFT, lo, jc, w);
       CBV tb = op2(BVRIGHTSHIFT, hi, jc, w);
       destroy(jc);
@@ -671,7 +626,7 @@ bool AchievableImage::applyExact(const GroundStep& step)
         if (ucmp(d, mask) >= 0) // a full cycle: every value reached
         {
           nl = mkZero(len);
-          nh = mkOnes(len);
+          nh = allOnes(len);
           exact = true;
         }
         destroy(d);
@@ -857,9 +812,9 @@ void AchievableImage::degradeToSamples(const GroundStep& degradingStep)
   }
   addSeed(mkZero(w));
   addSeed(mkOne(w));
-  addSeed(mkOnes(w));
+  addSeed(allOnes(w));
   { // signed extremes
-    CBV sMax = mkOnes(w);
+    CBV sMax = allOnes(w);
     CONSTANTBV::BitVector_Bit_Off(sMax, w - 1);
     addSeed(sMax);
     CBV sMin = mkZero(w);
@@ -996,7 +951,7 @@ CBV AchievableImage::invertStep(const GroundStep& step, const CBV inLo,
     {
       const unsigned j = step.constants[1].GetUnsignedConst();
       const unsigned len = step.outWidth;
-      CBV jc = mkNum(w, j);
+      CBV jc = cbvFromU64(w, j);
       CBV ta = op2(BVRIGHTSHIFT, inLo, jc, w);
       CBV tb = op2(BVRIGHTSHIFT, inHi, jc, w);
       CBV mask = mkLowMask(len, w);
@@ -1153,7 +1108,7 @@ AchievableImage::Decision AchievableImage::decide(Kind pred,
           CONSTANTBV::BitVector_bit_test(hi, curWidth - 1);
       if (isSigned && crossing)
       {
-        mx = mkOnes(curWidth);
+        mx = allOnes(curWidth);
         CONSTANTBV::BitVector_Bit_Off(mx, curWidth - 1);
         mn = mkZero(curWidth);
         CONSTANTBV::BitVector_Bit_On(mn, curWidth - 1);

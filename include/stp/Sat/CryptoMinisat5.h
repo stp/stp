@@ -77,7 +77,7 @@ public:
   lbool false_literal() const override { return ((uint8_t)-1); }
   lbool undef_literal() const override { return ((uint8_t)0); }
 
-  uint32_t getFixedCountWithAssumptions(const stp::SATSolver::vec_literals& assumps,  const std::unordered_set<unsigned>& literals );
+  uint32_t getFixedCountWithAssumptions(const stp::SATSolver::vec_literals& assumps,  const std::unordered_set<unsigned>& literals, bool& conflict );
 
 
   void solveAndDump();

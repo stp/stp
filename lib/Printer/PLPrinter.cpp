@@ -361,7 +361,11 @@ ostream& PL_Print(ostream& os, const ASTNode& n, STPMgr* bm, int indentation)
   bm->NodeLetVarMap1.clear();
 
   // pass 1: letize the node
-  n.LetizeNode(bm);
+  {
+    LetizeState st = {bm->PLPrintNodeSet, bm->NodeLetVarMap, bm->NodeLetVarVec,
+                      "let_k_", false};
+    LetizeNode(n, st, bm);
+  }
 
   // pass 2:
   //
