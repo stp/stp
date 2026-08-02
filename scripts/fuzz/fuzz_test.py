@@ -102,7 +102,7 @@ class Tester:
         # , "--SMTLIB1", "-m", "--SMTLIB2"
 
         # output options
-        # --output-CNF --output-bench --exit-after-CNF
+        # --output-CNF --exit-after-CNF
         opts = ["--disable-simplifications", "-w", "-a", "--disable-cbitp",
                 "--disable-equality",
                 "-r"]

@@ -97,6 +97,31 @@ string precisionDetail(const Row& r)
     if (r.sat.unsound > 0)
       o << " (" << r.sat.unsound << " UNSOUND)";
   }
+  if (r.bcp.ran && r.bcp.cases > 0)
+  {
+    o << "; vs bit-blasted: " << fixed(r.bcp.bcpBits, 2) << " vs "
+      << fixed(r.bcp.cbitpBits, 2) << " bits (";
+    if (r.bcp.bcpBits <= 0 && r.bcp.cbitpBits > 0)
+      o << "all new";
+    else
+      o << fixed(r.bcp.ratio(), 1) << "x";
+    o << ", " << r.bcp.cases << " cases, " << r.bcp.clauses << " clauses/"
+      << r.bcp.variables << " vars)";
+  }
+  if (r.bcpExhaustive.ran && r.bcpExhaustive.cases > 0)
+  {
+    const BcpExhaustive& e = r.bcpExhaustive;
+    o << "; encoding arc-consistent w=" << e.width << ": "
+      << (e.arcConsistent() ? "yes" : "NO") << " (" << e.complete << "/"
+      << e.cases << " cases, " << e.contradictory << " contradictory";
+    if (e.incomplete > 0)
+      o << ", " << e.incomplete << " incomplete";
+    if (e.missedConflict > 0)
+      o << ", " << e.missedConflict << " MISSED CONFLICTS";
+    if (e.unsound > 0)
+      o << ", " << e.unsound << " UNSOUND";
+    o << ")";
+  }
   if (r.witnessUnsound > 0)
     o << "; " << r.witnessUnsound << " timed cases lost their solution";
   if (r.conflicts > 0)
@@ -126,6 +151,9 @@ string configSummary(const Config& c)
     << "s budget each, arity " << c.arity << ", seed " << c.seed;
   if (c.satCases > 0)
     o << ", " << c.satCases << " SAT-checked cases per row";
+  if (c.bcpCases > 0)
+    o << ", " << c.bcpCases << " cases per row against the bit-blasted "
+      << "encoding (CNF: " << (c.cnf.empty() ? "medium" : c.cnf) << ")";
   return o.str();
 }
 
@@ -180,7 +208,8 @@ void writeCsv(const Config& cfg, const vector<Row>& rows, const string& path)
        "bits_gained_per_call,calls,conflicts,maximally_precise,"
        "exhaustive_width,exhaustive_cases,exhaustive_precise,"
        "exhaustive_unsound,exhaustive_missed_conflicts,deducible_bits,"
-       "gained_bits,sat_cases,sat_precise,sat_unsound\n";
+       "gained_bits,sat_cases,sat_precise,sat_unsound,"
+       "bcp_cases,bcp_bits,bcp_cbitp_bits,bcp_clauses,bcp_vars\n";
   for (const Row& r : rows)
   {
     f << name(r.domain) << "," << r.op << "," << name(r.direction) << ","
@@ -191,7 +220,9 @@ void writeCsv(const Config& cfg, const vector<Row>& rows, const string& path)
       << "," << r.precision.precise << "," << r.precision.unsound << ","
       << r.precision.missedConflict << "," << r.precision.derivable << ","
       << r.precision.gained << "," << r.sat.cases << "," << r.sat.precise
-      << "," << r.sat.unsound << "\n";
+      << "," << r.sat.unsound << "," << r.bcp.cases << ","
+      << fixed(r.bcp.bcpBits, 4) << "," << fixed(r.bcp.cbitpBits, 4) << ","
+      << r.bcp.clauses << "," << r.bcp.variables << "\n";
   }
   (void)cfg;
   std::cout << "wrote " << path << std::endl;
@@ -266,6 +297,13 @@ void writeHtml(const Config& cfg, const vector<Row>& rows, const string& path)
     f << " and spot-checked at the benchmarked width against the SAT-based "
          "maximally precise propagator";
   f << ".</p>\n";
+  if (cfg.bcpCases > 0)
+    f << "<p class=\"note\"><em>vs bit-blasted</em> is the other comparison: "
+         "how many bits unit propagation over the CNF encoding of the same "
+         "operation fixes, against how many the transfer function fixes, on "
+         "the same cases. STP bit-blasts and calls a SAT solver anyway, so "
+         "the multiplier is what the word-level propagator adds over what "
+         "the solver would have found without it.</p>\n";
 
   for (Domain d : {Domain::Cbitp, Domain::Interval, Domain::ValueSet})
   {

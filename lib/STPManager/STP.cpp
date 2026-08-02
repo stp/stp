@@ -470,8 +470,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
       (bm->UserFlags.bitblast_simplification == -1 || initial_difficulty_score < bm->UserFlags.bitblast_simplification))
   {
     BBNodeManagerAIG bitblast_nodemgr;
-    BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(
-        &bitblast_nodemgr, simp, bm->defaultNodeFactory, &(bm->UserFlags));
+    BitBlaster bb(&bitblast_nodemgr, simp, bm->defaultNodeFactory,
+                  &(bm->UserFlags));
     ASTNodeMap fromTo;
     ASTNodeMap equivs;
     bb.getConsts(inputToSat, fromTo, equivs);
@@ -683,8 +683,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   if (!worse && (bitblasted_difficulty != -1))
   {
     BBNodeManagerAIG bitblast_nodemgr;
-    BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(
-        &bitblast_nodemgr, simp, bm->defaultNodeFactory, &(bm->UserFlags));
+    BitBlaster bb(&bitblast_nodemgr, simp, bm->defaultNodeFactory,
+                  &(bm->UserFlags));
     bb.BBForm(inputToSat);
     int newBB = bitblast_nodemgr.totalNumberOfNodes();
     if (bm->UserFlags.stats_flag)

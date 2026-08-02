@@ -67,33 +67,33 @@ class ValueSetAnalysis
 
   ValueSet* fresh(const ASTNode& n) const;
 
+  // The analysis proper, written once over a representation of a value
+  // given as the template argument. The two of them (in the .cpp) hold a
+  // value as a CONSTANTBV bit-vector of any width, and natively in a
+  // uint64_t; a node is analysed with the second whenever it and all its
+  // children fit in 64 bits, which is nearly always, leaving the first
+  // handling only the wide nodes.
+  template <class Rep>
+  ValueSet* product(const ASTNode& n, const vector<const ValueSet*>& children);
+
   // Values that stand in for an unknown child: evaluating over them gives
   // exactly the results the child's whole width would give. False when
   // there are too many of them, or the operation says nothing anyway.
+  template <class Rep>
   bool standIns(const ASTNode& n, size_t index,
-                const vector<const ValueSet*>& children, vector<CBV>& out,
-                Expand& expand);
+                const vector<const ValueSet*>& children, unsigned width,
+                vector<typename Rep::Value>& out, Expand& expand);
+  template <class Rep>
   bool shiftStandIns(const ASTNode& n, size_t index,
                      const vector<const ValueSet*>& children,
-                     vector<CBV>& out);
+                     vector<typename Rep::Value>& out);
 
-  // Takes ownership of "set", returning the expanded set, or nullptr when
-  // the expansion is bigger than a set can hold.
-  ValueSet* expand(ValueSet* set, Expand how);
-
-  // The same analysis again, evaluated natively on uint64_t. Taken
-  // whenever the node and all its children fit in 64 bits, which leaves
-  // the bit-vector path above handling only the wide nodes.
-  ValueSet* dispatch64(const ASTNode& n,
-                       const vector<const ValueSet*>& children);
-  bool standIns64(const ASTNode& n, size_t index,
-                  const vector<const ValueSet*>& children, unsigned width,
-                  vector<uint64_t>& out, Expand& expand);
-  bool shiftStandIns64(const ASTNode& n, size_t index,
-                       const vector<const ValueSet*>& children,
-                       vector<uint64_t>& out);
-  static bool expand64(uint64_t* values, size_t& size, unsigned width,
-                       Expand how);
+  // What an unknown operand of a bitwise operation turns the values
+  // evaluated so far into, in place on the sorted array of them. False
+  // when the expansion is bigger than a set can hold.
+  template <class Rep>
+  static bool expand(typename Rep::Value* values, size_t& size, unsigned width,
+                     Expand how);
 
 public:
   ValueSetAnalysis(STPMgr&) {}

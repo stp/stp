@@ -170,7 +170,7 @@ public:
     }
   }
 
-  unsigned GetNodeNum() const { return node_uid; }
+  uint64_t GetNodeNum() const { return node_uid; }
 
   virtual bool isSimplified() const { return false; }
 

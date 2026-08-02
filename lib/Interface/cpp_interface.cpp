@@ -271,24 +271,6 @@ ASTNode Cpp_interface::applyFunction(const string& name, const ASTVec& params)
   return SubstitutionMap::replace(f.function, fromTo, cache, nf);
 }
 
-bool Cpp_interface::isBitVectorFunction(const string& name)
-{
-  const auto found = functions.find(name);
-  if (found == functions.end())
-    return false;
-
-  return found->second.function.GetType() == BITVECTOR_TYPE;
-}
-
-bool Cpp_interface::isBooleanFunction(const string& name)
-{
-  const auto found = functions.find(name);
-  if (found == functions.end())
-    return false;
-
-  return found->second.function.GetType() == BOOLEAN_TYPE;
-}
-
 types Cpp_interface::functionReturnType(const string& name)
 {
   const auto found = functions.find(name);
@@ -499,15 +481,6 @@ void Cpp_interface::ignoreCheckSat()
   ignoreCheckSatRequest = true;
 }
 
-void Cpp_interface::printStatus()
-{
-  for (size_t i = 0, size = cache.size(); i < size; ++i)
-  {
-    cache[i].print();
-  }
-  cerr << endl;
-}
-
 // Does some simple caching of prior results.
 void Cpp_interface::checkSat(const ASTVec& assertionsSMT2)
 {
@@ -527,7 +500,7 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2)
   }
 
   Entry& last_run = cache.back();
-  if (((unsigned)last_run.node_number != assertionsSMT2.back().GetNodeNum()) &&
+  if ((last_run.node_number != assertionsSMT2.back().GetNodeNum()) &&
       (last_run.result == SOLVER_SATISFIABLE))
   {
     // extra asserts might have been added to it,
@@ -588,6 +561,12 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2)
 }
 
 // This method sets up some of the globally required data.
+//
+// NB it does not create the STP that GlobalSTP points at. Every writer of
+// GlobalSTP borrows: whoever allocates the STP frees it, and the pointer is
+// only ever a non-owning view. Callers that need one (because they reach
+// something which dereferences GlobalSTP, such as BBAsProp) construct the STP
+// themselves and assign it before that point.
 Cpp_interface::Cpp_interface(STPMgr& bm_)
     : bm(bm_), letMgr(new LetMgr(bm.ASTUndefined)), nf(bm_.defaultNodeFactory)
 {
@@ -595,14 +574,7 @@ Cpp_interface::Cpp_interface(STPMgr& bm_)
   startup();
   stp::GlobalParserInterface = this;
   stp::GlobalParserBM = &bm_;
-  GlobalSTP = new STP(&bm);
   init();
-}
-
-void Cpp_interface::deleteGlobal()
-{
-  GlobalSTP->deleteObjects();
-  delete GlobalSTP;
 }
 
 void Cpp_interface::cleanUp()
