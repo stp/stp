@@ -56,13 +56,8 @@ THREAD_LOCAL_IE vector<pair<ASTNode, ASTNode>> NodeLetVarVec;
 // correctly print shared subterms inside the LET itself
 THREAD_LOCAL_IE stp::ASTNodeMap NodeLetVarMap1;
 
-// Prints one node, in SMT-LIB1 syntax when smtlib1 is set and in SMT-LIB2
-// syntax otherwise. The two dialects share the whole traversal; they differ
-// in exactly five places, each marked "dialect:" below.
 // A rounding mode in operand position: the five constants print by name;
 // anything else -- a RoundingMode variable, an ite -- prints as itself.
-// Floating-point spellings exist only in dialect 2, so the recursion here
-// and the FP cases below are unconditionally SMT-LIB2.
 static void printRoundingModeSMTLIB2(ostream& os, const ASTNode& rm,
                                      bool letize)
 {
@@ -77,6 +72,11 @@ static void printRoundingModeSMTLIB2(ostream& os, const ASTNode& rm,
   SMTLIB_Print1(os, rm, 0, letize, false);
 }
 
+// Prints one node, in SMT-LIB1 syntax when smtlib1 is set and in SMT-LIB2
+// syntax otherwise. The two dialects share the whole traversal; they differ
+// in exactly five places, each marked "dialect:" below. The floating-point
+// cases are not among them: SMT-LIB1 has no FP theory, so those nodes only
+// ever reach here with smtlib1 clear.
 void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize,
                    bool smtlib1)
 {
