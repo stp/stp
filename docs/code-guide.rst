@@ -59,9 +59,8 @@ The executables are built from ``tools/``:
 -  The rest are development aids, built only when ``BUILD_EXTRA_TOOLS``
    is enabled: ``propagator_bench`` times the propagators and checks how
    much they deduce, ``measure_constantbitprop`` compares that against
-   what unit propagation on the bit-blasted encoding deduces,
-   ``rewrite_rule_gen`` searches for rewrite rules, and ``cvc_to_c``
-   turns a CVC file into a C program.
+   what unit propagation on the bit-blasted encoding deduces, and
+   ``rewrite_rule_gen`` searches for rewrite rules.
 
 The Python bindings are in ``bindings/python``, and the tests are in
 ``tests/`` (see :doc:`testing`).
