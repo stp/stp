@@ -37,6 +37,7 @@ THE SOFTWARE.
 #include <ctime>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <vector>
 
 #include "stp/AST/AST.h"
@@ -133,6 +134,12 @@ typedef std::unordered_map<ASTNode, string, ASTNode::ASTNodeHasher,
 
 stp::STPMgr* mgr;
 NodeFactory* nf;
+
+// GlobalSTP is a borrowed pointer everywhere in the tree; this is the one
+// owner in this tool. shutdown() frees it, while mgr is still alive -- an STP
+// outliving its STPMgr is a use-after-free, because ~STP drops ASTNode
+// references back into the manager's node tables.
+std::unique_ptr<STP> stpOwner;
 
 SATSolver* ss;
 ASTNodeSet stored; // Store nodes so they aren't garbage collected.
@@ -759,7 +766,8 @@ void startup()
 
   mgr = new stp::STPMgr();
   stp::GlobalParserBM = mgr;
-  GlobalSTP = new STP(mgr);
+  stpOwner = std::make_unique<STP>(mgr);
+  GlobalSTP = stpOwner.get();
 
   mgr->defaultNodeFactory =
       new SimplifyingNodeFactory(*mgr->hashingNodeFactory, *mgr);
@@ -790,6 +798,14 @@ void startup()
   // Write out the work so far..
   signal(SIGUSR1, do_write_out);
   signal(SIGUSR2, do_usr2);
+}
+
+// Mirrors the STP half of startup(). Runs while mgr is still alive, which is
+// the order ~STP needs.
+void shutdown()
+{
+  GlobalSTP = NULL;
+  stpOwner.reset();
 }
 
 void clearSAT()
@@ -2267,6 +2283,8 @@ int main(int argc, const char* argv[])
 
   for (size_t i = 0; i < saved_array.size(); i++)
     delete saved_array[i];
+
+  shutdown();
 }
 
 #if 0
