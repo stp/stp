@@ -1497,41 +1497,50 @@ ASTNode SimplifyingNodeFactory::handle_bvxor(unsigned int width, const ASTVec& i
 
 
 // The conjuncts a BVAND constrains, descending through nested BVANDs, since
-// (a & (b & c)) constrains exactly a, b and c.
+// (a & (b & c)) constrains exactly a, b and c. A nested BVAND is recorded as
+// a conjunct in its own right as well as being descended into: what gets
+// negated may be the nested node rather than one of its leaves.
+//
+// Each conjunct is packed as a node number and a polarity -- x as 2n, ~x as
+// 2n+1 -- so a literal and its negation differ only in the low bit, and
+// sorting brings them next to each other. That is the same shape as the
+// adjacency test the duplicate removal below uses.
+//
+// The buffer is a fixed array rather than a set or a vector. This runs on
+// every BVAND that has a BVAND child, 1.9M times over the hard QF_BV
+// problems, to hold six conjuncts on average; at that size the allocation
+// would cost more than everything else here put together.
 //
 // Bounded by how many conjuncts have been gathered, not by how deep the walk
-// went. Measured, by instrumenting this function over the 4661 hard problems
-// of the non-incremental QF_BV set: 1.9M walks, 65 of which found a
-// complementary pair, and the shallowest depth at which that pair was
-// reachable was
+// went, and the figure comes from measuring rather than guessing.
+// Instrumenting this function over the 4661 hard problems: of those 1.9M
+// walks, 65 found a complementary pair, and the shallowest depth at which
+// that pair was reachable was
 //
-//   depth 1: 35    depth 2: 27    depth 3: 1    depth 7: 1    depth 8: 1
+//   depth 1: 35   depth 2: 27   depth 3: 1   depth 7: 1   depth 8: 1
 //
-// so 95% are within two levels but the tail runs to eight, while the nesting
-// itself reaches sixty. A depth limit would therefore have to be set at
-// eight to lose nothing, which is not a number with any meaning -- it is
-// just the deepest pair this corpus happens to contain. The budget bounds
-// the cost directly instead, and since every BVAND has at least two
-// children it bounds the recursion too. Sixty-four is comfortably past the
-// depth of every pair seen.
+// So 95% are within two levels, but the tail runs to eight, while the
+// nesting itself reaches sixty. A depth limit would have to be set at eight
+// to lose nothing, and eight is not a number with any meaning -- it is just
+// the deepest pair this corpus happens to contain. Bounding the conjuncts
+// bounds the cost directly instead, and since every BVAND has at least two
+// children it bounds the recursion too; sixty-four is comfortably past every
+// pair seen.
 //
 // Stopping early costs a rewrite that does not fire, never a wrong answer.
 static const size_t MAX_CONJUNCTS = 64;
 
-static void collectConjuncts(const ASTNode& n, stp::ASTNodeSet& out)
+static void collectConjuncts(const ASTNode& n, uint64_t* out, size_t& count)
 {
-  if (out.size() >= MAX_CONJUNCTS)
+  if (count >= MAX_CONJUNCTS)
     return;
 
-  // A nested BVAND is a conjunct in its own right *and* contributes its own
-  // children, so both go in. Recording only the children would miss the case
-  // where what gets negated is the nested node itself: in A & (y & ~A) with
-  // A = (v0 & v1), decomposing A into v0 and v1 leaves ~A with no partner.
-  out.insert(n);
+  out[count++] = (n.GetKind() == BVNOT) ? ((n[0].GetNodeNum() << 1) | 1)
+                                        : (n.GetNodeNum() << 1);
 
   if (n.GetKind() == stp::BVAND)
     for (size_t i = 0; i < n.Degree(); i++)
-      collectConjuncts(n[i], out);
+      collectConjuncts(n[i], out, count);
 }
 
 ASTNode SimplifyingNodeFactory::handle_bvand(unsigned int width, const ASTVec& new_children) 
@@ -1554,13 +1563,18 @@ ASTNode SimplifyingNodeFactory::handle_bvand(unsigned int width, const ASTVec& n
 
     if (nested)
     {
-      stp::ASTNodeSet conjuncts;
+      uint64_t conjuncts[MAX_CONJUNCTS];
+      size_t count = 0;
       for (size_t i = 0; i < new_children.size(); i++)
-        collectConjuncts(new_children[i], conjuncts);
+        collectConjuncts(new_children[i], conjuncts, count);
 
-      for (stp::ASTNodeSet::const_iterator it = conjuncts.begin();
-           it != conjuncts.end(); it++)
-        if (it->GetKind() == BVNOT && conjuncts.count((*it)[0]) > 0)
+      std::sort(conjuncts, conjuncts + count);
+
+      // x is 2n and ~x is 2n+1, so a pair is two consecutive values with the
+      // even one first. Equal neighbours are duplicates, not a pair.
+      for (size_t i = 1; i < count; i++)
+        if (conjuncts[i] == conjuncts[i - 1] + 1 &&
+            (conjuncts[i - 1] & 1) == 0)
           return bm.CreateZeroConst(width);
     }
   }
