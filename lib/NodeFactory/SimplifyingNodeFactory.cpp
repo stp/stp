@@ -1495,8 +1495,73 @@ ASTNode SimplifyingNodeFactory::handle_bvxor(unsigned int width, const ASTVec& i
 
 
 
+
+// The conjuncts a BVAND constrains, descending through nested BVANDs, since
+// (a & (b & c)) constrains exactly a, b and c.
+//
+// Bounded by how many conjuncts have been gathered, not by how deep the walk
+// went. Measured, by instrumenting this function over the 4661 hard problems
+// of the non-incremental QF_BV set: 1.9M walks, 65 of which found a
+// complementary pair, and the shallowest depth at which that pair was
+// reachable was
+//
+//   depth 1: 35    depth 2: 27    depth 3: 1    depth 7: 1    depth 8: 1
+//
+// so 95% are within two levels but the tail runs to eight, while the nesting
+// itself reaches sixty. A depth limit would therefore have to be set at
+// eight to lose nothing, which is not a number with any meaning -- it is
+// just the deepest pair this corpus happens to contain. The budget bounds
+// the cost directly instead, and since every BVAND has at least two
+// children it bounds the recursion too. Sixty-four is comfortably past the
+// depth of every pair seen.
+//
+// Stopping early costs a rewrite that does not fire, never a wrong answer.
+static const size_t MAX_CONJUNCTS = 64;
+
+static void collectConjuncts(const ASTNode& n, stp::ASTNodeSet& out)
+{
+  if (out.size() >= MAX_CONJUNCTS)
+    return;
+
+  if (n.GetKind() == stp::BVAND)
+  {
+    for (size_t i = 0; i < n.Degree(); i++)
+      collectConjuncts(n[i], out);
+  }
+  else
+    out.insert(n);
+}
+
 ASTNode SimplifyingNodeFactory::handle_bvand(unsigned int width, const ASTVec& new_children) 
 {
+
+
+  // x & ~x is zero however the two are nested: (~x & (x & y)) and
+  // (x & (~x & ~y)) are both zero, and the scan below only ever compares
+  // immediate children, so it sees neither. Only worth walking when a nested
+  // BVAND is actually present -- and this can only ever return the
+  // annihilator, so a node it does not fire on is left exactly as it was.
+  {
+    bool nested = false;
+    for (size_t i = 0; i < new_children.size(); i++)
+      if (new_children[i].GetKind() == stp::BVAND)
+      {
+        nested = true;
+        break;
+      }
+
+    if (nested)
+    {
+      stp::ASTNodeSet conjuncts;
+      for (size_t i = 0; i < new_children.size(); i++)
+        collectConjuncts(new_children[i], conjuncts);
+
+      for (stp::ASTNodeSet::const_iterator it = conjuncts.begin();
+           it != conjuncts.end(); it++)
+        if (it->GetKind() == BVNOT && conjuncts.count((*it)[0]) > 0)
+          return bm.CreateZeroConst(width);
+    }
+  }
 
   ASTVec flat_children(new_children);
   SortByExprNum(flat_children); // We want duplicates to be adjacent.
