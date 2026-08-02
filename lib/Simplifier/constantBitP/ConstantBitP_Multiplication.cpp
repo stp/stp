@@ -409,43 +409,16 @@ Result setToZero(FixedBits& y, unsigned from, unsigned to)
   return r;
 }
 
-// Finds the leading one in each of the two inputs.
-// If this position is i & j, then in the output
-// there can be no ones higher than i+j+1.
-Result useLeadingZeroesToFix_OLD(FixedBits& x, FixedBits& y, FixedBits& output)
-{
-  // Count the leading zeroes on x & y.
-  // Output should have about that many..
-  int xTop = x.topmostPossibleLeadingOne();
-  int yTop = y.topmostPossibleLeadingOne();
-
-  int maxOutputOneFromInputs = xTop + yTop + 1;
-
-  for (int i = output.getWidth() - 1; i > maxOutputOneFromInputs; i--)
-    if (!output.isFixed(i))
-    {
-      output.setFixed(i, true);
-      output.setValue(i, false);
-    }
-    else
-    {
-      if (output.getValue(i))
-        return CONFLICT;
-    }
-
-  return NOT_IMPLEMENTED;
-}
-
+// Zero the output bits that cannot be reached by any product of a value
+// admitted by x and one admitted by y: multiply the two largest admitted
+// values and take the position of that product's leading one as the bound.
+//
+// This subsumes an earlier version that bounded the product by the sum of
+// the operands' leading-one positions plus one. That version, and the
+// exhaustive check that this one fixes at least as much, now live in
+// tests/unit-tests/ConstantBitP_TransferFunctions_Test.cpp.
 Result useLeadingZeroesToFix(FixedBits& x, FixedBits& y, FixedBits& output)
 {
-// To check that the new implementation subsumes the old.
-#ifndef NDEBUG
-  FixedBits x_p = x;
-  FixedBits y_p = y;
-  FixedBits o_p = output;
-  useLeadingZeroesToFix_OLD(x_p, y_p, o_p);
-#endif
-
   const int bitWidth = x.getWidth();
   CBV x_c = CONSTANTBV::BitVector_Create(2 * bitWidth, true);
   CBV y_c = CONSTANTBV::BitVector_Create(2 * bitWidth, true);
@@ -487,13 +460,6 @@ Result useLeadingZeroesToFix(FixedBits& x, FixedBits& y, FixedBits& output)
     }
   }
 
-#ifndef NDEBUG
-  // Assert the new implementation fixes more than the old.
-  assert(FixedBits::in(x, x_p));
-  assert(FixedBits::in(y, y_p));
-  assert(FixedBits::in(output, o_p));
-#endif
-
   CONSTANTBV::BitVector_Destroy(x_c);
   CONSTANTBV::BitVector_Destroy(y_c);
   CONSTANTBV::BitVector_Destroy(result);
@@ -501,9 +467,12 @@ Result useLeadingZeroesToFix(FixedBits& x, FixedBits& y, FixedBits& output)
   return NOT_IMPLEMENTED;
 }
 
-Result trailingOneReasoning_OLD(FixedBits& x, FixedBits& y, FixedBits& output);
-
 // Remove from x any trailing "boths", that don't have support in y and output.
+//
+// This subsumes an earlier version that started the scan at x's minimum
+// trailing-one position rather than at bit zero. That version, and the
+// exhaustive check that this one leaves it nothing to find, now live in
+// tests/unit-tests/ConstantBitP_TransferFunctions_Test.cpp.
 Result trailingOneReasoning(FixedBits& x, FixedBits& y, FixedBits& output)
 {
   Result r = NO_CHANGE;
@@ -534,57 +503,6 @@ Result trailingOneReasoning(FixedBits& x, FixedBits& y, FixedBits& output)
     r = CHANGED;
   }
 
-#ifndef NDEBUG
-  // Check that the old implementation is subsumed. On copies, because it
-  // fixes bits when it fires, and nothing should mutate inside assert().
-  FixedBits x_c(x), y_c(y), o_c(output);
-  assert(trailingOneReasoning_OLD(x_c, y_c, o_c) == NO_CHANGE);
-#endif
-  return r;
-}
-
-// Remove from x any trailing "boths", that don't have support in y and output.
-Result trailingOneReasoning_OLD(FixedBits& x, FixedBits& y, FixedBits& output)
-{
-  Result r = NO_CHANGE;
-
-  const int bitwidth = output.getWidth();
-
-  const int x_min = x.minimum_trailingOne();
-  const int x_max = x.maximum_trailingOne();
-
-  const int y_min = y.minimum_trailingOne();
-  const int y_max = y.maximum_trailingOne();
-
-  int output_max = output.maximum_trailingOne();
-
-  bool done = false;
-  for (int i = x_min; i <= std::min(x_max, bitwidth - 1); i++)
-  {
-    if (x[i] == '1')
-      break;
-
-    if (x[i] == '0')
-      continue;
-
-    assert(!done);
-    for (int j = y_min; j <= std::min(y_max, output_max); j++)
-    {
-      if (j + i >= bitwidth || (y[j] != '0' && output[i + j] != '0'))
-      {
-        done = true;
-        break;
-      }
-    }
-    if (!done)
-    {
-      x.setFixed(i, true);
-      x.setValue(i, false);
-      r = CHANGED;
-    }
-    else
-      break;
-  }
   return r;
 }
 
