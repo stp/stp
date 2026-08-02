@@ -18,8 +18,37 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-# Enable symbol exports
-add_definitions(-D STP_EXPORTS)
+# Symbol visibility, see the DLL_PUBLIC block in include/stp/Util/Attributes.h
+# (duplicated in include/stp/c_interface.h). Both macros only ever do anything
+# under MSVC; the GNU/clang branch of that block tests neither of them, so on
+# every non-MSVC build these definitions are inert.
+#
+# STP_EXPORTS means "this translation unit is part of libstp", as opposed to a
+# client compiling against the installed headers. It must reach every source
+# that goes into the library, which is all of lib/ and its subdirectories --
+# hence directory scope here, ahead of the add_subdirectory() calls that create
+# the object libraries. It is deliberately not set for tools/, bindings/ or the
+# tests: those are clients of the library and want the import side.
+#
+# This used to read add_definitions(-D STP_EXPORTS). CMake's -D handling does
+# not match a bare -D followed by a separate argument, so neither token became a
+# compile definition; both fell through to the directory's COMPILE_OPTIONS and
+# only reached the compiler because they happened to stay adjacent on the
+# command line -- invisible to COMPILE_DEFINITIONS and to anything that inspects
+# it.
+add_compile_definitions(STP_EXPORTS)
+
+# STP_SHARED_LIB means "libstp is a DLL". Only then may the __declspec arms be
+# used: a static MSVC build that saw __declspec(dllimport) would fail to link,
+# which is why the #else fallback to an empty DLL_PUBLIC is the correct one for
+# static and must stay reachable. STATICCOMPILE forces BUILD_SHARED_LIBS OFF, so
+# static builds (including the Windows CI job) keep the empty expansion.
+#
+# Note this is currently dormant: no shared MSVC build of STP is produced, so
+# nothing has exercised the __declspec arms.
+if (BUILD_SHARED_LIBS)
+    add_compile_definitions(STP_SHARED_LIB)
+endif()
 
 add_subdirectory(Globals)
 add_subdirectory(AST)
@@ -88,6 +117,24 @@ endif()
 add_library(stp
     ${stp_lib_objects}
 )
+
+# The directory-scope definitions above cover the object libraries this target
+# is assembled from. Repeating STP_EXPORTS as a PRIVATE requirement keeps it
+# attached to the library target itself rather than only to the directory, so it
+# still applies if sources are ever added to stp directly -- and, more to the
+# point, it documents that STP_EXPORTS is a build-of-the-library requirement and
+# must never become part of the link interface.
+#
+# STP_SHARED_LIB is the opposite: consumers need it too. A client compiling
+# against the installed c_interface.h must see STP_SHARED_LIB (so DLL_PUBLIC is
+# a __declspec) with STP_EXPORTS unset (so it resolves to dllimport). Putting it
+# in the INTERFACE requirements records it in the exported STPTargets.cmake, so
+# anything that links the imported stp target picks it up automatically, and
+# in-tree consumers (tools/, bindings/, tests/) get it for free.
+target_compile_definitions(stp PRIVATE STP_EXPORTS)
+if (BUILD_SHARED_LIBS)
+    target_compile_definitions(stp INTERFACE STP_SHARED_LIB)
+endif()
 
 # Set the public header so it will be installed
 set_target_properties(stp PROPERTIES
