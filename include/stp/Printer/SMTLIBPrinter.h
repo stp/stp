@@ -50,8 +50,6 @@ ostream& SMTLIB_Print(ostream& os, STPMgr*, const ASTNode n,
                       const int indentation,
                       void (*SMTLIB_Print1)(ostream&, const ASTNode, int, bool),
                       bool smtlib1);
-
-bool containsAnyArrayOps(const ASTNode& n);
 }
 
 #endif
