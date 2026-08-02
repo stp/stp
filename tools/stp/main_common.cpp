@@ -175,11 +175,6 @@ void Main::print_back(ASTNode& query, ASTNode& asserts)
     printer::SMTLIB2_PrintBack(cout, original_input, bm);
   }
 
-  if (bm->UserFlags.print_STPinput_back_C_flag)
-  {
-    printer::C_Print(cout, original_input, bm);
-  }
-
   if (bm->UserFlags.print_STPinput_back_GDL_flag)
   {
     printer::GDL_Print(cout, original_input);

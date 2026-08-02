@@ -1,11 +1,5 @@
-// Outputs in the Graph Description Langauge format (GDL)
-// can be laid out by the graph layout tool: aiSee.
-
-// todo: this contains only small differences to the dotprinter.cpp. they should
-// be merged.
-
 /********************************************************************
- * AUTHORS: Trevor Hansen
+ * AUTHORS: Vijay Ganesh
  *
  * BEGIN DATE: November, 2005
  *
@@ -31,6 +25,18 @@ THE SOFTWARE.
 #include "stp/Printer/printers.h"
 #include <string>
 
+/*
+ * The two graph back-ends.
+ *
+ * DOT can be laid out by the dotty/neato tools; GDL (Graph Description
+ * Language) by aiSee.  They share how a node is labelled but not much else:
+ * GDL annotates nodes, labels edges only for non-commutative operators, and
+ * gives every use of a constant its own node so the layout does not collapse
+ * into a hairball.  Those differences are large enough that the two walks are
+ * kept separate; what they agree on -- what a node is called -- is
+ * printNodeLabel() below.
+ */
+
 namespace printer
 {
 
@@ -38,19 +44,9 @@ using std::string;
 using std::endl;
 using namespace stp;
 
-void outputBitVec(const ASTNode n, ostream& os);
-
-void GDL_Print1(ostream& os, const ASTNode& n,
-                std::unordered_set<int>* alreadyOutput,
-                string (*annotate)(const ASTNode&))
+// The text inside a node's box. Constants come out in SMT-LIB1 syntax.
+static void printNodeLabel(ostream& os, const ASTNode& n)
 {
-  // check if this node has already been printed. If so return.
-  if (alreadyOutput->find(n.GetNodeNum()) != alreadyOutput->end())
-    return;
-
-  alreadyOutput->insert(n.GetNodeNum());
-
-  os << "node: { title:\"n" << n.GetNodeNum() << "\" label: \"";
   switch (n.GetKind())
   {
     case SYMBOL:
@@ -65,7 +61,66 @@ void GDL_Print1(ostream& os, const ASTNode& n,
     default:
       os << _kind_names[n.GetKind()];
   }
+}
 
+void Dot_Print1(ostream& os, const ASTNode n,
+                std::unordered_set<uint64_t>* alreadyOutput)
+{
+
+  // check if this node has already been printed. If so return.
+  if (alreadyOutput->find(n.GetNodeNum()) != alreadyOutput->end())
+    return;
+
+  alreadyOutput->insert(n.GetNodeNum());
+
+  os << "n" << n.GetNodeNum() << "[label =\"";
+  printNodeLabel(os, n);
+  os << "\"];" << endl;
+
+  // print the edges to each child.
+  const ASTChildren ch = n.GetChildren();
+  auto itend = ch.end();
+  int i = 0;
+  for (auto it = ch.begin(); it < itend; it++)
+  {
+    os << "n" << n.GetNodeNum() << " -> "
+       << "n" << it->GetNodeNum() << "[label=" << i++ << "];" << endl;
+  }
+
+  // print each of the children.
+  for (auto it = ch.begin(); it < itend; it++)
+  {
+    Dot_Print1(os, *it, alreadyOutput);
+  }
+}
+
+ostream& Dot_Print(ostream& os, const ASTNode n)
+{
+
+  os << "digraph G{" << endl;
+
+  // create hashmap to hold integers (node numbers).
+  std::unordered_set<uint64_t> alreadyOutput;
+
+  Dot_Print1(os, n, &alreadyOutput);
+
+  os << "}" << endl;
+
+  return os;
+}
+
+void GDL_Print1(ostream& os, const ASTNode& n,
+                std::unordered_set<uint64_t>* alreadyOutput,
+                string (*annotate)(const ASTNode&))
+{
+  // check if this node has already been printed. If so return.
+  if (alreadyOutput->find(n.GetNodeNum()) != alreadyOutput->end())
+    return;
+
+  alreadyOutput->insert(n.GetNodeNum());
+
+  os << "node: { title:\"n" << n.GetNodeNum() << "\" label: \"";
+  printNodeLabel(os, n);
   os << annotate(n);
   os << "\"}" << endl;
 
@@ -94,10 +149,9 @@ void GDL_Print1(ostream& os, const ASTNode& n,
         os << "node: { title:\"n";
 
         os << ss.str() << "\" label: \"";
-        if (it->GetType() == stp::BOOLEAN_TYPE)
-          os << _kind_names[it->GetKind()];
-        else
-          outputBitVec(*it, os);
+        // The same labelling as any other node: a boolean constant is TRUE
+        // or FALSE, which printNodeLabel() reaches through its default arm.
+        printNodeLabel(os, *it);
         os << "\"}" << endl;
         constantOutput.insert(*it);
       }
@@ -134,7 +188,7 @@ ostream& GDL_Print(ostream& os, const ASTNode n,
   os << "display_edge_labels: yes" << endl;
 
   // create hashmap to hold integers (node numbers).
-  std::unordered_set<int> alreadyOutput;
+  std::unordered_set<uint64_t> alreadyOutput;
 
   GDL_Print1(os, n, &alreadyOutput, annotate);
   ;

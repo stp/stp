@@ -45,9 +45,29 @@ extern "C" {
 /// into code that includes it.
 /////////////////////////////////////////////////////////////////////////////
 
+// The DLL_PUBLIC / DLL_LOCAL block below is duplicated verbatim from
+// include/stp/Util/Attributes.h, and deliberately so: this is the only header
+// STP installs, and Attributes.h ships nowhere, so it cannot be included from
+// here. Do not "deduplicate" the two -- that would leave this header with no
+// definition of DLL_PUBLIC once installed. Keep them in sync instead.
 #if defined(_MSC_VER)
-// NOTE: for now, we need STP_SHARED_LIB for clients of the statically linked
-// STP library, for which linking fails when DLL_PUBLIC is __declspec(dllimport).
+// MSVC symbol visibility. Two macros drive it, both set by lib/CMakeLists.txt:
+//
+//   STP_SHARED_LIB  libstp is a DLL. Defined only when BUILD_SHARED_LIBS is ON:
+//                   for the library's own sources, and, through the exported
+//                   target's interface, for clients that link it.
+//   STP_EXPORTS     this translation unit is part of libstp itself, rather than
+//                   a client compiling against these headers.
+//
+// A static build defines neither and gets an empty DLL_PUBLIC. That is the only
+// expansion that links for static: a static client that saw dllimport would
+// fail at link time. A shared build gets dllexport while the library is being
+// compiled and dllimport for everyone else.
+//
+// The mechanism is currently dormant -- no shared MSVC build of STP is produced
+// (the only Windows CI job is STATICCOMPILE=ON, which forces BUILD_SHARED_LIBS
+// OFF), so neither __declspec arm is ever taken. It is kept correct so that
+// enabling a Windows DLL build later works.
 #if defined(STP_SHARED_LIB) && defined(STP_EXPORTS)
 // This is visible when building the STP library as a DLL.
 #define DLL_PUBLIC __declspec(dllexport)
@@ -423,10 +443,6 @@ DLL_PUBLIC Expr vc_parseExpr(VC vc, const char* filepath);
 //! \brief Prints the given expression to stdout in the presentation language.
 //!
 DLL_PUBLIC void vc_printExpr(VC vc, Expr e);
-
-//! \brief Prints the given expression to stdout as C code.
-//!
-DLL_PUBLIC void vc_printExprCCode(VC vc, Expr e);
 
 //! \brief Prints the given expression to stdout in the STMLib2 format.
 //!
@@ -1565,7 +1581,7 @@ DLL_PUBLIC const char* exprName(Expr e);
 
 //! \brief Returns the internal node ID of the given expression.
 //!
-DLL_PUBLIC int getExprID(Expr ex);
+DLL_PUBLIC uint64_t getExprID(Expr ex);
 
 //! \brief Parses the given string in CVC or SMTLib1.0 format and extracts
 //!        query and assertion information into the 'outQuery' and 'outAsserts'

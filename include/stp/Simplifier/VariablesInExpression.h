@@ -37,7 +37,7 @@ class VariablesInExpression
 private:
   void insert(const ASTNode& n, Symbols* s);
 
-  typedef std::unordered_map<int, Symbols*> ASTNodeToNodes;
+  typedef std::unordered_map<uint64_t, Symbols*> ASTNodeToNodes;
   ASTNodeToNodes symbol_graph;
 
 public:

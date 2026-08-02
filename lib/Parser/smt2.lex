@@ -122,9 +122,8 @@ namespace stp
     // Checking the functions before the symbols saves a symbol-table
     // probe in files built almost entirely from define-funs. A name can't
     // legally be both, so the order isn't observable on valid input. A
-    // single functionReturnType probe classifies the name, avoiding the
-    // second map lookup that separate isBitVector/isBooleanFunction calls
-    // would cost on boolean-function references.
+    // single functionReturnType probe classifies the name, so a boolean-
+    // function reference costs one map lookup rather than two.
     else if (stp::GlobalParserInterface->hasFunctions())
     {
       const stp::SourceSort source_sort =

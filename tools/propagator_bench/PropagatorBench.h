@@ -185,6 +185,57 @@ struct SatCheck
   uint64_t unsound = 0;
 };
 
+// Comparison against unit propagation on the bit-blasted encoding: not what
+// an ideal propagator could deduce, but what the SAT solver would have
+// deduced from the same inputs without the propagator's help. Both figures
+// are bits newly fixed, averaged per case, over the varying children and the
+// result.
+struct BcpCheck
+{
+  bool ran = false;
+  uint64_t cases = 0;
+  double bcpBits = 0;   // fixed by boolean constraint propagation
+  double cbitpBits = 0; // fixed by the transfer function, same cases
+  unsigned clauses = 0; // size of the encoding propagated over
+  unsigned variables = 0;
+
+  // What the propagator adds over the encoding. Above 1 it is earning its
+  // keep; at 1 the SAT solver would have found the same bits anyway.
+  double ratio() const
+  {
+    if (!ran || bcpBits <= 0)
+      return cbitpBits > 0 ? 0 : 1; // 0 stands for "infinite", printed as such
+    return cbitpBits / bcpBits;
+  }
+};
+
+// Exhaustive arc-consistency check of the bit-blasted encoding at a small
+// width: every combination of fixed/unfixed input bits, contradictory ones
+// included, against a brute-forced ideal. This is the half the sampled
+// --bcp-check cannot reach, because its cases are all built from a solution
+// and so are never contradictory.
+struct BcpExhaustive
+{
+  bool ran = false;
+  unsigned width = 0;
+  uint64_t cases = 0;
+  uint64_t complete = 0;       // deduced everything that follows
+  uint64_t incomplete = 0;     // left something on the table
+  uint64_t missedConflict = 0; // no solution, and propagation did not say so
+  uint64_t unsound = 0;        // fixed more than the ideal: would be a bug
+  uint64_t contradictory = 0;  // cases with no solution at all
+  uint64_t derivable = 0;
+  uint64_t gained = 0;
+
+  // Arc consistent means both halves: everything implied is derived, and
+  // every contradiction is detected.
+  bool arcConsistent() const
+  {
+    return ran && cases > 0 && incomplete == 0 && missedConflict == 0 &&
+           unsound == 0;
+  }
+};
+
 struct Row
 {
   Domain domain = Domain::Cbitp;
@@ -206,6 +257,8 @@ struct Row
 
   PrecisionResult precision; // exhaustive, at a small width
   SatCheck sat;              // at this row's width
+  BcpCheck bcp;              // against the bit-blasted encoding
+  BcpExhaustive bcpExhaustive; // arc consistency of that encoding
 };
 
 struct Config
@@ -225,7 +278,15 @@ struct Config
   uint64_t precisionCaseCap = 4000000;
   unsigned satCases = 0;        // 0 disables the SAT spot check
   double satBudgetSeconds = 5;  // it is thousands of times slower per case
+  unsigned bcpCases = 0;        // 0 disables the bit-blasted comparison
+  double bcpBudgetSeconds = 5;  // a fresh solver and CNF load per case
+  unsigned bcpExhaustiveWidth = 0; // 0 disables the arc-consistency check
   unsigned seed = 42;
+  // How the CNF that --bcp-check propagates over is generated. Empty leaves
+  // STP's default (medium) alone. A different encoding of the same circuit
+  // can have different unit-propagation strength, which is the point of
+  // being able to set it here.
+  string cnf;
   bool shiftBias = true; // draw half the shift amounts from [0, width)
   bool verbose = false;
   string html;
@@ -254,6 +315,30 @@ void runValueSet(stp::STPMgr* mgr, const Config& c, vector<Row>& out);
 simplifier::constantBitP::Result cbitpTransfer(stp::STPMgr* mgr, stp::Kind k,
                                                vector<FixedBits*>& children,
                                                FixedBits& output);
+
+// ---------------------------------------------------------------------------
+// The bit-blasted encoding, as a propagator. See Bcp.cpp. Built once per
+// (operation, layout) because bit-blasting dwarfs the propagation; NULL when
+// the operation cannot be encoded, or in a build without CryptoMiniSat.
+// `bits` is always the varying children in layout order, then the result.
+
+struct BcpEncoding;
+
+bool bcpAvailable();
+BcpEncoding* makeBcpEncoding(stp::STPMgr* mgr, const OpSpec& op,
+                             const Layout& l);
+void destroyBcpEncoding(BcpEncoding* e);
+// Asserts the known bits and propagates. Returns false when unit propagation
+// refutes them -- the conflict-detection half of arc consistency -- and
+// otherwise sets `fixed` to the variables fixed at decision level zero.
+bool bcpPropagate(const BcpEncoding* e, const vector<const FixedBits*>& bits,
+                  unsigned& fixed);
+// Of the known bits, how many the encoding represents at all.
+unsigned bcpVisibleFixed(const BcpEncoding* e,
+                         const vector<const FixedBits*>& bits);
+// The size of the CNF being propagated over, which is what --cnf changes.
+unsigned bcpClauses(const BcpEncoding* e);
+unsigned bcpVariables(const BcpEncoding* e);
 
 // ---------------------------------------------------------------------------
 // Reporting.

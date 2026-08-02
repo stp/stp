@@ -108,24 +108,17 @@ class Cpp_interface
   // Used to cache prior queries.
   struct Entry
   {
+    // No node has this number, so it marks "nothing recorded yet".
+    static constexpr uint64_t NO_NODE = UINT64_MAX;
+
     explicit Entry(SOLVER_RETURN_TYPE result_)
     {
       result = result_;
-      node_number = -1;
+      node_number = NO_NODE;
     }
 
     SOLVER_RETURN_TYPE result;
-    int node_number; // a weak pointer.
-
-    void print()
-    {
-      if (result == SOLVER_UNSATISFIABLE)
-        std::cerr << "u";
-      else if (result == SOLVER_SATISFIABLE)
-        std::cerr << "s";
-      else if (result == SOLVER_UNDECIDED)
-        std::cerr << "?";
-    }
+    uint64_t node_number; // a weak pointer.
   };
   vector<Entry> cache;
 
@@ -261,11 +254,10 @@ public:
   DLL_PUBLIC ASTNode applyFunction(const std::string& name,
                                    const ASTVec& params);
 
-  DLL_PUBLIC bool isBitVectorFunction(const std::string& name);
-  DLL_PUBLIC bool isBooleanFunction(const std::string& name);
-  // Classify a name by its carrier return type, or UNKNOWN_TYPE when the name
-  // is not stored. Source-only distinctions are available from
-  // functionReturnSourceSort().
+  // Classify a name in a single map probe: returns the function's carrier
+  // return type (BITVECTOR_TYPE or BOOLEAN_TYPE), or UNKNOWN_TYPE when the
+  // name is not a stored function. Source-only distinctions are available
+  // from functionReturnSourceSort().
   DLL_PUBLIC types functionReturnType(const std::string& name);
   DLL_PUBLIC SourceSort functionReturnSourceSort(const std::string& name);
   bool hasFunctions() const { return !functions.empty(); }
@@ -337,10 +329,8 @@ public:
 
   // Useful when printing back, so that you can parse, but ignore the request.
   DLL_PUBLIC void ignoreCheckSat();
-  DLL_PUBLIC void printStatus();
   DLL_PUBLIC void checkSat(const ASTVec& assertionsSMT2);
 
-  DLL_PUBLIC void deleteGlobal();
   DLL_PUBLIC void cleanUp();
 
   DLL_PUBLIC void setOption(std::string, std::string);

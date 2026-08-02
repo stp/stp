@@ -59,12 +59,6 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
   assert(satSolver.nVars() == 0);
   add_cnf_to_solver(satSolver, cnfData);
 
-  if (bm->UserFlags.output_bench_flag)
-  {
-    cerr << "Converting to CNF via ABC's AIG package can't yet print out bench "
-            "format"
-         << endl;
-  }
   release_cnf_memory(cnfData);
 
   mark_variables_as_frozen(satSolver);
@@ -117,8 +111,7 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
   Simplifier simp(bm, &sm);
 
   BBNodeManagerAIG mgr;
-  BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(
-      &mgr, &simp, bm->defaultNodeFactory, &bm->UserFlags, cb);
+  BitBlaster bb(&mgr, &simp, bm->defaultNodeFactory, &bm->UserFlags, cb);
 
   bm->GetRunTimes()->start(RunTimes::BitBlasting);
   BBNodeAIG BBFormula = bb.BBForm(input);

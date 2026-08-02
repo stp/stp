@@ -54,41 +54,11 @@ ostream& ASTNode::PL_Print(ostream& os, STPMgr* mgr, int indentation) const
   return printer::PL_Print(os, *this, mgr, indentation);
 }
 
-// This is the IO manipulator.  It builds an object of class
-//"LispPrinter" that has a special overloaded "<<" operator.
-inline LispPrinter lisp(const ASTNode& node, int indentation = 0)
-{
-  LispPrinter lp(node, indentation);
-  return lp;
-}
-
-// FIXME: Made non-ref in the hope that it would work better.
-void lp(ASTNode node)
-{
-  cout << lisp(node) << endl;
-}
-
 void lpvec(const ASTVec& vec)
 {
   LispPrintVec(cout, vec, 0);
   cout << endl;
 }
-
-//  //Variable Order Printer: A global function which converts a MINISAT
-//   //var into a ASTNODE var. It then prints this var along with
-//   //variable order dcisions taken by MINISAT.
-//   void Convert_MINISATVar_To_ASTNode_Print(int minisat_var,
-//                                       int decision_level, int polarity)
-//   {
-//     stp::ASTNode vv = stp::GlobalSTPMgr->_SATVar_to_AST[minisat_var];
-//     cout << spaces(decision_level);
-//     if (polarity)
-//       {
-//         cout << "!";
-//       }
-//     printer::PL_Print(cout,vv, 0);
-//     cout << endl;
-//   } //end of Convert_MINISATVar_To_ASTNode_Print()
 
 void STPMgr::printVarDeclsToStream(ostream& os, ASTNodeSet& ListOfDeclaredVars)
 {
