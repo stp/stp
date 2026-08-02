@@ -62,10 +62,34 @@ inline uint64_t mask64(unsigned width)
   return width >= 64 ? ~0ull : (1ull << width) - 1;
 }
 
-// A fresh all-ones vector of the given width. The caller owns it.
+// The small constants. Each returns a fresh vector that the caller owns.
+//
+// These say what the value is, which the raw constructor does not: the
+// boolean of BitVector_Create is a zero-fill flag, so a bare
+// BitVector_Create(width, true) reads as an allocation rather than as
+// the number zero. mkZero and mkOne are spelt after STPMgr's
+// CreateZeroConst and CreateOneConst, which build the same two values as
+// AST nodes.
+//
+// Take care not to read mkOne as allOnes: mkOne is 1, allOnes is
+// 2^width - 1. They agree only at width 1, which is why the boolean
+// analyses can use either.
+
+inline CBV mkZero(unsigned width)
+{
+  return CONSTANTBV::BitVector_Create(width, true);
+}
+
+inline CBV mkOne(unsigned width)
+{
+  CBV result = mkZero(width);
+  CONSTANTBV::BitVector_increment(result);
+  return result;
+}
+
 inline CBV allOnes(unsigned width)
 {
-  CBV result = CONSTANTBV::BitVector_Create(width, true);
+  CBV result = mkZero(width);
   CONSTANTBV::BitVector_Fill(result);
   return result;
 }
