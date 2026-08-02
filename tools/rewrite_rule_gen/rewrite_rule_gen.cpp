@@ -37,6 +37,7 @@ THE SOFTWARE.
 #include <ctime>
 #include <fstream>
 #include <iostream>
+#include <set>
 #include <memory>
 #include <vector>
 
@@ -2193,6 +2194,211 @@ void test()
   rewrite_system.clear();
 }
 
+// ---------------------------------------------------------------------------
+// missed-constants: expressions the simplifying node factory left as
+// expressions, when they can only ever take one value.
+//
+// Every two-level function and predicate over the two variables is built --
+// no constant leaves, so nothing folds merely because a constant was handed
+// in -- and each result the factory did not reduce to a constant is asked
+// whether it is one anyway. (bvsub v v) is the shape being looked for.
+//
+// Constancy is "n agrees with a copy of itself over fresh variables, for
+// every assignment", which needs no candidate value to be guessed. A
+// concrete-evaluation filter runs first: a node taking two different values
+// under two assignments needs no solver call at all.
+
+// Substitutes concrete values for the variables. Every leaf is a constant
+// afterwards, so the factory folds the result -- unless it is missing a fold,
+// which is what this mode hunts, so the caller checks rather than assumes.
+ASTNode evalAt(const ASTNode& n, const ASTNode& vVal, const ASTNode& wVal)
+{
+  ASTNodeMap ft;
+  ft.insert(make_pair(v, vVal));
+  ft.insert(make_pair(w, wVal));
+  ASTNodeMap cache;
+  return SubstitutionMap::replace(n, ft, cache, nf);
+}
+
+// Distinct nodes in the DAG; used only to report the smallest findings first.
+size_t nodeCount(const ASTNode& n, ASTNodeSet& seen)
+{
+  if (!seen.insert(n).second)
+    return 0;
+  size_t total = 1;
+  for (size_t i = 0; i < n.Degree(); i++)
+    total += nodeCount(n[i], seen);
+  return total;
+}
+
+size_t nodeCount(const ASTNode& n)
+{
+  ASTNodeSet seen;
+  return nodeCount(n, seen);
+}
+
+bool isFolded(const ASTNode& n)
+{
+  return n.isConstant() || n == mgr->ASTTrue || n == mgr->ASTFalse;
+}
+
+// True when n takes the same value at every sample. Wrong only in the safe
+// direction: it can pass a node that is not constant, never reject one that
+// is.
+bool sameAtEverySample(const ASTNode& n,
+                       const vector<std::pair<ASTNode, ASTNode>>& samples,
+                       ASTNode& value)
+{
+  value = evalAt(n, samples[0].first, samples[0].second);
+  if (!isFolded(value))
+    return false; // not folded even fully applied; not what this looks for
+
+  for (size_t i = 1; i < samples.size(); i++)
+    if (evalAt(n, samples[i].first, samples[i].second) != value)
+      return false;
+  return true;
+}
+
+// n is constant exactly when it agrees with a copy of itself over fresh
+// variables, whatever the two are assigned.
+bool provablyConstant(const ASTNode& n)
+{
+  const ASTNode other = renameVars(n);
+  const ASTNode agree = (n.GetType() == BOOLEAN_TYPE)
+                            ? nf->CreateNode(IFF, n, other)
+                            : nf->CreateNode(EQ, n, other);
+  if (agree == mgr->ASTTrue)
+    return true;
+  return isConstantToSat(agree, -1);
+}
+
+// One more level of operators over `fromTerms`, appending to `terms` and
+// `preds`. Unary and binary, no constants introduced anywhere.
+void addLevel(const ASTVec& fromTerms, ASTVec& terms, ASTVec& preds)
+{
+  static const Kind termUnary[] = {stp::BVNOT, stp::BVUMINUS};
+  static const Kind termBinary[] = {
+      stp::BVPLUS,  stp::BVSUB,        stp::BVMULT,       stp::BVDIV,
+      stp::BVMOD,   stp::SBVDIV,       stp::SBVREM,       stp::SBVMOD,
+      stp::BVAND,   stp::BVOR,         stp::BVXOR,        stp::BVLEFTSHIFT,
+      stp::BVRIGHTSHIFT, stp::BVSRSHIFT};
+  static const Kind predBinary[] = {stp::EQ,   stp::BVLT,  stp::BVLE,
+                                    stp::BVGT, stp::BVGE,  stp::BVSLT,
+                                    stp::BVSLE, stp::BVSGT, stp::BVSGE};
+
+  for (size_t i = 0; i < fromTerms.size(); i++)
+  {
+    for (size_t u = 0; u < sizeof(termUnary) / sizeof(Kind); u++)
+    {
+      ASTVec c;
+      c.push_back(fromTerms[i]);
+      terms.push_back(create(termUnary[u], c));
+    }
+
+    for (size_t j = 0; j < fromTerms.size(); j++)
+    {
+      for (size_t b = 0; b < sizeof(termBinary) / sizeof(Kind); b++)
+        terms.push_back(create(termBinary[b], fromTerms[i], fromTerms[j]));
+      for (size_t b = 0; b < sizeof(predBinary) / sizeof(Kind); b++)
+        preds.push_back(create(predBinary[b], fromTerms[i], fromTerms[j]));
+    }
+  }
+}
+
+void findMissedConstants()
+{
+  createVariables();
+
+  vector<std::pair<ASTNode, ASTNode>> samples;
+  samples.push_back(
+      std::make_pair(mgr->CreateZeroConst(bits), mgr->CreateZeroConst(bits)));
+  samples.push_back(
+      std::make_pair(mgr->CreateOneConst(bits), mgr->CreateZeroConst(bits)));
+  samples.push_back(
+      std::make_pair(mgr->CreateZeroConst(bits), mgr->CreateOneConst(bits)));
+  samples.push_back(
+      std::make_pair(mgr->CreateMaxConst(bits), mgr->CreateOneConst(bits)));
+  samples.push_back(
+      std::make_pair(mgr->CreateMaxConst(bits), mgr->CreateMaxConst(bits)));
+  for (int i = 0; i < 8; i++)
+    samples.push_back(
+        std::make_pair(mgr->CreateBVConst(bits, rand() % (1 << bits)),
+                       mgr->CreateBVConst(bits, rand() % (1 << bits))));
+
+  // No constant leaves: a fold that only fires because a constant was passed
+  // in is not what this is looking for.
+  ASTVec leaves;
+  leaves.push_back(v);
+  leaves.push_back(w);
+
+  ASTVec terms(leaves), preds;
+  addLevel(leaves, terms, preds);
+  removeDuplicates(terms);
+  removeDuplicates(preds);
+  cout << "one level:  " << terms.size() << " terms, " << preds.size()
+       << " predicates" << endl;
+
+  const ASTVec firstLevel(terms);
+  addLevel(firstLevel, terms, preds);
+  removeDuplicates(terms);
+  removeDuplicates(preds);
+  cout << "two levels: " << terms.size() << " terms, " << preds.size()
+       << " predicates" << endl;
+
+  ASTVec all(terms);
+  all.insert(all.end(), preds.begin(), preds.end());
+
+  unsigned candidates = 0, found = 0;
+
+  // (op v v) and (op w w) are the same finding twice. Reporting is keyed on
+  // the expression with every variable mapped to v, which collapses them.
+  std::set<string> seen;
+  vector<std::pair<size_t, string>> hits; // node count, text
+
+  for (size_t i = 0; i < all.size(); i++)
+  {
+    const ASTNode& n = all[i];
+
+    if (isFolded(n))
+      continue; // the factory already reduced it; nothing missed here
+
+    ASTNode value;
+    if (!sameAtEverySample(n, samples, value))
+      continue;
+
+    candidates++;
+    if (!provablyConstant(n))
+      continue;
+
+    ASTNodeMap ft;
+    ft.insert(make_pair(w, v));
+    ASTNodeMap cache;
+    const ASTNode canonical = SubstitutionMap::replace(n, ft, cache, nf);
+
+    std::stringstream key;
+    printer::SMTLIB2_Print1(key, canonical, 0, false);
+    if (!seen.insert(key.str()).second)
+      continue;
+
+    found++;
+
+    std::stringstream line;
+    printer::SMTLIB2_Print1(line, n, 0, false);
+    line << "\n    is always ";
+    printer::SMTLIB2_Print1(line, value, 0, false);
+    hits.push_back(std::make_pair(nodeCount(n), line.str()));
+  }
+
+  // Smallest first: those are the ones worth teaching the factory.
+  std::sort(hits.begin(), hits.end());
+  for (size_t i = 0; i < hits.size(); i++)
+    cout << "\n" << hits[i].second << endl;
+
+  cout << "\nchecked " << all.size() << " expressions at " << bits
+       << " bits; " << candidates << " constant at every sample, " << found
+       << " distinct shapes confirmed constant but not folded" << endl;
+}
+
 void createVariables()
 {
   v = mgr->LookupOrCreateSymbol("v");
@@ -2256,6 +2462,10 @@ void usage()
       "                        spending at most MS milliseconds on each.\n"
       "  rewrite               apply the rule set to itself and write it back.\n"
       "  write-out             re-emit the rule set, including its C++ form.\n"
+      "  missed-constants      build every two-level function and predicate\n"
+      "                        over the variables, with no constant leaves,\n"
+      "                        and report the ones the node factory left as\n"
+      "                        expressions that can only take one value.\n"
       "  unit-test             check the commutative matcher. Needs no input.\n"
       "  test                  check the rule properties. Needs no input.\n"
       "\n"
@@ -2417,6 +2627,10 @@ int main(int argc, const char* argv[])
   {
     load_new_rules();
     t2();
+  }
+  else if (argc == 2 && !strcmp("missed-constants", argv[1]))
+  {
+    findMissedConstants();
   }
   else
   {
