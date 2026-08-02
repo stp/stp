@@ -954,77 +954,143 @@ bool lessThan(const ASTNode& n1, const ASTNode& n2)
 
 // Breaks the expressions into buckets recursively, then pairwise checks that
 // they are equivalent.
+// This used to recurse three ways, and an unbounded run segfaulted: the stack
+// ran out at depth 23771. Two of the calls were tail calls -- "narrow the list
+// by one counterexample, start again, and return" -- and the list shrinks by
+// about one element each time, so they alone went tens of thousands of frames
+// deep. The third splits the list into equivalence buckets and recurses into
+// each, and because a narrowed restart re-enters that split, converting only
+// the tail calls just moved the growth (it then died at depth 38730).
+//
+// So the search carries its own stack. `pending` holds the buckets still to
+// be examined, the tail calls are iterations of the inner loop, and the depth
+// STP's own stack reaches no longer depends on the size of the function list.
 void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
                   const int depth = 0)
 {
-  if (expressions.size() < 2)
+  struct Frame
   {
-    discarded += expressions.size();
-    return;
+    ASTVec expressions;
+    vector<VariableAssignment> values;
+    int depth;
+  };
+
+  vector<Frame> pending;
+  {
+    // Taken by reference and consumed, exactly as before.
+    Frame first;
+    first.expressions.swap(expressions);
+    first.values = values;
+    first.depth = depth;
+    pending.push_back(std::move(first));
   }
 
-  if (max_search_depth >= 0 && depth >= max_search_depth)
+  while (!pending.empty())
   {
-    discarded += expressions.size();
-    return;
+  ASTVec work;
+  work.swap(pending.back().expressions);
+  vector<VariableAssignment> vals(std::move(pending.back().values));
+  int d = pending.back().depth;
+  pending.pop_back();
+
+  // The former tail calls set this and go round again with a narrowed list.
+  bool restart = true;
+  // Set when a split separated nothing, so the next round goes straight to
+  // the pairwise pass instead of performing the identical split again.
+  bool skipSplit = false;
+  while (restart)
+  {
+  restart = false;
+
+  if (work.size() < 2)
+  {
+    discarded += work.size();
+    break;
+  }
+
+  if (max_search_depth >= 0 && d >= max_search_depth)
+  {
+    discarded += work.size();
+    break;
   }
 
   if (max_rules_wanted >= 0 &&
       (int)rewrite_system.size() >= max_rules_wanted)
   {
-    discarded += expressions.size();
-    return;
+    discarded += work.size();
+    break;
   }
 
   cout << '\n'
-       << "depth:" << depth << ", size:" << expressions.size()
-       << " values:" << values.size() << " found: " << rewrite_system.size()
+       << "depth:" << d << ", size:" << work.size()
+       << " values:" << vals.size() << " found: " << rewrite_system.size()
        << " done:" << discarded << "\n";
 
-  assert(expressions.size() > 0);
+  assert(work.size() > 0);
 
-  if (values.size() > 0)
+  if (vals.size() > 0 && !skipSplit)
   {
-    const int old_size = values.size();
+    const int old_size = vals.size();
     if (old_size > 10)
-      removeDuplicates(expressions);
+      removeDuplicates(work);
 
-    discarded += (old_size - values.size());
+    discarded += (old_size - vals.size());
 
     // Put the functions in buckets based on their results on the values.
     std::unordered_map<uint64_t, ASTVec> map;
-    for (size_t i = 0; i < expressions.size(); i++)
+    for (size_t i = 0; i < work.size(); i++)
     {
-      if (expressions[i] == mgr->ASTUndefined)
+      if (work[i] == mgr->ASTUndefined)
         continue; // omit undefined.
 
       if (i % 50000 == 49999)
         cout << ".";
-      uint64_t hash = getHash(expressions[i], values);
+      uint64_t hash = getHash(work[i], vals);
       if (map.find(hash) == map.end())
         map.insert(make_pair(hash, ASTVec()));
-      map[hash].push_back(expressions[i]);
+      map[hash].push_back(work[i]);
     }
-    expressions.clear();
+    work.clear();
 
     std::unordered_map<uint64_t, ASTVec>::iterator it2;
 
     cout << "Split into " << map.size() << " pieces\n";
-    if (depth > 0)
+    if (d > 0)
     {
       assert(map.size() > 0);
     }
 
-    for (it2 = map.begin(); it2 != map.end(); it2++)
+    // One bucket holding everything means this value set told the expressions
+    // apart not at all, so it has taught us nothing and must be kept rather
+    // than reset -- resetting it is what made every split as coarse as the
+    // first, and the pairwise pass then produced the same counterexample
+    // forever. Go on to examine the group pairwise, and retry the split once
+    // that pass has contributed another assignment.
+    if (map.size() == 1)
     {
-      ASTVec& equiv = it2->second;
-      vector<VariableAssignment> a;
-      findRewrites(equiv, a, depth + 1);
-      equiv.clear();
+      work.swap(map.begin()->second);
+      skipSplit = true;
+      restart = true;
+      continue; // same frame, straight to the pairwise pass
     }
-    return;
+
+    // Pushed rather than recursed into. Reversed first so they come back off
+    // the stack in the order the recursive version visited them.
+    vector<ASTVec> buckets;
+    for (it2 = map.begin(); it2 != map.end(); it2++)
+      buckets.push_back(std::move(it2->second));
+    map.clear();
+
+    for (size_t b = buckets.size(); b-- > 0;)
+    {
+      Frame f;
+      f.expressions.swap(buckets[b]);
+      f.depth = d + 1;
+      pending.push_back(std::move(f));
+    }
+    break;
   }
-  ASTVec& equiv = expressions;
+  ASTVec& equiv = work;
 
   // Sort so that constants, and smaller expressions will be checked first.
   // std::sort(equiv.begin(), equiv.end(), lessThan);
@@ -1113,8 +1179,15 @@ void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
           // If it can fit into an unsigned. Split the list on it.
           if (sizeof(unsigned int) * 8 > bad.getV().GetValueWidth())
           {
-            findRewrites(equiv, ass, depth + 1);
-            return;
+            // equiv aliases work, so the list carries over untouched.
+            // Accumulated, not replaced: dropping the assignments already
+            // found makes every split as coarse as the first one, so a group
+            // the newest value cannot separate never gets separated.
+            vals.push_back(bad);
+            skipSplit = false; // the enlarged set can separate them now
+            d++;
+            restart = true;
+            break;
           }
           else
             continue;
@@ -1150,8 +1223,12 @@ void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
                         equiv.end());
         equiv.clear();
 
-        findRewrites(newEquiv, ass, depth + 1);
-        return;
+        work.swap(newEquiv);
+        vals.push_back(different); // accumulated, see above
+        skipSplit = false; // the enlarged set can separate them now
+        d++;
+        restart = true;
+        break;
       }
 
       // Write out the rules intermitently.
@@ -1162,8 +1239,16 @@ void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
         lastOutput = rewrite_system.size();
       }
     }
+    if (restart)
+      break;
   }
-  discarded += expressions.size();
+
+  if (restart)
+    continue; // narrowed list, one more counterexample: go round again
+
+  discarded += work.size();
+  } // while (restart)
+  } // while (!pending.empty())
 }
 
 // Converts the node into an IF statement that matches the node.
@@ -1826,9 +1911,16 @@ void load_new_rules(const string fileName = "rules_new.smt2")
 
   if (!ifstream(
           fileName.c_str())) /// use stdin if the default file is not found.
+  {
+    // Silently blocking on a terminal looks like a hang, and reading rules
+    // from a pipe by accident looks like there were none.
+    cerr << "rewrite_rule_gen: no " << fileName << ", reading rules from stdin"
+         << endl;
     in = stdin;
+  }
   else
   {
+    cerr << "rewrite_rule_gen: reading rules from " << fileName << endl;
     in = fopen(fileName.c_str(), "r");
     opended = true; // so we know to fclose it.
   }
@@ -2142,8 +2234,44 @@ void unit_test()
   assert(commutative_matchNode(plus_v, plus_w, sub, 1));
 }
 
+// The modes, and what each needs. Without this the only way to find out was
+// to read main(): an unrecognised argument fell through every branch and the
+// tool exited 0, so a typo looked exactly like success.
+void usage()
+{
+  cout <<
+      "usage: rewrite_rule_gen [mode [arguments]]\n"
+      "\n"
+      "Searches for bit-vector rewrite rules, and checks the ones already\n"
+      "found. Rules are read from ./rules_new.smt2 where a mode needs them,\n"
+      "and written back there.\n"
+      "\n"
+      "  (no arguments)        search for new rules, unbounded. Reads the\n"
+      "                        current rule set from stdin if there is no\n"
+      "                        rules_new.smt2.\n"
+      "  generate D N          the same search, stopping at depth D or after\n"
+      "                        N rules. -1 for either means no limit.\n"
+      "  verify [FILE]         SAT-check every rule in FILE.\n"
+      "  expand MS [FILE]      widen the bit-widths the rules are checked at,\n"
+      "                        spending at most MS milliseconds on each.\n"
+      "  rewrite               apply the rule set to itself and write it back.\n"
+      "  write-out             re-emit the rule set, including its C++ form.\n"
+      "  unit-test             check the commutative matcher. Needs no input.\n"
+      "  test                  check the rule properties. Needs no input.\n"
+      "\n"
+      "The search prints its progress; it can run for a long time before it\n"
+      "reports anything.\n";
+}
+
 int main(int argc, const char* argv[])
 {
+  if (argc > 1 && (!strcmp("--help", argv[1]) || !strcmp("-h", argv[1]) ||
+                   !strcmp("help", argv[1])))
+  {
+    usage();
+    return 0;
+  }
+
   startup();
 
   if (argc == 1) // Read the current rule set, find new rules.
@@ -2239,6 +2367,11 @@ int main(int argc, const char* argv[])
   {
     // load the rules and apply the rewrite system to itself.
     load_new_rules();
+    if (rewrite_system.size() == 0)
+    {
+      cerr << "rewrite_rule_gen: no rules to rewrite" << endl;
+      return 1;
+    }
     createVariables();
     rewrite_system.eraseDuplicates();
     rewrite_system.rewriteAll();
@@ -2247,6 +2380,12 @@ int main(int argc, const char* argv[])
   else if (argc == 2 && !strcmp("write-out", argv[1]))
   {
     load_new_rules();
+    if (rewrite_system.size() == 0)
+    {
+      // Otherwise this truncates rules_new.smt2 to nothing and reports success.
+      cerr << "rewrite_rule_gen: no rules to write out" << endl;
+      return 1;
+    }
     createVariables();
     rewrite_system.rewriteAll();
     writeOutRules(); // have the times now..
@@ -2278,6 +2417,15 @@ int main(int argc, const char* argv[])
   {
     load_new_rules();
     t2();
+  }
+  else
+  {
+    cerr << "rewrite_rule_gen: unrecognised mode";
+    for (int i = 1; i < argc; i++)
+      cerr << " " << argv[i];
+    cerr << "\n\n";
+    usage();
+    return 1;
   }
 
   for (size_t i = 0; i < saved_array.size(); i++)
