@@ -89,6 +89,20 @@ void usage()
       << "  --sat-budget SECS   time limit for that check, per row\n"
       << "                      (default 5); fewer cases are run if it\n"
       << "                      doesn't fit\n"
+      << "  --bcp-check N       also compare N cases per row against unit\n"
+      << "                      propagation on the bit-blasted encoding --\n"
+      << "                      what the SAT solver deduces without the\n"
+      << "                      propagator (CryptoMiniSat builds only)\n"
+      << "  --bcp-budget SECS   time limit for that comparison, per row\n"
+      << "                      (default 5)\n"
+      << "  --bcp-exhaustive W  check the bit-blasted encoding for arc\n"
+      << "                      consistency at width W: every combination of\n"
+      << "                      fixed bits, contradictory ones included\n"
+      << "  --cnf HOW           how to generate the CNF --bcp-check\n"
+      << "                      propagates over: simple, very-low, low,\n"
+      << "                      medium (STP's default), high, very-high.\n"
+      << "                      Different encodings of the same circuit can\n"
+      << "                      propagate differently\n"
       << "  --no-shift-bias     draw shift amounts uniformly, instead of\n"
       << "                      half of them from [0, width)\n"
       << "  --seed N            random seed (default 42)\n"
@@ -199,6 +213,12 @@ int main(int argc, char** argv)
     else if (arg == "--sat-check") { cfg.satCases = atoi(value.c_str()); i++; }
     else if (arg == "--sat-budget")
     { cfg.satBudgetSeconds = atof(value.c_str()); i++; }
+    else if (arg == "--bcp-check") { cfg.bcpCases = atoi(value.c_str()); i++; }
+    else if (arg == "--bcp-budget")
+    { cfg.bcpBudgetSeconds = atof(value.c_str()); i++; }
+    else if (arg == "--bcp-exhaustive")
+    { cfg.bcpExhaustiveWidth = atoi(value.c_str()); i++; }
+    else if (arg == "--cnf") { cfg.cnf = value; i++; }
     else if (arg == "--seed") { cfg.seed = atoi(value.c_str()); i++; }
     else if (arg == "--html") { cfg.html = value; i++; }
     else if (arg == "--csv") { cfg.csv = value; i++; }
@@ -217,10 +237,43 @@ int main(int argc, char** argv)
     return 1;
   }
 
+  if ((cfg.bcpCases > 0 || cfg.bcpExhaustiveWidth > 0) && !bcpAvailable())
+  {
+    // Refuse rather than silently report nothing: the whole point of the
+    // option is the comparison it makes.
+    std::cerr << "propagator_bench: --bcp-check/--bcp-exhaustive need a build with "
+                 "CryptoMiniSat (configure with -DNOCRYPTOMINISAT=OFF)\n";
+    return 1;
+  }
+
   stp::STPMgr* mgr = new stp::STPMgr();
   stp::Cpp_interface interface(*mgr, mgr->defaultNodeFactory);
   interface.startup();
   stp::GlobalParserBM = mgr;
+
+  if (!cfg.cnf.empty())
+  {
+    typedef stp::UserDefinedFlags UF;
+    UF& uf = mgr->UserFlags;
+    if (cfg.cnf == "simple")
+      uf.simple_cnf = true;
+    else if (cfg.cnf == "very-low")
+      uf.cnf_effort = UF::CNF_EFFORT_VERY_LOW;
+    else if (cfg.cnf == "low")
+      uf.cnf_effort = UF::CNF_EFFORT_LOW;
+    else if (cfg.cnf == "medium")
+      uf.cnf_effort = UF::CNF_EFFORT_MEDIUM;
+    else if (cfg.cnf == "high")
+      uf.cnf_effort = UF::CNF_EFFORT_HIGH;
+    else if (cfg.cnf == "very-high")
+      uf.cnf_effort = UF::CNF_EFFORT_VERY_HIGH;
+    else
+    {
+      std::cerr << "propagator_bench: unknown --cnf value '" << cfg.cnf
+                << "' (simple, very-low, low, medium, high, very-high)\n";
+      return 1;
+    }
+  }
 
   vector<Row> rows;
   for (Domain d : cfg.domains)
