@@ -96,11 +96,15 @@ struct BcpEncoding
     cnf = aig.bitblast(constraint, false);
     const ToSATBase::ASTNodeToSATVar& map = aig.SATVar_to_SymbolIndexMap();
 
-    // The varying children, in layout order, then the result.
+    // The varying children, in layout order, then the result. GetChildren()
+    // returns the view by value, so it is held in a named local: binding a
+    // reference to an element of the temporary would dangle at the end of the
+    // full expression, which gcc 13 diagnoses under -Wdangling-reference.
+    const ASTChildren nodeChildren = node.GetChildren();
     for (unsigned i : l.varying())
     {
-      const ASTNode& sym = node.GetChildren()[i];
-      if (!collect(map, sym, l.children[i].isBoolean ? 1 : l.children[i].width))
+      if (!collect(map, nodeChildren[i],
+                   l.children[i].isBoolean ? 1 : l.children[i].width))
         return;
     }
     if (!collect(map, result, l.outIsBoolean ? 1 : l.outWidth))
