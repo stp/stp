@@ -859,45 +859,17 @@ Expr vc_notExpr(VC vc, Expr ccc)
 
 Expr vc_andExpr(VC vc, Expr left, Expr right)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
-  stp::ASTNode* l = (stp::ASTNode*)left;
-  stp::ASTNode* r = (stp::ASTNode*)right;
-
-  stp::ASTNode o = b->CreateNode(stp::AND, *l, *r);
-  assert(BVTypeCheck(o));
-
-  stp::ASTNode* output = new stp::ASTNode(o);
-  // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return createBinaryNode(vc, stp::AND, left, right);
 }
 
 Expr vc_orExpr(VC vc, Expr left, Expr right)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
-  stp::ASTNode* l = (stp::ASTNode*)left;
-  stp::ASTNode* r = (stp::ASTNode*)right;
-
-  stp::ASTNode o = b->CreateNode(stp::OR, *l, *r);
-  assert(BVTypeCheck(o));
-  stp::ASTNode* output = new stp::ASTNode(o);
-  // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return createBinaryNode(vc, stp::OR, left, right);
 }
 
 Expr vc_xorExpr(VC vc, Expr left, Expr right)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
-  stp::ASTNode* l = (stp::ASTNode*)left;
-  stp::ASTNode* r = (stp::ASTNode*)right;
-
-  stp::ASTNode o = b->CreateNode(stp::XOR, *l, *r);
-  assert(BVTypeCheck(o));
-  stp::ASTNode* output = new stp::ASTNode(o);
-  // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return createBinaryNode(vc, stp::XOR, left, right);
 }
 
 Expr vc_nandExpr(VC vc, Expr left, Expr right)
@@ -996,38 +968,12 @@ Expr vc_iteExpr(VC vc, Expr cond, Expr thenpart, Expr elsepart)
 
 Expr vc_impliesExpr(VC vc, Expr antecedent, Expr consequent)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
-  stp::ASTNode* c = (stp::ASTNode*)antecedent;
-  stp::ASTNode* t = (stp::ASTNode*)consequent;
-
-  assert(BVTypeCheck(*c));
-  assert(BVTypeCheck(*t));
-  stp::ASTNode o;
-
-  o = b->CreateNode(stp::IMPLIES, *c, *t);
-  assert(BVTypeCheck(o));
-  stp::ASTNode* output = new stp::ASTNode(o);
-  // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return createBinaryNode(vc, stp::IMPLIES, antecedent, consequent);
 }
 
 Expr vc_iffExpr(VC vc, Expr e0, Expr e1)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
-  stp::ASTNode* c = (stp::ASTNode*)e0;
-  stp::ASTNode* t = (stp::ASTNode*)e1;
-
-  assert(BVTypeCheck(*c));
-  assert(BVTypeCheck(*t));
-  stp::ASTNode o;
-
-  o = b->CreateNode(stp::IFF, *c, *t);
-  assert(BVTypeCheck(o));
-  stp::ASTNode* output = new stp::ASTNode(o);
-  // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return createBinaryNode(vc, stp::IFF, e0, e1);
 }
 
 Expr vc_boolToBVExpr(VC vc, Expr form)
