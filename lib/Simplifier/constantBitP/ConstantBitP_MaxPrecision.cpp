@@ -302,7 +302,8 @@ bool maxBoundsPrecision(vector<FixedBits*> children, FixedBits& output,
 
     toSolve = at.TransformFormula_TopLevel(toSolve);
     total = beev->CreateNode(AND, total, toSolve);
-    int result = ce.CallSAT_ResultCheck(newS, total, total, &tosat, true);
+    int result =
+        ce.CallSAT_ResultCheck(newS, total, total, total, &tosat, true);
 
     if (2 == result)
       FatalError("error from solver");
@@ -486,7 +487,7 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind,
     if (first)
     {
       beev->SetQuery(beev->ASTUndefined);
-      result = ce.CallSAT_ResultCheck(newS, expr, expr, &tosat, true);
+      result = ce.CallSAT_ResultCheck(newS, expr, expr, expr, &tosat, true);
     }
     else
     {
@@ -496,7 +497,7 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind,
 
       beev->SetQuery(beev->ASTUndefined);
       result = ce.CallSAT_ResultCheck(newS, beev->ASTTrue, beev->ASTTrue,
-                                      &tosat, true);
+                                      beev->ASTTrue, &tosat, true);
     }
 
     if (2 == result)

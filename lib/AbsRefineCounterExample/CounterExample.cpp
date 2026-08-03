@@ -952,9 +952,18 @@ void AbsRefine_CounterExample::CheckCounterExample(
   if (debug_counterexample)
     cerr << "checking " << checked_input;
 
+  // Drop the formula memo first. Its entries were produced while the
+  // model was still being assembled -- before the array-equality
+  // consistency check published its certified observations, in an
+  // active solve -- and reusing them would let this check confirm the
+  // answer with the very values it is supposed to be re-deriving. What
+  // is deliberately kept is CounterExampleMap: that is the model, not a
+  // cache of conclusions about it.
+  ClearComputeFormulaMap();
+
   if (ASTFalse == ComputeFormulaUsingModel(checked_input))
     FatalError("CheckCounterExample:counterexample bogus: "
-               "the solve's semantic input evaluates to FALSE under the "
+               "the submitted query evaluates to FALSE under the "
                "counterexample: NOT OK",
                checked_input);
 }
@@ -1759,6 +1768,7 @@ SOLVER_RETURN_TYPE
 AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
                                               const ASTNode& modified_input,
                                               const ASTNode& original_input,
+                                              const ASTNode& submitted_input,
                                               ToSATBase* tosat, bool refinement)
 {
   bool sat = tosat->CallSAT(SatSolver, modified_input, refinement);
@@ -1857,7 +1867,7 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
       {
         if (bm->UserFlags.check_counterexample_flag)
         {
-          CheckCounterExample(SatSolver.okay(), original_input);
+          CheckCounterExample(SatSolver.okay(), submitted_input);
         }
 
         if ((bm->UserFlags.stats_flag ||

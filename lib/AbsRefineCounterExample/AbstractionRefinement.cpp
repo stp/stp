@@ -284,7 +284,7 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
   sort(arrayToIndex.begin(), arrayToIndex.end(), sortBySize);
 
   ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  const bool extActive = ext != NULL && ext->active();
+  const bool extActive = ext != NULL && ext->activeInSolve();
   if (extActive)
     FatalError("array-equality: legacy array-read refinement was invoked "
                "during a solve owned by the extensionality checker");
@@ -391,7 +391,8 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
 
         SOLVER_RETURN_TYPE res2;
         bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
-        res2 = CallSAT_ResultCheck(SatSolver, ASTTrue, original_input, tosat,
+        res2 = CallSAT_ResultCheck(SatSolver, ASTTrue, original_input,
+                                   original_input, tosat,
                                    true);
 
         if (SOLVER_UNDECIDED != res2)
@@ -412,7 +413,8 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
     applyAxiomsToSolver(satVar, RemainingAxiomsVec, SatSolver);
 
     bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
-    return CallSAT_ResultCheck(SatSolver, ASTTrue, original_input, tosat, true);
+    return CallSAT_ResultCheck(SatSolver, ASTTrue, original_input,
+                               original_input, tosat, true);
   }
 // For difficult problems, I suspec this is a better way to do it.
 // However because it can cause an extra three SAT solver calls, it slows down
@@ -442,7 +444,8 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
       bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
       SOLVER_RETURN_TYPE res2;
       res2 =
-          CallSAT_ResultCheck(SatSolver, ASTTrue, original_input, tosat, true);
+          CallSAT_ResultCheck(SatSolver, ASTTrue, original_input,
+                              original_input, tosat, true);
       if (SOLVER_UNDECIDED != res2)
         return res2;
 
@@ -451,6 +454,7 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
     assert(current_position == RemainingAxiomsVec.size());
     RemainingAxiomsVec.clear();
     assert(SOLVER_UNDECIDED == CallSAT_ResultCheck(SatSolver, ASTTrue,
+                                                   original_input,
                                                    original_input, tosat,
                                                    true));
   }

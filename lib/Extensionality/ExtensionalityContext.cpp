@@ -164,7 +164,8 @@ ASTNode recoverAnchoredOperand(const ASTNode& rhs, const ASTNode& lambda,
 } // namespace
 
 ExtensionalityContext::ExtensionalityContext(STPMgr* bm_)
-    : lemmasEmitted(0), lemmaAtomsFolded(0), bm(bm_), registrySealed(false),
+    : lemmasEmitted(0), lemmaAtomsFolded(0), bm(bm_), solveInProgress(false),
+      registrySealed(false),
       arrayGraphIsFrozen(false), graphBound(false),
       readTransformInProgress(false), readTransformComplete(false),
       pendingLemmaValid(false)
@@ -1514,6 +1515,24 @@ void ExtensionalityContext::encodePendingLemmas(SATSolver& solver,
   pendingLemmaValid = false;
 }
 
+// See the header. A premise is dropped when it is valid, the
+// conclusion when it is unsatisfiable; a lemma conclusion is always an
+// equality, so BV_NE there is not a position the encoder produces.
+ExtensionalityContext::FoldVerdict
+ExtensionalityContext::requiredFoldVerdict(ExtLemmaAtom::Op op,
+                                           LemmaPosition where)
+{
+  if (where == LEMMA_PREMISE)
+  {
+    if (op == ExtLemmaAtom::BV_EQ)
+      return FOLD_VALID;
+    if (op == ExtLemmaAtom::BV_NE)
+      return FOLD_UNSAT;
+    return FOLD_UNDECIDED;
+  }
+  return op == ExtLemmaAtom::BV_EQ ? FOLD_UNSAT : FOLD_UNDECIDED;
+}
+
 void ExtensionalityContext::encodeOneLemma(const ExtConflict& pendingLemma,
                                            SATSolver& solver,
                                            ToSATBase* tosat)
@@ -1546,10 +1565,17 @@ void ExtensionalityContext::encodeOneLemma(const ExtConflict& pendingLemma,
 
   SATSolver::vec_literals clause;
 
-  // Returns -1 for an atom decided by constants (the caller drops the
-  // literal; the lemma self-check already fixed its polarity), else the
-  // reified equality variable q with q <-> (a = b), full equivalence in
-  // both directions.
+  // Returns the reified equality variable q with q <-> (a = b) -- full
+  // equivalence in both directions -- or, when the atom needs no circuit
+  // because it is structurally decided, one of the two sentinels below.
+  //
+  // Which sentinel it is matters. Dropping a literal from the clause is
+  // only equivalence-preserving on one side per position: a premise may
+  // be dropped when it is valid, the conclusion when it is
+  // unsatisfiable. Dropping on the other side yields a strictly
+  // stronger clause -- a silent wrong unsat. So the fold reports its
+  // direction and each consumer checks it against the position it is
+  // filling; a mismatch is an internal error, not something to encode.
   struct EqLit
   {
     ExtensionalityContext* self;
@@ -1562,8 +1588,9 @@ void ExtensionalityContext::encodeOneLemma(const ExtConflict& pendingLemma,
     }
     int operator()(const ASTNode& a, const ASTNode& b)
     {
+      // Two hash-consed constants: equal iff the same node.
       if (a.isConstant() && b.isConstant())
-        return -1;
+        return (a == b) ? FOLD_VALID : FOLD_UNSAT;
       const uint64_t na = a.GetNodeNum(), nb = b.GetNodeNum();
       const std::pair<uint64_t, uint64_t> key(std::min(na, nb),
                                               std::max(na, nb));
@@ -1572,16 +1599,23 @@ void ExtensionalityContext::encodeOneLemma(const ExtConflict& pendingLemma,
       if (it != self->eqLitCache.end())
         return it->second;
 
-      // An atom the simplifier can decide from the defining terms
-      // needs no circuit: each name equals its term through the
-      // anchoring equations, and the lemma self-check verified the
-      // atom's polarity in the candidate, so a structurally decided
-      // atom sits on its satisfied side and its literal is redundant
-      // -- the same argument as the constant/constant case above.
-      // Write indices that are offsets from a shared pointer are the
-      // common win: the simplifying factory cancels the shared operand
-      // and decides the equality, sparing the SAT solver a 32-bit
-      // arithmetic case split per lemma.
+      // An atom the simplifier can decide from the defining terms needs
+      // no circuit: each name equals its term through the anchoring
+      // equations, so the factory's verdict on the terms is a verdict on
+      // the names. Write indices that are offsets from a shared pointer
+      // are the common win: the simplifying factory cancels the shared
+      // operand and decides the equality, sparing the SAT solver a
+      // 32-bit arithmetic case split per lemma.
+      //
+      // This transfers to the SAT abstraction only because the factory's
+      // EQ path treats every READ subterm as an opaque leaf --
+      // CreateSimpleEQ has no array rule and constructs no READ, so
+      // chaseRead cannot fire on it. The defining equations are
+      // conjoined before the array transform, so what SAT holds is
+      // "name = T(term)" with T abstracting reads into lazily
+      // axiomatized variables; a factory verdict that used an array
+      // axiom would not survive T. Anyone adding an array rule to the
+      // EQ dispatch has to revisit this.
       {
         const std::map<ASTNode, ASTNode>& n2t = self->nameToTermMap;
         std::map<ASTNode, ASTNode>::const_iterator ta = n2t.find(a);
@@ -1592,9 +1626,11 @@ void ExtensionalityContext::encodeOneLemma(const ExtConflict& pendingLemma,
             self->bm->defaultNodeFactory->CreateNode(EQ, termA, termB);
         if (folded.GetKind() == TRUE || folded.GetKind() == FALSE)
         {
+          const int verdict =
+              folded.GetKind() == TRUE ? FOLD_VALID : FOLD_UNSAT;
           self->lemmaAtomsFolded++;
-          self->eqLitCache[key] = -1;
-          return -1;
+          self->eqLitCache[key] = verdict;
+          return verdict;
         }
       }
 
@@ -1617,7 +1653,21 @@ void ExtensionalityContext::encodeOneLemma(const ExtConflict& pendingLemma,
     {
       const int q = eqLit(atom.a, atom.b);
       if (q < 0)
-        continue; // constant-decided premise, necessarily true; drop
+      {
+        // The premise is dropped only on the side that keeps the clause
+        // equivalent. The other direction makes the premise
+        // unsatisfiable, so the lemma is vacuous and the shortened
+        // clause asserts something the theory does not entail.
+        // validateAbstractLemma has already established that the atom
+        // holds in the candidate, so reaching here means the structural
+        // verdict disagrees with the candidate.
+        if (q != requiredFoldVerdict(atom.op, LEMMA_PREMISE))
+          FatalError("array-equality: a lemma premise was structurally "
+                     "decided against the polarity the conflict needs, so "
+                     "dropping its literal would strengthen the clause",
+                     atom.a);
+        continue;
+      }
       // premise literal appears negated in the final clause
       clause.push(SATSolver::mkLit(q, atom.op == ExtLemmaAtom::BV_EQ));
     }
@@ -1645,9 +1695,17 @@ void ExtensionalityContext::encodeOneLemma(const ExtConflict& pendingLemma,
         eqLit(pendingLemma.abstractConclusionA, pendingLemma.abstractConclusionB);
     if (q >= 0)
       clause.push(SATSolver::mkLit(q, false));
-    // A constant-decided conclusion is necessarily false (the lemma
-    // self-check verified it); the clause then consists of the negated
-    // premises alone.
+    else if (q != requiredFoldVerdict(ExtLemmaAtom::BV_EQ, LEMMA_CONCLUSION))
+      // The conclusion may be dropped only when it is unsatisfiable:
+      // the premises then cannot all hold, and the negated premises
+      // alone are the theory-valid clause. A structurally valid
+      // conclusion makes the whole lemma a tautology, and dropping its
+      // literal would leave a clause forbidding the premises for no
+      // reason.
+      FatalError("array-equality: a lemma conclusion was structurally "
+                 "decided true, so dropping its literal would leave an "
+                 "unsound clause",
+                 pendingLemma.abstractConclusionA);
   }
 
   if (clause.size() == 0)

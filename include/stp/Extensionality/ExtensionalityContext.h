@@ -132,19 +132,28 @@ public:
   // across solves.
   bool getCurrentLowering(const ASTNode& opaque, ASTNode& lowered) const;
 
-  // Holds the registry seal for the duration of one solve and releases it
-  // however the solve exits. Any record minted after the solve took its
-  // constraint snapshot would be active without a defining witness bundle.
+  // Marks the window in which a solve owns the array graph. It holds the
+  // registry seal for that window and releases it however the solve
+  // exits -- any record minted after the solve took its constraint
+  // snapshot would be active without a defining witness bundle -- and it
+  // is what activeInSolve() tests.
   class SolveScope
   {
     ExtensionalityContext* ctx;
 
   public:
-    explicit SolveScope(ExtensionalityContext* c) : ctx(c) {}
+    explicit SolveScope(ExtensionalityContext* c) : ctx(c)
+    {
+      if (ctx != NULL)
+        ctx->solveInProgress = true;
+    }
     ~SolveScope()
     {
       if (ctx != NULL)
+      {
         ctx->registrySealed = false;
+        ctx->solveInProgress = false;
+      }
     }
     SolveScope(const SolveScope&) = delete;
     SolveScope& operator=(const SolveScope&) = delete;
@@ -159,6 +168,25 @@ public:
   // array machinery at exactly the cost it would pay with the feature
   // off.
   bool active() const { return enabled() && !activeRecordIds.empty(); }
+
+  // The same ownership, restricted to the solve that established it.
+  //
+  // active() deliberately outlives its solve: the model surfaces --
+  // (get-model), vc_getCounterExampleArray, term evaluation through the
+  // counterexample -- read the frozen graph and the certified
+  // observations after TopLevelSTPAux has returned, and they must keep
+  // seeing them until the next solve calls beginSolve(). Only
+  // activeRecordIds clears it, so between one solve and the next it
+  // still reports the previous query's ownership.
+  //
+  // That makes it the wrong predicate for holding STP's own passes off
+  // the array graph. Those have to stand back only while the solve that
+  // owns the graph is running; anything that reaches the simplifier, the
+  // substitution map or unconstrained-variable removal outside that
+  // window -- a direct vc_simplify, an assertion arriving for the next
+  // query -- is ordinary work and should get ordinary treatment.
+  // SolveScope marks the window, and every pass gate tests this instead.
+  bool activeInSolve() const { return solveInProgress && active(); }
 
   const std::vector<Record>& getRecords() const { return records; }
   size_t getActiveRecordCount() const { return activeRecordIds.size(); }
@@ -314,6 +342,33 @@ public:
   // literals the lemmas share are built once.
   void encodePendingLemmas(SATSolver& solver, ToSATBase* tosat);
 
+  // A lemma atom the simplifier can decide from its defining terms
+  // needs no equality circuit, and its literal is dropped from the
+  // clause. Dropping is equivalence-preserving on only one side per
+  // position: a premise may go when the atom is valid, the conclusion
+  // when it is unsatisfiable. The other direction yields a strictly
+  // stronger clause -- a silent wrong unsat -- so the fold reports its
+  // direction and the encoder checks it here.
+  enum FoldVerdict
+  {
+    FOLD_UNDECIDED = 0, // no structural verdict; build the circuit
+    FOLD_VALID = -1,    // "a = b" holds in every model
+    FOLD_UNSAT = -2     // "a = b" holds in none
+  };
+
+  enum LemmaPosition
+  {
+    LEMMA_PREMISE,
+    LEMMA_CONCLUSION
+  };
+
+  // The verdict that permits dropping a structurally decided atom from
+  // this position, or FOLD_UNDECIDED where no verdict does. Pure, so
+  // the rule lives in one place and its truth table is pinned by a unit
+  // test instead of being restated at each call site.
+  static FoldVerdict requiredFoldVerdict(ExtLemmaAtom::Op op,
+                                         LemmaPosition where);
+
   // Validate one bit-vector lemma leaf: it must be a fixed-width
   // constant, or a SYMBOL whose complete SAT-variable vector was
   // encoded by the initial bit-blast (present, full width, every bit
@@ -381,6 +436,13 @@ private:
   std::set<ASTNode> protectedSymbols;
   std::set<ASTNode> lemmaOnlySymbols; // per-solve; see the accessor
   std::set<ASTNode> anticipatedArraySymbols;
+
+  // True only between SolveScope's construction and destruction. Owned
+  // entirely by that scope -- beginSolve() deliberately does not touch
+  // it, because beginSolve() is also how scope operations (pop,
+  // reset-assertions) discard a finished solve's state, which happens
+  // outside any solve.
+  bool solveInProgress;
 
   // Set once a solve has taken its copy of the registry's constraints.
   // Minting a record after that point would leave it active with

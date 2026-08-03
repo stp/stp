@@ -1796,6 +1796,66 @@ TEST_F(ExtFixtureTest, ConflictPremiseUsesShortestPaths)
   EXPECT_EQ(guardsInCertificates, r.materializedGuardCount);
 }
 
+// The limit of the property above, which the comments used to state
+// without one. An arrival that conflicts is recorded as seen but is not
+// queued, so the access stops at the array it conflicted at. Shortest
+// paths are therefore a property of the graph in which each access's
+// own conflict sites are terminal -- exactly the first conflict of a
+// pass, and best-effort after that.
+//
+// Here the only route from S to E runs through D. x conflicts with y on
+// arrival at D and goes no further, so it never meets z, although the
+// two differ at the same index and the equalities joining them are both
+// true. The pass reports the conflicts it can still reach; refinement
+// proceeds on those, and the x/z conflict resurfaces in a later round
+// once a lemma has moved the candidate.
+TEST_F(ExtFixtureTest, ConflictingArrivalStopsAtTheConflictArray)
+{
+  ASTNode S = arr("S"), D = arr("D"), E = arr("E");
+  ASTNode i = bv("i", 1);
+  ASTNode vX = bv("vX", 1), vY = bv("vY", 2), vZ = bv("vZ", 3);
+
+  eqEdge(S, D, "e0", true);
+  eqEdge(D, E, "e1", true);
+
+  const size_t x = readAccess(S, i, vX);
+  const size_t y = readAccess(D, i, vY);
+  const size_t z = readAccess(E, i, vZ);
+
+  ExtCheckResult r = run();
+  ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
+  ASSERT_FALSE(r.conflicts.empty());
+
+  // The earliest conflict still has shortest paths on both sides: y is
+  // where it was seeded, x crossed one equality to reach it.
+  const ExtConflict& first = r.conflicts[0];
+  EXPECT_EQ(D, first.commonArray);
+  EXPECT_EQ(y, first.leftAccess);
+  EXPECT_EQ(x, first.rightAccess);
+  EXPECT_EQ(0u, first.leftGuards.size());
+  EXPECT_EQ(1u, first.rightGuards.size());
+
+  // x and z are connected and disagree, but are never reported: x was
+  // stopped at D.
+  for (const ExtConflict& c : r.conflicts)
+  {
+    const bool pairsXandZ = (c.leftAccess == x && c.rightAccess == z) ||
+                            (c.leftAccess == z && c.rightAccess == x);
+    EXPECT_FALSE(pairsXandZ)
+        << "the pass is not exhaustive over connected disagreeing pairs";
+  }
+
+  // The mechanism itself: nothing ever propagates x onward out of D.
+  for (const ExtEvent& e : r.events)
+  {
+    if (e.kind == ExtEvent::PROPAGATE && e.access == x)
+    {
+      EXPECT_NE(D, e.source)
+          << "a conflicting arrival must not propagate past its conflict";
+    }
+  }
+}
+
 TEST_F(ExtFixtureTest, IteTrueConditionPropagatesDownWithPositiveGuard)
 {
   expectIteConflict(true, true);
@@ -2455,6 +2515,48 @@ TEST_F(ExtPrepareTest, ArrayReachableOnlyThroughAnIteBranchIsAnticipated)
   EXPECT_TRUE(ext->ownsArray(ite));
 }
 
+// The two halves of ownership have different lifetimes, and conflating
+// them left STP's passes held off the array graph after the solve that
+// owned it had returned.
+//
+// active() has to outlive its solve: (get-model),
+// vc_getCounterExampleArray and term evaluation all read the frozen
+// graph and the certified observations once TopLevelSTPAux has
+// returned, and only the next beginSolve() clears it.
+// activeInSolve() must not, or an assertion arriving for the next query
+// -- or a direct vc_simplify -- is still denied ordinary substitution
+// and read-over-if-then-else distribution on account of a solve that
+// has already finished.
+TEST_F(ExtPrepareTest, OwnershipGatesPassesOnlyInsideTheSolveWindow)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b");
+
+  ext->beginSolve();
+  ext->lowerArrayEqualities(hf->CreateNode(EQ, a, b));
+  ASSERT_TRUE(ext->active());
+
+  // Between beginSolve() and the scope opening, no pass is gated yet.
+  EXPECT_FALSE(ext->activeInSolve());
+  {
+    ExtensionalityContext::SolveScope scope(ext);
+    EXPECT_TRUE(ext->activeInSolve());
+    EXPECT_TRUE(ext->active());
+  }
+
+  // The solve has returned. The model surfaces still own the query...
+  EXPECT_TRUE(ext->active());
+  // ...and no pass is held off any longer.
+  EXPECT_FALSE(ext->activeInSolve());
+
+  // Nesting restores the window, and leaving it closes it again.
+  {
+    ExtensionalityContext::SolveScope scope(ext);
+    EXPECT_TRUE(ext->activeInSolve());
+  }
+  EXPECT_FALSE(ext->activeInSolve());
+}
+
 TEST_F(ExtPrepareTest, ExactReadInventorySurvivesNamingAndIndexAliases)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
@@ -2490,6 +2592,10 @@ TEST_F(ExtPrepareTest, ExactReadInventorySurvivesNamingAndIndexAliases)
   SubstitutionMap substitutions(&mgr);
   Simplifier simplifier(&mgr, &substitutions);
   ArrayTransformer transformer(&mgr, &simplifier);
+  // The transform is a solve-time pass and gates on activeInSolve(), so
+  // it has to run inside the solve window, exactly as TopLevelSTPAux
+  // runs it.
+  ExtensionalityContext::SolveScope scope(ext);
   transformer.TransformFormula_TopLevel(prepared);
   ext->bindAfterTransform(&transformer);
 
@@ -2518,6 +2624,10 @@ TEST_F(ExtPrepareTest, ConstantTermIteAccountsForDeadReadSubtree)
   SubstitutionMap substitutions(&mgr);
   Simplifier simplifier(&mgr, &substitutions);
   ArrayTransformer transformer(&mgr, &simplifier);
+  // The transform is a solve-time pass and gates on activeInSolve(), so
+  // it has to run inside the solve window, exactly as TopLevelSTPAux
+  // runs it.
+  ExtensionalityContext::SolveScope scope(ext);
   transformer.TransformFormula_TopLevel(prepared);
   ext->bindAfterTransform(&transformer);
 
@@ -2609,6 +2719,57 @@ TEST(ExtCertification, TruthTable)
             EC::decideCertification(true, true, EC::EXT_SKIPPED));
   EXPECT_EQ(EC::INTERNAL_ERROR,
             EC::decideCertification(false, true, EC::EXT_SKIPPED));
+}
+
+// A lemma atom the simplifying factory decides from its defining terms
+// contributes no literal to the clause. Which structural verdict makes
+// that equivalence-preserving depends on where the atom sits: dropping
+// a premise is sound when the premise is valid, dropping the conclusion
+// when the conclusion is unsatisfiable. Getting this backwards would
+// emit a strictly stronger clause -- a wrong unsat that no assertion
+// downstream would catch -- so the mapping is pinned here rather than
+// left implicit in the encoder.
+TEST(ExtLemmaFold, DropRuleIsPolarityCorrect)
+{
+  typedef ExtensionalityContext EC;
+
+  // Premise "a = b": droppable only if the fold proved it valid.
+  EXPECT_EQ(EC::FOLD_VALID,
+            EC::requiredFoldVerdict(ExtLemmaAtom::BV_EQ, EC::LEMMA_PREMISE));
+  // Premise "a != b": droppable only if the fold proved "a = b" unsat.
+  EXPECT_EQ(EC::FOLD_UNSAT,
+            EC::requiredFoldVerdict(ExtLemmaAtom::BV_NE, EC::LEMMA_PREMISE));
+  // Conclusion "a = b": droppable only if the fold proved it unsat --
+  // the opposite of the same atom in a premise, which is the whole
+  // reason a single sentinel could not carry this decision.
+  EXPECT_EQ(EC::FOLD_UNSAT, EC::requiredFoldVerdict(ExtLemmaAtom::BV_EQ,
+                                                    EC::LEMMA_CONCLUSION));
+  EXPECT_NE(EC::requiredFoldVerdict(ExtLemmaAtom::BV_EQ, EC::LEMMA_PREMISE),
+            EC::requiredFoldVerdict(ExtLemmaAtom::BV_EQ,
+                                    EC::LEMMA_CONCLUSION));
+
+  // Every other combination is a position the encoder never produces
+  // (a conclusion is always an equality; Boolean atoms never reach the
+  // fold), and no verdict may drop one: FOLD_UNDECIDED matches neither
+  // sentinel, so the encoder's comparison fails loudly.
+  EXPECT_EQ(EC::FOLD_UNDECIDED, EC::requiredFoldVerdict(
+                                    ExtLemmaAtom::BV_NE, EC::LEMMA_CONCLUSION));
+  const ExtLemmaAtom::Op nonBV[] = {ExtLemmaAtom::ARRAY_EQ,
+                                    ExtLemmaAtom::BOOL_LIT,
+                                    ExtLemmaAtom::BOOL_LIT_NEG};
+  for (size_t i = 0; i < sizeof(nonBV) / sizeof(nonBV[0]); i++)
+  {
+    EXPECT_EQ(EC::FOLD_UNDECIDED,
+              EC::requiredFoldVerdict(nonBV[i], EC::LEMMA_PREMISE));
+    EXPECT_EQ(EC::FOLD_UNDECIDED,
+              EC::requiredFoldVerdict(nonBV[i], EC::LEMMA_CONCLUSION));
+  }
+
+  // The two sentinels must stay distinct from each other and from every
+  // SAT variable index, which the encoder tests for with "q >= 0".
+  EXPECT_NE(EC::FOLD_VALID, EC::FOLD_UNSAT);
+  EXPECT_LT(EC::FOLD_VALID, 0);
+  EXPECT_LT(EC::FOLD_UNSAT, 0);
 }
 
 } // namespace

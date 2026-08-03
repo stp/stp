@@ -2471,7 +2471,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       }
       else if (ITE == array_term.GetKind() &&
                !(_bm->getExtensionalityIfAny() != NULL &&
-                 _bm->getExtensionalityIfAny()->active()))
+                 _bm->getExtensionalityIfAny()->activeInSolve()))
       {
         // Pushes the READ through ITES, which is potentially exponential.
         // At present, because there's no write refinement or similar, the

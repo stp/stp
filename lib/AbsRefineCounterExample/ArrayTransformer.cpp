@@ -54,7 +54,7 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
   // participates in the extensionality hand-off; an early transform which
   // actually encounters an owned READ still fails in TransformArrayRead.
   const bool extPrepared =
-      ext != NULL && ext->active() && ext->arrayGraphFrozen();
+      ext != NULL && ext->activeInSolve() && ext->arrayGraphFrozen();
   if (extPrepared)
     ext->beginReadTransform(form);
   ASTNode result = TransformFormula(form);
@@ -96,7 +96,7 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
       // reads therefore take the fresh-index-variable path (which
       // conjoins index = fresh) for every non-constant index.
       const bool forceIndexAnchor =
-          ext != NULL && ext->active() && ext->needsIndexAnchor(iset->first);
+          ext != NULL && ext->activeInSolve() && ext->needsIndexAnchor(iset->first);
 
       for (std::map<ASTNode, ArrayTransformer::ArrayRead>::iterator it =
                mapper.begin();
@@ -351,14 +351,14 @@ ASTNode ArrayTransformer::TransformTerm(const ASTNode& term)
       if (ASTTrue == cond)
       {
         ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-        if (ext != NULL && ext->active())
+        if (ext != NULL && ext->activeInSolve())
           ext->noteEliminatedReadSubtree(els);
         result = TransformTerm(thn);
       }
       else if (ASTFalse == cond)
       {
         ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-        if (ext != NULL && ext->active())
+        if (ext != NULL && ext->activeInSolve())
           ext->noteEliminatedReadSubtree(thn);
         result = TransformTerm(els);
       }
@@ -454,7 +454,7 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
   // and it needs the structure and the abstraction variables intact.
   {
     ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-    if (ext != NULL && ext->active())
+    if (ext != NULL && ext->activeInSolve())
     {
       if (!ext->arrayGraphFrozen())
         FatalError("array-equality: the array transform ran before the "
