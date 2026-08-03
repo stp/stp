@@ -21,10 +21,21 @@
 # -----------------------------------------------------------------------------
 # Create binary
 # -----------------------------------------------------------------------------
+# Everything the two front ends share: parsing, print-back, and the solve.
+# They differ only in how they read their options. An object library so the
+# translation unit is named once and compiled once, rather than stp_simple
+# reaching across directories for ../stp/main_common.cpp.
+#
+# Built whenever executables are, including under ONLY_SIMPLE, where
+# stp_simple is the only consumer.
+if(BUILD_EXECUTABLES)
+    add_library(stp_main_common OBJECT main_common.cpp)
+endif()
+
 if(BUILD_EXECUTABLES AND NOT ONLY_SIMPLE)
     add_executable(stp-bin
         main.cpp
-        main_common.cpp
+        $<TARGET_OBJECTS:stp_main_common>
     )
 
     set_target_properties(stp-bin PROPERTIES

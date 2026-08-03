@@ -2886,6 +2886,17 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             NodeFactory::CreateTerm(
                 SBVDIV, width, children[0],
                 NodeFactory::CreateTerm(BVUMINUS, width, children[1])));
+      else if (children[0] == children[1])
+        // x / x is 1 wherever the division is a real one. The remaining case
+        // is 0 / 0, which takes the total-division value the rule above
+        // gives: zero is not negative, so all ones. SBVMOD already has the
+        // matching x smod x rule; this one was missing, and without it
+        // nothing downstream can tell that the quotient is never zero.
+        result = NodeFactory::CreateTerm(
+            ITE, width,
+            NodeFactory::CreateNode(EQ, children[0],
+                                    bm.CreateZeroConst(width)),
+            bm.CreateMaxConst(width), bm.CreateOneConst(width));
       break;
 
     case SBVREM:

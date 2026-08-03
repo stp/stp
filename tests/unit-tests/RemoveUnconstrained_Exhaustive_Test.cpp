@@ -147,8 +147,8 @@ struct Context
     ASTNode cur = n;
     for (int i = 0; i < 64; i++)
     {
-      ASTNodeMap fromTo = *simp.Return_SolverMap(); // replace() mutates it.
-      ASTNodeMap cache;
+      DenseNodeMap fromTo = *simp.Return_SolverMap(); // replace() mutates it.
+      DenseNodeMap cache;
       ASTNode next = SubstitutionMap::replace(cur, fromTo, cache, &snf);
       if (next == cur)
         return cur;

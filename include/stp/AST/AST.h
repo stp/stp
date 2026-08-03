@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "ASTNode.h"
 #include "UsefulDefs.h"
 #include "stp/Util/Attributes.h"
+#include "extlib-unordered-dense/ankerl/unordered_dense.h"
 
 namespace stp
 {
@@ -163,6 +164,15 @@ unsigned int GetUnsignedConst(const ASTNode n);
 typedef std::unordered_map<ASTNode, ASTNode, ASTNode::ASTNodeHasher,
                            ASTNode::ASTNodeEqual>
     ASTNodeMap;
+
+// Flat open-addressing alternative to ASTNodeMap. Much faster to probe and
+// insert, but: values move on insert/erase (no pointer or reference
+// stability), erase reorders survivors, and iteration is in insertion order.
+// Only use where nothing points into the map and iteration order never
+// reaches a decision.
+typedef ankerl::unordered_dense::map<ASTNode, ASTNode, ASTNode::ASTNodeHasher,
+                                     ASTNode::ASTNodeEqual>
+    DenseNodeMap;
 
 typedef std::unordered_map<ASTNode, int32_t, ASTNode::ASTNodeHasher,
                            ASTNode::ASTNodeEqual>

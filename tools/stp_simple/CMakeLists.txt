@@ -24,7 +24,7 @@
 if(BUILD_EXECUTABLES)
     add_executable(stp_simple-bin
         main_simple.cpp
-        ../stp/main_common.cpp
+        $<TARGET_OBJECTS:stp_main_common>
     )
 
     set_target_properties(stp_simple-bin PROPERTIES
