@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Michael Katelman, Vijay Ganesh, Trevor Hansen, Andrew V. Jones
+ * AUTHORS: Michael Katelman, Vijay Ganesh, Trevor Hansen, Andrew Teylu
  *
  * BEGIN DATE: Apr, 2008
  *
@@ -237,6 +237,16 @@ DLL_PUBLIC void make_division_total(VC vc);
 //!
 DLL_PUBLIC VC vc_createValidityChecker(void);
 
+//! \brief Creates a validity checker over an existing node manager.
+//!
+//! `_bm` must be a live stp::STPMgr* (the parameter is void* only so this C
+//! header need not name the C++ type). Lets a client that builds nodes
+//! through the C++ objects solve them through the C API. The manager keeps
+//! any node factory it was already given, and stays owned by the caller's
+//! vc_Destroy like any other checker's manager.
+//!
+DLL_PUBLIC VC vc_createValidityCheckerReuse(void* _bm);
+
 //! \brief Returns the boolean type for the given validity checker.
 //!
 DLL_PUBLIC Type vc_boolType(VC vc);
@@ -244,7 +254,13 @@ DLL_PUBLIC Type vc_boolType(VC vc);
 //! \brief Returns an array type with the given index type and data type
 //!        for the given validity checker.
 //!
-//! Note that index type and data type must both be of bitvector (bv) type.
+//! Index type and data type may each be a bitvector type (vc_bvType), a
+//! floating-point type (vc_fpType) or the RoundingMode type
+//! (vc_fpRoundingModeType), matching SMT-LIB's (Array X Y) over those
+//! sorts. Reads and writes then expect (and vc_readExpr's result carries)
+//! the corresponding sorts; a float-indexed array follows SMT-LIB '='
+//! on its indexes, so every NaN addresses one cell while +0 and -0 stay
+//! distinct cells.
 //!
 DLL_PUBLIC Type vc_arrayType(VC vc, Type typeIndex, Type typeData);
 
@@ -284,6 +300,11 @@ DLL_PUBLIC int vc_getBVLength(VC vc, Expr e);
 //! \brief Create an equality expression. The two children must have the same type.
 //!
 //! Returns a boolean expression.
+//!
+//! On floating-point operands this is SMT-LIB's '=': +0 and -0 are
+//! distinct, and every NaN equals every NaN (payloads are not
+//! distinguished). For IEEE equality (+0 == -0, NaN unequal to
+//! everything) use vc_fpEqExpr.
 //!
 DLL_PUBLIC Expr vc_eqExpr(VC vc, Expr child0, Expr child1);
 
@@ -391,14 +412,22 @@ DLL_PUBLIC Expr vc_paramBoolExpr(VC vc, Expr var, Expr param);
 //! \brief Returns an array-read-expression representing the reading of
 //!        the given array's entry of the given index.
 //!
-//! The array parameter must be of type array and index must be of type bitvector.
+//! The array parameter must be of type array, and the index must have the
+//! array's index sort: a bitvector for a bitvector-indexed array, a float
+//! of the declared format for a float-indexed one, a rounding mode for a
+//! RoundingMode-indexed one. The result carries the array's element sort
+//! (a read from a float-element array is a float of that format, usable
+//! anywhere a float is; a read from a RoundingMode-element array is a
+//! rounding mode, pinned to the five legal encodings at solve time).
 //!
 DLL_PUBLIC Expr vc_readExpr(VC vc, Expr array, Expr index);
 
 //! \brief Returns an array-write-expressions representing the writing of
 //!        the given new value into the given array at the given entry index.
 //!
-//! The array parameter must be of type array, and index and newValue of type bitvector.
+//! The array parameter must be of type array; the index must have the
+//! array's index sort and newValue the array's element sort, as for
+//! vc_readExpr.
 //!
 DLL_PUBLIC Expr vc_writeExpr(VC vc, Expr array, Expr index, Expr newValue);
 
@@ -413,11 +442,33 @@ DLL_PUBLIC Expr vc_parseExpr(VC vc, const char* filepath);
 
 //! \brief Prints the given expression to stdout in the presentation language.
 //!
+//! The presentation language has no floating-point syntax. An expression that
+//! uses the floating-point theory -- including a RoundingMode -- is refused
+//! here rather than printed; use vc_printSMTLIB2.
+//!
 DLL_PUBLIC void vc_printExpr(VC vc, Expr e);
 
-//! \brief Prints the given expression to stdout in the STMLib2 format.
+//! \brief Returns the given expression in the SMT-LIB **1** format.
+//!
+//! It is the responsibility of the caller to free the returned string.
+//!
+//! SMT-LIB 1 has no floating-point theory, so an expression that uses it is
+//! refused rather than printed; use vc_printSMTLIB2. (This function has always
+//! emitted SMT-LIB 1 despite what its documentation said; the name is kept for
+//! compatibility.)
 //!
 DLL_PUBLIC char* vc_printSMTLIB(VC vc, Expr e);
+
+//! \brief Returns the given expression in the SMT-LIB 2 format.
+//!
+//! It is the responsibility of the caller to free the returned string.
+//!
+//! This is the export that understands every sort STP has: bit-vectors,
+//! arrays, FloatingPoint and RoundingMode. Prefer it to vc_printSMTLIB and
+//! vc_printExpr, both of which predate the floating-point theory and refuse
+//! it.
+//!
+DLL_PUBLIC char* vc_printSMTLIB2(VC vc, Expr e);
 
 //! \brief Prints the given expression into the file with the given file descriptor
 //!        in the presentation language.
@@ -439,11 +490,29 @@ DLL_PUBLIC void vc_printExprFile(VC vc, Expr e, int fd);
 DLL_PUBLIC void vc_printExprToBuffer(VC vc, Expr e, char** buf,
                                      unsigned long* len);
 
-//! \brief Prints the counter example after an invalid query to stdout.
+//! \brief Prints the counter example after an invalid query to stdout, in the
+//!        presentation language.
 //!
 //! This method should only be called after a query which returns false.
 //!
+//! The presentation language has no floating-point or rounding-mode syntax, so
+//! values of those sorts print as their packed carriers here -- a float as its
+//! IEEE bits, a rounding mode as a 5-bit constant. Use
+//! vc_printCounterExampleSMTLIB2 to get them at the sort they were declared
+//! with.
+//!
 DLL_PUBLIC void vc_printCounterExample(VC vc);
+
+//! \brief Prints the counter example after an invalid query to stdout, in the
+//!        SMT-LIB 2 `(define-fun ...)` form.
+//!
+//! This method should only be called after a query which returns false.
+//!
+//! Unlike vc_printCounterExample this states each value at its declared sort:
+//! a float as `(fp #b... #b... #b...)` of the right `(_ FloatingPoint eb sb)`,
+//! a rounding mode by name. Symbols STP introduced for itself are left out.
+//!
+DLL_PUBLIC void vc_printCounterExampleSMTLIB2(VC vc);
 
 //! \brief Prints variable declarations to stdout.
 //!
@@ -546,6 +615,11 @@ DLL_PUBLIC int vc_query(VC vc, Expr e);
 
 //! \brief Returns the counter example after an invalid query.
 //!
+//! The value has the sort of 'e': the value of a floating-point term is a
+//! floating-point constant of that term's format, not the bitvector of its
+//! packed bits. So it can be fed straight back -- vc_eqExpr(vc, e, value) is
+//! well sorted, and asserting it pins 'e' to the value.
+//!
 DLL_PUBLIC Expr vc_getCounterExample(VC vc, Expr e);
 
 //! \brief Returns an array from a counter example after an invalid query.
@@ -553,6 +627,10 @@ DLL_PUBLIC Expr vc_getCounterExample(VC vc, Expr e);
 //! The buffer for the array is allocated by STP and returned via the
 //! non-null expected out parameters 'outIndices' for the indices, 'outValues'
 //! for the values and 'outSize' for the size of the array.
+//!
+//! As for vc_getCounterExample, each index has the array's index sort and
+//! each value its element sort, so an entry can be fed back as
+//! vc_readExpr(vc, e, index) and vc_eqExpr with the value.
 //!
 //! It is the caller's responsibility to free the memory afterwards.
 //!
@@ -629,6 +707,213 @@ DLL_PUBLIC int vc_getValueSize(VC /* vc */, Type type);
 //! \brief Returns the index size for the given type.
 //!
 DLL_PUBLIC int vc_getIndexSize(VC /* vc */, Type type);
+
+/////////////////////////////////////////////////////////////////////////////
+/// FLOATING POINT OPERATIONS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Floating-point support is a build-time option (ENABLE_FLOATING_POINT,
+// ON by default). Every function below exists -- and links -- in every
+// build, so this header and the library ABI are the same either way. On a
+// build configured without floating-point support, vc_fpType (and anything
+// else that would create a floating-point value) fails with a FatalError
+// naming the option; it does not return.
+
+//! \brief Returns the IEEE-754 floating-point type with `exp_bits` exponent
+//!        bits and `sig_bits` significand bits.
+//!
+//! The significand width INCLUDES the hidden bit, matching SMT-LIB's
+//! `(_ FloatingPoint eb sb)`. For example `vc_fpType(vc, 11, 53)` is an IEEE
+//! double and `vc_fpType(vc, 8, 24)` an IEEE single. Use it anywhere a type is
+//! expected, e.g. `vc_varExpr(vc, "x", vc_fpType(vc, 11, 53))`.
+//!
+DLL_PUBLIC Type vc_fpType(VC vc, int exp_bits, int sig_bits);
+
+//! \brief The RoundingMode sort, for declaring rounding-mode variables with
+//!        vc_varExpr.
+//!
+//! A variable of this sort ranges over exactly the five modes: vc_varExpr
+//! asserts the validity constraint (at the current assertion level, so it
+//! scopes with vc_push/vc_pop like any assertion), and
+//! vc_printCounterExampleSMTLIB2 prints the variable's value by mode name.
+//! (vc_printCounterExample prints the 5-bit carrier: the presentation language
+//! has no rounding-mode syntax.) Read it from a model with
+//! vc_getCounterExample; the bits are the enum VCRoundingMode encoding.
+//! vc_fpRoundingModeVar is a one-call convenience for the same thing.
+DLL_PUBLIC Type vc_fpRoundingModeType(VC vc);
+
+//! \brief Returns the exponent width of a floating-point expression, value or
+//!        type (0 if `e` is not floating-point).
+//!
+DLL_PUBLIC int vc_getExpWidth(Expr e);
+
+//! \brief Returns the significand width (including the hidden bit) of a
+//!        floating-point expression, value or type (0 if not floating-point).
+//!
+DLL_PUBLIC int vc_getSigWidth(Expr e);
+
+//! \brief Builds a floating-point constant of format (exp_bits, sig_bits) by
+//!        reinterpreting the bits of the bitvector constant `bv`.
+//!
+//! `bv`'s width must equal exp_bits + sig_bits, laid out most-significant-first
+//! as sign : exponent : trailing-significand (the hidden significand bit is not
+//! stored). This is the exact, format-generic primitive for floating-point
+//! constants; every value -- normals, subnormals, the zeros, the infinities and
+//! NaN -- has such a bit pattern. NaN payloads are not preserved: the sort has
+//! a single NaN, so every NaN pattern (any sign, any payload) interns as the
+//! one canonical quiet NaN -- the same bits every floating-point operation and
+//! vc_fpToIEEEBV produce. If exact NaN bits matter, keep them in a bitvector
+//! and reinterpret at the boundary.
+//!
+DLL_PUBLIC Expr vc_fpConstFromBits(VC vc, int exp_bits, int sig_bits, Expr bv);
+
+//! \brief Returns the IEEE floating-point equality `a == b` (fp.eq).
+//!
+//! True exactly when `a` and `b` are equal as numbers: +0 == -0, and any NaN
+//! operand makes it false. For SMT-LIB's '=' -- which keeps +0 and -0
+//! distinct and makes every NaN equal to every NaN (payloads are not
+//! distinguished) -- use vc_eqExpr instead.
+//!
+DLL_PUBLIC Expr vc_fpEqExpr(VC vc, Expr a, Expr b);
+
+//! \brief Rounding modes, matching SMT-LIB's RoundingMode. Pass one to
+//!        vc_fpRoundingMode to obtain a rounding-mode expression.
+//!
+enum VCRoundingMode
+{
+  //! The values are one-hot because they mirror STP's internal rounding-mode
+  //! encoding. They are five DISTINCT modes, not flags: combining them with
+  //! bitwise-or does not name a mode, and vc_fpRoundingMode rejects it.
+  VC_RM_RNE = 1,  //!< round nearest, ties to even  (roundNearestTiesToEven)
+  VC_RM_RTP = 2,  //!< round toward positive        (roundTowardPositive)
+  VC_RM_RTN = 4,  //!< round toward negative        (roundTowardNegative)
+  VC_RM_RTZ = 8,  //!< round toward zero            (roundTowardZero)
+  VC_RM_RNA = 16  //!< round nearest, ties to away  (roundNearestTiesToAway)
+};
+
+//! \brief Returns a rounding-mode expression for `mode`, to pass as the first
+//!        operand of the rounding operations (add, sub, mul, div, fma, sqrt and
+//!        roundToIntegral).
+//!
+DLL_PUBLIC Expr vc_fpRoundingMode(VC vc, enum VCRoundingMode mode);
+
+//! \brief A fresh variable of SMT-LIB's RoundingMode sort, usable wherever
+//!        vc_fpRoundingMode's constants are. Shorthand for vc_varExpr over
+//!        vc_fpRoundingModeType (see there for the semantics).
+//!
+//! Do NOT substitute a plain 5-bit variable: nothing would constrain it to
+//! denote one of the five modes.
+DLL_PUBLIC Expr vc_fpRoundingModeVar(VC vc, const char* name);
+
+// Arithmetic. The result is a floating-point value with the same format as the
+// operands (which must all share that format).
+
+//! \brief fp.abs: the magnitude of `f` (clears the sign bit).
+DLL_PUBLIC Expr vc_fpAbsExpr(VC vc, Expr f);
+//! \brief fp.neg: `f` with its sign bit flipped.
+DLL_PUBLIC Expr vc_fpNegExpr(VC vc, Expr f);
+//! \brief fp.add of `a` and `b` under rounding mode `rm`.
+DLL_PUBLIC Expr vc_fpAddExpr(VC vc, Expr rm, Expr a, Expr b);
+//! \brief fp.sub of `a` and `b` under rounding mode `rm`.
+DLL_PUBLIC Expr vc_fpSubExpr(VC vc, Expr rm, Expr a, Expr b);
+//! \brief fp.mul of `a` and `b` under rounding mode `rm`.
+DLL_PUBLIC Expr vc_fpMulExpr(VC vc, Expr rm, Expr a, Expr b);
+//! \brief fp.div of `a` by `b` under rounding mode `rm`.
+DLL_PUBLIC Expr vc_fpDivExpr(VC vc, Expr rm, Expr a, Expr b);
+//! \brief fp.fma under rounding mode `rm`: round(a*b + c).
+DLL_PUBLIC Expr vc_fpFMAExpr(VC vc, Expr rm, Expr a, Expr b, Expr c);
+//! \brief fp.sqrt of `f` under rounding mode `rm`.
+DLL_PUBLIC Expr vc_fpSqrtExpr(VC vc, Expr rm, Expr f);
+//! \brief fp.roundToIntegral of `f` under rounding mode `rm`.
+DLL_PUBLIC Expr vc_fpRoundToIntegralExpr(VC vc, Expr rm, Expr f);
+//! \brief fp.rem: the IEEE remainder of `a` by `b` (exact; no rounding mode).
+DLL_PUBLIC Expr vc_fpRemExpr(VC vc, Expr a, Expr b);
+//! \brief fp.min of `a` and `b` (no rounding mode).
+DLL_PUBLIC Expr vc_fpMinExpr(VC vc, Expr a, Expr b);
+//! \brief fp.max of `a` and `b` (no rounding mode).
+DLL_PUBLIC Expr vc_fpMaxExpr(VC vc, Expr a, Expr b);
+
+// Predicates. The result is Boolean.
+
+//! \brief fp.lt: ordered less-than (false if either operand is NaN).
+DLL_PUBLIC Expr vc_fpLtExpr(VC vc, Expr a, Expr b);
+//! \brief fp.leq: ordered less-or-equal (false if either operand is NaN).
+DLL_PUBLIC Expr vc_fpLeqExpr(VC vc, Expr a, Expr b);
+//! \brief fp.gt: ordered greater-than (false if either operand is NaN).
+DLL_PUBLIC Expr vc_fpGtExpr(VC vc, Expr a, Expr b);
+//! \brief fp.geq: ordered greater-or-equal (false if either operand is NaN).
+DLL_PUBLIC Expr vc_fpGeqExpr(VC vc, Expr a, Expr b);
+//! \brief fp.isNormal: true when `f` is a normal number.
+DLL_PUBLIC Expr vc_fpIsNormalExpr(VC vc, Expr f);
+//! \brief fp.isSubnormal: true when `f` is subnormal.
+DLL_PUBLIC Expr vc_fpIsSubnormalExpr(VC vc, Expr f);
+//! \brief fp.isZero: true when `f` is +0 or -0.
+DLL_PUBLIC Expr vc_fpIsZeroExpr(VC vc, Expr f);
+//! \brief fp.isInfinite: true when `f` is +oo or -oo.
+DLL_PUBLIC Expr vc_fpIsInfiniteExpr(VC vc, Expr f);
+//! \brief fp.isNaN: true when `f` is NaN.
+DLL_PUBLIC Expr vc_fpIsNaNExpr(VC vc, Expr f);
+//! \brief fp.isNegative: true when `f` is negative (includes -oo and -0).
+DLL_PUBLIC Expr vc_fpIsNegativeExpr(VC vc, Expr f);
+//! \brief fp.isPositive: true when `f` is positive (includes +oo and +0).
+DLL_PUBLIC Expr vc_fpIsPositiveExpr(VC vc, Expr f);
+
+// Special-value constants of a given floating-point type.
+
+//! \brief The NaN of `fpType`.
+DLL_PUBLIC Expr vc_fpNaN(VC vc, Type fpType);
+//! \brief +oo of `fpType`.
+DLL_PUBLIC Expr vc_fpPlusInfinity(VC vc, Type fpType);
+//! \brief -oo of `fpType`.
+DLL_PUBLIC Expr vc_fpMinusInfinity(VC vc, Type fpType);
+//! \brief +0 of `fpType`.
+DLL_PUBLIC Expr vc_fpPlusZero(VC vc, Type fpType);
+//! \brief -0 of `fpType`.
+DLL_PUBLIC Expr vc_fpMinusZero(VC vc, Type fpType);
+
+//! \brief A constant of `target` floating-point type equal to the native
+//!        double `d`, rounded under `rm`.
+//!
+//! `d` is already an IEEE-754 binary64 value, so this reinterprets its bits as
+//! a (11,53) float and, when `target` differs, reformats with fp.to_fp under
+//! `rm` (exact when `target` is binary64, so `rm` is then irrelevant). Note: a
+//! literal such as 0.1 is rounded to the nearest double by the C compiler
+//! before it reaches here.
+//!
+DLL_PUBLIC Expr vc_fpConstFromDouble(VC vc, Type target, Expr rm, double d);
+//! \brief As vc_fpConstFromDouble, from a native float (IEEE-754 binary32).
+DLL_PUBLIC Expr vc_fpConstFromFloat(VC vc, Type target, Expr rm, float f);
+
+// Conversions.
+
+//! \brief One-argument (_ to_fp eb sb): reinterpret the bits of bitvector `bv`
+//!        (whose width must be eb+sb) as a float. No rounding.
+DLL_PUBLIC Expr vc_fpToFPFromIEEEBV(VC vc, int eb, int sb, Expr bv);
+//! \brief (_ to_fp eb sb) rm f: reformat float `f` to format (eb,sb) under `rm`.
+DLL_PUBLIC Expr vc_fpToFPFromFP(VC vc, int eb, int sb, Expr rm, Expr f);
+//! \brief (_ to_fp eb sb) rm bv: convert the signed integer in `bv` to a float
+//!        of format (eb,sb) under `rm`.
+DLL_PUBLIC Expr vc_fpToFPFromSignedBV(VC vc, int eb, int sb, Expr rm, Expr bv);
+//! \brief (_ to_fp_unsigned eb sb) rm bv: convert the unsigned integer in `bv`
+//!        to a float of format (eb,sb) under `rm`.
+DLL_PUBLIC Expr vc_fpToFPFromUnsignedBV(VC vc, int eb, int sb, Expr rm, Expr bv);
+//! \brief (_ fp.to_ubv m) rm f: round float `f` to an m-bit unsigned integer
+//!        (a bitvector) under `rm`.
+DLL_PUBLIC Expr vc_fpToUBVExpr(VC vc, int width, Expr rm, Expr f);
+//! \brief (_ fp.to_sbv m) rm f: round float `f` to an m-bit signed integer
+//!        (a bitvector) under `rm`.
+DLL_PUBLIC Expr vc_fpToSBVExpr(VC vc, int width, Expr rm, Expr f);
+
+//! \brief Reinterpret float `f` as its packed IEEE bits: a bitvector of width
+//!        exp_width + sig_width, laid out most-significant-first as
+//!        sign : exponent : trailing-significand.
+//!
+//! The inverse of vc_fpToFPFromIEEEBV. Use vc_bvExtract on the result to pull
+//! out the sign, exponent or significand field (e.g. the exponent is bits
+//! [sig_width-1 .. sig_width+exp_width-2]). NaN is canonicalised -- the payload
+//! is not preserved -- so every NaN yields the same bits.
+//!
+DLL_PUBLIC Expr vc_fpToIEEEBV(VC vc, Expr f);
 
 //Const expressions for string, int, long-long, etc
 
@@ -1151,6 +1436,11 @@ DLL_PUBLIC void vc_Destroy(VC vc);
 
 //! \brief Destroy the given expression, freeing its associated memory.
 //!
+//! Only for expressions the caller owns. Do NOT pass expressions returned by
+//! the vc_fp* constructors (or the type/true/false constructors): those are
+//! owned by the checker and freed by vc_Destroy -- deleting one here frees
+//! it twice.
+//!
 DLL_PUBLIC void vc_DeleteExpr(Expr e);
 
 //! \brief Returns the whole counterexample from the given validity checker.
@@ -1158,6 +1448,12 @@ DLL_PUBLIC void vc_DeleteExpr(Expr e);
 DLL_PUBLIC WholeCounterExample vc_getWholeCounterExample(VC vc);
 
 //! \brief Returns the value of the given term expression from the given whole counter example.
+//!
+//! As for vc_getCounterExample, the value has the sort of 'e' -- a
+//! floating-point term's value is a floating-point constant of that term's
+//! format. Note that 'e' must be a variable or something the model already
+//! records: unlike vc_getCounterExample this does not evaluate a term
+//! against the model, and hands an unrecorded term straight back.
 //!
 DLL_PUBLIC Expr vc_getTermFromCounterExample(VC vc, Expr e,
                                              WholeCounterExample c);
@@ -1167,6 +1463,11 @@ DLL_PUBLIC Expr vc_getTermFromCounterExample(VC vc, Expr e,
 DLL_PUBLIC void vc_deleteWholeCounterExample(WholeCounterExample cc);
 
 //! Covers all kinds of expressions that exist in STP.
+//!
+//! Mirrors the internal stp::Kind (generated from lib/AST/ASTKind.kinds) by
+//! numeric value: getExprKind is a direct cast, so the enumerators must stay
+//! in the same order. static_asserts next to getExprKind's implementation
+//! pin the correspondence.
 //!
 enum exprkind_t
 {
@@ -1225,11 +1526,44 @@ enum exprkind_t
   IMPLIES,   //!< Implication boolean expression
   PARAMBOOL, //!< Parameterized boolean expression. No longer created;
              //!< kept so that the later kind values don't change.
-  READ,      //!< Array read expression
-  WRITE,     //!< Array write expression
-  ARRAY,     //!< Array creation expression
-  BITVECTOR, //!< Bitvector creation expression
-  BOOLEAN    //!< Boolean creation expression
+  READ,          //!< Array read expression
+  WRITE,         //!< Array write expression
+  ARRAY,         //!< Array creation expression
+  BITVECTOR,     //!< Bitvector creation expression
+  BOOLEAN,       //!< Boolean creation expression
+  FLOATINGPOINT, //!< Floating point creation expression
+  ROUNDINGMODE,  //!< RoundingMode type expression (vc_fpRoundingModeType)
+  FP_ABS,
+  FP_NEG,
+  FP_ADD,
+  FP_SUB,
+  FP_MUL,
+  FP_DIV,
+  FP_FMA,
+  FP_SQRT,
+  FP_REM,
+  FP_ROUNDTOINTEGRAL,
+  FP_MIN,
+  FP_MAX,
+  FP_TOFP,
+  FP_TOFP_SIGNED,
+  FP_TOFP_UNSIGNED,
+  FP_TO_UBV,
+  FP_TO_SBV,
+  FP_TO_IEEE_BV,
+  FP_LEQ,
+  FP_LT,
+  FP_GEQ,
+  FP_GT,
+  FP_EQ,
+  FP_ISNORMAL,
+  FP_ISSUBNORMAL,
+  FP_ISZERO,
+  FP_ISINFINITE,
+  FP_ISNAN,
+  FP_ISNEGATIVE,
+  FP_ISPOSITIVE,
+  FP_SMT_EQ, //!< SMT-LIB '=' over floats: +0 and -0 distinct, all NaNs equal.
 };
 
 //! \brief Returns the expression-kind of the given expression.
@@ -1246,12 +1580,18 @@ DLL_PUBLIC int getBVLength(Expr e);
 
 //! Covers all kinds of types that exist in STP.
 //!
+//! FLOATINGPOINT_TYPE and ROUNDINGMODE_TYPE are appended after the legacy
+//! values so that values compiled into older clients stay valid. This public
+//! enum describes source sorts; STP's internal carrier enum has no separate
+//! RoundingMode entry.
 enum type_t
 {
   BOOLEAN_TYPE = 0,
   BITVECTOR_TYPE,
   ARRAY_TYPE,
-  UNKNOWN_TYPE
+  UNKNOWN_TYPE,
+  FLOATINGPOINT_TYPE,
+  ROUNDINGMODE_TYPE
 };
 
 //! \brief Returns the type-kind of the given expression.
