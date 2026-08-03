@@ -54,6 +54,8 @@
 #include "stp/Parser/parser.h"
 #include "parsesmt2.tab.h"
 #include "smt2_flex_header.h"
+#include <sstream>
+#include <string>
 
   using std::cout;
   using std::cerr;
@@ -197,15 +199,29 @@
   extern int smt2lineno;
   extern bool stringOnly;
 
+  // The diagnostic, built once. It is the body of the SMT-LIB (error ...)
+  // response on stdout and also what the fatal path hands to the error
+  // handler -- which used to receive the empty string, so a caller that
+  // registered one through vc_registerErrorHandler learned that parsing
+  // had failed but never why, and the command line printed two labelled
+  // blank lines after a perfectly good response.
+  static std::string smt2_diagnostic(const char *s)
+  {
+    std::ostringstream o;
+    o << "syntax error: line " << smt2lineno << " " << s
+      << "  token: " << smt2text;
+    return o.str();
+  }
+
   int yyerror(const char *s) {
-    cout << "(error \"syntax error: line " << smt2lineno << " " << s << "  token: " << smt2text << "\")" << endl;
+    cout << "(error \"" << smt2_diagnostic(s) << "\")" << endl;
     return 1;
   }
 
   int fatal_yyerror(const char *s) 
   {
     yyerror(s);
-    stp::FatalError("");
+    stp::FatalError(smt2_diagnostic(s).c_str());
   }
 
   ASTNode* createNode(Kind k, ASTVec * c)
@@ -929,14 +945,14 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
     s.SetIndexWidth($9);
   }
   else {
-    fatal_yyerror("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
+    fatal_yyerror("bit-vectors must be of positive length");
   }
 
   if(value_len > 0) {
     s.SetValueWidth($14);
   }
   else {
-    fatal_yyerror("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
+    fatal_yyerror("bit-vectors must be of positive length");
   }
   delete $1;
 }
@@ -972,14 +988,14 @@ STRING_TOK  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
     s.SetIndexWidth($7);
   }
   else {
-    fatal_yyerror("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
+    fatal_yyerror("bit-vectors must be of positive length");
   }
 
   if(value_len > 0) {
     s.SetValueWidth($12);
   }
   else {
-    fatal_yyerror("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
+    fatal_yyerror("bit-vectors must be of positive length");
   }
   delete $1;
 }

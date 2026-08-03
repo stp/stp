@@ -27,6 +27,8 @@ THE SOFTWARE.
 #include "stp/cpp_interface.h"
 #include "stp/Parser/LetMgr.h"
 #include "stp/Parser/parser.h"
+#include <sstream>
+#include <string>
 
   using namespace stp;
   using std::cout;
@@ -45,9 +47,19 @@ THE SOFTWARE.
   extern int cvclex(void);
   extern char* yytext;
   extern int cvclineno;
+  // Built once: printed for the user and handed to the error handler,
+  // which used to receive the empty string. See the note in smt2.y.
+  static std::string cvc_diagnostic(const char *s)
+  {
+    std::ostringstream o;
+    o << "CVC syntax error: line " << cvclineno << ": " << s;
+    return o.str();
+  }
+
   int yyerror(const char *s) {
-    cout << "CVC syntax error: line " << cvclineno << "\n" << s << endl;
-    FatalError("");
+    const std::string msg = cvc_diagnostic(s);
+    cout << msg << endl;
+    FatalError(msg.c_str());
     return YY_EXIT_FAILURE;
   }
   int yyerror(void* /*AssertsQuery*/, const char* s) { return yyerror(s); }
@@ -226,7 +238,7 @@ other_cmd       :
 /*   ASTVec aaa = GlobalParserInterface->GetAsserts(); */
 /*   if(aaa.size() == 0) */
 /*     { */
-/*       yyerror("Fatal Error: parsing:  GetAsserts() call: no assertions: "); */
+/*       yyerror("GetAsserts() call: no assertions"); */
 /*     } */
 
 /*   ASTNode asserts =  */
@@ -252,7 +264,7 @@ other_cmd       :
   ASTVec aaa = GlobalParserInterface->GetAsserts();
   if(aaa.size() == 0)
     {
-      yyerror("Fatal Error: parsing:  GetAsserts() call: no assertions: ");
+      yyerror("GetAsserts() call: no assertions");
     }
 
   ASTNode asserts = 
@@ -344,9 +356,9 @@ VarDecl         :      FORM_IDs ':' Type
   //do type checking. if doesn't pass then abort
   BVTypeCheck(*$5);
   if($3.indexwidth != $5->GetIndexWidth())
-    yyerror("Fatal Error: parsing: LET Expr: Type check fail: ");
+    yyerror("LET Expr: type check fail");
   if($3.valuewidth != $5->GetValueWidth())
-    yyerror("Fatal Error: parsing: LET Expr: Type check fail: ");
+    yyerror("LET Expr: type check fail");
                          
   for(vector<char*>::iterator i=$1->begin(),iend=$1->end();i!=iend;i++) {                         
     GlobalParserInterface->letMgr->LetExprMgr(*i,*$5);
@@ -359,9 +371,9 @@ VarDecl         :      FORM_IDs ':' Type
   //do type checking. if doesn't pass then abort
   BVTypeCheck(*$5);
   if($3.indexwidth != $5->GetIndexWidth())
-    yyerror("Fatal Error: parsing: LET Expr: Type check fail: ");
+    yyerror("LET Expr: type check fail");
   if($3.valuewidth != $5->GetValueWidth())
-    yyerror("Fatal Error: parsing: LET Expr: Type check fail: ");
+    yyerror("LET Expr: type check fail");
                          
   for(vector<char*>::iterator i=$1->begin(),iend=$1->end();i!=iend;i++) {                         
     GlobalParserInterface->letMgr->LetExprMgr(*i,*$5);
@@ -407,7 +419,7 @@ BvType          :      BV_TOK '(' NUMERAL_TOK ')'
     $$.valuewidth = length;
   }
   else
-    FatalError("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
+    FatalError("parsing: bit-vectors must be of positive length");
 }
 ;
 BoolType        :      BOOLEAN_TOK
@@ -473,7 +485,7 @@ Formula         :     '(' Formula ')'
 |      FORMID_TOK '(' Expr ')'
 {
   if (stp::BVCONST != $3->GetKind())
-    yyerror("Fatal Error: the argument of a parameterised boolean must be a constant");
+    yyerror("the argument of a parameterised boolean must be a constant");
   $$ = new ASTNode(GlobalParserInterface->CreateParameterisedBooleanVar(*$1,*$3));
   delete $1;
   delete $3;
@@ -482,7 +494,7 @@ Formula         :     '(' Formula ')'
 {
   unsigned int width = $3->GetValueWidth();
   if(width <= (unsigned)$5)
-    yyerror("Fatal Error: BOOLEXTRACT: trying to boolextract a bit which beyond range");
+    yyerror("BOOLEXTRACT: trying to boolextract a bit which is beyond range");
                          
   ASTNode bit = GlobalParserInterface->CreateBVConst(32, $5);
   ASTNode * out = new ASTNode(GlobalParserInterface->nf->CreateNode(BOOLEXTRACT,*$3,bit));
@@ -1090,9 +1102,9 @@ LetDecl         :       STRING_TOK '=' Expr
   BVTypeCheck(*$5);
                           
   if($3.indexwidth != $5->GetIndexWidth())
-    yyerror("Fatal Error: parsing: LET Expr: Type check fail: ");
+    yyerror("LET Expr: type check fail");
   if($3.valuewidth != $5->GetValueWidth())
-    yyerror("Fatal Error: parsing: LET Expr: Type check fail: ");
+    yyerror("LET Expr: type check fail");
 
   GlobalParserInterface->letMgr->LetExprMgr($1,*$5);
   free( $1);
@@ -1114,9 +1126,9 @@ LetDecl         :       STRING_TOK '=' Expr
   BVTypeCheck(*$5);
 
   if($3.indexwidth != $5->GetIndexWidth())
-    yyerror("Fatal Error: parsing: LET Expr: Type check fail: ");
+    yyerror("LET Expr: type check fail");
   if($3.valuewidth != $5->GetValueWidth())
-    yyerror("Fatal Error: parsing: LET Expr: Type check fail: ");
+    yyerror("LET Expr: type check fail");
 
   //Do LET-expr management
   GlobalParserInterface->letMgr->LetExprMgr($1,*$5);
