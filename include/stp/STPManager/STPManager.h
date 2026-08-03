@@ -577,10 +577,10 @@ public:
   // Record a symbol STP introduced rather than the user declaring it, so the
   // counterexample printers leave it out. CreateFreshVariable does this for
   // the names it mints; this is the way in for an introduced symbol whose
-  // *name* is load-bearing and so cannot be minted there -- the arrays
-  // supplying the unspecified results of the partial floating-point
+  // *name* is load-bearing and so cannot be minted there -- the arrays and
+  // free bits supplying the unspecified results of the partial floating-point
   // operations, whose identity is their name (see
-  // FloatBlaster::unspecifiedValue).
+  // FloatBlaster::unspecifiedValue and FloatBlaster::unspecifiedCells).
   void noteIntroducedSymbol(const ASTNode& in)
   {
     Introduced_SymbolsSet.insert(in);

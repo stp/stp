@@ -231,32 +231,31 @@ bool FloatBlaster::roundToIntegralSupported(unsigned exp_width,
   return unpackedExponentWidth(exp_width, sig_width) != sig_width;
 }
 
-ASTNode FloatBlaster::unspecifiedValue(STPMgr* bm, const char* tag,
-                                       const ASTVec& operands,
-                                       const ASTNode& index,
-                                       unsigned int value_width)
+// The stem every unspecified-value name is built on: the operation, then the
+// formats of its floating-point operands.
+//
+// The '@' prefix puts the name in the namespace SMT-LIB 2 reserves for solver
+// use (as CreateFreshVariable does), so it cannot collide with a conforming
+// input's own symbols.
+//
+// The formats are what the packed widths cannot stand in for -- see the header.
+// Every caller holds format-carrying source operands: the pass runs before
+// lowering, and model evaluation reuses that same pass through the solve's
+// encoding context. A caller that lost the format would quietly mint a
+// *different* object from the one the solve constrained, so refuse rather than
+// answer from the wrong one.
+static std::string unspecifiedName(const char* tag, const ASTVec& operands)
 {
-  const unsigned int index_width = index.GetValueWidth();
-
-  // The '@' prefix puts the name in the namespace SMT-LIB 2 reserves for
-  // solver use (as CreateFreshVariable does), so it cannot collide with a
-  // conforming input's own symbols.
   std::string name("@fp_unspecified_");
   name += tag;
 
-  // Then the operand formats, which the packed widths below cannot stand in
-  // for -- see the header. Every caller holds format-carrying source operands:
-  // the pass runs before lowering, and model evaluation reuses that same pass
-  // through the solve's encoding context. A caller that lost the format would
-  // quietly mint a *different* array from the one the solve constrained, so
-  // refuse rather than answer from the wrong one.
   for (size_t i = 0; i < operands.size(); i++)
   {
     const unsigned int exp_width = operands[i].GetExpWidth();
     const unsigned int sig_width = operands[i].GetSigWidth();
 
     if (exp_width == 0 || sig_width == 0)
-      FatalError("unspecifiedValue: a partial floating-point operation's "
+      FatalError("unspecifiedName: a partial floating-point operation's "
                  "operand reached totalisation without its format: ",
                  operands[i]);
 
@@ -266,6 +265,36 @@ ASTNode FloatBlaster::unspecifiedValue(STPMgr* bm, const char* tag,
     name += std::to_string(sig_width);
   }
 
+  return name;
+}
+
+ASTNode FloatBlaster::unspecifiedCells(STPMgr* bm, const char* tag,
+                                       const ASTVec& operands,
+                                       unsigned int cell_count)
+{
+  std::string name = unspecifiedName(tag, operands);
+  name += "_";
+  name += std::to_string(cell_count);
+
+  const ASTNode cells =
+      bm->defaultNodeFactory->CreateSymbol(name.c_str(), 0, cell_count);
+
+  // Introduced, so the printers skip it: the model must not answer with a
+  // symbol the user never declared. Same reasoning as the array below, and
+  // the plain-symbol case the introduced-symbol filter already handled.
+  bm->noteIntroducedSymbol(cells);
+
+  return cells;
+}
+
+ASTNode FloatBlaster::unspecifiedValue(STPMgr* bm, const char* tag,
+                                       const ASTVec& operands,
+                                       const ASTNode& index,
+                                       unsigned int value_width)
+{
+  const unsigned int index_width = index.GetValueWidth();
+
+  std::string name = unspecifiedName(tag, operands);
   name += "_";
   name += std::to_string(index_width);
   name += "_";

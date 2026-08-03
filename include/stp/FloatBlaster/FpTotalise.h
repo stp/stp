@@ -42,21 +42,31 @@ namespace stp
 // equal results. An unconstrained value per occurrence would give the
 // freedom and lose the congruence, which is unsound for equality reasoning.
 //
-// STP has no uninterpreted functions, but an array is exactly a congruent
-// map: one array per operation and signature, read at an index built from
-// the operands. This pass rewrites each partial operation into a total one
-// carrying that read as an extra child.
+// STP has no uninterpreted functions, so the map is built from what it does
+// have. This pass rewrites each partial operation into a total one carrying
+// that map's answer as an extra child.
+//
+// Which map depends on how big the choice's domain is. fp.to_ubv/fp.to_sbv
+// are unspecified over a rounding mode and a whole packed value, so they read
+// a shared array -- an array being exactly a congruent map: one per operation
+// and signature, read at an index built from the operands. fp.min/fp.max are
+// unspecified on four sign-bit combinations and no more (see zeroChoice), so
+// they select between four free bits. Both are functions of the operands;
+// only the first needs the array theory to be one.
 //
 // It has to be a pass rather than something done when the node is built or
 // when it is blasted. Introducing the array during blasting is too late --
 // the solver never sees it, so the counterexample evaluator cannot read a
 // value for it out of the model, and the refinement loop fails to converge.
 // Running here, before the array transformer and before the reads are
-// counted, puts the array in the problem like any other.
+// counted, puts the array in the problem like any other. That placement is
+// also why the small choice must *not* be an array: a read introduced here is
+// indistinguishable from the user's to every heuristic downstream.
 //
-// A pleasant side effect: the extra child is not constant, so these nodes
-// stop being candidates for constant folding, which is what we want. Their
-// results genuinely are not constants even when their operands are.
+// A pleasant side effect either way: the extra child is not constant, so
+// these nodes stop being candidates for constant folding, which is what we
+// want. Their results genuinely are not constants even when their operands
+// are.
 //
 // The pass also adapts array accesses whose index or element sort is
 // floating-point or RoundingMode, for the same reason at the same moment:
@@ -137,10 +147,12 @@ private:
   // value, so the whole value goes into the index.
   ASTNode conversionIndex(const ASTNode& rounding_mode, const ASTNode& value);
 
-  // The index for fp.min/fp.max: the two operands' sign bits, and nothing
-  // else. See the definition for why that is not merely sound but exactly
-  // complete.
-  ASTNode zeroChoiceIndex(const ASTNode& left, const ASTNode& right);
+  // The unspecified value for fp.min/fp.max: four free bits, selected between
+  // by the two operands' sign bits and nothing else. See the definition for
+  // why four cells are not merely sound but exactly complete, and for why this
+  // one does not go through an array.
+  ASTNode zeroChoice(const char* tag, const ASTNode& left,
+                     const ASTNode& right, const ASTVec& floats);
 
   // A float's sign, taken from its canonical packed bits.
   ASTNode signBit(const ASTNode& value);
