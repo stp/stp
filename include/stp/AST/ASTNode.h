@@ -263,8 +263,17 @@ public:
   // The immutable source-language sort. This is deliberately separate from
   // GetType(), which remains the packed carrier classification consumed by
   // STP's bit-vector pipeline.
+  //
+  // Memoised on the node; deriveSourceSort below is the derivation itself and
+  // runs at most once per node (see ASTInternal::cachedSourceSort).
   SourceSort GetSourceSort() const;
 
+private:
+  // The derivation behind GetSourceSort, without the memo. Private so that
+  // nothing reintroduces the recomputation by calling it directly.
+  SourceSort deriveSourceSort() const;
+
+public:
   unsigned int GetSigWidth() const;
   unsigned int GetExpWidth() const;
 

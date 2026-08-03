@@ -158,6 +158,8 @@ ASTNode STPMgr::CreateSourceSymbol(const char* const name,
     FatalError("CreateSourceSymbol requires a known source sort");
   if (source_sort.containsFloatingPoint())
     noteFloatingPoint();
+  else if (source_sort.usesFloatingPointTheory())
+    noteFloatingPointTheory();
   ASTSymbol temp_sym(this, name, source_sort);
   return ASTNode(LookupOrCreateSymbol(temp_sym));
 }
@@ -195,6 +197,7 @@ ASTSymbol* STPMgr::LookupOrCreateSymbol(ASTSymbol& s)
     s_ptr1->_sig_width = s_ptr->_sig_width;
     std::pair<ASTSymbolSet::const_iterator, bool> p =
         _symbol_unique_table.insert(s_ptr1);
+    indexSymbolName(s_ptr1);
     return *p.first;
   }
   else
@@ -202,6 +205,32 @@ ASTSymbol* STPMgr::LookupOrCreateSymbol(ASTSymbol& s)
     // return symbol found in table.
     return *it;
   }
+}
+
+void STPMgr::indexSymbolName(ASTSymbol* symbol)
+{
+  _symbol_name_index[symbol->GetName()].push_back(symbol);
+}
+
+void STPMgr::unindexSymbolName(ASTSymbol* symbol)
+{
+  const SymbolNameIndex::iterator entry =
+      _symbol_name_index.find(symbol->GetName());
+  if (entry == _symbol_name_index.end())
+    return;
+
+  std::vector<ASTSymbol*>& declared = entry->second;
+  for (size_t i = 0; i < declared.size(); i++)
+  {
+    if (declared[i] == symbol)
+    {
+      declared.erase(declared.begin() + i);
+      break;
+    }
+  }
+
+  if (declared.empty())
+    _symbol_name_index.erase(entry);
 }
 
 bool STPMgr::LookupSymbol(ASTSymbol& s)
@@ -214,27 +243,27 @@ bool STPMgr::LookupSymbol(ASTSymbol& s)
     return true;
 }
 
+// The two name-only lookups. A symbol's sort is part of its identity, so
+// these cannot probe the unique table; they go through the name index, which
+// is maintained alongside it (see _symbol_name_index).
 bool STPMgr::LookupSymbol(const char* const name)
 {
-  for (const ASTSymbol* symbol : _symbol_unique_table)
-  {
-    if (strcmp(symbol->GetName(), name) == 0)
-      return true;
-  }
-  return false;
+  return _symbol_name_index.find(name) != _symbol_name_index.end();
 }
 
 bool STPMgr::LookupSymbol(const char* const name, ASTNode& output)
 {
-  for (ASTSymbol* symbol : _symbol_unique_table)
-  {
-    if (strcmp(symbol->GetName(), name) == 0)
-    {
-      output = ASTNode(symbol);
-      return true;
-    }
-  }
-  return false;
+  const SymbolNameIndex::const_iterator entry = _symbol_name_index.find(name);
+  if (entry == _symbol_name_index.end())
+    return false;
+
+  // The first symbol declared under the name, where the old scan returned
+  // whichever the table happened to iterate first. Only a name declared at
+  // two different sorts can tell the difference, and then a deterministic
+  // answer is the better one.
+  assert(!entry->second.empty());
+  output = ASTNode(entry->second.front());
+  return true;
 }
 
 // Create a ASTBVConst node
@@ -379,6 +408,7 @@ void STPMgr::noteFloatingPoint()
              "reconfigure with -DENABLE_FLOATING_POINT=ON");
 #else
   has_floating_point = true;
+  has_floating_point_theory = true;
 #endif
 }
 
@@ -477,6 +507,10 @@ ASTNode STPMgr::CreateRMConst(unsigned mode)
     default:
       FatalError("CreateRMConst requires one of the five rounding modes");
   }
+
+  // A rounding mode has no format, so noteFloatingPoint is never reached for
+  // it -- but it still needs FpTotalise's pinning pass to run.
+  noteFloatingPointTheory();
 
   const ASTNode bits = CreateBVConst(5, mode);
   ASTBVConst* src = static_cast<ASTBVConst*>(bits._int_node_ptr);
@@ -951,6 +985,7 @@ STPMgr::~STPMgr()
 
   Introduced_SymbolsSet.clear();
   _symbol_unique_table.clear();
+  _symbol_name_index.clear();
   _bvconst_unique_table.clear();
 
   vector<ASTVec*>::iterator it = _asserts.begin();
