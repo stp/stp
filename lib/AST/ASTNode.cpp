@@ -306,10 +306,36 @@ const char* ASTNode::GetName() const
   return ((ASTSymbol*)_int_node_ptr)->GetName();
 }
 
+// Memoised wrapper over deriveSourceSort.
+//
+// The derivation walks children for READ, WRITE and ITE -- and for ITE it
+// walks *both* branches -- so recomputing it costs Theta(2^depth) on a
+// shared-branch ITE DAG and Theta(depth) on a store chain, on a graph of
+// linear size. That is not a cost paid once: the front ends ask for every
+// node they build, and containsFloatingPointTheory asks for every node of
+// every query, including queries with no floating point in them.
+//
+// Memoising is sound for the same reason the floating-point format's memo is
+// (see cacheFPFormat): the derivation reads only the node's kind, children
+// and widths, and the first two are the hash-cons key. The widths are not, so
+// the setters drop the memo.
 SourceSort ASTNode::GetSourceSort() const
 {
   if (IsNull())
     return SourceSort::unknown();
+
+  if (const SourceSort* cached = _int_node_ptr->cachedSourceSort())
+    return *cached;
+
+  _int_node_ptr->nodeManager->source_sort_derivations++;
+  const SourceSort derived = deriveSourceSort();
+  _int_node_ptr->setCachedSourceSort(
+      _int_node_ptr->nodeManager->internSourceSort(derived));
+  return derived;
+}
+
+SourceSort ASTNode::deriveSourceSort() const
+{
   if (GetKind() == UNDEFINED)
     return SourceSort::unknown();
 

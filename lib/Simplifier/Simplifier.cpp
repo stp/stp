@@ -713,12 +713,12 @@ ASTNode Simplifier::ITEOpt_InEqs(const ASTNode& in)
     // whatever the condition, and folding to the condition would be
     // wrong.
     ASTNode cond = in1[0];
-    if (in1[1] == in2 && !constantsSameBits(in2, in1[2]))
+    if (in1[1] == in2 && constantsDenoteDifferentValues(in2, in1[2]))
     {
       // ITE(cond, c, d) = c <=> cond
       output = cond;
     }
-    else if (in1[2] == in2 && !constantsSameBits(in2, in1[1]))
+    else if (in1[2] == in2 && constantsDenoteDifferentValues(in2, in1[1]))
     {
       cond = SimplifyFormula(cond, true);
       output = cond;
@@ -733,12 +733,12 @@ ASTNode Simplifier::ITEOpt_InEqs(const ASTNode& in)
            BVCONST == in2[2].GetKind() && BVCONST == k1)
   {
     ASTNode cond = in2[0];
-    if (in2[1] == in1 && !constantsSameBits(in1, in2[2]))
+    if (in2[1] == in1 && constantsDenoteDifferentValues(in1, in2[2]))
     {
       // ITE(cond, c, d) = c <=> cond
       output = cond;
     }
-    else if (in2[2] == in1 && !constantsSameBits(in1, in2[1]))
+    else if (in2[2] == in1 && constantsDenoteDifferentValues(in1, in2[1]))
     {
       cond = SimplifyFormula(cond, true);
       output = cond;

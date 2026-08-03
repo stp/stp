@@ -28,10 +28,25 @@ AddSTPGTest(FindPureLiterals_Test.cpp)
 AddSTPGTest(Flatten_Test.cpp)
 AddSTPGTest(NodeDomainAnalysis_Test.cpp)
 AddSTPGTest(SplitExtracts_Test.cpp)
+# Not under ENABLE_FLOATING_POINT: the source-sort memo and the symbol name
+# index are AST machinery that floating point introduced but that every build
+# pays for, so both configurations have to cover them.
+AddSTPGTest(SourceSortMemo_Test.cpp)
 if (ENABLE_FLOATING_POINT)
     AddSTPGTest(FPPrintBack_Test.cpp)
     AddSTPGTest(FloatBlast_Test.cpp)
+    AddSTPGTest(FpTotalise_Test.cpp)
     AddSTPGTest(SourceSort_Test.cpp)
+    # Builds float/rounding-mode constants, which is the whole point.
+    AddSTPGTest(ConstantIdentity_Test.cpp)
+    AddSTPGTest(FpConstantFold_Test.cpp)
+    # The oracle is the hardware, evaluated under a rounding mode set with
+    # fesetround. Without this the compiler assumes the default mode and
+    # folds the reference arithmetic while compiling, so every non-default
+    # mode disagrees for a reason that has nothing to do with STP.
+    if (TARGET FpConstantFold_TestTests AND NOT MSVC)
+        target_compile_options(FpConstantFold_TestTests PRIVATE -frounding-math)
+    endif()
     # Builds float-typed symbols, so it needs the floating-point funnels
     # (SetExpWidth) to be more than a fatal error.
     AddSTPGTest(BVSolver_Test.cpp)

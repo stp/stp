@@ -109,6 +109,28 @@ protected:
     return SourceSort::unknown();
   }
 
+  // Memo for the *derived* source sort, on the nodes that derive one.
+  //
+  // ASTNode::GetSourceSort walks children for READ, WRITE and ITE -- and for
+  // ITE it walks both branches -- so without a memo a shared-branch ITE DAG
+  // costs Theta(2^depth) per query and a store chain costs Theta(depth), on a
+  // graph of linear size. The front ends ask once per node they build, and
+  // containsFloatingPointTheory asks once per node of every query, so the
+  // recomputation is not incidental. This is the same treatment cacheFPFormat
+  // already gives the floating-point format, for the same reason, and it is
+  // sound for the same reason: the derivation reads only the node's kind,
+  // children and widths.
+  //
+  // The pointer is into the manager's intern pool, so a cached answer costs
+  // eight bytes and no allocation, and Unknown interns like any other sort --
+  // a non-null pointer to an Unknown sort is the negative cache.
+  //
+  // Only ASTInterior can hold one. Leaves either carry a declared sort or
+  // derive theirs from widths that legacy callers still set after
+  // construction, and both are already O(1).
+  virtual const SourceSort* cachedSourceSort() const { return NULL; }
+  virtual void setCachedSourceSort(const SourceSort*) const {}
+
   /*******************************************************************
    * ASTNode is of type BV      <==> ((indexwidth=0)&&(valuewidth>0))*
    * ASTNode is of type ARRAY   <==> ((indexwidth>0)&&(valuewidth>0))*

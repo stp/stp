@@ -85,6 +85,21 @@ private:
     return symbolic_fp::floatingPointTypeInfo(exponent, significand);
   }
 
+  // fp.min, fp.max, fp.to_ubv and fp.to_sbv carry one more child after
+  // FpTotalise has run -- the array read supplying their unspecified answer
+  // -- and the operations cannot be lowered without it. BVTypeCheck
+  // deliberately accepts both arities, so the requirement is not in the
+  // node's type; it was an assert here, which under NDEBUG read past the end
+  // of the children instead of saying so.
+  void requireTotalised(const ASTNode& n, size_t expected) const
+  {
+    if (n.Degree() != expected)
+      FatalError("FloatBlast: this partial floating-point operation has not "
+                 "been totalised; FpTotalise has to run before it is "
+                 "lowered: ",
+                 n);
+  }
+
   void requireSameFormat(const ASTNode& left, const ASTNode& right) const
   {
     if (left.GetSourceSort() != right.GetSourceSort())
@@ -370,7 +385,7 @@ private:
       case FP_MIN:
       case FP_MAX:
       {
-        assert(n.Degree() == 3);
+        requireTotalised(n, 3);
         requireSameFormat(n[0], n[1]);
         const ASTNode choice = node_factory->CreateNode(
             EQ, lower(n[2]), bm->CreateOneConst(1));
@@ -458,7 +473,7 @@ private:
     {
       case FP_TO_UBV:
       case FP_TO_SBV:
-        assert(n.Degree() == 4);
+        requireTotalised(n, 4);
         return symbolic_fp::unpacked::toBV(
             formatOf(n[2]), lower(n[1]), asUnpacked(n[2]),
             n[0].GetUnsignedConst(), lower(n[3]), kind == FP_TO_SBV);
@@ -558,6 +573,31 @@ FloatBlast::FloatBlast(STPMgr* bm_) : impl(new Impl(bm_)) {}
 FloatBlast::~FloatBlast() = default;
 
 ASTNode FloatBlast::topLevel(const ASTNode& n) { return impl->topLevel(n); }
+
+#ifdef STP_ENABLE_FLOATING_POINT
+
+ASTNode FloatBlast::lowerOperation(STPMgr* bm, const ASTNode& n)
+{
+  // A context of its own: these callers lower one node, unrelated to the
+  // solve's, and must not share or disturb its caches.
+  FloatBlast lower(bm);
+  return lower.topLevel(n);
+}
+
+#else
+
+// Fail closed, as the rest of the floating-point surface does in this
+// configuration: the parser and the STPMgr funnels reject floating-point
+// input long before a constant fold or a model query could reach here, so
+// arriving means a caller bypassed them. topLevel stays an identity because
+// FpEncodingContext needs the same ownership surface in both builds.
+ASTNode FloatBlast::lowerOperation(STPMgr*, const ASTNode&)
+{
+  FatalError("FloatBlast: this STP was built without floating-point "
+             "support; reconfigure with -DENABLE_FLOATING_POINT=ON");
+}
+
+#endif
 
 const FloatBlast::Statistics& FloatBlast::statistics() const noexcept
 {

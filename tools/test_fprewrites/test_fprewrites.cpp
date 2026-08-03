@@ -45,6 +45,7 @@ THE SOFTWARE.
 // affordable: circuit construction dwarfs circuit evaluation.)
 
 #include "stp/AST/AST.h"
+#include "stp/FloatBlaster/FloatBlast.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/FloatBlaster/symbolic_fp.h"
 #include "stp/NodeFactory/SimplifyingNodeFactory.h"
@@ -172,33 +173,13 @@ struct Ctx
   }
 
   // Blast a (possibly symbolic) tree to a pure bitvector/Boolean circuit,
-  // bottom-up, the way FloatBlast does in a real solve: each floating-point
-  // operation is lowered after its children, and its operand format comes
-  // from the node the caller built rather than from the bits its children
-  // lowered to. Nothing is stamped -- a lowered float is a bitvector, and
-  // saying otherwise on a hash-consed node is what FloatBlast exists to
-  // avoid. The blaster builds through the manager's default factory -- the
-  // *hashing* one here -- so no rewrite fires on the way.
+  // through the same lowering pass a real solve uses -- so this tool cannot
+  // drift from it, which is the point of testing the rewrites against the
+  // blaster at all. The pass builds through the manager's default factory --
+  // the *hashing* one here -- so no rewrite fires on the way.
   ASTNode blastTree(const ASTNode& n)
   {
-    if (n.Degree() == 0)
-      return n; // a float symbol or constant is already its packed bits
-    ASTVec kids;
-    kids.reserve(n.Degree());
-    for (const ASTNode& ch : n)
-      kids.push_back(blastTree(ch));
-
-    const Kind k = n.GetKind();
-    if (!is_FP_kind(k))
-      return (n.GetType() == BOOLEAN_TYPE)
-                 ? hf->CreateNode(k, kids)
-                 : hf->CreateTerm(k, n.GetValueWidth(), kids);
-
-    // From `n`, not from `kids`: the operands are bits by now.
-    const std::pair<unsigned int, unsigned int> fmt =
-        FloatBlaster::operandFormat(n);
-    return FloatBlaster::BlastNode_TopLevel(&mgr, k, kids, fmt.first,
-                                            fmt.second);
+    return FloatBlast::lowerOperation(&mgr, n);
   }
 
   ASTNode blastOnce(const ASTNode& n)

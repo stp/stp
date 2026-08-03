@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/FloatBlaster/FloatBlast.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/FloatBlaster/FpEncodingContext.h"
 #include "stp/Printer/printers.h"
@@ -596,8 +597,8 @@ AbsRefine_CounterExample::TermToConstTermUsingModel_inner(const ASTNode& term,
           ff = TermToConstTermUsingModel(*it, false);
         // A floating-point operand comes back as a bare bit-vector:
         // TermToConstTermUsingModel strips the format off every result it
-        // returns. NonMemberBVConstEvaluator -> BlastNode reads the operand
-        // format off its operands (operandFormat) to decode them, so restore
+        // returns. NonMemberBVConstEvaluator lowers through FloatBlast,
+        // which reads each operand's format off its source sort, so restore
         // each float operand's own format here -- the same reattachment the
         // FP-predicate arm of ComputeFormulaUsingModel makes before rebuilding
         // a predicate. Non-float operands (bit-vectors, rounding modes) keep
@@ -903,12 +904,10 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
         break;
       }
 
-      // From `form`, not `temp`: temp's operands are evaluated bits by now.
-      const std::pair<unsigned int, unsigned int> fmt =
-          FloatBlaster::operandFormat(form);
-      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(
-          bm, temp.GetKind(), toASTVec(temp.GetChildren()), fmt.first,
-          fmt.second));
+      // One table, the same one the solver's lowering pass uses. temp's
+      // operands were re-stamped with their formats above, so it is a
+      // well-formed source node and its own sorts say what the formats are.
+      ASTNode blasted(FloatBlast::lowerOperation(bm, temp));
 
       assert(blasted != temp);
       assert(blasted != form);

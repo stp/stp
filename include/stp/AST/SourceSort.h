@@ -13,6 +13,7 @@
 #include <cassert>
 #include <cstddef>
 #include <memory>
+#include <unordered_set>
 
 namespace stp
 {
@@ -184,6 +185,13 @@ public:
     }
     return h;
   }
+
+  // For the manager's intern pool, which is what lets a derived sort be
+  // memoised on a node as a pointer.
+  struct Hasher
+  {
+    size_t operator()(const SourceSort& sort) const { return sort.hash(); }
+  };
 };
 
 } // namespace stp

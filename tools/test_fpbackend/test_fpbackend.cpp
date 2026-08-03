@@ -101,6 +101,19 @@ static ASTNode f32(uint32_t bits)
   return bm->CreateFPConst(n, 8, 24);
 }
 
+// fp.to_ubv/fp.to_sbv from packed bits. The solver keeps its floats unpacked
+// between operations and only this tool wants a one-shot packed form, so the
+// decode is spelled out here rather than kept as a second entry point in the
+// backend -- there is one lowering table now, and this is not another one.
+static ASTNode blast_fp_to_bv(const floatingPointTypeInfo& size,
+                              const ASTNode& rm, const ASTNode& expr,
+                              bitWidthType target_width, const ASTNode& undef,
+                              bool is_signed)
+{
+  return unpacked::toBV(size, rm, unpacked::decode(size, expr), target_width,
+                        undef, is_signed);
+}
+
 static uint32_t bits_of(float f)
 {
   uint32_t u;

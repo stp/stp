@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
+#include "stp/FloatBlaster/FloatBlast.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Util/CBVOps.h"
@@ -1030,7 +1031,8 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
         // A plain BVCONST cannot carry a format at all -- ASTBVConst's
         // getExpWidth() is hardwired to 0 and its setter asserts -- so the
         // constant has to be re-made as an ASTFPConst first. That is what
-        // CreateFPConst is for, and what BlastNode does with its own result.
+        // CreateFPConst is for, and what the lowering pass does with its
+        // own result.
         formatted.push_back(
             FloatBlaster::withFormat(_bm, children[i], exp_width, sig_width));
       }
@@ -1050,7 +1052,7 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       // Only a floating-point *result* carries a floating-point format. The
       // classifications and comparisons return a Boolean and to_ubv/to_sbv
       // return a bit-vector; stamping a format on temp for those is wrong,
-      // because BlastNode then copies temp's format onto the blasted output --
+      // because lowering would then copy temp's format onto its output --
       // poisoning the shared Boolean constant, whose GetType() afterwards reads
       // FLOATINGPOINT and sends the constant evaluator down its bit-vector
       // (GetBVConst) path. temp's type already distinguishes the cases.
@@ -1079,12 +1081,11 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
         break;
       }
 
-      // The *operand* format, which for to_fp is not exp_width/sig_width
-      // above: those name the target it converts into.
-      const std::pair<unsigned int, unsigned int> fmt =
-          FloatBlaster::operandFormat(children);
-      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(
-          _bm, k, toASTVec(temp.GetChildren()), fmt.first, fmt.second));
+      // One table, the same one the solver's lowering pass uses, reached with
+      // the node rather than with its parts: it reads each operand's format
+      // from its source sort, so nothing here has to work out which child
+      // carries the format and pass it alongside.
+      ASTNode blasted(FloatBlast::lowerOperation(_bm, temp));
       OutputNode = NonMemberBVConstEvaluator(_bm, blasted);
 
       // Carry the format out, so an enclosing operation sees a formatted

@@ -364,7 +364,7 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
         // a float constant interns apart from the plain constant with its
         // bits, and skipping such a pair drops a needed axiom for good.
         if (BVCONST == iKind && jKind[j] == BVCONST &&
-            !constantsSameBits(index_i, index_j))
+            constantsDenoteDifferentValues(index_i, index_j))
           continue;
 
         if (ASTFalse == simp->CreateSimplifiedEQ(index_i, index_j))
@@ -537,7 +537,7 @@ void AbsRefine_CounterExample::applyAllCongruenceConstraints(
         // a float constant interns apart from the plain constant with its
         // bits, and skipping such a pair drops a needed axiom for good.
         if (BVCONST == iKind && jKind[j] == BVCONST &&
-            !constantsSameBits(index_i, index_j))
+            constantsDenoteDifferentValues(index_i, index_j))
           continue;
 
         if (ASTFalse == simp->CreateSimplifiedEQ(index_i, index_j))

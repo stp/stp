@@ -9,6 +9,7 @@
 #include "stp/STPManager/STPManager.h"
 
 #include <gtest/gtest.h>
+#include <set>
 
 using namespace stp;
 
@@ -185,4 +186,98 @@ TEST(FloatBlast, totalisation_defers_canonical_boundaries_to_lowering)
   EXPECT_EQ(2u, lower.statistics().unpack_builds);
   EXPECT_EQ(2u, lower.statistics().unpacked_operation_builds);
   EXPECT_EQ(2u, lower.statistics().pack_builds);
+}
+
+// Every floating-point kind reaches an arm of the lowering table.
+//
+// There used to be two tables over this signature -- the unpacked one here
+// and a packed one in FloatBlaster::BlastNode -- and keeping them in step was
+// a manual obligation: a kind added to one and not the other compiles, and
+// fails only on the path that reaches the one that was missed. There is one
+// table now, so the remaining risk is a kind that reaches no arm at all.
+// Both ends of the table fail closed with a FatalError, so an omission
+// aborts this test rather than silently answering.
+TEST(FloatBlast, every_floating_point_kind_is_lowered)
+{
+  STPMgr mgr;
+  const SourceSort fp32 = SourceSort::floatingPoint(8, 24);
+  const ASTNode x = mgr.CreateSourceSymbol("x", fp32);
+  const ASTNode y = mgr.CreateSourceSymbol("y", fp32);
+  const ASTNode z = mgr.CreateSourceSymbol("z", fp32);
+  const ASTNode rm = rne(mgr);
+  const ASTNode bits = mgr.CreateSourceSymbol("b", SourceSort::bitVector(32));
+  const ASTNode choice =
+      mgr.CreateSourceSymbol("c", SourceSort::bitVector(1));
+  const ASTNode undef =
+      mgr.CreateSourceSymbol("u", SourceSort::bitVector(16));
+  const ASTNode eight = mgr.CreateBVConst(32, 8);
+  const ASTNode twentyfour = mgr.CreateBVConst(32, 24);
+  const ASTNode sixteen = mgr.CreateBVConst(32, 16);
+
+  // One representative per kind, in the arity the blaster is entitled to
+  // assume -- the partial operations after FpTotalise has added their
+  // unspecified-value child.
+  std::vector<std::pair<Kind, ASTNode>> cases;
+  auto term = [&](Kind k, unsigned w, const ASTVec& kids) {
+    cases.push_back({k, mgr.CreateTerm(k, w, kids)});
+  };
+  auto form = [&](Kind k, const ASTVec& kids) {
+    cases.push_back({k, mgr.CreateNode(k, kids)});
+  };
+
+  term(FP_ABS, 32, {x});
+  term(FP_NEG, 32, {x});
+  term(FP_ADD, 32, {rm, x, y});
+  term(FP_SUB, 32, {rm, x, y});
+  term(FP_MUL, 32, {rm, x, y});
+  term(FP_DIV, 32, {rm, x, y});
+  term(FP_FMA, 32, {rm, x, y, z});
+  term(FP_SQRT, 32, {rm, x});
+  term(FP_REM, 32, {x, y});
+  term(FP_ROUNDTOINTEGRAL, 32, {rm, x});
+  term(FP_MIN, 32, {x, y, choice});
+  term(FP_MAX, 32, {x, y, choice});
+  term(FP_TOFP, 32, {eight, twentyfour, bits});
+  term(FP_TOFP, 32, {eight, twentyfour, rm, x});
+  term(FP_TOFP_SIGNED, 32, {eight, twentyfour, rm, bits});
+  term(FP_TOFP_UNSIGNED, 32, {eight, twentyfour, rm, bits});
+  term(FP_TO_UBV, 16, {sixteen, rm, x, undef});
+  term(FP_TO_SBV, 16, {sixteen, rm, x, undef});
+  term(FP_TO_IEEE_BV, 32, {x});
+  form(FP_LEQ, {x, y});
+  form(FP_LT, {x, y});
+  form(FP_GEQ, {x, y});
+  form(FP_GT, {x, y});
+  form(FP_EQ, {x, y});
+  form(FP_SMT_EQ, {x, y});
+  form(FP_ISNORMAL, {x});
+  form(FP_ISSUBNORMAL, {x});
+  form(FP_ISZERO, {x});
+  form(FP_ISINFINITE, {x});
+  form(FP_ISNAN, {x});
+  form(FP_ISNEGATIVE, {x});
+  form(FP_ISPOSITIVE, {x});
+
+  // Every FP kind in the tree is represented, so adding one without adding
+  // an arm for it fails here rather than at the first input that uses it.
+  // FP_SMT_EQ is the last kind in ASTKind.kinds; a new one is appended after
+  // it, so the scan has to reach it.
+  std::set<int> covered;
+  for (const auto& c : cases)
+    covered.insert(static_cast<int>(c.first));
+  for (int k = 0; k <= static_cast<int>(FP_SMT_EQ); k++)
+  {
+    if (!is_FP_kind(static_cast<Kind>(k)))
+      continue;
+    EXPECT_EQ(1u, covered.count(k)) << "no representative for "
+                                    << _kind_names[k];
+  }
+
+  for (const auto& c : cases)
+  {
+    FloatBlast lower(&mgr);
+    const ASTNode lowered = lower.topLevel(c.second);
+    EXPECT_FALSE(containsFloatingPointKind(lowered))
+        << _kind_names[c.first] << " was not lowered";
+  }
 }

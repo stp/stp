@@ -210,7 +210,13 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
     original_input = inputasserts;
   }
 
+  // The latch is the same kind of cheap fast-negative the lowering test below
+  // uses, widened to cover RoundingMode -- which carries no format, so it
+  // never reaches noteFloatingPoint, and which is exactly why this test could
+  // not use has_floating_point. Without a negative every pure bit-vector
+  // query walked its whole DAG asking each node for its source sort.
   const bool input_uses_floating_point_theory =
+      bm->has_floating_point_theory &&
       containsFloatingPointTheory(original_input, bm);
 
   // Make the partial floating-point operations total, canonicalise the

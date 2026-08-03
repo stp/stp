@@ -190,45 +190,61 @@ ASTNode FpTotalise::rebuild(const ASTNode& n, const ASTVec& children)
   return FloatBlaster::withFormat(bm, out, n.GetExpWidth(), n.GetSigWidth());
 }
 
-ASTNode FpTotalise::unspecified(const char* tag, const ASTNode& prefix,
+ASTNode FpTotalise::unspecified(const char* tag, const ASTNode& index,
                                 const ASTVec& floats,
                                 unsigned int value_width)
 {
-  ASTNode index;
-  unsigned int width = 0;
-
-  if (!prefix.IsNull())
-  {
-    index = prefix;
-    width = prefix.GetValueWidth();
-  }
-
-  for (size_t i = 0; i < floats.size(); i++)
-  {
-    // Index on canonical bits, not raw ones. SMT-LIB equality on floats makes
-    // every NaN equal to every other, so operands that are equal may still
-    // differ in payload; indexing on raw bits would let them read different
-    // slots and answer differently, losing the very congruence this array
-    // exists to provide. FP_TO_IEEE_BV records that round-trip as a source
-    // boundary; FloatBlast later collapses the payload while keeping +0 and
-    // -0 apart, and can reuse the same unpacked operand as the operation.
-    const ASTNode canonical = canonicalSourceBits(floats[i]);
-
-    if (width == 0)
-    {
-      index = canonical;
-      width = canonical.GetValueWidth();
-    }
-    else
-    {
-      width += canonical.GetValueWidth();
-      index = bm->CreateTerm(BVCONCAT, width, index, canonical);
-    }
-  }
-
-  // `floats` rather than the canonicalised bits: the bits are what the array
-  // is indexed *by*, the formats are part of what array it is.
+  // `floats` rather than the index: the index is what the array is addressed
+  // *by*, the formats are part of what array it is.
   return FloatBlaster::unspecifiedValue(bm, tag, floats, index, value_width);
+}
+
+ASTNode FpTotalise::conversionIndex(const ASTNode& rounding_mode,
+                                    const ASTNode& value)
+{
+  // Index on canonical bits, not raw ones. SMT-LIB equality on floats makes
+  // every NaN equal to every other, so operands that are equal may still
+  // differ in payload; indexing on raw bits would let them read different
+  // slots and answer differently, losing the very congruence this array
+  // exists to provide. FP_TO_IEEE_BV records that round-trip as a source
+  // boundary; FloatBlast later collapses the payload while keeping +0 and
+  // -0 apart, and can reuse the same unpacked operand as the operation.
+  const ASTNode canonical = canonicalSourceBits(value);
+  const unsigned int width =
+      rounding_mode.GetValueWidth() + canonical.GetValueWidth();
+  return bm->CreateTerm(BVCONCAT, width, rounding_mode, canonical);
+}
+
+ASTNode FpTotalise::signBit(const ASTNode& value)
+{
+  const ASTNode canonical = canonicalSourceBits(value);
+  const unsigned int top = canonical.GetValueWidth() - 1;
+  const ASTNode position = bm->CreateBVConst(32, top);
+  return nf->CreateTerm(BVEXTRACT, 1, canonical, position, position);
+}
+
+// fp.min and fp.max are unspecified only on (+0, -0) and (-0, +0), and the
+// choice is a function of the two sign bits -- so the map that supplies it
+// needs four cells, not one per pair of packed values.
+//
+// Reading symfpu's ordering() (symfpu/core/compare.h:85-152), the choice
+// arrives as its `equality` argument and changes the answer in exactly three
+// places: both operands the same infinity, both operands zero, and both
+// operands equal in sign, exponent and significand. In the first and third
+// the enclosing ITE selects between two values that are equal, so the choice
+// is unobservable; only the zero case can be seen, and there the result is
+// determined by which zero is returned.
+//
+// Four cells is therefore not an approximation but exactly complete: the
+// (+0, -0) and (-0, +0) cells stay independent, as SMT-LIB requires, and the
+// cells the other sign pairs read are unobservable. Indexing on the full
+// 2(e+s) bits was sound too, but it put a 64-bit-indexed array (256-bit at
+// Float128) into problems that otherwise have no arrays at all, which drags
+// them into the lazy read-refinement regime and perturbs the read count that
+// decides how the user's own arrays are handled.
+ASTNode FpTotalise::zeroChoiceIndex(const ASTNode& left, const ASTNode& right)
+{
+  return bm->CreateTerm(BVCONCAT, 2, signBit(left), signBit(right));
 }
 
 ASTNode FpTotalise::visit(const ASTNode& n)
@@ -266,8 +282,9 @@ ASTNode FpTotalise::visit(const ASTNode& n)
     floats.push_back(children[0]);
     floats.push_back(children[1]);
 
-    children.push_back(unspecified(k == FP_MIN ? "min_zero" : "max_zero",
-                                   ASTNode(), floats, 1));
+    children.push_back(
+        unspecified(k == FP_MIN ? "min_zero" : "max_zero",
+                    zeroChoiceIndex(children[0], children[1]), floats, 1));
     changed = true;
   }
   // fp.to_ubv/fp.to_sbv: unspecified for NaN, the infinities and anything out
@@ -279,8 +296,10 @@ ASTNode FpTotalise::visit(const ASTNode& n)
     ASTVec floats;
     floats.push_back(children[2]);
 
-    children.push_back(unspecified(k == FP_TO_UBV ? "to_ubv" : "to_sbv",
-                                   children[1], floats, n.GetValueWidth()));
+    children.push_back(
+        unspecified(k == FP_TO_UBV ? "to_ubv" : "to_sbv",
+                    conversionIndex(children[1], children[2]), floats,
+                    n.GetValueWidth()));
     changed = true;
   }
   // An access over a float-indexed array addresses canonical bits (see the

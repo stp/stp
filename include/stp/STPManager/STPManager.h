@@ -227,9 +227,52 @@ private:
 
   CBV CreateBVConstVal;
 
+  // Name -> symbols declared under it, in declaration order.
+  //
+  // A symbol's source sort is part of its identity, so the unique table is
+  // keyed on (name, sort) and a name-only probe cannot be built for it. That
+  // is what turned the two name lookups below into a scan of every symbol --
+  // and they are not rare: LookupOrCreateSymbol(name) is how every internally
+  // minted symbol is made (ArrayTransformer's per-abstracted-read variable,
+  // RemoveUnconstrained's per-unconstrained-parent variable), so the scan made
+  // symbol creation quadratic on problems with no floating point in them.
+  //
+  // This index answers those lookups in constant time. Entries are appended
+  // where the unique table is inserted into and removed where a symbol is
+  // cleaned up, so the two stay in step; the vector is for the case the sorted
+  // key admits and the old name-keyed one could not -- one name at two sorts.
+  typedef ankerl::unordered_dense::map<std::string, std::vector<ASTSymbol*>>
+      SymbolNameIndex;
+  SymbolNameIndex _symbol_name_index;
+
+  // Distinct source sorts, interned so a derived one can be memoised on the
+  // node as a pointer. std::unordered_set rather than a dense map because the
+  // addresses have to stay put as it grows.
+  std::unordered_set<SourceSort, SourceSort::Hasher> _source_sort_pool;
+
 public:
   bool LookupSymbol(const char* const name);
   bool LookupSymbol(const char* const name, ASTNode& output);
+
+  // Intern `sort` and return its stable address, for ASTInternal's source-sort
+  // memo. Unknown interns like anything else, so the memo needs no separate
+  // negative sentinel.
+  const SourceSort* internSourceSort(const SourceSort& sort)
+  {
+    return &*_source_sort_pool.insert(sort).first;
+  }
+
+  // How many times a source sort has actually been derived, as opposed to
+  // answered from a node's memo. Counted so that the memo is directly
+  // testable: a derivation walks children, so "once per node" versus "once
+  // per path" is the whole difference, and it cannot be read off a result
+  // that is correct either way.
+  uint64_t source_sort_derivations = 0;
+
+  // Record/forget a symbol in the name index. Called only from the unique
+  // table's insertion point and from ASTSymbol::CleanUp.
+  void indexSymbolName(ASTSymbol* symbol);
+  void unindexSymbolName(ASTSymbol* symbol);
 
   /****************************************************************
    * Public Flags                                                 *
@@ -311,6 +354,16 @@ public:
   // lowering; true is not query state -- an unused term or a popped scope may
   // have set it -- so positive decisions must also inspect the current DAG.
   bool has_floating_point = false;
+
+  // The same hint for the floating-point *theory* rather than for floats: a
+  // RoundingMode symbol, constant or array element carries no format, so it
+  // never reaches noteFloatingPoint, yet it still needs FpTotalise to pin it
+  // to the five legal encodings. TopLevelSTP's theory test is the one place
+  // that needs the broader question, and without this latch it had no cheap
+  // negative and walked the DAG of every pure bit-vector query.
+  bool has_floating_point_theory = false;
+
+  void noteFloatingPointTheory() { has_floating_point_theory = true; }
 
   // Record that a float of a real format has been built. Every float's format
   // arrives through one of the funnels above, so calling this there is what

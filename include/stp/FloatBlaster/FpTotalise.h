@@ -133,11 +133,26 @@ private:
   // floating-point format, which is per-node state that rebuilding drops.
   ASTNode rebuild(const ASTNode& n, const ASTVec& children);
 
-  // The array read supplying the unspecified value. `prefix`, when not null,
-  // is prepended to the index; `floats` are canonicalised before being
-  // concatenated into it.
-  ASTNode unspecified(const char* tag, const ASTNode& prefix,
+  // The array read supplying the unspecified value. `index` addresses it and
+  // `floats` are the operation's floating-point operands, which name the
+  // array -- a format is not recoverable from a packed width, and the same
+  // operation at two formats is two different unspecified functions.
+  ASTNode unspecified(const char* tag, const ASTNode& index,
                       const ASTVec& floats, unsigned int value_width);
+
+  // The index for fp.to_ubv/fp.to_sbv: the rounding mode and the float's
+  // canonical bits. The result is unspecified for NaN, the infinities and
+  // anything out of range, and which of those applies depends on the whole
+  // value, so the whole value goes into the index.
+  ASTNode conversionIndex(const ASTNode& rounding_mode, const ASTNode& value);
+
+  // The index for fp.min/fp.max: the two operands' sign bits, and nothing
+  // else. See the definition for why that is not merely sound but exactly
+  // complete.
+  ASTNode zeroChoiceIndex(const ASTNode& left, const ASTNode& right);
+
+  // A float's sign, taken from its canonical packed bits.
+  ASTNode signBit(const ASTNode& value);
 
   STPMgr* bm;
   NodeFactory* nf;

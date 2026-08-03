@@ -304,7 +304,10 @@ void buildListOfSymbols(const ASTNode& n, ASTNodeSet& visited,
 // what made to_fp read an integer source as a float and answer wrongly.
 // ASTNode::SetExpWidth now refuses such a stamp; this rejects the result of
 // one wherever the bits are used, so the two ends agree.
-static bool isBitsValued(const ASTNode& n)
+// Declared in AST.h; shared, because every bit-vector-only pass that
+// classifies a node by GetType() has to ask this question and they must all
+// ask it the same way.
+bool isBitsValued(const ASTNode& n)
 {
   const types t = n.GetType();
 
