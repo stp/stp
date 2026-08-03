@@ -44,8 +44,6 @@ using std::map;
 namespace stp
 {
 
-  using NodeToUnsignedIntervalMap = std::unordered_map<const ASTNode, UnsignedInterval*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
-
   void UnsignedIntervalAnalysis::stats()
   {
     std::cerr << "{UnsignedIntervalAnalysis} TODO propagator not implemented: "
