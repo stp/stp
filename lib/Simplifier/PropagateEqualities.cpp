@@ -39,12 +39,16 @@ void log([[maybe_unused]] std::string s)
 typedef PropagateEqualities::IdSet IdSet;
 typedef ankerl::unordered_dense::map<uint64_t, uint64_t> IdToId;
 typedef ankerl::unordered_dense::map<uint64_t, IdSet> IdToIdSet;
+// Safe as a dense set: only inserted into, then copied out and sorted by
+// expression number -- its iteration order never reaches a decision.
+typedef ankerl::unordered_dense::set<ASTNode, ASTNode::ASTNodeHasher,
+                                     ASTNode::ASTNodeEqual> DenseNodeSet;
 // Values must stay pointer-stable: the priority queue and update() hold
 // pointers/references into the map while it is queried, so this stays a
 // node-based std::unordered_map (mapped is never inserted into after build).
 typedef PropagateEqualities::MapToNodeSet MapToNodeSet;
 
-void tagNodes(const ASTNode& n, const uint64_t tag, IdToId& nodeToTag, ASTNodeSet& shared)
+void tagNodes(const ASTNode& n, const uint64_t tag, IdToId& nodeToTag, DenseNodeSet& shared)
 {
   if (n.Degree() == 0)
     return; 
@@ -93,7 +97,7 @@ void intersection(const ASTNode& n, IdSet& visited, IdSet& variables, const IdSe
 
 MapToNodeSet PropagateEqualities::buildMapOfLHStoVariablesInRHS(const IdSet& allLhsVariables)
 {
-  ASTNodeSet shared;
+  DenseNodeSet shared;
   {
     IdToId tags;
     uint64_t tag = 0;
