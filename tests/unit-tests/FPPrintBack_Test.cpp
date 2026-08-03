@@ -303,3 +303,67 @@ TEST(FPPrintBack, rounding_mode_only_selects_fp_logic)
              {"(set-logic QF_BVFP)",
               "(declare-fun |r| () RoundingMode)", "(= |r| RNE)"});
 }
+
+// A term is a DAG, and rounding-mode ites share their operands freely.
+//
+// The walk that decides which 5-bit bitvectors are modes has to descend into
+// both arms of an ite, because a mode reached through one is not itself a
+// child of the operation (see which_five_bit_bitvectors_are_modes). Doing
+// that without a visited set turns "descend into both arms" into "enumerate
+// every root-to-leaf path" -- and the two are wildly different numbers on a
+// DAG, for a walk whose whole job is to insert into a set and which therefore
+// cannot learn anything from a second visit.
+//
+// The two enclosing passes each carry a visited set; this one did not, and
+// could not simply borrow theirs: the enclosing walk reaches a mode operand as
+// an ordinary child as well, so one shared set would let whichever arrived
+// first suppress the other.
+//
+// The shape below is the standard exponential-path DAG -- two distinct modes
+// per level, each built from both modes of the level beneath -- so depth d is
+// 2d nodes and 2^d paths. Note that the arms must differ: (ite c m m) is folded
+// to m by the simplifying factory, which quietly collapses the whole structure
+// and makes this test prove nothing.
+//
+// This does not measure time. At depth 40 the unfixed walk does not finish, so
+// the assertion is that print-back returns at all. The `let` bindings keep the
+// input linear too, and the printer letizes shared subterms on the way out, so
+// nothing else here is exponential.
+TEST(FPPrintBack, mode_ite_dag_is_walked_once)
+{
+  const int depth = 40;
+
+  std::string input = "(set-logic QF_FP)\n"
+                      "(declare-const r1 RoundingMode)\n"
+                      "(declare-const r2 RoundingMode)\n"
+                      "(declare-const x (_ FloatingPoint 8 24))\n";
+  for (int k = 1; k <= depth; k++)
+    input += "(declare-const p" + std::to_string(k) + " Bool)\n" +
+             "(declare-const q" + std::to_string(k) + " Bool)\n";
+
+  std::string opens, closes;
+  for (int k = 1; k <= depth; k++)
+  {
+    const std::string a = (k == 1) ? "r1" : ("a" + std::to_string(k - 1));
+    const std::string b = (k == 1) ? "r2" : ("b" + std::to_string(k - 1));
+    const std::string k_s = std::to_string(k);
+    opens += "(let ((a" + k_s + " (ite p" + k_s + " " + a + " " + b + "))) ";
+    opens += "(let ((b" + k_s + " (ite q" + k_s + " " + a + " " + b + "))) ";
+    closes += "))";
+  }
+
+  input += "(assert " + opens + "(fp.isNormal (fp.add a" +
+           std::to_string(depth) + " x x))" + closes + ")\n";
+
+  Ctx ctx;
+  const std::string printed = ctx.print(ctx.parse(input));
+
+  // Both leaves are still recognised as modes: the visited set must not cost
+  // the answer the walk exists to produce.
+  EXPECT_NE(std::string::npos,
+            printed.find("(declare-fun |r1| () RoundingMode)"))
+      << printed.substr(0, 600);
+  EXPECT_NE(std::string::npos,
+            printed.find("(declare-fun |r2| () RoundingMode)"))
+      << printed.substr(0, 600);
+}

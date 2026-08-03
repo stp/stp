@@ -113,8 +113,21 @@ static int roundingModeChild(const ASTNode& n)
 // test alone missed: the mode inside (ite c RTZ r) is not itself a child of
 // the operation, so r printed as (_ BitVec 5) and the printed form no longer
 // parsed. The ite is recorded too, so pass two can see it as an array index.
-static void noteRoundingMode(const ASTNode& rm, STPMgr* mgr, UsedSorts& out)
+//
+// `noted` is this walk's own visited set, and is not the one the enclosing
+// pass uses: the two walk the same nodes for different purposes, and the
+// enclosing walk reaches a mode operand as an ordinary child as well, so one
+// shared set would let whichever arrived first suppress the other. It has to
+// be a set all the same. Terms are a DAG, the ite arms are frequently shared,
+// and this only ever inserts into `out`, so a second visit can add nothing --
+// but without the set the recursion is 2^depth. Nested shared mode ites cost
+// 0.01s at depth 20 and 3.95s at depth 28, a clean doubling per level.
+static void noteRoundingMode(const ASTNode& rm, STPMgr* mgr, ASTNodeSet& noted,
+                             UsedSorts& out)
 {
+  if (!noted.insert(rm).second)
+    return;
+
   switch (rm.GetKind())
   {
     case SYMBOL:
@@ -131,8 +144,8 @@ static void noteRoundingMode(const ASTNode& rm, STPMgr* mgr, UsedSorts& out)
     }
     case ITE:
       out.rounding_modes.insert(rm);
-      noteRoundingMode(rm[1], mgr, out);
-      noteRoundingMode(rm[2], mgr, out);
+      noteRoundingMode(rm[1], mgr, noted, out);
+      noteRoundingMode(rm[2], mgr, noted, out);
       break;
     default:
       break;
@@ -141,17 +154,18 @@ static void noteRoundingMode(const ASTNode& rm, STPMgr* mgr, UsedSorts& out)
 
 // Pass one: what is used as a rounding mode.
 static void collectRoundingModeUses(const ASTNode& n, STPMgr* mgr,
-                                    ASTNodeSet& visited, UsedSorts& out)
+                                    ASTNodeSet& visited, ASTNodeSet& noted,
+                                    UsedSorts& out)
 {
   if (!visited.insert(n).second)
     return;
 
   const int rm = roundingModeChild(n);
   if (rm >= 0 && static_cast<size_t>(rm) < n.Degree())
-    noteRoundingMode(n[rm], mgr, out);
+    noteRoundingMode(n[rm], mgr, noted, out);
 
   for (size_t i = 0; i < n.Degree(); i++)
-    collectRoundingModeUses(n[i], mgr, visited, out);
+    collectRoundingModeUses(n[i], mgr, visited, noted, out);
 }
 
 // Pass two: what the arrays are indexed by. Needs pass one's answer, since a
@@ -238,8 +252,8 @@ void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr,
 
   UsedSorts used;
   {
-    ASTNodeSet seen;
-    collectRoundingModeUses(n, mgr, seen, used);
+    ASTNodeSet seen, noted;
+    collectRoundingModeUses(n, mgr, seen, noted, used);
   }
   {
     ASTNodeSet seen;

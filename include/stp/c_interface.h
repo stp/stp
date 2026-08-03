@@ -442,11 +442,33 @@ DLL_PUBLIC Expr vc_parseExpr(VC vc, const char* filepath);
 
 //! \brief Prints the given expression to stdout in the presentation language.
 //!
+//! The presentation language has no floating-point syntax. An expression that
+//! uses the floating-point theory -- including a RoundingMode -- is refused
+//! here rather than printed; use vc_printSMTLIB2.
+//!
 DLL_PUBLIC void vc_printExpr(VC vc, Expr e);
 
-//! \brief Prints the given expression to stdout in the STMLib2 format.
+//! \brief Returns the given expression in the SMT-LIB **1** format.
+//!
+//! It is the responsibility of the caller to free the returned string.
+//!
+//! SMT-LIB 1 has no floating-point theory, so an expression that uses it is
+//! refused rather than printed; use vc_printSMTLIB2. (This function has always
+//! emitted SMT-LIB 1 despite what its documentation said; the name is kept for
+//! compatibility.)
 //!
 DLL_PUBLIC char* vc_printSMTLIB(VC vc, Expr e);
+
+//! \brief Returns the given expression in the SMT-LIB 2 format.
+//!
+//! It is the responsibility of the caller to free the returned string.
+//!
+//! This is the export that understands every sort STP has: bit-vectors,
+//! arrays, FloatingPoint and RoundingMode. Prefer it to vc_printSMTLIB and
+//! vc_printExpr, both of which predate the floating-point theory and refuse
+//! it.
+//!
+DLL_PUBLIC char* vc_printSMTLIB2(VC vc, Expr e);
 
 //! \brief Prints the given expression into the file with the given file descriptor
 //!        in the presentation language.
@@ -468,11 +490,29 @@ DLL_PUBLIC void vc_printExprFile(VC vc, Expr e, int fd);
 DLL_PUBLIC void vc_printExprToBuffer(VC vc, Expr e, char** buf,
                                      unsigned long* len);
 
-//! \brief Prints the counter example after an invalid query to stdout.
+//! \brief Prints the counter example after an invalid query to stdout, in the
+//!        presentation language.
 //!
 //! This method should only be called after a query which returns false.
 //!
+//! The presentation language has no floating-point or rounding-mode syntax, so
+//! values of those sorts print as their packed carriers here -- a float as its
+//! IEEE bits, a rounding mode as a 5-bit constant. Use
+//! vc_printCounterExampleSMTLIB2 to get them at the sort they were declared
+//! with.
+//!
 DLL_PUBLIC void vc_printCounterExample(VC vc);
+
+//! \brief Prints the counter example after an invalid query to stdout, in the
+//!        SMT-LIB 2 `(define-fun ...)` form.
+//!
+//! This method should only be called after a query which returns false.
+//!
+//! Unlike vc_printCounterExample this states each value at its declared sort:
+//! a float as `(fp #b... #b... #b...)` of the right `(_ FloatingPoint eb sb)`,
+//! a rounding mode by name. Symbols STP introduced for itself are left out.
+//!
+DLL_PUBLIC void vc_printCounterExampleSMTLIB2(VC vc);
 
 //! \brief Prints variable declarations to stdout.
 //!
@@ -706,8 +746,10 @@ DLL_PUBLIC Type vc_fpType(VC vc, int exp_bits, int sig_bits);
 //!
 //! A variable of this sort ranges over exactly the five modes: vc_varExpr
 //! asserts the validity constraint (at the current assertion level, so it
-//! scopes with vc_push/vc_pop like any assertion), and counterexamples
-//! print the variable's value by mode name. Read it from a model with
+//! scopes with vc_push/vc_pop like any assertion), and
+//! vc_printCounterExampleSMTLIB2 prints the variable's value by mode name.
+//! (vc_printCounterExample prints the 5-bit carrier: the presentation language
+//! has no rounding-mode syntax.) Read it from a model with
 //! vc_getCounterExample; the bits are the enum VCRoundingMode encoding.
 //! vc_fpRoundingModeVar is a one-call convenience for the same thing.
 DLL_PUBLIC Type vc_fpRoundingModeType(VC vc);

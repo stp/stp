@@ -233,18 +233,52 @@ ASTNode FpTotalise::signBit(const ASTNode& value)
 // operands equal in sign, exponent and significand. In the first and third
 // the enclosing ITE selects between two values that are equal, so the choice
 // is unobservable; only the zero case can be seen, and there the result is
-// determined by which zero is returned.
+// determined by which zero is returned. (unpackedFloat::wellFormed is what
+// makes the first and third genuinely unobservable: it forces the default
+// exponent and significand whenever the nan/inf/zero flag is set.)
 //
 // Four cells is therefore not an approximation but exactly complete: the
 // (+0, -0) and (-0, +0) cells stay independent, as SMT-LIB requires, and the
-// cells the other sign pairs read are unobservable. Indexing on the full
-// 2(e+s) bits was sound too, but it put a 64-bit-indexed array (256-bit at
-// Float128) into problems that otherwise have no arrays at all, which drags
-// them into the lazy read-refinement regime and perturbs the read count that
-// decides how the user's own arrays are handled.
-ASTNode FpTotalise::zeroChoiceIndex(const ASTNode& left, const ASTNode& right)
+// cells the other sign pairs select are unobservable.
+//
+// Having proved the domain is four points, hold it in four bits. The array
+// this used to read was sound, and is still the right encoding for
+// fp.to_ubv/fp.to_sbv where the domain really is a rounding mode and a whole
+// packed value -- but for a four-point map it buys nothing and costs a great
+// deal that is not local. FpTotalise runs before containsArrayOps and
+// numberOfReadsLessThan, so a read it introduces is indistinguishable from the
+// user's: ten fp.mins turn a pure QF_FP query into an "array" problem, forcing
+// counterexample construction on and skipping the size-reducing fixed point,
+// and three of them are enough to stop a QF_ABVFP query Ackermannising the
+// user's own arrays. Narrowing the index from 2(e+s) bits to two, as this
+// previously did, shrinks each index term but not the number of reads, so it
+// did not address any of that.
+//
+// The cells are free and the selection is a mux, so the result is still a
+// function of the operands; hash-consing gives the congruence the array's
+// index equalities were giving. The mux is still not constant, so these nodes
+// still stay out of constant folding, which is what we want -- their results
+// genuinely are not constants even when their operands are.
+ASTNode FpTotalise::zeroChoice(const char* tag, const ASTNode& left,
+                               const ASTNode& right, const ASTVec& floats)
 {
-  return bm->CreateTerm(BVCONCAT, 2, signBit(left), signBit(right));
+  const ASTNode cells = FloatBlaster::unspecifiedCells(bm, tag, floats, 4);
+
+  ASTNode bit[4];
+  for (unsigned int i = 0; i < 4; i++)
+  {
+    const ASTNode position = bm->CreateBVConst(32, i);
+    bit[i] = nf->CreateTerm(BVEXTRACT, 1, cells, position, position);
+  }
+
+  const ASTNode zero = bm->CreateZeroConst(1);
+  const ASTNode left_positive = nf->CreateNode(EQ, signBit(left), zero);
+  const ASTNode right_positive = nf->CreateNode(EQ, signBit(right), zero);
+
+  return nf->CreateTerm(
+      ITE, 1, left_positive,
+      nf->CreateTerm(ITE, 1, right_positive, bit[0], bit[1]),
+      nf->CreateTerm(ITE, 1, right_positive, bit[2], bit[3]));
 }
 
 ASTNode FpTotalise::visit(const ASTNode& n)
@@ -282,9 +316,8 @@ ASTNode FpTotalise::visit(const ASTNode& n)
     floats.push_back(children[0]);
     floats.push_back(children[1]);
 
-    children.push_back(
-        unspecified(k == FP_MIN ? "min_zero" : "max_zero",
-                    zeroChoiceIndex(children[0], children[1]), floats, 1));
+    children.push_back(zeroChoice(k == FP_MIN ? "min_zero" : "max_zero",
+                                  children[0], children[1], floats));
     changed = true;
   }
   // fp.to_ubv/fp.to_sbv: unspecified for NaN, the infinities and anything out

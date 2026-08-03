@@ -80,6 +80,27 @@ static void check(const char* what, uint64_t got, uint64_t want)
          ok ? "ok" : "** MISMATCH **");
 }
 
+// symfpu states its properties through PRECONDITION/POSTCONDITION/INVARIANT,
+// and calls them with either a plain bool or a prop. This backend redefines
+// all three (see symbolic_fp.h): a prop here is a circuit constructor whose
+// result nothing can check while the circuit is being built, so constructing
+// it at all is pure waste -- while the bool properties are real checks and
+// must keep firing. These two counters pin both halves.
+static int props_constructed = 0;
+static int bools_evaluated = 0;
+
+static proposition countedProp()
+{
+  ++props_constructed;
+  return proposition(true);
+}
+
+static bool countedBool()
+{
+  ++bools_evaluated;
+  return true;
+}
+
 static void check_width(const char* what, unsigned got, unsigned want)
 {
   checks++;
@@ -323,6 +344,31 @@ int main()
     printf("  result kind = %s, width = %u\n",
            _kind_names[r.GetKind()], r.GetValueWidth());
     check("to_ubv(4.0) with symbolic undef", value_of(r), 4);
+  }
+
+  printf("== symfpu property hooks ==\n");
+  {
+    // A prop-valued property must not be constructed at all. symfpu's default
+    // expansion is a plain call, so the argument would be fully built and then
+    // dropped by an overload that can do nothing with it -- and valid()/
+    // wellFormed(), which is what these arguments are, are reached from
+    // nowhere else in symfpu. Every node of that is dead, in every build
+    // configuration, and it is a large fraction of what lowering constructs.
+    props_constructed = 0;
+    PRECONDITION(countedProp());
+    POSTCONDITION(countedProp());
+    INVARIANT(countedProp());
+    check("prop properties construct nothing", props_constructed, 0);
+
+    // A bool-valued property is a real check on a width or a flag symfpu has
+    // already settled, so it must still be evaluated -- and asserted, in a
+    // build with assertions on. Suppressing these too would be a regression,
+    // which is why this is a type question and not a blanket suppression.
+    bools_evaluated = 0;
+    PRECONDITION(countedBool());
+    POSTCONDITION(countedBool());
+    INVARIANT(countedBool());
+    check("bool properties are still evaluated", bools_evaluated, 3);
   }
 
   printf("\n%d checks, %d failures\n", checks, failures);

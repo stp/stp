@@ -405,3 +405,33 @@ TEST(FpConstantFold, one_third_matches_known_values_under_every_mode)
     EXPECT_EQ(c.want, f.fold(FP_DIV, 64, {rm, x, y})) << c.name << " 1.0/3.0";
   }
 }
+
+// The fold must not depend on which node factory the embedder installed.
+//
+// Every other test here runs the production wiring, where defaultNodeFactory
+// is the simplifying factory: it folds as it builds, so lowerOperation hands
+// the evaluator a BVCONST that is already the answer and the evaluation is a
+// no-op. STPMgr's own constructor installs the hashing factory instead, and
+// then the same call hands back the whole symfpu circuit -- a deeply shared
+// DAG, which an evaluator that walks paths rather than nodes cannot finish.
+//
+// The format is deliberately tiny. Float(3,4) is about the smallest symfpu
+// will build (formatSupported refuses sb <= 3), and its fp.add circuit is a
+// few hundred nodes -- linear if each is visited once, and hopeless
+// otherwise. Nothing here checks the *value*; the tests above do that, and
+// against the hardware. This one checks only that it arrives.
+TEST(FpConstantFold, folds_under_a_non_simplifying_factory)
+{
+  STPMgr mgr; // hashingNodeFactory, as the constructor leaves it
+
+  const unsigned eb = 3, sb = 4;
+  const ASTNode one = mgr.CreateFPConst(mgr.CreateBVConst(eb + sb, 0x38), eb, sb);
+  const ASTNode rne =
+      mgr.CreateRMConst(stp::symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+
+  const ASTNode folded = NonMemberBVConstEvaluator(
+      &mgr, FP_ADD, ASTVec{rne, one, one}, eb + sb);
+
+  EXPECT_TRUE(folded.isConstant());
+  EXPECT_EQ(eb + sb, folded.GetValueWidth());
+}

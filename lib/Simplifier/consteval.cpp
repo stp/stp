@@ -1086,6 +1086,13 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
       // from its source sort, so nothing here has to work out which child
       // carries the format and pass it alongside.
       ASTNode blasted(FloatBlast::lowerOperation(_bm, temp));
+
+      // How much work the next line is depends on the installed factory: a
+      // simplifying one has already folded the circuit to its answer while
+      // building it, so this is a no-op; a hashing one hands back the circuit
+      // itself, and it is evaluated here. Both are supported, which is what
+      // the memo in NonMemberBVConstEvaluator is for -- the circuit is a
+      // deeply shared DAG, and evaluating it by paths does not finish.
       OutputNode = NonMemberBVConstEvaluator(_bm, blasted);
 
       // Carry the format out, so an enclosing operation sees a formatted
@@ -1114,14 +1121,72 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
   return OutputNode;
 }
 
+// One evaluation per distinct node, rather than one per path to it.
+//
+// The argument is a DAG and the walk below is a tree walk, so without this a
+// shared subterm is re-evaluated once for every route into it. That is
+// affordable for the word-level bit-vector nodes this was written for, whose
+// sharing is shallow. It is not affordable for a lowered floating-point
+// circuit: those are deeply shared by construction, and the floating-point
+// arm above folds by lowering the operation and then evaluating the circuit
+// it gets back. A single Float(3,4) fp.add does not finish.
+//
+// It has not bitten because the CLI and the C API both install the
+// simplifying factory, which folds as it builds -- so lowerOperation hands
+// back a BVCONST that is already the answer and the evaluation below is a
+// no-op. That is a property of the caller's configuration, not of this
+// module, and STPMgr's own constructor installs the hashing factory instead.
+//
+// Children are evaluated here rather than left to the kind-and-children
+// overload, which does the same thing one level down but has no memo to
+// consult. Handing it constants throughout makes its own recursion
+// unreachable; the two agree on everything else, since it evaluates every
+// child eagerly regardless of kind.
+static ASTNode evaluateMemoised(STPMgr* mgr, const ASTNode& t,
+                                ASTNodeMap& memo)
+{
+  if (t.isConstant())
+    return t;
+
+  const ASTNodeMap::const_iterator cached = memo.find(t);
+  if (cached != memo.end())
+    return cached->second;
+
+  ASTVec children;
+  children.reserve(t.Degree());
+  for (size_t i = 0; i < t.Degree(); i++)
+    children.push_back(evaluateMemoised(mgr, t[i], memo));
+
+  const ASTNode out = NonMemberBVConstEvaluator(mgr, t.GetKind(), children,
+                                                t.GetValueWidth());
+  memo[t] = out;
+  return out;
+}
+
 // Const evaluator logical and arithmetic operations.
 ASTNode NonMemberBVConstEvaluator(STPMgr* mgr, const ASTNode& t)
 {
   if (t.isConstant())
     return t;
 
-  return NonMemberBVConstEvaluator(mgr, t.GetKind(), toASTVec(t.GetChildren()),
-                                   t.GetValueWidth());
+  // The common case by far: an operation over constants, reached from the
+  // simplifying factory's fold. There is nothing under it to share, so it
+  // does not pay for a memo it would use once.
+  bool children_are_constant = true;
+  for (size_t i = 0; i < t.Degree(); i++)
+    if (!t[i].isConstant())
+    {
+      children_are_constant = false;
+      break;
+    }
+
+  if (children_are_constant)
+    return NonMemberBVConstEvaluator(mgr, t.GetKind(),
+                                     toASTVec(t.GetChildren()),
+                                     t.GetValueWidth());
+
+  ASTNodeMap memo;
+  return evaluateMemoised(mgr, t, memo);
 }
 
 } // end of namespace stp

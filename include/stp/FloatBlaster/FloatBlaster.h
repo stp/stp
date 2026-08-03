@@ -136,12 +136,41 @@ public:
   // are the floating-point operands *carrying their formats*, and each one's
   // (exp, sig) goes into the name: a format is not recoverable from a packed
   // width, and two formats of equal packed width -- (_ FloatingPoint 8 24) and
-  // (_ FloatingPoint 24 8), say -- are different sorts, so fp.min at each is a
-  // different function and may answer differently. Sharing one array between
+  // (_ FloatingPoint 24 8), say -- are different sorts, so fp.to_ubv at each is
+  // a different function and may answer differently. Sharing one array between
   // them equates two independent unspecified choices and loses models.
+  //
+  // For fp.to_ubv/fp.to_sbv, whose index really is a rounding mode and a whole
+  // packed value. An operation whose unspecified choice ranges over a handful
+  // of cases wants unspecifiedCells instead.
   static ASTNode unspecifiedValue(STPMgr* bm, const char* tag,
                                   const ASTVec& operands, const ASTNode& index,
                                   unsigned int value_width);
+
+  // The same congruent map, for an operation whose unspecified choice has been
+  // shown to depend on only a few bits of its operands: one free bitvector
+  // symbol with one bit per case, to be selected between by the caller.
+  //
+  // An array is the general answer -- a solver without uninterpreted functions
+  // has nothing else that is both free and congruent over an unbounded index
+  // domain. But it is a heavy one, and its weight is not local: FpTotalise runs
+  // before containsArrayOps and numberOfReadsLessThan, so reads it introduces
+  // are indistinguishable from the user's. A pure QF_FP problem acquires "array
+  // operations" it never had, and a QF_ABVFP problem can stop Ackermannising
+  // the user's own arrays because unrelated floating-point operations pushed
+  // the read count past a threshold.
+  //
+  // Over a *finite, small* domain none of that is needed. The cells are free
+  // and the selection is a mux, so the result is a function of the operands by
+  // construction, and hash-consing supplies the congruence the array's index
+  // equalities were supplying. Same freedom, same congruence, no reads, no
+  // congruence axioms, and no perturbation of how the user's arrays are solved.
+  //
+  // Identity is the name here too, and for the same reason: the solve and the
+  // two counterexample re-derivations have to mint the same object.
+  static ASTNode unspecifiedCells(STPMgr* bm, const char* tag,
+                                  const ASTVec& operands,
+                                  unsigned int cell_count);
 };
 } // namespace stp
 #endif

@@ -213,6 +213,20 @@ ASTNode Cpp_interface::CreateRMConst(unsigned mode)
 ASTNode Cpp_interface::CreateSourceSymbol(const char* name,
                                           const SourceSort& source_sort)
 {
+  // SMT-LIB 2 reserves an initial '@' or '.' for the solver, and STP does not
+  // merely respect that reservation, it relies on it: CreateFreshVariable
+  // mints '@' names, and so do the objects supplying the unspecified results
+  // of the partial floating-point operations, whose identity *is* their name.
+  // An input free to declare one of those names could be handed the solver's
+  // own object -- which is a wrong answer, not just a confusing model.
+  //
+  // Every declaration the parser makes comes through here, so this is the one
+  // place it has to be said. Symbols STP mints for itself go to the manager
+  // directly and are unaffected.
+  if (STPMgr::isReservedSymbolName(name))
+    FatalError("a symbol name beginning with '@' or '.' is reserved for "
+               "solver use and cannot be declared");
+
   return bm.CreateSourceSymbol(name, source_sort);
 }
 

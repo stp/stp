@@ -679,8 +679,56 @@ namespace stp
   // "unsupported" without parsing them; this inspects the swallowed text
   // (comments already excluded) and registers the alias when it has the one
   // implemented shape. Returns false to answer "unsupported" instead.
+  // The IEEE interchange formats SMT-LIB gives names to: (eb, sb), with sb
+  // counting the hidden bit -- the same pair (_ FloatingPoint eb sb) takes.
+  //
+  // One table, because the two callers cannot share a code path. The sort
+  // rule below reaches these names as lexer tokens; tryRegisterFpSortAlias
+  // reaches them as raw text, because define-sort's body is swallowed whole
+  // and re-tokenised by hand. Both need the same answer, and these widths
+  // have been wrong once already -- the named sorts used to split the packed
+  // total in two (4+12, 16+48, 32+96) rather than use the IEEE fields, so
+  // every one but Float32 named a format that does not exist. A second copy
+  // is a second chance to make that mistake, in the caller that no test
+  // reaches.
+  bool namedFloatFormat(const std::string& name, unsigned int& exp_width,
+                        unsigned int& sig_width)
+  {
+    if (name == "Float16") { exp_width = 5;  sig_width = 11;  return true; }
+    if (name == "Float32") { exp_width = 8;  sig_width = 24;  return true; }
+    if (name == "Float64") { exp_width = 11; sig_width = 53;  return true; }
+    if (name == "Float128") { exp_width = 15; sig_width = 113; return true; }
+    return false;
+  }
+
+  // The same table, for the grammar rule: one named sort per token, so the
+  // name is a literal here and the lookup cannot fail.
+  stp::float_size* namedFloatSize(const char* name)
+  {
+    checkFpSupported();
+
+    unsigned int exp_width = 0;
+    unsigned int sig_width = 0;
+    if (!namedFloatFormat(name, exp_width, sig_width))
+      stp::FatalError("namedFloatSize: not a named floating-point sort");
+
+    return new stp::float_size(exp_width, sig_width);
+  }
+
   bool tryRegisterFpSortAlias(const std::string& text)
   {
+    // The per-logic gate, which nothing else here can apply for us. Every
+    // other floating-point name in the input is a keyword only while an FP
+    // set-logic is in force, because the lexer routes it through fpKeyword();
+    // define-sort's body never reaches those rules -- SKIP_SEXPR swallows it
+    // and the loop below re-tokenises the raw text -- so "Float32" was a
+    // floating-point sort here under QF_BV, and a QF_BV script could obtain a
+    // FloatingPoint variable while legitimately declaring a symbol named "fp"
+    // in the same scope. Answer "unsupported", as this does for every other
+    // sort it does not implement.
+    if (!stp::SMT2FloatTokensActive())
+      return false;
+
     std::vector<std::string> toks;
     std::string cur;
     for (const char c : text)
@@ -718,23 +766,7 @@ namespace stp
     unsigned int exp_width, sig_width;
     if (toks.size() == 4)
     {
-      if (toks[3] == "Float16")
-      {
-        exp_width = 5; sig_width = 11;
-      }
-      else if (toks[3] == "Float32")
-      {
-        exp_width = 8; sig_width = 24;
-      }
-      else if (toks[3] == "Float64")
-      {
-        exp_width = 11; sig_width = 53;
-      }
-      else if (toks[3] == "Float128")
-      {
-        exp_width = 15; sig_width = 113;
-      }
-      else
+      if (!namedFloatFormat(toks[3], exp_width, sig_width))
         return false;
     }
     else if (toks.size() == 9 && toks[3] == "(" && toks[4] == "_" &&
@@ -1865,30 +1897,24 @@ SOURCE_TOK
 ;
 
 an_fp_sort:
-  // float_size is (exponent bits, significand bits), where the significand
-  // includes the hidden bit -- the same (eb, sb) that (_ FloatingPoint eb sb)
-  // uses. The named sorts had their widths set by naively splitting the total
-  // in two (4+12, 16+48, 32+96) instead of using the IEEE fields, so every
-  // one but Float32 named the wrong format.
+  // Through namedFloatFormat, which define-sort's text scraper reads too --
+  // see there for why the two must not each carry their own copy of these
+  // widths.
   FLOAT16_TOK
 {
-    checkFpSupported();
-    $$ = new stp::float_size(5, 11);
+    $$ = namedFloatSize("Float16");
 }
 | FLOAT32_TOK
 {
-    checkFpSupported();
-    $$ = new stp::float_size(8, 24);
+    $$ = namedFloatSize("Float32");
 }
 | FLOAT64_TOK
 {
-    checkFpSupported();
-    $$ = new stp::float_size(11, 53);
+    $$ = namedFloatSize("Float64");
 }
 | FLOAT128_TOK
 {
-    checkFpSupported();
-    $$ = new stp::float_size(15, 113);
+    $$ = namedFloatSize("Float128");
 }
 | LPAREN_TOK UNDERSCORE_TOK FLOATINGPOINT_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK
 {

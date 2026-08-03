@@ -70,6 +70,16 @@ void requireBooleanOperand(const char* operation, const stp::ASTNode& n)
 stp::ASTNode createPublicSourceSymbol(stp::STPMgr* bm, const char* name,
                                       const stp::SourceSort& source_sort)
 {
+  // The same reservation the parser enforces, for the entry point that has no
+  // parser in front of it. STP mints '@' names for its own objects and takes
+  // their uniqueness on trust, so a caller able to declare one could be handed
+  // the solver's own -- see Cpp_interface::CreateSourceSymbol.
+  if (stp::STPMgr::isReservedSymbolName(name))
+  {
+    stp::FatalError("CInterface: a symbol name beginning with '@' or '.' is "
+                    "reserved for solver use and cannot be declared");
+  }
+
   const auto found = bm->c_api_source_sorts.find(name);
   if (found != bm->c_api_source_sorts.end() && found->second != source_sort)
   {
@@ -327,6 +337,17 @@ char* vc_printSMTLIB(VC vc, Expr e)
 
   stringstream ss;
   printer::SMTLIB1_PrintBack(ss, *((stp::ASTNode*)e), b);
+  string s = ss.str();
+  char* copy = strdup(s.c_str());
+  return copy;
+}
+
+char* vc_printSMTLIB2(VC vc, Expr e)
+{
+  stp::STPMgr* b = mgr(vc);
+
+  stringstream ss;
+  printer::SMTLIB2_PrintBack(ss, *((stp::ASTNode*)e), b, false);
   string s = ss.str();
   char* copy = strdup(s.c_str());
   return copy;
@@ -834,6 +855,19 @@ void vc_printCounterExample(VC vc)
   cout << "COUNTEREXAMPLE BEGIN: \n";
   ce->PrintCounterExample(true);
   cout << "COUNTEREXAMPLE END: \n";
+  b->UserFlags.print_counterexample_flag = currentPrint;
+}
+
+void vc_printCounterExampleSMTLIB2(VC vc)
+{
+  stp::STP* stp_i = (stp::STP*)vc;
+  stp::STPMgr* b = stp_i->bm;
+  stp::AbsRefine_CounterExample* ce =
+      (stp::AbsRefine_CounterExample*)(stp_i->Ctr_Example);
+
+  bool currentPrint = b->UserFlags.print_counterexample_flag;
+  b->UserFlags.print_counterexample_flag = true;
+  ce->PrintCounterExampleSMTLIB2(cout);
   b->UserFlags.print_counterexample_flag = currentPrint;
 }
 

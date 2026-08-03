@@ -37,10 +37,25 @@ namespace stp
 {
 using std::cout;
 
+// Whether `n` is an access over an array whose declared index sort is
+// floating-point -- the question FpTotalise::visit asks before canonicalising
+// an index, asked here in the same terms.
+//
+// Deliberately says nothing about *this* node's own index. A constant index is
+// already canonical, so an access carrying one may well need no rewrite; but
+// "needs no rewrite" is a property of the whole access, not of its index, and
+// only the encoding pass can decide it. A READ over a WRITE has the write's
+// index to canonicalise however constant the read's index is, and short-
+// circuiting on the read's kind sent exactly that shape down the raw-carrier
+// path below, where a float symbol resolves to whichever NaN payload the SAT
+// solver picked while the solve compared pack(unpack(x)).
+//
+// The caller already handles the no-rewrite case: encodeForModel returns the
+// node unchanged, and the `encoded != term` test falls through. So the gate is
+// the sort question and nothing else.
 static bool isFpIndexedArrayAccess(const ASTNode& n)
 {
-  if ((n.GetKind() != READ && n.GetKind() != WRITE) || n.Degree() < 2 ||
-      n[1].GetKind() == BVCONST)
+  if ((n.GetKind() != READ && n.GetKind() != WRITE) || n.Degree() < 2)
     return false;
 
   const SourceSort array_sort = n[0].GetSourceSort();
@@ -325,10 +340,17 @@ AbsRefine_CounterExample::TermToConstTermUsingModel_inner(const ASTNode& term,
     if (encoded == term && is_FP_kind(k))
       FatalError("floating-point model encoding made no progress: ", term);
 
-    // A constant FP index is already canonical, so the access may require no
-    // rewrite. Symbolic indices, including NaNs whose SAT carrier is not the
-    // canonical NaN, must be looked up through the encoded access used by the
-    // solve rather than through their raw model bits.
+    // The invariant this arm exists to hold: *a float's model value is its
+    // canonical carrier*. A float symbol's raw model bits are whichever NaN
+    // payload the SAT solver happened to pick, and the solve compared
+    // pack(unpack(x)); the two agree on everything except the payload, which
+    // is exactly what an array index distinguishes. So any node the encoding
+    // pass rewrote must be evaluated through that rewrite and never through
+    // its raw bits.
+    //
+    // Whether a rewrite was needed is the pass's answer to give, not ours:
+    // an access whose indexes are all already canonical comes back unchanged
+    // and falls through to the ordinary switch below.
     if (encoded != term)
     {
       // The lowered DAG retains source-sort metadata on carrier reads and

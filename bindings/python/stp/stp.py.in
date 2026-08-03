@@ -36,7 +36,7 @@ import struct
 from .library_path import PATHS
 
 __all__ = [
-    'ArrayExpr', 'Expr', 'FloatExpr', 'Solver', 'stp', 'add', 'array',
+    'AnyExpr', 'ArrayExpr', 'Expr', 'FloatExpr', 'Solver', 'stp', 'add', 'array',
     'bitvec', 'bitvecs', 'check', 'model',
     'RNE', 'RTP', 'RTN', 'RTZ', 'RNA',
     'get_git_version_sha', 'get_git_version_tag', 'get_compilation_env', 'get_lib'
@@ -477,7 +477,7 @@ class Solver(object):
     def add(self, *exprs):
         """Adds one or more constraint(s) to STP."""
         for expr in exprs:
-            assert isinstance(expr, Expr), 'Formula should be an Expression'
+            assert isinstance(expr, AnyExpr), 'Formula should be an Expression'
             _lib.vc_assertFormula(self.vc, expr.expr)
 
     def push(self):
@@ -491,7 +491,7 @@ class Solver(object):
     def _n_exprs(self, *exprs):
         """Creates an array of Expressions to be used in the C API."""
         for expr in exprs:
-            assert isinstance(expr, Expr), 'Object should be an Expression'
+            assert isinstance(expr, AnyExpr), 'Object should be an Expression'
 
         # This may not be very clean, but I'm not sure if there are
         # better ways to achieve this goal.
@@ -545,9 +545,10 @@ class Solver(object):
         if width <= 64:
             value = _lib.vc_getCounterExample(self.vc, expr)
             return _lib.getBVUnsignedLongLong(value)
+        carrier = self._bit_carrier(expr)
         extract = 0
         for i in range((width - 1) // 64 + 1):
-            extractExpr = _lib.vc_bvExtract(self.vc, expr,
+            extractExpr = _lib.vc_bvExtract(self.vc, carrier,
                                             min((i+1)*64, width)-1, i*64)
             bvExpr = _lib.vc_getCounterExample(self.vc, extractExpr)
             extract += (_lib.getBVUnsignedLongLong(bvExpr) << (64 * i))
@@ -570,7 +571,7 @@ class Solver(object):
                                       keys
         """
 
-        if expr and isinstance(expr, Expr):
+        if expr and isinstance(expr, AnyExpr):
             #
             # If we have an expression, and it is a _wrapped_ expression, we
             # need to unbox it
@@ -600,29 +601,32 @@ class Solver(object):
     # Allows easy access to the Counter Example.
     __getitem__ = model
 
+    def _bit_carrier(self, expr):
+        """The bit-vector holding an expression's packed value.
+
+        A value wider than 64 bits is read out in 64-bit slices, and slicing
+        means vc_bvExtract -- which refuses a float, because the C boundary
+        enforces the source sort. Every format above binary64 therefore has to
+        be sliced through its IEEE bits, which vc_fpToIEEEBV supplies and
+        which are exactly the packed bits the slicing wants. A bit-vector is
+        already its own carrier.
+        """
+        if _lib.vc_getExpWidth(expr):
+            return _lib.vc_fpToIEEEBV(self.vc, expr)
+        return expr
+
     def model_bits(self, key=None, expr=None):
         """Like model(), but always returns the raw packed bits as an integer,
         with no floating-point decoding, at any width (e.g. to inspect a float's
         exponent/significand fields, or to read a value wider than 64 bits)."""
-        if expr and isinstance(expr, Expr):
+        if expr and isinstance(expr, AnyExpr):
             expr = expr.expr
         elif not expr and key is not None:
             expr = self.keys[key]
         if not expr:
             return None
 
-        width = _lib.getVWidth(expr)
-        if width > 64:
-            value = 0
-            for i in range((width - 1) // 64 + 1):
-                part = _lib.vc_bvExtract(
-                    self.vc, expr, min((i + 1) * 64, width) - 1, i * 64)
-                bits = _lib.getBVUnsignedLongLong(
-                    _lib.vc_getCounterExample(self.vc, part))
-                value += bits << (64 * i)
-            return value
-        return _lib.getBVUnsignedLongLong(
-            _lib.vc_getCounterExample(self.vc, expr))
+        return self._counterexample_int(expr, _lib.getVWidth(expr))
 
     def and_(self, *exprs):
         exprs, length = self._n_exprs(*exprs)
@@ -635,29 +639,29 @@ class Solver(object):
         return Expr(self, None, expr)
 
     def xor(self, a, b):
-        assert isinstance(a, Expr), 'Object must be an Expression'
-        assert isinstance(b, Expr), 'Object must be an Expression'
+        assert isinstance(a, AnyExpr), 'Object must be an Expression'
+        assert isinstance(b, AnyExpr), 'Object must be an Expression'
         expr = _lib.vc_xorExpr(self.vc, a.expr, b.expr)
         return Expr(self, None, expr)
 
     def nand(self, a, b):
         """Boolean nand, i.e. not (a and b)."""
-        assert isinstance(a, Expr), 'Object must be an Expression'
-        assert isinstance(b, Expr), 'Object must be an Expression'
+        assert isinstance(a, AnyExpr), 'Object must be an Expression'
+        assert isinstance(b, AnyExpr), 'Object must be an Expression'
         expr = _lib.vc_nandExpr(self.vc, a.expr, b.expr)
         return Expr(self, None, expr)
 
     def nor(self, a, b):
         """Boolean nor, i.e. not (a or b)."""
-        assert isinstance(a, Expr), 'Object must be an Expression'
-        assert isinstance(b, Expr), 'Object must be an Expression'
+        assert isinstance(a, AnyExpr), 'Object must be an Expression'
+        assert isinstance(b, AnyExpr), 'Object must be an Expression'
         expr = _lib.vc_norExpr(self.vc, a.expr, b.expr)
         return Expr(self, None, expr)
 
     def ite(self, a, b, c):
-        assert isinstance(a, Expr), 'Object must be an Expression'
-        assert isinstance(b, Expr), 'Object must be an Expression'
-        assert isinstance(c, Expr), 'Object must be an Expression'
+        assert isinstance(a, AnyExpr), 'Object must be an Expression'
+        assert isinstance(b, AnyExpr), 'Object must be an Expression'
+        assert isinstance(c, AnyExpr), 'Object must be an Expression'
         if a.s is not self or b.s is not self or c.s is not self:
             raise ValueError('ite expressions belong to different solvers')
         if isinstance(b, FloatExpr) or isinstance(c, FloatExpr):
@@ -672,12 +676,38 @@ class Solver(object):
         return Expr(self, b.width, expr)   
  
     def not_(self, obj):
-        assert isinstance(obj, Expr), 'Object should be an Expression'
+        assert isinstance(obj, AnyExpr), 'Object should be an Expression'
         expr = _lib.vc_notExpr(self.vc, obj.expr)
         return Expr(self, obj.width, expr)
 
 
-class Expr(object):
+class AnyExpr(object):
+    """What every wrapped expression has: the solver it belongs to, the C
+    handle, and the width of the value it denotes.
+
+    The theories' operations live in the subclasses and nowhere else. Expr
+    carries the bit-vector ones, FloatExpr the floating-point ones, and
+    neither inherits the other's.
+
+    That is not a tidiness point. FloatExpr used to subclass Expr and
+    neutralise the bit-vector methods it must not offer with a hand-written
+    list of names -- and a list of names over a base class you do not control
+    cannot be kept correct, which it demonstrably was not: thirteen were
+    missing, including every overflow predicate, zero_extend, sign_extend and
+    the reflected arithmetic. Each of those reached a C entry point that
+    refuses a float, so instead of the documented TypeError they aborted the
+    interpreter. Nine of the thirteen were added to Expr the day *after* the
+    list was written.
+
+    With the operations separated there is no list to maintain and no drift to
+    have: an operation FloatExpr does not define simply is not there, so a
+    named one raises AttributeError and an operator raises TypeError, both
+    from Python itself.
+
+    Use this class, not Expr, wherever the question is "is this a wrapped
+    expression"; use Expr where the question is "is this a bit-vector".
+    """
+
     def __init__(self, s, width, expr, name=None):
         self.s = s
         self.width = width
@@ -689,6 +719,13 @@ class Expr(object):
         # _lib.vc_DeleteExpr(self.expr)
         pass
 
+    @property
+    def value(self):
+        """This expression's value in the current model."""
+        return self.s.model(expr=self)
+
+
+class Expr(AnyExpr):
     def _1(self, cb):
         """Wrapper around single-expression STP functions."""
         expr = cb(self.s.vc, self.expr)
@@ -970,13 +1007,8 @@ class Expr(object):
         expr = _lib.vc_simplify(self.s.vc, self.expr)
         return Expr(self.s, self.width, expr)
 
-    @property
-    def value(self):
-        """Returns the value of this BitVec in the current model."""
-        return self.s.model(expr=self)
 
-
-class FloatExpr(Expr):
+class FloatExpr(AnyExpr):
     """A floating-point expression of format (eb, sb).
 
     The arithmetic operators (+ - * / and abs, sqrt, ...) round under the
@@ -987,7 +1019,7 @@ class FloatExpr(Expr):
     """
 
     def __init__(self, s, eb, sb, expr, name=None):
-        Expr.__init__(self, s, eb + sb, expr, name=name)
+        AnyExpr.__init__(self, s, eb + sb, expr, name=name)
         self.eb = eb
         self.sb = sb
 
@@ -1136,21 +1168,9 @@ class FloatExpr(Expr):
             return NotImplemented
         return self.ne(other)
 
-    # The BitVector operations inherited from Expr are meaningless on a float
-    # and would build malformed nodes; refuse them. Bit-level work goes
-    # through to_ieee_bits().
-    def _fp_no_bv(self, *args, **kwargs):
-        raise TypeError('BitVector operations are not defined on a '
-                        'FloatExpr; use to_ieee_bits() for bit-level work')
-
-    mod = rmod = rem = rrem = sdiv = rsdiv = smod = rsmod = _fp_no_bv
-    srem = rsrem = slt = sle = sgt = sge = _fp_no_bv
-    and_ = or_ = xor = not_ = shl = rshl = shr = rshr = sar = rsar = _fp_no_bv
-    extract = _fp_no_bv
-    __mod__ = __rmod__ = __and__ = __rand__ = __or__ = __ror__ = _fp_no_bv
-    __xor__ = __rxor__ = __invert__ = _fp_no_bv
-    __lshift__ = __rlshift__ = __rshift__ = __rrshift__ = _fp_no_bv
-    __div__ = __rdiv__ = __floordiv__ = __rfloordiv__ = _fp_no_bv
+    # No list of bit-vector methods to refuse: FloatExpr does not inherit
+    # them (see AnyExpr). Bit-level work goes through to_ieee_bits(), which
+    # returns an Expr and has every one of them.
 
 
 class ArrayExpr(Expr):

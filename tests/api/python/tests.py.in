@@ -554,6 +554,88 @@ class TestSTP(unittest.TestCase):
         self.assertEqual(s.model(expr=x.to_ubv(8)), 3)
 
     @needs_floating_point
+    def test_fp_model_wider_than_sixty_four_bits(self):
+        # A value wider than 64 bits is read out in 64-bit slices, and slicing
+        # is vc_bvExtract -- which refuses a float, because the C boundary
+        # enforces the source sort. So model() and model_bits() aborted the
+        # interpreter on every format above binary64, in the very methods
+        # whose docstrings advertise the wide case. They slice the IEEE bits
+        # now, which are legal at any width and are the packed bits wanted.
+        s = self.s
+        x = s.fp("x", 15, 113)          # binary128
+        s.add(x.is_nan())
+        self.assertTrue(s.check())
+
+        # Canonical quiet NaN: sign 0, exponent all ones, leading significand
+        # bit set. binary128 has no native Python float, so model() gives the
+        # packed bits back unchanged, exactly as the narrow path does for a
+        # format it cannot decode.
+        canonical_nan = 0x7fff8000000000000000000000000000
+        self.assertEqual(s.model_bits("x"), canonical_nan)
+        self.assertEqual(s.model("x"), canonical_nan)
+
+    @needs_floating_point
+    def test_fp_has_no_bitvector_operations(self):
+        # FloatExpr used to subclass Expr and neutralise the bit-vector
+        # methods it must not offer with a hand-written list of names. A list
+        # of names over a base class you do not control cannot be kept
+        # correct, and was not: thirteen were missing -- nand, nor, xnor, the
+        # six overflow predicates, zero_extend, sign_extend, rsub, rdiv --
+        # and each reached a C entry point that refuses a float, so instead of
+        # the documented TypeError they aborted the interpreter. Nine of the
+        # thirteen had been added to Expr the day after the list was written.
+        #
+        # The classes are separate now, so there is no list and nothing to
+        # drift. This test states that structurally rather than by naming
+        # methods, so it keeps holding as Expr grows.
+        import inspect
+        s = self.s
+        x = s.fp("x", 8, 24)
+
+        bitvector_only = [
+            name for name, _ in inspect.getmembers(stp.Expr, callable)
+            if not name.startswith("_") and not hasattr(stp.FloatExpr, name)
+        ]
+        # If this is ever zero the test has stopped testing anything.
+        self.assertGreater(len(bitvector_only), 20)
+        for name in bitvector_only:
+            self.assertFalse(hasattr(x, name),
+                             "%s leaked onto FloatExpr" % name)
+
+        # The named ones raise AttributeError and the operators TypeError,
+        # both from Python, because the operation genuinely is not there.
+        with self.assertRaises(AttributeError):
+            x.and_(x)
+        with self.assertRaises(TypeError):
+            x & x
+        with self.assertRaises(TypeError):
+            x << x
+        with self.assertRaises(TypeError):
+            ~x
+
+        # Bit-level work goes through to_ieee_bits(), which is an Expr and has
+        # all of them.
+        bits = x.to_ieee_bits()
+        self.assertIsInstance(bits, stp.Expr)
+        for name in bitvector_only:
+            self.assertTrue(hasattr(bits, name))
+
+    @needs_floating_point
+    def test_fp_is_an_expression_to_the_solver(self):
+        # Separating the classes must not cost FloatExpr its standing as
+        # something the solver accepts: the shared base is what the
+        # solver-level checks ask about.
+        s = self.s
+        x = s.fp("x", 5, 11)
+        self.assertIsInstance(x, stp.AnyExpr)
+        self.assertNotIsInstance(x, stp.Expr)
+
+        s.add(x == 2.0)
+        self.assertTrue(s.check())
+        self.assertEqual(s.model("x"), 2.0)
+        self.assertEqual(x.value, 2.0)
+
+    @needs_floating_point
     def test_fp_to_sbv(self):
         s = self.s
         x = s.fp("x", 5, 11)

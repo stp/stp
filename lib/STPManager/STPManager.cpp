@@ -208,6 +208,30 @@ ASTSymbol* STPMgr::LookupOrCreateSymbol(ASTSymbol& s)
   }
 }
 
+ASTNode STPMgr::introducedSymbol(const std::string& name,
+                                 unsigned index_width, unsigned value_width)
+{
+  const std::map<std::string, ASTNode>::const_iterator found =
+      _introduced_by_name.find(name);
+  if (found != _introduced_by_name.end())
+    return found->second;
+
+  // Only ever on the first request, and only reachable if a public boundary
+  // let a reserved name through, which is precisely what they refuse. Adopting
+  // the existing symbol instead -- which is what the name-only lookup below
+  // does unaided -- makes a user's declaration into one of STP's own objects.
+  if (LookupSymbol(name.c_str()))
+    FatalError("introducedSymbol: a symbol STP reserves for itself has "
+               "already been declared: ",
+               ASTUndefined, 0);
+
+  const ASTNode symbol =
+      defaultNodeFactory->CreateSymbol(name.c_str(), index_width, value_width);
+  noteIntroducedSymbol(symbol);
+  _introduced_by_name[name] = symbol;
+  return symbol;
+}
+
 void STPMgr::indexSymbolName(ASTSymbol* symbol)
 {
   _symbol_name_index[symbol->GetName()].push_back(symbol);

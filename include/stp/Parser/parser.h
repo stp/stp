@@ -58,6 +58,11 @@ DLL_PUBLIC void setSMT2Interactive(bool enable);
 // starts each script with them off; the set-logic action flips them.
 void SMT2SetFloatTokens(bool enable);
 
+// The same question, for the one place that cannot be answered by the lexer
+// rules: define-sort's body is swallowed whole and re-tokenised by hand in
+// the grammar, so it has to consult the gate itself.
+bool SMT2FloatTokensActive();
+
 DLL_PUBLIC int SMTParse(void* AssertsQuery);
 DLL_PUBLIC int SMT2Parse();
 DLL_PUBLIC int CVCParse(void* AssertsQuery);

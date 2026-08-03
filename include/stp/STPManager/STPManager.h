@@ -250,6 +250,11 @@ private:
   // addresses have to stay put as it grows.
   std::unordered_set<SourceSort, SourceSort::Hasher> _source_sort_pool;
 
+  // The symbols STP introduces under a name of its own choosing, so that the
+  // name identifies the object without being looked up in the symbol table.
+  // See introducedSymbol.
+  std::map<std::string, ASTNode> _introduced_by_name;
+
 public:
   bool LookupSymbol(const char* const name);
   bool LookupSymbol(const char* const name, ASTNode& output);
@@ -596,17 +601,53 @@ public:
     return false;
   }
 
+  // Whether `name` is in the namespace SMT-LIB 2 reserves for solver use.
+  //
+  // STP relies on that reservation rather than merely respecting it:
+  // CreateFreshVariable mints '@'-prefixed names, and so do the objects
+  // supplying the unspecified results of the partial floating-point
+  // operations. The public boundaries refuse to declare such a name, which is
+  // what makes the reliance sound -- see Cpp_interface::CreateSourceSymbol and
+  // createPublicSourceSymbol.
+  static bool isReservedSymbolName(const char* name)
+  {
+    return name != NULL && (name[0] == '@' || name[0] == '.');
+  }
+
   // Record a symbol STP introduced rather than the user declaring it, so the
   // counterexample printers leave it out. CreateFreshVariable does this for
   // the names it mints; this is the way in for an introduced symbol whose
-  // *name* is load-bearing and so cannot be minted there -- the arrays
-  // supplying the unspecified results of the partial floating-point
+  // *name* is load-bearing and so cannot be minted there -- the arrays and
+  // free bits supplying the unspecified results of the partial floating-point
   // operations, whose identity is their name (see
-  // FloatBlaster::unspecifiedValue).
+  // FloatBlaster::unspecifiedValue and FloatBlaster::unspecifiedCells).
   void noteIntroducedSymbol(const ASTNode& in)
   {
     Introduced_SymbolsSet.insert(in);
   }
+
+  // The one symbol STP introduces under `name`, minted on first request.
+  //
+  // Identity is the name here on purpose: the solve and the two counterexample
+  // re-derivations each rebuild these independently and have to arrive at the
+  // same object, which a minted-per-call fresh variable cannot give them.
+  //
+  // That identity used to be nothing but the name, handed to a lookup that
+  // matches on name alone and returns the first symbol declared under it at
+  // *any* sort -- and whose width setters are then silent no-ops. A user
+  // declaration at the matching sort therefore *became* the object: pinning a
+  // cell of fp.min's choice map decided the solver's "unspecified" answer, the
+  // user's own symbol vanished from the model, and a declaration at a
+  // different sort aborted on a width assert. The '@' prefix was the whole
+  // defence, and nothing enforced it.
+  //
+  // Now the map is the identity: after the first call the name is never looked
+  // up again, and the first call refuses rather than adopts a name already
+  // taken. The public boundaries make that refusal unreachable by rejecting
+  // reserved names outright, so it is a backstop and not an expected error.
+  DLL_PUBLIC ASTNode introducedSymbol(const std::string& name,
+                                      unsigned index_width,
+                                      unsigned value_width);
 
   // Whether a counterexample entry belongs to an introduced symbol. Entries
   // for an introduced *array* are keyed on the read rather than on the array
