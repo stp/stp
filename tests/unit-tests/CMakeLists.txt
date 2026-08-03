@@ -35,6 +35,7 @@ AddSTPGTest(SourceSortMemo_Test.cpp)
 if (ENABLE_FLOATING_POINT)
     AddSTPGTest(FPPrintBack_Test.cpp)
     AddSTPGTest(FloatBlast_Test.cpp)
+    AddSTPGTest(FpTotalise_Test.cpp)
     AddSTPGTest(SourceSort_Test.cpp)
     # Builds float/rounding-mode constants, which is the whole point.
     AddSTPGTest(ConstantIdentity_Test.cpp)
