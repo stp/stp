@@ -641,21 +641,20 @@ TEST_F(ConstantBitP_TransferFunctions, signedRemainderExhaustiveWidth3)
       OVERAPPROXIMATES, SETTLES_IN_ONE_CALL, RESULT_IS_VAGUE);
 }
 
-// bvsmod is the only transfer function that fails to settle on a single call
-// with *distinct* children: 795 of the 19683 width-3 starting states derive
-// more on a later call, and 671 of those end in a CONFLICT the first call
-// missed. propagate() only ever gives it one call, so that reasoning is
-// currently unreachable in the solver.
+// bvsmod used to be the only transfer function that failed to settle on a
+// single call with *distinct* children: 795 of the 19683 width-3 starting
+// states derived more on a later call, 671 of them a CONFLICT the first
+// call missed. It now iterates its structural and decompose passes to an
+// internal fixed point, so it must settle in one call like everything else.
 TEST_F(ConstantBitP_TransferFunctions, signedModulusExhaustiveWidth3)
 {
-  const unsigned bvsmodNeedsThreeCalls = 3;
   exhaustiveCheck(
       "bvsmod",
       [this](std::vector<FixedBits*>& children, FixedBits& out) {
         return bvSignedModulusBothWays(children, out, &mgr);
       },
       evaluatorSemantics(&mgr, stp::SBVMOD, 3), bv3(2), out3(),
-      OVERAPPROXIMATES, bvsmodNeedsThreeCalls);
+      OVERAPPROXIMATES, SETTLES_IN_ONE_CALL);
 }
 
 TEST_F(ConstantBitP_TransferFunctions, multiplicationExhaustiveWidth3)

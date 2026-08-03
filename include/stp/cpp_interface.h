@@ -180,14 +180,18 @@ class Cpp_interface
   bool produce_models;
   bool changed_model_status;
 
+  // Set by the constructors that point GlobalParserBM at bm themselves, so
+  // that the destructor knows to clear it again. Constructors that leave the
+  // global alone leave it alone on the way out too -- callers such as the
+  // rewrite-rule tools set GlobalParserBM once and then build and destroy
+  // several interfaces over the same manager.
+  bool set_global_parser_bm;
+
 public:
   std::unique_ptr<LetMgr> letMgr;
   NodeFactory* nf;
 
-  ~Cpp_interface()
-  {
-    cleanUp();
-  }
+  DLL_PUBLIC ~Cpp_interface();
 
   DLL_PUBLIC Cpp_interface(STPMgr& bm_);
   DLL_PUBLIC Cpp_interface(STPMgr& bm_, NodeFactory* factory);

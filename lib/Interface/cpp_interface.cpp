@@ -88,9 +88,27 @@ void Cpp_interface::removeFrame()
 }
 
 Cpp_interface::Cpp_interface(STPMgr& bm_, NodeFactory* factory)
-    : bm(bm_), letMgr(new LetMgr(bm.ASTUndefined)), nf(factory)
+    : bm(bm_), set_global_parser_bm(false),
+      letMgr(new LetMgr(bm.ASTUndefined)), nf(factory)
 {
   init();
+}
+
+// Every writer of the parser globals borrows: whoever sets one clears it
+// again. GlobalParserInterface is cleared whichever constructor ran, because
+// the callers that assign it directly (the C interface's parse entry points)
+// point it at a stack local of theirs, which is this object. The guard keeps
+// an interface that has since been superseded from clearing a pointer that
+// now belongs to a live one.
+Cpp_interface::~Cpp_interface()
+{
+  cleanUp();
+
+  if (GlobalParserInterface == this)
+    GlobalParserInterface = NULL;
+
+  if (set_global_parser_bm && GlobalParserBM == &bm)
+    GlobalParserBM = NULL;
 }
 
 ASTVec& Cpp_interface::getCurrentSymbols()
@@ -657,7 +675,8 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2)
 // something which dereferences GlobalSTP, such as BBAsProp) construct the STP
 // themselves and assign it before that point.
 Cpp_interface::Cpp_interface(STPMgr& bm_)
-    : bm(bm_), letMgr(new LetMgr(bm.ASTUndefined)), nf(bm_.defaultNodeFactory)
+    : bm(bm_), set_global_parser_bm(true),
+      letMgr(new LetMgr(bm.ASTUndefined)), nf(bm_.defaultNodeFactory)
 {
   nf = bm.defaultNodeFactory;
   startup();

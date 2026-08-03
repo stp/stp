@@ -126,7 +126,8 @@ public:
 
   DLL_PUBLIC ASTNode applySubstitutionMap(const ASTNode& n);
   DLL_PUBLIC ASTNode applySubstitutionMapUntilArrays(const ASTNode& n);
-  ASTNode applySubstitutionMapUntilArrays(const ASTNode& n, ASTNodeMap& cache);
+  ASTNode applySubstitutionMapUntilArrays(const ASTNode& n,
+                                          DenseNodeMap& cache);
 
   
   #ifdef _MSC_VER
@@ -175,9 +176,9 @@ public:
     return substitutionMap.hasUnappliedSubstitutions();
   }
 
-  ASTNodeMap* Return_SolverMap() 
-  { 
-    return substitutionMap.Return_SolverMap(); 
+  DenseNodeMap* Return_SolverMap()
+  {
+    return substitutionMap.Return_SolverMap();
   }
 
   void haveAppliedSubstitutionMap()

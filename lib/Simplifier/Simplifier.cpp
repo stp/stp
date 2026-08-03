@@ -147,7 +147,7 @@ ASTNode Simplifier::applySubstitutionMapUntilArrays(const ASTNode& n)
   return substitutionMap.applySubstitutionMapUntilArrays(n);
 }
 
-ASTNode Simplifier::applySubstitutionMapUntilArrays(const ASTNode& n, ASTNodeMap& cache)
+ASTNode Simplifier::applySubstitutionMapUntilArrays(const ASTNode& n, DenseNodeMap& cache)
 {
   return substitutionMap.applySubstitutionMapUntilArrays(n,cache);
 }

@@ -73,7 +73,7 @@ int TermOrder(const ASTNode& a, const ASTNode& b)
 ASTNode SubstitutionMap::applySubstitutionMap(const ASTNode& n)
 {
   bm->GetRunTimes()->start(RunTimes::ApplyingSubstitutions);
-  ASTNodeMap cache;
+  DenseNodeMap cache;
   ASTNode result = replace(n, *SolverMap, cache, bm->defaultNodeFactory, false, false);
 
   bm->GetRunTimes()->stop(RunTimes::ApplyingSubstitutions);
@@ -97,12 +97,12 @@ ASTNode SubstitutionMap::applySubstitutionMapAtTopLevel(const ASTNode& topLevel)
 // not always idempotent.
 ASTNode SubstitutionMap::applySubstitutionMapUntilArrays(const ASTNode& n)
 {
-  ASTNodeMap cache;
+  DenseNodeMap cache;
   return applySubstitutionMapUntilArrays(n, cache);
 }
 
 // not always idempotent.
-ASTNode SubstitutionMap::applySubstitutionMapUntilArrays(const ASTNode& n, ASTNodeMap& cache)
+ASTNode SubstitutionMap::applySubstitutionMapUntilArrays(const ASTNode& n, DenseNodeMap& cache)
 {
   bm->GetRunTimes()->start(RunTimes::ApplyingSubstitutions);
   ASTNode result = replace(n, *SolverMap, cache, bm->defaultNodeFactory, true, false);
@@ -111,8 +111,9 @@ ASTNode SubstitutionMap::applySubstitutionMapUntilArrays(const ASTNode& n, ASTNo
 }
 
 
-ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
-                                 ASTNodeMap& cache, NodeFactory* nf)
+template <class NodeMapType>
+ASTNode SubstitutionMap::replace(const ASTNode& n, NodeMapType& fromTo,
+                                 NodeMapType& cache, NodeFactory* nf)
 {
   if (0 == fromTo.size())
     return n;
@@ -129,22 +130,26 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
 // NB: You can't use this to map from "5" to the symbol "x" say.
 // It's optimised for the symbol to something case.
 
-ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
-                                 ASTNodeMap& cache, NodeFactory* nf,
+template <class NodeMapType>
+ASTNode SubstitutionMap::replace(const ASTNode& n, NodeMapType& fromTo,
+                                 NodeMapType& cache, NodeFactory* nf,
                                  bool stopAtArrays, bool preventInfinite)
 {
   const Kind k = n.GetKind();
   if (k == BVCONST || k == TRUE || k == FALSE)
     return n;
 
-  ASTNodeMap::const_iterator it;
+  typename NodeMapType::const_iterator it;
 
   if ((it = cache.find(n)) != cache.end())
     return it->second;
 
   if ((it = fromTo.find(n)) != fromTo.end())
   {
-    const ASTNode& r = it->second;
+    // By value, not by reference: the recursive calls below can insert into
+    // and erase from fromTo, and a DenseNodeMap moves its elements when that
+    // happens -- a reference here would dangle.
+    const ASTNode r = it->second;
     assert(r.GetIndexWidth() == n.GetIndexWidth());
 
     if (preventInfinite)
@@ -255,6 +260,17 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
   cache.insert(make_pair(n, result));
   return result;
 }
+
+// The two map types replace() runs over: the SolverMap paths use
+// DenseNodeMap; external callers pass ASTNodeMaps.
+template ASTNode SubstitutionMap::replace<ASTNodeMap>(const ASTNode&,
+    ASTNodeMap&, ASTNodeMap&, NodeFactory*);
+template ASTNode SubstitutionMap::replace<ASTNodeMap>(const ASTNode&,
+    ASTNodeMap&, ASTNodeMap&, NodeFactory*, bool, bool);
+template ASTNode SubstitutionMap::replace<DenseNodeMap>(const ASTNode&,
+    DenseNodeMap&, DenseNodeMap&, NodeFactory*);
+template ASTNode SubstitutionMap::replace<DenseNodeMap>(const ASTNode&,
+    DenseNodeMap&, DenseNodeMap&, NodeFactory*, bool, bool);
 
 // Adds to the dependency graph that n0 depends on the variables in n1.
 // It's not the transitive closure of the dependencies. Just the variables in
