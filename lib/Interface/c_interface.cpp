@@ -342,6 +342,17 @@ char* vc_printSMTLIB(VC vc, Expr e)
   return copy;
 }
 
+char* vc_printSMTLIB2(VC vc, Expr e)
+{
+  stp::STPMgr* b = mgr(vc);
+
+  stringstream ss;
+  printer::SMTLIB2_PrintBack(ss, *((stp::ASTNode*)e), b, false);
+  string s = ss.str();
+  char* copy = strdup(s.c_str());
+  return copy;
+}
+
 void vc_printExprFile(VC vc, Expr e, int fd)
 {
   stp::STPMgr* b = mgr(vc);
@@ -844,6 +855,19 @@ void vc_printCounterExample(VC vc)
   cout << "COUNTEREXAMPLE BEGIN: \n";
   ce->PrintCounterExample(true);
   cout << "COUNTEREXAMPLE END: \n";
+  b->UserFlags.print_counterexample_flag = currentPrint;
+}
+
+void vc_printCounterExampleSMTLIB2(VC vc)
+{
+  stp::STP* stp_i = (stp::STP*)vc;
+  stp::STPMgr* b = stp_i->bm;
+  stp::AbsRefine_CounterExample* ce =
+      (stp::AbsRefine_CounterExample*)(stp_i->Ctr_Example);
+
+  bool currentPrint = b->UserFlags.print_counterexample_flag;
+  b->UserFlags.print_counterexample_flag = true;
+  ce->PrintCounterExampleSMTLIB2(cout);
   b->UserFlags.print_counterexample_flag = currentPrint;
 }
 
