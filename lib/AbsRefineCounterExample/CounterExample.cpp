@@ -1319,6 +1319,13 @@ AbsRefine_CounterExample::GetSortedArrayModelEntries(const ASTNode& arraySym)
   // changes it. Which breaks the iterator otherwise.
   const ASTNodeMap c(CounterExampleMap);
 
+  // The element sort decides when two recorded values for one cell are
+  // really two values: NaN has many packings and one meaning.
+  const SourceSort arraySort = arraySym.GetSourceSort();
+  const SourceSort elementSort =
+      arraySort.kind() == SourceSort::Kind::Array ? arraySort.element()
+                                                  : SourceSort::unknown();
+
   std::map<ASTNode, ASTNode> byIndex;
   for (const auto& e : c)
   {
@@ -1336,8 +1343,16 @@ AbsRefine_CounterExample::GetSortedArrayModelEntries(const ASTNode& arraySym)
         rhs = ComputeFormulaUsingModel(e.second);
       }
       assert(rhs.isConstant());
-      auto ins = byIndex.insert(std::make_pair(f[1], rhs));
-      if (!ins.second && ins.first->second != rhs)
+      // Key on the plain spelling of the index, not on the node. A
+      // rounding-mode or float constant interns apart from the plain
+      // constant with its bits, so one cell can be recorded under two
+      // index nodes -- and keying on the node makes that one cell two
+      // entries, which the printer then emits as two stores of the same
+      // value to the same index.
+      auto ins = byIndex.insert(
+          std::make_pair(plainBitVectorConstant(bm, f[1]), rhs));
+      if (!ins.second && constantsDenoteDifferentSourceValues(
+                             ins.first->second, rhs, elementSort))
         FatalError("GetSortedArrayModelEntries: conflicting model values "
                    "for one concrete array index",
                    f);
