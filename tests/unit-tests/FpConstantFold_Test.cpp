@@ -317,12 +317,13 @@ TEST(FpConstantFold, binary32_arithmetic_matches_the_hardware)
   }
 }
 
-TEST(FpConstantFold, sqrt_fma_and_remainder_match_the_hardware)
+TEST(FpConstantFold, sqrt_fma_and_roundtointegral_match_the_hardware)
 {
   Fixture f;
   for (const Mode& mode : MODES)
   {
     const ASTNode rm = f.rm(mode.stp);
+    const ASTNode addend = f.fpConst(11, 53, bitsOf(1.5));
     for (double a : VALUES)
     {
       const ASTNode x = f.fpConst(11, 53, bitsOf(a));
@@ -342,23 +343,35 @@ TEST(FpConstantFold, sqrt_fma_and_remainder_match_the_hardware)
       for (double b : VALUES)
       {
         const ASTNode y = f.fpConst(11, 53, bitsOf(b));
-
-        // fp.rem is exact, so it is the same under every rounding mode --
-        // which is why it takes none.
-        const double rem = runtimeRemainder(a, b);
-        EXPECT_TRUE(sameDouble(f.fold(FP_REM, 64, {x, y}), bitsOf(rem)))
-            << "fp.rem " << a << " " << b;
-
         double fused;
         {
           ScopedRound rounding(mode.native);
           fused = runtimeFma(a, b, 1.5);
         }
-        const ASTNode addend = f.fpConst(11, 53, bitsOf(1.5));
         EXPECT_TRUE(
             sameDouble(f.fold(FP_FMA, 64, {rm, x, y, addend}), bitsOf(fused)))
             << mode.name << " fp.fma " << a << " " << b;
       }
+    }
+  }
+}
+
+// fp.rem is exact and takes no rounding mode, so it gets one pass rather
+// than one per mode. It is also the most expensive circuit here -- binary64
+// unrolls 2097 divide steps -- so running it four times was most of this
+// file's cost and none of its coverage.
+TEST(FpConstantFold, remainder_matches_the_hardware)
+{
+  Fixture f;
+  for (double a : VALUES)
+  {
+    const ASTNode x = f.fpConst(11, 53, bitsOf(a));
+    for (double b : VALUES)
+    {
+      const ASTNode y = f.fpConst(11, 53, bitsOf(b));
+      const double rem = runtimeRemainder(a, b);
+      EXPECT_TRUE(sameDouble(f.fold(FP_REM, 64, {x, y}), bitsOf(rem)))
+          << "fp.rem " << a << " " << b;
     }
   }
 }
