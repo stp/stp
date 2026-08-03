@@ -62,15 +62,18 @@ reached the solver unconstrained and the verdict could be wrong, and a
 build with assertions aborted instead of answering. Both behaviours
 reproduce on STP releases predating this feature. The C API surface is pinned byte for byte: an opt-in
 test (``default-off-capi-baseline-differential``, enabled with
-``-DTEST_BASELINE_DIFFERENTIAL=ON``) builds the pre-feature baseline
-from git history and compares every observation of an identical C API
-driver — verdicts, model values, counterexample-array entries and
-their order, stdout, stderr, exit status — across the two builds. Two
-diagnostic texts deliberately differ from the baseline and sit outside
-that comparison: whole-array equality is refused with an error naming
-the option, where the baseline warned and continued (pinned by a lit
-test), and ``stp_simple``'s usage error mentions the flag it newly
-accepts. One behavioral corner also deliberately differs: when the
+``-DTEST_BASELINE_DIFFERENTIAL=ON``) builds the upstream commit this
+branch was last merged with from git history and compares every
+observation of an identical C API driver — verdicts, model values,
+counterexample-array entries and their order, stdout, stderr, exit
+status — across the two builds. Holding upstream fixed on both sides is
+what makes the difference attributable to this feature; a baseline
+frozen further back would also collect every unrelated upstream change
+made since. Two diagnostic texts deliberately differ from the baseline
+and sit outside that comparison: whole-array equality is refused with an
+error naming the option, where the baseline warned and continued (pinned
+by a lit test), and ``stp_simple``'s usage error mentions the flag it
+newly accepts. One behavioral corner also deliberately differs: when the
 soft timeout expires while lazy refinement is still undecided, the
 solve now reports a timeout where it previously aborted with an
 internal error.
