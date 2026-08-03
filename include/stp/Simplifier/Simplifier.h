@@ -76,10 +76,12 @@ private:
   ASTNode ASTTrue, ASTFalse, ASTUndefined;
 
   // Memo table for simplifcation. Key is unsimplified node, and
-  // value is simplified node.
-  ASTNodeMap* SimplifyMap;
-  ASTNodeMap* SimplifyNegMap;
-  ASTNodeMap MultInverseMap;
+  // value is simplified node. Flat maps: probed and written once per node
+  // visit across the whole recursive simplifier, never iterated except to
+  // filter constants (order-independent).
+  DenseNodeMap* SimplifyMap;
+  DenseNodeMap* SimplifyNegMap;
+  DenseNodeMap MultInverseMap;
 
   NodeFactory* nf;
 
@@ -91,8 +93,8 @@ public:
   {
     nf = _bm->defaultNodeFactory;
 
-    SimplifyMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
-    SimplifyNegMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
+    SimplifyMap = new DenseNodeMap(INITIAL_TABLE_SIZE);
+    SimplifyNegMap = new DenseNodeMap(INITIAL_TABLE_SIZE);
 
     ASTTrue = nf->getTrue();
     ASTFalse = nf->getFalse();

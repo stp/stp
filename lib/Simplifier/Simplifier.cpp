@@ -74,7 +74,7 @@ bool Simplifier::CheckSimplifyMap(const ASTNode& key, ASTNode& output,
     return true;
   }
 
-  ASTNodeMap::iterator it, itend;
+  DenseNodeMap::iterator it, itend;
   it = pushNeg ? SimplifyNegMap->find(key) : SimplifyMap->find(key);
   itend = pushNeg ? SimplifyNegMap->end() : SimplifyMap->end();
 
@@ -169,8 +169,8 @@ bool Simplifier::UpdateSubstitutionMap(const ASTNode& e0, const ASTNode& e1)
 
 bool Simplifier::CheckMultInverseMap(const ASTNode& key, ASTNode& output)
 {
-  ASTNodeMap::iterator it;
-  if ((it = MultInverseMap.find(key)) != MultInverseMap.end())
+  const auto it = MultInverseMap.find(key);
+  if (it != MultInverseMap.end())
   {
     output = it->second;
     return true;
@@ -1273,9 +1273,9 @@ bool Simplifier::hasBeenSimplified(const ASTNode& n)
   if (n.GetKind() == SYMBOL)
     return true;
 
-  ASTNodeMap::const_iterator it;
   // If it's in the simplification map, it has been simplified.
-  if ((it = SimplifyMap->find(n)) == SimplifyMap->end())
+  const auto it = SimplifyMap->find(n);
+  if (it == SimplifyMap->end())
     return false;
 
   return (it->second == n);
@@ -3019,13 +3019,16 @@ void Simplifier::ResetSimplifyMaps()
   // deletes the contents.  The destructor seems to clear everything
   // anyway.
 
+  // (With the dense maps the delete/new and clear() are both cheap -- one
+  // vector teardown -- but the delete also returns the memory.)
+
   // SimplifyMap->clear();
   delete SimplifyMap;
-  SimplifyMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
+  SimplifyMap = new DenseNodeMap(INITIAL_TABLE_SIZE);
 
   // SimplifyNegMap->clear();
   delete SimplifyNegMap;
-  SimplifyNegMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
+  SimplifyNegMap = new DenseNodeMap(INITIAL_TABLE_SIZE);
 }
 
 void Simplifier::printCacheStatus()
