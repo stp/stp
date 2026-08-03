@@ -1380,7 +1380,7 @@ ASTNode SimplifyingNodeFactory::chaseRead(const ASTVec& children,
       return write[2];
     }
     else if (read_is_const && stp::BVCONST == write_index.GetKind() &&
-             !stp::constantsSameBits(readIndex, write_index))
+             stp::constantsDenoteDifferentValues(readIndex, write_index))
     {
       // Different bits, so definately different. (Distinct constant
       // nodes alone prove nothing: a float constant interns apart from

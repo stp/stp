@@ -78,6 +78,20 @@ bool numberOfReadsLessThan(const ASTNode& n, int v);
 // must compare through here instead.
 bool constantsSameBits(const ASTNode& a, const ASTNode& b);
 
+// Whether two constants are known to denote *different* values.
+//
+// This is the unsound direction, and the reason it has a name of its own:
+// `a != b` answers it correctly for plain bitvector constants and wrongly
+// for a floating-point or rounding-mode constant that shares its bits with
+// one, and the two spellings look alike at a glance. Every rule that skips
+// a write, proves two array indexes address different cells, or otherwise
+// concludes "different value" must ask through here, so that the sites which
+// depend on the distinction can be found by looking for this name.
+inline bool constantsDenoteDifferentValues(const ASTNode& a, const ASTNode& b)
+{
+  return !constantsSameBits(a, b);
+}
+
 // Whether `n` denotes bits to the bit-vector layers, which is not the same
 // question as GetType() == BITVECTOR_TYPE.
 //
