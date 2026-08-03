@@ -51,9 +51,20 @@ class PropagateEqualities : public NodeSimplifier
   STPMgr* bm;
   const ASTNode ASTTrue, ASTFalse;
 
+public:
   using IdSet =  std::unordered_set<uint64_t>;
-  using MapToNodeSet = std::unordered_map<uint64_t, std::tuple <ASTNode, ASTNode, IdSet, int > > ;
 
+  struct CandidateInfo
+  {
+    ASTNode lhs;
+    ASTNode rhs;
+    IdSet vars;  // candidate-LHS variables in rhs, with replacements folded in
+    int id;      // insertion order; priority-queue tie-break for determinism
+    size_t upTo; // how many replacements have been folded into vars
+  };
+  using MapToNodeSet = std::unordered_map<uint64_t, CandidateInfo>;
+
+private:
   IdSet alreadyVisited;
 
   void buildCandidateList(const ASTNode& a);
