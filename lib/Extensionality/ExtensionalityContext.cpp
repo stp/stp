@@ -1588,9 +1588,22 @@ void ExtensionalityContext::encodeOneLemma(const ExtConflict& pendingLemma,
     }
     int operator()(const ASTNode& a, const ASTNode& b)
     {
-      // Two hash-consed constants: equal iff the same node.
+      // Two constants: equal iff the same *bits*. That used to be the same
+      // question as being the same node, and is not any more -- a
+      // floating-point or rounding-mode constant carries its source sort as
+      // part of its identity, so it interns apart from the plain bit-vector
+      // constant holding its bits.
+      //
+      // The two sides here are names from accesses on arrays being equated,
+      // so their sorts agree and both constants are the same flavour; the
+      // pair that could differ cannot reach this. It is asked on bits
+      // anyway, because the answer feeds FOLD_UNSAT and so decides whether
+      // a conclusion is dropped, and getting that wrong is the
+      // strictly-stronger clause the comment above warns about -- too sharp
+      // an edge to leave resting on an invariant that holds for a reason
+      // outside this function.
       if (a.isConstant() && b.isConstant())
-        return (a == b) ? FOLD_VALID : FOLD_UNSAT;
+        return constantsSameBits(a, b) ? FOLD_VALID : FOLD_UNSAT;
       const uint64_t na = a.GetNodeNum(), nb = b.GetNodeNum();
       const std::pair<uint64_t, uint64_t> key(std::min(na, nb),
                                               std::max(na, nb));
