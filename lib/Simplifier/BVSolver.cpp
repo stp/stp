@@ -531,7 +531,7 @@ ASTNode BVSolver::TopLevelBVSolve(const ASTNode& _input,
 
   ASTVec eveneqns;
   bool any_solved = false;
-  ASTNodeMap cache;
+  DenseNodeMap cache;
   for (ASTVec::iterator it = c.begin(), itend = c.end(); it != itend; it++)
   {
     /*

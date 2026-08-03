@@ -36,12 +36,19 @@ void log([[maybe_unused]] std::string s)
 #endif
 }
 
-typedef std::unordered_set<uint64_t> IdSet;
-typedef std::unordered_map<uint64_t, uint64_t> IdToId;
-typedef std::unordered_map<uint64_t, IdSet> IdToIdSet;
-typedef std::unordered_map<uint64_t, std::tuple <ASTNode, ASTNode, IdSet, int > > MapToNodeSet;
+typedef PropagateEqualities::IdSet IdSet;
+typedef ankerl::unordered_dense::map<uint64_t, uint64_t> IdToId;
+typedef ankerl::unordered_dense::map<uint64_t, IdSet> IdToIdSet;
+// Safe as a dense set: only inserted into, then copied out and sorted by
+// expression number -- its iteration order never reaches a decision.
+typedef ankerl::unordered_dense::set<ASTNode, ASTNode::ASTNodeHasher,
+                                     ASTNode::ASTNodeEqual> DenseNodeSet;
+// Values must stay pointer-stable: the priority queue and update() hold
+// pointers/references into the map while it is queried, so this stays a
+// node-based std::unordered_map (mapped is never inserted into after build).
+typedef PropagateEqualities::MapToNodeSet MapToNodeSet;
 
-void tagNodes(const ASTNode& n, const uint64_t tag, IdToId& nodeToTag, ASTNodeSet& shared)
+void tagNodes(const ASTNode& n, const uint64_t tag, IdToId& nodeToTag, DenseNodeSet& shared)
 {
   if (n.Degree() == 0)
     return; 
@@ -71,10 +78,10 @@ void intersection(const ASTNode& n, IdSet& visited, IdSet& variables, const IdSe
   if (!visited.insert(n_id).second)
     return;
 
-  if (cache.find(n_id) != cache.end())
+  const auto cit = cache.find(n_id);
+  if (cit != cache.end())
   {
-    const auto& item = cache.find(n_id)->second;
-    variables.insert(item.begin(), item.end());
+    variables.insert(cit->second.begin(), cit->second.end());
     return;
   }
  
@@ -90,7 +97,7 @@ void intersection(const ASTNode& n, IdSet& visited, IdSet& variables, const IdSe
 
 MapToNodeSet PropagateEqualities::buildMapOfLHStoVariablesInRHS(const IdSet& allLhsVariables)
 {
-  ASTNodeSet shared;
+  DenseNodeSet shared;
   {
     IdToId tags;
     uint64_t tag = 0;
@@ -117,6 +124,7 @@ MapToNodeSet PropagateEqualities::buildMapOfLHStoVariablesInRHS(const IdSet& all
   // Without the id field, which we sort the priority queue on, the order that the rules were applied
   // was not deterministic, giving diffent CNF.
   MapToNodeSet mapped;
+  mapped.reserve(candidates.size());
   int id =0;
 
   for (const auto& e: candidates)
@@ -124,34 +132,85 @@ MapToNodeSet PropagateEqualities::buildMapOfLHStoVariablesInRHS(const IdSet& all
     IdSet visited;
     IdSet variables;
     intersection(e.second, visited, variables, allLhsVariables, cache);
-    mapped.insert(std::make_pair(e.first.GetNodeNum(), std::make_tuple(e.first, e.second, variables, id++)));
+    mapped.insert(std::make_pair(
+        e.first.GetNodeNum(),
+        PropagateEqualities::CandidateInfo{e.first, e.second,
+                                          std::move(variables), id++, 0}));
   }
 
   return mapped;
 }
 
-void update(const uint64_t n, MapToNodeSet& m, const IdSet& replaced)
+// Bring candidate `start`'s variable set up to date with the replacements
+// performed so far. Each candidate remembers how many replacements it has
+// already folded in (upTo), so only the newly replaced variables need
+// checking. Invariant: a replaced variable still present in a set must have
+// been replaced after that set's upTo, and an up-to-date set contains no
+// replaced variables at all -- which is why folding a dependency's set in
+// cannot re-introduce work, and why the fold order doesn't matter.
+static void update(const uint64_t start, MapToNodeSet& m,
+                   const std::vector<uint64_t>& replacedOrder,
+                   const IdToId& replacedIndex)
 {
-    auto& variables = std::get<2>(m[n]);
-    vector<uint64_t> toRemove;
-    vector<IdSet*> toAdd;
+  const size_t now = replacedOrder.size();
 
-    // all the variables that get inserted have already been updated.
-    for (const auto& v: variables)
+  struct Frame
+  {
+    uint64_t n;
+    std::vector<uint64_t> deps;
+    bool expanded = false;
+  };
+  std::vector<Frame> stack;
+  stack.push_back({start, {}, false});
+
+  while (!stack.empty())
+  {
+    Frame& f = stack.back();
+    assert(m.find(f.n) != m.end());
+    PropagateEqualities::CandidateInfo& ci = m.find(f.n)->second;
+
+    if (!f.expanded)
     {
-      if (replaced.find(v) != replaced.end())
-      {
-          // It's been replaced.
-          update(v,m,replaced);
-          toRemove.push_back(v);
-          toAdd.push_back(&std::get<2>(m.find(v)->second));
-      }
-    }
-    for (const auto& e: toRemove)
-      variables.erase(e);
+      f.expanded = true;
 
-    for (const auto& e: toAdd)
-      variables.insert(e->begin(), e->end()); 
+      // Find the replaced variables in ci.vars, probing whichever side is
+      // smaller: the pending replacements, or the set itself.
+      if (now - ci.upTo < ci.vars.size())
+      {
+        for (size_t i = ci.upTo; i < now; i++)
+          if (ci.vars.count(replacedOrder[i]) != 0)
+            f.deps.push_back(replacedOrder[i]);
+      }
+      else
+      {
+        for (const auto v : ci.vars)
+        {
+          const auto it = replacedIndex.find(v);
+          if (it != replacedIndex.end() && it->second >= ci.upTo)
+            f.deps.push_back(v);
+        }
+      }
+
+      bool pushed = false;
+      for (const auto v : f.deps)
+        if (m.find(v)->second.upTo != now)
+        {
+          stack.push_back({v, {}, false});
+          pushed = true;
+        }
+      if (pushed)
+        continue; // fold once the dependencies are up to date themselves
+    }
+
+    for (const auto v : f.deps)
+    {
+      ci.vars.erase(v);
+      const IdSet& add = m.find(v)->second.vars;
+      ci.vars.insert(add.begin(), add.end());
+    }
+    ci.upTo = now;
+    stack.pop_back();
+  }
 }
 
 void PropagateEqualities::processCandidates()
@@ -171,39 +230,37 @@ void PropagateEqualities::processCandidates()
   MapToNodeSet mapped;
   mapped = buildMapOfLHStoVariablesInRHS(allLhsVariables);
 
-  typedef std::tuple<ASTNode, ASTNode, const IdSet*, int> qType;
-  auto cmp = [](qType left, qType right) 
-    { 
-      if (std::get<2>(left)->size() > std::get<2>(right)->size())
+  typedef const CandidateInfo* qType;
+  auto cmp = [](qType left, qType right)
+    {
+      if (left->vars.size() > right->vars.size())
           return true;
-      if (std::get<2>(left)->size() == std::get<2>(right)->size())
-          return std::get<3>(left) > std::get<3>(right);
+      if (left->vars.size() == right->vars.size())
+          return left->id > right->id;
       return false;
-    };  
-  std::priority_queue < qType, vector<qType>, decltype(cmp) > q(cmp);
+    };
+  vector<qType> qStore;
+  qStore.reserve(mapped.size());
+  std::priority_queue < qType, vector<qType>, decltype(cmp) > q(cmp, std::move(qStore));
 
   for (const auto& e: mapped)
-  {
-    const ASTNode& lhs = std::get<0>(e.second);
-    const ASTNode& rhs = std::get<1>(e.second);
-    const IdSet* varsInRHS = &(std::get<2>(e.second));
-    const int id = std::get<3>(e.second);
-    auto d = std::make_tuple(lhs,rhs,varsInRHS,id);
-    q.push(d);
-  }
+    q.push(&e.second);
 
-  IdSet variablesReplacedAlready;
+  std::vector<uint64_t> replacedOrder;
+  replacedOrder.reserve(mapped.size());
+  IdToId replacedIndex;
+  replacedIndex.reserve(mapped.size());
 
   while (!q.empty())
   {
-    auto e = q.top();
+    const CandidateInfo* e = q.top();
     q.pop();
 
-    const ASTNode& lhs = std::get<0>(e);
+    const ASTNode& lhs = e->lhs;
     const uint64_t lhs_id = lhs.GetNodeNum();
 
-    const ASTNode& rhs = std::get<1>(e);
-    const IdSet& rhsVariables = *std::get<2>(e);
+    const ASTNode& rhs = e->rhs;
+    const IdSet& rhsVariables = e->vars;
 
     assert(SYMBOL == lhs.GetKind());
 
@@ -211,28 +268,29 @@ void PropagateEqualities::processCandidates()
     if (rhsVariables.find(lhs_id) != rhsVariables.end())
       continue; // Loops already, so no more processing.
 
-    if (variablesReplacedAlready.find(lhs_id) != variablesReplacedAlready.end())
+    if (replacedIndex.find(lhs_id) != replacedIndex.end())
       continue; // already replaced.
 
-    update(lhs.GetNodeNum(), mapped, variablesReplacedAlready);
-    
-    if (!q.empty() && 5* std::get<2>(q.top())->size() < rhsVariables.size())
+    update(lhs_id, mapped, replacedOrder, replacedIndex);
+
+    if (!q.empty() && 5* q.top()->vars.size() < rhsVariables.size())
     {
       // The priority queue doesn't automatically update as the priorties change.
       // If the next item in the priority queue is much smaller, loop.
       q.push(e);
       continue;
     }
- 
+
     if (rhsVariables.find(lhs_id) == rhsVariables.end())
     {
       simp->UpdateSubstitutionMapFewChecks(lhs, rhs);
-      variablesReplacedAlready.insert(lhs_id);
+      replacedIndex.emplace(lhs_id, replacedOrder.size());
+      replacedOrder.push_back(lhs_id);
     }
   }
 
   if (bm->UserFlags.stats_flag)
-    std::cerr <<  "{PropagateEqualities} Applied:" << variablesReplacedAlready.size() << std::endl;
+    std::cerr <<  "{PropagateEqualities} Applied:" << replacedOrder.size() << std::endl;
 
   candidates.clear();
 }

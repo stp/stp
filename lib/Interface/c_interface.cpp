@@ -1883,6 +1883,11 @@ Expr vc_parseExpr(VC vc, const char* infile)
   stp::ASTNode o = b->CreateNode(stp::AND, asserts, oo);
   stp::ASTNode* output = new stp::ASTNode(o);
   delete AssertsQuery;
+
+  // cpp_inter is about to go out of scope, so give back the global that
+  // points at it. (~Cpp_interface does this too, for the paths that don't
+  // reach here.)
+  stp::GlobalParserInterface = NULL;
   return output;
 }
 
@@ -2215,6 +2220,10 @@ int vc_parseMemExpr(VC vc, const char* s, Expr* oquery, Expr* oasserts)
   {
     *(stp::ASTNode**)oasserts = new stp::ASTNode(AssertsQuery[0]);
   }
+
+  // pi is about to go out of scope, so give back the global that points at
+  // it. (~Cpp_interface does this too, for the paths that don't reach here.)
+  stp::GlobalParserInterface = NULL;
   return 1;
 }
 
