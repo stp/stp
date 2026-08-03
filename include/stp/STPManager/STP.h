@@ -106,6 +106,8 @@ public:
   // NB doesn't delete the STPMgr.
   void deleteObjects()
   {
+    if (Ctr_Example != NULL)
+      Ctr_Example->setFpEncodingContext(NULL);
     fpEncodingContext.reset();
 
     delete Ctr_Example;
@@ -142,7 +144,10 @@ public:
     if (tosat != NULL)
       tosat->ClearAllTables();
     if (Ctr_Example != NULL)
+    {
       Ctr_Example->ClearAllTables();
+      Ctr_Example->setFpEncodingContext(NULL);
+    }
     fpEncodingContext.reset();
     // bm->ClearAllTables();
   }

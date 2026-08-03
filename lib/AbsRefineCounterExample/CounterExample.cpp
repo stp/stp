@@ -23,6 +23,9 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
+#include "stp/FloatBlaster/FloatBlast.h"
+#include "stp/FloatBlaster/FloatBlaster.h"
+#include "stp/FloatBlaster/FpEncodingContext.h"
 #include "stp/Printer/printers.h"
 #include "stp/ToSat/ToSATAIG.h"
 
@@ -31,6 +34,74 @@ const bool debug_counterexample = false;
 namespace stp
 {
 using std::cout;
+
+// Whether `n` is an access over an array whose declared index sort is
+// floating-point -- the question FpTotalise::visit asks before canonicalising
+// an index, asked here in the same terms.
+//
+// Deliberately says nothing about *this* node's own index. A constant index is
+// already canonical, so an access carrying one may well need no rewrite; but
+// "needs no rewrite" is a property of the whole access, not of its index, and
+// only the encoding pass can decide it. A READ over a WRITE has the write's
+// index to canonicalise however constant the read's index is, and short-
+// circuiting on the read's kind sent exactly that shape down the raw-carrier
+// path below, where a float symbol resolves to whichever NaN payload the SAT
+// solver picked while the solve compared pack(unpack(x)).
+//
+// The caller already handles the no-rewrite case: encodeForModel returns the
+// node unchanged, and the `encoded != term` test falls through. So the gate is
+// the sort question and nothing else.
+static bool isFpIndexedArrayAccess(const ASTNode& n)
+{
+  if ((n.GetKind() != READ && n.GetKind() != WRITE) || n.Degree() < 2)
+    return false;
+
+  const SourceSort array_sort = n[0].GetSourceSort();
+  return array_sort.kind() == SourceSort::Kind::Array &&
+         array_sort.index().kind() == SourceSort::Kind::FloatingPoint;
+}
+
+static ASTNode plainModelCarrier(STPMgr* bm, const ASTNode& value)
+{
+  // The plain twin of a source-sorted carrier constant: same bits, the
+  // flavour every identity comparison in model evaluation expects.  SAT
+  // model constants are plain bit-vectors, so retaining FloatingPoint or
+  // RoundingMode decoration here would make equal carrier values distinct
+  // interned AST nodes.
+  const SourceSort::Kind sort = value.GetSourceSort().kind();
+  if (value.GetKind() == BVCONST &&
+      (value.GetExpWidth() != 0 || sort == SourceSort::Kind::RoundingMode))
+    return bm->CreateBVConst(CONSTANTBV::BitVector_Clone(value.GetBVConst()),
+                             value.GetValueWidth());
+  return value;
+}
+
+class ScopedFpEncodedEvaluation final
+{
+public:
+  explicit ScopedFpEncodedEvaluation(unsigned int& depth_) : depth(depth_)
+  {
+    ++depth;
+  }
+
+  ~ScopedFpEncodedEvaluation()
+  {
+    assert(depth > 0);
+    --depth;
+  }
+
+private:
+  unsigned int& depth;
+};
+
+FpEncodingContext&
+AbsRefine_CounterExample::requireFpEncodingContext() const
+{
+  if (fpEncodingContext == NULL)
+    FatalError("floating-point model evaluation has no solve encoding "
+               "context");
+  return *fpEncodingContext;
+}
 
 /*FUNCTION: constructs counterexample from MINISAT counterexample
  * step1 : iterate through MINISAT counterexample and assemble the
@@ -73,7 +144,8 @@ void AbsRefine_CounterExample::ConstructCounterExample(
         continue;
 
       // assemble the counterexample here
-      if (symbol.GetType() == BITVECTOR_TYPE)
+      if (symbol.GetType() == BITVECTOR_TYPE ||
+          symbol.GetType() == FLOATINGPOINT_TYPE)
       {
         // Collect the bits of 'symbol' and store in v. Store
         // in reverse order.
@@ -92,7 +164,8 @@ void AbsRefine_CounterExample::ConstructCounterExample(
       }
     }
 
-    if (symbol.GetType() == BITVECTOR_TYPE)
+    if (symbol.GetType() == BITVECTOR_TYPE ||
+        symbol.GetType() == FLOATINGPOINT_TYPE)
     {
       CounterExampleMap[symbol] =
           BoolVectoBVConst(&bitVector_array, symbol.GetValueWidth());
@@ -127,7 +200,8 @@ void AbsRefine_CounterExample::ConstructCounterExample(
       // to a constant against the model
       ASTNode value = TermToConstTermUsingModel(value_ite);
       // save the result in the counter_example
-      if (!simp->InsideSubstitutionMap(key))
+      // As in TermToConstTermUsingModel: never record a read as its own value.
+      if (!simp->InsideSubstitutionMap(key) && key != value)
         CounterExampleMap[key] = value;
     }
   }
@@ -152,10 +226,19 @@ void AbsRefine_CounterExample::ConstructCounterExample(
 // 3. arrayread.
 //
 // 4. If (the boolean variable 'ArrayReadFlag' is false) && ArrayRead
-// 4. doesn't have a value in the counterexample then return 0 as the
-// 4. value of the arrayread.
+// 4. doesn't have a value in the counterexample then complete it with an
+// 4. arbitrary concrete value. RoundingMode reads use RNE, because junk
+// 4. patterns in their 5-bit carrier are not values of that sort.
 ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
                                                             bool ArrayReadFlag)
+{
+  return plainModelCarrier(
+      bm, TermToConstTermUsingModel_inner(term, ArrayReadFlag));
+}
+
+ASTNode
+AbsRefine_CounterExample::TermToConstTermUsingModel_inner(const ASTNode& term,
+                                                          bool ArrayReadFlag)
 {
   if (term.GetKind() == BVCONST)
     return term;
@@ -196,6 +279,44 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
     }
   }
 
+  // FP source operations are evaluated through the solve-owned lowering
+  // context. This is deliberately before the target-language switch below:
+  // counterexample evaluation must not maintain a second implementation of
+  // totalisation, operand reconstruction, and SymFPU lowering.
+  if (fpEncodedEvaluationDepth == 0 &&
+      (is_FP_kind(k) || isFpIndexedArrayAccess(term)))
+  {
+    const ASTNode encoded =
+        requireFpEncodingContext().encodeForModel(term);
+    if (encoded == term && is_FP_kind(k))
+      FatalError("floating-point model encoding made no progress: ", term);
+
+    // The invariant this arm exists to hold: *a float's model value is its
+    // canonical carrier*. A float symbol's raw model bits are whichever NaN
+    // payload the SAT solver happened to pick, and the solve compared
+    // pack(unpack(x)); the two agree on everything except the payload, which
+    // is exactly what an array index distinguishes. So any node the encoding
+    // pass rewrote must be evaluated through that rewrite and never through
+    // its raw bits.
+    //
+    // Whether a rewrite was needed is the pass's answer to give, not ours:
+    // an access whose indexes are all already canonical comes back unchanged
+    // and falls through to the ordinary switch below.
+    if (encoded != term)
+    {
+      // The lowered DAG retains source-sort metadata on carrier reads and
+      // leaves. Keep the entire recursive evaluation in target mode so a
+      // nested read-over-write cannot mistake that metadata for a fresh
+      // source boundary and canonicalise it repeatedly.
+      const ScopedFpEncodedEvaluation evaluating(fpEncodedEvaluationDepth);
+      const ASTNode value =
+          TermToConstTermUsingModel(encoded, ArrayReadFlag);
+      if (term != value)
+        CounterExampleMap[term] = value;
+      return value;
+    }
+  }
+
   ASTNode output;
   switch (k)
   {
@@ -208,9 +329,16 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
       {
         return term;
       }
-
-      // Has been simplified out. Can take any value.
-      output = bm->CreateZeroConst(term.GetValueWidth());
+      else
+      {
+        // Has been simplified out and can take any value. A RoundingMode's
+        // 5-bit representation has 27 junk patterns, though, so complete that
+        // sort with a real value rather than the ordinary all-zero default.
+        output = bm->isRoundingModeSortedTerm(term)
+                     ? bm->CreateBVConst(
+                           5, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN)
+                     : bm->CreateZeroConst(term.GetValueWidth());
+      }
       break;
     }
     case READ:
@@ -304,8 +432,14 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
       }
       else
       {
-        // Has been simplified out. Can take any value.
-        output = bm->CreateMaxConst(modelentry.GetValueWidth());
+        // Has been simplified out and can take any value. Keep the historical
+        // all-one completion for ordinary bitvectors, but not for
+        // RoundingMode: 0b11111 is not one of that sort's five values and can
+        // make SymFPU exhibit a non-IEEE sixth rounding behaviour.
+        output = bm->isRoundingModeSortedTerm(modelentry)
+                     ? bm->CreateBVConst(
+                           5, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN)
+                     : bm->CreateMaxConst(modelentry.GetValueWidth());
       }
       break;
     }
@@ -337,6 +471,29 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
            it++)
       {
         ASTNode ff = TermToConstTermUsingModel(*it, ArrayReadFlag);
+        // NonMemberBVConstEvaluator below needs every child to be a constant.
+        // With ArrayReadFlag set, a read with no value in the model comes back
+        // as a symbolic READ over the array (case 2 above) rather than a
+        // constant -- this happens for the unconstrained array that totalising
+        // introduces for an out-of-range to_ubv/to_sbv, reached here when the
+        // enclosing ITE selects the unspecified branch and it feeds an ordinary
+        // bit-vector operation. Its value is genuinely arbitrary, so resolve it
+        // to a concrete constant rather than hand a non-constant to the
+        // evaluator (which cannot read arrays and would abort on the array
+        // symbol).
+        if (BVCONST != ff.GetKind())
+          ff = TermToConstTermUsingModel(*it, false);
+        // A floating-point operand comes back as a bare bit-vector:
+        // TermToConstTermUsingModel strips the format off every result it
+        // returns. NonMemberBVConstEvaluator lowers through FloatBlast,
+        // which reads each operand's format off its source sort, so restore
+        // each float operand's own format here -- the same reattachment the
+        // FP-predicate arm of ComputeFormulaUsingModel makes before rebuilding
+        // a predicate. Non-float operands (bit-vectors, rounding modes) keep
+        // their bare form.
+        if (it->GetType() == FLOATINGPOINT_TYPE)
+          ff = FloatBlaster::withFormat(bm, ff, it->GetExpWidth(),
+                                        it->GetSigWidth());
         o.push_back(ff);
       }
 
@@ -352,7 +509,16 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
   // datastructure
   // if (!ArrayReadFlag)
   {
-    CounterExampleMap[term] = output;
+    // Don't memoise a read as its own value. With ArrayReadFlag true, a read
+    // with no value in the model is returned unchanged (case 2 above) -- this
+    // happens for an unconstrained read, such as the array that totalising
+    // introduces for an out-of-range to_ubv/to_sbv. Caching term -> term would
+    // put the term in its own value slot, violating the invariant the lookups
+    // rely on: a later lookup then trips the "stored as-is" fatal error, or
+    // leaves the read unresolved and non-constant. Skipping the self-entry lets
+    // that later lookup fall through to the documented arbitrary completion.
+    if (term != output)
+      CounterExampleMap[term] = output;
   }
 
   // cerr << "Output to TermToConstTermUsingModel: " << output << endl;
@@ -455,6 +621,15 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
     }
   }
 
+  // Unlike the term arm (TermToConstTermUsingModel), floating-point *predicates*
+  // are not routed through encodeForModel. Encoding the whole predicate and
+  // re-entering the evaluator runs the recursion at fpEncodedEvaluationDepth > 0,
+  // where the term arm's own encode step is switched off -- so any float operand
+  // reached inside the encoded predicate would fall through to the term switch's
+  // default. Instead the FP_* predicate cases below resolve each operand to a
+  // constant at depth 0 (where the term arm does encode floats correctly) and
+  // fold the predicate over those constants.
+
   ASTNode output = ASTUndefined;
   switch (k)
   {
@@ -555,6 +730,68 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
                    form);
     }
     break;
+    case FP_LEQ:
+    case FP_LT:
+    case FP_GEQ:
+    case FP_GT:
+    case FP_EQ:
+    case FP_ISNORMAL:
+    case FP_ISSUBNORMAL:
+    case FP_ISZERO:
+    case FP_ISINFINITE:
+    case FP_ISNAN:
+    case FP_ISNEGATIVE:
+    case FP_ISPOSITIVE:
+    case FP_SMT_EQ:
+    {
+      // Rebuild at the node's real arity: the comparisons are binary but the
+      // classification predicates are unary.
+      ASTVec operands;
+      operands.reserve(form.Degree());
+
+      for (unsigned int i = 0; i < form.Degree(); i++)
+      {
+        ASTNode simp(TermToConstTermUsingModel(form[i]));
+        // An operand must resolve to a constant, as in the float arm of
+        // TermToConstTermUsingModel: the read-tolerant flag is on inside the
+        // walk, so a float-element array read the solve never constrained
+        // comes back as the symbolic READ (case 2 there) rather than a
+        // value. Rebuilding the predicate over it is not evaluation -- the
+        // blaster would carry the read along, and the same-operand folds
+        // below can hand the bare READ back. The read is genuinely
+        // unconstrained here, so resolve it to a concrete value.
+        if (BVCONST != simp.GetKind())
+          simp = TermToConstTermUsingModel(form[i], false);
+        assert(simp.GetKind() == BVCONST);
+        operands.push_back(FloatBlaster::withFormat(
+            bm, simp, form[i].GetExpWidth(), form[i].GetSigWidth()));
+      }
+
+      ASTNode temp(bm->CreateNode(k, operands));
+
+      // Rebuilding through the simplifying factory may rewrite the predicate
+      // rather than return it: constant operands fold to true/false outright,
+      // and the same-operand rules fire here because interned constants
+      // compare pointer-equal -- fp.leq of a value with itself comes back as
+      // (not (fp.isNaN ...)). Whatever came back that is not this operation
+      // is a formula; evaluate it, never blast it.
+      if (temp.GetKind() != k)
+      {
+        output = ComputeFormulaUsingModel(temp);
+        break;
+      }
+
+      // One table, the same one the solver's lowering pass uses. temp's
+      // operands were re-stamped with their formats above, so it is a
+      // well-formed source node and its own sorts say what the formats are.
+      ASTNode blasted(FloatBlast::lowerOperation(bm, temp));
+
+      assert(blasted != temp);
+      assert(blasted != form);
+
+      output = ComputeFormulaUsingModel(blasted);
+      break;
+    }
     default:
       cerr << _kind_names[k];
       FatalError(" ComputeFormulaUsingModel: "
@@ -580,6 +817,10 @@ void AbsRefine_CounterExample::CheckCounterExample(bool t)
     FatalError("CheckCounterExample: "
                "No CounterExample to check",
                ASTUndefined);
+  // These are the raw stored assertions, not the prepared formula. When the
+  // evaluator reaches an FP subgraph it delegates to the solve's encoding
+  // context, whose totalisation cache maps it to the same unspecified-value
+  // arrays used by the SAT problem.
   const ASTVec c = bm->GetAsserts();
 
   if (bm->UserFlags.stats_flag)
@@ -620,7 +861,15 @@ ASTNode AbsRefine_CounterExample::GetCounterExample(const ASTNode& expr)
     return ComputeFormulaUsingModel(expr);
   }
 
-  return TermToConstTermUsingModel(expr, false);
+  // Model evaluation works in plain bit-vector constants throughout (see
+  // TermToConstTermUsingModel, which strips the format off every result it
+  // returns), but this is where a value crosses back out to the caller. A
+  // float-sorted term's value has to be float-sorted again here: handed a
+  // bare bit-vector, asserting (= term value) builds a float/bit-vector mix
+  // that does not typecheck, so STP rejects its own model. Found by murxla's
+  // -C model check, which re-asserts every reported value.
+  return bm->LiftSourceValue(TermToConstTermUsingModel(expr, false),
+                             expr.GetSourceSort());
 }
 
 // FUNCTION: queries the counterexample, and returns the number of array
@@ -661,8 +910,9 @@ AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
                  se);
     }
 
-    // skip over introduced variables
-    if (f.GetKind() == SYMBOL && (bm->FoundIntroducedSymbolSet(f)))
+    // skip over introduced variables, and over the reads of an introduced
+    // array -- those entries are keyed on the read, not on the array
+    if (bm->isIntroducedCounterExampleEntry(f))
     {
       continue;
     }
@@ -670,7 +920,7 @@ AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
         f[1].GetKind() == BVCONST)
     {
       ASTNode rhs;
-      if (BITVECTOR_TYPE == se.GetType())
+      if (BITVECTOR_TYPE == se.GetType() || FLOATINGPOINT_TYPE == se.GetType())
       {
         rhs = TermToConstTermUsingModel(se, false);
       }
@@ -679,7 +929,17 @@ AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
         rhs = ComputeFormulaUsingModel(se);
       }
       assert(rhs.isConstant());
-      entries.push_back(std::make_pair(f[1], rhs));
+
+      // Hand the pair back at the array's declared sorts, for the reason
+      // GetCounterExample re-stamps its result: an index that is a bare
+      // bit-vector is not accepted back as an index of a float-indexed
+      // array, and a bare element cannot be equated with a read of a
+      // float-element one.
+      const SourceSort array_sort = e.GetSourceSort();
+      assert(array_sort.kind() == SourceSort::Kind::Array);
+      entries.push_back(std::make_pair(
+          bm->LiftSourceValue(f[1], array_sort.index()),
+          bm->LiftSourceValue(rhs, array_sort.element())));
     }
   }
 
@@ -698,7 +958,27 @@ void AbsRefine_CounterExample::PrintSMTLIB2(std::ostream& os, const ASTNode& n)
     n.nodeprint(os);
     os << "| ";
 
-    if (n.GetType() == stp::BITVECTOR_TYPE)
+    if (bm->isRoundingModeSymbol(n))
+    {
+      // A RoundingMode value must print as a mode name -- a legal term of
+      // the sort -- not as its raw 5-bit carrier. The declaration pinned the
+      // symbol one-hot, so the model value always names a mode; anything
+      // else would be a bug, but print the bits rather than crash.
+      const ASTNode v = TermToConstTermUsingModel(n, false);
+      const char* name = printer::roundingModeName(v.GetUnsignedConst());
+      if (name != NULL)
+        os << name;
+      else
+        printer::outputBitVecSMTLIB2(v, os);
+    }
+    else if (n.GetType() == stp::FLOATINGPOINT_TYPE)
+      // A floating-point value must be printed in floating-point syntax
+      // (fp #bS #bE #bM), not as the raw packed bit-vector -- the get-model
+      // path (outputLine) does this; get-value must match, or it hands back a
+      // bit-vector literal where an operand of floating-point sort is expected.
+      printer::outputFloatingPointSMTLIB2(TermToConstTermUsingModel(n, false),
+                                          os, n);
+    else if (n.GetType() == stp::BITVECTOR_TYPE)
       printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(n, false), os);
     else
     {
@@ -721,20 +1001,33 @@ void AbsRefine_CounterExample::outputLine(std::ostream& os, const ASTNode &f, AS
                  se);
     }
 
-    // skip over introduced variables
-    if (f.GetKind() == SYMBOL && (bm->FoundIntroducedSymbolSet(f)))
+    // skip over introduced variables, and over the reads of an introduced
+    // array -- those entries are keyed on the read, not on the array
+    if (bm->isIntroducedCounterExampleEntry(f))
     {
       return;
     }
 
     if (f.GetKind() == SYMBOL)
     {
-      os << "( define-fun ";
+      os << "(define-fun ";
       os << "|";
       f.nodeprint(os);
       os << "|";
 
-      if (f.GetType() == stp::BITVECTOR_TYPE)
+      if (bm->isRoundingModeSymbol(f))
+      {
+        // As in PrintSMTLIB2: the sort and value are RoundingMode, not the
+        // 5-bit carrier.
+        os << " () RoundingMode ";
+        const ASTNode v = TermToConstTermUsingModel(se, false);
+        const char* name = printer::roundingModeName(v.GetUnsignedConst());
+        if (name != NULL)
+          os << name;
+        else
+          printer::outputBitVecSMTLIB2(v, os);
+      }
+      else if (f.GetType() == stp::BITVECTOR_TYPE)
       {
         os << " () (";
         os << "_ BitVec " << f.GetValueWidth() << ")";
@@ -746,35 +1039,103 @@ void AbsRefine_CounterExample::outputLine(std::ostream& os, const ASTNode &f, AS
         assert (se == bm->ASTTrue || se == bm->ASTFalse);
         os << " () Bool " << ((se == bm->ASTTrue) ? "true" : "false");
       }
+      else if (f.GetType() == stp::FLOATINGPOINT_TYPE)
+      {
+        os << " () (";
+        os << "_ FloatingPoint " << f.GetExpWidth() << " " << f.GetSigWidth()
+           << ") ";
+        printer::outputFloatingPointSMTLIB2(
+            TermToConstTermUsingModel(se, false), os, f);
+      }
       else
       {
         FatalError("Wrong Type");
       }
 
-      os << " )" << std::endl;
+      os << ")" << std::endl;
     }
 
     //TODO completely the wrong format.
     if ((f.GetKind() == READ && f[0].GetKind() == SYMBOL &&
          f[1].GetKind() == BVCONST))
     {
+      const ASTNode& array = f[0];
 
-      os << "( define-fun ";
+      // The true sorts, so the line replays against the original
+      // declaration: a float element's format is on the array node, while
+      // a float index format and RoundingMode on either side come from the
+      // manager's array registries.
+      unsigned int idx_exp = 0;
+      unsigned int idx_sig = 0;
+      const bool fp_index = bm->arrayHasFpIndex(array, idx_exp, idx_sig);
+      const bool rm_index = bm->arrayHasRmIndex(array);
+      const bool rm_element = bm->arrayHasRmElement(array);
+      const bool fp_element = array.GetExpWidth() != 0;
+
+      os << "(define-fun ";
 
       os << "|";
-      f[0].nodeprint(os);
-      os << "| ";
+      array.nodeprint(os);
+      // No trailing space: the sorts and values below each supply their own
+      // leading one, exactly as in the scalar branch above.
+      os << "|";
 
-      os << " (";
-      os << "_ BitVec " << f[0].GetIndexWidth() << ")";
+      if (fp_index)
+        os << " (_ FloatingPoint " << idx_exp << " " << idx_sig << ")";
+      else if (rm_index)
+        os << " RoundingMode";
+      else
+        os << " (_ BitVec " << array.GetIndexWidth() << ")";
 
-      os << " (";
-      os << "_ BitVec " << f[0].GetValueWidth() << ")";
+      if (fp_element)
+        os << " (_ FloatingPoint " << array.GetExpWidth() << " "
+           << array.GetSigWidth() << ")";
+      else if (rm_element)
+        os << " RoundingMode";
+      else
+        os << " (_ BitVec " << array.GetValueWidth() << ")";
 
-      printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(f[1], false), os);
+      // A RoundingMode cell or index prints by mode name when the bits name
+      // one (they always should; print the bits rather than crash), a float
+      // as an (fp ...) literal, exactly as scalar values of those sorts do.
+      const ASTNode index = TermToConstTermUsingModel(f[1], false);
+      if (fp_index)
+      {
+        os << " ";
+        printer::outputFloatingPointSMTLIB2(index, os, idx_exp, idx_sig);
+      }
+      else if (rm_index)
+      {
+        const char* name = printer::roundingModeName(index.GetUnsignedConst());
+        os << " ";
+        if (name != NULL)
+          os << name;
+        else
+          printer::outputBitVecSMTLIB2(index, os);
+      }
+      else
+        printer::outputBitVecSMTLIB2(index, os);
 
-      printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(se, false), os);
-      os << " )" << endl;
+      const ASTNode value = TermToConstTermUsingModel(se, false);
+      if (fp_element)
+      {
+        os << " ";
+        printer::outputFloatingPointSMTLIB2(value, os, array.GetExpWidth(),
+                                            array.GetSigWidth());
+      }
+      else if (rm_element)
+      {
+        const char* name = printer::roundingModeName(value.GetUnsignedConst());
+        os << " ";
+        if (name != NULL)
+          os << name;
+        else
+          printer::outputBitVecSMTLIB2(value, os);
+      }
+      else
+        printer::outputBitVecSMTLIB2(value, os);
+
+      os << ")" << endl;
     }
 
 }
@@ -800,11 +1161,43 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
         c.insert(e);
   }
 
-  for (const auto& e: c)
+  // The map iterates in an order that follows interning history, which
+  // varies across configurations of the solver. Sort the observed reads
+  // by array name and then by index, so one query prints one model text
+  // everywhere. Solver-map entries can carry a read at a symbolic index
+  // next to the concrete observations, so indexes are only compared as
+  // bits when both are constants; symbolic ones sort after, by name
+  // when possible.
+  const auto nodeBefore = [](const ASTNode& a, const ASTNode& b) {
+    if (a.GetKind() == SYMBOL && b.GetKind() == SYMBOL)
+      return strcmp(a.GetName(), b.GetName()) < 0;
+    return a.GetNodeNum() < b.GetNodeNum();
+  };
+  std::vector<std::pair<ASTNode, ASTNode>> reads(c.begin(), c.end());
+  std::sort(reads.begin(), reads.end(),
+            [&nodeBefore](const std::pair<ASTNode, ASTNode>& x,
+                          const std::pair<ASTNode, ASTNode>& y) {
+              const ASTNode& ax = x.first[0];
+              const ASTNode& ay = y.first[0];
+              if (ax != ay)
+                return nodeBefore(ax, ay);
+              const ASTNode& ix = x.first[1];
+              const ASTNode& iy = y.first[1];
+              const bool cx = ix.isConstant();
+              const bool cy = iy.isConstant();
+              if (cx && cy)
+                return CONSTANTBV::BitVector_Lexicompare(ix.GetBVConst(),
+                                                         iy.GetBVConst()) < 0;
+              if (cx != cy)
+                return cx;
+              return nodeBefore(ix, iy);
+            });
+
+  for (const auto& e : reads)
   {
-    outputLine(os, e.first, e.second); 
+    outputLine(os, e.first, e.second);
   }
-    
+
   os.flush();
 }
 
@@ -876,8 +1269,9 @@ void AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
                  se);
     }
 
-    // skip over introduced variables
-    if (f.GetKind() == SYMBOL && (bm->FoundIntroducedSymbolSet(f)))
+    // skip over introduced variables, and over the reads of an introduced
+    // array -- those entries are keyed on the read, not on the array
+    if (bm->isIntroducedCounterExampleEntry(f))
     {
       continue;
     }
@@ -899,7 +1293,7 @@ void AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
       }
 
       ASTNode rhs;
-      if (BITVECTOR_TYPE == se.GetType())
+      if (BITVECTOR_TYPE == se.GetType() || FLOATINGPOINT_TYPE == se.GetType())
       {
         rhs = TermToConstTermUsingModel(se, false);
       }

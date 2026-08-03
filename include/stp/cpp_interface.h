@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Trevor Hansen, Andrew V. Jones
+ * AUTHORS: Trevor Hansen, Andrew Teylu
  *
  * BEGIN DATE: Apr, 2010
  *
@@ -29,6 +29,7 @@ THE SOFTWARE.
 #include "stp/NodeFactory/NodeFactory.h"
 #include "stp/Util/Attributes.h"
 #include "extlib-unordered-dense/ankerl/unordered_dense.h"
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -42,10 +43,64 @@ namespace stp
 struct UserDefinedFlags;
 class STPMgr;
 class LetMgr;
+enum class FPSpecial; // see STPManager.h
+
+// The (exponent bits, significand bits) of a parsed floating-point sort;
+// parser plumbing (bison's %union carries a pointer to one).
+struct float_size
+{
+  explicit float_size(int exp, int sig) : exp_bits(exp), sig_bits(sig) {}
+  int exp_bits;
+  int sig_bits;
+};
+
+// One component -- index or element -- of a parsed (Array X Y) sort, and
+// the assembled pair; parser plumbing like float_size. `width` is the bit
+// width the sort is laid out on: the declared width for a bitvector, the
+// packed width for a float, five for a rounding mode.
+struct array_sort_component
+{
+  enum Kind
+  {
+    BITVECTOR,
+    FLOATINGPOINT,
+    ROUNDINGMODE
+  };
+  Kind kind;
+  unsigned width;
+  unsigned exp_bits; // FLOATINGPOINT only
+  unsigned sig_bits; // FLOATINGPOINT only
+
+  SourceSort sourceSort() const
+  {
+    switch (kind)
+    {
+      case BITVECTOR:
+        return SourceSort::bitVector(width);
+      case FLOATINGPOINT:
+        return SourceSort::floatingPoint(exp_bits, sig_bits);
+      case ROUNDINGMODE:
+        return SourceSort::roundingMode();
+    }
+    return SourceSort::unknown();
+  }
+};
+
+struct array_sort
+{
+  array_sort_component index;
+  array_sort_component elem;
+
+  SourceSort sourceSort() const
+  {
+    return SourceSort::array(index.sourceSort(), elem.sourceSort());
+  }
+};
 
 class Cpp_interface
 {
   STPMgr& bm;
+  std::map<std::string, std::pair<unsigned, unsigned>> sort_aliases;
   bool alreadyWarned;
   bool print_success;
   bool ignoreCheckSatRequest;
@@ -82,7 +137,9 @@ class Cpp_interface
     // Functions are (currently) managed at global scope; we need a pointer to
     // the global functions to be able to remove functions when we pop
     SolverFrame(ankerl::unordered_dense::map<std::string, Function>*
-                    global_function_context);
+                    global_function_context,
+                std::map<std::string, std::pair<unsigned, unsigned>>*
+                    global_sort_alias_context);
     virtual ~SolverFrame();
 
     // Obtain the functions for the current frame
@@ -91,11 +148,20 @@ class Cpp_interface
     // Obtain the symbols for the current frame
     ASTVec& getSymbols();
 
+    void addSortAlias(const std::string& name);
+    void addSymbol(const ASTNode& symbol);
+    bool removeSymbol(const ASTNode& symbol);
+    bool lookupSymbol(const std::string& name, ASTNode& output) const;
+
   private:
     vector<std::string> _scoped_functions;
+    vector<std::string> _scoped_sort_aliases;
     ASTVec _scoped_symbols;
+    std::map<std::string, std::vector<ASTNode>> _symbol_bindings;
     ankerl::unordered_dense::map<std::string, Function>*
         _global_function_context;
+    std::map<std::string, std::pair<unsigned, unsigned>>*
+        _global_sort_alias_context;
   };
 
   // The vector of all frames that have been created by calling push
@@ -109,6 +175,7 @@ class Cpp_interface
   void init();
   void addFrame();
   void removeFrame();
+  void assertRoundingModeValid(const ASTNode& s);
 
   bool produce_models;
   bool changed_model_status;
@@ -152,11 +219,28 @@ public:
   // TERMS//
   DLL_PUBLIC ASTNode CreateZeroConst(unsigned int width);
   DLL_PUBLIC ASTNode CreateOneConst(unsigned int width);
+  DLL_PUBLIC ASTNode CreateFPSpecialConst(stp::FPSpecial which,
+                                          unsigned exp_width,
+                                          unsigned sig_width);
+
+  // define-sort aliases for floating-point sorts. A real table: the alias
+  // name is NOT interned as a symbol (the old scheme made the sort name
+  // resolvable as a term variable). Aliases follow assertion-frame scope;
+  // STP does not support global declarations.
+  DLL_PUBLIC void addSortAlias(const std::string& name, unsigned exp_width,
+                               unsigned sig_width);
+  DLL_PUBLIC bool lookupSortAlias(const std::string& name,
+                                  unsigned& exp_width,
+                                  unsigned& sig_width) const;
+
   DLL_PUBLIC ASTNode CreateBVConst(std::string& strval, int base,
                                    int bit_width);
   DLL_PUBLIC ASTNode CreateBVConst(const char* const strval, int base);
   DLL_PUBLIC ASTNode CreateBVConst(unsigned int width,
                                    unsigned long long int bvconst);
+  DLL_PUBLIC ASTNode CreateRMConst(unsigned mode);
+  DLL_PUBLIC ASTNode CreateSourceSymbol(const char* name,
+                                        const SourceSort& source_sort);
   DLL_PUBLIC ASTNode LookupOrCreateSymbol(const char* const name);
 
   // A boolean variable applied to a constant, e.g. p(0x3), names an
@@ -174,10 +258,12 @@ public:
   DLL_PUBLIC ASTNode applyFunction(const std::string& name,
                                    const ASTVec& params);
 
-  // Classify a name in a single map probe: returns the function's return
-  // type (BITVECTOR_TYPE or BOOLEAN_TYPE), or UNKNOWN_TYPE when the name
-  // is not a stored function.
+  // Classify a name in a single map probe: returns the function's carrier
+  // return type (BITVECTOR_TYPE or BOOLEAN_TYPE), or UNKNOWN_TYPE when the
+  // name is not a stored function. Source-only distinctions are available
+  // from functionReturnSourceSort().
   DLL_PUBLIC types functionReturnType(const std::string& name);
+  DLL_PUBLIC SourceSort functionReturnSourceSort(const std::string& name);
   bool hasFunctions() const { return !functions.empty(); }
 
   DLL_PUBLIC ASTNode LookupOrCreateSymbol(std::string name);
@@ -204,6 +290,28 @@ public:
   DLL_PUBLIC void deleteNode(ASTNode* n);
   DLL_PUBLIC void addSymbol(ASTNode& s);
 
+  // Declare a symbol of SMT-LIB's RoundingMode sort: registers it like
+  // addSymbol, marks it for the model printers, and asserts that it takes
+  // one of the five one-hot mode encodings. The sort has exactly five
+  // values but the 5-bit carrier has 32; without the constraint a model
+  // can pick an encoding that denotes no rounding mode at all (e.g.
+  // "r differs from all five modes" used to answer sat).
+  DLL_PUBLIC void addRoundingModeSymbol(ASTNode& s);
+
+  // Declare an array symbol of the parsed (Array X Y) sort: registers it
+  // like addSymbol, lays the widths onto the node, stamps a float element's
+  // format there too, and records any float-index, RoundingMode-index or
+  // RoundingMode-element sort in the manager's array registries (the node
+  // itself cannot carry those -- see STPMgr). The registries are dropped
+  // with the symbol when its frame pops.
+  DLL_PUBLIC void addArraySymbol(ASTNode& s, const array_sort& sort);
+
+  // Whether an array-valued term's sorts -- base-symbol registries plus the
+  // element format on the node -- agree with a parsed (Array X Y) sort.
+  // Width agreement is the caller's (cheaper, better-reported) check; this
+  // answers for the sort classes that share one width.
+  DLL_PUBLIC bool arraySortsAgree(const ASTNode& arr, const array_sort& sort);
+
   DLL_PUBLIC void success();
   DLL_PUBLIC void error(std::string msg);
   DLL_PUBLIC void unsupported();
@@ -215,8 +323,9 @@ public:
   // Reset STP back to "just started up" state.
   DLL_PUBLIC void reset();
 
-  // Empty the assertion stack, keeping the declarations and options of the
-  // base level. Weaker than reset(), per SMT-LIB 2.6 4.2.5.
+  // Empty the assertion stack and discard its declarations/definitions,
+  // while retaining solver options and the selected logic. STP does not
+  // support :global-declarations, so its required default is false.
   DLL_PUBLIC void resetAssertions();
   DLL_PUBLIC void pop();
   DLL_PUBLIC void push();

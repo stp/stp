@@ -24,6 +24,13 @@ else()
     set(STP_EXECUTABLE_PATH "$<TARGET_FILE:stp_simple-bin>")
 endif()
 
+# A Python literal for lit.site.cfg.in: CMake booleans render as ON/OFF.
+if (ENABLE_FLOATING_POINT)
+    set(STP_FLOATING_POINT_PYBOOL "True")
+else()
+    set(STP_FLOATING_POINT_PYBOOL "False")
+endif()
+
 # Create llvm-lit configuration file
 configure_file(lit.site.cfg.in lit.site.cfg.g @ONLY)
 file(GENERATE OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>.site.cfg

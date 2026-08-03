@@ -80,6 +80,9 @@
 
 %parse-param {void* AssertsQuery}
 
+/* Pinned conflict count (see smt2.y). */
+%expect 72
+
 %union {  
   // FIXME: Why is this not an UNSIGNED int?
   int uintval;                  /* for numerals in types. */

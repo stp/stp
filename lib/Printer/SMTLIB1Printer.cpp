@@ -47,6 +47,20 @@ void printSMTLIB1VarDeclsToStream(ASTNodeSet& symbols, ostream& os);
 
 void SMTLIB1_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr)
 {
+  // SMT-LIB 1 has no floating-point theory, so there is nothing correct to
+  // emit here. Without this the printer produced one of two wrong things: a
+  // FatalError from deep inside the variable declarations, or -- when the
+  // floats were all in the formula and none in a declaration -- SMT-LIB *2*
+  // floating-point syntax inside an SMT-LIB 1 benchmark announced as
+  // :logic QF_BV, which no parser will read and which quietly claims to be a
+  // bit-vector problem. Refuse where the caller can see why.
+  if (containsFloatingPointTheory(n, mgr))
+  {
+    FatalError("SMTLIB1_PrintBack: SMT-LIB 1 has no floating-point theory; "
+               "print this with SMTLIB2_PrintBack (vc_printSMTLIB2 from the "
+               "C interface)");
+  }
+
   os << "(" << endl;
   os << "benchmark blah" << endl;
   if (containsArrayOps(n, mgr))
