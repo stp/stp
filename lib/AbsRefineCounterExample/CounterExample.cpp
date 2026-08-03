@@ -561,7 +561,10 @@ AbsRefine_CounterExample::TermToConstTermUsingModel_inner(const ASTNode& term,
         // lowering's reads while the printed arrays are identical, which
         // is the disagreement the post-solve audit trips on -- and,
         // unaudited, a (get-model) that falsifies the query it answered
-        // sat.
+        // sat. Both of this arm's former answers were such an invention:
+        // all-ones for a bitvector cell the printer filled with zero,
+        // and RNE for a RoundingMode cell that ReadUsingModel and the
+        // checker were still completing with all-zero bits.
         //
         // Memoising the invented value instead cannot close that gap.
         // Model queries run inside a scope that restores the
@@ -1090,13 +1093,18 @@ void AbsRefine_CounterExample::CollectArrayNodes(const ASTNode& arrayTerm,
   }
 }
 
-// See the header. On this branch every array has a bit-vector element
-// sort, all of whose patterns denote, so the completion is zero -- but
-// it is stated here rather than at the five sites that need it, because
-// what matters is that they agree, not what they agree on.
+// See the header. Zero bits is +0.0 for a float element and a perfectly
+// ordinary bitvector otherwise, so the only sort needing its own answer
+// is RoundingMode, whose one-hot encoding leaves all-zero denoting
+// nothing at all. RNE is the mode published for such a cell -- the same
+// choice cvc5 makes, and IEEE 754's default rounding direction; the
+// value is a don't-care, so what matters is that every site takes it
+// from here and none of them invents its own.
 ASTNode
 AbsRefine_CounterExample::defaultCellValue(const ASTNode& arrayTerm) const
 {
+  if (bm->arrayHasRmElement(arrayTerm))
+    return bm->CreateBVConst(5, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
   return bm->CreateZeroConst(arrayTerm.GetValueWidth());
 }
 
@@ -1803,12 +1811,11 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
     for (size_t i = 0; i < entries.size(); i++)
       os << " (store";
     os << " ((as const " << sortText.str() << ")";
-    // The unobserved cells' value: zero is +zero for a float element
-    // but denotes no mode, so RoundingMode elements default to RNE.
-    if (rmElement)
-      os << " RNE";
-    else
-      printCell(defaultCellValue(array));
+    // The unobserved cells' value, printed through the same cell
+    // printer as an observed one, so that what is published here is
+    // demonstrably the value every other reader completes with rather
+    // than text that happens to match it.
+    printCell(defaultCellValue(array));
     os << ")";
     for (size_t i = 0; i < entries.size(); i++)
     {

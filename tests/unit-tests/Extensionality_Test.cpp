@@ -3289,6 +3289,43 @@ TEST_F(ExtModelEqualityTest, UnrecordedCellsCompleteToZero)
   EXPECT_FALSE(ce.ArraysEqualUsingModel(b, a));
 }
 
+// The completion is a property of the element sort, not of its width.
+// RoundingMode is a one-hot five-bit encoding, so the all-zero pattern a
+// five-bit bitvector array completes with denotes no mode at all --
+// which is why the printer publishes RNE for such a cell. A completion
+// derived from the width alone puts a sixth rounding behaviour in the
+// printed model and, worse, makes the checker's contents walk complete
+// with a different value than the read evaluator invents: the audit then
+// reports a lowering and its own operands disagreeing on a satisfiable
+// query.
+TEST_F(ExtModelEqualityTest, RoundingModeCellsCompleteToAMode)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  const SourceSort rmElements = SourceSort::array(
+      SourceSort::bitVector(3), SourceSort::roundingMode());
+  const ASTNode modes = mgr.CreateSourceSymbol("modes", rmElements);
+  const ASTNode plain = mgr.CreateSymbol("plain", 3, 5);
+  const ASTNode rne =
+      mgr.CreateBVConst(5, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+
+  EXPECT_EQ(rne, ce.defaultCellValue(modes));
+  // Identical element width, ordinary bitvector elements: still zero.
+  EXPECT_EQ(mgr.CreateZeroConst(5), ce.defaultCellValue(plain));
+
+  // And the comparison the audit makes agrees with it: writing the
+  // completion back leaves the array alone, writing a different mode
+  // does not. Both directions matter -- the two polarities of the
+  // audit's message are exactly these two cases.
+  const ASTNode i = mgr.CreateBVConst(3, 2);
+  EXPECT_TRUE(ce.ArraysEqualUsingModel(
+      hf->CreateArrayTerm(WRITE, 3, 5, {modes, i, rne}), modes));
+  EXPECT_FALSE(ce.ArraysEqualUsingModel(
+      hf->CreateArrayTerm(
+          WRITE, 3, 5,
+          {modes, i, mgr.CreateBVConst(5, symbolic_fp::ROUND_TOWARD_ZERO)}),
+      modes));
+}
+
 TEST_F(ExtModelEqualityTest, WalksWriteStructureAgainstTheModel)
 {
   ASTNode a = arr("a");
