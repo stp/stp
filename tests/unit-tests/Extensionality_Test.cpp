@@ -78,6 +78,38 @@ TEST(ArrayEqualityAstTest, OpaqueNodeIsTypedHashedAndPrintedAsEquality)
   EXPECT_EQ("(= |a| |b|)", out.str());
 }
 
+// The factory is the whole of the enforcement. Every front end's node
+// creation bottoms out here, so refusing here is what makes "the option
+// is off, therefore no ARRAY_EQ exists" true -- and that in turn is why
+// the solve entry point does not walk each query looking for one. A
+// second, later refusal would be defending a state this one already
+// makes unreachable; if this test ever stops holding, that walk has to
+// come back.
+TEST(ArrayEqualityAstTest, WholeArrayEqualityIsRefusedWithoutTheOption)
+{
+  STPMgr mgr;
+  ASSERT_FALSE(mgr.UserFlags.enable_array_equality);
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  const ASTNode a = mgr.CreateSymbol("a", 2, 3);
+  const ASTNode b = mgr.CreateSymbol("b", 2, 3);
+
+  EXPECT_DEATH(hf->CreateNode(EQ, a, b),
+               "cannot decide equality between whole array terms");
+
+  // Refused at construction, so it is refused however deeply the
+  // equality is buried and whatever the surrounding formula would have
+  // done with it -- there is no later point at which a query could
+  // still be carrying one.
+  SimplifyingNodeFactory simplifying(*mgr.hashingNodeFactory, mgr);
+  EXPECT_DEATH(simplifying.CreateNode(EQ, ASTVec{a, b}),
+               "cannot decide equality between whole array terms");
+
+  // Bit-vector equality is untouched by the refusal.
+  const ASTNode x = mgr.CreateSymbol("x", 0, 3);
+  const ASTNode y = mgr.CreateSymbol("y", 0, 3);
+  EXPECT_EQ(EQ, hf->CreateNode(EQ, x, y).GetKind());
+}
+
 TEST(ArrayEqualityAstTest, FunctionApplicationSpecializesOpaqueOperands)
 {
   STPMgr mgr;

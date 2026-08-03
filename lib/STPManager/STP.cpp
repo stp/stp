@@ -315,23 +315,30 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   if (ext != NULL)
     ext->beginSolve();
 
+  //
+  // Nothing here runs without the option. ARRAY_EQ has exactly one
+  // producer -- the hashing factory, which every front end's node
+  // creation bottoms out in -- and it refuses to build one while the
+  // option is off, so a query that never enabled it cannot contain one
+  // and does not have to be walked to find that out. A second check
+  // here would defend a state its own enforcement point already makes
+  // unreachable, at the price of a whole-DAG traversal on every solve
+  // STP performs.
   ASTNode semantic_input = original_input;
-  if (containsOpaqueArrayEquality(original_input))
+  if (bm->UserFlags.enable_array_equality)
   {
-    if (!bm->UserFlags.enable_array_equality)
-      FatalError("array-equality: opaque equality reached solve while the "
-                 "decision procedure is disabled");
-    if (ext == NULL)
+    if (ext == NULL && containsOpaqueArrayEquality(original_input))
     {
       ext = bm->getExtensionality();
       ext->beginSolve();
     }
+    // Reuse an existing context object when present; beginSolve() above has
+    // cleared all generated records. The lowering pass builds fresh
+    // solve-local records and computes an empty active set when this root has
+    // no equality.
+    if (ext != NULL)
+      semantic_input = ext->lowerArrayEqualities(original_input);
   }
-  // Reuse an existing context object when present; beginSolve() above has
-  // cleared all generated records. The lowering pass builds fresh solve-local
-  // records and computes an empty active set when this root has no equality.
-  if (ext != NULL && ext->enabled())
-    semantic_input = ext->lowerArrayEqualities(original_input);
 
   bm->ASTNodeStats("input asserts and query: ", semantic_input);
 
@@ -774,8 +781,12 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // ARRAY_EQ is a user-facing, solve-boundary node only.  Check the exact
   // root handed to the ordinary array transformer so that no future
   // preparation rewrite can accidentally leak opaque equality semantics
-  // into code which has no case for it.
-  if (containsOpaqueArrayEquality(inputToSat))
+  // into code which has no case for it.  This barrier is worth its walk,
+  // but only where the node it looks for can exist: with the option off
+  // the factory never built one, so a query that never enabled the
+  // feature pays nothing.
+  if (bm->UserFlags.enable_array_equality &&
+      containsOpaqueArrayEquality(inputToSat))
     FatalError("array-equality: an opaque equality reached the final array "
                "transformation boundary",
                inputToSat);
