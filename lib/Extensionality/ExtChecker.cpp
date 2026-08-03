@@ -213,6 +213,15 @@ struct CheckerState
         // onward from a conflicting arrival. The representative keeps
         // the array's slot for this index, exactly as when the pass
         // stopped here.
+        //
+        // This is what bounds the section 11.1 minimization to the
+        // first conflict: the access's search tree ends here, so a
+        // later conflict involving it uses whatever route remains, and
+        // a pair that could only have met through this array is left
+        // for a later refinement round. Queueing it instead would
+        // restore exact minimization at the cost of an unbounded number
+        // of further conflicts per pass, all derived from an already
+        // refuted candidate.
         paths[key] = candidatePath;
         return;
       }
@@ -264,8 +273,10 @@ bool atomLess(const ExtLemmaAtom& x, const ExtLemmaAtom& y)
 
 // Canonicalize a premise: drop reflexive equalities (an index compared
 // with itself contributes nothing), drop exact duplicate atoms, and
-// sort deterministically. The guard paths feeding this are already
-// shortest (section 11.1, a property of the FIFO work list); beyond
+// sort deterministically. The guard paths feeding this are as short as
+// the pass could make them (section 11.1, a property of the FIFO work
+// list -- exactly shortest for the first conflict, and shortest among
+// the routes still open for a later one; see ExtChecker.h); beyond
 // that only exact duplicates are removed, no semantic subsumption.
 std::vector<ExtLemmaAtom> canonicalAtoms(const std::vector<ExtLemmaAtom>& in)
 {
@@ -430,13 +441,19 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
   //
   // The FIFO discipline is load-bearing: with every access seeded
   // before the fixed point starts, discovery is breadth-first per
-  // access, so an access's recorded path to any array -- and in
-  // particular the arrival that fires a conflict -- is a shortest
-  // propagation path. That is the lemma minimization of section 11.1,
-  // obtained without the separate post-conflict search a depth-first
-  // (stack) working list would need. Pinned by the
-  // ConflictPremiseUsesShortestPaths unit test; do not replace the
-  // deque with a stack.
+  // access, so an access's recorded path to any array is a shortest
+  // propagation path among the routes still open to it. That is the
+  // lemma minimization of section 11.1, obtained without the separate
+  // post-conflict search a depth-first (stack) working list would need.
+  //
+  // "Still open" because a conflicting arrival is not queued (see
+  // insert), so an access stops at an array it conflicted at. The first
+  // conflict of a pass is unaffected -- nothing has been truncated when
+  // it fires -- but a later one can carry a longer premise than an
+  // exhaustive search would give it. Pinned at both ends by the
+  // ConflictPremiseUsesShortestPaths and
+  // ConflictingArrivalStopsAtTheConflictArray unit tests; do not
+  // replace the deque with a stack.
   while (!st.worklist.empty())
   {
     const PairKey cur = st.worklist.front();

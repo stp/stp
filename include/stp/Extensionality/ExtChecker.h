@@ -51,10 +51,24 @@ THE SOFTWARE.
  * The work list is FIFO and rule I seeds every access before the
  * fixed point starts, so discovery is breadth-first per access: the
  * first arrival of an access at an array -- the one whose path gets
- * recorded, and the one a conflict fires on -- came along a shortest
- * propagation path. Conflict lemmas therefore use shortest paths on
- * both sides (the minimization of section 11.1) without a separate
- * post-conflict search.
+ * recorded -- came along a shortest propagation path. That gives the
+ * minimization of section 11.1 without a separate post-conflict
+ * search.
+ *
+ * Exactly how far that reaches is worth stating, because the pass does
+ * not stop at the first conflict the way the paper's does. An arrival
+ * that conflicts is recorded as seen but is not queued, so the access
+ * stops at the array it conflicted at. Shortest paths are therefore a
+ * property of the graph in which each access's own conflict sites are
+ * terminal: the first conflict of a pass has shortest paths on both
+ * sides unconditionally, and a later one has the shortest paths still
+ * available to it. A later conflict can consequently carry a longer
+ * premise than an exhaustive search would give it, and a pair that can
+ * only meet through an earlier conflict site is not reported at all --
+ * it resurfaces in a later refinement round, once a lemma has moved the
+ * candidate. Pinned at both ends by the ConflictPremiseUsesShortestPaths
+ * and ConflictingArrivalStopsAtTheConflictArray unit tests; do not
+ * replace the deque with a stack.
  *
  * Following section 11.2, rho keeps one representative access per
  * concrete index of each array, in a hash keyed by the index value: a
@@ -330,7 +344,10 @@ struct ExtCheckResult
   // the first, because each conflict yields a lemma that is valid on
   // its own (its premise holds and its conclusion fails in the very
   // same candidate), and emitting them together spares a whole
-  // solve-from-scratch per lemma.
+  // solve-from-scratch per lemma. "Found", not "exists": a conflicting
+  // arrival does not propagate onward, so this is not an exhaustive
+  // enumeration of the disagreeing pairs in the candidate. See the
+  // shortest-path discussion at the top of this file.
   std::vector<ExtConflict> conflicts;
   // conflicts[0] -- the conflict a first-conflict-wins pass would have
   // stopped at. Kept for callers that want just the earliest one.

@@ -1797,6 +1797,62 @@ TEST_F(ExtFixtureTest, ConflictPremiseUsesShortestPaths)
   EXPECT_EQ(guardsInCertificates, r.materializedGuardCount);
 }
 
+// The limit of the property above, which the comments used to state
+// without one. An arrival that conflicts is recorded as seen but is not
+// queued, so the access stops at the array it conflicted at. Shortest
+// paths are therefore a property of the graph in which each access's
+// own conflict sites are terminal -- exactly the first conflict of a
+// pass, and best-effort after that.
+//
+// Here the only route from S to E runs through D. x conflicts with y on
+// arrival at D and goes no further, so it never meets z, although the
+// two differ at the same index and the equalities joining them are both
+// true. The pass reports the conflicts it can still reach; refinement
+// proceeds on those, and the x/z conflict resurfaces in a later round
+// once a lemma has moved the candidate.
+TEST_F(ExtFixtureTest, ConflictingArrivalStopsAtTheConflictArray)
+{
+  ASTNode S = arr("S"), D = arr("D"), E = arr("E");
+  ASTNode i = bv("i", 1);
+  ASTNode vX = bv("vX", 1), vY = bv("vY", 2), vZ = bv("vZ", 3);
+
+  eqEdge(S, D, "e0", true);
+  eqEdge(D, E, "e1", true);
+
+  const size_t x = readAccess(S, i, vX);
+  const size_t y = readAccess(D, i, vY);
+  const size_t z = readAccess(E, i, vZ);
+
+  ExtCheckResult r = run();
+  ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
+  ASSERT_FALSE(r.conflicts.empty());
+
+  // The earliest conflict still has shortest paths on both sides: y is
+  // where it was seeded, x crossed one equality to reach it.
+  const ExtConflict& first = r.conflicts[0];
+  EXPECT_EQ(D, first.commonArray);
+  EXPECT_EQ(y, first.leftAccess);
+  EXPECT_EQ(x, first.rightAccess);
+  EXPECT_EQ(0u, first.leftGuards.size());
+  EXPECT_EQ(1u, first.rightGuards.size());
+
+  // x and z are connected and disagree, but are never reported: x was
+  // stopped at D.
+  for (const ExtConflict& c : r.conflicts)
+  {
+    const bool pairsXandZ = (c.leftAccess == x && c.rightAccess == z) ||
+                            (c.leftAccess == z && c.rightAccess == x);
+    EXPECT_FALSE(pairsXandZ)
+        << "the pass is not exhaustive over connected disagreeing pairs";
+  }
+
+  // The mechanism itself: nothing ever propagates x onward out of D.
+  for (const ExtEvent& e : r.events)
+    if (e.kind == ExtEvent::PROPAGATE && e.access == x)
+      EXPECT_NE(D, e.source)
+          << "a conflicting arrival must not propagate past its conflict";
+}
+
 TEST_F(ExtFixtureTest, IteTrueConditionPropagatesDownWithPositiveGuard)
 {
   expectIteConflict(true, true);

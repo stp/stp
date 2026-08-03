@@ -207,17 +207,24 @@ for each abstracted candidate formula:
                           ∧ ⋀ crossed if-then-else conditions
         →  value(x) = value(y)
 
-   which is false in the candidate σ. Both propagation paths are
-   shortest paths (the minimization of §11.1): seeding every access
-   before the fixed point starts makes the FIFO work list breadth-first
-   per access, so the arrival that fires a conflict is the earliest —
-   shortest — one. The lemma is encoded as clauses over
+   which is false in the candidate σ. Propagation paths are as short as
+   the pass can make them (the minimization of §11.1): seeding every
+   access before the fixed point starts makes the FIFO work list
+   breadth-first per access, so the arrival that fires a conflict is the
+   earliest — shortest — one. Because the pass continues past a
+   conflict rather than stopping at it, that is exact for the first
+   conflict of a pass and best-effort afterwards: an arrival that
+   conflicts is not queued onward, so a later conflict uses the shortest
+   route still open to it, and a pair that could only have met at an
+   earlier conflict site waits for a later refinement round. The lemma
+   is encoded as clauses over
    the SAT variables of the already-encoded names (equalities reified
    through fresh definitional literals); an atom the simplifier can
    decide from its defining terms — write indices that are distinct
    constant offsets from one pointer are the common case — is dropped
    at encoding time instead of becoming an equality circuit the SAT
-   solver would have to search through. The clause is added to the
+   solver would have to search through, on whichever side of the atom
+   the structural verdict permits. The clause is added to the
    incremental SAT solver; the loop re-solves. Each lemma permanently excludes the
    assignment that produced it, so the loop terminates.
 
