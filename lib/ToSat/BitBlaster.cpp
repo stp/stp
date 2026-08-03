@@ -2384,7 +2384,7 @@ BBNodeVec BitBlaster::v9(vector<list<BBNode>>& products,
     vector<BBNode> sorted; // The current column (sorted) gets put into here.
     vector<BBNode> prior;  // Prior is always empty in this..
 
-    const unsigned size = products[column].size();
+    [[maybe_unused]] const unsigned size = products[column].size();
     sortingNetworkAdd(support, products[column], sorted, prior);
 
     assert(products[column].size() == 1);

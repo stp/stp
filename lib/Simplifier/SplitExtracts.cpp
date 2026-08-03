@@ -80,7 +80,7 @@ namespace stp
 
       for (const auto& e: nodeToExtracts )
       {
-        const auto& symbol = e.first;
+        [[maybe_unused]] const auto& symbol = e.first;
         assert(symbol.GetKind() == SYMBOL);
 
         auto ranges = e.second;

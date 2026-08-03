@@ -743,7 +743,8 @@ namespace stp
     {
       CBV r = mkZero(bits_(x));
       CBV tmp = CONSTANTBV::BitVector_Clone(x); // Mul_Pos destroys this one.
-      CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Mul_Pos(r, tmp, y, true);
+      [[maybe_unused]] CONSTANTBV::ErrCode e =
+          CONSTANTBV::BitVector_Mul_Pos(r, tmp, y, true);
       assert(0 == e);
       CONSTANTBV::BitVector_Destroy(tmp);
       return r;
@@ -1322,7 +1323,7 @@ namespace stp
         // divisor. Division by zero gives all ones, so this lower bound
         // holds even if the divisor might be zero.
         CBV dividend = CONSTANTBV::BitVector_Clone(top->minV);
-        CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(
+        [[maybe_unused]] CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(
             result->minV, dividend, c1->maxV, remainder);
         assert(0 == e);
         CONSTANTBV::BitVector_Destroy(dividend);
@@ -1429,8 +1430,9 @@ namespace stp
             CBV quotientMax = CONSTANTBV::BitVector_Create(width, true);
 
             CBV dividend = CONSTANTBV::BitVector_Clone(children[0]->minV);
-            CONSTANTBV::ErrCode e = CONSTANTBV::BitVector_Div_Pos(
-                quotientMin, dividend, divisor, remainderMin);
+            [[maybe_unused]] CONSTANTBV::ErrCode e =
+                CONSTANTBV::BitVector_Div_Pos(quotientMin, dividend, divisor,
+                                              remainderMin);
             assert(0 == e);
             CONSTANTBV::BitVector_Destroy(dividend);
 

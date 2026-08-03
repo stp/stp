@@ -239,12 +239,24 @@ void PropagateEqualities::processCandidates()
           return left->id > right->id;
       return false;
     };
+  // Fill the backing vector first and heapify once, rather than pushing
+  // into an empty queue element by element: that is O(n) instead of
+  // O(n log n), and the pop order is unchanged because cmp is a total order
+  // (equal variable counts are broken by the unique id).
+  //
+  // It also sidesteps a GCC false positive. Move-constructing the queue from
+  // an *empty* reserved vector runs make_heap over a range GCC cannot see is
+  // empty, and it then derives an absurd trip count and reports
+  // -Waggressive-loop-optimizations, which is fatal under -Werror in a
+  // release build.
   vector<qType> qStore;
   qStore.reserve(mapped.size());
-  std::priority_queue < qType, vector<qType>, decltype(cmp) > q(cmp, std::move(qStore));
 
   for (const auto& e: mapped)
-    q.push(&e.second);
+    qStore.push_back(&e.second);
+
+  std::priority_queue<qType, vector<qType>, decltype(cmp)> q(
+      cmp, std::move(qStore));
 
   std::vector<uint64_t> replacedOrder;
   replacedOrder.reserve(mapped.size());
