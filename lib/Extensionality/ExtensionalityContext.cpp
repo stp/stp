@@ -406,6 +406,35 @@ void ExtensionalityContext::activateReachableRecords(
   }
 
   activeRecordIds.assign(activeIds.begin(), activeIds.end());
+
+  // Forget the lowering of every equality this solve did not keep. The
+  // map is written for each opaque node as it is visited, before there
+  // is any activation to consult, and lowering can then throw the
+  // result away: an equality between a write chain and its own base is
+  // solved by rewriting, and a conjunct of that rewriting is dropped
+  // when an outer write to the same index certainly shadows it, taking
+  // a nested equality's abstraction variable with it. The record is
+  // never activated, so the variable occurs in no constraint and the
+  // solver never assigns it -- but the entry survived, and the model
+  // surfaces resolve public handles through it. They would then report
+  // the two arrays unequal, because an unassigned Boolean completes to
+  // false, while the same model prints them identically.
+  //
+  // A proxy that did not activate is exactly an equality unreachable in
+  // this solve, so its entry has nothing left to say. Reflexive and
+  // rewritten lowerings carry no proxy and are unaffected.
+  for (ASTNodeMap::iterator it = currentLowerings.begin();
+       it != currentLowerings.end();)
+  {
+    const std::map<ASTNode, size_t>::const_iterator record =
+        proxyToRecord.find(it->second);
+    if (record != proxyToRecord.end() &&
+        activeIds.find(record->second) == activeIds.end())
+      it = currentLowerings.erase(it);
+    else
+      ++it;
+  }
+
   anticipatedArraySymbols.clear();
   for (size_t i = 0; i < activeRecordIds.size(); ++i)
   {

@@ -1989,7 +1989,85 @@ protected:
 
   ASTNode arr(const char* name) { return mgr.CreateSymbol(name, 2, 2); }
   ASTNode bv(const char* name) { return mgr.CreateSymbol(name, 0, 2); }
+
+  static bool mentions(const ASTNode& haystack, const ASTNode& needle)
+  {
+    ASTNodeSet seen;
+    ASTVec pending(1, haystack);
+    while (!pending.empty())
+    {
+      const ASTNode n = pending.back();
+      pending.pop_back();
+      if (!seen.insert(n).second)
+        continue;
+      if (n == needle)
+        return true;
+      for (unsigned k = 0; k < n.Degree(); k++)
+        pending.push_back(n[k]);
+    }
+    return false;
+  }
 };
+
+// Lowering records a lowering for every opaque equality it visits, at
+// the moment it visits it -- before there is any activation to consult.
+// It can then throw the result away: a write chain equated with its own
+// base is solved by rewriting, and a conjunct of that rewriting is
+// dropped when an outer write to the same index certainly shadows it.
+// Anything nested in the dropped conjunct goes with it, including
+// another equality's abstraction variable.
+//
+// Such a variable occurs in no constraint, so the solver never assigns
+// it and it completes to false wherever a model is read -- while the
+// same model prints the two arrays identically, because nothing
+// constrained either of them. The public handle and the printed model
+// would then contradict each other. The entry has to go with the
+// variable.
+TEST_F(ExtPrepareTest, LoweringOfADiscardedEqualityIsNotRetained)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), p = arr("p"), q = arr("q");
+  ASTNode i = bv("i"), j = bv("j"), v = bv("v"), y = bv("y");
+
+  // The nested equality sits in the value written at index i, under the
+  // innermost write of the chain.
+  const ASTNode nested = hf->CreateNode(EQ, p, q);
+  ASSERT_EQ(ARRAY_EQ, nested.GetKind());
+  const ASTNode nestedValue = hf->CreateTerm(
+      ITE, 2, nested, mgr.CreateBVConst(2, 1), mgr.CreateZeroConst(2));
+
+  // store(store(store(a, i, nestedValue), j, y), i, v) = a. The
+  // outermost write is to i as well, so the innermost write to i is
+  // certainly shadowed and its conjunct -- the only one mentioning
+  // nestedValue -- is dropped from the solved form.
+  ASTNode chain = hf->CreateArrayTerm(WRITE, 2, 2, {a, i, nestedValue});
+  chain = hf->CreateArrayTerm(WRITE, 2, 2, {chain, j, y});
+  chain = hf->CreateArrayTerm(WRITE, 2, 2, {chain, i, v});
+
+  ext->beginSolve();
+  const ASTNode lowered = ext->lowerArrayEqualities(hf->CreateNode(EQ, chain, a));
+
+  // The outer equality was solved by rewriting, so it minted no record;
+  // the nested one did, and nothing activated it.
+  ASSERT_EQ(1u, ext->getRecords().size());
+  EXPECT_EQ(0u, ext->getActiveRecordCount());
+  const ASTNode proxy = ext->getRecords()[0].proxy;
+  ASSERT_FALSE(mentions(lowered, proxy))
+      << "the shadowed conjunct was expected to take the proxy with it";
+
+  // So the model has nothing to say about it, and the map must not
+  // offer the abandoned variable as an answer.
+  ASTNode answer;
+  EXPECT_FALSE(ext->getCurrentLowering(nested, answer));
+
+  // An equality that did survive keeps its lowering, so the drop is
+  // narrowed to what the solve abandoned rather than clearing the map.
+  ext->beginSolve();
+  const ASTNode live = ext->lowerArrayEqualities(nested);
+  ASSERT_EQ(1u, ext->getActiveRecordCount());
+  EXPECT_TRUE(ext->getCurrentLowering(nested, answer));
+  EXPECT_EQ(live, answer);
+}
 
 TEST_F(ExtPrepareTest, RecoversOperandsConeAndNames)
 {
