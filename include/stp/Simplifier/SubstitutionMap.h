@@ -65,7 +65,9 @@ class DLL_PUBLIC SubstitutionMap
   // either orientation if it would delete a protected scalar definition or
   // any READ-headed equation. Every read is checker-owned, independently of
   // its other operand's shape or its connectivity to an equality operand.
-  bool extensionalityProtected(const ASTNode& e0, const ASTNode& e1) const;
+  // Oriented: "key" is the side that gets replaced. See the definition.
+  bool extensionalityProtected(const ASTNode& key,
+                               const ASTNode& value) const;
 
   size_t substitutionsLastApplied;
   VariablesInExpression vars;
