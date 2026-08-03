@@ -63,18 +63,21 @@ build with assertions aborted instead of answering. Both behaviours
 reproduce on STP releases predating this feature. The documented C API
 surface is pinned by an opt-in test
 (``default-off-capi-baseline-differential``, enabled with
-``-DTEST_BASELINE_DIFFERENTIAL=ON``), which builds the pre-feature baseline
-from git history and compares every observation of an identical C API
-driver — verdicts, model values, every counterexample-array entry, stdout,
-stderr and exit status — across the two builds. The driver canonicalizes the
-entry order before comparison: the default-off API does not specify one, and
-the legacy order comes from an unordered map keyed by internal node-creation
-IDs. Two
-diagnostic texts deliberately differ from the baseline and sit outside
-that comparison: whole-array equality is refused with an error naming
-the option, where the baseline warned and continued (pinned by a lit
-test), and ``stp_simple``'s usage error mentions the flag it newly
-accepts. One behavioral corner also deliberately differs: when the
+``-DTEST_BASELINE_DIFFERENTIAL=ON``), which builds the upstream commit
+this branch was last merged with from git history and compares every
+observation of an identical C API driver — verdicts, model values, every
+counterexample-array entry, stdout, stderr and exit status — across the
+two builds. Holding upstream fixed on both sides is what makes the
+difference attributable to this feature; a baseline frozen further back
+would also collect every unrelated upstream change made since. The
+driver canonicalizes the entry order before comparison: the default-off
+API does not specify one, and the legacy order comes from an unordered
+map keyed by internal node-creation IDs. Two diagnostic texts
+deliberately differ from the baseline and sit outside that comparison:
+whole-array equality is refused with an error naming the option, where
+the baseline warned and continued (pinned by a lit test), and
+``stp_simple``'s usage error mentions the flag it newly accepts. One
+behavioral corner also deliberately differs: when the
 soft timeout expires while lazy refinement is still undecided, the
 solve now reports a timeout where it previously aborted with an
 internal error.

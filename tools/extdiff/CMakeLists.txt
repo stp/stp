@@ -20,8 +20,8 @@
 
 # C API observation driver for the default-off baseline differential
 # (see scripts/extdiff-baseline-differential.sh). The same source is
-# compiled into both the pinned pre-array-equality baseline and the
-# candidate tree by that script.
+# compiled into both the pinned baseline tree and the candidate tree by
+# that script.
 if(BUILD_EXECUTABLES)
     add_executable(extdiff-bin
         extdiff.cpp
