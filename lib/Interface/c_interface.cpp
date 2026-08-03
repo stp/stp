@@ -83,6 +83,16 @@ void requireBooleanOperand(const char* operation, const stp::ASTNode& n)
 stp::ASTNode createPublicSourceSymbol(stp::STPMgr* bm, const char* name,
                                       const stp::SourceSort& source_sort)
 {
+  // The same reservation the parser enforces, for the entry point that has no
+  // parser in front of it. STP mints '@' names for its own objects and takes
+  // their uniqueness on trust, so a caller able to declare one could be handed
+  // the solver's own -- see Cpp_interface::CreateSourceSymbol.
+  if (stp::STPMgr::isReservedSymbolName(name))
+  {
+    stp::FatalError("CInterface: a symbol name beginning with '@' or '.' is "
+                    "reserved for solver use and cannot be declared");
+  }
+
   const auto found = bm->c_api_source_sorts.find(name);
   if (found != bm->c_api_source_sorts.end() && found->second != source_sort)
   {

@@ -276,15 +276,13 @@ ASTNode FloatBlaster::unspecifiedCells(STPMgr* bm, const char* tag,
   name += "_";
   name += std::to_string(cell_count);
 
-  const ASTNode cells =
-      bm->defaultNodeFactory->CreateSymbol(name.c_str(), 0, cell_count);
-
-  // Introduced, so the printers skip it: the model must not answer with a
-  // symbol the user never declared. Same reasoning as the array below, and
-  // the plain-symbol case the introduced-symbol filter already handled.
-  bm->noteIntroducedSymbol(cells);
-
-  return cells;
+  // Through the manager's registry of its own named symbols: the name has to
+  // identify the object across the solve and the two counterexample
+  // re-derivations, and going back through the symbol table for it is what let
+  // a user declaration be adopted as this one. Introduced, so the printers
+  // skip it -- the model must not answer with a symbol the user never
+  // declared -- which introducedSymbol records too.
+  return bm->introducedSymbol(name, 0, cell_count);
 }
 
 ASTNode FloatBlaster::unspecifiedValue(STPMgr* bm, const char* tag,
@@ -300,16 +298,16 @@ ASTNode FloatBlaster::unspecifiedValue(STPMgr* bm, const char* tag,
   name += "_";
   name += std::to_string(value_width);
 
-  const ASTNode array = bm->defaultNodeFactory->CreateSymbol(
-      name.c_str(), index_width, value_width);
-
-  // Not CreateFreshVariable, whose minted names would differ between the
-  // solve and the two counterexample re-derivations and so would not be the
-  // same array; but introduced all the same, so say so, or the model answers
-  // with a symbol the user never declared and in a sort their signature does
-  // not have. The solver still gets the array -- only the printers skip it,
-  // and CheckCounterExample needs its cell values.
-  bm->noteIntroducedSymbol(array);
+  // Not CreateFreshVariable, whose minted names would differ between the solve
+  // and the two counterexample re-derivations and so would not be the same
+  // array; the manager's registry of its own named symbols gives that
+  // stability without the name having to be looked up in the symbol table,
+  // where a user declaration under it would be adopted as this array. It is
+  // introduced all the same, which introducedSymbol records, or the model
+  // answers with a symbol the user never declared and in a sort their
+  // signature does not have. The solver still gets the array -- only the
+  // printers skip it, and CheckCounterExample needs its cell values.
+  const ASTNode array = bm->introducedSymbol(name, index_width, value_width);
 
   return bm->CreateTerm(READ, value_width, array, index);
 }
