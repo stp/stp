@@ -50,7 +50,7 @@ using namespace stp::symbolic_fp;
 // The manager and factory the circuits are built into. symfpu constructs
 // backend values through static trait calls (traits::RNE() and friends take
 // no context), so the context has to live in file statics; init() repoints
-// them before every top-level blast (see FloatBlaster::BlastNode_TopLevel).
+// them before every top-level blast (see FloatBlast::topLevel).
 // Each thread needs its own pair: independent validity checkers may blast in
 // parallel, and a process-global pair would make one thread build through the
 // other thread's manager and concurrently mutate its hash-cons tables.
