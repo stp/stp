@@ -85,6 +85,39 @@ void collectDag(const ASTNode& n, ASTNodeSet& visited)
 //
 // Anything else means an anchor was rewritten beyond recognition:
 // refuse loudly rather than guess.
+// Does any node of this DAG belong to `needles`? Iterative post-order,
+// because the terms it is asked about are as deep as the user's write
+// chains and if-then-else nests.
+bool subtreeMentions(const ASTNode& root, const std::set<ASTNode>& needles)
+{
+  std::map<ASTNode, bool> found;
+  std::vector<std::pair<ASTNode, bool>> stack;
+  stack.push_back(std::make_pair(root, false));
+  while (!stack.empty())
+  {
+    const ASTNode n = stack.back().first;
+    const bool expanded = stack.back().second;
+    stack.pop_back();
+    if (found.find(n) != found.end())
+      continue;
+    if (!expanded)
+    {
+      // Children are pushed after this node's second visit, so they are
+      // all answered before it is.
+      stack.push_back(std::make_pair(n, true));
+      for (unsigned k = 0; k < n.Degree(); k++)
+        if (found.find(n[k]) == found.end())
+          stack.push_back(std::make_pair(n[k], false));
+      continue;
+    }
+    bool here = needles.find(n) != needles.end();
+    for (unsigned k = 0; !here && k < n.Degree(); k++)
+      here = found[n[k]];
+    found[n] = here;
+  }
+  return found[root];
+}
+
 ASTNode recoverAnchoredOperand(const ASTNode& rhs, const ASTNode& lambda,
                                const ASTNode& proxy)
 {
@@ -587,26 +620,25 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
   {
     const ASTNode& n = *it;
 
-    // A witness index occurs only as the index of its own two anchor
-    // reads. That is what stops a read-over-write chase from stepping
-    // an anchor onto a deeper array and handing recovery an operand the
-    // equality was never about (see recoverAnchoredOperand): the chase
-    // steps only over a write index it can prove different from the
-    // read index, and it can prove nothing about a symbol that appears
-    // nowhere else. Checking every parent of the index is enough to
-    // establish that, however deeply a term buried it, because the node
-    // holding it as a direct child is in this walk too.
-    for (unsigned k = 0; k < n.Degree(); k++)
-    {
-      if (witnessIndexes.find(n[k]) == witnessIndexes.end())
-        continue;
-      if (n.GetKind() == READ && n.Degree() == 2 && k == 1)
-        continue;
-      FatalError("array-equality: a witness index escaped its anchor read, "
-                 "so a rewrite could decide a write index against it and "
-                 "move the equality operand recovery reads",
+    // No write index mentions a witness index. That is what stops a
+    // read-over-write chase from stepping an anchor onto a deeper array
+    // and handing recovery an operand the equality was never about (see
+    // recoverAnchoredOperand): the chase steps over a write only when it
+    // can decide that write's index against the read's, and a
+    // context-free rule can decide nothing about a fresh symbol the
+    // write index does not mention.
+    //
+    // Deliberately not the stronger "a witness index appears only as an
+    // anchor read's index". It legitimately appears elsewhere -- a
+    // constraint confining it to the patterns its sort denotes is one,
+    // and a sort whose values are not all denoting needs exactly that --
+    // and no such position gives a rewrite anything to work with. Only a
+    // write index does.
+    if (n.GetKind() == WRITE && subtreeMentions(n[1], witnessIndexes))
+      FatalError("array-equality: a write index mentions a witness index, "
+                 "so a rewrite could decide that write against an anchor "
+                 "read and move the operand recovery reads",
                  n);
-    }
 
     if (n.GetKind() != EQ || n.Degree() != 2)
       continue;

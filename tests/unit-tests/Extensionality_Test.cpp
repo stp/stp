@@ -2328,10 +2328,11 @@ TEST_F(ExtPrepareTest, RewrittenWitnessIndexFailsLoudly)
 // prove different from the read index, and lambda appears nowhere a
 // rule could get a grip on it.
 //
-// So that is the thing to check. A witness index reachable anywhere but
-// as the index of its own anchor read means some pass built a term over
-// it, and the argument recovery rests on is gone.
-TEST_F(ExtPrepareTest, WitnessIndexEscapingItsAnchorFailsLoudly)
+// So that is the thing to check, and the thing to check is narrow: a
+// write index that mentions the witness index. Nothing else gives a
+// context-free rule a way to decide the write against the anchor's
+// read.
+TEST_F(ExtPrepareTest, WitnessIndexReachingAWriteIndexFailsLoudly)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
   ASTNode a = arr("a"), b = arr("b");
@@ -2342,15 +2343,52 @@ TEST_F(ExtPrepareTest, WitnessIndexEscapingItsAnchorFailsLoudly)
   ASSERT_EQ(1u, ext->getRecords().size());
   const ASTNode lambda = ext->getRecords()[0].lambda;
 
-  // Anything a pass could leave behind that mentions the witness index:
-  // here the simplest one, an equation relating it to another variable.
-  // A write index derived from it would be the shape that actually
-  // bites, and is caught by the same check -- whatever term buries it,
-  // some node holds it as a direct child.
-  const ASTNode escaped = hf->CreateNode(EQ, bv("k"), lambda);
-  const ASTNode tampered = hf->CreateNode(AND, root, escaped);
+  // The witness index used directly as a write index.
+  {
+    const ASTNode w = hf->CreateArrayTerm(WRITE, 2, 2, {a, lambda, bv("e")});
+    const ASTNode tampered = hf->CreateNode(
+        AND, root, hf->CreateNode(EQ, hf->CreateTerm(READ, 2, w, bv("k")),
+                                  bv("e")));
+    EXPECT_DEATH(ext->prepare(tampered), "write index mentions a witness");
+  }
 
-  EXPECT_DEATH(ext->prepare(tampered), "witness index escaped its anchor");
+  // And buried in one: the check is on the whole index term, because
+  // that is what a rewrite would be reasoning about.
+  {
+    const ASTNode derived =
+        hf->CreateTerm(BVPLUS, 2, lambda, mgr.CreateBVConst(2, 1));
+    const ASTNode w = hf->CreateArrayTerm(WRITE, 2, 2, {a, derived, bv("e")});
+    const ASTNode tampered = hf->CreateNode(
+        AND, root, hf->CreateNode(EQ, hf->CreateTerm(READ, 2, w, bv("k")),
+                                  bv("e")));
+    EXPECT_DEATH(ext->prepare(tampered), "write index mentions a witness");
+  }
+}
+
+// The complement, and the reason the check is not the stronger "a
+// witness index appears only as an anchor read's index": a constraint
+// *about* the witness index is legitimate. An index sort whose values
+// are not all denoting needs exactly that -- something confining lambda
+// to the patterns the sort denotes -- and it gives a rewrite nothing to
+// work with, because it never reaches a write index.
+TEST_F(ExtPrepareTest, ConstraintOnTheWitnessIndexIsAccepted)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b");
+  ext->beginSolve();
+  const ASTNode proxy =
+      ext->lowerArrayEqualities(hf->CreateNode(EQ, ASTVec{a, b}));
+  ASTNode root = ext->conjoinRecordConstraints(proxy);
+  const ASTNode lambda = ext->getRecords()[0].lambda;
+
+  const ASTNode confined = hf->CreateNode(
+      OR, hf->CreateNode(EQ, lambda, mgr.CreateZeroConst(2)),
+      hf->CreateNode(EQ, lambda, mgr.CreateBVConst(2, 1)));
+  ext->prepare(hf->CreateNode(AND, root, confined));
+
+  const ExtensionalityContext::Record& r = ext->getRecords()[0];
+  EXPECT_EQ(a, r.canonicalLeft);
+  EXPECT_EQ(b, r.canonicalRight);
 }
 
 // The same index in the place it belongs is not an escape: recovery has
