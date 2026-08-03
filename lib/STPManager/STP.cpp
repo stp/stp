@@ -845,8 +845,13 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     bm->print_stats();
 
   // If it doesn't contain array operations, use ABC's CNF generation.
+  // semantic_input decides the verdict; original_input -- the same query
+  // with its opaque array equalities still in place -- is what
+  // --check-counterexample re-evaluates, so the check covers the
+  // lowering rather than repeating the question just answered.
   res = Ctr_Example->CallSAT_ResultCheck(NewSolver, inputToSat, semantic_input,
-                                         satBase, maybeRefinement);
+                                         original_input, satBase,
+                                         maybeRefinement);
 
   if (bm->soft_timeout_expired)
   {
@@ -885,7 +890,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
                    "a decision nor a pending theory lemma");
       ext->encodePendingLemmas(NewSolver, satBase);
       res = Ctr_Example->CallSAT_ResultCheck(NewSolver, bm->ASTTrue,
-                                             semantic_input, satBase, true);
+                                             semantic_input, original_input,
+                                             satBase, true);
     }
     else
     {

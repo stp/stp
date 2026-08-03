@@ -74,10 +74,20 @@ private:
   // Ptr to ArrayTransformer
   ArrayTransformer* ArrayTransform;
 
-  // Checks the exact semantic formula submitted for this solve.  This must
-  // not reconstruct the formula from STPMgr's assertion/query registry:
-  // solve-boundary passes (notably opaque array-equality lowering) are local
-  // to checked_input and deliberately do not mutate that public registry.
+  // Re-evaluates the query the user actually submitted against the
+  // finished model. This must not reconstruct the formula from STPMgr's
+  // assertion/query registry: solve-boundary passes (notably opaque
+  // array-equality lowering) are local to the root handed to the solve
+  // and deliberately do not mutate that public registry.
+  //
+  // checked_input is the root as submitted, *before* array-equality
+  // lowering -- not the semantic root the solve ran on. The two differ
+  // by exactly the transformation this check is worth running on: every
+  // opaque ARRAY_EQ is still present here and is evaluated through its
+  // recorded lowering, so a lowering that did not preserve the query's
+  // meaning shows up as a bogus counterexample. Passing the semantic
+  // root instead would re-ask a question the caller has already had
+  // answered, and the memo would answer it from cache.
   void CheckCounterExample(bool t, const ASTNode& checked_input);
 
   // Accepts a term and turns it into a constant-term w.r.t
@@ -190,9 +200,16 @@ public:
   /****************************************************************
    * Array Refinement functions                                   *
    ****************************************************************/
+  // original_input is the semantic root this solve ran on, and is what
+  // the model is evaluated against to decide the verdict. submitted_input
+  // is the root as the user handed it over, before array-equality
+  // lowering; it differs only when lowering did something, and it is
+  // what --check-counterexample re-evaluates. Callers with no lowered
+  // form to distinguish pass the same node twice.
   SOLVER_RETURN_TYPE
   CallSAT_ResultCheck(SATSolver& SatSolver, const ASTNode& modified_input,
-                      const ASTNode& original_input, ToSATBase* tosat,
+                      const ASTNode& original_input,
+                      const ASTNode& submitted_input, ToSATBase* tosat,
                       bool refinement);
 
   SOLVER_RETURN_TYPE
