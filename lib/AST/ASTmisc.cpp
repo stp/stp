@@ -135,6 +135,39 @@ bool constantsSameBits(const ASTNode& a, const ASTNode& b)
                                                 b.GetBVConst());
 }
 
+// Whether the packed floating-point constant x of format (eb, sb) holds
+// a NaN: an all-ones exponent over a nonzero significand, the layout
+// being [sign | exponent eb | significand sb-1]. The value-level twin of
+// the circuit ExtensionalityContext builds as isPackedNaN; keep the two
+// reading alike.
+static bool packedConstantIsNaN(const ASTNode& x, unsigned eb, unsigned sb)
+{
+  const unsigned w = eb + sb;
+  if (x.GetKind() != BVCONST || x.GetValueWidth() != w)
+    return false;
+  CBV bits = x.GetBVConst();
+  for (unsigned i = sb - 1; i + 1 < w; i++)
+    if (!CONSTANTBV::BitVector_bit_test(bits, i))
+      return false;
+  for (unsigned i = 0; i + 1 < sb; i++)
+    if (CONSTANTBV::BitVector_bit_test(bits, i))
+      return true;
+  return false;
+}
+
+// See the declaration.
+bool constantsSameSourceValue(const ASTNode& a, const ASTNode& b,
+                              const SourceSort& sort)
+{
+  if (constantsSameBits(a, b))
+    return true;
+  if (sort.kind() != SourceSort::Kind::FloatingPoint)
+    return false;
+  const unsigned eb = sort.exponentWidth();
+  const unsigned sb = sort.significandWidth();
+  return packedConstantIsNaN(a, eb, sb) && packedConstantIsNaN(b, eb, sb);
+}
+
 // True if any descendants are arrays.
 bool containsArrayOps(const ASTNode& n, STPMgr* mgr)
 {

@@ -795,11 +795,11 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
         // about to print, so the answer agrees with it by construction,
         // which is the property the abstraction variable could not
         // offer.
-        if (form[0].GetSourceSort().usesFloatingPointTheory() ||
-            form[1].GetSourceSort().usesFloatingPointTheory())
+        if (!arrayEqualityIsModelDecidable(form[0]) ||
+            !arrayEqualityIsModelDecidable(form[1]))
           FatalError("array-equality: cannot evaluate an opaque equality "
-                     "over floating-point-sorted arrays that was not "
-                     "reachable in the most recent solve",
+                     "over float-indexed arrays that was not reachable in "
+                     "the most recent solve",
                      form);
         output = ArraysEqualUsingModel(form[0], form[1]) ? ASTTrue : ASTFalse;
       }
@@ -1108,7 +1108,28 @@ ASTNode AbsRefine_CounterExample::ReadUsingModel(const ASTNode& arrayTerm,
   }
 }
 
-// See the header.
+// See the header. The one restriction, in one place.
+//
+// Deciding an equality from the model means finding the two arrays'
+// cells, and this walk names a cell by the concrete index it sits at.
+// That works while an index is what the solve recorded a cell against.
+// It is not, once the index sort is a floating-point one: the solve
+// canonicalises those indexes and keys the model by the lowered carrier
+// access, so a cell exists that no constant index of the source term
+// names. The walk would find nothing, complete every cell to zero, and
+// still read written values straight out of the term -- reporting two
+// equal arrays as differing.
+//
+// A floating-point *element* is fine, and is the case worth having:
+// cells are found exactly as before and compared for equal value.
+bool AbsRefine_CounterExample::arrayEqualityIsModelDecidable(
+    const ASTNode& arrayTerm)
+{
+  const SourceSort sort = arrayTerm.GetSourceSort();
+  return sort.kind() != SourceSort::Kind::Array ||
+         !sort.index().usesFloatingPointTheory();
+}
+
 bool AbsRefine_CounterExample::ArraysEqualUsingModel(const ASTNode& left,
                                                      const ASTNode& right)
 {
@@ -1116,6 +1137,21 @@ bool AbsRefine_CounterExample::ArraysEqualUsingModel(const ASTNode& left,
     return true;
 
   ModelQuery unchanged(CounterExampleMap, ComputeFormulaMap);
+
+  // A floating-point *element* changes only the comparison: cells are
+  // compared for the same value rather than the same bits, because NaN
+  // is one value with many packings. The walk itself is unaffected --
+  // the cell is still found at the index it is found at.
+  //
+  // A floating-point *index* is a different matter and this does not
+  // handle it; callers are expected not to ask (see
+  // arrayEqualityIsModelDecidable).
+  SourceSort elementSort = SourceSort::unknown();
+  {
+    const SourceSort arraySort = left.GetSourceSort();
+    if (arraySort.kind() == SourceSort::Kind::Array)
+      elementSort = arraySort.element();
+  }
 
   ASTNodeSet arrays;
   CollectArrayNodes(left, arrays);
@@ -1137,14 +1173,15 @@ bool AbsRefine_CounterExample::ArraysEqualUsingModel(const ASTNode& left,
     if (WRITE == it->GetKind())
       indexes.insert(TermToConstTermUsingModel((*it)[1], false));
 
-  // On bits rather than on node identity: a cell of a float-element
-  // array holds a floating-point constant, which interns apart from the
-  // plain constant with the same bits, and the zero an unobserved cell
-  // completes to is exactly such a plain constant.
+  // By value at the element's sort, never by node identity: a
+  // float-element cell holds a floating-point constant, which interns
+  // apart from the plain constant with the same bits -- and the zero an
+  // unobserved cell completes to is exactly such a plain constant.
   for (std::set<ASTNode>::const_iterator it = indexes.begin();
        it != indexes.end(); ++it)
-    if (constantsDenoteDifferentValues(ReadUsingModel(left, *it),
-                                       ReadUsingModel(right, *it)))
+    if (constantsDenoteDifferentSourceValues(
+            ReadUsingModel(left, *it), ReadUsingModel(right, *it),
+            elementSort))
       return false;
   return true;
 }

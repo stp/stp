@@ -394,7 +394,7 @@ public:
   static bool contentsAgree(
       const std::vector<std::pair<ASTNode, ASTNode>>& left,
       const std::vector<std::pair<ASTNode, ASTNode>>& right,
-      const ASTNode& zero);
+      const ASTNode& zero, const SourceSort& elementSort);
 
   // Validate one bit-vector lemma leaf: it must be a fixed-width
   // constant, or a SYMBOL whose complete SAT-variable vector was

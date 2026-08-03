@@ -265,6 +265,11 @@ public:
   // term. Anywhere else both terms read as zero.
   bool ArraysEqualUsingModel(const ASTNode& left, const ASTNode& right);
 
+  // Whether ArraysEqualUsingModel can answer about this array term at
+  // all. It cannot once the index sort is a floating-point one; see the
+  // definition for why. Ask before asking.
+  static bool arrayEqualityIsModelDecidable(const ASTNode& arrayTerm);
+
   // ComputeFormulaUsingModel for a caller asking a question about the
   // model rather than assembling it: whatever the evaluation would
   // have recorded is rolled back. See the note on ModelQuery in the

@@ -1902,7 +1902,8 @@ void ExtensionalityContext::publishObservations(AbsRefine_CounterExample* ce)
 // one observes.
 bool ExtensionalityContext::contentsAgree(
     const std::vector<std::pair<ASTNode, ASTNode>>& left,
-    const std::vector<std::pair<ASTNode, ASTNode>>& right, const ASTNode& zero)
+    const std::vector<std::pair<ASTNode, ASTNode>>& right, const ASTNode& zero,
+    const SourceSort& elementSort)
 {
   std::map<ASTNode, ASTNode> leftCells, rightCells;
   for (size_t i = 0; i < left.size(); i++)
@@ -1910,19 +1911,21 @@ bool ExtensionalityContext::contentsAgree(
   for (size_t i = 0; i < right.size(); i++)
     rightCells[right[i].first] = right[i].second;
 
-  // Cells are compared on their bits, not on node identity. A cell of a
-  // float-element array holds a floating-point constant, which interns
-  // apart from the plain bit-vector constant with the same bits -- and
-  // one side of most of these comparisons is exactly such a plain
-  // constant, the zero an unobserved cell completes to. Asking by node
-  // would report two identical arrays as differing.
+  // Cells are compared by value at the element's sort, never by node
+  // identity. A float-element cell holds a floating-point constant,
+  // which interns apart from the plain bit-vector constant with the same
+  // bits -- and one side of most of these comparisons is exactly such a
+  // plain constant, the zero an unobserved cell completes to. Node
+  // identity would report two identical arrays as differing; equal bits
+  // would do the same to two NaN payloads, which are one value.
   for (std::map<ASTNode, ASTNode>::const_iterator it = leftCells.begin();
        it != leftCells.end(); ++it)
   {
     const std::map<ASTNode, ASTNode>::const_iterator other =
         rightCells.find(it->first);
-    if (constantsDenoteDifferentValues(
-            it->second, other == rightCells.end() ? zero : other->second))
+    if (constantsDenoteDifferentSourceValues(
+            it->second, other == rightCells.end() ? zero : other->second,
+            elementSort))
       return false;
   }
   // Only the indexes the first array does not observe are left to check;
@@ -1930,7 +1933,7 @@ bool ExtensionalityContext::contentsAgree(
   for (std::map<ASTNode, ASTNode>::const_iterator it = rightCells.begin();
        it != rightCells.end(); ++it)
     if (leftCells.find(it->first) == leftCells.end() &&
-        constantsDenoteDifferentValues(it->second, zero))
+        constantsDenoteDifferentSourceValues(it->second, zero, elementSort))
       return false;
   return true;
 }
@@ -1955,17 +1958,13 @@ const char* ExtensionalityContext::recheckCertifiedEqualities(
   for (size_t i = 0; i < activeRecordIds.size(); i++)
   {
     const Record& r = records[activeRecordIds[i]];
-    // Both loops below decide array equality by comparing published
-    // cells for equal bits. That is the right question only while the
-    // element and index sorts are bit-vector ones. Over a
-    // floating-point sort it is not: NaN is one value with many
-    // encodings, so two arrays this theory calls equal can hold cells
-    // that differ bit for bit, and the check would report a model wrong
-    // for being right. Deciding those needs the value equality the
-    // procedure itself uses, which this does not implement -- so it
-    // declines to speak rather than speak wrongly.
-    if (r.canonicalLeft.GetSourceSort().usesFloatingPointTheory() ||
-        r.canonicalRight.GetSourceSort().usesFloatingPointTheory())
+    // Both loops decide an equality by comparing the cells the model
+    // published. Where that is answerable at all is one question, asked
+    // in one place; a float-indexed array is the case it is not.
+    if (!AbsRefine_CounterExample::arrayEqualityIsModelDecidable(
+            r.constructionLeft) ||
+        !AbsRefine_CounterExample::arrayEqualityIsModelDecidable(
+            r.constructionRight))
       continue;
     const ASTNode assigned = ce->LookupAssignedValue(r.proxy);
     if (assigned.IsNull() ||
@@ -1979,10 +1978,18 @@ const char* ExtensionalityContext::recheckCertifiedEqualities(
     const ObsMap::const_iterator obsR = lastObserved.find(r.canonicalRight);
     const ASTNode zero =
         bm->CreateZeroConst(r.canonicalLeft.GetValueWidth());
+    // The element sort comes from the operands the user wrote: the
+    // canonical forms are post-lowering carriers, and what a cell means
+    // is a property of the source sort, not of its carrier.
+    const SourceSort constructionSort = r.constructionLeft.GetSourceSort();
+    const SourceSort elementSort =
+        constructionSort.kind() == SourceSort::Kind::Array
+            ? constructionSort.element()
+            : SourceSort::unknown();
     const bool agree =
         contentsAgree(obsL == lastObserved.end() ? unobserved : obsL->second,
                       obsR == lastObserved.end() ? unobserved : obsR->second,
-                      zero);
+                      zero, elementSort);
 
     if (agree != (assigned.GetKind() == TRUE))
       return agree ? "array-equality: the model makes an array equality's "
@@ -2012,8 +2019,10 @@ const char* ExtensionalityContext::recheckCertifiedEqualities(
        it != currentLowerings.end(); ++it)
   {
     // Same restriction, same reason; see the loop above.
-    if (it->first[0].GetSourceSort().usesFloatingPointTheory() ||
-        it->first[1].GetSourceSort().usesFloatingPointTheory())
+    if (!AbsRefine_CounterExample::arrayEqualityIsModelDecidable(
+            it->first[0]) ||
+        !AbsRefine_CounterExample::arrayEqualityIsModelDecidable(
+            it->first[1]))
       continue;
     const ASTNode verdict = ce->QueryFormulaAgainstModel(it->second);
     if (!(verdict.GetKind() == TRUE || verdict.GetKind() == FALSE))

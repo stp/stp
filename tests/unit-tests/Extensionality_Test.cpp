@@ -3038,6 +3038,92 @@ TEST(ExtLemmaFold, DropRuleIsPolarityCorrect)
 // report a bogus counterexample on any satisfiable query whose equal
 // arrays were reached by different numbers of accesses -- which is
 // most of them.
+// The same rule over a floating-point element sort, where "same value"
+// stops being "same bits". SMT-LIB's = on floats is identity of values
+// and NaN is one value with many packings, so two arrays holding
+// different NaN payloads at a cell are equal -- and a check that read
+// the bits would report a correct model wrong. Every other float value
+// has one packing, so nothing else loosens.
+TEST(ExtCertifiedEqualities, ContentsAgreeQuotientsNaNAtAFloatElementSort)
+{
+  STPMgr mgr;
+  mgr.UserFlags.enable_array_equality = true;
+  Cpp_interface interface(mgr, mgr.defaultNodeFactory);
+
+  const SourceSort f32 = SourceSort::floatingPoint(8, 24);
+  const ASTNode zero = mgr.CreateZeroConst(32);
+  const ASTNode i0 = mgr.CreateZeroConst(4);
+
+  // Two NaNs: all-ones exponent, different non-zero significands.
+  const ASTNode nanA = mgr.CreateBVConst(32, 0x7FDC9E15u);
+  const ASTNode nanB = mgr.CreateBVConst(32, 0x7F8C9E15u);
+  const ASTNode quietNaN = mgr.CreateBVConst(32, 0x7FC00000u);
+  // An all-ones exponent with a zero significand is infinity, not NaN.
+  const ASTNode infinity = mgr.CreateBVConst(32, 0x7F800000u);
+  const ASTNode one = mgr.CreateBVConst(32, 0x3F800000u);
+
+  typedef std::vector<std::pair<ASTNode, ASTNode>> Obs;
+  Obs a, b;
+  a.push_back(std::make_pair(i0, nanA));
+  b.push_back(std::make_pair(i0, nanB));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(a, b, zero, f32));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(b, a, zero, f32));
+
+  Obs quiet;
+  quiet.push_back(std::make_pair(i0, quietNaN));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(a, quiet, zero, f32));
+
+  // At a bit-vector sort the very same cells are two different values.
+  EXPECT_FALSE(ExtensionalityContext::contentsAgree(
+      a, b, zero, SourceSort::bitVector(32)));
+
+  // Nothing else is quotiented: infinity is not NaN, and an ordinary
+  // value still has to match exactly.
+  Obs inf, ones;
+  inf.push_back(std::make_pair(i0, infinity));
+  ones.push_back(std::make_pair(i0, one));
+  EXPECT_FALSE(ExtensionalityContext::contentsAgree(a, inf, zero, f32));
+  EXPECT_FALSE(ExtensionalityContext::contentsAgree(inf, a, zero, f32));
+  EXPECT_FALSE(ExtensionalityContext::contentsAgree(ones, a, zero, f32));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(ones, ones, zero, f32));
+
+  // The completion is unaffected: an unobserved cell is +zero, which is
+  // not NaN, so a NaN on the other side is still a difference.
+  const Obs empty;
+  EXPECT_FALSE(ExtensionalityContext::contentsAgree(a, empty, zero, f32));
+  Obs zeroCell;
+  zeroCell.push_back(std::make_pair(i0, zero));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(zeroCell, empty, zero, f32));
+}
+
+// The rule on its own, at the level the model is read back.
+TEST(ExtCertifiedEqualities, SameSourceValueIsBitsExceptForNaN)
+{
+  STPMgr mgr;
+  const SourceSort f32 = SourceSort::floatingPoint(8, 24);
+  const SourceSort bv32 = SourceSort::bitVector(32);
+  const ASTNode nanA = mgr.CreateBVConst(32, 0x7FDC9E15u);
+  const ASTNode nanB = mgr.CreateBVConst(32, 0xFF8C9E15u); // negative NaN
+  const ASTNode infinity = mgr.CreateBVConst(32, 0x7F800000u);
+  const ASTNode one = mgr.CreateBVConst(32, 0x3F800000u);
+
+  EXPECT_TRUE(constantsSameSourceValue(nanA, nanB, f32));
+  EXPECT_FALSE(constantsSameSourceValue(nanA, nanB, bv32));
+  EXPECT_FALSE(constantsSameSourceValue(nanA, infinity, f32));
+  EXPECT_FALSE(constantsSameSourceValue(one, nanA, f32));
+  EXPECT_TRUE(constantsSameSourceValue(one, one, f32));
+  EXPECT_TRUE(constantsSameSourceValue(infinity, infinity, f32));
+
+  // A rounding-mode sort has one encoding per value, so it is bits.
+  const ASTNode rm0 = mgr.CreateBVConst(3, 0u);
+  const ASTNode rm1 = mgr.CreateBVConst(3, 1u);
+  EXPECT_TRUE(constantsSameSourceValue(rm0, rm0, SourceSort::roundingMode()));
+  EXPECT_FALSE(constantsSameSourceValue(rm0, rm1, SourceSort::roundingMode()));
+
+  // An unknown sort must not loosen anything.
+  EXPECT_FALSE(constantsSameSourceValue(nanA, nanB, SourceSort::unknown()));
+}
+
 TEST(ExtCertifiedEqualities, ContentsAgreeCompletesUnobservedCellsWithZero)
 {
   STPMgr mgr;
@@ -3045,6 +3131,7 @@ TEST(ExtCertifiedEqualities, ContentsAgreeCompletesUnobservedCellsWithZero)
   Cpp_interface interface(mgr, mgr.defaultNodeFactory);
 
   const ASTNode zero = mgr.CreateZeroConst(8);
+  const SourceSort bvElement = SourceSort::bitVector(8);
   const ASTNode one = mgr.CreateBVConst(8, 1);
   const ASTNode two = mgr.CreateBVConst(8, 2);
   const ASTNode i0 = mgr.CreateZeroConst(4);
@@ -3057,18 +3144,18 @@ TEST(ExtCertifiedEqualities, ContentsAgreeCompletesUnobservedCellsWithZero)
   Obs a, b;
   a.push_back(std::make_pair(i0, one));
   b.push_back(std::make_pair(i0, one));
-  EXPECT_TRUE(ExtensionalityContext::contentsAgree(a, b, zero));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(a, b, zero, bvElement));
 
   // Same cell, different value.
   Obs c;
   c.push_back(std::make_pair(i0, two));
-  EXPECT_FALSE(ExtensionalityContext::contentsAgree(a, c, zero));
-  EXPECT_FALSE(ExtensionalityContext::contentsAgree(c, a, zero));
+  EXPECT_FALSE(ExtensionalityContext::contentsAgree(a, c, zero, bvElement));
+  EXPECT_FALSE(ExtensionalityContext::contentsAgree(c, a, zero, bvElement));
 
   // A cell only one side observes, holding a non-zero value: the other
   // side completes to zero there, so they differ.
-  EXPECT_FALSE(ExtensionalityContext::contentsAgree(a, empty, zero));
-  EXPECT_FALSE(ExtensionalityContext::contentsAgree(empty, a, zero));
+  EXPECT_FALSE(ExtensionalityContext::contentsAgree(a, empty, zero, bvElement));
+  EXPECT_FALSE(ExtensionalityContext::contentsAgree(empty, a, zero, bvElement));
 
   // The same cell holding zero: the completion agrees with it, so the
   // arrays are equal even though one list is longer. Checked in both
@@ -3076,16 +3163,16 @@ TEST(ExtCertifiedEqualities, ContentsAgreeCompletesUnobservedCellsWithZero)
   // separately.
   Obs zeroCell;
   zeroCell.push_back(std::make_pair(i1, zero));
-  EXPECT_TRUE(ExtensionalityContext::contentsAgree(zeroCell, empty, zero));
-  EXPECT_TRUE(ExtensionalityContext::contentsAgree(empty, zeroCell, zero));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(zeroCell, empty, zero, bvElement));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(empty, zeroCell, zero, bvElement));
   Obs aPlusZeroCell(a);
   aPlusZeroCell.push_back(std::make_pair(i1, zero));
-  EXPECT_TRUE(ExtensionalityContext::contentsAgree(aPlusZeroCell, b, zero));
-  EXPECT_TRUE(ExtensionalityContext::contentsAgree(b, aPlusZeroCell, zero));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(aPlusZeroCell, b, zero, bvElement));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(b, aPlusZeroCell, zero, bvElement));
 
   // Two empty arrays are equal; that is what makes an equality between
   // arrays no access ever reached come out true.
-  EXPECT_TRUE(ExtensionalityContext::contentsAgree(empty, empty, zero));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(empty, empty, zero, bvElement));
 }
 
 // Deciding an array equality from the finished model, with no

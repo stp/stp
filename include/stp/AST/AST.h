@@ -92,6 +92,27 @@ inline bool constantsDenoteDifferentValues(const ASTNode& a, const ASTNode& b)
   return !constantsSameBits(a, b);
 }
 
+// Whether two constants denote the same value *of a given sort*, which
+// for a floating-point sort is a weaker question than sharing bits.
+//
+// SMT-LIB's = on floats is identity of values, and NaN is one value with
+// many packings, so two cells or indexes holding different NaN payloads
+// hold the same value. Every other float value has exactly one packing,
+// and every bit-vector and rounding-mode value has exactly one encoding,
+// so for those this is constantsSameBits. The extensionality layer
+// builds the circuit form of the same rule (packedFloatEq); this is the
+// form for constants already in hand, used where the model is read back
+// rather than constrained.
+bool constantsSameSourceValue(const ASTNode& a, const ASTNode& b,
+                              const SourceSort& sort);
+
+inline bool constantsDenoteDifferentSourceValues(const ASTNode& a,
+                                                 const ASTNode& b,
+                                                 const SourceSort& sort)
+{
+  return !constantsSameSourceValue(a, b, sort);
+}
+
 // Whether `n` denotes bits to the bit-vector layers, which is not the same
 // question as GetType() == BITVECTOR_TYPE.
 //
