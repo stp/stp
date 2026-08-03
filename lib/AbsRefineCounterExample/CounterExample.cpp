@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
+#include "stp/FloatBlaster/FloatBlast.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/FloatBlaster/FpEncodingContext.h"
 #include "stp/Printer/printers.h"
@@ -758,12 +759,10 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
         break;
       }
 
-      // From `form`, not `temp`: temp's operands are evaluated bits by now.
-      const std::pair<unsigned int, unsigned int> fmt =
-          FloatBlaster::operandFormat(form);
-      ASTNode blasted(FloatBlaster::BlastNode_TopLevel(
-          bm, temp.GetKind(), toASTVec(temp.GetChildren()), fmt.first,
-          fmt.second));
+      // One table, the same one the solver's lowering pass uses. temp's
+      // operands were re-stamped with their formats above, so it is a
+      // well-formed source node and its own sorts say what the formats are.
+      ASTNode blasted(FloatBlast::lowerOperation(bm, temp));
 
       assert(blasted != temp);
       assert(blasted != form);

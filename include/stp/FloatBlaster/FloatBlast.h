@@ -94,6 +94,20 @@ public:
   // computes. Idempotent: a formula with none left is returned unchanged.
   ASTNode topLevel(const ASTNode& n);
 
+  // Lower one floating-point node on its own, for a caller that holds the
+  // node it built and wants the bits -- or the Boolean -- it computes: the
+  // constant evaluator folding an all-constant operation, and the model
+  // evaluator reducing one over a model.
+  //
+  // This used to be a second entry point with its own ~30-case switch over
+  // the whole floating-point signature (FloatBlaster::BlastNode), taking the
+  // operation apart into a kind plus already-blasted children because that
+  // was what the packed formulation needed. The two switches agreed on every
+  // kind, and had to keep agreeing by hand: an operation added to one and
+  // not the other compiles, and fails only on the path that reaches the one
+  // that was missed. There is one table now.
+  static ASTNode lowerOperation(STPMgr* bm, const ASTNode& n);
+
   // Cumulative, context-local counters. Besides diagnostics, these make the
   // intended lazy boundary directly testable instead of inferring it from a
   // hash-consed output DAG in which redundant construction can be hidden.
