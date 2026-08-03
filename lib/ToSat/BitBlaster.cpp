@@ -277,8 +277,7 @@ void BitBlaster::getConsts(const ASTNode& form,
     // and constants as their packed-bit leaves. They are bit-blaster terms at
     // this internal boundary even though their public sort remains
     // FLOATINGPOINT_TYPE for model reconstruction.
-    assert(n.GetType() == BITVECTOR_TYPE ||
-           n.GetType() == FLOATINGPOINT_TYPE);
+    assert(isBitsValued(n));
 
     if (n.isConstant())
       continue;
@@ -608,7 +607,11 @@ BitBlaster::simplify_during_bb(ASTNode& term,
 
   for (int i = 0; i < numberOfChildren; i++)
   {
-    if (term[i].GetType() == BITVECTOR_TYPE)
+    // isBitsValued, not GetType() == BITVECTOR_TYPE: a lowered formula still
+    // carries float-typed leaves, which are bits here (see isBitsValued).
+    // Testing the type directly is what made this function abort on every
+    // query with a float symbol or constant left in it.
+    if (isBitsValued(term[i]))
     {
       ch.push_back(BBTerm(term[i], support));
     }

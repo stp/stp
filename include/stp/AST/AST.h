@@ -78,6 +78,22 @@ bool numberOfReadsLessThan(const ASTNode& n, int v);
 // must compare through here instead.
 bool constantsSameBits(const ASTNode& a, const ASTNode& b);
 
+// Whether `n` denotes bits to the bit-vector layers, which is not the same
+// question as GetType() == BITVECTOR_TYPE.
+//
+// FloatBlast removes every floating-point *operation* but deliberately leaves
+// float symbols, constants and the structural nodes over them as their packed
+// bits, still reporting FLOATINGPOINT_TYPE so that model reconstruction can
+// recover the sort. So a lowered formula handed to the bit-vector layers
+// contains float-typed leaves that are, at that boundary, ordinary bitvectors.
+//
+// Every bit-vector-only pass that classifies a node by GetType() needs this
+// question rather than the raw comparison, and it must be asked in one place:
+// spelling it out per call site is what left BitBlaster::simplify_during_bb
+// behind when the invariant was introduced, so that --bb.simplify-during-bb
+// aborted on any query with a float leaf in it.
+bool isBitsValued(const ASTNode& n);
+
 // If (a > b) in the termorder, then return 1 elseif (a < b) in the
 // termorder, then return -1 else return 0
 int TermOrder(const ASTNode& a, const ASTNode& b);
