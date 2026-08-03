@@ -2339,4 +2339,55 @@ TEST(ExtCertification, TruthTable)
             EC::decideCertification(false, true, EC::EXT_SKIPPED));
 }
 
+// A lemma atom the simplifying factory decides from its defining terms
+// contributes no literal to the clause. Which structural verdict makes
+// that equivalence-preserving depends on where the atom sits: dropping
+// a premise is sound when the premise is valid, dropping the conclusion
+// when the conclusion is unsatisfiable. Getting this backwards would
+// emit a strictly stronger clause -- a wrong unsat that no assertion
+// downstream would catch -- so the mapping is pinned here rather than
+// left implicit in the encoder.
+TEST(ExtLemmaFold, DropRuleIsPolarityCorrect)
+{
+  typedef ExtensionalityContext EC;
+
+  // Premise "a = b": droppable only if the fold proved it valid.
+  EXPECT_EQ(EC::FOLD_VALID,
+            EC::requiredFoldVerdict(ExtLemmaAtom::BV_EQ, EC::LEMMA_PREMISE));
+  // Premise "a != b": droppable only if the fold proved "a = b" unsat.
+  EXPECT_EQ(EC::FOLD_UNSAT,
+            EC::requiredFoldVerdict(ExtLemmaAtom::BV_NE, EC::LEMMA_PREMISE));
+  // Conclusion "a = b": droppable only if the fold proved it unsat --
+  // the opposite of the same atom in a premise, which is the whole
+  // reason a single sentinel could not carry this decision.
+  EXPECT_EQ(EC::FOLD_UNSAT, EC::requiredFoldVerdict(ExtLemmaAtom::BV_EQ,
+                                                    EC::LEMMA_CONCLUSION));
+  EXPECT_NE(EC::requiredFoldVerdict(ExtLemmaAtom::BV_EQ, EC::LEMMA_PREMISE),
+            EC::requiredFoldVerdict(ExtLemmaAtom::BV_EQ,
+                                    EC::LEMMA_CONCLUSION));
+
+  // Every other combination is a position the encoder never produces
+  // (a conclusion is always an equality; Boolean atoms never reach the
+  // fold), and no verdict may drop one: FOLD_UNDECIDED matches neither
+  // sentinel, so the encoder's comparison fails loudly.
+  EXPECT_EQ(EC::FOLD_UNDECIDED, EC::requiredFoldVerdict(
+                                    ExtLemmaAtom::BV_NE, EC::LEMMA_CONCLUSION));
+  const ExtLemmaAtom::Op nonBV[] = {ExtLemmaAtom::ARRAY_EQ,
+                                    ExtLemmaAtom::BOOL_LIT,
+                                    ExtLemmaAtom::BOOL_LIT_NEG};
+  for (size_t i = 0; i < sizeof(nonBV) / sizeof(nonBV[0]); i++)
+  {
+    EXPECT_EQ(EC::FOLD_UNDECIDED,
+              EC::requiredFoldVerdict(nonBV[i], EC::LEMMA_PREMISE));
+    EXPECT_EQ(EC::FOLD_UNDECIDED,
+              EC::requiredFoldVerdict(nonBV[i], EC::LEMMA_CONCLUSION));
+  }
+
+  // The two sentinels must stay distinct from each other and from every
+  // SAT variable index, which the encoder tests for with "q >= 0".
+  EXPECT_NE(EC::FOLD_VALID, EC::FOLD_UNSAT);
+  EXPECT_LT(EC::FOLD_VALID, 0);
+  EXPECT_LT(EC::FOLD_UNSAT, 0);
+}
+
 } // namespace

@@ -306,6 +306,33 @@ public:
   // literals the lemmas share are built once.
   void encodePendingLemmas(SATSolver& solver, ToSATBase* tosat);
 
+  // A lemma atom the simplifier can decide from its defining terms
+  // needs no equality circuit, and its literal is dropped from the
+  // clause. Dropping is equivalence-preserving on only one side per
+  // position: a premise may go when the atom is valid, the conclusion
+  // when it is unsatisfiable. The other direction yields a strictly
+  // stronger clause -- a silent wrong unsat -- so the fold reports its
+  // direction and the encoder checks it here.
+  enum FoldVerdict
+  {
+    FOLD_UNDECIDED = 0, // no structural verdict; build the circuit
+    FOLD_VALID = -1,    // "a = b" holds in every model
+    FOLD_UNSAT = -2     // "a = b" holds in none
+  };
+
+  enum LemmaPosition
+  {
+    LEMMA_PREMISE,
+    LEMMA_CONCLUSION
+  };
+
+  // The verdict that permits dropping a structurally decided atom from
+  // this position, or FOLD_UNDECIDED where no verdict does. Pure, so
+  // the rule lives in one place and its truth table is pinned by a unit
+  // test instead of being restated at each call site.
+  static FoldVerdict requiredFoldVerdict(ExtLemmaAtom::Op op,
+                                         LemmaPosition where);
+
   // Validate one bit-vector lemma leaf: it must be a fixed-width
   // constant, or a SYMBOL whose complete SAT-variable vector was
   // encoded by the initial bit-blast (present, full width, every bit
