@@ -39,6 +39,14 @@ if (ENABLE_FLOATING_POINT)
     AddSTPGTest(SourceSort_Test.cpp)
     # Builds float/rounding-mode constants, which is the whole point.
     AddSTPGTest(ConstantIdentity_Test.cpp)
+    AddSTPGTest(FpConstantFold_Test.cpp)
+    # The oracle is the hardware, evaluated under a rounding mode set with
+    # fesetround. Without this the compiler assumes the default mode and
+    # folds the reference arithmetic while compiling, so every non-default
+    # mode disagrees for a reason that has nothing to do with STP.
+    if (TARGET FpConstantFold_TestTests AND NOT MSVC)
+        target_compile_options(FpConstantFold_TestTests PRIVATE -frounding-math)
+    endif()
     # Builds float-typed symbols, so it needs the floating-point funnels
     # (SetExpWidth) to be more than a fatal error.
     AddSTPGTest(BVSolver_Test.cpp)
