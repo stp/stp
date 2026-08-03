@@ -2939,6 +2939,45 @@ TEST_F(ExtModelEqualityTest, FollowsTheSelectedIfThenElseBranch)
   EXPECT_FALSE(ce.ArraysEqualUsingModel(t, b));
 }
 
+// The post-solve audit asks one question two ways: it evaluates an
+// equality's lowering as a formula, and it compares the contents the
+// model publishes for the two operands. For a write chain equated with
+// its own base -- the lowering with no consistency checker behind it --
+// that lowering is read(base, i) = v, so the two halves agree only if
+// evaluating the read completes a cell nobody recorded exactly as the
+// contents comparison completes it.
+//
+// Evaluation used to invent all-ones for such a cell, while the printer,
+// vc_getCounterExampleArray and the comparison below all fill it with
+// zero. store(a, i, 0) = a then read false through its lowering and true
+// through the contents, and the audit killed a satisfiable query.
+TEST_F(ExtModelEqualityTest, LoweringOfAWriteChainAgreesWithTheContents)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a");
+  const ASTNode i = idx(5); // the model records no cell here, nor anywhere
+  const ASTNode read = hf->CreateTerm(READ, 4, {a, i});
+
+  // Reading the cell has to yield the completion the rest of the model
+  // surface uses -- stated as the invariant rather than as the value,
+  // since it is the agreement that matters. On this branch it is zero.
+  EXPECT_EQ(el(0), ce.defaultCellValue(a));
+  EXPECT_EQ(mgr.ASTTrue,
+            ce.QueryFormulaAgainstModel(
+                hf->CreateNode(EQ, read, ce.defaultCellValue(a))));
+
+  // Both polarities of the audit's comparison, on the shape that reaches
+  // it: writing what the cell already holds leaves the array alone,
+  // writing anything else does not.
+  for (int v = 0; v < 2; v++)
+  {
+    const ASTNode lowering = hf->CreateNode(EQ, read, el(v));
+    EXPECT_EQ(ce.ArraysEqualUsingModel(write(a, i, el(v)), a),
+              ce.QueryFormulaAgainstModel(lowering) == mgr.ASTTrue)
+        << "written value " << v;
+  }
+}
+
 TEST_F(ExtModelEqualityTest, AskingDoesNotChangeTheModel)
 {
   ASTNode a = arr("a"), b = arr("b");

@@ -101,7 +101,7 @@ private:
   // The value the model gives one cell of an array term, without
   // recording anything: the recorded cell if there is one, else the
   // written value if a write at this level hits the index, else the
-  // same question one level down, else zero.
+  // same question one level down, else defaultCellValue.
   ASTNode ReadUsingModel(const ASTNode& arrayTerm,
                          const ASTNode& concreteIndex);
 
@@ -220,16 +220,35 @@ public:
   // Decided from the model alone -- no abstraction variable, no
   // record, no lowering -- so it can answer for an equality the solve
   // never reasoned about, and it is an independent opinion where the
-  // solve did. Cells the model records nothing for read as zero, which
-  // is the completion the model printer and the programmatic model API
-  // both apply, so the answer is the one a reader of the printed model
-  // would get.
+  // solve did. Cells the model records nothing for read as
+  // defaultCellValue, which is the completion the model printer and the
+  // programmatic model API both apply, so the answer is the one a
+  // reader of the printed model would get.
   //
   // The cells at which two array terms can differ are finite and
   // known: every index the model records against an array either term
   // is built from, plus every index written to by a write in either
-  // term. Anywhere else both terms read as zero.
+  // term. Anywhere else both terms read the same default.
   bool ArraysEqualUsingModel(const ASTNode& left, const ASTNode& right);
+
+  // What a cell of this array holds when the model records nothing for
+  // it.
+  //
+  // Every reader of a published model has to answer this identically:
+  // the printer emits it as the constant array underneath the observed
+  // cells, ReadUsingModel and the read evaluator return it for an index
+  // with no entry, and the array-equality checker completes both sides
+  // with it before comparing contents. A site that disagrees makes the
+  // model contradict itself -- an equality reads false through its
+  // lowering's reads while the printed arrays are identical -- and that
+  // is invisible until something compares two of the answers. So the
+  // value is decided once, here, and every site asks rather than
+  // spelling it out.
+  //
+  // Keyed on the array because it is a property of the element sort,
+  // not of the element width: a sort whose bit patterns are not all
+  // meaningful cannot be completed with an arbitrary one.
+  ASTNode defaultCellValue(const ASTNode& arrayTerm) const;
 
   // ComputeFormulaUsingModel for a caller asking a question about the
   // model rather than assembling it: whatever the evaluation would

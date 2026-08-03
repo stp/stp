@@ -379,14 +379,20 @@ public:
   const char* recheckCertifiedEqualities(AbsRefine_CounterExample* ce) const;
 
   // Do two certified observation lists denote the same array? Every
-  // cell no observation mentions holds `zero` on both sides, so the two
-  // arrays agree everywhere exactly when they agree at every index
+  // cell no observation mentions holds `absent` on both sides, so the
+  // two arrays agree everywhere exactly when they agree at every index
   // either one observes. Pure, so the rule is pinned by a unit test
   // rather than restated at its call site.
+  //
+  // `absent` is the caller's business, and the caller must take it from
+  // AbsRefine_CounterExample::defaultCellValue: comparing contents with
+  // one completion while the model publishes another is exactly the
+  // disagreement recheckCertifiedEqualities exists to catch, and it
+  // would then be catching itself.
   static bool contentsAgree(
       const std::vector<std::pair<ASTNode, ASTNode>>& left,
       const std::vector<std::pair<ASTNode, ASTNode>>& right,
-      const ASTNode& zero);
+      const ASTNode& absent);
 
   // Validate one bit-vector lemma leaf: it must be a fixed-width
   // constant, or a SYMBOL whose complete SAT-variable vector was

@@ -1674,12 +1674,13 @@ void ExtensionalityContext::publishObservations(AbsRefine_CounterExample* ce)
   ce->ClearComputeFormulaMap();
 }
 
-// See the header. Unobserved cells hold `zero` on both sides, so two
+// See the header. Unobserved cells hold `absent` on both sides, so two
 // arrays agree everywhere exactly when they agree at every index either
 // one observes.
 bool ExtensionalityContext::contentsAgree(
     const std::vector<std::pair<ASTNode, ASTNode>>& left,
-    const std::vector<std::pair<ASTNode, ASTNode>>& right, const ASTNode& zero)
+    const std::vector<std::pair<ASTNode, ASTNode>>& right,
+    const ASTNode& absent)
 {
   std::map<ASTNode, ASTNode> leftCells, rightCells;
   for (size_t i = 0; i < left.size(); i++)
@@ -1692,14 +1693,15 @@ bool ExtensionalityContext::contentsAgree(
   {
     const std::map<ASTNode, ASTNode>::const_iterator other =
         rightCells.find(it->first);
-    if (!(it->second == (other == rightCells.end() ? zero : other->second)))
+    if (!(it->second == (other == rightCells.end() ? absent : other->second)))
       return false;
   }
   // Only the indexes the first array does not observe are left to check;
-  // there it holds zero.
+  // there it holds `absent`.
   for (std::map<ASTNode, ASTNode>::const_iterator it = rightCells.begin();
        it != rightCells.end(); ++it)
-    if (leftCells.find(it->first) == leftCells.end() && !(it->second == zero))
+    if (leftCells.find(it->first) == leftCells.end() &&
+        !(it->second == absent))
       return false;
   return true;
 }
@@ -1730,16 +1732,22 @@ const char* ExtensionalityContext::recheckCertifiedEqualities(
       return "array-equality: an equality abstraction variable has no "
              "Boolean value in the model it was certified against";
 
-    // An array the fixed point never reached observes nothing, which is
-    // the all-zero array -- the same completion the printer applies.
+    // An array the fixed point never reached observes nothing, so it is
+    // the constant array the printer would emit for it. Taking the cell
+    // value from the model surface rather than spelling it out here is
+    // what keeps this comparison asking about the model that gets
+    // published.
+    // Observations are keyed on the canonical operands, but the
+    // completion is asked of the constructed one: it follows the
+    // element sort, and the canonical form is what the solve rewrote
+    // its way to, which need not still carry the sort the user wrote.
     const ObsMap::const_iterator obsL = lastObserved.find(r.canonicalLeft);
     const ObsMap::const_iterator obsR = lastObserved.find(r.canonicalRight);
-    const ASTNode zero =
-        bm->CreateZeroConst(r.canonicalLeft.GetValueWidth());
+    const ASTNode absent = ce->defaultCellValue(r.constructionLeft);
     const bool agree =
         contentsAgree(obsL == lastObserved.end() ? unobserved : obsL->second,
                       obsR == lastObserved.end() ? unobserved : obsR->second,
-                      zero);
+                      absent);
 
     if (agree != (assigned.GetKind() == TRUE))
       return agree ? "array-equality: the model makes an array equality's "

@@ -333,9 +333,8 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
                            level[0]);
               continue;
             }
-            // base array with no observation: unobserved indices
-            // default to zero
-            val = bm->CreateZeroConst(term.GetValueWidth());
+            // base array with no observation
+            val = defaultCellValue(level);
             break;
           }
           CounterExampleMap[term] = val;
@@ -421,25 +420,35 @@ ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
         // return the array read over a constantindex
         output = modelentry;
       }
+      else if (bm->UserFlags.enable_array_equality)
+      {
+        // Has been simplified out, so any value will do -- but only one
+        // value agrees with the model that is published. With array
+        // equality enabled the model surface prints a total
+        // interpretation per array, and this is a cell of it that no
+        // observation covers, so it is the completion or nothing.
+        // Inventing something else makes evaluation disagree with every
+        // other reader: an array equality evaluates false through its
+        // lowering's reads while the printed arrays are identical, which
+        // is the disagreement the post-solve audit trips on -- and,
+        // unaudited, a (get-model) that falsifies the query it answered
+        // sat.
+        //
+        // Memoising the invented value instead cannot close that gap.
+        // Model queries run inside a scope that restores the
+        // counterexample map afterwards, so the entry is rolled back
+        // and the next reader invents the value again against a model
+        // that never recorded it. Agreeing with the completion the rest
+        // of the model already uses needs no bookkeeping at all.
+        //
+        // Gated on the option: with it off the counterexample map, and
+        // so vc_getCounterExampleArray, must stay exactly as before.
+        output = defaultCellValue(arrName);
+      }
       else
       {
         // Has been simplified out. Can take any value.
         output = bm->CreateMaxConst(modelentry.GetValueWidth());
-
-        // ... but having handed a value out, stand by it. The result is
-        // memoised below under "term", whose index may be symbolic;
-        // with array equality enabled the model surface prints a total
-        // interpretation per array built from the concrete-index READ
-        // keys alone, and fills every index it finds no key for with
-        // zero. Without this the printer would commit the cell to zero
-        // while the rest of the model was computed from the value
-        // invented here, and (get-model) could return an
-        // interpretation that falsifies the query it answered sat.
-        // Gated on the option: with it off the counterexample map, and
-        // so vc_getCounterExampleArray, must stay exactly as before.
-        if (bm->UserFlags.enable_array_equality &&
-            CounterExampleMap.find(modelentry) == CounterExampleMap.end())
-          CounterExampleMap[modelentry] = output;
       }
       break;
     }
@@ -833,6 +842,16 @@ void AbsRefine_CounterExample::CollectArrayNodes(const ASTNode& arrayTerm,
   }
 }
 
+// See the header. On this branch every array has a bit-vector element
+// sort, all of whose patterns denote, so the completion is zero -- but
+// it is stated here rather than at the five sites that need it, because
+// what matters is that they agree, not what they agree on.
+ASTNode
+AbsRefine_CounterExample::defaultCellValue(const ASTNode& arrayTerm) const
+{
+  return bm->CreateZeroConst(arrayTerm.GetValueWidth());
+}
+
 // See the header. This is the walk the read path already performs for
 // an array the extensionality checker owns, lifted out so that it can
 // be asked about any array term, including one from a solve that never
@@ -874,9 +893,9 @@ ASTNode AbsRefine_CounterExample::ReadUsingModel(const ASTNode& arrayTerm,
       continue;
     }
 
-    // A base array the model records nothing for at this index. Zero is
-    // what the printer fills it with, so zero is what it holds.
-    return bm->CreateZeroConst(level.GetValueWidth());
+    // A base array the model records nothing for at this index. It
+    // holds what the printer fills it with.
+    return defaultCellValue(level);
   }
 }
 
@@ -1201,9 +1220,12 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
   }
 
   // Arrays: emit one valid nullary define-fun per array symbol whose
-  // body is a constant-zero array with every observed (index, value)
-  // pair stored on top, in ascending concrete-index order. The printed
-  // model replays in a conforming SMT-LIB2 solver.
+  // body is the constant defaultCellValue array with every observed
+  // (index, value) pair stored on top, in ascending concrete-index
+  // order. The printed model replays in a conforming SMT-LIB2 solver.
+  // This is the surface every other completion site has to match: what
+  // is printed here is what the model says about a cell nothing
+  // observed.
   vector<ASTNode> arrays;
   for (ASTNode f : symbols)
     if (ARRAY_TYPE == f.GetType() && !bm->FoundIntroducedSymbolSet(f))
@@ -1229,7 +1251,7 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
       os << " (store";
     os << " ((as const (Array (_ BitVec " << iw << ") (_ BitVec " << vw
        << ")))";
-    printer::outputBitVecSMTLIB2(bm->CreateZeroConst(vw), os);
+    printer::outputBitVecSMTLIB2(defaultCellValue(array), os);
     os << " )";
     for (size_t i = 0; i < entries.size(); i++)
     {

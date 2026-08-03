@@ -815,6 +815,91 @@ TEST(array_extensionality, handle_for_an_unasserted_equality_matches_the_model)
   vc_Destroy(vc);
 }
 
+// A cell no constraint ever mentioned is read while evaluating a
+// lowering, and the value invented for it has to be the value the
+// published model gives that cell.
+//
+// Every array equality here is a write chain against a base of its own
+// chain, so lowering solves all six by rewriting: no abstraction
+// variable, no record, no consistency checker behind any of them. They
+// also sit in the untaken branch of an if-then-else whose condition is
+// asserted, so preprocessing deletes them from the formula and the
+// solver constrains none of the arrays -- yet the lowerings are still
+// what the model surface answers an equality handle with, and the
+// post-solve audit compares each one against the contents the model
+// publishes for its operands.
+//
+// The model completes an unobserved cell with zero: that is what the
+// printer stores under the array, what vc_getCounterExampleArray
+// reports, and what the checker compares contents with. Evaluation used
+// to invent all-ones for such a cell instead, which made the lowering of
+// store(store(x5,3,3), x6, x1) = store(x5,3,3) read false while the same
+// model printed the two arrays identically. Found by fuzzing; the audit
+// caught it and aborted a satisfiable query.
+TEST(array_extensionality, unconstrained_cells_read_as_the_model_prints_them)
+{
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+  vc_setFlag(vc, 'd'); // build the counterexample and audit it
+
+  Type bv3 = vc_bvType(vc, 3);
+  Type arrT = vc_arrayType(vc, bv3, bv3);
+
+  Expr x1 = vc_varExpr(vc, "x1", bv3);
+  Expr x2 = vc_varExpr(vc, "x2", vc_boolType(vc));
+  Expr x5 = vc_varExpr(vc, "x5", arrT);
+  Expr x6 = vc_varExpr(vc, "x6", bv3);
+  Expr x8 = vc_varExpr(vc, "x8", bv3);
+  Expr x9 = vc_varExpr(vc, "x9", bv3);
+  Expr three = vc_bvConstExprFromInt(vc, 3, 3);
+
+  Expr c = vc_writeExpr(vc, x5, three, three);
+  Expr a = vc_writeExpr(vc, c, x6, x1);
+  Expr d = vc_writeExpr(
+      vc,
+      vc_writeExpr(vc, vc_writeExpr(vc, a, three, x1),
+                   vc_readExpr(vc, x5, x1), three),
+      x1, three);
+
+  // (distinct a x5 c d): six pairs, each of them a write chain and a
+  // base of that same chain.
+  Expr operands[4] = {a, x5, c, d};
+  Expr pairs[6];
+  int n = 0;
+  for (int p = 0; p < 4; p++)
+    for (int q = p + 1; q < 4; q++)
+      pairs[n++] = vc_notExpr(vc, vc_eqExpr(vc, operands[p], operands[q]));
+
+  vc_assertFormula(vc, x2);
+  vc_assertFormula(
+      vc, vc_notExpr(vc, vc_iteExpr(vc, x2, vc_eqExpr(vc, x8, x9),
+                                    vc_andExprN(vc, pairs, 6))));
+
+  // Satisfiable: x2 holds, so only x8 != x9 is required and the whole
+  // distinct is dead.
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+
+  // Nothing constrained x5, so the model prints it as the all-zero
+  // array -- and a read of it must say zero too, at the index the
+  // dropped equalities read it at.
+  Expr *indices, *values;
+  int size = -1;
+  vc_getCounterExampleArray(vc, x5, &indices, &values, &size);
+  EXPECT_EQ(0, size);
+  EXPECT_EQ(0, getBVUnsignedLongLong(
+                   vc_getCounterExample(vc, vc_readExpr(vc, x5, x6))));
+
+  // The equality handles agree with those contents in both directions:
+  // store(x5,3,3) with a write of x1 at x6 on top is the same array when
+  // x5 already holds x1 there, and neither is x5 itself, which holds
+  // zero at index 3.
+  EXPECT_EQ(TRUE, getExprKind(vc_getCounterExample(vc, vc_eqExpr(vc, a, c))));
+  EXPECT_EQ(FALSE, getExprKind(vc_getCounterExample(vc, vc_eqExpr(vc, a, x5))));
+  EXPECT_EQ(FALSE, getExprKind(vc_getCounterExample(vc, vc_eqExpr(vc, c, x5))));
+
+  vc_Destroy(vc);
+}
+
 TEST(array_extensionality, active_checker_owns_complete_array_graph)
 {
   // The contradiction lives in congruence across a = b, while unrelated
