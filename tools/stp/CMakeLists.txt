@@ -30,6 +30,11 @@
 # stp_simple is the only consumer.
 if(BUILD_EXECUTABLES)
     add_library(stp_main_common OBJECT main_common.cpp)
+    # main_common.cpp reaches the generated ASTKind.h through NodeFactory.h.
+    # As a standalone object library it does not inherit the generator
+    # dependency from libstp, so name it here or a parallel build can compile
+    # this TU before ASTKind.h exists (as every other consumer target does).
+    add_dependencies(stp_main_common ASTKind_header)
 endif()
 
 if(BUILD_EXECUTABLES AND NOT ONLY_SIMPLE)

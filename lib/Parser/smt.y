@@ -37,6 +37,8 @@
 #include "stp/cpp_interface.h"
 #include "stp/Parser/LetMgr.h"
 #include "stp/Parser/parser.h"
+#include <sstream>
+#include <string>
 
   using namespace stp;
   using std::cout;
@@ -51,10 +53,20 @@
   extern int smtlineno;
   extern int smtlex(void);
 
+  // Built once: printed for the user and handed to the error handler,
+  // which used to receive the empty string. See the note in smt2.y.
+  static std::string smt_diagnostic(const char *s)
+  {
+    std::ostringstream o;
+    o << "syntax error: line " << smtlineno << ": " << s
+      << "  token: " << smttext;
+    return o.str();
+  }
+
   int yyerror(const char *s) {
-    cout << "syntax error: line " << smtlineno << "\n" << s << endl;
-    cout << "  token: " << smttext << endl;
-    FatalError("");
+    const std::string msg = smt_diagnostic(s);
+    cout << msg << endl;
+    FatalError(msg.c_str());
     return 1;
   }
   int yyerror(void* /*AssertsQuery*/, const char* s) { return yyerror(s); }
@@ -1058,7 +1070,7 @@ BITVEC_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK
     $$.valuewidth = length;
   }
   else {
-    FatalError("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
+    FatalError("parsing: bit-vectors must be of positive length");
   }
 }
 | ARRAY_TOK LBRACKET_TOK NUMERAL_TOK COLON_TOK NUMERAL_TOK RBRACKET_TOK
@@ -1069,14 +1081,14 @@ BITVEC_TOK LBRACKET_TOK NUMERAL_TOK RBRACKET_TOK
     $$.indexwidth = $3;
   }
   else {
-    FatalError("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
+    FatalError("parsing: bit-vectors must be of positive length");
   }
 
   if(value_len > 0) {
     $$.valuewidth = $5;
   }
   else {
-    FatalError("Fatal Error: parsing: BITVECTORS must be of positive length: \n");
+    FatalError("parsing: bit-vectors must be of positive length");
   }
 }
 ;
