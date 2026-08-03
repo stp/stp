@@ -535,20 +535,25 @@ class Solver(object):
 
         if expr:
             width = _lib.getVWidth(expr)
-            
+            eb = _lib.vc_getExpWidth(expr)
+
             #What if it's compiled for 32-bit?
             if width > 64:
+                carrier = self._bit_carrier(expr)
                 extract = 0
                 for i in range(( width - 1 ) // 64 + 1):
-                    extractExpr = _lib.vc_bvExtract(self.vc, expr, min ((i+1)*64, width)-1, i*64)
+                    extractExpr = _lib.vc_bvExtract(self.vc, carrier, min ((i+1)*64, width)-1, i*64)
                     #maybe extractExpr leaks?
                     bvExpr = _lib.vc_getCounterExample(self.vc, extractExpr)
                     extract +=  (_lib.getBVUnsignedLongLong(bvExpr) << (64 * i))
+                if eb:
+                    # Same decode as the narrow path: a format with no native
+                    # Python float comes back as its packed bits.
+                    return _decode_fp(extract, eb, _lib.vc_getSigWidth(expr))
                 return extract
             else:
                 value = _lib.vc_getCounterExample(self.vc, expr)
                 bits = _lib.getBVUnsignedLongLong(value)
-                eb = _lib.vc_getExpWidth(expr)
                 if eb:
                     # A floating-point value: decode its packed bits (to a
                     # Python float for the standard formats).
@@ -563,6 +568,20 @@ class Solver(object):
     # Allows easy access to the Counter Example.
     __getitem__ = model
 
+    def _bit_carrier(self, expr):
+        """The bit-vector holding an expression's packed value.
+
+        A value wider than 64 bits is read out in 64-bit slices, and slicing
+        means vc_bvExtract -- which refuses a float, because the C boundary
+        enforces the source sort. Every format above binary64 therefore has to
+        be sliced through its IEEE bits, which vc_fpToIEEEBV supplies and
+        which are exactly the packed bits the slicing wants. A bit-vector is
+        already its own carrier.
+        """
+        if _lib.vc_getExpWidth(expr):
+            return _lib.vc_fpToIEEEBV(self.vc, expr)
+        return expr
+
     def model_bits(self, key=None, expr=None):
         """Like model(), but always returns the raw packed bits as an integer,
         with no floating-point decoding, at any width (e.g. to inspect a float's
@@ -576,10 +595,11 @@ class Solver(object):
 
         width = _lib.getVWidth(expr)
         if width > 64:
+            carrier = self._bit_carrier(expr)
             value = 0
             for i in range((width - 1) // 64 + 1):
                 part = _lib.vc_bvExtract(
-                    self.vc, expr, min((i + 1) * 64, width) - 1, i * 64)
+                    self.vc, carrier, min((i + 1) * 64, width) - 1, i * 64)
                 bits = _lib.getBVUnsignedLongLong(
                     _lib.vc_getCounterExample(self.vc, part))
                 value += bits << (64 * i)
