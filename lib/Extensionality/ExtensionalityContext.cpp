@@ -131,12 +131,64 @@ void collectDag(const ASTNode& n, ASTNodeSet& visited)
 
 // The current form of an equality operand, read back from its witness
 // anchor. The anchor was recorded as name = read(operand, lambda), and
-// stays that shape: the only rewrite that could break it is the
-// simplifier distributing the read over an array if-then-else, which it
-// does not do while the procedure is active -- the checker reasons
-// about those directly and needs the read left where it stands.
+// what this returns is whatever array that read now stands over.
+//
+// Two rewrites in the tree can act on a read of that shape, and they
+// are dangerous in different ways.
+//
+// Distributing the read over an array if-then-else changes the shape,
+// so it cannot go unnoticed -- and it is suppressed while the procedure
+// is active anyway, because the checker reasons about those directly
+// and needs the read left where it stands.
+//
+// Chasing the read through a write does not change the shape. It
+// returns a read at the same index over a strictly deeper array, which
+// would pass every check here and hand back an operand the equality was
+// never about. Nothing suppresses it: SimplifyingNodeFactory::chaseRead
+// runs on every READ built over a WRITE. What makes it safe is that it
+// only steps over a write whose index it can prove different from the
+// read index, and lambda is fresh -- no term outside the two anchors
+// mentions it, so no context-free rule can decide "write index =
+// lambda" either way, and the chase stops at the first write. That is a
+// property of the formula rather than of this function, so
+// locateCanonicalOperands checks it directly instead of leaving it as
+// an argument in a comment.
+//
 // Anything else means an anchor was rewritten beyond recognition:
 // refuse loudly rather than guess.
+// Does any node of this DAG belong to `needles`? Iterative post-order,
+// because the terms it is asked about are as deep as the user's write
+// chains and if-then-else nests.
+bool subtreeMentions(const ASTNode& root, const std::set<ASTNode>& needles)
+{
+  std::map<ASTNode, bool> found;
+  std::vector<std::pair<ASTNode, bool>> stack;
+  stack.push_back(std::make_pair(root, false));
+  while (!stack.empty())
+  {
+    const ASTNode n = stack.back().first;
+    const bool expanded = stack.back().second;
+    stack.pop_back();
+    if (found.find(n) != found.end())
+      continue;
+    if (!expanded)
+    {
+      // Children are pushed after this node's second visit, so they are
+      // all answered before it is.
+      stack.push_back(std::make_pair(n, true));
+      for (unsigned k = 0; k < n.Degree(); k++)
+        if (found.find(n[k]) == found.end())
+          stack.push_back(std::make_pair(n[k], false));
+      continue;
+    }
+    bool here = needles.find(n) != needles.end();
+    for (unsigned k = 0; !here && k < n.Degree(); k++)
+      here = found[n[k]];
+    found[n] = here;
+  }
+  return found[root];
+}
+
 ASTNode recoverAnchoredOperand(const ASTNode& rhs, const ASTNode& lambda,
                                const ASTNode& proxy)
 {
@@ -361,7 +413,22 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
   std::map<std::pair<ASTNode, ASTNode>, size_t>::const_iterator it =
       keyToRecord.find(key);
   if (it != keyToRecord.end())
-    return records[it->second].proxy;
+  {
+    // The key is the operand pair, so a hit is a record built from these
+    // very operands. Check it, because nothing downstream ever recovers
+    // the pair an abstraction variable stands for: a key that collapsed
+    // two distinct equalities would hand this one a variable standing
+    // for the other one's arrays, and the witness bundle, the checker
+    // edges and the model would then all be consistent about the wrong
+    // question.
+    const Record& existing = records[it->second];
+    if (!(existing.constructionLeft == left &&
+          existing.constructionRight == right))
+      FatalError("array-equality: the record registry returned an "
+                 "abstraction variable built from a different operand pair",
+                 left);
+    return existing.proxy;
+  }
 
   if (registrySealed)
     FatalError("array-equality: an array equality was built during a "
@@ -592,6 +659,35 @@ void ExtensionalityContext::activateReachableRecords(
   }
 
   activeRecordIds.assign(activeIds.begin(), activeIds.end());
+
+  // Forget the lowering of every equality this solve did not keep. The
+  // map is written for each opaque node as it is visited, before there
+  // is any activation to consult, and lowering can then throw the
+  // result away: an equality between a write chain and its own base is
+  // solved by rewriting, and a conjunct of that rewriting is dropped
+  // when an outer write to the same index certainly shadows it, taking
+  // a nested equality's abstraction variable with it. The record is
+  // never activated, so the variable occurs in no constraint and the
+  // solver never assigns it -- but the entry survived, and the model
+  // surfaces resolve public handles through it. They would then report
+  // the two arrays unequal, because an unassigned Boolean completes to
+  // false, while the same model prints them identically.
+  //
+  // A proxy that did not activate is exactly an equality unreachable in
+  // this solve, so its entry has nothing left to say. Reflexive and
+  // rewritten lowerings carry no proxy and are unaffected.
+  for (ASTNodeMap::iterator it = currentLowerings.begin();
+       it != currentLowerings.end();)
+  {
+    const std::map<ASTNode, size_t>::const_iterator record =
+        proxyToRecord.find(it->second);
+    if (record != proxyToRecord.end() &&
+        activeIds.find(record->second) == activeIds.end())
+      it = currentLowerings.erase(it);
+    else
+      ++it;
+  }
+
   anticipatedArraySymbols.clear();
   for (size_t i = 0; i < activeRecordIds.size(); ++i)
   {
@@ -689,11 +785,13 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
   // collected: a protected lambda or proxy turning up in an equation of
   // the same shape is none of this function's business.
   std::set<ASTNode> witnessNames;
+  std::set<ASTNode> witnessIndexes;
   for (size_t i = 0; i < activeRecordIds.size(); i++)
   {
     const Record& r = records[activeRecordIds[i]];
     witnessNames.insert(r.nameL);
     witnessNames.insert(r.nameR);
+    witnessIndexes.insert(r.lambda);
   }
 
   // name symbol -> the anchored right-hand side: the witness read, or
@@ -724,6 +822,27 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
        ++it)
   {
     const ASTNode& n = *it;
+
+    // No write index mentions a witness index. That is what stops a
+    // read-over-write chase from stepping an anchor onto a deeper array
+    // and handing recovery an operand the equality was never about (see
+    // recoverAnchoredOperand): the chase steps over a write only when it
+    // can decide that write's index against the read's, and a
+    // context-free rule can decide nothing about a fresh symbol the
+    // write index does not mention.
+    //
+    // Deliberately not the stronger "a witness index appears only as an
+    // anchor read's index". It legitimately appears elsewhere -- a
+    // constraint confining it to the patterns its sort denotes is one,
+    // and a sort whose values are not all denoting needs exactly that --
+    // and no such position gives a rewrite anything to work with. Only a
+    // write index does.
+    if (n.GetKind() == WRITE && subtreeMentions(n[1], witnessIndexes))
+      FatalError("array-equality: a write index mentions a witness index, "
+                 "so a rewrite could decide that write against an anchor "
+                 "read and move the operand recovery reads",
+                 n);
+
     if (n.GetKind() != EQ || n.Degree() != 2)
       continue;
     for (int side = 0; side < 2; side++)
@@ -1776,6 +1895,141 @@ void ExtensionalityContext::publishObservations(AbsRefine_CounterExample* ce)
   // No model evaluation should precede certification, but clearing the
   // cache here makes publication an explicit phase boundary.
   ce->ClearComputeFormulaMap();
+}
+
+// See the header. Unobserved cells hold `zero` on both sides, so two
+// arrays agree everywhere exactly when they agree at every index either
+// one observes.
+bool ExtensionalityContext::contentsAgree(
+    const std::vector<std::pair<ASTNode, ASTNode>>& left,
+    const std::vector<std::pair<ASTNode, ASTNode>>& right, const ASTNode& zero)
+{
+  std::map<ASTNode, ASTNode> leftCells, rightCells;
+  for (size_t i = 0; i < left.size(); i++)
+    leftCells[left[i].first] = left[i].second;
+  for (size_t i = 0; i < right.size(); i++)
+    rightCells[right[i].first] = right[i].second;
+
+  // Cells are compared on their bits, not on node identity. A cell of a
+  // float-element array holds a floating-point constant, which interns
+  // apart from the plain bit-vector constant with the same bits -- and
+  // one side of most of these comparisons is exactly such a plain
+  // constant, the zero an unobserved cell completes to. Asking by node
+  // would report two identical arrays as differing.
+  for (std::map<ASTNode, ASTNode>::const_iterator it = leftCells.begin();
+       it != leftCells.end(); ++it)
+  {
+    const std::map<ASTNode, ASTNode>::const_iterator other =
+        rightCells.find(it->first);
+    if (constantsDenoteDifferentValues(
+            it->second, other == rightCells.end() ? zero : other->second))
+      return false;
+  }
+  // Only the indexes the first array does not observe are left to check;
+  // there it holds zero.
+  for (std::map<ASTNode, ASTNode>::const_iterator it = rightCells.begin();
+       it != rightCells.end(); ++it)
+    if (leftCells.find(it->first) == leftCells.end() &&
+        constantsDenoteDifferentValues(it->second, zero))
+      return false;
+  return true;
+}
+
+// See the header. Runs against the published model, so it must come
+// after publishObservations -- the contents it compares are the ones
+// the model APIs and the printers will hand back.
+const char* ExtensionalityContext::recheckCertifiedEqualities(
+    AbsRefine_CounterExample* ce) const
+{
+  if (!activeRecordIds.empty() && !graphBound)
+    return "array-equality: the counterexample check ran before the "
+           "complete array graph was bound";
+
+  static const std::vector<std::pair<ASTNode, ASTNode>> unobserved;
+  typedef std::map<ASTNode, std::vector<std::pair<ASTNode, ASTNode>>> ObsMap;
+
+  // The certified cells of every active record's canonical operands
+  // against its abstraction variable. Empty when the only equalities in
+  // the query were ones lowering solved outright, which is why the
+  // second loop below is not conditioned on this one having run.
+  for (size_t i = 0; i < activeRecordIds.size(); i++)
+  {
+    const Record& r = records[activeRecordIds[i]];
+    // Both loops below decide array equality by comparing published
+    // cells for equal bits. That is the right question only while the
+    // element and index sorts are bit-vector ones. Over a
+    // floating-point sort it is not: NaN is one value with many
+    // encodings, so two arrays this theory calls equal can hold cells
+    // that differ bit for bit, and the check would report a model wrong
+    // for being right. Deciding those needs the value equality the
+    // procedure itself uses, which this does not implement -- so it
+    // declines to speak rather than speak wrongly.
+    if (r.canonicalLeft.GetSourceSort().usesFloatingPointTheory() ||
+        r.canonicalRight.GetSourceSort().usesFloatingPointTheory())
+      continue;
+    const ASTNode assigned = ce->LookupAssignedValue(r.proxy);
+    if (assigned.IsNull() ||
+        !(assigned.GetKind() == TRUE || assigned.GetKind() == FALSE))
+      return "array-equality: an equality abstraction variable has no "
+             "Boolean value in the model it was certified against";
+
+    // An array the fixed point never reached observes nothing, which is
+    // the all-zero array -- the same completion the printer applies.
+    const ObsMap::const_iterator obsL = lastObserved.find(r.canonicalLeft);
+    const ObsMap::const_iterator obsR = lastObserved.find(r.canonicalRight);
+    const ASTNode zero =
+        bm->CreateZeroConst(r.canonicalLeft.GetValueWidth());
+    const bool agree =
+        contentsAgree(obsL == lastObserved.end() ? unobserved : obsL->second,
+                      obsR == lastObserved.end() ? unobserved : obsR->second,
+                      zero);
+
+    if (agree != (assigned.GetKind() == TRUE))
+      return agree ? "array-equality: the model makes an array equality's "
+                     "operands identical at every certified cell, but its "
+                     "abstraction variable was assigned false -- the "
+                     "witness of preprocessing step 1 did not hold"
+                   : "array-equality: an array equality's abstraction "
+                     "variable was assigned true, but the model gives its "
+                     "operands different contents -- read propagation "
+                     "across the equality was incomplete";
+  }
+
+  // The same question asked of every equality this solve lowered, and
+  // asked about the operands the user wrote rather than the canonical
+  // forms the checker reasoned over.
+  //
+  // This is the part re-evaluating the query cannot reach. That walk
+  // resolves an opaque equality through exactly this map, so it agrees
+  // with the lowering by construction and a lowering that says
+  // something other than what its operands do in the finished model is
+  // invisible to it. Two lowerings mint no record at all and so are
+  // covered by nothing else: the reflexive fold, and the rewritten form
+  // of a write chain equated with its own base -- the one place the
+  // decision procedure is bypassed entirely, where a wrong rewrite is a
+  // wrong answer with no checker behind it.
+  for (ASTNodeMap::const_iterator it = currentLowerings.begin();
+       it != currentLowerings.end(); ++it)
+  {
+    // Same restriction, same reason; see the loop above.
+    if (it->first[0].GetSourceSort().usesFloatingPointTheory() ||
+        it->first[1].GetSourceSort().usesFloatingPointTheory())
+      continue;
+    const ASTNode verdict = ce->QueryFormulaAgainstModel(it->second);
+    if (!(verdict.GetKind() == TRUE || verdict.GetKind() == FALSE))
+      return "array-equality: an array equality's lowering has no truth "
+             "value in the model that answered the query";
+    if (ce->ArraysEqualUsingModel(it->first[0], it->first[1]) !=
+        (verdict.GetKind() == TRUE))
+      return verdict.GetKind() == TRUE
+                 ? "array-equality: an array equality's lowering is true in "
+                   "the model, but the model gives the two operands the "
+                   "user equated different contents"
+                 : "array-equality: an array equality's lowering is false in "
+                   "the model, but the model gives the two operands the "
+                   "user equated identical contents";
+  }
+  return NULL;
 }
 
 } // namespace stp

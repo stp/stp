@@ -77,6 +77,38 @@ TEST(ArrayEqualityAstTest, OpaqueNodeIsTypedHashedAndPrintedAsEquality)
   EXPECT_EQ("(= |a| |b|)", out.str());
 }
 
+// The factory is the whole of the enforcement. Every front end's node
+// creation bottoms out here, so refusing here is what makes "the option
+// is off, therefore no ARRAY_EQ exists" true -- and that in turn is why
+// the solve entry point does not walk each query looking for one. A
+// second, later refusal would be defending a state this one already
+// makes unreachable; if this test ever stops holding, that walk has to
+// come back.
+TEST(ArrayEqualityAstTest, WholeArrayEqualityIsRefusedWithoutTheOption)
+{
+  STPMgr mgr;
+  ASSERT_FALSE(mgr.UserFlags.enable_array_equality);
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  const ASTNode a = mgr.CreateSymbol("a", 2, 3);
+  const ASTNode b = mgr.CreateSymbol("b", 2, 3);
+
+  EXPECT_DEATH(hf->CreateNode(EQ, a, b),
+               "cannot decide equality between whole array terms");
+
+  // Refused at construction, so it is refused however deeply the
+  // equality is buried and whatever the surrounding formula would have
+  // done with it -- there is no later point at which a query could
+  // still be carrying one.
+  SimplifyingNodeFactory simplifying(*mgr.hashingNodeFactory, mgr);
+  EXPECT_DEATH(simplifying.CreateNode(EQ, ASTVec{a, b}),
+               "cannot decide equality between whole array terms");
+
+  // Bit-vector equality is untouched by the refusal.
+  const ASTNode x = mgr.CreateSymbol("x", 0, 3);
+  const ASTNode y = mgr.CreateSymbol("y", 0, 3);
+  EXPECT_EQ(EQ, hf->CreateNode(EQ, x, y).GetKind());
+}
+
 TEST(ArrayEqualityAstTest, FunctionApplicationSpecializesOpaqueOperands)
 {
   STPMgr mgr;
@@ -1629,6 +1661,57 @@ TEST_F(ExtFixtureTest, RepresentedDuplicateIsPruned)
 // a later access at the same concrete index with a different value
 // conflicts against the representative, and the lemma premise is the
 // index equality of exactly those two accesses.
+// Section 11.2 pruning has to stay complete when the drops chain. Four
+// arrays joined by true equalities; three accesses share one concrete
+// index and value, so each is dropped by the resident of the next array
+// along, and the access that dropped the first is itself dropped
+// further on. Nothing that reached array D carries the pruned accesses
+// forward, and yet the disagreement at D is still reported -- because
+// completeness is a property of the concrete (index, value) class, not
+// of any one representative outliving the others. Stated the one-hop
+// way, this graph is a counterexample to the claim; stated as a class
+// argument, it is an instance of it.
+TEST_F(ExtFixtureTest, PruningStaysCompleteWhenTheDropsChain)
+{
+  ASTNode A = arr("A"), B = arr("B"), C = arr("C"), D = arr("D");
+  eqEdge(A, B, "eq_ab", true);
+  eqEdge(B, C, "eq_bc", true);
+  eqEdge(C, D, "eq_cd", true);
+
+  // One concrete index throughout, and one value shared by the three
+  // accesses that will prune each other.
+  ASTNode index = bv("index", 1);
+  ASTNode agreed_x = bv("agreed_x", 3);
+  ASTNode agreed_p = bv("agreed_p", 3);
+  ASTNode agreed_q = bv("agreed_q", 3);
+  ASTNode disagreeing = bv("disagreeing", 2);
+
+  readAccess(A, index, agreed_x);
+  readAccess(B, index, agreed_p);
+  const size_t q = readAccess(C, index, agreed_q);
+  const size_t z = readAccess(D, index, disagreeing);
+
+  ExtCheckResult r = run();
+  ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
+  ASSERT_FALSE(r.conflicts.empty());
+
+  // Some member of the class meets the disagreeing access at D. The
+  // disagreeing one is seeded there, so it holds the index and the
+  // class member is the arrival. Which member arrives is not the point
+  // and is not pinned here; that one does is.
+  const ExtConflict& c = r.conflicts[0];
+  EXPECT_EQ(D, c.commonArray);
+  EXPECT_EQ(z, c.leftAccess);
+  EXPECT_EQ(mgr.CreateBVConst(2, 2), c.leftValue);
+  EXPECT_EQ(mgr.CreateBVConst(2, 3), c.rightValue);
+  EXPECT_TRUE(c.rightAccess == q || c.rightAccess == 0u || c.rightAccess == 1u)
+      << "conflict credited to access " << c.rightAccess;
+
+  // The pruning did happen -- otherwise this proves nothing about the
+  // chained case.
+  EXPECT_GT(r.stats["skipped_represented"], 0);
+}
+
 TEST_F(ExtFixtureTest, ConflictFiresAgainstRepresentative)
 {
   ASTNode A = arr("A");
@@ -1956,7 +2039,85 @@ protected:
 
   ASTNode arr(const char* name) { return mgr.CreateSymbol(name, 2, 2); }
   ASTNode bv(const char* name) { return mgr.CreateSymbol(name, 0, 2); }
+
+  static bool mentions(const ASTNode& haystack, const ASTNode& needle)
+  {
+    ASTNodeSet seen;
+    ASTVec pending(1, haystack);
+    while (!pending.empty())
+    {
+      const ASTNode n = pending.back();
+      pending.pop_back();
+      if (!seen.insert(n).second)
+        continue;
+      if (n == needle)
+        return true;
+      for (unsigned k = 0; k < n.Degree(); k++)
+        pending.push_back(n[k]);
+    }
+    return false;
+  }
 };
+
+// Lowering records a lowering for every opaque equality it visits, at
+// the moment it visits it -- before there is any activation to consult.
+// It can then throw the result away: a write chain equated with its own
+// base is solved by rewriting, and a conjunct of that rewriting is
+// dropped when an outer write to the same index certainly shadows it.
+// Anything nested in the dropped conjunct goes with it, including
+// another equality's abstraction variable.
+//
+// Such a variable occurs in no constraint, so the solver never assigns
+// it and it completes to false wherever a model is read -- while the
+// same model prints the two arrays identically, because nothing
+// constrained either of them. The public handle and the printed model
+// would then contradict each other. The entry has to go with the
+// variable.
+TEST_F(ExtPrepareTest, LoweringOfADiscardedEqualityIsNotRetained)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), p = arr("p"), q = arr("q");
+  ASTNode i = bv("i"), j = bv("j"), v = bv("v"), y = bv("y");
+
+  // The nested equality sits in the value written at index i, under the
+  // innermost write of the chain.
+  const ASTNode nested = hf->CreateNode(EQ, p, q);
+  ASSERT_EQ(ARRAY_EQ, nested.GetKind());
+  const ASTNode nestedValue = hf->CreateTerm(
+      ITE, 2, nested, mgr.CreateBVConst(2, 1), mgr.CreateZeroConst(2));
+
+  // store(store(store(a, i, nestedValue), j, y), i, v) = a. The
+  // outermost write is to i as well, so the innermost write to i is
+  // certainly shadowed and its conjunct -- the only one mentioning
+  // nestedValue -- is dropped from the solved form.
+  ASTNode chain = hf->CreateArrayTerm(WRITE, 2, 2, {a, i, nestedValue});
+  chain = hf->CreateArrayTerm(WRITE, 2, 2, {chain, j, y});
+  chain = hf->CreateArrayTerm(WRITE, 2, 2, {chain, i, v});
+
+  ext->beginSolve();
+  const ASTNode lowered = ext->lowerArrayEqualities(hf->CreateNode(EQ, chain, a));
+
+  // The outer equality was solved by rewriting, so it minted no record;
+  // the nested one did, and nothing activated it.
+  ASSERT_EQ(1u, ext->getRecords().size());
+  EXPECT_EQ(0u, ext->getActiveRecordCount());
+  const ASTNode proxy = ext->getRecords()[0].proxy;
+  ASSERT_FALSE(mentions(lowered, proxy))
+      << "the shadowed conjunct was expected to take the proxy with it";
+
+  // So the model has nothing to say about it, and the map must not
+  // offer the abandoned variable as an answer.
+  ASTNode answer;
+  EXPECT_FALSE(ext->getCurrentLowering(nested, answer));
+
+  // An equality that did survive keeps its lowering, so the drop is
+  // narrowed to what the solve abandoned rather than clearing the map.
+  ext->beginSolve();
+  const ASTNode live = ext->lowerArrayEqualities(nested);
+  ASSERT_EQ(1u, ext->getActiveRecordCount());
+  EXPECT_TRUE(ext->getCurrentLowering(nested, answer));
+  EXPECT_EQ(live, answer);
+}
 
 TEST_F(ExtPrepareTest, RecoversOperandsConeAndNames)
 {
@@ -2431,6 +2592,103 @@ TEST_F(ExtPrepareTest, MixedIndexSortEqualityFailsLoudly)
 // them -- but that is a property of the passes in between, not of this
 // walk. A second one would otherwise be resolved by hash order, giving
 // a different equality operand from run to run.
+// Operand recovery reads the array back out of "name = read(operand,
+// lambda)". A read-over-write chase preserves that shape exactly while
+// changing the operand -- it returns a read at the same index over the
+// write's base -- so no check at the recovery site could see it happen.
+// What stops it is that the chase only steps over a write index it can
+// prove different from the read index, and lambda appears nowhere a
+// rule could get a grip on it.
+//
+// So that is the thing to check, and the thing to check is narrow: a
+// write index that mentions the witness index. Nothing else gives a
+// context-free rule a way to decide the write against the anchor's
+// read.
+TEST_F(ExtPrepareTest, WitnessIndexReachingAWriteIndexFailsLoudly)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b");
+  ext->beginSolve();
+  const ASTNode proxy =
+      ext->lowerArrayEqualities(hf->CreateNode(EQ, ASTVec{a, b}));
+  ASTNode root = ext->conjoinRecordConstraints(proxy);
+  ASSERT_EQ(1u, ext->getRecords().size());
+  const ASTNode lambda = ext->getRecords()[0].lambda;
+
+  // The witness index used directly as a write index.
+  {
+    const ASTNode w = hf->CreateArrayTerm(WRITE, 2, 2, {a, lambda, bv("e")});
+    const ASTNode tampered = hf->CreateNode(
+        AND, root, hf->CreateNode(EQ, hf->CreateTerm(READ, 2, w, bv("k")),
+                                  bv("e")));
+    EXPECT_DEATH(ext->prepare(tampered), "write index mentions a witness");
+  }
+
+  // And buried in one: the check is on the whole index term, because
+  // that is what a rewrite would be reasoning about.
+  {
+    const ASTNode derived =
+        hf->CreateTerm(BVPLUS, 2, lambda, mgr.CreateBVConst(2, 1));
+    const ASTNode w = hf->CreateArrayTerm(WRITE, 2, 2, {a, derived, bv("e")});
+    const ASTNode tampered = hf->CreateNode(
+        AND, root, hf->CreateNode(EQ, hf->CreateTerm(READ, 2, w, bv("k")),
+                                  bv("e")));
+    EXPECT_DEATH(ext->prepare(tampered), "write index mentions a witness");
+  }
+}
+
+// The complement, and the reason the check is not the stronger "a
+// witness index appears only as an anchor read's index": a constraint
+// *about* the witness index is legitimate. An index sort whose values
+// are not all denoting needs exactly that -- something confining lambda
+// to the patterns the sort denotes -- and it gives a rewrite nothing to
+// work with, because it never reaches a write index.
+TEST_F(ExtPrepareTest, ConstraintOnTheWitnessIndexIsAccepted)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b");
+  ext->beginSolve();
+  const ASTNode proxy =
+      ext->lowerArrayEqualities(hf->CreateNode(EQ, ASTVec{a, b}));
+  ASTNode root = ext->conjoinRecordConstraints(proxy);
+  const ASTNode lambda = ext->getRecords()[0].lambda;
+
+  const ASTNode confined = hf->CreateNode(
+      OR, hf->CreateNode(EQ, lambda, mgr.CreateZeroConst(2)),
+      hf->CreateNode(EQ, lambda, mgr.CreateBVConst(2, 1)));
+  ext->prepare(hf->CreateNode(AND, root, confined));
+
+  const ExtensionalityContext::Record& r = ext->getRecords()[0];
+  EXPECT_EQ(a, r.canonicalLeft);
+  EXPECT_EQ(b, r.canonicalRight);
+}
+
+// The same index in the place it belongs is not an escape: recovery has
+// to keep working on an operand that is itself a write chain, which is
+// the shape the chase would have acted on.
+TEST_F(ExtPrepareTest, WitnessIndexOverAWriteChainOperandIsAccepted)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b");
+  ASTNode i = bv("i"), e = bv("e");
+  const ASTNode w = hf->CreateArrayTerm(WRITE, 2, 2, {a, i, e});
+
+  ext->beginSolve();
+  const ASTNode proxy =
+      ext->lowerArrayEqualities(hf->CreateNode(EQ, ASTVec{w, b}));
+  ASTNode root = ext->conjoinRecordConstraints(proxy);
+  ext->prepare(root);
+
+  // The registry orders the pair by node number, so which side the
+  // write chain lands on is not this test's business; that it survives
+  // recovery intact is.
+  const ExtensionalityContext::Record& r = ext->getRecords()[0];
+  EXPECT_TRUE((r.canonicalLeft == w && r.canonicalRight == b) ||
+              (r.canonicalLeft == b && r.canonicalRight == w))
+      << "recovery moved an operand: left=" << r.canonicalLeft
+      << " right=" << r.canonicalRight;
+}
+
 TEST_F(ExtPrepareTest, DuplicateAnchorFailsLoudly)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
@@ -2770,6 +3028,205 @@ TEST(ExtLemmaFold, DropRuleIsPolarityCorrect)
   EXPECT_NE(EC::FOLD_VALID, EC::FOLD_UNSAT);
   EXPECT_LT(EC::FOLD_VALID, 0);
   EXPECT_LT(EC::FOLD_UNSAT, 0);
+}
+
+// The rule that decides an array equality from the published model,
+// independently of the abstraction variable the solve reasoned over.
+// The subtle cell is the last one: an index only one side observes does
+// NOT make the arrays differ, because the other side holds zero there
+// and so does an observation of zero. Getting that backwards would
+// report a bogus counterexample on any satisfiable query whose equal
+// arrays were reached by different numbers of accesses -- which is
+// most of them.
+TEST(ExtCertifiedEqualities, ContentsAgreeCompletesUnobservedCellsWithZero)
+{
+  STPMgr mgr;
+  mgr.UserFlags.enable_array_equality = true;
+  Cpp_interface interface(mgr, mgr.defaultNodeFactory);
+
+  const ASTNode zero = mgr.CreateZeroConst(8);
+  const ASTNode one = mgr.CreateBVConst(8, 1);
+  const ASTNode two = mgr.CreateBVConst(8, 2);
+  const ASTNode i0 = mgr.CreateZeroConst(4);
+  const ASTNode i1 = mgr.CreateBVConst(4, 1);
+
+  typedef std::vector<std::pair<ASTNode, ASTNode>> Obs;
+  const Obs empty;
+
+  // Identical observations.
+  Obs a, b;
+  a.push_back(std::make_pair(i0, one));
+  b.push_back(std::make_pair(i0, one));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(a, b, zero));
+
+  // Same cell, different value.
+  Obs c;
+  c.push_back(std::make_pair(i0, two));
+  EXPECT_FALSE(ExtensionalityContext::contentsAgree(a, c, zero));
+  EXPECT_FALSE(ExtensionalityContext::contentsAgree(c, a, zero));
+
+  // A cell only one side observes, holding a non-zero value: the other
+  // side completes to zero there, so they differ.
+  EXPECT_FALSE(ExtensionalityContext::contentsAgree(a, empty, zero));
+  EXPECT_FALSE(ExtensionalityContext::contentsAgree(empty, a, zero));
+
+  // The same cell holding zero: the completion agrees with it, so the
+  // arrays are equal even though one list is longer. Checked in both
+  // operand orders, because the two directions of the scan are written
+  // separately.
+  Obs zeroCell;
+  zeroCell.push_back(std::make_pair(i1, zero));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(zeroCell, empty, zero));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(empty, zeroCell, zero));
+  Obs aPlusZeroCell(a);
+  aPlusZeroCell.push_back(std::make_pair(i1, zero));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(aPlusZeroCell, b, zero));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(b, aPlusZeroCell, zero));
+
+  // Two empty arrays are equal; that is what makes an equality between
+  // arrays no access ever reached come out true.
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(empty, empty, zero));
+}
+
+// Deciding an array equality from the finished model, with no
+// abstraction variable involved. This is what answers a handle for an
+// equality the solve never reasoned about, and what the counterexample
+// check compares every lowering against -- including the rewritten form
+// of a write chain equated with its own base, which mints no record and
+// so has no consistency checker behind it.
+//
+// The model is hand-built here, because the point is the completion
+// rule and the walk over write and if-then-else structure, not any
+// particular solve.
+class ExtModelEqualityTest : public ::testing::Test
+{
+protected:
+  STPMgr mgr;
+  SubstitutionMap substitutions;
+  Simplifier simplifier;
+  ArrayTransformer transformer;
+  AbsRefine_CounterExample ce;
+
+  ExtModelEqualityTest()
+      : substitutions(&mgr), simplifier(&mgr, &substitutions),
+        transformer(&mgr, &simplifier), ce(&mgr, &simplifier, &transformer)
+  {
+    mgr.UserFlags.enable_array_equality = true;
+  }
+
+  ASTNode arr(const char* name) { return mgr.CreateSymbol(name, 3, 4); }
+  ASTNode idx(int v) { return mgr.CreateBVConst(3, v); }
+  ASTNode el(int v) { return mgr.CreateBVConst(4, v); }
+
+  // Record one cell of the model, the way publishObservations does.
+  void cell(const ASTNode& array, int index, int value)
+  {
+    ce.InsertIntoCounterExampleMap(
+        mgr.hashingNodeFactory->CreateTerm(READ, 4, {array, idx(index)}),
+        el(value));
+  }
+  ASTNode write(const ASTNode& base, const ASTNode& i, const ASTNode& v)
+  {
+    return mgr.hashingNodeFactory->CreateArrayTerm(WRITE, 3, 4, {base, i, v});
+  }
+};
+
+TEST_F(ExtModelEqualityTest, IdenticalCellsAreEqualAndOneDifferingCellIsNot)
+{
+  ASTNode a = arr("a"), b = arr("b");
+  cell(a, 1, 7);
+  cell(b, 1, 7);
+  EXPECT_TRUE(ce.ArraysEqualUsingModel(a, b));
+
+  ASTNode c = arr("c");
+  cell(c, 1, 6);
+  EXPECT_FALSE(ce.ArraysEqualUsingModel(a, c));
+  EXPECT_FALSE(ce.ArraysEqualUsingModel(c, a));
+
+  // Reflexivity holds without consulting the model at all, which is
+  // what makes an equality between two syntactically identical terms
+  // answerable even when nothing was ever recorded for them.
+  EXPECT_TRUE(ce.ArraysEqualUsingModel(a, a));
+  EXPECT_TRUE(ce.ArraysEqualUsingModel(arr("never_mentioned"),
+                                       arr("never_mentioned")));
+}
+
+TEST_F(ExtModelEqualityTest, UnrecordedCellsCompleteToZero)
+{
+  ASTNode a = arr("a"), b = arr("b");
+  // Two arrays the model says nothing about are both the zero array.
+  EXPECT_TRUE(ce.ArraysEqualUsingModel(a, b));
+
+  // A cell recorded on one side only: zero agrees with the completion,
+  // anything else does not. This is the case that decides a handle for
+  // an equality lowering discarded, so getting it wrong would report
+  // arrays unequal that the printer prints identically.
+  cell(a, 2, 0);
+  EXPECT_TRUE(ce.ArraysEqualUsingModel(a, b));
+  EXPECT_TRUE(ce.ArraysEqualUsingModel(b, a));
+
+  cell(a, 3, 9);
+  EXPECT_FALSE(ce.ArraysEqualUsingModel(a, b));
+  EXPECT_FALSE(ce.ArraysEqualUsingModel(b, a));
+}
+
+TEST_F(ExtModelEqualityTest, WalksWriteStructureAgainstTheModel)
+{
+  ASTNode a = arr("a");
+  cell(a, 1, 7);
+
+  // store(a, 1, 7) writes what is already there, so it is a.
+  EXPECT_TRUE(ce.ArraysEqualUsingModel(write(a, idx(1), el(7)), a));
+  // store(a, 1, 8) does not.
+  EXPECT_FALSE(ce.ArraysEqualUsingModel(write(a, idx(1), el(8)), a));
+
+  // A write to a cell the model records nothing for: the base completes
+  // to zero there, so only writing zero leaves the array unchanged.
+  // Nothing records a cell for the write node itself, which is why the
+  // written index has to join the candidate set on its own account --
+  // scanning the model for recorded cells alone would miss it and
+  // wrongly call these equal.
+  EXPECT_TRUE(ce.ArraysEqualUsingModel(write(a, idx(4), el(0)), a));
+  EXPECT_FALSE(ce.ArraysEqualUsingModel(write(a, idx(4), el(1)), a));
+
+  // Shadowing: the outer write wins, so the inner one is invisible.
+  EXPECT_TRUE(ce.ArraysEqualUsingModel(
+      write(write(a, idx(1), el(3)), idx(1), el(7)), a));
+}
+
+TEST_F(ExtModelEqualityTest, FollowsTheSelectedIfThenElseBranch)
+{
+  ASTNode a = arr("a"), b = arr("b");
+  cell(a, 1, 7);
+  cell(b, 1, 2);
+
+  ASTNode cond = mgr.CreateSymbol("cond", 0, 0);
+  ASTNode t = mgr.hashingNodeFactory->CreateArrayTerm(ITE, 3, 4,
+                                                      {cond, a, b});
+
+  // The condition is read from the model, so the term denotes whichever
+  // branch the model selected -- and equals that branch, not the other.
+  ce.InsertIntoCounterExampleMap(cond, mgr.ASTTrue);
+  EXPECT_TRUE(ce.ArraysEqualUsingModel(t, a));
+  EXPECT_FALSE(ce.ArraysEqualUsingModel(t, b));
+}
+
+TEST_F(ExtModelEqualityTest, AskingDoesNotChangeTheModel)
+{
+  ASTNode a = arr("a"), b = arr("b");
+  cell(a, 1, 7);
+  const int before = ce.CounterExampleSize();
+
+  // The walk evaluates cells no one recorded, and evaluation is
+  // normally allowed to record what it invents. A question about the
+  // model must not leave any of that behind: the model APIs and the
+  // printer report exactly the cells the map holds, so a query that
+  // added some would change the answer it was asked about.
+  EXPECT_FALSE(ce.ArraysEqualUsingModel(write(a, idx(5), el(4)), b));
+  EXPECT_EQ(before, ce.CounterExampleSize());
+
+  EXPECT_EQ(mgr.ASTTrue, ce.QueryFormulaAgainstModel(mgr.ASTTrue));
+  EXPECT_EQ(before, ce.CounterExampleSize());
 }
 
 } // namespace

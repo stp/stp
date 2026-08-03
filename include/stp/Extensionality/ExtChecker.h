@@ -75,11 +75,22 @@ THE SOFTWARE.
  * congruence lookup is a single probe rather than a scan, and an
  * access arriving with the same concrete index and the same concrete
  * value as the representative is dropped without further propagation.
- * Dropping it is complete: which arrays an access can reach from here
- * depends only on its concrete index (write indices stepped over,
- * equalities assigned true), so the representative reaches exactly the
- * same arrays carrying the same value, and any conflict the duplicate
- * would have found the representative finds too.
+ *
+ * Dropping it is complete, but the reason is about the whole class of
+ * accesses carrying that concrete (index, value) pair rather than about
+ * the two accesses at hand. It is not the case that the representative
+ * reaches everything the duplicate would have: the representative can
+ * be dropped in its turn at a later array, or stop there on a conflict.
+ * What holds is that no rule can tell members of the class apart. Every
+ * rule's applicability depends on the source array, on sigma, and on
+ * the access's concrete index -- write indices stepped over, array
+ * equalities and if-then-else conditions sigma decided -- and never on
+ * which member carries it. So the class reaches exactly the arrays any
+ * one member would, at most one member is ever resident at an array,
+ * and whether an arrival conflicts depends only on its concrete index
+ * and value meeting a different value there. Every conflict a member
+ * would find, therefore, some member does find -- possibly credited to
+ * a different one of them.
  *
  * On a conflict it builds the paper's lemma (section 8): the
  * conjunction of the index equality, the write-index disequalities
@@ -93,10 +104,16 @@ THE SOFTWARE.
  * witness index lambda (axiom A4').
  *
  * The checker is pure: it never creates terms in the host query, adds
- * clauses, or calls SAT. Insertion is first-path-wins, so each
- * (array, access) pair is considered once per candidate. Concrete
- * values are hash-consed BVCONST nodes, making value comparison node
- * identity at any bit width.
+ * clauses, or calls SAT. Insertion is first-path-wins: the first
+ * arrival of an access at an array fixes its recorded path there and no
+ * later arrival displaces it, so each (array, access) pair is inserted
+ * at most once. Arrivals are not the same as insertions -- one dropped
+ * as represented leaves no record behind, so a later arrival by another
+ * route repeats the constant-work test and reaches the same verdict,
+ * sigma being fixed and representatives never changing. That is why the
+ * skip counters count arrivals rather than pairs. Concrete values are
+ * hash-consed BVCONST nodes, making value comparison node identity at
+ * any bit width.
  */
 
 #ifndef EXTCHECKER_H

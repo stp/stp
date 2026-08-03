@@ -96,16 +96,37 @@ private:
   // and deliberately do not mutate that public registry.
   //
   // checked_input is the root as submitted, *before* array-equality
-  // lowering -- not the semantic root the solve ran on. The two differ
-  // by exactly the transformation this check is worth running on: every
-  // opaque ARRAY_EQ is still present here and is evaluated through its
-  // recorded lowering, so a lowering that did not preserve the query's
-  // meaning shows up as a bogus counterexample. Passing the semantic
-  // root instead would re-ask a question the caller has already had
-  // answered, and the memo would answer it from cache.
+  // lowering -- not the semantic root the solve ran on. Passing the
+  // semantic root instead would re-ask a question the caller has
+  // already had answered, and the memo would answer it from cache.
+  //
+  // Be precise about what the extra reach buys, because it is less than
+  // it looks: an opaque ARRAY_EQ is still present in this root, but it
+  // is evaluated through its recorded lowering, which is the value the
+  // verdict already rested on. So this walk covers the Boolean skeleton
+  // the lowering rebuilt around the equalities -- not the equalities.
+  // Their own content is checked separately, by comparing each
+  // abstraction variable against the array cells the model publishes
+  // (ExtensionalityContext::recheckCertifiedEqualities, called at the
+  // end of this function).
   void CheckCounterExample(bool t, const ASTNode& checked_input);
 
   // Accepts a term and turns it into a constant-term w.r.t
+  // The value the model gives one cell of an array term, without
+  // recording anything: the recorded cell if there is one, else the
+  // written value if a write at this level hits the index, else the
+  // same question one level down, else zero. Answers with a plain
+  // bitvector constant, for the reason given on
+  // TermToConstTermUsingModel below -- its results are compared by
+  // node identity.
+  ASTNode ReadUsingModel(const ASTNode& arrayTerm,
+                         const ASTNode& concreteIndex);
+
+  // The array-valued nodes an array term is built from -- itself, the
+  // base of every write, both branches of every array if-then-else.
+  // These are the nodes the model can hold cells against.
+  static void CollectArrayNodes(const ASTNode& arrayTerm, ASTNodeSet& out);
+
   // counter_example. Always answers with a plain bitvector constant: a
   // float constant interns separately from the bitvector constant with
   // the same bits, and evaluation results are compared (write-hit
@@ -227,6 +248,28 @@ public:
 
   // Computes the truth value of a formula w.r.t counter_example
   ASTNode ComputeFormulaUsingModel(const ASTNode& form);
+
+  // Do two array terms denote the same array in the finished model?
+  //
+  // Decided from the model alone -- no abstraction variable, no
+  // record, no lowering -- so it can answer for an equality the solve
+  // never reasoned about, and it is an independent opinion where the
+  // solve did. Cells the model records nothing for read as zero, which
+  // is the completion the model printer and the programmatic model API
+  // both apply, so the answer is the one a reader of the printed model
+  // would get.
+  //
+  // The cells at which two array terms can differ are finite and
+  // known: every index the model records against an array either term
+  // is built from, plus every index written to by a write in either
+  // term. Anywhere else both terms read as zero.
+  bool ArraysEqualUsingModel(const ASTNode& left, const ASTNode& right);
+
+  // ComputeFormulaUsingModel for a caller asking a question about the
+  // model rather than assembling it: whatever the evaluation would
+  // have recorded is rolled back. See the note on ModelQuery in the
+  // implementation for why that matters.
+  ASTNode QueryFormulaAgainstModel(const ASTNode& form);
 
   /****************************************************************
    * Array Refinement functions                                   *
