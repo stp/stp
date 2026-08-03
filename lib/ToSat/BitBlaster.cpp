@@ -273,7 +273,11 @@ void BitBlaster::getConsts(const ASTNode& form,
   for (auto it = BBTermMemo.begin(); it != BBTermMemo.end(); it++)
   {
     const ASTNode& n = it->first;
-    assert(n.GetType() == BITVECTOR_TYPE);
+    // FloatBlast removes FP operations but deliberately leaves float symbols
+    // and constants as their packed-bit leaves. They are bit-blaster terms at
+    // this internal boundary even though their public sort remains
+    // FLOATINGPOINT_TYPE for model reconstruction.
+    assert(isBitsValued(n));
 
     if (n.isConstant())
       continue;
@@ -504,7 +508,8 @@ void BitBlaster::updateTerm(const ASTNode& n,
   {
     if (bbFixed)
     {
-      b = new FixedBits(n.GetType() == BOOLEAN_TYPE ? 1 : n.GetValueWidth(),
+      const unsigned int num_bits = n.GetValueWidth();
+      b = new FixedBits(n.GetType() == BOOLEAN_TYPE ? 1 : num_bits,
                         n.GetType() == BOOLEAN_TYPE);
       cb->fixedMap->map->insert(std::pair<ASTNode, FixedBits*>(n, b));
       if (debug_bitblaster)
@@ -602,7 +607,11 @@ BitBlaster::simplify_during_bb(ASTNode& term,
 
   for (int i = 0; i < numberOfChildren; i++)
   {
-    if (term[i].GetType() == BITVECTOR_TYPE)
+    // isBitsValued, not GetType() == BITVECTOR_TYPE: a lowered formula still
+    // carries float-typed leaves, which are bits here (see isBitsValued).
+    // Testing the type directly is what made this function abort on every
+    // query with a float symbol or constant left in it.
+    if (isBitsValued(term[i]))
     {
       ch.push_back(BBTerm(term[i], support));
     }
@@ -758,6 +767,7 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term,
 
   const auto kids_end = term.end();
   const unsigned int num_bits = term.GetValueWidth();
+
   switch (k)
   {
     case BVNOT:
@@ -1115,11 +1125,33 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term,
       result = tmp_res;
       break;
     }
+    case FP_ABS:
+    case FP_NEG:
+    case FP_ADD:
+    case FP_SUB:
+    case FP_MUL:
+    case FP_DIV:
+    case FP_FMA:
+    case FP_SQRT:
+    case FP_REM:
+    case FP_ROUNDTOINTEGRAL:
+    case FP_MIN:
+    case FP_MAX:
+    case FP_TOFP:
+    case FP_TOFP_SIGNED:
+    case FP_TOFP_UNSIGNED:
+    case FP_TO_UBV:
+    case FP_TO_SBV:
+    case FP_TO_IEEE_BV:
+    {
+      FatalError("BBForm: FP terms should not reach the bit-blaster: ", term);
+      break;
+    }
     default:
       FatalError("BBTerm: Illegal kind to BBTerm", term);
   }
 
-  assert(result.size() == term.GetValueWidth());
+  assert(result.size() == num_bits);
 
   if (debug_do_check)
     check(result, term);
@@ -1289,6 +1321,24 @@ const BBNode BitBlaster::BBForm(const ASTNode& form,
     case BVSSUBO:
     {
       result = BBOverflow(form, support);
+      break;
+    }
+    case FP_LEQ:
+    case FP_LT:
+    case FP_GEQ:
+    case FP_GT:
+    case FP_EQ:
+    case FP_ISNORMAL:
+    case FP_ISSUBNORMAL:
+    case FP_ISZERO:
+    case FP_ISINFINITE:
+    case FP_ISNAN:
+    case FP_ISNEGATIVE:
+    case FP_ISPOSITIVE:
+    case FP_SMT_EQ:
+    {
+      FatalError("BBForm: FP formulas should not reach the bit-blaster: ",
+                 form);
       break;
     }
     default:

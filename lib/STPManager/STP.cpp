@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Trevor Hansen, Andrew V. Jones
+ * AUTHORS: Vijay Ganesh, Trevor Hansen, Andrew Teylu
  *
  * BEGIN DATE: November, 2005
  *
@@ -165,6 +165,11 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
                                     const ASTNode& query)
 {
 
+  // One encoding context per actual solve. Keep it after this function
+  // returns so counterexample/get-value requests reuse the exact mappings
+  // that introduced unspecified-value arrays and lowered the solved formula.
+  fpEncodingContext.reset(new FpEncodingContext(bm));
+
   // Unfortunatey this is a global variable,which the aux function needs to
   // overwrite sometimes.
   bool saved_ack = bm->UserFlags.ackermannisation;
@@ -180,7 +185,27 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
     original_input = inputasserts;
   }
 
+  // The latch is the same kind of cheap fast-negative the lowering test below
+  // uses, widened to cover RoundingMode -- which carries no format, so it
+  // never reaches noteFloatingPoint, and which is exactly why this test could
+  // not use has_floating_point. Without a negative every pure bit-vector
+  // query walked its whole DAG asking each node for its source sort.
+  const bool input_uses_floating_point_theory =
+      bm->has_floating_point_theory &&
+      containsFloatingPointTheory(original_input, bm);
+
+  // Make the partial floating-point operations total, canonicalise the
+  // indexes of float-indexed arrays, and pin every rounding mode the formula
+  // names to the five legal encodings -- before the formula is used for
+  // anything. See FpTotalise. This is query-local: an unused or popped FP
+  // term must not send a later pure-BV query through an FP-only pass.
+  // RoundingMode-element arrays and RoundingMode symbols can each appear
+  // without a single float node, hence the broader source-theory test.
+  if (input_uses_floating_point_theory)
+    original_input = fpEncodingContext->prepare(original_input);
+
   SATSolver* newS = get_new_sat_solver();
+
   SOLVER_RETURN_TYPE result = solve_by_sat_solver(newS, original_input);
   delete newS;
 
@@ -291,6 +316,13 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 {
   bm->ASTNodeStats("input asserts and query: ", original_input);
 
+  // has_floating_point is deliberately only a manager-lifetime fast-negative
+  // hint. A float built in a popped scope (or never asserted at all) must not
+  // send this query through the lowering pass. Do not reset the hint on pop:
+  // public AST handles may retain the old node and use it in a later query.
+  const bool input_has_floating_point =
+      bm->has_floating_point && containsFloatingPoint(original_input, bm);
+
   DifficultyScore difficulty;
   if (bm->UserFlags.stats_flag)
     cerr << "Difficulty Initially:" << difficulty.score(original_input, bm)
@@ -382,6 +414,33 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   {
     inputToSat =
         callSizeReducing(inputToSat, bvSolver.get(), pe.get(), domain.get());
+  }
+
+  // Lower floating-point operations before the first pass that invokes the
+  // bit-blaster. From here on the formula is a packed-bit circuit: float
+  // symbols, constants and reads retain sort metadata for model reconstruction,
+  // but no FP operation reaches a bitvector-only pass.
+  //
+  // This remains after all of the size-reducing passes above. In particular,
+  // RemoveUnconstrained must see a float symbol rather than its exposed bits.
+  // The old location was just below the difficulty snapshot, but that let the
+  // optional bit-blast simplification here receive FP_EQ and other floating-
+  // point nodes when --bit-blast-simplification enabled it.
+  //
+  // See FloatBlast for why this is a pass of its own: doing it inside
+  // simplification meant building floating-point nodes over bitvector
+  // children and stamping a float format on them to make them type check,
+  // and that stamp landed on hash-consed nodes the input still used as plain
+  // bitvectors.
+  if (input_has_floating_point)
+  {
+    inputToSat = fpEncodingContext->lowerPrepared(inputToSat);
+    bm->ASTNodeStats("After floating-point lowering: ", inputToSat);
+
+    // The threshold controls the cost of bit-blasting the formula in its
+    // lowered form, so compare it with that form's difficulty rather than the
+    // much smaller word-level FP syntax. The always setting (-1) is unchanged.
+    initial_difficulty_score = difficulty.score(inputToSat, bm);
   }
 
   long bitblasted_difficulty = -1;
