@@ -113,8 +113,8 @@ struct Context
    // application reaches the fixed point.
    ASTNode backSubstitute(const ASTNode& n)
    {
-     stp::ASTNodeMap fromTo = *simplifier.Return_SolverMap(); // replace() mutates it.
-     stp::ASTNodeMap cache;
+     stp::DenseNodeMap fromTo = *simplifier.Return_SolverMap(); // replace() mutates it.
+     stp::DenseNodeMap cache;
      return stp::SubstitutionMap::replace(n, fromTo, cache, &snf);
    }
 
