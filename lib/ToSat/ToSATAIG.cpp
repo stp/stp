@@ -197,7 +197,7 @@ void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
   // the SAT variables of its abstraction variables, witness symbols
   // and scalar names; keep those variables from being eliminated.
   ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  if (ext != NULL && ext->active())
+  if (ext != NULL && ext->activeInSolve())
   {
     const std::set<ASTNode>& symbols = ext->getFrozenSymbols();
     for (std::set<ASTNode>::const_iterator it = symbols.begin();

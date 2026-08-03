@@ -64,7 +64,7 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier)
   // instead of a return code nobody can act on.
   ExtensionalityContext* ext = bm.getExtensionalityIfAny();
   MutableASTNode::UntouchableScope protect(
-      (ext != NULL && ext->active()) ? &ext->getFrozenSymbols() : NULL);
+      (ext != NULL && ext->activeInSolve()) ? &ext->getFrozenSymbols() : NULL);
 
   bm.GetRunTimes()->start(RunTimes::RemoveUnconstrained);
 

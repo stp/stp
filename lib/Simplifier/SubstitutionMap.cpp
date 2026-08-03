@@ -416,7 +416,7 @@ bool SubstitutionMap::extensionalityProtected(const ASTNode& key,
                                               const ASTNode& value) const
 {
   ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  if (ext == NULL || !ext->active())
+  if (ext == NULL || !ext->activeInSolve())
     return false;
   if (key.GetKind() == SYMBOL && ext->isProtected(key))
     return true;

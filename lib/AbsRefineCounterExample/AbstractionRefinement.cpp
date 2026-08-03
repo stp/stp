@@ -272,7 +272,7 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
   sort(arrayToIndex.begin(), arrayToIndex.end(), sortBySize);
 
   ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  const bool extActive = ext != NULL && ext->active();
+  const bool extActive = ext != NULL && ext->activeInSolve();
   if (extActive)
     FatalError("array-equality: legacy array-read refinement was invoked "
                "during a solve owned by the extensionality checker");

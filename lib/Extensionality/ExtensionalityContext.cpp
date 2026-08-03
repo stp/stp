@@ -93,7 +93,8 @@ ASTNode recoverAnchoredOperand(const ASTNode& rhs, const ASTNode& lambda,
 } // namespace
 
 ExtensionalityContext::ExtensionalityContext(STPMgr* bm_)
-    : lemmasEmitted(0), lemmaAtomsFolded(0), bm(bm_), registrySealed(false),
+    : lemmasEmitted(0), lemmaAtomsFolded(0), bm(bm_), solveInProgress(false),
+      registrySealed(false),
       arrayGraphIsFrozen(false), graphBound(false),
       readTransformInProgress(false), readTransformComplete(false),
       pendingLemmaValid(false)

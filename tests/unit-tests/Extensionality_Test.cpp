@@ -2239,6 +2239,48 @@ TEST_F(ExtPrepareTest, ArrayReachableOnlyThroughAnIteBranchIsAnticipated)
   EXPECT_TRUE(ext->ownsArray(ite));
 }
 
+// The two halves of ownership have different lifetimes, and conflating
+// them left STP's passes held off the array graph after the solve that
+// owned it had returned.
+//
+// active() has to outlive its solve: (get-model),
+// vc_getCounterExampleArray and term evaluation all read the frozen
+// graph and the certified observations once TopLevelSTPAux has
+// returned, and only the next beginSolve() clears it.
+// activeInSolve() must not, or an assertion arriving for the next query
+// -- or a direct vc_simplify -- is still denied ordinary substitution
+// and read-over-if-then-else distribution on account of a solve that
+// has already finished.
+TEST_F(ExtPrepareTest, OwnershipGatesPassesOnlyInsideTheSolveWindow)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b");
+
+  ext->beginSolve();
+  ext->lowerArrayEqualities(hf->CreateNode(EQ, a, b));
+  ASSERT_TRUE(ext->active());
+
+  // Between beginSolve() and the scope opening, no pass is gated yet.
+  EXPECT_FALSE(ext->activeInSolve());
+  {
+    ExtensionalityContext::SolveScope scope(ext);
+    EXPECT_TRUE(ext->activeInSolve());
+    EXPECT_TRUE(ext->active());
+  }
+
+  // The solve has returned. The model surfaces still own the query...
+  EXPECT_TRUE(ext->active());
+  // ...and no pass is held off any longer.
+  EXPECT_FALSE(ext->activeInSolve());
+
+  // Nesting restores the window, and leaving it closes it again.
+  {
+    ExtensionalityContext::SolveScope scope(ext);
+    EXPECT_TRUE(ext->activeInSolve());
+  }
+  EXPECT_FALSE(ext->activeInSolve());
+}
+
 TEST_F(ExtPrepareTest, ExactReadInventorySurvivesNamingAndIndexAliases)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
@@ -2274,6 +2316,10 @@ TEST_F(ExtPrepareTest, ExactReadInventorySurvivesNamingAndIndexAliases)
   SubstitutionMap substitutions(&mgr);
   Simplifier simplifier(&mgr, &substitutions);
   ArrayTransformer transformer(&mgr, &simplifier);
+  // The transform is a solve-time pass and gates on activeInSolve(), so
+  // it has to run inside the solve window, exactly as TopLevelSTPAux
+  // runs it.
+  ExtensionalityContext::SolveScope scope(ext);
   transformer.TransformFormula_TopLevel(prepared);
   ext->bindAfterTransform(&transformer);
 
@@ -2302,6 +2348,10 @@ TEST_F(ExtPrepareTest, ConstantTermIteAccountsForDeadReadSubtree)
   SubstitutionMap substitutions(&mgr);
   Simplifier simplifier(&mgr, &substitutions);
   ArrayTransformer transformer(&mgr, &simplifier);
+  // The transform is a solve-time pass and gates on activeInSolve(), so
+  // it has to run inside the solve window, exactly as TopLevelSTPAux
+  // runs it.
+  ExtensionalityContext::SolveScope scope(ext);
   transformer.TransformFormula_TopLevel(prepared);
   ext->bindAfterTransform(&transformer);
 
