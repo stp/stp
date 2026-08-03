@@ -1662,6 +1662,57 @@ TEST_F(ExtFixtureTest, RepresentedDuplicateIsPruned)
 // a later access at the same concrete index with a different value
 // conflicts against the representative, and the lemma premise is the
 // index equality of exactly those two accesses.
+// Section 11.2 pruning has to stay complete when the drops chain. Four
+// arrays joined by true equalities; three accesses share one concrete
+// index and value, so each is dropped by the resident of the next array
+// along, and the access that dropped the first is itself dropped
+// further on. Nothing that reached array D carries the pruned accesses
+// forward, and yet the disagreement at D is still reported -- because
+// completeness is a property of the concrete (index, value) class, not
+// of any one representative outliving the others. Stated the one-hop
+// way, this graph is a counterexample to the claim; stated as a class
+// argument, it is an instance of it.
+TEST_F(ExtFixtureTest, PruningStaysCompleteWhenTheDropsChain)
+{
+  ASTNode A = arr("A"), B = arr("B"), C = arr("C"), D = arr("D");
+  eqEdge(A, B, "eq_ab", true);
+  eqEdge(B, C, "eq_bc", true);
+  eqEdge(C, D, "eq_cd", true);
+
+  // One concrete index throughout, and one value shared by the three
+  // accesses that will prune each other.
+  ASTNode index = bv("index", 1);
+  ASTNode agreed_x = bv("agreed_x", 3);
+  ASTNode agreed_p = bv("agreed_p", 3);
+  ASTNode agreed_q = bv("agreed_q", 3);
+  ASTNode disagreeing = bv("disagreeing", 2);
+
+  readAccess(A, index, agreed_x);
+  readAccess(B, index, agreed_p);
+  const size_t q = readAccess(C, index, agreed_q);
+  const size_t z = readAccess(D, index, disagreeing);
+
+  ExtCheckResult r = run();
+  ASSERT_EQ(ExtCheckResult::CONFLICT, r.status);
+  ASSERT_FALSE(r.conflicts.empty());
+
+  // Some member of the class meets the disagreeing access at D. The
+  // disagreeing one is seeded there, so it holds the index and the
+  // class member is the arrival. Which member arrives is not the point
+  // and is not pinned here; that one does is.
+  const ExtConflict& c = r.conflicts[0];
+  EXPECT_EQ(D, c.commonArray);
+  EXPECT_EQ(z, c.leftAccess);
+  EXPECT_EQ(mgr.CreateBVConst(2, 2), c.leftValue);
+  EXPECT_EQ(mgr.CreateBVConst(2, 3), c.rightValue);
+  EXPECT_TRUE(c.rightAccess == q || c.rightAccess == 0u || c.rightAccess == 1u)
+      << "conflict credited to access " << c.rightAccess;
+
+  // The pruning did happen -- otherwise this proves nothing about the
+  // chained case.
+  EXPECT_GT(r.stats["skipped_represented"], 0);
+}
+
 TEST_F(ExtFixtureTest, ConflictFiresAgainstRepresentative)
 {
   ASTNode A = arr("A");

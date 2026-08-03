@@ -114,17 +114,9 @@ struct CheckerState
     result.events.push_back(e);
   }
 
-  // Congruence checking (rule C) runs on the fly, at insertion time,
-  // against the one representative access per concrete index that rho
-  // keeps for each array (section 11.2); insertion is
-  // first-path-wins, so each (array, access) pair is processed once.
-  // An access matching its representative in both concrete index and
-  // concrete value is dropped without insertion or further
-  // propagation: the representative reaches every array the duplicate
-  // could reach, carrying the same value (see ExtChecker.h).
-  // A conflict is appended to result.conflicts (without the lemmas,
-  // which buildLemmas adds) and the fixed point carries on, so one pass
-  // collects every independent conflict rather than only the earliest.
+  // Walk one predecessor chain back to its seed, turning the stored
+  // one-guard-per-link entries into the complete path a conflict
+  // certificate reports.
   std::vector<ExtGuard> materializeGuards(const PathRecord& tail)
   {
     std::vector<ExtGuard> reversed;
@@ -149,6 +141,30 @@ struct CheckerState
     result.materializedGuardCount = materializedGuardCount;
   }
 
+  // Bring one access to one array, and run congruence (rule C) on the
+  // spot, against the single representative rho keeps for that array
+  // and concrete index (section 11.2).
+  //
+  // Three outcomes. An arrival at a pair already recorded is skipped:
+  // insertion is first-path-wins and the recorded path stays. An
+  // arrival matching the representative in both concrete index and
+  // concrete value is dropped without insertion or propagation --
+  // complete because no rule can tell members of a concrete
+  // (index, value) class apart; see ExtChecker.h for why that is not
+  // the same claim as "the representative reaches everything this
+  // access would". Note that this one records nothing, so the same
+  // access arriving again by another route repeats the test; the
+  // counters below therefore count arrivals, not pairs. Otherwise the
+  // access is inserted, becomes the representative if the index was
+  // free, and is queued.
+  //
+  // A representative already there with a different concrete value is a
+  // conflict: it is appended to result.conflicts (without the lemma,
+  // which buildLemmas adds afterwards) and the pass carries on, so it
+  // collects further independent conflicts instead of stopping at the
+  // earliest. It does not enumerate every disagreeing pair in the
+  // candidate -- a conflicting arrival is not queued, so pairs that
+  // could only meet beyond it are left to a later refinement round.
   void insert(const ASTNode& destination, size_t accessId,
               const ExtGuard* incomingGuard, const char* rule,
               const ASTNode& source)
@@ -437,7 +453,7 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
 
   // Fixed-point computation over a FIFO work list (the "working queue
   // that manages future read propagations" of section 7.3); for each
-  // pair the edges fire in the order D, U, then R/L.
+  // pair the edges fire in the order D, U, R/L, then the T rules.
   //
   // The FIFO discipline is load-bearing: with every access seeded
   // before the fixed point starts, discovery is breadth-first per
