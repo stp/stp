@@ -1678,13 +1678,17 @@ bool ExtensionalityContext::contentsAgree(
 const char* ExtensionalityContext::recheckCertifiedEqualities(
     AbsRefine_CounterExample* ce) const
 {
-  if (!graphBound)
+  if (!activeRecordIds.empty() && !graphBound)
     return "array-equality: the counterexample check ran before the "
            "complete array graph was bound";
 
   static const std::vector<std::pair<ASTNode, ASTNode>> unobserved;
   typedef std::map<ASTNode, std::vector<std::pair<ASTNode, ASTNode>>> ObsMap;
 
+  // The certified cells of every active record's canonical operands
+  // against its abstraction variable. Empty when the only equalities in
+  // the query were ones lowering solved outright, which is why the
+  // second loop below is not conditioned on this one having run.
   for (size_t i = 0; i < activeRecordIds.size(); i++)
   {
     const Record& r = records[activeRecordIds[i]];
@@ -1714,6 +1718,37 @@ const char* ExtensionalityContext::recheckCertifiedEqualities(
                      "variable was assigned true, but the model gives its "
                      "operands different contents -- read propagation "
                      "across the equality was incomplete";
+  }
+
+  // The same question asked of every equality this solve lowered, and
+  // asked about the operands the user wrote rather than the canonical
+  // forms the checker reasoned over.
+  //
+  // This is the part re-evaluating the query cannot reach. That walk
+  // resolves an opaque equality through exactly this map, so it agrees
+  // with the lowering by construction and a lowering that says
+  // something other than what its operands do in the finished model is
+  // invisible to it. Two lowerings mint no record at all and so are
+  // covered by nothing else: the reflexive fold, and the rewritten form
+  // of a write chain equated with its own base -- the one place the
+  // decision procedure is bypassed entirely, where a wrong rewrite is a
+  // wrong answer with no checker behind it.
+  for (ASTNodeMap::const_iterator it = currentLowerings.begin();
+       it != currentLowerings.end(); ++it)
+  {
+    const ASTNode verdict = ce->QueryFormulaAgainstModel(it->second);
+    if (!(verdict.GetKind() == TRUE || verdict.GetKind() == FALSE))
+      return "array-equality: an array equality's lowering has no truth "
+             "value in the model that answered the query";
+    if (ce->ArraysEqualUsingModel(it->first[0], it->first[1]) !=
+        (verdict.GetKind() == TRUE))
+      return verdict.GetKind() == TRUE
+                 ? "array-equality: an array equality's lowering is true in "
+                   "the model, but the model gives the two operands the "
+                   "user equated different contents"
+                 : "array-equality: an array equality's lowering is false in "
+                   "the model, but the model gives the two operands the "
+                   "user equated identical contents";
   }
   return NULL;
 }

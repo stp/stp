@@ -720,6 +720,101 @@ TEST(array_extensionality, opaque_equality_handle_uses_current_model_lowering)
   vc_Destroy(vc);
 }
 
+// A handle for an equality the solve did not decide is answered from
+// the model, not from an abstraction variable.
+//
+// Lowering can throw an equality away. Solving a write chain against
+// its own base rewrites the equality instead of abstracting it, and
+// drops the conjunct for a write an outer write to the same index
+// shadows -- so an equality nested in that write's value goes with it.
+// Its abstraction variable then enters no constraint and is never
+// assigned, and reading the handle through it gave false, while the
+// same model gave both arrays no cells at all and so printed them
+// identically.
+//
+// Deciding it from the published cells cannot disagree with the model,
+// because it is the model. Both arrays are unconstrained here, so both
+// are the zero array, so they are equal.
+TEST(array_extensionality, handle_for_a_discarded_equality_matches_the_model)
+{
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type idxT = vc_bvType(vc, 3), elT = vc_bvType(vc, 4);
+  Type arrT = vc_arrayType(vc, idxT, elT);
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr p = vc_varExpr(vc, "p", arrT);
+  Expr q = vc_varExpr(vc, "q", arrT);
+  Expr i = vc_varExpr(vc, "i", idxT);
+  Expr j = vc_varExpr(vc, "j", idxT);
+  Expr v = vc_varExpr(vc, "v", elT);
+  Expr y = vc_varExpr(vc, "y", elT);
+
+  Expr nested = vc_eqExpr(vc, p, q);
+  Expr value = vc_iteExpr(vc, nested, vc_bvConstExprFromInt(vc, 4, 1),
+                          vc_bvConstExprFromInt(vc, 4, 0));
+  // store(store(store(a, i, value), j, y), i, v) = a. The outermost
+  // write is to i as well, so the innermost write to i is shadowed and
+  // its conjunct -- the only one mentioning `value` -- is dropped.
+  Expr chain = vc_writeExpr(vc, a, i, value);
+  chain = vc_writeExpr(vc, chain, j, y);
+  chain = vc_writeExpr(vc, chain, i, v);
+  vc_assertFormula(vc, vc_eqExpr(vc, chain, a));
+
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+
+  // Neither array carries a single cell, so the model makes them the
+  // same array. Answering false here -- which is what an unassigned
+  // abstraction variable produced -- contradicted the model in the same
+  // breath as reporting it.
+  Expr *indices, *values;
+  int size = -1;
+  vc_getCounterExampleArray(vc, p, &indices, &values, &size);
+  ASSERT_EQ(0, size);
+  vc_getCounterExampleArray(vc, q, &indices, &values, &size);
+  ASSERT_EQ(0, size);
+
+  EXPECT_EQ(TRUE, getExprKind(vc_getCounterExample(vc, nested)));
+
+  vc_Destroy(vc);
+}
+
+// The equality was never part of any query. There is no lowering for it
+// and never was, so this is the same path with no discarding involved:
+// the answer still comes from the model, and still agrees with what the
+// model says about the two arrays.
+TEST(array_extensionality, handle_for_an_unasserted_equality_matches_the_model)
+{
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'x');
+
+  Type idxT = vc_bvType(vc, 3), elT = vc_bvType(vc, 4);
+  Type arrT = vc_arrayType(vc, idxT, elT);
+  Expr a = vc_varExpr(vc, "a", arrT);
+  Expr b = vc_varExpr(vc, "b", arrT);
+  Expr idx = vc_bvConstExprFromInt(vc, 3, 1);
+
+  // Only `a` is constrained, and only at one cell. `b` is untouched.
+  vc_assertFormula(vc, vc_eqExpr(vc, vc_readExpr(vc, a, idx),
+                                 vc_bvConstExprFromInt(vc, 4, 5)));
+  ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+
+  // a holds 5 at that cell and b completes to zero there, so they
+  // differ -- and a equals itself whatever the model says.
+  Expr ab = vc_eqExpr(vc, a, b);
+  EXPECT_EQ(FALSE, getExprKind(vc_getCounterExample(vc, ab)));
+  EXPECT_EQ(TRUE, getExprKind(vc_getCounterExample(vc, vc_eqExpr(vc, a, a))));
+
+  // Asking did not add cells to the model that the model API would
+  // then report.
+  Expr *indices, *values;
+  int size = -1;
+  vc_getCounterExampleArray(vc, b, &indices, &values, &size);
+  EXPECT_EQ(0, size);
+
+  vc_Destroy(vc);
+}
+
 TEST(array_extensionality, active_checker_owns_complete_array_graph)
 {
   // The contradiction lives in congruence across a = b, while unrelated

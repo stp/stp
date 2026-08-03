@@ -623,11 +623,27 @@ ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
     {
       ExtensionalityContext* ext = bm->getExtensionalityIfAny();
       ASTNode lowered;
-      if (ext == NULL || !ext->getCurrentLowering(form, lowered))
-        FatalError("array-equality: cannot evaluate an opaque equality that "
-                   "was not reachable in the most recent solve",
-                   form);
-      output = ComputeFormulaUsingModel(lowered);
+      if (ext != NULL && ext->getCurrentLowering(form, lowered))
+      {
+        // This solve decided the equality; its lowering is the answer.
+        output = ComputeFormulaUsingModel(lowered);
+      }
+      else
+      {
+        // It did not: either the equality belongs to an earlier query,
+        // or lowering discarded it -- an equality nested in a conjunct
+        // that solving a write chain against its own base dropped as
+        // shadowed. There is no abstraction variable to consult, and
+        // the one that used to be consulted here had never been
+        // assigned, so it read false while the model gave the two
+        // arrays identical contents.
+        //
+        // Ask the model instead. It is the same model the caller is
+        // about to print, so the answer agrees with it by construction,
+        // which is the property the abstraction variable could not
+        // offer.
+        output = ArraysEqualUsingModel(form[0], form[1]) ? ASTTrue : ASTFalse;
+      }
       break;
     }
     case BOOLEXTRACT:
@@ -752,13 +768,159 @@ void AbsRefine_CounterExample::CheckCounterExample(
   // the equalities themselves on trust. Ask the other half of the
   // question here: does the model that is about to be printed give the
   // equalities the values the solver assigned them?
+  // Deliberately not gated on active(): an equality lowering solved
+  // outright -- a write chain against its own base, or a reflexive fold
+  // -- mints no record, so there is nothing active to gate on, and it
+  // is exactly the case with no consistency checker behind it.
   ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  if (ext != NULL && ext->active())
+  if (ext != NULL && ext->enabled())
   {
     const char* reason = ext->recheckCertifiedEqualities(this);
     if (reason != NULL)
       FatalError(reason);
   }
+}
+
+// Asking the model a question must not change it. Evaluation memoises,
+// and where it cannot account for a read it invents a value and records
+// it -- so a question would otherwise leave cells behind that the model
+// printer and vc_getCounterExampleArray then report as part of the
+// answer. Both public query entry points roll the model back to what it
+// was; the invented values are deterministic, so anything that needs
+// one again gets the same one.
+namespace
+{
+class ModelQuery
+{
+  ASTNodeMap& cells;
+  ASTNodeMap& formulas;
+  const ASTNodeMap savedCells;
+  const ASTNodeMap savedFormulas;
+
+public:
+  ModelQuery(ASTNodeMap& c, ASTNodeMap& f)
+      : cells(c), formulas(f), savedCells(c), savedFormulas(f)
+  {
+  }
+  ~ModelQuery()
+  {
+    cells = savedCells;
+    formulas = savedFormulas;
+  }
+  ModelQuery(const ModelQuery&) = delete;
+  ModelQuery& operator=(const ModelQuery&) = delete;
+};
+} // namespace
+
+// See the header.
+void AbsRefine_CounterExample::CollectArrayNodes(const ASTNode& arrayTerm,
+                                                 ASTNodeSet& out)
+{
+  ASTVec pending(1, arrayTerm);
+  while (!pending.empty())
+  {
+    const ASTNode n = pending.back();
+    pending.pop_back();
+    if (!out.insert(n).second)
+      continue;
+    if (WRITE == n.GetKind())
+      pending.push_back(n[0]);
+    else if (ITE == n.GetKind() && ARRAY_TYPE == n.GetType())
+    {
+      pending.push_back(n[1]);
+      pending.push_back(n[2]);
+    }
+  }
+}
+
+// See the header. This is the walk the read path already performs for
+// an array the extensionality checker owns, lifted out so that it can
+// be asked about any array term, including one from a solve that never
+// owned anything.
+ASTNode AbsRefine_CounterExample::ReadUsingModel(const ASTNode& arrayTerm,
+                                                 const ASTNode& concreteIndex)
+{
+  NodeFactory* hf = bm->hashingNodeFactory;
+  ASTNode level = arrayTerm;
+  while (true)
+  {
+    const ASTNode key =
+        hf->CreateTerm(READ, level.GetValueWidth(), level, concreteIndex);
+    const ASTNodeMap::const_iterator recorded = CounterExampleMap.find(key);
+    if (recorded != CounterExampleMap.end())
+      return BVCONST == recorded->second.GetKind()
+                 ? recorded->second
+                 : TermToConstTermUsingModel(recorded->second, false);
+
+    if (WRITE == level.GetKind())
+    {
+      if (TermToConstTermUsingModel(level[1], false) == concreteIndex)
+        return TermToConstTermUsingModel(level[2], false);
+      level = level[0];
+      continue;
+    }
+
+    if (ITE == level.GetKind() && ARRAY_TYPE == level.GetType())
+    {
+      const ASTNode cond = ComputeFormulaUsingModel(level[0]);
+      if (ASTTrue == cond)
+        level = level[1];
+      else if (ASTFalse == cond)
+        level = level[2];
+      else
+        FatalError("ReadUsingModel: an array if-then-else condition has no "
+                   "truth value in the model",
+                   level[0]);
+      continue;
+    }
+
+    // A base array the model records nothing for at this index. Zero is
+    // what the printer fills it with, so zero is what it holds.
+    return bm->CreateZeroConst(level.GetValueWidth());
+  }
+}
+
+// See the header.
+bool AbsRefine_CounterExample::ArraysEqualUsingModel(const ASTNode& left,
+                                                     const ASTNode& right)
+{
+  if (left == right)
+    return true;
+
+  ModelQuery unchanged(CounterExampleMap, ComputeFormulaMap);
+
+  ASTNodeSet arrays;
+  CollectArrayNodes(left, arrays);
+  CollectArrayNodes(right, arrays);
+
+  std::set<ASTNode> indexes;
+  // Every cell the model records against one of those arrays.
+  for (ASTNodeMap::const_iterator it = CounterExampleMap.begin();
+       it != CounterExampleMap.end(); ++it)
+    if (READ == it->first.GetKind() && BVCONST == it->first[1].GetKind() &&
+        arrays.find(it->first[0]) != arrays.end())
+      indexes.insert(it->first[1]);
+  // Plus every index a write in either term writes to. A write's own
+  // cell need not be recorded -- it is not recorded at all when no
+  // equality was active -- and stepping over it is exactly what makes
+  // the array above it differ from the one below.
+  for (ASTNodeSet::const_iterator it = arrays.begin(); it != arrays.end();
+       ++it)
+    if (WRITE == it->GetKind())
+      indexes.insert(TermToConstTermUsingModel((*it)[1], false));
+
+  for (std::set<ASTNode>::const_iterator it = indexes.begin();
+       it != indexes.end(); ++it)
+    if (!(ReadUsingModel(left, *it) == ReadUsingModel(right, *it)))
+      return false;
+  return true;
+}
+
+// See the header.
+ASTNode AbsRefine_CounterExample::QueryFormulaAgainstModel(const ASTNode& form)
+{
+  ModelQuery unchanged(CounterExampleMap, ComputeFormulaMap);
+  return ComputeFormulaUsingModel(form);
 }
 
 /* FUNCTION: queries the value of expr given the current counterexample.

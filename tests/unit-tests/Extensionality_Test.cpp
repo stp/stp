@@ -2778,4 +2778,145 @@ TEST(ExtCertifiedEqualities, ContentsAgreeCompletesUnobservedCellsWithZero)
   EXPECT_TRUE(ExtensionalityContext::contentsAgree(empty, empty, zero));
 }
 
+// Deciding an array equality from the finished model, with no
+// abstraction variable involved. This is what answers a handle for an
+// equality the solve never reasoned about, and what the counterexample
+// check compares every lowering against -- including the rewritten form
+// of a write chain equated with its own base, which mints no record and
+// so has no consistency checker behind it.
+//
+// The model is hand-built here, because the point is the completion
+// rule and the walk over write and if-then-else structure, not any
+// particular solve.
+class ExtModelEqualityTest : public ::testing::Test
+{
+protected:
+  STPMgr mgr;
+  SubstitutionMap substitutions;
+  Simplifier simplifier;
+  ArrayTransformer transformer;
+  AbsRefine_CounterExample ce;
+
+  ExtModelEqualityTest()
+      : substitutions(&mgr), simplifier(&mgr, &substitutions),
+        transformer(&mgr, &simplifier), ce(&mgr, &simplifier, &transformer)
+  {
+    mgr.UserFlags.enable_array_equality = true;
+  }
+
+  ASTNode arr(const char* name) { return mgr.CreateSymbol(name, 3, 4); }
+  ASTNode idx(int v) { return mgr.CreateBVConst(3, v); }
+  ASTNode el(int v) { return mgr.CreateBVConst(4, v); }
+
+  // Record one cell of the model, the way publishObservations does.
+  void cell(const ASTNode& array, int index, int value)
+  {
+    ce.InsertIntoCounterExampleMap(
+        mgr.hashingNodeFactory->CreateTerm(READ, 4, {array, idx(index)}),
+        el(value));
+  }
+  ASTNode write(const ASTNode& base, const ASTNode& i, const ASTNode& v)
+  {
+    return mgr.hashingNodeFactory->CreateArrayTerm(WRITE, 3, 4, {base, i, v});
+  }
+};
+
+TEST_F(ExtModelEqualityTest, IdenticalCellsAreEqualAndOneDifferingCellIsNot)
+{
+  ASTNode a = arr("a"), b = arr("b");
+  cell(a, 1, 7);
+  cell(b, 1, 7);
+  EXPECT_TRUE(ce.ArraysEqualUsingModel(a, b));
+
+  ASTNode c = arr("c");
+  cell(c, 1, 6);
+  EXPECT_FALSE(ce.ArraysEqualUsingModel(a, c));
+  EXPECT_FALSE(ce.ArraysEqualUsingModel(c, a));
+
+  // Reflexivity holds without consulting the model at all, which is
+  // what makes an equality between two syntactically identical terms
+  // answerable even when nothing was ever recorded for them.
+  EXPECT_TRUE(ce.ArraysEqualUsingModel(a, a));
+  EXPECT_TRUE(ce.ArraysEqualUsingModel(arr("never_mentioned"),
+                                       arr("never_mentioned")));
+}
+
+TEST_F(ExtModelEqualityTest, UnrecordedCellsCompleteToZero)
+{
+  ASTNode a = arr("a"), b = arr("b");
+  // Two arrays the model says nothing about are both the zero array.
+  EXPECT_TRUE(ce.ArraysEqualUsingModel(a, b));
+
+  // A cell recorded on one side only: zero agrees with the completion,
+  // anything else does not. This is the case that decides a handle for
+  // an equality lowering discarded, so getting it wrong would report
+  // arrays unequal that the printer prints identically.
+  cell(a, 2, 0);
+  EXPECT_TRUE(ce.ArraysEqualUsingModel(a, b));
+  EXPECT_TRUE(ce.ArraysEqualUsingModel(b, a));
+
+  cell(a, 3, 9);
+  EXPECT_FALSE(ce.ArraysEqualUsingModel(a, b));
+  EXPECT_FALSE(ce.ArraysEqualUsingModel(b, a));
+}
+
+TEST_F(ExtModelEqualityTest, WalksWriteStructureAgainstTheModel)
+{
+  ASTNode a = arr("a");
+  cell(a, 1, 7);
+
+  // store(a, 1, 7) writes what is already there, so it is a.
+  EXPECT_TRUE(ce.ArraysEqualUsingModel(write(a, idx(1), el(7)), a));
+  // store(a, 1, 8) does not.
+  EXPECT_FALSE(ce.ArraysEqualUsingModel(write(a, idx(1), el(8)), a));
+
+  // A write to a cell the model records nothing for: the base completes
+  // to zero there, so only writing zero leaves the array unchanged.
+  // Nothing records a cell for the write node itself, which is why the
+  // written index has to join the candidate set on its own account --
+  // scanning the model for recorded cells alone would miss it and
+  // wrongly call these equal.
+  EXPECT_TRUE(ce.ArraysEqualUsingModel(write(a, idx(4), el(0)), a));
+  EXPECT_FALSE(ce.ArraysEqualUsingModel(write(a, idx(4), el(1)), a));
+
+  // Shadowing: the outer write wins, so the inner one is invisible.
+  EXPECT_TRUE(ce.ArraysEqualUsingModel(
+      write(write(a, idx(1), el(3)), idx(1), el(7)), a));
+}
+
+TEST_F(ExtModelEqualityTest, FollowsTheSelectedIfThenElseBranch)
+{
+  ASTNode a = arr("a"), b = arr("b");
+  cell(a, 1, 7);
+  cell(b, 1, 2);
+
+  ASTNode cond = mgr.CreateSymbol("cond", 0, 0);
+  ASTNode t = mgr.hashingNodeFactory->CreateArrayTerm(ITE, 3, 4,
+                                                      {cond, a, b});
+
+  // The condition is read from the model, so the term denotes whichever
+  // branch the model selected -- and equals that branch, not the other.
+  ce.InsertIntoCounterExampleMap(cond, mgr.ASTTrue);
+  EXPECT_TRUE(ce.ArraysEqualUsingModel(t, a));
+  EXPECT_FALSE(ce.ArraysEqualUsingModel(t, b));
+}
+
+TEST_F(ExtModelEqualityTest, AskingDoesNotChangeTheModel)
+{
+  ASTNode a = arr("a"), b = arr("b");
+  cell(a, 1, 7);
+  const int before = ce.CounterExampleSize();
+
+  // The walk evaluates cells no one recorded, and evaluation is
+  // normally allowed to record what it invents. A question about the
+  // model must not leave any of that behind: the model APIs and the
+  // printer report exactly the cells the map holds, so a query that
+  // added some would change the answer it was asked about.
+  EXPECT_FALSE(ce.ArraysEqualUsingModel(write(a, idx(5), el(4)), b));
+  EXPECT_EQ(before, ce.CounterExampleSize());
+
+  EXPECT_EQ(mgr.ASTTrue, ce.QueryFormulaAgainstModel(mgr.ASTTrue));
+  EXPECT_EQ(before, ce.CounterExampleSize());
+}
+
 } // namespace

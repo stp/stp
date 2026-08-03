@@ -98,6 +98,18 @@ private:
 
   // Accepts a term and turns it into a constant-term w.r.t
   // counter_example
+  // The value the model gives one cell of an array term, without
+  // recording anything: the recorded cell if there is one, else the
+  // written value if a write at this level hits the index, else the
+  // same question one level down, else zero.
+  ASTNode ReadUsingModel(const ASTNode& arrayTerm,
+                         const ASTNode& concreteIndex);
+
+  // The array-valued nodes an array term is built from -- itself, the
+  // base of every write, both branches of every array if-then-else.
+  // These are the nodes the model can hold cells against.
+  static void CollectArrayNodes(const ASTNode& arrayTerm, ASTNodeSet& out);
+
   ASTNode TermToConstTermUsingModel(const ASTNode& term,
                                     bool ArrayReadFlag = true);
 
@@ -202,6 +214,28 @@ public:
 
   // Computes the truth value of a formula w.r.t counter_example
   ASTNode ComputeFormulaUsingModel(const ASTNode& form);
+
+  // Do two array terms denote the same array in the finished model?
+  //
+  // Decided from the model alone -- no abstraction variable, no
+  // record, no lowering -- so it can answer for an equality the solve
+  // never reasoned about, and it is an independent opinion where the
+  // solve did. Cells the model records nothing for read as zero, which
+  // is the completion the model printer and the programmatic model API
+  // both apply, so the answer is the one a reader of the printed model
+  // would get.
+  //
+  // The cells at which two array terms can differ are finite and
+  // known: every index the model records against an array either term
+  // is built from, plus every index written to by a write in either
+  // term. Anywhere else both terms read as zero.
+  bool ArraysEqualUsingModel(const ASTNode& left, const ASTNode& right);
+
+  // ComputeFormulaUsingModel for a caller asking a question about the
+  // model rather than assembling it: whatever the evaluation would
+  // have recorded is rolled back. See the note on ModelQuery in the
+  // implementation for why that matters.
+  ASTNode QueryFormulaAgainstModel(const ASTNode& form);
 
   /****************************************************************
    * Array Refinement functions                                   *
