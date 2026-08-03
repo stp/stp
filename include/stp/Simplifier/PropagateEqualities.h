@@ -30,6 +30,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/PropagateEqualities.h"
 #include "stp/Simplifier/NodeSimplifier.h"
+#include "extlib-unordered-dense/ankerl/unordered_dense.h"
 
 /* 
   Finds formulae asserted at the top level, and removes the variables, e.g:
@@ -52,7 +53,10 @@ class PropagateEqualities : public NodeSimplifier
   const ASTNode ASTTrue, ASTFalse;
 
 public:
-  using IdSet =  std::unordered_set<uint64_t>;
+  // Flat open-addressing set: the sets are hot (closure folds, membership
+  // probes), and only their *contents* matter to the algorithm, never their
+  // iteration order.
+  using IdSet = ankerl::unordered_dense::set<uint64_t>;
 
   struct CandidateInfo
   {

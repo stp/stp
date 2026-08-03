@@ -36,9 +36,12 @@ void log([[maybe_unused]] std::string s)
 #endif
 }
 
-typedef std::unordered_set<uint64_t> IdSet;
-typedef std::unordered_map<uint64_t, uint64_t> IdToId;
-typedef std::unordered_map<uint64_t, IdSet> IdToIdSet;
+typedef PropagateEqualities::IdSet IdSet;
+typedef ankerl::unordered_dense::map<uint64_t, uint64_t> IdToId;
+typedef ankerl::unordered_dense::map<uint64_t, IdSet> IdToIdSet;
+// Values must stay pointer-stable: the priority queue and update() hold
+// pointers/references into the map while it is queried, so this stays a
+// node-based std::unordered_map (mapped is never inserted into after build).
 typedef PropagateEqualities::MapToNodeSet MapToNodeSet;
 
 void tagNodes(const ASTNode& n, const uint64_t tag, IdToId& nodeToTag, ASTNodeSet& shared)
@@ -117,6 +120,7 @@ MapToNodeSet PropagateEqualities::buildMapOfLHStoVariablesInRHS(const IdSet& all
   // Without the id field, which we sort the priority queue on, the order that the rules were applied
   // was not deterministic, giving diffent CNF.
   MapToNodeSet mapped;
+  mapped.reserve(candidates.size());
   int id =0;
 
   for (const auto& e: candidates)
@@ -231,13 +235,17 @@ void PropagateEqualities::processCandidates()
           return left->id > right->id;
       return false;
     };
-  std::priority_queue < qType, vector<qType>, decltype(cmp) > q(cmp);
+  vector<qType> qStore;
+  qStore.reserve(mapped.size());
+  std::priority_queue < qType, vector<qType>, decltype(cmp) > q(cmp, std::move(qStore));
 
   for (const auto& e: mapped)
     q.push(&e.second);
 
   std::vector<uint64_t> replacedOrder;
+  replacedOrder.reserve(mapped.size());
   IdToId replacedIndex;
+  replacedIndex.reserve(mapped.size());
 
   while (!q.empty())
   {
