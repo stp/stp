@@ -1848,9 +1848,13 @@ TEST_F(ExtFixtureTest, ConflictingArrivalStopsAtTheConflictArray)
 
   // The mechanism itself: nothing ever propagates x onward out of D.
   for (const ExtEvent& e : r.events)
+  {
     if (e.kind == ExtEvent::PROPAGATE && e.access == x)
+    {
       EXPECT_NE(D, e.source)
           << "a conflicting arrival must not propagate past its conflict";
+    }
+  }
 }
 
 TEST_F(ExtFixtureTest, IteTrueConditionPropagatesDownWithPositiveGuard)
