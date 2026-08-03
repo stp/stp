@@ -361,6 +361,33 @@ public:
   static FoldVerdict requiredFoldVerdict(ExtLemmaAtom::Op op,
                                          LemmaPosition where);
 
+  // Re-derive every active equality from the certified model instead of
+  // from the abstraction the solve reasoned over, and report the first
+  // disagreement. Returns NULL when every abstraction variable matches
+  // the array contents published under it, else a static reason string.
+  //
+  // This is what --check-counterexample can contribute here that
+  // re-evaluating the query cannot. That walk reaches an opaque
+  // equality and resolves it through the lowering map -- the same
+  // answer the verdict already rested on -- so it confirms the Boolean
+  // skeleton and nothing about extensionality. Comparing the published
+  // cells asks the other question: whether the model STP is about to
+  // print actually makes the equalities take the values the solver
+  // assigned them. A propagation rule that missed an edge shows up as a
+  // true abstraction variable over two arrays whose certified contents
+  // differ; a lost witness as a false one over two that agree.
+  const char* recheckCertifiedEqualities(AbsRefine_CounterExample* ce) const;
+
+  // Do two certified observation lists denote the same array? Every
+  // cell no observation mentions holds `zero` on both sides, so the two
+  // arrays agree everywhere exactly when they agree at every index
+  // either one observes. Pure, so the rule is pinned by a unit test
+  // rather than restated at its call site.
+  static bool contentsAgree(
+      const std::vector<std::pair<ASTNode, ASTNode>>& left,
+      const std::vector<std::pair<ASTNode, ASTNode>>& right,
+      const ASTNode& zero);
+
   // Validate one bit-vector lemma leaf: it must be a fixed-width
   // constant, or a SYMBOL whose complete SAT-variable vector was
   // encoded by the initial bit-blast (present, full width, every bit

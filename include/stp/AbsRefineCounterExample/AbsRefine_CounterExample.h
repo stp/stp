@@ -81,13 +81,19 @@ private:
   // and deliberately do not mutate that public registry.
   //
   // checked_input is the root as submitted, *before* array-equality
-  // lowering -- not the semantic root the solve ran on. The two differ
-  // by exactly the transformation this check is worth running on: every
-  // opaque ARRAY_EQ is still present here and is evaluated through its
-  // recorded lowering, so a lowering that did not preserve the query's
-  // meaning shows up as a bogus counterexample. Passing the semantic
-  // root instead would re-ask a question the caller has already had
-  // answered, and the memo would answer it from cache.
+  // lowering -- not the semantic root the solve ran on. Passing the
+  // semantic root instead would re-ask a question the caller has
+  // already had answered, and the memo would answer it from cache.
+  //
+  // Be precise about what the extra reach buys, because it is less than
+  // it looks: an opaque ARRAY_EQ is still present in this root, but it
+  // is evaluated through its recorded lowering, which is the value the
+  // verdict already rested on. So this walk covers the Boolean skeleton
+  // the lowering rebuilt around the equalities -- not the equalities.
+  // Their own content is checked separately, by comparing each
+  // abstraction variable against the array cells the model publishes
+  // (ExtensionalityContext::recheckCertifiedEqualities, called at the
+  // end of this function).
   void CheckCounterExample(bool t, const ASTNode& checked_input);
 
   // Accepts a term and turns it into a constant-term w.r.t

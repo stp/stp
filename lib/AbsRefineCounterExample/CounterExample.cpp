@@ -746,6 +746,19 @@ void AbsRefine_CounterExample::CheckCounterExample(
                "the submitted query evaluates to FALSE under the "
                "counterexample: NOT OK",
                checked_input);
+
+  // The walk above resolves each opaque array equality through its
+  // recorded lowering, so it re-derives the Boolean skeleton but takes
+  // the equalities themselves on trust. Ask the other half of the
+  // question here: does the model that is about to be printed give the
+  // equalities the values the solver assigned them?
+  ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  if (ext != NULL && ext->active())
+  {
+    const char* reason = ext->recheckCertifiedEqualities(this);
+    if (reason != NULL)
+      FatalError(reason);
+  }
 }
 
 /* FUNCTION: queries the value of expr given the current counterexample.

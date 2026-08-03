@@ -2500,4 +2500,62 @@ TEST(ExtLemmaFold, DropRuleIsPolarityCorrect)
   EXPECT_LT(EC::FOLD_UNSAT, 0);
 }
 
+// The rule that decides an array equality from the published model,
+// independently of the abstraction variable the solve reasoned over.
+// The subtle cell is the last one: an index only one side observes does
+// NOT make the arrays differ, because the other side holds zero there
+// and so does an observation of zero. Getting that backwards would
+// report a bogus counterexample on any satisfiable query whose equal
+// arrays were reached by different numbers of accesses -- which is
+// most of them.
+TEST(ExtCertifiedEqualities, ContentsAgreeCompletesUnobservedCellsWithZero)
+{
+  STPMgr mgr;
+  mgr.UserFlags.enable_array_equality = true;
+  Cpp_interface interface(mgr, mgr.defaultNodeFactory);
+
+  const ASTNode zero = mgr.CreateZeroConst(8);
+  const ASTNode one = mgr.CreateBVConst(8, 1);
+  const ASTNode two = mgr.CreateBVConst(8, 2);
+  const ASTNode i0 = mgr.CreateZeroConst(4);
+  const ASTNode i1 = mgr.CreateBVConst(4, 1);
+
+  typedef std::vector<std::pair<ASTNode, ASTNode>> Obs;
+  const Obs empty;
+
+  // Identical observations.
+  Obs a, b;
+  a.push_back(std::make_pair(i0, one));
+  b.push_back(std::make_pair(i0, one));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(a, b, zero));
+
+  // Same cell, different value.
+  Obs c;
+  c.push_back(std::make_pair(i0, two));
+  EXPECT_FALSE(ExtensionalityContext::contentsAgree(a, c, zero));
+  EXPECT_FALSE(ExtensionalityContext::contentsAgree(c, a, zero));
+
+  // A cell only one side observes, holding a non-zero value: the other
+  // side completes to zero there, so they differ.
+  EXPECT_FALSE(ExtensionalityContext::contentsAgree(a, empty, zero));
+  EXPECT_FALSE(ExtensionalityContext::contentsAgree(empty, a, zero));
+
+  // The same cell holding zero: the completion agrees with it, so the
+  // arrays are equal even though one list is longer. Checked in both
+  // operand orders, because the two directions of the scan are written
+  // separately.
+  Obs zeroCell;
+  zeroCell.push_back(std::make_pair(i1, zero));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(zeroCell, empty, zero));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(empty, zeroCell, zero));
+  Obs aPlusZeroCell(a);
+  aPlusZeroCell.push_back(std::make_pair(i1, zero));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(aPlusZeroCell, b, zero));
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(b, aPlusZeroCell, zero));
+
+  // Two empty arrays are equal; that is what makes an equality between
+  // arrays no access ever reached come out true.
+  EXPECT_TRUE(ExtensionalityContext::contentsAgree(empty, empty, zero));
+}
+
 } // namespace

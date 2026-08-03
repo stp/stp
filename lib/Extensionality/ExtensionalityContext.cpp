@@ -244,7 +244,22 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
   std::map<std::pair<ASTNode, ASTNode>, size_t>::const_iterator it =
       keyToRecord.find(key);
   if (it != keyToRecord.end())
-    return records[it->second].proxy;
+  {
+    // The key is the operand pair, so a hit is a record built from these
+    // very operands. Check it, because nothing downstream ever recovers
+    // the pair an abstraction variable stands for: a key that collapsed
+    // two distinct equalities would hand this one a variable standing
+    // for the other one's arrays, and the witness bundle, the checker
+    // edges and the model would then all be consistent about the wrong
+    // question.
+    const Record& existing = records[it->second];
+    if (!(existing.constructionLeft == left &&
+          existing.constructionRight == right))
+      FatalError("array-equality: the record registry returned an "
+                 "abstraction variable built from a different operand pair",
+                 left);
+    return existing.proxy;
+  }
 
   if (registrySealed)
     FatalError("array-equality: an array equality was built during a "
@@ -1553,6 +1568,82 @@ void ExtensionalityContext::publishObservations(AbsRefine_CounterExample* ce)
   // No model evaluation should precede certification, but clearing the
   // cache here makes publication an explicit phase boundary.
   ce->ClearComputeFormulaMap();
+}
+
+// See the header. Unobserved cells hold `zero` on both sides, so two
+// arrays agree everywhere exactly when they agree at every index either
+// one observes.
+bool ExtensionalityContext::contentsAgree(
+    const std::vector<std::pair<ASTNode, ASTNode>>& left,
+    const std::vector<std::pair<ASTNode, ASTNode>>& right, const ASTNode& zero)
+{
+  std::map<ASTNode, ASTNode> leftCells, rightCells;
+  for (size_t i = 0; i < left.size(); i++)
+    leftCells[left[i].first] = left[i].second;
+  for (size_t i = 0; i < right.size(); i++)
+    rightCells[right[i].first] = right[i].second;
+
+  for (std::map<ASTNode, ASTNode>::const_iterator it = leftCells.begin();
+       it != leftCells.end(); ++it)
+  {
+    const std::map<ASTNode, ASTNode>::const_iterator other =
+        rightCells.find(it->first);
+    if (!(it->second == (other == rightCells.end() ? zero : other->second)))
+      return false;
+  }
+  // Only the indexes the first array does not observe are left to check;
+  // there it holds zero.
+  for (std::map<ASTNode, ASTNode>::const_iterator it = rightCells.begin();
+       it != rightCells.end(); ++it)
+    if (leftCells.find(it->first) == leftCells.end() && !(it->second == zero))
+      return false;
+  return true;
+}
+
+// See the header. Runs against the published model, so it must come
+// after publishObservations -- the contents it compares are the ones
+// the model APIs and the printers will hand back.
+const char* ExtensionalityContext::recheckCertifiedEqualities(
+    AbsRefine_CounterExample* ce) const
+{
+  if (!graphBound)
+    return "array-equality: the counterexample check ran before the "
+           "complete array graph was bound";
+
+  static const std::vector<std::pair<ASTNode, ASTNode>> unobserved;
+  typedef std::map<ASTNode, std::vector<std::pair<ASTNode, ASTNode>>> ObsMap;
+
+  for (size_t i = 0; i < activeRecordIds.size(); i++)
+  {
+    const Record& r = records[activeRecordIds[i]];
+    const ASTNode assigned = ce->LookupAssignedValue(r.proxy);
+    if (assigned.IsNull() ||
+        !(assigned.GetKind() == TRUE || assigned.GetKind() == FALSE))
+      return "array-equality: an equality abstraction variable has no "
+             "Boolean value in the model it was certified against";
+
+    // An array the fixed point never reached observes nothing, which is
+    // the all-zero array -- the same completion the printer applies.
+    const ObsMap::const_iterator obsL = lastObserved.find(r.canonicalLeft);
+    const ObsMap::const_iterator obsR = lastObserved.find(r.canonicalRight);
+    const ASTNode zero =
+        bm->CreateZeroConst(r.canonicalLeft.GetValueWidth());
+    const bool agree =
+        contentsAgree(obsL == lastObserved.end() ? unobserved : obsL->second,
+                      obsR == lastObserved.end() ? unobserved : obsR->second,
+                      zero);
+
+    if (agree != (assigned.GetKind() == TRUE))
+      return agree ? "array-equality: the model makes an array equality's "
+                     "operands identical at every certified cell, but its "
+                     "abstraction variable was assigned false -- the "
+                     "witness of preprocessing step 1 did not hold"
+                   : "array-equality: an array equality's abstraction "
+                     "variable was assigned true, but the model gives its "
+                     "operands different contents -- read propagation "
+                     "across the equality was incomplete";
+  }
+  return NULL;
 }
 
 } // namespace stp

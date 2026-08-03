@@ -847,8 +847,10 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // If it doesn't contain array operations, use ABC's CNF generation.
   // semantic_input decides the verdict; original_input -- the same query
   // with its opaque array equalities still in place -- is what
-  // --check-counterexample re-evaluates, so the check covers the
-  // lowering rather than repeating the question just answered.
+  // --check-counterexample re-evaluates, so the check covers the Boolean
+  // skeleton the lowering rebuilt rather than repeating the question
+  // just answered. The equalities themselves are checked against the
+  // published array cells, not re-evaluated here.
   res = Ctr_Example->CallSAT_ResultCheck(NewSolver, inputToSat, semantic_input,
                                          original_input, satBase,
                                          maybeRefinement);
