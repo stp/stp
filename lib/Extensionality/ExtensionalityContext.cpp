@@ -60,10 +60,29 @@ void collectDag(const ASTNode& n, ASTNodeSet& visited)
 
 // The current form of an equality operand, read back from its witness
 // anchor. The anchor was recorded as name = read(operand, lambda), and
-// stays that shape: the only rewrite that could break it is the
-// simplifier distributing the read over an array if-then-else, which it
-// does not do while the procedure is active -- the checker reasons
-// about those directly and needs the read left where it stands.
+// what this returns is whatever array that read now stands over.
+//
+// Two rewrites in the tree can act on a read of that shape, and they
+// are dangerous in different ways.
+//
+// Distributing the read over an array if-then-else changes the shape,
+// so it cannot go unnoticed -- and it is suppressed while the procedure
+// is active anyway, because the checker reasons about those directly
+// and needs the read left where it stands.
+//
+// Chasing the read through a write does not change the shape. It
+// returns a read at the same index over a strictly deeper array, which
+// would pass every check here and hand back an operand the equality was
+// never about. Nothing suppresses it: SimplifyingNodeFactory::chaseRead
+// runs on every READ built over a WRITE. What makes it safe is that it
+// only steps over a write whose index it can prove different from the
+// read index, and lambda is fresh -- no term outside the two anchors
+// mentions it, so no context-free rule can decide "write index =
+// lambda" either way, and the chase stops at the first write. That is a
+// property of the formula rather than of this function, so
+// locateCanonicalOperands checks it directly instead of leaving it as
+// an argument in a comment.
+//
 // Anything else means an anchor was rewritten beyond recognition:
 // refuse loudly rather than guess.
 ASTNode recoverAnchoredOperand(const ASTNode& rhs, const ASTNode& lambda,
@@ -530,11 +549,13 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
   // collected: a protected lambda or proxy turning up in an equation of
   // the same shape is none of this function's business.
   std::set<ASTNode> witnessNames;
+  std::set<ASTNode> witnessIndexes;
   for (size_t i = 0; i < activeRecordIds.size(); i++)
   {
     const Record& r = records[activeRecordIds[i]];
     witnessNames.insert(r.nameL);
     witnessNames.insert(r.nameR);
+    witnessIndexes.insert(r.lambda);
   }
 
   // name symbol -> the anchored right-hand side: the witness read, or
@@ -565,6 +586,28 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
        ++it)
   {
     const ASTNode& n = *it;
+
+    // A witness index occurs only as the index of its own two anchor
+    // reads. That is what stops a read-over-write chase from stepping
+    // an anchor onto a deeper array and handing recovery an operand the
+    // equality was never about (see recoverAnchoredOperand): the chase
+    // steps only over a write index it can prove different from the
+    // read index, and it can prove nothing about a symbol that appears
+    // nowhere else. Checking every parent of the index is enough to
+    // establish that, however deeply a term buried it, because the node
+    // holding it as a direct child is in this walk too.
+    for (unsigned k = 0; k < n.Degree(); k++)
+    {
+      if (witnessIndexes.find(n[k]) == witnessIndexes.end())
+        continue;
+      if (n.GetKind() == READ && n.Degree() == 2 && k == 1)
+        continue;
+      FatalError("array-equality: a witness index escaped its anchor read, "
+                 "so a rewrite could decide a write index against it and "
+                 "move the equality operand recovery reads",
+                 n);
+    }
+
     if (n.GetKind() != EQ || n.Degree() != 2)
       continue;
     for (int side = 0; side < 2; side++)

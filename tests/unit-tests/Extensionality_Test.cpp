@@ -2269,6 +2269,65 @@ TEST_F(ExtPrepareTest, RewrittenWitnessIndexFailsLoudly)
 // them -- but that is a property of the passes in between, not of this
 // walk. A second one would otherwise be resolved by hash order, giving
 // a different equality operand from run to run.
+// Operand recovery reads the array back out of "name = read(operand,
+// lambda)". A read-over-write chase preserves that shape exactly while
+// changing the operand -- it returns a read at the same index over the
+// write's base -- so no check at the recovery site could see it happen.
+// What stops it is that the chase only steps over a write index it can
+// prove different from the read index, and lambda appears nowhere a
+// rule could get a grip on it.
+//
+// So that is the thing to check. A witness index reachable anywhere but
+// as the index of its own anchor read means some pass built a term over
+// it, and the argument recovery rests on is gone.
+TEST_F(ExtPrepareTest, WitnessIndexEscapingItsAnchorFailsLoudly)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b");
+  ext->beginSolve();
+  const ASTNode proxy =
+      ext->lowerArrayEqualities(hf->CreateNode(EQ, ASTVec{a, b}));
+  ASTNode root = ext->conjoinRecordConstraints(proxy);
+  ASSERT_EQ(1u, ext->getRecords().size());
+  const ASTNode lambda = ext->getRecords()[0].lambda;
+
+  // Anything a pass could leave behind that mentions the witness index:
+  // here the simplest one, an equation relating it to another variable.
+  // A write index derived from it would be the shape that actually
+  // bites, and is caught by the same check -- whatever term buries it,
+  // some node holds it as a direct child.
+  const ASTNode escaped = hf->CreateNode(EQ, bv("k"), lambda);
+  const ASTNode tampered = hf->CreateNode(AND, root, escaped);
+
+  EXPECT_DEATH(ext->prepare(tampered), "witness index escaped its anchor");
+}
+
+// The same index in the place it belongs is not an escape: recovery has
+// to keep working on an operand that is itself a write chain, which is
+// the shape the chase would have acted on.
+TEST_F(ExtPrepareTest, WitnessIndexOverAWriteChainOperandIsAccepted)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("a"), b = arr("b");
+  ASTNode i = bv("i"), e = bv("e");
+  const ASTNode w = hf->CreateArrayTerm(WRITE, 2, 2, {a, i, e});
+
+  ext->beginSolve();
+  const ASTNode proxy =
+      ext->lowerArrayEqualities(hf->CreateNode(EQ, ASTVec{w, b}));
+  ASTNode root = ext->conjoinRecordConstraints(proxy);
+  ext->prepare(root);
+
+  // The registry orders the pair by node number, so which side the
+  // write chain lands on is not this test's business; that it survives
+  // recovery intact is.
+  const ExtensionalityContext::Record& r = ext->getRecords()[0];
+  EXPECT_TRUE((r.canonicalLeft == w && r.canonicalRight == b) ||
+              (r.canonicalLeft == b && r.canonicalRight == w))
+      << "recovery moved an operand: left=" << r.canonicalLeft
+      << " right=" << r.canonicalRight;
+}
+
 TEST_F(ExtPrepareTest, DuplicateAnchorFailsLoudly)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
