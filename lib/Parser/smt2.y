@@ -681,6 +681,18 @@ namespace stp
   // implemented shape. Returns false to answer "unsupported" instead.
   bool tryRegisterFpSortAlias(const std::string& text)
   {
+    // The per-logic gate, which nothing else here can apply for us. Every
+    // other floating-point name in the input is a keyword only while an FP
+    // set-logic is in force, because the lexer routes it through fpKeyword();
+    // define-sort's body never reaches those rules -- SKIP_SEXPR swallows it
+    // and the loop below re-tokenises the raw text -- so "Float32" was a
+    // floating-point sort here under QF_BV, and a QF_BV script could obtain a
+    // FloatingPoint variable while legitimately declaring a symbol named "fp"
+    // in the same scope. Answer "unsupported", as this does for every other
+    // sort it does not implement.
+    if (!stp::SMT2FloatTokensActive())
+      return false;
+
     std::vector<std::string> toks;
     std::string cur;
     for (const char c : text)

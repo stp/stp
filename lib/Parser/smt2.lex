@@ -83,6 +83,11 @@ namespace stp
   const std::string& smt2_skipped_text() { return skippedText; }
 
   void SMT2SetFloatTokens(bool enable) { floatTokensActive = enable; }
+
+  // define-sort's body never reaches the rules below -- SKIP_SEXPR swallows
+  // it and the grammar re-tokenises the text by hand -- so it has to ask the
+  // gate itself rather than being answered by it. See tryRegisterFpSortAlias.
+  bool SMT2FloatTokensActive() { return floatTokensActive; }
 }
 
   static int lookup(char* s)
