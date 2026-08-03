@@ -1,7 +1,7 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, David L. Dill
+ * AUTHORS: Andrew Teylu
  *
- * BEGIN DATE: November, 2005
+ * BEGIN DATE: January 2021
  *
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,34 +22,24 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "stp/AST/ASTSymbol.h"
+#include "stp/AST/ASTFPConst.h"
+
 #include "stp/AST/AST.h"
-#include "stp/STPManager/STP.h"
 
 namespace stp
 {
-const ASTVec ASTSymbol::empty_children;
 
-// Get the name of the symbol
-const char* ASTSymbol::GetName() const
+ASTFPConst::ASTFPConst(STPMgr* mgr, CBV bv, uint32_t exp_width,
+                       uint32_t sig_width)
+    : ASTBVConst(mgr, bv, 0, /*managed_outside=*/true), _sig_width(sig_width),
+      _exp_width(exp_width)
 {
-  return _name;
 }
 
-// Print function for symbol
-void ASTSymbol::nodeprint(ostream& os, bool /*c_friendly*/)
+ASTFPConst::ASTFPConst(const ASTFPConst& other)
+    : ASTBVConst(other), _sig_width(other._sig_width),
+      _exp_width(other._exp_width)
 {
-  os << _name;
 }
 
-// Call this when deleting a node that has been stored in the the
-// unique table
-void ASTSymbol::CleanUp()
-{
-  nodeManager->_symbol_unique_table.erase(this);
-  nodeManager->unindexSymbolName(this);
-  free((char*)this->_name);
-  delete this;
-}
-
-} // end of namespace
+} // namespace stp

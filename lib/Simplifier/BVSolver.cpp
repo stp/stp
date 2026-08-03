@@ -56,6 +56,30 @@ namespace stp
 const bool flatten_ands = true;
 const bool debug_bvsolver = false;
 
+// Whether eliminating `var` in favour of `value` keeps the floating-point
+// format `var` carries.
+//
+// A float's format is per-node state that only a leaf, a floating-point-kind
+// node or an array can hold (see ASTNode::canStoreFPFormat), so an ordinary
+// bitvector term -- everything this file builds to replace a variable with --
+// answers (0, 0) whatever it denotes. The floating-point layer is still
+// unlowered while the solver runs: FloatBlast comes after the size-reducing
+// passes, and it reads an operation's format off its operands, because by
+// then they are the only thing that still says what sort they are (see
+// FloatBlaster::operandFormat). So a float-typed variable rewritten into a
+// concatenation leaves fp.isZero and friends blasting against a format of
+// (0, 0) -- a packed width of zero against a 64-bit operand.
+//
+// Non-floats compare (0, 0) against (0, 0), so this is only ever a question
+// about floats. The same invariant UpdateSubstitutionMap asserts; the
+// solver map's own entry point does not check, so the check has to happen
+// here, before the equation that justifies the entry is discarded.
+static bool keepsFPFormat(const ASTNode& var, const ASTNode& value)
+{
+  return var.GetExpWidth() == value.GetExpWidth() &&
+         var.GetSigWidth() == value.GetSigWidth();
+}
+
 // The simplify functions can increase the size of the DAG,
 // so we have the option to disable simplifications.
 ASTNode BVSolver::simplifyNode(const ASTNode n)
@@ -270,6 +294,11 @@ ASTNode BVSolver::substitute(const ASTNode& eq, const ASTNode& lhs,
         return eq;
       }
 
+      // The right-hand side stands in for the variable everywhere, so it has
+      // to be the same sort of thing -- as a float too, not just as bits.
+      if (!keepsFPFormat(lhs, rhs))
+        return eq;
+
       if (!_simp->UpdateSolverMap(lhs, rhs))
       {
         return eq;
@@ -290,6 +319,15 @@ ASTNode BVSolver::substitute(const ASTNode& eq, const ASTNode& lhs,
       }
 
       if (vars.VarSeenInTerm(lhs[0], rhs))
+      {
+        return eq;
+      }
+
+      // Solving here renames the whole variable, not just the bits the
+      // extract names: below it becomes a concatenation, which carries no
+      // floating-point format at all. So a float-typed variable is left
+      // alone, extract equation and all. See keepsFPFormat.
+      if (lhs[0].GetExpWidth() != 0)
       {
         return eq;
       }
@@ -332,6 +370,15 @@ ASTNode BVSolver::substitute(const ASTNode& eq, const ASTNode& lhs,
       }
 
       bool ChosenVar_Is_Extract = (BVEXTRACT == lhs[1].GetKind());
+
+      // The variable becomes a multiple of the right-hand side, or a
+      // concatenation ending in one. Both are bitvector terms with no
+      // floating-point format to carry, so a float-typed variable is left
+      // alone. See keepsFPFormat.
+      if ((ChosenVar_Is_Extract ? lhs[1][0] : lhs[1]).GetExpWidth() != 0)
+      {
+        return eq;
+      }
 
       // if coeff is even, then we know that all the coeffs in the eqn
       // are even. Simply return the eqn
