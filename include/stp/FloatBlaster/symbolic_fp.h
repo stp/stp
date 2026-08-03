@@ -35,6 +35,79 @@ THE SOFTWARE.
 #include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/STPManager/STPManager.h"
 
+#include <cassert>
+#include <type_traits>
+
+// symfpu states its preconditions, postconditions and invariants through
+// three macros, and calls them with arguments of two quite different kinds:
+// a plain `bool` -- a width, a position, a flag it can settle while building
+// the circuit -- or a `prop`. For this back end a `prop` is not a value. It
+// is a circuit constructor: PRECONDITION(uf.valid(format)) builds a
+// wellFormed conjunction, a getSubnormalAmount, an orderEncode and a mask
+// test, every node of it through the manager's simplifying factory.
+//
+// symfpu's default expansion is an ordinary function call, `t::precondition(X)`,
+// so the argument is fully evaluated before the overload that receives it can
+// decide what to do with it -- and the `prop` overload can only throw it away,
+// since a symbolic property cannot be checked while the circuit is being
+// built. valid() and wellFormed() are reached from nowhere else in symfpu, so
+// every node those arguments construct is dead on arrival, in every build
+// configuration: the overload is empty with and without NDEBUG.
+//
+// properties.h guards all three macros with #ifndef precisely so that a back
+// end can say otherwise. Say otherwise. `decltype` does not evaluate its
+// operand, so asking the type first costs nothing and lets the `bool`
+// properties -- which are real checks, and cheap -- go on being asserted while
+// the `prop` ones are never built at all.
+//
+// Both branches still have to compile, which is what keeps this honest: it
+// stays a question about the argument's type, not a blanket suppression, so a
+// symfpu update that changed a property's shape would not slip through.
+//
+// This must come before any symfpu header, which is why every translation unit
+// that uses symfpu includes *this* header first. Enforced rather than trusted:
+// getting the order wrong would not fail, it would silently restore the
+// expansion that builds and discards the circuits, and nothing downstream
+// would look any different.
+#ifdef SYMFPU_PROPERTIES
+#error "stp/FloatBlaster/symbolic_fp.h must be included before any symfpu \
+header, so that it defines PRECONDITION/POSTCONDITION/INVARIANT before \
+symfpu/utils/properties.h supplies its own."
+#endif
+
+namespace stp
+{
+namespace symbolic_fp
+{
+
+// The two halves of the decision above. The `bool` overload is the check
+// symfpu wanted; the template one exists so that the branch the macro
+// discards is still *well-formed* for a `prop`, which outside a template it
+// has to be -- `if constexpr` only skips instantiating a discarded branch
+// inside one, and every symfpu use of these macros happens to be in a
+// template. Without the overload this compiles there and nowhere else.
+inline void assertProperty(const bool holds)
+{
+  assert(holds);
+  (void)holds;
+}
+
+template <class T> inline void assertProperty(const T&) {}
+
+} // namespace symbolic_fp
+} // namespace stp
+
+#define STP_SYMFPU_PROPERTY(X)                                                 \
+  do                                                                           \
+  {                                                                            \
+    if constexpr (std::is_same_v<std::decay_t<decltype(X)>, bool>)             \
+      ::stp::symbolic_fp::assertProperty(X);                                   \
+  } while (false)
+
+#define PRECONDITION(X) STP_SYMFPU_PROPERTY(X)
+#define POSTCONDITION(X) STP_SYMFPU_PROPERTY(X)
+#define INVARIANT(X) STP_SYMFPU_PROPERTY(X)
+
 #include "symfpu/core/unpackedFloat.h"
 
 namespace stp
