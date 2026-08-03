@@ -112,6 +112,21 @@ private:
   void CheckCounterExample(bool t, const ASTNode& checked_input);
 
   // Accepts a term and turns it into a constant-term w.r.t
+  // The cells the model records for a set of array nodes, keyed by
+  // (array, index) with the index normalised to its plain bit-vector
+  // spelling.
+  //
+  // Keyed that way on purpose. A cell is a property of the *value* of
+  // its index, but a floating-point constant interns apart from the
+  // plain constant with its bits -- so 1.0f and 0x3F800000 are two
+  // nodes naming one cell, and looking a cell up by building a READ
+  // node asks about the spelling. Whichever spelling the model happened
+  // to record under would be found and the other missed, and the miss
+  // completes to zero: one array reads a cell the other does not, and
+  // two equal arrays are reported as differing.
+  typedef std::map<std::pair<ASTNode, ASTNode>, ASTNode> ModelCells;
+  void CollectModelCells(const ASTNodeSet& arrays, ModelCells& out);
+
   // The value the model gives one cell of an array term, without
   // recording anything: the recorded cell if there is one, else the
   // written value if a write at this level hits the index, else the
@@ -120,7 +135,8 @@ private:
   // TermToConstTermUsingModel below -- its results are compared by
   // node identity.
   ASTNode ReadUsingModel(const ASTNode& arrayTerm,
-                         const ASTNode& concreteIndex);
+                         const ASTNode& concreteIndex,
+                         const ModelCells& cells);
 
   // The array-valued nodes an array term is built from -- itself, the
   // base of every write, both branches of every array if-then-else.
@@ -266,9 +282,9 @@ public:
   bool ArraysEqualUsingModel(const ASTNode& left, const ASTNode& right);
 
   // Whether ArraysEqualUsingModel can answer about this array term at
-  // all. It cannot once the index sort is a floating-point one; see the
-  // definition for why. Ask before asking.
-  static bool arrayEqualityIsModelDecidable(const ASTNode& arrayTerm);
+  // all. Ask before asking; see the definition for the one case it
+  // cannot.
+  bool arrayEqualityIsModelDecidable(const ASTNode& arrayTerm) const;
 
   // ComputeFormulaUsingModel for a caller asking a question about the
   // model rather than assembling it: whatever the evaluation would

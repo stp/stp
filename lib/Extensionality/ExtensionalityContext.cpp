@@ -49,25 +49,13 @@ bool nodeNumLess(const ASTNode& a, const ASTNode& b)
   return a.GetNodeNum() < b.GetNodeNum();
 }
 
-// The plain bitvector twin of a constant. A floating-point constant
-// interns separately from the bitvector constant with the same bits
-// (the format is part of the identity), but this machinery works on
-// packed bits and compares model constants by node identity, so every
-// constant it keeps -- scalar names, checker model values, lemma
-// leaves -- must be the plain flavour: a float-element write value
-// held as a float constant would never compare equal to the same bits
-// read back from the SAT assignment, and the checker would report the
-// same phantom conflict on every refinement iteration.
-ASTNode plainConst(STPMgr* bm, const ASTNode& c)
-{
-  assert(c.isConstant());
-  const SourceSort::Kind sort = c.GetSourceSort().kind();
-  if (c.GetKind() != BVCONST ||
-      (c.GetExpWidth() == 0 && sort != SourceSort::Kind::RoundingMode))
-    return c;
-  return bm->CreateBVConst(CONSTANTBV::BitVector_Clone(c.GetBVConst()),
-                           c.GetValueWidth());
-}
+// Why this layer normalises every constant it keeps through
+// plainBitVectorConstant (see AST.h): it works on packed bits and
+// compares model constants by node identity, so a float-element write
+// value held as a float constant would never compare equal to the same
+// bits read back from the SAT assignment, and the checker would report
+// the same phantom conflict on every refinement iteration. Scalar
+// names, checker model values and lemma leaves are all kept plain.
 
 // Whether the packed floating-point cell x of format (eb, sb) holds a NaN:
 // an all-ones exponent with a nonzero significand, the layout being
@@ -914,7 +902,7 @@ ASTNode ExtensionalityContext::freshName(const ASTNode& term,
                                          ASTVec& namingConstraints)
 {
   if (term.isConstant())
-    return plainConst(bm, term);
+    return plainBitVectorConstant(bm, term);
   std::map<ASTNode, ASTNode>::const_iterator it = scalarNames.find(term);
   if (it != scalarNames.end())
     return it->second;
@@ -1420,7 +1408,7 @@ public:
   virtual ASTNode bvValue(const ASTNode& term)
   {
     if (term.GetKind() == BVCONST)
-      return plainConst(bm, term);
+      return plainBitVectorConstant(bm, term);
     if (term.GetKind() != SYMBOL)
       FatalError("array-equality: the checker requested a bit-vector term "
                  "instead of its scalar SAT name",
@@ -1435,7 +1423,7 @@ public:
     // Substitution entries can hand a float-element symbol back as a
     // float constant; the checker compares constants by node identity,
     // so give it the plain twin.
-    return plainConst(bm, v);
+    return plainBitVectorConstant(bm, v);
   }
 
   virtual bool boolValue(const ASTNode& term)
@@ -1959,12 +1947,10 @@ const char* ExtensionalityContext::recheckCertifiedEqualities(
   {
     const Record& r = records[activeRecordIds[i]];
     // Both loops decide an equality by comparing the cells the model
-    // published. Where that is answerable at all is one question, asked
-    // in one place; a float-indexed array is the case it is not.
-    if (!AbsRefine_CounterExample::arrayEqualityIsModelDecidable(
-            r.constructionLeft) ||
-        !AbsRefine_CounterExample::arrayEqualityIsModelDecidable(
-            r.constructionRight))
+    // published. Whether that is answerable at all is one question,
+    // asked in one place.
+    if (!ce->arrayEqualityIsModelDecidable(r.constructionLeft) ||
+        !ce->arrayEqualityIsModelDecidable(r.constructionRight))
       continue;
     const ASTNode assigned = ce->LookupAssignedValue(r.proxy);
     if (assigned.IsNull() ||
@@ -2019,10 +2005,8 @@ const char* ExtensionalityContext::recheckCertifiedEqualities(
        it != currentLowerings.end(); ++it)
   {
     // Same restriction, same reason; see the loop above.
-    if (!AbsRefine_CounterExample::arrayEqualityIsModelDecidable(
-            it->first[0]) ||
-        !AbsRefine_CounterExample::arrayEqualityIsModelDecidable(
-            it->first[1]))
+    if (!ce->arrayEqualityIsModelDecidable(it->first[0]) ||
+        !ce->arrayEqualityIsModelDecidable(it->first[1]))
       continue;
     const ASTNode verdict = ce->QueryFormulaAgainstModel(it->second);
     if (!(verdict.GetKind() == TRUE || verdict.GetKind() == FALSE))

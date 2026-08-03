@@ -3038,6 +3038,38 @@ TEST(ExtLemmaFold, DropRuleIsPolarityCorrect)
 // report a bogus counterexample on any satisfiable query whose equal
 // arrays were reached by different numbers of accesses -- which is
 // most of them.
+// A constant's node identity is not its value: a float constant interns
+// apart from the plain bit-vector constant spelling its bits. Anything
+// that keys a container by a constant, or builds a lookup node from one,
+// is asking about the spelling unless it normalises first -- which is
+// how one array cell became two candidate indexes, one of which found
+// the recorded cell and the other completed to zero.
+TEST(ExtCertifiedEqualities, PlainConstantCollapsesTheSpellingsOfOneValue)
+{
+  STPMgr mgr;
+  Cpp_interface interface(mgr, mgr.defaultNodeFactory);
+
+  const ASTNode plain = mgr.CreateBVConst(32, 0x3F800000u);
+  const ASTNode asFloat = mgr.CreateFPConst(plain, 8, 24);
+
+  // The premise: two nodes, one value.
+  ASSERT_NE(plain, asFloat);
+  ASSERT_TRUE(constantsSameBits(plain, asFloat));
+
+  // Normalising collapses them, so a set keyed on the result holds one
+  // entry and a lookup finds whichever spelling was recorded.
+  EXPECT_EQ(plain, plainBitVectorConstant(&mgr, asFloat));
+  EXPECT_EQ(plain, plainBitVectorConstant(&mgr, plain));
+
+  std::set<ASTNode> raw, normalised;
+  raw.insert(plain);
+  raw.insert(asFloat);
+  normalised.insert(plainBitVectorConstant(&mgr, plain));
+  normalised.insert(plainBitVectorConstant(&mgr, asFloat));
+  EXPECT_EQ(2u, raw.size());
+  EXPECT_EQ(1u, normalised.size());
+}
+
 // The same rule over a floating-point element sort, where "same value"
 // stops being "same bits". SMT-LIB's = on floats is identity of values
 // and NaN is one value with many packings, so two arrays holding

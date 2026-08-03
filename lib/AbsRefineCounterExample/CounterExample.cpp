@@ -29,6 +29,7 @@ THE SOFTWARE.
 #include "stp/FloatBlaster/FpEncodingContext.h"
 #include "stp/Printer/printers.h"
 #include "stp/ToSat/ToSATAIG.h"
+#include <memory>
 
 const bool debug_counterexample = false;
 
@@ -1062,17 +1063,34 @@ void AbsRefine_CounterExample::CollectArrayNodes(const ASTNode& arrayTerm,
 // an array the extensionality checker owns, lifted out so that it can
 // be asked about any array term, including one from a solve that never
 // owned anything.
-ASTNode AbsRefine_CounterExample::ReadUsingModel(const ASTNode& arrayTerm,
-                                                 const ASTNode& concreteIndex)
+void AbsRefine_CounterExample::CollectModelCells(const ASTNodeSet& arrays,
+                                                 ModelCells& out)
 {
-  NodeFactory* hf = bm->hashingNodeFactory;
+  for (ASTNodeMap::const_iterator it = CounterExampleMap.begin();
+       it != CounterExampleMap.end(); ++it)
+  {
+    if (READ != it->first.GetKind() || !it->first[1].isConstant() ||
+        arrays.find(it->first[0]) == arrays.end())
+      continue;
+    const std::pair<ASTNode, ASTNode> key(
+        it->first[0], plainBitVectorConstant(bm, it->first[1]));
+    // One cell recorded under both spellings of its index must not
+    // become two entries; the records agree, being the same cell.
+    if (out.find(key) == out.end())
+      out[key] = it->second;
+  }
+}
+
+ASTNode AbsRefine_CounterExample::ReadUsingModel(const ASTNode& arrayTerm,
+                                                 const ASTNode& concreteIndex,
+                                                 const ModelCells& cells)
+{
   ASTNode level = arrayTerm;
   while (true)
   {
-    const ASTNode key =
-        hf->CreateTerm(READ, level.GetValueWidth(), level, concreteIndex);
-    const ASTNodeMap::const_iterator recorded = CounterExampleMap.find(key);
-    if (recorded != CounterExampleMap.end())
+    const ModelCells::const_iterator recorded =
+        cells.find(std::make_pair(level, concreteIndex));
+    if (recorded != cells.end())
       return BVCONST == recorded->second.GetKind()
                  ? recorded->second
                  : TermToConstTermUsingModel(recorded->second, false);
@@ -1110,24 +1128,18 @@ ASTNode AbsRefine_CounterExample::ReadUsingModel(const ASTNode& arrayTerm,
 
 // See the header. The one restriction, in one place.
 //
-// Deciding an equality from the model means finding the two arrays'
-// cells, and this walk names a cell by the concrete index it sits at.
-// That works while an index is what the solve recorded a cell against.
-// It is not, once the index sort is a floating-point one: the solve
-// canonicalises those indexes and keys the model by the lowered carrier
-// access, so a cell exists that no constant index of the source term
-// names. The walk would find nothing, complete every cell to zero, and
-// still read written values straight out of the term -- reporting two
-// equal arrays as differing.
-//
-// A floating-point *element* is fine, and is the case worth having:
-// cells are found exactly as before and compared for equal value.
+// A float-indexed array is answerable, but only through the solve's own
+// encoding context: the solve canonicalises float indexes and records
+// the model against the lowered carrier access, so the operands must be
+// lowered the same way before the walk can find a cell. Without that
+// context -- outside a solve, or in a unit fixture that never made one
+// -- the question cannot be put.
 bool AbsRefine_CounterExample::arrayEqualityIsModelDecidable(
-    const ASTNode& arrayTerm)
+    const ASTNode& arrayTerm) const
 {
   const SourceSort sort = arrayTerm.GetSourceSort();
   return sort.kind() != SourceSort::Kind::Array ||
-         !sort.index().usesFloatingPointTheory();
+         !sort.index().usesFloatingPointTheory() || fpEncodingContext != NULL;
 }
 
 bool AbsRefine_CounterExample::ArraysEqualUsingModel(const ASTNode& left,
@@ -1138,36 +1150,62 @@ bool AbsRefine_CounterExample::ArraysEqualUsingModel(const ASTNode& left,
 
   ModelQuery unchanged(CounterExampleMap, ComputeFormulaMap);
 
-  // A floating-point *element* changes only the comparison: cells are
-  // compared for the same value rather than the same bits, because NaN
-  // is one value with many packings. The walk itself is unaffected --
-  // the cell is still found at the index it is found at.
+  // Two floating-point sorts, two independent problems; an array can
+  // have either, both, or neither.
   //
-  // A floating-point *index* is a different matter and this does not
-  // handle it; callers are expected not to ask (see
-  // arrayEqualityIsModelDecidable).
+  // A float *element* changes only the comparison: cells are compared
+  // for the same value rather than the same bits, because NaN is one
+  // value with many packings. The walk is unaffected.
+  //
+  // A float *index* changes where the cells are. The solve canonicalises
+  // those indexes and records the model against the lowered carrier
+  // access, so the operands have to be lowered the same way before a
+  // cell can be found at all. Stay in encoded mode from there for the
+  // reason the term evaluator gives where it does the same: the lowered
+  // DAG keeps its source-sort metadata, and a nested access would
+  // otherwise be taken for a fresh source boundary and canonicalised
+  // again.
   SourceSort elementSort = SourceSort::unknown();
+  bool encode = false;
   {
     const SourceSort arraySort = left.GetSourceSort();
     if (arraySort.kind() == SourceSort::Kind::Array)
+    {
       elementSort = arraySort.element();
+      encode = fpEncodingContext != NULL && fpEncodedEvaluationDepth == 0 &&
+               arraySort.index().usesFloatingPointTheory();
+    }
   }
+  const ASTNode lowered_left =
+      encode ? requireFpEncodingContext().encodeForModel(left) : left;
+  const ASTNode lowered_right =
+      encode ? requireFpEncodingContext().encodeForModel(right) : right;
+  std::unique_ptr<ScopedFpEncodedEvaluation> evaluating;
+  if (encode)
+    evaluating.reset(new ScopedFpEncodedEvaluation(fpEncodedEvaluationDepth));
+  if (lowered_left == lowered_right)
+    return true;
 
   ASTNodeSet arrays;
-  CollectArrayNodes(left, arrays);
-  CollectArrayNodes(right, arrays);
+  CollectArrayNodes(lowered_left, arrays);
+  CollectArrayNodes(lowered_right, arrays);
+  ModelCells cells;
+  CollectModelCells(arrays, cells);
 
+  // Every cell the model records against one of those arrays, plus every
+  // index a write in either term writes to -- a write's own cell need
+  // not be recorded, and stepping over it is exactly what makes the
+  // array above it differ from the one below.
+  //
+  // Both sources are already normalised, and both have to be: an index
+  // is a value, and two spellings of one value would be two candidates,
+  // the one that does not match the recorded cell finding nothing and
+  // completing to zero. The cell keys are normalised where they are
+  // built; a written index is whatever the term evaluator returns, and
+  // that is documented to be a plain constant for this very reason.
   std::set<ASTNode> indexes;
-  // Every cell the model records against one of those arrays.
-  for (ASTNodeMap::const_iterator it = CounterExampleMap.begin();
-       it != CounterExampleMap.end(); ++it)
-    if (READ == it->first.GetKind() && BVCONST == it->first[1].GetKind() &&
-        arrays.find(it->first[0]) != arrays.end())
-      indexes.insert(it->first[1]);
-  // Plus every index a write in either term writes to. A write's own
-  // cell need not be recorded -- it is not recorded at all when no
-  // equality was active -- and stepping over it is exactly what makes
-  // the array above it differ from the one below.
+  for (ModelCells::const_iterator it = cells.begin(); it != cells.end(); ++it)
+    indexes.insert(it->first.second);
   for (ASTNodeSet::const_iterator it = arrays.begin(); it != arrays.end();
        ++it)
     if (WRITE == it->GetKind())
@@ -1180,8 +1218,8 @@ bool AbsRefine_CounterExample::ArraysEqualUsingModel(const ASTNode& left,
   for (std::set<ASTNode>::const_iterator it = indexes.begin();
        it != indexes.end(); ++it)
     if (constantsDenoteDifferentSourceValues(
-            ReadUsingModel(left, *it), ReadUsingModel(right, *it),
-            elementSort))
+            ReadUsingModel(lowered_left, *it, cells),
+            ReadUsingModel(lowered_right, *it, cells), elementSort))
       return false;
   return true;
 }

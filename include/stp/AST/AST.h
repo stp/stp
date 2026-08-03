@@ -92,6 +92,14 @@ inline bool constantsDenoteDifferentValues(const ASTNode& a, const ASTNode& b)
   return !constantsSameBits(a, b);
 }
 
+// The plain bit-vector constant spelling the same bits as `c`, or `c`
+// itself when it already is one. A floating-point or rounding-mode
+// constant interns apart from the plain constant with its bits, so two
+// nodes can spell one value -- and anything that keys a container or
+// builds a lookup node from a constant is asking about the spelling
+// unless it normalises through here first.
+ASTNode plainBitVectorConstant(STPMgr* bm, const ASTNode& c);
+
 // Whether two constants denote the same value *of a given sort*, which
 // for a floating-point sort is a weaker question than sharing bits.
 //

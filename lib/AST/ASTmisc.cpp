@@ -135,6 +135,18 @@ bool constantsSameBits(const ASTNode& a, const ASTNode& b)
                                                 b.GetBVConst());
 }
 
+// See the declaration.
+ASTNode plainBitVectorConstant(STPMgr* bm, const ASTNode& c)
+{
+  assert(c.isConstant());
+  const SourceSort::Kind sort = c.GetSourceSort().kind();
+  if (c.GetKind() != BVCONST ||
+      (c.GetExpWidth() == 0 && sort != SourceSort::Kind::RoundingMode))
+    return c;
+  return bm->CreateBVConst(CONSTANTBV::BitVector_Clone(c.GetBVConst()),
+                           c.GetValueWidth());
+}
+
 // Whether the packed floating-point constant x of format (eb, sb) holds
 // a NaN: an all-ones exponent over a nonzero significand, the layout
 // being [sign | exponent eb | significand sb-1]. The value-level twin of
