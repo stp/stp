@@ -108,6 +108,11 @@ generators.
 - `USE_RISS` - Try to use the Riss solver
 - `TUNE_NATIVE` - Build with `-mtune=native`
 - `WERROR` - Treat compiler warnings as errors
+- `ENABLE_FLOATING_POINT` - SMT-LIB floating-point support (default ON), via
+  the vendored [SymFPU](https://github.com/martin-cs/symfpu) submodule (or an
+  external clone through `SYMFPU_INCLUDE_DIRS`). With `OFF`, STP builds
+  without SymFPU and rejects floating-point input with a clear error; the
+  library ABI is identical either way.
 - `STP_ALLOCATOR` - Which memory allocator the `stp` binary uses. STP is
   allocation-heavy, and the C library allocator is a significant bottleneck, so
   this defaults to `mimalloc`, which is vendored as a submodule and built as
@@ -117,9 +122,12 @@ generators.
   whatever application embeds it.
 
 ### Dependencies
-STP relies on : boost (program_options), flex, bison, perl, zlib and minisat. A
-python3 interpreter is needed for the python interface and for the test suite,
-and GMP is needed when building with CryptoMiniSat. You can install these by:
+STP relies on : boost (program_options), flex, bison, perl, zlib and minisat.
+The floating-point support uses the header-only
+[SymFPU](https://github.com/martin-cs/symfpu) library, which is vendored as a
+submodule -- nothing to install. A python3 interpreter is needed for the
+python interface and for the test suite, and GMP is needed when building with
+CryptoMiniSat. You can install most of these by:
 
 ```
 $ sudo apt-get install build-essential cmake bison flex libboost-program-options-dev libgmp-dev zlib1g-dev python3 perl minisat
@@ -136,6 +144,20 @@ $ cmake --build . -j$(nproc)
 $ sudo cmake --install .
 $ command -v ldconfig && sudo ldconfig
 ```
+
+Floating-point support is on by default, backed by the vendored SymFPU
+submodule (`git submodule update --init lib/extlib-symfpu/symfpu` if you
+cloned without `--recursive`); an external SymFPU clone can be used
+instead via `-DSYMFPU_INCLUDE_DIRS=<directory containing the clone>`.
+With it, STP solves the SMT-LIB floating-point theory
+(QF_FP/QF_BVFP/QF_ABVFP) and exposes floating-point terms through the C,
+C++ (`stp/fp.hpp`) and Python APIs. One operation is format-bounded:
+`fp.rem` is refused past roughly binary64-sized formats (its circuit
+unrolls one divide step per representable exponent difference, so
+Float128's would be ~33000 steps deep). Configuring with
+`-DENABLE_FLOATING_POINT=OFF` builds without SymFPU entirely and rejects
+floating-point input with a clear "built without floating-point support"
+error; the library ABI is the same either way.
 
 STP uses minisat as its SAT solver when nothing else is available, but it also supports other SAT solvers including CryptoMiniSat as an optional extra. If installed, it will be detected during the cmake and becomes the default solver, with `--minisat` selecting minisat at runtime:
 

@@ -34,5 +34,6 @@ endif()
 # enable_testing() and after the checks that can turn ENABLE_TESTING off.
 if (ENABLE_FLOATING_POINT AND (ENABLE_TESTING OR BUILD_EXTRA_TOOLS))
     add_subdirectory(test_fpbackend)
+    add_subdirectory(test_fprewrites)
 endif()
 

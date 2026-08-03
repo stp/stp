@@ -1,8 +1,4 @@
-# author: Dan Liew
-# date: Sep, 2014
-#
-# author: Andrew V. Jones
-# date: Apr, 2019
+# AUTHORS: Andrew Teylu
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -11,31 +7,18 @@
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
 #
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
 #
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 # AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
 
+add_executable(test_fprewrites test_fprewrites.cpp)
+target_link_libraries(test_fprewrites stp)
 
-from .stp import (
-    AnyExpr,
-    Expr,
-    FloatExpr,
-    Solver,
-    stp,
-    add,
-    bitvec,
-    bitvecs,
-    check,
-    model,
-    get_git_version_sha,
-    get_git_version_tag,
-    get_compilation_env,
-    get_lib,
-)
+# EOF
