@@ -27,12 +27,16 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
+#include "stp/FloatBlaster/FloatBlaster.h"
+#include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/ToSat/ToSATBase.h"
 
 namespace stp
 {
+class FpEncodingContext;
+
 class AbsRefine_CounterExample // not copyable
 {
 private:
@@ -54,6 +58,17 @@ private:
   // Ptr to ArrayTransformer
   ArrayTransformer* ArrayTransform;
 
+  // Non-owning observer of STP's solve-local source-to-carrier mapping.
+  // STP clears this before destroying or replacing the context.
+  FpEncodingContext* fpEncodingContext;
+
+  // Non-zero while an already-lowered source expression is being evaluated.
+  // Its descendants retain source-sort metadata, but must not be lowered a
+  // second time merely because of that metadata.
+  unsigned int fpEncodedEvaluationDepth;
+
+  FpEncodingContext& requireFpEncodingContext() const;
+
   // Checks if the counterexample is good. In order for the
   // counterexample to be ok, every assert must evaluate to true
   // w.r.t couner_example, and the query must evaluate to
@@ -61,9 +76,19 @@ private:
   void CheckCounterExample(bool t);
 
   // Accepts a term and turns it into a constant-term w.r.t
-  // counter_example
+  // counter_example. Always answers with a plain bitvector constant: a
+  // float constant interns separately from the bitvector constant with
+  // the same bits, and evaluation results are compared (write-hit
+  // tests, counterexample-map keys) by node identity, so bits equal
+  // must mean nodes equal.
   ASTNode TermToConstTermUsingModel(const ASTNode& term,
                                     bool ArrayReadFlag = true);
+
+private:
+  ASTNode TermToConstTermUsingModel_inner(const ASTNode& term,
+                                           bool ArrayReadFlag);
+
+public:
 
   ASTNode Expand_ReadOverWrite_UsingModel(const ASTNode& term,
                                           bool ArrayReadFlag = true);
@@ -83,11 +108,17 @@ private:
 
 public:
   AbsRefine_CounterExample(STPMgr* b, Simplifier* s, ArrayTransformer* at)
-      : bm(b), simp(s), ArrayTransform(at)
+      : bm(b), simp(s), ArrayTransform(at), fpEncodingContext(NULL),
+        fpEncodedEvaluationDepth(0)
   {
     ASTTrue = bm->CreateNode(TRUE);
     ASTFalse = bm->CreateNode(FALSE);
     ASTUndefined = bm->CreateNode(UNDEFINED);
+  }
+
+  void setFpEncodingContext(FpEncodingContext* context)
+  {
+    fpEncodingContext = context;
   }
 
   // Prints the counterexample to stdout
@@ -179,7 +210,12 @@ public:
     }
     if (counterexample.find(e) != counterexample.end())
     {
-      return counterexample[e];
+      // The map is the raw model, holding the plain bitvector constants that
+      // model evaluation works in. A value handed out carries the sort of
+      // what was asked for, as from
+      // AbsRefine_CounterExample::GetCounterExample -- so a float term's
+      // value can be equated with the term again.
+      return bv->LiftSourceValue(counterexample[e], e.GetSourceSort());
     }
     else
     {
@@ -190,8 +226,14 @@ public:
 
       if (SYMBOL == e.GetKind())
       {
-        ASTNode z = bv->CreateZeroConst(e.GetValueWidth());
-        return z;
+        // Simplified out, so it can take any value. RoundingMode has only five
+        // values in its 5-bit carrier, so use a legal deterministic default;
+        // ordinary bitvectors and floats retain the all-zero completion.
+        ASTNode z = bv->isRoundingModeSortedTerm(e)
+                        ? bv->CreateBVConst(
+                              5, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN)
+                        : bv->CreateZeroConst(e.GetValueWidth());
+        return bv->LiftSourceValue(z, e.GetSourceSort());
       }
 
       return e;

@@ -168,7 +168,9 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   // One encoding context per actual solve. Keep it after this function
   // returns so counterexample/get-value requests reuse the exact mappings
   // that introduced unspecified-value arrays and lowered the solved formula.
+  Ctr_Example->setFpEncodingContext(NULL);
   fpEncodingContext.reset(new FpEncodingContext(bm));
+  Ctr_Example->setFpEncodingContext(fpEncodingContext.get());
 
   // Unfortunatey this is a global variable,which the aux function needs to
   // overwrite sometimes.

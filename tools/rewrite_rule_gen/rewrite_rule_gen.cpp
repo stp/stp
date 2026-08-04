@@ -1926,25 +1926,17 @@ void load_new_rules(const string fileName = "rules_new.smt2")
     opended = true; // so we know to fclose it.
   }
 
-  // We store references to "v" and "w", so we need to remove the
-  // definitions from the input we parse.
-
-  v = mgr->LookupOrCreateSymbol("v");
-  v.SetValueWidth(bits);
-  w = mgr->LookupOrCreateSymbol("w");
-  w.SetValueWidth(bits);
+  // We store references to "v" and "w". A symbol's source sort is part of its
+  // identity, so these have to be made at the sort the parser will declare
+  // them at -- LookupOrCreateSymbol leaves it Unknown, which interns a
+  // *different* node from the one the rule blocks then talk about.
+  v = mgr->CreateSourceSymbol("v", stp::SourceSort::bitVector(bits));
+  w = mgr->CreateSourceSymbol("w", stp::SourceSort::bitVector(bits));
 
   TypeChecker nfTypeCheckDefault(*mgr->hashingNodeFactory, *mgr);
   Cpp_interface piTypeCheckDefault(*mgr, &nfTypeCheckDefault);
   mgr->UserFlags.print_STPinput_back_SMTLIB2_flag = true;
   GlobalParserInterface = &piTypeCheckDefault;
-
-  stringstream v_ss, w_ss;
-  v_ss << "(declare-fun v () (_ BitVec " << bits << "))";
-  string v_string = v_ss.str();
-
-  w_ss << "(declare-fun w () (_ BitVec " << bits << "))";
-  string w_string = w_ss.str();
 
   // This file I/O code: 1) Is terrible  2) I'm in a big rush so just getting it
   // working 3) am embarised by it.
@@ -1987,8 +1979,10 @@ void load_new_rules(const string fileName = "rules_new.smt2")
 
     mgr->GetRunTimes()->start(RunTimes::Parsing);
 
-    replace(s, v_string, "");
-    replace(s, w_string, "");
+    // The declarations are left in: the parser resolves a name through its
+    // own binding frames and no longer falls back to the manager's symbol
+    // table, so each block has to declare what it names. They intern to the
+    // v and w above, which were made at the same sort.
 
     // Load it into a string because other wise the parser reads in big blocks
     // way past where we want it to.

@@ -33,6 +33,7 @@ AddSTPGTest(SplitExtracts_Test.cpp)
 # pays for, so both configurations have to cover them.
 AddSTPGTest(SourceSortMemo_Test.cpp)
 if (ENABLE_FLOATING_POINT)
+    AddSTPGTest(FPPrintBack_Test.cpp)
     AddSTPGTest(FloatBlast_Test.cpp)
     AddSTPGTest(FpTotalise_Test.cpp)
     AddSTPGTest(SourceSort_Test.cpp)
