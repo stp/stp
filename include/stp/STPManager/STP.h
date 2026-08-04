@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
+#include "stp/FloatBlaster/FpEncodingContext.h"
 #include "stp/Parser/LetMgr.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/BVSolver.h"
@@ -36,6 +37,8 @@ THE SOFTWARE.
 #include "stp/Util/Attributes.h"
 #include "stp/ToSat/ToSATAIG.h"
 #include "stp/Simplifier/NodeDomainAnalysis.h"
+
+#include <memory>
 
 namespace stp
 {
@@ -68,6 +71,10 @@ class STP
 
   SATSolver* get_new_sat_solver();
 
+  // The source-to-carrier mapping for the most recent solve. It remains
+  // alive after TopLevelSTP returns so model queries use that exact encoding.
+  std::unique_ptr<FpEncodingContext> fpEncodingContext;
+
 public:
   STPMgr* bm;
   Simplifier* simp;
@@ -99,6 +106,8 @@ public:
   // NB doesn't delete the STPMgr.
   void deleteObjects()
   {
+    fpEncodingContext.reset();
+
     delete Ctr_Example;
     Ctr_Example = NULL;
 
@@ -134,6 +143,7 @@ public:
       tosat->ClearAllTables();
     if (Ctr_Example != NULL)
       Ctr_Example->ClearAllTables();
+    fpEncodingContext.reset();
     // bm->ClearAllTables();
   }
 };

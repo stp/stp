@@ -33,7 +33,34 @@ AddSTPGTest(SplitExtracts_Test.cpp)
 # pays for, so both configurations have to cover them.
 AddSTPGTest(SourceSortMemo_Test.cpp)
 if (ENABLE_FLOATING_POINT)
+    AddSTPGTest(FloatBlast_Test.cpp)
+    AddSTPGTest(FpTotalise_Test.cpp)
     AddSTPGTest(SourceSort_Test.cpp)
+    # Builds float/rounding-mode constants, which is the whole point.
+    AddSTPGTest(ConstantIdentity_Test.cpp)
+    AddSTPGTest(FpConstantFold_Test.cpp)
+    # The oracle is the hardware, evaluated under a rounding mode set with
+    # fesetround. Without this the compiler assumes the default mode and
+    # folds the reference arithmetic while compiling, so every non-default
+    # mode disagrees for a reason that has nothing to do with STP.
+    if (TARGET FpConstantFold_TestTests AND NOT MSVC)
+        target_compile_options(FpConstantFold_TestTests PRIVATE -frounding-math)
+        # And on 32-bit x86 the default is x87, which keeps a 64-bit
+        # significand and so double-rounds on the way to binary64: the
+        # hardware then disagrees with a correctly-rounded result, e.g.
+        # 3.0 / 1.0000000000000002 under RNE. binary32 has guard bits to
+        # spare, which is why only the binary64 tests would notice. SSE2
+        # arithmetic is correctly rounded, so ask for it and the oracle is
+        # IEEE again rather than skipping the coverage.
+        if (CMAKE_SIZEOF_VOID_P EQUAL 4)
+            include(CheckCXXCompilerFlag)
+            check_cxx_compiler_flag("-msse2 -mfpmath=sse" HAVE_SSE_MATH_FLAGS)
+            if (HAVE_SSE_MATH_FLAGS)
+                target_compile_options(FpConstantFold_TestTests
+                                       PRIVATE -msse2 -mfpmath=sse)
+            endif()
+        endif()
+    endif()
     # Builds float-typed symbols, so it needs the floating-point funnels
     # (SetExpWidth) to be more than a fatal error.
     AddSTPGTest(BVSolver_Test.cpp)

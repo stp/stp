@@ -1,4 +1,4 @@
-# AUTHORS: Dan Liew, Ryan Govostes, Mate Soos
+# AUTHORS: Andrew Teylu
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -18,21 +18,19 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-add_subdirectory(stp)
-add_subdirectory(stp_simple)
-
-option(BUILD_EXTRA_TOOLS "Build extra tools" OFF)
-if (BUILD_EXTRA_TOOLS)
-  add_subdirectory(rewrite_rule_gen)
-  add_subdirectory(propagator_bench)
+# FloatBlaster.cpp and FpTotalise.cpp always build: withFormat/FpTotalise
+# are SymFPU-free, and without ENABLE_FLOATING_POINT the blast entry points
+# become "built without floating-point support" stubs (the ifdefs are in
+# FloatBlaster.cpp). Only symbolic_fp.cpp -- the SymFPU backend -- needs
+# the library itself.
+set(floatblaster_sources
+    FloatBlaster.cpp
+    FloatBlast.cpp
+    FpEncodingContext.cpp
+    FpTotalise.cpp
+)
+if (ENABLE_FLOATING_POINT)
+    list(APPEND floatblaster_sources symbolic_fp.cpp)
 endif()
-
-# The floating-point self-test tools: ordinary executables that exit
-# non-zero on failure. Built when testing needs them or when the extra
-# tools are asked for -- not in a default build. They are registered with
-# CTest from tests/CMakeLists.txt, which is processed after
-# enable_testing() and after the checks that can turn ENABLE_TESTING off.
-if (ENABLE_FLOATING_POINT AND (ENABLE_TESTING OR BUILD_EXTRA_TOOLS))
-    add_subdirectory(test_fpbackend)
-endif()
-
+add_library(floatblaster OBJECT ${floatblaster_sources})
+add_dependencies(floatblaster ASTKind_header)
