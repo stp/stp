@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/STPManager/STPManager.h"
 #include <cassert>
 #include <math.h>
@@ -36,13 +37,6 @@ using std::map;
 /******************************************************************
  * Abstraction Refinement related functions
  ******************************************************************/
-
-enum Polarity
-{
-  LEFT_ONLY,
-  RIGHT_ONLY,
-  BOTH
-};
 
 void getSatVariables(const ASTNode& a, vector<unsigned>& v_a,
                      SATSolver& SatSolver, ToSATBase::ASTNodeToSATVar& satVar)
@@ -71,8 +65,7 @@ void getSatVariables(const ASTNode& a, vector<unsigned>& v_a,
 // Because it's used to create array axionms (a=b)-> (c=d), it can be
 // used to only add one of the two polarities.
 Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
-                       ToSATBase::ASTNodeToSATVar& satVar,
-                       Polarity polary = BOTH)
+                       ToSATBase::ASTNodeToSATVar& satVar, Polarity polary)
 {
   const unsigned width = a.GetValueWidth();
   assert(width == b.GetValueWidth());
@@ -94,7 +87,7 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
     {
       SATSolver::vec_literals s;
 
-      if (polary != RIGHT_ONLY)
+      if (polary != Polarity::RIGHT_ONLY)
       {
         int nv0 = SatSolver.newVar();
         s.push(SATSolver::mkLit(v_a[i], true));
@@ -112,7 +105,7 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
         all.push(SATSolver::mkLit(nv0, true));
       }
 
-      if (polary != LEFT_ONLY)
+      if (polary != Polarity::LEFT_ONLY)
       {
         s.push(SATSolver::mkLit(v_a[i], true));
         s.push(SATSolver::mkLit(v_b[i], false));
@@ -148,7 +141,7 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
     CBV v = constant.GetBVConst();
     for (unsigned i = 0; i < width; i++)
     {
-      if (polary != RIGHT_ONLY)
+      if (polary != Polarity::RIGHT_ONLY)
       {
         if (CONSTANTBV::BitVector_bit_test(v, i))
           all.push(SATSolver::mkLit(vec[i], true));
@@ -156,7 +149,7 @@ Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
           all.push(SATSolver::mkLit(vec[i], false));
       }
 
-      if (polary != LEFT_ONLY)
+      if (polary != Polarity::LEFT_ONLY)
       {
         SATSolver::vec_literals p;
         p.push(SATSolver::mkLit(result, true));
@@ -232,10 +225,10 @@ struct AxiomToBe
 void applyAxiomToSAT(SATSolver& SatSolver, AxiomToBe& toBe,
                      ToSATBase::ASTNodeToSATVar& satVar)
 {
-  Minisat::Var a =
-      getEquals(SatSolver, toBe.index0, toBe.index1, satVar, LEFT_ONLY);
-  Minisat::Var b =
-      getEquals(SatSolver, toBe.value0, toBe.value1, satVar, RIGHT_ONLY);
+  Minisat::Var a = getEquals(SatSolver, toBe.index0, toBe.index1, satVar,
+                             Polarity::LEFT_ONLY);
+  Minisat::Var b = getEquals(SatSolver, toBe.value0, toBe.value1, satVar,
+                             Polarity::RIGHT_ONLY);
   SATSolver::vec_literals satSolverClause;
   satSolverClause.push(SATSolver::mkLit(a, true));
   satSolverClause.push(SATSolver::mkLit(b, false));
@@ -289,6 +282,12 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
                       ArrayTransform->arrayToIndexToRead.begin(),
                       ArrayTransform->arrayToIndexToRead.end());
   sort(arrayToIndex.begin(), arrayToIndex.end(), sortBySize);
+
+  ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  const bool extActive = ext != NULL && ext->activeInSolve();
+  if (extActive)
+    FatalError("array-equality: legacy array-read refinement was invoked "
+               "during a solve owned by the extensionality checker");
 
   // In these loops we try to construct Leibnitz axioms and add it to
   // the solve(). We add only those axioms that are false in the
@@ -392,7 +391,8 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
 
         SOLVER_RETURN_TYPE res2;
         bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
-        res2 = CallSAT_ResultCheck(SatSolver, ASTTrue, original_input, tosat,
+        res2 = CallSAT_ResultCheck(SatSolver, ASTTrue, original_input,
+                                   original_input, tosat,
                                    true);
 
         if (SOLVER_UNDECIDED != res2)
@@ -413,7 +413,8 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
     applyAxiomsToSolver(satVar, RemainingAxiomsVec, SatSolver);
 
     bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
-    return CallSAT_ResultCheck(SatSolver, ASTTrue, original_input, tosat, true);
+    return CallSAT_ResultCheck(SatSolver, ASTTrue, original_input,
+                               original_input, tosat, true);
   }
 // For difficult problems, I suspec this is a better way to do it.
 // However because it can cause an extra three SAT solver calls, it slows down
@@ -443,7 +444,8 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
       bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
       SOLVER_RETURN_TYPE res2;
       res2 =
-          CallSAT_ResultCheck(SatSolver, ASTTrue, original_input, tosat, true);
+          CallSAT_ResultCheck(SatSolver, ASTTrue, original_input,
+                              original_input, tosat, true);
       if (SOLVER_UNDECIDED != res2)
         return res2;
 
@@ -452,6 +454,7 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
     assert(current_position == RemainingAxiomsVec.size());
     RemainingAxiomsVec.clear();
     assert(SOLVER_UNDECIDED == CallSAT_ResultCheck(SatSolver, ASTTrue,
+                                                   original_input,
                                                    original_input, tosat,
                                                    true));
   }

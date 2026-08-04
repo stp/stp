@@ -41,6 +41,7 @@ THE SOFTWARE.
 
 namespace stp
 {
+class ExtensionalityContext;
 
 // The five SMT-LIB floating-point special values. Their nodes are ordinary
 // packed interned constants (see STPMgr::CreateFPSpecialConst); a childless
@@ -91,6 +92,8 @@ private:
   // Table for variable names, let names etc.
   ASTSymbolSet _symbol_unique_table;
 
+  ExtensionalityContext* extensionality = nullptr;
+
   // Table to uniquefy bvconst
   ASTBVConstSet _bvconst_unique_table;
 
@@ -99,6 +102,16 @@ private:
 public:
   HashingNodeFactory* hashingNodeFactory;
   NodeFactory* defaultNodeFactory;
+
+  // State of the array-equality (extensional arrays) decision procedure:
+  // solve-local equality records, the complete per-solve array graph, and
+  // pending refinement. Created lazily when a completed solve root containing
+  // an opaque equality first reaches lowering.
+  DLL_PUBLIC ExtensionalityContext* getExtensionality();
+  ExtensionalityContext* getExtensionalityIfAny() const
+  {
+    return extensionality;
+  }
 
   // frequently used nodes
   ASTNode ASTFalse, ASTTrue, ASTUndefined;
@@ -498,6 +511,15 @@ public:
 
   const ASTVec GetAsserts();
   const ASTVec getVectorOfAsserts();
+
+  // Every assertion currently on the stack, appended to out. Unlike
+  // getVectorOfAsserts() this does not collapse each level into a
+  // single conjunct, so it is safe to call outside a solve.
+  void collectAsserts(ASTVec& out) const
+  {
+    for (size_t i = 0; i < _asserts.size(); i++)
+      out.insert(out.end(), _asserts[i]->begin(), _asserts[i]->end());
+  }
 
   // add a query/assertion to the current logical context
   void AddAssert(const ASTNode& assert);

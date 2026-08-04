@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Andrew V. Jones
+ * AUTHORS: Vijay Ganesh, Andrew Teylu
  *
  * BEGIN DATE: November, 2005
  *
@@ -81,6 +81,13 @@ public:
 
   // eagerly write through the array's function congruence axioms.
   bool ackermannisation = false;
+
+  // Decide whole-array equality/disequality (the extensional theory of
+  // arrays) with the lemmas-on-demand procedure of Brummayer & Biere
+  // (JSAT 2010). Runtime semantic option; it must be set before a
+  // whole-array equality is constructed. Construction preserves an opaque
+  // ARRAY_EQ, which is lowered only after the complete query is assembled.
+  bool enable_array_equality = false;
 
   // construct the counterexample in terms of original variable based
   // on the counterexample returned by SAT solver
