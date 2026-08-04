@@ -270,5 +270,5 @@ You will need to install [cmake](https://cmake.org/download/) and follow the ste
 * Mate Soos
 * Dan Liew
 * Ryan Govostes
-* Andrew V. Teylu
+* Andrew Teylu
 * And many others...
