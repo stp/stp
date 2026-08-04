@@ -514,6 +514,27 @@ static void run(Ctx& c)
            c.nf->CreateNode(FP_GEQ, {x, x}) == notNan);
   }
 
+  // The less-thans mirror onto the greater-thans (as BVLT does onto BVGT):
+  // fp.lt(a, b) = fp.gt(b, a) and fp.leq(a, b) = fp.geq(b, a), exactly, NaN
+  // included. Structural: the factory must produce the mirrored node.
+  // Semantic: the mirror must agree with the un-normalised original on every
+  // pair of floats, which is what makes the structural check trustworthy.
+  {
+    ASTNode x = c.fp(EB, SB), y = c.fp(EB, SB);
+
+    const ASTNode lt = c.nf->CreateNode(FP_LT, {x, y});
+    report("fp.lt(a, b) -> fp.gt(b, a)",
+           lt == c.hf->CreateNode(FP_GT, {y, x}));
+    std::string why = c.firstDisagreement(c.hf->CreateNode(FP_LT, {x, y}), lt);
+    report("fp.lt mirror exact on all pairs", why.empty(), why);
+
+    const ASTNode leq = c.nf->CreateNode(FP_LEQ, {x, y});
+    report("fp.leq(a, b) -> fp.geq(b, a)",
+           leq == c.hf->CreateNode(FP_GEQ, {y, x}));
+    why = c.firstDisagreement(c.hf->CreateNode(FP_LEQ, {x, y}), leq);
+    report("fp.leq mirror exact on all pairs", why.empty(), why);
+  }
+
   // fp.eq / fp.smt_eq are symmetric; the factory canonicalises operand order so
   // that x ~ y and y ~ x are the same node (and share a blasted circuit).
   {

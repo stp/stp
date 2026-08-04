@@ -614,15 +614,32 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
         result = NodeFactory::CreateNode(kind, children[0][0]);
       break;
 
-    // x < x and x > x are false, NaN included.
+    // Mirror the less-thans onto the greater-thans, as the bit-vector
+    // comparisons are above (BVLT -> BVGT): fp.lt(a, b) is fp.gt(b, a)
+    // exactly, NaN included -- both mean "ordered and strictly ordered", so
+    // the swap is a pure mirror -- and likewise for the non-strict pair.
+    // Downstream simplification then meets only the greater-than forms and
+    // needs half the comparison rules. (Unlike the total bit-vector order,
+    // this is as far as FP comparisons collapse: not(fp.lt) is geq-or-
+    // unordered, so the four kinds reduce to two, not one.)
     case stp::FP_LT:
+      if (children.size() == 2)
+        result = NodeFactory::CreateNode(stp::FP_GT, children[1], children[0]);
+      break;
+
+    case stp::FP_LEQ:
+      if (children.size() == 2)
+        result =
+            NodeFactory::CreateNode(stp::FP_GEQ, children[1], children[0]);
+      break;
+
+    // x > x is false, NaN included.
     case stp::FP_GT:
       if (children.size() == 2 && children[0] == children[1])
         result = ASTFalse;
       break;
 
-    // x <= x and x >= x hold exactly when x is not NaN.
-    case stp::FP_LEQ:
+    // x >= x holds exactly when x is not NaN.
     case stp::FP_GEQ:
       if (children.size() == 2 && children[0] == children[1])
         result = NodeFactory::CreateNode(
