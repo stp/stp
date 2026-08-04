@@ -41,6 +41,8 @@ add_library(AST OBJECT
     ASTNode.cpp
     ASTUtil.cpp
     ASTBVConst.cpp
+    ASTFPConst.cpp
+    ASTRMConst.cpp
     ASTmisc.cpp
     ASTSymbol.cpp
     MutableASTNode.cpp

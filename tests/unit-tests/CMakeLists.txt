@@ -28,6 +28,16 @@ AddSTPGTest(FindPureLiterals_Test.cpp)
 AddSTPGTest(Flatten_Test.cpp)
 AddSTPGTest(NodeDomainAnalysis_Test.cpp)
 AddSTPGTest(SplitExtracts_Test.cpp)
+# Not under ENABLE_FLOATING_POINT: the source-sort memo and the symbol name
+# index are AST machinery that floating point introduced but that every build
+# pays for, so both configurations have to cover them.
+AddSTPGTest(SourceSortMemo_Test.cpp)
+if (ENABLE_FLOATING_POINT)
+    AddSTPGTest(SourceSort_Test.cpp)
+    # Builds float-typed symbols, so it needs the floating-point funnels
+    # (SetExpWidth) to be more than a fatal error.
+    AddSTPGTest(BVSolver_Test.cpp)
+endif()
 AddSTPGTest(StrengthReduction_Test.cpp)
 AddSTPGTest(StrengthReduction_Exhaustive_Test.cpp)
 AddSTPGTest(RemoveUnconstrained_Exhaustive_Test.cpp)

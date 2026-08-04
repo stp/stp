@@ -228,6 +228,14 @@ public:
   unsigned int GetIndexWidth() const { return _int_node_ptr->getIndexWidth(); }
   DLL_PUBLIC unsigned int GetValueWidth() const
   {
+    // Invariant: a float-formatted node stores its packed width as the value
+    // width like any other term (the declaration rules and node builders all
+    // maintain this). The format is never the width's only source -- this
+    // accessor used to derive sig + exp on every call, solver-wide, to paper
+    // over declaration sites that left the value width zero.
+    assert(_int_node_ptr->getSigWidth() == 0 ||
+           _int_node_ptr->getValueWidth() ==
+               _int_node_ptr->getExpWidth() + _int_node_ptr->getSigWidth());
     return _int_node_ptr->getValueWidth();
   }
   void SetIndexWidth(unsigned int iw) const;
@@ -240,11 +248,49 @@ public:
     const unsigned int iw = GetIndexWidth();
     const unsigned int vw = GetValueWidth();
 
-    if (0 == iw)
-      return (0 == vw) ? BOOLEAN_TYPE : BITVECTOR_TYPE;
+    // Arrays first. An array of floats carries its *element's* format in the
+    // exponent and significand widths, so testing those first would call the
+    // array itself a float.
+    if (iw > 0)
+      return (vw > 0) ? ARRAY_TYPE : UNKNOWN_TYPE;
 
-    return (vw > 0) ? ARRAY_TYPE : UNKNOWN_TYPE;
+    if (GetSigWidth() != 0 && GetExpWidth() != 0)
+      return FLOATINGPOINT_TYPE;
+
+    return (0 == vw) ? BOOLEAN_TYPE : BITVECTOR_TYPE;
   }
+
+  // The immutable source-language sort. This is deliberately separate from
+  // GetType(), which remains the packed carrier classification consumed by
+  // STP's bit-vector pipeline.
+  //
+  // Memoised on the node; deriveSourceSort below is the derivation itself and
+  // runs at most once per node (see ASTInternal::cachedSourceSort).
+  SourceSort GetSourceSort() const;
+
+private:
+  // The derivation behind GetSourceSort, without the memo. Private so that
+  // nothing reintroduces the recomputation by calling it directly.
+  SourceSort deriveSourceSort() const;
+
+public:
+  unsigned int GetSigWidth() const;
+  unsigned int GetExpWidth() const;
+
+  // Work the floating-point format out from this node's kind and children and
+  // remember it. Called on demand by GetExpWidth/GetSigWidth; the format of an
+  // interior node is derived rather than assigned, so that rebuilding a node
+  // cannot lose it.
+  void cacheFPFormat() const;
+  void SetSigWidth(unsigned int sw) const;
+  void SetExpWidth(unsigned int ew) const;
+
+  // Whether a floating-point format may be *stored* on this node, rather than
+  // derived from its kind and children or not carried at all. SetExpWidth
+  // asserts on it and FloatBlaster::withFormat -- the funnel that decides
+  // where a format goes -- consults it; the rule, and what stamping a node
+  // that fails it would do, are with the definition.
+  bool canStoreFPFormat() const;
 
   // Hash is the node's unique id. Inlined: used by every ==/</hash lookup.
   size_t Hash() const { return _int_node_ptr ? _int_node_ptr->node_uid : 0; }

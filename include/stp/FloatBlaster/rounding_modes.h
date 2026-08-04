@@ -1,7 +1,7 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, David L. Dill
+ * AUTHORS: Andrew Teylu
  *
- * BEGIN DATE: November, 2005
+ * BEGIN DATE: January 2021
  *
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -22,34 +22,32 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 
-#include "stp/AST/ASTSymbol.h"
-#include "stp/AST/AST.h"
-#include "stp/STPManager/STP.h"
+// The one-hot rounding-mode encoding, split out of symbolic_fp.h so the
+// parser (which builds rounding-mode constants whether or not the SymFPU
+// backend is compiled in) does not drag in the SymFPU headers.
+
+#ifndef STP_FP_ROUNDING_MODES_H
+#define STP_FP_ROUNDING_MODES_H
 
 namespace stp
 {
-const ASTVec ASTSymbol::empty_children;
-
-// Get the name of the symbol
-const char* ASTSymbol::GetName() const
+namespace symbolic_fp
 {
-  return _name;
-}
 
-// Print function for symbol
-void ASTSymbol::nodeprint(ostream& os, bool /*c_friendly*/)
+// A rounding mode is a one-hot 5-bit bitvector: one bit per IEEE mode, so
+// an invalid mode is representable (all-zero, or multiple bits) and
+// roundingMode::valid() can constrain a symbolic one. The public C API's
+// VCRoundingMode mirrors these values.
+enum rounding_modes
 {
-  os << _name;
-}
+  ROUND_NEAREST_TIES_TO_EVEN = 1,
+  ROUND_TOWARD_POSITIVE = ROUND_NEAREST_TIES_TO_EVEN << 1,
+  ROUND_TOWARD_NEGATIVE = ROUND_TOWARD_POSITIVE << 1,
+  ROUND_TOWARD_ZERO = ROUND_TOWARD_NEGATIVE << 1,
+  ROUND_NEAREST_TIES_TO_AWAY = ROUND_TOWARD_ZERO << 1,
+};
 
-// Call this when deleting a node that has been stored in the the
-// unique table
-void ASTSymbol::CleanUp()
-{
-  nodeManager->_symbol_unique_table.erase(this);
-  nodeManager->unindexSymbolName(this);
-  free((char*)this->_name);
-  delete this;
-}
+} // namespace symbolic_fp
+} // namespace stp
 
-} // end of namespace
+#endif

@@ -98,16 +98,70 @@ class ASTInterior : public ASTInternal
   uint32_t _value_width;
   uint32_t _index_width;
 
-  virtual void setIndexWidth(uint32_t i) { _index_width = i; }
+  uint32_t _sig_width;
+  uint32_t _exp_width;
+
+  // Derived, and memoised on first request; see ASTInternal::cachedSourceSort.
+  // Points into the manager's intern pool, so it neither owns nor allocates.
+  //
+  // A width setter drops it, because the derivation reads the widths and
+  // legacy callers still set them after the node is built -- but only when the
+  // width actually changes. The node factories re-assert a node's widths on
+  // every hash-cons *hit* (HashingNodeFactory::CreateTerm), so invalidating
+  // unconditionally would throw the memo away on each of the DAG's incoming
+  // edges and leave the recomputation exactly as it was.
+  mutable const SourceSort* _source_sort_cache;
+
+  virtual void setIndexWidth(uint32_t i)
+  {
+    if (_index_width == i)
+      return;
+    _index_width = i;
+    _source_sort_cache = NULL;
+  }
   virtual uint32_t getIndexWidth() const { return _index_width; }
 
-  virtual void setValueWidth(uint32_t v) { _value_width = v; }
+  virtual void setValueWidth(uint32_t v)
+  {
+    if (_value_width == v)
+      return;
+    _value_width = v;
+    _source_sort_cache = NULL;
+  }
   virtual uint32_t getValueWidth() const { return _value_width; }
+
+  virtual void setSigWidth(uint32_t sw)
+  {
+    if (_sig_width == sw)
+      return;
+    _sig_width = sw;
+    _source_sort_cache = NULL;
+  }
+  virtual uint32_t getSigWidth() const { return _sig_width; }
+
+  virtual void setExpWidth(uint32_t ew)
+  {
+    if (_exp_width == ew)
+      return;
+    _exp_width = ew;
+    _source_sort_cache = NULL;
+  }
+  virtual uint32_t getExpWidth() const { return _exp_width; }
+
+  virtual const SourceSort* cachedSourceSort() const
+  {
+    return _source_sort_cache;
+  }
+  virtual void setCachedSourceSort(const SourceSort* s) const
+  {
+    _source_sort_cache = s;
+  }
 
 public:
   ASTInterior(STPMgr* mgr, Kind kind, const ASTVec& children)
       : ASTInternal(mgr, kind), _children(children), _value_width(0),
-        _index_width(0)
+        _index_width(0), _sig_width(0), _exp_width(0),
+        _source_sort_cache(NULL)
   {
     is_simplified = false;
     if (kind == NOT)
@@ -118,7 +172,8 @@ public:
   // avoiding a copy when the caller has a temporary to give up.
   ASTInterior(STPMgr* mgr, Kind kind, ASTVec&& children)
       : ASTInternal(mgr, kind), _children(std::move(children)), _value_width(0),
-        _index_width(0)
+        _index_width(0), _sig_width(0), _exp_width(0),
+        _source_sort_cache(NULL)
   {
     is_simplified = false;
     if (kind == NOT)
@@ -130,7 +185,9 @@ public:
   // ASTNode, does NOT invoke this.
   ASTInterior(const ASTInterior& int_node)
       : ASTInternal(int_node), _children(int_node._children),
-        _value_width(int_node._value_width), _index_width(int_node._index_width)
+        _value_width(int_node._value_width),
+        _index_width(int_node._index_width), _sig_width(int_node._sig_width),
+        _exp_width(int_node._exp_width), _source_sort_cache(NULL)
   {
     is_simplified = false;
   }
@@ -140,7 +197,8 @@ public:
   ASTInterior(ASTInterior&& int_node)
       : ASTInternal(int_node), _children(std::move(int_node._children)),
         _cached_hash(int_node._cached_hash), _value_width(int_node._value_width),
-        _index_width(int_node._index_width)
+        _index_width(int_node._index_width), _sig_width(int_node._sig_width),
+        _exp_width(int_node._exp_width), _source_sort_cache(NULL)
   {
     is_simplified = false;
   }
