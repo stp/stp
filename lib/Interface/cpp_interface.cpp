@@ -821,6 +821,12 @@ void Cpp_interface::getAssertions()
 
 void Cpp_interface::getValue(const ASTVec& v)
 {
+  if (!bm.UserFlags.construct_counterexample_flag)
+  {
+    unsupported();
+    return;
+  }
+
   std::ostringstream os;
 
   os << "(" << std::endl;
