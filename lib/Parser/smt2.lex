@@ -162,17 +162,16 @@ namespace stp
           free (cleaned);
         return  FLOATINGPOINT_FUNCTIONID_TOK;
       }
+      // A nullary define-fun whose body has array type is a pure name for
+      // that body, so it is accepted whether or not --array-equality is on
+      // (QF_ABVFP benchmarks use them with no whole-array equalities in
+      // sight). Uses of the name expand to the body in the grammar.
       else if (ft == stp::ARRAY_TYPE)
       {
-        // A nullary define-fun whose body has array type. Resolve it to that
-        // body -- there are no parameters to substitute -- and hand it back
-        // through the ordinary term path, exactly as a declared array symbol
-        // would be. Arrays have no *_FUNCTIONID_TOK of their own, so without
-        // this a later reference to the name falls through to STRING_TOK and
-        // the parser rejects it.
-        stp::ASTVec empty;
-        nptr = stp::GlobalParserInterface->applyFunction(s, empty);
-        found = true;
+        smt2lval.str = new std::string(s);
+        if (cleaned)
+          free (cleaned);
+        return  ARRAY_FUNCTIONID_TOK;
       }
       else if (stp::GlobalParserInterface->LookupSymbol(s,nptr)) // it's a symbol.
       {

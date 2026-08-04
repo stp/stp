@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/STPManager/STP.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/NodeToFixedBitsMap.h"
 #include "stp/ToSat/ToSATAIG.h"
@@ -73,8 +74,28 @@ const static string pe_message = "After Propagating Equalities. ";
 const static string domain_message = "After Domain Analysis. ";
 const static string se_message = "After Split Extracts. ";
 
+static bool containsOpaqueArrayEquality(const ASTNode& root)
+{
+  ASTNodeSet visited;
+  ASTVec pending(1, root);
+  while (!pending.empty())
+  {
+    const ASTNode node = pending.back();
+    pending.pop_back();
+    if (!visited.insert(node).second)
+      continue;
+    if (node.GetKind() == ARRAY_EQ)
+      return true;
+    for (unsigned i = 0; i < node.Degree(); ++i)
+      pending.push_back(node[i]);
+  }
+  return false;
+}
+
 SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS,
-                                            ASTNode original_input)
+                                            ASTNode original_input,
+                                            const ASTNodeMap&
+                                                arrayEqualityRewrites)
 {
   SATSolver& NewSolver = *newS;
   if (bm->UserFlags.stats_flag)
@@ -95,7 +116,8 @@ SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS,
   // reset the timeout expired flag for the new check
   bm->soft_timeout_expired = false;
 
-  SOLVER_RETURN_TYPE result = TopLevelSTPAux(NewSolver, original_input);
+  SOLVER_RETURN_TYPE result =
+      TopLevelSTPAux(NewSolver, original_input, arrayEqualityRewrites);
   return result;
 }
 
@@ -177,6 +199,7 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   bool saved_ack = bm->UserFlags.ackermannisation;
 
   ASTNode original_input;
+  ASTNodeMap arrayEqualityRewrites;
   if (query != bm->ASTFalse)
   {
     original_input =
@@ -204,11 +227,15 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   // RoundingMode-element arrays and RoundingMode symbols can each appear
   // without a single float node, hence the broader source-theory test.
   if (input_uses_floating_point_theory)
+  {
     original_input = fpEncodingContext->prepare(original_input);
+    fpEncodingContext->copyArrayEqualityRewrites(arrayEqualityRewrites);
+  }
 
   SATSolver* newS = get_new_sat_solver();
 
-  SOLVER_RETURN_TYPE result = solve_by_sat_solver(newS, original_input);
+  SOLVER_RETURN_TYPE result =
+      solve_by_sat_solver(newS, original_input, arrayEqualityRewrites);
   delete newS;
 
   bm->UserFlags.ackermannisation = saved_ack;
@@ -314,9 +341,48 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
 // if returned 0 then input is INVALID if returned 1 then input is
 // VALID if returned 2 then UNDECIDED
 SOLVER_RETURN_TYPE
-STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
+STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
+                    const ASTNodeMap& arrayEqualityRewrites)
 {
-  bm->ASTNodeStats("input asserts and query: ", original_input);
+  // ARRAY_EQ remains a normal, traversable AST node through query assembly
+  // and macro/function substitution. Lower it only now, at the complete-query
+  // boundary and before any ordinary simplifier or array transform runs.
+  ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  if (ext != NULL)
+    ext->beginSolve();
+
+  //
+  // Nothing here runs without the option. ARRAY_EQ has exactly one
+  // producer -- the hashing factory, which every front end's node
+  // creation bottoms out in -- and it refuses to build one while the
+  // option is off, so a query that never enabled it cannot contain one
+  // and does not have to be walked to find that out. A second check
+  // here would defend a state its own enforcement point already makes
+  // unreachable, at the price of a whole-DAG traversal on every solve
+  // STP performs.
+  // The rewrite map is subject to the same argument: floating-point
+  // preparation records an entry only for a node that was already an
+  // ARRAY_EQ, so a non-empty map means one was built, which means the
+  // option was on.
+  ASTNode semantic_input = original_input;
+  if (bm->UserFlags.enable_array_equality)
+  {
+    if (ext == NULL && (containsOpaqueArrayEquality(original_input) ||
+                        !arrayEqualityRewrites.empty()))
+    {
+      ext = bm->getExtensionality();
+      ext->beginSolve();
+    }
+    // Reuse an existing context object when present; beginSolve() above has
+    // cleared all generated records. The lowering pass builds fresh
+    // solve-local records and computes an empty active set when this root has
+    // no equality.
+    if (ext != NULL)
+      semantic_input =
+          ext->lowerArrayEqualities(original_input, arrayEqualityRewrites);
+  }
+
+  bm->ASTNodeStats("input asserts and query: ", semantic_input);
 
   // has_floating_point is deliberately only a manager-lifetime fast-negative
   // hint. A float built in a popped scope (or never asserted at all) must not
@@ -327,7 +393,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   DifficultyScore difficulty;
   if (bm->UserFlags.stats_flag)
-    cerr << "Difficulty Initially:" << difficulty.score(original_input, bm)
+    cerr << "Difficulty Initially:" << difficulty.score(semantic_input, bm)
          << endl;
 
   // A heap object so I can easily control its lifetime.
@@ -335,9 +401,38 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   std::unique_ptr<PropagateEqualities> pe(
       new PropagateEqualities(simp, bm->defaultNodeFactory, bm));
 
-  ASTNode inputToSat = original_input;
+  ASTNode inputToSat = semantic_input;
 
-  bool arrayops = containsArrayOps(inputToSat, bm);
+  // Array equality (lemmas on demand, Brummayer & Biere JSAT 2010):
+  // with at least one array equality reachable from the current root, conjoin
+  // exactly its active dependency closure's witness constraints. These are
+  // preprocessing step 1 of the paper: a fresh index lambda with two virtual
+  // reads witnessing inequality. The anchors keep each operand reachable and
+  // carry it through the same preprocessing as the rest of the formula so its
+  // current form can be recovered. Array-valued ITEs remain structural and
+  // are handled directly by the consistency checker's T rules. A query with
+  // no active array equality stays on STP's ordinary array path.
+  const bool extActive = ext != NULL && ext->active();
+  // Releases the record-table seal on every exit from this function.
+  ExtensionalityContext::SolveScope extScope(ext);
+  if (extActive)
+  {
+    inputToSat = ext->conjoinRecordConstraints(inputToSat);
+    if (bm->UserFlags.ackermannisation)
+    {
+      // Eager Ackermannization expands reads into if-then-else chains,
+      // destroying the array structure the lazy procedure works on.
+      cerr << "Warning: --ackermanize is disabled for queries with "
+              "array equality."
+           << endl;
+      bm->UserFlags.ackermannisation = false;
+    }
+  }
+
+  // Record anchors keep equality operands live even when no array operation
+  // is reachable from the lowered Boolean root, so active extensionality
+  // counts as array operations for the refinement machinery.
+  bool arrayops = containsArrayOps(inputToSat, bm) || extActive;
 
   // If the number of array reads is small. We rewrite them through.
   // The bit-vector simplifications are more thorough than the array
@@ -348,9 +443,11 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // introduced.
   // TODO: I chose the number of reads we perform this operation at randomly.
   bool removed = false;
-  if (arrayops && ((bm->UserFlags.ackermannisation &&
-                    numberOfReadsLessThan(inputToSat, 50)) ||
-                   numberOfReadsLessThan(inputToSat, 10)))
+  if (arrayops &&
+      !extActive && // array equality needs the refinement loop
+      ((bm->UserFlags.ackermannisation &&
+        numberOfReadsLessThan(inputToSat, 50)) ||
+       numberOfReadsLessThan(inputToSat, 10)))
   {
     // If the number of axioms that would be added it small. Remove them.
     bm->UserFlags.ackermannisation = true;
@@ -447,7 +544,13 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   long bitblasted_difficulty = -1;
   // Expensive, so only want to do it once.
-  if (bm->UserFlags.bitblast_simplification == -1 || initial_difficulty_score < bm->UserFlags.bitblast_simplification)
+  // The AIG-equivalence/constant substitutions found here are not
+  // recorded in the solver map, so they could silently strip a symbol
+  // the array-equality procedure depends on (an abstraction variable,
+  // witness name, or lemma-leaf name) out of the formula. They are an
+  // optimization; skip them when array equality is active.
+  if (!extActive &&
+      (bm->UserFlags.bitblast_simplification == -1 || initial_difficulty_score < bm->UserFlags.bitblast_simplification))
   {
     BBNodeManagerAIG bitblast_nodemgr;
     BitBlaster bb(&bitblast_nodemgr, simp, bm->defaultNodeFactory,
@@ -547,6 +650,20 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
       if (bm->UserFlags.simplify_to_constants_only)
       {    
           auto constants = simp->FindConsts_TopLevel(inputToSat, false);
+
+          // These replacements are not recorded in the solver map, so
+          // a symbol the array-equality procedure depends on must not
+          // be replaced away.
+          if (extActive)
+            for (ASTNodeMap::iterator cit = constants.begin();
+                 cit != constants.end();)
+            {
+              if (cit->first.GetKind() == SYMBOL &&
+                  ext->isProtected(cit->first))
+                cit = constants.erase(cit);
+              else
+                ++cit;
+            }
 
           if (bm->UserFlags.stats_flag)
                 cerr << "constants found:" << constants.size() << endl;
@@ -722,12 +839,49 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   }
   revert.reset(NULL);
 
+  // A pre-view pass may already have proved the formula false. In that
+  // case no candidate or bound graph is needed; any satisfiable active
+  // candidate is required below to have passed preparation and binding.
+  const bool extPrepared = extActive && !inputToSat.isConstant();
+  if (extPrepared)
+  {
+    // Array equality: final preparation, immediately before the one
+    // main array transform. Recover the current equality operands,
+    // collect and freeze the complete array graph (including retained
+    // array-valued if-then-elses), and conjoin the naming equations that
+    // give future lemma leaves SAT variables.
+    inputToSat = ext->prepare(inputToSat);
+    bm->ASTNodeStats("after extensionality preparation: ", inputToSat);
+  }
+
+  // ARRAY_EQ is a user-facing, solve-boundary node only.  Check the exact
+  // root handed to the ordinary array transformer so that no future
+  // preparation rewrite can accidentally leak opaque equality semantics
+  // into code which has no case for it.  This barrier is worth its walk,
+  // but only where the node it looks for can exist: with the option off
+  // the factory never built one, so a query that never enabled the
+  // feature pays nothing.
+  if (bm->UserFlags.enable_array_equality &&
+      containsOpaqueArrayEquality(inputToSat))
+    FatalError("array-equality: an opaque equality reached the final array "
+               "transformation boundary",
+               inputToSat);
+
+  // extPrepared implies extActive, and an active registry counts as array
+  // operations above -- so a prepared registry always reaches this transform.
+  // bindAfterTransform below reads the map only this call populates, so
+  // skipping it for a prepared registry would silently bind no reads.
+  assert(!extPrepared || arrayops);
+
   if (arrayops)
   {
     inputToSat = arrayTransformer->TransformFormula_TopLevel(inputToSat);
     bm->ASTNodeStats("after transformation: ", inputToSat);
   }
   bm->TermsAlreadySeenMap_Clear();
+
+  if (extPrepared)
+    ext->bindAfterTransform(arrayTransformer);
 
   bm->UserFlags.optimize_flag = optimize_enabled;
 
@@ -778,9 +932,13 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     bm->print_stats();
 
   // If it doesn't contain array operations, use ABC's CNF generation.
-  // The submitted and original forms coincide until the array-equality
-  // pass introduces a lowered form of its own; see the next commit.
-  res = Ctr_Example->CallSAT_ResultCheck(NewSolver, inputToSat, original_input,
+  // semantic_input decides the verdict; original_input -- the same query
+  // with its opaque array equalities still in place -- is what
+  // --check-counterexample re-evaluates, so the check covers the Boolean
+  // skeleton the lowering rebuilt rather than repeating the question
+  // just answered. The equalities themselves are checked against the
+  // published array cells, not re-evaluated here.
+  res = Ctr_Example->CallSAT_ResultCheck(NewSolver, inputToSat, semantic_input,
                                          original_input, satBase,
                                          maybeRefinement);
 
@@ -807,15 +965,50 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   assert(arrayops);
   assert(!bm->UserFlags.ackermannisation); // Refinement must be enabled too.
 
-  res = Ctr_Example->SATBased_ArrayReadRefinement(NewSolver, original_input,
-                                                  satBase);
-  if (SOLVER_UNDECIDED != res)
+  // Refinement driver. In an active equality solve the extensionality
+  // checker owns the complete array graph, so each undecided candidate
+  // must carry a pending theory lemma and legacy read refinement is
+  // never entered. Without an active equality, retain STP's ordinary
+  // read-refinement path unchanged.
+  while (true)
   {
-    if (toSATAIG.cbIsDestructed())
-      cleaner.release();
+    if (extActive)
+    {
+      if (!ext->hasPendingLemma())
+        FatalError("array-equality: an active refinement round has neither "
+                   "a decision nor a pending theory lemma");
+      ext->encodePendingLemmas(NewSolver, satBase);
+      res = Ctr_Example->CallSAT_ResultCheck(NewSolver, bm->ASTTrue,
+                                             semantic_input, original_input,
+                                             satBase, true);
+    }
+    else
+    {
+      res = Ctr_Example->SATBased_ArrayReadRefinement(NewSolver,
+                                                      semantic_input, satBase);
+    }
 
-    CountersAndStats("print_func_stats", bm);
-    return res;
+    if (SOLVER_UNDECIDED != res)
+    {
+      if (toSATAIG.cbIsDestructed())
+        cleaner.release();
+
+      CountersAndStats("print_func_stats", bm);
+      return res;
+    }
+
+    // Refinement reached no decision but the soft timeout has expired:
+    // report the timeout instead of iterating further (or falling into
+    // the fatal error below when nothing more is pending).
+    if (bm->soft_timeout_expired)
+    {
+      if (toSATAIG.cbIsDestructed())
+        cleaner.release();
+      return SOLVER_TIMEOUT;
+    }
+
+    if (!extActive)
+      break;
   }
 
   FatalError("TopLevelSTPAux: reached the end without proper conclusion:"

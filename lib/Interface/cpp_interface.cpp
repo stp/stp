@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/cpp_interface.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/Parser/LetMgr.h"
 #include "stp/Printer/printers.h"
 #include "stp/Util/GitSHA1.h"
@@ -47,7 +48,6 @@ void Cpp_interface::checkInvariant()
 void Cpp_interface::init()
 {
   assert(nf != NULL);
-  alreadyWarned = false;
 
   cache.push_back(Entry(SOLVER_UNDECIDED));
 
@@ -158,27 +158,12 @@ void Cpp_interface::SetQuery(const ASTNode& q)
 
 ASTNode Cpp_interface::CreateNode(stp::Kind kind, const stp::ASTVec& children)
 {
-  if (kind == EQ && children.size() > 0 && children[0].GetIndexWidth() > 0 && !alreadyWarned)
-  {
-    cerr << "Warning: Parsing a term that uses array extensionality. "
-            "STP doesn't handle array extensionality."
-         << endl;
-    alreadyWarned = true;
-  }
-
   return nf->CreateNode(kind, children);
 }
 
 ASTNode Cpp_interface::CreateNode(stp::Kind kind, const stp::ASTNode n0,
                                   const stp::ASTNode n1)
 {
-  if (n0.GetIndexWidth() > 0 && !alreadyWarned)
-  {
-    cerr << "Warning: Parsing a term that uses array extensionality. "
-            "STP doesn't handle array extensionality."
-         << endl;
-    alreadyWarned = true;
-  }
   return nf->CreateNode(kind, n0, n1);
 }
 
@@ -481,6 +466,17 @@ void Cpp_interface::resetSolver()
   GlobalSTP->ClearAllTables();
 }
 
+// Public and define-fun handles retain opaque ARRAY_EQ nodes, never generated
+// proxies. Scope mutation can therefore discard the complete last-solve table
+// without inspecting which handles remain live; future assertions lower their
+// durable structural handles afresh.
+void Cpp_interface::discardExtensionalitySolveState()
+{
+  ExtensionalityContext* ext = bm.getExtensionalityIfAny();
+  if (ext != NULL)
+    ext->beginSolve();
+}
+
 // Can clear away the base frame..
 void Cpp_interface::reset()
 {
@@ -499,6 +495,7 @@ void Cpp_interface::reset()
   // These tables might hold references to symbols that have been
   // removed.
   resetSolver();
+  discardExtensionalitySolveState();
 
   cleanUp();
 
@@ -540,6 +537,7 @@ void Cpp_interface::resetAssertions()
 
   // These tables may retain the discarded assertions or declarations.
   resetSolver();
+  discardExtensionalitySolveState();
 
   cache.push_back(Entry(SOLVER_UNDECIDED));
   addFrame();
@@ -560,6 +558,7 @@ void Cpp_interface::pop()
   // These tables might hold references to symbols that have been
   // removed.
   resetSolver();
+  discardExtensionalitySolveState();
 
   cache.erase(cache.end() - 1);
 
@@ -827,7 +826,12 @@ void Cpp_interface::getValue(const ASTVec& v)
 
   for (ASTNode n : v)
   {
-    if (n.GetKind() != SYMBOL)
+    // Array-valued get-value is explicitly unsupported when array
+    // equality is enabled; use (get-model), which prints the completed
+    // array interpretations. With the feature disabled the
+    // pre-extension behavior is preserved unchanged.
+    if (n.GetKind() != SYMBOL ||
+        (n.GetType() == ARRAY_TYPE && bm.UserFlags.enable_array_equality))
     {
       unsupported();
       return;

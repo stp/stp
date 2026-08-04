@@ -26,6 +26,12 @@ ASTNode FpEncodingContext::prepare(const ASTNode& source)
   return totalise.topLevel(source);
 }
 
+void FpEncodingContext::copyArrayEqualityRewrites(ASTNodeMap& out) const
+{
+  requireOriginalNodeFactory();
+  totalise.copyArrayEqualityRewrites(out);
+}
+
 ASTNode FpEncodingContext::lowerPrepared(const ASTNode& prepared)
 {
   requireOriginalNodeFactory();

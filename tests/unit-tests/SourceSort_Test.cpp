@@ -65,3 +65,27 @@ TEST(SourceSort, typed_same_name_symbols_do_not_retype_each_other)
   EXPECT_EQ(SourceSort::Kind::RoundingMode, rm.GetSourceSort().kind());
   EXPECT_EQ(SourceSort::Kind::BitVector, bits.GetSourceSort().kind());
 }
+
+TEST(SourceSort, array_equality_rejects_equal_width_different_source_sorts)
+{
+  STPMgr mgr;
+  mgr.UserFlags.enable_array_equality = true;
+
+  const ASTNode fp_indexed = mgr.CreateSourceSymbol(
+      "fp_indexed",
+      SourceSort::array(SourceSort::floatingPoint(8, 24),
+                        SourceSort::bitVector(8)));
+  const ASTNode bv_indexed = mgr.CreateSourceSymbol(
+      "bv_indexed",
+      SourceSort::array(SourceSort::bitVector(32),
+                        SourceSort::bitVector(8)));
+
+  // The carrier widths agree, but these are different SMT source sorts.
+  EXPECT_DEATH(
+      mgr.hashingNodeFactory->CreateNode(EQ, ASTVec{fp_indexed, bv_indexed}),
+      "identical source sorts");
+  EXPECT_DEATH(
+      mgr.hashingNodeFactory->CreateNode(ARRAY_EQ,
+                                         ASTVec{fp_indexed, bv_indexed}),
+      "identical source sorts");
+}

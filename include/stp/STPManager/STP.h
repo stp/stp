@@ -64,10 +64,13 @@ class STP
   // counterexample for invalid queries, and prints them upon
   // request.
   SOLVER_RETURN_TYPE TopLevelSTPAux(SATSolver& NewSolver,
-                                    const ASTNode& modified_input);
+                                    const ASTNode& modified_input,
+                                    const ASTNodeMap& arrayEqualityRewrites);
 
   SOLVER_RETURN_TYPE solve_by_sat_solver(SATSolver* newS,
-                                         ASTNode original_input);
+                                         ASTNode original_input,
+                                         const ASTNodeMap&
+                                             arrayEqualityRewrites);
 
   SATSolver* get_new_sat_solver();
 

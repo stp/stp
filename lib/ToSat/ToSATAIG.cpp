@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/ToSat/ToSATAIG.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 
@@ -189,6 +190,53 @@ void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
         for (size_t i = 0, size = v.size(); i < size; ++i)
           satSolver.setFrozen(v[i]);
       }
+    }
+  }
+
+  // The array-equality procedure encodes its refinement lemmas over
+  // the SAT variables of its abstraction variables, witness symbols
+  // and scalar names; keep those variables from being eliminated.
+  ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  if (ext != NULL && ext->activeInSolve())
+  {
+    const std::set<ASTNode>& symbols = ext->getFrozenSymbols();
+    for (std::set<ASTNode>::const_iterator it = symbols.begin();
+         it != symbols.end(); ++it)
+    {
+      ASTNodeToSATVar::iterator vit = nodeToSATVar.find(*it);
+      if (vit == nodeToSATVar.end())
+        continue;
+      const vector<unsigned>& v = vit->second;
+      for (size_t i = 0, size = v.size(); i < size; ++i)
+        if (v[i] != ~((unsigned)0))
+          satSolver.setFrozen(v[i]);
+    }
+
+    // A lemma-only symbol -- an owned read's abstraction variable or
+    // index -- may legally never have reached the bit-blast: the
+    // read's only occurrence can itself sit inside another abstracted
+    // term. Its semantics live entirely in future refinement lemmas,
+    // so fresh SAT variables allocated here, before the first solve,
+    // are exactly the unconstrained meaning the blasted formula gives
+    // it; the model loop then values them like any other symbol, and
+    // the lemmas constrain the same variables the candidate was
+    // checked against. Names defined by equations are deliberately
+    // not treated this way -- for them a missing vector still fails
+    // loudly at lemma encoding.
+    const std::set<ASTNode>& lemmaOnly = ext->getLemmaOnlySymbols();
+    for (std::set<ASTNode>::const_iterator it = lemmaOnly.begin();
+         it != lemmaOnly.end(); ++it)
+    {
+      if (nodeToSATVar.find(*it) != nodeToSATVar.end())
+        continue;
+      const unsigned width = it->GetValueWidth();
+      vector<unsigned> v(width);
+      for (unsigned i = 0; i < width; i++)
+      {
+        v[i] = satSolver.newVar();
+        satSolver.setFrozen(v[i]);
+      }
+      nodeToSATVar.insert(make_pair(*it, v));
     }
   }
 }

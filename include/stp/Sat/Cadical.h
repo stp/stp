@@ -77,6 +77,8 @@ public:
 
   uint32_t newVar() override;
 
+  void setFrozen(uint32_t var) override;
+
   bool setSearchBias(SearchBias bias) override;
 
   void setVerbosity(int v) override;

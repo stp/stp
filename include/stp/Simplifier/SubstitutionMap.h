@@ -61,6 +61,14 @@ class DLL_PUBLIC SubstitutionMap
                     std::set<ASTNode>& visited);
   bool loops(const ASTNode& n0, const ASTNode& n1);
 
+  // Array equality: while the complete-graph checker is active, refuse
+  // either orientation if it would delete a protected scalar definition or
+  // any READ-headed equation. Every read is checker-owned, independently of
+  // its other operand's shape or its connectivity to an equality operand.
+  // Oriented: "key" is the side that gets replaced. See the definition.
+  bool extensionalityProtected(const ASTNode& key,
+                               const ASTNode& value) const;
+
   size_t substitutionsLastApplied;
   VariablesInExpression vars;
 
@@ -125,6 +133,9 @@ public:
   {
     ASTNode var = (BVEXTRACT == key.GetKind()) ? key[0] : key;
 
+    if (extensionalityProtected(var, value))
+      return false;
+
     if (var.GetKind() == SYMBOL && loops(var, value))
       return false;
 
@@ -154,6 +165,8 @@ public:
   {
     assert(e0.GetKind() == SYMBOL);
     assert(!InsideSubstitutionMap(e0) && "e0 MUST NOT be in the SolverMap");
+    if (extensionalityProtected(e0, e1))
+      return false;
     (*SolverMap)[e0] = e1;
     return true;
   }
