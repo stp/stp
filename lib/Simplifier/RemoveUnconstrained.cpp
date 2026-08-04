@@ -37,6 +37,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/RemoveUnconstrained.h"
 #include "stp/AST/MutableASTNode.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/Simplifier/AchievableImage.h"
 #include "stp/Simplifier/constantBitP/Dependencies.h"
 
@@ -690,6 +691,92 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
           MutableASTNode* newN = MutableASTNode::build(n, create);
           muteParent.replaceWithAnotherNode(newN);
           // assert(muteParent.checkInvariant());
+        }
+      }
+      break;
+
+      case FP_GT:
+      {
+        // fp.gt over an unconstrained float, handled here while the
+        // comparison is still one source node and the variable one use --
+        // after FloatBlast the variable feeds its unpack circuit many times
+        // over and stops looking unconstrained. The witnesses are IEEE's
+        // extremes: NaN makes any ordered comparison false, and an infinity
+        // of the right sign makes fp.gt true whenever any value can.
+        if (numberOfChildren != 2)
+          break;
+
+        const SourceSort sort = var.GetSourceSort();
+        if (sort.kind() != SourceSort::Kind::FloatingPoint)
+          break;
+
+        const unsigned exp_width = sort.exponentWidth();
+        const unsigned sig_width = sort.significandWidth();
+
+        // A format the blaster refuses has to keep refusing: eliminating
+        // the comparison first would turn that loud refusal into a quiet
+        // wrong-looking answer.
+        if (!FloatBlaster::formatSupported(exp_width, sig_width))
+          break;
+
+        width = var.GetValueWidth();
+
+        // NaN and the infinities intern canonically (CreateFPConst funnels
+        // every NaN payload to the one quiet NaN), so recognising them in a
+        // constant operand is node identity.
+        const ASTNode nan =
+            bm.CreateFPSpecialConst(FPSpecial::NaN, exp_width, sig_width);
+
+        if (mutable_children[0]->isUnconstrained() &&
+            mutable_children[1]->isUnconstrained() &&
+            children[0].GetSourceSort() == children[1].GetSourceSort())
+        {
+          // x > y: true via (+oo, +0), false via (NaN, NaN).
+          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+          replace(children[0],
+                  nf->CreateTerm(ITE, width, v,
+                                 bm.CreateFPSpecialConst(
+                                     FPSpecial::PlusInfinity, exp_width,
+                                     sig_width),
+                                 nan));
+          replace(children[1],
+                  nf->CreateTerm(ITE, width, v,
+                                 bm.CreateFPSpecialConst(FPSpecial::PlusZero,
+                                                         exp_width, sig_width),
+                                 nan));
+        }
+        else if (other.GetSourceSort() == sort)
+        {
+          // FP constant folding is deferred solver-wide, so a literal
+          // usually arrives as to_fp's three-child reinterpret form over
+          // constant bits, not as an interned constant. Resolve it locally,
+          // through the canonicalising funnel (CreateFPConst), so NaN
+          // payloads compare by node identity below. `other` itself is not
+          // rewritten; it leaves the formula along with the predicate.
+          ASTNode constant = other;
+          if (constant.GetKind() == FP_TOFP && constant.Degree() == 3 &&
+              constant[2].GetKind() == BVCONST)
+            constant = bm.CreateFPConst(constant[2], exp_width, sig_width);
+
+          if (!constant.isConstant())
+            break;
+
+          const bool varOnLHS = (children[0] == var);
+
+          // The constant the variable's side cannot beat: nothing exceeds
+          // +oo (variable on the left), nothing lies below -oo (variable on
+          // the right) -- and nothing compares to NaN.
+          const ASTNode unbeatable = bm.CreateFPSpecialConst(
+              varOnLHS ? FPSpecial::PlusInfinity : FPSpecial::MinusInfinity,
+              exp_width, sig_width);
+
+          if (constant == nan || constant == unbeatable)
+            continue; // Always false; the blasted circuit collapses it.
+
+          // Both outcomes achievable: the variable's own extreme wins,
+          // NaN loses.
+          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+          replace(var, nf->CreateTerm(ITE, width, v, unbeatable, nan));
         }
       }
       break;
