@@ -151,8 +151,6 @@ class BitBlaster
 
   /////////// The end of the multiplication stuff..
 
-  void checkFixed(const BBNodeVec& v, const ASTNode& n);
-
   // AND each bit of vector y with single bit b and return the result.
   // (used in BBMult)
   // BBNodeVec BBAndBit(const BBNodeVec& y, ASTNode b);

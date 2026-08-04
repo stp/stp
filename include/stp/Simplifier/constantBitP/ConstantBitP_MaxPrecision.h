@@ -35,12 +35,6 @@ namespace simplifier
 namespace constantBitP
 {
 
-enum Direction
-{
-  UPWARDS_ONLY,
-  BOTH_WAYS
-};
-
 // This is used for very specific purposes.
 enum Type
 {
@@ -55,7 +49,6 @@ struct Signature
   Type inputType;
   int maxInputWidth;
   int numberOfInputs;
-  Direction direction;
   bool imprecise;
   Signature() { imprecise = false; }
 };
