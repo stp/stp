@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/SubstitutionMap.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/Simplifier/Simplifier.h"
 
 namespace stp
@@ -405,11 +406,63 @@ bool SubstitutionMap::loops(const ASTNode& n0, const ASTNode& n1)
   return (loops);
 }
 
+// Two obligations while array equality is active, with two different
+// shapes. Callers pass the substitution oriented: "key" is what gets
+// replaced and whose defining equation leaves the formula.
+//
+// Protected symbols -- equality abstraction variables, witness indices
+// and witness-read names, lemma-leaf names -- must survive to the
+// bit-blast, because their SAT variables carry the refinement lemmas
+// and the witness-read equations are how each equality operand's
+// current form is recovered afterwards. A protected symbol is refused
+// on whichever side it appears: as a key it would vanish outright, and
+// keeping the check symmetric costs nothing, since there are only a
+// handful of them.
+//
+// Reads are different, and only one orientation is dangerous. With the
+// checker owning the complete array graph, an access it never sees is
+// an access it cannot catch a disagreement at. TermOrder makes a READ
+// the key in exactly one situation, READ(Arr, const) against a
+// constant; that substitution deletes the read from the formula and
+// bakes its value in, so a second read of the same cell across a true
+// array equality would have nothing left to conflict with. Refuse it.
+//
+// The other orientation, "v |-> READ(A, i)", deletes nothing: the read
+// is copied to wherever v occurred and reaches the checker from there,
+// and if v occurred nowhere else then the read constrained nothing to
+// begin with. Refusing that one as well -- which is what a bare
+// "either side is a READ" test does -- suppressed BVSolver over every
+// read in the query, connected to an equality or not, and cost more
+// than the whole decision procedure on array-heavy input.
+bool SubstitutionMap::extensionalityProtected(const ASTNode& key,
+                                              const ASTNode& value) const
+{
+  ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  if (ext == NULL || !ext->activeInSolve())
+    return false;
+  if (key.GetKind() == SYMBOL && ext->isProtected(key))
+    return true;
+  if (value.GetKind() == SYMBOL && ext->isProtected(value))
+    return true;
+  // The equation-deleting orientation: the read itself is the key.
+  if (key.GetKind() == READ)
+    return true;
+  return false;
+}
+
 bool SubstitutionMap::UpdateSubstitutionMap(const ASTNode& e0,
                                             const ASTNode& e1)
 {
   int i = TermOrder(e0, e1);
   if (0 == i)
+    return false;
+
+  // TermOrder has already chosen which side is the key: e0 when it
+  // returned 1, e1 when it returned -1. extensionalityProtected needs
+  // that orientation, because only a read in key position deletes an
+  // access. The later "i = -1" flip below cannot change the answer:
+  // it applies only when both sides are symbols.
+  if (extensionalityProtected(1 == i ? e0 : e1, 1 == i ? e1 : e0))
     return false;
 
   assert(e0 != e1);

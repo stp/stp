@@ -187,3 +187,37 @@ if (ENABLE_FLOATING_POINT)
     add_test(NAME test_fpbackend COMMAND test_fpbackend)
     add_test(NAME test_fprewrites COMMAND test_fprewrites)
 endif()
+
+# -----------------------------------------------------------------------------
+# Default-off baseline differential for the array-equality feature
+#
+# Builds the pinned pre-extension baseline commit from repository history
+# with the candidate's toolchain, runs the identical C API observation
+# driver (tools/extdiff) against both with array equality disabled, and
+# requires byte-identical output after canonicalizing the API's unspecified
+# counterexample-array entry order. Skips cleanly when the baseline commit is
+# unavailable (e.g. shallow CI clones). The baseline checkout/build is cached
+# inside the build tree, so only the first run pays for it.
+#
+# Opt-in (-DTEST_BASELINE_DIFFERENTIAL=ON): the first run configures and
+# compiles an entire second STP from git history, which a plain ctest
+# invocation should not pay for by surprise.
+# -----------------------------------------------------------------------------
+
+option(TEST_BASELINE_DIFFERENTIAL
+       "Enable the default-off C API baseline differential test"
+       OFF
+      )
+
+if(TEST_BASELINE_DIFFERENTIAL AND BUILD_EXECUTABLES)
+    add_test(
+      NAME default-off-capi-baseline-differential
+      COMMAND ${PROJECT_SOURCE_DIR}/scripts/extdiff-baseline-differential.sh
+              ${PROJECT_SOURCE_DIR} ${PROJECT_BINARY_DIR}
+    )
+    set_tests_properties(default-off-capi-baseline-differential PROPERTIES
+      SKIP_RETURN_CODE 77
+      TIMEOUT 1800
+      LABELS "baseline-differential"
+    )
+endif()

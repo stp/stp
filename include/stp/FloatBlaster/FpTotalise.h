@@ -103,10 +103,19 @@ public:
   FpTotalise(const FpTotalise&) = delete;
   FpTotalise& operator=(const FpTotalise&) = delete;
 
-  // Returns `n` with every partial floating-point operation replaced by its
-  // total form. Idempotent: operations that already carry an unspecified
-  // value are left alone.
+  // Returns one unprocessed solve root with every partial floating-point
+  // operation replaced by its total form. Operations that already carry an
+  // unspecified value are left alone, but the complete pass is deliberately
+  // not structurally idempotent: feeding its output back through it would
+  // canonicalise float-array indexes a second time.
   ASTNode topLevel(const ASTNode& n);
+
+  // Copy the opaque array equalities rebuilt by the most recent topLevel()
+  // call. Public expression handles retain the pre-totalisation node, while
+  // solve-boundary array lowering sees the rebuilt node; the solve pipeline
+  // uses these aliases to keep model evaluation of the public handle tied to
+  // the exact formula that was solved.
+  void copyArrayEqualityRewrites(ASTNodeMap& out) const;
 
 private:
   ASTNode visit(const ASTNode& n);
@@ -166,6 +175,12 @@ private:
   // enormous pre-simplification DAGs alive for the lifetime of the model.
   ASTNodeMap traversal_cache;
   ASTNodeMap persistent_cache;
+
+  // ARRAY_EQ is lowered by the extensionality layer after this pass. Keep
+  // only the aliases whose operands preparation rebuilt, so public handles
+  // and the prepared solve root identify the same opaque equality without
+  // retaining the rest of the traversal DAG.
+  ASTNodeMap array_equality_rewrites;
 };
 
 } // namespace stp

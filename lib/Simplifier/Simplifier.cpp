@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/Simplifier.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
 #include <cassert>
 #include <cmath>
@@ -2468,7 +2469,9 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
                                 read_index);
         }
       }
-      else if (ITE == array_term.GetKind())
+      else if (ITE == array_term.GetKind() &&
+               !(_bm->getExtensionalityIfAny() != NULL &&
+                 _bm->getExtensionalityIfAny()->activeInSolve()))
       {
         // Pushes the READ through ITES, which is potentially exponential.
         // At present, because there's no write refinement or similar, the
@@ -2483,6 +2486,14 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         read1 = SimplifyTerm(read1);
         read2 = SimplifyTerm(read2);
         out1 = CreateSimplifiedTermITE(cond, read1, read2);
+      }
+      else if (ITE == array_term.GetKind())
+      {
+        // Array equality is running: leave the read on the if-then-else.
+        // Distributing it would put the reads on the branches, where the
+        // consistency checker's T rules cannot see them, and would push a
+        // witness anchor into a shape operand recovery does not accept.
+        out1 = nf->CreateTerm(READ, inputValueWidth, array_term, read_index);
       }
       else
       {

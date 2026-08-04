@@ -113,8 +113,9 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize,
       // dialect 1: the bitvector constant spelling.
       if (smtlib1)
         outputBitVec(n, os);
-      // A float constant is stored as its packed bits, but denotes a float:
-      // print it in (fp ...) syntax, not as a bitvector literal.
+      // A rounding mode and a float are both stored as packed bits but
+      // denote neither: print them by mode name and in (fp ...) syntax
+      // rather than as bitvector literals.
       else if (n.GetSourceSort().kind() == stp::SourceSort::Kind::RoundingMode)
       {
         const char* name = roundingModeName(n.GetUnsignedConst());
@@ -533,6 +534,7 @@ string functionToSMTLIBName(const Kind k, bool smtlib1)
     case BVUMINUS:
       return "bvneg";
     case EQ:
+    case ARRAY_EQ:
       return "=";
     case READ:
       return "select";

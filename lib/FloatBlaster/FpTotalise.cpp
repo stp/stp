@@ -33,9 +33,15 @@ namespace stp
 
 FpTotalise::FpTotalise(STPMgr* bm_) : bm(bm_), nf(bm_->defaultNodeFactory) {}
 
+void FpTotalise::copyArrayEqualityRewrites(ASTNodeMap& out) const
+{
+  out.insert(array_equality_rewrites.begin(), array_equality_rewrites.end());
+}
+
 ASTNode FpTotalise::topLevel(const ASTNode& n)
 {
   traversal_cache.clear();
+  array_equality_rewrites.clear();
   ASTNode out = visit(n);
 
   // Pin every rounding mode the final formula names -- declared symbols and
@@ -353,6 +359,9 @@ ASTNode FpTotalise::visit(const ASTNode& n)
   const ASTNode out = changed ? rebuild(n, children) : n;
 
   traversal_cache[n] = out;
+  if (out != n && k == ARRAY_EQ)
+    array_equality_rewrites[n] = out;
+
   const SourceSort source_sort = n.GetSourceSort();
   const bool fp_array_access =
       (k == READ || k == WRITE) && n.Degree() > 0 &&

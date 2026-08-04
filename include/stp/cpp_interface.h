@@ -101,7 +101,6 @@ class Cpp_interface
 {
   STPMgr& bm;
   std::map<std::string, std::pair<unsigned, unsigned>> sort_aliases;
-  bool alreadyWarned;
   bool print_success;
   bool ignoreCheckSatRequest;
 
@@ -250,6 +249,10 @@ public:
 
   void removeSymbol(ASTNode to_remove);
 
+  // Release query-local generated state whenever assertions/scoped symbols
+  // are discarded; durable user expressions contain opaque ARRAY_EQ nodes.
+  void discardExtensionalitySolveState();
+
   // Declare a function. We can't keep references to the declared variables
   // though. So rename them..
   DLL_PUBLIC void storeFunction(const std::string& name, const ASTVec& params,
@@ -258,10 +261,10 @@ public:
   DLL_PUBLIC ASTNode applyFunction(const std::string& name,
                                    const ASTVec& params);
 
-  // Classify a name in a single map probe: returns the function's carrier
-  // return type (BITVECTOR_TYPE or BOOLEAN_TYPE), or UNKNOWN_TYPE when the
-  // name is not a stored function. Source-only distinctions are available
-  // from functionReturnSourceSort().
+  // Classify a name by its carrier return type in a single map probe:
+  // BITVECTOR_TYPE or BOOLEAN_TYPE, or UNKNOWN_TYPE when the name is not a
+  // stored function. Source-only distinctions are available from
+  // functionReturnSourceSort().
   DLL_PUBLIC types functionReturnType(const std::string& name);
   DLL_PUBLIC SourceSort functionReturnSourceSort(const std::string& name);
   bool hasFunctions() const { return !functions.empty(); }

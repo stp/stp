@@ -82,6 +82,7 @@ string functionToCVCName(const Kind k)
     case BVNOT:
       return "~";
     case EQ:
+    case ARRAY_EQ:
       return "=";
     case BVCONCAT:
       return "@";
@@ -298,6 +299,7 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize,
     case BVOR:
     case BVAND:
     case EQ:
+    case ARRAY_EQ:
     case IFF:
     case IMPLIES:
       assert(2 == c.size());

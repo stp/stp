@@ -29,6 +29,10 @@ public:
   // formula-level source-sort side conditions.
   ASTNode prepare(const ASTNode& source);
 
+  // Copy opaque array-equality aliases produced by the most recent prepare()
+  // call for the solve-boundary extensionality lowering pass.
+  void copyArrayEqualityRewrites(ASTNodeMap& out) const;
+
   // Lower a prepared expression to its packed bit-vector circuit. Kept
   // separate because the word-level simplifiers run between these two steps.
   ASTNode lowerPrepared(const ASTNode& prepared);

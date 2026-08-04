@@ -1160,7 +1160,7 @@ namespace stp
 %token  DECIMAL_TOK
 
 %token <node> FORMID_TOK TERMID_TOK
-%token <str> STRING_TOK BITVECTOR_FUNCTIONID_TOK BOOLEAN_FUNCTIONID_TOK FLOATINGPOINT_FUNCTIONID_TOK
+%token <str> STRING_TOK BITVECTOR_FUNCTIONID_TOK BOOLEAN_FUNCTIONID_TOK FLOATINGPOINT_FUNCTIONID_TOK ARRAY_FUNCTIONID_TOK
 
 
  /* set-info tokens */
@@ -1808,20 +1808,21 @@ STRING_TOK LPAREN_TOK function_params RPAREN_TOK an_array_sort an_term
 STRING_TOK LPAREN_TOK RPAREN_TOK an_array_sort an_term
 {
   // A nullary define-fun whose result is an array. This is just a name for
-  // its body, stored like any other nullary function; the lexer resolves
-  // later references to it back to that body. A body whose widths disagree
-  // with the declared sort is reported -- mirroring the sibling bitvector
-  // define-fun productions -- and still stored, so parsing continues. The
-  // sorts that share one bit layout (a float index or element format,
-  // RoundingMode on either side) get their own check: the widths cannot
-  // tell them apart.
+  // its body, stored like any other nullary function -- accepted with or
+  // without --array-equality; the lexer resolves later references to it
+  // back to that body. A body whose widths disagree with the declared sort
+  // is reported -- mirroring the sibling bitvector define-fun productions
+  // -- and still stored, so parsing continues. The sorts that share one
+  // bit layout (a float index or element format, RoundingMode on either
+  // side) get their own check: the widths cannot tell them apart.
   if ($5->GetIndexWidth() != $4->index.width ||
       $5->GetValueWidth() != $4->elem.width)
   {
     char msg [100];
-    sprintf(msg, "Different array widths specified: (%d %d) vs (%d %d)",
-            $5->GetIndexWidth(), $5->GetValueWidth(), $4->index.width,
-            $4->elem.width);
+    snprintf(msg, sizeof(msg),
+             "Different array widths specified: (%u %u) vs (%u %u)",
+             $5->GetIndexWidth(), $5->GetValueWidth(), $4->index.width,
+             $4->elem.width);
     yyerror(msg);
   }
   else if (!stp::GlobalParserInterface->arraySortsAgree(*$5, *$4))
@@ -2771,6 +2772,13 @@ TERMID_TOK
 {
   $$ = stp::GlobalParserInterface->newNode((*$1));
   stp::GlobalParserInterface->deleteNode( $1);
+}
+| ARRAY_FUNCTIONID_TOK
+{
+  // A use of a nullary array-sorted define-fun expands to its body.
+  ASTVec empty;
+  $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$1,empty));
+  delete $1;
 }
 | LPAREN_TOK an_term RPAREN_TOK
 {

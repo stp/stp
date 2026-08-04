@@ -100,6 +100,23 @@ uint32_t Cadical::newVar()
   return ++next_variable;
 }
 
+void Cadical::setFrozen(uint32_t var)
+{
+  // Deliberately not s->freeze(var). Refinement encodes clauses over
+  // these variables in later solve calls, which is safe here without
+  // freezing: Cadical restores an eliminated variable the moment a new
+  // clause mentions it, and extends every model over the eliminated
+  // variables, so both the added clauses and the values the refinement
+  // loop reads stay correct. Freezing instead would keep every
+  // refinement-visible variable out of inprocessing whether or not any
+  // lemma ever mentions it, which measures ~25% slower on the
+  // wchains array-equality benchmarks (three-run A/B on wchains016ue:
+  // 19.9-20.5s frozen against 15.9-16.0s restored). Solvers without
+  // restoration (the simplifying Minisat family) genuinely need their
+  // setFrozen; this one is a documented decision, not an omission.
+  (void)var;
+}
+
 bool Cadical::setSearchBias(SearchBias bias)
 {
   // Cadical has named configurations of its own, so this is a straight
