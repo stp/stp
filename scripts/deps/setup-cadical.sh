@@ -16,7 +16,7 @@ cd "${dep_dir}"
 git clone https://github.com/arminbiere/cadical "${dep}"
 cd "${dep}"
 # We specify the tags/commits for the other repositories, so do for this too
-git checkout rel-2.1.3
+git checkout rel-3.0.1
 # -fPIC: libcadical.a is linked into libstp.so, and CaDiCaL's configure
 # does not build position-independent code by default.
 ./configure -fPIC
