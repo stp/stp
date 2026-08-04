@@ -57,19 +57,6 @@ Expr createBinaryNode(VC vc, Kind k, Expr left, Expr right);
 namespace /* anonymous namespace for static */
 {
 
-/* The two steps almost every entry point below repeats: unwrapping the
- * opaque VC handle to reach the node manager, and handing a node that has
- * just been built back to the caller as an opaque, caller-owned Expr. */
-stp::STPMgr* mgr(VC vc)
-{
-  return ((stp::STP*)vc)->bm;
-}
-
-Expr wrap(const stp::ASTNode& n)
-{
-  return new stp::ASTNode(n);
-}
-
 void requireBooleanOperand(const char* operation, const stp::ASTNode& n)
 {
   if (n.GetSourceSort().kind() == stp::SourceSort::Kind::Bool)
@@ -150,6 +137,19 @@ unsigned int scalarTypeNodeWidth(const stp::ASTNode& t)
                       t);
       return 0;
   }
+}
+
+/* The two steps almost every entry point below repeats: unwrapping the
+ * opaque VC handle to reach the node manager, and handing a node that has
+ * just been built back to the caller as an opaque, caller-owned Expr. */
+stp::STPMgr* mgr(VC vc)
+{
+  return ((stp::STP*)vc)->bm;
+}
+
+Expr wrap(const stp::ASTNode& n)
+{
+  return new stp::ASTNode(n);
 }
 
 /* this method is purposefully not public! */
@@ -921,6 +921,19 @@ void vc_getCounterExampleArray(VC vc, Expr e, Expr** indices, Expr** values,
       (*values)[i] = new stp::ASTNode(entries[i].second);
     }
   }
+}
+
+void vc_deleteCounterExampleArray(Expr* indices, Expr* values, int size)
+{
+  if (size <= 0)
+    return;
+  for (int i = 0; i < size; ++i)
+  {
+    delete (stp::ASTNode*)indices[i];
+    delete (stp::ASTNode*)values[i];
+  }
+  free(indices);
+  free(values);
 }
 
 int vc_counterexample_size(VC vc)
@@ -3075,6 +3088,10 @@ static_assert((int)BOOLEAN_TYPE == (int)stp::BOOLEAN_TYPE &&
 exprkind_t getExprKind(Expr e)
 {
   stp::ASTNode* input = (stp::ASTNode*)e;
+  // ARRAY_EQ is an internal, opaque representation of ordinary equality.
+  // Do not expose a new C API enum value (or shift the stable existing ones).
+  if (input->GetKind() == stp::ARRAY_EQ)
+    return EQ;
   return (exprkind_t)(input->GetKind());
 }
 
@@ -3206,6 +3223,14 @@ void process_argument(const char ch, VC vc)
       break;
     case 'w':
       bm->UserFlags.wordlevel_solve_flag = false;
+      break;
+    case 'x':
+      // Decide whole-array equality/disequality (the extensional
+      // theory of arrays) with the lemmas-on-demand procedure of
+      // Brummayer & Biere. This must be set before a whole-array equality
+      // is built; construction preserves an opaque ARRAY_EQ until the
+      // completed query is lowered at the solve boundary.
+      bm->UserFlags.enable_array_equality = true;
       break;
     case 'y':
       bm->UserFlags.print_binary_flag = true;
