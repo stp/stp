@@ -182,7 +182,10 @@ TEST(fp_arithmetic, expr_kinds)
   Expr y = vc_varExpr(vc, "y", f);
 
   EXPECT_EQ(FP_ADD, getExprKind(vc_fpAddExpr(vc, rne, x, y)));
-  EXPECT_EQ(FP_LEQ, getExprKind(vc_fpLeqExpr(vc, x, y)));
+  // The factory mirrors the less-thans onto the greater-thans (as it does
+  // BVLT onto BVGT), so vc_fpLeqExpr hands back an fp.geq node with the
+  // operands swapped -- and getExprKind must label that node correctly.
+  EXPECT_EQ(FP_GEQ, getExprKind(vc_fpLeqExpr(vc, x, y)));
   EXPECT_EQ(FP_EQ, getExprKind(vc_fpEqExpr(vc, x, y)));
   EXPECT_EQ(FP_ISNAN, getExprKind(vc_fpIsNaNExpr(vc, x)));
   EXPECT_EQ(FP_TO_IEEE_BV, getExprKind(vc_fpToIEEEBV(vc, x)));

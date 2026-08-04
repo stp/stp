@@ -169,7 +169,11 @@ TEST(FPPrintBack, arithmetic_and_modes)
   )",
              {"(set-logic QF_BVFP)", "fp.add RNE", "fp.mul RTZ", "fp.sqrt RNA",
               "fp.roundToIntegral |r|", "fp.fma RTP", "fp.rem", "fp.min",
-              "fp.max", "fp.lt", "fp.leq", "fp.geq", "fp.gt",
+              // The source fp.lt/fp.leq print back as their mirrors: the
+              // factory rewrites them to swapped fp.gt/fp.geq at creation,
+              // exactly as bvult prints back as bvugt. The re-parse below
+              // still exercises the fp.lt/fp.leq parser paths.
+              "fp.max", "fp.geq", "fp.gt",
               // The mode's declaration must name the sort, not the 5-bit
               // carrier: the operations ask for the sort, so printing the
               // carrier gives back something that no longer parses -- which
