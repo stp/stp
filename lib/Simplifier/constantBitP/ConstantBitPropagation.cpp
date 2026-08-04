@@ -446,7 +446,7 @@ void notHandled(const Kind& k)
 // add to the work list any nodes that take the result of the "n" node.
 void ConstantBitPropagation::scheduleUp(const ASTNode& n)
 {
-  for (const auto &it : *dependents->getDependents(n))
+  for (const auto &it : dependents->getDependents(n))
     workList->push(it);
 }
 
@@ -580,7 +580,7 @@ void ConstantBitPropagation::propagate()
           // rescheduled - except 'n' itself: the transfer function that
           // just ran left 'n' at its fixed point for exactly these child
           // values, so an immediate revisit derives nothing.
-          for (const auto& parent : *dependents->getDependents(n[i]))
+          for (const auto& parent : dependents->getDependents(n[i]))
             if (!(parent == n))
               workList->push(parent);
 
