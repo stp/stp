@@ -185,4 +185,5 @@ endif()
 
 if (ENABLE_FLOATING_POINT)
     add_test(NAME test_fpbackend COMMAND test_fpbackend)
+    add_test(NAME test_fprewrites COMMAND test_fprewrites)
 endif()

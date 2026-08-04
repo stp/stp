@@ -140,7 +140,7 @@ endif()
 
 # Set the public header so it will be installed
 set_target_properties(stp PROPERTIES
-    PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/c_interface.h"
+    PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/c_interface.h;${PROJECT_SOURCE_DIR}/include/stp/fp.hpp"
     VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     SOVERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
 )
