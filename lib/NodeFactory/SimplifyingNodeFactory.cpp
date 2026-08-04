@@ -1757,7 +1757,7 @@ ASTNode SimplifyingNodeFactory::plusRules(const ASTVec& oldChildren)
 
 
 // If the shift is bigger than the bitwidth, replace by an extract.
-ASTNode convertArithmeticKnownShiftAmount(const Kind k,
+ASTNode convertArithmeticKnownShiftAmount([[maybe_unused]] const Kind k,
                                                       const ASTVec& children,
                                                       STPMgr& bm,
                                                       NodeFactory* nf)

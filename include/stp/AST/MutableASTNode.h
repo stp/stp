@@ -102,7 +102,8 @@ public:
     for (ParentsType::iterator it = parents.begin(); it != parents.end(); it++)
     {
       vector<MutableASTNode*>::iterator it2 = (*it)->children.begin();
-      bool found = false;
+      // Only consumed by the assert, which an NDEBUG build compiles out.
+      [[maybe_unused]] bool found = false;
       for (; it2 != (*it)->children.end(); it2++)
       {
         assert(*it2 != NULL);

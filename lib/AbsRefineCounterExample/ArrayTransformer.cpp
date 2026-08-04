@@ -127,7 +127,8 @@ void ArrayTransformer::assertTransformPostConditions(const ASTNode& term,
   if (!p.second)
     return;
 
-  const Kind k = term.GetKind();
+  // Only consumed by the asserts, which an NDEBUG build compiles out.
+  [[maybe_unused]] const Kind k = term.GetKind();
 
   // Check the array reads / writes have been removed
   assert(READ != k);

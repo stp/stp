@@ -339,7 +339,7 @@ Result bvImpliesBothWays(vector<FixedBits*>& children, FixedBits& result)
   FixedBits& b = (*children[1]);
 
   assert(a.getWidth() == result.getWidth());
-  const int bitWidth = a.getWidth();
+  [[maybe_unused]] const int bitWidth = a.getWidth();
   assert(bitWidth == 1);
 
   Result r = NO_CHANGE;

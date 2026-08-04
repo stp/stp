@@ -157,7 +157,7 @@ Result fixIfCanForMultiplication(vector<FixedBits*>& children,
   Result result = NO_CHANGE;
 
   // only one of the conditionals can run.
-  bool run = false;
+  [[maybe_unused]] bool run = false;
 
   // We need every value that is unfixed to be set to one.
   if (aspirationalSum == columnOnes + columnOneFixed + columnUnfixed &&
@@ -433,7 +433,8 @@ Result useLeadingZeroesToFix(FixedBits& x, FixedBits& y, FixedBits& output)
   }
 
   stp::CBV result = CONSTANTBV::BitVector_Create(2 * bitWidth + 1, true);
-  CONSTANTBV::ErrCode ec = CONSTANTBV::BitVector_Multiply(result, x_c, y_c);
+  [[maybe_unused]] CONSTANTBV::ErrCode ec =
+      CONSTANTBV::BitVector_Multiply(result, x_c, y_c);
   assert(ec == CONSTANTBV::ErrCode_Ok);
 
   for (int j = (2 * bitWidth) - 1; j >= 0; j--)

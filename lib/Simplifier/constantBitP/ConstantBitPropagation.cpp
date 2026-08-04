@@ -366,7 +366,8 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
 
     if (SYMBOL == node.GetKind())
     {
-      bool r = simplifier->UpdateSubstitutionMap(node, constNode);
+      [[maybe_unused]] bool r =
+          simplifier->UpdateSubstitutionMap(node, constNode);
       assert(r);
     }
     else if (conjoinToTop && node != top)
