@@ -1,6 +1,5 @@
 #include <gtest/gtest.h>
 #include <stp/c_interface.h>
-#include <cstdlib>
 
 // Regression tests: a model value must be a value *of the sort of the term
 // it was read from*, so that feeding it straight back -- asserting
@@ -143,8 +142,7 @@ TEST(fp_model_roundtrip, array_model_entries)
   vc_assertFormula(vc, vc_eqExpr(vc, cell, values[0]));
   ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
 
-  free(indices);
-  free(values);
+  vc_deleteCounterExampleArray(indices, values, size);
   vc_Destroy(vc);
 }
 

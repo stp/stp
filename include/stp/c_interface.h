@@ -632,10 +632,22 @@ DLL_PUBLIC Expr vc_getCounterExample(VC vc, Expr e);
 //! each value its element sort, so an entry can be fed back as
 //! vc_readExpr(vc, e, index) and vc_eqExpr with the value.
 //!
-//! It is the caller's responsibility to free the memory afterwards.
+//! It is the caller's responsibility to free the memory afterwards;
+//! vc_deleteCounterExampleArray does so with the allocator that made it.
 //!
 DLL_PUBLIC void vc_getCounterExampleArray(VC vc, Expr e, Expr** outIndices,
                                           Expr** outValues, int* outSize);
+
+//! \brief Frees a counter example array returned by
+//!        vc_getCounterExampleArray.
+//!
+//! Deletes every entry expression and releases both buffers inside the
+//! library, so allocation and deallocation always use the same
+//! allocator even when the embedding process links a different one.
+//! With a size of zero nothing was allocated and nothing is freed.
+//!
+DLL_PUBLIC void vc_deleteCounterExampleArray(Expr* indices, Expr* values,
+                                             int size);
 
 //! \brief Returns the size of the counter example array,
 //!        i.e. the number of variable and array locations
@@ -1462,7 +1474,8 @@ DLL_PUBLIC Expr vc_getTermFromCounterExample(VC vc, Expr e,
 //!
 DLL_PUBLIC void vc_deleteWholeCounterExample(WholeCounterExample cc);
 
-//! Covers all kinds of expressions that exist in STP.
+//! Covers the expression kinds exposed by the public C API. Internal kinds
+//! may be represented by their corresponding public kind.
 //!
 //! Mirrors the internal stp::Kind (generated from lib/AST/ASTKind.kinds) by
 //! numeric value: getExprKind is a direct cast, so the enumerators must stay
