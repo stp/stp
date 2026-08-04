@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 // to get the PRIu64 macro from inttypes, this needs to be defined.
 #include "stp/STPManager/STPManager.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/Printer/SMTLIBPrinter.h"
 #include "stp/Util/CBVOps.h"
@@ -983,9 +984,19 @@ ASTNode STPMgr::NewParameterized_BooleanVar(const ASTNode& var,
 }
 
 // If ASTNode remain with references (somewhere), this will segfault.
+ExtensionalityContext* STPMgr::getExtensionality()
+{
+  if (extensionality == NULL)
+    extensionality = new ExtensionalityContext(this);
+  return extensionality;
+}
+
 STPMgr::~STPMgr()
 {
   ClearAllTables();
+
+  delete extensionality;
+  extensionality = NULL;
 
   printer::NodeLetVarMap.clear();
   printer::NodeLetVarVec.clear();

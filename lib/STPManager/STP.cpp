@@ -778,8 +778,11 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     bm->print_stats();
 
   // If it doesn't contain array operations, use ABC's CNF generation.
+  // The submitted and original forms coincide until the array-equality
+  // pass introduces a lowered form of its own; see the next commit.
   res = Ctr_Example->CallSAT_ResultCheck(NewSolver, inputToSat, original_input,
-                                         satBase, maybeRefinement);
+                                         original_input, satBase,
+                                         maybeRefinement);
 
   if (bm->soft_timeout_expired)
   {

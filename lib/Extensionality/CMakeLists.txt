@@ -20,6 +20,7 @@
 
 add_library(extensionality OBJECT
     ExtChecker.cpp
+    ExtensionalityContext.cpp
 )
 
 add_dependencies(extensionality ASTKind_header)

@@ -837,7 +837,7 @@ bool isConstantToSat(const ASTNode& query, int64_t timeout_max_confl)
     ss->setMaxConflicts(timeout_max_confl);
 
   SOLVER_RETURN_TYPE r = GlobalSTP->Ctr_Example->CallSAT_ResultCheck(
-      *ss, query2, query2, GlobalSTP->tosat, false);
+      *ss, query2, query2, query2, GlobalSTP->tosat, false);
 
   return (r == SOLVER_VALID); // unsat, always true
 }

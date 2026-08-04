@@ -135,6 +135,51 @@ bool constantsSameBits(const ASTNode& a, const ASTNode& b)
                                                 b.GetBVConst());
 }
 
+// See the declaration.
+ASTNode plainBitVectorConstant(STPMgr* bm, const ASTNode& c)
+{
+  assert(c.isConstant());
+  const SourceSort::Kind sort = c.GetSourceSort().kind();
+  if (c.GetKind() != BVCONST ||
+      (c.GetExpWidth() == 0 && sort != SourceSort::Kind::RoundingMode))
+    return c;
+  return bm->CreateBVConst(CONSTANTBV::BitVector_Clone(c.GetBVConst()),
+                           c.GetValueWidth());
+}
+
+// Whether the packed floating-point constant x of format (eb, sb) holds
+// a NaN: an all-ones exponent over a nonzero significand, the layout
+// being [sign | exponent eb | significand sb-1]. The value-level twin of
+// the circuit ExtensionalityContext builds as isPackedNaN; keep the two
+// reading alike.
+static bool packedConstantIsNaN(const ASTNode& x, unsigned eb, unsigned sb)
+{
+  const unsigned w = eb + sb;
+  if (x.GetKind() != BVCONST || x.GetValueWidth() != w)
+    return false;
+  CBV bits = x.GetBVConst();
+  for (unsigned i = sb - 1; i + 1 < w; i++)
+    if (!CONSTANTBV::BitVector_bit_test(bits, i))
+      return false;
+  for (unsigned i = 0; i + 1 < sb; i++)
+    if (CONSTANTBV::BitVector_bit_test(bits, i))
+      return true;
+  return false;
+}
+
+// See the declaration.
+bool constantsSameSourceValue(const ASTNode& a, const ASTNode& b,
+                              const SourceSort& sort)
+{
+  if (constantsSameBits(a, b))
+    return true;
+  if (sort.kind() != SourceSort::Kind::FloatingPoint)
+    return false;
+  const unsigned eb = sort.exponentWidth();
+  const unsigned sb = sort.significandWidth();
+  return packedConstantIsNaN(a, eb, sb) && packedConstantIsNaN(b, eb, sb);
+}
+
 // True if any descendants are arrays.
 bool containsArrayOps(const ASTNode& n, STPMgr* mgr)
 {
@@ -187,6 +232,7 @@ bool isCommutative(const Kind k)
     case BVPLUS:
     case BVMULT:
     case EQ:
+    case ARRAY_EQ:
     case AND:
     case OR:
     case NAND:
@@ -955,6 +1001,19 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
         cerr << "sigwidth of rhs of EQ: " << n[1].GetSigWidth() << endl;
         FatalError(
             "BVTypeCheck: terms in atomic formulas must be of equal length", n);
+      }
+      break;
+
+    case ARRAY_EQ:
+      if (n.Degree() != 2)
+        FatalError("BVTypeCheck: ARRAY_EQ should have exactly 2 args\n", n);
+
+      if (n[0].GetType() != ARRAY_TYPE || n[1].GetType() != ARRAY_TYPE ||
+          n[0].GetValueWidth() != n[1].GetValueWidth() ||
+          n[0].GetIndexWidth() != n[1].GetIndexWidth())
+      {
+        FatalError("BVTypeCheck: ARRAY_EQ requires identically typed arrays",
+                   n);
       }
       break;
 
