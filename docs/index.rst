@@ -69,6 +69,7 @@ implemented.
    :maxdepth: 1
 
    smt-input-language
+   array-extensionality
 
 
 Python usage
