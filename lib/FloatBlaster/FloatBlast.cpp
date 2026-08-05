@@ -133,6 +133,21 @@ private:
       return bm->CreateFPConst(n[2], sort.exponentWidth(),
                                sort.significandWidth());
     }
+    // A select from a float-element array already IS the packed element
+    // bits: asPacked's READ arm only rebuilds the array and index if they
+    // contain FP work, so it never builds a circuit for the element itself
+    // and the predicate can consume those bits directly. The element format
+    // lives on the array node and the read derives it (deriveFPFormat), so
+    // it survives the array transform's rewriting of this operand -- every
+    // stand-in it mints for a read carries the format (ArrayTransformer),
+    // which is what the bit-blaster reads back here.
+    if (n.GetKind() == READ)
+    {
+      const ASTNode packed = asPacked(n);
+      assert(packed.GetKind() == READ);
+      assert(packed.GetSourceSort().kind() == SourceSort::Kind::FloatingPoint);
+      return packed;
+    }
     // A float-sorted ITE is a mux over packed bits once its branches are
     // packed views, and the bit-blaster muxes them for free (BBITE) -- while
     // SymFPU's ITE arm unpacks BOTH branches and muxes the unpacked records.

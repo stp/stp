@@ -450,6 +450,72 @@ TEST(FloatBlast, native_comparison_survives_for_ite_operands)
   EXPECT_FALSE(containsFloatingPointKind(lowered(isnan_mux)));
 }
 
+// A select from a float-element array is the packed element bits already,
+// so a predicate over one survives lowering as well. The array and the index
+// are lowered like any other children -- what must not happen is the element
+// itself being unpacked and re-encoded.
+TEST(FloatBlast, native_comparison_survives_for_read_operands)
+{
+  STPMgr mgr;
+  ASSERT_TRUE(mgr.UserFlags.fp_native_cmp); // on by default
+  const SourceSort fp32 = SourceSort::floatingPoint(8, 24);
+  const SourceSort index = SourceSort::bitVector(4);
+  const ASTNode array =
+      mgr.CreateSourceSymbol("A", SourceSort::array(index, fp32));
+  const ASTNode i = mgr.CreateSourceSymbol("i", index);
+  const ASTNode y = mgr.CreateSourceSymbol("y", fp32);
+  const ASTNode x = mgr.CreateSourceSymbol("x", fp32);
+  const ASTNode sum = mgr.CreateTerm(FP_ADD, 32, ASTVec{rne(mgr), x, y});
+
+  auto lowered = [&mgr](const ASTNode& n) {
+    FloatBlast lower(&mgr);
+    return lower.topLevel(n);
+  };
+
+  const ASTNode read = mgr.CreateTerm(READ, 32, array, i);
+  ASSERT_EQ(SourceSort::Kind::FloatingPoint, read.GetSourceSort().kind());
+
+  // Array and index carry no FP work: the whole comparison survives as is.
+  const ASTNode gt_read = mgr.CreateNode(FP_GT, read, y);
+  EXPECT_EQ(gt_read, lowered(gt_read));
+
+  // The classifications and equalities share the gate.
+  const ASTNode isnan_read = mgr.CreateNode(FP_ISNAN, read);
+  EXPECT_EQ(isnan_read, lowered(isnan_read));
+
+  // An index containing FP work is lowered like any other child, so the
+  // comparison survives REBUILT over a read with the lowered index -- the
+  // element bits are still read directly. The index here compares an
+  // fp.add, which cannot survive, so nothing floating-point is left in it.
+  const ASTNode fp_index = mgr.CreateTerm(
+      ITE, 4,
+      ASTVec{mgr.CreateNode(FP_GT, sum, y), i, mgr.CreateBVConst(4, 3)});
+  const ASTNode gt_fp_index =
+      mgr.CreateNode(FP_GT, mgr.CreateTerm(READ, 32, array, fp_index), y);
+  const ASTNode gt_fp_index_lowered = lowered(gt_fp_index);
+  EXPECT_NE(gt_fp_index, gt_fp_index_lowered);
+  EXPECT_EQ(FP_GT, gt_fp_index_lowered.GetKind());
+  ASSERT_EQ(READ, gt_fp_index_lowered[0].GetKind());
+  EXPECT_EQ(array, gt_fp_index_lowered[0][0]);
+  EXPECT_FALSE(containsFloatingPointKind(gt_fp_index_lowered[0][1]));
+
+  // A comparison in the index that CAN survive is left alone there, exactly
+  // as it would be anywhere else in the formula.
+  const ASTNode native_index = mgr.CreateTerm(
+      ITE, 4, ASTVec{mgr.CreateNode(FP_GT, x, y), i, mgr.CreateBVConst(4, 3)});
+  const ASTNode gt_native_index =
+      mgr.CreateNode(FP_GT, mgr.CreateTerm(READ, 32, array, native_index), y);
+  EXPECT_EQ(gt_native_index, lowered(gt_native_index));
+
+  // The other operand still has to pass the gate.
+  EXPECT_FALSE(
+      containsFloatingPointKind(lowered(mgr.CreateNode(FP_GT, read, sum))));
+
+  // Flag off: the old behaviour, everything lowers.
+  mgr.UserFlags.fp_native_cmp = false;
+  EXPECT_FALSE(containsFloatingPointKind(lowered(gt_read)));
+}
+
 // The native encoding and SymFPU must agree on every predicate. At the
 // smallest supported format, (3, 4), all 128 x 128 packed operand pairs are
 // checked for each of the six comparison predicates, and all 128 operands
