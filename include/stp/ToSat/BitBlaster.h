@@ -201,6 +201,11 @@ class BitBlaster
   // operands
   BBNode BBeqFP(const ASTNode& form, BBNodeSet& support);
 
+  // bit blast a floating-point classification predicate (FP_ISNORMAL,
+  // FP_ISSUBNORMAL, FP_ISZERO, FP_ISINFINITE, FP_ISNAN, FP_ISNEGATIVE,
+  // FP_ISPOSITIVE) over a packed operand
+  BBNode BBclassifyFP(const ASTNode& form, BBNodeSet& support);
+
   // Field tests on a packed IEEE-754 operand, shared by the comparison and
   // equality encodings. `sb` is the significand width, `w` the total width.
   BBNode BBfpIsNaN(const BBNodeVec& p, unsigned sb, unsigned w);
