@@ -565,10 +565,9 @@ add_definitions(-DSIZEOF_LONG=${SIZEOF_LONG})
 CHECK_TYPE_SIZE("int" SIZEOF_INT)
 add_definitions(-DSIZEOF_INT=${SIZEOF_INT})
 
-
-
-option(ONLY_SIMPLE "Only build very simplistic executable" OFF)
-add_feature_info(SimpleOptions ONLY_SIMPLE "Simplifies command-line interface, only a few command-line options will be available")
+# Declared here, well before its first use (the manpage rule); the subdirs it
+# gates are added at the bottom of this file.
+option(BUILD_EXECUTABLES "Build executables" ON)
 
 # -----------------------------------------------------------------------------
 # Find Riss
@@ -768,7 +767,7 @@ include_directories(${minisat_SOURCE_DIR})
 if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     find_program(HELP2MAN_FOUND help2man)
     if (HELP2MAN_FOUND)
-        if (NOT ONLY_SIMPLE)
+        if (BUILD_EXECUTABLES)
             ADD_CUSTOM_TARGET(man_stp
                 ALL
                 DEPENDS stp-bin
@@ -1035,7 +1034,6 @@ add_feature_info(PythonInterface ENABLE_PYTHON_INTERFACE "Enables Python interfa
 
 message(STATUS "Final CXX flags ${CMAKE_CXX_FLAGS}")
 
-option(BUILD_EXECUTABLES "Build executables" ON)
 add_subdirectory(lib)
 add_subdirectory(tools)
 add_subdirectory(bindings)

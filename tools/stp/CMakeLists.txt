@@ -21,23 +21,7 @@
 # -----------------------------------------------------------------------------
 # Create binary
 # -----------------------------------------------------------------------------
-# Everything the two front ends share: parsing, print-back, and the solve.
-# They differ only in how they read their options. An object library so the
-# translation unit is named once and compiled once, rather than stp_simple
-# reaching across directories for ../stp/main_common.cpp.
-#
-# Built whenever executables are, including under ONLY_SIMPLE, where
-# stp_simple is the only consumer.
 if(BUILD_EXECUTABLES)
-    add_library(stp_main_common OBJECT main_common.cpp)
-    # main_common.cpp reaches the generated ASTKind.h through NodeFactory.h.
-    # As a standalone object library it does not inherit the generator
-    # dependency from libstp, so name it here or a parallel build can compile
-    # this TU before ASTKind.h exists (as every other consumer target does).
-    add_dependencies(stp_main_common ASTKind_header)
-endif()
-
-if(BUILD_EXECUTABLES AND NOT ONLY_SIMPLE)
     if(NOT EXISTS "${PROJECT_SOURCE_DIR}/lib/extlib-cli11/include/CLI/CLI.hpp")
         message(FATAL_ERROR "The CLI11 submodule is missing. Run: "
                             "git submodule update --init lib/extlib-cli11")
@@ -45,8 +29,12 @@ if(BUILD_EXECUTABLES AND NOT ONLY_SIMPLE)
 
     add_executable(stp-bin
         main.cpp
-        $<TARGET_OBJECTS:stp_main_common>
+        main_common.cpp
     )
+    # main_common.cpp reaches the generated ASTKind.h through NodeFactory.h,
+    # so name the generator here or a parallel build can compile this TU
+    # before ASTKind.h exists.
+    add_dependencies(stp-bin ASTKind_header)
 
     # CLI11 is header-only and used by this one translation unit, so the
     # vendored include directory is all it needs; nothing is linked and

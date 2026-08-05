@@ -146,8 +146,6 @@ runs:
       fi
       cmake -DSTATICCOMPILE:BOOL=ON -Dcryptominisat5_DIR:PATH="$GITHUB_WORKSPACE/deps/install/lib/cmake/cryptominisat5" -DFORCE_CMS:BOOL=ON -DWERROR:BOOL="$WERROR" "${args[@]}" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
-  # ONLY_SIMPLE, or a runner without Boost, produces stp_simple rather than
-  # stp. Report whichever was built so the caller does not have to guess.
   - name: Build
     id: build
     shell: bash
@@ -158,8 +156,7 @@ runs:
       ccache --zero-stats
       cmake --build . --parallel "$(nproc)"
       ccache --show-stats
-      stp=$([ -x ./stp ] && echo stp || echo stp_simple)
-      echo "binary=build/$stp" >> "$GITHUB_OUTPUT"
+      echo "binary=build/stp" >> "$GITHUB_OUTPUT"
 
   # Linking is most of the point of this action, but a binary that links and
   # then dies on the first query would still pass, so solve something and

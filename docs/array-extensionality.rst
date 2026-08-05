@@ -22,7 +22,6 @@ Usage
 Command line::
 
     stp --array-equality file.smt2
-    stp_simple --array-equality file.smt2
 
 C API: call ``vc_setFlag(vc, 'x')`` before constructing any equality
 between whole arrays.
@@ -72,11 +71,10 @@ difference attributable to this feature; a baseline frozen further back
 would also collect every unrelated upstream change made since. The
 driver canonicalizes the entry order before comparison: the default-off
 API does not specify one, and the legacy order comes from an unordered
-map keyed by internal node-creation IDs. Two diagnostic texts
-deliberately differ from the baseline and sit outside that comparison:
+map keyed by internal node-creation IDs. One diagnostic text
+deliberately differs from the baseline and sits outside that comparison:
 whole-array equality is refused with an error naming the option, where
-the baseline warned and continued (pinned by a lit test), and
-``stp_simple``'s usage error mentions the flag it newly accepts. One
+the baseline warned and continued (pinned by a lit test). One
 behavioral corner also deliberately differs: when the
 soft timeout expires while lazy refinement is still undecided, the
 solve now reports a timeout where it previously aborted with an

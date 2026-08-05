@@ -44,7 +44,6 @@ const char* stp::get_compilation_env()
     "CMAKE_CXX_COMPILER = @CMAKE_CXX_COMPILER@ | "
     "CMAKE_CXX_FLAGS = @CMAKE_CXX_FLAGS@ | "
     "COMPILE_DEFINES = @COMPILE_DEFINES@ | "
-    "ONLY_SIMPLE = @ONLY_SIMPLE@ | "
     "STATICCOMPILE = @STATICCOMPILE@ | "
     "TUNE_NATIVE = @TUNE_NATIVE@ | "
     "COVERAGE = @COVERAGE@ | "

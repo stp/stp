@@ -53,9 +53,6 @@ Third-party code that is compiled into STP also lives under ``lib/``:
 The executables are built from ``tools/``:
 
 -  ``stp``: The main command-line solver.
--  ``stp_simple``: A cut-down front end that accepts a single SMT-LIB2
-   file (or stdin) and no other options. Setting ``ONLY_SIMPLE`` builds
-   this instead of ``stp``, which drops the dependency on Boost.
 -  The rest are development aids, built only when ``BUILD_EXTRA_TOOLS``
    is enabled: ``propagator_bench`` times the propagators, checks how much
    they deduce, and with ``--bcp-check`` compares that against what unit
