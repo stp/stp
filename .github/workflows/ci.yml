@@ -174,8 +174,17 @@ jobs:
       working-directory: build/tests/api/python
 
   build-cadical:
-    name: gcc (cadical)
+    name: gcc (cadical ${{ matrix.cadical_tag }})
     runs-on: ubuntu-latest
+
+    # Both supported CaDiCaL lines: 3.x compiles in --cadical-factor and its
+    # variable-translation machinery (ctest grows a factor-forced lit sweep),
+    # 2.x compiles the wrapper without it and has to keep building and
+    # declining the flag gracefully.
+    strategy:
+      fail-fast: false
+      matrix:
+        cadical_tag: [rel-3.0.1, rel-2.1.3]
 
     env:
       CCACHE_MAXSIZE: 800M
@@ -222,7 +231,9 @@ jobs:
           deps/cadical
           deps/gtest
           deps/OutputCheck
-        key: deps-x86_64-cadical-${{ steps.deps-key.outputs.key }}
+        # The tag is part of the key by hand: cache-key.sh hashes the setup
+        # scripts, and the matrix override never changes their content.
+        key: deps-x86_64-cadical-${{ matrix.cadical_tag }}-${{ steps.deps-key.outputs.key }}
 
     # CryptoMiniSat is left out: USE_CADICAL makes CaDiCaL the default
     # solver, so building CMS as well would only add build time.
@@ -230,7 +241,7 @@ jobs:
       if: steps.deps-cache.outputs.cache-hit != 'true'
       run: |
         ./scripts/deps/setup-minisat.sh
-        ./scripts/deps/setup-cadical.sh
+        CADICAL_TAG=${{ matrix.cadical_tag }} ./scripts/deps/setup-cadical.sh
         ./scripts/deps/setup-gtest.sh
         ./scripts/deps/setup-outputcheck.sh
 
@@ -238,8 +249,8 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/ccache
-        key: ccache-cadical-${{ github.run_id }}
-        restore-keys: ccache-cadical-
+        key: ccache-cadical-${{ matrix.cadical_tag }}-${{ github.run_id }}
+        restore-keys: ccache-cadical-${{ matrix.cadical_tag }}-
 
     # CMAKE_INSTALL_PREFIX and PYTHON_LIB_INSTALL_DIR are set so that the
     # install steps below land in the workspace rather than needing root.

@@ -624,6 +624,9 @@ if (USE_CADICAL)
     if (CADICAL_VERSION VERSION_GREATER_EQUAL "3.0.0")
         message(STATUS "CaDiCaL ${CADICAL_VERSION}: bounded variable addition (--cadical-factor) enabled")
         add_definitions(-DSTP_CADICAL_HAS_FACTOR)
+        # Mirrored as a variable so the test tree can register the
+        # factor-forced lit sweep only when the flag can actually engage.
+        set(CADICAL_HAS_FACTOR ON)
     else()
         message(STATUS "CaDiCaL ${CADICAL_VERSION} predates 3.0.0: --cadical-factor will be unavailable")
     endif()
