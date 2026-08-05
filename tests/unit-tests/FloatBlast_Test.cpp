@@ -289,9 +289,10 @@ TEST(FloatBlast, every_floating_point_kind_is_lowered)
   }
 }
 
-// The four ordering comparisons over leaf operands are not expanded to
-// SymFPU circuits: the source node passes through lowering unchanged and
-// the bit-blaster encodes it natively over the packed bits (BBcompareFP).
+// The six comparison predicates over leaf operands are not expanded to
+// SymFPU circuits: the source node passes through lowering unchanged and the
+// bit-blaster encodes it natively over the packed bits (BBcompareFP,
+// BBeqFP).
 // Everything else -- operands that are FP operations, constant pairs, and
 // every comparison once the flag is off -- still lowers through SymFPU.
 TEST(FloatBlast, native_comparison_survives_for_leaf_operands)
@@ -352,6 +353,14 @@ TEST(FloatBlast, native_comparison_survives_for_leaf_operands)
   EXPECT_FALSE(
       containsFloatingPointKind(lowered(mgr.CreateNode(FP_GEQ, sum, y))));
 
+  // ... and so do the two equalities.
+  const ASTNode eq_symbols = mgr.CreateNode(FP_EQ, x, y);
+  EXPECT_EQ(eq_symbols, lowered(eq_symbols));
+  const ASTNode smt_eq_constant = mgr.CreateNode(FP_SMT_EQ, x, one);
+  EXPECT_EQ(smt_eq_constant, lowered(smt_eq_constant));
+  EXPECT_FALSE(
+      containsFloatingPointKind(lowered(mgr.CreateNode(FP_EQ, sum, y))));
+
   // Flag off: the old behaviour, everything lowers.
   mgr.UserFlags.fp_native_cmp = false;
   EXPECT_FALSE(containsFloatingPointKind(lowered(gt_symbols)));
@@ -359,7 +368,7 @@ TEST(FloatBlast, native_comparison_survives_for_leaf_operands)
 
 // The native encoding and SymFPU must agree on every comparison. At the
 // smallest supported format, (3, 4), all 128 x 128 packed operand pairs are
-// checked for each of the four ordering comparisons: the native verdict
+// checked for each of the six comparison predicates: the native verdict
 // comes from bit-blasting the comparison over constant operands (the AIG
 // collapses to a constant), the reference from SymFPU's
 // fold-by-construction constant evaluation. The sweep includes +/-0,
@@ -386,7 +395,7 @@ TEST(FloatBlast, native_comparison_agrees_with_symfpu_exhaustively)
   {
     for (unsigned j = 0; j < values; j++)
     {
-      for (const Kind kind : {FP_GT, FP_LT, FP_GEQ, FP_LEQ})
+      for (const Kind kind : {FP_GT, FP_LT, FP_GEQ, FP_LEQ, FP_EQ, FP_SMT_EQ})
       {
         const ASTNode comparison =
             mgr.CreateNode(kind, constants[i], constants[j]);
@@ -404,5 +413,5 @@ TEST(FloatBlast, native_comparison_agrees_with_symfpu_exhaustively)
       }
     }
   }
-  EXPECT_EQ(4 * values * values, checked);
+  EXPECT_EQ(6 * values * values, checked);
 }

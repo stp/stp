@@ -129,10 +129,10 @@ private:
     return ASTNode();
   }
 
-  // The four ordering comparisons over leaf operands skip SymFPU entirely:
+  // The six comparison predicates over leaf operands skip SymFPU entirely:
   // the source comparison survives to the bit-blaster, which compares the
-  // packed IEEE bits directly (BBcompareFP). Returns the surviving node --
-  // `n` itself,
+  // packed IEEE bits directly (BBcompareFP, BBeqFP). Returns the surviving
+  // node -- `n` itself,
   // or the comparison rebuilt over resolved constant operands, both purely
   // float-sorted so no FP node is ever built over packed carriers -- or
   // null when the comparison has to take the SymFPU path.
@@ -155,7 +155,20 @@ private:
       return ASTNode();
     if (left == n[0] && right == n[1])
       return n;
-    return node_factory->CreateNode(n.GetKind(), left, right);
+    // The rebuild goes through the simplifying factory, which may fold the
+    // comparison into something the bit-blaster has no native arm for (it
+    // already turns fp.geq(x,x) into not(fp.isNaN(x))). Anything but a
+    // natively blasted comparison goes back to SymFPU.
+    const ASTNode rebuilt = node_factory->CreateNode(n.GetKind(), left, right);
+    if (!isNativelyBlasted(rebuilt.GetKind()))
+      return ASTNode();
+    return rebuilt;
+  }
+
+  static bool isNativelyBlasted(Kind k)
+  {
+    return k == FP_GT || k == FP_LT || k == FP_GEQ || k == FP_LEQ ||
+           k == FP_EQ || k == FP_SMT_EQ;
   }
 
   ASTNode rebuild(const ASTNode& n, const ASTVec& children)
@@ -534,14 +547,23 @@ private:
         return canonicalPacked(n[0]);
 
       case FP_SMT_EQ:
+      {
         requireSameFormat(n[0], n[1]);
+        const ASTNode survivor = nativeComparisonSurvivor(n);
+        if (!survivor.IsNull())
+          return survivor;
         return symbolic_fp::unpacked::smtEqual(
             formatOf(n[0]), asUnpacked(n[0]), asUnpacked(n[1]));
-
+      }
       case FP_EQ:
+      {
         requireSameFormat(n[0], n[1]);
+        const ASTNode survivor = nativeComparisonSurvivor(n);
+        if (!survivor.IsNull())
+          return survivor;
         return symbolic_fp::unpacked::ieeeEqual(
             formatOf(n[0]), asUnpacked(n[0]), asUnpacked(n[1]));
+      }
       case FP_LT:
       {
         requireSameFormat(n[0], n[1]);
