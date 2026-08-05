@@ -193,7 +193,8 @@ class BitBlaster
   // Return bit-blasted form for BVLE, BVGE, BVGT, SBLE, etc.
   BBNode BBcompare(const ASTNode& form, BBNodeSet& support);
 
-  // bit blast a floating-point comparison (FP_GT/FP_LT) over packed operands
+  // bit blast a floating-point ordering comparison (FP_GT, FP_LT, FP_GEQ,
+  // FP_LEQ) over packed operands
   BBNode BBcompareFP(const ASTNode& form, BBNodeSet& support);
 
   // Return bit-blasted form for the overflow predicates BVUADDO, BVSADDO,
