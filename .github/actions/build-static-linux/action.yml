@@ -54,7 +54,6 @@ runs:
         flex \
         gcc \
         git \
-        libboost-program-options-dev \
         libgmp-dev \
         ninja-build \
         zlib1g-dev

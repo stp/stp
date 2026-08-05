@@ -21,7 +21,6 @@ apt-get install -y --no-install-recommends \
   curl \
   flex \
   git \
-  libboost-program-options-dev \
   ninja-build \
   patch \
   python3 \

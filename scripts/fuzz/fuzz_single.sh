@@ -373,8 +373,8 @@ declare -a g_misc=(
 "--interactive=1"
 )
 
-# Drop entries this binary doesn't understand, rather than have boost reject
-# them and count every iteration as a mismatch. Catches both a stale build and
+# Drop entries this binary doesn't understand, rather than have the option
+# parser reject them and count every iteration as a mismatch. Catches both a stale build and
 # typos in the arrays above. ($supported was read from --help further up.)
 declare -a dropped=()
 offered=0

@@ -12,7 +12,7 @@ Install instructions
 
 For Debian-like platforms first install the prerequisites: 
 ```
-apt-get install cmake g++ zlib1g-dev libboost-all-dev flex bison
+apt-get install cmake g++ zlib1g-dev flex bison
 ```
 
 Then install minisat:

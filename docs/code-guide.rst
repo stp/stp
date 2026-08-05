@@ -38,6 +38,9 @@ Third-party code that is compiled into STP also lives under ``lib/``:
 
 -  ``extlib-abc``: The `ABC <https://github.com/berkeley-abc/abc>`__
    package, used to build AIGs and convert them to CNF. A git submodule.
+-  ``extlib-cli11``: `CLI11 <https://github.com/CLIUtils/CLI11>`__, the
+   command-line parser of the ``stp`` executable. Header-only, so it is
+   compiled into the tool but never into ``libstp``. A git submodule.
 -  ``extlib-constbv``: A library that implements multi-word fixed-length
    integers, based on Steffen Beyer's
    `Bit::Vector <https://metacpan.org/pod/Bit::Vector>`__ perl module.
