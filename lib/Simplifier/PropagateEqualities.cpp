@@ -346,7 +346,26 @@ void PropagateEqualities::addCandidate(const ASTNode a, const ASTNode b)
   candidates.push_back(std::make_pair(a,b));
 
   if (SYMBOL == b.GetKind())
-    candidates.push_back(std::make_pair(b,a));    
+    candidates.push_back(std::make_pair(b,a));
+}
+
+// FP constant folding is deferred solver-wide, so a float literal usually
+// arrives as to_fp's three-child reinterpret form over constant bits
+// rather than as an interned constant. Resolve that form through the
+// canonicalising funnel (CreateFPConst) -- the same lookthrough
+// RemoveUnconstrained's comparison rule and FloatBlast's native-comparison
+// gate use -- so the substitution installs an interned constant that folds
+// at every use site. Anything else is returned unchanged.
+ASTNode PropagateEqualities::resolveFpLiteral(const ASTNode& n)
+{
+  if (n.GetKind() == FP_TOFP && n.Degree() == 3 && n[2].GetKind() == BVCONST)
+  {
+    const SourceSort sort = n.GetSourceSort();
+    if (sort.kind() == SourceSort::Kind::FloatingPoint)
+      return bm->CreateFPConst(n[2], sort.exponentWidth(),
+                               sort.significandWidth());
+  }
+  return n;
 }
 
 void PropagateEqualities::buildXORCandidates(const ASTNode a, bool negated)
@@ -604,6 +623,21 @@ void PropagateEqualities::buildCandidateList(const ASTNode& a)
         //std::cerr << a;
     }
 
+  }
+  else if (FP_SMT_EQ == k)
+  {
+    // SMT `=` on floats is true equality on the abstract domain (one NaN,
+    // two distinct zeros), so substituting one side for the other is sound
+    // in every context. fp.eq (FP_EQ) must NEVER be propagated: it
+    // identifies +0 with -0, which fp.isNegative, division etc.
+    // distinguish. Kept separate from the EQ arm above so the bitvector
+    // inverse rewrites (BVNOT/BVUMINUS/BVPLUS) can't see float operands.
+    const ASTNode left = resolveFpLiteral(a[0]);
+    const ASTNode right = resolveFpLiteral(a[1]);
+    if (SYMBOL == left.GetKind())
+      addCandidate(left, right);
+    else if (SYMBOL == right.GetKind())
+      addCandidate(right, left);
   }
   else if (AND == k)
   {

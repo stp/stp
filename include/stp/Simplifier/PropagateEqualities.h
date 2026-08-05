@@ -78,6 +78,7 @@ private:
   //ASTNode AndPropagate(const ASTNode& a, ArrayTransformer* at);
 
   void addCandidate(const ASTNode a, const ASTNode b);
+  ASTNode resolveFpLiteral(const ASTNode& n);
   bool isSymbol(ASTNode c);
 
   std::vector < std::pair<ASTNode, ASTNode> > candidates;
