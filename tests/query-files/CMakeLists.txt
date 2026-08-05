@@ -30,6 +30,11 @@ if (ENABLE_FLOATING_POINT)
 else()
     set(STP_FLOATING_POINT_PYBOOL "False")
 endif()
+if (USE_LIBBF)
+    set(STP_LIBBF_PYBOOL "True")
+else()
+    set(STP_LIBBF_PYBOOL "False")
+endif()
 
 # Create llvm-lit configuration file
 configure_file(lit.site.cfg.in lit.site.cfg.g @ONLY)

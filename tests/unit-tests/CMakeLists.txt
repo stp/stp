@@ -40,6 +40,9 @@ if (ENABLE_FLOATING_POINT)
     # Builds float/rounding-mode constants, which is the whole point.
     AddSTPGTest(ConstantIdentity_Test.cpp)
     AddSTPGTest(FpConstantFold_Test.cpp)
+    # The LibBF-backed real-literal conversion; self-skips in builds
+    # without LibBF (STP_HAVE_LIBBF off).
+    AddSTPGTest(DecimalToFP_Test.cpp)
     # The oracle is the hardware, evaluated under a rounding mode set with
     # fesetround. Without this the compiler assumes the default mode and
     # folds the reference arithmetic while compiling, so every non-default

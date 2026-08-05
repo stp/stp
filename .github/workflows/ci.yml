@@ -688,5 +688,18 @@ jobs:
         "fp solver output: '$($outfp.Trim())'"
         "fp solver exit code: $LASTEXITCODE"
         if ($outfp.Trim() -ne "sat") { exit 1 }
+        # Real-literal folding through the MSVC-built LibBF: the decimal
+        # fold must equal its packed-bits spelling, and a rational under a
+        # symbolic rounding mode pinned to RTZ must pick that conversion.
+        "(set-logic QF_FP)(declare-fun x () (_ FloatingPoint 8 24))(assert (= x ((_ to_fp 8 24) RNE 1.5)))(assert (distinct x ((_ to_fp 8 24) #x3fc00000)))(check-sat)" | Out-File -Encoding ascii testlit.smt2
+        $outlit = & $stp testlit.smt2 2>&1 | Out-String
+        "real-literal output: '$($outlit.Trim())'"
+        "real-literal exit code: $LASTEXITCODE"
+        if ($outlit.Trim() -ne "unsat") { exit 1 }
+        "(set-logic QF_FP)(declare-fun x () (_ FloatingPoint 8 24))(declare-fun r () RoundingMode)(assert (= x ((_ to_fp 8 24) r (/ 1 3))))(assert (= r RTZ))(assert (distinct x ((_ to_fp 8 24) #x3eaaaaaa)))(check-sat)" | Out-File -Encoding ascii testrat.smt2
+        $outrat = & $stp testrat.smt2 2>&1 | Out-String
+        "rational/symbolic-rm output: '$($outrat.Trim())'"
+        "rational/symbolic-rm exit code: $LASTEXITCODE"
+        if ($outrat.Trim() -ne "unsat") { exit 1 }
 
 # EOF
