@@ -18,10 +18,12 @@ apt-get install -y --no-install-recommends \
   ca-certificates \
   ccache \
   cmake \
+  curl \
   flex \
   git \
   libboost-program-options-dev \
   ninja-build \
+  patch \
   python3 \
   python3-pip \
   python3-setuptools \
@@ -37,10 +39,18 @@ compgen -G 'deps/install/lib*/libminisat*' > /dev/null || ./scripts/deps/setup-m
 [ -d deps/gtest ] || ./scripts/deps/setup-gtest.sh
 [ -d deps/OutputCheck ] || ./scripts/deps/setup-outputcheck.sh
 
+# Not cached (the tarball is tiny and builds in seconds), and worth having
+# here specifically: a 32-bit toolchain gives LibBF its 32-bit limb build
+# (LIMB_BITS = 32, BF_EXP_BITS_MAX = 29), which no other job exercises.
+./scripts/deps/setup-libbf.sh
+stp_root="$(pwd)"
+
 mkdir -p build-32bit
 cd build-32bit
 cmake \
   -DNOCRYPTOMINISAT:BOOL=ON \
+  -DUSE_LIBBF:BOOL=ON \
+  -DLIBBF_DIR:PATH="${stp_root}/deps/libbf" \
   -DENABLE_TESTING:BOOL=ON \
   -DWERROR:BOOL=ON \
   -DLIT_ARGS:STRING=-v \

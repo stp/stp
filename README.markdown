@@ -125,7 +125,16 @@ generators.
 STP relies on : boost (program_options), flex, bison, perl, zlib and minisat.
 The floating-point support uses the header-only
 [SymFPU](https://github.com/martin-cs/symfpu) library, which is vendored as a
-submodule -- nothing to install. A python3 interpreter is needed for the
+submodule -- nothing to install. Real literals in floating-point input --
+`((_ to_fp 8 24) RNE 1.5)` -- are converted by
+[LibBF](https://bellard.org/libbf/), an optional dependency fetched and
+built like minisat and CaDiCaL: run `scripts/deps/setup-libbf.sh` (it
+downloads the pinned release tarball, checks its hash, applies STP's MSVC
+portability patch and builds `libbf.a`; set `LIBBF_TARBALL` to a
+pre-downloaded copy for offline builds), then configure with
+`-DUSE_LIBBF:BOOL=ON -DLIBBF_DIR:PATH=<repo>/deps/libbf`. Without it STP
+builds as before and refuses real literals with a message pointing at the
+script. A python3 interpreter is needed for the
 python interface and for the test suite, and GMP is needed when building with
 CryptoMiniSat. You can install most of these by:
 
@@ -151,7 +160,12 @@ cloned without `--recursive`); an external SymFPU clone can be used
 instead via `-DSYMFPU_INCLUDE_DIRS=<directory containing the clone>`.
 With it, STP solves the SMT-LIB floating-point theory
 (QF_FP/QF_BVFP/QF_ABVFP) and exposes floating-point terms through the C,
-C++ (`stp/fp.hpp`) and Python APIs. One operation is format-bounded:
+C++ (`stp/fp.hpp`) and Python APIs. When additionally built with LibBF
+(`-DUSE_LIBBF=ON`, see Dependencies), real literals under `to_fp` --
+`((_ to_fp 8 24) RNE 0.1)` -- are folded to their exactly-rounded bits
+while parsing, in any format and under any of the five rounding modes,
+so they mean the same bits they do in bitwuzla, cvc5 and z3. One
+operation is format-bounded:
 `fp.rem` is refused past roughly binary64-sized formats (its circuit
 unrolls one divide step per representable exponent difference, so
 Float128's would be ~33000 steps deep). Configuring with

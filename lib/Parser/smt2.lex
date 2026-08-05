@@ -237,7 +237,7 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_TOK; }
 #b{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCONST_BINARY_TOK; }
 #x({DIGIT}|[a-fA-F])+  { smt2lval.str = new std::string(smt2text+2); return BVCONST_HEXIDECIMAL_TOK; }
-{DIGIT}+"."{DIGIT}+    { return DECIMAL_TOK;}
+{DIGIT}+"."{DIGIT}+    { smt2lval.str = new std::string(smt2text); return DECIMAL_TOK;}
 
 ";" { BEGIN COMMENT; }
 <COMMENT>"\n" { BEGIN INITIAL; /* return to normal mode */}
