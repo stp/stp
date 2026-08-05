@@ -440,3 +440,86 @@ TEST(FpConstantFold, folds_under_a_non_simplifying_factory)
   EXPECT_TRUE(folded.isConstant());
   EXPECT_EQ(eb + sb, folded.GetValueWidth());
 }
+
+// The simplifying factory folds all-constant floating-point nodes at
+// creation (the constant evaluator's FP arm re-interns results through the
+// CreateFPConst funnel), so a constant has ONE representation regardless of
+// how it was spelled, and constant operations never outlive their creation.
+TEST(FpConstantFold, both_literal_spellings_intern_to_the_same_node)
+{
+  Fixture f;
+  const uint64_t bits = 0x3FF4CCCCCCCCCCCDull; // 1.3, binary64
+
+  // ((_ to_fp 11 53) #x3FF4CCCCCCCCCCCD), as the parser builds it.
+  const ASTNode viaToFp = f.snf.CreateTerm(
+      FP_TOFP, 64,
+      ASTVec{f.mgr.CreateBVConst(32, 11), f.mgr.CreateBVConst(32, 53),
+             f.mgr.CreateBVConst(64, bits)});
+
+  // (fp #b0 #b01111111111 #b0100...) interns through CreateFPConst.
+  const ASTNode viaLiteral = f.fpConst(11, 53, bits);
+
+  EXPECT_TRUE(viaToFp.isConstant());
+  EXPECT_EQ(viaLiteral, viaToFp); // the same hash-consed node
+  EXPECT_EQ(11u, viaToFp.GetExpWidth());
+  EXPECT_EQ(53u, viaToFp.GetSigWidth());
+}
+
+TEST(FpConstantFold, constant_predicates_fold_at_creation)
+{
+  Fixture f;
+  const ASTNode onePointFive = f.fpConst(8, 24, 0x3FC00000u);
+  const ASTNode one = f.fpConst(8, 24, 0x3F800000u);
+
+  EXPECT_EQ(f.mgr.ASTTrue,
+            f.snf.CreateNode(FP_GT, ASTVec{onePointFive, one}));
+  EXPECT_EQ(f.mgr.ASTFalse,
+            f.snf.CreateNode(FP_LT, ASTVec{onePointFive, one}));
+  EXPECT_EQ(f.mgr.ASTFalse, f.snf.CreateNode(FP_ISNAN, ASTVec{one}));
+}
+
+TEST(FpConstantFold, constant_arithmetic_folds_at_creation)
+{
+  Fixture f;
+  const ASTNode sum = f.snf.CreateTerm(
+      FP_ADD, 64,
+      ASTVec{f.rm(symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN),
+             f.fpConst(11, 53, bitsOf(1.5)), f.fpConst(11, 53, bitsOf(2.5))});
+
+  EXPECT_TRUE(sum.isConstant());
+  EXPECT_EQ(f.fpConst(11, 53, bitsOf(4.0)), sum);
+  EXPECT_EQ(11u, sum.GetExpWidth());
+}
+
+TEST(FpConstantFold, nan_payloads_intern_canonically)
+{
+  Fixture f;
+  auto reinterpret = [&f](uint32_t bits) {
+    return f.snf.CreateTerm(
+        FP_TOFP, 32,
+        ASTVec{f.mgr.CreateBVConst(32, 8), f.mgr.CreateBVConst(32, 24),
+               f.mgr.CreateBVConst(32, bits)});
+  };
+  // Two different NaN payloads (and signs) intern to the one canonical NaN,
+  // matching what every FP-observable path (unpack, fp.to_ieee_bv) already
+  // does with payloads.
+  const ASTNode a = reinterpret(0x7F800001u);
+  const ASTNode b = reinterpret(0xFFC12345u);
+  EXPECT_TRUE(a.isConstant());
+  EXPECT_EQ(a, b);
+  EXPECT_EQ(f.mgr.ASTTrue, f.snf.CreateNode(FP_ISNAN, ASTVec{a}));
+}
+
+// fp.min/fp.max (opposite zeros) and fp.to_ubv/fp.to_sbv (out of range)
+// have unspecified cases that only get an answer once FpTotalise adds its
+// unspecified-value child, so their pre-totalise constant forms must NOT
+// fold at creation.
+TEST(FpConstantFold, partial_operations_do_not_fold_at_creation)
+{
+  Fixture f;
+  const ASTNode minimum = f.snf.CreateTerm(
+      FP_MIN, 32,
+      ASTVec{f.fpConst(8, 24, 0x80000000u), f.fpConst(8, 24, 0x00000000u)});
+  EXPECT_EQ(FP_MIN, minimum.GetKind());
+  EXPECT_FALSE(minimum.isConstant());
+}

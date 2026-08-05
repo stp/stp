@@ -1046,8 +1046,18 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
           k == FP_ISSUBNORMAL || k == FP_ISZERO || k == FP_ISINFINITE ||
           k == FP_ISNAN || k == FP_ISNEGATIVE || k == FP_ISPOSITIVE;
 
-      ASTNode temp(boolean_result ? _bm->CreateNode(k, formatted)
-                                  : _bm->CreateTerm(k, inputwidth, formatted));
+      // Build the normalisation copy through the HASHING factory, never the
+      // default one: the simplifying factory folds all-constant
+      // floating-point nodes by calling back into this evaluator, so
+      // rebuilding the same kind over the same constant children through it
+      // would recurse without bound. Nothing is lost -- the factory
+      // shortcuts this skips (abs of a constant, x*1.0, same-operand
+      // comparisons) are all handled by lowering below, and the evaluation
+      // of `blasted` already supports an unfolded circuit.
+      ASTNode temp(boolean_result
+                       ? _bm->hashingNodeFactory->CreateNode(k, formatted)
+                       : _bm->hashingNodeFactory->CreateTerm(k, inputwidth,
+                                                             formatted));
 
       // Only a floating-point *result* carries a floating-point format. The
       // classifications and comparisons return a Boolean and to_ubv/to_sbv
