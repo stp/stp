@@ -96,6 +96,12 @@ public:
   // that ignores it is slower rather than wrong.
   virtual bool setSearchBias(SearchBias /*bias*/) { return false; }
 
+  // Ask the backend to turn on bounded variable addition (BVA, CaDiCaL's
+  // "factor"). Like setSearchBias this is only ever called before the first
+  // clause is added, and FALSE means the backend has no such technique to
+  // enable -- a performance hint declined, not an error.
+  virtual bool enableBVA() { return false; }
+
   // ---------------------------------------------------------------------
   // Resource budgets.
   //

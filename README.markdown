@@ -194,6 +194,10 @@ into STP's shared library. These commands are pre-configured in
 When STP is built this way CaDiCaL becomes the *default* solver; `--minisat`
 or `--cryptominisat` select the others at runtime.
 
+With a CaDiCaL 3.x build, `--cadical-factor` controls CaDiCaL's bounded
+variable addition: `on`, `off`, or `auto` (the default, which enables it
+only for problems with array operations, where it measures fastest).
+
 #### Building against non-installed libraries
 
 If you wish to build STP's dependencies without installing them, you can tell CMake where to find the non-installed artefacts. For example:

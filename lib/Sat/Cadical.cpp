@@ -70,6 +70,8 @@ bool Cadical::solveInternal(bool& timeout_expired)
     s->connect_terminator(&time_limit);
   }
 
+  declareNewVariables();
+
   auto ret = s->solve();
   if (ret == 0)
   {
@@ -166,12 +168,56 @@ bool Cadical::okay()
   return s->state() != CaDiCaL::State::UNSATISFIED; 
 }
 
+// Enabling factor commits every later clause and model lookup to the
+// translation table (see the header): declared variables are the only ones
+// factor's contract allows, and CaDiCaL places each declared range itself.
+// Only ever called while the solver is still empty (CONFIGURING), which is
+// the one state "factor" may be set in.
+bool Cadical::enableBVA()
+{
+#ifdef STP_CADICAL_HAS_FACTOR
+  s->set("factor", 1);
+  factor_enabled = true;
+  return true;
+#else
+  // Building against a pre-3.0 CaDiCaL, where enabling factor was either
+  // impossible or untested; solving is unaffected.
+  return false;
+#endif
+}
+
+// With factor enabled, external variables must be declared before use, and
+// CaDiCaL chooses where each declared range lives so that it never overlaps
+// the extension variables factor invents. Declaration is batched here
+// (lazily, before clauses are added) rather than done in newVar because
+// declare_more_variables destroys a satisfying assignment, and newVar can
+// be called while the refinement loop is still reading the model.
+void Cadical::declareNewVariables()
+{
+#ifdef STP_CADICAL_HAS_FACTOR
+  if (!factor_enabled)
+    return;
+  if (ext_of_stp.empty())
+    ext_of_stp.push_back(0); // dummy: variables are 1-based
+  while (ext_of_stp.size() <= next_variable)
+  {
+    const size_t gap = next_variable + 1 - ext_of_stp.size();
+    const int newmax = s->declare_more_variables((int)gap);
+    for (size_t i = gap; i >= 1; i--)
+      ext_of_stp.push_back(newmax - (int)i + 1);
+  }
+#endif
+}
+
 bool Cadical::addClause(const vec_literals& ps) // Add a clause to the solver.
 {
+  declareNewVariables();
   for (int i=0; i < ps.size(); i++)
     {
       uint32_t var = ps[i].x >> 1;
       uint32_t polarity = ps[i].x & 1;
+      if (factor_enabled)
+        var = (uint32_t)ext_of_stp[var];
       s->add(polarity? -(int)var : (int)var);
     }
   s->add(0);
@@ -180,7 +226,9 @@ bool Cadical::addClause(const vec_literals& ps) // Add a clause to the solver.
 
 uint8_t Cadical::modelValue(uint32_t x) const
 {
-  if (s->val(x) > 0)
+  if (factor_enabled)
+    x = (x < ext_of_stp.size()) ? (uint32_t)ext_of_stp[x] : 0;
+  if (x != 0 && s->val(x) > 0)
     return true_literal();
   else
     return false_literal();
