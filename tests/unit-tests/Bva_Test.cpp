@@ -16,6 +16,18 @@
 
 using stp::SATSolver;
 
+// Minisat has no BVA, and has to say so rather than silently drop the
+// request: STP warns on the back of this.
+TEST(Bva, MinisatReportsNoSupport)
+{
+  stp::MinisatCore s;
+  EXPECT_FALSE(s.enableBVA());
+}
+
+#ifdef USE_CADICAL
+
+// Only the Cadical tests below build clauses; without USE_CADICAL these
+// helpers would be unused and -Werror=unused-function rejects the file.
 namespace
 {
 
@@ -35,16 +47,6 @@ void addBinary(SATSolver& s, uint32_t a, bool a_neg, uint32_t b, bool b_neg)
 }
 
 } // namespace
-
-// Minisat has no BVA, and has to say so rather than silently drop the
-// request: STP warns on the back of this.
-TEST(Bva, MinisatReportsNoSupport)
-{
-  stp::MinisatCore s;
-  EXPECT_FALSE(s.enableBVA());
-}
-
-#ifdef USE_CADICAL
 
 // Whether Cadical can enable BVA is decided at configure time from the
 // CaDiCaL version, and the answer at runtime has to match that decision.
