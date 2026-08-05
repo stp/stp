@@ -342,20 +342,22 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
   // These are created specially.
   //
 
-  /* we need to bypass the constant evaluation if we're creating an FP term
-   * (a table lookup: the FP category comes from ASTKind.kinds) */
-  const bool is_fp_operation = is_FP_kind(kind);
-
   // If all the parameters are constant, return the constant value.
   // The bitblaster calls CreateNode with a boolean vector. We don't try to
   // simplify those.
   // The type kinds (BOOLEAN..ROUNDINGMODE, API-only nodes) are exempt: a
   // childless one has "all children constant" vacuously, and the constant
   // evaluator has no business seeing a type.
+  //
+  // Floating-point predicates fold here too: the constant evaluator's FP
+  // arm evaluates them by lowering over the constant operands and returns
+  // TRUE/FALSE, so constant floating-point comparisons and classifications
+  // never outlive their creation. (The FP *term* fold, with its
+  // format-carrying subtleties, is in CreateTerm.)
   if (kind != stp::UNDEFINED && kind != stp::BOOLEAN &&
       kind != stp::BITVECTOR && kind != stp::ARRAY &&
       kind != stp::FLOATINGPOINT && kind != stp::ROUNDINGMODE &&
-      !is_fp_operation && children_all_constants(children))
+      children_all_constants(children))
   {
     const ASTNode& hash = hashing.CreateNode(kind, children);
     const ASTNode& c = NonMemberBVConstEvaluator(&bm, hash);
@@ -2017,12 +2019,21 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
   assert(bm.hashingNodeFactory == &hashing);
 
-  /* we need to bypass the constant evaluation if we're creating an FP term
-   * (a table lookup: the FP category comes from ASTKind.kinds) */
-  const bool is_fp_operation = is_FP_kind(kind);
+  // The partial floating-point operations cannot be constant-folded here:
+  // their unspecified cases (fp.min/fp.max on opposite zeros, out-of-range
+  // fp.to_ubv/fp.to_sbv) only get an answer when FpTotalise adds its
+  // never-constant unspecified-value child, and lowering requires that
+  // totalised arity. Every other floating-point term folds through the
+  // constant evaluator's FP arm, which re-interns the result with its
+  // format via the CreateFPConst funnel -- so both literal spellings,
+  // ((_ to_fp e s) bits) and (fp s e m), intern to the same ASTFPConst,
+  // and constant arithmetic collapses at creation.
+  const bool is_partial_fp_operation =
+      kind == stp::FP_MIN || kind == stp::FP_MAX || kind == stp::FP_TO_UBV ||
+      kind == stp::FP_TO_SBV;
 
   // If all the parameters are constant, return the constant value.
-  if (children_all_constants(children) && !is_fp_operation)
+  if (children_all_constants(children) && !is_partial_fp_operation)
   {
     const ASTNode& hash = hashing.CreateTerm(kind, width, children);
     const ASTNode& c = NonMemberBVConstEvaluator(&bm, hash);
