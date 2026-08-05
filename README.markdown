@@ -180,7 +180,7 @@ consumed from a build tree rather than an installation, so point
 ```
 $ git clone https://github.com/arminbiere/cadical
 $ cd cadical
-$ git checkout rel-2.1.3
+$ git checkout rel-3.0.1
 $ ./configure -fPIC
 $ make
 ```
@@ -193,6 +193,10 @@ into STP's shared library. These commands are pre-configured in
 
 When STP is built this way CaDiCaL becomes the *default* solver; `--minisat`
 or `--cryptominisat` select the others at runtime.
+
+With a CaDiCaL 3.x build, `--cadical-factor` controls CaDiCaL's bounded
+variable addition: `on`, `off`, or `auto` (the default, which enables it
+only for problems with array operations, where it measures fastest).
 
 #### Building against non-installed libraries
 

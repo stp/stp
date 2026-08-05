@@ -195,6 +195,20 @@ public:
   // every backend at its own settings, so the option is opt-in.
   SearchBias search_bias = SearchBias::NONE;
 
+  // Whether CaDiCaL may use bounded variable addition (its "factor"
+  // technique). Measured on QF_ABV it is a large win on some
+  // array-refinement families (wchains: up to 5x) and a modest loss on
+  // others (countbitstable: ~30%), so AUTO -- the default -- enables it
+  // only for problems that still contain array operations after
+  // simplification, and an explicit ON/OFF from the user always wins.
+  enum class BVAMode
+  {
+    AUTO = 0,
+    ON,
+    OFF
+  };
+  BVAMode cadical_factor = BVAMode::AUTO;
+
   bool get_print_output_at_all() const
   {
     return print_STPinput_back_flag || print_STPinput_back_SMTLIB2_flag ||

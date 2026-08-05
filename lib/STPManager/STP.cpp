@@ -464,6 +464,28 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     assert(!containsArrayOps(inputToSat, bm));
   }
 
+  // Bounded variable addition is decided here rather than at solver
+  // construction because AUTO wants the post-simplification answer: the
+  // Ackermannisation above can remove every array operation, and arrayops
+  // is only final from this point on. The solver has not yet been handed a
+  // clause, which is the only window in which it accepts the setting. A
+  // declined explicit ON is worth a warning (no CaDiCaL 3.x behind the
+  // build, or a different backend); a declined AUTO is just the default
+  // heuristic not applying.
+  if (bm->UserFlags.cadical_factor == UserDefinedFlags::BVAMode::ON ||
+      (bm->UserFlags.cadical_factor == UserDefinedFlags::BVAMode::AUTO &&
+       arrayops))
+  {
+    if (!NewSolver.enableBVA() &&
+        bm->UserFlags.cadical_factor == UserDefinedFlags::BVAMode::ON)
+    {
+      std::cerr << "Warning: --cadical-factor was requested but the SAT "
+                   "solver in use has no bounded variable addition to "
+                   "enable; using its own settings instead."
+                << std::endl;
+    }
+  }
+
   if (bm->UserFlags.check_counterexample_flag ||
       bm->UserFlags.print_counterexample_flag || (arrayops && !removed))
     bm->UserFlags.construct_counterexample_flag = true;

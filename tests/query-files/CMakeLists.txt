@@ -40,3 +40,23 @@ add_test(NAME query-files
     COMMAND ${LIT_TOOL} ${LIT_ARGS} --config-prefix=$<CONFIG> .
     WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
 )
+
+# The run above only exercises CaDiCaL's bounded variable addition where the
+# AUTO default turns it on (array problems). Forcing it on for the whole
+# corpus also covers the declare/translate machinery on problems the
+# heuristic would leave alone, so a numbering mistake cannot hide behind the
+# heuristic. Only registered when the flag can actually engage; on pre-3.0
+# CaDiCaL builds the sweep would just repeat the run above behind warnings.
+if (USE_CADICAL AND CADICAL_HAS_FACTOR)
+    add_test(NAME query-files-cadical-factor
+        COMMAND ${LIT_TOOL} ${LIT_ARGS} --config-prefix=$<CONFIG>
+                --param solver_params=--cadical-factor=on .
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+    )
+    # Both lit invocations write per-test Output/ files into this same
+    # directory, so running them concurrently under ctest -j corrupts each
+    # other's results. Serialise them against each other (only).
+    set_tests_properties(query-files query-files-cadical-factor
+        PROPERTIES RESOURCE_LOCK query-files-exec-root
+    )
+endif()

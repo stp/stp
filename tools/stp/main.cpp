@@ -58,6 +58,9 @@ public:
 
   // Held as text until parse_options() turns it into UserFlags.search_bias.
   std::string search_bias;
+
+  // Likewise for UserFlags.cadical_factor.
+  std::string cadical_factor;
 };
 
 int ExtraMain::create_and_parse_options(int argc, char** argv)
@@ -238,6 +241,10 @@ void ExtraMain::create_options()
   solver_options.add_options()
 #ifdef USE_CADICAL
       ("cadical", "use cadical as the solver")
+      ("cadical-factor", po::value<std::string>(&cadical_factor),
+       "let cadical use bounded variable addition: 'on', 'off', or 'auto' "
+       "(the default, on only for problems with array operations). Needs a "
+       "CaDiCaL 3.x build; otherwise the request is declined with a warning")
 #endif
 
 #ifdef USE_CRYPTOMINISAT
@@ -549,6 +556,22 @@ int ExtraMain::parse_options(int argc, char** argv)
     else
     {
       cerr << "ERROR: --search-bias must be one of 'sat', 'unsat' or 'none'"
+           << endl;
+      std::exit(-1);
+    }
+  }
+
+  if (vm.count("cadical-factor"))
+  {
+    if (cadical_factor == "on")
+      bm->UserFlags.cadical_factor = UserDefinedFlags::BVAMode::ON;
+    else if (cadical_factor == "off")
+      bm->UserFlags.cadical_factor = UserDefinedFlags::BVAMode::OFF;
+    else if (cadical_factor == "auto")
+      bm->UserFlags.cadical_factor = UserDefinedFlags::BVAMode::AUTO;
+    else
+    {
+      cerr << "ERROR: --cadical-factor must be one of 'on', 'off' or 'auto'"
            << endl;
       std::exit(-1);
     }

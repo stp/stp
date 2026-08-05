@@ -608,6 +608,28 @@ if (USE_CADICAL)
     add_definitions(-DUSE_CADICAL)
     include_directories(${CADICAL_INCLUDE_DIR})
     link_libraries(${CADICAL_LIBRARY})
+
+    # Bounded variable addition (--cadical-factor) needs the
+    # declare_more_variables API. That appeared in CaDiCaL 2.2.0, but the
+    # 2.2 line shipped it with different contract-checking defaults and was
+    # never tested here, so support is only compiled in against the 3.x
+    # series. Older checkouts still build and solve; STP just warns if the
+    # factor flag is explicitly requested. The checkout root carries its
+    # version in a VERSION file, which is what CADICAL_INCLUDE_DIR points at.
+    set(CADICAL_VERSION "unknown")
+    if (EXISTS "${CADICAL_INCLUDE_DIR}/VERSION")
+        file(READ "${CADICAL_INCLUDE_DIR}/VERSION" CADICAL_VERSION)
+        string(STRIP "${CADICAL_VERSION}" CADICAL_VERSION)
+    endif()
+    if (CADICAL_VERSION VERSION_GREATER_EQUAL "3.0.0")
+        message(STATUS "CaDiCaL ${CADICAL_VERSION}: bounded variable addition (--cadical-factor) enabled")
+        add_definitions(-DSTP_CADICAL_HAS_FACTOR)
+        # Mirrored as a variable so the test tree can register the
+        # factor-forced lit sweep only when the flag can actually engage.
+        set(CADICAL_HAS_FACTOR ON)
+    else()
+        message(STATUS "CaDiCaL ${CADICAL_VERSION} predates 3.0.0: --cadical-factor will be unavailable")
+    endif()
 endif()
 
 # -----------------------------------------------------------------------------
