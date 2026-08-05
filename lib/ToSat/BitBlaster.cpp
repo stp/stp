@@ -3198,18 +3198,23 @@ BBNode BitBlaster::BBeqFP(const ASTNode& form, BBNodeSet& support)
     return nf->CreateNode(OR, bothNaN, sameBits);
   }
 
-  const BBNode aNotNaN = nf->CreateNode(NOT, BBfpIsNaN(aBits, sb, w));
-  const BBNode bNotNaN = nf->CreateNode(NOT, BBfpIsNaN(bBits, sb, w));
+  // One not-NaN test suffices, not two: when the result can be true at
+  // all, either bits(a) = bits(b) -- identical patterns, so the operands
+  // are NaN or not together and one test implies the other -- or both
+  // operands are zeros, which are never NaN. Testing only one side
+  // computes the same Boolean function (the exhaustive differential
+  // passes with either or both tests; no test CAN distinguish them, so
+  // this comment is the argument that keeps the dropped test dropped).
+  // Test the constant side when there is one: its isNaN folds away
+  // entirely and the symbolic side's isNaN circuit is never built. The
+  // choice is per-node and deterministic.
+  const BBNodeVec& nanSide = form[0].isConstant() ? aBits : bBits;
+  const BBNode notNaN = nf->CreateNode(NOT, BBfpIsNaN(nanSide, sb, w));
   const BBNode bothZero =
       nf->CreateNode(AND, BBfpIsZero(aBits, w), BBfpIsZero(bBits, w));
   const BBNode sameValue = nf->CreateNode(OR, sameBits, bothZero);
 
-  BBNodeVec conjuncts;
-  conjuncts.reserve(3);
-  conjuncts.push_back(aNotNaN);
-  conjuncts.push_back(bNotNaN);
-  conjuncts.push_back(sameValue);
-  return nf->CreateNode(AND, conjuncts);
+  return nf->CreateNode(AND, notNaN, sameValue);
 }
 
 // Return bit-blasted form for the overflow predicates BVUADDO, BVSADDO,
