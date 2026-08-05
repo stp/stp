@@ -343,9 +343,12 @@ TEST(PropagateEquality_Test, g_Booleans)
 
 // SMT `=` on floats (FP_SMT_EQ) is true equality on the abstract domain,
 // so it propagates like EQ. fp.eq (FP_EQ) identifies +0 with -0 and must
-// never propagate. These parse their own QF_FP prelude and return the
-// propagated conjunction for inspection.
-static stp::ASTNode propagateFP(const std::string& input)
+// never propagate. These parse their own QF_FP prelude and hand the
+// propagated conjunction to a checker WHILE the manager is alive: an
+// ASTNode must not outlive the STPMgr that owns its storage (returning one
+// crashed on i386 and shows as an invalid access under valgrind on x86-64).
+template <typename Check>
+static void propagateFP(const std::string& input, Check check)
 {
   stp::STPMgr mgr;
   SimplifyingNodeFactory snf(*(mgr.hashingNodeFactory), mgr);
@@ -382,7 +385,7 @@ static stp::ASTNode propagateFP(const std::string& input)
     n = simp.applySubstitutionMap(n);
     simp.haveAppliedSubstitutionMap();
   }
-  return n;
+  check(n);
 }
 
 // The propagated conjunction is not fully constant-folded here (all-constant
@@ -401,51 +404,62 @@ static bool containsSymbolNamed(const stp::ASTNode& n, const std::string& s)
 
 TEST(PropagateEquality_Test, fp_smt_eq_constant)
 {
-  const stp::ASTNode n = propagateFP(R"(
+  propagateFP(R"(
    (assert (= x (fp #b0 #b01111111 #b10000000000000000000000)))
    (assert (fp.gt x (fp #b0 #b01111111 #b00000000000000000000000)))
-  )");
-  ASSERT_FALSE(containsSymbolNamed(n, "x"));
+  )",
+              [](const stp::ASTNode& n) {
+                ASSERT_FALSE(containsSymbolNamed(n, "x"));
+              });
 }
 
 TEST(PropagateEquality_Test, fp_smt_eq_tofp_literal)
 {
   // The literal arrives as to_fp's unfolded reinterpret form; the
   // lookthrough resolves it to an interned constant before substituting.
-  const stp::ASTNode n = propagateFP(R"(
+  propagateFP(R"(
    (assert (= x ((_ to_fp 8 24) #x3FC00000)))
    (assert (fp.lt x ((_ to_fp 8 24) #x40000000)))
-  )");
-  ASSERT_FALSE(containsSymbolNamed(n, "x"));
+  )",
+              [](const stp::ASTNode& n) {
+                ASSERT_FALSE(containsSymbolNamed(n, "x"));
+              });
 }
 
 TEST(PropagateEquality_Test, fp_smt_eq_symbols)
 {
   // One of the two symbols substitutes for the other.
-  const stp::ASTNode n = propagateFP(R"(
+  propagateFP(R"(
    (assert (= x y))
    (assert (fp.isNormal x))
    (assert (fp.isNormal y))
-  )");
-  ASSERT_TRUE(!containsSymbolNamed(n, "x") || !containsSymbolNamed(n, "y"));
+  )",
+              [](const stp::ASTNode& n) {
+                ASSERT_TRUE(!containsSymbolNamed(n, "x") ||
+                            !containsSymbolNamed(n, "y"));
+              });
 }
 
 TEST(PropagateEquality_Test, fp_eq_never_propagates)
 {
   // fp.eq's +0 = -0 makes substitution unsound; the node must survive.
-  const stp::ASTNode n = propagateFP(R"(
+  propagateFP(R"(
    (assert (fp.eq x (fp #b0 #b00000000 #b00000000000000000000000)))
-  )");
-  ASSERT_EQ(stp::FP_EQ, n.GetKind());
+  )",
+              [](const stp::ASTNode& n) {
+                ASSERT_EQ(stp::FP_EQ, n.GetKind());
+              });
 }
 
 TEST(PropagateEquality_Test, fp_smt_eq_occurs_check)
 {
   // x appears on both sides; the candidate must be rejected, not looped.
-  const stp::ASTNode n = propagateFP(R"(
+  propagateFP(R"(
    (assert (= x (fp.add RNE x y)))
-  )");
-  ASSERT_EQ(stp::FP_SMT_EQ, n.GetKind());
+  )",
+              [](const stp::ASTNode& n) {
+                ASSERT_EQ(stp::FP_SMT_EQ, n.GetKind());
+              });
 }
 
 #endif // STP_ENABLE_FLOATING_POINT
