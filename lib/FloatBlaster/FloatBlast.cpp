@@ -107,6 +107,56 @@ private:
                  "source sorts");
   }
 
+  // A comparison operand that is (or resolves to) a leaf the lowering
+  // leaves untouched: a symbol or an interned constant. FP constant folding
+  // is deferred solver-wide, so a literal usually arrives as to_fp's
+  // three-child reinterpret form over constant bits; resolve it through the
+  // canonicalising funnel (CreateFPConst), the same lookthrough
+  // RemoveUnconstrained's comparison rule uses. Returns null for anything
+  // else -- in particular for FP operations, whose values are cached
+  // unpacked and belong on the SymFPU path.
+  ASTNode comparisonLeaf(const ASTNode& n) const
+  {
+    if (n.Degree() == 0)
+      return n;
+    if (n.GetKind() == FP_TOFP && n.Degree() == 3 &&
+        n[2].GetKind() == BVCONST)
+    {
+      const SourceSort sort = n.GetSourceSort();
+      return bm->CreateFPConst(n[2], sort.exponentWidth(),
+                               sort.significandWidth());
+    }
+    return ASTNode();
+  }
+
+  // fp.gt/fp.lt over leaf operands skip SymFPU entirely: the source
+  // comparison survives to the bit-blaster, which compares the packed IEEE
+  // bits directly (BBcompareFP). Returns the surviving node -- `n` itself,
+  // or the comparison rebuilt over resolved constant operands, both purely
+  // float-sorted so no FP node is ever built over packed carriers -- or
+  // null when the comparison has to take the SymFPU path.
+  //
+  // A comparison of two constants must not survive: constant folding and
+  // model evaluation lower the node over its constant children and rely on
+  // the result collapsing to TRUE/FALSE through the simplifying factory
+  // (ComputeFormulaUsingModel asserts lowering changed the node).
+  ASTNode nativeComparisonSurvivor(const ASTNode& n) const
+  {
+    if (!bm->UserFlags.fp_native_cmp)
+      return ASTNode();
+    const ASTNode left = comparisonLeaf(n[0]);
+    if (left.IsNull())
+      return ASTNode();
+    const ASTNode right = comparisonLeaf(n[1]);
+    if (right.IsNull())
+      return ASTNode();
+    if (left.isConstant() && right.isConstant())
+      return ASTNode();
+    if (left == n[0] && right == n[1])
+      return n;
+    return node_factory->CreateNode(n.GetKind(), left, right);
+  }
+
   ASTNode rebuild(const ASTNode& n, const ASTVec& children)
   {
     if (n.GetType() == BOOLEAN_TYPE)
@@ -492,17 +542,27 @@ private:
         return symbolic_fp::unpacked::ieeeEqual(
             formatOf(n[0]), asUnpacked(n[0]), asUnpacked(n[1]));
       case FP_LT:
+      {
         requireSameFormat(n[0], n[1]);
+        const ASTNode survivor = nativeComparisonSurvivor(n);
+        if (!survivor.IsNull())
+          return survivor;
         return symbolic_fp::unpacked::lessThan(
             formatOf(n[0]), asUnpacked(n[0]), asUnpacked(n[1]));
+      }
       case FP_LEQ:
         requireSameFormat(n[0], n[1]);
         return symbolic_fp::unpacked::lessThanOrEqual(
             formatOf(n[0]), asUnpacked(n[0]), asUnpacked(n[1]));
       case FP_GT:
+      {
         requireSameFormat(n[0], n[1]);
+        const ASTNode survivor = nativeComparisonSurvivor(n);
+        if (!survivor.IsNull())
+          return survivor;
         return symbolic_fp::unpacked::lessThan(
             formatOf(n[0]), asUnpacked(n[1]), asUnpacked(n[0]));
+      }
       case FP_GEQ:
         requireSameFormat(n[0], n[1]);
         return symbolic_fp::unpacked::lessThanOrEqual(

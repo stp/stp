@@ -372,6 +372,11 @@ void ExtraMain::create_options()
       "When constant-bit propagation detects a constant bit during AIG construction, assert the AIG node and replace it, in the AIG, by the constant bit"
       )
 
+    ("bb.fp-native-cmp",
+      BOOL_ARG(bm->UserFlags.fp_native_cmp),
+      "Bit-blast fp.gt/fp.lt over already-packed operands natively instead of via the SymFPU unpacking circuits"
+      )
+
     ("bb.simplify-during-bb",
       BOOL_ARG(bm->UserFlags.simplify_during_BB_flag),
       "When bit-blasting discovers that a non-constant child of a term blasts to an all-constant vector, rebuild the term with that constant and re-run the word-level term simplifier on it. Has no effect unless the rewriting simplifier is also on, i.e. not with --disable-opt-inc or --disable-simplifications"

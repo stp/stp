@@ -35,6 +35,14 @@ AddSTPGTest(SourceSortMemo_Test.cpp)
 if (ENABLE_FLOATING_POINT)
     AddSTPGTest(FPPrintBack_Test.cpp)
     AddSTPGTest(FloatBlast_Test.cpp)
+    # The native-comparison differential instantiates BBNodeManagerAIG, whose
+    # inline members call ABC. A shared libstp localises ABC's symbols
+    # (--exclude-libs), so this test links its own copy; the AIG package keeps
+    # all of its state in the manager struct, which is shared fine. Linking
+    # the archive by file keeps ABC's interface flags (-fno-exceptions) off
+    # the test's own compilation.
+    target_link_libraries(FloatBlast_TestTests $<TARGET_FILE:libabc-pic>)
+    add_dependencies(FloatBlast_TestTests libabc-pic)
     AddSTPGTest(FpTotalise_Test.cpp)
     AddSTPGTest(SourceSort_Test.cpp)
     # Builds float/rounding-mode constants, which is the whole point.

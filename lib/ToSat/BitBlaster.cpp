@@ -1323,10 +1323,15 @@ const BBNode BitBlaster::BBForm(const ASTNode& form,
       result = BBOverflow(form, support);
       break;
     }
-    case FP_LEQ:
-    case FP_LT:
-    case FP_GEQ:
     case FP_GT:
+    case FP_LT:
+    {
+      result = BBcompareFP(form, support);
+      break;
+    }
+
+    case FP_LEQ:
+    case FP_GEQ:
     case FP_EQ:
     case FP_ISNORMAL:
     case FP_ISSUBNORMAL:
@@ -3052,6 +3057,83 @@ BBNode BitBlaster::BBcompare(const ASTNode& form,
       cerr << "BBCompare: Illegal kind" << form << endl;
       FatalError("", form);
   }
+}
+
+// Bit-blasted form for FP_GT and FP_LT over packed IEEE-754 operands.
+// FloatBlast leaves these comparisons in place when both operands are leaves
+// (symbols, interned constants); their packed bits are compared directly,
+// with no unpacking. Sign-magnitude maps onto an unsigned total order with a
+// per-bit XOR against the sign:
+//
+//   key(f) = not(sign(f)) ++ (f[w-2:0] xor sign(f))
+//   a > b  = not(isNaN(a)) and not(isNaN(b))
+//            and not(isZero(a) and isZero(b)) and key(a) >u key(b)
+//
+// The keys order every pair correctly except (+0, -0): their keys are
+// adjacent with no other float's key between them, so the only misordered
+// pair is repaired by the both-zero conjunct. (A greater-or-equal variant
+// would need the correction ORed in instead.) isNaN tests the exponent and
+// significand fields, so operands with arbitrary NaN payloads compare as
+// NaN.
+BBNode BitBlaster::BBcompareFP(const ASTNode& form, BBNodeSet& support)
+{
+  assert(form.GetKind() == FP_GT || form.GetKind() == FP_LT);
+  // fp.lt(a,b) is exactly fp.gt(b,a).
+  const ASTNode& a = form.GetKind() == FP_GT ? form[0] : form[1];
+  const ASTNode& b = form.GetKind() == FP_GT ? form[1] : form[0];
+
+  const SourceSort sort = a.GetSourceSort();
+  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb = sort.significandWidth();
+  const unsigned w = sort.exponentWidth() + sb;
+  assert(a.GetValueWidth() == w);
+  assert(b.GetValueWidth() == w);
+  assert(sb >= 2 && w >= sb + 1);
+
+  // Bit i of a packed operand is bit i of the IEEE encoding: significand
+  // field in bits [0, sb-2], exponent field in bits [sb-1, w-2], sign at
+  // w-1.
+  const BBNodeVec aBits = BBTerm(a, support);
+  const BBNodeVec bBits = BBTerm(b, support);
+
+  auto isNaN = [this](const BBNodeVec& p, unsigned sig, unsigned width) {
+    BBNodeVec expField(p.begin() + (sig - 1), p.begin() + (width - 1));
+    BBNodeVec sigField(p.begin(), p.begin() + (sig - 1));
+    const BBNode expAllOnes = nf->CreateNode(AND, expField);
+    const BBNode sigNonZero = nf->CreateNode(OR, sigField);
+    return nf->CreateNode(AND, expAllOnes, sigNonZero);
+  };
+
+  auto isZero = [this](const BBNodeVec& p, unsigned width) {
+    BBNodeVec magnitude(p.begin(), p.begin() + (width - 1));
+    return nf->CreateNode(NOR, magnitude);
+  };
+
+  auto key = [this](const BBNodeVec& p, unsigned width) {
+    const BBNode& sign = p[width - 1];
+    BBNodeVec k;
+    k.reserve(width);
+    for (unsigned i = 0; i < width - 1; i++)
+      k.push_back(nf->CreateNode(XOR, p[i], sign));
+    k.push_back(nf->CreateNode(NOT, sign));
+    return k;
+  };
+
+  const BBNode aNotNaN = nf->CreateNode(NOT, isNaN(aBits, sb, w));
+  const BBNode bNotNaN = nf->CreateNode(NOT, isNaN(bBits, sb, w));
+  const BBNode bothZero =
+      nf->CreateNode(AND, isZero(aBits, w), isZero(bBits, w));
+  const BBNodeVec aKey = key(aBits, w);
+  const BBNodeVec bKey = key(bBits, w);
+  const BBNode greater = BBBVLE(bKey, aKey, false, true); // key(a) >u key(b)
+
+  BBNodeVec conjuncts;
+  conjuncts.reserve(4);
+  conjuncts.push_back(aNotNaN);
+  conjuncts.push_back(bNotNaN);
+  conjuncts.push_back(nf->CreateNode(NOT, bothZero));
+  conjuncts.push_back(greater);
+  return nf->CreateNode(AND, conjuncts);
 }
 
 // Return bit-blasted form for the overflow predicates BVUADDO, BVSADDO,

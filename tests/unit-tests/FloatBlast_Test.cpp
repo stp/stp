@@ -7,6 +7,9 @@
 #include "stp/FloatBlaster/FpTotalise.h"
 #include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/STPManager/STPManager.h"
+#include "stp/Simplifier/Simplifier.h"
+#include "stp/ToSat/BBNodeManagerAIG.h"
+#include "stp/ToSat/BitBlaster.h"
 
 #include <gtest/gtest.h>
 #include <set>
@@ -200,6 +203,10 @@ TEST(FloatBlast, totalisation_defers_canonical_boundaries_to_lowering)
 TEST(FloatBlast, every_floating_point_kind_is_lowered)
 {
   STPMgr mgr;
+  // fp.gt/fp.lt over leaves deliberately survive lowering when the native
+  // comparison is on (see native_comparison_survives_for_leaf_operands).
+  // This sweep checks that every kind has a SymFPU arm, so turn it off.
+  mgr.UserFlags.fp_native_cmp = false;
   const SourceSort fp32 = SourceSort::floatingPoint(8, 24);
   const ASTNode x = mgr.CreateSourceSymbol("x", fp32);
   const ASTNode y = mgr.CreateSourceSymbol("y", fp32);
@@ -280,4 +287,120 @@ TEST(FloatBlast, every_floating_point_kind_is_lowered)
     EXPECT_FALSE(containsFloatingPointKind(lowered))
         << _kind_names[c.first] << " was not lowered";
   }
+}
+
+// fp.gt/fp.lt over leaf operands are not expanded to SymFPU circuits: the
+// source node passes through lowering unchanged and the bit-blaster encodes
+// it natively over the packed bits (BBcompareFP). Everything else -- other
+// comparison kinds, operands that are FP operations, constant pairs, and
+// every comparison once the flag is off -- still lowers through SymFPU.
+TEST(FloatBlast, native_comparison_survives_for_leaf_operands)
+{
+  STPMgr mgr;
+  ASSERT_TRUE(mgr.UserFlags.fp_native_cmp); // on by default
+  const SourceSort fp32 = SourceSort::floatingPoint(8, 24);
+  const ASTNode x = mgr.CreateSourceSymbol("x", fp32);
+  const ASTNode y = mgr.CreateSourceSymbol("y", fp32);
+  const ASTNode one =
+      mgr.CreateFPConst(mgr.CreateBVConst(32, 0x3f800000u), 8, 24);
+  const ASTNode two =
+      mgr.CreateFPConst(mgr.CreateBVConst(32, 0x40000000u), 8, 24);
+  const ASTNode sum =
+      mgr.CreateTerm(FP_ADD, 32, ASTVec{rne(mgr), x, y});
+
+  auto lowered = [&mgr](const ASTNode& n) {
+    FloatBlast lower(&mgr);
+    return lower.topLevel(n);
+  };
+
+  // Leaf operands: the comparison itself survives, and nothing else does.
+  const ASTNode gt_symbols = mgr.CreateNode(FP_GT, x, y);
+  EXPECT_EQ(gt_symbols, lowered(gt_symbols));
+  const ASTNode gt_constant = mgr.CreateNode(FP_GT, x, one);
+  EXPECT_EQ(gt_constant, lowered(gt_constant));
+  const ASTNode lt_constant = mgr.CreateNode(FP_LT, x, one);
+  EXPECT_EQ(lt_constant, lowered(lt_constant));
+
+  // FP constant folding is deferred solver-wide, so literals usually arrive
+  // as to_fp's three-child reinterpret form over constant bits. The gate
+  // resolves that form to the interned constant and the comparison survives
+  // rebuilt over it.
+  const ASTNode one_reinterpreted = mgr.CreateTerm(
+      FP_TOFP, 32,
+      ASTVec{mgr.CreateBVConst(32, 8), mgr.CreateBVConst(32, 24),
+             mgr.CreateBVConst(32, 0x3f800000u)});
+  EXPECT_EQ(gt_constant,
+            lowered(mgr.CreateNode(FP_GT, x, one_reinterpreted)));
+
+  // An FP-operation operand keeps the whole comparison on the SymFPU path:
+  // its value is cached unpacked and the unpacked comparison is cheaper
+  // than packing it.
+  EXPECT_FALSE(
+      containsFloatingPointKind(lowered(mgr.CreateNode(FP_GT, sum, y))));
+
+  // A constant pair must not survive -- constant folding and model
+  // evaluation rely on lowering replacing the node (they collapse the
+  // SymFPU circuit built over the constants).
+  EXPECT_FALSE(
+      containsFloatingPointKind(lowered(mgr.CreateNode(FP_GT, one, two))));
+
+  // The other comparison kinds are not migrated.
+  EXPECT_FALSE(
+      containsFloatingPointKind(lowered(mgr.CreateNode(FP_GEQ, x, y))));
+  EXPECT_FALSE(
+      containsFloatingPointKind(lowered(mgr.CreateNode(FP_LEQ, x, y))));
+
+  // Flag off: the old behaviour, everything lowers.
+  mgr.UserFlags.fp_native_cmp = false;
+  EXPECT_FALSE(containsFloatingPointKind(lowered(gt_symbols)));
+}
+
+// The native encoding and SymFPU must agree on every comparison. At the
+// smallest supported format, (3, 4), all 128 x 128 packed operand pairs are
+// checked for both fp.gt and fp.lt: the native verdict comes from
+// bit-blasting the comparison over constant operands (the AIG collapses to
+// a constant), the reference from SymFPU's fold-by-construction constant
+// evaluation. The sweep includes +/-0, +/-infinity, NaN and every subnormal
+// pair.
+TEST(FloatBlast, native_comparison_agrees_with_symfpu_exhaustively)
+{
+  STPMgr mgr;
+  SubstitutionMap substitutions(&mgr);
+  Simplifier simp(&mgr, &substitutions);
+  BBNodeManagerAIG aig;
+  BitBlaster bb(&aig, &simp, mgr.defaultNodeFactory, &mgr.UserFlags);
+
+  const unsigned eb = 3, sb = 4;
+  const unsigned width = eb + sb;
+  const unsigned values = 1u << width;
+
+  std::vector<ASTNode> constants;
+  constants.reserve(values);
+  for (unsigned i = 0; i < values; i++)
+    constants.push_back(mgr.CreateFPConst(mgr.CreateBVConst(width, i), eb, sb));
+
+  unsigned checked = 0;
+  for (unsigned i = 0; i < values; i++)
+  {
+    for (unsigned j = 0; j < values; j++)
+    {
+      for (const Kind kind : {FP_GT, FP_LT})
+      {
+        const ASTNode comparison =
+            mgr.CreateNode(kind, constants[i], constants[j]);
+
+        const ASTNode reference = NonMemberBVConstEvaluator(&mgr, comparison);
+        ASSERT_TRUE(reference == mgr.ASTTrue || reference == mgr.ASTFalse);
+
+        const BBNode native = bb.BBForm(comparison);
+        ASSERT_TRUE(native == aig.getTrue() || native == aig.getFalse());
+
+        ASSERT_EQ(reference == mgr.ASTTrue, native == aig.getTrue())
+            << _kind_names[kind] << " disagrees on operands " << i << ", "
+            << j;
+        ++checked;
+      }
+    }
+  }
+  EXPECT_EQ(2 * values * values, checked);
 }
