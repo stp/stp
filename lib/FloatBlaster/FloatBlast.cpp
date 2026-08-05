@@ -107,15 +107,22 @@ private:
                  "source sorts");
   }
 
-  // A comparison operand that is (or resolves to) a leaf the lowering
-  // leaves untouched: a symbol or an interned constant. FP constant folding
-  // is deferred solver-wide, so a literal usually arrives as to_fp's
-  // three-child reinterpret form over constant bits; resolve it through the
-  // canonicalising funnel (CreateFPConst), the same lookthrough
-  // RemoveUnconstrained's comparison rule uses. Returns null for anything
-  // else -- in particular for FP operations, whose values are cached
-  // unpacked and belong on the SymFPU path.
-  ASTNode comparisonLeaf(const ASTNode& n) const
+  // A predicate operand that is (or resolves to) a packed view the lowering
+  // leaves in the formula: a symbol or an interned constant, and structural
+  // nodes built out of those. FP constant folding is deferred solver-wide,
+  // so a literal usually arrives as to_fp's three-child reinterpret form
+  // over constant bits; resolve it through the canonicalising funnel
+  // (CreateFPConst), the same lookthrough RemoveUnconstrained's comparison
+  // rule uses. Returns null for anything else -- in particular for FP
+  // operations, whose values are cached unpacked and belong on the SymFPU
+  // path.
+  //
+  // Everything returned here ends up as a child of a surviving predicate,
+  // so it must be what lowering would have left in the formula anyway: each
+  // case returns the node unchanged, or a node of the same kind whose
+  // children are themselves resolved this way (or lowered, for the parts
+  // that are not float-sorted).
+  ASTNode comparisonLeaf(const ASTNode& n)
   {
     if (n.Degree() == 0)
       return n;
@@ -126,23 +133,51 @@ private:
       return bm->CreateFPConst(n[2], sort.exponentWidth(),
                                sort.significandWidth());
     }
+    // A float-sorted ITE is a mux over packed bits once its branches are
+    // packed views, and the bit-blaster muxes them for free (BBITE) -- while
+    // SymFPU's ITE arm unpacks BOTH branches and muxes the unpacked records.
+    // The branches recurse through here rather than through asPacked,
+    // because asPacked would happily build an encode() circuit for an
+    // FP-operation branch, which is exactly the case that belongs on the
+    // SymFPU path.
+    if (n.GetKind() == ITE && n.Degree() == 3)
+    {
+      const ASTNode thenLeaf = comparisonLeaf(n[1]);
+      if (thenLeaf.IsNull())
+        return ASTNode();
+      const ASTNode elseLeaf = comparisonLeaf(n[2]);
+      if (elseLeaf.IsNull())
+        return ASTNode();
+      // The condition is Boolean, so lower() is the right treatment: any FP
+      // work inside it is lowered (possibly into further surviving native
+      // predicates) exactly as it would be anywhere else.
+      const ASTNode cond = lower(n[0]);
+      if (cond == n[0] && thenLeaf == n[1] && elseLeaf == n[2])
+        return n;
+      // Through the factory, so a folded condition collapses the mux to one
+      // branch here rather than leaving a dead one under the predicate. The
+      // constant rules in the two survivor functions run after this and
+      // still see the collapsed operand.
+      return node_factory->CreateTerm(ITE, n.GetValueWidth(), cond, thenLeaf,
+                                      elseLeaf);
+    }
     return ASTNode();
   }
 
-  // The six binary comparison predicates over leaf operands skip SymFPU
-  // entirely: the source comparison survives to the bit-blaster, which
-  // compares the packed IEEE bits directly (BBcompareFP, BBeqFP). Returns
-  // the surviving node -- `n` itself, or the comparison rebuilt over
-  // resolved constant operands, both purely float-sorted so no FP node is
-  // ever built over packed carriers -- or null when the comparison has to
-  // take the SymFPU path. (nativeClassificationSurvivor is the unary
+  // The six binary comparison predicates over packed-view operands skip
+  // SymFPU entirely: the source comparison survives to the bit-blaster,
+  // which compares the packed IEEE bits directly (BBcompareFP, BBeqFP).
+  // Returns the surviving node -- `n` itself, or the comparison rebuilt
+  // over resolved operands, both purely float-sorted so no FP node is ever
+  // built over packed carriers -- or null when the comparison has to take
+  // the SymFPU path. (nativeClassificationSurvivor is the unary
   // sibling, for the classification predicates.)
   //
   // A comparison of two constants must not survive: constant folding and
   // model evaluation lower the node over its constant children and rely on
   // the result collapsing to TRUE/FALSE through the simplifying factory
   // (ComputeFormulaUsingModel asserts lowering changed the node).
-  ASTNode nativeComparisonSurvivor(const ASTNode& n) const
+  ASTNode nativeComparisonSurvivor(const ASTNode& n)
   {
     if (!bm->UserFlags.fp_native_cmp)
       return ASTNode();
@@ -172,7 +207,7 @@ private:
   // for a unary predicate a constant operand means the whole node is
   // constant, and an all-constant node has to lower so that constant
   // folding and model evaluation see it collapse.
-  ASTNode nativeClassificationSurvivor(const ASTNode& n) const
+  ASTNode nativeClassificationSurvivor(const ASTNode& n)
   {
     if (!bm->UserFlags.fp_native_cmp)
       return ASTNode();

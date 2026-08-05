@@ -289,7 +289,7 @@ TEST(FloatBlast, every_floating_point_kind_is_lowered)
   }
 }
 
-// The six comparison predicates over leaf operands are not expanded to
+// The six comparison predicates over packed-view operands are not expanded to
 // SymFPU circuits: the source node passes through lowering unchanged and the
 // bit-blaster encodes it natively over the packed bits (BBcompareFP,
 // BBeqFP).
@@ -383,6 +383,73 @@ TEST(FloatBlast, native_comparison_survives_for_leaf_operands)
   EXPECT_FALSE(containsFloatingPointKind(lowered(isnan_symbol)));
 }
 
+// A float-sorted ITE is a mux over packed bits, so a predicate over one can
+// survive lowering too: the bit-blaster muxes the branches (BBITE) instead
+// of SymFPU unpacking both of them and muxing the unpacked records. The
+// branches have to pass the same test the top-level operands do.
+TEST(FloatBlast, native_comparison_survives_for_ite_operands)
+{
+  STPMgr mgr;
+  ASSERT_TRUE(mgr.UserFlags.fp_native_cmp); // on by default
+  const SourceSort fp32 = SourceSort::floatingPoint(8, 24);
+  const ASTNode x = mgr.CreateSourceSymbol("x", fp32);
+  const ASTNode y = mgr.CreateSourceSymbol("y", fp32);
+  const ASTNode z = mgr.CreateSourceSymbol("z", fp32);
+  const ASTNode c = mgr.CreateSymbol("c", 0, 0);
+  const ASTNode d = mgr.CreateSymbol("d", 0, 0);
+  const ASTNode one =
+      mgr.CreateFPConst(mgr.CreateBVConst(32, 0x3f800000u), 8, 24);
+  const ASTNode sum = mgr.CreateTerm(FP_ADD, 32, ASTVec{rne(mgr), x, y});
+
+  auto lowered = [&mgr](const ASTNode& n) {
+    FloatBlast lower(&mgr);
+    return lower.topLevel(n);
+  };
+
+  // Both branches are symbols: the whole comparison survives unchanged.
+  const ASTNode mux = mgr.CreateTerm(ITE, 32, ASTVec{c, x, y});
+  const ASTNode gt_mux = mgr.CreateNode(FP_GT, mux, z);
+  EXPECT_EQ(gt_mux, lowered(gt_mux));
+
+  // Nested muxes are just more of the same.
+  const ASTNode nested = mgr.CreateTerm(
+      ITE, 32, ASTVec{d, x, mgr.CreateTerm(ITE, 32, ASTVec{c, y, z})});
+  const ASTNode gt_nested = mgr.CreateNode(FP_GT, nested, z);
+  EXPECT_EQ(gt_nested, lowered(gt_nested));
+
+  // A to_fp-spelled literal inside a branch resolves to the interned
+  // constant, so the comparison survives rebuilt over the resolved mux.
+  const ASTNode one_reinterpreted = mgr.CreateTerm(
+      FP_TOFP, 32,
+      ASTVec{mgr.CreateBVConst(32, 8), mgr.CreateBVConst(32, 24),
+             mgr.CreateBVConst(32, 0x3f800000u)});
+  const ASTNode gt_resolved = mgr.CreateNode(
+      FP_GT, mgr.CreateTerm(ITE, 32, ASTVec{c, x, one}), z);
+  EXPECT_EQ(gt_resolved,
+            lowered(mgr.CreateNode(
+                FP_GT, mgr.CreateTerm(ITE, 32, ASTVec{c, x, one_reinterpreted}),
+                z)));
+
+  // An FP operation in either branch keeps the whole comparison on the
+  // SymFPU path -- the branch has no packed view that lowering would leave
+  // in the formula.
+  EXPECT_FALSE(containsFloatingPointKind(lowered(mgr.CreateNode(
+      FP_GT, mgr.CreateTerm(ITE, 32, ASTVec{c, x, sum}), z))));
+  EXPECT_FALSE(containsFloatingPointKind(lowered(mgr.CreateNode(
+      FP_GT, mgr.CreateTerm(ITE, 32, ASTVec{c, sum, x}), z))));
+
+  // The equalities and the classifications share the gate.
+  const ASTNode eq_mux = mgr.CreateNode(FP_EQ, mux, z);
+  EXPECT_EQ(eq_mux, lowered(eq_mux));
+  const ASTNode isnan_mux = mgr.CreateNode(FP_ISNAN, mux);
+  EXPECT_EQ(isnan_mux, lowered(isnan_mux));
+
+  // Flag off: the old behaviour, everything lowers.
+  mgr.UserFlags.fp_native_cmp = false;
+  EXPECT_FALSE(containsFloatingPointKind(lowered(gt_mux)));
+  EXPECT_FALSE(containsFloatingPointKind(lowered(isnan_mux)));
+}
+
 // The native encoding and SymFPU must agree on every predicate. At the
 // smallest supported format, (3, 4), all 128 x 128 packed operand pairs are
 // checked for each of the six comparison predicates, and all 128 operands
@@ -454,4 +521,45 @@ TEST(FloatBlast, native_comparison_agrees_with_symfpu_exhaustively)
     }
   }
   EXPECT_EQ(7 * values, classified);
+
+  // Muxed operands: the same sweep through a float-sorted ITE. The mux is
+  // structural, so what needs checking is that the surviving comparison
+  // reads the branch the condition selects -- against every constant, with
+  // a NaN in the other branch so a mux that leaked the wrong branch shows
+  // up as a comparison that is false when it should not be. (The unit tests
+  // build nodes through the hashing factory, so the constant condition does
+  // not fold the ITE away before it is blasted.)
+  unsigned nanIndex = values;
+  for (unsigned i = 0; i < values && nanIndex == values; i++)
+    if (NonMemberBVConstEvaluator(&mgr, mgr.CreateNode(FP_ISNAN, constants[i]))
+        == mgr.ASTTrue)
+      nanIndex = i;
+  ASSERT_LT(nanIndex, values);
+
+  unsigned muxed = 0;
+  for (const ASTNode& cond : {mgr.ASTTrue, mgr.ASTFalse})
+  {
+    for (unsigned i = 0; i < values; i++)
+    {
+      const ASTNode mux = mgr.CreateTerm(
+          ITE, width, ASTVec{cond, constants[i], constants[nanIndex]});
+      const ASTNode& selected =
+          cond == mgr.ASTTrue ? constants[i] : constants[nanIndex];
+      for (unsigned j = 0; j < values; j++)
+      {
+        const ASTNode comparison = mgr.CreateNode(FP_GT, mux, constants[j]);
+        const ASTNode reference = NonMemberBVConstEvaluator(
+            &mgr, mgr.CreateNode(FP_GT, selected, constants[j]));
+        ASSERT_TRUE(reference == mgr.ASTTrue || reference == mgr.ASTFalse);
+
+        const BBNode native = bb.BBForm(comparison);
+        ASSERT_TRUE(native == aig.getTrue() || native == aig.getFalse());
+
+        ASSERT_EQ(reference == mgr.ASTTrue, native == aig.getTrue())
+            << "muxed fp.gt disagrees on branch " << i << ", operand " << j;
+        ++muxed;
+      }
+    }
+  }
+  EXPECT_EQ(2 * values * values, muxed);
 }
