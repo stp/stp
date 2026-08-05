@@ -203,8 +203,8 @@ TEST(FloatBlast, totalisation_defers_canonical_boundaries_to_lowering)
 TEST(FloatBlast, every_floating_point_kind_is_lowered)
 {
   STPMgr mgr;
-  // fp.gt/fp.lt over leaves deliberately survive lowering when the native
-  // comparison is on (see native_comparison_survives_for_leaf_operands).
+  // The FP predicates over leaves deliberately survive lowering when the
+  // native encoding is on (see native_comparison_survives_for_leaf_operands).
   // This sweep checks that every kind has a SymFPU arm, so turn it off.
   mgr.UserFlags.fp_native_cmp = false;
   const SourceSort fp32 = SourceSort::floatingPoint(8, 24);
@@ -361,18 +361,36 @@ TEST(FloatBlast, native_comparison_survives_for_leaf_operands)
   EXPECT_FALSE(
       containsFloatingPointKind(lowered(mgr.CreateNode(FP_EQ, sum, y))));
 
+  // The classification predicates survive over a symbol operand. Their gate
+  // is stricter about constants than the binary one: a unary predicate over
+  // a constant is a constant node, which must lower and collapse -- so the
+  // to_fp-reinterpret literal that makes a comparison survive does not make
+  // a classification survive.
+  const ASTNode isnan_symbol = mgr.CreateNode(FP_ISNAN, x);
+  EXPECT_EQ(isnan_symbol, lowered(isnan_symbol));
+  const ASTNode ispositive_symbol = mgr.CreateNode(FP_ISPOSITIVE, x);
+  EXPECT_EQ(ispositive_symbol, lowered(ispositive_symbol));
+  EXPECT_FALSE(containsFloatingPointKind(
+      lowered(mgr.CreateNode(FP_ISNAN, one_reinterpreted))));
+  EXPECT_FALSE(
+      containsFloatingPointKind(lowered(mgr.CreateNode(FP_ISNAN, one))));
+  EXPECT_FALSE(
+      containsFloatingPointKind(lowered(mgr.CreateNode(FP_ISNORMAL, sum))));
+
   // Flag off: the old behaviour, everything lowers.
   mgr.UserFlags.fp_native_cmp = false;
   EXPECT_FALSE(containsFloatingPointKind(lowered(gt_symbols)));
+  EXPECT_FALSE(containsFloatingPointKind(lowered(isnan_symbol)));
 }
 
-// The native encoding and SymFPU must agree on every comparison. At the
+// The native encoding and SymFPU must agree on every predicate. At the
 // smallest supported format, (3, 4), all 128 x 128 packed operand pairs are
-// checked for each of the six comparison predicates: the native verdict
-// comes from bit-blasting the comparison over constant operands (the AIG
-// collapses to a constant), the reference from SymFPU's
-// fold-by-construction constant evaluation. The sweep includes +/-0,
-// +/-infinity, NaN and every subnormal pair.
+// checked for each of the six comparison predicates, and all 128 operands
+// for each of the seven classifications: the native verdict comes from
+// bit-blasting the predicate over constant operands (the AIG collapses to a
+// constant), the reference from SymFPU's fold-by-construction constant
+// evaluation. The sweep includes +/-0, +/-infinity, every NaN payload and
+// every subnormal.
 TEST(FloatBlast, native_comparison_agrees_with_symfpu_exhaustively)
 {
   STPMgr mgr;
@@ -414,4 +432,26 @@ TEST(FloatBlast, native_comparison_agrees_with_symfpu_exhaustively)
     }
   }
   EXPECT_EQ(6 * values * values, checked);
+
+  unsigned classified = 0;
+  for (unsigned i = 0; i < values; i++)
+  {
+    for (const Kind kind : {FP_ISNORMAL, FP_ISSUBNORMAL, FP_ISZERO,
+                            FP_ISINFINITE, FP_ISNAN, FP_ISNEGATIVE,
+                            FP_ISPOSITIVE})
+    {
+      const ASTNode classification = mgr.CreateNode(kind, constants[i]);
+
+      const ASTNode reference = NonMemberBVConstEvaluator(&mgr, classification);
+      ASSERT_TRUE(reference == mgr.ASTTrue || reference == mgr.ASTFalse);
+
+      const BBNode native = bb.BBForm(classification);
+      ASSERT_TRUE(native == aig.getTrue() || native == aig.getFalse());
+
+      ASSERT_EQ(reference == mgr.ASTTrue, native == aig.getTrue())
+          << _kind_names[kind] << " disagrees on operand " << i;
+      ++classified;
+    }
+  }
+  EXPECT_EQ(7 * values, classified);
 }

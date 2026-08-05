@@ -374,7 +374,7 @@ void ExtraMain::create_options()
 
     ("bb.fp-native-cmp",
       BOOL_ARG(bm->UserFlags.fp_native_cmp),
-      "Bit-blast floating-point comparisons and equalities over already-packed operands natively instead of via the SymFPU unpacking circuits"
+      "Bit-blast floating-point predicates (comparisons, equalities, classifications) over already-packed operands natively instead of via the SymFPU unpacking circuits"
       )
 
     ("bb.simplify-during-bb",

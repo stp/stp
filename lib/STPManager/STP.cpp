@@ -540,10 +540,11 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // Lower floating-point operations before the first pass that invokes the
   // bit-blaster. From here on the formula is a packed-bit circuit: float
   // symbols, constants and reads retain sort metadata for model
-  // reconstruction. The only FP operations that survive are the six
-  // comparison predicates (fp.gt/fp.lt/fp.geq/fp.leq and the two
-  // equalities, fp.eq and = on floats) over leaf operands, which the
-  // bit-blaster encodes natively (BBcompareFP, BBeqFP); every downstream pass
+  // reconstruction. The only FP operations that survive are the predicates
+  // over leaf operands -- the four ordering comparisons, the two equalities
+  // (fp.eq and = on floats) and the seven classifications -- which the
+  // bit-blaster encodes natively over the packed bits (BBcompareFP, BBeqFP,
+  // BBclassifyFP); every downstream pass
   // already has arms for these kinds because they used to reach it before
   // lowering existed.
   //

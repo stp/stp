@@ -1347,8 +1347,7 @@ const BBNode BitBlaster::BBForm(const ASTNode& form,
     case FP_ISNEGATIVE:
     case FP_ISPOSITIVE:
     {
-      FatalError("BBForm: FP formulas should not reach the bit-blaster: ",
-                 form);
+      result = BBclassifyFP(form, support);
       break;
     }
     default:
@@ -3215,6 +3214,93 @@ BBNode BitBlaster::BBeqFP(const ASTNode& form, BBNodeSet& support)
   const BBNode sameValue = nf->CreateNode(OR, sameBits, bothZero);
 
   return nf->CreateNode(AND, notNaN, sameValue);
+}
+
+// Bit-blasted form for the seven classification predicates over a packed
+// IEEE-754 operand. Each is a test on the exponent field e and the stored
+// significand m, both directly visible in the packed encoding, so the
+// SymFPU route pays a full unpack to read flags that are already there:
+//
+//   isZero        e = 0        and m = 0    (either sign)
+//   isSubnormal   e = 0        and m != 0
+//   isNormal      e != 0       and e != all-ones
+//   isInfinite    e = all-ones and m = 0
+//   isNaN         e = all-ones and m != 0   (any payload)
+//   isNegative    sign set     and not NaN
+//   isPositive    sign clear   and not NaN
+//
+// The two sign predicates are the ones with corners: -0 IS negative and +0
+// IS positive (the sign bit alone decides among the finite values), while a
+// NaN is neither, because its sign bit carries no meaning. isNormal has to
+// exclude the all-ones exponent as well as the zero one, or infinities and
+// NaNs count as normal.
+BBNode BitBlaster::BBclassifyFP(const ASTNode& form, BBNodeSet& support)
+{
+  const Kind k = form.GetKind();
+
+  const SourceSort sort = form[0].GetSourceSort();
+  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb = sort.significandWidth();
+  const unsigned w = sort.exponentWidth() + sb;
+  assert(form[0].GetValueWidth() == w);
+  assert(sb >= 2 && w >= sb + 1);
+
+  const BBNodeVec p = BBTerm(form[0], support);
+
+  switch (k)
+  {
+    case FP_ISZERO:
+      return BBfpIsZero(p, w);
+
+    case FP_ISNAN:
+      return BBfpIsNaN(p, sb, w);
+
+    case FP_ISSUBNORMAL:
+    {
+      BBNodeVec expField(p.begin() + (sb - 1), p.begin() + (w - 1));
+      BBNodeVec sigField(p.begin(), p.begin() + (sb - 1));
+      const BBNode expZero = nf->CreateNode(NOR, expField);
+      const BBNode sigNonZero = nf->CreateNode(OR, sigField);
+      return nf->CreateNode(AND, expZero, sigNonZero);
+    }
+
+    case FP_ISNORMAL:
+    {
+      // Built as NOT(AND(e)) rather than NAND(e) so the all-ones test is
+      // the same AIG node isNaN and isInfinite build over this operand.
+      BBNodeVec expField(p.begin() + (sb - 1), p.begin() + (w - 1));
+      const BBNode expNonZero = nf->CreateNode(OR, expField);
+      const BBNode expAllOnes = nf->CreateNode(AND, expField);
+      const BBNode expNotOnes = nf->CreateNode(NOT, expAllOnes);
+      return nf->CreateNode(AND, expNonZero, expNotOnes);
+    }
+
+    case FP_ISINFINITE:
+    {
+      BBNodeVec expField(p.begin() + (sb - 1), p.begin() + (w - 1));
+      BBNodeVec sigField(p.begin(), p.begin() + (sb - 1));
+      const BBNode expAllOnes = nf->CreateNode(AND, expField);
+      const BBNode sigZero = nf->CreateNode(NOR, sigField);
+      return nf->CreateNode(AND, expAllOnes, sigZero);
+    }
+
+    case FP_ISNEGATIVE:
+    {
+      const BBNode notNaN = nf->CreateNode(NOT, BBfpIsNaN(p, sb, w));
+      return nf->CreateNode(AND, p[w - 1], notNaN);
+    }
+
+    case FP_ISPOSITIVE:
+    {
+      const BBNode notNaN = nf->CreateNode(NOT, BBfpIsNaN(p, sb, w));
+      const BBNode signClear = nf->CreateNode(NOT, p[w - 1]);
+      return nf->CreateNode(AND, signClear, notNaN);
+    }
+
+    default:
+      FatalError("BBclassifyFP: Illegal kind", form);
+      return BBNode();
+  }
 }
 
 // Return bit-blasted form for the overflow predicates BVUADDO, BVSADDO,
