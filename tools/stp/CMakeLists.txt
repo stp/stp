@@ -38,9 +38,21 @@ if(BUILD_EXECUTABLES)
 endif()
 
 if(BUILD_EXECUTABLES AND NOT ONLY_SIMPLE)
+    if(NOT EXISTS "${PROJECT_SOURCE_DIR}/lib/extlib-cli11/include/CLI/CLI.hpp")
+        message(FATAL_ERROR "The CLI11 submodule is missing. Run: "
+                            "git submodule update --init lib/extlib-cli11")
+    endif()
+
     add_executable(stp-bin
         main.cpp
         $<TARGET_OBJECTS:stp_main_common>
+    )
+
+    # CLI11 is header-only and used by this one translation unit, so the
+    # vendored include directory is all it needs; nothing is linked and
+    # nothing leaks into libstp's link interface.
+    target_include_directories(stp-bin PRIVATE
+        "${PROJECT_SOURCE_DIR}/lib/extlib-cli11/include"
     )
 
     set_target_properties(stp-bin PROPERTIES
@@ -56,7 +68,6 @@ if(BUILD_EXECUTABLES AND NOT ONLY_SIMPLE)
     target_link_libraries(stp-bin
         ${STP_ALLOCATOR_LIBRARY}
         stp
-        Boost::program_options
     )
 
     install(TARGETS stp-bin

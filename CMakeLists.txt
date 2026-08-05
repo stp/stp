@@ -137,7 +137,6 @@ endif()
 add_feature_info(Static STATICCOMPILE "Compiles static library and executable")
 
 if ((${CMAKE_SYSTEM_NAME} MATCHES "Windows") OR (NOT BUILD_SHARED_LIBS))
-    set(Boost_USE_STATIC_LIBS ON)
     set(Minisat_USE_STATIC_LIBS ON)
 endif()
 
@@ -568,14 +567,7 @@ add_definitions(-DSIZEOF_INT=${SIZEOF_INT})
 
 
 
-option(ONLY_SIMPLE "Only build very simplistic executable -- no Boost needed" OFF)
-if (NOT ONLY_SIMPLE)
-  find_package( Boost 1.46 COMPONENTS program_options)
-endif()
-
-if(NOT Boost_FOUND)
-    set(ONLY_SIMPLE ON)
-endif()
+option(ONLY_SIMPLE "Only build very simplistic executable" OFF)
 add_feature_info(SimpleOptions ONLY_SIMPLE "Simplifies command-line interface, only a few command-line options will be available")
 
 # -----------------------------------------------------------------------------
