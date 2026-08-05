@@ -56,7 +56,6 @@ jobs:
           flex \
           gcc \
           git \
-          libboost-program-options-dev \
           ninja-build \
           python3 \
           python3-pip \
@@ -212,7 +211,6 @@ jobs:
           flex \
           gcc \
           git \
-          libboost-program-options-dev \
           ninja-build \
           python3 \
           python3-pip \
@@ -426,7 +424,6 @@ jobs:
           cmake \
           flex \
           git \
-          libboost-program-options-dev \
           ninja-build \
           python3 \
           python3-pip \
@@ -455,7 +452,7 @@ jobs:
 
     - name: Smoke test
       run: |
-        stp=$([ -x build/stp ] && echo build/stp || echo build/stp_simple)
+        stp=build/stp
         echo '(set-logic QF_BV)(declare-fun a () (_ BitVec 8))(declare-fun b () (_ BitVec 8))(assert (= (bvmul a b) #x21))(assert (bvult a b))(check-sat)' > test.smt2
         out=$("$stp" test.smt2)
         echo "bv output: '$out'"
@@ -666,7 +663,7 @@ jobs:
     - name: Smoke test
       run: |
         dir build\bin
-        $stp = if (Test-Path build\bin\stp.exe) { "build\bin\stp.exe" } else { "build\bin\stp_simple.exe" }
+        $stp = "build\bin\stp.exe"
         "(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (= x #x2a))(check-sat)" | Out-File -Encoding ascii test.smt2
         $out = & $stp test.smt2 2>&1 | Out-String
         "solver output: '$($out.Trim())'"

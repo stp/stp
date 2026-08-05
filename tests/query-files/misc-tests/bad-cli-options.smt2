@@ -6,33 +6,32 @@
 ; by a signal as a failure. A crash therefore fails the RUN line on its own,
 ; and the -NOT directives catch it a second time via the C++ runtime's message.
 
-; --- errors detected by boost::program_options ---------------------------
+; --- errors detected by CLI11 --------------------------------------------
 
-; An unrecognised option.
+; An unrecognised option. CLI11 reports it as an unexpected argument, and
+; a prefix of a real option name (--print-back) is no longer expanded to
+; the full name, so it is diagnosed the same way.
 ; RUN: not %solver --this-option-does-not-exist %s 2>&1 | %OutputCheck %s --check-prefix=UNKNOWN
 ; RUN: not %solver -Z %s 2>&1 | %OutputCheck %s --check-prefix=UNKNOWN
+; RUN: not %solver --print-back %s 2>&1 | %OutputCheck %s --check-prefix=UNKNOWN
 ; UNKNOWN-NOT: terminate called
-; UNKNOWN: Unknown option
+; UNKNOWN: was not expected
 
 ; An option given without the argument it requires.
 ; RUN: not %solver %s --max-time 2>&1 | %OutputCheck %s --check-prefix=MISSINGARG
 ; MISSINGARG-NOT: terminate called
-; MISSINGARG: the required argument for option .--max-time. is missing
+; MISSINGARG: --max-time: 1 required INT missing
 
-; An abbreviation matching more than one option.
-; RUN: not %solver --print-back %s 2>&1 | %OutputCheck %s --check-prefix=AMBIGUOUS
-; AMBIGUOUS-NOT: terminate called
-; AMBIGUOUS: is ambiguous
-
-; More than one input file. Only one positional argument is accepted.
+; More than one input file. Only one positional argument is accepted, so
+; the second file is an unexpected argument.
 ; RUN: not %solver %s %s 2>&1 | %OutputCheck %s --check-prefix=TOOMANY
 ; TOOMANY-NOT: terminate called
-; TOOMANY: too many positional options
+; TOOMANY: was not expected
 
 ; A non-boolean argument to a boolean option.
 ; RUN: not %solver --flattening=maybe %s 2>&1 | %OutputCheck %s --check-prefix=BADBOOL
 ; BADBOOL-NOT: terminate called
-; BADBOOL: Invalid value
+; BADBOOL: Could not convert
 
 ; --- errors detected by stp's own validation -----------------------------
 
@@ -63,7 +62,7 @@
 
 ; RUN: not %solver --this-option-does-not-exist %s 2>/dev/null | %OutputCheck %s --check-prefix=NOSTDOUT
 ; RUN: not %solver --search-bias=bogus %s 2>/dev/null | %OutputCheck %s --check-prefix=NOSTDOUT
-; NOSTDOUT-NOT: Unknown option
+; NOSTDOUT-NOT: was not expected
 ; NOSTDOUT-NOT: search-bias
 
 ; --- a well-formed command line is unaffected ----------------------------

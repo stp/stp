@@ -24,7 +24,7 @@ For Debian-like platforms first install the prerequisites:
 .. code-block:: bash
 
     apt-get install git build-essential cmake bison flex \
-        libboost-program-options-dev libgmp-dev zlib1g-dev perl
+        libgmp-dev zlib1g-dev perl
 
 Then install minisat:
 

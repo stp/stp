@@ -14,7 +14,7 @@ STP is a constraint solver (or SMT solver) aimed at solving constraints of bitve
 For a quick install:
 
 ```
-sudo apt-get install git build-essential cmake bison flex libboost-program-options-dev libgmp-dev zlib1g-dev python3 perl
+sudo apt-get install git build-essential cmake bison flex libgmp-dev zlib1g-dev python3 perl
 git clone https://github.com/stp/stp
 cd stp
 git submodule init && git submodule update
@@ -122,7 +122,9 @@ generators.
   whatever application embeds it.
 
 ### Dependencies
-STP relies on : boost (program_options), flex, bison, perl, zlib and minisat.
+STP relies on: flex, bison, perl, zlib and minisat. The command-line
+parser, [CLI11](https://github.com/CLIUtils/CLI11), is vendored as a
+submodule -- nothing to install.
 The floating-point support uses the header-only
 [SymFPU](https://github.com/martin-cs/symfpu) library, which is vendored as a
 submodule -- nothing to install. Real literals in floating-point input --
@@ -139,7 +141,7 @@ python interface and for the test suite, and GMP is needed when building with
 CryptoMiniSat. You can install most of these by:
 
 ```
-$ sudo apt-get install build-essential cmake bison flex libboost-program-options-dev libgmp-dev zlib1g-dev python3 perl minisat
+$ sudo apt-get install build-essential cmake bison flex libgmp-dev zlib1g-dev python3 perl minisat
 ```
 
 If your distribution does not come with minisat, STP maintains an updated fork. It can be built as follows:

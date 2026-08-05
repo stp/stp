@@ -158,21 +158,6 @@ else()
 endif()
 
 
-# -----------------------------------------------------------------------------
-# On non-windows systems a built static library cannot have another static
-# library linked to it. So this does not cause the Boost libraries to be
-# added to ``stp.a``. Instead what this does is tell CMake that anything
-# that we built that uses the ``stp`` target should also link in these
-# Boost libraries.
-#
-# So the stp executable and any clients of stp that use the exported CMake
-# targets (e.g. examples/simple) will know what to link in.
-#
-# Clients of stp that don't use CMake will have to link the Boost libraries
-# in manually.
-# -----------------------------------------------------------------------------
-# https://gitlab.kitware.com/cmake/cmake/-/issues/15415#note_633938
-
 # Configure ABC library build options
 set(READLINE_FOUND FALSE CACHE BOOL "Disable readline for ABC" FORCE)
 set(ABC_SKIP_TESTS ON CACHE BOOL "Skip ABC tests" FORCE)

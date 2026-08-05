@@ -16,7 +16,6 @@ RUN apt-get update \
         flex \
         g++ \
         gcc \
-        libboost-program-options-dev \
         libgmp-dev \
         libm4ri-dev \
         libncurses-dev \
