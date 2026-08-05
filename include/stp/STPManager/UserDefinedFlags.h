@@ -126,9 +126,9 @@ public:
   bool bvplus_variant = true;
   bool conjoin_to_top = false;
 
-  // Bit-blast the floating-point ordering comparisons over already-packed
-  // operands natively (sign-magnitude comparison of the IEEE bits) instead
-  // of via the SymFPU unpacking circuits.
+  // Bit-blast the floating-point comparisons and equalities over
+  // already-packed operands natively (over the IEEE bits) instead of via the
+  // SymFPU unpacking circuits.
   bool fp_native_cmp = true;
 
   int64_t multiplication_variant = 1;

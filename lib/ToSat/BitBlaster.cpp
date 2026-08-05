@@ -1333,6 +1333,12 @@ const BBNode BitBlaster::BBForm(const ASTNode& form,
     }
 
     case FP_EQ:
+    case FP_SMT_EQ:
+    {
+      result = BBeqFP(form, support);
+      break;
+    }
+
     case FP_ISNORMAL:
     case FP_ISSUBNORMAL:
     case FP_ISZERO:
@@ -1340,7 +1346,6 @@ const BBNode BitBlaster::BBForm(const ASTNode& form,
     case FP_ISNAN:
     case FP_ISNEGATIVE:
     case FP_ISPOSITIVE:
-    case FP_SMT_EQ:
     {
       FatalError("BBForm: FP formulas should not reach the bit-blaster: ",
                  form);
@@ -3059,6 +3064,28 @@ BBNode BitBlaster::BBcompare(const ASTNode& form,
   }
 }
 
+// A packed IEEE-754 operand is NaN iff its exponent field is all ones and
+// its significand field is nonzero -- true of every NaN payload, so no
+// canonical pattern is assumed. Bit i is bit i of the IEEE encoding:
+// significand field in bits [0, sb-2], exponent field in bits [sb-1, w-2],
+// sign at w-1.
+BBNode BitBlaster::BBfpIsNaN(const BBNodeVec& p, unsigned sb, unsigned w)
+{
+  BBNodeVec expField(p.begin() + (sb - 1), p.begin() + (w - 1));
+  BBNodeVec sigField(p.begin(), p.begin() + (sb - 1));
+  const BBNode expAllOnes = nf->CreateNode(AND, expField);
+  const BBNode sigNonZero = nf->CreateNode(OR, sigField);
+  return nf->CreateNode(AND, expAllOnes, sigNonZero);
+}
+
+// Zero iff the whole magnitude (everything below the sign bit) is zero, so
+// both +0 and -0 satisfy it.
+BBNode BitBlaster::BBfpIsZero(const BBNodeVec& p, unsigned w)
+{
+  BBNodeVec magnitude(p.begin(), p.begin() + (w - 1));
+  return nf->CreateNode(NOR, magnitude);
+}
+
 // Bit-blasted form for the four ordering comparisons (FP_GT, FP_LT, FP_GEQ,
 // FP_LEQ) over packed IEEE-754 operands. FloatBlast leaves these comparisons
 // in place when both operands are leaves (symbols, interned constants);
@@ -3102,19 +3129,6 @@ BBNode BitBlaster::BBcompareFP(const ASTNode& form, BBNodeSet& support)
   const BBNodeVec aBits = BBTerm(a, support);
   const BBNodeVec bBits = BBTerm(b, support);
 
-  auto isNaN = [this](const BBNodeVec& p, unsigned sig, unsigned width) {
-    BBNodeVec expField(p.begin() + (sig - 1), p.begin() + (width - 1));
-    BBNodeVec sigField(p.begin(), p.begin() + (sig - 1));
-    const BBNode expAllOnes = nf->CreateNode(AND, expField);
-    const BBNode sigNonZero = nf->CreateNode(OR, sigField);
-    return nf->CreateNode(AND, expAllOnes, sigNonZero);
-  };
-
-  auto isZero = [this](const BBNodeVec& p, unsigned width) {
-    BBNodeVec magnitude(p.begin(), p.begin() + (width - 1));
-    return nf->CreateNode(NOR, magnitude);
-  };
-
   auto key = [this](const BBNodeVec& p, unsigned width) {
     const BBNode& sign = p[width - 1];
     BBNodeVec k;
@@ -3125,10 +3139,10 @@ BBNode BitBlaster::BBcompareFP(const ASTNode& form, BBNodeSet& support)
     return k;
   };
 
-  const BBNode aNotNaN = nf->CreateNode(NOT, isNaN(aBits, sb, w));
-  const BBNode bNotNaN = nf->CreateNode(NOT, isNaN(bBits, sb, w));
+  const BBNode aNotNaN = nf->CreateNode(NOT, BBfpIsNaN(aBits, sb, w));
+  const BBNode bNotNaN = nf->CreateNode(NOT, BBfpIsNaN(bBits, sb, w));
   const BBNode bothZero =
-      nf->CreateNode(AND, isZero(aBits, w), isZero(bBits, w));
+      nf->CreateNode(AND, BBfpIsZero(aBits, w), BBfpIsZero(bBits, w));
   const BBNodeVec aKey = key(aBits, w);
   const BBNodeVec bKey = key(bBits, w);
   // key(a) >u key(b) when strict, key(a) >=u key(b) otherwise.
@@ -3143,6 +3157,58 @@ BBNode BitBlaster::BBcompareFP(const ASTNode& form, BBNodeSet& support)
   conjuncts.push_back(aNotNaN);
   conjuncts.push_back(bNotNaN);
   conjuncts.push_back(zeroCorrected);
+  return nf->CreateNode(AND, conjuncts);
+}
+
+// Bit-blasted form for the two equalities (FP_EQ, FP_SMT_EQ) over packed
+// IEEE-754 operands; FloatBlast leaves them in place under the same gate as
+// the ordering comparisons (see BBcompareFP). No unpacking and no
+// comparator is needed: an IEEE interchange format encodes every value
+// exactly once, so equality is bit equality -- except at the two corners,
+// where the two kinds make opposite choices.
+//
+//   fp.eq: NaN equals nothing (whatever its payload), and +0 equals -0.
+//     fp.eq(a,b) = not(isNaN(a)) and not(isNaN(b))
+//                  and (bits(a) = bits(b) or (isZero(a) and isZero(b)))
+//
+//   SMT =: the SMT domain has one abstract NaN, so all NaN payloads are
+//   equal, and two distinct zeros, so +0 and -0 are not.
+//     a = b = (isNaN(a) and isNaN(b)) or bits(a) = bits(b)
+BBNode BitBlaster::BBeqFP(const ASTNode& form, BBNodeSet& support)
+{
+  const Kind k = form.GetKind();
+  assert(k == FP_EQ || k == FP_SMT_EQ);
+
+  const SourceSort sort = form[0].GetSourceSort();
+  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb = sort.significandWidth();
+  const unsigned w = sort.exponentWidth() + sb;
+  assert(form[0].GetValueWidth() == w);
+  assert(form[1].GetValueWidth() == w);
+  assert(sb >= 2 && w >= sb + 1);
+
+  const BBNodeVec aBits = BBTerm(form[0], support);
+  const BBNodeVec bBits = BBTerm(form[1], support);
+  const BBNode sameBits = BBEQ(aBits, bBits);
+
+  if (k == FP_SMT_EQ)
+  {
+    const BBNode bothNaN = nf->CreateNode(AND, BBfpIsNaN(aBits, sb, w),
+                                          BBfpIsNaN(bBits, sb, w));
+    return nf->CreateNode(OR, bothNaN, sameBits);
+  }
+
+  const BBNode aNotNaN = nf->CreateNode(NOT, BBfpIsNaN(aBits, sb, w));
+  const BBNode bNotNaN = nf->CreateNode(NOT, BBfpIsNaN(bBits, sb, w));
+  const BBNode bothZero =
+      nf->CreateNode(AND, BBfpIsZero(aBits, w), BBfpIsZero(bBits, w));
+  const BBNode sameValue = nf->CreateNode(OR, sameBits, bothZero);
+
+  BBNodeVec conjuncts;
+  conjuncts.reserve(3);
+  conjuncts.push_back(aNotNaN);
+  conjuncts.push_back(bNotNaN);
+  conjuncts.push_back(sameValue);
   return nf->CreateNode(AND, conjuncts);
 }
 
