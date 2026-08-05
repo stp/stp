@@ -289,10 +289,10 @@ TEST(FloatBlast, every_floating_point_kind_is_lowered)
   }
 }
 
-// fp.gt/fp.lt over leaf operands are not expanded to SymFPU circuits: the
-// source node passes through lowering unchanged and the bit-blaster encodes
-// it natively over the packed bits (BBcompareFP). Everything else -- other
-// comparison kinds, operands that are FP operations, constant pairs, and
+// The four ordering comparisons over leaf operands are not expanded to
+// SymFPU circuits: the source node passes through lowering unchanged and
+// the bit-blaster encodes it natively over the packed bits (BBcompareFP).
+// Everything else -- operands that are FP operations, constant pairs, and
 // every comparison once the flag is off -- still lowers through SymFPU.
 TEST(FloatBlast, native_comparison_survives_for_leaf_operands)
 {
@@ -344,11 +344,13 @@ TEST(FloatBlast, native_comparison_survives_for_leaf_operands)
   EXPECT_FALSE(
       containsFloatingPointKind(lowered(mgr.CreateNode(FP_GT, one, two))));
 
-  // The other comparison kinds are not migrated.
+  // The non-strict comparisons survive under the same gate.
+  const ASTNode geq_symbols = mgr.CreateNode(FP_GEQ, x, y);
+  EXPECT_EQ(geq_symbols, lowered(geq_symbols));
+  const ASTNode leq_constant = mgr.CreateNode(FP_LEQ, x, one);
+  EXPECT_EQ(leq_constant, lowered(leq_constant));
   EXPECT_FALSE(
-      containsFloatingPointKind(lowered(mgr.CreateNode(FP_GEQ, x, y))));
-  EXPECT_FALSE(
-      containsFloatingPointKind(lowered(mgr.CreateNode(FP_LEQ, x, y))));
+      containsFloatingPointKind(lowered(mgr.CreateNode(FP_GEQ, sum, y))));
 
   // Flag off: the old behaviour, everything lowers.
   mgr.UserFlags.fp_native_cmp = false;
@@ -357,11 +359,11 @@ TEST(FloatBlast, native_comparison_survives_for_leaf_operands)
 
 // The native encoding and SymFPU must agree on every comparison. At the
 // smallest supported format, (3, 4), all 128 x 128 packed operand pairs are
-// checked for both fp.gt and fp.lt: the native verdict comes from
-// bit-blasting the comparison over constant operands (the AIG collapses to
-// a constant), the reference from SymFPU's fold-by-construction constant
-// evaluation. The sweep includes +/-0, +/-infinity, NaN and every subnormal
-// pair.
+// checked for each of the four ordering comparisons: the native verdict
+// comes from bit-blasting the comparison over constant operands (the AIG
+// collapses to a constant), the reference from SymFPU's
+// fold-by-construction constant evaluation. The sweep includes +/-0,
+// +/-infinity, NaN and every subnormal pair.
 TEST(FloatBlast, native_comparison_agrees_with_symfpu_exhaustively)
 {
   STPMgr mgr;
@@ -384,7 +386,7 @@ TEST(FloatBlast, native_comparison_agrees_with_symfpu_exhaustively)
   {
     for (unsigned j = 0; j < values; j++)
     {
-      for (const Kind kind : {FP_GT, FP_LT})
+      for (const Kind kind : {FP_GT, FP_LT, FP_GEQ, FP_LEQ})
       {
         const ASTNode comparison =
             mgr.CreateNode(kind, constants[i], constants[j]);
@@ -402,5 +404,5 @@ TEST(FloatBlast, native_comparison_agrees_with_symfpu_exhaustively)
       }
     }
   }
-  EXPECT_EQ(2 * values * values, checked);
+  EXPECT_EQ(4 * values * values, checked);
 }

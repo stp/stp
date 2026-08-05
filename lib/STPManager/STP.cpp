@@ -540,10 +540,11 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // Lower floating-point operations before the first pass that invokes the
   // bit-blaster. From here on the formula is a packed-bit circuit: float
   // symbols, constants and reads retain sort metadata for model
-  // reconstruction. The only FP operations that survive are fp.gt/fp.lt over
-  // leaf operands, which the bit-blaster encodes natively (see
-  // BBcompareFP); every downstream pass already has an FP_GT/FP_LT arm
-  // because these kinds used to reach them before lowering existed.
+  // reconstruction. The only FP operations that survive are the ordering
+  // comparisons (fp.gt/fp.lt/fp.geq/fp.leq) over leaf operands, which the
+  // bit-blaster encodes natively (see BBcompareFP); every downstream pass
+  // already has arms for these kinds because they used to reach it before
+  // lowering existed.
   //
   // This remains after all of the size-reducing passes above. In particular,
   // RemoveUnconstrained must see a float symbol rather than its exposed bits.

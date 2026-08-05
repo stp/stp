@@ -1325,13 +1325,13 @@ const BBNode BitBlaster::BBForm(const ASTNode& form,
     }
     case FP_GT:
     case FP_LT:
+    case FP_GEQ:
+    case FP_LEQ:
     {
       result = BBcompareFP(form, support);
       break;
     }
 
-    case FP_LEQ:
-    case FP_GEQ:
     case FP_EQ:
     case FP_ISNORMAL:
     case FP_ISSUBNORMAL:
@@ -3059,28 +3059,34 @@ BBNode BitBlaster::BBcompare(const ASTNode& form,
   }
 }
 
-// Bit-blasted form for FP_GT and FP_LT over packed IEEE-754 operands.
-// FloatBlast leaves these comparisons in place when both operands are leaves
-// (symbols, interned constants); their packed bits are compared directly,
-// with no unpacking. Sign-magnitude maps onto an unsigned total order with a
-// per-bit XOR against the sign:
+// Bit-blasted form for the four ordering comparisons (FP_GT, FP_LT, FP_GEQ,
+// FP_LEQ) over packed IEEE-754 operands. FloatBlast leaves these comparisons
+// in place when both operands are leaves (symbols, interned constants);
+// their packed bits are compared directly, with no unpacking. Sign-magnitude
+// maps onto an unsigned total order with a per-bit XOR against the sign:
 //
 //   key(f) = not(sign(f)) ++ (f[w-2:0] xor sign(f))
-//   a > b  = not(isNaN(a)) and not(isNaN(b))
-//            and not(isZero(a) and isZero(b)) and key(a) >u key(b)
+//   a >  b = not(isNaN(a)) and not(isNaN(b))
+//            and not(isZero(a) and isZero(b)) and key(a) >u  key(b)
+//   a >= b = not(isNaN(a)) and not(isNaN(b))
+//            and (   (isZero(a) and isZero(b)) or  key(a) >=u key(b))
 //
-// The keys order every pair correctly except (+0, -0): their keys are
-// adjacent with no other float's key between them, so the only misordered
-// pair is repaired by the both-zero conjunct. (A greater-or-equal variant
-// would need the correction ORed in instead.) isNaN tests the exponent and
-// significand fields, so operands with arbitrary NaN payloads compare as
-// NaN.
+// The keys order every pair correctly except the two zeros: key(-0) and
+// key(+0) are adjacent with no other float's key between them, and +0 and
+// -0 compare EQUAL. So exactly one pair is misordered per direction --
+// strictly, key(+0) > key(-0) must be suppressed (the both-zero conjunct);
+// non-strictly, key(-0) >= key(+0) must be granted (the both-zero
+// disjunct). isNaN tests the exponent and significand fields, so operands
+// with arbitrary NaN payloads compare as NaN.
 BBNode BitBlaster::BBcompareFP(const ASTNode& form, BBNodeSet& support)
 {
-  assert(form.GetKind() == FP_GT || form.GetKind() == FP_LT);
-  // fp.lt(a,b) is exactly fp.gt(b,a).
-  const ASTNode& a = form.GetKind() == FP_GT ? form[0] : form[1];
-  const ASTNode& b = form.GetKind() == FP_GT ? form[1] : form[0];
+  const Kind k = form.GetKind();
+  assert(k == FP_GT || k == FP_LT || k == FP_GEQ || k == FP_LEQ);
+  // fp.lt(a,b) is exactly fp.gt(b,a), and fp.leq(a,b) exactly fp.geq(b,a).
+  const bool mirrored = (k == FP_LT || k == FP_LEQ);
+  const bool strict = (k == FP_GT || k == FP_LT);
+  const ASTNode& a = mirrored ? form[1] : form[0];
+  const ASTNode& b = mirrored ? form[0] : form[1];
 
   const SourceSort sort = a.GetSourceSort();
   assert(sort.kind() == SourceSort::Kind::FloatingPoint);
@@ -3125,14 +3131,18 @@ BBNode BitBlaster::BBcompareFP(const ASTNode& form, BBNodeSet& support)
       nf->CreateNode(AND, isZero(aBits, w), isZero(bBits, w));
   const BBNodeVec aKey = key(aBits, w);
   const BBNodeVec bKey = key(bBits, w);
-  const BBNode greater = BBBVLE(bKey, aKey, false, true); // key(a) >u key(b)
+  // key(a) >u key(b) when strict, key(a) >=u key(b) otherwise.
+  const BBNode ordered = strict ? BBBVLE(bKey, aKey, false, true)
+                                : BBBVLE(bKey, aKey, false);
+  const BBNode zeroCorrected =
+      strict ? nf->CreateNode(AND, nf->CreateNode(NOT, bothZero), ordered)
+             : nf->CreateNode(OR, bothZero, ordered);
 
   BBNodeVec conjuncts;
-  conjuncts.reserve(4);
+  conjuncts.reserve(3);
   conjuncts.push_back(aNotNaN);
   conjuncts.push_back(bNotNaN);
-  conjuncts.push_back(nf->CreateNode(NOT, bothZero));
-  conjuncts.push_back(greater);
+  conjuncts.push_back(zeroCorrected);
   return nf->CreateNode(AND, conjuncts);
 }
 

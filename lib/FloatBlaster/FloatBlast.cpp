@@ -129,9 +129,10 @@ private:
     return ASTNode();
   }
 
-  // fp.gt/fp.lt over leaf operands skip SymFPU entirely: the source
-  // comparison survives to the bit-blaster, which compares the packed IEEE
-  // bits directly (BBcompareFP). Returns the surviving node -- `n` itself,
+  // The four ordering comparisons over leaf operands skip SymFPU entirely:
+  // the source comparison survives to the bit-blaster, which compares the
+  // packed IEEE bits directly (BBcompareFP). Returns the surviving node --
+  // `n` itself,
   // or the comparison rebuilt over resolved constant operands, both purely
   // float-sorted so no FP node is ever built over packed carriers -- or
   // null when the comparison has to take the SymFPU path.
@@ -551,9 +552,14 @@ private:
             formatOf(n[0]), asUnpacked(n[0]), asUnpacked(n[1]));
       }
       case FP_LEQ:
+      {
         requireSameFormat(n[0], n[1]);
+        const ASTNode survivor = nativeComparisonSurvivor(n);
+        if (!survivor.IsNull())
+          return survivor;
         return symbolic_fp::unpacked::lessThanOrEqual(
             formatOf(n[0]), asUnpacked(n[0]), asUnpacked(n[1]));
+      }
       case FP_GT:
       {
         requireSameFormat(n[0], n[1]);
@@ -564,9 +570,14 @@ private:
             formatOf(n[0]), asUnpacked(n[1]), asUnpacked(n[0]));
       }
       case FP_GEQ:
+      {
         requireSameFormat(n[0], n[1]);
+        const ASTNode survivor = nativeComparisonSurvivor(n);
+        if (!survivor.IsNull())
+          return survivor;
         return symbolic_fp::unpacked::lessThanOrEqual(
             formatOf(n[0]), asUnpacked(n[1]), asUnpacked(n[0]));
+      }
 
       case FP_ISNORMAL:
         return symbolic_fp::unpacked::isNormal(formatOf(n[0]),
