@@ -911,6 +911,35 @@ if (ENABLE_FLOATING_POINT)
     add_definitions(-DSTP_ENABLE_FLOATING_POINT)
 endif()
 
+option(USE_LIBBF "Use LibBF to fold real literals in floating-point input" OFF)
+add_feature_info(LibBF USE_LIBBF "Folds ((_ to_fp e s) rm 1.5) to its bits while parsing")
+
+if (USE_LIBBF)
+    # The one thing LibBF is for is converting real literals to float bits,
+    # which only exists in floating-point input.
+    if (NOT ENABLE_FLOATING_POINT)
+        message(FATAL_ERROR "USE_LIBBF folds floating-point real literals "
+                "and needs ENABLE_FLOATING_POINT")
+    endif()
+    set(LIBBF_DIR "" CACHE PATH "Path to a built LibBF (the directory containing libbf.h and libbf.a, as laid out by scripts/deps/setup-libbf.sh)")
+    find_path(LIBBF_INCLUDE_DIR NAMES libbf.h HINTS ${LIBBF_DIR})
+    find_library(LIBBF_LIBRARY NAMES bf HINTS ${LIBBF_DIR})
+    if (NOT LIBBF_INCLUDE_DIR OR NOT LIBBF_LIBRARY)
+        message(FATAL_ERROR "USE_LIBBF is set but LibBF was not found. Run "
+                "scripts/deps/setup-libbf.sh and point LIBBF_DIR at the "
+                "deps/libbf directory it creates")
+    endif()
+    message(STATUS "Found LibBF: ${LIBBF_LIBRARY}")
+    # DecimalLiteral.cpp keys on this to fold real literals instead of
+    # refusing them.
+    add_definitions(-DSTP_HAVE_LIBBF)
+    # SYSTEM, the way ABC and SymFPU are consumed: the header typedefs
+    # __int128 on 64-bit targets, which gcc's -pedantic rejects in the one
+    # C++ translation unit that includes it.
+    include_directories(SYSTEM ${LIBBF_INCLUDE_DIR})
+    link_libraries(${LIBBF_LIBRARY})
+endif()
+
 # -----------------------------------------------------------------------------
 # Query definitions
 # -----------------------------------------------------------------------------

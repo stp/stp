@@ -89,6 +89,12 @@ jobs:
         ./scripts/deps/setup-gtest.sh
         ./scripts/deps/setup-outputcheck.sh
 
+    # Deliberately outside the cached Dependencies step: the pinned tarball
+    # is ~300KB and builds in seconds, so caching it would only complicate
+    # the cache key for nothing.
+    - name: LibBF (real-literal folding)
+      run: ./scripts/deps/setup-libbf.sh
+
     # Keyed per run so every build writes a fresh entry; restore-keys picks
     # up the most recent one from this branch, or from the base branch.
     - name: Compiler cache
@@ -102,7 +108,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        ${{ matrix.env }} cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DBUILD_EXTRA_TOOLS:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        ${{ matrix.env }} cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DBUILD_EXTRA_TOOLS:BOOL=ON -DUSE_LIBBF:BOOL=ON -DLIBBF_DIR:PATH="$GITHUB_WORKSPACE/deps/libbf" -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -245,6 +251,10 @@ jobs:
         ./scripts/deps/setup-gtest.sh
         ./scripts/deps/setup-outputcheck.sh
 
+    # Outside the cached step, as in the main job: tiny and quick to build.
+    - name: LibBF (real-literal folding)
+      run: ./scripts/deps/setup-libbf.sh
+
     - name: Compiler cache
       uses: actions/cache@v4
       with:
@@ -263,7 +273,7 @@ jobs:
         mkdir build
         mkdir -p "$GITHUB_WORKSPACE/install/pylib"
         cd build
-        cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DNOCRYPTOMINISAT:BOOL=ON -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_INSTALL_PREFIX:PATH="$GITHUB_WORKSPACE/install" -DPYTHON_LIB_INSTALL_DIR:PATH="$GITHUB_WORKSPACE/install/pylib" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DUSE_LIBBF:BOOL=ON -DLIBBF_DIR:PATH="$GITHUB_WORKSPACE/deps/libbf" -DNOCRYPTOMINISAT:BOOL=ON -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_INSTALL_PREFIX:PATH="$GITHUB_WORKSPACE/install" -DPYTHON_LIB_INSTALL_DIR:PATH="$GITHUB_WORKSPACE/install/pylib" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -613,6 +623,30 @@ jobs:
         if (-not $lib) { throw "no zlib .lib found" }
         "ZLIB_LIBRARY=$lib" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
+    # The script's fetch/verify/patch half is portable (curl, sha256sum,
+    # tar and patch all ship with Git for Windows); the compile half is
+    # cc/ar, so it stops before that and cl takes over below.
+    - name: Fetch LibBF (real-literal folding)
+      shell: bash
+      run: LIBBF_NO_BUILD=1 ./scripts/deps/setup-libbf.sh
+
+    # vswhere ships on the runner images; Enter-VsDevShell is the
+    # supported way to a cl on PATH without a third-party action. The
+    # MSVC branch of the vendored-patch shims is what this compiles.
+    - name: Build LibBF (MSVC)
+      run: |
+        $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+        $vs = & $vswhere -latest -property installationPath
+        if (-not $vs) { throw "vswhere found no Visual Studio" }
+        Import-Module (Join-Path $vs "Common7\Tools\Microsoft.VisualStudio.DevShell.dll")
+        Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments '-arch=x64'
+        Set-Location deps\libbf
+        cl /nologo /std:c11 /O2 /c libbf.c cutils.c
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+        lib /nologo /OUT:bf.lib libbf.obj cutils.obj
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+        dir
+
     - name: Build minisat
       run: |
         git clone --depth 1 https://github.com/stp/minisat
@@ -624,7 +658,7 @@ jobs:
       # NOCRYPTOMINISAT: CryptoMiniSat does not build with MSVC (CaDiCaL
       # and CMS's oracle use POSIX-only code); upstream CMS only supports
       # MinGW on Windows.
-      run: cmake -B build -A x64 -DSTATICCOMPILE=ON -DNOCRYPTOMINISAT=ON -DENABLE_PYTHON_INTERFACE=OFF "-DMINISAT_LIBDIR=$env:MINISAT_ROOT" "-DMINISAT_INCLUDE_DIRS=$env:MINISAT_ROOT\include" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
+      run: cmake -B build -A x64 -DSTATICCOMPILE=ON -DNOCRYPTOMINISAT=ON -DENABLE_PYTHON_INTERFACE=OFF -DUSE_LIBBF=ON "-DLIBBF_DIR=$env:GITHUB_WORKSPACE\deps\libbf" "-DMINISAT_LIBDIR=$env:MINISAT_ROOT" "-DMINISAT_INCLUDE_DIRS=$env:MINISAT_ROOT\include" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
 
     - name: Build
       run: cmake --build build --config Release
