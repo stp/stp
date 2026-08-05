@@ -22,8 +22,12 @@
 # are SymFPU-free, and without ENABLE_FLOATING_POINT the blast entry points
 # become "built without floating-point support" stubs (the ifdefs are in
 # FloatBlaster.cpp). Only symbolic_fp.cpp -- the SymFPU backend -- needs
-# the library itself.
+# the library itself. DecimalLiteral.cpp follows the stub pattern: it always
+# builds so the parser always links, and without STP_HAVE_LIBBF (set by the
+# USE_LIBBF block in the top-level CMakeLists.txt) its one function is a
+# "cannot convert real literals" refusal.
 set(floatblaster_sources
+    DecimalLiteral.cpp
     FloatBlaster.cpp
     FloatBlast.cpp
     FpEncodingContext.cpp

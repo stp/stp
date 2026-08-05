@@ -56,6 +56,7 @@
 #include "stp/Parser/parser.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/FloatBlaster/rounding_modes.h"
+#include "stp/FloatBlaster/DecimalLiteral.h"
 #include "parsesmt2.tab.h"
 #include "smt2_flex_header.h"
 #include <sstream>
@@ -919,6 +920,142 @@ namespace stp
     return n;
   }
 
+  // A concrete Real constant under to_fp -- the only Real terms the
+  // QF_FP-family logics admit: a numeral or decimal magnitude, optionally
+  // a denominator (the (/ p q) rational spelling), optionally negated.
+  struct ParsedRealConstant
+  {
+    std::string* num;
+    std::string* den; // null unless the (/ p q) form
+    bool negative;
+  };
+
+  // The five rounding modes as parse-time values. Rounding-mode constants
+  // are interned, so comparing against the five is exact; anything else of
+  // RoundingMode sort is symbolic.
+  bool constantRoundingMode(const ASTNode& rm, unsigned* mode)
+  {
+    static const unsigned modes[] = {
+        ROUND_NEAREST_TIES_TO_EVEN, ROUND_NEAREST_TIES_TO_AWAY,
+        ROUND_TOWARD_POSITIVE, ROUND_TOWARD_NEGATIVE, ROUND_TOWARD_ZERO};
+    for (size_t i = 0; i < sizeof(modes) / sizeof(modes[0]); i++)
+    {
+      if (rm == stp::GlobalParserInterface->CreateRMConst(modes[i]))
+      {
+        *mode = modes[i];
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // One packed pattern as the interned float constant, format stamped --
+  // the same product the packed-bits spellings of the value would build.
+  ASTNode fpConstFromPackedBits(std::string& bits, unsigned int exp_width,
+                                unsigned int sig_width)
+  {
+    ASTNode packed(stp::GlobalParserInterface->CreateBVConst(
+        bits, 2, exp_width + sig_width));
+    ASTNode c(stp::GlobalParserInterface->nf->CreateFPConst(packed, exp_width,
+                                                            sig_width));
+    setFPFormat(&c, exp_width, sig_width);
+    return c;
+  }
+
+  // ((_ to_fp e s) rm 1.5) -- conversion from a real literal, folded at
+  // parse time. LibBF reads the decimal exactly and rounds it once in the
+  // (e, s) format per mode (see DecimalLiteral.cpp), so the fold is the
+  // SMT-LIB semantics, not an approximation of it. A constant rounding
+  // mode picks its conversion directly. A symbolic one gets the value
+  // under every mode as an if-then-else over the five constants -- the
+  // shape bitwuzla builds -- with the last mode as the fall-through: a
+  // RoundingMode term is pinned to the five legal encodings when it is
+  // declared, so no sixth case exists. A literal that every mode rounds
+  // identically (anything exactly representable) collapses to the one
+  // constant, symbolic rounding mode or not.
+  ASTNode* createFPFromReal(unsigned int exp_width, unsigned int sig_width,
+                            ASTNode* rm, ParsedRealConstant* real)
+  {
+    checkFpFormatWidths(exp_width, sig_width);
+    checkRoundingMode(rm);
+
+    static const unsigned modes[] = {
+        ROUND_NEAREST_TIES_TO_EVEN, ROUND_NEAREST_TIES_TO_AWAY,
+        ROUND_TOWARD_POSITIVE, ROUND_TOWARD_NEGATIVE, ROUND_TOWARD_ZERO};
+    const size_t n_modes = sizeof(modes) / sizeof(modes[0]);
+
+    unsigned mode = 0;
+    const bool constant_rm = constantRoundingMode(*rm, &mode);
+
+    // The conversions this use needs: one for a constant rounding mode,
+    // all five for a symbolic one. The error cases (exponent widths the
+    // conversion does not cover, a zero denominator, a build without
+    // LibBF) do not depend on the mode, so the first conversion reports
+    // them.
+    std::string bits[sizeof(modes) / sizeof(modes[0])];
+    std::string err;
+    const size_t needed = constant_rm ? 1 : n_modes;
+    for (size_t i = 0; i < needed; i++)
+    {
+      const unsigned m = constant_rm ? mode : modes[i];
+      bool converted;
+      if (real->den != nullptr)
+      {
+        converted = stp::rationalToPackedFPBits(*real->num, *real->den,
+                                                real->negative, exp_width,
+                                                sig_width, m, bits[i], err);
+      }
+      else
+      {
+        // The engine takes the sign inline for the plain spelling.
+        const std::string text =
+            (real->negative ? "-" : "") + *real->num;
+        converted = stp::decimalToPackedFPBits(text, exp_width, sig_width, m,
+                                               bits[i], err);
+      }
+      if (!converted)
+      {
+        fatal_yyerror(err.c_str());
+      }
+    }
+
+    bool all_same = true;
+    for (size_t i = 1; i < needed; i++)
+      all_same = all_same && bits[i] == bits[0];
+
+    ASTNode* n;
+    if (all_same)
+    {
+      n = stp::GlobalParserInterface->newNode(
+          fpConstFromPackedBits(bits[0], exp_width, sig_width));
+    }
+    else
+    {
+      // Innermost else first. Each step wraps exactly what the grammar's
+      // own (ite ...) rule would build: the branches are float constants
+      // of one format, so the source sorts agree by construction, and the
+      // leaves carry the format -- the ite nodes are not stamped, like
+      // any other parsed ite over floats.
+      const unsigned int width = exp_width + sig_width;
+      ASTNode result =
+          fpConstFromPackedBits(bits[n_modes - 1], exp_width, sig_width);
+      for (size_t i = n_modes - 1; i-- > 0;)
+      {
+        ASTNode cond(stp::GlobalParserInterface->nf->CreateNode(
+            EQ, *rm, stp::GlobalParserInterface->CreateRMConst(modes[i])));
+        ASTNode branch = fpConstFromPackedBits(bits[i], exp_width, sig_width);
+        result = stp::GlobalParserInterface->nf->CreateArrayTerm(
+            ITE, result.GetIndexWidth(), width, cond, branch, result);
+      }
+      n = stp::GlobalParserInterface->newNode(result);
+    }
+    delete rm;
+    delete real->num;
+    delete real->den;
+    delete real;
+    return n;
+  }
+
   // (fp sign exp sig) -- build a float from its three bitvector components:
   // a one-bit sign, an e-bit exponent, and the (s-1)-bit stored significand
   // (the hidden bit is implicit). SMT-LIB permits each component to be an
@@ -1124,6 +1261,9 @@ namespace stp
 %expect 0
 
 %union {
+  /* Elaborated: the union lands in parsesmt2.tab.h, where only this
+     pointer is named; the struct itself lives in the parser prologue. */
+  struct ParsedRealConstant* realc;
   unsigned uintval; /* for numerals in types. */
   stp::Kind kind;
   stp::float_size* fp_size;
@@ -1156,8 +1296,11 @@ namespace stp
 %token <str> BVCONST_BINARY_TOK
 %token <str> BVCONST_HEXIDECIMAL_TOK
 
- /* We have this so we can parse :smt-lib-version 2.0 */
-%token  DECIMAL_TOK
+ /* Carries its text: to_fp folds real literals, and set-info values
+    like :smt-lib-version 2.0 land here too (and are freed unused). */
+%token <str> DECIMAL_TOK
+%type <str> an_real_magnitude
+%type <realc> an_real_constant
 
 %token <node> FORMID_TOK TERMID_TOK
 %token <str> STRING_TOK BITVECTOR_FUNCTIONID_TOK BOOLEAN_FUNCTIONID_TOK FLOATINGPOINT_FUNCTIONID_TOK ARRAY_FUNCTIONID_TOK
@@ -1600,6 +1743,7 @@ cmdi:
 |
      NOTES_TOK attribute DECIMAL_TOK
     {
+      delete $3;
       stp::GlobalParserInterface->success();
     }
 |
@@ -2564,6 +2708,67 @@ BVCONST_HEXIDECIMAL_TOK
   $$ = createFPFromParts($2, $3, $4);
 };
 
+ /* The magnitude of a real constant: a decimal, or a numeral (which the
+    lexer delivers as its value -- numerals are capped at machine range
+    here, as everywhere else in this parser). */
+an_real_magnitude:
+  DECIMAL_TOK
+{
+  $$ = $1;
+}
+| NUMERAL_TOK
+{
+  std::ostringstream os;
+  os << $1;
+  $$ = new std::string(os.str());
+}
+;
+
+ /* A concrete Real constant, the only Real term the QF_FP-family logics
+    admit: a magnitude, (- x) negating one, or the rational spelling
+    (/ p q), also negatable. '-' and '/' reach the parser as plain
+    symbols (STRING_TOK), so which operator -- and its arity -- is
+    checked in the action. */
+an_real_constant:
+  an_real_magnitude
+{
+  $$ = new ParsedRealConstant{$1, nullptr, false};
+}
+| LPAREN_TOK STRING_TOK an_real_constant RPAREN_TOK
+{
+  if (*$2 != "-")
+  {
+    fatal_yyerror("expected '-' (negation): the only unary operation on a "
+                  "real constant");
+  }
+  delete $2;
+  $$ = $3;
+  $$->negative = !$$->negative;
+}
+| LPAREN_TOK STRING_TOK an_real_constant an_real_constant RPAREN_TOK
+{
+  if (*$2 != "/")
+  {
+    fatal_yyerror("expected '/' (a rational constant): the only binary "
+                  "operation on real constants");
+  }
+  delete $2;
+  if ($3->den != nullptr || $4->den != nullptr)
+  {
+    fatal_yyerror("a rational constant does not nest: write (/ p q), "
+                  "(- (/ p q)) or (/ (- p) q)");
+  }
+  if ($4->negative)
+  {
+    fatal_yyerror("write a negative rational as (- (/ p q)) or (/ (- p) q), "
+                  "not with a negative denominator");
+  }
+  $$ = $3;
+  $$->den = $4->num;
+  delete $4;
+}
+;
+
 an_rounding_mode:
   FP_RM_ROUNDTOWARDZERO_TOK
 {
@@ -2673,22 +2878,15 @@ an_fp_term:
 {
   $$ = createFPFromUnsignedBV($5, $6, $8, $9);
 }
-| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term DECIMAL_TOK RPAREN_TOK
+| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_term an_real_constant RPAREN_TOK
 {
-  // ((_ to_fp e s) rm 1.5): conversion from a real literal. Deliberately
-  // unsupported -- no QF_FP/QF_BVFP/QF_ABVFP benchmark uses it -- but say
-  // so, rather than a bare syntax error at the literal.
-  fatal_yyerror("real literals are not supported (STP's floating point is "
-                "bit-precise); write the value as its packed bits, e.g. "
-                "((_ to_fp 8 24) #x3fc00000) for 1.5, or as a "
-                "(fp sign exponent significand) literal");
+  $$ = createFPFromReal($5, $6, $8, $9);
 }
-| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK DECIMAL_TOK RPAREN_TOK
+| LPAREN_TOK LPAREN_TOK UNDERSCORE_TOK FP_TOFP_TOK NUMERAL_TOK NUMERAL_TOK RPAREN_TOK an_real_constant RPAREN_TOK
 {
-  fatal_yyerror("real literals are not supported (STP's floating point is "
-                "bit-precise); write the value as its packed bits, e.g. "
-                "((_ to_fp 8 24) #x3fc00000) for 1.5, or as a "
-                "(fp sign exponent significand) literal");
+  fatal_yyerror("converting a real literal needs a rounding mode, e.g. "
+                "((_ to_fp 8 24) RNE 1.5); the one-argument form of to_fp "
+                "reinterprets the packed bits of a bitvector");
 }
 | LPAREN_TOK FP_TO_REAL_TOK an_term RPAREN_TOK
 {
