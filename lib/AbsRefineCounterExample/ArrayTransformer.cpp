@@ -487,6 +487,15 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
 
       ASTNode CurrentSymbol = bm->CreateFreshVariable(
           term.GetIndexWidth(), term.GetValueWidth(), "ext_read");
+
+      // Same reason as the read-refinement path below: this variable stands
+      // in for the read from here on and is a leaf, so the element format
+      // has to travel with it or the element reaches the blaster as a
+      // formatless bitvector. Setting a zero width (a non-float array) is a
+      // no-op.
+      CurrentSymbol.SetExpWidth(term.GetExpWidth());
+      CurrentSymbol.SetSigWidth(term.GetSigWidth());
+
       result = CurrentSymbol;
       arrayToIndexToRead[arrName].insert(
           make_pair(readIndex, ArrayRead(result, CurrentSymbol)));

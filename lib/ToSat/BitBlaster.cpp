@@ -3087,7 +3087,8 @@ BBNode BitBlaster::BBfpIsZero(const BBNodeVec& p, unsigned w)
 
 // Bit-blasted form for the four ordering comparisons (FP_GT, FP_LT, FP_GEQ,
 // FP_LEQ) over packed IEEE-754 operands. FloatBlast leaves these comparisons
-// in place when both operands are leaves (symbols, interned constants);
+// in place when both operands are packed views (symbols, interned
+// constants, muxes over those);
 // their packed bits are compared directly, with no unpacking. Sign-magnitude
 // maps onto an unsigned total order with a per-bit XOR against the sign:
 //
