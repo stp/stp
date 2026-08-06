@@ -21,6 +21,7 @@
 set(sat_lib_to_add
     MinisatCore.cpp
     SimplifyingMinisat.cpp
+    SATSolverFactory.cpp
 )
 
 if (USE_CRYPTOMINISAT)
