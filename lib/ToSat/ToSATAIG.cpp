@@ -152,7 +152,7 @@ void ToSATAIG::add_cnf_to_solver(SATSolver& satSolver, Cnf_Dat_t* cnfData)
     {
       uint32_t var = (*pLit) >> 1;
       assert((var < satSolver.nVars()));
-      Minisat::Lit l = SATSolver::mkLit(var, (*pLit) & 1);
+      SATSolver::Lit l = SATSolver::mkLit(var, (*pLit) & 1);
       satSolverClause.push(l);
     }
 

@@ -675,7 +675,7 @@ int getDifficulty(const ASTNode& n_)
     {
       uint32_t var = (*pLit) >> 1;
       assert((var < ss->nVars()));
-      Minisat::Lit l = SATSolver::mkLit(var, (*pLit) & 1);
+      SATSolver::Lit l = SATSolver::mkLit(var, (*pLit) & 1);
       satSolverClause.push(l);
     }
 

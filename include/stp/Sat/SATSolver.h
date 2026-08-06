@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Trevor Hansen, Andrew V. Jones
+ * AUTHORS: Trevor Hansen, Andrew Teylu
  *
  * BEGIN DATE: Aug, 2010
  *
@@ -26,14 +26,11 @@ THE SOFTWARE.
 #define SATSOLVER_H_
 
 #include "SearchBias.h"
-#include "minisat/core/SolverTypes.h"
-#include "minisat/mtl/Vec.h"
 #include <cassert>
 #include <chrono>
 #include <cstdint>
 #include <iostream>
-
-// Don't let the defines escape outside.
+#include <vector>
 
 namespace stp
 {
@@ -48,8 +45,23 @@ public:
 
   virtual ~SATSolver() {}
 
-  class vec_literals : public Minisat::vec<Minisat::Lit>
+  // A literal: a variable index and a sign, packed as variable*2 + sign
+  // (sign set means negated). This is STP's own encoding; each backend
+  // translates it into its solver's literal type in addClause.
+  struct Lit
   {
+    uint32_t x;
+  };
+
+  class vec_literals
+  {
+    std::vector<Lit> lits;
+
+  public:
+    int size() const { return static_cast<int>(lits.size()); }
+    void push(Lit l) { lits.push_back(l); }
+    void clear() { lits.clear(); }
+    Lit operator[](int i) const { return lits[static_cast<size_t>(i)]; }
   };
 
   virtual bool addClause(
@@ -80,12 +92,16 @@ public:
 
   typedef uint8_t lbool;
 
-  static inline Minisat::Lit mkLit(uint32_t var, bool sign)
+  static inline Lit mkLit(uint32_t var, bool sign)
   {
-    Minisat::Lit p;
-    p.x = var + var + (int)sign;
+    Lit p;
+    p.x = var + var + (uint32_t)sign;
     return p;
   }
+
+  static inline uint32_t var(Lit p) { return p.x >> 1; }
+  static inline bool sign(Lit p) { return (p.x & 1) != 0; }
+  static inline int toInt(Lit p) { return (int)p.x; }
 
   // Ask the backend to tune its search towards satisfiable or unsatisfiable
   // instances. Only ever called before the first clause is added, because a

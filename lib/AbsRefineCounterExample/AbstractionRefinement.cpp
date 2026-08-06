@@ -64,8 +64,8 @@ void getSatVariables(const ASTNode& a, vector<unsigned>& v_a,
 // (which it returns).
 // Because it's used to create array axionms (a=b)-> (c=d), it can be
 // used to only add one of the two polarities.
-Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
-                       ToSATBase::ASTNodeToSATVar& satVar, Polarity polary)
+uint32_t getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
+                   ToSATBase::ASTNodeToSATVar& satVar, Polarity polary)
 {
   const unsigned width = a.GetValueWidth();
   assert(width == b.GetValueWidth());
@@ -225,10 +225,10 @@ struct AxiomToBe
 void applyAxiomToSAT(SATSolver& SatSolver, AxiomToBe& toBe,
                      ToSATBase::ASTNodeToSATVar& satVar)
 {
-  Minisat::Var a = getEquals(SatSolver, toBe.index0, toBe.index1, satVar,
-                             Polarity::LEFT_ONLY);
-  Minisat::Var b = getEquals(SatSolver, toBe.value0, toBe.value1, satVar,
-                             Polarity::RIGHT_ONLY);
+  uint32_t a = getEquals(SatSolver, toBe.index0, toBe.index1, satVar,
+                         Polarity::LEFT_ONLY);
+  uint32_t b = getEquals(SatSolver, toBe.value0, toBe.value1, satVar,
+                         Polarity::RIGHT_ONLY);
   SATSolver::vec_literals satSolverClause;
   satSolverClause.push(SATSolver::mkLit(a, true));
   satSolverClause.push(SATSolver::mkLit(b, false));

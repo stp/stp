@@ -51,9 +51,9 @@ void getSatVariables(const ASTNode& a, vector<unsigned>& v_a,
 
 // Adds clauses constraining a fresh SAT variable to (partially) reify
 // the bit-vector equality a = b, and returns that variable.
-Minisat::Var getEquals(SATSolver& SatSolver, const ASTNode& a,
-                       const ASTNode& b, ToSATBase::ASTNodeToSATVar& satVar,
-                       Polarity polary = Polarity::BOTH);
+uint32_t getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
+                   ToSATBase::ASTNodeToSATVar& satVar,
+                   Polarity polary = Polarity::BOTH);
 
 class FpEncodingContext;
 
