@@ -1146,9 +1146,17 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term,
       result = tmp_res;
       break;
     }
+    // fp.mul survives to the bit-blaster under --bb.fp-native-arith, when
+    // FloatBlast left it beneath a surviving native predicate over packed
+    // views (comparisonLeaf).
+    case FP_MUL:
+    {
+      result = BBfpMul(term, support);
+      break;
+    }
+
     case FP_ADD:
     case FP_SUB:
-    case FP_MUL:
     case FP_DIV:
     case FP_FMA:
     case FP_SQRT:
@@ -3321,6 +3329,356 @@ BBNode BitBlaster::BBclassifyFP(const ASTNode& form, BBNodeSet& support)
       FatalError("BBclassifyFP: Illegal kind", form);
       return BBNode();
   }
+}
+
+/****************************************************************
+ * Native fp.mul (--bb.fp-native-arith)                         *
+ ****************************************************************/
+
+// Count of leading zeros of v (scanning from the MSB down), as an unsigned
+// binary vector of countWidth bits. An all-zero v counts v.size(). Built as
+// a priority chain: scanning positions from the LSB up, each set bit
+// overrides the count implied by the lower ones, so the MSB wins.
+BBNodeVec BitBlaster::BBfpCLZ(const BBNodeVec& v, unsigned countWidth)
+{
+  const unsigned n = v.size();
+  auto constVec = [&](unsigned value) {
+    BBNodeVec c(countWidth);
+    for (unsigned i = 0; i < countWidth; i++)
+      c[i] = ((value >> i) & 1) ? nf->getTrue() : nf->getFalse();
+    return c;
+  };
+  BBNodeVec count = constVec(n);
+  for (unsigned i = 0; i < n; i++)
+    count = BBITE(v[i], constVec(n - 1 - i), count);
+  return count;
+}
+
+// Logarithmic left shifter, zero fill. The amount is unsigned binary; any
+// amount >= v.size() shifts everything out.
+BBNodeVec BitBlaster::BBfpShiftLeft(const BBNodeVec& v, const BBNodeVec& amt)
+{
+  BBNodeVec r = v;
+  for (unsigned s = 0; s < amt.size(); s++)
+  {
+    const unsigned k = 1u << s;
+    if (k >= r.size())
+    {
+      const BBNodeVec zeros = BBfill(r.size(), nf->getFalse());
+      r = BBITE(amt[s], zeros, r);
+      continue;
+    }
+    BBNodeVec shifted(r.size());
+    for (unsigned i = 0; i < r.size(); i++)
+      shifted[i] = (i >= k) ? r[i - k] : nf->getFalse();
+    r = BBITE(amt[s], shifted, r);
+  }
+  return r;
+}
+
+// Logarithmic right shifter that ORs every shifted-out bit into sticky --
+// the rounding circuits must not lose shifted-out precision.
+BBNodeVec BitBlaster::BBfpShiftRightSticky(const BBNodeVec& v,
+                                           const BBNodeVec& amt,
+                                           BBNode& sticky)
+{
+  BBNodeVec r = v;
+  for (unsigned s = 0; s < amt.size(); s++)
+  {
+    const unsigned k = 1u << s;
+    if (k >= r.size())
+    {
+      const BBNode all = nf->CreateNode(OR, r);
+      sticky = nf->CreateNode(OR, sticky, nf->CreateNode(AND, amt[s], all));
+      const BBNodeVec zeros = BBfill(r.size(), nf->getFalse());
+      r = BBITE(amt[s], zeros, r);
+      continue;
+    }
+    BBNodeVec dropped(r.begin(), r.begin() + k);
+    const BBNode droppedAny = nf->CreateNode(OR, dropped);
+    sticky =
+        nf->CreateNode(OR, sticky, nf->CreateNode(AND, amt[s], droppedAny));
+    BBNodeVec shifted(r.size());
+    for (unsigned i = 0; i < r.size(); i++)
+      shifted[i] = (i + k < r.size()) ? r[i + k] : nf->getFalse();
+    r = BBITE(amt[s], shifted, r);
+  }
+  return r;
+}
+
+// v + inc (a single carry-in bit), one bit wider than v -- the rounding
+// increment, whose carry-out is the significand overflowing to 10...0.
+BBNodeVec BitBlaster::BBfpIncrement(const BBNodeVec& v, const BBNode& inc)
+{
+  BBNodeVec r(v.size() + 1);
+  BBNode carry = inc;
+  for (unsigned i = 0; i < v.size(); i++)
+  {
+    r[i] = nf->CreateNode(XOR, v[i], carry);
+    carry = nf->CreateNode(AND, v[i], carry);
+  }
+  r[v.size()] = carry;
+  return r;
+}
+
+// Bit-blasted fp.mul over packed IEEE-754 operands: a hand-written
+// unpack / multiply / round / pack circuit, no SymFPU. FloatBlast leaves
+// FP_MUL in place under a surviving native predicate when
+// --bb.fp-native-arith is on and both float operands are packed views.
+//
+// Shape (fields as in BBcompareFP: significand in bits [0, sb-2], exponent
+// in [sb-1, w-2], sign at w-1):
+//   1. Normalise each operand to a significand with an explicit leading 1
+//      (subnormals shift up by their leading-zero count) and an unbiased
+//      exponent in eb+2 signed bits -- wide enough for every intermediate
+//      sum this circuit forms.
+//   2. Multiply the sb-bit significands into 2sb bits (school multiplier;
+//      the partial-product array is the irreducible core).
+//   3. Normalise the product (top bit at 2sb-1 or 2sb-2), extracting
+//      guard and sticky.
+//   4. If the biased exponent fell to 0 or below, shift right into the
+//      subnormal range, accumulating sticky; a shift past the significand
+//      leaves all-sticky (which rounding may still pull up to the minimum
+//      subnormal, e.g. under RTP).
+//   5. Round per mode -- the increment's carry renormalises, and a
+//      subnormal that rounds up to the hidden bit becomes the smallest
+//      normal with the same biased exponent.
+//   6. Overflow saturates per mode: RNE/RNA to infinity, RTZ to the
+//      largest finite, RTP/RTN to whichever of the two matches the sign.
+//   7. Specials are muxed over the computed result: NaN (any NaN operand,
+//      or zero times infinity), then infinity, then zero. The NaN produced
+//      is the canonical quiet NaN (positive, significand MSB set), the
+//      same value the SymFPU path packs.
+BBNodeVec BitBlaster::BBfpMul(const ASTNode& term, BBNodeSet& support)
+{
+  assert(term.GetKind() == FP_MUL);
+  assert(term.Degree() == 3);
+
+  const SourceSort sort = term.GetSourceSort();
+  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb = sort.significandWidth();
+  const unsigned w = sort.exponentWidth() + sb;
+  const unsigned eb = w - sb;
+  assert(sb >= 2 && eb >= 2);
+  const unsigned bias = (1u << (eb - 1)) - 1;
+  const unsigned maxbe = (1u << eb) - 2; // largest finite biased exponent
+  // Internal signed exponent width. eb+2 covers every exponent SUM this
+  // circuit forms, but the subnormal shift distance 1 - be reaches
+  // bias + 2sb - 1, which overflows eb+2 bits when the significand is wide
+  // relative to the exponent (e.g. (2,5)); widen until it fits.
+  unsigned E = eb + 2;
+  while ((1u << (E - 1)) <= bias + 2 * sb)
+    E++;
+
+  const BBNodeVec rm = BBTerm(term[0], support); // one-hot, see
+  const BBNode& rne = rm[0];                     // rounding_modes.h
+  const BBNode& rtp = rm[1];
+  const BBNode& rtn = rm[2];
+  const BBNode& rna = rm[4];
+
+  const BBNodeVec pa = BBTerm(term[1], support);
+  const BBNodeVec pb = BBTerm(term[2], support);
+  assert(pa.size() == w && pb.size() == w);
+
+  auto constVec = [&](unsigned value, unsigned width) {
+    BBNodeVec c(width);
+    for (unsigned i = 0; i < width; i++)
+      c[i] = ((value >> i) & 1) ? nf->getTrue() : nf->getFalse();
+    return c;
+  };
+  auto zext = [&](const BBNodeVec& v, unsigned width) {
+    BBNodeVec c = v;
+    while (c.size() < width)
+      c.push_back(nf->getFalse());
+    return c;
+  };
+
+  // Field split and classification of one packed operand. The significand
+  // keeps its hidden bit UN-normalised (0 for subnormals): normalisation
+  // is deferred to the product, so consuming a packed operand costs only
+  // wiring and four classification gates -- nothing is shifted. That is
+  // what keeps chained native operations (whose intermediate results are
+  // packed) from paying an unpack circuit at every step.
+  struct Operand
+  {
+    BBNode sign, isZero, isInf, isNaN;
+    BBNodeVec msig; // sb bits, hidden bit at msig[sb-1], NOT normalised
+    BBNodeVec eUnb; // E bits, signed, unbiased (subnormals read exp as 1)
+  };
+  auto unpack = [&](const BBNodeVec& p) {
+    Operand o;
+    o.sign = p[w - 1];
+    BBNodeVec exp(p.begin() + (sb - 1), p.begin() + (w - 1));
+    BBNodeVec sig(p.begin(), p.begin() + (sb - 1));
+    const BBNode expZero = nf->CreateNode(NOR, exp);
+    const BBNode expOnes = nf->CreateNode(AND, exp);
+    const BBNode sigZero = nf->CreateNode(NOR, sig);
+    const BBNode sigNonzero = nf->CreateNode(OR, sig);
+    o.isZero = nf->CreateNode(AND, expZero, sigZero);
+    o.isInf = nf->CreateNode(AND, expOnes, sigZero);
+    o.isNaN = nf->CreateNode(AND, expOnes, sigNonzero);
+    const BBNode hidden = nf->CreateNode(NOT, expZero);
+    o.msig = sig;
+    o.msig.push_back(hidden);
+    BBNodeVec e = zext(BBITE(hidden, exp, constVec(1, eb)), E);
+    BBNodeVec biasV = constVec(bias, E);
+    BBSub(e, biasV, support);
+    o.eUnb = e;
+    return o;
+  };
+  const Operand a = unpack(pa);
+  const Operand b = unpack(pb);
+
+  const BBNode sgn = nf->CreateNode(XOR, a.sign, b.sign);
+
+  // Significand product, 2sb bits, of the raw hidden-bit significands --
+  // in [0, 4) counting subnormal fractions.
+  BBNodeVec prod = BBfill(2 * sb, nf->getFalse());
+  for (unsigned i = 0; i < sb; i++)
+  {
+    const BBNodeVec row = BBAndBit(b.msig, a.msig[i]);
+    BBNodeVec addend = BBfill(2 * sb, nf->getFalse());
+    for (unsigned j = 0; j < sb; j++)
+      addend[i + j] = row[j];
+    BBPlus2(prod, addend, nf->getFalse());
+  }
+
+  // One normalisation for the whole product: shift its leading 1 to the
+  // top and fold the shift count into the exponent. This also absorbs the
+  // subnormal operands' missing normalisation (their leading zeros simply
+  // appear here). A zero product leaves garbage, muxed out by the
+  // specials below (zero operands) or rounded from all-sticky=0 to zero.
+  const unsigned lw2 = [](unsigned x) { // bits to count up to x
+    unsigned bb = 1;
+    while ((1u << bb) <= x)
+      bb++;
+    return bb;
+  }(2 * sb);
+  const BBNodeVec ell = BBfpCLZ(prod, lw2);
+  const BBNodeVec pn = BBfpShiftLeft(prod, ell);
+  BBNodeVec rsig(pn.begin() + sb, pn.end()); // top sb bits: 1.frac
+  BBNode guard = pn[sb - 1];
+  auto orVec = [&](BBNodeVec v) {
+    return v.empty() ? nf->getFalse() : nf->CreateNode(OR, v);
+  };
+  BBNodeVec lowBits(pn.begin(), pn.begin() + (sb - 1));
+  BBNode sticky = orVec(lowBits);
+
+  // Biased result exponent: eUnbA + eUnbB + bias + 1 - leading zeros.
+  BBNodeVec be = a.eUnb;
+  BBPlus2(be, b.eUnb, nf->getFalse());
+  BBPlus2(be, constVec(bias, E), nf->getTrue());
+  BBNodeVec ellE = zext(ell, E);
+  BBSub(be, ellE, support);
+
+  // Subnormal range: biased exponent <= 0 needs a right shift of 1 - be,
+  // clamped -- anything past guard is pure sticky.
+  const unsigned dmax = sb + 2;
+  const BBNode beNonPos =
+      nf->CreateNode(OR, be[E - 1], nf->CreateNode(NOR, be));
+  BBNodeVec shiftFull = constVec(1, E);
+  BBSub(shiftFull, be, support); // 1 - be, signed
+  const BBNode tooFar = nf->CreateNode(
+      NOT, BBBVLE(shiftFull, constVec(dmax, E), true /*signed*/));
+  const unsigned dw = [](unsigned x) {
+    unsigned bb = 1;
+    while ((1u << bb) <= x)
+      bb++;
+    return bb;
+  }(dmax);
+  BBNodeVec d(dw);
+  for (unsigned i = 0; i < dw; i++)
+  {
+    const BBNode inRange = nf->CreateNode(ITE, tooFar,
+                                          ((dmax >> i) & 1) ? nf->getTrue()
+                                                            : nf->getFalse(),
+                                          shiftFull[i]);
+    d[i] = nf->CreateNode(AND, beNonPos, inRange);
+  }
+  BBNodeVec vg = rsig;
+  vg.insert(vg.begin(), guard); // [guard, rsig...]
+  vg = BBfpShiftRightSticky(vg, d, sticky);
+  guard = vg[0];
+  for (unsigned i = 0; i < sb; i++)
+    rsig[i] = vg[i + 1];
+  // After a subnormal shift the value sits at the exp=1 scale (the encoding
+  // with exponent field 0 shares it).
+  BBNodeVec beAfter = BBITE(beNonPos, constVec(1, E), be);
+
+  // Round.
+  const BBNode gs = nf->CreateNode(OR, guard, sticky);
+  BBNodeVec upCases;
+  upCases.push_back(nf->CreateNode(
+      AND, rne, guard, nf->CreateNode(OR, sticky, rsig[0])));
+  upCases.push_back(nf->CreateNode(AND, rna, guard));
+  upCases.push_back(
+      nf->CreateNode(AND, rtp, nf->CreateNode(NOT, sgn), gs));
+  upCases.push_back(nf->CreateNode(AND, rtn, sgn, gs));
+  const BBNode roundUp = nf->CreateNode(OR, upCases);
+  const BBNodeVec rr = BBfpIncrement(rsig, roundUp);
+  const BBNode carry = rr[sb];
+  BBNodeVec rsigF(sb);
+  for (unsigned i = 0; i < sb; i++)
+    rsigF[i] = nf->CreateNode(ITE, carry, rr[i + 1], rr[i]);
+  BBNodeVec beF = beAfter;
+  BBPlus2(beF, BBfill(E, nf->getFalse()), carry);
+
+  // Overflow, checked after rounding; saturation is mode- and sign-
+  // dependent.
+  const BBNode ovf =
+      nf->CreateNode(NOT, BBBVLE(beF, constVec(maxbe, E), true /*signed*/));
+  BBNodeVec infCases;
+  infCases.push_back(rne);
+  infCases.push_back(rna);
+  infCases.push_back(nf->CreateNode(AND, rtp, nf->CreateNode(NOT, sgn)));
+  infCases.push_back(nf->CreateNode(AND, rtn, sgn));
+  const BBNode roundsToInf = nf->CreateNode(OR, infCases);
+
+  // Pack the finite computed result. A significand without its leading 1
+  // is subnormal: exponent field 0 (beAfter is 1 there, the same scale).
+  const BBNode isNormRes = rsigF[sb - 1];
+  BBNodeVec res(w);
+  for (unsigned i = 0; i < sb - 1; i++)
+    res[i] = rsigF[i];
+  for (unsigned i = 0; i < eb; i++)
+    res[sb - 1 + i] = nf->CreateNode(AND, isNormRes, beF[i]);
+  res[w - 1] = sgn;
+
+  // Specials, outermost first: NaN, then infinity, then zero, then
+  // overflow saturation.
+  auto packSpecial = [&](bool nan, bool inf, bool maxFinite) {
+    BBNodeVec s(w, nf->getFalse());
+    if (nan || inf || maxFinite)
+      for (unsigned i = 0; i < eb; i++)
+        s[sb - 1 + i] = nf->getTrue();
+    if (maxFinite)
+    {
+      s[sb - 1] = nf->getFalse(); // maxbe = 2^eb - 2: all ones but the LSB
+      for (unsigned i = 0; i < sb - 1; i++)
+        s[i] = nf->getTrue();
+    }
+    if (nan)
+      s[sb - 2] = nf->getTrue(); // canonical quiet NaN, positive
+    else
+      s[w - 1] = sgn;
+    return s;
+  };
+  BBNodeVec nanCases;
+  nanCases.push_back(a.isNaN);
+  nanCases.push_back(b.isNaN);
+  nanCases.push_back(nf->CreateNode(AND, a.isZero, b.isInf));
+  nanCases.push_back(nf->CreateNode(AND, a.isInf, b.isZero));
+  const BBNode anyNaN = nf->CreateNode(OR, nanCases);
+  const BBNode anyInf = nf->CreateNode(OR, a.isInf, b.isInf);
+  const BBNode anyZero = nf->CreateNode(OR, a.isZero, b.isZero);
+
+  res = BBITE(ovf, BBITE(roundsToInf, packSpecial(false, true, false),
+                         packSpecial(false, false, true)),
+              res);
+  res = BBITE(anyZero, packSpecial(false, false, false), res);
+  res = BBITE(anyInf, packSpecial(false, true, false), res);
+  res = BBITE(anyNaN, packSpecial(true, false, false), res);
+  return res;
 }
 
 // Return bit-blasted form for the overflow predicates BVUADDO, BVSADDO,

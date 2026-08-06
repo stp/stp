@@ -151,6 +151,29 @@ private:
         return n;
       return node_factory->CreateTerm(n.GetKind(), n.GetValueWidth(), inner);
     }
+    // fp.mul under --bb.fp-native-arith: the bit-blaster's hand-written
+    // packed circuit (BBfpMul) takes over from SymFPU when both float
+    // operands resolve to packed views and the rounding mode is immediate
+    // (a constant, or a declared symbol -- whose one-hot validity is
+    // asserted at declaration). The rebuild goes through the factory, so
+    // constant operands fold (a fully constant multiply never survives,
+    // keeping the lowering-must-change invariant of constant folding and
+    // model evaluation) and the multiplicative-identity rules still fire.
+    if (n.GetKind() == FP_MUL && bm->UserFlags.fp_native_arith &&
+        n.Degree() == 3 &&
+        (n[0].GetKind() == SYMBOL || n[0].GetKind() == BVCONST))
+    {
+      const ASTNode left = comparisonLeaf(n[1]);
+      if (left.IsNull())
+        return ASTNode();
+      const ASTNode right = comparisonLeaf(n[2]);
+      if (right.IsNull())
+        return ASTNode();
+      if (left == n[1] && right == n[2])
+        return n;
+      return node_factory->CreateTerm(FP_MUL, n.GetValueWidth(), n[0], left,
+                                      right);
+    }
     // A select from a float-element array already IS the packed element
     // bits: asPacked's READ arm only rebuilds the array and index if they
     // contain FP work, so it never builds a circuit for the element itself

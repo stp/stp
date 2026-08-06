@@ -211,6 +211,22 @@ class BitBlaster
   BBNode BBfpIsNaN(const BBNodeVec& p, unsigned sb, unsigned w);
   BBNode BBfpIsZero(const BBNodeVec& p, unsigned w);
 
+  // bit blast fp.mul over packed operands: a hand-written
+  // unpack/multiply/round/pack circuit, no SymFPU (--bb.fp-native-arith)
+  BBNodeVec BBfpMul(const ASTNode& term, BBNodeSet& support);
+
+  // Helpers for the native floating-point arithmetic circuits.
+  // Count of leading zeros of v (from the MSB down) as an unsigned binary
+  // vector of `countWidth` bits; an all-zero v counts v.size().
+  BBNodeVec BBfpCLZ(const BBNodeVec& v, unsigned countWidth);
+  // Left shift v by the unsigned binary amount `amt` (zero fill).
+  BBNodeVec BBfpShiftLeft(const BBNodeVec& v, const BBNodeVec& amt);
+  // Right shift v by `amt`, ORing every shifted-out bit into `sticky`.
+  BBNodeVec BBfpShiftRightSticky(const BBNodeVec& v, const BBNodeVec& amt,
+                                 BBNode& sticky);
+  // v + inc (a single carry-in bit), one bit wider than v.
+  BBNodeVec BBfpIncrement(const BBNodeVec& v, const BBNode& inc);
+
   // Return bit-blasted form for the overflow predicates BVUADDO, BVSADDO,
   // BVUMULO, BVSMULO, BVUSUBO, BVSSUBO.
   BBNode BBOverflow(const ASTNode& form, BBNodeSet& support);
