@@ -47,6 +47,7 @@ stp_root="$(pwd)"
 mkdir -p build-32bit
 cd build-32bit
 cmake \
+  -DUSE_MINISAT:BOOL=ON \
   -DNOCRYPTOMINISAT:BOOL=ON \
   -DUSE_LIBBF:BOOL=ON \
   -DLIBBF_DIR:PATH="${stp_root}/deps/libbf" \

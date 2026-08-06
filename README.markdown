@@ -14,15 +14,14 @@ STP is a constraint solver (or SMT solver) aimed at solving constraints of bitve
 For a quick install:
 
 ```
-sudo apt-get install git build-essential cmake bison flex libgmp-dev zlib1g-dev python3 perl
+sudo apt-get install git build-essential cmake bison flex libgmp-dev python3 perl
 git clone https://github.com/stp/stp
 cd stp
 git submodule init && git submodule update
-./scripts/deps/setup-cms.sh
-./scripts/deps/setup-minisat.sh
+./scripts/deps/setup-cadical.sh
 mkdir build
 cd build
-cmake ..
+cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$(pwd)/../deps/cadical" ..
 cmake --build . -j$(nproc)
 sudo cmake --install .
 ```
@@ -122,7 +121,11 @@ generators.
   whatever application embeds it.
 
 ### Dependencies
-STP relies on: flex, bison, perl, zlib and minisat. The command-line
+STP relies on: flex, bison and perl, plus at least one SAT backend.
+CaDiCaL (opt-in via `-DUSE_CADICAL`, see below) is the recommended one;
+the alternatives are CryptoMiniSat (found automatically when installed)
+and MiniSat (opt-in via `-DUSE_MINISAT`, which also needs zlib).
+Configuration fails if no backend is enabled. The command-line
 parser, [CLI11](https://github.com/CLIUtils/CLI11), is vendored as a
 submodule -- nothing to install.
 The floating-point support uses the header-only
@@ -141,10 +144,12 @@ python interface and for the test suite, and GMP is needed when building with
 CryptoMiniSat. You can install most of these by:
 
 ```
-$ sudo apt-get install build-essential cmake bison flex libgmp-dev zlib1g-dev python3 perl minisat
+$ sudo apt-get install build-essential cmake bison flex libgmp-dev zlib1g-dev python3 perl
 ```
 
-If your distribution does not come with minisat, STP maintains an updated fork. It can be built as follows:
+The MiniSat backend is optional and off by default; enable it with
+`-DUSE_MINISAT:BOOL=ON`. Your distribution's minisat package works, or STP
+maintains an updated fork that can be built as follows:
 
 ```
 $ git clone https://github.com/stp/minisat
@@ -207,8 +212,9 @@ where `<path>` is the checkout containing `src/cadical.hpp` and
 into STP's shared library. These commands are pre-configured in
 `scripts/deps/setup-cadical.sh`.
 
-When STP is built this way CaDiCaL becomes the *default* solver; `--minisat`
-or `--cryptominisat` select the others at runtime.
+When STP is built this way CaDiCaL becomes the *default* solver;
+`--cryptominisat` (or `--minisat`, in a `-DUSE_MINISAT` build) selects the
+others at runtime.
 
 With a CaDiCaL 3.x build, `--cadical-factor` controls CaDiCaL's bounded
 variable addition: `on`, `off`, or `auto` (the default, which enables it
@@ -263,12 +269,12 @@ git clone https://github.com/stp/stp
 cd stp
 git submodule update --init
 pip install lit
-./scripts/deps/setup-minisat.sh
+./scripts/deps/setup-cadical.sh
 ./scripts/deps/setup-gtest.sh
 ./scripts/deps/setup-outputcheck.sh
 mkdir build
 cd build
-cmake -DENABLE_TESTING=ON ..
+cmake -DENABLE_TESTING=ON -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$(pwd)/../deps/cadical" ..
 cmake --build . -j$(nproc)
 ctest
 ```
