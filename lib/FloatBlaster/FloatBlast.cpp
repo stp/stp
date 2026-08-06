@@ -133,6 +133,24 @@ private:
       return bm->CreateFPConst(n[2], sort.exponentWidth(),
                                sort.significandWidth());
     }
+    // fp.neg and fp.abs are sign-bit edits on the packed encoding (IEEE-754
+    // 5.5.1 quiet operations: no rounding, NaN payload untouched), so either
+    // wrapped around a packed view is still a packed view: resolve the
+    // operand and keep the wrapper for the bit-blaster, whose FP_NEG/FP_ABS
+    // arms negate or clear the top bit of the operand's bits. Rebuilding
+    // through the factory matters when the operand resolved to something
+    // new: a constant folds (foldFPSign), so the survivor functions'
+    // constant rules see the folded form, and a collapsed mux re-enters the
+    // involution rules (neg(neg x) = x).
+    if (n.GetKind() == FP_NEG || n.GetKind() == FP_ABS)
+    {
+      const ASTNode inner = comparisonLeaf(n[0]);
+      if (inner.IsNull())
+        return ASTNode();
+      if (inner == n[0])
+        return n;
+      return node_factory->CreateTerm(n.GetKind(), n.GetValueWidth(), inner);
+    }
     // A select from a float-element array already IS the packed element
     // bits: asPacked's READ arm only rebuilds the array and index if they
     // contain FP work, so it never builds a circuit for the element itself

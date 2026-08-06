@@ -778,6 +778,27 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term,
       break;
     }
 
+    // fp.neg / fp.abs over a packed IEEE-754 operand: sign-bit edits (IEEE
+    // 5.5.1 quiet operations -- no rounding, NaN payload kept), so the
+    // operand's bits pass through with the top bit negated or cleared.
+    // FloatBlast only leaves these under a surviving native predicate,
+    // whose operands are packed views (comparisonLeaf).
+    case FP_NEG:
+    {
+      BBNodeVec bits = BBTerm(term[0], support);
+      bits[bits.size() - 1] = nf->CreateNode(NOT, bits[bits.size() - 1]);
+      result = bits;
+      break;
+    }
+
+    case FP_ABS:
+    {
+      BBNodeVec bits = BBTerm(term[0], support);
+      bits[bits.size() - 1] = nf->getFalse();
+      result = bits;
+      break;
+    }
+
     case BVRIGHTSHIFT:
     case BVSRSHIFT:
     case BVLEFTSHIFT:
@@ -1125,8 +1146,6 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term,
       result = tmp_res;
       break;
     }
-    case FP_ABS:
-    case FP_NEG:
     case FP_ADD:
     case FP_SUB:
     case FP_MUL:
