@@ -27,7 +27,12 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 
-// estimate how difficult that input is to solve based on some simple rules.
+// Estimates how many AIG AND-nodes bit-blasting a formula would build,
+// without building them: the per-operation costs are measured, and summed
+// over the formula's distinct nodes. Used to decide whether a simplification
+// left the problem harder than it found it. See DifficultyScore.cpp for what
+// the estimate does and does not model, and tools/difficulty_bench for the
+// measurement it is fitted to.
 
 namespace stp
 {

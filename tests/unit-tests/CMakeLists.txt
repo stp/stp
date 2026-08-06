@@ -78,6 +78,12 @@ if (ENABLE_FLOATING_POINT)
     AddSTPGTest(BVSolver_Test.cpp)
 endif()
 AddSTPGTest(StrengthReduction_Test.cpp)
+# Bit-blasts each operation to check the difficulty score against what the
+# AIG really costs, so it instantiates BBNodeManagerAIG and needs its own
+# copy of ABC for the same reason FloatBlast_Test does.
+AddSTPGTest(DifficultyScore_Test.cpp)
+target_link_libraries(DifficultyScore_TestTests $<TARGET_FILE:libabc-pic>)
+add_dependencies(DifficultyScore_TestTests libabc-pic)
 AddSTPGTest(StrengthReduction_Exhaustive_Test.cpp)
 AddSTPGTest(RemoveUnconstrained_Exhaustive_Test.cpp)
 AddSTPGTest(AchievableImage_Exhaustive_Test.cpp)
