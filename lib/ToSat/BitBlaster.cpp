@@ -3479,7 +3479,6 @@ BBNodeVec BitBlaster::BBfpRoundPack(const BBNodeVec& rm, const BBNode& sgn,
                                     unsigned eb, BBNodeSet& support)
 {
   const unsigned w = eb + sb;
-  const unsigned bias = (1u << (eb - 1)) - 1;
   const unsigned maxbe = (1u << eb) - 2;
   const unsigned E = beIn.size();
   const BBNode& rne = rm[0];
@@ -3630,11 +3629,7 @@ BBNodeVec BitBlaster::BBfpMul(const ASTNode& term, BBNodeSet& support)
   const unsigned E = BBfpExpWidth(eb, sb);
 
   const BBNodeVec rm = BBTerm(term[0], support); // one-hot, see
-  const BBNode& rne = rm[0];                     // rounding_modes.h
-  const BBNode& rtp = rm[1];
-  const BBNode& rtn = rm[2];
-  const BBNode& rna = rm[4];
-
+                                                 // rounding_modes.h
   const BBNodeVec pa = BBTerm(term[1], support);
   const BBNodeVec pb = BBTerm(term[2], support);
   assert(pa.size() == w && pb.size() == w);
