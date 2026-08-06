@@ -3,6 +3,8 @@
  ********************************************************************/
 #include "stp/FloatBlaster/FpEncodingContext.h"
 
+#include <iostream>
+
 namespace stp
 {
 
@@ -35,7 +37,22 @@ void FpEncodingContext::copyArrayEqualityRewrites(ASTNodeMap& out) const
 ASTNode FpEncodingContext::lowerPrepared(const ASTNode& prepared)
 {
   requireOriginalNodeFactory();
-  return blast.topLevel(prepared);
+  const ASTNode out = blast.topLevel(prepared);
+  if (bm->UserFlags.stats_flag)
+  {
+    // All-zero counters mean no SymFPU circuit was built: every
+    // floating-point node passed through to the bit-blaster's native
+    // encodings and this lowering was an identity.
+    const FloatBlast::Statistics& s = blast.statistics();
+    const bool noop =
+        s.unpacked_operation_builds + s.unpack_builds + s.pack_builds == 0;
+    std::cerr << "FloatBlast: " << s.unpacked_operation_builds
+              << " SymFPU operations, " << s.unpack_builds << " unpacks, "
+              << s.pack_builds << " packs"
+              << (noop ? " (no-op: everything passed through natively)" : "")
+              << std::endl;
+  }
+  return out;
 }
 
 ASTNode FpEncodingContext::encodeForModel(const ASTNode& source)

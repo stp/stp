@@ -299,9 +299,9 @@ void ExtraMain::create_options()
            bb_group);
 
   bool_arg("--bb.fp-native-arith", bm->UserFlags.fp_native_arith,
-           "Bit-blast fp.mul under surviving native predicates with the "
-           "hand-written packed-operand circuit instead of the SymFPU "
-           "unpacking circuits (experimental)",
+           "Bit-blast fp.add and fp.mul under surviving native predicates "
+           "with the hand-written packed-operand circuits instead of the "
+           "SymFPU unpacking circuits (experimental)",
            bb_group);
 
   bool_arg("--bb.simplify-during-bb", bm->UserFlags.simplify_during_BB_flag,
