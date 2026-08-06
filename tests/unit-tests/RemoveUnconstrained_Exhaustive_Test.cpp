@@ -256,6 +256,69 @@ struct Context
     checkEquivalent(back, result);
   }
 
+  // Equisatisfiability with model mapping, for the image-constrained
+  // rewrite: a fresh variable stands for a shared term, with a
+  // membership constraint conjoined. The pointwise identity the
+  // constant-witness rules satisfy does not hold off the image, so
+  // instead check that (a) every assignment satisfying `result` also
+  // satisfies the back-substituted original -- models map back -- and
+  // (b) original and result are satisfiable together or not at all.
+  void checkEquisat(const ASTNode& original, const ASTNode& result)
+  {
+    ASTNode back = backSubstitute(original);
+
+    ASTNodeSet symSet;
+    collectSymbols(result, symSet);
+    collectSymbols(back, symSet);
+    std::vector<ASTNode> syms(symSet.begin(), symSet.end());
+    unsigned long combos = 1;
+    for (const auto& s : syms)
+      combos *= domainSize(s);
+    ASSERT_LE(combos, 1u << 16) << "too many assignments";
+
+    bool resultSat = false;
+    for (unsigned long c = 0; c < combos; c++)
+    {
+      ASTNodeMap assignment;
+      unsigned long rest = c;
+      for (size_t i = 0; i < syms.size(); i++)
+      {
+        const unsigned size = domainSize(syms[i]);
+        assignment.insert({syms[i], valueFor(syms[i], rest % size)});
+        rest /= size;
+      }
+      ASTNodeMap a2 = assignment;
+      if (eval(result, assignment) == mgr.ASTTrue)
+      {
+        resultSat = true;
+        ASSERT_EQ(eval(back, a2), mgr.ASTTrue)
+            << "a model of the result failed to map back at assignment " << c;
+      }
+    }
+
+    ASTNodeSet oset;
+    collectSymbols(original, oset);
+    std::vector<ASTNode> osyms(oset.begin(), oset.end());
+    unsigned long ocombos = 1;
+    for (const auto& s : osyms)
+      ocombos *= domainSize(s);
+    ASSERT_LE(ocombos, 1u << 16);
+    bool origSat = false;
+    for (unsigned long c = 0; c < ocombos && !origSat; c++)
+    {
+      ASTNodeMap assignment;
+      unsigned long rest = c;
+      for (size_t i = 0; i < osyms.size(); i++)
+      {
+        const unsigned size = domainSize(osyms[i]);
+        assignment.insert({osyms[i], valueFor(osyms[i], rest % size)});
+        rest /= size;
+      }
+      origSat = (eval(original, assignment) == mgr.ASTTrue);
+    }
+    ASSERT_EQ(origSat, resultSat) << "satisfiability changed";
+  }
+
   // As checkSound, but the operator takes the surviving `keep` as one operand
   // (used for the binary comparisons, which have a dedicated one-sided rule).
   void checkSoundWithKeep(Kind k, bool termLevel)
@@ -936,18 +999,105 @@ TEST(RemoveUnconstrained_GroundPath, one_polarity_no_collapse)
   });
 }
 
-TEST(RemoveUnconstrained_GroundPath, shared_interior_no_collapse)
-{
-  // (x mod 4) is used twice: forcing x to witness values would change the
-  // second use, so the climb must refuse to step past a shared interior
-  // node. Also check the pass stays sound on this shape.
-  auto build = [](Context& c) {
-    ASTNode t = c.hf->CreateTerm(BVMOD, W, c.bv(), c.konst(4));
-    return c.hf->CreateNode(AND, c.hf->CreateNode(EQ, t, c.konst(2)),
-                            c.hf->CreateNode(BVGT, t, c.konst(1)));
-  };
-  expectNoCollapse(build);
+/////////////////////////////////////////////////////////////////////////////
+// 4) Image-constrained fresh variables: a shared non-surjective
+//    single-step term t(x) is replaced by a fresh v, "v in Image(t)" is
+//    conjoined, and x := projection(v). Checked with checkEquisat, since
+//    the pointwise identity doesn't hold off the image.
+/////////////////////////////////////////////////////////////////////////////
 
+// Runs the pass on `top`, requiring x to be eliminated and the rewrite
+// to be equisatisfiable with mapping models.
+static void checkImageConstrained(Context& c, const ASTNode& x,
+                                  const ASTNode& top)
+{
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 1u) << "x not eliminated";
+  c.checkEquisat(top, result);
+}
+
+TEST(RemoveUnconstrained_ImageConstrained, shared_urem)
+{
+  // (x mod 4) used twice: no predicate-level collapse is possible, but
+  // the term becomes v with (bvult v 4) conjoined and x := v.
   Context c;
-  c.checkSoundTop(build(c));
+  ASTNode x = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVMOD, W, x, c.konst(4));
+  ASTNode top = c.hf->CreateNode(AND, c.hf->CreateNode(EQ, t, c.konst(2)),
+                                 c.hf->CreateNode(BVGT, t, c.konst(1)));
+  checkImageConstrained(c, x, top);
+}
+
+TEST(RemoveUnconstrained_ImageConstrained, shared_zero_extend)
+{
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVZX, 2 * W, x, c.konst(2 * W, 32));
+  ASTNode top =
+      c.hf->CreateNode(AND, c.hf->CreateNode(EQ, t, c.konst(2, 2 * W)),
+                       c.hf->CreateNode(BVGT, t, c.konst(1, 2 * W)));
+  checkImageConstrained(c, x, top);
+}
+
+TEST(RemoveUnconstrained_ImageConstrained, shared_sign_extend)
+{
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVSX, 2 * W, x, c.konst(2 * W, 32));
+  ASTNode top =
+      c.hf->CreateNode(AND, c.hf->CreateNode(EQ, t, c.konst(7, 2 * W)),
+                       c.hf->CreateNode(BVSGT, t, c.konst(0, 2 * W)));
+  checkImageConstrained(c, x, top);
+}
+
+TEST(RemoveUnconstrained_ImageConstrained, shared_concat_low_constant)
+{
+  // x ++ 2-bit constant, shared: low bits pinned, x := high extract.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVCONCAT, W + 2, x, c.konst(2, 2));
+  ASTNode top =
+      c.hf->CreateNode(AND, c.hf->CreateNode(EQ, t, c.konst(6, W + 2)),
+                       c.hf->CreateNode(BVGT, t, c.konst(1, W + 2)));
+  checkImageConstrained(c, x, top);
+}
+
+TEST(RemoveUnconstrained_ImageConstrained, shared_even_multiply)
+{
+  // 6 = 2 * 3: image is the even values; x := (v >> 1) * inverse(3).
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVMULT, W, c.konst(6), x);
+  ASTNode top = c.hf->CreateNode(AND, c.hf->CreateNode(EQ, t, c.konst(4)),
+                                 c.hf->CreateNode(BVGT, t, c.konst(1)));
+  checkImageConstrained(c, x, top);
+}
+
+TEST(RemoveUnconstrained_ImageConstrained, shared_ashr_not_rewritten)
+{
+  // Arithmetic right shift isn't in the shape table: x must survive.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVSRSHIFT, W, x, c.konst(1));
+  ASTNode top = c.hf->CreateNode(AND, c.hf->CreateNode(EQ, t, c.konst(2)),
+                                 c.hf->CreateNode(BVGT, t, c.konst(1)));
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 0u);
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_ImageConstrained, shared_multi_step_not_rewritten)
+{
+  // The shared node sits two steps up ((x mod 4) + 1): single-step only.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode t = c.hf->CreateTerm(
+      BVPLUS, W, c.hf->CreateTerm(BVMOD, W, x, c.konst(4)), c.konst(1));
+  ASTNode top = c.hf->CreateNode(AND, c.hf->CreateNode(EQ, t, c.konst(2)),
+                                 c.hf->CreateNode(BVGT, t, c.konst(1)));
+  ASTNode result = c.run(top);
+  EXPECT_EQ(c.simp.Return_SolverMap()->count(x), 0u);
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
 }

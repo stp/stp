@@ -165,6 +165,202 @@ static ASTNode applyStepToNode(NodeFactory* nf, STPMgr& bm,
   return nf->CreateTerm(s.kind, s.outWidth, s.constants[0], in);
 }
 
+/* A shared non-surjective single-step chain: t = op(x, c) has several
+ * parents, so no predicate-level collapse is possible -- pinning x for
+ * one consumer would change the others. But t's image is exactly and
+ * cheaply expressible, so replace t ITSELF with a fresh variable v,
+ * conjoin "v is in the image" onto the formula, and define x as a
+ * projection of v:
+ *
+ *    exists x. phi(t(x))   <=>   exists v. v in Image(t)  /\  phi(v)
+ *
+ * e.g. shared (concat 0 x) becomes v with high bits pinned to zero and
+ * x := extract(v). Consumers then see a variable, which the
+ * symbol-keyed passes (equality propagation, the bit-vector solver, the
+ * disjoint-extract splitter, this pass itself) can work with.
+ *
+ * Note this rewrite satisfies equisatisfiability with model mapping (a
+ * model of the result maps back through x := projection(v)), not the
+ * stronger pointwise identity the constant-witness rules satisfy: off
+ * the image, t(projection(v)) differs from v, which is exactly what the
+ * conjoined constraint excludes.
+ */
+bool RemoveUnconstrained::tryImageConstrainShared(
+    const ASTNode& var, MutableASTNode& sharedNode, const GroundStep& step,
+    vector<MutableASTNode*>& variables)
+{
+  if (step.samePathAllOperands)
+    return false; // squares: image genuinely scattered
+
+  const unsigned w = step.inWidth;
+  const unsigned W = step.outWidth;
+
+  const auto extractOf = [&](const ASTNode& n, unsigned high, unsigned low) {
+    return nf->CreateTerm(BVEXTRACT, high - low + 1, n,
+                          bm.CreateBVConst(32, high),
+                          bm.CreateBVConst(32, low));
+  };
+  // A constant's value when it fits a machine word.
+  const auto constToU64 = [](const ASTNode& n, uint64_t& out) {
+    const CBV c = n.GetBVConst();
+    if (CONSTANTBV::Set_Max(c) >= 32)
+      return false;
+    out = ((unsigned*)c)[0];
+    return true;
+  };
+
+  ASTNode v = bm.CreateFreshVariable(0, W, "unconstrained_image");
+  ASTNode constraint, projection;
+
+  switch (step.kind)
+  {
+    case BVCONCAT:
+    {
+      const ASTNode c = step.constants[0];
+      const unsigned cw = c.GetValueWidth();
+      if (step.pathIndex == 1) // c ++ x: the high bits equal c
+      {
+        constraint = nf->CreateNode(EQ, extractOf(v, W - 1, w), c);
+        projection = extractOf(v, w - 1, 0);
+      }
+      else // x ++ c: the low bits equal c
+      {
+        constraint = nf->CreateNode(EQ, extractOf(v, cw - 1, 0), c);
+        projection = extractOf(v, W - 1, cw);
+      }
+      break;
+    }
+
+    case BVZX:
+    {
+      if (W == w)
+        return false;
+      constraint =
+          nf->CreateNode(EQ, extractOf(v, W - 1, w), bm.CreateZeroConst(W - w));
+      projection = extractOf(v, w - 1, 0);
+      break;
+    }
+
+    case BVSX:
+    {
+      if (W == w)
+        return false;
+      // The image is the fixed points of re-extension.
+      projection = extractOf(v, w - 1, 0);
+      constraint = nf->CreateNode(
+          EQ, v,
+          nf->CreateTerm(BVSX, W, projection, bm.CreateBVConst(32, W)));
+      break;
+    }
+
+    case BVMULT:
+    {
+      // c = 2^s * o with o odd and s > 0 (odd constants are bijective
+      // and consumed by the per-kind rule): the image is the multiples
+      // of 2^s, and x = (v >> s) * o^-1 inverts it.
+      const CBV c = step.constants[0].GetBVConst();
+      if (CONSTANTBV::BitVector_is_empty(c))
+        return false;
+      const unsigned s = (unsigned)CONSTANTBV::Set_Min(c);
+      if (s == 0)
+        return false;
+      CBV oc = CONSTANTBV::BitVector_Create(W, true);
+      CONSTANTBV::BitVector_Interval_Copy(oc, c, 0, s, W - s);
+      const ASTNode oInv =
+          simplifier->MultiplicativeInverse(bm.CreateBVConst(oc, W));
+      constraint = nf->CreateNode(EQ, extractOf(v, s - 1, 0),
+                                  bm.CreateZeroConst(s));
+      projection = nf->CreateTerm(
+          BVMULT, W, oInv,
+          nf->CreateTerm(BVRIGHTSHIFT, W, v, bm.CreateBVConst(W, s)));
+      break;
+    }
+
+    case BVLEFTSHIFT:
+    {
+      uint64_t k;
+      if (step.pathIndex != 0 || !constToU64(step.constants[0], k) || k == 0 ||
+          k >= W)
+        return false;
+      constraint = nf->CreateNode(EQ, extractOf(v, (unsigned)k - 1, 0),
+                                  bm.CreateZeroConst((unsigned)k));
+      projection = nf->CreateTerm(BVRIGHTSHIFT, W, v, step.constants[0]);
+      break;
+    }
+
+    case BVRIGHTSHIFT:
+    {
+      uint64_t k;
+      if (step.pathIndex != 0 || !constToU64(step.constants[0], k) || k == 0 ||
+          k >= W)
+        return false;
+      constraint = nf->CreateNode(EQ, extractOf(v, W - 1, W - (unsigned)k),
+                                  bm.CreateZeroConst((unsigned)k));
+      projection = nf->CreateTerm(BVLEFTSHIFT, W, v, step.constants[0]);
+      break;
+    }
+
+    case BVAND:
+    {
+      // A low mask behaves as mod 2^kb: high bits zero, x := v.
+      const CBV c = step.constants[0].GetBVConst();
+      if (CONSTANTBV::BitVector_is_empty(c) ||
+          CONSTANTBV::BitVector_is_full(c))
+        return false;
+      const unsigned kb = (unsigned)CONSTANTBV::Set_Max(c) + 1;
+      CBV lowMask = CONSTANTBV::BitVector_Create(W, true);
+      CONSTANTBV::BitVector_Interval_Fill(lowMask, 0, kb - 1);
+      const bool isLowMask = CONSTANTBV::BitVector_equal(c, lowMask);
+      CONSTANTBV::BitVector_Destroy(lowMask);
+      if (!isLowMask || kb >= W)
+        return false;
+      constraint = nf->CreateNode(EQ, extractOf(v, W - 1, kb),
+                                  bm.CreateZeroConst(W - kb));
+      projection = v;
+      break;
+    }
+
+    case BVMOD:
+    {
+      const ASTNode c = step.constants[0];
+      if (step.pathIndex != 0 ||
+          CONSTANTBV::BitVector_is_empty(c.GetBVConst()))
+        return false;
+      constraint = nf->CreateNode(BVLT, v, c);
+      projection = v;
+      break;
+    }
+
+    case BVDIV:
+    {
+      const ASTNode c = step.constants[0];
+      if (step.pathIndex != 0 ||
+          CONSTANTBV::BitVector_is_empty(c.GetBVConst()))
+        return false;
+      // Image is [0, allones / c]; x = v * c re-divides to v within it.
+      std::vector<CBV> args = {nullptr, nullptr};
+      CBV ones = CONSTANTBV::BitVector_Create(W, true);
+      CONSTANTBV::BitVector_Fill(ones);
+      args[0] = ones;
+      args[1] = c.GetBVConst();
+      CBV q = NonMemberBVConstEvaluator(BVDIV, args, W);
+      CONSTANTBV::BitVector_Destroy(ones);
+      constraint = nf->CreateNode(BVLE, v, bm.CreateBVConst(q, W));
+      projection = nf->CreateTerm(BVMULT, W, v, c);
+      break;
+    }
+
+    default:
+      return false;
+  }
+
+  assert(projection.GetValueWidth() == var.GetValueWidth());
+  sharedNode.replaceWithVar(v, variables);
+  replace(var, projection);
+  imageConstraints.push_back(constraint);
+  return true;
+}
+
 /* When none of the per-kind rules fired for `var` (each detaches the
  * variable when it does), generalise: climb from the variable towards the
  * root while every node on the way is single-use and every sibling is a
@@ -349,9 +545,15 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
 
     steps.push_back(step);
 
-    // Interior nodes must be single-use to step past them.
+    // Interior nodes must be single-use to step past them. A shared
+    // single-step chain may still be eliminated by constraining a fresh
+    // variable to its image.
     if (parent.parents.size() != 1)
+    {
+      if (steps.size() == 1 && frames.empty())
+        return tryImageConstrainShared(var, parent, steps[0], variables);
       return false;
+    }
     cur = &parent;
   }
   if (predicate == NULL)
@@ -423,6 +625,8 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
     return n; // top level is an unconstrained symbol/.
 
   this->simplifier = simplifier;
+
+  imageConstraints.clear();
 
   MutableASTNode* topMutable = MutableASTNode::build(n);
 
@@ -1082,6 +1286,17 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
 
   ASTNode result = topMutable->toASTNode(&bm);
   topMutable->cleanup();
+
+  // Membership constraints for image-constrained fresh variables join
+  // the formula here, once the mutable tree is materialised.
+  if (!imageConstraints.empty())
+  {
+    ASTVec conj;
+    conj.push_back(result);
+    conj.insert(conj.end(), imageConstraints.begin(), imageConstraints.end());
+    result = nf->CreateNode(AND, conj);
+    imageConstraints.clear();
+  }
   // cout << result;
   if (result.GetKind() == SYMBOL)
   {
