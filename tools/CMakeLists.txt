@@ -23,8 +23,18 @@ add_subdirectory(extdiff)
 
 option(BUILD_EXTRA_TOOLS "Build extra tools" OFF)
 if (BUILD_EXTRA_TOOLS)
-  add_subdirectory(rewrite_rule_gen)
-  add_subdirectory(propagator_bench)
+  # Each of these drives one particular backend directly, so each needs
+  # that backend compiled in.
+  if (USE_MINISAT)
+    add_subdirectory(rewrite_rule_gen)
+  else()
+    message(STATUS "Skipping rewrite_rule_gen: it needs -DUSE_MINISAT=ON")
+  endif()
+  if (USE_CRYPTOMINISAT)
+    add_subdirectory(propagator_bench)
+  else()
+    message(STATUS "Skipping propagator_bench: it needs CryptoMiniSat")
+  endif()
 endif()
 
 # The floating-point self-test tools: ordinary executables that exit

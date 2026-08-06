@@ -19,10 +19,15 @@
 # THE SOFTWARE.
 
 set(sat_lib_to_add
-    MinisatCore.cpp
-    SimplifyingMinisat.cpp
     SATSolverFactory.cpp
 )
+
+if (USE_MINISAT)
+    set(sat_lib_to_add ${sat_lib_to_add}
+        MinisatCore.cpp
+        SimplifyingMinisat.cpp
+    )
+endif()
 
 if (USE_CRYPTOMINISAT)
     include_directories(${CRYPTOMINISAT5_INCLUDE_DIRS})

@@ -1653,9 +1653,6 @@ DLL_PUBLIC int vc_parseMemExpr(VC vc, const char* s, Expr* outQuery,
 
 //! \brief Checks if STP was compiled with support for minisat
 //!
-//!  Note: always returns true (future support for minisat being the
-//!  non-default)
-//!
 DLL_PUBLIC bool vc_supportsMinisat(VC vc);
 
 //! \brief Sets underlying SAT solver to minisat
@@ -1667,9 +1664,6 @@ DLL_PUBLIC bool vc_useMinisat(VC vc);
 DLL_PUBLIC bool vc_isUsingMinisat(VC vc);
 
 //! \brief Checks if STP was compiled with support for simplifying minisat
-//!
-//!  Note: always returns true (future support for simplifying minisat being
-//!  the non-default)
 //!
 DLL_PUBLIC bool vc_supportsSimplifyingMinisat(VC vc);
 

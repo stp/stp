@@ -6,16 +6,19 @@
 // drives the warning STP prints for an explicit --cadical-factor=on), and
 // with BVA enabled the verdicts and model values across incremental solve
 // calls -- the pattern the refinement loop relies on -- must be unchanged.
-#include "stp/Sat/MinisatCore.h"
 #include "stp/Sat/SATSolver.h"
 #include <gtest/gtest.h>
 
+#ifdef USE_MINISAT
+#include "stp/Sat/MinisatCore.h"
+#endif
 #ifdef USE_CADICAL
 #include "stp/Sat/Cadical.h"
 #endif
 
 using stp::SATSolver;
 
+#ifdef USE_MINISAT
 // Minisat has no BVA, and has to say so rather than silently drop the
 // request: STP warns on the back of this.
 TEST(Bva, MinisatReportsNoSupport)
@@ -23,6 +26,7 @@ TEST(Bva, MinisatReportsNoSupport)
   stp::MinisatCore s;
   EXPECT_FALSE(s.enableBVA());
 }
+#endif
 
 #ifdef USE_CADICAL
 

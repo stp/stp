@@ -3321,34 +3321,74 @@ bool _vc_isUsingSolver(VC vc, stp::UserDefinedFlags::SATSolvers solver)
 
 bool vc_supportsMinisat(VC /*vc*/)
 {
+#ifdef USE_MINISAT
   return true;
+#else
+  return false;
+#endif
 }
 
-bool vc_useMinisat(VC vc)
+bool vc_useMinisat(VC
+#ifdef USE_MINISAT
+vc
+#endif
+)
 {
+#ifdef USE_MINISAT
   _vc_useSolver(vc, stp::UserDefinedFlags::MINISAT_SOLVER);
   return true;
+#else
+  return false;
+#endif
 }
 
-bool vc_isUsingMinisat(VC vc)
+bool vc_isUsingMinisat(VC
+#ifdef USE_MINISAT
+vc
+#endif
+)
 {
+#ifdef USE_MINISAT
   return _vc_isUsingSolver(vc, stp::UserDefinedFlags::MINISAT_SOLVER);
+#else
+  return false;
+#endif
 }
 
 bool vc_supportsSimplifyingMinisat(VC /*vc*/)
 {
+#ifdef USE_MINISAT
   return true;
+#else
+  return false;
+#endif
 }
 
-bool vc_useSimplifyingMinisat(VC vc)
+bool vc_useSimplifyingMinisat(VC
+#ifdef USE_MINISAT
+vc
+#endif
+)
 {
+#ifdef USE_MINISAT
   _vc_useSolver(vc, stp::UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER);
   return true;
+#else
+  return false;
+#endif
 }
 
-bool vc_isUsingSimplifyingMinisat(VC vc)
+bool vc_isUsingSimplifyingMinisat(VC
+#ifdef USE_MINISAT
+vc
+#endif
+)
 {
+#ifdef USE_MINISAT
   return _vc_isUsingSolver(vc, stp::UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER);
+#else
+  return false;
+#endif
 }
 
 bool vc_supportsCryptominisat(VC /*vc*/)

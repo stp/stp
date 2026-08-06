@@ -38,8 +38,10 @@ THE SOFTWARE.
 #include "stp/Sat/Cadical.h"
 #endif
 
+#ifdef USE_MINISAT
 #include "stp/Sat/MinisatCore.h"
 #include "stp/Sat/SimplifyingMinisat.h"
+#endif
 
 #include <cstdlib>
 #include <iostream>
@@ -53,7 +55,13 @@ SATSolver* createSATSolver(const UserDefinedFlags& flags)
   switch (flags.solver_to_use)
   {
     case UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER:
+#ifdef USE_MINISAT
       newS = new SimplifyingMinisat;
+#else
+      std::cerr << "MiniSat support was not enabled at configure time."
+                << std::endl;
+      exit(-1);
+#endif
       break;
 
     case UserDefinedFlags::CRYPTOMINISAT5_SOLVER:
@@ -75,7 +83,13 @@ SATSolver* createSATSolver(const UserDefinedFlags& flags)
 #endif
       break;
     case UserDefinedFlags::MINISAT_SOLVER:
+#ifdef USE_MINISAT
       newS = new MinisatCore;
+#else
+      std::cerr << "MiniSat support was not enabled at configure time."
+                << std::endl;
+      exit(-1);
+#endif
       break;
 
     case UserDefinedFlags::CADICAL_SOLVER:

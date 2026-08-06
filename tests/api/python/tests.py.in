@@ -723,13 +723,13 @@ class TestSTP(unittest.TestCase):
         """
         Checks that the underlying solver can be set to be minisat
         """
-        self._test_solver("Minisat", is_default_solver=True)
+        self._test_solver("Minisat")
 
     def test_simplifyingminisat(self):
         """
         Checks that the underlying solver can be set to be simplifyingminisat
         """
-        self._test_solver("SimplifyingMinisat", is_default_solver=True)
+        self._test_solver("SimplifyingMinisat")
 
     def test_cryptominisat(self):
         """
