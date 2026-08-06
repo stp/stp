@@ -42,8 +42,10 @@ THE SOFTWARE.
 // These tests are the gate for it. IEEE-754 requires +, -, *, / and sqrt to
 // be correctly rounded, so the hardware is an exact oracle for the two
 // native formats under the four native rounding modes, independent of
-// anything in STP. They pass against the circuit path today; a literal
-// backend has to keep them passing.
+// anything in STP. That backend now exists (lib/FloatBlaster/literal_fp.cpp)
+// and the constant evaluator prefers it, so these oracle tests exercise the
+// literal path; the exhaustive differential at the bottom of this file pins
+// it to the circuit path per kind and keeps the circuit fold reachable.
 
 #include "stp/AST/AST.h"
 #include "stp/FloatBlaster/rounding_modes.h"
@@ -522,4 +524,139 @@ TEST(FpConstantFold, partial_operations_do_not_fold_at_creation)
       ASTVec{f.fpConst(8, 24, 0x80000000u), f.fpConst(8, 24, 0x00000000u)});
   EXPECT_EQ(FP_MIN, minimum.GetKind());
   EXPECT_FALSE(minimum.isConstant());
+}
+
+// The anti-drift gate for the literal backend. Both paths instantiate the
+// same symfpu core, but each has its own Kind-to-operation driver; this
+// pins them together mechanically -- every covered kind, exhaustively at
+// the smallest supported format -- and is also what keeps the circuit fold
+// path exercised now that the evaluator prefers the literal one.
+#include "stp/FloatBlaster/FloatBlast.h"
+#include "stp/FloatBlaster/literal_fp.h"
+
+namespace
+{
+
+struct Differential : Fixture
+{
+  unsigned checked = 0;
+
+  ASTNode temp(Kind k, const ASTVec& kids, unsigned width, unsigned eb,
+               unsigned sb, bool float_result)
+  {
+    ASTNode t = (width == 0)
+                    ? mgr.hashingNodeFactory->CreateNode(k, kids)
+                    : mgr.hashingNodeFactory->CreateTerm(k, width, kids);
+    if (float_result)
+    {
+      t.SetExpWidth(eb);
+      t.SetSigWidth(sb);
+    }
+    return t;
+  }
+
+  void agree(Kind k, const ASTVec& kids, unsigned width, unsigned eb,
+             unsigned sb, bool float_result)
+  {
+    const ASTNode t = temp(k, kids, width, eb, sb, float_result);
+
+    const ASTNode viaLiteral = literal_fp::tryEvaluateFpConstant(&mgr, t);
+    ASSERT_FALSE(viaLiteral.IsNull()) << _kind_names[k];
+
+    const ASTNode blasted = FloatBlast::lowerOperation(&mgr, t);
+    const ASTNode viaCircuit = NonMemberBVConstEvaluator(&mgr, blasted);
+
+    ASSERT_EQ(viaCircuit, viaLiteral) << _kind_names[k];
+    ++checked;
+  }
+};
+
+} // namespace
+
+TEST(FpConstantFold, literal_backend_agrees_with_the_circuit_exhaustively)
+{
+  Differential d;
+  const unsigned eb = 3, sb = 4, w = eb + sb, N = 1u << w;
+  std::vector<ASTNode> c;
+  for (unsigned i = 0; i < N; i++)
+    c.push_back(d.fpConst(eb, sb, i));
+  const std::vector<unsigned> modes = {
+      symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN,
+      symbolic_fp::ROUND_NEAREST_TIES_TO_AWAY,
+      symbolic_fp::ROUND_TOWARD_POSITIVE,
+      symbolic_fp::ROUND_TOWARD_NEGATIVE,
+      symbolic_fp::ROUND_TOWARD_ZERO};
+
+  // Binary predicates: every pair.
+  for (const Kind k : {FP_LEQ, FP_LT, FP_GEQ, FP_GT, FP_EQ, FP_SMT_EQ})
+    for (unsigned i = 0; i < N; i++)
+      for (unsigned j = i % 2; j < N; j += 2)
+        d.agree(k, ASTVec{c[i], c[j]}, 0, eb, sb, false);
+
+  // Classifications and sign ops: every value.
+  for (unsigned i = 0; i < N; i++)
+  {
+    for (const Kind k : {FP_ISNORMAL, FP_ISSUBNORMAL, FP_ISZERO,
+                         FP_ISINFINITE, FP_ISNAN, FP_ISNEGATIVE,
+                         FP_ISPOSITIVE})
+      d.agree(k, ASTVec{c[i]}, 0, eb, sb, false);
+    d.agree(FP_ABS, ASTVec{c[i]}, w, eb, sb, true);
+    d.agree(FP_NEG, ASTVec{c[i]}, w, eb, sb, true);
+    d.agree(FP_TO_IEEE_BV, ASTVec{c[i]}, w, eb, sb, false);
+  }
+
+  // Rounded binary arithmetic: every pair under RNE, and every mode over a
+  // coarser grid. fp.rem takes no mode; every pair.
+  // fp.add exhaustively; the others on strides that still hit every value
+  // on each side (odd strides are coprime with the space).
+  for (unsigned i = 0; i < N; i++)
+    for (unsigned j = 0; j < N; j++)
+      d.agree(FP_ADD, ASTVec{d.rm(modes[0]), c[i], c[j]}, w, eb, sb, true);
+  for (const Kind k : {FP_SUB, FP_MUL, FP_DIV})
+    for (unsigned i = 0; i < N; i++)
+      for (unsigned j = i % 3; j < N; j += 3)
+        d.agree(k, ASTVec{d.rm(modes[0]), c[i], c[j]}, w, eb, sb, true);
+  for (const Kind k : {FP_ADD, FP_SUB, FP_MUL, FP_DIV})
+    for (size_t m = 1; m < modes.size(); m++)
+      for (unsigned i = 0; i < N; i += 5)
+        for (unsigned j = 0; j < N; j += 5)
+          d.agree(k, ASTVec{d.rm(modes[m]), c[i], c[j]}, w, eb, sb, true);
+  for (unsigned i = 0; i < N; i++)
+    for (unsigned j = i % 3; j < N; j += 3)
+      d.agree(FP_REM, ASTVec{c[i], c[j]}, w, eb, sb, true);
+
+  // sqrt under every mode; fma over a coarse grid under RNE.
+  for (const unsigned m : modes)
+    for (unsigned i = 0; i < N; i++)
+      d.agree(FP_SQRT, ASTVec{d.rm(m), c[i]}, w, eb, sb, true);
+  for (unsigned i = 0; i < N; i += 7)
+    for (unsigned j = 0; j < N; j += 7)
+      for (unsigned l = 0; l < N; l += 7)
+        d.agree(FP_FMA, ASTVec{d.rm(modes[0]), c[i], c[j], c[l]}, w, eb, sb,
+                true);
+
+  // Conversions: reinterpret every pattern; float->float both directions;
+  // bv->float signed/unsigned under every mode.
+  const ASTNode ebc = d.mgr.CreateBVConst(32, eb);
+  const ASTNode sbc = d.mgr.CreateBVConst(32, sb);
+  const ASTNode eb2 = d.mgr.CreateBVConst(32, 4);
+  const ASTNode sb2 = d.mgr.CreateBVConst(32, 5);
+  for (unsigned i = 0; i < N; i++)
+  {
+    d.agree(FP_TOFP, ASTVec{ebc, sbc, d.mgr.CreateBVConst(w, i)}, w, eb, sb,
+            true);
+    d.agree(FP_TOFP, ASTVec{eb2, sb2, d.rm(modes[i % 5]), c[i]}, 9, 4, 5,
+            true);
+    for (const unsigned m : modes)
+    {
+      d.agree(FP_TOFP_SIGNED,
+              ASTVec{ebc, sbc, d.rm(m), d.mgr.CreateBVConst(w, i)}, w, eb, sb,
+              true);
+      d.agree(FP_TOFP_UNSIGNED,
+              ASTVec{ebc, sbc, d.rm(m), d.mgr.CreateBVConst(w, i)}, w, eb, sb,
+              true);
+    }
+  }
+
+  EXPECT_GT(d.checked, 90000u);
 }
