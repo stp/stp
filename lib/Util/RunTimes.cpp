@@ -32,17 +32,63 @@ THE SOFTWARE.
 // always be tracked.
 
 #include "stp/Util/RunTimes.h"
-#include "minisat/utils/System.h"
 #include "stp/Util/Attributes.h"
 #include <cassert>
 #include <iostream>
 #include <sstream>
-#include <sys/time.h>
 #include <utility>
+
+#include <sys/time.h>
+
+#if defined(_WIN32)
+#include <windows.h>
+#include <psapi.h>
+#else
+#include <sys/resource.h>
+#endif
 
 namespace stp
 {
 ATTR_NORETURN void FatalError(const char* str);
+}
+
+// CPU time this process has spent in user mode, in seconds.
+static double processCpuTime()
+{
+#if defined(_WIN32)
+  FILETIME creation, exited, kernel, user;
+  if (GetProcessTimes(GetCurrentProcess(), &creation, &exited, &kernel, &user))
+  {
+    ULARGE_INTEGER u;
+    u.LowPart = user.dwLowDateTime;
+    u.HighPart = user.dwHighDateTime;
+    return (double)u.QuadPart * 1e-7; // 100ns ticks
+  }
+  return 0.0;
+#else
+  struct rusage ru;
+  getrusage(RUSAGE_SELF, &ru);
+  return (double)ru.ru_utime.tv_sec + (double)ru.ru_utime.tv_usec * 1e-6;
+#endif
+}
+
+// Peak resident set size of this process, in megabytes.
+static double peakMemoryMB()
+{
+#if defined(_WIN32)
+  PROCESS_MEMORY_COUNTERS pmc;
+  if (GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc)))
+    return (double)pmc.PeakWorkingSetSize / (1024.0 * 1024.0);
+  return 0.0;
+#elif defined(__APPLE__)
+  struct rusage ru;
+  getrusage(RUSAGE_SELF, &ru);
+  return (double)ru.ru_maxrss / (1024.0 * 1024.0); // ru_maxrss is in bytes
+#else
+  struct rusage ru;
+  getrusage(RUSAGE_SELF, &ru);
+  return (double)ru.ru_maxrss / 1024.0; // ru_maxrss is in kilobytes
+#endif
 }
 
 long RunTimes::getCurrentTime()
@@ -92,9 +138,8 @@ void RunTimes::print()
   std::cerr.precision(2);
   std::cerr << "Statistics Total: " << ((double)cummulative_ms) / 1000 << "s"
             << std::endl;
-  std::cerr << "CPU Time Used   : " << Minisat::cpuTime() << "s" << std::endl;
-  std::cerr << "Peak Memory Used: " << Minisat::memUsed() / (1024.0 * 1024.0)
-            << "MB" << std::endl;
+  std::cerr << "CPU Time Used   : " << processCpuTime() << "s" << std::endl;
+  std::cerr << "Peak Memory Used: " << peakMemoryMB() << "MB" << std::endl;
 
   std::cerr.flags(f);
   clear();
@@ -106,8 +151,7 @@ std::string RunTimes::getDifference()
   long val = getCurrentTime();
   s << (val - lastTime) << "ms";
   lastTime = val;
-  s << ":" << std::fixed << std::setprecision(0)
-    << Minisat::memUsed() / (1024.0 * 1024.0) << "MB";
+  s << ":" << std::fixed << std::setprecision(0) << peakMemoryMB() << "MB";
   return s.str();
 }
 
