@@ -1161,6 +1161,14 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term,
       break;
     }
 
+    // Only the four-child float-to-float form survives (comparisonLeaf);
+    // the reinterpret form resolves to the operand's own bits there.
+    case FP_TOFP:
+    {
+      result = BBfpToFp(term, support);
+      break;
+    }
+
     case FP_SUB:
     case FP_DIV:
     case FP_FMA:
@@ -1169,7 +1177,6 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term,
     case FP_ROUNDTOINTEGRAL:
     case FP_MIN:
     case FP_MAX:
-    case FP_TOFP:
     case FP_TOFP_SIGNED:
     case FP_TOFP_UNSIGNED:
     case FP_TO_UBV:
@@ -3893,6 +3900,116 @@ BBNodeVec BitBlaster::BBfpAdd(const ASTNode& term, BBNodeSet& support)
 
   res = BBITE(anyInf, packSpecial(false, infSign), res);
   res = BBITE(anyNaN, packSpecial(true, nf->getFalse()), res);
+  return res;
+}
+
+// Bit-blasted float-to-float conversion (the four-child form of to_fp)
+// over a packed operand, under the same flag and gate as BBfpMul/BBfpAdd.
+// A conversion is re-rounding: normalise the source significand (one CLZ,
+// absorbing subnormals), map it onto the target width -- low zeros when
+// widening, guard and sticky when narrowing -- rebias, and let the shared
+// rounder/packer handle the rest. Widening (both fields no narrower) is
+// exact by construction: no guard, no sticky, and a target exponent range
+// covering the source's, so the rounder never fires. The internal
+// exponent covers BOTH formats' ranges: a double's subnormal scale is far
+// outside a half's eb+2 bits.
+BBNodeVec BitBlaster::BBfpToFp(const ASTNode& term, BBNodeSet& support)
+{
+  assert(term.GetKind() == FP_TOFP);
+  assert(term.Degree() == 4);
+
+  const SourceSort tsort = term.GetSourceSort();
+  const SourceSort ssort = term[3].GetSourceSort();
+  assert(tsort.kind() == SourceSort::Kind::FloatingPoint);
+  assert(ssort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb1 = ssort.significandWidth();
+  const unsigned eb1 = ssort.exponentWidth();
+  const unsigned w1 = eb1 + sb1;
+  const unsigned sb2 = tsort.significandWidth();
+  const unsigned eb2 = tsort.exponentWidth();
+  const unsigned w2 = eb2 + sb2;
+  const unsigned bias1 = (1u << (eb1 - 1)) - 1;
+  const unsigned bias2 = (1u << (eb2 - 1)) - 1;
+  unsigned E = 2;
+  while ((1u << (E - 1)) <= bias1 + sb1 + bias2 + 2 * sb2 + 4)
+    E++;
+
+  const BBNodeVec rm = BBTerm(term[2], support);
+  const BBNodeVec p = BBTerm(term[3], support);
+  assert(p.size() == w1);
+
+  auto constVec = [&](unsigned value, unsigned width) {
+    BBNodeVec c(width);
+    for (unsigned i = 0; i < width; i++)
+      c[i] = ((value >> i) & 1) ? nf->getTrue() : nf->getFalse();
+    return c;
+  };
+  auto zext = [&](const BBNodeVec& v, unsigned width) {
+    BBNodeVec c = v;
+    while (c.size() < width)
+      c.push_back(nf->getFalse());
+    return c;
+  };
+
+  const FpOperand s = BBfpUnpack(p, sb1, w1, E, support);
+
+  // Normalise the source significand; the count also lets a subnormal
+  // source become normal in a wider target range.
+  const unsigned lw1 = [](unsigned x) {
+    unsigned bb = 1;
+    while ((1u << bb) <= x)
+      bb++;
+    return bb;
+  }(sb1);
+  const BBNodeVec clz = BBfpCLZ(s.msig, lw1);
+  const BBNodeVec sn = BBfpShiftLeft(s.msig, clz);
+
+  // Map onto the target significand width.
+  BBNodeVec rsig(sb2);
+  BBNode guard = nf->getFalse();
+  BBNode sticky = nf->getFalse();
+  if (sb2 >= sb1)
+  {
+    for (unsigned i = 0; i < sb2 - sb1; i++)
+      rsig[i] = nf->getFalse();
+    for (unsigned i = 0; i < sb1; i++)
+      rsig[sb2 - sb1 + i] = sn[i];
+  }
+  else
+  {
+    const unsigned cut = sb1 - sb2;
+    for (unsigned i = 0; i < sb2; i++)
+      rsig[i] = sn[cut + i];
+    guard = sn[cut - 1];
+    BBNodeVec low(sn.begin(), sn.begin() + (cut - 1));
+    sticky = low.empty() ? nf->getFalse() : nf->CreateNode(OR, low);
+  }
+
+  // Rebias: be = eUnb - leading zeros + bias2.
+  BBNodeVec be = s.eUnb;
+  BBNodeVec clzE = zext(clz, E);
+  BBSub(be, clzE, support);
+  BBPlus2(be, constVec(bias2, E), nf->getFalse());
+
+  BBNodeVec res =
+      BBfpRoundPack(rm, s.sign, rsig, guard, sticky, be, sb2, eb2, support);
+
+  // Specials map to the target format's; a zero operand must be muxed
+  // (its garbage leading-zero count would otherwise wander the exponent).
+  auto packSpecial = [&](bool isnan, bool isinf) {
+    BBNodeVec sp(w2, nf->getFalse());
+    if (isnan || isinf)
+      for (unsigned i = 0; i < eb2; i++)
+        sp[sb2 - 1 + i] = nf->getTrue();
+    if (isnan)
+      sp[sb2 - 2] = nf->getTrue(); // canonical quiet NaN, positive
+    else
+      sp[w2 - 1] = s.sign;
+    return sp;
+  };
+  res = BBITE(s.isZero, packSpecial(false, false), res);
+  res = BBITE(s.isInf, packSpecial(false, true), res);
+  res = BBITE(s.isNaN, packSpecial(true, false), res);
   return res;
 }
 

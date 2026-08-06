@@ -211,10 +211,12 @@ class BitBlaster
   BBNode BBfpIsNaN(const BBNodeVec& p, unsigned sb, unsigned w);
   BBNode BBfpIsZero(const BBNodeVec& p, unsigned w);
 
-  // bit blast fp.mul / fp.add over packed operands: hand-written
-  // unpack/compute/round/pack circuits, no SymFPU (--bb.fp-native-arith)
+  // bit blast fp.mul / fp.add / float-to-float to_fp over packed operands:
+  // hand-written unpack/compute/round/pack circuits, no SymFPU
+  // (--bb.fp-native-arith)
   BBNodeVec BBfpMul(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpAdd(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpToFp(const ASTNode& term, BBNodeSet& support);
 
   // A packed operand split for the native arithmetic circuits: fields,
   // classification, and the significand with its hidden bit made explicit

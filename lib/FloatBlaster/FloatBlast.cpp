@@ -176,6 +176,41 @@ private:
       return node_factory->CreateTerm(n.GetKind(), n.GetValueWidth(), n[0],
                                       left, right);
     }
+    // The float-to-float form of to_fp (four children: the two format
+    // constants, the rounding mode, the float operand), under the same
+    // flag: the bit-blaster re-rounds the packed source directly
+    // (BBfpToFp). Unlike the arithmetic arms there is no factory fold for
+    // a constant conversion, so a constant operand under a constant mode
+    // must NOT survive -- constant folding and model evaluation rely on
+    // the SymFPU lowering collapsing exactly that case.
+    //
+    // Targets with a 2-bit exponent stay on the SymFPU path: SymFPU's
+    // convertFloatToFloat mis-rounds into such formats (e.g. converting
+    // the (3, 4) value 3/32 to (2, 5) under RNE gives the odd neighbour
+    // where IEEE ties-to-even picks 4/32; its own (2, 5) ADDITION is
+    // clean, so this is specific to the conversion). The native circuit
+    // rounds correctly there, but a circuit that disagrees with the
+    // constant evaluator makes model validation reject its own models.
+    // Until the evaluator side is fixed, the gate keeps the two aligned.
+    if (n.GetKind() == FP_TOFP && bm->UserFlags.fp_native_arith &&
+        n.Degree() == 4 &&
+        (n[2].GetKind() == SYMBOL || n[2].GetKind() == BVCONST) &&
+        n[0].GetUnsignedConst() >= 3)
+    {
+      const ASTNode operand = comparisonLeaf(n[3]);
+      if (operand.IsNull())
+        return ASTNode();
+      if (operand.isConstant() && n[2].GetKind() == BVCONST)
+        return ASTNode();
+      if (operand == n[3])
+        return n;
+      ASTVec children;
+      children.push_back(n[0]);
+      children.push_back(n[1]);
+      children.push_back(n[2]);
+      children.push_back(operand);
+      return node_factory->CreateTerm(FP_TOFP, n.GetValueWidth(), children);
+    }
     // A select from a float-element array already IS the packed element
     // bits: asPacked's READ arm only rebuilds the array and index if they
     // contain FP work, so it never builds a circuit for the element itself
