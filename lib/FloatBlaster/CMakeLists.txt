@@ -32,6 +32,7 @@ set(floatblaster_sources
     FloatBlast.cpp
     FpEncodingContext.cpp
     FpTotalise.cpp
+    literal_fp.cpp
 )
 if (ENABLE_FLOATING_POINT)
     list(APPEND floatblaster_sources symbolic_fp.cpp)
