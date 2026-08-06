@@ -131,6 +131,11 @@ public:
   // bits) instead of via the SymFPU unpacking circuits.
   bool fp_native_cmp = true;
 
+  // Bit-blast fp.mul under surviving native predicates with the hand-written
+  // packed-operand circuit (BBfpMul) instead of the SymFPU unpacking
+  // circuits. Experimental; off by default.
+  bool fp_native_arith = false;
+
   int64_t multiplication_variant = 1;
 
   // If the bit-blaster discovers new constants, should the term simplifier be
