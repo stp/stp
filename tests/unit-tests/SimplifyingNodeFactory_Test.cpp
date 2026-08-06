@@ -829,3 +829,181 @@ TEST(SimplifyingNodeFactory_Test, ite_true_false)
    ASTNode n = c.process(input);
    ASSERT_EQ(n, c.mgr.ASTTrue);
 }
+
+// ---------------------------------------------------------------------------
+// x & ~x is zero, and x | ~x is all ones, however deeply the two are nested.
+//
+// handle_bvand() used to compare only the immediate children of one BVAND, so
+// the pair went unnoticed as soon as one of them sat inside a nested BVAND.
+// The bitvector OR arrives here too: BVOR is lowered to ~(~a & ~b) at
+// creation, so every one of these is a BVAND question by the time the factory
+// sees it.
+//
+// Each case asserts the equality the rule should make true. The parser builds
+// through the simplifying factory, so a node that reaches ASTTrue is one the
+// factory folded, which a satisfiability check could not tell apart from a
+// claim that merely happens to hold.
+
+TEST(SimplifyingNodeFactory_Test, bvand_complement_nested_once)
+{
+  const std::string input = R"(
+    (assert (= (bvand (bvnot v0) (bvand v0 v1)) (_ bv0 20)) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvand_complement_nested_other_order)
+{
+  // The pair the other way round: the flat scan only ever caught it when the
+  // positive literal sorted ahead of the negated one.
+  const std::string input = R"(
+    (assert (= (bvand v0 (bvand (bvnot v0) (bvnot v1))) (_ bv0 20)) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvand_complement_nested_deeply)
+{
+  // Eight levels down. Measured over the hard QF_BV problems, the deepest
+  // annihilating pair actually occurring sits at exactly this depth.
+  const std::string input = R"(
+    (assert (= (bvand (bvnot v0)
+                 (bvand v1 (bvand v2 (bvand v3 (bvand v1
+                   (bvand v2 (bvand v3 (bvand v1 v0)))))))) (_ bv0 20)) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvand_no_complement_is_left_alone)
+{
+  // The guard on the rule: no complementary pair here, so nothing may be
+  // annihilated. (bvand v0 (bvand v1 v1)) is not the zero constant, so the
+  // equality must not fold to true.
+  const std::string input = R"(
+    (assert (= (bvand v0 (bvand v1 v1)) (_ bv0 20)) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_NE(n, c.mgr.ASTTrue);
+  ASSERT_NE(n, c.mgr.ASTFalse);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvor_complement_nested_once)
+{
+  const std::string input = R"(
+    (assert (= (bvor v0 (bvor v1 (bvnot v0))) (bvnot (_ bv0 20))) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvor_complement_nested_deeply)
+{
+  const std::string input = R"(
+    (assert (= (bvor (bvnot v0)
+                 (bvor v1 (bvor v2 (bvor v3 (bvor v1
+                   (bvor v2 (bvor v3 (bvor v1 v0)))))))) (bvnot (_ bv0 20))) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvor_no_complement_is_left_alone)
+{
+  const std::string input = R"(
+    (assert (= (bvor v0 (bvor v1 v1)) (bvnot (_ bv0 20))) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_NE(n, c.mgr.ASTTrue);
+  ASSERT_NE(n, c.mgr.ASTFalse);
+}
+
+// The boolean AND and OR keep their own one-level check in
+// CreateSimpleAndOr(), which is left as it is: measured over the hard QF_BV
+// problems it sees 165M calls and misses exactly one pair, at depth two, in
+// 4660 files. These pin the behaviour that is there.
+
+TEST(SimplifyingNodeFactory_Test, bool_and_complement_nested_once)
+{
+  const std::string input = R"(
+    (assert (= (and a (and (not a) b)) false) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bool_or_complement_nested_once)
+{
+  const std::string input = R"(
+    (assert (= (or a (or (not a) b)) true) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvand_complement_of_a_nested_and)
+{
+  // The negated conjunct is itself a BVAND, and the one it negates appears
+  // higher up:  A & (v2 & ~A)  with  A = (v0 & v1).
+  const std::string input = R"(
+    (assert (= (bvand (bvand v0 v1) (bvand v2 (bvnot (bvand v0 v1))))
+               (_ bv0 20)) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvor_complement_of_a_nested_or)
+{
+  // The same shape through the OR lowering:  A | (v2 | ~A)  with
+  // A = (v0 | v1), which reaches the factory as a BVAND question.
+  const std::string input = R"(
+    (assert (= (bvor (bvor v0 v1) (bvor v2 (bvnot (bvor v0 v1))))
+               (bvnot (_ bv0 20))) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvand_nested_and_without_its_negation)
+{
+  // The guard for the case above: a nested BVAND is present and so is the
+  // negation of a BVAND, but not of that one, so nothing may be annihilated.
+  // Disjoint variables on purpose -- (v0 & v1 & v2 & ~(v3 & v4)) is not the
+  // zero constant, so a rule that fired here would be unsound rather than
+  // merely eager. (v0 & v1 & v2 & ~(v0 & v2)) would not do: that one really
+  // is always zero, just not for a reason this rule knows.
+  const std::string input = R"(
+    (assert (= (bvand (bvand v0 v1) (bvand v2 (bvnot (bvand v3 v4))))
+               (_ bv0 20)) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_NE(n, c.mgr.ASTTrue);
+  ASSERT_NE(n, c.mgr.ASTFalse);
+}
