@@ -212,11 +212,16 @@ TEST(FPPrintBack, specials_equality_and_classifications)
     (declare-fun a () (Array (_ BitVec 4) (_ FloatingPoint 3 5)))
     (declare-fun i () (_ BitVec 4))
     (assert (= x (_ +oo 3 5)))
-    (assert (fp.eq y (_ -zero 3 5)))
+    (assert (= y (_ -zero 3 5)))
+    (assert (fp.eq x y))
     (assert (or (fp.isSubnormal x) (fp.isZero y) (fp.isInfinite x)))
     (assert (or (fp.isNegative y) (fp.isPositive (select a i))))
   )",
-             {"(fp #b0 #b111 #b0000)", "(fp #b1 #b000 #b0000)",
+             // The equalities keep their constants: `=` is the strong one, so
+             // the factory's fp.eq-against-a-constant reduction leaves it
+             // alone. fp.eq between two symbols has nothing to reduce to and
+             // survives for the printer to spell.
+             {"(fp #b0 #b111 #b0000)", "(fp #b1 #b000 #b0000)", "fp.eq",
               "fp.isSubnormal", "fp.isZero", "fp.isInfinite", "fp.isNegative",
               "fp.isPositive",
               // The float-element array declares with its element sort.

@@ -442,12 +442,55 @@ TEST(PropagateEquality_Test, fp_smt_eq_symbols)
 
 TEST(PropagateEquality_Test, fp_eq_never_propagates)
 {
-  // fp.eq's +0 = -0 makes substitution unsound; the node must survive.
+  // fp.eq's +0 = -0 makes substitution unsound, so x must survive. The
+  // factory has already turned the comparison against a zero into the
+  // classification that says exactly this -- which is the point: isZero
+  // keeps both zeros available where `x := +0` would have lost -0.
   propagateFP(R"(
    (assert (fp.eq x (fp #b0 #b00000000 #b00000000000000000000000)))
   )",
               [](const stp::ASTNode& n) {
+                ASSERT_EQ(stp::FP_ISZERO, n.GetKind());
+                ASSERT_TRUE(containsSymbolNamed(n, "x"));
+              });
+}
+
+TEST(PropagateEquality_Test, fp_eq_symbols_never_propagates)
+{
+  // With no constant to classify against, fp.eq stays fp.eq: substituting
+  // one symbol for the other would identify +0 with -0.
+  propagateFP(R"(
+   (assert (fp.eq x y))
+  )",
+              [](const stp::ASTNode& n) {
                 ASSERT_EQ(stp::FP_EQ, n.GetKind());
+                ASSERT_TRUE(containsSymbolNamed(n, "x"));
+                ASSERT_TRUE(containsSymbolNamed(n, "y"));
+              });
+}
+
+TEST(PropagateEquality_Test, fp_eq_nonzero_constant_propagates)
+{
+  // Against a constant that is neither NaN nor a zero, fp.eq and `=` agree,
+  // so the factory hands PropagateEqualities the `=` form and x substitutes
+  // away -- the whole point of the strength reduction.
+  propagateFP(R"(
+   (assert (fp.eq x (fp #b0 #b01111111 #b10000000000000000000000)))
+   (assert (fp.gt x (fp #b0 #b01111111 #b00000000000000000000000)))
+  )",
+              [](const stp::ASTNode& n) {
+                ASSERT_FALSE(containsSymbolNamed(n, "x"));
+              });
+}
+
+TEST(PropagateEquality_Test, fp_eq_nan_constant_is_false)
+{
+  // Nothing is fp.eq-equal to NaN, itself included.
+  propagateFP(R"(
+   (assert (fp.eq x (_ NaN 8 24)))
+  )",
+              [](const stp::ASTNode& n) {
+                ASSERT_EQ(stp::FALSE, n.GetKind());
               });
 }
 

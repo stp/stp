@@ -556,6 +556,83 @@ static void run(Ctx& c)
                c.nf->CreateNode(FP_SMT_EQ, {y, x}));
   }
 
+  // The reflexive pair: `=` is reflexive on the abstract domain (one NaN
+  // value), fp.eq is not (NaN compares equal to nothing, itself included).
+  {
+    ASTNode x = c.fp(EB, SB);
+    report("x = x -> true",
+           c.nf->CreateNode(FP_SMT_EQ, {x, x}) == c.mgr.ASTTrue);
+    report("fp.eq(x, x) -> not isNaN(x)",
+           c.nf->CreateNode(FP_EQ, {x, x}) ==
+               c.hf->CreateNode(NOT, {c.hf->CreateNode(FP_ISNAN, {x})}));
+  }
+
+  // Strength reduction of fp.eq against a constant. The two equalities
+  // disagree only on pairs holding a NaN or two zeros, so the constant
+  // decides which of three forms is exact: false for a NaN, isZero for
+  // either zero, and `=` for everything else -- the one worth having, since
+  // `=` propagates as a substitution where fp.eq never may.
+  //
+  // Checked over EVERY constant of the format and both operand orders:
+  // structurally (the expected node came out) and semantically (the folded
+  // circuits agree on every value of the free operand, which is what makes
+  // the structural expectation worth asserting).
+  {
+    ASTNode x = c.fp(EB, SB);
+    const uint64_t N = 1ull << (EB + SB);
+    const uint64_t signBit = 1ull << (EB + SB - 1);
+    bool structOk = true, semOk = true;
+    std::string why;
+    for (uint64_t v = 0; v < N && semOk; v++)
+    {
+      const RefFp d = refDecode(EB, SB, v);
+      const ASTNode k = c.fpConst(EB, SB, v);
+      // Interning collapses every NaN pattern onto one; compare against the
+      // constant the factory actually saw, not the pattern asked for.
+      const ASTNode want =
+          d.nan ? c.mgr.ASTFalse
+          : d.zero
+              ? c.hf->CreateNode(FP_ISZERO, {x})
+              : c.nf->CreateNode(FP_SMT_EQ, {x, k});
+      for (int order = 0; order < 2 && semOk; order++)
+      {
+        const ASTVec kids = order ? ASTVec{k, x} : ASTVec{x, k};
+        const ASTNode got = c.nf->CreateNode(FP_EQ, kids);
+        if (got != want)
+        {
+          structOk = false;
+          why = "unexpected form at v=" + std::to_string(v);
+        }
+        const std::string bad =
+            c.firstDisagreement(c.hf->CreateNode(FP_EQ, kids), got);
+        if (!bad.empty())
+        {
+          semOk = false;
+          why = bad + " (constant v=" + std::to_string(v) + ")";
+        }
+      }
+    }
+    report("fp.eq(x, const) exact for every constant", semOk, why);
+    report("fp.eq(x, const) takes the expected form", structOk, why);
+
+    // The three forms really are distinguishable: a NaN constant must not
+    // become an equality, and a zero constant must catch the *other* zero.
+    // (Rewriting fp.eq(x, +0) to `= x +0` would be the classic unsoundness.)
+    const ASTNode posZero = c.fpConst(EB, SB, 0);
+    const ASTNode negZero = c.fpConst(EB, SB, signBit);
+    report("fp.eq(x, +0) and fp.eq(x, -0) agree",
+           c.nf->CreateNode(FP_EQ, {x, posZero}) ==
+               c.nf->CreateNode(FP_EQ, {x, negZero}));
+
+    // `=` against a constant must NOT pick up any of this: it is already the
+    // strong equality, and a zero constant there distinguishes the two zeros.
+    // (Only the operand order may change, so compare kinds, not nodes.)
+    report("smt = keeps its zero constant",
+           c.nf->CreateNode(FP_SMT_EQ, {x, posZero}).GetKind() == FP_SMT_EQ &&
+               c.nf->CreateNode(FP_SMT_EQ, {x, posZero}) !=
+                   c.nf->CreateNode(FP_SMT_EQ, {x, negZero}));
+  }
+
   // fp.add and fp.mul are commutative in their two float operands
   {
     ASTNode x = c.fp(EB, SB), y = c.fp(EB, SB);
