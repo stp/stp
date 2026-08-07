@@ -23,8 +23,9 @@ add_subdirectory(extdiff)
 
 option(BUILD_EXTRA_TOOLS "Build extra tools" OFF)
 if (BUILD_EXTRA_TOOLS)
-  # Each of these drives one particular backend directly, so each needs
-  # that backend compiled in.
+  # rewrite_rule_gen and propagator_bench each drive one particular backend
+  # directly, so each needs that backend compiled in; difficulty_bench only
+  # scores formulas and works with any backend.
   if (USE_MINISAT)
     add_subdirectory(rewrite_rule_gen)
   else()
@@ -35,6 +36,7 @@ if (BUILD_EXTRA_TOOLS)
   else()
     message(STATUS "Skipping propagator_bench: it needs CryptoMiniSat")
   endif()
+  add_subdirectory(difficulty_bench)
 endif()
 
 # The floating-point self-test tools: ordinary executables that exit

@@ -61,6 +61,7 @@
 // Not thread safe (unless auto-initialization is avoided and each thread has
 // its own MTRand object)
 
+#include <cstdint>
 #include <iostream>
 #include <limits.h>
 #include <math.h>
@@ -71,7 +72,11 @@ class MTRand
 {
   // Data
 public:
-  typedef unsigned long uint32; // unsigned integer type, at least 32 bits
+  // Exactly 32 bits, not "unsigned long", which is 64 on LP64. The algorithm
+  // masks every state update to 32 bits, so the generated sequence is the
+  // same either way, but a 64-bit word doubled the state array and made
+  // the /dev/urandom seed read 8 bytes per word to then discard 4.
+  typedef uint32_t uint32;
 
   enum
   {

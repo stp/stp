@@ -259,7 +259,7 @@ namespace stp
          exception to never increasing the node count: they add one node (two
          comparisons and a connective replace one comparison), but eliminate
          a plus from under the comparison, which is a large win on the
-         difficulty score (a comparison costs 6*width, a plus 14*width). The
+         difficulty score (a comparison costs 6*width, a plus 11*width). The
          single-use guard on the plus is what secures that win: if the plus
          survived for another use, the extra comparison would be a pure loss.
       */

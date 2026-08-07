@@ -50,6 +50,20 @@ THE SOFTWARE.
 namespace stp
 {
 ATTR_NORETURN void FatalError(const char* str);
+
+// The only definition of the millisecond clock; declared in RunTimes.h and
+// used both here and by the rewrite-rule tools.
+//
+// tv_sec is widened before the multiply on purpose. Where time_t is 32 bits
+// -- the default on i386 -- "1000 * t.tv_sec" is a signed overflow, and the
+// millisecond result does not fit a 32-bit long either.
+int64_t getCurrentTime()
+{
+  timeval t;
+  gettimeofday(&t, NULL);
+  return (1000 * static_cast<int64_t>(t.tv_sec)) +
+         (static_cast<int64_t>(t.tv_usec) / 1000);
+}
 }
 
 // CPU time this process has spent in user mode, in seconds.
@@ -91,13 +105,6 @@ static double peakMemoryMB()
 #endif
 }
 
-long RunTimes::getCurrentTime()
-{
-  timeval t;
-  gettimeofday(&t, NULL);
-  return (1000 * t.tv_sec) + (t.tv_usec / 1000);
-}
-
 void RunTimes::print()
 {
   if (!category_stack.empty())
@@ -111,13 +118,13 @@ void RunTimes::print()
   std::ostringstream result;
   result << "statistics\n";
   std::map<Category, int>::const_iterator it1 = counts.begin();
-  std::map<Category, long>::const_iterator it2 = times.begin();
+  std::map<Category, int64_t>::const_iterator it2 = times.begin();
 
-  int cummulative_ms = 0;
+  int64_t cummulative_ms = 0;
 
   while (it1 != counts.end())
   {
-    int time_ms = 0;
+    int64_t time_ms = 0;
     if ((it2 = times.find(it1->first)) != times.end())
       time_ms = it2->second;
 
@@ -148,16 +155,16 @@ void RunTimes::print()
 std::string RunTimes::getDifference()
 {
   std::stringstream s;
-  long val = getCurrentTime();
+  int64_t val = stp::getCurrentTime();
   s << (val - lastTime) << "ms";
   lastTime = val;
   s << ":" << std::fixed << std::setprecision(0) << peakMemoryMB() << "MB";
   return s.str();
 }
 
-void RunTimes::addTime(Category c, long milliseconds)
+void RunTimes::addTime(Category c, int64_t milliseconds)
 {
-  std::map<Category, long>::iterator it;
+  std::map<Category, int64_t>::iterator it;
   if ((it = times.find(c)) == times.end())
   {
     times[c] = milliseconds;
@@ -191,11 +198,11 @@ void RunTimes::stop(Category c)
     std::cerr << c;
     stp::FatalError("Don't match");
   }
-  addTime(c, getCurrentTime() - e.second);
+  addTime(c, stp::getCurrentTime() - e.second);
   addCount(c);
 }
 
 void RunTimes::start(Category c)
 {
-  category_stack.push(std::make_pair(c, getCurrentTime()));
+  category_stack.push(std::make_pair(c, stp::getCurrentTime()));
 }

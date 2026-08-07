@@ -142,16 +142,16 @@ struct Context
     collectSymbols(after, symSet);
     std::vector<ASTNode> syms(symSet.begin(), symSet.end());
 
-    unsigned long combos = 1;
+    uint64_t combos = 1;
     for (const auto& s : syms)
       combos *= domainSize(s);
     ASSERT_LE(combos, 1u << 16)
         << "too many assignments (" << combos << ") -- lower the width";
 
-    for (unsigned long c = 0; c < combos; c++)
+    for (uint64_t c = 0; c < combos; c++)
     {
       ASTNodeMap assignment;
-      unsigned long rest = c;
+      uint64_t rest = c;
       for (size_t i = 0; i < syms.size(); i++)
       {
         const unsigned size = domainSize(syms[i]);

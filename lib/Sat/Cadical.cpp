@@ -29,7 +29,7 @@ using std::vector;
 
 namespace stp
 {
-unsigned long Cadical::nVars() const
+uint32_t Cadical::nVars() const
 {
   // Unlike other solvers Cadical doesn't need to be told about the variable in advance.
   return next_variable;
