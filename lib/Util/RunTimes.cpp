@@ -41,6 +41,9 @@ THE SOFTWARE.
 #include <sys/time.h>
 
 #if defined(_WIN32)
+// A bare windows.h drags in winsock.h, whose struct timeval collides with
+// the winports sys/time.h shim MSVC builds compile against.
+#define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <psapi.h>
 #else
