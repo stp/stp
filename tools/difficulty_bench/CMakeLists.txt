@@ -1,4 +1,4 @@
-# AUTHORS: Dan Liew, Ryan Govostes, Mate Soos
+# AUTHORS: Trevor Hansen
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -18,23 +18,19 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-add_subdirectory(stp)
-add_subdirectory(extdiff)
+add_executable(difficulty_bench
+    main.cpp
+)
 
-option(BUILD_EXTRA_TOOLS "Build extra tools" OFF)
-if (BUILD_EXTRA_TOOLS)
-  add_subdirectory(rewrite_rule_gen)
-  add_subdirectory(propagator_bench)
-  add_subdirectory(difficulty_bench)
-endif()
-
-# The floating-point self-test tools: ordinary executables that exit
-# non-zero on failure. Built when testing needs them or when the extra
-# tools are asked for -- not in a default build. They are registered with
-# CTest from tests/CMakeLists.txt, which is processed after
-# enable_testing() and after the checks that can turn ENABLE_TESTING off.
-if (ENABLE_FLOATING_POINT AND (ENABLE_TESTING OR BUILD_EXTRA_TOOLS))
-    add_subdirectory(test_fpbackend)
-    add_subdirectory(test_fprewrites)
-endif()
-
+# difficulty_bench builds the AIG itself rather than reaching it through
+# libstp: BBNodeManagerAIG's inline constructor and destructor call
+# Aig_ManStart and Aig_ManStop. libstp localises the ABC symbols it links
+# (--exclude-libs, see lib/CMakeLists.txt), so a direct user of ABC has to
+# link it directly.
+target_link_libraries(difficulty_bench
+    stp
+    $<TARGET_FILE:libabc-pic>
+)
+# $<TARGET_FILE:...> names a file rather than a target, so the build order has
+# to be spelled out, exactly as lib/CMakeLists.txt does for libstp.
+add_dependencies(difficulty_bench libabc-pic)
