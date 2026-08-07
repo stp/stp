@@ -31,9 +31,9 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
-#include "stp/Simplifier/constantBitP/MersenneTwister.h"
 
 #include <cstdint>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -351,10 +351,10 @@ void writeHtml(const Config& c, const vector<Row>& rows, const string& path);
 // Small shared helpers.
 
 // A fully fixed FixedBits holding a random value (or the given one).
-FixedBits randomConcrete(const ChildSpec& spec, MTRand& rand);
+FixedBits randomConcrete(const ChildSpec& spec, std::mt19937& rand);
 FixedBits concreteOf(const ChildSpec& spec, uint64_t value);
 // Unfixes every bit with probability (100 - percent)%.
-void unfixTo(FixedBits& bits, unsigned percent, MTRand& rand);
+void unfixTo(FixedBits& bits, unsigned percent, std::mt19937& rand);
 uint64_t unsignedValue(const FixedBits& bits);
 
 double median(vector<double>& v);

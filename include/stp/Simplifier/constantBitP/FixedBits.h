@@ -34,9 +34,8 @@ THE SOFTWARE.
 #include <algorithm>
 #include <cassert>
 #include <iostream>
+#include <random>
 #include <vector>
-
-class MTRand;
 
 namespace stp
 {
@@ -432,7 +431,7 @@ public:
 
   DLL_PUBLIC static FixedBits createRandom(const unsigned length,
                                 const unsigned probabilityOfSetting,
-                                MTRand& rand);
+                                std::mt19937& rand);
 
   DLL_PUBLIC void fromUnsigned(unsigned val);
 
