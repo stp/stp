@@ -27,6 +27,7 @@ THE SOFTWARE.
 #include "stp/AST/ASTKind.h"
 #include "stp/Util/NodeIterator.h"
 #include <algorithm>
+#include <cstdint>
 #include <list>
 
 /* Estimates how many AIG AND-nodes the bit-blaster will build for a formula.
@@ -92,18 +93,18 @@ bool anyConstantChild(const ASTNode& b)
 // costs 4w-6, because a known addend fixes one input of every full adder.
 // Subtracting a constant is cheaper again -- the negation of a constant is
 // itself a constant, so no carry chain is built for it.
-long addCost(const ASTNode& b, long w, bool subtract)
+int64_t addCost(const ASTNode& b, int64_t w, bool subtract)
 {
   const unsigned degree = b.Degree();
   const unsigned constants = constantChildren(b);
   const unsigned symbolic = degree - constants;
 
-  long score = 0;
+  int64_t score = 0;
   if (symbolic >= 2)
-    score += (11L * w - 7) * (symbolic - 1);
+    score += (11 * w - 7) * static_cast<int64_t>(symbolic - 1);
   if (constants > 0 && symbolic > 0)
-    score += subtract ? (3L * w - 1) : (4L * w - 6);
-  return std::max(0L, score);
+    score += subtract ? (3 * w - 1) : (4 * w - 6);
+  return std::max<int64_t>(0, score);
 }
 
 // One binary multiply of width w.
@@ -116,7 +117,7 @@ long addCost(const ASTNode& b, long w, bool subtract)
 // a constant with few -- or high -- set bits is so much cheaper than the
 // symbolic case. Summing that series over every bit gives the symmetric
 // case, 6(w-1)^2+1, which the measurements reproduce exactly out to w=256.
-long multiplyCost(const ASTNode& b, long w)
+int64_t multiplyCost(const ASTNode& b, int64_t w)
 {
   const ASTNode* constant = NULL;
   if (b.Degree() == 2)
@@ -128,21 +129,21 @@ long multiplyCost(const ASTNode& b, long w)
   }
 
   if (constant == NULL)
-    return 6L * (w - 1) * (w - 1) + 1;
+    return 6 * (w - 1) * (w - 1) + 1;
 
   const CBV cbv = constant->GetBVConst();
-  long score = 0;
+  int64_t score = 0;
   bool seenLowestSetBit = false;
-  for (long i = 0; i < w; i++)
+  for (int64_t i = 0; i < w; i++)
   {
-    if (!CONSTANTBV::BitVector_bit_test(cbv, (unsigned)i))
+    if (!CONSTANTBV::BitVector_bit_test(cbv, static_cast<unsigned>(i)))
       continue;
     if (!seenLowestSetBit)
     {
       seenLowestSetBit = true;
       continue;
     }
-    score += 11L * (w - i) - 7;
+    score += 11 * (w - i) - 7;
   }
   return score;
 }
@@ -151,14 +152,15 @@ long multiplyCost(const ASTNode& b, long w)
 // prunes against whichever operand is fixed, and against both ends of it: the
 // highest set bit bounds how many quotient bits can be non-zero, the lowest
 // bounds how much of each subtract survives.
-void setBitRange(const ASTNode& constant, long w, long& lowest, long& highest)
+void setBitRange(const ASTNode& constant, int64_t w, int64_t& lowest,
+                 int64_t& highest)
 {
   const CBV cbv = constant.GetBVConst();
   lowest = 0;
   highest = 0;
   bool seen = false;
-  for (long i = w - 1; i >= 0; i--)
-    if (CONSTANTBV::BitVector_bit_test(cbv, (unsigned)i))
+  for (int64_t i = w - 1; i >= 0; i--)
+    if (CONSTANTBV::BitVector_bit_test(cbv, static_cast<unsigned>(i)))
     {
       if (!seen)
       {
@@ -178,18 +180,18 @@ void setBitRange(const ASTNode& constant, long w, long& lowest, long& highest)
 // w-highest bits wide and each subtract is only as wide as the divisor's own
 // span, so the cost tapers from both ends: at w=32, dividing by 1 costs 5752
 // nodes, by 2^31-1 costs 2357, and by 2^30 costs 181.
-long constantDivisionCost(bool dividendIsConstant, const ASTNode& constant,
-                          long w)
+int64_t constantDivisionCost(bool dividendIsConstant,
+                             const ASTNode& constant, int64_t w)
 {
-  long lowest = 0, highest = 0;
+  int64_t lowest = 0, highest = 0;
   setBitRange(constant, w, lowest, highest);
 
   if (dividendIsConstant)
-    return 16L * w * highest + 6L * w;
+    return 16 * w * highest + 6 * w;
 
   // Two independent taperings of the symmetric cost, applied in steps so
   // that a wide bit-vector cannot overflow the product.
-  long score = 3L * (w - 1) * (w - 1);
+  int64_t score = 3 * (w - 1) * (w - 1);
   score = score * (2 * w - highest) / w;
   score = score * (w - lowest) / w;
   return score;
@@ -229,7 +231,7 @@ unsigned fpWidth(const ASTNode& n)
   return eb + sb;
 }
 
-long fpEval(const ASTNode& b, const Kind k)
+int64_t fpEval(const ASTNode& b, const Kind k)
 {
   switch (k)
   {
@@ -245,30 +247,30 @@ long fpEval(const ASTNode& b, const Kind k)
     case FP_GEQ:
     case FP_GT:
     {
-      const unsigned w = fpWidth(b[0]);
-      return anyConstantChild(b) ? 5L * w : 15L * w;
+      const int64_t w = fpWidth(b[0]);
+      return anyConstantChild(b) ? 5 * w : 15 * w;
     }
     case FP_EQ:
     case FP_SMT_EQ:
     {
-      const unsigned w = fpWidth(b[0]);
-      return anyConstantChild(b) ? (3L * w) / 2 : 6L * w;
+      const int64_t w = fpWidth(b[0]);
+      return anyConstantChild(b) ? (3 * w) / 2 : 6 * w;
     }
     case FP_ISNORMAL:
     {
       // Two exponent field tests: all-ones and all-zeros.
       unsigned eb = 0, sb = 0;
       fpFormat(b[0], eb, sb);
-      return std::max(1L, 2L * eb - 1);
+      return std::max<int64_t>(1, 2 * static_cast<int64_t>(eb) - 1);
     }
     case FP_ISSUBNORMAL:
     case FP_ISZERO:
     case FP_ISINFINITE:
     case FP_ISNAN:
-      return std::max(1L, (long)fpWidth(b[0]) - 2);
+      return std::max<int64_t>(1, static_cast<int64_t>(fpWidth(b[0])) - 2);
     case FP_ISNEGATIVE:
     case FP_ISPOSITIVE:
-      return std::max(1L, (long)fpWidth(b[0]) - 1);
+      return std::max<int64_t>(1, static_cast<int64_t>(fpWidth(b[0])) - 1);
 
     default:
       break;
@@ -277,37 +279,37 @@ long fpEval(const ASTNode& b, const Kind k)
   // The terms. Every one of these is costed at the format of its *result*.
   unsigned eb = 0, sb = 0;
   fpFormat(b, eb, sb);
-  const long w = eb + sb;
-  const long sig = sb;
+  const int64_t w = eb + sb;
+  const int64_t sig = sb;
 
   switch (k)
   {
     // Unpacking an operand and packing a result.
     case FP_TO_IEEE_BV:
-      return 35L * b.GetValueWidth();
+      return 35 * static_cast<int64_t>(b.GetValueWidth());
 
     case FP_ADD:
     case FP_SUB:
       // Alignment and normalisation shifters over the significand, then one
       // round: linear in the format with a barrel-shifter term on top.
-      return 85L * w + 11L * w * log2ceil(w);
+      return 85 * w + 11 * w * static_cast<int64_t>(log2ceil(w));
 
     case FP_MUL:
-      return 12L * sig * sig + 50L * w;
+      return 12 * sig * sig + 50 * w;
 
     case FP_DIV:
-      return 53L * sig * sig + 100L * w;
+      return 53 * sig * sig + 100 * w;
 
     case FP_FMA:
-      return 12L * sig * sig + 260L * w;
+      return 12 * sig * sig + 260 * w;
 
     case FP_SQRT:
     {
       // A restoring square root: one subtract-and-select per result bit over
       // a growing remainder. Cubic, so the significand is clamped before it
       // is cubed rather than after.
-      const long s = std::min(sig, 1000000L);
-      return 4L * s * s * s + 25L * s * s;
+      const int64_t s = std::min<int64_t>(sig, 1000000);
+      return 4 * s * s * s + 25 * s * s;
     }
 
     case FP_REM:
@@ -316,50 +318,51 @@ long fpEval(const ASTNode& b, const Kind k)
       // exponential in the exponent width. Clamped so the estimate stays a
       // number rather than an overflow.
       const unsigned shift = std::min(eb, 40u);
-      return 25L * (1L << shift) * sig;
+      return 25 * (INT64_C(1) << shift) * sig;
     }
 
     case FP_ROUNDTOINTEGRAL:
-      return 6L * w * log2ceil(w);
+      return 6 * w * static_cast<int64_t>(log2ceil(w));
 
     case FP_MIN:
     case FP_MAX:
-      return 14L * w * log2ceil(w);
+      return 14 * w * static_cast<int64_t>(log2ceil(w));
 
     case FP_TOFP:
     {
       // Reformatting another float. Widening is exact -- the circuit is
       // wiring -- so only narrowing pays for a round.
-      const long src = fpWidth(b[b.Degree() - 1]);
-      return src <= w ? (5L * src) / 4 : 25L * (src + w);
+      const int64_t src = fpWidth(b[b.Degree() - 1]);
+      return src <= w ? (5 * src) / 4 : 25 * (src + w);
     }
 
     case FP_TOFP_SIGNED:
     case FP_TOFP_UNSIGNED:
     {
       // An integer narrower than the significand converts exactly.
-      const long src = std::max(1u, b[b.Degree() - 1].GetValueWidth());
-      const long perBit = (k == FP_TOFP_SIGNED) ? 35L : 20L;
-      const long exact = (k == FP_TOFP_SIGNED) ? 8L : 1L;
+      const int64_t src = std::max(1u, b[b.Degree() - 1].GetValueWidth());
+      const int64_t perBit = (k == FP_TOFP_SIGNED) ? 35 : 20;
+      const int64_t exact = (k == FP_TOFP_SIGNED) ? 8 : 1;
       return src <= sig ? exact * src : perBit * src;
     }
 
     case FP_TO_UBV:
     case FP_TO_SBV:
       // Children are (target width, rounding mode, operand [, default]).
-      return (k == FP_TO_SBV ? 26L : 23L) *
-             ((long)std::max(1u, b.GetValueWidth()) + (long)fpWidth(b[2]));
+      return (k == FP_TO_SBV ? 26 : 23) *
+             (static_cast<int64_t>(std::max(1u, b.GetValueWidth())) +
+              static_cast<int64_t>(fpWidth(b[2])));
 
     default:
       break;
   }
 
-  return std::max(1L, w) * b.Degree();
+  return std::max<int64_t>(1, w) * b.Degree();
 }
 
 } // namespace
 
-long eval(const ASTNode& b)
+int64_t eval(const ASTNode& b)
 {
   const Kind k = b.GetKind();
 
@@ -369,7 +372,7 @@ long eval(const ASTNode& b)
   const unsigned w = b.GetValueWidth();
   const unsigned degree = b.Degree();
   // Booleans report a width of zero; the arithmetic below wants one bit.
-  const long lw = std::max(1u, w);
+  const int64_t lw = std::max(1u, w);
 
   // An operation over constants alone is evaluated by the bit-blaster, not
   // built: every bit of it comes back as the AIG's true or false. That is
@@ -425,7 +428,7 @@ long eval(const ASTNode& b)
     {
       // A constant operand fixes each column, so it costs nothing.
       const unsigned symbolic = degree - constantChildren(b);
-      return symbolic < 2 ? 0 : lw * (symbolic - 1);
+      return symbolic < 2 ? 0 : lw * static_cast<int64_t>(symbolic - 1);
     }
 
     case BVXOR:
@@ -434,7 +437,7 @@ long eval(const ASTNode& b)
       // An AIG spends three nodes on an XOR, but XOR with a constant is a
       // conditional inversion, so it is free.
       const unsigned symbolic = degree - constantChildren(b);
-      return symbolic < 2 ? 0 : 3L * lw * (symbolic - 1);
+      return symbolic < 2 ? 0 : 3 * lw * static_cast<int64_t>(symbolic - 1);
     }
 
     case BVPLUS:
@@ -445,13 +448,13 @@ long eval(const ASTNode& b)
       return addCost(b, lw, true);
 
     case BVUMINUS:
-      return 4L * (lw - 1);
+      return 4 * (lw - 1);
 
     case BVMULT:
       if (degree == 2)
         return multiplyCost(b, lw);
       // Wider multiplies are binarised before the bit-blaster sees them.
-      return (long)(degree - 1) * multiplyCost(b, lw);
+      return static_cast<int64_t>(degree - 1) * multiplyCost(b, lw);
 
     case BVDIV:
     case BVMOD:
@@ -461,17 +464,17 @@ long eval(const ASTNode& b)
         return constantDivisionCost(true, b[0], lw);
       if (b[1].isConstant())
         return constantDivisionCost(false, b[1], lw);
-      return 20L * (lw - 1) * (lw - 1) + 29L * lw;
+      return 20 * (lw - 1) * (lw - 1) + 29 * lw;
 
     case SBVDIV:
     case SBVREM:
     case SBVMOD:
       // The unsigned circuit plus the sign fixups on either side of it.
       if (b[0].isConstant())
-        return constantDivisionCost(true, b[0], lw) + 12L * lw;
+        return constantDivisionCost(true, b[0], lw) + 12 * lw;
       if (b[1].isConstant())
-        return constantDivisionCost(false, b[1], lw) + 12L * lw;
-      return 20L * (lw - 1) * (lw - 1) + 50L * lw;
+        return constantDivisionCost(false, b[1], lw) + 12 * lw;
+      return 20 * (lw - 1) * (lw - 1) + 50 * lw;
 
     case BVLEFTSHIFT:
     case BVRIGHTSHIFT:
@@ -483,9 +486,9 @@ long eval(const ASTNode& b)
       if (b[1].isConstant())
         return 0;
       if (b[0].isConstant())
-        return (11L * lw) / 2;
-      const long stages = log2ceil(w);
-      return ((k == BVSRSHIFT) ? 7L : 6L) * lw * stages / 2;
+        return (11 * lw) / 2;
+      const int64_t stages = log2ceil(w);
+      return ((k == BVSRSHIFT) ? 7 : 6) * lw * stages / 2;
     }
 
     case ITE:
@@ -496,13 +499,13 @@ long eval(const ASTNode& b)
           (b[1].isConstant() ? 1u : 0u) + (b[2].isConstant() ? 1u : 0u);
       if (constantArms == 2)
         return 0;
-      return constantArms == 1 ? lw + 3 : 3L * lw;
+      return constantArms == 1 ? lw + 3 : 3 * lw;
     }
 
     case EQ:
     {
-      const unsigned ow = std::max(1u, b[0].GetValueWidth());
-      return anyConstantChild(b) ? std::max(1L, (long)ow - 1) : 4L * ow - 1;
+      const int64_t ow = std::max(1u, b[0].GetValueWidth());
+      return anyConstantChild(b) ? std::max<int64_t>(1, ow - 1) : 4 * ow - 1;
     }
 
     case BVLT:
@@ -514,36 +517,36 @@ long eval(const ASTNode& b)
     case BVSGT:
     case BVSGE:
     {
-      const unsigned ow = std::max(1u, b[0].GetValueWidth());
-      return anyConstantChild(b) ? (long)ow : 6L * ow - 1;
+      const int64_t ow = std::max(1u, b[0].GetValueWidth());
+      return anyConstantChild(b) ? ow : 6 * ow - 1;
     }
 
     case BVUADDO:
     case BVUSUBO:
     {
       // The adder, kept only for its carry out.
-      const unsigned ow = std::max(1u, b[0].GetValueWidth());
-      return 11L * ow - 7;
+      const int64_t ow = std::max(1u, b[0].GetValueWidth());
+      return 11 * ow - 7;
     }
 
     case BVSADDO:
     case BVSSUBO:
     {
       // As above, plus the sign comparison the signed predicate needs.
-      const unsigned ow = std::max(1u, b[0].GetValueWidth());
-      return 11L * ow + 3;
+      const int64_t ow = std::max(1u, b[0].GetValueWidth());
+      return 11 * ow + 3;
     }
 
     case BVUMULO:
     {
-      const unsigned ow = std::max(1u, b[0].GetValueWidth());
-      return 12L * (ow - 1) * (ow - 1) + 7L * ow;
+      const int64_t ow = std::max(1u, b[0].GetValueWidth());
+      return 12 * (ow - 1) * (ow - 1) + 7 * ow;
     }
 
     case BVSMULO:
     {
-      const unsigned ow = std::max(1u, b[0].GetValueWidth());
-      return 23L * (ow - 1) * (ow - 1) + 21L * ow;
+      const int64_t ow = std::max(1u, b[0].GetValueWidth());
+      return 23 * (ow - 1) * (ow - 1) + 21 * ow;
     }
 
     // Boolean connectives, one AIG node per binary combination.
@@ -551,11 +554,11 @@ long eval(const ASTNode& b)
     case OR:
     case NAND:
     case NOR:
-      return degree - 1;
+      return static_cast<int64_t>(degree) - 1;
 
     case XOR:
     case IFF:
-      return 3L * (degree - 1);
+      return 3 * (static_cast<int64_t>(degree) - 1);
 
     case IMPLIES:
       return 1;
@@ -564,11 +567,11 @@ long eval(const ASTNode& b)
       // READ and WRITE reach here, as does anything new. Arrays are removed
       // before the bit-blaster runs, so this only has to be a placeholder
       // that grows with the operand.
-      return std::max<long>(w, 1) * degree;
+      return std::max<int64_t>(w, 1) * degree;
   }
 }
 
-long DifficultyScore::score(const ASTNode& top, STPMgr* mgr)
+int64_t DifficultyScore::score(const ASTNode& top, STPMgr* mgr)
 {
 
   {
@@ -579,7 +582,7 @@ long DifficultyScore::score(const ASTNode& top, STPMgr* mgr)
 
   NonAtomIterator ni(top, mgr->ASTUndefined, *mgr);
   ASTNode current;
-  long result = 0;
+  int64_t result = 0;
   while ((current = ni.next()) != ni.end())
     {
       evalCount++;

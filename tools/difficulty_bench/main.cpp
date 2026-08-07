@@ -40,7 +40,9 @@ THE SOFTWARE.
 #endif
 
 #include <algorithm>
+#include <cstdint>
 #include <cmath>
+#include <cinttypes>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -91,7 +93,7 @@ int aigNodes(const ASTNode& n)
   return nm.totalNumberOfNodes();
 }
 
-long scoreOf(const ASTNode& n)
+int64_t scoreOf(const ASTNode& n)
 {
   DifficultyScore d;
   return d.score(n, mgr);
@@ -105,19 +107,20 @@ struct Totals
   unsigned within2x = 0;
 } totals;
 
-void report(const string& label, unsigned width, int aig, long score)
+void report(const string& label, unsigned width, int aig, int64_t score)
 {
   if (aig < 0)
   {
     if (csv)
-      printf("%s,%u,,%ld\n", label.c_str(), width, score);
+      printf("%s,%u,,%" PRId64 "\n", label.c_str(), width, score);
     else
-      printf("%-24s %6u %12s %12ld %8s\n", label.c_str(), width, "n/a", score,
-             "-");
+      printf("%-24s %6u %12s %12" PRId64 " %8s\n", label.c_str(), width,
+             "n/a", score, "-");
     return;
   }
 
-  const double ratio = (double)std::max(1L, score) / std::max(1, aig);
+  const double ratio =
+      static_cast<double>(std::max<int64_t>(1, score)) / std::max(1, aig);
   totals.logSum += std::log(ratio);
   totals.logSqSum += std::log(ratio) * std::log(ratio);
   totals.count++;
@@ -125,10 +128,10 @@ void report(const string& label, unsigned width, int aig, long score)
     totals.within2x++;
 
   if (csv)
-    printf("%s,%u,%d,%ld\n", label.c_str(), width, aig, score);
+    printf("%s,%u,%d,%" PRId64 "\n", label.c_str(), width, aig, score);
   else
-    printf("%-24s %6u %12d %12ld %7.2fx\n", label.c_str(), width, aig, score,
-           ratio);
+    printf("%-24s %6u %12d %12" PRId64 " %7.2fx\n", label.c_str(), width, aig,
+           score, ratio);
 }
 
 // Bit-vector operations are measured in-process.
@@ -144,7 +147,7 @@ void measure(const string& label, unsigned width, const ASTNode& n)
 void measureFp(const string& label, unsigned width, const ASTNode& measured,
                const ASTNode& scored)
 {
-  const long score = scoreOf(scored);
+  const int64_t score = scoreOf(scored);
 
   int fds[2];
   if (pipe(fds) != 0)

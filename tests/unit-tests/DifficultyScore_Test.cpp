@@ -63,7 +63,7 @@ public:
     return nm.totalNumberOfNodes();
   }
 
-  long score(const ASTNode& n)
+  int64_t score(const ASTNode& n)
   {
     DifficultyScore d;
     return d.score(n, &mgr);
@@ -86,10 +86,10 @@ public:
 void expectClose(DifficultyFixture& f, const ASTNode& n, const char* what)
 {
   const int aig = f.aigNodes(n);
-  const long predicted = f.score(n);
-  EXPECT_LE(predicted, 2 * (long)aig + 8)
+  const int64_t predicted = f.score(n);
+  EXPECT_LE(predicted, 2 * static_cast<int64_t>(aig) + 8)
       << what << ": predicted " << predicted << ", built " << aig;
-  EXPECT_GE(2 * predicted + 8, (long)aig)
+  EXPECT_GE(2 * predicted + 8, static_cast<int64_t>(aig))
       << what << ": predicted " << predicted << ", built " << aig;
 }
 
@@ -184,14 +184,14 @@ TEST(DifficultyScore, n_ary_scales_with_one_fewer_than_the_degree)
 
   for (const Kind k : {BVPLUS, BVAND, BVXOR})
   {
-    const long binary =
+    const int64_t binary =
         f.score(f.mgr.CreateTerm(k, w, f.fresh(w), f.fresh(w)));
     for (unsigned degree = 3; degree <= 8; degree++)
     {
       ASTVec kids;
       for (unsigned i = 0; i < degree; i++)
         kids.push_back(f.fresh(w));
-      EXPECT_EQ(binary * (long)(degree - 1),
+      EXPECT_EQ(binary * static_cast<int64_t>(degree - 1),
                 f.score(f.mgr.CreateTerm(k, w, kids)))
           << _kind_names[k] << " at degree " << degree;
     }
@@ -226,7 +226,7 @@ TEST(DifficultyScore, sharing_is_counted_once)
   const ASTNode twice =
       f.mgr.CreateNode(AND, once, f.mgr.CreateNode(EQ, product, f.fresh(w)));
 
-  const long multiply = f.score(product);
+  const int64_t multiply = f.score(product);
   ASSERT_GT(multiply, 0);
   // The second use adds an equality and a conjunction, not another multiply.
   EXPECT_LT(f.score(twice) - f.score(once), multiply / 2);

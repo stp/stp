@@ -523,10 +523,10 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
 
   // Run size reducing just once.
   inputToSat = sizeReducing(inputToSat, bvSolver.get(), pe.get(), domain.get());
-  long initial_difficulty_score = difficulty.score(inputToSat, bm);
+  int64_t initial_difficulty_score = difficulty.score(inputToSat, bm);
 
   // It's helpful to know the initial node size. The difficulty scorer can easily get something similar:
-  const long initial_node_size = difficulty.getEvalCount();
+  const int64_t initial_node_size = difficulty.getEvalCount();
 
   // Fixed point it if it's not too difficult.
   // Currently we discards all the state each time sizeReducing is called,
@@ -570,7 +570,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     initial_difficulty_score = difficulty.score(inputToSat, bm);
   }
 
-  long bitblasted_difficulty = -1;
+  int64_t bitblasted_difficulty = -1;
   // Expensive, so only want to do it once.
   // The AIG-equivalence/constant substitutions found here are not
   // recorded in the solver map, so they could silently strip a symbol
@@ -780,7 +780,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
 
   bm->TermsAlreadySeenMap_Clear();
 
-  long final_difficulty_score = difficulty.score(inputToSat, bm);
+  int64_t final_difficulty_score = difficulty.score(inputToSat, bm);
 
   bool worse = false;
   if (final_difficulty_score > .8 * initial_difficulty_score)
