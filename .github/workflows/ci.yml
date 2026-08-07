@@ -83,7 +83,6 @@ jobs:
     - name: Dependencies
       if: steps.deps-cache.outputs.cache-hit != 'true'
       run: |
-        ./scripts/deps/setup-minisat.sh
         ./scripts/deps/setup-cms.sh
         ./scripts/deps/setup-gtest.sh
         ./scripts/deps/setup-outputcheck.sh
@@ -107,7 +106,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        ${{ matrix.env }} cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DUSE_MINISAT:BOOL=ON -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DBUILD_EXTRA_TOOLS:BOOL=ON -DUSE_LIBBF:BOOL=ON -DLIBBF_DIR:PATH="$GITHUB_WORKSPACE/deps/libbf" -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        ${{ matrix.env }} cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DBUILD_EXTRA_TOOLS:BOOL=ON -DUSE_LIBBF:BOOL=ON -DLIBBF_DIR:PATH="$GITHUB_WORKSPACE/deps/libbf" -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -424,7 +423,7 @@ jobs:
 
     - name: Dependencies
       run: |
-        ./scripts/deps/setup-minisat.sh
+        ./scripts/deps/setup-cadical.sh
         ./scripts/deps/setup-gtest.sh
         ./scripts/deps/setup-outputcheck.sh
 
@@ -432,7 +431,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake -DUSE_MINISAT:BOOL=ON -DNOCRYPTOMINISAT:BOOL=ON -DWERROR:BOOL=ON -DENABLE_FLOATING_POINT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -G Ninja ..
+        cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DNOCRYPTOMINISAT:BOOL=ON -DWERROR:BOOL=ON -DENABLE_FLOATING_POINT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -G Ninja ..
 
     - name: Build
       run: cmake --build build --parallel "$(nproc)"
@@ -459,6 +458,70 @@ jobs:
           *) echo "the floating-point diagnostic is missing"; exit 1 ;;
         esac
 
+  # The MiniSat backend is opt-in (-DUSE_MINISAT) and no other Linux job
+  # enables it, so this is the configuration that keeps it honest: MiniSat
+  # as the only backend, which also makes it the default solver the whole
+  # test suite runs against. The USE_MINISAT-gated tests (the MiniSat
+  # gtest suites, the 'minisat' lit feature) only ever execute here.
+  build-minisat:
+    name: gcc (minisat only)
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - uses: actions/checkout@v7
+      with:
+          submodules: 'true'
+
+    - name: Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bison \
+          build-essential \
+          cmake \
+          flex \
+          git \
+          ninja-build \
+          python3 \
+          python3-pip \
+          python3-setuptools \
+          zlib1g-dev
+        sudo pip3 install -U lit
+
+    - name: Dependencies
+      run: |
+        ./scripts/deps/setup-minisat.sh
+        ./scripts/deps/setup-gtest.sh
+        ./scripts/deps/setup-outputcheck.sh
+
+    - name: Configure
+      run: |
+        mkdir build
+        cd build
+        cmake -DUSE_MINISAT:BOOL=ON -DNOCRYPTOMINISAT:BOOL=ON -DWERROR:BOOL=ON -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -G Ninja ..
+
+    - name: Build
+      run: cmake --build build --parallel "$(nproc)"
+
+    - name: Test
+      run: ctest --parallel "$(nproc)" -VV --output-on-failure
+      working-directory: build
+
+    # The substitution solver answers trivial queries during simplification,
+    # so this one is built to reach bitblasting, ABC's CNF generation and
+    # MiniSat itself.
+    - name: Smoke test
+      run: |
+        stp=build/stp
+        echo '(set-logic QF_BV)(declare-fun a () (_ BitVec 8))(declare-fun b () (_ BitVec 8))(assert (= (bvmul a b) #x21))(assert (bvult a b))(check-sat)' > test.smt2
+        out=$("$stp" --minisat test.smt2)
+        echo "minisat output: '$out'"
+        [ "$out" = "sat" ]
+        out=$("$stp" --simplifying-minisat test.smt2)
+        echo "simplifying-minisat output: '$out'"
+        [ "$out" = "sat" ]
+
   build-32bit:
     name: gcc (i386)
     runs-on: ubuntu-latest
@@ -477,10 +540,13 @@ jobs:
       uses: actions/cache@v4
       with:
         path: |
-          deps/install
+          deps/cadical
           deps/gtest
           deps/OutputCheck
-        key: deps-i386-${{ steps.deps-key.outputs.key }}
+        # "cadical" in the prefix: the path set changed when the job moved
+        # off MiniSat, and the old entries (same script hashes) would
+        # otherwise hit forever without ever containing deps/cadical.
+        key: deps-i386-cadical-${{ steps.deps-key.outputs.key }}
 
     # Inside the workspace so the bind mount carries it back out to the
     # runner for the post-job save.
@@ -506,8 +572,12 @@ jobs:
         mkdir -p .ccache deps
         sudo chown -R "$(id -u):$(id -g)" .ccache deps
 
-  build-windows:
-    name: windows
+  # The MSVC leg is the MiniSat one out of necessity, not preference: MSVC
+  # compiles neither CryptoMiniSat (POSIX-only oracle code) nor CaDiCaL
+  # (unguarded __builtin_* throughout), so MiniSat is the only backend a
+  # cl-built STP can link. The MinGW job below covers CaDiCaL on Windows.
+  build-windows-minisat:
+    name: windows (minisat, MSVC)
     runs-on: windows-2025
 
     env:
@@ -689,5 +759,77 @@ jobs:
         "rational/symbolic-rm output: '$($outrat.Trim())'"
         "rational/symbolic-rm exit code: $LASTEXITCODE"
         if ($outrat.Trim() -ne "unsat") { exit 1 }
+
+  # CaDiCaL on Windows. MSVC cannot compile CaDiCaL, but CaDiCaL's BUILD.md
+  # documents a MinGW build, so this leg compiles both CaDiCaL and STP with
+  # the MSYS2 UCRT64 toolchain: the Windows counterpart of the Linux cadical
+  # job, and CaDiCaL-only backend-wise.
+  build-windows-cadical:
+    name: windows (cadical, MinGW)
+    runs-on: windows-2025
+
+    env:
+      # Build ABC single-threaded, as the MSVC leg does: fewer moving parts
+      # than winpthreads, and nothing here needs a threaded ABC.
+      ABC_USE_NO_PTHREADS: 1
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+
+    - uses: actions/checkout@v7
+      with:
+          submodules: 'true'
+
+    - uses: msys2/setup-msys2@v2
+      with:
+        msystem: UCRT64
+        update: false
+        install: >-
+          bison
+          flex
+          git
+          make
+          patch
+          mingw-w64-ucrt-x86_64-cmake
+          mingw-w64-ucrt-x86_64-gcc
+          mingw-w64-ucrt-x86_64-ninja
+
+    # CaDiCaL's own build system, with the flags its BUILD.md prescribes for
+    # MinGW: -lpsapi for the resource-usage calls, and only the 'cadical'
+    # target, since mobical does not compile on MinGW. The tag matches
+    # scripts/deps/setup-cadical.sh's pin; the script itself is not used
+    # because its plain 'make' would build mobical too.
+    - name: Build CaDiCaL
+      run: |
+        git clone https://github.com/arminbiere/cadical deps/cadical
+        cd deps/cadical
+        git checkout rel-3.0.1
+        ./configure -static -lpsapi
+        make -j"$(nproc)" cadical
+
+    - name: Configure
+      run: cmake -B build -G Ninja -DSTATICCOMPILE:BOOL=ON -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$(pwd)/deps/cadical" -DNOCRYPTOMINISAT:BOOL=ON -DENABLE_PYTHON_INTERFACE:BOOL=OFF .
+
+    - name: Build
+      run: cmake --build build --parallel "$(nproc)"
+
+    # The first query is answered during simplification; the second cannot
+    # be, so it exercises bitblasting, ABC's CNF generation and CaDiCaL.
+    - name: Smoke test
+      run: |
+        stp=$(find build -name 'stp.exe' | head -1)
+        echo "binary: $stp"
+        test -n "$stp"
+        echo '(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (= x #x2a))(check-sat)' > test.smt2
+        out=$("$stp" test.smt2)
+        echo "output: '$out'"
+        [ "$out" = "sat" ]
+        echo '(set-logic QF_BV)(declare-fun a () (_ BitVec 8))(declare-fun b () (_ BitVec 8))(assert (= (bvmul a b) #x21))(assert (bvult a b))(check-sat)' > testsat.smt2
+        out=$("$stp" testsat.smt2)
+        echo "sat-backend output: '$out'"
+        [ "$out" = "sat" ]
 
 # EOF

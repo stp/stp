@@ -23,14 +23,12 @@ add_subdirectory(extdiff)
 
 option(BUILD_EXTRA_TOOLS "Build extra tools" OFF)
 if (BUILD_EXTRA_TOOLS)
-  # rewrite_rule_gen and propagator_bench each drive one particular backend
-  # directly, so each needs that backend compiled in; difficulty_bench only
-  # scores formulas and works with any backend.
-  if (USE_MINISAT)
-    add_subdirectory(rewrite_rule_gen)
-  else()
-    message(STATUS "Skipping rewrite_rule_gen: it needs -DUSE_MINISAT=ON")
-  endif()
+  # rewrite_rule_gen constructs its solver through the factory, so any
+  # backend serves it, but its own CMakeLists still needs CryptoMiniSat
+  # (it links ABC directly). propagator_bench drives CryptoMiniSat's
+  # fixed-count API directly. difficulty_bench only scores formulas and
+  # works with any backend.
+  add_subdirectory(rewrite_rule_gen)
   if (USE_CRYPTOMINISAT)
     add_subdirectory(propagator_bench)
   else()

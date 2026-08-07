@@ -34,7 +34,7 @@ pip3 install --break-system-packages -U lit
 git config --global --add safe.directory '*'
 
 # CI restores these from a cache; only build what is missing.
-compgen -G 'deps/install/lib*/libminisat*' > /dev/null || ./scripts/deps/setup-minisat.sh
+[ -f deps/cadical/build/libcadical.a ] || ./scripts/deps/setup-cadical.sh
 [ -d deps/gtest ] || ./scripts/deps/setup-gtest.sh
 [ -d deps/OutputCheck ] || ./scripts/deps/setup-outputcheck.sh
 
@@ -47,7 +47,8 @@ stp_root="$(pwd)"
 mkdir -p build-32bit
 cd build-32bit
 cmake \
-  -DUSE_MINISAT:BOOL=ON \
+  -DUSE_CADICAL:BOOL=ON \
+  -DCADICAL_DIR:PATH="${stp_root}/deps/cadical" \
   -DNOCRYPTOMINISAT:BOOL=ON \
   -DUSE_LIBBF:BOOL=ON \
   -DLIBBF_DIR:PATH="${stp_root}/deps/libbf" \

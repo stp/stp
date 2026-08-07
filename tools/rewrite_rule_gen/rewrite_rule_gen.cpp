@@ -48,7 +48,8 @@ THE SOFTWARE.
 #include "stp/NodeFactory/TypeChecker.h"
 #include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
-#include "stp/Sat/MinisatCore.h"
+#include "stp/Sat/SATSolver.h"
+#include "stp/Sat/SATSolverFactory.h"
 #include "stp/Simplifier/DifficultyScore.h"
 #include "stp/cpp_interface.h"
 
@@ -776,7 +777,7 @@ void startup()
   mgr->UserFlags.stats_flag = false;
   mgr->UserFlags.optimize_flag = true;
 
-  ss = new MinisatCore;
+  ss = createSATSolver(mgr->UserFlags);
 
   // Prime the cache with 100..
   for (int i = 0; i < 100; i++)
@@ -811,7 +812,7 @@ void shutdown()
 void clearSAT()
 {
   delete ss;
-  ss = new MinisatCore;
+  ss = createSATSolver(mgr->UserFlags);
 
   delete GlobalSTP->tosat;
   ToSATAIG* aig = new ToSATAIG(mgr, GlobalSTP->arrayTransformer);
