@@ -219,7 +219,8 @@ private:
   }
 
 public:
-  // returns -1 if it's zero.
+  // returns -1 if it's zero. Signed for that sentinel: check for it before
+  // using the result as a bit position, which is unsigned.
   int topmostPossibleLeadingOne()
   {
     for (int w = (int)numWords() - 1; w >= 0; w--)
@@ -254,6 +255,8 @@ public:
     return lowestSet(&FixedBits::unfixedBits);
   }
 
+  // returns -1 if every bit is fixed. Signed for that sentinel: check for it
+  // before using the result as a bit position, which is unsigned.
   int mostUnfixed() const
   {
     for (int w = (int)numWords() - 1; w >= 0; w--)
@@ -266,10 +269,10 @@ public:
   }
 
   // is this bit fixed to zero?
-  bool isFixedToZero(int n) const { return isFixed(n) && !getValue(n); }
+  bool isFixedToZero(unsigned n) const { return isFixed(n) && !getValue(n); }
 
   // is this bit fixed to one?
-  bool isFixedToOne(int n) const { return isFixed(n) && getValue(n); }
+  bool isFixedToOne(unsigned n) const { return isFixed(n) && getValue(n); }
 
   // is this bit fixed to either zero or one?
   bool isFixed(unsigned n) const
