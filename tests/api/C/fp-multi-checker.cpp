@@ -227,7 +227,7 @@ TEST(fp_multi_checker, print_counterexample_across_checkers)
 
   // Print v1's counterexample into a buffer; it must not touch v2's manager.
   char* buf = NULL;
-  unsigned long len = 0;
+  size_t len = 0;
   vc_printCounterExampleToBuffer(v1, &buf, &len);
   EXPECT_TRUE(buf != NULL);
   EXPECT_TRUE(len > 0);
