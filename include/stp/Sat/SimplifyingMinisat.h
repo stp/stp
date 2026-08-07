@@ -56,7 +56,7 @@ public:
 
   uint32_t newVar() override;
 
-  unsigned long nVars() const override;
+  uint32_t nVars() const override;
 
   void printStats() const override;
 

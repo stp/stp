@@ -179,7 +179,7 @@ void CryptoMiniSat5::setVerbosity(int v)
   s->set_verbosity(v);
 }
 
-unsigned long CryptoMiniSat5::nVars() const
+uint32_t CryptoMiniSat5::nVars() const
 {
   return s->nVars();
 }

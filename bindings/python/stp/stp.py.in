@@ -27,7 +27,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import ast
 from ctypes import cdll, POINTER, CFUNCTYPE, byref
-from ctypes import c_char, c_char_p, c_void_p, c_int32, c_uint32, c_uint64, c_ulong, c_bool
+from ctypes import c_char, c_char_p, c_void_p, c_int32, c_uint32, c_uint64, c_size_t, c_bool
 from ctypes import c_double, c_float
 import inspect
 import os.path
@@ -116,13 +116,13 @@ _set_func('vc_parseExpr', _Expr, _VC, c_char_p)
 _set_func('vc_printExpr', None, _VC, _Expr)
 _set_func('vc_printSMTLIB', c_char_p, _VC, _Expr)
 _set_func('vc_printExprFile', None, _VC, _Expr, c_int32)
-_set_func('vc_printExprToBuffer', None, _VC, _Expr, POINTER(c_char_p), POINTER(c_ulong))
+_set_func('vc_printExprToBuffer', None, _VC, _Expr, POINTER(c_char_p), POINTER(c_size_t))
 _set_func('vc_printCounterExample', None, _VC)
 _set_func('vc_printVarDecls', None, _VC)
 _set_func('vc_clearDecls', None, _VC)
 _set_func('vc_printAsserts', None, _VC, c_int32)
-_set_func('vc_printQueryStateToBuffer', None, _VC, _Expr, POINTER(c_char_p), POINTER(c_ulong), c_int32)
-_set_func('vc_printCounterExampleToBuffer', None, _VC, POINTER(c_char_p), POINTER(c_ulong))
+_set_func('vc_printQueryStateToBuffer', None, _VC, _Expr, POINTER(c_char_p), POINTER(c_size_t), c_int32)
+_set_func('vc_printCounterExampleToBuffer', None, _VC, POINTER(c_char_p), POINTER(c_size_t))
 _set_func('vc_printQuery', None, _VC)
 _set_func('vc_assertFormula', None, _VC, _Expr)
 _set_func('vc_simplify', _Expr, _VC, _Expr)

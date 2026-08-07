@@ -131,7 +131,7 @@ void RissCore::setVerbosity(int v)
   s->verbosity = v;
 }
 
-unsigned long RissCore::nVars() const
+uint32_t RissCore::nVars() const
 {
   return s->nVars();
 }

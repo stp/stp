@@ -120,7 +120,7 @@ struct Ctx
   // The float of format (eb, sb) whose packed IEEE bits are `v`.
   ASTNode fpConst(unsigned eb, unsigned sb, uint64_t v)
   {
-    ASTNode n = mgr.CreateBVConst(eb + sb, (unsigned long long)v);
+    ASTNode n = mgr.CreateBVConst(eb + sb, v);
     return mgr.CreateFPConst(n, eb, sb);
   }
 
@@ -261,16 +261,21 @@ struct Ctx
       collectSymbols(c, out);
   }
 
-  unsigned long domain(const ASTNode& s)
+  // Number of values the symbol can take, saturated rather than shifted past
+  // the width of the result: "1ul << 32" is fine on LP64 but undefined where
+  // long is 32 bits, and the caller only needs to know that a wide symbol
+  // exceeds its enumeration limit.
+  uint64_t domain(const ASTNode& s)
   {
     if (s.GetType() == BOOLEAN_TYPE)
       return 2;
-    if (s.GetType() == FLOATINGPOINT_TYPE)
-      return 1ul << (s.GetExpWidth() + s.GetSigWidth());
-    return 1ul << s.GetValueWidth();
+    const unsigned bits = (s.GetType() == FLOATINGPOINT_TYPE)
+                              ? s.GetExpWidth() + s.GetSigWidth()
+                              : s.GetValueWidth();
+    return bits >= 64 ? UINT64_MAX : (UINT64_C(1) << bits);
   }
 
-  ASTNode valueFor(const ASTNode& s, unsigned long v)
+  ASTNode valueFor(const ASTNode& s, uint64_t v)
   {
     if (s.GetType() == BOOLEAN_TYPE)
       return (v & 1) ? mgr.ASTTrue : mgr.ASTFalse;
@@ -294,11 +299,16 @@ struct Ctx
     collectSymbols(after, symSet);
     std::vector<ASTNode> syms(symSet.begin(), symSet.end());
 
-    unsigned long combos = 1;
+    // Tested before each multiply, so the product cannot itself overflow.
+    const uint64_t maxCombos = UINT64_C(1) << 18;
+    uint64_t combos = 1;
     for (const auto& s : syms)
-      combos *= domain(s);
-    if (combos > (1ul << 18))
-      return "too many assignments (" + std::to_string(combos) + ")";
+    {
+      const uint64_t d = domain(s);
+      if (d > maxCombos || combos > maxCombos / d)
+        return "too many assignments (over " + std::to_string(maxCombos) + ")";
+      combos *= d;
+    }
 
     const ASTNode blastedBefore = blastOnce(before);
     const ASTNode blastedAfter = blastOnce(after);
@@ -307,13 +317,13 @@ struct Ctx
     // if need be); a Boolean check reads 0s and collapses nothing.
     const unsigned eb = before.GetExpWidth(), sb = before.GetSigWidth();
 
-    for (unsigned long c = 0; c < combos; c++)
+    for (uint64_t c = 0; c < combos; c++)
     {
       ASTNodeMap assignment;
-      unsigned long rest = c;
+      uint64_t rest = c;
       for (size_t i = 0; i < syms.size(); i++)
       {
-        const unsigned long size = domain(syms[i]);
+        const uint64_t size = domain(syms[i]);
         assignment.insert({syms[i], valueFor(syms[i], rest % size)});
         rest /= size;
       }

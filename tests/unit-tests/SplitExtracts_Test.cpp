@@ -141,7 +141,7 @@ struct Context
      collectSymbols(post, symSet);
      std::vector<ASTNode> syms(symSet.begin(), symSet.end());
 
-     unsigned long combos = 1;
+     uint64_t combos = 1;
      for (const auto& s : syms)
        combos *= (s.GetType() == stp::BOOLEAN_TYPE)
                      ? 2u
@@ -149,10 +149,10 @@ struct Context
      ASSERT_LE(combos, 1u << 16)
          << "too many assignments (" << combos << ") -- lower the width";
 
-     for (unsigned long c = 0; c < combos; c++)
+     for (uint64_t c = 0; c < combos; c++)
      {
        stp::ASTNodeMap assignment;
-       unsigned long rest = c;
+       uint64_t rest = c;
        for (const auto& s : syms)
        {
          if (s.GetType() == stp::BOOLEAN_TYPE)

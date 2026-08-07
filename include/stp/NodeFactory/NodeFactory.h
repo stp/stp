@@ -27,6 +27,7 @@ THE SOFTWARE.
 
 #include "stp/AST/ASTKind.h"
 #include "stp/Util/Attributes.h"
+#include <cstdint>
 #include <vector>
 
 using std::vector;
@@ -107,7 +108,7 @@ public:
   ASTNode CreateMaxConst(unsigned width);
   ASTNode CreateSignedMinConst(unsigned width);
   
-  ASTNode CreateBVConst(unsigned int width, unsigned long long int bvconst);
+  ASTNode CreateBVConst(unsigned int width, uint64_t bvconst);
   ASTNode CreateFPConst(const stp::ASTNode& bvconst, unsigned exp_width,
                         unsigned sig_width);
 

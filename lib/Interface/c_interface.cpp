@@ -428,7 +428,7 @@ void vc_printAsserts(VC vc, int simplify_print)
   vc_printAssertsToStream(vc, cout, simplify_print);
 }
 
-void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf, unsigned long* len,
+void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf, size_t* len,
                                 int simplify_print)
 {
   stp::STPMgr* b = mgr(vc);
@@ -457,18 +457,18 @@ void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf, unsigned long* len,
   // convert to a c buffer
   string s = os.str();
   const char* cstr = s.c_str();
-  unsigned long size = s.size() + 1; // number of chars + terminating null
+  size_t size = s.size() + 1; // number of chars + terminating null
   *buf = (char*)malloc(size);
   if (!(*buf))
   {
-    fprintf(stderr, "malloc(%lu) failed.", size);
+    fprintf(stderr, "malloc(%zu) failed.", size);
     assert(*buf);
   }
   *len = size;
   memcpy(*buf, cstr, size);
 }
 
-void vc_printCounterExampleToBuffer(VC vc, char** buf, unsigned long* len)
+void vc_printCounterExampleToBuffer(VC vc, char** buf, size_t* len)
 {
   assert(vc);
   assert(buf);
@@ -491,18 +491,18 @@ void vc_printCounterExampleToBuffer(VC vc, char** buf, unsigned long* len)
   // convert to a c buffer
   string s = os.str();
   const char* cstr = s.c_str();
-  unsigned long size = s.size() + 1; // number of chars + terminating null
+  size_t size = s.size() + 1; // number of chars + terminating null
   *buf = (char*)malloc(size);
   if (!(*buf))
   {
-    fprintf(stderr, "malloc(%lu) failed.", size);
+    fprintf(stderr, "malloc(%zu) failed.", size);
     assert(*buf);
   }
   *len = size;
   memcpy(*buf, cstr, size);
 }
 
-void vc_printExprToBuffer(VC vc, Expr e, char** buf, unsigned long* len)
+void vc_printExprToBuffer(VC vc, Expr e, char** buf, size_t* len)
 {
   stp::STPMgr* b = mgr(vc);
   stp::ASTNode q = *((stp::ASTNode*)e);
@@ -511,7 +511,7 @@ void vc_printExprToBuffer(VC vc, Expr e, char** buf, unsigned long* len)
   q.PL_Print(os, b);
   string s = os.str();
   const char* cstr = s.c_str();
-  unsigned long size = s.size() + 1; // number of chars + terminating null
+  size_t size = s.size() + 1; // number of chars + terminating null
   *buf = (char*)malloc(size);
   *len = size;
   memcpy(*buf, cstr, size);
@@ -2706,7 +2706,7 @@ uint64_t getBVUnsignedLongLong(Expr e)
   return tmp;
 }
 
-void vc_printBVBitStringToBuffer(Expr e, char** buf, unsigned long* len)
+void vc_printBVBitStringToBuffer(Expr e, char** buf, size_t* len)
 {
   assert(buf);
   assert(len);
@@ -2734,11 +2734,11 @@ void vc_printBVBitStringToBuffer(Expr e, char** buf, unsigned long* len)
 
   // convert to a c buffer
   const char* cstr = string_bv.c_str();
-  unsigned long size = string_bv.size() + 1; // number of chars + terminating null
+  size_t size = string_bv.size() + 1; // number of chars + terminating null
   *buf = (char*)malloc(size);
   if (!(*buf))
   {
-    fprintf(stderr, "malloc(%lu) failed.", size);
+    fprintf(stderr, "malloc(%zu) failed.", size);
     assert(*buf);
   }
   *len = size;

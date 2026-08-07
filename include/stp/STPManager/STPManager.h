@@ -38,6 +38,7 @@ THE SOFTWARE.
 #include "stp/Sat/SATSolver.h"
 #include "stp/Util/Attributes.h"
 #include "extlib-unordered-dense/ankerl/unordered_dense.h"
+#include <cstdint>
 
 namespace stp
 {
@@ -335,7 +336,7 @@ public:
   DLL_PUBLIC ASTNode CreateBVConst(CBV bv, unsigned width);
   ASTNode CreateBVConst(const char* strval, int base);
   ASTNode CreateBVConst(std::string strval, int base, int bit_width);
-  ASTNode CreateBVConst(unsigned int width, unsigned long long int bvconst);
+  ASTNode CreateBVConst(unsigned int width, uint64_t bvconst);
   ASTNode charToASTNode(unsigned char* strval, int base, int bit_width);
 
   DLL_PUBLIC ASTNode CreateFPConst(const stp::ASTNode& bvconst,
