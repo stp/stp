@@ -307,39 +307,24 @@ ASTNode STPMgr::CreateBVConst(unsigned int width,
   CreateBVConstVal = CONSTANTBV::BitVector_Resize(CreateBVConstVal, width);
   CONSTANTBV::BitVector_Empty(CreateBVConstVal);
 
-  unsigned long c_val = (~((unsigned long)0)) & bvconst;
-  unsigned int copied = 0;
-
-  // sizeof(unsigned long) returns the number of bytes in unsigned
-  // long. In order to convert it to bits, we need to shift left by
-  // 3. Hence, sizeof(unsigned long)*8
-
-  // The algo below works as follows: It starts by copying the
-  // lower-order bits of the input "bvconst" in chunks of size =
-  // number of bits in unsigned long. The variable "copied" keeps
-  // track of the number of chunks copied so far
-
-  const int shift_amount = sizeof(unsigned long) * 8;
-  while (copied + shift_amount < width)
+  // Copy the value into the bitvector 32 bits at a time, low chunk first.
+  //
+  // 32 rather than the width of a machine word: Chunk_Store takes its value
+  // as an "unsigned long", which is 32 bits on i386 and on 64-bit Windows,
+  // so a wider chunk would be silently truncated there. This loop stores the
+  // same chunks on every target, and needs no shift by the word size -- which
+  // is what the old version suppressed -Wshift-count-overflow for.
+  //
+  // Any width above 64 keeps the zeroes BitVector_Empty just wrote, because
+  // the source value has no bits up there.
+  const unsigned chunk = 32;
+  for (unsigned offset = 0; offset < width && offset < 64; offset += chunk)
   {
-    CONSTANTBV::BitVector_Chunk_Store(CreateBVConstVal, shift_amount, copied,
-                                      c_val);
-    if (shift_amount < (sizeof(bvconst) * 8))
-    {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wshift-count-overflow"
-      bvconst >>= shift_amount;
-#pragma GCC diagnostic pop
-    }
-    else
-    {
-      bvconst = 0;
-    }
-    c_val = (~((unsigned long)0)) & bvconst;
-    copied += shift_amount;
+    const unsigned size = (width - offset < chunk) ? (width - offset) : chunk;
+    const unsigned long c_val =
+        static_cast<uint32_t>(bvconst >> offset);
+    CONSTANTBV::BitVector_Chunk_Store(CreateBVConstVal, size, offset, c_val);
   }
-  CONSTANTBV::BitVector_Chunk_Store(CreateBVConstVal, width - copied, copied,
-                                    c_val);
 
   ASTBVConst temp_bvconst(this, CreateBVConstVal, width, true);
   return ASTNode(LookupOrCreateBVConst(temp_bvconst));

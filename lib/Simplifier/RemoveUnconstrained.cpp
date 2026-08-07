@@ -1060,7 +1060,7 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
           newWidth += rhsSize;
         }
 
-        assert(newWidth == (long int)operandWidth);
+        assert(newWidth == (int)operandWidth);
         replace(var, current);
       }
       break;
