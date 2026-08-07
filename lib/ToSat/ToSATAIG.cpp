@@ -174,13 +174,18 @@ void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
     for (ArrayTransformer::arrTypeMap::const_iterator arr_it = atm.begin();
          arr_it != atm.end(); arr_it++)
     {
+      // A bit that reached no SAT variable is marked with ~0u rather than
+      // omitted, so freezing has to skip it: the sentinel is not a variable
+      // index, and a backend that acts on setFrozen() writes out of bounds
+      // when handed it. The extensionality loop below already guards this.
       const ArrayTransformer::ArrayRead& ar = arr_it->second;
       ASTNodeToSATVar::iterator it = nodeToSATVar.find(ar.index_symbol);
       if (it != nodeToSATVar.end())
       {
         const vector<unsigned>& v = it->second;
         for (size_t i = 0, size = v.size(); i < size; ++i)
-          satSolver.setFrozen(v[i]);
+          if (v[i] != ~((unsigned)0))
+            satSolver.setFrozen(v[i]);
       }
 
       ASTNodeToSATVar::iterator it2 = nodeToSATVar.find(ar.symbol);
@@ -188,7 +193,8 @@ void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
       {
         const vector<unsigned>& v = it2->second;
         for (size_t i = 0, size = v.size(); i < size; ++i)
-          satSolver.setFrozen(v[i]);
+          if (v[i] != ~((unsigned)0))
+            satSolver.setFrozen(v[i]);
       }
     }
   }
