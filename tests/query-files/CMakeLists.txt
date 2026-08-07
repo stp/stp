@@ -31,6 +31,11 @@ if (USE_LIBBF)
 else()
     set(STP_LIBBF_PYBOOL "False")
 endif()
+if (USE_MINISAT)
+    set(STP_MINISAT_PYBOOL "True")
+else()
+    set(STP_MINISAT_PYBOOL "False")
+endif()
 
 # Create llvm-lit configuration file
 configure_file(lit.site.cfg.in lit.site.cfg.g @ONLY)

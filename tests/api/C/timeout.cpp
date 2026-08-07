@@ -1,5 +1,5 @@
 /***********
-AUTHORS:  Trevor Hansen, Dan Liew, Andrew V. Jones
+AUTHORS:  Trevor Hansen, Dan Liew, Andrew Teylu
 
 BEGIN DATE: Jan, 2012
 
@@ -47,6 +47,8 @@ void test_timeout(bool test_with_time, uint32_t max_value, bool use_cms)
     }
     else
     {
+      // Falls back to the build's default backend when MiniSat is absent;
+      // the timeout behaviour under test does not depend on which one runs.
       vc_useMinisat(vc);
     }
 

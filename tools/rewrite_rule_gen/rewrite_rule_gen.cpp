@@ -48,7 +48,8 @@ THE SOFTWARE.
 #include "stp/NodeFactory/TypeChecker.h"
 #include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
-#include "stp/Sat/MinisatCore.h"
+#include "stp/Sat/SATSolver.h"
+#include "stp/Sat/SATSolverFactory.h"
 #include "stp/Simplifier/DifficultyScore.h"
 #include "stp/cpp_interface.h"
 
@@ -658,37 +659,46 @@ int getDifficulty(const ASTNode& n_)
   ToSATBase::ASTNodeToSATVar nodeToSATVar;
   toCNF.toCNF(BBFormula, cnfData, nodeToSATVar, false, nm);
 
-  // Send the clauses to Minisat, do unit propagation.
+  // Send the clauses to the SAT solver, do unit propagation, and count what
+  // is left. Backends that keep no clause count fall back to the raw CNF
+  // size: a coarser difficulty, but still monotone with formula size.
   ///////////////
-
-  // Create a new sat variable for each of the variables in the CNF.
-  assert(ss->nVars() == 0);
-  for (int i = 0; i < cnfData->nVars; i++)
-    ss->newVar();
-
-  SATSolver::vec_literals satSolverClause;
-  for (int i = 0; i < cnfData->nClauses; i++)
+  int score;
+  if (ss->reportsClauseCount())
   {
-    satSolverClause.clear();
-    for (int *pLit = cnfData->pClauses[i], *pStop = cnfData->pClauses[i + 1];
-         pLit < pStop; pLit++)
+    // Create a new sat variable for each of the variables in the CNF.
+    assert(ss->nVars() == 0);
+    for (int i = 0; i < cnfData->nVars; i++)
+      ss->newVar();
+
+    SATSolver::vec_literals satSolverClause;
+    for (int i = 0; i < cnfData->nClauses; i++)
     {
-      uint32_t var = (*pLit) >> 1;
-      assert((var < ss->nVars()));
-      Minisat::Lit l = SATSolver::mkLit(var, (*pLit) & 1);
-      satSolverClause.push(l);
+      satSolverClause.clear();
+      for (int *pLit = cnfData->pClauses[i], *pStop = cnfData->pClauses[i + 1];
+           pLit < pStop; pLit++)
+      {
+        uint32_t var = (*pLit) >> 1;
+        assert((var < ss->nVars()));
+        SATSolver::Lit l = SATSolver::mkLit(var, (*pLit) & 1);
+        satSolverClause.push(l);
+      }
+
+      ss->addClause(satSolverClause);
     }
 
-    ss->addClause(satSolverClause);
+    ss->simplify();
+    assert(ss->okay());
+    // should be satisfiable.
+
+    // Why we go to all this trouble. The number of clauses.
+    score = ss->nClauses();
+    assert(score <= cnfData->nClauses);
   }
-
-  ss->simplify();
-  assert(ss->okay());
-  // should be satisfiable.
-
-  // Why we go to all this trouble. The number of clauses.
-  const int score = ss->nClauses();
-  assert(score <= cnfData->nClauses);
+  else
+  {
+    score = cnfData->nClauses;
+  }
   //////////////
 
   // Cnf_ClearMemory();
@@ -776,7 +786,7 @@ void startup()
   mgr->UserFlags.stats_flag = false;
   mgr->UserFlags.optimize_flag = true;
 
-  ss = new MinisatCore;
+  ss = createSATSolver(mgr->UserFlags);
 
   // Prime the cache with 100..
   for (int i = 0; i < 100; i++)
@@ -811,7 +821,7 @@ void shutdown()
 void clearSAT()
 {
   delete ss;
-  ss = new MinisatCore;
+  ss = createSATSolver(mgr->UserFlags);
 
   delete GlobalSTP->tosat;
   ToSATAIG* aig = new ToSATAIG(mgr, GlobalSTP->arrayTransformer);
@@ -828,7 +838,7 @@ bool isConstantToSat(const ASTNode& query, int64_t timeout_max_confl)
 
   ASTNode query2 = nf->CreateNode(NOT, query);
 
-  assert(ss->nClauses() == 0);
+  assert(!ss->reportsClauseCount() || ss->nClauses() == 0);
   mgr->SetQuery(mgr->ASTUndefined);
 
   // A negative budget means "no limit", which is spelled by not configuring

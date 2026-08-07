@@ -72,8 +72,11 @@ jobs:
         languages: ${{ matrix.language }}
 
     # CodeQL only sees C++ code that is actually compiled, so every optional
-    # component is switched on: the CryptoMiniSat and CaDiCaL backends, the
-    # unit tests and the extra tools.
+    # component is switched on: all three backends, the unit tests and the
+    # extra tools. MiniSat is deliberately included even though the build
+    # and test jobs confine it to the dedicated minisat-only legs -- this is
+    # the analysis job, and dropping the backend here would leave its
+    # wrappers unanalysed anywhere.
     #
     # CADICAL_LIBRARY is pinned by hand: CMS installs its own bundled cadical
     # into deps/install, and find_library searches CMAKE_PREFIX_PATH (which
@@ -85,6 +88,7 @@ jobs:
         mkdir build
         cd build
         cmake \
+          -DUSE_MINISAT:BOOL=ON \
           -DNOCRYPTOMINISAT:BOOL=OFF \
           -DUSE_CADICAL:BOOL=ON \
           -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" \

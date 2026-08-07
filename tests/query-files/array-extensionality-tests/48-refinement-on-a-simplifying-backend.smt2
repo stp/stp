@@ -1,3 +1,4 @@
+; REQUIRES: minisat
 ; RUN: %solver --array-equality --simplifying-minisat %s | %OutputCheck %s
 ; CHECK: ^unsat
 ; The refinement loop on a SAT backend that eliminates variables. Same

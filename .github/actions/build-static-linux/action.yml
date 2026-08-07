@@ -70,12 +70,12 @@ runs:
   # builds CryptoMiniSat into a static-linkable prefix, and the only one that
   # needs neither gtest nor OutputCheck.
   #
-  # Only deps/install: both setup scripts install self-contained CMake
-  # packages there -- archives and configs, with no path pointing back at
-  # deps/cms or deps/minisat -- so the source and build trees are worth
-  # nothing after the install and several hundred megabytes to carry. On a
-  # hit the step below is skipped and they are not wanted; on a miss they are
-  # cloned again. This is what every other job caches.
+  # Only deps/install: the setup script installs a self-contained CMake
+  # package there -- archives and configs, with no path pointing back at
+  # deps/cms -- so the source and build trees are worth nothing after the
+  # install and several hundred megabytes to carry. On a hit the step below
+  # is skipped and they are not wanted; on a miss they are cloned again.
+  # This is what every other job caches.
   #
   # Shared between the build types below, which differ only in how STP itself
   # is compiled: the dependencies are identical either way. Two jobs racing
@@ -88,15 +88,13 @@ runs:
       path: deps/install
       key: deps-x86_64-static-cms-${{ steps.deps-key.outputs.key }}
 
-  # Neither script needs an argument here: both already build a static (PIC)
-  # library, which is what a static STP links against and what gets folded
-  # into a shared libstp otherwise. setup-cms.sh additionally builds
-  # CryptoMiniSat in Release.
+  # The script needs no argument here: it already builds a static (PIC)
+  # CryptoMiniSat in Release, which is what a static STP links against and
+  # what gets folded into a shared libstp otherwise.
   - name: Dependencies
     if: steps.deps-cache.outputs.cache-hit != 'true'
     shell: bash
     run: |
-      ./scripts/deps/setup-minisat.sh
       ./scripts/deps/setup-cms.sh
 
   # Keyed by build type as well: the two differ in optimisation level and in

@@ -30,21 +30,7 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/NodeDomainAnalysis.h"
 
-#ifdef USE_CRYPTOMINISAT
-#include "stp/Sat/CryptoMinisat5.h"
-#endif
-
-#ifdef USE_RISS
-#include "stp/Sat/Riss.h"
-#endif
-
-#ifdef USE_CADICAL
-#include "stp/Sat/Cadical.h"
-#endif
-
-
-#include "stp/Sat/MinisatCore.h"
-#include "stp/Sat/SimplifyingMinisat.h"
+#include "stp/Sat/SATSolverFactory.h"
 
 #include "stp/Simplifier/AIGSimplifyPropositionalCore.h"
 #include "stp/Simplifier/DifficultyScore.h"
@@ -123,49 +109,7 @@ SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS,
 
 SATSolver* STP::get_new_sat_solver()
 {
-  SATSolver* newS = NULL;
-  switch (bm->UserFlags.solver_to_use)
-  {
-    case UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER:
-      newS = new SimplifyingMinisat;
-      break;
-      
-    case UserDefinedFlags::CRYPTOMINISAT5_SOLVER:
-#ifdef USE_CRYPTOMINISAT
-      newS = new CryptoMiniSat5(bm->UserFlags.num_solver_threads);
-#else
-      std::cerr << "CryptoMiniSat5 support was not enabled at configure time."
-                << std::endl;
-      exit(-1);
-#endif
-      break;
-    case UserDefinedFlags::RISS_SOLVER:
-#ifdef USE_RISS
-      newS = new RissCore();
-#else
-      std::cerr << "Riss support was not enabled at configure time."
-                << std::endl;
-      exit(-1);
-#endif
-      break;
-    case UserDefinedFlags::MINISAT_SOLVER:
-      newS = new MinisatCore;
-      break;
-    
-    case UserDefinedFlags::CADICAL_SOLVER:
-#ifdef USE_CADICAL
-      newS = new Cadical();
-      break;
-#else
-      std::cerr << "Cadical support was not enabled at configure time."
-                << std::endl;
-      exit(-1);
-#endif
-    default:
-      std::cerr << "ERROR: Undefined solver to use." << endl;
-      exit(-1);
-      break;
-  };
+  SATSolver* newS = createSATSolver(bm->UserFlags);
 
   // Before any clause reaches it, which is the only point some backends will
   // accept a configuration at.

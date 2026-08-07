@@ -3,7 +3,6 @@
 // way this feature could do damage. Every backend compiled into this build is
 // checked, including one that doesn't implement the bias at all, since
 // reporting that honestly is what drives the warning STP prints.
-#include "stp/Sat/MinisatCore.h"
 #include "stp/Sat/SATSolver.h"
 #include "stp/Sat/SearchBias.h"
 #include <cstdlib>
@@ -11,6 +10,9 @@
 #include <gtest/gtest.h>
 #include <memory>
 
+#ifdef USE_MINISAT
+#include "stp/Sat/MinisatCore.h"
+#endif
 #ifdef USE_CADICAL
 #include "stp/Sat/Cadical.h"
 #endif
@@ -86,6 +88,7 @@ void checkSatVerdict(const SolverFactory& make, const char* name)
 
 } // namespace
 
+#ifdef USE_MINISAT
 TEST(SearchBias, MinisatVerdictsAreStable)
 {
   const SolverFactory make = [] {
@@ -103,6 +106,7 @@ TEST(SearchBias, MinisatReportsNoSupport)
   EXPECT_FALSE(s.setSearchBias(SearchBias::SAT));
   EXPECT_FALSE(s.setSearchBias(SearchBias::UNSAT));
 }
+#endif
 
 #ifdef USE_CADICAL
 TEST(SearchBias, CadicalVerdictsAreStable)

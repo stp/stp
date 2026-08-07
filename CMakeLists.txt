@@ -572,6 +572,9 @@ option(BUILD_EXECUTABLES "Build executables" ON)
 # -----------------------------------------------------------------------------
 # Find Riss
 # -----------------------------------------------------------------------------
+option(USE_MINISAT "Use the MiniSat solver backend" OFF)
+add_feature_info(MiniSat USE_MINISAT "Enables the MiniSat and simplifying-MiniSat solvers")
+
 option(USE_RISS "Try to use Riss" OFF)
 add_feature_info(Riss USE_RISS "Enables Riss solver")
 
@@ -757,9 +760,10 @@ endif()
 # yes, we need to include the zlib header location or STP will not build
 # thanks to MiniSat include-ing it n the header
 # -----------------------------------------------------------------------------
-find_package(ZLIB)
-include_directories(${ZLIB_INCLUDE_DIR})
-include_directories(${minisat_SOURCE_DIR})
+if (USE_MINISAT)
+    find_package(ZLIB)
+    include_directories(${ZLIB_INCLUDE_DIR})
+endif()
 
 # ----------
 # manpage
@@ -796,25 +800,36 @@ endif()
 # Find Minisat
 # -----------------------------------------------------------------------------
 
-find_package(minisat)
-set(MINISAT_INCLUDE_DIR "" CACHE PATH "MiniSat include directory")
-set(MINISAT_LIBRARY "" CACHE PATH "MiniSat library directory")
-
-if (minisat_FOUND)
-    message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIRS}")
-else()
-    message(STATUS "Not found using installed MiniSat, looking for built MiniSat")
-    find_package(minisat CONFIG)
+if (USE_MINISAT)
+    find_package(minisat)
+    set(MINISAT_INCLUDE_DIR "" CACHE PATH "MiniSat include directory")
+    set(MINISAT_LIBRARY "" CACHE PATH "MiniSat library directory")
 
     if (minisat_FOUND)
         message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIRS}")
     else()
-        message(FATAL_ERROR "You must install minisat from https://github.com/stp/minisat")
+        message(STATUS "Not found using installed MiniSat, looking for built MiniSat")
+        find_package(minisat CONFIG)
+
+        if (minisat_FOUND)
+            message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIRS}")
+        else()
+            message(FATAL_ERROR "USE_MINISAT is set but MiniSat was not found. Install it from https://github.com/stp/minisat")
+        endif()
     endif()
+
+    add_definitions(-DUSE_MINISAT)
+    include_directories(SYSTEM ${MINISAT_INCLUDE_DIRS})
+    set(LIBS ${LIBS} ${MINISAT_LIBRARIES})
 endif()
 
-include_directories(SYSTEM ${MINISAT_INCLUDE_DIRS})
-set(LIBS ${LIBS} ${MINISAT_LIBRARIES})
+# Every backend is optional, but a solver with no SAT backend at all cannot
+# solve anything, so insist that at least one made it in.
+if (NOT USE_MINISAT AND NOT USE_CRYPTOMINISAT AND NOT USE_CADICAL AND NOT USE_RISS)
+    message(FATAL_ERROR "No SAT backend is enabled. Enable at least one of: "
+            "-DUSE_CADICAL=ON, CryptoMiniSat (found automatically when "
+            "installed), -DUSE_MINISAT=ON, or -DUSE_RISS=ON.")
+endif()
 
 # -----------------------------------------------------------------------------
 # Find Parser and Lexer generators
