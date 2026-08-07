@@ -772,6 +772,13 @@ jobs:
       # Build ABC single-threaded, as the MSVC leg does: fewer moving parts
       # than winpthreads, and nothing here needs a threaded ABC.
       ABC_USE_NO_PTHREADS: 1
+      # ABC's arch_flags probe assumes 8-byte pointers mean 64-bit Linux and
+      # prints -DLIN64, whose ABC_PTRINT_T is 'long' -- 32 bits on LLP64
+      # MinGW, so pointer-carrying casts fail to compile. (MSVC never hit
+      # this: cl cannot build the probe the way the makefile invokes it, so
+      # the flags come out empty there.) This routes abc_global.h onto
+      # stdint.h's intptr_t instead of the probe's guess.
+      ABC_USE_STDINT_H: 1
 
     defaults:
       run:
