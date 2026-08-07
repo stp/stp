@@ -23,6 +23,7 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/CommonSubSum.h"
 #include <algorithm>
+#include <set>
 
 namespace stp
 {
@@ -82,10 +83,21 @@ bool CommonSubSum::extractOnePair()
       return false;
     }
 
+    // Record each distinct pair once per addition. An operand repeated k
+    // times yields the same pair C(k,2) times, and counting those
+    // separately would both overstate the sharing and, worse, make the
+    // substitution below run repeatedly on one addition -- after the first
+    // pass its operands are gone, so the later passes would add the shared
+    // node without removing anything and change the addition's value.
+    std::set<std::pair<uint64_t, uint64_t>> pairsHere;
     for (size_t i = 0; i < v.size(); i++)
       for (size_t j = i + 1; j < v.size(); j++)
-        occurrences[{v[i].GetNodeNum(), v[j].GetNodeNum()}].push_back(
-            sum.first);
+      {
+        const std::pair<uint64_t, uint64_t> key(v[i].GetNodeNum(),
+                                                v[j].GetNodeNum());
+        if (pairsHere.insert(key).second)
+          occurrences[key].push_back(sum.first);
+      }
   }
 
   size_t best = 0;
@@ -108,24 +120,41 @@ bool CommonSubSum::extractOnePair()
   byNum[shared.GetNodeNum()] = shared;
 
   const std::vector<uint64_t> hits = occurrences[bestPair];
+  long applied = 0;
   for (uint64_t sum : hits)
   {
     ASTVec& v = operands[sum];
-    for (unsigned which = 0; which < 2; which++)
+
+    // Locate both operands before removing either, so that a sum which
+    // somehow lacks one of them is left untouched rather than rewritten
+    // into a different value.
+    bool found = true;
+    ASTVec scratch = v;
+    for (unsigned which = 0; which < 2 && found; which++)
     {
       const uint64_t wanted = (which == 0) ? bestPair.first : bestPair.second;
-      for (size_t i = 0; i < v.size(); i++)
-        if (v[i].GetNodeNum() == wanted)
+      found = false;
+      for (size_t i = 0; i < scratch.size(); i++)
+        if (scratch[i].GetNodeNum() == wanted)
         {
-          v.erase(v.begin() + i);
+          scratch.erase(scratch.begin() + i);
+          found = true;
           break;
         }
     }
-    v.push_back(shared);
-    std::sort(v.begin(), v.end(), byNodeNum);
+    if (!found)
+      continue;
+
+    scratch.push_back(shared);
+    std::sort(scratch.begin(), scratch.end(), byNodeNum);
+    v.swap(scratch);
+    applied++;
   }
 
-  saved += (long)hits.size() - 1;
+  if (applied < 2)
+    return false;
+
+  saved += applied - 1;
   return true;
 }
 
