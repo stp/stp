@@ -79,6 +79,8 @@ public:
   lbool false_literal() const override { return ((uint8_t)1); }
   lbool undef_literal() const override { return ((uint8_t)2); }
 
+  bool reportsClauseCount() const override { return true; }
+
   int nClauses() override;
 
   //bool unitPropagate(const vec_literals& ps);

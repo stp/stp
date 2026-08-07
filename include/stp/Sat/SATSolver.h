@@ -203,6 +203,11 @@ public:
 
   virtual void enableRefinement(const bool /*enable*/) {}
 
+  // TRUE when nClauses() is implemented, i.e. the backend can report how
+  // many clauses it currently holds (after simplify(), the post-propagation
+  // count). Callers with a fallback should ask this before calling it.
+  virtual bool reportsClauseCount() const { return false; }
+
   virtual int nClauses()
   {
     std::cerr << "Not yet implemented.";

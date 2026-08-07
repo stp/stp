@@ -99,6 +99,10 @@ public:
 
   uint32_t nVars() const override;
 
+  bool reportsClauseCount() const override { return true; }
+
+  int nClauses() override;
+
   void printStats() const override;
 
   lbool true_literal() const override { return ((uint8_t)1); }

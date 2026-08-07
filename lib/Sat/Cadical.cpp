@@ -41,6 +41,14 @@ bool Cadical::simplify()
   return false;
 }
 
+int Cadical::nClauses()
+{
+  // Active irredundant clauses: what remains of the input after CaDiCaL's
+  // preprocessing, which is the post-simplify() count nClauses() promises.
+  // Learnt clauses are counted separately (redundant()) and excluded.
+  return (int)s->irredundant();
+}
+
 void Cadical::setMaxConflicts(int64_t _max_confl)
 {
   assert(_max_confl >= 0);
