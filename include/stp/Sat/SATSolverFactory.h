@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Andrew Teylu
+ * AUTHORS: Andrew Teylu
  *
  * BEGIN DATE: August, 2026
  *
