@@ -120,7 +120,7 @@ struct Ctx
   // The float of format (eb, sb) whose packed IEEE bits are `v`.
   ASTNode fpConst(unsigned eb, unsigned sb, uint64_t v)
   {
-    ASTNode n = mgr.CreateBVConst(eb + sb, (unsigned long long)v);
+    ASTNode n = mgr.CreateBVConst(eb + sb, v);
     return mgr.CreateFPConst(n, eb, sb);
   }
 

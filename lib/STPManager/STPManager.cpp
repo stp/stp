@@ -293,12 +293,12 @@ bool STPMgr::LookupSymbol(const char* const name, ASTNode& output)
 
 // Create a ASTBVConst node
 ASTNode STPMgr::CreateBVConst(unsigned int width,
-                              unsigned long long int bvconst)
+                              uint64_t bvconst)
 {
   if (width == 0)
     FatalError("CreateBVConst: "
                "trying to create bvconst using "
-               "unsigned long long of width: ",
+               "uint64_t of width: ",
                ASTUndefined, width);
 
   // We create a single bvconst that gets reused.

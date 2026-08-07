@@ -29,6 +29,7 @@ THE SOFTWARE.
 #include "stp/NodeFactory/NodeFactory.h"
 #include "stp/Util/Attributes.h"
 #include "extlib-unordered-dense/ankerl/unordered_dense.h"
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <string>
@@ -236,7 +237,7 @@ public:
                                    int bit_width);
   DLL_PUBLIC ASTNode CreateBVConst(const char* const strval, int base);
   DLL_PUBLIC ASTNode CreateBVConst(unsigned int width,
-                                   unsigned long long int bvconst);
+                                   uint64_t bvconst);
   DLL_PUBLIC ASTNode CreateRMConst(unsigned mode);
   DLL_PUBLIC ASTNode CreateSourceSymbol(const char* name,
                                         const SourceSort& source_sort);

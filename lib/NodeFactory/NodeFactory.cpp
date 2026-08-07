@@ -187,7 +187,7 @@ ASTNode NodeFactory::CreateSignedMinConst(unsigned width)
 
 
 ASTNode NodeFactory::CreateBVConst(unsigned int width,
-                                   unsigned long long int bvconst)
+                                   uint64_t bvconst)
 {
   return bm.CreateBVConst(width, bvconst);
 }
