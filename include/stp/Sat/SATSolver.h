@@ -172,7 +172,7 @@ public:
 
   virtual uint32_t newVar() = 0;
 
-  virtual unsigned long nVars() const = 0;
+  virtual uint32_t nVars() const = 0;
 
   virtual void printStats() const = 0;
 

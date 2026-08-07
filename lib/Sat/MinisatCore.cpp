@@ -112,7 +112,7 @@ void MinisatCore::setVerbosity(int v)
   s->verbosity = v;
 }
 
-unsigned long MinisatCore::nVars() const
+uint32_t MinisatCore::nVars() const
 {
   return s->nVars();
 }
