@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/FloatBlaster/FloatBlast.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
+#include "stp/FloatBlaster/literal_fp.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Util/CBVOps.h"
 #include <cassert>
@@ -1089,6 +1090,24 @@ ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
           OutputNode =
               FloatBlaster::withFormat(_bm, OutputNode, exp_width, sig_width);
         break;
+      }
+
+      // Evaluate directly when the literal backend covers the operation:
+      // the same symfpu semantics as the circuit, instantiated over
+      // concrete CBV arithmetic -- microseconds instead of building and
+      // collapsing thousands of interned gates. The per-kind agreement of
+      // the two paths is machine-checked exhaustively at a small format
+      // (FpConstantFold_Test) and against the hardware oracle.
+      {
+        const ASTNode literal = literal_fp::tryEvaluateFpConstant(_bm, temp);
+        if (!literal.IsNull())
+        {
+          OutputNode = literal;
+          if (float_result)
+            OutputNode =
+                FloatBlaster::withFormat(_bm, OutputNode, exp_width, sig_width);
+          break;
+        }
       }
 
       // One table, the same one the solver's lowering pass uses, reached with
