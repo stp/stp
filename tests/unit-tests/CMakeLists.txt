@@ -44,6 +44,9 @@ if (ENABLE_FLOATING_POINT)
     target_link_libraries(FloatBlast_TestTests $<TARGET_FILE:libabc-pic>)
     add_dependencies(FloatBlast_TestTests libabc-pic)
     AddSTPGTest(FpTotalise_Test.cpp)
+    # Truth values the model-formula evaluator gives the two float
+    # equalities; the circuit's answers are covered elsewhere.
+    AddSTPGTest(FpModelEquality_Test.cpp)
     AddSTPGTest(SourceSort_Test.cpp)
     # Builds float/rounding-mode constants, which is the whole point.
     AddSTPGTest(ConstantIdentity_Test.cpp)
