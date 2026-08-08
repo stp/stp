@@ -173,64 +173,6 @@ bool FloatBlaster::remSupported(unsigned exp_width, unsigned sig_width)
   return remUnrollSteps(exp_width, sig_width) <= REM_UNROLL_LIMIT;
 }
 
-// symfpu's bitsToRepresent (symfpu/core/nondet.h and friends): how many bits
-// it takes to write `n`.
-static unsigned bitsToRepresent(uint64_t n)
-{
-  unsigned bits = 0;
-  while (n != 0)
-  {
-    bits++;
-    n >>= 1;
-  }
-  return bits;
-}
-
-// Kept line for line with symfpu's unpackedFloat<t>::exponentWidth so the two
-// can be diffed; see the header for why it is replicated rather than called.
-// The one deviation is the overflow guard in the last branch, which symfpu
-// does not have -- and which has to stay in that branch, since anywhere
-// earlier it stops being a guard and starts being a wrong answer.
-unsigned FloatBlaster::unpackedExponentWidth(unsigned exp_width,
-                                             unsigned sig_width)
-{
-  if (sig_width <= 3)
-  {
-    // Subnormals fit into the gap between the minimum normal exponent and
-    // what a signed number of this width can hold, so no widening is needed
-    // -- and, as formatSupported records, symfpu's own unpack then rejects
-    // the format.
-    return exp_width;
-  }
-
-  if (bitsToRepresent(sig_width - 3) < exp_width - 1)
-  {
-    // Significand is short compared to the exponent range: one extra bit.
-    return exp_width + 1;
-  }
-
-  // Significand is long compared to the exponent range. Only this branch
-  // shifts, so only this branch needs the guard below -- putting it any
-  // earlier answers for the branch above as well, and answers it wrong.
-  if (exp_width >= 63)
-    return UINT_MAX; // the shift would overflow; certainly wide enough
-
-  return bitsToRepresent(((uint64_t)1 << (exp_width - 1)) + sig_width - 3) + 1;
-}
-
-bool FloatBlaster::formatSupported(unsigned exp_width, unsigned sig_width)
-{
-  return unpackedExponentWidth(exp_width, sig_width) > exp_width;
-}
-
-bool FloatBlaster::roundToIntegralSupported(unsigned exp_width,
-                                            unsigned sig_width)
-{
-  // unpackedFloat<t>::significandWidth is the format's significand width
-  // unchanged, so sig_width is the width convert.h compares against.
-  return unpackedExponentWidth(exp_width, sig_width) != sig_width;
-}
-
 // The stem every unspecified-value name is built on: the operation, then the
 // formats of its floating-point operands.
 //

@@ -713,12 +713,6 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
         const unsigned exp_width = sort.exponentWidth();
         const unsigned sig_width = sort.significandWidth();
 
-        // A format the blaster refuses has to keep refusing: eliminating
-        // the comparison first would turn that loud refusal into a quiet
-        // wrong-looking answer.
-        if (!FloatBlaster::formatSupported(exp_width, sig_width))
-          break;
-
         width = var.GetValueWidth();
 
         // NaN and the infinities intern canonically (CreateFPConst funnels

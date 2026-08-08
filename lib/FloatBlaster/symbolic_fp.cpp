@@ -575,15 +575,15 @@ bitVector<isSigned>::matchWidth(const bitVector<isSigned>& op) const
   // builder walks off the end of a bitvector. An assert would catch it, but
   // CMAKE_BUILD_TYPE=Release compiles asserts out (CMakeLists.txt forces
   // ENABLE_ASSERTIONS off there), so the builds users ship are exactly the
-  // ones that would segfault. FloatBlaster::formatSupported and
-  // roundToIntegralSupported refuse the formats where symfpu is known to
-  // reach here; this catches any that were missed.
+  // ones that would segfault. The formats that used to reach here are fixed
+  // in patches/symfpu/ rather than refused at the front door, so nothing is
+  // expected to trip this; it stays as the backstop that turns a future
+  // width miscalculation into a diagnosis instead of a crash.
   if (this->getWidth() > op.getWidth())
   {
     FatalError("symbolic_fp: matchWidth cannot narrow a bitvector; symfpu "
-               "asked to resize a value wider than its target, which means a "
-               "floating-point format reached the blaster that "
-               "FloatBlaster::formatSupported should have refused");
+               "asked to resize a value wider than its target, which is a "
+               "width miscalculation in the floating-point lowering");
   }
   if (this->getWidth() == op.getWidth())
     return *this;
