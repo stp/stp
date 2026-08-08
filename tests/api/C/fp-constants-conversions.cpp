@@ -25,15 +25,30 @@ TEST(fp_constants, from_bits_rejects_invalid_smt_format)
       "at least 2 exponent and 2 significand bits");
 }
 
-TEST(fp_constants, from_bits_rejects_unsupported_symfpu_format)
+// The narrowest formats SMT-LIB allows used to be refused outright, because
+// SymFPU's unpack aborted on them. They are fixed in patches/symfpu/ instead,
+// so the API now builds and solves at them like any other format. (2, 3) is
+// the case that needs both of those patches: the first makes it reachable at
+// all, and doing so gives it an unpacked exponent width equal to its
+// significand width, which is exactly the family the second one fixes.
+TEST(fp_constants, from_bits_at_the_narrowest_formats)
 {
-  EXPECT_DEATH(
-      {
-        VC vc = vc_createValidityChecker();
-        Expr bits = vc_bvConstExprFromLL(vc, 5, 0);
-        (void)vc_fpConstFromBits(vc, 2, 3, bits);
-      },
-      "this floating-point format is not supported");
+  for (int sb = 2; sb <= 4; sb++)
+    for (int eb = 2; eb <= 4; eb++)
+    {
+      VC vc = vc_createValidityChecker();
+      Type f = vc_fpType(vc, eb, sb);
+      // The all-ones exponent with a zero significand is an infinity at every
+      // format, so the bits say what the value must classify as.
+      Expr bits = vc_bvConstExprFromLL(vc, eb + sb,
+                                       ((1ULL << eb) - 1) << (sb - 1));
+      Expr x = vc_fpConstFromBits(vc, eb, sb, bits);
+      vc_assertFormula(vc, vc_fpIsInfiniteExpr(vc, x));
+      vc_assertFormula(vc, vc_fpIsPositiveExpr(vc, x));
+      EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc)))
+          << "format (" << eb << ", " << sb << ")";
+      vc_Destroy(vc);
+    }
 }
 
 // The special-value constructors produce values that classify as claimed.

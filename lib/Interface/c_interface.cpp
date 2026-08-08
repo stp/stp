@@ -1109,16 +1109,6 @@ static void checkFpWidths(int eb, int sb)
     stp::FatalError("CInterface: a floating-point format needs at least 2 "
                     "exponent and 2 significand bits");
   }
-
-  // SMT-LIB's floor above, symfpu's here; see FloatBlaster::formatSupported.
-  if (!stp::FloatBlaster::formatSupported(eb, sb))
-  {
-    stp::FatalError("CInterface: this floating-point format is not "
-                    "supported: symfpu needs an unpacked exponent wider than "
-                    "the format's own, which does not hold once the "
-                    "significand is 3 bits or fewer; use at least 4 "
-                    "significand bits");
-  }
 }
 
 Type vc_fpType(VC vc, int exp_bits, int sig_bits)
@@ -1404,20 +1394,6 @@ Expr vc_fpRoundToIntegralExpr(VC vc, Expr rm, Expr f)
   stp::ASTNode* m = (stp::ASTNode*)rm;
   stp::ASTNode* x = (stp::ASTNode*)f;
   checkRoundingMode("vc_fpRoundToIntegralExpr", ((stp::STP*)vc)->bm, *m);
-  // Refused at term creation, where the caller can see it, rather than during
-  // solving -- as vc_fpRemExpr does, and for the same reason. A non-float
-  // operand gets fpTermResult's own diagnosis, so ask only about a real
-  // format.
-  if (x->GetSourceSort().kind() == stp::SourceSort::Kind::FloatingPoint &&
-      !stp::FloatBlaster::roundToIntegralSupported(x->GetExpWidth(),
-                                                   x->GetSigWidth()))
-  {
-    stp::FatalError("CInterface: vc_fpRoundToIntegralExpr: "
-                    "fp.roundToIntegral is not supported at this format: "
-                    "symfpu resizes its rounding point with matchWidth, "
-                    "which may only widen, on a guard one bit short of the "
-                    "width being resized");
-  }
   return fpTermResult(vc, stp::FP_ROUNDTOINTEGRAL, *x, {*m, *x});
 }
 

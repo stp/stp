@@ -77,11 +77,6 @@ private:
 
     const unsigned int exponent = sort.exponentWidth();
     const unsigned int significand = sort.significandWidth();
-    if (!FloatBlaster::formatSupported(exponent, significand))
-      FatalError("FloatBlast: this floating-point format is not supported: "
-                 "SymFPU needs an unpacked exponent wider than the source "
-                 "format's exponent");
-
     return symbolic_fp::floatingPointTypeInfo(exponent, significand);
   }
 
@@ -616,11 +611,6 @@ private:
 
       case FP_ROUNDTOINTEGRAL:
       {
-        const SourceSort sort = n.GetSourceSort();
-        if (!FloatBlaster::roundToIntegralSupported(sort.exponentWidth(),
-                                                    sort.significandWidth()))
-          FatalError("FloatBlast: fp.roundToIntegral is not supported at "
-                     "this format");
         result.reset(new symbolic_fp::uf(
             symbolic_fp::unpacked::roundToIntegral(
                 result_format, lower(n[0]), asUnpacked(n[1]))));
