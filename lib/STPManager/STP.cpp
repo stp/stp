@@ -40,6 +40,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/SplitExtracts.h"
 #include "stp/Simplifier/UseITEContext.h"
 #include "stp/Simplifier/Flatten.h"
+#include "stp/Simplifier/CommonSubSum.h"
 #include "stp/Simplifier/StrengthReduction.h"
 #include "stp/Simplifier/Rewriting.h"
 #include "stp/Simplifier/MergeSame.h"
@@ -890,6 +891,13 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
 
     if (cb->isUnsatisfiable())
       inputToSat = bm->ASTFalse;
+  }
+
+  if (bm->UserFlags.enable_common_subsum)
+  {
+    CommonSubSum css(bm, bm->defaultNodeFactory);
+    inputToSat = css.topLevel(inputToSat);
+    bm->ASTNodeStats("After Common Sub-sum Extraction: ", inputToSat);
   }
 
   ToSATAIG toSATAIG(bm, cb, arrayTransformer);

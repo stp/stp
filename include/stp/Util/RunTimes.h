@@ -71,7 +71,8 @@ public:
     StrengthReduction,
     SplitExtracts,
     Rewriting,
-    MergeSame
+    MergeSame,
+    CommonSubSum
   };
 
   std::vector<std::string> CategoryNames = {"Transforming",
@@ -98,7 +99,8 @@ public:
                                             "Strength Reduction",
                                             "Spliting Extracts",
                                             "Sharing-aware rewriting",
-                                            "Merge Same"
+                                            "Merge Same",
+                                            "Common Sub-sum Extraction"
                                           };
 
 

@@ -181,6 +181,16 @@ void ExtraMain::create_options()
   bool_arg("--pure-literals", bm->UserFlags.enable_pure_literals,
            "Pure literals are replaced.", simp_group);
 
+  bool_arg("--common-subsum", bm->UserFlags.enable_common_subsum,
+           "Factor sub-sums shared between n-ary bvadd nodes into a single "
+           "shared node, so the adder is built once (needs --flattening)",
+           simp_group);
+
+  bool_arg("--pair-extract", bm->UserFlags.enable_pair_extract,
+           "In an n-ary bvadd, replace a pair of addends whose possibly-one "
+           "bits are disjoint by their bitwise-or, removing an adder stage",
+           simp_group);
+
   bool_arg("--merge-same", bm->UserFlags.enable_merge_same,
            "Uses simple boolean algebra rules to combine conjuncts at the top "
            "level",
