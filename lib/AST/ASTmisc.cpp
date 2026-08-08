@@ -31,8 +31,6 @@ THE SOFTWARE.
 #include <unistd.h>
 #endif
 
-#include <sys/time.h>
-
 namespace stp
 {
 using std::cout;
@@ -1177,13 +1175,6 @@ bool BVTypeCheck(const ASTNode& n)
   {
     return BVTypeCheck_nonterm_kind(n, k);
   }
-}
-
-long getCurrentTime()
-{
-  timeval t;
-  gettimeofday(&t, NULL);
-  return (1000 * t.tv_sec) + (t.tv_usec / 1000);
 }
 
 } // end of namespace

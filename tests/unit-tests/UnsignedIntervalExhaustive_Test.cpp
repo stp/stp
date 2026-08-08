@@ -48,8 +48,8 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/UnsignedIntervalAnalysis.h"
 #include "stp/Simplifier/UnsignedInterval.h"
-#include "stp/Simplifier/constantBitP/MersenneTwister.h"
 #include <gtest/gtest.h>
+#include <random>
 #include <vector>
 
 namespace
@@ -352,7 +352,7 @@ TEST(UnsignedIntervalExhaustive, Mult)
 TEST(UnsignedIntervalExhaustive, MultConstantOperandRandomised)
 {
   Context c;
-  MTRand rand(12345U);
+  std::mt19937 rand(12345U);
 
   const unsigned w = 16;
   const uint64_t N = 1ull << w;
@@ -365,11 +365,11 @@ TEST(UnsignedIntervalExhaustive, MultConstantOperandRandomised)
 
   for (unsigned iteration = 0; iteration < 300; iteration++)
   {
-    uint64_t lo = rand.randInt() % N;
-    uint64_t hi = rand.randInt() % N;
+    uint64_t lo = rand() % N;
+    uint64_t hi = rand() % N;
     if (lo > hi)
       std::swap(lo, hi);
-    const uint64_t multiplier = rand.randInt() % N;
+    const uint64_t multiplier = rand() % N;
 
     uint64_t bruteMin = UINT64_MAX, bruteMax = 0;
     for (uint64_t x = lo; x <= hi; x++)

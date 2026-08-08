@@ -301,7 +301,7 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize,
       {
         string close = "";
 
-        for (long int i = 0; i < (long int)c.size() - 1; i++)
+        for (size_t i = 0; i + 1 < c.size(); i++)
         {
           os << "(" << functionToSMTLIBName(kind, smtlib1);
           os << " ";

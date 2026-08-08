@@ -151,8 +151,6 @@ int TermOrder(const ASTNode& a, const ASTNode& b);
 // NB: The boolean value is always true!
 bool BVTypeCheck(const ASTNode& n);
 
-long getCurrentTime();
-
 ASTVec FlattenKind(Kind k, const ASTChildren& children, int maxDepth = INT_MAX);
 
 // Checks recursively all the way down.

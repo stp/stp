@@ -292,7 +292,7 @@ public:
     {
       VariableAssignment assignment;
       bool bad = false;
-      const long st = stp::getCurrentTime();
+      const int64_t st = stp::getCurrentTime();
       bool r = checkRule(it->getFrom(), it->getTo(), assignment, bad);
       if (!r || bad)
       {
@@ -303,7 +303,7 @@ public:
         assert(!bad);
       }
       if (bits >= it->getVerifiedToBits())
-        it->setVerified(bits, stp::getCurrentTime() - st);
+        it->setVerified(bits, static_cast<int>(stp::getCurrentTime() - st));
     }
   }
 

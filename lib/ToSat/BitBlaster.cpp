@@ -896,8 +896,8 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term,
       // Replicate high-order bit as many times as necessary.
       // Arg 0 is expression to be sign extended.
       const ASTNode& arg = term[0];
-      const unsigned long result_width = term.GetValueWidth();
-      const unsigned long arg_width = arg.GetValueWidth();
+      const unsigned result_width = term.GetValueWidth();
+      const unsigned arg_width = arg.GetValueWidth();
       const BBNodeVec& bbarg = BBTerm(arg, support);
 
       if (result_width == arg_width)

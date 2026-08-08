@@ -237,6 +237,14 @@ add_dependencies(stp libabc-pic)
 # defined for STP's sources too.
 set(stp_link_libs ${MINISAT_LIBRARIES} $<TARGET_FILE:libabc-pic>)
 
+# RunTimes reads the process's peak memory through GetProcessMemoryInfo,
+# which lives in psapi. ABC's sclLiberty.c calls PathMatchSpec from
+# shlwapi; MSVC picks that library up through ABC's #pragma comment(lib),
+# which MinGW's linker ignores, so it has to be named here.
+if (WIN32)
+    set(stp_link_libs ${stp_link_libs} psapi shlwapi)
+endif()
+
 if (USE_CRYPTOMINISAT)
     if (STATICCOMPILE)
       set(stp_link_libs

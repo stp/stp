@@ -183,6 +183,9 @@ TEST(fp_array_extensionality, float_indexed_refinement_converges)
 {
   VC vc = vc_createValidityChecker();
   vc_setFlag(vc, 'x');
+  // The historic livelock needed MiniSat's model sequence; without that
+  // backend the selection stays on the default, and the test still pins
+  // the property that refinement over a float-indexed array terminates.
   vc_useMinisat(vc);
 
   Type fp = vc_fpType(vc, 8, 24);

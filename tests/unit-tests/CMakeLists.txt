@@ -32,6 +32,13 @@ AddSTPGTest(SplitExtracts_Test.cpp)
 # index are AST machinery that floating point introduced but that every build
 # pays for, so both configurations have to cover them.
 AddSTPGTest(SourceSortMemo_Test.cpp)
+# The AIG gate builders, which every build has. Instantiating
+# BBNodeManagerAIG calls ABC through its inline members, and a shared libstp
+# localises ABC's symbols (--exclude-libs), so this links its own copy the
+# way FloatBlast_Test does below.
+AddSTPGTest(BBNodeManagerAIG_Test.cpp)
+target_link_libraries(BBNodeManagerAIG_TestTests $<TARGET_FILE:libabc-pic>)
+add_dependencies(BBNodeManagerAIG_TestTests libabc-pic)
 if (ENABLE_FLOATING_POINT)
     AddSTPGTest(FPPrintBack_Test.cpp)
     AddSTPGTest(FloatBlast_Test.cpp)
@@ -44,6 +51,9 @@ if (ENABLE_FLOATING_POINT)
     target_link_libraries(FloatBlast_TestTests $<TARGET_FILE:libabc-pic>)
     add_dependencies(FloatBlast_TestTests libabc-pic)
     AddSTPGTest(FpTotalise_Test.cpp)
+    # Truth values the model-formula evaluator gives the two float
+    # equalities; the circuit's answers are covered elsewhere.
+    AddSTPGTest(FpModelEquality_Test.cpp)
     AddSTPGTest(SourceSort_Test.cpp)
     # Builds float/rounding-mode constants, which is the whole point.
     AddSTPGTest(ConstantIdentity_Test.cpp)
@@ -78,6 +88,12 @@ if (ENABLE_FLOATING_POINT)
     AddSTPGTest(BVSolver_Test.cpp)
 endif()
 AddSTPGTest(StrengthReduction_Test.cpp)
+# Bit-blasts each operation to check the difficulty score against what the
+# AIG really costs, so it instantiates BBNodeManagerAIG and needs its own
+# copy of ABC for the same reason FloatBlast_Test does.
+AddSTPGTest(DifficultyScore_Test.cpp)
+target_link_libraries(DifficultyScore_TestTests $<TARGET_FILE:libabc-pic>)
+add_dependencies(DifficultyScore_TestTests libabc-pic)
 AddSTPGTest(StrengthReduction_Exhaustive_Test.cpp)
 AddSTPGTest(RemoveUnconstrained_Exhaustive_Test.cpp)
 AddSTPGTest(AchievableImage_Exhaustive_Test.cpp)
@@ -100,3 +116,4 @@ AddSTPGTest(ValueSet_Test.cpp)
 AddSTPGTest(ValueSet_Exhaustive_Test.cpp)
 AddSTPGTest(SearchBias_Test.cpp)
 AddSTPGTest(Bva_Test.cpp)
+AddSTPGTest(FdOStream_Test.cpp)

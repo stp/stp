@@ -25,6 +25,7 @@ THE SOFTWARE.
 #define UDEFFLAGS_H
 
 #include "stp/Sat/SearchBias.h"
+#include <cstdint>
 
 namespace stp
 {

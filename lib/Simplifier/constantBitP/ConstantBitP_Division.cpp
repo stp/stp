@@ -1327,14 +1327,15 @@ static Result bvSignedModulusStructural(vector<FixedBits*>& children,
   {
     if (!fixBitTo(output, sign, false))
       return CONFLICT;
-    int highest = -1; // highest divisor bit that might be one.
-    for (int i = (int)sign - 1; i >= 0; i--)
+    // highest divisor bit that might be one; `sign` means there is none.
+    unsigned highest = sign;
+    for (unsigned i = sign; i-- > 0;)
       if (!b.isFixedToZero(i))
       {
         highest = i;
         break;
       }
-    assert(highest >= 0); // b is non-zero with a zero sign bit.
+    assert(highest < sign); // b is non-zero with a zero sign bit.
     // divisor <= 2^(highest+1)-1, so result <= 2^(highest+1)-2: the bits
     // above `highest` are zero.
     for (unsigned i = highest + 1; i < sign; i++)

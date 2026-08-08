@@ -29,7 +29,7 @@ using std::vector;
 
 namespace stp
 {
-unsigned long Cadical::nVars() const
+uint32_t Cadical::nVars() const
 {
   // Unlike other solvers Cadical doesn't need to be told about the variable in advance.
   return next_variable;
@@ -39,6 +39,14 @@ bool Cadical::simplify()
 {
   s->simplify();
   return false;
+}
+
+int Cadical::nClauses()
+{
+  // Active irredundant clauses: what remains of the input after CaDiCaL's
+  // preprocessing, which is the post-simplify() count nClauses() promises.
+  // Learnt clauses are counted separately (redundant()) and excluded.
+  return (int)s->irredundant();
 }
 
 void Cadical::setMaxConflicts(int64_t _max_confl)

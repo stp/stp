@@ -30,7 +30,7 @@ THE SOFTWARE.
 #include <cstdlib>
 #include <cstring>
 
-#include "stp/Interface/fdstream.h"
+#include "stp/Interface/FdOStream.h"
 #include "stp/Parser/parser.h"
 #include "stp/Printer/printers.h"
 #include "stp/cpp_interface.h"
@@ -48,7 +48,6 @@ using std::cout;
 using std::ostream;
 using std::stringstream;
 using std::string;
-using std::fdostream;
 using std::endl;
 
 // Defined further down, but used by the boolean expression builders above it.
@@ -357,7 +356,7 @@ void vc_printExprFile(VC vc, Expr e, int fd)
 {
   stp::STPMgr* b = mgr(vc);
 
-  fdostream os(fd);
+  stp::FdOStream os(fd);
 
   ((stp::ASTNode*)e)->PL_Print(os, b);
   // os.flush();
@@ -428,7 +427,7 @@ void vc_printAsserts(VC vc, int simplify_print)
   vc_printAssertsToStream(vc, cout, simplify_print);
 }
 
-void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf, unsigned long* len,
+void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf, size_t* len,
                                 int simplify_print)
 {
   stp::STPMgr* b = mgr(vc);
@@ -457,18 +456,18 @@ void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf, unsigned long* len,
   // convert to a c buffer
   string s = os.str();
   const char* cstr = s.c_str();
-  unsigned long size = s.size() + 1; // number of chars + terminating null
+  size_t size = s.size() + 1; // number of chars + terminating null
   *buf = (char*)malloc(size);
   if (!(*buf))
   {
-    fprintf(stderr, "malloc(%lu) failed.", size);
+    fprintf(stderr, "malloc(%zu) failed.", size);
     assert(*buf);
   }
   *len = size;
   memcpy(*buf, cstr, size);
 }
 
-void vc_printCounterExampleToBuffer(VC vc, char** buf, unsigned long* len)
+void vc_printCounterExampleToBuffer(VC vc, char** buf, size_t* len)
 {
   assert(vc);
   assert(buf);
@@ -491,18 +490,18 @@ void vc_printCounterExampleToBuffer(VC vc, char** buf, unsigned long* len)
   // convert to a c buffer
   string s = os.str();
   const char* cstr = s.c_str();
-  unsigned long size = s.size() + 1; // number of chars + terminating null
+  size_t size = s.size() + 1; // number of chars + terminating null
   *buf = (char*)malloc(size);
   if (!(*buf))
   {
-    fprintf(stderr, "malloc(%lu) failed.", size);
+    fprintf(stderr, "malloc(%zu) failed.", size);
     assert(*buf);
   }
   *len = size;
   memcpy(*buf, cstr, size);
 }
 
-void vc_printExprToBuffer(VC vc, Expr e, char** buf, unsigned long* len)
+void vc_printExprToBuffer(VC vc, Expr e, char** buf, size_t* len)
 {
   stp::STPMgr* b = mgr(vc);
   stp::ASTNode q = *((stp::ASTNode*)e);
@@ -511,7 +510,7 @@ void vc_printExprToBuffer(VC vc, Expr e, char** buf, unsigned long* len)
   q.PL_Print(os, b);
   string s = os.str();
   const char* cstr = s.c_str();
-  unsigned long size = s.size() + 1; // number of chars + terminating null
+  size_t size = s.size() + 1; // number of chars + terminating null
   *buf = (char*)malloc(size);
   *len = size;
   memcpy(*buf, cstr, size);
@@ -2706,7 +2705,7 @@ uint64_t getBVUnsignedLongLong(Expr e)
   return tmp;
 }
 
-void vc_printBVBitStringToBuffer(Expr e, char** buf, unsigned long* len)
+void vc_printBVBitStringToBuffer(Expr e, char** buf, size_t* len)
 {
   assert(buf);
   assert(len);
@@ -2734,11 +2733,11 @@ void vc_printBVBitStringToBuffer(Expr e, char** buf, unsigned long* len)
 
   // convert to a c buffer
   const char* cstr = string_bv.c_str();
-  unsigned long size = string_bv.size() + 1; // number of chars + terminating null
+  size_t size = string_bv.size() + 1; // number of chars + terminating null
   *buf = (char*)malloc(size);
   if (!(*buf))
   {
-    fprintf(stderr, "malloc(%lu) failed.", size);
+    fprintf(stderr, "malloc(%zu) failed.", size);
     assert(*buf);
   }
   *len = size;
@@ -3151,7 +3150,7 @@ void vc_printCounterExampleFile(VC vc, int fd)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
 
-  fdostream os(fd);
+  stp::FdOStream os(fd);
   stp::AbsRefine_CounterExample* ce =
       (stp::AbsRefine_CounterExample*)(stp_i->Ctr_Example);
 
@@ -3321,34 +3320,74 @@ bool _vc_isUsingSolver(VC vc, stp::UserDefinedFlags::SATSolvers solver)
 
 bool vc_supportsMinisat(VC /*vc*/)
 {
+#ifdef USE_MINISAT
   return true;
+#else
+  return false;
+#endif
 }
 
-bool vc_useMinisat(VC vc)
+bool vc_useMinisat(VC
+#ifdef USE_MINISAT
+vc
+#endif
+)
 {
+#ifdef USE_MINISAT
   _vc_useSolver(vc, stp::UserDefinedFlags::MINISAT_SOLVER);
   return true;
+#else
+  return false;
+#endif
 }
 
-bool vc_isUsingMinisat(VC vc)
+bool vc_isUsingMinisat(VC
+#ifdef USE_MINISAT
+vc
+#endif
+)
 {
+#ifdef USE_MINISAT
   return _vc_isUsingSolver(vc, stp::UserDefinedFlags::MINISAT_SOLVER);
+#else
+  return false;
+#endif
 }
 
 bool vc_supportsSimplifyingMinisat(VC /*vc*/)
 {
+#ifdef USE_MINISAT
   return true;
+#else
+  return false;
+#endif
 }
 
-bool vc_useSimplifyingMinisat(VC vc)
+bool vc_useSimplifyingMinisat(VC
+#ifdef USE_MINISAT
+vc
+#endif
+)
 {
+#ifdef USE_MINISAT
   _vc_useSolver(vc, stp::UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER);
   return true;
+#else
+  return false;
+#endif
 }
 
-bool vc_isUsingSimplifyingMinisat(VC vc)
+bool vc_isUsingSimplifyingMinisat(VC
+#ifdef USE_MINISAT
+vc
+#endif
+)
 {
+#ifdef USE_MINISAT
   return _vc_isUsingSolver(vc, stp::UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER);
+#else
+  return false;
+#endif
 }
 
 bool vc_supportsCryptominisat(VC /*vc*/)

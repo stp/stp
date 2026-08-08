@@ -97,7 +97,11 @@ public:
 
   void setVerbosity(int v) override;
 
-  unsigned long nVars() const override;
+  uint32_t nVars() const override;
+
+  bool reportsClauseCount() const override { return true; }
+
+  int nClauses() override;
 
   void printStats() const override;
 

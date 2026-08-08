@@ -30,21 +30,7 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/NodeDomainAnalysis.h"
 
-#ifdef USE_CRYPTOMINISAT
-#include "stp/Sat/CryptoMinisat5.h"
-#endif
-
-#ifdef USE_RISS
-#include "stp/Sat/Riss.h"
-#endif
-
-#ifdef USE_CADICAL
-#include "stp/Sat/Cadical.h"
-#endif
-
-
-#include "stp/Sat/MinisatCore.h"
-#include "stp/Sat/SimplifyingMinisat.h"
+#include "stp/Sat/SATSolverFactory.h"
 
 #include "stp/Simplifier/AIGSimplifyPropositionalCore.h"
 #include "stp/Simplifier/DifficultyScore.h"
@@ -124,49 +110,7 @@ SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS,
 
 SATSolver* STP::get_new_sat_solver()
 {
-  SATSolver* newS = NULL;
-  switch (bm->UserFlags.solver_to_use)
-  {
-    case UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER:
-      newS = new SimplifyingMinisat;
-      break;
-      
-    case UserDefinedFlags::CRYPTOMINISAT5_SOLVER:
-#ifdef USE_CRYPTOMINISAT
-      newS = new CryptoMiniSat5(bm->UserFlags.num_solver_threads);
-#else
-      std::cerr << "CryptoMiniSat5 support was not enabled at configure time."
-                << std::endl;
-      exit(-1);
-#endif
-      break;
-    case UserDefinedFlags::RISS_SOLVER:
-#ifdef USE_RISS
-      newS = new RissCore();
-#else
-      std::cerr << "Riss support was not enabled at configure time."
-                << std::endl;
-      exit(-1);
-#endif
-      break;
-    case UserDefinedFlags::MINISAT_SOLVER:
-      newS = new MinisatCore;
-      break;
-    
-    case UserDefinedFlags::CADICAL_SOLVER:
-#ifdef USE_CADICAL
-      newS = new Cadical();
-      break;
-#else
-      std::cerr << "Cadical support was not enabled at configure time."
-                << std::endl;
-      exit(-1);
-#endif
-    default:
-      std::cerr << "ERROR: Undefined solver to use." << endl;
-      exit(-1);
-      break;
-  };
+  SATSolver* newS = createSATSolver(bm->UserFlags);
 
   // Before any clause reaches it, which is the only point some backends will
   // accept a configuration at.
@@ -524,10 +468,10 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
 
   // Run size reducing just once.
   inputToSat = sizeReducing(inputToSat, bvSolver.get(), pe.get(), domain.get());
-  long initial_difficulty_score = difficulty.score(inputToSat, bm);
+  int64_t initial_difficulty_score = difficulty.score(inputToSat, bm);
 
   // It's helpful to know the initial node size. The difficulty scorer can easily get something similar:
-  const long initial_node_size = difficulty.getEvalCount();
+  const int64_t initial_node_size = difficulty.getEvalCount();
 
   // Fixed point it if it's not too difficult.
   // Currently we discards all the state each time sizeReducing is called,
@@ -571,7 +515,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     initial_difficulty_score = difficulty.score(inputToSat, bm);
   }
 
-  long bitblasted_difficulty = -1;
+  int64_t bitblasted_difficulty = -1;
   // Expensive, so only want to do it once.
   // The AIG-equivalence/constant substitutions found here are not
   // recorded in the solver map, so they could silently strip a symbol
@@ -781,7 +725,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
 
   bm->TermsAlreadySeenMap_Clear();
 
-  long final_difficulty_score = difficulty.score(inputToSat, bm);
+  int64_t final_difficulty_score = difficulty.score(inputToSat, bm);
 
   bool worse = false;
   if (final_difficulty_score > .8 * initial_difficulty_score)

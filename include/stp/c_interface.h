@@ -36,6 +36,7 @@ extern "C" {
 #endif
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 /////////////////////////////////////////////////////////////////////////////
@@ -488,7 +489,7 @@ DLL_PUBLIC void vc_printExprFile(VC vc, Expr e, int fd);
 //! The buffer is returned via output parameter 'buf' alongside its length 'len'.
 //! It is the responsibility of the caller to free the memory afterwards.
 DLL_PUBLIC void vc_printExprToBuffer(VC vc, Expr e, char** buf,
-                                     unsigned long* len);
+                                     size_t* len);
 
 //! \brief Prints the counter example after an invalid query to stdout, in the
 //!        presentation language.
@@ -544,7 +545,7 @@ DLL_PUBLIC void vc_printAsserts(VC vc, int simplify_print _CVCL_DEFAULT_ARG(0));
 //! to enable simplifications of the query state during printing.
 //!
 DLL_PUBLIC void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf,
-                                           unsigned long* len,
+                                           size_t* len,
                                            int simplify_print);
 
 //! \brief Prints the found counter example to a buffer allocated by STP
@@ -557,7 +558,7 @@ DLL_PUBLIC void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf,
 //! to enable simplifications of the counter example during printing.
 //!
 DLL_PUBLIC void vc_printCounterExampleToBuffer(VC vc, char** buf,
-                                               unsigned long* len);
+                                               size_t* len);
 
 //! \brief Prints the query to stdout in presentation language.
 //!
@@ -693,7 +694,7 @@ DLL_PUBLIC uint64_t getBVUnsignedLongLong(Expr e);
 //!
 //! It is the callers responsibility to free the buffer's memory.
 //!
-DLL_PUBLIC void vc_printBVBitStringToBuffer(Expr e, char** buf, unsigned long* len);
+DLL_PUBLIC void vc_printBVBitStringToBuffer(Expr e, char** buf, size_t* len);
 
 /////////////////////////////////////////////////////////////////////////////
 /// BITVECTOR OPERATIONS
@@ -1653,9 +1654,6 @@ DLL_PUBLIC int vc_parseMemExpr(VC vc, const char* s, Expr* outQuery,
 
 //! \brief Checks if STP was compiled with support for minisat
 //!
-//!  Note: always returns true (future support for minisat being the
-//!  non-default)
-//!
 DLL_PUBLIC bool vc_supportsMinisat(VC vc);
 
 //! \brief Sets underlying SAT solver to minisat
@@ -1667,9 +1665,6 @@ DLL_PUBLIC bool vc_useMinisat(VC vc);
 DLL_PUBLIC bool vc_isUsingMinisat(VC vc);
 
 //! \brief Checks if STP was compiled with support for simplifying minisat
-//!
-//!  Note: always returns true (future support for simplifying minisat being
-//!  the non-default)
 //!
 DLL_PUBLIC bool vc_supportsSimplifyingMinisat(VC vc);
 

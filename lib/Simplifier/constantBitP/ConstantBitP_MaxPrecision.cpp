@@ -27,11 +27,13 @@ THE SOFTWARE.
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include "stp/STPManager/STPManager.h"
-#include "stp/Sat/MinisatCore.h"
+#include "stp/Sat/SATSolver.h"
+#include "stp/Sat/SATSolverFactory.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
 #include "stp/ToSat/ToSATAIG.h"
 #include "stp/ToSat/BitBlaster.h"
+#include <memory>
 
 using namespace stp;
 
@@ -268,7 +270,8 @@ bool maxBoundsPrecision(vector<FixedBits*> children, FixedBits& output,
   ArrayTransformer at(beev, &simp);
   AbsRefine_CounterExample ce(beev, &simp, &at);
   ToSATAIG tosat(beev, &at);
-  MinisatCore newS;
+  std::unique_ptr<SATSolver> newS_owner(createSATSolver(beev->UserFlags));
+  SATSolver& newS = *newS_owner;
 
   vector<ASTNode> min_children(children.size());
   vector<ASTNode> max_children(children.size());
@@ -473,7 +476,8 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind,
   Simplifier simp(beev, &sm );
   ArrayTransformer at(beev, &simp);
   AbsRefine_CounterExample ce(beev, &simp, &at);
-  MinisatCore newS;
+  std::unique_ptr<SATSolver> newS_owner(createSATSolver(beev->UserFlags));
+  SATSolver& newS = *newS_owner;
 
   ToSATAIG tosat(beev, &at);
 

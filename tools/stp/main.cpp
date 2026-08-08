@@ -62,8 +62,10 @@ public:
   bool use_cvc = false;
   bool use_smtlib1 = false;
   bool use_smtlib2 = false;
+#ifdef USE_MINISAT
   bool use_simplifying_minisat = false;
   bool use_minisat = false;
+#endif
 #ifdef USE_CRYPTOMINISAT
   bool use_cryptominisat = false;
 #endif
@@ -248,12 +250,14 @@ void ExtraMain::create_options()
   app.add_flag("--riss", "use Riss as the solver")->group(solver_group);
 #endif
 
+#ifdef USE_MINISAT
   app.add_flag("--simplifying-minisat", use_simplifying_minisat,
                "use installed simplifying minisat version as the solver")
       ->group(solver_group);
   app.add_flag("--minisat", use_minisat,
                "use installed minisat version as the solver ")
       ->group(solver_group);
+#endif
   search_bias_option =
       app.add_option("--search-bias", search_bias,
                      "tune the SAT search towards one answer: 'unsat' (best "
@@ -516,6 +520,7 @@ int ExtraMain::parse_options(int argc, char** argv)
     bm->UserFlags.smtlib2_parser_flag = true;
   }
 
+#ifdef USE_MINISAT
   if (use_simplifying_minisat)
   {
     bm->UserFlags.solver_to_use = UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER;
@@ -525,6 +530,7 @@ int ExtraMain::parse_options(int argc, char** argv)
   {
     bm->UserFlags.solver_to_use = UserDefinedFlags::MINISAT_SOLVER;
   }
+#endif
 
 #ifdef USE_CRYPTOMINISAT
   if (use_cryptominisat)

@@ -61,8 +61,10 @@ std::vector<Backend> backends()
 {
   std::vector<Backend> result;
 
+#ifdef USE_MINISAT
   result.push_back({"minisat", vc_useMinisat, false});
   result.push_back({"simplifying-minisat", vc_useSimplifyingMinisat, false});
+#endif
 
 #ifdef USE_CRYPTOMINISAT
   result.push_back({"cryptominisat", vc_useCryptominisat, true});
@@ -306,8 +308,10 @@ TEST(timeout_budget, cadical_is_selectable)
   EXPECT_TRUE(vc_useCadical(vc));
   EXPECT_TRUE(vc_isUsingCadical(vc));
 
+#ifdef USE_MINISAT
   EXPECT_TRUE(vc_useMinisat(vc));
   EXPECT_FALSE(vc_isUsingCadical(vc));
+#endif
 
   vc_Destroy(vc);
 }

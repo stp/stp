@@ -109,6 +109,38 @@ static int fpConstPlusMinusOne(const stp::ASTNode& c)
   return CONSTANTBV::BitVector_bit_test(bits, eb + sb - 1) ? -1 : 1;
 }
 
+// True for a packed floating-point constant that is NaN: exponent field
+// (bits [sb-1 .. sb+eb-2]) all ones and stored significand (bits
+// [0 .. sb-2]) nonzero. Interning canonicalises every NaN literal to one
+// pattern, but classify from the bits rather than lean on that.
+static bool fpConstIsNaN(const stp::ASTNode& c)
+{
+  assert(c.GetKind() == stp::BVCONST);
+  const unsigned eb = c.GetExpWidth();
+  const unsigned sb = c.GetSigWidth();
+  assert(eb >= 2 && sb >= 2 && c.GetValueWidth() == eb + sb);
+  stp::CBV bits = c.GetBVConst();
+  for (unsigned i = sb - 1; i < sb + eb - 1; i++)
+    if (!CONSTANTBV::BitVector_bit_test(bits, i))
+      return false;
+  for (unsigned i = 0; i + 1 < sb; i++)
+    if (CONSTANTBV::BitVector_bit_test(bits, i))
+      return true;
+  return false;
+}
+
+// True for a packed floating-point constant that is +0 or -0: everything
+// below the sign bit is zero.
+static bool fpConstIsZero(const stp::ASTNode& c)
+{
+  assert(c.GetKind() == stp::BVCONST);
+  stp::CBV bits = c.GetBVConst();
+  for (unsigned i = 0; i + 1 < c.GetValueWidth(); i++)
+    if (CONSTANTBV::BitVector_bit_test(bits, i))
+      return false;
+  return true;
+}
+
 bool SimplifyingNodeFactory::children_all_constants(
     const ASTVec& children) const
 {
@@ -648,17 +680,66 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
             stp::NOT, NodeFactory::CreateNode(stp::FP_ISNAN, children[0]));
       break;
 
-    // Both float equalities are symmetric. Order the operands so that x ~ y
-    // and y ~ x become the same node and share their blasted circuit.
     case stp::FP_EQ:
     case stp::FP_SMT_EQ:
-      if (children.size() == 2 &&
-          children[0].GetNodeNum() > children[1].GetNodeNum())
+      if (children.size() == 2)
       {
-        ASTVec swapped;
-        swapped.push_back(children[1]);
-        swapped.push_back(children[0]);
-        result = hashing.CreateNode(kind, swapped);
+        // x = x is reflexively true; fp.eq(x, x) fails exactly when x is NaN
+        // (the FP_GEQ rule above, restated for the other reflexive predicate).
+        if (children[0] == children[1])
+        {
+          if (kind == stp::FP_SMT_EQ)
+            result = bm.ASTTrue;
+          else
+            result = NodeFactory::CreateNode(
+                stp::NOT,
+                NodeFactory::CreateNode(stp::FP_ISNAN, children[0]));
+          break;
+        }
+
+        // fp.eq against a constant: fp.eq and = disagree only on pairs
+        // holding a NaN or two zeros, and inspecting the constant settles
+        // both. Nothing compares fp.eq-equal to NaN; the zeros compare
+        // fp.eq-equal to each other and to nothing else; any other value is
+        // the sole member of its fp.eq class, where IEEE equality *is*
+        // abstract equality. The prize is the = form: PropagateEqualities
+        // may substitute through it, which fp.eq must never do.
+        // (Both-constant instances folded before the switch.)
+        if (kind == stp::FP_EQ)
+        {
+          const int ci = children[0].GetKind() == stp::BVCONST   ? 0
+                         : children[1].GetKind() == stp::BVCONST ? 1
+                                                                 : -1;
+          // A constant operand of an fp.eq carries its format, but read the
+          // fields rather than assume: a packed carrier that has lost the
+          // stamp must fall through to the plain symmetric ordering.
+          const unsigned eb = ci < 0 ? 0 : children[ci].GetExpWidth();
+          const unsigned sb = ci < 0 ? 0 : children[ci].GetSigWidth();
+          if (ci >= 0 && eb >= 2 && sb >= 2 &&
+              children[ci].GetValueWidth() == eb + sb)
+          {
+            const ASTNode& c = children[ci];
+            const ASTNode& x = children[1 - ci];
+            if (fpConstIsNaN(c))
+              result = ASTFalse;
+            else if (fpConstIsZero(c))
+              result = NodeFactory::CreateNode(stp::FP_ISZERO, x);
+            else
+              result = NodeFactory::CreateNode(stp::FP_SMT_EQ, x, c);
+            break;
+          }
+        }
+
+        // Both float equalities are symmetric. Order the operands so that
+        // x ~ y and y ~ x become the same node and share their blasted
+        // circuit.
+        if (children[0].GetNodeNum() > children[1].GetNodeNum())
+        {
+          ASTVec swapped;
+          swapped.push_back(children[1]);
+          swapped.push_back(children[0]);
+          result = hashing.CreateNode(kind, swapped);
+        }
       }
       break;
 

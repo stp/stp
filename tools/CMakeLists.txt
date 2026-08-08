@@ -23,8 +23,18 @@ add_subdirectory(extdiff)
 
 option(BUILD_EXTRA_TOOLS "Build extra tools" OFF)
 if (BUILD_EXTRA_TOOLS)
+  # rewrite_rule_gen constructs its solver through the factory, so any
+  # backend serves it, but its own CMakeLists still needs CryptoMiniSat
+  # (it links ABC directly). propagator_bench drives CryptoMiniSat's
+  # fixed-count API directly. difficulty_bench only scores formulas and
+  # works with any backend.
   add_subdirectory(rewrite_rule_gen)
-  add_subdirectory(propagator_bench)
+  if (USE_CRYPTOMINISAT)
+    add_subdirectory(propagator_bench)
+  else()
+    message(STATUS "Skipping propagator_bench: it needs CryptoMiniSat")
+  endif()
+  add_subdirectory(difficulty_bench)
 endif()
 
 # The floating-point self-test tools: ordinary executables that exit
