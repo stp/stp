@@ -37,7 +37,6 @@ TEST(fp_constants, from_bits_at_the_narrowest_formats)
     for (int eb = 2; eb <= 4; eb++)
     {
       VC vc = vc_createValidityChecker();
-      Type f = vc_fpType(vc, eb, sb);
       // The all-ones exponent with a zero significand is an infinity at every
       // format, so the bits say what the value must classify as.
       Expr bits = vc_bvConstExprFromLL(vc, eb + sb,

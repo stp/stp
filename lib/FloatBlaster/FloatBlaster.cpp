@@ -173,19 +173,6 @@ bool FloatBlaster::remSupported(unsigned exp_width, unsigned sig_width)
   return remUnrollSteps(exp_width, sig_width) <= REM_UNROLL_LIMIT;
 }
 
-// symfpu's bitsToRepresent (symfpu/core/nondet.h and friends): how many bits
-// it takes to write `n`.
-static unsigned bitsToRepresent(uint64_t n)
-{
-  unsigned bits = 0;
-  while (n != 0)
-  {
-    bits++;
-    n >>= 1;
-  }
-  return bits;
-}
-
 // The stem every unspecified-value name is built on: the operation, then the
 // formats of its floating-point operands.
 //
