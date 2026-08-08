@@ -484,9 +484,12 @@ include_directories("${CMAKE_CURRENT_BINARY_DIR}/include")
 include_directories(# For extlib-constbv
                     ${PROJECT_SOURCE_DIR}/lib
                    )
-# ABC is a vendored upstream submodule, so local fixes cannot simply be
-# committed to it. Any patch in patches/ that touches ABC is applied here, at
-# configure time, before it is built.
+# The vendored upstream submodules cannot simply be committed to, so local
+# fixes are carried as patches and applied here, at configure time, before
+# anything is built. Each submodule that takes patches has its own directory
+# under patches/, named for the library; the patches inside are relative to
+# that submodule's own root, so they are the plain `git diff` its checkout
+# produces.
 #
 # Applying is idempotent: a patch that reverse-applies cleanly is already in
 # the tree and is skipped, so re-running cmake, or configuring a second build
@@ -494,36 +497,51 @@ include_directories(# For extlib-constbv
 # neither is a hard error rather than a silent miscompile -- that happens when
 # the submodule is bumped past the code the patch was written against, and the
 # patch then needs rebasing or, if upstream has taken it, deleting.
-file(GLOB STP_ABC_PATCHES "${PROJECT_SOURCE_DIR}/patches/*.patch")
-list(SORT STP_ABC_PATCHES)
-if(STP_ABC_PATCHES AND EXISTS "${PROJECT_SOURCE_DIR}/lib/extlib-abc/src/opt/dar/darCut.c")
+#
+# The sentinel is a file the submodule is known to contain; it distinguishes a
+# checked-out submodule from the empty directory an uninitialised one leaves,
+# so a build without submodules is not turned into a patch failure.
+function(stp_apply_vendored_patches _label _subdir _sentinel)
+  set(_patchdir "${PROJECT_SOURCE_DIR}/patches/${_label}")
+  file(GLOB _patches "${_patchdir}/*.patch")
+  list(SORT _patches)
+  if(NOT _patches)
+    return()
+  endif()
+  if(NOT EXISTS "${PROJECT_SOURCE_DIR}/${_subdir}/${_sentinel}")
+    return() # submodule not checked out; nothing to patch
+  endif()
   if(NOT GIT_EXECUTABLE)
     message(FATAL_ERROR
-            "patches/ contains patches for the vendored ABC but git was not "
-            "found to apply them. Install git, or remove the patches.")
+            "patches/${_label}/ contains patches for the vendored ${_label} "
+            "but git was not found to apply them. Install git, or remove the "
+            "patches.")
   endif()
-  foreach(_patch ${STP_ABC_PATCHES})
+  foreach(_patch ${_patches})
     get_filename_component(_patch_name "${_patch}" NAME)
     execute_process(COMMAND "${GIT_EXECUTABLE}" apply --reverse --check "${_patch}"
-                    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/lib/extlib-abc"
+                    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/${_subdir}"
                     RESULT_VARIABLE _already OUTPUT_QUIET ERROR_QUIET)
     if(_already EQUAL 0)
-      message(STATUS "ABC patch already applied: ${_patch_name}")
+      message(STATUS "${_label} patch already applied: ${_patch_name}")
     else()
       execute_process(COMMAND "${GIT_EXECUTABLE}" apply "${_patch}"
-                      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/lib/extlib-abc"
+                      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/${_subdir}"
                       RESULT_VARIABLE _rc ERROR_VARIABLE _err)
       if(NOT _rc EQUAL 0)
         message(FATAL_ERROR
-                "Failed to apply ${_patch_name} to lib/extlib-abc:\n${_err}"
-                "It neither applies nor is already applied. If the ABC "
+                "Failed to apply ${_patch_name} to ${_subdir}:\n${_err}"
+                "It neither applies nor is already applied. If the ${_label} "
                 "submodule was bumped, rebase the patch onto the new revision, "
                 "or delete it if upstream has taken the change.")
       endif()
-      message(STATUS "Applied ABC patch: ${_patch_name}")
+      message(STATUS "Applied ${_label} patch: ${_patch_name}")
     endif()
   endforeach()
-endif()
+endfunction()
+
+stp_apply_vendored_patches(abc "lib/extlib-abc" "src/opt/dar/darCut.c")
+stp_apply_vendored_patches(symfpu "lib/extlib-symfpu/symfpu" "core/convert.h")
 
 # ABC is a vendored upstream submodule (berkeley-abc/abc); mark its headers as
 # SYSTEM so their warnings (e.g. -Wpedantic zero-size arrays, -Wunused-parameter
