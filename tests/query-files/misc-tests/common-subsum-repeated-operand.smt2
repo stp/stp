@@ -1,4 +1,4 @@
-; RUN: %solver %s | %OutputCheck %s
+; RUN: %solver --flattening=true --common-subsum=true %s | %OutputCheck %s
 ; CHECK-NEXT: ^unsat
 ; Common sub-sum extraction must handle an addition whose operands repeat.
 ; An operand appearing k times yields the same candidate pair C(k,2) times;
