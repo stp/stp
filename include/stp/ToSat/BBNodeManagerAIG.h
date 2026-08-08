@@ -217,7 +217,13 @@ public:
         break;
 
       case NAND:
-        if (children.size() == 2)
+        // The one-child cases mirror AND and OR above. makeTower needs at
+        // least two, and a single-bit field is not hypothetical: the
+        // significand of a two-bit format has exactly one stored bit, so
+        // NOR over it arrives here with one child.
+        if (children.size() == 1)
+          pNode = children[0].n;
+        else if (children.size() == 2)
           pNode = Aig_And(aigMgr, children[0].n, children[1].n);
         else
           pNode = makeTower(Aig_And, children);
@@ -230,7 +236,9 @@ public:
         break;
 
       case NOR:
-        if (children.size() == 2)
+        if (children.size() == 1)
+          pNode = children[0].n;
+        else if (children.size() == 2)
           pNode = Aig_Or(aigMgr, children[0].n, children[1].n);
         else
           pNode = makeTower(Aig_Or, children);
@@ -238,7 +246,9 @@ public:
         break;
 
       case XOR:
-        if (children.size() == 2)
+        if (children.size() == 1)
+          pNode = children[0].n;
+        else if (children.size() == 2)
           pNode = orderedAigExor(aigMgr, children[0].n, children[1].n);
         else
           pNode = makeTower(orderedAigExor, children);
