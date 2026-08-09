@@ -100,6 +100,8 @@ class BitBlaster
                   BBNodeSet& support, const stp::ASTNode& xN,
                   const stp::ASTNode& yN, vector<list<BBNode>>& products,
                   const ASTNode& n);
+  void mult_Booth_radix4(const BBNodeVec& x, const BBNodeVec& y,
+                         vector<list<BBNode>>& products, const ASTNode& n);
   BBNodeVec mult_normal(const BBNodeVec& x, const BBNodeVec& y,
                              BBNodeSet& support, const ASTNode& n);
 

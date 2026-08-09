@@ -309,7 +309,8 @@ void ExtraMain::create_options()
   int64_arg("--bb.mult-variant", bm->UserFlags.multiplication_variant,
             "unsigned multiplication encoding. 1 (default) shifts and adds. "
             "14 is 1, except that a multiplier holding a run of constant one "
-            "bits is Booth recoded. "
+            "bits is Booth recoded. 15 is radix-4 modified Booth, which halves "
+            "the partial-product rows and recodes symbolic multipliers too. "
             "3, 4, 6, 7, 8, 9 and 13 Booth recode and differ in how the "
             "partial-product columns are summed. 5 uses the constant-bit "
             "multiplication bounds, and needs --bb.mult-v2. Any other value "
