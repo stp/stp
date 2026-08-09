@@ -1937,6 +1937,78 @@ void BitBlaster::mult_Booth(
   }
 }
 
+// Radix-4 modified Booth recoding.
+//
+// mult_Booth only rewrites runs of *constant* one bits, so a symbolic
+// multiplier still costs one partial-product row per bit. This groups the
+// multiplier into overlapping three-bit windows instead, halving the rows to
+// ceil(width/2). Each window picks a digit in {-2,-1,0,1,2}:
+//
+//   b(2i+1) b(2i) b(2i-1)   digit         b(-1) reads as zero
+//     0 0 0                   0
+//     0 0 1 / 0 1 0          +1
+//     0 1 1                  +2
+//     1 0 0                  -2
+//     1 0 1 / 1 1 0          -1
+//     1 1 1                   0
+//
+// which is carried as three signals: neg = b(2i+1), one = b(2i) xor b(2i-1),
+// and two = the pair of patterns that select twice y. Row bit j is then a
+// select between y[j] and y[j-1], conditionally inverted, and the inversion is
+// completed by adding neg itself into the row's lowest column -- the usual
+// two's complement identity -y = ~y + 1, made conditional. The all-ones window
+// falls out correctly: it selects nothing, inverts to all ones, and the added
+// one carries it back to zero.
+//
+// The trade is that halving the rows has to pay for a costlier row: a naive row
+// is one AND per bit, a radix-4 row is a select plus an XOR. Whether that is
+// worthwhile in CNF rather than in silicon is a question for measurement.
+//
+// Truncation keeps the negative digits honest: BVMULT is same-width, so bits
+// above the width are dropped and each row only needs to be right modulo
+// 2^width.
+void BitBlaster::mult_Booth_radix4(const BBNodeVec& x, const BBNodeVec& y,
+                                   vector<list<BBNode>>& products,
+                                   const ASTNode& n)
+{
+  const unsigned bitWidth = x.size();
+  const BBNode& BBFalse = nf->getFalse();
+
+  // The column bounds in MultiplicationStatsMap describe the un-recoded matrix
+  // of AND terms. This matrix holds conditionally negated selects instead, so
+  // those bounds do not apply to it -- mark the node so statsFound() keeps them
+  // away, exactly as mult_Booth does once it has recoded a run.
+  booth_recoded.insert(n);
+
+  for (unsigned base = 0; base < bitWidth; base += 2)
+  {
+    const BBNode& below = (base == 0) ? BBFalse : x[base - 1];
+    const BBNode& low = x[base];
+    const BBNode& high = (base + 1 < bitWidth) ? x[base + 1] : BBFalse;
+
+    const BBNode& neg = high;
+    const BBNode one = nf->CreateNode(XOR, low, below);
+    // twice y is selected by 011 and by 100, i.e. when low and below agree with
+    // each other and disagree with high.
+    const BBNode two = nf->CreateNode(
+        AND, nf->CreateNode(NOT, nf->CreateNode(XOR, low, below)),
+        nf->CreateNode(XOR, high, below));
+
+    for (unsigned j = 0; base + j < bitWidth; j++)
+    {
+      const BBNode single = nf->CreateNode(AND, one, y[j]);
+      const BBNode dbl =
+          (j == 0) ? BBFalse : nf->CreateNode(AND, two, y[j - 1]);
+      const BBNode selected = nf->CreateNode(OR, single, dbl);
+      products[base + j].push_back(nf->CreateNode(XOR, selected, neg));
+    }
+
+    // The +1 that completes a negated row, and nothing when the digit is
+    // positive.
+    products[base].push_back(neg);
+  }
+}
+
 void BitBlaster::mult_allPairs(
     const BBNodeVec& x, const BBNodeVec& y, BBNodeSet& /*support*/,
     vector<list<BBNode>>& products)
@@ -2398,6 +2470,21 @@ BBNodeVec BitBlaster::BBMult(const BBNodeVec& _x,
         return buildAdditionNetworkResult(products, support, n);
       }
       return mult_normal(x, y, support, n);
+    }
+
+    case 15:
+    {
+      // Radix-4 modified Booth: half as many partial-product rows, at the cost
+      // of a costlier row. Unlike the other Booth variants this recodes
+      // symbolic multipliers too, so it applies to every multiply rather than
+      // only to those with a constant operand.
+      //
+      // No setColumnsToZero() here: mult_Booth_radix4 marks the node recoded,
+      // because the constant-bit column bounds describe the un-recoded matrix
+      // of AND terms and would be wrong applied to conditionally negated
+      // selects.
+      mult_Booth_radix4(x, y, products, n);
+      return buildAdditionNetworkResult(products, support, n);
     }
 
     default:
