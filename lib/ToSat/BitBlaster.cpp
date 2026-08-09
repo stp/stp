@@ -2291,6 +2291,68 @@ void BitBlaster::setColumnsToZero(
   }
 }
 
+// Fill the partial-product matrix by Booth recoding a constant multiplier,
+// choosing whichever operand is the cheaper one to decompose.
+//
+// Only the operand mult_Booth decomposes into partial products is worth
+// recoding: the other is added whole once per row, so its bit pattern does not
+// change the row count, and its constant bits are folded inside each row by the
+// AIG. The choice is therefore which operand to hand it first, and the cost
+// that dominates is the number of symbolic rows -- each is a fresh AND gate per
+// bit of the other operand, whereas a constant row costs no gates and only adds
+// column height. Rows overall break a tie.
+//
+// The test is on the bit-blasted vectors rather than on BVCONST, because that
+// is what convert() itself looks at: a run of ones that constant bit
+// propagation established is worth just as much as one written down in the
+// input. Testing the term instead would both miss those and route constants
+// with no run of ones -- which encode the same either way -- down a path that
+// only churns the encoding.
+//
+// Returns false, leaving products untouched, when neither operand recodes.
+// That is the symbolic x symbolic case, and the caller picks the fallback.
+bool BitBlaster::mult_Booth_constant(const BBNodeVec& x, const BBNodeVec& y,
+                                     BBNodeSet& support,
+                                     vector<list<BBNode>>& products,
+                                     const ASTNode& n)
+{
+  int xRecoded = 0, yRecoded = 0, xSymbolic = 0, ySymbolic = 0;
+  const int xRows = boothRows(x, nf, xRecoded, xSymbolic);
+  const int yRows = boothRows(y, nf, yRecoded, ySymbolic);
+
+  if (xRecoded == 0 && yRecoded == 0)
+    return false;
+
+  // BBMult swapped x to the constant side, so track which AST child each vector
+  // now names -- xN/yN are used only for debug output, but keeping them
+  // consistent costs nothing.
+  const bool swapped =
+      (BVCONST != n[0].GetKind()) && (BVCONST == n[1].GetKind());
+  const ASTNode& xN = swapped ? n[1] : n[0];
+  const ASTNode& yN = swapped ? n[0] : n[1];
+
+  const bool useY = (yRecoded > 0) &&
+                    (xRecoded == 0 || ySymbolic < xSymbolic ||
+                     (ySymbolic == xSymbolic && yRows < xRows));
+
+  if (useY)
+    mult_Booth(y, x, support, yN, xN, products, n);
+  else
+    mult_Booth(x, y, support, xN, yN, products, n);
+
+  // No setColumnsToZero() by the callers, unlike the other Booth variants. It
+  // would do nothing: it reaches the constant-bit multiplication bounds through
+  // statsFound(), which refuses any node mult_Booth has recoded -- the column
+  // sums it holds describe the un-recoded matrix and are wrong once a run has
+  // become a subtract/add pair. Those variants call mult_Booth
+  // unconditionally, so for them the node is often not recoded and the call
+  // still pays; this path is only taken when the multiplier did recode, so the
+  // bounds are never available. The all-false argument of
+  // buildAdditionNetworkResult() is unreachable for the same reason. Measured
+  // over 1276 multiplies: the bounds were live 0 times.
+  return true;
+}
+
 // Multiply two bitblasted numbers
 BBNodeVec BitBlaster::BBMult(const BBNodeVec& _x,
                              const BBNodeVec& _y,
@@ -2401,7 +2463,8 @@ BBNodeVec BitBlaster::BBMult(const BBNodeVec& _x,
 
     case 14:
     {
-      // Variant 1, except that a constant multiplier is Booth recoded.
+      // Variant 1, except that a multiplier holding a run of constant one bits
+      // is Booth recoded.
       //
       // mult_normal walks the set bits of the multiplier and pays for one
       // ripple-carry adder per set bit, so a constant containing a run of ones
@@ -2410,65 +2473,11 @@ BBNodeVec BitBlaster::BBMult(const BBNodeVec& _x,
       // into a subtract/add pair, which is where nearly all of the encoding
       // cost of a constant multiply goes.
       //
-      // The test is on the bit-blasted vectors rather than on BVCONST, because
-      // that is what convert() itself looks at: a run of ones that constant bit
-      // propagation established is worth just as much as one written down in
-      // the input.  Testing the term instead would both miss those and route
-      // constants with no run of ones -- which encode the same either way --
-      // down a path that only churns the encoding.
-      //
-      // Only the operand mult_Booth decomposes into partial products is worth
-      // recoding: the other one is added or subtracted whole, once per row, so
-      // its bit pattern does not change the row count, and its constant bits
-      // are already folded away inside each row by the AIG.  So the choice
-      // that matters is which operand to hand it first, and the cost to
-      // minimise is rows -- not runs.  An operand can recode more runs than
-      // the other and still be the more expensive multiplier, by carrying more
-      // symbolic bits alongside them.
-      //
-      // An operand that recodes nothing is not a candidate: handing it to
-      // mult_Booth would change only the summation strategy, which the
-      // existing Booth variants already offer.  When neither recodes -- the
-      // symbolic x symbolic case -- mult_normal is kept.
-      int xRecoded = 0, yRecoded = 0, xSymbolic = 0, ySymbolic = 0;
-      const int xRows = boothRows(x, nf, xRecoded, xSymbolic);
-      const int yRows = boothRows(y, nf, yRecoded, ySymbolic);
-
-      if (xRecoded > 0 || yRecoded > 0)
-      {
-        // BBMult swapped x to the constant side, so track which AST child each
-        // vector now names -- xN/yN are used only for debug output, but keeping
-        // them consistent costs nothing.
-        const bool swapped =
-            (BVCONST != n[0].GetKind()) && (BVCONST == n[1].GetKind());
-        const ASTNode& xN = swapped ? n[1] : n[0];
-        const ASTNode& yN = swapped ? n[0] : n[1];
-
-        // Prefer the cheaper multiplier, among those that actually recode:
-        // fewest symbolic rows first, then fewest rows overall.
-        const bool useY =
-            (yRecoded > 0) &&
-            (xRecoded == 0 || ySymbolic < xSymbolic ||
-             (ySymbolic == xSymbolic && yRows < xRows));
-
-        if (useY)
-          mult_Booth(y, x, support, yN, xN, products, n);
-        else
-          mult_Booth(x, y, support, xN, yN, products, n);
-
-        // No setColumnsToZero() here, unlike the other Booth variants. It
-        // would do nothing: it reaches the constant-bit multiplication bounds
-        // through statsFound(), which refuses any node mult_Booth has recoded
-        // -- the column sums it holds describe the un-recoded matrix and are
-        // wrong once a run has become a subtract/add pair. Those variants call
-        // mult_Booth unconditionally, so for them the node is often not
-        // recoded and the call still pays; this one only gets here when the
-        // multiplier did recode, so the bounds are never available. The
-        // all-false argument of buildAdditionNetworkResult() is unreachable
-        // for the same reason. Measured over 1276 multiplies: the bounds were
-        // live 0 times.
+      // Symbolic x symbolic keeps mult_normal: routing it through mult_Booth
+      // would recode nothing and only change the summation strategy, which the
+      // existing Booth variants already offer.
+      if (mult_Booth_constant(x, y, support, products, n))
         return buildAdditionNetworkResult(products, support, n);
-      }
       return mult_normal(x, y, support, n);
     }
 
@@ -2484,6 +2493,17 @@ BBNodeVec BitBlaster::BBMult(const BBNodeVec& _x,
       // of AND terms and would be wrong applied to conditionally negated
       // selects.
       mult_Booth_radix4(x, y, products, n);
+      return buildAdditionNetworkResult(products, support, n);
+    }
+
+    case 16:
+    {
+      // 14 and 15 win on different multiplies: 14's radix-2 constant recoding
+      // is the better encoding when the multiplier is constant, and 15's
+      // radix-4 is the only one of the two that does anything at all when it is
+      // symbolic. This picks between them per multiply rather than per query.
+      if (!mult_Booth_constant(x, y, support, products, n))
+        mult_Booth_radix4(x, y, products, n);
       return buildAdditionNetworkResult(products, support, n);
     }
 
