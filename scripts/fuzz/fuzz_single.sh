@@ -45,6 +45,29 @@
 #
 #                 One entry is drawn at random per iteration. See the comment
 #                 on LOGIC_SETS below for the full syntax.
+#
+#                 The floating-point logics (QF_BVFP, QF_FP, QF_ABVFP, ...)
+#                 generate and parse fine, and are the only way the
+#                 --bb.fp-native-* options get exercised at all, but they are
+#                 not in the built-in list because neither reference solver to
+#                 hand can be trusted on them:
+#
+#                   z3 5.0.0        unusably slow. STP answered a 20-query
+#                                   QF_BVFP batch in 9.6s; z3 had not finished
+#                                   it after 400s.
+#                   bitwuzla 0.9.1  segfaults part way through some batches
+#                                   (not a stack limit -- it still dies with
+#                                   the stack unlimited), so those iterations
+#                                   land in FAIL_DIR with the checker, not STP,
+#                                   as the one that failed. It also rejects
+#                                   formats outside Float16/32/64/128, which
+#                                   rules out -fp-any.
+#
+#                 The startup probe below will not catch either: both answer
+#                 the trivial probe query. So before trusting an FP run, check
+#                 the checker on a batch of the size QUERIES will produce, then
+#
+#                   CHECKER=<validated> QUERIES=100 LOGICS=QF_BVFP ./fuzz_single.sh
 #   LOGIC         A single entry, for the same purpose. Ignored if LOGICS is
 #                 set. Default: the built-in list.
 #   QUERIES       Queries per generated file. Default: 2500.
@@ -114,6 +137,11 @@ fi
 # what the options were meant to add.
 declare -a LOGIC_SETS=(
 "QF_BV"
+# Sub-sum extraction and pair extraction need n-ary bvadds that share addends,
+# and the default -nary 3 -ref 1 hardly ever builds one: with it, both
+# --common-subsum and --pair-extract leave the CNF byte-identical on every
+# generated file. -nary 8 -ref 3 is where they start to bite.
+"QF_BV -nary 8 -ref 3"
 "QF_ABV"
 # Array extensionality: -mxn/-Mxn are how many array pairs FuzzSMT compares
 # with = or distinct. Without them it never equates two arrays, so the whole
@@ -278,6 +306,12 @@ rm -f probe.smt2
 # --cadical being handed over together. Options that combine freely belong in
 # groups of their own.
 #
+# Since #789 the binary knows the same relationships and refuses a command line
+# that pairs two options it cannot honour both of, so getting this wrong is no
+# longer a silently degraded iteration: it is a rejected one, saved as a
+# mismatch. `excludes_all` at the end of create_options() in tools/stp/main.cpp
+# is the list to check an entry against.
+#
 # An entry has to be non-default AND has to actually change the output,
 # otherwise it silently re-runs the baseline and wastes the iteration. Check it
 # against the "arg (=N)" defaults in `stp --help`, then confirm the emitted CNF
@@ -293,7 +327,15 @@ rm -f probe.smt2
 # the default multiplication variant. Paired with variant 5 it does bite, so
 # that is the form kept below.
 
-declare -a OPTION_GROUPS=(simplify mult bitblast cnf solver misc)
+declare -a OPTION_GROUPS=(simplify mult bitblast fp cnf solver bias misc)
+
+# A group named here is drawn only when the iteration's logic matches the
+# pattern, which is how options that do nothing outside one theory stay out of
+# the draw everywhere else. The pattern is a shell glob, matched against the
+# logic name.
+declare -A GROUP_LOGIC_FILTER=(
+[fp]='*FP*'
+)
 
 declare -a g_simplify=(
 ""
@@ -310,12 +352,21 @@ declare -a g_simplify=(
 "--difficulty-reversion=0"
 "--flattening=1"
 "--ite-context-simplifications=1"
-"--always-true=1"
 "--merge-same=1"
 "--simplify-to-constants-only=1"
-"--bit-blast-simplification=-1"
 "--size-reducing-fixed-point-limit=-1"
 "--aig-core-simplification=1"
+
+# Both are documented as needing --flattening, and both do nothing without it
+# on a generated file, so they are paired with it rather than listed alone.
+"--flattening=1 --common-subsum=1"
+"--flattening=1 --pair-extract=1"
+
+# A bit-blasting option, but it lives here because #789 made it exclude
+# --disable-opt-inc and --disable-simplifications, which are entries above.
+# Drawn from its own group it would be paired with them roughly one iteration
+# in a hundred, and STP now rejects that command line outright.
+"--bb.simplify-during-bb=1"
 
 # These two have given wrong answers in the past, so they get extra exposure
 # here rather than being trusted.
@@ -335,6 +386,17 @@ declare -a g_mult=(
 "--bb.mult-variant=8"
 "--bb.mult-variant=9"
 "--bb.mult-variant=13"
+# 14 only recodes a *constant* multiplier holding a run of ones, which the two
+# plain logic entries never build: byte-identical CNF on all 24 of them. It is
+# the "QF_BV -nary 8 -ref 3" entry that exercises it (3/30 files), so the two
+# belong together -- dropping that logic entry silently stops fuzzing this
+# variant. Wider constants reach it more often still (7/30 at -Mc 8 -Mbw 32).
+"--bb.mult-variant=14"
+# 15 is the one Booth variant that recodes symbolic multipliers, and the only
+# one that skips setColumnsToZero(), so it reaches a bit-blasting path none of
+# the others do. 7/24 on the plain entries, as does 16.
+"--bb.mult-variant=15"
+"--bb.mult-variant=16"
 # multWithBounds() is only reachable from variant 5, so pair them.
 "--bb.mult-variant=5 --bb.mult-v2=1"
 )
@@ -352,6 +414,16 @@ declare -a g_bitblast=(
 "--bb.conjoin-constant=1"
 )
 
+# Floating-point bit-blasting, drawn only for the FP logics: with no FP in the
+# input both settings leave the CNF byte-identical, so anywhere else they are a
+# wasted iteration. --bb.fp-native-arith only applies to predicates that stayed
+# native, so it is not combined with turning --bb.fp-native-cmp off.
+declare -a g_fp=(
+""
+"--bb.fp-native-cmp=0"
+"--bb.fp-native-arith=1"
+)
+
 declare -a g_cnf=(
 ""
 "--cnf-generation-effort=very-low"
@@ -361,10 +433,23 @@ declare -a g_cnf=(
 declare -a g_solver=(
 ""
 "--cadical"
+# Bounded variable addition, which is cadical's and needs a CaDiCaL 3.x build.
+# On an older one these are dropped at startup; see the probe further down.
+"--cadical --cadical-factor on"
+"--cadical --cadical-factor off"
 "--cryptominisat"
 "--cryptominisat --threads=4"
 "--simplifying-minisat"
 "--minisat"
+)
+
+# Which answer the SAT search is tuned towards. Independent of which solver is
+# in use -- one without the setting ignores it -- so it gets its own group.
+# 'none' is the default and is what the empty entry already tests.
+declare -a g_bias=(
+""
+"--search-bias unsat"
+"--search-bias sat"
 )
 
 declare -a g_misc=(
@@ -372,6 +457,22 @@ declare -a g_misc=(
 "--ackermanize"
 "--interactive=1"
 )
+
+# --cadical-factor is accepted by the option parser whatever CaDiCaL is linked,
+# but only a 3.x build can act on it; an older one declines the request with a
+# warning per query, which buries the progress output and leaves the entries
+# testing nothing. Ask once here so they are dropped like any other unsupported
+# option. Only 'on' is worth probing: 'off' and 'auto' are silent either way,
+# and with no bounded variable addition all three mean the same thing.
+if echo "$supported" | grep -qx -- '--cadical-factor'; then
+  echo '(set-logic QF_BV)(assert true)(check-sat)' > factor-probe.smt2
+  if "$STP" --cadical --cadical-factor on factor-probe.smt2 2>&1 > /dev/null \
+     | grep -q -- '--cadical-factor'; then
+    supported=$(echo "$supported" | grep -vx -- '--cadical-factor')
+    cadical_factor_declined=1
+  fi
+  rm -f factor-probe.smt2
+fi
 
 # Drop entries this binary doesn't understand, rather than have the option
 # parser reject them and count every iteration as a mismatch. Catches both a stale build and
@@ -411,24 +512,44 @@ if [ "${#dropped[@]}" -gt 0 ]; then
   printf '    %s\n' "${dropped[@]}" >&2
   echo "  Those code paths are NOT being fuzzed. Rebuild with them enabled if" >&2
   echo "  that is not deliberate." >&2
+  if [ -n "${cadical_factor_declined:-}" ]; then
+    echo "  --cadical-factor is in --help but the linked CaDiCaL has no bounded" >&2
+    echo "  variable addition to turn on, so it was treated as unsupported." >&2
+    echo "  A CaDiCaL 3.x build is needed to fuzz it." >&2
+  fi
   echo >&2
 fi
 
 # The empty entry never matches the filter, so a group cannot come out of that
 # loop empty unless the group itself was written empty.
-combinations=1
 for gname in "${OPTION_GROUPS[@]}"; do
   declare -n group="g_$gname"
   if [ "${#group[@]}" -eq 0 ]; then
     echo "Option group '$gname' is empty." >&2
     exit 1
   fi
-  printf '  %-10s %2d entries\n' "$gname" "${#group[@]}"
-  combinations=$(( combinations * ${#group[@]} ))
+  filter=${GROUP_LOGIC_FILTER[$gname]:-}
+  printf '  %-10s %2d entries%s\n' "$gname" "${#group[@]}" \
+         "${filter:+  (only for $filter logics)}"
   unset -n group
 done
 printf '  %-10s %2d entries\n' "logics" "${#LOGIC_SETS[@]}"
-combinations=$(( combinations * ${#LOGIC_SETS[@]} ))
+
+# Summed over the logics rather than a flat product, because a filtered group
+# contributes only to the logics it applies to.
+combinations=0
+for entry in "${LOGIC_SETS[@]}"; do
+  read -r -a gen_args <<< "${entry%%|*}"
+  per_logic=1
+  for gname in "${OPTION_GROUPS[@]}"; do
+    filter=${GROUP_LOGIC_FILTER[$gname]:-}
+    if [ -n "$filter" ] && [[ ${gen_args[0]} != $filter ]]; then continue; fi
+    declare -n group="g_$gname"
+    per_logic=$(( per_logic * ${#group[@]} ))
+    unset -n group
+  done
+  combinations=$(( combinations + per_logic ))
+done
 echo "$combinations combinations"
 
 #Don't want to fill up SHM.
@@ -447,24 +568,30 @@ timed_out() { [ "$1" -eq 152 ] || [ "$1" -eq 137 ]; }
 
 while (true)
   do
-    # One pick per group, concatenated. Empty picks contribute nothing, so an
-    # all-empty draw leaves $se empty and tests the default configuration.
+    # One logic per iteration. Drawn before the options because a group can be
+    # restricted to particular logics.
+    entry=${LOGIC_SETS[ $RANDOM % ${#LOGIC_SETS[@]} ]}
+    IFS='|' read -r gen logic_opts <<< "$entry"
+    read -r -a gen_args <<< "$gen"
+    read -r -a logic_args <<< "$logic_opts"
+    logic=${gen_args[0]}
+
+    # One pick per applicable group, concatenated. Empty picks contribute
+    # nothing, so an all-empty draw leaves $se empty and tests the default
+    # configuration.
     se=""
     for gname in "${OPTION_GROUPS[@]}"; do
+      filter=${GROUP_LOGIC_FILTER[$gname]:-}
+      if [ -n "$filter" ] && [[ $logic != $filter ]]; then continue; fi
       declare -n group="g_$gname"
       pick=${group[ $RANDOM % ${#group[@]} ]}
       if [ -n "$pick" ]; then se="${se:+$se }$pick"; fi
       unset -n group
     done
 
-    # One logic per iteration, drawn the same way. Its own STP options join the
-    # ones just drawn, so e.g. an extensional entry always gets the option that
-    # lets STP read the file at all.
-    entry=${LOGIC_SETS[ $RANDOM % ${#LOGIC_SETS[@]} ]}
-    IFS='|' read -r gen logic_opts <<< "$entry"
-    read -r -a gen_args <<< "$gen"
-    read -r -a logic_args <<< "$logic_opts"
-    logic=${gen_args[0]}
+    # The logic's own STP options join the ones just drawn, so e.g. an
+    # extensional entry always gets the option that lets STP read the file at
+    # all.
     if [ "${#logic_args[@]}" -gt 0 ]; then se="${se:+$se }${logic_args[*]}"; fi
 
     # Without this check a generation failure is silent: big.smt2 ends up
