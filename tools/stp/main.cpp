@@ -295,7 +295,14 @@ void ExtraMain::create_options()
            "comparison encoding variant 1", bb_group);
 
   int64_arg("--bb.mult-variant", bm->UserFlags.multiplication_variant,
-            "unsigned multiplication variant", bb_group);
+            "unsigned multiplication encoding. 1 (default) shifts and adds. "
+            "14 is 1, except that a multiplier holding a run of constant one "
+            "bits is Booth recoded. "
+            "3, 4, 6, 7, 8, 9 and 13 Booth recode and differ in how the "
+            "partial-product columns are summed. 5 uses the constant-bit "
+            "multiplication bounds, and needs --bb.mult-v2. Any other value "
+            "is an error, reported once bit-blasting reaches a multiply",
+            bb_group);
 
   bool_arg("--bb.mult-v2", bm->UserFlags.upper_multiplication_bound,
            "unsigned multiplication variant 2", bb_group);
