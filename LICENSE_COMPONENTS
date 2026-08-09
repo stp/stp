@@ -6,6 +6,9 @@ STP imports code from the following libraries:
 	* mimalloc Copyright (c) 2018-2025 Microsoft Corporation, Daan Leijen.
 	* SymFPU copyright (C) by the authors from 2018 (only compiled in when
 		floating-point support is enabled).
+	* LibBF Copyright (c) 2017-2025 Fabrice Bellard (only compiled in when
+		built with USE_LIBBF, which folds the real literals in
+		floating-point input).
 	* ankerl::unordered_dense Copyright (c) 2022-2024 Martin Leitner-Ankerl.
 	* CLI11 Copyright (c) 2017-2026 University of Cincinnati (only compiled
 		into the stp command-line tool, not into the library).
@@ -143,6 +146,33 @@ SymFPU
 	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
 	IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 	POSSIBILITY OF SUCH DAMAGE.
+
+LibBF
+	MIT License
+
+	STP builds the library proper out of the upstream release tarball, which
+	is two pairs of files, carrying a copyright line each:
+
+	libbf.c and libbf.h: Copyright (c) 2017-2025 Fabrice Bellard
+	cutils.c and cutils.h: Copyright (c) 2017 Fabrice Bellard
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in all
+	copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	SOFTWARE.
 
 ankerl::unordered_dense
 	Licensed under the MIT License <http://opensource.org/licenses/MIT>.
