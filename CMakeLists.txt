@@ -1143,6 +1143,22 @@ export(PACKAGE STP)
 
 
 # -----------------------------------------------------------------------------
+# Install the licences
+# -----------------------------------------------------------------------------
+# STP's own licence, and the notices of the third-party code compiled into it.
+# Several of those -- ABC, mimalloc, ankerl::unordered_dense, LibBF -- are MIT
+# or BSD, whose one condition is that the notice travels with the binary, so an
+# install that left these behind would not meet it. Which components are
+# actually linked in varies with the configuration, and the file says which
+# ones are conditional, so it is installed whole rather than assembled per
+# build.
+install(FILES
+  "${PROJECT_SOURCE_DIR}/LICENSE"
+  "${PROJECT_SOURCE_DIR}/LICENSE_COMPONENTS"
+  DESTINATION "${CMAKE_INSTALL_DOCDIR}"
+)
+
+# -----------------------------------------------------------------------------
 # Export our targets so that other CMake based projects can interface with
 # the build of STP that is installed.
 # -----------------------------------------------------------------------------
