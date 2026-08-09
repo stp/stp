@@ -26,8 +26,8 @@ THE SOFTWARE.
 
 #include <CLI/CLI.hpp>
 
-#include <cstddef>
 #include <initializer_list>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -461,11 +461,12 @@ void ExtraMain::create_options()
   // parse_options() already rejects with a message of their own, and
   // --search-bias, documented as ignored by solvers that have no such setting
   // rather than as an error.
-  auto excludes_all = [this](const char* name,
+  auto excludes_all = [this](const std::string& name,
                              std::initializer_list<const char*> others) {
+    CLI::Option* const option = app.get_option(name);
     for (const char* other : others)
     {
-      app.get_option(name)->excludes(app.get_option(other));
+      option->excludes(app.get_option(other));
     }
   };
 
@@ -473,26 +474,27 @@ void ExtraMain::create_options()
   // consults them in a fixed sequence, so 'stp --cadical --minisat' quietly
   // ran CaDiCaL. Only one of them can be meant. Which ones exist depends on
   // what was compiled in.
-  std::vector<const char*> solver_flags;
+  std::vector<std::string> solver_flags;
 #ifdef USE_CADICAL
-  solver_flags.push_back("--cadical");
+  solver_flags.emplace_back("--cadical");
 #endif
 #ifdef USE_CRYPTOMINISAT
-  solver_flags.push_back("--cryptominisat");
+  solver_flags.emplace_back("--cryptominisat");
 #endif
 #ifdef USE_RISS
-  solver_flags.push_back("--riss");
+  solver_flags.emplace_back("--riss");
 #endif
 #ifdef USE_MINISAT
-  solver_flags.push_back("--simplifying-minisat");
-  solver_flags.push_back("--minisat");
+  solver_flags.emplace_back("--simplifying-minisat");
+  solver_flags.emplace_back("--minisat");
 #endif
 
-  for (size_t i = 0; i < solver_flags.size(); i++)
+  for (auto first = solver_flags.begin(); first != solver_flags.end(); ++first)
   {
-    for (size_t j = i + 1; j < solver_flags.size(); j++)
+    CLI::Option* const option = app.get_option(*first);
+    for (auto second = std::next(first); second != solver_flags.end(); ++second)
     {
-      app.get_option(solver_flags[i])->excludes(app.get_option(solver_flags[j]));
+      option->excludes(app.get_option(*second));
     }
   }
 
@@ -505,11 +507,12 @@ void ExtraMain::create_options()
   // must apply, and tests/query-files/CMakeLists.txt sweeps the whole corpus
   // with it appended to every invocation, so an exclusion would fail every
   // test in that run that names a solver.
-  for (const char* flag : solver_flags)
+  CLI::Option* const threads_option = app.get_option("--threads");
+  for (const std::string& flag : solver_flags)
   {
-    if (std::string(flag) != "--cryptominisat")
+    if (flag != "--cryptominisat")
     {
-      app.get_option("--threads")->excludes(app.get_option(flag));
+      threads_option->excludes(app.get_option(flag));
     }
   }
 #endif
