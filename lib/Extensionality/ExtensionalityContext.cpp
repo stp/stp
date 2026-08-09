@@ -65,17 +65,23 @@ bool nodeNumLess(const ASTNode& a, const ASTNode& b)
 ASTNode isPackedNaN(NodeFactory* hf, const ASTNode& x, unsigned eb,
                     unsigned sb)
 {
+  // Each sub-term is built in its own statement. C++ does not sequence a
+  // call's arguments against each other, so building two of them inside one
+  // call leaves the order to the compiler -- and node ids are handed out in
+  // creation order, which decides the numbering all the way out to the CNF.
   const unsigned w = eb + sb;
-  const ASTNode exponent =
-      hf->CreateTerm(BVEXTRACT, eb, x, hf->CreateBVConst(32, w - 2),
-                     hf->CreateBVConst(32, sb - 1));
+  const ASTNode expHigh = hf->CreateBVConst(32, w - 2);
+  const ASTNode expLow = hf->CreateBVConst(32, sb - 1);
+  const ASTNode exponent = hf->CreateTerm(BVEXTRACT, eb, x, expHigh, expLow);
+  const ASTNode sigHigh = hf->CreateBVConst(32, sb - 2);
+  const ASTNode sigLow = hf->CreateBVConst(32, 0);
   const ASTNode significand =
-      hf->CreateTerm(BVEXTRACT, sb - 1, x, hf->CreateBVConst(32, sb - 2),
-                     hf->CreateBVConst(32, 0));
-  return hf->CreateNode(
-      AND, hf->CreateNode(EQ, exponent, hf->CreateMaxConst(eb)),
-      hf->CreateNode(
-          NOT, hf->CreateNode(EQ, significand, hf->CreateZeroConst(sb - 1))));
+      hf->CreateTerm(BVEXTRACT, sb - 1, x, sigHigh, sigLow);
+  const ASTNode expAllOnes =
+      hf->CreateNode(EQ, exponent, hf->CreateMaxConst(eb));
+  const ASTNode sigZero =
+      hf->CreateNode(EQ, significand, hf->CreateZeroConst(sb - 1));
+  return hf->CreateNode(AND, expAllOnes, hf->CreateNode(NOT, sigZero));
 }
 
 // SMT-LIB's = between two packed floating-point cells of format (eb, sb).
@@ -87,9 +93,11 @@ ASTNode isPackedNaN(NodeFactory* hf, const ASTNode& x, unsigned eb,
 ASTNode packedFloatEq(NodeFactory* hf, const ASTNode& l, const ASTNode& r,
                       unsigned eb, unsigned sb)
 {
-  return hf->CreateNode(OR, hf->CreateNode(EQ, l, r),
-                        hf->CreateNode(AND, isPackedNaN(hf, l, eb, sb),
-                                       isPackedNaN(hf, r, eb, sb)));
+  // Sequenced deliberately; see the note in isPackedNaN.
+  const ASTNode sameBits = hf->CreateNode(EQ, l, r);
+  const ASTNode lNaN = isPackedNaN(hf, l, eb, sb);
+  const ASTNode rNaN = isPackedNaN(hf, r, eb, sb);
+  return hf->CreateNode(OR, sameBits, hf->CreateNode(AND, lNaN, rNaN));
 }
 
 // The packed bits of the one canonical quiet NaN of format (eb, sb):
@@ -458,11 +466,11 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
   {
     const unsigned eb = elementSort.exponentWidth();
     const unsigned sb = elementSort.significandWidth();
+    // Sequenced deliberately; see the note in isPackedNaN.
+    const ASTNode lNaN = isPackedNaN(hf, r.nameL, eb, sb);
+    const ASTNode rNaN = isPackedNaN(hf, r.nameR, eb, sb);
     differ = hf->CreateNode(
-        AND, differ,
-        hf->CreateNode(NOT,
-                       hf->CreateNode(AND, isPackedNaN(hf, r.nameL, eb, sb),
-                                      isPackedNaN(hf, r.nameR, eb, sb))));
+        AND, differ, hf->CreateNode(NOT, hf->CreateNode(AND, lNaN, rNaN)));
   }
   else if (elementSort.kind() == SourceSort::Kind::RoundingMode)
   {
@@ -470,10 +478,11 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
     // so a witness difference must be a difference of modes: both cells
     // are pinned valid. (The reads of the formula are pinned by
     // FpTotalise; these virtual reads enter the formula after it ran.)
-    differ = hf->CreateNode(
-        AND, differ,
-        hf->CreateNode(AND, bm->roundingModeValidConstraint(r.nameL),
-                       bm->roundingModeValidConstraint(r.nameR)));
+    // Sequenced deliberately; see the note in isPackedNaN.
+    const ASTNode lValid = bm->roundingModeValidConstraint(r.nameL);
+    const ASTNode rValid = bm->roundingModeValidConstraint(r.nameR);
+    differ = hf->CreateNode(AND, differ,
+                            hf->CreateNode(AND, lValid, rValid));
   }
   r.witnessClause = hf->CreateNode(OR, r.proxy, differ);
 
@@ -485,9 +494,12 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
     {
       const unsigned ieb = indexSort.exponentWidth();
       const unsigned isb = indexSort.significandWidth();
-      r.indexSortClause = hf->CreateNode(
-          OR, hf->CreateNode(NOT, isPackedNaN(hf, r.lambda, ieb, isb)),
-          hf->CreateNode(EQ, r.lambda, canonicalQuietNaN(bm, ieb, isb)));
+      // Sequenced deliberately; see the note in isPackedNaN.
+      const ASTNode notNaN =
+          hf->CreateNode(NOT, isPackedNaN(hf, r.lambda, ieb, isb));
+      const ASTNode isCanonical =
+          hf->CreateNode(EQ, r.lambda, canonicalQuietNaN(bm, ieb, isb));
+      r.indexSortClause = hf->CreateNode(OR, notNaN, isCanonical);
     }
     else if (indexSort.kind() == SourceSort::Kind::RoundingMode)
     {
