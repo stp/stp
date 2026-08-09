@@ -55,6 +55,60 @@
 ; BADPARSER-NOT: terminate called
 ; BADPARSER: more than one parsing option
 
+; --- options that cannot both take effect --------------------------------
+;
+; One option discarding another's is a usage error rather than a silent
+; preference for whichever the code applies last. The solver flags are in
+; bad-cli-options-solvers.smt2, which which solvers are compiled in decides
+; whether to run at all.
+
+; A simplification requested alongside the flag that turns the whole suite
+; off. Rejected whichever way round they are given.
+; RUN: not %solver --disable-simplifications --flattening=true %s 2>&1 | %OutputCheck %s --check-prefix=DISABLEDSIMP
+; RUN: not %solver --flattening=true --disable-simplifications %s 2>&1 | %OutputCheck %s --check-prefix=DISABLEDSIMP
+; DISABLEDSIMP-NOT: terminate called
+; DISABLEDSIMP: excludes
+
+; ... and one it agrees with: the request still had no bearing on the run.
+; RUN: not %solver --disable-simplifications --disable-cbitp %s 2>&1 | %OutputCheck %s --check-prefix=DISABLEDSIMP
+
+; --size-reducing-only likewise overrides what it forces.
+; RUN: not %solver --size-reducing-only --difficulty-reversion=true %s 2>&1 | %OutputCheck %s --check-prefix=SIZEREDUCING
+; SIZEREDUCING-NOT: terminate called
+; SIZEREDUCING: excludes
+
+; --bb.simplify-during-bb needs the rewriting simplifier that these turn off.
+; RUN: not %solver --bb.simplify-during-bb=true --disable-opt-inc %s 2>&1 | %OutputCheck %s --check-prefix=SIMPDURINGBB
+; RUN: not %solver --bb.simplify-during-bb=true --disable-simplifications %s 2>&1 | %OutputCheck %s --check-prefix=SIMPDURINGBB
+; SIMPDURINGBB-NOT: terminate called
+; SIMPDURINGBB: excludes
+
+; --parse-only stops before any CNF exists to write out or exit after.
+; RUN: not %solver --parse-only --output-CNF %s 2>&1 | %OutputCheck %s --check-prefix=PARSEONLY
+; RUN: not %solver --parse-only --exit-after-CNF %s 2>&1 | %OutputCheck %s --check-prefix=PARSEONLY
+; PARSEONLY-NOT: terminate called
+; PARSEONLY: excludes
+
+; --interactive is read only on the SMT-LIB2 path.
+; RUN: not %solver --interactive=true --CVC %s 2>&1 | %OutputCheck %s --check-prefix=INTERACTIVE
+; RUN: not %solver --interactive=true --SMTLIB1 %s 2>&1 | %OutputCheck %s --check-prefix=INTERACTIVE
+; INTERACTIVE-NOT: terminate called
+; INTERACTIVE: excludes
+
+; --- combinations that are still accepted --------------------------------
+;
+; The exclusions above must not have caught anything that does take effect.
+
+; RUN: %solver --disable-simplifications %s 2>&1 | %OutputCheck %s --check-prefix=SOLVE
+; RUN: %solver --flattening=true %s 2>&1 | %OutputCheck %s --check-prefix=SOLVE
+; RUN: %solver --size-reducing-only %s 2>&1 | %OutputCheck %s --check-prefix=SOLVE
+; RUN: %solver --exit-after-CNF %s 2>&1 | %OutputCheck %s --check-prefix=SOLVE
+; RUN: %solver --disable-simplifications --size-reducing-only %s 2>&1 | %OutputCheck %s --check-prefix=SOLVE
+
+; --search-bias is documented as ignored by solvers without such a setting,
+; so it stays accepted next to any solver flag.
+; RUN: %solver --search-bias=unsat %s 2>&1 | %OutputCheck %s --check-prefix=SOLVE
+
 ; --- the diagnostics above go to stderr, not stdout ----------------------
 ;
 ; A caller that pipes stdout to a result parser should see nothing on a usage
