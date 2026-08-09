@@ -204,13 +204,6 @@ void ExtraMain::create_options()
            "level",
            simp_group);
 
-  int64_arg("--bit-blast-simplification", bm->UserFlags.bitblast_simplification,
-            "Part-way through simplifying, convert to AIGs and look for bits "
-            "that the AIGs figure out are true/false or the same as another "
-            "node. If the difficulty is less than this number. -1 means "
-            "always.",
-            simp_group);
-
   int64_arg("--size-reducing-fixed-point-limit",
             bm->UserFlags.size_reducing_fixed_point,
             "If the number of non-leaf nodes is fewer than this number, run "
@@ -534,7 +527,7 @@ void ExtraMain::create_options()
                 "--flattening", "--rewriting", "--split-extracts",
                 "--ite-context-simplifications", "--use-intervals",
                 "--pure-literals", "--common-subsum", "--pair-extract",
-                "--merge-same", "--bit-blast-simplification"});
+                "--merge-same"});
 
   // Likewise for what disableSizeIncreasingSimplifications() forces.
   excludes_all("--size-reducing-only",
