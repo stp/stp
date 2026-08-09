@@ -26,6 +26,11 @@ THE SOFTWARE.
 
 #include <CLI/CLI.hpp>
 
+#include <cstddef>
+#include <initializer_list>
+#include <string>
+#include <vector>
+
 using namespace stp;
 using std::cout;
 using std::cerr;
@@ -71,6 +76,9 @@ public:
 #endif
 #ifdef USE_CADICAL
   bool use_cadical = false;
+#endif
+#ifdef USE_RISS
+  bool use_riss = false;
 #endif
 
   // Held as text until parse_options() turns it into UserFlags.search_bias.
@@ -247,7 +255,11 @@ void ExtraMain::create_options()
 #endif
 
 #ifdef USE_RISS
-  app.add_flag("--riss", "use Riss as the solver")->group(solver_group);
+  // Bound to a variable like the rest: without one the flag parsed and then
+  // selected nothing, so asking for Riss was silently ignored whenever
+  // another solver was compiled in to supply the default.
+  app.add_flag("--riss", use_riss, "use Riss as the solver")
+      ->group(solver_group);
 #endif
 
 #ifdef USE_MINISAT
@@ -321,9 +333,9 @@ void ExtraMain::create_options()
   bool_arg("--bb.simplify-during-bb", bm->UserFlags.simplify_during_BB_flag,
            "When bit-blasting discovers that a non-constant child of a term "
            "blasts to an all-constant vector, rebuild the term with that "
-           "constant and re-run the word-level term simplifier on it. Has no "
-           "effect unless the rewriting simplifier is also on, i.e. not with "
-           "--disable-opt-inc or --disable-simplifications",
+           "constant and re-run the word-level term simplifier on it. Needs "
+           "the rewriting simplifier, so not with --disable-opt-inc or "
+           "--disable-simplifications",
            bb_group);
 
   const char* const print_group = "Printing options";
@@ -425,6 +437,108 @@ void ExtraMain::create_options()
   app.add_flag("--check-sanity,-d", bm->UserFlags.check_counterexample_flag,
                "construct counterexample and check it")
       ->group(misc_group);
+
+  // ---------------------------------------------------------------------
+  // Combinations where one option discards another's effect
+  // ---------------------------------------------------------------------
+  // Each pair below is one STP cannot honour both halves of: whichever the
+  // code happens to apply last wins, and the other request never reaches the
+  // solver. Reporting that is more useful than obeying half a command line,
+  // most of all for the generated ones that option sweeps and build scripts
+  // produce, where a silently dropped flag reads as a measurement.
+  //
+  // The options are looked up by name so that the definitions above stay as
+  // they were; get_option() throws if a name here stops matching one, so
+  // renaming an option cannot quietly drop its relationships.
+  //
+  // CLI11 tests whether an option was given, not what it was set to, so
+  // '--disable-simplifications --flattening false' is refused as well, even
+  // though the two agree. That is the same mistake in a milder form -- the
+  // second option still had no bearing on the run -- and treating it the same
+  // way keeps the rule to one sentence.
+  //
+  // Deliberately not here: the CVC/SMT-LIB1/SMT-LIB2 parser flags, which
+  // parse_options() already rejects with a message of their own, and
+  // --search-bias, documented as ignored by solvers that have no such setting
+  // rather than as an error.
+  auto excludes_all = [this](const char* name,
+                             std::initializer_list<const char*> others) {
+    for (const char* other : others)
+    {
+      app.get_option(name)->excludes(app.get_option(other));
+    }
+  };
+
+  // The solver flags are not applied in the order given: parse_options()
+  // consults them in a fixed sequence, so 'stp --cadical --minisat' quietly
+  // ran CaDiCaL. Only one of them can be meant. Which ones exist depends on
+  // what was compiled in.
+  std::vector<const char*> solver_flags;
+#ifdef USE_CADICAL
+  solver_flags.push_back("--cadical");
+#endif
+#ifdef USE_CRYPTOMINISAT
+  solver_flags.push_back("--cryptominisat");
+#endif
+#ifdef USE_RISS
+  solver_flags.push_back("--riss");
+#endif
+#ifdef USE_MINISAT
+  solver_flags.push_back("--simplifying-minisat");
+  solver_flags.push_back("--minisat");
+#endif
+
+  for (size_t i = 0; i < solver_flags.size(); i++)
+  {
+    for (size_t j = i + 1; j < solver_flags.size(); j++)
+    {
+      app.get_option(solver_flags[i])->excludes(app.get_option(solver_flags[j]));
+    }
+  }
+
+#ifdef USE_CRYPTOMINISAT
+  // A thread count is read only by CryptoMiniSat, so asking for one while
+  // selecting a different solver gets neither threads nor a warning.
+  //
+  // --cadical-factor is deliberately not treated the same way: it is a
+  // request CaDiCaL may decline with a warning rather than a setting that
+  // must apply, and tests/query-files/CMakeLists.txt sweeps the whole corpus
+  // with it appended to every invocation, so an exclusion would fail every
+  // test in that run that names a solver.
+  for (const char* flag : solver_flags)
+  {
+    if (std::string(flag) != "--cryptominisat")
+    {
+      app.get_option("--threads")->excludes(app.get_option(flag));
+    }
+  }
+#endif
+
+  // disableSimplifications() clears each of these after the command line has
+  // been read, so a request for one alongside it never takes effect.
+  excludes_all("--disable-simplifications",
+               {"--switch-word", "--disable-opt-inc", "--disable-cbitp",
+                "--disable-equality", "--unconstrained-variable-elimination",
+                "--flattening", "--rewriting", "--split-extracts",
+                "--ite-context-simplifications", "--use-intervals",
+                "--pure-literals", "--common-subsum", "--pair-extract",
+                "--merge-same", "--bit-blast-simplification"});
+
+  // Likewise for what disableSizeIncreasingSimplifications() forces.
+  excludes_all("--size-reducing-only",
+               {"--simplify-to-constants-only",
+                "--ite-context-simplifications", "--difficulty-reversion"});
+
+  // The rewriting simplifier has to be on for this to do anything.
+  excludes_all("--bb.simplify-during-bb",
+               {"--disable-opt-inc", "--disable-simplifications"});
+
+  // --parse-only stops before the SAT solver is reached, so there is never a
+  // CNF for these two to write out or exit after.
+  excludes_all("--parse-only", {"--output-CNF", "--exit-after-CNF"});
+
+  // interactive_read is consulted only on the SMT-LIB2 path.
+  excludes_all("--interactive", {"--CVC", "--SMTLIB1"});
 }
 
 int ExtraMain::parse_options(int argc, char** argv)
@@ -543,6 +657,13 @@ int ExtraMain::parse_options(int argc, char** argv)
   if (use_cadical)
   {
     bm->UserFlags.solver_to_use = UserDefinedFlags::CADICAL_SOLVER;
+  }
+#endif
+
+#ifdef USE_RISS
+  if (use_riss)
+  {
+    bm->UserFlags.solver_to_use = UserDefinedFlags::RISS_SOLVER;
   }
 #endif
 
