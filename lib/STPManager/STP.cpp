@@ -51,7 +51,6 @@ namespace stp
 {
 
 const static string cb_message = "After Constant Bit Propagation. ";
-const static string bb_message = "After Bitblast simplification. ";
 const static string uc_message = "After Removing Unconstrained. ";
 const static string int_message = "After Unsigned Interval Analysis. ";
 const static string pl_message = "After Pure Literals. ";
@@ -495,9 +494,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   //
   // This remains after all of the size-reducing passes above. In particular,
   // RemoveUnconstrained must see a float symbol rather than its exposed bits.
-  // The old location was just below the difficulty snapshot, but that let the
-  // optional bit-blast simplification here receive FP_EQ and other floating-
-  // point nodes when --bit-blast-simplification enabled it.
   //
   // See FloatBlast for why this is a pass of its own: doing it inside
   // simplification meant building floating-point nodes over bitvector
@@ -509,65 +505,17 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     inputToSat = fpEncodingContext->lowerPrepared(inputToSat);
     bm->ASTNodeStats("After floating-point lowering: ", inputToSat);
 
-    // The threshold controls the cost of bit-blasting the formula in its
-    // lowered form, so compare it with that form's difficulty rather than the
-    // much smaller word-level FP syntax. The always setting (-1) is unchanged.
+    // Everything downstream works on the lowered form, so the snapshot that
+    // difficulty reversion later compares against has to describe that form
+    // rather than the much smaller word-level FP syntax. Retaken here because
+    // the recompute below is skipped for array problems.
     initial_difficulty_score = difficulty.score(inputToSat, bm);
   }
-
-  int64_t bitblasted_difficulty = -1;
-  // Expensive, so only want to do it once.
-  // The AIG-equivalence/constant substitutions found here are not
-  // recorded in the solver map, so they could silently strip a symbol
-  // the array-equality procedure depends on (an abstraction variable,
-  // witness name, or lemma-leaf name) out of the formula. They are an
-  // optimization; skip them when array equality is active.
-  if (!extActive &&
-      (bm->UserFlags.bitblast_simplification == -1 || initial_difficulty_score < bm->UserFlags.bitblast_simplification))
-  {
-    BBNodeManagerAIG bitblast_nodemgr;
-    BitBlaster bb(&bitblast_nodemgr, simp, bm->defaultNodeFactory,
-                  &(bm->UserFlags));
-    ASTNodeMap fromTo;
-    ASTNodeMap equivs;
-    bb.getConsts(inputToSat, fromTo, equivs);
-
-    if (equivs.size() > 0)
-    {
-      /* These nodes have equivalent AIG representations, so even though they
-       * have different
-       * word level expressions they are identical semantically. So we pick one
-       * of the ASTnodes
-       * and replace the others with it.
-       * TODO: I replace with the lower id node, sometimes though we replace
-       * with much more
-       * difficult looking ASTNodes.
-      */
-      ASTNodeMap cache;
-      inputToSat = SubstitutionMap::replace(
-          inputToSat, equivs, cache, bm->defaultNodeFactory, false, true);
-      bm->ASTNodeStats(bb_message.c_str(), inputToSat);
-    }
-
-    if (fromTo.size() > 0)
-    {
-      ASTNodeMap cache;
-      inputToSat = SubstitutionMap::replace(inputToSat, fromTo, cache,
-                                            bm->defaultNodeFactory);
-      bm->ASTNodeStats(bb_message.c_str(), inputToSat);
-    }
-    
-    bitblasted_difficulty = bitblast_nodemgr.totalNumberOfNodes();
-  }
-
 
   if (!arrayops || bm->UserFlags.array_difficulty_reversion)
   {
     initial_difficulty_score = difficulty.score(inputToSat, bm);
   }
-
-  if (bitblasted_difficulty != -1 && bm->UserFlags.stats_flag)
-    cout << "Initial Bitblasted size:" << bitblasted_difficulty << endl;
 
   if (bm->UserFlags.stats_flag)
     cout << "Difficulty After Size reducing:" << initial_difficulty_score
@@ -730,25 +678,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   bool worse = false;
   if (final_difficulty_score > .8 * initial_difficulty_score)
     worse = true;
-
-  // It's of course very wasteful to do this! Later I'll make it reuse the
-  // work..We bit-blast again, in order to throw it away, so that we can
-  // measure whether the number of AIG nodes is smaller. The difficulty score
-  // is sometimes completelywrong, the sage-app7 are the motivating examples.
-  // The other way to improve it would be to fix the difficulty scorer!
-  if (!worse && (bitblasted_difficulty != -1))
-  {
-    BBNodeManagerAIG bitblast_nodemgr;
-    BitBlaster bb(&bitblast_nodemgr, simp, bm->defaultNodeFactory,
-                  &(bm->UserFlags));
-    bb.BBForm(inputToSat);
-    int newBB = bitblast_nodemgr.totalNumberOfNodes();
-    if (bm->UserFlags.stats_flag)
-      cerr << "Final BB Size:" << newBB << endl;
-
-    if (bitblasted_difficulty < newBB)
-      worse = true;
-  }
 
   if (bm->UserFlags.stats_flag)
   {
