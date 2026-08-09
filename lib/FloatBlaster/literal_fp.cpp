@@ -25,7 +25,6 @@ THE SOFTWARE.
 
 #ifdef STP_ENABLE_FLOATING_POINT
 
-#include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/STPManager/STPManager.h"
 
@@ -566,10 +565,13 @@ ASTNode packedResult(STPMgr* bm, const floatingPointTypeInfo& fmt,
                            fmt.packedWidth());
 }
 
+// Whether the node carries a floating-point format at all. Every format the
+// parser admits can be evaluated -- the widths symfpu once miscalculated are
+// fixed in patches/symfpu/ rather than refused here -- so the format itself
+// needs no further check.
 bool formatOk(const ASTNode& c)
 {
-  return c.GetExpWidth() != 0 &&
-         FloatBlaster::formatSupported(c.GetExpWidth(), c.GetSigWidth());
+  return c.GetExpWidth() != 0;
 }
 
 } // namespace
@@ -735,8 +737,6 @@ ASTNode tryEvaluateFpConstant(STPMgr* bm, const ASTNode& n)
     {
       const unsigned eb = n[0].GetUnsignedConst();
       const unsigned sb = n[1].GetUnsignedConst();
-      if (!FloatBlaster::formatSupported(eb, sb))
-        return ASTNode();
       const floatingPointTypeInfo target(eb, sb);
       if (n.Degree() == 3)
       {
@@ -761,8 +761,6 @@ ASTNode tryEvaluateFpConstant(STPMgr* bm, const ASTNode& n)
     {
       const unsigned eb = n[0].GetUnsignedConst();
       const unsigned sb = n[1].GetUnsignedConst();
-      if (!FloatBlaster::formatSupported(eb, sb))
-        return ASTNode();
       const floatingPointTypeInfo target(eb, sb);
       const roundingMode rm = rmOf(n[2]);
       const traits::ubv bits = packedOf(n[3]);

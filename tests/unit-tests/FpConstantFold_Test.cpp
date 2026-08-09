@@ -422,11 +422,10 @@ TEST(FpConstantFold, one_third_matches_known_values_under_every_mode)
 // then the same call hands back the whole symfpu circuit -- a deeply shared
 // DAG, which an evaluator that walks paths rather than nodes cannot finish.
 //
-// The format is deliberately tiny. Float(3,4) is about the smallest symfpu
-// will build (formatSupported refuses sb <= 3), and its fp.add circuit is a
-// few hundred nodes -- linear if each is visited once, and hopeless
-// otherwise. Nothing here checks the *value*; the tests above do that, and
-// against the hardware. This one checks only that it arrives.
+// The format is deliberately tiny. Float(3,4)'s fp.add circuit is a few
+// hundred nodes -- linear if each is visited once, and hopeless otherwise.
+// Nothing here checks the *value*; the tests above do that, and against the
+// hardware. This one checks only that it arrives.
 TEST(FpConstantFold, folds_under_a_non_simplifying_factory)
 {
   STPMgr mgr; // hashingNodeFactory, as the constructor leaves it
@@ -529,8 +528,8 @@ TEST(FpConstantFold, partial_operations_do_not_fold_at_creation)
 // The anti-drift gate for the literal backend. Both paths instantiate the
 // same symfpu core, but each has its own Kind-to-operation driver; this
 // pins them together mechanically -- every covered kind, exhaustively at
-// the smallest supported format -- and is also what keeps the circuit fold
-// path exercised now that the evaluator prefers the literal one.
+// the narrowest formats -- and is also what keeps the circuit fold path
+// exercised now that the evaluator prefers the literal one.
 #include "stp/FloatBlaster/FloatBlast.h"
 #include "stp/FloatBlaster/literal_fp.h"
 
@@ -571,12 +570,9 @@ struct Differential : Fixture
   }
 };
 
-} // namespace
-
-TEST(FpConstantFold, literal_backend_agrees_with_the_circuit_exhaustively)
+void runDifferential(Differential& d, const unsigned eb, const unsigned sb)
 {
-  Differential d;
-  const unsigned eb = 3, sb = 4, w = eb + sb, N = 1u << w;
+  const unsigned w = eb + sb, N = 1u << w;
   std::vector<ASTNode> c;
   for (unsigned i = 0; i < N; i++)
     c.push_back(d.fpConst(eb, sb, i));
@@ -657,6 +653,37 @@ TEST(FpConstantFold, literal_backend_agrees_with_the_circuit_exhaustively)
               true);
     }
   }
+}
 
+} // namespace
+
+TEST(FpConstantFold, literal_backend_agrees_with_the_circuit_exhaustively)
+{
+  Differential d;
+  runDifferential(d, 3, 4);
   EXPECT_GT(d.checked, 90000u);
+}
+
+// The same gate at the formats that used to be refused outright.
+// FloatBlaster::formatSupported turned away everything with sb <= 3, because
+// symfpu's own unpack aborted on INVARIANT(unpackedExWidth > exWidth) there;
+// patches/symfpu/0002 gives those formats the headroom bit instead, so they
+// are now ordinary formats and both fold paths have to handle them. SMT-LIB
+// admits every format from (2,2) up, so these are the narrowest inputs a
+// solver can be handed.
+//
+// (2,4) is here for a second reason. It is not a short significand, so the
+// refusal never covered it on purpose, but it is where the unpacked exponent
+// ends up narrower than the significand -- eb 2 with sb a power of two -- and
+// unpackedFloat::valid then built its own bound at the exponent's width and
+// wrapped it negative. Only the literal backend evaluates that INVARIANT (the
+// symbolic one cannot), so the assertion builds are what see it; it is fixed
+// in patches/symfpu/0004.
+TEST(FpConstantFold, literal_backend_agrees_at_the_narrowest_formats)
+{
+  Differential d;
+  runDifferential(d, 3, 3);
+  runDifferential(d, 2, 2);
+  runDifferential(d, 2, 4);
+  EXPECT_GT(d.checked, 56000u);
 }
