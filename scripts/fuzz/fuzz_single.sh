@@ -354,7 +354,6 @@ declare -a g_simplify=(
 "--ite-context-simplifications=1"
 "--merge-same=1"
 "--simplify-to-constants-only=1"
-"--bit-blast-simplification=-1"
 "--size-reducing-fixed-point-limit=-1"
 "--aig-core-simplification=1"
 
