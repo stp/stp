@@ -45,8 +45,11 @@ TEST(fp_printing, smtlib2_states_the_source_sorts)
   VC vc = vc_createValidityChecker();
 
   Expr x = vc_varExpr(vc, "x", vc_fpType(vc, 8, 24));
+  Expr y = vc_varExpr(vc, "y", vc_fpType(vc, 8, 24));
   Expr r = vc_varExpr(vc, "r", vc_fpRoundingModeType(vc));
-  Expr f = vc_fpIsNaNExpr(vc, vc_fpAddExpr(vc, r, x, x));
+  // Two DISTINCT floats: fp.isNaN(x + x) simplifies to fp.isNaN(x) at
+  // construction, which would drop the fp.add (and r) this test is about.
+  Expr f = vc_fpIsNaNExpr(vc, vc_fpAddExpr(vc, r, x, y));
 
   const std::string out = smtlib2(vc, f);
 

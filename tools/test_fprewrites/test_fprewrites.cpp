@@ -516,9 +516,17 @@ static void run(Ctx& c)
       report(std::string(nm[i]) + "(abs/neg x) = " + nm[i] + "(x)",
              fires && sound);
     }
-    // isPositive/isNegative DO depend on the sign: must not be rewritten.
-    c.checkUnchanged("isPositive keeps abs", FP_ISPOSITIVE, {absx});
-    c.checkUnchanged("isNegative keeps neg", FP_ISNEGATIVE, {negx});
+    // isPositive/isNegative DO depend on the sign, so the peel above must
+    // not apply -- instead each resolves against what abs/neg do to it:
+    // an abs is never negative and positive iff not NaN; a neg swaps them.
+    c.checkNodeIs("isPositive(abs x) -> not isNaN", FP_ISPOSITIVE, {absx},
+                  c.hf->CreateNode(NOT, {c.hf->CreateNode(FP_ISNAN, {x})}));
+    c.checkNodeIs("isNegative(abs x) -> false", FP_ISNEGATIVE, {absx},
+                  c.mgr.ASTFalse);
+    c.checkNodeIs("isNegative(neg x) -> isPositive x", FP_ISNEGATIVE, {negx},
+                  c.hf->CreateNode(FP_ISPOSITIVE, {x}));
+    c.checkNodeIs("isPositive(neg x) -> isNegative x", FP_ISPOSITIVE, {negx},
+                  c.hf->CreateNode(FP_ISNEGATIVE, {x}));
   }
 
   // Folding a *constant* classification used to stamp a float format on the
@@ -928,6 +936,127 @@ static void run(Ctx& c)
                     nan);
       c.checkTermIs("fma(rm, +0, -0, z) = -0 + z", FP_FMA, w, {r, pz, nz, z},
                     c.nf->CreateTerm(FP_ADD, w, {r, nz, z}));
+    }
+  }
+
+  // ---- Depth-2 rules (found by fp_rewrite_gen's nested search). ----
+  // Facts about the never-below-zero terms (abs, sqrt, a self-product),
+  // classification predicates looking through value-preserving shapes, `=`
+  // against NaN with a compound side, and roundToIntegral idempotence.
+
+  {
+    ASTNode x = c.fp(EB, SB);
+    const unsigned w = x.GetValueWidth();
+    ASTNode nan = c.fpConst(EB, SB, packNaN(EB, SB));
+    ASTNode pz = c.fpConst(EB, SB, packZero(EB, SB, false));
+    ASTNode nz = c.fpConst(EB, SB, packZero(EB, SB, true));
+    ASTNode negOne = c.fpConst(EB, SB, packOne(EB, SB, true));
+    ASTNode ninf = c.fpConst(EB, SB, packInf(EB, SB, true));
+    const ASTNode notNanX =
+        c.hf->CreateNode(NOT, {c.hf->CreateNode(FP_ISNAN, {x})});
+
+    // The inner terms, built unsimplified. Both a "round" and a "directed"
+    // mode for the ones that round.
+    auto mk = [&](Kind k, const ASTVec& ch) {
+      ASTNode n = c.hf->CreateTerm(k, w, ch);
+      n.SetExpWidth(EB);
+      n.SetSigWidth(SB);
+      return n;
+    };
+    for (unsigned mode : {(unsigned)ROUND_NEAREST_TIES_TO_EVEN,
+                          (unsigned)ROUND_TOWARD_NEGATIVE})
+    {
+      ASTNode r = c.rm(mode);
+      ASTNode absx = c.unary(c.hf, FP_ABS, x);
+      ASTNode sq = mk(FP_MUL, {r, x, x});
+      ASTNode sqrtx = mk(FP_SQRT, {r, x});
+      ASTNode dbl = mk(FP_ADD, {r, x, x});
+      ASTNode rti = mk(FP_ROUNDTOINTEGRAL, {r, x});
+
+      // Range facts: never-below-zero terms against sign-decided constants.
+      c.checkNodeIs("gt(-1, |x|) -> false", FP_GT, {negOne, absx},
+                    c.mgr.ASTFalse);
+      c.checkNodeIs("gt(+0, sqrt x) -> false", FP_GT, {pz, sqrtx},
+                    c.mgr.ASTFalse);
+      c.checkNodeIs("gt(-0, x*x) -> false", FP_GT, {nz, sq}, c.mgr.ASTFalse);
+      c.checkNodeIs("gt(|x|, -1) -> not isNaN x", FP_GT, {absx, negOne},
+                    notNanX);
+      c.checkNodeIs("gt(x*x, -oo) -> not isNaN x", FP_GT, {sq, ninf},
+                    notNanX);
+      c.checkNodeIs(
+          "gt(sqrt x, -1) -> not isNaN(sqrt x)", FP_GT, {sqrtx, negOne},
+          c.hf->CreateNode(NOT, {c.hf->CreateNode(FP_ISNAN, {sqrtx})}));
+      c.checkNodeIs("geq(|x|, -0) -> not isNaN x", FP_GEQ, {absx, nz},
+                    notNanX);
+      c.checkNodeIs("geq(-1, x*x) -> false", FP_GEQ, {negOne, sq},
+                    c.mgr.ASTFalse);
+      c.checkNodeIs("geq(+0, |x|) -> isZero x", FP_GEQ, {pz, absx},
+                    c.hf->CreateNode(FP_ISZERO, {x}));
+      // isZero(x*x) does NOT reduce to isZero(x) -- a tiny square
+      // underflows to +0 -- so the squeeze must stop at isZero(x*x).
+      c.checkNodeIs("geq(-0, x*x) -> isZero(x*x)", FP_GEQ, {nz, sq},
+                    c.hf->CreateNode(FP_ISZERO, {sq}));
+      // The lt/leq spellings arrive through the mirror.
+      c.checkNodeIs("lt(|x|, -1) -> false", FP_LT, {absx, negOne},
+                    c.mgr.ASTFalse);
+      c.checkNodeIs("leq(sqrt x, -0) -> isZero x", FP_LEQ, {sqrtx, nz},
+                    c.hf->CreateNode(FP_ISZERO, {x}));
+
+      // t against |t|, no constant involved.
+      c.checkNodeIs("gt(x, |x|) -> false", FP_GT, {x, absx}, c.mgr.ASTFalse);
+      c.checkNodeIs("lt(|x|, x) -> false", FP_LT, {absx, x}, c.mgr.ASTFalse);
+      c.checkNodeIs("geq(|x|, x) -> not isNaN x", FP_GEQ, {absx, x},
+                    notNanX);
+      c.checkNodeIs("leq(x, |x|) -> not isNaN x", FP_LEQ, {x, absx},
+                    notNanX);
+
+      // Classification predicates looking through value-preserving shapes.
+      const ASTNode isNanX = c.hf->CreateNode(FP_ISNAN, {x});
+      c.checkNodeIs("isNaN(rti x) -> isNaN x", FP_ISNAN, {rti}, isNanX);
+      c.checkNodeIs("isNaN(x+x) -> isNaN x", FP_ISNAN, {dbl}, isNanX);
+      c.checkNodeIs("isNaN(x*x) -> isNaN x", FP_ISNAN, {sq}, isNanX);
+      c.checkNodeIs("isZero(sqrt x) -> isZero x", FP_ISZERO, {sqrtx},
+                    c.hf->CreateNode(FP_ISZERO, {x}));
+      c.checkNodeIs("isZero(x+x) -> isZero x", FP_ISZERO, {dbl},
+                    c.hf->CreateNode(FP_ISZERO, {x}));
+      c.checkNodeIs("isInfinite(rti x) -> isInfinite x", FP_ISINFINITE,
+                    {rti}, c.hf->CreateNode(FP_ISINFINITE, {x}));
+      c.checkNodeIs("isSubnormal(rti x) -> false", FP_ISSUBNORMAL, {rti},
+                    c.mgr.ASTFalse);
+      c.checkNodeIs("isNegative(x*x) -> false", FP_ISNEGATIVE, {sq},
+                    c.mgr.ASTFalse);
+      c.checkNodeIs("isPositive(x*x) -> not isNaN x", FP_ISPOSITIVE, {sq},
+                    notNanX);
+      c.checkNodeIs("isNegative(rti x) -> isNegative x", FP_ISNEGATIVE,
+                    {rti}, c.hf->CreateNode(FP_ISNEGATIVE, {x}));
+      c.checkNodeIs("isPositive(sqrt x) -> isPositive x", FP_ISPOSITIVE,
+                    {sqrtx}, c.hf->CreateNode(FP_ISPOSITIVE, {x}));
+      c.checkNodeIs("isNegative(x+x) -> isNegative x", FP_ISNEGATIVE, {dbl},
+                    c.hf->CreateNode(FP_ISNEGATIVE, {x}));
+      c.checkNodeIs("isPositive(x+x) -> isPositive x", FP_ISPOSITIVE, {dbl},
+                    c.hf->CreateNode(FP_ISPOSITIVE, {x}));
+
+      // `=` against NaN with a compound side is the NaN test (the bare-x
+      // spelling keeps its `=`, checked above); the created isNaN then
+      // simplifies through the same rules.
+      c.checkNodeIs("(= |x| NaN) -> isNaN x", FP_SMT_EQ, {absx, nan},
+                    isNanX);
+      c.checkNodeIs("(= NaN x*x) -> isNaN x", FP_SMT_EQ, {nan, sq}, isNanX);
+
+      // abs of a self-product is a no-op.
+      c.checkTermIs("abs(x*x) = x*x", FP_ABS, w, {sq}, sq);
+    }
+
+    // roundToIntegral idempotence must hold across DIFFERENT modes: the
+    // inner result is integral (or a zero, infinity or NaN), and rounding
+    // such a value is exact under every mode. The generator only verified
+    // the shared-mode instances, so cross-mode is the case to pin here.
+    {
+      ASTNode inner = mk(FP_ROUNDTOINTEGRAL,
+                         {c.rm(ROUND_TOWARD_NEGATIVE), x});
+      c.checkTermIs("rti(RTP, rti(RTN, x)) = rti(RTN, x)",
+                    FP_ROUNDTOINTEGRAL, w,
+                    {c.rm(ROUND_TOWARD_POSITIVE), inner}, inner);
     }
   }
 }
