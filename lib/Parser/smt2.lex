@@ -3,7 +3,6 @@
 %option noyywrap
 %option noreject
 %option noyymore
-%option yylineno
 %option full
 
 /* %option debug */
@@ -43,8 +42,25 @@
 #include "parsesmt2.tab.h"
 
   extern char *smt2text;
+  extern int smt2leng;
   extern int smt2error (const char *msg);
   bool stringOnly = false;
+
+  // Line counting for syntax-error messages, maintained by hand (in the
+  // flex-provided smt2lineno) in the few rules whose matches can contain a
+  // newline. '%option yylineno' made flex check a can-this-rule-match-eol
+  // table on every token instead, which cost a load and a branch per match
+  // across the whole input.
+  static void countNewlines(const char* s, size_t len)
+  {
+    const char* p = s;
+    const char* const end = s + len;
+    while ((p = (const char*)memchr(p, '\n', end - p)) != NULL)
+    {
+      smt2lineno++;
+      p++;
+    }
+  }
 
   // Whether the floating-point keywords are live. Off until the parser sees
   // an FP set-logic: SMT-LIB reserves theory names per-logic, and QF_BV
@@ -92,27 +108,24 @@ namespace stp
 
   static int lookup(char* s)
   {
-    char * cleaned = NULL;
-
     // The SMTLIB2 specifications sez that the outter bars aren't part of the
     // name. This means that we can create an empty string symbol name.
+    // Strip them in place: s is always yytext (writable, and dead once the
+    // action returns), so overwriting the closing bar saves a malloc+copy
+    // per occurrence.
     if (s[0] == '|') {
-      size_t len = strlen(s);
+      const size_t len = smt2leng;
       assert(len >= 2);
       if (s[len-1] == '|')
       {
-        cleaned = (char*) malloc(len);
-        strncpy(cleaned,s+1,len-2); // chop off first and last characters.
-        cleaned[len-2] = '\0';
-        s = cleaned;
+        s[len-1] = '\0'; // chop off first and last characters.
+        s++;
       }
     }
 
     if (stringOnly)
     {
       smt2lval.str = new std::string(s);
-      if (cleaned)
-        free (cleaned);
       return STRING_TOK;
     }
 
@@ -126,52 +139,37 @@ namespace stp
     }
     // Checking the functions before the symbols saves a symbol-table
     // probe in files built almost entirely from define-funs. A name can't
-    // legally be both, so the order isn't observable on valid input. A
-    // single functionReturnType probe classifies the name, so a boolean-
-    // function reference costs one map lookup rather than two.
+    // legally be both, so the order isn't observable on valid input. One
+    // map probe resolves the name; the token carries the resolved function
+    // so the grammar never probes again, and the sort of the stored body
+    // (memoised on the node) classifies the token.
     else if (stp::GlobalParserInterface->hasFunctions())
     {
-      const stp::SourceSort source_sort =
-          stp::GlobalParserInterface->functionReturnSourceSort(s);
-      if (source_sort.kind() == stp::SourceSort::Kind::RoundingMode)
+      const stp::Cpp_interface::Function* fn =
+          stp::GlobalParserInterface->lookupFunction(s);
+      if (fn != NULL)
       {
-        smt2lval.str = new std::string(s);
-        if (cleaned)
-          free(cleaned);
-        return ROUNDINGMODE_FUNCTIONID_TOK;
-      }
-      const stp::types ft = stp::GlobalParserInterface->functionReturnType(s);
-      if (ft == stp::BITVECTOR_TYPE)
-      {
-        smt2lval.str = new std::string(s);
-        if (cleaned)
-          free (cleaned);
-        return  BITVECTOR_FUNCTIONID_TOK;
-      }
-      else if (ft == stp::BOOLEAN_TYPE)
-      {
-        smt2lval.str = new std::string(s);
-        if (cleaned)
-          free (cleaned);
-        return  BOOLEAN_FUNCTIONID_TOK;
-      }
-      else if (ft == stp::FLOATINGPOINT_TYPE)
-      {
-        smt2lval.str = new std::string(s);
-        if (cleaned)
-          free (cleaned);
-        return  FLOATINGPOINT_FUNCTIONID_TOK;
-      }
-      // A nullary define-fun whose body has array type is a pure name for
-      // that body, so it is accepted whether or not --array-equality is on
-      // (QF_ABVFP benchmarks use them with no whole-array equalities in
-      // sight). Uses of the name expand to the body in the grammar.
-      else if (ft == stp::ARRAY_TYPE)
-      {
-        smt2lval.str = new std::string(s);
-        if (cleaned)
-          free (cleaned);
-        return  ARRAY_FUNCTIONID_TOK;
+        smt2lval.fn = fn;
+        switch (fn->function.GetSourceSort().kind())
+        {
+          case stp::SourceSort::Kind::RoundingMode:
+            return ROUNDINGMODE_FUNCTIONID_TOK;
+          case stp::SourceSort::Kind::BitVector:
+            return BITVECTOR_FUNCTIONID_TOK;
+          case stp::SourceSort::Kind::Bool:
+            return BOOLEAN_FUNCTIONID_TOK;
+          case stp::SourceSort::Kind::FloatingPoint:
+            return FLOATINGPOINT_FUNCTIONID_TOK;
+          // A nullary define-fun whose body has array type is a pure name
+          // for that body, so it is accepted whether or not --array-equality
+          // is on (QF_ABVFP benchmarks use them with no whole-array
+          // equalities in sight). Uses of the name expand to the body in
+          // the grammar.
+          case stp::SourceSort::Kind::Array:
+            return ARRAY_FUNCTIONID_TOK;
+          case stp::SourceSort::Kind::Unknown:
+            smt2error("Function with underivable return sort.");
+        }
       }
       else if (stp::GlobalParserInterface->LookupSymbol(s,nptr)) // it's a symbol.
       {
@@ -185,9 +183,6 @@ namespace stp
 
     if (found)
     {
-       if (cleaned)
-         free (cleaned);
-
       // Check valuesize to see if it's a prop var.  I don't like doing
       // type determination in the lexer, but it's easier than rewriting
       // the whole grammar to eliminate the term/formula distinction.
@@ -201,8 +196,6 @@ namespace stp
     {
       // it has not been seen before.
       smt2lval.str = new std::string(s);
-      if (cleaned)
-        free (cleaned);
       return STRING_TOK;
     }
   }
@@ -230,7 +223,7 @@ OPCHAR  ([~!@$%^&*\_\-+=<>\.?/])
 ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 
 %%
-[ \n\t\r\f] { /* skip whitespace */ }
+[ \n\t\r\f] { if (*smt2text == '\n') smt2lineno++; /* skip whitespace */ }
 
  /* We limit numerals to maxint, in the specification they are arbitary precision.*/
 {DIGIT}+               { smt2lval.uintval = strtoul(smt2text, NULL, 10); return NUMERAL_TOK; }
@@ -240,7 +233,7 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 {DIGIT}+"."{DIGIT}+    { smt2lval.str = new std::string(smt2text); return DECIMAL_TOK;}
 
 ";" { BEGIN COMMENT; }
-<COMMENT>"\n" { BEGIN INITIAL; /* return to normal mode */}
+<COMMENT>"\n" { smt2lineno++; BEGIN INITIAL; /* return to normal mode */}
 <COMMENT>.    { /* stay in comment mode */ }
 
 <INITIAL>"\""   { BEGIN STRING_LITERAL;
@@ -252,7 +245,8 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
           smt2lval.str = new std::string(_string_lit);
           return STRING_TOK; }
 <STRING_LITERAL>.     { _string_lit.insert(_string_lit.end(),*smt2text); }
-<STRING_LITERAL>"\n"  { _string_lit.insert(_string_lit.end(),*smt2text); }
+<STRING_LITERAL>"\n"  { smt2lineno++;
+                        _string_lit.insert(_string_lit.end(),*smt2text); }
 
  /* Valid character are: ~ ! @ # $ % ^ & * _ - + = | \ : ; " < > . ? / ( )     */
 "("             { return LPAREN_TOK; }
@@ -319,8 +313,10 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
   * so that the parenthesis returned is the one that closes the command
   * itself. String literals and quoted symbols are matched as units, since
   * either may contain an unbalanced parenthesis. */
-<SKIP_SEXPR>"\""([^"]|"\"\"")*"\""  { skippedText += yytext; /* string literal */ }
-<SKIP_SEXPR>"|"[^|]*"|"             { skippedText += yytext; /* quoted symbol */ }
+<SKIP_SEXPR>"\""([^"]|"\"\"")*"\""  { countNewlines(yytext, yyleng);
+                                      skippedText += yytext; /* string literal */ }
+<SKIP_SEXPR>"|"[^|]*"|"             { countNewlines(yytext, yyleng);
+                                      skippedText += yytext; /* quoted symbol */ }
 <SKIP_SEXPR>";"[^\n]*               { /* comment: not captured */ }
 <SKIP_SEXPR>"("                     { skippedDepth++; skippedText += '('; }
 <SKIP_SEXPR>")"                     { if (skippedDepth == 0)
@@ -337,7 +333,8 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
                                           return RPAREN_TOK;
                                         }
                                       skippedDepth--; skippedText += ')'; }
-<SKIP_SEXPR>[^()|;\"]+              { skippedText += yytext; }
+<SKIP_SEXPR>[^()|;\"]+              { countNewlines(yytext, yyleng);
+                                      skippedText += yytext; }
 <SKIP_SEXPR>.                       { skippedText += yytext; }
 <SKIP_SEXPR><<EOF>>                 { BEGIN INITIAL; deferredDefineSort = false;
                                       return 0; }
@@ -488,7 +485,7 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 
 
 ({LETTER}|{OPCHAR})({ANYTHING})*  {return lookup(smt2text);}
-\|([^\|]|\n)*\| {return lookup(smt2text);}
+\|([^\|]|\n)*\| { countNewlines(smt2text, smt2leng); return lookup(smt2text); }
 
 . { smt2error("Illegal input character."); }
 %%
