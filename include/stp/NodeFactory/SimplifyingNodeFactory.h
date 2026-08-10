@@ -108,6 +108,11 @@ private:
   // sign bit, keeping the rest of the packed bits and the format.
   ASTNode foldFPSign(const ASTNode& fpConst, bool flip);
 
+  // The special constants of a format, for rules whose result is not one of
+  // the operands: interning canonicalises the NaN.
+  ASTNode makeFPNaN(unsigned eb, unsigned sb);
+  ASTNode makeFPZero(unsigned eb, unsigned sb, bool negative);
+
   ASTNode plusRules(const ASTVec& oldChildren);
 
 };
