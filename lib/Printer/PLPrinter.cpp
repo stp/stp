@@ -82,6 +82,7 @@ string functionToCVCName(const Kind k)
     case BVNOT:
       return "~";
     case EQ:
+    case ARRAY_EQ:
       return "=";
     case BVCONCAT:
       return "@";
@@ -298,6 +299,7 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize,
     case BVOR:
     case BVAND:
     case EQ:
+    case ARRAY_EQ:
     case IFF:
     case IMPLIES:
       assert(2 == c.size());
@@ -352,6 +354,18 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize,
 // 2. once is replaced with the corresponding let variable.
 ostream& PL_Print(ostream& os, const ASTNode& n, STPMgr* bm, int indentation)
 {
+  // The presentation language has no floating-point syntax, so there is
+  // nothing correct to emit. Without this the walk reached an FP kind it has
+  // no case for and died with "printing not implemented for this kind", from
+  // inside a printer, naming a kind number. Refuse where the caller can see
+  // why, and say what to use instead.
+  if (containsFloatingPointTheory(n, bm))
+  {
+    FatalError("PL_Print: the presentation language has no floating-point "
+               "syntax; print this with SMTLIB2_PrintBack (vc_printSMTLIB2 "
+               "from the C interface)");
+  }
+
   // Clear the PrintMap
   bm->PLPrintNodeSet.clear();
   bm->NodeLetVarMap.clear();

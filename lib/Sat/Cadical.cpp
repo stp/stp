@@ -29,7 +29,7 @@ using std::vector;
 
 namespace stp
 {
-unsigned long Cadical::nVars() const
+uint32_t Cadical::nVars() const
 {
   // Unlike other solvers Cadical doesn't need to be told about the variable in advance.
   return next_variable;
@@ -39,6 +39,14 @@ bool Cadical::simplify()
 {
   s->simplify();
   return false;
+}
+
+int Cadical::nClauses()
+{
+  // Active irredundant clauses: what remains of the input after CaDiCaL's
+  // preprocessing, which is the post-simplify() count nClauses() promises.
+  // Learnt clauses are counted separately (redundant()) and excluded.
+  return (int)s->irredundant();
 }
 
 void Cadical::setMaxConflicts(int64_t _max_confl)
@@ -70,6 +78,8 @@ bool Cadical::solveInternal(bool& timeout_expired)
     s->connect_terminator(&time_limit);
   }
 
+  declareNewVariables();
+
   auto ret = s->solve();
   if (ret == 0)
   {
@@ -98,6 +108,23 @@ void Cadical::printStats() const
 uint32_t Cadical::newVar()
 {
   return ++next_variable;
+}
+
+void Cadical::setFrozen(uint32_t var)
+{
+  // Deliberately not s->freeze(var). Refinement encodes clauses over
+  // these variables in later solve calls, which is safe here without
+  // freezing: Cadical restores an eliminated variable the moment a new
+  // clause mentions it, and extends every model over the eliminated
+  // variables, so both the added clauses and the values the refinement
+  // loop reads stay correct. Freezing instead would keep every
+  // refinement-visible variable out of inprocessing whether or not any
+  // lemma ever mentions it, which measures ~25% slower on the
+  // wchains array-equality benchmarks (three-run A/B on wchains016ue:
+  // 19.9-20.5s frozen against 15.9-16.0s restored). Solvers without
+  // restoration (the simplifying Minisat family) genuinely need their
+  // setFrozen; this one is a documented decision, not an omission.
+  (void)var;
 }
 
 bool Cadical::setSearchBias(SearchBias bias)
@@ -149,12 +176,56 @@ bool Cadical::okay()
   return s->state() != CaDiCaL::State::UNSATISFIED; 
 }
 
+// Enabling factor commits every later clause and model lookup to the
+// translation table (see the header): declared variables are the only ones
+// factor's contract allows, and CaDiCaL places each declared range itself.
+// Only ever called while the solver is still empty (CONFIGURING), which is
+// the one state "factor" may be set in.
+bool Cadical::enableBVA()
+{
+#ifdef STP_CADICAL_HAS_FACTOR
+  s->set("factor", 1);
+  factor_enabled = true;
+  return true;
+#else
+  // Building against a pre-3.0 CaDiCaL, where enabling factor was either
+  // impossible or untested; solving is unaffected.
+  return false;
+#endif
+}
+
+// With factor enabled, external variables must be declared before use, and
+// CaDiCaL chooses where each declared range lives so that it never overlaps
+// the extension variables factor invents. Declaration is batched here
+// (lazily, before clauses are added) rather than done in newVar because
+// declare_more_variables destroys a satisfying assignment, and newVar can
+// be called while the refinement loop is still reading the model.
+void Cadical::declareNewVariables()
+{
+#ifdef STP_CADICAL_HAS_FACTOR
+  if (!factor_enabled)
+    return;
+  if (ext_of_stp.empty())
+    ext_of_stp.push_back(0); // dummy: variables are 1-based
+  while (ext_of_stp.size() <= next_variable)
+  {
+    const size_t gap = next_variable + 1 - ext_of_stp.size();
+    const int newmax = s->declare_more_variables((int)gap);
+    for (size_t i = gap; i >= 1; i--)
+      ext_of_stp.push_back(newmax - (int)i + 1);
+  }
+#endif
+}
+
 bool Cadical::addClause(const vec_literals& ps) // Add a clause to the solver.
 {
+  declareNewVariables();
   for (int i=0; i < ps.size(); i++)
     {
       uint32_t var = ps[i].x >> 1;
       uint32_t polarity = ps[i].x & 1;
+      if (factor_enabled)
+        var = (uint32_t)ext_of_stp[var];
       s->add(polarity? -(int)var : (int)var);
     }
   s->add(0);
@@ -163,7 +234,9 @@ bool Cadical::addClause(const vec_literals& ps) // Add a clause to the solver.
 
 uint8_t Cadical::modelValue(uint32_t x) const
 {
-  if (s->val(x) > 0)
+  if (factor_enabled)
+    x = (x < ext_of_stp.size()) ? (uint32_t)ext_of_stp[x] : 0;
+  if (x != 0 && s->val(x) > 0)
     return true_literal();
   else
     return false_literal();

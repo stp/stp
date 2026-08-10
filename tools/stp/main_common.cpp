@@ -28,8 +28,8 @@ THE SOFTWARE.
 #include "sat/cnf/cnf.h"
 
 #include "stp/Parser/parser.h"
-#include "stp/cpp_interface.h"
 #include "stp/ToSat/ToSATAIG.h"
+#include "stp/cpp_interface.h"
 #include <memory>
 
 extern void errorHandler(const char* error_msg);

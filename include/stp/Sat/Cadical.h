@@ -60,6 +60,18 @@ namespace stp
 
   int64_t max_confl = -1;
 
+  // Bounded variable addition (factor) invents extension variables in the
+  // external index space, so once it is enabled STP's dense 1..n numbering
+  // can no longer be used as CaDiCaL's directly: every variable has to be
+  // declared, CaDiCaL picks where each declared range lives, and clause
+  // literals and model lookups translate through this table. ext_of_stp[v]
+  // is the CaDiCaL external index declared for STP variable v (1-based;
+  // entry 0 unused). Empty and unused while factor is off, which keeps the
+  // untranslated fast path bit-for-bit identical to pre-factor builds.
+  std::vector<int> ext_of_stp;
+  bool factor_enabled = false;
+  void declareNewVariables();
+
 public:
   Cadical();
 
@@ -77,11 +89,19 @@ public:
 
   uint32_t newVar() override;
 
+  void setFrozen(uint32_t var) override;
+
   bool setSearchBias(SearchBias bias) override;
+
+  bool enableBVA() override;
 
   void setVerbosity(int v) override;
 
-  unsigned long nVars() const override;
+  uint32_t nVars() const override;
+
+  bool reportsClauseCount() const override { return true; }
+
+  int nClauses() override;
 
   void printStats() const override;
 

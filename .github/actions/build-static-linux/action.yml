@@ -54,7 +54,6 @@ runs:
         flex \
         gcc \
         git \
-        libboost-program-options-dev \
         libgmp-dev \
         ninja-build \
         zlib1g-dev
@@ -71,12 +70,12 @@ runs:
   # builds CryptoMiniSat into a static-linkable prefix, and the only one that
   # needs neither gtest nor OutputCheck.
   #
-  # Only deps/install: both setup scripts install self-contained CMake
-  # packages there -- archives and configs, with no path pointing back at
-  # deps/cms or deps/minisat -- so the source and build trees are worth
-  # nothing after the install and several hundred megabytes to carry. On a
-  # hit the step below is skipped and they are not wanted; on a miss they are
-  # cloned again. This is what every other job caches.
+  # Only deps/install: the setup script installs a self-contained CMake
+  # package there -- archives and configs, with no path pointing back at
+  # deps/cms -- so the source and build trees are worth nothing after the
+  # install and several hundred megabytes to carry. On a hit the step below
+  # is skipped and they are not wanted; on a miss they are cloned again.
+  # This is what every other job caches.
   #
   # Shared between the build types below, which differ only in how STP itself
   # is compiled: the dependencies are identical either way. Two jobs racing
@@ -89,15 +88,13 @@ runs:
       path: deps/install
       key: deps-x86_64-static-cms-${{ steps.deps-key.outputs.key }}
 
-  # Neither script needs an argument here: both already build a static (PIC)
-  # library, which is what a static STP links against and what gets folded
-  # into a shared libstp otherwise. setup-cms.sh additionally builds
-  # CryptoMiniSat in Release.
+  # The script needs no argument here: it already builds a static (PIC)
+  # CryptoMiniSat in Release, which is what a static STP links against and
+  # what gets folded into a shared libstp otherwise.
   - name: Dependencies
     if: steps.deps-cache.outputs.cache-hit != 'true'
     shell: bash
     run: |
-      ./scripts/deps/setup-minisat.sh
       ./scripts/deps/setup-cms.sh
 
   # Keyed by build type as well: the two differ in optimisation level and in
@@ -146,8 +143,6 @@ runs:
       fi
       cmake -DSTATICCOMPILE:BOOL=ON -Dcryptominisat5_DIR:PATH="$GITHUB_WORKSPACE/deps/install/lib/cmake/cryptominisat5" -DFORCE_CMS:BOOL=ON -DWERROR:BOOL="$WERROR" "${args[@]}" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
-  # ONLY_SIMPLE, or a runner without Boost, produces stp_simple rather than
-  # stp. Report whichever was built so the caller does not have to guess.
   - name: Build
     id: build
     shell: bash
@@ -158,8 +153,7 @@ runs:
       ccache --zero-stats
       cmake --build . --parallel "$(nproc)"
       ccache --show-stats
-      stp=$([ -x ./stp ] && echo stp || echo stp_simple)
-      echo "binary=build/$stp" >> "$GITHUB_OUTPUT"
+      echo "binary=build/stp" >> "$GITHUB_OUTPUT"
 
   # Linking is most of the point of this action, but a binary that links and
   # then dies on the first query would still pass, so solve something and

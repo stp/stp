@@ -100,6 +100,11 @@ class BitBlaster
                   BBNodeSet& support, const stp::ASTNode& xN,
                   const stp::ASTNode& yN, vector<list<BBNode>>& products,
                   const ASTNode& n);
+  void mult_Booth_radix4(const BBNodeVec& x, const BBNodeVec& y,
+                         vector<list<BBNode>>& products, const ASTNode& n);
+  bool mult_Booth_constant(const BBNodeVec& x, const BBNodeVec& y,
+                           BBNodeSet& support, vector<list<BBNode>>& products,
+                           const ASTNode& n);
   BBNodeVec mult_normal(const BBNodeVec& x, const BBNodeVec& y,
                              BBNodeSet& support, const ASTNode& n);
 
@@ -192,6 +197,71 @@ class BitBlaster
 
   // Return bit-blasted form for BVLE, BVGE, BVGT, SBLE, etc.
   BBNode BBcompare(const ASTNode& form, BBNodeSet& support);
+
+  // bit blast a floating-point ordering comparison (FP_GT, FP_LT, FP_GEQ,
+  // FP_LEQ) over packed operands
+  BBNode BBcompareFP(const ASTNode& form, BBNodeSet& support);
+
+  // bit blast a floating-point equality (FP_EQ, FP_SMT_EQ) over packed
+  // operands
+  BBNode BBeqFP(const ASTNode& form, BBNodeSet& support);
+
+  // bit blast a floating-point classification predicate (FP_ISNORMAL,
+  // FP_ISSUBNORMAL, FP_ISZERO, FP_ISINFINITE, FP_ISNAN, FP_ISNEGATIVE,
+  // FP_ISPOSITIVE) over a packed operand
+  BBNode BBclassifyFP(const ASTNode& form, BBNodeSet& support);
+
+  // Field tests on a packed IEEE-754 operand, shared by the comparison and
+  // equality encodings. `sb` is the significand width, `w` the total width.
+  BBNode BBfpIsNaN(const BBNodeVec& p, unsigned sb, unsigned w);
+  BBNode BBfpIsZero(const BBNodeVec& p, unsigned w);
+
+  // bit blast fp.mul / fp.add / float-to-float to_fp over packed operands:
+  // hand-written unpack/compute/round/pack circuits, no SymFPU
+  // (--bb.fp-native-arith)
+  BBNodeVec BBfpMul(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpAdd(const ASTNode& term, BBNodeSet& support);
+  BBNodeVec BBfpToFp(const ASTNode& term, BBNodeSet& support);
+
+  // A packed operand split for the native arithmetic circuits: fields,
+  // classification, and the significand with its hidden bit made explicit
+  // but NOT normalised (0 for subnormals) -- normalisation is deferred to
+  // the operation's result, so consuming a packed operand is only wiring.
+  struct FpOperand
+  {
+    BBNode sign, isZero, isInf, isNaN;
+    BBNodeVec msig; // sb bits, hidden bit at msig[sb-1]
+    BBNodeVec eUnb; // E bits, signed, unbiased (subnormals read exp as 1)
+  };
+  FpOperand BBfpUnpack(const BBNodeVec& p, unsigned sb, unsigned w,
+                       unsigned E, BBNodeSet& support);
+
+  // The shared tail of the native arithmetic circuits: denormalise into
+  // the subnormal range when the biased exponent be is <= 0, round rsig
+  // (with its guard and sticky) per the one-hot mode rm, saturate
+  // overflow per mode, and pack the finite result. NaN/infinity/zero
+  // specials are the caller's to mux over the top.
+  BBNodeVec BBfpRoundPack(const BBNodeVec& rm, const BBNode& sgn,
+                          const BBNodeVec& rsig, const BBNode& guard,
+                          const BBNode& sticky, const BBNodeVec& be,
+                          unsigned sb, unsigned eb, BBNodeSet& support);
+
+  // Width of the internal signed exponent for format (eb, sb): eb+2
+  // widened until the subnormal shift distance (up to bias + 2sb + 3,
+  // counting fp.add's alignment headroom) cannot overflow it.
+  static unsigned BBfpExpWidth(unsigned eb, unsigned sb);
+
+  // Helpers for the native floating-point arithmetic circuits.
+  // Count of leading zeros of v (from the MSB down) as an unsigned binary
+  // vector of `countWidth` bits; an all-zero v counts v.size().
+  BBNodeVec BBfpCLZ(const BBNodeVec& v, unsigned countWidth);
+  // Left shift v by the unsigned binary amount `amt` (zero fill).
+  BBNodeVec BBfpShiftLeft(const BBNodeVec& v, const BBNodeVec& amt);
+  // Right shift v by `amt`, ORing every shifted-out bit into `sticky`.
+  BBNodeVec BBfpShiftRightSticky(const BBNodeVec& v, const BBNodeVec& amt,
+                                 BBNode& sticky);
+  // v + inc (a single carry-in bit), one bit wider than v.
+  BBNodeVec BBfpIncrement(const BBNodeVec& v, const BBNode& inc);
 
   // Return bit-blasted form for the overflow predicates BVUADDO, BVSADDO,
   // BVUMULO, BVSMULO, BVUSUBO, BVSSUBO.

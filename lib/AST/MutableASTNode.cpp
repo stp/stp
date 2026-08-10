@@ -27,4 +27,5 @@ namespace stp
 {
 
 THREAD_LOCAL_IE vector<MutableASTNode*> MutableASTNode::all;
+THREAD_LOCAL_IE const std::set<ASTNode>* MutableASTNode::untouchable = NULL;
 }

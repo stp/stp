@@ -19,6 +19,7 @@
 ; CHECK-NEXT: ^unsupported
 (declare-sort S 0)
 (reset-assertions)
+(declare-fun x () (_ BitVec 4))
 (assert (= x #x1))
 ; CHECK-NEXT: ^sat
 (check-sat)

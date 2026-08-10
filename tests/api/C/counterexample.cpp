@@ -35,25 +35,25 @@ TEST(counterexample, one)
   Expr eq = vc_eqExpr(vc, A, c42);
 
   vc_assertFormula(vc, eq);
-  assert(0 == vc_query(vc, falseExpr));
+  ASSERT_EQ(0, vc_query(vc, falseExpr));
 
   Expr ce = vc_getCounterExample(vc, A);
-  assert(42 == getBVInt(ce));
+  ASSERT_EQ(42, getBVInt(ce));
 
   Expr Aplus42 = vc_bvPlusExpr(vc, 32, A, c42);
   ce = vc_getCounterExample(vc, Aplus42);
-  assert(84 == getBVInt(ce));
+  ASSERT_EQ(84, getBVInt(ce));
 
   ce = vc_getCounterExample(vc, falseExpr);
-  assert(0 == vc_isBool(ce));
+  ASSERT_EQ(0, vc_isBool(ce));
 
   Expr trueExpr = vc_notExpr(vc, falseExpr);
   ce = vc_getCounterExample(vc, trueExpr);
-  assert(1 == vc_isBool(ce));
+  ASSERT_EQ(1, vc_isBool(ce));
 
   Expr eq2 = vc_eqExpr(vc, Aplus42, vc_bvConstExprFromInt(vc, 32, 84));
   ce = vc_getCounterExample(vc, eq2);
-  assert(1 == vc_isBool(ce));
+  ASSERT_EQ(1, vc_isBool(ce));
 
   vc_Destroy(vc);
 }

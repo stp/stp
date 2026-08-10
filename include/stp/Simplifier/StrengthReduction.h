@@ -67,8 +67,8 @@ class StrengthReduction
 
 public:
 
-  using NodeToUnsignedIntervalMap = std::unordered_map<const ASTNode, UnsignedInterval*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
-  using NodeToFixedBitsMap = std::unordered_map<const ASTNode, FixedBits*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
+  // The domain-map types come from NodeDomainAnalysis.h (the owner of the
+  // data); duplicating them here previously shadowed those definitions.
 
   StrengthReduction(NodeFactory *nf, UserDefinedFlags *uf);
   

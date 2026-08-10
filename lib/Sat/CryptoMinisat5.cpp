@@ -179,7 +179,7 @@ void CryptoMiniSat5::setVerbosity(int v)
   s->set_verbosity(v);
 }
 
-unsigned long CryptoMiniSat5::nVars() const
+uint32_t CryptoMiniSat5::nVars() const
 {
   return s->nVars();
 }
@@ -203,7 +203,7 @@ void CryptoMiniSat5::solveAndDump()
 // return value carries no information.
 uint32_t CryptoMiniSat5::getFixedCountWithAssumptions(const stp::SATSolver::vec_literals& assumps, const std::unordered_set<unsigned>& literals, bool& conflict )
 {
-  const uint64_t conf = s->get_sum_conflicts();
+  [[maybe_unused]] const uint64_t conf = s->get_sum_conflicts();
   assert(conf == 0);
 
 

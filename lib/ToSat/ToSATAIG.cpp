@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/ToSat/ToSATAIG.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 
@@ -151,7 +152,7 @@ void ToSATAIG::add_cnf_to_solver(SATSolver& satSolver, Cnf_Dat_t* cnfData)
     {
       uint32_t var = (*pLit) >> 1;
       assert((var < satSolver.nVars()));
-      Minisat::Lit l = SATSolver::mkLit(var, (*pLit) & 1);
+      SATSolver::Lit l = SATSolver::mkLit(var, (*pLit) & 1);
       satSolverClause.push(l);
     }
 
@@ -173,13 +174,18 @@ void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
     for (ArrayTransformer::arrTypeMap::const_iterator arr_it = atm.begin();
          arr_it != atm.end(); arr_it++)
     {
+      // A bit that reached no SAT variable is marked with ~0u rather than
+      // omitted, so freezing has to skip it: the sentinel is not a variable
+      // index, and a backend that acts on setFrozen() writes out of bounds
+      // when handed it. The extensionality loop below already guards this.
       const ArrayTransformer::ArrayRead& ar = arr_it->second;
       ASTNodeToSATVar::iterator it = nodeToSATVar.find(ar.index_symbol);
       if (it != nodeToSATVar.end())
       {
         const vector<unsigned>& v = it->second;
         for (size_t i = 0, size = v.size(); i < size; ++i)
-          satSolver.setFrozen(v[i]);
+          if (v[i] != ~((unsigned)0))
+            satSolver.setFrozen(v[i]);
       }
 
       ASTNodeToSATVar::iterator it2 = nodeToSATVar.find(ar.symbol);
@@ -187,8 +193,56 @@ void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
       {
         const vector<unsigned>& v = it2->second;
         for (size_t i = 0, size = v.size(); i < size; ++i)
-          satSolver.setFrozen(v[i]);
+          if (v[i] != ~((unsigned)0))
+            satSolver.setFrozen(v[i]);
       }
+    }
+  }
+
+  // The array-equality procedure encodes its refinement lemmas over
+  // the SAT variables of its abstraction variables, witness symbols
+  // and scalar names; keep those variables from being eliminated.
+  ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  if (ext != NULL && ext->activeInSolve())
+  {
+    const std::set<ASTNode>& symbols = ext->getFrozenSymbols();
+    for (std::set<ASTNode>::const_iterator it = symbols.begin();
+         it != symbols.end(); ++it)
+    {
+      ASTNodeToSATVar::iterator vit = nodeToSATVar.find(*it);
+      if (vit == nodeToSATVar.end())
+        continue;
+      const vector<unsigned>& v = vit->second;
+      for (size_t i = 0, size = v.size(); i < size; ++i)
+        if (v[i] != ~((unsigned)0))
+          satSolver.setFrozen(v[i]);
+    }
+
+    // A lemma-only symbol -- an owned read's abstraction variable or
+    // index -- may legally never have reached the bit-blast: the
+    // read's only occurrence can itself sit inside another abstracted
+    // term. Its semantics live entirely in future refinement lemmas,
+    // so fresh SAT variables allocated here, before the first solve,
+    // are exactly the unconstrained meaning the blasted formula gives
+    // it; the model loop then values them like any other symbol, and
+    // the lemmas constrain the same variables the candidate was
+    // checked against. Names defined by equations are deliberately
+    // not treated this way -- for them a missing vector still fails
+    // loudly at lemma encoding.
+    const std::set<ASTNode>& lemmaOnly = ext->getLemmaOnlySymbols();
+    for (std::set<ASTNode>::const_iterator it = lemmaOnly.begin();
+         it != lemmaOnly.end(); ++it)
+    {
+      if (nodeToSATVar.find(*it) != nodeToSATVar.end())
+        continue;
+      const unsigned width = it->GetValueWidth();
+      vector<unsigned> v(width);
+      for (unsigned i = 0; i < width; i++)
+      {
+        v[i] = satSolver.newVar();
+        satSolver.setFrozen(v[i]);
+      }
+      nodeToSATVar.insert(make_pair(*it, v));
     }
   }
 }

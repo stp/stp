@@ -14,15 +14,14 @@ STP is a constraint solver (or SMT solver) aimed at solving constraints of bitve
 For a quick install:
 
 ```
-sudo apt-get install git build-essential cmake bison flex libboost-program-options-dev libgmp-dev zlib1g-dev python3 perl
+sudo apt-get install git build-essential cmake bison flex libgmp-dev python3 perl
 git clone https://github.com/stp/stp
 cd stp
 git submodule init && git submodule update
-./scripts/deps/setup-cms.sh
-./scripts/deps/setup-minisat.sh
+./scripts/deps/setup-cadical.sh
 mkdir build
 cd build
-cmake ..
+cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$(pwd)/../deps/cadical" ..
 cmake --build . -j$(nproc)
 sudo cmake --install .
 ```
@@ -108,6 +107,11 @@ generators.
 - `USE_RISS` - Try to use the Riss solver
 - `TUNE_NATIVE` - Build with `-mtune=native`
 - `WERROR` - Treat compiler warnings as errors
+- `ENABLE_FLOATING_POINT` - SMT-LIB floating-point support (default ON), via
+  the vendored [SymFPU](https://github.com/martin-cs/symfpu) submodule (or an
+  external clone through `SYMFPU_INCLUDE_DIRS`). With `OFF`, STP builds
+  without SymFPU and rejects floating-point input with a clear error; the
+  library ABI is identical either way.
 - `STP_ALLOCATOR` - Which memory allocator the `stp` binary uses. STP is
   allocation-heavy, and the C library allocator is a significant bottleneck, so
   this defaults to `mimalloc`, which is vendored as a submodule and built as
@@ -117,15 +121,35 @@ generators.
   whatever application embeds it.
 
 ### Dependencies
-STP relies on : boost (program_options), flex, bison, perl, zlib and minisat. A
-python3 interpreter is needed for the python interface and for the test suite,
-and GMP is needed when building with CryptoMiniSat. You can install these by:
+STP relies on: flex, bison and perl, plus at least one SAT backend.
+CaDiCaL (opt-in via `-DUSE_CADICAL`, see below) is the recommended one;
+the alternatives are CryptoMiniSat (found automatically when installed)
+and MiniSat (opt-in via `-DUSE_MINISAT`, which also needs zlib).
+Configuration fails if no backend is enabled. The command-line
+parser, [CLI11](https://github.com/CLIUtils/CLI11), is vendored as a
+submodule -- nothing to install.
+The floating-point support uses the header-only
+[SymFPU](https://github.com/martin-cs/symfpu) library, which is vendored as a
+submodule -- nothing to install. Real literals in floating-point input --
+`((_ to_fp 8 24) RNE 1.5)` -- are converted by
+[LibBF](https://bellard.org/libbf/), an optional dependency fetched and
+built like minisat and CaDiCaL: run `scripts/deps/setup-libbf.sh` (it
+downloads the pinned release tarball, checks its hash, applies STP's MSVC
+portability patch and builds `libbf.a`; set `LIBBF_TARBALL` to a
+pre-downloaded copy for offline builds), then configure with
+`-DUSE_LIBBF:BOOL=ON -DLIBBF_DIR:PATH=<repo>/deps/libbf`. Without it STP
+builds as before and refuses real literals with a message pointing at the
+script. A python3 interpreter is needed for the
+python interface and for the test suite, and GMP is needed when building with
+CryptoMiniSat. You can install most of these by:
 
 ```
-$ sudo apt-get install build-essential cmake bison flex libboost-program-options-dev libgmp-dev zlib1g-dev python3 perl minisat
+$ sudo apt-get install build-essential cmake bison flex libgmp-dev zlib1g-dev python3 perl
 ```
 
-If your distribution does not come with minisat, STP maintains an updated fork. It can be built as follows:
+The MiniSat backend is optional and off by default; enable it with
+`-DUSE_MINISAT:BOOL=ON`. Your distribution's minisat package works, or STP
+maintains an updated fork that can be built as follows:
 
 ```
 $ git clone https://github.com/stp/minisat
@@ -136,6 +160,25 @@ $ cmake --build . -j$(nproc)
 $ sudo cmake --install .
 $ command -v ldconfig && sudo ldconfig
 ```
+
+Floating-point support is on by default, backed by the vendored SymFPU
+submodule (`git submodule update --init lib/extlib-symfpu/symfpu` if you
+cloned without `--recursive`); an external SymFPU clone can be used
+instead via `-DSYMFPU_INCLUDE_DIRS=<directory containing the clone>`.
+With it, STP solves the SMT-LIB floating-point theory
+(QF_FP/QF_BVFP/QF_ABVFP) and exposes floating-point terms through the C,
+C++ (`stp/fp.hpp`) and Python APIs. When additionally built with LibBF
+(`-DUSE_LIBBF=ON`, see Dependencies), real literals under `to_fp` --
+`((_ to_fp 8 24) RNE 0.1)` -- are folded to their exactly-rounded bits
+while parsing, in any format and under any of the five rounding modes,
+so they mean the same bits they do in bitwuzla, cvc5 and z3. One
+operation is format-bounded:
+`fp.rem` is refused past roughly binary64-sized formats (its circuit
+unrolls one divide step per representable exponent difference, so
+Float128's would be ~33000 steps deep). Configuring with
+`-DENABLE_FLOATING_POINT=OFF` builds without SymFPU entirely and rejects
+floating-point input with a clear "built without floating-point support"
+error; the library ABI is the same either way.
 
 STP uses minisat as its SAT solver when nothing else is available, but it also supports other SAT solvers including CryptoMiniSat as an optional extra. If installed, it will be detected during the cmake and becomes the default solver, with `--minisat` selecting minisat at runtime:
 
@@ -158,7 +201,7 @@ consumed from a build tree rather than an installation, so point
 ```
 $ git clone https://github.com/arminbiere/cadical
 $ cd cadical
-$ git checkout rel-2.1.3
+$ git checkout rel-3.0.1
 $ ./configure -fPIC
 $ make
 ```
@@ -169,8 +212,13 @@ where `<path>` is the checkout containing `src/cadical.hpp` and
 into STP's shared library. These commands are pre-configured in
 `scripts/deps/setup-cadical.sh`.
 
-When STP is built this way CaDiCaL becomes the *default* solver; `--minisat`
-or `--cryptominisat` select the others at runtime.
+When STP is built this way CaDiCaL becomes the *default* solver;
+`--cryptominisat` (or `--minisat`, in a `-DUSE_MINISAT` build) selects the
+others at runtime.
+
+With a CaDiCaL 3.x build, `--cadical-factor` controls CaDiCaL's bounded
+variable addition: `on`, `off`, or `auto` (the default, which enables it
+only for problems with array operations, where it measures fastest).
 
 #### Building against non-installed libraries
 
@@ -221,12 +269,12 @@ git clone https://github.com/stp/stp
 cd stp
 git submodule update --init
 pip install lit
-./scripts/deps/setup-minisat.sh
+./scripts/deps/setup-cadical.sh
 ./scripts/deps/setup-gtest.sh
 ./scripts/deps/setup-outputcheck.sh
 mkdir build
 cd build
-cmake -DENABLE_TESTING=ON ..
+cmake -DENABLE_TESTING=ON -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$(pwd)/../deps/cadical" ..
 cmake --build . -j$(nproc)
 ctest
 ```
@@ -248,5 +296,5 @@ You will need to install [cmake](https://cmake.org/download/) and follow the ste
 * Mate Soos
 * Dan Liew
 * Ryan Govostes
-* Andrew V. Teylu
+* Andrew Teylu
 * And many others...

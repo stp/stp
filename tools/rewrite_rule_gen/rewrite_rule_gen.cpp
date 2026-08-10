@@ -48,7 +48,8 @@ THE SOFTWARE.
 #include "stp/NodeFactory/TypeChecker.h"
 #include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
-#include "stp/Sat/MinisatCore.h"
+#include "stp/Sat/SATSolver.h"
+#include "stp/Sat/SATSolverFactory.h"
 #include "stp/Simplifier/DifficultyScore.h"
 #include "stp/cpp_interface.h"
 
@@ -658,37 +659,46 @@ int getDifficulty(const ASTNode& n_)
   ToSATBase::ASTNodeToSATVar nodeToSATVar;
   toCNF.toCNF(BBFormula, cnfData, nodeToSATVar, false, nm);
 
-  // Send the clauses to Minisat, do unit propagation.
+  // Send the clauses to the SAT solver, do unit propagation, and count what
+  // is left. Backends that keep no clause count fall back to the raw CNF
+  // size: a coarser difficulty, but still monotone with formula size.
   ///////////////
-
-  // Create a new sat variable for each of the variables in the CNF.
-  assert(ss->nVars() == 0);
-  for (int i = 0; i < cnfData->nVars; i++)
-    ss->newVar();
-
-  SATSolver::vec_literals satSolverClause;
-  for (int i = 0; i < cnfData->nClauses; i++)
+  int score;
+  if (ss->reportsClauseCount())
   {
-    satSolverClause.clear();
-    for (int *pLit = cnfData->pClauses[i], *pStop = cnfData->pClauses[i + 1];
-         pLit < pStop; pLit++)
+    // Create a new sat variable for each of the variables in the CNF.
+    assert(ss->nVars() == 0);
+    for (int i = 0; i < cnfData->nVars; i++)
+      ss->newVar();
+
+    SATSolver::vec_literals satSolverClause;
+    for (int i = 0; i < cnfData->nClauses; i++)
     {
-      uint32_t var = (*pLit) >> 1;
-      assert((var < ss->nVars()));
-      Minisat::Lit l = SATSolver::mkLit(var, (*pLit) & 1);
-      satSolverClause.push(l);
+      satSolverClause.clear();
+      for (int *pLit = cnfData->pClauses[i], *pStop = cnfData->pClauses[i + 1];
+           pLit < pStop; pLit++)
+      {
+        uint32_t var = (*pLit) >> 1;
+        assert((var < ss->nVars()));
+        SATSolver::Lit l = SATSolver::mkLit(var, (*pLit) & 1);
+        satSolverClause.push(l);
+      }
+
+      ss->addClause(satSolverClause);
     }
 
-    ss->addClause(satSolverClause);
+    ss->simplify();
+    assert(ss->okay());
+    // should be satisfiable.
+
+    // Why we go to all this trouble. The number of clauses.
+    score = ss->nClauses();
+    assert(score <= cnfData->nClauses);
   }
-
-  ss->simplify();
-  assert(ss->okay());
-  // should be satisfiable.
-
-  // Why we go to all this trouble. The number of clauses.
-  const int score = ss->nClauses();
-  assert(score <= cnfData->nClauses);
+  else
+  {
+    score = cnfData->nClauses;
+  }
   //////////////
 
   // Cnf_ClearMemory();
@@ -776,7 +786,7 @@ void startup()
   mgr->UserFlags.stats_flag = false;
   mgr->UserFlags.optimize_flag = true;
 
-  ss = new MinisatCore;
+  ss = createSATSolver(mgr->UserFlags);
 
   // Prime the cache with 100..
   for (int i = 0; i < 100; i++)
@@ -811,7 +821,7 @@ void shutdown()
 void clearSAT()
 {
   delete ss;
-  ss = new MinisatCore;
+  ss = createSATSolver(mgr->UserFlags);
 
   delete GlobalSTP->tosat;
   ToSATAIG* aig = new ToSATAIG(mgr, GlobalSTP->arrayTransformer);
@@ -828,7 +838,7 @@ bool isConstantToSat(const ASTNode& query, int64_t timeout_max_confl)
 
   ASTNode query2 = nf->CreateNode(NOT, query);
 
-  assert(ss->nClauses() == 0);
+  assert(!ss->reportsClauseCount() || ss->nClauses() == 0);
   mgr->SetQuery(mgr->ASTUndefined);
 
   // A negative budget means "no limit", which is spelled by not configuring
@@ -837,7 +847,7 @@ bool isConstantToSat(const ASTNode& query, int64_t timeout_max_confl)
     ss->setMaxConflicts(timeout_max_confl);
 
   SOLVER_RETURN_TYPE r = GlobalSTP->Ctr_Example->CallSAT_ResultCheck(
-      *ss, query2, query2, GlobalSTP->tosat, false);
+      *ss, query2, query2, query2, GlobalSTP->tosat, false);
 
   return (r == SOLVER_VALID); // unsat, always true
 }
@@ -1135,11 +1145,11 @@ void findRewrites(ASTVec& expressions, const vector<VariableAssignment>& values,
 
       VariableAssignment different;
       bool bad = false;
-      const long st = getCurrentTime();
+      const int64_t st = getCurrentTime();
 
       if (checkRule(from, to, different, bad))
       {
-        const long checktime = getCurrentTime() - st;
+        const int64_t checktime = getCurrentTime() - st;
 
         equiv[i] = rewriteThroughWithAIGS(equiv[i]);
         equiv[j] = rewriteThroughWithAIGS(equiv[j]);
@@ -1926,25 +1936,17 @@ void load_new_rules(const string fileName = "rules_new.smt2")
     opended = true; // so we know to fclose it.
   }
 
-  // We store references to "v" and "w", so we need to remove the
-  // definitions from the input we parse.
-
-  v = mgr->LookupOrCreateSymbol("v");
-  v.SetValueWidth(bits);
-  w = mgr->LookupOrCreateSymbol("w");
-  w.SetValueWidth(bits);
+  // We store references to "v" and "w". A symbol's source sort is part of its
+  // identity, so these have to be made at the sort the parser will declare
+  // them at -- LookupOrCreateSymbol leaves it Unknown, which interns a
+  // *different* node from the one the rule blocks then talk about.
+  v = mgr->CreateSourceSymbol("v", stp::SourceSort::bitVector(bits));
+  w = mgr->CreateSourceSymbol("w", stp::SourceSort::bitVector(bits));
 
   TypeChecker nfTypeCheckDefault(*mgr->hashingNodeFactory, *mgr);
   Cpp_interface piTypeCheckDefault(*mgr, &nfTypeCheckDefault);
   mgr->UserFlags.print_STPinput_back_SMTLIB2_flag = true;
   GlobalParserInterface = &piTypeCheckDefault;
-
-  stringstream v_ss, w_ss;
-  v_ss << "(declare-fun v () (_ BitVec " << bits << "))";
-  string v_string = v_ss.str();
-
-  w_ss << "(declare-fun w () (_ BitVec " << bits << "))";
-  string w_string = w_ss.str();
 
   // This file I/O code: 1) Is terrible  2) I'm in a big rush so just getting it
   // working 3) am embarised by it.
@@ -1987,8 +1989,10 @@ void load_new_rules(const string fileName = "rules_new.smt2")
 
     mgr->GetRunTimes()->start(RunTimes::Parsing);
 
-    replace(s, v_string, "");
-    replace(s, w_string, "");
+    // The declarations are left in: the parser resolves a name through its
+    // own binding frames and no longer falls back to the manager's symbol
+    // table, so each block has to declare what it names. They intern to the
+    // v and w above, which were made at the same sort.
 
     // Load it into a string because other wise the parser reads in big blocks
     // way past where we want it to.

@@ -58,6 +58,15 @@ class RemoveUnconstrained
   // replace() writes definitions into.
   Simplifier* simplifier;
 
+  // Definitions the substitution map refused to record. Every rule
+  // rewrites the graph before replace() is called, so a refusal cannot
+  // be undone; topLevel() conjoins these back onto the result instead,
+  // which is exactly what the refused substitution would have meant.
+  // The untouchable set installed in topLevel() should keep this
+  // empty -- it is the repair for anything that slips past it, not the
+  // primary mechanism.
+  ASTVec refusedDefinitions;
+
 public:
   RemoveUnconstrained(STPMgr& bm);
 	

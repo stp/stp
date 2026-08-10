@@ -27,6 +27,7 @@ THE SOFTWARE.
 
 #include "stp/AST/ASTKind.h"
 #include "stp/Util/Attributes.h"
+#include <cstdint>
 #include <vector>
 
 using std::vector;
@@ -94,14 +95,22 @@ public:
   ASTNode getFalse();
   ASTNode getUndefined();
 
-  ASTNode CreateConstant(stp::CBV cbv, unsigned width);
+  // With a nonzero exp_width the constant is made as a floating-point
+  // constant of that format. A constant is a leaf, so unlike an interior
+  // node it cannot derive a format from its children; a caller replacing a
+  // float-valued node with a constant must pass the format through or the
+  // float-ness is lost.
+  ASTNode CreateConstant(stp::CBV cbv, unsigned width, unsigned exp_width = 0,
+                         unsigned sig_width = 0);
 
   ASTNode CreateOneConst(unsigned width);
   ASTNode CreateZeroConst(unsigned width);
   ASTNode CreateMaxConst(unsigned width);
   ASTNode CreateSignedMinConst(unsigned width);
   
-  ASTNode CreateBVConst(unsigned int width, unsigned long long int bvconst);
+  ASTNode CreateBVConst(unsigned int width, uint64_t bvconst);
+  ASTNode CreateFPConst(const stp::ASTNode& bvconst, unsigned exp_width,
+                        unsigned sig_width);
 
   virtual std::string getName() = 0;
 };

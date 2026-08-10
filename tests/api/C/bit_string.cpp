@@ -38,7 +38,7 @@ TEST(bit_string, one)
 
   // Convert it back to a bit string
   char* buf;
-  unsigned long len;
+  size_t len;
   vc_printBVBitStringToBuffer(e, &buf, &len);
 
   // 'buf' should now be allocated

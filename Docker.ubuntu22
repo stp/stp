@@ -16,7 +16,6 @@ RUN apt-get update \
         flex \
         g++ \
         gcc \
-        libboost-program-options-dev \
         libgmp-dev \
         libm4ri-dev \
         libtinfo-dev \
@@ -60,4 +59,8 @@ RUN cmake .. \
 # Set up to run in a minimal container
 FROM scratch
 COPY --from=builder /usr/local/bin/stp /stp
+# The image is a single static binary on scratch, so these are the only place
+# the notices of the code linked into it can live. MIT and BSD components
+# require them to accompany the binary; `cmake --install` put them here.
+COPY --from=builder /usr/local/share/doc/STP/ /share/doc/STP/
 ENTRYPOINT ["/stp", "--SMTLIB2"]

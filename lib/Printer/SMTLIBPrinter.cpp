@@ -56,9 +56,27 @@ THREAD_LOCAL_IE vector<pair<ASTNode, ASTNode>> NodeLetVarVec;
 // correctly print shared subterms inside the LET itself
 THREAD_LOCAL_IE stp::ASTNodeMap NodeLetVarMap1;
 
+// A rounding mode in operand position: the five constants print by name;
+// anything else -- a RoundingMode variable, an ite -- prints as itself.
+static void printRoundingModeSMTLIB2(ostream& os, const ASTNode& rm,
+                                     bool letize)
+{
+  if (rm.GetKind() == stp::BVCONST && rm.GetValueWidth() == 5)
+  {
+    if (const char* name = roundingModeName(rm.GetUnsignedConst()))
+    {
+      os << name;
+      return;
+    }
+  }
+  SMTLIB_Print1(os, rm, 0, letize, false);
+}
+
 // Prints one node, in SMT-LIB1 syntax when smtlib1 is set and in SMT-LIB2
 // syntax otherwise. The two dialects share the whole traversal; they differ
-// in exactly five places, each marked "dialect:" below.
+// in exactly five places, each marked "dialect:" below. The floating-point
+// cases are not among them: SMT-LIB1 has no FP theory, so those nodes only
+// ever reach here with smtlib1 clear.
 void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize,
                    bool smtlib1)
 {
@@ -95,6 +113,18 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize,
       // dialect 1: the bitvector constant spelling.
       if (smtlib1)
         outputBitVec(n, os);
+      // A rounding mode and a float are both stored as packed bits but
+      // denote neither: print them by mode name and in (fp ...) syntax
+      // rather than as bitvector literals.
+      else if (n.GetSourceSort().kind() == stp::SourceSort::Kind::RoundingMode)
+      {
+        const char* name = roundingModeName(n.GetUnsignedConst());
+        if (name == NULL)
+          FatalError("invalid RoundingMode literal", n);
+        os << name;
+      }
+      else if (n.GetType() == stp::FLOATINGPOINT_TYPE)
+        outputFloatingPointSMTLIB2(n, os, n);
       else
         outputBitVecSMTLIB2(n, os);
       break;
@@ -161,6 +191,100 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize,
       os << ")";
     }
     break;
+    // The rounded operations lead with their rounding mode, which prints by
+    // name (RNE...) when it is one of the five constants.
+    case FP_ADD:
+    case FP_SUB:
+    case FP_MUL:
+    case FP_DIV:
+    case FP_FMA:
+    case FP_SQRT:
+    case FP_ROUNDTOINTEGRAL:
+    {
+      os << "(" << functionToSMTLIBName(kind, false) << " ";
+      printRoundingModeSMTLIB2(os, c[0], letize);
+      for (size_t i = 1; i < c.size(); i++)
+      {
+        os << " ";
+        SMTLIB_Print1(os, c[i], 0, letize, false);
+      }
+      os << ")";
+    }
+    break;
+    case FP_MIN:
+    case FP_MAX:
+    {
+      // A totalised node carries a third, internal child (the (+0, -0)
+      // choice); the SMT-LIB form has exactly two operands.
+      os << "(" << functionToSMTLIBName(kind, false);
+      for (size_t i = 0; i < 2; i++)
+      {
+        os << " ";
+        SMTLIB_Print1(os, c[i], 0, letize, false);
+      }
+      os << ")";
+    }
+    break;
+    case FP_TOFP:
+    {
+      // Children: (eb, sb, bits) reinterprets; (eb, sb, rm, source) converts.
+      os << "((_ to_fp " << c[0].GetUnsignedConst() << " "
+         << c[1].GetUnsignedConst() << ")";
+      if (c.size() == 4)
+      {
+        os << " ";
+        printRoundingModeSMTLIB2(os, c[2], letize);
+        os << " ";
+        SMTLIB_Print1(os, c[3], 0, letize, false);
+      }
+      else
+      {
+        os << " ";
+        SMTLIB_Print1(os, c[2], 0, letize, false);
+      }
+      os << ")";
+    }
+    break;
+    // Spelled `to_fp` -- SMT-LIB overloads the name on the operand's sort;
+    // the separate kind is ours, so that the sort survives blasting.
+    case FP_TOFP_SIGNED:
+    {
+      os << "((_ to_fp " << c[0].GetUnsignedConst() << " "
+         << c[1].GetUnsignedConst() << ") ";
+      printRoundingModeSMTLIB2(os, c[2], letize);
+      os << " ";
+      SMTLIB_Print1(os, c[3], 0, letize, false);
+      os << ")";
+    }
+    break;
+    case FP_TOFP_UNSIGNED:
+    {
+      os << "((_ to_fp_unsigned " << c[0].GetUnsignedConst() << " "
+         << c[1].GetUnsignedConst() << ") ";
+      printRoundingModeSMTLIB2(os, c[2], letize);
+      os << " ";
+      SMTLIB_Print1(os, c[3], 0, letize, false);
+      os << ")";
+    }
+    break;
+    case FP_TO_UBV:
+    case FP_TO_SBV:
+    {
+      // Children: (width, rm, float[, unspecified-value]); the totalised
+      // fourth child is internal.
+      os << "((_ " << (kind == FP_TO_UBV ? "fp.to_ubv" : "fp.to_sbv") << " "
+         << c[0].GetUnsignedConst() << ") ";
+      printRoundingModeSMTLIB2(os, c[1], letize);
+      os << " ";
+      SMTLIB_Print1(os, c[2], 0, letize, false);
+      os << ")";
+    }
+    break;
+    case FP_TO_IEEE_BV:
+      FatalError("SMTLIB2: a float-to-IEEE-bits node (an API-only operation) "
+                 "has no SMT-LIB spelling",
+                 n);
+      break;
     default:
     {
       // dialect 5: a handful of operators were renamed between the versions,
@@ -177,7 +301,7 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize,
       {
         string close = "";
 
-        for (long int i = 0; i < (long int)c.size() - 1; i++)
+        for (size_t i = 0; i + 1 < c.size(); i++)
         {
           os << "(" << functionToSMTLIBName(kind, smtlib1);
           os << " ";
@@ -410,6 +534,7 @@ string functionToSMTLIBName(const Kind k, bool smtlib1)
     case BVUMINUS:
       return "bvneg";
     case EQ:
+    case ARRAY_EQ:
       return "=";
     case READ:
       return "select";
@@ -421,6 +546,60 @@ string functionToSMTLIBName(const Kind k, bool smtlib1)
       return "bvsrem";
     case SBVMOD:
       return "bvsmod";
+
+    // Floating point (SMT-LIB 2 only; there is no SMT-LIB 1 FP theory).
+    // The indexed operators (to_fp, fp.to_ubv...) print through their own
+    // cases in SMTLIB2_Print1, not through this name map.
+    case FP_ABS:
+      return "fp.abs";
+    case FP_NEG:
+      return "fp.neg";
+    case FP_ADD:
+      return "fp.add";
+    case FP_SUB:
+      return "fp.sub";
+    case FP_MUL:
+      return "fp.mul";
+    case FP_DIV:
+      return "fp.div";
+    case FP_FMA:
+      return "fp.fma";
+    case FP_SQRT:
+      return "fp.sqrt";
+    case FP_REM:
+      return "fp.rem";
+    case FP_ROUNDTOINTEGRAL:
+      return "fp.roundToIntegral";
+    case FP_MIN:
+      return "fp.min";
+    case FP_MAX:
+      return "fp.max";
+    case FP_LEQ:
+      return "fp.leq";
+    case FP_LT:
+      return "fp.lt";
+    case FP_GEQ:
+      return "fp.geq";
+    case FP_GT:
+      return "fp.gt";
+    case FP_EQ:
+      return "fp.eq";
+    case FP_ISNORMAL:
+      return "fp.isNormal";
+    case FP_ISSUBNORMAL:
+      return "fp.isSubnormal";
+    case FP_ISZERO:
+      return "fp.isZero";
+    case FP_ISINFINITE:
+      return "fp.isInfinite";
+    case FP_ISNAN:
+      return "fp.isNaN";
+    case FP_ISNEGATIVE:
+      return "fp.isNegative";
+    case FP_ISPOSITIVE:
+      return "fp.isPositive";
+    case FP_SMT_EQ:
+      return "=";
 
     default:
     {

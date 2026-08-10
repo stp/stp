@@ -30,6 +30,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/PropagateEqualities.h"
 #include "stp/Simplifier/NodeSimplifier.h"
+#include "extlib-unordered-dense/ankerl/unordered_dense.h"
 
 /* 
   Finds formulae asserted at the top level, and removes the variables, e.g:
@@ -51,9 +52,23 @@ class PropagateEqualities : public NodeSimplifier
   STPMgr* bm;
   const ASTNode ASTTrue, ASTFalse;
 
-  using IdSet =  std::unordered_set<uint64_t>;
-  using MapToNodeSet = std::unordered_map<uint64_t, std::tuple <ASTNode, ASTNode, IdSet, int > > ;
+public:
+  // Flat open-addressing set: the sets are hot (closure folds, membership
+  // probes), and only their *contents* matter to the algorithm, never their
+  // iteration order.
+  using IdSet = ankerl::unordered_dense::set<uint64_t>;
 
+  struct CandidateInfo
+  {
+    ASTNode lhs;
+    ASTNode rhs;
+    IdSet vars;  // candidate-LHS variables in rhs, with replacements folded in
+    int id;      // insertion order; priority-queue tie-break for determinism
+    size_t upTo; // how many replacements have been folded into vars
+  };
+  using MapToNodeSet = std::unordered_map<uint64_t, CandidateInfo>;
+
+private:
   IdSet alreadyVisited;
 
   void buildCandidateList(const ASTNode& a);
@@ -63,6 +78,7 @@ class PropagateEqualities : public NodeSimplifier
   //ASTNode AndPropagate(const ASTNode& a, ArrayTransformer* at);
 
   void addCandidate(const ASTNode a, const ASTNode b);
+  ASTNode resolveFpLiteral(const ASTNode& n);
   bool isSymbol(ASTNode c);
 
   std::vector < std::pair<ASTNode, ASTNode> > candidates;

@@ -23,6 +23,8 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/Simplifier.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/FloatBlaster/FloatBlaster.h"
 #include <cassert>
 #include <cmath>
 
@@ -74,7 +76,7 @@ bool Simplifier::CheckSimplifyMap(const ASTNode& key, ASTNode& output,
     return true;
   }
 
-  ASTNodeMap::iterator it, itend;
+  DenseNodeMap::iterator it, itend;
   it = pushNeg ? SimplifyNegMap->find(key) : SimplifyMap->find(key);
   itend = pushNeg ? SimplifyNegMap->end() : SimplifyMap->end();
 
@@ -146,7 +148,7 @@ ASTNode Simplifier::applySubstitutionMapUntilArrays(const ASTNode& n)
   return substitutionMap.applySubstitutionMapUntilArrays(n);
 }
 
-ASTNode Simplifier::applySubstitutionMapUntilArrays(const ASTNode& n, ASTNodeMap& cache)
+ASTNode Simplifier::applySubstitutionMapUntilArrays(const ASTNode& n, DenseNodeMap& cache)
 {
   return substitutionMap.applySubstitutionMapUntilArrays(n,cache);
 }
@@ -169,8 +171,8 @@ bool Simplifier::UpdateSubstitutionMap(const ASTNode& e0, const ASTNode& e1)
 
 bool Simplifier::CheckMultInverseMap(const ASTNode& key, ASTNode& output)
 {
-  ASTNodeMap::iterator it;
-  if ((it = MultInverseMap.find(key)) != MultInverseMap.end())
+  const auto it = MultInverseMap.find(key);
+  if (it != MultInverseMap.end())
   {
     output = it->second;
     return true;
@@ -406,6 +408,40 @@ ASTNode Simplifier::SimplifyAtomicFormula(const ASTNode& a, bool pushNeg)
       output = pushNeg ? nf->CreateNode(NOT, output) : output;
       break;
     }
+    case FP_LEQ:
+    case FP_LT:
+    case FP_GEQ:
+    case FP_GT:
+    case FP_EQ:
+    case FP_ISNORMAL:
+    case FP_ISSUBNORMAL:
+    case FP_ISZERO:
+    case FP_ISINFINITE:
+    case FP_ISNAN:
+    case FP_ISNEGATIVE:
+    case FP_ISPOSITIVE:
+    case FP_SMT_EQ:
+    {
+      // Rebuild at the node's real arity: the comparisons are binary but the
+      // classification predicates are unary. Nothing here lowers anything --
+      // see the floating-point arm of simplify_term_switch, and FloatBlast.
+      ASTVec simplified;
+      simplified.reserve(a.Degree());
+
+      for (unsigned int i = 0; i < a.Degree(); i++)
+        simplified.push_back(SimplifyTerm(a[i]));
+
+      // The factory may rewrite the predicate rather than build it: constant
+      // operands fold to true/false, and the same-operand rules fire (fp.leq
+      // of a term with itself comes back as (not (fp.isNaN ...))) -- interned
+      // constants compare pointer-equal, so equal values are the same
+      // operand.
+      output = nf->CreateNode(kind, simplified);
+      if (pushNeg)
+        output = nf->CreateNode(NOT, output);
+
+      break;
+    }
     default:
       FatalError("SimplifyAtomicFormula: "
                  "NO atomic formula of the kind: ",
@@ -610,6 +646,16 @@ ASTNode Simplifier::PullUpITE(const ASTNode& in)
     result = nf->CreateTerm(ITE, in.GetValueWidth(), in[0][0], l1, l2);
   }
 
+  // A rebuilt node cannot lose the input's floating-point format. The
+  // interesting case is not a float operation (those derive their format
+  // from their children) but a plain bitvector node carrying a format
+  // *stamp*: the canonicalised index of a float-indexed array is a
+  // bitvector circuit stamped with the index's format (see FpTotalise),
+  // and pulling an if-then-else out of, say, its concatenation must
+  // keep the stamp or the node changes type. No-op for everything else.
+  result = FloatBlaster::withFormat(_bm, result, in.GetExpWidth(),
+                                    in.GetSigWidth());
+
   assert(result.GetType() == in.GetType());
   assert(result.GetValueWidth() == in.GetValueWidth());
   assert(result.GetIndexWidth() == in.GetIndexWidth());
@@ -645,8 +691,9 @@ ASTNode Simplifier::ITEOpt_InEqs(const ASTNode& in)
   }
   else if (BVCONST == k1 && BVCONST == k2)
   {
-    assert(in1 != in2);
-    output = ASTFalse;
+    // Distinct constant nodes may still spell one value (a float
+    // constant interns apart from the plain constant with its bits).
+    output = constantsSameBits(in1, in2) ? ASTTrue : ASTFalse;
   }
   else if (ITE == k1 && BVCONST == in1[1].GetKind() &&
            BVCONST == in1[2].GetKind() && BVCONST == k2)
@@ -661,13 +708,17 @@ ASTNode Simplifier::ITEOpt_InEqs(const ASTNode& in)
     // c = ITE(cond,d,c) <=> NOT(cond)
     //
     // similarly ITE(cond,d,c) = d <=> NOT(cond)
+    // The "other branch differs" side conditions compare values, not
+    // nodes: with both branches spelling one value the equality holds
+    // whatever the condition, and folding to the condition would be
+    // wrong.
     ASTNode cond = in1[0];
-    if (in1[1] == in2 && (in2 != in1[2]))
+    if (in1[1] == in2 && constantsDenoteDifferentValues(in2, in1[2]))
     {
       // ITE(cond, c, d) = c <=> cond
       output = cond;
     }
-    else if (in1[2] == in2 && (in2 != in1[1]))
+    else if (in1[2] == in2 && constantsDenoteDifferentValues(in2, in1[1]))
     {
       cond = SimplifyFormula(cond, true);
       output = cond;
@@ -682,12 +733,12 @@ ASTNode Simplifier::ITEOpt_InEqs(const ASTNode& in)
            BVCONST == in2[2].GetKind() && BVCONST == k1)
   {
     ASTNode cond = in2[0];
-    if (in2[1] == in1 && (in1 != in2[2]))
+    if (in2[1] == in1 && constantsDenoteDifferentValues(in1, in2[2]))
     {
       // ITE(cond, c, d) = c <=> cond
       output = cond;
     }
-    else if (in2[2] == in1 && (in1 != in2[1]))
+    else if (in2[2] == in1 && constantsDenoteDifferentValues(in1, in2[1]))
     {
       cond = SimplifyFormula(cond, true);
       output = cond;
@@ -720,10 +771,11 @@ ASTNode Simplifier::CreateSimplifiedEQ(const ASTNode& in1, const ASTNode& in2)
     // terms are syntactically the same
     return ASTTrue;
 
-  // here the terms are definitely not syntactically equal but may be
-  // semantically equal.
+  // Two constant nodes still may be semantically equal: a float constant
+  // interns apart from the plain constant with its bits, so compare the
+  // bits, not the identities.
   if (BVCONST == k1 && BVCONST == k2)
-    return ASTFalse;
+    return constantsSameBits(in1, in2) ? ASTTrue : ASTFalse;
 
   // Check if some of the leading constant bits are different. Fancier code
   // would check
@@ -1273,9 +1325,9 @@ bool Simplifier::hasBeenSimplified(const ASTNode& n)
   if (n.GetKind() == SYMBOL)
     return true;
 
-  ASTNodeMap::const_iterator it;
   // If it's in the simplification map, it has been simplified.
-  if ((it = SimplifyMap->find(n)) == SimplifyMap->end())
+  const auto it = SimplifyMap->find(n);
+  if (it == SimplifyMap->end())
     return false;
 
   return (it->second == n);
@@ -1287,7 +1339,7 @@ ASTNode Simplifier::pullUpBVSX(ASTNode output)
   assert(output.GetChildren().size() == 2);
   assert(output[0].GetKind() == BVSX);
   assert(output[1].GetKind() == BVSX);
-  const Kind k = output.GetKind();
+  [[maybe_unused]] const Kind k = output.GetKind();
 
   assert(BVMULT == k || SBVDIV == k || BVPLUS == k);
   const int inputValueWidth = output.GetValueWidth();
@@ -1397,6 +1449,20 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm)
           v.push_back(SimplifyTerm(toProcess[i]));
         else if (toProcess[i].GetType() == BOOLEAN_TYPE)
           v.push_back(SimplifyFormula(toProcess[i], false));
+        // A floating-point child is a term like any other: simplify it, so
+        // the floating-point identities and constant folds fire (see the
+        // matching arm of simplify_term_switch -- which, like everything
+        // here, lowers nothing; lowering is FloatBlast's own pass). It
+        // needs an arm of its own only because its type is neither
+        // BITVECTOR nor BOOLEAN, and the catch-all below would carry it
+        // through unsimplified. Historically -- when lowering still
+        // happened inside simplification -- this same line made several
+        // satisfiable QF_ABVFP queries answer unsat; both causes (rebuilds
+        // dropping the per-node float format, and the operand sort
+        // inverting the floating-point comparisons) were fixed in
+        // fbb96cd8, and the nested-fp lit tests pin the behaviour.
+        else if (toProcess[i].GetType() == FLOATINGPOINT_TYPE)
+          v.push_back(SimplifyTerm(toProcess[i]));
         else
           v.push_back(toProcess[i]);
       }
@@ -1406,6 +1472,15 @@ ASTNode Simplifier::SimplifyTerm(const ASTNode& actualInputterm)
       {
         output = nf->CreateArrayTerm(k, actualInputterm.GetIndexWidth(),
                                      inputValueWidth, v);
+
+        // Rebuilding drops the floating-point format, which is per-node state
+        // rather than something the kind implies. Carry it over: the rebuilt
+        // node has the same kind and children, so it denotes a float of the
+        // same format, and everything downstream (the blaster in particular)
+        // reads the format off the node.
+        output = FloatBlaster::withFormat(_bm, output,
+                                          actualInputterm.GetExpWidth(),
+                                          actualInputterm.GetSigWidth());
       }
       else
         output = actualInputterm;
@@ -2394,7 +2469,9 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
                                 read_index);
         }
       }
-      else if (ITE == array_term.GetKind())
+      else if (ITE == array_term.GetKind() &&
+               !(_bm->getExtensionalityIfAny() != NULL &&
+                 _bm->getExtensionalityIfAny()->activeInSolve()))
       {
         // Pushes the READ through ITES, which is potentially exponential.
         // At present, because there's no write refinement or similar, the
@@ -2409,6 +2486,14 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         read1 = SimplifyTerm(read1);
         read2 = SimplifyTerm(read2);
         out1 = CreateSimplifiedTermITE(cond, read1, read2);
+      }
+      else if (ITE == array_term.GetKind())
+      {
+        // Array equality is running: leave the read on the if-then-else.
+        // Distributing it would put the reads on the branches, where the
+        // consistency checker's T rules cannot see them, and would push a
+        // witness anchor into a shape operand recovery does not accept.
+        out1 = nf->CreateTerm(READ, inputValueWidth, array_term, read_index);
       }
       else
       {
@@ -2456,6 +2541,58 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
 
       break;
     }
+    case FP_ABS:
+    case FP_NEG:
+    case FP_ADD:
+    case FP_SUB:
+    case FP_MUL:
+    case FP_DIV:
+    case FP_FMA:
+    case FP_SQRT:
+    case FP_REM:
+    case FP_ROUNDTOINTEGRAL:
+    case FP_MIN:
+    case FP_MAX:
+    case FP_TOFP:
+    case FP_TOFP_SIGNED:
+    case FP_TOFP_UNSIGNED:
+    case FP_TO_UBV:
+    case FP_TO_SBV:
+    case FP_TO_IEEE_BV:
+    {
+      // Rebuild with the same kind and arity. Only the float operands are
+      // simplified: the other children -- the rounding mode of the arithmetic
+      // operations, and to_fp's format arguments -- are constants the blaster
+      // reads directly, so simplifying them buys nothing and risks rewriting
+      // them into a form it does not recognise.
+      //
+      // Nothing here lowers anything. A floating-point operation simplifies
+      // to a floating-point operation, with its format derived from its kind
+      // and children as always; FloatBlast replaces the whole layer with bits
+      // in one pass, before the formula ever reaches this code. Blasting from
+      // inside simplification meant rebuilding an FP_ADD over bitvector
+      // children -- a node that does not type check, and which only passed
+      // because a float format was stamped onto it and its blasted children.
+      // Nodes are hash-consed, so that stamp landed on whatever else denoted
+      // the same bits.
+      ASTVec simplified;
+      simplified.reserve(inputterm.Degree());
+
+      for (unsigned int i = 0; i < inputterm.Degree(); i++)
+      {
+        if (inputterm[i].GetType() != FLOATINGPOINT_TYPE)
+          simplified.push_back(inputterm[i]);
+        else
+          simplified.push_back(SimplifyTerm(inputterm[i]));
+      }
+
+      // The factory may fold the operation as it rebuilds it (abs/neg of a
+      // constant, x*1.0, x/1.0), which is the whole point of going back
+      // through it; whatever comes back is what this term simplifies to.
+      output = nf->CreateTerm(k, inputValueWidth, simplified);
+      break;
+    }
+
     case WRITE:
     default:
       FatalError("SimplifyTerm: Control should never reach here:", inputterm,
@@ -3019,13 +3156,16 @@ void Simplifier::ResetSimplifyMaps()
   // deletes the contents.  The destructor seems to clear everything
   // anyway.
 
+  // (With the dense maps the delete/new and clear() are both cheap -- one
+  // vector teardown -- but the delete also returns the memory.)
+
   // SimplifyMap->clear();
   delete SimplifyMap;
-  SimplifyMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
+  SimplifyMap = new DenseNodeMap(INITIAL_TABLE_SIZE);
 
   // SimplifyNegMap->clear();
   delete SimplifyNegMap;
-  SimplifyNegMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
+  SimplifyNegMap = new DenseNodeMap(INITIAL_TABLE_SIZE);
 }
 
 void Simplifier::printCacheStatus()

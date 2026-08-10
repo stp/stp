@@ -164,8 +164,8 @@ struct Context
     std::vector<ASTNode> syms(symSet.begin(), symSet.end());
     ASSERT_LE(syms.size(), 16u) << "too many variables to enumerate";
 
-    const unsigned long combos = 1UL << syms.size();
-    for (unsigned long c = 0; c < combos; c++)
+    const uint64_t combos = UINT64_C(1) << syms.size();
+    for (uint64_t c = 0; c < combos; c++)
     {
       std::map<ASTNode, bool> asgn;
       for (size_t i = 0; i < syms.size(); i++)

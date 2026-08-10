@@ -87,6 +87,15 @@ DLL_PUBLIC void SMTLIB2_Print1(ostream& os, const stp::ASTNode n,
 // it too, so their node labels are in SMT-LIB1 syntax.
 void outputBitVec(const ASTNode n, ostream& os);
 void outputBitVecSMTLIB2(const ASTNode n, ostream& os);
+void outputFloatingPointSMTLIB2(const ASTNode n, ostream& os,
+                                const ASTNode term);
+void outputFloatingPointSMTLIB2(const ASTNode n, ostream& os,
+                                unsigned int exp_width,
+                                unsigned int sig_width);
+
+// The SMT-LIB short name (RNE...) for a one-hot rounding-mode encoding
+// (see symbolic_fp's rounding_modes), or NULL when the value names no mode.
+const char* roundingModeName(unsigned encoding);
 
 DLL_PUBLIC ostream& GDL_Print(ostream& os, const stp::ASTNode n);
 DLL_PUBLIC ostream& GDL_Print(ostream& os, const ASTNode n,

@@ -1,0 +1,877 @@
+/********************************************************************
+ * AUTHORS: Andrew Teylu
+ *
+ * BEGIN DATE: January 2021
+ *
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+********************************************************************/
+
+#include "stp/FloatBlaster/FloatBlast.h"
+
+#include "stp/FloatBlaster/FloatBlaster.h"
+
+#ifdef STP_ENABLE_FLOATING_POINT
+#include "stp/FloatBlaster/symbolic_fp.h"
+
+#include <cassert>
+#include <unordered_map>
+#endif
+
+namespace stp
+{
+
+#ifdef STP_ENABLE_FLOATING_POINT
+
+class FloatBlast::Impl
+{
+public:
+  explicit Impl(STPMgr* bm_)
+      : bm(bm_), node_factory(bm_->defaultNodeFactory)
+  {
+  }
+
+  ASTNode topLevel(const ASTNode& n)
+  {
+    if (bm->defaultNodeFactory != node_factory)
+      FatalError("FloatBlast reused after the node factory changed");
+
+    // SymFPU's STP backend is thread-local rather than object-local. Another
+    // checker may have used this thread since our previous model query.
+    symbolic_fp::init(bm);
+
+    traversal_cache.clear();
+    const ASTNode out = lower(n);
+    traversal_cache.clear();
+    return out;
+  }
+
+  const FloatBlast::Statistics& statistics() const noexcept { return stats; }
+
+private:
+  typedef std::unordered_map<ASTNode, std::unique_ptr<symbolic_fp::uf>,
+                             ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
+      UnpackedMap;
+
+  symbolic_fp::floatingPointTypeInfo formatOf(const ASTNode& n) const
+  {
+    const SourceSort sort = n.GetSourceSort();
+    if (sort.kind() != SourceSort::Kind::FloatingPoint)
+      FatalError("FloatBlast expected a floating-point source expression: ",
+                 n);
+
+    const unsigned int exponent = sort.exponentWidth();
+    const unsigned int significand = sort.significandWidth();
+    return symbolic_fp::floatingPointTypeInfo(exponent, significand);
+  }
+
+  // fp.min, fp.max, fp.to_ubv and fp.to_sbv carry one more child after
+  // FpTotalise has run -- the array read supplying their unspecified answer
+  // -- and the operations cannot be lowered without it. BVTypeCheck
+  // deliberately accepts both arities, so the requirement is not in the
+  // node's type; it was an assert here, which under NDEBUG read past the end
+  // of the children instead of saying so.
+  void requireTotalised(const ASTNode& n, size_t expected) const
+  {
+    if (n.Degree() != expected)
+      FatalError("FloatBlast: this partial floating-point operation has not "
+                 "been totalised; FpTotalise has to run before it is "
+                 "lowered: ",
+                 n);
+  }
+
+  void requireSameFormat(const ASTNode& left, const ASTNode& right) const
+  {
+    if (left.GetSourceSort() != right.GetSourceSort())
+      FatalError("FloatBlast received floating-point operands of different "
+                 "source sorts");
+  }
+
+  // A predicate operand that is (or resolves to) a packed view the lowering
+  // leaves in the formula: a symbol or an interned constant, and structural
+  // nodes built out of those. FP constant folding is deferred solver-wide,
+  // so a literal usually arrives as to_fp's three-child reinterpret form
+  // over constant bits; resolve it through the canonicalising funnel
+  // (CreateFPConst), the same lookthrough RemoveUnconstrained's comparison
+  // rule uses. Returns null for anything else -- in particular for FP
+  // operations, whose values are cached unpacked and belong on the SymFPU
+  // path.
+  //
+  // Everything returned here ends up as a child of a surviving predicate,
+  // so it must be what lowering would have left in the formula anyway: each
+  // case returns the node unchanged, or a node of the same kind whose
+  // children are themselves resolved this way (or lowered, for the parts
+  // that are not float-sorted).
+  ASTNode comparisonLeaf(const ASTNode& n)
+  {
+    if (n.Degree() == 0)
+      return n;
+    if (n.GetKind() == FP_TOFP && n.Degree() == 3 &&
+        n[2].GetKind() == BVCONST)
+    {
+      const SourceSort sort = n.GetSourceSort();
+      return bm->CreateFPConst(n[2], sort.exponentWidth(),
+                               sort.significandWidth());
+    }
+    // fp.neg and fp.abs are sign-bit edits on the packed encoding (IEEE-754
+    // 5.5.1 quiet operations: no rounding, NaN payload untouched), so either
+    // wrapped around a packed view is still a packed view: resolve the
+    // operand and keep the wrapper for the bit-blaster, whose FP_NEG/FP_ABS
+    // arms negate or clear the top bit of the operand's bits. Rebuilding
+    // through the factory matters when the operand resolved to something
+    // new: a constant folds (foldFPSign), so the survivor functions'
+    // constant rules see the folded form, and a collapsed mux re-enters the
+    // involution rules (neg(neg x) = x).
+    if (n.GetKind() == FP_NEG || n.GetKind() == FP_ABS)
+    {
+      const ASTNode inner = comparisonLeaf(n[0]);
+      if (inner.IsNull())
+        return ASTNode();
+      if (inner == n[0])
+        return n;
+      return node_factory->CreateTerm(n.GetKind(), n.GetValueWidth(), inner);
+    }
+    // fp.mul and fp.add under --bb.fp-native-arith: the bit-blaster's
+    // hand-written packed circuits (BBfpMul, BBfpAdd) take over from
+    // SymFPU when both float operands resolve to packed views and the
+    // rounding mode is immediate (a constant, or a declared symbol --
+    // whose one-hot validity is asserted at declaration). The rebuild
+    // goes through the factory, so constant operands fold (a fully
+    // constant operation never survives, keeping the lowering-must-change
+    // invariant of constant folding and model evaluation) and the
+    // identity rules still fire. fp.sub needs no arm: the factory already
+    // lowers it to fp.add of the negation.
+    if ((n.GetKind() == FP_MUL || n.GetKind() == FP_ADD) &&
+        bm->UserFlags.fp_native_arith && n.Degree() == 3 &&
+        (n[0].GetKind() == SYMBOL || n[0].GetKind() == BVCONST))
+    {
+      const ASTNode left = comparisonLeaf(n[1]);
+      if (left.IsNull())
+        return ASTNode();
+      const ASTNode right = comparisonLeaf(n[2]);
+      if (right.IsNull())
+        return ASTNode();
+      if (left == n[1] && right == n[2])
+        return n;
+      return node_factory->CreateTerm(n.GetKind(), n.GetValueWidth(), n[0],
+                                      left, right);
+    }
+    // The float-to-float form of to_fp (four children: the two format
+    // constants, the rounding mode, the float operand), under the same
+    // flag: the bit-blaster re-rounds the packed source directly
+    // (BBfpToFp). Unlike the arithmetic arms there is no factory fold for
+    // a constant conversion, so a constant operand under a constant mode
+    // must NOT survive -- constant folding and model evaluation rely on
+    // the SymFPU lowering collapsing exactly that case.
+    //
+    // Targets with a 2-bit exponent stay on the SymFPU path: SymFPU's
+    // convertFloatToFloat mis-rounds into such formats (e.g. converting
+    // the (3, 4) value 3/32 to (2, 5) under RNE gives the odd neighbour
+    // where IEEE ties-to-even picks 4/32; its own (2, 5) ADDITION is
+    // clean, so this is specific to the conversion). The native circuit
+    // rounds correctly there, but a circuit that disagrees with the
+    // constant evaluator makes model validation reject its own models.
+    // Until the evaluator side is fixed, the gate keeps the two aligned.
+    if (n.GetKind() == FP_TOFP && bm->UserFlags.fp_native_arith &&
+        n.Degree() == 4 &&
+        (n[2].GetKind() == SYMBOL || n[2].GetKind() == BVCONST) &&
+        n[0].GetUnsignedConst() >= 3)
+    {
+      const ASTNode operand = comparisonLeaf(n[3]);
+      if (operand.IsNull())
+        return ASTNode();
+      if (operand.isConstant() && n[2].GetKind() == BVCONST)
+        return ASTNode();
+      if (operand == n[3])
+        return n;
+      ASTVec children;
+      children.push_back(n[0]);
+      children.push_back(n[1]);
+      children.push_back(n[2]);
+      children.push_back(operand);
+      return node_factory->CreateTerm(FP_TOFP, n.GetValueWidth(), children);
+    }
+    // A select from a float-element array already IS the packed element
+    // bits: asPacked's READ arm only rebuilds the array and index if they
+    // contain FP work, so it never builds a circuit for the element itself
+    // and the predicate can consume those bits directly. The element format
+    // lives on the array node and the read derives it (deriveFPFormat), so
+    // it survives the array transform's rewriting of this operand -- every
+    // stand-in it mints for a read carries the format (ArrayTransformer),
+    // which is what the bit-blaster reads back here.
+    if (n.GetKind() == READ)
+    {
+      const ASTNode packed = asPacked(n);
+      assert(packed.GetKind() == READ);
+      assert(packed.GetSourceSort().kind() == SourceSort::Kind::FloatingPoint);
+      return packed;
+    }
+    // A float-sorted ITE is a mux over packed bits once its branches are
+    // packed views, and the bit-blaster muxes them for free (BBITE) -- while
+    // SymFPU's ITE arm unpacks BOTH branches and muxes the unpacked records.
+    // The branches recurse through here rather than through asPacked,
+    // because asPacked would happily build an encode() circuit for an
+    // FP-operation branch, which is exactly the case that belongs on the
+    // SymFPU path.
+    if (n.GetKind() == ITE && n.Degree() == 3)
+    {
+      const ASTNode thenLeaf = comparisonLeaf(n[1]);
+      if (thenLeaf.IsNull())
+        return ASTNode();
+      const ASTNode elseLeaf = comparisonLeaf(n[2]);
+      if (elseLeaf.IsNull())
+        return ASTNode();
+      // The condition is Boolean, so lower() is the right treatment: any FP
+      // work inside it is lowered (possibly into further surviving native
+      // predicates) exactly as it would be anywhere else.
+      const ASTNode cond = lower(n[0]);
+      if (cond == n[0] && thenLeaf == n[1] && elseLeaf == n[2])
+        return n;
+      // Through the factory, so a folded condition collapses the mux to one
+      // branch here rather than leaving a dead one under the predicate. The
+      // constant rules in the two survivor functions run after this and
+      // still see the collapsed operand.
+      return node_factory->CreateTerm(ITE, n.GetValueWidth(), cond, thenLeaf,
+                                      elseLeaf);
+    }
+    return ASTNode();
+  }
+
+  // The six binary comparison predicates over packed-view operands skip
+  // SymFPU entirely: the source comparison survives to the bit-blaster,
+  // which compares the packed IEEE bits directly (BBcompareFP, BBeqFP).
+  // Returns the surviving node -- `n` itself, or the comparison rebuilt
+  // over resolved operands, both purely float-sorted so no FP node is ever
+  // built over packed carriers -- or null when the comparison has to take
+  // the SymFPU path. (nativeClassificationSurvivor is the unary
+  // sibling, for the classification predicates.)
+  //
+  // A comparison of two constants must not survive: constant folding and
+  // model evaluation lower the node over its constant children and rely on
+  // the result collapsing to TRUE/FALSE through the simplifying factory
+  // (ComputeFormulaUsingModel asserts lowering changed the node).
+  ASTNode nativeComparisonSurvivor(const ASTNode& n)
+  {
+    if (!bm->UserFlags.fp_native_cmp)
+      return ASTNode();
+    const ASTNode left = comparisonLeaf(n[0]);
+    if (left.IsNull())
+      return ASTNode();
+    const ASTNode right = comparisonLeaf(n[1]);
+    if (right.IsNull())
+      return ASTNode();
+    if (left.isConstant() && right.isConstant())
+      return ASTNode();
+    if (left == n[0] && right == n[1])
+      return n;
+    // The rebuild goes through the simplifying factory, which may fold the
+    // comparison into something the bit-blaster has no native arm for (it
+    // already turns fp.geq(x,x) into not(fp.isNaN(x))). Anything but a
+    // natively blasted comparison goes back to SymFPU.
+    const ASTNode rebuilt = node_factory->CreateNode(n.GetKind(), left, right);
+    if (!isNativelyBlasted(rebuilt.GetKind()))
+      return ASTNode();
+    return rebuilt;
+  }
+
+  // Unary sibling of nativeComparisonSurvivor for the classification
+  // predicates, which the bit-blaster reads straight off the packed fields
+  // (BBclassifyFP). Same three conditions, with the constant rule tightened:
+  // for a unary predicate a constant operand means the whole node is
+  // constant, and an all-constant node has to lower so that constant
+  // folding and model evaluation see it collapse.
+  ASTNode nativeClassificationSurvivor(const ASTNode& n)
+  {
+    if (!bm->UserFlags.fp_native_cmp)
+      return ASTNode();
+    const ASTNode leaf = comparisonLeaf(n[0]);
+    if (leaf.IsNull() || leaf.isConstant())
+      return ASTNode();
+    if (leaf == n[0])
+      return n;
+    const ASTNode rebuilt = node_factory->CreateNode(n.GetKind(), leaf);
+    if (!isNativelyBlasted(rebuilt.GetKind()))
+      return ASTNode();
+    return rebuilt;
+  }
+
+  static bool isNativelyBlasted(Kind k)
+  {
+    return k == FP_GT || k == FP_LT || k == FP_GEQ || k == FP_LEQ ||
+           k == FP_EQ || k == FP_SMT_EQ || k == FP_ISNORMAL ||
+           k == FP_ISSUBNORMAL || k == FP_ISZERO || k == FP_ISINFINITE ||
+           k == FP_ISNAN || k == FP_ISNEGATIVE || k == FP_ISPOSITIVE;
+  }
+
+  ASTNode rebuild(const ASTNode& n, const ASTVec& children)
+  {
+    if (n.GetType() == BOOLEAN_TYPE)
+      return node_factory->CreateNode(n.GetKind(), children);
+
+    if (n.GetIndexWidth() > 0)
+      return node_factory->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(),
+                                           n.GetValueWidth(), children);
+
+    return node_factory->CreateTerm(n.GetKind(), n.GetValueWidth(), children);
+  }
+
+  // Target-language view. Source FP values are packed only if their caller
+  // genuinely needs an AST carrier; FP predicates and conversions bypass
+  // this function and consume the unpacked view directly.
+  ASTNode lower(const ASTNode& n)
+  {
+    if (n.GetSourceSort().kind() == SourceSort::Kind::FloatingPoint)
+      return asPacked(n);
+
+    if (n.Degree() == 0)
+      return n;
+
+    const ASTNodeMap::const_iterator persistent = terminal_cache.find(n);
+    if (persistent != terminal_cache.end())
+      return persistent->second;
+
+    const ASTNodeMap::const_iterator current = traversal_cache.find(n);
+    if (current != traversal_cache.end())
+      return current->second;
+
+    ASTNode out;
+    if (is_FP_kind(n.GetKind()))
+    {
+      out = lowerFpTerminal(n);
+      terminal_cache[n] = out;
+    }
+    else
+    {
+      ASTVec children;
+      children.reserve(n.Degree());
+      bool changed = false;
+      for (size_t i = 0; i < n.Degree(); ++i)
+      {
+        const ASTNode child = lower(n[i]);
+        changed = changed || child != n[i];
+        children.push_back(child);
+      }
+      out = changed ? rebuild(n, children) : n;
+    }
+
+    traversal_cache[n] = out;
+    return out;
+  }
+
+  // Ordinary packed view. Leaves and structural carrier nodes already are
+  // the bits that store the source value, so preserve them (and any NaN
+  // payload they happen to contain). A genuine FP operation has no such
+  // target representation and is encoded lazily from its cached UF.
+  ASTNode asPacked(const ASTNode& n)
+  {
+    const ASTNodeMap::const_iterator cached = packed_cache.find(n);
+    if (cached != packed_cache.end())
+      return cached->second;
+
+    (void)formatOf(n); // exact source-sort/format validation at the boundary
+
+    ASTNode out;
+    if (n.Degree() == 0)
+    {
+      out = n;
+    }
+    else if (n.GetKind() == READ)
+    {
+      ASTVec children;
+      children.reserve(n.Degree());
+      bool changed = false;
+      for (size_t i = 0; i < n.Degree(); ++i)
+      {
+        const ASTNode child = lower(n[i]);
+        changed = changed || child != n[i];
+        children.push_back(child);
+      }
+      out = changed ? rebuild(n, children) : n;
+    }
+    else if (n.GetKind() == ITE)
+    {
+      assert(n.Degree() == 3);
+      ASTVec children;
+      children.reserve(3);
+      children.push_back(lower(n[0]));
+      children.push_back(asPacked(n[1]));
+      children.push_back(asPacked(n[2]));
+      out = (children[0] == n[0] && children[1] == n[1] &&
+             children[2] == n[2])
+                ? n
+                : rebuild(n, children);
+    }
+    else if (!is_FP_kind(n.GetKind()))
+    {
+      // Compatibility for legacy carrier expressions which were explicitly
+      // declared/stamped as FP. Rebuild their carrier children first, then
+      // leave the operation itself in the target language.
+      ASTVec children;
+      children.reserve(n.Degree());
+      bool changed = false;
+      for (size_t i = 0; i < n.Degree(); ++i)
+      {
+        const ASTNode child = lower(n[i]);
+        changed = changed || child != n[i];
+        children.push_back(child);
+      }
+      out = changed ? rebuild(n, children) : n;
+    }
+    else
+    {
+      const ASTNodeMap::const_iterator canonical = canonical_packed_cache.find(n);
+      if (canonical != canonical_packed_cache.end())
+        out = canonical->second;
+      else
+      {
+        out = symbolic_fp::unpacked::encode(formatOf(n), asUnpacked(n));
+        ++stats.pack_builds;
+        canonical_packed_cache[n] = out;
+      }
+    }
+
+    packed_cache[n] = out;
+    return out;
+  }
+
+  // Canonical packed view. This is deliberately distinct from asPacked:
+  // SMT FP equality identifies all NaNs, so semantic quotient boundaries
+  // (FP_TO_IEEE_BV and totalisation/array indexes) must collapse payloads.
+  ASTNode canonicalPacked(const ASTNode& n)
+  {
+    const ASTNodeMap::const_iterator cached = canonical_packed_cache.find(n);
+    if (cached != canonical_packed_cache.end())
+      return cached->second;
+
+    const ASTNode out =
+        symbolic_fp::unpacked::encode(formatOf(n), asUnpacked(n));
+    ++stats.pack_builds;
+    canonical_packed_cache[n] = out;
+
+    // A real FP operation's ordinary packed representation is the same
+    // SymFPU encoding. Raw leaves/READs/ITEs intentionally remain distinct.
+    if (is_FP_kind(n.GetKind()))
+      packed_cache[n] = out;
+    return out;
+  }
+
+  const symbolic_fp::uf& remember(const ASTNode& n,
+                                   std::unique_ptr<symbolic_fp::uf> value)
+  {
+    const std::pair<UnpackedMap::iterator, bool> inserted =
+        unpacked_cache.emplace(n, std::move(value));
+    assert(inserted.second);
+    return *inserted.first->second;
+  }
+
+  const symbolic_fp::uf& decodeCarrier(const ASTNode& n,
+                                        const ASTNode& carrier)
+  {
+    ++stats.unpack_builds;
+    return remember(n, std::unique_ptr<symbolic_fp::uf>(
+                           new symbolic_fp::uf(symbolic_fp::unpacked::decode(
+                               formatOf(n), carrier))));
+  }
+
+  // Unpacked source view. Every entry is either one actual decode of an
+  // opaque carrier or the final (already rounded) result of exactly one
+  // source FP operation. References remain stable because values are owned
+  // separately from the hash table's buckets.
+  const symbolic_fp::uf& asUnpacked(const ASTNode& n)
+  {
+    const UnpackedMap::const_iterator cached = unpacked_cache.find(n);
+    if (cached != unpacked_cache.end())
+    {
+      ++stats.unpacked_cache_hits;
+      return *cached->second;
+    }
+
+    const symbolic_fp::floatingPointTypeInfo result_format = formatOf(n);
+    const Kind kind = n.GetKind();
+
+    if (n.Degree() == 0)
+      return decodeCarrier(n, n);
+
+    if (kind == READ)
+    {
+      // Break the asPacked/asUnpacked recursion explicitly: a READ is an
+      // opaque packed cell, but its array and index may still need lowering.
+      ASTVec children;
+      children.reserve(n.Degree());
+      bool changed = false;
+      for (size_t i = 0; i < n.Degree(); ++i)
+      {
+        const ASTNode child = lower(n[i]);
+        changed = changed || child != n[i];
+        children.push_back(child);
+      }
+      const ASTNode carrier = changed ? rebuild(n, children) : n;
+      packed_cache[n] = carrier;
+      return decodeCarrier(n, carrier);
+    }
+
+    std::unique_ptr<symbolic_fp::uf> result;
+    switch (kind)
+    {
+      case ITE:
+        assert(n.Degree() == 3);
+        requireSameFormat(n[1], n[2]);
+        result.reset(new symbolic_fp::uf(symbolic_fp::unpacked::select(
+            lower(n[0]), asUnpacked(n[1]), asUnpacked(n[2]))));
+        break;
+
+      case FP_ABS:
+        result.reset(new symbolic_fp::uf(
+            symbolic_fp::unpacked::abs(result_format, asUnpacked(n[0]))));
+        break;
+      case FP_NEG:
+        result.reset(new symbolic_fp::uf(
+            symbolic_fp::unpacked::neg(result_format, asUnpacked(n[0]))));
+        break;
+
+      case FP_ADD:
+      case FP_SUB:
+      case FP_MUL:
+      case FP_DIV:
+        requireSameFormat(n[1], n[2]);
+        if (kind == FP_ADD)
+          result.reset(new symbolic_fp::uf(symbolic_fp::unpacked::add(
+              result_format, lower(n[0]), asUnpacked(n[1]),
+              asUnpacked(n[2]))));
+        else if (kind == FP_SUB)
+          result.reset(new symbolic_fp::uf(symbolic_fp::unpacked::sub(
+              result_format, lower(n[0]), asUnpacked(n[1]),
+              asUnpacked(n[2]))));
+        else if (kind == FP_MUL)
+          result.reset(new symbolic_fp::uf(symbolic_fp::unpacked::mul(
+              result_format, lower(n[0]), asUnpacked(n[1]),
+              asUnpacked(n[2]))));
+        else
+          result.reset(new symbolic_fp::uf(symbolic_fp::unpacked::div(
+              result_format, lower(n[0]), asUnpacked(n[1]),
+              asUnpacked(n[2]))));
+        break;
+
+      case FP_FMA:
+        requireSameFormat(n[1], n[2]);
+        requireSameFormat(n[1], n[3]);
+        result.reset(new symbolic_fp::uf(symbolic_fp::unpacked::fma(
+            result_format, lower(n[0]), asUnpacked(n[1]), asUnpacked(n[2]),
+            asUnpacked(n[3]))));
+        break;
+
+      case FP_SQRT:
+        result.reset(new symbolic_fp::uf(symbolic_fp::unpacked::sqrt(
+            result_format, lower(n[0]), asUnpacked(n[1]))));
+        break;
+
+      case FP_REM:
+      {
+        const SourceSort sort = n.GetSourceSort();
+        if (!FloatBlaster::remSupported(sort.exponentWidth(),
+                                        sort.significandWidth()))
+          FatalError("FloatBlast: fp.rem is not supported at this format: "
+                     "its circuit is exponential in the exponent width");
+        requireSameFormat(n[0], n[1]);
+        result.reset(new symbolic_fp::uf(symbolic_fp::unpacked::rem(
+            result_format, asUnpacked(n[0]), asUnpacked(n[1]))));
+        break;
+      }
+
+      case FP_MIN:
+      case FP_MAX:
+      {
+        requireTotalised(n, 3);
+        requireSameFormat(n[0], n[1]);
+        const ASTNode choice = node_factory->CreateNode(
+            EQ, lower(n[2]), bm->CreateOneConst(1));
+        result.reset(new symbolic_fp::uf(
+            kind == FP_MIN
+                ? symbolic_fp::unpacked::min(result_format, asUnpacked(n[0]),
+                                             asUnpacked(n[1]), choice)
+                : symbolic_fp::unpacked::max(result_format, asUnpacked(n[0]),
+                                             asUnpacked(n[1]), choice)));
+        break;
+      }
+
+      case FP_ROUNDTOINTEGRAL:
+      {
+        result.reset(new symbolic_fp::uf(
+            symbolic_fp::unpacked::roundToIntegral(
+                result_format, lower(n[0]), asUnpacked(n[1]))));
+        break;
+      }
+
+      case FP_TOFP:
+        if (n.Degree() == 3)
+        {
+          ++stats.unpack_builds;
+          result.reset(new symbolic_fp::uf(symbolic_fp::unpacked::decode(
+              result_format, lower(n[2]))));
+        }
+        else
+        {
+          assert(n.Degree() == 4);
+          result.reset(new symbolic_fp::uf(
+              symbolic_fp::unpacked::convertFloatToFloat(
+                  formatOf(n[3]), result_format, lower(n[2]),
+                  asUnpacked(n[3]))));
+        }
+        break;
+
+      case FP_TOFP_SIGNED:
+      case FP_TOFP_UNSIGNED:
+        assert(n.Degree() == 4);
+        result.reset(new symbolic_fp::uf(
+            symbolic_fp::unpacked::convertBVToFloat(
+                result_format, lower(n[2]), lower(n[3]),
+                kind == FP_TOFP_SIGNED)));
+        break;
+
+      default:
+      {
+        // A legacy non-FP carrier node may still have a declared/stored FP
+        // source sort. Decode the rebuilt carrier once rather than guessing
+        // an operation from its width.
+        if (is_FP_kind(kind))
+          FatalError("FloatBlast: unhandled floating-point result kind: ", n);
+
+        ASTVec children;
+        children.reserve(n.Degree());
+        bool changed = false;
+        for (size_t i = 0; i < n.Degree(); ++i)
+        {
+          const ASTNode child = lower(n[i]);
+          changed = changed || child != n[i];
+          children.push_back(child);
+        }
+        const ASTNode carrier = changed ? rebuild(n, children) : n;
+        packed_cache[n] = carrier;
+        return decodeCarrier(n, carrier);
+      }
+    }
+
+    assert(result.get() != nullptr);
+    if (kind != ITE)
+      ++stats.unpacked_operation_builds;
+    return remember(n, std::move(result));
+  }
+
+  ASTNode lowerFpTerminal(const ASTNode& n)
+  {
+    const Kind kind = n.GetKind();
+    switch (kind)
+    {
+      case FP_TO_UBV:
+      case FP_TO_SBV:
+        requireTotalised(n, 4);
+        return symbolic_fp::unpacked::toBV(
+            formatOf(n[2]), lower(n[1]), asUnpacked(n[2]),
+            n[0].GetUnsignedConst(), lower(n[3]), kind == FP_TO_SBV);
+
+      case FP_TO_IEEE_BV:
+        assert(n.Degree() == 1);
+        return canonicalPacked(n[0]);
+
+      case FP_SMT_EQ:
+      {
+        requireSameFormat(n[0], n[1]);
+        const ASTNode survivor = nativeComparisonSurvivor(n);
+        if (!survivor.IsNull())
+          return survivor;
+        return symbolic_fp::unpacked::smtEqual(
+            formatOf(n[0]), asUnpacked(n[0]), asUnpacked(n[1]));
+      }
+      case FP_EQ:
+      {
+        requireSameFormat(n[0], n[1]);
+        const ASTNode survivor = nativeComparisonSurvivor(n);
+        if (!survivor.IsNull())
+          return survivor;
+        return symbolic_fp::unpacked::ieeeEqual(
+            formatOf(n[0]), asUnpacked(n[0]), asUnpacked(n[1]));
+      }
+      case FP_LT:
+      {
+        requireSameFormat(n[0], n[1]);
+        const ASTNode survivor = nativeComparisonSurvivor(n);
+        if (!survivor.IsNull())
+          return survivor;
+        return symbolic_fp::unpacked::lessThan(
+            formatOf(n[0]), asUnpacked(n[0]), asUnpacked(n[1]));
+      }
+      case FP_LEQ:
+      {
+        requireSameFormat(n[0], n[1]);
+        const ASTNode survivor = nativeComparisonSurvivor(n);
+        if (!survivor.IsNull())
+          return survivor;
+        return symbolic_fp::unpacked::lessThanOrEqual(
+            formatOf(n[0]), asUnpacked(n[0]), asUnpacked(n[1]));
+      }
+      case FP_GT:
+      {
+        requireSameFormat(n[0], n[1]);
+        const ASTNode survivor = nativeComparisonSurvivor(n);
+        if (!survivor.IsNull())
+          return survivor;
+        return symbolic_fp::unpacked::lessThan(
+            formatOf(n[0]), asUnpacked(n[1]), asUnpacked(n[0]));
+      }
+      case FP_GEQ:
+      {
+        requireSameFormat(n[0], n[1]);
+        const ASTNode survivor = nativeComparisonSurvivor(n);
+        if (!survivor.IsNull())
+          return survivor;
+        return symbolic_fp::unpacked::lessThanOrEqual(
+            formatOf(n[0]), asUnpacked(n[1]), asUnpacked(n[0]));
+      }
+
+      case FP_ISNORMAL:
+      {
+        const ASTNode survivor = nativeClassificationSurvivor(n);
+        if (!survivor.IsNull())
+          return survivor;
+        return symbolic_fp::unpacked::isNormal(formatOf(n[0]),
+                                               asUnpacked(n[0]));
+      }
+      case FP_ISSUBNORMAL:
+      {
+        const ASTNode survivor = nativeClassificationSurvivor(n);
+        if (!survivor.IsNull())
+          return survivor;
+        return symbolic_fp::unpacked::isSubnormal(formatOf(n[0]),
+                                                  asUnpacked(n[0]));
+      }
+      case FP_ISZERO:
+      {
+        const ASTNode survivor = nativeClassificationSurvivor(n);
+        if (!survivor.IsNull())
+          return survivor;
+        return symbolic_fp::unpacked::isZero(formatOf(n[0]),
+                                             asUnpacked(n[0]));
+      }
+      case FP_ISINFINITE:
+      {
+        const ASTNode survivor = nativeClassificationSurvivor(n);
+        if (!survivor.IsNull())
+          return survivor;
+        return symbolic_fp::unpacked::isInfinite(formatOf(n[0]),
+                                                 asUnpacked(n[0]));
+      }
+      case FP_ISNAN:
+      {
+        const ASTNode survivor = nativeClassificationSurvivor(n);
+        if (!survivor.IsNull())
+          return survivor;
+        return symbolic_fp::unpacked::isNaN(formatOf(n[0]),
+                                            asUnpacked(n[0]));
+      }
+      case FP_ISNEGATIVE:
+      {
+        const ASTNode survivor = nativeClassificationSurvivor(n);
+        if (!survivor.IsNull())
+          return survivor;
+        return symbolic_fp::unpacked::isNegative(formatOf(n[0]),
+                                                 asUnpacked(n[0]));
+      }
+      case FP_ISPOSITIVE:
+      {
+        const ASTNode survivor = nativeClassificationSurvivor(n);
+        if (!survivor.IsNull())
+          return survivor;
+        return symbolic_fp::unpacked::isPositive(formatOf(n[0]),
+                                                 asUnpacked(n[0]));
+      }
+
+      default:
+        FatalError("FloatBlast: unhandled target-valued floating-point kind: ",
+                   n);
+    }
+  }
+
+  STPMgr* bm;
+  NodeFactory* node_factory;
+  FloatBlast::Statistics stats;
+
+  // Only the source/target FP boundary survives between calls. Generic BV
+  // traversal state is released after every root to avoid retaining whole
+  // pre-simplification DAGs for the lifetime of a model.
+  ASTNodeMap traversal_cache;
+  ASTNodeMap terminal_cache;
+  ASTNodeMap packed_cache;
+  ASTNodeMap canonical_packed_cache;
+  UnpackedMap unpacked_cache;
+};
+
+#else
+
+// Floating-point syntax is rejected before solving in this configuration.
+// Keeping the pass as an identity gives FpEncodingContext the same link and
+// ownership surface in both builds without exposing SymFPU in the header.
+class FloatBlast::Impl
+{
+public:
+  explicit Impl(STPMgr*) {}
+  ASTNode topLevel(const ASTNode& n) { return n; }
+  const FloatBlast::Statistics& statistics() const noexcept { return stats; }
+
+private:
+  FloatBlast::Statistics stats;
+};
+
+#endif
+
+FloatBlast::FloatBlast(STPMgr* bm_) : impl(new Impl(bm_)) {}
+
+FloatBlast::~FloatBlast() = default;
+
+ASTNode FloatBlast::topLevel(const ASTNode& n) { return impl->topLevel(n); }
+
+#ifdef STP_ENABLE_FLOATING_POINT
+
+ASTNode FloatBlast::lowerOperation(STPMgr* bm, const ASTNode& n)
+{
+  // A context of its own: these callers lower one node, unrelated to the
+  // solve's, and must not share or disturb its caches.
+  FloatBlast lower(bm);
+  return lower.topLevel(n);
+}
+
+#else
+
+// Fail closed, as the rest of the floating-point surface does in this
+// configuration: the parser and the STPMgr funnels reject floating-point
+// input long before a constant fold or a model query could reach here, so
+// arriving means a caller bypassed them. topLevel stays an identity because
+// FpEncodingContext needs the same ownership surface in both builds.
+ASTNode FloatBlast::lowerOperation(STPMgr*, const ASTNode&)
+{
+  FatalError("FloatBlast: this STP was built without floating-point "
+             "support; reconfigure with -DENABLE_FLOATING_POINT=ON");
+}
+
+#endif
+
+const FloatBlast::Statistics& FloatBlast::statistics() const noexcept
+{
+  return impl->statistics();
+}
+
+} // namespace stp

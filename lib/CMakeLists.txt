@@ -53,6 +53,8 @@ endif()
 add_subdirectory(Globals)
 add_subdirectory(AST)
 add_subdirectory(AbsRefineCounterExample)
+add_subdirectory(Extensionality)
+add_subdirectory(FloatBlaster)
 add_subdirectory(Simplifier)
 add_subdirectory(Printer)
 add_subdirectory(Parser)
@@ -76,8 +78,10 @@ set(stp_lib_targets
     AST
     stpmgr
     abstractionrefinement
+    extensionality
     tosat
     sat
+    floatblaster
     simplifier
     constantbv
     cinterface
@@ -138,7 +142,7 @@ endif()
 
 # Set the public header so it will be installed
 set_target_properties(stp PROPERTIES
-    PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/c_interface.h"
+    PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/c_interface.h;${PROJECT_SOURCE_DIR}/include/stp/fp.hpp"
     VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     SOVERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
 )
@@ -153,21 +157,6 @@ else()
     )
 endif()
 
-
-# -----------------------------------------------------------------------------
-# On non-windows systems a built static library cannot have another static
-# library linked to it. So this does not cause the Boost libraries to be
-# added to ``stp.a``. Instead what this does is tell CMake that anything
-# that we built that uses the ``stp`` target should also link in these
-# Boost libraries.
-#
-# So the stp executable and any clients of stp that use the exported CMake
-# targets (e.g. examples/simple) will know what to link in.
-#
-# Clients of stp that don't use CMake will have to link the Boost libraries
-# in manually.
-# -----------------------------------------------------------------------------
-# https://gitlab.kitware.com/cmake/cmake/-/issues/15415#note_633938
 
 # Configure ABC library build options
 set(READLINE_FOUND FALSE CACHE BOOL "Disable readline for ABC" FORCE)
@@ -247,6 +236,14 @@ add_dependencies(stp libabc-pic)
 # option that changes a declaration in aig.h, dar.h or cnf.h would have to be
 # defined for STP's sources too.
 set(stp_link_libs ${MINISAT_LIBRARIES} $<TARGET_FILE:libabc-pic>)
+
+# RunTimes reads the process's peak memory through GetProcessMemoryInfo,
+# which lives in psapi. ABC's sclLiberty.c calls PathMatchSpec from
+# shlwapi; MSVC picks that library up through ABC's #pragma comment(lib),
+# which MinGW's linker ignores, so it has to be named here.
+if (WIN32)
+    set(stp_link_libs ${stp_link_libs} psapi shlwapi)
+endif()
 
 if (USE_CRYPTOMINISAT)
     if (STATICCOMPILE)

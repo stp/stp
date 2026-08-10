@@ -15,8 +15,12 @@ cd "${dep_dir}"
 # header in src/cadical.hpp and the static library in build/libcadical.a.
 git clone https://github.com/arminbiere/cadical "${dep}"
 cd "${dep}"
-# We specify the tags/commits for the other repositories, so do for this too
-git checkout rel-2.1.3
+# We specify the tags/commits for the other repositories, so do for this too.
+# CI overrides the tag to also cover the 2.x line (which STP builds against
+# without --cadical-factor support); anyone caching on this script's content
+# must fold the tag into their cache key, since an override never changes
+# the script.
+git checkout "${CADICAL_TAG:-rel-3.0.1}"
 # -fPIC: libcadical.a is linked into libstp.so, and CaDiCaL's configure
 # does not build position-independent code by default.
 ./configure -fPIC

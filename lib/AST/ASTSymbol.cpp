@@ -47,6 +47,7 @@ void ASTSymbol::nodeprint(ostream& os, bool /*c_friendly*/)
 void ASTSymbol::CleanUp()
 {
   nodeManager->_symbol_unique_table.erase(this);
+  nodeManager->unindexSymbolName(this);
   free((char*)this->_name);
   delete this;
 }

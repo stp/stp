@@ -28,6 +28,7 @@ THE SOFTWARE.
  * replaced by equivalent bit-vector variables
  */
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/Simplifier/Simplifier.h"
 #include <cassert>
 #include <cstdio>
@@ -46,7 +47,19 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
 
   assert(TransformMap == NULL);
   TransformMap = new ASTNodeMap(100);
+
+  ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  // Constant-bit propagation also creates local ArrayTransformers for
+  // scalar-only auxiliary formulas.  Only the transform of the frozen root
+  // participates in the extensionality hand-off; an early transform which
+  // actually encounters an owned READ still fails in TransformArrayRead.
+  const bool extPrepared =
+      ext != NULL && ext->activeInSolve() && ext->arrayGraphFrozen();
+  if (extPrepared)
+    ext->beginReadTransform(form);
   ASTNode result = TransformFormula(form);
+  if (extPrepared)
+    ext->finishReadTransform();
 
 #if 0
     {
@@ -75,13 +88,24 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
     {
       std::map<ASTNode, ArrayTransformer::ArrayRead>& mapper = iset->second;
 
+      // With array equality active, the index of a read in the owned
+      // graph must reach the bit-blaster even when it is a
+      // plain variable: once the read is replaced by its abstraction
+      // variable the index may occur nowhere else, yet future
+      // refinement lemmas will be encoded over its SAT variables. Such
+      // reads therefore take the fresh-index-variable path (which
+      // conjoins index = fresh) for every non-constant index.
+      const bool forceIndexAnchor =
+          ext != NULL && ext->activeInSolve() && ext->needsIndexAnchor(iset->first);
+
       for (std::map<ASTNode, ArrayTransformer::ArrayRead>::iterator it =
                mapper.begin();
            it != mapper.end(); it++)
       {
         const ASTNode& the_index = it->first;
 
-        if (the_index.isConstant() || the_index.GetKind() == SYMBOL)
+        if (the_index.isConstant() ||
+            (the_index.GetKind() == SYMBOL && !forceIndexAnchor))
         {
           it->second.index_symbol = the_index;
         }
@@ -127,7 +151,8 @@ void ArrayTransformer::assertTransformPostConditions(const ASTNode& term,
   if (!p.second)
     return;
 
-  const Kind k = term.GetKind();
+  // Only consumed by the asserts, which an NDEBUG build compiles out.
+  [[maybe_unused]] const Kind k = term.GetKind();
 
   // Check the array reads / writes have been removed
   assert(READ != k);
@@ -246,6 +271,32 @@ ASTNode ArrayTransformer::TransformFormula(const ASTNode& simpleForm)
       result = nf->CreateNode(k, vec);
       break;
     }
+    case FP_LEQ:
+    case FP_LT:
+    case FP_GEQ:
+    case FP_GT:
+    case FP_EQ:
+    case FP_ISNORMAL:
+    case FP_ISSUBNORMAL:
+    case FP_ISZERO:
+    case FP_ISINFINITE:
+    case FP_ISNAN:
+    case FP_ISNEGATIVE:
+    case FP_ISPOSITIVE:
+    case FP_SMT_EQ:
+    {
+      ASTVec vec;
+      vec.reserve(simpleForm.Degree());
+
+      for (auto it = simpleForm.begin(), itend = simpleForm.end(); it != itend;
+           it++)
+      {
+        vec.push_back(TransformTerm(*it));
+      }
+
+      result = nf->CreateNode(k, vec);
+      break;
+    }
     default:
     {
       if (k == SYMBOL && BOOLEAN_TYPE == simpleForm.GetType())
@@ -298,9 +349,19 @@ ASTNode ArrayTransformer::TransformTerm(const ASTNode& term)
       ASTNode els = term[2];
       cond = TransformFormula(cond);
       if (ASTTrue == cond)
+      {
+        ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+        if (ext != NULL && ext->activeInSolve())
+          ext->noteEliminatedReadSubtree(els);
         result = TransformTerm(thn);
+      }
       else if (ASTFalse == cond)
+      {
+        ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+        if (ext != NULL && ext->activeInSolve())
+          ext->noteEliminatedReadSubtree(thn);
         result = TransformTerm(els);
+      }
       else
       {
         thn = TransformTerm(thn);
@@ -383,6 +444,67 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
 
   ASTNode result;
 
+  // With array equality active, every read takes the direct
+  // read-abstraction path: mint or reuse the fresh variable for the
+  // (array, index) pair, whatever the array
+  // term is: variable, write, or if-then-else. Neither its write chain
+  // nor its if-then-else structure is expanded here. The lemmas-on-
+  // demand consistency checker owns read-over-write and read-over-
+  // if-then-else reasoning for these arrays (rules D/U and T-down/T-up),
+  // and it needs the structure and the abstraction variables intact.
+  {
+    ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+    if (ext != NULL && ext->activeInSolve())
+    {
+      if (!ext->arrayGraphFrozen())
+        FatalError("array-equality: the array transform ran before the "
+                   "complete array graph was frozen",
+                   term);
+      if (!ext->ownsArray(arrName))
+        FatalError("array-equality: a transformed read is absent from the "
+                   "complete owned array graph",
+                   term);
+      if (bm->UserFlags.ackermannisation)
+        FatalError("array-equality: eager Ackermannization reached the "
+                   "whole-graph read transform");
+
+      ArrType::const_iterator it;
+      if ((it = arrayToIndexToRead.find(arrName)) != arrayToIndexToRead.end())
+      {
+        std::map<ASTNode, ArrayRead>::const_iterator it2;
+        if ((it2 = it->second.find(readIndex)) != it->second.end())
+        {
+          if (it2->second.ite != it2->second.symbol)
+            FatalError("array-equality: a whole-graph read reused a legacy "
+                       "nested-ITE transformer row",
+                       term);
+          result = it2->second.ite;
+          ext->noteAbstractedRead(term, readIndex, it2->second.symbol);
+          (*TransformMap)[term] = result;
+          return result;
+        }
+      }
+
+      ASTNode CurrentSymbol = bm->CreateFreshVariable(
+          term.GetIndexWidth(), term.GetValueWidth(), "ext_read");
+
+      // Same reason as the read-refinement path below: this variable stands
+      // in for the read from here on and is a leaf, so the element format
+      // has to travel with it or the element reaches the blaster as a
+      // formatless bitvector. Setting a zero width (a non-float array) is a
+      // no-op.
+      CurrentSymbol.SetExpWidth(term.GetExpWidth());
+      CurrentSymbol.SetSigWidth(term.GetSigWidth());
+
+      result = CurrentSymbol;
+      arrayToIndexToRead[arrName].insert(
+          make_pair(readIndex, ArrayRead(result, CurrentSymbol)));
+      ext->noteAbstractedRead(term, readIndex, CurrentSymbol);
+      (*TransformMap)[term] = result;
+      return result;
+    }
+  }
+
   switch (arrName.GetKind())
   {
     case SYMBOL:
@@ -416,6 +538,14 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
       ASTNode CurrentSymbol =
           bm->CreateFreshVariable(term.GetIndexWidth(), term.GetValueWidth(),
                                   "array_" + std::string(arrName.GetName()));
+
+      // Reading an array of floats yields a float. The read node derived its
+      // format from the array, but this fresh variable stands in for the read
+      // from here on and is a leaf, so it has to carry the format itself --
+      // otherwise the element arrives at the blaster as a formatless
+      // bitvector.
+      CurrentSymbol.SetExpWidth(term.GetExpWidth());
+      CurrentSymbol.SetSigWidth(term.GetSigWidth());
 
       result = CurrentSymbol;
 

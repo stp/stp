@@ -151,6 +151,13 @@ ASTNodeMap ConstantBitPropagation::getAllFixed()
     if (BVCONCAT == node.GetKind())
       continue;
 
+    // Constant-bit propagation only reasons about Boolean and bit-vector
+    // values. A floating-point node has value width zero, so it is given a
+    // placeholder FixedBits that does not describe its packed contents; it must
+    // never be turned back into a constant here.
+    if (node.GetType() != BOOLEAN_TYPE && node.GetType() != BITVECTOR_TYPE)
+      continue;
+
     if (bits.isTotallyFixed())
     {
       toFrom.insert(make_pair(node, bitsToNode(node, bits)));
@@ -359,15 +366,26 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
     if (fromTo.find(node) != fromTo.end())
       continue;
 
+    // Only Boolean and bit-vector nodes can be replaced by a constant here; a
+    // floating-point node's FixedBits is a placeholder (see getAllFixed()).
     if (node.GetType() != BOOLEAN_TYPE && node.GetType() != BITVECTOR_TYPE)
-      FatalError("sadf234s");
+      continue;
 
     ASTNode constNode = bitsToNode(node, bits);
 
     if (SYMBOL == node.GetKind())
     {
-      bool r = simplifier->UpdateSubstitutionMap(node, constNode);
-      assert(r);
+      // Symbols the array-equality procedure depends on refuse substitution;
+      // conjoin the derived fixing instead, so the information is kept and the
+      // symbol stays in the formula.
+      if (!simplifier->UpdateSubstitutionMap(node, constNode) && conjoinToTop)
+      {
+        if (BOOLEAN_TYPE == node.GetType())
+          toConjoin.push_back(bits.getValue(0) ? node
+                                               : nf->CreateNode(NOT, node));
+        else
+          toConjoin.push_back(nf->CreateNode(EQ, node, constNode));
+      }
     }
     else if (conjoinToTop && node != top)
     {
@@ -446,7 +464,7 @@ void notHandled(const Kind& k)
 // add to the work list any nodes that take the result of the "n" node.
 void ConstantBitPropagation::scheduleUp(const ASTNode& n)
 {
-  for (const auto &it : *dependents->getDependents(n))
+  for (const auto &it : dependents->getDependents(n))
     workList->push(it);
 }
 
@@ -580,7 +598,7 @@ void ConstantBitPropagation::propagate()
           // rescheduled - except 'n' itself: the transfer function that
           // just ran left 'n' at its fixed point for exactly these child
           // values, so an immediate revisit derives nothing.
-          for (const auto& parent : *dependents->getDependents(n[i]))
+          for (const auto& parent : dependents->getDependents(n[i]))
             if (!(parent == n))
               workList->push(parent);
 

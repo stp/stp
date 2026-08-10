@@ -23,7 +23,6 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/AST/AST.h"
-#include "stp/Simplifier/constantBitP/MersenneTwister.h"
 
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
 
@@ -297,19 +296,16 @@ bool FixedBits::unsignedHolds_old(unsigned val)
   return true;
 }
 
-// Getting a new random number is expensive. Not sure why.
 FixedBits FixedBits::createRandom(const unsigned length,
                                   const unsigned probabilityOfSetting,
-                                  MTRand& trand)
+                                  std::mt19937& trand)
 {
   assert(100 >= probabilityOfSetting);
 
   FixedBits result(length, false);
 
-  // I'm not sure if the random number generator is generating just 32 bit
-  // numbers??
   unsigned i = 0;
-  unsigned randomV = trand.randInt();
+  unsigned randomV = trand();
 
   int pool = 32;
 
@@ -317,7 +313,7 @@ FixedBits FixedBits::createRandom(const unsigned length,
   {
     if (pool < 8)
     {
-      randomV = trand.randInt();
+      randomV = trand();
       pool = 32;
     }
 
