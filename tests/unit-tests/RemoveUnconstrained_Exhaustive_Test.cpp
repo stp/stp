@@ -951,3 +951,292 @@ TEST(RemoveUnconstrained_GroundPath, shared_interior_no_collapse)
   Context c;
   c.checkSoundTop(build(c));
 }
+
+/////////////////////////////////////////////////////////////////////////////
+// 4) Symbolic-side collapse: the predicate's other side is any term. The
+//    predicate is rewritten into its invertibility condition over that term
+//    joined with a fresh boolean, and x is defined to realise either truth
+//    value -- EQ via the chain's pseudo-inverse, comparisons via the exact
+//    enumerated extremes of the chain's image.
+/////////////////////////////////////////////////////////////////////////////
+
+namespace
+{
+// Run the pass on `top`, require that `x` was eliminated, and check the
+// back-substituted original agrees with the result on every assignment.
+void checkSymbolicFires(Context& c, const ASTNode& x, const ASTNode& top)
+{
+  ASTNode result = c.run(top);
+  ASTNodeSet syms;
+  c.collectSymbols(result, syms);
+  EXPECT_EQ(syms.count(x), 0u) << "x survived the symbolic-side collapse";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+} // namespace
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_and_mask)
+{
+  // (= (bvand x 5) t): the invertibility condition is (t & ~5) == 0.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode pred =
+      c.hf->CreateNode(EQ, c.hf->CreateTerm(BVAND, W, x, c.konst(5)), t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+  checkSymbolicFires(c, x, top);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_bijective_chain_with_concat)
+{
+  // (= (bvadd (concat 2 (bvxor x 5)) 7) t): xor and plus invert exactly;
+  // the concat contributes the condition that t's high slice inverts to
+  // the constant 2.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv(5);
+  ASTNode t = c.hf->CreateTerm(BVNOT, 5, keep);
+  ASTNode inner = c.hf->CreateTerm(BVXOR, W, x, c.konst(5));
+  ASTNode mid = c.hf->CreateTerm(BVCONCAT, 5, c.konst(2, 2), inner);
+  ASTNode chain = c.hf->CreateTerm(BVPLUS, 5, mid, c.konst(7, 5));
+  ASTNode pred = c.hf->CreateNode(EQ, chain, t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+  checkSymbolicFires(c, x, top);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_urem)
+{
+  // (= (bvurem x 5) t): condition t <u 5, witness x := t.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode pred =
+      c.hf->CreateNode(EQ, c.hf->CreateTerm(BVMOD, W, x, c.konst(5)), t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+  checkSymbolicFires(c, x, top);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_shift_right_t_first)
+{
+  // (= t (bvlshr x 1)) with the term on the left: condition on t's top
+  // bit, witness x := t << 1.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode pred = c.hf->CreateNode(
+      EQ, t, c.hf->CreateTerm(BVRIGHTSHIFT, W, x, c.konst(1)));
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+  checkSymbolicFires(c, x, top);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_extract_bottom)
+{
+  // (= ((_ extract 2 1) x) t): every t is achievable; x pads with zeros.
+  Context c;
+  ASTNode x = c.bv(4);
+  ASTNode keep = c.bv(2);
+  ASTNode t = c.hf->CreateTerm(BVNOT, 2, keep);
+  ASTNode ex =
+      c.hf->CreateTerm(BVEXTRACT, 2, x, c.konst(2, 32), c.konst(1, 32));
+  ASTNode pred = c.hf->CreateNode(EQ, ex, t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+  checkSymbolicFires(c, x, top);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, ugt_concat_plus)
+{
+  // (bvugt (bvadd (concat 1 x) 3) t): enumerated exact extremes of the
+  // chain's image drive the rewrite.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv(5);
+  ASTNode t = c.hf->CreateTerm(BVNOT, 5, keep);
+  ASTNode mid = c.hf->CreateTerm(BVCONCAT, 5, c.konst(1, 2), x);
+  ASTNode chain = c.hf->CreateTerm(BVPLUS, 5, mid, c.konst(3, 5));
+  ASTNode pred = c.hf->CreateNode(BVGT, chain, t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+  checkSymbolicFires(c, x, top);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, ult_t_first_sext)
+{
+  // (bvult t (sign_extend x)): the path is the second operand, and the
+  // sext image wraps in unsigned order, where an interval analysis loses
+  // exactness; enumeration finds the true unsigned extremes regardless.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv(5);
+  ASTNode t = c.hf->CreateTerm(BVNOT, 5, keep);
+  ASTNode chain = c.hf->CreateTerm(BVSX, 5, x, c.konst(5, 32));
+  ASTNode pred = c.hf->CreateNode(BVLT, t, chain);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+  checkSymbolicFires(c, x, top);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, sgt_mult_chain)
+{
+  // (bvsgt (bvmul x 3) t): multiplication has no inverse entry, but the
+  // comparison path only needs enumerated extremes, in signed order.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode chain = c.hf->CreateTerm(BVMULT, W, x, c.konst(3));
+  ASTNode pred = c.hf->CreateNode(BVSGT, chain, t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+  checkSymbolicFires(c, x, top);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, ite_frame_distributes)
+{
+  // (= (ite b (bvand x 5) keep) t): the ITE frame distributes and the
+  // rewritten equality sits on x's branch.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode keep2 = c.bv();
+  ASTNode b = c.boolean();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep2);
+  ASTNode masked = c.hf->CreateTerm(BVAND, W, x, c.konst(5));
+  ASTNode ite = c.hf->CreateTerm(ITE, W, b, masked, keep);
+  ASTNode pred = c.hf->CreateNode(EQ, ite, t);
+  ASTNode top = c.hf->CreateNode(
+      AND, pred, c.hf->CreateNode(AND, c.anchorFor(keep), c.anchorFor(keep2)));
+  checkSymbolicFires(c, x, top);
+}
+
+// --- Cases that must NOT fire. ---
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_lossy_above_lossy_refused)
+{
+  // (= (bvand (bvor x 1) 3) t): a lossy step above another step. The
+  // walk's per-step conditions only characterise a lossy step's image
+  // when its input is the free variable itself, so a non-bottom and/or
+  // must be refused and x must survive.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode inner = c.hf->CreateTerm(BVOR, W, x, c.konst(1));
+  ASTNode chain = c.hf->CreateTerm(BVAND, W, inner, c.konst(3));
+  ASTNode pred = c.hf->CreateNode(EQ, chain, t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+
+  ASTNode result = c.run(top);
+  ASTNodeSet syms;
+  c.collectSymbols(result, syms);
+  EXPECT_EQ(syms.count(x), 1u) << "walk stepped past a non-bottom lossy step";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_degenerate_mask_refused)
+{
+  // (= (bvand x 0) t): the image is {0}; the chain is a constant in
+  // disguise and the rule must leave it to constant folding.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode pred =
+      c.hf->CreateNode(EQ, c.hf->CreateTerm(BVAND, W, x, c.konst(0)), t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+
+  ASTNode result = c.run(top);
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, shared_chain_refused)
+{
+  // The masked node is used twice; the climb must refuse to step past it.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode masked = c.hf->CreateTerm(BVAND, W, x, c.konst(5));
+  ASTNode pred = c.hf->CreateNode(EQ, masked, t);
+  ASTNode top = c.hf->CreateNode(
+      AND, pred,
+      c.hf->CreateNode(AND, c.hf->CreateNode(BVGT, masked, c.konst(1)),
+                       c.anchorFor(keep)));
+
+  ASTNode result = c.run(top);
+  ASTNodeSet syms;
+  c.collectSymbols(result, syms);
+  EXPECT_EQ(syms.count(x), 1u) << "stepped past a shared interior node";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_mult_odd_mid_chain)
+{
+  // (= (bvadd (bvmul x 5) 7) t): an odd multiplication is a bijection
+  // (modular inverse), so it may sit anywhere on the chain.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode mul = c.hf->CreateTerm(BVMULT, W, x, c.konst(5));
+  ASTNode chain = c.hf->CreateTerm(BVPLUS, W, mul, c.konst(7));
+  ASTNode pred = c.hf->CreateNode(EQ, chain, t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+  checkSymbolicFires(c, x, top);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_mult_even_bottom)
+{
+  // (= (bvmul x 6) t): 6 = 3 * 2, so the image is exactly the even
+  // values; condition t[0] == 0, witness x := inv(3) * (t >> 1).
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode pred =
+      c.hf->CreateNode(EQ, c.hf->CreateTerm(BVMULT, W, x, c.konst(6)), t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+  checkSymbolicFires(c, x, top);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_mult_even_above_refused)
+{
+  // (= (bvmul (bvurem x 5) 6) t): the even multiplication is not at the
+  // bottom (a bvnot inner step wouldn't do here: its per-kind rule fires
+  // first and legitimately leaves the mult at the bottom of the fresh
+  // variable's chain), so its free low preimage bits belong to the inner
+  // chain and the walk must refuse.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode chain = c.hf->CreateTerm(
+      BVMULT, W, c.hf->CreateTerm(BVMOD, W, x, c.konst(5)), c.konst(6));
+  ASTNode pred = c.hf->CreateNode(EQ, chain, t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+
+  ASTNode result = c.run(top);
+  ASTNodeSet syms;
+  c.collectSymbols(result, syms);
+  EXPECT_EQ(syms.count(x), 1u) << "walk stepped past a non-bottom even mult";
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
+
+TEST(RemoveUnconstrained_SymbolicSide, eq_mult_zero_refused)
+{
+  // (= (bvmul x 0) t): the image is {0}; leave it to constant folding.
+  Context c;
+  ASTNode x = c.bv();
+  ASTNode keep = c.bv();
+  ASTNode t = c.hf->CreateTerm(BVNOT, W, keep);
+  ASTNode pred =
+      c.hf->CreateNode(EQ, c.hf->CreateTerm(BVMULT, W, x, c.konst(0)), t);
+  ASTNode top = c.hf->CreateNode(AND, pred, c.anchorFor(keep));
+
+  ASTNode result = c.run(top);
+  ASTNode back = c.backSubstitute(top);
+  c.checkEquivalent(back, result);
+}
