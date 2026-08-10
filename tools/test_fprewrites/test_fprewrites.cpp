@@ -58,8 +58,10 @@ THE SOFTWARE.
 #include <vector>
 
 using namespace stp;
+using stp::symbolic_fp::ROUND_NEAREST_TIES_TO_AWAY;
 using stp::symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN;
 using stp::symbolic_fp::ROUND_TOWARD_NEGATIVE;
+using stp::symbolic_fp::ROUND_TOWARD_POSITIVE;
 using stp::symbolic_fp::ROUND_TOWARD_ZERO;
 
 static int g_checks = 0;
@@ -360,7 +362,58 @@ struct Ctx
     ASTNode simplified = nf->CreateNode(k, children);
     report(name, plain == simplified, "node was unexpectedly rewritten");
   }
+
+  // Build through both factories; require the simplified result to BE
+  // `expected`, and the plain original to agree with it on every assignment
+  // of the free floats.
+  void checkTermIs(const std::string& name, Kind k, unsigned width,
+                   const ASTVec& children, const ASTNode& expected)
+  {
+    ASTNode plain = hf->CreateTerm(k, width, children);
+    ASTNode simplified = nf->CreateTerm(k, width, children);
+    if (simplified != expected)
+    {
+      report(name, false, "did not take the expected form");
+      return;
+    }
+    const std::string why = firstDisagreement(plain, simplified);
+    report(name, why.empty(), why);
+  }
+
+  void checkNodeIs(const std::string& name, Kind k, const ASTVec& children,
+                   const ASTNode& expected)
+  {
+    ASTNode plain = hf->CreateNode(k, children);
+    ASTNode simplified = nf->CreateNode(k, children);
+    if (simplified != expected)
+    {
+      report(name, false, "did not take the expected form");
+      return;
+    }
+    const std::string why = firstDisagreement(plain, simplified);
+    report(name, why.empty(), why);
+  }
 };
+
+// The packed bit patterns of the special constants, per format.
+static uint64_t packNaN(unsigned eb, unsigned sb)
+{
+  return (((1ull << eb) - 1) << (sb - 1)) | 1;
+}
+static uint64_t packInf(unsigned eb, unsigned sb, bool neg)
+{
+  const uint64_t v = ((1ull << eb) - 1) << (sb - 1);
+  return neg ? v | (1ull << (eb + sb - 1)) : v;
+}
+static uint64_t packZero(unsigned eb, unsigned sb, bool neg)
+{
+  return neg ? (1ull << (eb + sb - 1)) : 0;
+}
+static uint64_t packOne(unsigned eb, unsigned sb, bool neg)
+{
+  const uint64_t v = ((1ull << (eb - 1)) - 1) << (sb - 1);
+  return neg ? v | (1ull << (eb + sb - 1)) : v;
+}
 
 // Small formats that still contain zeros, subnormals, normals, infinities and
 // NaNs. (eb, sb): sb counts the hidden bit, packed = eb + sb. sb must be at
@@ -722,9 +775,159 @@ static void run(Ctx& c)
       c.checkTerm("x * -1.0 = neg x", FP_MUL, w, {r, x, negOne});
       c.checkTerm("-1.0 * x = neg x", FP_MUL, w, {r, negOne, x});
       c.checkTerm("x / 1.0 = x", FP_DIV, w, {r, x, one});
+      c.checkTerm("x / -1.0 = neg x", FP_DIV, w, {r, x, negOne});
       // 1.0 / x is not x: the divisor-only rule must leave this unchanged (and
       // must not, in any case, change its meaning).
       c.checkTerm("1.0 / x unchanged", FP_DIV, w, {r, one, x}, false);
+    }
+  }
+
+  // ---- Constant-operand collapses (found by tools/fp_rewrite_gen). ----
+  // Each check requires the factory to produce exactly the expected node AND
+  // the unsimplified original to agree with it on every float of the format.
+
+  {
+    ASTNode x = c.fp(EB, SB);
+    const unsigned w = x.GetValueWidth();
+    ASTNode nan = c.fpConst(EB, SB, packNaN(EB, SB));
+    ASTNode pinf = c.fpConst(EB, SB, packInf(EB, SB, false));
+    ASTNode ninf = c.fpConst(EB, SB, packInf(EB, SB, true));
+    ASTNode pz = c.fpConst(EB, SB, packZero(EB, SB, false));
+    ASTNode nz = c.fpConst(EB, SB, packZero(EB, SB, true));
+
+    // NaN absorbs through the arithmetic: either operand, every mode
+    // (round-toward-negative is the usually-sensitive one).
+    for (unsigned mode : {(unsigned)ROUND_NEAREST_TIES_TO_EVEN,
+                          (unsigned)ROUND_TOWARD_NEGATIVE})
+    {
+      ASTNode r = c.rm(mode);
+      c.checkTermIs("x + NaN = NaN", FP_ADD, w, {r, x, nan}, nan);
+      c.checkTermIs("NaN + x = NaN", FP_ADD, w, {r, nan, x}, nan);
+      c.checkTermIs("x - NaN = NaN", FP_SUB, w, {r, x, nan}, nan);
+      c.checkTermIs("NaN - x = NaN", FP_SUB, w, {r, nan, x}, nan);
+      c.checkTermIs("x * NaN = NaN", FP_MUL, w, {r, x, nan}, nan);
+      c.checkTermIs("NaN * x = NaN", FP_MUL, w, {r, nan, x}, nan);
+      c.checkTermIs("x / NaN = NaN", FP_DIV, w, {r, x, nan}, nan);
+      c.checkTermIs("NaN / x = NaN", FP_DIV, w, {r, nan, x}, nan);
+    }
+
+    // The rm-guarded signed-zero identities: x + (-0) = x except under
+    // round-toward-negative, and x + (+0) = x only there -- the sum of the
+    // opposite zeros is the input that decides. Where the identity does not
+    // apply, the zero must survive (only equivalence is required).
+    {
+      const unsigned modes[] = {
+          (unsigned)ROUND_NEAREST_TIES_TO_EVEN,
+          (unsigned)ROUND_NEAREST_TIES_TO_AWAY,
+          (unsigned)ROUND_TOWARD_POSITIVE,
+          (unsigned)ROUND_TOWARD_NEGATIVE,
+          (unsigned)ROUND_TOWARD_ZERO,
+      };
+      const char* names[] = {"RNE", "RNA", "RTP", "RTN", "RTZ"};
+      for (int i = 0; i < 5; i++)
+      {
+        ASTNode r = c.rm(modes[i]);
+        const bool rtn = (modes[i] == (unsigned)ROUND_TOWARD_NEGATIVE);
+        const std::string sfx = std::string(" [") + names[i] + "]";
+        if (rtn)
+        {
+          c.checkTermIs("x + +0 = x" + sfx, FP_ADD, w, {r, x, pz}, x);
+          c.checkTerm("x + -0 keeps the zero" + sfx, FP_ADD, w, {r, x, nz},
+                      false);
+        }
+        else
+        {
+          c.checkTermIs("x + -0 = x" + sfx, FP_ADD, w, {r, x, nz}, x);
+          c.checkTerm("x + +0 keeps the zero" + sfx, FP_ADD, w, {r, x, pz},
+                      false);
+        }
+      }
+      // Via the sub-to-add lowering: x - (+0) adds -0.
+      ASTNode rne = c.rm(ROUND_NEAREST_TIES_TO_EVEN);
+      c.checkTermIs("x - +0 = x [RNE]", FP_SUB, w, {rne, x, pz}, x);
+    }
+
+    // fp.rem's invalid operands are NaN whatever the other operand is.
+    ASTNode b = c.fp(EB, SB);
+    c.checkTermIs("rem(NaN, b) = NaN", FP_REM, w, {nan, b}, nan);
+    c.checkTermIs("rem(a, NaN) = NaN", FP_REM, w, {x, nan}, nan);
+    c.checkTermIs("rem(+oo, b) = NaN", FP_REM, w, {pinf, b}, nan);
+    c.checkTermIs("rem(-oo, b) = NaN", FP_REM, w, {ninf, b}, nan);
+    c.checkTermIs("rem(a, +0) = NaN", FP_REM, w, {x, pz}, nan);
+    c.checkTermIs("rem(a, -0) = NaN", FP_REM, w, {x, nz}, nan);
+
+    // fp.min/fp.max ignore a NaN operand, and the matching extreme absorbs.
+    c.checkTermIs("min(x, NaN) = x", FP_MIN, w, {x, nan}, x);
+    c.checkTermIs("min(NaN, x) = x", FP_MIN, w, {nan, x}, x);
+    c.checkTermIs("max(x, NaN) = x", FP_MAX, w, {x, nan}, x);
+    c.checkTermIs("max(NaN, x) = x", FP_MAX, w, {nan, x}, x);
+    c.checkTermIs("min(x, -oo) = -oo", FP_MIN, w, {x, ninf}, ninf);
+    c.checkTermIs("max(x, +oo) = +oo", FP_MAX, w, {x, pinf}, pinf);
+    // The opposite extreme decides nothing (NaN breaks it): must survive.
+    c.checkTerm("min(x, +oo) keeps both", FP_MIN, w, {x, pinf}, false);
+    c.checkTerm("max(x, -oo) keeps both", FP_MAX, w, {x, ninf}, false);
+
+    // Comparisons against NaN and the extremes. The lt/leq forms arrive at
+    // the gt/geq rules through the mirroring, so both spellings are checked.
+    const ASTNode notNan =
+        c.hf->CreateNode(NOT, {c.hf->CreateNode(FP_ISNAN, {x})});
+    c.checkNodeIs("fp.gt(x, NaN) -> false", FP_GT, {x, nan}, c.mgr.ASTFalse);
+    c.checkNodeIs("fp.gt(NaN, x) -> false", FP_GT, {nan, x}, c.mgr.ASTFalse);
+    c.checkNodeIs("fp.gt(-oo, x) -> false", FP_GT, {ninf, x}, c.mgr.ASTFalse);
+    c.checkNodeIs("fp.gt(x, +oo) -> false", FP_GT, {x, pinf}, c.mgr.ASTFalse);
+    c.checkNodeIs("fp.lt(x, NaN) -> false", FP_LT, {x, nan}, c.mgr.ASTFalse);
+    c.checkNodeIs("fp.lt(x, -oo) -> false", FP_LT, {x, ninf}, c.mgr.ASTFalse);
+    c.checkNodeIs("fp.lt(+oo, x) -> false", FP_LT, {pinf, x}, c.mgr.ASTFalse);
+    c.checkNodeIs("fp.geq(NaN, x) -> false", FP_GEQ, {nan, x}, c.mgr.ASTFalse);
+    c.checkNodeIs("fp.geq(x, NaN) -> false", FP_GEQ, {x, nan}, c.mgr.ASTFalse);
+    c.checkNodeIs("fp.geq(+oo, x) -> not isNaN", FP_GEQ, {pinf, x}, notNan);
+    c.checkNodeIs("fp.geq(x, -oo) -> not isNaN", FP_GEQ, {x, ninf}, notNan);
+    c.checkNodeIs("fp.leq(-oo, x) -> not isNaN", FP_LEQ, {ninf, x}, notNan);
+    c.checkNodeIs("fp.leq(x, +oo) -> not isNaN", FP_LEQ, {x, pinf}, notNan);
+
+    // (= x NaN) is exactly (fp.isNaN x), but it is deliberately NOT
+    // rewritten: PropagateEqualities substitutes through a `=` with a
+    // constant side (x := NaN everywhere), which is strictly stronger than
+    // holding the smaller predicate.
+    report("= keeps its NaN constant",
+           c.nf->CreateNode(FP_SMT_EQ, {x, nan}).GetKind() == FP_SMT_EQ);
+  }
+
+  // fp.fma at the smaller format (its circuits are much larger): NaN in any
+  // operand absorbs, and an exact product -- a +-1.0 multiplicand, or two
+  // constant multiplicands holding a zero -- reduces the fma to the fp.add
+  // of the product, which then re-simplifies by the rules above. The
+  // expected nodes are built through the simplifying factory so they take
+  // the same post-rewrite form.
+  {
+    ASTNode y = c.fp(SEB, SSB), z = c.fp(SEB, SSB);
+    const unsigned w = y.GetValueWidth();
+    ASTNode nan = c.fpConst(SEB, SSB, packNaN(SEB, SSB));
+    ASTNode pinf = c.fpConst(SEB, SSB, packInf(SEB, SSB, false));
+    ASTNode pz = c.fpConst(SEB, SSB, packZero(SEB, SSB, false));
+    ASTNode nz = c.fpConst(SEB, SSB, packZero(SEB, SSB, true));
+    ASTNode one = c.fpConst(SEB, SSB, packOne(SEB, SSB, false));
+    ASTNode negOne = c.fpConst(SEB, SSB, packOne(SEB, SSB, true));
+    for (unsigned mode : {(unsigned)ROUND_NEAREST_TIES_TO_EVEN,
+                          (unsigned)ROUND_TOWARD_NEGATIVE})
+    {
+      ASTNode r = c.rm(mode);
+      c.checkTermIs("fma(rm, NaN, y, z) = NaN", FP_FMA, w, {r, nan, y, z},
+                    nan);
+      c.checkTermIs("fma(rm, y, NaN, z) = NaN", FP_FMA, w, {r, y, nan, z},
+                    nan);
+      c.checkTermIs("fma(rm, y, z, NaN) = NaN", FP_FMA, w, {r, y, z, nan},
+                    nan);
+      c.checkTermIs("fma(rm, 1, y, z) = y + z", FP_FMA, w, {r, one, y, z},
+                    c.nf->CreateTerm(FP_ADD, w, {r, y, z}));
+      c.checkTermIs("fma(rm, -1, y, z) = -y + z", FP_FMA, w,
+                    {r, negOne, y, z},
+                    c.nf->CreateTerm(FP_ADD, w,
+                                     {r, c.unary(c.hf, FP_NEG, y), z}));
+      c.checkTermIs("fma(rm, +0, +oo, z) = NaN", FP_FMA, w, {r, pz, pinf, z},
+                    nan);
+      c.checkTermIs("fma(rm, +0, -0, z) = -0 + z", FP_FMA, w, {r, pz, nz, z},
+                    c.nf->CreateTerm(FP_ADD, w, {r, nz, z}));
     }
   }
 }
