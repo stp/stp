@@ -42,6 +42,7 @@
 #include "parsesmt2.tab.h"
 
   extern char *smt2text;
+  extern int smt2leng;
   extern int smt2error (const char *msg);
   bool stringOnly = false;
 
@@ -107,27 +108,24 @@ namespace stp
 
   static int lookup(char* s)
   {
-    char * cleaned = NULL;
-
     // The SMTLIB2 specifications sez that the outter bars aren't part of the
     // name. This means that we can create an empty string symbol name.
+    // Strip them in place: s is always yytext (writable, and dead once the
+    // action returns), so overwriting the closing bar saves a malloc+copy
+    // per occurrence.
     if (s[0] == '|') {
-      size_t len = strlen(s);
+      const size_t len = smt2leng;
       assert(len >= 2);
       if (s[len-1] == '|')
       {
-        cleaned = (char*) malloc(len);
-        strncpy(cleaned,s+1,len-2); // chop off first and last characters.
-        cleaned[len-2] = '\0';
-        s = cleaned;
+        s[len-1] = '\0'; // chop off first and last characters.
+        s++;
       }
     }
 
     if (stringOnly)
     {
       smt2lval.str = new std::string(s);
-      if (cleaned)
-        free (cleaned);
       return STRING_TOK;
     }
 
@@ -151,8 +149,6 @@ namespace stp
           stp::GlobalParserInterface->lookupFunction(s);
       if (fn != NULL)
       {
-        if (cleaned)
-          free(cleaned);
         smt2lval.fn = fn;
         switch (fn->function.GetSourceSort().kind())
         {
@@ -187,9 +183,6 @@ namespace stp
 
     if (found)
     {
-       if (cleaned)
-         free (cleaned);
-
       // Check valuesize to see if it's a prop var.  I don't like doing
       // type determination in the lexer, but it's easier than rewriting
       // the whole grammar to eliminate the term/formula distinction.
@@ -203,8 +196,6 @@ namespace stp
     {
       // it has not been seen before.
       smt2lval.str = new std::string(s);
-      if (cleaned)
-        free (cleaned);
       return STRING_TOK;
     }
   }
