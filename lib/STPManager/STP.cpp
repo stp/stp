@@ -805,6 +805,17 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
 
   const bool maybeRefinement = arrayops && !bm->UserFlags.ackermannisation;
 
+  // Must run before the ConstantBitPropagation object below is built: cb's
+  // fixed-point map has to describe the exact tree handed to ToSATAIG, and a
+  // rewrite between the two leaves nodes the propagator has never seen, which
+  // BitBlaster's checkAtFixedPoint assertion rejects.
+  if (bm->UserFlags.enable_common_subsum)
+  {
+    CommonSubSum css(bm, bm->defaultNodeFactory);
+    inputToSat = css.topLevel(inputToSat);
+    bm->ASTNodeStats("After Common Sub-sum Extraction: ", inputToSat);
+  }
+
   simplifier::constantBitP::ConstantBitPropagation* cb = NULL;
   std::unique_ptr<simplifier::constantBitP::ConstantBitPropagation> cleaner;
 
@@ -821,13 +832,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
 
     if (cb->isUnsatisfiable())
       inputToSat = bm->ASTFalse;
-  }
-
-  if (bm->UserFlags.enable_common_subsum)
-  {
-    CommonSubSum css(bm, bm->defaultNodeFactory);
-    inputToSat = css.topLevel(inputToSat);
-    bm->ASTNodeStats("After Common Sub-sum Extraction: ", inputToSat);
   }
 
   ToSATAIG toSATAIG(bm, cb, arrayTransformer);
