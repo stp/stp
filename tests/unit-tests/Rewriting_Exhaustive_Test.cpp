@@ -142,16 +142,16 @@ struct Context
     collectSymbols(after, symSet);
     std::vector<ASTNode> syms(symSet.begin(), symSet.end());
 
-    unsigned long combos = 1;
+    uint64_t combos = 1;
     for (const auto& s : syms)
       combos *= domainSize(s);
     ASSERT_LE(combos, 1u << 16)
         << "too many assignments (" << combos << ") -- lower the width";
 
-    for (unsigned long c = 0; c < combos; c++)
+    for (uint64_t c = 0; c < combos; c++)
     {
       ASTNodeMap assignment;
-      unsigned long rest = c;
+      uint64_t rest = c;
       for (size_t i = 0; i < syms.size(); i++)
       {
         const unsigned size = domainSize(syms[i]);
@@ -352,6 +352,93 @@ TEST(Rewriting_Exhaustive, bvand_ite_from_bvor_shape)
   ASTNode bvor = c.hf->CreateTerm(BVNOT, 4, band);
   ASTNode top = c.hf->CreateNode(NOT, c.hf->CreateNode(EQ, x, bvor));
   c.checkEquivalent(top, c.run(top));
+}
+
+/* (c1 * x) = c0 with odd c1: multiply through by the inverse; the
+   multiplication disappears. 5^-1 mod 8 is 5, so x = 5*3 mod 8 = 7. */
+TEST(Rewriting_Exhaustive, eq_mult_constant_inverse)
+{
+  Context c;
+  ASTNode x = c.bv(3);
+  ASTNode mult = c.hf->CreateTerm(BVMULT, 3, c.konst(5, 3), x);
+  ASTNode top = c.hf->CreateNode(NOT, c.hf->CreateNode(EQ, mult, c.konst(3, 3)));
+  EXPECT_NE(c.run(top), top);
+  c.checkEquivalent(top, c.run(top));
+}
+
+/* (c1 * x) = (c2 * y) with odd c1 --> x = ((c1^-1 * c2) * y) */
+TEST(Rewriting_Exhaustive, eq_mult_mult_inverse)
+{
+  Context c;
+  ASTNode x = c.bv(3), y = c.bv(3);
+  ASTNode m1 = c.hf->CreateTerm(BVMULT, 3, c.konst(3, 3), x);
+  ASTNode m2 = c.hf->CreateTerm(BVMULT, 3, c.konst(2, 3), y);
+  ASTNode top = c.hf->CreateNode(NOT, c.hf->CreateNode(EQ, m1, m2));
+  EXPECT_NE(c.run(top), top);
+  c.checkEquivalent(top, c.run(top));
+}
+
+/* the mult is shared, so multiplying through would strand it: no fire */
+TEST(Rewriting_Exhaustive, eq_mult_inverse_respects_sharing)
+{
+  Context c;
+  ASTNode x = c.bv(3), y = c.bv(3);
+  ASTNode mult = c.hf->CreateTerm(BVMULT, 3, c.konst(5, 3), x);
+  ASTNode eq1 = c.hf->CreateNode(EQ, mult, c.konst(3, 3));
+  ASTNode eq2 = c.hf->CreateNode(EQ, mult, y);
+  ASTNode top = c.hf->CreateNode(AND, eq1, eq2);
+  EXPECT_EQ(c.run(top), top);
+  c.checkEquivalent(top, c.run(top));
+}
+
+/* addends common to both sides of an equality cancel, one occurrence per
+   side per match */
+TEST(Rewriting_Exhaustive, eq_plus_plus_cancel)
+{
+  Context c;
+  ASTNode a = c.bv(2), x = c.bv(2), y = c.bv(2), z = c.bv(2);
+
+  ASTNode lhs = c.hf->CreateTerm(BVPLUS, 2, a, x, y);
+  ASTNode rhs = c.hf->CreateTerm(BVPLUS, 2, a, z);
+  ASTNode top = c.hf->CreateNode(NOT, c.hf->CreateNode(EQ, lhs, rhs));
+  EXPECT_NE(c.run(top), top);
+  c.checkEquivalent(top, c.run(top));
+
+  // x + x = x + y cancels only one occurrence of x.
+  ASTNode lhs2 = c.hf->CreateTerm(BVPLUS, 2, x, x);
+  ASTNode rhs2 = c.hf->CreateTerm(BVPLUS, 2, x, y);
+  ASTNode top2 = c.hf->CreateNode(NOT, c.hf->CreateNode(EQ, lhs2, rhs2));
+  EXPECT_NE(c.run(top2), top2);
+  c.checkEquivalent(top2, c.run(top2));
+
+  // Identical sums cancel completely, to 0 = 0.
+  ASTNode top3 = c.hf->CreateNode(
+      NOT, c.hf->CreateNode(EQ, c.hf->CreateTerm(BVPLUS, 2, x, y),
+                            c.hf->CreateTerm(BVPLUS, 2, y, x)));
+  c.checkEquivalent(top3, c.run(top3));
+}
+
+/* (a * b) + (a * d) --> a * (b + d), including when the summed constants
+   fold to zero */
+TEST(Rewriting_Exhaustive, plus_of_shared_factor_mults)
+{
+  Context c;
+  ASTNode a = c.bv(3), b = c.bv(3), d = c.bv(3);
+  ASTNode m1 = c.hf->CreateTerm(BVMULT, 3, a, b);
+  ASTNode m2 = c.hf->CreateTerm(BVMULT, 3, a, d);
+  ASTNode plus = c.hf->CreateTerm(BVPLUS, 3, m1, m2);
+  ASTNode top = c.hf->CreateNode(EQ, plus, c.bv(3));
+  EXPECT_NE(c.run(top), top);
+  c.checkEquivalent(top, c.run(top));
+
+  // 3x + 5x at width 3 is 8x = 0.
+  ASTNode x = c.bv(3);
+  ASTNode k1 = c.hf->CreateTerm(BVMULT, 3, c.konst(3, 3), x);
+  ASTNode k2 = c.hf->CreateTerm(BVMULT, 3, c.konst(5, 3), x);
+  ASTNode plus2 = c.hf->CreateTerm(BVPLUS, 3, k1, k2);
+  ASTNode top2 = c.hf->CreateNode(EQ, plus2, c.bv(3));
+  EXPECT_NE(c.run(top2), top2);
+  c.checkEquivalent(top2, c.run(top2));
 }
 
 } // namespace

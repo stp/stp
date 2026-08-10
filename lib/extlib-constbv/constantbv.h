@@ -55,6 +55,14 @@
 
 namespace CONSTANTBV {
 
+// STP builds with -fvisibility=hidden, but this API has to stay exported:
+// inline code in STP's public headers calls it -- ASTBVConst's hasher,
+// equality and destructor all do -- so a translation unit outside libstp that
+// emits one of those inlines needs to be able to bind to it.
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC visibility push(default)
+#endif
+
 #ifdef __cplusplus
   extern "C" {
     typedef bool boolean;
@@ -311,6 +319,10 @@ namespace CONSTANTBV {
     };
 #ifdef __cplusplus
   }
+#endif
+
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC visibility pop
 #endif
 } //end of namespace CONSTANTBV
 #endif

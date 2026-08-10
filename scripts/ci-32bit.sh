@@ -16,11 +16,13 @@ apt-get install -y --no-install-recommends \
   bison \
   build-essential \
   ca-certificates \
+  ccache \
   cmake \
+  curl \
   flex \
   git \
-  libboost-program-options-dev \
   ninja-build \
+  patch \
   python3 \
   python3-pip \
   python3-setuptools \
@@ -31,19 +33,35 @@ pip3 install --break-system-packages -U lit
 # different user than the one running in the container.
 git config --global --add safe.directory '*'
 
-./scripts/deps/setup-minisat.sh
-./scripts/deps/setup-gtest.sh
-./scripts/deps/setup-outputcheck.sh
+# CI restores these from a cache; only build what is missing.
+[ -f deps/cadical/build/libcadical.a ] || ./scripts/deps/setup-cadical.sh
+[ -d deps/gtest ] || ./scripts/deps/setup-gtest.sh
+[ -d deps/OutputCheck ] || ./scripts/deps/setup-outputcheck.sh
+
+# Not cached (the tarball is tiny and builds in seconds), and worth having
+# here specifically: a 32-bit toolchain gives LibBF its 32-bit limb build
+# (LIMB_BITS = 32, BF_EXP_BITS_MAX = 29), which no other job exercises.
+./scripts/deps/setup-libbf.sh
+stp_root="$(pwd)"
 
 mkdir -p build-32bit
 cd build-32bit
 cmake \
+  -DUSE_CADICAL:BOOL=ON \
+  -DCADICAL_DIR:PATH="${stp_root}/deps/cadical" \
   -DNOCRYPTOMINISAT:BOOL=ON \
+  -DUSE_LIBBF:BOOL=ON \
+  -DLIBBF_DIR:PATH="${stp_root}/deps/libbf" \
   -DENABLE_TESTING:BOOL=ON \
+  -DWERROR:BOOL=ON \
   -DLIT_ARGS:STRING=-v \
   -DPYTHON_EXECUTABLE:PATH="$(which python3)" \
+  -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
   -G Ninja ..
+ccache --zero-stats
 cmake --build . --parallel "$(nproc)"
+ccache --show-stats
 
 # Tests whose RUN line uses "not" need it as a real executable under
 # lit's default external shell; it comes with LLVM, which the GitHub

@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Trevor Hansen, Andrew V. Jones
+ * AUTHORS: Trevor Hansen, Andrew Teylu
  *
  * BEGIN DATE: Apr, 2010
  *
@@ -23,7 +23,10 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/cpp_interface.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/Parser/LetMgr.h"
+#include "stp/Printer/printers.h"
+#include "stp/Util/GitSHA1.h"
 #include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/ToSat/ToSATAIG.h"
@@ -45,13 +48,16 @@ void Cpp_interface::checkInvariant()
 void Cpp_interface::init()
 {
   assert(nf != NULL);
-  alreadyWarned = false;
 
   cache.push_back(Entry(SOLVER_UNDECIDED));
 
   addFrame();
 
-  if (bm.getVectorOfAsserts().size() == 0)
+  // Ask the stack how deep it is rather than for its contents:
+  // getVectorOfAsserts() fills empty levels with TRUE as a side effect, and
+  // two interfaces are constructed over the one STPMgr, so using it as an
+  // emptiness test left a stray TRUE asserted at the base level forever.
+  if (bm.getAssertLevel() == 0)
     bm.Push();
 
   print_success = false;
@@ -63,7 +69,7 @@ void Cpp_interface::init()
 void Cpp_interface::addFrame()
 {
   // create a new frame
-  SolverFrame* new_frame = new SolverFrame(&functions);
+  SolverFrame* new_frame = new SolverFrame(&functions, &sort_aliases);
 
   // store the new frame
   frames.push_back(new_frame);
@@ -82,9 +88,27 @@ void Cpp_interface::removeFrame()
 }
 
 Cpp_interface::Cpp_interface(STPMgr& bm_, NodeFactory* factory)
-    : bm(bm_), letMgr(new LetMgr(bm.ASTUndefined)), nf(factory)
+    : bm(bm_), set_global_parser_bm(false),
+      letMgr(new LetMgr(bm.ASTUndefined)), nf(factory)
 {
   init();
+}
+
+// Every writer of the parser globals borrows: whoever sets one clears it
+// again. GlobalParserInterface is cleared whichever constructor ran, because
+// the callers that assign it directly (the C interface's parse entry points)
+// point it at a stack local of theirs, which is this object. The guard keeps
+// an interface that has since been superseded from clearing a pointer that
+// now belongs to a live one.
+Cpp_interface::~Cpp_interface()
+{
+  cleanUp();
+
+  if (GlobalParserInterface == this)
+    GlobalParserInterface = NULL;
+
+  if (set_global_parser_bm && GlobalParserBM == &bm)
+    GlobalParserBM = NULL;
 }
 
 ASTVec& Cpp_interface::getCurrentSymbols()
@@ -134,27 +158,12 @@ void Cpp_interface::SetQuery(const ASTNode& q)
 
 ASTNode Cpp_interface::CreateNode(stp::Kind kind, const stp::ASTVec& children)
 {
-  if (kind == EQ && children.size() > 0 && children[0].GetIndexWidth() > 0 && !alreadyWarned)
-  {
-    cerr << "Warning: Parsing a term that uses array extensionality. "
-            "STP doesn't handle array extensionality."
-         << endl;
-    alreadyWarned = true;
-  }
-
   return nf->CreateNode(kind, children);
 }
 
 ASTNode Cpp_interface::CreateNode(stp::Kind kind, const stp::ASTNode n0,
                                   const stp::ASTNode n1)
 {
-  if (n0.GetIndexWidth() > 0 && !alreadyWarned)
-  {
-    cerr << "Warning: Parsing a term that uses array extensionality. "
-            "STP doesn't handle array extensionality."
-         << endl;
-    alreadyWarned = true;
-  }
   return nf->CreateNode(kind, n0, n1);
 }
 
@@ -166,6 +175,35 @@ ASTNode Cpp_interface::CreateZeroConst(unsigned int width)
 ASTNode Cpp_interface::CreateOneConst(unsigned int width)
 {
   return bm.CreateOneConst(width);
+}
+
+ASTNode Cpp_interface::CreateFPSpecialConst(stp::FPSpecial which,
+                                            unsigned exp_width,
+                                            unsigned sig_width)
+{
+  return bm.CreateFPSpecialConst(which, exp_width, sig_width);
+}
+
+void Cpp_interface::addSortAlias(const std::string& name, unsigned exp_width,
+                                 unsigned sig_width)
+{
+  // SMT-LIB does not allow redefining a sort name.
+  if (sort_aliases.find(name) != sort_aliases.end())
+    FatalError("define-sort: the sort name is already defined");
+  sort_aliases[name] = std::make_pair(exp_width, sig_width);
+  frames.back()->addSortAlias(name);
+}
+
+bool Cpp_interface::lookupSortAlias(const std::string& name,
+                                    unsigned& exp_width,
+                                    unsigned& sig_width) const
+{
+  const auto found = sort_aliases.find(name);
+  if (found == sort_aliases.end())
+    return false;
+  exp_width = found->second.first;
+  sig_width = found->second.second;
+  return true;
 }
 
 ASTNode Cpp_interface::CreateBVConst(string& strval, int base, int bit_width)
@@ -180,35 +218,53 @@ ASTNode Cpp_interface::CreateBVConst(const char* const strval, int base)
 
 // FIXME: unsigned long long int is wong. Use intN_t from cstdint
 ASTNode Cpp_interface::CreateBVConst(unsigned int width,
-                                     unsigned long long int bvconst)
+                                     uint64_t bvconst)
 {
   return bm.CreateBVConst(width, bvconst);
 }
 
+ASTNode Cpp_interface::CreateRMConst(unsigned mode)
+{
+  return bm.CreateRMConst(mode);
+}
+
+ASTNode Cpp_interface::CreateSourceSymbol(const char* name,
+                                          const SourceSort& source_sort)
+{
+  // SMT-LIB 2 reserves an initial '@' or '.' for the solver, and STP does not
+  // merely respect that reservation, it relies on it: CreateFreshVariable
+  // mints '@' names, and so do the objects supplying the unspecified results
+  // of the partial floating-point operations, whose identity *is* their name.
+  // An input free to declare one of those names could be handed the solver's
+  // own object -- which is a wrong answer, not just a confusing model.
+  //
+  // Every declaration the parser makes comes through here, so this is the one
+  // place it has to be said. Symbols STP mints for itself go to the manager
+  // directly and are unaffected.
+  if (STPMgr::isReservedSymbolName(name))
+    FatalError("a symbol name beginning with '@' or '.' is reserved for "
+               "solver use and cannot be declared");
+
+  return bm.CreateSourceSymbol(name, source_sort);
+}
+
 ASTNode Cpp_interface::LookupOrCreateSymbol(const char* const name)
 {
+  ASTNode found;
+  if (LookupSymbol(name, found))
+    return found;
   return bm.LookupOrCreateSymbol(name);
+}
+
+ASTNode Cpp_interface::CreateParameterisedBooleanVar(const ASTNode& var,
+                                                     const ASTNode& constant)
+{
+  return bm.NewParameterized_BooleanVar(var, constant);
 }
 
 void Cpp_interface::removeSymbol(ASTNode to_remove)
 {
-  bool removed = false;
-
-  // Get the symbols for the current frame
-  ASTVec& curr_symbols = getCurrentSymbols();
-
-  for (ASTVec::iterator iter = curr_symbols.begin(); iter != curr_symbols.end();
-       ++iter)
-  {
-    if ((*iter) == to_remove)
-    {
-      curr_symbols.erase(iter);
-      removed = true;
-      break;
-    }
-  }
-
-  if (!removed)
+  if (!frames.back()->removeSymbol(to_remove))
     FatalError("Should have been removed...");
 }
 
@@ -221,9 +277,8 @@ void Cpp_interface::storeFunction(const string& name, const ASTVec& params,
   ASTNodeMap fromTo;
   for (size_t i = 0, size = params.size(); i < size; ++i)
   {
-    ASTNode p = bm.CreateFreshVariable(params[i].GetIndexWidth(),
-                                       params[i].GetValueWidth(),
-                                       "STP_INTERNAL_FUNCTION_NAME");
+    ASTNode p = bm.CreateFreshSourceVariable(
+        params[i].GetSourceSort(), "STP_INTERNAL_FUNCTION_NAME");
     fromTo.insert(std::make_pair(params[i], p));
     f.params.push_back(p);
   }
@@ -261,35 +316,14 @@ ASTNode Cpp_interface::applyFunction(const string& name, const ASTVec& params)
   ASTNodeMap fromTo;
   for (size_t i = 0, size = f.params.size(); i < size; ++i)
   {
-    if (f.params[i].GetValueWidth() != params[i].GetValueWidth())
-      FatalError("Actual parameters differ from formal");
-
-    if (f.params[i].GetIndexWidth() != params[i].GetIndexWidth())
-      FatalError("Actual parameters differ from formal");
+    if (f.params[i].GetSourceSort() != params[i].GetSourceSort())
+      FatalError("Actual parameter sort differs from formal");
 
     fromTo.insert(std::make_pair(f.params[i], params[i]));
   }
 
   ASTNodeMap cache;
   return SubstitutionMap::replace(f.function, fromTo, cache, nf);
-}
-
-bool Cpp_interface::isBitVectorFunction(const string& name)
-{
-  const auto found = functions.find(name);
-  if (found == functions.end())
-    return false;
-
-  return found->second.function.GetType() == BITVECTOR_TYPE;
-}
-
-bool Cpp_interface::isBooleanFunction(const string& name)
-{
-  const auto found = functions.find(name);
-  if (found == functions.end())
-    return false;
-
-  return found->second.function.GetType() == BOOLEAN_TYPE;
 }
 
 types Cpp_interface::functionReturnType(const string& name)
@@ -301,19 +335,32 @@ types Cpp_interface::functionReturnType(const string& name)
   return found->second.function.GetType();
 }
 
+SourceSort Cpp_interface::functionReturnSourceSort(const string& name)
+{
+  const auto found = functions.find(name);
+  return found == functions.end() ? SourceSort::unknown()
+                                  : found->second.function.GetSourceSort();
+}
+
 ASTNode Cpp_interface::LookupOrCreateSymbol(string name)
 {
-  return bm.LookupOrCreateSymbol(name.c_str());
+  return LookupOrCreateSymbol(name.c_str());
 }
 
 bool Cpp_interface::LookupSymbol(const char* const name, ASTNode& output)
 {
-  return bm.LookupSymbol(name, output);
+  for (auto it = frames.rbegin(); it != frames.rend(); ++it)
+  {
+    if ((*it)->lookupSymbol(name, output))
+      return true;
+  }
+  return false;
 }
 
 bool Cpp_interface::isSymbolAlreadyDeclared(char* name)
 {
-  return bm.LookupSymbol(name);
+  ASTNode ignored;
+  return LookupSymbol(name, ignored);
 }
 
 void Cpp_interface::setPrintSuccess(bool ps)
@@ -324,7 +371,8 @@ void Cpp_interface::setPrintSuccess(bool ps)
 
 bool Cpp_interface::isSymbolAlreadyDeclared(string name)
 {
-  return bm.LookupSymbol(name.c_str());
+  ASTNode ignored;
+  return LookupSymbol(name.c_str(), ignored);
 }
 
 ASTNode* Cpp_interface::newNode(const Kind k, const ASTNode& n0,
@@ -357,7 +405,37 @@ void Cpp_interface::deleteNode(ASTNode* n)
 
 void Cpp_interface::addSymbol(ASTNode& s)
 {
-  getCurrentSymbols().push_back(s);
+  frames.back()->addSymbol(s);
+}
+
+void Cpp_interface::addRoundingModeSymbol(ASTNode& s)
+{
+  addSymbol(s);
+  assertRoundingModeValid(s);
+}
+
+// SMT-LIB's RoundingMode sort has exactly five values; the 5-bit carrier has
+// 32. Pin a declared RoundingMode symbol to the five one-hot encodings.
+// Asserted (rather than built into the blaster) so that every route to a
+// query -- check-sat here, or a C-API query over a parsed file -- sees it.
+//
+// This is the pin for the level the symbol is declared at, not the guarantee:
+// an assertion belongs to a level and the symbol node does not, so FpTotalise
+// re-pins every mode the formula names at solve time. See its class comment.
+void Cpp_interface::assertRoundingModeValid(const ASTNode& s)
+{
+  AddAssert(bm.roundingModeValidConstraint(s));
+}
+
+void Cpp_interface::addArraySymbol(ASTNode& s, const array_sort& sort)
+{
+  addSymbol(s);
+  (void)sort;
+}
+
+bool Cpp_interface::arraySortsAgree(const ASTNode& arr, const array_sort& sort)
+{
+  return arr.GetSourceSort() == sort.sourceSort();
 }
 
 void Cpp_interface::success()
@@ -372,7 +450,7 @@ void Cpp_interface::success()
 //TODO escape string.
 void Cpp_interface::error(std::string msg)
 {
-  cout << "error(\"" << msg << "\")" << endl;
+  cout << "(error \"" << msg << "\")" << endl;
   flush(cout);
 }
 
@@ -386,6 +464,17 @@ void Cpp_interface::resetSolver()
 {
   bm.ClearAllTables();
   GlobalSTP->ClearAllTables();
+}
+
+// Public and define-fun handles retain opaque ARRAY_EQ nodes, never generated
+// proxies. Scope mutation can therefore discard the complete last-solve table
+// without inspecting which handles remain live; future assertions lower their
+// durable structural handles afresh.
+void Cpp_interface::discardExtensionalitySolveState()
+{
+  ExtensionalityContext* ext = bm.getExtensionalityIfAny();
+  if (ext != NULL)
+    ext->beginSolve();
 }
 
 // Can clear away the base frame..
@@ -406,6 +495,7 @@ void Cpp_interface::reset()
   // These tables might hold references to symbols that have been
   // removed.
   resetSolver();
+  discardExtensionalitySolveState();
 
   cleanUp();
 
@@ -424,6 +514,38 @@ void Cpp_interface::popToFirstLevel()
     bm.Pop();
 }
 
+// Weaker than reset(): retain options and the selected logic, but empty the
+// assertion stack. With the supported/default :global-declarations=false,
+// SMT-LIB requires this to discard declarations and definitions too.
+void Cpp_interface::resetAssertions()
+{
+  // Pop the ordinary levels through the ordinary path so the assertion stack,
+  // result cache, declarations and solver tables stay in lockstep.
+  while (frames.size() > 1)
+    pop();
+
+  assert(frames.size() == 1);
+  assert(cache.size() == 1);
+  assert(bm.getAssertLevel() == 1);
+
+  // The base is an assertion level too for declaration lifetime. Rebuild it
+  // rather than merely replacing its assertions: destroying the frame drops
+  // its symbols, functions, and sort aliases together.
+  bm.Pop();
+  removeFrame();
+  cache.clear();
+
+  // These tables may retain the discarded assertions or declarations.
+  resetSolver();
+  discardExtensionalitySolveState();
+
+  cache.push_back(Entry(SOLVER_UNDECIDED));
+  addFrame();
+  bm.Push();
+
+  checkInvariant();
+}
+
 void Cpp_interface::pop()
 {
   if (frames.size() == 0)
@@ -436,6 +558,7 @@ void Cpp_interface::pop()
   // These tables might hold references to symbols that have been
   // removed.
   resetSolver();
+  discardExtensionalitySolveState();
 
   cache.erase(cache.end() - 1);
 
@@ -464,15 +587,6 @@ void Cpp_interface::ignoreCheckSat()
   ignoreCheckSatRequest = true;
 }
 
-void Cpp_interface::printStatus()
-{
-  for (size_t i = 0, size = cache.size(); i < size; ++i)
-  {
-    cache[i].print();
-  }
-  cerr << endl;
-}
-
 // Does some simple caching of prior results.
 void Cpp_interface::checkSat(const ASTVec& assertionsSMT2)
 {
@@ -492,7 +606,7 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2)
   }
 
   Entry& last_run = cache.back();
-  if (((unsigned)last_run.node_number != assertionsSMT2.back().GetNodeNum()) &&
+  if ((last_run.node_number != assertionsSMT2.back().GetNodeNum()) &&
       (last_run.result == SOLVER_SATISFIABLE))
   {
     // extra asserts might have been added to it,
@@ -540,7 +654,7 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2)
     bm.GetRunTimes()->print();
   }
 
-  (GlobalSTP->tosat)->PrintOutput(last_run.result);
+  ToSATBase::PrintOutput(&bm, last_run.result);
 
   // User has specified -p option to print model.
    if (bm.UserFlags.print_counterexample_flag)
@@ -553,21 +667,21 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2)
 }
 
 // This method sets up some of the globally required data.
+//
+// NB it does not create the STP that GlobalSTP points at. Every writer of
+// GlobalSTP borrows: whoever allocates the STP frees it, and the pointer is
+// only ever a non-owning view. Callers that need one (because they reach
+// something which dereferences GlobalSTP, such as BBAsProp) construct the STP
+// themselves and assign it before that point.
 Cpp_interface::Cpp_interface(STPMgr& bm_)
-    : bm(bm_), letMgr(new LetMgr(bm.ASTUndefined)), nf(bm_.defaultNodeFactory)
+    : bm(bm_), set_global_parser_bm(true),
+      letMgr(new LetMgr(bm.ASTUndefined)), nf(bm_.defaultNodeFactory)
 {
   nf = bm.defaultNodeFactory;
   startup();
   stp::GlobalParserInterface = this;
   stp::GlobalParserBM = &bm_;
-  GlobalSTP = new STP(&bm);
   init();
-}
-
-void Cpp_interface::deleteGlobal()
-{
-  GlobalSTP->deleteObjects();
-  delete GlobalSTP;
 }
 
 void Cpp_interface::cleanUp()
@@ -641,20 +755,89 @@ void Cpp_interface::setOption(std::string option, std::string value)
     unsupported();
 }
 
-void Cpp_interface::getOption(std::string)
+// The options we report are exactly the ones setOption() honours; everything
+// else must answer "unsupported" rather than invent a value (SMT-LIB 2.6
+// 4.1.7).
+void Cpp_interface::getOption(std::string option)
 {
-  unsupported();
+  if (option == "print-success")
+    cout << (print_success ? "true" : "false") << endl;
+  else if (option == "produce-models")
+    cout << (produce_models ? "true" : "false") << endl;
+  else if (option == "diagnostic-output-channel")
+    cout << "\"stdout\"" << endl;
+  else
+  {
+    unsupported();
+    return;
+  }
+
+  flush(cout);
+}
+
+void Cpp_interface::getInfo(std::string flag)
+{
+  if (flag == "name")
+    cout << "(:name \"STP\")" << endl;
+  else if (flag == "version")
+    cout << "(:version \"" << get_git_version_tag() << "\")" << endl;
+  else if (flag == "error-behavior")
+  {
+    // FatalError() exits rather than unwinding to the next command.
+    cout << "(:error-behavior immediate-exit)" << endl;
+  }
+  else if (flag == "assertion-stack-levels")
+  {
+    // The base level is not an assertion level.
+    cout << "(:assertion-stack-levels "
+         << (frames.size() > 0 ? frames.size() - 1 : 0) << ")" << endl;
+  }
+  else
+  {
+    // :all-statistics, :authors and :reason-unknown are not reported.
+    unsupported();
+    return;
+  }
+
+  flush(cout);
+}
+
+void Cpp_interface::getAssertions()
+{
+  // GetAsserts() flattens the stack into the individual asserted formulas,
+  // unlike getAssertVector(), which conjoins each level.
+  const ASTVec v = GetAsserts();
+
+  cout << "(" << endl;
+  for (const ASTNode& n : v)
+  {
+    printer::SMTLIB2_Print1(cout, n, 0, false);
+    cout << endl;
+  }
+  cout << ")" << endl;
+  flush(cout);
 }
 
 void Cpp_interface::getValue(const ASTVec& v)
 {
+  if (!bm.UserFlags.construct_counterexample_flag)
+  {
+    unsupported();
+    return;
+  }
+
   std::ostringstream os;
 
   os << "(" << std::endl;
 
   for (ASTNode n : v)
   {
-    if (n.GetKind() != SYMBOL)
+    // Array-valued get-value is explicitly unsupported when array
+    // equality is enabled; use (get-model), which prints the completed
+    // array interpretations. With the feature disabled the
+    // pre-extension behavior is preserved unchanged.
+    if (n.GetKind() != SYMBOL ||
+        (n.GetType() == ARRAY_TYPE && bm.UserFlags.enable_array_equality))
     {
       unsupported();
       return;
@@ -682,8 +865,7 @@ void Cpp_interface::getModel()
     return;
   }
 
-  cout << "(model" << std::endl;
-
+  cout << "(" << std::endl;
   std::ostringstream os;
   GlobalSTP->Ctr_Example->PrintFullCounterExampleSMTLIB2(os);
   cout << os.str();
@@ -697,8 +879,11 @@ void CNFClearMemory()
 
 Cpp_interface::SolverFrame::SolverFrame(
     ankerl::unordered_dense::map<std::string, Function>*
-        global_function_context)
-    : _global_function_context(global_function_context)
+        global_function_context,
+    std::map<std::string, std::pair<unsigned, unsigned>>*
+        global_sort_alias_context)
+    : _global_function_context(global_function_context),
+      _global_sort_alias_context(global_sort_alias_context)
 {
 }
 
@@ -725,6 +910,18 @@ Cpp_interface::SolverFrame::~SolverFrame()
     // Remove our scope function from the global function context
     _global_function_context->erase(function_to_erase);
   }
+
+  // Sort declarations have the same SMT-LIB scope as symbols and functions:
+  // pop drops declarations made in that frame, while reset and
+  // reset-assertions drop every non-global declaration.
+  for (const auto& scoped_alias_name : _scoped_sort_aliases)
+  {
+    const auto alias_to_erase =
+        _global_sort_alias_context->find(scoped_alias_name);
+    if (alias_to_erase == _global_sort_alias_context->end())
+      FatalError("Trying to erase a sort alias which has not been defined.");
+    _global_sort_alias_context->erase(alias_to_erase);
+  }
 }
 
 vector<std::string>& Cpp_interface::SolverFrame::getFunctions()
@@ -735,5 +932,48 @@ vector<std::string>& Cpp_interface::SolverFrame::getFunctions()
 ASTVec& Cpp_interface::SolverFrame::getSymbols()
 {
   return _scoped_symbols;
+}
+
+void Cpp_interface::SolverFrame::addSortAlias(const std::string& name)
+{
+  _scoped_sort_aliases.push_back(name);
+}
+
+void Cpp_interface::SolverFrame::addSymbol(const ASTNode& symbol)
+{
+  _scoped_symbols.push_back(symbol);
+  _symbol_bindings[symbol.GetName()].push_back(symbol);
+}
+
+bool Cpp_interface::SolverFrame::removeSymbol(const ASTNode& symbol)
+{
+  const auto binding = _symbol_bindings.find(symbol.GetName());
+  if (binding == _symbol_bindings.end() || binding->second.empty() ||
+      binding->second.back() != symbol)
+    return false;
+  binding->second.pop_back();
+  if (binding->second.empty())
+    _symbol_bindings.erase(binding);
+
+  for (auto it = _scoped_symbols.end(); it != _scoped_symbols.begin();)
+  {
+    --it;
+    if (*it == symbol)
+    {
+      _scoped_symbols.erase(it);
+      return true;
+    }
+  }
+  return false;
+}
+
+bool Cpp_interface::SolverFrame::lookupSymbol(const std::string& name,
+                                              ASTNode& output) const
+{
+  const auto found = _symbol_bindings.find(name);
+  if (found == _symbol_bindings.end() || found->second.empty())
+    return false;
+  output = found->second.back();
+  return true;
 }
 }

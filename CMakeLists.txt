@@ -18,34 +18,20 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
-
-if(POLICY CMP0048)
-    #policy for VERSION in cmake 3.0
-    cmake_policy(SET CMP0048 NEW)
-endif()
-
-if(POLICY CMP0074)
-    #policy for <PackageName>_ROOT variables
-    cmake_policy(SET CMP0074 NEW)
-endif()
-
-if(POLICY CMP0092)
-    # Disable passing /W3 by default on MSVC
-    cmake_policy(SET CMP0092 NEW)
-endif()
-
-if(POLICY CMP0077)
-    # Allow to override options via regular variables
-    cmake_policy(SET CMP0077 NEW)
-endif()
+# 3.18 is what lib/extlib-mimalloc requires, and mimalloc is the default
+# STP_ALLOCATOR, so a default build already needs it. Anyone on an older CMake
+# can configure with -DSTP_ALLOCATOR=system, which skips that subdirectory.
+#
+# Nothing here sets a policy explicitly: every policy STP cares about
+# (CMP0048, CMP0074, CMP0077, CMP0092 - the newest introduced in 3.15) is NEW
+# by default at this minimum.
+cmake_minimum_required(VERSION 3.18)
 
 project(STP)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_CXX_STANDARD 17)
 
-include(GenerateExportHeader)
 include(GNUInstallDirs)
 include(FeatureSummary)
 
@@ -119,8 +105,6 @@ macro(add_cxx_flag flagname)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flagname}")
 endmacro()
 
-include(MacroPushRequiredVars)
-
 option(SANITIZE "Use Clang sanitizers" OFF)
 if (SANITIZE)
     # Set in Cache so user can tweak it later
@@ -153,7 +137,6 @@ endif()
 add_feature_info(Static STATICCOMPILE "Compiles static library and executable")
 
 if ((${CMAKE_SYSTEM_NAME} MATCHES "Windows") OR (NOT BUILD_SHARED_LIBS))
-    set(Boost_USE_STATIC_LIBS ON)
     set(Minisat_USE_STATIC_LIBS ON)
 endif()
 
@@ -181,16 +164,16 @@ else ()
     # (but later on when installing)
     SET(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 
-    SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_LIBDIR}")
+    SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_FULL_LIBDIR}")
 
     # add the automatically determined parts of the RPATH
     # which point to directories outside the build tree to the install RPATH
     SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 
     # the RPATH to be used when installing, but only if it's not a system directory
-    LIST(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES "${CMAKE_INSTALL_LIBDIR}" isSystemDir)
+    LIST(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES "${CMAKE_INSTALL_FULL_LIBDIR}" isSystemDir)
     IF("${isSystemDir}" STREQUAL "-1")
-        SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_LIBDIR}")
+        SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_FULL_LIBDIR}")
     ENDIF("${isSystemDir}" STREQUAL "-1")
 
     if (APPLE)
@@ -208,7 +191,8 @@ if (NOT MSVC)
 
     add_compile_options("$<$<CONFIG:RELWITHDEBINFO>:-O2>")
 
-    add_compile_options("$<$<CONFIG:RELEASE>:-O2>")
+    add_compile_options("$<$<CONFIG:RELEASE>:-O3>")
+    add_compile_options("$<$<CONFIG:RELEASE>:-fno-tree-vectorize>")
     add_compile_options("$<$<CONFIG:RELEASE>:-g0>")
 
     add_compile_options("$<$<CONFIG:DEBUG>:-O0>")
@@ -287,14 +271,10 @@ else()
     # set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /PDBCOMPRESS")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /STACK:1572864")
 
-    #what does this do?
-    set(DEF_INSTALL_CMAKE_DIR CMake)
-
-
     if (MSVC)
         # Windows compatibility includes
         set(STP_DEFS_COMM ${STP_DEFS_COMM} -D_CRT_SECURE_NO_WARNINGS)
-        set(STP_INCL_COMM windows/winports windows/winports/msc99hdr ${STP_INCL_COMM})
+        set(STP_INCL_COMM windows/winports ${STP_INCL_COMM})
         include_directories(${STP_INCL_COMM})
         add_subdirectory(windows)
         set(PLATFORM_COMPAT_LIBRARIES ${PLATFORM_COMPAT_LIBRARIES} windows_compat)
@@ -314,6 +294,7 @@ endif()
 # Set the appropriate build flags
 # -----------------------------------------------------------------------------
 include(CheckCXXCompilerFlag)
+include(CheckLinkerFlag)
 
 macro(add_cxx_flag_if_supported flagname)
   check_cxx_compiler_flag("${flagname}" HAVE_FLAG_${flagname})
@@ -354,10 +335,45 @@ if(NOT MSVC)
     if (NOT CMAKE_BUILD_TYPE STREQUAL "Release")
         add_cxx_flag_if_supported("-fno-omit-frame-pointer")
     endif()
-    #if(NOT ENABLE_TESTING AND ${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
-        # almost working
-        # add_cxx_flag_if_supported("-fvisibility=hidden")
+        # Cut the cost of dynamic symbol resolution, which is ~79% of STP's
+        # fixed 4.15M-instruction startup and so dominates easy queries.
+        #
+        # -fvisibility=hidden exports only what is explicitly annotated
+        # DLL_PUBLIC (see include/stp/Util/Attributes.h), which is the whole
+        # public C and C++ API.  Everything else becomes local, so the loader
+        # has far fewer symbols to look up.
+        #
+        # -Wl,-Bsymbolic-functions binds libstp's calls to its own exported
+        # functions at link time instead of going through the PLT.  The one
+        # consequence is that LD_PRELOAD can no longer interpose STP's own
+        # functions on calls made from inside libstp; that is not a use case
+        # for a solver library, and the flag is in Debian's default hardening
+        # set.  Neither flag changes behaviour: the emitted CNF is unchanged.
+        #
+        # -fvisibility=hidden is skipped for ENABLE_TESTING and
+        # BUILD_EXTRA_TOOLS builds.  The unit tests and the extra tools
+        # (propagator_bench and friends) link libstp and call directly into
+        # entry points that are not part of the public API (the simplifier
+        # passes, the domain analyses, STPMgr internals, SMT2ScanString), so
+        # they need the full export set.  This is why the flag was carried
+        # commented-out here.
+        if(NOT ENABLE_TESTING AND NOT BUILD_EXTRA_TOOLS)
+            add_cxx_flag_if_supported("-fvisibility=hidden")
+            # The vendored ABC sources are C.  There is no
+            # add_c_flag_if_supported, so reuse the check above and set
+            # CMAKE_C_FLAGS directly, as WERROR does.
+            if(HAVE_FLAG_-fvisibility=hidden)
+                set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
+            endif()
+        endif()
+
+        check_linker_flag(CXX "-Wl,-Bsymbolic-functions" HAVE_LINKER_FLAG_BSYMBOLIC_FUNCTIONS)
+        if(HAVE_LINKER_FLAG_BSYMBOLIC_FUNCTIONS)
+            set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -Wl,-Bsymbolic-functions")
+            set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-Bsymbolic-functions")
+        endif()
+
         set(CMAKE_EXE_LINKER_FLAGS " ${CMAKE_EXE_LINKER_FLAGS} -Wl,--discard-all -Wl,--build-id=sha1")
     endif()
     # add_cxx_flag_if_supported("-flto") # slow compile and not enough benefits
@@ -369,6 +385,26 @@ add_definitions("-D__STDC_LIMIT_MACROS")
 option(TUNE_NATIVE "Use -mtune=native" OFF)
 if(TUNE_NATIVE)
   add_cxx_flag_if_supported("-mtune=native")
+endif()
+
+# Let the compiler emit the POPCNT instruction.  Without this, popCount64() in
+# include/stp/Util/BitOps.h counts in software, because gcc's default x86-64
+# target has no POPCNT and __builtin_popcountll would otherwise become an
+# out-of-line call into libgcc.  Note TUNE_NATIVE does not imply this: -mtune
+# only changes scheduling, not the instructions the compiler may emit.
+#
+# On by default -- POPCNT is on every x86-64 CPU since Nehalem (2008) and AMD
+# Barcelona (2007).  Turn it off when building for hardware older than that,
+# such as a distribution package targeting the baseline x86-64 ISA; the
+# software fallback in BitOps.h is then used and remains correct everywhere.
+option(USE_POPCNT "Use the POPCNT instruction (requires Nehalem/2008 or later)" ON)
+if(USE_POPCNT)
+  add_cxx_flag_if_supported("-mpopcnt")
+  # The vendored ABC sources are C.  There is no add_c_flag_if_supported, so
+  # reuse the check above and set CMAKE_C_FLAGS directly, as WERROR does.
+  if(HAVE_FLAG_-mpopcnt)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mpopcnt")
+  endif()
 endif()
 
 option(COVERAGE "Build with coverage check" OFF)
@@ -420,7 +456,7 @@ if (GIT_EXECUTABLE)
 else()
   set(GIT_SHA "GIT-hash-notfound")
 endif()
-set(STP_FULL_VERSION "2.3.4")
+set(STP_FULL_VERSION "2.4.1")
 
 string(REPLACE "." ";" STP_FULL_VERSION_LIST ${STP_FULL_VERSION})
 SetVersionNumber("PROJECT" ${STP_FULL_VERSION_LIST})
@@ -445,18 +481,97 @@ include_directories("${CMAKE_CURRENT_SOURCE_DIR}/include")
 include_directories("${CMAKE_CURRENT_BINARY_DIR}/include")
 
 # FIXME: External library includes
-include_directories(# For extlib-abc and extlib-constbv
+include_directories(# For extlib-constbv
                     ${PROJECT_SOURCE_DIR}/lib
-                    ${PROJECT_SOURCE_DIR}/lib/extlib-abc/src
                    )
+# The vendored upstream submodules cannot simply be committed to, so local
+# fixes are carried as patches and applied here, at configure time, before
+# anything is built. Each submodule that takes patches has its own directory
+# under patches/, named for the library; the patches inside are relative to
+# that submodule's own root, so they are the plain `git diff` its checkout
+# produces.
+#
+# Applying is idempotent: a patch that reverse-applies cleanly is already in
+# the tree and is skipped, so re-running cmake, or configuring a second build
+# directory against the same source, does not double-apply. A patch that does
+# neither is a hard error rather than a silent miscompile -- that happens when
+# the submodule is bumped past the code the patch was written against, and the
+# patch then needs rebasing or, if upstream has taken it, deleting.
+#
+# The sentinel is a file the submodule is known to contain; it distinguishes a
+# checked-out submodule from the empty directory an uninitialised one leaves,
+# so a build without submodules is not turned into a patch failure.
+function(stp_apply_vendored_patches _label _subdir _sentinel)
+  set(_patchdir "${PROJECT_SOURCE_DIR}/patches/${_label}")
+  file(GLOB _patches "${_patchdir}/*.patch")
+  list(SORT _patches)
+  if(NOT _patches)
+    return()
+  endif()
+  if(NOT EXISTS "${PROJECT_SOURCE_DIR}/${_subdir}/${_sentinel}")
+    return() # submodule not checked out; nothing to patch
+  endif()
+  if(NOT GIT_EXECUTABLE)
+    message(FATAL_ERROR
+            "patches/${_label}/ contains patches for the vendored ${_label} "
+            "but git was not found to apply them. Install git, or remove the "
+            "patches.")
+  endif()
+  foreach(_patch ${_patches})
+    get_filename_component(_patch_name "${_patch}" NAME)
+    execute_process(COMMAND "${GIT_EXECUTABLE}" apply --reverse --check "${_patch}"
+                    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/${_subdir}"
+                    RESULT_VARIABLE _already OUTPUT_QUIET ERROR_QUIET)
+    if(_already EQUAL 0)
+      message(STATUS "${_label} patch already applied: ${_patch_name}")
+    else()
+      execute_process(COMMAND "${GIT_EXECUTABLE}" apply "${_patch}"
+                      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/${_subdir}"
+                      RESULT_VARIABLE _rc ERROR_VARIABLE _err)
+      if(NOT _rc EQUAL 0)
+        message(FATAL_ERROR
+                "Failed to apply ${_patch_name} to ${_subdir}:\n${_err}"
+                "It neither applies nor is already applied. If the ${_label} "
+                "submodule was bumped, rebase the patch onto the new revision, "
+                "or delete it if upstream has taken the change.")
+      endif()
+      message(STATUS "Applied ${_label} patch: ${_patch_name}")
+    endif()
+  endforeach()
+endfunction()
+
+stp_apply_vendored_patches(abc "lib/extlib-abc" "src/opt/dar/darCut.c")
+stp_apply_vendored_patches(symfpu "lib/extlib-symfpu/symfpu" "core/convert.h")
+
+# ABC is a vendored upstream submodule (berkeley-abc/abc); mark its headers as
+# SYSTEM so their warnings (e.g. -Wpedantic zero-size arrays, -Wunused-parameter
+# in inline helpers) don't trip -Werror in the STP translation units that
+# include them.
+include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/lib/extlib-abc/src)
 # abc related word size check
 include(CheckTypeSize)
 # Check size of void pointer (void*)
 CHECK_TYPE_SIZE("void*" SIZEOF_VOID_P)
-if(SIZEOF_VOID_P EQUAL 8)
-    add_definitions(-DLIN64)
+# LIN/LIN64 select ABC's Linux code paths, and NT64 the 64-bit Windows
+# ones. (abc_global.h only detects the platform by itself when
+# ABC_USE_STDINT_H is set; without NT64 its fallback ladder sees MSVC's
+# WIN32 and picks a 32-bit ABC_PTRUINT_T, whose tagged AIG pointers
+# (Aig_Not/Aig_Regular) truncate 64-bit heap pointers -- the first query
+# to reach ABC's CNF generation then dies with an access violation.
+# 32-bit Windows is already correct via the WIN32 fallback.)
+if(NOT WIN32)
+    if(SIZEOF_VOID_P EQUAL 8)
+        add_definitions(-DLIN64)
+    else()
+        add_definitions(-DLIN)
+    endif()
 else()
-    add_definitions(-DLIN)
+    if(SIZEOF_VOID_P EQUAL 8)
+        add_definitions(-DNT64)
+    endif()
+    # ABC is linked statically; without this its headers declare the
+    # ABC API __declspec(dllimport), producing unresolved __imp_ symbols.
+    add_definitions(-DWIN32_NO_DLL)
 endif()
 add_definitions(-DSIZEOF_VOID_P=${SIZEOF_VOID_P})
 
@@ -468,21 +583,16 @@ add_definitions(-DSIZEOF_LONG=${SIZEOF_LONG})
 CHECK_TYPE_SIZE("int" SIZEOF_INT)
 add_definitions(-DSIZEOF_INT=${SIZEOF_INT})
 
-
-
-option(ONLY_SIMPLE "Only build very simplistic executable -- no Boost needed" OFF)
-if (NOT ONLY_SIMPLE)
-  find_package( Boost 1.46 COMPONENTS program_options)
-endif()
-
-if(NOT Boost_FOUND)
-    set(ONLY_SIMPLE ON)
-endif()
-add_feature_info(SimpleOptions ONLY_SIMPLE "Simplifies command-line interface, only a few command-line options will be available")
+# Declared here, well before its first use (the manpage rule); the subdirs it
+# gates are added at the bottom of this file.
+option(BUILD_EXECUTABLES "Build executables" ON)
 
 # -----------------------------------------------------------------------------
 # Find Riss
 # -----------------------------------------------------------------------------
+option(USE_MINISAT "Use the MiniSat solver backend" OFF)
+add_feature_info(MiniSat USE_MINISAT "Enables the MiniSat and simplifying-MiniSat solvers")
+
 option(USE_RISS "Try to use Riss" OFF)
 add_feature_info(Riss USE_RISS "Enables Riss solver")
 
@@ -510,7 +620,122 @@ if (USE_CADICAL)
     add_definitions(-DUSE_CADICAL)
     include_directories(${CADICAL_INCLUDE_DIR})
     link_libraries(${CADICAL_LIBRARY})
+
+    # Bounded variable addition (--cadical-factor) needs the
+    # declare_more_variables API. That appeared in CaDiCaL 2.2.0, but the
+    # 2.2 line shipped it with different contract-checking defaults and was
+    # never tested here, so support is only compiled in against the 3.x
+    # series. Older checkouts still build and solve; STP just warns if the
+    # factor flag is explicitly requested. The checkout root carries its
+    # version in a VERSION file, which is what CADICAL_INCLUDE_DIR points at.
+    set(CADICAL_VERSION "unknown")
+    if (EXISTS "${CADICAL_INCLUDE_DIR}/VERSION")
+        file(READ "${CADICAL_INCLUDE_DIR}/VERSION" CADICAL_VERSION)
+        string(STRIP "${CADICAL_VERSION}" CADICAL_VERSION)
+    endif()
+    if (CADICAL_VERSION VERSION_GREATER_EQUAL "3.0.0")
+        message(STATUS "CaDiCaL ${CADICAL_VERSION}: bounded variable addition (--cadical-factor) enabled")
+        add_definitions(-DSTP_CADICAL_HAS_FACTOR)
+        # Mirrored as a variable so the test tree can register the
+        # factor-forced lit sweep only when the flag can actually engage.
+        set(CADICAL_HAS_FACTOR ON)
+    else()
+        message(STATUS "CaDiCaL ${CADICAL_VERSION} predates 3.0.0: --cadical-factor will be unavailable")
+    endif()
 endif()
+
+# -----------------------------------------------------------------------------
+# Allocator selection
+# -----------------------------------------------------------------------------
+# STP is allocation-heavy at every stage: bit-blasting and CNF generation churn
+# the AIG and CNF data structures, and the SAT solvers churn clause memory.
+# The C library allocator is the bottleneck; any of the modern replacements is
+# ~15% faster to CNF, ~14% faster for CaDiCaL solving and ~7% for CryptoMiniSat,
+# with identical results. mimalloc is vendored as a submodule so that a fast
+# allocator is always available and is what you get unless you ask otherwise.
+#
+#   mimalloc  (default) build and link the vendored lib/extlib-mimalloc
+#   tcmalloc            link the system gperftools tcmalloc, if it can be found
+#   system              plain malloc from the C library
+set(STP_ALLOCATOR "mimalloc" CACHE STRING
+    "Memory allocator to link against (mimalloc/tcmalloc/system)")
+set_property(CACHE STP_ALLOCATOR PROPERTY STRINGS mimalloc tcmalloc system)
+
+# Back-compat: -DUSE_TCMALLOC=ON/OFF predates STP_ALLOCATOR and still works.
+if (DEFINED USE_TCMALLOC AND NOT DEFINED _STP_ALLOCATOR_FROM_USE_TCMALLOC)
+    if (USE_TCMALLOC)
+        message(WARNING "USE_TCMALLOC is deprecated, use -DSTP_ALLOCATOR=tcmalloc")
+        set(STP_ALLOCATOR "tcmalloc" CACHE STRING "" FORCE)
+    else()
+        message(WARNING "USE_TCMALLOC=OFF is deprecated, use -DSTP_ALLOCATOR=system")
+        set(STP_ALLOCATOR "system" CACHE STRING "" FORCE)
+    endif()
+    set(_STP_ALLOCATOR_FROM_USE_TCMALLOC ON CACHE INTERNAL "")
+endif()
+
+# STP_ALLOCATOR_LIBRARY is what the executables link; empty means system malloc.
+set(STP_ALLOCATOR_LIBRARY "")
+
+if (STP_ALLOCATOR STREQUAL "mimalloc")
+    if (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/lib/extlib-mimalloc/CMakeLists.txt")
+        message(FATAL_ERROR
+            "STP_ALLOCATOR=mimalloc but lib/extlib-mimalloc is empty. "
+            "Run: git submodule update --init lib/extlib-mimalloc "
+            "(or configure with -DSTP_ALLOCATOR=system).")
+    endif()
+    # The static library is what the executables link: it keeps them
+    # self-contained, with nothing extra to install or ship. The shared one is
+    # built too but not installed - it is there to be LD_PRELOADed by processes
+    # that embed libstp rather than run the stp binary, the Python (ctypes)
+    # interface being the one in tree. See tests/api/python/allocator_tests.py.
+    set(MI_BUILD_SHARED ON  CACHE BOOL "" FORCE)
+    set(MI_BUILD_OBJECT OFF CACHE BOOL "" FORCE)
+    set(MI_BUILD_TESTS  OFF CACHE BOOL "" FORCE)
+    set(MI_BUILD_STATIC ON  CACHE BOOL "" FORCE)
+    set(MI_OVERRIDE     ON  CACHE BOOL "" FORCE)
+    add_subdirectory(lib/extlib-mimalloc EXCLUDE_FROM_ALL)
+    # Vendored upstream code whose warnings we do not control.
+    if (WERROR AND NOT MSVC)
+        target_compile_options(mimalloc-static PRIVATE -Wno-error)
+        target_compile_options(mimalloc PRIVATE -Wno-error)
+    endif()
+    set(STP_ALLOCATOR_LIBRARY mimalloc-static)
+    # EXCLUDE_FROM_ALL above keeps mimalloc's other targets out of the build;
+    # the shared library is small and wanted by anyone preloading it, so opt it
+    # back in.
+    set_target_properties(mimalloc PROPERTIES EXCLUDE_FROM_ALL FALSE)
+    set(STP_ALLOCATOR_PRELOADABLE mimalloc)
+    message(STATUS "Allocator: vendored mimalloc (lib/extlib-mimalloc)")
+
+elseif (STP_ALLOCATOR STREQUAL "tcmalloc")
+    if (NOT BUILD_SHARED_LIBS)
+        # A -static link needs the archive; a versioned .so is useless here.
+        find_library(TCMALLOC_LIBRARY NAMES tcmalloc_minimal tcmalloc)
+    else()
+        # Distributions ship the unversioned symlink only in the -dev package,
+        # so also accept the runtime soname that everyone actually has.
+        find_library(TCMALLOC_LIBRARY
+                     NAMES tcmalloc_minimal tcmalloc
+                           libtcmalloc_minimal.so.4 libtcmalloc.so.4)
+    endif()
+    if (NOT TCMALLOC_LIBRARY)
+        message(FATAL_ERROR "STP_ALLOCATOR=tcmalloc but tcmalloc was not found. "
+                "Install gperftools (e.g. libtcmalloc-minimal-dev / gperftools-devel), "
+                "point -DTCMALLOC_LIBRARY at it, or use -DSTP_ALLOCATOR=mimalloc.")
+    endif()
+    set(STP_ALLOCATOR_LIBRARY ${TCMALLOC_LIBRARY})
+    message(STATUS "Allocator: tcmalloc (${TCMALLOC_LIBRARY})")
+
+elseif (STP_ALLOCATOR STREQUAL "system")
+    message(STATUS "Allocator: system malloc (slower; -DSTP_ALLOCATOR=mimalloc is the default)")
+
+else()
+    message(FATAL_ERROR "STP_ALLOCATOR must be mimalloc, tcmalloc or system, "
+            "not '${STP_ALLOCATOR}'")
+endif()
+
+add_feature_info(Allocator "NOT STP_ALLOCATOR STREQUAL system"
+                 "Links ${STP_ALLOCATOR} for faster allocation")
 
 # -----------------------------------------------------------------------------
 # Find CryptoMiniSat
@@ -524,6 +749,12 @@ if (NOT NOCRYPTOMINISAT)
   message(STATUS "GMP libraries: ${GMP_LIBRARIES}")
   include_directories(SYSTEM ${GMP_INCLUDE_DIRS})
   set(LIBS ${LIBS} ${GMP_LIBRARIES})
+  # A static CryptoMiniSat references cadical/cadiback imported targets but its
+  # config file does not find them itself; a shared CryptoMiniSat has no such
+  # packages, hence QUIET. cadical's export in turn references Threads::Threads.
+  find_package(Threads QUIET)
+  find_package(cadical CONFIG QUIET)
+  find_package(cadiback CONFIG QUIET)
   find_package(cryptominisat5 CONFIG)
   if (cryptominisat5_FOUND AND HAVE_FLAG_STD_CPP11 AND (NOT NOCRYPTOMINISAT))
     message(STATUS "CryptoMiniSat5 dynamic lib: ${CRYPTOMINISAT5_LIBRARIES}")
@@ -547,9 +778,10 @@ endif()
 # yes, we need to include the zlib header location or STP will not build
 # thanks to MiniSat include-ing it n the header
 # -----------------------------------------------------------------------------
-find_package(ZLIB)
-include_directories(${ZLIB_INCLUDE_DIR})
-include_directories(${minisat_SOURCE_DIR})
+if (USE_MINISAT)
+    find_package(ZLIB)
+    include_directories(${ZLIB_INCLUDE_DIR})
+endif()
 
 # ----------
 # manpage
@@ -557,7 +789,7 @@ include_directories(${minisat_SOURCE_DIR})
 if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     find_program(HELP2MAN_FOUND help2man)
     if (HELP2MAN_FOUND)
-        if (NOT ONLY_SIMPLE)
+        if (BUILD_EXECUTABLES)
             ADD_CUSTOM_TARGET(man_stp
                 ALL
                 DEPENDS stp-bin
@@ -586,25 +818,36 @@ endif()
 # Find Minisat
 # -----------------------------------------------------------------------------
 
-find_package(minisat)
-set(MINISAT_INCLUDE_DIR "" CACHE PATH "MiniSat include directory")
-set(MINISAT_LIBRARY "" CACHE PATH "MiniSat library directory")
-
-if (minisat_FOUND)
-    message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIRS}")
-else()
-    message(STATUS "Not found using installed MiniSat, looking for built MiniSat")
-    find_package(minisat CONFIG)
+if (USE_MINISAT)
+    find_package(minisat)
+    set(MINISAT_INCLUDE_DIR "" CACHE PATH "MiniSat include directory")
+    set(MINISAT_LIBRARY "" CACHE PATH "MiniSat library directory")
 
     if (minisat_FOUND)
         message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIRS}")
     else()
-        message(FATAL_ERROR "You must install minisat from https://github.com/stp/minisat")
+        message(STATUS "Not found using installed MiniSat, looking for built MiniSat")
+        find_package(minisat CONFIG)
+
+        if (minisat_FOUND)
+            message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIRS}")
+        else()
+            message(FATAL_ERROR "USE_MINISAT is set but MiniSat was not found. Install it from https://github.com/stp/minisat")
+        endif()
     endif()
+
+    add_definitions(-DUSE_MINISAT)
+    include_directories(SYSTEM ${MINISAT_INCLUDE_DIRS})
+    set(LIBS ${LIBS} ${MINISAT_LIBRARIES})
 endif()
 
-include_directories(SYSTEM ${MINISAT_INCLUDE_DIRS})
-set(LIBS ${LIBS} ${MINISAT_LIBRARIES})
+# Every backend is optional, but a solver with no SAT backend at all cannot
+# solve anything, so insist that at least one made it in.
+if (NOT USE_MINISAT AND NOT USE_CRYPTOMINISAT AND NOT USE_CADICAL AND NOT USE_RISS)
+    message(FATAL_ERROR "No SAT backend is enabled. Enable at least one of: "
+            "-DUSE_CADICAL=ON, CryptoMiniSat (found automatically when "
+            "installed), -DUSE_MINISAT=ON, or -DUSE_RISS=ON.")
+endif()
 
 # -----------------------------------------------------------------------------
 # Find Parser and Lexer generators
@@ -646,6 +889,80 @@ endif()
 
 # required for genkinds.pl and a few other scripts
 find_package(Perl REQUIRED)
+
+# -----------------------------------------------------------------------------
+# Floating-point support (opt-out; uses the header-only SymFPU library)
+# -----------------------------------------------------------------------------
+# SymFPU (BSD 3-Clause) is vendored as a pinned submodule, the same
+# arrangement as mimalloc above, so the default build has floating-point
+# support with nothing to install. When OFF, everything floating-point
+# stays out of the build except the always-compiled AST/parser/API surface,
+# which recognises floating-point input and rejects it with a "built
+# without floating-point support" error (see FloatBlaster.cpp's stubs and
+# checkFpSupported in smt2.y). The public headers and the libstp ABI are
+# identical either way.
+
+option(ENABLE_FLOATING_POINT
+       "SMT-LIB floating-point support (uses the vendored SymFPU library)" ON)
+add_feature_info(FloatingPoint ENABLE_FLOATING_POINT
+                 "Enables SMT-LIB floating-point support (via SymFPU)")
+
+if (ENABLE_FLOATING_POINT)
+    # The vendored submodule is the default; -DSYMFPU_INCLUDE_DIRS=<dir
+    # that CONTAINS a symfpu clone> overrides it with an external copy.
+    if (NOT SYMFPU_INCLUDE_DIRS)
+        set(SYMFPU_INCLUDE_DIRS "${PROJECT_SOURCE_DIR}/lib/extlib-symfpu")
+    endif()
+
+    find_package(SymFPU)
+
+    if (SymFPU_FOUND)
+        message(STATUS "OK, found SymFPU include dirs under ${SYMFPU_INCLUDE_DIRS}")
+    else()
+        message(FATAL_ERROR
+            "SymFPU (header-only, required for the floating-point support) "
+            "was not found. It is vendored as a submodule: run "
+            "git submodule update --init lib/extlib-symfpu/symfpu. An "
+            "external clone of https://github.com/martin-cs/symfpu works "
+            "too, via -DSYMFPU_INCLUDE_DIRS=<directory that CONTAINS the "
+            "symfpu clone>. To build without floating-point support, "
+            "configure with -DENABLE_FLOATING_POINT=OFF.")
+    endif()
+
+    # Let's get clean builds ...
+    include_directories(SYSTEM ${SYMFPU_INCLUDE_DIRS})
+
+    add_definitions(-DSTP_ENABLE_FLOATING_POINT)
+endif()
+
+option(USE_LIBBF "Use LibBF to fold real literals in floating-point input" OFF)
+add_feature_info(LibBF USE_LIBBF "Folds ((_ to_fp e s) rm 1.5) to its bits while parsing")
+
+if (USE_LIBBF)
+    # The one thing LibBF is for is converting real literals to float bits,
+    # which only exists in floating-point input.
+    if (NOT ENABLE_FLOATING_POINT)
+        message(FATAL_ERROR "USE_LIBBF folds floating-point real literals "
+                "and needs ENABLE_FLOATING_POINT")
+    endif()
+    set(LIBBF_DIR "" CACHE PATH "Path to a built LibBF (the directory containing libbf.h and libbf.a, as laid out by scripts/deps/setup-libbf.sh)")
+    find_path(LIBBF_INCLUDE_DIR NAMES libbf.h HINTS ${LIBBF_DIR})
+    find_library(LIBBF_LIBRARY NAMES bf HINTS ${LIBBF_DIR})
+    if (NOT LIBBF_INCLUDE_DIR OR NOT LIBBF_LIBRARY)
+        message(FATAL_ERROR "USE_LIBBF is set but LibBF was not found. Run "
+                "scripts/deps/setup-libbf.sh and point LIBBF_DIR at the "
+                "deps/libbf directory it creates")
+    endif()
+    message(STATUS "Found LibBF: ${LIBBF_LIBRARY}")
+    # DecimalLiteral.cpp keys on this to fold real literals instead of
+    # refusing them.
+    add_definitions(-DSTP_HAVE_LIBBF)
+    # SYSTEM, the way ABC and SymFPU are consumed: the header typedefs
+    # __int128 on 64-bit targets, which gcc's -pedantic rejects in the one
+    # C++ translation unit that includes it.
+    include_directories(SYSTEM ${LIBBF_INCLUDE_DIR})
+    link_libraries(${LIBBF_LIBRARY})
+endif()
 
 # -----------------------------------------------------------------------------
 # Query definitions
@@ -704,8 +1021,39 @@ option(ENABLE_TESTING "Enable testing" OFF)
 # try finding python if the user did not explicitly said that
 # he/she does not want python bindings
 if((NOT DEFINED ENABLE_PYTHON_INTERFACE) OR ENABLE_PYTHON_INTERFACE)
-    find_package (PythonInterp)
-    if(PYTHON_EXECUTABLE AND BUILD_SHARED_LIBS)
+    # Python 3 only. PYTHON_EXECUTABLE stays the documented way to choose the
+    # interpreter (the rest of the build and our CI use that name), so feed it
+    # to the finder and write the validated result back to it.
+    set(PYTHON_DOC_STRING "Python 3 interpreter for the bindings and the test suite")
+    if(CMAKE_VERSION VERSION_LESS 3.12)
+        # FindPython3 arrived in CMake 3.12; on older CMake ask the deprecated
+        # module for a Python 3 interpreter instead. It searches PYTHON_EXECUTABLE
+        # directly, so no hint needs forwarding.
+        find_package(PythonInterp 3)
+        set(Python3_EXECUTABLE "${PYTHON_EXECUTABLE}")
+        set(Python3_Interpreter_FOUND ${PYTHONINTERP_FOUND})
+    else()
+        if(PYTHON_EXECUTABLE)
+            set(Python3_EXECUTABLE "${PYTHON_EXECUTABLE}" CACHE FILEPATH
+                "${PYTHON_DOC_STRING}" FORCE)
+        endif()
+        find_package(Python3 COMPONENTS Interpreter)
+    endif()
+
+    # Publish the result in the cache so that subprojects looking for an
+    # interpreter of their own (e.g. gtest, which still uses the deprecated
+    # FindPythonInterp) pick up this Python 3 rather than finding a Python 2.
+    if(Python3_Interpreter_FOUND)
+        set(PYTHON_EXECUTABLE "${Python3_EXECUTABLE}" CACHE FILEPATH
+            "${PYTHON_DOC_STRING}" FORCE)
+    else()
+        set(PYTHON_EXECUTABLE "" CACHE FILEPATH "${PYTHON_DOC_STRING}" FORCE)
+        # Don't let a rejected interpreter stick in the cache, or every later
+        # reconfigure would keep re-testing the same unsuitable one.
+        unset(Python3_EXECUTABLE CACHE)
+    endif()
+
+    if(Python3_Interpreter_FOUND AND BUILD_SHARED_LIBS)
         set(ENABLE_PYTHON_INTERFACE ON)
     else()
         set(ENABLE_PYTHON_INTERFACE OFF)
@@ -719,7 +1067,6 @@ add_feature_info(PythonInterface ENABLE_PYTHON_INTERFACE "Enables Python interfa
 
 message(STATUS "Final CXX flags ${CMAKE_CXX_FLAGS}")
 
-option(BUILD_EXECUTABLES "Build executables" ON)
 add_subdirectory(lib)
 add_subdirectory(tools)
 add_subdirectory(bindings)
@@ -794,6 +1141,22 @@ configure_file(STPConfigVersion.cmake.in
 # Now the user can just use find_package(STP) on their system
 export(PACKAGE STP)
 
+
+# -----------------------------------------------------------------------------
+# Install the licences
+# -----------------------------------------------------------------------------
+# STP's own licence, and the notices of the third-party code compiled into it.
+# Several of those -- ABC, mimalloc, ankerl::unordered_dense, LibBF -- are MIT
+# or BSD, whose one condition is that the notice travels with the binary, so an
+# install that left these behind would not meet it. Which components are
+# actually linked in varies with the configuration, and the file says which
+# ones are conditional, so it is installed whole rather than assembled per
+# build.
+install(FILES
+  "${PROJECT_SOURCE_DIR}/LICENSE"
+  "${PROJECT_SOURCE_DIR}/LICENSE_COMPONENTS"
+  DESTINATION "${CMAKE_INSTALL_DOCDIR}"
+)
 
 # -----------------------------------------------------------------------------
 # Export our targets so that other CMake based projects can interface with

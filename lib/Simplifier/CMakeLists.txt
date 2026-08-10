@@ -19,6 +19,7 @@
 # THE SOFTWARE.
 
 add_library(simplifier OBJECT
+    AchievableImage.cpp
     BVSolver.cpp
     consteval.cpp
     PropagateEqualities.cpp
@@ -34,6 +35,7 @@ add_library(simplifier OBJECT
     UnsignedIntervalAnalysis.cpp
     ValueSetAnalysis.cpp
     Flatten.cpp
+    CommonSubSum.cpp
     NodeDomainAnalysis.cpp
     SplitExtracts.cpp
     Rewriting.cpp

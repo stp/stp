@@ -1,11 +1,11 @@
 name: "CodeQL"
 
 on:
-  #push:
-  #  branches: [master]
-  #pull_request:
-    # The branches below must be a subset of the branches above
-    #branches: [master]
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
   schedule:
     - cron: '0 0 * * 1'
 
@@ -15,38 +15,113 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      # required for all workflows
+      actions: read
+      contents: read
       security-events: write
 
     strategy:
       fail-fast: false
       matrix:
-        # Override automatic language detection by changing the below list
-        # Supported options are ['csharp', 'cpp', 'go', 'java', 'javascript', 'python']
-        language: ['cpp']
-        # Learn more...
-        # https://docs.github.com/en/github/finding-security-vulnerabilities-and-errors-in-your-code/configuring-code-scanning#overriding-automatic-language-detection
+        language: ['cpp', 'python']
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v7
+      with:
+        submodules: 'true'
+
+    - name: Packages
+      if: matrix.language == 'cpp'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bison \
+          build-essential \
+          cmake \
+          flex \
+          git \
+          python3 \
+          python3-pip \
+          python3-setuptools \
+          zlib1g-dev
+        # ENABLE_TESTING is a hard configure error without lit, even though
+        # this job only builds the tests and never runs them.
+        sudo pip3 install -U lit
+
+    # The solver libraries are built before CodeQL is initialized, so their
+    # compilation is not traced into the database. gtest cannot be handled
+    # the same way (tests/CMakeLists.txt compiles it as part of the STP
+    # build); it is cloned here and filtered out of the results below.
+    #
+    # CryptoMiniSat is built shared, unlike everywhere else: this is the one
+    # build that links CMS and CaDiCaL at the same time, and a static CMS
+    # drags its own FetchContent-built libcadical.a onto libstp's link line,
+    # where it collides with the newer CaDiCaL from setup-cadical.sh. A
+    # shared libcryptominisat5 keeps its bundled cadical internal.
+    - name: Dependencies
+      if: matrix.language == 'cpp'
+      run: |
+        ./scripts/deps/setup-minisat.sh
+        ./scripts/deps/setup-cms.sh -DBUILD_SHARED_LIBS=ON
+        ./scripts/deps/setup-cadical.sh
+        ./scripts/deps/setup-gtest.sh
 
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v4
       with:
-         languages: ${{ matrix.language }}
+        languages: ${{ matrix.language }}
 
-    - run: |
-       mkdir minisat_git && cd minisat_git
-       git clone --depth 1 https://github.com/stp/minisat
-       cd minisat
-       mkdir build && cd build
-       cmake ..
-       make
-       cd ../../..
-       mkdir build && cd build
-       cmake ..
-       make
+    # CodeQL only sees C++ code that is actually compiled, so every optional
+    # component is switched on: all three backends, the unit tests and the
+    # extra tools. MiniSat is deliberately included even though the build
+    # and test jobs confine it to the dedicated minisat-only legs -- this is
+    # the analysis job, and dropping the backend here would leave its
+    # wrappers unanalysed anywhere.
+    #
+    # CADICAL_LIBRARY is pinned by hand: CMS installs its own bundled cadical
+    # into deps/install, and find_library searches CMAKE_PREFIX_PATH (which
+    # CMakeLists points at deps/install) before the CADICAL_DIR hint, so
+    # without the pin libstp links the older library against the 3.x headers.
+    - name: Build
+      if: matrix.language == 'cpp'
+      run: |
+        mkdir build
+        cd build
+        cmake \
+          -DUSE_MINISAT:BOOL=ON \
+          -DNOCRYPTOMINISAT:BOOL=OFF \
+          -DUSE_CADICAL:BOOL=ON \
+          -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" \
+          -DCADICAL_LIBRARY:FILEPATH="$GITHUB_WORKSPACE/deps/cadical/build/libcadical.a" \
+          -DENABLE_TESTING:BOOL=ON \
+          -DBUILD_EXTRA_TOOLS:BOOL=ON \
+          -DPYTHON_EXECUTABLE:PATH="$(which python3)" \
+          ..
+        make -j"$(nproc)"
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v4
+      with:
+        category: "/language:${{ matrix.language }}"
+        output: sarif-results
+        upload: failure-only
+
+    # A CodeQL config's paths-ignore only filters interpreted languages, so
+    # vendored code the build compiles (extlib-abc, mimalloc, gtest) has to
+    # be dropped from the SARIF instead.
+    - name: Filter out third-party code
+      uses: advanced-security/filter-sarif@v1
+      with:
+        patterns: |
+          -lib/extlib-abc/**
+          -lib/extlib-mimalloc/**
+          -lib/extlib-symfpu/**
+          -deps/**
+        input: sarif-results/${{ matrix.language }}.sarif
+        output: sarif-results/${{ matrix.language }}.sarif
+
+    - name: Upload results
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        category: "/language:${{ matrix.language }}"
+        sarif_file: sarif-results/${{ matrix.language }}.sarif

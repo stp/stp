@@ -18,8 +18,8 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
+cmake_minimum_required(VERSION 3.18)
 project(SimpleSTPExample)
-cmake_minimum_required(VERSION 2.8)
 
 # See the CMake manual on the find_package() command in Config mode.
 set(STP_DIR "" CACHE PATH "Try to use particular STP install (set this to folder where STPConfig.cmake is installed)")
@@ -32,15 +32,10 @@ message("Using STP rooted at ${STP_DIR}")
 # -----------------------------------------------------------------------------
 
 message("STP include paths are: ${STP_INCLUDE_DIRS}")
-message("STP executable: ${STP_EXECUTABLE}")
 message("STP version: ${STP_VERSION}")
 message("STP major version: ${STP_VERSION_MAJOR}")
 message("STP minor version: ${STP_VERSION_MINOR}")
 message("STP patch version: ${STP_VERSION_PATCH}")
-
-# Get full path to STP executable
-get_target_property(STP_FULL_PATH ${STP_EXECUTABLE} LOCATION)
-message("Full path to STP binary is ${STP_FULL_PATH}")
 
 # -----------------------------------------------------------------------------
 # Example program

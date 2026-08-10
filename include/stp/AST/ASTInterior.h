@@ -64,6 +64,20 @@ class ASTInterior : public ASTInternal
   uint32_t _value_width;
   uint32_t _index_width;
 
+  uint32_t _sig_width;
+  uint32_t _exp_width;
+
+  // Derived, and memoised on first request; see ASTInternal::cachedSourceSort.
+  // Points into the manager's intern pool, so it neither owns nor allocates.
+  //
+  // A width setter drops it, because the derivation reads the widths and
+  // legacy callers still set them after the node is built -- but only when the
+  // width actually changes. The node factories re-assert a node's widths on
+  // every hash-cons *hit* (HashingNodeFactory::CreateTerm), so invalidating
+  // unconditionally would throw the memo away on each of the DAG's incoming
+  // edges and leave the recomputation exactly as it was.
+  mutable const SourceSort* _source_sort_cache;
+
   // The children live immediately after the object in the same allocation.
   ASTNode* childrenPtr() { return reinterpret_cast<ASTNode*>(this + 1); }
   const ASTNode* childrenPtr() const
@@ -79,7 +93,7 @@ class ASTInterior : public ASTInternal
   // into the tail afterwards (and fixes up a NOT node's number).
   ASTInterior(STPMgr* mgr, Kind kind, uint32_t num_children)
       : ASTInternal(mgr, kind), _num_children(num_children), _value_width(0),
-        _index_width(0)
+        _index_width(0), _sig_width(0), _exp_width(0), _source_sort_cache(NULL)
   {
     is_simplified = false;
   }
@@ -124,6 +138,9 @@ public:
     using is_transparent = void; // enable heterogeneous (Probe) lookup
     size_t operator()(const ASTInterior* int_node_ptr) const;
     size_t operator()(const Probe& probe) const;
+
+  private:
+    static size_t hashKindChildren(Kind kind, const ASTChildren& ch);
   };
 
   /******************************************************************
@@ -165,16 +182,100 @@ private:
   // compilers will accept)
   virtual void nodeprint(ostream& os, bool c_friendly = false);
 
-  virtual void setIndexWidth(uint32_t i) { _index_width = i; }
+  virtual void setIndexWidth(uint32_t i)
+  {
+    if (_index_width == i)
+      return;
+    _index_width = i;
+    _source_sort_cache = NULL;
+  }
   virtual uint32_t getIndexWidth() const { return _index_width; }
 
-  virtual void setValueWidth(uint32_t v) { _value_width = v; }
+  virtual void setValueWidth(uint32_t v)
+  {
+    if (_value_width == v)
+      return;
+    _value_width = v;
+    _source_sort_cache = NULL;
+  }
   virtual uint32_t getValueWidth() const { return _value_width; }
+
+  virtual void setSigWidth(uint32_t sw)
+  {
+    if (_sig_width == sw)
+      return;
+    _sig_width = sw;
+    _source_sort_cache = NULL;
+  }
+  virtual uint32_t getSigWidth() const { return _sig_width; }
+
+  virtual void setExpWidth(uint32_t ew)
+  {
+    if (_exp_width == ew)
+      return;
+    _exp_width = ew;
+    _source_sort_cache = NULL;
+  }
+  virtual uint32_t getExpWidth() const { return _exp_width; }
+
+  virtual const SourceSort* cachedSourceSort() const
+  {
+    return _source_sort_cache;
+  }
+  virtual void setCachedSourceSort(const SourceSort* s) const
+  {
+    _source_sort_cache = s;
+  }
 };
 
 static_assert(sizeof(ASTInterior) % alignof(ASTNode) == 0,
               "children are tail-allocated after ASTInterior and must stay "
               "aligned");
+
+// Defined out of line because they dereference ASTInterior, which is still
+// incomplete inside the nested class bodies above.  They must stay in the
+// header: they key STPMgr's interior unique table, so they run on every
+// hash-cons probe, and being inline keeps that path free of a call.
+
+// Shared hash of a (kind, children) pair -- the single source of truth so the
+// pointer and Probe overloads agree bit-for-bit.
+inline size_t ASTInterior::ASTInteriorHasher::hashKindChildren(
+    Kind kind, const ASTChildren& ch)
+{
+  size_t hashval = ((size_t)kind);
+  auto iend = ch.end();
+  for (auto i = ch.begin(); i != iend; i++)
+  {
+    hashval += i->Hash();
+    hashval += (hashval << 10);
+    hashval ^= (hashval >> 6);
+  }
+
+  hashval += (hashval << 3);
+  hashval ^= (hashval >> 11);
+  hashval += (hashval << 15);
+
+  if (hashval == 0)
+    hashval = 1; // 0 marks the hash as not yet computed.
+  return hashval;
+}
+
+inline size_t
+ASTInterior::ASTInteriorHasher::operator()(const ASTInterior* int_node_ptr) const
+{
+  if (int_node_ptr->_cached_hash != 0)
+    return int_node_ptr->_cached_hash;
+
+  int_node_ptr->_cached_hash =
+      hashKindChildren(int_node_ptr->GetKind(), int_node_ptr->GetChildren());
+  return int_node_ptr->_cached_hash;
+}
+
+// Transparent overload: hash a borrowed (kind, children) probe the same way.
+inline size_t ASTInterior::ASTInteriorHasher::operator()(const Probe& probe) const
+{
+  return hashKindChildren(probe.kind, probe.children);
+}
 
 } // end of namespace stp
 #endif

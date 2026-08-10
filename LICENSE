@@ -35,7 +35,7 @@ Also includes copyrighted software from:
     * CVC's SMT-LIB Parser -- Copyright (C) 2004 by the Board of Trustees
         of Leland Stanford Junior University and by New York University.
     * ABC -- Copyright (c) The Regents of the University of California.
-    * Windows msc99hdr -- Copyright (c) 2006-2008 Alexander Chemeris
-        Copyright (c) 2000 Jeroen Ruigrok van der Werven <asmodai@FreeBSD.org>
+    * mimalloc -- Copyright (c) 2018-2025 Microsoft Corporation, Daan Leijen
+    * ankerl::unordered_dense -- Copyright (c) 2022-2024 Martin Leitner-Ankerl
 
 For licenses of these SW packages, please see LICENSE_COMPONENTS

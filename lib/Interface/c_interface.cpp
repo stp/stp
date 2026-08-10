@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Andrew V. Jones
+ * AUTHORS: Vijay Ganesh, Andrew Teylu
  *
  * BEGIN DATE: November, 2005
  *
@@ -24,13 +24,18 @@ THE SOFTWARE.
 #include "stp/c_interface.h"
 
 #include <cassert>
+#include <cinttypes>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 
-#include "stp/Interface/fdstream.h"
+#include "stp/Interface/FdOStream.h"
 #include "stp/Parser/parser.h"
 #include "stp/Printer/printers.h"
 #include "stp/cpp_interface.h"
+#include "stp/FloatBlaster/FloatBlaster.h"
+#include "stp/FloatBlaster/FpTotalise.h"
 #include "stp/Util/GitSHA1.h"
 
 // From ABC
@@ -43,11 +48,108 @@ using std::cout;
 using std::ostream;
 using std::stringstream;
 using std::string;
-using std::fdostream;
 using std::endl;
+
+// Defined further down, but used by the boolean expression builders above it.
+Expr createBinaryNode(VC vc, Kind k, Expr left, Expr right);
 
 namespace /* anonymous namespace for static */
 {
+
+void requireBooleanOperand(const char* operation, const stp::ASTNode& n)
+{
+  if (n.GetSourceSort().kind() == stp::SourceSort::Kind::Bool)
+    return;
+  std::string message("CInterface: ");
+  message += operation;
+  message += " requires Boolean operands: ";
+  stp::FatalError(message.c_str(), n);
+}
+
+stp::ASTNode createPublicSourceSymbol(stp::STPMgr* bm, const char* name,
+                                      const stp::SourceSort& source_sort)
+{
+  // The same reservation the parser enforces, for the entry point that has no
+  // parser in front of it. STP mints '@' names for its own objects and takes
+  // their uniqueness on trust, so a caller able to declare one could be handed
+  // the solver's own -- see Cpp_interface::CreateSourceSymbol.
+  if (stp::STPMgr::isReservedSymbolName(name))
+  {
+    stp::FatalError("CInterface: a symbol name beginning with '@' or '.' is "
+                    "reserved for solver use and cannot be declared");
+  }
+
+  const auto found = bm->c_api_source_sorts.find(name);
+  if (found != bm->c_api_source_sorts.end() && found->second != source_sort)
+  {
+    stp::FatalError("CInterface: a symbol cannot be redeclared with a "
+                    "different source sort");
+  }
+  bm->c_api_source_sorts[name] = source_sort;
+  return bm->CreateSourceSymbol(name, source_sort);
+}
+
+void requireBitVectorOperand(const char* operation, const stp::ASTNode& n)
+{
+  if (n.GetSourceSort().kind() == stp::SourceSort::Kind::BitVector)
+    return;
+
+  std::string message("CInterface: ");
+  message += operation;
+  message += " requires bitvector operands";
+  if (n.GetType() == stp::FLOATINGPOINT_TYPE)
+    message += "; use vc_fpToIEEEBV to expose a float's packed bits";
+  message += ": ";
+  stp::FatalError(message.c_str(), n);
+}
+
+void requireSamePublicSort(const char* operation, stp::STPMgr* bm,
+                           const stp::ASTNode& left,
+                           const stp::ASTNode& right)
+{
+  (void)bm;
+  const stp::SourceSort left_sort = left.GetSourceSort();
+  if (left_sort.isKnown() && left_sort == right.GetSourceSort())
+    return;
+
+  std::string message("CInterface: ");
+  message += operation;
+  message += " requires operands of the same sort: ";
+  stp::FatalError(message.c_str(), left);
+}
+
+// The packed bit width laid under a scalar type node: the declared width of
+// a BITVECTOR, the packed width of a FLOATINGPOINT, five for ROUNDINGMODE.
+unsigned int scalarTypeNodeWidth(const stp::ASTNode& t)
+{
+  switch (t.GetKind())
+  {
+    case stp::BITVECTOR:
+      return t[0].GetUnsignedConst();
+    case stp::FLOATINGPOINT:
+      return t[0].GetUnsignedConst() + t[1].GetUnsignedConst();
+    case stp::ROUNDINGMODE:
+      return 5;
+    default:
+      stp::FatalError("CInterface: expected a bitvector, floating-point or "
+                      "RoundingMode type node: ",
+                      t);
+      return 0;
+  }
+}
+
+/* The two steps almost every entry point below repeats: unwrapping the
+ * opaque VC handle to reach the node manager, and handing a node that has
+ * just been built back to the caller as an opaque, caller-owned Expr. */
+stp::STPMgr* mgr(VC vc)
+{
+  return ((stp::STP*)vc)->bm;
+}
+
+Expr wrap(const stp::ASTNode& n)
+{
+  return new stp::ASTNode(n);
+}
 
 /* this method is purposefully not public! */
 std::pair<unsigned int, unsigned int> getTypeSizes(Type type)
@@ -64,12 +166,27 @@ std::pair<unsigned int, unsigned int> getTypeSizes(Type type)
       valueWidth = (*a)[0].GetUnsignedConst();
       break;
     case stp::ARRAY:
-      indexWidth = (*a)[0].GetUnsignedConst();
-      valueWidth = (*a)[1].GetUnsignedConst();
+      // The children are the index and element type nodes themselves (see
+      // vc_arrayType), each BITVECTOR, FLOATINGPOINT or ROUNDINGMODE.
+      indexWidth = scalarTypeNodeWidth((*a)[0]);
+      valueWidth = scalarTypeNodeWidth((*a)[1]);
       break;
     case stp::BOOLEAN:
       indexWidth = 0;
       valueWidth = 0;
+      break;
+    case stp::FLOATINGPOINT:
+      // A floating-point type node carries its exponent and significand widths
+      // as its two children (see vc_fpType). The packed value width is their
+      // sum; exp/sig are stamped onto the symbol separately, in vc_varExpr.
+      indexWidth = 0;
+      valueWidth = (*a)[0].GetUnsignedConst() + (*a)[1].GetUnsignedConst();
+      break;
+    case stp::ROUNDINGMODE:
+      // A rounding mode is carried as a 5-bit bitvector; vc_varExpr
+      // additionally pins the symbol to the five legal encodings.
+      indexWidth = 0;
+      valueWidth = 5;
       break;
     default:
       stp::FatalError("CInterface: vc_varExpr: Unsupported type", *a);
@@ -117,8 +234,7 @@ void vc_setFlag(VC vc, char c)
 
 void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   switch (f)
   {
     case EXPRDELETE:
@@ -141,6 +257,9 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
       //Array-based Minisat has been replaced with normal MiniSat
       b->UserFlags.solver_to_use = stp::UserDefinedFlags::MINISAT_SOLVER;
       break;
+    case CADICAL:
+      b->UserFlags.solver_to_use = stp::UserDefinedFlags::CADICAL_SOLVER;
+      break;
     default:
       stp::FatalError("C_interface: vc_setInterfaceFlags: Unrecognized flag\n");
       break;
@@ -155,6 +274,8 @@ void make_division_total(VC /*vc*/)
 // Create a validity Checker.
 VC vc_createValidityChecker(void)
 {
+  // Boot the bitvector library before allocating anything, so the failure
+  // path leaks nothing.
   CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot();
   if (0 != c)
   {
@@ -162,10 +283,35 @@ VC vc_createValidityChecker(void)
     return 0;
   }
 
-  stp::STPMgr* bm = new stp::STPMgr();
+  return vc_createValidityCheckerReuse(new stp::STPMgr());
+}
 
-  bm->defaultNodeFactory =
-      new SimplifyingNodeFactory(*(bm->hashingNodeFactory), *bm);
+// Create a validity checker over an existing manager (an stp::STPMgr*), so a
+// client mixing the C API with the C++ objects can solve over nodes it built
+// directly.
+VC vc_createValidityCheckerReuse(void* _bm)
+{
+  stp::STPMgr* bm = (stp::STPMgr*)_bm;
+
+  CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot();
+  if (0 != c)
+  {
+    cout << CONSTANTBV::BitVector_Error(c) << endl;
+    return 0;
+  }
+
+  // A fresh manager starts out with its plain hashing factory; upgrade it to
+  // the simplifying one. A reused manager that was already given a factory
+  // keeps it (this used to replace -- and leak -- whatever was installed).
+  if (bm->defaultNodeFactory == bm->hashingNodeFactory)
+    bm->defaultNodeFactory =
+        new SimplifyingNodeFactory(*(bm->hashingNodeFactory), *bm);
+
+  // The parser-facing helpers read GlobalParserBM; point it at this manager
+  // so a C-API client that never parses still has it aimed at a live one.
+  // (Floating-point blasting itself takes the manager explicitly and does
+  // not consult this.)
+  stp::GlobalParserBM = bm;
 
   stp::STP* stpObj =
       new stp::STP(bm);
@@ -179,16 +325,14 @@ VC vc_createValidityChecker(void)
 void vc_printExpr(VC vc, Expr e)
 {
   // do not print in lisp mode
-  stp::STP* stp_i = (stp::STP*)vc;
   stp::ASTNode q = (*(stp::ASTNode*)e);
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   q.PL_Print(cout, b);
 }
 
 char* vc_printSMTLIB(VC vc, Expr e)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
 
   stringstream ss;
   printer::SMTLIB1_PrintBack(ss, *((stp::ASTNode*)e), b);
@@ -197,47 +341,22 @@ char* vc_printSMTLIB(VC vc, Expr e)
   return copy;
 }
 
-// prints Expr 'e' to stdout as C code
-void vc_printExprCCode(VC vc, Expr e)
+char* vc_printSMTLIB2(VC vc, Expr e)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
-  stp::ASTNode q = (*(stp::ASTNode*)e);
+  stp::STPMgr* b = mgr(vc);
 
-  // print variable declarations
-  stp::ASTVec declsFromParser = (stp::ASTVec)b->decls;
-
-  for (stp::ASTVec::iterator it = declsFromParser.begin(),
-                             itend = declsFromParser.end();
-       it != itend; it++)
-  {
-    if (stp::BITVECTOR_TYPE == it->GetType())
-    {
-      const char* name = it->GetName();
-      unsigned int bitWidth = it->GetValueWidth();
-      assert(bitWidth % 8 == 0);
-      unsigned int byteWidth = bitWidth / 8;
-      cout << "unsigned char " << name << "[" << byteWidth << "];" << endl;
-    }
-    else
-    {
-      // vc_printExprCCode: unsupported decl. type
-      assert(0);
-    }
-  }
-
-  cout << endl;
-
-  // print constraints and assert
-  printer::C_Print(cout, q, b);
+  stringstream ss;
+  printer::SMTLIB2_PrintBack(ss, *((stp::ASTNode*)e), b, false);
+  string s = ss.str();
+  char* copy = strdup(s.c_str());
+  return copy;
 }
 
 void vc_printExprFile(VC vc, Expr e, int fd)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
 
-  fdostream os(fd);
+  stp::FdOStream os(fd);
 
   ((stp::ASTNode*)e)->PL_Print(os, b);
   // os.flush();
@@ -245,8 +364,7 @@ void vc_printExprFile(VC vc, Expr e, int fd)
 
 static void vc_printVarDeclsToStream(VC vc, ostream& os)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
 
   for (stp::ASTVec::iterator i = b->decls.begin(), iend = b->decls.end();
        i != iend; i++)
@@ -282,15 +400,13 @@ void vc_printVarDecls(VC vc)
 
 void vc_clearDecls(VC vc)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   b->decls.clear();
 }
 
 static void vc_printAssertsToStream(VC vc, ostream& os, int simplify_print)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   stp::ASTVec v = b->GetAsserts();
 
   stp::SubstitutionMap sm (b);
@@ -311,11 +427,10 @@ void vc_printAsserts(VC vc, int simplify_print)
   vc_printAssertsToStream(vc, cout, simplify_print);
 }
 
-void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf, unsigned long* len,
+void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf, size_t* len,
                                 int simplify_print)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   assert(vc);
   assert(e);
   assert(buf);
@@ -341,18 +456,18 @@ void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf, unsigned long* len,
   // convert to a c buffer
   string s = os.str();
   const char* cstr = s.c_str();
-  unsigned long size = s.size() + 1; // number of chars + terminating null
+  size_t size = s.size() + 1; // number of chars + terminating null
   *buf = (char*)malloc(size);
   if (!(*buf))
   {
-    fprintf(stderr, "malloc(%lu) failed.", size);
+    fprintf(stderr, "malloc(%zu) failed.", size);
     assert(*buf);
   }
   *len = size;
   memcpy(*buf, cstr, size);
 }
 
-void vc_printCounterExampleToBuffer(VC vc, char** buf, unsigned long* len)
+void vc_printCounterExampleToBuffer(VC vc, char** buf, size_t* len)
 {
   assert(vc);
   assert(buf);
@@ -375,28 +490,27 @@ void vc_printCounterExampleToBuffer(VC vc, char** buf, unsigned long* len)
   // convert to a c buffer
   string s = os.str();
   const char* cstr = s.c_str();
-  unsigned long size = s.size() + 1; // number of chars + terminating null
+  size_t size = s.size() + 1; // number of chars + terminating null
   *buf = (char*)malloc(size);
   if (!(*buf))
   {
-    fprintf(stderr, "malloc(%lu) failed.", size);
+    fprintf(stderr, "malloc(%zu) failed.", size);
     assert(*buf);
   }
   *len = size;
   memcpy(*buf, cstr, size);
 }
 
-void vc_printExprToBuffer(VC vc, Expr e, char** buf, unsigned long* len)
+void vc_printExprToBuffer(VC vc, Expr e, char** buf, size_t* len)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   stp::ASTNode q = *((stp::ASTNode*)e);
 
   stringstream os;
   q.PL_Print(os, b);
   string s = os.str();
   const char* cstr = s.c_str();
-  unsigned long size = s.size() + 1; // number of chars + terminating null
+  size_t size = s.size() + 1; // number of chars + terminating null
   *buf = (char*)malloc(size);
   *len = size;
   memcpy(*buf, cstr, size);
@@ -404,8 +518,7 @@ void vc_printExprToBuffer(VC vc, Expr e, char** buf, unsigned long* len)
 
 void vc_printQuery(VC vc)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
 
   ostream& os = std::cout;
   os << "QUERY(";
@@ -416,8 +529,7 @@ void vc_printQuery(VC vc)
 
 stp::ASTNode* persistNode(VC vc, stp::ASTNode n)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
 
   stp::ASTNode* np = new stp::ASTNode(n);
   if (b->UserFlags.cinterface_exprdelete_on_flag)
@@ -431,51 +543,146 @@ stp::ASTNode* persistNode(VC vc, stp::ASTNode n)
 //! Create an array type
 Type vc_arrayType(VC vc, Type typeIndex, Type typeData)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   stp::ASTNode* ti = (stp::ASTNode*)typeIndex;
   stp::ASTNode* td = (stp::ASTNode*)typeData;
 
-  if (!(ti->GetKind() == stp::BITVECTOR && (*ti)[0].GetKind() == stp::BVCONST))
+  // Index and element may each be a bitvector, a floating-point format, or
+  // RoundingMode. The type node keeps the child type nodes whole, so
+  // vc_varExpr can lay the right widths and formats onto the symbol.
+  const auto scalar = [](const stp::ASTNode& t) {
+    return t.GetKind() == stp::BITVECTOR ||
+           t.GetKind() == stp::FLOATINGPOINT ||
+           t.GetKind() == stp::ROUNDINGMODE;
+  };
+  if (!scalar(*ti))
   {
-    stp::FatalError("Tyring to build array whose"
-                    "indextype i is not a BITVECTOR, where i = ",
+    stp::FatalError("CInterface: vc_arrayType: the index type must be a "
+                    "bitvector, floating-point or RoundingMode type: ",
                     *ti);
   }
-  if (!(td->GetKind() == stp::BITVECTOR && (*td)[0].GetKind() == stp::BVCONST))
+  if (!scalar(*td))
   {
-    stp::FatalError("Trying to build an array whose"
-                    "valuetype v is not a BITVECTOR. where a = ",
+    stp::FatalError("CInterface: vc_arrayType: the element type must be a "
+                    "bitvector, floating-point or RoundingMode type: ",
                     *td);
   }
-  stp::ASTNode output = b->CreateNode(stp::ARRAY, (*ti)[0], (*td)[0]);
+  stp::ASTNode output = b->CreateNode(stp::ARRAY, *ti, *td);
 
   return persistNode(vc, output);
+}
+
+// A rounding-mode-sorted term. Was a copy here; it is STPMgr's now, because
+// the operations that take a rounding mode need the same test and were making
+// do with the carrier's width.
+// The rounding-mode argument of a floating-point operation. SMT-LIB's
+// RoundingMode has five values; the carrier has thirty-two, and symfpu
+// computes under a sixth, non-IEEE mode if handed one of the other
+// twenty-seven.
+static void checkRoundingMode(const char* who, stp::STPMgr* b,
+                              const stp::ASTNode& rm)
+{
+  if (!b->isRoundingModeSortedTerm(rm))
+  {
+    stp::FatalError((std::string("CInterface: ") + who +
+                     ": expected a rounding mode: ")
+                        .c_str(),
+                    rm);
+  }
+}
+
+// The index of an array access must have the array's declared index sort:
+// a float of the right format for a float-indexed array, a rounding mode
+// for a RoundingMode-indexed one, and a plain bitvector otherwise. Mixing
+// sorts of one width is not merely ill-sorted -- a raw index alongside
+// canonicalised ones would break the array's congruence (see FpTotalise).
+static void checkArrayIndexSort(const char* who, stp::STPMgr* b,
+                                const stp::ASTNode& arr,
+                                const stp::ASTNode& index)
+{
+  (void)b;
+  const stp::SourceSort array_sort = arr.GetSourceSort();
+  if (array_sort.kind() != stp::SourceSort::Kind::Array)
+    stp::FatalError("CInterface: select/store expects an array: ", arr);
+  const stp::SourceSort expected = array_sort.index();
+  if (index.GetSourceSort() == expected)
+    return;
+
+  if (expected.kind() == stp::SourceSort::Kind::FloatingPoint)
+  {
+    stp::FatalError((std::string("CInterface: ") + who +
+                     ": the array is indexed by a floating-point sort, but "
+                     "the index is not a float of that format: ")
+                        .c_str(),
+                    index);
+  }
+  if (expected.kind() == stp::SourceSort::Kind::RoundingMode)
+  {
+    stp::FatalError((std::string("CInterface: ") + who +
+                     ": the array is indexed by RoundingMode, but the index "
+                     "is not a rounding mode: ")
+                        .c_str(),
+                    index);
+  }
+  stp::FatalError((std::string("CInterface: ") + who +
+                   ": index sort differs from the array's bitvector index "
+                   "sort: ")
+                      .c_str(),
+                  index);
+}
+
+// The value stored by vc_writeExpr must have the array's element sort, by
+// the same reasoning.
+static void checkArrayValueSort(stp::STPMgr* b, const stp::ASTNode& arr,
+                                const stp::ASTNode& value)
+{
+  (void)b;
+  const stp::SourceSort array_sort = arr.GetSourceSort();
+  if (array_sort.kind() != stp::SourceSort::Kind::Array)
+    stp::FatalError("CInterface: vc_writeExpr expects an array: ", arr);
+  const stp::SourceSort expected = array_sort.element();
+  if (value.GetSourceSort() == expected)
+    return;
+
+  if (expected.kind() == stp::SourceSort::Kind::FloatingPoint)
+  {
+    stp::FatalError("CInterface: vc_writeExpr: the array's elements are "
+                    "floats, but the stored value is not a float of that "
+                    "format: ",
+                    value);
+  }
+  if (expected.kind() == stp::SourceSort::Kind::RoundingMode)
+  {
+    stp::FatalError("CInterface: vc_writeExpr: the array's elements are "
+                    "rounding modes, but the stored value is not one: ",
+                    value);
+  }
+  stp::FatalError("CInterface: vc_writeExpr: stored value sort differs from "
+                  "the array's bitvector element sort: ",
+                  value);
 }
 
 //! Create an expression for the value of array at the given index
 Expr vc_readExpr(VC vc, Expr array, Expr index)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   stp::ASTNode* a = (stp::ASTNode*)array;
   stp::ASTNode* i = (stp::ASTNode*)index;
 
   assert(BVTypeCheck(*a));
   assert(BVTypeCheck(*i));
+  checkArrayIndexSort("vc_readExpr", b, *a, *i);
   stp::ASTNode o = b->CreateTerm(stp::READ, a->GetValueWidth(), *a, *i);
   assert(BVTypeCheck(o));
 
-  stp::ASTNode* output = new stp::ASTNode(o);
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return wrap(o);
 }
 
 // //! Array update; equivalent to "array WITH [index] := newValue"
 Expr vc_writeExpr(VC vc, Expr array, Expr index, Expr newValue)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   stp::ASTNode* a = (stp::ASTNode*)array;
   stp::ASTNode* i = (stp::ASTNode*)index;
   stp::ASTNode* n = (stp::ASTNode*)newValue;
@@ -483,13 +690,14 @@ Expr vc_writeExpr(VC vc, Expr array, Expr index, Expr newValue)
   assert(BVTypeCheck(*a));
   assert(BVTypeCheck(*i));
   assert(BVTypeCheck(*n));
+  checkArrayIndexSort("vc_writeExpr", b, *a, *i);
+  checkArrayValueSort(b, *a, *n);
   stp::ASTNode o = b->CreateTerm(stp::WRITE, a->GetValueWidth(), *a, *i, *n);
   o.SetIndexWidth(a->GetIndexWidth());
   assert(BVTypeCheck(o));
 
-  stp::ASTNode* output = new stp::ASTNode(o);
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return wrap(o);
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -499,11 +707,11 @@ Expr vc_writeExpr(VC vc, Expr array, Expr index, Expr newValue)
 /*! The formula must have Boolean type. */
 void vc_assertFormula(VC vc, Expr e)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   stp::ASTNode* a = (stp::ASTNode*)e;
 
-  if (!stp::is_Form_kind(a->GetKind()))
+  if (a->GetSourceSort().kind() != stp::SourceSort::Kind::Bool ||
+      !stp::is_Form_kind(a->GetKind()))
     stp::FatalError("Trying to assert a NON formula: ", *a);
 
   assert(BVTypeCheck(*a));
@@ -534,7 +742,32 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_max_conflicts, int timeout_
   stp::ASTNode* a = (stp::ASTNode*)e;
   stp::STPMgr* b = stp_i->bm;
 
-  if (!stp::is_Form_kind(a->GetKind()))
+  // Make this checker's manager current so floating-point blasting during the
+  // solve targets it, not whichever checker was created or solved last.
+  stp::GlobalParserBM = b;
+
+  /*
+   * -1 is the only negative value that means anything ("no limit"). Reject
+   * the rest rather than silently running unlimited, which is the dangerous
+   * direction for a caller that computed a budget and got the sign wrong.
+   */
+  if (timeout_max_conflicts < -1)
+  {
+    std::cerr << "CInterface: timeout_max_conflicts must be -1 (no limit) or "
+                 "greater"
+              << std::endl;
+    return 2;
+  }
+
+  if (timeout_max_time < -1)
+  {
+    std::cerr << "CInterface: timeout_max_time must be -1 (no limit) or greater"
+              << std::endl;
+    return 2;
+  }
+
+  if (a->GetSourceSort().kind() != stp::SourceSort::Kind::Bool ||
+      !stp::is_Form_kind(a->GetKind()))
   {
     stp::FatalError("CInterface: Trying to QUERY a NON formula: ", *a);
   }
@@ -605,8 +838,7 @@ void vc_push(VC vc)
 //NB, doesn't remove symbols from decls, so they will be kept alive.
 void vc_pop(VC vc)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   b->Pop();
 }
 
@@ -625,6 +857,19 @@ void vc_printCounterExample(VC vc)
   b->UserFlags.print_counterexample_flag = currentPrint;
 }
 
+void vc_printCounterExampleSMTLIB2(VC vc)
+{
+  stp::STP* stp_i = (stp::STP*)vc;
+  stp::STPMgr* b = stp_i->bm;
+  stp::AbsRefine_CounterExample* ce =
+      (stp::AbsRefine_CounterExample*)(stp_i->Ctr_Example);
+
+  bool currentPrint = b->UserFlags.print_counterexample_flag;
+  b->UserFlags.print_counterexample_flag = true;
+  ce->PrintCounterExampleSMTLIB2(cout);
+  b->UserFlags.print_counterexample_flag = currentPrint;
+}
+
 // //! Return the counterexample after a failed query.
 // /*! This method should only be called after a query which returns
 //  * false.  It will try to return the simplest possible set of
@@ -638,10 +883,13 @@ Expr vc_getCounterExample(VC vc, Expr e)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::ASTNode* a = (stp::ASTNode*)e;
 
+  // Reading a floating-point value blasts the term, so this checker's manager
+  // must be current (see vc_query_with_timeout).
+  stp::GlobalParserBM = stp_i->bm;
+
   stp::AbsRefine_CounterExample* ce =
       (stp::AbsRefine_CounterExample*)(stp_i->Ctr_Example);
-  stp::ASTNode* output = new stp::ASTNode(ce->GetCounterExample(*a));
-  return output;
+  return wrap(ce->GetCounterExample(*a));
 }
 
 void vc_getCounterExampleArray(VC vc, Expr e, Expr** indices, Expr** values,
@@ -674,6 +922,19 @@ void vc_getCounterExampleArray(VC vc, Expr e, Expr** indices, Expr** values,
   }
 }
 
+void vc_deleteCounterExampleArray(Expr* indices, Expr* values, int size)
+{
+  if (size <= 0)
+    return;
+  for (int i = 0; i < size; ++i)
+  {
+    delete (stp::ASTNode*)indices[i];
+    delete (stp::ASTNode*)values[i];
+  }
+  free(indices);
+  free(values);
+}
+
 int vc_counterexample_size(VC vc)
 {
   stp::STP* stp_i = (stp::STP*)vc;
@@ -699,8 +960,7 @@ Expr vc_getTermFromCounterExample(VC /*vc*/, Expr e, WholeCounterExample cc)
   stp::ASTNode* n = (stp::ASTNode*)e;
   stp::CompleteCounterExample* c = (stp::CompleteCounterExample*)cc;
 
-  stp::ASTNode* output = new stp::ASTNode(c->GetCounterExample(*n));
-  return output;
+  return wrap(c->GetCounterExample(*n));
 }
 
 void vc_deleteWholeCounterExample(WholeCounterExample cc)
@@ -714,7 +974,7 @@ int vc_getBVLength(VC /*vc*/, Expr ex)
 {
   stp::ASTNode* e = (stp::ASTNode*)ex;
 
-  if (stp::BITVECTOR_TYPE != e->GetType())
+  if (e->GetSourceSort().kind() != stp::SourceSort::Kind::BitVector)
   {
     stp::FatalError("c_interface: vc_GetBVLength: "
                     "Input expression must be a bit-vector");
@@ -729,10 +989,18 @@ int vc_getBVLength(VC /*vc*/, Expr ex)
 /*! The type cannot be a function type. */
 Expr vc_varExpr1(VC vc, const char* name, int indexwidth, int valuewidth)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
 
-  stp::ASTNode o = b->CreateSymbol(name, indexwidth, valuewidth);
+  stp::SourceSort source_sort;
+  if (indexwidth > 0)
+    source_sort = stp::SourceSort::array(
+        stp::SourceSort::bitVector(indexwidth),
+        stp::SourceSort::bitVector(valuewidth));
+  else if (valuewidth > 0)
+    source_sort = stp::SourceSort::bitVector(valuewidth);
+  else
+    source_sort = stp::SourceSort::boolean();
+  stp::ASTNode o = createPublicSourceSymbol(b, name, source_sort);
 
   stp::ASTNode* output = new stp::ASTNode(o);
   ////if(cinterface_exprdelete_on) created_exprs.push_back(output);
@@ -745,12 +1013,39 @@ Expr vc_varExpr1(VC vc, const char* name, int indexwidth, int valuewidth)
 
 Expr vc_varExpr(VC vc, const char* name, Type type)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
-  std::pair<unsigned int, unsigned int> typeSizes(getTypeSizes(type));
-  unsigned int valueWidth = typeSizes.first;
-  unsigned int indexWidth = typeSizes.second;
-  stp::ASTNode o = b->CreateSymbol(name, indexWidth, valueWidth);
+  stp::STPMgr* b = mgr(vc);
+  stp::ASTNode* typeNode = (stp::ASTNode*)type;
+  switch (typeNode->GetKind())
+  {
+    case stp::BOOLEAN:
+    case stp::BITVECTOR:
+    case stp::FLOATINGPOINT:
+    case stp::ROUNDINGMODE:
+    case stp::ARRAY:
+      break;
+    default:
+      stp::FatalError("CInterface: vc_varExpr expects a type node: ",
+                      *typeNode);
+  }
+  const stp::SourceSort source_sort = typeNode->GetSourceSort();
+  if (!source_sort.isKnown())
+    stp::FatalError("CInterface: vc_varExpr: unsupported source sort: ",
+                    *typeNode);
+  stp::ASTNode o = createPublicSourceSymbol(b, name, source_sort);
+
+  // A RoundingMode variable must range over exactly the five modes: pin the
+  // 5-bit carrier to the one-hot encodings (asserted at the current
+  // assertion level) and register the symbol so counterexamples print its
+  // value by mode name -- exactly as the parser declares one.
+  //
+  // The assertion is the pin for this level, not the guarantee. vc_pop drops
+  // a level's assertions and the symbol node survives it hash-consed, so what
+  // actually holds the mode to five values is FpTotalise re-pinning every one
+  // the formula names at solve time.
+  if (typeNode->GetKind() == stp::ROUNDINGMODE)
+  {
+    b->AddAssert(b->roundingModeValidConstraint(o));
+  }
 
   stp::ASTNode* output = new stp::ASTNode(o);
   ////if(cinterface_exprdelete_on) created_exprs.push_back(output);
@@ -765,27 +1060,632 @@ Expr vc_varExpr(VC vc, const char* name, Type type)
 // same type.
 Expr vc_eqExpr(VC vc, Expr ccc0, Expr ccc1)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
 
   stp::ASTNode* a = (stp::ASTNode*)ccc0;
   stp::ASTNode* aa = (stp::ASTNode*)ccc1;
   assert(BVTypeCheck(*a));
   assert(BVTypeCheck(*aa));
-  stp::ASTNode o = b->CreateNode(stp::EQ, *a, *aa);
+  requireSamePublicSort("vc_eqExpr", b, *a, *aa);
 
-  stp::ASTNode* output = new stp::ASTNode(o);
+  // SMT-LIB '=' over floats is FP_SMT_EQ, not the generic EQ, mirroring the
+  // parser's (= ...) rule: +0 and -0 stay distinct, and every NaN equals
+  // every NaN. A plain EQ over floating-point operands is a node the later
+  // passes cannot discharge -- the solve died without a conclusion (found
+  // by murxla; vc_fpEqExpr's doc sends '=' callers here, so this is the
+  // documented route). With only one float operand, FP_SMT_EQ's typecheck
+  // then rejects the float/bitvector mix, exactly as the parser does.
+  const stp::Kind k =
+      (a->GetSourceSort().kind() == stp::SourceSort::Kind::FloatingPoint ||
+       aa->GetSourceSort().kind() == stp::SourceSort::Kind::FloatingPoint)
+                          ? stp::FP_SMT_EQ
+                          : stp::EQ;
+  stp::ASTNode o = b->CreateNode(k, *a, *aa);
+
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return wrap(o);
 }
 
 Expr vc_boolType(VC vc)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
 
   stp::ASTNode output = b->CreateNode(stp::BOOLEAN);
   return persistNode(vc, output);
+}
+
+// ---------------------------------------------------------------------------
+// Floating point
+// ---------------------------------------------------------------------------
+
+// Every route by which a floating-point format enters through the C API --
+// vc_fpType's type node and the entry points that take the widths as raw
+// ints. One funnel: the parser's copy of this drifted from its sort rule's
+// once already.
+static void checkFpWidths(int eb, int sb)
+{
+  if (eb < 2 || sb < 2)
+  {
+    stp::FatalError("CInterface: a floating-point format needs at least 2 "
+                    "exponent and 2 significand bits");
+  }
+}
+
+Type vc_fpType(VC vc, int exp_bits, int sig_bits)
+{
+#ifndef STP_ENABLE_FLOATING_POINT
+  // Refuse at the API's natural entry point. Anything that slips past --
+  // this is the only vc_fp* call that neither takes nor produces a
+  // floating-point term -- is caught when SetExpWidth/CreateFPConst first
+  // stamp a format.
+  (void)vc;
+  (void)exp_bits;
+  (void)sig_bits;
+  stp::FatalError("CInterface: vc_fpType: this STP was built without "
+                  "floating-point support; reconfigure with "
+                  "-DENABLE_FLOATING_POINT=ON");
+#else
+  stp::STP* stp_i = (stp::STP*)vc;
+  stp::STPMgr* b = stp_i->bm;
+
+  checkFpWidths(exp_bits, sig_bits);
+
+  // Mirror vc_bvType/vc_arrayType: a type is a node whose children hold the
+  // widths -- here the exponent and significand widths.
+  stp::ASTNode e = b->CreateBVConst(32, exp_bits);
+  stp::ASTNode s = b->CreateBVConst(32, sig_bits);
+  stp::ASTNode output = b->CreateNode(stp::FLOATINGPOINT, e, s);
+  return persistNode(vc, output);
+#endif
+}
+
+Type vc_fpRoundingModeType(VC vc)
+{
+#ifndef STP_ENABLE_FLOATING_POINT
+  // Refused at the entry point, like vc_fpType: a type node neither takes
+  // nor produces a floating-point term, so the STPMgr format funnels would
+  // never catch it.
+  (void)vc;
+  stp::FatalError("CInterface: vc_fpRoundingModeType: this STP was built "
+                  "without floating-point support; reconfigure with "
+                  "-DENABLE_FLOATING_POINT=ON");
+#else
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+
+  // The sort has no parameters, so the type node is childless; vc_varExpr
+  // recognises it and builds the constrained 5-bit variable.
+  return persistNode(vc, b->CreateNode(stp::ROUNDINGMODE));
+#endif
+}
+
+int vc_getExpWidth(Expr e)
+{
+  return (int)((stp::ASTNode*)e)->GetExpWidth();
+}
+
+int vc_getSigWidth(Expr e)
+{
+  return (int)((stp::ASTNode*)e)->GetSigWidth();
+}
+
+Expr vc_fpConstFromBits(VC vc, int exp_bits, int sig_bits, Expr bv)
+{
+  stp::STP* stp_i = (stp::STP*)vc;
+  stp::STPMgr* b = stp_i->bm;
+  stp::ASTNode* bits = (stp::ASTNode*)bv;
+
+  checkFpWidths(exp_bits, sig_bits);
+  requireBitVectorOperand("vc_fpConstFromBits", *bits);
+
+  if (bits->GetKind() != stp::BVCONST)
+  {
+    stp::FatalError("CInterface: vc_fpConstFromBits: the bits argument must be "
+                    "a bitvector constant: ",
+                    *bits);
+  }
+  if ((int)bits->GetValueWidth() != exp_bits + sig_bits)
+  {
+    stp::FatalError("CInterface: vc_fpConstFromBits: the bitvector width must "
+                    "equal exp_bits + sig_bits: ",
+                    *bits);
+  }
+
+  stp::ASTNode output = b->CreateFPConst(*bits, exp_bits, sig_bits);
+  return persistNode(vc, output);
+}
+
+Expr vc_fpEqExpr(VC vc, Expr a, Expr b)
+{
+  stp::STP* stp_i = (stp::STP*)vc;
+  stp::STPMgr* bm = stp_i->bm;
+  stp::ASTNode* l = (stp::ASTNode*)a;
+  stp::ASTNode* r = (stp::ASTNode*)b;
+
+  if (l->GetSourceSort().kind() != stp::SourceSort::Kind::FloatingPoint ||
+      r->GetSourceSort().kind() != stp::SourceSort::Kind::FloatingPoint)
+  {
+    stp::FatalError("CInterface: vc_fpEqExpr requires floating-point operands: ",
+                    l->GetType() == stp::FLOATINGPOINT_TYPE ? *r : *l);
+  }
+  requireSamePublicSort("vc_fpEqExpr", bm, *l, *r);
+
+  stp::ASTNode output = bm->CreateNode(stp::FP_EQ, *l, *r);
+  assert(BVTypeCheck(output));
+  return persistNode(vc, output);
+}
+
+// A floating-point operation returns a value of the same format as its
+// operands, so the result node carries the format taken from `fmt` (as the
+// parser's setFPFormat does).
+//
+// Through withFormat, because the operation need not have produced a node of
+// its own kind: the factory folds (fp.min x x) to x, (fp.mul rm x 1.0) to x,
+// (fp.neg (fp.neg x)) to x, and so hands back an operand that is already a
+// float of exactly this format and may be of any kind at all -- an ite, an
+// array read, a symbol, a constant. Stamping such a node is unnecessary, and
+// on a bitvector-kind interior node it is forbidden (SetExpWidth asserts):
+// the format is per-node state and nodes are hash-consed, so it would retype
+// every other use of the same bits. withFormat knows when the stamp is
+// needed and where it can go.
+static Expr fpTermResult(VC vc, stp::Kind k, const stp::ASTNode& fmt,
+                         const stp::ASTVec& children)
+{
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  if (fmt.GetSourceSort().kind() != stp::SourceSort::Kind::FloatingPoint)
+  {
+    stp::FatalError("CInterface: floating-point operation applied to a "
+                    "non-float operand: ",
+                    fmt);
+  }
+
+  // Every operation built through this helper has only floating-point value
+  // operands, except that rounded operations carry their RoundingMode first.
+  // Check the complete public signature here, in ordinary Release code.  The
+  // assertion below protects STP's internal construction; it is not an API
+  // contract check because Release deliberately compiles it out.
+  size_t first_float = 0;
+  switch (k)
+  {
+    case stp::FP_ADD:
+    case stp::FP_SUB:
+    case stp::FP_MUL:
+    case stp::FP_DIV:
+    case stp::FP_FMA:
+    case stp::FP_SQRT:
+    case stp::FP_ROUNDTOINTEGRAL:
+      first_float = 1;
+      break;
+    default:
+      break;
+  }
+  for (size_t i = first_float; i < children.size(); i++)
+    requireSamePublicSort("floating-point operation", b, fmt, children[i]);
+
+  stp::ASTNode r = stp::FloatBlaster::withFormat(
+      b, b->CreateTerm(k, fmt.GetValueWidth(), children), fmt.GetExpWidth(),
+      fmt.GetSigWidth());
+  assert(BVTypeCheck(r));
+  assert(r.GetType() == stp::FLOATINGPOINT_TYPE);
+  return persistNode(vc, r);
+}
+
+// A floating-point predicate returns a Boolean and carries no format.
+static Expr fpPredResult(VC vc, stp::Kind k, const stp::ASTVec& children)
+{
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  if (children.empty() ||
+      children[0].GetSourceSort().kind() !=
+          stp::SourceSort::Kind::FloatingPoint)
+  {
+    stp::FatalError("CInterface: floating-point predicate requires a "
+                    "floating-point operand");
+  }
+  for (size_t i = 1; i < children.size(); i++)
+    requireSamePublicSort("floating-point predicate", b, children[0],
+                          children[i]);
+
+  stp::ASTNode r = b->CreateNode(k, children);
+  assert(BVTypeCheck(r));
+  return persistNode(vc, r);
+}
+
+Expr vc_fpRoundingMode(VC vc, enum VCRoundingMode mode)
+{
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+
+  // The enum's values are one-hot (they mirror the internal encoding), so a
+  // plausible-looking OR of two modes is not a mode; anything but the five
+  // exact values would silently fall through symfpu's mode dispatch.
+  switch (mode)
+  {
+    case VC_RM_RNE:
+    case VC_RM_RTP:
+    case VC_RM_RTN:
+    case VC_RM_RTZ:
+    case VC_RM_RNA:
+      break;
+    default:
+      stp::FatalError("CInterface: vc_fpRoundingMode: not one of the five "
+                      "rounding modes");
+  }
+
+  // A rounding mode is a 5-bit one-hot bitvector constant.
+  return persistNode(vc, b->CreateRMConst((unsigned)mode));
+}
+
+Expr vc_fpRoundingModeVar(VC vc, const char* name)
+{
+  // Convenience for vc_varExpr over vc_fpRoundingModeType, which does the
+  // real work: a 5-bit symbol pinned to the five one-hot encodings and
+  // registered so counterexamples print its value by mode name. (Without
+  // the constraint the carrier's 27 junk values would be satisfiable
+  // "modes", which is also why a plain 5-bit vc_varExpr is no substitute.)
+  return vc_varExpr(vc, name, vc_fpRoundingModeType(vc));
+}
+
+Expr vc_fpAbsExpr(VC vc, Expr f)
+{
+  stp::ASTNode* x = (stp::ASTNode*)f;
+  return fpTermResult(vc, stp::FP_ABS, *x, {*x});
+}
+
+Expr vc_fpNegExpr(VC vc, Expr f)
+{
+  stp::ASTNode* x = (stp::ASTNode*)f;
+  return fpTermResult(vc, stp::FP_NEG, *x, {*x});
+}
+
+Expr vc_fpAddExpr(VC vc, Expr rm, Expr a, Expr b)
+{
+  stp::ASTNode* m = (stp::ASTNode*)rm;
+  stp::ASTNode* x = (stp::ASTNode*)a;
+  stp::ASTNode* y = (stp::ASTNode*)b;
+  checkRoundingMode("vc_fpAddExpr", ((stp::STP*)vc)->bm, *m);
+  return fpTermResult(vc, stp::FP_ADD, *x, {*m, *x, *y});
+}
+
+Expr vc_fpSubExpr(VC vc, Expr rm, Expr a, Expr b)
+{
+  stp::ASTNode* m = (stp::ASTNode*)rm;
+  stp::ASTNode* x = (stp::ASTNode*)a;
+  stp::ASTNode* y = (stp::ASTNode*)b;
+  checkRoundingMode("vc_fpSubExpr", ((stp::STP*)vc)->bm, *m);
+  return fpTermResult(vc, stp::FP_SUB, *x, {*m, *x, *y});
+}
+
+Expr vc_fpMulExpr(VC vc, Expr rm, Expr a, Expr b)
+{
+  stp::ASTNode* m = (stp::ASTNode*)rm;
+  stp::ASTNode* x = (stp::ASTNode*)a;
+  stp::ASTNode* y = (stp::ASTNode*)b;
+  checkRoundingMode("vc_fpMulExpr", ((stp::STP*)vc)->bm, *m);
+  return fpTermResult(vc, stp::FP_MUL, *x, {*m, *x, *y});
+}
+
+Expr vc_fpDivExpr(VC vc, Expr rm, Expr a, Expr b)
+{
+  stp::ASTNode* m = (stp::ASTNode*)rm;
+  stp::ASTNode* x = (stp::ASTNode*)a;
+  stp::ASTNode* y = (stp::ASTNode*)b;
+  checkRoundingMode("vc_fpDivExpr", ((stp::STP*)vc)->bm, *m);
+  return fpTermResult(vc, stp::FP_DIV, *x, {*m, *x, *y});
+}
+
+Expr vc_fpFMAExpr(VC vc, Expr rm, Expr a, Expr b, Expr c)
+{
+  stp::ASTNode* m = (stp::ASTNode*)rm;
+  stp::ASTNode* x = (stp::ASTNode*)a;
+  stp::ASTNode* y = (stp::ASTNode*)b;
+  stp::ASTNode* z = (stp::ASTNode*)c;
+  checkRoundingMode("vc_fpFMAExpr", ((stp::STP*)vc)->bm, *m);
+  return fpTermResult(vc, stp::FP_FMA, *x, {*m, *x, *y, *z});
+}
+
+Expr vc_fpSqrtExpr(VC vc, Expr rm, Expr f)
+{
+  stp::ASTNode* m = (stp::ASTNode*)rm;
+  stp::ASTNode* x = (stp::ASTNode*)f;
+  checkRoundingMode("vc_fpSqrtExpr", ((stp::STP*)vc)->bm, *m);
+  return fpTermResult(vc, stp::FP_SQRT, *x, {*m, *x});
+}
+
+Expr vc_fpRoundToIntegralExpr(VC vc, Expr rm, Expr f)
+{
+  stp::ASTNode* m = (stp::ASTNode*)rm;
+  stp::ASTNode* x = (stp::ASTNode*)f;
+  checkRoundingMode("vc_fpRoundToIntegralExpr", ((stp::STP*)vc)->bm, *m);
+  return fpTermResult(vc, stp::FP_ROUNDTOINTEGRAL, *x, {*m, *x});
+}
+
+Expr vc_fpRemExpr(VC vc, Expr a, Expr b)
+{
+  stp::ASTNode* x = (stp::ASTNode*)a;
+  stp::ASTNode* y = (stp::ASTNode*)b;
+  // A non-float operand gets its own diagnosis first (fpTermResult's, at
+  // the end, comes too late): asking remSupported about a format of (0, 0)
+  // underflows its step count and reported the format-limit message for
+  // what is really a sort error.
+  if (x->GetSourceSort().kind() != stp::SourceSort::Kind::FloatingPoint)
+  {
+    stp::FatalError("CInterface: vc_fpRemExpr: fp.rem applied to a "
+                    "non-float operand: ",
+                    *x);
+  }
+  // The remainder circuit's unrolling is exponential in the exponent width;
+  // refuse at term creation, where the caller can see it, rather than
+  // during solving (the parser does the same for SMT-LIB input).
+  if (!stp::FloatBlaster::remSupported(x->GetExpWidth(), x->GetSigWidth()))
+  {
+    stp::FatalError("CInterface: vc_fpRemExpr: fp.rem is not supported at "
+                    "this format: its circuit unrolls one divide step per "
+                    "representable exponent difference, which is exponential "
+                    "in the exponent width; use a format no larger than "
+                    "binary64");
+  }
+  return fpTermResult(vc, stp::FP_REM, *x, {*x, *y});
+}
+
+Expr vc_fpMinExpr(VC vc, Expr a, Expr b)
+{
+  stp::ASTNode* x = (stp::ASTNode*)a;
+  stp::ASTNode* y = (stp::ASTNode*)b;
+  return fpTermResult(vc, stp::FP_MIN, *x, {*x, *y});
+}
+
+Expr vc_fpMaxExpr(VC vc, Expr a, Expr b)
+{
+  stp::ASTNode* x = (stp::ASTNode*)a;
+  stp::ASTNode* y = (stp::ASTNode*)b;
+  return fpTermResult(vc, stp::FP_MAX, *x, {*x, *y});
+}
+
+Expr vc_fpLtExpr(VC vc, Expr a, Expr b)
+{
+  return fpPredResult(vc, stp::FP_LT, {*(stp::ASTNode*)a, *(stp::ASTNode*)b});
+}
+
+Expr vc_fpLeqExpr(VC vc, Expr a, Expr b)
+{
+  return fpPredResult(vc, stp::FP_LEQ, {*(stp::ASTNode*)a, *(stp::ASTNode*)b});
+}
+
+Expr vc_fpGtExpr(VC vc, Expr a, Expr b)
+{
+  return fpPredResult(vc, stp::FP_GT, {*(stp::ASTNode*)a, *(stp::ASTNode*)b});
+}
+
+Expr vc_fpGeqExpr(VC vc, Expr a, Expr b)
+{
+  return fpPredResult(vc, stp::FP_GEQ, {*(stp::ASTNode*)a, *(stp::ASTNode*)b});
+}
+
+Expr vc_fpIsNormalExpr(VC vc, Expr f)
+{
+  return fpPredResult(vc, stp::FP_ISNORMAL, {*(stp::ASTNode*)f});
+}
+
+Expr vc_fpIsSubnormalExpr(VC vc, Expr f)
+{
+  return fpPredResult(vc, stp::FP_ISSUBNORMAL, {*(stp::ASTNode*)f});
+}
+
+Expr vc_fpIsZeroExpr(VC vc, Expr f)
+{
+  return fpPredResult(vc, stp::FP_ISZERO, {*(stp::ASTNode*)f});
+}
+
+Expr vc_fpIsInfiniteExpr(VC vc, Expr f)
+{
+  return fpPredResult(vc, stp::FP_ISINFINITE, {*(stp::ASTNode*)f});
+}
+
+Expr vc_fpIsNaNExpr(VC vc, Expr f)
+{
+  return fpPredResult(vc, stp::FP_ISNAN, {*(stp::ASTNode*)f});
+}
+
+Expr vc_fpIsNegativeExpr(VC vc, Expr f)
+{
+  return fpPredResult(vc, stp::FP_ISNEGATIVE, {*(stp::ASTNode*)f});
+}
+
+Expr vc_fpIsPositiveExpr(VC vc, Expr f)
+{
+  return fpPredResult(vc, stp::FP_ISPOSITIVE, {*(stp::ASTNode*)f});
+}
+
+// Extract (eb, sb) from a floating-point type node (see vc_fpType).
+static void fpTypeWidths(Type fpType, unsigned& eb, unsigned& sb)
+{
+  stp::ASTNode* t = (stp::ASTNode*)fpType;
+  if (t->GetKind() != stp::FLOATINGPOINT)
+  {
+    // Reading children of, say, a bitvector type would index out of bounds.
+    stp::FatalError("CInterface: expected a floating-point type "
+                    "(from vc_fpType): ",
+                    *t);
+  }
+  eb = (*t)[0].GetUnsignedConst();
+  sb = (*t)[1].GetUnsignedConst();
+}
+
+static Expr fpSpecial(VC vc, stp::FPSpecial which, Type fpType)
+{
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  unsigned eb, sb;
+  fpTypeWidths(fpType, eb, sb);
+  return persistNode(vc, b->CreateFPSpecialConst(which, eb, sb));
+}
+
+Expr vc_fpNaN(VC vc, Type fpType)
+{
+  return fpSpecial(vc, stp::FPSpecial::NaN, fpType);
+}
+Expr vc_fpPlusInfinity(VC vc, Type fpType)
+{
+  return fpSpecial(vc, stp::FPSpecial::PlusInfinity, fpType);
+}
+Expr vc_fpMinusInfinity(VC vc, Type fpType)
+{
+  return fpSpecial(vc, stp::FPSpecial::MinusInfinity, fpType);
+}
+Expr vc_fpPlusZero(VC vc, Type fpType)
+{
+  return fpSpecial(vc, stp::FPSpecial::PlusZero, fpType);
+}
+Expr vc_fpMinusZero(VC vc, Type fpType)
+{
+  return fpSpecial(vc, stp::FPSpecial::MinusZero, fpType);
+}
+
+// Build a to_fp node: the (eb,sb) width children the blaster reads, an
+// optional rounding mode, then the source. The result is a float of (eb, sb).
+// `k` is FP_TOFP for the bits and float-to-float forms and FP_TOFP_SIGNED for
+// the integer one. SMT-LIB spells all three `to_fp` and tells them apart by
+// the source's sort, but a float is carried as its packed bits, so the sort
+// stops being readable the moment the source is lowered. Each entry point
+// below knows which operation the caller asked for; the kind records it.
+static Expr fpToFP(VC vc, stp::Kind k, int eb, int sb, const stp::ASTNode* rm,
+                   const stp::ASTNode& src)
+{
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  checkFpWidths(eb, sb);
+
+  const bool expects_float = k == stp::FP_TOFP && rm != NULL;
+  const stp::SourceSort::Kind source_kind = src.GetSourceSort().kind();
+  if ((expects_float &&
+       source_kind != stp::SourceSort::Kind::FloatingPoint) ||
+      (!expects_float && source_kind != stp::SourceSort::Kind::BitVector))
+  {
+    stp::FatalError(expects_float
+                        ? "CInterface: float-to-float conversion requires a "
+                          "floating-point source: "
+                        : "CInterface: bitvector-to-float conversion requires "
+                          "a bitvector source: ",
+                    src);
+  }
+
+  stp::ASTVec kids;
+  kids.push_back(b->CreateBVConst(32, eb));
+  kids.push_back(b->CreateBVConst(32, sb));
+  if (rm != NULL)
+  {
+    // Covers vc_fpToFPFrom{FP,SignedBV,UnsignedBV} and, through them,
+    // vc_fpConstFrom{Double,Float}. The bits form takes no mode at all.
+    checkRoundingMode("to_fp", b, *rm);
+    kids.push_back(*rm);
+  }
+  kids.push_back(src);
+  // withFormat rather than a bare stamp, for the reason fpTermResult gives:
+  // what comes back need not be a fresh to_fp node.
+  stp::ASTNode r =
+      stp::FloatBlaster::withFormat(b, b->CreateTerm(k, eb + sb, kids), eb, sb);
+  return persistNode(vc, r);
+}
+
+Expr vc_fpToFPFromIEEEBV(VC vc, int eb, int sb, Expr bv)
+{
+  return fpToFP(vc, stp::FP_TOFP, eb, sb, NULL, *(stp::ASTNode*)bv);
+}
+
+Expr vc_fpToFPFromFP(VC vc, int eb, int sb, Expr rm, Expr f)
+{
+  return fpToFP(vc, stp::FP_TOFP, eb, sb, (stp::ASTNode*)rm, *(stp::ASTNode*)f);
+}
+
+Expr vc_fpToFPFromSignedBV(VC vc, int eb, int sb, Expr rm, Expr bv)
+{
+  return fpToFP(vc, stp::FP_TOFP_SIGNED, eb, sb, (stp::ASTNode*)rm,
+                *(stp::ASTNode*)bv);
+}
+
+Expr vc_fpToFPFromUnsignedBV(VC vc, int eb, int sb, Expr rm, Expr bv)
+{
+  // Through fpToFP like its signed sibling. It used to carry its own copy of
+  // that body -- identical but for the kind -- and so was the one to_fp form
+  // that never checked its rounding mode.
+  return fpToFP(vc, stp::FP_TOFP_UNSIGNED, eb, sb, (stp::ASTNode*)rm,
+                *(stp::ASTNode*)bv);
+}
+
+// fp.to_ubv / fp.to_sbv: a float in, a `width`-bit bitvector out. The result is
+// a bitvector, so it carries no floating-point format.
+static Expr fpToBV(VC vc, stp::Kind k, int width, const stp::ASTNode& rm,
+                   const stp::ASTNode& f)
+{
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  if (width < 1)
+  {
+    stp::FatalError("CInterface: fp.to_ubv/fp.to_sbv need a positive "
+                    "target width");
+  }
+  if (f.GetSourceSort().kind() != stp::SourceSort::Kind::FloatingPoint)
+  {
+    stp::FatalError("CInterface: fp.to_ubv/fp.to_sbv applied to a "
+                    "non-float: ",
+                    f);
+  }
+  checkRoundingMode("fp.to_ubv/fp.to_sbv", b, rm);
+  stp::ASTVec kids;
+  kids.push_back(b->CreateBVConst(32, width));
+  kids.push_back(rm);
+  kids.push_back(f);
+  return persistNode(vc, b->CreateTerm(k, width, kids));
+}
+
+Expr vc_fpToUBVExpr(VC vc, int width, Expr rm, Expr f)
+{
+  return fpToBV(vc, stp::FP_TO_UBV, width, *(stp::ASTNode*)rm,
+                *(stp::ASTNode*)f);
+}
+
+Expr vc_fpToSBVExpr(VC vc, int width, Expr rm, Expr f)
+{
+  return fpToBV(vc, stp::FP_TO_SBV, width, *(stp::ASTNode*)rm,
+                *(stp::ASTNode*)f);
+}
+
+Expr vc_fpToIEEEBV(VC vc, Expr f)
+{
+  stp::STPMgr* b = ((stp::STP*)vc)->bm;
+  stp::ASTNode* x = (stp::ASTNode*)f;
+  if (x->GetSourceSort().kind() != stp::SourceSort::Kind::FloatingPoint)
+  {
+    stp::FatalError("CInterface: vc_fpToIEEEBV applied to a non-float: ", *x);
+  }
+  const unsigned width = x->GetExpWidth() + x->GetSigWidth();
+  // The result is a bitvector (the packed bits), so it carries no fp format.
+  return persistNode(vc, b->CreateTerm(stp::FP_TO_IEEE_BV, width, *x));
+}
+
+Expr vc_fpConstFromDouble(VC vc, Type target, Expr rm, double d)
+{
+  checkRoundingMode("vc_fpConstFromDouble", ((stp::STP*)vc)->bm,
+                    *(stp::ASTNode*)rm);
+  uint64_t bits;
+  std::memcpy(&bits, &d, sizeof(bits)); // d is already IEEE-754 binary64
+  Expr dbl =
+      vc_fpConstFromBits(vc, 11, 53, vc_bvConstExprFromLL(vc, 64, bits));
+  unsigned eb, sb;
+  fpTypeWidths(target, eb, sb);
+  if (eb == 11 && sb == 53)
+    return dbl; // target is binary64: the reinterpret is exact
+  return vc_fpToFPFromFP(vc, eb, sb, rm, dbl);
+}
+
+Expr vc_fpConstFromFloat(VC vc, Type target, Expr rm, float f)
+{
+  checkRoundingMode("vc_fpConstFromFloat", ((stp::STP*)vc)->bm,
+                    *(stp::ASTNode*)rm);
+  uint32_t bits;
+  std::memcpy(&bits, &f, sizeof(bits)); // f is already IEEE-754 binary32
+  Expr single =
+      vc_fpConstFromBits(vc, 8, 24, vc_bvConstExprFromLL(vc, 32, bits));
+  unsigned eb, sb;
+  fpTypeWidths(target, eb, sb);
+  if (eb == 8 && sb == 24)
+    return single; // target is binary32: the reinterpret is exact
+  return vc_fpToFPFromFP(vc, eb, sb, rm, single);
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -795,144 +1695,121 @@ Expr vc_boolType(VC vc)
 // provided as arguments must be of type Boolean.
 Expr vc_trueExpr(VC vc)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   stp::ASTNode c = b->CreateNode(stp::TRUE);
 
-  stp::ASTNode* d = new stp::ASTNode(c);
   // if(cinterface_exprdelete_on) created_exprs.push_back(d);
-  return d;
+  return wrap(c);
 }
 
 Expr vc_falseExpr(VC vc)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   stp::ASTNode c = b->CreateNode(stp::FALSE);
 
-  stp::ASTNode* d = new stp::ASTNode(c);
   // if(cinterface_exprdelete_on) created_exprs.push_back(d);
-  return d;
+  return wrap(c);
 }
 
 Expr vc_notExpr(VC vc, Expr ccc)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   stp::ASTNode* a = (stp::ASTNode*)ccc;
+  requireBooleanOperand("vc_notExpr", *a);
 
   stp::ASTNode o = b->CreateNode(stp::NOT, *a);
   assert(BVTypeCheck(o));
 
-  stp::ASTNode* output = new stp::ASTNode(o);
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return wrap(o);
 }
 
 Expr vc_andExpr(VC vc, Expr left, Expr right)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
-  stp::ASTNode* l = (stp::ASTNode*)left;
-  stp::ASTNode* r = (stp::ASTNode*)right;
-
-  stp::ASTNode o = b->CreateNode(stp::AND, *l, *r);
-  assert(BVTypeCheck(o));
-
-  stp::ASTNode* output = new stp::ASTNode(o);
-  // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return createBinaryNode(vc, stp::AND, left, right);
 }
 
 Expr vc_orExpr(VC vc, Expr left, Expr right)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
-  stp::ASTNode* l = (stp::ASTNode*)left;
-  stp::ASTNode* r = (stp::ASTNode*)right;
-
-  stp::ASTNode o = b->CreateNode(stp::OR, *l, *r);
-  assert(BVTypeCheck(o));
-  stp::ASTNode* output = new stp::ASTNode(o);
-  // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return createBinaryNode(vc, stp::OR, left, right);
 }
 
 Expr vc_xorExpr(VC vc, Expr left, Expr right)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
-  stp::ASTNode* l = (stp::ASTNode*)left;
-  stp::ASTNode* r = (stp::ASTNode*)right;
+  return createBinaryNode(vc, stp::XOR, left, right);
+}
 
-  stp::ASTNode o = b->CreateNode(stp::XOR, *l, *r);
-  assert(BVTypeCheck(o));
-  stp::ASTNode* output = new stp::ASTNode(o);
-  // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+Expr vc_nandExpr(VC vc, Expr left, Expr right)
+{
+  return createBinaryNode(vc, stp::NAND, left, right);
+}
+
+Expr vc_norExpr(VC vc, Expr left, Expr right)
+{
+  return createBinaryNode(vc, stp::NOR, left, right);
 }
 
 Expr vc_andExprN(VC vc, Expr* cc, int n)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   stp::ASTNode** c = (stp::ASTNode**)cc;
   assert(n > 0);
 
   stp::ASTVec d;
   for (int i = 0; i < n; i++)
   {
+    requireBooleanOperand("vc_andExprN", *c[i]);
     d.push_back(*c[i]);
   }
 
   stp::ASTNode o = b->CreateNode(stp::AND, d);
   assert(BVTypeCheck(o));
-  stp::ASTNode* output = new stp::ASTNode(o);
 
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return wrap(o);
 }
 
 Expr vc_orExprN(VC vc, Expr* cc, int n)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   stp::ASTNode** c = (stp::ASTNode**)cc;
   stp::ASTVec d;
 
   for (int i = 0; i < n; i++)
+  {
+    requireBooleanOperand("vc_orExprN", *c[i]);
     d.push_back(*c[i]);
+  }
 
   stp::ASTNode o = b->CreateNode(stp::OR, d);
   assert(BVTypeCheck(o));
 
-  stp::ASTNode* output = new stp::ASTNode(o);
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return wrap(o);
 }
 
 Expr vc_bvPlusExprN(VC vc, int n_bits, Expr* cc, int n)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   stp::ASTNode** c = (stp::ASTNode**)cc;
   stp::ASTVec d;
 
   for (int i = 0; i < n; i++)
+  {
+    requireBitVectorOperand("vc_bvPlusExprN", *c[i]);
     d.push_back(*c[i]);
+  }
 
   stp::ASTNode o = b->CreateTerm(stp::BVPLUS, n_bits, d);
   assert(BVTypeCheck(o));
 
-  stp::ASTNode* output = new stp::ASTNode(o);
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return wrap(o);
 }
 
 Expr vc_iteExpr(VC vc, Expr cond, Expr thenpart, Expr elsepart)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   stp::ASTNode* c = (stp::ASTNode*)cond;
   stp::ASTNode* t = (stp::ASTNode*)thenpart;
   stp::ASTNode* e = (stp::ASTNode*)elsepart;
@@ -940,6 +1817,33 @@ Expr vc_iteExpr(VC vc, Expr cond, Expr thenpart, Expr elsepart)
   assert(BVTypeCheck(*c));
   assert(BVTypeCheck(*t));
   assert(BVTypeCheck(*e));
+
+  if (c->GetSourceSort().kind() != stp::SourceSort::Kind::Bool)
+  {
+    stp::FatalError("CInterface: vc_iteExpr requires a Boolean condition: ",
+                    *c);
+  }
+
+  // Branches that BOTH claim to be floats must agree on the format: two
+  // formats can share one packed width -- (8, 24) and (24, 8) are both 32
+  // bits -- so the width checks cannot tell them apart, and the node would
+  // derive whichever branch's format comes first (see deriveFPFormat) and
+  // silently read the other branch's bits at it. Checked here, not only in
+  // BVTypeCheck: the asserts above compile out of a release build, and a
+  // constant condition folds the if-then-else to one branch before any
+  // type check can see the pair. Covers arrays too, whose exponent and
+  // significand widths carry the element's format. The general sort check
+  // above rejects a float/BitVec pair even when their packed widths match.
+  if (t->GetExpWidth() != 0 && e->GetExpWidth() != 0 &&
+      (t->GetExpWidth() != e->GetExpWidth() ||
+       t->GetSigWidth() != e->GetSigWidth()))
+  {
+    stp::FatalError("CInterface: vc_iteExpr: the then and else branches "
+                    "differ in floating-point format: ",
+                    *t);
+  }
+  requireSamePublicSort("vc_iteExpr", b, *t, *e);
+
   stp::ASTNode o;
   // if the user asks for a formula then produce a formula, else
   // prodcue a term
@@ -951,52 +1855,25 @@ Expr vc_iteExpr(VC vc, Expr cond, Expr thenpart, Expr elsepart)
     o.SetIndexWidth(t->GetIndexWidth());
   }
   assert(BVTypeCheck(o));
-  stp::ASTNode* output = new stp::ASTNode(o);
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return wrap(o);
 }
 
 Expr vc_impliesExpr(VC vc, Expr antecedent, Expr consequent)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
-  stp::ASTNode* c = (stp::ASTNode*)antecedent;
-  stp::ASTNode* t = (stp::ASTNode*)consequent;
-
-  assert(BVTypeCheck(*c));
-  assert(BVTypeCheck(*t));
-  stp::ASTNode o;
-
-  o = b->CreateNode(stp::IMPLIES, *c, *t);
-  assert(BVTypeCheck(o));
-  stp::ASTNode* output = new stp::ASTNode(o);
-  // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return createBinaryNode(vc, stp::IMPLIES, antecedent, consequent);
 }
 
 Expr vc_iffExpr(VC vc, Expr e0, Expr e1)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
-  stp::ASTNode* c = (stp::ASTNode*)e0;
-  stp::ASTNode* t = (stp::ASTNode*)e1;
-
-  assert(BVTypeCheck(*c));
-  assert(BVTypeCheck(*t));
-  stp::ASTNode o;
-
-  o = b->CreateNode(stp::IFF, *c, *t);
-  assert(BVTypeCheck(o));
-  stp::ASTNode* output = new stp::ASTNode(o);
-  // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return createBinaryNode(vc, stp::IFF, e0, e1);
 }
 
 Expr vc_boolToBVExpr(VC vc, Expr form)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   stp::ASTNode* c = (stp::ASTNode*)form;
+  requireBooleanOperand("vc_boolToBVExpr", *c);
 
   assert(BVTypeCheck(*c));
   if (!is_Form_kind(c->GetKind()))
@@ -1012,27 +1889,30 @@ Expr vc_boolToBVExpr(VC vc, Expr form)
   o = b->CreateTerm(stp::ITE, 1, *c, one, zero);
 
   assert(BVTypeCheck(o));
-  stp::ASTNode* output = new stp::ASTNode(o);
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return wrap(o);
 }
 
 Expr vc_paramBoolExpr(VC vc, Expr boolvar, Expr parameter)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   stp::ASTNode* c = (stp::ASTNode*)boolvar;
   stp::ASTNode* t = (stp::ASTNode*)parameter;
 
+  requireBooleanOperand("vc_paramBoolExpr", *c);
+  requireBitVectorOperand("vc_paramBoolExpr", *t);
+
   assert(BVTypeCheck(*c));
   assert(BVTypeCheck(*t));
-  stp::ASTNode o;
 
-  o = b->CreateNode(stp::PARAMBOOL, *c, *t);
-  // BVTypeCheck(o);
-  stp::ASTNode* output = new stp::ASTNode(o);
+  if (stp::BVCONST != t->GetKind())
+    stp::FatalError("vc_paramBoolExpr: the parameter must be a constant "
+                    "bit-vector",
+                    *t);
+
+  stp::ASTNode o = b->NewParameterized_BooleanVar(*c, *t);
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return wrap(o);
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -1040,8 +1920,7 @@ Expr vc_paramBoolExpr(VC vc, Expr boolvar, Expr parameter)
 /////////////////////////////////////////////////////////////////////////////
 Type vc_bvType(VC vc, int num_bits)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
 
   if (!(0 < num_bits))
   {
@@ -1076,41 +1955,53 @@ int vc_getIndexSize(VC /* vc */, Type type)
 
 Expr vc_bvConstExprFromDecStr(VC vc, int width, const char* decimalInput)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
 
   std::string str(decimalInput);
   stp::ASTNode n = b->CreateBVConst(str, 10, width);
   assert(BVTypeCheck(n));
-  stp::ASTNode* output = new stp::ASTNode(n);
-  return output;
+  return wrap(n);
 }
 
 Expr vc_bvConstExprFromStr(VC vc, const char* binary_repr)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
 
   stp::ASTNode n = b->CreateBVConst(binary_repr, 2);
   assert(BVTypeCheck(n));
-  stp::ASTNode* output = new stp::ASTNode(n);
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return wrap(n);
 }
 
 Expr vc_bvConstExprFromInt(VC vc, int n_bits, unsigned int value)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
 
-  unsigned long long int v = (unsigned long long int)value;
-  unsigned long long int max_n_bits = 0xFFFFFFFFFFFFFFFFULL >> (64 - n_bits);
-  // printf("%ull", max_n_bits);
+  if (n_bits <= 0)
+  {
+    printf("CInterface: vc_bvConstExprFromInt: "
+           "Bit width must be positive, got %d.\n",
+           n_bits);
+    stp::FatalError("FatalError");
+  }
+
+  const uint64_t v = value;
+
+  // The largest value representable in n_bits bits. Written as a branch
+  // because the shift that computed it, 0xFF..FF >> (64 - n_bits), has an
+  // operand that goes negative as soon as n_bits exceeds 64 -- undefined,
+  // and on x86-64 the count is masked to six bits, so the bound collapsed
+  // instead of growing: width 65 yielded a maximum of 1 and width 66 a
+  // maximum of 3, rejecting constants that fit with room to spare.
+  const uint64_t max_n_bits =
+      (n_bits >= 64) ? UINT64_MAX : ((UINT64_C(1) << n_bits) - 1);
+
   if (v > max_n_bits)
   {
     printf("CInterface: vc_bvConstExprFromInt: "
-           "Cannot construct a constant %llu >= %llu,\n",
-           v, max_n_bits);
+           "Cannot construct a constant %" PRIu64 " in %d bits, "
+           "the maximum is %" PRIu64 ".\n",
+           v, n_bits, max_n_bits);
     stp::FatalError("FatalError");
   }
   stp::ASTNode n = b->CreateBVConst(n_bits, v);
@@ -1118,49 +2009,49 @@ Expr vc_bvConstExprFromInt(VC vc, int n_bits, unsigned int value)
   return persistNode(vc, n);
 }
 
-Expr vc_bvConstExprFromLL(VC vc, int n_bits, unsigned long long value)
+Expr vc_bvConstExprFromLL(VC vc, int n_bits, uint64_t value)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
 
   stp::ASTNode n = b->CreateBVConst(n_bits, value);
   assert(BVTypeCheck(n));
-  stp::ASTNode* output = new stp::ASTNode(n);
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return wrap(n);
 }
 
 Expr vc_bvConcatExpr(VC vc, Expr left, Expr right)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   stp::ASTNode* l = (stp::ASTNode*)left;
   stp::ASTNode* r = (stp::ASTNode*)right;
+
+  requireBitVectorOperand("vc_bvConcatExpr", *l);
+  requireBitVectorOperand("vc_bvConcatExpr", *r);
 
   assert(BVTypeCheck(*l));
   assert(BVTypeCheck(*r));
   stp::ASTNode o = b->CreateTerm(
       stp::BVCONCAT, l->GetValueWidth() + r->GetValueWidth(), *l, *r);
   assert(BVTypeCheck(o));
-  stp::ASTNode* output = new stp::ASTNode(o);
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return wrap(o);
 }
 
 Expr createBinaryTerm(VC vc, int n_bits, Kind k, Expr left, Expr right)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   stp::ASTNode* l = (stp::ASTNode*)left;
   stp::ASTNode* r = (stp::ASTNode*)right;
+
+  requireBitVectorOperand("bitvector operation", *l);
+  requireBitVectorOperand("bitvector operation", *r);
 
   assert(BVTypeCheck(*l));
   assert(BVTypeCheck(*r));
   stp::ASTNode o = b->CreateTerm(k, n_bits, *l, *r);
   assert(BVTypeCheck(o));
-  stp::ASTNode* output = new stp::ASTNode(o);
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return wrap(o);
 }
 
 Expr vc_bvPlusExpr(VC vc, int n_bits, Expr left, Expr right)
@@ -1229,18 +2120,49 @@ Expr vc_bv32MultExpr(VC vc, Expr left, Expr right)
 
 Expr createBinaryNode(VC vc, Kind k, Expr left, Expr right)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   stp::ASTNode* l = (stp::ASTNode*)left;
   stp::ASTNode* r = (stp::ASTNode*)right;
+
+  switch (k)
+  {
+    case stp::BVLT:
+    case stp::BVLE:
+    case stp::BVGT:
+    case stp::BVGE:
+    case stp::BVSLT:
+    case stp::BVSLE:
+    case stp::BVSGT:
+    case stp::BVSGE:
+    case stp::BVUADDO:
+    case stp::BVSADDO:
+    case stp::BVUMULO:
+    case stp::BVSMULO:
+    case stp::BVUSUBO:
+    case stp::BVSSUBO:
+      requireBitVectorOperand("bitvector predicate", *l);
+      requireBitVectorOperand("bitvector predicate", *r);
+      break;
+    case stp::AND:
+    case stp::OR:
+    case stp::XOR:
+    case stp::NAND:
+    case stp::NOR:
+    case stp::IMPLIES:
+    case stp::IFF:
+      requireBooleanOperand("Boolean connective", *l);
+      requireBooleanOperand("Boolean connective", *r);
+      break;
+    default:
+      break;
+  }
   assert(BVTypeCheck(*l));
   assert(BVTypeCheck(*r));
   stp::ASTNode o = b->CreateNode(k, *l, *r);
   assert(BVTypeCheck(o));
-  stp::ASTNode* output = new stp::ASTNode(o);
   // if(cinterface_exprdelete_on)
   //  created_exprs.push_back(output);
-  return output;
+  return wrap(o);
 }
 
 // unsigned comparators
@@ -1278,6 +2200,32 @@ Expr vc_sbvGeExpr(VC vc, Expr left, Expr right)
   return createBinaryNode(vc, stp::BVSGE, left, right);
 }
 
+// overflow predicates
+Expr vc_bvUnsignedAddOverflowExpr(VC vc, Expr left, Expr right)
+{
+  return createBinaryNode(vc, stp::BVUADDO, left, right);
+}
+Expr vc_bvSignedAddOverflowExpr(VC vc, Expr left, Expr right)
+{
+  return createBinaryNode(vc, stp::BVSADDO, left, right);
+}
+Expr vc_bvUnsignedSubOverflowExpr(VC vc, Expr left, Expr right)
+{
+  return createBinaryNode(vc, stp::BVUSUBO, left, right);
+}
+Expr vc_bvSignedSubOverflowExpr(VC vc, Expr left, Expr right)
+{
+  return createBinaryNode(vc, stp::BVSSUBO, left, right);
+}
+Expr vc_bvUnsignedMulOverflowExpr(VC vc, Expr left, Expr right)
+{
+  return createBinaryNode(vc, stp::BVUMULO, left, right);
+}
+Expr vc_bvSignedMulOverflowExpr(VC vc, Expr left, Expr right)
+{
+  return createBinaryNode(vc, stp::BVSMULO, left, right);
+}
+
 Expr vc_bvLeftShiftExprExpr(VC vc, int n_bits, Expr left, Expr right)
 {
   return createBinaryTerm(vc, n_bits, stp::BVLEFTSHIFT, left, right);
@@ -1295,17 +2243,16 @@ Expr vc_bvSignedRightShiftExprExpr(VC vc, int n_bits, Expr left, Expr right)
 
 Expr vc_bvUMinusExpr(VC vc, Expr ccc)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
 
   stp::ASTNode* a = (stp::ASTNode*)ccc;
+  requireBitVectorOperand("vc_bvUMinusExpr", *a);
   assert(BVTypeCheck(*a));
 
   stp::ASTNode o = b->CreateTerm(stp::BVUMINUS, a->GetValueWidth(), *a);
   assert(BVTypeCheck(o));
-  stp::ASTNode* output = new stp::ASTNode(o);
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return wrap(o);
 }
 
 // Expr createBinaryTerm(VC vc, int n_bits, Kind k, Expr left, Expr right){
@@ -1329,25 +2276,67 @@ Expr vc_bvXorExpr(VC vc, Expr left, Expr right)
                           stp::BVXOR, left, right);
 }
 
+/*
+ * The bitwise nand/nor/xnor below are built as a negated and/or/xor rather
+ * than as the BVNAND/BVNOR/BVXNOR kinds their names suggest. Those kinds are
+ * vestigial: no parser produces them -- the SMT-LIB2 grammar expands bvnand,
+ * bvnor and bvxnor exactly this way, see lib/Parser/smt2.y -- so while the
+ * bit-blaster handles them, constant folding (BVConstEvaluator) and printing
+ * (functionToSMTLIBName has no BVXNOR) do not. Building them here would make
+ * those kinds reachable for the first time and abort on a constant operand.
+ */
+static Expr createNegatedBinaryTerm(VC vc, Kind k, Expr left, Expr right)
+{
+  stp::STPMgr* b = mgr(vc);
+  stp::ASTNode* l = (stp::ASTNode*)left;
+  stp::ASTNode* r = (stp::ASTNode*)right;
+
+  requireBitVectorOperand("bitvector operation", *l);
+  requireBitVectorOperand("bitvector operation", *r);
+
+  assert(BVTypeCheck(*l));
+  assert(BVTypeCheck(*r));
+
+  const unsigned int width = l->GetValueWidth();
+  stp::ASTNode o =
+      b->CreateTerm(stp::BVNOT, width, b->CreateTerm(k, width, *l, *r));
+  assert(BVTypeCheck(o));
+  return wrap(o);
+}
+
+Expr vc_bvNandExpr(VC vc, Expr left, Expr right)
+{
+  return createNegatedBinaryTerm(vc, stp::BVAND, left, right);
+}
+
+Expr vc_bvNorExpr(VC vc, Expr left, Expr right)
+{
+  return createNegatedBinaryTerm(vc, stp::BVOR, left, right);
+}
+
+Expr vc_bvXnorExpr(VC vc, Expr left, Expr right)
+{
+  return createNegatedBinaryTerm(vc, stp::BVXOR, left, right);
+}
+
 Expr vc_bvNotExpr(VC vc, Expr ccc)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   stp::ASTNode* a = (stp::ASTNode*)ccc;
 
+  requireBitVectorOperand("vc_bvNotExpr", *a);
   assert(BVTypeCheck(*a));
   stp::ASTNode o = b->CreateTerm(stp::BVNOT, a->GetValueWidth(), *a);
   assert(BVTypeCheck(o));
-  stp::ASTNode* output = new stp::ASTNode(o);
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return wrap(o);
 }
 
 Expr vc_bvLeftShiftExpr(VC vc, int sh_amt, Expr ccc)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   stp::ASTNode* a = (stp::ASTNode*)ccc;
+  requireBitVectorOperand("vc_bvLeftShiftExpr", *a);
   assert(BVTypeCheck(*a));
 
   // convert leftshift to bvconcat
@@ -1357,9 +2346,8 @@ Expr vc_bvLeftShiftExpr(VC vc, int sh_amt, Expr ccc)
     stp::ASTNode o =
         b->CreateTerm(stp::BVCONCAT, a->GetValueWidth() + sh_amt, *a, len);
     assert(BVTypeCheck(o));
-    stp::ASTNode* output = new stp::ASTNode(o);
     // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-    return output;
+    return wrap(o);
   }
   else
     return a;
@@ -1367,9 +2355,9 @@ Expr vc_bvLeftShiftExpr(VC vc, int sh_amt, Expr ccc)
 
 Expr vc_bvRightShiftExpr(VC vc, int sh_amt, Expr ccc)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   stp::ASTNode* a = (stp::ASTNode*)ccc;
+  requireBitVectorOperand("vc_bvRightShiftExpr", *a);
   assert(BVTypeCheck(*a));
 
   unsigned int w = a->GetValueWidth();
@@ -1386,14 +2374,12 @@ Expr vc_bvRightShiftExpr(VC vc, int sh_amt, Expr ccc)
 
     stp::ASTNode n = b->CreateTerm(stp::BVCONCAT, w, len, extract);
     BVTypeCheck(n);
-    stp::ASTNode* output = new stp::ASTNode(n);
     // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-    return output;
+    return wrap(n);
   }
   else if ((unsigned)sh_amt == w)
   {
-    stp::ASTNode* output = new stp::ASTNode(b->CreateBVConst(w, 0));
-    return output;
+    return wrap(b->CreateBVConst(w, 0));
   }
   else if (sh_amt == 0)
     return a;
@@ -1405,9 +2391,8 @@ Expr vc_bvRightShiftExpr(VC vc, int sh_amt, Expr ccc)
                       "cannot have a bitvector of length 0:",
                       *a);
     }
-    stp::ASTNode* output = new stp::ASTNode(b->CreateBVConst(w, 0));
     // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-    return output;
+    return wrap(b->CreateBVConst(w, 0));
   }
 }
 
@@ -1510,9 +2495,9 @@ Expr vc_bvVar32RightShiftExpr(VC vc, Expr sh_amt, Expr child)
 
 Expr vc_bvExtract(VC vc, Expr ccc, int hi_num, int low_num)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   stp::ASTNode* a = (stp::ASTNode*)ccc;
+  requireBitVectorOperand("vc_bvExtract", *a);
   BVTypeCheck(*a);
 
   stp::ASTNode hi = b->CreateBVConst(32, hi_num);
@@ -1520,9 +2505,8 @@ Expr vc_bvExtract(VC vc, Expr ccc, int hi_num, int low_num)
   stp::ASTNode o =
       b->CreateTerm(stp::BVEXTRACT, hi_num - low_num + 1, *a, hi, low);
   BVTypeCheck(o);
-  stp::ASTNode* output = new stp::ASTNode(o);
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return wrap(o);
 }
 
 Expr vc_bvBoolExtract(VC vc, Expr ccc, int bit_num)
@@ -1530,6 +2514,7 @@ Expr vc_bvBoolExtract(VC vc, Expr ccc, int bit_num)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* a = (stp::ASTNode*)ccc;
+  requireBitVectorOperand("vc_bvBoolExtract", *a);
   BVTypeCheck(*a);
 
   stp::ASTNode bit = b->CreateBVConst(32, bit_num);
@@ -1548,6 +2533,7 @@ Expr vc_bvBoolExtract_Zero(VC vc, Expr ccc, int bit_num)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* a = (stp::ASTNode*)ccc;
+  requireBitVectorOperand("vc_bvBoolExtract_Zero", *a);
   BVTypeCheck(*a);
 
   stp::ASTNode bit = b->CreateBVConst(32, bit_num);
@@ -1566,6 +2552,7 @@ Expr vc_bvBoolExtract_One(VC vc, Expr ccc, int bit_num)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
   stp::ASTNode* a = (stp::ASTNode*)ccc;
+  requireBitVectorOperand("vc_bvBoolExtract_One", *a);
   BVTypeCheck(*a);
 
   stp::ASTNode bit = b->CreateBVConst(32, bit_num);
@@ -1581,9 +2568,10 @@ Expr vc_bvBoolExtract_One(VC vc, Expr ccc, int bit_num)
 
 Expr vc_bvSignExtend(VC vc, Expr ccc, int nbits)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   stp::ASTNode* a = (stp::ASTNode*)ccc;
+
+  requireBitVectorOperand("vc_bvSignExtend", *a);
 
   // width of the expr which is being sign extended. nbits is the
   // resulting length of the signextended expr
@@ -1608,9 +2596,44 @@ Expr vc_bvSignExtend(VC vc, Expr ccc, int nbits)
   }
 
   BVTypeCheck(n);
-  stp::ASTNode* output = new stp::ASTNode(n);
   // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-  return output;
+  return wrap(n);
+}
+
+Expr vc_bvZeroExtend(VC vc, Expr ccc, int nbits)
+{
+  stp::STPMgr* b = mgr(vc);
+  stp::ASTNode* a = (stp::ASTNode*)ccc;
+
+  requireBitVectorOperand("vc_bvZeroExtend", *a);
+
+  // width of the expr which is being zero extended. nbits is the
+  // resulting length of the zeroextended expr
+  BVTypeCheck(*a);
+
+  if (nbits <= 0)
+    stp::FatalError("vc_bvZeroExtend: the new width must be positive");
+
+  unsigned exprlen = a->GetValueWidth();
+  unsigned outputlen = nbits;
+  stp::ASTNode n;
+  if (exprlen >= outputlen)
+  {
+    // extract
+    stp::ASTNode hi = b->CreateBVConst(32, outputlen - 1);
+    stp::ASTNode low = b->CreateBVConst(32, 0);
+    n = b->CreateTerm(stp::BVEXTRACT, nbits, *a, hi, low);
+  }
+  else
+  {
+    // zero extend
+    stp::ASTNode width = b->CreateBVConst(32, nbits);
+    n = b->CreateTerm(stp::BVZX, nbits, *a, width);
+  }
+
+  BVTypeCheck(n);
+  // if(cinterface_exprdelete_on) created_exprs.push_back(output);
+  return wrap(n);
 }
 
 //! Return an int from a constant bitvector expression
@@ -1641,8 +2664,8 @@ unsigned int getBVUnsigned(Expr e)
   return (unsigned int)a->GetUnsignedConst();
 }
 
-//! Return an unsigned long long int from a constant bitvector expression
-unsigned long long int getBVUnsignedLongLong(Expr e)
+//! Return a uint64_t from a constant bitvector expression
+uint64_t getBVUnsignedLongLong(Expr e)
 {
   stp::ASTNode* a = (stp::ASTNode*)e;
 
@@ -1653,12 +2676,12 @@ unsigned long long int getBVUnsignedLongLong(Expr e)
   unsigned* bv = a->GetBVConst();
 
   char* str_bv = (char*)CONSTANTBV::BitVector_to_Bin(bv);
-  unsigned long long int tmp = std::strtoull(str_bv, NULL, 2);
+  uint64_t tmp = std::strtoull(str_bv, NULL, 2);
   CONSTANTBV::BitVector_Dispose((unsigned char*)str_bv);
   return tmp;
 }
 
-void vc_printBVBitStringToBuffer(Expr e, char** buf, unsigned long* len)
+void vc_printBVBitStringToBuffer(Expr e, char** buf, size_t* len)
 {
   assert(buf);
   assert(len);
@@ -1686,11 +2709,11 @@ void vc_printBVBitStringToBuffer(Expr e, char** buf, unsigned long* len)
 
   // convert to a c buffer
   const char* cstr = string_bv.c_str();
-  unsigned long size = string_bv.size() + 1; // number of chars + terminating null
+  size_t size = string_bv.size() + 1; // number of chars + terminating null
   *buf = (char*)malloc(size);
   if (!(*buf))
   {
-    fprintf(stderr, "malloc(%lu) failed.", size);
+    fprintf(stderr, "malloc(%zu) failed.", size);
     assert(*buf);
   }
   *len = size;
@@ -1703,10 +2726,20 @@ Expr vc_simplify(VC vc, Expr e)
   stp::Simplifier* simp = (stp::Simplifier*)(stp_i->simp);
   stp::ASTNode* a = (stp::ASTNode*)e;
 
-  if (stp::BOOLEAN_TYPE == a->GetType())
+  // Simplification is a public entrance to the same source-level FP graph as
+  // solving.  In particular, fp.min/fp.max and fp.to_{u,s}bv are deliberately
+  // built at their SMT-LIB arity; FpTotalise supplies the internal child that
+  // makes their otherwise-unspecified result a congruent total function.  The
+  // solve path already does this before any simplifier can constant-evaluate
+  // those nodes.  Do it here too, rather than letting the constant evaluator
+  // hand the raw node to FloatBlaster, which requires the internal child.
+  stp::FpTotalise totalise(stp_i->bm);
+  const stp::ASTNode totalised = totalise.topLevel(*a);
+
+  if (stp::BOOLEAN_TYPE == totalised.GetType())
   {
     stp::ASTNode* round1 =
-        new stp::ASTNode(simp->SimplifyFormula_TopLevel(*a, false));
+        new stp::ASTNode(simp->SimplifyFormula_TopLevel(totalised, false));
     stp::ASTNode* output =
         new stp::ASTNode(simp->SimplifyFormula_TopLevel(*round1, false));
     delete round1;
@@ -1714,7 +2747,7 @@ Expr vc_simplify(VC vc, Expr e)
   }
   else
   {
-    stp::ASTNode* round1 = new stp::ASTNode(simp->SimplifyTerm(*a));
+    stp::ASTNode* round1 = new stp::ASTNode(simp->SimplifyTerm(totalised));
     stp::ASTNode* output = new stp::ASTNode(simp->SimplifyTerm(*round1));
     delete round1;
     return output;
@@ -1859,6 +2892,11 @@ Expr vc_parseExpr(VC vc, const char* infile)
   stp::ASTNode o = b->CreateNode(stp::AND, asserts, oo);
   stp::ASTNode* output = new stp::ASTNode(o);
   delete AssertsQuery;
+
+  // cpp_inter is about to go out of scope, so give back the global that
+  // points at it. (~Cpp_interface does this too, for the paths that don't
+  // reach here.)
+  stp::GlobalParserInterface = NULL;
   return output;
 }
 
@@ -1889,9 +2927,8 @@ Expr getChild(Expr e, int i)
   if (0 <= i && (unsigned)i < c.size())
   {
     stp::ASTNode o = c[i];
-    stp::ASTNode* output = new stp::ASTNode(o);
     // if(cinterface_exprdelete_on) created_exprs.push_back(output);
-    return output;
+    return wrap(o);
   }
   else
   {
@@ -1909,8 +2946,7 @@ void vc_registerErrorHandler(void (*error_hdlr)(const char* err_msg))
 
 int vc_getHashQueryStateToBuffer(VC vc, Expr query)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   stp::ASTNode* qry = (stp::ASTNode*)query;
   assert(vc);
   assert(query);
@@ -1923,22 +2959,33 @@ int vc_getHashQueryStateToBuffer(VC vc, Expr query)
 Type vc_getType(VC vc, Expr ex)
 {
   stp::ASTNode* e = (stp::ASTNode*)ex;
-
-  switch (e->GetType())
-  {
-    case stp::BOOLEAN_TYPE:
-      return vc_boolType(vc);
-      break;
-    case stp::BITVECTOR_TYPE:
-      return vc_bvType(vc, e->GetValueWidth());
-      break;
-    case stp::ARRAY_TYPE:
+  const stp::SourceSort sort = e->GetSourceSort();
+  const auto scalar_type = [vc](const stp::SourceSort& scalar) -> Type {
+    switch (scalar.kind())
     {
-      Type typeindex = vc_bvType(vc, e->GetIndexWidth());
-      Type typedata = vc_bvType(vc, e->GetValueWidth());
-      return vc_arrayType(vc, typeindex, typedata);
-      break;
+      case stp::SourceSort::Kind::BitVector:
+        return vc_bvType(vc, scalar.bitVectorWidth());
+      case stp::SourceSort::Kind::FloatingPoint:
+        return vc_fpType(vc, scalar.exponentWidth(),
+                         scalar.significandWidth());
+      case stp::SourceSort::Kind::RoundingMode:
+        return vc_fpRoundingModeType(vc);
+      default:
+        stp::FatalError("c_interface: vc_GetType: expected scalar sort");
     }
+  };
+
+  switch (sort.kind())
+  {
+    case stp::SourceSort::Kind::Bool:
+      return vc_boolType(vc);
+    case stp::SourceSort::Kind::BitVector:
+    case stp::SourceSort::Kind::FloatingPoint:
+    case stp::SourceSort::Kind::RoundingMode:
+      return scalar_type(sort);
+    case stp::SourceSort::Kind::Array:
+      return vc_arrayType(vc, scalar_type(sort.index()),
+                          scalar_type(sort.element()));
     default:
       stp::FatalError("c_interface: vc_GetType: "
                       "expression with bad typing: "
@@ -1983,8 +3030,13 @@ void vc_Destroy(VC vc)
   vc_clearDecls(vc);
   stp_i->deleteObjects();
 
+  // Never leave the global aimed at a dead manager.
+  if (stp::GlobalParserBM == b)
+    stp::GlobalParserBM = NULL;
+
   delete stp_i;
-  delete b->defaultNodeFactory;
+  if (b->defaultNodeFactory != b->hashingNodeFactory)
+    delete b->defaultNodeFactory;
   delete b;
 }
 
@@ -1994,9 +3046,27 @@ void vc_DeleteExpr(Expr e)
   delete input;
 }
 
+// exprkind_t mirrors stp::Kind, which is generated from ASTKind.kinds, and
+// getExprKind is a raw cast -- so the two enums must stay in numeric
+// lockstep. These anchors catch a kind added to one side but not the other.
+static_assert((int)UNDEFINED == (int)stp::UNDEFINED, "exprkind_t drift");
+static_assert((int)BVCONST == (int)stp::BVCONST, "exprkind_t drift");
+static_assert((int)FP_ABS == (int)stp::FP_ABS, "exprkind_t drift");
+static_assert((int)FP_TO_IEEE_BV == (int)stp::FP_TO_IEEE_BV,
+              "exprkind_t drift");
+static_assert((int)FP_SMT_EQ == (int)stp::FP_SMT_EQ, "exprkind_t drift");
+static_assert((int)BOOLEAN_TYPE == (int)stp::BOOLEAN_TYPE &&
+                  (int)FLOATINGPOINT_TYPE == (int)stp::FLOATINGPOINT_TYPE &&
+                  (int)UNKNOWN_TYPE == (int)stp::UNKNOWN_TYPE,
+              "type_t drift");
+
 exprkind_t getExprKind(Expr e)
 {
   stp::ASTNode* input = (stp::ASTNode*)e;
+  // ARRAY_EQ is an internal, opaque representation of ordinary equality.
+  // Do not expose a new C API enum value (or shift the stable existing ones).
+  if (input->GetKind() == stp::ARRAY_EQ)
+    return EQ;
   return (exprkind_t)(input->GetKind());
 }
 
@@ -2010,7 +3080,7 @@ int getBVLength(Expr ex)
 {
   stp::ASTNode* e = (stp::ASTNode*)ex;
 
-  if (stp::BITVECTOR_TYPE != e->GetType())
+  if (e->GetSourceSort().kind() != stp::SourceSort::Kind::BitVector)
   {
     stp::FatalError("c_interface: vc_GetBVLength: "
                     "Input expression must be a bit-vector");
@@ -2022,7 +3092,21 @@ int getBVLength(Expr ex)
 type_t getType(Expr ex)
 {
   stp::ASTNode* e = (stp::ASTNode*)ex;
-  return (type_t)(e->GetType());
+  switch (e->GetSourceSort().kind())
+  {
+    case stp::SourceSort::Kind::Bool:
+      return BOOLEAN_TYPE;
+    case stp::SourceSort::Kind::BitVector:
+      return BITVECTOR_TYPE;
+    case stp::SourceSort::Kind::Array:
+      return ARRAY_TYPE;
+    case stp::SourceSort::Kind::FloatingPoint:
+      return FLOATINGPOINT_TYPE;
+    case stp::SourceSort::Kind::RoundingMode:
+      return ROUNDINGMODE_TYPE;
+    default:
+      return UNKNOWN_TYPE;
+  }
 }
 
 int getVWidth(Expr ex)
@@ -2042,7 +3126,7 @@ void vc_printCounterExampleFile(VC vc, int fd)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
 
-  fdostream os(fd);
+  stp::FdOStream os(fd);
   stp::AbsRefine_CounterExample* ce =
       (stp::AbsRefine_CounterExample*)(stp_i->Ctr_Example);
 
@@ -2059,7 +3143,7 @@ const char* exprName(Expr e)
   return ((stp::ASTNode*)e)->GetName();
 }
 
-int getExprID(Expr ex)
+uint64_t getExprID(Expr ex)
 {
   stp::ASTNode q = (*(stp::ASTNode*)ex);
   return q.GetNodeNum();
@@ -2067,8 +3151,7 @@ int getExprID(Expr ex)
 
 void process_argument(const char ch, VC vc)
 {
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* bm = stp_i->bm;
+  stp::STPMgr* bm = mgr(vc);
 
   switch (ch)
   {
@@ -2115,6 +3198,14 @@ void process_argument(const char ch, VC vc)
       break;
     case 'w':
       bm->UserFlags.wordlevel_solve_flag = false;
+      break;
+    case 'x':
+      // Decide whole-array equality/disequality (the extensional
+      // theory of arrays) with the lemmas-on-demand procedure of
+      // Brummayer & Biere. This must be set before a whole-array equality
+      // is built; construction preserves an opaque ARRAY_EQ until the
+      // completed query is lowered at the solve boundary.
+      bm->UserFlags.enable_array_equality = true;
       break;
     case 'y':
       bm->UserFlags.print_binary_flag = true;
@@ -2182,55 +3273,97 @@ int vc_parseMemExpr(VC vc, const char* s, Expr* oquery, Expr* oasserts)
   {
     *(stp::ASTNode**)oasserts = new stp::ASTNode(AssertsQuery[0]);
   }
+
+  // pi is about to go out of scope, so give back the global that points at
+  // it. (~Cpp_interface does this too, for the paths that don't reach here.)
+  stp::GlobalParserInterface = NULL;
   return 1;
 }
 
 void _vc_useSolver(VC vc, stp::UserDefinedFlags::SATSolvers solver)
 {
   /* Helper method to encapsulate setting a solver */
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   b->UserFlags.solver_to_use = solver;
 }
 
 bool _vc_isUsingSolver(VC vc, stp::UserDefinedFlags::SATSolvers solver)
 {
   /* Helper method to encapsulate getting a solver */
-  stp::STP* stp_i = (stp::STP*)vc;
-  stp::STPMgr* b = stp_i->bm;
+  stp::STPMgr* b = mgr(vc);
   return b->UserFlags.solver_to_use == solver;
 }
 
 bool vc_supportsMinisat(VC /*vc*/)
 {
+#ifdef USE_MINISAT
   return true;
+#else
+  return false;
+#endif
 }
 
-bool vc_useMinisat(VC vc)
+bool vc_useMinisat(VC
+#ifdef USE_MINISAT
+vc
+#endif
+)
 {
+#ifdef USE_MINISAT
   _vc_useSolver(vc, stp::UserDefinedFlags::MINISAT_SOLVER);
   return true;
+#else
+  return false;
+#endif
 }
 
-bool vc_isUsingMinisat(VC vc)
+bool vc_isUsingMinisat(VC
+#ifdef USE_MINISAT
+vc
+#endif
+)
 {
+#ifdef USE_MINISAT
   return _vc_isUsingSolver(vc, stp::UserDefinedFlags::MINISAT_SOLVER);
+#else
+  return false;
+#endif
 }
 
 bool vc_supportsSimplifyingMinisat(VC /*vc*/)
 {
+#ifdef USE_MINISAT
   return true;
+#else
+  return false;
+#endif
 }
 
-bool vc_useSimplifyingMinisat(VC vc)
+bool vc_useSimplifyingMinisat(VC
+#ifdef USE_MINISAT
+vc
+#endif
+)
 {
+#ifdef USE_MINISAT
   _vc_useSolver(vc, stp::UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER);
   return true;
+#else
+  return false;
+#endif
 }
 
-bool vc_isUsingSimplifyingMinisat(VC vc)
+bool vc_isUsingSimplifyingMinisat(VC
+#ifdef USE_MINISAT
+vc
+#endif
+)
 {
+#ifdef USE_MINISAT
   return _vc_isUsingSolver(vc, stp::UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER);
+#else
+  return false;
+#endif
 }
 
 bool vc_supportsCryptominisat(VC /*vc*/)
@@ -2305,3 +3438,38 @@ vc
 #endif
 }
 
+bool vc_supportsCadical(VC /*vc*/)
+{
+#ifdef USE_CADICAL
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool vc_useCadical(VC
+#ifdef USE_CADICAL
+vc
+#endif
+)
+{
+#ifdef USE_CADICAL
+  _vc_useSolver(vc, stp::UserDefinedFlags::CADICAL_SOLVER);
+  return true;
+#else
+  return false;
+#endif
+}
+
+bool vc_isUsingCadical(VC
+#ifdef USE_CADICAL
+vc
+#endif
+)
+{
+#ifdef USE_CADICAL
+  return _vc_isUsingSolver(vc, stp::UserDefinedFlags::CADICAL_SOLVER);
+#else
+  return false;
+#endif
+}

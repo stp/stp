@@ -44,57 +44,76 @@ namespace stp
   CaDiCaL::Solver * s;
 
   // Cadical has no wall-clock limit of its own; it polls a Terminator
-  // during search, so a deadline check gives us setMaxTime().
+  // during search, so asking the base class whether the query's deadline
+  // has passed is what gives us setMaxTime(). The deadline lives in
+  // SATSolver and spans the whole query, so this is not re-armed per solve.
   class TimeLimit : public CaDiCaL::Terminator
   {
   public:
-    std::chrono::steady_clock::time_point deadline;
-    bool armed = false;
-    bool terminate() override
-    {
-      return armed && std::chrono::steady_clock::now() >= deadline;
-    }
+    TimeLimit(const SATSolver& owner) : owner(owner) {}
+    bool terminate() override { return owner.timeLimitExpired(); }
+
+  private:
+    const SATSolver& owner;
   };
   TimeLimit time_limit;
 
   int64_t max_confl = -1;
-  int64_t max_time = -1; // seconds
+
+  // Bounded variable addition (factor) invents extension variables in the
+  // external index space, so once it is enabled STP's dense 1..n numbering
+  // can no longer be used as CaDiCaL's directly: every variable has to be
+  // declared, CaDiCaL picks where each declared range lives, and clause
+  // literals and model lookups translate through this table. ext_of_stp[v]
+  // is the CaDiCaL external index declared for STP variable v (1-based;
+  // entry 0 unused). Empty and unused while factor is off, which keeps the
+  // untranslated fast path bit-for-bit identical to pre-factor builds.
+  std::vector<int> ext_of_stp;
+  bool factor_enabled = false;
+  void declareNewVariables();
 
 public:
   Cadical();
 
   ~Cadical();
 
-  bool addClause(const vec_literals& ps); // Add a clause to the solver.
+  bool addClause(const vec_literals& ps) override; // Add a clause to the solver.
 
-  bool okay() const; // FALSE means solver is in a conflicting state
+  bool okay() const override; // FALSE means solver is in a conflicting state
 
-  bool solve(bool& timeout_expired); // Search without assumptions.
+  void setMaxConflicts(int64_t max_confl) override; // set max solver conflicts
 
-  virtual void setMaxConflicts(int64_t max_confl); // set max solver conflicts
+  bool simplify() override; // Removes already satisfied clauses.
 
-  virtual void setMaxTime(int64_t max_time); // set max solver time in seconds
+  uint8_t modelValue(uint32_t x) const override;
 
-  bool propagateWithAssumptions(const stp::SATSolver::vec_literals& assumps);
+  uint32_t newVar() override;
 
-  virtual bool simplify(); // Removes already satisfied clauses.
+  void setFrozen(uint32_t var) override;
 
-  virtual uint8_t modelValue(uint32_t x) const;
+  bool setSearchBias(SearchBias bias) override;
 
-  uint8_t value(uint32_t x) const;
+  bool enableBVA() override;
 
-  virtual uint32_t newVar();
+  void setVerbosity(int v) override;
 
-  void setVerbosity(int v);
+  uint32_t nVars() const override;
 
-  unsigned long nVars() const;
+  bool reportsClauseCount() const override { return true; }
 
-  void printStats() const;
+  int nClauses() override;
 
-  virtual lbool true_literal() const { return ((uint8_t)1); }
-  virtual lbool false_literal() const { return ((uint8_t)-1); }
-  virtual lbool undef_literal() const { return ((uint8_t)2); }
+  void printStats() const override;
 
+  lbool true_literal() const override { return ((uint8_t)1); }
+  lbool false_literal() const override { return ((uint8_t)-1); }
+  lbool undef_literal() const override { return ((uint8_t)2); }
+
+protected:
+  bool solveInternal(bool& timeout_expired) override;
+
+  // Cadical polls the Terminator we connect during search.
+  bool canInterruptSearch() const override { return true; }
 };
 }
 

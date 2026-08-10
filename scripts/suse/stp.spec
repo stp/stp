@@ -18,17 +18,12 @@
 
 Name:           stp
 BuildRequires:  bison
-%if 0%{?suse_version} > 1320
-BuildRequires:  libboost_program_options-devel
-%else
-BuildRequires:  boost-devel
-%endif
 BuildRequires:  cmake
 BuildRequires:  flex
 BuildRequires:  gcc-c++
 BuildRequires:  minisat-devel
 BuildRequires:  ninja
-BuildRequires:  python-devel
+BuildRequires:  python3-devel
 BuildRequires:  xz
 Summary:        Constraint Solver
 License:        MIT
@@ -67,11 +62,6 @@ bitvector terms.
 Summary:        Devel files for stp
 Group:          Development/Languages/C and C++
 Requires:       %{name} = %{version}
-%if 0%{?suse_version} > 1320
-Requires:       libboost_program_options-devel
-%else
-Requires:       boost-devel
-%endif
 Requires:       libstp2_1 = %{version}
 Requires:       minisat-devel
 
@@ -126,6 +116,6 @@ Python bindings for stp library.
 
 %files python
 %defattr(-,root,root)
-%{python_sitelib}/*
+%{python3_sitelib}/*
 
 %changelog

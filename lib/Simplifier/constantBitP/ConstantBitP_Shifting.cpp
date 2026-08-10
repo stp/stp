@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
+#include "stp/Util/BitOps.h"
 // FIXME: External library
 #include "extlib-constbv/constantbv.h"
 
@@ -228,7 +229,7 @@ Result applyShiftUnion(const unsigned bitWidth, PackedBits& packedShift,
                          PackedBits::widthMask(j, bitWidth);
       while (pending)
       {
-        const unsigned b = __builtin_ctzll(pending);
+        const unsigned b = ::stp::countTrailingZeroes64(pending);
         pending &= pending - 1;
         const uint64_t bit = (uint64_t)1 << b;
 
@@ -332,7 +333,7 @@ namespace
 {
 inline uint64_t bitReverse64(uint64_t x)
 {
-  x = __builtin_bswap64(x);
+  x = ::stp::byteSwap64(x);
   x = ((x & 0x0F0F0F0F0F0F0F0FULL) << 4) | ((x >> 4) & 0x0F0F0F0F0F0F0F0FULL);
   x = ((x & 0x3333333333333333ULL) << 2) | ((x >> 2) & 0x3333333333333333ULL);
   x = ((x & 0x5555555555555555ULL) << 1) | ((x >> 1) & 0x5555555555555555ULL);
@@ -823,7 +824,7 @@ static Result shlCore(const unsigned bitWidth, PackedBits& packedOp,
   {
     const uint64_t ones = packedOut.fixed[j] & packedOut.value[j];
     if (ones != 0)
-      positionOfFirstOne = j * 64 + __builtin_ctzll(ones);
+      positionOfFirstOne = j * 64 + ::stp::countTrailingZeroes64(ones);
   }
 
   if (positionOfFirstOne >= 0)
@@ -1007,7 +1008,7 @@ static Result shlCore(const unsigned bitWidth, PackedBits& packedOp,
   return NOT_IMPLEMENTED;
 }
 
-Result bvLeftShiftBothWays(vector<FixedBits*>& children, FixedBits& output)
+static Result leftShiftOnePass(vector<FixedBits*>& children, FixedBits& output)
 {
   const unsigned bitWidth = output.getWidth();
   assert(2 == children.size());
@@ -1040,6 +1041,42 @@ Result bvLeftShiftBothWays(vector<FixedBits*>& children, FixedBits& output)
   writeBack(shift, packedShift, origShift);
   writeBack(output, packedOut, origOut);
   return result;
+}
+
+Result bvLeftShiftBothWays(vector<FixedBits*>& children, FixedBits& output)
+{
+  Result r = leftShiftOnePass(children, output);
+
+  // Same shape as bvConcatBothWays: nothing derived or a conflict means a
+  // second pass would see exactly what this one did, and distinct operands
+  // never need one. NB the NO_CHANGE arm is inert here - shlCore ends in an
+  // unconditional `return NOT_IMPLEMENTED`, so this function never reports
+  // NO_CHANGE and the alias check runs on every call. It is two pointer
+  // compares, and the arm starts working the moment shlCore reports honestly.
+  if (NO_CHANGE == r || CONFLICT == r || !operandsAlias(children))
+    return r;
+
+  // x << x. shlCore snapshots the value and the amount into separate
+  // PackedBits and writes both back into the one FixedBits, so a bit it
+  // derives for the amount is not read as part of the value until the next
+  // call - and narrowing either one narrows the other again. Unlike concat
+  // there is no two-pass argument to lean on: random sweeps reach six passes
+  // by width 31, so iterate until nothing new is fixed.
+  unsigned fixed = totalFixedBits(children, output);
+  while (true)
+  {
+    const Result pass = leftShiftOnePass(children, output);
+
+    r = merge(r, pass);
+    if (NO_CHANGE == pass || CONFLICT == pass)
+      return r;
+
+    const unsigned now = totalFixedBits(children, output);
+    assert(now >= fixed); // Bits are only ever fixed, never unfixed.
+    if (now == fixed)
+      return r;
+    fixed = now;
+  }
 }
 }
 }

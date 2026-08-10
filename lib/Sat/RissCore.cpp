@@ -59,6 +59,7 @@ RissCore::~RissCore()
 
 void RissCore::setMaxConflicts(int64_t max_confl)
 {
+  assert(max_confl >= 0);
   s->setConfBudget(max_confl);
 }
 
@@ -69,7 +70,7 @@ bool RissCore::addClause(
   Riss::vec<Lit> &v = *(Riss::vec<Riss::Lit> *)riss_clause;
   v.capacity(ps.size());
   v.clear();
-  for(int i = 0 ; i < ps.size(); ++ i) v.push_(Riss::toLit(Minisat::toInt(ps[i])));
+  for(int i = 0 ; i < ps.size(); ++ i) v.push_(Riss::toLit(toInt(ps[i])));
 
   return s->addClause(v);
 }
@@ -93,14 +94,14 @@ bool RissCore::propagateWithAssumptions(
   Riss::vec<Lit> &v = *(Riss::vec<Riss::Lit> *)riss_clause;
   v.capacity(assumps.size());
   v.clear();
-  for(int i = 0 ; i < assumps.size(); ++ i) v.push_(Riss::toLit(Minisat::toInt(assumps[i])));
+  for(int i = 0 ; i < assumps.size(); ++ i) v.push_(Riss::toLit(toInt(assumps[i])));
 
   Riss::lbool ret = s->solveLimited(v);
   assert(s->conflicts ==0);
   return ret != (Riss::lbool)l_False;
 }
 
-bool RissCore::solve(bool& timeout_expired) // Search without assumptions.
+bool RissCore::solveInternal(bool& timeout_expired)
 {
   if (!s->simplify())
     return false;
@@ -130,7 +131,7 @@ void RissCore::setVerbosity(int v)
   s->verbosity = v;
 }
 
-unsigned long RissCore::nVars() const
+uint32_t RissCore::nVars() const
 {
   return s->nVars();
 }

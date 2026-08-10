@@ -43,6 +43,8 @@ THE SOFTWARE.
 
 
 #include "stp/Simplifier/Rewriting.h"
+#include "stp/Simplifier/Simplifier.h"
+#include "stp/Simplifier/SubstitutionMap.h"
 #include <list>
 
 namespace stp
@@ -230,11 +232,11 @@ namespace stp
        )
        {
 
-        for (int matching =0 ; matching < c[1][0].Degree(); matching++)
+        for (size_t matching =0 ; matching < c[1][0].Degree(); matching++)
           if (c[1][0][matching] == c[0])
           {
             ASTVec others;
-            for (int i =0 ; i < c[1][0].Degree(); i++)
+            for (size_t i =0 ; i < c[1][0].Degree(); i++)
               if (i != matching)
                 others.push_back(c[1][0][i]);
 
@@ -257,7 +259,7 @@ namespace stp
          exception to never increasing the node count: they add one node (two
          comparisons and a connective replace one comparison), but eliminate
          a plus from under the comparison, which is a large win on the
-         difficulty score (a comparison costs 6*width, a plus 14*width). The
+         difficulty score (a comparison costs 6*width, a plus 11*width). The
          single-use guard on the plus is what secures that win: if the plus
          survived for another use, the extra comparison would be a pure loss.
       */
@@ -550,15 +552,136 @@ namespace stp
         }
 
 /*
-(EQ 
-  62:(BVMULT 
+  (c1 * x) = c0        -->  x = (c1^-1 * c0),        for odd c1.
+  (c1 * x) = (c2 * y)  -->  x = ((c1^-1 * c2) * y),  for odd c1.
+
+  Multiplication by an odd constant is a bijection mod 2^w, so multiplying
+  both sides by the inverse preserves the equality. The multiplication on
+  the c1 side disappears outright.
+*/
+    if (c.GetKind() == EQ)
+      for (unsigned i = 0; i < 2; i++)
+      {
+        const ASTNode& mult = c[i];
+        const ASTNode& other = c[1 - i];
+
+        if (mult.GetKind() != BVMULT || mult.Degree() != 2 ||
+            mult[0].GetKind() != BVCONST ||
+            !CONSTANTBV::BitVector_bit_test(mult[0].GetBVConst(), 0) ||
+            shareCount[mult.GetNodeNum()] > 1)
+          continue;
+
+        const bool otherIsConst = other.GetKind() == BVCONST;
+        // The other side's multiplication dies too (it's rebuilt with a
+        // different constant), so it must also be unshared.
+        const bool otherIsMult =
+            other.GetKind() == BVMULT && other.Degree() == 2 &&
+            other[0].GetKind() == BVCONST &&
+            shareCount[other.GetNodeNum()] <= 1;
+
+        if (!otherIsConst && !otherIsMult)
+          continue;
+
+        const auto width = mult.GetValueWidth();
+        SubstitutionMap subMap(stpMgr);
+        Simplifier simplifier(stpMgr, &subMap);
+        const ASTNode inverse = simplifier.MultiplicativeInverse(mult[0]);
+
+        ASTNode rhs;
+        if (otherIsConst)
+          rhs = nf->CreateTerm(BVMULT, width, inverse, other);
+        else
+          rhs = nf->CreateTerm(
+              BVMULT, width,
+              nf->CreateTerm(BVMULT, width, inverse, other[0]), other[1]);
+
+        c = nf->CreateNode(EQ, mult[1], rhs);
+        break;
+      }
+
+/*
+  (a + x + y) = (a + z)  -->  (x + y) = z
+
+  Addition is cancellative mod 2^w, so addends common to both sides drop
+  with no overflow condition. Each match cancels one occurrence per side.
+*/
+    if (c.GetKind() == EQ
+        && c[0].GetKind() == BVPLUS
+        && c[1].GetKind() == BVPLUS
+        && shareCount[c[0].GetNodeNum()] <= 1
+        && shareCount[c[1].GetNodeNum()] <= 1)
+    {
+      const ASTChildren ch0 = c[0].GetChildren();
+      const ASTChildren ch1 = c[1].GetChildren();
+      ASTVec v0(ch0.begin(), ch0.end());
+      ASTVec v1(ch1.begin(), ch1.end());
+      bool cancelled = false;
+
+      for (auto it = v0.begin(); it != v0.end();)
+      {
+        const auto match = std::find(v1.begin(), v1.end(), *it);
+        if (match != v1.end())
+        {
+          v1.erase(match);
+          it = v0.erase(it);
+          cancelled = true;
+        }
+        else
+          ++it;
+      }
+
+      if (cancelled)
+      {
+        const auto width = c[0].GetValueWidth();
+        auto rebuild = [&](const ASTVec& v) {
+          if (v.empty())
+            return nf->CreateZeroConst(width);
+          if (v.size() == 1)
+            return v[0];
+          return nf->CreateTerm(BVPLUS, width, v);
+        };
+        c = nf->CreateNode(EQ, rebuild(v0), rebuild(v1));
+      }
+    }
+
+/*
+  (a * b) + (a * d)  -->  a * (b + d)
+
+  Multiplication distributes over addition, so a shared factor pulls out
+  and two multiplications become one.
+*/
+    if (c.GetKind() == BVPLUS
+        && c.Degree() == 2
+        && c[0].GetKind() == BVMULT
+        && c[0].Degree() == 2
+        && c[1].GetKind() == BVMULT
+        && c[1].Degree() == 2
+        && shareCount[c[0].GetNodeNum()] <= 1
+        && shareCount[c[1].GetNodeNum()] <= 1)
+    {
+      bool fired = false;
+      for (unsigned i = 0; i < 2 && !fired; i++)
+        for (unsigned j = 0; j < 2 && !fired; j++)
+          if (c[0][i] == c[1][j])
+          {
+            const auto width = c.GetValueWidth();
+            const auto sum =
+                nf->CreateTerm(BVPLUS, width, c[0][1 - i], c[1][1 - j]);
+            c = nf->CreateTerm(BVMULT, width, c[0][i], sum);
+            fired = true;
+          }
+    }
+
+/*
+(EQ
+  62:(BVMULT
     48:t
-    60:(BVPLUS 
+    60:(BVPLUS
       42:s
       58:...)
-  76:(BVMULT 
+  76:(BVMULT
     42:s
-    74:(BVPLUS 
+    74:(BVPLUS
       48:t
       72:...))
   */

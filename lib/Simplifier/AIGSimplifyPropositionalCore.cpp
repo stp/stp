@@ -49,43 +49,66 @@ namespace stp
 {
 using std::make_pair;
 
-THREAD_LOCAL ASTNodeMap varToNodeMap;
-THREAD_LOCAL STPMgr* bm;
-THREAD_LOCAL NodeFactory* nf;
-
 AIGSimplifyPropositionalCore::AIGSimplifyPropositionalCore(STPMgr* _bm)
 {
   bm = _bm;
   nf = _bm->defaultNodeFactory;
 }
 
+// The propositional skeleton that this pass hands to the AIG rewriter.
+// Anything else of boolean type is a theory atom, and is replaced wholesale by
+// a fresh propositional variable.
+//
+// This is deliberately a structural test rather than a list of atom kinds. A
+// list silently rots as kinds are added, and an atom that isn't recognised as
+// one gets descended into by theoryToFresh, which then walks into bitvector
+// terms that it has no way to handle.
+static bool isPropositionalConnective(const ASTNode& n)
+{
+  switch (n.GetKind())
+  {
+    case NOT:
+    case AND:
+    case OR:
+    case NAND:
+    case NOR:
+    case XOR:
+    case IFF:
+    case IMPLIES:
+      return true;
+
+    // ITE is a connective only when it is a formula. A term-valued ITE is an
+    // atom's argument, so it is never reached.
+    case ITE:
+      return n.GetType() == BOOLEAN_TYPE;
+
+    default:
+      return false;
+  }
+}
+
 // Convert theory nodes to fresh variables.
 ASTNode AIGSimplifyPropositionalCore::theoryToFresh(const ASTNode& n,
                                                     ASTNodeMap& fromTo)
 {
-  if (n.isConstant())
-    return n;
+  assert(n.GetType() == BOOLEAN_TYPE);
 
-  const Kind k = n.GetKind();
-  if (k == SYMBOL)
+  if (n.isConstant() || n.GetKind() == SYMBOL)
     return n;
 
   ASTNodeMap::const_iterator it;
   if ((it = fromTo.find(n)) != fromTo.end())
     return it->second;
 
-  assert(n.GetValueWidth() == 0);
-  assert(n.GetIndexWidth() == 0);
-
-  if (k == BVGT || k == BVGE || k == EQ || k == BVSGE || k == BVSGT ||
-      k == PARAMBOOL) // plus the rest.
+  if (!isPropositionalConnective(n))
   {
-    ASTNode fresh = bm->CreateFreshVariable(n.GetIndexWidth(),
-                                            n.GetValueWidth(), "theoryToFresh");
+    ASTNode fresh = bm->CreateFreshVariable(0, 0, "theoryToFresh");
     varToNodeMap.insert(make_pair(fresh, n));
     fromTo.insert(make_pair(n, fresh));
     return fresh;
   }
+
+  const Kind k = n.GetKind();
 
   const ASTChildren children = n.GetChildren();
   ASTVec new_children;
@@ -117,9 +140,12 @@ ASTNode AIGSimplifyPropositionalCore::convert(BBNodeManagerAIG& mgr,
     return nf->CreateNode(NOT, convert(mgr, Aig_Regular(obj), cache));
   else if (Aig_ObjIsAnd(obj))
   {
-    ASTNode result =
-        nf->CreateNode(AND, convert(mgr, Aig_ObjChild0(obj), cache),
-                       convert(mgr, Aig_ObjChild1(obj), cache));
+    // Argument evaluation order is unspecified, so convert each child into a
+    // named variable first, otherwise the nodes are built in a
+    // compiler-dependent order.
+    const ASTNode child0 = convert(mgr, Aig_ObjChild0(obj), cache);
+    const ASTNode child1 = convert(mgr, Aig_ObjChild1(obj), cache);
+    ASTNode result = nf->CreateNode(AND, child0, child1);
     cache.insert(make_pair(obj, result));
     return result;
   }
@@ -131,7 +157,10 @@ ASTNode AIGSimplifyPropositionalCore::convert(BBNodeManagerAIG& mgr,
     return convert(mgr, Aig_ObjChild0(obj), cache);
   else
   {
-    FatalError("Unknown type");
+    // Every combinational input was put into the cache by topLevel(), so
+    // reaching here means the symbol-to-input mapping is incomplete.
+    assert(!Aig_ObjIsCi(obj) && "AIG input missing from the symbol map");
+    FatalError("AIGSimplifyPropositionalCore: unhandled AIG object type");
   }
   assert(false);
   exit(-1);
@@ -152,8 +181,7 @@ ASTNode AIGSimplifyPropositionalCore::topLevel(const ASTNode& top)
   SubstitutionMap sm (bm);
   Simplifier simplifier(bm, &sm );
   BBNodeManagerAIG mgr;
-  BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(
-      &mgr, &simplifier, bm->defaultNodeFactory, &bm->UserFlags);
+  BitBlaster bb(&mgr, &simplifier, bm->defaultNodeFactory, &bm->UserFlags);
   BBNodeAIG blasted = bb.BBForm(replaced);
 
   Aig_ObjCreateCo(mgr.aigMgr, blasted.n);
@@ -181,6 +209,10 @@ ASTNode AIGSimplifyPropositionalCore::topLevel(const ASTNode& top)
     mgr.aigMgr = Aig_ManDupDfs(pTemp = mgr.aigMgr);
     Aig_ManStop(pTemp);
     Dar_ManRewrite(mgr.aigMgr, pPars);
+
+    // Rewriting can leave nodes with no fanout behind, and Aig_ManDupDfs()
+    // asserts that it drops none. See the same call in ToCNFAIG.cpp.
+    Aig_ManCleanup(mgr.aigMgr);
 
     mgr.aigMgr = Aig_ManDupDfs(pTemp = mgr.aigMgr);
     Aig_ManStop(pTemp);
@@ -213,7 +245,11 @@ ASTNode AIGSimplifyPropositionalCore::topLevel(const ASTNode& top)
     assert((it->second).size() == 1); // should be a propositional variable.
     const int index =
         (it->second)[0].symbol_index; // This is the index of the pi.
-    Aig_Obj_t* pi = Aig_ManLi(mgr.aigMgr, index);
+    // symbol_index indexes vCis (see BBNodeManagerAIG::CreateSymbol), so this
+    // is a combinational input. Not Aig_ManLi, which is the latch-input
+    // accessor and reads past the end of vCos on a combinational AIG.
+    assert(index < Aig_ManCiNum(mgr.aigMgr));
+    Aig_Obj_t* pi = Aig_ManCi(mgr.aigMgr, index);
     ptrToOrig.insert(make_pair(pi, result));
   }
 

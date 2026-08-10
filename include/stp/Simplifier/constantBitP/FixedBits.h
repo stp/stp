@@ -28,14 +28,14 @@ THE SOFTWARE.
 #include <cstdint>
 #include <cstring>
 #include "stp/Util/Attributes.h"
+#include "stp/Util/BitOps.h"
 #include <stp/Util/Attributes.h>
 
 #include <algorithm>
 #include <cassert>
 #include <iostream>
+#include <random>
 #include <vector>
-
-class MTRand;
 
 namespace stp
 {
@@ -54,7 +54,7 @@ namespace constantBitP
 #define CONSTANTBITP_UTILITY_XSTR(s) CONSTANTBITP_UTILITY_STR(s)
 #define LOCATION __FILE__ ":" CONSTANTBITP_UTILITY_XSTR(__LINE__) ": "
 
-static THREAD_LOCAL int staticUniqueId = 1;
+static THREAD_LOCAL_IE int staticUniqueId = 1;
 
 // Bits can be fixed, or unfixed. Fixed bits are fixed to either zero or one.
 // Unfixed bits are marked as '*' when using operator[]
@@ -204,7 +204,7 @@ private:
     {
       const uint64_t t = (this->*wordFn)(w);
       if (t != 0)
-        return w * 64 + __builtin_ctzll(t);
+        return w * 64 + ::stp::countTrailingZeroes64(t);
     }
     return width;
   }
@@ -218,14 +218,15 @@ private:
   }
 
 public:
-  // returns -1 if it's zero.
+  // returns -1 if it's zero. Signed for that sentinel: check for it before
+  // using the result as a bit position, which is unsigned.
   int topmostPossibleLeadingOne()
   {
     for (int w = (int)numWords() - 1; w >= 0; w--)
     {
       const uint64_t t = possibleOnes(w);
       if (t != 0)
-        return w * 64 + 63 - __builtin_clzll(t);
+        return w * 64 + 63 - ::stp::countLeadingZeroes64(t);
     }
     return -1;
   }
@@ -253,22 +254,24 @@ public:
     return lowestSet(&FixedBits::unfixedBits);
   }
 
+  // returns -1 if every bit is fixed. Signed for that sentinel: check for it
+  // before using the result as a bit position, which is unsigned.
   int mostUnfixed() const
   {
     for (int w = (int)numWords() - 1; w >= 0; w--)
     {
       const uint64_t t = unfixedBits(w);
       if (t != 0)
-        return w * 64 + 63 - __builtin_clzll(t);
+        return w * 64 + 63 - ::stp::countLeadingZeroes64(t);
     }
     return -1;
   }
 
   // is this bit fixed to zero?
-  bool isFixedToZero(int n) const { return isFixed(n) && !getValue(n); }
+  bool isFixedToZero(unsigned n) const { return isFixed(n) && !getValue(n); }
 
   // is this bit fixed to one?
-  bool isFixedToOne(int n) const { return isFixed(n) && getValue(n); }
+  bool isFixedToOne(unsigned n) const { return isFixed(n) && getValue(n); }
 
   // is this bit fixed to either zero or one?
   bool isFixed(unsigned n) const
@@ -338,7 +341,7 @@ public:
   {
     unsigned result = 0;
     for (unsigned w = 0; w < numWords(); w++)
-      result += __builtin_popcountll(fixedW_[w]);
+      result += ::stp::popCount64(fixedW_[w]);
     return result;
   }
 
@@ -428,7 +431,7 @@ public:
 
   DLL_PUBLIC static FixedBits createRandom(const unsigned length,
                                 const unsigned probabilityOfSetting,
-                                MTRand& rand);
+                                std::mt19937& rand);
 
   DLL_PUBLIC void fromUnsigned(unsigned val);
 

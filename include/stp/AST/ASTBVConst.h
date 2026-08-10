@@ -36,6 +36,8 @@ class ASTBVConst : public ASTInternal
 {
   friend class STPMgr;
   friend class ASTNode;
+  friend class ASTFPConst;
+  friend class ASTRMConst;
   friend class ASTNodeHasher;
   friend class ASTNodeEqual;
 
@@ -79,30 +81,44 @@ private:
   // friend equality operator
   friend bool operator==(const ASTBVConst& bvc1, const ASTBVConst& bvc2)
   {
-    if (bvc1.getValueWidth() != bvc2.getValueWidth())
+    if (bvc1.getDeclaredSourceSort() != bvc2.getDeclaredSourceSort())
       return false;
     return (0 == CONSTANTBV::BitVector_Compare(bvc1._bvconst, bvc2._bvconst));
   }
 
   // Call this when deleting a node that has been stored in the the
   // unique table
-  virtual void CleanUp();
+  void CleanUp() override;
 
   // Print function for bvconst -- return _bvconst value in bin
   // format (c_friendly is for printing hex. numbers that C
   // compilers will accept)
-  virtual void nodeprint(ostream& os, bool c_friendly = false);
+  void nodeprint(ostream& os, bool c_friendly = false) override;
 
   const static ASTVec astbv_empty_children;
 
-  void setIndexWidth( [[maybe_unused]] uint32_t i ) { assert(i == 0); }
-  uint32_t getIndexWidth() const { return 0; }
+  void setIndexWidth([[maybe_unused]] uint32_t i) override { assert(i == 0); }
+  uint32_t getIndexWidth() const override { return 0; }
 
-  void setValueWidth([[maybe_unused]] uint32_t v ) { assert(v == getValueWidth()); }
-  uint32_t getValueWidth() const { return bits_(_bvconst); }
+  void setValueWidth([[maybe_unused]] uint32_t v) override
+  {
+    assert(v == getValueWidth());
+  }
+  uint32_t getValueWidth() const override { return bits_(_bvconst); }
+
+  void setExpWidth(uint32_t) override { assert(false); }
+  uint32_t getExpWidth() const override { return 0; }
+
+  void setSigWidth(uint32_t) override { assert(false); }
+  uint32_t getSigWidth() const override { return 0; }
+
+  SourceSort getDeclaredSourceSort() const override
+  {
+    return SourceSort::bitVector(getValueWidth());
+  }
 
 public:
-  virtual ASTChildren GetChildren() const { return astbv_empty_children; }
+  ASTChildren GetChildren() const override { return astbv_empty_children; }
 
   virtual ~ASTBVConst()
   {
@@ -113,6 +129,28 @@ public:
   // Return the bvconst. It is a const-value
   CBV GetBVConst() const;
 };
+
+// Defined out of line because they dereference ASTBVConst, which is still
+// incomplete inside the nested class bodies above.  They must stay in the
+// header: they key STPMgr's bvconst unique table, so they run on every
+// hash-cons probe, and being inline keeps that path free of a call.
+inline size_t
+ASTBVConst::ASTBVConstHasher::operator()(const ASTBVConst* bvc) const
+{
+  return CONSTANTBV::BitVector_Hash(bvc->_bvconst) ^
+         (bvc->getDeclaredSourceSort().hash() * 0x9e3779b97f4a7c15ULL);
+}
+
+inline bool
+ASTBVConst::ASTBVConstEqual::operator()(const ASTBVConst* bvc1,
+                                        const ASTBVConst* bvc2) const
+{
+  if (bvc1->getDeclaredSourceSort() != bvc2->getDeclaredSourceSort())
+  {
+    return false;
+  }
+  return (0 == CONSTANTBV::BitVector_Compare(bvc1->_bvconst, bvc2->_bvconst));
+}
 
 } // end of namespace
 #endif

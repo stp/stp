@@ -18,7 +18,7 @@ TEST(counter_example_reading, one)
   Expr AplusBplus42 =
       vc_bv32PlusExpr(vc, AplusB, vc_bv32ConstExprFromInt(vc, 42));
 
-  assert(0 == vc_query(vc, falseExpr));
+  ASSERT_EQ(0, vc_query(vc, falseExpr));
 
 // Don't do this,
 #if 0

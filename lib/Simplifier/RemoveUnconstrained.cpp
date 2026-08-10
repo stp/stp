@@ -27,12 +27,20 @@ THE SOFTWARE.
  * Robert Bruttomesso's & Robert Brummayer's dissertations describe this.
  *
  * Nb. this isn't finished. It doesn't do reads / writes.
- * I don't think anything can be done for : bvsx, bvzx.
+ *
+ * Kinds without a per-kind rule (bvsx, bvzx, bvurem/bvudiv by a
+ * constant, masks, ...) can still be eliminated when the variable's
+ * whole use is a predicate over it and constants: see
+ * tryGroundPathCollapse.
  */
 
 #include "stp/Simplifier/RemoveUnconstrained.h"
 #include "stp/AST/MutableASTNode.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/FloatBlaster/FloatBlaster.h"
+#include "stp/Simplifier/AchievableImage.h"
 #include "stp/Simplifier/constantBitP/Dependencies.h"
+#include <cstdint>
 
 namespace stp
 {
@@ -47,6 +55,18 @@ RemoveUnconstrained::RemoveUnconstrained(STPMgr& _bm) : bm(_bm)
 ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier)
 {
   ASTNode result(n);
+
+  // Symbols the array-equality procedure depends on must not be
+  // treated as unconstrained. Every rule below decides what to rewrite
+  // from isUnconstrained(), and each one mutates the graph before
+  // recording the variable's replacement -- so a substitution the map
+  // refuses (see SubstitutionMap::extensionalityProtected) cannot undo
+  // the rewrite that was made on its promise. Excluding the symbols
+  // from the predicate is what makes the protection a precondition
+  // instead of a return code nobody can act on.
+  ExtensionalityContext* ext = bm.getExtensionalityIfAny();
+  MutableASTNode::UntouchableScope protect(
+      (ext != NULL && ext->activeInSolve()) ? &ext->getFrozenSymbols() : NULL);
 
   bm.GetRunTimes()->start(RunTimes::RemoveUnconstrained);
 
@@ -71,6 +91,16 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier)
       assert(result2 == result);
   }
 #endif
+
+  // Any definition the substitution map refused goes back as a
+  // conjunct, so the variable it defines is not left free.
+  if (!refusedDefinitions.empty())
+  {
+    refusedDefinitions.push_back(result);
+    result = nf->CreateNode(AND, refusedDefinitions);
+    refusedDefinitions.clear();
+  }
+
   bm.GetRunTimes()->stop(RunTimes::RemoveUnconstrained);
   return result;
 }
@@ -91,6 +121,10 @@ RemoveUnconstrained::replaceParentWithFresh(MutableASTNode& mute,
   const ASTNode& parent = mute.n;
   ASTNode v =
       bm.CreateFreshVariable(0, parent.GetValueWidth(), "unconstrained");
+  // A float-valued parent's stand-in must carry the format too, or the
+  // blaster later meets a formatless bitvector where a float belongs.
+  v.SetExpWidth(parent.GetExpWidth());
+  v.SetSigWidth(parent.GetSigWidth());
   mute.replaceWithVar(v, variables);
   return v;
 }
@@ -101,93 +135,759 @@ void RemoveUnconstrained::replace(const ASTNode& from, const ASTNode to)
 {
   assert(from.GetKind() == SYMBOL);
   assert(from.GetValueWidth() == to.GetValueWidth());
-  simplifier->UpdateSubstitutionMapFewChecks(from, to);
+  if (simplifier->UpdateSubstitutionMapFewChecks(from, to))
+    return;
+
+  // Refused (only SubstitutionMap::extensionalityProtected refuses).
+  // The caller has already rewritten the graph to remove whatever
+  // constrained "from", so dropping the definition here would leave it
+  // free. Keep it as an ordinary conjunct instead; topLevel() attaches
+  // these to the result.
+  refusedDefinitions.push_back(
+      from.GetType() == BOOLEAN_TYPE ? nf->CreateNode(IFF, from, to)
+                                     : nf->CreateNode(EQ, from, to));
 }
 
-/* The most complicated handling is for EXTRACTS. If a variable has parents that
-*are all extracts and each of those extracts is disjoint (i.e. reads different
-* bits)
-*Then each of the extracts are replaced by a fresh variable. This is the only
-* case
-*where a variable with multiple distinct parents is replaced by a fresh
-* variable.
-*+ We perform this check upfront, so will miss any extra cases the the
-* unconstrained
-*  variable elimination introduces.
-*+ It's all or nothing. So even if there's an extract of [0:2] [1:2] and [3:5],
-* we wont
-*  replace the [3:5] (even though it could be).
-*/
-void RemoveUnconstrained::splitExtractOnly(vector<MutableASTNode*> extracts)
+// Rebuild one collected step as an ASTNode around `in`. Used when a
+// distributed ITE's other branch gets the suffix steps re-applied.
+static ASTNode applyStepToNode(NodeFactory* nf, STPMgr& bm,
+                               const GroundStep& s, const ASTNode& in)
 {
-  assert(extracts.size() > 0);
+  if (s.kind == BVSX || s.kind == BVZX)
+    return nf->CreateTerm(s.kind, s.outWidth, in,
+                          bm.CreateBVConst(32, s.outWidth));
+  if (s.kind == BVEXTRACT)
+    return nf->CreateTerm(BVEXTRACT, s.outWidth, in, s.constants[0],
+                          s.constants[1]);
+  if (s.samePathAllOperands)
+    return nf->CreateTerm(s.kind, s.outWidth, in, in);
+  if (s.pathIndex == 0)
+    return nf->CreateTerm(s.kind, s.outWidth, in, s.constants[0]);
+  return nf->CreateTerm(s.kind, s.outWidth, s.constants[0], in);
+}
 
-  // Going to be rebuilt later anyway, so discard.
-  vector<MutableASTNode*> variables;
-
-  for (size_t i = 0; i < extracts.size(); i++)
+// Forward-evaluate the whole chain at a concrete x. Returns an owned CBV
+// at the chain's output width.
+static CBV evalChain(const std::vector<GroundStep>& steps, const CBV x)
+{
+  CBV v = CONSTANTBV::BitVector_Clone(x);
+  for (const GroundStep& s : steps)
   {
-    ASTNode& var = extracts[i]->n;
-    assert(var.GetKind() == SYMBOL);
-    const int size = var.GetValueWidth();
-    vector<ASTNode> toVar(size);
-
-    // Create a mutable copy that we can iterate over.
-    vector<MutableASTNode*> mut;
-    mut.insert(mut.end(), extracts[i]->parents.begin(),
-               extracts[i]->parents.end());
-
-    for (vector<MutableASTNode*>::iterator it = mut.begin(); it != mut.end();
-         it++)
-    {
-      ASTNode parent_node = (*it)->n;
-      assert(((**it)).children[0] == extracts[i]);
-      assert(!parent_node.IsNull());
-      assert(parent_node.GetKind() == BVEXTRACT);
-
-      int lb = parent_node[2].GetUnsignedConst();
-      // Replace each parent with a fresh.
-      toVar[lb] = replaceParentWithFresh(**it, variables);
-    }
-
-    ASTVec concatVec;
-    int empty = 0;
-    for (int j = 0; j < size; j++)
-    {
-      if (toVar[j].IsNull())
-      {
-        empty++;
-        continue;
-      }
-
-      if (empty > 0)
-      {
-        concatVec.push_back(bm.CreateFreshVariable(0, empty, "extract_unc"));
-        empty = 0;
-      }
-
-      concatVec.push_back(toVar[j]);
-      // cout << toVar[j];
-      assert(toVar[j].GetValueWidth() > 0);
-      j += toVar[j].GetValueWidth() - 1;
-    }
-
-    if (empty > 0)
-    {
-      concatVec.push_back(bm.CreateFreshVariable(0, empty, "extract_unc"));
-    }
-
-    ASTNode concat = concatVec[0];
-    for (size_t i = 1; i < concatVec.size(); i++)
-    {
-      assert(!concat.IsNull());
-      concat = bm.CreateTerm(
-          BVCONCAT, concat.GetValueWidth() + concatVec[i].GetValueWidth(),
-          concatVec[i], concat);
-    }
-
-    replace(var, concat);
+    CBV nv = AchievableImage::evalStep(s, v);
+    CONSTANTBV::BitVector_Destroy(v);
+    v = nv;
   }
+  return v;
+}
+
+static ASTNode mkExtract(NodeFactory* nf, STPMgr& bm, const ASTNode& u,
+                         unsigned high, unsigned low)
+{
+  return nf->CreateTerm(BVEXTRACT, high - low + 1, u,
+                        bm.CreateBVConst(32, high), bm.CreateBVConst(32, low));
+}
+
+/* One step of the pseudo-inverse walk for an equality against a symbolic
+ * term t. `u` holds the term this step's OUTPUT must equal; on success it
+ * is replaced by the term the step's INPUT must equal, and the membership
+ * condition on the old `u` (the invertibility condition) is appended to
+ * `conds`.
+ *
+ * The conditions must characterise the COMPOSED chain's image exactly, so
+ * a step whose preimage is not unique (its condition describes the image
+ * of a FREE input, and its inverse picks one preimage of several) is only
+ * admitted at the bottom of the chain, where its input really is the free
+ * variable. Anywhere else the picked preimage could fall outside the
+ * lower chain's image while another preimage lies inside it, and the
+ * collected conditions would under-approximate membership -- losing
+ * satisfying assignments. Bijective steps and injective-under-condition
+ * steps (concat with a constant, sign/zero extension) compose exactly.
+ *
+ * Returns false when the step has no usable inverse here, or when it
+ * collapses the image to a single value (such chains are constants and
+ * belong to the factory, not to this rule).
+ */
+static bool invertStepSymbolic(NodeFactory* nf, STPMgr& bm, Simplifier* simp,
+                               const GroundStep& s, bool isBottom, ASTNode& u,
+                               ASTVec& conds)
+{
+  if (s.samePathAllOperands)
+    return false;
+  const unsigned w = s.outWidth;
+  switch (s.kind)
+  {
+    case BVMULT:
+    {
+      // c = odd * 2^k. The odd factor is a bijection (invert with the
+      // modular inverse, anywhere on the chain); the 2^k factor makes
+      // the image exactly the multiples of 2^k, with the k low bits of
+      // the preimage free -- so like the shifts it is bottom-only, with
+      // the condition that u's k low bits are zero.
+      const ASTNode& c = s.constants[0];
+      const CBV cv = c.GetBVConst();
+      if (CONSTANTBV::BitVector_is_empty(cv))
+        return false; // image is {0}.
+      unsigned k = 0;
+      while (!CONSTANTBV::BitVector_bit_test(cv, k))
+        k++;
+      ASTNode oddPart = c;
+      if (k > 0)
+      {
+        if (!isBottom)
+          return false;
+        CBV shifted = CONSTANTBV::BitVector_Create(w, true);
+        CONSTANTBV::BitVector_Interval_Copy(shifted, cv, 0, k, w - k);
+        oddPart = bm.CreateBVConst(shifted, w);
+        conds.push_back(nf->CreateNode(EQ, mkExtract(nf, bm, u, k - 1, 0),
+                                       bm.CreateZeroConst(k)));
+        u = nf->CreateTerm(BVCONCAT, w, bm.CreateZeroConst(k),
+                           mkExtract(nf, bm, u, w - 1, k));
+      }
+      u = nf->CreateTerm(BVMULT, w, simp->MultiplicativeInverse(oddPart), u);
+      return true;
+    }
+
+    // Bijective: exact everywhere, no condition.
+    case BVXOR:
+      u = nf->CreateTerm(BVXOR, w, u, s.constants[0]);
+      return true;
+    case BVPLUS:
+    {
+      std::vector<CBV> a = {s.constants[0].GetBVConst()};
+      CBV negC = NonMemberBVConstEvaluator(BVUMINUS, a, w);
+      u = nf->CreateTerm(BVPLUS, w, u, bm.CreateBVConst(negC, w));
+      return true;
+    }
+    case BVSUB:
+      u = (s.pathIndex == 0)
+              ? nf->CreateTerm(BVPLUS, w, u, s.constants[0])
+              : nf->CreateTerm(BVSUB, w, s.constants[0], u);
+      return true;
+    case BVUMINUS:
+    case BVNOT:
+      u = nf->CreateTerm(s.kind, w, u);
+      return true;
+
+    // Injective under the condition: exact everywhere.
+    case BVCONCAT:
+    {
+      const ASTNode& c = s.constants[0];
+      const unsigned cW = c.GetValueWidth();
+      if (s.pathIndex == 0) // x is the high slice, c the low.
+      {
+        conds.push_back(nf->CreateNode(EQ, mkExtract(nf, bm, u, cW - 1, 0), c));
+        u = mkExtract(nf, bm, u, w - 1, cW);
+      }
+      else
+      {
+        conds.push_back(
+            nf->CreateNode(EQ, mkExtract(nf, bm, u, w - 1, w - cW), c));
+        u = mkExtract(nf, bm, u, w - cW - 1, 0);
+      }
+      return true;
+    }
+    case BVSX:
+    {
+      const ASTNode low = mkExtract(nf, bm, u, s.inWidth - 1, 0);
+      conds.push_back(nf->CreateNode(
+          EQ, u, nf->CreateTerm(BVSX, w, low, bm.CreateBVConst(32, w))));
+      u = low;
+      return true;
+    }
+    case BVZX:
+    {
+      conds.push_back(nf->CreateNode(
+          EQ, mkExtract(nf, bm, u, w - 1, s.inWidth),
+          bm.CreateZeroConst(w - s.inWidth)));
+      u = mkExtract(nf, bm, u, s.inWidth - 1, 0);
+      return true;
+    }
+
+    // Preimage not unique: bottom of the chain only.
+    case BVAND:
+    {
+      const ASTNode& c = s.constants[0];
+      if (!isBottom || CONSTANTBV::BitVector_is_empty(c.GetBVConst()))
+        return false; // shared bits chosen below, or image is {0}.
+      std::vector<CBV> a = {c.GetBVConst()};
+      CBV notC = NonMemberBVConstEvaluator(BVNOT, a, w);
+      conds.push_back(nf->CreateNode(
+          EQ, nf->CreateTerm(BVAND, w, u, bm.CreateBVConst(notC, w)),
+          bm.CreateZeroConst(w)));
+      return true; // x := u reproduces u under the condition.
+    }
+    case BVOR:
+    {
+      const ASTNode& c = s.constants[0];
+      if (!isBottom || CONSTANTBV::BitVector_is_full(c.GetBVConst()))
+        return false;
+      conds.push_back(
+          nf->CreateNode(EQ, nf->CreateTerm(BVAND, w, u, c), c));
+      return true; // x := u reproduces u under the condition.
+    }
+    case BVEXTRACT:
+    {
+      if (!isBottom)
+        return false;
+      const unsigned high = s.constants[0].GetUnsignedConst();
+      const unsigned low = s.constants[1].GetUnsignedConst();
+      if (low > 0)
+        u = nf->CreateTerm(BVCONCAT, low + s.outWidth, u,
+                           bm.CreateZeroConst(low));
+      if (high + 1 < s.inWidth)
+        u = nf->CreateTerm(BVCONCAT, s.inWidth,
+                           bm.CreateZeroConst(s.inWidth - 1 - high), u);
+      return true;
+    }
+    case BVMOD:
+    {
+      const ASTNode& c = s.constants[0];
+      if (!isBottom || s.pathIndex != 0 ||
+          CONSTANTBV::BitVector_is_empty(c.GetBVConst()) ||
+          c == bm.CreateOneConst(w))
+        return false; // x mod 0 / mod 1: leave to the factory.
+      conds.push_back(nf->CreateNode(BVLT, u, c));
+      return true; // x := u.
+    }
+    case BVDIV:
+    {
+      const ASTNode& c = s.constants[0];
+      if (!isBottom || s.pathIndex != 0 ||
+          CONSTANTBV::BitVector_is_empty(c.GetBVConst()))
+        return false;
+      std::vector<CBV> a = {bm.CreateMaxConst(w).GetBVConst(),
+                            c.GetBVConst()};
+      CBV maxQ = NonMemberBVConstEvaluator(BVDIV, a, w);
+      const ASTNode maxQn = bm.CreateBVConst(maxQ, w);
+      if (maxQn == bm.CreateZeroConst(w))
+        return false; // image is {0}.
+      conds.push_back(nf->CreateNode(BVLE, u, maxQn));
+      u = nf->CreateTerm(BVMULT, w, u, c);
+      return true;
+    }
+    case BVRIGHTSHIFT:
+    case BVLEFTSHIFT:
+    {
+      const ASTNode& c = s.constants[0];
+      if (s.pathIndex != 0 || c.GetValueWidth() > 32)
+        return false;
+      const unsigned k = c.GetUnsignedConst();
+      if (k == 0)
+        return true; // identity, bijective.
+      if (!isBottom || k >= w)
+        return false; // low/high bits chosen below, or image is {0}.
+      if (s.kind == BVRIGHTSHIFT)
+      {
+        conds.push_back(nf->CreateNode(EQ, mkExtract(nf, bm, u, w - 1, w - k),
+                                       bm.CreateZeroConst(k)));
+        u = nf->CreateTerm(BVCONCAT, w, mkExtract(nf, bm, u, w - k - 1, 0),
+                           bm.CreateZeroConst(k));
+      }
+      else
+      {
+        conds.push_back(nf->CreateNode(EQ, mkExtract(nf, bm, u, k - 1, 0),
+                                       bm.CreateZeroConst(k)));
+        u = nf->CreateTerm(BVCONCAT, w, bm.CreateZeroConst(k),
+                           mkExtract(nf, bm, u, w - 1, k));
+      }
+      return true;
+    }
+
+    default:
+      return false;
+  }
+}
+
+// Two distinct chain outputs with the x values that achieve them, for the
+// false branch of an equality collapse. Tries 0, each single bit, and all
+// ones; returns false if every candidate evaluates alike.
+static bool findTwoChainValues(const std::vector<GroundStep>& steps,
+                               unsigned varWidth, STPMgr& bm, ASTNode& v1,
+                               ASTNode& x1, ASTNode& v2, ASTNode& x2)
+{
+  const unsigned outW = steps.empty() ? varWidth : steps.back().outWidth;
+  std::vector<CBV> xs;
+  xs.push_back(CONSTANTBV::BitVector_Create(varWidth, true));
+  for (unsigned i = 0; i < varWidth && i < 24; i++)
+  {
+    CBV c = CONSTANTBV::BitVector_Create(varWidth, true);
+    CONSTANTBV::BitVector_Bit_On(c, i);
+    xs.push_back(c);
+  }
+  CBV ones = CONSTANTBV::BitVector_Create(varWidth, false);
+  CONSTANTBV::BitVector_Fill(ones);
+  xs.push_back(ones);
+
+  CBV firstV = evalChain(steps, xs[0]);
+  bool found = false;
+  for (size_t i = 1; i < xs.size() && !found; i++)
+  {
+    CBV v = evalChain(steps, xs[i]);
+    if (CONSTANTBV::BitVector_Lexicompare(v, firstV) != 0)
+    {
+      v1 = bm.CreateBVConst(firstV, outW);
+      x1 = bm.CreateBVConst(CONSTANTBV::BitVector_Clone(xs[0]), varWidth);
+      v2 = bm.CreateBVConst(v, outW);
+      x2 = bm.CreateBVConst(CONSTANTBV::BitVector_Clone(xs[i]), varWidth);
+      found = true;
+    }
+    else
+      CONSTANTBV::BitVector_Destroy(v);
+  }
+  if (!found)
+    CONSTANTBV::BitVector_Destroy(firstV);
+  for (CBV c : xs)
+    CONSTANTBV::BitVector_Destroy(c);
+  return found;
+}
+
+// Compare two chain outputs in the requested order.
+static int cmpChainValue(const CBV a, const CBV b, bool isSigned, unsigned w)
+{
+  if (isSigned)
+  {
+    const bool sa = CONSTANTBV::BitVector_bit_test(a, w - 1);
+    const bool sb = CONSTANTBV::BitVector_bit_test(b, w - 1);
+    if (sa != sb)
+      return sa ? -1 : 1;
+  }
+  return CONSTANTBV::BitVector_Lexicompare(a, b);
+}
+
+// The exact smallest and largest chain outputs in the requested order,
+// with x values achieving them, by enumerating every value of a narrow
+// free variable. Exactness matters: an under-approximated extreme would
+// force the rewritten predicate below a value the original could reach,
+// losing satisfying assignments.
+static void enumerateChainExtremes(const std::vector<GroundStep>& steps,
+                                   unsigned varWidth, bool isSigned, STPMgr& bm,
+                                   ASTNode& mn, ASTNode& xmn, ASTNode& mx,
+                                   ASTNode& xmx)
+{
+  const unsigned outW = steps.empty() ? varWidth : steps.back().outWidth;
+  CBV x = CONSTANTBV::BitVector_Create(varWidth, true);
+  CBV bestLo = NULL, bestHi = NULL, xLo = NULL, xHi = NULL;
+  const uint64_t count = 1ULL << varWidth;
+  for (uint64_t i = 0; i < count; i++)
+  {
+    CBV v = evalChain(steps, x);
+    if (bestLo == NULL || cmpChainValue(v, bestLo, isSigned, outW) < 0)
+    {
+      if (bestLo != NULL)
+      {
+        CONSTANTBV::BitVector_Destroy(bestLo);
+        CONSTANTBV::BitVector_Destroy(xLo);
+      }
+      bestLo = CONSTANTBV::BitVector_Clone(v);
+      xLo = CONSTANTBV::BitVector_Clone(x);
+    }
+    if (bestHi == NULL || cmpChainValue(v, bestHi, isSigned, outW) > 0)
+    {
+      if (bestHi != NULL)
+      {
+        CONSTANTBV::BitVector_Destroy(bestHi);
+        CONSTANTBV::BitVector_Destroy(xHi);
+      }
+      bestHi = CONSTANTBV::BitVector_Clone(v);
+      xHi = CONSTANTBV::BitVector_Clone(x);
+    }
+    CONSTANTBV::BitVector_Destroy(v);
+    CONSTANTBV::BitVector_increment(x);
+  }
+  CONSTANTBV::BitVector_Destroy(x);
+  mn = bm.CreateBVConst(bestLo, outW);
+  xmn = bm.CreateBVConst(xLo, varWidth);
+  mx = bm.CreateBVConst(bestHi, outW);
+  xmx = bm.CreateBVConst(xHi, varWidth);
+}
+
+/* When none of the per-kind rules fired for `var` (each detaches the
+ * variable when it does), generalise: climb from the variable towards the
+ * root while every node on the way is single-use and every sibling is a
+ * constant. The first boolean-valued node reached is then a predicate over
+ * a function of the variable alone -- e.g. ((x mod 100) + 7 >u 50) -- even
+ * though no individual operation on the path has (or could have) a rule of
+ * its own. AchievableImage tracks which values the chain can produce; if
+ * the predicate can be made both true and false, it is replaced by a fresh
+ * boolean v with var := ITE(v, w_true, w_false) recorded, exactly like the
+ * direct EQ rule.
+ *
+ * Term-level ITEs may sit on the path with non-ground conditions and
+ * other branches: the predicate distributes over each,
+ *   P(g(ite(c, f(x), t)))  ==>  ite(c, v, P(g(t))),
+ * applied per frame from the innermost out, so a stack of selects
+ * becomes a nest of boolean ITEs with one rebuilt predicate per frame
+ * (linear growth, capped). x's definition is sound regardless of the
+ * conditions, since x only influences the formula when every frame
+ * selects its branch.
+ *
+ * The interior nodes must be single-use: a second use of any node on the
+ * path would survive the rewrite and be forced to the witness values,
+ * changing its meaning. The predicate node itself may be shared, since
+ * under the recorded definition every occurrence of it evaluates to v
+ * (or to the distributed ITE, which is a pure equivalence).
+ */
+bool RemoveUnconstrained::tryGroundPathCollapse(
+    MutableASTNode& muteNode, vector<MutableASTNode*>& variables)
+{
+  const ASTNode var = muteNode.n;
+  if (var.GetValueWidth() == 0 || var.GetIndexWidth() != 0)
+    return false;
+
+  // Phase 1: collect the path structurally, up to the predicate. Knowing
+  // the predicate's constant before the image is built lets it be used as
+  // a seed hint when the image degrades to samples.
+  std::vector<GroundStep> steps;
+  MutableASTNode* predicate = NULL;
+  Kind predKind = UNDEFINED;
+  bool pathFirst = false;
+  ASTNode predConst;
+  MutableASTNode* predOther = NULL; // set instead when the side is symbolic.
+
+  // ITE frames on the path, innermost first. Each frame costs one
+  // rebuilt predicate around its other branch, so growth is linear in
+  // the frame count; the cap bounds it.
+  struct IteFrame
+  {
+    MutableASTNode* cond;
+    MutableASTNode* other;
+    bool pathThen;
+    size_t stepsBelow;
+  };
+  const size_t MAX_ITE_FRAMES = 4;
+  std::vector<IteFrame> frames;
+
+  MutableASTNode* cur = &muteNode;
+  for (unsigned depth = 0; depth < AchievableImage::MAX_PATH; depth++)
+  {
+    MutableASTNode& parent = cur->getParent();
+    const ASTNode& p = parent.n;
+    const vector<MutableASTNode*>& kids = parent.children;
+
+    if (p.GetValueWidth() == 0)
+    {
+      // Boolean level: a predicate between the chain and either a
+      // constant or -- for the invertibility-condition collapse -- any
+      // term (the single-use x cannot occur inside the other side).
+      if (!AchievableImage::predicateKind(p.GetKind()) || kids.size() != 2)
+        return false;
+      pathFirst = (kids[0] == cur);
+      if (kids[0] == kids[1] || (!pathFirst && kids[1] != cur))
+        return false;
+      MutableASTNode* otherM = pathFirst ? kids[1] : kids[0];
+      if (otherM->n.GetValueWidth() != cur->n.GetValueWidth())
+        return false;
+      predicate = &parent;
+      predKind = p.GetKind();
+      if (otherM->n.isConstant())
+        predConst = otherM->n;
+      else
+        predOther = otherM;
+      break;
+    }
+
+    // Term level: one path child, constants everywhere else.
+    const Kind kind = p.GetKind();
+
+    if (kind == ITE && p.GetValueWidth() > 0)
+    {
+      // Capture a distribution frame and keep climbing; the ITE
+      // contributes no image step (on x's branch it is the identity).
+      if (frames.size() >= MAX_ITE_FRAMES || p.GetIndexWidth() != 0 ||
+          kids.size() != 3)
+        return false;
+      const bool inThen = (kids[1] == cur);
+      if ((!inThen && kids[2] != cur) || kids[1] == kids[2] || kids[0] == cur)
+        return false;
+      frames.push_back(
+          {kids[0], inThen ? kids[2] : kids[1], inThen, steps.size()});
+      if (parent.parents.size() != 1)
+        return false;
+      cur = &parent;
+      continue;
+    }
+
+    if (!AchievableImage::handledKind(kind))
+      return false;
+
+    size_t pathCount = 0, pathIdx = 0;
+    bool nonConstSibling = false;
+    for (size_t i = 0; i < kids.size(); i++)
+    {
+      if (kids[i] == cur)
+      {
+        pathCount++;
+        pathIdx = i;
+      }
+      else if (!kids[i]->n.isConstant())
+        nonConstSibling = true;
+    }
+    if (nonConstSibling)
+      return false;
+    // Both operands being the path -- (bvmul t t), squaring -- is still
+    // a unary function of the path value; anything else duplicated is
+    // not a chain.
+    const bool samePathAllOperands = (pathCount == 2 && kids.size() == 2);
+    if (pathCount != 1 && !samePathAllOperands)
+      return false;
+
+    GroundStep step;
+    step.kind = kind;
+    step.outWidth = p.GetValueWidth();
+    step.inWidth = cur->n.GetValueWidth();
+
+    if (samePathAllOperands)
+    {
+      step.samePathAllOperands = true;
+      step.pathIndex = 0;
+    }
+    else if (kind == BVSX || kind == BVZX)
+    {
+      // The second child is the width constant; the evaluator takes the
+      // width from outWidth instead.
+      if (pathIdx != 0)
+        return false;
+      step.pathIndex = 0;
+    }
+    else if (kind == BVEXTRACT)
+    {
+      if (pathIdx != 0)
+        return false;
+      step.pathIndex = 0;
+      step.constants.push_back(kids[1]->n);
+      step.constants.push_back(kids[2]->n);
+    }
+    else if (kind == BVPLUS || kind == BVMULT || kind == BVAND ||
+             kind == BVOR || kind == BVXOR)
+    {
+      // n-ary and commutative: fold the constant siblings into one.
+      // (Don't assume an earlier factory folded them; inputs can come
+      // through the hashing factory.)
+      if (kids.size() == 2)
+      {
+        step.pathIndex = pathIdx;
+        step.constants.push_back(kids[1 - pathIdx]->n);
+      }
+      else
+      {
+        std::vector<CBV> consts;
+        for (size_t i = 0; i < kids.size(); i++)
+          if (i != pathIdx)
+            consts.push_back(kids[i]->n.GetBVConst());
+        CBV folded = NonMemberBVConstEvaluator(kind, consts, step.outWidth);
+        step.pathIndex = 0;
+        step.constants.push_back(bm.CreateBVConst(folded, step.outWidth));
+      }
+    }
+    else
+    {
+      // Binary, position matters.
+      if (kids.size() != 2)
+        return false;
+      step.pathIndex = pathIdx;
+      step.constants.push_back(kids[1 - pathIdx]->n);
+    }
+
+    steps.push_back(step);
+
+    // Interior nodes must be single-use to step past them.
+    if (parent.parents.size() != 1)
+      return false;
+    cur = &parent;
+  }
+  if (predicate == NULL)
+    return false; // too deep
+
+  if (predOther != NULL)
+  {
+    /* The other side is symbolic, so achievability cannot be decided
+     * statically; instead the predicate is rewritten into its
+     * invertibility condition -- a predicate over t alone -- joined with
+     * a fresh boolean, and x is defined to realise whichever truth value
+     * the rewritten predicate takes:
+     *
+     *   (= (bvand x c) t)   ==>  (and (= (bvand t (bvnot c)) 0) b)
+     *   (bvugt (f x) t)     ==>  (and (bvugt M t) (or b (bvugt m t)))
+     *
+     * with x := ITE(newP, x_true, x_false). For an equality the true
+     * witness is the chain's pseudo-inverse applied to t (the collected
+     * conditions state exactly that t is in the chain's image); for a
+     * comparison the witnesses are the x values reaching the chain's
+     * smallest and largest output m/M in the predicate's order, found by
+     * exhaustive enumeration of a narrow x. The rewrite is a pointwise
+     * function equality -- P(f(x_def), t) == newP for every valuation of
+     * t's variables and b -- so it holds in any polarity and under
+     * shared predicates, exactly like the fresh-boolean EQ rule.
+     */
+    const unsigned varW = var.GetValueWidth();
+    const unsigned MAX_ENUM_WIDTH = 12;
+
+    // If the other side holds an unconstrained variable of its own, an
+    // elimination from that side (e.g. the EQ rule) collapses the whole
+    // predicate to a bare boolean -- strictly better than this rewrite,
+    // which copies t into the invertibility condition and by that extra
+    // use would destroy the other side's unconstrainedness. Defer.
+    {
+      vector<MutableASTNode*> otherVars;
+      std::unordered_set<MutableASTNode*> seen;
+      predOther->getAllVariablesRecursively(otherVars, seen);
+      for (MutableASTNode* ov : otherVars)
+        if (ov->isUnconstrained())
+          return false;
+    }
+
+    const ASTNode t = predOther->toASTNode(&bm);
+    ASTNode newP, xDef;
+
+    if (predKind == EQ)
+    {
+      ASTVec conds;
+      ASTNode u = t;
+      bool ok = true;
+      for (size_t i = steps.size(); i-- > 0 && ok;)
+        ok = invertStepSymbolic(nf, bm, simplifier, steps[i],
+                                /*isBottom=*/i == 0, u, conds);
+      ASTNode v1, x1, v2, x2;
+      if (ok)
+        ok = findTwoChainValues(steps, varW, bm, v1, x1, v2, x2);
+      if (!ok)
+        return false;
+
+      const ASTNode b = bm.CreateFreshVariable(0, 0, "unconstrained_ic");
+      conds.push_back(b);
+      newP = (conds.size() == 1) ? b : nf->CreateNode(AND, conds);
+      const ASTNode xAlt =
+          nf->CreateTerm(ITE, varW, nf->CreateNode(EQ, t, v1), x2, x1);
+      xDef = nf->CreateTerm(ITE, varW, newP, u, xAlt);
+    }
+    else
+    {
+      if (varW > MAX_ENUM_WIDTH)
+        return false;
+      const bool isSigned = (predKind == BVSGT || predKind == BVSGE ||
+                             predKind == BVSLT || predKind == BVSLE);
+      ASTNode m, xm, M, xM;
+      enumerateChainExtremes(steps, varW, isSigned, bm, m, xm, M, xM);
+
+      const auto mkP = [&](const ASTNode& v) {
+        return pathFirst ? nf->CreateNode(predKind, v, t)
+                         : nf->CreateNode(predKind, t, v);
+      };
+      // As a function of the chain's value, the predicate is monotone;
+      // vTop maximises it and vBot minimises it, so P(vTop) is the
+      // invertibility condition and P(vBot) forces truth when even the
+      // minimising witness satisfies the predicate.
+      const bool greater = (predKind == BVGT || predKind == BVGE ||
+                            predKind == BVSGT || predKind == BVSGE);
+      const bool increasing = (greater == pathFirst);
+      const ASTNode& vTop = increasing ? M : m;
+      const ASTNode& vBot = increasing ? m : M;
+      const ASTNode& xTop = increasing ? xM : xm;
+      const ASTNode& xBot = increasing ? xm : xM;
+
+      const ASTNode b = bm.CreateFreshVariable(0, 0, "unconstrained_ic");
+      newP =
+          nf->CreateNode(AND, mkP(vTop), nf->CreateNode(OR, b, mkP(vBot)));
+      xDef = nf->CreateTerm(ITE, varW, newP, xTop, xBot);
+    }
+
+    // Distribute over any captured ITE frames with the rewritten
+    // predicate as the innermost leaf, then splice it in, reusing the
+    // existing mutable nodes for every variable it mentions.
+    vector<MutableASTNode*> vars;
+    std::unordered_set<MutableASTNode*> visited;
+    predOther->getAllVariablesRecursively(vars, visited);
+    ASTNode inner = newP;
+    for (const IteFrame& fr : frames)
+    {
+      ASTNode gt = fr.other->toASTNode(&bm);
+      for (size_t i = fr.stepsBelow; i < steps.size(); i++)
+        gt = applyStepToNode(nf, bm, steps[i], gt);
+      const ASTNode elseP = pathFirst ? nf->CreateNode(predKind, gt, t)
+                                      : nf->CreateNode(predKind, t, gt);
+      inner = nf->CreateNode(ITE, fr.cond->toASTNode(&bm),
+                             fr.pathThen ? inner : elseP,
+                             fr.pathThen ? elseP : inner);
+      fr.cond->getAllVariablesRecursively(vars, visited);
+      fr.other->getAllVariablesRecursively(vars, visited);
+    }
+    visited.clear();
+
+    std::unordered_map<uint64_t, MutableASTNode*> create;
+    for (MutableASTNode* mNode : vars)
+      create.insert(std::make_pair(mNode->n.GetNodeNum(), mNode));
+    vars.clear();
+
+    predicate->replaceWithAnotherNode(MutableASTNode::build(inner, create));
+    replace(var, xDef);
+    if (bm.UserFlags.stats_flag)
+    {
+      std::cerr << "{RemoveUnconstrained} symbolic-side collapse: " << predKind
+                << " over";
+      for (const GroundStep& s : steps)
+        std::cerr << " " << s.kind;
+      std::cerr << (steps.empty() ? " the bare variable" : "") << std::endl;
+    }
+    return true;
+  }
+
+  // Phase 2: flow the achievable image up the collected path and decide.
+  AchievableImage image(bm, var.GetValueWidth());
+  image.addHintChain(steps, predConst);
+  for (const GroundStep& step : steps)
+    if (!image.apply(step))
+      return false;
+
+  AchievableImage::Decision d = image.decide(predKind, pathFirst, predConst);
+  if (!d.collapse)
+    return false;
+
+  if (frames.empty())
+  {
+    // The predicate has width 0, so this creates a fresh boolean and
+    // prunes the whole path out of the mutable tree.
+    ASTNode v = replaceParentWithFresh(*predicate, variables);
+    replace(var, nf->CreateTerm(ITE, var.GetValueWidth(), v, d.witnessTrue,
+                                d.witnessFalse));
+    return true;
+  }
+
+  // Distribute the predicate over the captured frames, innermost out:
+  //   P(...ite(c_i, path_i, t_i)...)
+  //     ==>  ite(c_k, ... ite(c_1, v, P(above_1(t_1))) ..., P(above_k(t_k)))
+  // where above_i re-applies every ground step recorded above frame i.
+  ASTNode v = bm.CreateFreshVariable(0, 0, "unconstrained_ite");
+  vector<MutableASTNode*> vars;
+  std::unordered_set<MutableASTNode*> visited;
+  ASTNode inner = v;
+  for (const IteFrame& fr : frames)
+  {
+    ASTNode gt = fr.other->toASTNode(&bm);
+    for (size_t i = fr.stepsBelow; i < steps.size(); i++)
+      gt = applyStepToNode(nf, bm, steps[i], gt);
+    ASTNode elseP = pathFirst ? nf->CreateNode(predKind, gt, predConst)
+                              : nf->CreateNode(predKind, predConst, gt);
+    inner = nf->CreateNode(ITE, fr.cond->toASTNode(&bm),
+                           fr.pathThen ? inner : elseP,
+                           fr.pathThen ? elseP : inner);
+    fr.cond->getAllVariablesRecursively(vars, visited);
+    fr.other->getAllVariablesRecursively(vars, visited);
+  }
+  visited.clear();
+
+  // Splice the new formula in, reusing the existing mutable nodes for the
+  // variables it mentions (same mechanics as the comparison rule).
+  std::unordered_map<uint64_t, MutableASTNode*> create;
+  for (MutableASTNode* m : vars)
+    create.insert(std::make_pair(m->n.GetNodeNum(), m));
+  vars.clear();
+
+  MutableASTNode* newN = MutableASTNode::build(inner, create);
+  predicate->replaceWithAnotherNode(newN);
+
+  replace(var, nf->CreateTerm(ITE, var.GetValueWidth(), v, d.witnessTrue,
+                              d.witnessFalse));
+  return true;
 }
 
 ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
@@ -199,13 +899,6 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
   this->simplifier = simplifier;
 
   MutableASTNode* topMutable = MutableASTNode::build(n);
-
-  vector<MutableASTNode*> extracts;
-  topMutable->getDisjointExtractVariables(extracts);
-  if (extracts.size() > 0)
-  {
-    splitExtractOnly(extracts);
-  }
 
   vector<MutableASTNode*> variable_array;
   topMutable->getAllUnconstrainedVariables(variable_array);
@@ -343,7 +1036,8 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
       {
         width = var.GetValueWidth();
         if (width == 1)
-          continue; // Hard to get right, not used often.
+          break; // Hard to get right here; the ground-path collapse
+                 // below handles the width-1 case.
 
         ASTNode biggestNumber, smallestNumber;
 
@@ -471,6 +1165,86 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
           MutableASTNode* newN = MutableASTNode::build(n, create);
           muteParent.replaceWithAnotherNode(newN);
           // assert(muteParent.checkInvariant());
+        }
+      }
+      break;
+
+      case FP_GT:
+      {
+        // fp.gt over an unconstrained float, handled here while the
+        // comparison is still one source node and the variable one use --
+        // after FloatBlast the variable feeds its unpack circuit many times
+        // over and stops looking unconstrained. The witnesses are IEEE's
+        // extremes: NaN makes any ordered comparison false, and an infinity
+        // of the right sign makes fp.gt true whenever any value can.
+        if (numberOfChildren != 2)
+          break;
+
+        const SourceSort sort = var.GetSourceSort();
+        if (sort.kind() != SourceSort::Kind::FloatingPoint)
+          break;
+
+        const unsigned exp_width = sort.exponentWidth();
+        const unsigned sig_width = sort.significandWidth();
+
+        width = var.GetValueWidth();
+
+        // NaN and the infinities intern canonically (CreateFPConst funnels
+        // every NaN payload to the one quiet NaN), so recognising them in a
+        // constant operand is node identity.
+        const ASTNode nan =
+            bm.CreateFPSpecialConst(FPSpecial::NaN, exp_width, sig_width);
+
+        if (mutable_children[0]->isUnconstrained() &&
+            mutable_children[1]->isUnconstrained() &&
+            children[0].GetSourceSort() == children[1].GetSourceSort())
+        {
+          // x > y: true via (+oo, +0), false via (NaN, NaN).
+          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+          replace(children[0],
+                  nf->CreateTerm(ITE, width, v,
+                                 bm.CreateFPSpecialConst(
+                                     FPSpecial::PlusInfinity, exp_width,
+                                     sig_width),
+                                 nan));
+          replace(children[1],
+                  nf->CreateTerm(ITE, width, v,
+                                 bm.CreateFPSpecialConst(FPSpecial::PlusZero,
+                                                         exp_width, sig_width),
+                                 nan));
+        }
+        else if (other.GetSourceSort() == sort)
+        {
+          // FP constant folding is deferred solver-wide, so a literal
+          // usually arrives as to_fp's three-child reinterpret form over
+          // constant bits, not as an interned constant. Resolve it locally,
+          // through the canonicalising funnel (CreateFPConst), so NaN
+          // payloads compare by node identity below. `other` itself is not
+          // rewritten; it leaves the formula along with the predicate.
+          ASTNode constant = other;
+          if (constant.GetKind() == FP_TOFP && constant.Degree() == 3 &&
+              constant[2].GetKind() == BVCONST)
+            constant = bm.CreateFPConst(constant[2], exp_width, sig_width);
+
+          if (!constant.isConstant())
+            break;
+
+          const bool varOnLHS = (children[0] == var);
+
+          // The constant the variable's side cannot beat: nothing exceeds
+          // +oo (variable on the left), nothing lies below -oo (variable on
+          // the right) -- and nothing compares to NaN.
+          const ASTNode unbeatable = bm.CreateFPSpecialConst(
+              varOnLHS ? FPSpecial::PlusInfinity : FPSpecial::MinusInfinity,
+              exp_width, sig_width);
+
+          if (constant == nan || constant == unbeatable)
+            continue; // Always false; the blasted circuit collapses it.
+
+          // Both outcomes achievable: the variable's own extreme wins,
+          // NaN loses.
+          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+          replace(var, nf->CreateTerm(ITE, width, v, unbeatable, nan));
         }
       }
       break;
@@ -754,7 +1528,7 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
           newWidth += rhsSize;
         }
 
-        assert(newWidth == (long int)operandWidth);
+        assert(newWidth == (int)operandWidth);
         replace(var, current);
       }
       break;
@@ -767,6 +1541,11 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
         //        cerr << var;
         //      cerr << parent;
     }
+
+    // None of the per-kind rules fired (each detaches `var` from its
+    // parent when it does). Try the generalised ground-path collapse.
+    if (muteNode.isUnconstrained())
+      tryGroundPathCollapse(muteNode, variable_array);
   }
 
   ASTNode result = topMutable->toASTNode(&bm);

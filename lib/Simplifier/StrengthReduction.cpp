@@ -25,6 +25,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/StrengthReduction.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
+#include "stp/Util/CBVOps.h"
 #include <iostream>
 
 namespace stp
@@ -39,15 +40,21 @@ namespace stp
     if (n.isAtom())
       return n;
 
-    if (cache.find(n) != cache.end())
-      return (*(cache.find(n))).second;
+    {
+      const ASTNodeMap::const_iterator it = cache.find(n);
+      if (it != cache.end())
+        return it->second;
+    }
 
     ASTNode result = n;
 
-    if (fromTo.find(n) != fromTo.end())
     {
-      result = (*fromTo.find(n)).second;
-      fromTo.erase(n); // this is how it differs from the everyday replace.
+      const ASTNodeMap::iterator it = fromTo.find(n);
+      if (it != fromTo.end())
+      {
+        result = it->second;
+        fromTo.erase(it); // this is how it differs from the everyday replace.
+      }
     }
 
     ASTVec new_children;
@@ -84,8 +91,11 @@ namespace stp
     if (n.Degree() == 0 )
       return n;
 
-    if (cache.find(n) != cache.end())
-      return cache[n];
+    {
+      const ASTNodeMap::const_iterator it = cache.find(n);
+      if (it != cache.end())
+        return it->second;
+    }
 
     ASTVec children;
     children.reserve(n.Degree());
@@ -101,13 +111,23 @@ namespace stp
     else
       newN = nf->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(),n.GetValueWidth(), children);
    
+    // buildMap memoises on the node, so it only needs redoing when the
+    // preceding reduction actually replaced the node.
     nda.buildMap(newN);
-    newN = strengthReduction(newN, *nda.getCbitMap());
+    ASTNode reduced = strengthReduction(newN, *nda.getCbitMap());
 
-    nda.buildMap(newN);
-    newN = strengthReduction(newN, *nda.getIntervalMap());
+    if (reduced != newN)
+    {
+      newN = reduced;
+      nda.buildMap(newN);
+    }
+    reduced = strengthReduction(newN, *nda.getIntervalMap());
 
-    nda.buildMap(newN);
+    if (reduced != newN)
+    {
+      newN = reduced;
+      nda.buildMap(newN);
+    }
     newN = strengthReduction(newN, *nda.getValueSetMap());
 
     cache.insert({n,newN});
@@ -121,6 +141,35 @@ namespace stp
     if (uf->stats_flag)
       stats();
     return result;
+  }
+
+  // True unless the product of the operands' interval maxima provably
+  // fits in `width` bits, i.e. the multiplication can't wrap. Both
+  // maxima are zero-extended into 2w+1 bits so the signed
+  // BitVector_Multiply computes the unsigned product.
+  static bool multMayOverflow(const UnsignedInterval* a,
+                              const UnsignedInterval* b, unsigned width)
+  {
+    if (a == nullptr || b == nullptr)
+      return true;
+
+    const unsigned ew = 2 * width + 1;
+    CBV a2 = CONSTANTBV::BitVector_Create(ew, true);
+    CBV b2 = CONSTANTBV::BitVector_Create(ew, true);
+    CBV product = CONSTANTBV::BitVector_Create(ew, true);
+    CONSTANTBV::BitVector_Interval_Copy(a2, a->maxV, 0, 0, width);
+    CONSTANTBV::BitVector_Interval_Copy(b2, b->maxV, 0, 0, width);
+    CONSTANTBV::BitVector_Multiply(product, a2, b2);
+
+    bool overflow = false;
+    for (unsigned i = width; i < ew && !overflow; i++)
+      if (CONSTANTBV::BitVector_bit_test(product, i))
+        overflow = true;
+
+    CONSTANTBV::BitVector_Destroy(a2);
+    CONSTANTBV::BitVector_Destroy(b2);
+    CONSTANTBV::BitVector_Destroy(product);
+    return overflow;
   }
 
   // Lots of these rules are more nicely addressed by the fixedbits.
@@ -284,10 +333,42 @@ namespace stp
         {
           const ASTNode touch = nf->CreateConstant(
               CONSTANTBV::BitVector_Clone(lo), n[0].GetValueWidth());
-          newN = nf->CreateNode(AND, nf->CreateNode(EQ, touch, n[0]),
-                                nf->CreateNode(EQ, touch, n[1]));
+          // Named variables, so that the nodes aren't built in whatever order
+          // the compiler picks to evaluate the arguments in.
+          const ASTNode eq0 = nf->CreateNode(EQ, touch, n[0]);
+          const ASTNode eq1 = nf->CreateNode(EQ, touch, n[1]);
+          newN = nf->CreateNode(AND, eq0, eq1);
           replaceWithSimpler++;
         }
+      }
+
+      // (a * b) = (a * c) --> b = c, when a is provably non-zero and
+      // neither multiplication can wrap: without wrapping the products
+      // are integer products, and a non-zero common factor cancels.
+      if (newN == n && n[0].GetKind() == BVMULT && n[0].Degree() == 2 &&
+          n[1].GetKind() == BVMULT && n[1].Degree() == 2)
+      {
+        const auto get = [&visited](const ASTNode& m) -> const UnsignedInterval* {
+          const auto it = visited.find(m);
+          return it == visited.end() ? nullptr : it->second;
+        };
+
+        const unsigned width = n[0].GetValueWidth();
+
+        for (unsigned i = 0; i < 2 && newN == n; i++)
+          for (unsigned j = 0; j < 2 && newN == n; j++)
+            if (n[0][i] == n[1][j])
+            {
+              const UnsignedInterval* shared = get(n[0][i]);
+              if (shared != nullptr &&
+                  !CONSTANTBV::BitVector_is_empty(shared->minV) &&
+                  !multMayOverflow(get(n[0][0]), get(n[0][1]), width) &&
+                  !multMayOverflow(get(n[1][0]), get(n[1][1]), width))
+              {
+                newN = nf->CreateNode(EQ, n[0][1 - i], n[1][1 - j]);
+                replaceWithSimpler++;
+              }
+            }
       }
     }
     return newN;
@@ -309,20 +390,30 @@ namespace stp
           newN = nf->getFalse();
       }
       else
-        newN = nf->CreateConstant(b->GetBVConst(), n.GetValueWidth());
+      {
+        // The replaced node's floating-point format (if it has one) must be
+        // passed along: a constant is a leaf, so unlike the interior node it
+        // stands in for it cannot derive a format from children. A bare
+        // bitvector constant put where a float was makes the parent
+        // operation's rebuild abort -- fp.neg of a constant folds by making
+        // a floating-point constant, of format (0, 0) then.
+        newN = nf->CreateConstant(b->GetBVConst(), n.GetValueWidth(),
+                                  n.GetExpWidth(), n.GetSigWidth());
+      }
 
       replaceWithConstant++;
     }
     else if (kind == BVSGT || kind == BVSGE || kind == SBVDIV ||
-             kind == SBVMOD || kind == SBVREM)
+             kind == SBVMOD || kind == SBVREM || kind == BVSADDO ||
+             kind == BVSSUBO)
     {
-      if (visited.find(n[0]) != visited.end() &&
-          visited.find(n[1]) != visited.end())
-        if (visited.find(n[0])->second != nullptr &&
-            visited.find(n[1])->second != nullptr)
+      const auto lIt = visited.find(n[0]);
+      const auto rIt = visited.find(n[1]);
+      if (lIt != visited.end() && rIt != visited.end())
+        if (lIt->second != nullptr && rIt->second != nullptr)
         {
-          const FixedBits* l = visited.find(n[0])->second;
-          const FixedBits* r = visited.find(n[1])->second;
+          const FixedBits* l = lIt->second;
+          const FixedBits* r = rIt->second;
           const unsigned bw = n[0].GetValueWidth();
           if (l->isFixed(bw - 1) && r->isFixed(bw - 1))
           {
@@ -331,6 +422,22 @@ namespace stp
             {
               // replace with unsigned comparison.
               newN = nf->CreateNode(kind == BVSGT ? BVGT : BVGE, n[0], n[1]);
+              replaceWithSimpler++;
+            }
+            else if (kind == BVSADDO &&
+                     (l->getValue(bw - 1) != r->getValue(bw - 1)))
+            {
+              // Signed add overflow requires the operands to share a sign,
+              // so opposite sign bits prove no overflow.
+              newN = nf->getFalse();
+              replaceWithSimpler++;
+            }
+            else if (kind == BVSSUBO &&
+                     (l->getValue(bw - 1) == r->getValue(bw - 1)))
+            {
+              // Signed sub overflow requires the operands to differ in sign,
+              // so equal sign bits prove no overflow.
+              newN = nf->getFalse();
               replaceWithSimpler++;
             }
             else if (kind == SBVDIV || kind == SBVREM)
@@ -400,18 +507,165 @@ namespace stp
           }
         }
     }
+    else if (kind == EQ)
+    {
+      // (a * x) = (a * y) --> x = y, when a's lowest bit is fixed to
+      // one: multiplication by an odd factor is a bijection mod 2^w,
+      // so the factor cancels with no overflow condition.
+      if (n[0].GetKind() == BVMULT && n[0].Degree() == 2 &&
+          n[1].GetKind() == BVMULT && n[1].Degree() == 2)
+      {
+        for (unsigned i = 0; i < 2 && newN == n; i++)
+          for (unsigned j = 0; j < 2 && newN == n; j++)
+            if (n[0][i] == n[1][j])
+            {
+              const auto it = visited.find(n[0][i]);
+              if (it != visited.end() && it->second != nullptr &&
+                  it->second->isFixed(0) && it->second->getValue(0))
+              {
+                newN = nf->CreateNode(EQ, n[0][1 - i], n[1][1 - j]);
+                replaceWithSimpler++;
+              }
+            }
+      }
+    }
     else if (kind == BVPLUS || kind == BVXOR)
     {
+      // A pair of addends whose possibly-one bits are disjoint can never
+      // carry into each other, so their sum is their bitwise-or. Peeling
+      // such a pair out of an n-ary sum removes an adder stage. Unlike the
+      // whole-node rule below this needs bit information for only the two
+      // addends being paired, so it still applies when the rest are unknown.
+      if (uf->enable_pair_extract && kind == BVPLUS && n.Degree() > 2)
+      {
+        const unsigned w = n.GetValueWidth();
+        const unsigned words = (w + 63) / 64;
+
+        // A group holds addends that are pairwise disjoint, so the group's
+        // sum is its bitwise-or. Addends with no bit information sit in
+        // singleton groups and never merge.
+        vector<ASTVec> groups;
+        vector<vector<uint64_t>> masks;
+        vector<char> known;
+        groups.reserve(n.Degree());
+        masks.reserve(n.Degree());
+        known.reserve(n.Degree());
+
+        for (unsigned j = 0; j < n.Degree(); j++)
+        {
+          groups.push_back(ASTVec(1, n[j]));
+          const auto it = visited.find(n[j]);
+          const bool haveBits = (it != visited.end() && it->second != nullptr);
+          known.push_back(haveBits ? 1 : 0);
+          masks.push_back(vector<uint64_t>(words, 0));
+          if (!haveBits)
+            continue;
+          for (unsigned i = 0; i < w; i++)
+            if (!it->second->isFixed(i) || it->second->getValue(i))
+              masks.back()[i / 64] |= (uint64_t(1) << (i % 64));
+        }
+
+        bool merged = false;
+        for (unsigned x = 0; x < groups.size(); x++)
+        {
+          if (!known[x])
+            continue;
+          for (unsigned y = x + 1; y < groups.size();)
+          {
+            bool overlap = !known[y];
+            for (unsigned k = 0; k < words && !overlap; k++)
+              if (masks[x][k] & masks[y][k])
+                overlap = true;
+            if (overlap)
+            {
+              y++;
+              continue;
+            }
+            for (unsigned k = 0; k < words; k++)
+              masks[x][k] |= masks[y][k];
+            groups[x].insert(groups[x].end(), groups[y].begin(),
+                             groups[y].end());
+            groups.erase(groups.begin() + y);
+            masks.erase(masks.begin() + y);
+            known.erase(known.begin() + y);
+            merged = true;
+          }
+        }
+
+        if (merged)
+        {
+          ASTVec newKids;
+          newKids.reserve(groups.size());
+          for (const auto& g : groups)
+          {
+            if (g.size() == 1)
+            {
+              newKids.push_back(g[0]);
+              continue;
+            }
+
+            // The group's members are pairwise disjoint, so each bit is
+            // owned by at most one of them and the group is just wiring:
+            // a concatenation of slices of its members, with zero constants
+            // where no member can be one.
+            vector<int> owner(w, -1);
+            for (unsigned m = 0; m < g.size(); m++)
+            {
+              const auto it = visited.find(g[m]);
+              if (it == visited.end() || it->second == nullptr)
+                continue;
+              for (unsigned i = 0; i < w; i++)
+                if (!it->second->isFixed(i) || it->second->getValue(i))
+                  owner[i] = (int)m;
+            }
+
+            // Walk the maximal runs of equal ownership from the top down,
+            // folding them into a right-leaning concatenation.
+            ASTNode acc;
+            unsigned accWidth = 0;
+            unsigned hi = w;
+            while (hi > 0)
+            {
+              unsigned lo = hi - 1;
+              while (lo > 0 && owner[lo - 1] == owner[hi - 1])
+                lo--;
+              const unsigned pieceWidth = hi - lo;
+              const ASTNode piece =
+                  (owner[hi - 1] < 0)
+                      ? nf->CreateZeroConst(pieceWidth)
+                      : nf->CreateTerm(BVEXTRACT, pieceWidth, g[owner[hi - 1]],
+                                       nf->CreateBVConst(32, hi - 1),
+                                       nf->CreateBVConst(32, lo));
+              if (accWidth == 0)
+                acc = piece;
+              else
+                acc = nf->CreateTerm(BVCONCAT, accWidth + pieceWidth, acc,
+                                     piece);
+              accWidth += pieceWidth;
+              hi = lo;
+            }
+            newKids.push_back(acc);
+          }
+
+          newN = (newKids.size() == 1) ? newKids[0]
+                                       : nf->CreateTerm(BVPLUS, w, newKids);
+          replaceWithSimpler++;
+          return newN;
+        }
+      }
+
       // If all the bits are zero except for one, in each position, replace by OR
       vector<FixedBits*> children;
       bool bad = false;
       for (ASTNode c : n.GetChildren())
       {
-        if (visited.find(c) == visited.end())
+        const auto it = visited.find(c);
+        if (it == visited.end() || it->second == nullptr)
+        {
           bad = true;
-        children.push_back(visited.find(c)->second);
-        if (children.back() == nullptr)
-          bad = true;
+          break;
+        }
+        children.push_back(it->second);
       }
       if (!bad)
       {
@@ -459,14 +713,14 @@ namespace stp
 
               if (lowFits && k > 0 && k < width)
               {
-                newN = nf->CreateTerm(
-                    BVCONCAT, width,
-                    nf->CreateTerm(BVEXTRACT, width - k, n[i],
-                                   nf->CreateBVConst(32, width - 1),
-                                   nf->CreateBVConst(32, k)),
-                    nf->CreateTerm(BVEXTRACT, k, n[1 - i],
-                                   nf->CreateBVConst(32, k - 1),
-                                   nf->CreateBVConst(32, 0)));
+                const ASTNode top = nf->CreateTerm(
+                    BVEXTRACT, width - k, n[i],
+                    nf->CreateBVConst(32, width - 1),
+                    nf->CreateBVConst(32, k));
+                const ASTNode bottom = nf->CreateTerm(
+                    BVEXTRACT, k, n[1 - i], nf->CreateBVConst(32, k - 1),
+                    nf->CreateBVConst(32, 0));
+                newN = nf->CreateTerm(BVCONCAT, width, top, bottom);
                 break;
               }
             }
@@ -595,16 +849,17 @@ namespace stp
                              nf->CreateBVConst(32, width - 1),
                              nf->CreateBVConst(32, rest)));
 
-          const ASTNode narrowed = nf->CreateTerm(
-              BVCONCAT, width, nf->CreateZeroConst(nlz),
-              nf->CreateTerm(
-                  kind, rest,
-                  nf->CreateTerm(BVEXTRACT, rest, n[0],
-                                 nf->CreateBVConst(32, rest - 1),
-                                 nf->CreateBVConst(32, 0)),
-                  nf->CreateTerm(BVEXTRACT, rest, n[1],
-                                 nf->CreateBVConst(32, rest - 1),
-                                 nf->CreateBVConst(32, 0))));
+          const ASTNode lhs =
+              nf->CreateTerm(BVEXTRACT, rest, n[0],
+                             nf->CreateBVConst(32, rest - 1),
+                             nf->CreateBVConst(32, 0));
+          const ASTNode rhs =
+              nf->CreateTerm(BVEXTRACT, rest, n[1],
+                             nf->CreateBVConst(32, rest - 1),
+                             nf->CreateBVConst(32, 0));
+          const ASTNode narrowed =
+              nf->CreateTerm(BVCONCAT, width, nf->CreateZeroConst(nlz),
+                             nf->CreateTerm(kind, rest, lhs, rhs));
 
           const ASTNode otherwise =
               (kind == BVDIV) ? nf->CreateZeroConst(width) : n[0];
@@ -695,9 +950,9 @@ namespace stp
     const ASTNode commonNode = nf->CreateConstant(
         CONSTANTBV::BitVector_Clone(common), n[0].GetValueWidth());
 
-    ASTNode newN =
-        nf->CreateNode(AND, nf->CreateNode(EQ, commonNode, n[0]),
-                       nf->CreateNode(EQ, commonNode, n[1]));
+    const ASTNode eq0 = nf->CreateNode(EQ, commonNode, n[0]);
+    const ASTNode eq1 = nf->CreateNode(EQ, commonNode, n[1]);
+    ASTNode newN = nf->CreateNode(AND, eq0, eq1);
     replaceWithSimpler++;
     return newN;
   }
@@ -794,9 +1049,7 @@ namespace stp
 
   StrengthReduction::StrengthReduction(NodeFactory* _nf, UserDefinedFlags * _uf)
   {
-    littleOne = CONSTANTBV::BitVector_Create(1, true);
-    littleZero = CONSTANTBV::BitVector_Create(1, true);
-    CONSTANTBV::BitVector_Fill(littleOne);
+    littleOne = mkOne(1);
     nf = _nf;
     uf = _uf;
 
@@ -807,7 +1060,6 @@ namespace stp
   StrengthReduction::~StrengthReduction()
   {
     CONSTANTBV::BitVector_Destroy(littleOne);
-    CONSTANTBV::BitVector_Destroy(littleZero);
   }
 
   void StrengthReduction::stats(string name)
@@ -818,5 +1070,6 @@ namespace stp
     std::cerr << "{" << name
               << "} replace with simpler operation: " << replaceWithSimpler
               << std::endl;
+
   }
 }

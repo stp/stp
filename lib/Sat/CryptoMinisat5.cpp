@@ -59,12 +59,8 @@ CryptoMiniSat5::~CryptoMiniSat5()
 
 void CryptoMiniSat5::setMaxConflicts(int64_t _max_confl)
 {
+  assert(_max_confl >= 0);
   max_confl = _max_confl;
-}
-
-void CryptoMiniSat5::setMaxTime(int64_t _max_time)
-{
-  max_time = _max_time;
 }
 
 bool CryptoMiniSat5::addClause(
@@ -89,19 +85,43 @@ bool CryptoMiniSat5::okay()
   return s->okay();
 }
 
-bool CryptoMiniSat5::solve(bool& timeout_expired) // Search without assumptions.
+bool CryptoMiniSat5::solveInternal(bool& timeout_expired)
 {
-  if (max_confl > 0) {
-     s->set_max_confl(std::max(max_confl - s->get_sum_conflicts(), (uint64_t)1));
+  /*
+   * The conflict budget is for the query, so what is handed over is what is
+   * left of it. Once it is gone we give up here rather than passing a budget
+   * of zero down and relying on how CryptoMiniSat reads it.
+   */
+  if (max_confl >= 0) {
+     const int64_t remaining =
+         max_confl - static_cast<int64_t>(s->get_sum_conflicts());
+
+     if (remaining <= 0) {
+        timeout_expired = true;
+        return false;
+     }
+
+     s->set_max_confl(static_cast<uint64_t>(remaining));
   }
 
   /*
-   * STP uses -1 for a value of "no timeout" -- this means that we only set the
-   * timeout _in the SAT solver_ if the value is >= 0. This avoids us
-   * accidentally setting a large limit (or one in the past).
+   * The budget belongs to the query rather than to this call, so hand over
+   * what is left of it rather than the original figure. SATSolver::solve()
+   * has already turned away a query whose deadline is in the past, but the
+   * clock moves on between that check and this one, and secondsRemaining()
+   * clamps a negative remainder to zero: give up here rather than handing a
+   * zero down and relying on how CryptoMiniSat reads it, exactly as the
+   * conflict budget above does.
    */
-  if (max_time > 0) {
-     s->set_max_time(max_time);
+  if (hasTimeLimit()) {
+     const double remaining = secondsRemaining();
+
+     if (remaining <= 0.0) {
+        timeout_expired = true;
+        return false;
+     }
+
+     s->set_max_time(remaining);
   }
 
   CMSat::lbool ret = s->solve();
@@ -123,12 +143,43 @@ uint32_t CryptoMiniSat5::newVar()
   return s->nVars() - 1;
 }
 
+bool CryptoMiniSat5::setSearchBias(SearchBias bias)
+{
+  // CryptoMiniSat has no named configurations, so what it offers has to be
+  // picked out by hand. Turning off SLS is the piece that carries over: it is
+  // the local-search phase, it looks for models, and it is wasted work when
+  // there isn't one. On the QF_BV/20230221-oisc-gurtner family it came out
+  // ahead on all 18 interleaved A/B pairs measured, by 12% of wall clock at
+  // the median.
+  //
+  // Its other half-analogue was measured and rejected. CryptoMiniSat rotates
+  // its polarity strategy over {best, stable, best_inv, saved} as the search
+  // restarts, which looks like the stabilising mode that other solvers turn
+  // off for unsatisfiable instances -- but pinning the rotation to plain
+  // phase saving was *slower* on 8 of 9 of the same pairs, by 10-49%, so the
+  // rotation is evidently earning its keep here whatever the answer turns out
+  // to be. Its restart strategy is not reachable through the public API, so
+  // the stabilising side of the bias is simply left alone.
+  //
+  // Nothing is done for SAT: the defaults are already the satisfiable-leaning
+  // end of what is on offer, so say so rather than pretend to have applied
+  // something.
+  if (bias == SearchBias::NONE)
+    return true;
+
+  if (bias == SearchBias::SAT)
+    return false;
+
+  s->set_sls(0);
+  return true;
+}
+
 void CryptoMiniSat5::setVerbosity(int v)
 {
   s->set_verbosity(v);
 }
 
-unsigned long CryptoMiniSat5::nVars() const
+uint32_t CryptoMiniSat5::nVars() const
 {
   return s->nVars();
 }
@@ -147,24 +198,40 @@ void CryptoMiniSat5::solveAndDump()
 
 
 
-// Count how many literals/bits get fixed subject to the assumptions..
-uint32_t CryptoMiniSat5::getFixedCountWithAssumptions(const stp::SATSolver::vec_literals& assumps, const std::unordered_set<unsigned>& literals )
+// Count how many literals/bits get fixed subject to the assumptions. Sets
+// `conflict` when unit propagation refutes them instead, in which case the
+// return value carries no information.
+uint32_t CryptoMiniSat5::getFixedCountWithAssumptions(const stp::SATSolver::vec_literals& assumps, const std::unordered_set<unsigned>& literals, bool& conflict )
 {
-  const uint64_t conf = s->get_sum_conflicts();
+  [[maybe_unused]] const uint64_t conf = s->get_sum_conflicts();
   assert(conf == 0);
 
 
-  const CMSat::lbool r = s->simplify();  
+  // Bounded variable elimination would remove variables this count is about
+  // to look for, so a bit that is implied but whose variable was eliminated
+  // reads as not deduced. The caller wants what unit propagation derives over
+  // the encoding it asked for, not over whatever CMS rewrote it into.
+  s->set_no_bve();
 
-   
-  // Add the assumptions are clauses.
+  bool bad = (CMSat::l_False == s->simplify());
+
+
+  // Add the assumptions are clauses. add_clause() propagates a unit at level
+  // zero as it adds it, so a false return is unit propagation deriving the
+  // empty clause -- the conflict this is asked to report. Once that has
+  // happened every later add_clause() returns false too, which is harmless.
   vector<CMSat::Lit>& real_temp_cl = *(vector<CMSat::Lit>*)temp_cl;
   for (int i = 0; i < assumps.size(); i++)
   {
     real_temp_cl.clear();
     real_temp_cl.push_back(CMSat::Lit(var(assumps[i]), sign(assumps[i])));
-    s->add_clause(real_temp_cl);
+    if (!s->add_clause(real_temp_cl))
+      bad = true;
   }
+
+  conflict = bad;
+  if (bad)
+    return 0; // nothing meaningful to count in an unsatisfiable solver
 
 
   //std::cerr << assumps.size() << " assumptions" << std::endl;
@@ -183,10 +250,8 @@ uint32_t CryptoMiniSat5::getFixedCountWithAssumptions(const stp::SATSolver::vec_
 
   // The assumptions are each single literals (corresponding to bits) that are true/false. 
   // so in the result they should be all be set
-  assert(assumps.size() >= 0);
   assert(assigned >= static_cast<uint32_t>(assumps.size()));
   assert(s->get_sum_conflicts() == conf ); // no searching, so no conflicts.
-  assert(CMSat::l_False != r); // always satisfiable.
 
   return assigned;
 }

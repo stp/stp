@@ -31,27 +31,25 @@ namespace printer
 {
 
 // Map from ASTNodes to LetVars
-extern THREAD_LOCAL stp::ASTNodeMap NodeLetVarMap;
+extern THREAD_LOCAL_IE stp::ASTNodeMap NodeLetVarMap;
 
 // This is a vector which stores the Node to LetVars pairs. It
 // allows for sorted printing, as opposed to NodeLetVarMap
-extern THREAD_LOCAL vector<std::pair<ASTNode, ASTNode>> NodeLetVarVec;
+extern THREAD_LOCAL_IE vector<std::pair<ASTNode, ASTNode>> NodeLetVarVec;
 
 // a partial Map from ASTNodes to LetVars. Needed in order to
 // correctly print shared subterms inside the LET itself
-extern THREAD_LOCAL stp::ASTNodeMap NodeLetVarMap1;
+extern THREAD_LOCAL_IE stp::ASTNodeMap NodeLetVarMap1;
 
 std::string functionToSMTLIBName(const Kind k, bool smtlib1);
 
-void LetizeNode(const ASTNode& n, stp::ASTNodeSet& PLPrintNodeSet, bool smtlib1,
-                STPMgr*);
+// Prints one node in SMT-LIB1 (smtlib1 == true) or SMT-LIB2 syntax. Both
+// dialects share this one traversal.
+void SMTLIB_Print1(ostream& os, const stp::ASTNode n, int indentation,
+                   bool letize, bool smtlib1);
 
 ostream& SMTLIB_Print(ostream& os, STPMgr*, const ASTNode n,
-                      const int indentation,
-                      void (*SMTLIB_Print1)(ostream&, const ASTNode, int, bool),
-                      bool smtlib1);
-
-bool containsAnyArrayOps(const ASTNode& n);
+                      const int indentation, bool smtlib1);
 }
 
 #endif

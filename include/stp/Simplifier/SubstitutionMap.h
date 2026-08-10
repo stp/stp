@@ -41,7 +41,7 @@ const bool debug_substn = false;
 class DLL_PUBLIC SubstitutionMap
 {
 
-  ASTNodeMap* SolverMap;
+  DenseNodeMap* SolverMap;
   STPMgr* bm;
   ASTNode ASTTrue, ASTFalse, ASTUndefined;
 
@@ -61,6 +61,14 @@ class DLL_PUBLIC SubstitutionMap
                     std::set<ASTNode>& visited);
   bool loops(const ASTNode& n0, const ASTNode& n1);
 
+  // Array equality: while the complete-graph checker is active, refuse
+  // either orientation if it would delete a protected scalar definition or
+  // any READ-headed equation. Every read is checker-owned, independently of
+  // its other operand's shape or its connectivity to an equality operand.
+  // Oriented: "key" is the side that gets replaced. See the definition.
+  bool extensionalityProtected(const ASTNode& key,
+                               const ASTNode& value) const;
+
   size_t substitutionsLastApplied;
   VariablesInExpression vars;
 
@@ -73,7 +81,7 @@ public:
     ASTFalse = bm->CreateNode(FALSE);
     ASTUndefined = bm->CreateNode(UNDEFINED);
 
-    SolverMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
+    SolverMap = new DenseNodeMap(INITIAL_TABLE_SIZE);
     loopCount = 0;
     substitutionsLastApplied = 0;
   }
@@ -111,7 +119,7 @@ public:
   // value by reference in the argument 'output'
   bool InsideSubstitutionMap(const ASTNode& key, ASTNode& output)
   {
-    ASTNodeMap::iterator it = SolverMap->find(key);
+    const auto it = SolverMap->find(key);
     if (it != SolverMap->end())
     {
       output = it->second;
@@ -124,6 +132,9 @@ public:
   bool UpdateSolverMap(const ASTNode& key, const ASTNode& value)
   {
     ASTNode var = (BVEXTRACT == key.GetKind()) ? key[0] : key;
+
+    if (extensionalityProtected(var, value))
+      return false;
 
     if (var.GetKind() == SYMBOL && loops(var, value))
       return false;
@@ -138,7 +149,7 @@ public:
     return false;
   }
 
-  ASTNodeMap* Return_SolverMap() { return SolverMap; }
+  DenseNodeMap* Return_SolverMap() { return SolverMap; }
 
   //Returns TRUE if key is not in SolverMap
   bool InsideSubstitutionMap(const ASTNode& key)
@@ -154,6 +165,8 @@ public:
   {
     assert(e0.GetKind() == SYMBOL);
     assert(!InsideSubstitutionMap(e0) && "e0 MUST NOT be in the SolverMap");
+    if (extensionalityProtected(e0, e1))
+      return false;
     (*SolverMap)[e0] = e1;
     return true;
   }
@@ -167,14 +180,20 @@ public:
   ASTNode applySubstitutionMap(const ASTNode& n);
 
   ASTNode applySubstitutionMapUntilArrays(const ASTNode& n);
-  ASTNode applySubstitutionMapUntilArrays(const ASTNode& n, ASTNodeMap& cache);
+  ASTNode applySubstitutionMapUntilArrays(const ASTNode& n,
+                                          DenseNodeMap& cache);
 
   // Replace any nodes in "n" that exist in the fromTo map.
   // NB the fromTo map is changed.
-  static ASTNode replace(const ASTNode& n, ASTNodeMap& fromTo,
-                         ASTNodeMap& cache, NodeFactory* nf);
-  static ASTNode replace(const ASTNode& n, ASTNodeMap& fromTo,
-                         ASTNodeMap& cache, NodeFactory* nf, bool stopAtArrays,
+  // Templated on the map type: the SolverMap paths use DenseNodeMap, while
+  // external callers keep their ASTNodeMaps. Both are explicitly
+  // instantiated in SubstitutionMap.cpp.
+  template <class NodeMapType>
+  static ASTNode replace(const ASTNode& n, NodeMapType& fromTo,
+                         NodeMapType& cache, NodeFactory* nf);
+  template <class NodeMapType>
+  static ASTNode replace(const ASTNode& n, NodeMapType& fromTo,
+                         NodeMapType& cache, NodeFactory* nf, bool stopAtArrays,
                          bool preventInfiniteLoops);
 
   #ifdef _MSC_VER

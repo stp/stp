@@ -36,6 +36,15 @@ using namespace MiniSat;
 namespace stp
 {
 
+// STP's literal encoding (variable*2 + sign) is the one MiniSat itself
+// uses, so translation is a straight reinterpretation of each literal.
+static void convert(const SATSolver::vec_literals& ps,
+                    Minisat::vec<Minisat::Lit>& out)
+{
+  for (int i = 0; i < ps.size(); i++)
+    out.push(Minisat::toLit(SATSolver::toInt(ps[i])));
+}
+
 uint8_t MinisatCore::value(uint32_t x) const
 {
   return Minisat::toInt(s->value(x));
@@ -53,13 +62,16 @@ MinisatCore::~MinisatCore()
 
 void MinisatCore::setMaxConflicts(int64_t max_confl)
 {
+  assert(max_confl >= 0);
   s->setConfBudget(max_confl);
 }
 
 bool MinisatCore::addClause(
     const SATSolver::vec_literals& ps) // Add a clause to the solver.
 {
-  return s->addClause(ps);
+  Minisat::vec<Minisat::Lit> clause;
+  convert(ps, clause);
+  return s->addClause_(clause);
 }
 
 bool MinisatCore::okay() const // FALSE means solver is in a conflicting state
@@ -76,12 +88,14 @@ bool MinisatCore::propagateWithAssumptions(
     return false;
 
   setMaxConflicts(0);
-  Minisat::lbool ret = s->solveLimited(assumps);
+  Minisat::vec<Minisat::Lit> ms_assumps;
+  convert(assumps, ms_assumps);
+  Minisat::lbool ret = s->solveLimited(ms_assumps);
   assert(s->conflicts ==0);
   return ret != (Minisat::lbool)Minisat::l_False;
 }
 
-bool MinisatCore::solve(bool& timeout_expired) // Search without assumptions.
+bool MinisatCore::solveInternal(bool& timeout_expired)
 {
   if (!s->simplify())
     return false;
@@ -111,7 +125,7 @@ void MinisatCore::setVerbosity(int v)
   s->verbosity = v;
 }
 
-unsigned long MinisatCore::nVars() const
+uint32_t MinisatCore::nVars() const
 {
   return s->nVars();
 }

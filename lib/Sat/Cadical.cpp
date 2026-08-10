@@ -29,7 +29,7 @@ using std::vector;
 
 namespace stp
 {
-unsigned long Cadical::nVars() const
+uint32_t Cadical::nVars() const
 {
   // Unlike other solvers Cadical doesn't need to be told about the variable in advance.
   return next_variable;
@@ -41,23 +41,29 @@ bool Cadical::simplify()
   return false;
 }
 
-void Cadical::setMaxConflicts(int64_t _max_confl)
+int Cadical::nClauses()
 {
-  max_confl = _max_confl;
+  // Active irredundant clauses: what remains of the input after CaDiCaL's
+  // preprocessing, which is the post-simplify() count nClauses() promises.
+  // Learnt clauses are counted separately (redundant()) and excluded.
+  return (int)s->irredundant();
 }
 
-void Cadical::setMaxTime(int64_t _max_time)
+void Cadical::setMaxConflicts(int64_t _max_confl)
 {
-  max_time = _max_time;
+  assert(_max_confl >= 0);
+  max_confl = _max_confl;
 }
 
  //    0 = UNSOLVED     (limit reached or interrupted through 'terminate')
  //   10 = SATISFIABLE
  //   20 = UNSATISFIABLE
-bool Cadical::solve(bool& timeout_expired)
+bool Cadical::solveInternal(bool& timeout_expired)
 {
-  // Cadical's limits only apply to the next solve() call, so re-arm on
-  // every call. Each call gets the full budget.
+  // Cadical's conflict limit only applies to the next solve() call and is
+  // reset once it returns, so it has to be re-armed here. Cadical exposes no
+  // count of the conflicts it has used, so unlike the time budget this one
+  // cannot be made to span the whole query: each call gets the full figure.
   if (max_confl >= 0)
   {
     const int budget =
@@ -65,13 +71,14 @@ bool Cadical::solve(bool& timeout_expired)
     s->limit("conflicts", budget);
   }
 
-  if (max_time >= 0)
+  // The Terminator reads the query's deadline from the base class, so this
+  // only needs connecting -- there is nothing to re-arm.
+  if (hasTimeLimit())
   {
-    time_limit.deadline =
-        std::chrono::steady_clock::now() + std::chrono::seconds(max_time);
-    time_limit.armed = true;
     s->connect_terminator(&time_limit);
   }
+
+  declareNewVariables();
 
   auto ret = s->solve();
   if (ret == 0)
@@ -81,7 +88,7 @@ bool Cadical::solve(bool& timeout_expired)
   return ret == 10;
 }
 
-Cadical::Cadical()
+Cadical::Cadical() : time_limit(*this)
 {
   s = new CaDiCaL::Solver ();
   s->set("quiet",1);
@@ -101,6 +108,51 @@ void Cadical::printStats() const
 uint32_t Cadical::newVar()
 {
   return ++next_variable;
+}
+
+void Cadical::setFrozen(uint32_t var)
+{
+  // Deliberately not s->freeze(var). Refinement encodes clauses over
+  // these variables in later solve calls, which is safe here without
+  // freezing: Cadical restores an eliminated variable the moment a new
+  // clause mentions it, and extends every model over the eliminated
+  // variables, so both the added clauses and the values the refinement
+  // loop reads stay correct. Freezing instead would keep every
+  // refinement-visible variable out of inprocessing whether or not any
+  // lemma ever mentions it, which measures ~25% slower on the
+  // wchains array-equality benchmarks (three-run A/B on wchains016ue:
+  // 19.9-20.5s frozen against 15.9-16.0s restored). Solvers without
+  // restoration (the simplifying Minisat family) genuinely need their
+  // setFrozen; this one is a documented decision, not an omission.
+  (void)var;
+}
+
+bool Cadical::setSearchBias(SearchBias bias)
+{
+  // Cadical has named configurations of its own, so this is a straight
+  // translation. "unsat" turns off stabilising search and the local-search
+  // walker, keeping Cadical in focused, restart-heavy search; "sat" leaves it
+  // stabilising and spends more effort on elimination and subsumption.
+  //
+  // Cadical only accepts a configuration "right after initialization", which
+  // is why this is applied here rather than at solve time. Setting "quiet" in
+  // the constructor doesn't spoil that: quiet and verbose are exempt from
+  // Cadical's state check, and only adding a clause leaves the configuring
+  // state.
+  const char* config = nullptr;
+  switch (bias)
+  {
+    case SearchBias::SAT:
+      config = "sat";
+      break;
+    case SearchBias::UNSAT:
+      config = "unsat";
+      break;
+    case SearchBias::NONE:
+      return true; // nothing to do, which counts as honouring the request.
+  }
+
+  return s->configure(config);
 }
 
 void Cadical::setVerbosity(int v)
@@ -124,12 +176,56 @@ bool Cadical::okay()
   return s->state() != CaDiCaL::State::UNSATISFIED; 
 }
 
+// Enabling factor commits every later clause and model lookup to the
+// translation table (see the header): declared variables are the only ones
+// factor's contract allows, and CaDiCaL places each declared range itself.
+// Only ever called while the solver is still empty (CONFIGURING), which is
+// the one state "factor" may be set in.
+bool Cadical::enableBVA()
+{
+#ifdef STP_CADICAL_HAS_FACTOR
+  s->set("factor", 1);
+  factor_enabled = true;
+  return true;
+#else
+  // Building against a pre-3.0 CaDiCaL, where enabling factor was either
+  // impossible or untested; solving is unaffected.
+  return false;
+#endif
+}
+
+// With factor enabled, external variables must be declared before use, and
+// CaDiCaL chooses where each declared range lives so that it never overlaps
+// the extension variables factor invents. Declaration is batched here
+// (lazily, before clauses are added) rather than done in newVar because
+// declare_more_variables destroys a satisfying assignment, and newVar can
+// be called while the refinement loop is still reading the model.
+void Cadical::declareNewVariables()
+{
+#ifdef STP_CADICAL_HAS_FACTOR
+  if (!factor_enabled)
+    return;
+  if (ext_of_stp.empty())
+    ext_of_stp.push_back(0); // dummy: variables are 1-based
+  while (ext_of_stp.size() <= next_variable)
+  {
+    const size_t gap = next_variable + 1 - ext_of_stp.size();
+    const int newmax = s->declare_more_variables((int)gap);
+    for (size_t i = gap; i >= 1; i--)
+      ext_of_stp.push_back(newmax - (int)i + 1);
+  }
+#endif
+}
+
 bool Cadical::addClause(const vec_literals& ps) // Add a clause to the solver.
 {
-  for (unsigned i=0; i < ps.size(); i++)
+  declareNewVariables();
+  for (int i=0; i < ps.size(); i++)
     {
       uint32_t var = ps[i].x >> 1;
       uint32_t polarity = ps[i].x & 1;
+      if (factor_enabled)
+        var = (uint32_t)ext_of_stp[var];
       s->add(polarity? -(int)var : (int)var);
     }
   s->add(0);
@@ -138,7 +234,9 @@ bool Cadical::addClause(const vec_literals& ps) // Add a clause to the solver.
 
 uint8_t Cadical::modelValue(uint32_t x) const
 {
-  if (s->val(x) > 0)
+  if (factor_enabled)
+    x = (x < ext_of_stp.size()) ? (uint32_t)ext_of_stp[x] : 0;
+  if (x != 0 && s->val(x) > 0)
     return true_literal();
   else
     return false_literal();

@@ -28,8 +28,8 @@ THE SOFTWARE.
 #include "sat/cnf/cnf.h"
 
 #include "stp/Parser/parser.h"
-#include "stp/cpp_interface.h"
 #include "stp/ToSat/ToSATAIG.h"
+#include "stp/cpp_interface.h"
 #include <memory>
 
 extern void errorHandler(const char* error_msg);
@@ -175,11 +175,6 @@ void Main::print_back(ASTNode& query, ASTNode& asserts)
     printer::SMTLIB2_PrintBack(cout, original_input, bm);
   }
 
-  if (bm->UserFlags.print_STPinput_back_C_flag)
-  {
-    printer::C_Print(cout, original_input, bm);
-  }
-
   if (bm->UserFlags.print_STPinput_back_GDL_flag)
   {
     printer::GDL_Print(cout, original_input);
@@ -270,7 +265,9 @@ int Main::main(int argc, char** argv)
   }
 
   // ensure that all output is (at most) line buffered
-  setvbuf(stdout, NULL, _IOLBF, 0);
+  // A size of 0 is rejected by MSVC's CRT (fatal invalid-parameter error);
+  // it requires 2 <= size <= INT_MAX.
+  setvbuf(stdout, NULL, _IOLBF, BUFSIZ);
 
   STP* stp = new STP(bm);
 
@@ -324,7 +321,7 @@ int Main::main(int argc, char** argv)
       {
         bm->GetRunTimes()->print();
       }
-      stp->tosat->PrintOutput(ret);
+      ToSATBase::PrintOutput(bm, ret);
     }
 
     asserts = ASTNode();

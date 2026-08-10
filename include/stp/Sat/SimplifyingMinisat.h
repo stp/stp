@@ -42,31 +42,32 @@ public:
   SimplifyingMinisat();
   ~SimplifyingMinisat();
 
-  bool addClause(const vec_literals& ps); // Add a clause to the solver.
+  bool addClause(const vec_literals& ps) override; // Add a clause to the solver.
 
-  bool okay() const; // FALSE means solver is in a conflicting state
+  bool okay() const override; // FALSE means solver is in a conflicting state
 
-  bool solve(bool& timeout_expired); // Search without assumptions.
+  bool simplify() override; // Removes already satisfied clauses.
 
-  bool simplify(); // Removes already satisfied clauses.
+  void setMaxConflicts(int64_t max_confl) override;
 
-  virtual void setMaxConflicts(int64_t max_confl);
+  void setVerbosity(int v) override;
 
-  void setVerbosity(int v);
+  uint8_t modelValue(uint32_t x) const override;
 
-  virtual uint8_t modelValue(uint32_t x) const;
+  uint32_t newVar() override;
 
-  virtual uint32_t newVar();
+  uint32_t nVars() const override;
 
-  unsigned long nVars() const;
+  void printStats() const override;
 
-  void printStats() const;
+  lbool true_literal() const override { return ((uint8_t)0); }
+  lbool false_literal() const override { return ((uint8_t)1); }
+  lbool undef_literal() const override { return ((uint8_t)2); }
 
-  virtual lbool true_literal() const { return ((uint8_t)0); }
-  virtual lbool false_literal() const { return ((uint8_t)1); }
-  virtual lbool undef_literal() const { return ((uint8_t)2); }
+  void setFrozen(uint32_t x) override;
 
-  virtual void setFrozen(uint32_t x);
+protected:
+  bool solveInternal(bool& timeout_expired) override;
 };
 }
 

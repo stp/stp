@@ -52,43 +52,48 @@ public:
 
   ~CryptoMiniSat5();
 
-  virtual void setMaxConflicts(int64_t max_confl); // set max solver conflicts
+  void setMaxConflicts(int64_t max_confl) override; // set max solver conflicts
 
-  virtual void setMaxTime(int64_t max_time); // set max solver time in seconds
+  bool addClause(const vec_literals& ps) override; // Add a clause to the solver.
 
-  bool addClause(const vec_literals& ps); // Add a clause to the solver.
+  bool okay() const override; // FALSE means solver is in a conflicting state
 
-  bool okay() const; // FALSE means solver is in a conflicting state
+  uint8_t modelValue(uint32_t x) const override;
 
-  bool solve(bool& timeout_expired); // Search without assumptions.
+  uint32_t newVar() override;
 
-  virtual uint8_t modelValue(uint32_t x) const;
+  bool setSearchBias(SearchBias bias) override;
 
-  virtual uint32_t newVar();
+  void setVerbosity(int v) override;
 
-  void setVerbosity(int v);
+  uint32_t nVars() const override;
 
-  unsigned long nVars() const;
+  void printStats() const override;
 
-  void printStats() const;
-
-  virtual void enableRefinement(const bool enable);
+  void enableRefinement(const bool enable) override;
 
   // nb CryptoMiniSat has different literal values to the other minisats.
-  virtual lbool true_literal() const { return ((uint8_t)1); }
-  virtual lbool false_literal() const { return ((uint8_t)-1); }
-  virtual lbool undef_literal() const { return ((uint8_t)0); }
+  lbool true_literal() const override { return ((uint8_t)1); }
+  lbool false_literal() const override { return ((uint8_t)-1); }
+  lbool undef_literal() const override { return ((uint8_t)0); }
 
-  uint32_t getFixedCountWithAssumptions(const stp::SATSolver::vec_literals& assumps,  const std::unordered_set<unsigned>& literals );
+  uint32_t getFixedCountWithAssumptions(const stp::SATSolver::vec_literals& assumps,  const std::unordered_set<unsigned>& literals, bool& conflict );
 
 
   void solveAndDump();
 
 
+protected:
+  bool solveInternal(bool& timeout_expired) override;
+
+  // CryptoMiniSat polls its own wall-clock limit during search.
+  bool canInterruptSearch() const override { return true; }
+
 private:
   void* temp_cl;
-  int64_t max_confl = 0;
-  int64_t max_time = 0; // seconds
+  // Negative means no budget was configured. This cannot default to 0,
+  // which is now a budget of zero rather than the absence of one.
+  int64_t max_confl = -1;
 };
 }
 

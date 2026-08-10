@@ -26,6 +26,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
+#include "stp/Util/BitOps.h"
 #include <cstdint>
 #include <set>
 #include <stdexcept>
@@ -163,7 +164,7 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
       const bool under2 = d1 < borrow;
       borrow = (under1 || under2) ? 1 : 0;
       if (d != 0)
-        bitLen = w * 64 + 64 - (unsigned)__builtin_clzll(d);
+        bitLen = w * 64 + 64 - (unsigned)::stp::countLeadingZeroes64(d);
     }
     for (unsigned w = 0; w < words; w++)
     {
@@ -175,7 +176,7 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
       maxAdm[w] &= ~forced0;
       while (forced0)
       {
-        const unsigned bit = __builtin_ctzll(forced0);
+        const unsigned bit = ::stp::countTrailingZeroes64(forced0);
         forced0 &= forced0 - 1;
         b.setFixed(w * 64 + bit, true);
         b.setValue(w * 64 + bit, false);
@@ -204,7 +205,7 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
       const bool under2 = d1 < borrow;
       borrow = (under1 || under2) ? 1 : 0;
       if (d != 0)
-        bitLen = w * 64 + 64 - (unsigned)__builtin_clzll(d);
+        bitLen = w * 64 + 64 - (unsigned)::stp::countLeadingZeroes64(d);
     }
     for (unsigned w = 0; w < words; w++)
     {
@@ -216,7 +217,7 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
       bV[w] |= forced1;
       while (forced1)
       {
-        const unsigned bit = __builtin_ctzll(forced1);
+        const unsigned bit = ::stp::countTrailingZeroes64(forced1);
         forced1 &= forced1 - 1;
         b.setFixed(w * 64 + bit, true);
         b.setValue(w * 64 + bit, true);
@@ -232,7 +233,7 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
       const uint64_t d = (lowW[w] ^ highW[w]) & rangeBelow(w, width);
       if (d != 0)
       {
-        firstDiffer = w * 64 + 64 - (unsigned)__builtin_clzll(d);
+        firstDiffer = w * 64 + 64 - (unsigned)::stp::countLeadingZeroes64(d);
         break;
       }
     }
@@ -248,7 +249,7 @@ Result fix(FixedBits& b, stp::CBV low, stp::CBV high)
       changed |= newFix != 0;
       while (newFix)
       {
-        const unsigned bit = __builtin_ctzll(newFix);
+        const unsigned bit = ::stp::countTrailingZeroes64(newFix);
         newFix &= newFix - 1;
         b.setFixed(w * 64 + bit, true);
         b.setValue(w * 64 + bit, (lowW[w] >> bit) & 1);
@@ -345,7 +346,6 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
 
     bool changed = true;
 
-    int iteration = 0;
     while (changed)
     {
       changed = false;
@@ -551,9 +551,6 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
         log << "[" << *minQuotient << "," << *maxQuotient << "]";
         log << endl;
       }
-      iteration++;
-      // if (iteration==2 && changed)
-      // exit(1);
     }
 
     if (debug_division)
@@ -864,7 +861,7 @@ Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,
       const uint64_t ones = vo & range;
       const uint64_t add =
           ~fo & range &
-          (ones != 0 ? ~rangeBelow(w, w * 64 + 64 - __builtin_clzll(ones))
+          (ones != 0 ? ~rangeBelow(w, w * 64 + 64 - ::stp::countLeadingZeroes64(ones))
                      : ~(uint64_t)0);
       if (add != 0)
       {
@@ -873,7 +870,7 @@ Result bvUnsignedDivisionBothWays(vector<FixedBits*>& children,
       }
       if (ones != 0)
       {
-        conflictAt = w * 64 + 63 - __builtin_clzll(ones);
+        conflictAt = w * 64 + 63 - ::stp::countLeadingZeroes64(ones);
         break;
       }
     }
@@ -1330,14 +1327,15 @@ static Result bvSignedModulusStructural(vector<FixedBits*>& children,
   {
     if (!fixBitTo(output, sign, false))
       return CONFLICT;
-    int highest = -1; // highest divisor bit that might be one.
-    for (int i = (int)sign - 1; i >= 0; i--)
+    // highest divisor bit that might be one; `sign` means there is none.
+    unsigned highest = sign;
+    for (unsigned i = sign; i-- > 0;)
       if (!b.isFixedToZero(i))
       {
         highest = i;
         break;
       }
-    assert(highest >= 0); // b is non-zero with a zero sign bit.
+    assert(highest < sign); // b is non-zero with a zero sign bit.
     // divisor <= 2^(highest+1)-1, so result <= 2^(highest+1)-2: the bits
     // above `highest` are zero.
     for (unsigned i = highest + 1; i < sign; i++)
@@ -1639,19 +1637,39 @@ Result bvSignedModulusBothWays(vector<FixedBits*>& children, FixedBits& output,
     return NO_CHANGE;
   }
 
-  const Result r0 = bvSignedModulusStructural(children, output, bm);
-  if (CONFLICT == r0)
-    return CONFLICT;
+  // Iterate the two passes to an internal fixed point. A single decompose
+  // pass can fix operand bits whose consequences only a re-run sees: an
+  // output fixed to a value no divisor admits first forces the dividend,
+  // and only the next pass notices the contradiction. propagate() gives
+  // each node exactly one call, so a state this function would itself
+  // refute must not survive the return. Terminates because a CHANGED pass
+  // fixes at least one more bit, bounded by 3 * width.
+  bool changed = false;
+  while (true)
+  {
+    const Result r0 = bvSignedModulusStructural(children, output, bm);
+    if (CONFLICT == r0)
+      return CONFLICT;
 
-  // The sign-case decomposition is expensive and deduces little when the
-  // divisor may be zero; bail out early like the other signed operations.
-  if (children[1]->containsZero())
-    return r0;
+    // The sign-case decomposition is expensive and deduces little when the
+    // divisor may be zero; skip it like the other signed operations.
+    if (children[1]->containsZero())
+    {
+      if (r0 != CHANGED)
+        break;
+      changed = true;
+      continue;
+    }
 
-  const Result r1 = bvSignedModulusDecompose(children, output, bm);
-  if (CONFLICT == r1)
-    return CONFLICT;
-  return merge(r0, r1);
+    const Result r1 = bvSignedModulusDecompose(children, output, bm);
+    if (CONFLICT == r1)
+      return CONFLICT;
+
+    if (r0 != CHANGED && r1 != CHANGED)
+      break;
+    changed = true;
+  }
+  return changed ? CHANGED : NO_CHANGE;
 }
 
 Result bvSignedRemainderBothWays(vector<FixedBits*>& children,

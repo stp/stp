@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "ASTNode.h"
 #include "UsefulDefs.h"
 #include "stp/Util/Attributes.h"
+#include "extlib-unordered-dense/ankerl/unordered_dense.h"
 
 namespace stp
 {
@@ -52,10 +53,90 @@ struct ExprLess
     return n1.GetNodeNum() < n2.GetNodeNum();
   }
 };
-bool isAtomic(Kind k);
+
+// Functor form of arithless, for the same reason as ExprLess above. Ordering
+// is identical to arithless.
+struct ArithLess
+{
+  bool operator()(const ASTNode& n1, const ASTNode& n2) const
+  {
+    return arithless(n1, n2);
+  }
+};
 bool isCommutative(const Kind k);
 bool containsArrayOps(const ASTNode& n, STPMgr* stp);
+// Query-local source-theory checks. The first asks whether FP lowering is
+// needed; the second also includes RoundingMode-only syntax for printing.
+bool containsFloatingPoint(const ASTNode& n, STPMgr* stp);
+bool containsFloatingPointTheory(const ASTNode& n, STPMgr* stp);
 bool numberOfReadsLessThan(const ASTNode& n, int v);
+
+// Whether two constants spell the same bits. Node identity understates
+// this: a floating-point constant interns apart from the plain bitvector
+// constant with its bits (the format is part of a constant's identity),
+// so two distinct constant nodes may denote one bitvector value. Any
+// rule that concludes "different value" from "different constant nodes"
+// must compare through here instead.
+bool constantsSameBits(const ASTNode& a, const ASTNode& b);
+
+// Whether two constants are known to denote *different* values.
+//
+// This is the unsound direction, and the reason it has a name of its own:
+// `a != b` answers it correctly for plain bitvector constants and wrongly
+// for a floating-point or rounding-mode constant that shares its bits with
+// one, and the two spellings look alike at a glance. Every rule that skips
+// a write, proves two array indexes address different cells, or otherwise
+// concludes "different value" must ask through here, so that the sites which
+// depend on the distinction can be found by looking for this name.
+inline bool constantsDenoteDifferentValues(const ASTNode& a, const ASTNode& b)
+{
+  return !constantsSameBits(a, b);
+}
+
+// The plain bit-vector constant spelling the same bits as `c`, or `c`
+// itself when it already is one. A floating-point or rounding-mode
+// constant interns apart from the plain constant with its bits, so two
+// nodes can spell one value -- and anything that keys a container or
+// builds a lookup node from a constant is asking about the spelling
+// unless it normalises through here first.
+ASTNode plainBitVectorConstant(STPMgr* bm, const ASTNode& c);
+
+// Whether two constants denote the same value *of a given sort*, which
+// for a floating-point sort is a weaker question than sharing bits.
+//
+// SMT-LIB's = on floats is identity of values, and NaN is one value with
+// many packings, so two cells or indexes holding different NaN payloads
+// hold the same value. Every other float value has exactly one packing,
+// and every bit-vector and rounding-mode value has exactly one encoding,
+// so for those this is constantsSameBits. The extensionality layer
+// builds the circuit form of the same rule (packedFloatEq); this is the
+// form for constants already in hand, used where the model is read back
+// rather than constrained.
+bool constantsSameSourceValue(const ASTNode& a, const ASTNode& b,
+                              const SourceSort& sort);
+
+inline bool constantsDenoteDifferentSourceValues(const ASTNode& a,
+                                                 const ASTNode& b,
+                                                 const SourceSort& sort)
+{
+  return !constantsSameSourceValue(a, b, sort);
+}
+
+// Whether `n` denotes bits to the bit-vector layers, which is not the same
+// question as GetType() == BITVECTOR_TYPE.
+//
+// FloatBlast removes every floating-point *operation* but deliberately leaves
+// float symbols, constants and the structural nodes over them as their packed
+// bits, still reporting FLOATINGPOINT_TYPE so that model reconstruction can
+// recover the sort. So a lowered formula handed to the bit-vector layers
+// contains float-typed leaves that are, at that boundary, ordinary bitvectors.
+//
+// Every bit-vector-only pass that classifies a node by GetType() needs this
+// question rather than the raw comparison, and it must be asked in one place:
+// spelling it out per call site is what left BitBlaster::simplify_during_bb
+// behind when the invariant was introduced, so that --bb.simplify-during-bb
+// aborted on any query with a float leaf in it.
+bool isBitsValued(const ASTNode& n);
 
 // If (a > b) in the termorder, then return 1 elseif (a < b) in the
 // termorder, then return -1 else return 0
@@ -70,8 +151,6 @@ int TermOrder(const ASTNode& a, const ASTNode& b);
 // NB: The boolean value is always true!
 bool BVTypeCheck(const ASTNode& n);
 
-long getCurrentTime();
-
 ASTVec FlattenKind(Kind k, const ASTChildren& children, int maxDepth = INT_MAX);
 
 // Checks recursively all the way down.
@@ -83,6 +162,15 @@ unsigned int GetUnsignedConst(const ASTNode n);
 typedef std::unordered_map<ASTNode, ASTNode, ASTNode::ASTNodeHasher,
                            ASTNode::ASTNodeEqual>
     ASTNodeMap;
+
+// Flat open-addressing alternative to ASTNodeMap. Much faster to probe and
+// insert, but: values move on insert/erase (no pointer or reference
+// stability), erase reorders survivors, and iteration is in insertion order.
+// Only use where nothing points into the map and iteration order never
+// reaches a decision.
+typedef ankerl::unordered_dense::map<ASTNode, ASTNode, ASTNode::ASTNodeHasher,
+                                     ASTNode::ASTNodeEqual>
+    DenseNodeMap;
 
 typedef std::unordered_map<ASTNode, int32_t, ASTNode::ASTNodeHasher,
                            ASTNode::ASTNodeEqual>

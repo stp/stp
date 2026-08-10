@@ -30,7 +30,7 @@ namespace printer
 using std::string;
 using namespace stp;
 
-THREAD_LOCAL ASTNodeSet Lisp_AlreadyPrintedSet;
+THREAD_LOCAL_IE ASTNodeSet Lisp_AlreadyPrintedSet;
 ostream& Lisp_Print_indent(ostream& os, const ASTNode& n, int indentation);
 
 /** Internal function to print in lisp format.  Assume newline

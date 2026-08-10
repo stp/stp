@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Trevor Hansen, Andrew V. Jones
+ * AUTHORS: Vijay Ganesh, Trevor Hansen, Andrew Teylu
  *
  * BEGIN DATE: November, 2005
  *
@@ -23,30 +23,16 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/STPManager/STP.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/NodeToFixedBitsMap.h"
 #include "stp/ToSat/ToSATAIG.h"
 
 #include "stp/Simplifier/NodeDomainAnalysis.h"
 
-#ifdef USE_CRYPTOMINISAT
-#include "stp/Sat/CryptoMinisat5.h"
-#endif
-
-#ifdef USE_RISS
-#include "stp/Sat/Riss.h"
-#endif
-
-#ifdef USE_CADICAL
-#include "stp/Sat/Cadical.h"
-#endif
-
-
-#include "stp/Sat/MinisatCore.h"
-#include "stp/Sat/SimplifyingMinisat.h"
+#include "stp/Sat/SATSolverFactory.h"
 
 #include "stp/Simplifier/AIGSimplifyPropositionalCore.h"
-#include "stp/Simplifier/AlwaysTrue.h"
 #include "stp/Simplifier/DifficultyScore.h"
 #include "stp/Simplifier/FindPureLiterals.h"
 #include "stp/Simplifier/RemoveUnconstrained.h"
@@ -54,6 +40,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/SplitExtracts.h"
 #include "stp/Simplifier/UseITEContext.h"
 #include "stp/Simplifier/Flatten.h"
+#include "stp/Simplifier/CommonSubSum.h"
 #include "stp/Simplifier/StrengthReduction.h"
 #include "stp/Simplifier/Rewriting.h"
 #include "stp/Simplifier/MergeSame.h"
@@ -64,7 +51,6 @@ namespace stp
 {
 
 const static string cb_message = "After Constant Bit Propagation. ";
-const static string bb_message = "After Bitblast simplification. ";
 const static string uc_message = "After Removing Unconstrained. ";
 const static string int_message = "After Unsigned Interval Analysis. ";
 const static string pl_message = "After Pure Literals. ";
@@ -74,13 +60,39 @@ const static string pe_message = "After Propagating Equalities. ";
 const static string domain_message = "After Domain Analysis. ";
 const static string se_message = "After Split Extracts. ";
 
+static bool containsOpaqueArrayEquality(const ASTNode& root)
+{
+  ASTNodeSet visited;
+  ASTVec pending(1, root);
+  while (!pending.empty())
+  {
+    const ASTNode node = pending.back();
+    pending.pop_back();
+    if (!visited.insert(node).second)
+      continue;
+    if (node.GetKind() == ARRAY_EQ)
+      return true;
+    for (unsigned i = 0; i < node.Degree(); ++i)
+      pending.push_back(node[i]);
+  }
+  return false;
+}
+
 SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS,
-                                            ASTNode original_input)
+                                            ASTNode original_input,
+                                            const ASTNodeMap&
+                                                arrayEqualityRewrites)
 {
   SATSolver& NewSolver = *newS;
   if (bm->UserFlags.stats_flag)
     NewSolver.setVerbosity(1);
 
+  /*
+   * STP spells "no limit" as a negative value, and every other value -- zero
+   * included -- is a budget to be honoured. Do that translation once, here,
+   * so that the backends are only ever handed a value >= 0 and cannot each
+   * decide for themselves what, say, zero means.
+   */
   if (bm->UserFlags.timeout_max_conflicts >= 0)
     newS->setMaxConflicts(bm->UserFlags.timeout_max_conflicts);
 
@@ -90,55 +102,25 @@ SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS,
   // reset the timeout expired flag for the new check
   bm->soft_timeout_expired = false;
 
-  SOLVER_RETURN_TYPE result = TopLevelSTPAux(NewSolver, original_input);
+  SOLVER_RETURN_TYPE result =
+      TopLevelSTPAux(NewSolver, original_input, arrayEqualityRewrites);
   return result;
 }
 
 SATSolver* STP::get_new_sat_solver()
 {
-  SATSolver* newS = NULL;
-  switch (bm->UserFlags.solver_to_use)
+  SATSolver* newS = createSATSolver(bm->UserFlags);
+
+  // Before any clause reaches it, which is the only point some backends will
+  // accept a configuration at.
+  if (bm->UserFlags.search_bias != SearchBias::NONE &&
+      !newS->setSearchBias(bm->UserFlags.search_bias))
   {
-    case UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER:
-      newS = new SimplifyingMinisat;
-      break;
-      
-    case UserDefinedFlags::CRYPTOMINISAT5_SOLVER:
-#ifdef USE_CRYPTOMINISAT
-      newS = new CryptoMiniSat5(bm->UserFlags.num_solver_threads);
-#else
-      std::cerr << "CryptoMiniSat5 support was not enabled at configure time."
-                << std::endl;
-      exit(-1);
-#endif
-      break;
-    case UserDefinedFlags::RISS_SOLVER:
-#ifdef USE_RISS
-      newS = new RissCore();
-#else
-      std::cerr << "Riss support was not enabled at configure time."
-                << std::endl;
-      exit(-1);
-#endif
-      break;
-    case UserDefinedFlags::MINISAT_SOLVER:
-      newS = new MinisatCore;
-      break;
-    
-    case UserDefinedFlags::CADICAL_SOLVER:
-#ifdef USE_CADICAL
-      newS = new Cadical();
-      break;
-#else
-      std::cerr << "Cadical support was not enabled at configure time."
-                << std::endl;
-      exit(-1);
-#endif
-    default:
-      std::cerr << "ERROR: Undefined solver to use." << endl;
-      exit(-1);
-      break;
-  };
+    std::cerr << "Warning: the SAT solver in use has no '"
+              << searchBiasName(bm->UserFlags.search_bias)
+              << "' search bias to select; using its own settings instead."
+              << std::endl;
+  }
 
   return newS;
 }
@@ -149,11 +131,19 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
                                     const ASTNode& query)
 {
 
+  // One encoding context per actual solve. Keep it after this function
+  // returns so counterexample/get-value requests reuse the exact mappings
+  // that introduced unspecified-value arrays and lowered the solved formula.
+  Ctr_Example->setFpEncodingContext(NULL);
+  fpEncodingContext.reset(new FpEncodingContext(bm));
+  Ctr_Example->setFpEncodingContext(fpEncodingContext.get());
+
   // Unfortunatey this is a global variable,which the aux function needs to
   // overwrite sometimes.
   bool saved_ack = bm->UserFlags.ackermannisation;
 
   ASTNode original_input;
+  ASTNodeMap arrayEqualityRewrites;
   if (query != bm->ASTFalse)
   {
     original_input =
@@ -164,8 +154,32 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
     original_input = inputasserts;
   }
 
+  // The latch is the same kind of cheap fast-negative the lowering test below
+  // uses, widened to cover RoundingMode -- which carries no format, so it
+  // never reaches noteFloatingPoint, and which is exactly why this test could
+  // not use has_floating_point. Without a negative every pure bit-vector
+  // query walked its whole DAG asking each node for its source sort.
+  const bool input_uses_floating_point_theory =
+      bm->has_floating_point_theory &&
+      containsFloatingPointTheory(original_input, bm);
+
+  // Make the partial floating-point operations total, canonicalise the
+  // indexes of float-indexed arrays, and pin every rounding mode the formula
+  // names to the five legal encodings -- before the formula is used for
+  // anything. See FpTotalise. This is query-local: an unused or popped FP
+  // term must not send a later pure-BV query through an FP-only pass.
+  // RoundingMode-element arrays and RoundingMode symbols can each appear
+  // without a single float node, hence the broader source-theory test.
+  if (input_uses_floating_point_theory)
+  {
+    original_input = fpEncodingContext->prepare(original_input);
+    fpEncodingContext->copyArrayEqualityRewrites(arrayEqualityRewrites);
+  }
+
   SATSolver* newS = get_new_sat_solver();
-  SOLVER_RETURN_TYPE result = solve_by_sat_solver(newS, original_input);
+
+  SOLVER_RETURN_TYPE result =
+      solve_by_sat_solver(newS, original_input, arrayEqualityRewrites);
   delete newS;
 
   bm->UserFlags.ackermannisation = saved_ack;
@@ -231,15 +245,8 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
   if (bm->UserFlags.enable_split_extracts)
   {
     SplitExtracts se(*bm);
-    inputToSat = se.topLevel(inputToSat);
+    inputToSat = se.topLevel(inputToSat, simp);
     bm->ASTNodeStats(se_message.c_str(), inputToSat);
-  }
-
-  if (bm->UserFlags.enable_always_true)
-  {
-    AlwaysTrue always(bm, bm->defaultNodeFactory);
-    inputToSat = always.topLevel(inputToSat);
-    bm->ASTNodeStats("After removing always true: ", inputToSat);
   }
 
   if (bm->UserFlags.enable_merge_same)
@@ -278,13 +285,59 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
 // if returned 0 then input is INVALID if returned 1 then input is
 // VALID if returned 2 then UNDECIDED
 SOLVER_RETURN_TYPE
-STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
+STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
+                    const ASTNodeMap& arrayEqualityRewrites)
 {
-  bm->ASTNodeStats("input asserts and query: ", original_input);
+  // ARRAY_EQ remains a normal, traversable AST node through query assembly
+  // and macro/function substitution. Lower it only now, at the complete-query
+  // boundary and before any ordinary simplifier or array transform runs.
+  ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  if (ext != NULL)
+    ext->beginSolve();
+
+  //
+  // Nothing here runs without the option. ARRAY_EQ has exactly one
+  // producer -- the hashing factory, which every front end's node
+  // creation bottoms out in -- and it refuses to build one while the
+  // option is off, so a query that never enabled it cannot contain one
+  // and does not have to be walked to find that out. A second check
+  // here would defend a state its own enforcement point already makes
+  // unreachable, at the price of a whole-DAG traversal on every solve
+  // STP performs.
+  // The rewrite map is subject to the same argument: floating-point
+  // preparation records an entry only for a node that was already an
+  // ARRAY_EQ, so a non-empty map means one was built, which means the
+  // option was on.
+  ASTNode semantic_input = original_input;
+  if (bm->UserFlags.enable_array_equality)
+  {
+    if (ext == NULL && (containsOpaqueArrayEquality(original_input) ||
+                        !arrayEqualityRewrites.empty()))
+    {
+      ext = bm->getExtensionality();
+      ext->beginSolve();
+    }
+    // Reuse an existing context object when present; beginSolve() above has
+    // cleared all generated records. The lowering pass builds fresh
+    // solve-local records and computes an empty active set when this root has
+    // no equality.
+    if (ext != NULL)
+      semantic_input =
+          ext->lowerArrayEqualities(original_input, arrayEqualityRewrites);
+  }
+
+  bm->ASTNodeStats("input asserts and query: ", semantic_input);
+
+  // has_floating_point is deliberately only a manager-lifetime fast-negative
+  // hint. A float built in a popped scope (or never asserted at all) must not
+  // send this query through the lowering pass. Do not reset the hint on pop:
+  // public AST handles may retain the old node and use it in a later query.
+  const bool input_has_floating_point =
+      bm->has_floating_point && containsFloatingPoint(original_input, bm);
 
   DifficultyScore difficulty;
   if (bm->UserFlags.stats_flag)
-    cerr << "Difficulty Initially:" << difficulty.score(original_input, bm)
+    cerr << "Difficulty Initially:" << difficulty.score(semantic_input, bm)
          << endl;
 
   // A heap object so I can easily control its lifetime.
@@ -292,7 +345,38 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   std::unique_ptr<PropagateEqualities> pe(
       new PropagateEqualities(simp, bm->defaultNodeFactory, bm));
 
-  ASTNode inputToSat = original_input;
+  ASTNode inputToSat = semantic_input;
+
+  // Array equality (lemmas on demand, Brummayer & Biere JSAT 2010):
+  // with at least one array equality reachable from the current root, conjoin
+  // exactly its active dependency closure's witness constraints. These are
+  // preprocessing step 1 of the paper: a fresh index lambda with two virtual
+  // reads witnessing inequality. The anchors keep each operand reachable and
+  // carry it through the same preprocessing as the rest of the formula so its
+  // current form can be recovered. Array-valued ITEs remain structural and
+  // are handled directly by the consistency checker's T rules. A query with
+  // no active array equality stays on STP's ordinary array path.
+  const bool extActive = ext != NULL && ext->active();
+  // Releases the record-table seal on every exit from this function.
+  ExtensionalityContext::SolveScope extScope(ext);
+  if (extActive)
+  {
+    inputToSat = ext->conjoinRecordConstraints(inputToSat);
+    if (bm->UserFlags.ackermannisation)
+    {
+      // Eager Ackermannization expands reads into if-then-else chains,
+      // destroying the array structure the lazy procedure works on.
+      cerr << "Warning: --ackermanize is disabled for queries with "
+              "array equality."
+           << endl;
+      bm->UserFlags.ackermannisation = false;
+    }
+  }
+
+  // Record anchors keep equality operands live even when no array operation
+  // is reachable from the lowered Boolean root, so active extensionality
+  // counts as array operations for the refinement machinery.
+  bool arrayops = containsArrayOps(inputToSat, bm) || extActive;
 
   // If the number of array reads is small. We rewrite them through.
   // The bit-vector simplifications are more thorough than the array
@@ -303,9 +387,11 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   // introduced.
   // TODO: I chose the number of reads we perform this operation at randomly.
   bool removed = false;
-  if ((bm->UserFlags.ackermannisation &&
-       numberOfReadsLessThan(inputToSat, 50)) ||
-      numberOfReadsLessThan(inputToSat, 10))
+  if (arrayops &&
+      !extActive && // array equality needs the refinement loop
+      ((bm->UserFlags.ackermannisation &&
+        numberOfReadsLessThan(inputToSat, 50)) ||
+       numberOfReadsLessThan(inputToSat, 10)))
   {
     // If the number of axioms that would be added it small. Remove them.
     bm->UserFlags.ackermannisation = true;
@@ -315,12 +401,33 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
       cerr << "Have removed array operations" << endl;
     }
     removed = true;
+
+    // With ackermannisation on, the transform removes every array
+    // operation.
+    arrayops = false;
+    assert(!containsArrayOps(inputToSat, bm));
   }
 
-  const bool arrayops = containsArrayOps(inputToSat, bm);
-  if (removed)
+  // Bounded variable addition is decided here rather than at solver
+  // construction because AUTO wants the post-simplification answer: the
+  // Ackermannisation above can remove every array operation, and arrayops
+  // is only final from this point on. The solver has not yet been handed a
+  // clause, which is the only window in which it accepts the setting. A
+  // declined explicit ON is worth a warning (no CaDiCaL 3.x behind the
+  // build, or a different backend); a declined AUTO is just the default
+  // heuristic not applying.
+  if (bm->UserFlags.cadical_factor == UserDefinedFlags::BVAMode::ON ||
+      (bm->UserFlags.cadical_factor == UserDefinedFlags::BVAMode::AUTO &&
+       arrayops))
   {
-    assert(!arrayops);
+    if (!NewSolver.enableBVA() &&
+        bm->UserFlags.cadical_factor == UserDefinedFlags::BVAMode::ON)
+    {
+      std::cerr << "Warning: --cadical-factor was requested but the SAT "
+                   "solver in use has no bounded variable addition to "
+                   "enable; using its own settings instead."
+                << std::endl;
+    }
   }
 
   if (bm->UserFlags.check_counterexample_flag ||
@@ -360,10 +467,10 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   // Run size reducing just once.
   inputToSat = sizeReducing(inputToSat, bvSolver.get(), pe.get(), domain.get());
-  long initial_difficulty_score = difficulty.score(inputToSat, bm);
+  int64_t initial_difficulty_score = difficulty.score(inputToSat, bm);
 
   // It's helpful to know the initial node size. The difficulty scorer can easily get something similar:
-  const long initial_node_size = difficulty.getEvalCount();
+  const int64_t initial_node_size = difficulty.getEvalCount();
 
   // Fixed point it if it's not too difficult.
   // Currently we discards all the state each time sizeReducing is called,
@@ -374,53 +481,41 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
         callSizeReducing(inputToSat, bvSolver.get(), pe.get(), domain.get());
   }
 
-  long bitblasted_difficulty = -1;
-  // Expensive, so only want to do it once.
-  if (bm->UserFlags.bitblast_simplification == -1 || initial_difficulty_score < bm->UserFlags.bitblast_simplification)
+  // Lower floating-point operations before the first pass that invokes the
+  // bit-blaster. From here on the formula is a packed-bit circuit: float
+  // symbols, constants and reads retain sort metadata for model
+  // reconstruction. The only FP operations that survive are the predicates
+  // over packed-view operands -- the four ordering comparisons, the two
+  // equalities (fp.eq and = on floats) and the seven classifications --
+  // which the bit-blaster encodes natively over the packed bits
+  // (BBcompareFP, BBeqFP, BBclassifyFP); every downstream pass already has
+  // arms for these kinds because they used to reach it before lowering
+  // existed.
+  //
+  // This remains after all of the size-reducing passes above. In particular,
+  // RemoveUnconstrained must see a float symbol rather than its exposed bits.
+  //
+  // See FloatBlast for why this is a pass of its own: doing it inside
+  // simplification meant building floating-point nodes over bitvector
+  // children and stamping a float format on them to make them type check,
+  // and that stamp landed on hash-consed nodes the input still used as plain
+  // bitvectors.
+  if (input_has_floating_point)
   {
-    BBNodeManagerAIG bitblast_nodemgr;
-    BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(
-        &bitblast_nodemgr, simp, bm->defaultNodeFactory, &(bm->UserFlags));
-    ASTNodeMap fromTo;
-    ASTNodeMap equivs;
-    bb.getConsts(inputToSat, fromTo, equivs);
+    inputToSat = fpEncodingContext->lowerPrepared(inputToSat);
+    bm->ASTNodeStats("After floating-point lowering: ", inputToSat);
 
-    if (equivs.size() > 0)
-    {
-      /* These nodes have equivalent AIG representations, so even though they
-       * have different
-       * word level expressions they are identical semantically. So we pick one
-       * of the ASTnodes
-       * and replace the others with it.
-       * TODO: I replace with the lower id node, sometimes though we replace
-       * with much more
-       * difficult looking ASTNodes.
-      */
-      ASTNodeMap cache;
-      inputToSat = SubstitutionMap::replace(
-          inputToSat, equivs, cache, bm->defaultNodeFactory, false, true);
-      bm->ASTNodeStats(bb_message.c_str(), inputToSat);
-    }
-
-    if (fromTo.size() > 0)
-    {
-      ASTNodeMap cache;
-      inputToSat = SubstitutionMap::replace(inputToSat, fromTo, cache,
-                                            bm->defaultNodeFactory);
-      bm->ASTNodeStats(bb_message.c_str(), inputToSat);
-    }
-    
-    bitblasted_difficulty = bitblast_nodemgr.totalNumberOfNodes();
+    // Everything downstream works on the lowered form, so the snapshot that
+    // difficulty reversion later compares against has to describe that form
+    // rather than the much smaller word-level FP syntax. Retaken here because
+    // the recompute below is skipped for array problems.
+    initial_difficulty_score = difficulty.score(inputToSat, bm);
   }
-
 
   if (!arrayops || bm->UserFlags.array_difficulty_reversion)
   {
     initial_difficulty_score = difficulty.score(inputToSat, bm);
   }
-
-  if (bitblasted_difficulty != -1 && bm->UserFlags.stats_flag)
-    cout << "Initial Bitblasted size:" << bitblasted_difficulty << endl;
 
   if (bm->UserFlags.stats_flag)
     cout << "Difficulty After Size reducing:" << initial_difficulty_score
@@ -476,6 +571,20 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
       if (bm->UserFlags.simplify_to_constants_only)
       {    
           auto constants = simp->FindConsts_TopLevel(inputToSat, false);
+
+          // These replacements are not recorded in the solver map, so
+          // a symbol the array-equality procedure depends on must not
+          // be replaced away.
+          if (extActive)
+            for (ASTNodeMap::iterator cit = constants.begin();
+                 cit != constants.end();)
+            {
+              if (cit->first.GetKind() == SYMBOL &&
+                  ext->isProtected(cit->first))
+                cit = constants.erase(cit);
+              else
+                ++cit;
+            }
 
           if (bm->UserFlags.stats_flag)
                 cerr << "constants found:" << constants.size() << endl;
@@ -564,30 +673,12 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   bm->TermsAlreadySeenMap_Clear();
 
-  long final_difficulty_score = difficulty.score(inputToSat, bm);
+  int64_t final_difficulty_score = difficulty.score(inputToSat, bm);
 
-  bool worse = false;
-  if (final_difficulty_score > .8 * initial_difficulty_score)
-    worse = true;
-
-  // It's of course very wasteful to do this! Later I'll make it reuse the
-  // work..We bit-blast again, in order to throw it away, so that we can
-  // measure whether the number of AIG nodes is smaller. The difficulty score
-  // is sometimes completelywrong, the sage-app7 are the motivating examples.
-  // The other way to improve it would be to fix the difficulty scorer!
-  if (!worse && (bitblasted_difficulty != -1))
-  {
-    BBNodeManagerAIG bitblast_nodemgr;
-    BitBlaster<BBNodeAIG, BBNodeManagerAIG> bb(
-        &bitblast_nodemgr, simp, bm->defaultNodeFactory, &(bm->UserFlags));
-    bb.BBForm(inputToSat);
-    int newBB = bitblast_nodemgr.totalNumberOfNodes();
-    if (bm->UserFlags.stats_flag)
-      cerr << "Final BB Size:" << newBB << endl;
-
-    if (bitblasted_difficulty < newBB)
-      worse = true;
-  }
+  // Simplification has to have taken a fifth off the score to count as having
+  // helped. Written as an assignment now that the AIG node count is gone: it
+  // was the second of the two things that could set this.
+  const bool worse = final_difficulty_score > .8 * initial_difficulty_score;
 
   if (bm->UserFlags.stats_flag)
   {
@@ -651,9 +742,49 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   }
   revert.reset(NULL);
 
-  inputToSat = arrayTransformer->TransformFormula_TopLevel(inputToSat);
-  bm->ASTNodeStats("after transformation: ", inputToSat);
+  // A pre-view pass may already have proved the formula false. In that
+  // case no candidate or bound graph is needed; any satisfiable active
+  // candidate is required below to have passed preparation and binding.
+  const bool extPrepared = extActive && !inputToSat.isConstant();
+  if (extPrepared)
+  {
+    // Array equality: final preparation, immediately before the one
+    // main array transform. Recover the current equality operands,
+    // collect and freeze the complete array graph (including retained
+    // array-valued if-then-elses), and conjoin the naming equations that
+    // give future lemma leaves SAT variables.
+    inputToSat = ext->prepare(inputToSat);
+    bm->ASTNodeStats("after extensionality preparation: ", inputToSat);
+  }
+
+  // ARRAY_EQ is a user-facing, solve-boundary node only.  Check the exact
+  // root handed to the ordinary array transformer so that no future
+  // preparation rewrite can accidentally leak opaque equality semantics
+  // into code which has no case for it.  This barrier is worth its walk,
+  // but only where the node it looks for can exist: with the option off
+  // the factory never built one, so a query that never enabled the
+  // feature pays nothing.
+  if (bm->UserFlags.enable_array_equality &&
+      containsOpaqueArrayEquality(inputToSat))
+    FatalError("array-equality: an opaque equality reached the final array "
+               "transformation boundary",
+               inputToSat);
+
+  // extPrepared implies extActive, and an active registry counts as array
+  // operations above -- so a prepared registry always reaches this transform.
+  // bindAfterTransform below reads the map only this call populates, so
+  // skipping it for a prepared registry would silently bind no reads.
+  assert(!extPrepared || arrayops);
+
+  if (arrayops)
+  {
+    inputToSat = arrayTransformer->TransformFormula_TopLevel(inputToSat);
+    bm->ASTNodeStats("after transformation: ", inputToSat);
+  }
   bm->TermsAlreadySeenMap_Clear();
+
+  if (extPrepared)
+    ext->bindAfterTransform(arrayTransformer);
 
   bm->UserFlags.optimize_flag = optimize_enabled;
 
@@ -674,6 +805,17 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
 
   const bool maybeRefinement = arrayops && !bm->UserFlags.ackermannisation;
 
+  // Must run before the ConstantBitPropagation object below is built: cb's
+  // fixed-point map has to describe the exact tree handed to ToSATAIG, and a
+  // rewrite between the two leaves nodes the propagator has never seen, which
+  // BitBlaster's checkAtFixedPoint assertion rejects.
+  if (bm->UserFlags.enable_common_subsum)
+  {
+    CommonSubSum css(bm, bm->defaultNodeFactory);
+    inputToSat = css.topLevel(inputToSat);
+    bm->ASTNodeStats("After Common Sub-sum Extraction: ", inputToSat);
+  }
+
   simplifier::constantBitP::ConstantBitPropagation* cb = NULL;
   std::unique_ptr<simplifier::constantBitP::ConstantBitPropagation> cleaner;
 
@@ -693,7 +835,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   }
 
   ToSATAIG toSATAIG(bm, cb, arrayTransformer);
-  ToSATBase* satBase = bm->UserFlags.traditional_cnf ? tosat : &toSATAIG;
+  ToSATBase* satBase = &toSATAIG;
 
   if (bm->soft_timeout_expired)
     return SOLVER_TIMEOUT;
@@ -704,8 +846,15 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
     bm->print_stats();
 
   // If it doesn't contain array operations, use ABC's CNF generation.
-  res = Ctr_Example->CallSAT_ResultCheck(NewSolver, inputToSat, original_input,
-                                         satBase, maybeRefinement);
+  // semantic_input decides the verdict; original_input -- the same query
+  // with its opaque array equalities still in place -- is what
+  // --check-counterexample re-evaluates, so the check covers the Boolean
+  // skeleton the lowering rebuilt rather than repeating the question
+  // just answered. The equalities themselves are checked against the
+  // published array cells, not re-evaluated here.
+  res = Ctr_Example->CallSAT_ResultCheck(NewSolver, inputToSat, semantic_input,
+                                         original_input, satBase,
+                                         maybeRefinement);
 
   if (bm->soft_timeout_expired)
   {
@@ -730,15 +879,50 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input)
   assert(arrayops);
   assert(!bm->UserFlags.ackermannisation); // Refinement must be enabled too.
 
-  res = Ctr_Example->SATBased_ArrayReadRefinement(NewSolver, original_input,
-                                                  satBase);
-  if (SOLVER_UNDECIDED != res)
+  // Refinement driver. In an active equality solve the extensionality
+  // checker owns the complete array graph, so each undecided candidate
+  // must carry a pending theory lemma and legacy read refinement is
+  // never entered. Without an active equality, retain STP's ordinary
+  // read-refinement path unchanged.
+  while (true)
   {
-    if (toSATAIG.cbIsDestructed())
-      cleaner.release();
+    if (extActive)
+    {
+      if (!ext->hasPendingLemma())
+        FatalError("array-equality: an active refinement round has neither "
+                   "a decision nor a pending theory lemma");
+      ext->encodePendingLemmas(NewSolver, satBase);
+      res = Ctr_Example->CallSAT_ResultCheck(NewSolver, bm->ASTTrue,
+                                             semantic_input, original_input,
+                                             satBase, true);
+    }
+    else
+    {
+      res = Ctr_Example->SATBased_ArrayReadRefinement(NewSolver,
+                                                      semantic_input, satBase);
+    }
 
-    CountersAndStats("print_func_stats", bm);
-    return res;
+    if (SOLVER_UNDECIDED != res)
+    {
+      if (toSATAIG.cbIsDestructed())
+        cleaner.release();
+
+      CountersAndStats("print_func_stats", bm);
+      return res;
+    }
+
+    // Refinement reached no decision but the soft timeout has expired:
+    // report the timeout instead of iterating further (or falling into
+    // the fatal error below when nothing more is pending).
+    if (bm->soft_timeout_expired)
+    {
+      if (toSATAIG.cbIsDestructed())
+        cleaner.release();
+      return SOLVER_TIMEOUT;
+    }
+
+    if (!extActive)
+      break;
   }
 
   FatalError("TopLevelSTPAux: reached the end without proper conclusion:"

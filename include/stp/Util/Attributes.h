@@ -36,9 +36,29 @@ THE SOFTWARE.
 #define ATTR_NORETURN
 #endif
 
+// The DLL_PUBLIC / DLL_LOCAL block below is duplicated verbatim in
+// include/stp/c_interface.h, and deliberately so: c_interface.h is the only
+// header STP installs, and this header ships nowhere, so the public C header
+// cannot include it. Do not "deduplicate" the two -- that would leave the
+// installed header with no definition of DLL_PUBLIC. Keep them in sync instead.
 #if defined(_MSC_VER)
-// NOTE: for now, we need STP_SHARED_LIB for clients of the statically linked
-// STP library, for which linking fails when DLL_PUBLIC is __declspec(dllimport).
+// MSVC symbol visibility. Two macros drive it, both set by lib/CMakeLists.txt:
+//
+//   STP_SHARED_LIB  libstp is a DLL. Defined only when BUILD_SHARED_LIBS is ON:
+//                   for the library's own sources, and, through the exported
+//                   target's interface, for clients that link it.
+//   STP_EXPORTS     this translation unit is part of libstp itself, rather than
+//                   a client compiling against these headers.
+//
+// A static build defines neither and gets an empty DLL_PUBLIC. That is the only
+// expansion that links for static: a static client that saw dllimport would
+// fail at link time. A shared build gets dllexport while the library is being
+// compiled and dllimport for everyone else.
+//
+// The mechanism is currently dormant -- no shared MSVC build of STP is produced
+// (the only Windows CI job is STATICCOMPILE=ON, which forces BUILD_SHARED_LIBS
+// OFF), so neither __declspec arm is ever taken. It is kept correct so that
+// enabling a Windows DLL build later works.
 #if defined(STP_SHARED_LIB) && defined(STP_EXPORTS)
 // This is visible when building the STP library as a DLL.
 #define DLL_PUBLIC __declspec(dllexport)
@@ -60,38 +80,43 @@ THE SOFTWARE.
 #define DLL_LOCAL
 #endif
 
-//Defining THREAD_LOCAL
+// Defining THREAD_LOCAL_IE, the storage class STP uses for every one of its
+// mutable globals. "IE" is the initial-exec TLS model: the variable lives at a
+// fixed offset from the thread pointer instead of being reached through a
+// __tls_get_addr call into the dynamic loader on every access. Thread-safety
+// is identical either way -- one copy per thread -- only the addressing
+// differs, so this is the right default for all of them, not just the hot
+// ones. The cost is that initial-exec variables are allocated out of the
+// process's static TLS surplus; that is fine for the stp binary and for
+// libstp when it is in the initial load set or dlopen'd early, which are the
+// normal cases. Configure with -DUSE_THREAD_LOCAL=OFF for plain globals.
 #if !USE_THREAD_LOCAL
-#define THREAD_LOCAL
+#define STP_THREAD_LOCAL
 #elif __cplusplus >= 201103L
-#define THREAD_LOCAL thread_local
+#define STP_THREAD_LOCAL thread_local
 #elif defined _WIN32 && (defined _MSC_VER || defined __ICL ||                  \
                          defined __DMC__ || defined __BORLANDC__)
 
 //********************
-// For windows, this does not work, DLL_PUBLIC and THREAD_LOCAL together die
+// For windows, this does not work, DLL_PUBLIC and thread-local together die
 //********************
-//#define THREAD_LOCAL __declspec(thread)
-#define THREAD_LOCAL
+//#define STP_THREAD_LOCAL __declspec(thread)
+#define STP_THREAD_LOCAL
 
 /* note that ICC (linux) and Clang are covered by __GNUC__ */
 #elif defined __GNUC__ || defined __SUNPRO_C || defined __xlC__
-#define THREAD_LOCAL __thread
+#define STP_THREAD_LOCAL __thread
 #else
-#error "Cannot define THREAD_LOCAL"
+#error "Cannot define STP_THREAD_LOCAL"
 #endif
 
-// THREAD_LOCAL_IE: a thread-local requesting the initial-exec TLS model,
-// which is accessed by a fixed offset instead of a __tls_get_addr call.
-// Use only for hot thread-locals that libstp itself defines and that are
-// touched on the parse/node-creation fast path. Safe when libstp is in
-// the initial load set or dlopen'd before the using thread is created
-// (the normal cases: the stp binary and the Python bindings). glibc's
-// static-TLS surplus covers typical dlopen use too.
+// The initial-exec attribute is a GCC/Clang spelling; everywhere else the
+// macro degrades to a plain thread-local (or to nothing).
 #if USE_THREAD_LOCAL && (defined(__GNUC__) || defined(__clang__))
-#define THREAD_LOCAL_IE THREAD_LOCAL __attribute__((tls_model("initial-exec")))
+#define THREAD_LOCAL_IE                                                        \
+  STP_THREAD_LOCAL __attribute__((tls_model("initial-exec")))
 #else
-#define THREAD_LOCAL_IE THREAD_LOCAL
+#define THREAD_LOCAL_IE STP_THREAD_LOCAL
 #endif
 
 #endif //ATTRIBUTES_H_

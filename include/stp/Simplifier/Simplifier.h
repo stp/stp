@@ -37,6 +37,36 @@ DLL_PUBLIC ASTNode NonMemberBVConstEvaluator(STPMgr* _bm, const Kind k,
                                   const ASTVec& input_children,
                                   unsigned int inputwidth);
 
+// The two evaluators above, but straight on the bit-vectors, for callers
+// that don't want a hash-consed node built for the result.
+
+// The bit-vector term kinds. Only reads the arguments; returns a fresh
+// CBV the caller owns. outputWidth is the evaluated node's width, though
+// BVEXTRACT and BVCONCAT compute their own from the arguments.
+DLL_PUBLIC CBV NonMemberBVConstEvaluator(const Kind k,
+                                         const std::vector<CBV>& args,
+                                         unsigned outputWidth);
+
+// The predicate kinds over two bit-vector arguments: the comparisons,
+// equality, boolean extraction, and the overflow tests.
+DLL_PUBLIC bool NonMemberBVConstPredicateEvaluator(const Kind k, const CBV a,
+                                                   const CBV b);
+
+// The same two again, over values that fit in 64 bits, for callers that
+// evaluate in bulk. Each argument is masked to its width; argWidths gives
+// the width of each argument (used by the extends and concat -- the
+// other kinds take it from outputWidth or from the argument values).
+DLL_PUBLIC uint64_t NonMemberBVConstEvaluator64(
+    const Kind k, const std::vector<uint64_t>& args,
+    const std::vector<unsigned>& argWidths, unsigned outputWidth);
+
+// width is the width of a and b. BOOLEXTRACT's b is the bit index, and
+// the only predicate whose arguments' widths differ.
+DLL_PUBLIC bool NonMemberBVConstPredicateEvaluator64(const Kind k,
+                                                     const uint64_t a,
+                                                     const uint64_t b,
+                                                     const unsigned width);
+
 class Simplifier // not copyable
 {
   friend class counterexample;
@@ -46,10 +76,12 @@ private:
   ASTNode ASTTrue, ASTFalse, ASTUndefined;
 
   // Memo table for simplifcation. Key is unsimplified node, and
-  // value is simplified node.
-  ASTNodeMap* SimplifyMap;
-  ASTNodeMap* SimplifyNegMap;
-  ASTNodeMap MultInverseMap;
+  // value is simplified node. Flat maps: probed and written once per node
+  // visit across the whole recursive simplifier, never iterated except to
+  // filter constants (order-independent).
+  DenseNodeMap* SimplifyMap;
+  DenseNodeMap* SimplifyNegMap;
+  DenseNodeMap MultInverseMap;
 
   NodeFactory* nf;
 
@@ -61,8 +93,8 @@ public:
   {
     nf = _bm->defaultNodeFactory;
 
-    SimplifyMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
-    SimplifyNegMap = new ASTNodeMap(INITIAL_TABLE_SIZE);
+    SimplifyMap = new DenseNodeMap(INITIAL_TABLE_SIZE);
+    SimplifyNegMap = new DenseNodeMap(INITIAL_TABLE_SIZE);
 
     ASTTrue = nf->getTrue();
     ASTFalse = nf->getFalse();
@@ -78,14 +110,9 @@ public:
   Simplifier(Simplifier const&) = delete;
   Simplifier& operator=(Simplifier const&) = delete;
 
-  // Check the map passed to SimplifyTerm
-  bool CheckMap(ASTNodeMap* VarConstMap, const ASTNode& key, ASTNode& output);
-
   // functions for checking and updating simplification map
-  bool CheckSimplifyMap(const ASTNode& key, ASTNode& output, bool pushNeg,
-                        ASTNodeMap* VarConstMap = NULL);
-  void UpdateSimplifyMap(const ASTNode& key, const ASTNode& value, bool pushNeg,
-                         ASTNodeMap* VarConstMap = NULL);
+  bool CheckSimplifyMap(const ASTNode& key, ASTNode& output, bool pushNeg);
+  void UpdateSimplifyMap(const ASTNode& key, const ASTNode& value, bool pushNeg);
   bool CheckMultInverseMap(const ASTNode& key, ASTNode& output);
   void UpdateMultInverseMap(const ASTNode& key, const ASTNode& value);
 
@@ -101,7 +128,8 @@ public:
 
   DLL_PUBLIC ASTNode applySubstitutionMap(const ASTNode& n);
   DLL_PUBLIC ASTNode applySubstitutionMapUntilArrays(const ASTNode& n);
-  ASTNode applySubstitutionMapUntilArrays(const ASTNode& n, ASTNodeMap& cache);
+  ASTNode applySubstitutionMapUntilArrays(const ASTNode& n,
+                                          DenseNodeMap& cache);
 
   
   #ifdef _MSC_VER
@@ -119,19 +147,16 @@ public:
    * Simplification functions                                     *
    ****************************************************************/
 
-  ASTNodeMap FindConsts_TopLevel(const ASTNode& b, bool pushNeg, ASTNodeMap* VarConstMap = nullptr);
+  ASTNodeMap FindConsts_TopLevel(const ASTNode& b, bool pushNeg);
 
 
-  ASTNode SimplifyFormula_TopLevel(const ASTNode& a, bool pushNeg,
-                                   ASTNodeMap* VarConstMap = NULL);
+  ASTNode SimplifyFormula_TopLevel(const ASTNode& a, bool pushNeg);
 
   ASTNode SimplifyTerm_TopLevel(const ASTNode& b);
 
-  ASTNode SimplifyTerm(const ASTNode& inputterm,
-                       ASTNodeMap* VarConstMap = NULL);
+  ASTNode SimplifyTerm(const ASTNode& inputterm);
 
-  ASTNode SimplifyFormula(const ASTNode& a, bool pushNeg,
-                          ASTNodeMap* VarConstMap = NULL);
+  ASTNode SimplifyFormula(const ASTNode& a, bool pushNeg);
 
   ASTNode CreateSimplifiedEQ(const ASTNode& t1, const ASTNode& t2);
 
@@ -153,9 +178,9 @@ public:
     return substitutionMap.hasUnappliedSubstitutions();
   }
 
-  ASTNodeMap* Return_SolverMap() 
-  { 
-    return substitutionMap.Return_SolverMap(); 
+  DenseNodeMap* Return_SolverMap()
+  {
+    return substitutionMap.Return_SolverMap();
   }
 
   void haveAppliedSubstitutionMap()
@@ -194,21 +219,18 @@ private:
   ASTNode pullUpBVSX(const ASTNode output);
 
   ASTNode simplify_term_switch(const ASTNode& actualInputterm,
-                               ASTNode& inputterm, ASTNode& output,
-                               ASTNodeMap* VarConstMap, Kind k,
+                               ASTNode& inputterm, ASTNode& output, Kind k,
                                const unsigned int inputValueWidth);
 
   void ResetSimplifyMaps(void);
 
   bool hasBeenSimplified(const ASTNode& n);
 
-  ASTNode SimplifyFormula_NoRemoveWrites(const ASTNode& a, bool pushNeg,
-                                         ASTNodeMap* VarConstMap = NULL);
+  ASTNode SimplifyFormula_NoRemoveWrites(const ASTNode& a, bool pushNeg);
 
-  ASTNode SimplifyAtomicFormula(const ASTNode& a, bool pushNeg,
-                                ASTNodeMap* VarConstMap = NULL);
+  ASTNode SimplifyAtomicFormula(const ASTNode& a, bool pushNeg);
 
-  ASTNode ITEOpt_InEqs(const ASTNode& in1, ASTNodeMap* VarConstMap = NULL);
+  ASTNode ITEOpt_InEqs(const ASTNode& in1);
 
   ASTNode PullUpITE(const ASTNode& in);
 
@@ -218,29 +240,21 @@ private:
   ASTNode CreateSimplifiedINEQ(const Kind k, const ASTNode& a0,
                                const ASTNode& a1, bool pushNeg);
 
-  ASTNode SimplifyNotFormula(const ASTNode& a, bool pushNeg,
-                             ASTNodeMap* VarConstMap = NULL);
+  ASTNode SimplifyNotFormula(const ASTNode& a, bool pushNeg);
 
-  ASTNode SimplifyAndOrFormula(const ASTNode& a, bool pushNeg,
-                               ASTNodeMap* VarConstMap = NULL);
+  ASTNode SimplifyAndOrFormula(const ASTNode& a, bool pushNeg);
 
-  ASTNode SimplifyXorFormula(const ASTNode& a, bool pushNeg,
-                             ASTNodeMap* VarConstMap = NULL);
+  ASTNode SimplifyXorFormula(const ASTNode& a, bool pushNeg);
 
-  ASTNode SimplifyNandFormula(const ASTNode& a, bool pushNeg,
-                              ASTNodeMap* VarConstMap = NULL);
+  ASTNode SimplifyNandFormula(const ASTNode& a, bool pushNeg);
 
-  ASTNode SimplifyNorFormula(const ASTNode& a, bool pushNeg,
-                             ASTNodeMap* VarConstMap = NULL);
+  ASTNode SimplifyNorFormula(const ASTNode& a, bool pushNeg);
 
-  ASTNode SimplifyImpliesFormula(const ASTNode& a, bool pushNeg,
-                                 ASTNodeMap* VarConstMap = NULL);
+  ASTNode SimplifyImpliesFormula(const ASTNode& a, bool pushNeg);
 
-  ASTNode SimplifyIffFormula(const ASTNode& a, bool pushNeg,
-                             ASTNodeMap* VarConstMap = NULL);
+  ASTNode SimplifyIffFormula(const ASTNode& a, bool pushNeg);
 
-  ASTNode SimplifyIteFormula(const ASTNode& a, bool pushNeg,
-                             ASTNodeMap* VarConstMap = NULL);
+  ASTNode SimplifyIteFormula(const ASTNode& a, bool pushNeg);
 
   ASTNode CombineLikeTerms(const ASTNode& a);
   ASTNode CombineLikeTerms(const ASTVec& a);
@@ -253,10 +267,9 @@ private:
   // Replaces WRITE(Arr,i,val) with ITE(j=i, val, READ(Arr,j))
   ASTNode RemoveWrites_TopLevel(const ASTNode& term);
   ASTNode RemoveWrites(const ASTNode& term);
-  ASTNode SimplifyWrites_InPlace(const ASTNode& term,
-                                 ASTNodeMap* VarConstMap = NULL);
+  ASTNode SimplifyWrites_InPlace(const ASTNode& term);
 
-  ASTNode SimplifyArrayTerm(const ASTNode& term, ASTNodeMap* VarConstMap);
+  ASTNode SimplifyArrayTerm(const ASTNode& term);
 
 };
 } // end of namespace

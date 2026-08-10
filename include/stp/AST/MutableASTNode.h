@@ -37,9 +37,42 @@ namespace stp
 {
 class MutableASTNode
 {
-  static THREAD_LOCAL vector<MutableASTNode*> all;
+  static THREAD_LOCAL_IE vector<MutableASTNode*> all;
+
+  // Symbols that must never be reported unconstrained, however few
+  // occurrences they have in this graph. The active array-equality solve
+  // uses them as proxy/witness/name anchors or as leaves of future
+  // refinement lemmas, whose meanings and SAT variables must survive this
+  // pass.
+  // A caller that rewrites the graph on the strength of
+  // isUnconstrained() would delete such a definition, and the
+  // substitution map's refusal to record the replacement comes too
+  // late to undo it. Installed for the duration of a pass; NULL means
+  // no restriction.
+  static THREAD_LOCAL_IE const std::set<ASTNode>* untouchable;
 
 public:
+  // Scoped installer for the untouchable set; restores the previous
+  // value so passes cannot leak the restriction into each other.
+  class UntouchableScope
+  {
+    const std::set<ASTNode>* saved;
+
+  public:
+    explicit UntouchableScope(const std::set<ASTNode>* s) : saved(untouchable)
+    {
+      untouchable = s;
+    }
+    ~UntouchableScope() { untouchable = saved; }
+    UntouchableScope(const UntouchableScope&) = delete;
+    UntouchableScope& operator=(const UntouchableScope&) = delete;
+  };
+
+  static bool isUntouchable(const ASTNode& n)
+  {
+    return untouchable != NULL && untouchable->find(n) != untouchable->end();
+  }
+
   typedef std::unordered_set<MutableASTNode*> ParentsType;
   ParentsType parents;
 
@@ -59,9 +92,10 @@ public:
   static MutableASTNode* build(const ASTNode& n,
                                std::unordered_map<uint64_t, MutableASTNode*>& visited)
   {
-    if (visited.find(n.GetNodeNum()) != visited.end())
     {
-      return visited.find(n.GetNodeNum())->second;
+      const auto it = visited.find(n.GetNodeNum());
+      if (it != visited.end())
+        return it->second;
     }
 
     vector<MutableASTNode*> tempChildren;
@@ -101,7 +135,8 @@ public:
     for (ParentsType::iterator it = parents.begin(); it != parents.end(); it++)
     {
       vector<MutableASTNode*>::iterator it2 = (*it)->children.begin();
-      bool found = false;
+      // Only consumed by the assert, which an NDEBUG build compiles out.
+      [[maybe_unused]] bool found = false;
       for (; it2 != (*it)->children.end(); it2++)
       {
         assert(*it2 != NULL);
@@ -251,61 +286,6 @@ public:
     }
   }
 
-  // Variables that have >1 disjoint extract parents.
-  static void getDisjointExtractVariables(vector<MutableASTNode*>& result)
-  {
-    const int size = all.size();
-    for (int i = size - 1; i >= 0; i--)
-    {
-      if (!all[i]->isSymbol())
-        continue;
-
-      ParentsType* p = &(all[i]->parents);
-
-      if (p->size() == 1)
-        continue; // the regular case. Don't consider here.
-
-      ASTNode& node = all[i]->n;
-      // TODO remove alloca
-      bool* found = (bool*)alloca(sizeof(bool) * node.GetValueWidth());
-      for (size_t j = 0; j < node.GetValueWidth(); j++)
-        found[j] = false;
-
-      ParentsType::const_iterator it;
-      for (it = p->begin(); it != p->end(); it++)
-      {
-        ASTNode& parent_node = (*it)->n;
-        if (parent_node.GetKind() != BVEXTRACT)
-          break;
-
-        const int lb = parent_node[2].GetUnsignedConst();
-        const int ub = parent_node[1].GetUnsignedConst();
-        assert(lb <= ub);
-
-        int j;
-        for (j = lb; j <= ub; j++)
-        {
-          if (found[j])
-            break;
-          found[j] = true;
-        }
-
-        // if didn't make it to the finish. Then it overlaps.
-        if (j <= ub)
-        {
-          break;
-        }
-      }
-
-      if (it != p->end())
-        continue;
-
-      // All are extracts that don't overlap.
-      result.push_back(all[i]);
-    }
-    return;
-  }
-
   // Visit the parent before children. So that we hopefully prune parts of the
   // tree. Ie given  ( F(x_1,... x_10000) = v), where v is unconstrained,
   // we don't spend time exploring F(..), but chop it out.
@@ -337,6 +317,11 @@ public:
   bool isUnconstrained()
   {
     if (!isSymbol())
+      return false;
+
+    // A protected symbol is never free to be given a value here, no
+    // matter how it occurs; see the untouchable declaration above.
+    if (isUntouchable(n))
       return false;
 
     return parents.size() == 1;

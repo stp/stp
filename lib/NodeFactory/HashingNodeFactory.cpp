@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/NodeFactory/HashingNodeFactory.h"
 #include "stp/AST/AST.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/STPManager/STP.h"
 
 using namespace stp;
@@ -42,6 +43,43 @@ ASTNode HashingNodeFactory::CreateNode(const Kind kind,
   if (kind == NOT && back_children[0].GetKind() == NOT)
   {
     return back_children[0][0];
+  }
+
+  // Array equality: every front end's node creation bottoms out here. Keep
+  // the operands visible in an opaque node until query construction and
+  // function/let substitution are complete; TopLevelSTPAux lowers ARRAY_EQ
+  // before any ordinary preprocessing can encounter it.
+  const bool array_eq_from_source =
+      kind == EQ && back_children.size() == 2 &&
+      back_children[0].GetIndexWidth() > 0;
+  if (array_eq_from_source || kind == ARRAY_EQ)
+  {
+    if (back_children.size() != 2)
+      FatalError("array-equality: expected exactly two operands");
+
+    if (array_eq_from_source && !bm.UserFlags.enable_array_equality)
+      FatalError("STP cannot decide equality between whole array terms "
+                 "without --array-equality (the C API's vc_setFlag(vc, "
+                 "'x'), or Solver(array_equality=True) in Python).");
+
+    if (back_children[0].GetType() != ARRAY_TYPE ||
+        back_children[1].GetType() != ARRAY_TYPE ||
+        back_children[0].GetIndexWidth() !=
+            back_children[1].GetIndexWidth() ||
+        back_children[0].GetValueWidth() !=
+            back_children[1].GetValueWidth())
+      FatalError("array-equality: operands must have identical index and "
+                 "element widths");
+
+    const SourceSort left_sort = back_children[0].GetSourceSort();
+    const SourceSort right_sort = back_children[1].GetSourceSort();
+    if (left_sort.kind() != SourceSort::Kind::Array ||
+        right_sort.kind() != SourceSort::Kind::Array ||
+        left_sort != right_sort)
+      FatalError("array-equality: operands must have identical source sorts");
+
+    if (array_eq_from_source)
+      return CreateNode(ARRAY_EQ, back_children);
   }
   
   if (back_children.size()  <= 1 || !isCommutative(kind))
@@ -63,6 +101,13 @@ ASTNode HashingNodeFactory::CreateNode(const Kind kind,
   }
   else
   {
+    if (std::is_sorted(back_children.begin(), back_children.end(),
+                       stp::ArithLess{}))
+    {
+      // Don't create a new vector if it's already sorted.
+      return ASTNode(bm.LookupOrCreateInterior(kind, back_children));
+    }
+
     ASTVec children(back_children);
     // The Bitvector solver seems to expect constants on the RHS, variables on the
     // LHS.
@@ -76,7 +121,6 @@ ASTNode HashingNodeFactory::CreateNode(const Kind kind,
 ASTNode HashingNodeFactory::CreateTerm(Kind kind, unsigned int width,
                                        const ASTVec& children)
 {
-
   ASTNode n = CreateNode(kind, children);
   n.SetValueWidth(width);
 

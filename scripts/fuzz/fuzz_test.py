@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 # Copyright (c) 2013 Mate Soos
@@ -13,12 +13,9 @@
 # The above copyright notice and this permission notice shall be included in
 # all copies or substantial portions of the Software.
 
-from __future__ import with_statement  # Required in 2.5
-from __future__ import print_function
 import subprocess
 import os
 import re
-import commands
 import resource
 import time
 import struct
@@ -105,7 +102,7 @@ class Tester:
         # , "--SMTLIB1", "-m", "--SMTLIB2"
 
         # output options
-        # --output-CNF --output-bench --exit-after-CNF
+        # --output-CNF --exit-after-CNF
         opts = ["--disable-simplifications", "-w", "-a", "--disable-cbitp",
                 "--disable-equality",
                 "-r"]
@@ -155,9 +152,11 @@ class Tester:
 
         # if need time limit, then limit
         if needToLimitTime:
-            p = subprocess.Popen(command.rsplit(), stdout=subprocess.PIPE, preexec_fn=setlimits)
+            p = subprocess.Popen(command.rsplit(), stdout=subprocess.PIPE,
+                                 universal_newlines=True, preexec_fn=setlimits)
         else:
-            p = subprocess.Popen(command.rsplit(), stdout=subprocess.PIPE)
+            p = subprocess.Popen(command.rsplit(), stdout=subprocess.PIPE,
+                                 universal_newlines=True)
 
         # print time limit after child startup
         if options.verbose:
@@ -225,7 +224,7 @@ class Tester:
         print("Solving with other solver.. '%s'" % toexec)
         currTime = time.time()
         p = subprocess.Popen(toexec.rsplit(), stdout=subprocess.PIPE,
-                             preexec_fn=setlimits)
+                             universal_newlines=True, preexec_fn=setlimits)
         consoleOutput2 = p.communicate()[0]
 
         # if other solver was out of time, then we can't say anything
@@ -246,7 +245,8 @@ class Tester:
         command += " -h"
         if options.verbose:
             print("Running: %s" % command)
-        p = subprocess.Popen(command.rsplit(), stdout=subprocess.PIPE, preexec_fn=setlimits)
+        p = subprocess.Popen(command.rsplit(), stdout=subprocess.PIPE,
+                             universal_newlines=True, preexec_fn=setlimits)
         consoleOutput, _ = p.communicate()
         for line in consoleOutput.split("\n"):
             if "cryptominisat" in line:
@@ -329,7 +329,7 @@ class Tester:
             # create the fuzz file
             call = self.callFromFuzzer(directory, fuzzer, file_name)
             print("calling ", fuzzer, " : ", call)
-            out = commands.getstatusoutput(call)
+            out = subprocess.getstatusoutput(call)
 
             # check file
             self.check(fname=file_name, needToLimitTime=True)
@@ -342,7 +342,7 @@ tester = Tester()
 
 tester.check_unsat = True
 if options.num_todo:
-    for _ in xrange(options.num_todo):
+    for _ in range(options.num_todo):
         tester.fuzz_test()
 
 else:

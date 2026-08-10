@@ -41,9 +41,18 @@ namespace stp
 {
 using simplifier::constantBitP::FixedBits;
 
-using NodeToUnsignedIntervalMap = std::unordered_map<const ASTNode, UnsignedInterval*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
-using NodeToFixedBitsMap = std::unordered_map<const ASTNode, FixedBits*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
-using NodeToValueSetMap = std::unordered_map<const ASTNode, ValueSet*, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>;
+// Flat hash maps: buildMap probes and inserts these once per node, and
+// StrengthReduction probes them several times per node visited. They are
+// never iterated except by the destructor (order-independent deletes). Keys
+// are plain ASTNode (not const) because a dense map moves its elements; the
+// pointed-to domain objects live on the heap and are unaffected by moves.
+// NodeToUnsignedIntervalMap is defined in UnsignedIntervalAnalysis.h.
+using NodeToFixedBitsMap =
+    ankerl::unordered_dense::map<ASTNode, FixedBits*, ASTNode::ASTNodeHasher,
+                                 ASTNode::ASTNodeEqual>;
+using NodeToValueSetMap =
+    ankerl::unordered_dense::map<ASTNode, ValueSet*, ASTNode::ASTNodeHasher,
+                                 ASTNode::ASTNodeEqual>;
 
 class NodeDomainAnalysis
 {

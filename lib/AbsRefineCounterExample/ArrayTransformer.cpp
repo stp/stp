@@ -24,11 +24,11 @@ THE SOFTWARE.
 
 /* Transform:
  *
- * Converts signed Div/signed remainder/signed modulus into their
- * unsigned counterparts. Removes array selects and stores from
- * formula. Arrays are replaced by equivalent bit-vector variables
+ * Removes array selects and stores from the formula. Arrays are
+ * replaced by equivalent bit-vector variables
  */
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/Simplifier/Simplifier.h"
 #include <cassert>
 #include <cstdio>
@@ -47,7 +47,19 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
 
   assert(TransformMap == NULL);
   TransformMap = new ASTNodeMap(100);
+
+  ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  // Constant-bit propagation also creates local ArrayTransformers for
+  // scalar-only auxiliary formulas.  Only the transform of the frozen root
+  // participates in the extensionality hand-off; an early transform which
+  // actually encounters an owned READ still fails in TransformArrayRead.
+  const bool extPrepared =
+      ext != NULL && ext->activeInSolve() && ext->arrayGraphFrozen();
+  if (extPrepared)
+    ext->beginReadTransform(form);
   ASTNode result = TransformFormula(form);
+  if (extPrepared)
+    ext->finishReadTransform();
 
 #if 0
     {
@@ -76,13 +88,24 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
     {
       std::map<ASTNode, ArrayTransformer::ArrayRead>& mapper = iset->second;
 
+      // With array equality active, the index of a read in the owned
+      // graph must reach the bit-blaster even when it is a
+      // plain variable: once the read is replaced by its abstraction
+      // variable the index may occur nowhere else, yet future
+      // refinement lemmas will be encoded over its SAT variables. Such
+      // reads therefore take the fresh-index-variable path (which
+      // conjoins index = fresh) for every non-constant index.
+      const bool forceIndexAnchor =
+          ext != NULL && ext->activeInSolve() && ext->needsIndexAnchor(iset->first);
+
       for (std::map<ASTNode, ArrayTransformer::ArrayRead>::iterator it =
                mapper.begin();
            it != mapper.end(); it++)
       {
         const ASTNode& the_index = it->first;
 
-        if (the_index.isConstant() || the_index.GetKind() == SYMBOL)
+        if (the_index.isConstant() ||
+            (the_index.GetKind() == SYMBOL && !forceIndexAnchor))
         {
           it->second.index_symbol = the_index;
         }
@@ -118,139 +141,6 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
   }
 }
 
-// Translates signed BVDIV,BVMOD and BVREM into unsigned variety
-ASTNode ArrayTransformer::TranslateSignedDivModRem(const ASTNode& in,
-                                                   NodeFactory* nf)
-{
-  assert(in.GetChildren().size() == 2);
-
-  const ASTNode& dividend = in[0];
-  const ASTNode& divisor = in[1];
-  const unsigned len = in.GetValueWidth();
-
-  ASTNode hi1 = nf->CreateBVConst(32, len - 1);
-  ASTNode one = nf->CreateOneConst(1);
-  ASTNode zero = nf->CreateZeroConst(1);
-  // create the condition for the dividend
-  ASTNode cond_dividend =
-      nf->CreateNode(EQ, one, nf->CreateTerm(BVEXTRACT, 1, dividend, hi1, hi1));
-  // create the condition for the divisor
-  ASTNode cond_divisor =
-      nf->CreateNode(EQ, one, nf->CreateTerm(BVEXTRACT, 1, divisor, hi1, hi1));
-
-  if (SBVREM == in.GetKind())
-  {
-    // BVMOD is an expensive operation. So have the fewest bvmods
-    // possible. Just one.
-
-    // Take absolute value.
-    ASTNode pos_dividend =
-        nf->CreateTerm(ITE, len, cond_dividend,
-                       nf->CreateTerm(BVUMINUS, len, dividend), dividend);
-    ASTNode pos_divisor =
-        nf->CreateTerm(ITE, len, cond_divisor,
-                       nf->CreateTerm(BVUMINUS, len, divisor), divisor);
-
-    // create the modulus term
-    ASTNode modnode = nf->CreateTerm(BVMOD, len, pos_dividend, pos_divisor);
-
-    // If the dividend is <0 take the unary minus.
-    ASTNode n = nf->CreateTerm(ITE, len, cond_dividend,
-                               nf->CreateTerm(BVUMINUS, len, modnode), modnode);
-    return n;
-  }
-
-  // This is the modulus of dividing rounding to -infinity.
-  else if (SBVMOD == in.GetKind())
-  {
-
-    /*
-    (bvsmod s t) abbreviates
-        (let ((?msb_s ((_ extract |m-1| |m-1|) s))
-          (?msb_t ((_ extract |m-1| |m-1|) t)))
-        (let ((abs_s (ite (= ?msb_s #b0) s (bvneg s)))
-            (abs_t (ite (= ?msb_t #b0) t (bvneg t))))
-          (let ((u (bvurem abs_s abs_t)))
-          (ite (= u (_ bv0 m))
-             u
-          (ite (and (= ?msb_s #b0) (= ?msb_t #b0))
-             u
-          (ite (and (= ?msb_s #b1) (= ?msb_t #b0))
-             (bvadd (bvneg u) t)
-          (ite (and (= ?msb_s #b0) (= ?msb_t #b1))
-             (bvadd u t)
-             (bvneg u))))))))
-     */
-
-    // Take absolute value.
-    ASTNode pos_dividend =
-        nf->CreateTerm(ITE, len, cond_dividend,
-                       nf->CreateTerm(BVUMINUS, len, dividend), dividend);
-    ASTNode pos_divisor =
-        nf->CreateTerm(ITE, len, cond_divisor,
-                       nf->CreateTerm(BVUMINUS, len, divisor), divisor);
-
-    ASTNode urem_node = nf->CreateTerm(BVMOD, len, pos_dividend, pos_divisor);
-
-    // If the dividend is <0, then we negate the whole thing.
-    ASTNode rev_node =
-        nf->CreateTerm(ITE, len, cond_dividend,
-                       nf->CreateTerm(BVUMINUS, len, urem_node), urem_node);
-
-    // if It's XOR <0, and it doesn't perfectly divide, then add t (not its
-    // absolute value).
-    ASTNode xor_node = nf->CreateNode(XOR, cond_dividend, cond_divisor);
-    ASTNode neZ = nf->CreateNode(
-        NOT,
-        nf->CreateNode(EQ, rev_node,
-                       nf->CreateZeroConst(divisor.GetValueWidth())));
-    ASTNode cond = nf->CreateNode(AND, xor_node, neZ);
-    ASTNode n = nf->CreateTerm(ITE, len, cond,
-                               nf->CreateTerm(BVPLUS, len, rev_node, divisor),
-                               rev_node);
-
-    return n;
-  }
-  else if (SBVDIV == in.GetKind())
-  {
-    // now handle the BVDIV case
-    // if topBit(dividend) is 1 and topBit(divisor) is 0
-    //
-    // then output is -BVDIV(-dividend,divisor)
-    //
-    // elseif topBit(dividend) is 0 and topBit(divisor) is 1
-    //
-    // then output is -BVDIV(dividend,-divisor)
-    //
-    // elseif topBit(dividend) is 1 and topBit(divisor) is 1
-    //
-    // then output is BVDIV(-dividend,-divisor)
-    //
-    // else simply output BVDIV(dividend,divisor)
-
-    // Take absolute value.
-    ASTNode pos_dividend =
-        nf->CreateTerm(ITE, len, cond_dividend,
-                       nf->CreateTerm(BVUMINUS, len, dividend), dividend);
-    ASTNode pos_divisor =
-        nf->CreateTerm(ITE, len, cond_divisor,
-                       nf->CreateTerm(BVUMINUS, len, divisor), divisor);
-
-    ASTNode divnode = nf->CreateTerm(BVDIV, len, pos_dividend, pos_divisor);
-
-    // A little confusing. Only negate the result if they are XOR <0.
-    ASTNode xor_node = nf->CreateNode(XOR, cond_dividend, cond_divisor);
-    ASTNode n = nf->CreateTerm(ITE, len, xor_node,
-                               nf->CreateTerm(BVUMINUS, len, divnode), divnode);
-
-    return n;
-  }
-
-  FatalError("TranslateSignedDivModRem:"
-             "input must be signed DIV/MOD/REM",
-             in);
-}
-
 // Check that the transformations have occurred.
 void ArrayTransformer::assertTransformPostConditions(const ASTNode& term,
                                                      ASTNodeSet& visited)
@@ -261,7 +151,8 @@ void ArrayTransformer::assertTransformPostConditions(const ASTNode& term,
   if (!p.second)
     return;
 
-  const Kind k = term.GetKind();
+  // Only consumed by the asserts, which an NDEBUG build compiles out.
+  [[maybe_unused]] const Kind k = term.GetKind();
 
   // Check the array reads / writes have been removed
   assert(READ != k);
@@ -282,7 +173,7 @@ void ArrayTransformer::assertTransformPostConditions(const ASTNode& term,
 /********************************************************
  * TransformFormula()
  *
- * Get rid of DIV/MODs, ARRAY read/writes, FOR constructs
+ * Get rid of ARRAY read/writes
  ********************************************************/
 ASTNode ArrayTransformer::TransformFormula(const ASTNode& simpleForm)
 {
@@ -380,22 +271,30 @@ ASTNode ArrayTransformer::TransformFormula(const ASTNode& simpleForm)
       result = nf->CreateNode(k, vec);
       break;
     }
-    case PARAMBOOL:
+    case FP_LEQ:
+    case FP_LT:
+    case FP_GEQ:
+    case FP_GT:
+    case FP_EQ:
+    case FP_ISNORMAL:
+    case FP_ISSUBNORMAL:
+    case FP_ISZERO:
+    case FP_ISINFINITE:
+    case FP_ISNAN:
+    case FP_ISNEGATIVE:
+    case FP_ISPOSITIVE:
+    case FP_SMT_EQ:
     {
-      // If the parameteric boolean variable is of the form
-      // VAR(const), then convert it into a Boolean variable of the
-      // form "VAR(const)".
-      //
-      // Else if the paramteric boolean variable is of the form
-      // VAR(expression), then simply return it
-      if (BVCONST == simpleForm[1].GetKind())
+      ASTVec vec;
+      vec.reserve(simpleForm.Degree());
+
+      for (auto it = simpleForm.begin(), itend = simpleForm.end(); it != itend;
+           it++)
       {
-        result = bm->NewParameterized_BooleanVar(simpleForm[0], simpleForm[1]);
+        vec.push_back(TransformTerm(*it));
       }
-      else
-      {
-        result = simpleForm;
-      }
+
+      result = nf->CreateNode(k, vec);
       break;
     }
     default:
@@ -450,9 +349,19 @@ ASTNode ArrayTransformer::TransformTerm(const ASTNode& term)
       ASTNode els = term[2];
       cond = TransformFormula(cond);
       if (ASTTrue == cond)
+      {
+        ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+        if (ext != NULL && ext->activeInSolve())
+          ext->noteEliminatedReadSubtree(els);
         result = TransformTerm(thn);
+      }
       else if (ASTFalse == cond)
+      {
+        ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+        if (ext != NULL && ext->activeInSolve())
+          ext->noteEliminatedReadSubtree(thn);
         result = TransformTerm(els);
+      }
       else
       {
         thn = TransformTerm(thn);
@@ -535,6 +444,67 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
 
   ASTNode result;
 
+  // With array equality active, every read takes the direct
+  // read-abstraction path: mint or reuse the fresh variable for the
+  // (array, index) pair, whatever the array
+  // term is: variable, write, or if-then-else. Neither its write chain
+  // nor its if-then-else structure is expanded here. The lemmas-on-
+  // demand consistency checker owns read-over-write and read-over-
+  // if-then-else reasoning for these arrays (rules D/U and T-down/T-up),
+  // and it needs the structure and the abstraction variables intact.
+  {
+    ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+    if (ext != NULL && ext->activeInSolve())
+    {
+      if (!ext->arrayGraphFrozen())
+        FatalError("array-equality: the array transform ran before the "
+                   "complete array graph was frozen",
+                   term);
+      if (!ext->ownsArray(arrName))
+        FatalError("array-equality: a transformed read is absent from the "
+                   "complete owned array graph",
+                   term);
+      if (bm->UserFlags.ackermannisation)
+        FatalError("array-equality: eager Ackermannization reached the "
+                   "whole-graph read transform");
+
+      ArrType::const_iterator it;
+      if ((it = arrayToIndexToRead.find(arrName)) != arrayToIndexToRead.end())
+      {
+        std::map<ASTNode, ArrayRead>::const_iterator it2;
+        if ((it2 = it->second.find(readIndex)) != it->second.end())
+        {
+          if (it2->second.ite != it2->second.symbol)
+            FatalError("array-equality: a whole-graph read reused a legacy "
+                       "nested-ITE transformer row",
+                       term);
+          result = it2->second.ite;
+          ext->noteAbstractedRead(term, readIndex, it2->second.symbol);
+          (*TransformMap)[term] = result;
+          return result;
+        }
+      }
+
+      ASTNode CurrentSymbol = bm->CreateFreshVariable(
+          term.GetIndexWidth(), term.GetValueWidth(), "ext_read");
+
+      // Same reason as the read-refinement path below: this variable stands
+      // in for the read from here on and is a leaf, so the element format
+      // has to travel with it or the element reaches the blaster as a
+      // formatless bitvector. Setting a zero width (a non-float array) is a
+      // no-op.
+      CurrentSymbol.SetExpWidth(term.GetExpWidth());
+      CurrentSymbol.SetSigWidth(term.GetSigWidth());
+
+      result = CurrentSymbol;
+      arrayToIndexToRead[arrName].insert(
+          make_pair(readIndex, ArrayRead(result, CurrentSymbol)));
+      ext->noteAbstractedRead(term, readIndex, CurrentSymbol);
+      (*TransformMap)[term] = result;
+      return result;
+    }
+  }
+
   switch (arrName.GetKind())
   {
     case SYMBOL:
@@ -568,6 +538,14 @@ ASTNode ArrayTransformer::TransformArrayRead(const ASTNode& term)
       ASTNode CurrentSymbol =
           bm->CreateFreshVariable(term.GetIndexWidth(), term.GetValueWidth(),
                                   "array_" + std::string(arrName.GetName()));
+
+      // Reading an array of floats yields a float. The read node derived its
+      // format from the array, but this fresh variable stands in for the read
+      // from here on and is a leaf, so it has to carry the format itself --
+      // otherwise the element arrives at the blaster as a formatless
+      // bitvector.
+      CurrentSymbol.SetExpWidth(term.GetExpWidth());
+      CurrentSymbol.SetSigWidth(term.GetSigWidth());
 
       result = CurrentSymbol;
 

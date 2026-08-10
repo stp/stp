@@ -1,20 +1,53 @@
-on: [push, pull_request]
+# Pushes are only built on master. An unfiltered push event fires a second,
+# identical run alongside the pull_request one whenever the branch lives in
+# this repository rather than in a fork. The pull_request run is the one
+# worth keeping: it builds the branch merged with master, which is what
+# actually lands. Tags do not match either, and release.yml builds and
+# smoke-tests the tagged tree itself.
+#
+# A branch is therefore covered from the moment a pull request is opened.
+# Before that, and for re-running against a branch whose last push predates
+# a fix elsewhere, workflow_dispatch adds a "Run workflow" button on the
+# Actions tab that works against any branch.
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
 name: CI
+
+# A newer commit makes the runs still going for the previous one pointless.
+# github.ref is refs/pull/N/merge on a pull_request event, so a superseded
+# run of a pull request is cancelled. Pushes to master are left running, so
+# every commit there keeps a result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
 
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
-        name: [clang]
-        #name: [gcc, clang]
+        name: [gcc, clang]
         include:
-          #- name: gcc
-          #  env: CC=gcc CXX=g++
+          - name: gcc
+            env: CC=gcc CXX=g++
           - name: clang
             env: CC=clang CXX=clang++
+          # Release strips assertions -- the configuration users install.
+          # NB the floating-point tests run here without symfpu's internal
+          # checks; small significand widths stay unvalidated until
+          # martin-cs/symfpu#14.
+          - name: gcc-release
+            env: CC=gcc CXX=g++
+            build_type: Release
 
     name: ${{ matrix.name }}
-    runs-on: [ubuntu-latest]
+    runs-on: ubuntu-latest
+
+    env:
+      CCACHE_MAXSIZE: 800M
 
     steps:
 
@@ -28,12 +61,525 @@ jobs:
         sudo apt-get install -y \
           bison \
           build-essential \
+          ccache \
           clang \
           cmake \
           flex \
           gcc \
           git \
-          libboost-program-options-dev \
+          ninja-build \
+          python3 \
+          python3-pip \
+          python3-setuptools \
+          zlib1g-dev
+        sudo pip3 install -U lit
+
+    # Most of these are cloned without a pinned revision, so the cache key
+    # tracks what their default branches currently point at: a new upstream
+    # commit gets a new key rather than a stale cache.
+    - name: Resolve dependency revisions
+      id: deps-key
+      run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
+
+    - name: Restore dependencies
+      id: deps-cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          deps/install
+          deps/gtest
+          deps/OutputCheck
+        key: deps-x86_64-${{ steps.deps-key.outputs.key }}
+
+    - name: Dependencies
+      if: steps.deps-cache.outputs.cache-hit != 'true'
+      run: |
+        ./scripts/deps/setup-cms.sh
+        ./scripts/deps/setup-gtest.sh
+        ./scripts/deps/setup-outputcheck.sh
+
+    # Deliberately outside the cached Dependencies step: the pinned tarball
+    # is ~300KB and builds in seconds, so caching it would only complicate
+    # the cache key for nothing.
+    - name: LibBF (real-literal folding)
+      run: ./scripts/deps/setup-libbf.sh
+
+    # Keyed per run so every build writes a fresh entry; restore-keys picks
+    # up the most recent one from this branch, or from the base branch.
+    - name: Compiler cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ccache
+        key: ccache-${{ matrix.name }}-${{ github.run_id }}
+        restore-keys: ccache-${{ matrix.name }}-
+
+    - name: Configure
+      run: |
+        mkdir build
+        cd build
+        ${{ matrix.env }} cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DBUILD_EXTRA_TOOLS:BOOL=ON -DUSE_LIBBF:BOOL=ON -DLIBBF_DIR:PATH="$GITHUB_WORKSPACE/deps/libbf" -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+
+    - name: Build
+      run: |
+        ccache --zero-stats
+        cmake --build . --parallel "$(nproc)"
+        ccache --show-stats
+      working-directory: build
+
+    - name: Test
+      run: ctest --parallel "$(nproc)" -VV --output-on-failure
+      working-directory: build
+
+    # BUILD_EXTRA_TOOLS is off by default and nothing else compiles these five
+    # tools, so all of them had quietly stopped building: headers that were
+    # never self-contained, and calls into APIs that had changed shape. Getting
+    # them compiled again is most of the value here, which is why this job now
+    # configures them -- it already enables CryptoMiniSat, which
+    # rewrite_rule_gen requires.
+    #
+    # On top of that, four rewrite_rule_gen invocations. unit-test and test check
+    # themselves and need no input; assertions are live because CI leaves
+    # CMAKE_BUILD_TYPE unset, giving RelWithDebInfo with NDEBUG filtered out, so
+    # they really do assert. verify SAT-checks a small committed rule set, and
+    # fails if the file cannot be read or yields no rules -- without that guard a
+    # mistyped path falls back to stdin and "verifies" nothing. generate is a
+    # bounded rule search, here purely as a regression test against the stack
+    # overflow an unbounded one hits; it is not expected to find rules.
+    #
+    # The tool's remaining modes are unsuitable: expand, rewrite and write-out
+    # want a rules_new.smt2 that is not in the tree and exit 0 immediately
+    # without one, and the default no-argument mode is an interactive, unbounded
+    # search that recurses until the stack is exhausted.
+    - name: Extra tools smoke test
+      run: |
+        ./tools/rewrite_rule_gen/rewrite_rule_gen unit-test
+        ./tools/rewrite_rule_gen/rewrite_rule_gen test
+        ./tools/rewrite_rule_gen/rewrite_rule_gen verify \
+          ../tools/rewrite_rule_gen/test-rules.smt2
+        ./tools/rewrite_rule_gen/rewrite_rule_gen generate 5 3
+      working-directory: build
+
+    # The bindings walk the CPython AST, whose node types drift between
+    # releases: 3.14 removed NodeVisitor's visit_Num fallback, so every
+    # numeric literal in an @stp-decorated function began reaching
+    # ASTtoSTP.generic_visit and raising "Constant is not yet supported!".
+    # Nothing above catches that -- the build configures against whatever
+    # python3 the runner ships, which trails the newest release -- so run
+    # the binding tests once more against the newest one. stp.py.in has no
+    # configure-time substitutions, so the interpreter can be swapped
+    # under the same build tree; no second build is needed.
+    #
+    # Bump the version when a newer Python is released. The point is to be
+    # a step ahead of what the distributions ship, not to pin one version
+    # forever. Last on the gcc leg only: the interpreter is what is under
+    # test, not the compiler, and setup-python puts its own python3 first
+    # on PATH, which no later step should inherit.
+    - name: Set up the newest Python
+      if: matrix.name == 'gcc'
+      uses: actions/setup-python@v7
+      with:
+        python-version: '3.14'
+
+    - name: Python bindings against the newest Python
+      if: matrix.name == 'gcc'
+      run: |
+        python3 --version
+        python3 tests.py
+        python3 allocator_tests.py
+      working-directory: build/tests/api/python
+
+    # The three legs of this matrix configure identically and differ only in
+    # compiler and optimisation level, which makes them the pairs worth
+    # comparing: the CNF is a function of the input, so nothing about how the
+    # binary was built should reach it. The cnf-determinism job below diffs
+    # the manifests. See scripts/cnf-manifest.sh for what a difference means.
+    # Not on the clang leg. STP's own code builds its operands in a fixed
+    # order, but SymFPU -- which only the floating-point path reaches -- does
+    # not, and C++ leaves the order of an overloaded operator's operands to
+    # the implementation. gcc and clang each choose consistently but
+    # differently, so their CNF differs on nine of the corpus's inputs, all
+    # floating-point. That is an encoding difference, not a wrong answer, and
+    # the fix is to replace SymFPU rather than to rewrite it; see
+    # bench-hard/reports/2026-08-10-cnf-build-determinism.md. Comparing the
+    # two gcc legs still covers optimisation level and assertions, and holds
+    # for every input with nothing excluded.
+    - name: CNF manifest
+      if: matrix.name != 'clang'
+      run: |
+        ./scripts/cnf-manifest.sh build/stp tests/query-files 120 \
+          > "cnf-${{ matrix.name }}.manifest"
+        wc -l < "cnf-${{ matrix.name }}.manifest"
+
+    - uses: actions/upload-artifact@v4
+      if: matrix.name != 'clang'
+      with:
+        name: cnf-manifest-${{ matrix.name }}
+        path: cnf-${{ matrix.name }}.manifest
+        if-no-files-found: error
+
+  # Whether the CNF STP writes depends on anything but its input. It should
+  # not: a build-dependent CNF means something upstream is reading an address
+  # rather than a value -- iteration over a pointer-keyed hash table, a sort
+  # tie broken on node identity, an uninitialised read -- and that class of
+  # bug makes measurements irreproducible and bug reports unrepeatable while
+  # staying invisible to a suite that only checks sat/unsat.
+  #
+  # This reuses the builds the matrix above already made, so it costs one
+  # short job rather than any extra compilation.
+  cnf-determinism:
+    name: CNF determinism
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+
+    - uses: actions/download-artifact@v4
+      with:
+        pattern: cnf-manifest-*
+        merge-multiple: true
+
+    - name: Compare the manifests
+      run: |
+        set -u
+        ls -l ./*.manifest
+
+        # Every input is compared; there is no exclusion list.
+        #
+        # Every manifest is compared against the first, so a difference is
+        # reported once per differing build rather than once per pair.
+        reference=$(find . -maxdepth 1 -name '*.manifest' | LC_ALL=C sort | head -1)
+        echo "reference: $reference ($(wc -l < "$reference") inputs compared)"
+
+        failed=0
+        for manifest in $(find . -maxdepth 1 -name '*.manifest' | LC_ALL=C sort | tail -n +2); do
+          if diff -u "$reference" "$manifest" > delta.txt; then
+            echo "OK       $manifest matches $reference"
+          else
+            failed=1
+            echo "::error::$manifest and $reference disagree on the CNF for $(grep -c '^-' delta.txt) input(s)"
+            echo "--- $reference vs $manifest ---"
+            cat delta.txt
+          fi
+        done
+
+        if [ "$failed" -ne 0 ]; then
+          echo
+          echo "The CNF STP generates differs between builds of the same source."
+          echo "The CNF is a function of the input; a build-dependent one means"
+          echo "something upstream depends on node creation order or on an"
+          echo "address. Each line above names the input that provokes it:"
+          echo "  stp --array-equality --output-CNF --exit-after-CNF <input>"
+          echo "under both builds, then diff output_0.cnf."
+          exit 1
+        fi
+
+        echo "All builds agree on the CNF for every input compared."
+
+  build-cadical:
+    name: gcc (cadical ${{ matrix.cadical_tag }})
+    runs-on: ubuntu-latest
+
+    # Both supported CaDiCaL lines: 3.x compiles in --cadical-factor and its
+    # variable-translation machinery (ctest grows a factor-forced lit sweep),
+    # 2.x compiles the wrapper without it and has to keep building and
+    # declining the flag gracefully.
+    strategy:
+      fail-fast: false
+      matrix:
+        cadical_tag: [rel-3.0.1, rel-2.1.3]
+
+    env:
+      CCACHE_MAXSIZE: 800M
+
+    steps:
+
+    - uses: actions/checkout@v7
+      with:
+          submodules: 'true'
+
+    - name: Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bison \
+          build-essential \
+          ccache \
+          cmake \
+          flex \
+          gcc \
+          git \
+          ninja-build \
+          python3 \
+          python3-pip \
+          python3-setuptools \
+          zlib1g-dev
+        sudo pip3 install -U lit
+
+    - name: Resolve dependency revisions
+      id: deps-key
+      run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
+
+    # A different set of dependencies to the job above, so a different key
+    # prefix: the key describes their revisions, not which of them are in
+    # the tree, and restoring the wrong set would skip the step that builds
+    # what is missing.
+    - name: Restore dependencies
+      id: deps-cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          deps/cadical
+          deps/gtest
+          deps/OutputCheck
+        # The tag is part of the key by hand: cache-key.sh hashes the setup
+        # scripts, and the matrix override never changes their content.
+        key: deps-x86_64-cadical-${{ matrix.cadical_tag }}-${{ steps.deps-key.outputs.key }}
+
+    # CryptoMiniSat is left out: USE_CADICAL makes CaDiCaL the default
+    # solver, so building CMS as well would only add build time. MiniSat is
+    # left out too, deliberately: this job is the one that proves STP
+    # configures, builds and passes its tests with no MiniSat anywhere.
+    - name: Dependencies
+      if: steps.deps-cache.outputs.cache-hit != 'true'
+      run: |
+        CADICAL_TAG=${{ matrix.cadical_tag }} ./scripts/deps/setup-cadical.sh
+        ./scripts/deps/setup-gtest.sh
+        ./scripts/deps/setup-outputcheck.sh
+
+    # Outside the cached step, as in the main job: tiny and quick to build.
+    - name: LibBF (real-literal folding)
+      run: ./scripts/deps/setup-libbf.sh
+
+    - name: Compiler cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ccache
+        key: ccache-cadical-${{ matrix.cadical_tag }}-${{ github.run_id }}
+        restore-keys: ccache-cadical-${{ matrix.cadical_tag }}-
+
+    # CMAKE_INSTALL_PREFIX and PYTHON_LIB_INSTALL_DIR are set so that the
+    # install steps below land in the workspace rather than needing root.
+    # Both have to be settled here rather than at install time: the header
+    # and Python destinations are absolute paths baked into the cache, and
+    # so is the install RPATH this job checks. Neither affects what is built
+    # or tested - the Python tests run out of the build tree.
+    - name: Configure
+      run: |
+        mkdir build
+        mkdir -p "$GITHUB_WORKSPACE/install/pylib"
+        cd build
+        cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DUSE_LIBBF:BOOL=ON -DLIBBF_DIR:PATH="$GITHUB_WORKSPACE/deps/libbf" -DNOCRYPTOMINISAT:BOOL=ON -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_INSTALL_PREFIX:PATH="$GITHUB_WORKSPACE/install" -DPYTHON_LIB_INSTALL_DIR:PATH="$GITHUB_WORKSPACE/install/pylib" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+
+    - name: Build
+      run: |
+        ccache --zero-stats
+        cmake --build . --parallel "$(nproc)"
+        ccache --show-stats
+      working-directory: build
+
+    - name: Test
+      run: ctest --parallel "$(nproc)" -VV --output-on-failure
+      working-directory: build
+
+    # An installed binary has to find its own libraries whatever directory it
+    # is run from. The install RPATH used to be CMAKE_INSTALL_LIBDIR, which
+    # GNUInstallDirs leaves relative ("lib", or "lib64" where a distro sets
+    # it), so the loader resolved it against the *caller's* working directory:
+    # stp found libstp only when it happened to be run somewhere with a
+    # matching lib/ alongside, and preferred whatever was in there to its own
+    # install. Nothing caught it because the build tree links against absolute
+    # paths and every test ran from the build directory.
+    #
+    # LD_LIBRARY_PATH is deliberately left unset: this configuration has no
+    # solver shared libraries outside the install tree (CaDiCaL is a static
+    # archive), and finding install/lib is the property under test.
+    - name: Check the installed stp runs from an unrelated directory
+      run: |
+        cmake --install build
+
+        stp="$GITHUB_WORKSPACE/install/bin/stp"
+        readelf -d "$stp" | grep -E 'R(UN)?PATH' || echo "(no RPATH/RUNPATH)"
+
+        soname=$(readelf -d "$stp" |
+                 sed -n 's/.*NEEDED.*\[\(libstp\.so[^]]*\)\]/\1/p')
+        test -n "$soname"
+
+        cd "$(mktemp -d)"
+        "$stp" --version > /dev/null
+        echo "ok: runs from $PWD"
+
+        # ...and must not be diverted by a decoy sitting in ./lib. Loading
+        # this one fails outright ("file too short"), so a pass here means the
+        # loader never consulted it rather than that it got away with it.
+        mkdir lib && echo 'not an ELF file' > "lib/$soname"
+        "$stp" --version > /dev/null
+        echo "ok: ignored the decoy ./lib/$soname"
+
+    # examples/simple is not part of the main build - no add_subdirectory
+    # reaches it - so nothing used to compile it, and it sat at
+    # cmake_minimum_required(VERSION 2.8) until CMake 4 made that a hard
+    # error. Build it against an install tree, which is the arrangement its
+    # README documents and the one downstream users actually get: this
+    # exercises `cmake --install` and the installed STPConfig.cmake together.
+    # This job is the one to do it in because it configures with
+    # NOCRYPTOMINISAT, so the generated STPConfig.cmake has no
+    # find_dependency(cryptominisat5) to satisfy.
+    #
+    # The prefix comes from CMAKE_INSTALL_PREFIX at configure time rather than
+    # `cmake --install --prefix` here, because the latter does not relocate the
+    # headers: lib/CMakeLists.txt installs PUBLIC_HEADER to the absolute
+    # CMAKE_INSTALL_FULL_INCLUDEDIR, which is fixed when the cache is written.
+    - name: Build the example against the install tree
+      run: |
+        cmake --install build
+        cmake -S examples/simple -B build-example \
+          -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/install" \
+          -G Ninja
+        cmake --build build-example --parallel "$(nproc)"
+        LD_LIBRARY_PATH="$GITHUB_WORKSPACE/install/lib:$GITHUB_WORKSPACE/deps/install/lib" \
+          ./build-example/stp-example
+
+  # Until this job existed, the only static build in CI was the Windows one,
+  # so a break that only shows up when everything is linked into one
+  # executable could sit in master with every Linux job green.
+  #
+  # The steps are in a composite action because the release workflow builds
+  # the published binary with the same ones. Keeping a single copy is what
+  # stops the binary people download from drifting away from the one CI
+  # tests.
+  #
+  # Two configurations, because sharing the steps is not the same as building
+  # the same thing. The default one is what the rest of CI builds:
+  # RelWithDebInfo, -O2, assertions live. The release build is Release, which
+  # is -O3 -fno-tree-vectorize -g0 with ENABLE_ASSERTIONS off and so -DNDEBUG
+  # defined. No job here compiled that until now -- every Linux job leaves
+  # CMAKE_BUILD_TYPE unset and the Windows one configures without it too -- so
+  # anything that only breaks with assertions compiled out, or only at -O3,
+  # first got built when a release tag was pushed and it was too late to be
+  # cheap. Now a tag only has to rebuild what this job already proved.
+  build-static:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: static
+            build-type: ''
+            werror: 'ON'
+          # WERROR off to match the release exactly: see the composite
+          # action's input description for why the release does not use it.
+          - name: static, release
+            build-type: Release
+            werror: 'OFF'
+
+    name: gcc (${{ matrix.name }})
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - uses: actions/checkout@v7
+      with:
+          submodules: 'true'
+
+    - uses: ./.github/actions/build-static-linux
+      with:
+        build-type: ${{ matrix.build-type }}
+        werror: ${{ matrix.werror }}
+
+  # Floating-point support defaults to ON, backed by the vendored SymFPU
+  # submodule; every other job builds that default. This one opts out with
+  # -DENABLE_FLOATING_POINT=OFF and validates that the build still solves
+  # (a SAT-requiring bitvector query), that floating-point input is
+  # refused with the "built without floating-point support" diagnostic,
+  # and -- with testing enabled -- that the whole test suite's
+  # feature-off gating actually holds (the floating-point gtest suites,
+  # lit tests and Python tests must all skip, not fail).
+  build-nofp:
+    name: gcc (no-fp)
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - uses: actions/checkout@v7
+      with:
+          submodules: 'true'
+
+    - name: Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bison \
+          build-essential \
+          cmake \
+          flex \
+          git \
+          ninja-build \
+          python3 \
+          python3-pip \
+          python3-setuptools \
+          zlib1g-dev
+        sudo pip3 install -U lit
+
+    - name: Dependencies
+      run: |
+        ./scripts/deps/setup-cadical.sh
+        ./scripts/deps/setup-gtest.sh
+        ./scripts/deps/setup-outputcheck.sh
+
+    - name: Configure
+      run: |
+        mkdir build
+        cd build
+        cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DNOCRYPTOMINISAT:BOOL=ON -DWERROR:BOOL=ON -DENABLE_FLOATING_POINT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -G Ninja ..
+
+    - name: Build
+      run: cmake --build build --parallel "$(nproc)"
+
+    - name: Test
+      run: ctest --parallel "$(nproc)" -VV --output-on-failure
+      working-directory: build
+
+    - name: Smoke test
+      run: |
+        stp=build/stp
+        echo '(set-logic QF_BV)(declare-fun a () (_ BitVec 8))(declare-fun b () (_ BitVec 8))(assert (= (bvmul a b) #x21))(assert (bvult a b))(check-sat)' > test.smt2
+        out=$("$stp" test.smt2)
+        echo "bv output: '$out'"
+        [ "$out" = "sat" ]
+        echo '(set-logic QF_FP)(declare-fun x () (_ FloatingPoint 8 24))(assert (fp.gt (fp.add RNE x x) x))(check-sat)' > testfp.smt2
+        if outfp=$("$stp" testfp.smt2 2>&1); then
+          echo "expected a nonzero exit for floating-point input, got: '$outfp'"
+          exit 1
+        fi
+        echo "fp output: '$outfp'"
+        case "$outfp" in
+          *"without floating-point support"*) echo "OK: unsupported diagnostic present" ;;
+          *) echo "the floating-point diagnostic is missing"; exit 1 ;;
+        esac
+
+  # The MiniSat backend is opt-in (-DUSE_MINISAT) and no other Linux job
+  # enables it, so this is the configuration that keeps it honest: MiniSat
+  # as the only backend, which also makes it the default solver the whole
+  # test suite runs against. The USE_MINISAT-gated tests (the MiniSat
+  # gtest suites, the 'minisat' lit feature) only ever execute here.
+  build-minisat:
+    name: gcc (minisat only)
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - uses: actions/checkout@v7
+      with:
+          submodules: 'true'
+
+    - name: Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bison \
+          build-essential \
+          cmake \
+          flex \
+          git \
           ninja-build \
           python3 \
           python3-pip \
@@ -44,7 +590,6 @@ jobs:
     - name: Dependencies
       run: |
         ./scripts/deps/setup-minisat.sh
-        ./scripts/deps/setup-cms.sh
         ./scripts/deps/setup-gtest.sh
         ./scripts/deps/setup-outputcheck.sh
 
@@ -52,19 +597,32 @@ jobs:
       run: |
         mkdir build
         cd build
-        ${{ matrix.env }} cmake -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -G Ninja ..
+        cmake -DUSE_MINISAT:BOOL=ON -DNOCRYPTOMINISAT:BOOL=ON -DWERROR:BOOL=ON -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -G Ninja ..
 
     - name: Build
-      run: cmake --build . --parallel "$(nproc)"
-      working-directory: build
+      run: cmake --build build --parallel "$(nproc)"
 
     - name: Test
       run: ctest --parallel "$(nproc)" -VV --output-on-failure
       working-directory: build
 
+    # The substitution solver answers trivial queries during simplification,
+    # so this one is built to reach bitblasting, ABC's CNF generation and
+    # MiniSat itself.
+    - name: Smoke test
+      run: |
+        stp=build/stp
+        echo '(set-logic QF_BV)(declare-fun a () (_ BitVec 8))(declare-fun b () (_ BitVec 8))(assert (= (bvmul a b) #x21))(assert (bvult a b))(check-sat)' > test.smt2
+        out=$("$stp" --minisat test.smt2)
+        echo "minisat output: '$out'"
+        [ "$out" = "sat" ]
+        out=$("$stp" --simplifying-minisat test.smt2)
+        echo "simplifying-minisat output: '$out'"
+        [ "$out" = "sat" ]
+
   build-32bit:
     name: gcc (i386)
-    runs-on: [ubuntu-latest]
+    runs-on: ubuntu-latest
 
     steps:
 
@@ -72,9 +630,311 @@ jobs:
       with:
           submodules: 'true'
 
+    - name: Resolve dependency revisions
+      id: deps-key
+      run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
+
+    - name: Restore dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          deps/cadical
+          deps/gtest
+          deps/OutputCheck
+        # "cadical" in the prefix: the path set changed when the job moved
+        # off MiniSat, and the old entries (same script hashes) would
+        # otherwise hit forever without ever containing deps/cadical.
+        key: deps-i386-cadical-${{ steps.deps-key.outputs.key }}
+
+    # Inside the workspace so the bind mount carries it back out to the
+    # runner for the post-job save.
+    - name: Compiler cache
+      uses: actions/cache@v4
+      with:
+        path: .ccache
+        key: ccache-i386-${{ github.run_id }}
+        restore-keys: ccache-i386-
+
     - name: Build and test in a 32-bit container
       run: |
+        mkdir -p .ccache
         docker run --rm -v "$GITHUB_WORKSPACE":/stp -w /stp \
+          -e CCACHE_DIR=/stp/.ccache -e CCACHE_MAXSIZE=800M -e CCACHE_UMASK=022 \
           i386/debian:bookworm linux32 ./scripts/ci-32bit.sh
+
+    # The container writes as root; hand the cached trees back to the runner
+    # so the post-job save can read them.
+    - name: Reclaim ownership of cached trees
+      if: always()
+      run: |
+        mkdir -p .ccache deps
+        sudo chown -R "$(id -u):$(id -g)" .ccache deps
+
+  # The MSVC leg is the MiniSat one out of necessity, not preference: MSVC
+  # compiles neither CryptoMiniSat (POSIX-only oracle code) nor CaDiCaL
+  # (unguarded __builtin_* throughout), so MiniSat is the only backend a
+  # cl-built STP can link. The MinGW job below covers CaDiCaL on Windows.
+  build-windows-minisat:
+    name: windows (minisat, MSVC)
+    runs-on: windows-2025
+
+    env:
+      MINISAT_ROOT: ${{ github.workspace }}\minisat\install
+      # Build ABC single-threaded: its pthread/atomics code paths don't
+      # compile with MSVC. ABC's Makefile (run during CMake configure to
+      # extract flags) reads this from the environment.
+      ABC_USE_NO_PTHREADS: 1
+      # minisat and STP both predate CMP0074, so ZLIB_ROOT is ignored;
+      # pass the include dir and library explicitly instead.
+      # ZLIB_LIBRARY is located after the vcpkg install (see below).
+      ZLIB_INCLUDE_DIR: C:\vcpkg\installed\x64-windows-static\include
+
+    steps:
+
+    - uses: actions/checkout@v7
+      with:
+          submodules: 'true'
+
+    # Fetched straight from the upstream release rather than via
+    # 'choco install winflexbison3': community.chocolatey.org intermittently
+    # answers 503, and choco exits 0 when it does ("installed 0/0 packages"),
+    # so the miss surfaced minutes later as "Could NOT find BISON" during CMake
+    # configure. This also pins the toolchain, which the choco install did not.
+    #
+    # 2.5.24 is the version the choco package resolved to; the archive holds
+    # win_flex.exe, win_bison.exe and bison's data/ skeleton directory, which
+    # bison locates relative to its own path, so it is extracted as a unit.
+    - name: Install flex and bison
+      env:
+        WFB_VERSION: '2.5.24'
+        WFB_SHA256: '39c6086ce211d5415500acc5ed2d8939861ca1696aee48909c7f6daf5122b505'
+      run: |
+        $ErrorActionPreference = 'Continue'
+        $ProgressPreference = 'SilentlyContinue'
+        $url = "https://github.com/lexxmark/winflexbison/releases/download/v$env:WFB_VERSION/win_flex_bison-$env:WFB_VERSION.zip"
+        $zip = Join-Path $env:RUNNER_TEMP 'win_flex_bison.zip'
+        $dir = Join-Path $env:RUNNER_TEMP 'winflexbison'
+
+        $attempts = 3
+        $backoff = @(15, 45)   # seconds, between attempts
+        $ok = $false
+        for ($i = 1; $i -le $attempts; $i++) {
+          try {
+            "Downloading $url (attempt $i/$attempts)"
+            Remove-Item $zip -ErrorAction SilentlyContinue
+            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+            # A truncated body or an error page served with a 200 shows up here
+            # rather than as a thrown exception, so retry on mismatch too.
+            $hash = (Get-FileHash $zip -Algorithm SHA256).Hash
+            if ($hash -ne $env:WFB_SHA256.ToUpper()) {
+              throw "SHA256 mismatch: got $hash, expected $($env:WFB_SHA256.ToUpper())"
+            }
+            $ok = $true
+            break
+          } catch {
+            Write-Host "::warning::winflexbison download attempt $i failed: $_"
+            # Not sleeping after the final attempt: it only delays a failure
+            # that has already been decided.
+            if ($i -lt $attempts) {
+              $delay = $backoff[$i - 1]
+              "Retrying in $delay s..."
+              Start-Sleep -Seconds $delay
+            }
+          }
+        }
+        if (-not $ok) {
+          Write-Host "::error::Could not download winflexbison $env:WFB_VERSION after $attempts attempts."
+          exit 1
+        }
+
+        Expand-Archive -Path $zip -DestinationPath $dir -Force
+        # CMake's FindBISON/FindFLEX search for these names on Windows.
+        foreach ($exe in 'win_bison.exe', 'win_flex.exe') {
+          $path = Join-Path $dir $exe
+          if (-not (Test-Path $path)) {
+            Write-Host "::error::$exe missing from the extracted archive."
+            exit 1
+          }
+          # Also catches a binary that unpacked but cannot run at all. Both
+          # are cleared first: if the launch fails, the assignment never runs
+          # and $LASTEXITCODE is left untouched, so the previous binary's
+          # output and exit code would otherwise be read as this one's success.
+          $out = $null
+          $global:LASTEXITCODE = $null
+          try { $out = (& $path --version 2>&1 | Out-String).Trim() } catch { $out = $null }
+          if ($LASTEXITCODE -ne 0 -or -not $out) {
+            Write-Host "::error::$exe failed to run (exit $LASTEXITCODE): $out"
+            exit 1
+          }
+          ($out -split "`n")[0]
+        }
+        # Applies to subsequent steps only, hence the full paths just above.
+        $dir | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+    - name: Install zlib
+      run: |
+        vcpkg install zlib:x64-windows-static
+        dir C:\vcpkg\installed\x64-windows-static\lib
+        $lib = (Get-ChildItem C:\vcpkg\installed\x64-windows-static\lib -Filter *z*.lib | Select-Object -First 1).FullName
+        if (-not $lib) { throw "no zlib .lib found" }
+        "ZLIB_LIBRARY=$lib" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+    # The script's fetch/verify/patch half is portable (curl, sha256sum,
+    # tar and patch all ship with Git for Windows); the compile half is
+    # cc/ar, so it stops before that and cl takes over below.
+    - name: Fetch LibBF (real-literal folding)
+      shell: bash
+      run: LIBBF_NO_BUILD=1 ./scripts/deps/setup-libbf.sh
+
+    # vswhere ships on the runner images; Enter-VsDevShell is the
+    # supported way to a cl on PATH without a third-party action. The
+    # MSVC branch of the vendored-patch shims is what this compiles.
+    - name: Build LibBF (MSVC)
+      run: |
+        $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+        $vs = & $vswhere -latest -property installationPath
+        if (-not $vs) { throw "vswhere found no Visual Studio" }
+        Import-Module (Join-Path $vs "Common7\Tools\Microsoft.VisualStudio.DevShell.dll")
+        Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments '-arch=x64'
+        Set-Location deps\libbf
+        cl /nologo /std:c11 /O2 /c libbf.c cutils.c
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+        lib /nologo /OUT:bf.lib libbf.obj cutils.obj
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+        dir
+
+    - name: Build minisat
+      run: |
+        git clone --depth 1 https://github.com/stp/minisat
+        cd minisat
+        cmake -B build -A x64 -DSTATICCOMPILE=ON "-DCMAKE_POLICY_VERSION_MINIMUM=3.12" "-DCMAKE_INSTALL_PREFIX=$env:MINISAT_ROOT" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
+        cmake --build build --config Release --target install
+
+    - name: Configure
+      # NOCRYPTOMINISAT: CryptoMiniSat does not build with MSVC (CaDiCaL
+      # and CMS's oracle use POSIX-only code); upstream CMS only supports
+      # MinGW on Windows.
+      run: cmake -B build -A x64 -DSTATICCOMPILE=ON -DUSE_MINISAT=ON -DNOCRYPTOMINISAT=ON -DENABLE_PYTHON_INTERFACE=OFF -DUSE_LIBBF=ON "-DLIBBF_DIR=$env:GITHUB_WORKSPACE\deps\libbf" "-DMINISAT_LIBDIR=$env:MINISAT_ROOT" "-DMINISAT_INCLUDE_DIRS=$env:MINISAT_ROOT\include" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
+
+    - name: Build
+      run: cmake --build build --config Release
+
+    - name: Smoke test
+      run: |
+        dir build\bin
+        $stp = "build\bin\stp.exe"
+        "(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (= x #x2a))(check-sat)" | Out-File -Encoding ascii test.smt2
+        $out = & $stp test.smt2 2>&1 | Out-String
+        "solver output: '$($out.Trim())'"
+        # pwsh -Command collapses nonzero exit codes to 1, so log the real
+        # one (crash statuses like 0xC0000005 show up as large negatives).
+        "solver exit code: $LASTEXITCODE"
+        if ($out.Trim() -ne "sat") { exit 1 }
+        # The query above is answered by the substitution solver during
+        # simplification, so it never reaches the SAT backend. This one
+        # cannot be simplified away, so it exercises bitblasting, ABC's
+        # CNF generation and minisat.
+        "(set-logic QF_BV)(declare-fun a () (_ BitVec 8))(declare-fun b () (_ BitVec 8))(assert (= (bvmul a b) #x21))(assert (bvult a b))(check-sat)" | Out-File -Encoding ascii testsat.smt2
+        $out = & $stp testsat.smt2 2>&1 | Out-String
+        "sat-backend output: '$($out.Trim())'"
+        "sat-backend exit code: $LASTEXITCODE"
+        if ($out.Trim() -ne "sat") { exit 1 }
+        "(set-logic QF_FP)(declare-fun x () (_ FloatingPoint 8 24))(assert (fp.gt (fp.add RNE x x) x))(check-sat)" | Out-File -Encoding ascii testfp.smt2
+        $outfp = & $stp testfp.smt2 2>&1 | Out-String
+        "fp solver output: '$($outfp.Trim())'"
+        "fp solver exit code: $LASTEXITCODE"
+        if ($outfp.Trim() -ne "sat") { exit 1 }
+        # Real-literal folding through the MSVC-built LibBF: the decimal
+        # fold must equal its packed-bits spelling, and a rational under a
+        # symbolic rounding mode pinned to RTZ must pick that conversion.
+        "(set-logic QF_FP)(declare-fun x () (_ FloatingPoint 8 24))(assert (= x ((_ to_fp 8 24) RNE 1.5)))(assert (distinct x ((_ to_fp 8 24) #x3fc00000)))(check-sat)" | Out-File -Encoding ascii testlit.smt2
+        $outlit = & $stp testlit.smt2 2>&1 | Out-String
+        "real-literal output: '$($outlit.Trim())'"
+        "real-literal exit code: $LASTEXITCODE"
+        if ($outlit.Trim() -ne "unsat") { exit 1 }
+        "(set-logic QF_FP)(declare-fun x () (_ FloatingPoint 8 24))(declare-fun r () RoundingMode)(assert (= x ((_ to_fp 8 24) r (/ 1 3))))(assert (= r RTZ))(assert (distinct x ((_ to_fp 8 24) #x3eaaaaaa)))(check-sat)" | Out-File -Encoding ascii testrat.smt2
+        $outrat = & $stp testrat.smt2 2>&1 | Out-String
+        "rational/symbolic-rm output: '$($outrat.Trim())'"
+        "rational/symbolic-rm exit code: $LASTEXITCODE"
+        if ($outrat.Trim() -ne "unsat") { exit 1 }
+
+  # CaDiCaL on Windows. MSVC cannot compile CaDiCaL, but CaDiCaL's BUILD.md
+  # documents a MinGW build, so this leg compiles both CaDiCaL and STP with
+  # the MSYS2 UCRT64 toolchain: the Windows counterpart of the Linux cadical
+  # job, and CaDiCaL-only backend-wise.
+  build-windows-cadical:
+    name: windows (cadical, MinGW)
+    runs-on: windows-2025
+
+    env:
+      # Build ABC single-threaded, as the MSVC leg does: fewer moving parts
+      # than winpthreads, and nothing here needs a threaded ABC.
+      ABC_USE_NO_PTHREADS: 1
+      # ABC's arch_flags probe assumes 8-byte pointers mean 64-bit Linux and
+      # prints -DLIN64, whose ABC_PTRINT_T is 'long' -- 32 bits on LLP64
+      # MinGW, so pointer-carrying casts fail to compile. (MSVC never hit
+      # this: cl cannot build the probe the way the makefile invokes it, so
+      # the flags come out empty there.) This routes abc_global.h onto
+      # stdint.h's intptr_t instead of the probe's guess.
+      ABC_USE_STDINT_H: 1
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+
+    - uses: actions/checkout@v7
+      with:
+          submodules: 'true'
+
+    - uses: msys2/setup-msys2@v2
+      with:
+        msystem: UCRT64
+        update: false
+        install: >-
+          bison
+          flex
+          git
+          make
+          patch
+          mingw-w64-ucrt-x86_64-cmake
+          mingw-w64-ucrt-x86_64-gcc
+          mingw-w64-ucrt-x86_64-ninja
+
+    # CaDiCaL's own build system, with the flags its BUILD.md prescribes for
+    # MinGW: -lpsapi for the resource-usage calls, and only the 'cadical'
+    # target, since mobical does not compile on MinGW. The tag matches
+    # scripts/deps/setup-cadical.sh's pin; the script itself is not used
+    # because its plain 'make' would build mobical too.
+    - name: Build CaDiCaL
+      run: |
+        git clone https://github.com/arminbiere/cadical deps/cadical
+        cd deps/cadical
+        git checkout rel-3.0.1
+        ./configure -static -lpsapi
+        make -j"$(nproc)" cadical
+
+    - name: Configure
+      run: cmake -B build -G Ninja -DSTATICCOMPILE:BOOL=ON -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$(pwd)/deps/cadical" -DNOCRYPTOMINISAT:BOOL=ON -DENABLE_PYTHON_INTERFACE:BOOL=OFF .
+
+    - name: Build
+      run: cmake --build build --parallel "$(nproc)"
+
+    # The first query is answered during simplification; the second cannot
+    # be, so it exercises bitblasting, ABC's CNF generation and CaDiCaL.
+    - name: Smoke test
+      run: |
+        stp=$(find build -name 'stp.exe' | head -1)
+        echo "binary: $stp"
+        test -n "$stp"
+        echo '(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (= x #x2a))(check-sat)' > test.smt2
+        out=$("$stp" test.smt2)
+        echo "output: '$out'"
+        [ "$out" = "sat" ]
+        echo '(set-logic QF_BV)(declare-fun a () (_ BitVec 8))(declare-fun b () (_ BitVec 8))(assert (= (bvmul a b) #x21))(assert (bvult a b))(check-sat)' > testsat.smt2
+        out=$("$stp" testsat.smt2)
+        echo "sat-backend output: '$out'"
+        [ "$out" = "sat" ]
 
 # EOF

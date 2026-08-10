@@ -33,8 +33,10 @@ THE SOFTWARE.
 #include "stp/Simplifier/constantBitP/ConstantBitP_MaxPrecision.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
+#include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <vector>
 
 using std::endl;
 using std::cout;
@@ -57,7 +59,7 @@ namespace simplifier
 {
 namespace constantBitP
 {
-THREAD_LOCAL NodeToFixedBitsMap* PrintingHackfixedMap; // Used when debugging.
+THREAD_LOCAL_IE NodeToFixedBitsMap* PrintingHackfixedMap; // Used when debugging.
 
 const bool debug_cBitProp_messages = false;
 const bool output_mult_like = false;
@@ -149,6 +151,13 @@ ASTNodeMap ConstantBitPropagation::getAllFixed()
     if (BVCONCAT == node.GetKind())
       continue;
 
+    // Constant-bit propagation only reasons about Boolean and bit-vector
+    // values. A floating-point node has value width zero, so it is given a
+    // placeholder FixedBits that does not describe its packed contents; it must
+    // never be turned back into a constant here.
+    if (node.GetType() != BOOLEAN_TYPE && node.GetType() != BITVECTOR_TYPE)
+      continue;
+
     if (bits.isTotallyFixed())
     {
       toFrom.insert(make_pair(node, bitsToNode(node, bits)));
@@ -226,6 +235,30 @@ ConstantBitPropagation::ConstantBitPropagation(stp::STPMgr* mgr_,
   topFixed = false;
 }
 
+// Rewrite the children of "n" with the map, then rebuild "n" on top of
+// them. Starting one level down means an entry for "n" itself in the map
+// can't fire: a node is never its own descendant, so the map can safely
+// hold a fact about "n" while "n"'s fact is being rebuilt.
+static ASTNode replaceChildren(const ASTNode& n, ASTNodeMap& fromTo,
+                               ASTNodeMap& cache, NodeFactory* nf)
+{
+  const ASTChildren originals = n.GetChildren();
+
+  ASTVec children;
+  children.reserve(n.Degree());
+  for (const auto& c : originals)
+    children.push_back(SubstitutionMap::replace(c, fromTo, cache, nf));
+
+  if (std::equal(children.begin(), children.end(), originals.begin(),
+                 originals.end()))
+    return n;
+
+  if (BOOLEAN_TYPE == n.GetType())
+    return nf->CreateNode(n.GetKind(), children);
+
+  return nf->CreateTerm(n.GetKind(), n.GetValueWidth(), children);
+}
+
 // Both way propagation. Initialising the top to "true".
 // The hardest thing to understand is the two cases:
 // 1) If we get the fixed bits of a node, without assuming the top node is true,
@@ -287,9 +320,26 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
 
   ASTVec toConjoin;
 
-  // go through the fixedBits. If a node is entirely fixed.
-  // "and" it onto the top. Creates redundancy. Check that the
-  // node doesn't already depend on "top" directly.
+  // For each entirely fixed node: replace the node by its constant inside
+  // "top", and conjoin a fact that pins the node down, so the constraint
+  // isn't lost.
+  //
+  // Every fact is rewritten with every other fact's constant, so the
+  // constants discharge into the facts that pin them down. (The top-level
+  // conjuncts themselves are always fixed to true; without the rewriting,
+  // each conjunct would be erased by the replacement and then restored
+  // verbatim by its conjoined fact, putting the input back together.)
+  // All the rewriting shares one map and one cache: a fact's own map entry
+  // can't erase the fact, because the rewrite starts at the node's
+  // children, and a node is never its own descendant.
+
+  struct Fact
+  {
+    ASTNode node;
+    ASTNode constant;
+  };
+  std::vector<Fact> facts;
+
   NodeToFixedBitsMap::NodeToFixedBitsMapType::iterator it, itEnd;
 
   // iterates through all the pairs of node->fixedBits.
@@ -311,80 +361,66 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
     if (BVEXTRACT == node.GetKind() || BVCONCAT == node.GetKind())
       continue;
 
-    // toAssign: conjoin it with the top level.
-    // toReplace: replace all references to it (except the one conjoined to the
-    // top) with this.
-    ASTNode propositionToAssert;
-    ASTNode constantToReplaceWith;
-    // skip the assigning and replacing.
-    bool doAssign = false;
+    // If it is already contained in the fromTo map, then it's one of the
+    // values that have fully been determined (previously). Not conjoined.
+    if (fromTo.find(node) != fromTo.end())
+      continue;
 
+    // Only Boolean and bit-vector nodes can be replaced by a constant here; a
+    // floating-point node's FixedBits is a placeholder (see getAllFixed()).
+    if (node.GetType() != BOOLEAN_TYPE && node.GetType() != BITVECTOR_TYPE)
+      continue;
+
+    ASTNode constNode = bitsToNode(node, bits);
+
+    if (SYMBOL == node.GetKind())
     {
-      // If it is already contained in the fromTo map, then it's one of the
-      // values
-      // that have fully been determined (previously). Not conjoined.
-      if (fromTo.find(node) != fromTo.end())
-        continue;
-
-      ASTNode constNode = bitsToNode(node, bits);
-
-      if (node.GetType() == BOOLEAN_TYPE)
+      // Symbols the array-equality procedure depends on refuse substitution;
+      // conjoin the derived fixing instead, so the information is kept and the
+      // symbol stays in the formula.
+      if (!simplifier->UpdateSubstitutionMap(node, constNode) && conjoinToTop)
       {
-        if (SYMBOL == node.GetKind())
-        {
-          bool r = simplifier->UpdateSubstitutionMap(node, constNode);
-          assert(r);
-          doAssign = false;
-        }
-        else if (conjoinToTop && bits.getValue(0))
-        {
-          propositionToAssert = node;
-          constantToReplaceWith = constNode;
-          doAssign = true;
-        }
-        else if (conjoinToTop)
-        {
-          propositionToAssert = nf->CreateNode(NOT, node);
-          constantToReplaceWith = constNode;
-          doAssign = true;
-        }
+        if (BOOLEAN_TYPE == node.GetType())
+          toConjoin.push_back(bits.getValue(0) ? node
+                                               : nf->CreateNode(NOT, node));
+        else
+          toConjoin.push_back(nf->CreateNode(EQ, node, constNode));
       }
-      else if (node.GetType() == BITVECTOR_TYPE)
-      {
-        assert(((unsigned)bits.getWidth()) == node.GetValueWidth());
-        if (SYMBOL == node.GetKind())
-        {
-          bool r = simplifier->UpdateSubstitutionMap(node, constNode);
-          assert(r);
-          doAssign = false;
-        }
-        else if (conjoinToTop)
-        {
-          propositionToAssert = nf->CreateNode(EQ, node, constNode);
-          constantToReplaceWith = constNode;
-          doAssign = true;
-        }
-      }
-      else
-        FatalError("sadf234s");
     }
-
-    if (doAssign && top != propositionToAssert &&
-        !dependents->nodeDependsOn(top, propositionToAssert))
+    else if (conjoinToTop && node != top)
     {
-      assert(!constantToReplaceWith.IsNull());
-      assert(constantToReplaceWith.isConstant());
-      assert(propositionToAssert.GetType() == BOOLEAN_TYPE);
-      assert(node.GetValueWidth() == constantToReplaceWith.GetValueWidth());
+      assert(node.GetType() == BOOLEAN_TYPE ||
+             ((unsigned)bits.getWidth()) == node.GetValueWidth());
 
-      fromTo.insert(make_pair(node, constantToReplaceWith));
-      toConjoin.push_back(propositionToAssert);
-      assert(conjoinToTop);
+      fromTo.insert(make_pair(node, constNode));
+      facts.push_back({node, constNode});
     }
   }
 
-  // Write the constants into the main graph.
   ASTNodeMap cache;
+
+  for (const auto& fact : facts)
+  {
+    const ASTNode rebuilt = replaceChildren(fact.node, fromTo, cache, nf);
+
+    ASTNode prop;
+    if (BOOLEAN_TYPE == fact.node.GetType())
+      prop = (nf->getTrue() == fact.constant) ? rebuilt
+                                              : nf->CreateNode(NOT, rebuilt);
+    else
+      prop = nf->CreateNode(EQ, rebuilt, fact.constant);
+
+    // A fact that rewrites to true is implied by the others.
+    if (nf->getTrue() != prop)
+      toConjoin.push_back(prop);
+  }
+
+  // The fixedMap iteration order isn't defined; sort for determinism.
+  SortByExprNum(toConjoin);
+  toConjoin.erase(std::unique(toConjoin.begin(), toConjoin.end()),
+                  toConjoin.end());
+
+  // Write the constants into the main graph.
   ASTNode result = SubstitutionMap::replace(top, fromTo, cache, nf);
 
   if (0 != toConjoin.size())
@@ -428,7 +464,7 @@ void notHandled(const Kind& k)
 // add to the work list any nodes that take the result of the "n" node.
 void ConstantBitPropagation::scheduleUp(const ASTNode& n)
 {
-  for (const auto &it : *dependents->getDependents(n))
+  for (const auto &it : dependents->getDependents(n))
     workList->push(it);
 }
 
@@ -562,7 +598,7 @@ void ConstantBitPropagation::propagate()
           // rescheduled - except 'n' itself: the transfer function that
           // just ran left 'n' at its fixed point for exactly these child
           // values, so an immediate revisit derives nothing.
-          for (const auto& parent : *dependents->getDependents(n[i]))
+          for (const auto& parent : dependents->getDependents(n[i]))
             if (!(parent == n))
               workList->push(parent);
 
@@ -574,19 +610,10 @@ void ConstantBitPropagation::propagate()
   }
 }
 
-// get the current value from the map. If no value is in the map. Make a new
-// value.
-FixedBits* ConstantBitPropagation::getCurrentFixedBits(const ASTNode& n)
+// No value is in the map yet, so make a new one. The lookup that discovered
+// the miss is inlined into getCurrentFixedBits.
+FixedBits* ConstantBitPropagation::createFixedBits(const ASTNode& n)
 {
-  assert(NULL != fixedMap);
-
-  NodeToFixedBitsMap::NodeToFixedBitsMapType::iterator it =
-      fixedMap->map->find(n);
-  if (it != fixedMap->map->end())
-  {
-    return it->second;
-  }
-
   int bw;
   if (0 == n.GetValueWidth())
   {

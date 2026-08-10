@@ -23,7 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/SplitExtracts.h"
-#include "stp/Simplifier/SubstitutionMap.h"
+#include "stp/Simplifier/Simplifier.h"
 
 namespace stp
 {
@@ -51,41 +51,36 @@ namespace stp
     }
   }
 
-  ASTNode SplitExtracts::topLevel(const ASTNode& n)
-  { 
+  ASTNode SplitExtracts::topLevel(const ASTNode& n, Simplifier* simp)
+  {
     assert(bm.UserFlags.enable_split_extracts);
-
-    // TODO doesn't construct the model yet.
-    // It requires a messy implementation.
-    if (bm.UserFlags.construct_counterexample_flag)
-    {
-      if (bm.UserFlags.stats_flag)
-        std::cerr << "{Split Extracts} Disabled" << std::endl;
-      return n;
-    }
-
-    ASTNode result = n;
 
     introduced = 0;
     extractsFound =0;
+
+    bm.GetRunTimes()->start(RunTimes::SplitExtracts);
+
+    // Splitting records a definition of the symbol in the substitution map,
+    // which requires that the symbol isn't already a key of the map.
+    // After applying any pending substitutions, no symbol left in the
+    // formula is a key.
+    ASTNode result = simp->applySubstitutionMapAtTopLevel(n);
 
     // Needs the full global context to figure it out.
     // Think, we might be able to keep visited between invocations
     // of topLevel if no extracts are found?
     NodeToExtractsMap  nodeToExtracts;
 
-    bm.GetRunTimes()->start(RunTimes::SplitExtracts);
-
     std::unordered_set<uint64_t> visited;
-    buildMap(n,visited, nodeToExtracts);
+    buildMap(result, visited, nodeToExtracts);
 
     if (extractsFound > 0)
     {
-      ASTNodeMap fromTo;
+      bool substitutionsAdded = false;
 
       for (const auto& e: nodeToExtracts )
       {
-        const auto& symbol = e.first;
+        [[maybe_unused]] const auto& symbol = e.first;
         assert(symbol.GetKind() == SYMBOL);
 
         auto ranges = e.second;
@@ -94,18 +89,21 @@ namespace stp
           continue; // Don't want to split if there's just one.
 
         auto comp = [](const auto& p0, const auto& p1)
-        { 
-          return std::get<2>(p0) < std::get<2>(p1); 
+        {
+          return std::get<2>(p0) < std::get<2>(p1);
         };
 
         // Afterwards e.g. (4,0) (3,3) (8,5)
         sort(ranges.begin(), ranges.end(), comp);
 
+        // An extract is split out iff its range overlaps no other use of
+        // the symbol. Non-extract uses were recorded as covering every
+        // bit, so they block all splitting.
+        std::vector<std::pair<uint64_t, uint64_t>> toSplit; // (high, low)
         uint64_t highest = 0;
 
         for (unsigned i = 0; i < ranges.size(); i++)
         {
-          const auto extract = std::get<0>(ranges[i]);
           const auto high = std::get<1>(ranges[i]);
           const auto low = std::get<2>(ranges[i]);
           assert(high >= low);
@@ -132,20 +130,57 @@ namespace stp
 
           if (replace)
           {
-          assert(extract.GetKind() == BVEXTRACT);
-          assert(extract[0] == symbol);
-            const auto fresh = bm.CreateFreshVariable(0,high-low+1, "_STP");
-          fromTo.insert({extract,fresh});
-          introduced++;
+          assert(std::get<0>(ranges[i]).GetKind() == BVEXTRACT);
+          assert(std::get<0>(ranges[i])[0] == symbol);
+          toSplit.push_back({high, low});
           }
+        }
+
+        if (toSplit.empty())
+          continue;
+
+        // Rename the symbol piecewise: a fresh variable for each split
+        // range and for each gap between them. The one substitution map
+        // entry both rewrites the formula (a split extract over the concat
+        // simplifies to its fresh variable) and rebuilds the symbol's
+        // value during model construction.
+        const uint64_t width = symbol.GetValueWidth();
+        ASTNode concatenated;
+        const auto append = [&](const ASTNode& piece) {
+          if (concatenated.IsNull())
+            concatenated = piece;
+          else
+            concatenated = bm.defaultNodeFactory->CreateTerm(
+                BVCONCAT,
+                concatenated.GetValueWidth() + piece.GetValueWidth(), piece,
+                concatenated);
+        };
+
+        uint64_t nextBit = 0;
+        for (const auto& range : toSplit)
+        {
+          const uint64_t high = range.first;
+          const uint64_t low = range.second;
+          if (low > nextBit)
+            append(bm.CreateFreshVariable(0, low - nextBit, "_STP"));
+          append(bm.CreateFreshVariable(0, high - low + 1, "_STP"));
+          nextBit = high + 1;
+        }
+        if (nextBit < width)
+          append(bm.CreateFreshVariable(0, width - nextBit, "_STP"));
+
+        assert(concatenated.GetValueWidth() == width);
+
+        // Fails if the extensionality context protects the symbol.
+        if (simp->UpdateSubstitutionMapFewChecks(symbol, concatenated))
+        {
+          introduced += toSplit.size();
+          substitutionsAdded = true;
         }
       }
 
-      if (fromTo.size() > 0)
-      {
-        ASTNodeMap cache;
-        result = stp::SubstitutionMap::replace(n, fromTo, cache, bm.defaultNodeFactory);
-      }
+      if (substitutionsAdded)
+        result = simp->applySubstitutionMapAtTopLevel(result);
     }
 
     bm.GetRunTimes()->stop(RunTimes::SplitExtracts);

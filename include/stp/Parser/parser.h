@@ -51,6 +51,18 @@ DLL_PUBLIC void setSMT2In(FILE* file);
 // is driven interactively over a pipe, where block reads would deadlock.
 DLL_PUBLIC void setSMT2Interactive(bool enable);
 
+// Whether the SMT-LIB2 lexer recognises the floating-point keywords.
+// SMT-LIB reserves theory names per-logic, so they are live only under an
+// FP set-logic; outside one, names like "fp", "NaN" or "RNE" stay ordinary
+// symbols (QF_BV inputs legitimately declare such names). SMT2Parse()
+// starts each script with them off; the set-logic action flips them.
+void SMT2SetFloatTokens(bool enable);
+
+// The same question, for the one place that cannot be answered by the lexer
+// rules: define-sort's body is swallowed whole and re-tokenised by hand in
+// the grammar, so it has to consult the gate itself.
+bool SMT2FloatTokensActive();
+
 DLL_PUBLIC int SMTParse(void* AssertsQuery);
 DLL_PUBLIC int SMT2Parse();
 DLL_PUBLIC int CVCParse(void* AssertsQuery);

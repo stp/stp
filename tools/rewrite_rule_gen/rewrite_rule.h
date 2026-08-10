@@ -100,7 +100,9 @@ public:
 
   // The "from" and "to" should be ordered with the orderEquivalence function.
   Rewrite_rule(stp::STPMgr* bm, const stp::ASTNode& from_,
-               const stp::ASTNode& to_, const int t, int _id = -1)
+               // _id is only used by the #if 0 block below, but callers
+               // still pass it.
+               const stp::ASTNode& to_, const int t, int /*_id*/ = -1)
       : from(from_), to(to_)
   {
 #if 0
@@ -135,7 +137,7 @@ public:
   {
     mgr->soft_timeout_expired = false;
 
-    const long st = stp::getCurrentTime();
+    const int64_t st = stp::getCurrentTime();
     int checked_to = 0;
 
     // Start it verifying where we left off..
@@ -174,7 +176,8 @@ public:
     }
 
     if (getVerifiedToBits() <= checked_to)
-      setVerified(checked_to, getTime() + (stp::getCurrentTime() - st));
+      setVerified(checked_to,
+                  getTime() + static_cast<int>(stp::getCurrentTime() - st));
 
     // The timer might not have expired yet.
     setitimer(ITIMER_VIRTUAL, NULL, NULL);

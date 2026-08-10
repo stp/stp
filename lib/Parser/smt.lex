@@ -44,7 +44,7 @@
   extern int smterror (const char *msg);
 
   // File-static (local to this file) variables and functions
-  static THREAD_LOCAL std::string _string_lit;
+  static THREAD_LOCAL_IE std::string _string_lit;
   static char escapeChar(char c) {
     switch(c) {
     case 'n': return '\n';
@@ -215,9 +215,6 @@ bit{DIGIT}+     {
 
 "rotate_left"   { return BVROTATE_LEFT_TOK;}
 "rotate_right"   { return BVROTATE_RIGHT_TOK;} 
-
-"boolextract"   { return BOOLEXTRACT_TOK;}
-"boolbv"        { return BOOL_TO_BV_TOK;}
 
 (({LETTER})|(_)({ANYTHING}))({ANYTHING})*	{
   string str(smttext);

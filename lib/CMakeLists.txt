@@ -18,12 +18,43 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-# Enable symbol exports
-add_definitions(-D STP_EXPORTS)
+# Symbol visibility, see the DLL_PUBLIC block in include/stp/Util/Attributes.h
+# (duplicated in include/stp/c_interface.h). Both macros only ever do anything
+# under MSVC; the GNU/clang branch of that block tests neither of them, so on
+# every non-MSVC build these definitions are inert.
+#
+# STP_EXPORTS means "this translation unit is part of libstp", as opposed to a
+# client compiling against the installed headers. It must reach every source
+# that goes into the library, which is all of lib/ and its subdirectories --
+# hence directory scope here, ahead of the add_subdirectory() calls that create
+# the object libraries. It is deliberately not set for tools/, bindings/ or the
+# tests: those are clients of the library and want the import side.
+#
+# This used to read add_definitions(-D STP_EXPORTS). CMake's -D handling does
+# not match a bare -D followed by a separate argument, so neither token became a
+# compile definition; both fell through to the directory's COMPILE_OPTIONS and
+# only reached the compiler because they happened to stay adjacent on the
+# command line -- invisible to COMPILE_DEFINITIONS and to anything that inspects
+# it.
+add_compile_definitions(STP_EXPORTS)
+
+# STP_SHARED_LIB means "libstp is a DLL". Only then may the __declspec arms be
+# used: a static MSVC build that saw __declspec(dllimport) would fail to link,
+# which is why the #else fallback to an empty DLL_PUBLIC is the correct one for
+# static and must stay reachable. STATICCOMPILE forces BUILD_SHARED_LIBS OFF, so
+# static builds (including the Windows CI job) keep the empty expansion.
+#
+# Note this is currently dormant: no shared MSVC build of STP is produced, so
+# nothing has exercised the __declspec arms.
+if (BUILD_SHARED_LIBS)
+    add_compile_definitions(STP_SHARED_LIB)
+endif()
 
 add_subdirectory(Globals)
 add_subdirectory(AST)
 add_subdirectory(AbsRefineCounterExample)
+add_subdirectory(Extensionality)
+add_subdirectory(FloatBlaster)
 add_subdirectory(Simplifier)
 add_subdirectory(Printer)
 add_subdirectory(Parser)
@@ -47,8 +78,10 @@ set(stp_lib_targets
     AST
     stpmgr
     abstractionrefinement
+    extensionality
     tosat
     sat
+    floatblaster
     simplifier
     constantbv
     cinterface
@@ -89,9 +122,27 @@ add_library(stp
     ${stp_lib_objects}
 )
 
+# The directory-scope definitions above cover the object libraries this target
+# is assembled from. Repeating STP_EXPORTS as a PRIVATE requirement keeps it
+# attached to the library target itself rather than only to the directory, so it
+# still applies if sources are ever added to stp directly -- and, more to the
+# point, it documents that STP_EXPORTS is a build-of-the-library requirement and
+# must never become part of the link interface.
+#
+# STP_SHARED_LIB is the opposite: consumers need it too. A client compiling
+# against the installed c_interface.h must see STP_SHARED_LIB (so DLL_PUBLIC is
+# a __declspec) with STP_EXPORTS unset (so it resolves to dllimport). Putting it
+# in the INTERFACE requirements records it in the exported STPTargets.cmake, so
+# anything that links the imported stp target picks it up automatically, and
+# in-tree consumers (tools/, bindings/, tests/) get it for free.
+target_compile_definitions(stp PRIVATE STP_EXPORTS)
+if (BUILD_SHARED_LIBS)
+    target_compile_definitions(stp INTERFACE STP_SHARED_LIB)
+endif()
+
 # Set the public header so it will be installed
 set_target_properties(stp PROPERTIES
-    PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/c_interface.h"
+    PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/c_interface.h;${PROJECT_SOURCE_DIR}/include/stp/fp.hpp"
     VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     SOVERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
 )
@@ -107,32 +158,92 @@ else()
 endif()
 
 
-# -----------------------------------------------------------------------------
-# On non-windows systems a built static library cannot have another static
-# library linked to it. So this does not cause the Boost libraries to be
-# added to ``stp.a``. Instead what this does is tell CMake that anything
-# that we built that uses the ``stp`` target should also link in these
-# Boost libraries.
-#
-# So the stp executable and any clients of stp that use the exported CMake
-# targets (e.g. examples/simple) will know what to link in.
-#
-# Clients of stp that don't use CMake will have to link the Boost libraries
-# in manually.
-# -----------------------------------------------------------------------------
-# https://gitlab.kitware.com/cmake/cmake/-/issues/15415#note_633938
-
 # Configure ABC library build options
 set(READLINE_FOUND FALSE CACHE BOOL "Disable readline for ABC" FORCE)
 set(ABC_SKIP_TESTS ON CACHE BOOL "Skip ABC tests" FORCE)
 
-# Add ABC as a subdirectory
-add_subdirectory(extlib-abc)
+# ABC has no CMake cache variables for the options below: its CMakeLists runs
+# ABC's own Makefile to extract the source list and flags, forwarding only the
+# readline and namespace settings. The Makefile gates these on ifndef, and make
+# honours the environment for that, which the inherited environment of ABC's
+# execute_process() reaches. So set them here rather than patching the submodule.
+#
+# CUDD: pulls in nine BDD modules (src/bdd/{cudd,extrab,dsd,epd,mtr,reo,cas,bbr,
+# llb}), 123 files and ~110k lines that STP never uses -- we only touch AIG
+# construction, Dar rewriting and CNF derivation. Safe for our include set:
+# ABC_USE_CUDD guards only Abc_Frame_t's DdManager field in base/main/mainInt.h
+# and three Kit_*ToBdd declarations in bool/kit/kit.h, and neither header is
+# reachable from aig/aig/aig.h, opt/dar/dar.h or sat/cnf/cnf.h.
+set(ENV{ABC_USE_NO_CUDD} 1)
+# pthreads: every ABC file we compile that calls pthread_* guards on
+# ABC_USE_PTHREADS (src/starter.c does not, but is in no module.make and is
+# never built). Dropping it also keeps the macro consistent between ABC's own
+# translation units and STP's, which include ABC headers without ABC's flags --
+# see the note on $<TARGET_FILE:libabc-pic> below.
+set(ENV{ABC_USE_NO_PTHREADS} 1)
+
+# EXCLUDE_FROM_ALL: ABC marks libabc and libabc-pic EXCLUDE_FROM_ALL but not its
+# abc executable, which links libabc (non-PIC) and so compiles all of ABC a
+# second time. STP only ever links libabc-pic, pulled in by the dependency
+# below; the executable is dead weight worth ~50% of ABC's build cost.
+#
+# BUILD_SHARED_LIBS: ABC's add_library() calls name neither STATIC nor SHARED,
+# so they follow BUILD_SHARED_LIBS, which defaults to ON. That made libabc-pic a
+# 17MB shared library which libstp.so recorded as a NEEDED entry even though ABC
+# has no install() rules, so an installed libstp.so named a library that was
+# never installed; only the build-tree RUNPATH kept it working. Building it as an
+# archive links the ABC code into libstp.so instead, which is self-contained and
+# installable. libabc-pic is already POSITION_INDEPENDENT_CODE, which is what
+# linking it into a shared library needs. Note the archive does not shrink the
+# result much: ABC is interconnected enough that our ~30 entry points transitively
+# pull in most of it either way -- what changes is that the symbols stop being
+# public, see --exclude-libs at the bottom of this file.
+# The normal variable shadows the cache entry for this scope only; unset()
+# restores the cached value for the rest of lib/.
+set(BUILD_SHARED_LIBS OFF)
+add_subdirectory(extlib-abc EXCLUDE_FROM_ALL)
+unset(BUILD_SHARED_LIBS)
+
+# ABC is a vendored, upstream submodule (berkeley-abc/abc) whose warnings we
+# don't control, so keep WERROR from turning them into build failures. The
+# -Wno-error comes after the global -Werror, so it wins for these targets only;
+# STP's own code stays gated on warnings.
+if (WERROR AND NOT MSVC)
+    foreach(_abc_target abc libabc libabc-pic)
+        if (TARGET ${_abc_target})
+            target_compile_options(${_abc_target} PRIVATE -Wno-error)
+        endif()
+    endforeach()
+endif()
+
+# Give each ABC function and data object its own section so the --gc-sections
+# below can drop the ones we never call. Applied to ABC only: the dead weight is
+# all on this side, and confining it keeps STP's own codegen unchanged.
+if (NOT MSVC)
+    foreach(_abc_target libabc libabc-pic)
+        if (TARGET ${_abc_target})
+            target_compile_options(${_abc_target} PRIVATE
+                -ffunction-sections -fdata-sections)
+        endif()
+    endforeach()
+endif()
 
 # Link to the ABC library target
 add_dependencies(stp libabc-pic)
-# Use the full path to the library instead of the target name for export compatibility
+# Use the full path to the library instead of the target name for export
+# compatibility. Note this bypasses ABC's PUBLIC usage requirements, so the
+# flags ABC sets for its own translation units do not reach STP's: any ABC
+# option that changes a declaration in aig.h, dar.h or cnf.h would have to be
+# defined for STP's sources too.
 set(stp_link_libs ${MINISAT_LIBRARIES} $<TARGET_FILE:libabc-pic>)
+
+# RunTimes reads the process's peak memory through GetProcessMemoryInfo,
+# which lives in psapi. ABC's sclLiberty.c calls PathMatchSpec from
+# shlwapi; MSVC picks that library up through ABC's #pragma comment(lib),
+# which MinGW's linker ignores, so it has to be named here.
+if (WIN32)
+    set(stp_link_libs ${stp_link_libs} psapi shlwapi)
+endif()
 
 if (USE_CRYPTOMINISAT)
     if (STATICCOMPILE)
@@ -152,9 +263,39 @@ if (USE_RISS)
         ${stp_link_libs} -lriss-coprocessor)
 endif()
 
+# PRIVATE, not LINK_PUBLIC: these are implementation details of libstp, and
+# naming them in the link interface put them in the exported STPTargets.cmake,
+# where they were unusable - $<TARGET_FILE:libabc-pic> names a target no
+# consumer has, and the minisat entry was an absolute path into whichever build
+# tree happened to produce the package. find_package(STP) failed outright on
+# the generator expression, so no external project could link STP at all; see
+# examples/simple. A shared libstp needs none of this propagated anyway: the
+# ABC archive is linked into the library (with its symbols localised, see
+# --exclude-libs below) and minisat is picked up transitively through
+# DT_NEEDED.
 target_link_libraries(stp
-    LINK_PUBLIC ${stp_link_libs}
+    PRIVATE ${stp_link_libs}
 )
+
+# ABC is interconnected enough that satisfying our ~30 entry points transitively
+# drags in most of the archive, including its vendored zlib and bzlib (gzopen,
+# inflate, deflate, crc32, BZ2_*). Left with default visibility those would be
+# exported from libstp.so, where they can serve requests that belong to the real
+# libz used by minisat and CryptoMiniSat. --exclude-libs makes symbols taken from
+# static archives local to the output, so libstp.so exports only STP's own API
+# and the ABC code it uses stays private. GNU ld and lld only; on Apple and
+# Windows this is skipped, and for a static libstp there is no link step to
+# apply it to.
+#
+# --gc-sections then discards the ABC sections nothing reaches. Linking ABC as an
+# archive puts its code inside libstp.so, and the transitive pull-in is most of
+# ABC, so without this the library grows from ~2MB to ~18MB; with it, ~3.4MB.
+# Hiding the symbols first is what makes the collection effective -- an exported
+# symbol is a GC root.
+if (BUILD_SHARED_LIBS AND NOT APPLE AND NOT WIN32 AND NOT MSVC)
+    set_property(TARGET stp APPEND_STRING PROPERTY
+        LINK_FLAGS " -Wl,--exclude-libs,ALL -Wl,--gc-sections")
+endif()
 
 install(TARGETS stp
     EXPORT ${STP_EXPORT_NAME}

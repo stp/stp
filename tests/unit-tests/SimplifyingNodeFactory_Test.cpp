@@ -399,6 +399,55 @@ TEST(SimplifyingNodeFactory_Test, bvgt)
 
 
 
+// x >s smallest  ->  NOT(x == smallest)   (#x80000 is the most-negative 20-bit value)
+TEST(SimplifyingNodeFactory_Test, bvsgt_smallest)
+{
+  const std::string input = R"(
+    (assert ( = (bvsgt v0 #x80000) (not (= v0 #x80000)))  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+// largest >s x  ->  NOT(largest == x)      (#x7ffff is the most-positive 20-bit value)
+TEST(SimplifyingNodeFactory_Test, bvsgt_largest)
+{
+  const std::string input = R"(
+    (assert ( = (bvsgt #x7ffff v0) (not (= #x7ffff v0)))  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+// The signed duals still fold the "always false" corners.
+TEST(SimplifyingNodeFactory_Test, bvsgt_false_corners)
+{
+  const std::string input = R"(
+    (assert (not (bvsgt v0 #x7ffff)) )
+    (assert (not (bvsgt #x80000 v0)) )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+// And BVSGE inherits the reduction: smallest >=s x  ->  x == smallest.
+TEST(SimplifyingNodeFactory_Test, bvsge_smallest)
+{
+  const std::string input = R"(
+    (assert ( = (bvsge #x80000 v0) (= v0 #x80000))  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
 TEST(SimplifyingNodeFactory_Test, bvplus0)
 {
   const std::string input = R"(
@@ -489,8 +538,8 @@ TEST(SimplifyingNodeFactory_Test, bvplus5)
 TEST(SimplifyingNodeFactory_Test, bvplus6)
 {
   const std::string input = R"(
-      (assert (= 
-                (bvadd (bvnot (bvnot (bvnot v1) ))  v1   )   
+      (assert (=
+                (bvadd (bvnot (bvnot (bvnot v1) ))  v1   )
                  (bvnot (_ bv0 20)  )
                )
       )
@@ -499,4 +548,462 @@ TEST(SimplifyingNodeFactory_Test, bvplus6)
    Context c;
    ASTNode n = c.process(input);
    ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+// The following confirm rewrites that used to live in Simplifier.cpp are done
+// by the simplifying node factory (these queries are not run through the
+// Simplifier pass, only the factory).
+
+TEST(SimplifyingNodeFactory_Test, bvsub_self)
+{
+  // (x - x) == 0
+  const std::string input = R"(
+    (assert (= (bvsub v0 v0) (_ bv0 20) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvsub_zero)
+{
+  // (x - 0) == x
+  const std::string input = R"(
+    (assert (= (bvsub v0 (_ bv0 20)) v0 )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvsub_to_plus)
+{
+  // (x - y) == x + (-y)
+  const std::string input = R"(
+    (assert (= (bvsub v0 v1) (bvadd v0 (bvneg v1)) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, shift_by_zero)
+{
+  // (x << 0) == x
+  const std::string input = R"(
+    (assert (= (bvshl v0 (_ bv0 20)) v0 )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, shift_left_past_width)
+{
+  // (x << width) == 0
+  const std::string input = R"(
+    (assert (= (bvshl v0 (_ bv20 20)) (_ bv0 20) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, shift_right_past_width)
+{
+  // (x >> width) == 0
+  const std::string input = R"(
+    (assert (= (bvlshr v0 (_ bv20 20)) (_ bv0 20) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, shift_left_const_to_concat)
+{
+  // (x << 4) == (x[15:0] ++ 0000)
+  const std::string input = R"(
+    (assert (= (bvshl v0 (_ bv4 20)) (concat ((_ extract 15 0) v0) (_ bv0 4)) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, extract_over_extract)
+{
+  // ((x[10:1])[5:2]) == x[6:3]
+  const std::string input = R"(
+    (assert (= ((_ extract 5 2) ((_ extract 10 1) v0)) ((_ extract 6 3) v0) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, extract_over_bvnot)
+{
+  // (~x)[5:2] == ~(x[5:2])
+  const std::string input = R"(
+    (assert (= ((_ extract 5 2) (bvnot v0)) (bvnot ((_ extract 5 2) v0)) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvxor_self)
+{
+  // (x ^ x) == 0
+  const std::string input = R"(
+    (assert (= (bvxor v0 v0) (_ bv0 20) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvxor_zero)
+{
+  // (0 ^ x) == x
+  const std::string input = R"(
+    (assert (= (bvxor (_ bv0 20) v0) v0 )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvneg_and_self)
+{
+  // -(x & -x) == x | -x
+  const std::string input = R"(
+    (assert (= (bvneg (bvand v0 (bvneg v0))) (bvor v0 (bvneg v0)) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, mult_over_leftshift)
+{
+  // (x * (y << s)) == ((x * y) << s), for a variable shift amount.
+  const std::string input = R"(
+    (assert (= (bvmul v0 (bvshl v1 v2)) (bvshl (bvmul v0 v1) v2) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvneg_bvneg)
+{
+  // -(-x) == x
+  const std::string input = R"(
+    (assert (= (bvneg (bvneg v0)) v0 )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvneg_bvnot)
+{
+  // -(~x) == x + 1
+  const std::string input = R"(
+    (assert (= (bvneg (bvnot v0)) (bvadd v0 (_ bv1 20)) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvnot_bvnot)
+{
+  // ~(~x) == x
+  const std::string input = R"(
+    (assert (= (bvnot (bvnot v0)) v0 )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, zero_extend_to_concat)
+{
+  // ((_ zero_extend 3) x) == (0^3 ++ x)
+  const std::string input = R"(
+    (assert (= ((_ zero_extend 3) v0) (concat (_ bv0 3) v0) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, ite_equal_branches)
+{
+  // ITE(c, x, x) == x
+  const std::string input = R"(
+    (assert (= (ite a b b) b )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, ite_then_true)
+{
+  // ITE(c, true, x) == (c or x)
+  const std::string input = R"(
+    (assert (= (ite a true b) (or a b) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, ite_then_false)
+{
+  // ITE(c, false, x) == ((not c) and x)
+  const std::string input = R"(
+    (assert (= (ite a false b) (and (not a) b) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, ite_else_true)
+{
+  // ITE(c, x, true) == ((not c) or x)
+  const std::string input = R"(
+    (assert (= (ite a b true) (or (not a) b) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, ite_else_false)
+{
+  // ITE(c, x, false) == (c and x)
+  const std::string input = R"(
+    (assert (= (ite a b false) (and a b) )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, ite_true_false)
+{
+  // ITE(c, true, false) == c
+  const std::string input = R"(
+    (assert (= (ite a true false) a )  )
+    )";
+
+   Context c;
+   ASTNode n = c.process(input);
+   ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+// ---------------------------------------------------------------------------
+// x & ~x is zero, and x | ~x is all ones, however deeply the two are nested.
+//
+// handle_bvand() used to compare only the immediate children of one BVAND, so
+// the pair went unnoticed as soon as one of them sat inside a nested BVAND.
+// The bitvector OR arrives here too: BVOR is lowered to ~(~a & ~b) at
+// creation, so every one of these is a BVAND question by the time the factory
+// sees it.
+//
+// Each case asserts the equality the rule should make true. The parser builds
+// through the simplifying factory, so a node that reaches ASTTrue is one the
+// factory folded, which a satisfiability check could not tell apart from a
+// claim that merely happens to hold.
+
+TEST(SimplifyingNodeFactory_Test, bvand_complement_nested_once)
+{
+  const std::string input = R"(
+    (assert (= (bvand (bvnot v0) (bvand v0 v1)) (_ bv0 20)) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvand_complement_nested_other_order)
+{
+  // The pair the other way round: the flat scan only ever caught it when the
+  // positive literal sorted ahead of the negated one.
+  const std::string input = R"(
+    (assert (= (bvand v0 (bvand (bvnot v0) (bvnot v1))) (_ bv0 20)) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvand_complement_nested_deeply)
+{
+  // Eight levels down. Measured over the hard QF_BV problems, the deepest
+  // annihilating pair actually occurring sits at exactly this depth.
+  const std::string input = R"(
+    (assert (= (bvand (bvnot v0)
+                 (bvand v1 (bvand v2 (bvand v3 (bvand v1
+                   (bvand v2 (bvand v3 (bvand v1 v0)))))))) (_ bv0 20)) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvand_no_complement_is_left_alone)
+{
+  // The guard on the rule: no complementary pair here, so nothing may be
+  // annihilated. (bvand v0 (bvand v1 v1)) is not the zero constant, so the
+  // equality must not fold to true.
+  const std::string input = R"(
+    (assert (= (bvand v0 (bvand v1 v1)) (_ bv0 20)) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_NE(n, c.mgr.ASTTrue);
+  ASSERT_NE(n, c.mgr.ASTFalse);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvor_complement_nested_once)
+{
+  const std::string input = R"(
+    (assert (= (bvor v0 (bvor v1 (bvnot v0))) (bvnot (_ bv0 20))) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvor_complement_nested_deeply)
+{
+  const std::string input = R"(
+    (assert (= (bvor (bvnot v0)
+                 (bvor v1 (bvor v2 (bvor v3 (bvor v1
+                   (bvor v2 (bvor v3 (bvor v1 v0)))))))) (bvnot (_ bv0 20))) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvor_no_complement_is_left_alone)
+{
+  const std::string input = R"(
+    (assert (= (bvor v0 (bvor v1 v1)) (bvnot (_ bv0 20))) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_NE(n, c.mgr.ASTTrue);
+  ASSERT_NE(n, c.mgr.ASTFalse);
+}
+
+// The boolean AND and OR keep their own one-level check in
+// CreateSimpleAndOr(), which is left as it is: measured over the hard QF_BV
+// problems it sees 165M calls and misses exactly one pair, at depth two, in
+// 4660 files. These pin the behaviour that is there.
+
+TEST(SimplifyingNodeFactory_Test, bool_and_complement_nested_once)
+{
+  const std::string input = R"(
+    (assert (= (and a (and (not a) b)) false) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bool_or_complement_nested_once)
+{
+  const std::string input = R"(
+    (assert (= (or a (or (not a) b)) true) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvand_complement_of_a_nested_and)
+{
+  // The negated conjunct is itself a BVAND, and the one it negates appears
+  // higher up:  A & (v2 & ~A)  with  A = (v0 & v1).
+  const std::string input = R"(
+    (assert (= (bvand (bvand v0 v1) (bvand v2 (bvnot (bvand v0 v1))))
+               (_ bv0 20)) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvor_complement_of_a_nested_or)
+{
+  // The same shape through the OR lowering:  A | (v2 | ~A)  with
+  // A = (v0 | v1), which reaches the factory as a BVAND question.
+  const std::string input = R"(
+    (assert (= (bvor (bvor v0 v1) (bvor v2 (bvnot (bvor v0 v1))))
+               (bvnot (_ bv0 20))) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
+TEST(SimplifyingNodeFactory_Test, bvand_nested_and_without_its_negation)
+{
+  // The guard for the case above: a nested BVAND is present and so is the
+  // negation of a BVAND, but not of that one, so nothing may be annihilated.
+  // Disjoint variables on purpose -- (v0 & v1 & v2 & ~(v3 & v4)) is not the
+  // zero constant, so a rule that fired here would be unsound rather than
+  // merely eager. (v0 & v1 & v2 & ~(v0 & v2)) would not do: that one really
+  // is always zero, just not for a reason this rule knows.
+  const std::string input = R"(
+    (assert (= (bvand (bvand v0 v1) (bvand v2 (bvnot (bvand v3 v4))))
+               (_ bv0 20)) )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_NE(n, c.mgr.ASTTrue);
+  ASSERT_NE(n, c.mgr.ASTFalse);
 }

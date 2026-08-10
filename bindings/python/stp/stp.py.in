@@ -3,7 +3,7 @@ The MIT License
 
 Copyright (c) 2008 Vijay Ganesh
               2014 Jurriaan Bremer, jurriaanbremer@gmail.com
-              2018-2021 Andrew V. Jones, andrewvaughanj@gmail.com
+              2018-2021 Andrew Teylu, andrew@tey.lu
 
 Permission is hereby granted, free of charge, to any person obtaining
 a copy of this software and associated documentation files (the
@@ -26,23 +26,29 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 """
 
 import ast
-from ctypes import cdll, POINTER, CFUNCTYPE
-from ctypes import c_char_p, c_void_p, c_int32, c_uint32, c_uint64, c_ulong, c_bool
+from ctypes import cdll, POINTER, CFUNCTYPE, byref
+from ctypes import c_char, c_char_p, c_void_p, c_int32, c_uint32, c_uint64, c_size_t, c_bool
+from ctypes import c_double, c_float
 import inspect
 import os.path
-import sys
+import struct
+
+from .library_path import PATHS
 
 __all__ = [
-    'Expr', 'Solver', 'stp', 'add', 'bitvec', 'bitvecs', 'check', 'model',
+    'AnyExpr', 'ArrayExpr', 'Expr', 'FloatExpr', 'Solver', 'stp', 'add', 'array',
+    'bitvec', 'bitvecs', 'check', 'model',
+    'RNE', 'RTP', 'RTN', 'RTZ', 'RNA',
     'get_git_version_sha', 'get_git_version_tag', 'get_compilation_env', 'get_lib'
 ]
 
-Py3 = sys.version_info >= (3, 0, 0)
+# Rounding modes (SMT-LIB RoundingMode values, matching enum VCRoundingMode).
+RNE = 1   # round nearest, ties to even
+RTP = 2   # round toward positive
+RTN = 4   # round toward negative
+RTZ = 8   # round toward zero
+RNA = 16  # round nearest, ties to away
 
-if Py3:
-    long = int
-
-from library_path import PATHS
 
 for path in PATHS:
     if not os.path.exists(path):
@@ -79,6 +85,9 @@ _set_func('vc_isUsingCryptominisat', c_bool, _VC)
 _set_func('vc_supportsRiss', c_bool, _VC)
 _set_func('vc_useRiss', c_bool, _VC)
 _set_func('vc_isUsingRiss', c_bool, _VC)
+_set_func('vc_supportsCadical', c_bool, _VC)
+_set_func('vc_useCadical', c_bool, _VC)
+_set_func('vc_isUsingCadical', c_bool, _VC)
 _set_func('vc_boolType', _Type, _VC)
 _set_func('vc_arrayType', _Type, _VC, _Type, _Type)
 _set_func('vc_varExpr', _Expr, _VC, c_char_p, _Type)
@@ -93,6 +102,8 @@ _set_func('vc_andExpr', _Expr, _VC, _Expr, _Expr)
 _set_func('vc_andExprN', _Expr, _VC, POINTER(_Expr), c_int32)
 _set_func('vc_orExpr', _Expr, _VC, _Expr, _Expr)
 _set_func('vc_xorExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_nandExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_norExpr', _Expr, _VC, _Expr, _Expr)
 _set_func('vc_orExprN', _Expr, _VC, POINTER(_Expr), c_int32)
 _set_func('vc_impliesExpr', _Expr, _VC, _Expr, _Expr)
 _set_func('vc_iffExpr', _Expr, _VC, _Expr, _Expr)
@@ -103,16 +114,15 @@ _set_func('vc_readExpr', _Expr, _VC, _Expr, _Expr)
 _set_func('vc_writeExpr', _Expr, _VC, _Expr, _Expr, _Expr)
 _set_func('vc_parseExpr', _Expr, _VC, c_char_p)
 _set_func('vc_printExpr', None, _VC, _Expr)
-_set_func('vc_printExprCCode', None, _VC, _Expr)
 _set_func('vc_printSMTLIB', c_char_p, _VC, _Expr)
 _set_func('vc_printExprFile', None, _VC, _Expr, c_int32)
-_set_func('vc_printExprToBuffer', None, _VC, _Expr, POINTER(c_char_p), POINTER(c_ulong))
+_set_func('vc_printExprToBuffer', None, _VC, _Expr, POINTER(c_char_p), POINTER(c_size_t))
 _set_func('vc_printCounterExample', None, _VC)
 _set_func('vc_printVarDecls', None, _VC)
 _set_func('vc_clearDecls', None, _VC)
 _set_func('vc_printAsserts', None, _VC, c_int32)
-_set_func('vc_printQueryStateToBuffer', None, _VC, _Expr, POINTER(c_char_p), POINTER(c_ulong), c_int32)
-_set_func('vc_printCounterExampleToBuffer', None, _VC, POINTER(c_char_p), POINTER(c_ulong))
+_set_func('vc_printQueryStateToBuffer', None, _VC, _Expr, POINTER(c_char_p), POINTER(c_size_t), c_int32)
+_set_func('vc_printCounterExampleToBuffer', None, _VC, POINTER(c_char_p), POINTER(c_size_t))
 _set_func('vc_printQuery', None, _VC)
 _set_func('vc_assertFormula', None, _VC, _Expr)
 _set_func('vc_simplify', _Expr, _VC, _Expr)
@@ -120,6 +130,7 @@ _set_func('vc_query_with_timeout', c_int32, _VC, _Expr, c_int32, c_int32)
 _set_func('vc_query', c_int32, _VC, _Expr)
 _set_func('vc_getCounterExample', _Expr, _VC, _Expr)
 _set_func('vc_getCounterExampleArray', None, _VC, _Expr, POINTER(POINTER(_Expr)), POINTER(POINTER(_Expr)), POINTER(c_int32))
+_set_func('vc_deleteCounterExampleArray', None, POINTER(_Expr), POINTER(_Expr), c_int32)
 _set_func('vc_counterexample_size', c_int32, _VC)
 _set_func('vc_push', None, _VC)
 _set_func('vc_pop', None, _VC)
@@ -157,10 +168,19 @@ _set_func('vc_sbvLtExpr', _Expr, _VC, _Expr, _Expr)
 _set_func('vc_sbvLeExpr', _Expr, _VC, _Expr, _Expr)
 _set_func('vc_sbvGtExpr', _Expr, _VC, _Expr, _Expr)
 _set_func('vc_sbvGeExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_bvUnsignedAddOverflowExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_bvSignedAddOverflowExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_bvUnsignedSubOverflowExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_bvSignedSubOverflowExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_bvUnsignedMulOverflowExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_bvSignedMulOverflowExpr', _Expr, _VC, _Expr, _Expr)
 _set_func('vc_bvUMinusExpr', _Expr, _VC, _Expr)
 _set_func('vc_bvAndExpr', _Expr, _VC, _Expr, _Expr)
 _set_func('vc_bvOrExpr', _Expr, _VC, _Expr, _Expr)
 _set_func('vc_bvXorExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_bvNandExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_bvNorExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_bvXnorExpr', _Expr, _VC, _Expr, _Expr)
 _set_func('vc_bvNotExpr', _Expr, _VC, _Expr)
 _set_func('vc_bvLeftShiftExprExpr', _Expr, _VC, c_int32, _Expr, _Expr)
 _set_func('vc_bvRightShiftExprExpr', _Expr, _VC, c_int32,  _Expr, _Expr)
@@ -177,6 +197,7 @@ _set_func('vc_bvBoolExtract', _Expr, _VC, _Expr, c_int32)
 _set_func('vc_bvBoolExtract_Zero', _Expr, _VC, _Expr, c_int32)
 _set_func('vc_bvBoolExtract_One', _Expr, _VC, _Expr, c_int32)
 _set_func('vc_bvSignExtend', _Expr, _VC, _Expr, c_int32)
+_set_func('vc_bvZeroExtend', _Expr, _VC, _Expr, c_int32)
 _set_func('vc_bvCreateMemoryArray', _Expr, _VC, c_char_p)
 _set_func('vc_bvReadMemoryArray', _Expr, _VC, _Expr, _Expr, c_int32)
 _set_func('vc_bvWriteToMemoryArray', _Expr, _VC, _Expr, _Expr, _Expr, c_int32)
@@ -198,17 +219,98 @@ _set_func('getVWidth', c_int32, _Expr)
 _set_func('getIWidth', c_int32, _Expr)
 _set_func('vc_printCounterExampleFile', None, _VC, c_int32)
 _set_func('exprName', c_char_p, _Expr)
-_set_func('getExprID', c_int32, _Expr)
+_set_func('getExprID', c_uint64, _Expr)
 _set_func('vc_parseMemExpr', c_int32, _VC, c_char_p, POINTER(_Expr), POINTER(_Expr))
+_set_func('vc_setFlag', None, _VC, c_char)
+
+# Floating point
+_set_func('vc_fpType', _Type, _VC, c_int32, c_int32)
+_set_func('vc_getExpWidth', c_int32, _Expr)
+_set_func('vc_getSigWidth', c_int32, _Expr)
+_set_func('vc_fpConstFromBits', _Expr, _VC, c_int32, c_int32, _Expr)
+_set_func('vc_fpEqExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_fpRoundingMode', _Expr, _VC, c_int32)
+_set_func('vc_fpAbsExpr', _Expr, _VC, _Expr)
+_set_func('vc_fpNegExpr', _Expr, _VC, _Expr)
+_set_func('vc_fpAddExpr', _Expr, _VC, _Expr, _Expr, _Expr)
+_set_func('vc_fpSubExpr', _Expr, _VC, _Expr, _Expr, _Expr)
+_set_func('vc_fpMulExpr', _Expr, _VC, _Expr, _Expr, _Expr)
+_set_func('vc_fpDivExpr', _Expr, _VC, _Expr, _Expr, _Expr)
+_set_func('vc_fpFMAExpr', _Expr, _VC, _Expr, _Expr, _Expr, _Expr)
+_set_func('vc_fpSqrtExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_fpRoundToIntegralExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_fpRemExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_fpMinExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_fpMaxExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_fpLtExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_fpLeqExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_fpGtExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_fpGeqExpr', _Expr, _VC, _Expr, _Expr)
+_set_func('vc_fpIsNormalExpr', _Expr, _VC, _Expr)
+_set_func('vc_fpIsSubnormalExpr', _Expr, _VC, _Expr)
+_set_func('vc_fpIsZeroExpr', _Expr, _VC, _Expr)
+_set_func('vc_fpIsInfiniteExpr', _Expr, _VC, _Expr)
+_set_func('vc_fpIsNaNExpr', _Expr, _VC, _Expr)
+_set_func('vc_fpIsNegativeExpr', _Expr, _VC, _Expr)
+_set_func('vc_fpIsPositiveExpr', _Expr, _VC, _Expr)
+_set_func('vc_fpNaN', _Expr, _VC, _Type)
+_set_func('vc_fpPlusInfinity', _Expr, _VC, _Type)
+_set_func('vc_fpMinusInfinity', _Expr, _VC, _Type)
+_set_func('vc_fpPlusZero', _Expr, _VC, _Type)
+_set_func('vc_fpMinusZero', _Expr, _VC, _Type)
+_set_func('vc_fpConstFromDouble', _Expr, _VC, _Type, _Expr, c_double)
+_set_func('vc_fpConstFromFloat', _Expr, _VC, _Type, _Expr, c_float)
+_set_func('vc_fpToFPFromIEEEBV', _Expr, _VC, c_int32, c_int32, _Expr)
+_set_func('vc_fpToFPFromFP', _Expr, _VC, c_int32, c_int32, _Expr, _Expr)
+_set_func('vc_fpToFPFromSignedBV', _Expr, _VC, c_int32, c_int32, _Expr, _Expr)
+_set_func('vc_fpToFPFromUnsignedBV', _Expr, _VC, c_int32, c_int32, _Expr, _Expr)
+_set_func('vc_fpToUBVExpr', _Expr, _VC, c_int32, _Expr, _Expr)
+_set_func('vc_fpToSBVExpr', _Expr, _VC, c_int32, _Expr, _Expr)
+_set_func('vc_fpToIEEEBV', _Expr, _VC, _Expr)
+
+
+# Standard IEEE formats (eb, sb) that have a native Python float: half, single,
+# double -> (struct float code, struct unsigned-int code, byte count).
+_FP_NATIVE = {
+    (5, 11): ('<e', '<H', 2),
+    (8, 24): ('<f', '<I', 4),
+    (11, 53): ('<d', '<Q', 8),
+}
+
+
+def _decode_fp(bits, eb, sb):
+    """Decode the packed IEEE bits of a floating-point value. Returns a Python
+    float for the standard formats (half/single/double); for any other format
+    there is no native float, so the raw integer bits are returned unchanged."""
+    native = _FP_NATIVE.get((eb, sb))
+    if native is None:
+        return bits
+    fcode, icode, nbytes = native
+    return struct.unpack(fcode, struct.pack(icode, bits & ((1 << (8 * nbytes)) - 1)))[0]
 
 
 class Solver(object):
     current = None
 
-    def __init__(self):
+    def __init__(self, array_equality=False):
+        """Creates a solver.
+
+        With array_equality=True, equality between whole arrays (the
+        extensional theory of arrays) becomes available: build arrays
+        with Solver.array() and compare them with ==/!=. The option
+        must be chosen here because construction of a whole-array equality
+        is flag-gated. Such equalities remain opaque until the completed
+        query is lowered at solve time.
+        """
         self.keys = {}
+        self.arrays = {}
+        self.array_equality = bool(array_equality)
         self.vc = _lib.vc_createValidityChecker()
         assert self.vc is not None, 'Error creating validity checker'
+        # Rounding mode for the arithmetic operators of FloatExprs made here.
+        self.rounding_mode = RNE
+        if array_equality:
+            _lib.vc_setFlag(self.vc, b'x')
 
     def __del__(self):
         # TODO We're not quite there yet.
@@ -258,12 +360,20 @@ class Solver(object):
     def isUsingRiss(self):
         return _lib.vc_isUsingRiss(self.vc)
 
+    def supportsCadical(self):
+        return _lib.vc_supportsCadical(self.vc)
+
+    def useCadical(self):
+        return _lib.vc_useCadical(self.vc)
+
+    def isUsingCadical(self):
+        return _lib.vc_isUsingCadical(self.vc)
+
     def bitvec(self, name, width=32):
         """Creates a new BitVector variable."""
         # TODO Sanitize the name or stp will segfault.
         # TODO Perhaps cache these calls per width?
-        # TODO Please, please, fix this terrible Py3 support.
-        name_conv = bytes(name, 'utf8') if Py3 else name
+        name_conv = name.encode('utf-8')
 
         bv_type = _lib.vc_bvType(self.vc, width)
         self.keys[name] = _lib.vc_varExpr(self.vc, name_conv, bv_type)
@@ -283,10 +393,78 @@ class Solver(object):
 
     def bitvecvalD(self, width, value):
         """Creates a new BitVector with a constant value."""
-        value_conv = bytes(value, 'utf8') if Py3 else value
-     
+        value_conv = value.encode('utf-8')
+
+
         expr = _lib.vc_bvConstExprFromDecStr(self.vc, width, value_conv)
         return Expr(self, width, expr)
+
+    def rounding_mode_expr(self):
+        """The current rounding-mode expression (self.rounding_mode, default RNE)."""
+        return _lib.vc_fpRoundingMode(self.vc, self.rounding_mode)
+
+    def fp(self, name, eb, sb):
+        """Creates a new floating-point variable of format (eb, sb).
+
+        sb counts the hidden significand bit, matching SMT-LIB's
+        (_ FloatingPoint eb sb): fp('x', 11, 53) is an IEEE double, fp('x', 8,
+        24) an IEEE single.
+        """
+        name_conv = name.encode('utf-8')
+        fp_type = _lib.vc_fpType(self.vc, eb, sb)
+        self.keys[name] = _lib.vc_varExpr(self.vc, name_conv, fp_type)
+        return FloatExpr(self, eb, sb, self.keys[name], name=name)
+
+    def fpval(self, eb, sb, value):
+        """A floating-point constant of format (eb, sb) equal to the Python float
+        `value`, rounded under the solver's rounding mode. (A literal like 0.1 is
+        already rounded to the nearest double by Python before it gets here.)"""
+        fp_type = _lib.vc_fpType(self.vc, eb, sb)
+        expr = _lib.vc_fpConstFromDouble(
+            self.vc, fp_type, self.rounding_mode_expr(), value)
+        return FloatExpr(self, eb, sb, expr)
+
+    def fpval_from_bits(self, eb, sb, bits):
+        """A floating-point constant of format (eb, sb) from its packed IEEE bits."""
+        bv = _lib.vc_bvConstExprFromLL(self.vc, eb + sb, bits)
+        expr = _lib.vc_fpConstFromBits(self.vc, eb, sb, bv)
+        return FloatExpr(self, eb, sb, expr)
+
+    def fp_nan(self, eb, sb):
+        """The NaN of format (eb, sb)."""
+        t = _lib.vc_fpType(self.vc, eb, sb)
+        return FloatExpr(self, eb, sb, _lib.vc_fpNaN(self.vc, t))
+
+    def fp_inf(self, eb, sb, negative=False):
+        """+oo (or -oo) of format (eb, sb)."""
+        t = _lib.vc_fpType(self.vc, eb, sb)
+        e = (_lib.vc_fpMinusInfinity if negative else _lib.vc_fpPlusInfinity)(self.vc, t)
+        return FloatExpr(self, eb, sb, e)
+
+    def fp_zero(self, eb, sb, negative=False):
+        """+0 (or -0) of format (eb, sb)."""
+        t = _lib.vc_fpType(self.vc, eb, sb)
+        e = (_lib.vc_fpMinusZero if negative else _lib.vc_fpPlusZero)(self.vc, t)
+        return FloatExpr(self, eb, sb, e)
+
+    def array(self, name, index_width, value_width):
+        """Creates a new array variable from bitvectors of index_width
+        bits to bitvectors of value_width bits.
+
+        Arrays are read with a[i], written with a.store(i, v), and --
+        when the solver was created with array_equality=True -- compared
+        whole with ==/!=. They are deliberately not part of
+        Solver.model(); read an array's entries with ArrayExpr.model().
+        """
+        name_conv = name.encode('utf-8')
+
+        arr_type = _lib.vc_arrayType(self.vc,
+                                     _lib.vc_bvType(self.vc, index_width),
+                                     _lib.vc_bvType(self.vc, value_width))
+        expr = _lib.vc_varExpr(self.vc, name_conv, arr_type)
+        arr = ArrayExpr(self, index_width, value_width, expr, name=name)
+        self.arrays[name] = arr
+        return arr
 
     def true(self):
         """Creates a True boolean."""
@@ -299,7 +477,7 @@ class Solver(object):
     def add(self, *exprs):
         """Adds one or more constraint(s) to STP."""
         for expr in exprs:
-            assert isinstance(expr, Expr), 'Formula should be an Expression'
+            assert isinstance(expr, AnyExpr), 'Formula should be an Expression'
             _lib.vc_assertFormula(self.vc, expr.expr)
 
     def push(self):
@@ -313,7 +491,7 @@ class Solver(object):
     def _n_exprs(self, *exprs):
         """Creates an array of Expressions to be used in the C API."""
         for expr in exprs:
-            assert isinstance(expr, Expr), 'Object should be an Expression'
+            assert isinstance(expr, AnyExpr), 'Object should be an Expression'
 
         # This may not be very clean, but I'm not sure if there are
         # better ways to achieve this goal.
@@ -322,7 +500,23 @@ class Solver(object):
         return exprs, len(exprs)
 
     def check_with_timeout(self, *exprs, **kwargs):
-        """Check whether the various expressions are satisfiable."""
+        """Check whether the various expressions are satisfiable.
+
+        Accepts two keyword budgets, max_conflicts and max_time (seconds).
+        For both, -1 means no limit and 0 means give up without searching;
+        any other negative value is rejected. max_time is a budget for the
+        whole query, not for each call into the SAT solver.
+
+        Returns 3 if the budget ran out before an answer was found.
+        """
+
+        for name in ('max_conflicts', 'max_time'):
+            value = kwargs.get(name, -1)
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise TypeError('%s should be an integer' % name)
+            if value < -1:
+                raise ValueError(
+                    '%s should be -1 (no limit) or greater' % name)
 
         _, length = self._n_exprs(*exprs)
         if (length > 0):
@@ -344,6 +538,22 @@ class Solver(object):
         assert ret == 0 or ret == 1, 'Error querying your input'
         return not ret
 
+    def _counterexample_int(self, expr, width):
+        """The unsigned value of an (unboxed) expression in the current
+        model, at any width. getBVUnsignedLongLong saturates at 64 bits,
+        so wider values are assembled from 64-bit extracts."""
+        if width <= 64:
+            value = _lib.vc_getCounterExample(self.vc, expr)
+            return _lib.getBVUnsignedLongLong(value)
+        carrier = self._bit_carrier(expr)
+        extract = 0
+        for i in range((width - 1) // 64 + 1):
+            extractExpr = _lib.vc_bvExtract(self.vc, carrier,
+                                            min((i+1)*64, width)-1, i*64)
+            bvExpr = _lib.vc_getCounterExample(self.vc, extractExpr)
+            extract += (_lib.getBVUnsignedLongLong(bvExpr) << (64 * i))
+        return extract
+
     def model(self, key=None, expr=None):
         """
         Returns the value for an expression (or a name), or a model for the
@@ -354,14 +564,14 @@ class Solver(object):
             expr (Expr): to look up a value by expression
 
         Returns:
-            long (if expr or key is specified): the counterexample for the
-                                                expression or key
+            int (if expr or key is specified): the counterexample for the
+                                               expression or key
 
             dict (if no expr or key): the counterexample model for all named
                                       keys
         """
 
-        if expr and isinstance(expr, Expr):
+        if expr and isinstance(expr, AnyExpr):
             #
             # If we have an expression, and it is a _wrapped_ expression, we
             # need to unbox it
@@ -375,20 +585,13 @@ class Solver(object):
             expr = self.keys[key]
 
         if expr:
-            width = _lib.getVWidth(expr)
-            
-            #What if it's compiled for 32-bit?
-            if width > 64:
-                extract = 0
-                for i in range(( width - 1 ) // 64 + 1):
-                    extractExpr = _lib.vc_bvExtract(self.vc, expr, min ((i+1)*64, width)-1, i*64)
-                    #maybe extractExpr leaks?
-                    bvExpr = _lib.vc_getCounterExample(self.vc, extractExpr)
-                    extract +=  (_lib.getBVUnsignedLongLong(bvExpr) << (64 * i))
-                return extract
-            else:
-                value = _lib.vc_getCounterExample(self.vc, expr)
-                return _lib.getBVUnsignedLongLong(value)
+            bits = self._counterexample_int(expr, _lib.getVWidth(expr))
+            eb = _lib.vc_getExpWidth(expr)
+            if eb:
+                # A floating-point value: decode its packed bits (to a
+                # Python float for the standard formats).
+                return _decode_fp(bits, eb, _lib.vc_getSigWidth(expr))
+            return bits
         #
         # If no expression, return a model giving values to simple bitvectors
         # (but not, e.g., arrays)
@@ -397,6 +600,33 @@ class Solver(object):
 
     # Allows easy access to the Counter Example.
     __getitem__ = model
+
+    def _bit_carrier(self, expr):
+        """The bit-vector holding an expression's packed value.
+
+        A value wider than 64 bits is read out in 64-bit slices, and slicing
+        means vc_bvExtract -- which refuses a float, because the C boundary
+        enforces the source sort. Every format above binary64 therefore has to
+        be sliced through its IEEE bits, which vc_fpToIEEEBV supplies and
+        which are exactly the packed bits the slicing wants. A bit-vector is
+        already its own carrier.
+        """
+        if _lib.vc_getExpWidth(expr):
+            return _lib.vc_fpToIEEEBV(self.vc, expr)
+        return expr
+
+    def model_bits(self, key=None, expr=None):
+        """Like model(), but always returns the raw packed bits as an integer,
+        with no floating-point decoding, at any width (e.g. to inspect a float's
+        exponent/significand fields, or to read a value wider than 64 bits)."""
+        if expr and isinstance(expr, AnyExpr):
+            expr = expr.expr
+        elif not expr and key is not None:
+            expr = self.keys[key]
+        if not expr:
+            return None
+
+        return self._counterexample_int(expr, _lib.getVWidth(expr))
 
     def and_(self, *exprs):
         exprs, length = self._n_exprs(*exprs)
@@ -409,26 +639,75 @@ class Solver(object):
         return Expr(self, None, expr)
 
     def xor(self, a, b):
-        assert isinstance(a, Expr), 'Object must be an Expression'
-        assert isinstance(b, Expr), 'Object must be an Expression'
+        assert isinstance(a, AnyExpr), 'Object must be an Expression'
+        assert isinstance(b, AnyExpr), 'Object must be an Expression'
         expr = _lib.vc_xorExpr(self.vc, a.expr, b.expr)
         return Expr(self, None, expr)
-        
+
+    def nand(self, a, b):
+        """Boolean nand, i.e. not (a and b)."""
+        assert isinstance(a, AnyExpr), 'Object must be an Expression'
+        assert isinstance(b, AnyExpr), 'Object must be an Expression'
+        expr = _lib.vc_nandExpr(self.vc, a.expr, b.expr)
+        return Expr(self, None, expr)
+
+    def nor(self, a, b):
+        """Boolean nor, i.e. not (a or b)."""
+        assert isinstance(a, AnyExpr), 'Object must be an Expression'
+        assert isinstance(b, AnyExpr), 'Object must be an Expression'
+        expr = _lib.vc_norExpr(self.vc, a.expr, b.expr)
+        return Expr(self, None, expr)
+
     def ite(self, a, b, c):
-        assert isinstance(a, Expr), 'Object must be an Expression'
-        assert isinstance(b, Expr), 'Object must be an Expression'
-        assert isinstance(c, Expr), 'Object must be an Expression'
+        assert isinstance(a, AnyExpr), 'Object must be an Expression'
+        assert isinstance(b, AnyExpr), 'Object must be an Expression'
+        assert isinstance(c, AnyExpr), 'Object must be an Expression'
+        if a.s is not self or b.s is not self or c.s is not self:
+            raise ValueError('ite expressions belong to different solvers')
+        if isinstance(b, FloatExpr) or isinstance(c, FloatExpr):
+            if not isinstance(b, FloatExpr) or not isinstance(c, FloatExpr):
+                raise ValueError('ite branches must have the same source sort')
+            if (b.eb, b.sb) != (c.eb, c.sb):
+                raise ValueError('ite floating-point branches must have the same format')
+            expr = _lib.vc_iteExpr(self.vc, a.expr, b.expr, c.expr)
+            return FloatExpr(self, b.eb, b.sb, expr)
         assert b.width == c.width, 'Objects must have the same width' # compound expressions have width None or 0
         expr = _lib.vc_iteExpr(self.vc, a.expr, b.expr, c.expr)
         return Expr(self, b.width, expr)   
  
     def not_(self, obj):
-        assert isinstance(obj, Expr), 'Object should be an Expression'
+        assert isinstance(obj, AnyExpr), 'Object should be an Expression'
         expr = _lib.vc_notExpr(self.vc, obj.expr)
         return Expr(self, obj.width, expr)
 
 
-class Expr(object):
+class AnyExpr(object):
+    """What every wrapped expression has: the solver it belongs to, the C
+    handle, and the width of the value it denotes.
+
+    The theories' operations live in the subclasses and nowhere else. Expr
+    carries the bit-vector ones, FloatExpr the floating-point ones, and
+    neither inherits the other's.
+
+    That is not a tidiness point. FloatExpr used to subclass Expr and
+    neutralise the bit-vector methods it must not offer with a hand-written
+    list of names -- and a list of names over a base class you do not control
+    cannot be kept correct, which it demonstrably was not: thirteen were
+    missing, including every overflow predicate, zero_extend, sign_extend and
+    the reflected arithmetic. Each of those reached a C entry point that
+    refuses a float, so instead of the documented TypeError they aborted the
+    interpreter. Nine of the thirteen were added to Expr the day *after* the
+    list was written.
+
+    With the operations separated there is no list to maintain and no drift to
+    have: an operation FloatExpr does not define simply is not there, so a
+    named one raises AttributeError and an operator raises TypeError, both
+    from Python itself.
+
+    Use this class, not Expr, wherever the question is "is this a wrapped
+    expression"; use Expr where the question is "is this a bit-vector".
+    """
+
     def __init__(self, s, width, expr, name=None):
         self.s = s
         self.width = width
@@ -440,6 +719,13 @@ class Expr(object):
         # _lib.vc_DeleteExpr(self.expr)
         pass
 
+    @property
+    def value(self):
+        """This expression's value in the current model."""
+        return self.s.model(expr=self)
+
+
+class Expr(AnyExpr):
     def _1(self, cb):
         """Wrapper around single-expression STP functions."""
         expr = cb(self.s.vc, self.expr)
@@ -451,7 +737,7 @@ class Expr(object):
         return Expr(self.s, self.width, expr)
 
     def _toexpr(self, other):
-        if isinstance(other, (int, long)):
+        if isinstance(other, int):
             return self.s.bitvecval(self.width, other)
 
         if isinstance(other, bool):
@@ -465,6 +751,17 @@ class Expr(object):
         assert isinstance(other, Expr), 'Other object must be an Expr instance'
         expr = cb(self.s.vc, self.expr, other.expr)
         return Expr(self.s, self.width, expr)
+
+    def _2b(self, cb, other):
+        """Wrapper around double-expression STP functions returning a boolean.
+
+        Unlike _2 the result is not a bitvector, so it carries no width --
+        matching what Solver.true()/and_()/xor() produce.
+        """
+        other = self._toexpr(other)
+        assert isinstance(other, Expr), 'Other object must be an Expr instance'
+        expr = cb(self.s.vc, self.expr, other.expr)
+        return Expr(self.s, None, expr)
 
     def _2w(self, cb, a, b):
         """Wrapper around double-expression with width STP functions."""
@@ -549,6 +846,10 @@ class Expr(object):
 
     __eq__ = eq
 
+    # Defining __eq__ suppresses the default hash. == builds a formula, so
+    # value hashing cannot exist; hash by identity (as z3py does).
+    __hash__ = object.__hash__
+
     def ne(self, other):
         return self.s.not_(self.eq(other))
 
@@ -604,6 +905,42 @@ class Expr(object):
     __xor__ = xor
     __rxor__ = xor
 
+    def nand(self, other):
+        """Bitwise nand, i.e. ~(self & other)."""
+        return self._2(_lib.vc_bvNandExpr, other)
+
+    def nor(self, other):
+        """Bitwise nor, i.e. ~(self | other)."""
+        return self._2(_lib.vc_bvNorExpr, other)
+
+    def xnor(self, other):
+        """Bitwise xnor, i.e. ~(self ^ other)."""
+        return self._2(_lib.vc_bvXnorExpr, other)
+
+    def uaddo(self, other):
+        """True when the unsigned addition self + other overflows."""
+        return self._2b(_lib.vc_bvUnsignedAddOverflowExpr, other)
+
+    def saddo(self, other):
+        """True when the signed addition self + other overflows."""
+        return self._2b(_lib.vc_bvSignedAddOverflowExpr, other)
+
+    def usubo(self, other):
+        """True when the unsigned subtraction self - other overflows."""
+        return self._2b(_lib.vc_bvUnsignedSubOverflowExpr, other)
+
+    def ssubo(self, other):
+        """True when the signed subtraction self - other overflows."""
+        return self._2b(_lib.vc_bvSignedSubOverflowExpr, other)
+
+    def umulo(self, other):
+        """True when the unsigned multiplication self * other overflows."""
+        return self._2b(_lib.vc_bvUnsignedMulOverflowExpr, other)
+
+    def smulo(self, other):
+        """True when the signed multiplication self * other overflows."""
+        return self._2b(_lib.vc_bvSignedMulOverflowExpr, other)
+
     def neg(self):
         return self._1(_lib.vc_bvUMinusExpr)
 
@@ -647,15 +984,318 @@ class Expr(object):
         expr = _lib.vc_bvExtract(self.s.vc, self.expr, high, low)
         return Expr(self.s, self.width, expr)
 
+    def zero_extend(self, width):
+        """Widen to 'width' by padding with zeroes.
+
+        A 'width' at or below the current one truncates instead, which is what
+        the underlying vc_bvZeroExtend does.
+        """
+        expr = _lib.vc_bvZeroExtend(self.s.vc, self.expr, width)
+        return Expr(self.s, width, expr)
+
+    def sign_extend(self, width):
+        """Widen to 'width' by replicating the sign bit.
+
+        A 'width' at or below the current one truncates instead, which is what
+        the underlying vc_bvSignExtend does.
+        """
+        expr = _lib.vc_bvSignExtend(self.s.vc, self.expr, width)
+        return Expr(self.s, width, expr)
+
     def simplify(self):
         """Simplify an expression."""
         expr = _lib.vc_simplify(self.s.vc, self.expr)
         return Expr(self.s, self.width, expr)
 
-    @property
-    def value(self):
-        """Returns the value of this BitVec in the current model."""
-        return self.s.model(expr=self)
+
+class FloatExpr(AnyExpr):
+    """A floating-point expression of format (eb, sb).
+
+    The arithmetic operators (+ - * / and abs, sqrt, ...) round under the
+    solver's rounding mode (solver.rounding_mode, default RNE). The comparison
+    operators <, <=, >, >= are the IEEE ordered comparisons, and == is fp.eq
+    (so +0 == -0, and any NaN operand makes it false). A Python number used as
+    an operand is coerced to a constant of this expression's format.
+    """
+
+    def __init__(self, s, eb, sb, expr, name=None):
+        AnyExpr.__init__(self, s, eb + sb, expr, name=name)
+        self.eb = eb
+        self.sb = sb
+
+    def _coerce(self, other):
+        """A FloatExpr passes through; a Python number becomes a constant of
+        this expression's format. (An int converts through float(), so
+        magnitudes beyond 2**53 round before they reach the solver.)"""
+        if isinstance(other, FloatExpr):
+            if other.s is not self.s:
+                raise ValueError('floating-point operands belong to different solvers')
+            if (other.eb, other.sb) != (self.eb, self.sb):
+                raise ValueError(
+                    'floating-point operands must have the same format: '
+                    '({}, {}) != ({}, {})'.format(
+                        self.eb, self.sb, other.eb, other.sb))
+            return other
+        if isinstance(other, (int, float)):
+            return self.s.fpval(self.eb, self.sb, float(other))
+        raise TypeError('operand must be a FloatExpr or a number')
+
+    def _rm(self):
+        return _lib.vc_fpRoundingMode(self.s.vc, self.s.rounding_mode)
+
+    def _fp1(self, cb):
+        return FloatExpr(self.s, self.eb, self.sb, cb(self.s.vc, self.expr))
+
+    def _fp1rm(self, cb):
+        return FloatExpr(self.s, self.eb, self.sb, cb(self.s.vc, self._rm(), self.expr))
+
+    def simplify(self):
+        """Simplify without erasing this expression's floating-point sort."""
+        expr = _lib.vc_simplify(self.s.vc, self.expr)
+        return FloatExpr(self.s, self.eb, self.sb, expr)
+
+    def _fp2(self, cb, other):
+        other = self._coerce(other)
+        return FloatExpr(self.s, self.eb, self.sb, cb(self.s.vc, self.expr, other.expr))
+
+    def _fp2rm(self, cb, a, b):
+        a, b = self._coerce(a), self._coerce(b)
+        return FloatExpr(self.s, self.eb, self.sb,
+                         cb(self.s.vc, self._rm(), a.expr, b.expr))
+
+    def _pred(self, cb, other):
+        other = self._coerce(other)
+        return Expr(self.s, None, cb(self.s.vc, self.expr, other.expr))
+
+    def _pred1(self, cb):
+        return Expr(self.s, None, cb(self.s.vc, self.expr))
+
+    # Arithmetic (rounding-mode aware).
+    def add(self, other): return self._fp2rm(_lib.vc_fpAddExpr, self, other)
+    def sub(self, other): return self._fp2rm(_lib.vc_fpSubExpr, self, other)
+    def mul(self, other): return self._fp2rm(_lib.vc_fpMulExpr, self, other)
+    def div(self, other): return self._fp2rm(_lib.vc_fpDivExpr, self, other)
+
+    __add__ = add
+    __radd__ = lambda self, o: self._coerce(o).add(self)
+    __sub__ = sub
+    __rsub__ = lambda self, o: self._coerce(o).sub(self)
+    __mul__ = mul
+    __rmul__ = lambda self, o: self._coerce(o).mul(self)
+    __truediv__ = div
+    __rtruediv__ = lambda self, o: self._coerce(o).div(self)
+
+    def neg(self): return self._fp1(_lib.vc_fpNegExpr)
+    __neg__ = neg
+
+    def __pos__(self): return self
+    def __abs__(self): return self._fp1(_lib.vc_fpAbsExpr)
+
+    def sqrt(self): return self._fp1rm(_lib.vc_fpSqrtExpr)
+    def round_to_integral(self): return self._fp1rm(_lib.vc_fpRoundToIntegralExpr)
+    def fp_rem(self, other): return self._fp2(_lib.vc_fpRemExpr, other)
+    def fp_min(self, other): return self._fp2(_lib.vc_fpMinExpr, other)
+    def fp_max(self, other): return self._fp2(_lib.vc_fpMaxExpr, other)
+
+    def fma(self, b, c):
+        """round(self * b + c) under the solver's rounding mode."""
+        b, c = self._coerce(b), self._coerce(c)
+        return FloatExpr(self.s, self.eb, self.sb,
+                         _lib.vc_fpFMAExpr(self.s.vc, self._rm(), self.expr,
+                                           b.expr, c.expr))
+
+    # Comparisons: IEEE ordered comparisons; == is fp.eq, != its negation.
+    # (The operator spellings are defined below, with the isinstance guard.)
+    def eq(self, other): return self._pred(_lib.vc_fpEqExpr, other)
+
+    def ne(self, other): return self.s.not_(self.eq(other))
+
+    def lt(self, other): return self._pred(_lib.vc_fpLtExpr, other)
+    __lt__ = lt
+
+    def le(self, other): return self._pred(_lib.vc_fpLeqExpr, other)
+    __le__ = le
+
+    def gt(self, other): return self._pred(_lib.vc_fpGtExpr, other)
+    __gt__ = gt
+
+    def ge(self, other): return self._pred(_lib.vc_fpGeqExpr, other)
+    __ge__ = ge
+
+    # Classifications.
+    def is_nan(self): return self._pred1(_lib.vc_fpIsNaNExpr)
+    def is_infinite(self): return self._pred1(_lib.vc_fpIsInfiniteExpr)
+    def is_zero(self): return self._pred1(_lib.vc_fpIsZeroExpr)
+    def is_normal(self): return self._pred1(_lib.vc_fpIsNormalExpr)
+    def is_subnormal(self): return self._pred1(_lib.vc_fpIsSubnormalExpr)
+    def is_negative(self): return self._pred1(_lib.vc_fpIsNegativeExpr)
+    def is_positive(self): return self._pred1(_lib.vc_fpIsPositiveExpr)
+
+    def to_ieee_bits(self):
+        """Reinterpret this float as its packed IEEE bits: a BitVector Expr of
+        width eb + sb. Use .extract(hi, lo) to pull out fields -- the exponent
+        is bits [sb-1 .. sb+eb-2], the significand bits [0 .. sb-2]."""
+        return Expr(self.s, self.eb + self.sb,
+                    _lib.vc_fpToIEEEBV(self.s.vc, self.expr))
+
+    def to_ubv(self, width, rm=None):
+        """Round to a `width`-bit unsigned integer (a BitVector Expr) under the
+        given rounding mode (default the solver's)."""
+        r = _lib.vc_fpRoundingMode(
+            self.s.vc, self.s.rounding_mode if rm is None else rm)
+        return Expr(self.s, width, _lib.vc_fpToUBVExpr(self.s.vc, width, r, self.expr))
+
+    def to_sbv(self, width, rm=None):
+        """Round to a `width`-bit signed integer (a BitVector Expr) under the
+        given rounding mode (default the solver's)."""
+        r = _lib.vc_fpRoundingMode(
+            self.s.vc, self.s.rounding_mode if rm is None else rm)
+        return Expr(self.s, width, _lib.vc_fpToSBVExpr(self.s.vc, width, r, self.expr))
+
+    # Defining __eq__ suppresses the default hash; hash by identity. (This
+    # used to copy Expr.__hash__, which was itself None at the time.)
+    __hash__ = object.__hash__
+
+    # == and != build formulas for the operands they understand and defer
+    # politely for anything else, so containment tests over mixed lists work.
+    def __eq__(self, other):
+        if not isinstance(other, (FloatExpr, int, float)):
+            return NotImplemented
+        return self.eq(other)
+
+    def __ne__(self, other):
+        if not isinstance(other, (FloatExpr, int, float)):
+            return NotImplemented
+        return self.ne(other)
+
+    # No list of bit-vector methods to refuse: FloatExpr does not inherit
+    # them (see AnyExpr). Bit-level work goes through to_ieee_bits(), which
+    # returns an Expr and has every one of them.
+
+
+class ArrayExpr(Expr):
+    """An array-sorted expression: read with a[i], write with
+    a.store(i, v), and -- when the solver was created with
+    array_equality=True -- compare whole arrays with ==/!=.
+
+    Arrays are not part of Solver.model(); read an array's entries from
+    a satisfying assignment with ArrayExpr.model().
+    """
+
+    def __init__(self, s, index_width, value_width, expr, name=None):
+        Expr.__init__(self, s, value_width, expr, name=name)
+        self.index_width = index_width
+        self.value_width = value_width
+
+    def _index(self, index):
+        if isinstance(index, int):
+            index = self.s.bitvecval(self.index_width, index)
+        assert isinstance(index, Expr), 'Index must be an Expr or an int'
+        assert not isinstance(index, ArrayExpr), 'Index must be a bitvector'
+        return index
+
+    def _value(self, value):
+        if isinstance(value, int):
+            value = self.s.bitvecval(self.value_width, value)
+        assert isinstance(value, Expr), 'Value must be an Expr or an int'
+        assert not isinstance(value, ArrayExpr), 'Value must be a bitvector'
+        return value
+
+    def read(self, index):
+        """The value this array holds at index."""
+        index = self._index(index)
+        expr = _lib.vc_readExpr(self.s.vc, self.expr, index.expr)
+        return Expr(self.s, self.value_width, expr)
+
+    __getitem__ = read
+
+    def store(self, index, value):
+        """The array equal to this one except that index maps to value."""
+        index = self._index(index)
+        value = self._value(value)
+        expr = _lib.vc_writeExpr(self.s.vc, self.expr, index.expr,
+                                 value.expr)
+        return ArrayExpr(self.s, self.index_width, self.value_width, expr)
+
+    def eq(self, other):
+        """Equality between whole arrays. Requires a solver created
+        with array_equality=True; without it a RuntimeError is raised
+        here, where it can be caught -- historically the query only
+        failed much later, aborting the process from inside the
+        library."""
+        if not self.s.array_equality:
+            raise RuntimeError(
+                'whole-array equality requires the solver to be created '
+                'with Solver(array_equality=True)')
+        assert isinstance(other, ArrayExpr), \
+            'An array only compares against another array'
+        assert self.index_width == other.index_width and \
+            self.value_width == other.value_width, \
+            'Arrays must have identical index and value widths'
+        expr = _lib.vc_eqExpr(self.s.vc, self.expr, other.expr)
+        return Expr(self.s, None, expr)
+
+    __eq__ = eq
+
+    def ne(self, other):
+        return self.s.not_(self.eq(other))
+
+    __ne__ = ne
+
+    def _entry_int(self, entry, width):
+        """One counterexample entry (a constant expression) as an int.
+        Entries wider than 64 bits are assembled from 64-bit extracts,
+        as in Solver.model(); getBVUnsignedLongLong alone saturates."""
+        if width <= 64:
+            return _lib.getBVUnsignedLongLong(entry)
+        return self.s._counterexample_int(entry, width)
+
+    def model(self):
+        """The array's entries in the current satisfying assignment:
+        a dict from index to value, one entry per observed index, in
+        ascending index order."""
+        indices = POINTER(_Expr)()
+        values = POINTER(_Expr)()
+        size = c_int32()
+        _lib.vc_getCounterExampleArray(self.s.vc, self.expr,
+                                       byref(indices), byref(values),
+                                       byref(size))
+        try:
+            out = {}
+            for k in range(size.value):
+                out[self._entry_int(indices[k], self.index_width)] = \
+                    self._entry_int(values[k], self.value_width)
+            return out
+        finally:
+            _lib.vc_deleteCounterExampleArray(indices, values, size)
+
+    value = property(model)
+
+    # The BitVector operations inherited from Expr are meaningless on an
+    # array and would build malformed nodes; refuse them. Element-level
+    # work goes through reads and stores.
+    def _array_no_bv(self, *args, **kwargs):
+        raise TypeError('BitVector operations are not defined on an '
+                        'ArrayExpr; read elements with a[i] and write '
+                        'them with a.store(i, v)')
+
+    add = sub = rsub = mul = div = rdiv = _array_no_bv
+    mod = rmod = rem = rrem = _array_no_bv
+    sdiv = rsdiv = smod = rsmod = srem = rsrem = _array_no_bv
+    lt = le = gt = ge = slt = sle = sgt = sge = _array_no_bv
+    and_ = or_ = xor = nand = nor = xnor = neg = not_ = _array_no_bv
+    uaddo = saddo = usubo = ssubo = umulo = smulo = _array_no_bv
+    shl = rshl = shr = rshr = sar = rsar = extract = _array_no_bv
+    zero_extend = sign_extend = simplify = _array_no_bv
+    __add__ = __radd__ = __sub__ = __rsub__ = _array_no_bv
+    __mul__ = __rmul__ = _array_no_bv
+    __div__ = __floordiv__ = __rdiv__ = __rfloordiv__ = _array_no_bv
+    __mod__ = __rmod__ = _array_no_bv
+    __lt__ = __le__ = __gt__ = __ge__ = _array_no_bv
+    __and__ = __rand__ = __or__ = __ror__ = _array_no_bv
+    __xor__ = __rxor__ = _array_no_bv
+    __neg__ = __invert__ = _array_no_bv
+    __lshift__ = __rlshift__ = __rshift__ = __rrshift__ = _array_no_bv
 
 
 class ASTtoSTP(ast.NodeVisitor):
@@ -687,7 +1327,7 @@ class ASTtoSTP(ast.NodeVisitor):
         self.func_name = node.name
 
         for idx, arg in enumerate(node.args.args):
-            arg = arg.arg if Py3 else arg.id
+            arg = arg.arg
             name = '%s_%d_%s' % (self.func_name, self.count, arg)
             if idx < len(self.args):
                 self.bitvecs[name] = self.args[idx]
@@ -708,6 +1348,14 @@ class ASTtoSTP(ast.NodeVisitor):
 
     def visit_Num(self, node):
         return node.n
+
+    def visit_Constant(self, node):
+        # Numeric literals have been represented by ast.Constant since
+        # Python 3.8.  NodeVisitor kept dispatching them through visit_Num
+        # for compatibility until Python 3.14 removed that fallback.
+        if isinstance(node.value, (int, float, complex)):
+            return node.value
+        return self.generic_visit(node)
 
     def visit_BoolOp(self, node):
         ops = {
@@ -810,6 +1458,10 @@ def bitvecs(*args, **kwargs):
     return Solver.current.bitvecs(*args, **kwargs)
 
 
+def array(*args, **kwargs):
+    return Solver.current.array(*args, **kwargs)
+
+
 def check(*args, **kwargs):
     return Solver.current.check(*args, **kwargs)
 
@@ -818,13 +1470,13 @@ def model(*args, **kwargs):
     return Solver.current.model(*args, **kwargs)
 
 def get_git_version_sha():
-    return _lib.get_git_version_sha()
+    return _lib.get_git_version_sha().decode('utf-8')
 
 def get_git_version_tag():
-    return _lib.get_git_version_tag()
+    return _lib.get_git_version_tag().decode('utf-8')
 
 def get_compilation_env():
-    return _lib.get_compilation_env()
+    return _lib.get_compilation_env().decode('utf-8')
 
 def get_lib():
     #

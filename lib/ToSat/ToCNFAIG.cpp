@@ -82,6 +82,18 @@ void ToCNFAIG::dag_aware_aig_rewrite(const bool needAbsRef,
       Aig_ManStop(pTemp);
       Dar_ManRewrite(mgr.aigMgr, pPars);
 
+      // Rewriting can leave a node with no fanout behind. Dar_LibBuildBest()
+      // builds each replacement subgraph bottom up with Aig_And(), and a
+      // trivial simplification or a structural-hash hit further up can drop
+      // the reference to a node it has just created; nothing deletes it
+      // afterwards, since Dar_ManRewrite() only cleans up on entry.
+      //
+      // Such a node is unreachable from the CO, so Aig_ManDupDfs() does not
+      // copy it -- but it also asserts that it copied everything, and aborts
+      // an assertions build. Delete them here instead. Only unreferenced AND
+      // nodes go, so the CI order the symbol table indexes by is untouched.
+      Aig_ManCleanup(mgr.aigMgr);
+
       mgr.aigMgr = Aig_ManDupDfs(pTemp = mgr.aigMgr);
       Aig_ManStop(pTemp);
 
@@ -125,7 +137,7 @@ void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
 
   if (!uf.simple_cnf)
   {
-    cnfData = Cnf_Derive(mgr.aigMgr, 0);
+    cnfData = derive_cnf(mgr);
     if (uf.stats_flag)
       cerr << "advanced CNF" << endl;
   }
@@ -138,6 +150,95 @@ void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
   assert(cnfData != NULL);
 
   fill_node_to_var(cnfData, nodeToVars, mgr);
+}
+
+// ABC's newer CNF generator. It works on a Gia_Man_t, so the AIG is converted
+// first. nLutSize bounds the cuts it considers: larger means a smaller CNF for
+// steeply more work.
+Cnf_Dat_t* ToCNFAIG::derive_cnf_mf(BBNodeManagerAIG& mgr, int nLutSize)
+{
+  Gia_Man_t* pGia = Gia_ManFromAig(mgr.aigMgr);
+
+  // fAddOrCla must be set. Cnf_Derive(pAig, 0) emits the clauses asserting the
+  // COs itself, but this generator only does so on request: it adds a single
+  // clause OR-ing all COs, and toCNF() has already established there is exactly
+  // one, so that clause is the unit which asserts the top-level formula.
+  // Without it the CNF is trivially satisfiable.
+  Cnf_Dat_t* cnfData =
+      (Cnf_Dat_t*)Mf_ManGenerateCnf(pGia, nLutSize, 0, 1, 0, 0);
+
+  // pVarNums comes back indexed by Gia object id, but addVariables() and
+  // fill_node_to_var() index it by Aig CI object id. Rebuild it over the Aig id
+  // space so those callers need no special case; only CIs are ever looked up,
+  // so everything else stays -1.
+  //
+  // Aig_ManObjNumMax(), not Aig_ManObjNum(): the latter subtracts nDeleted, and
+  // the Aig_ManCleanup() in toCNF() deletes nodes, so ids run past the count of
+  // live objects. Sizing by the count under-allocates by exactly nDeleted, and
+  // fill_node_to_var() then reads off the end of the array.
+  //
+  // Reading Gia CI ids is safe even though this generator may derive the CNF
+  // over a coarsened copy of the Gia (Gia_ManDupMuxes, when fCnfObjIds is 0):
+  // both managers append CIs before any AND node, so CI ids are 1..nCi in each,
+  // and pVarNums is sized by an object count that includes them.
+  const int nAigObjs = Aig_ManObjNumMax(mgr.aigMgr);
+  int* pRemap = ABC_ALLOC(int, nAigObjs);
+  for (int i = 0; i < nAigObjs; i++)
+    pRemap[i] = -1;
+
+  Aig_Obj_t* pCi;
+  int ci;
+  Aig_ManForEachCi(mgr.aigMgr, pCi, ci)
+    pRemap[pCi->Id] = cnfData->pVarNums[Gia_ObjId(pGia, Gia_ManCi(pGia, ci))];
+
+  ABC_FREE(cnfData->pVarNums);
+  cnfData->pVarNums = pRemap;
+
+  // Mf_ManGenerateCnf leaves pMan pointing at the Gia, cast to Aig_Man_t*.
+  // Nothing in STP reads pMan and Cnf_DataFree() does not touch it, so the Gia
+  // can be released here; null the pointer so it cannot be followed.
+  cnfData->pMan = NULL;
+  Gia_ManStop(pGia);
+
+  return cnfData;
+}
+
+Cnf_Dat_t* ToCNFAIG::derive_cnf(BBNodeManagerAIG& mgr)
+{
+  switch (uf.cnf_effort)
+  {
+    case UserDefinedFlags::CNF_EFFORT_VERY_LOW:
+      // No cut enumeration at all: a marking pass, then clause generation.
+      // This is the floor of the scale rather than Cnf_DeriveSimple() (the
+      // plain Tseitin encoding the simple_cnf path above uses), because
+      // Cnf_DeriveSimple buys about 12% off generation time for roughly 1.9x
+      // the clauses -- measured on one input at 51.7M clauses against 27.6M
+      // here. That trade is not worth a level.
+      return Cnf_DeriveFast(mgr.aigMgr, 0);
+
+    case UserDefinedFlags::CNF_EFFORT_LOW:
+      return derive_cnf_mf(mgr, 3);
+
+    case UserDefinedFlags::CNF_EFFORT_HIGH:
+      return derive_cnf_mf(mgr, 6);
+
+    case UserDefinedFlags::CNF_EFFORT_VERY_HIGH:
+      return derive_cnf_mf(mgr, 8);
+
+    case UserDefinedFlags::CNF_EFFORT_MEDIUM:
+    default:
+    {
+      // Cut enumeration and technology mapping, as in ABC's Cnf_Derive().
+      // That convenience wrapper reuses one process-global Cnf_Man_t, so two
+      // independent STP instances deriving CNF concurrently overwrite the
+      // same cut/mapping state. ABC exposes the underlying per-manager entry
+      // point; keep the manager local to this conversion instead.
+      Cnf_Man_t* cnfMan = Cnf_ManStart();
+      Cnf_Dat_t* result = Cnf_DeriveWithMan(cnfMan, mgr.aigMgr, 0);
+      Cnf_ManStop(cnfMan);
+      return result;
+    }
+  }
 }
 
 void ToCNFAIG::fill_node_to_var(Cnf_Dat_t* cnfData,

@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
+#include "stp/Util/BitOps.h"
 
 #include <cstdint>
 #include <vector>
@@ -141,7 +142,7 @@ bool fixTrueCase(FixedBits& lhs, FixedBits& rhs, bool strict, unsigned words,
   {
     if (delta[w] != 0)
     {
-      topBit = w * 64 + 63 - __builtin_clzll(delta[w]);
+      topBit = w * 64 + 63 - ::stp::countLeadingZeroes64(delta[w]);
       single = (delta[w] & (delta[w] - 1)) == 0;
       for (int lower = w - 1; single && lower >= 0; lower--)
         single = delta[lower] == 0;

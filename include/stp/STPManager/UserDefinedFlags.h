@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Andrew V. Jones
+ * AUTHORS: Vijay Ganesh, Andrew Teylu
  *
  * BEGIN DATE: November, 2005
  *
@@ -23,6 +23,9 @@ THE SOFTWARE.
 ********************************************************************/
 #ifndef UDEFFLAGS_H
 #define UDEFFLAGS_H
+
+#include "stp/Sat/SearchBias.h"
+#include <cstdint>
 
 namespace stp
 {
@@ -62,20 +65,17 @@ public:
   bool enable_aig_core_simplify = false;
   bool enable_use_intervals = true;
   bool enable_pure_literals = true;
-  bool enable_always_true = false;
   bool enable_split_extracts = true;
   bool enable_sharing_aware_rewriting = true;
   bool enable_merge_same = false;
+  bool enable_pair_extract = false;
+  bool enable_common_subsum = false;
 
   int64_t AIG_rewrites_iterations = 0; // Number of iterations of AIG rewrites.
-  int64_t bitblast_simplification = 0;
   int64_t size_reducing_fixed_point = 0;
   
 
   bool simplify_to_constants_only = false;
-
-  // given a/b = c, propagates that c<=a even if b may be zero.
-  bool cBitP_propagateForDivisionByZero = true;
 
   bool array_difficulty_reversion = true;
   bool difficulty_reversion = true;
@@ -83,6 +83,13 @@ public:
 
   // eagerly write through the array's function congruence axioms.
   bool ackermannisation = false;
+
+  // Decide whole-array equality/disequality (the extensional theory of
+  // arrays) with the lemmas-on-demand procedure of Brummayer & Biere
+  // (JSAT 2010). Runtime semantic option; it must be set before a
+  // whole-array equality is constructed. Construction preserves an opaque
+  // ARRAY_EQ, which is lowered only after the complete query is assembled.
+  bool enable_array_equality = false;
 
   // construct the counterexample in terms of original variable based
   // on the counterexample returned by SAT solver
@@ -98,7 +105,6 @@ public:
 
   // print the input back
   bool print_STPinput_back_flag = false;
-  bool print_STPinput_back_C_flag = false;
   bool print_STPinput_back_SMTLIB2_flag = false;
   bool print_STPinput_back_SMTLIB1_flag = false;
   bool print_STPinput_back_CVC_flag = false;
@@ -109,7 +115,6 @@ public:
 
   // output flags
   bool output_CNF_flag = false;
-  bool output_bench_flag = false;
 
   /* Bitblasting options */
 
@@ -123,6 +128,16 @@ public:
   bool bvplus_variant = true;
   bool conjoin_to_top = false;
 
+  // Bit-blast the floating-point predicates -- comparisons, equalities and
+  // classifications -- over already-packed operands natively (over the IEEE
+  // bits) instead of via the SymFPU unpacking circuits.
+  bool fp_native_cmp = true;
+
+  // Bit-blast fp.mul under surviving native predicates with the hand-written
+  // packed-operand circuit (BBfpMul) instead of the SymFPU unpacking
+  // circuits. Experimental; off by default.
+  bool fp_native_arith = false;
+
   int64_t multiplication_variant = 1;
 
   // If the bit-blaster discovers new constants, should the term simplifier be
@@ -131,8 +146,27 @@ public:
 
 
   /* CNF Generation options */
-  bool traditional_cnf = false;
   bool simple_cnf = false; // don't use the good AIG based CNF conversion.
+
+  // How much work to spend turning the AIG into CNF. Higher levels take longer
+  // to generate but produce a smaller CNF, so the best setting depends on
+  // whether a problem's cost is dominated by CNF generation or by solving.
+  //
+  // MEDIUM is ABC's Cnf_Derive(), a cut-enumeration and technology-mapping
+  // pass. VERY_LOW is Cnf_DeriveFast(), which skips cut enumeration entirely.
+  // LOW, HIGH and VERY_HIGH use ABC's newer Mf_ManGenerateCnf() at LUT sizes
+  // 3, 6 and 8; its cost grows steeply with LUT size for little further gain
+  // past 6.
+  enum CNFEffort
+  {
+    CNF_EFFORT_VERY_LOW = 0,
+    CNF_EFFORT_LOW,
+    CNF_EFFORT_MEDIUM,
+    CNF_EFFORT_HIGH,
+    CNF_EFFORT_VERY_HIGH
+  };
+
+  enum CNFEffort cnf_effort = CNF_EFFORT_MEDIUM;
 
   bool exit_after_CNF = false;
 
@@ -169,10 +203,27 @@ public:
 
   enum SATSolvers solver_to_use;
 
+  // Which answer to tune the SAT search towards. NONE, the default, leaves
+  // every backend at its own settings, so the option is opt-in.
+  SearchBias search_bias = SearchBias::NONE;
+
+  // Whether CaDiCaL may use bounded variable addition (its "factor"
+  // technique). Measured on QF_ABV it is a large win on some
+  // array-refinement families (wchains: up to 5x) and a modest loss on
+  // others (countbitstable: ~30%), so AUTO -- the default -- enables it
+  // only for problems that still contain array operations after
+  // simplification, and an explicit ON/OFF from the user always wins.
+  enum class BVAMode
+  {
+    AUTO = 0,
+    ON,
+    OFF
+  };
+  BVAMode cadical_factor = BVAMode::AUTO;
+
   bool get_print_output_at_all() const
   {
-    return print_STPinput_back_flag || print_STPinput_back_C_flag ||
-           print_STPinput_back_SMTLIB2_flag ||
+    return print_STPinput_back_flag || print_STPinput_back_SMTLIB2_flag ||
            print_STPinput_back_SMTLIB1_flag || print_STPinput_back_CVC_flag ||
            print_STPinput_back_dot_flag || print_STPinput_back_GDL_flag;
   }
@@ -184,16 +235,16 @@ public:
     bitConstantProp_flag = false;
     enable_use_intervals = false;
     enable_pure_literals = false;
-    enable_always_true = false;
     wordlevel_solve_flag = false;
     propagate_equalities = false;
     enable_flatten = false;
     enable_split_extracts = false;
     enable_sharing_aware_rewriting = false;
     enable_merge_same = false;
+    enable_pair_extract = false;
+    enable_common_subsum = false;
     enable_ite_context = false;
 
-    bitblast_simplification = 0;
     simple_cnf=true;
   }
 

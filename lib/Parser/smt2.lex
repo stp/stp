@@ -1,11 +1,12 @@
 /*%option reentrant
 %option bison-bridge*/
 %option noyywrap
-%option nounput
 %option noreject
 %option noyymore
 %option yylineno
 %option full
+
+/* %option debug */
 
 %{
 /********************************************************************
@@ -45,6 +46,13 @@
   extern int smt2error (const char *msg);
   bool stringOnly = false;
 
+  // Whether the floating-point keywords are live. Off until the parser sees
+  // an FP set-logic: SMT-LIB reserves theory names per-logic, and QF_BV
+  // inputs legitimately declare symbols named "fp", "NaN", "RNE" and so on
+  // (they parsed before floating-point support existed, and must keep
+  // parsing). See fpKeyword() below and stp::SMT2SetFloatTokens.
+  static thread_local bool floatTokensActive = false;
+
 #ifdef _MSC_VER
   #include <io.h>
   // defining isatty to avoid dll symbol export inconsistencies
@@ -52,7 +60,35 @@
 #endif
 
   // File-static (local to this file) variables and functions
-  static thread_local std::string _string_lit;
+  static THREAD_LOCAL_IE std::string _string_lit;
+
+  // Nesting depth while skipping the arguments of a command we don't
+  // interpret. Zero means the next ')' closes the command itself.
+  static THREAD_LOCAL_IE int skippedDepth = 0;
+
+  // The skipped text, comments excluded, for the one command that is only
+  // MOSTLY uninterpreted: define-sort inspects it for the nullary
+  // floating-point alias shape (see tryRegisterFpSortAlias in smt2.y).
+  //
+  // define-sort's token is emitted AFTER the swallowing (deferredDefineSort
+  // below), not before like its neighbours': its parser action reads the
+  // captured text, and bison runs that action as a default reduction,
+  // without fetching the lookahead that would otherwise drive the lexer
+  // through the s-expression first.
+  static thread_local std::string skippedText;
+  static thread_local bool deferredDefineSort = false;
+
+namespace stp
+{
+  const std::string& smt2_skipped_text() { return skippedText; }
+
+  void SMT2SetFloatTokens(bool enable) { floatTokensActive = enable; }
+
+  // define-sort's body never reaches the rules below -- SKIP_SEXPR swallows
+  // it and the grammar re-tokenises the text by hand -- so it has to ask the
+  // gate itself rather than being answered by it. See tryRegisterFpSortAlias.
+  bool SMT2FloatTokensActive() { return floatTokensActive; }
+}
 
   static int lookup(char* s)
   {
@@ -91,11 +127,19 @@
     // Checking the functions before the symbols saves a symbol-table
     // probe in files built almost entirely from define-funs. A name can't
     // legally be both, so the order isn't observable on valid input. A
-    // single functionReturnType probe classifies the name, avoiding the
-    // second map lookup that separate isBitVector/isBooleanFunction calls
-    // would cost on boolean-function references.
+    // single functionReturnType probe classifies the name, so a boolean-
+    // function reference costs one map lookup rather than two.
     else if (stp::GlobalParserInterface->hasFunctions())
     {
+      const stp::SourceSort source_sort =
+          stp::GlobalParserInterface->functionReturnSourceSort(s);
+      if (source_sort.kind() == stp::SourceSort::Kind::RoundingMode)
+      {
+        smt2lval.str = new std::string(s);
+        if (cleaned)
+          free(cleaned);
+        return ROUNDINGMODE_FUNCTIONID_TOK;
+      }
       const stp::types ft = stp::GlobalParserInterface->functionReturnType(s);
       if (ft == stp::BITVECTOR_TYPE)
       {
@@ -110,6 +154,24 @@
         if (cleaned)
           free (cleaned);
         return  BOOLEAN_FUNCTIONID_TOK;
+      }
+      else if (ft == stp::FLOATINGPOINT_TYPE)
+      {
+        smt2lval.str = new std::string(s);
+        if (cleaned)
+          free (cleaned);
+        return  FLOATINGPOINT_FUNCTIONID_TOK;
+      }
+      // A nullary define-fun whose body has array type is a pure name for
+      // that body, so it is accepted whether or not --array-equality is on
+      // (QF_ABVFP benchmarks use them with no whole-array equalities in
+      // sight). Uses of the name expand to the body in the grammar.
+      else if (ft == stp::ARRAY_TYPE)
+      {
+        smt2lval.str = new std::string(s);
+        if (cleaned)
+          free (cleaned);
+        return  ARRAY_FUNCTIONID_TOK;
       }
       else if (stp::GlobalParserInterface->LookupSymbol(s,nptr)) // it's a symbol.
       {
@@ -144,11 +206,22 @@
       return STRING_TOK;
     }
   }
+
+  // A name that is a keyword only in the FP logics: outside them it takes
+  // the ordinary identifier path, resolving to a declared symbol or coming
+  // back as a plain string.
+  static int fpKeyword(int token)
+  {
+    if (floatTokensActive)
+      return token;
+    return lookup(smt2text);
+  }
 %}
 
 %x  COMMENT
 %x  STRING_LITERAL
 %x  SYMBOL
+%x  SKIP_SEXPR
 
 LETTER  ([a-zA-Z])
 DIGIT  ([0-9])
@@ -164,7 +237,7 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_TOK; }
 #b{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCONST_BINARY_TOK; }
 #x({DIGIT}|[a-fA-F])+  { smt2lval.str = new std::string(smt2text+2); return BVCONST_HEXIDECIMAL_TOK; }
-{DIGIT}+"."{DIGIT}+    { return DECIMAL_TOK;}
+{DIGIT}+"."{DIGIT}+    { smt2lval.str = new std::string(smt2text); return DECIMAL_TOK;}
 
 ";" { BEGIN COMMENT; }
 <COMMENT>"\n" { BEGIN INITIAL; /* return to normal mode */}
@@ -210,9 +283,6 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 "declare-fun"             { return DECLARE_FUNCTION_TOK; }
 "declare-sort"            { return DECLARE_SORT_TOK;}
 "define-fun"              { return DEFINE_FUNCTION_TOK; }
-"define-fun-rec"          { return DECLARE_FUN_REC_TOK;}
-"define-funs-rec"         { return DECLARE_FUNS_REC_TOK;}
-"define-sort"             { return DEFINE_SORT_TOK;}
 "echo"                    { return ECHO_TOK;}
 "exit"                    { return EXIT_TOK;}
 "get-assertions"          { return GET_ASSERTIONS_TOK;}
@@ -221,7 +291,7 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 "get-model"               { return GET_MODEL_TOK;}
 "get-option"              { return GET_OPTION_TOK;}
 "get-proof"               { return GET_PROOF_TOK;}
-"get-unsat-assumption"    { return GET_UNSAT_ASSUMPTION_TOK;}
+"get-unsat-assumptions"   { return GET_UNSAT_ASSUMPTIONS_TOK;}
 "get-unsat-core"          { return GET_UNSAT_CORE_TOK;}
 "get-value"               { return GET_VALUE_TOK;}
 "pop"                     { return POP_TOK;}
@@ -232,12 +302,62 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 "set-logic"               { return LOGIC_TOK; }
 "set-option"              { return SET_OPTION_TOK; }
 
+ /* Commands STP cannot interpret, but which must still parse so that the
+  * rest of the script survives. The standard requires the response
+  * "unsupported" rather than an error. Their arguments (sorts, recursive
+  * function bodies, datatype declarations) are of no use to us, so the
+  * lexer swallows the remainder of the s-expression and hands the parser
+  * the closing parenthesis. */
+"define-fun-rec"   { skippedDepth = 0; BEGIN SKIP_SEXPR; return DEFINE_FUN_REC_TOK;}
+"define-funs-rec"  { skippedDepth = 0; BEGIN SKIP_SEXPR; return DEFINE_FUNS_REC_TOK;}
+"define-sort"      { skippedDepth = 0; skippedText.clear();
+                     deferredDefineSort = true; BEGIN SKIP_SEXPR; }
+"declare-datatype" { skippedDepth = 0; BEGIN SKIP_SEXPR; return DECLARE_DATATYPE_TOK;}
+"declare-datatypes" { skippedDepth = 0; BEGIN SKIP_SEXPR; return DECLARE_DATATYPES_TOK;}
+
+ /* Consume a command's arguments without interpreting them, tracking nesting
+  * so that the parenthesis returned is the one that closes the command
+  * itself. String literals and quoted symbols are matched as units, since
+  * either may contain an unbalanced parenthesis. */
+<SKIP_SEXPR>"\""([^"]|"\"\"")*"\""  { skippedText += yytext; /* string literal */ }
+<SKIP_SEXPR>"|"[^|]*"|"             { skippedText += yytext; /* quoted symbol */ }
+<SKIP_SEXPR>";"[^\n]*               { /* comment: not captured */ }
+<SKIP_SEXPR>"("                     { skippedDepth++; skippedText += '('; }
+<SKIP_SEXPR>")"                     { if (skippedDepth == 0)
+                                        {
+                                          BEGIN INITIAL;
+                                          if (deferredDefineSort)
+                                          {
+                                            // Hand back the closer so it
+                                            // arrives as the next token.
+                                            deferredDefineSort = false;
+                                            unput(')');
+                                            return DEFINE_SORT_TOK;
+                                          }
+                                          return RPAREN_TOK;
+                                        }
+                                      skippedDepth--; skippedText += ')'; }
+<SKIP_SEXPR>[^()|;\"]+              { skippedText += yytext; }
+<SKIP_SEXPR>.                       { skippedText += yytext; }
+<SKIP_SEXPR><<EOF>>                 { BEGIN INITIAL; deferredDefineSort = false;
+                                      return 0; }
+
 
 
  /* Types for QF_BV and QF_ABV. */
 "BitVec"        { return BITVEC_TOK;}
 "Array"         { return ARRAY_TOK;}
 "Bool"          { return BOOL_TOK;}
+
+ /* Types for QF_FP and QF_BVFP. These and every other floating-point
+  * name go through fpKeyword(): they are keywords only while an FP logic
+  * is set, and ordinary identifiers otherwise. */
+"FloatingPoint" { return fpKeyword(FLOATINGPOINT_TOK); }
+"RoundingMode" { return fpKeyword(ROUNDINGMODE_TOK); }
+"Float16" { return fpKeyword(FLOAT16_TOK); }
+"Float32" { return fpKeyword(FLOAT32_TOK); }
+"Float64" { return fpKeyword(FLOAT64_TOK); }
+"Float128" { return fpKeyword(FLOAT128_TOK); }
 
 
  /* CORE THEORY pg. 29 of the SMT-LIB2 standard 30-March-2010. */
@@ -303,6 +423,69 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
  /* Functions for QF_AUFBV. */
 "select"        { return SELECT_TOK; }
 "store"         { return STORE_TOK; }
+
+ /*
+  * NOTE: the call to `lookup` below is *extremely* greedy -- it means we
+  * cannot search for FP DOT ADD, we have to search for the whole thing --
+  * c'est la vie
+  */
+
+ /* generic FP token*/
+"fp" { return fpKeyword(FP_TOK); }
+
+ /* FP conversions */
+"to_fp" { return fpKeyword(FP_TOFP_TOK); }
+"to_fp_unsigned" { return fpKeyword(FP_TOFP_UNSIGNED_TOK); }
+"fp.to_ubv" { return fpKeyword(FP_TO_UBV_TOK); }
+"fp.to_sbv" { return fpKeyword(FP_TO_SBV_TOK); }
+
+ /* Functions for FP */
+"fp.to_real" { return fpKeyword(FP_TO_REAL_TOK); }
+"fp.abs" { return fpKeyword(FP_ABS_TOK); }
+"fp.neg" { return fpKeyword(FP_NEG_TOK); }
+"fp.add" { return fpKeyword(FP_ADD_TOK); }
+"fp.sub" { return fpKeyword(FP_SUB_TOK); }
+"fp.mul" { return fpKeyword(FP_MUL_TOK); }
+"fp.div" { return fpKeyword(FP_DIV_TOK); }
+"fp.fma" { return fpKeyword(FP_FMA_TOK); }
+"fp.sqrt" { return fpKeyword(FP_SQRT_TOK); }
+"fp.rem" { return fpKeyword(FP_REM_TOK); }
+"fp.roundToIntegral" { return fpKeyword(FP_ROUNDTOINTEGRAL_TOK); }
+"fp.min" { return fpKeyword(FP_MIN_TOK); }
+"fp.max" { return fpKeyword(FP_MAX_TOK); }
+"fp.leq" { return fpKeyword(FP_LEQ_TOK); }
+"fp.lt" { return fpKeyword(FP_LT_TOK); }
+"fp.geq" { return fpKeyword(FP_GEQ_TOK); }
+"fp.gt" { return fpKeyword(FP_GT_TOK); }
+"fp.eq" { return fpKeyword(FP_EQ_TOK); }
+"fp.isNormal" { return fpKeyword(FP_ISNORMAL_TOK); }
+"fp.isSubnormal" { return fpKeyword(FP_ISSUBNORMAL_TOK); }
+"fp.isZero" { return fpKeyword(FP_ISZERO_TOK); }
+"fp.isInfinite" { return fpKeyword(FP_ISINFINITE_TOK); }
+"fp.isNaN" { return fpKeyword(FP_ISNAN_TOK); }
+"fp.isNegative" { return fpKeyword(FP_ISNEGATIVE_TOK); }
+"fp.isPositive" { return fpKeyword(FP_ISPOSITIVE_TOK); }
+
+ /* rounding modes */
+"roundTowardZero" { return fpKeyword(FP_RM_ROUNDTOWARDZERO_TOK); }
+"roundNearestTiesToEven" { return fpKeyword(FP_RM_ROUNDNEARESTTIESTOEVEN_TOK); }
+"roundNearestTiesToAway" { return fpKeyword(FP_RM_ROUNDNEARESTTIESTOAWAY_TOK); }
+"roundTowardPositive" { return fpKeyword(FP_RM_ROUNDTOWARDPOSITIVE_TOK); }
+"roundTowardNegative" { return fpKeyword(FP_RM_ROUNDTOWARDNEGATIVE_TOK); }
+
+"RTZ" { return fpKeyword(FP_RM_ROUNDTOWARDZERO_TOK); }
+"RNE" { return fpKeyword(FP_RM_ROUNDNEARESTTIESTOEVEN_TOK); }
+"RNA" { return fpKeyword(FP_RM_ROUNDNEARESTTIESTOAWAY_TOK); }
+"RTP" { return fpKeyword(FP_RM_ROUNDTOWARDPOSITIVE_TOK); }
+"RTN" { return fpKeyword(FP_RM_ROUNDTOWARDNEGATIVE_TOK); }
+
+ /* fp constants */
+"NaN" { return fpKeyword(FP_NAN_TOK); }
+"-oo" { return fpKeyword(FP_NEG_INF_TOK); }
+"+oo" { return fpKeyword(FP_POS_INF_TOK); }
+"-zero" { return fpKeyword(FP_NEG_ZERO_TOK); }
+"+zero" { return fpKeyword(FP_POS_ZERO_TOK); }
+
 
 ({LETTER}|{OPCHAR})({ANYTHING})*  {return lookup(smt2text);}
 \|([^\|]|\n)*\| {return lookup(smt2text);}
