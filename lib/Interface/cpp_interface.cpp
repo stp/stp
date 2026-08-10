@@ -296,12 +296,21 @@ void Cpp_interface::storeFunction(const string& name, const ASTVec& params,
 
 ASTNode Cpp_interface::applyFunction(const string& name, const ASTVec& params)
 {
-  const auto found = functions.find(name);
-  if (found == functions.end())
+  const Function* f = lookupFunction(name);
+  if (f == NULL)
     FatalError("Trying to apply function which has not been defined.");
+  return applyFunction(*f, params);
+}
 
-  const Function& f = found->second;
+const Cpp_interface::Function*
+Cpp_interface::lookupFunction(const string& name) const
+{
+  const auto found = functions.find(name);
+  return found == functions.end() ? NULL : &found->second;
+}
 
+ASTNode Cpp_interface::applyFunction(const Function& f, const ASTVec& params)
+{
   if (f.params.size() != params.size())
     FatalError("Actual parameters differ in number from formal");
 

@@ -122,12 +122,17 @@ class Cpp_interface
   };
   vector<Entry> cache;
 
+public:
+  // A stored define-fun. Public because the SMT-LIB2 parser carries a
+  // pointer to one through a token (see lookupFunction).
   struct Function
   {
     ASTVec params;
     ASTNode function;
     std::string name;
   };
+
+private:
   ankerl::unordered_dense::map<std::string, Function> functions;
 
   // Nested helper class to encapsulate a frame (i.e., between push a pop)
@@ -261,6 +266,16 @@ public:
 
   DLL_PUBLIC ASTNode applyFunction(const std::string& name,
                                    const ASTVec& params);
+
+  // Resolve a name to its stored function in a single map probe, or NULL if
+  // no such function exists. The pointer is into `functions`, which only
+  // mutates between commands (define-fun stores, frame pops erase), never
+  // while a term is being parsed -- so a pointer handed to the parser via a
+  // token is valid for the lifetime of that token.
+  DLL_PUBLIC const Function* lookupFunction(const std::string& name) const;
+
+  // Apply an already-resolved function, skipping the by-name map probe.
+  DLL_PUBLIC ASTNode applyFunction(const Function& f, const ASTVec& params);
 
   // Classify a name by its carrier return type in a single map probe:
   // BITVECTOR_TYPE or BOOLEAN_TYPE, or UNKNOWN_TYPE when the name is not a

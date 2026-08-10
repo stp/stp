@@ -126,49 +126,43 @@ namespace stp
     }
     // Checking the functions before the symbols saves a symbol-table
     // probe in files built almost entirely from define-funs. A name can't
-    // legally be both, so the order isn't observable on valid input. The
-    // return SourceSort classifies the name completely, so a function
-    // reference costs one map lookup rather than two.
+    // legally be both, so the order isn't observable on valid input. One
+    // map probe resolves the name; the token carries the resolved function
+    // so the grammar never probes again, and the sort of the stored body
+    // (memoised on the node) classifies the token.
     else if (stp::GlobalParserInterface->hasFunctions())
     {
-      const stp::SourceSort source_sort =
-          stp::GlobalParserInterface->functionReturnSourceSort(s);
-      switch (source_sort.kind())
+      const stp::Cpp_interface::Function* fn =
+          stp::GlobalParserInterface->lookupFunction(s);
+      if (fn != NULL)
       {
-        case stp::SourceSort::Kind::RoundingMode:
-          smt2lval.str = new std::string(s);
-          if (cleaned)
-            free(cleaned);
-          return ROUNDINGMODE_FUNCTIONID_TOK;
-        case stp::SourceSort::Kind::BitVector:
-          smt2lval.str = new std::string(s);
-          if (cleaned)
-            free(cleaned);
-          return BITVECTOR_FUNCTIONID_TOK;
-        case stp::SourceSort::Kind::Bool:
-          smt2lval.str = new std::string(s);
-          if (cleaned)
-            free(cleaned);
-          return BOOLEAN_FUNCTIONID_TOK;
-        case stp::SourceSort::Kind::FloatingPoint:
-          smt2lval.str = new std::string(s);
-          if (cleaned)
-            free(cleaned);
-          return FLOATINGPOINT_FUNCTIONID_TOK;
-        // A nullary define-fun whose body has array type is a pure name for
-        // that body, so it is accepted whether or not --array-equality is on
-        // (QF_ABVFP benchmarks use them with no whole-array equalities in
-        // sight). Uses of the name expand to the body in the grammar.
-        case stp::SourceSort::Kind::Array:
-          smt2lval.str = new std::string(s);
-          if (cleaned)
-            free(cleaned);
-          return ARRAY_FUNCTIONID_TOK;
-        case stp::SourceSort::Kind::Unknown:
-          // Not a function after all.
-          if (stp::GlobalParserInterface->LookupSymbol(s,nptr)) // it's a symbol.
-            found = true;
-          break;
+        if (cleaned)
+          free(cleaned);
+        smt2lval.fn = fn;
+        switch (fn->function.GetSourceSort().kind())
+        {
+          case stp::SourceSort::Kind::RoundingMode:
+            return ROUNDINGMODE_FUNCTIONID_TOK;
+          case stp::SourceSort::Kind::BitVector:
+            return BITVECTOR_FUNCTIONID_TOK;
+          case stp::SourceSort::Kind::Bool:
+            return BOOLEAN_FUNCTIONID_TOK;
+          case stp::SourceSort::Kind::FloatingPoint:
+            return FLOATINGPOINT_FUNCTIONID_TOK;
+          // A nullary define-fun whose body has array type is a pure name
+          // for that body, so it is accepted whether or not --array-equality
+          // is on (QF_ABVFP benchmarks use them with no whole-array
+          // equalities in sight). Uses of the name expand to the body in
+          // the grammar.
+          case stp::SourceSort::Kind::Array:
+            return ARRAY_FUNCTIONID_TOK;
+          case stp::SourceSort::Kind::Unknown:
+            smt2error("Function with underivable return sort.");
+        }
+      }
+      else if (stp::GlobalParserInterface->LookupSymbol(s,nptr)) // it's a symbol.
+      {
+        found = true;
       }
     }
     else if (stp::GlobalParserInterface->LookupSymbol(s,nptr)) // it's a symbol.
