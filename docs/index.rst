@@ -24,7 +24,7 @@ For Debian-like platforms first install the prerequisites:
 .. code-block:: bash
 
     apt-get install git build-essential cmake bison flex \
-        libboost-program-options-dev libgmp-dev zlib1g-dev perl
+        libgmp-dev zlib1g-dev perl
 
 Then install minisat:
 
@@ -69,6 +69,7 @@ implemented.
    :maxdepth: 1
 
    smt-input-language
+   array-extensionality
 
 
 Python usage
@@ -167,6 +168,7 @@ Working on STP
    code-guide
    testing
    cnf-output-format
+   releasing
 
 
 Awards
@@ -258,7 +260,7 @@ History and authors
 The initial versions of STP were written primarily by Vijay Ganesh as
 part of his PhD thesis. STP was subsequently developed by Trevor
 Hansen during his PhD. The current authors are Trevor Hansen, Mate Soos, 
-Ryan Govostes and Andrew V. Teylu. STP is based on the
+Ryan Govostes and Andrew Teylu. STP is based on the
 following papers:
 
 -  `A Decision Procedure for Bit-Vectors and

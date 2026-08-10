@@ -137,7 +137,6 @@ endif()
 add_feature_info(Static STATICCOMPILE "Compiles static library and executable")
 
 if ((${CMAKE_SYSTEM_NAME} MATCHES "Windows") OR (NOT BUILD_SHARED_LIBS))
-    set(Boost_USE_STATIC_LIBS ON)
     set(Minisat_USE_STATIC_LIBS ON)
 endif()
 
@@ -457,7 +456,7 @@ if (GIT_EXECUTABLE)
 else()
   set(GIT_SHA "GIT-hash-notfound")
 endif()
-set(STP_FULL_VERSION "2.3.4")
+set(STP_FULL_VERSION "2.4.1")
 
 string(REPLACE "." ";" STP_FULL_VERSION_LIST ${STP_FULL_VERSION})
 SetVersionNumber("PROJECT" ${STP_FULL_VERSION_LIST})
@@ -485,9 +484,12 @@ include_directories("${CMAKE_CURRENT_BINARY_DIR}/include")
 include_directories(# For extlib-constbv
                     ${PROJECT_SOURCE_DIR}/lib
                    )
-# ABC is a vendored upstream submodule, so local fixes cannot simply be
-# committed to it. Any patch in patches/ that touches ABC is applied here, at
-# configure time, before it is built.
+# The vendored upstream submodules cannot simply be committed to, so local
+# fixes are carried as patches and applied here, at configure time, before
+# anything is built. Each submodule that takes patches has its own directory
+# under patches/, named for the library; the patches inside are relative to
+# that submodule's own root, so they are the plain `git diff` its checkout
+# produces.
 #
 # Applying is idempotent: a patch that reverse-applies cleanly is already in
 # the tree and is skipped, so re-running cmake, or configuring a second build
@@ -495,36 +497,51 @@ include_directories(# For extlib-constbv
 # neither is a hard error rather than a silent miscompile -- that happens when
 # the submodule is bumped past the code the patch was written against, and the
 # patch then needs rebasing or, if upstream has taken it, deleting.
-file(GLOB STP_ABC_PATCHES "${PROJECT_SOURCE_DIR}/patches/*.patch")
-list(SORT STP_ABC_PATCHES)
-if(STP_ABC_PATCHES AND EXISTS "${PROJECT_SOURCE_DIR}/lib/extlib-abc/src/opt/dar/darCut.c")
+#
+# The sentinel is a file the submodule is known to contain; it distinguishes a
+# checked-out submodule from the empty directory an uninitialised one leaves,
+# so a build without submodules is not turned into a patch failure.
+function(stp_apply_vendored_patches _label _subdir _sentinel)
+  set(_patchdir "${PROJECT_SOURCE_DIR}/patches/${_label}")
+  file(GLOB _patches "${_patchdir}/*.patch")
+  list(SORT _patches)
+  if(NOT _patches)
+    return()
+  endif()
+  if(NOT EXISTS "${PROJECT_SOURCE_DIR}/${_subdir}/${_sentinel}")
+    return() # submodule not checked out; nothing to patch
+  endif()
   if(NOT GIT_EXECUTABLE)
     message(FATAL_ERROR
-            "patches/ contains patches for the vendored ABC but git was not "
-            "found to apply them. Install git, or remove the patches.")
+            "patches/${_label}/ contains patches for the vendored ${_label} "
+            "but git was not found to apply them. Install git, or remove the "
+            "patches.")
   endif()
-  foreach(_patch ${STP_ABC_PATCHES})
+  foreach(_patch ${_patches})
     get_filename_component(_patch_name "${_patch}" NAME)
     execute_process(COMMAND "${GIT_EXECUTABLE}" apply --reverse --check "${_patch}"
-                    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/lib/extlib-abc"
+                    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/${_subdir}"
                     RESULT_VARIABLE _already OUTPUT_QUIET ERROR_QUIET)
     if(_already EQUAL 0)
-      message(STATUS "ABC patch already applied: ${_patch_name}")
+      message(STATUS "${_label} patch already applied: ${_patch_name}")
     else()
       execute_process(COMMAND "${GIT_EXECUTABLE}" apply "${_patch}"
-                      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/lib/extlib-abc"
+                      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/${_subdir}"
                       RESULT_VARIABLE _rc ERROR_VARIABLE _err)
       if(NOT _rc EQUAL 0)
         message(FATAL_ERROR
-                "Failed to apply ${_patch_name} to lib/extlib-abc:\n${_err}"
-                "It neither applies nor is already applied. If the ABC "
+                "Failed to apply ${_patch_name} to ${_subdir}:\n${_err}"
+                "It neither applies nor is already applied. If the ${_label} "
                 "submodule was bumped, rebase the patch onto the new revision, "
                 "or delete it if upstream has taken the change.")
       endif()
-      message(STATUS "Applied ABC patch: ${_patch_name}")
+      message(STATUS "Applied ${_label} patch: ${_patch_name}")
     endif()
   endforeach()
-endif()
+endfunction()
+
+stp_apply_vendored_patches(abc "lib/extlib-abc" "src/opt/dar/darCut.c")
+stp_apply_vendored_patches(symfpu "lib/extlib-symfpu/symfpu" "core/convert.h")
 
 # ABC is a vendored upstream submodule (berkeley-abc/abc); mark its headers as
 # SYSTEM so their warnings (e.g. -Wpedantic zero-size arrays, -Wunused-parameter
@@ -566,21 +583,16 @@ add_definitions(-DSIZEOF_LONG=${SIZEOF_LONG})
 CHECK_TYPE_SIZE("int" SIZEOF_INT)
 add_definitions(-DSIZEOF_INT=${SIZEOF_INT})
 
-
-
-option(ONLY_SIMPLE "Only build very simplistic executable -- no Boost needed" OFF)
-if (NOT ONLY_SIMPLE)
-  find_package( Boost 1.46 COMPONENTS program_options)
-endif()
-
-if(NOT Boost_FOUND)
-    set(ONLY_SIMPLE ON)
-endif()
-add_feature_info(SimpleOptions ONLY_SIMPLE "Simplifies command-line interface, only a few command-line options will be available")
+# Declared here, well before its first use (the manpage rule); the subdirs it
+# gates are added at the bottom of this file.
+option(BUILD_EXECUTABLES "Build executables" ON)
 
 # -----------------------------------------------------------------------------
 # Find Riss
 # -----------------------------------------------------------------------------
+option(USE_MINISAT "Use the MiniSat solver backend" OFF)
+add_feature_info(MiniSat USE_MINISAT "Enables the MiniSat and simplifying-MiniSat solvers")
+
 option(USE_RISS "Try to use Riss" OFF)
 add_feature_info(Riss USE_RISS "Enables Riss solver")
 
@@ -608,6 +620,28 @@ if (USE_CADICAL)
     add_definitions(-DUSE_CADICAL)
     include_directories(${CADICAL_INCLUDE_DIR})
     link_libraries(${CADICAL_LIBRARY})
+
+    # Bounded variable addition (--cadical-factor) needs the
+    # declare_more_variables API. That appeared in CaDiCaL 2.2.0, but the
+    # 2.2 line shipped it with different contract-checking defaults and was
+    # never tested here, so support is only compiled in against the 3.x
+    # series. Older checkouts still build and solve; STP just warns if the
+    # factor flag is explicitly requested. The checkout root carries its
+    # version in a VERSION file, which is what CADICAL_INCLUDE_DIR points at.
+    set(CADICAL_VERSION "unknown")
+    if (EXISTS "${CADICAL_INCLUDE_DIR}/VERSION")
+        file(READ "${CADICAL_INCLUDE_DIR}/VERSION" CADICAL_VERSION)
+        string(STRIP "${CADICAL_VERSION}" CADICAL_VERSION)
+    endif()
+    if (CADICAL_VERSION VERSION_GREATER_EQUAL "3.0.0")
+        message(STATUS "CaDiCaL ${CADICAL_VERSION}: bounded variable addition (--cadical-factor) enabled")
+        add_definitions(-DSTP_CADICAL_HAS_FACTOR)
+        # Mirrored as a variable so the test tree can register the
+        # factor-forced lit sweep only when the flag can actually engage.
+        set(CADICAL_HAS_FACTOR ON)
+    else()
+        message(STATUS "CaDiCaL ${CADICAL_VERSION} predates 3.0.0: --cadical-factor will be unavailable")
+    endif()
 endif()
 
 # -----------------------------------------------------------------------------
@@ -744,9 +778,10 @@ endif()
 # yes, we need to include the zlib header location or STP will not build
 # thanks to MiniSat include-ing it n the header
 # -----------------------------------------------------------------------------
-find_package(ZLIB)
-include_directories(${ZLIB_INCLUDE_DIR})
-include_directories(${minisat_SOURCE_DIR})
+if (USE_MINISAT)
+    find_package(ZLIB)
+    include_directories(${ZLIB_INCLUDE_DIR})
+endif()
 
 # ----------
 # manpage
@@ -754,7 +789,7 @@ include_directories(${minisat_SOURCE_DIR})
 if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     find_program(HELP2MAN_FOUND help2man)
     if (HELP2MAN_FOUND)
-        if (NOT ONLY_SIMPLE)
+        if (BUILD_EXECUTABLES)
             ADD_CUSTOM_TARGET(man_stp
                 ALL
                 DEPENDS stp-bin
@@ -783,25 +818,36 @@ endif()
 # Find Minisat
 # -----------------------------------------------------------------------------
 
-find_package(minisat)
-set(MINISAT_INCLUDE_DIR "" CACHE PATH "MiniSat include directory")
-set(MINISAT_LIBRARY "" CACHE PATH "MiniSat library directory")
-
-if (minisat_FOUND)
-    message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIRS}")
-else()
-    message(STATUS "Not found using installed MiniSat, looking for built MiniSat")
-    find_package(minisat CONFIG)
+if (USE_MINISAT)
+    find_package(minisat)
+    set(MINISAT_INCLUDE_DIR "" CACHE PATH "MiniSat include directory")
+    set(MINISAT_LIBRARY "" CACHE PATH "MiniSat library directory")
 
     if (minisat_FOUND)
         message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIRS}")
     else()
-        message(FATAL_ERROR "You must install minisat from https://github.com/stp/minisat")
+        message(STATUS "Not found using installed MiniSat, looking for built MiniSat")
+        find_package(minisat CONFIG)
+
+        if (minisat_FOUND)
+            message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIRS}")
+        else()
+            message(FATAL_ERROR "USE_MINISAT is set but MiniSat was not found. Install it from https://github.com/stp/minisat")
+        endif()
     endif()
+
+    add_definitions(-DUSE_MINISAT)
+    include_directories(SYSTEM ${MINISAT_INCLUDE_DIRS})
+    set(LIBS ${LIBS} ${MINISAT_LIBRARIES})
 endif()
 
-include_directories(SYSTEM ${MINISAT_INCLUDE_DIRS})
-set(LIBS ${LIBS} ${MINISAT_LIBRARIES})
+# Every backend is optional, but a solver with no SAT backend at all cannot
+# solve anything, so insist that at least one made it in.
+if (NOT USE_MINISAT AND NOT USE_CRYPTOMINISAT AND NOT USE_CADICAL AND NOT USE_RISS)
+    message(FATAL_ERROR "No SAT backend is enabled. Enable at least one of: "
+            "-DUSE_CADICAL=ON, CryptoMiniSat (found automatically when "
+            "installed), -DUSE_MINISAT=ON, or -DUSE_RISS=ON.")
+endif()
 
 # -----------------------------------------------------------------------------
 # Find Parser and Lexer generators
@@ -843,6 +889,80 @@ endif()
 
 # required for genkinds.pl and a few other scripts
 find_package(Perl REQUIRED)
+
+# -----------------------------------------------------------------------------
+# Floating-point support (opt-out; uses the header-only SymFPU library)
+# -----------------------------------------------------------------------------
+# SymFPU (BSD 3-Clause) is vendored as a pinned submodule, the same
+# arrangement as mimalloc above, so the default build has floating-point
+# support with nothing to install. When OFF, everything floating-point
+# stays out of the build except the always-compiled AST/parser/API surface,
+# which recognises floating-point input and rejects it with a "built
+# without floating-point support" error (see FloatBlaster.cpp's stubs and
+# checkFpSupported in smt2.y). The public headers and the libstp ABI are
+# identical either way.
+
+option(ENABLE_FLOATING_POINT
+       "SMT-LIB floating-point support (uses the vendored SymFPU library)" ON)
+add_feature_info(FloatingPoint ENABLE_FLOATING_POINT
+                 "Enables SMT-LIB floating-point support (via SymFPU)")
+
+if (ENABLE_FLOATING_POINT)
+    # The vendored submodule is the default; -DSYMFPU_INCLUDE_DIRS=<dir
+    # that CONTAINS a symfpu clone> overrides it with an external copy.
+    if (NOT SYMFPU_INCLUDE_DIRS)
+        set(SYMFPU_INCLUDE_DIRS "${PROJECT_SOURCE_DIR}/lib/extlib-symfpu")
+    endif()
+
+    find_package(SymFPU)
+
+    if (SymFPU_FOUND)
+        message(STATUS "OK, found SymFPU include dirs under ${SYMFPU_INCLUDE_DIRS}")
+    else()
+        message(FATAL_ERROR
+            "SymFPU (header-only, required for the floating-point support) "
+            "was not found. It is vendored as a submodule: run "
+            "git submodule update --init lib/extlib-symfpu/symfpu. An "
+            "external clone of https://github.com/martin-cs/symfpu works "
+            "too, via -DSYMFPU_INCLUDE_DIRS=<directory that CONTAINS the "
+            "symfpu clone>. To build without floating-point support, "
+            "configure with -DENABLE_FLOATING_POINT=OFF.")
+    endif()
+
+    # Let's get clean builds ...
+    include_directories(SYSTEM ${SYMFPU_INCLUDE_DIRS})
+
+    add_definitions(-DSTP_ENABLE_FLOATING_POINT)
+endif()
+
+option(USE_LIBBF "Use LibBF to fold real literals in floating-point input" OFF)
+add_feature_info(LibBF USE_LIBBF "Folds ((_ to_fp e s) rm 1.5) to its bits while parsing")
+
+if (USE_LIBBF)
+    # The one thing LibBF is for is converting real literals to float bits,
+    # which only exists in floating-point input.
+    if (NOT ENABLE_FLOATING_POINT)
+        message(FATAL_ERROR "USE_LIBBF folds floating-point real literals "
+                "and needs ENABLE_FLOATING_POINT")
+    endif()
+    set(LIBBF_DIR "" CACHE PATH "Path to a built LibBF (the directory containing libbf.h and libbf.a, as laid out by scripts/deps/setup-libbf.sh)")
+    find_path(LIBBF_INCLUDE_DIR NAMES libbf.h HINTS ${LIBBF_DIR})
+    find_library(LIBBF_LIBRARY NAMES bf HINTS ${LIBBF_DIR})
+    if (NOT LIBBF_INCLUDE_DIR OR NOT LIBBF_LIBRARY)
+        message(FATAL_ERROR "USE_LIBBF is set but LibBF was not found. Run "
+                "scripts/deps/setup-libbf.sh and point LIBBF_DIR at the "
+                "deps/libbf directory it creates")
+    endif()
+    message(STATUS "Found LibBF: ${LIBBF_LIBRARY}")
+    # DecimalLiteral.cpp keys on this to fold real literals instead of
+    # refusing them.
+    add_definitions(-DSTP_HAVE_LIBBF)
+    # SYSTEM, the way ABC and SymFPU are consumed: the header typedefs
+    # __int128 on 64-bit targets, which gcc's -pedantic rejects in the one
+    # C++ translation unit that includes it.
+    include_directories(SYSTEM ${LIBBF_INCLUDE_DIR})
+    link_libraries(${LIBBF_LIBRARY})
+endif()
 
 # -----------------------------------------------------------------------------
 # Query definitions
@@ -947,7 +1067,6 @@ add_feature_info(PythonInterface ENABLE_PYTHON_INTERFACE "Enables Python interfa
 
 message(STATUS "Final CXX flags ${CMAKE_CXX_FLAGS}")
 
-option(BUILD_EXECUTABLES "Build executables" ON)
 add_subdirectory(lib)
 add_subdirectory(tools)
 add_subdirectory(bindings)
@@ -1022,6 +1141,22 @@ configure_file(STPConfigVersion.cmake.in
 # Now the user can just use find_package(STP) on their system
 export(PACKAGE STP)
 
+
+# -----------------------------------------------------------------------------
+# Install the licences
+# -----------------------------------------------------------------------------
+# STP's own licence, and the notices of the third-party code compiled into it.
+# Several of those -- ABC, mimalloc, ankerl::unordered_dense, LibBF -- are MIT
+# or BSD, whose one condition is that the notice travels with the binary, so an
+# install that left these behind would not meet it. Which components are
+# actually linked in varies with the configuration, and the file says which
+# ones are conditional, so it is installed whole rather than assembled per
+# build.
+install(FILES
+  "${PROJECT_SOURCE_DIR}/LICENSE"
+  "${PROJECT_SOURCE_DIR}/LICENSE_COMPONENTS"
+  DESTINATION "${CMAKE_INSTALL_DOCDIR}"
+)
 
 # -----------------------------------------------------------------------------
 # Export our targets so that other CMake based projects can interface with

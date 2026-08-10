@@ -39,6 +39,7 @@ using stp::BVUMINUS;
 using stp::BVMULT;
 using stp::ITE;
 using stp::EQ;
+using stp::ARRAY_EQ;
 using stp::BVSRSHIFT;
 using stp::SBVREM;
 using stp::SBVMOD;
@@ -76,6 +77,70 @@ static unsigned lowestOneBit(const stp::ASTNode& n)
   return position;
 }
 
+// Recognise the packed floating-point constants +1.0 and -1.0 at any format:
+// returns 1 for +1.0, -1 for -1.0, and 0 otherwise. Both have an all-zero
+// significand and a biased exponent equal to the bias 2^(eb-1)-1 -- that is,
+// the exponent field is 0 1..1, its top bit clear and its remaining eb-1 bits
+// set -- and the sign bit selects between them. Read straight from the packed
+// representation, so it holds for every width.
+static int fpConstPlusMinusOne(const stp::ASTNode& c)
+{
+  if (c.GetKind() != stp::BVCONST)
+    return 0;
+  const unsigned eb = c.GetExpWidth();
+  const unsigned sb = c.GetSigWidth();
+  // A real IEEE format has eb, sb >= 2, and the packed width must be eb + sb
+  // for the bit indices below to be in range.
+  if (eb < 2 || sb < 2 || c.GetValueWidth() != eb + sb)
+    return 0;
+  stp::CBV bits = c.GetBVConst();
+  // Significand field: bits [0 .. sb-2] all zero.
+  for (unsigned i = 0; i + 1 < sb; i++)
+    if (CONSTANTBV::BitVector_bit_test(bits, i))
+      return 0;
+  // Exponent field is [sb-1 .. sb+eb-2]; the bias is 0 1..1, so its top bit
+  // (sb+eb-2) is clear and its lower eb-1 bits (sb-1 .. sb+eb-3) are all set.
+  if (CONSTANTBV::BitVector_bit_test(bits, sb + eb - 2))
+    return 0;
+  for (unsigned i = sb - 1; i + 1 < sb + eb - 1; i++)
+    if (!CONSTANTBV::BitVector_bit_test(bits, i))
+      return 0;
+  // Matched ±1.0; the sign bit (the top bit) chooses the sign.
+  return CONSTANTBV::BitVector_bit_test(bits, eb + sb - 1) ? -1 : 1;
+}
+
+// True for a packed floating-point constant that is NaN: exponent field
+// (bits [sb-1 .. sb+eb-2]) all ones and stored significand (bits
+// [0 .. sb-2]) nonzero. Interning canonicalises every NaN literal to one
+// pattern, but classify from the bits rather than lean on that.
+static bool fpConstIsNaN(const stp::ASTNode& c)
+{
+  assert(c.GetKind() == stp::BVCONST);
+  const unsigned eb = c.GetExpWidth();
+  const unsigned sb = c.GetSigWidth();
+  assert(eb >= 2 && sb >= 2 && c.GetValueWidth() == eb + sb);
+  stp::CBV bits = c.GetBVConst();
+  for (unsigned i = sb - 1; i < sb + eb - 1; i++)
+    if (!CONSTANTBV::BitVector_bit_test(bits, i))
+      return false;
+  for (unsigned i = 0; i + 1 < sb; i++)
+    if (CONSTANTBV::BitVector_bit_test(bits, i))
+      return true;
+  return false;
+}
+
+// True for a packed floating-point constant that is +0 or -0: everything
+// below the sign bit is zero.
+static bool fpConstIsZero(const stp::ASTNode& c)
+{
+  assert(c.GetKind() == stp::BVCONST);
+  stp::CBV bits = c.GetBVConst();
+  for (unsigned i = 0; i + 1 < c.GetValueWidth(); i++)
+    if (CONSTANTBV::BitVector_bit_test(bits, i))
+      return false;
+  return true;
+}
+
 bool SimplifyingNodeFactory::children_all_constants(
     const ASTVec& children) const
 {
@@ -105,6 +170,21 @@ ASTNode SimplifyingNodeFactory::get_largest_number(const unsigned width)
   CONSTANTBV::BitVector_Fill(max);
   CONSTANTBV::BitVector_Bit_Off(max, width - 1);
   return bm.CreateBVConst(max, width);
+}
+
+ASTNode SimplifyingNodeFactory::foldFPSign(const ASTNode& fpConst, bool flip)
+{
+  const unsigned width = fpConst.GetValueWidth(); // packed: sign is the top bit
+  stp::CBV bits = CONSTANTBV::BitVector_Clone(fpConst.GetBVConst());
+  if (!flip) // abs: clear the sign
+    CONSTANTBV::BitVector_Bit_Off(bits, width - 1);
+  else if (CONSTANTBV::BitVector_bit_test(bits, width - 1)) // neg: flip it
+    CONSTANTBV::BitVector_Bit_Off(bits, width - 1);
+  else
+    CONSTANTBV::BitVector_Bit_On(bits, width - 1);
+
+  return bm.CreateFPConst(bm.CreateBVConst(bits, width),
+                          fpConst.GetExpWidth(), fpConst.GetSigWidth());
 }
 
 ASTNode SimplifyingNodeFactory::create_gt_node(const ASTVec& children)
@@ -292,12 +372,23 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
 {
   assert(kind != SYMBOL);
   // These are created specially.
+  //
 
   // If all the parameters are constant, return the constant value.
   // The bitblaster calls CreateNode with a boolean vector. We don't try to
   // simplify those.
+  // The type kinds (BOOLEAN..ROUNDINGMODE, API-only nodes) are exempt: a
+  // childless one has "all children constant" vacuously, and the constant
+  // evaluator has no business seeing a type.
+  //
+  // Floating-point predicates fold here too: the constant evaluator's FP
+  // arm evaluates them by lowering over the constant operands and returns
+  // TRUE/FALSE, so constant floating-point comparisons and classifications
+  // never outlive their creation. (The FP *term* fold, with its
+  // format-carrying subtleties, is in CreateTerm.)
   if (kind != stp::UNDEFINED && kind != stp::BOOLEAN &&
       kind != stp::BITVECTOR && kind != stp::ARRAY &&
+      kind != stp::FLOATINGPOINT && kind != stp::ROUNDINGMODE &&
       children_all_constants(children))
   {
     const ASTNode& hash = hashing.CreateNode(kind, children);
@@ -495,7 +586,23 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
       result = CreateSimpleFormITE(children);
       break;
     case EQ:
-      result = CreateSimpleEQ(children);
+      // Whole-array equality is opaque until the solve-boundary lowering
+      // pass. Do not run bit-vector equality rewrites over array operands.
+      if (children.size() == 2 && children[0].GetIndexWidth() > 0)
+        result = children[0] == children[1]
+                     ? bm.ASTTrue
+                     : hashing.CreateNode(EQ, children);
+      else
+        result = CreateSimpleEQ(children);
+      break;
+    case ARRAY_EQ:
+      assert(children.size() == 2);
+      // ARRAY_EQ is deliberately opaque to ordinary simplification. The one
+      // theory-independent reduction is reflexivity; every other instance
+      // must survive until the extensionality lowering pass.
+      result = children[0] == children[1]
+                   ? bm.ASTTrue
+                   : hashing.CreateNode(ARRAY_EQ, children);
       break;
     case stp::IFF:
     {
@@ -521,6 +628,120 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
       }
       break;
     }
+
+    // ----- Cheap floating-point rewrites, applied before bit-blasting. -----
+    // These fire on the word-level node, so they shrink the circuit symfpu
+    // would otherwise build. Structural only -- constant folding is left to
+    // the blaster, which is why the FP kinds bypass the constant-fold path
+    // above.
+
+    // Classification ignores the sign, so a wrapping abs or neg can be peeled
+    // off. isPositive and isNegative are deliberately excluded: they are the
+    // two predicates that do depend on the sign.
+    case stp::FP_ISNORMAL:
+    case stp::FP_ISSUBNORMAL:
+    case stp::FP_ISZERO:
+    case stp::FP_ISINFINITE:
+    case stp::FP_ISNAN:
+      if (children[0].GetKind() == stp::FP_ABS ||
+          children[0].GetKind() == stp::FP_NEG)
+        result = NodeFactory::CreateNode(kind, children[0][0]);
+      break;
+
+    // Mirror the less-thans onto the greater-thans, as the bit-vector
+    // comparisons are above (BVLT -> BVGT): fp.lt(a, b) is fp.gt(b, a)
+    // exactly, NaN included -- both mean "ordered and strictly ordered", so
+    // the swap is a pure mirror -- and likewise for the non-strict pair.
+    // Downstream simplification then meets only the greater-than forms and
+    // needs half the comparison rules. (Unlike the total bit-vector order,
+    // this is as far as FP comparisons collapse: not(fp.lt) is geq-or-
+    // unordered, so the four kinds reduce to two, not one.)
+    case stp::FP_LT:
+      if (children.size() == 2)
+        result = NodeFactory::CreateNode(stp::FP_GT, children[1], children[0]);
+      break;
+
+    case stp::FP_LEQ:
+      if (children.size() == 2)
+        result =
+            NodeFactory::CreateNode(stp::FP_GEQ, children[1], children[0]);
+      break;
+
+    // x > x is false, NaN included.
+    case stp::FP_GT:
+      if (children.size() == 2 && children[0] == children[1])
+        result = ASTFalse;
+      break;
+
+    // x >= x holds exactly when x is not NaN.
+    case stp::FP_GEQ:
+      if (children.size() == 2 && children[0] == children[1])
+        result = NodeFactory::CreateNode(
+            stp::NOT, NodeFactory::CreateNode(stp::FP_ISNAN, children[0]));
+      break;
+
+    case stp::FP_EQ:
+    case stp::FP_SMT_EQ:
+      if (children.size() == 2)
+      {
+        // x = x is reflexively true; fp.eq(x, x) fails exactly when x is NaN
+        // (the FP_GEQ rule above, restated for the other reflexive predicate).
+        if (children[0] == children[1])
+        {
+          if (kind == stp::FP_SMT_EQ)
+            result = bm.ASTTrue;
+          else
+            result = NodeFactory::CreateNode(
+                stp::NOT,
+                NodeFactory::CreateNode(stp::FP_ISNAN, children[0]));
+          break;
+        }
+
+        // fp.eq against a constant: fp.eq and = disagree only on pairs
+        // holding a NaN or two zeros, and inspecting the constant settles
+        // both. Nothing compares fp.eq-equal to NaN; the zeros compare
+        // fp.eq-equal to each other and to nothing else; any other value is
+        // the sole member of its fp.eq class, where IEEE equality *is*
+        // abstract equality. The prize is the = form: PropagateEqualities
+        // may substitute through it, which fp.eq must never do.
+        // (Both-constant instances folded before the switch.)
+        if (kind == stp::FP_EQ)
+        {
+          const int ci = children[0].GetKind() == stp::BVCONST   ? 0
+                         : children[1].GetKind() == stp::BVCONST ? 1
+                                                                 : -1;
+          // A constant operand of an fp.eq carries its format, but read the
+          // fields rather than assume: a packed carrier that has lost the
+          // stamp must fall through to the plain symmetric ordering.
+          const unsigned eb = ci < 0 ? 0 : children[ci].GetExpWidth();
+          const unsigned sb = ci < 0 ? 0 : children[ci].GetSigWidth();
+          if (ci >= 0 && eb >= 2 && sb >= 2 &&
+              children[ci].GetValueWidth() == eb + sb)
+          {
+            const ASTNode& c = children[ci];
+            const ASTNode& x = children[1 - ci];
+            if (fpConstIsNaN(c))
+              result = ASTFalse;
+            else if (fpConstIsZero(c))
+              result = NodeFactory::CreateNode(stp::FP_ISZERO, x);
+            else
+              result = NodeFactory::CreateNode(stp::FP_SMT_EQ, x, c);
+            break;
+          }
+        }
+
+        // Both float equalities are symmetric. Order the operands so that
+        // x ~ y and y ~ x become the same node and share their blasted
+        // circuit.
+        if (children[0].GetNodeNum() > children[1].GetNodeNum())
+        {
+          ASTVec swapped;
+          swapped.push_back(children[1]);
+          swapped.push_back(children[0]);
+          result = hashing.CreateNode(kind, swapped);
+        }
+      }
+      break;
 
     default:
       result = hashing.CreateNode(kind, children);
@@ -782,10 +1003,11 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
     // terms are syntactically the same
     return ASTTrue;
 
-  // here the terms are definitely not syntactically equal but may be
-  // semantically equal.
+  // Two constant nodes still may be semantically equal: a float constant
+  // interns apart from the plain constant with its bits, so compare the
+  // bits, not the identities.
   if (stp::BVCONST == k1 && stp::BVCONST == k2)
-    return ASTFalse;
+    return stp::constantsSameBits(in1, in2) ? ASTTrue : ASTFalse;
 
   if ((k1 == BVNOT && k2 == BVNOT) || (k1 == BVUMINUS && k2 == BVUMINUS))
     return NodeFactory::CreateNode(EQ, in1[0], in2[0]);
@@ -1274,9 +1496,13 @@ ASTNode SimplifyingNodeFactory::chaseRead(const ASTVec& children,
       // cerr << "-";
       return write[2];
     }
-    else if (read_is_const && stp::BVCONST == write_index.GetKind())
+    else if (read_is_const && stp::BVCONST == write_index.GetKind() &&
+             stp::constantsDenoteDifferentValues(readIndex, write_index))
     {
-      // They are definately different. Ignore this.
+      // Different bits, so definately different. (Distinct constant
+      // nodes alone prove nothing: a float constant interns apart from
+      // the plain constant with its bits; skipping a write this read
+      // hits reads the wrong cell.)
       // cerr << "+";
     }
     else
@@ -1757,7 +1983,7 @@ ASTNode SimplifyingNodeFactory::plusRules(const ASTVec& oldChildren)
 
 
 // If the shift is bigger than the bitwidth, replace by an extract.
-ASTNode convertArithmeticKnownShiftAmount(const Kind k,
+ASTNode convertArithmeticKnownShiftAmount([[maybe_unused]] const Kind k,
                                                       const ASTVec& children,
                                                       STPMgr& bm,
                                                       NodeFactory* nf)
@@ -1874,8 +2100,21 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
   assert(bm.hashingNodeFactory == &hashing);
 
+  // The partial floating-point operations cannot be constant-folded here:
+  // their unspecified cases (fp.min/fp.max on opposite zeros, out-of-range
+  // fp.to_ubv/fp.to_sbv) only get an answer when FpTotalise adds its
+  // never-constant unspecified-value child, and lowering requires that
+  // totalised arity. Every other floating-point term folds through the
+  // constant evaluator's FP arm, which re-interns the result with its
+  // format via the CreateFPConst funnel -- so both literal spellings,
+  // ((_ to_fp e s) bits) and (fp s e m), intern to the same ASTFPConst,
+  // and constant arithmetic collapses at creation.
+  const bool is_partial_fp_operation =
+      kind == stp::FP_MIN || kind == stp::FP_MAX || kind == stp::FP_TO_UBV ||
+      kind == stp::FP_TO_SBV;
+
   // If all the parameters are constant, return the constant value.
-  if (children_all_constants(children))
+  if (children_all_constants(children) && !is_partial_fp_operation)
   {
     const ASTNode& hash = hashing.CreateTerm(kind, width, children);
     const ASTNode& c = NonMemberBVConstEvaluator(&bm, hash);
@@ -2756,6 +2995,17 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
             NodeFactory::CreateTerm(
                 SBVDIV, width, children[0],
                 NodeFactory::CreateTerm(BVUMINUS, width, children[1])));
+      else if (children[0] == children[1])
+        // x / x is 1 wherever the division is a real one. The remaining case
+        // is 0 / 0, which takes the total-division value the rule above
+        // gives: zero is not negative, so all ones. SBVMOD already has the
+        // matching x smod x rule; this one was missing, and without it
+        // nothing downstream can tell that the quotient is never zero.
+        result = NodeFactory::CreateTerm(
+            ITE, width,
+            NodeFactory::CreateNode(EQ, children[0],
+                                    bm.CreateZeroConst(width)),
+            bm.CreateMaxConst(width), bm.CreateOneConst(width));
       break;
 
     case SBVREM:
@@ -2909,6 +3159,148 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       }
       break;
 
+    // ----- Cheap floating-point rewrites, applied before bit-blasting. -----
+    // See the matching block in CreateNode.
+
+    // min(x, x) = max(x, x) = x. The two float operands are children 0 and 1;
+    // the totalising pass may append a choice-of-zero child, but it runs after
+    // this, and the identity holds whether or not it is present.
+    case stp::FP_MIN:
+    case stp::FP_MAX:
+      if (children.size() >= 2 && children[0] == children[1])
+        result = children[0];
+      break;
+
+    // abs(abs x) = abs(neg x) = abs x. On a constant, fold at construction --
+    // the cheap floating-point cases (unlike the arithmetic, which the
+    // constant evaluator folds by bit-blasting -- and would recurse through
+    // here) are pure sign-bit edits, so do them directly and keep the format.
+    // abs clears the sign; neg flips it. Both leave a NaN's payload alone,
+    // matching IEEE fp.abs/fp.neg (and SMT-LIB, where NaN is a single value).
+    case stp::FP_ABS:
+      if (children[0].GetKind() == stp::FP_ABS ||
+          children[0].GetKind() == stp::FP_NEG)
+        result = NodeFactory::CreateTerm(stp::FP_ABS, width, children[0][0]);
+      else if (children[0].GetKind() == stp::BVCONST)
+        result = foldFPSign(children[0], /*flip=*/false);
+      break;
+
+    // neg(neg x) = x.
+    case stp::FP_NEG:
+      if (children[0].GetKind() == stp::FP_NEG)
+        result = children[0][0];
+      else if (children[0].GetKind() == stp::BVCONST)
+        result = foldFPSign(children[0], /*flip=*/true);
+      break;
+
+    // fp.sub(rm, x, y) = fp.add(rm, x, fp.neg y). IEEE-754 defines subtraction
+    // as addition of the negation -- exact for every rounding mode and for
+    // signed zeros -- so lower it and reuse the add machinery (its constant
+    // folding, its commutative ordering, one adder to blast rather than two).
+    case stp::FP_SUB:
+      if (children.size() == 3)
+        result = NodeFactory::CreateTerm(
+            stp::FP_ADD, width, children[0], children[1],
+            NodeFactory::CreateTerm(stp::FP_NEG, width, children[2]));
+      break;
+
+    // fp.add is commutative in its two float operands (child 0 is the rounding
+    // mode). Order them so x + y and y + x share a node.
+    case stp::FP_ADD:
+      if (children.size() == 3 &&
+          children[1].GetNodeNum() > children[2].GetNodeNum())
+      {
+        ASTVec reordered;
+        reordered.push_back(children[0]);
+        reordered.push_back(children[2]);
+        reordered.push_back(children[1]);
+        result = hashing.CreateTerm(stp::FP_ADD, width, reordered);
+      }
+      break;
+
+    // fp.mul is commutative, and has two exact identity operands: x * 1.0 = x
+    // and x * -1.0 = -x, for every value and every rounding mode. 1.0 is the
+    // multiplicative identity and -1.0 its negation, so the product is exactly
+    // x or -x and no rounding happens (NaN, the infinities and the signed zeros
+    // all carry through). Either float operand (child 1 or 2) may be the
+    // constant; child 0 is the rounding mode.
+    case stp::FP_MUL:
+      if (children.size() == 3)
+      {
+        for (unsigned k = 1; result.IsNull() && k <= 2; k++)
+        {
+          const int pm = fpConstPlusMinusOne(children[k]);
+          if (pm == 1)
+            result = children[3 - k];
+          else if (pm == -1)
+            result =
+                NodeFactory::CreateTerm(stp::FP_NEG, width, children[3 - k]);
+        }
+        // Otherwise order the operands so x * y and y * x share a node.
+        if (result.IsNull() &&
+            children[1].GetNodeNum() > children[2].GetNodeNum())
+        {
+          ASTVec reordered;
+          reordered.push_back(children[0]);
+          reordered.push_back(children[2]);
+          reordered.push_back(children[1]);
+          result = hashing.CreateTerm(stp::FP_MUL, width, reordered);
+        }
+      }
+      break;
+
+    // fp.div by 1.0 is exact: x / 1.0 = x. Only the divisor (child 2) folds --
+    // 1.0 / x is not x -- so the dividend is left alone. (-1.0 is deliberately
+    // not handled here; x / -1.0 -> -x could be added the same way.)
+    case stp::FP_DIV:
+      if (children.size() == 3 && fpConstPlusMinusOne(children[2]) == 1)
+        result = children[1];
+      break;
+
+    // fp.fma(rm, x, y, z) computes round(x*y + z); the two multiplicands x
+    // and y (children 1 and 2) are symmetric, so order them, keeping the
+    // rounding mode (child 0) and the addend (child 3) in place.
+    case stp::FP_FMA:
+      if (children.size() == 4 &&
+          children[1].GetNodeNum() > children[2].GetNodeNum())
+      {
+        ASTVec reordered;
+        reordered.push_back(children[0]);
+        reordered.push_back(children[2]);
+        reordered.push_back(children[1]);
+        reordered.push_back(children[3]);
+        result = hashing.CreateTerm(stp::FP_FMA, width, reordered);
+      }
+      break;
+
+    // fp.rem(a, b) is exact, so several structural identities hold. Applied
+    // one per construction; the recursive calls re-simplify, so nested cases
+    // compose. Child 0 is the dividend a, child 1 the divisor b -- there is
+    // no rounding mode.
+    case stp::FP_REM:
+      if (children.size() == 2)
+      {
+        // rem(rem(a, b), b) = rem(a, b): a second remainder by the same
+        // divisor is a no-op.
+        if (children[0].GetKind() == stp::FP_REM &&
+            children[0][1] == children[1])
+          result = children[0];
+        // rem(a, -b) = rem(a, |b|) = rem(a, b): the divisor's sign is
+        // irrelevant.
+        else if (children[1].GetKind() == stp::FP_ABS ||
+                 children[1].GetKind() == stp::FP_NEG)
+          result = NodeFactory::CreateTerm(stp::FP_REM, width, children[0],
+                                           children[1][0]);
+        // rem(-a, b) = -rem(a, b): negating the dividend negates the result,
+        // so lift the negation out where it can meet another and cancel.
+        else if (children[0].GetKind() == stp::FP_NEG)
+          result = NodeFactory::CreateTerm(
+              stp::FP_NEG, width,
+              NodeFactory::CreateTerm(stp::FP_REM, width, children[0][0],
+                                      children[1]));
+      }
+      break;
+
     default: // quieten compiler.
       break;
   }
@@ -2918,4 +3310,3 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
 
   return result;
 }
-

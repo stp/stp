@@ -4,9 +4,14 @@ STP imports code from the following libraries:
 		of Leland Stanford Junior University and by New York University.
 	* ABC Copyright (c) The Regents of the University of California.
 	* mimalloc Copyright (c) 2018-2025 Microsoft Corporation, Daan Leijen.
+	* SymFPU copyright (C) by the authors from 2018 (only compiled in when
+		floating-point support is enabled).
+	* LibBF Copyright (c) 2017-2025 Fabrice Bellard (only compiled in when
+		built with USE_LIBBF, which folds the real literals in
+		floating-point input).
 	* ankerl::unordered_dense Copyright (c) 2022-2024 Martin Leitner-Ankerl.
-	* Mersenne Twister Copyright (C) 1997 - 2002 Makoto Matsumoto and Takuji
-		Nishimura, Copyright (C) 2000 - 2003 Richard J. Wagner.
+	* CLI11 Copyright (c) 2017-2026 University of Cincinnati (only compiled
+		into the stp command-line tool, not into the library).
 
 Our build system includes third-party CMake modules (these are not compiled
 into STP, but they are distributed with it):
@@ -108,6 +113,67 @@ mimalloc
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 	SOFTWARE.
 
+SymFPU
+	SymFPU is available under a choice of two licenses, GPL V3 or BSD
+	3-Clause; STP uses it under the BSD 3-Clause license, reproduced here.
+
+	SymFPU is copyright (C) by the authors from 2018
+
+	Redistribution and use in source and binary forms, with or without
+	modification, are permitted provided that the following conditions are
+	met:
+
+	    (1) Redistributions of source code must retain the above copyright
+	        notice, this list of conditions and the following disclaimer.
+
+	    (2) Redistributions in binary form must reproduce the above copyright
+	        notice, this list of conditions and the following disclaimer in
+	        the documentation and/or other materials provided with the
+	        distribution.
+
+	    (3) The name of the author may not be used to
+	        endorse or promote products derived from this software without
+	        specific prior written permission.
+
+	THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+	IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+	WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+	DISCLAIMED. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT,
+	INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+	(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+	SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+	HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+	STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
+	IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+	POSSIBILITY OF SUCH DAMAGE.
+
+LibBF
+	MIT License
+
+	STP builds the library proper out of the upstream release tarball, which
+	is two pairs of files, carrying a copyright line each:
+
+	libbf.c and libbf.h: Copyright (c) 2017-2025 Fabrice Bellard
+	cutils.c and cutils.h: Copyright (c) 2017 Fabrice Bellard
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in all
+	copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	SOFTWARE.
+
 ankerl::unordered_dense
 	Licensed under the MIT License <http://opensource.org/licenses/MIT>.
 	SPDX-License-Identifier: MIT
@@ -131,50 +197,32 @@ ankerl::unordered_dense
 	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 	SOFTWARE.
 
-Mersenne Twister
-	MersenneTwister.h
-	Mersenne Twister random number generator -- a C++ class MTRand
-	Based on code by Makoto Matsumoto, Takuji Nishimura, and Shawn Cokus
-	Richard J. Wagner  v1.0  15 May 2003  rjwagner@writeme.com
+CLI11
+	CLI11 2.7.2 Copyright (c) 2017-2026 University of Cincinnati, developed by Henry
+	Schreiner under NSF AWARD 1414736. All rights reserved.
 
-	Copyright (C) 1997 - 2002, Makoto Matsumoto and Takuji Nishimura,
-	Copyright (C) 2000 - 2003, Richard J. Wagner
-	All rights reserved.
+	Redistribution and use in source and binary forms of CLI11, with or without
+	modification, are permitted provided that the following conditions are met:
 
-	Redistribution and use in source and binary forms, with or without
-	modification, are permitted provided that the following conditions
-	are met:
+	1. Redistributions of source code must retain the above copyright notice, this
+	   list of conditions and the following disclaimer.
+	2. Redistributions in binary form must reproduce the above copyright notice,
+	   this list of conditions and the following disclaimer in the documentation
+	   and/or other materials provided with the distribution.
+	3. Neither the name of the copyright holder nor the names of its contributors
+	   may be used to endorse or promote products derived from this software without
+	   specific prior written permission.
 
-		1. Redistributions of source code must retain the above copyright
-			notice, this list of conditions and the following disclaimer.
-
-		2. Redistributions in binary form must reproduce the above copyright
-			notice, this list of conditions and the following disclaimer in the
-			documentation and/or other materials provided with the distribution.
-
-		3. The names of its contributors may not be used to endorse or promote
-			products derived from this software without specific prior written
-			permission.
-
-	THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-	"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-	LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-	A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER
-	OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-	EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-	PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-	PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-	LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-	NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+	THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+	ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+	WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+	DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+	ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+	(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+	ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+	(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 	SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-	The original code included the following notice:
-
-		When you use this, send an email to: matumoto@math.keio.ac.jp
-		with an appropriate reference to your work.
-
-	It would be nice to CC: rjwagner@writeme.com and Cokus@math.washington.edu
-	when you write.
 
 GetGitRevisionDescription.cmake (cmake/modules)
 	Original Author:

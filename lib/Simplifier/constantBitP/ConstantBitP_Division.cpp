@@ -1327,14 +1327,15 @@ static Result bvSignedModulusStructural(vector<FixedBits*>& children,
   {
     if (!fixBitTo(output, sign, false))
       return CONFLICT;
-    int highest = -1; // highest divisor bit that might be one.
-    for (int i = (int)sign - 1; i >= 0; i--)
+    // highest divisor bit that might be one; `sign` means there is none.
+    unsigned highest = sign;
+    for (unsigned i = sign; i-- > 0;)
       if (!b.isFixedToZero(i))
       {
         highest = i;
         break;
       }
-    assert(highest >= 0); // b is non-zero with a zero sign bit.
+    assert(highest < sign); // b is non-zero with a zero sign bit.
     // divisor <= 2^(highest+1)-1, so result <= 2^(highest+1)-2: the bits
     // above `highest` are zero.
     for (unsigned i = highest + 1; i < sign; i++)
@@ -1636,19 +1637,39 @@ Result bvSignedModulusBothWays(vector<FixedBits*>& children, FixedBits& output,
     return NO_CHANGE;
   }
 
-  const Result r0 = bvSignedModulusStructural(children, output, bm);
-  if (CONFLICT == r0)
-    return CONFLICT;
+  // Iterate the two passes to an internal fixed point. A single decompose
+  // pass can fix operand bits whose consequences only a re-run sees: an
+  // output fixed to a value no divisor admits first forces the dividend,
+  // and only the next pass notices the contradiction. propagate() gives
+  // each node exactly one call, so a state this function would itself
+  // refute must not survive the return. Terminates because a CHANGED pass
+  // fixes at least one more bit, bounded by 3 * width.
+  bool changed = false;
+  while (true)
+  {
+    const Result r0 = bvSignedModulusStructural(children, output, bm);
+    if (CONFLICT == r0)
+      return CONFLICT;
 
-  // The sign-case decomposition is expensive and deduces little when the
-  // divisor may be zero; bail out early like the other signed operations.
-  if (children[1]->containsZero())
-    return r0;
+    // The sign-case decomposition is expensive and deduces little when the
+    // divisor may be zero; skip it like the other signed operations.
+    if (children[1]->containsZero())
+    {
+      if (r0 != CHANGED)
+        break;
+      changed = true;
+      continue;
+    }
 
-  const Result r1 = bvSignedModulusDecompose(children, output, bm);
-  if (CONFLICT == r1)
-    return CONFLICT;
-  return merge(r0, r1);
+    const Result r1 = bvSignedModulusDecompose(children, output, bm);
+    if (CONFLICT == r1)
+      return CONFLICT;
+
+    if (r0 != CHANGED && r1 != CHANGED)
+      break;
+    changed = true;
+  }
+  return changed ? CHANGED : NO_CHANGE;
 }
 
 Result bvSignedRemainderBothWays(vector<FixedBits*>& children,

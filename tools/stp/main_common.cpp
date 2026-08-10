@@ -28,8 +28,8 @@ THE SOFTWARE.
 #include "sat/cnf/cnf.h"
 
 #include "stp/Parser/parser.h"
-#include "stp/cpp_interface.h"
 #include "stp/ToSat/ToSATAIG.h"
+#include "stp/cpp_interface.h"
 #include <memory>
 
 extern void errorHandler(const char* error_msg);
@@ -173,11 +173,6 @@ void Main::print_back(ASTNode& query, ASTNode& asserts)
   if (bm->UserFlags.print_STPinput_back_SMTLIB2_flag)
   {
     printer::SMTLIB2_PrintBack(cout, original_input, bm);
-  }
-
-  if (bm->UserFlags.print_STPinput_back_C_flag)
-  {
-    printer::C_Print(cout, original_input, bm);
   }
 
   if (bm->UserFlags.print_STPinput_back_GDL_flag)

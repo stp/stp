@@ -38,6 +38,9 @@ Third-party code that is compiled into STP also lives under ``lib/``:
 
 -  ``extlib-abc``: The `ABC <https://github.com/berkeley-abc/abc>`__
    package, used to build AIGs and convert them to CNF. A git submodule.
+-  ``extlib-cli11``: `CLI11 <https://github.com/CLIUtils/CLI11>`__, the
+   command-line parser of the ``stp`` executable. Header-only, so it is
+   compiled into the tool but never into ``libstp``. A git submodule.
 -  ``extlib-constbv``: A library that implements multi-word fixed-length
    integers, based on Steffen Beyer's
    `Bit::Vector <https://metacpan.org/pod/Bit::Vector>`__ perl module.
@@ -53,14 +56,11 @@ Third-party code that is compiled into STP also lives under ``lib/``:
 The executables are built from ``tools/``:
 
 -  ``stp``: The main command-line solver.
--  ``stp_simple``: A cut-down front end that accepts a single SMT-LIB2
-   file (or stdin) and no other options. Setting ``ONLY_SIMPLE`` builds
-   this instead of ``stp``, which drops the dependency on Boost.
 -  The rest are development aids, built only when ``BUILD_EXTRA_TOOLS``
-   is enabled: ``propagator_bench``, ``time_constantbitprop``,
-   ``measure_constantbitprop`` and ``test_constantbitprop`` exercise the
-   propagators, ``rewrite_rule_gen`` searches for rewrite rules, and
-   ``cvc_to_c`` turns a CVC file into a C program.
+   is enabled: ``propagator_bench`` times the propagators, checks how much
+   they deduce, and with ``--bcp-check`` compares that against what unit
+   propagation on the bit-blasted encoding deduces on its own; and
+   ``rewrite_rule_gen`` searches for rewrite rules.
 
 The Python bindings are in ``bindings/python``, and the tests are in
 ``tests/`` (see :doc:`testing`).

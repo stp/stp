@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/SubstitutionMap.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
+#include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/Simplifier/Simplifier.h"
 
 namespace stp
@@ -73,7 +74,7 @@ int TermOrder(const ASTNode& a, const ASTNode& b)
 ASTNode SubstitutionMap::applySubstitutionMap(const ASTNode& n)
 {
   bm->GetRunTimes()->start(RunTimes::ApplyingSubstitutions);
-  ASTNodeMap cache;
+  DenseNodeMap cache;
   ASTNode result = replace(n, *SolverMap, cache, bm->defaultNodeFactory, false, false);
 
   bm->GetRunTimes()->stop(RunTimes::ApplyingSubstitutions);
@@ -97,12 +98,12 @@ ASTNode SubstitutionMap::applySubstitutionMapAtTopLevel(const ASTNode& topLevel)
 // not always idempotent.
 ASTNode SubstitutionMap::applySubstitutionMapUntilArrays(const ASTNode& n)
 {
-  ASTNodeMap cache;
+  DenseNodeMap cache;
   return applySubstitutionMapUntilArrays(n, cache);
 }
 
 // not always idempotent.
-ASTNode SubstitutionMap::applySubstitutionMapUntilArrays(const ASTNode& n, ASTNodeMap& cache)
+ASTNode SubstitutionMap::applySubstitutionMapUntilArrays(const ASTNode& n, DenseNodeMap& cache)
 {
   bm->GetRunTimes()->start(RunTimes::ApplyingSubstitutions);
   ASTNode result = replace(n, *SolverMap, cache, bm->defaultNodeFactory, true, false);
@@ -111,8 +112,9 @@ ASTNode SubstitutionMap::applySubstitutionMapUntilArrays(const ASTNode& n, ASTNo
 }
 
 
-ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
-                                 ASTNodeMap& cache, NodeFactory* nf)
+template <class NodeMapType>
+ASTNode SubstitutionMap::replace(const ASTNode& n, NodeMapType& fromTo,
+                                 NodeMapType& cache, NodeFactory* nf)
 {
   if (0 == fromTo.size())
     return n;
@@ -129,22 +131,26 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
 // NB: You can't use this to map from "5" to the symbol "x" say.
 // It's optimised for the symbol to something case.
 
-ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
-                                 ASTNodeMap& cache, NodeFactory* nf,
+template <class NodeMapType>
+ASTNode SubstitutionMap::replace(const ASTNode& n, NodeMapType& fromTo,
+                                 NodeMapType& cache, NodeFactory* nf,
                                  bool stopAtArrays, bool preventInfinite)
 {
   const Kind k = n.GetKind();
   if (k == BVCONST || k == TRUE || k == FALSE)
     return n;
 
-  ASTNodeMap::const_iterator it;
+  typename NodeMapType::const_iterator it;
 
   if ((it = cache.find(n)) != cache.end())
     return it->second;
 
   if ((it = fromTo.find(n)) != fromTo.end())
   {
-    const ASTNode& r = it->second;
+    // By value, not by reference: the recursive calls below can insert into
+    // and erase from fromTo, and a DenseNodeMap moves its elements when that
+    // happens -- a reference here would dangle.
+    const ASTNode r = it->second;
     assert(r.GetIndexWidth() == n.GetIndexWidth());
 
     if (preventInfinite)
@@ -174,6 +180,12 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
   {
     return n;
   }
+
+  // Floating-point special constants (NaN, +/-oo, +/-zero) are nullary leaves
+  // that the BVCONST/TRUE/FALSE test above does not cover, so they reach here
+  // with no children. They are values: there is nothing to substitute into.
+  if (n.Degree() == 0)
+    return n;
 
   const ASTChildren children = n.GetChildren();
   assert(children.size() > 0);
@@ -249,6 +261,17 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, ASTNodeMap& fromTo,
   cache.insert(make_pair(n, result));
   return result;
 }
+
+// The two map types replace() runs over: the SolverMap paths use
+// DenseNodeMap; external callers pass ASTNodeMaps.
+template ASTNode SubstitutionMap::replace<ASTNodeMap>(const ASTNode&,
+    ASTNodeMap&, ASTNodeMap&, NodeFactory*);
+template ASTNode SubstitutionMap::replace<ASTNodeMap>(const ASTNode&,
+    ASTNodeMap&, ASTNodeMap&, NodeFactory*, bool, bool);
+template ASTNode SubstitutionMap::replace<DenseNodeMap>(const ASTNode&,
+    DenseNodeMap&, DenseNodeMap&, NodeFactory*);
+template ASTNode SubstitutionMap::replace<DenseNodeMap>(const ASTNode&,
+    DenseNodeMap&, DenseNodeMap&, NodeFactory*, bool, bool);
 
 // Adds to the dependency graph that n0 depends on the variables in n1.
 // It's not the transitive closure of the dependencies. Just the variables in
@@ -383,6 +406,50 @@ bool SubstitutionMap::loops(const ASTNode& n0, const ASTNode& n1)
   return (loops);
 }
 
+// Two obligations while array equality is active, with two different
+// shapes. Callers pass the substitution oriented: "key" is what gets
+// replaced and whose defining equation leaves the formula.
+//
+// Protected symbols -- equality abstraction variables, witness indices
+// and witness-read names, lemma-leaf names -- must survive to the
+// bit-blast, because their SAT variables carry the refinement lemmas
+// and the witness-read equations are how each equality operand's
+// current form is recovered afterwards. A protected symbol is refused
+// on whichever side it appears: as a key it would vanish outright, and
+// keeping the check symmetric costs nothing, since there are only a
+// handful of them.
+//
+// Reads are different, and only one orientation is dangerous. With the
+// checker owning the complete array graph, an access it never sees is
+// an access it cannot catch a disagreement at. TermOrder makes a READ
+// the key in exactly one situation, READ(Arr, const) against a
+// constant; that substitution deletes the read from the formula and
+// bakes its value in, so a second read of the same cell across a true
+// array equality would have nothing left to conflict with. Refuse it.
+//
+// The other orientation, "v |-> READ(A, i)", deletes nothing: the read
+// is copied to wherever v occurred and reaches the checker from there,
+// and if v occurred nowhere else then the read constrained nothing to
+// begin with. Refusing that one as well -- which is what a bare
+// "either side is a READ" test does -- suppressed BVSolver over every
+// read in the query, connected to an equality or not, and cost more
+// than the whole decision procedure on array-heavy input.
+bool SubstitutionMap::extensionalityProtected(const ASTNode& key,
+                                              const ASTNode& value) const
+{
+  ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  if (ext == NULL || !ext->activeInSolve())
+    return false;
+  if (key.GetKind() == SYMBOL && ext->isProtected(key))
+    return true;
+  if (value.GetKind() == SYMBOL && ext->isProtected(value))
+    return true;
+  // The equation-deleting orientation: the read itself is the key.
+  if (key.GetKind() == READ)
+    return true;
+  return false;
+}
+
 bool SubstitutionMap::UpdateSubstitutionMap(const ASTNode& e0,
                                             const ASTNode& e1)
 {
@@ -390,9 +457,24 @@ bool SubstitutionMap::UpdateSubstitutionMap(const ASTNode& e0,
   if (0 == i)
     return false;
 
+  // TermOrder has already chosen which side is the key: e0 when it
+  // returned 1, e1 when it returned -1. extensionalityProtected needs
+  // that orientation, because only a read in key position deletes an
+  // access. The later "i = -1" flip below cannot change the answer:
+  // it applies only when both sides are symbols.
+  if (extensionalityProtected(1 == i ? e0 : e1, 1 == i ? e1 : e0))
+    return false;
+
   assert(e0 != e1);
-  assert(e0.GetValueWidth() == e1.GetValueWidth());
-  assert(e0.GetIndexWidth() == e1.GetIndexWidth());
+  // A substituted pair must agree as bitvectors/arrays AND as floats. The
+  // format check is trivially true for non-floats (both report (0, 0)); for
+  // floats the widths agree whenever the formats do, since a float's value
+  // width is exp_width + sig_width. These used to be a disjunction, which
+  // any two non-float nodes satisfied through the vacuous format arm.
+  assert(e0.GetValueWidth() == e1.GetValueWidth() &&
+         e0.GetIndexWidth() == e1.GetIndexWidth());
+  assert(e0.GetExpWidth() == e1.GetExpWidth() &&
+         e0.GetSigWidth() == e1.GetSigWidth());
 
   if (e0.GetKind() == SYMBOL)
   {

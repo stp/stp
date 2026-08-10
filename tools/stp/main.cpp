@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Trevor Hansen, Andrew V. Jones
+ * AUTHORS: Vijay Ganesh, Trevor Hansen, Andrew Teylu
  *
  * BEGIN DATE: November, 2005
  *
@@ -24,8 +24,12 @@ THE SOFTWARE.
 
 #include "main_common.h"
 
-#include <boost/program_options.hpp>
-namespace po = boost::program_options;
+#include <CLI/CLI.hpp>
+
+#include <initializer_list>
+#include <iterator>
+#include <string>
+#include <vector>
 
 using namespace stp;
 using std::cout;
@@ -41,23 +45,60 @@ using std::endl;
  * step 3. Convert to CNF
  * step 4. Convert to SAT
  * step 5. Call SAT to determine if input is SAT or UNSAT
-********************************************************************/
+ ********************************************************************/
 
 class ExtraMain : public Main
 {
 public:
-  void try_parsing_options(int argc, char** argv, po::variables_map& vm,
-                           po::positional_options_description& pos_options);
   int create_and_parse_options(int argc, char** argv);
   void create_options();
   int parse_options(int argc, char** argv);
 
-  po::options_description cmdline_options;
-  po::options_description visible_options;
-  po::positional_options_description pos_options;
+  CLI::App app;
+
+  // Pure flags, true when given on the command line.
+  bool version = false;
+  bool disable_simplifications = false;
+  bool switch_word = false;
+  bool disable_opt_inc = false;
+  bool disable_cbitp = false;
+  bool disable_equality = false;
+  bool size_reducing_only = false;
+  bool use_cvc = false;
+  bool use_smtlib1 = false;
+  bool use_smtlib2 = false;
+#ifdef USE_MINISAT
+  bool use_simplifying_minisat = false;
+  bool use_minisat = false;
+#endif
+#ifdef USE_CRYPTOMINISAT
+  bool use_cryptominisat = false;
+#endif
+#ifdef USE_CADICAL
+  bool use_cadical = false;
+#endif
+#ifdef USE_RISS
+  bool use_riss = false;
+#endif
 
   // Held as text until parse_options() turns it into UserFlags.search_bias.
   std::string search_bias;
+  CLI::Option* search_bias_option = nullptr;
+
+  // Likewise for UserFlags.cadical_factor.
+  std::string cadical_factor;
+#ifdef USE_CADICAL
+  CLI::Option* cadical_factor_option = nullptr;
+#endif
+
+  // Likewise for UserFlags.cnf_effort; always mapped, so it carries the
+  // default spelling.
+  std::string cnf_effort = "medium";
+
+  // Tri-state: UserFlags.interactive_read is only overridden when the
+  // option was given, so the value needs its own presence check.
+  bool interactive = false;
+  CLI::Option* interactive_option = nullptr;
 };
 
 int ExtraMain::create_and_parse_options(int argc, char** argv)
@@ -71,427 +112,514 @@ int ExtraMain::create_and_parse_options(int argc, char** argv)
   return 0;
 }
 
-void ExtraMain::try_parsing_options(
-    int argc, char** argv, po::variables_map& vm,
-    po::positional_options_description& pos_options)
-{
-  try
-  {
-    po::store(po::command_line_parser(argc, argv)
-                  .options(cmdline_options)
-                  .positional(pos_options)
-                  .run(),
-              vm);
-
-    if (vm.count("help"))
-    {
-      cout << "USAGE: stp [options] <input-file>" << endl
-           << " where input is SMTLIB1/2 or CVC depending on options and file "
-              "extension"
-           << endl;
-
-      cout << cmdline_options << endl;
-      exit(0);
-    }
-
-    po::notify(vm);
-  }
-  /*
-   * Catch the program_options types themselves, not the wrapper that
-   * boost::throw_exception happens to build around them. That wrapper used to
-   * be clone_impl<error_info_injector<E>> and is wrapexcept<E> as of Boost
-   * 1.73, so naming it here silently stops catching anything when Boost is
-   * upgraded. Every one of these derives from po::error, and the final handler
-   * catches the ones we have no specific advice for -- missing arguments,
-   * ambiguous abbreviations, too many input files, and whatever future Boost
-   * versions add. Most-derived first.
-   */
-  catch (po::unknown_option& c)
-  {
-    cerr << "Some option you gave was wrong. Please give '--help' to get help"
-         << endl;
-    cerr << "Unknown option: " << c.what() << endl;
-    exit(-1);
-  }
-  catch (boost::bad_any_cast& e)
-  {
-    cerr << "ERROR! You probably gave a wrong argument type (Bad cast): "
-         << e.what() << endl;
-
-    exit(-1);
-  }
-  // The base of invalid_option_value and invalid_bool_value, which are
-  // siblings rather than one deriving from the other.
-  catch (po::validation_error& what)
-  {
-    cerr << "Invalid value given to option '" << what.get_option_name()
-         << "': " << what.what() << endl;
-
-    exit(-1);
-  }
-  catch (po::multiple_occurrences& what)
-  {
-    cerr << "Error: " << what.what() << " of option '" << what.get_option_name()
-         << "'" << endl;
-
-    exit(-1);
-  }
-  catch (po::required_option& what)
-  {
-    cerr << "You forgot to give a required option '" << what.get_option_name()
-         << "'" << endl;
-
-    exit(-1);
-  }
-  catch (po::error& what)
-  {
-    cerr << "Error: " << what.what() << endl;
-    cerr << "Please give '--help' to get help" << endl;
-
-    exit(-1);
-  }
-}
-
 void ExtraMain::create_options()
 {
-  po::options_description hiddenOptions("Hidden options");
-  hiddenOptions.add_options()("file", po::value<string>(&infile), "input file");
+  app.usage("USAGE: stp [options] <input-file>\n"
+            " where input is SMTLIB1/2 or CVC depending on options and file "
+            "extension");
 
-  // Declare the supported options.
-  po::options_description general_options("Most important options");
-  general_options.add_options()("help,h", "print this help")(
-      "version", "print version number");
+  // An empty group hides an option from --help; the input file is
+  // positional-only.
+  app.add_option("file", infile, "input file")->group("");
 
-#define BOOL_ARG(b0) po::value<bool>(&(b0))->default_value(b0)
-#define INT64_ARG(i0) po::value<int64_t>(&(i0))->default_value(i0)
+  const char* const general_group = "Most important options";
+  app.set_help_flag("--help,-h", "print this help")->group(general_group);
+  app.add_flag("--version", version, "print version number")
+      ->group(general_group);
 
-  po::options_description simplification_options("Simplifications");
-  simplification_options.add_options()("disable-simplifications",
-                                       "disable all simplifications")(
-      "switch-word,w", "switch off wordlevel solver")(
-      "disable-opt-inc,a", "disable rewriting simplifier")(
-      "disable-cbitp", "disable constant bit propagation")
-      ("disable-equality", "disable equality propagation")
-      ("size-reducing-only", "size reducing simplifications only")
+  const char* const simp_group = "Simplifications";
 
-      ("unconstrained-variable-elimination", 
-      BOOL_ARG(bm->UserFlags.enable_unconstrained),
-      "Unconstrained variables are eliminated.")
+  // A value-taking bool: accepts 1/0, true/false, on/off, as
+  // '--flattening false' or '--flattening=false'. capture_default_str()
+  // shows the current UserFlags default in --help.
+  auto bool_arg = [this](const char* name, bool& var, const char* desc,
+                         const char* group) {
+    return app.add_option(name, var, desc)->capture_default_str()->group(group);
+  };
+  auto int64_arg = [this](const char* name, int64_t& var, const char* desc,
+                          const char* group) {
+    return app.add_option(name, var, desc)->capture_default_str()->group(group);
+  };
 
-      ("aig-rewrite-passes", 
-      INT64_ARG(bm->UserFlags.AIG_rewrites_iterations),
-      "Iterations of AIG rewriting to perform")
+  app.add_flag("--disable-simplifications", disable_simplifications,
+               "disable all simplifications")
+      ->group(simp_group);
+  app.add_flag("--switch-word,-w", switch_word, "switch off wordlevel solver")
+      ->group(simp_group);
+  app.add_flag("--disable-opt-inc,-a", disable_opt_inc,
+               "disable rewriting simplifier")
+      ->group(simp_group);
+  app.add_flag("--disable-cbitp", disable_cbitp,
+               "disable constant bit propagation")
+      ->group(simp_group);
+  app.add_flag("--disable-equality", disable_equality,
+               "disable equality propagation")
+      ->group(simp_group);
+  app.add_flag("--size-reducing-only", size_reducing_only,
+               "size reducing simplifications only")
+      ->group(simp_group);
 
-      ("flattening", 
-      BOOL_ARG(bm->UserFlags.enable_flatten),
-      "Enable sharing-aware flattening of >2 arity nodes")
+  bool_arg("--unconstrained-variable-elimination",
+           bm->UserFlags.enable_unconstrained,
+           "Unconstrained variables are eliminated.", simp_group);
 
-      ("rewriting", 
-      BOOL_ARG(bm->UserFlags.enable_sharing_aware_rewriting),
-      "Enable sharing-aware rewriting")
+  int64_arg("--aig-rewrite-passes", bm->UserFlags.AIG_rewrites_iterations,
+            "Iterations of AIG rewriting to perform", simp_group);
 
-      ("split-extracts",
-      BOOL_ARG(bm->UserFlags.enable_split_extracts),
-      "Create new variables for some extracts")
+  bool_arg("--flattening", bm->UserFlags.enable_flatten,
+           "Enable sharing-aware flattening of >2 arity nodes", simp_group);
 
-      ("ite-context-simplifications", 
-      BOOL_ARG(bm->UserFlags.enable_ite_context),
-      "Use what is known to be true in an if-then-else node to simplify the true or false branches")
+  bool_arg("--rewriting", bm->UserFlags.enable_sharing_aware_rewriting,
+           "Enable sharing-aware rewriting", simp_group);
 
-      ("aig-core-simplification", 
-      BOOL_ARG(bm->UserFlags.enable_aig_core_simplify),
-      "Simplify the propositional core with AIGs")
+  bool_arg("--split-extracts", bm->UserFlags.enable_split_extracts,
+           "Create new variables for some extracts", simp_group);
 
-      ("use-intervals", 
-      BOOL_ARG(bm->UserFlags.enable_use_intervals),
-      "Simplify with interval analysis")
+  bool_arg("--ite-context-simplifications", bm->UserFlags.enable_ite_context,
+           "Use what is known to be true in an if-then-else node to simplify "
+           "the true or false branches",
+           simp_group);
 
-      ("pure-literals", 
-      BOOL_ARG(bm->UserFlags.enable_pure_literals),
-      "Pure literals are replaced.")
+  bool_arg("--aig-core-simplification", bm->UserFlags.enable_aig_core_simplify,
+           "Simplify the propositional core with AIGs", simp_group);
 
-      ("merge-same",
-      BOOL_ARG(bm->UserFlags.enable_merge_same),
-      "Uses simple boolean algebra rules to combine conjuncts at the top level")
+  bool_arg("--use-intervals", bm->UserFlags.enable_use_intervals,
+           "Simplify with interval analysis", simp_group);
 
-  
-      ("bit-blast-simplification", 
-      INT64_ARG(bm->UserFlags.bitblast_simplification),
-      "Part-way through simplifying, convert to AIGs and look for bits that the AIGs figure out are true/false or the same as another node. If the difficulty is less than this number. -1 means always.")
-      ("size-reducing-fixed-point-limit", 
-      INT64_ARG(bm->UserFlags.size_reducing_fixed_point),
-      "If the number of non-leaf nodes is fewer than this number, run size-reducing simplifications to a fixed-point. -1 means always.")
+  bool_arg("--pure-literals", bm->UserFlags.enable_pure_literals,
+           "Pure literals are replaced.", simp_group);
 
-      ("simplify-to-constants-only,simply_to_constants_only", 
-      BOOL_ARG(bm->UserFlags.simplify_to_constants_only),
-      "Use just the simplifications from the potentially size increasing suite that transform nodes to constants")
+  bool_arg("--common-subsum", bm->UserFlags.enable_common_subsum,
+           "Factor sub-sums shared between n-ary bvadd nodes into a single "
+           "shared node, so the adder is built once (needs --flattening)",
+           simp_group);
 
-      ("difficulty-reversion,difficulty_reversion", 
-      BOOL_ARG(bm->UserFlags.difficulty_reversion),
-      "Undo size increasing simplifications if they haven't made the problem simpler");
+  bool_arg("--pair-extract", bm->UserFlags.enable_pair_extract,
+           "In an n-ary bvadd, replace a pair of addends whose possibly-one "
+           "bits are disjoint by their bitwise-or, removing an adder stage",
+           simp_group);
 
-   
+  bool_arg("--merge-same", bm->UserFlags.enable_merge_same,
+           "Uses simple boolean algebra rules to combine conjuncts at the top "
+           "level",
+           simp_group);
 
+  int64_arg("--size-reducing-fixed-point-limit",
+            bm->UserFlags.size_reducing_fixed_point,
+            "If the number of non-leaf nodes is fewer than this number, run "
+            "size-reducing simplifications to a fixed-point. -1 means always.",
+            simp_group);
 
+  bool_arg("--simplify-to-constants-only,--simply_to_constants_only",
+           bm->UserFlags.simplify_to_constants_only,
+           "Use just the simplifications from the potentially size increasing "
+           "suite that transform nodes to constants",
+           simp_group);
 
-  po::options_description solver_options("SAT Solver options");
-  solver_options.add_options()
+  bool_arg("--difficulty-reversion,--difficulty_reversion",
+           bm->UserFlags.difficulty_reversion,
+           "Undo size increasing simplifications if they haven't made the "
+           "problem simpler",
+           simp_group);
+
+  const char* const solver_group = "SAT Solver options";
+
 #ifdef USE_CADICAL
-      ("cadical", "use cadical as the solver")
+  app.add_flag("--cadical", use_cadical, "use cadical as the solver")
+      ->group(solver_group);
+  cadical_factor_option =
+      app.add_option("--cadical-factor", cadical_factor,
+                     "let cadical use bounded variable addition: 'on', 'off', "
+                     "or 'auto' (the default, on only for problems with array "
+                     "operations). Needs a CaDiCaL 3.x build; otherwise the "
+                     "request is declined with a warning")
+          ->group(solver_group);
 #endif
 
 #ifdef USE_CRYPTOMINISAT
-      ("cryptominisat",
-       "use cryptominisat as the solver. Only use CryptoMiniSat 5.0 or above ")
-      ("threads",
-       po::value<int>(&bm->UserFlags.num_solver_threads)
-       ->default_value(bm->UserFlags.num_solver_threads),
-      "Number of threads for cryptominisat")
+  app.add_flag("--cryptominisat", use_cryptominisat,
+               "use cryptominisat as the solver. Only use CryptoMiniSat 5.0 "
+               "or above ")
+      ->group(solver_group);
+  app.add_option("--threads", bm->UserFlags.num_solver_threads,
+                 "Number of threads for cryptominisat")
+      ->capture_default_str()
+      ->group(solver_group);
+#endif
+
+#ifdef USE_RISS
+  // Bound to a variable like the rest: without one the flag parsed and then
+  // selected nothing, so asking for Riss was silently ignored whenever
+  // another solver was compiled in to supply the default.
+  app.add_flag("--riss", use_riss, "use Riss as the solver")
+      ->group(solver_group);
+#endif
+
+#ifdef USE_MINISAT
+  app.add_flag("--simplifying-minisat", use_simplifying_minisat,
+               "use installed simplifying minisat version as the solver")
+      ->group(solver_group);
+  app.add_flag("--minisat", use_minisat,
+               "use installed minisat version as the solver ")
+      ->group(solver_group);
+#endif
+  search_bias_option =
+      app.add_option("--search-bias", search_bias,
+                     "tune the SAT search towards one answer: 'unsat' (best "
+                     "for unsatisfiable / verification workloads), 'sat', or "
+                     "'none' (the default, leaving the solver at its own "
+                     "settings). Solvers with no such setting ignore it")
+          ->group(solver_group);
+
+  const char* const refinement_group = "Refinement options";
+  app.add_flag("--ackermanize,-r", bm->UserFlags.ackermannisation,
+               "eagerly encode array-read axioms (Ackermannistaion)")
+      ->group(refinement_group);
+  app.add_flag("--array-equality", bm->UserFlags.enable_array_equality,
+               "decide whole-array equality/disequality (extensional arrays) "
+               "by lemmas on demand")
+      ->group(refinement_group);
+
+  const char* const bb_group = "Bit-blasting options";
+  bool_arg("--bb.div-v1", bm->UserFlags.division_variant_1,
+           "unsigned division encoding variant 1", bb_group);
+
+  bool_arg("--bb.div-v2", bm->UserFlags.division_variant_2,
+           "unsigned division encoding variant 2", bb_group);
+
+  bool_arg("--bb.div-v3", bm->UserFlags.division_variant_3,
+           "unsigned division encoding variant 3", bb_group);
+
+  bool_arg("--bb.add-v1", bm->UserFlags.adder_variant,
+           "addition encoding variant 1", bb_group);
+
+  bool_arg("--bb.add-v2", bm->UserFlags.bvplus_variant,
+           "addition encoding variant 2", bb_group);
+
+  bool_arg("--bb.vle-v1", bm->UserFlags.bbbvle_variant,
+           "comparison encoding variant 1", bb_group);
+
+  int64_arg("--bb.mult-variant", bm->UserFlags.multiplication_variant,
+            "unsigned multiplication encoding. 1 (default) shifts and adds. "
+            "14 is 1, except that a multiplier holding a run of constant one "
+            "bits is Booth recoded. 15 is radix-4 modified Booth, which halves "
+            "the partial-product rows and recodes symbolic multipliers too. "
+            "16 chooses between 14 and 15 for each multiply. "
+            "3, 4, 6, 7, 8, 9 and 13 Booth recode and differ in how the "
+            "partial-product columns are summed. 5 uses the constant-bit "
+            "multiplication bounds, and needs --bb.mult-v2. Any other value "
+            "is an error, reported once bit-blasting reaches a multiply",
+            bb_group);
+
+  bool_arg("--bb.mult-v2", bm->UserFlags.upper_multiplication_bound,
+           "unsigned multiplication variant 2", bb_group);
+
+  bool_arg("--bb.conjoin-constant", bm->UserFlags.conjoin_to_top,
+           "When constant-bit propagation detects a constant bit during AIG "
+           "construction, assert the AIG node and replace it, in the AIG, by "
+           "the constant bit",
+           bb_group);
+
+  bool_arg("--bb.fp-native-cmp", bm->UserFlags.fp_native_cmp,
+           "Bit-blast floating-point predicates (comparisons, equalities, "
+           "classifications) over already-packed operands natively instead of "
+           "via the SymFPU unpacking circuits",
+           bb_group);
+
+  bool_arg("--bb.fp-native-arith", bm->UserFlags.fp_native_arith,
+           "Bit-blast fp.add and fp.mul under surviving native predicates "
+           "with the hand-written packed-operand circuits instead of the "
+           "SymFPU unpacking circuits (experimental)",
+           bb_group);
+
+  bool_arg("--bb.simplify-during-bb", bm->UserFlags.simplify_during_BB_flag,
+           "When bit-blasting discovers that a non-constant child of a term "
+           "blasts to an all-constant vector, rebuild the term with that "
+           "constant and re-run the word-level term simplifier on it. Needs "
+           "the rewriting simplifier, so not with --disable-opt-inc or "
+           "--disable-simplifications",
+           bb_group);
+
+  const char* const print_group = "Printing options";
+  app.add_flag("--print-stpinput,-b", bm->UserFlags.print_STPinput_back_flag,
+               "print STP input back to cout")
+      ->group(print_group);
+  app.add_flag("--print-back-CVC", bm->UserFlags.print_STPinput_back_CVC_flag,
+               "print input in CVC format, then exit")
+      ->group(print_group);
+  app.add_flag("--print-back-SMTLIB2",
+               bm->UserFlags.print_STPinput_back_SMTLIB2_flag,
+               "print input in SMT-LIB2 format, then exit")
+      ->group(print_group);
+  app.add_flag("--print-back-SMTLIB1",
+               bm->UserFlags.print_STPinput_back_SMTLIB1_flag,
+               "print input in SMT-LIB1 format, then exit")
+      ->group(print_group);
+  app.add_flag("--print-back-GDL", bm->UserFlags.print_STPinput_back_GDL_flag,
+               "print AiSee's graph format, then exit")
+      ->group(print_group);
+  app.add_flag("--print-back-dot", bm->UserFlags.print_STPinput_back_dot_flag,
+               "print dotty/neato's graph format, then exit")
+      ->group(print_group);
+  app.add_flag("--print-counterex,-p", bm->UserFlags.print_counterexample_flag,
+               "print counterexample")
+      ->group(print_group);
+  app.add_flag("--print-counterexbin,-y", bm->UserFlags.print_binary_flag,
+               "print counterexample in binary")
+      ->group(print_group);
+  app.add_flag("--print-arrayval,-q",
+               bm->UserFlags.print_arrayval_declaredorder_flag,
+               "print arrayval declared order")
+      ->group(print_group);
+  app.add_flag("--print-functionstat,-s", bm->UserFlags.stats_flag,
+               "print function statistics")
+      ->group(print_group);
+  app.add_flag("--print-quickstat,-t", bm->UserFlags.quick_statistics_flag,
+               "print quick statistics")
+      ->group(print_group);
+  app.add_flag("--print-nodes,-v", bm->UserFlags.print_nodes_flag,
+               "print nodes ")
+      ->group(print_group);
+  app.add_flag("--print-output,-n", bm->UserFlags.print_output_flag,
+               "Print output")
+      ->group(print_group);
+
+  const char* const input_group = "Input options";
+  app.add_flag("--SMTLIB1,-m", use_smtlib1, "use the SMT-LIB1 format parser")
+      ->group(input_group);
+  app.add_flag("--SMTLIB2", use_smtlib2, "use the SMT-LIB2 format parser")
+      ->group(input_group);
+  app.add_flag("--CVC", use_cvc, "use the CVC format parser")
+      ->group(input_group);
+
+  const char* const output_group = "Output options";
+  app.add_flag("--output-CNF", bm->UserFlags.output_CNF_flag,
+               "Save the CNF into output_[0..n].cnf. NOTE: variables cannot "
+               "be mapped back, and problems solved by the preprocessing "
+               "simplifier alone will not generate any CNF as the SAT solver "
+               "is never invoked")
+      ->group(output_group);
+
+  const char* const misc_group = "Miscellaneous options";
+  app.add_option("--cnf-generation-effort", cnf_effort,
+                 "effort spent minimising the CNF: very-low, low, medium, "
+                 "high, very-high. Higher is slower to generate but yields a "
+                 "smaller CNF")
+      ->capture_default_str()
+      ->group(misc_group);
+
+  app.add_flag("--exit-after-CNF", bm->UserFlags.exit_after_CNF,
+               "exit after the CNF has been generated")
+      ->group(misc_group);
+
+  app.add_flag("--parse-only", bm->UserFlags.parse_only,
+               "exit after parsing the input, without solving")
+      ->group(misc_group);
+
+  interactive_option =
+      app.add_option("--interactive", interactive,
+                     "read the input a character at a time, as needed when "
+                     "driving stp interactively over a pipe. Off reads in "
+                     "blocks, which is faster. Default: on when reading from "
+                     "stdin, off when reading from a file. SMT-LIB2 only.")
+          ->group(misc_group);
+
+  int64_arg("--max-num-confl,--max_num_confl,-g",
+            bm->UserFlags.timeout_max_conflicts,
+            "Number of conflicts after which the SAT solver gives up. "
+            "-1 means never, 0 means give up without searching.",
+            misc_group);
+
+  int64_arg("--max-time,--max_time,-k", bm->UserFlags.timeout_max_time,
+            "Number of seconds after which the SAT solver gives up. The "
+            "budget is for the whole query, not for each call into the SAT "
+            "solver. -1 means never, 0 means give up without searching.",
+            misc_group);
+
+  app.add_flag("--check-sanity,-d", bm->UserFlags.check_counterexample_flag,
+               "construct counterexample and check it")
+      ->group(misc_group);
+
+  // ---------------------------------------------------------------------
+  // Combinations where one option discards another's effect
+  // ---------------------------------------------------------------------
+  // Each pair below is one STP cannot honour both halves of: whichever the
+  // code happens to apply last wins, and the other request never reaches the
+  // solver. Reporting that is more useful than obeying half a command line,
+  // most of all for the generated ones that option sweeps and build scripts
+  // produce, where a silently dropped flag reads as a measurement.
+  //
+  // The options are looked up by name so that the definitions above stay as
+  // they were; get_option() throws if a name here stops matching one, so
+  // renaming an option cannot quietly drop its relationships.
+  //
+  // CLI11 tests whether an option was given, not what it was set to, so
+  // '--disable-simplifications --flattening false' is refused as well, even
+  // though the two agree. That is the same mistake in a milder form -- the
+  // second option still had no bearing on the run -- and treating it the same
+  // way keeps the rule to one sentence.
+  //
+  // Deliberately not here: the CVC/SMT-LIB1/SMT-LIB2 parser flags, which
+  // parse_options() already rejects with a message of their own, and
+  // --search-bias, documented as ignored by solvers that have no such setting
+  // rather than as an error.
+  auto excludes_all = [this](const std::string& name,
+                             std::initializer_list<const char*> others) {
+    CLI::Option* const option = app.get_option(name);
+    for (const char* other : others)
+    {
+      option->excludes(app.get_option(other));
+    }
+  };
+
+  // The solver flags are not applied in the order given: parse_options()
+  // consults them in a fixed sequence, so 'stp --cadical --minisat' quietly
+  // ran CaDiCaL. Only one of them can be meant. Which ones exist depends on
+  // what was compiled in.
+  std::vector<std::string> solver_flags;
+#ifdef USE_CADICAL
+  solver_flags.emplace_back("--cadical");
+#endif
+#ifdef USE_CRYPTOMINISAT
+  solver_flags.emplace_back("--cryptominisat");
 #endif
 #ifdef USE_RISS
-      ("riss",
-       "use Riss as the solver"
-      )
+  solver_flags.emplace_back("--riss");
 #endif
-         ("simplifying-minisat",
-           "use installed simplifying minisat version as the solver")(
-              "minisat", "use installed minisat version as the solver "
-#ifndef USE_CRYPTOMINISAT
+#ifdef USE_MINISAT
+  solver_flags.emplace_back("--simplifying-minisat");
+  solver_flags.emplace_back("--minisat");
 #endif
-              )
-      ("search-bias", po::value<std::string>(&search_bias),
-       "tune the SAT search towards one answer: 'unsat' (best for "
-       "unsatisfiable / verification workloads), 'sat', or 'none' (the "
-       "default, leaving the solver at its own settings). Solvers with no "
-       "such setting ignore it");
 
-  po::options_description refinement_options("Refinement options");
-  refinement_options.add_options()(
-      "ackermanize,r", po::bool_switch(&(bm->UserFlags.ackermannisation)),
-      "eagerly encode array-read axioms (Ackermannistaion)");
+  for (auto first = solver_flags.begin(); first != solver_flags.end(); ++first)
+  {
+    CLI::Option* const option = app.get_option(*first);
+    for (auto second = std::next(first); second != solver_flags.end(); ++second)
+    {
+      option->excludes(app.get_option(*second));
+    }
+  }
 
-  po::options_description print_options("Printing options");
-  print_options.add_options()(
-      "print-stpinput,b",
-      po::bool_switch(&(bm->UserFlags.print_STPinput_back_flag)),
-      "print STP input back to cout")(
-      "print-back-CVC",
-      po::bool_switch(&(bm->UserFlags.print_STPinput_back_CVC_flag)),
-      "print input in CVC format, then exit")(
-      "print-back-SMTLIB2",
-      po::bool_switch(&(bm->UserFlags.print_STPinput_back_SMTLIB2_flag)),
-      "print input in SMT-LIB2 format, then exit")(
-      "print-back-SMTLIB1",
-      po::bool_switch((&bm->UserFlags.print_STPinput_back_SMTLIB1_flag)),
-      "print input in SMT-LIB1 format, then exit")(
-      "print-back-GDL",
-      po::bool_switch(&(bm->UserFlags.print_STPinput_back_GDL_flag)),
-      "print AiSee's graph format, then exit")(
-      "print-back-dot",
-      po::bool_switch(&(bm->UserFlags.print_STPinput_back_dot_flag)),
-      "print dotty/neato's graph format, then exit")(
-      "print-counterex,p",
-      po::bool_switch(&(bm->UserFlags.print_counterexample_flag)), 
-      "print counterexample")(
-      "print-counterexbin,y",
-      po::bool_switch(&(bm->UserFlags.print_binary_flag)),
-      "print counterexample in binary")(
-      "print-arrayval,q",
-      po::bool_switch(&(bm->UserFlags.print_arrayval_declaredorder_flag)),
-      "print arrayval declared order")(
-      "print-functionstat,s", po::bool_switch(&(bm->UserFlags.stats_flag)),
-      "print function statistics")(
-      "print-quickstat,t",
-      po::bool_switch(&(bm->UserFlags.quick_statistics_flag)),
-      "print quick statistics")(
-      "print-nodes,v", po::bool_switch(&(bm->UserFlags.print_nodes_flag)),
-      "print nodes ")("print-output,n",
-                      po::bool_switch(&(bm->UserFlags.print_output_flag)),
-                      "Print output");
+#ifdef USE_CRYPTOMINISAT
+  // A thread count is read only by CryptoMiniSat, so asking for one while
+  // selecting a different solver gets neither threads nor a warning.
+  //
+  // --cadical-factor is deliberately not treated the same way: it is a
+  // request CaDiCaL may decline with a warning rather than a setting that
+  // must apply, and tests/query-files/CMakeLists.txt sweeps the whole corpus
+  // with it appended to every invocation, so an exclusion would fail every
+  // test in that run that names a solver.
+  CLI::Option* const threads_option = app.get_option("--threads");
+  for (const std::string& flag : solver_flags)
+  {
+    if (flag != "--cryptominisat")
+    {
+      threads_option->excludes(app.get_option(flag));
+    }
+  }
+#endif
 
-  po::options_description input_options("Input options");
-  input_options.add_options()("SMTLIB1,m", "use the SMT-LIB1 format parser")(
-      "SMTLIB2", "use the SMT-LIB2 format parser")("CVC",
-                                                   "use the CVC format parser");
+  // disableSimplifications() clears each of these after the command line has
+  // been read, so a request for one alongside it never takes effect.
+  excludes_all("--disable-simplifications",
+               {"--switch-word", "--disable-opt-inc", "--disable-cbitp",
+                "--disable-equality", "--unconstrained-variable-elimination",
+                "--flattening", "--rewriting", "--split-extracts",
+                "--ite-context-simplifications", "--use-intervals",
+                "--pure-literals", "--common-subsum", "--pair-extract",
+                "--merge-same"});
 
-  po::options_description output_options("Output options");
-  output_options.add_options()(
-      "output-CNF", po::bool_switch(&(bm->UserFlags.output_CNF_flag)),
-      "Save the CNF into output_[0..n].cnf. NOTE: variables cannot be mapped "
-      "back, and problems solved by the preprocessing simplifier alone will "
-      "not generate any CNF as the SAT solver is never invoked")(
-      "output-bench", po::bool_switch(&(bm->UserFlags.output_bench_flag)),
-      "save in ABC's bench format to output.bench");
+  // Likewise for what disableSizeIncreasingSimplifications() forces.
+  excludes_all("--size-reducing-only",
+               {"--simplify-to-constants-only",
+                "--ite-context-simplifications", "--difficulty-reversion"});
 
+  // The rewriting simplifier has to be on for this to do anything.
+  excludes_all("--bb.simplify-during-bb",
+               {"--disable-opt-inc", "--disable-simplifications"});
 
-  po::options_description bb_options("Bit-blasting options");
-  bb_options.add_options()
-    ("bb.div-v1", 
-      BOOL_ARG(bm->UserFlags.division_variant_1),
-      "unsigned division encoding variant 1")
+  // --parse-only stops before the SAT solver is reached, so there is never a
+  // CNF for these two to write out or exit after.
+  excludes_all("--parse-only", {"--output-CNF", "--exit-after-CNF"});
 
-    ("bb.div-v2", 
-      BOOL_ARG(bm->UserFlags.division_variant_2),
-      "unsigned division encoding variant 2")
-
-    ("bb.div-v3", 
-      BOOL_ARG(bm->UserFlags.division_variant_3),
-      "unsigned division encoding variant 3")
-
-    ("bb.add-v1", 
-      BOOL_ARG(bm->UserFlags.adder_variant),
-      "addition encoding variant 1")
-
-    ("bb.add-v2", 
-      BOOL_ARG(bm->UserFlags.bvplus_variant),
-      "addition encoding variant 2")
-
-    ("bb.vle-v1", 
-      BOOL_ARG(bm->UserFlags.bbbvle_variant),
-      "comparison encoding variant 1")
-
-    ("bb.mult-variant", 
-     INT64_ARG(bm->UserFlags.multiplication_variant),
-    "unsigned multiplication variant")
-
-    ("bb.mult-v2", 
-      BOOL_ARG(bm->UserFlags.upper_multiplication_bound),
-      "unsigned multiplication variant 2")
-
-    ("bb.conjoin-constant", 
-      BOOL_ARG(bm->UserFlags.conjoin_to_top),
-      "When constant-bit propagation detects a constant bit during AIG construction, assert the AIG node and replace it, in the AIG, by the constant bit"
-      );
-
-
-  po::options_description misc_options("Output options");
-  misc_options.add_options()
-
-      ("cnf-generation-effort", po::value<string>()->default_value("medium"),
-       "effort spent minimising the CNF: very-low, low, medium, high, "
-       "very-high. Higher is slower to generate but yields a smaller CNF")
-
-      // exit-after-CNF
-      ("exit-after-CNF", po::bool_switch(&(bm->UserFlags.exit_after_CNF)),
-       "exit after the CNF has been generated")
-
-      ("parse-only", po::bool_switch(&(bm->UserFlags.parse_only)),
-       "exit after parsing the input, without solving")
-
-      ("interactive", po::value<bool>(),
-       "read the input a character at a time, as needed when driving stp "
-       "interactively over a pipe. Off reads in blocks, which is faster. "
-       "Default: on when reading from stdin, off when reading from a file. "
-       "SMT-LIB2 only.")
-
-      ("max-num-confl,max_num_confl,g",
-      INT64_ARG(bm->UserFlags.timeout_max_conflicts),
-      "Number of conflicts after which the SAT solver gives up. "
-      "-1 means never, 0 means give up without searching.")
-
-      ("max-time,max_time,k",
-      INT64_ARG(bm->UserFlags.timeout_max_time),
-      "Number of seconds after which the SAT solver gives up. The budget is "
-      "for the whole query, not for each call into the SAT solver. "
-      "-1 means never, 0 means give up without searching.")
-
-      ("check-sanity,d", 
-        po::bool_switch(&(bm->UserFlags.check_counterexample_flag)),
-        "construct counterexample and check it");
-
-
-#undef BOOL_ARG
-#undef INT64_ARG
-
-  cmdline_options.add(general_options)
-      .add(simplification_options)
-      .add(solver_options)
-      .add(refinement_options)
-      .add(bb_options)
-      .add(print_options)
-      .add(input_options)
-      .add(output_options)
-      .add(misc_options)
-      .add(hiddenOptions);
-
-  // Register everything except hiddenOptions
-  visible_options.add(general_options)
-      .add(simplification_options)
-      .add(solver_options)
-      .add(refinement_options)
-      .add(bb_options)
-      .add(print_options)
-      .add(input_options)
-      .add(output_options)
-      .add(misc_options);
-
-  pos_options.add("file", 1);
+  // interactive_read is consulted only on the SMT-LIB2 path.
+  excludes_all("--interactive", {"--CVC", "--SMTLIB1"});
 }
 
 int ExtraMain::parse_options(int argc, char** argv)
 {
-  po::variables_map vm;
-  try_parsing_options(argc, argv, vm, pos_options);
+  try
+  {
+    app.parse(argc, argv);
+  }
+  catch (const CLI::CallForHelp&)
+  {
+    cout << app.help();
+    exit(0);
+  }
+  catch (const CLI::ParseError& e)
+  {
+    cerr << "Error: " << e.what() << endl;
+    cerr << "Please give '--help' to get help" << endl;
+    exit(-1);
+  }
+
   onePrintBack = bm->UserFlags.get_print_output_at_all();
 
-  if (vm.count("disable-opt-inc"))
+  if (disable_opt_inc)
   {
     bm->UserFlags.optimize_flag = false;
   }
 
-  if (vm.count("switch-word"))
+  if (switch_word)
   {
     bm->UserFlags.wordlevel_solve_flag = false;
   }
 
-  if (vm.count("disable-cbitp"))
+  if (disable_cbitp)
   {
     bm->UserFlags.bitConstantProp_flag = false;
   }
 
-  if (vm.count("interactive"))
+  if (interactive_option->count())
   {
-    bm->UserFlags.interactive_read = vm["interactive"].as<bool>() ? 1 : 0;
+    bm->UserFlags.interactive_read = interactive ? 1 : 0;
   }
 
-  if (vm.count("cnf-generation-effort"))
+  if (cnf_effort == "very-low")
+    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_VERY_LOW;
+  else if (cnf_effort == "low")
+    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_LOW;
+  else if (cnf_effort == "medium")
+    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_MEDIUM;
+  else if (cnf_effort == "high")
+    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_HIGH;
+  else if (cnf_effort == "very-high")
+    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_VERY_HIGH;
+  else
   {
-    const string effort = vm["cnf-generation-effort"].as<string>();
-    if (effort == "very-low")
-      bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_VERY_LOW;
-    else if (effort == "low")
-      bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_LOW;
-    else if (effort == "medium")
-      bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_MEDIUM;
-    else if (effort == "high")
-      bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_HIGH;
-    else if (effort == "very-high")
-      bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_VERY_HIGH;
-    else
-    {
-      std::cerr << "Unknown --cnf-generation-effort value '" << effort
-                << "'. Expected one of: very-low, low, medium, high, very-high."
-                << std::endl;
-      return -1;
-    }
+    std::cerr << "Unknown --cnf-generation-effort value '" << cnf_effort
+              << "'. Expected one of: very-low, low, medium, high, very-high."
+              << std::endl;
+    return -1;
   }
 
   int selected_type = 0;
-  if (vm.count("CVC"))
+  if (use_cvc)
   {
     selected_type++;
     bm->UserFlags.smtlib1_parser_flag = false;
     bm->UserFlags.smtlib2_parser_flag = false;
   }
 
-  if (vm.count("SMTLIB2"))
+  if (use_smtlib2)
   {
     selected_type++;
     bm->UserFlags.smtlib1_parser_flag = false;
     bm->UserFlags.smtlib2_parser_flag = true;
   }
 
-  if (vm.count("SMTLIB1"))
+  if (use_smtlib1)
   {
     selected_type++;
     bm->UserFlags.smtlib1_parser_flag = true;
@@ -511,27 +639,40 @@ int ExtraMain::parse_options(int argc, char** argv)
     bm->UserFlags.smtlib2_parser_flag = true;
   }
 
-  if (vm.count("simplifying-minisat"))
+#ifdef USE_MINISAT
+  if (use_simplifying_minisat)
   {
     bm->UserFlags.solver_to_use = UserDefinedFlags::SIMPLIFYING_MINISAT_SOLVER;
   }
 
-  if (vm.count("minisat"))
+  if (use_minisat)
   {
     bm->UserFlags.solver_to_use = UserDefinedFlags::MINISAT_SOLVER;
   }
+#endif
 
-  if (vm.count("cryptominisat"))
+#ifdef USE_CRYPTOMINISAT
+  if (use_cryptominisat)
   {
     bm->UserFlags.solver_to_use = UserDefinedFlags::CRYPTOMINISAT5_SOLVER;
   }
+#endif
 
-  if (vm.count("cadical"))
+#ifdef USE_CADICAL
+  if (use_cadical)
   {
     bm->UserFlags.solver_to_use = UserDefinedFlags::CADICAL_SOLVER;
   }
+#endif
 
-  if (vm.count("search-bias"))
+#ifdef USE_RISS
+  if (use_riss)
+  {
+    bm->UserFlags.solver_to_use = UserDefinedFlags::RISS_SOLVER;
+  }
+#endif
+
+  if (search_bias_option->count())
   {
     if (search_bias == "sat")
       bm->UserFlags.search_bias = SearchBias::SAT;
@@ -547,6 +688,23 @@ int ExtraMain::parse_options(int argc, char** argv)
     }
   }
 
+#ifdef USE_CADICAL
+  if (cadical_factor_option->count())
+  {
+    if (cadical_factor == "on")
+      bm->UserFlags.cadical_factor = UserDefinedFlags::BVAMode::ON;
+    else if (cadical_factor == "off")
+      bm->UserFlags.cadical_factor = UserDefinedFlags::BVAMode::OFF;
+    else if (cadical_factor == "auto")
+      bm->UserFlags.cadical_factor = UserDefinedFlags::BVAMode::AUTO;
+    else
+    {
+      cerr << "ERROR: --cadical-factor must be one of 'on', 'off' or 'auto'"
+           << endl;
+      std::exit(-1);
+    }
+  }
+#endif
 
   /*
    * -1 is the only negative value with a meaning ("no limit"); anything more
@@ -565,17 +723,17 @@ int ExtraMain::parse_options(int argc, char** argv)
     std::exit(-1);
   }
 
-  if (vm.count("disable-simplifications"))
+  if (disable_simplifications)
   {
     bm->UserFlags.disableSimplifications();
   }
 
-  if (vm.count("size-reducing-only"))
+  if (size_reducing_only)
   {
     bm->UserFlags.disableSizeIncreasingSimplifications();
   }
 
-  if (vm.count("disable-equality"))
+  if (disable_equality)
   {
     bm->UserFlags.propagate_equalities = false;
   }
@@ -586,7 +744,7 @@ int ExtraMain::parse_options(int argc, char** argv)
     check_infile_type();
   }
 
-  if (vm.count("version"))
+  if (version)
   {
     printVersionInfo();
     exit(0);

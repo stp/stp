@@ -25,6 +25,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/StrengthReduction.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
+#include "stp/Util/CBVOps.h"
 #include <iostream>
 
 namespace stp
@@ -389,7 +390,16 @@ namespace stp
           newN = nf->getFalse();
       }
       else
-        newN = nf->CreateConstant(b->GetBVConst(), n.GetValueWidth());
+      {
+        // The replaced node's floating-point format (if it has one) must be
+        // passed along: a constant is a leaf, so unlike the interior node it
+        // stands in for it cannot derive a format from children. A bare
+        // bitvector constant put where a float was makes the parent
+        // operation's rebuild abort -- fp.neg of a constant folds by making
+        // a floating-point constant, of format (0, 0) then.
+        newN = nf->CreateConstant(b->GetBVConst(), n.GetValueWidth(),
+                                  n.GetExpWidth(), n.GetSigWidth());
+      }
 
       replaceWithConstant++;
     }
@@ -521,6 +531,129 @@ namespace stp
     }
     else if (kind == BVPLUS || kind == BVXOR)
     {
+      // A pair of addends whose possibly-one bits are disjoint can never
+      // carry into each other, so their sum is their bitwise-or. Peeling
+      // such a pair out of an n-ary sum removes an adder stage. Unlike the
+      // whole-node rule below this needs bit information for only the two
+      // addends being paired, so it still applies when the rest are unknown.
+      if (uf->enable_pair_extract && kind == BVPLUS && n.Degree() > 2)
+      {
+        const unsigned w = n.GetValueWidth();
+        const unsigned words = (w + 63) / 64;
+
+        // A group holds addends that are pairwise disjoint, so the group's
+        // sum is its bitwise-or. Addends with no bit information sit in
+        // singleton groups and never merge.
+        vector<ASTVec> groups;
+        vector<vector<uint64_t>> masks;
+        vector<char> known;
+        groups.reserve(n.Degree());
+        masks.reserve(n.Degree());
+        known.reserve(n.Degree());
+
+        for (unsigned j = 0; j < n.Degree(); j++)
+        {
+          groups.push_back(ASTVec(1, n[j]));
+          const auto it = visited.find(n[j]);
+          const bool haveBits = (it != visited.end() && it->second != nullptr);
+          known.push_back(haveBits ? 1 : 0);
+          masks.push_back(vector<uint64_t>(words, 0));
+          if (!haveBits)
+            continue;
+          for (unsigned i = 0; i < w; i++)
+            if (!it->second->isFixed(i) || it->second->getValue(i))
+              masks.back()[i / 64] |= (uint64_t(1) << (i % 64));
+        }
+
+        bool merged = false;
+        for (unsigned x = 0; x < groups.size(); x++)
+        {
+          if (!known[x])
+            continue;
+          for (unsigned y = x + 1; y < groups.size();)
+          {
+            bool overlap = !known[y];
+            for (unsigned k = 0; k < words && !overlap; k++)
+              if (masks[x][k] & masks[y][k])
+                overlap = true;
+            if (overlap)
+            {
+              y++;
+              continue;
+            }
+            for (unsigned k = 0; k < words; k++)
+              masks[x][k] |= masks[y][k];
+            groups[x].insert(groups[x].end(), groups[y].begin(),
+                             groups[y].end());
+            groups.erase(groups.begin() + y);
+            masks.erase(masks.begin() + y);
+            known.erase(known.begin() + y);
+            merged = true;
+          }
+        }
+
+        if (merged)
+        {
+          ASTVec newKids;
+          newKids.reserve(groups.size());
+          for (const auto& g : groups)
+          {
+            if (g.size() == 1)
+            {
+              newKids.push_back(g[0]);
+              continue;
+            }
+
+            // The group's members are pairwise disjoint, so each bit is
+            // owned by at most one of them and the group is just wiring:
+            // a concatenation of slices of its members, with zero constants
+            // where no member can be one.
+            vector<int> owner(w, -1);
+            for (unsigned m = 0; m < g.size(); m++)
+            {
+              const auto it = visited.find(g[m]);
+              if (it == visited.end() || it->second == nullptr)
+                continue;
+              for (unsigned i = 0; i < w; i++)
+                if (!it->second->isFixed(i) || it->second->getValue(i))
+                  owner[i] = (int)m;
+            }
+
+            // Walk the maximal runs of equal ownership from the top down,
+            // folding them into a right-leaning concatenation.
+            ASTNode acc;
+            unsigned accWidth = 0;
+            unsigned hi = w;
+            while (hi > 0)
+            {
+              unsigned lo = hi - 1;
+              while (lo > 0 && owner[lo - 1] == owner[hi - 1])
+                lo--;
+              const unsigned pieceWidth = hi - lo;
+              const ASTNode piece =
+                  (owner[hi - 1] < 0)
+                      ? nf->CreateZeroConst(pieceWidth)
+                      : nf->CreateTerm(BVEXTRACT, pieceWidth, g[owner[hi - 1]],
+                                       nf->CreateBVConst(32, hi - 1),
+                                       nf->CreateBVConst(32, lo));
+              if (accWidth == 0)
+                acc = piece;
+              else
+                acc = nf->CreateTerm(BVCONCAT, accWidth + pieceWidth, acc,
+                                     piece);
+              accWidth += pieceWidth;
+              hi = lo;
+            }
+            newKids.push_back(acc);
+          }
+
+          newN = (newKids.size() == 1) ? newKids[0]
+                                       : nf->CreateTerm(BVPLUS, w, newKids);
+          replaceWithSimpler++;
+          return newN;
+        }
+      }
+
       // If all the bits are zero except for one, in each position, replace by OR
       vector<FixedBits*> children;
       bool bad = false;
@@ -916,9 +1049,7 @@ namespace stp
 
   StrengthReduction::StrengthReduction(NodeFactory* _nf, UserDefinedFlags * _uf)
   {
-    littleOne = CONSTANTBV::BitVector_Create(1, true);
-    littleZero = CONSTANTBV::BitVector_Create(1, true);
-    CONSTANTBV::BitVector_Fill(littleOne);
+    littleOne = mkOne(1);
     nf = _nf;
     uf = _uf;
 
@@ -929,7 +1060,6 @@ namespace stp
   StrengthReduction::~StrengthReduction()
   {
     CONSTANTBV::BitVector_Destroy(littleOne);
-    CONSTANTBV::BitVector_Destroy(littleZero);
   }
 
   void StrengthReduction::stats(string name)
@@ -940,5 +1070,6 @@ namespace stp
     std::cerr << "{" << name
               << "} replace with simpler operation: " << replaceWithSimpler
               << std::endl;
+
   }
 }

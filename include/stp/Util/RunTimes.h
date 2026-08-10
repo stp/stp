@@ -26,6 +26,7 @@ THE SOFTWARE.
 #define RUNTIMES_H
 
 #include "stp/Util/Attributes.h"
+#include <cstdint>
 #include <iomanip>
 #include <iostream>
 #include <map>
@@ -33,6 +34,13 @@ THE SOFTWARE.
 #include <stack>
 #include <string>
 #include <vector>
+
+namespace stp
+{
+// Milliseconds since the epoch. Fixed width, because a millisecond count
+// does not fit the 32-bit "long" of an ILP32 or LLP64 target.
+DLL_PUBLIC int64_t getCurrentTime();
+}
 
 class RunTimes // not copyable
 {
@@ -63,7 +71,8 @@ public:
     StrengthReduction,
     SplitExtracts,
     Rewriting,
-    MergeSame
+    MergeSame,
+    CommonSubSum
   };
 
   std::vector<std::string> CategoryNames = {"Transforming",
@@ -90,25 +99,24 @@ public:
                                             "Strength Reduction",
                                             "Spliting Extracts",
                                             "Sharing-aware rewriting",
-                                            "Merge Same"
+                                            "Merge Same",
+                                            "Common Sub-sum Extraction"
                                           };
 
 
-  typedef std::pair<Category, long> Element;
+  typedef std::pair<Category, int64_t> Element;
 
 private:
   RunTimes& operator=(const RunTimes&);
   RunTimes(const RunTimes& other);
 
   std::map<Category, int> counts;
-  std::map<Category, long> times;
+  std::map<Category, int64_t> times;
   std::stack<Element> category_stack;
 
-  // millisecond precision timer.
-  DLL_PUBLIC long getCurrentTime();
-  void addTime(Category c, long milliseconds);
+  void addTime(Category c, int64_t milliseconds);
 
-  long lastTime;
+  int64_t lastTime;
 
 public:
   DLL_PUBLIC void addCount(Category c);
@@ -122,7 +130,7 @@ public:
 
   void difference() { std::cout << getDifference() << std::endl << std::endl; }
 
-  RunTimes() { lastTime = getCurrentTime(); }
+  RunTimes() { lastTime = stp::getCurrentTime(); }
 
   void clear()
   {

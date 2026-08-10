@@ -71,13 +71,15 @@ public:
 
   void setVerbosity(int v) override;
 
-  unsigned long nVars() const override;
+  uint32_t nVars() const override;
 
   void printStats() const override;
 
   lbool true_literal() const override { return ((uint8_t)0); }
   lbool false_literal() const override { return ((uint8_t)1); }
   lbool undef_literal() const override { return ((uint8_t)2); }
+
+  bool reportsClauseCount() const override { return true; }
 
   int nClauses() override;
 

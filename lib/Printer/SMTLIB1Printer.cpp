@@ -43,12 +43,24 @@ using std::string;
 using std::endl;
 using namespace stp;
 
-void SMTLIB1_Print1(ostream& os, const stp::ASTNode n, int indentation,
-                    bool letize);
 void printSMTLIB1VarDeclsToStream(ASTNodeSet& symbols, ostream& os);
 
 void SMTLIB1_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr)
 {
+  // SMT-LIB 1 has no floating-point theory, so there is nothing correct to
+  // emit here. Without this the printer produced one of two wrong things: a
+  // FatalError from deep inside the variable declarations, or -- when the
+  // floats were all in the formula and none in a declaration -- SMT-LIB *2*
+  // floating-point syntax inside an SMT-LIB 1 benchmark announced as
+  // :logic QF_BV, which no parser will read and which quietly claims to be a
+  // bit-vector problem. Refuse where the caller can see why.
+  if (containsFloatingPointTheory(n, mgr))
+  {
+    FatalError("SMTLIB1_PrintBack: SMT-LIB 1 has no floating-point theory; "
+               "print this with SMTLIB2_PrintBack (vc_printSMTLIB2 from the "
+               "C interface)");
+  }
+
   os << "(" << endl;
   os << "benchmark blah" << endl;
   if (containsArrayOps(n, mgr))
@@ -71,7 +83,7 @@ void SMTLIB1_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr)
   buildListOfSymbols(n, visited, symbols);
   printSMTLIB1VarDeclsToStream(symbols, os);
   os << ":formula ";
-  SMTLIB_Print(os, mgr, n, 0, &SMTLIB1_Print1, true);
+  SMTLIB_Print(os, mgr, n, 0, true);
   os << ")" << endl;
 }
 
@@ -142,130 +154,4 @@ void outputBitVec(const ASTNode n, ostream& os)
   CONSTANTBV::BitVector_Dispose(str);
 }
 
-void SMTLIB1_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
-{
-  // os << spaces(indentation);
-  // os << endl << spaces(indentation);
-  if (!n.IsDefined())
-  {
-    FatalError("<undefined>");
-    return;
-  }
-
-  // if this node is present in the letvar Map, then print the letvar
-  // this is to print letvars for shared subterms inside the printing
-  // of "(LET v0 = term1, v1=term1@term2,...
-  if ((NodeLetVarMap1.find(n) != NodeLetVarMap1.end()) && !letize)
-  {
-    SMTLIB1_Print1(os, (NodeLetVarMap1[n]), indentation, letize);
-    return;
-  }
-
-  // this is to print letvars for shared subterms inside the actual
-  // term to be printed
-  if ((NodeLetVarMap.find(n) != NodeLetVarMap.end()) && letize)
-  {
-    SMTLIB1_Print1(os, (NodeLetVarMap[n]), indentation, letize);
-    return;
-  }
-
-  // otherwise print it normally
-  const Kind kind = n.GetKind();
-  const ASTChildren c = n.GetChildren();
-  switch (kind)
-  {
-    case BITVECTOR:
-    case BVCONST:
-      outputBitVec(n, os);
-      break;
-    case SYMBOL:
-      n.nodeprint(os);
-      break;
-    case FALSE:
-      os << "false";
-      break;
-    case NAND: // No NAND, NOR in smtlib format.
-    case NOR:
-      assert(c.size() == 2);
-      os << "("
-         << "not ";
-      if (NAND == kind)
-        os << "("
-           << "and ";
-      else
-        os << "("
-           << "or ";
-      SMTLIB1_Print1(os, c[0], 0, letize);
-      os << " ";
-      SMTLIB1_Print1(os, c[1], 0, letize);
-      os << "))";
-      break;
-    case TRUE:
-      os << "true";
-      break;
-    case BVSX:
-    case BVZX:
-    {
-      unsigned int amount = c[1].GetUnsignedConst();
-      if (BVZX == kind)
-        os << "(zero_extend[";
-      else
-        os << "(sign_extend[";
-
-      os << (amount - c[0].GetValueWidth()) << "]";
-      SMTLIB1_Print1(os, c[0], indentation, letize);
-      os << ")";
-    }
-    break;
-    case BVEXTRACT:
-    {
-      unsigned int upper = c[1].GetUnsignedConst();
-      unsigned int lower = c[2].GetUnsignedConst();
-      assert(upper >= lower);
-      os << "(extract[" << upper << ":" << lower << "] ";
-      SMTLIB1_Print1(os, c[0], indentation, letize);
-      os << ")";
-    }
-    break;
-    default:
-    {
-      if ((kind == AND || kind == OR || kind == XOR) && n.Degree() == 1)
-      {
-        FatalError("Wrong number of arguments to operation (must be >1).", n);
-      }
-
-      // SMT-LIB only allows these functions to have two parameters.
-      if ((kind == AND || kind == OR || kind == XOR || BVPLUS == kind ||
-           kind == BVOR || kind == BVAND) &&
-          n.Degree() > 2)
-      {
-        string close = "";
-
-        for (long int i = 0; i < (long int)c.size() - 1; i++)
-        {
-          os << "(" << functionToSMTLIBName(kind, true);
-          os << " ";
-          SMTLIB1_Print1(os, c[i], 0, letize);
-          os << " ";
-          close += ")";
-        }
-        SMTLIB1_Print1(os, c[c.size() - 1], 0, letize);
-        os << close;
-      }
-      else
-      {
-        os << "(" << functionToSMTLIBName(kind, true);
-
-        auto iend = c.end();
-        for (auto i = c.begin(); i != iend; i++)
-        {
-          os << " ";
-          SMTLIB1_Print1(os, *i, 0, letize);
-        }
-
-        os << ")";
-      }
-    }
-  }
-}
 }

@@ -64,6 +64,7 @@ class ASTInternal;
 class ASTInterior;
 class ASTSymbol;
 class ASTBVConst;
+class ASTFPConst;
 class BVSolver;
 
 /******************************************************************

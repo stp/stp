@@ -21,10 +21,26 @@
 # -----------------------------------------------------------------------------
 # Create binary
 # -----------------------------------------------------------------------------
-if(BUILD_EXECUTABLES AND NOT ONLY_SIMPLE)
+if(BUILD_EXECUTABLES)
+    if(NOT EXISTS "${PROJECT_SOURCE_DIR}/lib/extlib-cli11/include/CLI/CLI.hpp")
+        message(FATAL_ERROR "The CLI11 submodule is missing. Run: "
+                            "git submodule update --init lib/extlib-cli11")
+    endif()
+
     add_executable(stp-bin
         main.cpp
         main_common.cpp
+    )
+    # main_common.cpp reaches the generated ASTKind.h through NodeFactory.h,
+    # so name the generator here or a parallel build can compile this TU
+    # before ASTKind.h exists.
+    add_dependencies(stp-bin ASTKind_header)
+
+    # CLI11 is header-only and used by this one translation unit, so the
+    # vendored include directory is all it needs; nothing is linked and
+    # nothing leaks into libstp's link interface.
+    target_include_directories(stp-bin PRIVATE
+        "${PROJECT_SOURCE_DIR}/lib/extlib-cli11/include"
     )
 
     set_target_properties(stp-bin PROPERTIES
@@ -40,7 +56,6 @@ if(BUILD_EXECUTABLES AND NOT ONLY_SIMPLE)
     target_link_libraries(stp-bin
         ${STP_ALLOCATOR_LIBRARY}
         stp
-        Boost::program_options
     )
 
     install(TARGETS stp-bin

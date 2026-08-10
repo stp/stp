@@ -23,8 +23,8 @@ THE SOFTWARE.
 #include "stp/Simplifier/NodeDomainAnalysis.h"
 #include "stp/Simplifier/UnsignedInterval.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
-#include "stp/Simplifier/constantBitP/MersenneTwister.h"
 #include <gtest/gtest.h>
+#include <random>
 #include <stdio.h>
 
 
@@ -117,7 +117,7 @@ TEST(NodeDomainAnalysis_Test, 1)
 TEST(NodeDomainAnalysis_Test, 2)
 {
   Context c;
-  MTRand rand(10U);
+  std::mt19937 rand(10U);
 
   for (int i = 0; i < 100; i++)
   {
@@ -618,11 +618,11 @@ TEST(NodeDomainAnalysis_Test, harmonise_perfectly_tight)
                            << " e.g. " << example;
 }
 
-static stp::CBV randomCBV(unsigned width, MTRand& rand)
+static stp::CBV randomCBV(unsigned width, std::mt19937& rand)
 {
   stp::CBV result = CONSTANTBV::BitVector_Create(width, true);
   for (unsigned i = 0; i < width; i++)
-    if (rand.randInt() & 1)
+    if (rand() & 1)
       CONSTANTBV::BitVector_Bit_On(result, i);
   return result;
 }
@@ -632,7 +632,7 @@ TEST(NodeDomainAnalysis_Test, harmonise_idempotent_random)
 {
   boot();
   Context c;
-  MTRand rand(10U);
+  std::mt19937 rand(10U);
 
   const unsigned widths[] = {8, 20, 33, 64, 100};
 
@@ -640,7 +640,7 @@ TEST(NodeDomainAnalysis_Test, harmonise_idempotent_random)
     for (unsigned iteration = 0; iteration < 500; iteration++)
     {
       stp::FixedBits* bits = new stp::FixedBits(
-          stp::FixedBits::createRandom(width, rand.randInt() % 101, rand));
+          stp::FixedBits::createRandom(width, rand() % 101, rand));
 
       // A random member of the fixed bits, so the interval built around
       // it is guaranteed to intersect them.
@@ -648,7 +648,7 @@ TEST(NodeDomainAnalysis_Test, harmonise_idempotent_random)
       for (unsigned i = 0; i < width; i++)
       {
         const bool bit =
-            bits->isFixed(i) ? bits->getValue(i) : ((rand.randInt() & 1) != 0);
+            bits->isFixed(i) ? bits->getValue(i) : ((rand() & 1) != 0);
         if (bit)
           CONSTANTBV::BitVector_Bit_On(member, i);
       }

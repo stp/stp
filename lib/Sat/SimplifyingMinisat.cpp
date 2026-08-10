@@ -57,7 +57,12 @@ void SimplifyingMinisat::setMaxConflicts(int64_t max_confl)
 bool SimplifyingMinisat::addClause(
     const vec_literals& ps) // Add a clause to the solver.
 {
-  return s->addClause(ps);
+  // STP's literal encoding (variable*2 + sign) is MiniSat's own, so the
+  // translation is a straight reinterpretation of each literal.
+  Minisat::vec<Minisat::Lit> clause;
+  for (int i = 0; i < ps.size(); i++)
+    clause.push(Minisat::toLit(toInt(ps[i])));
+  return s->addClause_(clause);
 }
 
 bool SimplifyingMinisat::okay()
@@ -101,7 +106,7 @@ uint32_t SimplifyingMinisat::newVar()
   return s->newVar();
 }
 
-unsigned long SimplifyingMinisat::nVars() const
+uint32_t SimplifyingMinisat::nVars() const
 {
   return s->nVars();
 }

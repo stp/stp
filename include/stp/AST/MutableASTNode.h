@@ -39,7 +39,40 @@ class MutableASTNode
 {
   static THREAD_LOCAL_IE vector<MutableASTNode*> all;
 
+  // Symbols that must never be reported unconstrained, however few
+  // occurrences they have in this graph. The active array-equality solve
+  // uses them as proxy/witness/name anchors or as leaves of future
+  // refinement lemmas, whose meanings and SAT variables must survive this
+  // pass.
+  // A caller that rewrites the graph on the strength of
+  // isUnconstrained() would delete such a definition, and the
+  // substitution map's refusal to record the replacement comes too
+  // late to undo it. Installed for the duration of a pass; NULL means
+  // no restriction.
+  static THREAD_LOCAL_IE const std::set<ASTNode>* untouchable;
+
 public:
+  // Scoped installer for the untouchable set; restores the previous
+  // value so passes cannot leak the restriction into each other.
+  class UntouchableScope
+  {
+    const std::set<ASTNode>* saved;
+
+  public:
+    explicit UntouchableScope(const std::set<ASTNode>* s) : saved(untouchable)
+    {
+      untouchable = s;
+    }
+    ~UntouchableScope() { untouchable = saved; }
+    UntouchableScope(const UntouchableScope&) = delete;
+    UntouchableScope& operator=(const UntouchableScope&) = delete;
+  };
+
+  static bool isUntouchable(const ASTNode& n)
+  {
+    return untouchable != NULL && untouchable->find(n) != untouchable->end();
+  }
+
   typedef std::unordered_set<MutableASTNode*> ParentsType;
   ParentsType parents;
 
@@ -102,7 +135,8 @@ public:
     for (ParentsType::iterator it = parents.begin(); it != parents.end(); it++)
     {
       vector<MutableASTNode*>::iterator it2 = (*it)->children.begin();
-      bool found = false;
+      // Only consumed by the assert, which an NDEBUG build compiles out.
+      [[maybe_unused]] bool found = false;
       for (; it2 != (*it)->children.end(); it2++)
       {
         assert(*it2 != NULL);
@@ -283,6 +317,11 @@ public:
   bool isUnconstrained()
   {
     if (!isSymbol())
+      return false;
+
+    // A protected symbol is never free to be given a value here, no
+    // matter how it occurs; see the untouchable declaration above.
+    if (isUntouchable(n))
       return false;
 
     return parents.size() == 1;

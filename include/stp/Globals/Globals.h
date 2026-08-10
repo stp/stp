@@ -59,13 +59,19 @@ enum inputStatus
   TO_BE_UNKNOWN // Specified in the input file as unknown.
 };
 
-// return types for the GetType() function in ASTNode class
+// return types for the GetType() function in ASTNode class.
+// FLOATINGPOINT_TYPE is appended after UNKNOWN_TYPE, not slotted in sort
+// order. The legacy prefix of the C API's type_t mirrors these values
+// numerically, preserving values compiled into pre-floating-point clients.
+// Source-only sorts such as RoundingMode are intentionally absent here:
+// GetType() describes the carrier used by the bit-vector pipeline.
 enum types
 {
   BOOLEAN_TYPE = 0,
   BITVECTOR_TYPE,
   ARRAY_TYPE,
-  UNKNOWN_TYPE
+  UNKNOWN_TYPE,
+  FLOATINGPOINT_TYPE
 };
 
 enum SOLVER_RETURN_TYPE

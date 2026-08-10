@@ -147,8 +147,8 @@ struct Context
     ASTNode cur = n;
     for (int i = 0; i < 64; i++)
     {
-      ASTNodeMap fromTo = *simp.Return_SolverMap(); // replace() mutates it.
-      ASTNodeMap cache;
+      DenseNodeMap fromTo = *simp.Return_SolverMap(); // replace() mutates it.
+      DenseNodeMap cache;
       ASTNode next = SubstitutionMap::replace(cur, fromTo, cache, &snf);
       if (next == cur)
         return cur;
@@ -190,17 +190,17 @@ struct Context
     std::vector<ASTNode> syms(symSet.begin(), symSet.end());
 
     // Guard against an accidental combinatorial explosion.
-    unsigned long combos = 1;
+    uint64_t combos = 1;
     for (const auto& s : syms)
       combos *= domainSize(s);
     ASSERT_LE(combos, 1u << 16)
         << "too many assignments (" << combos << ") -- lower the width";
 
     std::vector<unsigned> idx(syms.size(), 0);
-    for (unsigned long c = 0; c < combos; c++)
+    for (uint64_t c = 0; c < combos; c++)
     {
       ASTNodeMap assignment;
-      unsigned long rest = c;
+      uint64_t rest = c;
       for (size_t i = 0; i < syms.size(); i++)
       {
         const unsigned size = domainSize(syms[i]);

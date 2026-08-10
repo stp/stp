@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Vijay Ganesh, Andrew V. Jones
+ * AUTHORS: Vijay Ganesh, Andrew Teylu
  *
  * BEGIN DATE: November, 2005
  *
@@ -25,6 +25,7 @@ THE SOFTWARE.
 #define UDEFFLAGS_H
 
 #include "stp/Sat/SearchBias.h"
+#include <cstdint>
 
 namespace stp
 {
@@ -67,9 +68,10 @@ public:
   bool enable_split_extracts = true;
   bool enable_sharing_aware_rewriting = true;
   bool enable_merge_same = false;
+  bool enable_pair_extract = false;
+  bool enable_common_subsum = false;
 
   int64_t AIG_rewrites_iterations = 0; // Number of iterations of AIG rewrites.
-  int64_t bitblast_simplification = 0;
   int64_t size_reducing_fixed_point = 0;
   
 
@@ -81,6 +83,13 @@ public:
 
   // eagerly write through the array's function congruence axioms.
   bool ackermannisation = false;
+
+  // Decide whole-array equality/disequality (the extensional theory of
+  // arrays) with the lemmas-on-demand procedure of Brummayer & Biere
+  // (JSAT 2010). Runtime semantic option; it must be set before a
+  // whole-array equality is constructed. Construction preserves an opaque
+  // ARRAY_EQ, which is lowered only after the complete query is assembled.
+  bool enable_array_equality = false;
 
   // construct the counterexample in terms of original variable based
   // on the counterexample returned by SAT solver
@@ -96,7 +105,6 @@ public:
 
   // print the input back
   bool print_STPinput_back_flag = false;
-  bool print_STPinput_back_C_flag = false;
   bool print_STPinput_back_SMTLIB2_flag = false;
   bool print_STPinput_back_SMTLIB1_flag = false;
   bool print_STPinput_back_CVC_flag = false;
@@ -107,7 +115,6 @@ public:
 
   // output flags
   bool output_CNF_flag = false;
-  bool output_bench_flag = false;
 
   /* Bitblasting options */
 
@@ -120,6 +127,16 @@ public:
   bool upper_multiplication_bound = false;
   bool bvplus_variant = true;
   bool conjoin_to_top = false;
+
+  // Bit-blast the floating-point predicates -- comparisons, equalities and
+  // classifications -- over already-packed operands natively (over the IEEE
+  // bits) instead of via the SymFPU unpacking circuits.
+  bool fp_native_cmp = true;
+
+  // Bit-blast fp.mul under surviving native predicates with the hand-written
+  // packed-operand circuit (BBfpMul) instead of the SymFPU unpacking
+  // circuits. Experimental; off by default.
+  bool fp_native_arith = false;
 
   int64_t multiplication_variant = 1;
 
@@ -190,10 +207,23 @@ public:
   // every backend at its own settings, so the option is opt-in.
   SearchBias search_bias = SearchBias::NONE;
 
+  // Whether CaDiCaL may use bounded variable addition (its "factor"
+  // technique). Measured on QF_ABV it is a large win on some
+  // array-refinement families (wchains: up to 5x) and a modest loss on
+  // others (countbitstable: ~30%), so AUTO -- the default -- enables it
+  // only for problems that still contain array operations after
+  // simplification, and an explicit ON/OFF from the user always wins.
+  enum class BVAMode
+  {
+    AUTO = 0,
+    ON,
+    OFF
+  };
+  BVAMode cadical_factor = BVAMode::AUTO;
+
   bool get_print_output_at_all() const
   {
-    return print_STPinput_back_flag || print_STPinput_back_C_flag ||
-           print_STPinput_back_SMTLIB2_flag ||
+    return print_STPinput_back_flag || print_STPinput_back_SMTLIB2_flag ||
            print_STPinput_back_SMTLIB1_flag || print_STPinput_back_CVC_flag ||
            print_STPinput_back_dot_flag || print_STPinput_back_GDL_flag;
   }
@@ -211,9 +241,10 @@ public:
     enable_split_extracts = false;
     enable_sharing_aware_rewriting = false;
     enable_merge_same = false;
+    enable_pair_extract = false;
+    enable_common_subsum = false;
     enable_ite_context = false;
 
-    bitblast_simplification = 0;
     simple_cnf=true;
   }
 

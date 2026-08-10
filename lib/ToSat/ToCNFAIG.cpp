@@ -227,8 +227,17 @@ Cnf_Dat_t* ToCNFAIG::derive_cnf(BBNodeManagerAIG& mgr)
 
     case UserDefinedFlags::CNF_EFFORT_MEDIUM:
     default:
-      // Cut enumeration and technology mapping, ABC's Cnf_Derive().
-      return Cnf_Derive(mgr.aigMgr, 0);
+    {
+      // Cut enumeration and technology mapping, as in ABC's Cnf_Derive().
+      // That convenience wrapper reuses one process-global Cnf_Man_t, so two
+      // independent STP instances deriving CNF concurrently overwrite the
+      // same cut/mapping state. ABC exposes the underlying per-manager entry
+      // point; keep the manager local to this conversion instead.
+      Cnf_Man_t* cnfMan = Cnf_ManStart();
+      Cnf_Dat_t* result = Cnf_DeriveWithMan(cnfMan, mgr.aigMgr, 0);
+      Cnf_ManStop(cnfMan);
+      return result;
+    }
   }
 }
 

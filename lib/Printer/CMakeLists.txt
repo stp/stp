@@ -23,10 +23,7 @@ include_directories(${PROJECT_BINARY_DIR}/src/AST/)
 
 add_library(printer OBJECT
     AssortedPrinters.cpp
-    BenchPrinter.cpp
-    CPrinter.cpp
-    dotPrinter.cpp
-    GDLPrinter.cpp
+    GraphPrinter.cpp
     LispPrinter.cpp
     PLPrinter.cpp
     SMTLIB1Printer.cpp

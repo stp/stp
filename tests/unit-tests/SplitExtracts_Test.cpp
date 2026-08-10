@@ -113,8 +113,8 @@ struct Context
    // application reaches the fixed point.
    ASTNode backSubstitute(const ASTNode& n)
    {
-     stp::ASTNodeMap fromTo = *simplifier.Return_SolverMap(); // replace() mutates it.
-     stp::ASTNodeMap cache;
+     stp::DenseNodeMap fromTo = *simplifier.Return_SolverMap(); // replace() mutates it.
+     stp::DenseNodeMap cache;
      return stp::SubstitutionMap::replace(n, fromTo, cache, &snf);
    }
 
@@ -141,7 +141,7 @@ struct Context
      collectSymbols(post, symSet);
      std::vector<ASTNode> syms(symSet.begin(), symSet.end());
 
-     unsigned long combos = 1;
+     uint64_t combos = 1;
      for (const auto& s : syms)
        combos *= (s.GetType() == stp::BOOLEAN_TYPE)
                      ? 2u
@@ -149,10 +149,10 @@ struct Context
      ASSERT_LE(combos, 1u << 16)
          << "too many assignments (" << combos << ") -- lower the width";
 
-     for (unsigned long c = 0; c < combos; c++)
+     for (uint64_t c = 0; c < combos; c++)
      {
        stp::ASTNodeMap assignment;
-       unsigned long rest = c;
+       uint64_t rest = c;
        for (const auto& s : syms)
        {
          if (s.GetType() == stp::BOOLEAN_TYPE)
@@ -242,17 +242,16 @@ TEST(SplitExtracts_Test , __LINE__)
   ASSERT_EQ(2, c.split.getIntroduced());
 }
 
-// One instance is unextracted
+// One instance is unextracted. (The reassembled side must be the full 20
+// bits: = between different widths is ill-sorted and now rejected at parse.)
 TEST(SplitExtracts_Test , __LINE__)
 {
   const std::string input = R"(
-    (assert 
-      (= 
-        (concat 
-         (concat 
-           (((_ extract 4 0 ) v1) )  
-           (((_ extract 8 5 ) v1) ))
-           (((_ extract 3 3 ) v1) ))  
+    (assert
+      (=
+        (concat
+           (((_ extract 4 0 ) v1) )
+           (((_ extract 19 5 ) v1) ))
           v1
        )
     )
@@ -263,10 +262,14 @@ TEST(SplitExtracts_Test , __LINE__)
   ASSERT_EQ(0, c.split.getIntroduced());
 }
 
-// The (8,5) doesn't intersect.
+// The (8,5) doesn't intersect. (The other side must match the concat's 10
+// bits -- = between different widths is ill-sorted and now rejected at
+// parse -- so compare against a fresh 10-bit variable, which contributes no
+// extracts of its own.)
 TEST(SplitExtracts_Test , __LINE__)
 {
   const std::string input = R"(
+    (declare-fun w10 () (_ BitVec 10))
     (assert
       (=
         (concat
@@ -274,7 +277,7 @@ TEST(SplitExtracts_Test , __LINE__)
            (((_ extract 4 0 ) v1) )
            (((_ extract 8 5 ) v1) ))
            (((_ extract 3 3 ) v1) ))
-          v0
+          w10
        )
     )
   )";
