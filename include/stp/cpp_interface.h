@@ -33,6 +33,7 @@ THE SOFTWARE.
 #include <map>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace stp
@@ -98,6 +99,19 @@ struct array_sort
   }
 };
 
+// Heterogeneous string hash: lets a string-keyed table be probed with a
+// string_view (e.g. straight from a lexer buffer) without materialising a
+// std::string first.
+struct TransparentStringHash
+{
+  using is_transparent = void;
+  using is_avalanching = void;
+  uint64_t operator()(std::string_view s) const noexcept
+  {
+    return ankerl::unordered_dense::hash<std::string_view>{}(s);
+  }
+};
+
 class Cpp_interface
 {
   STPMgr& bm;
@@ -122,12 +136,17 @@ class Cpp_interface
   };
   vector<Entry> cache;
 
+public:
+  // A stored define-fun. Public because the SMT-LIB2 parser carries a
+  // pointer to one through a token (see lookupFunction).
   struct Function
   {
     ASTVec params;
     ASTNode function;
     std::string name;
   };
+
+private:
   ankerl::unordered_dense::map<std::string, Function> functions;
 
   // Nested helper class to encapsulate a frame (i.e., between push a pop)
@@ -151,13 +170,18 @@ class Cpp_interface
     void addSortAlias(const std::string& name);
     void addSymbol(const ASTNode& symbol);
     bool removeSymbol(const ASTNode& symbol);
-    bool lookupSymbol(const std::string& name, ASTNode& output) const;
+    bool lookupSymbol(std::string_view name, ASTNode& output) const;
 
   private:
     vector<std::string> _scoped_functions;
     vector<std::string> _scoped_sort_aliases;
     ASTVec _scoped_symbols;
-    std::map<std::string, std::vector<ASTNode>> _symbol_bindings;
+    // Hash map, not std::map: files declare tens of thousands of symbols
+    // with long common prefixes, and a tree walk memcmps the prefix at
+    // every level. Nothing iterates this in order.
+    ankerl::unordered_dense::map<std::string, std::vector<ASTNode>,
+                                 TransparentStringHash, std::equal_to<>>
+        _symbol_bindings;
     ankerl::unordered_dense::map<std::string, Function>*
         _global_function_context;
     std::map<std::string, std::pair<unsigned, unsigned>>*
@@ -261,6 +285,16 @@ public:
 
   DLL_PUBLIC ASTNode applyFunction(const std::string& name,
                                    const ASTVec& params);
+
+  // Resolve a name to its stored function in a single map probe, or NULL if
+  // no such function exists. The pointer is into `functions`, which only
+  // mutates between commands (define-fun stores, frame pops erase), never
+  // while a term is being parsed -- so a pointer handed to the parser via a
+  // token is valid for the lifetime of that token.
+  DLL_PUBLIC const Function* lookupFunction(const std::string& name) const;
+
+  // Apply an already-resolved function, skipping the by-name map probe.
+  DLL_PUBLIC ASTNode applyFunction(const Function& f, const ASTVec& params);
 
   // Classify a name by its carrier return type in a single map probe:
   // BITVECTOR_TYPE or BOOLEAN_TYPE, or UNKNOWN_TYPE when the name is not a

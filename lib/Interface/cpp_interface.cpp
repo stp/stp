@@ -296,12 +296,21 @@ void Cpp_interface::storeFunction(const string& name, const ASTVec& params,
 
 ASTNode Cpp_interface::applyFunction(const string& name, const ASTVec& params)
 {
-  const auto found = functions.find(name);
-  if (found == functions.end())
+  const Function* f = lookupFunction(name);
+  if (f == NULL)
     FatalError("Trying to apply function which has not been defined.");
+  return applyFunction(*f, params);
+}
 
-  const Function& f = found->second;
+const Cpp_interface::Function*
+Cpp_interface::lookupFunction(const string& name) const
+{
+  const auto found = functions.find(name);
+  return found == functions.end() ? NULL : &found->second;
+}
 
+ASTNode Cpp_interface::applyFunction(const Function& f, const ASTVec& params)
+{
   if (f.params.size() != params.size())
     FatalError("Actual parameters differ in number from formal");
 
@@ -349,9 +358,11 @@ ASTNode Cpp_interface::LookupOrCreateSymbol(string name)
 
 bool Cpp_interface::LookupSymbol(const char* const name, ASTNode& output)
 {
+  // One strlen for the whole search, not one per frame.
+  const std::string_view sv(name);
   for (auto it = frames.rbegin(); it != frames.rend(); ++it)
   {
-    if ((*it)->lookupSymbol(name, output))
+    if ((*it)->lookupSymbol(sv, output))
       return true;
   }
   return false;
@@ -942,12 +953,12 @@ void Cpp_interface::SolverFrame::addSortAlias(const std::string& name)
 void Cpp_interface::SolverFrame::addSymbol(const ASTNode& symbol)
 {
   _scoped_symbols.push_back(symbol);
-  _symbol_bindings[symbol.GetName()].push_back(symbol);
+  _symbol_bindings[std::string(symbol.GetName())].push_back(symbol);
 }
 
 bool Cpp_interface::SolverFrame::removeSymbol(const ASTNode& symbol)
 {
-  const auto binding = _symbol_bindings.find(symbol.GetName());
+  const auto binding = _symbol_bindings.find(std::string_view(symbol.GetName()));
   if (binding == _symbol_bindings.end() || binding->second.empty() ||
       binding->second.back() != symbol)
     return false;
@@ -967,7 +978,7 @@ bool Cpp_interface::SolverFrame::removeSymbol(const ASTNode& symbol)
   return false;
 }
 
-bool Cpp_interface::SolverFrame::lookupSymbol(const std::string& name,
+bool Cpp_interface::SolverFrame::lookupSymbol(std::string_view name,
                                               ASTNode& output) const
 {
   const auto found = _symbol_bindings.find(name);

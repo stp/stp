@@ -127,8 +127,13 @@ ASTNode LetMgr::ResolveID(const ASTNode& v)
   return v;
 }
 
-const ASTNode* LetMgr::lookupLet(const string& s) const
+const ASTNode* LetMgr::lookupLet(std::string_view s) const
 {
+  // The lexer asks about every identifier, including on files with no lets
+  // at all; skip the string hash entirely when there is nothing to find.
+  if (bindings.empty())
+    return nullptr;
+
   const auto found = bindings.find(s);
   if (found == bindings.end())
     return nullptr;

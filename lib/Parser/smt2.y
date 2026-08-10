@@ -1252,6 +1252,11 @@ namespace stp
   stp::ASTVec *vec;
 
   std::string *str;
+
+  /* A resolved define-fun, pointing into Cpp_interface::functions. The map
+     only mutates between commands, never inside a term, so the pointer
+     outlives the token that carries it. */
+  const stp::Cpp_interface::Function *fn;
 };
 
 %start cmd
@@ -1280,7 +1285,8 @@ namespace stp
 %type <realc> an_real_constant
 
 %token <node> FORMID_TOK TERMID_TOK
-%token <str> STRING_TOK BITVECTOR_FUNCTIONID_TOK BOOLEAN_FUNCTIONID_TOK FLOATINGPOINT_FUNCTIONID_TOK ARRAY_FUNCTIONID_TOK
+%token <str> STRING_TOK
+%token <fn> BITVECTOR_FUNCTIONID_TOK BOOLEAN_FUNCTIONID_TOK FLOATINGPOINT_FUNCTIONID_TOK ARRAY_FUNCTIONID_TOK
 
 
  /* set-info tokens */
@@ -1358,7 +1364,7 @@ namespace stp
 /* Types for QF_FP and QF_BVFP. */
 %token FLOATINGPOINT_TOK
 %token ROUNDINGMODE_TOK
-%token <str> ROUNDINGMODE_FUNCTIONID_TOK
+%token <fn> ROUNDINGMODE_FUNCTIONID_TOK
 %token FLOAT16_TOK
 %token FLOAT32_TOK
 %token FLOAT64_TOK
@@ -2578,14 +2584,12 @@ FORMID_TOK
 | LPAREN_TOK BOOLEAN_FUNCTIONID_TOK an_mixed RPAREN_TOK
 {
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$2,*$3));
-  delete $2;
   delete $3;
 }
 | BOOLEAN_FUNCTIONID_TOK
 {
   ASTVec empty;
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$1,empty));
-  delete $1;
 }
 | LPAREN_TOK EXCLAIMATION_MARK_TOK an_formula NAMED_ATTRIBUTE_TOK STRING_TOK RPAREN_TOK
 {
@@ -2953,7 +2957,6 @@ TERMID_TOK
   // A use of a nullary array-sorted define-fun expands to its body.
   ASTVec empty;
   $$ = stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->applyFunction(*$1,empty));
-  delete $1;
 }
 | LPAREN_TOK an_term RPAREN_TOK
 {
@@ -3252,7 +3255,6 @@ TERMID_TOK
   if ($$->GetType() != BITVECTOR_TYPE)
       yyerror("Must be bitvector type");
 
-  delete $2;
   delete $3;
 }
 | LPAREN_TOK FLOATINGPOINT_FUNCTIONID_TOK an_mixed RPAREN_TOK
@@ -3262,7 +3264,6 @@ TERMID_TOK
   if ($$->GetType() != FLOATINGPOINT_TYPE)
       yyerror("Must be floating-point type");
 
-  delete $2;
   delete $3;
 }
 | FLOATINGPOINT_FUNCTIONID_TOK
@@ -3272,8 +3273,6 @@ TERMID_TOK
 
   if ($$->GetType() != FLOATINGPOINT_TYPE)
     yyerror("Must be floating-point type");
-
-  delete $1;
 }
 | BITVECTOR_FUNCTIONID_TOK
 {
@@ -3282,8 +3281,6 @@ TERMID_TOK
 
   if ($$->GetType() != BITVECTOR_TYPE)
     yyerror("Must be bitvector type");
-
-  delete $1;
 }
 | LPAREN_TOK ROUNDINGMODE_FUNCTIONID_TOK an_mixed RPAREN_TOK
 {
@@ -3291,7 +3288,6 @@ TERMID_TOK
       stp::GlobalParserInterface->applyFunction(*$2, *$3));
   if ($$->GetSourceSort().kind() != stp::SourceSort::Kind::RoundingMode)
     yyerror("Must be RoundingMode type");
-  delete $2;
   delete $3;
 }
 | ROUNDINGMODE_FUNCTIONID_TOK
@@ -3301,7 +3297,6 @@ TERMID_TOK
       stp::GlobalParserInterface->applyFunction(*$1, empty));
   if ($$->GetSourceSort().kind() != stp::SourceSort::Kind::RoundingMode)
     yyerror("Must be RoundingMode type");
-  delete $1;
 }
 | LPAREN_TOK EXCLAIMATION_MARK_TOK an_term NAMED_ATTRIBUTE_TOK STRING_TOK RPAREN_TOK
 {
