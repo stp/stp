@@ -47,3 +47,10 @@ if (ENABLE_FLOATING_POINT AND (ENABLE_TESTING OR BUILD_EXTRA_TOOLS))
     add_subdirectory(test_fprewrites)
 endif()
 
+# The floating-point rewrite-rule generator: enumerates small terms over a
+# float variable and special constants, looking for sound collapses the
+# SimplifyingNodeFactory is missing. A developer tool, not a test.
+if (ENABLE_FLOATING_POINT AND BUILD_EXTRA_TOOLS)
+    add_subdirectory(fp_rewrite_gen)
+endif()
+
