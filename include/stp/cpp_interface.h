@@ -33,6 +33,7 @@ THE SOFTWARE.
 #include <map>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace stp
@@ -98,6 +99,19 @@ struct array_sort
   }
 };
 
+// Heterogeneous string hash: lets a string-keyed table be probed with a
+// string_view (e.g. straight from a lexer buffer) without materialising a
+// std::string first.
+struct TransparentStringHash
+{
+  using is_transparent = void;
+  using is_avalanching = void;
+  uint64_t operator()(std::string_view s) const noexcept
+  {
+    return ankerl::unordered_dense::hash<std::string_view>{}(s);
+  }
+};
+
 class Cpp_interface
 {
   STPMgr& bm;
@@ -156,13 +170,18 @@ private:
     void addSortAlias(const std::string& name);
     void addSymbol(const ASTNode& symbol);
     bool removeSymbol(const ASTNode& symbol);
-    bool lookupSymbol(const std::string& name, ASTNode& output) const;
+    bool lookupSymbol(std::string_view name, ASTNode& output) const;
 
   private:
     vector<std::string> _scoped_functions;
     vector<std::string> _scoped_sort_aliases;
     ASTVec _scoped_symbols;
-    std::map<std::string, std::vector<ASTNode>> _symbol_bindings;
+    // Hash map, not std::map: files declare tens of thousands of symbols
+    // with long common prefixes, and a tree walk memcmps the prefix at
+    // every level. Nothing iterates this in order.
+    ankerl::unordered_dense::map<std::string, std::vector<ASTNode>,
+                                 TransparentStringHash, std::equal_to<>>
+        _symbol_bindings;
     ankerl::unordered_dense::map<std::string, Function>*
         _global_function_context;
     std::map<std::string, std::pair<unsigned, unsigned>>*
