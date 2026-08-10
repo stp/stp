@@ -3,7 +3,6 @@
 %option noyywrap
 %option noreject
 %option noyymore
-%option yylineno
 %option full
 
 /* %option debug */
@@ -45,6 +44,22 @@
   extern char *smt2text;
   extern int smt2error (const char *msg);
   bool stringOnly = false;
+
+  // Line counting for syntax-error messages, maintained by hand (in the
+  // flex-provided smt2lineno) in the few rules whose matches can contain a
+  // newline. '%option yylineno' made flex check a can-this-rule-match-eol
+  // table on every token instead, which cost a load and a branch per match
+  // across the whole input.
+  static void countNewlines(const char* s, size_t len)
+  {
+    const char* p = s;
+    const char* const end = s + len;
+    while ((p = (const char*)memchr(p, '\n', end - p)) != NULL)
+    {
+      smt2lineno++;
+      p++;
+    }
+  }
 
   // Whether the floating-point keywords are live. Off until the parser sees
   // an FP set-logic: SMT-LIB reserves theory names per-logic, and QF_BV
@@ -217,7 +232,7 @@ OPCHAR  ([~!@$%^&*\_\-+=<>\.?/])
 ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 
 %%
-[ \n\t\r\f] { /* skip whitespace */ }
+[ \n\t\r\f] { if (*smt2text == '\n') smt2lineno++; /* skip whitespace */ }
 
  /* We limit numerals to maxint, in the specification they are arbitary precision.*/
 {DIGIT}+               { smt2lval.uintval = strtoul(smt2text, NULL, 10); return NUMERAL_TOK; }
@@ -227,7 +242,7 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 {DIGIT}+"."{DIGIT}+    { smt2lval.str = new std::string(smt2text); return DECIMAL_TOK;}
 
 ";" { BEGIN COMMENT; }
-<COMMENT>"\n" { BEGIN INITIAL; /* return to normal mode */}
+<COMMENT>"\n" { smt2lineno++; BEGIN INITIAL; /* return to normal mode */}
 <COMMENT>.    { /* stay in comment mode */ }
 
 <INITIAL>"\""   { BEGIN STRING_LITERAL;
@@ -239,7 +254,8 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
           smt2lval.str = new std::string(_string_lit);
           return STRING_TOK; }
 <STRING_LITERAL>.     { _string_lit.insert(_string_lit.end(),*smt2text); }
-<STRING_LITERAL>"\n"  { _string_lit.insert(_string_lit.end(),*smt2text); }
+<STRING_LITERAL>"\n"  { smt2lineno++;
+                        _string_lit.insert(_string_lit.end(),*smt2text); }
 
  /* Valid character are: ~ ! @ # $ % ^ & * _ - + = | \ : ; " < > . ? / ( )     */
 "("             { return LPAREN_TOK; }
@@ -306,8 +322,10 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
   * so that the parenthesis returned is the one that closes the command
   * itself. String literals and quoted symbols are matched as units, since
   * either may contain an unbalanced parenthesis. */
-<SKIP_SEXPR>"\""([^"]|"\"\"")*"\""  { skippedText += yytext; /* string literal */ }
-<SKIP_SEXPR>"|"[^|]*"|"             { skippedText += yytext; /* quoted symbol */ }
+<SKIP_SEXPR>"\""([^"]|"\"\"")*"\""  { countNewlines(yytext, yyleng);
+                                      skippedText += yytext; /* string literal */ }
+<SKIP_SEXPR>"|"[^|]*"|"             { countNewlines(yytext, yyleng);
+                                      skippedText += yytext; /* quoted symbol */ }
 <SKIP_SEXPR>";"[^\n]*               { /* comment: not captured */ }
 <SKIP_SEXPR>"("                     { skippedDepth++; skippedText += '('; }
 <SKIP_SEXPR>")"                     { if (skippedDepth == 0)
@@ -324,7 +342,8 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
                                           return RPAREN_TOK;
                                         }
                                       skippedDepth--; skippedText += ')'; }
-<SKIP_SEXPR>[^()|;\"]+              { skippedText += yytext; }
+<SKIP_SEXPR>[^()|;\"]+              { countNewlines(yytext, yyleng);
+                                      skippedText += yytext; }
 <SKIP_SEXPR>.                       { skippedText += yytext; }
 <SKIP_SEXPR><<EOF>>                 { BEGIN INITIAL; deferredDefineSort = false;
                                       return 0; }
@@ -475,7 +494,7 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 
 
 ({LETTER}|{OPCHAR})({ANYTHING})*  {return lookup(smt2text);}
-\|([^\|]|\n)*\| {return lookup(smt2text);}
+\|([^\|]|\n)*\| { countNewlines(smt2text, smt2leng); return lookup(smt2text); }
 
 . { smt2error("Illegal input character."); }
 %%
