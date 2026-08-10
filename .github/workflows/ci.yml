@@ -188,6 +188,93 @@ jobs:
         python3 allocator_tests.py
       working-directory: build/tests/api/python
 
+    # The three legs of this matrix configure identically and differ only in
+    # compiler and optimisation level, which makes them the pairs worth
+    # comparing: the CNF is a function of the input, so nothing about how the
+    # binary was built should reach it. The cnf-determinism job below diffs
+    # the manifests. See scripts/cnf-manifest.sh for what a difference means.
+    # Not on the clang leg. STP's own code builds its operands in a fixed
+    # order, but SymFPU -- which only the floating-point path reaches -- does
+    # not, and C++ leaves the order of an overloaded operator's operands to
+    # the implementation. gcc and clang each choose consistently but
+    # differently, so their CNF differs on nine of the corpus's inputs, all
+    # floating-point. That is an encoding difference, not a wrong answer, and
+    # the fix is to replace SymFPU rather than to rewrite it; see
+    # bench-hard/reports/2026-08-10-cnf-build-determinism.md. Comparing the
+    # two gcc legs still covers optimisation level and assertions, and holds
+    # for every input with nothing excluded.
+    - name: CNF manifest
+      if: matrix.name != 'clang'
+      run: |
+        ./scripts/cnf-manifest.sh build/stp tests/query-files 120 \
+          > "cnf-${{ matrix.name }}.manifest"
+        wc -l < "cnf-${{ matrix.name }}.manifest"
+
+    - uses: actions/upload-artifact@v4
+      if: matrix.name != 'clang'
+      with:
+        name: cnf-manifest-${{ matrix.name }}
+        path: cnf-${{ matrix.name }}.manifest
+        if-no-files-found: error
+
+  # Whether the CNF STP writes depends on anything but its input. It should
+  # not: a build-dependent CNF means something upstream is reading an address
+  # rather than a value -- iteration over a pointer-keyed hash table, a sort
+  # tie broken on node identity, an uninitialised read -- and that class of
+  # bug makes measurements irreproducible and bug reports unrepeatable while
+  # staying invisible to a suite that only checks sat/unsat.
+  #
+  # This reuses the builds the matrix above already made, so it costs one
+  # short job rather than any extra compilation.
+  cnf-determinism:
+    name: CNF determinism
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+
+    - uses: actions/download-artifact@v4
+      with:
+        pattern: cnf-manifest-*
+        merge-multiple: true
+
+    - name: Compare the manifests
+      run: |
+        set -u
+        ls -l ./*.manifest
+
+        # Every input is compared; there is no exclusion list.
+        #
+        # Every manifest is compared against the first, so a difference is
+        # reported once per differing build rather than once per pair.
+        reference=$(find . -maxdepth 1 -name '*.manifest' | LC_ALL=C sort | head -1)
+        echo "reference: $reference ($(wc -l < "$reference") inputs compared)"
+
+        failed=0
+        for manifest in $(find . -maxdepth 1 -name '*.manifest' | LC_ALL=C sort | tail -n +2); do
+          if diff -u "$reference" "$manifest" > delta.txt; then
+            echo "OK       $manifest matches $reference"
+          else
+            failed=1
+            echo "::error::$manifest and $reference disagree on the CNF for $(grep -c '^-' delta.txt) input(s)"
+            echo "--- $reference vs $manifest ---"
+            cat delta.txt
+          fi
+        done
+
+        if [ "$failed" -ne 0 ]; then
+          echo
+          echo "The CNF STP generates differs between builds of the same source."
+          echo "The CNF is a function of the input; a build-dependent one means"
+          echo "something upstream depends on node creation order or on an"
+          echo "address. Each line above names the input that provokes it:"
+          echo "  stp --array-equality --output-CNF --exit-after-CNF <input>"
+          echo "under both builds, then diff output_0.cnf."
+          exit 1
+        fi
+
+        echo "All builds agree on the CNF for every input compared."
+
   build-cadical:
     name: gcc (cadical ${{ matrix.cadical_tag }})
     runs-on: ubuntu-latest

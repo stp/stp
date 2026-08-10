@@ -275,10 +275,16 @@ ASTNode FpTotalise::zeroChoice(const char* tag, const ASTNode& left,
   const ASTNode left_positive = nf->CreateNode(EQ, signBit(left), zero);
   const ASTNode right_positive = nf->CreateNode(EQ, signBit(right), zero);
 
-  return nf->CreateTerm(
-      ITE, 1, left_positive,
-      nf->CreateTerm(ITE, 1, right_positive, bit[0], bit[1]),
-      nf->CreateTerm(ITE, 1, right_positive, bit[2], bit[3]));
+  // Sequenced deliberately: C++ does not order a call's arguments against
+  // each other, and node ids are handed out in creation order, so building
+  // both branches inside the one call lets the compiler decide the numbering
+  // that ends up in the CNF.
+  const ASTNode leftPositiveCase =
+      nf->CreateTerm(ITE, 1, right_positive, bit[0], bit[1]);
+  const ASTNode leftNegativeCase =
+      nf->CreateTerm(ITE, 1, right_positive, bit[2], bit[3]);
+  return nf->CreateTerm(ITE, 1, left_positive, leftPositiveCase,
+                        leftNegativeCase);
 }
 
 ASTNode FpTotalise::visit(const ASTNode& n)

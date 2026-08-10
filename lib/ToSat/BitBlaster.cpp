@@ -1990,9 +1990,10 @@ void BitBlaster::mult_Booth_radix4(const BBNodeVec& x, const BBNodeVec& y,
     const BBNode one = nf->CreateNode(XOR, low, below);
     // twice y is selected by 011 and by 100, i.e. when low and below agree with
     // each other and disagree with high.
-    const BBNode two = nf->CreateNode(
-        AND, nf->CreateNode(NOT, nf->CreateNode(XOR, low, below)),
-        nf->CreateNode(XOR, high, below));
+    // Sequenced deliberately; see the note in BBcompareFP.
+    const BBNode lowAgrees = nf->CreateNode(NOT, nf->CreateNode(XOR, low, below));
+    const BBNode highDiffers = nf->CreateNode(XOR, high, below);
+    const BBNode two = nf->CreateNode(AND, lowAgrees, highDiffers);
 
     for (unsigned j = 0; base + j < bitWidth; j++)
     {
@@ -3409,8 +3410,13 @@ BBNode BitBlaster::BBcompareFP(const ASTNode& form, BBNodeSet& support)
 
   const BBNode aNotNaN = nf->CreateNode(NOT, BBfpIsNaN(aBits, sb, w));
   const BBNode bNotNaN = nf->CreateNode(NOT, BBfpIsNaN(bBits, sb, w));
-  const BBNode bothZero =
-      nf->CreateNode(AND, BBfpIsZero(aBits, w), BBfpIsZero(bBits, w));
+  // Both operands' circuits are built before they are combined. Written as
+  // two statements because C++ does not sequence a call's arguments against
+  // each other: as one expression, which operand's AIG nodes get built first
+  // is the compiler's choice, and the numbering it decides reaches the CNF.
+  const BBNode aZero = BBfpIsZero(aBits, w);
+  const BBNode bZero = BBfpIsZero(bBits, w);
+  const BBNode bothZero = nf->CreateNode(AND, aZero, bZero);
   const BBNodeVec aKey = key(aBits, w);
   const BBNodeVec bKey = key(bBits, w);
   // key(a) >u key(b) when strict, key(a) >=u key(b) otherwise.
@@ -3461,8 +3467,10 @@ BBNode BitBlaster::BBeqFP(const ASTNode& form, BBNodeSet& support)
 
   if (k == FP_SMT_EQ)
   {
-    const BBNode bothNaN = nf->CreateNode(AND, BBfpIsNaN(aBits, sb, w),
-                                          BBfpIsNaN(bBits, sb, w));
+    // Sequenced deliberately; see the note in BBcompareFP.
+    const BBNode aNaN = BBfpIsNaN(aBits, sb, w);
+    const BBNode bNaN = BBfpIsNaN(bBits, sb, w);
+    const BBNode bothNaN = nf->CreateNode(AND, aNaN, bNaN);
     return nf->CreateNode(OR, bothNaN, sameBits);
   }
 
@@ -3478,8 +3486,10 @@ BBNode BitBlaster::BBeqFP(const ASTNode& form, BBNodeSet& support)
   // choice is per-node and deterministic.
   const BBNodeVec& nanSide = form[0].isConstant() ? aBits : bBits;
   const BBNode notNaN = nf->CreateNode(NOT, BBfpIsNaN(nanSide, sb, w));
-  const BBNode bothZero =
-      nf->CreateNode(AND, BBfpIsZero(aBits, w), BBfpIsZero(bBits, w));
+  // Sequenced deliberately; see the note in BBcompareFP.
+  const BBNode aZero = BBfpIsZero(aBits, w);
+  const BBNode bZero = BBfpIsZero(bBits, w);
+  const BBNode bothZero = nf->CreateNode(AND, aZero, bZero);
   const BBNode sameValue = nf->CreateNode(OR, sameBits, bothZero);
 
   return nf->CreateNode(AND, notNaN, sameValue);

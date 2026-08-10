@@ -237,8 +237,12 @@ bitVector<isSigned>::bitVector(const bitVector<isSigned>& old)
 template <bool isSigned>
 ASTNode bitVector<isSigned>::fromProposition(const ASTNode& node) const
 {
-  return s_nf->CreateTerm(ITE, 1, node, s_bm->CreateOneConst(1),
-                          s_bm->CreateZeroConst(1));
+  // Sequenced deliberately: two constants built in one call expression are
+  // unordered against each other, and their node ids decide how commutative
+  // children later sort. See the note in FpTotalise::signSelect.
+  const ASTNode one = s_bm->CreateOneConst(1);
+  const ASTNode zero = s_bm->CreateZeroConst(1);
+  return s_nf->CreateTerm(ITE, 1, node, one, zero);
 }
 
 template <bool isSigned> bitWidthType bitVector<isSigned>::getWidth(void) const
@@ -603,10 +607,11 @@ bitVector<isSigned> bitVector<isSigned>::extract(bitWidthType upper,
                                                  bitWidthType lower) const
 {
   assert(upper >= lower);
+  // Sequenced deliberately; see the note in fromProposition.
+  const ASTNode hi = s_bm->CreateBVConst(32, upper);
+  const ASTNode lo = s_bm->CreateBVConst(32, lower);
   return bitVector<isSigned>(
-      s_nf->CreateTerm(BVEXTRACT, (upper - lower) + 1, *this,
-                       s_bm->CreateBVConst(32, upper),
-                       s_bm->CreateBVConst(32, lower)));
+      s_nf->CreateTerm(BVEXTRACT, (upper - lower) + 1, *this, hi, lo));
 }
 
 /****************************************************************
