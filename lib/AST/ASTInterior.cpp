@@ -24,11 +24,43 @@ THE SOFTWARE.
 
 #include "stp/AST/ASTInterior.h"
 #include "stp/STPManager/STPManager.h"
+#include <new>
 namespace stp
 {
 /******************************************************************
  * ASTInterior Member Functions                                   *
  ******************************************************************/
+
+// Allocate the node and its children as a single block, and copy-construct
+// the children into the tail (each copy takes a reference on the child).
+ASTInterior* ASTInterior::create(STPMgr* mgr, Kind kind, ASTChildren children)
+{
+  const uint32_t n = static_cast<uint32_t>(children.size());
+  void* mem = ::operator new(sizeof(ASTInterior) + n * sizeof(ASTNode));
+  // ::new so the global placement-new is used (the class's own operator new
+  // is deleted to forbid ordinary, wrongly-sized allocation).
+  ASTInterior* node = ::new (mem) ASTInterior(mgr, kind, n);
+
+  ASTNode* kids = node->childrenPtr();
+  for (uint32_t i = 0; i < n; i++)
+    new (&kids[i]) ASTNode(children[i]);
+
+  // (NOT alpha) is numbered alpha.nodenum + 1; needs the children in place.
+  if (kind == NOT)
+    node->node_uid = kids[0].GetNodeNum() + 1;
+
+  return node;
+}
+
+ASTInterior::~ASTInterior()
+{
+  // The children were placement-constructed in the tail; destroy them so
+  // their references are released. The block itself is freed by operator
+  // delete.
+  ASTNode* kids = childrenPtr();
+  for (uint32_t i = 0; i < _num_children; i++)
+    kids[i].~ASTNode();
+}
 
 // Call this when deleting a node that has been stored in the
 // the unique table
@@ -48,9 +80,5 @@ void ASTInterior::nodeprint(ostream& os, bool /*c_friendly*/)
 
 // ASTInteriorHasher::operator() and ASTInteriorEqual::operator() are defined
 // inline in ASTInterior.h.
-
-ASTInterior::~ASTInterior()
-{
-}
 
 } // end of namespace
