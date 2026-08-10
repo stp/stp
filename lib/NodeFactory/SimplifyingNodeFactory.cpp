@@ -1727,10 +1727,14 @@ ASTNode SimplifyingNodeFactory::handle_bvxor(unsigned int width, const ASTVec& i
 // a conjunct in its own right as well as being descended into: what gets
 // negated may be the nested node rather than one of its leaves.
 //
-// Each conjunct is packed as a node number and a polarity -- x as 2n, ~x as
-// 2n+1 -- so a literal and its negation differ only in the low bit, and
-// sorting brings them next to each other. That is the same shape as the
-// adjacency test the duplicate removal below uses.
+// Each conjunct is recorded the way the node numbering already pairs a node
+// with its negation: uids step by two, and the odd slot above an operand's
+// uid is where boolean NOT sits (see ASTInterior's constructor). BVNOT is
+// not numbered that way, so it is recorded that way here instead -- x as its
+// uid, ~x as uid(x)+1 -- and sorting brings a literal and its negation next
+// to each other. Only boolean NOT nodes occupy odd uids, and none can be a
+// BVAND conjunct, so recorded values collide only for equal conjuncts. That
+// is the same shape as the adjacency test the duplicate removal below uses.
 //
 // The buffer is a fixed array rather than a set or a vector. This runs on
 // every BVAND that has a BVAND child, 1.9M times over the hard QF_BV
@@ -1761,8 +1765,8 @@ static void collectConjuncts(const ASTNode& n, uint64_t* out, size_t& count)
   if (count >= MAX_CONJUNCTS)
     return;
 
-  out[count++] = (n.GetKind() == BVNOT) ? ((n[0].GetNodeNum() << 1) | 1)
-                                        : (n.GetNodeNum() << 1);
+  out[count++] = (n.GetKind() == BVNOT) ? n[0].GetNodeNum() + 1
+                                        : n.GetNodeNum();
 
   if (n.GetKind() == stp::BVAND)
     for (size_t i = 0; i < n.Degree(); i++)
@@ -1796,8 +1800,9 @@ ASTNode SimplifyingNodeFactory::handle_bvand(unsigned int width, const ASTVec& n
 
       std::sort(conjuncts, conjuncts + count);
 
-      // x is 2n and ~x is 2n+1, so a pair is two consecutive values with the
-      // even one first. Equal neighbours are duplicates, not a pair.
+      // x is recorded as its even uid and ~x as the odd uid above it, so a
+      // pair is two consecutive values with the even one first. Equal
+      // neighbours are duplicates, not a pair.
       for (size_t i = 1; i < count; i++)
         if (conjuncts[i] == conjuncts[i - 1] + 1 &&
             (conjuncts[i - 1] & 1) == 0)
