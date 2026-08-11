@@ -385,6 +385,41 @@ bool flattenShareCountOk(Context& c, unsigned depth)
 // observed crash path -- but --flatten puts it back. BVMULT is not a
 // flattenable kind, which keeps this a test of the traversal rather than
 // of flattening.
+// The remainder reconstruction in the simplifying factory, which pairs a
+// dividend with the "- b * (a / b)" product beside it in a sum. The pairs are
+// independent of each other, so the number of them is chosen by the input,
+// not by its depth: folding one and re-entering the factory to find the next
+// would spend a frame per pair. Flattening a chain of these additions is what
+// hands the factory one sum this wide.
+bool remainderFoldingOk(Context& c, unsigned pairs)
+{
+  const unsigned width = 32;
+  const ASTNode divisor = c.mgr.CreateBVConst(width, 101);
+  // The negated divisor as the constant it reaches the factory as: every
+  // node in a real query has been through the simplifying factory, which
+  // folds a negated constant on creation.
+  const ASTNode negDivisor = c.mgr.CreateBVConst(width, (1ULL << width) - 101);
+
+  ASTVec children;
+  children.reserve(2 * pairs);
+  for (unsigned i = 0; i < pairs; i++)
+  {
+    const std::string name = "rem-fold-a" + std::to_string(i);
+    const ASTNode a = c.mgr.CreateSymbol(name.c_str(), 0, width);
+    children.push_back(a);
+    children.push_back(c.hf->CreateTerm(
+        BVMULT, width, negDivisor,
+        c.hf->CreateTerm(SBVDIV, width, a, divisor)));
+  }
+
+  const ASTNode sum = c.nf->CreateTerm(BVPLUS, width, children);
+  c.roots.push_back(sum);
+
+  // Every pair became a remainder, so the sum has one operand per pair.
+  return sum.GetKind() == BVPLUS && sum.Degree() == pairs &&
+         sum[0].GetKind() == SBVREM;
+}
+
 bool flattenIdentityOk(Context& c, unsigned depth)
 {
   const ASTNode top = c.formula(c.chain(BVMULT, depth));
@@ -1763,6 +1798,12 @@ TEST(DeepDag, shallow_rewriting_rule_fires)
   EXPECT_TRUE(rewritingRuleFiresOk(c, SHALLOW));
 }
 
+TEST(DeepDag, shallow_remainder_folding)
+{
+  Context c;
+  EXPECT_TRUE(remainderFoldingOk(c, SHALLOW));
+}
+
 TEST(DeepDag, shallow_flatten)
 {
   Context c;
@@ -2597,6 +2638,11 @@ TEST(DeepDag, deep_flatten_kind_depth)
 TEST(DeepDag, deep_strength_reduction)
 {
   EXPECT_STACK_SAFE(strengthReductionOk, 20000);
+}
+
+TEST(DeepDag, deep_remainder_folding)
+{
+  EXPECT_STACK_SAFE(remainderFoldingOk, 20000);
 }
 
 TEST(DeepDag, deep_simplify)

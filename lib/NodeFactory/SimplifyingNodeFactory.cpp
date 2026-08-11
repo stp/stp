@@ -2007,6 +2007,121 @@ ASTNode SimplifyingNodeFactory::simplifyArrayEquality(const ASTNode& a,
   return ASTNode();
 }
 
+// A remainder is what a division leaves behind: a == (a / b) * b + (a rem b)
+// holds for every a and b, so a + (-b) * (a / b) *is* the remainder. It holds
+// for the signed and the unsigned pair alike, and at every operand pair --
+// including b = 0 and the most negative dividend -- because SMT-LIB's
+// division and remainder are total and satisfy that identity everywhere.
+//
+// Producers that expand a remainder into a - (a / b) * b, as translation
+// validation tools routinely do, otherwise hand the bit-blaster a division
+// that nothing recognises as the remainder it is really computing, and it
+// gets blasted as a second, independent divider.
+//
+// Returns the remainder if `a` and `product` have that shape, else null.
+ASTNode SimplifyingNodeFactory::remainderFromDivision(const ASTNode& a,
+                                                     const ASTNode& product)
+{
+  // The subtracted form BVSUB(a, b * (a / b)) reaches here as a plus of the
+  // dividend and a negated product; otherwise the multiplier carries the
+  // negation itself.
+  const bool negated = (product.GetKind() == BVUMINUS);
+  const ASTNode& mult = negated ? product[0] : product;
+
+  if (mult.GetKind() != stp::BVMULT || mult.Degree() != 2)
+    return ASTNode();
+
+  const unsigned width = a.GetValueWidth();
+
+  for (unsigned i = 0; i < 2; i++)
+  {
+    const ASTNode& quotient = mult[i];
+    const ASTNode& multiplier = mult[1 - i];
+
+    const Kind k = quotient.GetKind();
+    if ((k != SBVDIV && k != stp::BVDIV) || quotient[0] != a)
+      continue;
+
+    const ASTNode& divisor = quotient[1];
+
+    // Only now is it worth building the negated divisor to compare against.
+    // Constants fold and a double negation cancels, so this single comparison
+    // covers a constant multiplier, a BVUMINUS one, and an already negated
+    // divisor alike.
+    if (negated ? (multiplier != divisor)
+                : (multiplier !=
+                   NodeFactory::CreateTerm(BVUMINUS, width, divisor)))
+      continue;
+
+    return NodeFactory::CreateTerm(k == SBVDIV ? SBVREM : BVMOD, width, a,
+                                   divisor);
+  }
+
+  return ASTNode();
+}
+
+// True if `n` could be the "- b * (a / b)" half of the pair above, using only
+// checks that cost nothing, so that the search over a wide plus gives up
+// immediately on almost every operand.
+static bool mightBeDivisionProduct(const ASTNode& n)
+{
+  const ASTNode& mult = (n.GetKind() == BVUMINUS) ? n[0] : n;
+
+  if (mult.GetKind() != stp::BVMULT || mult.Degree() != 2)
+    return false;
+
+  for (unsigned i = 0; i < 2; i++)
+    if (mult[i].GetKind() == SBVDIV || mult[i].GetKind() == stp::BVDIV)
+      return true;
+
+  return false;
+}
+
+// One pass of the pairing over a sum's operands: every dividend and its
+// product collapse to the remainder they compute, wherever the two sit.
+// Returns true if anything folded, so the caller can run it again -- a fold
+// can expose another, when the remainder it builds is itself the dividend of
+// a product the sum already held.
+bool SimplifyingNodeFactory::foldRemainders(ASTVec& children)
+{
+  std::vector<bool> paired(children.size(), false);
+  ASTVec folded;
+
+  for (size_t i = 0; i < children.size(); i++)
+  {
+    if (paired[i] || !mightBeDivisionProduct(children[i]))
+      continue;
+
+    for (size_t j = 0; j < children.size(); j++)
+    {
+      if (i == j || paired[j])
+        continue;
+
+      const ASTNode remainder = remainderFromDivision(children[j], children[i]);
+      if (remainder.IsNull())
+        continue;
+
+      folded.push_back(remainder);
+      paired[i] = true;
+      paired[j] = true;
+      break;
+    }
+  }
+
+  if (folded.empty())
+    return false;
+
+  for (size_t i = 0; i < children.size(); i++)
+    if (!paired[i])
+      folded.push_back(children[i]);
+
+  // Each fold takes two operands and gives back one, so a sum of more than
+  // two operands keeps at least two.
+  assert(folded.size() >= 2);
+  children.swap(folded);
+  return true;
+}
+
 // This gets called with the arguments swapped as well. So the rules don't need
 // to know about commutivity.
 ASTNode SimplifyingNodeFactory::plusRules(const ASTNode& n0, const ASTNode& n1)
@@ -2014,7 +2129,14 @@ ASTNode SimplifyingNodeFactory::plusRules(const ASTNode& n0, const ASTNode& n1)
   ASTNode result;
   const int width = n0.GetValueWidth();
 
-  if (n0.isConstant() && CONSTANTBV::BitVector_is_empty(n0.GetBVConst()))
+  // a + (-b) * (a / b) is the remainder a rem b. Tried ahead of the chain
+  // below so that the negation-pulling rules at its end cannot claim the
+  // pair first, and skipped again the moment the shape does not fit.
+  if (mightBeDivisionProduct(n1))
+    result = remainderFromDivision(n0, n1);
+
+  if (result.IsNull() && n0.isConstant() &&
+      CONSTANTBV::BitVector_is_empty(n0.GetBVConst()))
     result = n1;
   else if (width == 1 && n0 == n1)
     result = bm.CreateZeroConst(1);
@@ -2505,6 +2627,32 @@ ASTNode SimplifyingNodeFactory::plusRules(const ASTChildren oldChildren)
 {
   assert(oldChildren.size() > 2);
   const unsigned width = oldChildren[0].GetValueWidth();
+
+  // A dividend and its "- b * (a / b)" partner fold back into the remainder
+  // they compute, wherever in the sum the two happen to sit.
+  //
+  // Every pair is taken here, by looping the pass, rather than by rebuilding
+  // the sum around one fold and re-entering the factory to find the next:
+  // that costs a stack frame per pair, and a sum wide enough -- which is what
+  // flattening a long chain of these produces -- overflows the stack. The
+  // scan is skipped altogether unless some operand is a product of a
+  // division, which almost no sum has.
+  bool anyProduct = false;
+  for (size_t i = 0; i < oldChildren.size() && !anyProduct; i++)
+    anyProduct = mightBeDivisionProduct(oldChildren[i]);
+
+  if (anyProduct)
+  {
+    ASTVec remaining(oldChildren.begin(), oldChildren.end());
+
+    if (foldRemainders(remaining))
+    {
+      while (foldRemainders(remaining))
+        ;
+
+      return CreateTerm(BVPLUS, width, remaining);
+    }
+  }
 
   ASTNode accumulate= bm.CreateZeroConst(width);
 
@@ -3456,7 +3604,26 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
     break;
 
     case stp::BVDIV:
-      if (children[1].isConstant() && children[1] == bm.CreateOneConst(width))
+      if (children[0].GetKind() == BVMOD && children[0][1] == children[1])
+      {
+        // (x umod y) / y is zero: a remainder is smaller than the divisor it
+        // was taken against, so it cannot contain it once. Only y = 0 escapes,
+        // where the remainder is x and the total quotient is all ones.
+        // Checked before the rules below because the power-of-two divisor is
+        // rewritten to an extract, after which nothing sees the remainder.
+        if (children[1].isConstant())
+          result = CONSTANTBV::BitVector_is_empty(children[1].GetBVConst())
+                       ? bm.CreateMaxConst(width)
+                       : bm.CreateZeroConst(width);
+        else
+          result = NodeFactory::CreateTerm(
+              ITE, width,
+              NodeFactory::CreateNode(EQ, children[1],
+                                      bm.CreateZeroConst(width)),
+              bm.CreateMaxConst(width), bm.CreateZeroConst(width));
+      }
+      else if (children[1].isConstant() &&
+               children[1] == bm.CreateOneConst(width))
         result = children[0];
       else if (children[1].isConstant() && hasSingleOneBit(children[1]) &&
                lowestOneBit(children[1]) > 0)
@@ -3551,7 +3718,35 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       // so (bvsdiv x 2^n) is NOT a plain arithmetic shift right (that would
       // round toward -inf for negative x); it needs a sign correction. Left for
       // the bit-blaster.
-      if (children[1].isConstant() && children[1] == bm.CreateOneConst(width))
+      if ((children[0].GetKind() == SBVREM || children[0].GetKind() == SBVMOD) &&
+          children[0][1] == children[1])
+      {
+        // (x srem y) / y and (x smod y) / y are both zero: either remainder is
+        // smaller in magnitude than the divisor it was taken against. Only
+        // y = 0 escapes, where both remainders are x and the total quotient is
+        // one for a negative x and all ones otherwise.
+        if (children[1].isConstant() &&
+            !CONSTANTBV::BitVector_is_empty(children[1].GetBVConst()))
+          result = bm.CreateZeroConst(width);
+        else
+        {
+          const ASTNode byZero = NodeFactory::CreateTerm(
+              ITE, width,
+              NodeFactory::CreateNode(stp::BVSLT, children[0][0],
+                                      bm.CreateZeroConst(width)),
+              bm.CreateOneConst(width), bm.CreateMaxConst(width));
+
+          result = children[1].isConstant()
+                       ? byZero
+                       : NodeFactory::CreateTerm(
+                             ITE, width,
+                             NodeFactory::CreateNode(
+                                 EQ, children[1], bm.CreateZeroConst(width)),
+                             byZero, bm.CreateZeroConst(width));
+        }
+      }
+      else if (children[1].isConstant() &&
+               children[1] == bm.CreateOneConst(width))
         result = children[0];
       else if (children[1].isConstant() &&
                CONSTANTBV::BitVector_is_full(children[1].GetBVConst()))
