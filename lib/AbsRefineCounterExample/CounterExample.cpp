@@ -1096,7 +1096,7 @@ public:
 
 // See the header.
 void AbsRefine_CounterExample::CollectArrayNodes(const ASTNode& arrayTerm,
-                                                 ASTNodeSet& out)
+                                                 ASTNodeSet& out) const
 {
   ASTVec pending(1, arrayTerm);
   while (!pending.empty())

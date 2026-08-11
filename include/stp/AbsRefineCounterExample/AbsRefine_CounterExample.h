@@ -141,7 +141,7 @@ private:
   // The array-valued nodes an array term is built from -- itself, the
   // base of every write, both branches of every array if-then-else.
   // These are the nodes the model can hold cells against.
-  void CollectArrayNodes(const ASTNode& arrayTerm, ASTNodeSet& out);
+  void CollectArrayNodes(const ASTNode& arrayTerm, ASTNodeSet& out) const;
 
   // counter_example. Always answers with a plain bitvector constant: a
   // float constant interns separately from the bitvector constant with

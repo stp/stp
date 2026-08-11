@@ -312,11 +312,13 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
       new PropagateEqualities(simp, bm->defaultNodeFactory, bm));
 
   ASTNode semantic_input = original_input;
+  bool hadWholeArrayEquality = false;
   if (bm->UserFlags.enable_array_equality)
   {
     const bool hasOpaqueEquality =
         containsOpaqueArrayEquality(original_input) ||
         !arrayEqualityRewrites.empty();
+    hadWholeArrayEquality = hasOpaqueEquality;
 
     // A definitional equality -- a symbol equated with an array term at
     // the top level, (= A (store B i v)) -- substitutes the symbol away
@@ -464,8 +466,16 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     }
   }
 
+  // A query with a whole-array equality always constructs the
+  // counterexample. Definitional substitution can leave so few reads
+  // that the eager removal above deletes every array operation, but the
+  // substituted symbols' interpretations still have to be reconstructed
+  // from their definitional aliases when the model surface is asked --
+  // and before substitution existed, every such query stayed on the
+  // lazy array path and constructed the counterexample anyway.
   if (bm->UserFlags.check_counterexample_flag ||
-      bm->UserFlags.print_counterexample_flag || (arrayops && !removed))
+      bm->UserFlags.print_counterexample_flag || (arrayops && !removed) ||
+      hadWholeArrayEquality)
     bm->UserFlags.construct_counterexample_flag = true;
   else
     bm->UserFlags.construct_counterexample_flag = false;
