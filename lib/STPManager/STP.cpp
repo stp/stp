@@ -356,7 +356,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // current form can be recovered. Array-valued ITEs remain structural and
   // are handled directly by the consistency checker's T rules. A query with
   // no active array equality stays on STP's ordinary array path.
-  const bool extActive = ext != NULL && ext->active();
+  bool extActive = ext != NULL && ext->active();
   // Releases the record-table seal on every exit from this function.
   ExtensionalityContext::SolveScope extScope(ext);
   if (extActive)
@@ -365,11 +365,26 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     if (bm->UserFlags.ackermannisation)
     {
       // Eager Ackermannization expands reads into if-then-else chains,
-      // destroying the array structure the lazy procedure works on.
-      cerr << "Warning: --ackermanize is disabled for queries with "
-              "array equality."
-           << endl;
-      bm->UserFlags.ackermannisation = false;
+      // destroying the array structure the lazy procedure works on --
+      // so the equalities go the same way: instantiate them pointwise
+      // over the solve's read indexes and retire the records, leaving a
+      // self-contained formula on STP's ordinary eager path. Quotiented
+      // sorts (float or RoundingMode cells or indexes) have no sound
+      // pointwise bit instantiation and stay on lemmas on demand.
+      const ASTNode eager = ext->instantiateEagerAckermann(inputToSat);
+      if (!eager.IsNull())
+      {
+        inputToSat = eager;
+        extActive = false;
+        bm->ASTNodeStats("after eager equality instantiation: ", inputToSat);
+      }
+      else
+      {
+        cerr << "Warning: --ackermanize is disabled for queries with "
+                "array equality over floating-point sorts."
+             << endl;
+        bm->UserFlags.ackermannisation = false;
+      }
     }
   }
 

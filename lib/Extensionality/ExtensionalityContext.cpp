@@ -771,6 +771,76 @@ ASTNode ExtensionalityContext::conjoinRecordConstraints(const ASTNode& root)
   return out;
 }
 
+ASTNode ExtensionalityContext::instantiateEagerAckermann(const ASTNode& root)
+{
+  assert(!activeRecordIds.empty());
+  assert(registrySealed); // the witness bundles are already in `root`
+
+  for (size_t i = 0; i < activeRecordIds.size(); i++)
+  {
+    const SourceSort sort =
+        records[activeRecordIds[i]].constructionLeft.GetSourceSort();
+    assert(sort.kind() == SourceSort::Kind::Array);
+    if (sort.usesFloatingPointTheory())
+      return ASTNode();
+  }
+
+  // Every distinct access-index term in the solve, grouped by the
+  // accessed array's shape. Writes are accesses exactly as they are for
+  // the lazy checker (paper section 11.4): equal stores at equal
+  // indices force equal values with no read anywhere near, so a write
+  // index is a point where an equality is observed and must be
+  // instantiated. One shared inventory per shape rather than one per
+  // equality-connected component: extra indexes only add valid
+  // implications of the guarding proxy, and sharing is what lets a
+  // chain a = b, b = c contradict a witness for a distinct (a, c) --
+  // the (a, c) record's lambda reaches the other two records' lemmas.
+  typedef std::pair<unsigned, unsigned> ArrayShape;
+  std::map<ArrayShape, std::set<ASTNode>> indexesByShape;
+  ASTNodeSet nodes;
+  collectDag(root, nodes);
+  for (ASTNodeSet::const_iterator it = nodes.begin(); it != nodes.end(); ++it)
+  {
+    const Kind k = it->GetKind();
+    if (k == READ)
+      indexesByShape[ArrayShape((*it)[0].GetIndexWidth(),
+                                (*it)[0].GetValueWidth())]
+          .insert((*it)[1]);
+    else if (k == WRITE)
+      indexesByShape[ArrayShape(it->GetIndexWidth(), it->GetValueWidth())]
+          .insert((*it)[1]);
+  }
+
+  // records-times-indexes lemmas, before the transform's own quadratic
+  // read expansion. That cost is what the user's --ackermanize opted
+  // into; it is the same trade the eager path makes without equalities.
+  NodeFactory* hf = bm->hashingNodeFactory;
+  ASTVec conjuncts;
+  conjuncts.push_back(root);
+  for (size_t i = 0; i < activeRecordIds.size(); i++)
+  {
+    const Record& r = records[activeRecordIds[i]];
+    const unsigned ew = r.constructionLeft.GetValueWidth();
+    const std::set<ASTNode>& indexes = indexesByShape[ArrayShape(
+        r.constructionLeft.GetIndexWidth(), ew)];
+    for (std::set<ASTNode>::const_iterator idx = indexes.begin();
+         idx != indexes.end(); ++idx)
+    {
+      const ASTNode readL = hf->CreateTerm(READ, ew, r.constructionLeft, *idx);
+      const ASTNode readR = hf->CreateTerm(READ, ew, r.constructionRight, *idx);
+      conjuncts.push_back(hf->CreateNode(OR, hf->CreateNode(NOT, r.proxy),
+                                         hf->CreateNode(EQ, readL, readR)));
+    }
+  }
+  const ASTNode out = bm->defaultNodeFactory->CreateNode(AND, conjuncts);
+
+  // Retire the records. Deliberately not beginSolve(): the current
+  // lowerings must survive for the model surfaces, and the protected-
+  // symbol set simply goes unconsulted once active() is false.
+  activeRecordIds.clear();
+  return out;
+}
+
 // Recover each record's canonical operands from its anchor equations
 // in the current formula. The anchors were conjoined before STP's
 // simplifications ran, so they were rewritten by exactly the passes

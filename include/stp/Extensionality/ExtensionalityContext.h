@@ -228,6 +228,34 @@ public:
   // remain structural and are handled by the checker's T rules.
   ASTNode conjoinRecordConstraints(const ASTNode& root);
 
+  // Eager Ackermann reduction of the active equalities, the classical
+  // eager alternative to the refinement loop, taken when the user asked
+  // for --ackermanize. The negative direction of every equality is
+  // already eager -- conjoinRecordConstraints planted its witness
+  // clause -- and this pass makes the positive direction eager too: for
+  // every active record and every access-index term (read and write
+  // indexes) of the record's array shape in the solve, conjoin
+  //     proxy => read(left, i) = read(right, i).
+  // Once instantiated, the formula carries the complete equality
+  // semantics by itself, so the records are retired (the procedure
+  // reports inactive, every pass gate reopens) and the solve proceeds
+  // as an ordinary eager-Ackermannisation solve: reads expand into
+  // if-then-else chains and no refinement runs. Current lowerings stay,
+  // so the model surfaces still resolve opaque public handles -- to
+  // proxies that are now ordinary Boolean variables of the formula.
+  //
+  // Called between conjoinRecordConstraints and any simplification, on
+  // the exact root the former returned: the witness anchors must be in
+  // `root` (each record's lambda joins the index inventory through its
+  // anchor reads) and the construction operands must still be current.
+  //
+  // Returns the null node -- and changes nothing -- when a sort
+  // quotients its bit patterns (a float or RoundingMode cell or index):
+  // pointwise bit-equality is stronger than value equality there (NaN
+  // payloads, non-denoting patterns), so a packed instantiation could
+  // refuse a genuine model. Such solves stay on lemmas on demand.
+  ASTNode instantiateEagerAckermann(const ASTNode& root);
+
   // Final preparation, run after STP's simplifications and immediately
   // before its main array transformation:
   //  - recover each record's canonical operands from its anchors;
