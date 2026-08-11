@@ -554,23 +554,35 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
       result = CreateSimpleFormITE(children);
       break;
     case EQ:
-      // Whole-array equality is opaque until the solve-boundary lowering
-      // pass. Do not run bit-vector equality rewrites over array operands.
+      // Whole-array equality is near-opaque until the solve-boundary
+      // lowering pass: reflexivity and the structural rules in
+      // simplifyArrayEquality apply, but no bit-vector equality rewrite
+      // may run over array operands. The hashing factory owns both the
+      // conversion to ARRAY_EQ and the rejection when --array-equality is
+      // off, so the rules only run once the node is legal to build.
       if (children.size() == 2 && children[0].GetIndexWidth() > 0)
-        result = children[0] == children[1]
-                     ? bm.ASTTrue
-                     : hashing.CreateNode(EQ, children);
+      {
+        if (children[0] == children[1])
+          result = bm.ASTTrue;
+        else if (bm.UserFlags.enable_array_equality)
+          result = simplifyArrayEquality(children[0], children[1]);
+        if (result.IsNull())
+          result = hashing.CreateNode(EQ, children);
+      }
       else
         result = CreateSimpleEQ(children);
       break;
     case ARRAY_EQ:
       assert(children.size() == 2);
-      // ARRAY_EQ is deliberately opaque to ordinary simplification. The one
-      // theory-independent reduction is reflexivity; every other instance
-      // must survive until the extensionality lowering pass.
-      result = children[0] == children[1]
-                   ? bm.ASTTrue
-                   : hashing.CreateNode(ARRAY_EQ, children);
+      // ARRAY_EQ is deliberately near-opaque to ordinary simplification:
+      // reflexivity and the structural rules apply; every other
+      // instance must survive until the extensionality lowering pass.
+      if (children[0] == children[1])
+        result = bm.ASTTrue;
+      else
+        result = simplifyArrayEquality(children[0], children[1]);
+      if (result.IsNull())
+        result = hashing.CreateNode(ARRAY_EQ, children);
       break;
     case stp::IFF:
     {
@@ -1452,6 +1464,85 @@ ASTNode SimplifyingNodeFactory::chaseRead(const ASTVec& children,
     write = write[0];
   }
   return hashing.CreateTerm(stp::READ, width, write, readIndex);
+}
+
+namespace
+{
+// The whole-array equality rules only fire over arrays whose cells and
+// indexes are plain bitvectors. Floating-point cells are equal modulo the
+// NaN quotient and rounding-mode cells only denote through the five one-hot
+// patterns, so for those element sorts a bit-level read equality is not
+// cell equality; non-bitvector index sorts additionally quotient their
+// index patterns. All of that belongs to the extensionality lowering's
+// witness machinery, which handles it explicitly.
+bool isPlainBitvectorArray(const ASTNode& n)
+{
+  const stp::SourceSort sort = n.GetSourceSort();
+  return sort.kind() == stp::SourceSort::Kind::Array &&
+         sort.index().kind() == stp::SourceSort::Kind::BitVector &&
+         sort.element().kind() == stp::SourceSort::Kind::BitVector;
+}
+}
+
+// Structural rules for whole-array equality, applied where the equality
+// has a complete quantifier-free meaning over the existing terms and the
+// rewrite cannot grow the formula: no rule here creates reads or expands
+// write chains. Everything else stays an opaque ARRAY_EQ for the
+// extensionality lowering, whose witness abstraction is the general
+// decision procedure -- in particular, eagerly reducing write chains to
+// read equalities is a decision-procedure choice that belongs at the
+// solve boundary, beside the machinery it would be trading against.
+// Returns null when no rule applies.
+ASTNode SimplifyingNodeFactory::simplifyArrayEquality(const ASTNode& a,
+                                                      const ASTNode& b)
+{
+  assert(a != b); // Callers fold reflexivity first.
+
+  if (!isPlainBitvectorArray(a) || !isPlainBitvectorArray(b))
+    return ASTNode();
+
+  // Both sides overwrite the same index of the same array: off that
+  // index both sides are that array, at it they hold the written
+  // values, so the equality is exactly the values' equality.
+  //   write(A,i,v) = write(A,i,w)  <=>  v = w
+  // Chains sharing a longer prefix are the same shape: hash-consing
+  // makes equal sub-chains one node, which appears here as A.
+  if (a.GetKind() == stp::WRITE && b.GetKind() == stp::WRITE &&
+      a[0] == b[0] && a[1] == b[1])
+  {
+    ASTVec values;
+    values.push_back(a[2]);
+    values.push_back(b[2]);
+    return CreateSimpleEQ(values);
+  }
+
+  // An array ITE equated with one of its own branches: the matching arm
+  // holds by reflexivity, leaving the choice of that arm or the other
+  // branch's equality.
+  //   ite(c,X,Y) = X  <=>  c OR (Y = X)
+  //   ite(c,X,Y) = Y  <=>  (NOT c) OR (X = Y)
+  for (int orientation = 0; orientation < 2; orientation++)
+  {
+    const ASTNode& iteNode = (orientation == 0) ? a : b;
+    const ASTNode& other = (orientation == 0) ? b : a;
+    if (iteNode.GetKind() != ITE)
+      continue;
+    const bool thenMatches = iteNode[1] == other;
+    const bool elseMatches = iteNode[2] == other;
+    if (!thenMatches && !elseMatches)
+      continue;
+    const ASTNode& residualBranch = thenMatches ? iteNode[2] : iteNode[1];
+    if (residualBranch.GetSourceSort() != other.GetSourceSort())
+      continue; // The hashing factory rejects mismatched-sort equalities.
+    ASTVec disjuncts;
+    disjuncts.push_back(thenMatches ? iteNode[0]
+                                    : CreateSimpleNot(iteNode[0]));
+    disjuncts.push_back(
+        NodeFactory::CreateNode(ARRAY_EQ, residualBranch, other));
+    return CreateSimpleAndOr(0, disjuncts);
+  }
+
+  return ASTNode();
 }
 
 // This gets called with the arguments swapped as well. So the rules don't need
