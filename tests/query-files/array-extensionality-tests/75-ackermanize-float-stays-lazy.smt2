@@ -1,3 +1,4 @@
+; REQUIRES: floating-point
 ; RUN: %solver --array-equality --ackermanize %s 2>&1 | %OutputCheck %s
 ; CHECK-L: Warning: --ackermanize is disabled for queries with array equality over floating-point sorts.
 ; CHECK: ^unsat
