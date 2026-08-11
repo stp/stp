@@ -339,6 +339,152 @@ TEST(PropagateEquality_Test, g_Booleans)
   verify(input);
 }
 
+// The propagated conjunction is not always fully constant-folded here, so
+// tests assert the guarantee propagation itself makes: the substituted
+// symbol is gone from the formula.
+static bool containsSymbolNamed(const stp::ASTNode& n, const std::string& s)
+{
+  if (n.GetKind() == stp::SYMBOL)
+    return n.GetName() == s;
+  for (size_t i = 0; i < n.Degree(); i++)
+    if (containsSymbolNamed(n[i], s))
+      return true;
+  return false;
+}
+
+// Whole-array equalities parse to ARRAY_EQ (a kind of its own, gated on
+// enable_array_equality). A top-level asserted (= A (store B x y)) is an
+// equality on the abstract array domain, so substituting A away is sound
+// exactly like the bitvector EQ case. These parse their own QF_ABV
+// prelude and hand the propagated conjunction to a checker WHILE the
+// manager is alive: an ASTNode must not outlive the STPMgr that owns its
+// storage.
+template <typename Check>
+static void propagateArray(const std::string& input, Check check)
+{
+  stp::STPMgr mgr;
+  mgr.UserFlags.enable_array_equality = true;
+  SimplifyingNodeFactory snf(*(mgr.hashingNodeFactory), mgr);
+  mgr.defaultNodeFactory = &snf;
+  stp::Cpp_interface interface(mgr, mgr.defaultNodeFactory);
+
+  interface.startup();
+  stp::GlobalParserBM = &mgr;
+  stp::GlobalParserInterface = &interface;
+
+  stp::SubstitutionMap sm(&mgr);
+  stp::Simplifier simp(&mgr, &sm);
+
+  const std::string prelude = R"(
+  (set-logic QF_ABV)
+  (declare-fun A () (Array (_ BitVec 4) (_ BitVec 8)))
+  (declare-fun B () (Array (_ BitVec 4) (_ BitVec 8)))
+  (declare-fun C () (Array (_ BitVec 4) (_ BitVec 8)))
+  (declare-fun x () (_ BitVec 4))
+  (declare-fun y () (_ BitVec 8))
+  (declare-fun i () (_ BitVec 4))
+  )";
+
+  stp::SMT2ScanString((prelude + input).c_str());
+  stp::SMT2Parse();
+  smt2lex_destroy();
+
+  ASTVec values = mgr.GetAsserts();
+  stp::ASTNode n = values.size() == 1 ? values[0]
+                                      : mgr.CreateNode(stp::AND, values);
+
+  stp::PropagateEqualities propagate(&simp, mgr.defaultNodeFactory, &mgr);
+  propagate.setSpeculativeOn();
+  n = propagate.topLevel(n);
+
+  if (simp.hasUnappliedSubstitutions())
+  {
+    n = simp.applySubstitutionMap(n);
+    simp.haveAppliedSubstitutionMap();
+  }
+  check(n);
+}
+
+TEST(PropagateEquality_Test, array_symbol_eq_write)
+{
+  // (= A (store B x y)) at the top level: A substitutes away everywhere,
+  // including under the unrelated select.
+  propagateArray(R"(
+   (assert (= A (store B x y)))
+   (assert (= (select A i) (_ bv0 8)))
+  )",
+                 [](const stp::ASTNode& n) {
+                   ASSERT_FALSE(containsSymbolNamed(n, "A"));
+                   ASSERT_TRUE(containsSymbolNamed(n, "B"));
+                 });
+}
+
+TEST(PropagateEquality_Test, array_write_eq_symbol)
+{
+  // Same equality with the symbol on the right-hand side.
+  propagateArray(R"(
+   (assert (= (store B x y) A))
+   (assert (= (select A i) (_ bv0 8)))
+  )",
+                 [](const stp::ASTNode& n) {
+                   ASSERT_FALSE(containsSymbolNamed(n, "A"));
+                   ASSERT_TRUE(containsSymbolNamed(n, "B"));
+                 });
+}
+
+TEST(PropagateEquality_Test, array_symbol_eq_symbol)
+{
+  // One of the two array symbols substitutes for the other.
+  propagateArray(R"(
+   (assert (= A B))
+   (assert (= (select A i) (_ bv0 8)))
+   (assert (= (select B x) (_ bv1 8)))
+  )",
+                 [](const stp::ASTNode& n) {
+                   ASSERT_TRUE(!containsSymbolNamed(n, "A") ||
+                               !containsSymbolNamed(n, "B"));
+                 });
+}
+
+TEST(PropagateEquality_Test, array_eq_chain)
+{
+  // A := store(B,..) feeds C := store(A,..): both definitions propagate
+  // through, leaving only B (plus the indices/values).
+  propagateArray(R"(
+   (assert (= A (store B x y)))
+   (assert (= C (store A i y)))
+   (assert (= (select C x) (_ bv0 8)))
+  )",
+                 [](const stp::ASTNode& n) {
+                   ASSERT_FALSE(containsSymbolNamed(n, "A"));
+                   ASSERT_FALSE(containsSymbolNamed(n, "C"));
+                   ASSERT_TRUE(containsSymbolNamed(n, "B"));
+                 });
+}
+
+TEST(PropagateEquality_Test, array_eq_occurs_check)
+{
+  // A appears on both sides; the candidate must be rejected, not looped.
+  propagateArray(R"(
+   (assert (= A (store A x y)))
+  )",
+                 [](const stp::ASTNode& n) {
+                   ASSERT_TRUE(containsSymbolNamed(n, "A"));
+                 });
+}
+
+TEST(PropagateEquality_Test, array_eq_negated_never_propagates)
+{
+  // A disequality asserts nothing substitutable; both symbols survive.
+  propagateArray(R"(
+   (assert (not (= A B)))
+  )",
+                 [](const stp::ASTNode& n) {
+                   ASSERT_TRUE(containsSymbolNamed(n, "A"));
+                   ASSERT_TRUE(containsSymbolNamed(n, "B"));
+                 });
+}
+
 #ifdef STP_ENABLE_FLOATING_POINT
 
 // SMT `=` on floats (FP_SMT_EQ) is true equality on the abstract domain,
@@ -386,20 +532,6 @@ static void propagateFP(const std::string& input, Check check)
     simp.haveAppliedSubstitutionMap();
   }
   check(n);
-}
-
-// The propagated conjunction is not fully constant-folded here (all-constant
-// FP predicates fold in later passes, not at node creation), so the tests
-// assert the guarantee propagation itself makes: the substituted symbol is
-// gone from the formula.
-static bool containsSymbolNamed(const stp::ASTNode& n, const std::string& s)
-{
-  if (n.GetKind() == stp::SYMBOL)
-    return n.GetName() == s;
-  for (size_t i = 0; i < n.Degree(); i++)
-    if (containsSymbolNamed(n[i], s))
-      return true;
-  return false;
 }
 
 TEST(PropagateEquality_Test, fp_smt_eq_constant)

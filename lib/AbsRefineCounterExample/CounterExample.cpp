@@ -298,8 +298,13 @@ AbsRefine_CounterExample::TermToConstTermUsingModel_inner(const ASTNode& term,
   assert(k != WRITE);
   assert(BOOLEAN_TYPE != term.GetType());
 
+  // An array-typed entry is a definitional alias installed by equality
+  // propagation (array symbol := array term), not a value; the READ case
+  // resolves through it. Recursing on it here would hand an array term to
+  // a walk that only understands element-typed values.
   ASTNodeMap::const_iterator it1;
-  if ((it1 = CounterExampleMap.find(term)) != CounterExampleMap.end())
+  if (ARRAY_TYPE != term.GetType() &&
+      (it1 = CounterExampleMap.find(term)) != CounterExampleMap.end())
   {
     // A copy, never a reference into the map: the recursion below can reach
     // an array equality, whose ModelQuery guard rolls CounterExampleMap back
@@ -403,6 +408,23 @@ AbsRefine_CounterExample::TermToConstTermUsingModel_inner(const ASTNode& term,
         FatalError("TermToConstTermUsingModel: "
                    "array has 0 index width: ",
                    arrName);
+      }
+
+      // An array symbol that equality propagation substituted away is
+      // defined by its (array-typed) entry in the counterexample map --
+      // the copied-in substitution map. The solve never bit-blasted a
+      // read of the vanished symbol, so no model entry can be keyed on
+      // it; read through the definition instead.
+      if (SYMBOL == arrName.GetKind())
+      {
+        ASTNodeMap::const_iterator sub = CounterExampleMap.find(arrName);
+        if (sub != CounterExampleMap.end() &&
+            ARRAY_TYPE == sub->second.GetType())
+        {
+          const ASTNode throughDefinition = bm->CreateTerm(
+              READ, term.GetValueWidth(), sub->second, index);
+          return TermToConstTermUsingModel(throughDefinition, ArrayReadFlag);
+        }
       }
 
       // With array equality active, every read in the solve is
@@ -1082,7 +1104,7 @@ public:
 
 // See the header.
 void AbsRefine_CounterExample::CollectArrayNodes(const ASTNode& arrayTerm,
-                                                 ASTNodeSet& out)
+                                                 ASTNodeSet& out) const
 {
   ASTVec pending(1, arrayTerm);
   while (!pending.empty())
@@ -1097,6 +1119,14 @@ void AbsRefine_CounterExample::CollectArrayNodes(const ASTNode& arrayTerm,
     {
       pending.push_back(n[1]);
       pending.push_back(n[2]);
+    }
+    else if (SYMBOL == n.GetKind())
+    {
+      // A substituted-away symbol's cells live against its definition.
+      const ASTNodeMap::const_iterator sub = CounterExampleMap.find(n);
+      if (sub != CounterExampleMap.end() &&
+          ARRAY_TYPE == sub->second.GetType())
+        pending.push_back(sub->second);
     }
   }
 }
@@ -1175,6 +1205,19 @@ ASTNode AbsRefine_CounterExample::ReadUsingModel(const ASTNode& arrayTerm,
                    "truth value in the model",
                    level[0]);
       continue;
+    }
+
+    // A symbol equality propagation substituted away holds exactly what
+    // its definition holds.
+    if (SYMBOL == level.GetKind())
+    {
+      const ASTNodeMap::const_iterator sub = CounterExampleMap.find(level);
+      if (sub != CounterExampleMap.end() &&
+          ARRAY_TYPE == sub->second.GetType())
+      {
+        level = sub->second;
+        continue;
+      }
     }
 
     // A base array the model records nothing for at this index. It
@@ -1322,6 +1365,48 @@ vector<std::pair<ASTNode, ASTNode>>
 AbsRefine_CounterExample::GetSortedArrayModelEntries(const ASTNode& arraySym)
 {
   vector<std::pair<ASTNode, ASTNode>> entries;
+
+  // A symbol equality propagation substituted away has no reads of its
+  // own in the model; it holds exactly what its definition holds. Derive
+  // its entries from the definition: every cell the model records
+  // against the definition's base arrays, plus every index one of its
+  // writes covers. Equality propagation only substitutes plain
+  // bitvector-sorted arrays, so indexes and cells are plain constants
+  // here.
+  {
+    const ASTNodeMap::const_iterator sub = CounterExampleMap.find(arraySym);
+    if (sub != CounterExampleMap.end() &&
+        ARRAY_TYPE == sub->second.GetType())
+    {
+      const ASTNode definition = sub->second;
+      ASTNodeSet arrays;
+      CollectArrayNodes(definition, arrays);
+      ModelCells cells;
+      CollectModelCells(arrays, cells);
+
+      std::set<ASTNode> indexes;
+      for (ModelCells::const_iterator it = cells.begin(); it != cells.end();
+           ++it)
+        indexes.insert(it->first.second);
+      for (ASTNodeSet::const_iterator it = arrays.begin();
+           it != arrays.end(); ++it)
+        if (WRITE == it->GetKind())
+          indexes.insert(TermToConstTermUsingModel((*it)[1], false));
+
+      for (std::set<ASTNode>::const_iterator it = indexes.begin();
+           it != indexes.end(); ++it)
+        entries.push_back(
+            std::make_pair(*it, ReadUsingModel(definition, *it, cells)));
+
+      std::sort(entries.begin(), entries.end(),
+                [](const std::pair<ASTNode, ASTNode>& x,
+                   const std::pair<ASTNode, ASTNode>& y) {
+                  return CONSTANTBV::BitVector_Lexicompare(
+                             x.first.GetBVConst(), y.first.GetBVConst()) < 0;
+                });
+      return entries;
+    }
+  }
 
   // Take a copy of the counterexample map, 'cause TermToConstTermUsingModel
   // changes it. Which breaks the iterator otherwise.
@@ -1516,9 +1601,10 @@ void AbsRefine_CounterExample::outputLine(std::ostream& os, const ASTNode &f, AS
 {
     if (ARRAY_TYPE == se.GetType())
     {
-      FatalError("PrintCounterExampleSMTLIB2: "
-                 "entry in counterexample is an arraytype. bogus:",
-                 se);
+      // A definitional alias installed by equality propagation (array
+      // symbol := array term), not a cell of the model. The cells are
+      // recorded against the definition's base arrays and print there.
+      return;
     }
 
     // skip over introduced variables, and over the reads of an introduced
@@ -1915,9 +2001,10 @@ void AbsRefine_CounterExample::PrintCounterExample(bool t, std::ostream& os)
 
     if (ARRAY_TYPE == se.GetType())
     {
-      FatalError("TermToConstTermUsingModel: "
-                 "entry in counterexample is an arraytype. bogus:",
-                 se);
+      // A definitional alias installed by equality propagation (array
+      // symbol := array term), not a cell of the model. The cells are
+      // recorded against the definition's base arrays and print there.
+      continue;
     }
 
     // skip over introduced variables, and over the reads of an introduced

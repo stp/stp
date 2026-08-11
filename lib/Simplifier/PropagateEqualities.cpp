@@ -639,6 +639,23 @@ void PropagateEqualities::buildCandidateList(const ASTNode& a)
     else if (SYMBOL == right.GetKind())
       addCandidate(right, left);
   }
+  else if (ARRAY_EQ == k &&
+           !a[0].GetSourceSort().usesFloatingPointTheory())
+  {
+    // Whole-array `=` asserted at the top level is true equality on the
+    // array domain, so a symbol operand substitutes away exactly like
+    // the bitvector EQ case (the occurs check in processCandidates
+    // rejects A = store(A, i, v)). Kept separate from the EQ arm above
+    // so the bitvector inverse rewrites (BVNOT/BVUMINUS/BVPLUS) can't
+    // see array operands. Float- or RoundingMode-sorted arrays are left
+    // to abstraction: the model machinery that reconstructs a
+    // substituted symbol's cells reads them as plain bits, which is
+    // wrong under NaN's many packings and float index canonicalisation.
+    if (SYMBOL == a[0].GetKind())
+      addCandidate(a[0], a[1]);
+    else if (SYMBOL == a[1].GetKind())
+      addCandidate(a[1], a[0]);
+  }
   else if (AND == k)
   {
     for (const auto& it : a)
