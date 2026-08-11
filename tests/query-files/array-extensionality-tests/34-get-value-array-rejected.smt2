@@ -6,6 +6,7 @@
 ; (get-model prints completed array interpretations instead); scalar
 ; get-value keeps working in the same session.
 (set-logic QF_ABV)
+(set-option :produce-models true)
 (declare-fun a () (Array (_ BitVec 2) (_ BitVec 2)))
 (declare-fun b () (Array (_ BitVec 2) (_ BitVec 2)))
 (declare-fun x () (_ BitVec 2))
