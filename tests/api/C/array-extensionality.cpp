@@ -178,7 +178,7 @@ TEST(array_extensionality, repeated_queries_do_not_leak_ite_records)
   // term) now substitutes away before abstraction ever sees it. This
   // test pins the abstraction/checker path itself, so keep the
   // equality there.
-  ((stp::STP*)vc)->bm->UserFlags.propagate_equalities = false;
+  static_cast<stp::STP*>(vc)->bm->UserFlags.propagate_equalities = false;
 
   Type bv8 = vc_bvType(vc, 8);
   Type bv4 = vc_bvType(vc, 4);
@@ -231,7 +231,7 @@ TEST(array_extensionality, nested_ite_fixed_point_is_stable)
   // term) now substitutes away before abstraction ever sees it. This
   // test pins the abstraction/checker path itself, so keep the
   // equality there.
-  ((stp::STP*)vc)->bm->UserFlags.propagate_equalities = false;
+  static_cast<stp::STP*>(vc)->bm->UserFlags.propagate_equalities = false;
 
   Type bv8 = vc_bvType(vc, 8);
   Type bv4 = vc_bvType(vc, 4);
@@ -354,7 +354,7 @@ TEST(array_extensionality, asserted_ite_condition_folds_before_fe03)
   // term) now substitutes away before abstraction ever sees it. This
   // test pins the abstraction/checker path itself, so keep the
   // equality there.
-  ((stp::STP*)vc)->bm->UserFlags.propagate_equalities = false;
+  static_cast<stp::STP*>(vc)->bm->UserFlags.propagate_equalities = false;
 
   Type bv8 = vc_bvType(vc, 8);
   Type bv4 = vc_bvType(vc, 4);
@@ -678,7 +678,7 @@ TEST(array_extensionality, equality_under_push_pops_away)
   // term) now substitutes away before abstraction ever sees it. This
   // test pins the abstraction/checker path itself, so keep the
   // equality there.
-  ((stp::STP*)vc)->bm->UserFlags.propagate_equalities = false;
+  static_cast<stp::STP*>(vc)->bm->UserFlags.propagate_equalities = false;
 
   Type bv8 = vc_bvType(vc, 8);
   Type bv4 = vc_bvType(vc, 4);
@@ -1000,7 +1000,7 @@ TEST(array_extensionality, active_checker_owns_complete_array_graph)
   // term) now substitutes away before abstraction ever sees it. This
   // test pins the abstraction/checker path itself, so keep the
   // equality there.
-  ((stp::STP*)vc)->bm->UserFlags.propagate_equalities = false;
+  static_cast<stp::STP*>(vc)->bm->UserFlags.propagate_equalities = false;
 
   Type bv8 = vc_bvType(vc, 8);
   Type bv4 = vc_bvType(vc, 4);
@@ -1287,7 +1287,7 @@ TEST(array_extensionality,
   // term) now substitutes away before abstraction ever sees it. This
   // test pins the abstraction/checker path itself, so keep the
   // equality there.
-  ((stp::STP*)vc)->bm->UserFlags.propagate_equalities = false;
+  static_cast<stp::STP*>(vc)->bm->UserFlags.propagate_equalities = false;
 
   Type bv8 = vc_bvType(vc, 8);
   Type arrT = vc_arrayType(vc, bv8, bv8);
@@ -1446,7 +1446,7 @@ TEST(array_extensionality, ite_replacement_survives_a_rewritten_condition)
   // term) now substitutes away before abstraction ever sees it. This
   // test pins the abstraction/checker path itself, so keep the
   // equality there.
-  ((stp::STP*)vc)->bm->UserFlags.propagate_equalities = false;
+  static_cast<stp::STP*>(vc)->bm->UserFlags.propagate_equalities = false;
 
   Type bv8 = vc_bvType(vc, 8);
   Type bv4 = vc_bvType(vc, 4);
