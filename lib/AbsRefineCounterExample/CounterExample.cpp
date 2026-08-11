@@ -301,7 +301,11 @@ AbsRefine_CounterExample::TermToConstTermUsingModel_inner(const ASTNode& term,
   ASTNodeMap::const_iterator it1;
   if ((it1 = CounterExampleMap.find(term)) != CounterExampleMap.end())
   {
-    const ASTNode& val = it1->second;
+    // A copy, never a reference into the map: the recursion below can reach
+    // an array equality, whose ModelQuery guard rolls CounterExampleMap back
+    // by whole-map assignment -- freeing every node, including the one a
+    // reference here would still be aliasing when the recursion returns.
+    const ASTNode val = it1->second;
     if (BVCONST != val.GetKind())
     {
       // CounterExampleMap has two maps rolled into
@@ -518,10 +522,10 @@ AbsRefine_CounterExample::TermToConstTermUsingModel_inner(const ASTNode& term,
       ASTNode modelentry;
       if (CounterExampleMap.find(index) != CounterExampleMap.end())
       {
-        // index has a const value in the CounterExampleMap
-        // ASTNode indexVal = CounterExampleMap[index];
-        ASTNode indexVal =
-            TermToConstTermUsingModel(CounterExampleMap[index], ArrayReadFlag);
+        // index has a const value in the CounterExampleMap. Copied out of the
+        // map for the reason given at the lookup at the top of this function.
+        const ASTNode indexEntry = CounterExampleMap[index];
+        ASTNode indexVal = TermToConstTermUsingModel(indexEntry, ArrayReadFlag);
         modelentry =
             bm->CreateTerm(READ, arrName.GetValueWidth(), arrName, indexVal);
       }
@@ -538,11 +542,13 @@ AbsRefine_CounterExample::TermToConstTermUsingModel_inner(const ASTNode& term,
       // modelentry is now an arrayread over a constant index
       BVTypeCheck(modelentry);
 
-      // if a value exists in the CounterExampleMap then return it
+      // if a value exists in the CounterExampleMap then return it. Copied out
+      // of the map for the reason given at the lookup at the top of this
+      // function.
       if (CounterExampleMap.find(modelentry) != CounterExampleMap.end())
       {
-        output = TermToConstTermUsingModel(CounterExampleMap[modelentry],
-                                           ArrayReadFlag);
+        const ASTNode modelentryValue = CounterExampleMap[modelentry];
+        output = TermToConstTermUsingModel(modelentryValue, ArrayReadFlag);
       }
       else if (ArrayReadFlag)
       {
@@ -688,7 +694,9 @@ AbsRefine_CounterExample::Expand_ReadOverWrite_UsingModel(const ASTNode& term,
   ASTNodeMap::iterator it1;
   if ((it1 = CounterExampleMap.find(term)) != CounterExampleMap.end())
   {
-    const ASTNode& val = it1->second;
+    // Copied out of the map for the reason given at the lookup at the top of
+    // TermToConstTermUsingModel_inner.
+    const ASTNode val = it1->second;
     if (BVCONST != val.GetKind())
     {
       // recursion is fine here. There are two maps that are checked
