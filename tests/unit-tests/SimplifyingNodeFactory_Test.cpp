@@ -73,6 +73,40 @@ struct Context
     }
 };
 
+TEST(SimplifyingNodeFactory_Test, child_view_uses_exact_subrange)
+{
+  Context c;
+  NodeFactory& factory = c.snf;
+
+  const ASTNode p = c.mgr.CreateSymbol("view-p", 0, 0);
+  const ASTNode q = c.mgr.CreateSymbol("view-q", 0, 0);
+  // Deliberately reversed: sorting may allocate, so the factory must create
+  // its view only after the owned sort buffer has reached its final storage.
+  ASTVec formulaArena{c.mgr.ASTFalse, q, p, c.mgr.ASTTrue};
+  const stp::ASTChildren formulaChildren(formulaArena.data() + 1, 2);
+  const ASTNode formula = factory.CreateNode(stp::AND, formulaChildren);
+
+  EXPECT_EQ(stp::AND, formula.GetKind());
+  ASSERT_EQ(2U, formula.Degree());
+  EXPECT_TRUE((formula[0] == p && formula[1] == q) ||
+              (formula[0] == q && formula[1] == p));
+
+  const ASTNode x = c.mgr.CreateSymbol("view-x", 0, 8);
+  const ASTNode y = c.mgr.CreateSymbol("view-y", 0, 8);
+  ASTVec termArena{c.mgr.CreateZeroConst(8), x, y,
+                   c.mgr.CreateOneConst(8)};
+  const stp::ASTChildren termChildren(termArena.data() + 1, 2);
+  const ASTNode term = factory.CreateArrayTerm(stp::BVXOR, 0, 8,
+                                                termChildren);
+
+  EXPECT_EQ(stp::BVXOR, term.GetKind());
+  EXPECT_EQ(0U, term.GetIndexWidth());
+  EXPECT_EQ(8U, term.GetValueWidth());
+  ASSERT_EQ(2U, term.Degree());
+  EXPECT_TRUE((term[0] == x && term[1] == y) ||
+              (term[0] == y && term[1] == x));
+}
+
 
 TEST(SimplifyingNodeFactory_Test, a)
 {

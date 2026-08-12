@@ -46,8 +46,8 @@ class ASTNode
   friend class STPMgr;
   friend class ASTInterior;
   friend class vector<ASTNode>;
-  friend ASTNode HashingNodeFactory::CreateNode(const stp::Kind kind,
-                                                const ASTVec& back_children);
+  friend ASTNode HashingNodeFactory::CreateNode(
+      stp::Kind kind, stp::ASTChildren back_children);
   friend bool exprless(const ASTNode& n1, const ASTNode& n2);
   friend bool arithless(const ASTNode& n1, const ASTNode& n2);
 

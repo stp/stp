@@ -27,9 +27,30 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 
 stp::ASTNode NodeFactory::CreateTerm(stp::Kind kind, unsigned int width,
-                                     const stp::ASTVec& children)
+                                     stp::ASTChildren children)
 {
   return CreateTerm(kind, width, children);
+}
+
+ASTNode NodeFactory::CreateTerm(Kind kind, unsigned int width,
+                                std::initializer_list<ASTNode> children)
+{
+  return CreateTerm(kind, width,
+                    ASTChildren(children.begin(), children.size()));
+}
+
+ASTNode NodeFactory::CreateArrayTerm(
+    Kind kind, unsigned int index, unsigned int width,
+    std::initializer_list<ASTNode> children)
+{
+  return CreateArrayTerm(kind, index, width,
+                         ASTChildren(children.begin(), children.size()));
+}
+
+ASTNode NodeFactory::CreateNode(Kind kind,
+                                std::initializer_list<ASTNode> children)
+{
+  return CreateNode(kind, ASTChildren(children.begin(), children.size()));
 }
 
 ASTNode NodeFactory::CreateTerm(Kind kind, unsigned int width,
@@ -122,7 +143,7 @@ ASTNode NodeFactory::CreateArrayTerm(Kind kind, unsigned int index,
 
 stp::ASTNode NodeFactory::CreateArrayTerm(Kind kind, unsigned int index,
                                           unsigned int width,
-                                          const stp::ASTVec& children)
+                                          stp::ASTChildren children)
 {
   ASTNode result = CreateTerm(kind, width, children);
   result.SetIndexWidth(index);

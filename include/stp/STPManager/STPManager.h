@@ -65,8 +65,8 @@ class STPMgr
   friend class ASTInterior;
   friend class ASTBVConst;
   friend class ASTSymbol;
-  friend ASTNode HashingNodeFactory::CreateNode(const Kind kind,
-                                                const ASTVec& back_children);
+  friend ASTNode HashingNodeFactory::CreateNode(
+      Kind kind, ASTChildren back_children);
 
 private:
   // Typedef for unique Interior node table.

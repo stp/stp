@@ -46,9 +46,8 @@ class ASTInterior : public ASTInternal
   friend class STPMgr;
   friend class ASTNodeHasher;
   friend class ASTNodeEqual;
-  friend stp::ASTNode
-  HashingNodeFactory::CreateNode(const Kind kind,
-                                 const stp::ASTVec& back_children);
+  friend stp::ASTNode HashingNodeFactory::CreateNode(
+      Kind kind, stp::ASTChildren back_children);
 
   // The children are stored in a flexible array immediately after this
   // object -- node and children are one allocation, made by create(). This
