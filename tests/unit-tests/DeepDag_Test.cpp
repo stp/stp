@@ -495,6 +495,51 @@ bool bitBlastOk(Context& c, unsigned depth)
   return nm.totalNumberOfNodes() >= static_cast<int>(depth);
 }
 
+// CreateSimpleEQ peels equal sides from two concat chains. Each peel used to
+// re-enter the simplifying node factory and consume another C++ frame.
+bool concatEqualityOk(Context& c, unsigned depth)
+{
+  ASTNode lhsBase = c.mgr.CreateSymbol("concat-lhs", 0, 1);
+  ASTNode rhsBase = c.mgr.CreateSymbol("concat-rhs", 0, 1);
+  ASTNode lhs = lhsBase;
+  ASTNode rhs = rhsBase;
+  for (unsigned i = 1; i < depth; ++i)
+  {
+    const std::string name = "concat-common-" + std::to_string(i);
+    const ASTNode common = c.mgr.CreateSymbol(name.c_str(), 0, 1);
+    lhs = c.hf->CreateTerm(BVCONCAT, i + 1, lhs, common);
+    rhs = c.hf->CreateTerm(BVCONCAT, i + 1, rhs, common);
+  }
+  c.roots.push_back(lhs);
+  c.roots.push_back(rhs);
+
+  const ASTNode expected = c.hf->CreateNode(EQ, lhsBase, rhsBase);
+  const ASTNode result = c.nf->CreateNode(EQ, lhs, rhs);
+  c.roots.push_back(result);
+  return result == expected;
+}
+
+// Constant equality takes both concat branches and rebuilds their two
+// equalities under AND, so it needs a real continuation frame rather than the
+// tail-peeling loop used by the shared-side case above.
+bool concatConstantEqualityOk(Context& c, unsigned depth)
+{
+  ASTNode concat = c.mgr.CreateSymbol("concat-constant-0", 0, 1);
+  for (unsigned i = 1; i < depth; ++i)
+  {
+    const std::string name = "concat-constant-" + std::to_string(i);
+    concat = c.hf->CreateTerm(
+        BVCONCAT, i + 1, concat,
+        c.mgr.CreateSymbol(name.c_str(), 0, 1));
+  }
+  c.roots.push_back(concat);
+
+  const ASTNode result =
+      c.nf->CreateNode(EQ, c.mgr.CreateZeroConst(depth), concat);
+  c.roots.push_back(result);
+  return result.GetType() == BOOLEAN_TYPE;
+}
+
 // NodeDomainAnalysis::buildMap.
 bool nodeDomainOk(Context& c, unsigned depth)
 {
@@ -1302,6 +1347,18 @@ TEST(DeepDag, shallow_bit_blast_nested)
   EXPECT_TRUE(bitBlastNestedOk(c, SHALLOW));
 }
 
+TEST(DeepDag, shallow_concat_equality)
+{
+  Context c;
+  EXPECT_TRUE(concatEqualityOk(c, SHALLOW));
+}
+
+TEST(DeepDag, shallow_concat_constant_equality)
+{
+  Context c;
+  EXPECT_TRUE(concatConstantEqualityOk(c, SHALLOW));
+}
+
 TEST(DeepDag, shallow_mutable_dag_walks)
 {
   Context c;
@@ -1485,6 +1542,14 @@ TEST(DeepDag, deep_bit_blast_nested)
 TEST(DeepDag, deep_common_sub_sum)              { EXPECT_STACK_SAFE(commonSubSumOk, 20000); }
 TEST(DeepDag, deep_work_list)          { EXPECT_STACK_SAFE(workListOk, 20000); }
 TEST(DeepDag, deep_remove_unconstrained) { EXPECT_STACK_SAFE(removeUnconstrainedOk, 20000); }
+TEST(DeepDag, deep_concat_equality)
+{
+  EXPECT_STACK_SAFE(concatEqualityOk, 20000);
+}
+TEST(DeepDag, deep_concat_constant_equality)
+{
+  EXPECT_STACK_SAFE(concatConstantEqualityOk, 4000);
+}
 TEST(DeepDag, deep_mutable_dag_walks)
 {
   EXPECT_STACK_SAFE(mutableDagWalksOk, 20000);

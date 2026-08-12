@@ -917,6 +917,30 @@ TEST(SimplifyingNodeFactory_Test, bvand_complement_nested_deeply)
   ASSERT_EQ(n, c.mgr.ASTTrue);
 }
 
+TEST(SimplifyingNodeFactory_Test, bvand_complement_at_conjunct_limit)
+{
+  Context c;
+  const unsigned width = 20;
+  const ASTNode x = c.mgr.CreateSymbol("limit-x", 0, width);
+  const ASTNode notX =
+      c.mgr.hashingNodeFactory->CreateTerm(stp::BVNOT, width, ASTVec{x});
+
+  ASTVec children;
+  for (unsigned i = 0; i < 70; ++i)
+  {
+    const std::string name = "limit-y" + std::to_string(i);
+    children.push_back(i == 61 ? x
+                               : c.mgr.CreateSymbol(name.c_str(), 0, width));
+  }
+  const ASTNode nested =
+      c.mgr.hashingNodeFactory->CreateTerm(stp::BVAND, width, children);
+
+  // ~x is conjunct 1, the nested BVAND is conjunct 2, and its child 61 is
+  // conjunct 64. The bounded walk must still include that last slot.
+  EXPECT_EQ(c.mgr.CreateZeroConst(width),
+            c.snf.CreateTerm(stp::BVAND, width, ASTVec{notX, nested}));
+}
+
 TEST(SimplifyingNodeFactory_Test, bvand_no_complement_is_left_alone)
 {
   // The guard on the rule: no complementary pair here, so nothing may be
