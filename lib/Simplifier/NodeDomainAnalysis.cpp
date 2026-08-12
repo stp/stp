@@ -25,9 +25,37 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/NodeDomainAnalysis.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
+#include "stp/Util/DagWalk.h"
 
 namespace stp
 {
+  namespace
+  {
+    // Keep the recursion counter balanced across buildMap's early returns.
+    class UnprimedDepth
+    {
+      size_t& depth;
+      const bool active;
+
+    public:
+      UnprimedDepth(size_t& depth_, const bool active_)
+          : depth(depth_), active(active_)
+      {
+        if (active)
+          ++depth;
+      }
+
+      UnprimedDepth(const UnprimedDepth&) = delete;
+      UnprimedDepth& operator=(const UnprimedDepth&) = delete;
+
+      ~UnprimedDepth()
+      {
+        if (active)
+          --depth;
+      }
+    };
+  }
+
 
   // True if the two domains have an intersection, i.e. share >=1 value.
   bool intersects(FixedBits * bits, UnsignedInterval * interval)
@@ -410,8 +438,36 @@ namespace stp
     assert(intersects(interval, set));
   }
 
+  // Every node below `n` before `n` itself, in the order buildMap would have
+  // reached them: children left to right, the node last. It looks at every
+  // child of every node it visits and has no early exit, so nothing is
+  // computed here that it would not have computed anyway.
+  void NodeDomainAnalysis::primeMaps(const ASTNode& n)
+  {
+    primeMemo(
+        n,
+        [this](const ASTNode& node)
+        {
+          if (toFixedBits.find(node) != toFixedBits.end())
+            return Walk::Skip; // buildMap would answer from the map.
+          return node.Degree() == 0 ? Walk::Visit : Walk::Descend;
+        },
+        [this](const ASTNode& node, PrimeMemoReady) { buildMap(node, true); });
+  }
+
   NodeDomainAnalysis::DomainInfo NodeDomainAnalysis::buildMap(const ASTNode& n)
   {
+    return buildMap(n, false);
+  }
+
+  NodeDomainAnalysis::DomainInfo
+  NodeDomainAnalysis::buildMap(const ASTNode& n, const bool knownMissing)
+  {
+    PrimeAudit::Running running(mapAudit, n);
+
+    // primeMaps' classifier already established the miss. Domain analysis of
+    // a descendant only records that descendant, never an ancestor.
+    if (!knownMissing)
     {
       auto it = toFixedBits.find(n);
       if (it != toFixedBits.end())
@@ -423,6 +479,25 @@ namespace stp
     }
 
     const auto number_children = n.Degree();
+
+    if (!priming && number_children > 0 &&
+        unprimedDepth >= unprimedDepthLimit)
+    {
+      priming = true;
+      primeMaps(n);
+      priming = false;
+
+      auto it = toFixedBits.find(n);
+      if (it != toFixedBits.end())
+      {
+        auto it0 = toIntervals.find(n);
+        auto it1 = toValueSets.find(n);
+        return {it->second, it0->second, it1->second};
+      }
+    }
+
+    // Leaves do not recurse, so they consume no part of the depth budget.
+    UnprimedDepth depth(unprimedDepth, !priming && number_children > 0);
 
     vector<FixedBits*> children_bits;
     children_bits.reserve(number_children);

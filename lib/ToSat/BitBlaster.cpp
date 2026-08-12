@@ -27,7 +27,9 @@ THE SOFTWARE.
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/Simplifier/constantBitP/NodeToFixedBitsMap.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
+#include "stp/Util/DagWalk.h"
 #include <cassert>
+#include <deque>
 #include <cmath>
 
 namespace stp
@@ -66,6 +68,35 @@ vector<BBNodeAIG> _empty_BBNodeAIGVec;
 // that should have already been applied.
 const bool debug_do_check = false;
 const bool debug_bitblaster = false;
+
+namespace
+{
+// BBForm and BBTerm share one recursion budget because they call each other.
+// Keeping the counter in a scope guard makes all of their many early returns
+// release the budget without putting cleanup code on each path.
+class UnprimedDepth
+{
+  size_t& depth;
+  const bool active;
+
+public:
+  UnprimedDepth(size_t& depth_, const bool active_)
+      : depth(depth_), active(active_)
+  {
+    if (active)
+      ++depth;
+  }
+
+  UnprimedDepth(const UnprimedDepth&) = delete;
+  UnprimedDepth& operator=(const UnprimedDepth&) = delete;
+
+  ~UnprimedDepth()
+  {
+    if (active)
+      --depth;
+  }
+};
+} // namespace
 
 // Translates signed BVDIV,BVMOD and BVREM into unsigned variety
 static ASTNode TranslateSignedDivModRem(const ASTNode& in, NodeFactory* nf)
@@ -737,18 +768,48 @@ BitBlaster::simplify_during_bb(ASTNode& term,
   return BBTermMemo.end();
 }
 
-const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term,
-                                   BBNodeSet& support)
+const BBNodeVec BitBlaster::BBTerm(const ASTNode& term, BBNodeSet& support)
+{
+  return BBTerm(term, support, false);
+}
+
+const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
+                                   const bool knownMissing)
 {
   ASTNode term = _term; // mutable local copy.
 
-  auto it = BBTermMemo.find(term);
-  if (it != BBTermMemo.end())
+  // Debug-only, and the whole of what holds primeMemos to the blaster: every
+  // node reached from here is one the walk has to have offered, and every
+  // operand the walk primed is one that has to be reached from here.
+  PrimeAudit::Running running(memoAudit, term);
+
+  auto it = BBTermMemo.end();
+  if (!knownMissing)
   {
-    // Constant bit propagation may have updated something.
-    updateTerm(term, it->second, support);
-    return it->second;
+    it = BBTermMemo.find(term);
+    if (it != BBTermMemo.end())
+    {
+      // Constant bit propagation may have updated something.
+      updateTerm(term, it->second, support);
+      return it->second;
+    }
   }
+
+  if (!priming && unprimedDepth >= unprimedDepthLimit)
+  {
+    priming = true;
+    primeMemos(term, support);
+    priming = false;
+
+    it = BBTermMemo.find(term);
+    if (it != BBTermMemo.end())
+    {
+      updateTerm(term, it->second, support);
+      return it->second;
+    }
+  }
+
+  UnprimedDepth depth(unprimedDepth, !priming);
 
   if (uf != NULL && uf->optimize_flag && uf->simplify_during_BB_flag)
   {
@@ -1241,16 +1302,112 @@ const BBNode BitBlaster::BBForm(const ASTNode& form)
     return nf->CreateNode(AND, v);
 }
 
-// bit blast a formula (boolean term).  Result is one bit wide,
-const BBNode BitBlaster::BBForm(const ASTNode& form,
-                                BBNodeSet& support)
+// The operands of a node, in the order the blaster reaches them, where that
+// is not left to right. Only the mirrored floating-point comparisons: to
+// blast fp.lt(a,b) BBcompareFP treats it as fp.gt(b,a) and blasts b first.
+// A walk that primed them left to right would build the same nodes in the
+// other order, and the CNF with them.
+static WalkOperands bbOperands(const ASTNode& n)
 {
-  auto it = BBFormMemo.find(form);
-  if (it != BBFormMemo.end())
+  const Kind k = n.GetKind();
+  if (k != FP_LT && k != FP_LEQ)
+    return WalkOperands::all(n);
+
+  return WalkOperands::reversed(n);
+}
+
+// Blast everything below `n` before `n` itself, so that the calls the
+// blaster makes on its operands all land on a memo and its recursion never
+// goes more than one deep. BBForm reaches its operands by calling itself for
+// the connectives; BBTerm reaches its own from 24 places across a 450-line
+// switch. Neither is restated: filling their memos from the bottom is what
+// makes them stack-safe.
+//
+// One walk over both memos rather than one each. The two sides reach each
+// other freely -- an ITE's condition is a formula inside a term, an
+// equality's operands are terms inside a formula -- so a walk that stopped
+// at the type boundary and left the far side to "the other walk" only works
+// if the other walk is running. It is not: it is guarded against re-entering
+// while this one is in progress. That is how a term below a formula below a
+// term used to go down the stack, and a walk that crosses the boundary
+// itself has no such hole. See DeepDag_Test.cpp.
+//
+// It is sound because of what the blaster does not do. No arm of either
+// function stops before an operand, so every node primed is one that would
+// have been blasted anyway; the order is the order they would have been
+// blasted in, operands first and each finished before the next starts. That
+// is load-bearing -- the CNF must not depend on the order operands happen to
+// be evaluated in, which is why BBForm blasts an ITE's arms into named
+// variables -- and it is what `bbOperands` above exists for.
+void BitBlaster::primeMemos(const ASTNode& n, BBNodeSet& support)
+{
+  primeMemo(
+      n,
+      [this](const ASTNode& node)
+      {
+        if (node.GetType() == BOOLEAN_TYPE)
+        {
+          // Ahead of the constant test below, because BBForm memoises TRUE
+          // and FALSE: the walk hands them over rather than skipping them.
+          if (BBFormMemo.find(node) != BBFormMemo.end())
+            return Walk::Skip; // BBForm would take it from the memo.
+          return node.Degree() == 0 ? Walk::Visit : Walk::Descend;
+        }
+        // A constant operand is skipped: the kinds that carry one --
+        // BVEXTRACT's indices, BVSX's width -- never blast it, and blasting
+        // it here would put a node in the memo the pass never asked for.
+        if (node.isConstant())
+          return Walk::Skip;
+        if (BBTermMemo.find(node) != BBTermMemo.end())
+          return Walk::Skip;
+        return node.Degree() == 0 ? Walk::Visit : Walk::Descend;
+      },
+      bbOperands,
+      [this, &support](const ASTNode& node, PrimeMemoReady)
+      {
+        if (node.GetType() == BOOLEAN_TYPE)
+          BBForm(node, support, true);
+        else
+          BBTerm(node, support, true);
+      });
+}
+
+// bit blast a formula (boolean term).  Result is one bit wide,
+const BBNode BitBlaster::BBForm(const ASTNode& form, BBNodeSet& support)
+{
+  return BBForm(form, support, false);
+}
+
+const BBNode BitBlaster::BBForm(const ASTNode& form, BBNodeSet& support,
+                                const bool knownMissing)
+{
+  // The other half of the audit above: the two memos are primed by one walk,
+  // so the walk is held to both functions at once.
+  PrimeAudit::Running running(memoAudit, form);
+
+  auto it = BBFormMemo.end();
+  if (!knownMissing)
   {
-    // already there.  Just return it.
-    return it->second;
+    it = BBFormMemo.find(form);
+    if (it != BBFormMemo.end())
+    {
+      // already there.  Just return it.
+      return it->second;
+    }
   }
+
+  if (!priming && unprimedDepth >= unprimedDepthLimit)
+  {
+    priming = true;
+    primeMemos(form, support);
+    priming = false;
+
+    it = BBFormMemo.find(form);
+    if (it != BBFormMemo.end())
+      return it->second;
+  }
+
+  UnprimedDepth depth(unprimedDepth, !priming);
 
   const Kind k = form.GetKind();
   if (!is_Form_kind(k))

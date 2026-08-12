@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/VariablesInExpression.h"
+#include "stp/Util/DagWalk.h"
 
 namespace stp
 {
@@ -48,9 +49,49 @@ void VariablesInExpression::insert(const ASTNode& n, Symbols* s)
 // in the descendents changes. For example (EXTRACT 0 1 n)
 // will have the same "Symbols" node as n, because
 // no new symbols are introduced.
+// Every node below `n` before `n` itself, in the order getSymbol would have
+// reached them. It looks at every child of every node it visits, and its one
+// early return is for a symbol, which has no children, so nothing is built
+// here that it would not have built anyway.
+void VariablesInExpression::primeSymbols(const ASTNode& n)
+{
+  primeMemo(
+      n,
+      [this](const ASTNode& node)
+      {
+        if (symbol_graph.find(node.GetNodeNum()) != symbol_graph.end())
+          return Walk::Skip; // getSymbol would answer from the graph.
+        return node.Degree() == 0 ? Walk::Visit : Walk::Descend;
+      },
+      [this](const ASTNode& node, PrimeMemoReady) { getSymbol(node, true); });
+}
+
 Symbols* VariablesInExpression::getSymbol(const ASTNode& n)
 {
+  return getSymbol(n, false);
+}
+
+Symbols* VariablesInExpression::getSymbol(const ASTNode& n,
+                                          const bool knownMissing)
+{
+  PrimeAudit::Running running(symbolAudit, n);
+
+  // primeSymbols' classifier already made this lookup. Its ready token is a
+  // known miss because building a descendant cannot insert an ancestor into
+  // this bottom-up graph.
+  if (!knownMissing)
   {
+    const ASTNodeToNodes::const_iterator it = symbol_graph.find(n.GetNodeNum());
+    if (it != symbol_graph.end())
+      return it->second;
+  }
+
+  if (!priming)
+  {
+    priming = true;
+    primeSymbols(n);
+    priming = false;
+
     const ASTNodeToNodes::const_iterator it = symbol_graph.find(n.GetNodeNum());
     if (it != symbol_graph.end())
       return it->second;
@@ -95,39 +136,46 @@ void VariablesInExpression::VarSeenInTerm(Symbols* term, SymbolPtrSet& visited,
                                           ASTNodeSet& found,
                                           vector<Symbols*>& av)
 {
-  if (visited.find(term) != visited.end())
+  // Iterative: the Symbols tree is as deep as the expression it was built
+  // from, so a call per level exhausts the stack on the inputs that reach
+  // here. Children are pushed in reverse, so they are still visited left to
+  // right and the walk sees what the recursion saw. See DeepDag_Test.cpp.
+  vector<Symbols*> toVisit;
+  toVisit.push_back(term);
+
+  while (!toVisit.empty())
   {
-    return;
+    Symbols* const current = toVisit.back();
+    toVisit.pop_back();
+
+    if (visited.find(current) != visited.end())
+    {
+      continue;
+    }
+
+    if (current->isLeaf())
+    {
+      found.insert(current->found);
+      continue;
+    }
+
+    visited.insert(current);
+
+    SymbolPtrToNode::const_iterator it;
+    if ((it = TermsAlreadySeenMap.find(current)) != TermsAlreadySeenMap.end())
+    {
+      // We've previously built the set of variables below this "symbols".
+      // It's not added into "found" because its sometimes 70k variables
+      // big, and if there are no other symbols discovered it's a terrible
+      // waste to create a copy of the set. Instead we store (in effect)
+      // a pointer to the set.
+      av.push_back(current);
+      continue;
+    }
+
+    for (size_t i = current->children.size(); i > 0; i--)
+      toVisit.push_back(current->children[i - 1]);
   }
-
-  if (term->isLeaf())
-  {
-    found.insert(term->found);
-    return;
-  }
-
-  visited.insert(term);
-
-  SymbolPtrToNode::const_iterator it;
-  if ((it = TermsAlreadySeenMap.find(term)) != TermsAlreadySeenMap.end())
-  {
-    // We've previously built the set of variables below this "symbols".
-    // It's not added into "found" because its sometimes 70k variables
-    // big, and if there are no other symbols discovered it's a terrible
-    // waste to create a copy of the set. Instead we store (in effect)
-    // a pointer to the set.
-    av.push_back(term);
-    return;
-  }
-
-  for (vector<Symbols*>::const_iterator it = term->children.begin(),
-                                        itend = term->children.end();
-       it != itend; it++)
-  {
-    VarSeenInTerm(*it, visited, found, av);
-  }
-
-  return;
 }
 
 ASTNodeSet* VariablesInExpression::SetofVarsSeenInTerm(Symbols* symbol,

@@ -200,6 +200,42 @@ struct Context
     return n;
   }
 };
+#ifdef STP_ENABLE_FLOATING_POINT
+
+// A chain of if-then-else terms, nested in the else-branch: a boolean symbol
+// the model says nothing about takes false, so evaluating one descends the
+// chain rather than stopping at the first level.
+ASTNode iteChain(Context& c, unsigned depth)
+{
+  const ASTNode cond = c.mgr.CreateSymbol("p", 0, 0);
+  const ASTNode zero = c.mgr.CreateZeroConst(8);
+  ASTNode t = c.mgr.CreateSymbol("x", 0, 8);
+  for (unsigned i = 0; i < depth; i++)
+    t = c.hf->CreateTerm(ITE, 8, cond, zero, t);
+  return t;
+}
+
+// A chain of stores over one array symbol, whose elements are `width` bits.
+ASTNode storeChain(Context& c, unsigned depth, const ASTNode& base,
+                   unsigned width = 8)
+{
+  ASTNode a = base;
+  for (unsigned i = 0; i < depth; i++)
+  {
+    const std::string nm = "w" + std::to_string(i);
+    a = c.hf->CreateArrayTerm(WRITE, 8, width, a,
+                              c.mgr.CreateSymbol(nm.c_str(), 0, 8),
+                              c.mgr.CreateZeroConst(width));
+  }
+  return a;
+}
+
+ASTNode storeChain(Context& c, unsigned depth)
+{
+  return storeChain(c, depth, c.mgr.CreateSymbol("A", 8, 8));
+}
+#endif // STP_ENABLE_FLOATING_POINT
+
 
 // Rewriting::rewrite (19 of the 21 known corpus crashes, ~9,300 nested
 // frames deep) and, ahead of it in the same pass, the equally unbounded
@@ -318,6 +354,93 @@ bool strengthReductionOk(Context& c, unsigned depth)
   return result == top;
 }
 
+// BitBlaster::BBTerm, which reaches its operands by calling itself from 24
+// places across its kind switch. The blaster uses ordinary recursion for a
+// bounded prefix, then fills the remaining suffix of its memo from the bottom
+// first. This depth is well beyond that boundary.
+bool bitBlastTermOk(Context& c, unsigned depth)
+{
+  const ASTNode f = c.formula(c.chain(BVXOR, depth));
+  c.roots.push_back(f);
+
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  BBNodeManagerAIG nm;
+  BitBlaster bb(&nm, &simp, c.nf, &c.mgr.UserFlags);
+  bb.BBForm(f);
+
+  // Every xor in the chain is 8 bits of AIG, so this cannot pass without
+  // the whole chain having been blasted.
+  return nm.totalNumberOfNodes() >= static_cast<int>(depth);
+}
+
+// A deep term that is only reachable through a formula that is only
+// reachable through a term: the chain is an equality's operand, the equality
+// is an ITE's condition, and the ITE is a term. Priming each memo on its own
+// left this to the recursion -- the walk over terms handed the condition to
+// BBForm and stopped, and the walk over formulas was suppressed while the
+// first was running, so nothing primed the chain and BBTerm descended it a
+// frame at a time.
+ASTNode termUnderFormulaUnderTerm(Context& c, unsigned depth)
+{
+  const ASTNode chain = c.chain(BVXOR, depth);
+  const ASTNode cond = c.hf->CreateNode(EQ, chain, c.mgr.CreateZeroConst(8));
+  const ASTNode y0 = c.mgr.CreateSymbol("y0", 0, 8);
+  const ASTNode y1 = c.mgr.CreateSymbol("y1", 0, 8);
+  const ASTNode ite = c.hf->CreateTerm(ITE, 8, cond, y0, y1);
+  return c.hf->CreateTerm(BVMULT, 8, ite, y0);
+}
+
+bool bitBlastNestedOk(Context& c, unsigned depth)
+{
+  const ASTNode f = c.formula(termUnderFormulaUnderTerm(c, depth));
+  c.roots.push_back(f);
+
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  BBNodeManagerAIG nm;
+  BitBlaster bb(&nm, &simp, c.nf, &c.mgr.UserFlags);
+  bb.BBForm(f);
+
+  // The chain is under the condition, so it cannot have been blasted
+  // without the walk having crossed into it.
+  return nm.totalNumberOfNodes() >= static_cast<int>(depth);
+}
+
+// BitBlaster::BBForm, which blasts a formula's operands by calling itself.
+bool bitBlastOk(Context& c, unsigned depth)
+{
+  ASTNode f = c.hf->CreateNode(EQ, c.mgr.CreateSymbol("b0", 0, 8),
+                               c.mgr.CreateZeroConst(8));
+  for (unsigned i = 1; i < depth; i++)
+  {
+    const std::string name = "b" + std::to_string(i);
+    const ASTNode leaf = c.hf->CreateNode(
+        EQ, c.mgr.CreateSymbol(name.c_str(), 0, 8), c.mgr.CreateZeroConst(8));
+    f = c.hf->CreateNode(AND, leaf, f);
+  }
+  c.roots.push_back(f);
+
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  BBNodeManagerAIG nm;
+  BitBlaster bb(&nm, &simp, c.nf, &c.mgr.UserFlags);
+  bb.BBForm(f);
+
+  // One AIG node per conjunct at the very least.
+  return nm.totalNumberOfNodes() >= static_cast<int>(depth);
+}
+
+// NodeDomainAnalysis::buildMap.
+bool nodeDomainOk(Context& c, unsigned depth)
+{
+  const ASTNode f = c.formula(c.chain(BVXOR, depth));
+  c.roots.push_back(f);
+  NodeDomainAnalysis nda(&c.mgr);
+  nda.buildMap(f);
+  return true;
+}
+
 // NodeIterator historically visits children right-to-left. Put the deep
 // child last so a pending-node implementation retains one unvisited sibling
 // at every level; a continuation iterator retains just the active path.
@@ -375,6 +498,19 @@ bool nonAtomIteratorOrderOk(Context& c)
   return actual == expected;
 }
 
+// VariablesInExpression::getSymbol.
+bool varsInExpressionOk(Context& c, unsigned depth)
+{
+  const ASTNode f = c.formula(c.chain(BVXOR, depth));
+  c.roots.push_back(f);
+  VariablesInExpression vie;
+  bool destruct = false;
+  ASTNodeSet* v = vie.SetofVarsSeenInTerm(f, destruct);
+  const bool ok = v != nullptr;
+  if (destruct) delete v;
+  return ok;
+}
+
 // PropagateEqualities::buildCandidateList -- a void pre-order walk with a
 // visited set, so a worklist is enough.
 bool propagateEqualitiesOk(Context& c, unsigned depth)
@@ -403,6 +539,99 @@ bool commonSubSumOk(Context& c, unsigned depth)
   ASTNode g = f;
   return css.topLevel(g).GetKind() != UNDEFINED;
 }
+#ifdef STP_ENABLE_FLOATING_POINT
+
+/* A node's floating-point format and its source sort are both derived from
+   its children and memoised on it, and both derivations read a child's answer
+   by asking for it -- which derives the child the same way. So each ran one
+   call frame per level of whatever it walked: a store chain for both of them,
+   an if-then-else spine for both of them.
+
+   Neither is a pass, so neither has an input of its own: they are reached by
+   asking an ordinary question about a node. GetType() asks for the format,
+   and everything asks GetType(). That is what makes these worth converting --
+   a query deep enough cannot be asked its type at all, from anywhere. */
+
+// deriveFPFormat's if-then-else arm, which takes a branch's format and so
+// walks the spine. Reached here through GetType, the way almost everything
+// reaches it.
+bool fpFormatIteChainOk(Context& c, unsigned depth)
+{
+  const ASTNode t = iteChain(c, depth);
+  c.roots.push_back(t);
+  return t.GetType() == BITVECTOR_TYPE;
+}
+
+// deriveFPFormat's read and store arms: an array of floats keeps its element
+// format on the array node, so a read over a store chain derives through
+// every store in it.
+//
+// The one case here that answers with a format rather than with "not a
+// float", so it checks that the walk carried an answer up rather than only
+// that it finished: the format found at the top is the one declared at the
+// bottom, 20,000 stores below.
+bool fpFormatStoreChainOk(Context& c, unsigned depth)
+{
+  const ASTNode a = c.mgr.CreateSymbol("A", 8, 16);
+  a.SetExpWidth(5);
+  a.SetSigWidth(11);
+
+  const ASTNode chain = storeChain(c, depth, a, 16);
+  const ASTNode r =
+      c.hf->CreateTerm(READ, 16, chain, c.mgr.CreateSymbol("j", 0, 8));
+  c.roots.push_back(r);
+  return r.GetExpWidth() == 5 && r.GetSigWidth() == 11;
+}
+
+// deriveSourceSort's if-then-else arm, which asks both branches and walks the
+// same spine.
+bool sourceSortIteChainOk(Context& c, unsigned depth)
+{
+  const ASTNode t = iteChain(c, depth);
+  c.roots.push_back(t);
+  return t.GetSourceSort().kind() == SourceSort::Kind::BitVector;
+}
+
+// deriveSourceSort's store arm: a store has the sort of the array under it.
+bool sourceSortStoreChainOk(Context& c, unsigned depth)
+{
+  const ASTNode a = storeChain(c, depth);
+  c.roots.push_back(a);
+  return a.GetSourceSort().kind() == SourceSort::Kind::Array;
+}
+
+// FpTotalise, which replaces every partial floating-point operation with its
+// total form before the blaster sees it. How deeply a float expression nests
+// is the input's choice, and both of this pass's walks -- the totalising one
+// and the rounding-mode collector that runs over its output -- went down it a
+// frame at a time. A query built from 30,000 nested fp.add operations found
+// it, once the simplifier stopped dying in front of it.
+//
+// The chain is fp.add over one float symbol, which is what that query is.
+// Constructing it needs the format on the leaf: a symbol's is declared, and
+// every operation above derives its own from it.
+bool fpTotaliseChainOk(Context& c, unsigned depth)
+{
+  const unsigned eb = 8, sb = 24;
+  const ASTNode x = c.mgr.CreateSymbol("x", 0, eb + sb);
+  x.SetExpWidth(eb);
+  x.SetSigWidth(sb);
+  const ASTNode rm = c.mgr.CreateBVConst(5, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+
+  ASTNode t = x;
+  for (unsigned i = 0; i < depth; i++)
+    t = c.hf->CreateTerm(FP_ADD, eb + sb, rm, t, x);
+
+  const ASTNode f = c.hf->CreateNode(FP_ISNAN, t);
+  c.roots.push_back(f);
+
+  FpTotalise fpt(&c.mgr);
+  const ASTNode result = fpt.topLevel(f);
+  c.roots.push_back(result);
+  return result.GetKind() != UNDEFINED;
+}
+#endif // STP_ENABLE_FLOATING_POINT
+
 
 TEST(DeepDag, shallow_rewriting)
 {
@@ -426,6 +655,12 @@ TEST(DeepDag, shallow_flatten_share_count)
 {
   Context c;
   EXPECT_TRUE(flattenShareCountOk(c, SHALLOW));
+}
+
+TEST(DeepDag, shallow_node_domain)
+{
+  Context c;
+  EXPECT_TRUE(nodeDomainOk(c, SHALLOW));
 }
 
 TEST(DeepDag, flatten_lazy_scratch_preserves_rebuild_and_dedup)
@@ -506,6 +741,41 @@ TEST(DeepDag, wide_propagate_equalities_visits_every_conjunct)
   PropagateEqualities propagate(&simplifier, c.nf, &c.mgr);
   EXPECT_EQ(c.mgr.ASTTrue, propagate.topLevel(input));
 }
+#ifdef STP_ENABLE_FLOATING_POINT
+
+TEST(DeepDag, wide_fp_rounding_mode_walk_adds_every_constraint)
+{
+  Context c;
+  const ASTNode rne = c.mgr.CreateRMConst(
+      symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+  ASTVec clauses;
+  clauses.reserve(256);
+  for (unsigned i = 0; i < 256; ++i)
+  {
+    const std::string name = "wide-rounding-mode" + std::to_string(i);
+    const ASTNode rm =
+        c.mgr.CreateSourceSymbol(name.c_str(), SourceSort::roundingMode());
+    clauses.push_back(c.hf->CreateNode(EQ, rm, rne));
+  }
+  const ASTNode input = c.hf->CreateNode(AND, clauses);
+  c.roots.push_back(input);
+
+  FpTotalise totalise(&c.mgr);
+  const ASTNode result = totalise.topLevel(input);
+  c.roots.push_back(result);
+
+  size_t validityConstraints = 0;
+  ASTNodeSet seen;
+  walkPreOrder(result, [&](const ASTNode& n) {
+    if (!seen.insert(n).second)
+      return false;
+    validityConstraints += n.GetKind() == OR && n.Degree() == 5;
+    return true;
+  });
+  EXPECT_EQ(clauses.size(), validityConstraints);
+}
+#endif // STP_ENABLE_FLOATING_POINT
+
 
 TEST(DeepDag, shallow_substitution)
 {
@@ -547,6 +817,24 @@ TEST(DeepDag, shallow_strength_reduction)
   EXPECT_TRUE(strengthReductionOk(c, SHALLOW));
 }
 
+TEST(DeepDag, shallow_bit_blast)
+{
+  Context c;
+  EXPECT_TRUE(bitBlastOk(c, SHALLOW));
+}
+
+TEST(DeepDag, shallow_bit_blast_term)
+{
+  Context c;
+  EXPECT_TRUE(bitBlastTermOk(c, SHALLOW));
+}
+
+TEST(DeepDag, shallow_bit_blast_nested)
+{
+  Context c;
+  EXPECT_TRUE(bitBlastNestedOk(c, SHALLOW));
+}
+
 TEST(DeepDag, node_iterator_preserves_lifo_dag_order)
 {
   Context c;
@@ -564,6 +852,33 @@ TEST(DeepDag, shallow_node_iterator)
   Context c;
   EXPECT_TRUE(nodeIteratorOk(c, SHALLOW));
 }
+#ifdef STP_ENABLE_FLOATING_POINT
+
+TEST(DeepDag, shallow_fp_format_ite)
+{
+  Context c;
+  EXPECT_TRUE(fpFormatIteChainOk(c, SHALLOW));
+}
+
+TEST(DeepDag, shallow_fp_format_store)
+{
+  Context c;
+  EXPECT_TRUE(fpFormatStoreChainOk(c, SHALLOW));
+}
+
+TEST(DeepDag, shallow_source_sort_ite)
+{
+  Context c;
+  EXPECT_TRUE(sourceSortIteChainOk(c, SHALLOW));
+}
+
+TEST(DeepDag, shallow_source_sort_store)
+{
+  Context c;
+  EXPECT_TRUE(sourceSortStoreChainOk(c, SHALLOW));
+}
+#endif // STP_ENABLE_FLOATING_POINT
+
 
 TEST(DeepDag, deep_rewriting_share_count)
 {
@@ -600,7 +915,32 @@ TEST(DeepDag, deep_strength_reduction)
   EXPECT_STACK_SAFE(strengthReductionOk, 20000);
 }
 
+TEST(DeepDag, deep_bit_blast)
+{
+  EXPECT_STACK_SAFE(bitBlastOk, 20000);
+}
+
+TEST(DeepDag, deep_bit_blast_term)
+{
+  EXPECT_STACK_SAFE(bitBlastTermOk, 20000);
+}
+
+TEST(DeepDag, deep_bit_blast_nested)
+{
+  EXPECT_STACK_SAFE(bitBlastNestedOk, 20000);
+}
+
 TEST(DeepDag, deep_common_sub_sum)              { EXPECT_STACK_SAFE(commonSubSumOk, 20000); }
+TEST(DeepDag, deep_node_domain)        { EXPECT_STACK_SAFE(nodeDomainOk, 20000); }
 TEST(DeepDag, deep_node_iterator)      { EXPECT_STACK_SAFE(nodeIteratorOk, 20000); }
+TEST(DeepDag, deep_vars_in_expression) { EXPECT_STACK_SAFE(varsInExpressionOk, 20000); }
 TEST(DeepDag, deep_propagate_equalities) { EXPECT_STACK_SAFE(propagateEqualitiesOk, 20000); }
+#ifdef STP_ENABLE_FLOATING_POINT
+TEST(DeepDag, deep_fp_totalise)        { EXPECT_STACK_SAFE(fpTotaliseChainOk, 20000); }
+TEST(DeepDag, deep_fp_format_ite)      { EXPECT_STACK_SAFE(fpFormatIteChainOk, 20000); }
+TEST(DeepDag, deep_fp_format_store)    { EXPECT_STACK_SAFE(fpFormatStoreChainOk, 20000); }
+TEST(DeepDag, deep_source_sort_ite)    { EXPECT_STACK_SAFE(sourceSortIteChainOk, 20000); }
+TEST(DeepDag, deep_source_sort_store)  { EXPECT_STACK_SAFE(sourceSortStoreChainOk, 20000); }
+#endif // STP_ENABLE_FLOATING_POINT
+
 } // namespace
