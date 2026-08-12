@@ -22,6 +22,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/Simplifier/PropagateEqualities.h"
+#include "stp/Util/DagWalk.h"
 #include <string>
 #include <utility>
 #include <queue>
@@ -537,11 +538,21 @@ void PropagateEqualities::countToDo(ASTNode n)
   }
 }
 
+// The AND arm below is the only place this reaches another node. Walk its
+// spine with suspended ancestors so both deeply nested and very wide
+// conjunctions have bounded auxiliary memory. See DeepDag_Test.cpp.
 void PropagateEqualities::buildCandidateList(const ASTNode& a)
+{
+  walkPreOrder(a, [&](const ASTNode& current) {
+    return buildCandidateListNode(current);
+  });
+}
+
+bool PropagateEqualities::buildCandidateListNode(const ASTNode& a)
 {
 
   if (!alreadyVisited.insert(a.GetNodeNum()).second)
-    return;
+    return false;
 
   const Kind k = a.GetKind();
 
@@ -656,11 +667,7 @@ void PropagateEqualities::buildCandidateList(const ASTNode& a)
     else if (SYMBOL == a[1].GetKind())
       addCandidate(a[1], a[0]);
   }
-  else if (AND == k)
-  {
-    for (const auto& it : a)
-      buildCandidateList(it);
-  }
+  return AND == k;
 }
 
 

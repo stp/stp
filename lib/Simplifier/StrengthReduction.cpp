@@ -26,6 +26,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/StrengthReduction.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/Util/CBVOps.h"
+#include "stp/Util/DagWalk.h"
 #include <iostream>
 
 namespace stp
@@ -86,52 +87,42 @@ namespace stp
   }
 
   // visit each node apply strength reductions to it.
+  //
+  // postOrderRebuild does the walking, on the heap: how deeply the input
+  // nests is not this pass's choice, and a call per level exhausts the
+  // stack. What is left here is the reduction of a single node.
   ASTNode StrengthReduction::visit(const ASTNode& n, NodeDomainAnalysis& nda, ASTNodeMap& cache)
   {
-    if (n.Degree() == 0 )
-      return n;
+    return postOrderRebuild(
+        n, cache, [&](const ASTNode& node, const ASTVec& children) {
+          ASTNode newN;
+          if (node.GetType() == BOOLEAN_TYPE)
+            newN = nf->CreateNode(node.GetKind(), children);
+          else
+            newN = nf->CreateArrayTerm(node.GetKind(), node.GetIndexWidth(),
+                                       node.GetValueWidth(), children);
 
-    {
-      const ASTNodeMap::const_iterator it = cache.find(n);
-      if (it != cache.end())
-        return it->second;
-    }
+          // buildMap memoises on the node, so it only needs redoing when the
+          // preceding reduction actually replaced the node.
+          nda.buildMap(newN);
+          ASTNode reduced = strengthReduction(newN, *nda.getCbitMap());
 
-    ASTVec children;
-    children.reserve(n.Degree());
-    
-    for (const auto & c: n)
-    {
-      children.push_back(visit(c,nda,cache));
-    }
+          if (reduced != newN)
+          {
+            newN = reduced;
+            nda.buildMap(newN);
+          }
+          reduced = strengthReduction(newN, *nda.getIntervalMap());
 
-    ASTNode newN;
-    if (n.GetType() == BOOLEAN_TYPE)
-      newN = nf->CreateNode(n.GetKind(), children);
-    else
-      newN = nf->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(),n.GetValueWidth(), children);
-   
-    // buildMap memoises on the node, so it only needs redoing when the
-    // preceding reduction actually replaced the node.
-    nda.buildMap(newN);
-    ASTNode reduced = strengthReduction(newN, *nda.getCbitMap());
+          if (reduced != newN)
+          {
+            newN = reduced;
+            nda.buildMap(newN);
+          }
+          newN = strengthReduction(newN, *nda.getValueSetMap());
 
-    if (reduced != newN)
-    {
-      newN = reduced;
-      nda.buildMap(newN);
-    }
-    reduced = strengthReduction(newN, *nda.getIntervalMap());
-
-    if (reduced != newN)
-    {
-      newN = reduced;
-      nda.buildMap(newN);
-    }
-    newN = strengthReduction(newN, *nda.getValueSetMap());
-
-    cache.insert({n,newN});
-    return newN;
+          return newN;
+        });
   }
 
   ASTNode StrengthReduction::topLevel(const ASTNode& top, NodeDomainAnalysis& nda)

@@ -49,6 +49,13 @@ class Rewriting
 
   // sharecount is 1 if the node has one reference in the tree.
   void buildShareCount(const ASTNode& n);
+  ASTNode applyRules(ASTNode c);
+
+  // rewrite() walks the DAG with its frames on the heap: the input decides
+  // how deep the walk goes, so a call per level exhausts the stack on the
+  // deeply nested formulas that exist. See DeepDag_Test.cpp.
+  struct Frame;
+  bool alreadyKnown(const ASTNode& n, ASTNode& answer);
   ASTNode rewrite(const ASTNode& n);
 
 public:
