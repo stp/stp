@@ -89,35 +89,68 @@ bool arithless(const ASTNode& n1, const ASTNode& n2)
   }
 }
 
-// counts the number of reads. Shortcut when we get to the limit.
-void numberOfReadsLessThan(const ASTNode& n, std::unordered_set<uint64_t>& visited,
-                           int& soFar, const int limit)
-{
-  if (n.isAtom())
-    return;
-
-  if (visited.find(n.GetNodeNum()) != visited.end())
-    return;
-
-  if (n.GetKind() == READ)
-    soFar++;
-
-  if (soFar > limit)
-    return;
-
-  visited.insert(n.GetNodeNum());
-
-  for (size_t i = 0; i < n.Degree(); i++)
-    numberOfReadsLessThan(n[i], visited, soFar, limit);
-}
-
 // True if the number of reads in "n" is less than "limit"
 bool numberOfReadsLessThan(const ASTNode& n, int limit)
 {
+  if (limit <= 0)
+    return false;
+
   std::unordered_set<uint64_t> visited;
   int reads = 0;
-  numberOfReadsLessThan(n, visited, reads, limit);
-  return reads < limit;
+
+  // Admit a node once and say whether its children need walking. Atoms were
+  // deliberately absent from the old memo and remain so here.
+  auto descend = [&](const ASTNode& current) {
+    if (current.isAtom() || !visited.insert(current.GetNodeNum()).second)
+      return false;
+
+    if (current.GetKind() == READ)
+      reads++;
+    return current.Degree() != 0;
+  };
+
+  if (!descend(n))
+    return reads < limit;
+  if (reads >= limit)
+    return false;
+
+  struct Frame
+  {
+    const ASTNode* node;
+    size_t nextChild = 0;
+  };
+  static_assert(sizeof(Frame) <= 2 * sizeof(void*),
+                "read-count frames must contain only traversal state");
+
+  // Keep only suspended ancestors. More importantly, return globally as
+  // soon as the strict bound is reached: unwinding the rest of the walk is
+  // unnecessary, and may itself be a large untouched subtree.
+  Frame current{&n};
+  std::vector<Frame> parents;
+  while (true)
+  {
+    if (current.nextChild < current.node->Degree())
+    {
+      const ASTNode* child = &(*current.node)[current.nextChild++];
+      if (!descend(*child))
+      {
+        if (reads >= limit)
+          return false;
+        continue;
+      }
+      if (reads >= limit)
+        return false;
+
+      parents.push_back(current);
+      current = Frame{child};
+      continue;
+    }
+
+    if (parents.empty())
+      return true;
+    current = parents.back();
+    parents.pop_back();
+  }
 }
 
 // See the declaration for why this exists: constants of one value need
@@ -389,44 +422,98 @@ ASTVec toASTVec(const ASTChildren& c)
   return ASTVec(c.begin(), c.end());
 }
 
+// Where the walk of one node's children has got to. `depth` is how much
+// further the depth-limited form below may descend; the deduplicating one
+// ignores it, as it always has.
+//
+// The frames are on the heap. A nested same-kind chain is as deep as the
+// input nests, and a call per level exhausts the stack: measured to die
+// between 100,000 and 150,000 at 8 MiB. Reached from the simplifier, the BV
+// solver, PropagateEqualities, MergeSame and UseITEContext -- and while no
+// parsed query gets there today, because the simplifying factory flattens a
+// conjunction as it builds one, that is a property of the factory rather
+// than of these functions. A pass building through the hashing factory
+// reaches it. See DeepDag_Test.cpp.
+namespace
+{
+struct FlattenFrame
+{
+  ASTChildren children;
+  size_t i;
+  int depth;
+
+  FlattenFrame(const ASTChildren& c, int d) : children(c), i(0), depth(d) {}
+};
+}
+
 void FlattenKindNoDuplicates(const Kind k, const ASTChildren& children,
                              ASTVec& flat_children,
                              ASTNodeSet& alreadyFlattened)
 {
-  const auto ch_end = children.end();
-  for (auto it = children.begin(); it != ch_end; it++)
+  // Children left to right, and a same-kind one expanded where it is reached,
+  // so flat_children comes out in the order the recursion built it. The
+  // frames hold spans into each node's own child storage, which its parent
+  // keeps alive for the whole walk. Keep the current frame local so a flat
+  // input never allocates a traversal stack; parents are needed only after
+  // the first same-kind child is reached.
+  FlattenFrame current(children, 0);
+  std::vector<FlattenFrame> parents;
+
+  while (true)
   {
-    const Kind ck = it->GetKind();
-    if (k == ck)
+    if (current.i == current.children.size())
     {
-      if (alreadyFlattened.find(*it) == alreadyFlattened.end())
-      {
-        alreadyFlattened.insert(*it);
-        FlattenKindNoDuplicates(k, it->GetChildren(), flat_children,
-                                alreadyFlattened);
-      }
+      if (parents.empty())
+        break;
+      current = parents.back();
+      parents.pop_back();
+      continue;
     }
-    else
+
+    const ASTNode& child = current.children[current.i++];
+
+    if (k != child.GetKind())
     {
-      flat_children.push_back(*it);
+      flat_children.push_back(child);
+      continue;
     }
+
+    // A same-kind child seen before contributes nothing a second time: its
+    // operands are already in flat_children.
+    if (!alreadyFlattened.insert(child).second)
+      continue;
+
+    parents.push_back(current);
+    current = FlattenFrame(child.GetChildren(), 0);
   }
 }
 
 void FlattenKind(const Kind k, const ASTChildren& children, ASTVec& flat_children, int depth)
 {
-  auto ch_end = children.end();
-  for (auto it = children.begin(); it != ch_end; it++)
+  FlattenFrame current(children, depth);
+  std::vector<FlattenFrame> parents;
+
+  while (true)
   {
-    const Kind ck = it->GetKind();
-    if (k == ck && depth >= 0 )
+    if (current.i == current.children.size())
     {
-      FlattenKind(k, it->GetChildren(), flat_children, depth-1);
+      if (parents.empty())
+        break;
+      current = parents.back();
+      parents.pop_back();
+      continue;
+    }
+
+    const ASTNode& child = current.children[current.i++];
+    const int below = current.depth - 1;
+
+    if (k == child.GetKind() && current.depth >= 0)
+    {
+      parents.push_back(current);
+      current = FlattenFrame(child.GetChildren(), below);
     }
     else
-    {
-      flat_children.push_back(*it);
-    }
+      flat_children.push_back(child);
   }
 }
 
@@ -436,11 +523,32 @@ ASTVec FlattenKind(Kind k, const ASTChildren& children, int maxDepth)
   ASTVec flat_children;
   if (k == OR || k == BVOR || k == BVAND || k == AND)
   {
+    bool nested = false;
+    for (const ASTNode& child : children)
+      if (child.GetKind() == k)
+      {
+        nested = true;
+        break;
+      }
+
+    // The overwhelmingly common flat case needs neither the traversal nor
+    // its deduplication set. Range assignment sizes the vector exactly once.
+    if (!nested)
+    {
+      flat_children.assign(children.begin(), children.end());
+      return flat_children;
+    }
+
     ASTNodeSet alreadyFlattened;
     FlattenKindNoDuplicates(k, children, flat_children, alreadyFlattened);
   }
   else
   {
+    // This form never discards repeated same-kind subtrees, so its output has
+    // at least the input's arity. The deduplicating form above can turn a
+    // very wide list of repeated edges into only a few operands; reserving
+    // the input's full width there retains memory for operands it discarded.
+    flat_children.reserve(children.size());
     FlattenKind(k, children, flat_children, maxDepth);
   }
 

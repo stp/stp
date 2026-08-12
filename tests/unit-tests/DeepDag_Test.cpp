@@ -530,6 +530,37 @@ bool propagateEqualitiesOk(Context& c, unsigned depth)
   return pe.topLevel(f).GetKind() != UNDEFINED;
 }
 
+// FlattenKind, which every pass that wants an n-ary view of a nested
+// same-kind chain goes through: the simplifier, the BV solver,
+// PropagateEqualities, MergeSame and UseITEContext. Its two forms differ in
+// whether they dedup or take a depth limit, and a chain of the kind being
+// flattened reaches each of them one level at a time.
+//
+// The deduplicating form is the one AND, OR, BVAND and BVOR take, and it
+// ignores the depth limit entirely.
+bool flattenKindNoDuplicatesOk(Context& c, unsigned depth)
+{
+  const ASTNode top = c.chain(BVAND, depth);
+  c.roots.push_back(top);
+
+  // The chain is left-nested, so flattening the top node yields every symbol
+  // in it -- which is also how we know the walk reached the bottom.
+  const ASTVec flat = FlattenKind(BVAND, top.GetChildren(), 15);
+  return flat.size() == depth;
+}
+
+// The depth-limited form, which the arithmetic kinds take -- with no limit at
+// all from two of the simplifier's arms, which is where its own recursion is
+// as deep as the chain.
+bool flattenKindDepthOk(Context& c, unsigned depth)
+{
+  const ASTNode top = c.chain(BVPLUS, depth);
+  c.roots.push_back(top);
+
+  const ASTVec flat = FlattenKind(BVPLUS, top.GetChildren());
+  return flat.size() == depth;
+}
+
 // CommonSubSum::topLevel. Already stack-safe; here to keep it that way.
 bool commonSubSumOk(Context& c, unsigned depth)
 {
@@ -538,6 +569,24 @@ bool commonSubSumOk(Context& c, unsigned depth)
   CommonSubSum css(&c.mgr, c.nf);
   ASTNode g = f;
   return css.topLevel(g).GetKind() != UNDEFINED;
+}
+
+// The read-count heuristic must traverse a read-free deep term without C++
+// recursion. Once its strict limit is reached, it must also stop the whole
+// traversal rather than continuing into a later deep sibling.
+bool numberOfReadsWalkOk(Context& c, unsigned depth)
+{
+  const ASTNode deep = c.chain(BVXOR, depth);
+  c.roots.push_back(deep);
+  if (!numberOfReadsLessThan(deep, 1))
+    return false;
+
+  const ASTNode array = c.mgr.CreateSymbol("read-count-array", 8, 8);
+  const ASTNode index = c.mgr.CreateSymbol("read-count-index", 0, 8);
+  const ASTNode read = c.hf->CreateTerm(READ, 8, array, index);
+  const ASTNode earlyStop = c.hf->CreateTerm(BVCONCAT, 16, read, deep);
+  c.roots.push_back(earlyStop);
+  return !numberOfReadsLessThan(earlyStop, 1);
 }
 #ifdef STP_ENABLE_FLOATING_POINT
 
@@ -811,6 +860,47 @@ TEST(DeepDag, substitution_root_fast_paths_preserve_results)
                                             true, false));
 }
 
+TEST(DeepDag, shallow_flatten_kind_no_duplicates)
+{
+  Context c;
+  EXPECT_TRUE(flattenKindNoDuplicatesOk(c, SHALLOW));
+}
+
+TEST(DeepDag, shallow_flatten_kind_depth)
+{
+  Context c;
+  EXPECT_TRUE(flattenKindDepthOk(c, SHALLOW));
+}
+
+TEST(DeepDag, flat_flatten_kind_preserves_children)
+{
+  Context c;
+  ASTVec children;
+  for (unsigned i = 0; i < 4; ++i)
+  {
+    const std::string name = "flat" + std::to_string(i);
+    children.push_back(c.mgr.CreateSymbol(name.c_str(), 0, 8));
+  }
+  const ASTNode holder = c.hf->CreateTerm(BVXOR, 8, children);
+  const ASTVec expected = toASTVec(holder.GetChildren());
+
+  EXPECT_EQ(expected, FlattenKind(BVAND, holder.GetChildren()));
+  EXPECT_EQ(expected, FlattenKind(BVPLUS, holder.GetChildren()));
+}
+
+TEST(DeepDag, duplicate_flatten_kind_does_not_reserve_discarded_edges)
+{
+  Context c;
+  const ASTNode a = c.mgr.CreateSymbol("flat-shared-a", 0, 8);
+  const ASTNode b = c.mgr.CreateSymbol("flat-shared-b", 0, 8);
+  const ASTNode shared = c.hf->CreateTerm(BVAND, 8, a, b);
+  const ASTNode holder = c.hf->CreateTerm(BVXOR, 8, ASTVec(4096, shared));
+
+  const ASTVec flat = FlattenKind(BVAND, holder.GetChildren());
+  EXPECT_EQ(toASTVec(shared.GetChildren()), flat);
+  EXPECT_LT(flat.capacity(), holder.Degree());
+}
+
 TEST(DeepDag, shallow_strength_reduction)
 {
   Context c;
@@ -880,6 +970,31 @@ TEST(DeepDag, shallow_source_sort_store)
 #endif // STP_ENABLE_FLOATING_POINT
 
 
+TEST(DeepDag, array_read_count_is_strict_and_deduplicates_the_dag)
+{
+  Context c;
+  const ASTNode array = c.mgr.CreateSymbol("read-count-shared-array", 8, 8);
+  const ASTNode i = c.mgr.CreateSymbol("read-count-shared-i", 0, 8);
+  const ASTNode j = c.mgr.CreateSymbol("read-count-shared-j", 0, 8);
+  const ASTNode first = c.hf->CreateTerm(READ, 8, array, i);
+  const ASTNode second = c.hf->CreateTerm(READ, 8, array, j);
+  const ASTNode top =
+      c.hf->CreateTerm(BVXOR, 8, ASTVec{first, first, second});
+  c.roots.push_back(top);
+
+  EXPECT_TRUE(numberOfReadsLessThan(top, 3));
+  EXPECT_FALSE(numberOfReadsLessThan(top, 2));
+  EXPECT_FALSE(numberOfReadsLessThan(first, 1));
+  EXPECT_TRUE(numberOfReadsLessThan(first, 2));
+  EXPECT_FALSE(numberOfReadsLessThan(top, 0));
+}
+
+TEST(DeepDag, shallow_array_read_count_walk)
+{
+  Context c;
+  EXPECT_TRUE(numberOfReadsWalkOk(c, SHALLOW));
+}
+
 TEST(DeepDag, deep_rewriting_share_count)
 {
   EXPECT_STACK_SAFE(rewritingIdentityOk, 200000);
@@ -910,6 +1025,16 @@ TEST(DeepDag, deep_substitution)
   EXPECT_STACK_SAFE(substitutionOk, 20000);
 }
 
+TEST(DeepDag, deep_flatten_kind_no_duplicates)
+{
+  EXPECT_STACK_SAFE(flattenKindNoDuplicatesOk, 20000);
+}
+
+TEST(DeepDag, deep_flatten_kind_depth)
+{
+  EXPECT_STACK_SAFE(flattenKindDepthOk, 20000);
+}
+
 TEST(DeepDag, deep_strength_reduction)
 {
   EXPECT_STACK_SAFE(strengthReductionOk, 20000);
@@ -935,6 +1060,10 @@ TEST(DeepDag, deep_node_domain)        { EXPECT_STACK_SAFE(nodeDomainOk, 20000);
 TEST(DeepDag, deep_node_iterator)      { EXPECT_STACK_SAFE(nodeIteratorOk, 20000); }
 TEST(DeepDag, deep_vars_in_expression) { EXPECT_STACK_SAFE(varsInExpressionOk, 20000); }
 TEST(DeepDag, deep_propagate_equalities) { EXPECT_STACK_SAFE(propagateEqualitiesOk, 20000); }
+TEST(DeepDag, deep_array_read_count_walk)
+{
+  EXPECT_STACK_SAFE(numberOfReadsWalkOk, 20000);
+}
 #ifdef STP_ENABLE_FLOATING_POINT
 TEST(DeepDag, deep_fp_totalise)        { EXPECT_STACK_SAFE(fpTotaliseChainOk, 20000); }
 TEST(DeepDag, deep_fp_format_ite)      { EXPECT_STACK_SAFE(fpFormatIteChainOk, 20000); }
