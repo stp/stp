@@ -22,6 +22,7 @@
 # -----------------------------------------------------------------------------
 # C API tests (these should be .cpp or .cxx files because GTest needs C++)
 # -----------------------------------------------------------------------------
+AddSTPGTest(ArrayReadRefinementProgress_Test.cpp)
 AddSTPGTest(SATSolver_Test.cpp)
 AddSTPGTest(SatSolverBudget_Test.cpp)
 AddSTPGTest(TrailReuse_Test.cpp)

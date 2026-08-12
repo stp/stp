@@ -56,6 +56,7 @@ uint32_t getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
                    Polarity polary = Polarity::BOTH);
 
 class FpEncodingContext;
+class ArrayReadRefinementProgress;
 
 class AbsRefine_CounterExample // not copyable
 {
@@ -344,7 +345,8 @@ public:
 
   SOLVER_RETURN_TYPE
   SATBased_ArrayReadRefinement(SATSolver& newS, const ASTNode& original_input,
-                               ToSATBase* tosat);
+                               ToSATBase* tosat,
+                               ArrayReadRefinementProgress* progress = NULL);
 
   void applyAllCongruenceConstraints(SATSolver& SatSolver, ToSATBase* tosat);
 
