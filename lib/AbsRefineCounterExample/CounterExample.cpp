@@ -29,7 +29,7 @@ THE SOFTWARE.
 #include "stp/FloatBlaster/FpEncodingContext.h"
 #include "stp/Printer/printers.h"
 #include "stp/ToSat/ToSATAIG.h"
-#include <memory>
+#include <vector>
 
 const bool debug_counterexample = false;
 
@@ -81,19 +81,52 @@ static ASTNode plainModelCarrier(STPMgr* bm, const ASTNode& value)
 class ScopedFpEncodedEvaluation final
 {
 public:
-  explicit ScopedFpEncodedEvaluation(unsigned int& depth_) : depth(depth_)
+  ScopedFpEncodedEvaluation() = default;
+
+  explicit ScopedFpEncodedEvaluation(unsigned int& depth_) { activate(depth_); }
+
+  ScopedFpEncodedEvaluation(const ScopedFpEncodedEvaluation&) = delete;
+  ScopedFpEncodedEvaluation&
+  operator=(const ScopedFpEncodedEvaluation&) = delete;
+
+  ScopedFpEncodedEvaluation(ScopedFpEncodedEvaluation&& other) noexcept
+      : depth(other.depth)
   {
-    ++depth;
+    other.depth = NULL;
   }
 
-  ~ScopedFpEncodedEvaluation()
+  ScopedFpEncodedEvaluation&
+  operator=(ScopedFpEncodedEvaluation&& other) noexcept
   {
-    assert(depth > 0);
-    --depth;
+    if (this != &other)
+    {
+      deactivate();
+      depth = other.depth;
+      other.depth = NULL;
+    }
+    return *this;
+  }
+
+  ~ScopedFpEncodedEvaluation() { deactivate(); }
+
+  void activate(unsigned int& depth_)
+  {
+    assert(depth == NULL);
+    depth = &depth_;
+    ++*depth;
   }
 
 private:
-  unsigned int& depth;
+  void deactivate()
+  {
+    if (depth == NULL)
+      return;
+    assert(*depth > 0);
+    --*depth;
+    depth = NULL;
+  }
+
+  unsigned int* depth = NULL;
 };
 
 FpEncodingContext&
@@ -256,6 +289,1056 @@ void AbsRefine_CounterExample::ConstructCounterExample(
   }
 }
 
+// Where one evaluation has got to.
+//
+// The three functions this replaces called each other once per level of the
+// input -- a formula's operands through the term evaluator, a term's
+// if-then-else condition back through the formula evaluator, a read over a
+// write through the expander and every term in the write chain back through
+// the term evaluator -- so they are one walk with its frames on the heap
+// rather than three sets of call frames. See DeepDag_Test.cpp.
+//
+// `job` says which of the three a frame is running and `phase` where in it,
+// because most of them suspend at more than one point. Everything else here
+// was a local of the function it came from, kept because it has to survive
+// the suspension.
+struct AbsRefine_CounterExample::Frame
+{
+  enum Phase
+  {
+    Start,
+
+    // ComputeFormulaUsingModel.
+    FormSymbolValue,     // boolean symbol: waiting for its recorded value
+    FormArrayEqLowered,  // array equality: for the lowering that decided it
+    FormBoolExtract,     // bit extract: for the term underneath
+    FormOperand,         // connective or comparison: for operand `i`
+    FormIteCond,         // if-then-else: for the condition
+    FormIteBranch,       // ... for the branch the condition left alive
+    FormFpOperand,       // float predicate: for operand `i`
+    FormFpOperandStrict, // ... for it again, this time refusing a bare read
+    FormFpRewritten,     // ... for what the factory returned instead
+    FormFpBlasted,       // ... for the lowering of the predicate
+
+    // TermToConstTermUsingModel.
+    TermRecordedValueStart, // recorded non-constant: about to evaluate its value
+    TermRecordedValue,  // for the value the model already records for this term
+    TermEncoded,        // float source term: for its encoding
+    TermDefinition,     // substituted array read: for the read through its definition
+    TermCellIndex,      // owned array read: for the index
+    TermCellValue,      // ... for a recorded cell value that is not constant
+    TermCellWriteIndex, // ... for the index the write at this level stores at
+    TermCellWritten,    // ... for the value it stores, the index having hit
+    TermCellIteCond,    // ... for an array if-then-else's condition
+    TermExpand,         // read over a write: for the expansion
+    TermExpanded,       // ... for the value of the expansion
+    TermReadIteIndex,   // read over an if-then-else: for the index
+    TermReadIteCond,    // ... for the condition
+    TermReadIteBranch,  // ... for the read over the branch it left alive
+    TermReadIndex,      // plain read: for the index, however it is spelled
+    TermReadValue,      // ... for the value the model records at that index
+    TermIteCond,        // if-then-else term: for the condition
+    TermIteBranch,      // ... for the branch the condition left alive
+    TermOperand,        // any other operation: for child `i`
+    TermOperandStrict,  // ... for it again, this time refusing a bare read
+
+    // Expand_ReadOverWrite_UsingModel.
+    ExpandRecordedValueStart, // recorded non-constant: about to evaluate its value
+    ExpandRecordedValue, // for the value the model already records for the read
+    ExpandReadIndex,     // for the read index
+    ExpandWriteIndex,    // for the index the write at this level stores at
+    ExpandWritten,       // ... for the value it stores, the index having hit
+    ExpandPushedIn       // for the read under everything the chain did not hit
+  };
+
+  Job job;
+  Phase phase = Start;
+  ASTNode n;
+  bool ArrayReadFlag;
+
+  ASTVec parts; // operands evaluated so far
+  size_t i = 0; // the operand being worked on
+
+  // Locals that outlive one of their function's suspension points. Each is
+  // one role, under whichever of the three names its function gave it: the
+  // evaluated read index (`idxVal`, `indexVal`, `readIndex`), the array node
+  // a walk down a chain has reached (`level`, `write`), and the read
+  // renormalised over a constant index (`modelentry`).
+  ASTNode index;
+  ASTNode cursor;
+  ASTNode entry;
+
+  // Raised while an already-lowered float expression is evaluated and
+  // lowered when this frame is dropped, which is where the scope guard the
+  // recursive version held across the sub-evaluation used to end. Getting
+  // this wrong changes float model values rather than crashing.
+  ScopedFpEncodedEvaluation fpScope;
+
+  Frame(Job j, const ASTNode& node, bool flag)
+      : job(j), n(node), ArrayReadFlag(flag)
+  {
+  }
+};
+
+// ComputeFormulaUsingModel, TermToConstTermUsingModel and
+// Expand_ReadOverWrite_UsingModel, walked together with their frames on the
+// heap. Everything the three did is here in the order they did it: the same
+// map reads and writes, the same node-factory calls, the same asserts, and
+// the same decisions about which operand is evaluated at all.
+//
+// That last one is why this is a state machine rather than a priming pass.
+// Three arms evaluate an if-then-else's condition and then only the branch it
+// leaves alive, and a dropped branch here is not merely wasted work: it can
+// be genuinely unevaluable against the model, and all three call FatalError
+// when it is.
+//
+// Two things a reader should check for, because both change the model
+// silently rather than crashing. The map writes are not uniform -- a term's
+// value is recorded by the tail its arm reaches, and five of the arms return
+// before that tail, three of them writing the map themselves on the way past.
+// And a term's answer is put into the plain bit-vector spelling once per
+// frame, where the wrapper around the old recursive evaluator did it once per
+// call.
+ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
+                                           const bool topArrayReadFlag)
+{
+  // The value the frame that finished last returned, which is what the frame
+  // below it resumes with.
+  ASTNode result;
+
+  // Run the non-recursive head of one of the three former functions. An
+  // immediate answer lands in `result` and needs no frame. Otherwise `frame`
+  // carries everything learned by the head into the walk below it, so a memo
+  // miss is never probed for a second time when the frame starts.
+  auto prepare = [&](const Job j, const ASTNode& n, Frame& frame) -> bool
+  {
+    assert(frame.job == j && frame.n == n);
+    if (j == EvalFormula)
+    {
+      if (!(is_Form_kind(n.GetKind()) && BOOLEAN_TYPE == n.GetType()))
+      {
+        FatalError(" ComputeConstFormUsingModel: "
+                   "The input is a non-formula: ",
+                   n);
+      }
+
+      const ASTNodeMap::const_iterator it = ComputeFormulaMap.find(n);
+      if (it != ComputeFormulaMap.end())
+      {
+        if (ASTTrue != it->second && ASTFalse != it->second)
+        {
+          FatalError("ComputeFormulaUsingModel: "
+                     "The value of a formula must be TRUE or FALSE:",
+                     n);
+        }
+
+        result = it->second;
+        return false;
+      }
+
+      // These are the formula equivalent of a term constant: the switch only
+      // records and returns them, so do that without allocating a worklist.
+      if (n.GetKind() == TRUE || n.GetKind() == FALSE)
+      {
+        ComputeFormulaMap[n] = n;
+        result = n;
+        return false;
+      }
+
+      return true;
+    }
+
+    if (j == EvalTerm)
+    {
+      // The recursive term evaluator returned constants before consulting the
+      // model. Keeping that in the head matters here: constants are never
+      // memoised, so otherwise every occurrence would allocate a frame.
+      if (n.GetKind() == BVCONST)
+      {
+        result = plainModelCarrier(bm, n);
+        return false;
+      }
+
+      assert(is_Term_kind(n.GetKind()));
+      assert(WRITE != n.GetKind());
+      assert(BOOLEAN_TYPE != n.GetType());
+
+      // An array-typed entry is a definitional alias installed by equality
+      // propagation (array symbol := array term), not a value. The READ arm
+      // below resolves through it; evaluating it here would hand an array
+      // term to a walk that only understands element-typed values.
+      const ASTNodeMap::const_iterator it = CounterExampleMap.find(n);
+      if (n.GetType() != ARRAY_TYPE && it != CounterExampleMap.end())
+      {
+        if (BVCONST == it->second.GetKind())
+        {
+          result = plainModelCarrier(bm, it->second);
+          return false;
+        }
+
+        if (n == it->second)
+        {
+          FatalError("TermToConstTermUsingModel: "
+                     "The input term is stored as-is "
+                     "in the CounterExample: Not ok: ",
+                     n);
+        }
+
+        frame.entry = it->second;
+        frame.phase = Frame::TermRecordedValueStart;
+        return true;
+      }
+
+      return true;
+    }
+
+    assert(j == EvalExpand);
+    if (READ != n.GetKind() || WRITE != n[0].GetKind())
+      FatalError("RemovesWrites: Input must be a READ over a WRITE", n);
+
+    const ASTNodeMap::const_iterator it = CounterExampleMap.find(n);
+    if (it != CounterExampleMap.end())
+    {
+      if (BVCONST == it->second.GetKind())
+      {
+        result = it->second;
+        return false;
+      }
+
+      if (n == it->second)
+      {
+        FatalError("TermToConstTermUsingModel: The input term is "
+                   "stored as-is "
+                   "in the CounterExample: Not ok: ",
+                   n);
+      }
+
+      frame.entry = it->second;
+      frame.phase = Frame::ExpandRecordedValueStart;
+      return true;
+    }
+
+    return true;
+  };
+
+  Frame first(job, top, topArrayReadFlag);
+  if (!prepare(job, top, first))
+    return result;
+
+  // Most model expressions are shallow. Keep their frontier contiguous and
+  // preallocate the common case; a push may move the current frame, so every
+  // step returns immediately after one.
+  std::vector<Frame> stack;
+  stack.reserve(8);
+  stack.push_back(std::move(first));
+
+  enum class StepResult
+  {
+    Finished,
+    Pushed,
+    Redispatch
+  };
+
+  // Ask for the value of `n`, and suspend this frame until it is known: it
+  // picks up at `resume` with the answer in `result`. An immediate head answer
+  // is redispatched within the same job; only a real child reaches the outer
+  // worklist loop.
+  auto want = [&](Frame& f, const Frame::Phase resume, const Job j,
+                  const ASTNode& n,
+                  const bool flag = true) -> StepResult {
+    f.phase = resume;
+    Frame below(j, n, flag);
+    if (!prepare(j, n, below))
+      return StepResult::Redispatch;
+    stack.push_back(std::move(below));
+    return StepResult::Pushed;
+  };
+
+  /* One step of ComputeFormulaUsingModel, which accepts a non-constant
+   * formula and checks if the formula is ASTTrue or ASTFalse w.r.t to a
+   * model.
+   */
+  auto stepFormula = [&](Frame& f) -> StepResult {
+    const ASTNode& form = f.n;
+    const Kind k = form.GetKind();
+
+    // The tail every path but the memo hit shares.
+    auto finish = [&](const ASTNode& output) {
+      assert(ASTUndefined != output);
+      assert(output.isConstant());
+      ComputeFormulaMap[form] = output;
+      result = output;
+      return StepResult::Finished;
+    };
+
+    // Unlike the term arm (TermToConstTermUsingModel), floating-point
+    // *predicates* are not routed through encodeForModel. Encoding the whole
+    // predicate and re-entering the evaluator runs the walk at
+    // fpEncodedEvaluationDepth > 0, where the term arm's own encode step is
+    // switched off -- so any float operand reached inside the encoded
+    // predicate would fall through to the term switch's default. Instead the
+    // FP_* predicate cases below resolve each operand to a constant at depth
+    // 0 (where the term arm does encode floats correctly) and fold the
+    // predicate over those constants.
+
+    switch (k)
+    {
+      case TRUE:
+      case FALSE:
+        return finish(form);
+      case SYMBOL:
+      {
+        if (f.phase == Frame::FormSymbolValue)
+          return finish(result);
+
+        if (BOOLEAN_TYPE != form.GetType())
+          FatalError(" ComputeFormulaUsingModel: "
+                     "Non-Boolean variables are not formulas",
+                     form);
+        const ASTNodeMap::const_iterator recorded =
+            CounterExampleMap.find(form);
+        if (recorded != CounterExampleMap.end())
+        {
+          const ASTNode counterexample_val = recorded->second;
+          if (!bm->VarSeenInTerm(form, counterexample_val))
+            return want(f, Frame::FormSymbolValue, EvalFormula,
+                        counterexample_val);
+          return finish(counterexample_val);
+        }
+        // Has been simplified out. Can take any value.
+        return finish(ASTFalse);
+      }
+      case ARRAY_EQ:
+      {
+        if (f.phase == Frame::FormArrayEqLowered)
+          return finish(result);
+
+        ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+        ASTNode lowered;
+        if (ext != NULL && ext->getCurrentLowering(form, lowered))
+        {
+          // This solve decided the equality; its lowering is the answer.
+          return want(f, Frame::FormArrayEqLowered, EvalFormula, lowered);
+        }
+
+        // It did not: either the equality belongs to an earlier query,
+        // or lowering discarded it -- an equality nested in a conjunct
+        // that solving a write chain against its own base dropped as
+        // shadowed. There is no abstraction variable to consult, and
+        // the one that used to be consulted here had never been
+        // assigned, so it read false while the model gave the two
+        // arrays identical contents.
+        //
+        // Ask the model instead. It is the same model the caller is
+        // about to print, so the answer agrees with it by construction,
+        // which is the property the abstraction variable could not
+        // offer.
+        if (!arrayEqualityIsModelDecidable(form[0]) ||
+            !arrayEqualityIsModelDecidable(form[1]))
+          FatalError("array-equality: cannot evaluate an opaque equality "
+                     "over float-indexed arrays that was not reachable in "
+                     "the most recent solve",
+                     form);
+        return finish(ArraysEqualUsingModel(form[0], form[1]) ? ASTTrue
+                                                              : ASTFalse);
+      }
+      case BOOLEXTRACT:
+      {
+        if (f.phase == Frame::Start)
+          return want(f, Frame::FormBoolExtract, EvalTerm, form[0]);
+
+        return finish(
+            simp->BVConstEvaluator(bm->CreateNode(BOOLEXTRACT, result,
+                                                  form[1])));
+      }
+      case EQ:
+      case BVLT:
+      case BVLE:
+      case BVGT:
+      case BVGE:
+      case BVSLT:
+      case BVSLE:
+      case BVSGT:
+      case BVSGE:
+      case BVUADDO:
+      case BVSADDO:
+      case BVUMULO:
+      case BVSMULO:
+      case BVUSUBO:
+      case BVSSUBO:
+      {
+        if (f.phase == Frame::FormOperand)
+          f.parts.push_back(result);
+        else
+          f.parts.reserve(form.Degree());
+
+        if (f.i < form.Degree())
+          return want(f, Frame::FormOperand, EvalTerm, form[f.i++], false);
+
+        return finish(
+            NonMemberBVConstEvaluator(bm, k, f.parts, form.GetValueWidth()));
+      }
+
+      case NAND:
+      case NOR:
+      case NOT:
+      case AND:
+      case XOR:
+      case IFF:
+      case IMPLIES:
+      case OR:
+      {
+        if (f.phase == Frame::FormOperand)
+          f.parts.push_back(result);
+        else
+          f.parts.reserve(form.Degree());
+
+        if (f.i < form.Degree())
+          return want(f, Frame::FormOperand, EvalFormula, form[f.i++]);
+
+        return finish(
+            NonMemberBVConstEvaluator(bm, k, f.parts, form.GetValueWidth()));
+      }
+
+      case ITE:
+      {
+        if (f.phase == Frame::Start)
+          return want(f, Frame::FormIteCond, EvalFormula, form[0]);
+
+        if (f.phase == Frame::FormIteCond)
+        {
+          if (ASTTrue == result)
+            return want(f, Frame::FormIteBranch, EvalFormula, form[1]);
+          else if (ASTFalse == result)
+            return want(f, Frame::FormIteBranch, EvalFormula, form[2]);
+          else
+            FatalError("ComputeFormulaUsingModel: ITE: "
+                       "something is wrong with the formula: ",
+                       form);
+        }
+
+        return finish(result);
+      }
+      case FP_LEQ:
+      case FP_LT:
+      case FP_GEQ:
+      case FP_GT:
+      case FP_EQ:
+      case FP_ISNORMAL:
+      case FP_ISSUBNORMAL:
+      case FP_ISZERO:
+      case FP_ISINFINITE:
+      case FP_ISNAN:
+      case FP_ISNEGATIVE:
+      case FP_ISPOSITIVE:
+      case FP_SMT_EQ:
+      {
+        if (f.phase == Frame::FormFpRewritten ||
+            f.phase == Frame::FormFpBlasted)
+          return finish(result);
+
+        // An operand must resolve to a constant, as in the float arm of
+        // TermToConstTermUsingModel: the read-tolerant flag is on inside the
+        // walk, so a float-element array read the solve never constrained
+        // comes back as the symbolic READ (case 2 there) rather than a
+        // value. Rebuilding the predicate over it is not evaluation -- the
+        // blaster would carry the read along, and the same-operand folds
+        // below can hand the bare READ back. The read is genuinely
+        // unconstrained here, so resolve it to a concrete value.
+        if (f.phase == Frame::FormFpOperand && BVCONST != result.GetKind())
+          return want(f, Frame::FormFpOperandStrict, EvalTerm, form[f.i],
+                      false);
+
+        if (f.phase == Frame::FormFpOperand ||
+            f.phase == Frame::FormFpOperandStrict)
+        {
+          assert(result.GetKind() == BVCONST);
+          f.parts.push_back(FloatBlaster::withFormat(
+              bm, result, form[f.i].GetExpWidth(), form[f.i].GetSigWidth()));
+          f.i++;
+        }
+        else
+        {
+          // Rebuild at the node's real arity: the comparisons are binary but
+          // the classification predicates are unary.
+          f.parts.reserve(form.Degree());
+        }
+
+        if (f.i < form.Degree())
+          return want(f, Frame::FormFpOperand, EvalTerm, form[f.i]);
+
+        ASTNode temp(bm->CreateNode(k, f.parts));
+
+        // Rebuilding through the simplifying factory may rewrite the predicate
+        // rather than return it: constant operands fold to true/false outright,
+        // and the same-operand rules fire here because interned constants
+        // compare pointer-equal -- fp.leq of a value with itself comes back as
+        // (not (fp.isNaN ...)). Whatever came back that is not this operation
+        // is a formula; evaluate it, never blast it.
+        if (temp.GetKind() != k)
+          return want(f, Frame::FormFpRewritten, EvalFormula, temp);
+
+        // One table, the same one the solver's lowering pass uses. temp's
+        // operands were re-stamped with their formats above, so it is a
+        // well-formed source node and its own sorts say what the formats are.
+        ASTNode blasted(FloatBlast::lowerOperation(bm, temp));
+
+        assert(blasted != temp);
+        assert(blasted != form);
+
+        return want(f, Frame::FormFpBlasted, EvalFormula, blasted);
+      }
+      default:
+        cerr << _kind_names[k];
+        FatalError(" ComputeFormulaUsingModel: "
+                   "the kind has not been implemented",
+                   ASTUndefined);
+    }
+  };
+
+  /* One step of TermToConstTermUsingModel, which accepts a non-constant term
+   * and returns the corresponding constant term with respect to a model.
+   */
+  auto stepTerm = [&](Frame& f) -> StepResult {
+    const ASTNode& term = f.n;
+    const Kind k = term.GetKind();
+    const bool ArrayReadFlag = f.ArrayReadFlag;
+
+    // The tail the arms that run to their end share. Five arms return before
+    // reaching it, and three of those record the term's value themselves.
+    auto finish = [&](const ASTNode& output) {
+      assert(ArrayReadFlag || (BVCONST == output.GetKind()));
+
+      // when this flag is false, we should compute the arrayread to a
+      // constant. this constant is stored in the counter_example
+      // datastructure
+      // if (!ArrayReadFlag)
+      {
+        // Don't memoise a read as its own value. With ArrayReadFlag true, a
+        // read with no value in the model is returned unchanged (case 2 above)
+        // -- this happens for an unconstrained read, such as the array that
+        // totalising introduces for an out-of-range to_ubv/to_sbv. Caching
+        // term -> term would put the term in its own value slot, violating the
+        // invariant the lookups rely on: a later lookup then trips the "stored
+        // as-is" fatal error, or leaves the read unresolved and non-constant.
+        // Skipping the self-entry lets that later lookup fall through to the
+        // documented arbitrary completion.
+        if (term != output)
+          CounterExampleMap[term] = output;
+      }
+
+      // cerr << "Output to TermToConstTermUsingModel: " << output << endl;
+      result = output;
+      return StepResult::Finished;
+    };
+
+    if (f.phase == Frame::TermRecordedValueStart)
+      return want(f, Frame::TermRecordedValue, EvalTerm, f.entry,
+                  ArrayReadFlag);
+
+    if (f.phase == Frame::Start && fpEncodedEvaluationDepth == 0 &&
+        (is_FP_kind(k) || isFpIndexedArrayAccess(term)))
+    {
+      // FP source operations are evaluated through the solve-owned lowering
+      // context. This is deliberately before the target-language switch below:
+      // counterexample evaluation must not maintain a second implementation of
+      // totalisation, operand reconstruction, and SymFPU lowering.
+      const ASTNode encoded = requireFpEncodingContext().encodeForModel(term);
+      if (encoded == term && is_FP_kind(k))
+        FatalError("floating-point model encoding made no progress: ", term);
+
+      // The invariant this arm exists to hold: *a float's model value is its
+      // canonical carrier*. A float symbol's raw model bits are whichever NaN
+      // payload the SAT solver happened to pick, and the solve compared
+      // pack(unpack(x)); the two agree on everything except the payload, which
+      // is exactly what an array index distinguishes. So any node the encoding
+      // pass rewrote must be evaluated through that rewrite and never through
+      // its raw bits.
+      //
+      // Whether a rewrite was needed is the pass's answer to give, not ours:
+      // an access whose indexes are all already canonical comes back unchanged
+      // and falls through to the ordinary switch below.
+      if (encoded != term)
+      {
+        // The lowered DAG retains source-sort metadata on carrier reads and
+        // leaves. Keep the entire evaluation below here in target mode so a
+        // nested read-over-write cannot mistake that metadata for a fresh
+        // source boundary and canonicalise it repeatedly. The scope ends
+        // when this frame is dropped, which is where the guard the recursive
+        // version held across the call to itself ended.
+        f.fpScope.activate(fpEncodedEvaluationDepth);
+        return want(f, Frame::TermEncoded, EvalTerm, encoded, ArrayReadFlag);
+      }
+    }
+
+    // The value the model already records for this term is the answer, and
+    // the map already holds it.
+    if (f.phase == Frame::TermRecordedValue)
+      return StepResult::Finished;
+
+    if (f.phase == Frame::TermEncoded)
+    {
+      const ASTNode value = result;
+      if (term != value)
+        CounterExampleMap[term] = value;
+      result = value;
+      return StepResult::Finished;
+    }
+
+    if (f.phase == Frame::TermDefinition)
+      return StepResult::Finished;
+
+    switch (k)
+    {
+      case BVCONST:
+        return finish(term);
+      case SYMBOL:
+      {
+        if (term.GetType() == ARRAY_TYPE)
+        {
+          result = term;
+          return StepResult::Finished;
+        }
+        // Has been simplified out and can take any value. A RoundingMode's
+        // 5-bit representation has 27 junk patterns, though, so complete that
+        // sort with a real value rather than the ordinary all-zero default.
+        return finish(bm->isRoundingModeSortedTerm(term)
+                          ? bm->CreateBVConst(
+                                5, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN)
+                          : bm->CreateZeroConst(term.GetValueWidth()));
+      }
+      case READ:
+      {
+        const ASTNode& arrName = term[0];
+        const ASTNode& index = term[1];
+
+        // Which of the four shapes of read this frame is walking is settled
+        // when it starts, and its phase says which from then on -- so each
+        // gate below is asked exactly once, as it was.
+        if (f.phase == Frame::Start)
+        {
+          if (0 == arrName.GetIndexWidth())
+          {
+            FatalError("TermToConstTermUsingModel: "
+                       "array has 0 index width: ",
+                       arrName);
+          }
+
+          // An array symbol that equality propagation substituted away is
+          // defined by its array-typed counterexample entry. The vanished
+          // symbol has no read abstraction in the solve, so evaluate a read
+          // through its definition instead. Copy the definition before the
+          // nested evaluation, which may restore the whole map.
+          if (SYMBOL == arrName.GetKind())
+          {
+            const ASTNodeMap::const_iterator sub =
+                CounterExampleMap.find(arrName);
+            if (sub != CounterExampleMap.end() &&
+                ARRAY_TYPE == sub->second.GetType())
+            {
+              const ASTNode definition = sub->second;
+              const ASTNode throughDefinition = bm->CreateTerm(
+                  READ, term.GetValueWidth(), definition, index);
+              return want(f, Frame::TermDefinition, EvalTerm,
+                          throughDefinition, ArrayReadFlag);
+            }
+          }
+
+          // With array equality active, every read in the solve is
+          // evaluated through its read-abstraction variable -- never by
+          // expanding its write chain against the model. The consistency
+          // checker, not the model-side expander, is the authority for
+          // these reads: the abstraction variable holds whatever the SAT
+          // solver assigned, and any disagreement with the array axioms is
+          // exactly what the checker turns into a lemma.
+          //
+          // An owned read with no recorded abstraction variable was
+          // simplified out of the formula before solving; it is evaluated
+          // from the certified array contents instead: the recorded
+          // observation at the concrete index if one exists at this level,
+          // else the concrete write-hit value, else descend into the base
+          // array, defaulting to zero. This agrees with every recorded
+          // access whenever the checker certifies the candidate.
+          ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+          if (ext != NULL && ext->active() && ext->arrayGraphFrozen() &&
+              ext->ownsArray(arrName))
+            return want(f, Frame::TermCellIndex, EvalTerm, index, false);
+
+          if (WRITE == arrName.GetKind()) // READ over a WRITE
+            return want(f, Frame::TermExpand, EvalExpand, term,
+                        ArrayReadFlag);
+
+          if (ITE == arrName.GetKind()) // READ over an ITE
+            return want(f, Frame::TermReadIteIndex, EvalTerm, index,
+                        ArrayReadFlag);
+
+          const ASTNodeMap::const_iterator recorded =
+              CounterExampleMap.find(index);
+          if (recorded != CounterExampleMap.end())
+          {
+            // Copy out of the map before the nested evaluation, which may
+            // restore the map by whole-map assignment.
+            const ASTNode indexEntry = recorded->second;
+            return want(f, Frame::TermReadIndex, EvalTerm, indexEntry,
+                        ArrayReadFlag);
+          }
+          // index does not have a const value in the
+          // CounterExampleMap. compute it.
+          return want(f, Frame::TermReadIndex, EvalTerm, index,
+                      ArrayReadFlag);
+        }
+
+        // The walk down an owned array for the cell the model gives it. Every
+        // turn of it but the last suspends, so what was a loop is the
+        // sequence of resumes into the turn below.
+        if (f.phase == Frame::TermCellValue ||
+            f.phase == Frame::TermCellWritten)
+        {
+          CounterExampleMap[term] = result;
+          return StepResult::Finished;
+        }
+
+        if (f.phase == Frame::TermCellIndex ||
+            f.phase == Frame::TermCellWriteIndex ||
+            f.phase == Frame::TermCellIteCond)
+        {
+          if (f.phase == Frame::TermCellIndex)
+          {
+            f.index = result;
+            f.cursor = arrName;
+          }
+          else if (f.phase == Frame::TermCellWriteIndex)
+          {
+            if (result == f.index)
+              return want(f, Frame::TermCellWritten, EvalTerm, f.cursor[2],
+                          false);
+            f.cursor = f.cursor[0];
+          }
+          else
+          {
+            if (result == ASTTrue)
+              f.cursor = f.cursor[1];
+            else if (result == ASTFalse)
+              f.cursor = f.cursor[2];
+            else
+              FatalError("array-equality: an owned array if-then-else "
+                         "condition has no concrete model value",
+                         f.cursor[0]);
+          }
+
+          NodeFactory* hf = bm->hashingNodeFactory;
+          const ASTNode key = hf->CreateTerm(READ, f.cursor.GetValueWidth(),
+                                             f.cursor, f.index);
+          ASTNodeMap::const_iterator cit = CounterExampleMap.find(key);
+          if (cit != CounterExampleMap.end())
+          {
+            const ASTNode val = cit->second;
+            if (BVCONST != val.GetKind())
+              return want(f, Frame::TermCellValue, EvalTerm, val, false);
+            CounterExampleMap[term] = val;
+            result = val;
+            return StepResult::Finished;
+          }
+          if (WRITE == f.cursor.GetKind())
+            return want(f, Frame::TermCellWriteIndex, EvalTerm, f.cursor[1],
+                        false);
+          if (ITE == f.cursor.GetKind() && f.cursor.GetType() == ARRAY_TYPE)
+            return want(f, Frame::TermCellIteCond, EvalFormula, f.cursor[0]);
+
+          // base array with no observation
+          const ASTNode val = defaultCellValue(f.cursor);
+          CounterExampleMap[term] = val;
+          result = val;
+          return StepResult::Finished;
+        }
+
+        if (f.phase == Frame::TermExpand)
+        {
+          if (result == term)
+          {
+            FatalError("TermToConstTermUsingModel: "
+                       "Read_Over_Write term must be expanded "
+                       "into an ITE",
+                       term);
+          }
+          return want(f, Frame::TermExpanded, EvalTerm, result,
+                      ArrayReadFlag);
+        }
+
+        if (f.phase == Frame::TermExpanded)
+        {
+          assert(ArrayReadFlag || (BVCONST == result.GetKind()));
+          return StepResult::Finished;
+        }
+
+        if (f.phase == Frame::TermReadIteIndex)
+        {
+          // The "then" and "else" branch are arrays.
+          f.index = result;
+          // Get the truth value.
+          return want(f, Frame::TermReadIteCond, EvalFormula, arrName[0]);
+        }
+
+        if (f.phase == Frame::TermReadIteCond)
+        {
+          const unsigned int wid = arrName.GetValueWidth();
+          if (ASTTrue == result)
+            return want(f, Frame::TermReadIteBranch, EvalTerm,
+                        bm->CreateTerm(READ, wid, arrName[1], f.index),
+                        ArrayReadFlag);
+          else if (ASTFalse == result)
+            return want(f, Frame::TermReadIteBranch, EvalTerm,
+                        bm->CreateTerm(READ, wid, arrName[2], f.index),
+                        ArrayReadFlag);
+          else
+          {
+            FatalError(" TermToConstTermUsingModel: termITE: "
+                       "cannot compute ITE conditional against model: ",
+                       term);
+          }
+        }
+
+        if (f.phase == Frame::TermReadIteBranch)
+        {
+          assert(ArrayReadFlag || (BVCONST == result.GetKind()));
+          return StepResult::Finished;
+        }
+
+        if (f.phase == Frame::TermReadIndex)
+        {
+          f.entry =
+              bm->CreateTerm(READ, arrName.GetValueWidth(), arrName, result);
+          // modelentry is now an arrayread over a constant index
+          BVTypeCheck(f.entry);
+
+          // if a value exists in the CounterExampleMap then return it
+          const ASTNodeMap::const_iterator recorded =
+              CounterExampleMap.find(f.entry);
+          if (recorded != CounterExampleMap.end())
+          {
+            const ASTNode modelentryValue = recorded->second;
+            return want(f, Frame::TermReadValue, EvalTerm, modelentryValue,
+                        ArrayReadFlag);
+          }
+
+          if (ArrayReadFlag)
+          {
+            // return the array read over a constantindex
+            return finish(f.entry);
+          }
+
+          if (bm->UserFlags.enable_array_equality)
+          {
+            // Has been simplified out, so any value will do -- but only one
+            // value agrees with the model that is published. With array
+            // equality enabled the model surface prints a total
+            // interpretation per array, and this is a cell of it that no
+            // observation covers, so it is the completion or nothing.
+            // Inventing something else makes evaluation disagree with every
+            // other reader: an array equality evaluates false through its
+            // lowering's reads while the printed arrays are identical, which
+            // is the disagreement the post-solve audit trips on -- and,
+            // unaudited, a (get-model) that falsifies the query it answered
+            // sat. Both of this arm's former answers were such an invention:
+            // all-ones for a bitvector cell the printer filled with zero,
+            // and RNE for a RoundingMode cell that ReadUsingModel and the
+            // checker were still completing with all-zero bits.
+            //
+            // Memoising the invented value instead cannot close that gap.
+            // Model queries run inside a scope that restores the
+            // counterexample map afterwards, so the entry is rolled back
+            // and the next reader invents the value again against a model
+            // that never recorded it. Agreeing with the completion the rest
+            // of the model already uses needs no bookkeeping at all.
+            //
+            // Gated on the option: with it off the counterexample map, and
+            // so vc_getCounterExampleArray, must stay exactly as before.
+            return finish(defaultCellValue(arrName));
+          }
+
+          // Has been simplified out and can take any value. Keep the historical
+          // all-one completion for ordinary bitvectors, but not for
+          // RoundingMode: 0b11111 is not one of that sort's five values and can
+          // make SymFPU exhibit a non-IEEE sixth rounding behaviour.
+          return finish(bm->isRoundingModeSortedTerm(f.entry)
+                            ? bm->CreateBVConst(
+                                  5, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN)
+                            : bm->CreateMaxConst(f.entry.GetValueWidth()));
+        }
+
+        return finish(result); // Frame::TermReadValue
+      }
+      case ITE:
+      {
+        if (f.phase == Frame::Start)
+          return want(f, Frame::TermIteCond, EvalFormula, term[0]);
+
+        if (f.phase == Frame::TermIteCond)
+        {
+          if (ASTTrue == result)
+            return want(f, Frame::TermIteBranch, EvalTerm, term[1],
+                        ArrayReadFlag);
+          else if (ASTFalse == result)
+            return want(f, Frame::TermIteBranch, EvalTerm, term[2],
+                        ArrayReadFlag);
+          else
+          {
+            FatalError(" TermToConstTermUsingModel: termITE: cannot "
+                       "compute ITE conditional against model: ",
+                       term);
+          }
+        }
+
+        return finish(result);
+      }
+      default:
+      {
+        // NonMemberBVConstEvaluator below needs every child to be a constant.
+        // With ArrayReadFlag set, a read with no value in the model comes back
+        // as a symbolic READ over the array (case 2 above) rather than a
+        // constant -- this happens for the unconstrained array that totalising
+        // introduces for an out-of-range to_ubv/to_sbv, reached here when the
+        // enclosing ITE selects the unspecified branch and it feeds an ordinary
+        // bit-vector operation. Its value is genuinely arbitrary, so resolve it
+        // to a concrete constant rather than hand a non-constant to the
+        // evaluator (which cannot read arrays and would abort on the array
+        // symbol).
+        if (f.phase == Frame::TermOperand && BVCONST != result.GetKind())
+          return want(f, Frame::TermOperandStrict, EvalTerm, term[f.i],
+                      false);
+
+        if (f.phase == Frame::TermOperand ||
+            f.phase == Frame::TermOperandStrict)
+        {
+          ASTNode ff = result;
+          // A floating-point operand comes back as a bare bit-vector:
+          // TermToConstTermUsingModel strips the format off every result it
+          // returns. NonMemberBVConstEvaluator lowers through FloatBlast,
+          // which reads each operand's format off its source sort, so restore
+          // each float operand's own format here -- the same reattachment the
+          // FP-predicate arm of ComputeFormulaUsingModel makes before rebuilding
+          // a predicate. Non-float operands (bit-vectors, rounding modes) keep
+          // their bare form.
+          if (term[f.i].GetType() == FLOATINGPOINT_TYPE)
+            ff = FloatBlaster::withFormat(bm, ff, term[f.i].GetExpWidth(),
+                                          term[f.i].GetSigWidth());
+          f.parts.push_back(ff);
+          f.i++;
+        }
+        else
+          f.parts.reserve(term.Degree());
+
+        if (f.i < term.Degree())
+          return want(f, Frame::TermOperand, EvalTerm, term[f.i],
+                      ArrayReadFlag);
+
+        return finish(
+            NonMemberBVConstEvaluator(bm, k, f.parts, term.GetValueWidth()));
+      }
+    }
+  };
+
+  // One step of Expand_ReadOverWrite_UsingModel, which expands
+  // read-over-write by evaluating (readIndex=writeIndex) for every writeindex
+  // until, either it evaluates to TRUE or all (readIndex=writeIndex) evaluate
+  // to FALSE.
+  auto stepExpand = [&](Frame& f) -> StepResult {
+    const ASTNode& term = f.n;
+    const bool arrayread_flag = f.ArrayReadFlag;
+
+    // memoize
+    auto finish = [&](const ASTNode& output) {
+      CounterExampleMap[term] = output;
+      result = output;
+      return StepResult::Finished;
+    };
+
+    if (f.phase == Frame::ExpandRecordedValueStart)
+      return want(f, Frame::ExpandRecordedValue, EvalTerm, f.entry,
+                  arrayread_flag);
+
+    if (f.phase == Frame::Start)
+      return want(f, Frame::ExpandReadIndex, EvalTerm, term[1], false);
+
+    // The value the model already records for this read is the answer, and
+    // the map already holds it.
+    if (f.phase == Frame::ExpandRecordedValue)
+      return StepResult::Finished;
+
+    if (f.phase == Frame::ExpandWritten || f.phase == Frame::ExpandPushedIn)
+      return finish(result);
+
+    // iteratively expand read-over-write, and evaluate against the
+    // model at every iteration
+    if (f.phase == Frame::ExpandReadIndex)
+    {
+      f.index = result;
+      f.cursor = term[0];
+    }
+    else // Frame::ExpandWriteIndex
+    {
+      if (result == f.index)
+      {
+        // found the write-value. return it
+        return want(f, Frame::ExpandWritten, EvalTerm, f.cursor[2], false);
+      }
+
+      f.cursor = f.cursor[0];
+      if (WRITE != f.cursor.GetKind())
+      {
+        const unsigned int width = term.GetValueWidth();
+        return want(f, Frame::ExpandPushedIn, EvalTerm,
+                    bm->CreateTerm(READ, width, f.cursor, f.index),
+                    arrayread_flag);
+      }
+    }
+
+    return want(f, Frame::ExpandWriteIndex, EvalTerm, f.cursor[1], false);
+  };
+
+  while (true)
+  {
+    Frame& current = stack.back();
+
+    StepResult stepResult = StepResult::Finished;
+    switch (current.job)
+    {
+      case EvalFormula:
+        do
+          stepResult = stepFormula(current);
+        while (stepResult == StepResult::Redispatch);
+        break;
+      case EvalTerm:
+        do
+          stepResult = stepTerm(current);
+        while (stepResult == StepResult::Redispatch);
+        break;
+      case EvalExpand:
+        do
+          stepResult = stepExpand(current);
+        while (stepResult == StepResult::Redispatch);
+        break;
+    }
+
+    if (stepResult == StepResult::Pushed)
+      continue;
+    assert(stepResult == StepResult::Finished);
+
+    // Dropping the frame is what lowers a float encoding's evaluation depth,
+    // so it happens before the answer is handed up -- exactly where the scope
+    // guard used to end. A term's answer is then put into the plain
+    // bit-vector spelling, which is what the wrapper around the recursive
+    // evaluator did to everything it returned.
+    const bool wasTerm = (current.job == EvalTerm);
+    stack.pop_back();
+    if (wasTerm)
+      result = plainModelCarrier(bm, result);
+
+    if (stack.empty())
+      return result;
+  }
+}
+
 // FUNCTION: accepts a non-constant term, and returns the
 // corresponding constant term with respect to a model.
 //
@@ -281,423 +1364,7 @@ void AbsRefine_CounterExample::ConstructCounterExample(
 ASTNode AbsRefine_CounterExample::TermToConstTermUsingModel(const ASTNode& term,
                                                             bool ArrayReadFlag)
 {
-  return plainModelCarrier(
-      bm, TermToConstTermUsingModel_inner(term, ArrayReadFlag));
-}
-
-ASTNode
-AbsRefine_CounterExample::TermToConstTermUsingModel_inner(const ASTNode& term,
-                                                          bool ArrayReadFlag)
-{
-  if (term.GetKind() == BVCONST)
-    return term;
-
-  const Kind k = term.GetKind();
-
-  assert(is_Term_kind(k));
-  assert(k != WRITE);
-  assert(BOOLEAN_TYPE != term.GetType());
-
-  // An array-typed entry is a definitional alias installed by equality
-  // propagation (array symbol := array term), not a value; the READ case
-  // resolves through it. Recursing on it here would hand an array term to
-  // a walk that only understands element-typed values.
-  ASTNodeMap::const_iterator it1;
-  if (ARRAY_TYPE != term.GetType() &&
-      (it1 = CounterExampleMap.find(term)) != CounterExampleMap.end())
-  {
-    // A copy, never a reference into the map: the recursion below can reach
-    // an array equality, whose ModelQuery guard rolls CounterExampleMap back
-    // by whole-map assignment -- freeing every node, including the one a
-    // reference here would still be aliasing when the recursion returns.
-    const ASTNode val = it1->second;
-    if (BVCONST != val.GetKind())
-    {
-      // CounterExampleMap has two maps rolled into
-      // one. SubstitutionMap and SolverMap.
-      //
-      // recursion is fine here. There are two maps that are checked
-      // here. One is the substitutionmap. We garuntee that the value
-      // of a key in the substitutionmap is always a constant.
-      //
-      // in the SolverMap we garuntee that "term" does not occur in
-      // the value part of the map
-      if (term == val)
-      {
-        FatalError("TermToConstTermUsingModel: "
-                   "The input term is stored as-is "
-                   "in the CounterExample: Not ok: ",
-                   term);
-      }
-      return TermToConstTermUsingModel(val, ArrayReadFlag);
-    }
-    else
-    {
-      return val;
-    }
-  }
-
-  // FP source operations are evaluated through the solve-owned lowering
-  // context. This is deliberately before the target-language switch below:
-  // counterexample evaluation must not maintain a second implementation of
-  // totalisation, operand reconstruction, and SymFPU lowering.
-  if (fpEncodedEvaluationDepth == 0 &&
-      (is_FP_kind(k) || isFpIndexedArrayAccess(term)))
-  {
-    const ASTNode encoded =
-        requireFpEncodingContext().encodeForModel(term);
-    if (encoded == term && is_FP_kind(k))
-      FatalError("floating-point model encoding made no progress: ", term);
-
-    // The invariant this arm exists to hold: *a float's model value is its
-    // canonical carrier*. A float symbol's raw model bits are whichever NaN
-    // payload the SAT solver happened to pick, and the solve compared
-    // pack(unpack(x)); the two agree on everything except the payload, which
-    // is exactly what an array index distinguishes. So any node the encoding
-    // pass rewrote must be evaluated through that rewrite and never through
-    // its raw bits.
-    //
-    // Whether a rewrite was needed is the pass's answer to give, not ours:
-    // an access whose indexes are all already canonical comes back unchanged
-    // and falls through to the ordinary switch below.
-    if (encoded != term)
-    {
-      // The lowered DAG retains source-sort metadata on carrier reads and
-      // leaves. Keep the entire recursive evaluation in target mode so a
-      // nested read-over-write cannot mistake that metadata for a fresh
-      // source boundary and canonicalise it repeatedly.
-      const ScopedFpEncodedEvaluation evaluating(fpEncodedEvaluationDepth);
-      const ASTNode value =
-          TermToConstTermUsingModel(encoded, ArrayReadFlag);
-      if (term != value)
-        CounterExampleMap[term] = value;
-      return value;
-    }
-  }
-
-  ASTNode output;
-  switch (k)
-  {
-    case BVCONST:
-      output = term;
-      break;
-    case SYMBOL:
-    {
-      if (term.GetType() == ARRAY_TYPE)
-      {
-        return term;
-      }
-      else
-      {
-        // Has been simplified out and can take any value. A RoundingMode's
-        // 5-bit representation has 27 junk patterns, though, so complete that
-        // sort with a real value rather than the ordinary all-zero default.
-        output = bm->isRoundingModeSortedTerm(term)
-                     ? bm->CreateBVConst(
-                           5, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN)
-                     : bm->CreateZeroConst(term.GetValueWidth());
-      }
-      break;
-    }
-    case READ:
-    {
-      ASTNode arrName = term[0];
-      ASTNode index = term[1];
-      if (0 == arrName.GetIndexWidth())
-      {
-        FatalError("TermToConstTermUsingModel: "
-                   "array has 0 index width: ",
-                   arrName);
-      }
-
-      // An array symbol that equality propagation substituted away is
-      // defined by its (array-typed) entry in the counterexample map --
-      // the copied-in substitution map. The solve never bit-blasted a
-      // read of the vanished symbol, so no model entry can be keyed on
-      // it; read through the definition instead.
-      if (SYMBOL == arrName.GetKind())
-      {
-        ASTNodeMap::const_iterator sub = CounterExampleMap.find(arrName);
-        if (sub != CounterExampleMap.end() &&
-            ARRAY_TYPE == sub->second.GetType())
-        {
-          const ASTNode throughDefinition = bm->CreateTerm(
-              READ, term.GetValueWidth(), sub->second, index);
-          return TermToConstTermUsingModel(throughDefinition, ArrayReadFlag);
-        }
-      }
-
-      // With array equality active, every read in the solve is
-      // evaluated through its read-abstraction variable -- never by
-      // expanding its write chain against the model. The consistency
-      // checker, not the model-side expander, is the authority for
-      // these reads: the abstraction variable holds whatever the SAT
-      // solver assigned, and any disagreement with the array axioms is
-      // exactly what the checker turns into a lemma.
-      //
-      // An owned read with no recorded abstraction variable was
-      // simplified out of the formula before solving; it is evaluated
-      // from the certified array contents instead: the recorded
-      // observation at the concrete index if one exists at this level,
-      // else the concrete write-hit value, else recurse into the base
-      // array, defaulting to zero. This agrees with every recorded
-      // access whenever the checker certifies the candidate.
-      {
-        ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-        if (ext != NULL && ext->active() && ext->arrayGraphFrozen() &&
-            ext->ownsArray(arrName))
-        {
-          const ASTNode idxVal = TermToConstTermUsingModel(index, false);
-          NodeFactory* hf = bm->hashingNodeFactory;
-          ASTNode level = arrName;
-          ASTNode val;
-          while (true)
-          {
-            const ASTNode key = hf->CreateTerm(READ, level.GetValueWidth(),
-                                               level, idxVal);
-            ASTNodeMap::const_iterator cit = CounterExampleMap.find(key);
-            if (cit != CounterExampleMap.end())
-            {
-              val = cit->second;
-              if (BVCONST != val.GetKind())
-                val = TermToConstTermUsingModel(val, false);
-              break;
-            }
-            if (WRITE == level.GetKind())
-            {
-              const ASTNode writeIdx = TermToConstTermUsingModel(level[1],
-                                                                 false);
-              if (writeIdx == idxVal)
-              {
-                val = TermToConstTermUsingModel(level[2], false);
-                break;
-              }
-              level = level[0];
-              continue;
-            }
-            if (ITE == level.GetKind() && level.GetType() == ARRAY_TYPE)
-            {
-              const ASTNode cond = ComputeFormulaUsingModel(level[0]);
-              if (cond == ASTTrue)
-                level = level[1];
-              else if (cond == ASTFalse)
-                level = level[2];
-              else
-                FatalError("array-equality: an owned array if-then-else "
-                           "condition has no concrete model value",
-                           level[0]);
-              continue;
-            }
-            // base array with no observation
-            val = defaultCellValue(level);
-            break;
-          }
-          CounterExampleMap[term] = val;
-          return val;
-        }
-      }
-
-      if (WRITE == arrName.GetKind()) // READ over a WRITE
-      {
-        ASTNode wrtterm = Expand_ReadOverWrite_UsingModel(term, ArrayReadFlag);
-        if (wrtterm == term)
-        {
-          FatalError("TermToConstTermUsingModel: "
-                     "Read_Over_Write term must be expanded "
-                     "into an ITE",
-                     term);
-        }
-        ASTNode rtterm = TermToConstTermUsingModel(wrtterm, ArrayReadFlag);
-        assert(ArrayReadFlag || (BVCONST == rtterm.GetKind()));
-        return rtterm;
-      }
-      else if (ITE == arrName.GetKind()) // READ over an ITE
-      {
-        // The "then" and "else" branch are arrays.
-        ASTNode indexVal = TermToConstTermUsingModel(index, ArrayReadFlag);
-
-        ASTNode condcompute =
-            ComputeFormulaUsingModel(arrName[0]); // Get the truth value.
-        unsigned int wid = arrName.GetValueWidth();
-        if (ASTTrue == condcompute)
-        {
-          const ASTNode& result = TermToConstTermUsingModel(
-              bm->CreateTerm(READ, wid, arrName[1], indexVal), ArrayReadFlag);
-          assert(ArrayReadFlag || (BVCONST == result.GetKind()));
-          return result;
-        }
-        else if (ASTFalse == condcompute)
-        {
-          const ASTNode& result = TermToConstTermUsingModel(
-              bm->CreateTerm(READ, wid, arrName[2], indexVal), ArrayReadFlag);
-          assert(ArrayReadFlag || (BVCONST == result.GetKind()));
-          return result;
-        }
-        else
-        {
-          FatalError(" TermToConstTermUsingModel: termITE: "
-                     "cannot compute ITE conditional against model: ",
-                     term);
-        }
-      }
-
-      ASTNode modelentry;
-      if (CounterExampleMap.find(index) != CounterExampleMap.end())
-      {
-        // index has a const value in the CounterExampleMap. Copied out of the
-        // map for the reason given at the lookup at the top of this function.
-        const ASTNode indexEntry = CounterExampleMap[index];
-        ASTNode indexVal = TermToConstTermUsingModel(indexEntry, ArrayReadFlag);
-        modelentry =
-            bm->CreateTerm(READ, arrName.GetValueWidth(), arrName, indexVal);
-      }
-      else
-      {
-        // index does not have a const value in the
-        // CounterExampleMap. compute it.
-        ASTNode indexconstval = TermToConstTermUsingModel(index, ArrayReadFlag);
-        // update model with value of the index
-        // CounterExampleMap[index] = indexconstval;
-        modelentry = bm->CreateTerm(READ, arrName.GetValueWidth(), arrName,
-                                    indexconstval);
-      }
-      // modelentry is now an arrayread over a constant index
-      BVTypeCheck(modelentry);
-
-      // if a value exists in the CounterExampleMap then return it. Copied out
-      // of the map for the reason given at the lookup at the top of this
-      // function.
-      if (CounterExampleMap.find(modelentry) != CounterExampleMap.end())
-      {
-        const ASTNode modelentryValue = CounterExampleMap[modelentry];
-        output = TermToConstTermUsingModel(modelentryValue, ArrayReadFlag);
-      }
-      else if (ArrayReadFlag)
-      {
-        // return the array read over a constantindex
-        output = modelentry;
-      }
-      else if (bm->UserFlags.enable_array_equality)
-      {
-        // Has been simplified out, so any value will do -- but only one
-        // value agrees with the model that is published. With array
-        // equality enabled the model surface prints a total
-        // interpretation per array, and this is a cell of it that no
-        // observation covers, so it is the completion or nothing.
-        // Inventing something else makes evaluation disagree with every
-        // other reader: an array equality evaluates false through its
-        // lowering's reads while the printed arrays are identical, which
-        // is the disagreement the post-solve audit trips on -- and,
-        // unaudited, a (get-model) that falsifies the query it answered
-        // sat. Both of this arm's former answers were such an invention:
-        // all-ones for a bitvector cell the printer filled with zero,
-        // and RNE for a RoundingMode cell that ReadUsingModel and the
-        // checker were still completing with all-zero bits.
-        //
-        // Memoising the invented value instead cannot close that gap.
-        // Model queries run inside a scope that restores the
-        // counterexample map afterwards, so the entry is rolled back
-        // and the next reader invents the value again against a model
-        // that never recorded it. Agreeing with the completion the rest
-        // of the model already uses needs no bookkeeping at all.
-        //
-        // Gated on the option: with it off the counterexample map, and
-        // so vc_getCounterExampleArray, must stay exactly as before.
-        output = defaultCellValue(arrName);
-      }
-      else
-      {
-        // Has been simplified out and can take any value. Keep the historical
-        // all-one completion for ordinary bitvectors, but not for
-        // RoundingMode: 0b11111 is not one of that sort's five values and can
-        // make SymFPU exhibit a non-IEEE sixth rounding behaviour.
-        output = bm->isRoundingModeSortedTerm(modelentry)
-                     ? bm->CreateBVConst(
-                           5, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN)
-                     : bm->CreateMaxConst(modelentry.GetValueWidth());
-      }
-      break;
-    }
-    case ITE:
-    {
-      ASTNode condcompute = ComputeFormulaUsingModel(term[0]);
-      if (ASTTrue == condcompute)
-      {
-        output = TermToConstTermUsingModel(term[1], ArrayReadFlag);
-      }
-      else if (ASTFalse == condcompute)
-      {
-        output = TermToConstTermUsingModel(term[2], ArrayReadFlag);
-      }
-      else
-      {
-        FatalError(" TermToConstTermUsingModel: termITE: cannot "
-                   "compute ITE conditional against model: ",
-                   term);
-      }
-      break;
-    }
-    default:
-    {
-      const ASTChildren c = term.GetChildren();
-      ASTVec o;
-      o.reserve(c.size());
-      for (auto it = c.begin(), itend = c.end(); it != itend;
-           it++)
-      {
-        ASTNode ff = TermToConstTermUsingModel(*it, ArrayReadFlag);
-        // NonMemberBVConstEvaluator below needs every child to be a constant.
-        // With ArrayReadFlag set, a read with no value in the model comes back
-        // as a symbolic READ over the array (case 2 above) rather than a
-        // constant -- this happens for the unconstrained array that totalising
-        // introduces for an out-of-range to_ubv/to_sbv, reached here when the
-        // enclosing ITE selects the unspecified branch and it feeds an ordinary
-        // bit-vector operation. Its value is genuinely arbitrary, so resolve it
-        // to a concrete constant rather than hand a non-constant to the
-        // evaluator (which cannot read arrays and would abort on the array
-        // symbol).
-        if (BVCONST != ff.GetKind())
-          ff = TermToConstTermUsingModel(*it, false);
-        // A floating-point operand comes back as a bare bit-vector:
-        // TermToConstTermUsingModel strips the format off every result it
-        // returns. NonMemberBVConstEvaluator lowers through FloatBlast,
-        // which reads each operand's format off its source sort, so restore
-        // each float operand's own format here -- the same reattachment the
-        // FP-predicate arm of ComputeFormulaUsingModel makes before rebuilding
-        // a predicate. Non-float operands (bit-vectors, rounding modes) keep
-        // their bare form.
-        if (it->GetType() == FLOATINGPOINT_TYPE)
-          ff = FloatBlaster::withFormat(bm, ff, it->GetExpWidth(),
-                                        it->GetSigWidth());
-        o.push_back(ff);
-      }
-
-      output = NonMemberBVConstEvaluator(bm, k, o, term.GetValueWidth());
-      break;
-    }
-  }
-
-  assert(ArrayReadFlag || (BVCONST == output.GetKind()));
-
-  // when this flag is false, we should compute the arrayread to a
-  // constant. this constant is stored in the counter_example
-  // datastructure
-  // if (!ArrayReadFlag)
-  {
-    // Don't memoise a read as its own value. With ArrayReadFlag true, a read
-    // with no value in the model is returned unchanged (case 2 above) -- this
-    // happens for an unconstrained read, such as the array that totalising
-    // introduces for an out-of-range to_ubv/to_sbv. Caching term -> term would
-    // put the term in its own value slot, violating the invariant the lookups
-    // rely on: a later lookup then trips the "stored as-is" fatal error, or
-    // leaves the read unresolved and non-constant. Skipping the self-entry lets
-    // that later lookup fall through to the documented arbitrary completion.
-    if (term != output)
-      CounterExampleMap[term] = output;
-  }
-
-  // cerr << "Output to TermToConstTermUsingModel: " << output << endl;
-  return output;
+  return evaluate(EvalTerm, term, ArrayReadFlag);
 }
 
 // Expands read-over-write by evaluating (readIndex=writeIndex) for
@@ -707,313 +1374,15 @@ ASTNode
 AbsRefine_CounterExample::Expand_ReadOverWrite_UsingModel(const ASTNode& term,
                                                           bool arrayread_flag)
 {
-  if (READ != term.GetKind() || WRITE != term[0].GetKind())
-  {
-    FatalError("RemovesWrites: Input must be a READ over a WRITE", term);
-  }
-
-  ASTNode output;
-  ASTNodeMap::iterator it1;
-  if ((it1 = CounterExampleMap.find(term)) != CounterExampleMap.end())
-  {
-    // Copied out of the map for the reason given at the lookup at the top of
-    // TermToConstTermUsingModel_inner.
-    const ASTNode val = it1->second;
-    if (BVCONST != val.GetKind())
-    {
-      // recursion is fine here. There are two maps that are checked
-      // here. One is the substitutionmap. We garuntee that the value
-      // of a key in the substitutionmap is always a constant.
-      if (term == val)
-      {
-        FatalError("TermToConstTermUsingModel: The input term is "
-                   "stored as-is "
-                   "in the CounterExample: Not ok: ",
-                   term);
-      }
-      return TermToConstTermUsingModel(val, arrayread_flag);
-    }
-    else
-    {
-      return val;
-    }
-  }
-
-  ASTNode newRead = term;
-  const ASTNode readIndex = TermToConstTermUsingModel(newRead[1], false);
-  // iteratively expand read-over-write, and evaluate against the
-  // model at every iteration
-  ASTNode write = newRead[0];
-  do
-  {
-    ASTNode writeIndex = TermToConstTermUsingModel(write[1], false);
-
-    if (writeIndex == readIndex)
-    {
-      // found the write-value. return it
-      output = TermToConstTermUsingModel(write[2], false);
-      CounterExampleMap[term] = output;
-      return output;
-    }
-
-    write = write[0];
-  } while (WRITE == write.GetKind());
-
-  const unsigned int width = term.GetValueWidth();
-  newRead = bm->CreateTerm(READ, width, write, readIndex);
-  output = TermToConstTermUsingModel(newRead, arrayread_flag);
-
-  // memoize
-  CounterExampleMap[term] = output;
-  return output;
-} // Expand_ReadOverWrite_UsingModel()
+  return evaluate(EvalExpand, term, arrayread_flag);
+}
 
 /* FUNCTION: accepts a non-constant formula, and checks if the
  * formula is ASTTrue or ASTFalse w.r.t to a model
  */
 ASTNode AbsRefine_CounterExample::ComputeFormulaUsingModel(const ASTNode& form)
 {
-  const Kind k = form.GetKind();
-  if (!(is_Form_kind(k) && BOOLEAN_TYPE == form.GetType()))
-  {
-    FatalError(" ComputeConstFormUsingModel: "
-               "The input is a non-formula: ",
-               form);
-  }
-
-  // cerr << "Input to ComputeFormulaUsingModel:" << form << endl;
-  ASTNodeMap::const_iterator it1;
-  if ((it1 = ComputeFormulaMap.find(form)) != ComputeFormulaMap.end())
-  {
-    const ASTNode& res = it1->second;
-    if (ASTTrue == res || ASTFalse == res)
-    {
-      return res;
-    }
-    else
-    {
-      FatalError("ComputeFormulaUsingModel: "
-                 "The value of a formula must be TRUE or FALSE:",
-                 form);
-    }
-  }
-
-  // Unlike the term arm (TermToConstTermUsingModel), floating-point *predicates*
-  // are not routed through encodeForModel. Encoding the whole predicate and
-  // re-entering the evaluator runs the recursion at fpEncodedEvaluationDepth > 0,
-  // where the term arm's own encode step is switched off -- so any float operand
-  // reached inside the encoded predicate would fall through to the term switch's
-  // default. Instead the FP_* predicate cases below resolve each operand to a
-  // constant at depth 0 (where the term arm does encode floats correctly) and
-  // fold the predicate over those constants.
-
-  ASTNode output = ASTUndefined;
-  switch (k)
-  {
-    case TRUE:
-    case FALSE:
-      output = form;
-      break;
-    case SYMBOL:
-      if (BOOLEAN_TYPE != form.GetType())
-        FatalError(" ComputeFormulaUsingModel: "
-                   "Non-Boolean variables are not formulas",
-                   form);
-      if (CounterExampleMap.find(form) != CounterExampleMap.end())
-      {
-        ASTNode counterexample_val = CounterExampleMap[form];
-        if (!bm->VarSeenInTerm(form, counterexample_val))
-        {
-          output = ComputeFormulaUsingModel(counterexample_val);
-        }
-        else
-        {
-          output = counterexample_val;
-        }
-      }
-      else
-      {
-        // Has been simplified out. Can take any value.
-        output = ASTFalse;
-      }
-      break;
-    case ARRAY_EQ:
-    {
-      ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-      ASTNode lowered;
-      if (ext != NULL && ext->getCurrentLowering(form, lowered))
-      {
-        // This solve decided the equality; its lowering is the answer.
-        output = ComputeFormulaUsingModel(lowered);
-      }
-      else
-      {
-        // It did not: either the equality belongs to an earlier query,
-        // or lowering discarded it -- an equality nested in a conjunct
-        // that solving a write chain against its own base dropped as
-        // shadowed. There is no abstraction variable to consult, and
-        // the one that used to be consulted here had never been
-        // assigned, so it read false while the model gave the two
-        // arrays identical contents.
-        //
-        // Ask the model instead. It is the same model the caller is
-        // about to print, so the answer agrees with it by construction,
-        // which is the property the abstraction variable could not
-        // offer.
-        if (!arrayEqualityIsModelDecidable(form[0]) ||
-            !arrayEqualityIsModelDecidable(form[1]))
-          FatalError("array-equality: cannot evaluate an opaque equality "
-                     "over float-indexed arrays that was not reachable in "
-                     "the most recent solve",
-                     form);
-        output = ArraysEqualUsingModel(form[0], form[1]) ? ASTTrue : ASTFalse;
-      }
-      break;
-    }
-    case BOOLEXTRACT:
-    {
-      ASTNode t0 = TermToConstTermUsingModel(form[0]);
-      output = simp->BVConstEvaluator(bm->CreateNode(BOOLEXTRACT, t0, form[1]));
-      break;
-    }
-    case EQ:
-    case BVLT:
-    case BVLE:
-    case BVGT:
-    case BVGE:
-    case BVSLT:
-    case BVSLE:
-    case BVSGT:
-    case BVSGE:
-    case BVUADDO:
-    case BVSADDO:
-    case BVUMULO:
-    case BVSMULO:
-    case BVUSUBO:
-    case BVSSUBO:
-    {
-      ASTVec children;
-      children.reserve(form.Degree());
-
-      for (auto it = form.begin(), itend = form.end();
-           it != itend; it++)
-      {
-        children.push_back(TermToConstTermUsingModel(*it, false));
-      }
-
-      output = NonMemberBVConstEvaluator(bm, k, children, form.GetValueWidth());
-    }
-    break;
-
-    case NAND:
-    case NOR:
-    case NOT:
-    case AND:
-    case XOR:
-    case IFF:
-    case IMPLIES:
-    case OR:
-    {
-      ASTVec children;
-      children.reserve(form.Degree());
-
-      for (auto it = form.begin(), itend = form.end();
-           it != itend; it++)
-      {
-        children.push_back(ComputeFormulaUsingModel(*it));
-      }
-
-      output = NonMemberBVConstEvaluator(bm, k, children, form.GetValueWidth());
-    }
-    break;
-
-    case ITE:
-    {
-      ASTNode t0 = ComputeFormulaUsingModel(form[0]);
-      if (ASTTrue == t0)
-        output = ComputeFormulaUsingModel(form[1]);
-      else if (ASTFalse == t0)
-        output = ComputeFormulaUsingModel(form[2]);
-      else
-        FatalError("ComputeFormulaUsingModel: ITE: "
-                   "something is wrong with the formula: ",
-                   form);
-    }
-    break;
-    case FP_LEQ:
-    case FP_LT:
-    case FP_GEQ:
-    case FP_GT:
-    case FP_EQ:
-    case FP_ISNORMAL:
-    case FP_ISSUBNORMAL:
-    case FP_ISZERO:
-    case FP_ISINFINITE:
-    case FP_ISNAN:
-    case FP_ISNEGATIVE:
-    case FP_ISPOSITIVE:
-    case FP_SMT_EQ:
-    {
-      // Rebuild at the node's real arity: the comparisons are binary but the
-      // classification predicates are unary.
-      ASTVec operands;
-      operands.reserve(form.Degree());
-
-      for (unsigned int i = 0; i < form.Degree(); i++)
-      {
-        ASTNode simp(TermToConstTermUsingModel(form[i]));
-        // An operand must resolve to a constant, as in the float arm of
-        // TermToConstTermUsingModel: the read-tolerant flag is on inside the
-        // walk, so a float-element array read the solve never constrained
-        // comes back as the symbolic READ (case 2 there) rather than a
-        // value. Rebuilding the predicate over it is not evaluation -- the
-        // blaster would carry the read along, and the same-operand folds
-        // below can hand the bare READ back. The read is genuinely
-        // unconstrained here, so resolve it to a concrete value.
-        if (BVCONST != simp.GetKind())
-          simp = TermToConstTermUsingModel(form[i], false);
-        assert(simp.GetKind() == BVCONST);
-        operands.push_back(FloatBlaster::withFormat(
-            bm, simp, form[i].GetExpWidth(), form[i].GetSigWidth()));
-      }
-
-      ASTNode temp(bm->CreateNode(k, operands));
-
-      // Rebuilding through the simplifying factory may rewrite the predicate
-      // rather than return it: constant operands fold to true/false outright,
-      // and the same-operand rules fire here because interned constants
-      // compare pointer-equal -- fp.leq of a value with itself comes back as
-      // (not (fp.isNaN ...)). Whatever came back that is not this operation
-      // is a formula; evaluate it, never blast it.
-      if (temp.GetKind() != k)
-      {
-        output = ComputeFormulaUsingModel(temp);
-        break;
-      }
-
-      // One table, the same one the solver's lowering pass uses. temp's
-      // operands were re-stamped with their formats above, so it is a
-      // well-formed source node and its own sorts say what the formats are.
-      ASTNode blasted(FloatBlast::lowerOperation(bm, temp));
-
-      assert(blasted != temp);
-      assert(blasted != form);
-
-      output = ComputeFormulaUsingModel(blasted);
-      break;
-    }
-    default:
-      cerr << _kind_names[k];
-      FatalError(" ComputeFormulaUsingModel: "
-                 "the kind has not been implemented",
-                 ASTUndefined);
-      break;
-  }
-
-  assert(ASTUndefined != output);
-  assert(output.isConstant());
-  ComputeFormulaMap[form] = output;
-  return output;
+  return evaluate(EvalFormula, form, true);
 }
 
 void AbsRefine_CounterExample::CheckCounterExample(
@@ -1280,9 +1649,9 @@ bool AbsRefine_CounterExample::ArraysEqualUsingModel(const ASTNode& left,
       encode ? requireFpEncodingContext().encodeForModel(left) : left;
   const ASTNode lowered_right =
       encode ? requireFpEncodingContext().encodeForModel(right) : right;
-  std::unique_ptr<ScopedFpEncodedEvaluation> evaluating;
+  ScopedFpEncodedEvaluation evaluating;
   if (encode)
-    evaluating.reset(new ScopedFpEncodedEvaluation(fpEncodedEvaluationDepth));
+    evaluating.activate(fpEncodedEvaluationDepth);
   if (lowered_left == lowered_right)
     return true;
 

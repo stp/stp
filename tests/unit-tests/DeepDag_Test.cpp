@@ -245,6 +245,8 @@ size_t dagDepth(const ASTNode& top)
 
   return result;
 }
+#endif // STP_ENABLE_FLOATING_POINT
+
 
 // A chain of if-then-else terms, nested in the else-branch: a boolean symbol
 // the model says nothing about takes false, so evaluating one descends the
@@ -258,6 +260,7 @@ ASTNode iteChain(Context& c, unsigned depth)
     t = c.hf->CreateTerm(ITE, 8, cond, zero, t);
   return t;
 }
+#ifdef STP_ENABLE_FLOATING_POINT
 
 // A chain of stores over one array symbol, whose elements are `width` bits.
 ASTNode storeChain(Context& c, unsigned depth, const ASTNode& base,
@@ -1470,6 +1473,92 @@ bool transformFormulaSpineOk(Context& c, unsigned depth)
   c.roots.push_back(result);
   return result.GetKind() != UNDEFINED;
 }
+
+// Counterexample evaluation. TermToConstTermUsingModel and
+// ComputeFormulaUsingModel evaluate the ORIGINAL formula against the model a
+// sat answer produced, and reached each other once per level of it, so a term
+// nested deeply enough took the stack with them. Two frames per level: a
+// chain of 30,000 selects died here at the ordinary 8 MiB, and it was the
+// last thing on that input's path that did.
+//
+// Neither generic tool fits, which is why it is a state machine. The term
+// side has no memo to prime -- only CounterExampleMap, written for array
+// reads and float encodings -- and a memo could not be keyed on the node
+// alone anyway, since the answer depends on ArrayReadFlag and on whether the
+// walk is already inside an encoded evaluation. And both sides evaluate an
+// if-then-else's condition and then only the branch it leaves alive, where a
+// dropped branch is not merely wasted work: it can be genuinely unevaluable
+// against the model, and both call FatalError when it is. So priming would
+// turn a working query into an abort.
+//
+// No solve is needed to reach it: with an empty model every symbol takes its
+// default and the walk still descends the whole term.
+bool counterExampleEvalOk(Context& c, unsigned depth)
+{
+  const ASTNode a = c.mgr.CreateSymbol("A", 8, 8);
+  ASTNode t = c.mgr.CreateSymbol("i", 0, 8);
+  for (unsigned i = 0; i < depth; i++)
+    t = c.hf->CreateTerm(READ, 8, a, t);
+
+  const ASTNode f = c.formula(t);
+  c.roots.push_back(f);
+
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  ArrayTransformer at(&c.mgr, &simp);
+  AbsRefine_CounterExample ce(&c.mgr, &simp, &at);
+
+  return ce.ComputeFormulaUsingModel(f).isConstant();
+}
+
+// The formula side's own spine, which is the arm nearly every query reaches:
+// a connective evaluates each operand and rebuilds over the answers.
+bool counterExampleFormulaOk(Context& c, unsigned depth)
+{
+  ASTNode f = c.hf->CreateNode(EQ, c.mgr.CreateSymbol("t0", 0, 8),
+                               c.mgr.CreateZeroConst(8));
+  for (unsigned i = 1; i < depth; i++)
+  {
+    const std::string nm = "t" + std::to_string(i);
+    f = c.hf->CreateNode(
+        NOT, c.hf->CreateNode(
+                 AND, c.hf->CreateNode(EQ, c.mgr.CreateSymbol(nm.c_str(), 0, 8),
+                                       c.mgr.CreateZeroConst(8)),
+                 f));
+  }
+  c.roots.push_back(f);
+
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  ArrayTransformer at(&c.mgr, &simp);
+  AbsRefine_CounterExample ce(&c.mgr, &simp, &at);
+
+  return ce.ComputeFormulaUsingModel(f).isConstant();
+}
+
+// A chain of if-then-else terms, which is the shape the two functions are
+// mutually recursive for: each level evaluates a condition as a formula and
+// then descends into the branch it leaves alive as a term.
+//
+// This case wanted the float format of each level derived as the chain was
+// built, because asking a nested if-then-else its type used to overflow
+// deriving that format before this walk got a turn. deep_fp_format_ite below
+// is that recursion, converted and tested on its own, so the chain is left
+// cold here.
+bool counterExampleTermIteOk(Context& c, unsigned depth)
+{
+  const ASTNode t = iteChain(c, depth);
+  c.roots.push_back(t);
+
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  ArrayTransformer at(&c.mgr, &simp);
+  AbsRefine_CounterExample ce(&c.mgr, &simp, &at);
+
+  // ModelValueOfTerm asks with the read-tolerant flag off, so every level has
+  // to come back a constant.
+  return ce.ModelValueOfTerm(t).GetKind() == BVCONST;
+}
 #ifdef STP_ENABLE_FLOATING_POINT
 
 /* A node's floating-point format and its source sort are both derived from
@@ -2040,6 +2129,84 @@ TEST(DeepDag, mutable_dag_shared_children_rebuild_in_operand_order)
   EXPECT_TRUE(mutableDagSharedRebuildOk(c));
 }
 
+TEST(DeepDag, counterexample_prechecked_heads_preserve_model_values)
+{
+  Context c;
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  ArrayTransformer transformer(&c.mgr, &simp);
+  AbsRefine_CounterExample ce(&c.mgr, &simp, &transformer);
+
+  const ASTNode zero = c.mgr.CreateZeroConst(8);
+  const ASTNode one = c.mgr.CreateOneConst(8);
+
+  // Constants and Boolean constants are answered by the job head itself.
+  EXPECT_EQ(zero, ce.ModelValueOfTerm(zero));
+  EXPECT_EQ(c.mgr.ASTTrue, ce.ModelValueOfFormula(c.mgr.ASTTrue));
+  EXPECT_EQ(c.mgr.ASTFalse, ce.ModelValueOfFormula(c.mgr.ASTFalse));
+
+  // A recorded non-constant still needs a frame, but the map lookup that
+  // discovered its image must carry through to that frame rather than being
+  // repeated when it starts.
+  const ASTNode x = c.mgr.CreateSymbol("ce-head-x", 0, 8);
+  const ASTNode y = c.mgr.CreateSymbol("ce-head-y", 0, 8);
+  ce.InsertIntoCounterExampleMap(x, y);
+  ce.InsertIntoCounterExampleMap(y, one);
+  EXPECT_EQ(one, ce.ModelValueOfTerm(x));
+
+  const ASTNode p = c.mgr.CreateSymbol("ce-head-p", 0, 0);
+  ce.InsertIntoCounterExampleMap(p, c.mgr.ASTTrue);
+  EXPECT_EQ(c.mgr.ASTTrue, ce.ModelValueOfFormula(p));
+  // The second question is a ComputeFormulaMap root hit.
+  EXPECT_EQ(c.mgr.ASTTrue, ce.ModelValueOfFormula(p));
+
+  // Exercise the corresponding prechecked image path in the read-over-write
+  // expander, not merely the term and formula jobs.
+  const ASTNode array = c.mgr.CreateSymbol("ce-head-array", 8, 8);
+  const ASTNode write = c.hf->CreateArrayTerm(WRITE, 8, 8, array, zero, one);
+  const ASTNode read = c.hf->CreateTerm(READ, 8, write, zero);
+  const ASTNode recorded = c.mgr.CreateSymbol("ce-head-read", 0, 8);
+  ce.InsertIntoCounterExampleMap(read, recorded);
+  ce.InsertIntoCounterExampleMap(recorded, one);
+  EXPECT_EQ(one, ce.Expand_ReadOverWrite_UsingModel(read, false));
+}
+
+TEST(DeepDag, counterexample_consumes_ready_descendants_in_place)
+{
+  Context c;
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  ArrayTransformer transformer(&c.mgr, &simp);
+  AbsRefine_CounterExample ce(&c.mgr, &simp, &transformer);
+
+  const ASTNode zero = c.mgr.CreateZeroConst(8);
+  const ASTNode one = c.mgr.CreateOneConst(8);
+  const ASTNode x = c.mgr.CreateSymbol("ce-ready-x", 0, 8);
+  const ASTNode y = c.mgr.CreateSymbol("ce-ready-y", 0, 8);
+  ce.InsertIntoCounterExampleMap(x, one);
+  ce.InsertIntoCounterExampleMap(y, zero);
+
+  // Both term operands are immediate model-map hits. The containing formula
+  // then consumes the completed term without suspending either job.
+  const ASTNode sum = c.hf->CreateTerm(BVPLUS, 8, x, y);
+  const ASTNode equality = c.hf->CreateNode(EQ, sum, one);
+  EXPECT_EQ(c.mgr.ASTTrue, ce.ModelValueOfFormula(equality));
+
+  // A formula memo hit follows the same continuation path.
+  const ASTNode p = c.mgr.CreateSymbol("ce-ready-p", 0, 0);
+  ce.InsertIntoCounterExampleMap(p, c.mgr.ASTTrue);
+  EXPECT_EQ(c.mgr.ASTTrue, ce.ModelValueOfFormula(p));
+  EXPECT_EQ(c.mgr.ASTTrue,
+            ce.ModelValueOfFormula(c.hf->CreateNode(AND, p, p)));
+
+  // The read-over-write expander consumes constant indexes and the selected
+  // value directly as well.
+  const ASTNode array = c.mgr.CreateSymbol("ce-ready-array", 8, 8);
+  const ASTNode write = c.hf->CreateArrayTerm(WRITE, 8, 8, array, zero, one);
+  const ASTNode read = c.hf->CreateTerm(READ, 8, write, zero);
+  EXPECT_EQ(one, ce.Expand_ReadOverWrite_UsingModel(read, false));
+}
+
 TEST(DeepDag, array_transformer_job_specific_operands_preserve_paths)
 {
   Context c;
@@ -2295,6 +2462,9 @@ TEST(DeepDag, deep_fp_totalise)        { EXPECT_STACK_SAFE(fpTotaliseChainOk, 20
 #endif // STP_ENABLE_FLOATING_POINT
 
 TEST(DeepDag, deep_printer_lisp)       { EXPECT_STACK_SAFE(printerLispOk, 20000); }
+TEST(DeepDag, deep_counterexample_eval) { EXPECT_STACK_SAFE(counterExampleEvalOk, 20000); }
+TEST(DeepDag, deep_counterexample_formula) { EXPECT_STACK_SAFE(counterExampleFormulaOk, 20000); }
+TEST(DeepDag, deep_counterexample_term_ite) { EXPECT_STACK_SAFE(counterExampleTermIteOk, 20000); }
 #ifdef STP_ENABLE_FLOATING_POINT
 TEST(DeepDag, deep_fp_format_ite)      { EXPECT_STACK_SAFE(fpFormatIteChainOk, 20000); }
 TEST(DeepDag, deep_fp_format_store)    { EXPECT_STACK_SAFE(fpFormatStoreChainOk, 20000); }
@@ -2303,4 +2473,5 @@ TEST(DeepDag, deep_source_sort_store)  { EXPECT_STACK_SAFE(sourceSortStoreChainO
 #endif // STP_ENABLE_FLOATING_POINT
 
 TEST(DeepDag, DISABLED_deep_printer_smtlib2)    { EXPECT_STACK_SAFE(printerSMTLIB2Ok, 20000); }
+
 } // namespace
