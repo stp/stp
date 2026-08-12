@@ -2207,6 +2207,77 @@ TEST(DeepDag, counterexample_consumes_ready_descendants_in_place)
   EXPECT_EQ(one, ce.Expand_ReadOverWrite_UsingModel(read, false));
 }
 
+TEST(DeepDag, counterexample_continuation_paths_preserve_model_values)
+{
+  Context c;
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  ArrayTransformer transformer(&c.mgr, &simp);
+  AbsRefine_CounterExample ce(&c.mgr, &simp, &transformer);
+
+  const ASTNode zero = c.mgr.CreateZeroConst(8);
+  const ASTNode one = c.mgr.CreateOneConst(8);
+  const ASTNode two = c.mgr.CreateBVConst(8, 2);
+  const ASTNode three = c.mgr.CreateBVConst(8, 3);
+  const ASTNode maximum = c.mgr.CreateMaxConst(8);
+  const ASTNode x = c.mgr.CreateSymbol("ce-path-x", 0, 8);
+  const ASTNode y = c.mgr.CreateSymbol("ce-path-y", 0, 8);
+  const ASTNode p = c.mgr.CreateSymbol("ce-path-p", 0, 0);
+  const ASTNode q = c.mgr.CreateSymbol("ce-path-q", 0, 0);
+  ce.InsertIntoCounterExampleMap(x, one);
+  ce.InsertIntoCounterExampleMap(y, two);
+  ce.InsertIntoCounterExampleMap(p, c.mgr.ASTTrue);
+  ce.InsertIntoCounterExampleMap(q, c.mgr.ASTFalse);
+
+  // Formula continuations: a term operand, formula operands, Boolean
+  // extraction, and conditionally evaluating just one ITE branch.
+  const ASTNode sum = c.hf->CreateTerm(BVPLUS, 8, x, y);
+  EXPECT_EQ(c.mgr.ASTTrue,
+            ce.ModelValueOfFormula(c.hf->CreateNode(EQ, sum, three)));
+  EXPECT_EQ(c.mgr.ASTTrue, ce.ModelValueOfFormula(c.hf->CreateNode(
+                               AND, p, c.hf->CreateNode(NOT, q))));
+  EXPECT_EQ(c.mgr.ASTTrue, ce.ModelValueOfFormula(c.hf->CreateNode(
+                               BOOLEXTRACT, x, c.mgr.CreateBVConst(32, 0))));
+  EXPECT_EQ(c.mgr.ASTFalse,
+            ce.ModelValueOfFormula(c.hf->CreateNode(ITE, p, q, c.mgr.ASTTrue)));
+
+  // Term continuations: ordinary operands and a selected ITE branch.
+  EXPECT_EQ(three, ce.ModelValueOfTerm(sum));
+  EXPECT_EQ(one, ce.ModelValueOfTerm(c.hf->CreateTerm(ITE, 8, p, x, y)));
+
+  const ASTNode base = c.mgr.CreateSymbol("ce-path-array", 8, 8);
+  const ASTNode other = c.mgr.CreateSymbol("ce-path-other", 8, 8);
+  const ASTNode symbolicIndex = c.mgr.CreateSymbol("ce-path-index", 0, 8);
+  const ASTNode plainRead = c.hf->CreateTerm(READ, 8, base, symbolicIndex);
+
+  // The formerly uncovered completion path: a read requested as a concrete
+  // value, with array equality disabled and no model entry, is all ones.
+  c.mgr.UserFlags.enable_array_equality = false;
+  EXPECT_EQ(maximum, ce.ModelValueOfTerm(plainRead));
+
+  // Expansion resumes both when a write hits and when it misses and pushes
+  // the read into the base array.
+  const ASTNode write = c.hf->CreateArrayTerm(WRITE, 8, 8, base, zero, one);
+  EXPECT_EQ(one, ce.Expand_ReadOverWrite_UsingModel(
+                     c.hf->CreateTerm(READ, 8, write, zero), false));
+  EXPECT_EQ(maximum, ce.Expand_ReadOverWrite_UsingModel(
+                         c.hf->CreateTerm(READ, 8, write, two), false));
+
+  // A read over an array ITE keeps its evaluated index while the condition
+  // and selected read are evaluated below it.
+  const ASTNode otherAtZero = c.mgr.CreateTerm(READ, 8, other, zero);
+  ce.InsertIntoCounterExampleMap(otherAtZero, two);
+  const ASTNode arrayChoice = c.hf->CreateArrayTerm(ITE, 8, 8, q, base, other);
+  EXPECT_EQ(two,
+            ce.ModelValueOfTerm(c.hf->CreateTerm(READ, 8, arrayChoice, zero)));
+
+  // Equality propagation can leave an array symbol as an alias for an array
+  // term. The definition continuation must evaluate the read through it.
+  const ASTNode alias = c.mgr.CreateSymbol("ce-path-alias", 8, 8);
+  ce.InsertIntoCounterExampleMap(alias, write);
+  EXPECT_EQ(one, ce.ModelValueOfTerm(c.hf->CreateTerm(READ, 8, alias, zero)));
+}
+
 TEST(DeepDag, array_transformer_job_specific_operands_preserve_paths)
 {
   Context c;
@@ -2301,6 +2372,59 @@ TEST(DeepDag, array_transformer_read_state_survives_nested_arena_growth)
   ASSERT_EQ(1U, transformer.arrayToIndexToRead.count(elsArray));
   EXPECT_EQ(1U, transformer.arrayToIndexToRead.at(thnArray).count(index));
   EXPECT_EQ(1U, transformer.arrayToIndexToRead.at(elsArray).count(index));
+}
+
+TEST(DeepDag, array_transformer_selected_and_write_continuations)
+{
+  Context c;
+  const ASTNode zero = c.mgr.CreateZeroConst(8);
+  const ASTNode one = c.mgr.CreateOneConst(8);
+  const ASTNode two = c.mgr.CreateBVConst(8, 2);
+  const ASTNode base = c.mgr.CreateSymbol("transform-path-base", 8, 8);
+  const ASTNode dropped = c.mgr.CreateSymbol("transform-path-dropped", 8, 8);
+  const ASTNode write = c.hf->CreateArrayTerm(WRITE, 8, 8, base, zero, one);
+  const ASTNode writeHit = c.hf->CreateTerm(READ, 8, write, zero);
+  const ASTNode writeMiss = c.hf->CreateTerm(READ, 8, write, two);
+  const ASTNode baseRead = c.hf->CreateTerm(READ, 8, base, zero);
+  const ASTNode droppedRead = c.hf->CreateTerm(READ, 8, dropped, zero);
+
+  // Both term ITE and read-over-array-ITE should transform only the branch
+  // selected by a constant condition. The write cases exercise both the
+  // direct hit and the read pushed into the base array after a miss.
+  const ASTNode termChoice =
+      c.hf->CreateTerm(ITE, 8, c.mgr.ASTTrue, baseRead, droppedRead);
+  const ASTNode arrayChoice =
+      c.hf->CreateArrayTerm(ITE, 8, 8, c.mgr.ASTTrue, base, dropped);
+  const ASTNode arrayChoiceRead = c.hf->CreateTerm(READ, 8, arrayChoice, zero);
+  const ASTNode input =
+      c.hf->CreateNode(AND, ASTVec{c.hf->CreateNode(EQ, writeHit, one),
+                                   c.hf->CreateNode(EQ, writeMiss, two),
+                                   c.hf->CreateNode(EQ, termChoice, one),
+                                   c.hf->CreateNode(EQ, arrayChoiceRead, one)});
+
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  ArrayTransformer transformer(&c.mgr, &simp);
+  const ASTNode result = transformer.TransformFormula_TopLevel(input);
+
+  bool sawRead = false;
+  ASTNodeSet visited;
+  ASTVec pending{result};
+  while (!pending.empty())
+  {
+    const ASTNode n = pending.back();
+    pending.pop_back();
+    if (!visited.insert(n).second)
+      continue;
+    sawRead |= n.GetKind() == READ;
+    pending.insert(pending.end(), n.begin(), n.end());
+  }
+
+  EXPECT_FALSE(sawRead);
+  EXPECT_EQ(0U, transformer.arrayToIndexToRead.count(dropped));
+  ASSERT_EQ(1U, transformer.arrayToIndexToRead.count(base));
+  EXPECT_EQ(1U, transformer.arrayToIndexToRead.at(base).count(zero));
+  EXPECT_EQ(1U, transformer.arrayToIndexToRead.at(base).count(two));
 }
 
 TEST(DeepDag, array_transformer_root_fast_paths_preserve_leaf_formulas)

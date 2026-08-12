@@ -771,9 +771,86 @@ ASTNode Simplifier::SimplifyFormula(const ASTNode& b, bool pushNeg)
   return simplifyNode(b, pushNeg, SimplifyJob::Formula);
 }
 
-ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
-                                 const SimplifyJob rootJob)
+class Simplifier::SimplifyDriver
 {
+  Simplifier& owner;
+  NodeFactory* const nf;
+  STPMgr* const _bm;
+  ASTNode& ASTTrue;
+  ASTNode& ASTFalse;
+  ASTNode& ASTUndefined;
+
+  bool formulaShortcut(const ASTNode& b, const bool pushNeg, ASTNode& a,
+                       ASTNode& out)
+  {
+    return owner.formulaShortcut(b, pushNeg, a, out);
+  }
+
+  bool CheckSimplifyMap(const ASTNode& key, ASTNode& output, const bool pushNeg)
+  {
+    return owner.CheckSimplifyMap(key, output, pushNeg);
+  }
+
+  void UpdateSimplifyMap(const ASTNode& key, const ASTNode& value,
+                         const bool pushNeg)
+  {
+    owner.UpdateSimplifyMap(key, value, pushNeg);
+  }
+
+  bool InsideSubstitutionMap(const ASTNode& key, ASTNode& output)
+  {
+    return owner.InsideSubstitutionMap(key, output);
+  }
+
+  ASTNode ITEOpt_InEqs(const ASTNode& input, ASTNode& conditionToNegate)
+  {
+    return owner.ITEOpt_InEqs(input, conditionToNegate);
+  }
+
+  ASTNode LhsMinusRhsTerm(const ASTNode& equality,
+                          const ASTNode& simplifiedNegatedRhs)
+  {
+    return owner.LhsMinusRhsTerm(equality, simplifiedNegatedRhs);
+  }
+
+  ASTNode CreateSimplifiedEQ(const ASTNode& left, const ASTNode& right)
+  {
+    return owner.CreateSimplifiedEQ(left, right);
+  }
+
+  ASTNode CreateSimplifiedINEQ(const Kind kind, const ASTNode& left,
+                               const ASTNode& right, const bool pushNeg)
+  {
+    return owner.CreateSimplifiedINEQ(kind, left, right, pushNeg);
+  }
+
+  ASTNode CreateSimplifiedTermITE(const ASTNode& condition,
+                                  const ASTNode& thenValue,
+                                  const ASTNode& elseValue)
+  {
+    return owner.CreateSimplifiedTermITE(condition, thenValue, elseValue);
+  }
+
+  ASTNode BVConstEvaluator(const ASTNode& node)
+  {
+    return owner.BVConstEvaluator(node);
+  }
+
+  ASTNode PullUpITE(const ASTNode& node) { return owner.PullUpITE(node); }
+
+  bool hasBeenSimplified(const ASTNode& node)
+  {
+    return owner.hasBeenSimplified(node);
+  }
+
+  ASTNode simplify_term_switch(const ASTNode& actualInput, ASTNode& input,
+                               ASTNode& output, const Kind kind,
+                               const unsigned valueWidth)
+  {
+    return owner.simplify_term_switch(actualInput, input, output, kind,
+                                      valueWidth);
+  }
+
   // What one node is part-way through. `b` is the node as it arrived and `a`
   // as PullUpITE left it; both are recorded against the answer, as
   // SimplifyFormula and simplifyNonAndOr each did.
@@ -798,9 +875,10 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
   //     default              SimplifyAtomicFormula
   //
   // An arm reads the same way as the function did if `finish` is read as its
-  // `return`, and `want` as the call it made just above one. Nothing else of
-  // those functions moved: the head each shared is formulaShortcut plus the
-  // map test in Frame::Start, and the tail each shared is `finish`.
+  // `return`, and `requestFormula` as the call it made just above one. Nothing
+  // else of those functions moved: the head each shared is formulaShortcut
+  // plus the map test before a frame is pushed, and the tail each shared is
+  // `finish`.
   struct Frame
   {
     enum Job : uint8_t
@@ -810,55 +888,61 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
       TermJob,
       ArrayJob
     };
-    enum Phase : uint8_t
+
+    // A resume point belongs to exactly one job. Keeping these as distinct
+    // types makes it impossible to suspend (say) a term frame at a formula
+    // continuation by mistake.
+    enum class FormulaPhase : uint8_t
     {
       Start,
-      PrecheckedStart,
-      AndOrOperand, // AND/OR: the operand at `i`
-      NotBody,      // NOT: whatever is under the run of NOTs
-      XorOperand,   // XOR: the operand at `i`
-      BinaryLeft,   // NAND, NOR, IMPLIES: the first operand
-      BinaryRight,  // ... and the second
-      IffRight,     // IFF: the second operand, which it simplifies first
-      IffLeft,      // ... then the first
-      IffFold,      // ... then one of the two again, negated
-      IteCond,      // ITE: the condition
-      IteThen,      // ... the then-branch
-      IteElse,      // ... the else-branch
-      IteFold,       // ... ITE(c, false, true): the condition again, negated
-      FormulaAtomic,
-
-      AtomicLeft,
-      AtomicRight,
-      AtomicBoolExtract,
-      AtomicFpOperand,
-      AtomicEqNegRhs,
-      AtomicEqCombined,
-      AtomicEqIteCondition,
-
-      TermSubstitutionPrechecked,
-      TermSubstitution,
-      TermOperand,
-      TermPulled,
-      TermRetry,
-      TermOutput,
-      TermReadArray,
-
-      ArrayCond,
-      ArrayThen,
-      ArrayElse,
-      ArrayBase,
-      ArrayIndex,
-      ArrayValue
+      AfterAndOrOperand,
+      AfterNotBody,
+      AfterXorOperand,
+      AfterBinaryLeft,
+      AfterBinaryRight,
+      AfterIffRight,
+      AfterIffLeft,
+      AfterIffFold,
+      AfterIteCondition,
+      AfterIteThen,
+      AfterIteElse,
+      AfterIteFold,
+      AfterAtomic
     };
 
-    struct Init
+    enum class AtomicPhase : uint8_t
     {
-      Job job;
-      ASTNode b;
-      ASTNode a;
-      bool pushNeg;
-      Phase phase;
+      Prepared,
+      AfterLeftOperand,
+      AfterRightOperand,
+      AfterBoolExtract,
+      AfterFpOperand,
+      AfterNegatedEqualityRhs,
+      AfterCombinedEquality,
+      AfterIteCondition
+    };
+
+    enum class TermPhase : uint8_t
+    {
+      Prepared,
+      PreparedSubstitution,
+      AfterSubstitution,
+      AfterOperand,
+      AfterPullUpIte,
+      AfterRetry,
+      AfterOutput,
+      AfterReadArray
+    };
+
+    enum class ArrayPhase : uint8_t
+    {
+      Prepared,
+      AfterCondition,
+      AfterThen,
+      AfterElse,
+      AfterBase,
+      AfterIndex,
+      AfterValue
     };
 
     // Put the reference-counted and aligned state first. The scalar state is
@@ -891,15 +975,61 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
     };
 
     Job job = FormulaJob;
-    Phase phase = Start;
+    union
+    {
+      FormulaPhase formulaPhase;
+      AtomicPhase atomicPhase;
+      TermPhase termPhase;
+      ArrayPhase arrayPhase;
+    };
     bool pushNeg = false;
 
-    Frame() : outKind(UNDEFINED) {}
+    Frame() : outKind(UNDEFINED), formulaPhase(FormulaPhase::Start) {}
 
-    explicit Frame(Init&& init)
-        : b(std::move(init.b)), a(std::move(init.a)), outKind(UNDEFINED),
-          job(init.job), phase(init.phase), pushNeg(init.pushNeg)
+    Frame(ASTNode input, ASTNode dispatch, const bool neg,
+          const FormulaPhase phase)
+        : b(std::move(input)), a(std::move(dispatch)), outKind(UNDEFINED),
+          job(FormulaJob), formulaPhase(phase), pushNeg(neg)
     {
+    }
+
+    Frame(ASTNode input, const bool neg, const AtomicPhase phase)
+        : b(std::move(input)), outKind(UNDEFINED), job(AtomicJob),
+          atomicPhase(phase), pushNeg(neg)
+    {
+    }
+
+    Frame(ASTNode input, const TermPhase phase)
+        : b(std::move(input)), outKind(UNDEFINED), job(TermJob),
+          termPhase(phase)
+    {
+    }
+
+    Frame(ASTNode input, const ArrayPhase phase)
+        : b(std::move(input)), outKind(UNDEFINED), job(ArrayJob),
+          arrayPhase(phase)
+    {
+    }
+
+    void resumeAt(const FormulaPhase phase)
+    {
+      assert(job == FormulaJob);
+      formulaPhase = phase;
+    }
+    void resumeAt(const AtomicPhase phase)
+    {
+      assert(job == AtomicJob);
+      atomicPhase = phase;
+    }
+    void resumeAt(const TermPhase phase)
+    {
+      assert(job == TermJob);
+      termPhase = phase;
+    }
+    void resumeAt(const ArrayPhase phase)
+    {
+      assert(job == ArrayJob);
+      arrayPhase = phase;
     }
   };
 
@@ -907,11 +1037,21 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
                 "simplifier continuation frame unexpectedly grew");
 
   ASTNode result;
+  std::vector<Frame> stack;
+
+  enum class StepResult
+  {
+    Finished,
+    Pushed,
+    Redispatch,
+    Yield
+  };
 
   // The head of SimplifyFormula: the answers it gives before dispatching to
   // an arm at all. `a` is left holding the node PullUpITE produced, which is
   // what the arm runs on. True when `result` is the answer.
-  auto head = [&](const ASTNode& n, const bool neg, ASTNode& a) -> bool {
+  bool prepareFormula(const ASTNode& n, const bool neg, ASTNode& a)
+  {
     ASTNode out;
     if (formulaShortcut(n, neg, a, out))
     {
@@ -931,75 +1071,7 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
       return true;
     }
     return false;
-  };
-
-  // Answer root-level leaves and memo hits before constructing the deque.
-  // A deque may allocate initial storage in its constructor (libstdc++ does),
-  // so returning after the first push can still make every shallow call pay
-  // for a traversal worklist it never used.
-  Frame top;
-  top.b = b;
-  top.pushNeg = pushNeg;
-  if (rootJob == SimplifyJob::Formula)
-  {
-    top.job = Frame::FormulaJob;
-    if (head(b, pushNeg, top.a))
-      return result;
   }
-  else if (rootJob == SimplifyJob::Term)
-  {
-    assert(_bm->UserFlags.optimize_flag);
-    top.job = Frame::TermJob;
-
-    // A root substitution frame only returned the answer from its image and
-    // deliberately did not memoise the substituted key. Follow those
-    // transparent frames here, applying the same constant/substitution/memo
-    // head as `want`, until a real term frame is needed.
-    ASTNode root = b;
-    ASTNode substitutionImage;
-    while (true)
-    {
-      if (root.isConstant())
-        return root;
-      if (InsideSubstitutionMap(root, substitutionImage))
-      {
-        root = substitutionImage;
-        continue;
-      }
-      if (CheckSimplifyMap(root, result, false))
-        return result;
-      break;
-    }
-
-    top.b = root;
-    top.phase = Frame::PrecheckedStart;
-  }
-  else
-  {
-    assert(b.GetIndexWidth() > 0);
-    top.job = Frame::ArrayJob;
-    if (CheckSimplifyMap(b, result, false))
-      return result;
-    if (b.GetKind() == SYMBOL)
-      return b;
-    top.phase = Frame::PrecheckedStart;
-  }
-
-  // Keep shallow walks in one contiguous allocation. `want` is the only
-  // operation that can grow the vector, and every caller returns from its
-  // step immediately afterwards, so no Frame reference survives a move.
-  // Unlike deque, vector also avoids allocating a block plus a block map for
-  // the overwhelmingly common one- and two-frame walks.
-  std::vector<Frame> stack;
-  stack.push_back(std::move(top));
-
-  enum class StepResult
-  {
-    Finished,
-    Pushed,
-    Redispatch,
-    Yield
-  };
 
   // Ask for the simplification of `n` under `neg`, and set this frame's
   // continuation to `resume`.
@@ -1013,29 +1085,25 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
   // `n` can name storage in the current frame (for example f.output or
   // f.t0). Construct the child before growing the vector so it owns those
   // references before a reallocation can move the parent.
-  auto pushChild = [&](const Frame::Job job, const ASTNode& n, ASTNode a,
-                       const bool neg,
-                       const Frame::Phase start) -> StepResult {
-    Frame::Init child{job, n, std::move(a), neg, start};
-    stack.emplace_back(std::move(child));
-    return StepResult::Pushed;
-  };
-
   // Keep the four child heads separate. Their job is known at every request
   // site; making it a run-time argument forced this hot path through a
   // four-way discriminator even though only one arm could ever apply.
-  auto want = [&](Frame& f, const Frame::Phase resume, const ASTNode& n,
-                  const bool neg) -> StepResult {
-    f.phase = resume;
+  template <typename ResumePhase>
+  StepResult requestFormula(Frame& f, const ResumePhase resume,
+                            const ASTNode& n, const bool neg)
+  {
+    f.resumeAt(resume);
     ASTNode a;
-    if (head(n, neg, a))
+    if (prepareFormula(n, neg, a))
       return StepResult::Redispatch;
-    return pushChild(Frame::FormulaJob, n, std::move(a), neg, Frame::Start);
-  };
+    stack.emplace_back(n, std::move(a), neg, Frame::FormulaPhase::Start);
+    return StepResult::Pushed;
+  }
 
-  auto wantTerm = [&](Frame& f, const Frame::Phase resume,
-                      const ASTNode& n) -> StepResult {
-    f.phase = resume;
+  template <typename ResumePhase>
+  StepResult requestTerm(Frame& f, const ResumePhase resume, const ASTNode& n)
+  {
+    f.resumeAt(resume);
     if (n.isConstant())
     {
       result = n;
@@ -1043,24 +1111,24 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
     }
 
     ASTNode substitutionImage;
-    Frame::Phase start;
+    Frame::TermPhase start;
     if (InsideSubstitutionMap(n, substitutionImage))
-      start = Frame::TermSubstitutionPrechecked;
+      start = Frame::TermPhase::PreparedSubstitution;
     else if (CheckSimplifyMap(n, result, false))
       return StepResult::Redispatch;
     else
-      start = Frame::PrecheckedStart;
+      start = Frame::TermPhase::Prepared;
 
-    const StepResult pushed =
-        pushChild(Frame::TermJob, n, ASTNode(), false, start);
-    if (start == Frame::TermSubstitutionPrechecked)
+    stack.emplace_back(n, start);
+    if (start == Frame::TermPhase::PreparedSubstitution)
       stack.back().output = std::move(substitutionImage);
-    return pushed;
-  };
+    return StepResult::Pushed;
+  }
 
-  auto wantArray = [&](Frame& f, const Frame::Phase resume,
-                       const ASTNode& n) -> StepResult {
-    f.phase = resume;
+  template <typename ResumePhase>
+  StepResult requestArray(Frame& f, const ResumePhase resume, const ASTNode& n)
+  {
+    f.resumeAt(resume);
     if (n.GetKind() == SYMBOL)
     {
       result = n;
@@ -1068,27 +1136,29 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
     }
     if (CheckSimplifyMap(n, result, false))
       return StepResult::Redispatch;
-    return pushChild(Frame::ArrayJob, n, ASTNode(), false,
-                     Frame::PrecheckedStart);
-  };
+    stack.emplace_back(n, Frame::ArrayPhase::Prepared);
+    return StepResult::Pushed;
+  }
 
-  auto wantAtomic = [&](Frame& f, const Frame::Phase resume,
-                        const ASTNode& n, const bool neg) -> StepResult {
-    f.phase = resume;
-    return pushChild(Frame::AtomicJob, n, ASTNode(), neg,
-                     Frame::PrecheckedStart);
-  };
+  template <typename ResumePhase>
+  StepResult requestAtomic(Frame& f, const ResumePhase resume, const ASTNode& n,
+                           const bool neg)
+  {
+    f.resumeAt(resume);
+    stack.emplace_back(n, neg, Frame::AtomicPhase::Prepared);
+    return StepResult::Pushed;
+  }
 
   // Keep each job's phase dispatcher in its own function. Formula and term
   // jobs dominate ordinary simplification; folding the atomic and array
   // state machines into the same large body evicts their hot code even when
   // those jobs are not running.
-  auto stepAtomic = [&](Frame& f) -> StepResult {
+  StepResult stepAtomic(Frame& f)
+  {
     assert(f.job == Frame::AtomicJob);
-    // The one request site, wantAtomic, always starts an atomic frame
+    // The one request site, requestAtomic, always starts an atomic frame
     // prechecked: the formula head that scheduled it has already probed the
     // map for this node under this polarity.
-    assert(f.phase != Frame::Start);
     {
       auto finishAtomic = [&](const ASTNode& output)
       {
@@ -1124,30 +1194,31 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
           // pushed child; the common request sites below fuse their immediate
           // answers directly.
           const StepResult requested =
-              want(f, Frame::AtomicEqIteCondition, conditionToNegate, true);
+              requestFormula(f, Frame::AtomicPhase::AfterIteCondition,
+                             conditionToNegate, true);
           return requested == StepResult::Redispatch ? StepResult::Yield
-                                                      : requested;
+                                                     : requested;
         }
         return finishEquality(output);
       };
 
-      if (f.phase == Frame::PrecheckedStart)
+      if (f.atomicPhase == Frame::AtomicPhase::Prepared)
       {
         // Keep the original atomic-formula order: every binary predicate
         // simplifies both operands before dispatch, including BOOLEXTRACT.
         if (f.b.Degree() == 2)
-          return wantTerm(f, Frame::AtomicLeft, f.b[0]);
+          return requestTerm(f, Frame::AtomicPhase::AfterLeftOperand, f.b[0]);
       }
-      else if (f.phase == Frame::AtomicLeft)
+      else if (f.atomicPhase == Frame::AtomicPhase::AfterLeftOperand)
       {
         f.t0 = result;
-        return wantTerm(f, Frame::AtomicRight, f.b[1]);
+        return requestTerm(f, Frame::AtomicPhase::AfterRightOperand, f.b[1]);
       }
-      else if (f.phase == Frame::AtomicRight)
+      else if (f.atomicPhase == Frame::AtomicPhase::AfterRightOperand)
       {
         f.t1 = result;
       }
-      else if (f.phase == Frame::AtomicBoolExtract)
+      else if (f.atomicPhase == Frame::AtomicPhase::AfterBoolExtract)
       {
         const ASTNode zero = nf->CreateZeroConst(1);
         const ASTNode one = nf->CreateOneConst(1);
@@ -1164,26 +1235,27 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
         }
         return finishAtomic(output);
       }
-      else if (f.phase == Frame::AtomicFpOperand)
+      else if (f.atomicPhase == Frame::AtomicPhase::AfterFpOperand)
       {
         f.outvec.push_back(result);
         ++f.i;
       }
 
-      if (f.phase == Frame::AtomicEqNegRhs)
+      if (f.atomicPhase == Frame::AtomicPhase::AfterNegatedEqualityRhs)
       {
         const ASTNode combined = LhsMinusRhsTerm(f.output, result);
-        return wantTerm(f, Frame::AtomicEqCombined, combined);
+        return requestTerm(f, Frame::AtomicPhase::AfterCombinedEquality,
+                           combined);
       }
 
       ASTNode output;
       const Kind kind = f.b.GetKind();
-      if (f.phase == Frame::AtomicEqIteCondition)
+      if (f.atomicPhase == Frame::AtomicPhase::AfterIteCondition)
       {
         UpdateSimplifyMap(f.output, result, false);
         return finishEquality(result);
       }
-      if (f.phase == Frame::AtomicEqCombined)
+      if (f.atomicPhase == Frame::AtomicPhase::AfterCombinedEquality)
       {
         output = CreateSimplifiedEQ(
             result, nf->CreateZeroConst(result.GetValueWidth()));
@@ -1208,7 +1280,8 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
         {
           const ASTNode getthebit =
               nf->CreateTerm(BVEXTRACT, 1, f.t0, f.b[1], f.b[1]);
-          return wantTerm(f, Frame::AtomicBoolExtract, getthebit);
+          return requestTerm(f, Frame::AtomicPhase::AfterBoolExtract,
+                             getthebit);
         }
         case EQ:
         {
@@ -1229,7 +1302,8 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
                                       : output[1];
               const ASTNode negated =
                   nf->CreateTerm(BVUMINUS, rhs.GetValueWidth(), rhs);
-              return wantTerm(f, Frame::AtomicEqNegRhs, negated);
+              return requestTerm(f, Frame::AtomicPhase::AfterNegatedEqualityRhs,
+                                 negated);
             }
           }
           return optimizeAndFinishEquality(output);
@@ -1278,7 +1352,7 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
           while (f.i < f.b.Degree())
           {
             const StepResult requested =
-                wantTerm(f, Frame::AtomicFpOperand, f.b[f.i]);
+                requestTerm(f, Frame::AtomicPhase::AfterFpOperand, f.b[f.i]);
             if (requested == StepResult::Pushed)
               return requested;
             assert(requested == StepResult::Redispatch);
@@ -1296,9 +1370,10 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
 
       return finishAtomic(output);
     }
-  };
+  }
 
-  auto stepArray = [&](Frame& f) -> StepResult {
+  StepResult stepArray(Frame& f)
+  {
     assert(f.job == Frame::ArrayJob);
     {
       auto finishArray = [&](const ASTNode& output)
@@ -1313,63 +1388,53 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
       const unsigned iw = f.b.GetIndexWidth();
       assert(iw > 0);
 
-      if (f.phase == Frame::Start || f.phase == Frame::PrecheckedStart)
+      if (f.arrayPhase == Frame::ArrayPhase::Prepared)
       {
-        if (f.phase == Frame::Start)
-        {
-          if (CheckSimplifyMap(f.b, result, false))
-            return StepResult::Finished;
-
-          if (f.b.GetKind() == SYMBOL)
-          {
-            result = f.b;
-            return StepResult::Finished;
-          }
-        }
-
         if (f.b.GetKind() == ITE)
-          return want(f, Frame::ArrayCond, f.b[0], false);
+          return requestFormula(f, Frame::ArrayPhase::AfterCondition, f.b[0],
+                                false);
         if (f.b.GetKind() == WRITE)
-          return wantArray(f, Frame::ArrayBase, f.b[0]);
+          return requestArray(f, Frame::ArrayPhase::AfterBase, f.b[0]);
 
         FatalError("SimplifyArrayTerm: unexpected array term", f.b);
       }
 
       if (f.b.GetKind() == ITE)
       {
-        if (f.phase == Frame::ArrayCond)
+        if (f.arrayPhase == Frame::ArrayPhase::AfterCondition)
         {
           f.t0 = result;
-          return wantArray(f, Frame::ArrayThen, f.b[1]);
+          return requestArray(f, Frame::ArrayPhase::AfterThen, f.b[1]);
         }
-        if (f.phase == Frame::ArrayThen)
+        if (f.arrayPhase == Frame::ArrayPhase::AfterThen)
         {
           f.t1 = result;
-          return wantArray(f, Frame::ArrayElse, f.b[2]);
+          return requestArray(f, Frame::ArrayPhase::AfterElse, f.b[2]);
         }
 
         f.t2 = result;
         return finishArray(CreateSimplifiedTermITE(f.t0, f.t1, f.t2));
       }
 
-      if (f.phase == Frame::ArrayBase)
+      if (f.arrayPhase == Frame::ArrayPhase::AfterBase)
       {
         f.t0 = result;
-        return wantTerm(f, Frame::ArrayIndex, f.b[1]);
+        return requestTerm(f, Frame::ArrayPhase::AfterIndex, f.b[1]);
       }
-      if (f.phase == Frame::ArrayIndex)
+      if (f.arrayPhase == Frame::ArrayPhase::AfterIndex)
       {
         f.t1 = result;
-        return wantTerm(f, Frame::ArrayValue, f.b[2]);
+        return requestTerm(f, Frame::ArrayPhase::AfterValue, f.b[2]);
       }
 
       f.t2 = result;
       return finishArray(nf->CreateArrayTerm(WRITE, iw, f.b.GetValueWidth(),
                                              f.t0, f.t1, f.t2));
     }
-  };
+  }
 
-  auto stepTerm = [&](Frame& f) -> StepResult {
+  StepResult stepTerm(Frame& f)
+  {
     assert(f.job == Frame::TermJob);
     {
       auto finishTerm = [&](const ASTNode& output)
@@ -1406,40 +1471,32 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
         return StepResult::Finished;
       };
 
-      if (f.phase == Frame::TermSubstitution)
+      if (f.termPhase == Frame::TermPhase::AfterSubstitution)
         return finishTerm(result);
-      if (f.phase == Frame::TermPulled || f.phase == Frame::TermRetry)
+      if (f.termPhase == Frame::TermPhase::AfterPullUpIte ||
+          f.termPhase == Frame::TermPhase::AfterRetry)
       {
         UpdateSimplifyMap(f.b, result, false);
         if (f.a != f.b)
           UpdateSimplifyMap(f.a, result, false);
         return finishTerm(result);
       }
-      if (f.phase == Frame::TermOutput)
+      if (f.termPhase == Frame::TermPhase::AfterOutput)
         return finishTermTail(result);
 
-      if (f.phase == Frame::Start ||
-          f.phase == Frame::PrecheckedStart ||
-          f.phase == Frame::TermSubstitutionPrechecked)
+      if (f.termPhase == Frame::TermPhase::Prepared ||
+          f.termPhase == Frame::TermPhase::PreparedSubstitution)
       {
         assert(_bm->UserFlags.optimize_flag);
-        if (f.phase == Frame::Start && f.b.isConstant())
-          return finishTerm(f.b);
 
         f.a = f.b;
         const ASTNode substitutionImage = f.output;
         f.output = f.a;
         assert(BVTypeCheck(f.a));
 
-        if (f.phase == Frame::TermSubstitutionPrechecked)
-          return wantTerm(f, Frame::TermSubstitution, substitutionImage);
-        if (f.phase == Frame::Start &&
-            InsideSubstitutionMap(f.a, f.output))
-          return wantTerm(f, Frame::TermSubstitution, f.output);
-        if (f.phase == Frame::Start &&
-            CheckSimplifyMap(f.a, result, false))
-          return StepResult::Finished;
-
+        if (f.termPhase == Frame::TermPhase::PreparedSubstitution)
+          return requestTerm(f, Frame::TermPhase::AfterSubstitution,
+                             substitutionImage);
         const Kind k = f.a.GetKind();
         if (!is_Term_kind(k))
           FatalError("SimplifyTerm: You have input a Non-term", f.a);
@@ -1453,7 +1510,7 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
             f.outvec = toASTVec(f.b.GetChildren());
         }
       }
-      else if (f.phase == Frame::TermOperand)
+      else if (f.termPhase == Frame::TermPhase::AfterOperand)
       {
         f.outvec[f.i] = result;
         ++f.i;
@@ -1469,7 +1526,7 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
             operand.GetType() == FLOATINGPOINT_TYPE)
         {
           const StepResult requested =
-              wantTerm(f, Frame::TermOperand, operand);
+              requestTerm(f, Frame::TermPhase::AfterOperand, operand);
           if (requested == StepResult::Pushed)
             return requested;
           assert(requested == StepResult::Redispatch);
@@ -1480,7 +1537,7 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
         if (operand.GetType() == BOOLEAN_TYPE)
         {
           const StepResult requested =
-              want(f, Frame::TermOperand, operand, false);
+              requestFormula(f, Frame::TermPhase::AfterOperand, operand, false);
           if (requested == StepResult::Pushed)
             return requested;
           assert(requested == StepResult::Redispatch);
@@ -1491,7 +1548,8 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
         ++f.i;
       }
 
-      if (f.a.GetKind() != SYMBOL && f.phase != Frame::TermReadArray)
+      if (f.a.GetKind() != SYMBOL &&
+          f.termPhase != Frame::TermPhase::AfterReadArray)
       {
         assert(!f.outvec.empty());
         if (ASTChildren(f.outvec) != f.b.GetChildren())
@@ -1534,7 +1592,7 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
 
         const ASTNode pulledUp = PullUpITE(f.a);
         if (pulledUp != f.a)
-          return wantTerm(f, Frame::TermPulled, pulledUp);
+          return requestTerm(f, Frame::TermPhase::AfterPullUpIte, pulledUp);
 
         bool notSimplified = false;
         for (size_t i = 0; i < f.a.Degree(); ++i)
@@ -1546,14 +1604,15 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
           }
         }
         if (notSimplified)
-          return wantTerm(f, Frame::TermRetry, f.a);
+          return requestTerm(f, Frame::TermPhase::AfterRetry, f.a);
       }
 
-      if (f.a.GetKind() == READ && f.phase != Frame::TermReadArray)
-        return wantArray(f, Frame::TermReadArray, f.a[0]);
+      if (f.a.GetKind() == READ &&
+          f.termPhase != Frame::TermPhase::AfterReadArray)
+        return requestArray(f, Frame::TermPhase::AfterReadArray, f.a[0]);
 
-      if (f.a.GetKind() == READ && f.phase == Frame::TermReadArray &&
-          result != f.a[0])
+      if (f.a.GetKind() == READ &&
+          f.termPhase == Frame::TermPhase::AfterReadArray && result != f.a[0])
       {
         // Preserve the pre-rebuild READ as a memo key. The recursive version
         // returned through that invocation after simplifying the array.
@@ -1577,18 +1636,20 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
 
       assert(!f.output.IsNull());
       if (f.a != f.output)
-        return wantTerm(f, Frame::TermOutput, f.output);
+        return requestTerm(f, Frame::TermPhase::AfterOutput, f.output);
       return finishTermTail(f.output);
     }
-  };
+  }
 
-  auto stepFormula = [&](Frame& f) -> StepResult {
+  StepResult stepFormula(Frame& f)
+  {
     assert(f.job == Frame::FormulaJob);
     // The formula arms implemented in this frame share their memoisation
     // tail: record the PullUpITE result and, when distinct, the input. The
     // separately scheduled AtomicJob owns its own first entry and bypasses
     // this tail when it returns below.
-    auto finish = [&](const ASTNode& output) {
+    auto finish = [&](const ASTNode& output)
+    {
       UpdateSimplifyMap(f.a, output, f.pushNeg);
       if (f.b != f.a)
         UpdateSimplifyMap(f.b, output, f.pushNeg);
@@ -1603,7 +1664,8 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
       case AND:
       case OR:
       {
-        auto takeChild = [&](const ASTNode& child) {
+        auto takeChild = [&](const ASTNode& child)
+        {
           if (child == f.output)
             return false;
 
@@ -1620,7 +1682,7 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
           return true;
         };
 
-        if (f.phase == Frame::Start)
+        if (f.formulaPhase == Frame::FormulaPhase::Start)
         {
           const bool isAnd = (k == AND);
           // Under pushNeg we are simplifying NOT(a): De Morgan flips the
@@ -1639,8 +1701,8 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
 
         while (f.i < f.a.Degree())
         {
-          const StepResult requested =
-              want(f, Frame::AndOrOperand, f.a[f.i], f.pushNeg);
+          const StepResult requested = requestFormula(
+              f, Frame::FormulaPhase::AfterAndOrOperand, f.a[f.i], f.pushNeg);
           if (requested == StepResult::Pushed)
             return requested;
           assert(requested == StepResult::Redispatch);
@@ -1657,7 +1719,7 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
 
       case NOT:
       {
-        if (f.phase == Frame::NotBody)
+        if (f.formulaPhase == Frame::FormulaPhase::AfterNotBody)
           return finish(result);
 
         if (!(f.a.Degree() == 1 && NOT == f.a.GetKind()))
@@ -1677,11 +1739,11 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
         // pushnegation if there are odd number of NOTs
         const bool pn = (NotCount % 2 == 0) ? false : true;
 
-        // `want` owns the child shortcut and memo probe. If it schedules a
+        // `requestFormula` owns the child shortcut and memo probe. If it schedules a
         // child frame, that frame records `o`; if it answers immediately,
         // the entry either already exists or `o` is a leaf that is never
         // memoised. The returning NOT frame therefore only records itself.
-        return want(f, Frame::NotBody, o, pn);
+        return requestFormula(f, Frame::FormulaPhase::AfterNotBody, o, pn);
       }
 
       case XOR:
@@ -1691,10 +1753,10 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
         if (f.a.Degree() == 1)
           return finish(f.a[0]);
 
-        if (f.phase == Frame::Start)
+        if (f.formulaPhase == Frame::FormulaPhase::Start)
           f.outvec.reserve(f.a.Degree());
 
-        if (f.phase == Frame::XorOperand)
+        if (f.formulaPhase == Frame::FormulaPhase::AfterXorOperand)
         {
           f.outvec.push_back(result);
           ++f.i;
@@ -1702,8 +1764,8 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
 
         while (f.i < f.a.Degree())
         {
-          const StepResult requested =
-              want(f, Frame::XorOperand, f.a[f.i], false);
+          const StepResult requested = requestFormula(
+              f, Frame::FormulaPhase::AfterXorOperand, f.a[f.i], false);
           if (requested == StepResult::Pushed)
             return requested;
           assert(requested == StepResult::Redispatch);
@@ -1732,7 +1794,7 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
       case NOR:
       case IMPLIES:
       {
-        if (f.phase == Frame::Start)
+        if (f.formulaPhase == Frame::FormulaPhase::Start)
         {
           if (k == IMPLIES && !(f.a.Degree() == 2))
             FatalError("SimplifyImpliesFormula: vector with wrong num of nodes",
@@ -1741,15 +1803,16 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
           // NAND and NOR are a negated AND/OR, so the negation they carry
           // goes into both operands and cancels with the caller's. IMPLIES
           // negates only its consequent, and only when it is itself negated.
-          return want(f, Frame::BinaryLeft, f.a[0],
-                      (k == IMPLIES) ? false : !f.pushNeg);
+          return requestFormula(f, Frame::FormulaPhase::AfterBinaryLeft, f.a[0],
+                                (k == IMPLIES) ? false : !f.pushNeg);
         }
 
-        if (f.phase == Frame::BinaryLeft)
+        if (f.formulaPhase == Frame::FormulaPhase::AfterBinaryLeft)
         {
           f.t0 = result;
-          return want(f, Frame::BinaryRight, f.a[1],
-                      (k == IMPLIES) ? f.pushNeg : !f.pushNeg);
+          return requestFormula(f, Frame::FormulaPhase::AfterBinaryRight,
+                                f.a[1],
+                                (k == IMPLIES) ? f.pushNeg : !f.pushNeg);
         }
 
         f.t1 = result;
@@ -1774,34 +1837,38 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
 
       case IFF:
       {
-        if (f.phase == Frame::Start)
+        if (f.formulaPhase == Frame::FormulaPhase::Start)
         {
           if (!(f.a.Degree() == 2))
             FatalError("SimplifyIffFormula: vector with wrong num of nodes",
                        ASTUndefined);
 
           // The second operand first, as it was.
-          return want(f, Frame::IffRight, f.a[1], false);
+          return requestFormula(f, Frame::FormulaPhase::AfterIffRight, f.a[1],
+                                false);
         }
 
-        if (f.phase == Frame::IffRight)
+        if (f.formulaPhase == Frame::FormulaPhase::AfterIffRight)
         {
           f.t1 = result;
-          return want(f, Frame::IffLeft, f.a[0], f.pushNeg);
+          return requestFormula(f, Frame::FormulaPhase::AfterIffLeft, f.a[0],
+                                f.pushNeg);
         }
 
-        if (f.phase == Frame::IffLeft)
+        if (f.formulaPhase == Frame::FormulaPhase::AfterIffLeft)
         {
           f.t0 = result;
 
           if (ASTTrue == f.t0)
             return finish(f.t1);
           if (ASTFalse == f.t0)
-            return want(f, Frame::IffFold, f.t1, true);
+            return requestFormula(f, Frame::FormulaPhase::AfterIffFold, f.t1,
+                                  true);
           if (ASTTrue == f.t1)
             return finish(f.t0);
           if (ASTFalse == f.t1)
-            return want(f, Frame::IffFold, f.t0, true);
+            return requestFormula(f, Frame::FormulaPhase::AfterIffFold, f.t0,
+                                  true);
           if (f.t0 == f.t1)
             return finish(ASTTrue);
           if ((NOT == f.t0.GetKind() && f.t0[0] == f.t1) ||
@@ -1810,33 +1877,36 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
           return finish(nf->CreateNode(XOR, nf->CreateNode(NOT, f.t0), f.t1));
         }
 
-        return finish(result); // Frame::IffFold
+        return finish(result); // Frame::FormulaPhase::AfterIffFold
       }
 
       case ITE:
       {
-        if (f.phase == Frame::Start)
+        if (f.formulaPhase == Frame::FormulaPhase::Start)
         {
           if (!(f.a.Degree() == 3))
             FatalError("SimplifyIteFormula: vector with wrong num of nodes",
                        ASTUndefined);
 
-          return want(f, Frame::IteCond, f.a[0], false);
+          return requestFormula(f, Frame::FormulaPhase::AfterIteCondition,
+                                f.a[0], false);
         }
 
-        if (f.phase == Frame::IteCond)
+        if (f.formulaPhase == Frame::FormulaPhase::AfterIteCondition)
         {
           f.t0 = result;
-          return want(f, Frame::IteThen, f.a[1], f.pushNeg);
+          return requestFormula(f, Frame::FormulaPhase::AfterIteThen, f.a[1],
+                                f.pushNeg);
         }
 
-        if (f.phase == Frame::IteThen)
+        if (f.formulaPhase == Frame::FormulaPhase::AfterIteThen)
         {
           f.t1 = result;
-          return want(f, Frame::IteElse, f.a[2], f.pushNeg);
+          return requestFormula(f, Frame::FormulaPhase::AfterIteElse, f.a[2],
+                                f.pushNeg);
         }
 
-        if (f.phase == Frame::IteElse)
+        if (f.formulaPhase == Frame::FormulaPhase::AfterIteElse)
         {
           f.t2 = result;
 
@@ -1852,17 +1922,18 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
           if (ASTFalse == f.t0)
             return finish(f.t2);
           if (ASTFalse == f.t1 && ASTTrue == f.t2)
-            return want(f, Frame::IteFold, f.t0, true);
+            return requestFormula(f, Frame::FormulaPhase::AfterIteFold, f.t0,
+                                  true);
           return finish(nf->CreateNode(ITE, f.t0, f.t1, f.t2));
         }
 
-        return finish(result); // Frame::IteFold
+        return finish(result); // Frame::FormulaPhase::AfterIteFold
       }
 
       default:
         // Atomic predicates do not stop the walk: their term operands and any
         // terms they manufacture are jobs on this same continuation stack.
-        if (f.phase == Frame::FormulaAtomic)
+        if (f.formulaPhase == Frame::FormulaPhase::AfterAtomic)
         {
           // AtomicJob has already recorded `f.a`. Only the pre-PullUpITE key
           // can remain for this formula frame to record.
@@ -1870,49 +1941,121 @@ ASTNode Simplifier::simplifyNode(const ASTNode& b, bool pushNeg,
             UpdateSimplifyMap(f.b, result, f.pushNeg);
           return StepResult::Finished;
         }
-        return wantAtomic(f, Frame::FormulaAtomic, f.a, f.pushNeg);
+        return requestAtomic(f, Frame::FormulaPhase::AfterAtomic, f.a,
+                             f.pushNeg);
     }
-  };
-
-  while (true)
-  {
-    Frame& current = stack.back();
-    StepResult stepResult = StepResult::Finished;
-    switch (current.job)
-    {
-      case Frame::FormulaJob:
-        do
-          stepResult = stepFormula(current);
-        while (stepResult == StepResult::Redispatch);
-        break;
-      case Frame::AtomicJob:
-        do
-          stepResult = stepAtomic(current);
-        while (stepResult == StepResult::Redispatch);
-        break;
-      case Frame::TermJob:
-        do
-          stepResult = stepTerm(current);
-        while (stepResult == StepResult::Redispatch);
-        break;
-      case Frame::ArrayJob:
-        do
-          stepResult = stepArray(current);
-        while (stepResult == StepResult::Redispatch);
-        break;
-    }
-
-    if (stepResult == StepResult::Pushed ||
-        stepResult == StepResult::Yield)
-      continue;
-    assert(stepResult == StepResult::Finished);
-
-    stack.pop_back();
-    if (stack.empty())
-      return result;
   }
-}
 
+public:
+  explicit SimplifyDriver(Simplifier& owner)
+      : owner(owner), nf(owner.nf), _bm(owner._bm), ASTTrue(owner.ASTTrue),
+        ASTFalse(owner.ASTFalse), ASTUndefined(owner.ASTUndefined)
+  {
+  }
+
+  ASTNode run(const ASTNode& b, const bool pushNeg, const SimplifyJob rootJob)
+  {
+    result = ASTNode();
+    stack.clear();
+
+    // Answer root-level leaves and memo hits before constructing the vector.
+    // A vector allocation is unnecessary for the overwhelmingly common leaf
+    // and memo-hit cases.
+    Frame top;
+    top.b = b;
+    top.pushNeg = pushNeg;
+    if (rootJob == SimplifyJob::Formula)
+    {
+      top.job = Frame::FormulaJob;
+      if (prepareFormula(b, pushNeg, top.a))
+        return result;
+    }
+    else if (rootJob == SimplifyJob::Term)
+    {
+      assert(_bm->UserFlags.optimize_flag);
+      top.job = Frame::TermJob;
+
+      // A substitution frame is transparent: follow its image without
+      // memoising the substituted key until a real term frame is needed.
+      ASTNode root = b;
+      ASTNode substitutionImage;
+      while (true)
+      {
+        if (root.isConstant())
+          return root;
+        if (InsideSubstitutionMap(root, substitutionImage))
+        {
+          root = substitutionImage;
+          continue;
+        }
+        if (CheckSimplifyMap(root, result, false))
+          return result;
+        break;
+      }
+
+      top.b = root;
+      top.termPhase = Frame::TermPhase::Prepared;
+    }
+    else
+    {
+      assert(b.GetIndexWidth() > 0);
+      top.job = Frame::ArrayJob;
+      if (CheckSimplifyMap(b, result, false))
+        return result;
+      if (b.GetKind() == SYMBOL)
+        return b;
+      top.arrayPhase = Frame::ArrayPhase::Prepared;
+    }
+
+    // A child request is the only operation that can grow the vector, and
+    // every caller returns from its step immediately afterwards, so no Frame
+    // reference survives a move.
+    stack.push_back(std::move(top));
+
+    while (true)
+    {
+      Frame& current = stack.back();
+      StepResult stepResult = StepResult::Finished;
+      switch (current.job)
+      {
+        case Frame::FormulaJob:
+          do
+            stepResult = stepFormula(current);
+          while (stepResult == StepResult::Redispatch);
+          break;
+        case Frame::AtomicJob:
+          do
+            stepResult = stepAtomic(current);
+          while (stepResult == StepResult::Redispatch);
+          break;
+        case Frame::TermJob:
+          do
+            stepResult = stepTerm(current);
+          while (stepResult == StepResult::Redispatch);
+          break;
+        case Frame::ArrayJob:
+          do
+            stepResult = stepArray(current);
+          while (stepResult == StepResult::Redispatch);
+          break;
+      }
+
+      if (stepResult == StepResult::Pushed || stepResult == StepResult::Yield)
+        continue;
+      assert(stepResult == StepResult::Finished);
+
+      stack.pop_back();
+      if (stack.empty())
+        return result;
+    }
+  }
+};
+
+ASTNode Simplifier::simplifyNode(const ASTNode& b, const bool pushNeg,
+                                 const SimplifyJob rootJob)
+{
+  return SimplifyDriver(*this).run(b, pushNeg, rootJob);
+}
 
 ASTNode Simplifier::makeTower(const Kind k, const stp::ASTVec& children)
 {

@@ -166,7 +166,7 @@ private:
   // choice and can be deeper than the stack holds. So the three are one walk
   // with its frames on the heap rather than three sets of call frames. See
   // DeepDag_Test.cpp.
-  struct Frame;
+  class EvaluationDriver;
   ASTNode evaluate(Job job, const ASTNode& n, bool topArrayReadFlag);
 
 public:

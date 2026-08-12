@@ -211,6 +211,8 @@ public:
   }
 
 private:
+  class SimplifyDriver;
+
   enum class SimplifyJob
   {
     Formula,
