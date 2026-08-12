@@ -1333,6 +1333,48 @@ bool commonSubSumOk(Context& c, unsigned depth)
   return css.topLevel(g).GetKind() != UNDEFINED;
 }
 
+// ArrayTransformer, whose three functions -- TransformFormula,
+// TransformTerm and TransformArrayRead -- reach each other once per level of
+// the input, and are one walk on the heap.
+//
+// Priming would not have done here, which is why this one is a state
+// machine: the ITE arms transform the condition and then only the branch
+// that survives it, telling the extensionality context which branch they
+// dropped, and which that is cannot be known until the condition has been
+// transformed. Nor does the operands hook rescue it, as SimplifyTerm's
+// flattening was rescued: the hook would have to run the pass to answer.
+bool arrayTransformerOk(Context& c, unsigned depth)
+{
+  const ASTNode f = c.formula(c.chain(BVXOR, depth));
+  c.roots.push_back(f);
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  ArrayTransformer at(&c.mgr, &simp);
+  return at.TransformFormula_TopLevel(f).GetKind() != UNDEFINED;
+}
+
+// A chain of reads, each indexing the array with the last one's result.
+// TransformArrayRead transforms a read's index by handing it back to
+// TransformTerm, so this is the input's nesting and not the pass's.
+bool arrayReadChainOk(Context& c, unsigned depth)
+{
+  const ASTNode a = c.mgr.CreateSymbol("A", 8, 8);
+  ASTNode t = c.mgr.CreateSymbol("i", 0, 8);
+  for (unsigned i = 0; i < depth; i++)
+    t = c.hf->CreateTerm(READ, 8, a, t);
+
+  const ASTNode f = c.formula(t);
+  c.roots.push_back(f);
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  ArrayTransformer at(&c.mgr, &simp);
+  const ASTNode result = at.TransformFormula_TopLevel(f);
+  c.roots.push_back(result);
+  // Every read is abstracted to a fresh variable, so nothing of the chain
+  // may be left.
+  return result.GetKind() != UNDEFINED;
+}
+
 // The read-count heuristic must traverse a read-free deep term without C++
 // recursion. Once its strict limit is reached, it must also stop the whole
 // traversal rather than continuing into a later deep sibling.
@@ -1349,6 +1391,32 @@ bool numberOfReadsWalkOk(Context& c, unsigned depth)
   const ASTNode earlyStop = c.hf->CreateTerm(BVCONCAT, 16, read, deep);
   c.roots.push_back(earlyStop);
   return !numberOfReadsLessThan(earlyStop, 1);
+}
+
+// A chain of writes under one read. The read is pushed under the writes one
+// at a time, each step building a new read over the array below it and
+// transforming that -- so the walk descends the write chain, which is again
+// the input's nesting.
+bool arrayWriteChainOk(Context& c, unsigned depth)
+{
+  ASTNode a = c.mgr.CreateSymbol("A", 8, 8);
+  for (unsigned i = 0; i < depth; i++)
+  {
+    const std::string nm = "w" + std::to_string(i);
+    a = c.hf->CreateArrayTerm(WRITE, 8, 8, a,
+                              c.mgr.CreateSymbol(nm.c_str(), 0, 8),
+                              c.mgr.CreateZeroConst(8));
+  }
+  const ASTNode f =
+      c.formula(c.hf->CreateTerm(READ, 8, a, c.mgr.CreateSymbol("j", 0, 8)));
+  c.roots.push_back(f);
+
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  ArrayTransformer at(&c.mgr, &simp);
+  const ASTNode result = at.TransformFormula_TopLevel(f);
+  c.roots.push_back(result);
+  return result.GetKind() != UNDEFINED;
 }
 
 // Solve-boundary array equality lowering used a recursive std::function for
@@ -1374,6 +1442,33 @@ bool arrayEqualityLoweringOk(Context& c, unsigned depth)
   c.roots.push_back(lowered);
   return lowered.GetKind() == SYMBOL && ext.getRecords().size() == 1 &&
          ext.getActiveRecordCount() == 1;
+}
+
+// TransformFormula's own spine. A conjunction reaches this pass flat in
+// ordinary use, because the simplifier collapses it first -- but that is the
+// simplifier's doing, not a property of this pass, and the pass is reachable
+// without it.
+bool transformFormulaSpineOk(Context& c, unsigned depth)
+{
+  ASTNode f = c.hf->CreateNode(EQ, c.mgr.CreateSymbol("t0", 0, 8),
+                               c.mgr.CreateZeroConst(8));
+  for (unsigned i = 1; i < depth; i++)
+  {
+    const std::string nm = "t" + std::to_string(i);
+    f = c.hf->CreateNode(
+        NOT, c.hf->CreateNode(
+                 AND, c.hf->CreateNode(EQ, c.mgr.CreateSymbol(nm.c_str(), 0, 8),
+                                       c.mgr.CreateZeroConst(8)),
+                 f));
+  }
+  c.roots.push_back(f);
+
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  ArrayTransformer at(&c.mgr, &simp);
+  const ASTNode result = at.TransformFormula_TopLevel(f);
+  c.roots.push_back(result);
+  return result.GetKind() != UNDEFINED;
 }
 #ifdef STP_ENABLE_FLOATING_POINT
 
@@ -1945,6 +2040,117 @@ TEST(DeepDag, mutable_dag_shared_children_rebuild_in_operand_order)
   EXPECT_TRUE(mutableDagSharedRebuildOk(c));
 }
 
+TEST(DeepDag, array_transformer_job_specific_operands_preserve_paths)
+{
+  Context c;
+  const ASTNode guard = c.mgr.CreateSymbol("array-guard", 0, 0);
+  const ASTNode cond = c.mgr.CreateSymbol("array-cond", 0, 0);
+  const ASTNode array = c.mgr.CreateSymbol("array-buffer", 8, 8);
+  const ASTNode index = c.mgr.CreateSymbol("array-index", 0, 8);
+  const ASTNode read = c.hf->CreateTerm(READ, 8, array, index);
+  const ASTNode sum = c.hf->CreateTerm(
+      BVXOR, 8, read, c.mgr.CreateOneConst(8));
+  const ASTNode choice = c.hf->CreateTerm(
+      ITE, 8, cond, sum, c.mgr.CreateZeroConst(8));
+  const ASTNode equality = c.hf->CreateNode(
+      EQ, choice, c.mgr.CreateSymbol("array-rhs", 0, 8));
+  // Transforming equality suspends below an already completed guard. This
+  // pins the shared operand arena's nonzero child range: finishing the
+  // equality must remove only its suffix, leaving the parent's guard intact.
+  const ASTNode input = c.hf->CreateNode(AND, guard, equality);
+
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  ArrayTransformer transformer(&c.mgr, &simp);
+  const ASTNode result = transformer.TransformFormula_TopLevel(input);
+
+  bool sawIte = false;
+  bool sawGenericTerm = false;
+  bool sawRead = false;
+  bool sawGuard = false;
+  ASTNodeSet visited;
+  ASTVec pending{result};
+  while (!pending.empty())
+  {
+    const ASTNode n = pending.back();
+    pending.pop_back();
+    if (!visited.insert(n).second)
+      continue;
+    sawIte |= n.GetKind() == ITE;
+    sawGenericTerm |= n.GetKind() == BVXOR;
+    sawRead |= n.GetKind() == READ;
+    sawGuard |= n == guard;
+    pending.insert(pending.end(), n.begin(), n.end());
+  }
+
+  EXPECT_EQ(AND, result.GetKind());
+  EXPECT_TRUE(sawIte);
+  EXPECT_TRUE(sawGenericTerm);
+  EXPECT_TRUE(sawGuard);
+  EXPECT_FALSE(sawRead);
+  ASSERT_EQ(1U, transformer.arrayToIndexToRead.count(array));
+  EXPECT_EQ(1U, transformer.arrayToIndexToRead.at(array).count(index));
+}
+
+TEST(DeepDag, array_transformer_read_state_survives_nested_arena_growth)
+{
+  Context c;
+  const ASTNode cond = c.mgr.CreateSymbol("read-state-cond", 0, 0);
+  const ASTNode thnArray = c.mgr.CreateSymbol("read-state-thn", 8, 8);
+  const ASTNode elsArray = c.mgr.CreateSymbol("read-state-els", 8, 8);
+  const ASTNode index = c.mgr.CreateSymbol("read-state-index", 0, 8);
+  const ASTNode arrayIte = c.hf->CreateArrayTerm(
+      ITE, 8, 8, cond, thnArray, elsArray);
+  const ASTNode read = c.hf->CreateTerm(READ, 8, arrayIte, index);
+  const ASTNode input = c.hf->CreateNode(
+      EQ, read, c.mgr.CreateSymbol("read-state-rhs", 0, 8));
+
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  ArrayTransformer transformer(&c.mgr, &simp);
+  const ASTNode result = transformer.TransformFormula_TopLevel(input);
+
+  // Transforming each ITE arm pushes another Read frame. The outer frame's
+  // condition and pending else-read must survive growth of the shared
+  // continuation arena.
+  bool sawIte = false;
+  bool sawRead = false;
+  ASTNodeSet visited;
+  ASTVec pending{result};
+  while (!pending.empty())
+  {
+    const ASTNode n = pending.back();
+    pending.pop_back();
+    if (!visited.insert(n).second)
+      continue;
+    sawIte |= n.GetKind() == ITE;
+    sawRead |= n.GetKind() == READ;
+    pending.insert(pending.end(), n.begin(), n.end());
+  }
+
+  EXPECT_TRUE(sawIte);
+  EXPECT_FALSE(sawRead);
+  ASSERT_EQ(1U, transformer.arrayToIndexToRead.count(thnArray));
+  ASSERT_EQ(1U, transformer.arrayToIndexToRead.count(elsArray));
+  EXPECT_EQ(1U, transformer.arrayToIndexToRead.at(thnArray).count(index));
+  EXPECT_EQ(1U, transformer.arrayToIndexToRead.at(elsArray).count(index));
+}
+
+TEST(DeepDag, array_transformer_root_fast_paths_preserve_leaf_formulas)
+{
+  Context c;
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  ArrayTransformer transformer(&c.mgr, &simp);
+  const ASTNode symbol = c.mgr.CreateSymbol("array-root-symbol", 0, 0);
+
+  EXPECT_EQ(c.mgr.ASTTrue,
+            transformer.TransformFormula_TopLevel(c.mgr.ASTTrue));
+  EXPECT_EQ(c.mgr.ASTFalse,
+            transformer.TransformFormula_TopLevel(c.mgr.ASTFalse));
+  EXPECT_EQ(symbol, transformer.TransformFormula_TopLevel(symbol));
+}
+
 /* The same properties on inputs deeper than the call stack can hold.
    Depths are picked so each case reaches the traversal it is named for:
    buildShareCount's frames are far smaller than rewrite's, so it only
@@ -2072,14 +2278,18 @@ TEST(DeepDag, deep_node_domain)        { EXPECT_STACK_SAFE(nodeDomainOk, 20000);
 TEST(DeepDag, deep_node_iterator)      { EXPECT_STACK_SAFE(nodeIteratorOk, 20000); }
 TEST(DeepDag, deep_vars_in_expression) { EXPECT_STACK_SAFE(varsInExpressionOk, 20000); }
 TEST(DeepDag, deep_propagate_equalities) { EXPECT_STACK_SAFE(propagateEqualitiesOk, 20000); }
+TEST(DeepDag, deep_array_transformer)  { EXPECT_STACK_SAFE(arrayTransformerOk, 20000); }
+TEST(DeepDag, deep_array_read_chain)   { EXPECT_STACK_SAFE(arrayReadChainOk, 20000); }
 TEST(DeepDag, deep_array_read_count_walk)
 {
   EXPECT_STACK_SAFE(numberOfReadsWalkOk, 20000);
 }
+TEST(DeepDag, deep_array_write_chain)  { EXPECT_STACK_SAFE(arrayWriteChainOk, 20000); }
 TEST(DeepDag, deep_array_equality_lowering)
 {
   EXPECT_STACK_SAFE(arrayEqualityLoweringOk, 20000);
 }
+TEST(DeepDag, deep_transform_formula_spine) { EXPECT_STACK_SAFE(transformFormulaSpineOk, 20000); }
 #ifdef STP_ENABLE_FLOATING_POINT
 TEST(DeepDag, deep_fp_totalise)        { EXPECT_STACK_SAFE(fpTotaliseChainOk, 20000); }
 #endif // STP_ENABLE_FLOATING_POINT

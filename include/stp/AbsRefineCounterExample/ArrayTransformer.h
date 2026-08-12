@@ -98,11 +98,18 @@ private:
    ****************************************************************/
 
   ASTNode TransformTerm(const ASTNode& inputterm);
+  ASTNode finishTransformTerm(const ASTNode& term, const ASTNode& result);
   void assertTransformPostConditions(const ASTNode& term, ASTNodeSet& visited);
 
-  ASTNode TransformArrayRead(const ASTNode& term);
-
   ASTNode TransformFormula(const ASTNode& form);
+
+  // Transforming a formula transforms its terms, a term its condition and
+  // its children, and a read the array under it -- once per level of the
+  // input, which is the input's choice and can be deeper than the stack
+  // holds. So the three are one walk with its frames on the heap rather
+  // than three sets of call frames. See DeepDag_Test.cpp.
+  struct Frame;
+  ASTNode transform(bool asFormula, const ASTNode& n);
 
 public:
   // fill the arrayname_readindices vector if e0 is a READ(Arr,index)
