@@ -64,10 +64,56 @@ ASTInterior::~ASTInterior()
 
 // Call this when deleting a node that has been stored in the
 // the unique table
+//
+// Deleting an interior node releases its children, and a child that loses
+// its last reference is deleted in turn. Left to nest, that is one set of
+// destructor frames per level of the DAG, so releasing a deeply nested
+// formula runs off the stack -- the depth is the input's, not ours. A short,
+// fixed prefix is still cheaper to release directly. Once that bound is
+// reached, anything else that dies is queued on the manager; the outermost
+// cleanup drains that queue with the same bounded prefix for each entry.
 void ASTInterior::CleanUp()
 {
   nodeManager->_interior_unique_table.erase(this);
+
+  // Thirty-two nested deletes are small even on the test suite's 1 MiB stack
+  // and cover ordinary shallow ASTs without one queue push and pop per node.
+  static constexpr uint8_t directDeletionDepth = 32;
+  if (nodeManager->_interior_deletion_depth >= directDeletionDepth)
+  {
+    nodeManager->_pending_deletion.push_back(this);
+    return;
+  }
+
+  // Held separately: the first delete below is `this`, and nodeManager is
+  // one of its members.
+  STPMgr* const mgr = nodeManager;
+
+  const bool outermost = mgr->_interior_deletion_depth == 0;
+
+  // Restored by the guard rather than by the line after delete. A destructor
+  // that threw would otherwise leave later cleanups starting at the wrong
+  // depth and queueing nodes on a drain that may never run again.
+  struct DeletionDepth
+  {
+    STPMgr* mgr;
+    DeletionDepth(STPMgr* m) : mgr(m) { ++mgr->_interior_deletion_depth; }
+    ~DeletionDepth() { --mgr->_interior_deletion_depth; }
+  } deletionDepth(mgr);
+
   delete this;
+
+  // A nested direct deletion returns to the destructor which released it.
+  // The outermost cleanup alone owns the spill queue.
+  if (!outermost)
+    return;
+
+  while (!mgr->_pending_deletion.empty())
+  {
+    ASTInterior* const node = mgr->_pending_deletion.back();
+    mgr->_pending_deletion.pop_back();
+    delete node; // releases up to another bounded prefix of descendants.
+  }
 }
 
 // Returns kinds.  "lispprinter" handles printing of parenthesis
