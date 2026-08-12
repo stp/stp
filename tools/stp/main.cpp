@@ -26,6 +26,7 @@ THE SOFTWARE.
 
 #include <CLI/CLI.hpp>
 
+#include <algorithm>
 #include <initializer_list>
 #include <iterator>
 #include <string>
@@ -58,6 +59,7 @@ public:
 
   // Pure flags, true when given on the command line.
   bool version = false;
+  bool hard = false;
   bool disable_simplifications = false;
   bool switch_word = false;
   bool disable_opt_inc = false;
@@ -99,6 +101,11 @@ public:
   // option was given, so the value needs its own presence check.
   bool interactive = false;
   CLI::Option* interactive_option = nullptr;
+
+  // The names of the solver-selecting flags that were compiled in, filled
+  // in by create_options(). Kept so that parse_options() can ask whether a
+  // solver was chosen without repeating the list.
+  std::vector<std::string> solver_flags;
 };
 
 int ExtraMain::create_and_parse_options(int argc, char** argv)
@@ -125,6 +132,12 @@ void ExtraMain::create_options()
   const char* const general_group = "Most important options";
   app.set_help_flag("--help,-h", "print this help")->group(general_group);
   app.add_flag("--version", version, "print version number")
+      ->group(general_group);
+  app.add_flag("--hard", hard,
+               "preset of option values that pay off on hard problems "
+               "(enables sharing-aware flattening with common sub-sum "
+               "factoring and pair extraction, and prefers CaDiCaL). "
+               "Individual options given explicitly override the preset")
       ->group(general_group);
 
   const char* const simp_group = "Simplifications";
@@ -476,7 +489,6 @@ void ExtraMain::create_options()
   // consults them in a fixed sequence, so 'stp --cadical --minisat' quietly
   // ran CaDiCaL. Only one of them can be meant. Which ones exist depends on
   // what was compiled in.
-  std::vector<std::string> solver_flags;
 #ifdef USE_CADICAL
   solver_flags.emplace_back("--cadical");
 #endif
@@ -721,6 +733,43 @@ int ExtraMain::parse_options(int argc, char** argv)
   {
     cerr << "ERROR: --max-time must be -1 (no limit) or greater" << endl;
     std::exit(-1);
+  }
+
+  // ---------------------------------------------------------------------
+  // The --hard preset
+  // ---------------------------------------------------------------------
+  // Values that pay off on hard problems, each applied only when the
+  // option that owns it was not given on the command line, so anything
+  // explicit beats the preset. count() is per option, so it covers every
+  // spelling of an option that has aliases.
+  //
+  // This runs before disableSimplifications() and
+  // disableSizeIncreasingSimplifications() below, so those keep the last
+  // word over the simplification fields and '--hard
+  // --disable-simplifications' behaves like '--disable-simplifications'.
+  if (hard)
+  {
+    const auto not_given = [this](const char* name) {
+      return app.get_option(name)->count() == 0;
+    };
+
+    // One line per preset value.
+    if (not_given("--flattening"))
+      bm->UserFlags.enable_flatten = true;
+    if (not_given("--common-subsum"))
+      bm->UserFlags.enable_common_subsum = true;
+    if (not_given("--pair-extract"))
+      bm->UserFlags.enable_pair_extract = true;
+
+#ifdef USE_CADICAL
+    const bool solver_given =
+        std::any_of(solver_flags.begin(), solver_flags.end(),
+                    [this](const std::string& flag) {
+                      return app.get_option(flag)->count() != 0;
+                    });
+    if (!solver_given)
+      bm->UserFlags.solver_to_use = UserDefinedFlags::CADICAL_SOLVER;
+#endif
   }
 
   if (disable_simplifications)
