@@ -338,6 +338,7 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
   bool bitEverChanged = false;
   bool bitJustChanged = true;
   Result result = NO_CHANGE;
+  bool stopRefinement = false;
 
   // We loop. There are 6 cases.
   while (bitJustChanged)
@@ -361,13 +362,16 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
         if (CONSTANTBV::BitVector_Lexicompare(minBottom, maxBottom) > 0)
         {
           result = CONFLICT;
-          goto end;
+          stopRefinement = true;
+          break;
         }
       }
 
       if (CONSTANTBV::BitVector_is_empty(minBottom))
       {
-        goto end; // Possible division by zero. Hard to work with..
+        // Possible division by zero. Hard to work with.
+        stopRefinement = true;
+        break;
       }
 
       bool carry_1 = false;
@@ -540,7 +544,8 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
         }
 
         result = CONFLICT;
-        goto end;
+        stopRefinement = true;
+        break;
       }
 
       if (debug_division)
@@ -552,6 +557,9 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
         log << endl;
       }
     }
+
+    if (stopRefinement)
+      break;
 
     if (debug_division)
     {
@@ -585,7 +593,7 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
       if (r1 == CONFLICT || r2 == CONFLICT || r3 == CONFLICT)
       {
         result = CONFLICT;
-        goto end;
+        break;
       }
       assert(result != CONFLICT);
 
@@ -639,7 +647,6 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
     }
   }
 
-end:
   CONSTANTBV::BitVector_Destroy_List(pool, 15);
 
   if (result == CONFLICT)
