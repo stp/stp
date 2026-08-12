@@ -421,11 +421,10 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // introduced.
   // TODO: I chose the number of reads we perform this operation at randomly.
   bool removed = false;
+  const int arrayReadLimit = bm->UserFlags.ackermannisation ? 50 : 10;
   if (arrayops &&
       !extActive && // array equality needs the refinement loop
-      ((bm->UserFlags.ackermannisation &&
-        numberOfReadsLessThan(inputToSat, 50)) ||
-       numberOfReadsLessThan(inputToSat, 10)))
+      numberOfReadsLessThan(inputToSat, arrayReadLimit))
   {
     // If the number of axioms that would be added it small. Remove them.
     bm->UserFlags.ackermannisation = true;
