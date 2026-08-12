@@ -180,7 +180,9 @@ Float128's would be ~33000 steps deep). Configuring with
 floating-point input with a clear "built without floating-point support"
 error; the library ABI is the same either way.
 
-STP uses minisat as its SAT solver when nothing else is available, but it also supports other SAT solvers including CryptoMiniSat as an optional extra. If installed, it will be detected during the cmake and becomes the default solver, with `--minisat` selecting minisat at runtime:
+STP supports CryptoMiniSat as an optional backend. If installed, it is
+detected by CMake and becomes the default unless CaDiCaL is enabled;
+`--minisat` is available only in a build configured with `-DUSE_MINISAT=ON`:
 
 ```
 $ git clone https://github.com/msoos/cryptominisat
