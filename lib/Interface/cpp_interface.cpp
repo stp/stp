@@ -63,7 +63,7 @@ void Cpp_interface::init()
   print_success = false;
   ignoreCheckSatRequest = false;
   produce_models = false;
-  changed_model_status = false;
+  model_valid = false;
 }
 
 void Cpp_interface::addFrame()
@@ -149,6 +149,11 @@ UserDefinedFlags& Cpp_interface::getUserFlags()
 void Cpp_interface::AddAssert(const ASTNode& assert)
 {
   bm.AddAssert(assert);
+
+  // SMT-LIB: an assertion invalidates the most recent model, and the last
+  // check-sat-assuming round with it.
+  model_valid = false;
+  lastCheckWasAssuming = false;
 }
 
 void Cpp_interface::SetQuery(const ASTNode& q)
@@ -542,6 +547,7 @@ void Cpp_interface::resetAssertions()
   // The base is an assertion level too for declaration lifetime. Rebuild it
   // rather than merely replacing its assertions: destroying the frame drops
   // its symbols, functions, and sort aliases together.
+  model_valid = false;
   bm.Pop();
   removeFrame();
   cache.clear();
@@ -563,6 +569,9 @@ void Cpp_interface::pop()
     FatalError("Popping from an empty stack.");
   if (frames.size() == 1)
     FatalError("Can't pop away the default base element.");
+
+  model_valid = false;
+  lastCheckWasAssuming = false;
 
   bm.Pop();
 
@@ -587,10 +596,53 @@ void Cpp_interface::push()
   else
     cache.push_back(Entry(SOLVER_UNDECIDED));
 
+  model_valid = false;
+  lastCheckWasAssuming = false;
+
   bm.Push();
 
   addFrame();
   checkInvariant();
+}
+
+void Cpp_interface::popAssumptionFrame()
+{
+  // The assumption frame cannot contain declarations -- nothing runs
+  // between the internal push and this pop -- so unlike pop() there is no
+  // danger of derived tables referencing removed symbols, and the tables
+  // are kept so the model remains readable. The next real solve clears
+  // them first (checkSat calls resetSolver before solving).
+  bm.Pop();
+  cache.erase(cache.end() - 1);
+  removeFrame();
+  checkInvariant();
+}
+
+void Cpp_interface::checkSatAssuming(const ASTVec& assumptions)
+{
+  // An internal assertion level holding exactly the assumptions. push()
+  // inherits a known-UNSAT verdict from the level below, and a SAT answer
+  // propagates to the levels beneath, so the verdict cache keeps working
+  // across this the same way it does for user levels.
+  push();
+
+  for (const ASTNode& a : assumptions)
+    AddAssert(a);
+
+  // The assumptions ride as the last level, assumed one conjunct each so
+  // an unsat answer can name exactly the assumptions it used.
+  checkSat(getAssertVector());
+
+  // Remember the round for get-unsat-assumptions; the verdict is read
+  // before the frame pop erases its cache entry.
+  lastAssumptionTerms = assumptions;
+  lastAssumingResult = cache.back().result;
+  lastCheckWasAssuming = true;
+
+  // checkSat set model_valid from this solve's outcome; the frame pop
+  // below deliberately leaves both it and the model alone, so get-value
+  // and get-model answer under the assumptions, per SMT-LIB.
+  popAssumptionFrame();
 }
 
 void Cpp_interface::ignoreCheckSat()
@@ -604,17 +656,14 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2)
   if (ignoreCheckSatRequest)
     return;
 
+  // Any ordinary check supersedes the last check-sat-assuming round;
+  // checkSatAssuming re-records after this returns.
+  lastCheckWasAssuming = false;
+
   bm.GetRunTimes()->stop(RunTimes::Parsing);
 
   checkInvariant();
   assert(assertionsSMT2.size() == cache.size());
-
-  // If there are no model commands in the STMLIB2 (say) file, then the command line
-  // argument might set that asks for the model to be checked.
-  if (changed_model_status)
-  {
-    bm.UserFlags.check_counterexample_flag = produce_models;
-  }
 
   Entry& last_run = cache.back();
   if ((last_run.node_number != assertionsSMT2.back().GetNodeNum()) &&
@@ -659,6 +708,12 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2)
       }
     }
   }
+
+  // A model exists exactly when this check concluded SAT and the solve
+  // constructed a counterexample. On the shortcut paths (verdict reused,
+  // no model wanted) nothing was constructed, so nothing may be read.
+  model_valid = (last_run.result == SOLVER_SATISFIABLE) &&
+                bm.UserFlags.construct_counterexample_flag;
 
   if (bm.UserFlags.quick_statistics_flag)
   {
@@ -740,18 +795,31 @@ void Cpp_interface::setOption(std::string option, std::string value)
   }
   else if (option == "produce-models")
   {
-    changed_model_status = true;
-
+    // An input to the counterexample-construction derivations (batch and
+    // driver), NOT the self-check flag: asking for models is not asking
+    // for them to be verified, and the driver defers construction to the
+    // first read.
     if (value == "true")
     {
       produce_models = true;
+      bm.UserFlags.produce_models = true;
       success();
     }
     else if (value == "false")
     {
       produce_models = false;
+      bm.UserFlags.produce_models = false;
       success();
     }
+    else
+      unsupported();
+  }
+  else if (option == "produce-unsat-assumptions")
+  {
+    // get-unsat-assumptions is always answered; the option is accepted so
+    // conforming drivers can request it.
+    if (value == "true" || value == "false")
+      success();
     else
       unsupported();
   }
@@ -761,7 +829,7 @@ void Cpp_interface::setOption(std::string option, std::string value)
       success();
     else
       unsupported();
-  }	  
+  }
   else
     unsupported();
 }
@@ -831,7 +899,7 @@ void Cpp_interface::getAssertions()
 
 void Cpp_interface::getValue(const ASTVec& v)
 {
-  if (!bm.UserFlags.construct_counterexample_flag)
+  if (!bm.UserFlags.construct_counterexample_flag || !model_valid)
   {
     unsupported();
     return;
@@ -861,6 +929,34 @@ void Cpp_interface::getValue(const ASTVec& v)
   cout << os.str() << std::endl;
 }
 
+void Cpp_interface::getUnsatAssumptions()
+{
+  // Meaningful right after a check-sat-assuming that answered unsat;
+  // anything else gets the empty list, which is the correct core whenever
+  // the command is legal at all.
+  if (!lastCheckWasAssuming || lastAssumingResult != SOLVER_UNSATISFIABLE)
+  {
+    cout << "()" << endl;
+    return;
+  }
+
+  // Every assumption is reported: a solve that cannot name individually
+  // which assumptions its refutation used has the whole set as its only
+  // correct answer.
+  std::ostringstream os;
+  os << "(";
+  bool first = true;
+  for (const ASTNode& a : lastAssumptionTerms)
+  {
+    if (!first)
+      os << " ";
+    first = false;
+    printer::SMTLIB2_Print1(os, a, 0, false);
+  }
+  os << ")";
+  cout << os.str() << endl;
+}
+
 // Note, doesn't consider that extra assertions might have been applied?
 void Cpp_interface::getModel()
 {
@@ -871,7 +967,8 @@ void Cpp_interface::getModel()
     return;
   }
 
-  if (cache.size() ==0 || (cache.back().result != SOLVER_SATISFIABLE))
+  if (cache.size() == 0 || (cache.back().result != SOLVER_SATISFIABLE) ||
+      !model_valid)
   {
     return;
   }

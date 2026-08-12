@@ -1505,15 +1505,17 @@ cmdi:
      CHECK_SAT_ASSUMING_TOK LPAREN_TOK an_formulas RPAREN_TOK
     {
       // The standard's argument is a list of prop_literals, i.e. boolean
-      // symbols or their negations. We accept any boolean formula, which is a
-      // superset, because the command is not supported either way.
-      stp::GlobalParserInterface->unsupported();
+      // symbols or their negations. We accept any boolean formula, which
+      // is a superset of that.
+      stp::GlobalParserInterface->checkSatAssuming(*$3);
       delete $3;
     }
 |
      CHECK_SAT_ASSUMING_TOK LPAREN_TOK RPAREN_TOK
     {
-      stp::GlobalParserInterface->unsupported();
+      // No assumptions: same as (check-sat), through the same path so the
+      // two commands cannot drift apart.
+      stp::GlobalParserInterface->checkSatAssuming(stp::ASTVec());
     }
 |
      DECLARE_CONST_TOK const_decl
@@ -1626,7 +1628,7 @@ cmdi:
 |
      GET_UNSAT_ASSUMPTIONS_TOK
     {
-       stp::GlobalParserInterface->unsupported();
+       stp::GlobalParserInterface->getUnsatAssumptions();
     }
 |
      /* STP's sorts are fixed: bitvectors, booleans and arrays of them. */
