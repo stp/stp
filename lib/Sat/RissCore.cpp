@@ -63,14 +63,15 @@ void RissCore::setMaxConflicts(int64_t max_confl)
   s->setConfBudget(max_confl);
 }
 
-bool RissCore::addClause(
+bool RissCore::addClauseInternal(
     const SATSolver::vec_literals& ps) // Add a clause to the solver.
 {
   // convert the vector
   Riss::vec<Lit> &v = *(Riss::vec<Riss::Lit> *)riss_clause;
   v.capacity(ps.size());
   v.clear();
-  for(int i = 0 ; i < ps.size(); ++ i) v.push_(Riss::toLit(toInt(ps[i])));
+  for(int i = 0 ; i < ps.size(); ++ i)
+    v.push_(Riss::toLit(SATSolver::toInt(ps[i])));
 
   return s->addClause(v);
 }
@@ -94,7 +95,8 @@ bool RissCore::propagateWithAssumptions(
   Riss::vec<Lit> &v = *(Riss::vec<Riss::Lit> *)riss_clause;
   v.capacity(assumps.size());
   v.clear();
-  for(int i = 0 ; i < assumps.size(); ++ i) v.push_(Riss::toLit(toInt(assumps[i])));
+  for(int i = 0 ; i < assumps.size(); ++ i)
+    v.push_(Riss::toLit(SATSolver::toInt(assumps[i])));
 
   Riss::lbool ret = s->solveLimited(v);
   assert(s->conflicts ==0);
@@ -108,6 +110,27 @@ bool RissCore::solveInternal(bool& timeout_expired)
 
   Riss::vec<Riss::Lit> assumps;
   Riss::lbool ret = s->solveLimited(assumps);
+  if (ret == (Riss::lbool)l_Undef)
+  {
+    timeout_expired = true;
+  }
+
+  return ret == (Riss::lbool)l_True;
+}
+
+bool RissCore::solveWithAssumptionsInternal(
+    const stp::SATSolver::vec_literals& assumps, bool& timeout_expired)
+{
+  if (!s->simplify())
+    return false;
+
+  // convert the vector, as in addClause
+  Riss::vec<Riss::Lit> riss_assumps;
+  riss_assumps.capacity(assumps.size());
+  for (int i = 0; i < assumps.size(); ++i)
+    riss_assumps.push_(Riss::toLit(SATSolver::toInt(assumps[i])));
+
+  Riss::lbool ret = s->solveLimited(riss_assumps);
   if (ret == (Riss::lbool)l_Undef)
   {
     timeout_expired = true;

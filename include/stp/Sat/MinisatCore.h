@@ -53,9 +53,10 @@ public:
 
   ~MinisatCore();
 
-  bool addClause(const vec_literals& ps) override; // Add a clause to the solver.
-
   bool okay() const override; // FALSE means solver is in a conflicting state
+
+  void unsatAssumptions(const vec_literals& assumps,
+                        std::vector<int>& out) override;
 
   bool propagateWithAssumptions(const stp::SATSolver::vec_literals& assumps);
 
@@ -85,8 +86,13 @@ public:
 
   //bool unitPropagate(const vec_literals& ps);
 
+  bool supportsAssumptions() const override { return true; }
+
 protected:
+  bool addClauseInternal(const vec_literals& ps) override;
   bool solveInternal(bool& timeout_expired) override;
+  bool solveWithAssumptionsInternal(const vec_literals& assumps,
+                                    bool& timeout_expired) override;
 };
 }
 

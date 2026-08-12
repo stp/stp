@@ -70,14 +70,16 @@ namespace stp
   // untranslated fast path bit-for-bit identical to pre-factor builds.
   std::vector<int> ext_of_stp;
   bool factor_enabled = false;
+
+  // Probed once at construction (inside the configuration window):
+  // whether this CaDiCaL build knows the "inprobing" option at all.
+  bool inprobing_control = false;
   void declareNewVariables();
 
 public:
   Cadical();
 
   ~Cadical();
-
-  bool addClause(const vec_literals& ps) override; // Add a clause to the solver.
 
   bool okay() const override; // FALSE means solver is in a conflicting state
 
@@ -91,9 +93,21 @@ public:
 
   void setFrozen(uint32_t var) override;
 
-  bool setSearchBias(SearchBias bias) override;
+  bool setSearchBiasInternal(SearchBias bias) override;
 
-  bool enableBVA() override;
+  bool enableBVAInternal() override;
+
+  bool supportsInprobingControl() const override;
+  bool disableInprobingInternal() override;
+  bool disableEliminationAndShrinkingInternal() override;
+  bool disableLuckyPhasesInternal() override;
+
+  bool enableTrailReuseInternal() override;
+
+  void suggestPhase(uint32_t var, bool value) override;
+
+  void unsatAssumptions(const vec_literals& assumps,
+                        std::vector<int>& out) override;
 
   void setVerbosity(int v) override;
 
@@ -109,8 +123,14 @@ public:
   lbool false_literal() const override { return ((uint8_t)-1); }
   lbool undef_literal() const override { return ((uint8_t)2); }
 
+public:
+  bool supportsAssumptions() const override { return true; }
+
 protected:
+  bool addClauseInternal(const vec_literals& ps) override;
   bool solveInternal(bool& timeout_expired) override;
+  bool solveWithAssumptionsInternal(const vec_literals& assumps,
+                                    bool& timeout_expired) override;
 
   // Cadical polls the Terminator we connect during search.
   bool canInterruptSearch() const override { return true; }
