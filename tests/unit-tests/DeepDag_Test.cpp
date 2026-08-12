@@ -720,6 +720,31 @@ bool fpTotaliseChainOk(Context& c, unsigned depth)
 #endif // STP_ENABLE_FLOATING_POINT
 
 
+// The LISP printer, which is what operator<< on a node uses -- so a deep
+// node cannot even be printed, including from an error path.
+bool printerLispOk(Context& c, unsigned depth)
+{
+  const ASTNode f = c.formula(c.chain(BVXOR, depth));
+  c.roots.push_back(f);
+  std::ostringstream os;
+  os << f;
+  return os.str().size() > 0;
+}
+
+// The SMT-LIB2 printer, behind --print-back-SMTLIB2. The same shape as the
+// LISP printer, which is done, but about thirty arms each interleaving
+// their own text with their operands, so it is a long mechanical
+// conversion rather than a subtle one. Its output is exactly checkable,
+// which is what makes it low risk.
+bool printerSMTLIB2Ok(Context& c, unsigned depth)
+{
+  const ASTNode f = c.formula(c.chain(BVXOR, depth));
+  c.roots.push_back(f);
+  std::ostringstream os;
+  printer::SMTLIB2_Print1(os, f, 0, false);
+  return os.str().size() > 0;
+}
+
 TEST(DeepDag, shallow_rewriting)
 {
   Context c;
@@ -1121,10 +1146,15 @@ TEST(DeepDag, deep_array_read_count_walk)
 }
 #ifdef STP_ENABLE_FLOATING_POINT
 TEST(DeepDag, deep_fp_totalise)        { EXPECT_STACK_SAFE(fpTotaliseChainOk, 20000); }
+#endif // STP_ENABLE_FLOATING_POINT
+
+TEST(DeepDag, deep_printer_lisp)       { EXPECT_STACK_SAFE(printerLispOk, 20000); }
+#ifdef STP_ENABLE_FLOATING_POINT
 TEST(DeepDag, deep_fp_format_ite)      { EXPECT_STACK_SAFE(fpFormatIteChainOk, 20000); }
 TEST(DeepDag, deep_fp_format_store)    { EXPECT_STACK_SAFE(fpFormatStoreChainOk, 20000); }
 TEST(DeepDag, deep_source_sort_ite)    { EXPECT_STACK_SAFE(sourceSortIteChainOk, 20000); }
 TEST(DeepDag, deep_source_sort_store)  { EXPECT_STACK_SAFE(sourceSortStoreChainOk, 20000); }
 #endif // STP_ENABLE_FLOATING_POINT
 
+TEST(DeepDag, DISABLED_deep_printer_smtlib2)    { EXPECT_STACK_SAFE(printerSMTLIB2Ok, 20000); }
 } // namespace
