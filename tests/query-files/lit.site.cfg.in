@@ -9,6 +9,8 @@ config.stp_executable = "@STP_EXECUTABLE_PATH@"
 config.stp_enable_floating_point = @STP_FLOATING_POINT_PYBOOL@
 config.stp_have_libbf = @STP_LIBBF_PYBOOL@
 config.stp_have_minisat = @STP_MINISAT_PYBOOL@
+config.stp_have_cadical = @STP_CADICAL_PYBOOL@
+config.stp_cadical_inprobing = @STP_CADICAL_INPROBING_PYBOOL@
 
 # Let the main config do the real work.
 lit_config.load_config(config, "@STP_SOURCE_DIR@/tests/query-files/lit.cfg")

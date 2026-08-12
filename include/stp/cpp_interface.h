@@ -133,6 +133,12 @@ class Cpp_interface
 
     SOLVER_RETURN_TYPE result;
     uint64_t node_number; // a weak pointer.
+
+    // The unsat verdict came from a deeper check whose failed assumptions
+    // all lay at or below this level -- recorded so a later check of this
+    // stack can answer without solving, and so the shortcut is observable
+    // under --stats.
+    bool fromCore = false;
   };
   vector<Entry> cache;
 
@@ -200,6 +206,7 @@ private:
   void addFrame();
   void removeFrame();
   void assertRoundingModeValid(const ASTNode& s);
+  void resetIncrementalSolver();
 
   bool produce_models;
 
@@ -209,6 +216,22 @@ private:
   // pop, reset, reset-assertions). get-value/get-model refuse when false
   // rather than print a model of an assertion set that no longer exists.
   bool model_valid;
+
+  // Unless --incremental or an explicit threshold overrides it, pure
+  // QF_BV/QF_ABV sessions delay the persistent driver until solve 32; other
+  // and unknown logics retain solve 3. The first solves carry the largest
+  // all-new formulas, and the batch pipeline's whole-formula simplification
+  // earns its keep there.
+  // The user's REQUEST, read once from the flags, and the SESSION's state,
+  // which a push turns on. Keeping them apart matters because reset() starts
+  // a new session: folding the session bit back into the request made a
+  // session that pushed and then reset behave for the rest of its life as
+  // though --incremental had been passed, forced-first-solve policies and
+  // all.
+  bool incremental_from_start;
+  bool session_incremental;
+  bool delayed_bv_auto_engagement;
+  size_t solves_run;
 
   // The most recent check-sat-assuming: its assumption terms, its verdict,
   // and whether it is still the last thing that happened to the assertion
@@ -332,6 +355,10 @@ public:
   DLL_PUBLIC void setPrintSuccess(bool ps);
   DLL_PUBLIC bool isSymbolAlreadyDeclared(std::string name);
 
+  // Retain the SMT-LIB2 set-logic classification needed by automatic
+  // incremental engagement. reset clears it; reset-assertions retains it.
+  DLL_PUBLIC void setLogic(const std::string& logic);
+
   // Create the node, then "new" it.
   DLL_PUBLIC ASTNode* newNode(const Kind k, const ASTNode& n0,
                               const ASTNode& n1);
@@ -393,7 +420,8 @@ public:
 
   // Useful when printing back, so that you can parse, but ignore the request.
   DLL_PUBLIC void ignoreCheckSat();
-  DLL_PUBLIC void checkSat(const ASTVec& assertionsSMT2);
+  DLL_PUBLIC void checkSat(const ASTVec& assertionsSMT2,
+                           bool fromCheckSatAssuming = false);
 
   // (check-sat-assuming (a1 ... an)): check-sat of the current stack
   // conjoined with the assumptions, which are discarded again afterwards.
@@ -402,10 +430,10 @@ public:
   // under the assumptions, and the assertion stack is unchanged.
   DLL_PUBLIC void checkSatAssuming(const ASTVec& assumptions);
 
-  // After an unsat check-sat-assuming: the assumptions the refutation
-  // used, printed as an SMT-LIB list of terms. Reporting the full
-  // assumption set is always a correct answer, and is what a solve that
-  // cannot name its failed assumptions individually reports.
+  // After an unsat check-sat-assuming: the subset of its assumptions the
+  // refutation used, printed as an SMT-LIB list of terms. The driver
+  // supplies per-assumption granularity when it ran; otherwise the full
+  // assumption set is reported, which is always a correct core.
   DLL_PUBLIC void getUnsatAssumptions();
 
   DLL_PUBLIC void cleanUp();

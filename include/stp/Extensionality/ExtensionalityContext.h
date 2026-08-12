@@ -219,6 +219,12 @@ public:
   // lemmas and model). Called immediately before lowering the next root.
   void beginSolve();
 
+  // A full incremental encoding-epoch rotation has already invalidated the
+  // previous model and SAT instance. Release vector high-water storage as
+  // well as clearing the solve-local records, so one large equality query
+  // does not pin its graph for the rest of a small incremental session.
+  void releaseSolveStorage();
+
   // Conjoin every current-root-active record's constraint bundle (the
   // witness clause of preprocessing step 1 plus the defining equations
   // of its virtual reads) before STP preprocessing, so the bundles are

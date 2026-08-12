@@ -311,6 +311,8 @@ class ArrayTransformer::TransformDriver
   ASTNode& ASTUndefined;
   ArrType& arrayToIndexToRead;
   std::map<ASTNode, vector<std::pair<ASTNode, ASTNode>>>& ack_pair;
+  const bool& recordTouchedReads;
+  std::vector<std::pair<ASTNode, ASTNode>>& touchedReads;
 
   ASTNode finishTransformTerm(const ASTNode& term, const ASTNode& result)
   {
@@ -872,7 +874,11 @@ class ArrayTransformer::TransformDriver
             {
               std::map<ASTNode, ArrayRead>::const_iterator it2;
               if ((it2 = it->second.find(readIndex)) != it->second.end())
+              {
+                if (recordTouchedReads)
+                  touchedReads.push_back(std::make_pair(arrName, readIndex));
                 return finishRead(it2->second.ite);
+              }
             }
           }
 
@@ -930,6 +936,8 @@ class ArrayTransformer::TransformDriver
           }
 
           assert(arrName.GetType() == ARRAY_TYPE);
+          if (recordTouchedReads)
+            touchedReads.push_back(std::make_pair(arrName, readIndex));
           arrayToIndexToRead[arrName].insert(
               make_pair(readIndex, ArrayRead(symbolResult, CurrentSymbol)));
           return finishRead(symbolResult);
@@ -1089,7 +1097,9 @@ public:
       : owner(owner), TransformMap(owner.TransformMap), simp(owner.simp),
         bm(owner.bm), nf(owner.nf), ASTTrue(owner.ASTTrue),
         ASTFalse(owner.ASTFalse), ASTUndefined(owner.ASTUndefined),
-        arrayToIndexToRead(owner.arrayToIndexToRead), ack_pair(owner.ack_pair)
+        arrayToIndexToRead(owner.arrayToIndexToRead), ack_pair(owner.ack_pair),
+        recordTouchedReads(owner.recordTouchedReads),
+        touchedReads(owner.touchedReads)
   {
   }
 

@@ -30,6 +30,7 @@ THE SOFTWARE.
 #include <cstdlib>
 #include <cstring>
 
+#include "stp/Incremental/IncrementalSolver.h"
 #include "stp/Interface/FdOStream.h"
 #include "stp/Parser/parser.h"
 #include "stp/Printer/printers.h"
@@ -257,6 +258,11 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
       //Array-based Minisat has been replaced with normal MiniSat
       b->UserFlags.solver_to_use = stp::UserDefinedFlags::MINISAT_SOLVER;
       break;
+    case INCREMENTAL_AUTO_ENGAGE_AT:
+      // Same policy object the SMT-LIB2 reader drives with
+      // --incremental-auto-engage-at; this is the C API's way to reach it.
+      b->UserFlags.incremental_auto_engage_at = param_value;
+      break;
     case CADICAL:
       b->UserFlags.solver_to_use = stp::UserDefinedFlags::CADICAL_SOLVER;
       break;
@@ -360,6 +366,16 @@ void vc_printExprFile(VC vc, Expr e, int fd)
 
   ((stp::ASTNode*)e)->PL_Print(os, b);
   // os.flush();
+}
+
+// The incremental driver defers counterexample construction to the first
+// reader; every C-API entry that reads the counterexample tables calls
+// this first. Cheap and idempotent when nothing is pending.
+static void materializePendingModel(VC vc)
+{
+  stp::STP* stp_i = (stp::STP*)vc;
+  if (stp_i->hasIncrementalSolver())
+    stp_i->getIncrementalSolver()->materializePendingModel();
 }
 
 static void vc_printVarDeclsToStream(VC vc, ostream& os)
@@ -469,6 +485,7 @@ void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf, size_t* len,
 
 void vc_printCounterExampleToBuffer(VC vc, char** buf, size_t* len)
 {
+  materializePendingModel(vc);
   assert(vc);
   assert(buf);
   assert(len);
@@ -778,11 +795,63 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_max_conflicts, int timeout_
 
   stp_i->ClearAllTables();
 
+  stp_i->bm->UserFlags.timeout_max_conflicts = timeout_max_conflicts;
+  stp_i->bm->UserFlags.timeout_max_time = timeout_max_time;
+
+  // Incremental sessions (a vc_push happened, or vc_setFlags 'i'): solve
+  // through the persistent driver. vc_query decides asserts AND NOT query,
+  // and the negated query is appended as one more retractable level -- an
+  // assumption for exactly this call, which is also what sidesteps the
+  // un-stacked _current_query. The driver populates the same
+  // counterexample tables the batch path does, so the C API's model
+  // contract (the counterexample belongs to the last query and survives
+  // the push/query/pop bracket) is untouched. Engagement follows the same
+  // policy object as the SMT-LIB2 frontend: by default the third solve, so
+  // the first solves keep the batch pipeline's whole-formula simplification
+  // and a two-query session -- whose final solve can never repay the
+  // driver's persistent encoding -- stays batch throughout. There is no
+  // set-logic here, so the longer pure-QF_BV default is not claimed. This
+  // used to be a literal 3 that incremental_auto_engage_at could not reach:
+  // the override was documented and inert for every embedder.
+  // vc_setFlags 'i' still forces the driver from the first solve.
+  const bool use_incremental =
+      stp_i->sessionIncremental &&
+      (stp_i->incrementalFromStart ||
+       stp::IncrementalSolver::automaticEngagementReady(
+           stp_i->bm->UserFlags.incremental_auto_engage_at,
+           /*delayedBvLogic=*/false, stp_i->incrementalSolvesRun));
+  // Same policy object as the SMT-LIB2 frontend. The `use_incremental &&`
+  // this used to carry was dead: the value is read only inside the
+  // `if (use_incremental)` branch below.
+  const bool firstForcedIncrementalSolve =
+      stp::IncrementalSolver::forcedFirstSolve(stp_i->incrementalFromStart,
+                                               stp_i->incrementalSolvesRun);
+  stp_i->incrementalSolvesRun++;
+  if (use_incremental)
+  {
+    // The driver treats its base level as permanent -- base conjuncts
+    // become unit clauses for the rest of the session. The SMT-LIB2
+    // frontend guarantees such a level (it exists from startup and can
+    // never be popped); the C API guarantees no such thing: the stack
+    // starts empty, the first vc_push creates a level that vc_pop will
+    // remove again, and even pre-push assertions can be popped. So here
+    // NOTHING is permanent: the driver's base is a synthetic TRUE, every
+    // real level rides as retractable assumptions, and the negated query
+    // is one more retractable level of its own.
+    stp::ASTVec levels;
+    levels.push_back(b->ASTTrue);
+    const stp::ASTVec current = b->getVectorOfAsserts();
+    levels.insert(levels.end(), current.begin(), current.end());
+    levels.push_back(b->CreateNode(stp::NOT, *a));
+
+    stp::IncrementalSolver* inc = stp_i->getIncrementalSolver();
+    if (inc->canHandle(levels))
+      return inc->checkSat(levels, false, firstForcedIncrementalSolve);
+  }
+
   const stp::ASTVec v = b->GetAsserts();
   stp::ASTNode o;
   int output;
-  stp_i->bm->UserFlags.timeout_max_conflicts = timeout_max_conflicts;
-  stp_i->bm->UserFlags.timeout_max_time = timeout_max_time;
   if (!v.empty())
   {
     if (v.size() == 1)
@@ -832,6 +901,10 @@ void vc_push(VC vc)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
 
+  // The session is incremental from the first push on, exactly as the
+  // SMT-LIB2 frontend behaves; sessions that never push are untouched.
+  stp_i->sessionIncremental = true;
+
   stp_i->ClearAllTables();
   b->Push();
 }
@@ -852,6 +925,7 @@ void vc_pop(VC vc)
 
 void vc_printCounterExample(VC vc)
 {
+  materializePendingModel(vc);
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
   stp::AbsRefine_CounterExample* ce =
@@ -867,6 +941,7 @@ void vc_printCounterExample(VC vc)
 
 void vc_printCounterExampleSMTLIB2(VC vc)
 {
+  materializePendingModel(vc);
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
   stp::AbsRefine_CounterExample* ce =
@@ -888,6 +963,7 @@ void vc_printCounterExampleSMTLIB2(VC vc)
 
 Expr vc_getCounterExample(VC vc, Expr e)
 {
+  materializePendingModel(vc);
   stp::STP* stp_i = (stp::STP*)vc;
   stp::ASTNode* a = (stp::ASTNode*)e;
 
@@ -903,6 +979,7 @@ Expr vc_getCounterExample(VC vc, Expr e)
 void vc_getCounterExampleArray(VC vc, Expr e, Expr** indices, Expr** values,
                                int* size)
 {
+  materializePendingModel(vc);
   stp::STP* stp_i = (stp::STP*)vc;
   stp::ASTNode* a = (stp::ASTNode*)e;
   stp::AbsRefine_CounterExample* ce =
@@ -945,6 +1022,7 @@ void vc_deleteCounterExampleArray(Expr* indices, Expr* values, int size)
 
 int vc_counterexample_size(VC vc)
 {
+  materializePendingModel(vc);
   stp::STP* stp_i = (stp::STP*)vc;
   stp::AbsRefine_CounterExample* ce =
       (stp::AbsRefine_CounterExample*)(stp_i->Ctr_Example);
@@ -953,6 +1031,7 @@ int vc_counterexample_size(VC vc)
 
 WholeCounterExample vc_getWholeCounterExample(VC vc)
 {
+  materializePendingModel(vc);
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
   stp::AbsRefine_CounterExample* ce =
@@ -3131,6 +3210,7 @@ int getIWidth(Expr ex)
 
 void vc_printCounterExampleFile(VC vc, int fd)
 {
+  materializePendingModel(vc);
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
 
@@ -3177,6 +3257,16 @@ void process_argument(const char ch, VC vc)
     case 'h':
       assert(0 && "This API is dumb, don't use it!");
       exit(-1);
+      break;
+    case 'i':
+      // Incremental solving from the first vc_query on (it switches itself
+      // on at the first vc_push even without this): one SAT solver and one
+      // encoding live across queries, with the negated query and the
+      // pushed levels' assertions assumed rather than re-encoded. See
+      // docs/incremental-solving.rst.
+      bm->UserFlags.incremental_solving = true;
+      ((stp::STP*)vc)->incrementalFromStart = true;
+      ((stp::STP*)vc)->sessionIncremental = true;
       break;
     case 'm':
       bm->UserFlags.smtlib1_parser_flag = true;

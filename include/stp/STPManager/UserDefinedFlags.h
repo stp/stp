@@ -84,6 +84,83 @@ public:
   // eagerly write through the array's function congruence axioms.
   bool ackermannisation = false;
 
+  // Incremental solving (docs/incremental-solving.rst): keep one SAT solver
+  // and one bit-blast/CNF encoding alive across (check-sat) calls, asserting
+  // retractable formulas as SAT assumptions instead of re-solving from
+  // scratch. Switched on by the first (push) in an SMT-LIB session, or from
+  // the start with --incremental; sessions that never push are untouched.
+  bool incremental_solving = false;
+
+  // The real-solve ordinal at which an automatically incremental SMT-LIB
+  // session starts using the persistent driver. -1 selects the measured
+  // per-logic policy (QF_BV/QF_ABV: 32; other/unknown logics: 3), 1 engages
+  // on the first solve, and 0 disables automatic driver engagement without
+  // disabling the frontend's per-level verdict cache. Explicit --incremental
+  // always engages from the first solve and ignores this threshold.
+  int64_t incremental_auto_engage_at = -1;
+
+  // Emit fine-grained per-check and cumulative measurements for the
+  // incremental driver. Kept separate from the general -s diagnostics so
+  // profiling is not distorted by verbose pass/backend output.
+  bool incremental_profile = false;
+
+  // Run only the persistent assumption/refinement core. This disables the
+  // fitted cross-level preprocessing, promotion, first-solve shortcuts and
+  // adaptive backend policies, but deliberately keeps memory-relief epoch
+  // rotation and every theory-correctness mechanism.
+  bool incremental_core_only = false;
+
+  // Diagnostic oracle for the CBP level trail: discard the engine on every
+  // stack divergence and re-feed the surviving prefix, as the pre-trail
+  // implementation did. This is intentionally off in normal solving.
+  bool incremental_cbp_reset = false;
+
+  // Explicit --incremental starts before there is any persistent state to
+  // reuse. On a very large first stack, building the cross-level CBP engine
+  // can cost more than the only solve; defer that bootstrap until a later
+  // real check. 0 disables the deferral.
+  int64_t incremental_cbp_bootstrap_limit = 100000;
+
+  // How many DAG nodes the cross-level CBP engine may retain for the live
+  // stack before it stops accepting levels. Charged against what the engine
+  // actually holds -- levels share subgraphs by identity, so this is the
+  // union over live levels, not the sum of their sizes. The default is the
+  // measured policy; the override exists so the cap can be reached in a
+  // test without a hundred-thousand-node file.
+  int64_t incremental_cbp_feed_cap = 200000;
+
+  // A relief rebuild re-derives the whole base semantically -- equality
+  // propagation, substitution and constant-bit propagation over every base
+  // conjunct at once -- before re-encoding it. That is worth doing on a base
+  // the pass can actually digest and is unbounded work on one it cannot, so
+  // it is skipped once the base passes this many DAG nodes; the raw base is
+  // re-encoded instead, exactly as it is for array bases and for the three
+  // rebuild reasons that are not about size. 0 skips it always.
+  int64_t incremental_base_resimplify_limit = 100000;
+
+  // The persistent encoding grows monotonically within an epoch; when the
+  // solver's variable count passes this limit AND most encodings belong to
+  // popped, never-returning content, the complete semantic/AIG/SAT encoding
+  // epoch is rotated and reconstructed from the live stack. 0 disables this
+  // SAT-size trigger; the independent semantic-cache trigger below may still
+  // rotate.
+  int64_t incremental_reencode_limit = 1000000;
+
+  // Approximate DAG-node charge at which the driver exactly compares the
+  // union pinned by semantic caches with the latest live stack. If dead
+  // cached structure is at least four times the peak live union, rotate the
+  // complete semantic/AIG epoch. Separate from the SAT-variable threshold so
+  // diagnostic SAT limits do not turn into unrelated semantic policy knobs.
+  // 0 disables semantic-cache-triggered relief.
+  int64_t incremental_semantic_cache_limit = 1000000;
+
+  // Promote a pushed level that has sat identical at the same depth for
+  // many consecutive solves to permanent unit clauses: its assumption
+  // disappears and its clauses join root-level preprocessing. A later
+  // retraction of a promoted level restarts the solver, with the
+  // stability threshold doubling on each such demotion.
+  bool incremental_promote_units = true;
+
   // Decide whole-array equality/disequality (the extensional theory of
   // arrays) with the lemmas-on-demand procedure of Brummayer & Biere
   // (JSAT 2010). Runtime semantic option; it must be set before a
@@ -234,6 +311,16 @@ public:
     OFF
   };
   BVAMode cadical_factor = BVAMode::AUTO;
+
+  // Whether the incremental driver may retire CaDiCaL's probe-based
+  // inprocessing mid-session. Inprobing re-runs over the whole
+  // persistent encoding at every solve; on many-solve sessions that
+  // recurring cost dominates what it earns (measured 2x on generated
+  // variant-push corpora), while few-solve sessions genuinely profit
+  // from it. AUTO -- the default -- retires it once a session has shown
+  // enough solves, via one bounded solver rebuild; ON never retires;
+  // OFF retires from the first driver solve.
+  BVAMode incremental_inprobing = BVAMode::AUTO;
 
   bool get_print_output_at_all() const
   {

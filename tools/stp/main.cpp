@@ -91,6 +91,12 @@ public:
   CLI::Option* cadical_factor_option = nullptr;
 #endif
 
+  // Likewise for UserFlags.incremental_inprobing.
+  std::string incremental_inprobing;
+#ifdef USE_CADICAL
+  CLI::Option* incremental_inprobing_option = nullptr;
+#endif
+
   // Likewise for UserFlags.cnf_effort; always mapped, so it carries the
   // default spelling.
   std::string cnf_effort = "medium";
@@ -233,6 +239,15 @@ void ExtraMain::create_options()
                      "or 'auto' (the default, on only for problems with array "
                      "operations). Needs a CaDiCaL 3.x build; otherwise the "
                      "request is declined with a warning")
+          ->group(solver_group);
+  incremental_inprobing_option =
+      app.add_option(
+             "--incremental-inprobing", incremental_inprobing,
+             "cadical's probe-based inprocessing on the incremental "
+             "driver's persistent solver: 'on' (always), 'off' (never), or "
+             "'auto' (the default: retired once a session shows many "
+             "solves, where re-probing the whole encoding every solve "
+             "costs more than it earns)")
           ->group(solver_group);
 #endif
 
@@ -423,6 +438,83 @@ void ExtraMain::create_options()
                      "blocks, which is faster. Default: on when reading from "
                      "stdin, off when reading from a file. SMT-LIB2 only.")
           ->group(misc_group);
+
+  app.add_flag("--incremental", bm->UserFlags.incremental_solving,
+               "solve incrementally from the start: keep the SAT solver and "
+               "the bit-blasted encoding across (check-sat) commands, "
+               "asserting retractable formulas as SAT assumptions. Switches "
+               "itself on at the first (push) even without this flag. "
+               "SMT-LIB2 only.")
+      ->group(misc_group);
+
+  int64_arg("--incremental-auto-engage-at",
+            bm->UserFlags.incremental_auto_engage_at,
+            "real-solve ordinal at which an automatically incremental "
+            "SMT-LIB session engages the persistent driver; -1 uses the "
+            "theory default (QF_BV/QF_ABV: 32, others: 3), 1 engages on "
+            "the first solve, and 0 never engages automatically (explicit "
+            "--incremental still engages at 1)",
+            misc_group);
+
+  app.add_flag("--incremental-profile", bm->UserFlags.incremental_profile,
+               "print fine-grained per-check and cumulative timings and "
+               "work counters for the incremental driver (use with "
+               "--incremental to profile from the first check)")
+      ->group(misc_group);
+
+  app.add_flag("--incremental-core-only",
+               bm->UserFlags.incremental_core_only,
+               "run the minimal persistent assumption/refinement core "
+               "without fitted preprocessing, promotion, or adaptive "
+               "backend policies; memory-relief rebuilding remains active")
+      ->group(misc_group);
+
+  app.add_flag("--incremental-cbp-reset", bm->UserFlags.incremental_cbp_reset,
+               "use reset and prefix re-feed instead of CBP level rollback "
+               "on stack divergence (diagnostic oracle)")
+      ->group(misc_group);
+
+  int64_arg("--incremental-cbp-bootstrap-limit",
+            bm->UserFlags.incremental_cbp_bootstrap_limit,
+            "on an explicitly forced first incremental solve, defer the "
+            "cross-level CBP bootstrap when the assertion stack exceeds "
+            "this many DAG nodes. 0 disables the deferral.",
+            misc_group);
+
+  int64_arg("--incremental-cbp-feed-cap", bm->UserFlags.incremental_cbp_feed_cap,
+            "how many DAG nodes the cross-level CBP engine may retain for "
+            "the live stack before it stops accepting levels; the charge is "
+            "refunded when a level pops.",
+            misc_group);
+
+  int64_arg("--incremental-base-resimplify-limit",
+            bm->UserFlags.incremental_base_resimplify_limit,
+            "skip the whole-base semantic pass a relief rebuild runs when "
+            "the base exceeds this many DAG nodes; the raw base is "
+            "re-encoded instead. 0 always skips it.",
+            misc_group);
+
+  int64_arg("--incremental-reencode-limit",
+            bm->UserFlags.incremental_reencode_limit,
+            "rebuild the incremental solver from the live assertion stack "
+            "once its variable count passes this limit and most encodings "
+            "belong to popped content. 0 disables the rebuild.",
+            misc_group);
+
+  int64_arg("--incremental-semantic-cache-limit",
+            bm->UserFlags.incremental_semantic_cache_limit,
+            "rotate the complete incremental encoding epoch once semantic "
+            "caches pass this approximate DAG-node charge and an exact "
+            "retained/live graph check finds mostly popped content. 0 "
+            "disables this trigger.",
+            misc_group);
+
+  app.add_flag("--incremental-promote-units,!--no-incremental-promote-units",
+               bm->UserFlags.incremental_promote_units,
+               "promote long-stable pushed levels to permanent unit "
+               "clauses on the incremental driver; retracting a promoted "
+               "level restarts its solver")
+      ->group(misc_group);
 
   int64_arg("--max-num-confl,--max_num_confl,-g",
             bm->UserFlags.timeout_max_conflicts,
@@ -704,6 +796,23 @@ int ExtraMain::parse_options(int argc, char** argv)
       std::exit(-1);
     }
   }
+
+  if (incremental_inprobing_option->count())
+  {
+    if (incremental_inprobing == "on")
+      bm->UserFlags.incremental_inprobing = UserDefinedFlags::BVAMode::ON;
+    else if (incremental_inprobing == "off")
+      bm->UserFlags.incremental_inprobing = UserDefinedFlags::BVAMode::OFF;
+    else if (incremental_inprobing == "auto")
+      bm->UserFlags.incremental_inprobing = UserDefinedFlags::BVAMode::AUTO;
+    else
+    {
+      cerr << "ERROR: --incremental-inprobing must be one of 'on', 'off' "
+              "or 'auto'"
+           << endl;
+      std::exit(-1);
+    }
+  }
 #endif
 
   /*
@@ -720,6 +829,27 @@ int ExtraMain::parse_options(int argc, char** argv)
   if (bm->UserFlags.timeout_max_time < -1)
   {
     cerr << "ERROR: --max-time must be -1 (no limit) or greater" << endl;
+    std::exit(-1);
+  }
+
+  if (bm->UserFlags.incremental_base_resimplify_limit < 0)
+  {
+    cerr << "ERROR: --incremental-base-resimplify-limit must be 0 or greater"
+         << endl;
+    std::exit(-1);
+  }
+
+  if (bm->UserFlags.incremental_cbp_feed_cap < 1)
+  {
+    cerr << "ERROR: --incremental-cbp-feed-cap must be at least 1" << endl;
+    std::exit(-1);
+  }
+
+  if (bm->UserFlags.incremental_auto_engage_at < -1)
+  {
+    cerr << "ERROR: --incremental-auto-engage-at must be -1 (theory "
+            "default), 0 (never), or greater"
+         << endl;
     std::exit(-1);
   }
 

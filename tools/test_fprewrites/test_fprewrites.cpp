@@ -619,10 +619,16 @@ static void run(Ctx& c)
 
   // The reflexive pair: `=` is reflexive on the abstract domain (one NaN
   // value), fp.eq is not (NaN compares equal to nothing, itself included).
+  // The SMT equality folds immediately, and does so whatever the solver mode:
+  // node construction is context-free.
   {
     ASTNode x = c.fp(EB, SB);
     report("x = x -> true",
            c.nf->CreateNode(FP_SMT_EQ, {x, x}) == c.mgr.ASTTrue);
+    c.mgr.UserFlags.incremental_solving = true;
+    report("x = x -> true, incremental mode included",
+           c.nf->CreateNode(FP_SMT_EQ, {x, x}) == c.mgr.ASTTrue);
+    c.mgr.UserFlags.incremental_solving = false;
     report("fp.eq(x, x) -> not isNaN(x)",
            c.nf->CreateNode(FP_EQ, {x, x}) ==
                c.hf->CreateNode(NOT, {c.hf->CreateNode(FP_ISNAN, {x})}));

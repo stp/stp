@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/STPManager/STP.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/Incremental/IncrementalSolver.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/NodeToFixedBitsMap.h"
 #include "stp/ToSat/ToSATAIG.h"
@@ -105,6 +106,20 @@ SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS,
   SOLVER_RETURN_TYPE result =
       TopLevelSTPAux(NewSolver, original_input, arrayEqualityRewrites);
   return result;
+}
+
+IncrementalSolver* STP::getIncrementalSolver()
+{
+  if (incrementalSolver == nullptr)
+    incrementalSolver =
+        new IncrementalSolver(bm, Ctr_Example, simp, arrayTransformer);
+  return incrementalSolver;
+}
+
+void STP::resetIncrementalSolver()
+{
+  delete incrementalSolver;
+  incrementalSolver = nullptr;
 }
 
 SATSolver* STP::get_new_sat_solver()

@@ -66,10 +66,20 @@ public:
   typedef std::map<ASTNode, ArrayRead> arrTypeMap;
   typedef std::map<ASTNode, arrTypeMap> ArrType;
   ArrType arrayToIndexToRead;
+  // When enabled, every (array, index) read the current transform run
+  // visits is appended here (registry hits and inserts alike), so a caller
+  // can learn which registry rows one formula's reads occupy.
+  bool recordTouchedReads = false;
+  std::vector<std::pair<ASTNode, ASTNode>> touchedReads;
 
-private:
+  // Under eager Ackermannisation: each array's reads in the order they
+  // were seen, from which a new read's nested if-then-else over the
+  // existing reads is built. Public alongside arrayToIndexToRead for the
+  // same reason: the incremental driver persists both across check-sats
+  // and seeds them back in before each transform.
   std::map<ASTNode, vector<std::pair<ASTNode, ASTNode>>> ack_pair;
 
+private:
   /****************************************************************
    * Private Typedefs and Data                                    *
    ****************************************************************/
@@ -80,6 +90,7 @@ private:
   // Memo table used by the transformer while it is transforming the
   // formulas and terms
   ASTNodeMap* TransformMap;
+
 
   // Ptr to an external simplifier
   Simplifier* simp;

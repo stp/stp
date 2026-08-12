@@ -212,7 +212,22 @@ enum ifaceflag_t
   //! Note: this is last so that the values of the flags above are unchanged
   //! from the releases before CaDiCaL was added.
   //!
-  CADICAL
+  CADICAL,
+
+  //! The real-query ordinal at which a session that never asked for the
+  //! incremental driver starts using it anyway.
+  //!
+  //! `param_value` is that ordinal: 1 engages on the first query, N on the
+  //! Nth, 0 disables automatic engagement entirely, and a negative value
+  //! restores the default (the third query). `vc_setFlags(vc, 'i')` still
+  //! forces the driver from the first query regardless of this.
+  //!
+  //! Set this before the first query; it is read per query, so changing it
+  //! mid-session takes effect on the next one.
+  //!
+  //! Note: appended so the values of the flags above are unchanged.
+  //!
+  INCREMENTAL_AUTO_ENGAGE_AT
 
 };
 
