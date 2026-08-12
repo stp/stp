@@ -125,3 +125,7 @@ AddSTPGTest(DeepDag_Test.cpp)
 # FloatBlast_Test does.
 target_link_libraries(DeepDag_TestTests $<TARGET_FILE:libabc-pic>)
 add_dependencies(DeepDag_TestTests libabc-pic)
+# The check that a primed pass still walks what its priming visits. Debug-only,
+# like the audit it drives: under NDEBUG the cases compile away and the binary
+# reports nothing to run.
+AddSTPGTest(PrimeMemo_Test.cpp)

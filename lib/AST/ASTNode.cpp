@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STP.h"
+#include "stp/Util/DagWalk.h"
 #include <sstream>
 
 namespace stp
@@ -173,6 +174,61 @@ static bool deriveFPFormat(const ASTNode& n, unsigned int& e, unsigned int& s)
   }
 }
 
+// Which children a node's format derivation reads, as a half-open range of
+// child positions.
+//
+// This says what the switch above consults and has to keep agreeing with it:
+// the read and store arms take the format of the array under them, the
+// if-then-else arm takes a branch's, and the arithmetic arms take whichever
+// operand carries one. Every other kind decides from its own kind, or from
+// children it reads as constants rather than as floats, so an empty range is
+// also "the walk below stops here".
+//
+// The if-then-else and arithmetic arms stop at the first operand that answers,
+// where this names them all. Naming more than is read costs a derivation that
+// would have happened the moment anything asked that node its type, and can
+// cost nothing else: neither derivation builds a node, calls a factory or
+// reads anything but its subject's kind, children and widths.
+static void fpFormatOperands(const ASTNode& n, size_t& from, size_t& to)
+{
+  from = 0;
+  to = 0;
+
+  switch (n.GetKind())
+  {
+    case READ:
+    case WRITE:
+      to = (n.Degree() >= 1) ? 1 : 0;
+      break;
+
+    case ITE:
+      if (n.Degree() == 3)
+      {
+        from = 1;
+        to = 3;
+      }
+      break;
+
+    case FP_ABS:
+    case FP_NEG:
+    case FP_ADD:
+    case FP_SUB:
+    case FP_MUL:
+    case FP_DIV:
+    case FP_FMA:
+    case FP_SQRT:
+    case FP_REM:
+    case FP_ROUNDTOINTEGRAL:
+    case FP_MIN:
+    case FP_MAX:
+      to = n.Degree();
+      break;
+
+    default:
+      break;
+  }
+}
+
 // Sentinel cached in _exp_width once derivation has concluded "not a
 // float". Without it every format query on a formatless node re-walks its
 // children -- quadratic on store chains and ITE spines, since WRITE and ITE
@@ -183,29 +239,82 @@ static const uint32_t FP_NOT_A_FLOAT = 0xFFFFFFFFu;
 // Derive once and keep the answer -- positive or negative. The fields are
 // already mutable, and an interior node can hold them, so this costs one
 // walk per node rather than one per query.
+//
+// The derivation reads its operands' formats, and reading one derives it --
+// which was this function again, one call frame per level of a store chain or
+// an if-then-else spine. Nothing bounds those: they are as deep as the input
+// nests, and 20,000 is fatal. It is worse than a pass dying on its own input,
+// because this is not a pass. GetType asks for the format and everything asks
+// GetType, so a query deep enough could not be asked its type at all, from
+// anywhere.
+//
+// So primeMemo fills the dependency suffix bottom up, and the derivation then
+// finds every operand it reads already answered and stops one level down. See
+// DagWalk.h, and DeepDag_Test.cpp for the depths.
 void ASTNode::cacheFPFormat() const
 {
-  unsigned int e = 0;
-  unsigned int s = 0;
+#ifndef NDEBUG
+  static thread_local PrimeAudit audit{"ASTNode::cacheFPFormat", 8};
+  PrimeAudit::Running running(audit, *this);
+#endif
 
-  const bool is_float = deriveFPFormat(*this, e, s);
+  // One node, with its operands already answered.
+  auto store = [](const ASTNode& n) {
+    unsigned int e = 0;
+    unsigned int s = 0;
 
-  // A BVCONST has nowhere to put either answer (its setters reject it);
-  // float constants are made as ASTFPConst instead, and re-deriving on a
-  // childless node is cheap.
-  if (GetKind() == BVCONST ||
-      (Degree() == 0 &&
-       _int_node_ptr->getDeclaredSourceSort().isKnown()))
-    return;
+    const bool is_float = deriveFPFormat(n, e, s);
 
-  if (!is_float)
+    // A BVCONST has nowhere to put either answer (its setters reject it);
+    // float constants are made as ASTFPConst instead, and re-deriving on a
+    // childless node is cheap.
+    if (n.GetKind() == BVCONST ||
+        (n.Degree() == 0 &&
+         n._int_node_ptr->getDeclaredSourceSort().isKnown()))
+      return;
+
+    if (!is_float)
+    {
+      n._int_node_ptr->setExpWidth(FP_NOT_A_FLOAT);
+      return;
+    }
+
+    n._int_node_ptr->setExpWidth(e);
+    n._int_node_ptr->setSigWidth(s);
+  };
+
+  // Nothing below `n` needs filling: either its own derivation reads no
+  // operands, so asking it is already one level, or it has been asked
+  // before. The first case is why a node that cannot hold an answer -- a
+  // constant, a declared leaf -- never sends this walk into a loop over it.
+  auto settled = [](const ASTNode& n) {
+    size_t from, to;
+    fpFormatOperands(n, from, to);
+    return from == to || n._int_node_ptr->getExpWidth() != 0;
+  };
+
+  size_t from, to;
+  fpFormatOperands(*this, from, to);
+  bool fill = false;
+  for (size_t i = from; i < to && !fill; i++)
+    fill = !settled((*this)[i]);
+
+  if (!fill)
   {
-    _int_node_ptr->setExpWidth(FP_NOT_A_FLOAT);
+    store(*this);
     return;
   }
 
-  _int_node_ptr->setExpWidth(e);
-  _int_node_ptr->setSigWidth(s);
+  primeMemoInlineParent(
+      *this, [&](const ASTNode& child)
+      { return settled(child) ? Walk::Skip : Walk::Descend; },
+      [](const ASTNode& n)
+      {
+        size_t f, t;
+        fpFormatOperands(n, f, t);
+        return WalkOperands::range(f, t);
+      },
+      [&](const ASTNode& n, PrimeMemoReady) { store(n); });
 }
 
 unsigned int ASTNode::GetExpWidth() const
@@ -319,6 +428,44 @@ const char* ASTNode::GetName() const
 // (see cacheFPFormat): the derivation reads only the node's kind, children
 // and widths, and the first two are the hash-cons key. The widths are not, so
 // the setters drop the memo.
+// Which children a node's source-sort derivation reads, as a half-open range
+// of child positions, and the same bargain as fpFormatOperands above: it has
+// to keep agreeing with deriveSourceSort, and naming more than is read can
+// only cost a derivation that the next question would have caused anyway.
+//
+// Every other kind answers from its own kind, its declared sort, or its
+// widths -- and the widths route through GetType, which is the format
+// derivation and stops on its own.
+static void sourceSortOperands(const ASTNode& n, size_t& from, size_t& to)
+{
+  from = 0;
+  to = 0;
+
+  switch (n.GetKind())
+  {
+    case ARRAY:
+      if (n.Degree() == 2)
+        to = 2;
+      break;
+
+    case READ:
+    case WRITE:
+      to = (n.Degree() >= 1) ? 1 : 0;
+      break;
+
+    case ITE:
+      if (n.Degree() == 3)
+      {
+        from = 1;
+        to = 3;
+      }
+      break;
+
+    default:
+      break;
+  }
+}
+
 SourceSort ASTNode::GetSourceSort() const
 {
   if (IsNull())
@@ -327,11 +474,59 @@ SourceSort ASTNode::GetSourceSort() const
   if (const SourceSort* cached = _int_node_ptr->cachedSourceSort())
     return *cached;
 
-  _int_node_ptr->nodeManager->source_sort_derivations++;
-  const SourceSort derived = deriveSourceSort();
-  _int_node_ptr->setCachedSourceSort(
-      _int_node_ptr->nodeManager->internSourceSort(derived));
-  return derived;
+#ifndef NDEBUG
+  static thread_local PrimeAudit audit{"ASTNode::GetSourceSort", 8};
+  PrimeAudit::Running running(audit, *this);
+#endif
+
+  // One node, with its operands already answered. The answer goes on the node
+  // where a node can hold one -- a leaf cannot, only an interior node holds
+  // the memo -- and into `answer` either way, which is how the node this
+  // started from returns its own: the walk finishes with it, so the last
+  // answer recorded is that one.
+  SourceSort answer = SourceSort::unknown();
+  auto store = [&](const ASTNode& n) {
+    n._int_node_ptr->nodeManager->source_sort_derivations++;
+    answer = n.deriveSourceSort();
+    n._int_node_ptr->setCachedSourceSort(
+        n._int_node_ptr->nodeManager->internSourceSort(answer));
+  };
+
+  // As in cacheFPFormat, and for the same reason -- the derivation reads a
+  // child's sort by asking for it, which derived the child the same way, one
+  // call frame per level of a store chain or an if-then-else spine.
+  //
+  // A leaf is settled by having nothing to read, never by its memo: only an
+  // interior node can hold one. So the walk stops above every leaf and leaves
+  // it to be derived by whichever parent reads it, which is what kept the
+  // derivation count what it was.
+  auto settled = [](const ASTNode& n) {
+    size_t from, to;
+    sourceSortOperands(n, from, to);
+    return from == to || n._int_node_ptr->cachedSourceSort() != NULL;
+  };
+
+  size_t from, to;
+  sourceSortOperands(*this, from, to);
+  bool fill = false;
+  for (size_t i = from; i < to && !fill; i++)
+    fill = !settled((*this)[i]);
+
+  if (fill)
+    primeMemoInlineParent(
+        *this, [&](const ASTNode& child)
+        { return settled(child) ? Walk::Skip : Walk::Descend; },
+        [](const ASTNode& n)
+        {
+          size_t f, t;
+          sourceSortOperands(n, f, t);
+          return WalkOperands::range(f, t);
+        },
+        [&](const ASTNode& n, PrimeMemoReady) { store(n); });
+  else
+    store(*this);
+
+  return answer;
 }
 
 SourceSort ASTNode::deriveSourceSort() const

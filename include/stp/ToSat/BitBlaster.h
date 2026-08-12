@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/constantBitP/MultiplicationStats.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
+#include "stp/Util/DagWalk.h"
 #include <cassert>
 #include <cmath>
 #include <list>
@@ -282,6 +283,28 @@ class BitBlaster
   void updateForm(const ASTNode& n, BBNode& bb, BBNodeSet& support);
 
   const BBNode BBForm(const ASTNode& form, BBNodeSet& support);
+  const BBNode BBForm(const ASTNode& form, BBNodeSet& support,
+                      bool knownMissing);
+  const BBNodeVec BBTerm(const ASTNode& term, BBNodeSet& support,
+                         bool knownMissing);
+
+  // BBForm and BBTerm both blast a node's operands by calling themselves, so
+  // input nested deeply enough takes the stack with it. Shallow inputs keep
+  // the ordinary recursive path: starting an extra walk at their root costs
+  // more than the stack it saves. Once the shared formula/term recursion
+  // budget is exhausted, primeMemos fills both memos below that point and the
+  // bounded recursive prefix unwinds normally. One walk covers both memos
+  // because the two functions reach each other. See DeepDag_Test.cpp.
+  void primeMemos(const ASTNode& n, BBNodeSet& support);
+  static constexpr size_t unprimedDepthLimit = 512;
+  size_t unprimedDepth = 0;
+  bool priming = false;
+
+  // Debug-only: the deliberately recursive prefix plus the small amount of
+  // recursion used while processing nodes created during priming. Empty and
+  // free in a build with NDEBUG. The suffix itself must still answer from one
+  // of the two memos rather than nesting with the input.
+  PrimeAudit memoAudit{"BitBlaster", unprimedDepthLimit + 32};
 
   bool isConstant(const BBNodeVec& v);
   ASTNode getConstant(const BBNodeVec& v, const ASTNode& n);
@@ -308,7 +331,7 @@ public:
   // bitvector term.  Result is a ref to a vector of formula nodes
   // representing the boolean formula.
   const BBNodeVec BBTerm(const ASTNode& term, BBNodeSet& support);
-  
+
   std::unordered_map<ASTNode, BBNodeVec, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>::iterator
   simplify_during_bb(ASTNode& term, BBNodeSet& support);
 
