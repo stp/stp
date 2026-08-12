@@ -152,8 +152,22 @@ private:
                                     bool ArrayReadFlag = true);
 
 private:
-  ASTNode TermToConstTermUsingModel_inner(const ASTNode& term,
-                                           bool ArrayReadFlag);
+  // Which of the three evaluations below a frame of the walk is running.
+  enum Job
+  {
+    EvalFormula,
+    EvalTerm,
+    EvalExpand
+  };
+
+  // Evaluating a formula evaluates its terms, a term its if-then-else
+  // condition, and a read over a write the expansion of that write chain and
+  // then the terms in it -- once per level of the input, which is the input's
+  // choice and can be deeper than the stack holds. So the three are one walk
+  // with its frames on the heap rather than three sets of call frames. See
+  // DeepDag_Test.cpp.
+  struct Frame;
+  ASTNode evaluate(Job job, const ASTNode& n, bool topArrayReadFlag);
 
 public:
 

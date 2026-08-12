@@ -53,6 +53,7 @@ THE SOFTWARE.
 
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
+#include "stp/FloatBlaster/FpEncodingContext.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
 #include <gtest/gtest.h>
@@ -83,13 +84,16 @@ protected:
   SubstitutionMap substitutions;
   Simplifier simplifier;
   ArrayTransformer transformer;
+  FpEncodingContext encoding;
   AbsRefine_CounterExample ce;
   unsigned counter = 0;
 
   FpModelEqualityTest()
       : substitutions(&mgr), simplifier(&mgr, &substitutions),
-        transformer(&mgr, &simplifier), ce(&mgr, &simplifier, &transformer)
+        transformer(&mgr, &simplifier), encoding(&mgr),
+        ce(&mgr, &simplifier, &transformer)
   {
+    ce.setFpEncodingContext(&encoding);
   }
 
   // A Float32 variable already bound to `bits` in the model. The binding is a
@@ -118,6 +122,22 @@ protected:
     return value == mgr.ASTTrue;
   }
 };
+
+TEST_F(FpModelEqualityTest, EncodedTermScopeEndsBetweenModelQueries)
+{
+  const ASTNode one = bound(ONE);
+  const ASTNode negated =
+      mgr.hashingNodeFactory->CreateTerm(FP_NEG, 32, ASTVec{one});
+  const ASTNode absolute =
+      mgr.hashingNodeFactory->CreateTerm(FP_ABS, 32, ASTVec{negated});
+
+  // Each source operation enters target-language evaluation while its lowered
+  // DAG is live. The next independent question must enter source mode again;
+  // otherwise it skips lowering and cannot interpret the FP operation.
+  EXPECT_EQ(mgr.CreateBVConst(32, 0xBF800000), ce.ModelValueOfTerm(negated));
+  EXPECT_EQ(mgr.CreateBVConst(32, ONE), ce.ModelValueOfTerm(absolute));
+  EXPECT_EQ(mgr.CreateBVConst(32, 0xBF800000), ce.ModelValueOfTerm(negated));
+}
 
 // fp.eq is IEEE numeric equality: the two zeros are equal, NaN is equal to
 // nothing, infinities agree only with the same sign.
