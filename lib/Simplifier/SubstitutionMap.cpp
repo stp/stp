@@ -26,6 +26,7 @@ THE SOFTWARE.
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/Simplifier/Simplifier.h"
+#include <vector>
 
 namespace stp
 {
@@ -131,135 +132,297 @@ ASTNode SubstitutionMap::replace(const ASTNode& n, NodeMapType& fromTo,
 // NB: You can't use this to map from "5" to the symbol "x" say.
 // It's optimised for the symbol to something case.
 
+// The walk keeps its frames on the heap. Input decides how deeply a formula
+// nests, and deeply nested ones exist, so a call per level of the DAG
+// exhausts the stack. See DeepDag_Test.cpp.
 template <class NodeMapType>
 ASTNode SubstitutionMap::replace(const ASTNode& n, NodeMapType& fromTo,
                                  NodeMapType& cache, NodeFactory* nf,
                                  bool stopAtArrays, bool preventInfinite)
 {
-  const Kind k = n.GetKind();
-  if (k == BVCONST || k == TRUE || k == FALSE)
-    return n;
-
-  typename NodeMapType::const_iterator it;
-
-  if ((it = cache.find(n)) != cache.end())
-    return it->second;
-
-  if ((it = fromTo.find(n)) != fromTo.end())
+  // One node's progress. `phase` says what a value arriving from below is:
+  // the recursive version called itself from three places -- following a
+  // chain of substitutions, replacing a child, and running again over a
+  // node it had just rebuilt -- and a frame has to know which it awaits.
+  struct Frame
   {
-    // By value, not by reference: the recursive calls below can insert into
-    // and erase from fromTo, and a DenseNodeMap moves its elements when that
-    // happens -- a reference here would dangle.
-    const ASTNode r = it->second;
-    assert(r.GetIndexWidth() == n.GetIndexWidth());
+    ASTNode n;
+    Kind k;
+    unsigned int indexWidth;
+    unsigned int valueWidth;
 
-    if (preventInfinite)
-      cache.insert(make_pair(n, r));
-
-    ASTNode replaced =
-        replace(r, fromTo, cache, nf, stopAtArrays, preventInfinite);
-    if (replaced != r)
+    enum Phase
     {
-      fromTo.erase(n);
-      fromTo[n] = replaced;
-    }
+      AwaitingChain,
+      AwaitingChild,
+      AwaitingRemap
+    };
+    Phase phase;
 
-    if (preventInfinite)
-      cache.erase(n);
+    ASTNode chainTarget; // what n maps to, for AwaitingChain
+    ASTNode remapped;    // the rebuilt node, for AwaitingRemap
+    bool started = false;
 
-    cache.insert(make_pair(n, replaced));
-    return replaced;
-  }
-
-  // These can't be created like regular nodes are
-  if (k == SYMBOL)
-    return n;
-
-  const unsigned int indexWidth = n.GetIndexWidth();
-  if (stopAtArrays && indexWidth > 0) // is an array.
-  {
-    return n;
-  }
-
-  // Floating-point special constants (NaN, +/-oo, +/-zero) are nullary leaves
-  // that the BVCONST/TRUE/FALSE test above does not cover, so they reach here
-  // with no children. They are values: there is nothing to substitute into.
-  if (n.Degree() == 0)
-    return n;
-
-  const ASTChildren children = n.GetChildren();
-  assert(children.size() > 0);
-  // Should have no leaves left here.
-
-  ASTVec newChildren;
-  bool changed = false;
-
-  for (auto it = children.begin(); it != children.end(); it++)
-  {
-    ASTNode newNode = replace(*it, fromTo, cache, nf, stopAtArrays, preventInfinite);
-    if (!changed && newNode!=*it)
-    {
-        newChildren.reserve(children.size());
-        newChildren.insert(newChildren.end(), children.begin(), it);
-        changed=true;
-    }
-    if (changed)   
-      newChildren.push_back(newNode);
-  }
-
-  assert(newChildren.size() == 0 || (newChildren.size() == children.size()));
-
-  // This code short-cuts if the children are the same. Nodes with the same
-  // children,
-  // won't have necessarily given the same node if the simplifyingNodeFactory is
-  // enabled
-  // now, but wasn't enabled when the node was created. Shortcutting saves lots
-  // of time.
-  if (newChildren.size() ==0)
-  {
-    cache.insert(make_pair(n, n));
-    return n;
-  }
+    ASTChildren children;
+    ASTVec newChildren;
+    bool changed = false;
+    unsigned i = 0; // the child being worked on
+    bool waiting = false;
+  };
 
   ASTNode result;
-  const unsigned int valueWidth = n.GetValueWidth();
 
-  if (valueWidth == 0) // n.GetType() == BOOLEAN_TYPE
+  // The head of the recursive version, in its order -- in particular the
+  // fromTo test before the SYMBOL test, which is what makes substituting
+  // for a symbol work at all. Either the answer needs no frame and lands in
+  // `result`, or `frame` is prepared for the walk below it.
+  auto prepare = [&](const ASTNode& node, Frame& frame) -> bool
   {
-    result = nf->CreateNode(k, newChildren);
-  }
-  else
-  {
-    // If the index and value width aren't saved, they are reset sometimes (??)
-    result = nf->CreateArrayTerm(k, indexWidth, valueWidth, newChildren);
-  }
+    const Kind k = node.GetKind();
+    if (k == BVCONST || k == TRUE || k == FALSE)
+    {
+      result = node;
+      return false;
+    }
 
-  // We may have created something that should be mapped. For instance,
-  // if n is READ(A, x), and the fromTo is: {x==0, READ(A,0) == 1}, then
-  // by here the result will be READ(A,0). Which needs to be mapped again..
-  // I hope that this makes it idempotent.
+    typename NodeMapType::const_iterator it;
 
-  if (fromTo.find(result) != fromTo.end())
+    if ((it = cache.find(node)) != cache.end())
+    {
+      result = it->second;
+      return false;
+    }
+
+    if ((it = fromTo.find(node)) != fromTo.end())
+    {
+      // By value, not by reference: the walk below inserts into and erases
+      // from fromTo, and a DenseNodeMap moves its elements when that
+      // happens -- a reference here would dangle.
+      frame.chainTarget = it->second;
+      assert(frame.chainTarget.GetIndexWidth() == node.GetIndexWidth());
+      frame.phase = Frame::AwaitingChain;
+
+      if (preventInfinite)
+        cache.insert(make_pair(node, frame.chainTarget));
+    }
+    // These can't be created like regular nodes are
+    else if (k == SYMBOL)
+    {
+      result = node;
+      return false;
+    }
+    else if (stopAtArrays && node.GetIndexWidth() > 0) // is an array.
+    {
+      result = node;
+      return false;
+    }
+    // Floating-point special constants (NaN, +/-oo, +/-zero) are nullary
+    // leaves that the BVCONST/TRUE/FALSE test above does not cover, so they
+    // reach here with no children. They are values: there is nothing to
+    // substitute into.
+    else if (node.Degree() == 0)
+    {
+      result = node;
+      return false;
+    }
+    else
+    {
+      frame.phase = Frame::AwaitingChild;
+      frame.children = node.GetChildren();
+      assert(frame.children.size() > 0);
+      // Should have no leaves left here.
+    }
+
+    frame.n = node;
+    frame.k = k;
+    frame.indexWidth = node.GetIndexWidth();
+    frame.valueWidth = node.GetValueWidth();
+    return true;
+  };
+
+  // Answer settled roots before constructing the stack, so constants, leaves,
+  // stopped arrays and cache hits pay for no traversal storage.
+  Frame top;
+  if (!prepare(n, top))
+    return result;
+
+  // Most substitution walks are only a few frames deep. Keep those frames in
+  // one compact allocation instead of a deque's map and fixed-size blocks.
+  // A push may move every frame, so callers of descend must not retain or use
+  // a Frame reference after descend returns true.
+  std::vector<Frame> stack;
+  stack.push_back(std::move(top));
+
+  auto descend = [&](const ASTNode& node, Frame* waitingParent = nullptr) -> bool
   {
-    // map n->result, if running replace() on result gives us 'n', it will not
-    // infinite loop.
-    // This is only currently required for the bitblast equivalence stuff.
+    Frame frame;
+    if (!prepare(node, frame))
+      return false;
+    if (waitingParent != nullptr)
+      waitingParent->waiting = true;
+    stack.push_back(std::move(frame));
+    return true;
+  };
+
+  // Copy on write, one child at a time.
+  auto foldChild = [](Frame& f, const ASTNode& newNode)
+  {
+    const ASTNode& child = f.children[f.i];
+    if (!f.changed && newNode != child)
+    {
+      f.newChildren.reserve(f.children.size());
+      f.newChildren.insert(f.newChildren.end(), f.children.begin(),
+                           f.children.begin() + f.i);
+      f.changed = true;
+    }
+    if (f.changed)
+      f.newChildren.push_back(newNode);
+    f.i++;
+  };
+
+  // The answer for a rebuilt node, cached and handed back up.
+  auto finish = [&](Frame& f, const ASTNode& value)
+  {
+    assert(value.GetValueWidth() == f.valueWidth);
+    assert(value.GetIndexWidth() == f.indexWidth);
+
+    // If there is already an "n" element in the cache, the maps semantics
+    // are to ignore the next insertion.
     if (preventInfinite)
-      cache.insert(make_pair(n, result));
+      cache.erase(f.n);
 
-    result = replace(result, fromTo, cache, nf, stopAtArrays, preventInfinite);
+    cache.insert(make_pair(f.n, value));
+    result = value;
+    stack.pop_back();
+  };
+
+  while (true)
+  {
+    Frame& current = stack.back();
+
+    // We call replace on each of the things in the fromTo map aswell.
+    // This is in case we have a fromTo map: (x maps to y), (y maps to 5),
+    // and pass the replace() function the node "x" to replace, then it
+    // will return 5, rather than y.
+    if (current.phase == Frame::AwaitingChain)
+    {
+      if (!current.started)
+      {
+        current.started = true;
+        if (descend(current.chainTarget))
+          continue;
+      }
+
+      const ASTNode replaced = result; // replace(chainTarget)
+      if (replaced != current.chainTarget)
+      {
+        fromTo.erase(current.n);
+        fromTo[current.n] = replaced;
+      }
+
+      if (preventInfinite)
+        cache.erase(current.n);
+
+      cache.insert(make_pair(current.n, replaced));
+      result = replaced;
+      stack.pop_back();
+
+      if (stack.empty())
+        return result;
+      continue;
+    }
+
+    if (current.phase == Frame::AwaitingRemap)
+    {
+      if (!current.started)
+      {
+        current.started = true;
+        if (descend(current.remapped))
+          continue;
+      }
+
+      finish(current, result); // replace(remapped)
+      if (stack.empty())
+        return result;
+      continue;
+    }
+
+    if (current.waiting)
+    {
+      current.waiting = false;
+      foldChild(current, result);
+    }
+
+    bool descended = false;
+    while (current.i < current.children.size())
+    {
+      // descend installs the continuation only when it will push, and does
+      // so before vector growth can move `current`.
+      if (descend(current.children[current.i], &current))
+      {
+        descended = true;
+        break;
+      }
+      foldChild(current, result);
+    }
+    if (descended)
+      continue;
+
+    assert(current.newChildren.size() == 0 ||
+           (current.newChildren.size() == current.children.size()));
+
+    // This code short-cuts if the children are the same. Nodes with the same
+    // children,
+    // won't have necessarily given the same node if the simplifyingNodeFactory is
+    // enabled
+    // now, but wasn't enabled when the node was created. Shortcutting saves lots
+    // of time.
+    if (current.newChildren.size() == 0)
+    {
+      cache.insert(make_pair(current.n, current.n));
+      result = current.n;
+      stack.pop_back();
+
+      if (stack.empty())
+        return result;
+      continue;
+    }
+
+    ASTNode built;
+    if (current.valueWidth == 0) // n.GetType() == BOOLEAN_TYPE
+    {
+      built = nf->CreateNode(current.k, current.newChildren);
+    }
+    else
+    {
+      // If the index and value width aren't saved, they are reset sometimes (??)
+      built = nf->CreateArrayTerm(current.k, current.indexWidth,
+                                  current.valueWidth, current.newChildren);
+    }
+
+    // We may have created something that should be mapped. For instance,
+    // if n is READ(A, x), and the fromTo is: {x==0, READ(A,0) == 1}, then
+    // by here the result will be READ(A,0). Which needs to be mapped again..
+    // I hope that this makes it idempotent.
+
+    if (fromTo.find(built) != fromTo.end())
+    {
+      // map n->result, if running replace() on result gives us 'n', it will
+      // not infinite loop.
+      // This is only currently required for the bitblast equivalence stuff.
+      if (preventInfinite)
+        cache.insert(make_pair(current.n, built));
+
+      current.phase = Frame::AwaitingRemap;
+      current.remapped = built;
+      current.started = false;
+      continue;
+    }
+
+    finish(current, built);
+    if (stack.empty())
+      return result;
   }
-
-  assert(result.GetValueWidth() == valueWidth);
-  assert(result.GetIndexWidth() == indexWidth);
-
-  // If there is already an "n" element in the cache, the maps semantics are to
-  // ignore the next insertion.
-  if (preventInfinite)
-    cache.erase(n);
-
-  cache.insert(make_pair(n, result));
-  return result;
 }
 
 // The two map types replace() runs over: the SolverMap paths use

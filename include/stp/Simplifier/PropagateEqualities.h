@@ -72,6 +72,7 @@ private:
   IdSet alreadyVisited;
 
   void buildCandidateList(const ASTNode& a);
+  bool buildCandidateListNode(const ASTNode& a);
   void replaceIfPossible(int line, ASTNode& output, const ASTNode& lhs, const ASTNode& rhs);
   void buildXORCandidates(const ASTNode a, bool negated);
   
