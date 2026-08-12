@@ -337,6 +337,44 @@ bool substitutionOk(Context& c, unsigned depth)
   return result != top;
 }
 
+// Releasing a DAG. A node that loses its last reference releases its
+// children, which can lose theirs: the teardown is as deep as the input,
+// and it runs wherever the last handle happens to be dropped.
+bool teardownOk(Context& c, unsigned depth)
+{
+  {
+    const ASTNode top = c.formula(c.chain(BVXOR, depth));
+    (void)top;
+  } // the only handle goes here, and the whole chain follows it.
+  return true;
+}
+
+// Two independently owned chains die under the same root. Both reach the
+// direct-deletion cap while that root is still being destroyed, so the
+// outermost cleanup has more than one spill frontier to drain.
+bool teardownSpillFrontiersOk(Context& c, unsigned depth)
+{
+  auto chain = [&](const char* side) {
+    const std::string first = std::string(side) + "0";
+    ASTNode n = c.mgr.CreateSymbol(first.c_str(), 0, 8);
+    for (unsigned i = 1; i < depth; ++i)
+    {
+      const std::string name = std::string(side) + std::to_string(i);
+      n = c.hf->CreateTerm(BVXOR, 8, n,
+                           c.mgr.CreateSymbol(name.c_str(), 0, 8));
+    }
+    return n;
+  };
+
+  {
+    const ASTNode top =
+        c.hf->CreateTerm(BVPLUS, 8, chain("delete-left-"),
+                         chain("delete-right-"));
+    (void)top;
+  }
+  return true;
+}
+
 // StrengthReduction::visit, which rebuilds the DAG applying whatever the
 // domain analyses prove about each node.
 bool strengthReductionOk(Context& c, unsigned depth)
@@ -860,6 +898,18 @@ TEST(DeepDag, substitution_root_fast_paths_preserve_results)
                                             true, false));
 }
 
+TEST(DeepDag, shallow_teardown)
+{
+  Context c;
+  EXPECT_TRUE(teardownOk(c, SHALLOW));
+}
+
+TEST(DeepDag, teardown_drains_multiple_spill_frontiers)
+{
+  Context c;
+  EXPECT_TRUE(teardownSpillFrontiersOk(c, SHALLOW));
+}
+
 TEST(DeepDag, shallow_flatten_kind_no_duplicates)
 {
   Context c;
@@ -1023,6 +1073,11 @@ TEST(DeepDag, deep_flatten)
 TEST(DeepDag, deep_substitution)
 {
   EXPECT_STACK_SAFE(substitutionOk, 20000);
+}
+
+TEST(DeepDag, deep_teardown)
+{
+  EXPECT_STACK_SAFE(teardownOk, 50000);
 }
 
 TEST(DeepDag, deep_flatten_kind_no_duplicates)

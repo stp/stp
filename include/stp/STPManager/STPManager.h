@@ -90,6 +90,14 @@ private:
   // Unique node tables that enables common subexpression sharing
   ASTInteriorSet _interior_unique_table;
 
+  // Interior nodes whose last reference has gone while another one was
+  // already being deleted. Releasing a node releases its children, so
+  // deleting the root of a deeply nested DAG would otherwise nest one
+  // destructor per level and run off the stack; ASTInterior::CleanUp drains
+  // this instead. See DeepDag_Test.cpp.
+  std::vector<ASTInterior*> _pending_deletion;
+  uint8_t _interior_deletion_depth = 0;
+
   // Table for variable names, let names etc.
   ASTSymbolSet _symbol_unique_table;
 
