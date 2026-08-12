@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "stp/AST/ASTKind.h"
 #include "stp/Util/Attributes.h"
 #include <cstdint>
+#include <initializer_list>
 #include <vector>
 
 using std::vector;
@@ -35,6 +36,8 @@ namespace stp
 {
 class ASTNode;
 typedef vector<ASTNode> ASTVec;
+template <class T> class Span;
+typedef Span<const ASTNode> ASTChildren;
 DLL_PUBLIC extern ASTVec _empty_ASTVec;
 class STPMgr;
 typedef unsigned int* CBV;
@@ -43,6 +46,7 @@ typedef unsigned int* CBV;
 using stp::ASTNode;
 using stp::Kind;
 using stp::ASTVec;
+using stp::ASTChildren;
 using stp::_empty_ASTVec;
 using stp::STPMgr;
 
@@ -56,14 +60,25 @@ public:
   NodeFactory(STPMgr& bm_) : bm(bm_) {}
   virtual ~NodeFactory() {}
 
+  // A non-owning contiguous child range. ASTVec converts to this view, while
+  // callers which already own another contiguous arena avoid materialising
+  // a vector merely to cross the factory boundary.
   virtual ASTNode CreateTerm(Kind kind, unsigned int width,
-                                        const ASTVec& children) = 0;
+                             ASTChildren children) = 0;
 
   virtual ASTNode CreateArrayTerm(Kind kind, unsigned int index,
-                                             unsigned int width,
-                                             const ASTVec& children);
+                                  unsigned int width, ASTChildren children);
 
-  virtual ASTNode CreateNode(Kind kind, const ASTVec& children) = 0;
+  virtual ASTNode CreateNode(Kind kind, ASTChildren children) = 0;
+
+  // Preserve the convenient braced-child API without allocating a temporary
+  // ASTVec. The initializer-list storage remains alive for the duration of
+  // these calls.
+  ASTNode CreateTerm(Kind kind, unsigned int width,
+                     std::initializer_list<ASTNode> children);
+  ASTNode CreateArrayTerm(Kind kind, unsigned int index, unsigned int width,
+                          std::initializer_list<ASTNode> children);
+  ASTNode CreateNode(Kind kind, std::initializer_list<ASTNode> children);
 
   ASTNode CreateSymbol(const char* const name, unsigned indexWidth,
                        unsigned valueWidth);

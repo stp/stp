@@ -272,7 +272,7 @@ static bool fpIsRoundToIntegral(const stp::ASTNode& n)
 }
 
 bool SimplifyingNodeFactory::children_all_constants(
-    const ASTVec& children) const
+    const ASTChildren children) const
 {
   for (unsigned i = 0; i < children.size(); i++)
   {
@@ -338,7 +338,7 @@ ASTNode SimplifyingNodeFactory::makeFPZero(unsigned eb, unsigned sb,
   return bm.CreateFPConst(bm.CreateBVConst(bits, width), eb, sb);
 }
 
-ASTNode SimplifyingNodeFactory::create_gt_node(const ASTVec& children)
+ASTNode SimplifyingNodeFactory::create_gt_node(const ASTChildren children)
 {
   if (children[0] == children[1])
   {
@@ -519,7 +519,8 @@ ASTNode SimplifyingNodeFactory::create_gt_node(const ASTVec& children)
   return ASTNode();
 }
 
-ASTNode SimplifyingNodeFactory::CreateNode(Kind kind, const ASTVec& children)
+ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
+                                           const ASTChildren children)
 {
   assert(kind != SYMBOL);
   // These are created specially.
@@ -1062,7 +1063,7 @@ ASTNode SimplifyingNodeFactory::CreateSimpleNot(const ASTNode& form)
   }
 }
 
-ASTNode SimplifyingNodeFactory::CreateSimpleNot(const ASTVec& children)
+ASTNode SimplifyingNodeFactory::CreateSimpleNot(const ASTChildren children)
 {
   assert(children.size() == 1);
   const Kind k = children[0].GetKind();
@@ -1099,7 +1100,7 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
 }
 
 ASTNode SimplifyingNodeFactory::handle_2_children(bool IsAnd,
-                                                  const ASTVec& children)
+                                                  const ASTChildren children)
 {
   if (children.size() == 2)
   {
@@ -1151,7 +1152,7 @@ ASTNode SimplifyingNodeFactory::handle_2_children(bool IsAnd,
 }
 
 ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
-                                                  const ASTVec& c)
+                                                  const ASTChildren c)
 {
   ASTNode retval = handle_2_children(IsAnd, c);
   if (retval != ASTUndefined)
@@ -1163,12 +1164,13 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
   // Sorting these can be expensive, so we only sort it if it's not already sorted.
   bool isSorted =  std::is_sorted(c.begin(),c.end(),stp::ExprLess{});
   ASTVec sorted_children;
-  const ASTVec& children = isSorted ? c: sorted_children;
   if (!isSorted)
   {
-    sorted_children = c;
+    sorted_children.assign(c.begin(), c.end());
     SortByExprNum(sorted_children);  
   }
+  const ASTChildren children =
+      isSorted ? c : ASTChildren(sorted_children);
 
   // Copy on write. Usually nothing is dropped, so we only build up
   // "new_children" once the first element is actually discarded; until then
@@ -1216,7 +1218,8 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
     }
   }
 
-  const ASTVec& out = materialised ? new_children : children;
+  const ASTChildren out =
+      materialised ? ASTChildren(new_children) : children;
 
   // A child of the same kind contributes its own children conjunctively
   // (resp. disjunctively), so a literal here and its negation one level
@@ -1267,7 +1270,7 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
 
 // Tries to simplify the input to TRUE/FALSE. if it fails, then
 // return the constructed equality
-ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
+ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTChildren children)
 {
   assert(children.size() == 2);
 
@@ -1545,13 +1548,13 @@ ASTNode SimplifyingNodeFactory::CreateSimpleEQ(const ASTVec& children)
 }
 
 // Constant children are accumulated in "accumconst".
-ASTNode SimplifyingNodeFactory::CreateSimpleXor(const ASTVec& children)
+ASTNode SimplifyingNodeFactory::CreateSimpleXor(const ASTChildren children)
 {
   if (debug_simplifyingNodeFactory)
   {
     cout << "========" << endl << "CreateSimpXor ";
 
-    lpvec(children);
+    lpvec(toASTVec(children));
     cout << endl;
   }
 
@@ -1580,8 +1583,7 @@ ASTNode SimplifyingNodeFactory::CreateSimpleXor(const ASTVec& children)
     }
   }
 
-  ASTVec flat_children; // empty vector
-  flat_children = children;
+  ASTVec flat_children(children.begin(), children.end());
 
   // sort so that identical nodes occur in sequential runs, followed by
   // their negations.
@@ -1685,7 +1687,8 @@ ASTNode SimplifyingNodeFactory::CreateSimpleXor(const ASTVec& children)
   return retval;
 }
 
-ASTNode SimplifyingNodeFactory::CreateSimpleFormITE(const ASTVec& children)
+ASTNode SimplifyingNodeFactory::CreateSimpleFormITE(
+    const ASTChildren children)
 {
   const ASTNode& child0 = children[0];
   const ASTNode& child1 = children[1];
@@ -1758,7 +1761,7 @@ ASTNode SimplifyingNodeFactory::CreateSimpleFormITE(const ASTVec& children)
 // simplify things like:
 // read(write(write(A,1,2),2,3),4) cheaply.
 // The "children" that are passed should be the children of a READ.
-ASTNode SimplifyingNodeFactory::chaseRead(const ASTVec& children,
+ASTNode SimplifyingNodeFactory::chaseRead(const ASTChildren children,
                                           unsigned int width)
 {
   assert(children[0].GetKind() == stp::WRITE);
@@ -1959,7 +1962,8 @@ ASTNode SimplifyingNodeFactory::plusRules(const ASTNode& n0, const ASTNode& n1)
   return result;
 }
 
-ASTNode SimplifyingNodeFactory::handle_bvxor(unsigned int width, const ASTVec& input_children)
+ASTNode SimplifyingNodeFactory::handle_bvxor(
+    unsigned int width, const ASTChildren input_children)
 {
   // a ^ (a ^ b ^ ...) -> (b ^ ...): cancel an operand shared with a nested
   // xor. Children aren't flattened, so the duplicate-removal below can't see
@@ -1999,7 +2003,7 @@ ASTNode SimplifyingNodeFactory::handle_bvxor(unsigned int width, const ASTVec& i
 
   const ASTNode zero = bm.CreateZeroConst(width);
 
-  ASTVec flat_children(input_children);
+  ASTVec flat_children(input_children.begin(), input_children.end());
 
   // Expression numbers don't place BVNOT(t) next to (t), so strip BVNOTS first..
   for (size_t i = 0; i < flat_children.size();i++)
@@ -2134,7 +2138,8 @@ static void collectConjuncts(const ASTNode& n, uint64_t* out, size_t& count)
       collectConjuncts(n[i], out, count);
 }
 
-ASTNode SimplifyingNodeFactory::handle_bvand(unsigned int width, const ASTVec& new_children) 
+ASTNode SimplifyingNodeFactory::handle_bvand(
+    unsigned int width, const ASTChildren new_children)
 {
 
 
@@ -2171,7 +2176,7 @@ ASTNode SimplifyingNodeFactory::handle_bvand(unsigned int width, const ASTVec& n
     }
   }
 
-  ASTVec flat_children(new_children);
+  ASTVec flat_children(new_children.begin(), new_children.end());
   SortByExprNum(flat_children); // We want duplicates to be adjacent.
 
   const ASTNode annihilator = bm.CreateZeroConst(width);
@@ -2349,7 +2354,7 @@ ASTNode SimplifyingNodeFactory::handle_bvand(unsigned int width, const ASTVec& n
   return hashing.CreateTerm(stp::BVAND,width,children);
 }
 
-ASTNode SimplifyingNodeFactory::plusRules(const ASTVec& oldChildren)
+ASTNode SimplifyingNodeFactory::plusRules(const ASTChildren oldChildren)
 {
   assert(oldChildren.size() > 2);
   const unsigned width = oldChildren[0].GetValueWidth();
@@ -2431,9 +2436,8 @@ ASTNode SimplifyingNodeFactory::plusRules(const ASTVec& oldChildren)
 
 // If the shift is bigger than the bitwidth, replace by an extract.
 ASTNode convertArithmeticKnownShiftAmount([[maybe_unused]] const Kind k,
-                                                      const ASTVec& children,
-                                                      STPMgr& bm,
-                                                      NodeFactory* nf)
+                                          const ASTChildren children,
+                                          STPMgr& bm, NodeFactory* nf)
 {
   const ASTNode a = children[0];
   const ASTNode b = children[1];
@@ -2477,8 +2481,9 @@ ASTNode convertArithmeticKnownShiftAmount([[maybe_unused]] const Kind k,
 
 // If the rhs of a left or right shift is known.
 ASTNode SimplifyingNodeFactory::convertKnownShiftAmount(const Kind k,
-                                            const ASTVec& children, STPMgr& bm,
-                                            NodeFactory* nf)
+                                                        ASTChildren children,
+                                                        STPMgr& bm,
+                                                        NodeFactory* nf)
 {
   const ASTNode a = children[0];
   const ASTNode b = children[1];
@@ -2535,7 +2540,7 @@ ASTNode SimplifyingNodeFactory::convertKnownShiftAmount(const Kind k,
 }
 
 ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
-                                           const ASTVec& children)
+                                           const ASTChildren children)
 {
   if (!is_Term_kind(kind))
     FatalError("CreateTerm:  Illegal kind to CreateTerm:", ASTUndefined, kind);
