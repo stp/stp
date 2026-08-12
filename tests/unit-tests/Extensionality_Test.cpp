@@ -2721,6 +2721,35 @@ TEST_F(ExtPrepareTest, WitnessIndexOverAWriteChainOperandIsAccepted)
       << " right=" << r.canonicalRight;
 }
 
+// Every write in this chain has the same deep index DAG. Witness-index
+// validation is a property of that DAG, not of an incoming write edge: the
+// shared index must be checked once and then reused rather than rebuilt into
+// a fresh post-order map for every write in the operand.
+TEST_F(ExtPrepareTest, SharedDeepWriteIndexDagIsAccepted)
+{
+  NodeFactory* hf = mgr.hashingNodeFactory;
+  ASTNode a = arr("shared-index-a"), b = arr("shared-index-b");
+  ASTNode index = bv("shared-index-i");
+  const ASTNode value = bv("shared-index-v");
+  for (unsigned i = 0; i < 1000; ++i)
+    index = hf->CreateTerm(BVNOT, 2, index);
+
+  ASTNode chain = a;
+  for (unsigned i = 0; i < 1000; ++i)
+    chain = hf->CreateArrayTerm(WRITE, 2, 2, {chain, index, value});
+
+  ext->beginSolve();
+  const ASTNode proxy =
+      ext->lowerArrayEqualities(hf->CreateNode(EQ, chain, b));
+  const ASTNode root = ext->conjoinRecordConstraints(proxy);
+  ext->prepare(root);
+
+  const ExtensionalityContext::Record& r = ext->getRecords()[0];
+  EXPECT_TRUE((r.canonicalLeft == chain && r.canonicalRight == b) ||
+              (r.canonicalLeft == b && r.canonicalRight == chain));
+  EXPECT_TRUE(ext->ownsArray(chain));
+}
+
 TEST_F(ExtPrepareTest, DuplicateAnchorFailsLoudly)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;

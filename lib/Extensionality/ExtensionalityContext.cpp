@@ -28,10 +28,11 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/SubstitutionMap.h"
 #include "stp/ToSat/ToSATBase.h"
+#include "stp/Util/DagWalk.h"
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
-#include <functional>
+#include <limits>
 
 namespace stp
 {
@@ -116,13 +117,14 @@ ASTNode canonicalQuietNaN(STPMgr* bm, unsigned eb, unsigned sb)
   return bm->CreateBVConst(bits, w);
 }
 
-// Postorder DAG collection of every node beneath (and including) n.
+// Collect every node beneath (and including) n. The input chooses the DAG's
+// depth, so retain suspended ancestors on the heap rather than recursing once
+// per level.
 void collectDag(const ASTNode& n, ASTNodeSet& visited)
 {
-  if (!visited.insert(n).second)
-    return;
-  for (unsigned k = 0; k < n.Degree(); k++)
-    collectDag(n[k], visited);
+  walkPreOrder(n, [&](const ASTNode& current) {
+    return visited.insert(current).second;
+  });
 }
 
 // The current form of an equality operand, read back from its witness
@@ -152,39 +154,6 @@ void collectDag(const ASTNode& n, ASTNodeSet& visited)
 //
 // Anything else means an anchor was rewritten beyond recognition:
 // refuse loudly rather than guess.
-// Does any node of this DAG belong to `needles`? Iterative post-order,
-// because the terms it is asked about are as deep as the user's write
-// chains and if-then-else nests.
-bool subtreeMentions(const ASTNode& root, const std::set<ASTNode>& needles)
-{
-  std::map<ASTNode, bool> found;
-  std::vector<std::pair<ASTNode, bool>> stack;
-  stack.push_back(std::make_pair(root, false));
-  while (!stack.empty())
-  {
-    const ASTNode n = stack.back().first;
-    const bool expanded = stack.back().second;
-    stack.pop_back();
-    if (found.find(n) != found.end())
-      continue;
-    if (!expanded)
-    {
-      // Children are pushed after this node's second visit, so they are
-      // all answered before it is.
-      stack.push_back(std::make_pair(n, true));
-      for (unsigned k = 0; k < n.Degree(); k++)
-        if (found.find(n[k]) == found.end())
-          stack.push_back(std::make_pair(n[k], false));
-      continue;
-    }
-    bool here = needles.find(n) != needles.end();
-    for (unsigned k = 0; !here && k < n.Degree(); k++)
-      here = found[n[k]];
-    found[n] = here;
-  }
-  return found[root];
-}
-
 ASTNode recoverAnchoredOperand(const ASTNode& rhs, const ASTNode& lambda,
                                const ASTNode& proxy)
 {
@@ -532,52 +501,173 @@ ASTNode ExtensionalityContext::lowerArrayEqualities(
 
   ASTNodeMap cache;
   NodeFactory* hf = bm->hashingNodeFactory;
-  std::function<ASTNode(const ASTNode&)> lower = [&](const ASTNode& n) {
-    ASTNodeMap::const_iterator found = cache.find(n);
+
+  // Lower the DAG in the same left-to-right post-order as the former
+  // recursive std::function. That function consumed one native call frame
+  // per input level (and made a type-erased call per edge); a sufficiently
+  // deep write operand therefore exhausted the stack before ordinary STP
+  // preprocessing began.
+  //
+  // Most nodes do not contain ARRAY_EQ and come back unchanged. Keep the
+  // current node's original children in its immutable storage and acquire an
+  // owned vector only after one child changes. Scratch slots are nested and
+  // released in traversal order, so unchanged frames stay compact while a
+  // changed ancestor can retain its prefix across a changed descendant.
+  struct Frame
+  {
+    enum : unsigned
+    {
+      noScratch = std::numeric_limits<unsigned>::max()
+    };
+
+    const ASTNode* node;
+    size_t nextChild = 0;
+    unsigned scratch = noScratch;
+    bool waiting = false;
+
+    explicit Frame(const ASTNode* n) : node(n) {}
+  };
+  static_assert(sizeof(Frame) <= 32,
+                "array-equality lowering frames must stay compact");
+
+  ASTNode result;
+
+  // The recursive form cached leaves too. Settle them without allocating a
+  // frame, at the same point in the traversal at which their call returned.
+  auto settled = [&](const ASTNode& n) -> bool {
+    const ASTNodeMap::const_iterator found = cache.find(n);
     if (found != cache.end())
-      return found->second;
-
-    const ASTChildren children = n.GetChildren();
-    ASTVec loweredChildren;
-    bool changed = false;
-    loweredChildren.reserve(children.size());
-    for (const ASTNode& originalChild : children)
     {
-      const ASTNode child = lower(originalChild);
-      loweredChildren.push_back(child);
-      changed = changed || child != originalChild;
+      result = found->second;
+      return true;
     }
-
-    ASTNode result;
-    if (n.GetKind() == ARRAY_EQ)
-    {
-      assert(loweredChildren.size() == 2);
-      result = makeEquality(loweredChildren[0], loweredChildren[1]);
-      currentLowerings[n] = result;
-    }
-    else if (!changed)
-    {
-      result = n;
-    }
-    else if (n.GetValueWidth() == 0)
-    {
-      result = hf->CreateNode(n.GetKind(), loweredChildren);
-    }
-    else if (n.GetIndexWidth() > 0)
-    {
-      result = hf->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(),
-                                   n.GetValueWidth(), loweredChildren);
-    }
-    else
-    {
-      result = hf->CreateTerm(n.GetKind(), n.GetValueWidth(), loweredChildren);
-    }
-
+    if (n.Degree() != 0)
+      return false;
+    result = n;
     cache.insert(std::make_pair(n, result));
-    return result;
+    return true;
   };
 
-  const ASTNode lowered = lower(root);
+  ASTNode lowered;
+  if (settled(root))
+  {
+    lowered = result;
+  }
+  else
+  {
+    std::vector<Frame> stack;
+    stack.emplace_back(&root);
+
+    std::vector<ASTVec> scratches;
+    unsigned scratchesInUse = 0;
+
+    auto scratchFor = [&](Frame& frame) -> ASTVec& {
+      if (frame.scratch == Frame::noScratch)
+      {
+        assert(scratchesInUse < Frame::noScratch);
+        frame.scratch = scratchesInUse++;
+        if (frame.scratch == scratches.size())
+          scratches.emplace_back();
+      }
+      return scratches[frame.scratch];
+    };
+
+    auto releaseScratch = [&](Frame& frame) {
+      if (frame.scratch == Frame::noScratch)
+        return;
+      assert(frame.scratch + 1 == scratchesInUse);
+      scratches[frame.scratch].clear();
+      --scratchesInUse;
+    };
+
+    // Consume the answer for frame.nextChild, copying the original prefix
+    // only when this is the first child that changed.
+    auto acceptChild = [&](Frame& frame) {
+      const ASTChildren original = frame.node->GetChildren();
+      assert(frame.nextChild < original.size());
+      if (result != original[frame.nextChild] &&
+          frame.scratch == Frame::noScratch)
+      {
+        ASTVec& changed = scratchFor(frame);
+        changed.reserve(original.size());
+        changed.insert(changed.end(), original.begin(),
+                       original.begin() + frame.nextChild);
+      }
+      if (frame.scratch != Frame::noScratch)
+        scratches[frame.scratch].push_back(result);
+      ++frame.nextChild;
+    };
+
+    while (true)
+    {
+      Frame& current = stack.back();
+
+      if (current.waiting)
+      {
+        current.waiting = false;
+        acceptChild(current);
+      }
+
+      bool descended = false;
+      while (current.nextChild < current.node->Degree())
+      {
+        const ASTNode* child = &(*current.node)[current.nextChild];
+        if (settled(*child))
+        {
+          acceptChild(current);
+          continue;
+        }
+
+        current.waiting = true;
+        stack.emplace_back(child);
+        descended = true;
+        break;
+      }
+      if (descended)
+        continue;
+
+      const ASTNode& n = *current.node;
+      const ASTVec* changed =
+          current.scratch == Frame::noScratch
+              ? NULL
+              : &scratches[current.scratch];
+
+      if (n.GetKind() == ARRAY_EQ)
+      {
+        assert(n.Degree() == 2);
+        const ASTNode& left = changed == NULL ? n[0] : (*changed)[0];
+        const ASTNode& right = changed == NULL ? n[1] : (*changed)[1];
+        result = makeEquality(left, right);
+        currentLowerings[n] = result;
+      }
+      else if (changed == NULL)
+      {
+        result = n;
+      }
+      else if (n.GetValueWidth() == 0)
+      {
+        result = hf->CreateNode(n.GetKind(), *changed);
+      }
+      else if (n.GetIndexWidth() > 0)
+      {
+        result = hf->CreateArrayTerm(n.GetKind(), n.GetIndexWidth(),
+                                     n.GetValueWidth(), *changed);
+      }
+      else
+      {
+        result = hf->CreateTerm(n.GetKind(), n.GetValueWidth(), *changed);
+      }
+
+      cache.insert(std::make_pair(n, result));
+      releaseScratch(current);
+      stack.pop_back();
+      if (stack.empty())
+      {
+        lowered = result;
+        break;
+      }
+    }
+  }
 
   // FpTotalise runs before this pass. If it changed an operand of an opaque
   // equality, the public expression handle still names the original node
@@ -605,14 +695,9 @@ ASTNode ExtensionalityContext::lowerArrayEqualities(
       currentLowerings[it->first] = loweredRewrite->second;
   }
 
-  // ARRAY_EQ is legal only in the user-facing AST. Ordinary simplification,
-  // array transformation and bit-blasting intentionally have no case for it.
-  ASTNodeSet nodes;
-  collectDag(lowered, nodes);
-  for (ASTNodeSet::const_iterator it = nodes.begin(); it != nodes.end(); ++it)
-    if (it->GetKind() == ARRAY_EQ)
-      FatalError("array-equality: query lowering left an opaque equality", *it);
-
+  // Activation walks this exact root next and checks the lowering
+  // postcondition while it does so; do not inventory the whole DAG once
+  // merely to traverse it again immediately afterwards.
   activateReachableRecords(lowered);
 
   return lowered;
@@ -633,13 +718,25 @@ void ExtensionalityContext::activateReachableRecords(
 {
   std::set<size_t> activeIds;
   ASTNodeSet visited;
+  visited.insert(loweredRoot);
   ASTVec pending(1, loweredRoot);
   while (!pending.empty())
   {
     const ASTNode node = pending.back();
     pending.pop_back();
-    if (!visited.insert(node).second)
-      continue;
+
+    // ARRAY_EQ is legal only in the user-facing AST. Ordinary
+    // simplification, array transformation and bit-blasting intentionally
+    // have no case for it. This used to be a separate complete walk just
+    // before activation.
+    if (node.GetKind() == ARRAY_EQ)
+      FatalError("array-equality: query lowering left an opaque equality",
+                 node);
+
+    auto enqueue = [&](const ASTNode& next) {
+      if (visited.insert(next).second)
+        pending.push_back(next);
+    };
 
     const std::map<ASTNode, size_t>::const_iterator proxy =
         proxyToRecord.find(node);
@@ -650,12 +747,12 @@ void ExtensionalityContext::activateReachableRecords(
       // condition or another operand subterm. Follow cached operands so that
       // activation is the transitive closure, not merely the proxies still
       // visible at the Boolean root.
-      pending.push_back(r.constructionLeft);
-      pending.push_back(r.constructionRight);
+      enqueue(r.constructionLeft);
+      enqueue(r.constructionRight);
     }
 
     for (unsigned i = 0; i < node.Degree(); ++i)
-      pending.push_back(node[i]);
+      enqueue(node[i]);
   }
 
   activeRecordIds.assign(activeIds.begin(), activeIds.end());
@@ -855,7 +952,7 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
   // collected: a protected lambda or proxy turning up in an equation of
   // the same shape is none of this function's business.
   std::set<ASTNode> witnessNames;
-  std::set<ASTNode> witnessIndexes;
+  ASTNodeSet witnessIndexes;
   for (size_t i = 0; i < activeRecordIds.size(); i++)
   {
     const Record& r = records[activeRecordIds[i]];
@@ -888,6 +985,35 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
   std::map<ASTNode, ASTNode> anchorRhs;
   ASTNodeSet visited;
   collectDag(root, visited);
+
+  // The question is existential and every write asks it against the same set
+  // of witness indexes. Once a node's complete subtree has been checked and
+  // found safe, every later write which shares that node is safe without a
+  // fresh post-order map. Across all writes this visits each unique index-DAG
+  // node once rather than once per write.
+  //
+  // The set is marked in pre-order, so a walk that finds a witness stops
+  // with the subtrees of already-marked nodes unexamined. That never leaks
+  // into a later answer only because a hit is fatal below: every call that
+  // returns false ran to completion, and only completed walks leave nodes
+  // behind for a later walk to trust. If the FatalError ever becomes a soft
+  // skip, this memo must go back to per-walk state.
+  ASTNodeSet checkedWriteIndexNodes;
+  auto writeIndexMentionsWitness = [&](const ASTNode& index) {
+    bool mentions = false;
+    walkPreOrder(index, [&](const ASTNode& current) {
+      if (mentions || !checkedWriteIndexNodes.insert(current).second)
+        return false;
+      if (witnessIndexes.find(current) != witnessIndexes.end())
+      {
+        mentions = true;
+        return false;
+      }
+      return true;
+    });
+    return mentions;
+  };
+
   for (ASTNodeSet::const_iterator it = visited.begin(); it != visited.end();
        ++it)
   {
@@ -907,7 +1033,7 @@ void ExtensionalityContext::locateCanonicalOperands(const ASTNode& root)
     // and a sort whose values are not all denoting needs exactly that --
     // and no such position gives a rewrite anything to work with. Only a
     // write index does.
-    if (n.GetKind() == WRITE && subtreeMentions(n[1], witnessIndexes))
+    if (n.GetKind() == WRITE && writeIndexMentionsWitness(n[1]))
       FatalError("array-equality: a write index mentions a witness index, "
                  "so a rewrite could decide that write against an anchor "
                  "read and move the operand recovery reads",
