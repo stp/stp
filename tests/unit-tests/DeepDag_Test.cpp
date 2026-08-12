@@ -63,6 +63,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/PropagateEqualities.h"
 #include "stp/Simplifier/RemoveUnconstrained.h"
 #include "stp/Simplifier/Simplifier.h"
+#include "stp/Simplifier/SplitExtracts.h"
 #include "stp/Simplifier/UseITEContext.h"
 #include "stp/Simplifier/VariablesInExpression.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
@@ -408,6 +409,30 @@ bool substitutionOk(Context& c, unsigned depth)
       SubstitutionMap::replace(top, fromTo, cache, c.nf);
   c.roots.push_back(result);
   return result != top;
+}
+
+// SplitExtracts::buildMap, which records every extract-of-a-symbol in the
+// input so that overlapping uses of one symbol can be split into pieces.
+// On the default path -- enable_split_extracts is on, and TopLevelSTPAux
+// runs the pass on every query -- and the walk is over the whole input.
+//
+// No extract matches a chain of BVXORs over symbols, so what the pass does
+// here is exactly the traversal, and finding nothing to split means the
+// formula comes back unchanged.
+bool splitExtractsOk(Context& c, unsigned depth)
+{
+  const ASTNode top = c.formula(c.chain(BVXOR, depth));
+  c.roots.push_back(top);
+
+  c.mgr.UserFlags.enable_split_extracts = true;
+
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  SplitExtracts split(c.mgr);
+
+  const ASTNode result = split.topLevel(top, &simp);
+  c.roots.push_back(result);
+  return result == top && split.getIntroduced() == 0;
 }
 
 // Releasing a DAG. A node that loses its last reference releases its
@@ -1831,6 +1856,12 @@ TEST(DeepDag, wide_fp_rounding_mode_walk_adds_every_constraint)
 #endif // STP_ENABLE_FLOATING_POINT
 
 
+TEST(DeepDag, shallow_split_extracts)
+{
+  Context c;
+  EXPECT_TRUE(splitExtractsOk(c, SHALLOW));
+}
+
 TEST(DeepDag, shallow_substitution)
 {
   Context c;
@@ -2480,6 +2511,11 @@ TEST(DeepDag, deep_flatten_share_count)
 TEST(DeepDag, deep_flatten)
 {
   EXPECT_STACK_SAFE(flattenIdentityOk, 10000);
+}
+
+TEST(DeepDag, deep_split_extracts)
+{
+  EXPECT_STACK_SAFE(splitExtractsOk, 50000);
 }
 
 TEST(DeepDag, deep_substitution)
