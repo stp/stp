@@ -568,6 +568,214 @@ bool propagateEqualitiesOk(Context& c, unsigned depth)
   return pe.topLevel(f).GetKind() != UNDEFINED;
 }
 
+// MutableASTNode::build, the up-and-down graph unconstrained-variable
+// elimination runs on. Not an AST walk by signature -- it hands back a
+// MutableASTNode, so the recursion checker's ASTNode test never saw it --
+// but it descends the input DAG all the same, and this is the shape that
+// found it: a formula that alternates NOT and AND has no flat spine for the
+// simplifier to collapse, so it reaches RemoveUnconstrained as deep as it
+// was written.
+bool removeUnconstrainedOk(Context& c, unsigned depth)
+{
+  ASTNode f = c.hf->CreateNode(EQ, c.mgr.CreateSymbol("u0", 0, 8),
+                               c.mgr.CreateZeroConst(8));
+  for (unsigned i = 1; i < depth; i++)
+  {
+    const std::string nm = "u" + std::to_string(i);
+    f = c.hf->CreateNode(
+        NOT, c.hf->CreateNode(
+                 AND, c.hf->CreateNode(EQ, c.mgr.CreateSymbol(nm.c_str(), 0, 8),
+                                       c.mgr.CreateZeroConst(8)),
+                 f));
+  }
+  c.roots.push_back(f);
+
+  c.mgr.UserFlags.optimize_flag = true;
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  RemoveUnconstrained ru(c.mgr);
+  const ASTNode result = ru.topLevel(f, &simp);
+  c.roots.push_back(result);
+  return result.GetKind() != UNDEFINED;
+}
+
+// The mutable graph has walks in both directions: invariant/variable scans
+// and dirty rebuilding go down, dirty propagation goes up, and detaching an
+// orphaned subtree tears it down in post-order. Exercise all of them on the
+// same chain so none can hide behind MutableASTNode::build's iterative walk.
+bool mutableDagWalksOk(Context& c, unsigned depth)
+{
+  const ASTNode input = c.chain(BVXOR, depth);
+  c.roots.push_back(input);
+  MutableASTNode* root = MutableASTNode::build(input);
+
+  bool ok = root->checkInvariant();
+  vector<MutableASTNode*> symbols;
+  std::unordered_set<MutableASTNode*> visited;
+  root->getAllVariablesRecursively(symbols, visited);
+  ok = ok && symbols.size() == depth;
+
+  MutableASTNode* leaf = root;
+  unsigned pathDepth = 0;
+  while (!leaf->isSymbol())
+  {
+    MutableASTNode* next = NULL;
+    for (MutableASTNode* child : leaf->children)
+      if (!child->isSymbol())
+      {
+        next = child;
+        break;
+      }
+    leaf = next == NULL ? leaf->children[0] : next;
+    pathDepth++;
+  }
+  ok = ok && pathDepth == depth - 1;
+
+  vector<MutableASTNode*> variables;
+  leaf->replaceWithVar(c.mgr.CreateSymbol("mutable-leaf", 0, 8), variables);
+  const ASTNode rebuilt = root->toASTNode(&c.mgr);
+  c.roots.push_back(rebuilt);
+  ok = ok && rebuilt != input && !variables.empty();
+
+  // Replacing the root orphans the whole rebuilt chain. removeChildren must
+  // finish that teardown without using one call frame per level.
+  root->replaceWithVar(c.mgr.CreateSymbol("mutable-root", 0, 8), variables);
+  ok = ok && root->toASTNode(&c.mgr) == root->n && root->checkInvariant();
+  MutableASTNode::cleanup();
+  return ok;
+}
+
+// Root-level no-ops should not need a traversal worklist: a repeated variable
+// scan is already visited, a symbol has no children to remove, and propagating
+// from an already-dirty replacement has nowhere new to go.
+bool mutableDagRootFastPathsOk(Context& c)
+{
+  const ASTNode original = c.mgr.CreateSymbol("mutable-fast-original", 0, 8);
+  MutableASTNode* root = MutableASTNode::build(original);
+
+  vector<MutableASTNode*> symbols;
+  std::unordered_set<MutableASTNode*> visited;
+  root->getAllVariablesRecursively(symbols, visited);
+  root->getAllVariablesRecursively(symbols, visited);
+
+  vector<MutableASTNode*> variables;
+  root->removeChildren(variables);
+  const ASTNode replacement =
+      c.mgr.CreateSymbol("mutable-fast-replacement", 0, 8);
+  root->replaceWithVar(replacement, variables);
+  root->propagateUpDirty();
+
+  const bool ok = symbols.size() == 1 && symbols[0] == root &&
+                  variables.empty() && root->toASTNode(&c.mgr) == replacement;
+  MutableASTNode::cleanup();
+  return ok;
+}
+
+// A parent consumes a newly built child directly when its child frame
+// returns; it must not need to find that child in `visited` a second time.
+// Mix misses and a shared hit so the continuation is pinned to the right
+// child position as well as to the right mutable node.
+bool mutableDagBuildResumeOrderOk(Context& c)
+{
+  const ASTNode a = c.mgr.CreateSymbol("mutable-build-a", 0, 8);
+  const ASTNode b = c.mgr.CreateSymbol("mutable-build-b", 0, 8);
+  const ASTNode d = c.mgr.CreateSymbol("mutable-build-d", 0, 8);
+  const ASTNode left = c.hf->CreateTerm(BVXOR, 8, a, b);
+  const ASTNode right = c.hf->CreateTerm(BVAND, 8, b, d);
+  const ASTNode top = c.hf->CreateTerm(BVPLUS, 8, left, right, left);
+  c.roots.push_back(top);
+
+  std::unordered_map<uint64_t, MutableASTNode*> nodes;
+  MutableASTNode* root = MutableASTNode::build(top, nodes);
+  bool ok = root->children.size() == top.Degree() && nodes.size() == 6;
+  for (size_t i = 0; ok && i < top.Degree(); ++i)
+  {
+    const auto child = nodes.find(top[i].GetNodeNum());
+    ok = child != nodes.end() && root->children[i] == child->second;
+  }
+
+  const auto leftNode = nodes.find(left.GetNodeNum());
+  size_t leftEdges = 0;
+  if (leftNode != nodes.end())
+  {
+    for (MutableASTNode* child : root->children)
+      leftEdges += child == leftNode->second;
+  }
+  ok = ok && leftNode != nodes.end() && leftEdges == 2 &&
+       leftNode->second->parents.count(root) == 1;
+  MutableASTNode::cleanup();
+  return ok;
+}
+
+// Dirty rebuilding can reach the same mutable child through more than one
+// parent. The first route rebuilds it and later routes reuse the stored AST;
+// the parent must gather both answers in operand order even though rebuild
+// frames no longer retain their own child vectors.
+bool mutableDagSharedRebuildOk(Context& c)
+{
+  const ASTNode x = c.mgr.CreateSymbol("mutable-rebuild-x", 0, 8);
+  const ASTNode y = c.mgr.CreateSymbol("mutable-rebuild-y", 0, 8);
+  const ASTNode z = c.mgr.CreateSymbol("mutable-rebuild-z", 0, 8);
+  const ASTNode shared = c.hf->CreateTerm(BVXOR, 8, x, y);
+  const ASTNode left = c.hf->CreateTerm(BVPLUS, 8, shared, z);
+  const ASTNode right = c.hf->CreateTerm(BVAND, 8, z, shared);
+  const ASTNode top = c.hf->CreateTerm(BVPLUS, 8, left, right, z);
+  c.roots.push_back(top);
+
+  std::unordered_map<uint64_t, MutableASTNode*> nodes;
+  MutableASTNode* root = MutableASTNode::build(top, nodes);
+  vector<MutableASTNode*> variables;
+  const ASTNode replacement =
+      c.mgr.CreateSymbol("mutable-rebuild-replacement", 0, 8);
+  nodes.at(x.GetNodeNum())->replaceWithVar(replacement, variables);
+
+  const ASTNode expectedShared =
+      c.hf->CreateTerm(BVXOR, 8, replacement, y);
+  const ASTNode expectedLeft =
+      c.hf->CreateTerm(BVPLUS, 8, expectedShared, z);
+  const ASTNode expectedRight =
+      c.hf->CreateTerm(BVAND, 8, z, expectedShared);
+  const ASTNode expected =
+      c.hf->CreateTerm(BVPLUS, 8, expectedLeft, expectedRight, z);
+  const ASTNode rebuilt = root->toASTNode(&c.mgr);
+  c.roots.push_back(rebuilt);
+
+  const bool ok = rebuilt == expected && root->toASTNode(&c.mgr) == rebuilt &&
+                  variables.size() == 1 && root->checkInvariant();
+  MutableASTNode::cleanup();
+  return ok;
+}
+
+// Mutable parents are a set, so two edges from one parent represent one
+// parent relationship. Detaching such a DAG must likewise process that
+// relationship once. Otherwise every duplicate edge revisits an already
+// orphaned child: n[i] = xor(n[i-1], n[i-1]) takes 2^i work, and a symbol
+// retained by another parent is reported once per path.
+bool mutableDagRepeatedEdgesOk(Context& c)
+{
+  const ASTNode shared = c.mgr.CreateSymbol("mutable-shared", 0, 8);
+  ASTNode repeated = shared;
+  for (unsigned i = 0; i < 12; ++i)
+    repeated = c.hf->CreateTerm(BVXOR, 8, repeated, repeated);
+
+  const ASTNode keeper = c.hf->CreateTerm(
+      BVXOR, 8, shared,
+      c.mgr.CreateSymbol("mutable-keeper-child", 0, 8));
+  const ASTNode top = c.hf->CreateTerm(BVPLUS, 8, repeated, keeper);
+  c.roots.push_back(top);
+
+  std::unordered_map<uint64_t, MutableASTNode*> nodes;
+  MutableASTNode::build(top, nodes);
+  MutableASTNode* repeatedMutable = nodes.at(repeated.GetNodeNum());
+
+  vector<MutableASTNode*> variables;
+  repeatedMutable->removeChildren(variables);
+  const bool ok = variables.size() == 1 && variables[0]->n == shared &&
+                  variables[0]->parents.size() == 1;
+  MutableASTNode::cleanup();
+  return ok;
+}
+
 // FlattenKind, which every pass that wants an n-ary view of a nested
 // same-kind chain goes through: the simplifier, the BV solver,
 // PropagateEqualities, MergeSame and UseITEContext. Its two forms differ in
@@ -1000,6 +1208,12 @@ TEST(DeepDag, shallow_bit_blast_nested)
   EXPECT_TRUE(bitBlastNestedOk(c, SHALLOW));
 }
 
+TEST(DeepDag, shallow_mutable_dag_walks)
+{
+  Context c;
+  EXPECT_TRUE(mutableDagWalksOk(c, SHALLOW));
+}
+
 TEST(DeepDag, node_iterator_preserves_lifo_dag_order)
 {
   Context c;
@@ -1070,6 +1284,30 @@ TEST(DeepDag, shallow_array_read_count_walk)
   EXPECT_TRUE(numberOfReadsWalkOk(c, SHALLOW));
 }
 
+TEST(DeepDag, mutable_dag_root_fast_paths_preserve_no_ops)
+{
+  Context c;
+  EXPECT_TRUE(mutableDagRootFastPathsOk(c));
+}
+
+TEST(DeepDag, mutable_dag_repeated_edges_are_detached_once)
+{
+  Context c;
+  EXPECT_TRUE(mutableDagRepeatedEdgesOk(c));
+}
+
+TEST(DeepDag, mutable_dag_build_consumes_returned_children_in_order)
+{
+  Context c;
+  EXPECT_TRUE(mutableDagBuildResumeOrderOk(c));
+}
+
+TEST(DeepDag, mutable_dag_shared_children_rebuild_in_operand_order)
+{
+  Context c;
+  EXPECT_TRUE(mutableDagSharedRebuildOk(c));
+}
+
 TEST(DeepDag, deep_rewriting_share_count)
 {
   EXPECT_STACK_SAFE(rewritingIdentityOk, 200000);
@@ -1136,6 +1374,11 @@ TEST(DeepDag, deep_bit_blast_nested)
 }
 
 TEST(DeepDag, deep_common_sub_sum)              { EXPECT_STACK_SAFE(commonSubSumOk, 20000); }
+TEST(DeepDag, deep_remove_unconstrained) { EXPECT_STACK_SAFE(removeUnconstrainedOk, 20000); }
+TEST(DeepDag, deep_mutable_dag_walks)
+{
+  EXPECT_STACK_SAFE(mutableDagWalksOk, 20000);
+}
 TEST(DeepDag, deep_node_domain)        { EXPECT_STACK_SAFE(nodeDomainOk, 20000); }
 TEST(DeepDag, deep_node_iterator)      { EXPECT_STACK_SAFE(nodeIteratorOk, 20000); }
 TEST(DeepDag, deep_vars_in_expression) { EXPECT_STACK_SAFE(varsInExpressionOk, 20000); }
