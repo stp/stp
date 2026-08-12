@@ -459,6 +459,35 @@ TEST(SimplifyingNodeFactory_Exhaustive, eq_concat_shared_half)
             c.nf->CreateNode(EQ, x, y));
 }
 
+/* constant = high ++ low --> high = constant[high] && low = constant[low].
+   This is the common one-level case, which does not need the nested-concat
+   continuation stack. */
+TEST(SimplifyingNodeFactory_Exhaustive, eq_constant_shallow_concat)
+{
+  Context c;
+  const ASTNode high = c.bv(2);
+  const ASTNode low = c.bv(3);
+  const ASTNode concat = c.hf->CreateTerm(BVCONCAT, 5, high, low);
+  const ASTNode constant = c.konst(0b10110, 5);
+  const ASTNode plain = c.hf->CreateNode(EQ, constant, concat);
+  const ASTNode simplified = c.nf->CreateNode(EQ, constant, concat);
+  const ASTNode reversePlain = c.hf->CreateNode(EQ, concat, constant);
+  const ASTNode reverseSimplified = c.nf->CreateNode(EQ, concat, constant);
+
+  const ASTNode lowEquality =
+      c.nf->CreateNode(EQ, low, c.konst(0b110, 3));
+  const ASTNode highEquality =
+      c.nf->CreateNode(EQ, high, c.konst(0b10, 2));
+  const ASTNode expected = c.nf->CreateNode(AND, lowEquality, highEquality);
+
+  EXPECT_NE(plain, simplified);
+  EXPECT_EQ(expected, simplified);
+  EXPECT_NE(reversePlain, reverseSimplified);
+  EXPECT_EQ(expected, reverseSimplified);
+  c.checkEquivalent(plain, simplified);
+  c.checkEquivalent(reversePlain, reverseSimplified);
+}
+
 /* equality and signed comparison of two sign extensions from the same
    width reduce to the originals */
 TEST(SimplifyingNodeFactory_Exhaustive, sx_pairs)

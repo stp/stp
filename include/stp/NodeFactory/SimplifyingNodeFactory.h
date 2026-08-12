@@ -95,7 +95,8 @@ private:
   ASTNode CreateSimpleNot(ASTChildren children);
 
   ASTNode CreateSimpleEQ(ASTChildren children);
-
+  ASTNode CreateSimpleEQConstConcat(const ASTNode& constant,
+                                    const ASTNode& concat);
 
   ASTNode chaseRead(ASTChildren children, unsigned int width);
 
