@@ -108,7 +108,7 @@ private:
   // input, which is the input's choice and can be deeper than the stack
   // holds. So the three are one walk with its frames on the heap rather
   // than three sets of call frames. See DeepDag_Test.cpp.
-  struct Frame;
+  class TransformDriver;
   ASTNode transform(bool asFormula, const ASTNode& n);
 
 public:

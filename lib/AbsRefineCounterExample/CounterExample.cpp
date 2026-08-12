@@ -298,119 +298,192 @@ void AbsRefine_CounterExample::ConstructCounterExample(
 // the term evaluator -- so they are one walk with its frames on the heap
 // rather than three sets of call frames. See DeepDag_Test.cpp.
 //
-// `job` says which of the three a frame is running and `phase` where in it,
-// because most of them suspend at more than one point. Everything else here
-// was a local of the function it came from, kept because it has to survive
-// the suspension.
-struct AbsRefine_CounterExample::Frame
+// The evaluator owns the explicit continuation stack and keeps all of its
+// suspension machinery out of AbsRefine_CounterExample's ordinary methods.
+class AbsRefine_CounterExample::EvaluationDriver
 {
-  enum Phase
+  AbsRefine_CounterExample& owner;
+  ASTNode& ASTTrue;
+  ASTNode& ASTFalse;
+  ASTNode& ASTUndefined;
+  ASTNodeMap& CounterExampleMap;
+  ASTNodeMap& ComputeFormulaMap;
+  STPMgr* const bm;
+  Simplifier* const simp;
+  unsigned int& fpEncodedEvaluationDepth;
+
+  FpEncodingContext& requireFpEncodingContext() const
   {
-    Start,
+    return owner.requireFpEncodingContext();
+  }
 
-    // ComputeFormulaUsingModel.
-    FormSymbolValue,     // boolean symbol: waiting for its recorded value
-    FormArrayEqLowered,  // array equality: for the lowering that decided it
-    FormBoolExtract,     // bit extract: for the term underneath
-    FormOperand,         // connective or comparison: for operand `i`
-    FormIteCond,         // if-then-else: for the condition
-    FormIteBranch,       // ... for the branch the condition left alive
-    FormFpOperand,       // float predicate: for operand `i`
-    FormFpOperandStrict, // ... for it again, this time refusing a bare read
-    FormFpRewritten,     // ... for what the factory returned instead
-    FormFpBlasted,       // ... for the lowering of the predicate
+  bool arrayEqualityIsModelDecidable(const ASTNode& arrayTerm) const
+  {
+    return owner.arrayEqualityIsModelDecidable(arrayTerm);
+  }
 
-    // TermToConstTermUsingModel.
-    TermRecordedValueStart, // recorded non-constant: about to evaluate its value
-    TermRecordedValue,  // for the value the model already records for this term
-    TermEncoded,        // float source term: for its encoding
-    TermDefinition,     // substituted array read: for the read through its definition
-    TermCellIndex,      // owned array read: for the index
-    TermCellValue,      // ... for a recorded cell value that is not constant
-    TermCellWriteIndex, // ... for the index the write at this level stores at
-    TermCellWritten,    // ... for the value it stores, the index having hit
-    TermCellIteCond,    // ... for an array if-then-else's condition
-    TermExpand,         // read over a write: for the expansion
-    TermExpanded,       // ... for the value of the expansion
-    TermReadIteIndex,   // read over an if-then-else: for the index
-    TermReadIteCond,    // ... for the condition
-    TermReadIteBranch,  // ... for the read over the branch it left alive
-    TermReadIndex,      // plain read: for the index, however it is spelled
-    TermReadValue,      // ... for the value the model records at that index
-    TermIteCond,        // if-then-else term: for the condition
-    TermIteBranch,      // ... for the branch the condition left alive
-    TermOperand,        // any other operation: for child `i`
-    TermOperandStrict,  // ... for it again, this time refusing a bare read
+  bool ArraysEqualUsingModel(const ASTNode& left, const ASTNode& right)
+  {
+    return owner.ArraysEqualUsingModel(left, right);
+  }
 
-    // Expand_ReadOverWrite_UsingModel.
-    ExpandRecordedValueStart, // recorded non-constant: about to evaluate its value
-    ExpandRecordedValue, // for the value the model already records for the read
-    ExpandReadIndex,     // for the read index
-    ExpandWriteIndex,    // for the index the write at this level stores at
-    ExpandWritten,       // ... for the value it stores, the index having hit
-    ExpandPushedIn       // for the read under everything the chain did not hit
+  ASTNode defaultCellValue(const ASTNode& arrayTerm) const
+  {
+    return owner.defaultCellValue(arrayTerm);
+  }
+
+  struct Frame
+  {
+    enum class FormulaPhase : uint8_t
+    {
+      Start,
+      AfterSymbolValue,
+      AfterArrayEqualityLowering,
+      AfterBoolExtractOperand,
+      AfterOperand,
+      AfterIteCondition,
+      AfterIteSelectedBranch,
+      AfterFpOperand,
+      AfterFpOperandStrict,
+      AfterFpRewrite,
+      AfterFpBlast
+    };
+
+    enum class TermPhase : uint8_t
+    {
+      Start,
+      PreparedRecordedValue,
+      AfterRecordedValue,
+      AfterEncodedValue,
+      AfterDefinition,
+      AfterCellIndex,
+      AfterCellValue,
+      AfterCellWriteIndex,
+      AfterCellWrittenValue,
+      AfterCellIteCondition,
+      AfterExpansion,
+      AfterExpandedValue,
+      AfterReadIteIndex,
+      AfterReadIteCondition,
+      AfterReadIteSelectedBranch,
+      AfterReadIndex,
+      AfterReadValue,
+      AfterIteCondition,
+      AfterIteSelectedBranch,
+      AfterOperand,
+      AfterOperandStrict
+    };
+
+    enum class ExpansionPhase : uint8_t
+    {
+      Start,
+      PreparedRecordedValue,
+      AfterRecordedValue,
+      AfterReadIndex,
+      AfterWriteIndex,
+      AfterWrittenValue,
+      AfterPushedRead
+    };
+
+    Job job;
+    union
+    {
+      FormulaPhase formulaPhase;
+      TermPhase termPhase;
+      ExpansionPhase expansionPhase;
+    };
+    ASTNode n;
+    bool ArrayReadFlag;
+
+    ASTVec parts; // operands evaluated so far
+    size_t i = 0; // the operand being worked on
+
+    // Locals that outlive one of their function's suspension points. Each is
+    // one role, under whichever of the three names its function gave it: the
+    // evaluated read index (`idxVal`, `indexVal`, `readIndex`), the array node
+    // a walk down a chain has reached (`level`, `write`), and the read
+    // renormalised over a constant index (`modelentry`).
+    ASTNode index;
+    ASTNode cursor;
+    ASTNode entry;
+
+    // Raised while an already-lowered float expression is evaluated and
+    // lowered when this frame is dropped, which is where the scope guard the
+    // recursive version held across the sub-evaluation used to end. Getting
+    // this wrong changes float model values rather than crashing.
+    ScopedFpEncodedEvaluation fpScope;
+
+    Frame(const ASTNode& node, const bool flag, const FormulaPhase phase)
+        : job(EvalFormula), formulaPhase(phase), n(node), ArrayReadFlag(flag)
+    {
+    }
+
+    Frame(const ASTNode& node, const bool flag, const TermPhase phase)
+        : job(EvalTerm), termPhase(phase), n(node), ArrayReadFlag(flag)
+    {
+    }
+
+    Frame(const ASTNode& node, const bool flag, const ExpansionPhase phase)
+        : job(EvalExpand), expansionPhase(phase), n(node), ArrayReadFlag(flag)
+    {
+    }
+
+    void resumeAt(const FormulaPhase phase)
+    {
+      assert(job == EvalFormula);
+      formulaPhase = phase;
+    }
+    void resumeAt(const TermPhase phase)
+    {
+      assert(job == EvalTerm);
+      termPhase = phase;
+    }
+    void resumeAt(const ExpansionPhase phase)
+    {
+      assert(job == EvalExpand);
+      expansionPhase = phase;
+    }
   };
 
-  Job job;
-  Phase phase = Start;
-  ASTNode n;
-  bool ArrayReadFlag;
+  // ComputeFormulaUsingModel, TermToConstTermUsingModel and
+  // Expand_ReadOverWrite_UsingModel, walked together with their frames on the
+  // heap. Everything the three did is here in the order they did it: the same
+  // map reads and writes, the same node-factory calls, the same asserts, and
+  // the same decisions about which operand is evaluated at all.
+  //
+  // That last one is why this is a state machine rather than a priming pass.
+  // Three arms evaluate an if-then-else's condition and then only the branch it
+  // leaves alive, and a dropped branch here is not merely wasted work: it can
+  // be genuinely unevaluable against the model, and all three call FatalError
+  // when it is.
+  //
+  // Two things a reader should check for, because both change the model
+  // silently rather than crashing. The map writes are not uniform -- a term's
+  // value is recorded by the tail its arm reaches, and five of the arms return
+  // before that tail, three of them writing the map themselves on the way past.
+  // And a term's answer is put into the plain bit-vector spelling once per
+  // frame, where the wrapper around the old recursive evaluator did it once per
+  // call.
+  static_assert(sizeof(Frame) <= 88,
+                "counterexample continuation frame unexpectedly grew");
 
-  ASTVec parts; // operands evaluated so far
-  size_t i = 0; // the operand being worked on
-
-  // Locals that outlive one of their function's suspension points. Each is
-  // one role, under whichever of the three names its function gave it: the
-  // evaluated read index (`idxVal`, `indexVal`, `readIndex`), the array node
-  // a walk down a chain has reached (`level`, `write`), and the read
-  // renormalised over a constant index (`modelentry`).
-  ASTNode index;
-  ASTNode cursor;
-  ASTNode entry;
-
-  // Raised while an already-lowered float expression is evaluated and
-  // lowered when this frame is dropped, which is where the scope guard the
-  // recursive version held across the sub-evaluation used to end. Getting
-  // this wrong changes float model values rather than crashing.
-  ScopedFpEncodedEvaluation fpScope;
-
-  Frame(Job j, const ASTNode& node, bool flag)
-      : job(j), n(node), ArrayReadFlag(flag)
-  {
-  }
-};
-
-// ComputeFormulaUsingModel, TermToConstTermUsingModel and
-// Expand_ReadOverWrite_UsingModel, walked together with their frames on the
-// heap. Everything the three did is here in the order they did it: the same
-// map reads and writes, the same node-factory calls, the same asserts, and
-// the same decisions about which operand is evaluated at all.
-//
-// That last one is why this is a state machine rather than a priming pass.
-// Three arms evaluate an if-then-else's condition and then only the branch it
-// leaves alive, and a dropped branch here is not merely wasted work: it can
-// be genuinely unevaluable against the model, and all three call FatalError
-// when it is.
-//
-// Two things a reader should check for, because both change the model
-// silently rather than crashing. The map writes are not uniform -- a term's
-// value is recorded by the tail its arm reaches, and five of the arms return
-// before that tail, three of them writing the map themselves on the way past.
-// And a term's answer is put into the plain bit-vector spelling once per
-// frame, where the wrapper around the old recursive evaluator did it once per
-// call.
-ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
-                                           const bool topArrayReadFlag)
-{
   // The value the frame that finished last returned, which is what the frame
   // below it resumes with.
   ASTNode result;
+  std::vector<Frame> stack;
+
+  enum class StepResult
+  {
+    Finished,
+    Pushed,
+    Redispatch
+  };
 
   // Run the non-recursive head of one of the three former functions. An
   // immediate answer lands in `result` and needs no frame. Otherwise `frame`
   // carries everything learned by the head into the walk below it, so a memo
   // miss is never probed for a second time when the frame starts.
-  auto prepare = [&](const Job j, const ASTNode& n, Frame& frame) -> bool
+  bool prepare(const Job j, const ASTNode& n, Frame& frame)
   {
     assert(frame.job == j && frame.n == n);
     if (j == EvalFormula)
@@ -485,7 +558,7 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
         }
 
         frame.entry = it->second;
-        frame.phase = Frame::TermRecordedValueStart;
+        frame.termPhase = Frame::TermPhase::PreparedRecordedValue;
         return true;
       }
 
@@ -514,56 +587,66 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
       }
 
       frame.entry = it->second;
-      frame.phase = Frame::ExpandRecordedValueStart;
+      frame.expansionPhase = Frame::ExpansionPhase::PreparedRecordedValue;
       return true;
     }
 
     return true;
-  };
-
-  Frame first(job, top, topArrayReadFlag);
-  if (!prepare(job, top, first))
-    return result;
-
-  // Most model expressions are shallow. Keep their frontier contiguous and
-  // preallocate the common case; a push may move the current frame, so every
-  // step returns immediately after one.
-  std::vector<Frame> stack;
-  stack.reserve(8);
-  stack.push_back(std::move(first));
-
-  enum class StepResult
-  {
-    Finished,
-    Pushed,
-    Redispatch
-  };
+  }
 
   // Ask for the value of `n`, and suspend this frame until it is known: it
   // picks up at `resume` with the answer in `result`. An immediate head answer
   // is redispatched within the same job; only a real child reaches the outer
   // worklist loop.
-  auto want = [&](Frame& f, const Frame::Phase resume, const Job j,
-                  const ASTNode& n,
-                  const bool flag = true) -> StepResult {
-    f.phase = resume;
-    Frame below(j, n, flag);
-    if (!prepare(j, n, below))
+  template <typename ResumePhase>
+  StepResult requestFormula(Frame& f, const ResumePhase resume,
+                            const ASTNode& n, const bool flag = true)
+  {
+    f.resumeAt(resume);
+    Frame below(n, flag, Frame::FormulaPhase::Start);
+    if (!prepare(EvalFormula, n, below))
       return StepResult::Redispatch;
     stack.push_back(std::move(below));
     return StepResult::Pushed;
-  };
+  }
+
+  template <typename ResumePhase>
+  StepResult requestTerm(Frame& f, const ResumePhase resume, const ASTNode& n,
+                         const bool flag = true)
+  {
+    f.resumeAt(resume);
+    Frame below(n, flag, Frame::TermPhase::Start);
+    if (!prepare(EvalTerm, n, below))
+      return StepResult::Redispatch;
+    stack.push_back(std::move(below));
+    return StepResult::Pushed;
+  }
+
+  template <typename ResumePhase>
+  StepResult requestExpansion(Frame& f, const ResumePhase resume,
+                              const ASTNode& n, const bool flag = true)
+  {
+    f.resumeAt(resume);
+    Frame below(n, flag, Frame::ExpansionPhase::Start);
+    if (!prepare(EvalExpand, n, below))
+      return StepResult::Redispatch;
+    stack.push_back(std::move(below));
+    return StepResult::Pushed;
+  }
 
   /* One step of ComputeFormulaUsingModel, which accepts a non-constant
    * formula and checks if the formula is ASTTrue or ASTFalse w.r.t to a
    * model.
    */
-  auto stepFormula = [&](Frame& f) -> StepResult {
+  StepResult stepFormula(Frame& f)
+  {
+    assert(f.job == EvalFormula);
     const ASTNode& form = f.n;
     const Kind k = form.GetKind();
 
     // The tail every path but the memo hit shares.
-    auto finish = [&](const ASTNode& output) {
+    auto finish = [&](const ASTNode& output)
+    {
       assert(ASTUndefined != output);
       assert(output.isConstant());
       ComputeFormulaMap[form] = output;
@@ -588,7 +671,7 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
         return finish(form);
       case SYMBOL:
       {
-        if (f.phase == Frame::FormSymbolValue)
+        if (f.formulaPhase == Frame::FormulaPhase::AfterSymbolValue)
           return finish(result);
 
         if (BOOLEAN_TYPE != form.GetType())
@@ -601,8 +684,8 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
         {
           const ASTNode counterexample_val = recorded->second;
           if (!bm->VarSeenInTerm(form, counterexample_val))
-            return want(f, Frame::FormSymbolValue, EvalFormula,
-                        counterexample_val);
+            return requestFormula(f, Frame::FormulaPhase::AfterSymbolValue,
+                                  counterexample_val);
           return finish(counterexample_val);
         }
         // Has been simplified out. Can take any value.
@@ -610,7 +693,7 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
       }
       case ARRAY_EQ:
       {
-        if (f.phase == Frame::FormArrayEqLowered)
+        if (f.formulaPhase == Frame::FormulaPhase::AfterArrayEqualityLowering)
           return finish(result);
 
         ExtensionalityContext* ext = bm->getExtensionalityIfAny();
@@ -618,7 +701,8 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
         if (ext != NULL && ext->getCurrentLowering(form, lowered))
         {
           // This solve decided the equality; its lowering is the answer.
-          return want(f, Frame::FormArrayEqLowered, EvalFormula, lowered);
+          return requestFormula(
+              f, Frame::FormulaPhase::AfterArrayEqualityLowering, lowered);
         }
 
         // It did not: either the equality belongs to an earlier query,
@@ -644,12 +728,12 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
       }
       case BOOLEXTRACT:
       {
-        if (f.phase == Frame::Start)
-          return want(f, Frame::FormBoolExtract, EvalTerm, form[0]);
+        if (f.formulaPhase == Frame::FormulaPhase::Start)
+          return requestTerm(f, Frame::FormulaPhase::AfterBoolExtractOperand,
+                             form[0]);
 
-        return finish(
-            simp->BVConstEvaluator(bm->CreateNode(BOOLEXTRACT, result,
-                                                  form[1])));
+        return finish(simp->BVConstEvaluator(
+            bm->CreateNode(BOOLEXTRACT, result, form[1])));
       }
       case EQ:
       case BVLT:
@@ -667,13 +751,14 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
       case BVUSUBO:
       case BVSSUBO:
       {
-        if (f.phase == Frame::FormOperand)
+        if (f.formulaPhase == Frame::FormulaPhase::AfterOperand)
           f.parts.push_back(result);
         else
           f.parts.reserve(form.Degree());
 
         if (f.i < form.Degree())
-          return want(f, Frame::FormOperand, EvalTerm, form[f.i++], false);
+          return requestTerm(f, Frame::FormulaPhase::AfterOperand, form[f.i++],
+                             false);
 
         return finish(
             NonMemberBVConstEvaluator(bm, k, f.parts, form.GetValueWidth()));
@@ -688,13 +773,14 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
       case IMPLIES:
       case OR:
       {
-        if (f.phase == Frame::FormOperand)
+        if (f.formulaPhase == Frame::FormulaPhase::AfterOperand)
           f.parts.push_back(result);
         else
           f.parts.reserve(form.Degree());
 
         if (f.i < form.Degree())
-          return want(f, Frame::FormOperand, EvalFormula, form[f.i++]);
+          return requestFormula(f, Frame::FormulaPhase::AfterOperand,
+                                form[f.i++]);
 
         return finish(
             NonMemberBVConstEvaluator(bm, k, f.parts, form.GetValueWidth()));
@@ -702,15 +788,18 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
 
       case ITE:
       {
-        if (f.phase == Frame::Start)
-          return want(f, Frame::FormIteCond, EvalFormula, form[0]);
+        if (f.formulaPhase == Frame::FormulaPhase::Start)
+          return requestFormula(f, Frame::FormulaPhase::AfterIteCondition,
+                                form[0]);
 
-        if (f.phase == Frame::FormIteCond)
+        if (f.formulaPhase == Frame::FormulaPhase::AfterIteCondition)
         {
           if (ASTTrue == result)
-            return want(f, Frame::FormIteBranch, EvalFormula, form[1]);
+            return requestFormula(
+                f, Frame::FormulaPhase::AfterIteSelectedBranch, form[1]);
           else if (ASTFalse == result)
-            return want(f, Frame::FormIteBranch, EvalFormula, form[2]);
+            return requestFormula(
+                f, Frame::FormulaPhase::AfterIteSelectedBranch, form[2]);
           else
             FatalError("ComputeFormulaUsingModel: ITE: "
                        "something is wrong with the formula: ",
@@ -733,8 +822,8 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
       case FP_ISPOSITIVE:
       case FP_SMT_EQ:
       {
-        if (f.phase == Frame::FormFpRewritten ||
-            f.phase == Frame::FormFpBlasted)
+        if (f.formulaPhase == Frame::FormulaPhase::AfterFpRewrite ||
+            f.formulaPhase == Frame::FormulaPhase::AfterFpBlast)
           return finish(result);
 
         // An operand must resolve to a constant, as in the float arm of
@@ -745,12 +834,13 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
         // blaster would carry the read along, and the same-operand folds
         // below can hand the bare READ back. The read is genuinely
         // unconstrained here, so resolve it to a concrete value.
-        if (f.phase == Frame::FormFpOperand && BVCONST != result.GetKind())
-          return want(f, Frame::FormFpOperandStrict, EvalTerm, form[f.i],
-                      false);
+        if (f.formulaPhase == Frame::FormulaPhase::AfterFpOperand &&
+            BVCONST != result.GetKind())
+          return requestTerm(f, Frame::FormulaPhase::AfterFpOperandStrict,
+                             form[f.i], false);
 
-        if (f.phase == Frame::FormFpOperand ||
-            f.phase == Frame::FormFpOperandStrict)
+        if (f.formulaPhase == Frame::FormulaPhase::AfterFpOperand ||
+            f.formulaPhase == Frame::FormulaPhase::AfterFpOperandStrict)
         {
           assert(result.GetKind() == BVCONST);
           f.parts.push_back(FloatBlaster::withFormat(
@@ -765,7 +855,7 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
         }
 
         if (f.i < form.Degree())
-          return want(f, Frame::FormFpOperand, EvalTerm, form[f.i]);
+          return requestTerm(f, Frame::FormulaPhase::AfterFpOperand, form[f.i]);
 
         ASTNode temp(bm->CreateNode(k, f.parts));
 
@@ -776,7 +866,7 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
         // (not (fp.isNaN ...)). Whatever came back that is not this operation
         // is a formula; evaluate it, never blast it.
         if (temp.GetKind() != k)
-          return want(f, Frame::FormFpRewritten, EvalFormula, temp);
+          return requestFormula(f, Frame::FormulaPhase::AfterFpRewrite, temp);
 
         // One table, the same one the solver's lowering pass uses. temp's
         // operands were re-stamped with their formats above, so it is a
@@ -786,7 +876,7 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
         assert(blasted != temp);
         assert(blasted != form);
 
-        return want(f, Frame::FormFpBlasted, EvalFormula, blasted);
+        return requestFormula(f, Frame::FormulaPhase::AfterFpBlast, blasted);
       }
       default:
         cerr << _kind_names[k];
@@ -794,19 +884,22 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
                    "the kind has not been implemented",
                    ASTUndefined);
     }
-  };
+  }
 
   /* One step of TermToConstTermUsingModel, which accepts a non-constant term
    * and returns the corresponding constant term with respect to a model.
    */
-  auto stepTerm = [&](Frame& f) -> StepResult {
+  StepResult stepTerm(Frame& f)
+  {
+    assert(f.job == EvalTerm);
     const ASTNode& term = f.n;
     const Kind k = term.GetKind();
     const bool ArrayReadFlag = f.ArrayReadFlag;
 
     // The tail the arms that run to their end share. Five arms return before
     // reaching it, and three of those record the term's value themselves.
-    auto finish = [&](const ASTNode& output) {
+    auto finish = [&](const ASTNode& output)
+    {
       assert(ArrayReadFlag || (BVCONST == output.GetKind()));
 
       // when this flag is false, we should compute the arrayread to a
@@ -832,11 +925,12 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
       return StepResult::Finished;
     };
 
-    if (f.phase == Frame::TermRecordedValueStart)
-      return want(f, Frame::TermRecordedValue, EvalTerm, f.entry,
-                  ArrayReadFlag);
+    if (f.termPhase == Frame::TermPhase::PreparedRecordedValue)
+      return requestTerm(f, Frame::TermPhase::AfterRecordedValue, f.entry,
+                         ArrayReadFlag);
 
-    if (f.phase == Frame::Start && fpEncodedEvaluationDepth == 0 &&
+    if (f.termPhase == Frame::TermPhase::Start &&
+        fpEncodedEvaluationDepth == 0 &&
         (is_FP_kind(k) || isFpIndexedArrayAccess(term)))
     {
       // FP source operations are evaluated through the solve-owned lowering
@@ -867,16 +961,17 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
         // when this frame is dropped, which is where the guard the recursive
         // version held across the call to itself ended.
         f.fpScope.activate(fpEncodedEvaluationDepth);
-        return want(f, Frame::TermEncoded, EvalTerm, encoded, ArrayReadFlag);
+        return requestTerm(f, Frame::TermPhase::AfterEncodedValue, encoded,
+                           ArrayReadFlag);
       }
     }
 
     // The value the model already records for this term is the answer, and
     // the map already holds it.
-    if (f.phase == Frame::TermRecordedValue)
+    if (f.termPhase == Frame::TermPhase::AfterRecordedValue)
       return StepResult::Finished;
 
-    if (f.phase == Frame::TermEncoded)
+    if (f.termPhase == Frame::TermPhase::AfterEncodedValue)
     {
       const ASTNode value = result;
       if (term != value)
@@ -885,7 +980,7 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
       return StepResult::Finished;
     }
 
-    if (f.phase == Frame::TermDefinition)
+    if (f.termPhase == Frame::TermPhase::AfterDefinition)
       return StepResult::Finished;
 
     switch (k)
@@ -902,10 +997,10 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
         // Has been simplified out and can take any value. A RoundingMode's
         // 5-bit representation has 27 junk patterns, though, so complete that
         // sort with a real value rather than the ordinary all-zero default.
-        return finish(bm->isRoundingModeSortedTerm(term)
-                          ? bm->CreateBVConst(
-                                5, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN)
-                          : bm->CreateZeroConst(term.GetValueWidth()));
+        return finish(
+            bm->isRoundingModeSortedTerm(term)
+                ? bm->CreateBVConst(5, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN)
+                : bm->CreateZeroConst(term.GetValueWidth()));
       }
       case READ:
       {
@@ -915,7 +1010,7 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
         // Which of the four shapes of read this frame is walking is settled
         // when it starts, and its phase says which from then on -- so each
         // gate below is asked exactly once, as it was.
-        if (f.phase == Frame::Start)
+        if (f.termPhase == Frame::TermPhase::Start)
         {
           if (0 == arrName.GetIndexWidth())
           {
@@ -937,10 +1032,10 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
                 ARRAY_TYPE == sub->second.GetType())
             {
               const ASTNode definition = sub->second;
-              const ASTNode throughDefinition = bm->CreateTerm(
-                  READ, term.GetValueWidth(), definition, index);
-              return want(f, Frame::TermDefinition, EvalTerm,
-                          throughDefinition, ArrayReadFlag);
+              const ASTNode throughDefinition =
+                  bm->CreateTerm(READ, term.GetValueWidth(), definition, index);
+              return requestTerm(f, Frame::TermPhase::AfterDefinition,
+                                 throughDefinition, ArrayReadFlag);
             }
           }
 
@@ -962,15 +1057,16 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
           ExtensionalityContext* ext = bm->getExtensionalityIfAny();
           if (ext != NULL && ext->active() && ext->arrayGraphFrozen() &&
               ext->ownsArray(arrName))
-            return want(f, Frame::TermCellIndex, EvalTerm, index, false);
+            return requestTerm(f, Frame::TermPhase::AfterCellIndex, index,
+                               false);
 
           if (WRITE == arrName.GetKind()) // READ over a WRITE
-            return want(f, Frame::TermExpand, EvalExpand, term,
-                        ArrayReadFlag);
+            return requestExpansion(f, Frame::TermPhase::AfterExpansion, term,
+                                    ArrayReadFlag);
 
           if (ITE == arrName.GetKind()) // READ over an ITE
-            return want(f, Frame::TermReadIteIndex, EvalTerm, index,
-                        ArrayReadFlag);
+            return requestTerm(f, Frame::TermPhase::AfterReadIteIndex, index,
+                               ArrayReadFlag);
 
           const ASTNodeMap::const_iterator recorded =
               CounterExampleMap.find(index);
@@ -979,39 +1075,39 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
             // Copy out of the map before the nested evaluation, which may
             // restore the map by whole-map assignment.
             const ASTNode indexEntry = recorded->second;
-            return want(f, Frame::TermReadIndex, EvalTerm, indexEntry,
-                        ArrayReadFlag);
+            return requestTerm(f, Frame::TermPhase::AfterReadIndex, indexEntry,
+                               ArrayReadFlag);
           }
           // index does not have a const value in the
           // CounterExampleMap. compute it.
-          return want(f, Frame::TermReadIndex, EvalTerm, index,
-                      ArrayReadFlag);
+          return requestTerm(f, Frame::TermPhase::AfterReadIndex, index,
+                             ArrayReadFlag);
         }
 
         // The walk down an owned array for the cell the model gives it. Every
         // turn of it but the last suspends, so what was a loop is the
         // sequence of resumes into the turn below.
-        if (f.phase == Frame::TermCellValue ||
-            f.phase == Frame::TermCellWritten)
+        if (f.termPhase == Frame::TermPhase::AfterCellValue ||
+            f.termPhase == Frame::TermPhase::AfterCellWrittenValue)
         {
           CounterExampleMap[term] = result;
           return StepResult::Finished;
         }
 
-        if (f.phase == Frame::TermCellIndex ||
-            f.phase == Frame::TermCellWriteIndex ||
-            f.phase == Frame::TermCellIteCond)
+        if (f.termPhase == Frame::TermPhase::AfterCellIndex ||
+            f.termPhase == Frame::TermPhase::AfterCellWriteIndex ||
+            f.termPhase == Frame::TermPhase::AfterCellIteCondition)
         {
-          if (f.phase == Frame::TermCellIndex)
+          if (f.termPhase == Frame::TermPhase::AfterCellIndex)
           {
             f.index = result;
             f.cursor = arrName;
           }
-          else if (f.phase == Frame::TermCellWriteIndex)
+          else if (f.termPhase == Frame::TermPhase::AfterCellWriteIndex)
           {
             if (result == f.index)
-              return want(f, Frame::TermCellWritten, EvalTerm, f.cursor[2],
-                          false);
+              return requestTerm(f, Frame::TermPhase::AfterCellWrittenValue,
+                                 f.cursor[2], false);
             f.cursor = f.cursor[0];
           }
           else
@@ -1027,23 +1123,25 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
           }
 
           NodeFactory* hf = bm->hashingNodeFactory;
-          const ASTNode key = hf->CreateTerm(READ, f.cursor.GetValueWidth(),
-                                             f.cursor, f.index);
+          const ASTNode key =
+              hf->CreateTerm(READ, f.cursor.GetValueWidth(), f.cursor, f.index);
           ASTNodeMap::const_iterator cit = CounterExampleMap.find(key);
           if (cit != CounterExampleMap.end())
           {
             const ASTNode val = cit->second;
             if (BVCONST != val.GetKind())
-              return want(f, Frame::TermCellValue, EvalTerm, val, false);
+              return requestTerm(f, Frame::TermPhase::AfterCellValue, val,
+                                 false);
             CounterExampleMap[term] = val;
             result = val;
             return StepResult::Finished;
           }
           if (WRITE == f.cursor.GetKind())
-            return want(f, Frame::TermCellWriteIndex, EvalTerm, f.cursor[1],
-                        false);
+            return requestTerm(f, Frame::TermPhase::AfterCellWriteIndex,
+                               f.cursor[1], false);
           if (ITE == f.cursor.GetKind() && f.cursor.GetType() == ARRAY_TYPE)
-            return want(f, Frame::TermCellIteCond, EvalFormula, f.cursor[0]);
+            return requestFormula(f, Frame::TermPhase::AfterCellIteCondition,
+                                  f.cursor[0]);
 
           // base array with no observation
           const ASTNode val = defaultCellValue(f.cursor);
@@ -1052,7 +1150,7 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
           return StepResult::Finished;
         }
 
-        if (f.phase == Frame::TermExpand)
+        if (f.termPhase == Frame::TermPhase::AfterExpansion)
         {
           if (result == term)
           {
@@ -1061,35 +1159,36 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
                        "into an ITE",
                        term);
           }
-          return want(f, Frame::TermExpanded, EvalTerm, result,
-                      ArrayReadFlag);
+          return requestTerm(f, Frame::TermPhase::AfterExpandedValue, result,
+                             ArrayReadFlag);
         }
 
-        if (f.phase == Frame::TermExpanded)
+        if (f.termPhase == Frame::TermPhase::AfterExpandedValue)
         {
           assert(ArrayReadFlag || (BVCONST == result.GetKind()));
           return StepResult::Finished;
         }
 
-        if (f.phase == Frame::TermReadIteIndex)
+        if (f.termPhase == Frame::TermPhase::AfterReadIteIndex)
         {
           // The "then" and "else" branch are arrays.
           f.index = result;
           // Get the truth value.
-          return want(f, Frame::TermReadIteCond, EvalFormula, arrName[0]);
+          return requestFormula(f, Frame::TermPhase::AfterReadIteCondition,
+                                arrName[0]);
         }
 
-        if (f.phase == Frame::TermReadIteCond)
+        if (f.termPhase == Frame::TermPhase::AfterReadIteCondition)
         {
           const unsigned int wid = arrName.GetValueWidth();
           if (ASTTrue == result)
-            return want(f, Frame::TermReadIteBranch, EvalTerm,
-                        bm->CreateTerm(READ, wid, arrName[1], f.index),
-                        ArrayReadFlag);
+            return requestTerm(f, Frame::TermPhase::AfterReadIteSelectedBranch,
+                               bm->CreateTerm(READ, wid, arrName[1], f.index),
+                               ArrayReadFlag);
           else if (ASTFalse == result)
-            return want(f, Frame::TermReadIteBranch, EvalTerm,
-                        bm->CreateTerm(READ, wid, arrName[2], f.index),
-                        ArrayReadFlag);
+            return requestTerm(f, Frame::TermPhase::AfterReadIteSelectedBranch,
+                               bm->CreateTerm(READ, wid, arrName[2], f.index),
+                               ArrayReadFlag);
           else
           {
             FatalError(" TermToConstTermUsingModel: termITE: "
@@ -1098,13 +1197,13 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
           }
         }
 
-        if (f.phase == Frame::TermReadIteBranch)
+        if (f.termPhase == Frame::TermPhase::AfterReadIteSelectedBranch)
         {
           assert(ArrayReadFlag || (BVCONST == result.GetKind()));
           return StepResult::Finished;
         }
 
-        if (f.phase == Frame::TermReadIndex)
+        if (f.termPhase == Frame::TermPhase::AfterReadIndex)
         {
           f.entry =
               bm->CreateTerm(READ, arrName.GetValueWidth(), arrName, result);
@@ -1117,8 +1216,8 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
           if (recorded != CounterExampleMap.end())
           {
             const ASTNode modelentryValue = recorded->second;
-            return want(f, Frame::TermReadValue, EvalTerm, modelentryValue,
-                        ArrayReadFlag);
+            return requestTerm(f, Frame::TermPhase::AfterReadValue,
+                               modelentryValue, ArrayReadFlag);
           }
 
           if (ArrayReadFlag)
@@ -1166,21 +1265,22 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
                             : bm->CreateMaxConst(f.entry.GetValueWidth()));
         }
 
-        return finish(result); // Frame::TermReadValue
+        return finish(result); // Frame::TermPhase::AfterReadValue
       }
       case ITE:
       {
-        if (f.phase == Frame::Start)
-          return want(f, Frame::TermIteCond, EvalFormula, term[0]);
+        if (f.termPhase == Frame::TermPhase::Start)
+          return requestFormula(f, Frame::TermPhase::AfterIteCondition,
+                                term[0]);
 
-        if (f.phase == Frame::TermIteCond)
+        if (f.termPhase == Frame::TermPhase::AfterIteCondition)
         {
           if (ASTTrue == result)
-            return want(f, Frame::TermIteBranch, EvalTerm, term[1],
-                        ArrayReadFlag);
+            return requestTerm(f, Frame::TermPhase::AfterIteSelectedBranch,
+                               term[1], ArrayReadFlag);
           else if (ASTFalse == result)
-            return want(f, Frame::TermIteBranch, EvalTerm, term[2],
-                        ArrayReadFlag);
+            return requestTerm(f, Frame::TermPhase::AfterIteSelectedBranch,
+                               term[2], ArrayReadFlag);
           else
           {
             FatalError(" TermToConstTermUsingModel: termITE: cannot "
@@ -1203,12 +1303,13 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
         // to a concrete constant rather than hand a non-constant to the
         // evaluator (which cannot read arrays and would abort on the array
         // symbol).
-        if (f.phase == Frame::TermOperand && BVCONST != result.GetKind())
-          return want(f, Frame::TermOperandStrict, EvalTerm, term[f.i],
-                      false);
+        if (f.termPhase == Frame::TermPhase::AfterOperand &&
+            BVCONST != result.GetKind())
+          return requestTerm(f, Frame::TermPhase::AfterOperandStrict, term[f.i],
+                             false);
 
-        if (f.phase == Frame::TermOperand ||
-            f.phase == Frame::TermOperandStrict)
+        if (f.termPhase == Frame::TermPhase::AfterOperand ||
+            f.termPhase == Frame::TermPhase::AfterOperandStrict)
         {
           ASTNode ff = result;
           // A floating-point operand comes back as a bare bit-vector:
@@ -1229,114 +1330,172 @@ ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
           f.parts.reserve(term.Degree());
 
         if (f.i < term.Degree())
-          return want(f, Frame::TermOperand, EvalTerm, term[f.i],
-                      ArrayReadFlag);
+          return requestTerm(f, Frame::TermPhase::AfterOperand, term[f.i],
+                             ArrayReadFlag);
 
         return finish(
             NonMemberBVConstEvaluator(bm, k, f.parts, term.GetValueWidth()));
       }
     }
-  };
+  }
 
   // One step of Expand_ReadOverWrite_UsingModel, which expands
   // read-over-write by evaluating (readIndex=writeIndex) for every writeindex
   // until, either it evaluates to TRUE or all (readIndex=writeIndex) evaluate
   // to FALSE.
-  auto stepExpand = [&](Frame& f) -> StepResult {
+  StepResult stepExpand(Frame& f)
+  {
+    assert(f.job == EvalExpand);
     const ASTNode& term = f.n;
     const bool arrayread_flag = f.ArrayReadFlag;
 
     // memoize
-    auto finish = [&](const ASTNode& output) {
+    auto finish = [&](const ASTNode& output)
+    {
       CounterExampleMap[term] = output;
       result = output;
       return StepResult::Finished;
     };
 
-    if (f.phase == Frame::ExpandRecordedValueStart)
-      return want(f, Frame::ExpandRecordedValue, EvalTerm, f.entry,
-                  arrayread_flag);
+    if (f.expansionPhase == Frame::ExpansionPhase::PreparedRecordedValue)
+      return requestTerm(f, Frame::ExpansionPhase::AfterRecordedValue, f.entry,
+                         arrayread_flag);
 
-    if (f.phase == Frame::Start)
-      return want(f, Frame::ExpandReadIndex, EvalTerm, term[1], false);
+    if (f.expansionPhase == Frame::ExpansionPhase::Start)
+      return requestTerm(f, Frame::ExpansionPhase::AfterReadIndex, term[1],
+                         false);
 
     // The value the model already records for this read is the answer, and
     // the map already holds it.
-    if (f.phase == Frame::ExpandRecordedValue)
+    if (f.expansionPhase == Frame::ExpansionPhase::AfterRecordedValue)
       return StepResult::Finished;
 
-    if (f.phase == Frame::ExpandWritten || f.phase == Frame::ExpandPushedIn)
+    if (f.expansionPhase == Frame::ExpansionPhase::AfterWrittenValue ||
+        f.expansionPhase == Frame::ExpansionPhase::AfterPushedRead)
       return finish(result);
 
     // iteratively expand read-over-write, and evaluate against the
     // model at every iteration
-    if (f.phase == Frame::ExpandReadIndex)
+    if (f.expansionPhase == Frame::ExpansionPhase::AfterReadIndex)
     {
       f.index = result;
       f.cursor = term[0];
     }
-    else // Frame::ExpandWriteIndex
+    else // Frame::ExpansionPhase::AfterWriteIndex
     {
       if (result == f.index)
       {
         // found the write-value. return it
-        return want(f, Frame::ExpandWritten, EvalTerm, f.cursor[2], false);
+        return requestTerm(f, Frame::ExpansionPhase::AfterWrittenValue,
+                           f.cursor[2], false);
       }
 
       f.cursor = f.cursor[0];
       if (WRITE != f.cursor.GetKind())
       {
         const unsigned int width = term.GetValueWidth();
-        return want(f, Frame::ExpandPushedIn, EvalTerm,
-                    bm->CreateTerm(READ, width, f.cursor, f.index),
-                    arrayread_flag);
+        return requestTerm(f, Frame::ExpansionPhase::AfterPushedRead,
+                           bm->CreateTerm(READ, width, f.cursor, f.index),
+                           arrayread_flag);
       }
     }
 
-    return want(f, Frame::ExpandWriteIndex, EvalTerm, f.cursor[1], false);
-  };
+    return requestTerm(f, Frame::ExpansionPhase::AfterWriteIndex, f.cursor[1],
+                       false);
+  }
 
-  while (true)
+public:
+  explicit EvaluationDriver(AbsRefine_CounterExample& owner)
+      : owner(owner), ASTTrue(owner.ASTTrue), ASTFalse(owner.ASTFalse),
+        ASTUndefined(owner.ASTUndefined),
+        CounterExampleMap(owner.CounterExampleMap),
+        ComputeFormulaMap(owner.ComputeFormulaMap), bm(owner.bm),
+        simp(owner.simp),
+        fpEncodedEvaluationDepth(owner.fpEncodedEvaluationDepth)
   {
-    Frame& current = stack.back();
+  }
 
-    StepResult stepResult = StepResult::Finished;
-    switch (current.job)
+  ASTNode run(const Job job, const ASTNode& top, const bool topArrayReadFlag)
+  {
+    result = ASTNode();
+    stack.clear();
+
+    // Most model expressions are shallow. Keep their frontier contiguous and
+    // preallocate the common case; a request may move the current frame, so
+    // every step returns immediately after one.
+    if (job == EvalFormula)
     {
-      case EvalFormula:
-        do
-          stepResult = stepFormula(current);
-        while (stepResult == StepResult::Redispatch);
-        break;
-      case EvalTerm:
-        do
-          stepResult = stepTerm(current);
-        while (stepResult == StepResult::Redispatch);
-        break;
-      case EvalExpand:
-        do
-          stepResult = stepExpand(current);
-        while (stepResult == StepResult::Redispatch);
-        break;
+      Frame first(top, topArrayReadFlag, Frame::FormulaPhase::Start);
+      if (!prepare(EvalFormula, top, first))
+        return result;
+      stack.reserve(8);
+      stack.push_back(std::move(first));
+    }
+    else if (job == EvalTerm)
+    {
+      Frame first(top, topArrayReadFlag, Frame::TermPhase::Start);
+      if (!prepare(EvalTerm, top, first))
+        return result;
+      stack.reserve(8);
+      stack.push_back(std::move(first));
+    }
+    else
+    {
+      Frame first(top, topArrayReadFlag, Frame::ExpansionPhase::Start);
+      if (!prepare(EvalExpand, top, first))
+        return result;
+      stack.reserve(8);
+      stack.push_back(std::move(first));
     }
 
-    if (stepResult == StepResult::Pushed)
-      continue;
-    assert(stepResult == StepResult::Finished);
+    while (true)
+    {
+      Frame& current = stack.back();
 
-    // Dropping the frame is what lowers a float encoding's evaluation depth,
-    // so it happens before the answer is handed up -- exactly where the scope
-    // guard used to end. A term's answer is then put into the plain
-    // bit-vector spelling, which is what the wrapper around the recursive
-    // evaluator did to everything it returned.
-    const bool wasTerm = (current.job == EvalTerm);
-    stack.pop_back();
-    if (wasTerm)
-      result = plainModelCarrier(bm, result);
+      StepResult stepResult = StepResult::Finished;
+      switch (current.job)
+      {
+        case EvalFormula:
+          do
+            stepResult = stepFormula(current);
+          while (stepResult == StepResult::Redispatch);
+          break;
+        case EvalTerm:
+          do
+            stepResult = stepTerm(current);
+          while (stepResult == StepResult::Redispatch);
+          break;
+        case EvalExpand:
+          do
+            stepResult = stepExpand(current);
+          while (stepResult == StepResult::Redispatch);
+          break;
+      }
 
-    if (stack.empty())
-      return result;
+      if (stepResult == StepResult::Pushed)
+        continue;
+      assert(stepResult == StepResult::Finished);
+
+      // Dropping the frame is what lowers a float encoding's evaluation depth,
+      // so it happens before the answer is handed up -- exactly where the scope
+      // guard used to end. A term's answer is then put into the plain
+      // bit-vector spelling, which is what the wrapper around the recursive
+      // evaluator did to everything it returned.
+      const bool wasTerm = (current.job == EvalTerm);
+      stack.pop_back();
+      if (wasTerm)
+        result = plainModelCarrier(bm, result);
+
+      if (stack.empty())
+        return result;
+    }
   }
+};
+
+ASTNode AbsRefine_CounterExample::evaluate(const Job job, const ASTNode& top,
+                                           const bool topArrayReadFlag)
+{
+  return EvaluationDriver(*this).run(job, top, topArrayReadFlag);
 }
 
 // FUNCTION: accepts a non-constant term, and returns the
