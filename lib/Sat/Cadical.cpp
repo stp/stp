@@ -78,7 +78,8 @@ bool Cadical::solveInternal(bool& timeout_expired)
     s->connect_terminator(&time_limit);
   }
 
-  declareNewVariables();
+  if (factor_enabled && ext_of_stp.size() <= next_variable)
+    declareNewVariables();
 
   auto ret = s->solve();
   if (ret == 0)
@@ -199,12 +200,14 @@ bool Cadical::enableBVA()
 // the extension variables factor invents. Declaration is batched here
 // (lazily, before clauses are added) rather than done in newVar because
 // declare_more_variables destroys a satisfying assignment, and newVar can
-// be called while the refinement loop is still reading the model.
+// be called while the refinement loop is still reading the model. Callers
+// check that a range is actually pending so the usual up-to-date clause path
+// does not enter this comparatively large routine.
 void Cadical::declareNewVariables()
 {
 #ifdef STP_CADICAL_HAS_FACTOR
-  if (!factor_enabled)
-    return;
+  assert(factor_enabled);
+  assert(ext_of_stp.size() <= next_variable);
   if (ext_of_stp.empty())
     ext_of_stp.push_back(0); // dummy: variables are 1-based
   while (ext_of_stp.size() <= next_variable)
@@ -219,7 +222,8 @@ void Cadical::declareNewVariables()
 
 bool Cadical::addClause(const vec_literals& ps) // Add a clause to the solver.
 {
-  declareNewVariables();
+  if (factor_enabled && ext_of_stp.size() <= next_variable)
+    declareNewVariables();
   for (int i=0; i < ps.size(); i++)
     {
       uint32_t var = ps[i].x >> 1;
