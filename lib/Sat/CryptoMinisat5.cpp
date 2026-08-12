@@ -61,6 +61,14 @@ void CryptoMiniSat5::setMaxConflicts(int64_t _max_confl)
 {
   assert(_max_confl >= 0);
   max_confl = _max_confl;
+
+  // The budget belongs to the query being armed for, so measure it from
+  // this point rather than from the solver's birth -- Minisat's
+  // setConfBudget does exactly this (conflicts + x). It made no difference
+  // while every query got a fresh solver; the incremental driver re-arms
+  // per check-sat on one long-lived solver, where counting from birth made
+  // each successive budget smaller until every solve gave up on arrival.
+  confl_base = s->get_sum_conflicts();
 }
 
 bool CryptoMiniSat5::addClause(
@@ -93,8 +101,9 @@ bool CryptoMiniSat5::solveInternal(bool& timeout_expired)
    * of zero down and relying on how CryptoMiniSat reads it.
    */
   if (max_confl >= 0) {
-     const int64_t remaining =
-         max_confl - static_cast<int64_t>(s->get_sum_conflicts());
+     const int64_t spent =
+         static_cast<int64_t>(s->get_sum_conflicts() - confl_base);
+     const int64_t remaining = max_confl - spent;
 
      if (remaining <= 0) {
         timeout_expired = true;
