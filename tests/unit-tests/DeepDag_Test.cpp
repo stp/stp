@@ -237,6 +237,32 @@ ASTNode storeChain(Context& c, unsigned depth)
 #endif // STP_ENABLE_FLOATING_POINT
 
 
+// Dependencies::build, the parent map constant-bit propagation runs on.
+// Two of the 21 known corpus crashes land here.
+bool dependenciesChainOk(Context& c, unsigned depth)
+{
+  const ASTNode top = c.formula(c.chain(BVXOR, depth));
+  c.roots.push_back(top);
+
+  simplifier::constantBitP::Dependencies deps(top);
+
+  // Every link of the chain is read by exactly one parent, the link above
+  // it -- and the traversal has to have reached the bottom to know that.
+  ASTNode n = Context::childOfKind(top, BVXOR);
+  unsigned levels = 0;
+  while (n.GetKind() == BVXOR)
+  {
+    const ASTNode child = n[0].GetKind() == BVXOR ? n[0] : n[1];
+    if (deps.getDependents(child).size() != 1)
+      return false;
+    if (!deps.nodeDependsOn(n, child))
+      return false;
+    n = child;
+    levels++;
+  }
+  return levels == depth - 1;
+}
+
 // Rewriting::rewrite (19 of the 21 known corpus crashes, ~9,300 nested
 // frames deep) and, ahead of it in the same pass, the equally unbounded
 // Rewriting::buildShareCount.
@@ -776,6 +802,25 @@ bool mutableDagRepeatedEdgesOk(Context& c)
   return ok;
 }
 
+// WorkList::addToWorklist, which seeds constant-bit propagation by walking
+// the whole input. A constant somewhere in the chain is what puts nodes on
+// the worklist at all, so the chain is built with one.
+bool workListOk(Context& c, unsigned depth)
+{
+  ASTNode t = c.mgr.CreateSymbol("k0", 0, 8);
+  for (unsigned i = 1; i < depth; i++)
+  {
+    const std::string nm = "k" + std::to_string(i);
+    t = c.hf->CreateTerm(BVXOR, 8, t, c.mgr.CreateSymbol(nm.c_str(), 0, 8));
+    t = c.hf->CreateTerm(BVPLUS, 8, t, c.mgr.CreateOneConst(8));
+  }
+  const ASTNode f = c.formula(t);
+  c.roots.push_back(f);
+
+  simplifier::constantBitP::WorkList wl(f);
+  return wl.size() > 0;
+}
+
 // FlattenKind, which every pass that wants an n-ary view of a nested
 // same-kind chain goes through: the simplifier, the BV solver,
 // PropagateEqualities, MergeSame and UseITEContext. Its two forms differ in
@@ -951,6 +996,15 @@ bool printerSMTLIB2Ok(Context& c, unsigned depth)
   std::ostringstream os;
   printer::SMTLIB2_Print1(os, f, 0, false);
   return os.str().size() > 0;
+}
+
+/* Control cases: the same properties on a chain shallow enough for the
+   recursive implementations. These pass today, so a deep case failing is
+   about stack depth and nothing else. */
+TEST(DeepDag, shallow_dependencies_build)
+{
+  Context c;
+  EXPECT_TRUE(dependenciesChainOk(c, SHALLOW));
 }
 
 TEST(DeepDag, shallow_rewriting)
@@ -1184,6 +1238,21 @@ TEST(DeepDag, duplicate_flatten_kind_does_not_reserve_discarded_edges)
   EXPECT_LT(flat.capacity(), holder.Degree());
 }
 
+TEST(DeepDag, work_list_shared_edges_are_visited_once)
+{
+  Context c;
+  const ASTNode symbol = c.mgr.CreateSymbol("work-list-shared", 0, 8);
+  const ASTNode one = c.mgr.CreateOneConst(8);
+  const ASTNode dependsOnConstant = c.hf->CreateTerm(BVXOR, 8, symbol, one);
+  const ASTNode shared = c.hf->CreateTerm(BVNOT, 8, dependsOnConstant);
+  const ASTNode top = c.hf->CreateTerm(BVXOR, 8, shared, shared);
+
+  simplifier::constantBitP::WorkList workList(top);
+  ASSERT_EQ(1, workList.size());
+  EXPECT_EQ(dependsOnConstant, workList.pop());
+  EXPECT_TRUE(workList.isEmpty());
+}
+
 TEST(DeepDag, shallow_strength_reduction)
 {
   Context c;
@@ -1308,6 +1377,21 @@ TEST(DeepDag, mutable_dag_shared_children_rebuild_in_operand_order)
   EXPECT_TRUE(mutableDagSharedRebuildOk(c));
 }
 
+/* The same properties on inputs deeper than the call stack can hold.
+   Depths are picked so each case reaches the traversal it is named for:
+   buildShareCount's frames are far smaller than rewrite's, so it only
+   fails first on a much deeper input.
+
+   The cases still marked DISABLED_ are the traversals that have not been
+   converted yet; each is enabled by the commit that converts the traversal
+   it names. deep_rewriting_share_count needs both buildShareCount and
+   rewrite, since topLevel runs them back to back and there is no way in
+   from outside to run only the first. */
+TEST(DeepDag, deep_dependencies_build)
+{
+  EXPECT_STACK_SAFE(dependenciesChainOk, 50000);
+}
+
 TEST(DeepDag, deep_rewriting_share_count)
 {
   EXPECT_STACK_SAFE(rewritingIdentityOk, 200000);
@@ -1374,6 +1458,7 @@ TEST(DeepDag, deep_bit_blast_nested)
 }
 
 TEST(DeepDag, deep_common_sub_sum)              { EXPECT_STACK_SAFE(commonSubSumOk, 20000); }
+TEST(DeepDag, deep_work_list)          { EXPECT_STACK_SAFE(workListOk, 20000); }
 TEST(DeepDag, deep_remove_unconstrained) { EXPECT_STACK_SAFE(removeUnconstrainedOk, 20000); }
 TEST(DeepDag, deep_mutable_dag_walks)
 {

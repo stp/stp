@@ -27,6 +27,7 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "extlib-unordered-dense/ankerl/unordered_dense.h"
+#include <cstdint>
 #include <utility>
 #include <vector>
 
@@ -49,6 +50,11 @@ using stp::ASTNode;
 // contiguous memory. Parents appear in each slice in the order the DFS
 // first saw the edge, which is the same order the previous per-node
 // insertion-ordered sets iterated in.
+//
+// The DFS keeps its frames on the heap. Nesting depth is whatever the input
+// formula nests to, and deep inputs exist -- CPAchecker k-induction traces
+// nest ~9,300 deep -- so one call frame per level exhausts the stack and
+// kills the process. See DeepDag_Test.cpp.
 class Dependencies
 {
 private:
@@ -63,6 +69,21 @@ private:
   // (childIdx, parentIdx) in DFS discovery order; cleared after compaction.
   typedef std::vector<std::pair<uint32_t, uint32_t>> EdgeList;
 
+  typedef ankerl::unordered_dense::set<uint64_t> WideSeen;
+
+  // Where the walk of one node has got to. `wide` is that node's slot in
+  // the duplicate-child sets, or NO_WIDE for the usual narrow node, which
+  // dedups by scanning instead and so needs no set at all.
+  struct Frame
+  {
+    uint32_t idx;
+    uint32_t degree;
+    uint32_t next;
+    uint32_t wide;
+  };
+
+  static constexpr uint32_t NO_WIDE = UINT32_MAX;
+
   uint32_t discover(const ASTNode& n)
   {
     const auto it = index.try_emplace(n.GetNodeNum(), (uint32_t)nodes.size());
@@ -71,28 +92,69 @@ private:
     return it.first->second;
   }
 
+  // Wide nodes are rare, so their sets are handed out from a pool that only
+  // ever grows to the deepest nesting of wide nodes, rather than sitting in
+  // every frame.
+  Frame enter(const uint32_t idx, std::vector<WideSeen>& wideSeen,
+              uint32_t& wideInUse) const
+  {
+    Frame f;
+    f.idx = idx;
+    f.degree = (uint32_t)nodes[idx].Degree();
+    f.next = 0;
+    f.wide = NO_WIDE;
+
+    if (f.degree > 32) // where the quadratic scan starts to bite.
+    {
+      if (wideInUse == wideSeen.size())
+        wideSeen.emplace_back();
+      else
+        wideSeen[wideInUse].clear(); // keeps the buckets it already has.
+      f.wide = wideInUse++;
+    }
+    return f;
+  }
+
   // A (parent -> child) edge repeats only when a node lists the same child
   // more than once (e.g. BVPLUS(x,x)); dedup by scanning the earlier
   // children, or through a set once the quadratic scan would bite.
-  void build(const ASTNode& current, const uint32_t currentIdx,
-             EdgeList& edges)
+  void build(const uint32_t topIdx, EdgeList& edges)
   {
-    const unsigned degree = current.Degree();
+    std::vector<Frame> stack;
+    std::vector<WideSeen> wideSeen;
+    uint32_t wideInUse = 0;
 
-    ankerl::unordered_dense::set<uint64_t> seenWide;
-    const bool wide = degree > 32;
+    stack.push_back(enter(topIdx, wideSeen, wideInUse));
 
-    for (unsigned i = 0; i < degree; i++)
+    while (!stack.empty())
     {
+      Frame& f = stack.back();
+
+      if (f.next == f.degree)
+      {
+        if (f.wide != NO_WIDE)
+          wideInUse--;
+        stack.pop_back();
+        continue;
+      }
+
+      const uint32_t currentIdx = f.idx;
+      const unsigned i = f.next++;
+
+      // Discovering a child can move `nodes`, so neither of these may be
+      // read across one. The child itself is stored in the node that lists
+      // it rather than in `nodes`, so that reference does survive.
+      const ASTNode& current = nodes[currentIdx];
       const ASTNode& child = current[i];
+
       if (child.isConstant()) // don't care about what depends on constants.
         continue;
 
       const uint64_t childId = child.GetNodeNum();
 
-      if (wide)
+      if (f.wide != NO_WIDE)
       {
-        if (!seenWide.insert(childId).second)
+        if (!wideSeen[f.wide].insert(childId).second)
           continue;
       }
       else
@@ -108,8 +170,8 @@ private:
           continue;
       }
 
-      // By value: the recursive call inserts into `index`, which can move
-      // the entry the iterator points at.
+      // By value: this inserts into `index`, which can move the entry the
+      // iterator points at.
       const auto r = index.try_emplace(childId, (uint32_t)nodes.size());
       const uint32_t childIdx = r.first->second;
       const bool firstVisit = r.second;
@@ -118,9 +180,10 @@ private:
       edges.emplace_back(childIdx, currentIdx);
 
       // On a repeat visit through a new parent, the edges to the children
-      // are already recorded.
+      // are already recorded. Descending invalidates `f`, so nothing above
+      // may be read after this point.
       if (firstVisit)
-        build(child, childIdx, edges);
+        stack.push_back(enter(childIdx, wideSeen, wideInUse));
     }
   }
 
@@ -148,7 +211,7 @@ public:
       return;
 
     EdgeList edges;
-    build(top, discover(top), edges);
+    build(discover(top), edges);
     compact(edges);
   }
 

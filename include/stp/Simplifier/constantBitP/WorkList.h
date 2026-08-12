@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/AST/ASTNode.h"
 #include "extlib-unordered-dense/ankerl/unordered_dense.h"
+#include <vector>
 
 namespace simplifier
 {
@@ -50,27 +51,70 @@ private:
   WorkList(const WorkList&); // Shouldn't needed to copy or assign.
   WorkList& operator=(const WorkList&);
 
-  // We add to the worklist any node that immediately depends on a constant.
-  void addToWorklist(const stp::ASTNode& n, stp::ASTNodeSet& visited)
+  // Where the walk of one node has got to. `addedParent` is that node's
+  // `alreadyAdded`: it is pushed once, at its first constant child.
+  struct Frame
   {
-    if (n.isConstant())
-      return;
+    const stp::ASTNode* n;
+    unsigned i = 0;
+    bool addedParent = false;
 
-    if (visited.find(n) != visited.end())
-      return;
+    Frame(const stp::ASTNode& node) : n(&node) {}
+  };
 
-    visited.insert(n);
+  // We add to the worklist any node that immediately depends on a constant.
+  //
+  // Iterative: this seeds constant-bit propagation by descending the whole
+  // input DAG, and how deeply that nests is the input's choice. A call per
+  // level exhausts the stack on the deeply nested formulas that exist -- a
+  // chain under an if-then-else condition reached here once the passes ahead
+  // of it stopped crashing. See DeepDag_Test.cpp.
+  //
+  // The order is the recursion's, which matters: `push` inserts into a set
+  // whose iteration order is its insertion order, and `pop` takes the front,
+  // so the order nodes are added is the order propagation visits them. A
+  // node is therefore still pushed at its first constant child and before
+  // the walk descends into that child. The stack holds pointers into each
+  // node's own child storage, which the node above keeps alive for the whole
+  // walk.
+  void addToWorklist(const stp::ASTNode& top, stp::ASTNodeSet& visited)
+  {
+    std::vector<Frame> stack;
 
-    bool alreadyAdded = false;
+    // The head of the recursive version: what it answered without a call.
+    auto enter = [&](const stp::ASTNode& n) {
+      if (n.isConstant())
+        return;
+      if (!visited.insert(n).second)
+        return;
+      stack.push_back(Frame(n));
+    };
 
-    for (unsigned i = 0; i < n.GetChildren().size(); i++)
+    enter(top);
+
+    while (!stack.empty())
     {
-      if (!alreadyAdded && n[i].isConstant())
+      Frame& f = stack.back();
+
+      if (f.i == f.n->Degree())
       {
-        alreadyAdded = true;
-        push(n);
+        stack.pop_back();
+        continue;
       }
-      addToWorklist(n[i], visited);
+
+      // Held through the push below, which can move `f` but not these: the
+      // child is stored in the node that lists it.
+      const stp::ASTNode& parent = *f.n;
+      const stp::ASTNode& child = parent[f.i++];
+
+      if (!f.addedParent && child.isConstant())
+      {
+        f.addedParent = true;
+        push(parent);
+      }
+
+      // Nothing above may be read after this.
+      enter(child);
     }
   }
 
