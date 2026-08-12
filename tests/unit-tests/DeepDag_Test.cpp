@@ -202,6 +202,50 @@ struct Context
 };
 #ifdef STP_ENABLE_FLOATING_POINT
 
+// Structural depth without putting the measurement itself on the call
+// stack. Memoisation matters for the generated FP circuits, which are DAGs
+// with extensive sharing rather than trees.
+size_t dagDepth(const ASTNode& top)
+{
+  struct Frame
+  {
+    ASTNode node;
+    size_t nextChild = 0;
+    size_t deepestChild = 0;
+
+    explicit Frame(const ASTNode& n) : node(n) {}
+  };
+
+  std::unordered_map<uint64_t, size_t> known;
+  std::vector<Frame> stack;
+  stack.emplace_back(top);
+  size_t result = 0;
+
+  while (!stack.empty())
+  {
+    Frame& frame = stack.back();
+    if (frame.nextChild < frame.node.Degree())
+    {
+      const ASTNode child = frame.node[frame.nextChild++];
+      const auto found = known.find(child.GetNodeNum());
+      if (found != known.end())
+        frame.deepestChild = std::max(frame.deepestChild, found->second);
+      else
+        stack.emplace_back(child);
+      continue;
+    }
+
+    result = frame.deepestChild + 1;
+    known[frame.node.GetNodeNum()] = result;
+    stack.pop_back();
+    if (!stack.empty())
+      stack.back().deepestChild =
+          std::max(stack.back().deepestChild, result);
+  }
+
+  return result;
+}
+
 // A chain of if-then-else terms, nested in the else-branch: a boolean symbol
 // the model says nothing about takes false, so evaluating one descends the
 // chain rather than stopping at the first level.
@@ -418,6 +462,57 @@ bool strengthReductionOk(Context& c, unsigned depth)
   return result == top;
 }
 
+// Simplifier::SimplifyFormula. The AND/OR spine it nests through is walked
+// on the heap; the other boolean kinds still recurse into each other.
+bool simplifyOk(Context& c, unsigned depth)
+{
+  // A chain of ANDs: each operand of each one is simplified by coming back
+  // through SimplifyFormula.
+  ASTNode f = c.hf->CreateNode(EQ, c.mgr.CreateSymbol("s0", 0, 8),
+                               c.mgr.CreateZeroConst(8));
+  for (unsigned i = 1; i < depth; i++)
+  {
+    const std::string name = "s" + std::to_string(i);
+    const ASTNode leaf = c.hf->CreateNode(
+        EQ, c.mgr.CreateSymbol(name.c_str(), 0, 8), c.mgr.CreateZeroConst(8));
+    f = c.hf->CreateNode(AND, leaf, f);
+  }
+  c.roots.push_back(f);
+
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  const ASTNode result = simp.SimplifyFormula_TopLevel(f, false);
+  c.roots.push_back(result);
+  return result.GetKind() == AND || result.GetKind() == EQ;
+}
+
+// The formula arms that are not AND or OR. Those two were walked on the heap
+// first, on the argument that the rest "nest through each other rather than
+// through a spine, and nothing has been seen to reach a depth that matters".
+// A float chain's lowering nests NOT and if-then-else exactly that way: a
+// query built from 8,000 nested fp.add operations died in these two arms, at
+// a depth below the deepest input we have.
+bool simplifyFormulaSpineOk(Context& c, unsigned depth)
+{
+  const ASTNode p = c.mgr.CreateSymbol("p", 0, 0);
+  ASTNode f = c.hf->CreateNode(EQ, c.mgr.CreateSymbol("s0", 0, 8),
+                               c.mgr.CreateZeroConst(8));
+  for (unsigned i = 1; i < depth; i++)
+  {
+    const std::string name = "s" + std::to_string(i);
+    const ASTNode leaf = c.hf->CreateNode(
+        EQ, c.mgr.CreateSymbol(name.c_str(), 0, 8), c.mgr.CreateZeroConst(8));
+    f = c.hf->CreateNode(NOT, c.hf->CreateNode(ITE, p, leaf, f));
+  }
+  c.roots.push_back(f);
+
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  const ASTNode result = simp.SimplifyFormula_TopLevel(f, false);
+  c.roots.push_back(result);
+  return result.GetKind() != UNDEFINED;
+}
+
 // BitBlaster::BBTerm, which reaches its operands by calling itself from 24
 // places across its kind switch. The blaster uses ordinary recursion for a
 // bounded prefix, then fills the remaining suffix of its memo from the bottom
@@ -495,6 +590,304 @@ bool bitBlastOk(Context& c, unsigned depth)
   return nm.totalNumberOfNodes() >= static_cast<int>(depth);
 }
 
+// Simplifier's term side. The job machine must use the same flattened operand
+// policy as the old recursive code; simplifying intermediate BVAND/BVOR/
+// BVPLUS nodes would change which nodes the pass constructs.
+bool simplifyTermOk(Context& c, unsigned depth)
+{
+  const ASTNode t = c.chain(BVXOR, depth);
+  c.roots.push_back(t);
+  c.mgr.UserFlags.optimize_flag = true;
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  return simp.SimplifyTerm(t).GetValueWidth() == 8;
+}
+
+// SimplifyTerm again, for the deep term it reaches through the substitution
+// map rather than through a child. The term handed to the pass is shallow;
+// everything below it arrives from the map, which is not somewhere a walk
+// over children would look.
+bool simplifyTermSubstitutedOk(Context& c, unsigned depth)
+{
+  const ASTNode deep = c.chain(BVXOR, depth);
+  c.roots.push_back(deep);
+
+  c.mgr.UserFlags.optimize_flag = true;
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+
+  const ASTNode s = c.mgr.CreateSymbol("substituted", 0, 8);
+  if (!simp.UpdateSolverMap(s, deep))
+    return false; // the map refused it: prove nothing quietly.
+
+  const ASTNode t =
+      c.hf->CreateTerm(BVMULT, 8, s, c.mgr.CreateSymbol("y0", 0, 8));
+  c.roots.push_back(t);
+  return simp.SimplifyTerm(t).GetValueWidth() == 8;
+}
+
+// The term work frame uses one operand buffer for both the inputs and their
+// answers. Exercise every way an entry can be handled: a boolean operand is a
+// formula job, a bit-vector operand is a term job, and an array operand stays
+// in place until READ schedules its separate array job.
+bool simplifyMixedTermOperandsOk(Context& c)
+{
+  const ASTNode zero = c.mgr.CreateZeroConst(8);
+  const ASTNode one = c.mgr.CreateOneConst(8);
+  const ASTNode index = c.mgr.CreateBVConst(8, 3);
+  const ASTNode stored = c.mgr.CreateBVConst(8, 0x2a);
+  const ASTNode array = c.mgr.CreateSymbol("operand-array", 8, 8);
+
+  const ASTNode write =
+      c.hf->CreateArrayTerm(WRITE, 8, 8, array, index, stored);
+  const ASTNode read = c.hf->CreateTerm(READ, 8, write, index);
+  const ASTNode condition = c.hf->CreateNode(EQ, zero, one);
+  const ASTNode selected = c.hf->CreateTerm(ITE, 8, condition, one, zero);
+  const ASTNode input = c.hf->CreateTerm(BVXOR, 8, selected, read);
+  c.roots.push_back(input);
+
+  c.mgr.UserFlags.optimize_flag = true;
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  const ASTNode output = simp.SimplifyTerm(input);
+  c.roots.push_back(output);
+  return output == stored;
+}
+
+// A descendant term is prechecked before its frame is pushed. Preserve a
+// substitution image found by that check so the frame neither probes the map
+// again nor accidentally simplifies the original symbol instead.
+bool simplifyPrecheckedSubstitutionOk(Context& c)
+{
+  const ASTNode one = c.mgr.CreateOneConst(8);
+  const ASTNode two = c.mgr.CreateBVConst(8, 2);
+  const ASTNode three = c.mgr.CreateBVConst(8, 3);
+  const ASTNode substituted = c.mgr.CreateSymbol("prechecked", 0, 8);
+  const ASTNode image = c.hf->CreateTerm(BVPLUS, 8, one, two);
+  const ASTNode input = c.hf->CreateTerm(BVXOR, 8, substituted,
+                                         c.mgr.CreateZeroConst(8));
+  c.roots.push_back(image);
+  c.roots.push_back(input);
+
+  c.mgr.UserFlags.optimize_flag = true;
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  if (!simp.UpdateSolverMap(substituted, image))
+    return false;
+
+  const ASTNode output = simp.SimplifyTerm(input);
+  c.roots.push_back(output);
+  return output == three;
+}
+
+// The NOT frame delegates an atomic child to AtomicJob. The child job owns
+// the pushed-negation memo entry, while the returning NOT frame owns its
+// outer entry; removing duplicate probes and writes must preserve both keys.
+bool simplifyNotAtomicMemoOk(Context& c)
+{
+  const ASTNode zero = c.mgr.CreateZeroConst(8);
+  const ASTNode x = c.mgr.CreateSymbol("memo-not-atomic", 0, 8);
+  const ASTNode term = c.hf->CreateTerm(BVXOR, 8, x, zero);
+  const ASTNode atomic = c.hf->CreateNode(EQ, term, zero);
+  const ASTNode input = c.hf->CreateNode(NOT, atomic);
+  c.roots.push_back(input);
+
+  c.mgr.UserFlags.optimize_flag = true;
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  const ASTNode output = simp.SimplifyFormula(input, false);
+  c.roots.push_back(output);
+
+  ASTNode atomicCached;
+  ASTNode inputCached;
+  return simp.CheckSimplifyMap(atomic, atomicCached, true) &&
+         simp.CheckSimplifyMap(input, inputCached, false) &&
+         atomicCached == output && inputCached == output &&
+         simp.SimplifyFormula(input, false) == output;
+}
+
+// Leaves, cached roots and transparent root substitutions are all answered
+// before the unified simplifier needs a continuation frame. Exercise each
+// shortcut and then a nontrivial substituted image, which must still enter
+// the job machine and produce the same result.
+bool simplifyRootFastPathsOk(Context& c)
+{
+  const ASTNode zero = c.mgr.CreateZeroConst(8);
+  const ASTNode one = c.mgr.CreateOneConst(8);
+  const ASTNode two = c.mgr.CreateBVConst(8, 2);
+  const ASTNode x = c.mgr.CreateSymbol("root-fast-x", 0, 8);
+  const ASTNode cachedTerm = c.hf->CreateTerm(BVXOR, 8, x, zero);
+  const ASTNode cachedFormula = c.hf->CreateNode(EQ, cachedTerm, zero);
+  const ASTNode substituted = c.mgr.CreateSymbol("root-fast-sub", 0, 8);
+  const ASTNode image = c.hf->CreateTerm(BVPLUS, 8, one, two);
+  c.roots.push_back(cachedFormula);
+  c.roots.push_back(image);
+
+  c.mgr.UserFlags.optimize_flag = true;
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+
+  if (simp.SimplifyTerm(zero) != zero ||
+      simp.SimplifyFormula(c.mgr.ASTTrue, false) != c.mgr.ASTTrue)
+    return false;
+
+  const ASTNode termOutput = simp.SimplifyTerm(cachedTerm);
+  const ASTNode formulaOutput = simp.SimplifyFormula(cachedFormula, false);
+  if (simp.SimplifyTerm(cachedTerm) != termOutput ||
+      simp.SimplifyFormula(cachedFormula, false) != formulaOutput)
+    return false;
+
+  if (!simp.UpdateSolverMap(substituted, image))
+    return false;
+  const ASTNode substitutedOutput = simp.SimplifyTerm(substituted);
+  c.roots.push_back(termOutput);
+  c.roots.push_back(formulaOutput);
+  c.roots.push_back(substitutedOutput);
+  return termOutput.GetType() == BITVECTOR_TYPE &&
+         formulaOutput.GetType() == BOOLEAN_TYPE &&
+         substitutedOutput == c.mgr.CreateBVConst(8, 3);
+}
+#ifdef STP_ENABLE_FLOATING_POINT
+
+// A descendant request normally answers from the simplification map rather
+// than by pushing another work frame. The parent must consume those ready
+// term and formula answers in place: yielding and re-dispatching is wasted
+// work, while treating a ready answer as a completed parent drops the rest of
+// the parent entirely.
+bool simplifyReadyDescendantsOk(Context& c)
+{
+  const ASTNode zero = c.mgr.CreateZeroConst(8);
+  const ASTNode x = c.mgr.CreateSymbol("ready-descendant-x", 0, 8);
+  const ASTNode y = c.mgr.CreateSymbol("ready-descendant-y", 0, 8);
+  const ASTNode z = c.mgr.CreateSymbol("ready-descendant-z", 0, 8);
+  const ASTNode left = c.hf->CreateTerm(BVXOR, 8, x, zero);
+  const ASTNode right = c.hf->CreateTerm(BVXOR, 8, y, zero);
+  const ASTNode third = c.hf->CreateTerm(BVXOR, 8, z, zero);
+  const ASTNode equality = c.hf->CreateNode(EQ, left, right);
+  const ASTNode top = c.hf->CreateNode(AND, equality, c.mgr.ASTTrue);
+  c.roots.push_back(top);
+
+  c.mgr.UserFlags.optimize_flag = true;
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+
+  // Prime both term continuations and then the formula continuation. Every
+  // child request made while simplifying `top` can now answer immediately.
+  const ASTNode simplifiedLeft = simp.SimplifyTerm(left);
+  const ASTNode simplifiedRight = simp.SimplifyTerm(right);
+  const ASTNode simplifiedThird = simp.SimplifyTerm(third);
+  const ASTNode simplifiedEquality = simp.SimplifyFormula(equality, false);
+  const ASTNode output = simp.SimplifyFormula(top, false);
+
+  // Pin the n-ary loops too: each answer is ready, but every position still
+  // has to be consumed exactly once before the parent is rebuilt.
+  const ASTNode wideTerm =
+      c.hf->CreateTerm(BVXOR, 8, ASTVec{left, right, third});
+  const ASTNode expectedTerm = c.nf->CreateTerm(
+      BVXOR, 8, ASTVec{simplifiedLeft, simplifiedRight, simplifiedThird});
+  const ASTNode termOutput = simp.SimplifyTerm(wideTerm);
+
+  const ASTNode p = c.mgr.CreateSymbol("ready-descendant-p", 0, 0);
+  const ASTNode q = c.mgr.CreateSymbol("ready-descendant-q", 0, 0);
+  const ASTNode r = c.mgr.CreateSymbol("ready-descendant-r", 0, 0);
+  const ASTNode wideAnd =
+      c.hf->CreateNode(AND, ASTVec{p, q, r, c.mgr.ASTTrue});
+  const ASTNode expectedAnd = c.nf->CreateNode(AND, ASTVec{p, q, r});
+  const ASTNode andOutput = simp.SimplifyFormula(wideAnd, false);
+
+  const ASTNode wideXor = c.hf->CreateNode(XOR, ASTVec{p, q, r});
+  const ASTNode expectedXor = c.nf->CreateNode(XOR, ASTVec{p, q, r});
+  const ASTNode xorOutput = simp.SimplifyFormula(wideXor, false);
+
+  // Unary floating-point predicates collect their term operands through the
+  // same ready-answer loop rather than the binary atomic-formula path.
+  const ASTNode fp = c.mgr.CreateSymbol("ready-descendant-fp", 0, 16);
+  fp.SetExpWidth(5);
+  fp.SetSigWidth(11);
+  simp.SimplifyTerm(fp);
+  const ASTNode fpPredicate = c.hf->CreateNode(FP_ISNAN, fp);
+  const ASTNode expectedFpPredicate = c.nf->CreateNode(FP_ISNAN, fp);
+  const ASTNode fpOutput = simp.SimplifyFormula(fpPredicate, false);
+
+  c.roots.push_back(simplifiedEquality);
+  c.roots.push_back(output);
+  c.roots.push_back(termOutput);
+  c.roots.push_back(andOutput);
+  c.roots.push_back(xorOutput);
+  c.roots.push_back(fpOutput);
+  return output == simplifiedEquality && termOutput == expectedTerm &&
+         andOutput == expectedAnd && xorOutput == expectedXor &&
+         fpOutput == expectedFpPredicate;
+}
+#endif // STP_ENABLE_FLOATING_POINT
+
+
+// A term contains a formula which contains the preceding term, at every
+// level. Separate iterative formula and term drivers are insufficient for
+// this shape: calling from one driver into the other still makes one C++
+// frame per alternation.
+bool simplifyAlternatingTermFormulaOk(Context& c, unsigned depth)
+{
+  const ASTNode zero = c.mgr.CreateZeroConst(8);
+  const ASTNode one = c.mgr.CreateOneConst(8);
+  ASTNode term = c.mgr.CreateSymbol("alternating", 0, 8);
+  for (unsigned i = 0; i < depth; ++i)
+  {
+    const ASTNode condition = c.hf->CreateNode(EQ, term, zero);
+    term = c.hf->CreateTerm(ITE, 8, condition, one, zero);
+  }
+  c.roots.push_back(term);
+
+  c.mgr.UserFlags.optimize_flag = true;
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  const ASTNode output = simp.SimplifyTerm(term);
+  c.roots.push_back(output);
+  return output.GetValueWidth() == 8;
+}
+#ifdef STP_ENABLE_FLOATING_POINT
+
+// A source expression only three operations deep can lower to a bit-vector
+// circuit thousands of terms deep. This is the shape that made term priming
+// an incomplete fix: the generated nodes did not exist when the input was
+// primed, so SimplifyTerm still descended them recursively. Exponent width
+// 11 is the supported boundary for fp.rem and generates the 8,000-level case
+// from rem-exponent-width-boundary.smt2; width 5 is the shallow control.
+bool simplifyInternallyGeneratedFpTermOk(Context& c, unsigned exponentWidth)
+{
+  const unsigned significandWidth = 8;
+  const unsigned width = exponentWidth + significandWidth;
+  const ASTNode x = c.mgr.CreateSymbol("generated-fp", 0, width);
+  x.SetExpWidth(exponentWidth);
+  x.SetSigWidth(significandWidth);
+  const ASTNode rm = c.mgr.CreateBVConst(
+      5, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+  const ASTNode rounded =
+      c.hf->CreateTerm(FP_ROUNDTOINTEGRAL, width, rm, x);
+  const ASTNode remainder = c.hf->CreateTerm(FP_REM, width, rounded, x);
+  const ASTNode source = c.hf->CreateNode(FP_ISNAN, remainder);
+  c.roots.push_back(source);
+
+  FpEncodingContext encoding(&c.mgr);
+  const ASTNode prepared = encoding.prepare(source);
+  const ASTNode lowered = encoding.lowerPrepared(prepared);
+  c.roots.push_back(prepared);
+  c.roots.push_back(lowered);
+  if (lowered == prepared)
+    return false; // no generated circuit means the intended path was missed.
+  if (exponentWidth == 11 && dagDepth(lowered) < 4000)
+    return false; // keep the low-stack case deep even if lowering changes.
+
+  c.mgr.UserFlags.optimize_flag = true;
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  const ASTNode output = simp.SimplifyFormula_TopLevel(lowered, false);
+  c.roots.push_back(output);
+  return output.GetType() == BOOLEAN_TYPE && output.GetKind() != UNDEFINED;
+}
+#endif // STP_ENABLE_FLOATING_POINT
+
+
 // CreateSimpleEQ peels equal sides from two concat chains. Each peel used to
 // re-enter the simplifying node factory and consume another C++ frame.
 bool concatEqualityOk(Context& c, unsigned depth)
@@ -538,6 +931,39 @@ bool concatConstantEqualityOk(Context& c, unsigned depth)
       c.nf->CreateNode(EQ, c.mgr.CreateZeroConst(depth), concat);
   c.roots.push_back(result);
   return result.GetType() == BOOLEAN_TYPE;
+}
+
+// Simplifier::CreateSimplifiedEQ compares every bit of the leading constant
+// prefixes. Make the only difference their least-significant bit, so it must
+// inspect the whole prefix; each lookup must reuse the constant found by one
+// descent through these deep concat chains.
+bool leadingConcatConstantScanOk(Context& c, unsigned depth)
+{
+  ASTNode lhs = c.mgr.CreateZeroConst(depth);
+  ASTNode rhs = c.mgr.CreateOneConst(depth);
+  const ASTNode tail = c.mgr.CreateSymbol("leading-constant-tail", 0, 1);
+  for (unsigned i = 0; i < depth; ++i)
+  {
+    const unsigned width = depth + i + 1;
+    lhs = c.hf->CreateTerm(BVCONCAT, width, lhs, tail);
+    rhs = c.hf->CreateTerm(BVCONCAT, width, rhs, tail);
+  }
+  c.roots.push_back(lhs);
+  c.roots.push_back(rhs);
+
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  return simp.CreateSimplifiedEQ(lhs, rhs) == c.mgr.ASTFalse;
+}
+
+// UseITEContext::visit. Carries a context set down, so neither the walker
+// nor priming fits: the same node under two contexts has two answers.
+bool useITEContextOk(Context& c, unsigned depth)
+{
+  const ASTNode f = c.formula(c.chain(BVXOR, depth));
+  c.roots.push_back(f);
+  UseITEContext u(&c.mgr);
+  return u.topLevel(f).GetKind() != UNDEFINED;
 }
 
 // NodeDomainAnalysis::buildMap.
@@ -1329,6 +1755,12 @@ TEST(DeepDag, shallow_strength_reduction)
   EXPECT_TRUE(strengthReductionOk(c, SHALLOW));
 }
 
+TEST(DeepDag, shallow_simplify)
+{
+  Context c;
+  EXPECT_TRUE(simplifyOk(c, SHALLOW));
+}
+
 TEST(DeepDag, shallow_bit_blast)
 {
   Context c;
@@ -1347,6 +1779,54 @@ TEST(DeepDag, shallow_bit_blast_nested)
   EXPECT_TRUE(bitBlastNestedOk(c, SHALLOW));
 }
 
+TEST(DeepDag, simplify_term_preserves_mixed_operand_positions)
+{
+  Context c;
+  EXPECT_TRUE(simplifyMixedTermOperandsOk(c));
+}
+
+TEST(DeepDag, simplify_term_preserves_prechecked_substitution)
+{
+  Context c;
+  EXPECT_TRUE(simplifyPrecheckedSubstitutionOk(c));
+}
+
+TEST(DeepDag, simplify_not_atomic_preserves_memo_edges)
+{
+  Context c;
+  EXPECT_TRUE(simplifyNotAtomicMemoOk(c));
+}
+
+TEST(DeepDag, simplifier_root_fast_paths_preserve_results)
+{
+  Context c;
+  EXPECT_TRUE(simplifyRootFastPathsOk(c));
+}
+#ifdef STP_ENABLE_FLOATING_POINT
+
+TEST(DeepDag, simplifier_consumes_ready_descendants_in_place)
+{
+  Context c;
+  EXPECT_TRUE(simplifyReadyDescendantsOk(c));
+}
+#endif // STP_ENABLE_FLOATING_POINT
+
+
+TEST(DeepDag, shallow_simplify_alternating_term_formula)
+{
+  Context c;
+  EXPECT_TRUE(simplifyAlternatingTermFormulaOk(c, SHALLOW));
+}
+#ifdef STP_ENABLE_FLOATING_POINT
+
+TEST(DeepDag, shallow_simplify_internally_generated_fp_term)
+{
+  Context c;
+  EXPECT_TRUE(simplifyInternallyGeneratedFpTermOk(c, 5));
+}
+#endif // STP_ENABLE_FLOATING_POINT
+
+
 TEST(DeepDag, shallow_concat_equality)
 {
   Context c;
@@ -1357,6 +1837,12 @@ TEST(DeepDag, shallow_concat_constant_equality)
 {
   Context c;
   EXPECT_TRUE(concatConstantEqualityOk(c, SHALLOW));
+}
+
+TEST(DeepDag, shallow_leading_concat_constant_scan)
+{
+  Context c;
+  EXPECT_TRUE(leadingConcatConstantScanOk(c, SHALLOW));
 }
 
 TEST(DeepDag, shallow_mutable_dag_walks)
@@ -1524,6 +2010,16 @@ TEST(DeepDag, deep_strength_reduction)
   EXPECT_STACK_SAFE(strengthReductionOk, 20000);
 }
 
+TEST(DeepDag, deep_simplify)
+{
+  EXPECT_STACK_SAFE(simplifyOk, 20000);
+}
+
+TEST(DeepDag, deep_simplify_formula_spine)
+{
+  EXPECT_STACK_SAFE(simplifyFormulaSpineOk, 20000);
+}
+
 TEST(DeepDag, deep_bit_blast)
 {
   EXPECT_STACK_SAFE(bitBlastOk, 20000);
@@ -1542,6 +2038,19 @@ TEST(DeepDag, deep_bit_blast_nested)
 TEST(DeepDag, deep_common_sub_sum)              { EXPECT_STACK_SAFE(commonSubSumOk, 20000); }
 TEST(DeepDag, deep_work_list)          { EXPECT_STACK_SAFE(workListOk, 20000); }
 TEST(DeepDag, deep_remove_unconstrained) { EXPECT_STACK_SAFE(removeUnconstrainedOk, 20000); }
+TEST(DeepDag, deep_simplify_term)      { EXPECT_STACK_SAFE(simplifyTermOk, 20000); }
+TEST(DeepDag, deep_simplify_term_substituted) { EXPECT_STACK_SAFE(simplifyTermSubstitutedOk, 20000); }
+TEST(DeepDag, deep_simplify_alternating_term_formula)
+{
+  EXPECT_STACK_SAFE(simplifyAlternatingTermFormulaOk, 20000);
+}
+#ifdef STP_ENABLE_FLOATING_POINT
+TEST(DeepDag, deep_simplify_internally_generated_fp_term)
+{
+  EXPECT_STACK_SAFE(simplifyInternallyGeneratedFpTermOk, 11);
+}
+#endif // STP_ENABLE_FLOATING_POINT
+
 TEST(DeepDag, deep_concat_equality)
 {
   EXPECT_STACK_SAFE(concatEqualityOk, 20000);
@@ -1550,10 +2059,15 @@ TEST(DeepDag, deep_concat_constant_equality)
 {
   EXPECT_STACK_SAFE(concatConstantEqualityOk, 4000);
 }
+TEST(DeepDag, deep_leading_concat_constant_scan)
+{
+  EXPECT_STACK_SAFE(leadingConcatConstantScanOk, 20000);
+}
 TEST(DeepDag, deep_mutable_dag_walks)
 {
   EXPECT_STACK_SAFE(mutableDagWalksOk, 20000);
 }
+TEST(DeepDag, DISABLED_deep_use_ite_context)    { EXPECT_STACK_SAFE(useITEContextOk, 20000); }
 TEST(DeepDag, deep_node_domain)        { EXPECT_STACK_SAFE(nodeDomainOk, 20000); }
 TEST(DeepDag, deep_node_iterator)      { EXPECT_STACK_SAFE(nodeIteratorOk, 20000); }
 TEST(DeepDag, deep_vars_in_expression) { EXPECT_STACK_SAFE(varsInExpressionOk, 20000); }

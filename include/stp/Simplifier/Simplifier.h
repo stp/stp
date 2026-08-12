@@ -211,6 +211,18 @@ public:
   }
 
 private:
+  enum class SimplifyJob
+  {
+    Formula,
+    Term,
+    Array
+  };
+
+  // Formulae, bit-vector/floating-point terms, and the array terms reached by
+  // READ all share one continuation stack. A generated rewrite is scheduled
+  // on that stack just like an input child, so neither input depth nor rewrite
+  // depth becomes C++ call depth.
+  ASTNode simplifyNode(const ASTNode& n, bool pushNeg, SimplifyJob job);
 
   void checkIfInSimplifyMap(const ASTNode& n, ASTNodeSet visited);
 
@@ -228,9 +240,7 @@ private:
 
   ASTNode SimplifyFormula_NoRemoveWrites(const ASTNode& a, bool pushNeg);
 
-  ASTNode SimplifyAtomicFormula(const ASTNode& a, bool pushNeg);
-
-  ASTNode ITEOpt_InEqs(const ASTNode& in1);
+  ASTNode ITEOpt_InEqs(const ASTNode& in1, ASTNode& conditionToNegate);
 
   ASTNode PullUpITE(const ASTNode& in);
 
@@ -240,26 +250,17 @@ private:
   ASTNode CreateSimplifiedINEQ(const Kind k, const ASTNode& a0,
                                const ASTNode& a1, bool pushNeg);
 
-  ASTNode SimplifyNotFormula(const ASTNode& a, bool pushNeg);
-
-  ASTNode SimplifyAndOrFormula(const ASTNode& a, bool pushNeg);
-
-  ASTNode SimplifyXorFormula(const ASTNode& a, bool pushNeg);
-
-  ASTNode SimplifyNandFormula(const ASTNode& a, bool pushNeg);
-
-  ASTNode SimplifyNorFormula(const ASTNode& a, bool pushNeg);
-
-  ASTNode SimplifyImpliesFormula(const ASTNode& a, bool pushNeg);
-
-  ASTNode SimplifyIffFormula(const ASTNode& a, bool pushNeg);
-
-  ASTNode SimplifyIteFormula(const ASTNode& a, bool pushNeg);
+  // SimplifyFormula's head: the answers it gives without dispatching at all,
+  // plus the PullUpITE'd node the dispatch would run on. True when `out` is
+  // the answer.
+  bool formulaShortcut(const ASTNode& b, bool pushNeg, ASTNode& a,
+                       ASTNode& out);
 
   ASTNode CombineLikeTerms(const ASTNode& a);
   ASTNode CombineLikeTerms(const ASTVec& a);
 
-  ASTNode LhsMinusRhs(const ASTNode& eq);
+  ASTNode LhsMinusRhsTerm(const ASTNode& eq,
+                          const ASTNode& simplifiedNegatedRhs);
 
   ASTNode DistributeMultOverPlus(const ASTNode& a,
                                  bool startdistribution = false);
