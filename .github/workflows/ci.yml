@@ -46,8 +46,17 @@ jobs:
     name: ${{ matrix.name }}
     runs-on: ubuntu-latest
 
+    # 400M rather than the 800M this used to be. Every ccache leg compiles about
+    # 1280 files at a 99.6% hit rate, but what that costs in cache varies by
+    # 2.6x: 243MB on this leg, 645MB on cadical rel-2.1.3, for the same tree and
+    # the same hit rate. One build's working set is around 250MB; the rest is
+    # objects from source versions that will never be compiled again, which
+    # ccache had no reason to evict while the ceiling was 800M. That slack is not
+    # free -- the Actions cache is one 10GB allowance shared by every key in the
+    # repository -- and it buys nothing, since the leg holding a third as much
+    # hits just as often. See cache-cleanup.yml for the other half of this.
     env:
-      CCACHE_MAXSIZE: 800M
+      CCACHE_MAXSIZE: 400M
 
     steps:
 
@@ -334,8 +343,9 @@ jobs:
       matrix:
         cadical_tag: [rel-3.0.1, rel-2.1.3]
 
+    # 400M rather than 800M; see the note on the gcc/clang job above.
     env:
-      CCACHE_MAXSIZE: 800M
+      CCACHE_MAXSIZE: 400M
 
     steps:
 
@@ -505,8 +515,9 @@ jobs:
     name: cms + cadical
     runs-on: ubuntu-latest
 
+    # 400M rather than 800M; see the note on the gcc/clang job above.
     env:
-      CCACHE_MAXSIZE: 800M
+      CCACHE_MAXSIZE: 400M
 
     steps:
 
@@ -827,7 +838,7 @@ jobs:
       run: |
         mkdir -p .ccache
         docker run --rm -v "$GITHUB_WORKSPACE":/stp -w /stp \
-          -e CCACHE_DIR=/stp/.ccache -e CCACHE_MAXSIZE=800M -e CCACHE_UMASK=022 \
+          -e CCACHE_DIR=/stp/.ccache -e CCACHE_MAXSIZE=400M -e CCACHE_UMASK=022 \
           i386/debian:bookworm linux32 ./scripts/ci-32bit.sh
 
     # The container writes as root; hand the cached trees back to the runner
