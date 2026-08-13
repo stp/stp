@@ -54,15 +54,16 @@ public:
 
   void setMaxConflicts(int64_t max_confl) override; // set max solver conflicts
 
-  bool addClause(const vec_literals& ps) override; // Add a clause to the solver.
-
   bool okay() const override; // FALSE means solver is in a conflicting state
+
+  void unsatAssumptions(const vec_literals& assumps,
+                        std::vector<int>& out) override;
 
   uint8_t modelValue(uint32_t x) const override;
 
   uint32_t newVar() override;
 
-  bool setSearchBias(SearchBias bias) override;
+  bool setSearchBiasInternal(SearchBias bias) override;
 
   void setVerbosity(int v) override;
 
@@ -82,14 +83,20 @@ public:
 
   void solveAndDump();
 
+  bool supportsAssumptions() const override { return true; }
 
 protected:
+  bool addClauseInternal(const vec_literals& ps) override;
   bool solveInternal(bool& timeout_expired) override;
+  bool solveWithAssumptionsInternal(const vec_literals& assumps,
+                                    bool& timeout_expired) override;
 
   // CryptoMiniSat polls its own wall-clock limit during search.
   bool canInterruptSearch() const override { return true; }
 
 private:
+  bool armBudgets(bool& timeout_expired);
+
   void* temp_cl;
   // Negative means no budget was configured. This cannot default to 0,
   // which is now a budget of zero rather than the absence of one.

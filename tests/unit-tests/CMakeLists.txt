@@ -22,6 +22,11 @@
 # -----------------------------------------------------------------------------
 # C API tests (these should be .cpp or .cxx files because GTest needs C++)
 # -----------------------------------------------------------------------------
+AddSTPGTest(SATSolver_Test.cpp)
+AddSTPGTest(SatSolverBudget_Test.cpp)
+AddSTPGTest(TrailReuse_Test.cpp)
+AddSTPGTest(SuggestPhase_Test.cpp)
+AddSTPGTest(UnsatAssumptions_Test.cpp)
 AddSTPGTest(PropagateEqualities_Test.cpp)
 AddSTPGTest(SimplifyingNodeFactory_Test.cpp)
 AddSTPGTest(FindPureLiterals_Test.cpp)
@@ -118,6 +123,7 @@ AddSTPGTest(ValueSet_Test.cpp)
 AddSTPGTest(ValueSet_Exhaustive_Test.cpp)
 AddSTPGTest(SearchBias_Test.cpp)
 AddSTPGTest(Bva_Test.cpp)
+AddSTPGTest(SATSolverConfigWindow_Test.cpp)
 AddSTPGTest(FdOStream_Test.cpp)
 # Deeply nested input must not put the AST-depth-recursive traversals through
 # the call stack. Each case runs in a forked child on a 1 MiB stack.

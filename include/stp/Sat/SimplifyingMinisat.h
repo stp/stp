@@ -42,8 +42,6 @@ public:
   SimplifyingMinisat();
   ~SimplifyingMinisat();
 
-  bool addClause(const vec_literals& ps) override; // Add a clause to the solver.
-
   bool okay() const override; // FALSE means solver is in a conflicting state
 
   bool simplify() override; // Removes already satisfied clauses.
@@ -67,6 +65,7 @@ public:
   void setFrozen(uint32_t x) override;
 
 protected:
+  bool addClauseInternal(const vec_literals& ps) override;
   bool solveInternal(bool& timeout_expired) override;
 };
 }

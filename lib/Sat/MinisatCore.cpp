@@ -66,12 +66,28 @@ void MinisatCore::setMaxConflicts(int64_t max_confl)
   s->setConfBudget(max_confl);
 }
 
-bool MinisatCore::addClause(
+bool MinisatCore::addClauseInternal(
     const SATSolver::vec_literals& ps) // Add a clause to the solver.
 {
   Minisat::vec<Minisat::Lit> clause;
   convert(ps, clause);
   return s->addClause_(clause);
+}
+
+void MinisatCore::unsatAssumptions(const vec_literals& assumps,
+                                   std::vector<int>& out)
+{
+  // After an unsat assumption solve, MiniSat's `conflict` holds the final
+  // conflict clause expressed in the assumptions: the negations of the
+  // failed ones. An assumption is in the core iff its negation appears.
+  out.clear();
+  for (int i = 0; i < assumps.size(); i++)
+  {
+    const Minisat::Lit assumed =
+        Minisat::toLit(SATSolver::toInt(assumps[i]));
+    if (s->conflict.has(~assumed))
+      out.push_back(assumps[i].x);
+  }
 }
 
 bool MinisatCore::okay() const // FALSE means solver is in a conflicting state
@@ -102,6 +118,25 @@ bool MinisatCore::solveInternal(bool& timeout_expired)
 
   Minisat::vec<Minisat::Lit> assumps;
   Minisat::lbool ret = s->solveLimited(assumps);
+  if (ret == (Minisat::lbool)Minisat::l_Undef)
+  {
+    timeout_expired = true;
+  }
+
+  return ret == (Minisat::lbool)Minisat::l_True;
+}
+
+bool MinisatCore::solveWithAssumptionsInternal(
+    const stp::SATSolver::vec_literals& assumps, bool& timeout_expired)
+{
+  // simplify() only removes clauses satisfied at level 0; the core solver
+  // never eliminates variables, so assumption literals are safe across it.
+  if (!s->simplify())
+    return false;
+
+  Minisat::vec<Minisat::Lit> ms_assumps;
+  convert(assumps, ms_assumps);
+  Minisat::lbool ret = s->solveLimited(ms_assumps);
   if (ret == (Minisat::lbool)Minisat::l_Undef)
   {
     timeout_expired = true;
