@@ -55,8 +55,11 @@ void IncrementalSolver::Impl::maintainBackendForCheck(
 
   // The relief valve: once the solver is past the configured size and most of
   // its encodings belong to content no longer on the stack, start it over from
-  // the live stack. Expand the exact live cone only after the cheap clause-mass
-  // gate says a rebuild might be due.
+  // the live stack. Deadness is measured by CLAUSE MASS: conjunct counts, the
+  // original proxy, missed variant-push sessions whose few dozen distinct
+  // conjuncts each carry a huge circuit (a million variables of ~95% popped
+  // content never tripped the count ratio). Expand the exact live cone only
+  // after the cheap clause-mass gate says a rebuild might be due.
   if (clauseReliefSizeReached() && reliefRatioReached())
     expandPendingLiveConeMass();
 
