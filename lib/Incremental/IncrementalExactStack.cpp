@@ -394,8 +394,7 @@ IncrementalSolver::Impl::exactStackCheckSat(
   // own solve-local rows into them. The rows are left in place afterwards
   // -- model construction reads them -- until the next solve or pop clears
   // the batch tables as usual.
-  batchAT->arrayToIndexToRead.clear();
-  batchAT->ack_pair.clear();
+  batchAT->ClearAllTables();
 
   const bool arrayops = containsArrayOps(inputToSat, bm) || extActive;
   if (arrayops)

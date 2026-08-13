@@ -41,8 +41,43 @@ THE SOFTWARE.
 namespace stp
 {
 using std::make_pair;
-// NB: This is the only function that should be called
-// externally. It sets up the cache that the others use.
+
+// Temporarily lend the transformer a caller-owned persistent registry while
+// preserving the batch registry already installed in the object. Tracking is
+// part of the same transaction, so callers cannot forget to restore one of
+// the maps or leave touched-read recording enabled after the run.
+class ArrayTransformer::RegistryScope
+{
+  ArrayTransformer& owner;
+  Registry& registry;
+  bool savedRecordTouchedReads;
+  ReadKeys savedTouchedReads;
+
+public:
+  RegistryScope(ArrayTransformer& owner, Registry& registry)
+      : owner(owner), registry(registry),
+        savedRecordTouchedReads(owner.recordTouchedReads)
+  {
+    assert(owner.TransformMap == NULL);
+    assert(!owner.recordTouchedReads);
+    owner.arrayToIndexToRead.swap(registry.reads);
+    owner.ack_pair.swap(registry.ackPairs);
+    owner.touchedReads.swap(savedTouchedReads);
+    owner.recordTouchedReads = true;
+  }
+
+  ~RegistryScope()
+  {
+    owner.recordTouchedReads = savedRecordTouchedReads;
+    owner.touchedReads.clear();
+    owner.touchedReads.swap(savedTouchedReads);
+    owner.arrayToIndexToRead.swap(registry.reads);
+    owner.ack_pair.swap(registry.ackPairs);
+  }
+};
+
+// Core top-level entry point. It sets up the cache that the recursive pieces
+// share; persistent callers reach it through TransformFormulaWithRegistry.
 ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
 {
   runTimes->start(RunTimes::Transforming);
@@ -154,6 +189,15 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
     runTimes->stop(RunTimes::Transforming);
     return result;
   }
+}
+
+ArrayTransformer::TransformResult
+ArrayTransformer::TransformFormulaWithRegistry(const ASTNode& form,
+                                               Registry& registry)
+{
+  RegistryScope scope(*this, registry);
+  const ASTNode transformed = TransformFormula_TopLevel(form);
+  return TransformResult(transformed, touchedReads);
 }
 
 // Check that the transformations have occurred.

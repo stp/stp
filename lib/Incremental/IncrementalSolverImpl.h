@@ -309,7 +309,13 @@ struct IncrementalSolver::Impl
   // encoded under root literals that are no longer assumed, so their SAT
   // variables float, and seedActiveReads below must keep them out of the
   // per-solve batch tables.
-  ArrayTransformer::ArrType myReads;
+  //
+  // Under --ackermanize the registry also carries the reads of each array in
+  // encounter order. That new-versus-existing shape is monotone, so
+  // persisting the list keeps pair coverage across check-sats: any two reads
+  // are related by whichever was encoded later. A popped read remains a sound
+  // unconstrained observation of the array.
+  ArrayTransformer::Registry arrayRegistry;
 
   // The (array, index) reads each ENCODING contains, keyed exactly as
   // rootLitOf is -- the raw conjunct on the ordinary path, the rewritten
@@ -326,15 +332,6 @@ struct IncrementalSolver::Impl
   // shadows an active cell with a floating value, makes the checker
   // reject every candidate, and refinement cannot converge.
   std::map<ASTNode, std::vector<std::pair<ASTNode, ASTNode>>> readsOfEncoded;
-
-  // Under --ackermanize, the transformer's other table: the reads of each
-  // array in the order they were seen, from which each NEW read's nested
-  // if-then-else over the EXISTING reads is built. That new-versus-existing
-  // shape is exactly monotone, so persisting the list keeps pair coverage
-  // across check-sats: any two reads are related by whichever was encoded
-  // later. A popped read's entry stays as an unconstrained observation of
-  // the array -- sound, since an array maps every index to some value.
-  std::map<ASTNode, vector<std::pair<ASTNode, ASTNode>>> myAckPairs;
 
   // Storage handed out by the ToSATBase adapter (the refinement machinery
   // asks for the symbol map by reference), and the adapter itself,
@@ -2195,18 +2192,10 @@ struct IncrementalSolver::Impl
 
     if (frag.arrays)
     {
-      // Swap rather than copy: the registry is the session's, and on a long
-      // array session copying it in and back out again is a per-encode cost
-      // proportional to every read ever seen.
-      batchAT->arrayToIndexToRead.swap(myReads);
-      batchAT->ack_pair.swap(myAckPairs);
-      batchAT->recordTouchedReads = true;
-      batchAT->touchedReads.clear();
-      toEncode = batchAT->TransformFormula_TopLevel(toEncode);
-      batchAT->recordTouchedReads = false;
-      readsOfEncoded[key] = batchAT->touchedReads;
-      myReads.swap(batchAT->arrayToIndexToRead);
-      myAckPairs.swap(batchAT->ack_pair);
+      ArrayTransformer::TransformResult transformed =
+          batchAT->TransformFormulaWithRegistry(toEncode, arrayRegistry);
+      toEncode = transformed.formula;
+      readsOfEncoded[key].swap(transformed.touchedReads);
       assert(!containsArrayOps(toEncode, bm));
       totalizeRegistrySymbols();
 
@@ -2228,8 +2217,8 @@ struct IncrementalSolver::Impl
         for (const std::pair<ASTNode, ASTNode>& ai : readsOfEncoded[key])
         {
           ArrayTransformer::ArrType::const_iterator ait =
-              myReads.find(ai.first);
-          if (ait == myReads.end())
+              arrayRegistry.reads.find(ai.first);
+          if (ait == arrayRegistry.reads.end())
             continue;
           ArrayTransformer::arrTypeMap::const_iterator rit =
               ait->second.find(ai.second);
@@ -2516,8 +2505,9 @@ struct IncrementalSolver::Impl
          it != seededRowRef.end(); ++it)
     {
       const std::pair<ASTNode, ASTNode>& ai = it->first;
-      ArrayTransformer::ArrType::const_iterator ait = myReads.find(ai.first);
-      if (ait == myReads.end())
+      ArrayTransformer::ArrType::const_iterator ait =
+          arrayRegistry.reads.find(ai.first);
+      if (ait == arrayRegistry.reads.end())
         continue;
       ArrayTransformer::arrTypeMap::const_iterator iit =
           ait->second.find(ai.second);
@@ -2554,7 +2544,7 @@ struct IncrementalSolver::Impl
     // and --ackermanize never refines.
     if (bm->UserFlags.ackermannisation)
       return;
-    totalizeReadTable(myReads);
+    totalizeReadTable(arrayRegistry.reads);
   }
 
   // The same guarantee for the rows an extensionality round refines over.
@@ -2572,12 +2562,13 @@ struct IncrementalSolver::Impl
   size_t semanticCacheEntryCount() const
   {
     size_t rows = 0;
-    for (ArrayTransformer::ArrType::const_iterator it = myReads.begin();
-         it != myReads.end(); ++it)
+    for (ArrayTransformer::ArrType::const_iterator it =
+             arrayRegistry.reads.begin();
+         it != arrayRegistry.reads.end(); ++it)
       rows += it->second.size();
     return semanticEpochRoots.size() + fragmentCache.size() + rows +
            readsOfEncoded.size() +
-           myAckPairs.size() + exactStackKeepAlive.size() +
+           arrayRegistry.ackPairs.size() + exactStackKeepAlive.size() +
            exactScopedPreprocessOf.size() + preparedPieceOf.size() +
            eliminationUsers.size() + screenedContent.size() +
            walks.cacheEntryCount() + scopedBlockOf.size();
@@ -2618,10 +2609,9 @@ struct IncrementalSolver::Impl
     releaseContainer(seededModelKeys);
     ce->ReleaseModelStorage();
 
-    // ArrayTransformer's maps free their nodes on clear, but the per-run
-    // touched-read vector retains the largest exact block it has seen.
-    batchAT->recordTouchedReads = false;
-    releaseContainer(batchAT->touchedReads);
+    // ArrayTransformer's maps free their nodes on clear, but its per-run
+    // scratch vector retains the largest exact block it has seen.
+    batchAT->ReleaseRunStorage();
 
     if (fpCtx)
       ce->setFpEncodingContext(NULL);
@@ -2631,9 +2621,9 @@ struct IncrementalSolver::Impl
     symbolMapCacheValid = false;
 
     releaseContainer(fragmentCache);
-    releaseContainer(myReads);
+    releaseContainer(arrayRegistry.reads);
     releaseContainer(readsOfEncoded);
-    releaseContainer(myAckPairs);
+    releaseContainer(arrayRegistry.ackPairs);
     releaseContainer(exactStackKeepAlive);
     releaseContainer(exactScopedPreprocessOf);
     releaseContainer(preparedPieceOf);
@@ -2843,8 +2833,7 @@ struct IncrementalSolver::Impl
     // Re-encoding can overwrite a key with a different row set (for example
     // after new permanent substitutions fold an index), so rebuild the
     // active-row view transactionally and queue every permanent key again.
-    batchAT->arrayToIndexToRead.clear();
-    batchAT->ack_pair.clear();
+    batchAT->ClearAllTables();
     lastSeededKeys.clear();
     seededRowRef.clear();
     foldedRowsOf.clear();
@@ -3307,7 +3296,7 @@ struct IncrementalSolver::Impl
         uf.cadical_factor == UserDefinedFlags::BVAMode::AUTO &&
         !uf.ackermannisation)
     {
-      wants = !myReads.empty();
+      wants = !arrayRegistry.reads.empty();
       for (size_t i = 0; !wants && i < assertionsSMT2.size(); i++)
       {
         const Fragment& f = fragment(assertionsSMT2[i]);

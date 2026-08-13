@@ -42,11 +42,13 @@ IncrementalSolver::seededReadsForTesting() const
   for (std::map<std::pair<ASTNode, ASTNode>, size_t>::const_iterator it =
            impl->seededRowRef.begin();
        it != impl->seededRowRef.end(); ++it)
-    if (impl->myReads.find(it->first.first) != impl->myReads.end() &&
-        impl->myReads.find(it->first.first)
-                ->second.find(it->first.second) !=
-            impl->myReads.find(it->first.first)->second.end())
+  {
+    const ArrayTransformer::ArrType::const_iterator array =
+        impl->arrayRegistry.reads.find(it->first.first);
+    if (array != impl->arrayRegistry.reads.end() &&
+        array->second.find(it->first.second) != array->second.end())
       out.push_back(it->first);
+  }
   return out;
 }
 
@@ -60,8 +62,9 @@ IncrementalSolver::encodingEpochStatsForTesting() const
   out.bitBlastedSymbols =
       impl->encoding.nodes().symbolToBBNode.size();
   out.semanticCacheEntries = impl->semanticCacheEntryCount();
-  for (ArrayTransformer::ArrType::const_iterator it = impl->myReads.begin();
-       it != impl->myReads.end(); ++it)
+  for (ArrayTransformer::ArrType::const_iterator it =
+           impl->arrayRegistry.reads.begin();
+       it != impl->arrayRegistry.reads.end(); ++it)
     out.arrayReadRows += it->second.size();
   return out;
 }
