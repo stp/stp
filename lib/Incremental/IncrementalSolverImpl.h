@@ -1651,6 +1651,23 @@ struct IncrementalSolver::Impl
   ProfileClock::time_point profileStarted;
   uint64_t profileClausesBefore = 0;
 
+  // The ordinary check-sat path is deliberately staged here rather than
+  // represented by a mutable solve-plan object. Each stage owns the local
+  // bookkeeping it creates and exposes only the value the next stage needs.
+  void maintainBackendForCheck(const ASTVec& assertionsSMT2,
+                               bool firstForcedIncrementalSolve);
+  bool tryExactStackRoute(const ASTVec& assertionsSMT2,
+                          bool assumeLastLevelPerConjunct,
+                          bool firstForcedIncrementalSolve,
+                          SOLVER_RETURN_TYPE& result);
+  void synchronizeCbpPrefix(const ASTVec& assertionsSMT2,
+                            bool firstForcedIncrementalSolve);
+  void encodeBaseLevel(const ASTVec& assertionsSMT2,
+                       bool firstForcedIncrementalSolve);
+  size_t prepareAndEncodePushedLevels(
+      const ASTVec& assertionsSMT2, bool assumeLastLevelPerConjunct,
+      SATSolver::vec_literals& assumptions);
+
   Impl(STPMgr* bm_, AbsRefine_CounterExample* ce_, Simplifier* batchSimp_,
        ArrayTransformer* batchAT_)
       : bm(bm_), ce(ce_), batchSimp(batchSimp_), batchAT(batchAT_),
