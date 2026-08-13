@@ -94,6 +94,9 @@ private:
   // Negative means no budget was configured. This cannot default to 0,
   // which is now a budget of zero rather than the absence of one.
   int64_t max_confl = -1;
+  // The solver's lifetime conflict count when the budget was last armed;
+  // what the budget's query has spent is measured from here.
+  uint64_t confl_base = 0;
 };
 }
 
