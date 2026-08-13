@@ -1782,6 +1782,9 @@ struct IncrementalSolver::Impl
     return false;
   }
 
+  // Both walkers below are the shared collectSymbols() walk (AST.h) over
+  // this driver's allocation-free paged epoch marks in place of the
+  // library wrapper's per-call ASTNodeSet.
   const ASTNodeSet& symbolsOf(const ASTNode& n)
   {
     NodeSymbolsMap::iterator hit = symbolsOfCache.find(n);
@@ -1789,21 +1792,11 @@ struct IncrementalSolver::Impl
       return hit->second;
 
     beginSymbolVisit();
-
     ASTNodeSet& out = symbolsOfCache[n];
-    std::vector<ASTNode> pending(1, n);
-    while (!pending.empty())
-    {
-      const ASTNode cur = pending.back();
-      pending.pop_back();
-      if (!firstSymbolVisit(cur))
-        continue;
-
-      if (cur.GetKind() == SYMBOL)
-        out.insert(cur);
-      for (unsigned i = 0; i < cur.Degree(); i++)
-        pending.push_back(cur[i]);
-    }
+    collectSymbols(ASTVec(1, n),
+                   [this](const ASTNode& node)
+                   { return firstSymbolVisit(node); },
+                   out);
     return out;
   }
 
@@ -1817,18 +1810,10 @@ struct IncrementalSolver::Impl
     if (roots.empty())
       return;
     beginSymbolVisit();
-    ASTVec pending = roots;
-    while (!pending.empty())
-    {
-      const ASTNode cur = pending.back();
-      pending.pop_back();
-      if (!firstSymbolVisit(cur))
-        continue;
-      if (cur.GetKind() == SYMBOL)
-        out.insert(cur);
-      for (unsigned i = 0; i < cur.Degree(); i++)
-        pending.push_back(cur[i]);
-    }
+    collectSymbols(roots,
+                   [this](const ASTNode& node)
+                   { return firstSymbolVisit(node); },
+                   out);
   }
 
   // Screen a piece of raw content that has never been seen: any symbol it

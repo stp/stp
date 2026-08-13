@@ -347,18 +347,10 @@ bool BVTypeCheckRecursive(const ASTNode& n)
 void buildListOfSymbols(const ASTNode& n, ASTNodeSet& visited,
                         ASTNodeSet& symbols)
 {
-  if (visited.find(n) != visited.end())
-    return; // already visited.
-
-  visited.insert(n);
-
-  if (n.GetKind() == SYMBOL)
-  {
-    symbols.insert(n);
-  }
-
-  for (unsigned i = 0; i < n.GetChildren().size(); i++)
-    buildListOfSymbols(n[i], visited, symbols);
+  collectSymbols(ASTVec(1, n),
+                 [&visited](const ASTNode& node)
+                 { return visited.insert(node).second; },
+                 symbols);
 }
 
 // A float is carried internally as its packed bits, so after FloatBlast a
