@@ -60,7 +60,7 @@ public:
   bool propagate_equalities = true; // Remove equalities.
   bool bitConstantProp_flag = true; // Constant bit propagation enabled.
   bool enable_unconstrained = true;
-  bool enable_flatten = false;
+  bool enable_flatten = true;
   bool enable_ite_context = false;
   bool enable_aig_core_simplify = false;
   bool enable_use_intervals = true;
@@ -68,8 +68,8 @@ public:
   bool enable_split_extracts = true;
   bool enable_sharing_aware_rewriting = true;
   bool enable_merge_same = false;
-  bool enable_pair_extract = false;
-  bool enable_common_subsum = false;
+  bool enable_pair_extract = true;
+  bool enable_common_subsum = true;
 
   int64_t AIG_rewrites_iterations = 0; // Number of iterations of AIG rewrites.
   int64_t size_reducing_fixed_point = 0;
