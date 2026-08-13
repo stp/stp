@@ -102,6 +102,22 @@ private:
                  "source sorts");
   }
 
+  // An array expression the array transform rewrites without losing element
+  // formats: a declared array, or an if-then-else choosing among such
+  // arrays (the transform pushes a read through the mux and abstracts each
+  // arm to a format-stamped stand-in). A WRITE anywhere disqualifies it --
+  // see the read arm of comparisonLeaf for why. A store chain answers false
+  // at its outermost node, so this never walks one; only if-then-else
+  // spines recurse.
+  bool writesFreeArray(const ASTNode& n)
+  {
+    if (n.GetKind() == SYMBOL)
+      return true;
+    if (n.GetKind() == ITE && n.Degree() == 3)
+      return writesFreeArray(n[1]) && writesFreeArray(n[2]);
+    return false;
+  }
+
   // A predicate operand that is (or resolves to) a packed view the lowering
   // leaves in the formula: a symbol or an interned constant, and structural
   // nodes built out of those. FP constant folding is deferred solver-wide,
@@ -214,16 +230,23 @@ private:
     // it survives the array transform's rewriting of this operand -- every
     // stand-in it mints for a read carries the format (ArrayTransformer),
     // which is what the bit-blaster reads back here.
+    //
+    // That survival argument holds only while the array expression is free
+    // of writes (writesFreeArray): the transform turns those reads into
+    // format-stamped stand-ins, or muxes over them. A read over a WRITE is
+    // instead expanded into a mux over the stored values, and once every
+    // leaf of that mux folds to a packed circuit -- the stored values were
+    // lowered, and the residual read can fold into one of them -- no node
+    // of the result carries the element format for the bit-blaster to read
+    // back. So reads over writes take the SymFPU path, which decodes the
+    // same carrier.
     if (n.GetKind() == READ)
     {
-      // asPacked rebuilds the read through the simplifying factory, whose
-      // read-over-write chase can fold the read away once lowering rewrites
-      // an index (a same-format to_fp on a store index collapses to the
-      // read index, for instance). The fold's result is whatever was
-      // stored, already lowered -- possibly an encode() circuit. Only a
-      // result that still carries the float sort is a packed view the
-      // predicate may consume; anything else sends the predicate to SymFPU,
-      // which decodes the same folded carrier.
+      if (!writesFreeArray(n[0]))
+        return ASTNode();
+      // asPacked rebuilds the read through the simplifying factory, so
+      // keep only a result that still carries the float sort; anything
+      // else sends the predicate to SymFPU.
       const ASTNode packed = asPacked(n);
       if (packed.GetSourceSort().kind() != SourceSort::Kind::FloatingPoint)
         return ASTNode();
