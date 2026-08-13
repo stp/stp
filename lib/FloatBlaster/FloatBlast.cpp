@@ -381,6 +381,18 @@ private:
     return out;
   }
 
+  // One branch of a float-valued mux, as packed bits. A branch that names
+  // the float sort has a packed view; one that does not is the packed
+  // circuit lowering already built for it (deriveSourceSort's ITE rule is
+  // what admits the mix, and it checks the widths agree), so it IS its
+  // packed bits and lowers as the bitvector it is.
+  ASTNode packedBranch(const ASTNode& n)
+  {
+    if (n.GetSourceSort().kind() == SourceSort::Kind::FloatingPoint)
+      return asPacked(n);
+    return lower(n);
+  }
+
   // Ordinary packed view. Leaves and structural carrier nodes already are
   // the bits that store the source value, so preserve them (and any NaN
   // payload they happen to contain). A genuine FP operation has no such
@@ -414,11 +426,16 @@ private:
     else if (n.GetKind() == ITE)
     {
       assert(n.Degree() == 3);
+      // The array transform can leave a float-valued mux holding one branch
+      // as its packed circuit -- a plain bitvector of the float's packed
+      // width (see deriveSourceSort's ITE rule). Such a branch already is
+      // its packed bits: lower it as the bitvector it is rather than
+      // asserting a float sort onto it (packedBranch).
       ASTVec children;
       children.reserve(3);
       children.push_back(lower(n[0]));
-      children.push_back(asPacked(n[1]));
-      children.push_back(asPacked(n[2]));
+      children.push_back(packedBranch(n[1]));
+      children.push_back(packedBranch(n[2]));
       out = (children[0] == n[0] && children[1] == n[1] &&
              children[2] == n[2])
                 ? n
@@ -538,6 +555,12 @@ private:
     {
       case ITE:
         assert(n.Degree() == 3);
+        // A mux holding one branch as its packed circuit (deriveSourceSort's
+        // ITE rule) cannot unpack branchwise -- the circuit branch carries
+        // no float sort. Both branches are packed bits, so the whole mux is
+        // one packed carrier: decode that instead.
+        if (n[1].GetSourceSort() != n[2].GetSourceSort())
+          return decodeCarrier(n, asPacked(n));
         requireSameFormat(n[1], n[2]);
         result.reset(new symbolic_fp::uf(symbolic_fp::unpacked::select(
             lower(n[0]), asUnpacked(n[1]), asUnpacked(n[2]))));
