@@ -239,6 +239,22 @@ rather than by backtracking:
   live eliminations, and a mention invalidates the cached preparation --
   it re-prepares with the variable now shared and the equation kept.
 
+There is deliberately no separate ``ScopedPreprocessor`` owner. The output
+already has one real owner: ``IncrementalScopeState`` stores the accepted
+``PreprocessingTransaction`` with the level or exact-stack scope which gives
+its eliminations and facts meaning. The machinery producing that value does
+not have one narrower lifetime to own:
+
+- ``sigma0`` and the raw base ledger are driver-session state;
+- prepared-piece, screening and exact-block memos are encoding-epoch caches;
+- base eliminations and restored roots are reconstructed at SAT-backend
+  rebuild boundaries; and
+- scratch simplifiers/substitution maps are local to a single trial.
+
+Wrapping those in one object would therefore hide four reset contracts rather
+than establish an ownership boundary. Preparation remains a named stage which
+returns/commits transactions; the scope ledger remains their owner.
+
 Cross-level constant-bit propagation
 ------------------------------------
 
