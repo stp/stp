@@ -4754,11 +4754,6 @@ public:
 
   void setAssumptions(const SATSolver::vec_literals* a) { assumps = a; }
 
-  // How many solves this adapter has run; the refinement driver reads it
-  // to tell a productive round (axioms added, solver re-run) from a stuck
-  // one (candidate rejected, nothing to add, no re-solve).
-  size_t solveCount = 0;
-
   bool CallSAT(SATSolver& SatSolver, const ASTNode& input,
                bool /*doesAbsRef*/) override
   {
@@ -4767,7 +4762,6 @@ public:
     assert(input == ASTTrue);
     (void)input;
 
-    solveCount++;
     const bool refinementSolve = d->profile.satCalls > 0;
     if (d->profile.enabled)
     {
