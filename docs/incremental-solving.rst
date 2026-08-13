@@ -720,10 +720,24 @@ Limitations
   content mentions their variable: an implied equation returns as
   itself, while a variable dropped as unconstrained gets its ORIGINAL
   conjuncts back -- its recorded definition is only a witness the model
-  replay uses, and asserting it would wrongly pin the variable. The finer-grained alternative (pinning
-  popped variables away from the decision heuristics, as cvc5's CaDiCaL
-  propagator integration does) requires the propagator interface and is
-  not portable across our backends.
+  replay uses, and asserting it would wrongly pin the variable. The
+  finer-grained alternative -- pinning each variable of retracted
+  content so the search never revisits it -- is sound only for a
+  variable that can never serve live content again, and this driver's
+  reuse breaks that guarantee twice over: a popped conjunct's root
+  literal is reused when the conjunct returns, and AIG cones are shared
+  through the blast memo, so a later encoding can reach a variable that
+  looked dead. Pinning would therefore need root-literal cache eviction
+  and a cone-liveness sweep first, machinery with no measured
+  beneficiary so far. The activation-literal retirement above is the
+  subset that is sound without any of that.
+- Driver encodings are always the plain three-clause Tseitin shape:
+  extending a live solver in place requires every previously assigned
+  variable to keep its id, and ABC's CNF generators -- including the
+  technology-mapped ones ``--cnf-effort`` selects -- are one-shot over a
+  whole AIG manager and renumber everything. ``--cnf-effort`` therefore
+  applies to batch solves only; once the driver engages it has no
+  effect.
 - Extensionality rounds rebuild the procedure's solve-local records each
   check-sat; reuse for them is at the encoding level (cached blocks and
   shared subcircuits), not at the record level.
