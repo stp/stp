@@ -26,6 +26,8 @@ AddSTPGTest(PropagateEqualities_Test.cpp)
 AddSTPGTest(SimplifyingNodeFactory_Test.cpp)
 AddSTPGTest(FindPureLiterals_Test.cpp)
 AddSTPGTest(Flatten_Test.cpp)
+AddSTPGTest(CommonSubSum_Test.cpp)
+AddSTPGTest(UserDefinedFlags_Test.cpp)
 AddSTPGTest(NodeDomainAnalysis_Test.cpp)
 AddSTPGTest(SplitExtracts_Test.cpp)
 # Not under ENABLE_FLOATING_POINT: the source-sort memo and the symbol name
