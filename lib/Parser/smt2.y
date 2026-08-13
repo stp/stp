@@ -293,8 +293,8 @@ namespace stp
     // the missing set-logic, so this does.
     if (stp::SMT2FpKeywordNeedsLogic(smt2text))
       o << "  hint: " << smt2text << " is a floating-point name; those are "
-           "recognised only after (set-logic QF_FP), (set-logic QF_BVFP) or "
-           "(set-logic QF_ABVFP)";
+           "recognised only after a floating-point (set-logic): QF_FP, "
+           "QF_BVFP, QF_ABVFP or one of their LRA variants";
     // Likewise, a numeral the parser would not take is not a malformed
     // numeral: it is one too large to be the index, width or count that the
     // position calls for. Without this the report is bison's token name.
@@ -1736,10 +1736,19 @@ cmdi:
 |
      LOGIC_TOK STRING_TOK
     {
+      // The *LRA logics are the FP logics plus a theory of reals. STP has no
+      // such theory, and the grammar admits a real only as the literal
+      // argument of to_fp -- which is the only way these benchmarks use one.
+      // Anything more (a Real declaration, arithmetic over reals) has no
+      // production and is a syntax error, so accepting the name here cannot
+      // answer a query STP could not decide.
       const bool fp_logic =
             0 == strcmp($2->c_str(),"QF_FP") ||
             0 == strcmp($2->c_str(),"QF_BVFP") ||
-            0 == strcmp($2->c_str(),"QF_ABVFP");
+            0 == strcmp($2->c_str(),"QF_ABVFP") ||
+            0 == strcmp($2->c_str(),"QF_FPLRA") ||
+            0 == strcmp($2->c_str(),"QF_BVFPLRA") ||
+            0 == strcmp($2->c_str(),"QF_ABVFPLRA");
       if (!(
             0 == strcmp($2->c_str(),"QF_BV") ||
             0 == strcmp($2->c_str(),"QF_ABV") ||
