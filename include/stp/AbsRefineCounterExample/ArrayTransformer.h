@@ -83,6 +83,14 @@ public:
       reads.clear();
       ackPairs.clear();
     }
+
+    void releaseStorage()
+    {
+      ArrType emptyReads;
+      AckPairMap emptyAckPairs;
+      reads.swap(emptyReads);
+      ackPairs.swap(emptyAckPairs);
+    }
   };
 
   struct TransformResult

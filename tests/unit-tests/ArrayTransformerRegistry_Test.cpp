@@ -99,6 +99,10 @@ TEST(ArrayTransformerRegistry, eager_ackermann_pairs_persist_with_reads)
   EXPECT_EQ(ArrayTransformer::ReadKey(array, j), second.touchedReads[0]);
   EXPECT_EQ(2u, persistent.reads.at(array).size());
   EXPECT_EQ(2u, persistent.ackPairs.at(array).size());
+
+  persistent.releaseStorage();
+  EXPECT_TRUE(persistent.reads.empty());
+  EXPECT_TRUE(persistent.ackPairs.empty());
 }
 
 } // namespace

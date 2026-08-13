@@ -35,6 +35,8 @@ THE SOFTWARE.
 
 #include "stp/Incremental/IncrementalSolver.h"
 
+#include "IncrementalLifetimeState.h"
+
 #include "stp/Incremental/IncrementalCBP.h"
 #include "stp/Incremental/IncrementalCnfEncoder.h"
 #include "stp/Incremental/IncrementalPolicy.h"
@@ -333,25 +335,9 @@ struct IncrementalSolver::Impl
   // reject every candidate, and refinement cannot converge.
   std::map<ASTNode, std::vector<std::pair<ASTNode, ASTNode>>> readsOfEncoded;
 
-  // Storage handed out by the ToSATBase adapter (the refinement machinery
-  // asks for the symbol map by reference), and the adapter itself,
-  // constructed on first array use (its class is defined below Impl).
-  //
-  // The storage is a cache. The refinement loop asks for the map once per
-  // round, and rebuilding it is a walk over every blasted symbol -- the
-  // per-round cost the batch path avoids by handing out one map by
-  // reference (see CallSAT_ResultCheck). It stays valid until either a
-  // new AIG-to-variable binding appears (the encoder's generation counter
-  // moves, which every encode and totalisation funnels through) or a new
-  // check-sat begins, whose scope reconciliation can change the
-  // eliminated-variable filter the map is built under. Batch semantics
-  // are also why STALENESS ONLY, not content, may invalidate it:
-  // getSatVariables inserts freshly minted variables for never-blasted
-  // symbols straight into the handed-out map, and a rebuild inside one
-  // check would discard them and mint duplicates the next round.
-  ToSATBase::ASTNodeToSATVar symbolMapStorage;
-  bool symbolMapCacheValid = false;
-  uint64_t symbolMapGeneration = 0;
+  IncrementalSymbolMapCache symbolMapCache;
+
+  // Constructed on first array use (its class is defined below Impl).
   std::unique_ptr<ToSATBase> adapter;
 
   // Created on first floating-point use; see fpContext().
@@ -509,14 +495,7 @@ struct IncrementalSolver::Impl
   // must protect, while keeping every growing root vector would itself take
   // quadratic memory. Popped historical content should not prevent relief.
   std::map<ASTNode, Aig_Obj_t*> aigRootOf;
-  struct PendingLiveCone
-  {
-    std::vector<Aig_Obj_t*> currentRoots;
-    size_t permanentRootCount = 0;
-    uint64_t nonStructuralMass = 0;
-  };
-  PendingLiveCone pendingLiveCone;
-  bool hasPendingLiveCone = false;
+  IncrementalPendingLiveCone pendingLiveCone;
 
   // Permanent-for-this-backend-epoch mass: base root units and definitions,
   // plus promoted units. A promoted level's retraction forces a rebuild, so
@@ -545,11 +524,7 @@ struct IncrementalSolver::Impl
   // The running charge is an inexpensive, conservative sum of per-root DAG
   // sizes; once it reaches the configured floor, semanticReliefReached()
   // walks the exact retained and live unions before authorizing rotation.
-  ASTNodeSet semanticEpochRoots;
-  uint64_t semanticNodeCharge = 0;
-  ASTVec latestSemanticLiveRoots;
-  uint64_t maxLiveSemanticNodes = 0;
-  uint64_t lastRetainedSemanticNodes = 0;
+  IncrementalSemanticEpochAccounting semanticEpoch;
 
   // Probe-based inprocessing retirement (see the trigger in
   // checkSatBody): how many solves this driver has run, and
@@ -613,47 +588,18 @@ struct IncrementalSolver::Impl
 
   void chargeSemanticRoot(const ASTNode& root)
   {
-    const size_t limit = semanticCacheLimit();
-    if (limit == 0 || root.IsNull() ||
-        !semanticEpochRoots.insert(root).second ||
-        semanticNodeCharge >= limit)
-      return;
-
-    const size_t remaining =
-        limit - static_cast<size_t>(semanticNodeCharge);
-    const size_t charge = dagSizeUpTo(root, remaining);
-    semanticNodeCharge =
-        charge > remaining ? limit : semanticNodeCharge + charge;
-  }
-
-  static uint64_t astDagUnionSize(const ASTVec& roots)
-  {
-    return IncrementalWalks::astDagUnionSize(roots);
+    semanticEpoch.charge(root, semanticCacheLimit());
   }
 
   void stageSemanticLiveStack(const ASTVec& rawStack,
                               const ASTVec& encodedRoots)
   {
-    ASTVec next = rawStack;
-    next.insert(next.end(), encodedRoots.begin(), encodedRoots.end());
-    latestSemanticLiveRoots.swap(next);
+    semanticEpoch.stage(rawStack, encodedRoots);
   }
 
   bool semanticReliefReached()
   {
-    const size_t limit = semanticCacheLimit();
-    if (limit == 0 || semanticNodeCharge < limit ||
-        latestSemanticLiveRoots.empty())
-      return false;
-
-    const uint64_t live = astDagUnionSize(latestSemanticLiveRoots);
-    maxLiveSemanticNodes = std::max(maxLiveSemanticNodes, live);
-
-    ASTVec retainedRoots(semanticEpochRoots.begin(),
-                         semanticEpochRoots.end());
-    lastRetainedSemanticNodes = astDagUnionSize(retainedRoots);
-    return maxLiveSemanticNodes != std::numeric_limits<uint64_t>::max() &&
-           maxLiveSemanticNodes + 1 <= lastRetainedSemanticNodes / 4;
+    return semanticEpoch.reliefReached(semanticCacheLimit());
   }
 
   // CBP's cost follows the sum of the level DAGs it feeds (a shared node in
@@ -1917,16 +1863,11 @@ struct IncrementalSolver::Impl
     // stale popped stacks are precisely the content relief should reclaim.
     if (stage)
     {
-      pendingLiveCone.currentRoots.swap(currentRoots);
-      pendingLiveCone.permanentRootCount = permanentAigRoots.size();
-      pendingLiveCone.nonStructuralMass = nonStructuralMass;
-      hasPendingLiveCone = true;
+      pendingLiveCone.replace(currentRoots, permanentAigRoots.size(),
+                              nonStructuralMass);
     }
     else
-    {
-      pendingLiveCone.currentRoots.clear();
-      hasPendingLiveCone = false;
-    }
+      pendingLiveCone.clear();
   }
 
   // Pay pending whole-cone walks only when the cheap ownership estimate would
@@ -1936,18 +1877,17 @@ struct IncrementalSolver::Impl
   // history to the last solve, so this is at most one full-cone walk.
   void expandPendingLiveConeMass()
   {
-    if (!hasPendingLiveCone)
+    if (!pendingLiveCone.active())
       return;
     const uint64_t structural = encodedAigConeMass(
-        pendingLiveCone.currentRoots, pendingLiveCone.permanentRootCount);
+        pendingLiveCone.roots(), pendingLiveCone.permanentRoots());
     const uint64_t live =
-        addMass(structural, pendingLiveCone.nonStructuralMass);
+        addMass(structural, pendingLiveCone.nonStructural());
     // This snapshot belongs to the previous solve. Discovering its exact cone
     // repairs the epoch's historical high-water mark, but must not report that
     // old working set as live in the check about to start.
     recordPeakLiveClauseMass(live);
-    pendingLiveCone.currentRoots.clear();
-    hasPendingLiveCone = false;
+    pendingLiveCone.clear();
   }
 
   void addBinary(int lit_a, int lit_b) { cnf.addBinary(lit_a, lit_b); }
@@ -2583,7 +2523,7 @@ struct IncrementalSolver::Impl
              arrayRegistry.reads.begin();
          it != arrayRegistry.reads.end(); ++it)
       rows += it->second.size();
-    return semanticEpochRoots.size() + fragmentCache.size() + rows +
+    return semanticEpoch.retainedRootCount() + fragmentCache.size() + rows +
            readsOfEncoded.size() +
            arrayRegistry.ackPairs.size() + exactStackKeepAlive.size() +
            exactScopedPreprocessOf.size() + preparedPieceOf.size() +
@@ -2634,13 +2574,11 @@ struct IncrementalSolver::Impl
       ce->setFpEncodingContext(NULL);
     fpCtx.reset();
     adapter.reset();
-    releaseContainer(symbolMapStorage);
-    symbolMapCacheValid = false;
+    symbolMapCache.releaseStorage();
 
     releaseContainer(fragmentCache);
-    releaseContainer(arrayRegistry.reads);
+    arrayRegistry.releaseStorage();
     releaseContainer(readsOfEncoded);
-    releaseContainer(arrayRegistry.ackPairs);
     releaseContainer(exactStackKeepAlive);
     releaseContainer(exactScopedPreprocessOf);
     releaseContainer(preparedPieceOf);
@@ -2685,7 +2623,7 @@ struct IncrementalSolver::Impl
     releaseContainer(rootLitOf);
     releaseContainer(aigRootOf);
     releaseContainer(permanentAigRoots);
-    releaseContainer(pendingLiveCone.currentRoots);
+    pendingLiveCone.releaseStorage();
     releaseContainer(actLitOf);
     releaseContainer(everAssumedLits);
     releaseContainer(activationMassOf);
@@ -2696,11 +2634,7 @@ struct IncrementalSolver::Impl
     releaseContainer(assumedLitLevels);
     releaseContainer(lastLevelLitConjuncts);
     releaseContainer(lastFailedLits);
-    releaseContainer(semanticEpochRoots);
-    semanticNodeCharge = 0;
-    releaseContainer(latestSemanticLiveRoots);
-    maxLiveSemanticNodes = 0;
-    lastRetainedSemanticNodes = 0;
+    semanticEpoch.releaseStorage();
 
     encoding.reset();
     ++encodingEpochGeneration;
@@ -2842,7 +2776,7 @@ struct IncrementalSolver::Impl
       rotateEncodingEpoch();
 
     cnf.reset(solver.get());
-    symbolMapCacheValid = false;
+    symbolMapCache.invalidate();
     rootLitOf.clear();
     actLitOf.clear();
     everAssumedLits.clear();
@@ -2860,8 +2794,7 @@ struct IncrementalSolver::Impl
     refinementMassOf.clear();
     currentRefinementClauseMass = 0;
     aigRootOf.clear();
-    pendingLiveCone.currentRoots.clear();
-    hasPendingLiveCone = false;
+    pendingLiveCone.clear();
     activationMassOf.clear();
     baseLiveMass = 0;
     permanentAigRoots.clear();
@@ -3568,15 +3501,14 @@ public:
 
   ASTNodeToSATVar& SATVar_to_SymbolIndexMap() override
   {
-    if (!d->symbolMapCacheValid ||
-        d->symbolMapGeneration != d->cnf.generation())
+    IncrementalSymbolMapCache& cache = d->symbolMapCache;
+    if (!cache.validFor(d->cnf.generation()))
     {
-      d->symbolMapStorage.clear();
-      d->buildSymbolMap(d->symbolMapStorage);
-      d->symbolMapCacheValid = true;
-      d->symbolMapGeneration = d->cnf.generation();
+      cache.storage().clear();
+      d->buildSymbolMap(cache.storage());
+      cache.markCurrent(d->cnf.generation());
     }
-    return d->symbolMapStorage;
+    return cache.storage();
   }
 
   void ClearAllTables(void) override {}

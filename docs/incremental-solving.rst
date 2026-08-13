@@ -115,6 +115,46 @@ only the current raw stack and permanent base facts. The raw scope ledger and
 monotone base substitutions survive because they describe live input, not
 historical encodings.
 
+The implementation uses the following reset map. It is intentionally a map of
+*validity*, not just a list of fields which happen to be cleared together:
+
+.. list-table:: Driver state lifetimes
+   :header-rows: 1
+   :widths: 20 47 33
+
+   * - Lifetime
+     - Representative state
+     - Boundary / owner
+   * - One check-sat
+     - Unsat-core bookkeeping, current assumptions, deferred-model latch and
+       the symbol-map cache's validity
+     - ``maintainBackendForCheck``; ``IncrementalSymbolMapCache`` couples map
+       validity to its CNF generation
+   * - Current scope snapshot
+     - Level identity and stability, promotion and active preprocessing/model
+       transactions
+     - ``IncrementalScopeState`` reconciles each supplied stack; its live raw
+       identities survive epoch rotation
+   * - SAT backend epoch
+     - SAT solver and CNF bindings, formula/activation literals, clause-mass
+       ownership and the pending exact live-cone snapshot
+     - ``rebuildEncodings``; ``IncrementalCnfEncoder`` and
+       ``IncrementalPendingLiveCone`` own their coupled reset state
+   * - Encoding epoch
+     - AIG/bit-blast state, semantic and prepared-form caches, FP lowering,
+       persistent array registry and exact-block keepalives
+     - ``rotateEncodingEpoch``; ``AigEncodingEpoch``,
+       ``IncrementalSemanticEpochAccounting``, ``IncrementalWalks`` and
+       ``ArrayTransformer::Registry`` release their own storage
+   * - Driver session
+     - Monotone raw base ledger/substitutions, engagement history and backend
+       policy latches
+     - Destroyed by reset/reset-assertions, not by an internal rebuild
+
+This separation is why the reset functions still contain some explicit work:
+several independent owners share a boundary, but they do not acquire one
+another's policy or lifetime merely to shorten that function.
+
 Reconstructing from the current snapshot is what lets ``push``/``pop`` need no
 driver hooks: the parser's assertion stack is the source of truth, and a
 popped assertion vanishes by not being present the next time. State that does

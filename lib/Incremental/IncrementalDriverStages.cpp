@@ -28,7 +28,7 @@ void IncrementalSolver::Impl::maintainBackendForCheck(
   lastFailedLits.clear();
   // Scope reconciliation below can change the eliminated-variable filter the
   // adapter's cached symbol map was built under.
-  symbolMapCacheValid = false;
+  symbolMapCache.invalidate();
 
   ScopedProfileTimer maintenanceTimer(profile.enabled, profile.maintenanceNs);
 
@@ -57,9 +57,11 @@ void IncrementalSolver::Impl::maintainBackendForCheck(
       std::cerr << "Incremental: re-encoded from scratch (solver had "
                 << solver->nVars() << " variables, " << retainedClauseMass()
                 << " retained clauses for a " << maxLiveClauseMass
-                << " clause working set, " << lastRetainedSemanticNodes
+                << " clause working set, "
+                << semanticEpoch.lastRetainedNodeCount()
                 << " retained semantic DAG nodes for a "
-                << maxLiveSemanticNodes << " node working set)" << std::endl;
+                << semanticEpoch.maxLiveNodeCount() << " node working set)"
+                << std::endl;
     rebuildEncodings(assertionsSMT2, RebuildReason::Relief);
   }
 
