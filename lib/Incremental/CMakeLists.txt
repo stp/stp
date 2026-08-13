@@ -20,6 +20,7 @@
 
 add_library(incremental OBJECT
     IncrementalCBP.cpp
+    IncrementalProfile.cpp
     IncrementalScopeState.cpp
     IncrementalSolver.cpp
 )
