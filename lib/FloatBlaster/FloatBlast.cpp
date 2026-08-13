@@ -216,9 +216,17 @@ private:
     // which is what the bit-blaster reads back here.
     if (n.GetKind() == READ)
     {
+      // asPacked rebuilds the read through the simplifying factory, whose
+      // read-over-write chase can fold the read away once lowering rewrites
+      // an index (a same-format to_fp on a store index collapses to the
+      // read index, for instance). The fold's result is whatever was
+      // stored, already lowered -- possibly an encode() circuit. Only a
+      // result that still carries the float sort is a packed view the
+      // predicate may consume; anything else sends the predicate to SymFPU,
+      // which decodes the same folded carrier.
       const ASTNode packed = asPacked(n);
-      assert(packed.GetKind() == READ);
-      assert(packed.GetSourceSort().kind() == SourceSort::Kind::FloatingPoint);
+      if (packed.GetSourceSort().kind() != SourceSort::Kind::FloatingPoint)
+        return ASTNode();
       return packed;
     }
     // A float-sorted ITE is a mux over packed bits once its branches are
