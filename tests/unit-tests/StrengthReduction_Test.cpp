@@ -496,6 +496,38 @@ TEST(StrengthReduction_Test , __LINE__)
   ASSERT_TRUE(presentWithWidth(stp::BVPLUS, n, 5));
 }
 
+// Two additions over the same masked operands, one of them carrying an extra
+// one-bit addend, narrow to the *same* width. Bounding the sum by the sum of
+// the operands' bounds is what makes that true: allowing the widest operand
+// ceil(log2(degree)) bits of carry instead would read the operand count, put
+// the four-operand sum in 6 bits and the five-operand one in 7, and leave the
+// two sharing no operand node at all. Issue #444.
+TEST(StrengthReduction_Test , __LINE__)
+{
+  const std::string input = R"(
+    (
+      assert
+            (and
+              ( = v4
+                (bvadd (bvand v0 (_ bv15 20)) (bvand v1 (_ bv15 20))
+                       (bvand v2 (_ bv15 20)) (bvand v3 (_ bv15 20)))
+              )
+              ( = v4
+                (bvadd (bvand v0 (_ bv15 20)) (bvand v1 (_ bv15 20))
+                       (bvand v2 (_ bv15 20)) (bvand v3 (_ bv15 20))
+                       ((_ zero_extend 19) x0))
+              )
+            )
+    )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_FALSE(presentWithWidth(stp::BVPLUS, n, 20));
+  ASSERT_FALSE(presentWithWidth(stp::BVPLUS, n, 7));
+  ASSERT_TRUE(presentWithWidth(stp::BVPLUS, n, 6));
+}
+
 // An addition whose operands split at a bit boundary becomes a concat:
 // no adder, no bitwise operation at all.
 TEST(StrengthReduction_Test , __LINE__)
