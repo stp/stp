@@ -2122,6 +2122,125 @@ bool SimplifyingNodeFactory::foldRemainders(ASTVec& children)
   return true;
 }
 
+// Push an extract down through the operators it can pass through, narrowing
+// the slice as it goes: an extract of a concat reaches only one half, one of
+// an extract composes into a single extract, one of a bvnot is the complement
+// of the extract underneath, and one of a sign extension either lands inside
+// the original term or is a run of copies of its sign bit.
+//
+// Each of those walks into a term that stays as deep as the input made it --
+// nothing collapses a concat chain, or a sign extension over one -- so the
+// walk is a loop here rather than a rebuild of the extract one level down
+// with the factory taking the next step. Re-entering would spend a stack
+// frame per level, and CreateTerm's frame is large enough that a few thousand
+// of them exhaust the stack.
+//
+// Returns null if the extract reaches none of these, so the caller can go on
+// to the rules that do not narrow it.
+ASTNode SimplifyingNodeFactory::narrowExtract(unsigned width,
+                                              ASTChildren children)
+{
+  ASTNode term = children[0];
+  unsigned high = children[1].GetUnsignedConst();
+  unsigned low = children[2].GetUnsignedConst();
+  // Complements cancel in pairs, so only their parity has to be carried.
+  bool complement = false;
+
+  // The sign-extension rebase below moves the slice without changing the
+  // term, so "did anything happen" has to watch the offsets too.
+  const unsigned firstHigh = high;
+  const unsigned firstLow = low;
+
+  for (bool stepped = true; stepped;)
+  {
+    stepped = true;
+
+    switch (term.GetKind())
+    {
+      case BVEXTRACT:
+      {
+        // Slicing a slice is one slice, taken from where the inner one began.
+        const unsigned innerLow = term[2].GetUnsignedConst();
+        high += innerLow;
+        low += innerLow;
+        term = term[0];
+        break;
+      }
+
+      case BVCONCAT:
+      {
+        // The lower value holds the bottom bits, so it is what the offsets
+        // are measured against. An extract that straddles the split needs
+        // both halves and stops the walk.
+        const unsigned lowerWidth = term[1].GetValueWidth();
+
+        if (high < lowerWidth)
+          term = term[1];
+        else if (low >= lowerWidth)
+        {
+          term = term[0];
+          high -= lowerWidth;
+          low -= lowerWidth;
+        }
+        else
+          stepped = false;
+        break;
+      }
+
+      case stp::BVNOT:
+        complement = !complement;
+        term = term[0];
+        break;
+
+      case BVUMINUS:
+        // Negating cannot change the bottom bit: it is the only one with no
+        // borrow below it.
+        if (high == 0 && low == 0)
+          term = term[0];
+        else
+          stepped = false;
+        break;
+
+      case stp::BVSX:
+      {
+        const unsigned innerWidth = term[0].GetValueWidth();
+
+        if (low >= innerWidth)
+        {
+          // Entirely within the extension: every extracted bit is a copy of
+          // the sign bit, so rebase the extract to end at the sign bit.
+          // Extracts of different slices of the extension then share a node.
+          // The rebase leaves `low` at the sign bit, so it does not repeat.
+          high = high - low + innerWidth - 1;
+          low = innerWidth - 1;
+        }
+        else if (high < innerWidth)
+          term = term[0]; // Entirely within the original term.
+        else
+          stepped = false;
+        break;
+      }
+
+      default:
+        stepped = false;
+        break;
+    }
+  }
+
+  if (term == children[0] && high == firstHigh && low == firstLow &&
+      !complement)
+    return ASTNode(); // Nothing here narrows it.
+
+  const ASTNode slice =
+      (low == 0 && width == term.GetValueWidth())
+          ? term
+          : NodeFactory::CreateTerm(BVEXTRACT, width, term,
+                                    bm.CreateBVConst(32, high),
+                                    bm.CreateBVConst(32, low));
+
+  return complement ? NodeFactory::CreateTerm(stp::BVNOT, width, slice) : slice;
+}
+
 // This gets called with the arguments swapped as well. So the rules don't need
 // to know about commutivity.
 ASTNode SimplifyingNodeFactory::plusRules(const ASTNode& n0, const ASTNode& n1)
@@ -3377,80 +3496,8 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
     case BVEXTRACT:
       if (width == children[0].GetValueWidth())
         result = children[0];
-      else if (BVEXTRACT ==
-               children[0].GetKind()) // reduce an extract over an extract.
-      {
-        const unsigned outerLow = children[2].GetUnsignedConst();
-        const unsigned outerHigh = children[1].GetUnsignedConst();
-
-        const unsigned innerLow = children[0][2].GetUnsignedConst();
-        // const unsigned innerHigh = children[0][1].GetUnsignedConst();
-        result =
-            NodeFactory::CreateTerm(BVEXTRACT, width, children[0][0],
-                                    bm.CreateBVConst(32, outerHigh + innerLow),
-                                    bm.CreateBVConst(32, outerLow + innerLow));
-      }
-      else if (BVCONCAT == children[0].GetKind())
-      {
-        // If the extract doesn't cross the concat, then remove the concat.
-        const ASTNode& a = children[0][0];
-        const ASTNode& b = children[0][1];
-
-        const unsigned low = children[2].GetUnsignedConst();
-        const unsigned high = children[1].GetUnsignedConst();
-
-        if (high <
-            b.GetValueWidth()) // Extract entirely from the lower value (b).
-        {
-          result = NodeFactory::CreateTerm(BVEXTRACT, width, b, children[1],
-                                           children[2]);
-        }
-        if (low >=
-            b.GetValueWidth()) // Extract entirely from the upper value (a).
-        {
-          ASTNode i = bm.CreateBVConst(32, high - b.GetValueWidth());
-          ASTNode j = bm.CreateBVConst(32, low - b.GetValueWidth());
-          result = NodeFactory::CreateTerm(BVEXTRACT, width, a, i, j);
-        }
-      }
-      else if (BVUMINUS == children[0].GetKind() &&
-               children[1] == bm.CreateZeroConst(children[1].GetValueWidth()) &&
-               children[2] == bm.CreateZeroConst(children[2].GetValueWidth()))
-      {
-        result = NodeFactory::CreateTerm(BVEXTRACT, width, children[0][0],
-                                         children[1], children[2]);
-      }
-      else if (stp::BVNOT == children[0].GetKind())
-      {
-        // pull the bvnot above the extract.
-        result = NodeFactory::CreateTerm(
-            stp::BVNOT, width,
-            NodeFactory::CreateTerm(BVEXTRACT, width, children[0][0],
-                                    children[1], children[2]));
-      }
-      else if (stp::BVSX == children[0].GetKind())
-      {
-        const unsigned innerWidth = children[0][0].GetValueWidth();
-        const unsigned high = children[1].GetUnsignedConst();
-        const unsigned low = children[2].GetUnsignedConst();
-
-        if (low >= innerWidth)
-        {
-          // Entirely within the extension: every extracted bit is a copy of
-          // the sign bit, so rebase the extract to end at the sign bit.
-          // Extracts of different slices of the extension then share a node.
-          result = NodeFactory::CreateTerm(
-              BVEXTRACT, width, children[0],
-              bm.CreateBVConst(32, high - low + innerWidth - 1),
-              bm.CreateBVConst(32, innerWidth - 1));
-        }
-        else if (high < innerWidth)
-        {
-          // Entirely within the original term: the extension is irrelevant.
-          result = NodeFactory::CreateTerm(BVEXTRACT, width, children[0][0],
-                                           children[1], children[2]);
-        }
-      }
+      else if (ASTNode narrowed = narrowExtract(width, children); !narrowed.IsNull())
+        result = narrowed;
       else if (stp::BVMULT == children[0].GetKind() &&
                children[0].Degree() == 2 &&
                (children[0][0].GetKind() == stp::BVCONST ||

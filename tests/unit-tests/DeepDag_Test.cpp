@@ -385,6 +385,55 @@ bool flattenShareCountOk(Context& c, unsigned depth)
 // observed crash path -- but --flatten puts it back. BVMULT is not a
 // flattenable kind, which keeps this a test of the traversal rather than
 // of flattening.
+// The extract-over-concat rule in the simplifying factory, which drops the
+// halves of a concat the extract does not reach into. A concat chain is a
+// normal form, so it stays as deep as the input made it, and an extract of
+// the far end has to walk the whole thing.
+//
+// Built with the simplifying factory rather than the hashing one: the rule
+// under test is the factory's, and it fires as the extract is created. The
+// chain itself is hash-consed either way -- no rule rewrites a concat of
+// distinct symbols -- so `nf` still produces the deep chain this needs.
+bool extractOverConcatOk(Context& c, unsigned links)
+{
+  const unsigned piece = 8;
+
+  // Symbols rather than constants: a concat of constants is folded on
+  // creation, so a chain built from them would collapse as it was built and
+  // there would be no depth here to walk.
+  const ASTNode chainTail = c.mgr.CreateSymbol("extract-concat-tail", 0, piece);
+  ASTNode chain = chainTail;
+
+  // One symbol serves every link. What makes each concat a distinct node is
+  // its right operand, which is a longer chain at each turn, so the left
+  // operands do not have to differ -- unlike the xor and multiply chains
+  // above, where a repeated symbol would cancel the depth away.
+  const ASTNode link = c.mgr.CreateSymbol("extract-concat-link", 0, piece);
+
+  for (unsigned i = 0; i < links; i++)
+    chain = c.nf->CreateTerm(BVCONCAT, chain.GetValueWidth() + piece, link,
+                             chain);
+  c.roots.push_back(chain);
+
+  // Every link still contributes its bits, so the walk below really is over
+  // that many of them. Without this the test goes on passing if some later
+  // rule flattens the chain, while no longer testing anything.
+  if (chain.GetValueWidth() != piece * (links + 1))
+    return false;
+
+  // The bottom byte is the tail, at the far end of the chain, so the walk
+  // has to have descended through every link to reach it. The tail is a
+  // different symbol from the links precisely so that this can say which
+  // one the extract landed on rather than merely that it landed on some
+  // symbol.
+  const ASTNode extract =
+      c.nf->CreateTerm(BVEXTRACT, piece, chain, c.mgr.CreateBVConst(32, 7),
+                       c.mgr.CreateBVConst(32, 0));
+  c.roots.push_back(extract);
+
+  return extract == chainTail;
+}
+
 // The remainder reconstruction in the simplifying factory, which pairs a
 // dividend with the "- b * (a / b)" product beside it in a sum. The pairs are
 // independent of each other, so the number of them is chosen by the input,
@@ -1798,6 +1847,12 @@ TEST(DeepDag, shallow_rewriting_rule_fires)
   EXPECT_TRUE(rewritingRuleFiresOk(c, SHALLOW));
 }
 
+TEST(DeepDag, shallow_extract_over_concat)
+{
+  Context c;
+  EXPECT_TRUE(extractOverConcatOk(c, SHALLOW));
+}
+
 TEST(DeepDag, shallow_remainder_folding)
 {
   Context c;
@@ -2638,6 +2693,11 @@ TEST(DeepDag, deep_flatten_kind_depth)
 TEST(DeepDag, deep_strength_reduction)
 {
   EXPECT_STACK_SAFE(strengthReductionOk, 20000);
+}
+
+TEST(DeepDag, deep_extract_over_concat)
+{
+  EXPECT_STACK_SAFE(extractOverConcatOk, 20000);
 }
 
 TEST(DeepDag, deep_remainder_folding)
