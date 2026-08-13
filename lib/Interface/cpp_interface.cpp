@@ -64,6 +64,7 @@ void Cpp_interface::init()
   print_success = false;
   ignoreCheckSatRequest = false;
   produce_models = false;
+  session_touched = false;
   model_valid = false;
   incremental_from_start =
       bm.UserFlags.incremental_mode == UserDefinedFlags::IncrementalMode::ON;
@@ -164,6 +165,7 @@ void Cpp_interface::setLogic(const std::string& logic)
 void Cpp_interface::AddAssert(const ASTNode& assert)
 {
   bm.AddAssert(assert);
+  session_touched = true;
 
   // SMT-LIB: an assertion invalidates the most recent model, and the last
   // check-sat-assuming round with it.
@@ -212,6 +214,7 @@ void Cpp_interface::addSortAlias(const std::string& name, unsigned exp_width,
     FatalError("define-sort: the sort name is already defined");
   sort_aliases[name] = std::make_pair(exp_width, sig_width);
   frames.back()->addSortAlias(name);
+  session_touched = true;
 }
 
 bool Cpp_interface::lookupSortAlias(const std::string& name,
@@ -308,6 +311,7 @@ void Cpp_interface::storeFunction(const string& name, const ASTVec& params,
 
   // store the function in the global function store
   functions.insert(std::make_pair(f.name, f));
+  session_touched = true;
 
   // record which frame this function was created in, such that it can be
   // removed later (e.g., via pop)
@@ -437,6 +441,7 @@ void Cpp_interface::deleteNode(ASTNode* n)
 void Cpp_interface::addSymbol(ASTNode& s)
 {
   frames.back()->addSymbol(s);
+  session_touched = true;
 }
 
 void Cpp_interface::addRoundingModeSymbol(ASTNode& s)
@@ -655,6 +660,7 @@ void Cpp_interface::push()
 
   model_valid = false;
   lastCheckWasAssuming = false;
+  session_touched = true;
 
   bm.Push();
 
@@ -717,6 +723,7 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
   // Any ordinary check supersedes the last check-sat-assuming round;
   // checkSatAssuming re-records after this returns.
   lastCheckWasAssuming = false;
+  session_touched = true;
 
   bm.GetRunTimes()->stop(RunTimes::Parsing);
 
@@ -943,11 +950,22 @@ void Cpp_interface::setOption(std::string option, std::string value)
   }
   else if (option == "global-declarations")
   {
-    // SMT-LIB gives this option mode "start", so a conforming script sets it
-    // before set-logic. STP enforces no mode on any option and does not start
-    // here: the flag is read when a level is popped or the assertions are
-    // reset, so a script that sets it later is answered rather than refused,
-    // and gets the behaviour it asked for from that point on.
+    // SMT-LIB gives this option mode "start" (2.6, 4.1.7), and this is the
+    // one option where a late change is not merely untidy: pop reads the flag
+    // as it stands then, not the value that was in force when the declaration
+    // was made, so setting it with declarations already in hand would decide
+    // their scope after the fact. Refuse instead of answering that
+    // retroactively. Nothing is at stake before the first declaration or
+    // assertion, so set-logic, set-info and the other options may all precede
+    // it, and reset makes it settable again.
+    if (session_touched)
+    {
+      const std::string msg = "set-option :global-declarations must come "
+                              "before anything is declared or asserted";
+      error(msg);
+      FatalError(msg.c_str());
+    }
+
     if (value == "true")
     {
       global_declarations = true;

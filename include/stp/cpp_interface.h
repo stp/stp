@@ -234,6 +234,12 @@ private:
   // saying how later declarations are scoped outlives it.
   bool global_declarations = false;
 
+  // Whether anything has been declared, defined, asserted, pushed or solved
+  // since start-up or the last reset. :global-declarations may only be set
+  // while this is false -- see setOption. init() clears it, so reset makes
+  // the option settable again; reset-assertions deliberately does not.
+  bool session_touched;
+
   // Whether the model held by the counterexample tables answers for the
   // current assertion stack. Set by checkSat from the solve's outcome;
   // cleared by anything SMT-LIB says invalidates a model (assert, push,
