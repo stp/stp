@@ -64,6 +64,7 @@ void Cpp_interface::init()
   print_success = false;
   ignoreCheckSatRequest = false;
   produce_models = false;
+  session_touched = false;
   model_valid = false;
   incremental_from_start =
       bm.UserFlags.incremental_mode == UserDefinedFlags::IncrementalMode::ON;
@@ -164,6 +165,7 @@ void Cpp_interface::setLogic(const std::string& logic)
 void Cpp_interface::AddAssert(const ASTNode& assert)
 {
   bm.AddAssert(assert);
+  session_touched = true;
 
   // SMT-LIB: an assertion invalidates the most recent model, and the last
   // check-sat-assuming round with it.
@@ -212,6 +214,7 @@ void Cpp_interface::addSortAlias(const std::string& name, unsigned exp_width,
     FatalError("define-sort: the sort name is already defined");
   sort_aliases[name] = std::make_pair(exp_width, sig_width);
   frames.back()->addSortAlias(name);
+  session_touched = true;
 }
 
 bool Cpp_interface::lookupSortAlias(const std::string& name,
@@ -308,6 +311,7 @@ void Cpp_interface::storeFunction(const string& name, const ASTVec& params,
 
   // store the function in the global function store
   functions.insert(std::make_pair(f.name, f));
+  session_touched = true;
 
   // record which frame this function was created in, such that it can be
   // removed later (e.g., via pop)
@@ -437,6 +441,7 @@ void Cpp_interface::deleteNode(ASTNode* n)
 void Cpp_interface::addSymbol(ASTNode& s)
 {
   frames.back()->addSymbol(s);
+  session_touched = true;
 }
 
 void Cpp_interface::addRoundingModeSymbol(ASTNode& s)
@@ -557,8 +562,10 @@ void Cpp_interface::popToFirstLevel()
 }
 
 // Weaker than reset(): retain options and the selected logic, but empty the
-// assertion stack. With the supported/default :global-declarations=false,
-// SMT-LIB requires this to discard declarations and definitions too.
+// assertion stack. With :global-declarations false SMT-LIB requires this to
+// discard declarations and definitions too; with it true they are kept, which
+// is the point of the option for a driver that streams large terms once and
+// re-queries them.
 void Cpp_interface::resetAssertions()
 {
   // Pop the ordinary levels through the ordinary path so the assertion stack,
@@ -572,10 +579,14 @@ void Cpp_interface::resetAssertions()
 
   // The base is an assertion level too for declaration lifetime. Rebuild it
   // rather than merely replacing its assertions: destroying the frame drops
-  // its symbols, functions, and sort aliases together.
+  // its symbols, functions, and sort aliases together. Global declarations
+  // are exactly the case where that must not happen -- the pops above have
+  // already moved every level's declarations into this frame -- so there the
+  // frame stays and only its assertions go.
   model_valid = false;
   bm.Pop();
-  removeFrame();
+  if (!global_declarations)
+    removeFrame();
   cache.clear();
 
   // These tables may retain the discarded assertions or declarations.
@@ -584,7 +595,8 @@ void Cpp_interface::resetAssertions()
   resetIncrementalSolver();
 
   cache.push_back(Entry(SOLVER_UNDECIDED));
-  addFrame();
+  if (!global_declarations)
+    addFrame();
   bm.Push();
 
   checkInvariant();
@@ -610,6 +622,14 @@ void Cpp_interface::pop()
   cache.erase(cache.end() - 1);
 
   assert(letMgr->_parser_symbol_table.size() == 0);
+
+  // Popping a level undoes the assertions made in it either way; what it does
+  // to the declarations made in it is what :global-declarations selects
+  // (SMT-LIB 2.6, 4.1.5). When they are global, the level's declarations move
+  // down to the base frame -- which only reset destroys -- instead of dying
+  // with the frame.
+  if (global_declarations)
+    frames.front()->adoptDeclarations(*frames.back());
 
   removeFrame();
   checkInvariant();
@@ -640,6 +660,7 @@ void Cpp_interface::push()
 
   model_valid = false;
   lastCheckWasAssuming = false;
+  session_touched = true;
 
   bm.Push();
 
@@ -702,8 +723,14 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
   // Any ordinary check supersedes the last check-sat-assuming round;
   // checkSatAssuming re-records after this returns.
   lastCheckWasAssuming = false;
+  session_touched = true;
 
   bm.GetRunTimes()->stop(RunTimes::Parsing);
+
+  // Bracket the solve so (get-info :all-statistics) can report on this check
+  // alone. Taken here rather than at entry so the parse that preceded the
+  // check is not charged to it.
+  const std::vector<CategoryWork> work_before = currentWork();
 
   checkInvariant();
   assert(assertionsSMT2.size() == cache.size());
@@ -812,6 +839,8 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
   model_valid = (last_run.result == SOLVER_SATISFIABLE) &&
                 bm.UserFlags.construct_counterexample_flag;
 
+  recordCheckWork(work_before);
+
   if (bm.UserFlags.quick_statistics_flag)
   {
     bm.GetRunTimes()->print();
@@ -864,6 +893,21 @@ void Cpp_interface::cleanUp()
   }
 }
 
+// SMT-LIB gives these options a <b_value> argument (2.6, figure 3.9), so a
+// value that is not true or false does not describe a command the solver
+// could have carried out: it is malformed input, and "unsupported" -- the
+// answer for what the solver cannot do (3.9.1) -- would misreport it as a
+// capability it lacks. Report it the way the parser reports its own
+// malformed input, with an error response and then a stop.
+void Cpp_interface::badBooleanOptionValue(const std::string& option,
+                                          const std::string& value)
+{
+  const std::string msg = "set-option :" + option +
+                          " takes true or false, but was given: " + value;
+  error(msg);
+  FatalError(msg.c_str());
+}
+
 void Cpp_interface::setOption(std::string option, std::string value)
 {
   /*
@@ -888,7 +932,7 @@ void Cpp_interface::setOption(std::string option, std::string value)
     else if (value == "false")
       setPrintSuccess(false);
     else
-      unsupported();
+      badBooleanOptionValue(option, value);
   }
   else if (option == "produce-models")
   {
@@ -909,7 +953,38 @@ void Cpp_interface::setOption(std::string option, std::string value)
       success();
     }
     else
-      unsupported();
+      badBooleanOptionValue(option, value);
+  }
+  else if (option == "global-declarations")
+  {
+    // SMT-LIB gives this option mode "start" (2.6, 4.1.7), and this is the
+    // one option where a late change is not merely untidy: pop reads the flag
+    // as it stands then, not the value that was in force when the declaration
+    // was made, so setting it with declarations already in hand would decide
+    // their scope after the fact. Refuse instead of answering that
+    // retroactively. Nothing is at stake before the first declaration or
+    // assertion, so set-logic, set-info and the other options may all precede
+    // it, and reset makes it settable again.
+    if (session_touched)
+    {
+      const std::string msg = "set-option :global-declarations must come "
+                              "before anything is declared or asserted";
+      error(msg);
+      FatalError(msg.c_str());
+    }
+
+    if (value == "true")
+    {
+      global_declarations = true;
+      success();
+    }
+    else if (value == "false")
+    {
+      global_declarations = false;
+      success();
+    }
+    else
+      badBooleanOptionValue(option, value);
   }
   else if (option == "produce-unsat-assumptions")
   {
@@ -918,7 +993,7 @@ void Cpp_interface::setOption(std::string option, std::string value)
     if (value == "true" || value == "false")
       success();
     else
-      unsupported();
+      badBooleanOptionValue(option, value);
   }
   else if (option == "diagnostic-output-channel")
   {
@@ -940,6 +1015,8 @@ void Cpp_interface::getOption(std::string option)
     cout << (print_success ? "true" : "false") << endl;
   else if (option == "produce-models")
     cout << (produce_models ? "true" : "false") << endl;
+  else if (option == "global-declarations")
+    cout << (global_declarations ? "true" : "false") << endl;
   else if (option == "diagnostic-output-channel")
     cout << "\"stdout\"" << endl;
   else
@@ -951,16 +1028,136 @@ void Cpp_interface::getOption(std::string option)
   flush(cout);
 }
 
+std::vector<Cpp_interface::CategoryWork> Cpp_interface::currentWork() const
+{
+  std::vector<CategoryWork> result;
+  for (const RunTimes::CategoryTotal& total : bm.GetRunTimes()->totals())
+  {
+    CategoryWork work;
+    work.category = static_cast<int>(total.category);
+    work.count = total.count;
+    work.time_ms = total.time_ms;
+    result.push_back(work);
+  }
+  return result;
+}
+
+void Cpp_interface::recordCheckWork(const std::vector<CategoryWork>& before)
+{
+  last_check_work.clear();
+  for (const CategoryWork& now : currentWork())
+  {
+    CategoryWork charged = now;
+    for (const CategoryWork& then : before)
+    {
+      if (then.category == now.category)
+      {
+        charged.count -= then.count;
+        charged.time_ms -= then.time_ms;
+        break;
+      }
+    }
+
+    // --print-quickstat clears the run times as it prints, so a later
+    // reading can be smaller than the one taken before the solve. Report
+    // nothing rather than a negative count when that happens.
+    if (charged.count > 0 && charged.time_ms >= 0)
+      last_check_work.push_back(charged);
+  }
+}
+
+// The keywords (get-info :all-statistics) answers with, one per run-time
+// category. Deliberately a table of its own rather than RunTimes' display
+// names: those are prose, they are what --print-quickstat prints, and one of
+// them is misspelled -- reusing them would make an output contract out of
+// text that exists to be read, where tidying a name later would break
+// whoever parses it.
+static const char* categoryKeyword(RunTimes::Category c)
+{
+  switch (c)
+  {
+    case RunTimes::Transforming: return "transforming";
+    case RunTimes::SimplifyTopLevel: return "simplifying";
+    case RunTimes::Parsing: return "parsing";
+    case RunTimes::CNFConversion: return "cnf-conversion";
+    case RunTimes::BitBlasting: return "bit-blasting";
+    case RunTimes::Solving: return "sat-solving";
+    case RunTimes::BVSolver: return "bitvector-solving";
+    case RunTimes::PropagateEqualities: return "variable-elimination";
+    case RunTimes::SendingToSAT: return "sending-to-sat-solver";
+    case RunTimes::CounterExampleGeneration:
+      return "counter-example-generation";
+    case RunTimes::SATSimplifying: return "sat-simplification";
+    case RunTimes::ConstantBitPropagation: return "constant-bit-propagation";
+    case RunTimes::ArrayReadRefinement: return "array-read-refinement";
+    case RunTimes::ApplyingSubstitutions: return "applying-substitutions";
+    case RunTimes::RemoveUnconstrained: return "removing-unconstrained";
+    case RunTimes::PureLiterals: return "pure-literals";
+    case RunTimes::UseITEContext: return "ite-contexts";
+    case RunTimes::AIGSimplifyCore: return "aig-core-simplification";
+    case RunTimes::IntervalPropagation: return "interval-propagation";
+    case RunTimes::Flatten: return "sharing-aware-flattening";
+    case RunTimes::NodeDomainAnalysis: return "node-domain-analysis";
+    case RunTimes::StrengthReduction: return "strength-reduction";
+    case RunTimes::SplitExtracts: return "split-extracts";
+    case RunTimes::Rewriting: return "sharing-aware-rewriting";
+    case RunTimes::MergeSame: return "merge-same";
+    case RunTimes::CommonSubSum: return "common-sub-sum-extraction";
+  }
+  return "unknown";
+}
+
 void Cpp_interface::getInfo(std::string flag)
 {
   if (flag == "name")
     cout << "(:name \"STP\")" << endl;
   else if (flag == "version")
     cout << "(:version \"" << get_git_version_tag() << "\")" << endl;
+  else if (flag == "authors")
+  {
+    // Required, like :name and :version (SMT-LIB 2.6, 4.1.8), and answered
+    // collectively: the response is a fixed string, while the people it
+    // stands for are in AUTHORS, where they can be credited properly and
+    // kept current without touching the solver's output.
+    cout << "(:authors \"the STP team\")" << endl;
+  }
   else if (flag == "error-behavior")
   {
     // FatalError() exits rather than unwinding to the next command.
     cout << "(:error-behavior immediate-exit)" << endl;
+  }
+  else if (flag == "all-statistics")
+  {
+    // No standard statistics are defined (SMT-LIB 2.6, 4.1.8), so what is in
+    // here is STP's own; the response shape is the standard's, a sequence of
+    // info_response values. The per-stage numbers are the most recent check's,
+    // as the standard asks; the process ones are what they say, process-wide,
+    // and :check-sat-calls counts the session. Stages the check did no work in
+    // are left out, so a small query does not answer with a screen of zeroes.
+    //
+    // The standard permits this only in sat or unsat mode. STP answers it
+    // whenever it is asked, since the alternative under an immediate-exit
+    // error behaviour is killing a session over a diagnostic query.
+    std::ios_base::fmtflags saved(cout.flags());
+    const std::streamsize saved_precision = cout.precision();
+    cout << std::fixed;
+    cout.precision(2);
+
+    cout << "(:check-sat-calls " << solves_run << endl;
+    cout << " :cpu-time " << processCpuTime() << endl;
+    cout << " :peak-memory-mb " << peakMemoryMB();
+
+    cout.flags(saved);
+    cout.precision(saved_precision);
+
+    for (const CategoryWork& work : last_check_work)
+    {
+      const char* keyword =
+          categoryKeyword(static_cast<RunTimes::Category>(work.category));
+      cout << endl << " :" << keyword << " " << work.count;
+      cout << endl << " :" << keyword << "-time-ms " << work.time_ms;
+    }
+    cout << ")" << endl;
   }
   else if (flag == "assertion-stack-levels")
   {
@@ -970,7 +1167,9 @@ void Cpp_interface::getInfo(std::string flag)
   }
   else
   {
-    // :all-statistics, :authors and :reason-unknown are not reported.
+    // :reason-unknown, the one standard flag left, is optional and not
+    // reported: STP does not answer unknown, so there is never a reason to
+    // give for one.
     unsupported();
     return;
   }
@@ -1229,6 +1428,30 @@ bool Cpp_interface::SolverFrame::removeSymbol(const ASTNode& symbol)
     }
   }
   return false;
+}
+
+void Cpp_interface::SolverFrame::adoptDeclarations(SolverFrame& donor)
+{
+  // Re-add rather than splice: this frame's own bindings index has to end up
+  // knowing about the adopted symbols, and adding them in declaration order
+  // keeps the most recent declaration of a name the one lookupSymbol finds.
+  for (const ASTNode& symbol : donor._scoped_symbols)
+    addSymbol(symbol);
+  donor._scoped_symbols.clear();
+  donor._symbol_bindings.clear();
+
+  // Functions and sort aliases live in contexts shared by every frame; a
+  // frame only records the names it is responsible for erasing, so moving
+  // the names is what moves the responsibility.
+  _scoped_functions.insert(_scoped_functions.end(),
+                           donor._scoped_functions.begin(),
+                           donor._scoped_functions.end());
+  donor._scoped_functions.clear();
+
+  _scoped_sort_aliases.insert(_scoped_sort_aliases.end(),
+                              donor._scoped_sort_aliases.begin(),
+                              donor._scoped_sort_aliases.end());
+  donor._scoped_sort_aliases.clear();
 }
 
 bool Cpp_interface::SolverFrame::lookupSymbol(std::string_view name,

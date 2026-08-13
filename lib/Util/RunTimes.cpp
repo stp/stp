@@ -70,7 +70,7 @@ int64_t getCurrentTime()
 }
 
 // CPU time this process has spent in user mode, in seconds.
-static double processCpuTime()
+double stp::processCpuTime()
 {
 #if defined(_WIN32)
   FILETIME creation, exited, kernel, user;
@@ -90,7 +90,7 @@ static double processCpuTime()
 }
 
 // Peak resident set size of this process, in megabytes.
-static double peakMemoryMB()
+double stp::peakMemoryMB()
 {
 #if defined(_WIN32)
   PROCESS_MEMORY_COUNTERS pmc;
@@ -148,11 +148,28 @@ void RunTimes::print()
   std::cerr.precision(2);
   std::cerr << "Statistics Total: " << ((double)cummulative_ms) / 1000 << "s"
             << std::endl;
-  std::cerr << "CPU Time Used   : " << processCpuTime() << "s" << std::endl;
-  std::cerr << "Peak Memory Used: " << peakMemoryMB() << "MB" << std::endl;
+  std::cerr << "CPU Time Used   : " << stp::processCpuTime() << "s" << std::endl;
+  std::cerr << "Peak Memory Used: " << stp::peakMemoryMB() << "MB" << std::endl;
 
   std::cerr.flags(f);
   clear();
+}
+
+std::vector<RunTimes::CategoryTotal> RunTimes::totals() const
+{
+  std::vector<CategoryTotal> result;
+  for (std::map<Category, int>::const_iterator it = counts.begin();
+       it != counts.end(); it++)
+  {
+    const std::map<Category, int64_t>::const_iterator time =
+        times.find(it->first);
+    CategoryTotal total;
+    total.category = it->first;
+    total.count = it->second;
+    total.time_ms = time == times.end() ? 0 : time->second;
+    result.push_back(total);
+  }
+  return result;
 }
 
 std::string RunTimes::getDifference()
@@ -161,7 +178,7 @@ std::string RunTimes::getDifference()
   int64_t val = stp::getCurrentTime();
   s << (val - lastTime) << "ms";
   lastTime = val;
-  s << ":" << std::fixed << std::setprecision(0) << peakMemoryMB() << "MB";
+  s << ":" << std::fixed << std::setprecision(0) << stp::peakMemoryMB() << "MB";
   return s.str();
 }
 

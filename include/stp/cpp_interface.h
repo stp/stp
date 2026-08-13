@@ -178,6 +178,13 @@ private:
     bool removeSymbol(const ASTNode& symbol);
     bool lookupSymbol(std::string_view name, ASTNode& output) const;
 
+    // Take over every declaration made in `donor`, leaving it empty. Used
+    // for :global-declarations true, where a pop removes the assertion
+    // level but must not end the lifetime of the names declared in it: the
+    // frame being destroyed hands them to the base frame first, so its
+    // destructor has nothing left to erase from the global contexts.
+    void adoptDeclarations(SolverFrame& donor);
+
   private:
     vector<std::string> _scoped_functions;
     vector<std::string> _scoped_sort_aliases;
@@ -201,14 +208,59 @@ private:
   ASTVec& getCurrentSymbols();
   vector<std::string>& getCurrentFunctions();
 
+  // What the most recent check-sat charged to each pipeline stage: the
+  // difference between two readings of the manager's run times taken around
+  // the solve, which is the granularity (get-info :all-statistics) reports on.
+  // Taking a difference rather than reading the totals is what keeps the
+  // answer to "the most recent check" from growing into a session total, and
+  // keeps it independent of --print-quickstat, which clears as it prints.
+  // Categories are held by index so this header need not know the enum.
+  struct CategoryWork
+  {
+    int category;
+    int count;
+    int64_t time_ms;
+  };
+  std::vector<CategoryWork> last_check_work;
+
   void checkInvariant();
   void init();
+
+  // The manager's run times as they stand, and -- given a reading taken in
+  // front of a solve -- what that solve added, which is what
+  // last_check_work holds. Declared over CategoryWork rather than over the
+  // run-time class's own type so this header does not have to know it.
+  std::vector<CategoryWork> currentWork() const;
+  void recordCheckWork(const std::vector<CategoryWork>& before);
+
+  // Report (set-option :<option> <value>) where the option's argument is a
+  // <b_value> and the value is neither true nor false. Malformed rather than
+  // unsupported, so it is an error response and not "unsupported"; STP's
+  // :error-behavior is immediate-exit, so it does not return.
+  ATTR_NORETURN void badBooleanOptionValue(const std::string& option,
+                                           const std::string& value);
   void addFrame();
   void removeFrame();
   void assertRoundingModeValid(const ASTNode& s);
   void resetIncrementalSolver();
 
   bool produce_models;
+
+  // :global-declarations. False (the required default) scopes declarations
+  // and definitions to the assertion level that made them; true makes them
+  // permanent, so pop and reset-assertions keep them and reset -- which
+  // discards every declaration -- is the only thing that takes them away.
+  //
+  // Initialised here rather than in init(), which reset() re-runs: reset
+  // empties the assertion stack and with it the declarations, but the option
+  // saying how later declarations are scoped outlives it.
+  bool global_declarations = false;
+
+  // Whether anything has been declared, defined, asserted, pushed or solved
+  // since start-up or the last reset. :global-declarations may only be set
+  // while this is false -- see setOption. init() clears it, so reset makes
+  // the option settable again; reset-assertions deliberately does not.
+  bool session_touched;
 
   // Whether the model held by the counterexample tables answers for the
   // current assertion stack. Set by checkSat from the solve's outcome;
@@ -294,8 +346,8 @@ public:
 
   // define-sort aliases for floating-point sorts. A real table: the alias
   // name is NOT interned as a symbol (the old scheme made the sort name
-  // resolvable as a term variable). Aliases follow assertion-frame scope;
-  // STP does not support global declarations.
+  // resolvable as a term variable). Aliases follow assertion-frame scope,
+  // and :global-declarations along with the other declarations.
   DLL_PUBLIC void addSortAlias(const std::string& name, unsigned exp_width,
                                unsigned sig_width);
   DLL_PUBLIC bool lookupSortAlias(const std::string& name,
@@ -410,9 +462,9 @@ public:
   // Reset STP back to "just started up" state.
   DLL_PUBLIC void reset();
 
-  // Empty the assertion stack and discard its declarations/definitions,
-  // while retaining solver options and the selected logic. STP does not
-  // support :global-declarations, so its required default is false.
+  // Empty the assertion stack while retaining solver options and the
+  // selected logic. Under the default :global-declarations false this
+  // discards the declarations and definitions too; under true they stay.
   DLL_PUBLIC void resetAssertions();
   DLL_PUBLIC void pop();
   DLL_PUBLIC void push();
