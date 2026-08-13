@@ -100,6 +100,10 @@ private:
 
   ASTNode chaseRead(ASTChildren children, unsigned int width);
 
+  // Push an extract down through the operators it passes through, in a loop.
+  // Null if none of them applies.
+  ASTNode narrowExtract(unsigned width, ASTChildren children);
+
   ASTNode simplifyArrayEquality(const ASTNode& a, const ASTNode& b);
 
   ASTNode plusRules(const ASTNode& n0, const ASTNode& n1);

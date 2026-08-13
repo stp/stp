@@ -1131,4 +1131,42 @@ TEST(SimplifyingNodeFactory_Exhaustive, division_of_remainder_near_misses)
   c.checkTerm(BVDIV, w, {c.hf->CreateTerm(SBVREM, w, a, b), b}, false);
 }
 
+/* An extract narrows through a whole stack of operators at once, not just the
+   one immediately beneath it: every slice of a term built from concats, sign
+   extensions, complements and nested extracts must mean what it meant before
+   the pushes, at every assignment and for every slice. */
+TEST(SimplifyingNodeFactory_Exhaustive, extract_narrows_through_a_stack)
+{
+  Context c;
+  ASTNode x = c.bv(2);
+  ASTNode y = c.bv(2);
+
+  // (~(sx(x, 4) ++ y))[hi:lo], and the same under an outer extract, so the
+  // walk crosses concat, bvnot, bvsx and extract in one go.
+  ASTNode sx = c.hf->CreateTerm(BVSX, 4, x, c.konst(4, 32));
+  ASTNode cat = c.hf->CreateTerm(BVCONCAT, 6, sx, y);
+  ASTNode nt = c.hf->CreateTerm(BVNOT, 6, cat);
+  ASTNode neg = c.hf->CreateTerm(BVUMINUS, 6, nt);
+
+  for (const ASTNode& base : {cat, nt, neg})
+  {
+    for (unsigned hi = 0; hi < 6; hi++)
+    {
+      for (unsigned lo = 0; lo <= hi; lo++)
+      {
+        // Every slice, whichever side of the concat it falls on and whether
+        // or not it straddles the split.
+        c.checkTerm(BVEXTRACT, hi - lo + 1,
+                    {base, c.konst(hi, 32), c.konst(lo, 32)}, false);
+
+        // The same slice reached through an outer extract of an inner one.
+        ASTNode inner = c.hf->CreateTerm(BVEXTRACT, hi + 1, base,
+                                         c.konst(hi, 32), c.konst(0, 32));
+        c.checkTerm(BVEXTRACT, hi - lo + 1,
+                    {inner, c.konst(hi - lo, 32), c.konst(0, 32)}, false);
+      }
+    }
+  }
+}
+
 } // namespace
