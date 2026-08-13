@@ -831,11 +831,19 @@ void vc_push(VC vc)
 {
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
+
   stp_i->ClearAllTables();
   b->Push();
 }
 
 //NB, doesn't remove symbols from decls, so they will be kept alive.
+//
+// Deliberately does NOT discard the counterexample tables, unlike vc_push
+// and vc_query: the C API's idiom brackets each query in push/pop and reads
+// the counterexample afterwards (see tests/api/C/stp-counterex.cpp). The
+// model belongs to the last vc_query, not to the assertion stack, and stays
+// readable until the next vc_push or vc_query clears it -- both of which
+// run before any state they clear could be reused for solving.
 void vc_pop(VC vc)
 {
   stp::STPMgr* b = mgr(vc);
@@ -3159,10 +3167,10 @@ void process_argument(const char ch, VC vc)
       bm->UserFlags.optimize_flag = false;
       break;
     case 'c':
-      bm->UserFlags.construct_counterexample_flag = true;
+      bm->UserFlags.request_counterexample = true;
       break;
     case 'd':
-      bm->UserFlags.construct_counterexample_flag = true;
+      bm->UserFlags.request_counterexample = true;
       bm->UserFlags.check_counterexample_flag = true;
       break;
 

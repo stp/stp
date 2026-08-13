@@ -187,6 +187,20 @@ public:
 
   // check the counterexample against the original input to STP
   bool check_counterexample_flag = false;
+
+  // SMT-LIB (set-option :produce-models true): models must be readable
+  // after sat answers. An input to the construct_counterexample_flag
+  // derivations, deliberately separate from check_counterexample_flag --
+  // asking for models is not asking for them to be verified, and
+  // construction itself may be deferred to the first read.
+  bool produce_models = false;
+
+  // The C API's 'c'/'d' flags ask for a counterexample directly, with no
+  // other trace of the request. Held here so the derivation below can be
+  // recomputed per query rather than merely widened: a flag that only ever
+  // gains value latches, and callers read it as "a model was asked for".
+  bool request_counterexample = false;
+
   //This is derived from other settings.
   bool construct_counterexample_flag = false;
 

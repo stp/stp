@@ -463,11 +463,15 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     }
   }
 
-  if (bm->UserFlags.check_counterexample_flag ||
-      bm->UserFlags.print_counterexample_flag || (arrayops && !removed))
-    bm->UserFlags.construct_counterexample_flag = true;
-  else
-    bm->UserFlags.construct_counterexample_flag = false;
+  // Recomputed per query, never latched: every input is available here,
+  // including the C API's direct request, so a query that happens to need a
+  // candidate model cannot leave construction switched on for the rest of
+  // the session.
+  bm->UserFlags.construct_counterexample_flag =
+      bm->UserFlags.check_counterexample_flag ||
+      bm->UserFlags.print_counterexample_flag ||
+      bm->UserFlags.produce_models || bm->UserFlags.request_counterexample ||
+      (arrayops && !removed);
 
 #ifndef NDEBUG
   bm->UserFlags.construct_counterexample_flag = true;
