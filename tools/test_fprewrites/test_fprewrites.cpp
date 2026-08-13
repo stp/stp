@@ -192,27 +192,107 @@ struct Ctx
     return blastTree(s);
   }
 
-  // Fold a blasted circuit to a constant under `memo`, which arrives seeded
-  // with the assignment (symbol -> packed constant) and memoises every
-  // shared subterm -- symfpu circuits are DAGs, and an uncached walk
-  // re-evaluates the shared spine exponentially often. Per node,
-  // NonMemberBVConstEvaluator does the arithmetic on the already-folded
-  // children.
-  ASTNode foldBlasted(const ASTNode& n, ASTNodeMap& memo)
+  // A blasted circuit flattened for repeated evaluation. Enumerating a rule
+  // exhaustively folds the same DAG once per assignment, so everything that
+  // does not depend on the assignment is hoisted out of that loop: the DAG is
+  // linearised once into a topological order with child *indices*, and each
+  // pass is then a flat sweep over an array -- no hashing, no recursion, and
+  // no re-walking of the shared spine. Both sides of a rule go into ONE
+  // Circuit, so subterms they share (which is most of the DAG for rules that
+  // rewrite one operand) are evaluated once between them.
+  struct Circuit
   {
+    std::vector<ASTNode> node;             // topological: children first
+    std::vector<uint32_t> kidStart;        // index into `kid`, size n+1
+    std::vector<uint32_t> kid;             // child slots, concatenated
+    std::vector<uint8_t> assignmentBound;  // slot's value varies per assignment
+    std::vector<ASTNode> value;            // scratch: the current fold
+
+    uint32_t size() const { return (uint32_t)node.size(); }
+  };
+
+  // Add `n` and everything below it to `c` (iteratively: blasted floating-point
+  // circuits are deep enough that a recursive walk is a real stack risk), and
+  // return its slot. `slotOf` carries over between calls so a second root
+  // reuses the first one's slots.
+  uint32_t linearise(const ASTNode& n, Circuit& c, ASTNodeCountMap& slotOf)
+  {
+    std::vector<std::pair<ASTNode, bool>> todo{{n, false}};
+    while (!todo.empty())
+    {
+      const ASTNode cur = todo.back().first;
+      const bool expanded = todo.back().second;
+      todo.pop_back();
+      if (slotOf.find(cur) != slotOf.end())
+        continue;
+      if (!expanded)
+      {
+        // Revisit `cur` once its children hold slots.
+        todo.push_back({cur, true});
+        for (const ASTNode& ch : cur)
+          if (slotOf.find(ch) == slotOf.end())
+            todo.push_back({ch, false});
+        continue;
+      }
+      const uint32_t slot = c.size();
+      c.node.push_back(cur);
+      c.kidStart.push_back((uint32_t)c.kid.size());
+      bool bound = false;
+      for (const ASTNode& ch : cur)
+      {
+        const uint32_t ks = (uint32_t)slotOf.find(ch)->second;
+        c.kid.push_back(ks);
+        bound |= (c.assignmentBound[ks] != 0);
+      }
+      if (cur.GetKind() == SYMBOL)
+        bound = true;
+      c.assignmentBound.push_back(bound ? 1 : 0);
+      slotOf.insert({cur, (int32_t)slot});
+    }
+    return (uint32_t)slotOf.find(n)->second;
+  }
+
+  // Close the child table off with its end sentinel, once both roots are in.
+  static void finalise(Circuit& c)
+  {
+    c.kidStart.push_back((uint32_t)c.kid.size());
+  }
+
+  // Fold every slot that does not depend on the assignment. Done once, before
+  // the enumeration, so the constant subcircuits symfpu emits are not refolded
+  // on every one of the (up to 2^18) passes.
+  void foldInvariant(Circuit& c)
+  {
+    c.value.assign(c.size(), mgr.ASTUndefined);
+    for (uint32_t i = 0; i < c.size(); i++)
+      if (!c.assignmentBound[i])
+        c.value[i] = evalSlot(c, i);
+  }
+
+  // Reused across every slot of every pass: the operand vector is otherwise a
+  // heap allocation per node, which at millions of node-evaluations per rule
+  // costs more than the arithmetic it carries.
+  ASTVec evalKids;
+
+  ASTNode evalSlot(const Circuit& c, uint32_t i)
+  {
+    const ASTNode& n = c.node[i];
     if (n.isConstant())
       return n;
-    const auto found = memo.find(n);
-    if (found != memo.end())
-      return found->second;
-    ASTVec kids;
-    kids.reserve(n.Degree());
-    for (const ASTNode& ch : n)
-      kids.push_back(foldBlasted(ch, memo));
-    const ASTNode r =
-        NonMemberBVConstEvaluator(&mgr, n.GetKind(), kids, n.GetValueWidth());
-    memo.insert({n, r});
-    return r;
+    evalKids.clear();
+    for (uint32_t k = c.kidStart[i]; k < c.kidStart[i + 1]; k++)
+      evalKids.push_back(c.value[c.kid[k]]);
+    return NonMemberBVConstEvaluator(&mgr, n.GetKind(), evalKids,
+                                     n.GetValueWidth());
+  }
+
+  // One pass: the symbol slots already hold the assignment, so sweeping the
+  // topological order in index order folds the whole circuit.
+  void foldAssignment(Circuit& c)
+  {
+    for (uint32_t i = 0; i < c.size(); i++)
+      if (c.assignmentBound[i] && c.node[i].GetKind() != SYMBOL)
+        c.value[i] = evalSlot(c, i);
   }
 
   // A comparable key for a folded result: Booleans get sentinels clear of
@@ -312,8 +392,22 @@ struct Ctx
       combos *= d;
     }
 
-    const ASTNode blastedBefore = blastOnce(before);
-    const ASTNode blastedAfter = blastOnce(after);
+    Circuit circuit;
+    ASTNodeCountMap slotOf;
+    const uint32_t rootBefore = linearise(blastOnce(before), circuit, slotOf);
+    const uint32_t rootAfter = linearise(blastOnce(after), circuit, slotOf);
+    finalise(circuit);
+    foldInvariant(circuit);
+
+    // Where each symbol's value goes. A symbol absent from the blasted
+    // circuit (a rewrite may drop one) simply has no slot.
+    std::vector<uint32_t> symSlot(syms.size(), UINT32_MAX);
+    for (size_t i = 0; i < syms.size(); i++)
+    {
+      const auto found = slotOf.find(syms[i]);
+      if (found != slotOf.end())
+        symSlot[i] = (uint32_t)found->second;
+    }
 
     // For the NaN collapse in key(). A float term knows its format (derived
     // if need be); a Boolean check reads 0s and collapses nothing.
@@ -321,18 +415,18 @@ struct Ctx
 
     for (uint64_t c = 0; c < combos; c++)
     {
-      ASTNodeMap assignment;
       uint64_t rest = c;
       for (size_t i = 0; i < syms.size(); i++)
       {
         const uint64_t size = domain(syms[i]);
-        assignment.insert({syms[i], valueFor(syms[i], rest % size)});
+        const ASTNode v = valueFor(syms[i], rest % size);
         rest /= size;
+        if (symSlot[i] != UINT32_MAX)
+          circuit.value[symSlot[i]] = v;
       }
-      ASTNodeMap memoBefore(assignment);
-      ASTNodeMap memoAfter(assignment);
-      if (key(foldBlasted(blastedBefore, memoBefore), eb, sb) !=
-          key(foldBlasted(blastedAfter, memoAfter), eb, sb))
+      foldAssignment(circuit);
+      if (key(circuit.value[rootBefore], eb, sb) !=
+          key(circuit.value[rootAfter], eb, sb))
         return "meaning changed at assignment " + std::to_string(c);
     }
     return "";
