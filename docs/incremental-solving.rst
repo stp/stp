@@ -123,15 +123,14 @@ repairs or resets on divergence. The conjunction can also change when an
 assertion is appended at the current depth, so depth alone is never a stable
 identity.
 
-Each check-sat runs on a worker thread with a large explicit stack.
-Several passes walk formulas by recursion -- the per-conjunct
-simplifier, substitution replace, the bit-blaster -- and parse-time
-inlining of chained ``define-fun``\ s builds nodes tens of thousands of
-levels deep out of flat input, deeper than a default-sized stack can
-walk. The worker inherits the process's thread-local solver state
-explicitly: it boots CONSTANTBV for itself and continues (then hands
-back) the node uid counter, which caches keyed on node numbers rely
-on.
+Each check-sat runs on the caller's stack. It did not always: the passes
+a check-sat drives -- the per-conjunct simplifier, substitution replace,
+the bit-blaster -- walked formulas by recursion, and parse-time inlining
+of chained ``define-fun``\ s builds nodes tens of thousands of levels deep
+out of flat input, deeper than a default-sized stack can walk, so the
+driver ran each check-sat on a worker thread with a 256 MiB stack. Those
+passes keep their working state on the heap now, and ``DeepDag_Test``
+drives a 20,000-deep check-sat under a 1 MiB stack bound to say so.
 
 Word-level rewriting is kept sound under retraction by construction
 rather than by backtracking:
@@ -629,8 +628,8 @@ whole-array-equality route is
 instead enclosed by ``extensionality-us``. ``refinement-us`` includes its SAT
 re-solves. ``rebuild-reset-us`` measures backend replacement and base
 re-simplification; the subsequent live-stack re-encoding is reported under
-``encode-us``. ``total-us`` begins immediately before the driver's large-stack
-worker is launched, but does not include frontend assertion snapshot
+``encode-us``. ``total-us`` begins immediately before the driver's
+check-sat body, but does not include frontend assertion snapshot
 construction, checks answered from the frontend cache or batch path, or a
 model materialized lazily after the solve.
 
