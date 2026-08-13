@@ -68,6 +68,21 @@
 #                 the checker on a batch of the size QUERIES will produce, then
 #
 #                   CHECKER=<validated> QUERIES=100 LOGICS=QF_BVFP ./fuzz_single.sh
+#
+#                 QF_ABVFP draws floating-point sorts into its array sorts,
+#                 so selects and stores cross between the theories -- the
+#                 region stp/stp#824 and #825 lived in, which the pure
+#                 bit-vector arrays could never reach. Ask for more reads
+#                 than the generator's defaults: reads are what push an
+#                 array past the eager-expansion regime, and the defaults
+#                 found nothing in 600 files where this entry crashed a
+#                 pre-fix build about 4 files in 100:
+#
+#                   LOGICS='QF_ABVFP -mr 12 -Mr 30 -mw 4 -Mw 12 -Mar 3 | --array-equality'
+#
+#                 (--array-equality because the generated files compare
+#                 whole arrays by default, as -mxn/-Mxn default to 0..2
+#                 for this logic.)
 #   LOGIC         A single entry, for the same purpose. Ignored if LOGICS is
 #                 set. Default: the built-in list.
 #   QUERIES       Queries per generated file. Default: 2500.
