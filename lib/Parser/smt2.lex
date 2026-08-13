@@ -3,7 +3,7 @@
 %option noyywrap
 %option noreject
 %option noyymore
-%option full
+%option 8bit
 
 /* %option debug */
 
