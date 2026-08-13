@@ -685,7 +685,21 @@ struct IncrementalSolver::Impl
   // Storage handed out by the ToSATBase adapter (the refinement machinery
   // asks for the symbol map by reference), and the adapter itself,
   // constructed on first array use (its class is defined below Impl).
+  //
+  // The storage is a cache. The refinement loop asks for the map once per
+  // round, and rebuilding it is a walk over every blasted symbol -- the
+  // per-round cost the batch path avoids by handing out one map by
+  // reference (see CallSAT_ResultCheck). It stays valid until either a
+  // new AIG-to-variable binding appears (setVarOfAig, which every encode
+  // and totalisation funnels through) or a new check-sat begins, whose
+  // scope reconciliation can change the eliminated-variable filter the
+  // map is built under. Batch semantics are also why STALENESS ONLY, not
+  // content, may invalidate it: getSatVariables inserts freshly minted
+  // variables for never-blasted symbols straight into the handed-out
+  // map, and a rebuild inside one check would discard them and mint
+  // duplicates the next round.
   ToSATBase::ASTNodeToSATVar symbolMapStorage;
+  bool symbolMapCacheValid = false;
   std::unique_ptr<ToSATBase> adapter;
 
   // Created on first floating-point use; see fpContext().
@@ -2777,6 +2791,9 @@ struct IncrementalSolver::Impl
     if (id >= aigIdToVar.size())
       aigIdToVar.resize(id + 1, -1);
     aigIdToVar[id] = var;
+    // A new binding can give a blasted symbol bits the cached adapter map
+    // does not know; every encode and totalisation funnels through here.
+    symbolMapCacheValid = false;
   }
 
   void addClause(SATSolver::vec_literals& c)
@@ -3783,6 +3800,7 @@ struct IncrementalSolver::Impl
     fpCtx.reset();
     adapter.reset();
     releaseContainer(symbolMapStorage);
+    symbolMapCacheValid = false;
 
     releaseContainer(fragmentCache);
     releaseContainer(myReads);
@@ -3992,6 +4010,7 @@ struct IncrementalSolver::Impl
       rotateEncodingEpoch();
 
     aigIdToVar.clear();
+    symbolMapCacheValid = false;
     trueVar = -1;
     rootLitOf.clear();
     actLitOf.clear();
@@ -4802,8 +4821,12 @@ public:
 
   ASTNodeToSATVar& SATVar_to_SymbolIndexMap() override
   {
-    d->symbolMapStorage.clear();
-    d->buildSymbolMap(d->symbolMapStorage);
+    if (!d->symbolMapCacheValid)
+    {
+      d->symbolMapStorage.clear();
+      d->buildSymbolMap(d->symbolMapStorage);
+      d->symbolMapCacheValid = true;
+    }
     return d->symbolMapStorage;
   }
 
@@ -5526,6 +5549,9 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   impl->assumedLitLevels.clear();
   impl->lastLevelLitConjuncts.clear();
   impl->lastFailedLits.clear();
+  // Scope reconciliation below can change the eliminated-variable filter
+  // the adapter's cached symbol map was built under.
+  impl->symbolMapCacheValid = false;
   {
     ScopedProfileTimer maintenanceTimer(impl->profile.enabled,
                                         impl->profile.maintenanceNs);
