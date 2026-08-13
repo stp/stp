@@ -25,6 +25,7 @@ THE SOFTWARE.
 #include "stp/Incremental/IncrementalSolver.h"
 
 #include "stp/Incremental/IncrementalCBP.h"
+#include "stp/Incremental/IncrementalCnfEncoder.h"
 #include "stp/Incremental/IncrementalPolicy.h"
 #include "stp/Incremental/IncrementalProfile.h"
 #include "stp/Incremental/IncrementalScopeState.h"
@@ -307,13 +308,12 @@ struct IncrementalSolver::Impl
   // below keep the call sites reading as they always have.
   IncrementalWalks walks;
 
-  // AIG object Id -> CNF variable; -1 = not encoded yet. AIG Ids are dense
-  // and only grow within one resettable encoding epoch.
-  std::vector<int> aigIdToVar;
-
-  // The variable standing for the AIG's constant-1 node, unit-asserted at
-  // creation; -1 until first needed.
-  int trueVar;
+  // The incremental Tseitin encoder over the persistent solver; owns the
+  // AIG-to-variable table and the shared TRUE variable
+  // (IncrementalCnfEncoder.h). Thin forwarders below keep call sites
+  // unchanged; its binding generation is what validates the adapter's
+  // cached symbol map.
+  IncrementalCnfEncoder cnf;
 
   // conjunct -> root literal (2*var + sign). Epoch-persistent: the encoding
   // of a formula is a definition, valid in every context using this AIG/SAT
@@ -373,16 +373,17 @@ struct IncrementalSolver::Impl
   // round, and rebuilding it is a walk over every blasted symbol -- the
   // per-round cost the batch path avoids by handing out one map by
   // reference (see CallSAT_ResultCheck). It stays valid until either a
-  // new AIG-to-variable binding appears (setVarOfAig, which every encode
-  // and totalisation funnels through) or a new check-sat begins, whose
-  // scope reconciliation can change the eliminated-variable filter the
-  // map is built under. Batch semantics are also why STALENESS ONLY, not
-  // content, may invalidate it: getSatVariables inserts freshly minted
-  // variables for never-blasted symbols straight into the handed-out
-  // map, and a rebuild inside one check would discard them and mint
-  // duplicates the next round.
+  // new AIG-to-variable binding appears (the encoder's generation counter
+  // moves, which every encode and totalisation funnels through) or a new
+  // check-sat begins, whose scope reconciliation can change the
+  // eliminated-variable filter the map is built under. Batch semantics
+  // are also why STALENESS ONLY, not content, may invalidate it:
+  // getSatVariables inserts freshly minted variables for never-blasted
+  // symbols straight into the handed-out map, and a rebuild inside one
+  // check would discard them and mint duplicates the next round.
   ToSATBase::ASTNodeToSATVar symbolMapStorage;
   bool symbolMapCacheValid = false;
+  uint64_t symbolMapGeneration = 0;
   std::unique_ptr<ToSATBase> adapter;
 
   // Created on first floating-point use; see fpContext().
@@ -2061,8 +2062,8 @@ struct IncrementalSolver::Impl
       : bm(bm_), ce(ce_), batchSimp(batchSimp_), batchAT(batchAT_),
         policy(bm_->UserFlags.incremental_core_only),
         solver(makeBackend(bm_->UserFlags, true)), encoding(bm_),
-        walks(bm_->ASTFalse),
-        trueVar(-1), lastUnsat(false), lastUnsatCoarse(false),
+        walks(bm_->ASTFalse), cnf(solver.get()),
+        lastUnsat(false), lastUnsatCoarse(false),
         lastLevelIndividual(false), modelPending(false),
         trailReuseAllowed(!policy.coreOnly()), lastLevelCount(0),
         bvaDecided(false),
@@ -2123,29 +2124,9 @@ struct IncrementalSolver::Impl
                             currentLiveClauseMass, maxLiveClauseMass);
   }
 
-  int varOfAig(Aig_Obj_t* regular)
-  {
-    const unsigned id = Aig_ObjId(regular);
-    if (id >= aigIdToVar.size())
-      return -1;
-    return aigIdToVar[id];
-  }
+  int varOfAig(Aig_Obj_t* regular) const { return cnf.varOf(regular); }
 
-  void setVarOfAig(Aig_Obj_t* regular, int var)
-  {
-    const unsigned id = Aig_ObjId(regular);
-    if (id >= aigIdToVar.size())
-      aigIdToVar.resize(id + 1, -1);
-    aigIdToVar[id] = var;
-    // A new binding can give a blasted symbol bits the cached adapter map
-    // does not know; every encode and totalisation funnels through here.
-    symbolMapCacheValid = false;
-  }
-
-  void addClause(SATSolver::vec_literals& c)
-  {
-    solver->addClause(c);
-  }
+  void addClause(SATSolver::vec_literals& c) { cnf.addClause(c); }
 
   static uint64_t addMass(uint64_t a, uint64_t b)
   {
@@ -2358,95 +2339,9 @@ struct IncrementalSolver::Impl
     hasPendingLiveCone = false;
   }
 
-  void addBinary(int lit_a, int lit_b)
-  {
-    SATSolver::vec_literals c;
-    c.push(SATSolver::mkLit(lit_a >> 1, lit_a & 1));
-    c.push(SATSolver::mkLit(lit_b >> 1, lit_b & 1));
-    addClause(c);
-  }
+  void addBinary(int lit_a, int lit_b) { cnf.addBinary(lit_a, lit_b); }
 
-  int ensureTrueVar()
-  {
-    if (trueVar == -1)
-    {
-      trueVar = solver->newVar();
-      SATSolver::vec_literals unit;
-      unit.push(SATSolver::mkLit(trueVar, false));
-      addClause(unit);
-    }
-    return trueVar;
-  }
-
-  // Tseitin-encode the cone of `regular` (an uncomplemented AIG node) into
-  // the solver, allocating variables and definitional clauses for the nodes
-  // not encoded yet. Everything emitted is a conservative extension, so it
-  // is never retracted.
-  void ensureEncoded(Aig_Obj_t* regular)
-  {
-    std::vector<Aig_Obj_t*> work;
-    work.push_back(regular);
-
-    while (!work.empty())
-    {
-      Aig_Obj_t* r = work.back();
-      assert(!Aig_IsComplement(r));
-
-      if (varOfAig(r) != -1)
-      {
-        work.pop_back();
-        continue;
-      }
-
-      if (Aig_ObjIsConst1(r))
-      {
-        setVarOfAig(r, ensureTrueVar());
-        work.pop_back();
-        continue;
-      }
-
-      if (Aig_ObjIsCi(r))
-      {
-        setVarOfAig(r, solver->newVar());
-        work.pop_back();
-        continue;
-      }
-
-      assert(Aig_ObjIsAnd(r));
-      Aig_Obj_t* f0 = Aig_ObjFanin0(r);
-      Aig_Obj_t* f1 = Aig_ObjFanin1(r);
-
-      const int v0 = varOfAig(f0);
-      const int v1 = varOfAig(f1);
-      if (v0 == -1)
-      {
-        work.push_back(f0);
-        continue;
-      }
-      if (v1 == -1)
-      {
-        work.push_back(f1);
-        continue;
-      }
-
-      // v <-> (l0 & l1)
-      const int v = solver->newVar();
-      const int l0 = 2 * v0 + (Aig_ObjFaninC0(r) ? 1 : 0);
-      const int l1 = 2 * v1 + (Aig_ObjFaninC1(r) ? 1 : 0);
-
-      addBinary(2 * v + 1, l0);
-      addBinary(2 * v + 1, l1);
-
-      SATSolver::vec_literals c;
-      c.push(SATSolver::mkLit(v, false));
-      c.push(SATSolver::mkLit(l0 >> 1, !(l0 & 1)));
-      c.push(SATSolver::mkLit(l1 >> 1, !(l1 & 1)));
-      addClause(c);
-
-      setVarOfAig(r, v);
-      work.pop_back();
-    }
-  }
+  void ensureEncoded(Aig_Obj_t* regular) { cnf.ensureEncoded(regular); }
 
   // Harvest a base-level substitution from a conjunct, if it defines one.
   // The conjunct itself is still encoded and asserted regardless, which is
@@ -3182,7 +3077,7 @@ struct IncrementalSolver::Impl
     // clear() leaves the high-water allocation behind for vectors and hash
     // tables. These were made logically empty by the backend reset; swap now
     // makes the relief boundary reclaim their storage as well.
-    releaseContainer(aigIdToVar);
+    cnf.releaseStorage();
     releaseContainer(rootLitOf);
     releaseContainer(aigRootOf);
     releaseContainer(permanentAigRoots);
@@ -3342,9 +3237,8 @@ struct IncrementalSolver::Impl
     if (reason == RebuildReason::Relief)
       rotateEncodingEpoch();
 
-    aigIdToVar.clear();
+    cnf.reset(solver.get());
     symbolMapCacheValid = false;
-    trueVar = -1;
     rootLitOf.clear();
     actLitOf.clear();
     everAssumedLits.clear();
@@ -4188,11 +4082,13 @@ public:
 
   ASTNodeToSATVar& SATVar_to_SymbolIndexMap() override
   {
-    if (!d->symbolMapCacheValid)
+    if (!d->symbolMapCacheValid ||
+        d->symbolMapGeneration != d->cnf.generation())
     {
       d->symbolMapStorage.clear();
       d->buildSymbolMap(d->symbolMapStorage);
       d->symbolMapCacheValid = true;
+      d->symbolMapGeneration = d->cnf.generation();
     }
     return d->symbolMapStorage;
   }
