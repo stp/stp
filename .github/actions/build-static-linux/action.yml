@@ -147,8 +147,9 @@ runs:
     id: build
     shell: bash
     working-directory: build
+    # 400M rather than 800M; see the note in ci.yml's gcc/clang job.
     env:
-      CCACHE_MAXSIZE: 800M
+      CCACHE_MAXSIZE: 400M
     run: |
       ccache --zero-stats
       cmake --build . --parallel "$(nproc)"

@@ -1,0 +1,70 @@
+# The repository gets one 10GB Actions cache allowance, shared by every key
+# every workflow writes, and ci.yml writes keys that can only accumulate: the
+# compiler caches end in github.run_id, so each run leaves its predecessor
+# behind, and a pull request's caches outlive the pull request. Nothing removed
+# either, so the allowance filled and GitHub started evicting by least-recent
+# use -- which falls on whatever is written in small pieces, the sccache objects
+# the Windows legs write above all, rather than on the multi-hundred-megabyte
+# tarballs that caused the pressure.
+#
+# scripts/prune-ci-caches.sh explains which entries are safe to delete and why.
+name: Cache cleanup
+
+on:
+  # After a CI run rather than inside one. The entries worth deleting are the
+  # ones that run has just superseded, and once it has finished nothing is
+  # going to ask for them. NB workflow_run only fires for the copy of this file
+  # on the default branch, so a pull request cannot exercise this path.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+  # The backstop for entries no later run supersedes: a pull request merged and
+  # never built again, a branch deleted, a job renamed out of existence.
+  schedule:
+    - cron: '17 4 * * *'
+
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Report what would be deleted, delete nothing
+        type: boolean
+        default: false
+
+permissions:
+  actions: write       # delete cache entries
+  contents: read       # check the script out
+  pull-requests: read  # tell an open pull request from a closed one
+
+# Prunes are interchangeable. One already running leaves this one nothing to
+# do, and cancelling one loses no work that the next will not redo.
+concurrency:
+  group: cache-cleanup
+  cancel-in-progress: true
+
+jobs:
+  prune:
+    name: Prune superseded caches
+    runs-on: ubuntu-latest
+
+    steps:
+
+    # No submodules: this job runs one script against the GitHub API and
+    # compiles nothing.
+    #
+    # The ref is pinned rather than left to default. A workflow_run job holds
+    # actions: write and is triggered by CI runs that include pull requests from
+    # forks, so what it executes must come from the branch this repository
+    # controls and never from the tree that triggered it. Pinning also costs
+    # nothing to work around: the script takes --dry-run and runs anywhere gh is
+    # authenticated, which is how a change to it should be tried out.
+    - uses: actions/checkout@v7
+      with:
+        ref: ${{ github.event.repository.default_branch }}
+
+    - name: Prune
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: ./scripts/prune-ci-caches.sh ${{ inputs.dry-run && '--dry-run' || '' }}
+
+# EOF
