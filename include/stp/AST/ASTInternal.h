@@ -80,18 +80,6 @@ protected:
   uint64_t node_uid;
   static THREAD_LOCAL_IE uint64_t node_uid_cntr;
 
-public:
-  // The counter is thread-local. A worker thread that creates nodes must
-  // continue the spawning thread's numbering and hand the advanced value
-  // back when it finishes (the incremental driver's large-stack solve
-  // worker does exactly this); a worker that starts from its own zero
-  // gives fresh nodes uids that collide with live main-thread nodes, and
-  // every cache keyed on node numbers -- the deterministic
-  // extensionality names above all -- can cross-bind.
-  static uint64_t getUidCounter() { return node_uid_cntr; }
-  static void adoptUidCounter(uint64_t v) { node_uid_cntr = v; }
-
-protected:
   // reference counting for garbage collection
   uint32_t _ref_count;
 

@@ -28,7 +28,6 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/Globals/Globals.h"
 #include <cstdint>
-#include <functional>
 #include <memory>
 
 // The incremental solving driver; docs/incremental-solving.rst tells the
@@ -208,21 +207,14 @@ public:
   struct Impl;
 
 private:
-  // The body of checkSat. The public method runs it on a worker thread
-  // with a large explicit stack: several passes walk formulas by
-  // recursion, and parse-time inlining of chained define-funs builds
-  // nodes deep enough (tens of thousands of levels from flat input) to
-  // exhaust a default-sized stack.
-  SOLVER_RETURN_TYPE checkSatOnCurrentStack(const ASTVec& assertionsSMT2,
+  // The bodies of the two public entry points above, split out so that the
+  // profile bracket and the pending-model latch enclose every path through
+  // them -- both bodies return from many places.
+  SOLVER_RETURN_TYPE checkSatBody(const ASTVec& assertionsSMT2,
                                             bool assumeLastLevelPerConjunct,
                                             bool firstForcedIncrementalSolve);
 
-  // Run `body` on the large-stack worker with the thread-local solver
-  // state carried across (CONSTANTBV boot, the node uid counter);
-  // checkSat and deferred model construction both go through this.
-  void runOnDriverStack(const std::function<void()>& body);
-
-  void materializeOnCurrentStack();
+  void buildPendingModel();
 
   std::unique_ptr<Impl> impl;
 };
