@@ -63,7 +63,9 @@
 #include <string>
 
 #include <cctype>
+#include <cerrno>
 #include <cstdlib>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -256,6 +258,23 @@ namespace stp
   extern int smt2lineno;
   extern bool stringOnly;
 
+  // Whether a token is all digits and out of range for the unsigned that
+  // every numeric position in this grammar but a real magnitude wants. The
+  // lexer made the same call to choose the token; recomputing it keeps the
+  // diagnostic a function of the text it is reporting.
+  static bool numeralTooLargeForIndex(const char* text)
+  {
+    if (text == nullptr || *text == '\0')
+      return false;
+    for (const char* p = text; *p != '\0'; p++)
+      if (*p < '0' || *p > '9')
+        return false;
+    errno = 0;
+    const unsigned long value = strtoul(text, nullptr, 10);
+    return errno == ERANGE ||
+           value > std::numeric_limits<unsigned>::max();
+  }
+
   // The diagnostic, built once. It is the body of the SMT-LIB (error ...)
   // response on stdout and also what the fatal path hands to the error
   // handler -- which used to receive the empty string, so a caller that
@@ -276,6 +295,13 @@ namespace stp
       o << "  hint: " << smt2text << " is a floating-point name; those are "
            "recognised only after (set-logic QF_FP), (set-logic QF_BVFP) or "
            "(set-logic QF_ABVFP)";
+    // Likewise, a numeral the parser would not take is not a malformed
+    // numeral: it is one too large to be the index, width or count that the
+    // position calls for. Without this the report is bison's token name.
+    if (numeralTooLargeForIndex(smt2text))
+      o << "  hint: " << smt2text << " does not fit an unsigned, so it cannot "
+           "be an index, a width or a count; only a real literal may be this "
+           "large";
     return o.str();
   }
 
@@ -1283,6 +1309,12 @@ namespace stp
 %type <arr_sort> an_array_sort
 
 %token <uintval> NUMERAL_TOK
+
+ /* A numeral too large for an unsigned, carrying its digits. It is a real
+    magnitude and nothing else: as an index, a width or a count it is out of
+    range, and the grammar rejecting it there is the diagnosis. */
+%token <str> BIG_NUMERAL_TOK
+
 %token <str> BVCONST_DECIMAL_TOK
 %token <str> BVCONST_BINARY_TOK
 %token <str> BVCONST_HEXIDECIMAL_TOK
@@ -1747,6 +1779,14 @@ cmdi:
 |
      NOTES_TOK attribute NUMERAL_TOK
     {
+      stp::GlobalParserInterface->success();
+    }
+|
+     /* set-info values are not interpreted, so an oversized one is no more
+        of a problem here than an ordinary numeral is. */
+     NOTES_TOK attribute BIG_NUMERAL_TOK
+    {
+      delete $3;
       stp::GlobalParserInterface->success();
     }
 |
@@ -2704,9 +2744,10 @@ BVCONST_HEXIDECIMAL_TOK
   $$ = createFPFromParts($2, $3, $4);
 };
 
- /* The magnitude of a real constant: a decimal, or a numeral (which the
-    lexer delivers as its value -- numerals are capped at machine range
-    here, as everywhere else in this parser). */
+ /* The magnitude of a real constant: a decimal, or a numeral. Conversion is
+    from the digits, so a magnitude is exact however many of them there are --
+    the numerals that fit an unsigned arrive as their value and are printed
+    back, the rest arrive as their text already. */
 an_real_magnitude:
   DECIMAL_TOK
 {
@@ -2717,6 +2758,10 @@ an_real_magnitude:
   std::ostringstream os;
   os << $1;
   $$ = new std::string(os.str());
+}
+| BIG_NUMERAL_TOK
+{
+  $$ = $1;
 }
 ;
 
