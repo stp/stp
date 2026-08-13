@@ -13,6 +13,24 @@ cd "${dep_dir}"
 
 # CMS >= 5.14 builds its cadical/cadiback dependencies itself (via CMake
 # FetchContent), so they no longer need to be built here.
+#
+# It also installs them, which matters to anything else using this prefix:
+# ${install_dir} ends up holding a libcadical.a, its headers and its CMake
+# package, none of which have anything to do with the CaDiCaL that
+# setup-cadical.sh builds. STP pins its own lookup to CADICAL_DIR so the two
+# cannot be confused, and refuses at configure time to link both at once --
+# see the USE_CADICAL block and the guard after the CryptoMiniSat block in
+# the top-level CMakeLists. Building CMS shared (-DBUILD_SHARED_LIBS=ON) is
+# what makes the combination work, because the bundled CaDiCaL then stays
+# inside libcryptominisat5.so; ci.yml's cms-cadical job does exactly that.
+#
+# Note also that the tag below does not pin the bundle: CMS fetches cadical
+# and cadiback from meelgroup's default branches, so which version arrives
+# depends on the day (5.14.7 brought CaDiCaL 2.1.3). cache-key.sh does not
+# track that -- it folds in a revision only for repositories its own scripts
+# clone unpinned -- so a cached deps/install can hold a bundle older than a
+# fresh build would produce. That drift stays inside CryptoMiniSat, which is
+# why it is tolerated rather than chased.
 
 git clone https://github.com/msoos/cryptominisat "${dep}"
 cd "${dep}"

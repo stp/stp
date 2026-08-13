@@ -53,11 +53,15 @@ jobs:
     # the same way (tests/CMakeLists.txt compiles it as part of the STP
     # build); it is cloned here and filtered out of the results below.
     #
-    # CryptoMiniSat is built shared, unlike everywhere else: this is the one
-    # build that links CMS and CaDiCaL at the same time, and a static CMS
-    # drags its own FetchContent-built libcadical.a onto libstp's link line,
-    # where it collides with the newer CaDiCaL from setup-cadical.sh. A
-    # shared libcryptominisat5 keeps its bundled cadical internal.
+    # CryptoMiniSat is built shared, unlike everywhere else: this job links CMS
+    # and CaDiCaL at the same time, and a static CMS drags its own
+    # FetchContent-built libcadical.a onto libstp's link line, where it
+    # collides with the CaDiCaL from setup-cadical.sh. A shared
+    # libcryptominisat5 resolves that dependency inside the .so and exports no
+    # CaDiCaL symbols, so only setup-cadical.sh's copy is linked. Dropping the
+    # flag no longer fails at link time -- CMakeLists rejects a static CMS
+    # alongside USE_CADICAL outright, and the cms-cadical job in ci.yml covers
+    # both halves of that.
     - name: Dependencies
       if: matrix.language == 'cpp'
       run: |
@@ -78,10 +82,6 @@ jobs:
     # the analysis job, and dropping the backend here would leave its
     # wrappers unanalysed anywhere.
     #
-    # CADICAL_LIBRARY is pinned by hand: CMS installs its own bundled cadical
-    # into deps/install, and find_library searches CMAKE_PREFIX_PATH (which
-    # CMakeLists points at deps/install) before the CADICAL_DIR hint, so
-    # without the pin libstp links the older library against the 3.x headers.
     - name: Build
       if: matrix.language == 'cpp'
       run: |
@@ -92,7 +92,6 @@ jobs:
           -DNOCRYPTOMINISAT:BOOL=OFF \
           -DUSE_CADICAL:BOOL=ON \
           -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" \
-          -DCADICAL_LIBRARY:FILEPATH="$GITHUB_WORKSPACE/deps/cadical/build/libcadical.a" \
           -DENABLE_TESTING:BOOL=ON \
           -DBUILD_EXTRA_TOOLS:BOOL=ON \
           -DPYTHON_EXECUTABLE:PATH="$(which python3)" \
