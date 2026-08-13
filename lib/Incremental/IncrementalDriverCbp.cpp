@@ -394,6 +394,19 @@ void IncrementalSolver::Impl::cbpFinishLevel()
 // refinement loop validates stay models of the raw stack. Fed
 // conjuncts are exempt: their own levels assert them for at least
 // as long as any adopter lives.
+//
+// The substitution handed to replace() is RESTRICTED to entries
+// whose keys occur in this conjunct's own DAG. replace() also maps
+// nodes it REBUILDS on the way up -- hash-consing folded children
+// can reproduce a fixed node the original conjunct never contained
+// (a ctx-substituted form collapsing back onto the raw interior AND
+// its level was fed as) -- and the fact walk, which can only see
+// the original DAG, would assert no pinning fact for it: the
+// fixing's whole constraint silently leaves the encoding, and the
+// model (or the verdict) is no longer the raw stack's. Restricting
+// the map makes "may fire" and "fact asserted" the same set again:
+// a rebuilt node can still hit an entry, but only one whose key
+// occurs -- and is therefore pinned -- somewhere in this conjunct.
 ASTNode IncrementalSolver::Impl::cbpAdopt(const ASTNode& conjunct,
                  std::vector<ScopedFact>& factsOut)
 {
@@ -404,21 +417,38 @@ ASTNode IncrementalSolver::Impl::cbpAdopt(const ASTNode& conjunct,
   if (profile.enabled)
     profile.cbpAdoptAttempts++;
 
-  // The conjunct's own entry (a ctx-substituted form can be fixed
-  // as an interior node without being a fed conjunct) never rewrites
-  // its own slot.
-  ASTNodeMap::iterator selfEntry = callCbpSubst.find(conjunct);
-  ASTNode selfConstant;
-  if (selfEntry != callCbpSubst.end())
+  // One walk collects the entries occurring in the conjunct, in a
+  // deterministic order the fact emission below reuses. The
+  // conjunct's own entry (a ctx-substituted form can be fixed as an
+  // interior node without being a fed conjunct) never rewrites its
+  // own slot, so the root is skipped as a domain.
+  ASTNodeMap occurring;
+  std::vector<std::pair<ASTNode, ASTNode>> occurringOrdered;
   {
-    selfConstant = selfEntry->second;
-    cbpEraseSubstitution(conjunct);
+    ASTNodeSet visited;
+    std::vector<ASTNode> pending(1, conjunct);
+    while (!pending.empty())
+    {
+      const ASTNode cur = pending.back();
+      pending.pop_back();
+      if (!visited.insert(cur).second)
+        continue;
+      ASTNodeMap::const_iterator sit = callCbpSubst.find(cur);
+      if (sit != callCbpSubst.end() && !(cur == conjunct))
+      {
+        occurring.insert(*sit);
+        occurringOrdered.push_back(*sit);
+      }
+      for (unsigned j = 0; j < cur.Degree(); j++)
+        pending.push_back(cur[j]);
+    }
   }
+  if (occurring.empty())
+    return conjunct;
+
   ASTNodeMap cache;
   const ASTNode adopted = SubstitutionMap::replace(
-      conjunct, callCbpSubst, cache, bm->defaultNodeFactory);
-  if (!selfConstant.IsNull())
-    cbpAssignSubstitution(conjunct, selfConstant);
+      conjunct, occurring, cache, bm->defaultNodeFactory);
   if (adopted == conjunct)
     return conjunct;
 
@@ -426,30 +456,20 @@ ASTNode IncrementalSolver::Impl::cbpAdopt(const ASTNode& conjunct,
   if (dagSizeUpTo(adopted, before) >= before)
     return conjunct;
 
-  ASTNodeSet visited;
-  std::vector<ASTNode> pending(1, conjunct);
-  while (!pending.empty())
+  for (const std::pair<ASTNode, ASTNode>& oe : occurringOrdered)
   {
-    const ASTNode cur = pending.back();
-    pending.pop_back();
-    if (!visited.insert(cur).second)
+    const ASTNode& cur = oe.first;
+    if (callCbpFedConjuncts.find(cur) != callCbpFedConjuncts.end() ||
+        !cbpInsertFactDomain(cur))
       continue;
-    ASTNodeMap::const_iterator sit = callCbpSubst.find(cur);
-    if (sit != callCbpSubst.end() &&
-        callCbpFedConjuncts.find(cur) == callCbpFedConjuncts.end() &&
-        cbpInsertFactDomain(cur))
-    {
-      ASTNode fact;
-      if (cur.GetType() == BOOLEAN_TYPE)
-        fact = sit->second == bm->ASTTrue
-                   ? cur
-                   : bm->defaultNodeFactory->CreateNode(NOT, cur);
-      else
-        fact = bm->defaultNodeFactory->CreateNode(EQ, cur, sit->second);
-      factsOut.push_back(ScopedFact(cur, fact));
-    }
-    for (unsigned j = 0; j < cur.Degree(); j++)
-      pending.push_back(cur[j]);
+    ASTNode fact;
+    if (cur.GetType() == BOOLEAN_TYPE)
+      fact = oe.second == bm->ASTTrue
+                 ? cur
+                 : bm->defaultNodeFactory->CreateNode(NOT, cur);
+    else
+      fact = bm->defaultNodeFactory->CreateNode(EQ, cur, oe.second);
+    factsOut.push_back(ScopedFact(cur, fact));
   }
 
   callCbpAdopted++;
