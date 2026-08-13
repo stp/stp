@@ -63,6 +63,12 @@ void SMT2SetFloatTokens(bool enable);
 // the grammar, so it has to consult the gate itself.
 bool SMT2FloatTokensActive();
 
+// Whether `text` is a floating-point name that the gate above handed to the
+// grammar as an ordinary undeclared identifier. The grammar cannot tell that
+// apart from a genuine typo, so its diagnostics ask this and append a hint
+// naming the set-logic that would have made the name a keyword.
+bool SMT2FpKeywordNeedsLogic(const char* text);
+
 DLL_PUBLIC int SMTParse(void* AssertsQuery);
 DLL_PUBLIC int SMT2Parse();
 DLL_PUBLIC int CVCParse(void* AssertsQuery);
