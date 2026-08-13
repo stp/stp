@@ -727,6 +727,11 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
 
   bm.GetRunTimes()->stop(RunTimes::Parsing);
 
+  // Bracket the solve so (get-info :all-statistics) can report on this check
+  // alone. Taken here rather than at entry so the parse that preceded the
+  // check is not charged to it.
+  const std::vector<CategoryWork> work_before = currentWork();
+
   checkInvariant();
   assert(assertionsSMT2.size() == cache.size());
 
@@ -833,6 +838,8 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
   // no model wanted) nothing was constructed, so nothing may be read.
   model_valid = (last_run.result == SOLVER_SATISFIABLE) &&
                 bm.UserFlags.construct_counterexample_flag;
+
+  recordCheckWork(work_before);
 
   if (bm.UserFlags.quick_statistics_flag)
   {
@@ -1021,6 +1028,85 @@ void Cpp_interface::getOption(std::string option)
   flush(cout);
 }
 
+std::vector<Cpp_interface::CategoryWork> Cpp_interface::currentWork() const
+{
+  std::vector<CategoryWork> result;
+  for (const RunTimes::CategoryTotal& total : bm.GetRunTimes()->totals())
+  {
+    CategoryWork work;
+    work.category = static_cast<int>(total.category);
+    work.count = total.count;
+    work.time_ms = total.time_ms;
+    result.push_back(work);
+  }
+  return result;
+}
+
+void Cpp_interface::recordCheckWork(const std::vector<CategoryWork>& before)
+{
+  last_check_work.clear();
+  for (const CategoryWork& now : currentWork())
+  {
+    CategoryWork charged = now;
+    for (const CategoryWork& then : before)
+    {
+      if (then.category == now.category)
+      {
+        charged.count -= then.count;
+        charged.time_ms -= then.time_ms;
+        break;
+      }
+    }
+
+    // --print-quickstat clears the run times as it prints, so a later
+    // reading can be smaller than the one taken before the solve. Report
+    // nothing rather than a negative count when that happens.
+    if (charged.count > 0 && charged.time_ms >= 0)
+      last_check_work.push_back(charged);
+  }
+}
+
+// The keywords (get-info :all-statistics) answers with, one per run-time
+// category. Deliberately a table of its own rather than RunTimes' display
+// names: those are prose, they are what --print-quickstat prints, and one of
+// them is misspelled -- reusing them would make an output contract out of
+// text that exists to be read, where tidying a name later would break
+// whoever parses it.
+static const char* categoryKeyword(RunTimes::Category c)
+{
+  switch (c)
+  {
+    case RunTimes::Transforming: return "transforming";
+    case RunTimes::SimplifyTopLevel: return "simplifying";
+    case RunTimes::Parsing: return "parsing";
+    case RunTimes::CNFConversion: return "cnf-conversion";
+    case RunTimes::BitBlasting: return "bit-blasting";
+    case RunTimes::Solving: return "sat-solving";
+    case RunTimes::BVSolver: return "bitvector-solving";
+    case RunTimes::PropagateEqualities: return "variable-elimination";
+    case RunTimes::SendingToSAT: return "sending-to-sat-solver";
+    case RunTimes::CounterExampleGeneration:
+      return "counter-example-generation";
+    case RunTimes::SATSimplifying: return "sat-simplification";
+    case RunTimes::ConstantBitPropagation: return "constant-bit-propagation";
+    case RunTimes::ArrayReadRefinement: return "array-read-refinement";
+    case RunTimes::ApplyingSubstitutions: return "applying-substitutions";
+    case RunTimes::RemoveUnconstrained: return "removing-unconstrained";
+    case RunTimes::PureLiterals: return "pure-literals";
+    case RunTimes::UseITEContext: return "ite-contexts";
+    case RunTimes::AIGSimplifyCore: return "aig-core-simplification";
+    case RunTimes::IntervalPropagation: return "interval-propagation";
+    case RunTimes::Flatten: return "sharing-aware-flattening";
+    case RunTimes::NodeDomainAnalysis: return "node-domain-analysis";
+    case RunTimes::StrengthReduction: return "strength-reduction";
+    case RunTimes::SplitExtracts: return "split-extracts";
+    case RunTimes::Rewriting: return "sharing-aware-rewriting";
+    case RunTimes::MergeSame: return "merge-same";
+    case RunTimes::CommonSubSum: return "common-sub-sum-extraction";
+  }
+  return "unknown";
+}
+
 void Cpp_interface::getInfo(std::string flag)
 {
   if (flag == "name")
@@ -1040,6 +1126,39 @@ void Cpp_interface::getInfo(std::string flag)
     // FatalError() exits rather than unwinding to the next command.
     cout << "(:error-behavior immediate-exit)" << endl;
   }
+  else if (flag == "all-statistics")
+  {
+    // No standard statistics are defined (SMT-LIB 2.6, 4.1.8), so what is in
+    // here is STP's own; the response shape is the standard's, a sequence of
+    // info_response values. The per-stage numbers are the most recent check's,
+    // as the standard asks; the process ones are what they say, process-wide,
+    // and :check-sat-calls counts the session. Stages the check did no work in
+    // are left out, so a small query does not answer with a screen of zeroes.
+    //
+    // The standard permits this only in sat or unsat mode. STP answers it
+    // whenever it is asked, since the alternative under an immediate-exit
+    // error behaviour is killing a session over a diagnostic query.
+    std::ios_base::fmtflags saved(cout.flags());
+    const std::streamsize saved_precision = cout.precision();
+    cout << std::fixed;
+    cout.precision(2);
+
+    cout << "(:check-sat-calls " << solves_run << endl;
+    cout << " :cpu-time " << processCpuTime() << endl;
+    cout << " :peak-memory-mb " << peakMemoryMB();
+
+    cout.flags(saved);
+    cout.precision(saved_precision);
+
+    for (const CategoryWork& work : last_check_work)
+    {
+      const char* keyword =
+          categoryKeyword(static_cast<RunTimes::Category>(work.category));
+      cout << endl << " :" << keyword << " " << work.count;
+      cout << endl << " :" << keyword << "-time-ms " << work.time_ms;
+    }
+    cout << ")" << endl;
+  }
   else if (flag == "assertion-stack-levels")
   {
     // The base level is not an assertion level.
@@ -1048,8 +1167,9 @@ void Cpp_interface::getInfo(std::string flag)
   }
   else
   {
-    // The remaining standard flags, :all-statistics and :reason-unknown, are
-    // both optional and not reported.
+    // :reason-unknown, the one standard flag left, is optional and not
+    // reported: STP does not answer unknown, so there is never a reason to
+    // give for one.
     unsupported();
     return;
   }

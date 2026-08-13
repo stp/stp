@@ -40,6 +40,12 @@ namespace stp
 // Milliseconds since the epoch. Fixed width, because a millisecond count
 // does not fit the 32-bit "long" of an ILP32 or LLP64 target.
 DLL_PUBLIC int64_t getCurrentTime();
+
+// Process-wide, not per-solve: the CPU seconds spent in user mode so far,
+// and the peak resident set size in megabytes. Printed by --print-quickstat
+// and reported by (get-info :all-statistics).
+DLL_PUBLIC double processCpuTime();
+DLL_PUBLIC double peakMemoryMB();
 }
 
 class RunTimes // not copyable
@@ -106,6 +112,15 @@ public:
 
   typedef std::pair<Category, int64_t> Element;
 
+  // What one category has been charged with so far. Categories that have
+  // been charged nothing are left out.
+  struct CategoryTotal
+  {
+    Category category;
+    int count;
+    int64_t time_ms;
+  };
+
 private:
   RunTimes& operator=(const RunTimes&);
   RunTimes(const RunTimes& other);
@@ -123,6 +138,11 @@ public:
   DLL_PUBLIC void start(Category c);
   DLL_PUBLIC void stop(Category c);
   DLL_PUBLIC void print();
+
+  // Read what has been charged so far without disturbing it. print() ends by
+  // clearing, which a reader that only reports -- (get-info :all-statistics)
+  // -- must not do to a session that goes on solving.
+  DLL_PUBLIC std::vector<CategoryTotal> totals() const;
 
   std::string getDifference();
 

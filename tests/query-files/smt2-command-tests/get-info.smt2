@@ -17,7 +17,11 @@
 ; CHECK-NEXT: ^\(:assertion-stack-levels 1\)
 (get-info :assertion-stack-levels)
 (pop 1)
-; CHECK-NEXT: ^unsupported
+; Answered; its contents are get-info-all-statistics's business, so all that
+; is wanted here is that the flag is one of the answered ones.
+; CHECK-NEXT: ^\(:check-sat-calls 0$
+; CHECK-NEXT: ^ :cpu-time
+; CHECK-NEXT: ^ :peak-memory-mb
 (get-info :all-statistics)
 ; CHECK-NEXT: ^unsupported
 (get-info :reason-unknown)

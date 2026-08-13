@@ -208,8 +208,30 @@ private:
   ASTVec& getCurrentSymbols();
   vector<std::string>& getCurrentFunctions();
 
+  // What the most recent check-sat charged to each pipeline stage: the
+  // difference between two readings of the manager's run times taken around
+  // the solve, which is the granularity (get-info :all-statistics) reports on.
+  // Taking a difference rather than reading the totals is what keeps the
+  // answer to "the most recent check" from growing into a session total, and
+  // keeps it independent of --print-quickstat, which clears as it prints.
+  // Categories are held by index so this header need not know the enum.
+  struct CategoryWork
+  {
+    int category;
+    int count;
+    int64_t time_ms;
+  };
+  std::vector<CategoryWork> last_check_work;
+
   void checkInvariant();
   void init();
+
+  // The manager's run times as they stand, and -- given a reading taken in
+  // front of a solve -- what that solve added, which is what
+  // last_check_work holds. Declared over CategoryWork rather than over the
+  // run-time class's own type so this header does not have to know it.
+  std::vector<CategoryWork> currentWork() const;
+  void recordCheckWork(const std::vector<CategoryWork>& before);
 
   // Report (set-option :<option> <value>) where the option's argument is a
   // <b_value> and the value is neither true nor false. Malformed rather than
