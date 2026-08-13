@@ -370,8 +370,11 @@ static bool invertStepSymbolic(NodeFactory* nf, STPMgr& bm, Simplifier* simp,
       if (!isBottom || s.pathIndex != 0 ||
           CONSTANTBV::BitVector_is_empty(c.GetBVConst()))
         return false;
-      std::vector<CBV> a = {bm.CreateMaxConst(w).GetBVConst(),
-                            c.GetBVConst()};
+      // Bind the CreateMaxConst node: it is a temporary, and GetBVConst()
+      // returns a pointer into it, so it must outlive the evaluator call
+      // below -- otherwise a[0] dangles (a use-after-free).
+      const ASTNode maxC = bm.CreateMaxConst(w);
+      std::vector<CBV> a = {maxC.GetBVConst(), c.GetBVConst()};
       CBV maxQ = NonMemberBVConstEvaluator(BVDIV, a, w);
       const ASTNode maxQn = bm.CreateBVConst(maxQ, w);
       if (maxQn == bm.CreateZeroConst(w))
