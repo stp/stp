@@ -40,6 +40,10 @@
 #include "stp/cpp_interface.h"
 #include "parsesmt2.tab.h"
 
+#include <cerrno>
+#include <cstdlib>
+#include <limits>
+
   extern char *smt2text;
   extern int smt2leng;
   extern int smt2error (const char *msg);
@@ -261,8 +265,24 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 %%
 [ \n\t\r\f] { if (*smt2text == '\n') smt2lineno++; /* skip whitespace */ }
 
- /* We limit numerals to maxint, in the specification they are arbitary precision.*/
-{DIGIT}+               { smt2lval.uintval = strtoul(smt2text, NULL, 10); return NUMERAL_TOK; }
+ /* Numerals are arbitrary precision in the specification, but every numeral
+    STP reads as a number is an index, a width or a count, all of which fit an
+    unsigned. One that does not is kept as its digits and returned as a
+    different token: a real literal converts from the digits and so stays
+    exact, while every other use of a numeral is a syntax error rather than
+    the silently wrapped value strtoul would hand back. */
+{DIGIT}+               {
+                         errno = 0;
+                         const unsigned long value = strtoul(smt2text, NULL, 10);
+                         if (errno == ERANGE ||
+                             value > std::numeric_limits<unsigned>::max())
+                         {
+                           smt2lval.str = new std::string(smt2text);
+                           return BIG_NUMERAL_TOK;
+                         }
+                         smt2lval.uintval = static_cast<unsigned>(value);
+                         return NUMERAL_TOK;
+                       }
 bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_TOK; }
 #b{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCONST_BINARY_TOK; }
 #x({DIGIT}|[a-fA-F])+  { smt2lval.str = new std::string(smt2text+2); return BVCONST_HEXIDECIMAL_TOK; }

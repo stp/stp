@@ -7,6 +7,6 @@
 ; disabled. The base message is left alone -- it is right for every other
 ; name that lands on that rule -- and the hint corrects it for this one.
 ; RoundingMode takes the same path.
-; CHECK-L: hint: Float64 is a floating-point name; those are recognised only after (set-logic QF_FP), (set-logic QF_BVFP) or (set-logic QF_ABVFP)
+; CHECK-L: hint: Float64 is a floating-point name; those are recognised only after a floating-point (set-logic): QF_FP, QF_BVFP, QF_ABVFP or one of their LRA variants
 (declare-const x Float64)
 (check-sat)
