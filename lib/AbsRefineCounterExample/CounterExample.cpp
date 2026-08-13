@@ -147,7 +147,7 @@ AbsRefine_CounterExample::requireFpEncodingContext() const
  * populate the CounterExampleMap data structure (ASTNode -> BVConst)
  */
 void AbsRefine_CounterExample::ConstructCounterExample(
-    SATSolver& newS, ToSATBase::ASTNodeToSATVar& satVarToSymbol)
+    SATSolver& newS, const ToSATBase::ASTNodeToSATVar& satVarToSymbol)
 {
   if (!newS.okay())
     return;
@@ -2741,7 +2741,11 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
     CounterExampleMap.clear();
     ComputeFormulaMap.clear();
 
-    ToSATBase::ASTNodeToSATVar satVarToSymbol = tosat->SATVar_to_SymbolIndexMap();
+    // By reference: the map holds an entry for every symbol ever bit-blasted,
+    // and copying it here cost that much again on every refinement round.
+    // ConstructCounterExample only ever iterates it.
+    const ToSATBase::ASTNodeToSATVar& satVarToSymbol =
+        tosat->SATVar_to_SymbolIndexMap();
     ConstructCounterExample(SatSolver, satVarToSymbol);
     if (bm->UserFlags.stats_flag && bm->UserFlags.print_nodes_flag)
     {

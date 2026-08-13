@@ -182,7 +182,7 @@ public:
   // Converts MINISAT counterexample into an AST memotable (i.e. the
   // function populates the datastructure CounterExampleMap)
   void ConstructCounterExample(SATSolver& newS,
-                               ToSATBase::ASTNodeToSATVar& satVarToSymbol);
+                               const ToSATBase::ASTNodeToSATVar& satVarToSymbol);
 
   // Prints MINISAT assigment one bit at a time, for debugging.
   void PrintSATModel(SATSolver& S, ToSATBase::ASTNodeToSATVar& satVarToSymbol);
