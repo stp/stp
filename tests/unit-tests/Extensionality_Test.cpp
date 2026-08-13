@@ -211,6 +211,54 @@ TEST(ArrayEqualityAstTest, ActivationIsTheTransitiveClosureOfCurrentRoot)
   EXPECT_EQ(1u, ext.getRecords().size());
 }
 
+TEST(ArrayEqualityAstTest, InitialFormulaProtocolTakesTheEagerArm)
+{
+  STPMgr mgr;
+  mgr.UserFlags.enable_array_equality = true;
+  mgr.UserFlags.ackermannisation = true;
+  ExtensionalityContext ext(&mgr);
+  NodeFactory* hf = mgr.hashingNodeFactory;
+
+  const ASTNode a = mgr.CreateSymbol("a", 1, 1);
+  const ASTNode b = mgr.CreateSymbol("b", 1, 1);
+  const ASTNode i = mgr.CreateSymbol("i", 0, 1);
+  const ASTNode eq = hf->CreateNode(EQ, a, b);
+  const ASTNode read = hf->CreateTerm(READ, 1, a, i);
+  const ASTNode input = hf->CreateNode(
+      AND, eq, hf->CreateNode(EQ, read, mgr.CreateZeroConst(1)));
+
+  ext.beginSolve();
+  const ASTNode lowered = ext.lowerArrayEqualities(input);
+  ASSERT_TRUE(ext.active());
+  const ASTNode prepared = ext.prepareInitialFormula(lowered);
+
+  EXPECT_FALSE(ext.active());
+  EXPECT_TRUE(mgr.UserFlags.ackermannisation);
+  EXPECT_NE(lowered, prepared);
+  EXPECT_FALSE(containsKind(prepared, ARRAY_EQ));
+  EXPECT_TRUE(containsKind(prepared, READ));
+}
+
+TEST(ArrayEqualityAstTest, InitialFormulaProtocolKeepsTheLazyArmActive)
+{
+  STPMgr mgr;
+  mgr.UserFlags.enable_array_equality = true;
+  ASSERT_FALSE(mgr.UserFlags.ackermannisation);
+  ExtensionalityContext ext(&mgr);
+  NodeFactory* hf = mgr.hashingNodeFactory;
+
+  const ASTNode a = mgr.CreateSymbol("a", 1, 1);
+  const ASTNode b = mgr.CreateSymbol("b", 1, 1);
+  ext.beginSolve();
+  const ASTNode lowered =
+      ext.lowerArrayEqualities(hf->CreateNode(EQ, a, b));
+  const ASTNode prepared = ext.prepareInitialFormula(lowered);
+
+  EXPECT_TRUE(ext.active());
+  EXPECT_NE(lowered, prepared);
+  EXPECT_FALSE(containsKind(prepared, ARRAY_EQ));
+}
+
 TEST(ExtGuardTest, PathPayloadRemainsCompact)
 {
   // A predecessor entry stores exactly one guard. Keep its payload below the

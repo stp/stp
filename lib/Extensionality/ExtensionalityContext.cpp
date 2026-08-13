@@ -956,6 +956,29 @@ ASTNode ExtensionalityContext::instantiateEagerAckermann(const ASTNode& root)
   return out;
 }
 
+ASTNode ExtensionalityContext::prepareInitialFormula(const ASTNode& root)
+{
+  if (!active())
+    return root;
+
+  const ASTNode constrained = conjoinRecordConstraints(root);
+  if (!bm->UserFlags.ackermannisation)
+    return constrained;
+
+  const ASTNode eager = instantiateEagerAckermann(constrained);
+  if (eager.IsNull())
+  {
+    std::cerr << "Warning: --ackermanize is disabled for queries with "
+                 "array equality over floating-point sorts."
+              << std::endl;
+    bm->UserFlags.ackermannisation = false;
+    return constrained;
+  }
+
+  bm->ASTNodeStats("after eager equality instantiation: ", eager);
+  return eager;
+}
+
 // Recover each record's canonical operands from its anchor equations
 // in the current formula. The anchors were conjoined before STP's
 // simplifications ran, so they were rewritten by exactly the passes

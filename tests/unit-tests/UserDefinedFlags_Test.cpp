@@ -31,3 +31,36 @@ TEST(UserDefinedFlags_Test, disable_simplifications_clears_flattening_stack)
   EXPECT_FALSE(uf.enable_common_subsum);
   EXPECT_FALSE(uf.enable_pair_extract);
 }
+
+TEST(UserDefinedFlags_Test, caller_model_request_is_derived_from_source_flags)
+{
+  stp::UserDefinedFlags uf;
+  EXPECT_FALSE(uf.callerRequestedModel());
+
+  uf.produce_models = true;
+  EXPECT_TRUE(uf.callerRequestedModel());
+  uf.produce_models = false;
+
+  uf.request_counterexample = true;
+  EXPECT_TRUE(uf.callerRequestedModel());
+  uf.request_counterexample = false;
+
+  uf.print_counterexample_flag = true;
+  EXPECT_TRUE(uf.callerRequestedModel());
+  uf.print_counterexample_flag = false;
+
+  uf.check_counterexample_flag = true;
+  EXPECT_TRUE(uf.callerRequestedModel());
+}
+
+TEST(UserDefinedFlags_Test, internal_model_consumer_is_a_separate_input)
+{
+  stp::UserDefinedFlags uf;
+  EXPECT_FALSE(uf.callerRequestedModel());
+  EXPECT_TRUE(uf.modelConstructionRequired(true));
+#ifdef NDEBUG
+  EXPECT_FALSE(uf.modelConstructionRequired(false));
+#else
+  EXPECT_TRUE(uf.modelConstructionRequired(false));
+#endif
+}

@@ -262,6 +262,16 @@ public:
   // refuse a genuine model. Such solves stay on lemmas on demand.
   ASTNode instantiateEagerAckermann(const ASTNode& root);
 
+  // The initial formula protocol shared by the batch and persistent drivers,
+  // after opaque equalities have been lowered and before ordinary
+  // simplification starts: conjoin the active records' witness bundles, then
+  // take the eager Ackermann arm when requested. A sort whose values quotient
+  // their bit patterns cannot use that arm; in that case this method emits the
+  // one standard warning and switches this solve to lazy refinement. Eager
+  // success retires the records, so callers read active() afterwards rather
+  // than maintaining a second account of the transition.
+  ASTNode prepareInitialFormula(const ASTNode& root);
+
   // Final preparation, run after STP's simplifications and immediately
   // before its main array transformation:
   //  - recover each record's canonical operands from its anchors;

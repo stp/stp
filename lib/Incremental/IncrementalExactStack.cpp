@@ -170,7 +170,7 @@ SOLVER_RETURN_TYPE IncrementalSolver::Impl::solvePlainExactStack(
 {
   UserDefinedFlags& uf = bm->UserFlags;
 
-  const bool construct = observableModelRequested(uf);
+  const bool construct = uf.modelConstructionRequired();
   uf.construct_counterexample_flag = construct;
 
   bm->GetRunTimes()->start(RunTimes::Solving);
@@ -307,28 +307,9 @@ IncrementalSolver::Impl::exactStackCheckSat(
   ExtensionalityContext::SolveScope extScope(ext);
 
   if (extActive)
-    inputToSat = ext->conjoinRecordConstraints(inputToSat);
-
-  if (extActive && uf.ackermannisation)
   {
-    const ASTNode eager = ext->instantiateEagerAckermann(inputToSat);
-    if (!eager.IsNull())
-    {
-      // The equalities are now ordinary conjuncts of the block and the
-      // records are retired: the round continues exactly as an eager
-      // array round, reads expanded through the transform below, nothing
-      // left for the lazy checker.
-      inputToSat = eager;
-      extActive = false;
-      bm->ASTNodeStats("after eager equality instantiation: ", inputToSat);
-    }
-    else
-    {
-      std::cerr << "Warning: --ackermanize is disabled for queries with "
-                   "array equality over floating-point sorts."
-                << std::endl;
-      uf.ackermannisation = false;
-    }
+    inputToSat = ext->prepareInitialFormula(inputToSat);
+    extActive = ext->active();
   }
 
   // Automatic engagement already received two batch-preprocessed solves, so
@@ -403,7 +384,7 @@ IncrementalSolver::Impl::exactStackCheckSat(
   chargeSemanticRoot(semantic);
   chargeSemanticRoot(inputToSat);
 
-  if (uf.enable_array_equality && containsArrayEquality(inputToSat))
+  if (uf.enable_array_equality && containsKind(inputToSat, ARRAY_EQ))
     FatalError("IncrementalSolver: an opaque array equality reached the "
                "final array transformation boundary",
                inputToSat);
@@ -524,7 +505,7 @@ IncrementalSolver::Impl::exactStackCheckSat(
   // entitled to observe the resulting model. In particular, the incoming
   // derived flag may still describe an earlier query (and is false before a
   // session's first query), so restoring it would lose :produce-models.
-  const bool constructForCaller = observableModelRequested(uf);
+  const bool constructForCaller = uf.modelConstructionRequired();
   uf.construct_counterexample_flag = true;
 
   if (fpCtx)

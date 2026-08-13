@@ -61,24 +61,6 @@ const static string pe_message = "After Propagating Equalities. ";
 const static string domain_message = "After Domain Analysis. ";
 const static string se_message = "After Split Extracts. ";
 
-static bool containsOpaqueArrayEquality(const ASTNode& root)
-{
-  ASTNodeSet visited;
-  ASTVec pending(1, root);
-  while (!pending.empty())
-  {
-    const ASTNode node = pending.back();
-    pending.pop_back();
-    if (!visited.insert(node).second)
-      continue;
-    if (node.GetKind() == ARRAY_EQ)
-      return true;
-    for (unsigned i = 0; i < node.Degree(); ++i)
-      pending.push_back(node[i]);
-  }
-  return false;
-}
-
 SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS,
                                             ASTNode original_input,
                                             const ASTNodeMap&
@@ -309,7 +291,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   if (bm->UserFlags.enable_array_equality)
   {
     const bool hasOpaqueEquality =
-        containsOpaqueArrayEquality(original_input) ||
+        containsKind(original_input, ARRAY_EQ) ||
         !arrayEqualityRewrites.empty();
 
     // A definitional equality -- a symbol equated with an array term at
@@ -374,31 +356,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   ExtensionalityContext::SolveScope extScope(ext);
   if (extActive)
   {
-    inputToSat = ext->conjoinRecordConstraints(inputToSat);
-    if (bm->UserFlags.ackermannisation)
-    {
-      // Eager Ackermannization expands reads into if-then-else chains,
-      // destroying the array structure the lazy procedure works on --
-      // so the equalities go the same way: instantiate them pointwise
-      // over the solve's read indexes and retire the records, leaving a
-      // self-contained formula on STP's ordinary eager path. Quotiented
-      // sorts (float or RoundingMode cells or indexes) have no sound
-      // pointwise bit instantiation and stay on lemmas on demand.
-      const ASTNode eager = ext->instantiateEagerAckermann(inputToSat);
-      if (!eager.IsNull())
-      {
-        inputToSat = eager;
-        extActive = false;
-        bm->ASTNodeStats("after eager equality instantiation: ", inputToSat);
-      }
-      else
-      {
-        cerr << "Warning: --ackermanize is disabled for queries with "
-                "array equality over floating-point sorts."
-             << endl;
-        bm->UserFlags.ackermannisation = false;
-      }
-    }
+    inputToSat = ext->prepareInitialFormula(inputToSat);
+    extActive = ext->active();
   }
 
   // Record anchors keep equality operands live even when no array operation
@@ -455,14 +414,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // candidate model cannot leave construction switched on for the rest of
   // the session.
   bm->UserFlags.construct_counterexample_flag =
-      bm->UserFlags.check_counterexample_flag ||
-      bm->UserFlags.print_counterexample_flag ||
-      bm->UserFlags.produce_models || bm->UserFlags.request_counterexample ||
-      (arrayops && !removed);
-
-#ifndef NDEBUG
-  bm->UserFlags.construct_counterexample_flag = true;
-#endif
+      bm->UserFlags.modelConstructionRequired(arrayops && !removed);
 
   if (bm->UserFlags.enable_flatten)
   {
@@ -789,7 +741,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // the factory never built one, so a query that never enabled the
   // feature pays nothing.
   if (bm->UserFlags.enable_array_equality &&
-      containsOpaqueArrayEquality(inputToSat))
+      containsKind(inputToSat, ARRAY_EQ))
     FatalError("array-equality: an opaque equality reached the final array "
                "transformation boundary",
                inputToSat);

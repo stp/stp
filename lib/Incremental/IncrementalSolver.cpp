@@ -1318,7 +1318,7 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   // candidate model for refinement cannot leave construction switched on
   // for every later check, and with it the frontend's shortcut for a
   // repeated query whose model nobody wants.
-  const bool construct = observableModelRequested(uf) || needRefinement;
+  const bool construct = uf.modelConstructionRequired(needRefinement);
   uf.construct_counterexample_flag = construct;
 
   // Model evaluation of floating-point terms needs the encoding context

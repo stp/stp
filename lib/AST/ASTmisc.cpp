@@ -211,6 +211,24 @@ bool constantsSameSourceValue(const ASTNode& a, const ASTNode& b,
   return packedConstantIsNaN(a, eb, sb) && packedConstantIsNaN(b, eb, sb);
 }
 
+bool containsKind(const ASTNode& root, Kind kind)
+{
+  ASTNodeSet visited;
+  ASTVec pending(1, root);
+  while (!pending.empty())
+  {
+    const ASTNode node = pending.back();
+    pending.pop_back();
+    if (!visited.insert(node).second)
+      continue;
+    if (node.GetKind() == kind)
+      return true;
+    for (unsigned i = 0; i < node.Degree(); ++i)
+      pending.push_back(node[i]);
+  }
+  return false;
+}
+
 // True if any descendants are arrays.
 bool containsArrayOps(const ASTNode& n, STPMgr* mgr)
 {

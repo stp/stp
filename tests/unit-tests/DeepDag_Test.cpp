@@ -1450,6 +1450,16 @@ bool numberOfReadsWalkOk(Context& c, unsigned depth)
   return !numberOfReadsLessThan(earlyStop, 1);
 }
 
+// Complete-DAG kind queries are used at solve boundaries, where the formula
+// may be supplied by the caller and therefore arbitrarily deep.
+bool containsKindWalkOk(Context& c, unsigned depth)
+{
+  const ASTNode deep = c.chain(BVXOR, depth);
+  const ASTNode formula = c.formula(deep);
+  c.roots.push_back(formula);
+  return containsKind(formula, BVXOR) && !containsKind(formula, ARRAY_EQ);
+}
+
 // A chain of writes under one read. The read is pushed under the writes one
 // at a time, each step building a new read over the array below it and
 // transforming that -- so the walk descends the write chain, which is again
@@ -2171,6 +2181,12 @@ TEST(DeepDag, shallow_array_read_count_walk)
   EXPECT_TRUE(numberOfReadsWalkOk(c, SHALLOW));
 }
 
+TEST(DeepDag, shallow_contains_kind_walk)
+{
+  Context c;
+  EXPECT_TRUE(containsKindWalkOk(c, SHALLOW));
+}
+
 TEST(DeepDag, mutable_dag_root_fast_paths_preserve_no_ops)
 {
   Context c;
@@ -2650,6 +2666,10 @@ TEST(DeepDag, deep_array_read_chain)   { EXPECT_STACK_SAFE(arrayReadChainOk, 200
 TEST(DeepDag, deep_array_read_count_walk)
 {
   EXPECT_STACK_SAFE(numberOfReadsWalkOk, 20000);
+}
+TEST(DeepDag, deep_contains_kind_walk)
+{
+  EXPECT_STACK_SAFE(containsKindWalkOk, 20000);
 }
 TEST(DeepDag, deep_array_write_chain)  { EXPECT_STACK_SAFE(arrayWriteChainOk, 20000); }
 TEST(DeepDag, deep_array_equality_lowering)

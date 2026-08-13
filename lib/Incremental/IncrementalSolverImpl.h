@@ -91,22 +91,6 @@ inline size_t clampToSize(const uint64_t value)
 }
 
 
-// Whether the result of this check-sat must leave a caller-visible model.
-// Theory refinement may need a candidate model internally even when this is
-// false; keeping the two requirements separate prevents an internal round
-// from either latching model production on or restoring a stale value from a
-// previous query.
-inline bool observableModelRequested(const UserDefinedFlags& uf)
-{
-  bool requested = uf.check_counterexample_flag ||
-                   uf.print_counterexample_flag || uf.produce_models ||
-                   uf.request_counterexample;
-#ifndef NDEBUG
-  requested = true;
-#endif
-  return requested;
-}
-
 template <class Container> void releaseContainer(Container& container)
 {
   Container empty;
@@ -250,28 +234,6 @@ inline void splitConjuncts(const ASTNode& n, const ASTNode& trueNode, ASTVec& ou
     out.push_back(cur);
   }
 }
-
-// ARRAY_EQ can only exist when the array-equality option is on; this is the
-// same complete-DAG barrier walk TopLevelSTPAux performs.
-inline bool containsArrayEquality(const ASTNode& root)
-{
-  ASTNodeSet visited;
-  ASTVec pending(1, root);
-  while (!pending.empty())
-  {
-    const ASTNode node = pending.back();
-    pending.pop_back();
-    if (!visited.insert(node).second)
-      continue;
-    if (node.GetKind() == ARRAY_EQ)
-      return true;
-    for (unsigned i = 0; i < node.Degree(); ++i)
-      pending.push_back(node[i]);
-  }
-  return false;
-}
-
-
 
 struct IncrementalSolver::Impl
 {
@@ -2034,7 +1996,7 @@ struct IncrementalSolver::Impl
       return false;
     if (containsArrayOps(term, bm))
       return false;
-    if (bm->UserFlags.enable_array_equality && containsArrayEquality(term))
+    if (bm->UserFlags.enable_array_equality && containsKind(term, ARRAY_EQ))
       return false;
     if (term.GetKind() != TRUE && term.GetKind() != FALSE &&
         bm->VarSeenInTerm(var, term))
@@ -2370,7 +2332,7 @@ struct IncrementalSolver::Impl
     f.fp =
         bm->has_floating_point_theory && containsFloatingPointTheory(n, bm);
     f.arrayEq =
-        bm->UserFlags.enable_array_equality && containsArrayEquality(n);
+        bm->UserFlags.enable_array_equality && containsKind(n, ARRAY_EQ);
     f.sourceArrays = containsArrayOps(n, bm);
 
     // Arrayness must be judged on the form that will be encoded: totalising
