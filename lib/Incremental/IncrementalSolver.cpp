@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "stp/Incremental/IncrementalPolicy.h"
 #include "stp/Incremental/IncrementalProfile.h"
 #include "stp/Incremental/IncrementalScopeState.h"
+#include "stp/Incremental/IncrementalWalks.h"
 
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/AbsRefineCounterExample/ArrayReadRefinementProgress.h"
@@ -301,6 +302,11 @@ struct IncrementalSolver::Impl
   // leak into the persistent encoding.
   AigEncodingEpoch encoding;
 
+  // The DAG-walk utilities and their epoch-scoped memos (per-node symbol
+  // sets, capped size counts); see IncrementalWalks.h. Thin forwarders
+  // below keep the call sites reading as they always have.
+  IncrementalWalks walks;
+
   // AIG object Id -> CNF variable; -1 = not encoded yet. AIG Ids are dense
   // and only grow within one resettable encoding epoch.
   std::vector<int> aigIdToVar;
@@ -446,54 +452,6 @@ struct IncrementalSolver::Impl
   // base grows, consulted by the privacy check.
   ASTNodeSet baseSymbols;
 
-  // Per-node symbol sets, memoised for this encoding epoch; the keys hold
-  // their nodes.
-  // Looked up by node and never iterated, so it wants hashing rather than
-  // the ordered comparison an std::map would do on every probe -- and it is
-  // probed once per candidate per piece per check.
-  typedef std::unordered_map<ASTNode, ASTNodeSet, ASTNode::ASTNodeHasher,
-                             ASTNode::ASTNodeEqual>
-      NodeSymbolsMap;
-  NodeSymbolsMap symbolsOfCache;
-
-  // Allocation-free scratch marks for symbol DAG walks. Node ids are
-  // process-thread-wide, monotone, and not reset with an encoding epoch. A
-  // sparse page map is therefore essential: a vector indexed by page number
-  // would immediately recreate a pointer span proportional to all historical
-  // node ids after every relief rotation, defeating memory reclamation.
-  static const size_t symbolVisitPageBits = 16;
-  static const size_t symbolVisitPageSize = size_t(1) << symbolVisitPageBits;
-  static const size_t symbolVisitPageMask = symbolVisitPageSize - 1;
-  std::unordered_map<uint64_t, std::unique_ptr<uint8_t[]>> symbolVisitPages;
-  uint8_t symbolVisitEpoch = 0;
-
-  void beginSymbolVisit()
-  {
-    symbolVisitEpoch++;
-    if (symbolVisitEpoch != 0)
-      return;
-    for (auto& entry : symbolVisitPages)
-      std::fill(entry.second.get(), entry.second.get() + symbolVisitPageSize,
-                uint8_t(0));
-    symbolVisitEpoch = 1;
-  }
-
-  bool firstSymbolVisit(const ASTNode& n)
-  {
-    const uint64_t base = bm->ASTFalse.GetNodeNum();
-    const uint64_t node = n.GetNodeNum();
-    assert(node >= base);
-    const uint64_t relative = node - base;
-    const uint64_t page64 = relative >> symbolVisitPageBits;
-    std::unique_ptr<uint8_t[]>& page = symbolVisitPages[page64];
-    if (!page)
-      page.reset(new uint8_t[symbolVisitPageSize]());
-    uint8_t& mark = page[static_cast<size_t>(relative) & symbolVisitPageMask];
-    if (mark == symbolVisitEpoch)
-      return false;
-    mark = symbolVisitEpoch;
-    return true;
-  }
 
   // Keys this driver has seeded into the batch Simplifier's SolverMap
   // (the model-evaluation channel), so the next solve can withdraw them.
@@ -663,41 +621,16 @@ struct IncrementalSolver::Impl
   static const int64_t firstStackMinReencodeLimit = 1000000;
 
   // DAG node count up to `cap`; used to pick the preparation granularity.
-  size_t dagSizeUpTo(const ASTNode& n, size_t cap)
+  static size_t dagSizeUpTo(const ASTNode& n, size_t cap)
   {
-    ASTNodeSet visited;
-    std::vector<ASTNode> pending(1, n);
-    while (!pending.empty() && visited.size() <= cap)
-    {
-      const ASTNode cur = pending.back();
-      pending.pop_back();
-      if (!visited.insert(cur).second)
-        continue;
-      for (unsigned i = 0; i < cur.Degree(); i++)
-        pending.push_back(cur[i]);
-    }
-    return visited.size();
+    return IncrementalWalks::dagSizeUpTo(n, cap);
   }
 
-  // The granularity measurement recurs for the same nodes on every call
-  // of a deep session (every level's granularity is re-judged per
-  // check-sat); nodes are immutable, so the clipped count is a permanent
-  // fact. The CBP feed does NOT measure sizes -- it asks the engine what a
-  // level would add to what it already holds, which no per-node size can
-  // answer.
-  typedef std::unordered_map<ASTNode, size_t, ASTNode::ASTNodeHasher,
-                             ASTNode::ASTNodeEqual>
-      NodeSizeMemo;
-  NodeSizeMemo dagSizeBigMemo;
-
-  size_t dagSizeUpToMemo(const ASTNode& n, size_t cap, NodeSizeMemo& memo)
+  // The memoised variant against the epoch-scoped big-formula memo; the
+  // rationale for memoising lives with the memo (IncrementalWalks.h).
+  size_t dagSizeUpToBigMemo(const ASTNode& n, size_t cap)
   {
-    NodeSizeMemo::const_iterator it = memo.find(n);
-    if (it != memo.end())
-      return it->second;
-    const size_t s = dagSizeUpTo(n, cap);
-    memo[n] = s;
-    return s;
+    return walks.dagSizeUpToBigMemo(n, cap);
   }
 
   size_t semanticCacheLimit() const
@@ -724,20 +657,9 @@ struct IncrementalSolver::Impl
         charge > remaining ? limit : semanticNodeCharge + charge;
   }
 
-  uint64_t astDagUnionSize(const ASTVec& roots) const
+  static uint64_t astDagUnionSize(const ASTVec& roots)
   {
-    ASTNodeSet visited;
-    ASTVec pending = roots;
-    while (!pending.empty())
-    {
-      const ASTNode node = pending.back();
-      pending.pop_back();
-      if (node.IsNull() || !visited.insert(node).second)
-        continue;
-      for (unsigned i = 0; i < node.Degree(); ++i)
-        pending.push_back(node[i]);
-    }
-    return static_cast<uint64_t>(visited.size());
+    return IncrementalWalks::astDagUnionSize(roots);
   }
 
   void stageSemanticLiveStack(const ASTVec& rawStack,
@@ -1086,34 +1008,11 @@ struct IncrementalSolver::Impl
     cbpFedArrays = false;
   }
 
-  // Early-exit containment: does `n` reach any of `syms`? The
-  // harvest's per-delta-node filters must stay walk-bounded with no
-  // per-node set materialisation -- a large formula's fixpoint delta
-  // is tens of thousands of nodes, and building symbol sets for each
-  // measured minutes on a single feed. A walk that exhausts its
-  // budget answers "reaches": the caller then defers the fixing,
-  // which only forgoes an intra-level fold.
-  bool reachesAnyOf(const ASTNode& n, const ASTNodeSet& syms)
+  // Budget-bounded containment probe; the harvest's rationale for the
+  // bound lives with the walk (IncrementalWalks.h).
+  static bool reachesAnyOf(const ASTNode& n, const ASTNodeSet& syms)
   {
-    static const size_t walkBudget = 2000;
-    ASTNodeSet visited;
-    std::vector<ASTNode> pending(1, n);
-    while (!pending.empty())
-    {
-      const ASTNode cur = pending.back();
-      pending.pop_back();
-      if (cur.isConstant())
-        continue;
-      if (!visited.insert(cur).second)
-        continue;
-      if (visited.size() > walkBudget)
-        return true;
-      if (syms.find(cur) != syms.end())
-        return true;
-      for (unsigned i = 0; i < cur.Degree(); i++)
-        pending.push_back(cur[i]);
-    }
-    return false;
+    return IncrementalWalks::reachesAnyOf(n, syms);
   }
 
   // Feed one live level's raw conjunction to the engine and collect
@@ -1459,38 +1358,13 @@ struct IncrementalSolver::Impl
     return false;
   }
 
-  // Both walkers below are the shared collectSymbols() walk (AST.h) over
-  // this driver's allocation-free paged epoch marks in place of the
-  // library wrapper's per-call ASTNodeSet.
-  const ASTNodeSet& symbolsOf(const ASTNode& n)
-  {
-    NodeSymbolsMap::iterator hit = symbolsOfCache.find(n);
-    if (hit != symbolsOfCache.end())
-      return hit->second;
+  // Per-node symbol sets (epoch-memoised) and the multi-root union walk;
+  // both live in IncrementalWalks.h with their machinery.
+  const ASTNodeSet& symbolsOf(const ASTNode& n) { return walks.symbolsOf(n); }
 
-    beginSymbolVisit();
-    ASTNodeSet& out = symbolsOfCache[n];
-    collectSymbols(ASTVec(1, n),
-                   [this](const ASTNode& node)
-                   { return firstSymbolVisit(node); },
-                   out);
-    return out;
-  }
-
-  // Add the union of symbols reachable from several roots in ONE DAG walk.
-  // Calling symbolsOf() for each root separately is intentionally useful when
-  // callers need each individual set, but is catastrophic for a large family
-  // of overlapping roots: CBP can expose thousands of eligible fixed domains
-  // over the same define-fun spine.  Protection only needs their union.
   void addSymbolsOf(const ASTVec& roots, ASTNodeSet& out)
   {
-    if (roots.empty())
-      return;
-    beginSymbolVisit();
-    collectSymbols(roots,
-                   [this](const ASTNode& node)
-                   { return firstSymbolVisit(node); },
-                   out);
+    walks.addSymbolsOf(roots, out);
   }
 
   // Screen a piece of raw content that has never been seen: any symbol it
@@ -2187,6 +2061,7 @@ struct IncrementalSolver::Impl
       : bm(bm_), ce(ce_), batchSimp(batchSimp_), batchAT(batchAT_),
         policy(bm_->UserFlags.incremental_core_only),
         solver(makeBackend(bm_->UserFlags, true)), encoding(bm_),
+        walks(bm_->ASTFalse),
         trueVar(-1), lastUnsat(false), lastUnsatCoarse(false),
         lastLevelIndividual(false), modelPending(false),
         trailReuseAllowed(!policy.coreOnly()), lastLevelCount(0),
@@ -3213,8 +3088,7 @@ struct IncrementalSolver::Impl
            myAckPairs.size() + exactStackKeepAlive.size() +
            exactScopedPreprocessOf.size() + preparedPieceOf.size() +
            eliminationUsers.size() + screenedContent.size() +
-           symbolsOfCache.size() + symbolVisitPages.size() +
-           dagSizeBigMemo.size() + scopedBlockOf.size();
+           walks.cacheEntryCount() + scopedBlockOf.size();
   }
 
   // Release all state whose validity/reuse is tied to the word-to-AIG
@@ -3273,10 +3147,7 @@ struct IncrementalSolver::Impl
     releaseContainer(preparedPieceOf);
     releaseContainer(eliminationUsers);
     releaseContainer(screenedContent);
-    releaseContainer(symbolsOfCache);
-    releaseContainer(symbolVisitPages);
-    symbolVisitEpoch = 0;
-    releaseContainer(dagSizeBigMemo);
+    walks.releaseEpochStorage();
     releaseContainer(scopedBlockOf);
     releaseContainer(levelOccurrences);
     invalidateLevelOccurrences();
@@ -3487,11 +3358,8 @@ struct IncrementalSolver::Impl
     seededRowRef.clear();
     foldedRowsOf.clear();
     clauseMassOf.clear();
-    // Symbol sets are a pure function of the node, so this is reclamation,
-    // not invalidation: entries for still-live nodes are simply re-derived
-    // on the next solve that asks. SAT-only policy restarts may reclaim this
-    // cheap memo even though they retain the structural AIG epoch.
-    symbolsOfCache.clear();
+    // Reclamation, not invalidation; see reclaimSymbolSets.
+    walks.reclaimSymbolSets();
     refinementMassOf.clear();
     currentRefinementClauseMass = 0;
     aigRootOf.clear();
@@ -3687,8 +3555,7 @@ struct IncrementalSolver::Impl
         bm->UserFlags.incremental_base_resimplify_limit;
     const size_t resimplifyLimit =
         configuredLimit < 0 ? 0 : static_cast<size_t>(configuredLimit);
-    if (dagSizeUpToMemo(conj, resimplifyLimit, dagSizeBigMemo) >
-        resimplifyLimit)
+    if (dagSizeUpToBigMemo(conj, resimplifyLimit) > resimplifyLimit)
     {
       if (bm->UserFlags.stats_flag)
         std::cerr << "Incremental: base re-simplification skipped (base over "
@@ -5590,8 +5457,8 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
       // preparation reuses every already-prepared piece and loses only
       // cross-conjunct effects beyond definition chaining.
       ASTVec rawConjuncts;
-      if (impl->dagSizeUpToMemo(assertionsSMT2[level], Impl::bigFormulaCap,
-                                impl->dagSizeBigMemo) <=
+      if (impl->dagSizeUpToBigMemo(assertionsSMT2[level],
+                                   Impl::bigFormulaCap) <=
           Impl::bigFormulaCap)
         rawConjuncts.push_back(assertionsSMT2[level]);
       else
@@ -5744,8 +5611,7 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
         // million clauses against the substituted form's thousands.
         // rootLit's raw-keyed preparation (sigma0 and the plain
         // simplifier inside the cache) does the rest, as it always has.
-        if (impl->dagSizeUpToMemo(replaced, Impl::bigFormulaCap,
-                                  impl->dagSizeBigMemo) >
+        if (impl->dagSizeUpToBigMemo(replaced, Impl::bigFormulaCap) >
             Impl::bigFormulaCap)
         {
           conjuncts.push_back(replaced);
