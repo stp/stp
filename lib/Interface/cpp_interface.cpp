@@ -1027,6 +1027,14 @@ void Cpp_interface::getInfo(std::string flag)
     cout << "(:name \"STP\")" << endl;
   else if (flag == "version")
     cout << "(:version \"" << get_git_version_tag() << "\")" << endl;
+  else if (flag == "authors")
+  {
+    // Required, like :name and :version (SMT-LIB 2.6, 4.1.8), and answered
+    // collectively: the response is a fixed string, while the people it
+    // stands for are in AUTHORS, where they can be credited properly and
+    // kept current without touching the solver's output.
+    cout << "(:authors \"the STP team\")" << endl;
+  }
   else if (flag == "error-behavior")
   {
     // FatalError() exits rather than unwinding to the next command.
@@ -1040,7 +1048,8 @@ void Cpp_interface::getInfo(std::string flag)
   }
   else
   {
-    // :all-statistics, :authors and :reason-unknown are not reported.
+    // The remaining standard flags, :all-statistics and :reason-unknown, are
+    // both optional and not reported.
     unsupported();
     return;
   }
