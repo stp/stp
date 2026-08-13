@@ -485,7 +485,7 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 
 
 ({LETTER}|{OPCHAR})({ANYTHING})*  {return lookup(smt2text);}
-\|([^\|]|\n)*\| { countNewlines(smt2text, smt2leng); return lookup(smt2text); }
+\|([^\|]|[\x80-\xff]|\n)*\| { countNewlines(smt2text, smt2leng); return lookup(smt2text); }
 
 . { smt2error("Illegal input character."); }
 %%
