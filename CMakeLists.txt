@@ -203,11 +203,21 @@ if (NOT MSVC)
     endif()
 else()
     # see https://msdn.microsoft.com/en-us/library/fwkeyyhe.aspx for details
-    # /ZI = include debug info
+    # /Z7 = include debug info
     # /Wall = all warnings
 
     add_compile_options("$<$<CONFIG:RELWITHDEBINFO>:/O2>")
-    add_compile_options("$<$<CONFIG:RELWITHDEBINFO>:/ZI>")
+    # /Z7 rather than /ZI or /Zi. Both of those write every object's debug
+    # information into one shared PDB through mspdbsrv, which a parallel build
+    # has to serialise on (/FS exists only to make that safe at all), and which
+    # a compiler cache cannot reproduce when it replays a hit -- sccache
+    # declines to cache anything compiled that way. /Z7 puts the same debug
+    # information in the object file itself, so it is per-object, needs no
+    # serialisation and survives caching; the linker still emits a PDB from it.
+    # /ZI additionally asks for Edit and Continue, which is a debugger feature
+    # of no use to a build, and which cl does not honour alongside the /O2
+    # above in any case.
+    add_compile_options("$<$<CONFIG:RELWITHDEBINFO>:/Z7>")
 
     add_compile_options("$<$<CONFIG:RELEASE>:/O2>")
     add_compile_options("$<$<CONFIG:RELEASE>:/D>")
