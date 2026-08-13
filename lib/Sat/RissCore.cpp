@@ -80,27 +80,6 @@ bool RissCore::okay() const // FALSE means solver is in a conflicting state
   return s->okay();
 }
 
-// *Doesn't solve*, just does a single unit propagate.
-// returns false if UNSAT.
-bool RissCore::propagateWithAssumptions(
-    const stp::SATSolver::vec_literals& assumps)
-{
-  if (!s->simplify())
-    return false;
-
-  setMaxConflicts(0);
-
-  // convert the vector
-  Riss::vec<Lit> &v = *(Riss::vec<Riss::Lit> *)riss_clause;
-  v.capacity(assumps.size());
-  v.clear();
-  for(int i = 0 ; i < assumps.size(); ++ i) v.push_(Riss::toLit(toInt(assumps[i])));
-
-  Riss::lbool ret = s->solveLimited(v);
-  assert(s->conflicts ==0);
-  return ret != (Riss::lbool)l_False;
-}
-
 bool RissCore::solveInternal(bool& timeout_expired)
 {
   if (!s->simplify())

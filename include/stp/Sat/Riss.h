@@ -58,8 +58,6 @@ public:
 
   bool okay() const override; // FALSE means solver is in a conflicting state
 
-  bool propagateWithAssumptions(const stp::SATSolver::vec_literals& assumps);
-
   void setMaxConflicts(int64_t max_confl) override;
 
   bool simplify() override; // Removes already satisfied clauses.
