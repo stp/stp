@@ -46,6 +46,7 @@ THE SOFTWARE.
 #ifndef COMMONSUBSUM_H_
 #define COMMONSUBSUM_H_
 
+#include "extlib-unordered-dense/ankerl/unordered_dense.h"
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include <map>
@@ -70,7 +71,42 @@ class CommonSubSum
   std::map<uint64_t, ASTVec> operands;
   std::map<uint64_t, ASTNode> byNum;
 
+  typedef std::pair<uint64_t, uint64_t> NodePair;
+
+  // Node numbers are allocated densely from zero, so the raw pair has almost
+  // no entropy in its high bits. One multiply-xor spreads it over the whole
+  // word, which is what 'is_avalanching' promises the table.
+  struct PairHash
+  {
+    using is_avalanching = void;
+    uint64_t operator()(const NodePair& p) const noexcept
+    {
+      return ankerl::unordered_dense::detail::wyhash::mix(
+          p.first + UINT64_C(0x9E3779B97F4A7C15), p.second);
+    }
+  };
+
+  // How many of the additions hold each pair of operands. Only the tally is
+  // kept: the additions holding the winning pair are recovered by a scan,
+  // which is far cheaper than a list of them hanging off every pair. The
+  // table is patched as additions change rather than rebuilt each round.
+  ankerl::unordered_dense::map<NodePair, uint32_t, PairHash> occurrences;
+
+  // Operands worth pairing. A pair can only be shared by two additions if
+  // each of its operands is, so an operand that starts out in one addition
+  // can be left out of the enumeration entirely -- which on a query whose
+  // additions share nothing is all of them.
+  ankerl::unordered_dense::set<uint64_t> shareable;
+
   void collect(const ASTNode& n, ASTNodeSet& seen, ASTVec& plusNodes);
+  void markShareable();
+  void eligibleOf(const ASTVec& v, std::vector<uint64_t>& out) const;
+  bool bump(uint64_t a, uint64_t b);
+  void drop(uint64_t a, uint64_t b);
+  bool addPairs(const ASTVec& v);
+  bool repair(const ASTVec& before, const ASTVec& after);
+  bool promote(const ASTNode& n);
+  bool buildOccurrences();
   bool extractOnePair();
   ASTNode rebuild(const ASTNode& n, const std::map<uint64_t, ASTVec>& changed,
                   ASTNodeMap& cache);
