@@ -2206,11 +2206,20 @@ struct IncrementalSolver::Impl
       // elimination is only sound if later uses are substituted away,
       // and substituting a big replacement destroys the sharing its
       // variable provides.
+      //
+      // An array-carrying BODY is refused too, exactly as the equality
+      // harvests refuse it (recogniseDefinition): an eliminated body is
+      // replayed through the model channel, where a read belongs to a
+      // registry row no active encoding anchors, and it joins the
+      // pushed-definition context, whose cycle check
+      // (STPMgr::VarSeenInTerm) does not look inside read-over-write
+      // terms. Keeping the equation asserted costs only the rewrite.
       ASTNode inlined;
       if (var.GetKind() != SYMBOL || var.GetIndexWidth() != 0 ||
           !levelPrivate(var, levelIdx, stack, conjunctCountOf,
                         protectedSymbols) ||
           dagSizeUpTo(def, defInlineCap) > defInlineCap ||
+          containsArrayOps(def, bm) ||
           !ctxInlinable(var, def, ctx, inlined))
       {
         keep.push_back(definitionEquation(var, def));
@@ -4335,6 +4344,14 @@ struct IncrementalSolver::Impl
     {
       const ASTNode& var = it->first;
       const ASTNode& def = it->second;
+      // The array gate at the top of this pass is what makes these
+      // eliminations replayable without the piece path's array-body
+      // refusal: an array-free base cannot harvest a read-carrying
+      // definition. Stated here, where the elimination is recorded,
+      // so a future relaxation of that gate fails by name.
+      assert(!containsArrayOps(def, bm) &&
+             "the base re-simplification gate admitted an array-carrying "
+             "definition");
       if (var.GetKind() != SYMBOL || var.GetIndexWidth() != 0 ||
           untouch.find(var) != untouch.end())
       {
