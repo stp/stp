@@ -587,7 +587,31 @@ SourceSort ASTNode::deriveSourceSort() const
   {
     const SourceSort then_sort = (*this)[1].GetSourceSort();
     const SourceSort else_sort = (*this)[2].GetSourceSort();
-    return then_sort == else_sort ? then_sort : SourceSort::unknown();
+    if (then_sort == else_sort)
+      return then_sort;
+    // After lowering, a float-valued mux may hold one branch as its packed
+    // circuit -- a plain bitvector of the float's packed width -- while the
+    // other branch still names the float sort. BVTypeCheck's ITE rule
+    // admits exactly this mix (it arises only when lowering replaces a
+    // branch with its circuit; public construction requires the branches to
+    // share a sort), and deriveFPFormat already reads the format from
+    // whichever branch kept it. The array transform builds such muxes when
+    // it expands a read over a write of a float array: the stored value is
+    // already a circuit, the fresh read variable is float-stamped. The
+    // float branch names the sort for both.
+    const bool then_is_float =
+        then_sort.kind() == SourceSort::Kind::FloatingPoint;
+    const bool else_is_float =
+        else_sort.kind() == SourceSort::Kind::FloatingPoint;
+    if (then_is_float != else_is_float)
+    {
+      const SourceSort& float_sort = then_is_float ? then_sort : else_sort;
+      const SourceSort& other_sort = then_is_float ? else_sort : then_sort;
+      if (other_sort.kind() == SourceSort::Kind::BitVector &&
+          other_sort.bitVectorWidth() == float_sort.packedWidth())
+        return float_sort;
+    }
+    return SourceSort::unknown();
   }
 
   // Compatibility for internal and legacy leaves that predate typed source
