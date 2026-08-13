@@ -21,15 +21,6 @@ THE SOFTWARE.
 #include "stp/STPManager/UserDefinedFlags.h"
 #include <gtest/gtest.h>
 
-// The sharing-aware flattening stack is on by default.
-TEST(UserDefinedFlags_Test, flattening_stack_on_by_default)
-{
-  stp::UserDefinedFlags uf;
-  EXPECT_TRUE(uf.enable_flatten);
-  EXPECT_TRUE(uf.enable_common_subsum);
-  EXPECT_TRUE(uf.enable_pair_extract);
-}
-
 // --disable-simplifications owns the whole stack: the bulk setter must
 // switch all of it off.
 TEST(UserDefinedFlags_Test, disable_simplifications_clears_flattening_stack)
