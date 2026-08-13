@@ -106,6 +106,19 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
       {
         const ASTNode& the_index = it->first;
 
+        // A row that already carries its anchor was bound when it was
+        // created, and its binding equation was conjoined onto whatever
+        // formula created it. Re-emitting it here would attach the whole
+        // table's anchors to every formula transformed afterwards -- which
+        // costs nothing in clauses, since the equations are interned and the
+        // AIG is strashed, but puts every row ever seen into every root's
+        // live cone. That is invisible in batch, where the table holds only
+        // the current query's rows and no row is ever seen already bound; it
+        // matters for a caller that keeps a registry across solves, whose
+        // relief valve then sees almost everything as live.
+        if (!it->second.index_symbol.IsNull())
+          continue;
+
         if (the_index.isConstant() ||
             (the_index.GetKind() == SYMBOL && !forceIndexAnchor))
         {
@@ -118,8 +131,8 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
         }
         else
         {
-          ASTNode newV = bm->CreateFreshVariable(0, the_index.GetValueWidth(),
-                                                 "STP__IndexVariables");
+          ASTNode newV = bm->CreateDeterministicVariable(
+              0, the_index.GetValueWidth(), "STP__IndexVariables", the_index);
           equalsNodes.push_back(nf->CreateNode(EQ, the_index, newV));
           replaced.insert(make_pair(the_index, newV));
           it->second.index_symbol = newV;
@@ -815,8 +828,12 @@ class ArrayTransformer::TransformDriver
             }
           }
 
-          ASTNode CurrentSymbol = bm->CreateFreshVariable(
-              term.GetIndexWidth(), term.GetValueWidth(), "ext_read");
+          // Deterministic per (array, index): repeating a solve re-mints the
+          // same abstraction variable, so an incremental round's encoding and
+          // lemmas stay attached to the right SAT variables.
+          ASTNode CurrentSymbol = bm->CreateDeterministicVariable(
+              term.GetIndexWidth(), term.GetValueWidth(), "ext_read", arrName,
+              readIndex);
 
           // Same reason as the read-refinement path below: this variable
           // stands in for the read from here on and is a leaf, so the element
@@ -859,13 +876,13 @@ class ArrayTransformer::TransformDriver
             }
           }
 
-          // Make up a new abstract variable. Build symbolic name
-          // corresponding to array read. The symbolic name has 2
-          // components: stringname, and a count
+          // Make up a new abstract variable, named deterministically by the
+          // (array, index) pair it reads: re-deriving the same read -- in a
+          // later solve or an incremental round -- yields the same variable.
 
-          ASTNode CurrentSymbol = bm->CreateFreshVariable(
+          ASTNode CurrentSymbol = bm->CreateDeterministicVariable(
               term.GetIndexWidth(), term.GetValueWidth(),
-              "array_" + std::string(arrName.GetName()));
+              "array_" + std::string(arrName.GetName()), readIndex);
 
           // Reading an array of floats yields a float. The read node derived
           // its format from the array, but this fresh variable stands in for
