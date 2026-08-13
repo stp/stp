@@ -222,14 +222,7 @@ SATSolver* makeBackend(UserDefinedFlags& uf, bool warn)
   // bias while they are still empty, so it belongs here for both the initial
   // solver and every relief rebuild. Warn once for the session, not once per
   // rebuild.
-  if (uf.search_bias != SearchBias::NONE &&
-      !s->setSearchBias(uf.search_bias) && warn)
-  {
-    std::cerr << "Warning: the SAT solver in use has no '"
-              << searchBiasName(uf.search_bias)
-              << "' search bias to select; using its own settings instead."
-              << std::endl;
-  }
+  applySearchBias(*s, uf, warn);
   return s;
 }
 
@@ -4597,18 +4590,8 @@ struct IncrementalSolver::Impl
       }
     }
 
-    if (!wants)
-      return;
-
-    if (!solver->enableBVA() &&
-        uf.cadical_factor == UserDefinedFlags::BVAMode::ON && !bvaWarned)
-    {
+    if (enableBVAIfWanted(*solver, uf, wants, !bvaWarned))
       bvaWarned = true;
-      std::cerr << "Warning: --cadical-factor was requested but the SAT "
-                   "solver in use has no bounded variable addition to "
-                   "enable; using its own settings instead."
-                << std::endl;
-    }
   }
 
   // The literal to assume for one pushed level, given the level's root
@@ -5180,10 +5163,7 @@ IncrementalSolver::Impl::exactStackCheckSat(
               << solver->nVars() << " variables" << std::endl;
   }
 
-  if (uf.timeout_max_conflicts >= 0)
-    solver->setMaxConflicts(uf.timeout_max_conflicts);
-  if (uf.timeout_max_time >= 0)
-    solver->setMaxTime(uf.timeout_max_time);
+  applySolveBudgets(*solver, uf);
   bm->soft_timeout_expired = false;
 
   SATSolver::vec_literals assumptions;
@@ -6603,10 +6583,7 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
     impl->ce->setFpEncodingContext(impl->fpCtx.get());
 
   // Budgets are per check-sat, as solve_by_sat_solver arms them per query.
-  if (uf.timeout_max_conflicts >= 0)
-    impl->solver->setMaxConflicts(uf.timeout_max_conflicts);
-  if (uf.timeout_max_time >= 0)
-    impl->solver->setMaxTime(uf.timeout_max_time);
+  applySolveBudgets(*impl->solver, uf);
   bm->soft_timeout_expired = false;
 
   if (needRefinement)

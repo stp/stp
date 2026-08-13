@@ -88,17 +88,7 @@ SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS,
   if (bm->UserFlags.stats_flag)
     NewSolver.setVerbosity(1);
 
-  /*
-   * STP spells "no limit" as a negative value, and every other value -- zero
-   * included -- is a budget to be honoured. Do that translation once, here,
-   * so that the backends are only ever handed a value >= 0 and cannot each
-   * decide for themselves what, say, zero means.
-   */
-  if (bm->UserFlags.timeout_max_conflicts >= 0)
-    newS->setMaxConflicts(bm->UserFlags.timeout_max_conflicts);
-
-  if (bm->UserFlags.timeout_max_time >= 0)
-    newS->setMaxTime(bm->UserFlags.timeout_max_time);
+  applySolveBudgets(NewSolver, bm->UserFlags);
 
   // reset the timeout expired flag for the new check
   bm->soft_timeout_expired = false;
@@ -125,18 +115,7 @@ void STP::resetIncrementalSolver()
 SATSolver* STP::get_new_sat_solver()
 {
   SATSolver* newS = createSATSolver(bm->UserFlags);
-
-  // Before any clause reaches it, which is the only point some backends will
-  // accept a configuration at.
-  if (bm->UserFlags.search_bias != SearchBias::NONE &&
-      !newS->setSearchBias(bm->UserFlags.search_bias))
-  {
-    std::cerr << "Warning: the SAT solver in use has no '"
-              << searchBiasName(bm->UserFlags.search_bias)
-              << "' search bias to select; using its own settings instead."
-              << std::endl;
-  }
-
+  applySearchBias(*newS, bm->UserFlags, true);
   return newS;
 }
 
@@ -464,19 +443,12 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // declined explicit ON is worth a warning (no CaDiCaL 3.x behind the
   // build, or a different backend); a declined AUTO is just the default
   // heuristic not applying.
-  if (bm->UserFlags.cadical_factor == UserDefinedFlags::BVAMode::ON ||
-      (bm->UserFlags.cadical_factor == UserDefinedFlags::BVAMode::AUTO &&
-       arrayops))
-  {
-    if (!NewSolver.enableBVA() &&
-        bm->UserFlags.cadical_factor == UserDefinedFlags::BVAMode::ON)
-    {
-      std::cerr << "Warning: --cadical-factor was requested but the SAT "
-                   "solver in use has no bounded variable addition to "
-                   "enable; using its own settings instead."
-                << std::endl;
-    }
-  }
+  enableBVAIfWanted(
+      NewSolver, bm->UserFlags,
+      bm->UserFlags.cadical_factor == UserDefinedFlags::BVAMode::ON ||
+          (bm->UserFlags.cadical_factor == UserDefinedFlags::BVAMode::AUTO &&
+           arrayops),
+      true);
 
   // Recomputed per query, never latched: every input is available here,
   // including the C API's direct request, so a query that happens to need a
