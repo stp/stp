@@ -879,6 +879,21 @@ void Cpp_interface::cleanUp()
   }
 }
 
+// SMT-LIB gives these options a <b_value> argument (2.6, figure 3.9), so a
+// value that is not true or false does not describe a command the solver
+// could have carried out: it is malformed input, and "unsupported" -- the
+// answer for what the solver cannot do (3.9.1) -- would misreport it as a
+// capability it lacks. Report it the way the parser reports its own
+// malformed input, with an error response and then a stop.
+void Cpp_interface::badBooleanOptionValue(const std::string& option,
+                                          const std::string& value)
+{
+  const std::string msg = "set-option :" + option +
+                          " takes true or false, but was given: " + value;
+  error(msg);
+  FatalError(msg.c_str());
+}
+
 void Cpp_interface::setOption(std::string option, std::string value)
 {
   /*
@@ -903,7 +918,7 @@ void Cpp_interface::setOption(std::string option, std::string value)
     else if (value == "false")
       setPrintSuccess(false);
     else
-      unsupported();
+      badBooleanOptionValue(option, value);
   }
   else if (option == "produce-models")
   {
@@ -924,7 +939,7 @@ void Cpp_interface::setOption(std::string option, std::string value)
       success();
     }
     else
-      unsupported();
+      badBooleanOptionValue(option, value);
   }
   else if (option == "global-declarations")
   {
@@ -944,7 +959,7 @@ void Cpp_interface::setOption(std::string option, std::string value)
       success();
     }
     else
-      unsupported();
+      badBooleanOptionValue(option, value);
   }
   else if (option == "produce-unsat-assumptions")
   {
@@ -953,7 +968,7 @@ void Cpp_interface::setOption(std::string option, std::string value)
     if (value == "true" || value == "false")
       success();
     else
-      unsupported();
+      badBooleanOptionValue(option, value);
   }
   else if (option == "diagnostic-output-channel")
   {

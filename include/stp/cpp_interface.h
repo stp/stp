@@ -210,6 +210,13 @@ private:
 
   void checkInvariant();
   void init();
+
+  // Report (set-option :<option> <value>) where the option's argument is a
+  // <b_value> and the value is neither true nor false. Malformed rather than
+  // unsupported, so it is an error response and not "unsupported"; STP's
+  // :error-behavior is immediate-exit, so it does not return.
+  ATTR_NORETURN void badBooleanOptionValue(const std::string& option,
+                                           const std::string& value);
   void addFrame();
   void removeFrame();
   void assertRoundingModeValid(const ASTNode& s);
