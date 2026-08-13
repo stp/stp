@@ -557,8 +557,10 @@ void Cpp_interface::popToFirstLevel()
 }
 
 // Weaker than reset(): retain options and the selected logic, but empty the
-// assertion stack. With the supported/default :global-declarations=false,
-// SMT-LIB requires this to discard declarations and definitions too.
+// assertion stack. With :global-declarations false SMT-LIB requires this to
+// discard declarations and definitions too; with it true they are kept, which
+// is the point of the option for a driver that streams large terms once and
+// re-queries them.
 void Cpp_interface::resetAssertions()
 {
   // Pop the ordinary levels through the ordinary path so the assertion stack,
@@ -572,10 +574,14 @@ void Cpp_interface::resetAssertions()
 
   // The base is an assertion level too for declaration lifetime. Rebuild it
   // rather than merely replacing its assertions: destroying the frame drops
-  // its symbols, functions, and sort aliases together.
+  // its symbols, functions, and sort aliases together. Global declarations
+  // are exactly the case where that must not happen -- the pops above have
+  // already moved every level's declarations into this frame -- so there the
+  // frame stays and only its assertions go.
   model_valid = false;
   bm.Pop();
-  removeFrame();
+  if (!global_declarations)
+    removeFrame();
   cache.clear();
 
   // These tables may retain the discarded assertions or declarations.
@@ -584,7 +590,8 @@ void Cpp_interface::resetAssertions()
   resetIncrementalSolver();
 
   cache.push_back(Entry(SOLVER_UNDECIDED));
-  addFrame();
+  if (!global_declarations)
+    addFrame();
   bm.Push();
 
   checkInvariant();
@@ -610,6 +617,14 @@ void Cpp_interface::pop()
   cache.erase(cache.end() - 1);
 
   assert(letMgr->_parser_symbol_table.size() == 0);
+
+  // Popping a level undoes the assertions made in it either way; what it does
+  // to the declarations made in it is what :global-declarations selects
+  // (SMT-LIB 2.6, 4.1.5). When they are global, the level's declarations move
+  // down to the base frame -- which only reset destroys -- instead of dying
+  // with the frame.
+  if (global_declarations)
+    frames.front()->adoptDeclarations(*frames.back());
 
   removeFrame();
   checkInvariant();
@@ -911,6 +926,26 @@ void Cpp_interface::setOption(std::string option, std::string value)
     else
       unsupported();
   }
+  else if (option == "global-declarations")
+  {
+    // SMT-LIB gives this option mode "start", so a conforming script sets it
+    // before set-logic. STP enforces no mode on any option and does not start
+    // here: the flag is read when a level is popped or the assertions are
+    // reset, so a script that sets it later is answered rather than refused,
+    // and gets the behaviour it asked for from that point on.
+    if (value == "true")
+    {
+      global_declarations = true;
+      success();
+    }
+    else if (value == "false")
+    {
+      global_declarations = false;
+      success();
+    }
+    else
+      unsupported();
+  }
   else if (option == "produce-unsat-assumptions")
   {
     // get-unsat-assumptions is always answered; the option is accepted so
@@ -940,6 +975,8 @@ void Cpp_interface::getOption(std::string option)
     cout << (print_success ? "true" : "false") << endl;
   else if (option == "produce-models")
     cout << (produce_models ? "true" : "false") << endl;
+  else if (option == "global-declarations")
+    cout << (global_declarations ? "true" : "false") << endl;
   else if (option == "diagnostic-output-channel")
     cout << "\"stdout\"" << endl;
   else
@@ -1229,6 +1266,30 @@ bool Cpp_interface::SolverFrame::removeSymbol(const ASTNode& symbol)
     }
   }
   return false;
+}
+
+void Cpp_interface::SolverFrame::adoptDeclarations(SolverFrame& donor)
+{
+  // Re-add rather than splice: this frame's own bindings index has to end up
+  // knowing about the adopted symbols, and adding them in declaration order
+  // keeps the most recent declaration of a name the one lookupSymbol finds.
+  for (const ASTNode& symbol : donor._scoped_symbols)
+    addSymbol(symbol);
+  donor._scoped_symbols.clear();
+  donor._symbol_bindings.clear();
+
+  // Functions and sort aliases live in contexts shared by every frame; a
+  // frame only records the names it is responsible for erasing, so moving
+  // the names is what moves the responsibility.
+  _scoped_functions.insert(_scoped_functions.end(),
+                           donor._scoped_functions.begin(),
+                           donor._scoped_functions.end());
+  donor._scoped_functions.clear();
+
+  _scoped_sort_aliases.insert(_scoped_sort_aliases.end(),
+                              donor._scoped_sort_aliases.begin(),
+                              donor._scoped_sort_aliases.end());
+  donor._scoped_sort_aliases.clear();
 }
 
 bool Cpp_interface::SolverFrame::lookupSymbol(std::string_view name,
