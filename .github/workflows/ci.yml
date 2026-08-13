@@ -923,6 +923,10 @@ jobs:
       # pass the include dir and library explicitly instead.
       # ZLIB_LIBRARY is located after the vcpkg install (see below).
       ZLIB_INCLUDE_DIR: C:\vcpkg\installed\x64-windows-static\include
+      # Turns on sccache's GitHub Actions storage backend. It has to be set for
+      # the job rather than the step, because the first compile starts a
+      # long-lived sccache server that inherits it once and keeps it.
+      SCCACHE_GHA_ENABLED: 'true'
 
     steps:
 
@@ -1014,6 +1018,52 @@ jobs:
         if (-not $lib) { throw "no zlib .lib found" }
         "ZLIB_LIBRARY=$lib" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
+    # The Ninja generator below needs cl on PATH with INCLUDE/LIB/LIBPATH set,
+    # rather than locating the toolchain for itself the way the Visual Studio
+    # generator does. vswhere and Enter-VsDevShell ship on the runner images, so
+    # this needs no third-party action; the environment they produce is handed to
+    # every later step through GITHUB_PATH and GITHUB_ENV, which is why it is
+    # entered once here instead of separately in each step that compiles.
+    - name: Enter the MSVC developer environment
+      run: |
+        $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+        $vs = & $vswhere -latest -property installationPath
+        if (-not $vs) { throw "vswhere found no Visual Studio" }
+        $before = $env:PATH -split ';'
+        Import-Module (Join-Path $vs "Common7\Tools\Microsoft.VisualStudio.DevShell.dll")
+        Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments '-arch=x64'
+
+        # GITHUB_PATH is prepended to the PATH of every later step, so only the
+        # entries the dev shell added are written out: re-listing the whole of
+        # PATH would put a second copy of the runner's own entries --
+        # winflexbison, installed above, among them -- ahead of the originals.
+        $env:PATH -split ';' |
+          Where-Object { $_ -and $before -notcontains $_ } |
+          Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+        foreach ($name in 'INCLUDE', 'LIB', 'LIBPATH') {
+          $value = [Environment]::GetEnvironmentVariable($name)
+          if (-not $value) { throw "$name is unset after Enter-VsDevShell" }
+          "$name=$value" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+        }
+
+        # Fails the step here, with a clear message, rather than at the first
+        # compile with a CMake toolchain-detection error. Ninja is on the runner
+        # image in its own right; the dev shell also carries the copy that comes
+        # with VS's C++ CMake component, so which one answers is not important.
+        foreach ($tool in 'cl', 'ninja') {
+          "$($tool): $((Get-Command $tool).Source)"
+        }
+
+    # sccache keys each compiled object on the preprocessed source, the compiler
+    # and its flags, and stores it in the GitHub Actions cache. ABC is 920 C
+    # files pinned at a submodule revision, so it recompiles identically every
+    # run and hits in full; STP's own objects hit for whatever the branch did not
+    # touch. Nothing here needs a cache key maintained by hand, the way the
+    # actions/cache steps in the Linux jobs do -- sccache derives its own, so a
+    # stale hit is not expressible.
+    - uses: mozilla-actions/sccache-action@v0.0.11
+
     # The script's fetch/verify/patch half is portable (curl, sha256sum,
     # tar and patch all ship with Git for Windows); the compile half is
     # cc/ar, so it stops before that and cl takes over below.
@@ -1021,16 +1071,10 @@ jobs:
       shell: bash
       run: LIBBF_NO_BUILD=1 ./scripts/deps/setup-libbf.sh
 
-    # vswhere ships on the runner images; Enter-VsDevShell is the
-    # supported way to a cl on PATH without a third-party action. The
-    # MSVC branch of the vendored-patch shims is what this compiles.
+    # The MSVC branch of the vendored-patch shims is what this compiles. Two
+    # files, so it is left out of the cache rather than given a launcher.
     - name: Build LibBF (MSVC)
       run: |
-        $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-        $vs = & $vswhere -latest -property installationPath
-        if (-not $vs) { throw "vswhere found no Visual Studio" }
-        Import-Module (Join-Path $vs "Common7\Tools\Microsoft.VisualStudio.DevShell.dll")
-        Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments '-arch=x64'
         Set-Location deps\libbf
         cl /nologo /std:c11 /O2 /c libbf.c cutils.c
         if ($LASTEXITCODE -ne 0) { exit 1 }
@@ -1045,19 +1089,77 @@ jobs:
         cmake -B build -A x64 -DSTATICCOMPILE=ON "-DCMAKE_POLICY_VERSION_MINIMUM=3.12" "-DCMAKE_INSTALL_PREFIX=$env:MINISAT_ROOT" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
         cmake --build build --config Release --target install
 
+    # Ninja rather than the Visual Studio generator, for two reasons. MSBuild
+    # invoked without /m builds one project at a time, and its ClCompile task
+    # without /MP compiles one file at a time within a project; neither is set
+    # anywhere, so this job used to compile ~1400 translation units serially,
+    # 920 of them ABC's. Ninja parallelises by default. And
+    # CMAKE_<LANG>_COMPILER_LAUNCHER, which is how sccache is wired into a CMake
+    # build, is honoured only by the Makefile and Ninja generators -- the Visual
+    # Studio generator ignores it silently, caching nothing.
+    #
+    # The build type has to be named now that the generator is single-config.
+    # RelWithDebInfo is what this job already configured: the Visual Studio
+    # generator ignored CMAKE_BUILD_TYPE and compiled --config Release, but
+    # ENABLE_ASSERTIONS was settled from CMAKE_BUILD_TYPE at configure time, so
+    # the binary this job smoke-tests has always asserted. Naming Release here
+    # would compile the same flags but quietly drop that, leaving no Windows job
+    # with assertions live.
+    #
+    # CMP0141/Embedded is what makes RelWithDebInfo cacheable: it moves CMake off
+    # the default /Zi, whose shared PDB sccache cannot reproduce from a hit, onto
+    # /Z7. See the matching note on the /Z7 in CMakeLists.txt. NB sccache's own
+    # README spells this -DCMAKE_POLICY_CMP0141, which is not a CMake variable
+    # and so does nothing: the policy default is CMAKE_POLICY_DEFAULT_CMP<NNNN>.
+    # Getting it wrong is silent -- /Zi survives and nothing is ever cached --
+    # which is what the hit rate printed after the build is there to catch.
+    #
+    # NOCRYPTOMINISAT: CryptoMiniSat does not build with MSVC (CaDiCaL
+    # and CMS's oracle use POSIX-only code); upstream CMS only supports
+    # MinGW on Windows.
     - name: Configure
-      # NOCRYPTOMINISAT: CryptoMiniSat does not build with MSVC (CaDiCaL
-      # and CMS's oracle use POSIX-only code); upstream CMS only supports
-      # MinGW on Windows.
-      run: cmake -B build -A x64 -DSTATICCOMPILE=ON -DUSE_MINISAT=ON -DNOCRYPTOMINISAT=ON -DENABLE_PYTHON_INTERFACE=OFF -DUSE_LIBBF=ON "-DLIBBF_DIR=$env:GITHUB_WORKSPACE\deps\libbf" "-DMINISAT_LIBDIR=$env:MINISAT_ROOT" "-DMINISAT_INCLUDE_DIRS=$env:MINISAT_ROOT\include" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
+      run: >
+        cmake -B build -G Ninja
+        -DCMAKE_BUILD_TYPE=RelWithDebInfo
+        -DCMAKE_POLICY_DEFAULT_CMP0141=NEW -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded
+        -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl
+        -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+        -DSTATICCOMPILE=ON -DUSE_MINISAT=ON -DNOCRYPTOMINISAT=ON
+        -DENABLE_PYTHON_INTERFACE=OFF -DUSE_LIBBF=ON
+        "-DLIBBF_DIR=$env:GITHUB_WORKSPACE\deps\libbf"
+        "-DMINISAT_LIBDIR=$env:MINISAT_ROOT"
+        "-DMINISAT_INCLUDE_DIRS=$env:MINISAT_ROOT\include"
+        "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR"
+        "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY"
+        .
 
+    # No --config: Ninja is single-config, and no --parallel either, since Ninja
+    # already defaults to one job per core plus two. The stats are printed so a
+    # run that quietly stops hitting is visible rather than just slow.
     - name: Build
-      run: cmake --build build --config Release
+      run: |
+        sccache --zero-stats
+        cmake --build build
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+        sccache --show-stats
 
+    # build\stp.exe, not the build\bin\stp.exe this used to look for, and the
+    # generator is what moved it. tools/stp/CMakeLists.txt sets the target's own
+    # RUNTIME_OUTPUT_DIRECTORY to PROJECT_BINARY_DIR. Under the Visual Studio
+    # generator that was outranked: the WIN32 block in CMakeLists.txt points
+    # CMAKE_RUNTIME_OUTPUT_DIRECTORY at bin/, and the multi-config branch below
+    # copies it into CMAKE_RUNTIME_OUTPUT_DIRECTORY_<CONFIG>, which initialises
+    # the per-config target property -- and a per-config property beats the plain
+    # one. Ninja has no per-config property, so the tool's own setting wins and
+    # the binary lands where every Linux job already finds it.
     - name: Smoke test
       run: |
-        dir build\bin
-        $stp = "build\bin\stp.exe"
+        $stp = "build\stp.exe"
+        if (-not (Test-Path $stp)) {
+          Get-ChildItem build -Filter *.exe -Recurse | ForEach-Object { $_.FullName }
+          throw "$stp was not built; the executables found are listed above"
+        }
+        Get-Item $stp
         "(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (= x #x2a))(check-sat)" | Out-File -Encoding ascii test.smt2
         $out = & $stp test.smt2 2>&1 | Out-String
         "solver output: '$($out.Trim())'"
@@ -1112,6 +1214,10 @@ jobs:
       # the flags come out empty there.) This routes abc_global.h onto
       # stdint.h's intptr_t instead of the probe's guess.
       ABC_USE_STDINT_H: 1
+      # Turns on sccache's GitHub Actions storage backend. It has to be set for
+      # the job rather than the step, because the first compile starts a
+      # long-lived sccache server that inherits it once and keeps it.
+      SCCACHE_GHA_ENABLED: 'true'
 
     defaults:
       run:
@@ -1122,6 +1228,33 @@ jobs:
     - uses: actions/checkout@v7
       with:
           submodules: 'true'
+
+    # sccache keys each compiled object on the preprocessed source, the compiler
+    # and its flags, and stores it in the GitHub Actions cache. ABC is 920 C
+    # files pinned at a submodule revision, so it recompiles identically every
+    # run and hits in full; STP's own objects hit for whatever the branch did not
+    # touch. Nothing here needs a cache key maintained by hand, the way the
+    # actions/cache steps in the Linux jobs do -- sccache derives its own, so a
+    # stale hit is not expressible.
+    - uses: mozilla-actions/sccache-action@v0.0.11
+
+    # The action puts sccache on the *Windows* PATH, which setup-msys2 does not
+    # import into the MSYS2 shell (its path-type defaults to "minimal"). The
+    # SCCACHE_PATH it exports does survive, being an ordinary environment
+    # variable, but it names the binary without the .exe suffix. Resolve both
+    # here, once, in forward-slash form so that CMake and bash can each take the
+    # result verbatim. Run under pwsh: this is the one step in the job that is
+    # talking to the runner rather than to the MSYS2 toolchain.
+    - name: Locate sccache
+      shell: pwsh
+      run: |
+        $exe = $env:SCCACHE_PATH
+        if (-not $exe.EndsWith('.exe')) { $exe = "$exe.exe" }
+        if (-not (Test-Path $exe)) { throw "sccache is not at $exe" }
+        & $exe --version
+        if ($LASTEXITCODE -ne 0) { throw "sccache failed to run" }
+        "SCCACHE=$($exe -replace '\\', '/')" |
+          Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
     - uses: msys2/setup-msys2@v2
       with:
@@ -1151,10 +1284,16 @@ jobs:
         make -j"$(nproc)" cadical
 
     - name: Configure
-      run: cmake -B build -G Ninja -DSTATICCOMPILE:BOOL=ON -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$(pwd)/deps/cadical" -DNOCRYPTOMINISAT:BOOL=ON -DENABLE_PYTHON_INTERFACE:BOOL=OFF .
+      run: cmake -B build -G Ninja -DSTATICCOMPILE:BOOL=ON -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$(pwd)/deps/cadical" -DNOCRYPTOMINISAT:BOOL=ON -DENABLE_PYTHON_INTERFACE:BOOL=OFF -DCMAKE_C_COMPILER_LAUNCHER="$SCCACHE" -DCMAKE_CXX_COMPILER_LAUNCHER="$SCCACHE" .
 
+    # CaDiCaL above is built by its own makefile and so is not cached; ABC and
+    # STP are, which is the bulk of this step. The stats are printed so a run
+    # that quietly stops hitting is visible rather than just slow.
     - name: Build
-      run: cmake --build build --parallel "$(nproc)"
+      run: |
+        "$SCCACHE" --zero-stats
+        cmake --build build --parallel "$(nproc)"
+        "$SCCACHE" --show-stats
 
     # The first query is answered during simplification; the second cannot
     # be, so it exercises bitblasting, ABC's CNF generation and CaDiCaL.

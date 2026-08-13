@@ -2,11 +2,13 @@
 #
 # Differential fuzzing of STP against a trusted reference solver.
 #
-# Each iteration generates a batch of random problems with FuzzSMT, wraps every
-# one of them in (push 1)/(pop 1) and concatenates them into a single
-# multi-query file, then compares the answers of STP -- run under a randomly
-# chosen option setting -- against the reference solver. Everything in the
-# working directory is copied aside when the two disagree.
+# Each iteration generates a batch of random problems with FuzzSMT, then runs
+# STP -- under a randomly chosen option setting -- and the reference solver on
+# each problem file individually, both under a short wall-clock timeout. A
+# file is skipped unless both solvers finish and the checker answered
+# sat/unsat; a file where the answers then differ is copied aside with both
+# outputs. An STP crash counts: it truncates or garbles STP's answer, so it
+# differs from the answer the checker gave.
 #
 # Runs until interrupted. Use fuzz.sh to run several copies in parallel.
 #
@@ -22,16 +24,22 @@
 #                 tree, else stp on PATH. A build with assertions enabled finds
 #                 more, which is why the release directory comes last.
 #   CHECKER       Reference solver, invoked as "$CHECKER file.smt2".
-#                 Default: z3. Anything that prints one sat/unsat line per
-#                 query and understands the bit-vector overflow predicates
-#                 works; z3 5.0.0 and bitwuzla 0.9.1 were both checked. This
-#                 is probed at startup, because a solver that gets it wrong
-#                 turns every iteration into a bogus mismatch -- z3 4.8.12 and
-#                 boolector 3.0.1 both fail it, the latter on bvnego.
+#                 Default: bitwuzla. Anything that prints one sat/unsat line
+#                 per query and understands the bit-vector overflow
+#                 predicates works; z3 5.0.0 and bitwuzla 0.9.1 were both
+#                 checked. This is probed at startup, because a solver that
+#                 gets it wrong turns every file into a bogus mismatch --
+#                 z3 4.8.12 and boolector 3.0.1 both fail it, the latter on
+#                 bvnego.
 #
-#                 On a 2500-query QF_ABV batch, z3 5.0.0 took 6.8s where
-#                 bitwuzla 0.9.1 took 251s, so the checker is no longer the
-#                 bottleneck. Both gave identical answers.
+#                 A slow checker costs coverage rather than correctness:
+#                 files it cannot answer inside TIMEOUT are skipped, and the
+#                 checker's speed decides how much of the hard tail gets
+#                 checked at all. That is what makes bitwuzla the default --
+#                 on the floating-point-array files that crashed a pre-fix
+#                 build it answers about 4 in 5 inside 10s where z3 5.0.0
+#                 answers essentially none, so with z3 those crashes would
+#                 be skipped as checker timeouts rather than reported.
 #   FUZZSMT_JAR   fuzzsmt.jar, from the FuzzSMT release of Brummayer and Biere,
 #                 "Fuzzing and Delta-Debugging SMT Solvers" (SMT'09).
 #                 Default: searched for next to the source tree and in $HOME.
@@ -46,32 +54,11 @@
 #                 One entry is drawn at random per iteration. See the comment
 #                 on LOGIC_SETS below for the full syntax.
 #
-#                 The floating-point logics (QF_BVFP, QF_FP, QF_ABVFP, ...)
-#                 generate and parse fine, and are the only way the
-#                 --bb.fp-native-* options get exercised at all, but they are
-#                 not in the built-in list because neither reference solver to
-#                 hand can be trusted on them:
-#
-#                   z3 5.0.0        unusably slow. STP answered a 20-query
-#                                   QF_BVFP batch in 9.6s; z3 had not finished
-#                                   it after 400s.
-#                   bitwuzla 0.9.1  segfaults part way through some batches
-#                                   (not a stack limit -- it still dies with
-#                                   the stack unlimited), so those iterations
-#                                   land in FAIL_DIR with the checker, not STP,
-#                                   as the one that failed. It also rejects
-#                                   formats outside Float16/32/64/128, which
-#                                   rules out -fp-any.
-#
-#                 The startup probe below will not catch either: both answer
-#                 the trivial probe query. So before trusting an FP run, check
-#                 the checker on a batch of the size QUERIES will produce, then
-#
-#                   CHECKER=<validated> QUERIES=100 LOGICS=QF_BVFP ./fuzz_single.sh
 #   LOGIC         A single entry, for the same purpose. Ignored if LOGICS is
 #                 set. Default: the built-in list.
-#   QUERIES       Queries per generated file. Default: 2500.
-#   CPU_LIMIT     Per-solver CPU seconds. Default: 3600.
+#   QUERIES       Problem files generated per iteration. Default: 2500.
+#   TIMEOUT       Per-solver wall-clock seconds per file; a file where either
+#                 solver runs out is skipped. Default: 10.
 #   FAIL_DIR      Where mismatches are saved.
 #                 Default: $TMPDIR/stp-fuzz-failures.
 
@@ -95,7 +82,7 @@ if [ ! -x "${STP:-}" ]; then
 fi
 
 # Find the reference solver.
-CHECKER=${CHECKER:-z3}
+CHECKER=${CHECKER:-bitwuzla}
 if ! command -v "$CHECKER" > /dev/null && [ ! -x "$CHECKER" ]; then
   echo "Reference solver '$CHECKER' not found. Set CHECKER=/path/to/solver." >&2
   exit 1
@@ -151,6 +138,14 @@ declare -a LOGIC_SETS=(
 # Writes are what make the extensional cases interesting, and the default
 # -Mw 5 is easily consumed by the reads.
 "QF_ABV -mxn 1 -Mxn 3 -mw 3 -Mw 10 -Mar 5 | --array-equality"
+# FuzzSMT draws floating-point sorts into this logic's array sorts, so
+# selects and stores cross between the theories -- the region #824/#825 and
+# their follow-ups lived in. The read counts matter: reads are what push an
+# array past the eager-expansion regime, and the generator's defaults found
+# nothing in 600 files where these counts crashed a pre-fix build about 4
+# files in 100. --array-equality because the generated files compare whole
+# arrays by default (-mxn/-Mxn default to 0..2 for this logic).
+"QF_ABVFP -mr 12 -Mr 30 -mw 4 -Mw 12 -Mar 3 | --array-equality"
 )
 
 # LOGICS overrides the list, LOGIC gives a single entry. Split on both newlines
@@ -167,7 +162,7 @@ if [ "${#LOGIC_SETS[@]}" -eq 0 ]; then
 fi
 
 QUERIES=${QUERIES:-2500}
-CPU_LIMIT=${CPU_LIMIT:-3600}
+TIMEOUT=${TIMEOUT:-10}
 FAIL_DIR=${FAIL_DIR:-${TMPDIR:-/tmp}/stp-fuzz-failures}
 mkdir -p "$FAIL_DIR" || exit 1
 
@@ -556,15 +551,14 @@ echo "$combinations combinations"
 # The marker goes too, so a clean exit leaves the directory empty and fuzz.sh
 # can rmdir it. A run killed outright leaves the marker behind, which is what
 # lets the next run recognise the directory as its own and wipe it.
-trap 'rm -f -- *.smt2 expression.txt first.txt second.txt "$marker"' EXIT
+trap 'rm -f -- *.smt2 expression.txt first.txt second.txt first-err.txt second-err.txt "$marker"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-# ulimit -t raises SIGXCPU and then SIGKILL. Running out of CPU is itself worth
-# investigating -- these problems are small -- so a timeout is saved like any
-# other failure, just labelled so triage knows which kind it is without having
-# to re-run it.
-timed_out() { [ "$1" -eq 152 ] || [ "$1" -eq 137 ]; }
+# timeout(1) exits 124, or 128+9 when the grace period passes and it has to
+# KILL. A file where either solver runs out is skipped rather than saved: a
+# timeout says nothing about correctness.
+timed_out() { [ "$1" -eq 124 ] || [ "$1" -eq 137 ]; }
 
 while (true)
   do
@@ -594,9 +588,8 @@ while (true)
     # all.
     if [ "${#logic_args[@]}" -gt 0 ]; then se="${se:+$se }${logic_args[*]}"; fi
 
-    # Without this check a generation failure is silent: big.smt2 ends up
-    # holding just the header, both solvers print nothing, the comparison
-    # passes, and the loop spins at full speed testing nothing.
+    # Without this check a generation failure is silent: no files appear,
+    # nothing runs, and the loop spins at full speed testing nothing.
     if ! java -jar "$FUZZSMT_JAR" "${gen_args[@]}" -g -bulk-export "$QUERIES" \
               -seed `od -A n -t d -N 3 /dev/urandom`; then
       echo "fuzzsmt failed to generate '$entry' problems" >&2
@@ -607,55 +600,60 @@ while (true)
       exit 1
     fi
 
-    sed -i '1i (push 1)' _file*.smt2
-    sed -i -e "\$a (pop 1)" _file*.smt2
-
-    # fuzzsmt writes (set-logic  LOGIC) with two spaces, once per generated
-    # file; strip those and keep a single header. The header uses three spaces
-    # so the sed below doesn't match it too.
-    echo "(set-logic   $logic)" > big.smt2
-    cat _file*.smt2 >> big.smt2
-    sed -i "s/(set-logic  $logic)//g" big.smt2
-
     echo "$se" > expression.txt
-    (ulimit -t "$CPU_LIMIT"; "$CHECKER" big.smt2 > first.txt) &
-    checker_job=$!
-    # $se is deliberately unquoted, some entries are two options.
-    (ulimit -t "$CPU_LIMIT"; "$STP" $se -d big.smt2 > second.txt)
-    stp_rc=$?
-    wait "$checker_job"
-    checker_rc=$?
+    for problem in _file*.smt2; do
+      # Both solvers on the one file, concurrently. A file either solver
+      # cannot answer inside TIMEOUT is skipped: a timeout says nothing
+      # about correctness, and skipping is what keeps a slow checker (or a
+      # hard instance) from stalling the run.
+      timeout "$TIMEOUT" "$CHECKER" "$problem" > first.txt 2> first-err.txt &
+      checker_job=$!
+      # $se is deliberately unquoted, some entries are two options.
+      timeout "$TIMEOUT" "$STP" $se -d "$problem" > second.txt 2> second-err.txt
+      stp_rc=$?
+      wait "$checker_job"
+      checker_rc=$?
+      if timed_out "$stp_rc" || timed_out "$checker_rc"; then
+        continue
+      fi
 
-    kind=""
-    if timed_out "$stp_rc"; then
-       kind="timeout-stp"
-    elif timed_out "$checker_rc"; then
-       kind="timeout-checker"
-    elif (! cmp -s first.txt second.txt ); then
-       kind="mismatch"
-    fi
+      # The comparison only means something when the checker produced an
+      # answer: a checker that crashes or rejects the file (bitwuzla 0.9.1
+      # segfaults on some of the floating-point-array files) says nothing
+      # about STP, so such files are skipped like timeouts. STP gets no
+      # such pass -- against a checker that answered, an STP crash garbles
+      # or truncates second.txt and is reported as the mismatch it is.
+      read -r checker_answer < first.txt || checker_answer=""
+      case $checker_answer in
+        sat|unsat) ;;
+        *) continue;;
+      esac
 
-    if [ -n "$kind" ]; then
-       # Without this check a full or unwritable FAIL_DIR would leave $failure
-       # empty, cp would fail, and the evidence for a real bug would be gone
-       # by the next iteration.
-       if ! failure=$(mktemp -d "$FAIL_DIR/XXXXXX"); then
-         echo "Could not create a directory under $FAIL_DIR to save a" >&2
-         echo "$kind in. Stopping rather than discarding it." >&2
-         exit 1
-       fi
-       cp -- * "$failure"
-       {
-         echo "kind:    $kind"
-         echo "when:    $(date '+%Y-%m-%d %H:%M:%S')"
-         echo "logic:   $entry"
-         echo "options: $se"
-         echo "stp:     $STP (exit $stp_rc)"
-         echo "checker: $CHECKER (exit $checker_rc)"
-       } > "$failure/what-happened.txt"
-       echo -n "[$kind $failure]"
-    else
-       echo -n "#"
-    fi
-    rm -f -- *.smt2 expression.txt first.txt second.txt
+      if cmp -s first.txt second.txt; then
+        continue
+      fi
+
+      # Without this check a full or unwritable FAIL_DIR would leave
+      # $failure empty, cp would fail, and the evidence for a real bug
+      # would be gone by the next iteration.
+      if ! failure=$(mktemp -d "$FAIL_DIR/XXXXXX"); then
+        echo "Could not create a directory under $FAIL_DIR to save a" >&2
+        echo "mismatch in. Stopping rather than discarding it." >&2
+        exit 1
+      fi
+      cp -- "$problem" expression.txt first.txt first-err.txt \
+            second.txt second-err.txt "$failure"
+      {
+        echo "kind:    mismatch"
+        echo "when:    $(date '+%Y-%m-%d %H:%M:%S')"
+        echo "file:    $problem"
+        echo "logic:   $entry"
+        echo "options: $se"
+        echo "stp:     $STP (exit $stp_rc)"
+        echo "checker: $CHECKER (exit $checker_rc)"
+      } > "$failure/what-happened.txt"
+      echo -n "[mismatch $failure]"
+    done
+    echo -n "#"
+    rm -f -- *.smt2 expression.txt first.txt second.txt first-err.txt second-err.txt
 done
