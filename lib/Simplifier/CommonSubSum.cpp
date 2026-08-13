@@ -78,6 +78,13 @@ void CommonSubSum::markShareable()
     // A two-operand addition already *is* its own pair; extracting from it
     // would leave a one-child BVPLUS that rebuilds to itself. It is not a
     // holder, because pairs are never enumerated over it.
+    //
+    // Counting it as one would widen this set to operands that can only ever
+    // pair *within* a single wide addition, and a pair internal to one
+    // addition is never shared. The wide addition would then pay a C(k,2)
+    // enumeration for nothing: on one addition over 1500 variables alongside
+    // two-operand additions of the same variables, that is 5.5s in a pass
+    // that otherwise does no work at all.
     if (v.size() < 3)
       continue;
 
@@ -117,6 +124,30 @@ void CommonSubSum::eligibleOf(const ASTVec& v, std::vector<uint64_t>& out) const
     if (shareable.count(num) != 0)
       out.push_back(num);
   }
+}
+
+// An addition of exactly two distinct operands is an adder the query is
+// already paying for. Recording its pair lets a single wider addition
+// holding both operands be rewritten to use it: the node the rewrite builds
+// hash-conses to this addition, so the extraction is free rather than
+// costing an adder to set up.
+//
+// This is what an addition whose operands are a sub-multiset of another's
+// needs. The greedy loop walks such a pair down to two operands and then
+// stops, because from there the smaller addition votes for nothing -- which
+// leaves the last adder, the one the two additions have in common, built
+// twice.
+void CommonSubSum::markRealized(const ASTVec& v)
+{
+  if (v.size() != 2 || v[0] == v[1])
+    return;
+
+  const uint64_t a = v[0].GetNodeNum();
+  const uint64_t b = v[1].GetNodeNum();
+  const NodePair key = (a < b) ? NodePair(a, b) : NodePair(b, a);
+
+  if (realized[key]++ == 0)
+    bump(a, b);
 }
 
 bool CommonSubSum::bump(uint64_t a, uint64_t b)
@@ -197,6 +228,10 @@ bool CommonSubSum::repair(const ASTVec& before, const ASTVec& after)
         return false;
   }
 
+  // An addition the extraction has just narrowed to two operands is from
+  // here on an adder others can reuse, exactly as one written that way.
+  markRealized(after);
+
   return true;
 }
 
@@ -230,8 +265,11 @@ bool CommonSubSum::promote(const ASTNode& n)
 bool CommonSubSum::buildOccurrences()
 {
   for (const auto& sum : operands)
+  {
+    markRealized(sum.second);
     if (!addPairs(sum.second))
       return false;
+  }
 
   return true;
 }
@@ -323,10 +361,16 @@ bool CommonSubSum::extractOnePair()
     }
   }
 
-  if (applied < 2)
+  // An addition that already is this pair counts towards the two holders
+  // that make the extraction worth doing, and means no adder is spent
+  // building the shared node.
+  const auto existing = realized.find(bestPair);
+  const bool free = (existing != realized.end() && existing->second > 0);
+
+  if (applied + (free ? 1 : 0) < 2)
     return false;
 
-  saved += applied - 1;
+  saved += free ? applied : applied - 1;
   return !truncated;
 }
 
@@ -393,6 +437,7 @@ ASTNode CommonSubSum::topLevel(const ASTNode& n)
   byNum.clear();
   occurrences.clear();
   shareable.clear();
+  realized.clear();
 
   ASTNodeSet seen;
   ASTVec plusNodes;
@@ -455,6 +500,7 @@ ASTNode CommonSubSum::topLevel(const ASTNode& n)
   byNum.clear();
   occurrences.clear();
   shareable.clear();
+  realized.clear();
 
   stpMgr->GetRunTimes()->stop(RunTimes::CommonSubSum);
   return result;

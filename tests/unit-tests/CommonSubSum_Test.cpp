@@ -23,6 +23,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/CommonSubSum.h"
 #include "stp/Simplifier/Flatten.h"
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <set>
 
   const std::string start_input = R"(
@@ -165,6 +166,50 @@ TEST(CommonSubSum_Test, shared_pair_factored_into_one_node)
     if (parents == 2)
       shared++;
   }
+  ASSERT_EQ(shared, 1);
+}
+
+// An addition whose operands are a sub-multiset of another's ends up being
+// the adder they have in common, rather than having it built twice:
+//   (v0 + v1 + v2), (v0 + v1 + v2 + v3)
+//     -->  s = (v0 + v1);  t = (s + v2);  t, (t + v3)
+// The greedy walks the smaller addition down to two operands and, at that
+// point, it *is* the pair the wider one still holds. Without counting a
+// two-operand addition as an adder others can reuse it votes for nothing
+// from there and stops one step short, leaving `t` built twice. This is the
+// shape stp#444 reduces to.
+TEST(CommonSubSum_Test, sub_multiset_sum_becomes_the_shared_node)
+{
+  const std::string input = R"(
+    (assert (= (bvmul v3 (bvadd v0 v1 v2)) (_ bv0 20)))
+    (assert (= (bvmul v0 (bvadd v0 v1 v2 v3)) (_ bv33 20)))
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+
+  std::set<ASTNode> plusNodes, visited;
+  collectPlusNodes(n, plusNodes, visited);
+
+  // s, t, and the wider addition rewritten around t: three binary adders
+  // for what arrived as a three-operand and a four-operand addition.
+  ASSERT_EQ(plusNodes.size(), 3u);
+  for (const ASTNode& p : plusNodes)
+    ASSERT_EQ(p.Degree(), 2u);
+
+  // The smaller addition is now a child of the wider one. That is the last
+  // extraction, and it is the one that does not happen without the change.
+  const ASTNode& widest = *std::max_element(
+      plusNodes.begin(), plusNodes.end(),
+      [](const ASTNode& a, const ASTNode& b) {
+        return a.GetNodeNum() < b.GetNodeNum();
+      });
+
+  int shared = 0;
+  for (const ASTNode& s : plusNodes)
+    for (const ASTNode& child : widest.GetChildren())
+      if (child == s)
+        shared++;
   ASSERT_EQ(shared, 1);
 }
 
