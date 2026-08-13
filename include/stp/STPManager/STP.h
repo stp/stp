@@ -99,8 +99,9 @@ public:
   // simplification), unless vc_setFlags 'i' asked for it from the start.
   // The SMT-LIB2 frontend keeps its own copies in Cpp_interface.
   bool incrementalFromStart = false;
-  // Session state, turned on by the first vc_push. Separate from
-  // UserFlags.incremental_solving, which stays the caller's request.
+  // Session state, turned on by the first vc_push unless the caller asked for
+  // IncrementalMode::OFF. Separate from UserFlags.incremental_mode, which
+  // stays the caller's request.
   bool sessionIncremental = false;
   size_t incrementalSolvesRun = 0;
 

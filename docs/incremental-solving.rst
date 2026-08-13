@@ -17,11 +17,32 @@ backend epoch.
 Usage
 -----
 
-Nothing needs to be enabled. Unless explicitly forced with ``--incremental``, a
-session becomes incremental at its first explicit or internal assertion scope:
+Nothing needs to be enabled. In the default ``--incremental=auto``, a session
+becomes incremental at its first explicit or internal assertion scope:
 normally ``(push ...)``, while ``check-sat-assuming`` creates a temporary scope
 itself. Ordinary sessions that create neither are entirely untouched and take
-the classic single-shot pipeline. Two refinements to know about:
+the classic single-shot pipeline.
+
+``--incremental`` is a three-valued flag, and its value must be attached with
+``=`` (``stp --incremental off file.smt2`` would parse ``off`` as the input
+file name, which STP reports as such rather than acting on):
+
+``--incremental=on``
+  Engage the driver from the first solve, whether or not the input ever
+  pushes. A bare ``--incremental`` is a spelling of this, so every existing
+  command line keeps its meaning.
+
+``--incremental=auto``
+  The default described above.
+
+``--incremental=off``
+  Never engage the driver: every ``(check-sat)`` takes the classic
+  single-shot pipeline, an input full of ``push`` and ``pop`` included, and
+  whatever ``--incremental-auto-engage-at`` says. The frontend verdict cache
+  below is not the driver and keeps working; ``off`` changes which solver
+  answers a check, never the answer.
+
+Two refinements to know about:
 
 - Automatic engagement is theory-specific. Pure ``QF_BV`` and ``QF_ABV``
   sessions engage the incremental driver from their *32nd* real solve; a
@@ -29,12 +50,13 @@ the classic single-shot pipeline. Two refinements to know about:
   pipeline's whole-formula simplification. Floating-point and other or
   unknown logics retain engagement from the *third* real solve. ``check-sat``
   calls made before the first explicit/internal scope still count toward the
-  threshold. ``--incremental`` engages the driver from the first solve.
+  threshold.
   ``--incremental-auto-engage-at=N`` is a diagnostic override: ``-1`` selects
   the theory policy, ``1`` engages on the first real solve, positive values
   name the solve ordinal, and ``0`` prevents automatic driver engagement
-  while leaving the frontend verdict cache active. Explicit ``--incremental``
-  takes precedence.
+  while leaving the frontend verdict cache active. It is an ``auto`` policy
+  knob: ``--incremental=on`` engages from the first solve whatever it says,
+  and ``--incremental=off`` engages never.
 - Independent of the driver, the frontend keeps a per-level verdict
   cache with sound monotonicity shortcuts: pushing under a known-unsat
   level inherits unsat, a sat answer marks the levels beneath it sat, and
@@ -61,7 +83,12 @@ untouched: the counterexample belongs to the last ``vc_query`` and
 deliberately survives the idiomatic push/query/pop bracket (see the
 documentation at those declarations); the driver fills the same
 counterexample tables the batch path does. The Python bindings sit on the
-C API and inherit all of this.
+C API and inherit all of this. ``vc_setFlags(vc, 'i')`` is the C API's
+``--incremental=on``; its ``--incremental=off`` is
+``vc_setInterfaceFlags(vc, INCREMENTAL_AUTO_ENGAGE_AT, 0)`` without ``'i'``,
+since a native session has no other way to engage. A C++ embedder can also
+set ``UserFlags.incremental_mode`` directly, and ``IncrementalMode::OFF``
+there additionally stops ``vc_push`` from making the session incremental.
 
 The whole input language is covered. Plain bit-vector assertions take the
 lean path described below; arrays, ``--ackermanize``, floating point and
@@ -77,7 +104,7 @@ preprocessing transactions, first-solve exact-stack shortcuts, stable-level
 promotion, activation-literal aggregation, retraction phase hints, trail reuse
 and automatic backend reconfiguration. Explicit backend requests such as
 ``--cadical-factor=on`` remain explicit requests. The option does not itself
-force driver engagement; combine it with ``--incremental`` or the automatic
+force driver engagement; combine it with ``--incremental=on`` or the automatic
 engagement controls. This profile is both a diagnostic baseline and an
 executable architectural boundary: optional performance machinery can be
 evaluated without being confused with the incremental algorithm itself.
@@ -308,7 +335,7 @@ once and then works shallow is not retired for good.
 behavior as a diagnostic oracle. It is intended for differential validation,
 not normal solving.
 
-When ``--incremental`` explicitly engages the driver on the first real solve,
+When ``--incremental=on`` explicitly engages the driver on the first real solve,
 there is not yet a CBP prefix to reuse. If the sum of the assertion-level DAGs
 exceeds ``--incremental-cbp-bootstrap-limit`` (100,000 nodes by default), that
 first solve skips only this cross-level prepass. A later real solve builds CBP
@@ -650,7 +677,7 @@ progress; the one-run reconciliation is correctness evidence and should not
 be used for quantitative timing conclusions.
 
 ``--incremental-profile`` enables a lower-noise profile for each invocation of
-the incremental driver. Pair it with ``--incremental`` to route the first
+the incremental driver. Pair it with ``--incremental=on`` to route the first
 check through that driver; the profile flag observes incremental work but does
 not itself change solver engagement. This is currently a command-line
 diagnostic rather than a C API option. Each invocation writes four keyed
@@ -797,7 +824,7 @@ Limitations
 - Extensionality rounds rebuild the procedure's solve-local records each
   check-sat; reuse for them is at the encoding level (cached blocks and
   shared subcircuits), not at the record level.
-- Forcing the driver from the first solve (``--incremental``) on a large
+- Forcing the driver from the first solve (``--incremental=on``) on a large
   all-new formula deliberately trades the batch pipeline's global
   simplification for encoding reuse that cannot pay off yet. The large-CBP
   bootstrap deferral removes one measured prepass cost, and the base-only

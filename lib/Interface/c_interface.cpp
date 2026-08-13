@@ -902,8 +902,12 @@ void vc_push(VC vc)
   stp::STPMgr* b = stp_i->bm;
 
   // The session is incremental from the first push on, exactly as the
-  // SMT-LIB2 frontend behaves; sessions that never push are untouched.
-  stp_i->sessionIncremental = true;
+  // SMT-LIB2 frontend behaves; sessions that never push are untouched, and a
+  // caller that set IncrementalMode::OFF has asked that not even a pushing
+  // session become incremental.
+  if (b->UserFlags.incremental_mode !=
+      stp::UserDefinedFlags::IncrementalMode::OFF)
+    stp_i->sessionIncremental = true;
 
   stp_i->ClearAllTables();
   b->Push();
@@ -3264,7 +3268,8 @@ void process_argument(const char ch, VC vc)
       // encoding live across queries, with the negated query and the
       // pushed levels' assertions assumed rather than re-encoded. See
       // docs/incremental-solving.rst.
-      bm->UserFlags.incremental_solving = true;
+      bm->UserFlags.incremental_mode =
+          stp::UserDefinedFlags::IncrementalMode::ON;
       ((stp::STP*)vc)->incrementalFromStart = true;
       ((stp::STP*)vc)->sessionIncremental = true;
       break;
