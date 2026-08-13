@@ -103,7 +103,10 @@ Cadical::~Cadical()
 
 void Cadical::printStats() const
 {
-    std::cerr << "print stats not yet implemented.";
+    // The newline matters: without it this stderr fragment glues onto the
+    // next stdout line (the check-sat verdict) in a combined stream, which
+    // is exactly what line-anchored test checks read.
+    std::cerr << "print stats not yet implemented." << std::endl;
 }
 
 uint32_t Cadical::newVar()
