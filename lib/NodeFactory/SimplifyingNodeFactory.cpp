@@ -951,6 +951,19 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
       {
         // x = x is reflexively true; fp.eq(x, x) fails exactly when x is NaN
         // (the FP_GEQ rule above, restated for the other reflexive predicate).
+        //
+        // This fold used to be suppressed while incremental solving was on,
+        // to hold the equality until bit-blasting and keep the persistent
+        // pipeline's encoding order stable. Node construction is meant to be
+        // context-free -- the design doc says so -- and the flag it read is
+        // set by the first push, so a pushing session got a different
+        // word-level DAG even when the driver never engaged, and the
+        // batch-versus-incremental differential compared two engines handed
+        // different graphs. The evidence for the suppression was a >3x
+        // CaDiCaL swing on the Newton family, which this project's own
+        // protocol says must never be diagnosed from: it flips between 0.98s
+        // and a timeout on identical code. Encoding order, if it needs
+        // choosing, belongs where order is chosen.
         if (children[0] == children[1])
         {
           if (kind == stp::FP_SMT_EQ)

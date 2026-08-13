@@ -1712,6 +1712,10 @@ cmdi:
       if (fp_logic) {
         checkFpSupported();
       }
+      // The incremental frontend needs only this validated logic name to
+      // choose its measured automatic-engagement policy. reset clears the
+      // classification; reset-assertions retains it with the SMT-LIB logic.
+      stp::GlobalParserInterface->setLogic(*$2);
       // The floating-point keywords exist only inside the FP logics;
       // everywhere else names like "fp" or "NaN" stay ordinary symbols,
       // exactly as before floating-point support existed.

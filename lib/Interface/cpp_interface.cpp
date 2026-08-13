@@ -27,6 +27,7 @@ THE SOFTWARE.
 #include "stp/Parser/LetMgr.h"
 #include "stp/Printer/printers.h"
 #include "stp/Util/GitSHA1.h"
+#include "stp/Incremental/IncrementalSolver.h"
 #include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/ToSat/ToSATAIG.h"
@@ -64,6 +65,10 @@ void Cpp_interface::init()
   ignoreCheckSatRequest = false;
   produce_models = false;
   model_valid = false;
+  incremental_from_start = bm.UserFlags.incremental_solving;
+  session_incremental = incremental_from_start;
+  delayed_bv_auto_engagement = false;
+  solves_run = 0;
 }
 
 void Cpp_interface::addFrame()
@@ -144,6 +149,15 @@ const ASTVec Cpp_interface::getAssertVector(void)
 UserDefinedFlags& Cpp_interface::getUserFlags()
 {
   return bm.UserFlags;
+}
+
+void Cpp_interface::setLogic(const std::string& logic)
+{
+  // This policy is intentionally limited to the two fragments measured in
+  // the threshold sweep. QF_AUFBV, the FP logics, legacy parsers, and native
+  // API clients retain the established solve-3 policy until separately
+  // measured. An explicit --incremental-auto-engage-at still wins below.
+  delayed_bv_auto_engagement = logic == "QF_BV" || logic == "QF_ABV";
 }
 
 void Cpp_interface::AddAssert(const ASTNode& assert)
@@ -482,6 +496,16 @@ void Cpp_interface::resetSolver()
   GlobalSTP->ClearAllTables();
 }
 
+// The incremental driver's base-level units are permanent, so anything that
+// empties the base level must destroy the driver; a fresh one is created on
+// demand. resetSolver() deliberately does not do this -- it runs before
+// every solve, where the driver's persistence is the whole point.
+void Cpp_interface::resetIncrementalSolver()
+{
+  if (GlobalSTP != NULL)
+    GlobalSTP->resetIncrementalSolver();
+}
+
 // Public and define-fun handles retain opaque ARRAY_EQ nodes, never generated
 // proxies. Scope mutation can therefore discard the complete last-solve table
 // without inspecting which handles remain live; future assertions lower their
@@ -512,6 +536,7 @@ void Cpp_interface::reset()
   // removed.
   resetSolver();
   discardExtensionalitySolveState();
+  resetIncrementalSolver();
 
   cleanUp();
 
@@ -555,6 +580,7 @@ void Cpp_interface::resetAssertions()
   // These tables may retain the discarded assertions or declarations.
   resetSolver();
   discardExtensionalitySolveState();
+  resetIncrementalSolver();
 
   cache.push_back(Entry(SOLVER_UNDECIDED));
   addFrame();
@@ -590,9 +616,21 @@ void Cpp_interface::pop()
 
 void Cpp_interface::push()
 {
-  // If the prior one is unsatisiable then the new one will be too.
+  // The session is incremental from the first push on (the same trigger z3
+  // uses): later check-sats go through the incremental driver where they
+  // can. Sessions that never push are untouched by this. This is session
+  // state, not the user's request, so it does not travel through UserFlags.
+  session_incremental = true;
+
+  // If the prior one is unsatisiable then the new one will be too. The
+  // core provenance rides along, so a shortcut taken above a core-recorded
+  // level still reports itself under --stats.
   if (cache.size() > 1 && cache.back().result == SOLVER_UNSATISFIABLE)
-    cache.push_back(Entry(SOLVER_UNSATISFIABLE));
+  {
+    Entry inherited(SOLVER_UNSATISFIABLE);
+    inherited.fromCore = cache.back().fromCore;
+    cache.push_back(inherited);
+  }
   else
     cache.push_back(Entry(SOLVER_UNDECIDED));
 
@@ -631,7 +669,7 @@ void Cpp_interface::checkSatAssuming(const ASTVec& assumptions)
 
   // The assumptions ride as the last level, assumed one conjunct each so
   // an unsat answer can name exactly the assumptions it used.
-  checkSat(getAssertVector());
+  checkSat(getAssertVector(), true);
 
   // Remember the round for get-unsat-assumptions; the verdict is read
   // before the frame pop erases its cache entry.
@@ -651,7 +689,8 @@ void Cpp_interface::ignoreCheckSat()
 }
 
 // Does some simple caching of prior results.
-void Cpp_interface::checkSat(const ASTVec& assertionsSMT2)
+void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
+                             bool fromCheckSatAssuming)
 {
   if (ignoreCheckSatRequest)
     return;
@@ -683,16 +722,63 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2)
   {
     resetSolver();
 
-    ASTNode query;
+    // The policy itself lives on the driver, so this frontend and the C API
+    // cannot drift apart again; explicit --incremental overrides it.
+    const bool autoEngaged = IncrementalSolver::automaticEngagementReady(
+        bm.UserFlags.incremental_auto_engage_at, delayed_bv_auto_engagement,
+        solves_run);
+    const bool use_incremental =
+        session_incremental &&
+        (incremental_from_start || autoEngaged) &&
+        GlobalSTP->getIncrementalSolver()->canHandle(assertionsSMT2);
+    // The `use_incremental &&` this used to carry was dead: the value is read
+    // only inside the `if (use_incremental)` branch below.
+    const bool firstForcedIncrementalSolve =
+        IncrementalSolver::forcedFirstSolve(incremental_from_start, solves_run);
+    solves_run++;
 
-    if (assertionsSMT2.size() > 1)
-      query = nf->CreateNode(AND, assertionsSMT2);
-    else if (assertionsSMT2.size() == 1)
-      query = assertionsSMT2[0];
+    SOLVER_RETURN_TYPE last_result;
+    if (use_incremental)
+    {
+      // The incremental driver keeps its SAT solver and encoding across
+      // check-sats; resetSolver() above cleared only batch-pipeline tables.
+      IncrementalSolver* inc = GlobalSTP->getIncrementalSolver();
+      last_result = inc->checkSat(assertionsSMT2, fromCheckSatAssuming,
+                                  firstForcedIncrementalSolve);
+
+      // Core-aware caching: when the refutation's failed assumptions all
+      // lie at or below some level D beneath the top, the stack truncated
+      // at D is already unsatisfiable -- the failed levels' formulas
+      // force their assumed literals (an activation variable occurs only
+      // in its implication clauses, so any model of the content extends
+      // to it), and the base only ever grows. Recording unsat on level
+      // D's entry lets every later check that pops back to (or re-pushes
+      // above) D answer from the cache without solving; a pop past D
+      // erases the entry, which is exactly its validity condition.
+      if (last_result == SOLVER_UNSATISFIABLE && inc->lastSolveWasUnsat())
+      {
+        const std::vector<size_t> core = inc->lastUnsatCoreLevels();
+        const size_t deepest = core.empty() ? 0 : core.back();
+        if (deepest + 1 < cache.size())
+        {
+          cache[deepest].result = SOLVER_UNSATISFIABLE;
+          cache[deepest].fromCore = true;
+        }
+      }
+    }
     else
-      query = bm.ASTTrue;
+    {
+      ASTNode query;
 
-    SOLVER_RETURN_TYPE last_result = GlobalSTP->TopLevelSTP(query, bm.ASTFalse);
+      if (assertionsSMT2.size() > 1)
+        query = nf->CreateNode(AND, assertionsSMT2);
+      else if (assertionsSMT2.size() == 1)
+        query = assertionsSMT2[0];
+      else
+        query = bm.ASTTrue;
+
+      last_result = GlobalSTP->TopLevelSTP(query, bm.ASTFalse);
+    }
 
     // Store away the answer. Might be timeout, or error though..
     last_run = Entry(last_result);
@@ -707,6 +793,12 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2)
         cache[i].result = SOLVER_SATISFIABLE;
       }
     }
+  }
+  else if (bm.UserFlags.stats_flag &&
+           last_run.result == SOLVER_UNSATISFIABLE && last_run.fromCore)
+  {
+    std::cerr << "Incremental: unsat answered from a cached core, no solve"
+              << std::endl;
   }
 
   // A model exists exactly when this check concluded SAT and the solve
@@ -905,6 +997,13 @@ void Cpp_interface::getValue(const ASTVec& v)
     return;
   }
 
+  // The driver defers counterexample construction to the first reader.
+  // hasIncrementalSolver, not getIncrementalSolver: the latter constructs one
+  // on demand, so asking it whether a driver exists built a driver -- and a
+  // SAT backend with it -- in every batch session that printed a model.
+  if (GlobalSTP != NULL && GlobalSTP->hasIncrementalSolver())
+    GlobalSTP->getIncrementalSolver()->materializePendingModel();
+
   std::ostringstream os;
 
   os << "(" << std::endl;
@@ -929,6 +1028,35 @@ void Cpp_interface::getValue(const ASTVec& v)
   cout << os.str() << std::endl;
 }
 
+namespace
+{
+// Whether any top-level conjunct of `a` is in `failed`. The driver reports
+// failed conjuncts of the assumptions LEVEL, and an assumption that is
+// itself a conjunction was split before it was assumed, so membership is
+// judged against its flattened conjuncts.
+bool assumptionFailed(const ASTNode& a, const ASTNodeSet& failed,
+                      const ASTNode& trueNode)
+{
+  std::vector<ASTNode> pending(1, a);
+  while (!pending.empty())
+  {
+    const ASTNode n = pending.back();
+    pending.pop_back();
+    if (n == trueNode)
+      continue;
+    if (n.GetKind() == AND)
+    {
+      for (const ASTNode& c : n)
+        pending.push_back(c);
+      continue;
+    }
+    if (failed.count(n))
+      return true;
+  }
+  return false;
+}
+} // namespace
+
 void Cpp_interface::getUnsatAssumptions()
 {
   // Meaningful right after a check-sat-assuming that answered unsat;
@@ -940,14 +1068,30 @@ void Cpp_interface::getUnsatAssumptions()
     return;
   }
 
-  // Every assumption is reported: a solve that cannot name individually
-  // which assumptions its refutation used has the whole set as its only
-  // correct answer.
+  // Per-assumption granularity from the driver when it ran the solve; the
+  // full assumption set is always a correct core, and covers the batch
+  // first solve and the extensionality rounds.
+  std::vector<ASTNode> failed;
+  bool granular = false;
+  if (GlobalSTP != NULL && GlobalSTP->hasIncrementalSolver())
+  {
+    IncrementalSolver* inc = GlobalSTP->getIncrementalSolver();
+    if (inc->lastSolveWasUnsat() &&
+        inc->lastUnsatHasAssumptionGranularity())
+    {
+      failed = inc->lastUnsatAssumptionConjuncts();
+      granular = true;
+    }
+  }
+  const ASTNodeSet failedSet(failed.begin(), failed.end());
+
   std::ostringstream os;
   os << "(";
   bool first = true;
   for (const ASTNode& a : lastAssumptionTerms)
   {
+    if (granular && !assumptionFailed(a, failedSet, bm.ASTTrue))
+      continue;
     if (!first)
       os << " ";
     first = false;
@@ -972,6 +1116,13 @@ void Cpp_interface::getModel()
   {
     return;
   }
+
+  // The driver defers counterexample construction to the first reader.
+  // hasIncrementalSolver, not getIncrementalSolver: the latter constructs one
+  // on demand, so asking it whether a driver exists built a driver -- and a
+  // SAT backend with it -- in every batch session that printed a model.
+  if (GlobalSTP != NULL && GlobalSTP->hasIncrementalSolver())
+    GlobalSTP->getIncrementalSolver()->materializePendingModel();
 
   cout << "(" << std::endl;
   std::ostringstream os;

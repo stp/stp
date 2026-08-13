@@ -837,6 +837,18 @@ void ExtensionalityContext::beginSolve()
   lastObserved.clear();
 }
 
+void ExtensionalityContext::releaseSolveStorage()
+{
+  assert(!solveInProgress);
+  beginSolve();
+  std::vector<Record>().swap(records);
+  std::vector<size_t>().swap(activeRecordIds);
+  ASTNodeMap().swap(currentLowerings);
+  std::vector<ExtEqEdge>().swap(eqEdges);
+  std::vector<ExtWitness>().swap(witnessObls);
+  std::vector<ExtConflict>().swap(pendingLemmas);
+}
+
 ASTNode ExtensionalityContext::conjoinRecordConstraints(const ASTNode& root)
 {
   if (activeRecordIds.empty())

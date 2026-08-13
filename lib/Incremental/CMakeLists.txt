@@ -21,6 +21,7 @@
 add_library(incremental OBJECT
     IncrementalCBP.cpp
     IncrementalScopeState.cpp
+    IncrementalSolver.cpp
 )
 
 # The AST headers this pulls in include the generated ASTKind.h; without the

@@ -639,6 +639,11 @@ if (USE_CADICAL)
         # Mirrored as a variable so the test tree can register the
         # factor-forced lit sweep only when the flag can actually engage.
         set(CADICAL_HAS_FACTOR ON)
+        # The "inprobing" option arrived in the same 3.0 series. The
+        # incremental driver probes for it at runtime and simply declines to
+        # retire inprocessing without it, so this gates only the tests that
+        # assert the retirement happens.
+        set(CADICAL_HAS_INPROBING ON)
     else()
         message(STATUS "CaDiCaL ${CADICAL_VERSION} predates 3.0.0: --cadical-factor will be unavailable")
     endif()

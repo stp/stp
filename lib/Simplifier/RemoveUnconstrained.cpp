@@ -52,7 +52,8 @@ RemoveUnconstrained::RemoveUnconstrained(STPMgr& _bm) : bm(_bm)
   simplifier = NULL;
 }
 
-ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier)
+ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier,
+                                      const std::set<ASTNode>* alsoUntouchable)
 {
   ASTNode result(n);
 
@@ -63,10 +64,24 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier)
   // refuses (see SubstitutionMap::extensionalityProtected) cannot undo
   // the rewrite that was made on its promise. Excluding the symbols
   // from the predicate is what makes the protection a precondition
-  // instead of a return code nobody can act on.
+  // instead of a return code nobody can act on. The caller's own
+  // untouchable set -- symbols constrained outside this formula -- is
+  // honoured the same way, merged when both apply.
   ExtensionalityContext* ext = bm.getExtensionalityIfAny();
-  MutableASTNode::UntouchableScope protect(
-      (ext != NULL && ext->activeInSolve()) ? &ext->getFrozenSymbols() : NULL);
+  const std::set<ASTNode>* extSet =
+      (ext != NULL && ext->activeInSolve()) ? &ext->getFrozenSymbols() : NULL;
+  std::set<ASTNode> mergedUntouchable;
+  const std::set<ASTNode>* effective = NULL;
+  if (extSet != NULL && alsoUntouchable != NULL)
+  {
+    mergedUntouchable = *extSet;
+    mergedUntouchable.insert(alsoUntouchable->begin(),
+                             alsoUntouchable->end());
+    effective = &mergedUntouchable;
+  }
+  else
+    effective = (extSet != NULL) ? extSet : alsoUntouchable;
+  MutableASTNode::UntouchableScope protect(effective);
 
   bm.GetRunTimes()->start(RunTimes::RemoveUnconstrained);
 
