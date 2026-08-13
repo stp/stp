@@ -3238,16 +3238,14 @@ struct IncrementalSolver::Impl
       fpLatch = true;
   }
 
-  // Assertion-local, equivalence-preserving simplification, with a fresh
-  // Simplifier so no cross-assertion state can exist: its substitution
-  // map is empty, so everything it does to this one conjunct is a plain
-  // equivalence. Measurably worth it on multi-round workloads; sharing a
-  // Simplifier across conjuncts measured slower, so this stays per call.
+  // Assertion-local, equivalence-preserving simplification; the shared
+  // one-shot entry point guarantees the empty substitution map, so
+  // everything it does to this one conjunct is a plain equivalence.
+  // Measurably worth it on multi-round workloads; sharing a Simplifier
+  // across conjuncts measured slower, so this stays per call.
   ASTNode simplifyAlone(const ASTNode& n)
   {
-    SubstitutionMap localSm(bm);
-    Simplifier localSimp(bm, &localSm);
-    return localSimp.SimplifyFormula_TopLevel(n, false);
+    return Simplifier::simplifyAlone(bm, n);
   }
 
   // What actually gets encoded for a conjunct: the conjunct rewritten under
