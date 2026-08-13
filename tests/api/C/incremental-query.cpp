@@ -167,6 +167,69 @@ TEST(incremental_query, deep_alternating_chain)
   vc_Destroy(vc);
 }
 
+// CBP adoption rewrites a ctx-substituted conjunct under the engine's
+// fixings, and hash-consing can REBUILD the raw inner AND the feed fixed
+// TRUE -- a node the original conjunct no longer contained, so the
+// pinning-fact walk asserted nothing for it and the inner conjuncts
+// (here the definer and the sdiv comparison) silently left the encoding.
+// This is murxla's shape: flag 'i', no push, everything riding the C
+// API's retractable levels. The model must satisfy every raw conjunct
+// -- pre-fix it returned x4=0, falsifying (bvsgt (bvsdiv x4 x4) x4),
+// whose only witnesses are 0b10 and 0b11 -- and disequalities excluding
+// those witnesses (invisible to the bit-level engine) must flip the
+// verdict rather than stay sat against the dropped conjunct.
+TEST(incremental_query, cbp_adoption_keeps_rebuilt_fixed_node_constraint)
+{
+  VC vc = vc_createValidityChecker();
+  vc_setFlags(vc, 'i');
+  vc_setFlags(vc, 'c');
+
+  Type bv1 = vc_bvType(vc, 1);
+  Type bv2 = vc_bvType(vc, 2);
+  Expr x0 = vc_varExpr(vc, "x0", bv2);
+  Expr x2 = vc_varExpr(vc, "x2", bv1);
+  Expr x3 = vc_varExpr(vc, "x3", bv1);
+  Expr x4 = vc_varExpr(vc, "x4", bv2);
+
+  // (and (and (= x2 x3) (bvsgt (bvsdiv x4 x4) x4))
+  //      (bvsle (bvlshr x0 x0) x0))
+  Expr inner =
+      vc_andExpr(vc, vc_eqExpr(vc, x2, x3),
+                 vc_sbvGtExpr(vc, vc_sbvDivExpr(vc, 2, x4, x4), x4));
+  Expr outer = vc_andExpr(
+      vc, inner,
+      vc_sbvLeExpr(vc, vc_bvRightShiftExprExpr(vc, 2, x0, x0), x0));
+  vc_assertFormula(vc, outer);
+
+  EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
+
+  // The model, checked against the raw conjuncts. Two-bit signed
+  // domain: 0b10 = -2, 0b11 = -1.
+  const uint64_t vx0 = getBVUnsignedLongLong(vc_getCounterExample(vc, x0));
+  const uint64_t vx2 = getBVUnsignedLongLong(vc_getCounterExample(vc, x2));
+  const uint64_t vx3 = getBVUnsignedLongLong(vc_getCounterExample(vc, x3));
+  const uint64_t vx4 = getBVUnsignedLongLong(vc_getCounterExample(vc, x4));
+  const auto asSigned = [](uint64_t b) {
+    return b >= 2 ? static_cast<int>(b) - 4 : static_cast<int>(b);
+  };
+  EXPECT_EQ(vx2, vx3);
+  // SMT-LIB bvsdiv: x/x is 1 except 0/0, which is -1.
+  const int sdiv = vx4 == 0 ? -1 : 1;
+  EXPECT_GT(sdiv, asSigned(vx4));
+  const uint64_t lshr = vx0 >= 2 ? 0 : (vx0 >> vx0) & 3;
+  EXPECT_LE(asSigned(lshr), asSigned(vx0));
+
+  // Only the sdiv conjunct refutes these; the bit-level engine learns
+  // nothing from a disequality, so a dropped conjunct answers sat.
+  Expr two = vc_bvConstExprFromInt(vc, 2, 2);
+  Expr three = vc_bvConstExprFromInt(vc, 2, 3);
+  vc_assertFormula(vc, vc_notExpr(vc, vc_eqExpr(vc, x4, two)));
+  vc_assertFormula(vc, vc_notExpr(vc, vc_eqExpr(vc, x4, three)));
+  EXPECT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
+
+  vc_Destroy(vc);
+}
+
 // The 'c' flag alone -- construct counterexamples, no self-check -- must
 // keep its counterexamples through the driver. construct_counterexample
 // is a direct input here with no other trace of the request, and both the
