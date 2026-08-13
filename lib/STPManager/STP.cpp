@@ -398,10 +398,10 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // construction because AUTO wants the post-simplification answer: the
   // Ackermannisation above can remove every array operation, and arrayops
   // is only final from this point on. The solver has not yet been handed a
-  // clause, which is the only window in which it accepts the setting. A
-  // declined explicit ON is worth a warning (no CaDiCaL 3.x behind the
-  // build, or a different backend); a declined AUTO is just the default
-  // heuristic not applying.
+  // clause, which is the only window in which it accepts the setting. ON is
+  // the default, so a decline (no CaDiCaL 3.x behind the build, or a
+  // different backend) is only worth a warning when ON was asked for by
+  // name; a declined AUTO is just the heuristic not applying.
   enableBVAIfWanted(
       NewSolver, bm->UserFlags,
       bm->UserFlags.cadical_factor == UserDefinedFlags::BVAMode::ON ||

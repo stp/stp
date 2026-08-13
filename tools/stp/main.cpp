@@ -235,10 +235,12 @@ void ExtraMain::create_options()
       ->group(solver_group);
   cadical_factor_option =
       app.add_option("--cadical-factor", cadical_factor,
-                     "let cadical use bounded variable addition: 'on', 'off', "
-                     "or 'auto' (the default, on only for problems with array "
-                     "operations). Needs a CaDiCaL 3.x build; otherwise the "
-                     "request is declined with a warning")
+                     "let cadical use bounded variable addition: 'on' (the "
+                     "default), 'off', or 'auto' (on only for problems with "
+                     "array operations, which was the default until it was "
+                     "measured on bitvector-only problems). Needs a CaDiCaL "
+                     "3.x build; otherwise an explicit request is declined "
+                     "with a warning")
           ->group(solver_group);
   incremental_inprobing_option =
       app.add_option(
@@ -783,6 +785,7 @@ int ExtraMain::parse_options(int argc, char** argv)
 #ifdef USE_CADICAL
   if (cadical_factor_option->count())
   {
+    bm->UserFlags.cadical_factor_explicit = true;
     if (cadical_factor == "on")
       bm->UserFlags.cadical_factor = UserDefinedFlags::BVAMode::ON;
     else if (cadical_factor == "off")

@@ -129,7 +129,10 @@ void applySearchBias(SATSolver& s, const UserDefinedFlags& flags, bool warn)
 bool enableBVAIfWanted(SATSolver& s, const UserDefinedFlags& flags,
                        bool wants, bool warn)
 {
-  if (!wants || s.enableBVA() ||
+  // A declined request is only worth reporting when the user asked for it by
+  // name: ON is the default, so warning on the mode alone would put a warning
+  // on every solve of a build whose CaDiCaL has no factor.
+  if (!wants || s.enableBVA() || !flags.cadical_factor_explicit ||
       flags.cadical_factor != UserDefinedFlags::BVAMode::ON || !warn)
     return false;
   std::cerr << "Warning: --cadical-factor was requested but the SAT "
