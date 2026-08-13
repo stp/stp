@@ -908,10 +908,23 @@ jobs:
         if ($LASTEXITCODE -ne 0) { exit 1 }
         sccache --show-stats
 
+    # build\stp.exe, not the build\bin\stp.exe this used to look for, and the
+    # generator is what moved it. tools/stp/CMakeLists.txt sets the target's own
+    # RUNTIME_OUTPUT_DIRECTORY to PROJECT_BINARY_DIR. Under the Visual Studio
+    # generator that was outranked: the WIN32 block in CMakeLists.txt points
+    # CMAKE_RUNTIME_OUTPUT_DIRECTORY at bin/, and the multi-config branch below
+    # copies it into CMAKE_RUNTIME_OUTPUT_DIRECTORY_<CONFIG>, which initialises
+    # the per-config target property -- and a per-config property beats the plain
+    # one. Ninja has no per-config property, so the tool's own setting wins and
+    # the binary lands where every Linux job already finds it.
     - name: Smoke test
       run: |
-        dir build\bin
-        $stp = "build\bin\stp.exe"
+        $stp = "build\stp.exe"
+        if (-not (Test-Path $stp)) {
+          Get-ChildItem build -Filter *.exe -Recurse | ForEach-Object { $_.FullName }
+          throw "$stp was not built; the executables found are listed above"
+        }
+        Get-Item $stp
         "(set-logic QF_BV)(declare-fun x () (_ BitVec 8))(assert (= x #x2a))(check-sat)" | Out-File -Encoding ascii test.smt2
         $out = & $stp test.smt2 2>&1 | Out-String
         "solver output: '$($out.Trim())'"
