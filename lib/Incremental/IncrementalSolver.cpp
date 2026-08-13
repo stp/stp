@@ -4877,6 +4877,11 @@ SOLVER_RETURN_TYPE IncrementalSolver::Impl::solvePlainExactStack(
   ce->ClearCounterExampleMap();
   ce->ClearComputeFormulaMap();
   seedEliminatedIntoModelChannel();
+  // Eagerly instantiated array-equality rounds land here with lowered
+  // floating-point terms in the block; model evaluation needs the context
+  // that lowered them, exactly as the refinement paths wire it.
+  if (fpCtx)
+    ce->setFpEncodingContext(fpCtx.get());
 
   ToSATBase::ASTNodeToSATVar symbolMap;
   buildSymbolMap(symbolMap);
@@ -4934,16 +4939,14 @@ IncrementalSolver::Impl::exactStackCheckSat(
       profile.enabled && arrayEqualityRound, profile.extensionalityNs);
 
   // Eager Ackermannization expands reads into if-then-else chains,
-  // destroying the array structure the lazy procedure works on -- the same
-  // per-solve override, warning included, the batch pipeline applies.
+  // destroying the array structure the lazy procedure works on. As in the
+  // batch pipeline, active equalities over plain bit-vector sorts are
+  // instantiated pointwise over the solve's access indexes (below, once
+  // the records are conjoined) and the round stays on the caller's eager
+  // path; quotiented floating-point cells have no sound pointwise bit
+  // instantiation and fall back to lemmas on demand for this round, with
+  // the flag disabled and the batch pipeline's warning.
   const bool savedAck = uf.ackermannisation;
-  if (arrayEqualityRound && uf.ackermannisation)
-  {
-    std::cerr << "Warning: --ackermanize is disabled for queries with "
-                 "array equality."
-              << std::endl;
-    uf.ackermannisation = false;
-  }
 
   ASTNode activeConjunction;
   if (assertionsSMT2.size() > 1)
@@ -4975,12 +4978,34 @@ IncrementalSolver::Impl::exactStackCheckSat(
         ext->lowerArrayEqualities(prepared, arrayEqualityRewrites);
   ASTNode inputToSat = semantic;
 
-  const bool extActive = arrayEqualityRound && ext->active();
+  bool extActive = arrayEqualityRound && ext->active();
   // Releases the record-table seal on every exit from this function.
   ExtensionalityContext::SolveScope extScope(ext);
 
   if (extActive)
     inputToSat = ext->conjoinRecordConstraints(inputToSat);
+
+  if (extActive && uf.ackermannisation)
+  {
+    const ASTNode eager = ext->instantiateEagerAckermann(inputToSat);
+    if (!eager.IsNull())
+    {
+      // The equalities are now ordinary conjuncts of the block and the
+      // records are retired: the round continues exactly as an eager
+      // array round, reads expanded through the transform below, nothing
+      // left for the lazy checker.
+      inputToSat = eager;
+      extActive = false;
+      bm->ASTNodeStats("after eager equality instantiation: ", inputToSat);
+    }
+    else
+    {
+      std::cerr << "Warning: --ackermanize is disabled for queries with "
+                   "array equality over floating-point sorts."
+                << std::endl;
+      uf.ackermannisation = false;
+    }
+  }
 
   // Automatic engagement already received two batch-preprocessed solves, so
   // its first persistent exact-stack block keeps the raw search shape and a
@@ -5164,7 +5189,12 @@ IncrementalSolver::Impl::exactStackCheckSat(
     profile.assumptions = assumptions.size();
   }
 
-  if (!arrayEqualityRound)
+  // An array-equality round whose equalities were eagerly instantiated --
+  // or simplified away before lowering -- while --ackermanize remains in
+  // force has been compiled onto the ordinary eager path: reads expanded
+  // by the transform above, nothing for the lazy checker or read
+  // refinement to do. Solve it like the plain block it now is.
+  if (!arrayEqualityRound || (uf.ackermannisation && !extActive))
     return solvePlainExactStack(assertionsSMT2, assumptions, inputToSat,
                                 blockRegular);
 
@@ -5460,6 +5490,11 @@ void IncrementalSolver::buildPendingModel()
   impl->ce->ClearComputeFormulaMap();
 
   impl->seedEliminatedIntoModelChannel();
+  // The solve that deferred this model may not have wired the context
+  // itself (the plain exact-stack route does not); lowered floating-point
+  // terms evaluate through the context that lowered them.
+  if (impl->fpCtx)
+    impl->ce->setFpEncodingContext(impl->fpCtx.get());
 
   ToSATBase::ASTNodeToSATVar symbolMap;
   impl->buildSymbolMap(symbolMap);
