@@ -149,12 +149,16 @@ namespace stp
       ASTVec newChildren;
       ASTVec nextChildren;
       std::unordered_set<uint64_t> seen;
+      // Entries merged into this frame instead of kept as children; balances
+      // the rebuild bookkeeping check below.
+      size_t flattenedIn = 0;
 
       void clear()
       {
         newChildren.clear();
         nextChildren.clear();
         seen.clear();
+        flattenedIn = 0;
       }
     };
 
@@ -239,6 +243,7 @@ namespace stp
             top_removed++;
           else
             removed++;
+          scratch.flattenedIn++;
 
           for (const auto& e : c.GetChildren())
           {
@@ -283,7 +288,13 @@ namespace stp
       if (done.changed)
       {
         Scratch& scratch = scratches[done.scratch];
-        assert(done.n.Degree() <= scratch.newChildren.size());
+        // Every consumed entry either landed in newChildren or was flattened
+        // in, adding its children to nextChildren minus what the AND/OR
+        // duplicate filter dropped. The filter means newChildren can end up
+        // *smaller* than the original degree, so the check is this balance,
+        // not `Degree() <= newChildren.size()`.
+        assert(scratch.newChildren.size() + scratch.flattenedIn ==
+               done.n.Degree() + scratch.nextChildren.size());
 
         if (done.n.GetType() == BOOLEAN_TYPE)
           result = nf->CreateNode(done.k, scratch.newChildren);

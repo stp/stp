@@ -127,6 +127,27 @@ TEST(Flatten_Test, DISABLED__LINE__)
 
 
 
+// The three conjuncts contain one another: expanding the chainable
+// equalities makes each later assertion an AND wrapping the previous one.
+// Merging them into the top-level conjunction sends only already-seen
+// entries through the AND/OR duplicate filter, so the rebuilt AND has
+// fewer children than the original's degree -- which is fine, and used to
+// trip an over-strong assert. Found by murxla.
+TEST(Flatten_Test, __LINE__)
+{
+  const std::string input = R"(
+    (assert (= true a (= b a)))
+    (assert (and (= true a (= b a)) a))
+    (assert (= (and (= true a (= b a)) a) true a))
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASTNode a = c.mgr.LookupOrCreateSymbol("a");
+  ASTNode b = c.mgr.LookupOrCreateSymbol("b");
+  ASSERT_EQ(n, c.mgr.CreateNode(stp::AND, a, b));
+}
+
 TEST(Flatten_Test, __LINE__)
 {
   const std::string input = R"(
