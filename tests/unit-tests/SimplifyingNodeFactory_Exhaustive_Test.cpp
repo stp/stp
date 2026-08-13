@@ -964,4 +964,171 @@ TEST(SimplifyingNodeFactory_Exhaustive, plus_cancels_negated_sum)
   }
 }
 
+/* a + (-b) * (a sdiv b) --> a srem b, and the unsigned pair, for a symbolic
+   divisor and for every constant one. */
+TEST(SimplifyingNodeFactory_Exhaustive, plus_of_division_product)
+{
+  const unsigned w = 4;
+  const struct
+  {
+    Kind div;
+    Kind rem;
+  } pairs[] = {{SBVDIV, SBVREM}, {BVDIV, BVMOD}};
+
+  for (const auto& p : pairs)
+  {
+    {
+      Context c;
+      ASTNode a = c.bv(w);
+      ASTNode b = c.bv(w);
+      ASTNode quot = c.hf->CreateTerm(p.div, w, a, b);
+      ASTNode negB = c.hf->CreateTerm(BVUMINUS, w, b);
+      // The multiplier's operands, and the sum's, in both orders.
+      for (const ASTVec& mulArgs :
+           {ASTVec{negB, quot}, ASTVec{quot, negB}})
+      {
+        ASTNode mult = c.hf->CreateTerm(BVMULT, w, mulArgs);
+        EXPECT_EQ(c.nf->CreateTerm(BVPLUS, w, a, mult),
+                  c.nf->CreateTerm(p.rem, w, a, b));
+        c.checkTerm(BVPLUS, w, {a, mult});
+        c.checkTerm(BVPLUS, w, {mult, a});
+      }
+    }
+
+    for (unsigned bv = 0; bv < (1u << w); bv++)
+    {
+      Context c;
+      ASTNode a = c.bv(w);
+      ASTNode b = c.konst(bv, w);
+      ASTNode negB = c.konst(((1u << w) - bv) & ((1u << w) - 1), w);
+      ASTNode quot = c.hf->CreateTerm(p.div, w, a, b);
+      ASTNode mult = c.hf->CreateTerm(BVMULT, w, negB, quot);
+      EXPECT_EQ(c.nf->CreateTerm(BVPLUS, w, a, mult),
+                c.nf->CreateTerm(p.rem, w, a, b));
+      c.checkTerm(BVPLUS, w, {a, mult});
+    }
+  }
+}
+
+/* The same sum written as a subtraction: a - b * (a sdiv b), which reaches
+   the rule as a plus of a negated product. */
+TEST(SimplifyingNodeFactory_Exhaustive, subtract_division_product)
+{
+  const unsigned w = 4;
+  Context c;
+  ASTNode a = c.bv(w);
+  ASTNode b = c.bv(w);
+
+  for (const auto& p : {std::make_pair(SBVDIV, SBVREM),
+                        std::make_pair(BVDIV, BVMOD)})
+  {
+    ASTNode quot = c.hf->CreateTerm(p.first, w, a, b);
+    for (const ASTVec& mulArgs : {ASTVec{b, quot}, ASTVec{quot, b}})
+    {
+      ASTNode mult = c.hf->CreateTerm(BVMULT, w, mulArgs);
+      EXPECT_EQ(c.nf->CreateTerm(BVSUB, w, a, mult),
+                c.nf->CreateTerm(p.second, w, a, b));
+      c.checkTerm(BVSUB, w, {a, mult});
+      c.checkTerm(BVPLUS, w, {a, c.hf->CreateTerm(BVUMINUS, w, mult)});
+    }
+  }
+}
+
+/* The pair is found wherever it sits in a wider sum. */
+TEST(SimplifyingNodeFactory_Exhaustive, plus_of_division_product_nary)
+{
+  const unsigned w = 4;
+  Context c;
+  ASTNode a = c.bv(w);
+  ASTNode b = c.bv(w);
+  ASTNode other = c.bv(w);
+  ASTNode quot = c.hf->CreateTerm(SBVDIV, w, a, b);
+  ASTNode mult =
+      c.hf->CreateTerm(BVMULT, w, c.hf->CreateTerm(BVUMINUS, w, b), quot);
+
+  ASTNode expected =
+      c.nf->CreateTerm(BVPLUS, w, c.nf->CreateTerm(SBVREM, w, a, b), other);
+  EXPECT_EQ(c.nf->CreateTerm(BVPLUS, w, {a, mult, other}), expected);
+  EXPECT_EQ(c.nf->CreateTerm(BVPLUS, w, {other, mult, a}), expected);
+  c.checkTerm(BVPLUS, w, {a, mult, other});
+  c.checkTerm(BVPLUS, w, {mult, other, a});
+}
+
+/* Near misses: the multiplier is not the negated divisor, the dividend is not
+   the other operand, or the quotient is signed where the sum is not. */
+TEST(SimplifyingNodeFactory_Exhaustive, plus_of_division_product_near_misses)
+{
+  const unsigned w = 4;
+  Context c;
+  ASTNode a = c.bv(w);
+  ASTNode b = c.bv(w);
+  ASTNode d = c.bv(w);
+  ASTNode quot = c.hf->CreateTerm(SBVDIV, w, a, b);
+  ASTNode negB = c.hf->CreateTerm(BVUMINUS, w, b);
+  ASTNode negD = c.hf->CreateTerm(BVUMINUS, w, d);
+
+  // Multiplied by the divisor rather than its negation.
+  c.checkTerm(BVPLUS, w, {a, c.hf->CreateTerm(BVMULT, w, b, quot)}, false);
+  // Multiplied by an unrelated negated term.
+  c.checkTerm(BVPLUS, w, {a, c.hf->CreateTerm(BVMULT, w, negD, quot)}, false);
+  // Added to something that is not the dividend.
+  c.checkTerm(BVPLUS, w, {d, c.hf->CreateTerm(BVMULT, w, negB, quot)}, false);
+  // Subtracted product, but of the negated divisor.
+  c.checkTerm(BVSUB, w, {a, c.hf->CreateTerm(BVMULT, w, negB, quot)}, false);
+}
+
+/* (x srem y) / y, (x smod y) / y and (x umod y) / y are zero away from a zero
+   divisor, where they take the total quotient of the dividend. */
+TEST(SimplifyingNodeFactory_Exhaustive, division_of_remainder)
+{
+  const unsigned w = 4;
+  const struct
+  {
+    Kind rem;
+    Kind div;
+  } pairs[] = {{SBVREM, SBVDIV}, {SBVMOD, SBVDIV}, {BVMOD, BVDIV}};
+
+  for (const auto& p : pairs)
+  {
+    {
+      Context c;
+      ASTNode a = c.bv(w);
+      ASTNode b = c.bv(w);
+      ASTNode rem = c.hf->CreateTerm(p.rem, w, a, b);
+      c.checkTerm(p.div, w, {rem, b});
+    }
+
+    for (unsigned bv = 0; bv < (1u << w); bv++)
+    {
+      Context c;
+      ASTNode a = c.bv(w);
+      ASTNode b = c.konst(bv, w);
+      ASTNode rem = c.hf->CreateTerm(p.rem, w, a, b);
+      c.checkTerm(p.div, w, {rem, b});
+      if (bv != 0)
+      {
+        EXPECT_EQ(c.nf->CreateTerm(p.div, w, rem, b), c.konst(0, w));
+      }
+    }
+  }
+}
+
+/* Near misses for the same: a remainder taken against a different divisor,
+   and a remainder of the wrong signedness for the division. */
+TEST(SimplifyingNodeFactory_Exhaustive, division_of_remainder_near_misses)
+{
+  const unsigned w = 4;
+  Context c;
+  ASTNode a = c.bv(w);
+  ASTNode b = c.bv(w);
+  ASTNode d = c.bv(w);
+
+  c.checkTerm(SBVDIV, w, {c.hf->CreateTerm(SBVREM, w, a, d), b}, false);
+  c.checkTerm(BVDIV, w, {c.hf->CreateTerm(BVMOD, w, a, d), b}, false);
+  // An unsigned remainder can exceed a signed divisor's magnitude, and a
+  // signed one can exceed an unsigned divisor's, so neither cross pair folds.
+  c.checkTerm(SBVDIV, w, {c.hf->CreateTerm(BVMOD, w, a, b), b}, false);
+  c.checkTerm(BVDIV, w, {c.hf->CreateTerm(SBVREM, w, a, b), b}, false);
+}
+
 } // namespace

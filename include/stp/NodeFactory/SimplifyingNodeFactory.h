@@ -104,6 +104,14 @@ private:
 
   ASTNode plusRules(const ASTNode& n0, const ASTNode& n1);
 
+  // Rebuild a remainder from the dividend and the "- b * (a / b)" product
+  // that a plus was given. Null if the two do not have that shape.
+  ASTNode remainderFromDivision(const ASTNode& a, const ASTNode& product);
+
+  // One pass of the above over a sum's operands, replacing every dividend
+  // and product pair it finds. True if it folded anything.
+  bool foldRemainders(ASTVec& children);
+
   //Helper functions
   bool children_all_constants(ASTChildren children) const;
   ASTNode get_smallest_number(const unsigned width);
