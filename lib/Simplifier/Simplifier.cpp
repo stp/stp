@@ -242,6 +242,13 @@ ASTNodeMap Simplifier::FindConsts_TopLevel(const ASTNode& b, bool pushNeg)
 
 // The SimplifyMaps on entry to the topLevel functions may contain
 // useful entries.  E.g. The BVSolver may call SimplifyTerm()
+ASTNode Simplifier::simplifyAlone(STPMgr* bm, const ASTNode& n)
+{
+  SubstitutionMap localSm(bm);
+  Simplifier localSimp(bm, &localSm);
+  return localSimp.SimplifyFormula_TopLevel(n, false);
+}
+
 ASTNode Simplifier::SimplifyFormula_TopLevel(const ASTNode& b, bool pushNeg)
 {
   assert(_bm->UserFlags.optimize_flag);

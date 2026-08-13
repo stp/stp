@@ -20,6 +20,11 @@
 
 add_library(incremental OBJECT
     IncrementalCBP.cpp
+    IncrementalDriverCbp.cpp
+    IncrementalDriverStages.cpp
+    IncrementalExactStack.cpp
+    IncrementalPushedLevels.cpp
+    IncrementalProfile.cpp
     IncrementalScopeState.cpp
     IncrementalSolver.cpp
 )

@@ -211,6 +211,24 @@ bool constantsSameSourceValue(const ASTNode& a, const ASTNode& b,
   return packedConstantIsNaN(a, eb, sb) && packedConstantIsNaN(b, eb, sb);
 }
 
+bool containsKind(const ASTNode& root, Kind kind)
+{
+  ASTNodeSet visited;
+  ASTVec pending(1, root);
+  while (!pending.empty())
+  {
+    const ASTNode node = pending.back();
+    pending.pop_back();
+    if (!visited.insert(node).second)
+      continue;
+    if (node.GetKind() == kind)
+      return true;
+    for (unsigned i = 0; i < node.Degree(); ++i)
+      pending.push_back(node[i]);
+  }
+  return false;
+}
+
 // True if any descendants are arrays.
 bool containsArrayOps(const ASTNode& n, STPMgr* mgr)
 {
@@ -347,18 +365,10 @@ bool BVTypeCheckRecursive(const ASTNode& n)
 void buildListOfSymbols(const ASTNode& n, ASTNodeSet& visited,
                         ASTNodeSet& symbols)
 {
-  if (visited.find(n) != visited.end())
-    return; // already visited.
-
-  visited.insert(n);
-
-  if (n.GetKind() == SYMBOL)
-  {
-    symbols.insert(n);
-  }
-
-  for (unsigned i = 0; i < n.GetChildren().size(); i++)
-    buildListOfSymbols(n[i], visited, symbols);
+  collectSymbols(ASTVec(1, n),
+                 [&visited](const ASTNode& node)
+                 { return visited.insert(node).second; },
+                 symbols);
 }
 
 // A float is carried internally as its packed bits, so after FloatBlast a

@@ -115,6 +115,46 @@ only the current raw stack and permanent base facts. The raw scope ledger and
 monotone base substitutions survive because they describe live input, not
 historical encodings.
 
+The implementation uses the following reset map. It is intentionally a map of
+*validity*, not just a list of fields which happen to be cleared together:
+
+.. list-table:: Driver state lifetimes
+   :header-rows: 1
+   :widths: 20 47 33
+
+   * - Lifetime
+     - Representative state
+     - Boundary / owner
+   * - One check-sat
+     - Unsat-core bookkeeping, current assumptions, deferred-model latch and
+       the symbol-map cache's validity
+     - ``maintainBackendForCheck``; ``IncrementalSymbolMapCache`` couples map
+       validity to its CNF generation
+   * - Current scope snapshot
+     - Level identity and stability, promotion and active preprocessing/model
+       transactions
+     - ``IncrementalScopeState`` reconciles each supplied stack; its live raw
+       identities survive epoch rotation
+   * - SAT backend epoch
+     - SAT solver and CNF bindings, formula/activation literals, clause-mass
+       ownership and the pending exact live-cone snapshot
+     - ``rebuildEncodings``; ``IncrementalCnfEncoder`` and
+       ``IncrementalPendingLiveCone`` own their coupled reset state
+   * - Encoding epoch
+     - AIG/bit-blast state, semantic and prepared-form caches, FP lowering,
+       persistent array registry and exact-block keepalives
+     - ``rotateEncodingEpoch``; ``AigEncodingEpoch``,
+       ``IncrementalSemanticEpochAccounting``, ``IncrementalWalks`` and
+       ``ArrayTransformer::Registry`` release their own storage
+   * - Driver session
+     - Monotone raw base ledger/substitutions, engagement history and backend
+       policy latches
+     - Destroyed by reset/reset-assertions, not by an internal rebuild
+
+This separation is why the reset functions still contain some explicit work:
+several independent owners share a boundary, but they do not acquire one
+another's policy or lifetime merely to shorten that function.
+
 Reconstructing from the current snapshot is what lets ``push``/``pop`` need no
 driver hooks: the parser's assertion stack is the source of truth, and a
 popped assertion vanishes by not being present the next time. State that does
@@ -198,6 +238,22 @@ rather than by backtracking:
   or encoded, never-seen content has its symbols checked against the
   live eliminations, and a mention invalidates the cached preparation --
   it re-prepares with the variable now shared and the equation kept.
+
+There is deliberately no separate ``ScopedPreprocessor`` owner. The output
+already has one real owner: ``IncrementalScopeState`` stores the accepted
+``PreprocessingTransaction`` with the level or exact-stack scope which gives
+its eliminations and facts meaning. The machinery producing that value does
+not have one narrower lifetime to own:
+
+- ``sigma0`` and the raw base ledger are driver-session state;
+- prepared-piece, screening and exact-block memos are encoding-epoch caches;
+- base eliminations and restored roots are reconstructed at SAT-backend
+  rebuild boundaries; and
+- scratch simplifiers/substitution maps are local to a single trial.
+
+Wrapping those in one object would therefore hide four reset contracts rather
+than establish an ownership boundary. Preparation remains a named stage which
+returns/commits transactions; the scope ledger remains their owner.
 
 Cross-level constant-bit propagation
 ------------------------------------
@@ -720,10 +776,24 @@ Limitations
   content mentions their variable: an implied equation returns as
   itself, while a variable dropped as unconstrained gets its ORIGINAL
   conjuncts back -- its recorded definition is only a witness the model
-  replay uses, and asserting it would wrongly pin the variable. The finer-grained alternative (pinning
-  popped variables away from the decision heuristics, as cvc5's CaDiCaL
-  propagator integration does) requires the propagator interface and is
-  not portable across our backends.
+  replay uses, and asserting it would wrongly pin the variable. The
+  finer-grained alternative -- pinning each variable of retracted
+  content so the search never revisits it -- is sound only for a
+  variable that can never serve live content again, and this driver's
+  reuse breaks that guarantee twice over: a popped conjunct's root
+  literal is reused when the conjunct returns, and AIG cones are shared
+  through the blast memo, so a later encoding can reach a variable that
+  looked dead. Pinning would therefore need root-literal cache eviction
+  and a cone-liveness sweep first, machinery with no measured
+  beneficiary so far. The activation-literal retirement above is the
+  subset that is sound without any of that.
+- Driver encodings are always the plain three-clause Tseitin shape:
+  extending a live solver in place requires every previously assigned
+  variable to keep its id, and ABC's CNF generators -- including the
+  technology-mapped ones ``--cnf-effort`` selects -- are one-shot over a
+  whole AIG manager and renumber everything. ``--cnf-effort`` therefore
+  applies to batch solves only; once the driver engages it has no
+  effect.
 - Extensionality rounds rebuild the procedure's solve-local records each
   check-sat; reuse for them is at the encoding level (cached blocks and
   shared subcircuits), not at the record level.

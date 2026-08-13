@@ -27,35 +27,6 @@ THE SOFTWARE.
 namespace stp
 {
 
-// Can it only add in the new variables somehow??
-void addVariables(BBNodeManagerAIG& mgr, Cnf_Dat_t*& cnfData,
-                  ToSATBase::ASTNodeToSATVar& nodeToVars)
-{
-  BBNodeManagerAIG::SymbolToBBNode::const_iterator it;
-  // Each symbol maps to a vector of CNF variables.
-  for (it = mgr.symbolToBBNode.begin(); it != mgr.symbolToBBNode.end(); it++)
-  {
-    const ASTNode& n = it->first;
-    const vector<BBNodeAIG>& b = it->second;
-
-    const int width = (n.GetType() == BOOLEAN_TYPE) ? 1 : n.GetValueWidth();
-
-    // INT_MAX for parts of symbols that didn't get encoded.
-    vector<unsigned> v(width, ~((unsigned)0));
-
-    for (unsigned i = 0; i < b.size(); i++)
-    {
-      if (!b[i].IsNull())
-      {
-        Aig_Obj_t* pObj;
-        pObj = (Aig_Obj_t*)Vec_PtrEntry(mgr.aigMgr->vCis, b[i].symbol_index);
-        v[i] = cnfData->pVarNums[pObj->Id];
-      }
-    }
-    nodeToVars.insert(make_pair(n, v));
-  }
-}
-
 void ToCNFAIG::dag_aware_aig_rewrite(const bool needAbsRef,
                                      BBNodeManagerAIG& mgr)
 {
@@ -167,10 +138,10 @@ Cnf_Dat_t* ToCNFAIG::derive_cnf_mf(BBNodeManagerAIG& mgr, int nLutSize)
   Cnf_Dat_t* cnfData =
       (Cnf_Dat_t*)Mf_ManGenerateCnf(pGia, nLutSize, 0, 1, 0, 0);
 
-  // pVarNums comes back indexed by Gia object id, but addVariables() and
-  // fill_node_to_var() index it by Aig CI object id. Rebuild it over the Aig id
-  // space so those callers need no special case; only CIs are ever looked up,
-  // so everything else stays -1.
+  // pVarNums comes back indexed by Gia object id, but fill_node_to_var()
+  // indexes it by Aig CI object id. Rebuild it over the Aig id space so that
+  // caller needs no special case; only CIs are ever looked up, so everything
+  // else stays -1.
   //
   // Aig_ManObjNumMax(), not Aig_ManObjNum(): the latter subtracts nDeleted, and
   // the Aig_ManCleanup() in toCNF() deletes nodes, so ids run past the count of
@@ -248,7 +219,6 @@ void ToCNFAIG::fill_node_to_var(Cnf_Dat_t* cnfData,
   BBNodeManagerAIG::SymbolToBBNode::const_iterator it;
   assert(nodeToVars.size() == 0);
 
-  // todo. cf. with addvariables above...
   // Each symbol maps to a vector of CNF variables.
   for (it = mgr.symbolToBBNode.begin(); it != mgr.symbolToBBNode.end(); it++)
   {

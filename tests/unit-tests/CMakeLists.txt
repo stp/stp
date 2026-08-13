@@ -24,9 +24,11 @@
 # -----------------------------------------------------------------------------
 AddSTPGTest(IncrementalCBP_Test.cpp)
 AddSTPGTest(IncrementalEncodingEpoch_Test.cpp)
+AddSTPGTest(IncrementalLifetimeState_Test.cpp)
 AddSTPGTest(IncrementalPolicy_Test.cpp)
 AddSTPGTest(IncrementalScopeState_Test.cpp)
 AddSTPGTest(IncrementalActiveReads_Test.cpp)
+AddSTPGTest(ArrayTransformerRegistry_Test.cpp)
 AddSTPGTest(ArrayReadRefinementProgress_Test.cpp)
 AddSTPGTest(SATSolver_Test.cpp)
 AddSTPGTest(SatSolverBudget_Test.cpp)

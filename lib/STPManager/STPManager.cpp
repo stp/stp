@@ -844,16 +844,16 @@ unsigned int STPMgr::NodeSize(const ASTNode& a)
 
 bool STPMgr::VarSeenInTerm(const ASTNode& var, const ASTNode& term)
 {
-  if (READ == term.GetKind() && WRITE == term[0].GetKind()
-      /*&& !GetRemoveWritesFlag()*/)
+  // A read-over-write term answers "not seen" WITHOUT walking inside:
+  // occurrences of `var` under the write are invisible to this check.
+  // (The condition once depended on a remove-writes flag whose other
+  // arm returned true; the flag is long gone and the second branch was
+  // unreachable, so it has been removed.) Callers using this as an
+  // occurs check must therefore refuse array-carrying terms before
+  // asking, as the incremental driver's definition harvests do.
+  if (READ == term.GetKind() && WRITE == term[0].GetKind())
   {
     return false;
-  }
-
-  if (READ == term.GetKind() && WRITE == term[0].GetKind()
-      /*&& GetRemoveWritesFlag()*/)
-  {
-    return true;
   }
 
   ASTNodeMap::iterator it;

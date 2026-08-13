@@ -37,8 +37,6 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 
-#include "extlib-constbv/constantbv.h"
-
 #include <cassert>
 
 using simplifier::constantBitP::ConstantBitPropagation;
@@ -233,6 +231,15 @@ size_t IncrementalCBP::freshNodeCount(const ASTNode& root, size_t budget) const
   return fresh.size();
 }
 
+// The batch WorkList's queue discipline -- the same seven expensive
+// transfer kinds, cheap work draining first -- over std::set rather than
+// its insertion-ordered dense set. The container is NOT incidental:
+// node-number-ordered pops keep the fixpoint's visit order independent
+// of feed history (an insertion-ordered replay after a rollback would
+// visit in a different order than the original feed), and the two
+// orders produce the same fixpoint but different intermediate work, so
+// unifying on WorkList is a measured change (a corpus differential),
+// not a refactor.
 void IncrementalCBP::pushWork(const ASTNode& n)
 {
   if (n.isConstant())
@@ -324,29 +331,8 @@ FixedBits* IncrementalCBP::getOrCreate(const ASTNode& n)
   if (it != fixedMap->map->end())
     return it->second;
 
-  const int bw = (n.GetValueWidth() == 0) ? 1 : n.GetValueWidth();
-  FixedBits* fb = new FixedBits(bw, BOOLEAN_TYPE == n.GetType());
-
-  if (BVCONST == n.GetKind())
-  {
-    CBV cbv = n.GetBVConst();
-    for (unsigned j = 0; j < n.GetValueWidth(); j++)
-    {
-      fb->setFixed(j, true);
-      fb->setValue(j, CONSTANTBV::BitVector_bit_test(cbv, j));
-    }
-  }
-  else if (TRUE == n.GetKind())
-  {
-    fb->setFixed(0, true);
-    fb->setValue(0, true);
-  }
-  else if (FALSE == n.GetKind())
-  {
-    fb->setFixed(0, true);
-    fb->setValue(0, false);
-  }
-
+  // The batch seeding, verbatim; only the trail bookkeeping is ours.
+  FixedBits* fb = ConstantBitPropagation::makeInitialFixedBits(n);
   fixedMap->map->insert(std::make_pair(n, fb));
   fixedCreated.push_back(n);
   currentFixedCreated.insert(n);
@@ -514,11 +500,8 @@ ASTNode IncrementalCBP::constantOf(const ASTNode& n) const
   if (it == fixedMap->map->end() || !it->second->isTotallyFixed())
     return ASTNode();
 
-  const FixedBits& bits = *it->second;
-  // The conversion bitsToNode performs, on this engine's factory.
-  if (n.GetType() == BOOLEAN_TYPE)
-    return bits.getValue(0) ? nf->getTrue() : nf->getFalse();
-  return nf->CreateConstant(bits.GetBVConst(), n.GetValueWidth());
+  // The batch conversion, on this engine's factory.
+  return ConstantBitPropagation::bitsToNode(nf, n, *it->second);
 }
 
 } // namespace stp

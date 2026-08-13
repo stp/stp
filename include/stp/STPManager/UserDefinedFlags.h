@@ -281,6 +281,27 @@ public:
   //This is derived from other settings.
   bool construct_counterexample_flag = false;
 
+  // The caller-facing reasons a satisfiable answer must retain a readable
+  // model. Theory refinement is an internal consumer and is deliberately a
+  // separate input to modelConstructionRequired() below.
+  bool callerRequestedModel() const
+  {
+    return check_counterexample_flag || print_counterexample_flag ||
+           produce_models || request_counterexample;
+  }
+
+  // Derive the per-query construction flag from its actual inputs rather than
+  // widening the previous query's value. Debug builds always construct so the
+  // solver's internal model checks keep their established coverage.
+  bool modelConstructionRequired(bool internalConsumer = false) const
+  {
+    bool required = callerRequestedModel() || internalConsumer;
+#ifndef NDEBUG
+    required = true;
+#endif
+    return required;
+  }
+
 
   // Available back-end SAT solvers.
   enum SATSolvers
