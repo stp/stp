@@ -3671,16 +3671,12 @@ struct IncrementalSolver::Impl
       profile.readRowsLive = seededRowRef.size();
   }
 
-  void totalizeRegistrySymbols()
+  // Every read row's value and index symbol of one table, totalised.
+  void totalizeReadTable(const ArrayTransformer::ArrType& table)
   {
     ScopedProfileTimer registryTimer(profile.enabled, profile.registryNs);
-    // Only the refinement machinery encodes axioms over registry symbols,
-    // and --ackermanize never refines.
-    if (bm->UserFlags.ackermannisation)
-      return;
-
-    for (ArrayTransformer::ArrType::const_iterator it = myReads.begin();
-         it != myReads.end(); ++it)
+    for (ArrayTransformer::ArrType::const_iterator it = table.begin();
+         it != table.end(); ++it)
     {
       for (ArrayTransformer::arrTypeMap::const_iterator rit =
                it->second.begin();
@@ -3692,6 +3688,15 @@ struct IncrementalSolver::Impl
     }
   }
 
+  void totalizeRegistrySymbols()
+  {
+    // Only the refinement machinery encodes axioms over registry symbols,
+    // and --ackermanize never refines.
+    if (bm->UserFlags.ackermannisation)
+      return;
+    totalizeReadTable(myReads);
+  }
+
   // The same guarantee for the rows an extensionality round refines over.
   // Those rows live in the batch transformer's per-round table, not in the
   // persistent registry -- the round transforms on a fresh table by design
@@ -3701,19 +3706,7 @@ struct IncrementalSolver::Impl
   // mid-round.
   void totalizeBatchRegistrySymbols()
   {
-    ScopedProfileTimer registryTimer(profile.enabled, profile.registryNs);
-    for (ArrayTransformer::ArrType::const_iterator it =
-             batchAT->arrayToIndexToRead.begin();
-         it != batchAT->arrayToIndexToRead.end(); ++it)
-    {
-      for (ArrayTransformer::arrTypeMap::const_iterator rit =
-               it->second.begin();
-           rit != it->second.end(); ++rit)
-      {
-        totalizeSymbol(rit->second.symbol);
-        totalizeSymbol(rit->second.index_symbol);
-      }
-    }
+    totalizeReadTable(batchAT->arrayToIndexToRead);
   }
 
   size_t semanticCacheEntryCount() const
@@ -4736,6 +4729,54 @@ struct IncrementalSolver::Impl
       out.insert(std::make_pair(it->first, vars));
     }
   }
+
+  // One ordinary read-refinement round under its no-progress guard.
+  // getEquals creates a fresh comparison circuit even for an axiom the
+  // solver already holds, so clause and variable counts are not logical
+  // progress; the check-local transaction suppresses that re-encoding,
+  // and an undecided round must therefore have claimed at least one
+  // genuinely NEW congruence axiom, or the encoding and the model
+  // evaluation disagree. `stuck` states the failure in the caller's
+  // route's terms.
+  SOLVER_RETURN_TYPE
+  runGuardedReadRefinementRound(const ASTNode& semanticRoot, ToSATBase* tosat,
+                                ArrayReadRefinementProgress& progress,
+                                const char* stuck)
+  {
+    const size_t emittedBefore = progress.emittedAxiomCount();
+    const SOLVER_RETURN_TYPE res =
+        ce->SATBased_ArrayReadRefinement(*solver, semanticRoot, tosat,
+                                         &progress);
+    if (res == SOLVER_UNDECIDED &&
+        progress.emittedAxiomCount() == emittedBefore)
+      FatalError(stuck);
+    return res;
+  }
+
+  // Check the RAW per-level assertions against the freshly constructed
+  // model, not only the prepared/encoded forms: scoped eliminations are
+  // replayed through the model channel, so this also guards the
+  // preprocessing/model-reconstruction boundary. GetCounterExample
+  // answers ASTUndefined while ValidFlag claims the last query was
+  // unsat, and at this point that flag still describes the PREVIOUS
+  // query, so it is cleared before evaluating.
+  void checkModelSatisfiesRawStack(const ASTVec& assertionsSMT2)
+  {
+    bm->ValidFlag = false;
+    ASTVec conjuncts;
+    for (const ASTNode& levelConjunction : assertionsSMT2)
+    {
+      conjuncts.clear();
+      splitConjuncts(levelConjunction, bm->ASTTrue, conjuncts);
+      for (const ASTNode& c : conjuncts)
+      {
+        if (ce->GetCounterExample(c) != bm->ASTTrue)
+          FatalError("IncrementalSolver: the model does not satisfy an "
+                     "asserted formula",
+                     c);
+      }
+    }
+  }
 };
 
 // The ToSATBase the refinement machinery drives. Everything is already
@@ -4877,23 +4918,7 @@ SOLVER_RETURN_TYPE IncrementalSolver::Impl::solvePlainExactStack(
   ce->ConstructCounterExample(*solver, symbolMap);
   bm->GetRunTimes()->stop(RunTimes::CounterExampleGeneration);
 
-  // Check the raw assertions, rather than only the simplified block: scoped
-  // eliminations are replayed through the model channel above, so this also
-  // guards the exact preprocessing/model-reconstruction boundary.
-  bm->ValidFlag = false;
-  ASTVec conjuncts;
-  for (const ASTNode& levelConjunction : assertionsSMT2)
-  {
-    conjuncts.clear();
-    splitConjuncts(levelConjunction, bm->ASTTrue, conjuncts);
-    for (const ASTNode& c : conjuncts)
-    {
-      if (ce->GetCounterExample(c) != bm->ASTTrue)
-        FatalError("IncrementalSolver: the model does not satisfy an "
-                   "asserted formula",
-                   c);
-    }
-  }
+  checkModelSatisfiesRawStack(assertionsSMT2);
 
   return SOLVER_SATISFIABLE;
 }
@@ -5238,18 +5263,13 @@ IncrementalSolver::Impl::exactStackCheckSat(
     else
     {
       // The hybrid case: routed here for an array equality that simplified
-      // away, so ordinary read refinement runs. Progress is a newly emitted
-      // logical congruence axiom, not a fresh CNF circuit for an old one.
-      const size_t emittedBefore =
-          readRefinementProgress.emittedAxiomCount();
-      res = ce->SATBased_ArrayReadRefinement(
-          *solver, semantic, tosat, &readRefinementProgress);
-      if (res == SOLVER_UNDECIDED &&
-          readRefinementProgress.emittedAxiomCount() == emittedBefore)
-        FatalError("IncrementalSolver: an array-equality round fell back to "
-                   "read refinement, rejected the candidate and emitted no "
-                   "new logical axiom -- the encoding and model evaluation "
-                   "disagree");
+      // away, so ordinary read refinement runs.
+      res = runGuardedReadRefinementRound(
+          semantic, tosat, readRefinementProgress,
+          "IncrementalSolver: an array-equality round fell back to "
+          "read refinement, rejected the candidate and emitted no "
+          "new logical axiom -- the encoding and model evaluation "
+          "disagree");
     }
   }
 
@@ -6621,19 +6641,11 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
     while (res == SOLVER_UNDECIDED)
     {
       refinementRounds++;
-      // getEquals creates a fresh comparison circuit even for an axiom the
-      // solver already holds, so clause and variable counts are not logical
-      // progress. The check-local transaction suppresses that re-encoding;
-      // an undecided round must therefore have claimed at least one genuinely
-      // new congruence axiom or the model/encoding boundary is inconsistent.
-      const size_t emittedBefore = refinementProgress.emittedAxiomCount();
-      res = impl->ce->SATBased_ArrayReadRefinement(
-          *impl->solver, activeConjunction, adapter, &refinementProgress);
-      if (res == SOLVER_UNDECIDED &&
-          refinementProgress.emittedAxiomCount() == emittedBefore)
-        FatalError("IncrementalSolver: an array refinement round rejected "
-                   "the candidate but emitted no new logical axiom -- the "
-                   "encoding and model evaluation disagree");
+      res = impl->runGuardedReadRefinementRound(
+          activeConjunction, adapter, refinementProgress,
+          "IncrementalSolver: an array refinement round rejected "
+          "the candidate but emitted no new logical axiom -- the "
+          "encoding and model evaluation disagree");
     }
     adapter->setAssumptions(NULL);
 
@@ -6730,24 +6742,7 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
     bm->GetRunTimes()->stop(RunTimes::CounterExampleGeneration);
 
     if (uf.check_counterexample_flag)
-    {
-      // GetCounterExample answers ASTUndefined while ValidFlag claims the
-      // last query was unsat; that flag describes the previous query at
-      // this point, so clear it before evaluating.
-      bm->ValidFlag = false;
-      for (const ASTNode& levelConjunction : assertionsSMT2)
-      {
-        conjuncts.clear();
-        splitConjuncts(levelConjunction, bm->ASTTrue, conjuncts);
-        for (const ASTNode& c : conjuncts)
-        {
-          if (impl->ce->GetCounterExample(c) != bm->ASTTrue)
-            FatalError("IncrementalSolver: the model does not satisfy an "
-                       "asserted formula",
-                       c);
-        }
-      }
-    }
+      impl->checkModelSatisfiesRawStack(assertionsSMT2);
   }
 
   return SOLVER_SATISFIABLE;
