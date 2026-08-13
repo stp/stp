@@ -251,9 +251,17 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   UserDefinedFlags& uf = bm->UserFlags;
 
   assert(!assertionsSMT2.empty());
+  // A frontend may claim a forced FIRST solve only before this driver has
+  // engaged at all; otherwise the first-solve policies the stages below key
+  // on the flag would be applied to a solve which already had
+  // batch-preprocessed predecessors. Checked here, where the claim arrives
+  // and before maintenance counts the solve, so the stages can take the
+  // flag's honesty for granted -- and maintenance, which never acts on the
+  // flag, need not take it at all.
+  assert((!firstForcedIncrementalSolve || impl->engagedSolves == 0) &&
+         "a forced first solve was claimed after the driver had engaged");
 
-  impl->maintainBackendForCheck(assertionsSMT2,
-                                firstForcedIncrementalSolve);
+  impl->maintainBackendForCheck(assertionsSMT2);
 
   SOLVER_RETURN_TYPE exactResult;
   if (impl->tryExactStackRoute(assertionsSMT2,

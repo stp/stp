@@ -1600,8 +1600,7 @@ struct IncrementalSolver::Impl
   // The ordinary check-sat path is deliberately staged here rather than
   // represented by a mutable solve-plan object. Each stage owns the local
   // bookkeeping it creates and exposes only the value the next stage needs.
-  void maintainBackendForCheck(const ASTVec& assertionsSMT2,
-                               bool firstForcedIncrementalSolve);
+  void maintainBackendForCheck(const ASTVec& assertionsSMT2);
   bool tryExactStackRoute(const ASTVec& assertionsSMT2,
                           bool assumeLastLevelPerConjunct,
                           bool firstForcedIncrementalSolve,

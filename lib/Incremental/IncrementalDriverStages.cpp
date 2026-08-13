@@ -28,7 +28,7 @@ namespace stp
 {
 
 void IncrementalSolver::Impl::maintainBackendForCheck(
-    const ASTVec& assertionsSMT2, bool firstForcedIncrementalSolve)
+    const ASTVec& assertionsSMT2)
 {
   UserDefinedFlags& uf = bm->UserFlags;
 
@@ -87,11 +87,6 @@ void IncrementalSolver::Impl::maintainBackendForCheck(
   // Probe-based inprocessing re-runs over the whole persistent encoding at
   // every solve. Retiring it is configuration-window-only, so the transition
   // is one bounded rebuild onto a fresh solver configured without it.
-  // A frontend may claim a forced FIRST solve only before this driver has
-  // engaged at all; otherwise the first-solve policies below would be applied
-  // to a solve which already had batch-preprocessed predecessors.
-  assert((!firstForcedIncrementalSolve || engagedSolves == 0) &&
-         "a forced first solve was claimed after the driver had engaged");
   engagedSolves++;
   if (!inprobingRetired &&
       ((uf.incremental_inprobing == UserDefinedFlags::BVAMode::OFF &&
