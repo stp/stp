@@ -97,6 +97,13 @@ public:
   CLI::Option* incremental_inprobing_option = nullptr;
 #endif
 
+  // Likewise for UserFlags.incremental_mode. This one is a flag rather than
+  // an option so that a bare --incremental keeps meaning what it always has;
+  // a value has to be attached with '=', which is also what stops it from
+  // swallowing the input file.
+  std::string incremental;
+  CLI::Option* incremental_option = nullptr;
+
   // Likewise for UserFlags.cnf_effort; always mapped, so it carries the
   // default spelling.
   std::string cnf_effort = "medium";
@@ -439,27 +446,33 @@ void ExtraMain::create_options()
                      "stdin, off when reading from a file. SMT-LIB2 only.")
           ->group(misc_group);
 
-  app.add_flag("--incremental", bm->UserFlags.incremental_solving,
-               "solve incrementally from the start: keep the SAT solver and "
-               "the bit-blasted encoding across (check-sat) commands, "
-               "asserting retractable formulas as SAT assumptions. Switches "
-               "itself on at the first (push) even without this flag. "
-               "SMT-LIB2 only.")
-      ->group(misc_group);
+  incremental_option =
+      app.add_flag("--incremental{on}", incremental,
+                   "whether to solve incrementally -- keeping the SAT solver "
+                   "and the bit-blasted encoding across (check-sat) commands, "
+                   "asserting retractable formulas as SAT assumptions: 'on' "
+                   "(from the first solve, pushes or no pushes), 'off' (never, "
+                   "not even for an input that pushes), or 'auto' (the "
+                   "default: an input that pushes switches it on for itself). "
+                   "A bare --incremental means 'on'; a value must be attached "
+                   "with '=' rather than spelled as a separate argument. "
+                   "SMT-LIB2 only.")
+          ->group(misc_group);
 
   int64_arg("--incremental-auto-engage-at",
             bm->UserFlags.incremental_auto_engage_at,
             "real-solve ordinal at which an automatically incremental "
             "SMT-LIB session engages the persistent driver; -1 uses the "
             "theory default (QF_BV/QF_ABV: 32, others: 3), 1 engages on "
-            "the first solve, and 0 never engages automatically (explicit "
-            "--incremental still engages at 1)",
+            "the first solve, and 0 never engages automatically "
+            "(--incremental=on still engages at 1, and --incremental=off "
+            "engages never)",
             misc_group);
 
   app.add_flag("--incremental-profile", bm->UserFlags.incremental_profile,
                "print fine-grained per-check and cumulative timings and "
                "work counters for the incremental driver (use with "
-               "--incremental to profile from the first check)")
+               "--incremental=on to profile from the first check)")
       ->group(misc_group);
 
   app.add_flag("--incremental-core-only",
@@ -476,8 +489,8 @@ void ExtraMain::create_options()
 
   int64_arg("--incremental-cbp-bootstrap-limit",
             bm->UserFlags.incremental_cbp_bootstrap_limit,
-            "on an explicitly forced first incremental solve, defer the "
-            "cross-level CBP bootstrap when the assertion stack exceeds "
+            "on a first incremental solve forced by --incremental=on, defer "
+            "the cross-level CBP bootstrap when the assertion stack exceeds "
             "this many DAG nodes. 0 disables the deferral.",
             misc_group);
 
@@ -814,6 +827,39 @@ int ExtraMain::parse_options(int argc, char** argv)
     }
   }
 #endif
+
+  if (incremental_option->count())
+  {
+    if (incremental == "on")
+      bm->UserFlags.incremental_mode = UserDefinedFlags::IncrementalMode::ON;
+    else if (incremental == "off")
+      bm->UserFlags.incremental_mode = UserDefinedFlags::IncrementalMode::OFF;
+    else if (incremental == "auto")
+      bm->UserFlags.incremental_mode = UserDefinedFlags::IncrementalMode::AUTO;
+    else
+    {
+      cerr << "ERROR: --incremental must be one of 'on', 'off' or 'auto', "
+              "attached with '=' (a bare --incremental means 'on')"
+           << endl;
+      std::exit(-1);
+    }
+  }
+
+  // A flag's value has to be attached, so 'stp --incremental off' parses as
+  // --incremental (which means 'on') followed by an input file named 'off' --
+  // the opposite of what was asked for, reported as "Cannot open off", which
+  // names neither half of the mistake.
+  if (incremental_option->count() &&
+      (infile == "on" || infile == "off" || infile == "auto"))
+  {
+    cerr << "ERROR: --incremental takes its value attached with '=', as "
+            "--incremental="
+         << infile
+         << "; given as a separate argument it was read as the name of the "
+            "input file"
+         << endl;
+    std::exit(-1);
+  }
 
   /*
    * -1 is the only negative value with a meaning ("no limit"); anything more

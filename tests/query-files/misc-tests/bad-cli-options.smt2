@@ -43,6 +43,17 @@
 ; BADBIAS-NOT: terminate called
 ; BADBIAS: --search-bias must be one of
 
+; RUN: not %solver --incremental=bogus %s 2>&1 | %OutputCheck %s --check-prefix=BADINCREMENTAL
+; BADINCREMENTAL-NOT: terminate called
+; BADINCREMENTAL: --incremental must be one of
+
+; --incremental is a flag, so a value spelled as a separate argument is read
+; as the input file name instead. Diagnosed by name rather than left to fail
+; later as a file that cannot be opened.
+; RUN: not %solver --incremental off 2>&1 | %OutputCheck %s --check-prefix=SPLITINCREMENTAL
+; SPLITINCREMENTAL-NOT: terminate called
+; SPLITINCREMENTAL: --incremental takes its value attached
+
 ; RUN: not %solver --max-time=-5 %s 2>&1 | %OutputCheck %s --check-prefix=BADTIME
 ; BADTIME-NOT: terminate called
 ; BADTIME: --max-time must be -1

@@ -87,16 +87,29 @@ public:
   // Incremental solving (docs/incremental-solving.rst): keep one SAT solver
   // and one bit-blast/CNF encoding alive across (check-sat) calls, asserting
   // retractable formulas as SAT assumptions instead of re-solving from
-  // scratch. Switched on by the first (push) in an SMT-LIB session, or from
-  // the start with --incremental; sessions that never push are untouched.
-  bool incremental_solving = false;
+  // scratch.
+  //
+  // AUTO -- the default -- lets the session switch itself on at its first
+  // (push), subject to the engagement threshold below; sessions that never
+  // push are untouched. ON engages the driver from the first solve, whether
+  // or not the input ever pushes. OFF keeps every solve on the batch
+  // pipeline, a pushing input included; the frontend's per-level verdict
+  // cache, which is not the driver, keeps working either way.
+  enum class IncrementalMode
+  {
+    AUTO = 0,
+    ON,
+    OFF
+  };
+  IncrementalMode incremental_mode = IncrementalMode::AUTO;
 
   // The real-solve ordinal at which an automatically incremental SMT-LIB
   // session starts using the persistent driver. -1 selects the measured
   // per-logic policy (QF_BV/QF_ABV: 32; other/unknown logics: 3), 1 engages
   // on the first solve, and 0 disables automatic driver engagement without
-  // disabling the frontend's per-level verdict cache. Explicit --incremental
-  // always engages from the first solve and ignores this threshold.
+  // disabling the frontend's per-level verdict cache. --incremental=on always
+  // engages from the first solve and ignores this threshold, and
+  // --incremental=off never engages whatever it is set to.
   int64_t incremental_auto_engage_at = -1;
 
   // Emit fine-grained per-check and cumulative measurements for the

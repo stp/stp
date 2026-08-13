@@ -65,7 +65,8 @@ void Cpp_interface::init()
   ignoreCheckSatRequest = false;
   produce_models = false;
   model_valid = false;
-  incremental_from_start = bm.UserFlags.incremental_solving;
+  incremental_from_start =
+      bm.UserFlags.incremental_mode == UserDefinedFlags::IncrementalMode::ON;
   session_incremental = incremental_from_start;
   delayed_bv_auto_engagement = false;
   solves_run = 0;
@@ -619,8 +620,11 @@ void Cpp_interface::push()
   // The session is incremental from the first push on (the same trigger z3
   // uses): later check-sats go through the incremental driver where they
   // can. Sessions that never push are untouched by this. This is session
-  // state, not the user's request, so it does not travel through UserFlags.
-  session_incremental = true;
+  // state, not the user's request, so it does not travel through UserFlags --
+  // but --incremental=off is a request that no session become incremental,
+  // pushing ones included, so it is the one thing that stops this.
+  if (bm.UserFlags.incremental_mode != UserDefinedFlags::IncrementalMode::OFF)
+    session_incremental = true;
 
   // If the prior one is unsatisiable then the new one will be too. The
   // core provenance rides along, so a shortcut taken above a core-recorded
@@ -723,7 +727,8 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
     resetSolver();
 
     // The policy itself lives on the driver, so this frontend and the C API
-    // cannot drift apart again; explicit --incremental overrides it.
+    // cannot drift apart again; --incremental=on overrides it, and
+    // --incremental=off has already kept session_incremental false.
     const bool autoEngaged = IncrementalSolver::automaticEngagementReady(
         bm.UserFlags.incremental_auto_engage_at, delayed_bv_auto_engagement,
         solves_run);

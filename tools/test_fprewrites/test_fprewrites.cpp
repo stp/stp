@@ -719,10 +719,10 @@ static void run(Ctx& c)
     ASTNode x = c.fp(EB, SB);
     report("x = x -> true",
            c.nf->CreateNode(FP_SMT_EQ, {x, x}) == c.mgr.ASTTrue);
-    c.mgr.UserFlags.incremental_solving = true;
+    c.mgr.UserFlags.incremental_mode = UserDefinedFlags::IncrementalMode::ON;
     report("x = x -> true, incremental mode included",
            c.nf->CreateNode(FP_SMT_EQ, {x, x}) == c.mgr.ASTTrue);
-    c.mgr.UserFlags.incremental_solving = false;
+    c.mgr.UserFlags.incremental_mode = UserDefinedFlags::IncrementalMode::AUTO;
     report("fp.eq(x, x) -> not isNaN(x)",
            c.nf->CreateNode(FP_EQ, {x, x}) ==
                c.hf->CreateNode(NOT, {c.hf->CreateNode(FP_ISNAN, {x})}));
