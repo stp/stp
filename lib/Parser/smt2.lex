@@ -68,6 +68,15 @@
   // parsing). See fpKeyword() below and stp::SMT2SetFloatTokens.
   static thread_local bool floatTokensActive = false;
 
+  // The most recent floating-point name that the gate above handed back as an
+  // ordinary identifier without finding a declaration for it. A missing
+  // set-logic surfaces far from its cause -- the grammar just trips over an
+  // undeclared symbol, and says so in those terms -- so the diagnostic asks
+  // for this to name the token and what would have made it a keyword. Only
+  // *unresolved* names are recorded: a QF_BV file that really did declare
+  // "fp" is using its own symbol and must not be told about FP logics.
+  static thread_local std::string unresolvedFpKeyword;
+
 #ifdef _MSC_VER
   #include <io.h>
   // defining isatty to avoid dll symbol export inconsistencies
@@ -97,12 +106,30 @@ namespace stp
 {
   const std::string& smt2_skipped_text() { return skippedText; }
 
-  void SMT2SetFloatTokens(bool enable) { floatTokensActive = enable; }
+  void SMT2SetFloatTokens(bool enable)
+  {
+    floatTokensActive = enable;
+    // Either direction starts a fresh script's worth of history -- set-logic
+    // opens one, reset closes one -- and these are thread-locals that outlive
+    // a single parse. A name left behind by an earlier script must not attach
+    // its hint to this one's first error.
+    unresolvedFpKeyword.clear();
+  }
 
   // define-sort's body never reaches the rules below -- SKIP_SEXPR swallows
   // it and the grammar re-tokenises the text by hand -- so it has to ask the
   // gate itself rather than being answered by it. See tryRegisterFpSortAlias.
   bool SMT2FloatTokensActive() { return floatTokensActive; }
+
+  // Whether the token a diagnostic is about is a floating-point name that the
+  // gate demoted for want of an FP set-logic. Matched against the offending
+  // text rather than answered from the flag alone, so that an unrelated error
+  // later in the file cannot inherit an earlier name's hint.
+  bool SMT2FpKeywordNeedsLogic(const char* text)
+  {
+    return !floatTokensActive && text != NULL && !unresolvedFpKeyword.empty() &&
+           unresolvedFpKeyword == text;
+  }
 }
 
   static int lookup(char* s)
@@ -206,7 +233,17 @@ namespace stp
   {
     if (floatTokensActive)
       return token;
-    return lookup(smt2text);
+    const int fallback = lookup(smt2text);
+    if (fallback == STRING_TOK)
+      unresolvedFpKeyword = smt2text;
+    else if (unresolvedFpKeyword == smt2text)
+    {
+      // The name resolved this time, so the earlier record of it is stale:
+      // declaring "NaN" is exactly how a QF_BV file makes it its own, and a
+      // later error mentioning it deserves no floating-point hint.
+      unresolvedFpKeyword.clear();
+    }
+    return fallback;
   }
 %}
 

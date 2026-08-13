@@ -267,6 +267,15 @@ namespace stp
     std::ostringstream o;
     o << "syntax error: line " << smt2lineno << " " << s
       << "  token: " << smt2text;
+    // Outside an FP logic a floating-point name is not an unknown name, it is
+    // a disabled keyword -- and every message that can land here says the
+    // opposite, from bison's "unexpected STRING_TOK" to the sort rules'
+    // "unknown sort (not built in...)". Nothing else in the output points at
+    // the missing set-logic, so this does.
+    if (stp::SMT2FpKeywordNeedsLogic(smt2text))
+      o << "  hint: " << smt2text << " is a floating-point name; those are "
+           "recognised only after (set-logic QF_FP), (set-logic QF_BVFP) or "
+           "(set-logic QF_ABVFP)";
     return o.str();
   }
 
