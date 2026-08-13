@@ -63,6 +63,7 @@ add_subdirectory(extlib-constbv)
 add_subdirectory(STPManager)
 add_subdirectory(ToSat)
 add_subdirectory(Sat)
+add_subdirectory(Incremental)
 add_subdirectory(Util)
 add_subdirectory(NodeFactory)
 
@@ -81,6 +82,7 @@ set(stp_lib_targets
     extensionality
     tosat
     sat
+    incremental
     floatblaster
     simplifier
     constantbv
