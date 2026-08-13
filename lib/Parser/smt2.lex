@@ -3,7 +3,6 @@
 %option noyywrap
 %option noreject
 %option noyymore
-%option full
 
 /* %option debug */
 
@@ -41,6 +40,10 @@
 #include "stp/cpp_interface.h"
 #include "parsesmt2.tab.h"
 
+#include <cerrno>
+#include <cstdlib>
+#include <limits>
+
   extern char *smt2text;
   extern int smt2leng;
   extern int smt2error (const char *msg);
@@ -68,6 +71,15 @@
   // (they parsed before floating-point support existed, and must keep
   // parsing). See fpKeyword() below and stp::SMT2SetFloatTokens.
   static thread_local bool floatTokensActive = false;
+
+  // The most recent floating-point name that the gate above handed back as an
+  // ordinary identifier without finding a declaration for it. A missing
+  // set-logic surfaces far from its cause -- the grammar just trips over an
+  // undeclared symbol, and says so in those terms -- so the diagnostic asks
+  // for this to name the token and what would have made it a keyword. Only
+  // *unresolved* names are recorded: a QF_BV file that really did declare
+  // "fp" is using its own symbol and must not be told about FP logics.
+  static thread_local std::string unresolvedFpKeyword;
 
 #ifdef _MSC_VER
   #include <io.h>
@@ -98,12 +110,30 @@ namespace stp
 {
   const std::string& smt2_skipped_text() { return skippedText; }
 
-  void SMT2SetFloatTokens(bool enable) { floatTokensActive = enable; }
+  void SMT2SetFloatTokens(bool enable)
+  {
+    floatTokensActive = enable;
+    // Either direction starts a fresh script's worth of history -- set-logic
+    // opens one, reset closes one -- and these are thread-locals that outlive
+    // a single parse. A name left behind by an earlier script must not attach
+    // its hint to this one's first error.
+    unresolvedFpKeyword.clear();
+  }
 
   // define-sort's body never reaches the rules below -- SKIP_SEXPR swallows
   // it and the grammar re-tokenises the text by hand -- so it has to ask the
   // gate itself rather than being answered by it. See tryRegisterFpSortAlias.
   bool SMT2FloatTokensActive() { return floatTokensActive; }
+
+  // Whether the token a diagnostic is about is a floating-point name that the
+  // gate demoted for want of an FP set-logic. Matched against the offending
+  // text rather than answered from the flag alone, so that an unrelated error
+  // later in the file cannot inherit an earlier name's hint.
+  bool SMT2FpKeywordNeedsLogic(const char* text)
+  {
+    return !floatTokensActive && text != NULL && !unresolvedFpKeyword.empty() &&
+           unresolvedFpKeyword == text;
+  }
 }
 
   static int lookup(char* s)
@@ -207,7 +237,17 @@ namespace stp
   {
     if (floatTokensActive)
       return token;
-    return lookup(smt2text);
+    const int fallback = lookup(smt2text);
+    if (fallback == STRING_TOK)
+      unresolvedFpKeyword = smt2text;
+    else if (unresolvedFpKeyword == smt2text)
+    {
+      // The name resolved this time, so the earlier record of it is stale:
+      // declaring "NaN" is exactly how a QF_BV file makes it its own, and a
+      // later error mentioning it deserves no floating-point hint.
+      unresolvedFpKeyword.clear();
+    }
+    return fallback;
   }
 %}
 
@@ -225,8 +265,24 @@ ANYTHING  ({LETTER}|{DIGIT}|{OPCHAR})
 %%
 [ \n\t\r\f] { if (*smt2text == '\n') smt2lineno++; /* skip whitespace */ }
 
- /* We limit numerals to maxint, in the specification they are arbitary precision.*/
-{DIGIT}+               { smt2lval.uintval = strtoul(smt2text, NULL, 10); return NUMERAL_TOK; }
+ /* Numerals are arbitrary precision in the specification, but every numeral
+    STP reads as a number is an index, a width or a count, all of which fit an
+    unsigned. One that does not is kept as its digits and returned as a
+    different token: a real literal converts from the digits and so stays
+    exact, while every other use of a numeral is a syntax error rather than
+    the silently wrapped value strtoul would hand back. */
+{DIGIT}+               {
+                         errno = 0;
+                         const unsigned long value = strtoul(smt2text, NULL, 10);
+                         if (errno == ERANGE ||
+                             value > std::numeric_limits<unsigned>::max())
+                         {
+                           smt2lval.str = new std::string(smt2text);
+                           return BIG_NUMERAL_TOK;
+                         }
+                         smt2lval.uintval = static_cast<unsigned>(value);
+                         return NUMERAL_TOK;
+                       }
 bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCONST_DECIMAL_TOK; }
 #b{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCONST_BINARY_TOK; }
 #x({DIGIT}|[a-fA-F])+  { smt2lval.str = new std::string(smt2text+2); return BVCONST_HEXIDECIMAL_TOK; }
@@ -485,7 +541,7 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 
 
 ({LETTER}|{OPCHAR})({ANYTHING})*  {return lookup(smt2text);}
-\|([^\|]|\n)*\| { countNewlines(smt2text, smt2leng); return lookup(smt2text); }
+\|([^\|]|[\x80-\xff]|\n)*\| { countNewlines(smt2text, smt2leng); return lookup(smt2text); }
 
 . { smt2error("Illegal input character."); }
 %%

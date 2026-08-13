@@ -64,6 +64,47 @@ TEST(Bva, CadicalReportsConfigureTimeSupport)
 #endif
 }
 
+// The incremental driver's pattern with BVA on: everything retractable is
+// solved under assumptions, and an assumption may name a variable created
+// after the last declared batch. Assumption literals must travel through
+// the same declare/translate machinery as clause literals -- an assumption
+// placed under a raw STP index binds a different CaDiCaL variable than the
+// clauses and the model lookups use, which first shows up as an assumption
+// that silently fails to constrain anything (sat where unsat, model values
+// contradicting the assumption). The final unsat/sat pair is the
+// deterministic version of that: a unit clause against an assumed negation
+// must conflict, and must stop conflicting when the assumption is dropped.
+TEST(Bva, CadicalAssumptionsShareTheTranslation)
+{
+  stp::Cadical s;
+  // On pre-3.0 CaDiCaL this declines and the same expectations pin the
+  // untranslated path instead.
+  s.enableBVA();
+
+  bool timed_out = false;
+  const uint32_t x = s.newVar();
+  const uint32_t y = s.newVar();
+  addBinary(s, x, false, y, false); // (x | y)
+
+  SATSolver::vec_literals notX;
+  notX.push(SATSolver::mkLit(x, true));
+  ASSERT_TRUE(s.solveWithAssumptions(notX, timed_out));
+  EXPECT_EQ(s.modelValue(y), s.true_literal());
+
+  // A variable no clause has mentioned yet: assuming it is what forces the
+  // declaration to happen at assume time, not first at the next addClause.
+  const uint32_t z = s.newVar();
+  SATSolver::vec_literals notZ;
+  notZ.push(SATSolver::mkLit(z, true));
+  ASSERT_TRUE(s.solveWithAssumptions(notZ, timed_out));
+  EXPECT_EQ(s.modelValue(z), s.false_literal());
+
+  addUnit(s, z, false); // (z)
+  EXPECT_FALSE(s.solveWithAssumptions(notZ, timed_out));
+  ASSERT_TRUE(s.solve(timed_out));
+  EXPECT_EQ(s.modelValue(z), s.true_literal());
+}
+
 // The refinement-loop pattern with BVA on: solve, read the model, add
 // clauses over fresh variables, solve again. Every variable here crosses
 // the declare/translate machinery, so a mapping mistake shows up as a

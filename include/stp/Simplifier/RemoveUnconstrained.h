@@ -73,7 +73,13 @@ public:
   RemoveUnconstrained(RemoveUnconstrained const&) = delete;
   RemoveUnconstrained& operator=(RemoveUnconstrained const&) = delete;
 
-  ASTNode topLevel(const ASTNode& n, Simplifier* s);
+  // `alsoUntouchable` extends the protected set for this pass: symbols a
+  // caller knows are constrained elsewhere (another assertion-stack
+  // level, an already-encoded conjunct) even though this formula alone
+  // mentions them once. Merged with the extensionality frozen set when
+  // both apply.
+  ASTNode topLevel(const ASTNode& n, Simplifier* s,
+                   const std::set<ASTNode>* alsoUntouchable = NULL);
 };
 }
 

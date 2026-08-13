@@ -98,7 +98,8 @@ string toString(const ASTNode& n)
 }
 
 // If the bits are totally fixed, then return a new matching ASTNode.
-ASTNode ConstantBitPropagation::bitsToNode(const ASTNode& node,
+ASTNode ConstantBitPropagation::bitsToNode(NodeFactory* nf,
+                                           const ASTNode& node,
                                            const FixedBits& bits)
 {
   ASTNode result;
@@ -160,7 +161,7 @@ ASTNodeMap ConstantBitPropagation::getAllFixed()
 
     if (bits.isTotallyFixed())
     {
-      toFrom.insert(make_pair(node, bitsToNode(node, bits)));
+      toFrom.insert(make_pair(node, bitsToNode(nf, node, bits)));
     }
   }
 
@@ -371,7 +372,7 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
     if (node.GetType() != BOOLEAN_TYPE && node.GetType() != BITVECTOR_TYPE)
       continue;
 
-    ASTNode constNode = bitsToNode(node, bits);
+    ASTNode constNode = bitsToNode(nf, node, bits);
 
     if (SYMBOL == node.GetKind())
     {
@@ -610,9 +611,7 @@ void ConstantBitPropagation::propagate()
   }
 }
 
-// No value is in the map yet, so make a new one. The lookup that discovered
-// the miss is inlined into getCurrentFixedBits.
-FixedBits* ConstantBitPropagation::createFixedBits(const ASTNode& n)
+FixedBits* ConstantBitPropagation::makeInitialFixedBits(const ASTNode& n)
 {
   int bw;
   if (0 == n.GetValueWidth())
@@ -648,6 +647,14 @@ FixedBits* ConstantBitPropagation::createFixedBits(const ASTNode& n)
     output->setValue(0, false);
   }
 
+  return output;
+}
+
+// No value is in the map yet, so make a new one. The lookup that discovered
+// the miss is inlined into getCurrentFixedBits.
+FixedBits* ConstantBitPropagation::createFixedBits(const ASTNode& n)
+{
+  FixedBits* output = makeInitialFixedBits(n);
   fixedMap->map->insert(pair<ASTNode, FixedBits*>(n, output));
   return output;
 }

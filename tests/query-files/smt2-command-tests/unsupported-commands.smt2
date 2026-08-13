@@ -12,7 +12,9 @@
 (get-proof)
 ; CHECK-NEXT: ^unsupported
 (get-unsat-core)
-; CHECK-NEXT: ^unsupported
+; get-unsat-assumptions is supported now; after a plain check-sat there
+; are no assumptions, so the core is the empty list.
+; CHECK-NEXT: ^\(\)$
 (get-unsat-assumptions)
 ; CHECK-NEXT: ^unsupported
 (get-assignment)

@@ -25,6 +25,8 @@ THE SOFTWARE.
 #include "stp/Sat/SATSolverFactory.h"
 
 #include "stp/STPManager/UserDefinedFlags.h"
+#include "stp/Sat/SATSolver.h"
+#include "stp/Sat/SearchBias.h"
 
 #ifdef USE_CRYPTOMINISAT
 #include "stp/Sat/CryptoMinisat5.h"
@@ -108,5 +110,40 @@ SATSolver* createSATSolver(const UserDefinedFlags& flags)
   };
 
   return newS;
+}
+
+void applySearchBias(SATSolver& s, const UserDefinedFlags& flags, bool warn)
+{
+  if (flags.search_bias == SearchBias::NONE ||
+      s.setSearchBias(flags.search_bias))
+    return;
+  if (warn)
+  {
+    std::cerr << "Warning: the SAT solver in use has no '"
+              << searchBiasName(flags.search_bias)
+              << "' search bias to select; using its own settings instead."
+              << std::endl;
+  }
+}
+
+bool enableBVAIfWanted(SATSolver& s, const UserDefinedFlags& flags,
+                       bool wants, bool warn)
+{
+  if (!wants || s.enableBVA() ||
+      flags.cadical_factor != UserDefinedFlags::BVAMode::ON || !warn)
+    return false;
+  std::cerr << "Warning: --cadical-factor was requested but the SAT "
+               "solver in use has no bounded variable addition to "
+               "enable; using its own settings instead."
+            << std::endl;
+  return true;
+}
+
+void applySolveBudgets(SATSolver& s, const UserDefinedFlags& flags)
+{
+  if (flags.timeout_max_conflicts >= 0)
+    s.setMaxConflicts(flags.timeout_max_conflicts);
+  if (flags.timeout_max_time >= 0)
+    s.setMaxTime(flags.timeout_max_time);
 }
 }

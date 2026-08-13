@@ -64,6 +64,10 @@ struct ArithLess
   }
 };
 bool isCommutative(const Kind k);
+// Complete-DAG containment, iterative so input-chosen AST depth cannot consume
+// the C++ call stack. Use for solve-boundary barriers whose answer cannot be
+// taken from a manager-lifetime "has ever seen" hint.
+bool containsKind(const ASTNode& n, Kind kind);
 bool containsArrayOps(const ASTNode& n, STPMgr* stp);
 // Query-local source-theory checks. The first asks whether FP lowering is
 // needed; the second also includes RoundingMode-only syntax for printing.
@@ -210,6 +214,30 @@ ostream& operator<<(ostream& os, const ASTNodeMap& nmap);
 
 void buildListOfSymbols(const ASTNode& n, ASTNodeSet& visited,
                         ASTNodeSet& symbols);
+
+// The one iterative symbol-collection walk, shared by every
+// visited-marking representation: firstVisit(n) answers true exactly
+// once per node. buildListOfSymbols wraps it over a plain ASTNodeSet;
+// the incremental driver wraps it over allocation-free paged epoch
+// marks. The walk keeps its position on the heap, so input-chosen DAG
+// depth cannot exhaust the call stack.
+template <class FirstVisit>
+void collectSymbols(const ASTVec& roots, FirstVisit firstVisit,
+                    ASTNodeSet& symbols)
+{
+  ASTVec pending = roots;
+  while (!pending.empty())
+  {
+    const ASTNode n = pending.back();
+    pending.pop_back();
+    if (!firstVisit(n))
+      continue;
+    if (n.GetKind() == SYMBOL)
+      symbols.insert(n);
+    for (unsigned i = 0; i < n.Degree(); i++)
+      pending.push_back(n[i]);
+  }
+}
 } // end namespace stp
 
 #endif

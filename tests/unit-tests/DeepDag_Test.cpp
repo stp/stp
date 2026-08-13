@@ -64,6 +64,10 @@ THE SOFTWARE.
 #include "stp/Simplifier/RemoveUnconstrained.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/SplitExtracts.h"
+#include "stp/Incremental/IncrementalSolver.h"
+#include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
+#include "stp/AbsRefineCounterExample/ArrayTransformer.h"
+#include "stp/Simplifier/SubstitutionMap.h"
 #include "stp/Simplifier/UseITEContext.h"
 #include "stp/Simplifier/VariablesInExpression.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
@@ -419,6 +423,31 @@ bool substitutionOk(Context& c, unsigned depth)
 // No extract matches a chain of BVXORs over symbols, so what the pass does
 // here is exactly the traversal, and finding nothing to split means the
 // formula comes back unchanged.
+// The incremental driver's check-sat. It used to run its body on a worker
+// thread with a 256 MiB stack, because the passes it drives -- the
+// per-conjunct simplifier, substitution replace(), the bit-blaster -- were
+// depth-recursive. They are not any more, and this is what says so: the
+// driver now runs on whatever stack it is called on, so it has to clear the
+// same 1 MiB bound as every other pass here.
+bool incrementalDriverOk(Context& c, unsigned depth)
+{
+  const ASTNode top = c.formula(c.chain(BVXOR, depth));
+  c.roots.push_back(top);
+
+  // The minimal core: no fitted preparation, promotion or backend policy, so
+  // what this measures is the encode/solve path itself.
+  c.mgr.UserFlags.incremental_core_only = true;
+
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  ArrayTransformer at(&c.mgr, &simp);
+  AbsRefine_CounterExample ce(&c.mgr, &simp, &at);
+  IncrementalSolver inc(&c.mgr, &ce, &simp, &at);
+
+  const ASTVec stack{top};
+  return inc.checkSat(stack) == SOLVER_SATISFIABLE;
+}
+
 bool splitExtractsOk(Context& c, unsigned depth)
 {
   const ASTNode top = c.formula(c.chain(BVXOR, depth));
@@ -1421,6 +1450,16 @@ bool numberOfReadsWalkOk(Context& c, unsigned depth)
   return !numberOfReadsLessThan(earlyStop, 1);
 }
 
+// Complete-DAG kind queries are used at solve boundaries, where the formula
+// may be supplied by the caller and therefore arbitrarily deep.
+bool containsKindWalkOk(Context& c, unsigned depth)
+{
+  const ASTNode deep = c.chain(BVXOR, depth);
+  const ASTNode formula = c.formula(deep);
+  c.roots.push_back(formula);
+  return containsKind(formula, BVXOR) && !containsKind(formula, ARRAY_EQ);
+}
+
 // A chain of writes under one read. The read is pushed under the writes one
 // at a time, each step building a new read over the array below it and
 // transforming that -- so the walk descends the write chain, which is again
@@ -1856,6 +1895,12 @@ TEST(DeepDag, wide_fp_rounding_mode_walk_adds_every_constraint)
 #endif // STP_ENABLE_FLOATING_POINT
 
 
+TEST(DeepDag, shallow_incremental_driver)
+{
+  Context c;
+  EXPECT_TRUE(incrementalDriverOk(c, SHALLOW));
+}
+
 TEST(DeepDag, shallow_split_extracts)
 {
   Context c;
@@ -2134,6 +2179,12 @@ TEST(DeepDag, shallow_array_read_count_walk)
 {
   Context c;
   EXPECT_TRUE(numberOfReadsWalkOk(c, SHALLOW));
+}
+
+TEST(DeepDag, shallow_contains_kind_walk)
+{
+  Context c;
+  EXPECT_TRUE(containsKindWalkOk(c, SHALLOW));
 }
 
 TEST(DeepDag, mutable_dag_root_fast_paths_preserve_no_ops)
@@ -2513,6 +2564,11 @@ TEST(DeepDag, deep_flatten)
   EXPECT_STACK_SAFE(flattenIdentityOk, 10000);
 }
 
+TEST(DeepDag, deep_incremental_driver)
+{
+  EXPECT_STACK_SAFE(incrementalDriverOk, 20000);
+}
+
 TEST(DeepDag, deep_split_extracts)
 {
   EXPECT_STACK_SAFE(splitExtractsOk, 50000);
@@ -2610,6 +2666,10 @@ TEST(DeepDag, deep_array_read_chain)   { EXPECT_STACK_SAFE(arrayReadChainOk, 200
 TEST(DeepDag, deep_array_read_count_walk)
 {
   EXPECT_STACK_SAFE(numberOfReadsWalkOk, 20000);
+}
+TEST(DeepDag, deep_contains_kind_walk)
+{
+  EXPECT_STACK_SAFE(containsKindWalkOk, 20000);
 }
 TEST(DeepDag, deep_array_write_chain)  { EXPECT_STACK_SAFE(arrayWriteChainOk, 20000); }
 TEST(DeepDag, deep_array_equality_lowering)

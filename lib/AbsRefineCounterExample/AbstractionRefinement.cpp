@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
+#include "stp/AbsRefineCounterExample/ArrayReadRefinementProgress.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/STPManager/STPManager.h"
 #include <cassert>
@@ -33,6 +34,53 @@ namespace stp
 {
 using std::pair;
 using std::map;
+
+void ArrayReadRefinementProgress::verifyStableBinding(
+    const ASTNode& leaf,
+    const ToSATBase::ASTNodeToSATVar& currentBindings)
+{
+  if (leaf.isConstant())
+    return;
+
+  ToSATBase::ASTNodeToSATVar::const_iterator current =
+      currentBindings.find(leaf);
+  if (current == currentBindings.end() ||
+      current->second.size() != leaf.GetValueWidth())
+    FatalError("Incremental array refinement has no stable SAT binding for "
+               "an axiom leaf: ",
+               leaf);
+  for (size_t i = 0; i < current->second.size(); ++i)
+    if (current->second[i] == ~((unsigned)0))
+      FatalError("Incremental array refinement has an incomplete SAT binding "
+                 "for an axiom leaf: ",
+                 leaf);
+
+  std::map<ASTNode, std::vector<unsigned>, ExprLess>::const_iterator prior =
+      stableBindings.find(leaf);
+  if (prior == stableBindings.end())
+  {
+    stableBindings.insert(std::make_pair(leaf, current->second));
+    return;
+  }
+  if (prior->second != current->second)
+    FatalError("Incremental array refinement changed an axiom leaf's SAT "
+               "binding inside one check-sat: ",
+               leaf);
+}
+
+bool ArrayReadRefinementProgress::claim(
+    const ASTNode& index0, const ASTNode& index1, const ASTNode& value0,
+    const ASTNode& value1,
+    const ToSATBase::ASTNodeToSATVar& currentBindings)
+{
+  verifyStableBinding(index0, currentBindings);
+  verifyStableBinding(index1, currentBindings);
+  verifyStableBinding(value0, currentBindings);
+  verifyStableBinding(value1, currentBindings);
+
+  const AxiomKey key = {{index0, index1, value0, value1}};
+  return emitted.insert(key).second;
+}
 
 /******************************************************************
  * Abstraction Refinement related functions
@@ -256,14 +304,32 @@ void applyAxiomToSAT(SATSolver& SatSolver, AxiomToBe& toBe,
   SatSolver.addClause(satSolverClause);
 }
 
-void applyAxiomsToSolver(ToSATBase::ASTNodeToSATVar& satVar,
-                         vector<AxiomToBe>& toBe, SATSolver& SatSolver)
+size_t applyAxiomsToSolver(ToSATBase::ASTNodeToSATVar& satVar,
+                           vector<AxiomToBe>& toBe, SATSolver& SatSolver,
+                           ArrayReadRefinementProgress* progress)
 {
+  // Preserve the batch path exactly: no memo allocation, node retention or
+  // binding copies when the caller did not request transactional progress.
+  if (progress == NULL)
+  {
+    const size_t emitted = toBe.size();
+    for (size_t i = 0; i < toBe.size(); i++)
+      applyAxiomToSAT(SatSolver, toBe[i], satVar);
+    toBe.clear();
+    return emitted;
+  }
+
+  size_t emitted = 0;
   for (size_t i = 0; i < toBe.size(); i++)
   {
+    const AxiomToBe& a = toBe[i];
+    if (!progress->claim(a.index0, a.index1, a.value0, a.value1, satVar))
+      continue;
     applyAxiomToSAT(SatSolver, toBe[i], satVar);
+    ++emitted;
   }
   toBe.clear();
+  return emitted;
 }
 
 bool sortBySize(const pair<ASTNode, ArrayTransformer::arrTypeMap>& a,
@@ -289,7 +355,8 @@ bool sortbyConstants(const AxiomToBe& a, const AxiomToBe& b)
 
 SOLVER_RETURN_TYPE
 AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
-    SATSolver& SatSolver, const ASTNode& original_input, ToSATBase* tosat)
+    SATSolver& SatSolver, const ASTNode& original_input, ToSATBase* tosat,
+    ArrayReadRefinementProgress* progress)
 {
   vector<AxiomToBe> RemainingAxiomsVec;
   vector<AxiomToBe> FalseAxiomsVec;
@@ -408,17 +475,20 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
       if (FalseAxiomsVec.size() > 0)
       {
         ToSATBase::ASTNodeToSATVar& satVar = tosat->SATVar_to_SymbolIndexMap();
-        applyAxiomsToSolver(satVar, FalseAxiomsVec, SatSolver);
+        const size_t emitted = applyAxiomsToSolver(
+            satVar, FalseAxiomsVec, SatSolver, progress);
 
-        SOLVER_RETURN_TYPE res2;
-        bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
-        res2 = CallSAT_ResultCheck(SatSolver, ASTTrue, original_input,
-                                   original_input, tosat,
-                                   true);
+        if (emitted > 0)
+        {
+          SOLVER_RETURN_TYPE res2;
+          bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
+          res2 = CallSAT_ResultCheck(SatSolver, ASTTrue, original_input,
+                                     original_input, tosat, true);
 
-        if (SOLVER_UNDECIDED != res2)
-          return res2;
-        bm->GetRunTimes()->start(RunTimes::ArrayReadRefinement);
+          if (SOLVER_UNDECIDED != res2)
+            return res2;
+          bm->GetRunTimes()->start(RunTimes::ArrayReadRefinement);
+        }
       }
     }
   }
@@ -431,11 +501,14 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
                 << " read axioms " << std::endl;
     }
     ToSATBase::ASTNodeToSATVar& satVar = tosat->SATVar_to_SymbolIndexMap();
-    applyAxiomsToSolver(satVar, RemainingAxiomsVec, SatSolver);
+    const size_t emitted = applyAxiomsToSolver(
+        satVar, RemainingAxiomsVec, SatSolver, progress);
 
     bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
-    return CallSAT_ResultCheck(SatSolver, ASTTrue, original_input,
-                               original_input, tosat, true);
+    if (emitted > 0)
+      return CallSAT_ResultCheck(SatSolver, ASTTrue, original_input,
+                                 original_input, tosat, true);
+    return SOLVER_UNDECIDED;
   }
 // For difficult problems, I suspec this is a better way to do it.
 // However because it can cause an extra three SAT solver calls, it slows down

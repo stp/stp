@@ -54,7 +54,7 @@ void SimplifyingMinisat::setMaxConflicts(int64_t max_confl)
   s->setConfBudget(max_confl);
 }
 
-bool SimplifyingMinisat::addClause(
+bool SimplifyingMinisat::addClauseInternal(
     const vec_literals& ps) // Add a clause to the solver.
 {
   // STP's literal encoding (variable*2 + sign) is MiniSat's own, so the

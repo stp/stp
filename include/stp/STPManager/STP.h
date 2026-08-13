@@ -42,6 +42,8 @@ THE SOFTWARE.
 
 namespace stp
 {
+class IncrementalSolver;
+
 // FIXME: This needs a better name
 class STP
 {
@@ -86,6 +88,26 @@ public:
   ArrayTransformer* arrayTransformer;
   SubstitutionMap* substitutionMap;
 
+  // The incremental driver (docs/incremental-solving.rst), created on first
+  // use and destroyed by reset/reset-assertions. NULL while no incremental
+  // session is active; the batch pipeline never touches it.
+  IncrementalSolver* incrementalSolver = nullptr;
+
+  // The C API's engagement bookkeeping, mirroring the SMT-LIB2 frontend's:
+  // the driver engages from the second solve of a session (the first,
+  // largest all-new formula gets the batch pipeline's whole-formula
+  // simplification), unless vc_setFlags 'i' asked for it from the start.
+  // The SMT-LIB2 frontend keeps its own copies in Cpp_interface.
+  bool incrementalFromStart = false;
+  // Session state, turned on by the first vc_push. Separate from
+  // UserFlags.incremental_solving, which stays the caller's request.
+  bool sessionIncremental = false;
+  size_t incrementalSolvesRun = 0;
+
+  DLL_PUBLIC IncrementalSolver* getIncrementalSolver();
+  DLL_PUBLIC void resetIncrementalSolver();
+  bool hasIncrementalSolver() const { return incrementalSolver != nullptr; }
+
 public:
   STP(STPMgr* b)
   {
@@ -109,6 +131,8 @@ public:
   // NB doesn't delete the STPMgr.
   void deleteObjects()
   {
+    resetIncrementalSolver();
+
     if (Ctr_Example != NULL)
       Ctr_Example->setFpEncodingContext(NULL);
     fpEncodingContext.reset();

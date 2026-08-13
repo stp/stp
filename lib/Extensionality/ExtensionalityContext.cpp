@@ -405,14 +405,20 @@ ASTNode ExtensionalityContext::makeEquality(const ASTNode& a, const ASTNode& b)
   const unsigned iw = left.GetIndexWidth();
   const unsigned ew = left.GetValueWidth();
 
+  // The registry is rebuilt every solve (beginSolve), but the variables a
+  // record mints are deterministic in its operand pair: re-deriving the
+  // same equality -- in a later solve, or a later incremental round --
+  // re-mints the same proxy, lambda and witness names, so encodings and
+  // lemmas over them stay meaningful across rounds. The left/right
+  // witnesses need distinct prefixes now that no counter tells them apart.
   Record r;
   r.id = records.size();
-  r.proxy = bm->CreateFreshVariable(0, 0, "ext_eq");
+  r.proxy = bm->CreateDeterministicVariable(0, 0, "ext_eq", left, right);
   r.constructionLeft = left;
   r.constructionRight = right;
-  r.lambda = bm->CreateFreshVariable(0, iw, "ext_lam");
-  r.nameL = bm->CreateFreshVariable(0, ew, "ext_wit");
-  r.nameR = bm->CreateFreshVariable(0, ew, "ext_wit");
+  r.lambda = bm->CreateDeterministicVariable(0, iw, "ext_lam", left, right);
+  r.nameL = bm->CreateDeterministicVariable(0, ew, "ext_wit_l", left, right);
+  r.nameR = bm->CreateDeterministicVariable(0, ew, "ext_wit_r", left, right);
 
   ASTNode readL = hf->CreateTerm(READ, ew, left, r.lambda);
   ASTNode readR = hf->CreateTerm(READ, ew, right, r.lambda);
@@ -831,6 +837,18 @@ void ExtensionalityContext::beginSolve()
   lastObserved.clear();
 }
 
+void ExtensionalityContext::releaseSolveStorage()
+{
+  assert(!solveInProgress);
+  beginSolve();
+  std::vector<Record>().swap(records);
+  std::vector<size_t>().swap(activeRecordIds);
+  ASTNodeMap().swap(currentLowerings);
+  std::vector<ExtEqEdge>().swap(eqEdges);
+  std::vector<ExtWitness>().swap(witnessObls);
+  std::vector<ExtConflict>().swap(pendingLemmas);
+}
+
 ASTNode ExtensionalityContext::conjoinRecordConstraints(const ASTNode& root)
 {
   if (activeRecordIds.empty())
@@ -936,6 +954,29 @@ ASTNode ExtensionalityContext::instantiateEagerAckermann(const ASTNode& root)
   // symbol set simply goes unconsulted once active() is false.
   activeRecordIds.clear();
   return out;
+}
+
+ASTNode ExtensionalityContext::prepareInitialFormula(const ASTNode& root)
+{
+  if (!active())
+    return root;
+
+  const ASTNode constrained = conjoinRecordConstraints(root);
+  if (!bm->UserFlags.ackermannisation)
+    return constrained;
+
+  const ASTNode eager = instantiateEagerAckermann(constrained);
+  if (eager.IsNull())
+  {
+    std::cerr << "Warning: --ackermanize is disabled for queries with "
+                 "array equality over floating-point sorts."
+              << std::endl;
+    bm->UserFlags.ackermannisation = false;
+    return constrained;
+  }
+
+  bm->ASTNodeStats("after eager equality instantiation: ", eager);
+  return eager;
 }
 
 // Recover each record's canonical operands from its anchor equations
@@ -1114,7 +1155,11 @@ ASTNode ExtensionalityContext::freshName(const ASTNode& term,
   std::map<ASTNode, ASTNode>::const_iterator it = scalarNames.find(term);
   if (it != scalarNames.end())
     return it->second;
-  ASTNode name = bm->CreateFreshVariable(0, term.GetValueWidth(), "ext_name");
+  // Deterministic per term: the same checker-visible term gets the same
+  // scalar name in every solve, which is what lets an incremental round's
+  // encoded lemmas and naming equations be reused when the round repeats.
+  ASTNode name = bm->CreateDeterministicVariable(0, term.GetValueWidth(),
+                                                 "ext_name", term);
   protectedSymbols.insert(name);
   namingConstraints.push_back(
       bm->defaultNodeFactory->CreateNode(EQ, name, term));
@@ -1130,7 +1175,8 @@ ASTNode ExtensionalityContext::conditionName(const ASTNode& cond,
   std::map<ASTNode, ASTNode>::const_iterator it = scalarNames.find(cond);
   if (it != scalarNames.end())
     return it->second;
-  ASTNode name = bm->CreateFreshVariable(0, 0, "ext_cond");
+  // Deterministic per condition, as in freshName.
+  ASTNode name = bm->CreateDeterministicVariable(0, 0, "ext_cond", cond);
   protectedSymbols.insert(name);
   namingConstraints.push_back(
       bm->defaultNodeFactory->CreateNode(IFF, name, cond));

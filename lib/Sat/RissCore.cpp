@@ -77,7 +77,7 @@ void RissCore::setMaxConflicts(int64_t max_confl)
   s->setConfBudget(max_confl);
 }
 
-bool RissCore::addClause(
+bool RissCore::addClauseInternal(
     const SATSolver::vec_literals& ps) // Add a clause to the solver.
 {
   // STP's literal encoding (variable*2 + sign) is the one Riss itself uses, so
@@ -85,7 +85,8 @@ bool RissCore::addClause(
   Riss::vec<Riss::Lit>& v = *(Riss::vec<Riss::Lit>*)riss_clause;
   v.capacity(ps.size());
   v.clear();
-  for(int i = 0 ; i < ps.size(); ++ i) v.push_(Riss::toLit(SATSolver::toInt(ps[i])));
+  for(int i = 0 ; i < ps.size(); ++ i)
+    v.push_(Riss::toLit(SATSolver::toInt(ps[i])));
 
   return s->addClause(v);
 }
@@ -95,6 +96,30 @@ bool RissCore::okay() const // FALSE means solver is in a conflicting state
   return s->okay();
 }
 
+void RissCore::unsatAssumptions(const vec_literals& assumps,
+                                std::vector<int>& out)
+{
+  // After an unsat assumption solve, Riss's `conflict` holds the final
+  // conflict clause expressed in the assumptions: the negations of the failed
+  // ones. An assumption is in the core iff its negation appears. Without this
+  // Riss would inherit SATSolver's fallback, which reports every assumption --
+  // sound, but no use to anyone asking which one is to blame.
+  out.clear();
+  for (int i = 0; i < assumps.size(); i++)
+  {
+    const Riss::Lit assumed = Riss::toLit(SATSolver::toInt(assumps[i]));
+    // Riss's vec has no has(), unlike MiniSat's, so this scans.
+    for (int j = 0; j < s->conflict.size(); j++)
+    {
+      if (s->conflict[j] == ~assumed)
+      {
+        out.push_back(assumps[i].x);
+        break;
+      }
+    }
+  }
+}
+
 bool RissCore::solveInternal(bool& timeout_expired)
 {
   if (!s->simplify())
@@ -102,6 +127,27 @@ bool RissCore::solveInternal(bool& timeout_expired)
 
   Riss::vec<Riss::Lit> assumps;
   Riss::lbool ret = s->solveLimited(assumps);
+  if (ret == (Riss::lbool)l_Undef)
+  {
+    timeout_expired = true;
+  }
+
+  return ret == (Riss::lbool)l_True;
+}
+
+bool RissCore::solveWithAssumptionsInternal(
+    const stp::SATSolver::vec_literals& assumps, bool& timeout_expired)
+{
+  if (!s->simplify())
+    return false;
+
+  // convert the vector, as in addClause
+  Riss::vec<Riss::Lit> riss_assumps;
+  riss_assumps.capacity(assumps.size());
+  for (int i = 0; i < assumps.size(); ++i)
+    riss_assumps.push_(Riss::toLit(SATSolver::toInt(assumps[i])));
+
+  Riss::lbool ret = s->solveLimited(riss_assumps);
   if (ret == (Riss::lbool)l_Undef)
   {
     timeout_expired = true;

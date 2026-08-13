@@ -107,6 +107,12 @@ public:
     delete SimplifyNegMap;
   }
 
+  // One-shot, equivalence-preserving simplification over a throwaway
+  // substitution map, so nothing can couple across calls. The
+  // constructor demands a SubstitutionMap, which had three callers
+  // hand-rolling the empty-map pairing to get exactly this.
+  static ASTNode simplifyAlone(STPMgr* bm, const ASTNode& n);
+
   Simplifier(Simplifier const&) = delete;
   Simplifier& operator=(Simplifier const&) = delete;
 

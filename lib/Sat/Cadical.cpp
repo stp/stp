@@ -89,10 +89,46 @@ bool Cadical::solveInternal(bool& timeout_expired)
   return ret == 10;
 }
 
+bool Cadical::solveWithAssumptionsInternal(const vec_literals& assumps,
+                                           bool& timeout_expired)
+{
+  // Assumptions hold for the next solve() call only, which is exactly the
+  // semantics solveWithAssumptions promises. Literal conversion as in
+  // addClause -- including the factor translation: an assumption placed
+  // under a raw STP index would bind a different CaDiCaL variable than the
+  // clauses use, silently constraining nothing. Declaration must also
+  // happen before the assumption names the variable, not first inside
+  // solveInternal: an assumed variable no clause has mentioned yet would
+  // otherwise be imported undeclared, and the range declared for it
+  // afterwards would map it elsewhere for the rest of the session.
+  //
+  // Guarded exactly as the other two call sites are: declareNewVariables()
+  // asserts that factoring is on and that there is a gap to close, so an
+  // unguarded call aborts on the first assumption solve of a build without
+  // factoring -- which is every default build.
+  if (factor_enabled && ext_of_stp.size() <= next_variable)
+    declareNewVariables();
+  for (int i = 0; i < assumps.size(); i++)
+  {
+    uint32_t var = assumps[i].x >> 1;
+    uint32_t polarity = assumps[i].x & 1;
+    if (factor_enabled)
+      var = (uint32_t)ext_of_stp[var];
+    s->assume(polarity ? -(int)var : (int)var);
+  }
+
+  return solveInternal(timeout_expired);
+}
+
 Cadical::Cadical() : time_limit(*this)
 {
   s = new CaDiCaL::Solver ();
   s->set("quiet",1);
+  // Probe for the "inprobing" option (CaDiCaL 3.x) while the
+  // configuration window is certainly open: setting it to its current
+  // value changes nothing but reports whether the option exists, which
+  // lets a caller decide about a LIVE solver without touching it.
+  inprobing_control = s->set("inprobing", s->get("inprobing"));
 }
 
 Cadical::~Cadical()
@@ -131,7 +167,7 @@ void Cadical::setFrozen(uint32_t var)
   (void)var;
 }
 
-bool Cadical::setSearchBias(SearchBias bias)
+bool Cadical::setSearchBiasInternal(SearchBias bias)
 {
   // Cadical has named configurations of its own, so this is a straight
   // translation. "unsat" turns off stabilising search and the local-search
@@ -185,7 +221,7 @@ bool Cadical::okay()
 // factor's contract allows, and CaDiCaL places each declared range itself.
 // Only ever called while the solver is still empty (CONFIGURING), which is
 // the one state "factor" may be set in.
-bool Cadical::enableBVA()
+bool Cadical::enableBVAInternal()
 {
 #ifdef STP_CADICAL_HAS_FACTOR
   s->set("factor", 1);
@@ -196,6 +232,79 @@ bool Cadical::enableBVA()
   // impossible or untested; solving is unaffected.
   return false;
 #endif
+}
+
+// Incremental lazy backtracking: on a new solve whose assumptions extend a
+// prefix of the previous call's, CaDiCaL backtracks only to the first
+// difference and keeps the shared trail, instead of re-deciding and
+// re-propagating everything from the root. Mode 1 restricts the kept
+// trail to the assumption prefix; measured equal to mode 2 on the
+// many-small-queries workloads this targets.
+bool Cadical::enableTrailReuseInternal()
+{
+  // Like factor, "ilb" may only be set while the solver is still in its
+  // configuration window; the driver's size gate therefore works by
+  // rebuilding onto a fresh solver rather than by toggling.
+  return s->set("ilb", 1);
+}
+
+bool Cadical::supportsInprobingControl() const
+{
+  return inprobing_control;
+}
+
+bool Cadical::disableInprobingInternal()
+{
+  // Configuration-window-only, like factor and ilb: the incremental
+  // driver's retirement therefore rebuilds onto a fresh solver and
+  // applies this there.
+  return s->set("inprobing", 0);
+}
+
+bool Cadical::disableEliminationAndShrinkingInternal()
+{
+  const bool a = s->set("elim", 0);
+  const bool b = s->set("shrink", 0);
+  return a && b;
+}
+
+bool Cadical::disableLuckyPhasesInternal()
+{
+  return s->set("lucky", 0);
+}
+
+void Cadical::unsatAssumptions(const vec_literals& assumps,
+                               std::vector<int>& out)
+{
+  // failed() answers per assumed literal, in CaDiCaL's external numbering
+  // -- so the query literal travels through the factor translation exactly
+  // as the assumption itself did.
+  out.clear();
+  for (int i = 0; i < assumps.size(); i++)
+  {
+    uint32_t var = assumps[i].x >> 1;
+    uint32_t polarity = assumps[i].x & 1;
+    if (factor_enabled)
+      var = (uint32_t)ext_of_stp[var];
+    if (s->failed(polarity ? -(int)var : (int)var))
+      out.push_back(assumps[i].x);
+  }
+}
+
+void Cadical::suggestPhase(uint32_t var, bool value)
+{
+  // No declareNewVariables() here, deliberately. Declaring can reach
+  // CaDiCaL's declare_more_variables, which leaves the SATISFIED state and
+  // resets the extension -- too much for an advisory hint to do. Nothing is
+  // lost: every literal worth phasing has had a clause added and is
+  // therefore already declared, and one that has not is guarded below.
+  if (factor_enabled)
+  {
+    if (var >= ext_of_stp.size())
+      return; // never declared: nothing to phase.
+    var = (uint32_t)ext_of_stp[var];
+  }
+  s->phase(value ? (int)var : -(int)var);
 }
 
 // With factor enabled, external variables must be declared before use, and
@@ -223,7 +332,8 @@ void Cadical::declareNewVariables()
 #endif
 }
 
-bool Cadical::addClause(const vec_literals& ps) // Add a clause to the solver.
+bool Cadical::addClauseInternal(
+    const vec_literals& ps) // Add a clause to the solver.
 {
   if (factor_enabled && ext_of_stp.size() <= next_variable)
     declareNewVariables();

@@ -70,6 +70,7 @@ implemented.
 
    smt-input-language
    array-extensionality
+   incremental-solving
 
 
 Python usage

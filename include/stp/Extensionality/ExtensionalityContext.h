@@ -219,6 +219,12 @@ public:
   // lemmas and model). Called immediately before lowering the next root.
   void beginSolve();
 
+  // A full incremental encoding-epoch rotation has already invalidated the
+  // previous model and SAT instance. Release vector high-water storage as
+  // well as clearing the solve-local records, so one large equality query
+  // does not pin its graph for the rest of a small incremental session.
+  void releaseSolveStorage();
+
   // Conjoin every current-root-active record's constraint bundle (the
   // witness clause of preprocessing step 1 plus the defining equations
   // of its virtual reads) before STP preprocessing, so the bundles are
@@ -255,6 +261,16 @@ public:
   // payloads, non-denoting patterns), so a packed instantiation could
   // refuse a genuine model. Such solves stay on lemmas on demand.
   ASTNode instantiateEagerAckermann(const ASTNode& root);
+
+  // The initial formula protocol shared by the batch and persistent drivers,
+  // after opaque equalities have been lowered and before ordinary
+  // simplification starts: conjoin the active records' witness bundles, then
+  // take the eager Ackermann arm when requested. A sort whose values quotient
+  // their bit patterns cannot use that arm; in that case this method emits the
+  // one standard warning and switches this solve to lazy refinement. Eager
+  // success retires the records, so callers read active() afterwards rather
+  // than maintaining a second account of the transition.
+  ASTNode prepareInitialFormula(const ASTNode& root);
 
   // Final preparation, run after STP's simplifications and immediately
   // before its main array transformation:

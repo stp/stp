@@ -65,10 +65,60 @@ public:
 
   typedef std::map<ASTNode, ArrayRead> arrTypeMap;
   typedef std::map<ASTNode, arrTypeMap> ArrType;
+  typedef std::pair<ASTNode, ASTNode> ReadKey;
+  typedef std::vector<ReadKey> ReadKeys;
+  typedef std::map<ASTNode, ReadKeys> AckPairMap;
+
+  // A caller-owned registry whose read abstractions must survive more than
+  // one top-level transform. The batch driver continues to use the
+  // transformer's own tables; the persistent driver lends one of these to a
+  // single transform through TransformFormulaWithRegistry().
+  struct Registry
+  {
+    ArrType reads;
+    AckPairMap ackPairs;
+
+    void clear()
+    {
+      reads.clear();
+      ackPairs.clear();
+    }
+
+    void releaseStorage()
+    {
+      ArrType emptyReads;
+      AckPairMap emptyAckPairs;
+      reads.swap(emptyReads);
+      ackPairs.swap(emptyAckPairs);
+    }
+  };
+
+  struct TransformResult
+  {
+    TransformResult(const ASTNode& transformed, ReadKeys& touched)
+        : formula(transformed)
+    {
+      touchedReads.swap(touched);
+    }
+
+    ASTNode formula;
+    ReadKeys touchedReads;
+  };
+
   ArrType arrayToIndexToRead;
 
 private:
-  std::map<ASTNode, vector<std::pair<ASTNode, ASTNode>>> ack_pair;
+  // When enabled, every (array, index) read the current transform run
+  // visits is appended here (registry hits and inserts alike), so a caller
+  // can learn which registry rows one formula's reads occupy.
+  bool recordTouchedReads = false;
+  ReadKeys touchedReads;
+
+  // Under eager Ackermannisation: each array's reads in the order they
+  // were seen, from which a new read's nested if-then-else over the
+  // existing reads is built. Persistent callers carry this inside Registry
+  // so the two tables can only be installed and restored together.
+  AckPairMap ack_pair;
 
   /****************************************************************
    * Private Typedefs and Data                                    *
@@ -80,6 +130,7 @@ private:
   // Memo table used by the transformer while it is transforming the
   // formulas and terms
   ASTNodeMap* TransformMap;
+
 
   // Ptr to an external simplifier
   Simplifier* simp;
@@ -109,6 +160,7 @@ private:
   // holds. So the three are one walk with its frames on the heap rather
   // than three sets of call frames. See DeepDag_Test.cpp.
   class TransformDriver;
+  class RegistryScope;
   ASTNode transform(bool asFormula, const ASTNode& n);
 
 public:
@@ -135,10 +187,24 @@ public:
   // variables, and returns the transformed formula
   ASTNode TransformFormula_TopLevel(const ASTNode& form);
 
+  // Run one transform against a caller-owned persistent registry. The
+  // transformer's batch tables are restored on every normal or exceptional
+  // exit, while the result reports exactly the rows this formula touched.
+  // Swapping keeps the transaction O(1) regardless of registry size.
+  TransformResult TransformFormulaWithRegistry(const ASTNode& form,
+                                               Registry& registry);
+
   void ClearAllTables(void)
   {
     arrayToIndexToRead.clear();
     ack_pair.clear();
+  }
+
+  void ReleaseRunStorage()
+  {
+    recordTouchedReads = false;
+    ReadKeys empty;
+    touchedReads.swap(empty);
   }
 
   void printArrayStats()

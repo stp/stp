@@ -212,7 +212,22 @@ enum ifaceflag_t
   //! Note: this is last so that the values of the flags above are unchanged
   //! from the releases before CaDiCaL was added.
   //!
-  CADICAL
+  CADICAL,
+
+  //! The real-query ordinal at which a session that never asked for the
+  //! incremental driver starts using it anyway.
+  //!
+  //! `param_value` is that ordinal: 1 engages on the first query, N on the
+  //! Nth, 0 disables automatic engagement entirely, and a negative value
+  //! restores the default (the third query). `vc_setFlags(vc, 'i')` still
+  //! forces the driver from the first query regardless of this.
+  //!
+  //! Set this before the first query; it is read per query, so changing it
+  //! mid-session takes effect on the next one.
+  //!
+  //! Note: appended so the values of the flags above are unchanged.
+  //!
+  INCREMENTAL_AUTO_ENGAGE_AT
 
 };
 
@@ -658,13 +673,24 @@ DLL_PUBLIC int vc_counterexample_size(VC vc);
 
 //! \brief Checkpoints the current context and increases the scope level.
 //!
-//! TODO: What effects has this?
+//! Opens a new assertion level: formulas asserted after this call are
+//! retracted again by the matching vc_pop. Also discards the previous
+//! query's counterexample and derived solver state, since the assertion
+//! set is about to change.
+//!
+//! Symbols are not scoped: an Expr created at any level remains valid --
+//! and remains the same variable -- after any number of pops.
 //!
 DLL_PUBLIC void vc_push(VC vc);
 
 //! \brief Restores the current context to its state at the last checkpoint.
 //!
-//! TODO: What effects has this?
+//! Retracts every formula asserted since the matching vc_push. The last
+//! query's counterexample is deliberately retained: the idiomatic use of
+//! this API brackets each vc_query in push/pop and reads the model
+//! afterwards. The counterexample describes the last vc_query (its
+//! assertions plus the negated query at that moment) and stays readable
+//! until the next vc_push or vc_query discards it.
 //!
 DLL_PUBLIC void vc_pop(VC vc);
 

@@ -56,6 +56,7 @@ uint32_t getEquals(SATSolver& SatSolver, const ASTNode& a, const ASTNode& b,
                    Polarity polary = Polarity::BOTH);
 
 class FpEncodingContext;
+class ArrayReadRefinementProgress;
 
 class AbsRefine_CounterExample // not copyable
 {
@@ -214,6 +215,15 @@ public:
 
   void ClearComputeFormulaMap(void) { ComputeFormulaMap.clear(); }
 
+  // Full incremental encoding-epoch reclamation. Ordinary solves retain the
+  // buckets for model reuse; a relief rotation drops a previous model's hash
+  // table high-water allocation after that model has been invalidated.
+  void ReleaseModelStorage(void)
+  {
+    ASTNodeMap().swap(CounterExampleMap);
+    ASTNodeMap().swap(ComputeFormulaMap);
+  }
+
   // Publish an array observation certified by the array-equality
   // consistency check: READ over a constant index mapped to its
   // concrete value. A different existing value is an integration
@@ -344,7 +354,8 @@ public:
 
   SOLVER_RETURN_TYPE
   SATBased_ArrayReadRefinement(SATSolver& newS, const ASTNode& original_input,
-                               ToSATBase* tosat);
+                               ToSATBase* tosat,
+                               ArrayReadRefinementProgress* progress = NULL);
 
   void applyAllCongruenceConstraints(SATSolver& SatSolver, ToSATBase* tosat);
 

@@ -598,8 +598,12 @@ add_feature_info(Riss USE_RISS "Enables Riss solver")
 
 if (USE_RISS)
     set(RISS_DIR "" CACHE PATH "Path to a Riss checkout (the directory containing riss/core/Solver.h and build/lib/libriss-coprocessor.a)")
-    find_path(RISS_INCLUDE_DIR NAMES riss/core/Solver.h HINTS ${RISS_DIR})
-    find_library(RISS_LIBRARY NAMES riss-coprocessor HINTS ${RISS_DIR}/build/lib)
+    # PATHS with NO_DEFAULT_PATH rather than HINTS, for the reason spelled out
+    # over the CaDiCaL lookup below: find_library reaches CMAKE_PREFIX_PATH
+    # before HINTS, and this file puts deps/install on that path, so anything
+    # installed there would outrank the checkout RISS_DIR names.
+    find_path(RISS_INCLUDE_DIR NAMES riss/core/Solver.h PATHS ${RISS_DIR} NO_DEFAULT_PATH)
+    find_library(RISS_LIBRARY NAMES riss-coprocessor PATHS ${RISS_DIR}/build/lib NO_DEFAULT_PATH)
     if (NOT RISS_INCLUDE_DIR OR NOT RISS_LIBRARY)
         message(FATAL_ERROR "USE_RISS is set but Riss was not found. "
                 "Set RISS_DIR to a Riss checkout containing riss/core/Solver.h "
@@ -621,8 +625,19 @@ add_feature_info(Cadical USE_CADICAL "Enables Cadical solver")
 
 if (USE_CADICAL)
     set(CADICAL_DIR "" CACHE PATH "Path to a CaDiCaL checkout (the directory containing src/cadical.hpp and build/libcadical.a)")
-    find_path(CADICAL_INCLUDE_DIR NAMES src/cadical.hpp HINTS ${CADICAL_DIR})
-    find_library(CADICAL_LIBRARY NAMES cadical HINTS ${CADICAL_DIR}/build)
+    # PATHS with NO_DEFAULT_PATH rather than HINTS, so that CADICAL_DIR decides
+    # and nothing else gets a say. find_library searches CMAKE_PREFIX_PATH
+    # before it reaches HINTS, and this file puts deps/install on that path, so
+    # any libcadical.a installed there outranked the checkout the caller named.
+    # CryptoMiniSat >= 5.14 installs exactly that: its own bundled CaDiCaL.
+    #
+    # The header lookup never went wrong in the same way -- src/cadical.hpp is
+    # a checkout-only path, absent from any install tree -- and that asymmetry
+    # was the whole problem. STP compiled against the headers CADICAL_DIR named
+    # and linked against a different CaDiCaL's library. Pinning both to
+    # CADICAL_DIR is what stops the two disagreeing.
+    find_path(CADICAL_INCLUDE_DIR NAMES src/cadical.hpp PATHS ${CADICAL_DIR} NO_DEFAULT_PATH)
+    find_library(CADICAL_LIBRARY NAMES cadical PATHS ${CADICAL_DIR}/build NO_DEFAULT_PATH)
     if (NOT CADICAL_INCLUDE_DIR OR NOT CADICAL_LIBRARY)
         message(FATAL_ERROR "USE_CADICAL is set but CaDiCaL was not found. "
                 "Set CADICAL_DIR to a CaDiCaL checkout containing src/cadical.hpp and build/libcadical.a")
@@ -650,6 +665,11 @@ if (USE_CADICAL)
         # Mirrored as a variable so the test tree can register the
         # factor-forced lit sweep only when the flag can actually engage.
         set(CADICAL_HAS_FACTOR ON)
+        # The "inprobing" option arrived in the same 3.0 series. The
+        # incremental driver probes for it at runtime and simply declines to
+        # retire inprocessing without it, so this gates only the tests that
+        # assert the retirement happens.
+        set(CADICAL_HAS_INPROBING ON)
     else()
         message(STATUS "CaDiCaL ${CADICAL_VERSION} predates 3.0.0: --cadical-factor will be unavailable")
     endif()
@@ -782,6 +802,42 @@ add_feature_info(CryptoMiniSat USE_CRYPTOMINISAT "Enables CryptoMiniSat solver, 
 option(FORCE_CMS "Must build with CryptoMiniSat" OFF)
 if (FORCE_CMS AND NOT USE_CRYPTOMINISAT)
     message(FATAL_ERROR "CryptoMiniSat 5.x was not found but it was requested. Exiting.")
+endif()
+
+# CryptoMiniSat >= 5.14 builds its own CaDiCaL -- the meelgroup fork, 2.1.3 as
+# of 5.14.7 -- and installs it beside itself, exported as an imported target
+# named plainly `cadical`. cryptominisat5Targets.cmake then requires a target
+# by that name to exist, which is why the block above has to find_package it.
+#
+# When libcryptominisat5 is static, that target is part of its link interface:
+# a consumer has to resolve a static library's private dependencies itself, so
+# both CaDiCaLs reach libstp's link line and their symbols collide. Neither
+# target can be renamed, so refuse the combination here. Left to the linker it
+# surfaces as pages of duplicate definitions that never mention CryptoMiniSat.
+#
+# A shared libcryptominisat5 is fine and is not rejected: CMake resolves its
+# private dependencies inside the .so, which exports no CaDiCaL symbols at all,
+# so only the CaDiCaL that CADICAL_DIR names is ever linked or called.
+if (USE_CADICAL AND USE_CRYPTOMINISAT AND TARGET cryptominisat5 AND TARGET cadical)
+    get_target_property(_cms_type cryptominisat5 TYPE)
+    if (_cms_type STREQUAL "STATIC_LIBRARY")
+        get_target_property(_cms_cadical cadical IMPORTED_LOCATION_RELEASE)
+        if (NOT _cms_cadical)
+            get_target_property(_cms_cadical cadical IMPORTED_LOCATION)
+        endif()
+        if (NOT _cms_cadical)
+            set(_cms_cadical "the copy in CryptoMiniSat's install prefix")
+        endif()
+        message(FATAL_ERROR
+            "A static CryptoMiniSat cannot be combined with USE_CADICAL. Both "
+            "put a CaDiCaL on libstp's link line and their symbols collide:\n"
+            "    CryptoMiniSat's bundled CaDiCaL: ${_cms_cadical}\n"
+            "    CADICAL_DIR's CaDiCaL:           ${CADICAL_LIBRARY}\n"
+            "Either build CryptoMiniSat as a shared library "
+            "(scripts/deps/setup-cms.sh -DBUILD_SHARED_LIBS=ON), which keeps "
+            "its bundled CaDiCaL to itself, or leave CryptoMiniSat out with "
+            "-DNOCRYPTOMINISAT=ON.")
+    endif()
 endif()
 
 # -----------------------------------------------------------------------------

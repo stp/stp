@@ -34,6 +34,29 @@ struct UserDefinedFlags;
 // a diagnostic if that backend was not compiled in. The caller owns the
 // returned solver.
 SATSolver* createSATSolver(const UserDefinedFlags& flags);
+
+// The configuration-window plumbing shared by the batch pipeline and the
+// incremental driver; each used to carry its own copy, warning strings
+// included.
+
+// Apply the configured search bias -- before any clause reaches the
+// backend, which is the only point some backends accept it -- warning
+// (when `warn`) if the backend declines an explicit choice.
+void applySearchBias(SATSolver& s, const UserDefinedFlags& flags, bool warn);
+
+// Ask for bounded variable addition when `wants` says the caller's policy
+// selected it. A declined explicit ON is worth a warning (no CaDiCaL 3.x
+// behind the build, or a different backend); a declined AUTO is just the
+// default heuristic not applying. Returns whether the warning fired, so a
+// session-latched caller can warn once.
+bool enableBVAIfWanted(SATSolver& s, const UserDefinedFlags& flags,
+                       bool wants, bool warn);
+
+// STP spells "no limit" as a negative value, and every other value --
+// zero included -- is a budget to be honoured. Translate once, here, so
+// backends are only ever handed a value >= 0 and cannot each decide what,
+// say, zero means.
+void applySolveBudgets(SATSolver& s, const UserDefinedFlags& flags);
 }
 
 #endif
