@@ -597,9 +597,20 @@ option(USE_RISS "Try to use Riss" OFF)
 add_feature_info(Riss USE_RISS "Enables Riss solver")
 
 if (USE_RISS)
+    set(RISS_DIR "" CACHE PATH "Path to a Riss checkout (the directory containing riss/core/Solver.h and build/lib/libriss-coprocessor.a)")
+    find_path(RISS_INCLUDE_DIR NAMES riss/core/Solver.h HINTS ${RISS_DIR})
+    find_library(RISS_LIBRARY NAMES riss-coprocessor HINTS ${RISS_DIR}/build/lib)
+    if (NOT RISS_INCLUDE_DIR OR NOT RISS_LIBRARY)
+        message(FATAL_ERROR "USE_RISS is set but Riss was not found. "
+                "Set RISS_DIR to a Riss checkout containing riss/core/Solver.h "
+                "and build/lib/libriss-coprocessor.a")
+    endif()
+    message(STATUS "Found Riss: ${RISS_LIBRARY}")
+    # USE_RISS reaches headers (UserDefinedFlags.h picks the default backend
+    # from it), so it has to stay a global definition. The include directory
+    # does not: only lib/Sat/RissCore.cpp includes a Riss header, and it is
+    # added there.
     add_definitions(-DUSE_RISS)
-    include_directories(${RISS_DIR}/)        # should point to the base directory: ~/git/riss/
-    link_directories(${RISS_DIR}/build/lib)  # should point to the base directory: ~/git/riss/build/lib
 endif()
 
 # -----------------------------------------------------------------------------

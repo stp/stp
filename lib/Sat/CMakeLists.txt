@@ -41,6 +41,13 @@ endif()
 
 
 if (USE_RISS)
+    # SYSTEM: Riss is upstream code whose warnings we do not control, and it is
+    # consumed as headers rather than as an STP-built target, so there is no
+    # target to hang a -Wno-error on. Without this a WERROR build fails inside
+    # Riss's own headers (~90 diagnostics across a dozen files), the same
+    # outcome the -Wno-error exemptions give abc and mimalloc. STP's own code
+    # in RissCore.cpp stays gated on warnings.
+    include_directories(SYSTEM ${RISS_INCLUDE_DIR})
     set(sat_lib_to_add ${sat_lib_to_add} RissCore.cpp)
 endif()
 

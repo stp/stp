@@ -28,11 +28,13 @@ THE SOFTWARE.
 //#include "utils/System.h"
 //#include "simp/SimpSolver.h"
 
-namespace Riss
-{
-}
-using namespace Riss;
-
+// Everything from Riss is spelled out with its namespace. A `using namespace
+// Riss;` here does not do what it looks like it does: inside a member function
+// of RissCore, class scope is searched first, so an unqualified `Lit` binds to
+// the inherited SATSolver::Lit and never reaches Riss at all. That silently
+// produced a Riss::vec<stp::SATSolver::Lit> where a Riss::vec<Riss::Lit> was
+// meant. Riss's l_True/l_False/l_Undef are macros, so they need no using
+// directive (and cannot be namespace-qualified).
 namespace stp
 {
 
@@ -44,12 +46,24 @@ uint8_t RissCore::value(uint32_t x) const
 RissCore::RissCore()
 {
   s = new Riss::Solver;
-  riss_clause = new Riss::vec<Lit>();
+  riss_clause = new Riss::vec<Riss::Lit>();
 }
 
 RissCore::~RissCore()
 {
+  // Riss::Solver is polymorphic but declares no virtual destructor. The delete
+  // is safe because the object is always created as exactly Riss::Solver and
+  // never as a subclass, but the compiler cannot see that. (MiniSat's Solver
+  // does declare a virtual destructor, which is why MinisatCore needs no
+  // equivalent suppression.)
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdelete-non-virtual-dtor"
+#endif
   delete s;
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
   if(riss_clause) {
     Riss::vec<Riss::Lit> *v = (Riss::vec<Riss::Lit> *)riss_clause;
     delete v;
@@ -66,11 +80,12 @@ void RissCore::setMaxConflicts(int64_t max_confl)
 bool RissCore::addClause(
     const SATSolver::vec_literals& ps) // Add a clause to the solver.
 {
-  // convert the vector
-  Riss::vec<Lit> &v = *(Riss::vec<Riss::Lit> *)riss_clause;
+  // STP's literal encoding (variable*2 + sign) is the one Riss itself uses, so
+  // translation is a straight reinterpretation of each literal.
+  Riss::vec<Riss::Lit>& v = *(Riss::vec<Riss::Lit>*)riss_clause;
   v.capacity(ps.size());
   v.clear();
-  for(int i = 0 ; i < ps.size(); ++ i) v.push_(Riss::toLit(toInt(ps[i])));
+  for(int i = 0 ; i < ps.size(); ++ i) v.push_(Riss::toLit(SATSolver::toInt(ps[i])));
 
   return s->addClause(v);
 }

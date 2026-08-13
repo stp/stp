@@ -260,7 +260,7 @@ endif()
 
 if (USE_RISS)
     set(stp_link_libs
-        ${stp_link_libs} -lriss-coprocessor)
+        ${stp_link_libs} ${RISS_LIBRARY})
 endif()
 
 # PRIVATE, not LINK_PUBLIC: these are implementation details of libstp, and
