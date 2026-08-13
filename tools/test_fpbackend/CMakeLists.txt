@@ -19,6 +19,9 @@
 # SOFTWARE.
 
 add_executable(test_fpbackend test_fpbackend.cpp)
-target_link_libraries(test_fpbackend stp)
+# The allocator goes first, as it does on the stp binary: this is an
+# exhaustive test that builds and tears down millions of interned nodes,
+# and the C library allocator is a fifth of the run.
+target_link_libraries(test_fpbackend ${STP_ALLOCATOR_LIBRARY} stp)
 
 # EOF

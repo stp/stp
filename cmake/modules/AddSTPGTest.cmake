@@ -45,8 +45,22 @@ function(AddSTPGTest sourcefile)
         #message(STATUS "Added flags to test ${testname} ${ARGN}")
     endif()
 
+    # The same allocator the stp binary links, for the same reason: the unit
+    # tests are as allocation-heavy as a solve -- the exhaustive ones build and
+    # tear down millions of interned nodes -- and on those the C library
+    # allocator is a fifth of the run. Listing it first keeps its definitions
+    # ahead of libc. Not under valgrind: memcheck replaces malloc by preloading
+    # into the process, and an allocator linked into the executable takes those
+    # calls before the preload sees them, so the run would report nothing.
+    # (-DSTP_ALLOCATOR=system opts out, which is what a sanitizer build already
+    # does.)
+    set(test_allocator "")
+    if(NOT USE_VALGRIND)
+        set(test_allocator ${STP_ALLOCATOR_LIBRARY})
+    endif()
+
     target_link_libraries(${testname}
-        stp ${GTEST_BOTH_LIBRARIES}
+        ${test_allocator} stp ${GTEST_BOTH_LIBRARIES}
     )
 
     # Add dependency so that building the testsuite

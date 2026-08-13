@@ -182,13 +182,18 @@ public:
   void clear() { deepest = 0; }
 
 private:
+  // Runs at the end of every top-level call of an audited pass, and
+  // cacheFPFormat is one -- so on a floating-point input this is one of the
+  // hottest paths an assertions build has. Test the claim directly rather than
+  // asking disagreement() for a string to look at: building its ostringstream
+  // costs a locale and several allocations every time, to produce the empty
+  // string that says nothing happened.
   void finished()
   {
-    const std::string bad = disagreement();
-    if (!bad.empty())
+    if (deepest > limit)
     {
       std::cerr << "primeMemo preconditions violated (stp/Util/DagWalk.h):\n"
-                << bad;
+                << disagreement();
       assert(false && "a primed pass nests with its input after all");
     }
     clear();
