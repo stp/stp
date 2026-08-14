@@ -1,0 +1,150 @@
+/* Benchmark pages. Scoped under .bench so nothing here reaches the rest of
+   the manual. The palette is the site's own cream/ink, plus two data colours
+   validated against the cream surface: blue #256abf and amber #a87400 clear
+   3:1 contrast and separate by dE 25 under protanopia, which green/amber and
+   amber/red do not. The site has no dark mode, so this commits to the light
+   surface rather than pretending otherwise. */
+.bench {
+  --surface: #F1EED9;
+  --ink: #46433A;
+  --muted: #8C8879;
+  --rule: #C9C3A4;
+  --fill: #E7E2C6;
+  --solved: #256abf;
+  --unsolved: #a87400;
+}
+
+/* ---- headline figures -------------------------------------------------- */
+.bench-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem 2.5rem;
+  margin: 1.2rem 0 1.8rem;
+}
+.bench-tile .n {
+  font-size: 2.1rem;
+  line-height: 1.1;
+  color: var(--ink);
+}
+.bench-tile .n small { font-size: 1rem; color: var(--muted); }
+.bench-tile .k {
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.bench-tile.alarm .n { color: #d03b3b; }
+
+/* ---- tables ------------------------------------------------------------ */
+.bench table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.bench th, .bench td { padding: 0.35rem 0.5rem; text-align: right; }
+.bench th:first-child, .bench td:first-child { text-align: left; }
+.bench thead th {
+  border-bottom: 1px solid var(--rule);
+  color: var(--muted);
+  font-weight: normal;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+}
+.bench tbody tr { border-bottom: 1px solid rgba(201, 195, 164, 0.4); }
+.bench td.logic { white-space: nowrap; }
+.bench td.mode { color: var(--muted); }
+
+/* Inline magnitude bar: one hue, length is the measure. 4px rounded end,
+   anchored to a common baseline, with a 2px surface gap to its neighbour. */
+.bench-bar {
+  position: relative;
+  width: 8rem;
+  height: 0.7rem;
+  background: var(--fill);
+  border-radius: 2px;
+  overflow: hidden;
+  display: inline-block;
+  vertical-align: middle;
+}
+.bench-bar > i {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--solved);
+  border-radius: 0 2px 2px 0;
+}
+.bench-bar > i.rest { background: var(--unsolved); border-radius: 0; }
+
+/* ---- legend ------------------------------------------------------------ */
+.bench-legend { margin: 0.6rem 0 0; font-size: 0.82rem; color: var(--muted); }
+.bench-legend span { margin-right: 1.2rem; white-space: nowrap; }
+.bench-legend i {
+  display: inline-block;
+  width: 0.7rem; height: 0.7rem;
+  border-radius: 2px;
+  margin-right: 0.35rem;
+  vertical-align: -1px;
+}
+
+/* ---- chart ------------------------------------------------------------- */
+.bench-chart { margin: 1rem 0; overflow-x: auto; }
+.bench-chart svg { display: block; max-width: 100%; height: auto; }
+.bench-note { color: var(--muted); font-size: 0.86rem; font-style: italic; }
+
+/* ---- tooltip ----------------------------------------------------------- */
+.bench-tip {
+  position: fixed;
+  z-index: 30;
+  pointer-events: none;
+  background: var(--ink);
+  color: var(--surface);
+  padding: 0.4rem 0.55rem;
+  border-radius: 3px;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.08s;
+}
+.bench-tip.on { opacity: 1; }
+
+.bench-meta { font-size: 0.82rem; color: var(--muted); }
+.bench-meta code { font-size: 0.8rem; }
+
+/* ---- grouped logic table ----------------------------------------------- */
+/* The rule sits above each group, so the eye reads nine logics rather than
+   seventeen rows. Rows inside a group are separated only by whitespace. */
+.bench table.bench-logics tbody.grp { border-top: 1px solid var(--rule); }
+.bench table.bench-logics tbody.grp tr { border-bottom: none; }
+.bench table.bench-logics td.logic { font-weight: 600; }
+/* A zero is context, not a finding: keep it readable but recessive so a
+   non-zero out-of-memory count is what the eye lands on. */
+.bench td.zero { color: var(--muted); }
+.bench td.hit { color: #d03b3b; }
+.bench tfoot tr {
+  border-top: 2px solid var(--rule);
+  border-bottom: none;
+}
+.bench tfoot td { padding-top: 0.6rem; font-weight: 600; }
+.bench tfoot td.mode { font-weight: normal; }
+
+/* ---- per-logic failure list -------------------------------------------- */
+.bench-counts { margin: 0.4rem 0 1.2rem; }
+.bench-counts li { margin: 0.15rem 0; }
+.bench table.bench-fail td.path { text-align: left; word-break: break-all; }
+.bench table.bench-fail td.path .fam { color: var(--muted); }
+.bench td.cls { text-align: left; white-space: nowrap; }
+/* Outcome is named in words in every row, so colour is reinforcement here,
+   never the carrier. Only the two that indicate a fault in STP are tinted. */
+.bench td.cls-mismatch, .bench td.cls-error { color: #d03b3b; font-weight: 600; }
+.bench td.cls-unsupported { color: var(--muted); }
+
+/* An unfinished campaign is flagged where its numbers are, not in a footnote:
+   a partial sweep read as a final result is the one misreading that matters. */
+.bench-running {
+  border-left: 3px solid var(--unsolved);
+  padding: 0.4rem 0 0.4rem 0.7rem;
+  margin: 0 0 1rem;
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+/* The bar sits immediately left of the count it encodes, so the number reads
+   as the bar's label. Right-align the bar against that number. */
+.bench table.bench-logics td:has(> .bench-bar) { text-align: right; padding-right: 0.35rem; }
