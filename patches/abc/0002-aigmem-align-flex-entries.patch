@@ -1,0 +1,59 @@
+diff --git a/src/aig/aig/aigMem.c b/src/aig/aig/aigMem.c
+index 7626b5fb8..d46c1a4e5 100644
+--- a/src/aig/aig/aigMem.c
++++ b/src/aig/aig/aigMem.c
+@@ -65,6 +65,40 @@ struct Aig_MmFlex_t_
+     int           nMemoryAlloc;  // memory allocated
+ };
+ 
++// The alignment Aig_MmFlexEntryFetch() rounds every entry size up to.
++//
++// It hands out entries one after another from a chunk that ABC_ALLOC()
++// returns, and malloc() aligns that chunk for any type; so it is the entry
++// sizes, and only those, that decide whether the entries after the first one
++// are aligned too.
++//
++// Eight rather than four, because a caller casts what it gets back to a
++// struct with pointer members. Cnf_CutAlloc()'s request is sizeof(Cnf_Cut_t)
++// -- 24 -- plus four bytes per leaf plus the cut's truth table, so it is 4
++// modulo 8 for half the cut sizes ABC asks for, and it then writes
++// Cnf_Cut_t's two Vec_Int_t * fields through the result. One such cut left
++// the next one 4 bytes past an aligned address, and every access through
++// that one -- the stores in Cnf_CutAlloc(), the reads through Cnf_CutTruth()
++// and in cnfUtil.c and cnfWrite.c later on -- was undefined. It happened to
++// produce the right answers on x86-64, where an unaligned load is merely
++// slower, but nothing guarantees that on another target or under another
++// optimiser.
++//
++// ABC's own Makefile passes -DABC_MEMALIGN=4, which rounds but not far enough
++// (those sizes are already multiples of 4), and a build that defines it
++// nowhere -- STP's CMake build among them -- did not round at all. Hence a
++// floor rather than a plain default: a larger externally requested alignment
++// is still honoured.
++//
++// Aig_MmStepEntryFetch() needs nothing of the sort. Its buckets are 8 << i
++// bytes and Aig_MmFixedEntryFetch() spaces entries by the bucket size, so
++// they are 8-byte aligned already.
++#if defined(ABC_MEMALIGN) && ABC_MEMALIGN > 8
++#define AIG_MM_ALIGN  ABC_MEMALIGN
++#else
++#define AIG_MM_ALIGN  8
++#endif
++
+ struct Aig_MmStep_t_
+ {
+     int               nMems;    // the number of fixed memory managers employed
+@@ -366,10 +400,9 @@ void Aig_MmFlexStop( Aig_MmFlex_t * p, int fVerbose )
+ char * Aig_MmFlexEntryFetch( Aig_MmFlex_t * p, int nBytes )
+ {
+     char * pTemp;
+-#ifdef ABC_MEMALIGN
+-    // extend size to max alignment
+-    nBytes += (ABC_MEMALIGN - nBytes % ABC_MEMALIGN) % ABC_MEMALIGN;
+-#endif
++    // extend size to max alignment (see AIG_MM_ALIGN; unconditional, because
++    // an unrounded entry misaligns every entry that follows it)
++    nBytes += (AIG_MM_ALIGN - nBytes % AIG_MM_ALIGN) % AIG_MM_ALIGN;
+     // check if there are still free entries
+     if ( p->pCurrent == NULL || p->pCurrent + nBytes > p->pEnd )
+     { // need to allocate more entries
