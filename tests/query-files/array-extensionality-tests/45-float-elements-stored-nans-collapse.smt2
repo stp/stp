@@ -1,4 +1,3 @@
-; REQUIRES: floating-point
 ; RUN: %solver --array-equality %s | %OutputCheck %s
 ; CHECK-NEXT: ^unsat
 ; Reinterpreting two different NaN payloads gives the same NaN value,

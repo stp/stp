@@ -2405,7 +2405,6 @@ TEST_F(ExtPrepareTest, RewrittenWitnessIndexFailsLoudly)
 // clause.
 // Builds float- or RoundingMode-sorted arrays, so it needs the
 // floating-point layer to be more than a fatal error.
-#ifdef STP_ENABLE_FLOATING_POINT
 TEST_F(ExtPrepareTest, FloatElementWitnessQuotientsNaN)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
@@ -2445,7 +2444,6 @@ TEST_F(ExtPrepareTest, FloatElementWitnessQuotientsNaN)
     EXPECT_EQ(AND, guard[0].GetKind());
   }
 }
-#endif
 
 // An equality between a chain of writes and the chain's own base is
 // rewritten into cell comparisons instead of being abstracted into a
@@ -2459,7 +2457,6 @@ TEST_F(ExtPrepareTest, FloatElementWitnessQuotientsNaN)
 // comparison.
 // Builds float- or RoundingMode-sorted arrays, so it needs the
 // floating-point layer to be more than a fatal error.
-#ifdef STP_ENABLE_FLOATING_POINT
 TEST_F(ExtPrepareTest, FloatCellWriteChainQuotientsNaN)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
@@ -2494,7 +2491,6 @@ TEST_F(ExtPrepareTest, FloatCellWriteChainQuotientsNaN)
     EXPECT_EQ(2u, bothNaN.Degree());
   }
 }
-#endif
 
 // An equality over a float-element array if-then-else gets a
 // NaN-qualified witness, like any other float-element equality. The
@@ -2504,7 +2500,6 @@ TEST_F(ExtPrepareTest, FloatCellWriteChainQuotientsNaN)
 // would be rejected outright.
 // Builds float- or RoundingMode-sorted arrays, so it needs the
 // floating-point layer to be more than a fatal error.
-#ifdef STP_ENABLE_FLOATING_POINT
 TEST_F(ExtPrepareTest, FloatArrayIteEqualityGetsNanQualifiedWitness)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
@@ -2535,13 +2530,11 @@ TEST_F(ExtPrepareTest, FloatArrayIteEqualityGetsNanQualifiedWitness)
       r.witnessClause[0] == r.proxy ? r.witnessClause[1] : r.witnessClause[0];
   EXPECT_EQ(AND, differ.GetKind());
 }
-#endif
 
 // Same packed width, different element sorts: a float-element array
 // may not be equated with a bitvector-element array.
 // Builds float- or RoundingMode-sorted arrays, so it needs the
 // floating-point layer to be more than a fatal error.
-#ifdef STP_ENABLE_FLOATING_POINT
 TEST_F(ExtPrepareTest, MixedElementSortEqualityFailsLoudly)
 {
   ASTNode fa = mgr.CreateSourceSymbol(
@@ -2550,7 +2543,6 @@ TEST_F(ExtPrepareTest, MixedElementSortEqualityFailsLoudly)
   ASTNode b = mgr.CreateSymbol("b", 2, 32);
   EXPECT_DEATH(ext->makeEquality(fa, b), "identical element sorts");
 }
-#endif
 
 // Index sorts that quotient their bit patterns confine the witness
 // index: a float-indexed record's lambda is non-NaN or the canonical
@@ -2558,7 +2550,6 @@ TEST_F(ExtPrepareTest, MixedElementSortEqualityFailsLoudly)
 // modes, and a plain bitvector-indexed record carries no clause.
 // Builds float- or RoundingMode-sorted arrays, so it needs the
 // floating-point layer to be more than a fatal error.
-#ifdef STP_ENABLE_FLOATING_POINT
 TEST_F(ExtPrepareTest, WitnessIndexConfinedToDenotingPatterns)
 {
   ASTNode p = arr("p"), q = arr("q");
@@ -2590,13 +2581,11 @@ TEST_F(ExtPrepareTest, WitnessIndexConfinedToDenotingPatterns)
     EXPECT_EQ(mgr.roundingModeValidConstraint(r.lambda), r.indexSortClause);
   }
 }
-#endif
 
 // A RoundingMode-element record pins both witness cells to denote
 // modes next to the bitwise disequality.
 // Builds float- or RoundingMode-sorted arrays, so it needs the
 // floating-point layer to be more than a fatal error.
-#ifdef STP_ENABLE_FLOATING_POINT
 TEST_F(ExtPrepareTest, RoundingModeElementWitnessPinsCells)
 {
   const SourceSort rmElements = SourceSort::array(
@@ -2611,7 +2600,6 @@ TEST_F(ExtPrepareTest, RoundingModeElementWitnessPinsCells)
                                                         : r.witnessClause[0];
   ASSERT_EQ(AND, differ.GetKind());
 }
-#endif
 
 // An if-then-else over float-indexed arrays resolves its index sort
 // through its branches (arrayBaseSymbol recurses into both and requires
@@ -2622,7 +2610,6 @@ TEST_F(ExtPrepareTest, RoundingModeElementWitnessPinsCells)
 // with no branches to recurse into and had to be stamped by hand.
 // Builds float- or RoundingMode-sorted arrays, so it needs the
 // floating-point layer to be more than a fatal error.
-#ifdef STP_ENABLE_FLOATING_POINT
 TEST_F(ExtPrepareTest, IteOverFloatIndexedArraysConfinesItsWitnessIndex)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
@@ -2648,13 +2635,11 @@ TEST_F(ExtPrepareTest, IteOverFloatIndexedArraysConfinesItsWitnessIndex)
   ASSERT_EQ(1u, ext->getRecords().size());
   EXPECT_FALSE(ext->getRecords()[0].indexSortClause.IsNull());
 }
-#endif
 
 // Same index width, different index sorts: a float-indexed array may
 // not be equated with a bitvector-indexed one.
 // Builds float- or RoundingMode-sorted arrays, so it needs the
 // floating-point layer to be more than a fatal error.
-#ifdef STP_ENABLE_FLOATING_POINT
 TEST_F(ExtPrepareTest, MixedIndexSortEqualityFailsLoudly)
 {
   ASTNode fa = mgr.CreateSourceSymbol(
@@ -2663,7 +2648,6 @@ TEST_F(ExtPrepareTest, MixedIndexSortEqualityFailsLoudly)
   ASTNode b = mgr.CreateSymbol("b", 32, 8);
   EXPECT_DEATH(ext->makeEquality(fa, b), "identical index sorts");
 }
-#endif
 
 // Operand recovery walks the whole DAG for equations of the anchor's
 // shape and keeps what it finds in a hash-ordered container. Exactly
@@ -3155,7 +3139,6 @@ TEST(ExtLemmaFold, DropRuleIsPolarityCorrect)
 // the recorded cell and the other completed to zero.
 // Builds float- or RoundingMode-sorted arrays, so it needs the
 // floating-point layer to be more than a fatal error.
-#ifdef STP_ENABLE_FLOATING_POINT
 TEST(ExtCertifiedEqualities, PlainConstantCollapsesTheSpellingsOfOneValue)
 {
   STPMgr mgr;
@@ -3181,7 +3164,6 @@ TEST(ExtCertifiedEqualities, PlainConstantCollapsesTheSpellingsOfOneValue)
   EXPECT_EQ(2u, raw.size());
   EXPECT_EQ(1u, normalised.size());
 }
-#endif
 
 // The same rule over a floating-point element sort, where "same value"
 // stops being "same bits". SMT-LIB's = on floats is identity of values
@@ -3191,7 +3173,6 @@ TEST(ExtCertifiedEqualities, PlainConstantCollapsesTheSpellingsOfOneValue)
 // has one packing, so nothing else loosens.
 // Builds float- or RoundingMode-sorted arrays, so it needs the
 // floating-point layer to be more than a fatal error.
-#ifdef STP_ENABLE_FLOATING_POINT
 TEST(ExtCertifiedEqualities, ContentsAgreeQuotientsNaNAtAFloatElementSort)
 {
   STPMgr mgr;
@@ -3243,12 +3224,10 @@ TEST(ExtCertifiedEqualities, ContentsAgreeQuotientsNaNAtAFloatElementSort)
   zeroCell.push_back(std::make_pair(i0, zero));
   EXPECT_TRUE(ExtensionalityContext::contentsAgree(zeroCell, empty, zero, f32));
 }
-#endif
 
 // The rule on its own, at the level the model is read back.
 // Builds float- or RoundingMode-sorted arrays, so it needs the
 // floating-point layer to be more than a fatal error.
-#ifdef STP_ENABLE_FLOATING_POINT
 TEST(ExtCertifiedEqualities, SameSourceValueIsBitsExceptForNaN)
 {
   STPMgr mgr;
@@ -3275,7 +3254,6 @@ TEST(ExtCertifiedEqualities, SameSourceValueIsBitsExceptForNaN)
   // An unknown sort must not loosen anything.
   EXPECT_FALSE(constantsSameSourceValue(nanA, nanB, SourceSort::unknown()));
 }
-#endif
 
 TEST(ExtCertifiedEqualities, ContentsAgreeCompletesUnobservedCellsWithZero)
 {
@@ -3421,7 +3399,6 @@ TEST_F(ExtModelEqualityTest, UnrecordedCellsCompleteToZero)
 // query.
 // Builds float- or RoundingMode-sorted arrays, so it needs the
 // floating-point layer to be more than a fatal error.
-#ifdef STP_ENABLE_FLOATING_POINT
 TEST_F(ExtModelEqualityTest, RoundingModeCellsCompleteToAMode)
 {
   NodeFactory* hf = mgr.hashingNodeFactory;
@@ -3449,7 +3426,6 @@ TEST_F(ExtModelEqualityTest, RoundingModeCellsCompleteToAMode)
           {modes, i, mgr.CreateBVConst(5, symbolic_fp::ROUND_TOWARD_ZERO)}),
       modes));
 }
-#endif
 
 TEST_F(ExtModelEqualityTest, WalksWriteStructureAgainstTheModel)
 {

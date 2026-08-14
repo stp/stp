@@ -44,7 +44,6 @@ THE SOFTWARE.
 
 #include "stp/ToSat/ToSATAIG.h"
 
-
 using std::cout;
 using std::ostream;
 using std::stringstream;
@@ -1204,18 +1203,6 @@ static void checkFpWidths(int eb, int sb)
 
 Type vc_fpType(VC vc, int exp_bits, int sig_bits)
 {
-#ifndef STP_ENABLE_FLOATING_POINT
-  // Refuse at the API's natural entry point. Anything that slips past --
-  // this is the only vc_fp* call that neither takes nor produces a
-  // floating-point term -- is caught when SetExpWidth/CreateFPConst first
-  // stamp a format.
-  (void)vc;
-  (void)exp_bits;
-  (void)sig_bits;
-  stp::FatalError("CInterface: vc_fpType: this STP was built without "
-                  "floating-point support; reconfigure with "
-                  "-DENABLE_FLOATING_POINT=ON");
-#else
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
 
@@ -1227,26 +1214,15 @@ Type vc_fpType(VC vc, int exp_bits, int sig_bits)
   stp::ASTNode s = b->CreateBVConst(32, sig_bits);
   stp::ASTNode output = b->CreateNode(stp::FLOATINGPOINT, e, s);
   return persistNode(vc, output);
-#endif
 }
 
 Type vc_fpRoundingModeType(VC vc)
 {
-#ifndef STP_ENABLE_FLOATING_POINT
-  // Refused at the entry point, like vc_fpType: a type node neither takes
-  // nor produces a floating-point term, so the STPMgr format funnels would
-  // never catch it.
-  (void)vc;
-  stp::FatalError("CInterface: vc_fpRoundingModeType: this STP was built "
-                  "without floating-point support; reconfigure with "
-                  "-DENABLE_FLOATING_POINT=ON");
-#else
   stp::STPMgr* b = ((stp::STP*)vc)->bm;
 
   // The sort has no parameters, so the type node is childless; vc_varExpr
   // recognises it and builds the constrained 5-bit variable.
   return persistNode(vc, b->CreateNode(stp::ROUNDINGMODE));
-#endif
 }
 
 int vc_getExpWidth(Expr e)

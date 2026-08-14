@@ -1,4 +1,3 @@
-; REQUIRES: floating-point
 ; RUN: %solver --array-equality %s | %OutputCheck %s
 ; CHECK-NEXT: ^unsat
 ; Storing =-equal float values at one index of one base gives equal

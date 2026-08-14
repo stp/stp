@@ -58,8 +58,6 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include <gtest/gtest.h>
 
-#ifdef STP_ENABLE_FLOATING_POINT
-
 using namespace stp;
 
 namespace
@@ -257,4 +255,3 @@ TEST_F(FpModelEqualityTest, TheTwoEqualitiesDifferExactlyOnZerosAndNaN)
 
 } // namespace
 
-#endif // STP_ENABLE_FLOATING_POINT

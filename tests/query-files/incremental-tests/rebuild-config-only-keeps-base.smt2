@@ -18,7 +18,7 @@
 ; base conjuncts are here to clear. The base is deliberately small in DAG
 ; nodes: a re-simplification pass would be well inside its size limit and
 ; would therefore run, and be reported, if the rebuild still asked for one.
-; REQUIRES: floating-point, cadical-inprobing
+; REQUIRES: cadical-inprobing
 ; RUN: %solver --incremental -s %s 2>&1 | %OutputCheck %s
 ; RUN: %solver --incremental-auto-engage-at 1 -s %s 2>&1 | %OutputCheck %s
 ; CHECK: inprobing retired

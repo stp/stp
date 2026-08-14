@@ -1,7 +1,6 @@
 ; Floating point and arrays together in the incremental driver: an
 ; FP-element array read pinned through rounds, with the read abstraction
 ; and the lowering caches both persistent.
-; REQUIRES: floating-point
 ; RUN: %solver --incremental %s | %OutputCheck %s
 (set-logic QF_ABVFP)
 (declare-fun a () (Array (_ BitVec 8) (_ FloatingPoint 8 24)))

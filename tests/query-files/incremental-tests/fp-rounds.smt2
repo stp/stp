@@ -1,7 +1,6 @@
 ; Floating point inside the incremental driver: per-conjunct totalisation
 ; and lowering over one session-long encoding context, circuits reused
 ; across rounds.
-; REQUIRES: floating-point
 ; RUN: %solver --incremental %s | %OutputCheck %s
 (set-logic QF_BVFP)
 (declare-fun f () (_ FloatingPoint 8 24))

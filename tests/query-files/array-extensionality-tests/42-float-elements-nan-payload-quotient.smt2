@@ -1,4 +1,3 @@
-; REQUIRES: floating-point
 ; RUN: %solver --array-equality %s | %OutputCheck %s
 ; CHECK-NEXT: ^unsat
 ; Every NaN bit pattern denotes the one NaN value, so arrays that are

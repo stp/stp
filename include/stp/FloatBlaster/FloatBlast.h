@@ -114,8 +114,7 @@ public:
   const Statistics& statistics() const noexcept;
 
 private:
-  // SymFPU types stay out of this public header, and therefore out of builds
-  // configured without floating-point support.
+  // SymFPU types stay out of this public header.
   class Impl;
   std::unique_ptr<Impl> impl;
 };

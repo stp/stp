@@ -1,4 +1,3 @@
-; REQUIRES: floating-point
 ; RUN: %solver -d --array-equality %s | %OutputCheck %s
 ; CHECK: ^sat
 ; A rounding-mode or float constant interns apart from the plain

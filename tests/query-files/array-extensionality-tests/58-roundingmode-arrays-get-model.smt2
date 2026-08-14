@@ -1,4 +1,3 @@
-; REQUIRES: floating-point
 ; RUN: %solver --array-equality %s | %OutputCheck %s
 ; CHECK-NEXT: ^sat
 ; CHECK: define-fun \|a\| \(\) \(Array RoundingMode \(_ BitVec 8\)\).*as const \(Array RoundingMode \(_ BitVec 8\)\).*RTZ #x2A

@@ -1,4 +1,3 @@
-; REQUIRES: floating-point
 ; RUN: %solver --array-equality %s | %OutputCheck %s
 ; CHECK-NEXT: ^sat
 ; Equal arrays have =-equal cells, yet a cell can still refute fp.eq

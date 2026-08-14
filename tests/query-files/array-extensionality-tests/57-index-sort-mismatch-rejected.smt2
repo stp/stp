@@ -1,4 +1,3 @@
-; REQUIRES: floating-point
 ; RUN: not %solver --array-equality %s 2>&1 | %OutputCheck %s
 ; CHECK-L: requires operands of the same sort
 ; Same index width is not the same index sort: a float-indexed array

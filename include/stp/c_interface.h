@@ -750,13 +750,6 @@ DLL_PUBLIC int vc_getIndexSize(VC /* vc */, Type type);
 /////////////////////////////////////////////////////////////////////////////
 /// FLOATING POINT OPERATIONS
 /////////////////////////////////////////////////////////////////////////////
-//
-// Floating-point support is a build-time option (ENABLE_FLOATING_POINT,
-// ON by default). Every function below exists -- and links -- in every
-// build, so this header and the library ABI are the same either way. On a
-// build configured without floating-point support, vc_fpType (and anything
-// else that would create a floating-point value) fails with a FatalError
-// naming the option; it does not return.
 
 //! \brief Returns the IEEE-754 floating-point type with `exp_bits` exponent
 //!        bits and `sig_bits` significand bits.
@@ -1737,7 +1730,6 @@ DLL_PUBLIC bool vc_useCadical(VC vc);
 //! \brief Checks if underlying SAT solver is cadical
 //!
 DLL_PUBLIC bool vc_isUsingCadical(VC vc);
-
 
 #ifdef __cplusplus
 }

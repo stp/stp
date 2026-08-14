@@ -1,4 +1,3 @@
-; REQUIRES: floating-point
 ; Totalising a partial floating-point operation can introduce reads of an
 ; unspecified-value array into a formula that had no arrays at all -- so
 ; the driver must decide arrayness (transform AND refinement) from the

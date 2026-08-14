@@ -1,4 +1,3 @@
-; REQUIRES: floating-point
 ; RUN: %solver -d --array-equality %s | %OutputCheck %s
 ; CHECK-NEXT: ^sat
 ; The counterexample check decides each array equality from the cells

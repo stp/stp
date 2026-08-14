@@ -4,8 +4,7 @@ STP imports code from the following libraries:
 		of Leland Stanford Junior University and by New York University.
 	* ABC Copyright (c) The Regents of the University of California.
 	* mimalloc Copyright (c) 2018-2025 Microsoft Corporation, Daan Leijen.
-	* SymFPU copyright (C) by the authors from 2018 (only compiled in when
-		floating-point support is enabled).
+	* SymFPU copyright (C) by the authors from 2018.
 	* LibBF Copyright (c) 2017-2025 Fabrice Bellard (only compiled in when
 		built with USE_LIBBF, which folds the real literals in
 		floating-point input).

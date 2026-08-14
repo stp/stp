@@ -26,17 +26,13 @@ THE SOFTWARE.
 
 #include "stp/FloatBlaster/FloatBlaster.h"
 
-#ifdef STP_ENABLE_FLOATING_POINT
 #include "stp/FloatBlaster/symbolic_fp.h"
 
 #include <cassert>
 #include <unordered_map>
-#endif
 
 namespace stp
 {
-
-#ifdef STP_ENABLE_FLOATING_POINT
 
 class FloatBlast::Impl
 {
@@ -874,31 +870,11 @@ private:
   UnpackedMap unpacked_cache;
 };
 
-#else
-
-// Floating-point syntax is rejected before solving in this configuration.
-// Keeping the pass as an identity gives FpEncodingContext the same link and
-// ownership surface in both builds without exposing SymFPU in the header.
-class FloatBlast::Impl
-{
-public:
-  explicit Impl(STPMgr*) {}
-  ASTNode topLevel(const ASTNode& n) { return n; }
-  const FloatBlast::Statistics& statistics() const noexcept { return stats; }
-
-private:
-  FloatBlast::Statistics stats;
-};
-
-#endif
-
 FloatBlast::FloatBlast(STPMgr* bm_) : impl(new Impl(bm_)) {}
 
 FloatBlast::~FloatBlast() = default;
 
 ASTNode FloatBlast::topLevel(const ASTNode& n) { return impl->topLevel(n); }
-
-#ifdef STP_ENABLE_FLOATING_POINT
 
 ASTNode FloatBlast::lowerOperation(STPMgr* bm, const ASTNode& n)
 {
@@ -907,21 +883,6 @@ ASTNode FloatBlast::lowerOperation(STPMgr* bm, const ASTNode& n)
   FloatBlast lower(bm);
   return lower.topLevel(n);
 }
-
-#else
-
-// Fail closed, as the rest of the floating-point surface does in this
-// configuration: the parser and the STPMgr funnels reject floating-point
-// input long before a constant fold or a model query could reach here, so
-// arriving means a caller bypassed them. topLevel stays an identity because
-// FpEncodingContext needs the same ownership surface in both builds.
-ASTNode FloatBlast::lowerOperation(STPMgr*, const ASTNode&)
-{
-  FatalError("FloatBlast: this STP was built without floating-point "
-             "support; reconfigure with -DENABLE_FLOATING_POINT=ON");
-}
-
-#endif
 
 const FloatBlast::Statistics& FloatBlast::statistics() const noexcept
 {

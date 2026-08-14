@@ -1,4 +1,4 @@
-; REQUIRES: floating-point, cadical
+; REQUIRES: cadical
 ; An established many-query session initially keeps its useful trail when
 ; floating point arrives late. Retiring immediately at this boundary used to
 ; rebuild the array registry and discard the search state accumulated by the

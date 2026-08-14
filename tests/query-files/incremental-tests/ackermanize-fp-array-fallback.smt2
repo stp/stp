@@ -1,4 +1,3 @@
-; REQUIRES: floating-point
 ; The driver-side twin of array-extensionality-tests/75: float cells
 ; quotient their bit patterns, so the pointwise eager instantiation is
 ; unsound for them and the round falls back to lemmas on demand -- with

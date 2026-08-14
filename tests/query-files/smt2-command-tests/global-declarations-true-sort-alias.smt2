@@ -1,7 +1,6 @@
 ; Sort aliases are definitions too, so define-sort obeys the option alongside
 ; declare-fun and define-fun: the alias made inside the pushed level is still a
 ; usable sort after the pop. define-sort-alias-scope covers the false side.
-; REQUIRES: floating-point
 ; RUN: %solver %s | %OutputCheck %s
 (set-option :global-declarations true)
 (set-logic QF_FP)

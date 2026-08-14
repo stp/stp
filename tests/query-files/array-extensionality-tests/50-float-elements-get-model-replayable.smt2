@@ -1,4 +1,3 @@
-; REQUIRES: floating-point
 ; RUN: %solver -d --array-equality %s | %OutputCheck %s
 ; CHECK-NEXT: ^sat
 ; CHECK: define-fun \|a\| \(\) \(Array \(_ BitVec 1\) \(_ FloatingPoint 8 24\)\).*as const \(Array \(_ BitVec 1\) \(_ FloatingPoint 8 24\)\).*\(fp #b[01] #b11111111

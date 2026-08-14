@@ -223,7 +223,6 @@ TEST(SymbolNameIndex, sees_internally_minted_symbols)
   EXPECT_EQ(fresh, found);
 }
 
-#ifdef STP_ENABLE_FLOATING_POINT
 // A float-indexed array of rounding modes: none of it is expressible in the
 // index/value/exp/sig widths, so it exercises the derivation rather than the
 // GetType() fallback beneath it.
@@ -246,4 +245,3 @@ TEST(SourceSortMemo, memo_preserves_sorts_the_widths_cannot_express)
   EXPECT_EQ(array, write.GetSourceSort());
   EXPECT_EQ(SourceSort::roundingMode(), read.GetSourceSort());
 }
-#endif

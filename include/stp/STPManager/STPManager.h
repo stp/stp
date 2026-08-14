@@ -366,10 +366,6 @@ public:
   // makes the fast-negative hint complete -- and it must be called whether or
   // not the format then needs storing on a node, since a node that derives its
   // format from its kind and children may later occur in a query.
-  //
-  // It is also where a build without floating-point support refuses the C
-  // API's floating-point entry points. (The parser rejects floating-point
-  // input earlier, with a line number; see checkFpSupported in smt2.y.)
   DLL_PUBLIC void noteFloatingPoint();
 
   bool isRoundingModeSymbol(const ASTNode& n) const
