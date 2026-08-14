@@ -48,9 +48,27 @@ configure time to consume a copy built somewhere else.
 SAT backends
 ------------
 
-CaDiCaL is the recommended backend. It is opt-in rather than
-auto-detected, and is consumed from a build tree rather than an
-installation, so ``CADICAL_DIR`` points at the checkout:
+CryptoMiniSat is the default backend, and the one the install
+instructions build. CMake finds it automatically when it is installed,
+including into ``deps/install``, where ``scripts/deps/setup-cms.sh``
+puts it:
+
+.. code-block:: bash
+
+    git clone https://github.com/msoos/cryptominisat
+    cd cryptominisat
+    mkdir build && cd build
+    cmake ..
+    cmake --build . -j$(nproc)
+    sudo cmake --install .
+    command -v ldconfig && sudo ldconfig
+
+``-DNOCRYPTOMINISAT=ON`` ignores an installed copy.
+
+CaDiCaL is the alternative, and is worth trying on hard bitvector
+problems. It is opt-in rather than auto-detected, and is consumed from a
+build tree rather than an installation, so ``CADICAL_DIR`` points at the
+checkout:
 
 .. code-block:: bash
 
@@ -66,25 +84,13 @@ where ``<path>`` is the checkout containing ``src/cadical.hpp`` and
 is linked into STP's shared library. These commands are pre-configured in
 ``scripts/deps/setup-cadical.sh``.
 
-A build made this way uses CaDiCaL by default; ``--cryptominisat`` (or
-``--minisat``, in a ``-DUSE_MINISAT`` build) selects another backend at
-run time. With a CaDiCaL 3.x build, ``--cadical-factor`` controls
-CaDiCaL's bounded variable addition: ``on``, ``off``, or ``auto`` -- the
-default, which enables it only for problems with array operations, where
-it measures fastest.
-
-CryptoMiniSat is optional. When it is installed, CMake finds it and it
-becomes the default unless CaDiCaL is enabled:
-
-.. code-block:: bash
-
-    git clone https://github.com/msoos/cryptominisat
-    cd cryptominisat
-    mkdir build && cd build
-    cmake ..
-    cmake --build . -j$(nproc)
-    sudo cmake --install .
-    command -v ldconfig && sudo ldconfig
+Enabling CaDiCaL makes it the default for that build, in place of
+CryptoMiniSat; ``--cryptominisat`` (or ``--minisat``, in a
+``-DUSE_MINISAT`` build) selects another backend at run time. With a
+CaDiCaL 3.x build, ``--cadical-factor`` controls CaDiCaL's bounded
+variable addition: ``on``, ``off``, or ``auto`` -- the default, which
+enables it only for problems with array operations, where it measures
+fastest.
 
 MiniSat is optional and off by default; enable it with
 ``-DUSE_MINISAT:BOOL=ON``, which also needs zlib. Your distribution's
