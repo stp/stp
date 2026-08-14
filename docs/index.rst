@@ -31,17 +31,22 @@ On a Debian-like platform, from a clean checkout:
     git clone https://github.com/stp/stp
     cd stp
     git submodule init && git submodule update
-    ./scripts/deps/setup-cadical.sh
+    ./scripts/deps/setup-cms.sh
     ./scripts/deps/setup-libbf.sh
     mkdir build && cd build
-    cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$(pwd)/../deps/cadical" ..
+    cmake ..
     cmake --build . -j$(nproc)
     sudo cmake --install .
 
-None of those steps is optional. ABC and mimalloc are submodules and are
-built as part of STP; LibBF is required, and the two ``setup`` scripts
-fetch and build it and the SAT solver into ``deps/``. A build with no SAT
-backend enabled does not configure.
+Every step is needed. ABC and mimalloc are submodules and are built as
+part of STP; LibBF is required; and a build with no SAT backend enabled
+does not configure. The two ``setup`` scripts fetch and build LibBF and
+the SAT solver into ``deps/``, where the build finds them without being
+told where to look.
+
+That gives a solver backed by CryptoMiniSat, which is the default.
+CaDiCaL is also supported, and is chosen at configure time rather than at
+run time; :doc:`building` has the recipe.
 
 With `Homebrew <https://brew.sh>`__:
 
@@ -491,6 +496,21 @@ Many people have contributed:
 
 -  `Khoo Yit Phang <https://github.com/khooyp>`__ — parser and printer work, and the OCaml bindings.
 
+-  `Felix Kutzner <https://github.com/fkutzner>`__ — the Windows CI, and
+   64-bit pointer fixes in the vendored ABC.
+
+-  `Jurriaan Bremer <https://github.com/jbremer>`__ — the Python
+   bindings and their packaging, including Python 3 support.
+
+-  `Norbert Manthey <https://github.com/conp-solutions>`__ — the
+   StarExec competition harness.
+
+-  **Stephen McCamant** — the early build system, and packaging
+   ``libstp`` as a library worth linking against.
+
+-  `Florian Merz <https://github.com/fmerz>`__ — parser and lexer fixes,
+   and Windows portability.
+
 -  **Michael Katelman** — CNF conversion, and correctness fixes to
    counterexample construction.
 
@@ -499,4 +519,8 @@ Many people have contributed:
 -  **Philip Guo** — the CVC-to-C converter.
 
 -  **Tim King** — contributions to the early solver at Stanford.
+
+And many others: the `contributors
+page <https://github.com/stp/stp/graphs/contributors>`__ lists everyone
+who has committed to STP.
 
