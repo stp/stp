@@ -330,6 +330,180 @@ jobs:
 
         echo "All builds agree on the CNF for every input compared."
 
+  # Undefined behaviour is invisible to every other job here. A build that
+  # executes it answers exactly like a build that does not, right up until an
+  # optimiser or a target decides otherwise, so it has to be looked for
+  # deliberately -- and nothing was looking. CMakeLists.txt has carried a
+  # SANITIZE option for years, but it only ever adds CXX flags, and ABC --
+  # the vendored library that turns every query's AIG into CNF -- is C, so
+  # the code most in need of the check was the code that option cannot reach.
+  #
+  # What was sitting there: a signed left shift that overflows for any cut
+  # whose truth table has bit 15 set, cuts handed out at addresses their own
+  # pointer members are not aligned for, and a hash mix that overflows a
+  # signed int once the AIG passes ~270,600 nodes. The first two are issue
+  # #881; the third turned up on fp-tests/rem-exponent-width-boundary.smt2
+  # when the whole suite was swept rather than that one regression. All three
+  # are fixed in patches/abc/, and this job is what keeps them fixed.
+  #
+  # -fno-sanitize-recover=all rather than UBSAN_OPTIONS=halt_on_error=1,
+  # because it makes aborting a property of the binary rather than of whoever
+  # runs it. Nothing has to remember to export anything -- not this workflow,
+  # not a developer reproducing a failure by hand -- and it does not rest on
+  # lit forwarding UBSAN_OPTIONS to the query file tests, which lit does do
+  # today but from a pass-through list that is lit's to change, not STP's.
+  build-ubsan:
+    name: clang (ubsan)
+    runs-on: ubuntu-latest
+
+    # 400M rather than 800M; see the note on the gcc/clang job above.
+    env:
+      CCACHE_MAXSIZE: 400M
+      # The file, line and check that failed are printed without this; it adds
+      # the stack that got there. lit forwards UBSAN_OPTIONS, so the query
+      # file tests get it too.
+      UBSAN_OPTIONS: print_stacktrace=1
+
+    steps:
+
+    - uses: actions/checkout@v7
+      with:
+          submodules: 'true'
+
+    # llvm for llvm-symbolizer, which is what turns the frames of a stack
+    # trace into names and line numbers.
+    - name: Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bison \
+          build-essential \
+          ccache \
+          clang \
+          cmake \
+          flex \
+          git \
+          llvm \
+          ninja-build \
+          python3 \
+          python3-pip \
+          python3-setuptools \
+          zlib1g-dev
+        sudo pip3 install -U lit
+
+    - name: Resolve dependency revisions
+      id: deps-key
+      run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
+
+    - name: Restore dependencies
+      id: deps-cache
+      uses: actions/cache@v4
+      with:
+        path: |
+          deps/cadical
+          deps/gtest
+          deps/OutputCheck
+        key: deps-x86_64-ubsan-${{ steps.deps-key.outputs.key }}
+
+    # CaDiCaL, and only CaDiCaL. The backend is built by its own script,
+    # uninstrumented, so whichever one is linked is not what is under test
+    # here; this is the one that is a static archive and builds in seconds.
+    - name: Dependencies
+      if: steps.deps-cache.outputs.cache-hit != 'true'
+      run: |
+        ./scripts/deps/setup-cadical.sh
+        ./scripts/deps/setup-gtest.sh
+        ./scripts/deps/setup-outputcheck.sh
+
+    - name: LibBF (real-literal folding)
+      run: ./scripts/deps/setup-libbf.sh
+
+    - name: Compiler cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ccache
+        key: ccache-ubsan-${{ github.run_id }}
+        restore-keys: ccache-ubsan-
+
+    # CMAKE_C_FLAGS is the half that matters most: ABC is C, and it is where
+    # the CNF that every query is decided from is built.
+    #
+    # -shared-libsan puts the sanitizer runtime in a shared object that
+    # libstp.so then records as a dependency, which is what lets the Python
+    # bindings dlopen it. With clang's default static runtime that dlopen
+    # fails outright -- "undefined symbol: __ubsan_handle_type_mismatch_v1" --
+    # and python-interface-tests is lost. Nothing then puts that shared object
+    # on the loader's path, hence the -rpath: clang adds none of its own, so
+    # without it every binary this job builds fails to start. The directory
+    # comes from -print-file-name rather than -print-runtime-dir because the
+    # two disagree on some distributions, and it is the one that answers where
+    # the file actually is.
+    #
+    # STP_ALLOCATOR=system leaves the vendored mimalloc out of the build. It
+    # is a third-party allocator that replaces malloc wholesale; instrumenting
+    # it would make this job partly about mimalloc rather than about STP and
+    # ABC.
+    #
+    # WERROR is left off deliberately. The clang job above already compiles
+    # this tree with -Werror, and gating a run-time check on whether an
+    # instrumented build warns differently would only add a way for this job
+    # to fail for a reason it is not looking for.
+    - name: Configure
+      run: |
+        set -u
+        soname=libclang_rt.ubsan_standalone-x86_64.so
+        rtdir=$(dirname "$(clang -print-file-name=$soname)")
+        echo "sanitizer runtime: $rtdir"
+        if [ ! -e "$rtdir/$soname" ]; then
+          echo "::error::clang cannot find $soname; -shared-libsan has nothing to link"
+          exit 1
+        fi
+
+        mkdir build
+        cd build
+        CC=clang CXX=clang++ cmake \
+          -DNOCRYPTOMINISAT:BOOL=ON \
+          -DUSE_CADICAL:BOOL=ON \
+          -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" \
+          -DSTP_ALLOCATOR=system \
+          -DENABLE_TESTING:BOOL=ON \
+          -DPYTHON_EXECUTABLE:PATH="$(which python3)" \
+          -DCMAKE_C_FLAGS="-fsanitize=undefined -fno-sanitize-recover=all -fno-omit-frame-pointer" \
+          -DCMAKE_CXX_FLAGS="-fsanitize=undefined -fno-sanitize-recover=all -fno-omit-frame-pointer" \
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=undefined -shared-libsan -Wl,-rpath,$rtdir" \
+          -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=undefined -shared-libsan -Wl,-rpath,$rtdir" \
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          -G Ninja ..
+
+    - name: Build
+      run: |
+        ccache --zero-stats
+        cmake --build . --parallel "$(nproc)"
+        ccache --show-stats
+      working-directory: build
+
+    # A job that quietly built without the sanitizer would pass everything
+    # below while checking nothing, so confirm the flags reached both
+    # artifacts before trusting the tests. The _abort suffix is the half that
+    # is easy to lose: those entry points are what -fno-sanitize-recover=all
+    # emits, and without it undefined behaviour only prints a line and
+    # carries on.
+    - name: The build really is instrumented
+      run: |
+        set -u
+        for f in build/stp build/lib/libstp.so; do
+          n=$(nm -D "$f" | grep -c '__ubsan_handle_.*_abort' || true)
+          echo "$f: $n aborting UBSan entry points"
+          if [ "$n" -eq 0 ]; then
+            echo "::error::$f was not built with -fsanitize=undefined -fno-sanitize-recover=all"
+            exit 1
+          fi
+        done
+
+    - name: Test
+      run: ctest --parallel "$(nproc)" -VV --output-on-failure
+      working-directory: build
+
   build-cadical:
     name: gcc (cadical ${{ matrix.cadical_tag }})
     runs-on: ubuntu-latest

@@ -160,7 +160,10 @@ These apply to all generators:
    only)
 -  ``PYTHON_EXECUTABLE`` -- which Python 3 to use, when more than one is
    installed
--  ``SANITIZE`` -- use Clang's sanitization checks
+-  ``SANITIZE`` -- use Clang's sanitization checks. It sets C++ flags only,
+   and turns on the address and integer sanitizers alongside the undefined
+   one; for the undefined-behaviour build CI runs, which also covers the
+   vendored C, see :ref:`ubsan`
 -  ``STATICCOMPILE`` -- build static libraries and binaries instead of
    dynamic
 -  ``BUILD_SHARED_LIBS`` -- build ``libstp`` as a shared library

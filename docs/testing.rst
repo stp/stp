@@ -196,6 +196,57 @@ individual allocations. Configure with ``-DSTP_ALLOCATOR=system`` if you
 want to run the binary itself under valgrind, and use lit's own ``--vg``
 flag for that.
 
+.. _ubsan:
+
+Running the tests under UndefinedBehaviorSanitizer
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Undefined behaviour does not announce itself. A build that executes it
+answers exactly like a build that does not, right up until an optimiser or a
+target decides otherwise, so it has to be looked for on purpose. Clang's
+UndefinedBehaviorSanitizer compiles in the checks the language leaves to the
+implementation -- signed overflow, out-of-range shifts, misaligned accesses --
+and reports them as they happen.
+
+::
+
+    $ rtdir=$(dirname "$(clang -print-file-name=libclang_rt.ubsan_standalone-x86_64.so)")
+    $ cmake -S . -B build-ubsan -G Ninja \
+        -DENABLE_TESTING=ON -DPYTHON_EXECUTABLE="$(which python3)" \
+        -DSTP_ALLOCATOR=system \
+        -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+        -DCMAKE_C_FLAGS="-fsanitize=undefined -fno-sanitize-recover=all -fno-omit-frame-pointer" \
+        -DCMAKE_CXX_FLAGS="-fsanitize=undefined -fno-sanitize-recover=all -fno-omit-frame-pointer" \
+        -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=undefined -shared-libsan -Wl,-rpath,$rtdir" \
+        -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=undefined -shared-libsan -Wl,-rpath,$rtdir"
+    $ cmake --build build-ubsan
+    $ ctest --test-dir build-ubsan -j8
+
+``CMAKE_C_FLAGS`` matters as much as the C++ one: ABC, the vendored library
+that turns each query's AIG into CNF, is C, and is where the undefined
+behaviour found so far has been. This is not what the ``SANITIZE``
+configuration variable does -- that one sets C++ flags only, and turns on the
+address and integer sanitizers as well.
+
+``-fno-sanitize-recover=all`` makes a failing check abort rather than print
+and carry on, which is what turns undefined behaviour into a failing test.
+``UBSAN_OPTIONS=halt_on_error=1`` would do the same thing for a run that
+remembers to set it -- lit does forward that variable to the query file tests
+-- but compiling it in makes it a property of the binary, so it holds however
+the binary is reached, including through the Python bindings. Leave the flag
+off when you would rather collect every report from a run than stop at the
+first, and set ``UBSAN_OPTIONS=print_stacktrace=1`` for a stack trace with
+each one.
+
+The rest is plumbing. ``-shared-libsan`` and the matching ``-rpath`` are what
+let ``python-interface-tests`` work: the bindings dlopen ``libstp.so``, which
+fails against clang's default static runtime with "undefined symbol:
+``__ubsan_handle_type_mismatch_v1``". ``STP_ALLOCATOR=system`` keeps the
+vendored mimalloc, which replaces ``malloc`` wholesale, out of the picture.
+
+CI runs this configuration on every pull request, as the ``clang (ubsan)``
+job in ``.github/workflows/ci.yml``.
+
 Notes for Query file tests
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 

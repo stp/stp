@@ -1,0 +1,21 @@
+diff --git a/src/sat/cnf/cnfCut.c b/src/sat/cnf/cnfCut.c
+index ee9dcfa7e..1cfd3c54c 100644
+--- a/src/sat/cnf/cnfCut.c
++++ b/src/sat/cnf/cnfCut.c
+@@ -96,7 +96,15 @@ Cnf_Cut_t * Cnf_CutCreate( Cnf_Man_t * p, Aig_Obj_t * pObj )
+     pCut = Cnf_CutAlloc( p, pCutBest->nLeaves );
+     memcpy( pCut->pFanins, pCutBest->pLeaves, sizeof(int) * pCutBest->nLeaves );
+     pTruth = Cnf_CutTruth(pCut);
+-    *pTruth = (pCutBest->uTruth << 16) | pCutBest->uTruth;
++    // uTruth is a 16-bit unsigned bit-field, so the integer promotions make
++    // it a plain int before the shift, and any truth table with bit 15 set
++    // then shifts into that int's sign bit -- undefined, rather than the
++    // 4-variable table duplicated into both halves of a word that this is
++    // after. Widening to unsigned first is defined for every value of the
++    // field and produces exactly that duplication. A UBSan build reports the
++    // original as "left shift of 34952 by 16 places cannot be represented in
++    // type 'int'".
++    *pTruth = ((unsigned)pCutBest->uTruth << 16) | pCutBest->uTruth;
+     pCut->Cost = Cnf_CutSopCost( p, pCutBest );
+     return pCut;
+ }
