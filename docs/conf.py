@@ -19,7 +19,8 @@
 
 # -- Project information -----------------------------------------------------
 
-project = 'stp'
+# Capitalised to match the name the website shows under the logo.
+project = 'STP'
 copyright = '2018-2026, The STP Project'
 author = 'The STP Project'
 
@@ -65,8 +66,9 @@ language = 'en'
 # This pattern also affects html_static_path and html_extra_path .
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '.direnv', 'requirements.txt']
 
-# The name of the Pygments (syntax highlighting) style to use.
-pygments_style = 'sphinx'
+# The name of the Pygments (syntax highlighting) style to use. 'friendly' sits
+# better on the cream page background than the default white-backed 'sphinx'.
+pygments_style = 'friendly'
 
 
 # -- Options for HTML output -------------------------------------------------
@@ -76,26 +78,88 @@ pygments_style = 'sphinx'
 #
 html_theme = 'alabaster'
 
-# Theme options are theme-specific and customize the look and feel of a theme
-# further.  For a list of options available for each theme, see the
-# documentation.
-#
-# html_theme_options = {}
+# This directory is the whole of stp.github.io/stp/ -- landing page and manual
+# together. The options below carry over the look of the Jekyll site that used
+# to serve the landing page: the cream page, the red links, Vollkorn, and the
+# round logo in the sidebar.
+html_theme_options = {
+    'logo': 'logo.png',
+    'logo_name': True,
+    'logo_text_align': 'center',
+    'description': 'The Simple Theorem Prover',
+    'description_font_style': 'normal',
 
-# Add any paths that contain custom static files (such as style sheets) here,
-# relative to this directory. They are copied after the builtin static files,
-# so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = []
+    'font_family': "'Vollkorn', Georgia, serif",
+    'head_font_family': "'Vollkorn', Georgia, serif",
+
+    'base_bg': '#F1EED9',
+    'body_bg': '#F1EED9',
+    'base_text': '#46433A',
+    'body_text': '#46433A',
+    'link': '#CE534D',
+    'link_hover': '#CE534D',
+    'sidebar_header': '#46433A',
+    'sidebar_text': '#46433A',
+    'sidebar_link': '#CE534D',
+    'sidebar_list': '#46433A',
+    'sidebar_search_button': '#C9C3A4',
+    'footer_text': '#8C8879',
+    'hr_border': '#C9C3A4',
+    'anchor': '#C9C3A4',
+
+    # Code needs to read as code without a white slab on the cream page.
+    'code_bg': '#E7E2C6',
+    'pre_bg': '#E7E2C6',
+    'code_text': '#46433A',
+    'code_hover': '#DCD6B6',
+    'highlight_bg': '#E7E2C6',
+
+    'show_powered_by': False,
+    'show_relbars': False,
+    'sidebar_collapse': False,
+    'page_width': '940px',
+    'sidebar_width': '240px',
+
+    'extra_nav_links': {
+        'Source code on GitHub': 'https://github.com/stp/stp',
+    },
+}
+
+html_static_path = ['_static']
+
+html_favicon = '_static/favicon.ico'
+
+# Shown in the browser tab and in the sidebar's alt text, in place of the
+# default "STP 2.4.1 documentation".
+html_title = 'STP, the Simple Theorem Prover'
+html_short_title = 'STP'
+
+# Used for the canonical link, and for the Open Graph URLs that
+# _templates/layout.html emits.
+html_baseurl = 'https://stp.github.io/stp/'
+
+html_context = {
+    'og_image': html_baseurl + '_static/logo.png',
+}
+
+# Files copied verbatim into the build. _extra/docs holds one redirect stub per
+# page for /stp/docs/, where the manual was published before the landing page
+# and the manual were merged into this one Sphinx build.
+html_extra_path = ['_extra']
+
+# Vollkorn is the site's body font; custom.css carries the handful of rules
+# the theme options cannot express (the ring around the logo, link underlining
+# on hover only, the faded rule).
+html_css_files = [
+    'https://fonts.googleapis.com/css?family=Vollkorn',
+    'custom.css',
+]
 
 # Custom sidebar templates, must be a dictionary that maps document names
 # to template names.
-#
-# The default sidebars (for documents that don't match any pattern) are
-# defined by theme itself.  Builtin themes are using these templates by
-# default: ``['localtoc.html', 'relations.html', 'sourcelink.html',
-# 'searchbox.html']``.
-#
-# html_sidebars = {}
+html_sidebars = {
+    '**': ['about.html', 'navigation.html', 'searchfield.html'],
+}
 
 
 # -- Options for HTMLHelp output ---------------------------------------------
