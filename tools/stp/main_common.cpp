@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "sat/cnf/cnf.h"
 
 #include "stp/Parser/parser.h"
+#include "stp/Sat/SATSolverFactory.h"
 #include "stp/ToSat/ToSATAIG.h"
 #include "stp/cpp_interface.h"
 #include <memory>
@@ -71,6 +72,18 @@ void Main::printVersionInfo()
   cout << "STP version " << stp::get_git_version_tag() << std::endl;
   cout << "STP version SHA string " << stp::get_git_version_sha() << std::endl;
   cout << "STP compilation options " << stp::get_compilation_env() << std::endl;
+
+  // Which SAT library is behind the build is not otherwise visible from
+  // outside it, and it changes the answers -- so it belongs next to the STP
+  // version rather than buried in a --verbose solve.
+  const std::vector<std::string> solvers = stp::compiledSolverVersions();
+  cout << "STP SAT solvers";
+  for (size_t i = 0; i < solvers.size(); i++)
+    cout << (i == 0 ? " " : ", ") << solvers[i];
+  if (solvers.empty())
+    cout << " none";
+  cout << std::endl;
+
 #ifdef __GNUC__
   cout << "c compiled with gcc version " << __VERSION__ << endl;
 #else

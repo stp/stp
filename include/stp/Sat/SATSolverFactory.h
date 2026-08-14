@@ -25,10 +25,24 @@ THE SOFTWARE.
 #ifndef SATSOLVERFACTORY_H_
 #define SATSOLVERFACTORY_H_
 
+#include <string>
+#include <vector>
+
 namespace stp
 {
 class SATSolver;
 struct UserDefinedFlags;
+
+// Every SAT backend compiled into this binary, as "name version".
+//
+// The version is what the linked library reports at run time, not what its
+// headers say. Those two can disagree -- a build picking up one checkout's
+// headers and another's library is a real and quiet failure mode -- and it
+// is the library that decides how the solver behaves, so that is the number
+// worth printing. Where the headers also carry a version and it differs,
+// the entry says so rather than choosing a side. Backends that expose no
+// version at all report their name alone.
+std::vector<std::string> compiledSolverVersions();
 
 // Construct the SAT backend that flags.solver_to_use selects, or exit with
 // a diagnostic if that backend was not compiled in. The caller owns the
