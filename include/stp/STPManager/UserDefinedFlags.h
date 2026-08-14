@@ -333,18 +333,31 @@ public:
   SearchBias search_bias = SearchBias::NONE;
 
   // Whether CaDiCaL may use bounded variable addition (its "factor"
-  // technique). Measured on QF_ABV it is a large win on some
-  // array-refinement families (wchains: up to 5x) and a modest loss on
-  // others (countbitstable: ~30%), so AUTO -- the default -- enables it
-  // only for problems that still contain array operations after
-  // simplification, and an explicit ON/OFF from the user always wins.
+  // technique). ON is the default: measured on QF_BV, where the AUTO
+  // heuristic below never fires, it is worth a 0.76-0.80 geometric mean of
+  // wall clock on hard instances (>10 s, 259 files, three rounds) and -12.5%
+  // total wall over 42k easy ones, with no answer disagreements.
+  //
+  // AUTO enables it only for problems that still contain array operations
+  // after simplification. That was the default when the flag landed, fitted
+  // on QF_ABV alone: BVA is a large win on some array-refinement families
+  // (wchains: up to 5x) and a loss on countbitstable, whose arrays are
+  // Ackermannised away, so testing for surviving arrays separated the two.
+  // It is kept as an explicit choice because it is the only way back to that
+  // behaviour; on QF_BV it is equivalent to OFF.
   enum class BVAMode
   {
     AUTO = 0,
     ON,
     OFF
   };
-  BVAMode cadical_factor = BVAMode::AUTO;
+  BVAMode cadical_factor = BVAMode::ON;
+
+  // Whether ON above came from the command line rather than from the default.
+  // A backend with no BVA declines the request, and that is worth a warning
+  // only when a user actually asked for it -- otherwise every solve on a
+  // pre-3.0 CaDiCaL build would carry one.
+  bool cadical_factor_explicit = false;
 
   // Whether the incremental driver may retire CaDiCaL's probe-based
   // inprocessing mid-session. Inprobing re-runs over the whole

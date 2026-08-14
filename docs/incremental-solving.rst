@@ -544,17 +544,22 @@ between solves safe. When CaDiCaL is compiled in it is the default
 backend.
 
 CaDiCaL's bounded variable addition (``--cadical-factor``) follows the
-batch pipeline's policy on the persistent solver too: an explicit ON
-always asks, AUTO asks for array sessions, and the decision has to land
-in the backend's configuration window, which closes at its first clause
--- the start of the first engaged check-sat, and again right after a
-relief-valve rebuild, whose fresh solver reopens the window. With factor
-on, clause literals, *assumption literals* and model lookups all travel
-through the wrapper's declared-variable translation table; assumptions
-are how every retractable formula is asserted here, so a literal that
-skipped the translation would silently constrain nothing. The
-``query-files-cadical-factor`` suite sweep re-runs every behavioural
-test, the incremental ones included, with factor forced on.
+batch pipeline's policy on the persistent solver too: ON -- the default
+since it was measured on bitvector-only problems -- always asks, AUTO
+asks for array sessions, and the decision has to land in the backend's
+configuration window, which closes at its first clause -- the start of
+the first engaged check-sat, and again right after a relief-valve
+rebuild, whose fresh solver reopens the window. Because ON is now the
+default, an engaged session asks for the factor whatever it contains,
+where before an array-free one did not; ``--cadical-factor=auto``
+restores the previous policy exactly. With factor on, clause literals,
+*assumption literals* and model lookups all travel through the wrapper's
+declared-variable translation table; assumptions are how every
+retractable formula is asserted here, so a literal that skipped the
+translation would silently constrain nothing. The
+``query-files-cadical-factor-off`` suite sweep re-runs every behavioural
+test, the incremental ones included, with the factor forced off, the
+side the default no longer covers.
 
 CaDiCaL's probe-based inprocessing re-runs over the whole persistent
 encoding at every solve, so on many-solve sessions its recurring cost
