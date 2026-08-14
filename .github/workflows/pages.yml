@@ -1,0 +1,75 @@
+name: Publish site
+
+# Publishes the project website and the manual together:
+#   https://stp.github.io/stp/        the Jekyll site in web/
+#   https://stp.github.io/stp/docs/   Sphinx, built from docs/
+#
+# stp.github.io/ is a redirect stub pointing here; this repo holds the only
+# copy of the sources. Because the content and the Pages site now live in the
+# same repo, a merge to master publishes immediately -- there is no scheduled
+# poll and no cross-repo credential to expire.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'web/**'
+      - 'docs/**'
+      - '.github/workflows/pages.yml'
+  # Build (but do not deploy) on PRs, so a change that breaks the site or the
+  # manual is caught in review rather than after it is already published.
+  pull_request:
+    paths:
+      - 'web/**'
+      - 'docs/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./web
+          destination: ./_site
+
+      # jekyll-build-pages runs as root inside its container, so _site comes
+      # back root-owned and later steps (running as `runner`) cannot write to it.
+      - run: sudo chown -R "$(id -u):$(id -g)" _site
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - run: pip install -r docs/requirements.txt
+
+      # -W turns warnings into errors: a docs problem fails the build rather
+      # than quietly publishing a broken manual.
+      - run: sphinx-build -W -b html docs _site/docs
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

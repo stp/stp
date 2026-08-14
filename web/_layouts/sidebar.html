@@ -1,0 +1,35 @@
+---
+layout: base
+---
+<div class="wrapper">
+
+  <header>
+    <div class="logo-ubercontainer">
+      <div class="logo-container">
+        <a class="logo" href="{{ site.baseurl }}/" style="background-image: url('{{ site.baseurl }}{{ site.compass.logo }}')"></a>
+        <br />
+        <div class="author-container"><h1>{{ site.compass.author }}</h1></div>
+      </div>
+    </div>
+    
+    <hr />
+
+    <ul class="main-list">
+      <li class="main-list-item">
+        <a href="{{ site.baseurl }}/docs/">Documentation</a>
+      </li>
+      <li class="main-list-item">
+        <a href="https://github.com/stp/stp">Source code on GitHub</a>
+      </li>
+    </ul>
+    
+    <hr id="separator"/>
+  </header>
+
+  <main>
+    <div class="content">
+    {{ content }}
+    </div>
+  </main>
+
+</div>
