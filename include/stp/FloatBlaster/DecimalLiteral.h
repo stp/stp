@@ -50,8 +50,8 @@ namespace stp
 // On success returns true and fills `bits` with exp_width + sig_width
 // characters of '0'/'1', most significant first: sign, biased exponent,
 // stored significand. On failure -- an exponent width outside what the
-// conversion supports, a malformed literal, out of memory, or a build
-// without LibBF -- returns false with a diagnostic in `err`.
+// conversion supports, a malformed literal, or out of memory -- returns
+// false with a diagnostic in `err`.
 bool decimalToPackedFPBits(const std::string& decimal, unsigned exp_width,
                            unsigned sig_width, unsigned rounding_mode,
                            std::string& bits, std::string& err);

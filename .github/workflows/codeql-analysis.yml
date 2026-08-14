@@ -48,10 +48,11 @@ jobs:
         # this job only builds the tests and never runs them.
         sudo pip3 install -U lit
 
-    # The solver libraries are built before CodeQL is initialized, so their
-    # compilation is not traced into the database. gtest cannot be handled
-    # the same way (tests/CMakeLists.txt compiles it as part of the STP
-    # build); it is cloned here and filtered out of the results below.
+    # The solver libraries and LibBF are built before CodeQL is
+    # initialized, so their compilation is not traced into the database.
+    # gtest cannot be handled the same way (tests/CMakeLists.txt compiles
+    # it as part of the STP build); it is cloned here and filtered out of
+    # the results below.
     #
     # CryptoMiniSat is built shared, unlike everywhere else: this job links CMS
     # and CaDiCaL at the same time, and a static CMS drags its own
@@ -69,6 +70,7 @@ jobs:
         ./scripts/deps/setup-cms.sh -DBUILD_SHARED_LIBS=ON
         ./scripts/deps/setup-cadical.sh
         ./scripts/deps/setup-gtest.sh
+        ./scripts/deps/setup-libbf.sh
 
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v4

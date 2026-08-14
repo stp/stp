@@ -126,7 +126,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        ${{ matrix.env }} cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DBUILD_EXTRA_TOOLS:BOOL=ON -DUSE_LIBBF:BOOL=ON -DLIBBF_DIR:PATH="$GITHUB_WORKSPACE/deps/libbf" -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        ${{ matrix.env }} cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DBUILD_EXTRA_TOOLS:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -426,7 +426,7 @@ jobs:
         mkdir build
         mkdir -p "$GITHUB_WORKSPACE/install/pylib"
         cd build
-        cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DUSE_LIBBF:BOOL=ON -DLIBBF_DIR:PATH="$GITHUB_WORKSPACE/deps/libbf" -DNOCRYPTOMINISAT:BOOL=ON -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_INSTALL_PREFIX:PATH="$GITHUB_WORKSPACE/install" -DPYTHON_LIB_INSTALL_DIR:PATH="$GITHUB_WORKSPACE/install/pylib" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DNOCRYPTOMINISAT:BOOL=ON -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_INSTALL_PREFIX:PATH="$GITHUB_WORKSPACE/install" -DPYTHON_LIB_INSTALL_DIR:PATH="$GITHUB_WORKSPACE/install/pylib" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -570,6 +570,11 @@ jobs:
         ./scripts/deps/setup-gtest.sh
         ./scripts/deps/setup-outputcheck.sh
 
+    # Outside the cached step, as in the gcc/clang job: the pinned tarball
+    # is ~300KB and builds in seconds.
+    - name: LibBF (real-literal folding)
+      run: ./scripts/deps/setup-libbf.sh
+
     - name: Compiler cache
       uses: actions/cache@v4
       with:
@@ -706,7 +711,9 @@ jobs:
           zlib1g-dev
 
     - name: Dependencies
-      run: ./scripts/deps/setup-minisat.sh
+      run: |
+        ./scripts/deps/setup-minisat.sh
+        ./scripts/deps/setup-libbf.sh
 
     - name: Configure
       run: |
@@ -765,6 +772,7 @@ jobs:
         ./scripts/deps/setup-minisat.sh
         ./scripts/deps/setup-gtest.sh
         ./scripts/deps/setup-outputcheck.sh
+        ./scripts/deps/setup-libbf.sh
 
     - name: Configure
       run: |
@@ -830,6 +838,7 @@ jobs:
         ./scripts/deps/setup-riss.sh
         ./scripts/deps/setup-gtest.sh
         ./scripts/deps/setup-outputcheck.sh
+        ./scripts/deps/setup-libbf.sh
 
     - name: Configure
       run: |
@@ -1130,8 +1139,7 @@ jobs:
         -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl
         -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
         -DSTATICCOMPILE=ON -DUSE_MINISAT=ON -DNOCRYPTOMINISAT=ON
-        -DENABLE_PYTHON_INTERFACE=OFF -DUSE_LIBBF=ON
-        "-DLIBBF_DIR=$env:GITHUB_WORKSPACE\deps\libbf"
+        -DENABLE_PYTHON_INTERFACE=OFF
         "-DMINISAT_LIBDIR=$env:MINISAT_ROOT"
         "-DMINISAT_INCLUDE_DIRS=$env:MINISAT_ROOT\include"
         "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR"
@@ -1288,6 +1296,20 @@ jobs:
         ./configure -static -lpsapi
         make -j"$(nproc)" cadical
 
+    # The script's fetch/verify/patch half runs under git-bash, exactly as
+    # the MSVC leg's does; the compile half then uses the UCRT64 gcc this
+    # job builds everything else with. gcc rather than the script's cc,
+    # which MinGW does not provide.
+    - name: Fetch LibBF (real-literal folding)
+      shell: bash
+      run: LIBBF_NO_BUILD=1 ./scripts/deps/setup-libbf.sh
+
+    - name: Build LibBF (MinGW)
+      run: |
+        cd deps/libbf
+        gcc -O2 -Wall -c libbf.c cutils.c
+        ar rcs libbf.a libbf.o cutils.o
+
     - name: Configure
       run: cmake -B build -G Ninja -DSTATICCOMPILE:BOOL=ON -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$(pwd)/deps/cadical" -DNOCRYPTOMINISAT:BOOL=ON -DENABLE_PYTHON_INTERFACE:BOOL=OFF -DCMAKE_C_COMPILER_LAUNCHER="$SCCACHE" -DCMAKE_CXX_COMPILER_LAUNCHER="$SCCACHE" .
 
@@ -1315,5 +1337,11 @@ jobs:
         out=$("$stp" testsat.smt2)
         echo "sat-backend output: '$out'"
         [ "$out" = "sat" ]
+        # Real-literal folding through the MinGW-built LibBF: the decimal
+        # fold must equal its packed-bits spelling.
+        echo '(set-logic QF_FP)(declare-fun x () (_ FloatingPoint 8 24))(assert (= x ((_ to_fp 8 24) RNE 1.5)))(assert (distinct x ((_ to_fp 8 24) #x3fc00000)))(check-sat)' > testlit.smt2
+        out=$("$stp" testlit.smt2)
+        echo "real-literal output: '$out'"
+        [ "$out" = "unsat" ]
 
 # EOF

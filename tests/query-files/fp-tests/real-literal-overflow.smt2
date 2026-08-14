@@ -1,4 +1,3 @@
-; REQUIRES: libbf
 ; RUN: %solver %s | %OutputCheck %s
 ;
 ; 65520 is above the largest Float16 (65504) but below 2^16, i.e. in

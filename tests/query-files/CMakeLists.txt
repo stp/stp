@@ -21,11 +21,6 @@
 set(STP_EXECUTABLE_PATH "$<TARGET_FILE:stp-bin>")
 
 # A Python literal for lit.site.cfg.in: CMake booleans render as ON/OFF.
-if (USE_LIBBF)
-    set(STP_LIBBF_PYBOOL "True")
-else()
-    set(STP_LIBBF_PYBOOL "False")
-endif()
 if (USE_MINISAT)
     set(STP_MINISAT_PYBOOL "True")
 else()

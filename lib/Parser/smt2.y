@@ -982,9 +982,8 @@ namespace stp
 
     // The conversions this use needs: one for a constant rounding mode,
     // all five for a symbolic one. The error cases (exponent widths the
-    // conversion does not cover, a zero denominator, a build without
-    // LibBF) do not depend on the mode, so the first conversion reports
-    // them.
+    // conversion does not cover, a zero denominator) do not depend on the
+    // mode, so the first conversion reports them.
     std::string bits[sizeof(modes) / sizeof(modes[0])];
     std::string err;
     const size_t needed = constant_rm ? 1 : n_modes;

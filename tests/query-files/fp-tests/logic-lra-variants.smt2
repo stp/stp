@@ -1,4 +1,3 @@
-; REQUIRES: libbf
 ; RUN: %solver %s | %OutputCheck %s
 ;
 ; The *LRA logics are the FP logics plus a theory of reals. The benchmarks

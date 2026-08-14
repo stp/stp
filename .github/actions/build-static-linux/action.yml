@@ -97,6 +97,12 @@ runs:
     run: |
       ./scripts/deps/setup-cms.sh
 
+  # Outside the cached step, as in ci.yml's gcc/clang job: the pinned
+  # tarball is ~300KB and builds in seconds.
+  - name: LibBF (real-literal folding)
+    shell: bash
+    run: ./scripts/deps/setup-libbf.sh
+
   # Keyed by build type as well: the two differ in optimisation level and in
   # whether NDEBUG is defined, so they share no compilations. One key would
   # have them evicting each other's entries inside the 800M budget while
@@ -188,5 +194,11 @@ runs:
         echo "$expected.smt2: '$got'"
         [ "$got" = "$expected" ] || exit 1
       done
+      # Real-literal folding through the statically linked LibBF: the
+      # decimal fold must equal its packed-bits spelling.
+      echo '(set-logic QF_FP)(declare-fun x () (_ FloatingPoint 8 24))(assert (= x ((_ to_fp 8 24) RNE 1.5)))(assert (distinct x ((_ to_fp 8 24) #x3fc00000)))(check-sat)' > lit.smt2
+      got=$("$stp" lit.smt2)
+      echo "lit.smt2: '$got'"
+      [ "$got" = "unsat" ] || exit 1
 
 # EOF

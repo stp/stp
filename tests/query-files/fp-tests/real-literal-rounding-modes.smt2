@@ -1,4 +1,3 @@
-; REQUIRES: libbf
 ; RUN: %solver %s | %OutputCheck %s
 ;
 ; 0.1 has an infinite binary expansion, so every format rounds it and the

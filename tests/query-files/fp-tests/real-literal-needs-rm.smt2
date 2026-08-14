@@ -1,4 +1,3 @@
-; REQUIRES: libbf
 ; RUN: not %solver %s 2>&1 | %OutputCheck %s
 ;
 ; SMT-LIB's to_fp-from-Real takes a rounding mode; without one the only

@@ -14,11 +14,12 @@ STP is a constraint solver (or SMT solver) aimed at solving constraints of bitve
 For a quick install:
 
 ```
-sudo apt-get install git build-essential cmake bison flex libgmp-dev python3 perl
+sudo apt-get install git build-essential cmake bison flex curl patch libgmp-dev python3 perl
 git clone https://github.com/stp/stp
 cd stp
 git submodule init && git submodule update
 ./scripts/deps/setup-cadical.sh
+./scripts/deps/setup-libbf.sh
 mkdir build
 cd build
 cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$(pwd)/../deps/cadical" ..
@@ -110,6 +111,9 @@ generators.
 - `SYMFPU_INCLUDE_DIRS` - Build the mandatory floating-point support against an
   external [SymFPU](https://github.com/martin-cs/symfpu) clone instead of the
   vendored submodule (point it at the directory *containing* the clone)
+- `LIBBF_DIR` - Where to find the built LibBF that the real-literal conversion
+  links (see Dependencies; defaults to `deps/libbf`, where
+  `scripts/deps/setup-libbf.sh` puts it)
 - `STP_ALLOCATOR` - Which memory allocator the `stp` binary uses. STP is
   allocation-heavy, and the C library allocator is a significant bottleneck, so
   this defaults to `mimalloc`, which is vendored as a submodule and built as
@@ -130,14 +134,13 @@ The floating-point support uses the header-only
 [SymFPU](https://github.com/martin-cs/symfpu) library, which is vendored as a
 submodule -- nothing to install. Real literals in floating-point input --
 `((_ to_fp 8 24) RNE 1.5)` -- are converted by
-[LibBF](https://bellard.org/libbf/), an optional dependency fetched and
-built like minisat and CaDiCaL: run `scripts/deps/setup-libbf.sh` (it
-downloads the pinned release tarball, checks its hash, applies STP's MSVC
-portability patch and builds `libbf.a`; set `LIBBF_TARBALL` to a
-pre-downloaded copy for offline builds), then configure with
-`-DUSE_LIBBF:BOOL=ON -DLIBBF_DIR:PATH=<repo>/deps/libbf`. Without it STP
-builds as before and refuses real literals with a message pointing at the
-script. A python3 interpreter is needed for the
+[LibBF](https://bellard.org/libbf/), which is fetched and built like
+minisat and CaDiCaL: run `scripts/deps/setup-libbf.sh` before configuring
+(it downloads the pinned release tarball, checks its hash, applies STP's
+MSVC portability patch and builds `libbf.a` in `deps/libbf`, where the
+build looks by default; set `LIBBF_TARBALL` to a pre-downloaded copy for
+offline builds, or `LIBBF_DIR` at configure time to consume a copy built
+somewhere else). A python3 interpreter is needed for the
 python interface and for the test suite, and GMP is needed when building with
 CryptoMiniSat. You can install most of these by:
 
@@ -165,12 +168,11 @@ cloned without `--recursive`); an external SymFPU clone can be used
 instead via `-DSYMFPU_INCLUDE_DIRS=<directory containing the clone>`.
 STP solves the SMT-LIB floating-point theory
 (QF_FP/QF_BVFP/QF_ABVFP) and exposes floating-point terms through the C,
-C++ (`stp/fp.hpp`) and Python APIs. When additionally built with LibBF
-(`-DUSE_LIBBF=ON`, see Dependencies), real literals under `to_fp` --
+C++ (`stp/fp.hpp`) and Python APIs. Real literals under `to_fp` --
 `((_ to_fp 8 24) RNE 0.1)` -- are folded to their exactly-rounded bits
-while parsing, in any format and under any of the five rounding modes,
-so they mean the same bits they do in bitwuzla, cvc5 and z3. One
-operation is format-bounded:
+while parsing (by LibBF, see Dependencies), in any format and under any
+of the five rounding modes, so they mean the same bits they do in
+bitwuzla, cvc5 and z3. One operation is format-bounded:
 `fp.rem` is refused past roughly binary64-sized formats (its circuit
 unrolls one divide step per representable exponent difference, so
 Float128's would be ~33000 steps deep).
@@ -267,6 +269,7 @@ cd stp
 git submodule update --init
 pip install lit
 ./scripts/deps/setup-cadical.sh
+./scripts/deps/setup-libbf.sh
 ./scripts/deps/setup-gtest.sh
 ./scripts/deps/setup-outputcheck.sh
 mkdir build
@@ -283,7 +286,7 @@ To install run `make install` and to uninstall run `make uninstall`. The root of
 
 ### Building on Windows/Visual Studio
 
-You will need to install [cmake](https://cmake.org/download/) and follow the steps that the `windows` job in [`.github/workflows/ci.yml`](https://github.com/stp/stp/blob/master/.github/workflows/ci.yml) runs: install flex and bison, build minisat, then configure STP against it with `-DNOCRYPTOMINISAT=ON` (CryptoMiniSat does not build with MSVC). In case you still have trouble, please see the mini-HOWTO [at issue #319](https://github.com/stp/stp/issues/319).
+You will need to install [cmake](https://cmake.org/download/) and follow the steps that the `windows` job in [`.github/workflows/ci.yml`](https://github.com/stp/stp/blob/master/.github/workflows/ci.yml) runs: install flex and bison, build minisat and LibBF, then configure STP against them with `-DNOCRYPTOMINISAT=ON` (CryptoMiniSat does not build with MSVC). In case you still have trouble, please see the mini-HOWTO [at issue #319](https://github.com/stp/stp/issues/319).
 
 
 # Authors

@@ -1,4 +1,3 @@
-; REQUIRES: libbf
 ; RUN: %solver %s | %OutputCheck %s
 ;
 ; Negated real constants: (- 1.5) is the exact negative, negation swaps

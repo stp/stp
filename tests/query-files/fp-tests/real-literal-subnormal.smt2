@@ -1,4 +1,3 @@
-; REQUIRES: libbf
 ; RUN: %solver %s | %OutputCheck %s
 ;
 ; The subnormal end of Float16. 2^-24 is exactly the smallest subnormal.

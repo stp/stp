@@ -18,9 +18,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-# DecimalLiteral.cpp always builds so the parser always links: without
-# STP_HAVE_LIBBF (set by the USE_LIBBF block in the top-level CMakeLists.txt)
-# its one function is a "cannot convert real literals" refusal.
 add_library(floatblaster OBJECT
     DecimalLiteral.cpp
     FloatBlaster.cpp
