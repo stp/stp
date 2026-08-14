@@ -26,12 +26,33 @@ THE SOFTWARE.
  * Identifies unconstrained variables and remove them from the input.
  * Robert Bruttomesso's & Robert Brummayer's dissertations describe this.
  *
- * Nb. this isn't finished. It doesn't do reads / writes.
- *
  * Kinds without a per-kind rule (bvsx, bvzx, bvurem/bvudiv by a
  * constant, masks, ...) can still be eliminated when the variable's
  * whole use is a predicate over it and constants: see
  * tryGroundPathCollapse.
+ *
+ * The array rules (READ, WRITE and array-sorted ITE) are the ones
+ * Brummayer's dissertation states for the extensional theory of
+ * arrays. One condition is less obvious than it looks: a write is
+ * unconstrained only when its *value* is unconstrained as well as its
+ * base array. write(a, i, e) with a free but e fixed is pinned to e at
+ * i, so it does not range over every array, and treating it as free
+ * would decide equalities that are in fact unsatisfiable.
+ *
+ * The corresponding rule for array equality -- one unconstrained side
+ * is enough to make the equality a free boolean -- is deliberately
+ * absent. It was implemented and measured over QF_ABV: it won nothing
+ * that the other three do not already win, and it cost the
+ * brummayerbiere fifo family up to 4x, because replacing a settled
+ * equality with a free boolean leaves the abstraction refinement loop
+ * to rediscover it -- 22 rounds rather than 2.
+ * RemoveUnconstrained_Collapse.array_equality pins the absence.
+ *
+ * Float- and RoundingMode-sorted arrays are excluded throughout, for
+ * the reason PropagateEqualities excludes them from the equivalent
+ * substitution: the model machinery that reconstructs a substituted
+ * symbol's cells reads them as plain bits, which is wrong under NaN's
+ * many packings and float index canonicalisation.
  */
 
 #include "stp/Simplifier/RemoveUnconstrained.h"
@@ -68,6 +89,7 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier,
   // untouchable set -- symbols constrained outside this formula -- is
   // honoured the same way, merged when both apply.
   ExtensionalityContext* ext = bm.getExtensionalityIfAny();
+  arrayRules = (ext == NULL || !ext->activeInSolve());
   const std::set<ASTNode>* extSet =
       (ext != NULL && ext->activeInSolve()) ? &ext->getFrozenSymbols() : NULL;
   std::set<ASTNode> mergedUntouchable;
@@ -120,6 +142,15 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier,
   return result;
 }
 
+// Whether an array-sorted node may take part in the array rules. A
+// float- or RoundingMode-sorted array is left alone: see the header
+// comment.
+static bool eligibleArray(const ASTNode& n)
+{
+  return n.GetIndexWidth() > 0 && n.GetType() == ARRAY_TYPE &&
+         !n.GetSourceSort().usesFloatingPointTheory();
+}
+
 bool allChildrenAreUnconstrained(vector<MutableASTNode*> children)
 {
   for (size_t i = 0; i < children.size(); i++)
@@ -134,8 +165,11 @@ RemoveUnconstrained::replaceParentWithFresh(MutableASTNode& mute,
                                             vector<MutableASTNode*>& variables)
 {
   const ASTNode& parent = mute.n;
-  ASTNode v =
-      bm.CreateFreshVariable(0, parent.GetValueWidth(), "unconstrained");
+  // An array-sorted parent (a write, or an if-then-else over arrays)
+  // needs an array-sorted stand-in; the index width is zero for
+  // everything else, so this is the ordinary case too.
+  ASTNode v = bm.CreateFreshVariable(parent.GetIndexWidth(),
+                                     parent.GetValueWidth(), "unconstrained");
   // A float-valued parent's stand-in must carry the format too, or the
   // blaster later meets a formatless bitvector where a float belongs.
   v.SetExpWidth(parent.GetExpWidth());
@@ -1339,8 +1373,8 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
 
       case ITE:
       {
-        if (indexWidth > 0)
-          continue; // don't do arrays.
+        if (indexWidth > 0 && (!arrayRules || !eligibleArray(muteParent.n)))
+          continue;
 
         if (mutable_children[0]->isUnconstrained() &&
             mutable_children[1]->isUnconstrained() &&
@@ -1439,6 +1473,52 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
           ASTNode inverse = simplifier->MultiplicativeInverse(other);
           ASTNode rhs = nf->CreateTerm(BVMULT, width, inverse, v);
           replace(var, rhs);
+        }
+      }
+      break;
+
+      case READ:
+      {
+        assert(numberOfChildren == 2);
+        // Only the array side is interesting. An unconstrained *index*
+        // says nothing: the cell it selects is still whatever the array
+        // holds there.
+        if (!arrayRules || children[0] != var || !eligibleArray(var))
+          break;
+
+        // read(a, i) with a free ranges over every value, so the read
+        // becomes a fresh scalar. Recovering a from it needs an array
+        // agreeing with v at i and free elsewhere, which is exactly a
+        // write of v into a second fresh array.
+        ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+        ASTNode rest = bm.CreateFreshVariable(
+            var.GetIndexWidth(), var.GetValueWidth(), "unconstrained_array");
+        replace(var, nf->CreateArrayTerm(WRITE, var.GetIndexWidth(),
+                                         var.GetValueWidth(), rest,
+                                         mutable_children[1]->toASTNode(&bm),
+                                         v));
+      }
+      break;
+
+      case WRITE:
+      {
+        assert(numberOfChildren == 3);
+        if (!arrayRules || !eligibleArray(muteParent.n))
+          break;
+
+        // Both the base array and the written value have to be free.
+        // With the value fixed the result is pinned at the write index
+        // and is not an arbitrary array; see the header comment.
+        if (mutable_children[0]->isUnconstrained() &&
+            mutable_children[2]->isUnconstrained())
+        {
+          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+          // write(a, i, e) == v is met by a := v and e := v[i], for any
+          // i: writing a cell's own value back changes nothing.
+          replace(children[0], v);
+          replace(children[2],
+                  nf->CreateTerm(READ, muteParent.n.GetValueWidth(), v,
+                                 mutable_children[1]->toASTNode(&bm)));
         }
       }
       break;

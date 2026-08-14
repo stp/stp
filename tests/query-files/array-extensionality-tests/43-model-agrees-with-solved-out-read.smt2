@@ -1,23 +1,26 @@
 ; RUN: %solver --array-equality %s | %OutputCheck %s
 ; CHECK: ^sat
 ; CHECK-L: (define-fun |i| () (_ BitVec 8) #x01)
-; CHECK-L: (define-fun |b| () (Array (_ BitVec 4) (_ BitVec 8)) ((as const (Array (_ BitVec 4) (_ BitVec 8))) #x00))
-; i occurs once, so unconstrained-variable elimination replaces the
-; disequality by a fresh boolean and defines i from select(b,j); the
-; read then reaches the bit-blaster nowhere, and evaluating i against
-; the model invents a value for b[j] on the spot. With array equality
-; enabled the model printer emits a *total* interpretation for every
-; array, filling in zero wherever it finds no concrete-index entry --
-; so an invented value other than zero makes the printed b say
-; b[0] = #x00 while i was computed from something else, and the model
-; contradicts the assertion it was produced for.
+; CHECK-L: (define-fun |b| () (Array (_ BitVec 4) (_ BitVec 8)) (store ((as const (Array (_ BitVec 4) (_ BitVec 8))) #x00) #x0 #x00))
+; Unconstrained-variable elimination reaches this disequality from
+; either side: i occurs once, and so does the array b beneath the read.
+; The read rule is the one that fires -- select(b,j) with b free is
+; itself free -- so the read becomes a fresh value and b is defined as a
+; write of it, which is why b prints with an explicit cell rather than
+; as the bare constant array. (Before the array rules existed it was i
+; that was eliminated, defined from select(b,j), and b printed with no
+; cells at all.)
 ;
-; Pinned exactly because both halves must agree: b[0] is the value the
-; evaluation used, and i is one more than it. The don't-care is zero
-; precisely so that it agrees with the completion every other reader of
-; the model applies -- the printer here, ReadUsingModel, and the
-; contents comparison the post-solve audit makes -- without anything
-; having to be recorded to keep them in step.
+; Either way the model has to be self-consistent, which is what this
+; pins: b[0] is the value the evaluation used, and i is one more than
+; it. With array equality enabled the model printer emits a *total*
+; interpretation for every array, filling in zero wherever it finds no
+; concrete-index entry, so a b whose printed cells disagreed with the
+; value i was computed from would contradict the assertion the model was
+; produced for. The don't-care is zero precisely so that it agrees with
+; the completion every other reader of the model applies -- the printer
+; here, ReadUsingModel, and the contents comparison the post-solve audit
+; makes -- without anything having to be recorded to keep them in step.
 (set-logic QF_ABV)
 (declare-fun a () (Array (_ BitVec 4) (_ BitVec 8)))
 (declare-fun c () (Array (_ BitVec 4) (_ BitVec 8)))

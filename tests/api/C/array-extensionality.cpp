@@ -867,6 +867,14 @@ TEST(array_extensionality, handle_for_a_discarded_equality_matches_the_model)
   vc_Destroy(vc);
 }
 
+// The same invariant as handle_for_a_discarded_equality_matches_the_model,
+// on the path that test now has to switch off: an equality with an
+// unconstrained operand is settled by unconstrained elimination, which
+// replaces it with a fresh boolean and defines the operand from it.
+// Whatever that boolean comes out as, the arrays the model publishes
+// have to say the same thing -- a reconstruction that forgot to make
+// them differ in the false case, or that made them differ in the true
+// case, would be reported here as a model contradicting itself.
 // The equality was never part of any query. There is no lowering for it
 // and never was, so this is the same path with no discarding involved:
 // the answer still comes from the model, and still agrees with what the
@@ -1447,6 +1455,10 @@ TEST(array_extensionality, ite_replacement_survives_a_rewritten_condition)
   // test pins the abstraction/checker path itself, so keep the
   // equality there.
   static_cast<stp::STP*>(vc)->bm->UserFlags.propagate_equalities = false;
+  // And for the same reason: all three arrays are used once, so
+  // unconstrained elimination would collapse the if-then-else and then
+  // the equality, minting no record for the checker to work on.
+  static_cast<stp::STP*>(vc)->bm->UserFlags.enable_unconstrained = false;
 
   Type bv8 = vc_bvType(vc, 8);
   Type bv4 = vc_bvType(vc, 4);

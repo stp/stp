@@ -67,6 +67,16 @@ class RemoveUnconstrained
   // primary mechanism.
   ASTVec refusedDefinitions;
 
+  // Whether the array rules may fire in this pass; set per topLevel()
+  // call. They are off once the array-equality procedure owns the
+  // formula, because by then every array term worth rewriting sits under
+  // a witness read whose shape ExtensionalityContext must be able to
+  // recover -- and the frozen-symbol set cannot express that, since it
+  // protects the anchors' own symbols rather than the arrays beneath
+  // them. Running before the lowering pass is what gives the rules
+  // something to do; see TopLevelSTPAux.
+  bool arrayRules;
+
 public:
   RemoveUnconstrained(STPMgr& bm);
 	
