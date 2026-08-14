@@ -1,8 +1,7 @@
 name: Publish site
 
-# Publishes the project website and the manual together:
-#   https://stp.github.io/stp/        the Jekyll site in web/
-#   https://stp.github.io/stp/docs/   Sphinx, built from docs/
+# Publishes https://stp.github.io/stp/ -- landing page and manual together,
+# one Sphinx build from docs/.
 #
 # stp.github.io/ is a redirect stub pointing here; this repo holds the only
 # copy of the sources. Because the content and the Pages site now live in the
@@ -13,14 +12,12 @@ on:
   push:
     branches: [master]
     paths:
-      - 'web/**'
       - 'docs/**'
       - '.github/workflows/pages.yml'
-  # Build (but do not deploy) on PRs, so a change that breaks the site or the
-  # manual is caught in review rather than after it is already published.
+  # Build (but do not deploy) on PRs, so a change that breaks the site is
+  # caught in review rather than after it is already published.
   pull_request:
     paths:
-      - 'web/**'
       - 'docs/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
@@ -40,24 +37,15 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/jekyll-build-pages@v1
-        with:
-          source: ./web
-          destination: ./_site
-
-      # jekyll-build-pages runs as root inside its container, so _site comes
-      # back root-owned and later steps (running as `runner`) cannot write to it.
-      - run: sudo chown -R "$(id -u):$(id -g)" _site
-
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
       - run: pip install -r docs/requirements.txt
 
-      # -W turns warnings into errors: a docs problem fails the build rather
-      # than quietly publishing a broken manual.
-      - run: sphinx-build -W -b html docs _site/docs
+      # -W turns warnings into errors: a problem fails the build rather than
+      # quietly publishing a broken site.
+      - run: sphinx-build -W -b html docs _site
 
       - uses: actions/upload-pages-artifact@v5
         with:

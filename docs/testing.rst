@@ -1,5 +1,8 @@
+Testing
+=======
+
 Introduction
-============
+------------
 
 STP currently supports the following types of tests
 
@@ -17,7 +20,7 @@ Both kinds are registered with CTest, so ``ctest`` (or ``make test``)
 runs everything.
 
 Getting started
-===============
+---------------
 
 We depend on a few external tools for testing. You need python3, and you
 need GoogleTest and OutputCheck, which are downloaded into ``deps/`` by
@@ -38,7 +41,7 @@ You also need the lit tool, which is available from
     $ pip install lit
 
 Installing lit without root access
-----------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If you don't want to install lit system-wide you can put it in a virtual
 environment:
@@ -78,7 +81,7 @@ The same applies to ``LIT_TOOL``, which CMake sets to the first ``lit``
 it finds in ``PATH``.
 
 CMake options
--------------
+~~~~~~~~~~~~~
 
 There are various CMake options that allow control over testing. You can
 easily configure these by…
@@ -123,7 +126,7 @@ At the time of writing the following options are available
    not enough for the exhaustive tests once valgrind's slowdown is applied.
 
 Running tests
--------------
+~~~~~~~~~~~~~
 
 To run all tests, from the build directory run
 
@@ -151,7 +154,7 @@ source file with ``Tests-gtest`` appended -- so
 .. _valgrind:
 
 Running the tests under valgrind
---------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Configure with ``USE_VALGRIND`` and every GoogleTest executable is run
 through valgrind's memcheck rather than being run directly, so ``ctest``
@@ -194,7 +197,7 @@ want to run the binary itself under valgrind, and use lit's own ``--vg``
 flag for that.
 
 Notes for Query file tests
---------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The query file tests can also be driven by running ``lit`` yourself. The
 lit configuration is generated into the build tree and named after the
@@ -228,12 +231,12 @@ This will pass additional flags to the solver. There is also
 OutputCheck.
 
 Individual tests
-----------------
+~~~~~~~~~~~~~~~~
 
 .. _query-file-tests-1:
 
 Query file tests
-~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^
 
 The lit tool gives you the ability to easily run a subset of tests: pass
 it a subdirectory or an individual query file instead of the whole
@@ -246,7 +249,7 @@ suite.
           tests/query-files/simplification-tests/alwaysTrue.smt2
 
 Unit tests
-~~~~~~~~~~
+^^^^^^^^^^
 
 The unit tests are built as standalone executables so individual tests
 can be executed by just running their executables, which live in the
@@ -256,12 +259,12 @@ binaries they take the usual flags, e.g. ``--gtest_filter=...`` to run a
 subset of the cases in one executable.
 
 Writing tests
--------------
+~~~~~~~~~~~~~
 
 .. _query-file-tests-2:
 
 Query file tests
-~~~~~~~~~~~~~~~~
+^^^^^^^^^^^^^^^^
 
 You should take a look at the existing tests and at the
 `lit <https://llvm.org/docs/CommandGuide/lit.html>`__, `LLVM
@@ -273,7 +276,7 @@ documentation.
 .. _unit-tests-1:
 
 Unit tests
-~~~~~~~~~~
+^^^^^^^^^^
 
 You should take a look at some existing tests and read the `GoogleTest
 documentation <https://google.github.io/googletest/>`__. A new test is

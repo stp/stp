@@ -1,15 +1,15 @@
 Array extensionality
 ====================
 
-By default STP implements the *non-extensional* theory of arrays: it can
-reason about array elements (``select``/``store``), but not about arrays
-as whole values. An equality between two array terms is refused, with an
-error, at the point the term is built.
+STP reasons about array elements (``select``/``store``) always, and
+about arrays as whole values with the ``--array-equality`` option: it
+then decides the quantifier-free *extensional* theory of arrays, in
+which equality and ``distinct`` between array terms are first-class
+atoms. Without the option an equality between two array terms is
+refused, with an error, at the point the term is built.
 
-With the ``--array-equality`` option STP decides the quantifier-free
-*extensional* theory of arrays: equality and ``distinct`` between array
-terms become first-class atoms. The implementation is an STP-specific
-integration of the lemmas-on-demand procedure of
+The implementation is an STP-specific integration of the
+lemmas-on-demand procedure of
 
     Robert Brummayer and Armin Biere,
     *Lemmas on Demand for the Extensional Theory of Arrays*,
