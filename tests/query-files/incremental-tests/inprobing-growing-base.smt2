@@ -1,4 +1,4 @@
-; REQUIRES: floating-point, cadical
+; REQUIRES: cadical
 ; Inprocessing retirement targets many variants over a fixed permanent base:
 ; re-probing that same encoding each time is recurring work. It must stay on
 ; while level zero is still growing, because the new permanent clauses give

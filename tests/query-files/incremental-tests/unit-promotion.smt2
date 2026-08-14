@@ -1,4 +1,3 @@
-; REQUIRES: floating-point
 ; A pushed level that sits identical at the same depth for eight
 ; consecutive solves is promoted to permanent unit clauses: its
 ; assumption disappears and its clauses join root-level preprocessing.

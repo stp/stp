@@ -12,7 +12,6 @@
 ; Constant-bit propagation independently re-derives p = 4 here, so this file
 ; is pinned with the pass disabled: it is a regression for promotion, not for
 ; whichever other mechanism happens to be masking it.
-; REQUIRES: floating-point
 ; RUN: %solver --incremental --disable-cbitp %s | %OutputCheck %s
 ; RUN: %solver --incremental-auto-engage-at 1 --disable-cbitp %s | %OutputCheck %s
 ; RUN: %solver --incremental --disable-cbitp --check-sanity %s | %OutputCheck %s

@@ -1,4 +1,3 @@
-; REQUIRES: floating-point
 ; A pushed definition whose substitution would rewrite INSIDE a
 ; floating-point operation is refused: the conjunct encodes raw-keyed,
 ; the definer equation stays asserted, and the raw circuit keeps its

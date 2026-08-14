@@ -348,25 +348,13 @@ ASTNode STPMgr::CreateBVConst(CBV bv, unsigned width)
 
 void STPMgr::noteFloatingPoint()
 {
-#ifndef STP_ENABLE_FLOATING_POINT
-  FatalError("this STP was built without floating-point support; "
-             "reconfigure with -DENABLE_FLOATING_POINT=ON");
-#else
   has_floating_point = true;
   has_floating_point_theory = true;
-#endif
 }
 
 ASTNode STPMgr::CreateFPConst(const stp::ASTNode& bvconst,
                               unsigned exp_width, unsigned sig_width)
 {
-#ifndef STP_ENABLE_FLOATING_POINT
-  (void)bvconst;
-  (void)exp_width;
-  (void)sig_width;
-  FatalError("this STP was built without floating-point support; "
-             "reconfigure with -DENABLE_FLOATING_POINT=ON");
-#else
   assert(bvconst.GetKind() == BVCONST);
   assert(exp_width + sig_width == bvconst.GetValueWidth());
 
@@ -416,7 +404,6 @@ ASTNode STPMgr::CreateFPConst(const stp::ASTNode& bvconst,
   ASTNode n(LookupOrCreateFPConst(temp));
   assert(n.GetKind() == BVCONST);
   return n;
-#endif
 }
 
 // As LookupOrCreateBVConst. The same table holds both flavours of constant:
@@ -435,11 +422,6 @@ ASTFPConst* STPMgr::LookupOrCreateFPConst(ASTFPConst& s)
 
 ASTNode STPMgr::CreateRMConst(unsigned mode)
 {
-#ifndef STP_ENABLE_FLOATING_POINT
-  (void)mode;
-  FatalError("this STP was built without floating-point support; "
-             "reconfigure with -DENABLE_FLOATING_POINT=ON");
-#else
   using namespace symbolic_fp;
   switch (mode)
   {
@@ -461,7 +443,6 @@ ASTNode STPMgr::CreateRMConst(unsigned mode)
   ASTBVConst* src = static_cast<ASTBVConst*>(bits._int_node_ptr);
   ASTRMConst temp(this, src->GetBVConst());
   return ASTNode(LookupOrCreateRMConst(temp));
-#endif
 }
 
 ASTRMConst* STPMgr::LookupOrCreateRMConst(ASTRMConst& s)

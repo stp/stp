@@ -9,7 +9,6 @@
 ; engagement the first two rounds use the batch solver and the buggy shape is
 ; instead the incremental driver's first round.  The fourth round re-pushes
 ; the identical scope to exercise CBP memo replay.
-; REQUIRES: floating-point
 ; RUN: %solver --array-equality --check-sanity %s | %OutputCheck %s
 ; RUN: %solver --incremental --check-sanity %s | %OutputCheck %s
 ; RUN: %solver --incremental-auto-engage-at 1 --check-sanity %s | %OutputCheck %s

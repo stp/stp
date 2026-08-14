@@ -1,4 +1,4 @@
-; REQUIRES: floating-point, cadical
+; REQUIRES: cadical
 ; The adaptive late-FP retirement belongs to source array+FP sessions, not
 ; array-free QF_BVFP. The latter recovered five campaign solves by retaining
 ; its established trail. Totalising fp.to_ubv introduces an internal

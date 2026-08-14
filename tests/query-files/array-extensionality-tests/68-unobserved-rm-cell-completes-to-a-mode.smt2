@@ -1,4 +1,3 @@
-; REQUIRES: floating-point
 ; RUN: %solver -d --array-equality %s | %OutputCheck %s
 ; CHECK: ^sat
 ; Every array equality here is a chain of writes against a base of its

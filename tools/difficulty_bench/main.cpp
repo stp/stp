@@ -33,11 +33,9 @@ THE SOFTWARE.
 #include "stp/ToSat/BBNodeManagerAIG.h"
 #include "stp/ToSat/BitBlaster.h"
 
-#ifdef STP_ENABLE_FLOATING_POINT
 #include "stp/FloatBlaster/FloatBlast.h"
 #include "stp/FloatBlaster/FpTotalise.h"
 #include "stp/FloatBlaster/rounding_modes.h"
-#endif
 
 #include <algorithm>
 #include <cstdint>
@@ -140,7 +138,6 @@ void measure(const string& label, unsigned width, const ASTNode& n)
   report(label, width, aigNodes(n), scoreOf(n));
 }
 
-#ifdef STP_ENABLE_FLOATING_POINT
 // Floating point is lowered first, in a forked child: an operation that has no
 // circuit at the format asked for (fp.rem at binary128, fp.roundToIntegral at
 // the smallest formats) calls FatalError, which aborts the process.
@@ -176,7 +173,6 @@ void measureFp(const string& label, unsigned width, const ASTNode& measured,
   waitpid(pid, &status, 0);
   report(label, width, aig, score);
 }
-#endif
 
 void header()
 {
@@ -255,7 +251,6 @@ void bitvectorSweep(const vector<unsigned>& widths, unsigned arity)
   }
 }
 
-#ifdef STP_ENABLE_FLOATING_POINT
 ASTNode freshFp(unsigned eb, unsigned sb)
 {
   char buf[32];
@@ -377,7 +372,6 @@ void floatingPointSweep(const vector<std::pair<unsigned, unsigned>>& formats)
               mgr->CreateNode(FP_ISZERO, fromUnsigned), fromUnsigned);
   }
 }
-#endif
 
 vector<unsigned> parseWidths(const char* s)
 {
@@ -452,12 +446,8 @@ int main(int argc, char** argv)
   if (doBv)
     bitvectorSweep(widths, arity);
 
-#ifdef STP_ENABLE_FLOATING_POINT
   if (doFp)
     floatingPointSweep({{5, 11}, {8, 24}, {11, 53}, {15, 113}});
-#else
-  (void)doFp;
-#endif
 
   if (!csv && totals.count > 0)
   {

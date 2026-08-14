@@ -16,7 +16,6 @@
 ;
 ; The reset-oracle and CBP-off runs pin that neither mechanism is what makes
 ; the answer right.
-; REQUIRES: floating-point
 ; RUN: %solver %s | %OutputCheck %s
 ; RUN: %solver --disable-cbitp %s | %OutputCheck %s
 ; RUN: %solver --check-sanity %s | %OutputCheck %s

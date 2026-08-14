@@ -23,8 +23,6 @@ THE SOFTWARE.
 
 #include "stp/FloatBlaster/literal_fp.h"
 
-#ifdef STP_ENABLE_FLOATING_POINT
-
 #include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/STPManager/STPManager.h"
 
@@ -782,17 +780,3 @@ ASTNode tryEvaluateFpConstant(STPMgr* bm, const ASTNode& n)
 } // namespace literal_fp
 } // namespace stp
 
-#else // !STP_ENABLE_FLOATING_POINT
-
-namespace stp
-{
-namespace literal_fp
-{
-ASTNode tryEvaluateFpConstant(STPMgr*, const ASTNode&)
-{
-  return ASTNode();
-}
-} // namespace literal_fp
-} // namespace stp
-
-#endif

@@ -1,4 +1,3 @@
-; REQUIRES: floating-point
 ; Trail reuse is retired for floating-point sessions: the FP families
 ; are phase-sensitive, and a full campaign measured the kept trail
 ; swinging individual files up to 20x in BOTH directions -- luck, not

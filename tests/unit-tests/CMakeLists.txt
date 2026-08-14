@@ -43,9 +43,6 @@ AddSTPGTest(CommonSubSum_Test.cpp)
 AddSTPGTest(UserDefinedFlags_Test.cpp)
 AddSTPGTest(NodeDomainAnalysis_Test.cpp)
 AddSTPGTest(SplitExtracts_Test.cpp)
-# Not under ENABLE_FLOATING_POINT: the source-sort memo and the symbol name
-# index are AST machinery that floating point introduced but that every build
-# pays for, so both configurations have to cover them.
 AddSTPGTest(SourceSortMemo_Test.cpp)
 # The AIG gate builders, which every build has. Instantiating
 # BBNodeManagerAIG calls ABC through its inline members, and a shared libstp
@@ -54,54 +51,50 @@ AddSTPGTest(SourceSortMemo_Test.cpp)
 AddSTPGTest(BBNodeManagerAIG_Test.cpp)
 target_link_libraries(BBNodeManagerAIG_TestTests $<TARGET_FILE:libabc-pic>)
 add_dependencies(BBNodeManagerAIG_TestTests libabc-pic)
-if (ENABLE_FLOATING_POINT)
-    AddSTPGTest(FPPrintBack_Test.cpp)
-    AddSTPGTest(FloatBlast_Test.cpp)
-    # The native-comparison differential instantiates BBNodeManagerAIG, whose
-    # inline members call ABC. A shared libstp localises ABC's symbols
-    # (--exclude-libs), so this test links its own copy; the AIG package keeps
-    # all of its state in the manager struct, which is shared fine. Linking
-    # the archive by file keeps ABC's interface flags (-fno-exceptions) off
-    # the test's own compilation.
-    target_link_libraries(FloatBlast_TestTests $<TARGET_FILE:libabc-pic>)
-    add_dependencies(FloatBlast_TestTests libabc-pic)
-    AddSTPGTest(FpTotalise_Test.cpp)
-    # Truth values the model-formula evaluator gives the two float
-    # equalities; the circuit's answers are covered elsewhere.
-    AddSTPGTest(FpModelEquality_Test.cpp)
-    AddSTPGTest(SourceSort_Test.cpp)
-    # Builds float/rounding-mode constants, which is the whole point.
-    AddSTPGTest(ConstantIdentity_Test.cpp)
-    AddSTPGTest(FpConstantFold_Test.cpp)
-    # The LibBF-backed real-literal conversion; self-skips in builds
-    # without LibBF (STP_HAVE_LIBBF off).
-    AddSTPGTest(DecimalToFP_Test.cpp)
-    # The oracle is the hardware, evaluated under a rounding mode set with
-    # fesetround. Without this the compiler assumes the default mode and
-    # folds the reference arithmetic while compiling, so every non-default
-    # mode disagrees for a reason that has nothing to do with STP.
-    if (TARGET FpConstantFold_TestTests AND NOT MSVC)
-        target_compile_options(FpConstantFold_TestTests PRIVATE -frounding-math)
-        # And on 32-bit x86 the default is x87, which keeps a 64-bit
-        # significand and so double-rounds on the way to binary64: the
-        # hardware then disagrees with a correctly-rounded result, e.g.
-        # 3.0 / 1.0000000000000002 under RNE. binary32 has guard bits to
-        # spare, which is why only the binary64 tests would notice. SSE2
-        # arithmetic is correctly rounded, so ask for it and the oracle is
-        # IEEE again rather than skipping the coverage.
-        if (CMAKE_SIZEOF_VOID_P EQUAL 4)
-            include(CheckCXXCompilerFlag)
-            check_cxx_compiler_flag("-msse2 -mfpmath=sse" HAVE_SSE_MATH_FLAGS)
-            if (HAVE_SSE_MATH_FLAGS)
-                target_compile_options(FpConstantFold_TestTests
-                                       PRIVATE -msse2 -mfpmath=sse)
-            endif()
+AddSTPGTest(FPPrintBack_Test.cpp)
+AddSTPGTest(FloatBlast_Test.cpp)
+# The native-comparison differential instantiates BBNodeManagerAIG, whose
+# inline members call ABC. A shared libstp localises ABC's symbols
+# (--exclude-libs), so this test links its own copy; the AIG package keeps
+# all of its state in the manager struct, which is shared fine. Linking
+# the archive by file keeps ABC's interface flags (-fno-exceptions) off
+# the test's own compilation.
+target_link_libraries(FloatBlast_TestTests $<TARGET_FILE:libabc-pic>)
+add_dependencies(FloatBlast_TestTests libabc-pic)
+AddSTPGTest(FpTotalise_Test.cpp)
+# Truth values the model-formula evaluator gives the two float
+# equalities; the circuit's answers are covered elsewhere.
+AddSTPGTest(FpModelEquality_Test.cpp)
+AddSTPGTest(SourceSort_Test.cpp)
+# Builds float/rounding-mode constants, which is the whole point.
+AddSTPGTest(ConstantIdentity_Test.cpp)
+AddSTPGTest(FpConstantFold_Test.cpp)
+# The LibBF-backed real-literal conversion; self-skips in builds
+# without LibBF (STP_HAVE_LIBBF off).
+AddSTPGTest(DecimalToFP_Test.cpp)
+# The oracle is the hardware, evaluated under a rounding mode set with
+# fesetround. Without this the compiler assumes the default mode and
+# folds the reference arithmetic while compiling, so every non-default
+# mode disagrees for a reason that has nothing to do with STP.
+if (TARGET FpConstantFold_TestTests AND NOT MSVC)
+    target_compile_options(FpConstantFold_TestTests PRIVATE -frounding-math)
+    # And on 32-bit x86 the default is x87, which keeps a 64-bit
+    # significand and so double-rounds on the way to binary64: the
+    # hardware then disagrees with a correctly-rounded result, e.g.
+    # 3.0 / 1.0000000000000002 under RNE. binary32 has guard bits to
+    # spare, which is why only the binary64 tests would notice. SSE2
+    # arithmetic is correctly rounded, so ask for it and the oracle is
+    # IEEE again rather than skipping the coverage.
+    if (CMAKE_SIZEOF_VOID_P EQUAL 4)
+        include(CheckCXXCompilerFlag)
+        check_cxx_compiler_flag("-msse2 -mfpmath=sse" HAVE_SSE_MATH_FLAGS)
+        if (HAVE_SSE_MATH_FLAGS)
+            target_compile_options(FpConstantFold_TestTests
+                                   PRIVATE -msse2 -mfpmath=sse)
         endif()
     endif()
-    # Builds float-typed symbols, so it needs the floating-point funnels
-    # (SetExpWidth) to be more than a fatal error.
-    AddSTPGTest(BVSolver_Test.cpp)
 endif()
+AddSTPGTest(BVSolver_Test.cpp)
 AddSTPGTest(StrengthReduction_Test.cpp)
 # Bit-blasts each operation to check the difficulty score against what the
 # AIG really costs, so it instantiates BBNodeManagerAIG and needs its own

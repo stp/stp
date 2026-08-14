@@ -179,14 +179,12 @@ endif()
 
 # -----------------------------------------------------------------------------
 # The floating-point self-test tools (built under tools/ whenever
-# ENABLE_FLOATING_POINT and ENABLE_TESTING are on) exit non-zero on failure,
-# so they run as plain CTest tests.
+# ENABLE_TESTING is on) exit non-zero on failure, so they run as plain
+# CTest tests.
 # -----------------------------------------------------------------------------
 
-if (ENABLE_FLOATING_POINT)
-    add_test(NAME test_fpbackend COMMAND test_fpbackend)
-    add_test(NAME test_fprewrites COMMAND test_fprewrites)
-endif()
+add_test(NAME test_fpbackend COMMAND test_fpbackend)
+add_test(NAME test_fprewrites COMMAND test_fprewrites)
 
 # -----------------------------------------------------------------------------
 # Default-off baseline differential for the array-equality feature

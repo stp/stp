@@ -27,11 +27,9 @@ THE SOFTWARE.
 #include <cassert>
 #include <string>
 
-#ifdef STP_ENABLE_FLOATING_POINT
 // The symfpu circuits are built behind the blast_* entry points; nothing
 // here touches symfpu directly.
 #include "stp/FloatBlaster/symbolic_fp.h"
-#endif
 
 namespace stp
 {
@@ -89,8 +87,7 @@ ASTNode FloatBlaster::withFormat(STPMgr* bm, const ASTNode& n,
   return out;
 }
 
-// Defined outside the feature gate: it only reads widths, and the callers
-// that thread the format into the blaster are compiled either way.
+// Reads widths only; no SymFPU circuit is involved.
 std::pair<unsigned int, unsigned int>
 FloatBlaster::operandFormat(const ASTVec& children)
 {
@@ -113,7 +110,6 @@ FloatBlaster::operandFormat(const ASTNode& n)
   return operandFormat(toASTVec(n.GetChildren()));
 }
 
-#ifdef STP_ENABLE_FLOATING_POINT
 ASTNode FloatBlaster::canonicalBits(STPMgr* bm, const ASTNode& f)
 {
   return canonicalBits(bm, f, f.GetExpWidth(), f.GetSigWidth());
@@ -135,32 +131,8 @@ ASTNode FloatBlaster::canonicalBits(STPMgr* bm, const ASTNode& f,
   return symbolic_fp::unpacked::encode(
       format, symbolic_fp::unpacked::decode(format, f));
 }
-#else
 
-// Fail-closed stubs so the link surface is identical with and without
-// floating-point support. The parser and the STPMgr funnels reject
-// floating-point input long before these could run (see checkFpSupported in
-// smt2.y and SetExpWidth/CreateFPConst), so reaching one means a caller
-// bypassed those checks.
-
-ASTNode FloatBlaster::canonicalBits(STPMgr*, const ASTNode&)
-{
-  FatalError("canonicalBits: this STP was built without floating-point "
-             "support; reconfigure with -DENABLE_FLOATING_POINT=ON");
-}
-
-ASTNode FloatBlaster::canonicalBits(STPMgr*, const ASTNode&, unsigned int,
-                                    unsigned int)
-{
-  FatalError("canonicalBits: this STP was built without floating-point "
-             "support; reconfigure with -DENABLE_FLOATING_POINT=ON");
-}
-
-#endif
-
-// Pure arithmetic, defined outside the feature gate: the parser refers to
-// it whenever it builds an fp.rem, including in builds without
-// floating-point support (where that path is unreachable but still links).
+// Pure arithmetic: the parser consults it whenever it builds an fp.rem.
 uint64_t FloatBlaster::remUnrollSteps(unsigned exp_width, unsigned sig_width)
 {
   if (exp_width >= 63)

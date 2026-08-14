@@ -42,7 +42,7 @@ endif()
 # tools are asked for -- not in a default build. They are registered with
 # CTest from tests/CMakeLists.txt, which is processed after
 # enable_testing() and after the checks that can turn ENABLE_TESTING off.
-if (ENABLE_FLOATING_POINT AND (ENABLE_TESTING OR BUILD_EXTRA_TOOLS))
+if (ENABLE_TESTING OR BUILD_EXTRA_TOOLS)
     add_subdirectory(test_fpbackend)
     add_subdirectory(test_fprewrites)
 endif()
@@ -50,7 +50,7 @@ endif()
 # The floating-point rewrite-rule generator: enumerates small terms over a
 # float variable and special constants, looking for sound collapses the
 # SimplifyingNodeFactory is missing. A developer tool, not a test.
-if (ENABLE_FLOATING_POINT AND BUILD_EXTRA_TOOLS)
+if (BUILD_EXTRA_TOOLS)
     add_subdirectory(fp_rewrite_gen)
 endif()
 

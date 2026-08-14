@@ -24,7 +24,6 @@
    * see CVCL license below
   ********************************************************************/
 
-
   /********************************************************************
    *
    * \file smtlib.y
@@ -76,7 +75,6 @@ namespace stp
   // tryRegisterFpSortAlias below).
   const std::string& smt2_skipped_text();
 }
-
 
   using std::cout;
   using std::cerr;
@@ -675,25 +673,10 @@ namespace stp
     return n;
   }
 
-  // On a build without floating-point support, reject floating-point input
-  // at its first construct, with a line number and the fix. Called from
-  // every path that introduces a float: the sort and conversion forms (via
-  // checkFpFormatWidths), (fp ...) literals, and the QF_*FP* logics. The
-  // STPMgr funnels (SetExpWidth/CreateFPConst) back this up for input that
-  // arrives through the C API instead of the parser.
-  void checkFpSupported()
-  {
-#ifndef STP_ENABLE_FLOATING_POINT
-    fatal_yyerror("this STP was built without floating-point support; "
-                  "reconfigure with -DENABLE_FLOATING_POINT=ON");
-#endif
-  }
-
   // The indexed to_fp forms and the special values carry the format as
   // numerals; apply the floor the sort rule enforces.
   void checkFpFormatWidths(unsigned int exp_width, unsigned int sig_width)
   {
-    checkFpSupported();
     if (exp_width < 2 || sig_width < 2)
     {
       fatal_yyerror("a floating-point format needs at least 2 exponent and "
@@ -734,8 +717,6 @@ namespace stp
   // name is a literal here and the lookup cannot fail.
   stp::float_size* namedFloatSize(const char* name)
   {
-    checkFpSupported();
-
     unsigned int exp_width = 0;
     unsigned int sig_width = 0;
     if (!namedFloatFormat(name, exp_width, sig_width))
@@ -1076,7 +1057,6 @@ namespace stp
   // every component is literal, exactly as the one-argument to_fp does.
   ASTNode* createFPFromParts(ASTNode* sign, ASTNode* exp, ASTNode* sig)
   {
-    checkFpSupported();
     if (sign->GetSourceSort().kind() != stp::SourceSort::Kind::BitVector ||
         exp->GetSourceSort().kind() != stp::SourceSort::Kind::BitVector ||
         sig->GetSourceSort().kind() != stp::SourceSort::Kind::BitVector)
@@ -1263,7 +1243,6 @@ namespace stp
 #define YYERROR_VERBOSE 1
 #define YY_EXIT_FAILURE -1
 
-
 %}
 
 /* Conflict-free, and pinned that way: the floating-point productions were
@@ -1299,7 +1278,6 @@ namespace stp
 %type <node> status
 %type <vec> an_formulas an_terms function_params an_mixed
 
-
 %type <node> an_term  an_formula function_param an_const an_fp_term an_fp_predicate an_rounding_mode
 %type <uintval> an_fp_const
 %type <str> info_flag
@@ -1329,7 +1307,6 @@ namespace stp
 %token <str> STRING_TOK
 %token <fn> BITVECTOR_FUNCTIONID_TOK BOOLEAN_FUNCTIONID_TOK FLOATINGPOINT_FUNCTIONID_TOK ARRAY_FUNCTIONID_TOK
 
-
  /* set-info tokens */
 %token SOURCE_TOK
 %token CATEGORY_TOK
@@ -1337,7 +1314,6 @@ namespace stp
 %token VERSION_TOK
 %token STATUS_TOK
 %token LICENSE_TOK
-
 
  /* ASCII Symbols */
  /* Semicolons (comments) are ignored by the lexer */
@@ -1348,7 +1324,6 @@ namespace stp
 /* Used for attributed expressions */
 %token EXCLAIMATION_MARK_TOK
 %token NAMED_ATTRIBUTE_TOK
-
 
  /*BV SPECIFIC TOKENS*/
 %token BVLEFTSHIFT_1_TOK
@@ -1523,7 +1498,6 @@ cmd: commands END
        YYACCEPT;
 }
 ;
-
 
 commands: commands LPAREN_TOK cmdi RPAREN_TOK
 | LPAREN_TOK cmdi RPAREN_TOK
@@ -1757,11 +1731,6 @@ cmdi:
             )) {
         yyerror("Wrong input logic");
       }
-      // Fail a well-formed floating-point benchmark on its set-logic line,
-      // not at its first declaration.
-      if (fp_logic) {
-        checkFpSupported();
-      }
       // The incremental frontend needs only this validated logic name to
       // choose its measured automatic-engagement policy. reset clears the
       // classification; reset-assertions retains it with the SMT-LIB logic.
@@ -1848,7 +1817,6 @@ function_param
   $$->push_back(*$2);
   stp::GlobalParserInterface->deleteNode($2);
 };
-
 
 function_def:
 STRING_TOK LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK  an_term
@@ -2030,7 +1998,6 @@ STRING_TOK LPAREN_TOK RPAREN_TOK an_array_sort an_term
 }
 ;
 
-
 status:
 STRING_TOK {
 
@@ -2169,7 +2136,6 @@ LPAREN_TOK ARRAY_TOK an_array_sort_component an_array_sort_component RPAREN_TOK
 }
 ;
 
-
 var_decl:
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
 {
@@ -2235,7 +2201,6 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
 }
 ;
 
-
 const_decl:
 STRING_TOK  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
 {
@@ -2295,9 +2260,6 @@ STRING_TOK  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
 }
 ;
 
-
-
-
 an_mixed:
 an_formula
 {
@@ -2334,8 +2296,6 @@ an_mixed an_term
     stp::GlobalParserInterface->deleteNode($2);
   }
 };
-
-
 
 an_formulas:
 an_formula

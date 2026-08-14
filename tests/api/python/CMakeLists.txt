@@ -19,13 +19,6 @@
 # THE SOFTWARE.
 
 set(PYTHON_INTERFACE_DIR ${PROJECT_BINARY_DIR}/bindings/python)
-# The floating-point tests skip themselves when the feature is off; the
-# library's floating-point entry points abort in that configuration.
-if (ENABLE_FLOATING_POINT)
-    set(STP_FLOATING_POINT_PYBOOL "True")
-else()
-    set(STP_FLOATING_POINT_PYBOOL "False")
-endif()
 configure_file(tests.py.in tests.py.in.g @ONLY)
 configure_file(${CMAKE_CURRENT_BINARY_DIR}/tests.py.in.g
               ${CMAKE_CURRENT_BINARY_DIR}/tests.py)

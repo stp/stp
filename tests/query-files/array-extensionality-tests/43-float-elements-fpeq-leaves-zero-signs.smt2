@@ -1,4 +1,3 @@
-; REQUIRES: floating-point
 ; RUN: %solver --array-equality %s | %OutputCheck %s
 ; CHECK-NEXT: ^sat
 ; fp.eq is weaker than =: it identifies the two zeros and refutes NaN,

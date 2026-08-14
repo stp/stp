@@ -1,4 +1,3 @@
-; REQUIRES: floating-point
 ; RUN: %solver --array-equality %s | %OutputCheck %s
 ; CHECK-NEXT: ^sat
 ; CHECK-L: define-fun |a| () (Array (_ FloatingPoint 8 24) (_ BitVec 8))

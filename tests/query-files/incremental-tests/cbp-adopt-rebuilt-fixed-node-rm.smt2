@@ -6,7 +6,6 @@
 ; with no pinning fact -- the returned model said _x0 = _x2 yet gave
 ; _x12 and _x8 a value other than the ite's RNE.  --check-sanity
 ; validates the model against the raw stack.
-; REQUIRES: floating-point
 ; RUN: %solver --incremental --check-sanity %s | %OutputCheck %s
 ; RUN: %solver --incremental --incremental-cbp-reset --check-sanity %s | %OutputCheck %s
 ; RUN: %solver --incremental-auto-engage-at 1 --check-sanity %s | %OutputCheck %s

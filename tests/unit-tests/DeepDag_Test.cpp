@@ -205,7 +205,6 @@ struct Context
     return n;
   }
 };
-#ifdef STP_ENABLE_FLOATING_POINT
 
 // Structural depth without putting the measurement itself on the call
 // stack. Memoisation matters for the generated FP circuits, which are DAGs
@@ -250,8 +249,6 @@ size_t dagDepth(const ASTNode& top)
 
   return result;
 }
-#endif // STP_ENABLE_FLOATING_POINT
-
 
 // A chain of if-then-else terms, nested in the else-branch: a boolean symbol
 // the model says nothing about takes false, so evaluating one descends the
@@ -265,7 +262,6 @@ ASTNode iteChain(Context& c, unsigned depth)
     t = c.hf->CreateTerm(ITE, 8, cond, zero, t);
   return t;
 }
-#ifdef STP_ENABLE_FLOATING_POINT
 
 // A chain of stores over one array symbol, whose elements are `width` bits.
 ASTNode storeChain(Context& c, unsigned depth, const ASTNode& base,
@@ -286,8 +282,6 @@ ASTNode storeChain(Context& c, unsigned depth)
 {
   return storeChain(c, depth, c.mgr.CreateSymbol("A", 8, 8));
 }
-#endif // STP_ENABLE_FLOATING_POINT
-
 
 // Dependencies::build, the parent map constant-bit propagation runs on.
 // Two of the 21 known corpus crashes land here.
@@ -888,7 +882,6 @@ bool simplifyRootFastPathsOk(Context& c)
          formulaOutput.GetType() == BOOLEAN_TYPE &&
          substitutedOutput == c.mgr.CreateBVConst(8, 3);
 }
-#ifdef STP_ENABLE_FLOATING_POINT
 
 // A descendant request normally answers from the simplification map rather
 // than by pushing another work frame. The parent must consume those ready
@@ -960,8 +953,6 @@ bool simplifyReadyDescendantsOk(Context& c)
          andOutput == expectedAnd && xorOutput == expectedXor &&
          fpOutput == expectedFpPredicate;
 }
-#endif // STP_ENABLE_FLOATING_POINT
-
 
 // A term contains a formula which contains the preceding term, at every
 // level. Separate iterative formula and term drivers are insufficient for
@@ -986,7 +977,6 @@ bool simplifyAlternatingTermFormulaOk(Context& c, unsigned depth)
   c.roots.push_back(output);
   return output.GetValueWidth() == 8;
 }
-#ifdef STP_ENABLE_FLOATING_POINT
 
 // A source expression only three operations deep can lower to a bit-vector
 // circuit thousands of terms deep. This is the shape that made term priming
@@ -1026,8 +1016,6 @@ bool simplifyInternallyGeneratedFpTermOk(Context& c, unsigned exponentWidth)
   c.roots.push_back(output);
   return output.GetType() == BOOLEAN_TYPE && output.GetKind() != UNDEFINED;
 }
-#endif // STP_ENABLE_FLOATING_POINT
-
 
 // CreateSimpleEQ peels equal sides from two concat chains. Each peel used to
 // re-enter the simplifying node factory and consume another C++ frame.
@@ -1707,7 +1695,6 @@ bool counterExampleTermIteOk(Context& c, unsigned depth)
   // to come back a constant.
   return ce.ModelValueOfTerm(t).GetKind() == BVCONST;
 }
-#ifdef STP_ENABLE_FLOATING_POINT
 
 /* A node's floating-point format and its source sort are both derived from
    its children and memoised on it, and both derivations read a child's answer
@@ -1798,8 +1785,6 @@ bool fpTotaliseChainOk(Context& c, unsigned depth)
   c.roots.push_back(result);
   return result.GetKind() != UNDEFINED;
 }
-#endif // STP_ENABLE_FLOATING_POINT
-
 
 // The LISP printer, which is what operator<< on a node uses -- so a deep
 // node cannot even be printed, including from an error path.
@@ -1955,7 +1940,6 @@ TEST(DeepDag, wide_propagate_equalities_visits_every_conjunct)
   PropagateEqualities propagate(&simplifier, c.nf, &c.mgr);
   EXPECT_EQ(c.mgr.ASTTrue, propagate.topLevel(input));
 }
-#ifdef STP_ENABLE_FLOATING_POINT
 
 TEST(DeepDag, wide_fp_rounding_mode_walk_adds_every_constraint)
 {
@@ -1988,8 +1972,6 @@ TEST(DeepDag, wide_fp_rounding_mode_walk_adds_every_constraint)
   });
   EXPECT_EQ(clauses.size(), validityConstraints);
 }
-#endif // STP_ENABLE_FLOATING_POINT
-
 
 TEST(DeepDag, shallow_incremental_driver)
 {
@@ -2158,30 +2140,24 @@ TEST(DeepDag, simplifier_root_fast_paths_preserve_results)
   Context c;
   EXPECT_TRUE(simplifyRootFastPathsOk(c));
 }
-#ifdef STP_ENABLE_FLOATING_POINT
 
 TEST(DeepDag, simplifier_consumes_ready_descendants_in_place)
 {
   Context c;
   EXPECT_TRUE(simplifyReadyDescendantsOk(c));
 }
-#endif // STP_ENABLE_FLOATING_POINT
-
 
 TEST(DeepDag, shallow_simplify_alternating_term_formula)
 {
   Context c;
   EXPECT_TRUE(simplifyAlternatingTermFormulaOk(c, SHALLOW));
 }
-#ifdef STP_ENABLE_FLOATING_POINT
 
 TEST(DeepDag, shallow_simplify_internally_generated_fp_term)
 {
   Context c;
   EXPECT_TRUE(simplifyInternallyGeneratedFpTermOk(c, 5));
 }
-#endif // STP_ENABLE_FLOATING_POINT
-
 
 TEST(DeepDag, shallow_concat_equality)
 {
@@ -2224,7 +2200,6 @@ TEST(DeepDag, shallow_node_iterator)
   Context c;
   EXPECT_TRUE(nodeIteratorOk(c, SHALLOW));
 }
-#ifdef STP_ENABLE_FLOATING_POINT
 
 TEST(DeepDag, shallow_fp_format_ite)
 {
@@ -2249,8 +2224,6 @@ TEST(DeepDag, shallow_source_sort_store)
   Context c;
   EXPECT_TRUE(sourceSortStoreChainOk(c, SHALLOW));
 }
-#endif // STP_ENABLE_FLOATING_POINT
-
 
 TEST(DeepDag, array_read_count_is_strict_and_deduplicates_the_dag)
 {
@@ -2739,12 +2712,10 @@ TEST(DeepDag, deep_simplify_alternating_term_formula)
 {
   EXPECT_STACK_SAFE(simplifyAlternatingTermFormulaOk, 20000);
 }
-#ifdef STP_ENABLE_FLOATING_POINT
 TEST(DeepDag, deep_simplify_internally_generated_fp_term)
 {
   EXPECT_STACK_SAFE(simplifyInternallyGeneratedFpTermOk, 11);
 }
-#endif // STP_ENABLE_FLOATING_POINT
 
 TEST(DeepDag, deep_concat_equality)
 {
@@ -2783,20 +2754,16 @@ TEST(DeepDag, deep_array_equality_lowering)
   EXPECT_STACK_SAFE(arrayEqualityLoweringOk, 20000);
 }
 TEST(DeepDag, deep_transform_formula_spine) { EXPECT_STACK_SAFE(transformFormulaSpineOk, 20000); }
-#ifdef STP_ENABLE_FLOATING_POINT
 TEST(DeepDag, deep_fp_totalise)        { EXPECT_STACK_SAFE(fpTotaliseChainOk, 20000); }
-#endif // STP_ENABLE_FLOATING_POINT
 
 TEST(DeepDag, deep_printer_lisp)       { EXPECT_STACK_SAFE(printerLispOk, 20000); }
 TEST(DeepDag, deep_counterexample_eval) { EXPECT_STACK_SAFE(counterExampleEvalOk, 20000); }
 TEST(DeepDag, deep_counterexample_formula) { EXPECT_STACK_SAFE(counterExampleFormulaOk, 20000); }
 TEST(DeepDag, deep_counterexample_term_ite) { EXPECT_STACK_SAFE(counterExampleTermIteOk, 20000); }
-#ifdef STP_ENABLE_FLOATING_POINT
 TEST(DeepDag, deep_fp_format_ite)      { EXPECT_STACK_SAFE(fpFormatIteChainOk, 20000); }
 TEST(DeepDag, deep_fp_format_store)    { EXPECT_STACK_SAFE(fpFormatStoreChainOk, 20000); }
 TEST(DeepDag, deep_source_sort_ite)    { EXPECT_STACK_SAFE(sourceSortIteChainOk, 20000); }
 TEST(DeepDag, deep_source_sort_store)  { EXPECT_STACK_SAFE(sourceSortStoreChainOk, 20000); }
-#endif // STP_ENABLE_FLOATING_POINT
 
 TEST(DeepDag, DISABLED_deep_printer_smtlib2)    { EXPECT_STACK_SAFE(printerSMTLIB2Ok, 20000); }
 

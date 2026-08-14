@@ -194,7 +194,6 @@ TEST(PropagateEquality_Test, c6)
   verify(input);
 }
 
-
 TEST(PropagateEquality_Test, c5)
 {
  const std::string input = R"( 
@@ -237,7 +236,6 @@ TEST(PropagateEquality_Test, DISABLED_c4)
   verify(input);
 }
 
-
 TEST(PropagateEquality_Test, d)
 {
  const std::string input = R"( 
@@ -251,7 +249,6 @@ TEST(PropagateEquality_Test, d)
 
   verify(input);
 }
-
 
 TEST(PropagateEquality_Test, DISABLED_g)
 {
@@ -268,7 +265,6 @@ TEST(PropagateEquality_Test, DISABLED_g)
   verify(input);
 }
 
-
 TEST(PropagateEquality_Test, gk)
 {
 
@@ -282,7 +278,6 @@ TEST(PropagateEquality_Test, gk)
 
   verify(input);
 }
-
 
 TEST(PropagateEquality_Test, gj)
 {
@@ -307,8 +302,6 @@ TEST(PropagateEquality_Test, h)
   verify(input);
 }
 
-
-
 TEST(PropagateEquality_Test, i)
 {
  const std::string input = R"( 
@@ -317,7 +310,6 @@ TEST(PropagateEquality_Test, i)
 
   verify(input);
 }
-
 
 TEST(PropagateEquality_Test, isFalse)
 {
@@ -485,8 +477,6 @@ TEST(PropagateEquality_Test, array_eq_negated_never_propagates)
                  });
 }
 
-#ifdef STP_ENABLE_FLOATING_POINT
-
 // SMT `=` on floats (FP_SMT_EQ) is true equality on the abstract domain,
 // so it propagates like EQ. fp.eq (FP_EQ) identifies +0 with -0 and must
 // never propagate. These parse their own QF_FP prelude and hand the
@@ -637,4 +627,3 @@ TEST(PropagateEquality_Test, fp_smt_eq_occurs_check)
               });
 }
 
-#endif // STP_ENABLE_FLOATING_POINT

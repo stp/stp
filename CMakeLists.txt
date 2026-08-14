@@ -968,60 +968,39 @@ endif()
 find_package(Perl REQUIRED)
 
 # -----------------------------------------------------------------------------
-# Floating-point support (opt-out; uses the header-only SymFPU library)
+# Floating-point support (uses the header-only SymFPU library)
 # -----------------------------------------------------------------------------
 # SymFPU (BSD 3-Clause) is vendored as a pinned submodule, the same
-# arrangement as mimalloc above, so the default build has floating-point
-# support with nothing to install. When OFF, everything floating-point
-# stays out of the build except the always-compiled AST/parser/API surface,
-# which recognises floating-point input and rejects it with a "built
-# without floating-point support" error (see FloatBlaster.cpp's stubs and
-# checkFpSupported in smt2.y). The public headers and the libstp ABI are
-# identical either way.
+# arrangement as mimalloc above, so there is nothing to install and every
+# build supports the SMT-LIB floating-point theory.
 
-option(ENABLE_FLOATING_POINT
-       "SMT-LIB floating-point support (uses the vendored SymFPU library)" ON)
-add_feature_info(FloatingPoint ENABLE_FLOATING_POINT
-                 "Enables SMT-LIB floating-point support (via SymFPU)")
-
-if (ENABLE_FLOATING_POINT)
-    # The vendored submodule is the default; -DSYMFPU_INCLUDE_DIRS=<dir
-    # that CONTAINS a symfpu clone> overrides it with an external copy.
-    if (NOT SYMFPU_INCLUDE_DIRS)
-        set(SYMFPU_INCLUDE_DIRS "${PROJECT_SOURCE_DIR}/lib/extlib-symfpu")
-    endif()
-
-    find_package(SymFPU)
-
-    if (SymFPU_FOUND)
-        message(STATUS "OK, found SymFPU include dirs under ${SYMFPU_INCLUDE_DIRS}")
-    else()
-        message(FATAL_ERROR
-            "SymFPU (header-only, required for the floating-point support) "
-            "was not found. It is vendored as a submodule: run "
-            "git submodule update --init lib/extlib-symfpu/symfpu. An "
-            "external clone of https://github.com/martin-cs/symfpu works "
-            "too, via -DSYMFPU_INCLUDE_DIRS=<directory that CONTAINS the "
-            "symfpu clone>. To build without floating-point support, "
-            "configure with -DENABLE_FLOATING_POINT=OFF.")
-    endif()
-
-    # Let's get clean builds ...
-    include_directories(SYSTEM ${SYMFPU_INCLUDE_DIRS})
-
-    add_definitions(-DSTP_ENABLE_FLOATING_POINT)
+# The vendored submodule is the default; -DSYMFPU_INCLUDE_DIRS=<dir
+# that CONTAINS a symfpu clone> overrides it with an external copy.
+if (NOT SYMFPU_INCLUDE_DIRS)
+    set(SYMFPU_INCLUDE_DIRS "${PROJECT_SOURCE_DIR}/lib/extlib-symfpu")
 endif()
+
+find_package(SymFPU)
+
+if (SymFPU_FOUND)
+    message(STATUS "OK, found SymFPU include dirs under ${SYMFPU_INCLUDE_DIRS}")
+else()
+    message(FATAL_ERROR
+        "SymFPU (header-only, required for the floating-point support) "
+        "was not found. It is vendored as a submodule: run "
+        "git submodule update --init lib/extlib-symfpu/symfpu. An "
+        "external clone of https://github.com/martin-cs/symfpu works "
+        "too, via -DSYMFPU_INCLUDE_DIRS=<directory that CONTAINS the "
+        "symfpu clone>.")
+endif()
+
+# Let's get clean builds ...
+include_directories(SYSTEM ${SYMFPU_INCLUDE_DIRS})
 
 option(USE_LIBBF "Use LibBF to fold real literals in floating-point input" OFF)
 add_feature_info(LibBF USE_LIBBF "Folds ((_ to_fp e s) rm 1.5) to its bits while parsing")
 
 if (USE_LIBBF)
-    # The one thing LibBF is for is converting real literals to float bits,
-    # which only exists in floating-point input.
-    if (NOT ENABLE_FLOATING_POINT)
-        message(FATAL_ERROR "USE_LIBBF folds floating-point real literals "
-                "and needs ENABLE_FLOATING_POINT")
-    endif()
     set(LIBBF_DIR "" CACHE PATH "Path to a built LibBF (the directory containing libbf.h and libbf.a, as laid out by scripts/deps/setup-libbf.sh)")
     find_path(LIBBF_INCLUDE_DIR NAMES libbf.h HINTS ${LIBBF_DIR})
     find_library(LIBBF_LIBRARY NAMES bf HINTS ${LIBBF_DIR})
