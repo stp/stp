@@ -309,6 +309,27 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
       bm->ASTNodeStats(pe_message.c_str(), semantic_input);
     }
 
+    // The same argument for unconstrained elimination, and it is the
+    // only window where its array rules can do anything: an equality
+    // with an unconstrained operand is a free Boolean, so it settles
+    // here rather than costing a record, a witness pair and a refinement
+    // loop. Afterwards the operands sit under witness reads whose shape
+    // ExtensionalityContext has to recognise, and the rules turn
+    // themselves off (RemoveUnconstrained::arrayRules).
+    //
+    // This is what the "unconstrained" benchmarks of Brummayer's
+    // dissertation ask for. Their arrays are each used once and the
+    // selector bits come from wide divisions that no model needs, so
+    // reaching abstraction at all means bit-blasting an unsatisfiable
+    // amount of dead arithmetic.
+    if (hasOpaqueEquality && bm->UserFlags.optimize_flag &&
+        bm->UserFlags.enable_unconstrained)
+    {
+      RemoveUnconstrained r(*bm);
+      semantic_input = r.topLevel(semantic_input, simp);
+      bm->ASTNodeStats(uc_message.c_str(), semantic_input);
+    }
+
     if (ext == NULL && hasOpaqueEquality)
     {
       ext = bm->getExtensionality();

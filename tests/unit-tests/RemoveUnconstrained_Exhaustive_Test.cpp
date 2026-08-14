@@ -256,6 +256,163 @@ struct Context
     checkEquivalent(back, result);
   }
 
+  //-------------------------------------------------------------------
+  // Arrays.
+  //
+  // An array symbol has no scalar domain to enumerate, so the checks
+  // above cannot see one. At the widths used here it has a small
+  // explicit one: an index width of IW and an element width of VW makes
+  // (2^VW)^(2^IW) distinct arrays -- four for the 1x1 arrays below. So
+  // the same exhaustive identity is available, once array-sorted terms
+  // can be evaluated under an assignment of concrete arrays.
+  //
+  // ground() does that by folding every array-rooted subterm away: a
+  // read becomes the cell it selects and an array equality becomes a
+  // constant, after which the formula is array-free and the existing
+  // scalar evaluator finishes the job.
+  //-------------------------------------------------------------------
+
+  static constexpr unsigned IW = 1; // index width of the test arrays
+  static constexpr unsigned VW = 1; // element width
+
+  typedef std::vector<unsigned> Cells; // one entry per index, 2^IW of them
+  typedef std::map<ASTNode, Cells> ArrayAssignment;
+
+  ASTNode array(unsigned iw = IW, unsigned vw = VW)
+  {
+    return mgr.CreateSymbol(("a" + std::to_string(counter++)).c_str(), iw, vw);
+  }
+
+  unsigned evalConst(const ASTNode& groundScalar)
+  {
+    ASTNode c = groundScalar.isConstant()
+                    ? groundScalar
+                    : NonMemberBVConstEvaluator(&mgr, groundScalar);
+    if (c.GetType() == BOOLEAN_TYPE)
+      return c == mgr.ASTTrue ? 1 : 0;
+    return c.GetUnsignedConst();
+  }
+
+  Cells arrayValue(const ASTNode& n, const ArrayAssignment& av)
+  {
+    if (n.GetKind() == SYMBOL)
+    {
+      auto it = av.find(n);
+      EXPECT_NE(it, av.end()) << "no value for array symbol " << n;
+      return it == av.end() ? Cells(1u << IW, 0) : it->second;
+    }
+    if (n.GetKind() == WRITE)
+    {
+      Cells v = arrayValue(n[0], av);
+      v[evalConst(ground(n[1], av))] = evalConst(ground(n[2], av));
+      return v;
+    }
+    if (n.GetKind() == ITE)
+      return evalConst(ground(n[0], av)) ? arrayValue(n[1], av)
+                                         : arrayValue(n[2], av);
+    ADD_FAILURE() << "cannot evaluate array term of kind " << n.GetKind();
+    return Cells(1u << IW, 0);
+  }
+
+  // `n` with every array-rooted subterm folded to a constant.
+  ASTNode ground(const ASTNode& n, const ArrayAssignment& av)
+  {
+    if (n.GetKind() == READ)
+    {
+      const Cells cells = arrayValue(n[0], av);
+      return konst(cells[evalConst(ground(n[1], av))], n.GetValueWidth());
+    }
+    if (n.GetKind() == ARRAY_EQ)
+      return arrayValue(n[0], av) == arrayValue(n[1], av) ? mgr.ASTTrue
+                                                          : mgr.ASTFalse;
+    if (n.GetKind() == SYMBOL || n.isConstant() || n.Degree() == 0)
+      return n;
+
+    ASTVec children;
+    children.reserve(n.Degree());
+    for (const auto& c : n)
+      children.push_back(ground(c, av));
+
+    if (n.GetType() == BOOLEAN_TYPE)
+      return nf->CreateNode(n.GetKind(), children);
+    return nf->CreateTerm(n.GetKind(), n.GetValueWidth(), children);
+  }
+
+  // As checkEquivalent, but ranging over array symbols as well: every
+  // assignment of concrete arrays, times every scalar assignment.
+  //
+  // The scalars are substituted first. A write's index and value are
+  // ordinary scalar terms -- and the write rule exists precisely because
+  // the value can be an unconstrained symbol -- so grounding an array
+  // term needs them already settled.
+  void checkEquivalentWithArrays(const ASTNode& before, const ASTNode& after)
+  {
+    ASTNodeSet symSet;
+    collectSymbols(before, symSet);
+    collectSymbols(after, symSet);
+
+    std::vector<ASTNode> arrays, scalars;
+    for (const auto& s : symSet)
+      (s.GetIndexWidth() > 0 ? arrays : scalars).push_back(s);
+
+    const unsigned cellCount = 1u << IW;
+    const unsigned perArray = 1u << (cellCount * VW); // arrays of this sort
+    uint64_t arrayCombos = 1;
+    for (size_t i = 0; i < arrays.size(); i++)
+      arrayCombos *= perArray;
+    uint64_t scalarCombos = 1;
+    for (const auto& s : scalars)
+      scalarCombos *= domainSize(s);
+    ASSERT_LE(arrayCombos * scalarCombos, 1u << 16)
+        << "too many assignments -- lower the widths";
+
+    for (uint64_t ac = 0; ac < arrayCombos; ac++)
+    {
+      ArrayAssignment av;
+      uint64_t rest = ac;
+      for (size_t i = 0; i < arrays.size(); i++)
+      {
+        unsigned code = rest % perArray;
+        rest /= perArray;
+        Cells cells(cellCount);
+        for (unsigned j = 0; j < cellCount; j++)
+        {
+          cells[j] = code & ((1u << VW) - 1);
+          code >>= VW;
+        }
+        av.insert({arrays[i], cells});
+      }
+
+      for (uint64_t sc = 0; sc < scalarCombos; sc++)
+      {
+        ASTNodeMap assignment;
+        uint64_t srest = sc;
+        for (size_t i = 0; i < scalars.size(); i++)
+        {
+          const unsigned size = domainSize(scalars[i]);
+          assignment.insert({scalars[i], valueFor(scalars[i], srest % size)});
+          srest /= size;
+        }
+
+        ASTNodeMap m1 = assignment, m2 = assignment, ca1, ca2, e1, e2;
+        const ASTNode b =
+            ground(SubstitutionMap::replace(before, m1, ca1, &snf), av);
+        const ASTNode a =
+            ground(SubstitutionMap::replace(after, m2, ca2, &snf), av);
+        ASSERT_EQ(eval(b, e1), eval(a, e2))
+            << "unconstrained rewrite changed the meaning at array "
+            << "assignment " << ac << ", scalar assignment " << sc;
+      }
+    }
+  }
+
+  void checkSoundArrays(const ASTNode& top)
+  {
+    ASTNode result = run(top);
+    ASTNode back = backSubstitute(top);
+    checkEquivalentWithArrays(back, result);
+  }
+
   // As checkSound, but the operator takes the surviving `keep` as one operand
   // (used for the binary comparisons, which have a dedicated one-sided rule).
   void checkSoundWithKeep(Kind k, bool termLevel)
@@ -445,6 +602,119 @@ TEST(RemoveUnconstrained_Exhaustive, uge_one_sided)
 {
   Context c;
   c.checkSoundWithKeep(BVGE, /*termLevel=*/false);
+}
+
+// --- Array rules. Each enumerates every concrete array as well as every
+// scalar assignment; see checkEquivalentWithArrays. ---
+
+TEST(RemoveUnconstrained_Exhaustive, array_read)
+{
+  Context c;
+  // read(a, 0) with `a` used once. The read is free, so it stands in
+  // for `keep`, which survives via the anchor.
+  ASTNode a = c.array();
+  ASTNode keep = c.bv(Context::VW);
+  ASTNode read = c.hf->CreateTerm(READ, Context::VW, a, c.konst(0, Context::IW));
+  c.checkSoundArrays(c.hf->CreateNode(
+      AND, c.hf->CreateNode(EQ, read, keep), c.anchorFor(keep)));
+}
+
+TEST(RemoveUnconstrained_Exhaustive, array_read_constrained_array_untouched)
+{
+  Context c;
+  // Two reads of the same array: it is not unconstrained, and neither
+  // read may be replaced by a free value -- congruence has to hold.
+  ASTNode a = c.array();
+  ASTNode keep = c.bv(Context::VW);
+  ASTNode r0 = c.hf->CreateTerm(READ, Context::VW, a, c.konst(0, Context::IW));
+  ASTNode r1 = c.hf->CreateTerm(READ, Context::VW, a, c.konst(0, Context::IW));
+  c.checkSoundArrays(c.hf->CreateNode(
+      AND, c.hf->CreateNode(EQ, c.hf->CreateTerm(BVPLUS, Context::VW, r0, r1),
+                            keep),
+      c.anchorFor(keep)));
+}
+
+TEST(RemoveUnconstrained_Exhaustive, array_write)
+{
+  Context c;
+  // write(a, 0, e) with both the base array and the written value free.
+  ASTNode a = c.array();
+  ASTNode e = c.bv(Context::VW);
+  ASTNode keep = c.bv(Context::VW);
+  ASTNode w = c.hf->CreateArrayTerm(WRITE, Context::IW, Context::VW, a,
+                                    c.konst(0, Context::IW), e);
+  ASTNode read = c.hf->CreateTerm(READ, Context::VW, w,
+                                  c.konst(1 % (1u << Context::IW), Context::IW));
+  c.checkSoundArrays(c.hf->CreateNode(
+      AND, c.hf->CreateNode(EQ, read, keep), c.anchorFor(keep)));
+}
+
+TEST(RemoveUnconstrained_Exhaustive, array_write_constrained_value)
+{
+  Context c;
+  // The value is a constant, so the write is pinned at index 0 and is
+  // NOT a free array. This is the case the rule's value condition
+  // exists for: a rule keyed on the base array alone would be unsound
+  // here, and the enumeration would catch it.
+  ASTNode a = c.array();
+  ASTNode keep = c.bv(Context::VW);
+  ASTNode w = c.hf->CreateArrayTerm(WRITE, Context::IW, Context::VW, a,
+                                    c.konst(0, Context::IW),
+                                    c.konst(1, Context::VW));
+  ASTNode read =
+      c.hf->CreateTerm(READ, Context::VW, w, c.konst(0, Context::IW));
+  c.checkSoundArrays(c.hf->CreateNode(
+      AND, c.hf->CreateNode(EQ, read, keep), c.anchorFor(keep)));
+}
+
+TEST(RemoveUnconstrained_Exhaustive, array_write_shared_value)
+{
+  Context c;
+  // As above, but the written value is a symbol used a second time, so
+  // it is constrained rather than constant. Dropping the rule's value
+  // condition makes it fire here and answer wrongly -- the write
+  // is pinned to whatever `e` turns out to be -- which the enumeration
+  // below detects. (With a *constant* value the same mistake trips
+  // replace()'s SYMBOL precondition instead, so this is the case that
+  // keeps the guard honest.)
+  ASTNode a = c.array();
+  ASTNode e = c.bv(Context::VW);
+  ASTNode keep = c.bv(Context::VW);
+  ASTNode w = c.hf->CreateArrayTerm(WRITE, Context::IW, Context::VW, a,
+                                    c.konst(0, Context::IW), e);
+  ASTNode read =
+      c.hf->CreateTerm(READ, Context::VW, w, c.konst(0, Context::IW));
+  ASTVec conjuncts;
+  conjuncts.push_back(c.hf->CreateNode(EQ, read, keep));
+  conjuncts.push_back(c.hf->CreateNode(EQ, e, keep)); // second use of `e`
+  conjuncts.push_back(c.anchorFor(keep));
+  c.checkSoundArrays(c.hf->CreateNode(AND, conjuncts));
+}
+
+TEST(RemoveUnconstrained_Exhaustive, array_ite)
+{
+  Context c;
+  // An if-then-else over two free arrays is itself free.
+  ASTNode cond = c.boolean();
+  ASTNode keep = c.bv(Context::VW);
+  ASTNode ite = c.hf->CreateArrayTerm(ITE, Context::IW, Context::VW, cond,
+                                      c.array(), c.array());
+  ASTNode read =
+      c.hf->CreateTerm(READ, Context::VW, ite, c.konst(0, Context::IW));
+  c.checkSoundArrays(c.hf->CreateNode(
+      AND, c.hf->CreateNode(EQ, read, keep), c.anchorFor(keep)));
+}
+
+TEST(RemoveUnconstrained_Collapse, array_equality)
+{
+  // The literature's rule set also eliminates an array equality with
+  // one unconstrained side. STP deliberately does not -- see the header
+  // comment in RemoveUnconstrained.cpp -- so this must NOT collapse. If
+  // a rule is added back, this is the test that will say so.
+  expectNoCollapse([](Context& c) {
+    c.mgr.UserFlags.enable_array_equality = true;
+    return c.hf->CreateNode(ARRAY_EQ, c.array(), c.array());
+  });
 }
 
 /////////////////////////////////////////////////////////////////////////////
