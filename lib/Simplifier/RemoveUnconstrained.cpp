@@ -74,8 +74,10 @@ RemoveUnconstrained::RemoveUnconstrained(STPMgr& _bm) : bm(_bm)
 }
 
 ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier,
-                                      const std::set<ASTNode>* alsoUntouchable)
+                                      const std::set<ASTNode>* alsoUntouchable,
+                                      bool arrayRulesOnly)
 {
+  scalarRules = !arrayRulesOnly;
   ASTNode result(n);
 
   // Symbols the array-equality procedure depends on must not be
@@ -989,6 +991,11 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
     unsigned width = muteNode.getParent().n.GetValueWidth();
     unsigned indexWidth = muteNode.getParent().n.GetIndexWidth();
 
+    // Array rules only: everything else is left for the later passes.
+    if (!scalarRules && !(kind == READ || kind == WRITE ||
+                          (kind == ITE && indexWidth > 0)))
+      continue;
+
     ASTNode other;
     MutableASTNode* muteOther = NULL;
 
@@ -1641,8 +1648,9 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
     }
 
     // None of the per-kind rules fired (each detaches `var` from its
-    // parent when it does). Try the generalised ground-path collapse.
-    if (muteNode.isUnconstrained())
+    // parent when it does). Try the generalised ground-path collapse --
+    // a scalar rule, so not in an array-rules-only pass.
+    if (scalarRules && muteNode.isUnconstrained())
       tryGroundPathCollapse(muteNode, variable_array);
   }
 

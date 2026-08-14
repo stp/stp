@@ -77,6 +77,15 @@ class RemoveUnconstrained
   // something to do; see TopLevelSTPAux.
   bool arrayRules;
 
+  // Whether the ordinary (bit-vector) rules may fire in this pass.
+  // The pre-lowering call leaves them off: they run later in
+  // sizeReducing anyway, and eliminating scalars that early costs the
+  // dwp_formulas flanagansaxe pair ~15x -- the abstraction refinement
+  // loop then needs 22 rounds where it had needed 2. Only the array
+  // rules have to run before the array-equality lowering, so only they
+  // do.
+  bool scalarRules;
+
 public:
   RemoveUnconstrained(STPMgr& bm);
 	
@@ -88,8 +97,11 @@ public:
   // level, an already-encoded conjunct) even though this formula alone
   // mentions them once. Merged with the extensionality frozen set when
   // both apply.
+  // `arrayRulesOnly` restricts the pass to the array rules; see
+  // scalarRules.
   ASTNode topLevel(const ASTNode& n, Simplifier* s,
-                   const std::set<ASTNode>* alsoUntouchable = NULL);
+                   const std::set<ASTNode>* alsoUntouchable = NULL,
+                   bool arrayRulesOnly = false);
 };
 }
 

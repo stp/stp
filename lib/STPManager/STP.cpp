@@ -326,7 +326,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
         bm->UserFlags.enable_unconstrained)
     {
       RemoveUnconstrained r(*bm);
-      semantic_input = r.topLevel(semantic_input, simp);
+      semantic_input =
+          r.topLevel(semantic_input, simp, NULL, /*arrayRulesOnly=*/true);
       bm->ASTNodeStats(uc_message.c_str(), semantic_input);
     }
 
