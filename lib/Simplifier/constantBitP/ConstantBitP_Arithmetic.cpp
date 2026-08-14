@@ -225,17 +225,26 @@ void initialiseColumnCounts(int columnL[], int columnH[], const int bitWidth,
     columnH[i] = numberOfChildren;
   }
 
-  // Set the column totals.
-  for (int i = 0; i < bitWidth; i++)
+  // Set the column totals. Walk a child's fixed bits a word at a time,
+  // visiting only the bits that are actually fixed: on wide sums most
+  // addends are entirely unfixed, and those cost nothing here.
+  const unsigned words = ((unsigned)bitWidth + 63) / 64;
+  for (int j = 0; j < numberOfChildren; j++)
   {
-    for (int j = 0; j < numberOfChildren; j++)
+    const FixedBits& child = *children[j];
+    for (unsigned w = 0; w < words; w++)
     {
-      if (children[j]->isFixed(i))
+      uint64_t fixed, ones;
+      child.fillPackedWord(w, fixed, ones);
+      const unsigned base = w * 64;
+      while (fixed != 0)
       {
-        if (children[j]->getValue(i))
-          columnL[i]++;
+        const unsigned bit = ::stp::countTrailingZeroes64(fixed);
+        fixed &= fixed - 1;
+        if ((ones >> bit) & 1)
+          columnL[base + bit]++;
         else
-          columnH[i]--;
+          columnH[base + bit]--;
       }
     }
   }
