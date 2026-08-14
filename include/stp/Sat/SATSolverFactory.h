@@ -25,6 +25,7 @@ THE SOFTWARE.
 #ifndef SATSOLVERFACTORY_H_
 #define SATSOLVERFACTORY_H_
 
+#include "stp/Util/Attributes.h"
 #include <string>
 #include <vector>
 
@@ -42,7 +43,11 @@ struct UserDefinedFlags;
 // worth printing. Where the headers also carry a version and it differs,
 // the entry says so rather than choosing a side. Backends that expose no
 // version at all report their name alone.
-std::vector<std::string> compiledSolverVersions();
+//
+// DLL_PUBLIC because the stp binary prints this from --version, alongside
+// the equally-annotated accessors in GitSHA1.h, and the default build hides
+// everything else in the shared library.
+DLL_PUBLIC std::vector<std::string> compiledSolverVersions();
 
 // Construct the SAT backend that flags.solver_to_use selects, or exit with
 // a diagnostic if that backend was not compiled in. The caller owns the
