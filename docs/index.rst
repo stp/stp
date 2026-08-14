@@ -360,6 +360,17 @@ bitvector (QF_BV) category.
 -  1st at `SMTCOMP
    2006 <http://smtcomp.sourceforge.net/2006/results-QF_UFBV32.shtml>`__
 
+Competition results are a snapshot of one year's entrants on one year's
+selection. :doc:`benchmarks` is the continuous version: every SMT-LIB
+benchmark STP can read, re-measured against a git commit so a change in the
+solver shows up as a change in the numbers.
+
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+
+   benchmarks
+
 Use cases
 =========
 
