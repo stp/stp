@@ -30,6 +30,7 @@ THE SOFTWARE.
 
 #ifdef USE_CRYPTOMINISAT
 #include "stp/Sat/CryptoMinisat5.h"
+#include "cryptominisat5/cryptominisat.h"
 #endif
 
 #ifdef USE_RISS
@@ -50,6 +51,56 @@ THE SOFTWARE.
 
 namespace stp
 {
+
+std::vector<std::string> compiledSolverVersions()
+{
+  std::vector<std::string> solvers;
+
+#ifdef USE_CADICAL
+  {
+    // Present in every CaDiCaL STP builds against, 1.8.0 included, and it
+    // returns the string compiled into the library rather than a macro the
+    // includer expanded.
+    const std::string linked = CaDiCaL::Solver::version();
+    std::string entry = "cadical " + linked;
+
+    // The semantic-version macros only arrived in the 3.x headers, so their
+    // absence is not a mismatch -- it just means there is nothing to check
+    // the library against.
+    //
+    // Major.minor only: CADICAL_PATCH is not maintained upstream (3.0.1
+    // ships a header saying 0), so comparing it flags every correct build
+    // and the note stops being worth reading. The mismatch actually worth
+    // catching is a whole different checkout -- headers from one, library
+    // from another -- which moves the major or the minor.
+#ifdef CADICAL_MAJOR
+    const std::string headers =
+        std::to_string(CADICAL_MAJOR) + "." + std::to_string(CADICAL_MINOR);
+    if (linked.compare(0, headers.size(), headers) != 0 ||
+        (linked.size() > headers.size() && linked[headers.size()] != '.'))
+      entry += " (built against headers " + headers + ".x)";
+#endif
+    solvers.push_back(entry);
+  }
+#endif
+
+#ifdef USE_CRYPTOMINISAT
+  solvers.push_back(std::string("cryptominisat ") +
+                    CMSat::SATSolver::get_version());
+#endif
+
+#ifdef USE_MINISAT
+  // MiniSat has no version API, and STP links a checkout that carries no
+  // version of its own either.
+  solvers.push_back("minisat (no version reported)");
+#endif
+
+#ifdef USE_RISS
+  solvers.push_back("riss (no version reported)");
+#endif
+
+  return solvers;
+}
 
 SATSolver* createSATSolver(const UserDefinedFlags& flags)
 {
