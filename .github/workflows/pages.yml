@@ -38,7 +38,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/jekyll-build-pages@v1
         with:
@@ -49,7 +49,7 @@ jobs:
       # back root-owned and later steps (running as `runner`) cannot write to it.
       - run: sudo chown -R "$(id -u):$(id -g)" _site
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -59,7 +59,7 @@ jobs:
       # than quietly publishing a broken manual.
       - run: sphinx-build -W -b html docs _site/docs
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: _site
 
@@ -72,4 +72,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
