@@ -27,6 +27,7 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/AST/ASTNode.h"
+#include "stp/Util/BitOps.h"
 #include "extlib-unordered-dense/ankerl/unordered_dense.h"
 #include <vector>
 
@@ -37,6 +38,22 @@ namespace constantBitP
 using std::cerr;
 using std::endl;
 
+// Nodes waiting to be propagated, taken cheapest-visit-first.
+//
+// Transfer functions differ in cost by orders of magnitude: a bitwise-and is
+// linear in the bit-width, an n-ary addition costs the width times the number
+// of addends, and the division family is one to three orders of magnitude
+// above everything else. Visiting the costly ones last is what makes them pay
+// off: by the time one is reached, its children have absorbed every change the
+// cheaper nodes could derive, so a single visit does the work that would
+// otherwise be split across many. Simplification can produce n-ary nodes with
+// tens of thousands of children, where one visit walks every child and any one
+// of them fixing a single bit reschedules the lot.
+//
+// The queue is buckets rather than a heap: the estimated cost of a visit is
+// rounded down to a power of two and each bucket is a set, so push and pop
+// stay constant-time and a node is still queued at most once. The estimate
+// only has to order the kinds correctly, not size them.
 class WorkList
 {
 private:
@@ -44,12 +61,58 @@ private:
                                        ASTNode::ASTNodeEqual>
       WorkListSetType;
 
-  // select nodes from the cheap_worklist first.
-  WorkListSetType cheap_workList;
-  WorkListSetType expensive_workList;
+  // Estimated costs run from a single bit operation to (children x width) on
+  // the widest n-ary nodes, so one bucket per power of two covers everything
+  // a 64-bit count can hold.
+  static const unsigned bucketCount = 64;
+
+  WorkListSetType buckets[bucketCount];
+
+  // No bucket below this one holds anything, so popping only rescans a
+  // bucket once it has emptied.
+  unsigned lowest;
 
   WorkList(const WorkList&); // Shouldn't needed to copy or assign.
   WorkList& operator=(const WorkList&);
+
+  // Roughly the number of bit operations one visit costs. Only the relative
+  // order matters, not the magnitude.
+  static uint64_t visitCost(const stp::ASTNode& n)
+  {
+    const uint64_t width = n.GetValueWidth() > 0 ? n.GetValueWidth() : 1;
+    const uint64_t degree = n.Degree() > 0 ? n.Degree() : 1;
+
+    switch (n.GetKind())
+    {
+      // Shift-and-add over the partial products, run in both directions.
+      case stp::BVMULT:
+        return width * width;
+
+      // Repeated multiplication, iterated to a fixed point.
+      case stp::BVDIV:
+      case stp::BVMOD:
+      case stp::SBVDIV:
+      case stp::SBVREM:
+      case stp::SBVMOD:
+        return width * width * width;
+
+      default:
+        break;
+    }
+
+    // A pass or two over the bits of each child. Addition needs no case of
+    // its own: the column algorithm walks every addend once per column, which
+    // is what this already charges, and two-operand addition is handled by a
+    // carry chain as cheap as the bitwise transfer functions.
+    return degree * width;
+  }
+
+  static unsigned bucketOf(const stp::ASTNode& n)
+  {
+    const uint64_t cost = visitCost(n);
+    assert(cost > 0);
+    return 63 - ::stp::countLeadingZeroes64(cost);
+  }
 
   // Where the walk of one node has got to. `addedParent` is that node's
   // `alreadyAdded`: it is pushed once, at its first constant child.
@@ -121,9 +184,15 @@ private:
 public:
   // Add to the worklist any node that immediately depends on a constant.
 
-  WorkList(const ASTNode& top) { initWorkList(top); }
+  WorkList(const ASTNode& top) : lowest(bucketCount) { initWorkList(top); }
 
-  int size() { return cheap_workList.size() + expensive_workList.size(); }
+  int size()
+  {
+    int result = 0;
+    for (unsigned b = lowest; b < bucketCount; b++)
+      result += buckets[b].size();
+    return result;
+  }
 
   void initWorkList(const ASTNode& n)
   {
@@ -136,61 +205,39 @@ public:
     if (n.isConstant()) // don't ever add constants to the worklist.
       return;
 
-    // cerr << "WorkList Inserting:" << n.GetNodeNum() << endl;
-    // The division family costs hundreds of microseconds per visit at wide
-    // bit-widths, one to three orders of magnitude more than the other
-    // transfer functions, so process those only once the cheap worklist has
-    // quietened down. BVPLUS is kept here for its n-ary forms: the column
-    // algorithm's cost grows with the number of children.
-    switch (n.GetKind())
-    {
-      case stp::BVMULT:
-      case stp::BVPLUS:
-      case stp::BVDIV:
-      case stp::BVMOD:
-      case stp::SBVDIV:
-      case stp::SBVREM:
-      case stp::SBVMOD:
-        expensive_workList.insert(n);
-        break;
-      default:
-        cheap_workList.insert(n);
-        break;
-    }
+    const unsigned b = bucketOf(n);
+    buckets[b].insert(n);
+    if (b < lowest)
+      lowest = b;
   }
 
   stp::ASTNode pop()
   {
     assert(!isEmpty());
-    if (cheap_workList.size() > 0)
-    {
-      ASTNode ret = *cheap_workList.begin();
-      cheap_workList.erase(cheap_workList.begin());
-      return ret;
-    }
-    else
-    {
-      assert(expensive_workList.size() > 0);
-      ASTNode ret = *expensive_workList.begin();
-      expensive_workList.erase(expensive_workList.begin());
-      return ret;
-    }
+    while (buckets[lowest].empty())
+      lowest++;
+
+    ASTNode ret = *buckets[lowest].begin();
+    buckets[lowest].erase(buckets[lowest].begin());
+    return ret;
   }
 
   bool isEmpty()
   {
-    return cheap_workList.empty() && expensive_workList.empty();
+    while (lowest < bucketCount && buckets[lowest].empty())
+      lowest++;
+    return lowest == bucketCount;
   }
 
   void print()
   {
     cerr << "+Worklist" << endl;
-    for (const auto& n : cheap_workList)
-      cerr << n << " ";
-    for (const auto& n : expensive_workList)
-      cerr << n << " ";
+    for (unsigned b = 0; b < bucketCount; b++)
+      for (const auto& n : buckets[b])
+        cerr << n << " ";
     cerr << "-Worklist" << endl;
   }
+
 };
 }
 }
