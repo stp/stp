@@ -997,28 +997,27 @@ endif()
 # Let's get clean builds ...
 include_directories(SYSTEM ${SYMFPU_INCLUDE_DIRS})
 
-option(USE_LIBBF "Use LibBF to fold real literals in floating-point input" OFF)
-add_feature_info(LibBF USE_LIBBF "Folds ((_ to_fp e s) rm 1.5) to its bits while parsing")
-
-if (USE_LIBBF)
-    set(LIBBF_DIR "" CACHE PATH "Path to a built LibBF (the directory containing libbf.h and libbf.a, as laid out by scripts/deps/setup-libbf.sh)")
-    find_path(LIBBF_INCLUDE_DIR NAMES libbf.h HINTS ${LIBBF_DIR})
-    find_library(LIBBF_LIBRARY NAMES bf HINTS ${LIBBF_DIR})
-    if (NOT LIBBF_INCLUDE_DIR OR NOT LIBBF_LIBRARY)
-        message(FATAL_ERROR "USE_LIBBF is set but LibBF was not found. Run "
-                "scripts/deps/setup-libbf.sh and point LIBBF_DIR at the "
-                "deps/libbf directory it creates")
-    endif()
-    message(STATUS "Found LibBF: ${LIBBF_LIBRARY}")
-    # DecimalLiteral.cpp keys on this to fold real literals instead of
-    # refusing them.
-    add_definitions(-DSTP_HAVE_LIBBF)
-    # SYSTEM, the way ABC and SymFPU are consumed: the header typedefs
-    # __int128 on 64-bit targets, which gcc's -pedantic rejects in the one
-    # C++ translation unit that includes it.
-    include_directories(SYSTEM ${LIBBF_INCLUDE_DIR})
-    link_libraries(${LIBBF_LIBRARY})
+# LibBF folds the real literals in floating-point input -- ((_ to_fp 8 24)
+# RNE 1.5) -- to their exactly-rounded bits while parsing. Upstream
+# publishes release tarballs rather than a repository, so it is fetched,
+# verified and built by scripts/deps/setup-libbf.sh, which lands it in
+# deps/libbf, where this looks by default.
+set(LIBBF_DIR "${PROJECT_SOURCE_DIR}/deps/libbf" CACHE PATH "Path to a built LibBF (the directory containing libbf.h and libbf.a, as laid out by scripts/deps/setup-libbf.sh)")
+find_path(LIBBF_INCLUDE_DIR NAMES libbf.h HINTS ${LIBBF_DIR})
+find_library(LIBBF_LIBRARY NAMES bf HINTS ${LIBBF_DIR})
+if (NOT LIBBF_INCLUDE_DIR OR NOT LIBBF_LIBRARY)
+    message(FATAL_ERROR "LibBF (required; it folds the real literals in "
+            "floating-point input) was not found. Run "
+            "scripts/deps/setup-libbf.sh from the top of the source tree "
+            "-- it fetches and builds LibBF into deps/libbf, where this "
+            "looks by default -- or point LIBBF_DIR at an existing build")
 endif()
+message(STATUS "Found LibBF: ${LIBBF_LIBRARY}")
+# SYSTEM, the way ABC and SymFPU are consumed: the header typedefs
+# __int128 on 64-bit targets, which gcc's -pedantic rejects in the one
+# C++ translation unit that includes it.
+include_directories(SYSTEM ${LIBBF_INCLUDE_DIR})
+link_libraries(${LIBBF_LIBRARY})
 
 # -----------------------------------------------------------------------------
 # Query definitions

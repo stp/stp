@@ -1,4 +1,3 @@
-; REQUIRES: libbf
 ; RUN: %solver %s | %OutputCheck %s
 ;
 ; The rational spelling (/ p q): 1/3 is inexact and mode-sensitive, 2/4

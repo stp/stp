@@ -1,4 +1,3 @@
-; REQUIRES: libbf
 ; RUN: not %solver %s 2>&1 | %OutputCheck %s
 ;
 ; LibBF encodes the exponent-field width in its flags, and its range

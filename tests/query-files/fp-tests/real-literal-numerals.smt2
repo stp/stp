@@ -1,4 +1,3 @@
-; REQUIRES: libbf
 ; RUN: %solver %s | %OutputCheck %s
 ;
 ; Bare numerals as real constants: 1 is 1.0, 0 is +zero, and 16777217 --

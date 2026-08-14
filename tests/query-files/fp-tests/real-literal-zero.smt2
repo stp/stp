@@ -1,4 +1,3 @@
-; REQUIRES: libbf
 ; RUN: %solver %s | %OutputCheck %s
 ;
 ; "0.0" is +zero under every rounding mode -- SMT-LIB fixes the sign, and

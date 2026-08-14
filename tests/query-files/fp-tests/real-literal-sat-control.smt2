@@ -1,4 +1,3 @@
-; REQUIRES: libbf
 ; RUN: %solver %s | %OutputCheck %s
 ;
 ; Control for the real-literal-* unsat tests: the same equalities asserted

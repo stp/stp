@@ -50,8 +50,6 @@ cmake \
   -DUSE_CADICAL:BOOL=ON \
   -DCADICAL_DIR:PATH="${stp_root}/deps/cadical" \
   -DNOCRYPTOMINISAT:BOOL=ON \
-  -DUSE_LIBBF:BOOL=ON \
-  -DLIBBF_DIR:PATH="${stp_root}/deps/libbf" \
   -DENABLE_TESTING:BOOL=ON \
   -DWERROR:BOOL=ON \
   -DLIT_ARGS:STRING=-v \

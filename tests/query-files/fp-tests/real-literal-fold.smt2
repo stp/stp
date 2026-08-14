@@ -1,4 +1,3 @@
-; REQUIRES: libbf
 ; RUN: %solver %s | %OutputCheck %s
 ;
 ; ((_ to_fp e s) rm <decimal>) folds to the same interned constant as the

@@ -29,10 +29,8 @@ THE SOFTWARE.
 #include <cassert>
 #include <sstream>
 
-#ifdef STP_HAVE_LIBBF
-
 // Angle brackets on purpose: the header resolves through the SYSTEM
-// include path the top-level USE_LIBBF block adds, which keeps its
+// include path the top-level LibBF block adds, which keeps its
 // GNU-isms -- __int128 under -pedantic -- out of STP's -Werror.
 extern "C"
 {
@@ -372,51 +370,3 @@ bool rationalToPackedFPBits(const std::string& numerator,
 }
 
 } // namespace stp
-
-#else // STP_HAVE_LIBBF
-
-namespace stp
-{
-
-namespace
-{
-const char* const kNoLibBF =
-    "this build of STP cannot convert real literals (LibBF is not "
-    "compiled in; run scripts/deps/setup-libbf.sh and configure with "
-    "-DUSE_LIBBF=ON); or write the value as its packed bits, e.g. "
-    "((_ to_fp 8 24) #x3fc00000) for 1.5";
-}
-
-bool decimalToPackedFPBits(const std::string& decimal, unsigned exp_width,
-                           unsigned sig_width, unsigned rounding_mode,
-                           std::string& bits, std::string& err)
-{
-  (void)decimal;
-  (void)exp_width;
-  (void)sig_width;
-  (void)rounding_mode;
-  (void)bits;
-  err = kNoLibBF;
-  return false;
-}
-
-bool rationalToPackedFPBits(const std::string& numerator,
-                            const std::string& denominator, bool negative,
-                            unsigned exp_width, unsigned sig_width,
-                            unsigned rounding_mode, std::string& bits,
-                            std::string& err)
-{
-  (void)numerator;
-  (void)denominator;
-  (void)negative;
-  (void)exp_width;
-  (void)sig_width;
-  (void)rounding_mode;
-  (void)bits;
-  err = kNoLibBF;
-  return false;
-}
-
-} // namespace stp
-
-#endif // STP_HAVE_LIBBF

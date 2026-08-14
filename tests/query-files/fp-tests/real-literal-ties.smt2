@@ -1,4 +1,3 @@
-; REQUIRES: libbf
 ; RUN: %solver %s | %OutputCheck %s
 ;
 ; 16777217 = 2^24 + 1 sits exactly halfway between the two nearest Float32

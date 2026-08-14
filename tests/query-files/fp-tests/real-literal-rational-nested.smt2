@@ -1,4 +1,3 @@
-; REQUIRES: libbf
 ; RUN: not %solver %s 2>&1 | %OutputCheck %s
 ;
 ; A rational constant is one ratio: division is not real arithmetic here,

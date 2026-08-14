@@ -80,25 +80,8 @@ std::string hostDoubleBits(const std::string& dec)
   return bitsOfU64(u, 64);
 }
 
-// A build without LibBF (see STP_HAVE_LIBBF in lib/CMakeLists.txt) refuses
-// every conversion; there is nothing else to test there.
-bool conversionAvailable()
-{
-  std::string bits, err;
-  return decimalToPackedFPBits("1.5", 8, 24, ROUND_NEAREST_TIES_TO_EVEN,
-                               bits, err);
-}
-
-#define SKIP_WITHOUT_LIBBF()                                                   \
-  do                                                                           \
-  {                                                                            \
-    if (!conversionAvailable())                                                \
-      GTEST_SKIP() << "LibBF not compiled in";                                 \
-  } while (0)
-
 TEST(DecimalToFP, hostAgreementFloat32RNE)
 {
-  SKIP_WITHOUT_LIBBF();
   const char* cases[] = {
       "0.0",     "1.0",         "1.5",      "2.0",
       "0.5",     "0.1",         "0.2",      "123.456",
@@ -116,7 +99,6 @@ TEST(DecimalToFP, hostAgreementFloat32RNE)
 
 TEST(DecimalToFP, hostAgreementFloat64RNE)
 {
-  SKIP_WITHOUT_LIBBF();
   const char* cases[] = {
       "0.0", "1.0", "1.5", "2.0", "0.5", "0.1", "0.2", "123.456", "0.001",
       "16777217.0", "3.14159265358979323846",
@@ -131,7 +113,6 @@ TEST(DecimalToFP, hostAgreementFloat64RNE)
 
 TEST(DecimalToFP, roundingModesFloat16)
 {
-  SKIP_WITHOUT_LIBBF();
   // 0.1 in Float16: only RTP rounds the significand up.
   EXPECT_EQ(convert("0.1", 5, 11, ROUND_NEAREST_TIES_TO_EVEN),
             bitsOfU64(0x2e66, 16));
@@ -147,7 +128,6 @@ TEST(DecimalToFP, roundingModesFloat16)
 
 TEST(DecimalToFP, tiesFloat32)
 {
-  SKIP_WITHOUT_LIBBF();
   // 2^24 + 1: exactly halfway between representable neighbours.
   EXPECT_EQ(convert("16777217.0", 8, 24, ROUND_NEAREST_TIES_TO_EVEN),
             bitsOfU64(0x4b800000, 32));
@@ -163,7 +143,6 @@ TEST(DecimalToFP, tiesFloat32)
 
 TEST(DecimalToFP, overflowIsModeSpecific)
 {
-  SKIP_WITHOUT_LIBBF();
   // 65520 > max Float16 (65504): nearest and away-side modes give +oo
   // (0x7c00), RTZ and RTN stop at the largest finite value (0x7bff).
   EXPECT_EQ(convert("65520.0", 5, 11, ROUND_NEAREST_TIES_TO_EVEN),
@@ -180,7 +159,6 @@ TEST(DecimalToFP, overflowIsModeSpecific)
 
 TEST(DecimalToFP, subnormalsFloat16)
 {
-  SKIP_WITHOUT_LIBBF();
   const std::string minSub = "0.000000059604644775390625";      // 2^-24
   const std::string halfSub = "0.0000000298023223876953125";    // 2^-25
   EXPECT_EQ(convert(minSub, 5, 11, ROUND_NEAREST_TIES_TO_EVEN),
@@ -201,7 +179,6 @@ TEST(DecimalToFP, subnormalsFloat16)
 
 TEST(DecimalToFP, spellingsOfTheSameValue)
 {
-  SKIP_WITHOUT_LIBBF();
   const std::string expected = convert("1.5", 8, 24,
                                        ROUND_NEAREST_TIES_TO_EVEN);
   EXPECT_EQ(convert("1.50", 8, 24, ROUND_NEAREST_TIES_TO_EVEN), expected);
@@ -215,7 +192,6 @@ TEST(DecimalToFP, spellingsOfTheSameValue)
 
 TEST(DecimalToFP, wideFormat)
 {
-  SKIP_WITHOUT_LIBBF();
   // Float128: the packed pattern no longer fits a machine word, so build
   // the expectation from its fields: 1.5 = sign 0, biased exponent 16383,
   // significand 100...0.
@@ -228,7 +204,6 @@ TEST(DecimalToFP, wideFormat)
 
 TEST(DecimalToFP, negativesAgreeWithHost)
 {
-  SKIP_WITHOUT_LIBBF();
   const char* cases[] = {
       "-1.5", "-0.1", "-123.456", "-16777217.0", "-65504.0",
       "-340282366920938463463374607431768211456.0", // -2^128: -oo under RNE
@@ -246,7 +221,6 @@ TEST(DecimalToFP, negativesAgreeWithHost)
 
 TEST(DecimalToFP, negativeDirectedModesFlip)
 {
-  SKIP_WITHOUT_LIBBF();
   // 0.1 in Float16 rounds up only under RTP; negating the value swaps the
   // directed modes: -0.1 rounds "up" in magnitude only under RTN.
   EXPECT_EQ(convert("-0.1", 5, 11, ROUND_NEAREST_TIES_TO_EVEN),
@@ -276,7 +250,6 @@ TEST(DecimalToFP, negativeDirectedModesFlip)
 
 TEST(DecimalToFP, exactZeroHasNoSign)
 {
-  SKIP_WITHOUT_LIBBF();
   // The real zero has no sign: "(- 0.0)" is the same real as "0.0", and
   // to_fp of it is +zero -- all-zero bits -- under every mode.
   EXPECT_EQ(convert("-0.0", 8, 24, ROUND_NEAREST_TIES_TO_EVEN),
@@ -302,7 +275,6 @@ std::string convertRational(const std::string& p, const std::string& q,
 
 TEST(DecimalToFP, rationalsAgreeWithHostDivision)
 {
-  SKIP_WITHOUT_LIBBF();
   // Hardware division is itself IEEE correctly rounded, so p/q computed
   // in float or double is the RNE oracle for the rational spelling.
   const std::pair<const char*, const char*> cases[] = {
@@ -340,7 +312,6 @@ TEST(DecimalToFP, rationalsAgreeWithHostDivision)
 
 TEST(DecimalToFP, rationalDirectedModes)
 {
-  SKIP_WITHOUT_LIBBF();
   // 1/3 = 0.0101...(01) binary: the nearest float32 is above the value,
   // so RNE and RTP land on ...ab, the downward modes on ...aa; negation
   // swaps the directed pair.
@@ -364,7 +335,6 @@ TEST(DecimalToFP, rationalDirectedModes)
 
 TEST(DecimalToFP, rationalDecimalComponentsScale)
 {
-  SKIP_WITHOUT_LIBBF();
   // (/ 1.2 3.25) is (/ 120 325) is (/ 24 65): decimal components only
   // shift powers of ten between numerator and denominator.
   for (unsigned rm : {ROUND_NEAREST_TIES_TO_EVEN, ROUND_TOWARD_POSITIVE,
@@ -380,7 +350,6 @@ TEST(DecimalToFP, rationalDecimalComponentsScale)
 
 TEST(DecimalToFP, rationalRefusals)
 {
-  SKIP_WITHOUT_LIBBF();
   std::string bits, err;
   EXPECT_FALSE(rationalToPackedFPBits("1", "0", false, 8, 24,
                                       ROUND_NEAREST_TIES_TO_EVEN, bits, err));
@@ -397,7 +366,6 @@ TEST(DecimalToFP, rationalRefusals)
 
 TEST(DecimalToFP, unsupportedExponentWidths)
 {
-  SKIP_WITHOUT_LIBBF();
   std::string bits, err;
   // SMT-LIB allows exponent width 2; LibBF's flag encoding starts at 3.
   EXPECT_FALSE(decimalToPackedFPBits("1.5", 2, 8,

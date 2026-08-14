@@ -1,4 +1,3 @@
-; REQUIRES: libbf
 ; RUN: not %solver %s 2>&1 | %OutputCheck %s
 ;
 ; (/ 1 0) is not a rational constant -- there is no real it names -- so
