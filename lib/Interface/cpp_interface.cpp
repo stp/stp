@@ -26,6 +26,7 @@ THE SOFTWARE.
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/Parser/LetMgr.h"
 #include "stp/Printer/printers.h"
+#include "stp/Sat/SATSolverFactory.h"
 #include "stp/Util/GitSHA1.h"
 #include "stp/Incremental/IncrementalSolver.h"
 #include "stp/STPManager/STP.h"
@@ -1112,7 +1113,20 @@ void Cpp_interface::getInfo(std::string flag)
   if (flag == "name")
     cout << "(:name \"STP\")" << endl;
   else if (flag == "version")
-    cout << "(:version \"" << get_git_version_tag() << "\")" << endl;
+  {
+    // The SAT backend behind the build decides both the answers and the
+    // timings, and a session driving STP through SMT-LIB has no --version to
+    // ask; so the version string carries the same backend list --version
+    // prints. The standard's response here is a single string, which is why
+    // the list rides inside it rather than as info values of its own.
+    cout << "(:version \"" << get_git_version_tag() << " (SAT solvers";
+    const std::vector<std::string> solvers = compiledSolverVersions();
+    for (size_t i = 0; i < solvers.size(); i++)
+      cout << (i == 0 ? " " : ", ") << solvers[i];
+    if (solvers.empty())
+      cout << " none";
+    cout << ")\")" << endl;
+  }
   else if (flag == "authors")
   {
     // Required, like :name and :version (SMT-LIB 2.6, 4.1.8), and answered
