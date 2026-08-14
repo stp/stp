@@ -664,6 +664,71 @@ jobs:
         build-type: ${{ matrix.build-type }}
         werror: ${{ matrix.werror }}
 
+  # -fvisibility=hidden is applied only when ENABLE_TESTING and
+  # BUILD_EXTRA_TOOLS are both off, because the tests and the extra tools
+  # call into entry points that are not part of the public API. Every other
+  # Linux job here turns at least one of them on, and the two that do not
+  # are STATICCOMPILE builds, where visibility does not affect linking at
+  # all. So the shared library CI built was never the one users get: the
+  # combination that hides symbols had no coverage.
+  #
+  # What that missed is a link failure, not a subtle one. Anything the stp
+  # binary calls in libstp has to be annotated DLL_PUBLIC, and a new call to
+  # an unannotated function -- get_git_version_tag's neighbour in
+  # printVersionInfo was exactly this -- fails to link in the default build
+  # while all of CI stays green.
+  #
+  # So: the documented build, no testing, no extra tools, shared library.
+  # The three settings are passed explicitly rather than left to their
+  # defaults, so that flipping a default cannot quietly stop covering the
+  # hidden-visibility case. MiniSat is the cheapest backend to install, and
+  # which one is linked does not matter here -- the point is the link.
+  build-default-shared:
+    name: gcc (default shared, hidden visibility)
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - uses: actions/checkout@v7
+      with:
+          submodules: 'true'
+
+    - name: Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          bison \
+          build-essential \
+          cmake \
+          flex \
+          git \
+          ninja-build \
+          zlib1g-dev
+
+    - name: Dependencies
+      run: ./scripts/deps/setup-minisat.sh
+
+    - name: Configure
+      run: |
+        mkdir build
+        cd build
+        cmake -DUSE_MINISAT:BOOL=ON -DNOCRYPTOMINISAT:BOOL=ON -DWERROR:BOOL=ON -DBUILD_SHARED_LIBS:BOOL=ON -DENABLE_TESTING:BOOL=OFF -DBUILD_EXTRA_TOOLS:BOOL=OFF -G Ninja ..
+
+    - name: Build
+      run: cmake --build build --parallel "$(nproc)"
+
+    # Confirm the hidden library really is loadable and complete enough to
+    # solve, not merely linkable. --version is here because it is what broke:
+    # it reaches four separate accessors in libstp and prints them.
+    - name: Smoke test
+      run: |
+        ldd build/stp | grep libstp
+        build/stp --version
+        echo '(set-logic QF_BV)(declare-fun a () (_ BitVec 8))(declare-fun b () (_ BitVec 8))(assert (= (bvmul a b) #x21))(assert (bvult a b))(check-sat)' > test.smt2
+        out=$(build/stp test.smt2)
+        echo "output: '$out'"
+        [ "$out" = "sat" ]
+
   # The MiniSat backend is opt-in (-DUSE_MINISAT) and no other Linux job
   # enables it, so this is the configuration that keeps it honest: MiniSat
   # as the only backend, which also makes it the default solver the whole
