@@ -1865,13 +1865,14 @@ ExtensionalityContext::checkPreencodedBV(const ASTNode& n,
 }
 
 void ExtensionalityContext::encodePendingLemmas(SATSolver& solver,
-                                                ToSATBase* tosat)
+                                                ToSATBase* tosat,
+                                                int guardLit)
 {
   if (!pendingLemmaValid || pendingLemmas.empty())
     FatalError("array-equality: lemma encoding began without a pending "
                "certificate");
   for (size_t i = 0; i < pendingLemmas.size(); i++)
-    encodeOneLemma(pendingLemmas[i], solver, tosat);
+    encodeOneLemma(pendingLemmas[i], solver, tosat, guardLit);
   pendingLemmas.clear();
   pendingLemmaValid = false;
 }
@@ -1896,7 +1897,7 @@ ExtensionalityContext::requiredFoldVerdict(ExtLemmaAtom::Op op,
 
 void ExtensionalityContext::encodeOneLemma(const ExtConflict& pendingLemma,
                                            SATSolver& solver,
-                                           ToSATBase* tosat)
+                                           ToSATBase* tosat, int guardLit)
 {
   ToSATBase::ASTNodeToSATVar& satVar = tosat->SATVar_to_SymbolIndexMap();
 
@@ -2085,6 +2086,14 @@ void ExtensionalityContext::encodeOneLemma(const ExtConflict& pendingLemma,
   if (clause.size() == 0)
     FatalError("array-equality: refinement produced an empty clause "
                "(the candidate should have been unsatisfiable already)");
+
+  // Scope the clause to the formula whose equations give its symbols
+  // their meaning (see the header). Added after the emptiness check:
+  // a lemma that is empty before its guard still means the candidate
+  // should never have existed, and must keep failing loudly rather
+  // than quietly asserting the block's negation.
+  if (guardLit >= 0)
+    clause.push(SATSolver::mkLit(guardLit >> 1, (guardLit & 1) != 0));
 
   solver.addClause(clause);
   lemmasEmitted++;

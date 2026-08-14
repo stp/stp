@@ -546,7 +546,19 @@ IncrementalSolver::Impl::exactStackCheckSat(
       if (!ext->hasPendingLemma())
         FatalError("IncrementalSolver: an active array-equality refinement "
                    "round has neither a decision nor a pending lemma");
-      ext->encodePendingLemmas(*solver, tosat);
+      // The lemmas persist in this session's solver, but their symbols
+      // mean what THIS block's anchor and naming equations say they
+      // mean -- and the whole-block preprocessing above may have
+      // rewritten those equations under a retractable conjunct (a
+      // check-sat-assuming level substituted into the anchors, say).
+      // Each lemma clause therefore carries the negated block literal:
+      // inert once this block is retracted, active again whenever the
+      // identical stack re-assumes it. Without the guard, a lemma whose
+      // atoms folded under such a substitution survives as an
+      // unconditional fact -- concretely, a refuted index-equality
+      // assumption left a permanent NOT-proxy unit behind, turning the
+      // next assumption-free solve of the satisfiable base stack unsat.
+      ext->encodePendingLemmas(*solver, tosat, blockLit ^ 1);
       res = ce->CallSAT_ResultCheck(*solver, bm->ASTTrue, semantic, prepared,
                                     tosat, true);
     }

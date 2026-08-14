@@ -384,7 +384,21 @@ public:
   // candidate that produced it, so the batch rules out that candidate
   // by many more facts than one clause could, and the reified equality
   // literals the lemmas share are built once.
-  void encodePendingLemmas(SATSolver& solver, ToSATBase* tosat);
+  //
+  // `guardLit`: a literal (2*var+sign) added to every lemma clause, or
+  // -1 for none. A lemma is a theory fact about the terms this solve's
+  // naming and anchor equations bind the lemma's symbols to -- and
+  // those equations are conjuncts of the formula being solved, which
+  // preprocessing may have rewritten under content that is retractable
+  // (an assumption level substituted into the anchors). In a solver
+  // that outlives the solve, the lemma is therefore only valid where
+  // that formula holds: a caller keeping the solver must pass the
+  // negation of the literal under which the formula was assumed, so
+  // each clause is inert once the block is retracted and reactivates
+  // whenever the identical block is assumed again. A per-query solver
+  // (the batch pipeline) passes no guard.
+  void encodePendingLemmas(SATSolver& solver, ToSATBase* tosat,
+                           int guardLit = -1);
 
   // A lemma atom the simplifier can decide from its defining terms
   // needs no equality circuit, and its literal is dropped from the
@@ -577,11 +591,12 @@ private:
   bool pendingLemmaValid;
   std::vector<ExtConflict> pendingLemmas;
 
-  // Encode one lemma as the clause NOT p1 OR ... OR NOT pk OR
-  // conclusion; the shared reified-literal cache means later lemmas in
-  // a batch reuse the equality variables the earlier ones built.
+  // Encode one lemma as the clause guard OR NOT p1 OR ... OR NOT pk OR
+  // conclusion (guard per encodePendingLemmas, absent when -1); the
+  // shared reified-literal cache means later lemmas in a batch reuse
+  // the equality variables the earlier ones built.
   void encodeOneLemma(const ExtConflict& lemma, SATSolver& solver,
-                      ToSATBase* tosat);
+                      ToSATBase* tosat, int guardLit);
 
   // reified equality cache, scoped to the current SAT instance
   std::map<std::pair<uint64_t, uint64_t>, int> eqLitCache;
