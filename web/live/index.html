@@ -1,0 +1,228 @@
+---
+layout: live
+---
+
+<header>
+  <nav class="navbar navbar-expand-md navbar-dark bg-dark fixed-top">
+    <a class="navbar-brand" href="#">STP</a>
+    <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarsExampleDefault" aria-controls="navbarsExampleDefault" aria-expanded="false" aria-label="Toggle navigation">
+    <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div class="collapse navbar-collapse" id="navbarsExampleDefault">
+      <ul class="navbar-nav mr-auto">
+        <li class="nav-item">
+          <a class="nav-link" href="{{ site.baseurl }}/">Homepage</a>
+        </li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" id="dropdown01" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Examples</a>
+          <div class="dropdown-menu" aria-labelledby="dropdown01">
+            <a class="dropdown-item" href="#">Action</a>
+            <a class="dropdown-item" href="#">Another action</a>
+            <a class="dropdown-item" href="#">Something else here</a>
+          </div>
+        </li>
+        <li class="nav-item">
+          <button type="button" id="save" class="btn btn-primary btn-md" data-container="body" data-toggle="popover" data-placement="bottom" data-content="Copied to clipboard" aria-label="Copy to Clipboard" disabled>
+            <i class="fas fa-paste" aria-hidden="true"></i>
+          </button>
+        </li>
+      </ul>
+    </div>
+  </nav>
+</header>
+
+<main role="main" class="main">
+  <div id="editor">
+    x, y : BITVECTOR(8);
+    z, t : BITVECTOR(12);
+
+    ASSERT(x=0hexff);
+    ASSERT(z=0hexff0);
+    QUERY(z = x << 4);
+  </div>
+</main>
+
+<footer class="bg-dark">
+  <div class="container-fluid">
+    <div class="row">
+      <div class="col">
+        <h1 id="result">loading</h1>
+      </div>
+      <div class="col-xs-2">
+        <button type="button" id="runbutton" class="btn btn-primary btn-lg" aria-label="Run" disabled>
+          <i class="fas fa-play" aria-hidden="true"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<!-- Bootstrap JS -->  
+<script src="https://code.jquery.com/jquery-3.2.1.slim.min.js" integrity="sha384-KJ3o2DKtIkvYIK3UENzmM7KCkRr/rE9/Qpg6aAZGJwFDMVNA/GpGFF93hXpG5KkN" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js" integrity="sha384-ApNbgh9B+Y1QKtv3Rn7W3mgPxhU9K/ScQsAP7hUibX39j7fakFPskvXusvfa0b4Q" crossorigin="anonymous"></script>
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js" integrity="sha384-JZR6Spejh4U02d8jOt6vLEHfe/JQGiRRSQQxSfFWpi1MquVdAyjUar5+76PVCmYl" crossorigin="anonymous"></script>
+
+<!-- FontAwesome -->
+<script src="https://use.fontawesome.com/releases/v5.0.8/js/all.js"></script>
+
+<!-- ACE editor -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.3.1/ace.js" type="text/javascript" charset="utf-8"></script>
+
+
+<script>
+  function base64dec(x) {
+    try {
+      if (x.length % 4 != 0) {
+        x = x.padEnd(x.length + (4 - (x.length % 4)), '=')
+      }
+      return atob(x.replace(/-/g, '+').replace(/_/g, '/'))
+    } catch (err) {
+      return ''
+    }
+  }
+  
+  function base64enc(x) {
+    return btoa(x).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g,'')
+  }
+  
+  function copyToClipboard(x) {
+    // Create an invisible text area
+    var target = $('<textarea>')
+                 .css('position', 'absolute')
+                 .css('left', '-9999px')
+                 .css('top', '0px')
+                 .val(x)
+    $('body').append(target);
+    
+    // Copy the contents
+    target.focus()
+    target[0].setSelectionRange(0, x.length)
+    document.execCommand('copy')
+    
+    // Remove it from the page
+    target.remove()
+  }
+  
+  $().ready(function () {
+    // Configure the editor
+    var editor = ace.edit('editor');
+    editor.setTheme('ace/theme/monokai');
+    editor.session.setMode('ace/mode/lisp');
+    
+    // Load text from the URL hash if it's there
+    if (window.location.hash) {
+      var hash = window.location.hash.substring(1)
+      editor.setValue(base64dec(hash))
+    }
+    
+    // Clear the hash whenever the code is updated
+    editor.session.on('change', function () {
+      window.location.hash = ''
+    })
+    
+    // Save button implementation
+    $('#save').click(function () {
+      // Push a new history item and change the URL
+      window.location.hash = ''
+      history.pushState(
+        { 'source': editor.getValue() }, 
+        '', // title
+        window.location.href.replace(/#$/, '') + '#' + base64enc(editor.getValue())
+      )
+      
+      // Copy the URL to the clipboard
+      copyToClipboard(window.location.href)
+      
+      // Show and hide the popover as a visual indication
+      $(this).popover('show')
+      setTimeout(function() {
+        $('#save').popover('hide')
+      }, 1000)
+    })
+    
+    // When the user pops state, load the new document
+    window.onpopstate = function (event) {
+      editor.setValue(event.state.source)
+      window.location.hash = '#' + base64enc(event.state.source)
+    }
+    
+    // Button is ready
+    $('#save').removeAttr('disabled');
+  })
+</script>
+
+<script src="libstp.js" type="text/javascript" charset="utf-8"></script>
+<script>
+  Module['onRuntimeInitialized'] = function () {
+    $().ready(function () {
+      $('#runbutton').removeAttr("disabled")
+      $('#result').text('ready')
+    })
+  }
+</script>
+
+<script>
+  $().ready(function () {
+    $('#runbutton').click(function () {
+      $('#result').text('running')
+      $('#runbutton').attr("disabled", true)
+    
+      source = ace.edit('editor').getValue()
+      
+      try {
+        result = stp_query(source)
+        if (result == 0) {
+          $('#result').text('invalid')
+        } else if (result == 1) {
+          $('#result').text('valid')
+        } else if (result == 2) {
+          $('#result').text('error')
+        } else if (result == 3) {
+          $('#result').text('timeout')
+        } else {
+          $('#result').text('unknown return')
+        }
+      } catch (err) {
+        $('#result').text('error')
+      }
+    
+      $('#runbutton').removeAttr("disabled")
+    })
+  })
+</script>
+
+<script>
+  /*       ___                      ___   /
+   * |__| |__  \ /      |  |  /\  |  |   / 
+   * |  | |___  |  ,    |/\| /--\ |  |  .  
+   *
+   * We made STP work in your browser by compiling it to WebAssembly using
+   * Emscripten. This was hacked together for demo purposes only, and not for
+   * real world use.
+   *
+   * The code below does gross things to call STP's awful C API from
+   * JavaScript. We strongly recommend that you do not re-use this code.
+   * 
+   * We would love contributions that make work STP better on the web!
+   */
+  function stp_query(source) {
+    vc = Module._vc_createValidityChecker()
+
+    qptr = Module._malloc(8) // sizeof(pointer)
+    assertsptr = Module._malloc(8)
+
+    result = Module.ccall('vc_parseMemExpr', 'number', ['number', 'string', 'number', 'number'], [vc, source, qptr, assertsptr])
+    if (result != 1) {
+      return 2
+    }
+
+    q = Module.getValue(qptr, '*')
+    asserts = Module.getValue(assertsptr, '*')
+
+    Module.ccall('vc_assertFormula', null, ['number', 'number'], [vc, asserts])
+    result = Module.ccall('vc_query', 'number', ['number', 'number'], [vc, q])
+    
+    return result
+  }
+</script>

@@ -1,0 +1,35 @@
+# general configuration
+# This repo's Pages site is served from a project path, not the org root, so
+# every internal link has to carry the /stp prefix. stp.github.io/ redirects
+# here. Note url has no trailing slash: templates build links as
+# {{ site.url }}{{ site.baseurl }}, which would otherwise double up.
+url: https://stp.github.io
+baseurl: '/stp'
+
+# compass configuration
+compass:
+  # an avatar or logo (optional)
+  logo: "/images/logo.png"
+  # author will appear under the avatar (optional)
+  author: "STP"
+  # tagline will appear under the title (optional)
+  tagline: "The Simple Theorem Prover"
+  # if include_content is true, the contents of the content.html include will be
+  # added right above the generated item list, if present
+  include_content: true
+  # if include_analytics is true, the content of the analytics.html include will
+  # be added at the end of the <head> section. You can add your Google Analytics
+  # Tracking Code to that file.
+  include_analytics: false
+  # Twitter @username (as defined by the Twitter Card specs)
+  twitter: "compass"
+
+# exclude
+exclude: ["CNAME", "Gemfile", "Gemfile.lock", "LICENSE", "README.md", "vendor"]
+
+# Dependencies
+markdown: kramdown
+highlighter: rouge
+
+# Permalinks
+permalink: pretty

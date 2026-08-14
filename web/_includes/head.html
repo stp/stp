@@ -1,0 +1,44 @@
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% if site.compass.author %}{{ site.compass.author }} &#8226; {% endif %}{{ site.compass.tagline | strip_html }}</title>
+
+  <link rel="apple-touch-icon" href="{{ site.baseurl }}{{ site.compass.logo }}"/>
+  <link rel="shortcut icon" sizes="16x16 24x24 32x32 48x48 64x64" href="{{ site.url }}{{ site.baseurl }}/favicon.ico" />
+
+  <link rel="stylesheet" href="{{ site.baseurl }}/assets/normalize.css">
+  <link rel="stylesheet" href="{{ site.baseurl }}/assets/main.css">
+  <link href='https://fonts.googleapis.com/css?family=Vollkorn' rel='stylesheet' type='text/css'>
+
+  <script defer src="https://use.fontawesome.com/releases/v5.0.8/js/all.js"></script>
+
+  <link rel="canonical" href="{{ site.url }}{{ site.baseurl }}{{ page.url }}">
+
+  <meta name="author" content="{{ site.compass.author }}">
+  <meta name="description" content="{{ site.compass.tagline }}"/>
+
+  <!-- Open Graph tags -->
+  <meta property="og:type" content="website"/>
+  <meta property="og:title" content="{{ site.compass.tagline }}"/>
+  <meta property="og:url" content="{{ site.url }}{{ site.baseurl }}{{ page.url }}"/>
+  <meta property="og:image" content="{{ site.url }}{{ site.baseurl }}{{ site.compass.logo }}"/>
+  <meta property="og:description" content="{{ site.compass.description }}"/>
+  <meta property="og:site_name" content="{{ site.compass.tagline }}">
+
+  <!-- Twitter Card tags -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="{{ site.compass.tagline }}">
+  {% if site.twitter.site %}
+  <meta name="twitter:site" content="{{ site.twitter.site }}">
+  {% endif %}
+  {% if site.twitter.creator %}
+  <meta name="twitter:creator" content="{{ site.twitter.creator }}">
+  {% endif %}
+  <meta name="twitter:url" content="{{ site.url }}{{ site.baseurl }}{{ page.url }}">
+  <meta name="twitter:description" content="{{ site.compass.description }}">
+  <meta name="twitter:image:src" content="{{ site.url }}{{ site.baseurl }}{{ site.compass.logo }}">
+
+  {% if site.compass.include_analytics %}
+  {% include analytics.html %}
+  {% endif %}
+</head>
