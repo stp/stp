@@ -22,42 +22,55 @@ checkers.
 Install instructions
 ====================
 
-For Debian-like platforms first install the prerequisites:
+On a Debian-like platform, from a clean checkout:
 
 .. code-block:: bash
 
-    apt-get install git build-essential cmake bison flex \
-        libgmp-dev zlib1g-dev perl
-
-Then install minisat:
-
-.. code-block:: bash
-
-    git clone https://github.com/stp/minisat.git
-    cd minisat && mkdir build && cd build
-    cmake ..
-    make
-    sudo make install
-    cd ../..
-
-Then install STP. Note the submodule step: ABC and mimalloc are built as
-part of STP, and the build will not configure without them.
-
-.. code-block:: bash
-
-    git clone https://github.com/stp/stp.git
+    sudo apt-get install git build-essential cmake bison flex curl patch \
+        libgmp-dev python3 perl
+    git clone https://github.com/stp/stp
     cd stp
-    git submodule update --init
+    git submodule init && git submodule update
+    ./scripts/deps/setup-cadical.sh
+    ./scripts/deps/setup-libbf.sh
     mkdir build && cd build
-    cmake ..
-    make
-    sudo make install
+    cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$(pwd)/../deps/cadical" ..
+    cmake --build . -j$(nproc)
+    sudo cmake --install .
 
-The `README <https://github.com/stp/stp/blob/master/README.markdown>`__
-covers the rest: the configuration variables, how to point STP at
-dependencies you have built but not installed, static builds, using
-CryptoMiniSat or CaDiCaL instead of MiniSat, and building on
-Windows/Visual Studio.
+None of those steps is optional. ABC and mimalloc are submodules and are
+built as part of STP; LibBF is required, and the two ``setup`` scripts
+fetch and build it and the SAT solver into ``deps/``. A build with no SAT
+backend enabled does not configure.
+
+With `Homebrew <https://brew.sh>`__:
+
+.. code-block:: bash
+
+    brew install stp
+
+Or with Docker, which needs nothing installed but Docker itself, and
+reads the problem on standard input:
+
+.. code-block:: bash
+
+    git clone https://github.com/stp/stp
+    cd stp
+    docker build -t stp .
+    echo "(set-logic QF_BV)
+    (assert (= (bvsdiv (_ bv3 2) (_ bv2 2)) (_ bv0 2)))
+    (check-sat)
+    (exit)" | docker run --rm -i stp
+
+:doc:`building` covers the rest: the configuration variables, the SAT
+backends and how to choose between them, building against dependencies
+you have built but not installed, static builds, and Windows.
+
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+
+   building
 
 
 SMT-LIB2 input language
@@ -342,6 +355,17 @@ bitvector (QF_BV) category.
 -  1st at `SMTCOMP
    2006 <http://smtcomp.sourceforge.net/2006/results-QF_UFBV32.shtml>`__
 
+Competition results are a snapshot of one year's entrants on one year's
+selection. :doc:`benchmarks` is the continuous version: every SMT-LIB
+benchmark STP can read, re-measured against a git commit so a change in the
+solver shows up as a change in the numbers.
+
+.. toctree::
+   :hidden:
+   :maxdepth: 1
+
+   benchmarks
+
 Use cases
 =========
 
@@ -478,6 +502,21 @@ Many people have contributed:
 
 -  `Khoo Yit Phang <https://github.com/khooyp>`__ — parser and printer work, and the OCaml bindings.
 
+-  `Felix Kutzner <https://github.com/fkutzner>`__ — the Windows CI, and
+   64-bit pointer fixes in the vendored ABC.
+
+-  `Jurriaan Bremer <https://github.com/jbremer>`__ — the Python
+   bindings and their packaging, including Python 3 support.
+
+-  `Norbert Manthey <https://github.com/conp-solutions>`__ — the
+   StarExec competition harness.
+
+-  **Stephen McCamant** — the early build system, and packaging
+   ``libstp`` as a library worth linking against.
+
+-  `Florian Merz <https://github.com/fmerz>`__ — parser and lexer fixes,
+   and Windows portability.
+
 -  **Michael Katelman** — CNF conversion, and correctness fixes to
    counterexample construction.
 
@@ -486,4 +525,8 @@ Many people have contributed:
 -  **Philip Guo** — the CVC-to-C converter.
 
 -  **Tim King** — contributions to the early solver at Stanford.
+
+And many others: the `contributors
+page <https://github.com/stp/stp/graphs/contributors>`__ lists everyone
+who has committed to STP.
 
