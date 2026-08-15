@@ -363,7 +363,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
 
   ASTNode inputToSat = semantic_input;
 
-  // Array equality (lemmas on demand, Brummayer & Biere JSAT 2010):
+  // Array equality (lemmas on demand, Brummayer & Biere JSAT 2009):
   // with at least one array equality reachable from the current root, conjoin
   // exactly its active dependency closure's witness constraints. These are
   // preprocessing step 1 of the paper: a fresh index lambda with two virtual

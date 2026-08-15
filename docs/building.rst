@@ -94,9 +94,10 @@ Enabling CaDiCaL makes it the default for that build, in place of
 CryptoMiniSat; ``--cryptominisat`` (or ``--minisat``, in a
 ``-DUSE_MINISAT`` build) selects another backend at run time. With a
 CaDiCaL 3.x build, ``--cadical-factor`` controls CaDiCaL's bounded
-variable addition: ``on``, ``off``, or ``auto`` -- the default, which
-enables it only for problems with array operations, where it measures
-fastest.
+variable addition: ``on`` -- the default -- ``off``, or ``auto``, which
+enables it only for problems with array operations. ``auto`` was the
+default until bounded variable addition was measured on bitvector-only
+problems and found to pay there too.
 
 MiniSat is optional and off by default; enable it with
 ``-DUSE_MINISAT:BOOL=ON``, which also needs zlib. Your distribution's
@@ -117,7 +118,10 @@ The MiniSat and CryptoMiniSat recipes above are pre-configured in
 Those scripts install into ``deps/install``, which CMake searches without
 any extra flags.
 
-The Riss solver can be enabled with ``-DUSE_RISS``.
+The Riss solver can be enabled with ``-DUSE_RISS``, which also needs
+``-DRISS_DIR=<path>`` naming a Riss checkout that contains
+``riss/core/Solver.h`` and ``build/lib/libriss-coprocessor.a``;
+configuration fails without it. ``scripts/deps/setup-riss.sh`` builds one.
 
 Building against non-installed libraries
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -225,12 +229,15 @@ Building on Windows and Visual Studio
 -------------------------------------
 
 Install `CMake <https://cmake.org/download/>`__ and follow the steps that
-the ``windows`` job in
+one of the two Windows jobs in
 `.github/workflows/ci.yml <https://github.com/stp/stp/blob/master/.github/workflows/ci.yml>`__
-runs: install flex and bison, build minisat and LibBF, then configure STP
-against them with ``-DNOCRYPTOMINISAT=ON``, CryptoMiniSat not being
-buildable with MSVC. There is also a mini-HOWTO in `issue
-319 <https://github.com/stp/stp/issues/319>`__.
+runs. Both install flex and bison, build LibBF, and configure with
+``-DNOCRYPTOMINISAT=ON``, CryptoMiniSat not being buildable there.
+
+``windows (cadical, MinGW)`` is the one to follow for a solver to use: it
+builds CaDiCaL under MinGW/UCRT64 and links a fully static ``stp.exe``
+against it. ``windows (minisat, MSVC)`` builds with Visual Studio instead,
+where MiniSat is the only backend that compiles.
 
 Testing
 -------

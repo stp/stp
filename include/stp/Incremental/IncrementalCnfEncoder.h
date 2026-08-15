@@ -34,7 +34,7 @@ THE SOFTWARE.
 // and root literals, activation literals and refinement lemmas over old
 // variables all depend on the numbering not moving. The cost of the
 // trade is encoding quality -- incremental cones always get the
-// three-clause Tseitin shape, never --cnf-effort's technology mapping.
+// three-clause Tseitin shape, never --cnf-generation-effort's technology mapping.
 //
 // Everything emitted is a conservative extension (fresh variables and
 // definitional clauses), so nothing is ever retracted.

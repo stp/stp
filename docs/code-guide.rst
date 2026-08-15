@@ -9,8 +9,15 @@ component of STP. The headers that go with them live under
    refinement and counterexample construction.
 -  ``AST``: Implements the abstract syntax tree for parsed solver
    inputs.
+-  ``Extensionality``: The decision procedure for equalities between
+   whole arrays, described in :doc:`array-extensionality`.
+-  ``FloatBlaster``: Bit-blasting of the floating-point theories, built
+   on the header-only SymFPU library.
 -  ``Globals``: The handful of thread-local globals that the parser
    shares with the rest of STP.
+-  ``Incremental``: The driver for incremental solving -- ``push``,
+   ``pop`` and repeated ``check-sat`` against a solver kept alive between
+   queries. See :doc:`incremental-solving`.
 -  ``Interface``: Defines the C interface (``stp/c_interface.h``) for
    parsing input files, constructing expressions, executing queries,
    etc., and the C++ interface (``stp/cpp_interface.h``) for invoking
@@ -44,10 +51,13 @@ Third-party code that is compiled into STP also lives under ``lib/``:
 -  ``extlib-constbv``: A library that implements multi-word fixed-length
    integers, based on Steffen Beyer's
    `Bit::Vector <https://metacpan.org/pod/Bit::Vector>`__ perl module.
+-  ``extlib-symfpu``: `SymFPU <https://github.com/martin-cs/symfpu>`__, a
+   header-only implementation of the floating-point operations in terms of
+   bitvectors, used by ``FloatBlaster``. A git submodule.
 -  ``extlib-mimalloc``:
    `mimalloc <https://github.com/microsoft/mimalloc>`__, the allocator
    the STP executables link against by default. A git submodule; see
-   ``STP_ALLOCATOR`` in the README for the alternatives.
+   ``STP_ALLOCATOR`` in :doc:`building` for the alternatives.
 -  ``extlib-unordered-dense``:
    `ankerl::unordered_dense <https://github.com/martinus/unordered_dense>`__,
    a densely stored hash map and set, used in place of
@@ -56,11 +66,20 @@ Third-party code that is compiled into STP also lives under ``lib/``:
 The executables are built from ``tools/``:
 
 -  ``stp``: The main command-line solver.
+-  ``extdiff``: Built alongside it, unconditionally. Compares two STP
+   binaries on the same query, which the baseline-differential test uses.
+-  ``test_fpbackend`` and ``test_fprewrites``: Floating-point checkers,
+   built when either ``ENABLE_TESTING`` or ``BUILD_EXTRA_TOOLS`` is on;
+   they are registered as tests.
 -  The rest are development aids, built only when ``BUILD_EXTRA_TOOLS``
-   is enabled: ``propagator_bench`` times the propagators, checks how much
-   they deduce, and with ``--bcp-check`` compares that against what unit
-   propagation on the bit-blasted encoding deduces on its own; and
-   ``rewrite_rule_gen`` searches for rewrite rules.
+   is enabled: ``difficulty_bench`` measures the difficulty scorer against
+   AIG sizes; ``fp_rewrite_gen`` searches for floating-point rewrite rules;
+   ``rewrite_rule_gen`` searches for bitvector ones; and
+   ``propagator_bench`` times the propagators, checks how much they deduce,
+   and with ``--bcp-check`` compares that against what unit propagation on
+   the bit-blasted encoding deduces on its own. ``propagator_bench``
+   additionally needs a build with CryptoMiniSat and is skipped without
+   one.
 
 The Python bindings are in ``bindings/python``, and the tests are in
 ``tests/`` (see :doc:`testing`).

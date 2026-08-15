@@ -20,7 +20,8 @@ Three things the numbers make visible that a reading of the bit-blaster does
 not:
 
 * **Operations are not symmetric in their operands.** `bvudiv c x` is linear in
-  the width where `bvudiv x c` is quadratic; `bvand x c` is free.
+  the *magnitude* of the constant dividend, whereas `bvudiv x c` is quadratic in
+  the width; `bvand x c` is free.
 * **The default multiplier is not Booth-recoded.** `multiplication_variant`
   defaults to 1, which is a plain shift-and-add array, so a multiply by a
   constant costs one add per *set bit*, not per run of set bits.
@@ -52,22 +53,27 @@ make difficulty_bench
 ```sh
 ./difficulty_bench                          # everything, at 8..128 bits
 ./difficulty_bench --widths 32 --no-fp      # just the bit-vector operations
+./difficulty_bench --no-bv                  # just the floating-point operations
 ./difficulty_bench --arity 4                # n-ary operands
 ./difficulty_bench --csv > measured.csv     # for re-fitting
 ```
 
-Sample output:
+`--widths` applies to the bit-vector operations only. The floating-point
+sweep always runs the four IEEE formats, and its `width` column is the total
+format width, so binary32 appears as 32 whatever `--widths` says.
+
+Sample output (the width-32 rows of a full run):
 
 ```
 operation                 width          aig        score    ratio
 bvadd                        32          345          345    1.00x
 bvmul                        32         5767         5767    1.00x
-bvudiv                       32        20136        21532    1.07x
-bvmul-const                  32         2105         2156    1.02x
-const-bvudiv                 32         2696         2720    1.01x
+bvudiv                       32        20136        20148    1.00x
+bvmul-const                  32          375          375    1.00x
+const-bvudiv                 32        15299        15552    1.02x
 bvult                        32          191          191    1.00x
-fp.mul                       32         8843         9632    1.09x
-  (depth 1) fp.mul           32         4636         4816    1.04x
+fp.mul                       32        17326        17054    0.98x
+  (depth 1) fp.mul           32         8843         8542    0.97x
 ```
 
 The trailing summary line gives the geomean of score/aig, the spread of that

@@ -27,7 +27,7 @@ THE SOFTWARE.
  * for the extensional theory of arrays:
  *
  *   Robert Brummayer, Armin Biere: "Lemmas on Demand for the
- *   Extensional Theory of Arrays", JSAT 6 (2010) 165-201.
+ *   Extensional Theory of Arrays", JSAT 6 (2009) 165-201.
  *
  * A candidate assignment sigma produced by the SAT solver assigns
  * values to the abstraction variables of reads and array equalities,

@@ -66,10 +66,12 @@ Two refinements to know about:
 ``(check-sat-assuming (l1 ... ln))`` is supported and implemented as an
 internal assertion level holding the assumptions; the model it produces
 remains readable by ``get-value``/``get-model`` afterwards, and the
-assertion stack is left untouched. Per SMT-LIB, a model is invalidated by
-``assert``, ``push``, ``pop`` and reset commands, and the model commands
-refuse (``unsupported``) rather than answer from a stack that no longer
-exists.
+assertion stack is left untouched, and both need
+``(set-option :produce-models true)`` as usual. Per SMT-LIB, a model is
+invalidated by ``assert``, ``push``, ``pop`` and reset commands, and the
+model commands then decline rather than answer from a stack that no longer
+exists: ``get-value`` replies ``unsupported``, while ``get-model`` prints
+nothing at all.
 
 The C API takes the same route: a session becomes incremental at its
 first ``vc_push`` (or from the first query with ``vc_setFlags(vc, 'i')``),
@@ -340,9 +342,9 @@ there is not yet a CBP prefix to reuse. If the sum of the assertion-level DAGs
 exceeds ``--incremental-cbp-bootstrap-limit`` (100,000 nodes by default), that
 first solve skips only this cross-level prepass. A later real solve builds CBP
 from the complete then-live stack in the normal way, so no persistent fact or
-future reuse is lost. Automatic sessions do not take this path: their first two
-solves use the batch pipeline and CBP starts normally when the driver engages
-on the third. Set the limit to 0 to disable the deferral.
+future reuse is lost. Automatic sessions do not take this path: their
+pre-engagement solves use the batch pipeline and CBP starts normally once
+the driver engages. Set the limit to 0 to disable the deferral.
 
 Explicit first engagement also recovers one cheap, high-yield part of batch
 preprocessing for a base-only, array/FP-free formula: before emitting any
@@ -355,8 +357,9 @@ conjuncts are restored only once per backend epoch. This deliberately does not
 repeat after the first solve and does not rewrite pushed levels: it targets the
 large first-check Boolean-clause families without reviving recurring global
 base preprocessing, which previously forfeited persistent roots and regressed
-changing-stack sessions. Automatic third-solve engagement has already run two
-whole-formula batch passes and therefore does not take this special path.
+changing-stack sessions. A session that engaged automatically has already
+run its pre-engagement whole-formula batch passes and therefore does not
+take this special path.
 
 A multi-level, plain-BV first stack gets a separate guarded opportunity to
 recover cross-level batch simplification. The complete active stack is run
@@ -378,7 +381,7 @@ and an explicitly aggressive ``--incremental-reencode-limit`` below the default
 one million disables the provisional block so SAT-relief ownership is
 available from the outset. Zero disables that SAT-size trigger and still
 permits the block; the semantic-cache relief trigger is independent. Automatic
-third-solve engagement again does not need this first-check escape.
+engagement again does not need this first-check escape.
 
 A pushed level holding many conjuncts is assumed through one *activation
 literal* -- a fresh variable implying each conjunct's root -- so a level
@@ -465,11 +468,12 @@ on node numbers -- so the driver pins each round's node spine, and in
 general any cache in STP that keys on nodes must *hold* them.
 
 Under automatic engagement, the first distinct persistent exact-stack block
-keeps its raw word-level shape: that session has already received two batch
-solves, and the raw shape can be a useful search strategy on write-heavy array
-graphs. A session explicitly forced incremental from its first solve has no
-batch preprocessing to fall back on, so its first block -- and every genuinely
-new later stack in either mode -- receives the high-yield prefix of the batch
+keeps its raw word-level shape: that session has already received its
+pre-engagement batch solves, and the raw shape can be a useful search
+strategy on write-heavy array graphs. A session explicitly forced
+incremental from its first solve has no batch preprocessing to fall back on,
+so its first block -- and every genuinely new later stack in either mode --
+receives the high-yield prefix of the batch
 size-reducing pipeline (constant-bit propagation, equality propagation,
 unconstrained elimination and pure literals) before array transformation.
 This is safe here because the result and every definition it eliminates have
@@ -800,9 +804,14 @@ Limitations
   The relief boundary is also the one
   place a GLOBAL simplification pass over the base is both sound and
   free -- everything re-encodes anyway, and the base never retracts --
-  so the driver runs the batch equality-propagation, simplification and
-  unconstrained-variable passes over the whole base conjunction there
-  (symbols of live pushed levels held untouchable, arrays excluded).
+  so the driver runs the batch equality-propagation, simplification,
+  unconstrained-variable and constant-bit-propagation passes over the whole
+  base conjunction there (symbols of live pushed levels held untouchable,
+  arrays excluded). Only a relief rebuild does this; the promotion,
+  in-probing and trail rebuilds re-encode the base as it stands. It is also
+  skipped, with a message, when the base exceeds
+  ``--incremental-base-resimplify-limit`` (default 100,000 DAG nodes; 0
+  always skips).
   Definitions it eliminates are permanent, replay into models by
   evaluation, and are restored as permanent units the moment later
   content mentions their variable: an implied equation returns as
@@ -819,13 +828,17 @@ Limitations
   and a cone-liveness sweep first, machinery with no measured
   beneficiary so far. The activation-literal retirement above is the
   subset that is sound without any of that.
+- Stable-level promotion is on by default and can be turned off with
+  ``--no-incremental-promote-units``. Retracting a promoted level restarts
+  that level's solver, which is why the promotion is delayed until a level
+  has been stable for a while.
 - Driver encodings are always the plain three-clause Tseitin shape:
   extending a live solver in place requires every previously assigned
   variable to keep its id, and ABC's CNF generators -- including the
-  technology-mapped ones ``--cnf-effort`` selects -- are one-shot over a
-  whole AIG manager and renumber everything. ``--cnf-effort`` therefore
-  applies to batch solves only; once the driver engages it has no
-  effect.
+  technology-mapped ones ``--cnf-generation-effort`` selects -- are one-shot
+  over a whole AIG manager and renumber everything.
+  ``--cnf-generation-effort`` therefore applies to batch solves only; once
+  the driver engages it has no effect.
 - Extensionality rounds rebuild the procedure's solve-local records each
   check-sat; reuse for them is at the encoding level (cached blocks and
   shared subcircuits), not at the record level.

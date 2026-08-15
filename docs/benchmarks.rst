@@ -49,6 +49,18 @@ Instances are counted in one of these ways:
    excluded from the headline, because counting a capability gap as a
    performance failure would misdescribe both.
 
+``error``
+   STP crashed, or reported an error instead of an answer.
+
+``mismatch``
+   STP answered, but disagreed with the benchmark's stated status. See the
+   soundness note above.
+
+The tables also report **PAR-2**: the total wall-clock time in seconds, with
+every unsolved instance charged twice the timeout. It rewards solving more
+instances and solving them faster in a single number, and it is the measure
+SMT-COMP uses.
+
 Reproducing a campaign
 ----------------------
 
