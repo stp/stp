@@ -498,7 +498,23 @@ void FlattenKindNoDuplicates(const Kind k, const ASTChildren& children,
   }
 }
 
-void FlattenKind(const Kind k, const ASTChildren& children, ASTVec& flat_children, int depth)
+// A same-kind child is expanded every time it is reached, which on a DAG means
+// once per root-to-leaf path rather than once per node. That is exponential in
+// the input's sharing, and `depth` does not bound it: depth limits how far down
+// the walk goes, and the cost is in how many ways it gets there. On
+// QF_BV/Sage2/bench_16265.smt2 this grew one ASTVec past 30GB and the process
+// was killed.
+//
+// Repeats cannot simply be dropped the way FlattenKindNoDuplicates drops them:
+// that is sound only for the idempotent kinds, and BVPLUS is not one -- x + x
+// is not x. So what bounds this is an output budget. Every step either pushes
+// an operand or descends one level, so capping the pushes caps the walk.
+//
+// Returns false if the budget was passed, in which case flat_children holds a
+// prefix of the operands and must be discarded: a truncated sum is not the sum.
+const size_t FLATTEN_OUTPUT_BUDGET = 1000;
+
+bool FlattenKind(const Kind k, const ASTChildren& children, ASTVec& flat_children, int depth)
 {
   FlattenFrame current(children, depth);
   std::vector<FlattenFrame> parents;
@@ -523,8 +539,14 @@ void FlattenKind(const Kind k, const ASTChildren& children, ASTVec& flat_childre
       current = FlattenFrame(child.GetChildren(), below);
     }
     else
+    {
       flat_children.push_back(child);
+      if (flat_children.size() > FLATTEN_OUTPUT_BUDGET)
+        return false;
+    }
   }
+
+  return true;
 }
 
 // Flatten (k ... (k ci cj) ...) to (k ... ci cj ...)
@@ -559,7 +581,14 @@ ASTVec FlattenKind(Kind k, const ASTChildren& children, int maxDepth)
     // very wide list of repeated edges into only a few operands; reserving
     // the input's full width there retains memory for operands it discarded.
     flat_children.reserve(children.size());
-    FlattenKind(k, children, flat_children, maxDepth);
+    if (!FlattenKind(k, children, flat_children, maxDepth))
+    {
+      // Over budget: hand the operands back exactly as they arrived. Not
+      // flattened, but every caller can rebuild from this, and no caller can
+      // rebuild from a prefix.
+      flat_children.clear();
+      flat_children.assign(children.begin(), children.end());
+    }
   }
 
   return flat_children;
