@@ -14,7 +14,8 @@ checkers.
 
 .. raw:: html
 
-   <!--The input to STP are formulas over the theory of bitvectors and arrays.
+   <!--The input to STP are formulas over the theories of bitvectors, arrays
+   and floating-point.
    This theory captures most expressions from languages like C,C++,Java, Verilog etc.
    STP can tell if the input formula is satisfiable or not and if is, then it can also
    generate a variable assignment to satisfy the input formula.-->

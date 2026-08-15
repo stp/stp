@@ -3,12 +3,18 @@ Architecture
 
 STP is an efficient decision procedure for the validity (or
 satisfiability) of formulas from a quantifier-free many-sorted theory of
-fixed-width bitvectors and one-dimensional arrays. The
-functions in STP’s input language include concatenation, extraction,
-left/right shift, sign-extension, unary minus, addition, multiplication,
-(signed) modulo/division, bitwise Boolean operations, if-then-else
-terms, and array reads and writes. The predicates in the language
-include equality and (signed) comparators between bitvector terms.
+fixed-width bitvectors, one-dimensional arrays and IEEE-754
+floating-point. The functions in STP’s input language include
+concatenation, extraction, left/right shift, sign-extension, unary minus,
+addition, multiplication, (signed) modulo/division, bitwise Boolean
+operations, if-then-else terms, and array reads and writes. The
+floating-point functions cover the four arithmetic operations and the
+fused multiply-add, square root, remainder, absolute value, negation,
+rounding to integral, minimum and maximum, and the conversions to and
+from bitvectors, each under any of the five rounding modes. The
+predicates in the language include equality and (signed) comparators
+between bitvector terms, and the ordering comparisons and the
+classifications over floating-point terms.
 
 The basic architecture of STP essentially follows the idea of word-level
 preprocessing followed by translation to SAT (CaDiCaL is the default SAT
@@ -28,9 +34,10 @@ checking tools and theorem-provers.
 The solving pipeline
 --------------------
 
-Every ``check-sat`` runs the sequence below. Dashed boxes are stages that
-only some queries reach; the brackets on the right mark the three places
-the pipeline repeats itself.
+This is the batch pipeline, which runs for every ``check-sat`` that the
+incremental driver does not take. Dashed boxes are stages that only some
+queries reach; the brackets on the right mark the three places the
+pipeline repeats itself.
 
 .. raw:: html
 
@@ -75,8 +82,8 @@ the pipeline repeats itself.
    <title>SMT-LIB2 input — click for a summary</title>
    <rect x="6" y="14" width="404" height="60" rx="7" fill="#E7E2C6" stroke="#C9C3A4" stroke-width="1.4"/>
    <text x="22" y="34" font-size="14.5" fill="#46433A" font-weight="600">SMT-LIB2 input</text>
-   <text x="22" y="51" font-size="11.5" fill="#8C8879">parsed into a hash-consed DAG; SimplifyingNodeFactory rewrites</text>
-   <text x="22" y="66" font-size="11.5" fill="#8C8879">each node as it is built</text>
+   <text x="22" y="51" font-size="11.5" fill="#8C8879">parsed into a hash-consed multigraph; SimplifyingNodeFactory</text>
+   <text x="22" y="66" font-size="11.5" fill="#8C8879">rewrites each node as it is built</text>
    </a>
    <a href="#stage-fp-prepare">
    <title>Floating-point preparation — click for a summary</title>
@@ -193,10 +200,21 @@ the pipeline repeats itself.
    <p class="pipe-hint">Click a stage for a summary of it.</p>
 
 Nothing in the diagram is a separate program or a separate traversal of
-the input from scratch: the formula is one hash-consed DAG throughout, and
+the input from scratch: the formula is one hash-consed multigraph
+throughout, and
 each stage rewrites it in place. The node factory is already simplifying
-as the parser builds the DAG, so the formula reaching the first stage has
-had the cheap local rewrites applied to it.
+as the parser builds the multigraph, so the formula reaching the first
+stage has had the cheap local rewrites applied to it.
+
+A session that has engaged the incremental driver does not come this way
+at all. The driver keeps one SAT solver and one encoding alive across
+queries and preprocesses what each ``check-sat`` added rather than the
+whole formula, so the sequence above describes only the solves that
+precede engagement, and those the driver declines to take. It engages on
+the 32nd solve of a pure ``QF_BV`` or ``QF_ABV`` session and the third of
+any other, or from the first with ``--incremental=on``, and never with
+``--incremental=off``. :doc:`incremental-solving` describes what it does
+instead.
 
 The stages in detail
 --------------------
@@ -228,7 +246,7 @@ runs them.
    </div>
    <div class="pipe-detail" id="stage-size-reducing">
    <h4>Size-reducing passes</h4>
-   <p>A sequence chosen so that no pass in it can make the DAG bigger. Each one can expose work for the others — eliminating an unconstrained variable can make an equality propagatable, which can fix more bits — so the sequence runs once and is then repeated until a round changes nothing. Rebuilding the analysis state each round is what makes the repeat expensive, so it is entered only for a formula with no array operations and fewer nodes than <code>--size-reducing-fixed-point-limit</code>; passing <code>-1</code> drops the size condition.</p>
+   <p>A sequence chosen so that no pass in it can make the multigraph bigger. Each one can expose work for the others — eliminating an unconstrained variable can make an equality propagatable, which can fix more bits — so the sequence runs once and is then repeated until a round changes nothing. Rebuilding the analysis state each round is what makes the repeat expensive, so it is entered only for a formula with no array operations and fewer nodes than <code>--size-reducing-fixed-point-limit</code>; passing <code>-1</code> drops the size condition.</p>
    </div>
    <div class="pipe-detail" id="stage-fp-lower">
    <h4>Floating-point lowering</h4>
@@ -236,7 +254,7 @@ runs them.
    </div>
    <div class="pipe-detail" id="stage-simplify">
    <h4>Simplify and solve</h4>
-   <p>The main simplification loop: equality propagation, then the general simplifier, then the linear bit-vector equation solver, repeated until a round returns the formula it started with. Because the DAG is hash-consed that comparison is a pointer comparison, not a traversal. Unlike the size-reducing sequence above this loop is not guarded by a size limit, its passes being the ones that shrink formulas most reliably.</p>
+   <p>The main simplification loop: equality propagation, then the general simplifier, then the linear bit-vector equation solver, repeated until a round returns the formula it started with. Because the multigraph is hash-consed that comparison is a pointer comparison, not a traversal. Unlike the size-reducing sequence above this loop is not guarded by a size limit, its passes being the ones that shrink formulas most reliably.</p>
    </div>
    <div class="pipe-detail" id="stage-cbp-2">
    <h4>Constant bit propagation</h4>
@@ -286,8 +304,8 @@ condition.
 **The simplify-and-solve loop** repeats for the same reason but is not
 guarded, because its passes are the ones that shrink the formula most
 reliably. It stops as soon as a round returns a formula equal to the one
-it started with. Since the DAG is hash-consed, that comparison is a
-pointer comparison.
+it started with. Since the multigraph is hash-consed, that comparison is
+a pointer comparison.
 
 **Array refinement** is not a simplification at all. When the formula
 still contains array operations, the encoding handed to the SAT solver
