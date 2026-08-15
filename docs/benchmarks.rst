@@ -57,3 +57,16 @@ the STP commit, the compiler, and the exact SAT solver library it was linked
 against — identified by hash rather than by version string, since several
 builds of the same version can be present on one machine and only one of them
 was linked.
+
+All of it is published, in `stp/benchmarks-data
+<https://github.com/stp/benchmarks-data>`__: the binary itself, the harness
+that ran it, the frozen benchmark manifests, and the raw data this page
+summarises — per-run wall time, CPU time and peak memory for all 160,610
+instances, each run's retained solver output, and the corpus index that gives
+the sha256 of every benchmark measured. The figures above are read from there
+live, so a new campaign appears here as soon as it is published.
+
+Two things are deliberately left out of the campaign list. A run over an ad-hoc
+selection of files is an experiment rather than a result about STP, and a
+campaign whose binary was not archived cannot be re-run by anyone, so neither
+is published.

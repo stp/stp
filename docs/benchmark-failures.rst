@@ -37,3 +37,8 @@ necessarily faults in STP:
    in ``QF_AUFBV``, nested array sorts, or real arithmetic beyond ``to_fp``
    arguments. These are excluded from the solved counts and from PAR-2, since
    a missing feature is not a performance result.
+
+What STP printed on each of these is kept. `stp/benchmarks-data
+<https://github.com/stp/benchmarks-data>`__ carries the retained stdout and
+stderr of every run, so a classification on this page can be checked, or
+disputed, without re-running the campaign.

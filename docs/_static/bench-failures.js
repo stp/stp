@@ -4,7 +4,8 @@
 (function () {
   'use strict';
 
-  var BASE = '_static/bench/';
+  /* stp/benchmarks-data, same as bench.js; see the note there. */
+  var BASE = window.BENCH_DATA_BASE || 'https://stp.github.io/benchmarks-data/data/';
 
   function el(tag, cls, text) {
     var e = document.createElement(tag);

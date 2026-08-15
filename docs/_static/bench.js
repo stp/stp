@@ -1,13 +1,21 @@
-/* Renders the benchmark pages from the JSON that scripts/bench exports.
+/* Renders the benchmark pages from the JSON published by stp/benchmarks-data.
  *
  * The data files are static: campaigns.json lists every campaign with its
  * provenance and headline, and summary/<name>.json carries the per-logic and
  * per-family breakdown. Nothing here is generated at build time, so refreshing
- * the numbers means dropping in new JSON, not rebuilding the manual. */
+ * the numbers means publishing new JSON, not rebuilding the manual. */
 (function () {
   'use strict';
 
-  var BASE = '_static/bench/';
+  /* The data lives in its own repository, because a campaign is tens of
+     megabytes of results and a 24 MB binary several times a year, and none of
+     that is source. Both sites are served from stp.github.io, so this fetch is
+     same-origin in production; the URL is absolute rather than root-relative
+     so a local build of the manual shows real numbers too.
+
+     window.BENCH_DATA_BASE overrides it, for testing a change to the data
+     against a change to this page. */
+  var BASE = window.BENCH_DATA_BASE || 'https://stp.github.io/benchmarks-data/data/';
 
   function el(tag, cls, text) {
     var e = document.createElement(tag);
