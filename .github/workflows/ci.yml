@@ -348,7 +348,8 @@ jobs:
   # signed int once the AIG passes ~270,600 nodes. The first two are issue
   # #881; the third turned up on fp-tests/rem-exponent-width-boundary.smt2
   # when the whole suite was swept rather than that one regression. All three
-  # are fixed in patches/abc/, and this job is what keeps them fixed.
+  # are fixed on the `stp` branch of the ABC fork the submodule points at, and
+  # this job is what keeps them fixed.
   #
   # -fno-sanitize-recover=all rather than UBSAN_OPTIONS=halt_on_error=1,
   # because it makes aborting a property of the binary rather than of whoever
