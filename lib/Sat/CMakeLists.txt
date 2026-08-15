@@ -53,3 +53,14 @@ endif()
 
 add_library(sat OBJECT ${sat_lib_to_add})
 
+# cryptominisat.h includes gmpxx.h, and the cryptominisat5 imported target
+# carries that requirement as PkgConfig::GMP in its link interface. Linking
+# the object library to the target is what brings GMP's include directory to
+# the compile of CryptoMinisat5.cpp; STP has no GMP lookup of its own. Only
+# the usage requirements travel: sat's objects reach libstp through
+# $<TARGET_OBJECTS:sat>, and libstp names the target on its own link line.
+# CRYPTOMINISAT5_INCLUDE_DIRS above stays because the target does not carry
+# CryptoMiniSat's own include directory, only the variable does.
+if (USE_CRYPTOMINISAT)
+    target_link_libraries(sat PRIVATE ${CRYPTOMINISAT5_LIBRARIES})
+endif()

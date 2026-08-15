@@ -157,8 +157,9 @@ finished binary rather than trusting the command line:
    ``Release``, and the default is ``RelWithDebInfo``, so without this the
    published binary asserts on every query.
 
-The static link also needs ``libgmp.a`` and ``libgmpxx.a``, hence
-``libgmp-dev`` on the runner: the image supplies the shared library only.
+The static link also needs ``libgmp.a``, which CryptoMiniSat's config puts
+on the link line, hence ``libgmp-dev`` on the runner: the image supplies the
+shared library only.
 
 Pinned revisions
 ~~~~~~~~~~~~~~~~
