@@ -492,12 +492,16 @@ include_directories("${CMAKE_CURRENT_BINARY_DIR}/include")
 include_directories(# For extlib-constbv
                     ${PROJECT_SOURCE_DIR}/lib
                    )
-# The vendored upstream submodules cannot simply be committed to, so local
-# fixes are carried as patches and applied here, at configure time, before
-# anything is built. Each submodule that takes patches has its own directory
+# A submodule that points straight at its upstream cannot be committed to, so
+# local fixes to one are carried as patches and applied here, at configure
+# time, before anything is built. Each such submodule has its own directory
 # under patches/, named for the library; the patches inside are relative to
 # that submodule's own root, so they are the plain `git diff` its checkout
 # produces.
+#
+# ABC is no longer among them: lib/extlib-abc points at stp/abc, a fork, so
+# its fixes are ordinary commits on that repository's `stp` branch. See
+# docs/code-guide.rst for how that fork is laid out.
 #
 # Applying is idempotent: a patch that reverse-applies cleanly is already in
 # the tree and is skipped, so re-running cmake, or configuring a second build
@@ -548,10 +552,9 @@ function(stp_apply_vendored_patches _label _subdir _sentinel)
   endforeach()
 endfunction()
 
-stp_apply_vendored_patches(abc "lib/extlib-abc" "src/opt/dar/darCut.c")
 stp_apply_vendored_patches(symfpu "lib/extlib-symfpu/symfpu" "core/convert.h")
 
-# ABC is a vendored upstream submodule (berkeley-abc/abc); mark its headers as
+# ABC is a vendored submodule; mark its headers as
 # SYSTEM so their warnings (e.g. -Wpedantic zero-size arrays, -Wunused-parameter
 # in inline helpers) don't trip -Werror in the STP translation units that
 # include them.

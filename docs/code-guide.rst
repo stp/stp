@@ -44,7 +44,19 @@ component of STP. The headers that go with them live under
 Third-party code that is compiled into STP also lives under ``lib/``:
 
 -  ``extlib-abc``: The `ABC <https://github.com/berkeley-abc/abc>`__
-   package, used to build AIGs and convert them to CNF. A git submodule.
+   package, used to build AIGs and convert them to CNF. A git submodule,
+   pointing at `stp/abc <https://github.com/stp/abc>`__ rather than at ABC
+   itself. That fork keeps two branches: ``master`` mirrors upstream
+   untouched, and ``stp`` -- the branch the submodule is pinned to -- carries
+   our changes as commits on top of the upstream revision we have taken.
+   Bumping ABC means rebasing ``stp`` onto a newer ``master`` in that
+   repository, then moving the pin here.
+
+   The fork exists because the changes cannot live upstream: some are fixes
+   that were offered to ABC and not taken, and the rest adjust which parts of
+   ABC get built. STP uses four of its packages -- ``aig/aig``, ``aig/gia``,
+   ``opt/dar`` and ``sat/cnf`` -- and ABC's build compiles every other one
+   too, including SAT solvers that STP already links its own copies of.
 -  ``extlib-cli11``: `CLI11 <https://github.com/CLIUtils/CLI11>`__, the
    command-line parser of the ``stp`` executable. Header-only, so it is
    compiled into the tool but never into ``libstp``. A git submodule.
