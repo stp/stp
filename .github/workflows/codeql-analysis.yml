@@ -30,6 +30,8 @@ jobs:
       with:
         submodules: 'true'
 
+    # libgmp-dev is CryptoMiniSat's, which setup-cms.sh builds below and this
+    # job links; STP itself does not use GMP.
     - name: Packages
       if: matrix.language == 'cpp'
       run: |
@@ -40,6 +42,7 @@ jobs:
           cmake \
           flex \
           git \
+          libgmp-dev \
           python3 \
           python3-pip \
           python3-setuptools \

@@ -123,10 +123,10 @@ runs:
   # ahead of it if both were compiled in, so this build deliberately does not
   # enable USE_CADICAL. CryptoMiniSat uses CaDiCaL internally regardless.
   #
-  # Linking it needs the static GMP archive (libgmp.a): the CryptoMiniSat
-  # config puts GMP on the link line, and with STATICCOMPILE it is looked up
-  # as an archive, hence libgmp-dev above -- the runner image supplies the
-  # shared library only.
+  # Linking it needs GMP: the CryptoMiniSat config puts it on the link line,
+  # and with STATICCOMPILE it is looked up as libgmp.a, hence libgmp-dev
+  # above. The runner image happens to ship that package already, but the
+  # dependency is this action's, so it is named rather than assumed.
   #
   # FORCE_CMS turns a CryptoMiniSat that was not found into a configure-time
   # error. Without it find_package failing is silent: the build simply falls
