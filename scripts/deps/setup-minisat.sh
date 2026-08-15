@@ -2,6 +2,12 @@
 
 set -e -u -o pipefail
 
+# MiniSat needs zlib -- it reads gzipped DIMACS, and its public headers include
+# zlib.h, so a build of STP with -DUSE_MINISAT=ON needs the headers too. No
+# other part of STP uses zlib, so install it here rather than as a baseline
+# dependency: on Debian-likes that is `zlib1g-dev`, on macOS zlib ships with
+# the SDK.
+
 dep_dir="deps"
 install_dir=$(readlink -fm "${dep_dir}"/install)
 

@@ -22,14 +22,19 @@ On a Debian-like platform most of it comes from the package manager:
 
 .. code-block:: bash
 
-    sudo apt-get install build-essential cmake bison flex libgmp-dev \
-        zlib1g-dev python3
+    sudo apt-get install git build-essential cmake bison flex patch python3
 
 A python3 interpreter is needed at build time -- it generates the AST kind
-tables -- and also for the Python interface and the test suite. GMP is
-needed when building with CryptoMiniSat.
+tables -- and also for the Python interface and the test suite. git is needed
+for the submodules and for the vendored-patch step that runs at configure
+time; ``patch`` is used when building LibBF.
 
-Three dependencies are vendored as submodules and need nothing installed:
+The SAT backends bring their own dependencies, which are needed only if you
+build that backend, and which the ``scripts/deps`` script for each one names:
+CryptoMiniSat needs GMP (``libgmp-dev``), MiniSat needs zlib
+(``zlib1g-dev``). Neither is used by STP itself.
+
+Four dependencies are vendored as submodules and need nothing installed:
 ABC, mimalloc, the command-line parser
 `CLI11 <https://github.com/CLIUtils/CLI11>`__, and the header-only
 floating-point library `SymFPU <https://github.com/martin-cs/symfpu>`__.
