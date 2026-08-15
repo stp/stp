@@ -882,6 +882,7 @@ jobs:
           flex \
           git \
           ninja-build \
+          python3 \
           zlib1g-dev
 
     - name: Dependencies

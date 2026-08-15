@@ -13,7 +13,7 @@ Comprehensive details are provided in the manual and homepage: https://stp.githu
 For a quick install:
 
 ```
-sudo apt-get install git build-essential cmake bison flex curl patch libgmp-dev python3 perl
+sudo apt-get install git build-essential cmake bison flex curl patch libgmp-dev python3
 git clone https://github.com/stp/stp
 cd stp
 git submodule init && git submodule update

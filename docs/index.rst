@@ -27,7 +27,7 @@ On a Debian-like platform, from a clean checkout:
 .. code-block:: bash
 
     sudo apt-get install git build-essential cmake bison flex curl patch \
-        libgmp-dev python3 perl
+        libgmp-dev python3
     git clone https://github.com/stp/stp
     cd stp
     git submodule init && git submodule update

@@ -440,9 +440,7 @@ add_feature_info(ThreadLocal USE_THREAD_LOCAL "Enables use of thread-local stora
 if(WIN32)
   set(FLEX_PATH_HINT "e:/cygwin/bin" CACHE STRING "Flex path hints, can be null if on your path")
   set(BISON_PATH_HINT "e:/cygwin/bin" CACHE STRING "Bison path hints, can be null if on your path")
-  set(PERL_PATH_HINT "C:/Perl/bin" CACHE STRING "Perl path hints, can be null if on your pat")
-
-  set(PHINTS ${PERL_PATH_HINT} ${FLEX_PATH_HINT} ${BISON_PATH_HINT})
+  set(PHINTS ${FLEX_PATH_HINT} ${BISON_PATH_HINT})
   add_definitions(${STP_DEFS_COMM})
 endif()
 
@@ -964,9 +962,6 @@ if (BISON_VERSION VERSION_LESS "2.6")
     message(FATAL_ERROR "STP requires Bison 2.6 or newer")
 endif()
 
-# required for genkinds.pl and a few other scripts
-find_package(Perl REQUIRED)
-
 # -----------------------------------------------------------------------------
 # Floating-point support (uses the header-only SymFPU library)
 # -----------------------------------------------------------------------------
@@ -1073,42 +1068,47 @@ set(STP_EXPORT_NAME "STPTargets")
 
 option(ENABLE_TESTING "Enable testing" OFF)
 
-# try finding python if the user did not explicitly said that
-# he/she does not want python bindings
-if((NOT DEFINED ENABLE_PYTHON_INTERFACE) OR ENABLE_PYTHON_INTERFACE)
-    # Python 3 only. PYTHON_EXECUTABLE stays the documented way to choose the
-    # interpreter (the rest of the build and our CI use that name), so feed it
-    # to the finder and write the validated result back to it.
-    set(PYTHON_DOC_STRING "Python 3 interpreter for the bindings and the test suite")
-    if(CMAKE_VERSION VERSION_LESS 3.12)
-        # FindPython3 arrived in CMake 3.12; on older CMake ask the deprecated
-        # module for a Python 3 interpreter instead. It searches PYTHON_EXECUTABLE
-        # directly, so no hint needs forwarding.
-        find_package(PythonInterp 3)
-        set(Python3_EXECUTABLE "${PYTHON_EXECUTABLE}")
-        set(Python3_Interpreter_FOUND ${PYTHONINTERP_FOUND})
-    else()
-        if(PYTHON_EXECUTABLE)
-            set(Python3_EXECUTABLE "${PYTHON_EXECUTABLE}" CACHE FILEPATH
-                "${PYTHON_DOC_STRING}" FORCE)
-        endif()
-        find_package(Python3 COMPONENTS Interpreter)
-    endif()
-
-    # Publish the result in the cache so that subprojects looking for an
-    # interpreter of their own (e.g. gtest, which still uses the deprecated
-    # FindPythonInterp) pick up this Python 3 rather than finding a Python 2.
-    if(Python3_Interpreter_FOUND)
-        set(PYTHON_EXECUTABLE "${Python3_EXECUTABLE}" CACHE FILEPATH
+# A Python 3 interpreter is always needed: lib/AST/genkinds.py generates the
+# kind tables at build time, so the search cannot be tied to the (optional)
+# Python bindings. PYTHON_EXECUTABLE stays the documented way to choose the
+# interpreter (the rest of the build and our CI use that name), so feed it
+# to the finder and write the validated result back to it.
+set(PYTHON_DOC_STRING "Python 3 interpreter for the code generator, the bindings and the test suite")
+if(CMAKE_VERSION VERSION_LESS 3.12)
+    # FindPython3 arrived in CMake 3.12; on older CMake ask the deprecated
+    # module for a Python 3 interpreter instead. It searches PYTHON_EXECUTABLE
+    # directly, so no hint needs forwarding.
+    find_package(PythonInterp 3)
+    set(Python3_EXECUTABLE "${PYTHON_EXECUTABLE}")
+    set(Python3_Interpreter_FOUND ${PYTHONINTERP_FOUND})
+else()
+    if(PYTHON_EXECUTABLE)
+        set(Python3_EXECUTABLE "${PYTHON_EXECUTABLE}" CACHE FILEPATH
             "${PYTHON_DOC_STRING}" FORCE)
-    else()
-        set(PYTHON_EXECUTABLE "" CACHE FILEPATH "${PYTHON_DOC_STRING}" FORCE)
-        # Don't let a rejected interpreter stick in the cache, or every later
-        # reconfigure would keep re-testing the same unsuitable one.
-        unset(Python3_EXECUTABLE CACHE)
     endif()
+    find_package(Python3 COMPONENTS Interpreter)
+endif()
 
-    if(Python3_Interpreter_FOUND AND BUILD_SHARED_LIBS)
+# Publish the result in the cache so that subprojects looking for an
+# interpreter of their own (e.g. gtest, which still uses the deprecated
+# FindPythonInterp) pick up this Python 3 rather than finding a Python 2.
+if(Python3_Interpreter_FOUND)
+    set(PYTHON_EXECUTABLE "${Python3_EXECUTABLE}" CACHE FILEPATH
+        "${PYTHON_DOC_STRING}" FORCE)
+else()
+    set(PYTHON_EXECUTABLE "" CACHE FILEPATH "${PYTHON_DOC_STRING}" FORCE)
+    # Don't let a rejected interpreter stick in the cache, or every later
+    # reconfigure would keep re-testing the same unsuitable one.
+    unset(Python3_EXECUTABLE CACHE)
+    message(FATAL_ERROR
+        "STP requires a Python 3 interpreter to generate lib/AST/ASTKind.{h,cpp}. "
+        "Install python3, or point -DPYTHON_EXECUTABLE=<path> at one.")
+endif()
+
+# The Python bindings are a separate, optional matter: they additionally need
+# a shared library to bind against.
+if((NOT DEFINED ENABLE_PYTHON_INTERFACE) OR ENABLE_PYTHON_INTERFACE)
+    if(BUILD_SHARED_LIBS)
         set(ENABLE_PYTHON_INTERFACE ON)
     else()
         set(ENABLE_PYTHON_INTERFACE OFF)
