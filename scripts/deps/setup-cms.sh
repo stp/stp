@@ -2,6 +2,11 @@
 
 set -e -u -o pipefail
 
+# CryptoMiniSat needs GMP, both to build and to be found afterwards: the
+# cryptominisat5Config.cmake it installs asks pkg-config for gmp. Nothing else
+# in STP uses GMP, so install it here rather than as a baseline dependency --
+# on Debian-likes that is `libgmp-dev`, on macOS `brew install gmp`.
+
 dep_dir="deps"
 install_dir=$(readlink -fm "${dep_dir}"/install)
 

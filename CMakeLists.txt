@@ -783,26 +783,37 @@ option(NOCRYPTOMINISAT "Don't try to use cryptominisat" OFF)
 
 if (NOT NOCRYPTOMINISAT)
   set(cryptominisat5_DIR "" CACHE PATH "Path to directory containing cryptominisat5Config.cmake")
-  find_package(GMP REQUIRED)
-  message(STATUS "GMP includes: ${GMP_INCLUDE_DIRS}")
-  message(STATUS "GMP libraries: ${GMP_LIBRARIES}")
-  include_directories(SYSTEM ${GMP_INCLUDE_DIRS})
-  set(LIBS ${LIBS} ${GMP_LIBRARIES})
-  # A static CryptoMiniSat references cadical/cadiback imported targets but its
-  # config file does not find them itself; a shared CryptoMiniSat has no such
-  # packages, hence QUIET. cadical's export in turn references Threads::Threads.
-  find_package(Threads QUIET)
-  find_package(cadical CONFIG QUIET)
-  find_package(cadiback CONFIG QUIET)
-  find_package(cryptominisat5 CONFIG)
-  if (cryptominisat5_FOUND AND HAVE_FLAG_STD_CPP11 AND (NOT NOCRYPTOMINISAT))
-    message(STATUS "CryptoMiniSat5 dynamic lib: ${CRYPTOMINISAT5_LIBRARIES}")
-    message(STATUS "CryptoMiniSat5 static lib:  ${CRYPTOMINISAT5_STATIC_LIBRARIES}")
-    message(STATUS "CryptoMiniSat5 static lib deps: ${CRYPTOMINISAT5_STATIC_LIBRARIES_DEPS}")
-    message(STATUS "CryptoMiniSat5 include dirs: ${CRYPTOMINISAT5_INCLUDE_DIRS}")
-    add_definitions(-DUSE_CRYPTOMINISAT)
-    set(USE_CRYPTOMINISAT ON)
+  # GMP is CryptoMiniSat's dependency, not STP's -- no STP source includes it.
+  # Look for it before CryptoMiniSat and treat it as part of finding that
+  # package: cryptominisat5Config.cmake asks pkg-config for gmp with REQUIRED,
+  # which aborts the whole configure when it is missing, so a box with neither
+  # installed would fail here rather than quietly building without CMS.
+  # scripts/deps/setup-cms.sh names libgmp-dev among the packages it needs.
+  find_package(GMP)
+  if (NOT GMP_FOUND)
+    message(STATUS "GMP not found, skipping CryptoMiniSat "
+                   "(install libgmp-dev to enable it)")
   else()
+    message(STATUS "GMP includes: ${GMP_INCLUDE_DIRS}")
+    message(STATUS "GMP libraries: ${GMP_LIBRARIES}")
+    # A static CryptoMiniSat references cadical/cadiback imported targets but its
+    # config file does not find them itself; a shared CryptoMiniSat has no such
+    # packages, hence QUIET. cadical's export in turn references Threads::Threads.
+    find_package(Threads QUIET)
+    find_package(cadical CONFIG QUIET)
+    find_package(cadiback CONFIG QUIET)
+    find_package(cryptominisat5 CONFIG)
+    if (cryptominisat5_FOUND AND HAVE_FLAG_STD_CPP11 AND (NOT NOCRYPTOMINISAT))
+      message(STATUS "CryptoMiniSat5 dynamic lib: ${CRYPTOMINISAT5_LIBRARIES}")
+      message(STATUS "CryptoMiniSat5 static lib:  ${CRYPTOMINISAT5_STATIC_LIBRARIES}")
+      message(STATUS "CryptoMiniSat5 static lib deps: ${CRYPTOMINISAT5_STATIC_LIBRARIES_DEPS}")
+      message(STATUS "CryptoMiniSat5 include dirs: ${CRYPTOMINISAT5_INCLUDE_DIRS}")
+      add_definitions(-DUSE_CRYPTOMINISAT)
+      set(USE_CRYPTOMINISAT ON)
+      # Only a build that actually links CryptoMiniSat needs GMP on its line.
+      include_directories(SYSTEM ${GMP_INCLUDE_DIRS})
+      set(LIBS ${LIBS} ${GMP_LIBRARIES})
+    endif()
   endif()
 endif()
 add_feature_info(CryptoMiniSat USE_CRYPTOMINISAT "Enables CryptoMiniSat solver, allows --cryptominisat5 option")

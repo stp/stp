@@ -27,7 +27,7 @@ On a Debian-like platform, from a clean checkout:
 .. code-block:: bash
 
     sudo apt-get install git build-essential cmake bison flex curl patch \
-        libgmp-dev python3
+        python3 libgmp-dev
     git clone https://github.com/stp/stp
     cd stp
     git submodule init && git submodule update
@@ -42,7 +42,9 @@ Every step is needed. ABC and mimalloc are submodules and are built as
 part of STP; LibBF is required; and a build with no SAT backend enabled
 does not configure. The two ``setup`` scripts fetch and build LibBF and
 the SAT solver into ``deps/``, where the build finds them without being
-told where to look.
+told where to look. ``libgmp-dev`` is in the list for CryptoMiniSat's sake
+-- it is the only thing that needs it, and a build without CryptoMiniSat
+does not.
 
 That gives a solver backed by CryptoMiniSat, which is the default.
 CaDiCaL is also supported, and is chosen at configure time rather than at
