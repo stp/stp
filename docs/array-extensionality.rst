@@ -6,7 +6,9 @@ about arrays as whole values with the ``--array-equality`` option: it
 then decides the quantifier-free *extensional* theory of arrays, in
 which equality and ``distinct`` between array terms are first-class
 atoms. Without the option an equality between two array terms is
-refused, with an error, at the point the term is built.
+refused, with an error, at the point the term is built -- except a
+syntactically reflexive one, which the simplifying node factory folds to
+true before the rejection is reached.
 
 The implementation is an STP-specific integration of the
 lemmas-on-demand procedure of
@@ -14,7 +16,7 @@ lemmas-on-demand procedure of
     Robert Brummayer and Armin Biere,
     *Lemmas on Demand for the Extensional Theory of Arrays*,
     Journal on Satisfiability, Boolean Modeling and Computation 6
-    (2010), 165--201.
+    (2009), 165--201.
 
 Usage
 -----
@@ -41,17 +43,19 @@ With the option enabled:
 * ``(= a b)`` and ``(distinct a b)`` over array terms are decided, as is
   equality involving ``store`` chains and array-valued ``ite``;
 * ``(get-model)`` prints each array as a valid nullary ``define-fun``
-  whose body is a constant-zero array with the observed writes stored on
-  top, in ascending index order — the model replays in any conforming
+  whose body is a constant default cell with the observed writes stored
+  on top, in ascending index order — the model replays in any conforming
   SMT-LIB2 solver. This form is used whenever the option is on, even for
   a query containing no array equality; only with the option off does
   the pre-feature array printer run;
 * ``vc_getCounterExampleArray`` returns one entry per concrete index in
   ascending index order;
-* nullary array-sorted ``define-fun`` is accepted by the SMT-LIB2
-  parser;
 * array-valued ``(get-value ...)`` is rejected as unsupported (use
   ``(get-model)``).
+
+Nullary array-sorted ``define-fun`` is accepted by the SMT-LIB2 parser
+whether or not the option is on: such a definition is a pure name for its
+body, and benchmarks use them without any whole-array equality in sight.
 
 Without the option, STP decides exactly what it decided before the
 feature existed, with one deliberate exception: an equality between whole
@@ -93,17 +97,30 @@ STP's existing bit-blaster and SAT solver provide ``DP_B``, the solver
 for each abstracted candidate formula:
 
 1. **Opaque construction and solve-boundary lowering.** Construction of
-   an equality between whole arrays produces a dedicated, opaque
-   ``ARRAY_EQ`` node whose operands remain visible. Function, ``let`` and
-   query substitution therefore specialize the operands normally. Once
-   the complete query has been assembled, and before ordinary STP
-   preprocessing starts, a DAG traversal replaces every reachable
-   ``ARRAY_EQ`` with a fresh Boolean *abstraction variable* and creates
+   an equality between whole arrays produces a dedicated, near-opaque
+   ``ARRAY_EQ`` node whose operands remain visible. The node factory folds
+   the shapes that are decidable on sight -- reflexivity, two writes to
+   the same index, and an if-then-else against one of its own branches --
+   and leaves everything else alone. Function, ``let`` and query
+   substitution therefore specialize the operands normally. Once the
+   complete query has been assembled, a DAG traversal replaces every
+   reachable ``ARRAY_EQ`` with a fresh Boolean *abstraction variable* and
+   creates
    its witness record. Repeated or operand-swapped pairs reuse one record
    within that solve, and a reflexive equality folds to true. Records,
    proxies and witnesses are solve-local and are rebuilt for the next
-   query; only the opaque public AST persists. No opaque array equality
-   reaches STP's ordinary simplifier, array transformer, or bit-blaster.
+   query; only the opaque public AST persists. No ``ARRAY_EQ`` reaches the
+   array transformer or the bit-blaster.
+
+   Two preprocessing passes deliberately run *before* that lowering, and
+   are the only points in the solve that see an ``ARRAY_EQ`` at all.
+   Equality propagation goes first, so that a definitional equality
+   substitutes its symbol operand away and never reaches abstraction.
+   Unconstrained-variable elimination goes second, because an equality
+   with an unconstrained operand is a free Boolean and settles there
+   rather than costing a record, a witness pair and a refinement loop.
+   Afterwards the operands sit under witness reads, and the unconstrained
+   array rules turn themselves off.
 
    One shape skips abstraction entirely: a chain of writes equated
    with its own base array (the frame condition ``store(a,i,v) = a``
@@ -192,9 +209,8 @@ for each abstracted candidate formula:
    witness indices and four virtual reads per if-then-else where the
    direct rules charge one Boolean literal, so it is worse on the
    paper's own bound (Proposition 10.1), and each of its two proxies is
-   unconstrained under one of the two assignments of the condition. On
-   nested array if-then-else under an equality that cost 9.35s at
-   nesting depth 32 against 0.02s here, and it grew with depth where
+   unconstrained under one of the two assignments of the condition. Its cost also
+   grew with nesting depth on array if-then-else under an equality, where
    the direct rules are flat.
 
    Per §11.2 the checker keeps one
@@ -235,7 +251,9 @@ for each abstracted candidate formula:
 
 5. **Models.** When the checker finds no conflict, the fixed point of
    its propagation defines each array's observed contents; unobserved
-   indices default to zero. These observations — including the witness
+   indices take a single default cell, which is zero except for an array
+   of ``RoundingMode`` elements, where zero is not a mode at all and the
+   default is ``RNE``. These observations — including the witness
    indices of false equalities — feed the model printer and the
    programmatic model APIs.
 

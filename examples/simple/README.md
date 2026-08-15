@@ -1,10 +1,14 @@
 Simple Example of STP's C API and using STP as an external CMake project
 ========================================================================
 
-A developer can use either the **build tree** or **installed** version of STP. By
-default the STP build system registers STP with the user's CMake user package
-registry when it is built so the build tree version of STP can be used easily
-out of the box.
+A developer can use either the **build tree** or **installed** version of STP.
+Point `CMAKE_PREFIX_PATH` at whichever one you want `find_package(STP)` to
+find; the "Detection of STP" section below covers both.
+
+STP does call `export(PACKAGE STP)`, which used to register the build tree in
+the CMake user package registry so that it was found with no configuration at
+all. Since STP's CMake baseline rose to 3.18 that call does nothing unless
+`CMAKE_EXPORT_PACKAGE_REGISTRY` is switched on, so do not rely on it.
 
 To build this example make sure you have built STP and then in this directory
 run:
@@ -25,7 +29,7 @@ If you use ``cmake-gui``
 4. If STP was detected then click on the generate button. If not see the next section.
 5. Exit
 
-Now you have succesfully configured you can build and run the simple example:
+Now that you have successfully configured, you can build and run the simple example:
 
 UNIX Makefiles
 --------------

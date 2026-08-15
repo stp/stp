@@ -8,7 +8,7 @@ bug finders, cryptographic algorithms, intelligent fuzzers and model
 checkers.
 
 -  Easy to embed or run standalone
--  Bindings for C, C++, and Python
+-  Bindings for C and Python
 -  Supports multiple query input formats
 -  Open source and MIT licensed
 
@@ -38,17 +38,19 @@ On a Debian-like platform, from a clean checkout:
     cmake --build . -j$(nproc)
     sudo cmake --install .
 
-Every step is needed. ABC and mimalloc are submodules and are built as
-part of STP; LibBF is required; and a build with no SAT backend enabled
+Every step is needed. ABC, mimalloc, CLI11 and SymFPU are submodules and
+are built as part of STP; LibBF is required; and a build with no SAT backend enabled
 does not configure. The two ``setup`` scripts fetch and build LibBF and
 the SAT solver into ``deps/``, where the build finds them without being
 told where to look. ``libgmp-dev`` is in the list for CryptoMiniSat's sake
 -- it is the only thing that needs it, and a build without CryptoMiniSat
 does not.
 
-That gives a solver backed by CryptoMiniSat, which is the default.
-CaDiCaL is also supported, and is chosen at configure time rather than at
-run time; :doc:`building` has the recipe.
+That gives a solver backed by CryptoMiniSat, which is the default when it
+is the only backend compiled in. CaDiCaL is also supported and becomes the
+default when it is compiled in; either way ``--cryptominisat``, ``--cadical``
+and ``--minisat`` pick a compiled-in backend at run time. :doc:`building`
+has the recipe.
 
 With `Homebrew <https://brew.sh>`__:
 
@@ -104,7 +106,8 @@ Header
 ------
 
 The SMT-LIB2 format uses a header to tell the solver which type of
-problem is coming, the header needed is:
+problem is coming. Only ``set-logic`` is needed; ``set-info`` is accepted
+and ignored, and benchmark files usually carry it:
 
 .. code-block:: lisp
 
@@ -142,7 +145,7 @@ Declarations
 
 Bitvector expressions (or terms) are constructed out of bitvector
 constants, bitvector variables and the functions listed below. In STP
-all variables have to declared before the point of use. An example
+all variables have to be declared before the point of use. An example
 declaration of a bitvector variable of length, say 32, is as follows:
 
 .. code-block:: lisp
@@ -174,33 +177,40 @@ Following are some examples of bitvector constants in binary and hexadecimal:
     #x0f50
 
 The bitvector implementation in STP supports a very large number of
-functions and predicates. The functions are categorized into word-level
-functions, bitwise functions, and arithmetic functions.
+functions and predicates. The functions are categorised into word-level
+functions, bitwise functions and arithmetic functions; the predicates are
+listed after them.
 
 Word-level functions
 ~~~~~~~~~~~~~~~~~~~~
 
-+----------------+-----------------+----------------------------------+
-| Name           | Symbol          | Example                          |
-+================+=================+==================================+
-| Concatenation  | ``concat``      | ``(concat (_ bv0 16) x)``        |
-+----------------+-----------------+----------------------------------+
-| Extraction     | ``extract``     | ``((_ extract 7 0) o277135888)`` |
-+----------------+-----------------+----------------------------------+
-| Left Shift     | ``bvlshl``      | ``(bvlshl x y)``                 |
-+----------------+-----------------+----------------------------------+
-| Light Shift    | ``bvlshr``      | ``(bvlshr x y)``                 |
-+----------------+-----------------+----------------------------------+
-| Sign Extension | ``sign_extend`` | ``((_ sign_extend 24) x)``       |
-+----------------+-----------------+----------------------------------+
-| Array READ     | ``select``      | ``(select e829 v817)``           |
-+----------------+-----------------+----------------------------------+
-| Array WRITE    | ``store``       | ``(store a x y)``                |
-+----------------+-----------------+----------------------------------+
++------------------------+-----------------+----------------------------------+
+| Name                   | Symbol          | Example                          |
++========================+=================+==================================+
+| Concatenation          | ``concat``      | ``(concat (_ bv0 16) x)``        |
++------------------------+-----------------+----------------------------------+
+| Extraction             | ``extract``     | ``((_ extract 7 0) o277135888)`` |
++------------------------+-----------------+----------------------------------+
+| Shift Left             | ``bvshl``       | ``(bvshl x y)``                  |
++------------------------+-----------------+----------------------------------+
+| Logical Shift Right    | ``bvlshr``      | ``(bvlshr x y)``                 |
++------------------------+-----------------+----------------------------------+
+| Arithmetic Shift Right | ``bvashr``      | ``(bvashr x y)``                 |
++------------------------+-----------------+----------------------------------+
+| Zero Extension         | ``zero_extend`` | ``((_ zero_extend 24) x)``       |
++------------------------+-----------------+----------------------------------+
+| Sign Extension         | ``sign_extend`` | ``((_ sign_extend 24) x)``       |
++------------------------+-----------------+----------------------------------+
+| Repetition             | ``repeat``      | ``((_ repeat 4) x)``             |
++------------------------+-----------------+----------------------------------+
+| Array READ             | ``select``      | ``(select e829 v817)``           |
++------------------------+-----------------+----------------------------------+
+| Array WRITE            | ``store``       | ``(store a x y)``                |
++------------------------+-----------------+----------------------------------+
 
 Notes:
 
-- For extraction terms, say ``((_extract i j) t)``, *n* > *i* >= *j* >= 0, where
+- For extraction terms, say ``((_ extract i j) t)``, *n* > *i* >= *j* >= 0, where
   *n* is the length of *t*.
 
 - For left shift terms, ``t << k`` is equal to *k* 0’s appended to *t*. The length
@@ -226,6 +236,69 @@ Bitwise functions
 
 The arguments of bitwise functions have the same length.
 
+Arithmetic functions
+~~~~~~~~~~~~~~~~~~~~
+
++--------------------+------------+------------------+
+| Name               | Symbol     | Example          |
++====================+============+==================+
+| Addition           | ``bvadd``  | ``(bvadd x y)``  |
++--------------------+------------+------------------+
+| Subtraction        | ``bvsub``  | ``(bvsub x y)``  |
++--------------------+------------+------------------+
+| Negation           | ``bvneg``  | ``(bvneg x)``    |
++--------------------+------------+------------------+
+| Multiplication     | ``bvmul``  | ``(bvmul x y)``  |
++--------------------+------------+------------------+
+| Unsigned division  | ``bvudiv`` | ``(bvudiv x y)`` |
++--------------------+------------+------------------+
+| Signed division    | ``bvsdiv`` | ``(bvsdiv x y)`` |
++--------------------+------------+------------------+
+| Unsigned remainder | ``bvurem`` | ``(bvurem x y)`` |
++--------------------+------------+------------------+
+| Signed remainder   | ``bvsrem`` | ``(bvsrem x y)`` |
++--------------------+------------+------------------+
+| Signed modulus     | ``bvsmod`` | ``(bvsmod x y)`` |
++--------------------+------------+------------------+
+
+The arguments of arithmetic functions have the same length, and the result
+has that length too. Division and remainder are total, as SMT-LIB2 requires:
+``bvudiv`` by zero is the all-ones bitvector, ``bvsdiv`` by zero is all-ones
+for a non-negative dividend and one for a negative one, and ``bvurem``,
+``bvsrem`` and ``bvsmod`` by zero return their first argument.
+
+Predicates
+~~~~~~~~~~
+
+Predicates compare two bitvectors of the same length and produce a
+formula rather than a term.
+
++---------------------------+-----------+-----------------+
+| Name                      | Symbol    | Example         |
++===========================+===========+=================+
+| Equality                  | ``=``     | ``(= x y)``     |
++---------------------------+-----------+-----------------+
+| Unsigned less than        | ``bvult`` | ``(bvult x y)`` |
++---------------------------+-----------+-----------------+
+| Unsigned less or equal    | ``bvule`` | ``(bvule x y)`` |
++---------------------------+-----------+-----------------+
+| Unsigned greater than     | ``bvugt`` | ``(bvugt x y)`` |
++---------------------------+-----------+-----------------+
+| Unsigned greater or equal | ``bvuge`` | ``(bvuge x y)`` |
++---------------------------+-----------+-----------------+
+| Signed less than          | ``bvslt`` | ``(bvslt x y)`` |
++---------------------------+-----------+-----------------+
+| Signed less or equal      | ``bvsle`` | ``(bvsle x y)`` |
++---------------------------+-----------+-----------------+
+| Signed greater than       | ``bvsgt`` | ``(bvsgt x y)`` |
++---------------------------+-----------+-----------------+
+| Signed greater or equal   | ``bvsge`` | ``(bvsge x y)`` |
++---------------------------+-----------+-----------------+
+
+STP also accepts the overflow predicates ``bvsaddo``, ``bvuaddo``,
+``bvssubo``, ``bvusubo``, ``bvsmulo``, ``bvumulo``, ``bvsdivo`` and
+``bvnego``, and the one-bit comparison ``bvcomp``.
+
 Footer
 ------
 
@@ -240,8 +313,8 @@ check the satisfiability, then to exit:
 Examples
 --------
 
-There are many SMT-LIB2 format examples in STP’s source code repository.
-Look for files with a .smt2 extension here. Signed division of -1/-2 =
+There are many SMT-LIB2 format examples in STP’s source code repository:
+look for files with a ``.smt2`` extension under |queryfiles|_. Signed division of -1/-2 =
 0, should be satisfiable:
 
 .. code-block:: lisp
@@ -267,10 +340,8 @@ Python usage
     s.add(a == 5)
     s.add(b == 6)
     s.add(a + b == c)
-    s.check()
-    >>> True
-    s.model()
-    >>> {'a': 5, 'b': 6, 'c': 11}
+    s.check()          # True
+    s.model()          # {'a': 5, 'b': 6, 'c': 11}
 
 C library usage
 ===============
@@ -281,7 +352,7 @@ can be used with one of two header files, depending on the preferred
 language:
 
 -  ``include/stp/c_interface.h`` for a C interface to STP
--  ``include/stp/cpp_interface.h`` for a C++ interface to STP
+-  ``include/stp/fp.hpp`` for the floating-point helpers
 
 An example C header usage can be as simple as:
 
@@ -292,6 +363,9 @@ An example C header usage can be as simple as:
 
     int main(int argc, char **argv) {
       VC vc = vc_createValidityChecker();
+
+      // ask for a counterexample to be built, so it can be printed below
+      vc_setFlags(vc, 'c');
 
       // 32-bit variable 'c'
       Expr c = vc_varExpr(vc, "c", vc_bvType(vc, 32));
@@ -310,8 +384,8 @@ An example C header usage can be as simple as:
       //Is a+b!=c always correct?
       int ret = vc_query(vc, eq2);
 
-      //No, c=a+b is a counterexample
-      assert(ret == false);
+      //No, c=a+b is a counterexample. vc_query returns 0 for INVALID.
+      assert(ret == 0);
 
       //print c = 11 counterexample
       vc_printCounterExample(vc);
@@ -324,6 +398,9 @@ An example C header usage can be as simple as:
 
 If you use CMake as the build system for your project it is easy to use
 STP as an external project. An example can be found in the sources under |examples|_.
+
+.. |queryfiles| replace:: ``tests/query-files``
+.. _queryfiles: https://github.com/stp/stp/tree/master/tests/query-files
 
 .. |examples| replace:: ``examples/simple``
 .. _examples: https://github.com/stp/stp/tree/master/examples/simple
@@ -349,18 +426,23 @@ bitvector (QF_BV) category.
 
 .. rst-class:: awards
 
--  1st in Single Query at SMTCOMP 2023
--  1st in Single Query UNSAT and in Single Query 24s Performance at
-   SMTCOMP 2022
--  1st in Cloud, and winner of the
-   `incremental <https://smt-comp.github.io/2021/results/qf-bitvec-incremental>`__
-   competition, at SMTCOMP 2021
--  `2nd <http://www.msoos.org/2014/06/smt-competition14-and-stp/>`__ at
-   SMTCOMP 2014
--  2nd at SMTCOMP 2011
--  1st at SMTCOMP 2010
--  1st at `SMTCOMP
-   2006 <http://smtcomp.sourceforge.net/2006/results-QF_UFBV32.shtml>`__
+-  1st in QF_BV in the `Single Query track
+   <https://smt-comp.github.io/2023/results/qf-bitvec-single-query>`__, on
+   all five scoring schemes, at SMT-COMP 2023
+-  1st in QF_BV for `Single Query UNSAT and Single Query 24s Performance
+   <https://smt-comp.github.io/2022/results/qf-bitvec-single-query>`__ at
+   SMT-COMP 2022
+-  Winner of the QF_BV `incremental
+   <https://smt-comp.github.io/2021/results/qf-bitvec-incremental>`__
+   competition at SMT-COMP 2021, and top-ranked in the `cloud
+   <https://smt-comp.github.io/2021/results/qf-bitvec-cloud>`__ track,
+   which was experimental and selected no winner
+-  `2nd <https://www.msoos.org/2014/06/smt-competition14-and-stp/>`__ in
+   QF_BV at SMT-COMP 2014
+-  2nd in QF_BV at SMT-COMP 2011, entered as *STP2*
+-  1st in QF_BV at SMT-COMP 2010, entered as *simplifyingSTP*
+-  1st at `SMT-COMP 2006
+   <https://smtcomp.sourceforge.net/2006/results-QF_UFBV32.shtml.html>`__
 
 Competition results are a snapshot of one year's entrants on one year's
 selection. :doc:`benchmarks` is the continuous version: every SMT-LIB
@@ -376,39 +458,44 @@ solver shows up as a change in the numbers.
 Use cases
 =========
 
--  `KLEE symbolic fuzzer <http://klee.github.io/>`__ is using STP at its
-   core (Professor Cristian Cadar’s group at Imperial College, London,
+-  `KLEE <https://klee-se.org/>`__, a symbolic execution engine, is using
+   STP at its core (Professor Cristian Cadar’s group at Imperial College, London,
    and Professor Dawson Engler’s group at Stanford University)
--  `Souper project <https://github.com/google/souper>`__ at the
-   University of Utah and Google
--  `S2E <http://s2e.epfl.ch/>`__ at EPFL
--  Mayhem fuzzer, which `found over 1000
-   bugs <http://lwn.net/Articles/557055/>`__ in mainline Debian is using
-   KLEE and hence STP
--  `Binary Analysis Platform (BAP) <http://bap.ece.cmu.edu/>`__ is using
-   STP for analysis, by the CMU
--  `EXE <http://people.csail.mit.edu/vganesh/STP_files/exe.pdf>`__ is a
+-  `Souper <https://github.com/google/souper>`__ at the University of Utah
+   and Google (historical: the project is archived and moved off STP)
+-  `S2E <https://s2e.systems/>`__, begun at EPFL
+-  `Binary Analysis Platform (BAP)
+   <https://github.com/BinaryAnalysisPlatform/bap>`__ is using STP for
+   analysis, by the CMU
+-  `EXE <https://github.com/stp/stp/blob/master/papers/EXE-STP.pdf>`__ is a
    symbolic-execution based bug-finding tool that reads your C program
    and tries to automatically crash it (Stanford University)
--  `MINESWEEPER <http://users.ece.cmu.edu/~dawnsong/>`__ is a tool that
+-  `MINESWEEPER
+   <https://bitblaze.cs.berkeley.edu/papers/botnet_book-2007.pdf>`__ is a
+   tool that
    automatically analyzes certain malicious behavior in unix utilities
    and malware. (Carnegie Mellon University)
--  `CATCHCONV <http://sourceforge.net/projects/catchconv/>`__ is a bug
+-  `CATCHCONV <https://sourceforge.net/projects/catchconv/>`__ is a bug
    finding tool that tries to find bugs due to type mismatch in C
    programs. (University of California, Berkeley)
 -  Backward path-sensitive analysis of C programs to find bugs by Tim
    Leek from MIT Lincoln Labs
 -  Bug finding in Verilog code (a major microprocessor company)
--  `JPF-SE <http://ase.arc.nasa.gov/people/pcorina/papers/jpfseTACAS07.pdf>`__
+-  `JPF-SE <https://doi.org/10.1007/978-3-540-71209-1_12>`__
    is a symbolic execution extension to the Java PathFinder model
    checker . (NASA Ames Research Center)
--  `Avalanche <http://code.google.com/p/avalanche/>`__ bug-finding tool
+-  `Avalanche
+   <https://www.ispras.ru/en/projects/avalanche_dynamic_program_analysis_tool/>`__
+   bug-finding tool
    (Institute of Systems Programming, Moscow, Russia)
--  `Low-level Bounded Model Checker - LLBMC <http://llbmc.org/>`__
+-  `Low-level Bounded Model Checker - LLBMC <http://llbmc.org/>`__ (frozen
+   at 2013.1)
    (Karlsruhe Institute of Technology (KIT), Germany)
--  `FuzzGrind <http://esec-lab.sogeti.com/pages/Fuzzgrind>`__ (ESEC Lab)
+-  `FuzzGrind
+   <http://web.archive.org/web/20150312084610/http://esec-lab.sogeti.com:80/pages/Fuzzgrind>`__
+   (ESEC Lab)
 -  In conjunction with
-   `ACL2 <http://www.cs.utexas.edu/users/moore/acl2/>`__ to formally
+   `ACL2 <https://www.cs.utexas.edu/~moore/acl2/>`__ to formally
    verify implementation of encryption algorithms in Java (Stanford
    University)
 -  `Hampi <http://people.csail.mit.edu/akiezun/hampi/>`__ : A solver for
@@ -429,13 +516,15 @@ terms, and array reads and writes. The predicates in the language
 include equality and (signed) comparators between bitvector terms.
 
 The basic architecture of STP essentially follows the idea of word-level
-preprocessing followed by translation to SAT (MiniSat is the default SAT
-solver; CryptoMiniSat and CaDiCaL can be used instead). In particular, we
+preprocessing followed by translation to SAT (CaDiCaL is the default SAT
+solver when it is compiled in, otherwise CryptoMiniSat; ``--cadical``,
+``--cryptominisat`` and ``--minisat`` select a compiled-in backend at run
+time). In particular, we
 introduce several new heuristics for the preprocessing step, including
 abstraction-refinement in the context of arrays, a new bitvector linear
 arithmetic equation solver, and some
 interesting simplifications. These heuristics help us achieve several
-magnitudes of order performance over other tools, and also over
+orders of magnitude of performance improvement over earlier tools, and over
 straight-forward translation to SAT. STP has been heavily tested on
 thousands of examples sourced from various real-world applications such
 as program analysis and bug-finding tools like EXE, and equivalence
@@ -448,7 +537,7 @@ STP is based on, and described by, the following.
 
 -  `A Decision Procedure for Bit-Vectors and
    Arrays <https://github.com/stp/stp/blob/master/papers/vijayganesh-stp-paper.pdf>`__
-   (`bibtex <http://dblp.uni-trier.de/rec/bibtex/conf/cav/GaneshD07>`__)
+   (`bibtex <https://dblp.org/rec/conf/cav/GaneshD07.html>`__)
    by Vijay Ganesh and David L. Dill. In Proceedings of the
    International Conference in Computer Aided Verification (CAV 2007),
    Berlin, Germany, July 2007.
@@ -456,8 +545,8 @@ STP is based on, and described by, the following.
 -  `EXE: Automatically Generating Inputs of
    Death <https://github.com/stp/stp/blob/master/papers/EXE-STP.pdf>`__
    (`bibtex <https://dblp.org/rec/conf/ccs/CadarGPDE06.html>`__)
-   by Cristian Cadar, Vijay Ganesh, Peter Pawlowski, Dawson Engler,
-   David Dill. In Proceedings of ACM Conference on Computer and
+   by Cristian Cadar, Vijay Ganesh, Peter Pawlowski, David L. Dill and
+   Dawson R. Engler. In Proceedings of ACM Conference on Computer and
    Communications Security 2006 (CCS 2006), Alexandria, Virginia,
    October, 2006. There is also an `extended journal
    version <https://github.com/stp/stp/blob/master/papers/EXE-STP-TISSEC-Journal-2007.pdf>`__
@@ -487,7 +576,7 @@ Schachte.
 
 Many people have contributed:
 
--  `Vijay Ganesh <https://github.com/vganesh2013>`__ — the original author: the AST, the parsers, the
+-  `Vijay Ganesh <https://github.com/hellovijay>`__ — the original author: the AST, the parsers, the
    translation to SAT, and the preprocessing the CAV paper describes.
 
 -  `Trevor Hansen <https://github.com/TrevorHansen>`__ — the word-level simplifiers, constant bit
@@ -512,7 +601,7 @@ Many people have contributed:
 -  `Felix Kutzner <https://github.com/fkutzner>`__ — the Windows CI, and
    64-bit pointer fixes in the vendored ABC.
 
--  `Jurriaan Bremer <https://github.com/jbremer>`__ — the Python
+-  `Jurriaan Bremer <https://github.com/jbremer>`__ — the original Python
    bindings and their packaging, including Python 3 support.
 
 -  `Norbert Manthey <https://github.com/conp-solutions>`__ — the

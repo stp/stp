@@ -30,8 +30,8 @@ committing the bump if you want the binary to name the release commit.
 
 The soname is ``MAJOR.MINOR`` only, and ``STPConfigVersion.cmake`` declares
 STP compatible only across a matching ``MAJOR.MINOR``. A patch bump keeps
-``libstp.so.2.3``, so downstream packages keep working; a minor or major
-bump makes ``find_package(STP 2.3)`` stop matching and forces packagers to
+``libstp.so.2.4``, so downstream packages keep working; a minor or major
+bump makes ``find_package(STP 2.4)`` stop matching and forces packagers to
 rebuild everything that links STP. Bump the minor only when the API or ABI
 actually changed.
 
@@ -54,7 +54,8 @@ with a static one -- see :doc:`testing`.
 Tagging, which cuts the release
 -------------------------------
 
-Tags are lightweight and unprefixed since 2.3.1. ``stp-2.2.0`` and the
+Release tags are lightweight and unprefixed; ``stp-2.2.0`` is the only one
+that ever carried a prefix. It and the
 branch tags ``smtcomp2020`` and ``2.3.4_cadical`` are exceptions, and the
 ``[0-9]+.[0-9]+.[0-9]+`` filter deliberately does not match names like
 them, so pushing a branch tag will not cut a release.
@@ -111,7 +112,8 @@ What gets built
 One statically linked Linux x86-64 binary, so someone can download a single
 file and run it without a matching glibc or any STP libraries installed --
 asserted rather than assumed, by requiring ``ldd`` to fail on it. Beside it
-goes ``SHA256SUMS``, checkable with ``sha256sum --check SHA256SUMS``. That
+go ``LICENSE`` and ``LICENSE_COMPONENTS``, and a ``SHA256SUMS`` covering all
+three, checkable with ``sha256sum --check SHA256SUMS``. That
 is integrity, not provenance: anyone able to replace the binary could
 replace the sums file with it. Signing, or GitHub's build attestations,
 would be the next step if that is ever wanted.
@@ -161,16 +163,24 @@ The static link also needs ``libgmp.a`` and ``libgmpxx.a``, hence
 Pinned revisions
 ~~~~~~~~~~~~~~~~
 
-Everything compiled in is pinned by the script that builds it:
-CryptoMiniSat at ``release/v5.14.7`` and CaDiCaL at ``rel-2.1.3`` by tag,
-minisat by commit, since ``stp/minisat`` carries only upstream's 2.0 and
-2.2.x tags. This matters more here than in CI, because the workflow
-restores a dependency cache rather than rebuilding: an unpinned dependency
-would mean linking against whatever a default branch held when some earlier
-CI run populated that cache. ``scripts/deps/cache-key.sh`` hashes the setup
-scripts, so moving a pin invalidates the cache. The one exception is
-OutputCheck, resolved with ``git ls-remote`` on every run; it is a
-test-only tool that never gets linked into anything.
+The release links CryptoMiniSat, pinned by ``setup-cms.sh`` at
+``release/v5.14.7``, and minisat, pinned by commit since ``stp/minisat``
+carries only upstream's 2.0 and 2.2.x tags. This matters more here than in
+CI, because the workflow restores a dependency cache rather than rebuilding:
+an unpinned dependency would mean linking against whatever a default branch
+held when some earlier CI run populated that cache.
+``scripts/deps/cache-key.sh`` hashes the setup scripts, so moving a pin
+invalidates the cache.
+
+Two things are not pinned. OutputCheck is resolved with ``git ls-remote`` on
+every run, which is harmless -- it is a test-only tool that never gets
+linked into anything. The CaDiCaL and cadiback that CryptoMiniSat fetches
+and builds for itself are not pinned by anything: CryptoMiniSat takes them
+from their default branches, so which revision arrives depends on the day,
+and ``cache-key.sh`` does not track it. That one is a real gap, described at
+the top of ``setup-cms.sh``. It is unrelated to
+``scripts/deps/setup-cadical.sh``, which pins ``rel-3.0.1`` and which the
+release does not run.
 
 ``setup-cms.sh`` builds the solver stack in ``Release`` rather than CMake's
 default, which had CryptoMiniSat compiling at ``-g -ggdb3`` and took the
@@ -183,11 +193,14 @@ CryptoMiniSat, CaDiCaL or cadiback. Pass
 What is not shipped
 ~~~~~~~~~~~~~~~~~~~
 
-No Windows binary, though the ``windows`` CI job still builds one and 2.3.3
-shipped one. MSVC compiles neither CryptoMiniSat nor CaDiCaL, both of which
-use POSIX-only code, leaving MiniSat as the only backend -- slow enough that
-shipping it would misrepresent what STP does. Getting a competitive solver
-to build there, via MinGW or by porting the POSIX-only parts, comes first.
+No Windows binary, though CI builds two and 2.3.3 shipped one. MSVC compiles
+neither CryptoMiniSat nor CaDiCaL, both of which use POSIX-only code, so
+``windows (minisat, MSVC)`` is left with MiniSat as its only backend -- slow
+enough that shipping it would misrepresent what STP does. ``windows
+(cadical, MinGW)`` no longer has that problem: it builds CaDiCaL under
+MinGW/UCRT64 and links a fully static ``stp.exe`` against it, so publishing
+that one is now a question of wiring it into the release workflow rather
+than of getting a competitive solver to build.
 
 No other architectures either, though adding a Linux one is about ten
 lines: copy the ``linux-amd64`` job, change ``runs-on`` to
@@ -213,8 +226,11 @@ For testing the release build, or if Actions is unavailable:
     ldd ./stp         # "not a dynamic executable"
 
 Neither setup script needs arguments: both already build the static PIC
-libraries a static STP links against. STP links minisat in whether or not
-it is the solver being used.
+libraries a static STP links against. Note that the configure line above does
+not pass ``-DUSE_MINISAT=ON``, so it does not in fact link minisat --
+``USE_MINISAT`` has defaulted to off since that backend became opt-in, and
+the release workflow does not run ``setup-minisat.sh`` at all. Run it only if
+you want to reproduce a build that has MiniSat compiled in.
 
 Prefer the workflow for anything you intend to publish: it checks out the
 tag, so the binary provably comes from the released commit rather than from
@@ -226,9 +242,9 @@ After the release
 
 -  Nothing needs pushing to downstream packagers: Debian, Homebrew, and the
    KLEE and Souper build scripts pick releases up themselves.
--  ``find_package(STP <version>)`` is covered by the ``gcc (cadical)`` CI
-   job, which installs STP and builds ``examples/simple`` against the
-   install tree on every push.
+-  ``find_package(STP <version>)`` is covered by the ``gcc (cadical ...)``
+   CI jobs -- a matrix over the supported CaDiCaL tags -- which install STP
+   and build ``examples/simple`` against the install tree on every push.
 -  Bump the version again only when the next release is cut. Master carries
    the last released version between releases, so a build from master
    reports the release it followed rather than something like

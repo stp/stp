@@ -11,10 +11,12 @@ STP currently supports the following types of tests
    `lit <https://pypi.org/project/lit/>`__ and
    `OutputCheck <https://github.com/stp/OutputCheck>`__ tools. We refer
    to these as query file tests. They live in ``tests/query-files``.
--  Tests that call STP's API and check the results with the
-   `GoogleTest <https://google.github.io/googletest/>`__ framework.
-   Those under ``tests/unit-tests`` exercise STP's internals; those
-   under ``tests/api`` exercise the public C, C++ and Python APIs.
+-  Tests that call STP's API. Those under ``tests/unit-tests`` exercise
+   STP's internals and those under ``tests/api/C`` and ``tests/api/CPP``
+   exercise the public C and C++ APIs, all using the
+   `GoogleTest <https://google.github.io/googletest/>`__ framework. The
+   Python API tests under ``tests/api/python`` are plain Python scripts
+   registered directly with CTest.
 
 Both kinds are registered with CTest, so ``ctest`` (or ``make test``)
 runs everything.
@@ -97,7 +99,8 @@ At the time of writing the following options are available
 
 -  ``ENABLE_TESTING`` - If enabled other testing options will be
    available. Note that testing needs a shared library build, so it is
-   forced off when ``STATICCOMPILE`` is on.
+   forced off when ``STATICCOMPILE`` is on, and it is forced off again
+   when no Python 3 interpreter was found.
 -  ``LIT_TOOL`` - Path to the ``lit`` executable (you shouldn't need to
    modify this normally)
 -  ``LIT_ARGS`` - Arguments passed to ``lit`` when CTest invokes it,
@@ -126,7 +129,7 @@ At the time of writing the following options are available
    not enough for the exhaustive tests once valgrind's slowdown is applied.
 
 Running tests
-~~~~~~~~~~~~~
+-------------
 
 To run all tests, from the build directory run
 
@@ -149,7 +152,9 @@ The query file tests appear as a single CTest test named
 file becomes its own executable and its own CTest test, named after the
 source file with ``Tests-gtest`` appended -- so
 ``tests/unit-tests/SimplifyFormula_Test.cpp`` is run by the CTest test
-``SimplifyFormula_TestTests-gtest``.
+``SimplifyFormula_TestTests-gtest``. The tests that are not GoogleTest
+are named individually: ``python-interface-tests``,
+``python-allocator-tests``, ``test_fpbackend`` and ``test_fprewrites``.
 
 .. _valgrind:
 
@@ -248,7 +253,7 @@ CI runs this configuration on every pull request, as the ``clang (ubsan)``
 job in ``.github/workflows/ci.yml``.
 
 Notes for Query file tests
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+--------------------------
 
 The query file tests can also be driven by running ``lit`` yourself. The
 lit configuration is generated into the build tree and named after the
@@ -282,12 +287,10 @@ This will pass additional flags to the solver. There is also
 OutputCheck.
 
 Individual tests
-~~~~~~~~~~~~~~~~
-
-.. _query-file-tests-1:
+----------------
 
 Query file tests
-^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~
 
 The lit tool gives you the ability to easily run a subset of tests: pass
 it a subdirectory or an individual query file instead of the whole
@@ -300,7 +303,7 @@ suite.
           tests/query-files/simplification-tests/alwaysTrue.smt2
 
 Unit tests
-^^^^^^^^^^
+~~~~~~~~~~
 
 The unit tests are built as standalone executables so individual tests
 can be executed by just running their executables, which live in the
@@ -310,12 +313,10 @@ binaries they take the usual flags, e.g. ``--gtest_filter=...`` to run a
 subset of the cases in one executable.
 
 Writing tests
-~~~~~~~~~~~~~
-
-.. _query-file-tests-2:
+-------------
 
 Query file tests
-^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~
 
 You should take a look at the existing tests and at the
 `lit <https://llvm.org/docs/CommandGuide/lit.html>`__, `LLVM
@@ -324,10 +325,8 @@ and
 `OutputCheck <https://github.com/stp/OutputCheck/blob/master/README.md>`__
 documentation.
 
-.. _unit-tests-1:
-
 Unit tests
-^^^^^^^^^^
+~~~~~~~~~~
 
 You should take a look at some existing tests and read the `GoogleTest
 documentation <https://google.github.io/googletest/>`__. A new test is

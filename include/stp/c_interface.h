@@ -128,6 +128,7 @@ DLL_PUBLIC const char* get_compilation_env(void);
 //!  - 'a': Disables optimization. TODO: What kind of optimization is meant here?
 //!  - 'c': Enables construction of counter examples.
 //!  - 'd': Enables construction and checking of counter examples. Superseeds flag 'c'.
+//!  - 'i': Enables incremental solving from the first vc_query on.
 //!  - 'm': Use SMTLib1 parser. Conflicts with using SMTLib2 parser.
 //!  - 'n': Enables printing of the output. TODO: What is meant with output here?
 //!  - 'p': Enables printing of counter examples.
@@ -136,7 +137,9 @@ DLL_PUBLIC const char* get_compilation_env(void);
 //!  - 's': Sets the status flag to true. TODO: What consequenses does this have?
 //!  - 't': Enables quick statistics. TODO: What is this?
 //!  - 'v': Enables printing of nodes.
-//!  - 'w': Enables word-level solving. TODO: What is mean with this?
+//!  - 'w': *Disables* word-level solving, despite the name.
+//!  - 'x': Enables deciding equality between whole arrays (the extensional
+//!         theory of arrays). Must be set before any such equality is built.
 //!  - 'y': Enables printing binaries. TODO: What is meant with this?
 //!
 //! This function panics if given an unsupported or unknown flag.
