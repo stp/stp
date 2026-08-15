@@ -34,6 +34,7 @@ sys.path.insert(0, "@PYTHON_INTERFACE_DIR@")
 import stp
 import unittest
 import ctypes
+import importlib
 
 
 @stp.stp
@@ -53,6 +54,40 @@ class TestSTP(unittest.TestCase):
         self.stp_solvers = set(
             ["Minisat", "SimplifyingMinisat", "Cryptominisat", "Riss", "Cadical"]
         )
+
+    def test_package_reexports_everything_public(self):
+        # stp/stp.py declares what is public; stp/__init__.py is what users
+        # actually import from. The two drifted once -- array, ArrayExpr and
+        # the rounding modes were declared but never re-exported, so
+        # `from stp import array` raised ImportError -- so check every name.
+        #
+        # Reached through importlib because the package re-exports a function
+        # called `stp`, which shadows the submodule of the same name.
+        module = importlib.import_module("stp.stp")
+        for name in module.__all__:
+            with self.subTest(name=name):
+                self.assertTrue(
+                    hasattr(stp, name),
+                    "%s is in stp/stp.py's __all__ but stp/__init__.py does "
+                    "not re-export it" % name,
+                )
+        self.assertEqual(list(stp.__all__), list(module.__all__))
+
+    def test_rounding_modes_are_distinct_and_one_hot(self):
+        # These mirror enum VCRoundingMode in c_interface.h, which is one-hot
+        # because it mirrors STP's internal encoding. They are five distinct
+        # modes rather than flags, so no two may share a value.
+        modes = {
+            "RNE": stp.RNE,
+            "RTP": stp.RTP,
+            "RTN": stp.RTN,
+            "RTZ": stp.RTZ,
+            "RNA": stp.RNA,
+        }
+        self.assertEqual(len(set(modes.values())), len(modes))
+        for name, value in modes.items():
+            with self.subTest(name=name):
+                self.assertEqual(value & (value - 1), 0)
 
     def test_long(self):
         s = self.s
