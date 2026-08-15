@@ -80,6 +80,7 @@ you have built but not installed, static builds, and Windows.
    :maxdepth: 1
 
    building
+   architecture
 
 
 SMT-LIB2 input language
@@ -506,29 +507,10 @@ Use cases
 Architecture
 ============
 
-STP is an efficient decision procedure for the validity (or
-satisfiability) of formulas from a quantifier-free many-sorted theory of
-fixed-width bitvectors and one-dimensional arrays. The
-functions in STP’s input language include concatenation, extraction,
-left/right shift, sign-extension, unary minus, addition, multiplication,
-(signed) modulo/division, bitwise Boolean operations, if-then-else
-terms, and array reads and writes. The predicates in the language
-include equality and (signed) comparators between bitvector terms.
-
-The basic architecture of STP essentially follows the idea of word-level
-preprocessing followed by translation to SAT (CaDiCaL is the default SAT
-solver when it is compiled in, otherwise CryptoMiniSat; ``--cadical``,
-``--cryptominisat`` and ``--minisat`` select a compiled-in backend at run
-time). In particular, we
-introduce several new heuristics for the preprocessing step, including
-abstraction-refinement in the context of arrays, a new bitvector linear
-arithmetic equation solver, and some
-interesting simplifications. These heuristics help us achieve several
-orders of magnitude of performance improvement over earlier tools, and over
-straight-forward translation to SAT. STP has been heavily tested on
-thousands of examples sourced from various real-world applications such
-as program analysis and bug-finding tools like EXE, and equivalence
-checking tools and theorem-provers.
+STP does word-level preprocessing and then translates what is left to
+SAT. :doc:`architecture` walks the whole pipeline, stage by stage, with a
+diagram of the passes and of the three places the solver repeats itself
+until it reaches a fixed point.
 
 Publications
 ============
