@@ -20,6 +20,7 @@ RUN apt-get update \
         libm4ri-dev \
         libncurses-dev \
         make \
+        python3 \
         wget \
         zlib1g-dev \
  && rm -rf /var/lib/apt/lists/*

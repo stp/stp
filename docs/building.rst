@@ -15,7 +15,7 @@ library's malloc instead.
 Dependencies
 ------------
 
-STP relies on flex, bison and perl, plus at least one SAT backend.
+STP relies on flex, bison and python3, plus at least one SAT backend.
 Configuration fails if no backend is enabled.
 
 On a Debian-like platform most of it comes from the package manager:
@@ -23,10 +23,11 @@ On a Debian-like platform most of it comes from the package manager:
 .. code-block:: bash
 
     sudo apt-get install build-essential cmake bison flex libgmp-dev \
-        zlib1g-dev python3 perl
+        zlib1g-dev python3
 
-A python3 interpreter is needed for the Python interface and for the test
-suite, and GMP is needed when building with CryptoMiniSat.
+A python3 interpreter is needed at build time -- it generates the AST kind
+tables -- and also for the Python interface and the test suite. GMP is
+needed when building with CryptoMiniSat.
 
 Three dependencies are vendored as submodules and need nothing installed:
 ABC, mimalloc, the command-line parser
