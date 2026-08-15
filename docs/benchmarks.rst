@@ -59,12 +59,17 @@ builds of the same version can be present on one machine and only one of them
 was linked.
 
 All of it is published, in `stp/benchmarks-data
-<https://github.com/stp/benchmarks-data>`__: the binary itself, the harness
-that ran it, the frozen benchmark manifests, and the raw data this page
-summarises — per-run wall time, CPU time and peak memory for all 160,610
-instances, each run's retained solver output, and the corpus index that gives
-the sha256 of every benchmark measured. The figures above are read from there
-live, so a new campaign appears here as soon as it is published.
+<https://github.com/stp/benchmarks-data>`__: the harness that ran the campaign,
+the frozen benchmark manifests, and the raw data this page summarises — per-run
+wall time, CPU time and peak memory for all 160,610 instances, each run's
+retained solver output, and the corpus index that gives the sha256 of every
+benchmark measured. The binaries are `releases
+<https://github.com/stp/benchmarks-data/releases>`__ of that repository, one
+per binary, so a campaign can be re-run rather than merely inspected — check
+what you download against the hash before you trust a measurement made with it.
+
+The figures above are read from there live, so a new campaign appears here as
+soon as it is published.
 
 Two things are deliberately left out of the campaign list. A run over an ad-hoc
 selection of files is an experiment rather than a result about STP, and a
