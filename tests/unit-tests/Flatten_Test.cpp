@@ -89,6 +89,23 @@ TEST(Flatten_Test , __LINE__)
   ASSERT_EQ(n, c.mgr.ASTFalse);
 }
 
+// Multiplication chains flatten too: the two groupings become one wide
+// product each, and the same node.
+TEST(Flatten_Test, __LINE__)
+{
+  const std::string input = R"(
+        (assert (=
+                  (bvmul v0 (bvmul v1 v2))
+                  (bvmul (bvmul v0 v1) v2)
+                )
+        )
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+  ASSERT_EQ(n, c.mgr.ASTTrue);
+}
+
 TEST(Flatten_Test, __LINE__)
 {
   const std::string input = R"(

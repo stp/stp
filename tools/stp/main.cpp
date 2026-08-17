@@ -203,8 +203,9 @@ void ExtraMain::create_options()
            "Pure literals are replaced.", simp_group);
 
   bool_arg("--common-subsum", bm->UserFlags.enable_common_subsum,
-           "Factor sub-sums shared between n-ary bvadd nodes into a single "
-           "shared node, so the adder is built once (needs --flattening)",
+           "Factor sub-terms shared between n-ary bvadd nodes, and between "
+           "n-ary bvmul nodes, into a single shared node, so the adder or "
+           "multiplier is built once (needs --flattening)",
            simp_group);
 
   bool_arg("--pair-extract", bm->UserFlags.enable_pair_extract,

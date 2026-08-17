@@ -41,6 +41,14 @@ THE SOFTWARE.
  Nested additions hide the opportunity -- (a + (b + c)) and (b + (a + d))
  share {a,b} but no node -- so this is most effective after Flatten has
  turned the additions into flat operand lists.
+
+ Multiplication is associative and commutative modulo 2^w for the same
+ reason, so the pass is parameterised by the operator and runs once over
+ the n-ary bvadd nodes and once over the n-ary bvmul nodes. Beyond
+ building the shared multiplier once, a shared sub-product makes a pair of
+ otherwise-unused variables visible to unconstrained-variable elimination:
+ in (a*b*c) and (a*b*d) the pair {a,b} is used nowhere else, and once
+ (a*b) is a node of its own that pass collapses it to a fresh variable.
 */
 
 #ifndef COMMONSUBSUM_H_
@@ -58,6 +66,11 @@ class CommonSubSum
 {
   STPMgr* stpMgr;
   NodeFactory* nf;
+
+  // The operator whose n-ary applications are rewritten: BVPLUS or BVMULT.
+  // Sums and products are tallied separately -- a pair shared between a sum
+  // and a product has no single node both could use.
+  const Kind kind;
 
   // Adders removed, counting the one spent building each shared sub-sum.
   long saved;
@@ -115,9 +128,10 @@ public:
   CommonSubSum(const CommonSubSum&) = delete;
   CommonSubSum& operator=(const CommonSubSum&) = delete;
 
-  CommonSubSum(STPMgr* stp_, NodeFactory* nf_)
-      : stpMgr(stp_), nf(nf_), saved(0), truncated(false)
+  CommonSubSum(STPMgr* stp_, NodeFactory* nf_, Kind kind_)
+      : stpMgr(stp_), nf(nf_), kind(kind_), saved(0), truncated(false)
   {
+    assert(kind == BVPLUS || kind == BVMULT);
   }
 
   ASTNode topLevel(const ASTNode& n);
