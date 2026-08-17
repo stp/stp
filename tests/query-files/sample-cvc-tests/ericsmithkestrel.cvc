@@ -2,6 +2,10 @@
 %% Regression level = 3
 %% Result = Valid
 %% Language = presentation
+%
+% Kept in CVC after the rest of this directory moved to SMT-LIB2: it is the
+% one remaining test of a QUERY over a formula rather than QUERY FALSE, and
+% of LET nesting on the CVC side.
 
 X : BITVECTOR(31);
 Y : BITVECTOR(31);

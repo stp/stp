@@ -2,6 +2,12 @@
 %% Regression level = 3
 %% Result = InValid
 %% Language = presentation
+%
+% The rest of this family was converted to SMT-LIB2 -- see
+% sample-smt-tests/masked-decrement-chain-sat.smt2, which pins n to the one
+% value these constraints allow instead of only checking Invalid.  This copy
+% stays in CVC because it is the one place COUNTEREXAMPLE, and the CVC
+% counterexample printer behind it, are still exercised end to end.
 
 n: BITVECTOR(32);
 c: BITVECTOR(8);
