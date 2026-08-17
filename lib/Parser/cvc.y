@@ -983,13 +983,12 @@ Expr            :      TERMID_TOK { $$ = new ASTNode(GlobalParserInterface->letM
   $$ = n;
   delete $3;
 }
-|      BVMULT_TOK '(' NUMERAL_TOK ',' Expr ',' Expr ')' 
+|      BVMULT_TOK '(' NUMERAL_TOK ',' Exprs ')'
 {
-  ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVMULT, $3, *$5, *$7));
+  ASTNode * n = new ASTNode(GlobalParserInterface->nf->CreateTerm(BVMULT, $3, *$5));
   $$ = n;
 
   delete $5;
-  delete $7;
 }
 |      BVDIV_TOK '(' NUMERAL_TOK ',' Expr ',' Expr ')' 
 {

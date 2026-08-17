@@ -84,9 +84,10 @@ private:
 
     switch (n.GetKind())
     {
-      // Shift-and-add over the partial products, run in both directions.
+      // Shift-and-add over the partial products, run in both directions,
+      // once per adjacent operand pair.
       case stp::BVMULT:
-        return width * width;
+        return (degree - 1) * width * width;
 
       // Repeated multiplication, iterated to a fixed point.
       case stp::BVDIV:

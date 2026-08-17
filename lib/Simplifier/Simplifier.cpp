@@ -2280,9 +2280,17 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
           }
           else if (BVMULT == k)
           {
-
             SortByArith(nonconstkids);
-            if (k == BVMULT && nonconstkids.size() > 2)
+
+            // DistributeMultOverPlus only understands two-operand
+            // multiplies, so a wide product with a sum inside is still
+            // towered down for it. Otherwise the product stays n-ary.
+            bool anyPlus = false;
+            for (const ASTNode& kid : nonconstkids)
+              if (BVPLUS == kid.GetKind())
+                anyPlus = true;
+
+            if (nonconstkids.size() > 2 && anyPlus)
               output = makeTower(k, nonconstkids);
             else
               output = nf->CreateTerm(k, inputValueWidth, nonconstkids);
@@ -2337,11 +2345,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
       {
         output = pullUpBVSX(output);
       }
-      else if (BVMULT == output.GetKind())
-      {
-        output = makeTower(BVMULT, toASTVec(output.GetChildren()));
-      }
-      else if (BVPLUS == output.GetKind())
+      else if (BVMULT == output.GetKind() || BVPLUS == output.GetKind())
       {
         ASTVec d = toASTVec(output.GetChildren());
         SortByArith(d);
@@ -2373,7 +2377,12 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
         // factory, so those children never reach here.
         case BVMULT:
         {
-          if (BVUMINUS == a0[0].GetKind())
+          if (a0.Degree() != 2)
+          {
+            // The rewrites below rebuild from the first two operands only.
+            output = inputterm;
+          }
+          else if (BVUMINUS == a0[0].GetKind())
           {
             output = nf->CreateTerm(BVMULT, inputValueWidth, a0[0][0], a0[1]);
           }
@@ -3225,15 +3234,15 @@ ASTNode Simplifier::CombineLikeTerms(const ASTVec& c)
     {
       vars_to_consts[aaa].push_back(one);
     }
-    else if (BVMULT == aaa.GetKind() && BVUMINUS == aaa[0].GetKind() &&
-             BVCONST == aaa[0][0].GetKind())
+    else if (BVMULT == aaa.GetKind() && 2 == aaa.Degree() &&
+             BVUMINUS == aaa[0].GetKind() && BVCONST == aaa[0][0].GetKind())
     {
       //(BVUMINUS(c))*(y) <==> compute(BVUMINUS(c))*y
       ASTNode compute_const = BVConstEvaluator(aaa[0]);
       vars_to_consts[aaa[1]].push_back(compute_const);
     }
-    else if (BVMULT == aaa.GetKind() && BVUMINUS == aaa[1].GetKind() &&
-             BVCONST == aaa[0].GetKind())
+    else if (BVMULT == aaa.GetKind() && 2 == aaa.Degree() &&
+             BVUMINUS == aaa[1].GetKind() && BVCONST == aaa[0].GetKind())
     {
       // c*(BVUMINUS(y)) <==> compute(BVUMINUS(c))*y
       ASTNode cccc = BVConstEvaluator(nf->CreateTerm(BVUMINUS, len, aaa[0]));
@@ -3241,10 +3250,20 @@ ASTNode Simplifier::CombineLikeTerms(const ASTVec& c)
     }
     else if (BVMULT == aaa.GetKind() && BVCONST == aaa[0].GetKind())
     {
-      // assumes that BVMULT is binary
-      vars_to_consts[aaa[1]].push_back(aaa[0]);
+      if (2 == aaa.Degree())
+      {
+        vars_to_consts[aaa[1]].push_back(aaa[0]);
+      }
+      else
+      {
+        // Wider multiply: the constant is the coefficient, the product of
+        // the remaining operands is the variable part.
+        ASTVec rest(aaa.begin() + 1, aaa.end());
+        vars_to_consts[nf->CreateTerm(BVMULT, len, rest)].push_back(aaa[0]);
+      }
     }
-    else if (BVMULT == aaa.GetKind() && BVUMINUS == aaa[0].GetKind())
+    else if (BVMULT == aaa.GetKind() && 2 == aaa.Degree() &&
+             BVUMINUS == aaa[0].GetKind())
     {
       //(-1*x)*(y) <==> -1*(xy)
       ASTNode cccc = nf->CreateTerm(BVMULT, len, aaa[0][0], aaa[1]);
@@ -3252,7 +3271,8 @@ ASTNode Simplifier::CombineLikeTerms(const ASTVec& c)
       SortByArith(cNodes);
       vars_to_consts[cccc].push_back(max);
     }
-    else if (BVMULT == aaa.GetKind() && BVUMINUS == aaa[1].GetKind())
+    else if (BVMULT == aaa.GetKind() && 2 == aaa.Degree() &&
+             BVUMINUS == aaa[1].GetKind())
     {
       // x*(-1*y) <==> -1*(xy)
       ASTNode cccc = nf->CreateTerm(BVMULT, len, aaa[0], aaa[1][0]);
@@ -3401,7 +3421,8 @@ ASTNode Simplifier::DistributeMultOverPlus(const ASTNode& a,
   if (BVMULT != k)
     return a;
 
-  assert(a.Degree() == 2);
+  if (a.Degree() != 2)
+    return a;
 
   ASTNode left = a[0];
   ASTNode right = a[1];

@@ -1,0 +1,15 @@
+% RUN: %solver --print-back-CVC %s > %t
+% RUN: %OutputCheck %s < %t
+% RUN: %solver --CVC %t | %OutputCheck --check-prefix=SOLVED %s
+% CHECK: BVMULT\(8,
+% SOLVED: ^Invalid
+%
+% The CVC printer writes a product in its n-ary form, so the CVC grammar
+% must read that form back: print, then re-solve what was printed. The
+% printer emits the internally negated query, so a Valid original reads
+% back Invalid -- the polarity flip is pre-existing printer behaviour;
+% what this pins is that the n-ary spelling parses and solves.
+
+X, Y, Z : BITVECTOR(8);
+
+QUERY BVMULT(8, X, Y, Z) = BVMULT(8, Z, Y, X);

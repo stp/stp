@@ -498,6 +498,14 @@ TEST(RemoveUnconstrained_Exhaustive, mult_odd_constant)
   c.checkSound(c.hf->CreateTerm(BVMULT, W, c.konst(3), c.bv()));
 }
 
+TEST(RemoveUnconstrained_Exhaustive, mult_three_operands)
+{
+  Context c;
+  // The BVMULT rules only exist for two operands; a wider multiply must be
+  // skipped soundly, not taken apart.
+  c.checkSound(c.hf->CreateTerm(BVMULT, W, c.bv(), c.bv(), c.bv()));
+}
+
 TEST(RemoveUnconstrained_Exhaustive, udiv_both_unconstrained)
 {
   Context c;

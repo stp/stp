@@ -296,7 +296,7 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize,
 
       // SMT-LIB only allows these functions to have two parameters.
       if ((kind == AND || kind == OR || kind == XOR || BVPLUS == kind ||
-           kind == BVOR || kind == BVAND) &&
+           kind == BVMULT || kind == BVOR || kind == BVAND) &&
           n.Degree() > 2)
       {
         string close = "";

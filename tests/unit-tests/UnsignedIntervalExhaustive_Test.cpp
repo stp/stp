@@ -344,6 +344,69 @@ TEST(UnsignedIntervalExhaustive, Mult)
     checkBinary(stp::BVMULT, w, OVERAPPROXIMATES);
 }
 
+// Three children: the transfer function folds the product pairwise -- exact
+// for two operands, sound beyond. Every interval triple must respect the
+// brute-force hull.
+TEST(UnsignedIntervalExhaustive, MultTernary)
+{
+  Context c;
+  const unsigned w = 2;
+  const uint64_t N = 1ull << w;
+
+  stp::ASTVec symbols;
+  symbols.push_back(c.mgr.CreateSymbol("x", 0, w));
+  symbols.push_back(c.mgr.CreateSymbol("y", 0, w));
+  symbols.push_back(c.mgr.CreateSymbol("z", 0, w));
+  const stp::ASTNode n =
+      c.mgr.hashingNodeFactory->CreateTerm(stp::BVMULT, w, symbols);
+
+  struct Choice
+  {
+    bool isNull;
+    uint64_t lo, hi;
+  };
+  std::vector<Choice> choices;
+  choices.push_back({true, 0, N - 1});
+  for (uint64_t lo = 0; lo < N; lo++)
+    for (uint64_t hi = lo; hi < N; hi++)
+      choices.push_back({false, lo, hi});
+
+  for (const Choice& c0 : choices)
+    for (const Choice& c1 : choices)
+      for (const Choice& c2 : choices)
+      {
+        uint64_t bruteMin = UINT64_MAX, bruteMax = 0;
+        for (uint64_t a = c0.lo; a <= c0.hi; a++)
+          for (uint64_t b = c1.lo; b <= c1.hi; b++)
+            for (uint64_t d = c2.lo; d <= c2.hi; d++)
+            {
+              const uint64_t v = (a * b * d) & (N - 1);
+              bruteMin = std::min(bruteMin, v);
+              bruteMax = std::max(bruteMax, v);
+            }
+
+        std::vector<const stp::UnsignedInterval*> children = {
+            c0.isNull ? nullptr : makeInterval(w, c0.lo, c0.hi),
+            c1.isNull ? nullptr : makeInterval(w, c1.lo, c1.hi),
+            c2.isNull ? nullptr : makeInterval(w, c2.lo, c2.hi)};
+        stp::UnsignedInterval* result =
+            c.analysis.dispatchToTransferFunctions(n, children);
+
+        const bool good = checkAgainstHull(stp::BVMULT, w, result, w, bruteMin,
+                                           bruteMax, OVERAPPROXIMATES);
+        cleanup(children, result);
+        if (!good)
+        {
+          ADD_FAILURE() << "triple ["
+                        << c0.lo << "," << c0.hi << "]["
+                        << c1.lo << "," << c1.hi << "]["
+                        << c2.lo << "," << c2.hi << "] (null flags "
+                        << c0.isNull << c1.isNull << c2.isNull << ")";
+          return;
+        }
+      }
+}
+
 // The constant-multiplier multiplication path finds the extremes of an
 // arithmetic progression mod 2^width by a binary search over a Euclidean
 // counting function. The exhaustive widths only reach shallow recursions,

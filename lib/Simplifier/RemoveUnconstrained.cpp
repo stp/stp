@@ -1457,7 +1457,9 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
       break;
       case BVMULT:
       {
-        assert(numberOfChildren == 2);
+        // The rules below (and `other`) only exist for two operands.
+        if (numberOfChildren != 2)
+          break;
 
         if (mutable_children[1]->isUnconstrained() &&
             mutable_children[0]->isUnconstrained()) // both are unconstrained

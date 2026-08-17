@@ -453,7 +453,7 @@ int64_t eval(const ASTNode& b)
     case BVMULT:
       if (degree == 2)
         return multiplyCost(b, lw);
-      // Wider multiplies are binarised before the bit-blaster sees them.
+      // The bit-blaster lowers a wider multiply to a tree of binary ones.
       return static_cast<int64_t>(degree - 1) * multiplyCost(b, lw);
 
     case BVDIV:

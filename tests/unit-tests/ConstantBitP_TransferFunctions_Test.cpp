@@ -691,6 +691,34 @@ TEST_F(ConstantBitP_TransferFunctions, multiplicationThreeChildrenDoesNothing)
   EXPECT_TRUE(FixedBits::equals(a, fromString("**1")));
 }
 
+// The dispatcher must also leave no multiplication-stats entry for a wider
+// multiply: bvMultiplyBothWays bails before filling the stats in, and an
+// empty entry's NULL column arrays would be read by the bit-blaster's
+// getMS() later.
+TEST_F(ConstantBitP_TransferFunctions, multiplicationThreeChildrenStoresNoStats)
+{
+  FixedBits a = fromString("**1");
+  FixedBits b = fromString("**1");
+  FixedBits c = fromString("***");
+  FixedBits out = fromString("***");
+
+  std::vector<FixedBits*> children;
+  children.push_back(&a);
+  children.push_back(&b);
+  children.push_back(&c);
+
+  const stp::ASTNode x = mgr.CreateSymbol("msmX", 0, 3);
+  const stp::ASTNode y = mgr.CreateSymbol("msmY", 0, 3);
+  const stp::ASTNode z = mgr.CreateSymbol("msmZ", 0, 3);
+  const stp::ASTNode n =
+      mgr.hashingNodeFactory->CreateTerm(stp::BVMULT, 3, x, y, z);
+
+  MultiplicationStatsMap msm;
+  EXPECT_EQ(NO_CHANGE, ConstantBitPropagation::dispatchToTransferFunctions(
+                           &mgr, stp::BVMULT, children, out, n, &msm));
+  EXPECT_TRUE(msm.map.empty());
+}
+
 // An odd operand c is invertible mod 2^k, so c * other == output can also be
 // read as inv(c) * output == other, and bvMultiplyBothWays runs the column
 // reasoning over that view too. Here 13 * <010*> can only be 0100 or 0001,
