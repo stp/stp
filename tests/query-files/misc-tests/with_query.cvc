@@ -1,5 +1,7 @@
 % RUN: %solver %s | %OutputCheck %s
 % CHECK: [Vv]alid
+% Kept in CVC: WITH (array update), an ARRAY declaration and a bare QUERY
+% with no ASSERT in front of it are only reachable through the CVC parser.
 NODE0 : ARRAY BITVECTOR(2) OF BITVECTOR(8);
 QUERY (
 LET NODE1 = (NODE0 WITH [0bin00[1:0]] := (0bin11111111[7:0])) IN (
