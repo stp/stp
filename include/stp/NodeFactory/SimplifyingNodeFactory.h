@@ -134,6 +134,7 @@ private:
   ASTNode makeFPZero(unsigned eb, unsigned sb, bool negative);
 
   ASTNode plusRules(ASTChildren oldChildren);
+  ASTNode multRules(ASTChildren oldChildren);
 
 };
 

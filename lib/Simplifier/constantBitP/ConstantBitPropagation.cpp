@@ -781,7 +781,10 @@ Result ConstantBitPropagation::dispatchToTransferFunctions(
   {
     MultiplicationStats ms;
     result = bvMultiplyBothWays(children, output, mgr, &ms);
-    if (CONFLICT != result)
+    // bvMultiplyBothWays only fills in ms for two-operand multiplies; a
+    // wider node would store empty stats whose NULL column arrays the
+    // bit-blaster's getMS() later reads.
+    if (CONFLICT != result && children.size() == 2)
       msm->map[n] = ms;
     mult_like = true;
   }

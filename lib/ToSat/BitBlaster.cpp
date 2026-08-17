@@ -1081,7 +1081,25 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
     case BVMULT:
     {
       assert(BVTypeCheck(term));
-      assert(term.Degree() == 2);
+
+      if (term.Degree() > 2)
+      {
+        // BBMult and the multiplication variants read their operands' AST
+        // nodes (constant detection, propagated-bit stats), so a wider
+        // multiply is lowered to a tree of genuine two-operand nodes.
+        std::deque<ASTNode> names(term.begin(), term.end());
+        std::sort(names.begin(), names.end(), stp::ExprLess{});
+        while (names.size() > 1)
+        {
+          ASTNode a = names.front();
+          names.pop_front();
+          ASTNode b = names.front();
+          names.pop_front();
+          names.push_back(ASTNF->CreateTerm(BVMULT, a.GetValueWidth(), a, b));
+        }
+        result = BBTerm(names.front(), support);
+        break;
+      }
 
       BBNodeVec mpcd1 = BBTerm(term[0], support);
       const BBNodeVec& mpcd2 = BBTerm(term[1], support);

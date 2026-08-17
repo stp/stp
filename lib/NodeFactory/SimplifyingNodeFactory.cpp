@@ -2847,6 +2847,83 @@ ASTNode SimplifyingNodeFactory::plusRules(const ASTChildren oldChildren)
   return result;
 }
 
+ASTNode SimplifyingNodeFactory::multRules(const ASTChildren oldChildren)
+{
+  assert(oldChildren.size() > 2);
+  const unsigned width = oldChildren[0].GetValueWidth();
+
+  ASTNode accumulate = bm.CreateOneConst(width);
+
+  stp::ASTNodeMultiSet other;
+
+  int constantsFound = 0;
+  unsigned negations = 0;
+
+  for (const auto& n : oldChildren)
+  {
+    ASTNode m = n;
+    if (m.GetKind() == BVUMINUS)
+    {
+      // Negations commute out of a product; track the parity and put a
+      // single one back on top, the canonical form the binary rules make.
+      negations++;
+      m = m[0];
+    }
+    if (m.GetKind() == stp::BVCONST)
+    {
+      accumulate = NodeFactory::CreateTerm(stp::BVMULT, width, accumulate, m);
+      constantsFound++;
+    }
+    else
+      other.insert(m);
+  }
+
+  // Zero absorbs the whole product.
+  if (constantsFound > 0 &&
+      CONSTANTBV::BitVector_is_empty(accumulate.GetBVConst()))
+    return bm.CreateZeroConst(width);
+
+  // A max constant is -1: fold it into the negation parity.
+  if (constantsFound > 0 && !other.empty() &&
+      CONSTANTBV::BitVector_is_full(accumulate.GetBVConst()))
+  {
+    accumulate = bm.CreateOneConst(width);
+    negations++;
+  }
+
+  const bool accumulateIsOne = (accumulate == bm.CreateOneConst(width));
+
+  bool changed = (constantsFound > 1) || (negations > 0);
+
+  // If a one constant was initially present, it is dropped.
+  if (constantsFound > 0 && accumulateIsOne)
+    changed = true;
+
+  if (!changed)
+    return hashing.CreateTerm(stp::BVMULT, width, oldChildren);
+
+  if (!accumulateIsOne)
+    other.insert(accumulate);
+
+  ASTVec newChildren(other.begin(), other.end());
+
+  ASTNode result;
+  if (newChildren.size() > 2)
+    result = hashing.CreateTerm(stp::BVMULT, width, newChildren);
+  else if (newChildren.size() == 2)
+    result = CreateTerm(stp::BVMULT, width,
+                        newChildren); // has been modified. Call more
+                                      // comprehensive.
+  else if (newChildren.size() == 1)
+    result = newChildren[0];
+  else
+    result = accumulate; // everything folded into the constant.
+
+  if ((negations & 1) != 0)
+    result = CreateTerm(BVUMINUS, width, result);
+
+  return result;
+}
 
 // If the shift is bigger than the bitwidth, replace by an extract.
 ASTNode convertArithmeticKnownShiftAmount([[maybe_unused]] const Kind k,
@@ -3176,27 +3253,7 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
       }
       else if (children.size() > 2)
       {
-        // Never create multiplications with arity > 2.
-
-        std::deque<ASTNode> names;
-
-        for (unsigned i = 0; i < children.size(); i++)
-          names.push_back(children[i]);
-
-        sort(names.begin(), names.end(), stp::ExprLess{});
-
-        while (names.size() > 1)
-        {
-          ASTNode a = names.front();
-          names.pop_front();
-
-          ASTNode b = names.front();
-          names.pop_front();
-
-          ASTNode n = NodeFactory::CreateTerm(BVMULT, a.GetValueWidth(), a, b);
-          names.push_back(n);
-        }
-        result = names.front();
+        result = multRules(children);
       }
     }
     break;

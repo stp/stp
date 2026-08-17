@@ -240,8 +240,26 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize,
       os << ")" << endl;
       break;
 
-    case BVMULT: // variable arity, function name at front, size next, comma
-                 // separated.
+    case BVMULT:
+      // The CVC grammar only accepts two-operand BVMULT, so a wider product
+      // is printed as a chain of binary applications it can read back.
+      if (c.size() > 2)
+      {
+        string close = "";
+        for (size_t i = 0; i + 1 < c.size(); i++)
+        {
+          os << functionToCVCName(kind) << "(" << n.GetValueWidth() << ", "
+             << endl;
+          PL_Print1(os, c[i], indentation, letize, bm);
+          os << ", " << endl;
+          close += ")";
+        }
+        PL_Print1(os, c[c.size() - 1], indentation, letize, bm);
+        os << close << endl;
+        break;
+      }
+      [[fallthrough]];
+    // variable arity, function name at front, size next, comma separated.
     case BVSUB:
     case BVPLUS:
     case SBVDIV:

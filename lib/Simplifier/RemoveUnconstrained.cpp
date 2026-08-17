@@ -1457,22 +1457,58 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
       break;
       case BVMULT:
       {
-        assert(numberOfChildren == 2);
-
-        if (mutable_children[1]->isUnconstrained() &&
-            mutable_children[0]->isUnconstrained()) // both are unconstrained
+        if (numberOfChildren == 2)
         {
-          ASTNode v = replaceParentWithFresh(muteParent, variable_array);
-          replace(children[0], bm.CreateOneConst(width));
-          replace(children[1], v);
+          if (mutable_children[1]->isUnconstrained() &&
+              mutable_children[0]->isUnconstrained()) // both are unconstrained
+          {
+            ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+            replace(children[0], bm.CreateOneConst(width));
+            replace(children[1], v);
+          }
+
+          if (other.isConstant() && simplifier->BVConstIsOdd(other))
+          {
+            ASTNode v = replaceParentWithFresh(muteParent, variable_array);
+            ASTNode inverse = simplifier->MultiplicativeInverse(other);
+            ASTNode rhs = nf->CreateTerm(BVMULT, width, inverse, v);
+            replace(var, rhs);
+          }
+          break;
         }
 
-        if (other.isConstant() && simplifier->BVConstIsOdd(other))
+        // A wide product whose every operand is unconstrained takes any
+        // value: `var` carries a fresh variable and the other operands
+        // become one. A single odd constant among the operands keeps that
+        // true -- it is invertible, so its inverse folds into the carried
+        // value. (An even constant pins low bits, so it disqualifies.)
+        ASTNode oddConstant;
+        bool eligible = true;
+        for (size_t i = 0; i < numberOfChildren && eligible; i++)
+        {
+          if (children[i] == var || mutable_children[i]->isUnconstrained())
+            continue;
+          if (children[i].isConstant() && oddConstant.IsNull() &&
+              simplifier->BVConstIsOdd(children[i]))
+            oddConstant = children[i];
+          else
+            eligible = false;
+        }
+
+        if (eligible)
         {
           ASTNode v = replaceParentWithFresh(muteParent, variable_array);
-          ASTNode inverse = simplifier->MultiplicativeInverse(other);
-          ASTNode rhs = nf->CreateTerm(BVMULT, width, inverse, v);
-          replace(var, rhs);
+          if (!oddConstant.IsNull())
+            v = nf->CreateTerm(
+                BVMULT, width,
+                simplifier->MultiplicativeInverse(oddConstant), v);
+          for (size_t i = 0; i < numberOfChildren; i++)
+          {
+            if (children[i] == var || children[i].isConstant())
+              continue;
+            replace(children[i], bm.CreateOneConst(width));
+          }
+          replace(var, v);
         }
       }
       break;

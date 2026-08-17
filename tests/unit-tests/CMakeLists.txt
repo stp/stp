@@ -95,6 +95,7 @@ if (TARGET FpConstantFold_TestTests AND NOT MSVC)
     endif()
 endif()
 AddSTPGTest(BVSolver_Test.cpp)
+AddSTPGTest(NaryBvmult_Test.cpp)
 AddSTPGTest(StrengthReduction_Test.cpp)
 # Bit-blasts each operation to check the difficulty score against what the
 # AIG really costs, so it instantiates BBNodeManagerAIG and needs its own

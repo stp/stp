@@ -2305,8 +2305,8 @@ void addLevel(const ASTVec& fromTerms, ASTVec& terms, ASTVec& preds,
                                     stp::BVGT,  stp::BVGE,  stp::BVSLT,
                                     stp::BVSLE, stp::BVSGT, stp::BVSGE};
   // The kinds that take a variable number of children.
-  static const Kind termNary[] = {stp::BVPLUS, stp::BVAND, stp::BVOR,
-                                  stp::BVXOR};
+  static const Kind termNary[] = {stp::BVPLUS, stp::BVMULT, stp::BVAND,
+                                  stp::BVOR, stp::BVXOR};
 
   for (size_t i = 0; i < fromTerms.size(); i++)
   {

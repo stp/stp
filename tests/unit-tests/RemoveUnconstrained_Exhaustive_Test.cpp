@@ -498,6 +498,14 @@ TEST(RemoveUnconstrained_Exhaustive, mult_odd_constant)
   c.checkSound(c.hf->CreateTerm(BVMULT, W, c.konst(3), c.bv()));
 }
 
+TEST(RemoveUnconstrained_Exhaustive, mult_three_operands)
+{
+  Context c;
+  // The BVMULT rules only exist for two operands; a wider multiply must be
+  // skipped soundly, not taken apart.
+  c.checkSound(c.hf->CreateTerm(BVMULT, W, c.bv(), c.bv(), c.bv()));
+}
+
 TEST(RemoveUnconstrained_Exhaustive, udiv_both_unconstrained)
 {
   Context c;
@@ -728,6 +736,32 @@ TEST(RemoveUnconstrained_Collapse, array_equality)
 TEST(RemoveUnconstrained_Collapse, eq)
 {
   expectCollapse([](Context& c) { return c.hf->CreateNode(EQ, c.bv(), c.bv()); });
+}
+
+TEST(RemoveUnconstrained_Collapse, mult_three_unconstrained)
+{
+  expectCollapse([](Context& c) {
+    return c.hf->CreateNode(
+        EQ, c.hf->CreateTerm(BVMULT, W, c.bv(), c.bv(), c.bv()), c.konst(2));
+  });
+}
+
+TEST(RemoveUnconstrained_Collapse, mult_wide_with_odd_constant)
+{
+  expectCollapse([](Context& c) {
+    ASTVec ch = {c.konst(3), c.bv(), c.bv(), c.bv()};
+    return c.hf->CreateNode(EQ, c.hf->CreateTerm(BVMULT, W, ch), c.konst(2));
+  });
+}
+
+TEST(RemoveUnconstrained_Collapse, mult_wide_with_even_constant_stays)
+{
+  // An even coefficient pins the product's low bit, so the wide product is
+  // not free to take every value and must not be replaced.
+  expectNoCollapse([](Context& c) {
+    ASTVec ch = {c.konst(2), c.bv(), c.bv(), c.bv()};
+    return c.hf->CreateNode(EQ, c.hf->CreateTerm(BVMULT, W, ch), c.konst(3));
+  });
 }
 
 TEST(RemoveUnconstrained_Collapse, sgt)

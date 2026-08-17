@@ -214,7 +214,8 @@ ASTNode BVSolver::ChooseMonom(const ASTNode& eq, ASTNode& modifiedlhs,
       const ASTNode& monom = *it;
       ASTNode var = (BVMULT == monom.GetKind()) ? monom[1] : ASTUndefined;
 
-      if (BVMULT == monom.GetKind() && BVCONST == monom[0].GetKind() &&
+      if (BVMULT == monom.GetKind() && 2 == monom.Degree() &&
+          BVCONST == monom[0].GetKind() &&
           _simp->BVConstIsOdd(monom[0]) && !chosen_symbol &&
           checked.find(var) == checked.end() &&
           ((SYMBOL == var.GetKind() && !vars.VarSeenInTerm(var, rhs)) ||
@@ -358,6 +359,11 @@ ASTNode BVSolver::substitute(const ASTNode& eq, const ASTNode& lhs,
       // the input is of the form a*x = t. If 'a' is odd, then compute
       // its multiplicative inverse a^-1, multiply 't' with it, and
       // update the solver map
+      if (lhs.Degree() != 2)
+      {
+        return eq;
+      }
+
       if (BVCONST != lhs[0].GetKind())
       {
         return eq;
@@ -719,7 +725,7 @@ ASTNode BVSolver::CheckEvenEqn(const ASTNode& input, bool& evenflag)
       continue;
     }
 
-    if (!(BVMULT == itk && BVCONST == aaa[0].GetKind() &&
+    if (!(BVMULT == itk && 2 == aaa.Degree() && BVCONST == aaa[0].GetKind() &&
           SYMBOL == aaa[1].GetKind() && !_simp->BVConstIsOdd(aaa[0])))
     {
       // If the monomials of the lhs are NOT of the form 'a*x' where
@@ -798,7 +804,7 @@ ASTNode BVSolver::BVSolve_Even(const ASTNode& input)
       const ASTNode aaa = *it;
       const Kind itk = aaa.GetKind();
       if (!(BVCONST == itk && !_simp->BVConstIsOdd(aaa)) &&
-          !(BVMULT == itk && BVCONST == aaa[0].GetKind() &&
+          !(BVMULT == itk && 2 == aaa.Degree() && BVCONST == aaa[0].GetKind() &&
             SYMBOL == aaa[1].GetKind() && !_simp->BVConstIsOdd(aaa[0])))
       {
         // If the monomials of the lhs are NOT of the form 'a*x' or 'a'

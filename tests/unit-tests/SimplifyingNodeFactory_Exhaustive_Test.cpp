@@ -1169,4 +1169,105 @@ TEST(SimplifyingNodeFactory_Exhaustive, extract_narrows_through_a_stack)
   }
 }
 
+/* The n-ary bvmul rules (multRules). */
+
+/* a zero operand anywhere zeroes the whole product */
+TEST(SimplifyingNodeFactory_Exhaustive, nary_mult_zero_child)
+{
+  Context c;
+  ASTNode x = c.bv(3), y = c.bv(3);
+  ASTVec ch = {x, c.konst(0, 3), y};
+  EXPECT_EQ(c.nf->CreateTerm(BVMULT, 3, ch), c.konst(0, 3));
+  c.checkTerm(BVMULT, 3, ch);
+}
+
+/* a one operand drops out */
+TEST(SimplifyingNodeFactory_Exhaustive, nary_mult_one_dropped)
+{
+  Context c;
+  ASTNode x = c.bv(3), y = c.bv(3);
+  ASTVec ch = {x, c.konst(1, 3), y};
+  ASTNode r = c.nf->CreateTerm(BVMULT, 3, ch);
+  EXPECT_EQ(BVMULT, r.GetKind());
+  EXPECT_EQ(2u, r.Degree());
+  c.checkTerm(BVMULT, 3, ch);
+}
+
+/* constants fold together wherever they sit */
+TEST(SimplifyingNodeFactory_Exhaustive, nary_mult_constants_fold)
+{
+  Context c;
+  ASTNode x = c.bv(3);
+  ASTVec ch = {c.konst(2, 3), x, c.konst(3, 3)};
+  ASTNode r = c.nf->CreateTerm(BVMULT, 3, ch);
+  EXPECT_EQ(BVMULT, r.GetKind());
+  EXPECT_EQ(2u, r.Degree());
+  EXPECT_TRUE(r[0] == c.konst(6, 3) || r[1] == c.konst(6, 3)) << r;
+  c.checkTerm(BVMULT, 3, ch);
+}
+
+/* negations lift out of the product; an even number cancels entirely */
+TEST(SimplifyingNodeFactory_Exhaustive, nary_mult_negation_parity_even)
+{
+  Context c;
+  ASTNode x = c.bv(2), y = c.bv(2), z = c.bv(2);
+  ASTNode nx = c.hf->CreateTerm(BVUMINUS, 2, x);
+  ASTNode ny = c.hf->CreateTerm(BVUMINUS, 2, y);
+  ASTVec ch = {nx, ny, z};
+  ASTNode r = c.nf->CreateTerm(BVMULT, 2, ch);
+  EXPECT_EQ(BVMULT, r.GetKind());
+  EXPECT_EQ(3u, r.Degree());
+  c.checkTerm(BVMULT, 2, ch);
+}
+
+/* an odd number of negations leaves one on top */
+TEST(SimplifyingNodeFactory_Exhaustive, nary_mult_negation_parity_odd)
+{
+  Context c;
+  ASTNode x = c.bv(2), y = c.bv(2), z = c.bv(2);
+  ASTNode nx = c.hf->CreateTerm(BVUMINUS, 2, x);
+  ASTVec ch = {nx, y, z};
+  ASTNode r = c.nf->CreateTerm(BVMULT, 2, ch);
+  EXPECT_EQ(BVUMINUS, r.GetKind());
+  c.checkTerm(BVMULT, 2, ch);
+}
+
+/* a max constant is -1: it becomes the sign of the product */
+TEST(SimplifyingNodeFactory_Exhaustive, nary_mult_max_becomes_negation)
+{
+  Context c;
+  ASTNode x = c.bv(3), y = c.bv(3);
+  ASTVec ch = {c.konst(7, 3), x, y};
+  ASTNode r = c.nf->CreateTerm(BVMULT, 3, ch);
+  EXPECT_EQ(BVUMINUS, r.GetKind());
+  c.checkTerm(BVMULT, 3, ch);
+}
+
+/* constants, ones and negations together */
+TEST(SimplifyingNodeFactory_Exhaustive, nary_mult_mixed)
+{
+  Context c;
+  ASTNode x = c.bv(3), y = c.bv(3);
+  ASTNode nx = c.hf->CreateTerm(BVUMINUS, 3, x);
+  ASTVec ch = {nx, c.konst(2, 3), y, c.konst(3, 3)};
+  ASTNode r = c.nf->CreateTerm(BVMULT, 3, ch);
+  EXPECT_EQ(BVUMINUS, r.GetKind());
+  EXPECT_EQ(BVMULT, r[0].GetKind());
+  EXPECT_EQ(3u, r[0].Degree());
+  c.checkTerm(BVMULT, 3, ch);
+}
+
+/* no rule applies: the product must SURVIVE as one n-ary node -- the
+   defining property of this representation change */
+TEST(SimplifyingNodeFactory_Exhaustive, nary_mult_arity_survives)
+{
+  Context c;
+  ASTNode x = c.bv(3), y = c.bv(3), z = c.bv(3);
+  ASTVec ch = {x, y, z};
+  ASTNode r = c.nf->CreateTerm(BVMULT, 3, ch);
+  EXPECT_EQ(BVMULT, r.GetKind());
+  EXPECT_EQ(3u, r.Degree());
+  c.checkTerm(BVMULT, 3, ch, false);
+}
+
 } // namespace

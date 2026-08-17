@@ -94,6 +94,8 @@ const vector<OpSpec>& allOps()
       {BVPLUS, "bvadd", Shape::Nary, true, true},
       {BVSUB, "bvsub", Shape::Nary, false, true},
       {BVUMINUS, "bvneg", Shape::Unary, false, true},
+      // bvmul stays two-operand here: the cbitp transfer function bails
+      // out (NO_CHANGE) on wider multiplies.
       {BVMULT, "bvmul", Shape::Nary, false, true},
       {BVDIV, "bvudiv", Shape::Nary, false, true},
       {BVMOD, "bvurem", Shape::Nary, false, true},
