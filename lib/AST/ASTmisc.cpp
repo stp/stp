@@ -512,7 +512,17 @@ void FlattenKindNoDuplicates(const Kind k, const ASTChildren& children,
 //
 // Returns false if the budget was passed, in which case flat_children holds a
 // prefix of the operands and must be discarded: a truncated sum is not the sum.
-const size_t FLATTEN_OUTPUT_BUDGET = 1000;
+//
+// The budget only has to stop the explosion, so it is set far above what a
+// formula plausibly needs rather than close to it. Declining to flatten is not
+// a small loss: generated-tests/form_32.var_64.bits_32.cvc wants 1054 operands
+// at its widest, and capping it below that leaves BVPLUS nested, which turns a
+// two-second solve into one that has not finished after five minutes. A cap
+// tight enough to be reached by an ordinary formula is worse than no pass at
+// all. Against that, raising it costs the pathological file almost nothing:
+// on QF_BV/Sage2/bench_16265.smt2 the walk that used to reach 30GB is abandoned
+// at 0.68s and 53MB here, against 0.53s and 53MB at a thousand.
+const size_t FLATTEN_OUTPUT_BUDGET = 100000;
 
 bool FlattenKind(const Kind k, const ASTChildren& children, ASTVec& flat_children, int depth)
 {
