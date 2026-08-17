@@ -18,12 +18,14 @@
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include "stp/Incremental/IncrementalSolver.h"
 #include "stp/NodeFactory/SimplifyingNodeFactory.h"
+#include "stp/Printer/printers.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/BVSolver.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/SubstitutionMap.h"
 #include "extlib-constbv/constantbv.h"
 #include <gtest/gtest.h>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -217,6 +219,27 @@ TEST(NaryBvmult, solver_leaves_wide_monomials_whole)
   ASTNode solved = solver.TopLevelBVSolve(eq, false);
   ASTNode back = simp.applySubstitutionMap(solved);
   c.checkEquivalent(eq, back);
+}
+
+// The CVC grammar is legacy and only accepts two-operand BVMULT, so the
+// CVC printer must emit a wide product as a chain of binary applications
+// it can read back.
+TEST(NaryBvmult, cvc_printer_chunks_into_binary)
+{
+  Context c;
+  const unsigned w = 4;
+  ASTNode x = c.bv(w), y = c.bv(w), z = c.bv(w);
+  ASTNode product = c.hf->CreateTerm(BVMULT, w, x, y, z);
+
+  std::ostringstream os;
+  printer::PL_Print(os, product, &c.mgr);
+  const std::string text = os.str();
+
+  size_t count = 0;
+  for (size_t pos = text.find("BVMULT("); pos != std::string::npos;
+       pos = text.find("BVMULT(", pos + 1))
+    count++;
+  EXPECT_EQ(2u, count) << text;
 }
 
 } // namespace
