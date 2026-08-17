@@ -335,17 +335,6 @@ void vc_printExpr(VC vc, Expr e)
   q.PL_Print(cout, b);
 }
 
-char* vc_printSMTLIB(VC vc, Expr e)
-{
-  stp::STPMgr* b = mgr(vc);
-
-  stringstream ss;
-  printer::SMTLIB1_PrintBack(ss, *((stp::ASTNode*)e), b);
-  string s = ss.str();
-  char* copy = strdup(s.c_str());
-  return copy;
-}
-
 char* vc_printSMTLIB2(VC vc, Expr e)
 {
   stp::STPMgr* b = mgr(vc);

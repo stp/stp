@@ -375,10 +375,6 @@ void ExtraMain::create_options()
                bm->UserFlags.print_STPinput_back_SMTLIB2_flag,
                "print input in SMT-LIB2 format, then exit")
       ->group(print_group);
-  app.add_flag("--print-back-SMTLIB1",
-               bm->UserFlags.print_STPinput_back_SMTLIB1_flag,
-               "print input in SMT-LIB1 format, then exit")
-      ->group(print_group);
   app.add_flag("--print-back-GDL", bm->UserFlags.print_STPinput_back_GDL_flag,
                "print AiSee's graph format, then exit")
       ->group(print_group);
