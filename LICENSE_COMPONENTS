@@ -11,6 +11,25 @@ STP imports code from the following libraries:
 	* CLI11 Copyright (c) 2017-2026 University of Cincinnati (only compiled
 		into the stp command-line tool, not into the library).
 
+STP is built against a SAT solver, which it does not import but does link.
+Which solvers are present depends on the build configuration, and a static
+build puts their code inside the binary, so the released binaries carry them:
+	* CryptoMiniSat Copyright (C) 2009-2020 Authors of CryptoMiniSat. The
+		released binaries are built against it.
+	* CaDiCaL Copyright (c) 2016-2026 by the authors listed below, and
+		CadiBack Copyright (c) 2023 Armin Biere. CryptoMiniSat 5.14 builds
+		both and bundles them into its own library, so they are present
+		whenever CryptoMiniSat is, as well as when CaDiCaL is selected
+		directly with -DUSE_CADICAL=ON.
+	* MiniSat Copyright (c) 2003-2010 Niklas Een, Niklas Sorensson, when
+		selected with -DUSE_MINISAT=ON.
+
+	Riss can also be selected, with -DUSE_RISS=ON. STP neither downloads nor
+	distributes Riss -- the build requires a checkout that the person building
+	it supplies -- so no licence for it is reproduced here. It is not MIT
+	licensed like the solvers above, and anyone redistributing a binary built
+	with it should check what its terms require.
+
 Our build system includes third-party CMake modules (these are not compiled
 into STP, but they are distributed with it):
 	* GetGitRevisionDescription.cmake Copyright Iowa State University 2009-2010.
@@ -222,6 +241,119 @@ CLI11
 	(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 	SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+CryptoMiniSat
+	Copyright (C) 2009-2020 Authors of CryptoMiniSat, see AUTHORS file
+	All rights reserved.
+
+	The general priciple of the licensing is as follows. Everything that's
+	needed to run/build/install/link the system is MIT licensed. This allows
+	easy distribution and running of the system everywhere. Files that
+	have no copyright header are also MIT licensed. Note that in case you
+	compile with Bliss, then Bliss's GPL license affects the final executable
+	and library.
+
+	Everything else that's not needed to run/build/install/link is usually GPLv2
+	licensed or compatible (see the copyright headers.)
+
+	[STP note: STP links the CryptoMiniSat library, which is the MIT licensed
+	part, and scripts/deps/setup-cms.sh does not build it with Bliss. The MIT
+	terms are reproduced here; for the GPLv2 text covering the parts STP does
+	not link, see the LICENSE.txt of a CryptoMiniSat checkout.]
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in
+	all copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+	THE SOFTWARE.
+
+CaDiCaL
+	MIT License
+
+	Copyright (c) 2016-2021 Armin Biere, Johannes Kepler University Linz, Austria
+	Copyright (c) 2020-2021 Mathias Fleury, Johannes Kepler University Linz, Austria
+	Copyright (c) 2020-2021 Nils Froleyks, Johannes Kepler University Linz, Austria
+	Copyright (c) 2022-2026 Katalin Fazekas, Vienna University of Technology, Austria
+	Copyright (c) 2021-2026 Armin Biere, University of Freiburg, Germany
+	Copyright (c) 2021-2026 Mathias Fleury, University of Freiburg, Germany
+	Copyright (c) 2023-2026 Florian Pollitt, University of Freiburg, Germany
+	Copyright (c) 2024-2026 Tobias Faller, University of Freiburg, Germany
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in all
+	copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	SOFTWARE.
+
+CadiBack
+	MIT License
+
+	Copyright (c) 2023 Armin Biere
+
+	Permission is hereby granted, free of charge, to any person obtaining a copy
+	of this software and associated documentation files (the "Software"), to deal
+	in the Software without restriction, including without limitation the rights
+	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+	copies of the Software, and to permit persons to whom the Software is
+	furnished to do so, subject to the following conditions:
+
+	The above copyright notice and this permission notice shall be included in all
+	copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+	SOFTWARE.
+
+MiniSat
+	MiniSat -- Copyright (c) 2003-2006, Niklas Een, Niklas Sorensson
+	           Copyright (c) 2007-2010  Niklas Sorensson
+
+	Permission is hereby granted, free of charge, to any person obtaining a
+	copy of this software and associated documentation files (the
+	"Software"), to deal in the Software without restriction, including
+	without limitation the rights to use, copy, modify, merge, publish,
+	distribute, sublicense, and/or sell copies of the Software, and to
+	permit persons to whom the Software is furnished to do so, subject to
+	the following conditions:
+
+	The above copyright notice and this permission notice shall be included
+	in all copies or substantial portions of the Software.
+
+	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+	OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+	MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+	NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+	LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+	OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+	WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 GetGitRevisionDescription.cmake (cmake/modules)
 	Original Author:
 	2009-2010 Ryan Pavlik <rpavlik@iastate.edu> <abiryan@ryand.net>
@@ -253,46 +385,36 @@ GetGitRevisionDescription.cmake (cmake/modules)
 	DEALINGS IN THE SOFTWARE.
 
 LLVM integration tester (llvm-lit)
-	University of Illinois/NCSA
-	Open Source License
+	The LLVM Project, of which lit is part, is under the Apache License v2.0
+	with LLVM Exceptions. The Apache License v2.0 runs to some two hundred
+	lines and is not reproduced here; it is at
+	http://www.apache.org/licenses/LICENSE-2.0 and in the LICENSE.TXT that
+	ships inside a lit installation. The exceptions LLVM adds to it are:
 
-	Copyright (c) 2003-2014 University of Illinois at Urbana-Champaign.
-	All rights reserved.
+	---- LLVM Exceptions to the Apache 2.0 License ----
 
-	Developed by:
+	As an exception, if, as a result of your compiling your source code, portions
+	of this Software are embedded into an Object form of such source code, you
+	may redistribute such embedded portions in such Object form without complying
+	with the conditions of Sections 4(a), 4(b) and 4(d) of the License.
 
-		LLVM Team
+	In addition, if you combine or link compiled forms of this Software with
+	software that is licensed under the GPLv2 ("Combined Software") and if a
+	court of competent jurisdiction determines that the patent provision (Section
+	3), the indemnity provision (Section 9) or other Section of the License
+	conflicts with the conditions of the GPLv2, you may retroactively and
+	prospectively choose to deem waived or otherwise exclude such Section(s) of
+	the License, but only in their entirety and only with respect to the Combined
+	Software.
 
-		University of Illinois at Urbana-Champaign
-
-		http://llvm.org
-
-	Permission is hereby granted, free of charge, to any person obtaining a copy of
-	this software and associated documentation files (the "Software"), to deal with
-	the Software without restriction, including without limitation the rights to
-	use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
-	of the Software, and to permit persons to whom the Software is furnished to do
-	so, subject to the following conditions:
-
-		* Redistributions of source code must retain the above copyright notice,
-			this list of conditions and the following disclaimers.
-
-		* Redistributions in binary form must reproduce the above copyright notice,
-			this list of conditions and the following disclaimers in the
-			documentation and/or other materials provided with the distribution.
-
-		* Neither the names of the LLVM Team, University of Illinois at
-			Urbana-Champaign, nor the names of its contributors may be used to
-			endorse or promote products derived from this Software without specific
-			prior written permission.
-
-	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
-	FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
-	CONTRIBUTORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS WITH THE
-	SOFTWARE.
+	[STP note: lit is installed separately, with e.g. `pip install lit`, and is
+	run to drive the test suites. No part of it is compiled into or distributed
+	with STP, so these terms are recorded for completeness rather than to meet
+	a redistribution condition. LLVM relicensed in 2019, from the University of
+	Illinois/NCSA Open Source License to the above; lit releases predating that
+	carry the NCSA terms, which LLVM still reproduces in its LICENSE.TXT under
+	the heading "Legacy LLVM License". This entry was checked against lit
+	16.0.6.]
 
 OutputCheck
 	Copyright (c) 2014, Daniel Liew All rights reserved.
