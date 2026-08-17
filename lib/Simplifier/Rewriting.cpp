@@ -692,6 +692,75 @@ namespace stp
           c = nf->CreateNode(EQ, left,right);
         }
 
+/*
+  An if-then-else with an if-then-else one level down that chooses the same
+  value: the two multiplexers become one, selected by a connective. With the
+  inner one on the else side,
+
+    ITE(c, t, ITE(d, t, b))  -->  ITE(c OR d,     t, b)
+    ITE(c, t, ITE(d, a, t))  -->  ITE(c OR NOT d, t, a)
+
+  and on the then side, where the outer's else branch is what repeats,
+
+    ITE(c, ITE(d, a, e), e)  -->  ITE(c AND d,     a, e)
+    ITE(c, ITE(d, e, b), e)  -->  ITE(c AND NOT d, b, e)
+
+  Bit-blasting a w-bit multiplexer costs 3w AND gates and the connective costs
+  one, so this trades the whole width for a single gate. The two negated forms
+  additionally build a NOT, which is a complemented edge in the AIG and so
+  costs nothing there -- the pass's only rules that add an AST node without
+  adding bit-blasted difficulty.
+
+  All four need the inner multiplexer to die with the rewrite. Where it is
+  shared it stays, the merged node is built beside it, and the rewrite is a
+  straight loss -- hence the share count. Symbolic execution emits these:
+  a branch that leaves part of the state alone reaches the same value under
+  several guards.
+*/
+      if (
+        c.GetKind() == ITE
+        && c[2].GetKind() == ITE
+        && (c[2][1] == c[1] || c[2][2] == c[1])
+        && shareCount[c[2].GetNodeNum()] <= 1
+       )
+       {
+          // Which branch of the inner if-then-else repeats the outer's then.
+          const bool repeatedOnThen = (c[2][1] == c[1]);
+
+          const auto inner =
+              repeatedOnThen ? c[2][0] : nf->CreateNode(NOT, c[2][0]);
+          const auto cond = nf->CreateNode(OR, c[0], inner);
+          const auto other = repeatedOnThen ? c[2][2] : c[2][1];
+
+          if (c.GetType() == BOOLEAN_TYPE)
+            c = nf->CreateNode(ITE, cond, c[1], other);
+          else
+            c = nf->CreateArrayTerm(ITE, c.GetIndexWidth(), c.GetValueWidth(),
+                                    cond, c[1], other);
+       }
+
+      if (
+        c.GetKind() == ITE
+        && c[1].GetKind() == ITE
+        && (c[1][1] == c[2] || c[1][2] == c[2])
+        && shareCount[c[1].GetNodeNum()] <= 1
+       )
+       {
+          // Which branch of the inner if-then-else repeats the outer's else.
+          const bool repeatedOnThen = (c[1][1] == c[2]);
+
+          const auto inner =
+              repeatedOnThen ? nf->CreateNode(NOT, c[1][0]) : c[1][0];
+          const auto cond = nf->CreateNode(AND, c[0], inner);
+          const auto other = repeatedOnThen ? c[1][2] : c[1][1];
+
+          if (c.GetType() == BOOLEAN_TYPE)
+            c = nf->CreateNode(ITE, cond, other, c[2]);
+          else
+            c = nf->CreateArrayTerm(ITE, c.GetIndexWidth(), c.GetValueWidth(),
+                                    cond, other, c[2]);
+       }
+
     return c;
   }
 
