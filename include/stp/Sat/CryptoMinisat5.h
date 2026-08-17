@@ -1,5 +1,5 @@
 /********************************************************************
- * AUTHORS: Mate Soos, Andrew V. Jones
+ * AUTHORS: Mate Soos, Andrew Teylu
  *
  * BEGIN DATE: November, 2013
  *

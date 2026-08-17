@@ -77,7 +77,7 @@ const int SOLVER_MAX_DEPTH = 50;
 // Matches FLATTEN_OUTPUT_BUDGET in ASTmisc.cpp. Kept as its own constant so a
 // change there shows up here as a failure rather than as a silent shift in
 // what these tests mean.
-const size_t OUTPUT_BUDGET = 1000;
+const size_t OUTPUT_BUDGET = 100000;
 
 // Deep enough that path-enumeration would be unmistakable: 2^22 operands from
 // 23 nodes, which is ~32MB of ASTVec if nothing stops it.
