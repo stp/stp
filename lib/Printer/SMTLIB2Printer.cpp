@@ -29,9 +29,9 @@ THE SOFTWARE.
 #include <cctype>
 #include <map>
 
-// Outputs in the SMTLIB format. If you want something that can be parsed by
-// other tools call
-// SMTLIB_PrintBack(). SMTLIB_Print() prints just an expression.
+// Outputs in the SMT-LIB2 format. If you want something that can be parsed
+// by other tools call SMTLIB2_PrintBack(). SMTLIB_Print() prints just an
+// expression.
 
 namespace printer
 {
@@ -262,7 +262,7 @@ void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr,
 
   printVarDeclsToStream(mgr, symbols, used, os);
   os << "(assert ";
-  SMTLIB_Print(os, mgr, n, 0, false);
+  SMTLIB_Print(os, mgr, n, 0);
   os << ")\n";
   // os << "(check-sat)" << endl;
   // os << "(exit)\n";
@@ -464,6 +464,6 @@ void outputFloatingPointSMTLIB2(const ASTNode n, ostream& os,
 // get-assertions prints the asserted formulas through it.
 void SMTLIB2_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
 {
-  SMTLIB_Print1(os, n, indentation, letize, false);
+  SMTLIB_Print1(os, n, indentation, letize);
 }
 }

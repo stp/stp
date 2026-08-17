@@ -467,25 +467,14 @@ DLL_PUBLIC Expr vc_parseExpr(VC vc, const char* filepath);
 //!
 DLL_PUBLIC void vc_printExpr(VC vc, Expr e);
 
-//! \brief Returns the given expression in the SMT-LIB **1** format.
-//!
-//! It is the responsibility of the caller to free the returned string.
-//!
-//! SMT-LIB 1 has no floating-point theory, so an expression that uses it is
-//! refused rather than printed; use vc_printSMTLIB2. (This function has always
-//! emitted SMT-LIB 1 despite what its documentation said; the name is kept for
-//! compatibility.)
-//!
-DLL_PUBLIC char* vc_printSMTLIB(VC vc, Expr e);
-
 //! \brief Returns the given expression in the SMT-LIB 2 format.
 //!
 //! It is the responsibility of the caller to free the returned string.
 //!
 //! This is the export that understands every sort STP has: bit-vectors,
-//! arrays, FloatingPoint and RoundingMode. Prefer it to vc_printSMTLIB and
-//! vc_printExpr, both of which predate the floating-point theory and refuse
-//! it.
+//! arrays, FloatingPoint and RoundingMode. Prefer it to vc_printExpr, which
+//! predates the floating-point theory and refuses it. (vc_printSMTLIB, which
+//! returned SMT-LIB 1, has been removed.)
 //!
 DLL_PUBLIC char* vc_printSMTLIB2(VC vc, Expr e);
 

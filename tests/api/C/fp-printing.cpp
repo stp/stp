@@ -6,18 +6,15 @@
 // The C API's *output* half, for floating-point problems.
 //
 // Roughly 1100 lines of floating-point constructors were added to this
-// interface and none of its printing entry points. Every textual route either
-// died inside a printer -- PL_Print with "printing not implemented for this
-// kind", SMTLIB1_PrintBack on a FloatingPoint declaration -- or, worse, when
-// the floats were all in the formula and none in a declaration, emitted
-// SMT-LIB *2* floating-point syntax inside an SMT-LIB 1 benchmark announced as
-// :logic QF_BV: text no parser will read, quietly claiming to be a bit-vector
-// problem. The one printer that understands the theory was unreachable from
-// any shipping entry point.
+// interface and none of its printing entry points. Every textual route died
+// inside a printer -- PL_Print with "printing not implemented for this
+// kind" -- so the one printer that understands the theory was unreachable
+// from any shipping entry point.
 //
-// So there is now an export that understands every sort STP has, and the two
-// that predate the theory refuse it by name instead of dying inside
-// themselves.
+// So there is now an export that understands every sort STP has, and the
+// presentation-language route, which predates the theory, refuses it by name
+// instead of dying inside itself. (vc_printSMTLIB, the SMT-LIB 1 route, has
+// been removed along with the rest of the SMT-LIB 1 printer.)
 
 namespace
 {
@@ -58,7 +55,7 @@ TEST(fp_printing, smtlib2_states_the_source_sorts)
   EXPECT_TRUE(contains(out, "(declare-fun |r| () RoundingMode")) << out;
   EXPECT_TRUE(contains(out, "fp.isNaN")) << out;
   EXPECT_TRUE(contains(out, "fp.add")) << out;
-  // An FP logic, not the QF_BV the SMT-LIB 1 printer used to claim.
+  // An FP logic, not QF_BV.
   EXPECT_TRUE(contains(out, "(set-logic QF_BVFP)") ||
               contains(out, "(set-logic QF_FP)"))
       << out;
@@ -90,11 +87,11 @@ TEST(fp_printing, smtlib2_counterexample_states_the_source_sorts)
   vc_Destroy(vc);
 }
 
-// The bit-vector-only routes refuse rather than die, and say what to use.
-// Death tests because a refusal here is a FatalError: the point is that the
+// The bit-vector-only route refuses rather than dies, and says what to use.
+// A death test because a refusal here is a FatalError: the point is that the
 // diagnostic names the replacement instead of naming a kind number from
 // inside a printer.
-TEST(fp_printing, the_bitvector_only_routes_refuse)
+TEST(fp_printing, the_bitvector_only_route_refuses)
 {
   ::testing::FLAGS_gtest_death_test_style = "threadsafe";
 
@@ -103,14 +100,6 @@ TEST(fp_printing, the_bitvector_only_routes_refuse)
         VC vc = vc_createValidityChecker();
         Expr x = vc_varExpr(vc, "x", vc_fpType(vc, 8, 24));
         vc_printExpr(vc, vc_fpIsNaNExpr(vc, x));
-      },
-      "vc_printSMTLIB2");
-
-  EXPECT_DEATH(
-      {
-        VC vc = vc_createValidityChecker();
-        Expr x = vc_varExpr(vc, "x", vc_fpType(vc, 8, 24));
-        vc_printSMTLIB(vc, vc_fpIsNaNExpr(vc, x));
       },
       "vc_printSMTLIB2");
 }
@@ -131,18 +120,19 @@ TEST(fp_printing, a_rounding_mode_alone_is_still_the_fp_theory)
   vc_Destroy(vc);
 }
 
-// Pure bit-vector problems keep both older routes, which is what makes the
+// Pure bit-vector problems keep the older route, which is what makes the
 // refusal above a floating-point rule rather than a general narrowing.
-TEST(fp_printing, bitvector_problems_still_print_every_way)
+TEST(fp_printing, bitvector_problems_still_print_the_old_way)
 {
   VC vc = vc_createValidityChecker();
 
   Expr b = vc_varExpr(vc, "b", vc_bvType(vc, 8));
   Expr f = vc_eqExpr(vc, b, vc_bvConstExprFromLL(vc, 8, 1));
 
-  char* one = vc_printSMTLIB(vc, f);
-  EXPECT_TRUE(contains(std::string(one), "benchmark"));
-  free(one);
+  testing::internal::CaptureStdout();
+  vc_printExpr(vc, f);
+  const std::string out = testing::internal::GetCapturedStdout();
+  EXPECT_TRUE(contains(out, "0x01")) << out;
 
   EXPECT_TRUE(contains(smtlib2(vc, f), "declare-fun |b|"));
 

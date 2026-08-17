@@ -178,11 +178,6 @@ void Main::print_back(ASTNode& query, ASTNode& asserts)
     print_STPInput_Back(original_input, bm);
   }
 
-  if (bm->UserFlags.print_STPinput_back_SMTLIB1_flag)
-  {
-    printer::SMTLIB1_PrintBack(cout, original_input, bm);
-  }
-
   if (bm->UserFlags.print_STPinput_back_SMTLIB2_flag)
   {
     printer::SMTLIB2_PrintBack(cout, original_input, bm);

@@ -44,7 +44,40 @@ using std::string;
 using std::endl;
 using namespace stp;
 
-// The text inside a node's box. Constants come out in SMT-LIB1 syntax.
+// A constant's label: "bv<decimal>[<width>]". This was the SMT-LIB1
+// spelling; it survives here because a graph label wants the value and the
+// width, not a parseable literal.
+static void outputBitVec(const ASTNode n, ostream& os)
+{
+  const Kind k = n.GetKind();
+  const ASTChildren c = n.GetChildren();
+  ASTNode op;
+
+  if (BITVECTOR == k)
+  {
+    op = c[0];
+  }
+  else if (BVCONST == k)
+  {
+    op = n;
+  }
+  else
+    FatalError("nsadfsdaf2");
+
+  // CONSTANTBV::BitVector_to_Dec returns a signed representation by default.
+  // Prepend with zero to convert to unsigned.
+
+  os << "bv";
+  CBV zero = CONSTANTBV::BitVector_Create(1, true);
+  CBV unsign = CONSTANTBV::BitVector_Concat(zero, op.GetBVConst());
+  unsigned char* str = CONSTANTBV::BitVector_to_Dec(unsign);
+  CONSTANTBV::BitVector_Destroy(unsign);
+  CONSTANTBV::BitVector_Destroy(zero);
+  os << str << "[" << op.GetValueWidth() << "]";
+  CONSTANTBV::BitVector_Dispose(str);
+}
+
+// The text inside a node's box.
 static void printNodeLabel(ostream& os, const ASTNode& n)
 {
   switch (n.GetKind())
