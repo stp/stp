@@ -1,5 +1,11 @@
 ; RUN: %solver %s | %OutputCheck %s
 ; CHECK-NEXT: ^sat
+;
+; One of the two SMT-LIB1 files kept after the rest of the format was
+; converted to SMT-LIB2 -- see working_54.smt. This is the wider of the pair:
+; sign_extend and zero_extend at both a real width and the zero width the
+; spec allows, shifts by amounts that do not fit in 32 bits, :extrafuns
+; interleaved with :assumption, and a closing :formula.
 (
 benchmark smt
 :logic QF_BV
