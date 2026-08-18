@@ -795,11 +795,17 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
     }
   }
 
-  if (!priming && unprimedDepth >= unprimedDepthLimit)
+  // Prime below this node once the recursion budget is spent -- and, while a
+  // priming walk is in progress, on any memo miss that is not one of the
+  // walk's own visits. The walk only covers nodes that existed when it ran:
+  // simplify_during_bb can replace a term with a freshly simplified one whose
+  // subtree nests with the input, and recursing into it mid-priming would put
+  // that depth back on the stack with the budget switched off.
+  if (!knownMissing && (priming != 0 || unprimedDepth >= unprimedDepthLimit))
   {
-    priming = true;
+    ++priming;
     primeMemos(term, support);
-    priming = false;
+    --priming;
 
     it = BBTermMemo.find(term);
     if (it != BBTermMemo.end())
@@ -809,7 +815,7 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
     }
   }
 
-  UnprimedDepth depth(unprimedDepth, !priming);
+  UnprimedDepth depth(unprimedDepth, priming == 0);
 
   if (uf != NULL && uf->optimize_flag && uf->simplify_during_BB_flag)
   {
@@ -1396,18 +1402,22 @@ const BBNode BitBlaster::BBForm(const ASTNode& form, BBNodeSet& support,
     }
   }
 
-  if (!priming && unprimedDepth >= unprimedDepthLimit)
+  // Same trigger as BBTerm's, and for the same reason: a node built during a
+  // priming walk -- a rewritten condition under a term simplify_during_bb
+  // replaced -- is not in the memo, and descending it mid-priming is
+  // unbudgeted recursion that nests with the input.
+  if (!knownMissing && (priming != 0 || unprimedDepth >= unprimedDepthLimit))
   {
-    priming = true;
+    ++priming;
     primeMemos(form, support);
-    priming = false;
+    --priming;
 
     it = BBFormMemo.find(form);
     if (it != BBFormMemo.end())
       return it->second;
   }
 
-  UnprimedDepth depth(unprimedDepth, !priming);
+  UnprimedDepth depth(unprimedDepth, priming == 0);
 
   const Kind k = form.GetKind();
   if (!is_Form_kind(k))
