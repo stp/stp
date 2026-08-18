@@ -122,9 +122,8 @@ namespace stp
 
     Frame(const ASTNode& n_, bool top_)
         : n(n_), k(n_.GetKind()), top(top_),
-          //TODO STP doesn't currerntly handle >2 arity BVMULT.
           flattenable(OR == k || AND == k || XOR == k || BVXOR == k ||
-                      BVOR == k || BVAND == k || BVPLUS == k),
+                      BVOR == k || BVAND == k || BVPLUS == k || BVMULT == k),
           children(n_.GetChildren())
     {
     }

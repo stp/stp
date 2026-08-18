@@ -55,7 +55,7 @@ void CommonSubSum::collect(const ASTNode& n, ASTNodeSet& seen,
     stack.pop_back();
     if (!seen.insert(current).second)
       continue;
-    if (current.GetKind() == BVPLUS && current.Degree() >= 2)
+    if (current.GetKind() == kind && current.Degree() >= 2)
       plusNodes.push_back(current);
     for (unsigned i = 0; i < current.Degree(); i++)
       stack.push_back(current[i]);
@@ -257,11 +257,11 @@ bool CommonSubSum::extractOnePair()
   if (best < 2)
     return false;
 
-  // Both operands are addends of a common addition, so they share its width.
+  // Both operands sit in a common application, so they share its width.
   const ASTNode first = byNum[bestPair.first];
   const ASTNode second = byNum[bestPair.second];
   const ASTNode shared =
-      nf->CreateTerm(BVPLUS, first.GetValueWidth(), first, second);
+      nf->CreateTerm(kind, first.GetValueWidth(), first, second);
   byNum[shared.GetNodeNum()] = shared;
 
   // Before any operand list moves, so that the two stay in step.
@@ -350,7 +350,7 @@ ASTNode CommonSubSum::rebuild(const ASTNode& n,
     kids.reserve(replacement->second.size());
     for (const auto& k : replacement->second)
       kids.push_back(rebuild(k, changed, cache));
-    result = nf->CreateTerm(BVPLUS, n.GetValueWidth(), kids);
+    result = nf->CreateTerm(kind, n.GetValueWidth(), kids);
   }
   else
   {
@@ -442,8 +442,10 @@ ASTNode CommonSubSum::topLevel(const ASTNode& n)
   }
 
   if (stpMgr->UserFlags.stats_flag)
-    std::cerr << "{CommonSubSum} Adders saved:" << saved
-              << " Truncated:" << (truncated ? 1 : 0) << std::endl;
+    std::cerr << "{CommonSubSum} "
+              << (kind == BVPLUS ? "Adders" : "Multipliers")
+              << " saved:" << saved << " Truncated:" << (truncated ? 1 : 0)
+              << std::endl;
 
   operands.clear();
   byNum.clear();

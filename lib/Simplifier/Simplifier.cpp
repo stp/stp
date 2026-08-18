@@ -1511,7 +1511,7 @@ class Simplifier::SimplifyDriver
         f.valueWidth = f.a.GetValueWidth();
         if (k != SYMBOL)
         {
-          if (k == BVAND || k == BVOR || k == BVPLUS)
+          if (k == BVAND || k == BVOR || k == BVPLUS || k == BVMULT)
             f.outvec = FlattenKind(k, f.b.GetChildren(), 15);
           else
             f.outvec = toASTVec(f.b.GetChildren());

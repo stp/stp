@@ -44,11 +44,13 @@ struct Context
    SimplifyingNodeFactory snf;
    stp::Cpp_interface interface;
    stp::CommonSubSum subSum;
+   stp::CommonSubSum subProd;
 
    Context() :
    snf (*(mgr.hashingNodeFactory), mgr),
    interface(mgr, &snf),
-   subSum(&mgr, &snf)
+   subSum(&mgr, &snf, stp::BVPLUS),
+   subProd(&mgr, &snf, stp::BVMULT)
    {
     mgr.defaultNodeFactory = &snf;
     interface.startup();
@@ -56,29 +58,50 @@ struct Context
     stp::GlobalParserInterface = &interface;
    }
 
-   ASTNode process(std::string input)
+   ASTNode parse(std::string input)
    {
       stp::SMT2ScanString((start_input + input).c_str());
       stp::SMT2Parse();
       smt2lex_destroy();
-      ASTNode n = mgr.CreateNode(stp::AND, mgr.GetAsserts());
+      return mgr.CreateNode(stp::AND, mgr.GetAsserts());
+   }
+
+   ASTNode process(std::string input)
+   {
+      ASTNode n = parse(input);
       std::cerr << "Pre common sub-sum " << n;
       n = subSum.topLevel(n);
       std::cerr << "Post common sub-sum " << n;
       return n;
     }
+
+   ASTNode processProducts(std::string input)
+   {
+      ASTNode n = parse(input);
+      std::cerr << "Pre common sub-product " << n;
+      n = subProd.topLevel(n);
+      std::cerr << "Post common sub-product " << n;
+      return n;
+    }
 };
 
-static void collectPlusNodes(const ASTNode& n, std::set<ASTNode>& out,
+static void collectKindNodes(const ASTNode& n, stp::Kind kind,
+                             std::set<ASTNode>& out,
                              std::set<ASTNode>& visited)
 {
   if (visited.count(n))
     return;
   visited.insert(n);
-  if (n.GetKind() == stp::BVPLUS)
+  if (n.GetKind() == kind)
     out.insert(n);
   for (const ASTNode& c : n.GetChildren())
-    collectPlusNodes(c, out, visited);
+    collectKindNodes(c, kind, out, visited);
+}
+
+static void collectPlusNodes(const ASTNode& n, std::set<ASTNode>& out,
+                             std::set<ASTNode>& visited)
+{
+  collectKindNodes(n, stp::BVPLUS, out, visited);
 }
 
 // Two additions sharing the operand pair {v0, v1} come back with that pair
@@ -135,4 +158,72 @@ TEST(CommonSubSum_Test, lone_sum_unchanged)
 
   ASSERT_EQ(plusNodes.size(), 1u);
   ASSERT_EQ(plusNodes.begin()->Degree(), 3u);
+}
+
+// The product instance of the pass does the same for multiplies:
+//   (v0 * v1 * v2), (v0 * v1 * v3)  -->  s = (v0 * v1); (s * v2), (s * v3)
+// The additions keep the equalities from being solved word-level at node
+// creation, so the products genuinely reach the pass.
+TEST(CommonSubSum_Test, shared_pair_factored_into_one_product_node)
+{
+  const std::string input = R"(
+    (assert (= (bvadd v2 (bvmul v0 v1 v2)) (_ bv0 20)))
+    (assert (= (bvadd v3 (bvmul v0 v1 v3)) (_ bv33 20)))
+    )";
+
+  Context c;
+  ASTNode n = c.processProducts(input);
+
+  std::set<ASTNode> multNodes, visited;
+  collectKindNodes(n, stp::BVMULT, multNodes, visited);
+
+  // Three binary multiplies: the shared pair and the two rewritten products.
+  ASSERT_EQ(multNodes.size(), 3u);
+  for (const ASTNode& p : multNodes)
+    ASSERT_EQ(p.Degree(), 2u);
+
+  // Exactly one of them is the shared node: a multiply that appears as a
+  // child of both of the other two.
+  int shared = 0;
+  for (const ASTNode& s : multNodes)
+  {
+    int parents = 0;
+    for (const ASTNode& p : multNodes)
+      for (const ASTNode& child : p.GetChildren())
+        if (child == s)
+          parents++;
+    if (parents == 2)
+      shared++;
+  }
+  ASSERT_EQ(shared, 1);
+}
+
+// A pair shared between a sum and a product has no node both could use:
+// neither instance of the pass may pair across kinds.
+TEST(CommonSubSum_Test, sum_and_product_do_not_pair)
+{
+  const std::string input = R"(
+    (assert (= (bvmul v3 (bvadd v0 v1 v2)) (_ bv0 20)))
+    (assert (= (bvadd v3 (bvmul v0 v1 v2)) (_ bv33 20)))
+    )";
+
+  Context c;
+  ASTNode n = c.subProd.topLevel(c.subSum.topLevel(c.parse(input)));
+
+  std::set<ASTNode> plusNodes, multNodes, visited;
+  collectKindNodes(n, stp::BVPLUS, plusNodes, visited);
+  visited.clear();
+  collectKindNodes(n, stp::BVMULT, multNodes, visited);
+
+  // One three-operand application of each kind survives untouched (plus
+  // the binary wrappers the asserts are built from).
+  int wideSums = 0, wideMults = 0;
+  for (const ASTNode& p : plusNodes)
+    if (p.Degree() == 3)
+      wideSums++;
+  for (const ASTNode& p : multNodes)
+    if (p.Degree() == 3)
+      wideMults++;
+  ASSERT_EQ(wideSums, 1);
+  ASSERT_EQ(wideMults, 1);
 }
