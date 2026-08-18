@@ -1502,11 +1502,20 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
             v = nf->CreateTerm(
                 BVMULT, width,
                 simplifier->MultiplicativeInverse(oddConstant), v);
+          // The same unconstrained operand can appear in several positions
+          // (e.g. bvmul(a, b, b)); each occurrence resolves to one symbol.
+          // Substitute it only once -- a second replace() would re-enter the
+          // substitution map for an already-substituted variable. (cf. the
+          // AND/OR/BVAND/BVOR case above, which dedups for the same reason.)
+          ASTNodeSet already;
           for (size_t i = 0; i < numberOfChildren; i++)
           {
             if (children[i] == var || children[i].isConstant())
               continue;
+            if (already.find(children[i]) != already.end())
+              continue;
             replace(children[i], bm.CreateOneConst(width));
+            already.insert(children[i]);
           }
           replace(var, v);
         }
