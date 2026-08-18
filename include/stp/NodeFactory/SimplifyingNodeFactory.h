@@ -133,6 +133,22 @@ private:
   ASTNode makeFPNaN(unsigned eb, unsigned sb);
   ASTNode makeFPZero(unsigned eb, unsigned sb, bool negative);
 
+  // The neighbouring value of a non-NaN float constant in its own format
+  // (up = the next value above). Null for NaN.
+  ASTNode fpConstAdjacent(const ASTNode& fpConst, bool up);
+
+  // The wide constant rounded into (te, ts) toward +oo (up) or -oo, or
+  // Null. Assertion builds and the DirectedNarrowing unit test hold the
+  // result to the directed rounding's defining property.
+  ASTNode narrowFPConstDirected(const ASTNode& c, unsigned te, unsigned ts,
+                                bool up);
+
+  // fp.gt / fp.geq over an exactly-widened operand: drop the widening(s),
+  // moving a constant other side into the operand's format. Null when the
+  // rule does not apply.
+  ASTNode narrowWidenedFPComparison(Kind kind, const ASTNode& a,
+                                    const ASTNode& b);
+
   ASTNode plusRules(ASTChildren oldChildren);
   ASTNode multRules(ASTChildren oldChildren);
 
