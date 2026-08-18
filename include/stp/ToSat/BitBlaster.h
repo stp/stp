@@ -298,7 +298,12 @@ class BitBlaster
   void primeMemos(const ASTNode& n, BBNodeSet& support);
   static constexpr size_t unprimedDepthLimit = 512;
   size_t unprimedDepth = 0;
-  bool priming = false;
+
+  // How many primeMemos walks are on the stack. Normally 0 or 1, but a walk's
+  // visit can reach a node built after the walk ran (simplify_during_bb
+  // replacing a term), and blasting that node primes below it first -- a
+  // nested session, so a count rather than a flag.
+  size_t priming = 0;
 
   // Debug-only: the deliberately recursive prefix plus the small amount of
   // recursion used while processing nodes created during priming. Empty and
