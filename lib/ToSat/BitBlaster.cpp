@@ -713,7 +713,12 @@ BitBlaster::simplify_during_bb(ASTNode& term,
       else
         nBits = it->second;
 
-      if (n_term.isConstant())
+      // concreteToAbstract only models bit-vector and boolean constants;
+      // a floating-point constant reaches its unhandled default and aborts.
+      // Such a node keeps its default (all-unknown) FixedBits, which is sound.
+      if (n_term.isConstant() &&
+          (n_term.GetType() == BITVECTOR_TYPE ||
+           n_term.GetType() == BOOLEAN_TYPE))
       {
         // It's assumed elsewhere that constants map to themselves in the
         // fixed map.
