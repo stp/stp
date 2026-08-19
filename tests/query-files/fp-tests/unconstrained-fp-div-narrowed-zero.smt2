@@ -1,10 +1,9 @@
 ; RUN: %solver -d %s | %OutputCheck %s
 ;
-; A zero numerator confines the narrowed quotient to {+0, -0, NaN}, with the
-; sign following the divisor's free sign: forcing the quotient to +0 from a
-; NEGATIVE zero numerator is satisfiable (divisor of matching sign), and the
-; model check reconstructs that divisor. The (= q +zero) spelling
-; distinguishes the zero signs, unlike fp.eq.
+; A zero numerator confines the narrowed quotient to {+0, -0, NaN}, sign
+; following the divisor's: +0 from a NEGATIVE zero numerator is satisfiable,
+; and -d reconstructs the sign-matched divisor. (= q +zero) distinguishes
+; the zero signs, unlike fp.eq.
 ;
 ; CHECK: ^sat
 (set-logic QF_FP)

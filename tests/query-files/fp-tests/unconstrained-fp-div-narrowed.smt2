@@ -1,14 +1,9 @@
 ; RUN: %solver -d %s | %OutputCheck %s
 ;
 ; A division by an unconstrained float64 divisor, narrowed back to float32,
-; reaches every float32 value, so RemoveUnconstrained replaces the whole
-; quotient with a fresh variable (filtered through the numerator's
-; classification) and never builds the divider circuit. The pinned numerator
-; and pinned quotient collapse the rest at the word level.
-;
-; -d additionally constructs the model and checks it against this input,
-; which exercises the witness divisor recorded for the eliminated u: the
-; check evaluates the original division at u's reconstructed value.
+; reaches every float32 value: the whole quotient becomes a fresh variable
+; and the divider circuit is never built. -d checks the constructed model
+; against this input, evaluating the division at u's reconstructed value.
 ;
 ; CHECK: ^sat
 (set-logic QF_FP)

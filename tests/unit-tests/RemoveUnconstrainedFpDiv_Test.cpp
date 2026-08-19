@@ -19,29 +19,13 @@ THE SOFTWARE.
 **********************/
 
 /*
- * The FP_DIV arm of RemoveUnconstrained: a division by an unconstrained
- * divisor, rounded down into a narrower format,
- *
- *   to_fp[te,ts](RNE, fp.div(RNE, to_fp[se,ss](RNE, x), u))
- *
- * is replaced by a fresh variable of the narrow format, filtered through x's
- * classification, and u gets a witness definition in the substitution map.
- *
- * The pass re-parameterises rather than rewrites, so soundness is checked
- * from both directions, exhaustively at small formats (target (3, 4) inside
- * source (5, 9) -- the smallest pair the rule's format-gap test admits that
- * stays clear of the known symfpu small-significand trouble spots):
- *
- *  - Witness direction: substituting u's recorded definition back into the
- *    original quotient must reproduce the replacement, as a function of x
- *    and the fresh variable. Every rewritten model then lifts to a model of
- *    the original formula. Checked on all 2^7 x 2^7 assignments.
- *
- *  - Reachability direction: every value the original quotient attains must
- *    pass the replacement's classification filter (with the fresh variable
- *    set to that value), or a satisfiable input could turn unsatisfiable.
- *    Checked on all 2^7 numerators against every special divisor, every
- *    divisor exponent boundary, and a deterministic random sample.
+ * The FP_DIV arm of RemoveUnconstrained, checked from both directions at
+ * (3, 4) inside (5, 9): substituting u's recorded witness back into the
+ * original quotient must reproduce the replacement on all 2^7 x 2^7
+ * (x, fresh) assignments, and every value the original quotient attains
+ * must pass the replacement's classification filter (all numerators
+ * against every divisor exponent boundary, every special, and a random
+ * sample). Plus firing and no-fire gate checks.
  */
 
 #include "stp/AST/MutableASTNode.h"
@@ -60,12 +44,8 @@ using namespace stp;
 namespace
 {
 
-// Target and source formats. The gap tests in the rule require
-// ss >= ts + 5 and emax_s >= 2*emax_t + ts + 1: (3, 4) in (5, 9) is minimal
-// with te >= 3 (symfpu's float-to-float conversions into two-bit exponents
-// and its tiny-significand unpacking are known trouble spots upstream;
-// staying at (3, 4) matches the formats the constant folder is exhaustively
-// tested at).
+// (3, 4) in (5, 9): the smallest pair the rule's format-gap test admits
+// that stays clear of symfpu's small-format trouble spots.
 const unsigned TE = 3, TS = 4, SE = 5, SS = 9;
 const unsigned TW = TE + TS, SW = SE + SS;
 
@@ -177,9 +157,8 @@ struct Context
     return NonMemberBVConstEvaluator(&mgr, s);
   }
 
-  // A format-carrying float constant from packed bits. Interning
-  // canonicalises every NaN payload to one node, which is also STP's
-  // semantics for them, so enumerating packed encodings enumerates values.
+  // Interning canonicalises NaN payloads, which is also STP's semantics
+  // for them, so enumerating packed encodings enumerates values.
   ASTNode packed(unsigned bits, unsigned eb, unsigned sb)
   {
     return mgr.CreateFPConst(mgr.CreateBVConst(eb + sb, bits), eb, sb);
@@ -265,9 +244,8 @@ TEST(RemoveUnconstrainedFpDiv, every_original_quotient_is_reachable)
   find(replacement);
   ASSERT_FALSE(fresh.IsNull());
 
-  // Divisors: every value whose significand field is zero or all-ones at
-  // every exponent (all specials and every boundary the rounding can pivot
-  // on), plus a deterministic sample of the rest.
+  // All specials and significand-field boundaries, plus a deterministic
+  // sample of the rest.
   std::vector<unsigned> divisors;
   for (unsigned sign = 0; sign < 2; sign++)
     for (unsigned exp = 0; exp < (1u << SE); exp++)

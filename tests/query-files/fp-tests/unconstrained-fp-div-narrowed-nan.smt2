@@ -1,8 +1,7 @@
 ; RUN: %solver %s | %OutputCheck %s
 ;
-; A NaN numerator pins the narrowed quotient to NaN whatever the
-; unconstrained divisor is: the elimination's stand-in keeps the
-; classification, so asking for a non-NaN quotient stays unsatisfiable.
+; A NaN numerator pins the narrowed quotient to NaN whatever the divisor
+; is, so a non-NaN quotient stays unsatisfiable after the elimination.
 ;
 ; CHECK: ^unsat
 (set-logic QF_FP)

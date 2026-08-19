@@ -1,7 +1,6 @@
 ; RUN: %solver %s | %OutputCheck %s
 ;
-; The other side of the zero-numerator class: no divisor makes 0/u a normal
-; number, and the elimination's classification filter preserves that.
+; No divisor makes 0/u a normal number; the classification filter keeps it.
 ;
 ; CHECK: ^unsat
 (set-logic QF_FP)

@@ -1,8 +1,7 @@
 ; RUN: %solver -d %s | %OutputCheck %s
 ;
-; An infinite numerator confines the narrowed quotient to {+oo, -oo, NaN}:
-; reaching +oo from -oo takes a negative (finite or zero) divisor, which the
-; recorded witness supplies for the model check.
+; An infinite numerator confines the quotient to {+oo, -oo, NaN}; +oo from
+; -oo takes a negative divisor, which the witness supplies for -d.
 ;
 ; CHECK: ^sat
 (set-logic QF_FP)

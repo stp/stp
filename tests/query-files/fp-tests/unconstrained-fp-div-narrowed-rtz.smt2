@@ -1,7 +1,7 @@
 ; RUN: %solver %s | %OutputCheck %s
 ;
-; Directed rounding is outside the verified envelope, so the elimination
-; must NOT fire; the query still solves through the ordinary circuit.
+; Directed rounding is outside the verified envelope: no elimination, the
+; query solves through the ordinary circuit.
 ;
 ; CHECK: ^sat
 (set-logic QF_FP)
