@@ -486,6 +486,128 @@ ASTNode SimplifyingNodeFactory::narrowWidenedFPComparison(Kind kind,
   return ASTNode();
 }
 
+// The narrow-format value that widens exactly to the constant, or Null
+// when no such value exists. Decided from the packed bits alone -- no
+// conversion is consulted -- so a Null answer is a proof of
+// unrepresentability and an equality against the constant may fold to
+// false on its strength. The caller establishes that c is a formatted
+// constant of a format containing (te, ts), with both exponent widths
+// under 63.
+ASTNode SimplifyingNodeFactory::fpConstNarrowExact(const ASTNode& c,
+                                                   unsigned te, unsigned ts)
+{
+  const unsigned se = c.GetExpWidth(), ss = c.GetSigWidth();
+  assert(fpFormattedConst(c) && se >= te && ss >= ts && se < 63 && te < 63);
+  stp::CBV bits = c.GetBVConst();
+  const bool negative = CONSTANTBV::BitVector_bit_test(bits, se + ss - 1);
+
+  int64_t expField = 0;
+  for (unsigned i = 0; i < se; i++)
+    if (CONSTANTBV::BitVector_bit_test(bits, ss - 1 + i))
+      expField |= (int64_t)1 << i;
+
+  int sigTop = -1; // highest set stored-significand bit
+  for (unsigned i = 0; i + 1 < ss; i++)
+    if (CONSTANTBV::BitVector_bit_test(bits, i))
+      sigTop = (int)i;
+
+  const int64_t biasS = ((int64_t)1 << (se - 1)) - 1;
+  const int64_t biasT = ((int64_t)1 << (te - 1)) - 1;
+
+  if (expField == ((int64_t)1 << se) - 1)
+    return (sigTop >= 0)
+               ? makeFPNaN(te, ts)
+               : bm.CreateFPSpecialConst(negative ? stp::FPSpecial::MinusInfinity
+                                                  : stp::FPSpecial::PlusInfinity,
+                                         te, ts);
+  if (expField == 0 && sigTop < 0)
+    return makeFPZero(te, ts, negative);
+
+  // The value as mant * 2^(e - msb), with mant's leading one at msb.
+  const bool isNormal = expField != 0;
+  const int msb = isNormal ? (int)ss - 1 : sigTop;
+  const int64_t e =
+      isNormal ? expField - biasS : 1 - biasS - ((int64_t)ss - 1) + sigTop;
+  const auto mant = [&](int64_t i) {
+    if (i < 0 || i > msb)
+      return false;
+    if (isNormal && i == msb)
+      return true;
+    return CONSTANTBV::BitVector_bit_test(bits, (unsigned)i) != 0;
+  };
+
+  // Where the leading one lands in the target: bit ts-1 of a normal
+  // significand, lower for a subnormal, out of range otherwise.
+  int64_t drop; // mantissa bits below this index must all be zero
+  int64_t targetExpField;
+  if (e > biasT)
+    return ASTNode(); // above the largest finite
+  if (e >= 1 - biasT)
+  {
+    drop = msb - ((int64_t)ts - 1);
+    targetExpField = e + biasT;
+  }
+  else if (e >= 2 - biasT - (int64_t)ts)
+  {
+    drop = msb - (e + biasT + (int64_t)ts - 2);
+    targetExpField = 0;
+  }
+  else
+    return ASTNode(); // below the smallest subnormal
+
+  for (int64_t i = 0; i < drop; i++)
+    if (mant(i))
+      return ASTNode();
+
+  const unsigned tw = te + ts;
+  stp::CBV out = CONSTANTBV::BitVector_Create(tw, true);
+  if (negative)
+    CONSTANTBV::BitVector_Bit_On(out, tw - 1);
+  for (unsigned i = 0; i < te; i++)
+    if ((targetExpField >> i) & 1)
+      CONSTANTBV::BitVector_Bit_On(out, ts - 1 + i);
+  for (unsigned k = 0; k + 1 < ts; k++)
+    if (mant((int64_t)k + drop))
+      CONSTANTBV::BitVector_Bit_On(out, k);
+  return bm.CreateFPConst(bm.CreateBVConst(out, tw), te, ts);
+}
+
+// Equalities over an exactly-widened operand narrow like the orderings,
+// only more simply: nothing rounds. Two widenings from one format compare
+// as their operands; against a wide constant, the comparison is with the
+// constant's exact narrow preimage when it has one, and false when it
+// does not (no narrow value widens onto it, and NaN operands make both
+// equality kinds false anyway). The narrowed = form is what
+// PropagateEqualities can substitute through, which the widened form
+// never allows.
+ASTNode SimplifyingNodeFactory::narrowWidenedFPEquality(Kind kind,
+                                                        const ASTNode& a,
+                                                        const ASTNode& b)
+{
+  assert(kind == stp::FP_EQ || kind == stp::FP_SMT_EQ);
+  const ASTNode xa = exactWideningOperand(a);
+  const ASTNode xb = exactWideningOperand(b);
+
+  if (!xa.IsNull() && !xb.IsNull() && xa.GetExpWidth() == xb.GetExpWidth() &&
+      xa.GetSigWidth() == xb.GetSigWidth())
+    return NodeFactory::CreateNode(kind, xa, xb);
+
+  const ASTNode& x = !xa.IsNull() ? xa : xb;
+  const ASTNode& widened = !xa.IsNull() ? a : b;
+  const ASTNode& other = !xa.IsNull() ? b : a;
+  if (x.IsNull() || !fpFormattedConst(other) ||
+      other.GetExpWidth() != widened.GetExpWidth() ||
+      other.GetSigWidth() != widened.GetSigWidth() ||
+      other.GetExpWidth() >= 63 || x.GetExpWidth() >= 63)
+    return ASTNode();
+
+  const ASTNode narrowed =
+      fpConstNarrowExact(other, x.GetExpWidth(), x.GetSigWidth());
+  if (narrowed.IsNull())
+    return ASTFalse;
+  return NodeFactory::CreateNode(kind, x, narrowed);
+}
+
 ASTNode SimplifyingNodeFactory::create_gt_node(const ASTChildren children)
 {
   if (children[0] == children[1])
@@ -958,7 +1080,15 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
     case stp::FP_ISNAN:
     {
       const ASTNode& t = children[0];
-      if (t.GetKind() == stp::FP_ABS || t.GetKind() == stp::FP_NEG)
+      // A widening fixes NaN, the infinities and the zeros (signs
+      // included), so these three classifications commute with it; the
+      // normal/subnormal pair does not -- a narrow subnormal widens to a
+      // wide normal.
+      if ((kind == stp::FP_ISNAN || kind == stp::FP_ISZERO ||
+           kind == stp::FP_ISINFINITE) &&
+          !exactWideningOperand(t).IsNull())
+        result = NodeFactory::CreateNode(kind, exactWideningOperand(t));
+      else if (t.GetKind() == stp::FP_ABS || t.GetKind() == stp::FP_NEG)
         result = NodeFactory::CreateNode(kind, t[0]);
       else if (kind == stp::FP_ISNAN &&
                (fpIsRoundToIntegral(t) || fpIsSelfSum(t) || fpIsSelfProduct(t)))
@@ -982,7 +1112,11 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
     case stp::FP_ISNEGATIVE:
     {
       const ASTNode& t = children[0];
-      if (t.GetKind() == stp::FP_ABS || fpIsSelfProduct(t))
+      // The sign of a widened value is its operand's (a widening fixes
+      // the zeros' signs, and NaN maps to NaN, failing both predicates).
+      if (!exactWideningOperand(t).IsNull())
+        result = NodeFactory::CreateNode(kind, exactWideningOperand(t));
+      else if (t.GetKind() == stp::FP_ABS || fpIsSelfProduct(t))
         result = ASTFalse;
       else if (t.GetKind() == stp::FP_NEG)
         result = NodeFactory::CreateNode(stp::FP_ISPOSITIVE, t[0]);
@@ -993,7 +1127,10 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
     case stp::FP_ISPOSITIVE:
     {
       const ASTNode& t = children[0];
-      if (t.GetKind() == stp::FP_ABS)
+      // Same commute as FP_ISNEGATIVE: a widening keeps the sign.
+      if (!exactWideningOperand(t).IsNull())
+        result = NodeFactory::CreateNode(kind, exactWideningOperand(t));
+      else if (t.GetKind() == stp::FP_ABS)
         result = NodeFactory::CreateNode(
             stp::NOT, NodeFactory::CreateNode(stp::FP_ISNAN, t[0]));
       else if (fpIsSelfProduct(t))
@@ -1129,6 +1266,14 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
                 NodeFactory::CreateNode(stp::FP_ISNAN, children[0]));
           break;
         }
+
+        // An exactly-widened operand: compare at its own format (against
+        // the wide constant's exact preimage, or nothing widens onto the
+        // constant and the equality is false).
+        result =
+            narrowWidenedFPEquality(kind, children[0], children[1]);
+        if (!result.IsNull())
+          break;
 
         // fp.eq against a constant: fp.eq and = disagree only on pairs
         // holding a NaN or two zeros, and inspecting the constant settles
