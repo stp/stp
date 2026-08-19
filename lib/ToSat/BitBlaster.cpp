@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 #include "stp/ToSat/BitBlaster.h"
+#include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
@@ -328,14 +329,9 @@ void BitBlaster::getConsts(const ASTNode& form,
     if (!constNode)
       continue;
 
-    CBV val = CONSTANTBV::BitVector_Create(n.GetValueWidth(), true);
-    for (int i = 0; i < (int)x.size(); i++)
-    {
-      if (x[i] == BBTrue)
-        CONSTANTBV::BitVector_Bit_On(val, i);
-    }
-
-    ASTNode r = ASTNF->CreateConstant(val, n.GetValueWidth());
+    // getConstant re-makes a float's packed bits as an ASTFPConst, keeping
+    // the substitution type-correct.
+    ASTNode r = getConstant(x, n);
     if (n.GetKind() == SYMBOL)
       simp->UpdateSubstitutionMap(n, r);
     else
@@ -617,7 +613,18 @@ ASTNode BitBlaster::getConstant(const BBNodeVec& v,
     if (v[i] == nf->getTrue())
       CONSTANTBV::BitVector_Bit_On(bv, i);
 
-  return ASTNF->CreateConstant(bv, v.size());
+  const ASTNode result = ASTNF->CreateConstant(bv, v.size());
+
+  // n may be a float carried as its packed bits (see isBitsValued). A plain
+  // BVCONST cannot hold the format, so the constant that stands in for n has
+  // to be re-made as an interned ASTFPConst -- otherwise the rebuilt parent
+  // carries a bitvector where an fp is required and fails BVTypeCheck.
+  const unsigned int exp_width = n.GetExpWidth();
+  if (exp_width != 0)
+    return FloatBlaster::withFormat(&ASTNF->getStpMgr(), result, exp_width,
+                                    n.GetSigWidth());
+
+  return result;
 }
 
 // This block checks if the bitblasting/fixed bits have discovered
