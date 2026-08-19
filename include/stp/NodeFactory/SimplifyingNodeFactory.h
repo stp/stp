@@ -149,6 +149,16 @@ private:
   ASTNode narrowWidenedFPComparison(Kind kind, const ASTNode& a,
                                     const ASTNode& b);
 
+  // The narrow value that widens exactly to the constant, or Null when
+  // none exists; decided from the packed bits alone.
+  ASTNode fpConstNarrowExact(const ASTNode& c, unsigned te, unsigned ts);
+
+  // fp.eq / = over an exactly-widened operand: compare the operands, or
+  // the operand against the constant's exact preimage; false against a
+  // constant nothing widens onto. Null when the rule does not apply.
+  ASTNode narrowWidenedFPEquality(Kind kind, const ASTNode& a,
+                                  const ASTNode& b);
+
   ASTNode plusRules(ASTChildren oldChildren);
   ASTNode multRules(ASTChildren oldChildren);
 
