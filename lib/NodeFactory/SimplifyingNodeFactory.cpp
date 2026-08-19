@@ -339,6 +339,153 @@ ASTNode SimplifyingNodeFactory::makeFPZero(unsigned eb, unsigned sb,
   return bm.CreateFPConst(bm.CreateBVConst(bits, width), eb, sb);
 }
 
+// The operand of `n` when `n` widens it -- converts into a format both of
+// whose dimensions contain the operand's own. A widening is exact and
+// order-preserving and fixes the specials, so comparisons look through it.
+static stp::ASTNode exactWideningOperand(const stp::ASTNode& n)
+{
+  if (n.GetKind() != stp::FP_TOFP || n.Degree() != 4)
+    return stp::ASTNode();
+  if (n[0].GetKind() != stp::BVCONST || n[1].GetKind() != stp::BVCONST)
+    return stp::ASTNode();
+  const stp::ASTNode& op = n[3];
+  if (op.GetType() != stp::FLOATINGPOINT_TYPE)
+    return stp::ASTNode();
+  const unsigned te = op.GetExpWidth(), ts = op.GetSigWidth();
+  if (te < 2 || ts < 2)
+    return stp::ASTNode();
+  if (n[0].GetUnsignedConst() < te || n[1].GetUnsignedConst() < ts)
+    return stp::ASTNode();
+  return op;
+}
+
+ASTNode SimplifyingNodeFactory::fpConstAdjacent(const ASTNode& fpConst,
+                                                bool up)
+{
+  if (!fpFormattedConst(fpConst) || fpConstIsNaN(fpConst))
+    return ASTNode();
+  const unsigned eb = fpConst.GetExpWidth();
+  const unsigned sb = fpConst.GetSigWidth();
+  const unsigned width = eb + sb;
+
+  // The zeros sit together between the smallest subnormals of each sign.
+  if (fpConstZeroSign(fpConst) != 0)
+  {
+    stp::CBV bits = CONSTANTBV::BitVector_Create(width, true);
+    CONSTANTBV::BitVector_Bit_On(bits, 0);
+    if (!up)
+      CONSTANTBV::BitVector_Bit_On(bits, width - 1);
+    return bm.CreateFPConst(bm.CreateBVConst(bits, width), eb, sb);
+  }
+
+  // Away from the zeros the packed encoding orders each sign's values by
+  // magnitude, so stepping the word steps the value: +1 on the
+  // non-negative side, -1 on the negative (-smallest-subnormal to -0).
+  stp::CBV bits = CONSTANTBV::BitVector_Clone(fpConst.GetBVConst());
+  const bool negative = CONSTANTBV::BitVector_bit_test(bits, width - 1);
+  if (up != negative)
+    CONSTANTBV::BitVector_increment(bits);
+  else
+    CONSTANTBV::BitVector_decrement(bits);
+  return bm.CreateFPConst(bm.CreateBVConst(bits, width), eb, sb);
+}
+
+ASTNode SimplifyingNodeFactory::narrowFPConstDirected(const ASTNode& c,
+                                                      unsigned te,
+                                                      unsigned ts, bool up)
+{
+  const ASTNode direction = bm.CreateRMConst(
+      up ? stp::symbolic_fp::ROUND_TOWARD_POSITIVE
+         : stp::symbolic_fp::ROUND_TOWARD_NEGATIVE);
+  const ASTNode candidate = NodeFactory::CreateTerm(
+      stp::FP_TOFP, te + ts,
+      {bm.CreateBVConst(32, te), bm.CreateBVConst(32, ts), direction, c});
+  if (!fpFormattedConst(candidate) || fpConstIsNaN(candidate))
+    return ASTNode();
+
+  // The narrowing conversion is trusted at runtime; the assertions below
+  // and the exhaustive DirectedNarrowing unit test hold it to the defining
+  // property of the directed rounding (downward: r <= c < nextUp(r)),
+  // stated over exact widenings and constant comparisons -- the
+  // conversions a misbehaving narrower (symfpu once mis-rounded into
+  // small-exponent formats) cannot affect.
+#ifndef NDEBUG
+  const unsigned se = c.GetExpWidth(), ss = c.GetSigWidth();
+  const ASTNode rne =
+      bm.CreateRMConst(stp::symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+  const auto widen = [&](const ASTNode& v) {
+    return NodeFactory::CreateTerm(
+        stp::FP_TOFP, se + ss,
+        {bm.CreateBVConst(32, se), bm.CreateBVConst(32, ss), rne, v});
+  };
+  const ASTNode widened = widen(candidate);
+  assert(fpFormattedConst(widened));
+  // An exactly-representable constant (the infinities included) is its own
+  // rounding in both directions and has no neighbour to test against.
+  if (widened != c)
+  {
+    const ASTNode side = up ? NodeFactory::CreateNode(stp::FP_GEQ, widened, c)
+                            : NodeFactory::CreateNode(stp::FP_GEQ, c, widened);
+    assert(side == ASTTrue);
+    (void)side;
+    const ASTNode adjacent = fpConstAdjacent(candidate, !up);
+    assert(!adjacent.IsNull());
+    const ASTNode widenedAdjacent = widen(adjacent);
+    assert(fpFormattedConst(widenedAdjacent));
+    const ASTNode tight =
+        up ? NodeFactory::CreateNode(stp::FP_GT, c, widenedAdjacent)
+           : NodeFactory::CreateNode(stp::FP_GT, widenedAdjacent, c);
+    assert(tight == ASTTrue);
+    (void)tight;
+  }
+#endif
+
+  return candidate;
+}
+
+ASTNode SimplifyingNodeFactory::narrowWidenedFPComparison(Kind kind,
+                                                          const ASTNode& a,
+                                                          const ASTNode& b)
+{
+  assert(kind == stp::FP_GT || kind == stp::FP_GEQ);
+  const ASTNode xa = exactWideningOperand(a);
+  const ASTNode xb = exactWideningOperand(b);
+
+  // Both sides widened from the same format: compare the operands.
+  if (!xa.IsNull() && !xb.IsNull() && xa.GetExpWidth() == xb.GetExpWidth() &&
+      xa.GetSigWidth() == xb.GetSigWidth())
+    return NodeFactory::CreateNode(kind, xa, xb);
+
+  // One side widened, the other a constant of the wide format: round the
+  // constant toward the side that keeps the truth value (no narrow value
+  // lies strictly between a constant and its directed rounding):
+  //
+  //   widen(x) >  c   <=>   x >  round_down(c)
+  //   widen(x) >= c   <=>   x >= round_up(c)
+  //   c >  widen(x)   <=>   round_up(c)   >  x
+  //   c >= widen(x)   <=>   round_down(c) >= x
+  if (!xa.IsNull() && fpFormattedConst(b) &&
+      b.GetExpWidth() == a.GetExpWidth() &&
+      b.GetSigWidth() == a.GetSigWidth())
+  {
+    const ASTNode narrowed = narrowFPConstDirected(
+        b, xa.GetExpWidth(), xa.GetSigWidth(), kind == stp::FP_GEQ);
+    if (!narrowed.IsNull())
+      return NodeFactory::CreateNode(kind, xa, narrowed);
+  }
+  if (!xb.IsNull() && fpFormattedConst(a) &&
+      a.GetExpWidth() == b.GetExpWidth() &&
+      a.GetSigWidth() == b.GetSigWidth())
+  {
+    const ASTNode narrowed = narrowFPConstDirected(
+        a, xb.GetExpWidth(), xb.GetSigWidth(), kind == stp::FP_GT);
+    if (!narrowed.IsNull())
+      return NodeFactory::CreateNode(kind, narrowed, xb);
+  }
+
+  return ASTNode();
+}
+
 ASTNode SimplifyingNodeFactory::create_gt_node(const ASTChildren children)
 {
   if (children[0] == children[1])
@@ -904,6 +1051,10 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
                  fpConstIsNegativeNonzero(children[1]))
           result = NodeFactory::CreateNode(
               stp::NOT, NodeFactory::CreateNode(stp::FP_ISNAN, children[0]));
+
+        if (result.IsNull())
+          result =
+              narrowWidenedFPComparison(kind, children[0], children[1]);
       }
       break;
 
@@ -942,6 +1093,10 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
           else if (fpConstZeroSign(children[0]) != 0)
             result = NodeFactory::CreateNode(stp::FP_ISZERO, children[1]);
         }
+
+        if (result.IsNull())
+          result =
+              narrowWidenedFPComparison(kind, children[0], children[1]);
       }
       break;
 
