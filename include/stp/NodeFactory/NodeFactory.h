@@ -60,6 +60,8 @@ public:
   NodeFactory(STPMgr& bm_) : bm(bm_) {}
   virtual ~NodeFactory() {}
 
+  STPMgr& getStpMgr() const { return bm; }
+
   // A non-owning contiguous child range. ASTVec converts to this view, while
   // callers which already own another contiguous arena avoid materialising
   // a vector merely to cross the factory boundary.
