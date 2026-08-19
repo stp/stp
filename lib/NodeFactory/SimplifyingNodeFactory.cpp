@@ -896,7 +896,9 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
       {
         if (children[0] == children[1])
           result = bm.ASTTrue;
-        else if (bm.UserFlags.enable_array_equality)
+        if (result.IsNull())
+          result = selfStoreEquality(children[0], children[1]);
+        if (result.IsNull() && bm.UserFlags.enable_array_equality)
           result = simplifyArrayEquality(children[0], children[1]);
         if (result.IsNull())
           result = hashing.CreateNode(EQ, children);
@@ -2110,6 +2112,40 @@ bool isPlainBitvectorArray(const ASTNode& n)
 // read equalities is a decision-procedure choice that belongs at the
 // solve boundary, beside the machinery it would be trading against.
 // Returns null when no rule applies.
+// A write onto an array differs from that array exactly at the written
+// index:
+//   A = write(A, i, v)  <=>  select(A, i) = v
+// Unconditional and O(1) like the rules below, but unlike them it removes
+// the whole-array equality entirely -- so, like reflexivity, it runs
+// whether or not --array-equality permits one to be built, and it covers
+// float-element arrays (the value equality is then the float =).
+ASTNode SimplifyingNodeFactory::selfStoreEquality(const ASTNode& a,
+                                                  const ASTNode& b)
+{
+  for (int orientation = 0; orientation < 2; orientation++)
+  {
+    const ASTNode& w = orientation ? b : a;
+    const ASTNode& base = orientation ? a : b;
+    if (w.GetKind() != stp::WRITE || w[0] != base)
+      continue;
+    // Bitvector indexes only, and bitvector or float values: rounding-mode
+    // cells and float indexes carry canonicalisation obligations the model
+    // machinery meets on the whole-array path, not on a minted read.
+    if (w[1].GetSourceSort().kind() != stp::SourceSort::Kind::BitVector)
+      continue;
+    const stp::SourceSort::Kind valueKind = w[2].GetSourceSort().kind();
+    if (valueKind != stp::SourceSort::Kind::BitVector &&
+        valueKind != stp::SourceSort::Kind::FloatingPoint)
+      continue;
+    const ASTNode read =
+        NodeFactory::CreateTerm(stp::READ, w[2].GetValueWidth(), base, w[1]);
+    const bool fp = valueKind == stp::SourceSort::Kind::FloatingPoint;
+    return NodeFactory::CreateNode(fp ? stp::FP_SMT_EQ : stp::EQ, read,
+                                   w[2]);
+  }
+  return ASTNode();
+}
+
 ASTNode SimplifyingNodeFactory::simplifyArrayEquality(const ASTNode& a,
                                                       const ASTNode& b)
 {

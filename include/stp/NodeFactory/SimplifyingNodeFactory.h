@@ -106,6 +106,9 @@ private:
 
   ASTNode simplifyArrayEquality(const ASTNode& a, const ASTNode& b);
 
+  // A = write(A, i, v) becomes select(A, i) = v; Null otherwise.
+  ASTNode selfStoreEquality(const ASTNode& a, const ASTNode& b);
+
   ASTNode plusRules(const ASTNode& n0, const ASTNode& n1);
 
   // Rebuild a remainder from the dividend and the "- b * (a / b)" product
