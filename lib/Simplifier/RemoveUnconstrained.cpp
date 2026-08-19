@@ -59,6 +59,7 @@ THE SOFTWARE.
 #include "stp/AST/MutableASTNode.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
+#include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/Simplifier/AchievableImage.h"
 #include "stp/Simplifier/constantBitP/Dependencies.h"
 #include <cstdint>
@@ -158,6 +159,35 @@ bool allChildrenAreUnconstrained(vector<MutableASTNode*> children)
       return false;
 
   return true;
+}
+
+static bool isRNEConstant(const ASTNode& n)
+{
+  return n.GetKind() == BVCONST && n.GetValueWidth() == 5 &&
+         n.GetUnsignedConst() ==
+             symbolic_fp::rounding_modes::ROUND_NEAREST_TIES_TO_EVEN;
+}
+
+// Whether narrowing a source-format quotient into the target format absorbs
+// the error of steering that quotient with a source-format divisor. Two
+// requirements, from the witness construction in the FP_DIV rule below: the
+// witness divisor and the division it feeds each contribute one part in
+// 2^(ss-1) of relative error, while the target's round-to-nearest interval
+// around any representable value is at least 2^-(ts+2) wide relative (the
+// tight case sits just above a power of two), so five extra significand
+// bits cover it with margin; and the witness quotient x/t -- |x| at most
+// the target's largest finite, |t| at least its smallest subnormal -- must
+// stay inside the source format's normal range, which spans 2^±emax_s.
+static bool narrowingAbsorbsDivisorGrid(unsigned se, unsigned ss,
+                                        unsigned te, unsigned ts)
+{
+  if (se < 2 || te < 2 || se > 62 || te > 62)
+    return false;
+  if (ss < ts + 5)
+    return false;
+  const uint64_t emax_t = (uint64_t(1) << (te - 1)) - 1;
+  const uint64_t emax_s = (uint64_t(1) << (se - 1)) - 1;
+  return emax_s >= 2 * emax_t + ts + 1;
 }
 
 ASTNode
@@ -1298,6 +1328,152 @@ ASTNode RemoveUnconstrained::topLevel_other(const ASTNode& n,
           ASTNode v = replaceParentWithFresh(muteParent, variable_array);
           replace(var, nf->CreateTerm(ITE, width, v, unbeatable, nan));
         }
+      }
+      break;
+
+      case FP_DIV:
+      {
+        // A division whose divisor is unconstrained, rounded down into a
+        // narrower format:
+        //
+        //   to_fp[te,ts](RNE, fp.div(RNE, to_fp[se,ss](rm, x), u))
+        //
+        // takes every value of the narrow format as u ranges, provided the
+        // source format out-resolves the target one
+        // (narrowingAbsorbsDivisorGrid). For finite non-zero x the witness
+        // u0 = fl_src(x/t) reaches any finite target t: u0 is off from x/t
+        // by one part in 2^(ss-1), dividing by it costs one more, and the
+        // narrowing rounds an error that small back onto t. IEEE's special
+        // quotients (x/±0, x/±oo, x/NaN) supply the extremes. When x itself
+        // is NaN, zero or infinite the quotient is pinned to NaN, {±0, NaN}
+        // or {±oo, NaN} -- the free divisor sign still picks the sign, but
+        // the magnitude cannot leave the class -- so the stand-in is a
+        // fresh variable filtered through x's classification.
+        //
+        // The narrowing is essential, not decoration: at the division's own
+        // format the reachable quotient grid has holes no divisor fills, so
+        // this arm keys on the divisor and then insists on the conversion
+        // above it. Like FP_GT this must run while the division is one
+        // source node and the divisor one use -- after lowering the divisor
+        // feeds its unpack circuit many times over and stops looking
+        // unconstrained.
+        //
+        // Only round-to-nearest-even instances have been verified
+        // (exhaustively at small formats, and by re-evaluating witnesses at
+        // binary32/binary64), so both rounding modes must be that constant;
+        // directed modes would need their own verification first.
+
+        if (numberOfChildren != 3 || children[2] != var)
+          break;
+
+        const ASTNode rm = children[0];
+        if (!isRNEConstant(rm))
+          break;
+
+        if (muteParent.parents.size() != 1)
+          break;
+        MutableASTNode& muteNarrow = muteParent.getParent();
+        const ASTNode narrow = muteNarrow.n;
+        if (narrow.GetKind() != FP_TOFP || narrow.Degree() != 4 ||
+            narrow[3] != muteParent.n || !isRNEConstant(narrow[2]))
+          break;
+
+        const ASTNode widen = children[1];
+        if (widen.GetKind() != FP_TOFP || widen.Degree() != 4)
+          break;
+
+        const unsigned te = narrow[0].GetUnsignedConst();
+        const unsigned ts = narrow[1].GetUnsignedConst();
+        const unsigned se = widen[0].GetUnsignedConst();
+        const unsigned ss = widen[1].GetUnsignedConst();
+
+        // The numerator must be a widening from exactly the result's
+        // format: that is what keeps the witness quotient x/t inside the
+        // source format's normal range.
+        const ASTNode x = widen[3];
+        if (x.GetExpWidth() != te || x.GetSigWidth() != ts)
+          break;
+
+        const SourceSort usort = var.GetSourceSort();
+        if (usort.kind() != SourceSort::Kind::FloatingPoint ||
+            usort.exponentWidth() != se || usort.significandWidth() != ss)
+          break;
+
+        if (!narrowingAbsorbsDivisorGrid(se, ss, te, ts))
+          break;
+
+        const unsigned tw = te + ts;
+        const unsigned sw = se + ss;
+
+        ASTNode v = bm.CreateFreshVariable(0, tw, "unconstrained");
+        v.SetExpWidth(te);
+        v.SetSigWidth(ts);
+
+        const ASTNode nanT = bm.CreateFPSpecialConst(FPSpecial::NaN, te, ts);
+        const ASTNode isZeroX = nf->CreateNode(FP_ISZERO, x);
+        const ASTNode isInfX = nf->CreateNode(FP_ISINFINITE, x);
+
+        // v, confined to the class a special numerator pins.
+        const ASTNode vIfZero = nf->CreateTerm(
+            ITE, tw,
+            nf->CreateNode(OR, nf->CreateNode(FP_ISZERO, v),
+                           nf->CreateNode(FP_ISNAN, v)),
+            v, nanT);
+        const ASTNode vIfInf = nf->CreateTerm(
+            ITE, tw,
+            nf->CreateNode(OR, nf->CreateNode(FP_ISINFINITE, v),
+                           nf->CreateNode(FP_ISNAN, v)),
+            v, nanT);
+
+        const ASTNode replacement = nf->CreateTerm(
+            ITE, tw, nf->CreateNode(FP_ISNAN, x), nanT,
+            nf->CreateTerm(ITE, tw, isZeroX, vIfZero,
+                           nf->CreateTerm(ITE, tw, isInfX, vIfInf, v)));
+
+        // The divisor that makes the original quotient come out at v,
+        // recorded for model construction. sign(quotient) = sign(x) XOR
+        // sign(u), so a zero or infinite quotient's sign picks the sign of
+        // the infinite (resp. zero) divisor, and NaN needs 0/0 (resp.
+        // oo/oo). Everywhere else fl_src(x/v) is the proof's witness, and
+        // IEEE's special quotients make the same expression cover v being
+        // NaN, a zero or an infinity.
+        const ASTNode isNegX = nf->CreateNode(FP_ISNEGATIVE, x);
+        const ASTNode isNegV = nf->CreateNode(FP_ISNEGATIVE, v);
+        const ASTNode signsDiffer = nf->CreateNode(XOR, isNegX, isNegV);
+        const ASTNode pInfS =
+            bm.CreateFPSpecialConst(FPSpecial::PlusInfinity, se, ss);
+        const ASTNode mInfS =
+            bm.CreateFPSpecialConst(FPSpecial::MinusInfinity, se, ss);
+        const ASTNode pZeroS =
+            bm.CreateFPSpecialConst(FPSpecial::PlusZero, se, ss);
+        const ASTNode mZeroS =
+            bm.CreateFPSpecialConst(FPSpecial::MinusZero, se, ss);
+
+        const ASTNode uWhenZero = nf->CreateTerm(
+            ITE, sw, nf->CreateNode(FP_ISZERO, v),
+            nf->CreateTerm(ITE, sw, signsDiffer, mInfS, pInfS), pZeroS);
+        const ASTNode uWhenInf = nf->CreateTerm(
+            ITE, sw, nf->CreateNode(FP_ISINFINITE, v),
+            nf->CreateTerm(ITE, sw, signsDiffer, mZeroS, pZeroS), pInfS);
+        const ASTNode uOtherwise = nf->CreateTerm(
+            FP_DIV, sw, rm, widen,
+            nf->CreateTerm(FP_TOFP, sw, {widen[0], widen[1], rm, v}));
+        const ASTNode witness = nf->CreateTerm(
+            ITE, sw, isZeroX, uWhenZero,
+            nf->CreateTerm(ITE, sw, isInfX, uWhenInf, uOtherwise));
+
+        // Splice the stand-in over the narrowing node. x appears verbatim
+        // under the classifications, so seed the builder's memo with its
+        // existing mutable node: rebuilding that subtree instead would give
+        // every symbol below x a duplicate parent, and the next divisor in
+        // a chain of these would stop looking unconstrained.
+        std::unordered_map<uint64_t, MutableASTNode*> create;
+        create.insert(std::make_pair(x.GetNodeNum(),
+                                     mutable_children[1]->children[3]));
+
+        MutableASTNode* newN = MutableASTNode::build(replacement, create);
+        muteNarrow.replaceWithAnotherNode(newN);
+        replace(var, witness);
       }
       break;
 
