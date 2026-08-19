@@ -22,6 +22,7 @@
 # -----------------------------------------------------------------------------
 # C API tests (these should be .cpp or .cxx files because GTest needs C++)
 # -----------------------------------------------------------------------------
+AddSTPGTest(LazyWriteChainReads_Test.cpp)
 AddSTPGTest(IncrementalCBP_Test.cpp)
 AddSTPGTest(IncrementalEncodingEpoch_Test.cpp)
 AddSTPGTest(IncrementalLifetimeState_Test.cpp)

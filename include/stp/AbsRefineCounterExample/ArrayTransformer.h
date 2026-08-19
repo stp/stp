@@ -69,6 +69,31 @@ public:
   typedef std::vector<ReadKey> ReadKeys;
   typedef std::map<ASTNode, ReadKeys> AckPairMap;
 
+  // One level of an abstracted write chain: the transformed write index
+  // and value, each paired with the anchor that carries its bits into the
+  // SAT encoding (the term itself when already a symbol or constant).
+  struct ChainLevel
+  {
+    ASTNode index, indexAnchor, value, valueAnchor;
+  };
+
+  // A read over a residual write chain, abstracted to `symbol` instead of
+  // the expanded if-then-else chain. `levels` lists the chain top-down;
+  // the fall-through is `baseReadSymbol`, the ordinary read abstraction of
+  // (baseArray, index), whose registry row also anchors the read index.
+  // Refinement pins `symbol` with path lemmas over the anchors.
+  struct ChainRow
+  {
+    ASTNode symbol;
+    ASTNode index;
+    ASTNode indexAnchor;
+    ASTNode baseArray;
+    ASTNode baseReadSymbol;
+    std::vector<ChainLevel> levels;
+  };
+  typedef std::map<ASTNode, ChainRow> ChainIndexMap; // read index -> row
+  typedef std::map<ASTNode, ChainIndexMap> ChainReadsMap; // chain node ->
+
   // A caller-owned registry whose read abstractions must survive more than
   // one top-level transform. The batch driver continues to use the
   // transformer's own tables; the persistent driver lends one of these to a
@@ -77,35 +102,47 @@ public:
   {
     ArrType reads;
     AckPairMap ackPairs;
+    ChainReadsMap chains;
+    ASTNodeMap chainAnchors;
 
     void clear()
     {
       reads.clear();
       ackPairs.clear();
+      chains.clear();
+      chainAnchors.clear();
     }
 
     void releaseStorage()
     {
       ArrType emptyReads;
       AckPairMap emptyAckPairs;
+      ChainReadsMap emptyChains;
+      ASTNodeMap emptyAnchors;
       reads.swap(emptyReads);
       ackPairs.swap(emptyAckPairs);
+      chains.swap(emptyChains);
+      chainAnchors.swap(emptyAnchors);
     }
   };
 
   struct TransformResult
   {
-    TransformResult(const ASTNode& transformed, ReadKeys& touched)
+    TransformResult(const ASTNode& transformed, ReadKeys& touched,
+                    ReadKeys& touchedChainKeys)
         : formula(transformed)
     {
       touchedReads.swap(touched);
+      touchedChains.swap(touchedChainKeys);
     }
 
     ASTNode formula;
     ReadKeys touchedReads;
+    ReadKeys touchedChains; // (chain node, read index) of rows visited
   };
 
   ArrType arrayToIndexToRead;
+  ChainReadsMap chainReads;
 
 private:
   // When enabled, every (array, index) read the current transform run
@@ -113,6 +150,30 @@ private:
   // can learn which registry rows one formula's reads occupy.
   bool recordTouchedReads = false;
   ReadKeys touchedReads;
+  ReadKeys touchedChains;
+
+  // Anchor variable per transformed chain term (identity for symbols and
+  // constants), and the binding equations minted by the current transform,
+  // conjoined onto the result at top level. Under a registry the anchor
+  // map persists (swapped by RegistryScope); the equations are per-run.
+  ASTNodeMap chainAnchorOf;
+  ASTVec chainAnchorEquations;
+
+  // Cut points chosen for this transformer's lifetime: reads of
+  // (chain node, read index) pairs in here are abstracted. Deliberately
+  // not part of the registry: rows themselves persist there, and a fresh
+  // walk can pick a different (equally sound) cut for a new read.
+  std::map<ASTNode, ASTNodeSet> lazyCutTargets;
+
+  // How many qualified reads (deep enough for a cut) each base array has
+  // seen, and each cut's residual may-alias depth: the abstraction
+  // activates only once the reads outnumber a share of the depth, which
+  // is when the eager levels-times-reads product beats the linear rows.
+  std::map<ASTNode, size_t> qualifiedScansOf;
+  std::map<ASTNode, size_t> cutDepthOf;
+
+  bool markLazyChainCut(const ASTNode& writeNode, const ASTNode& readIndex);
+  ASTNode anchorForChainTerm(const ASTNode& term);
 
   // Under eager Ackermannisation: each array's reads in the order they
   // were seen, from which a new read's nested if-then-else over the
@@ -198,6 +259,10 @@ public:
   {
     arrayToIndexToRead.clear();
     ack_pair.clear();
+    chainReads.clear();
+    chainAnchorOf.clear();
+    chainAnchorEquations.clear();
+    lazyCutTargets.clear();
   }
 
   void ReleaseRunStorage()
@@ -218,6 +283,19 @@ public:
       std::cerr << iset->second.size() << " : ";
     }
     std::cerr << std::endl;
+
+    size_t rows = 0, levels = 0;
+    for (ChainReadsMap::const_iterator cit = chainReads.begin();
+         cit != chainReads.end(); cit++)
+      for (ChainIndexMap::const_iterator rit = cit->second.begin();
+           rit != cit->second.end(); rit++)
+      {
+        rows++;
+        levels += rit->second.levels.size();
+      }
+    if (rows > 0)
+      std::cerr << "Abstracted chain reads:" << rows
+                << " levels:" << levels << std::endl;
   }
 };
 

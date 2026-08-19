@@ -304,6 +304,16 @@ void ExtraMain::create_options()
                "decide whole-array equality/disequality (extensional arrays) "
                "by lemmas on demand")
       ->group(refinement_group);
+  bool_arg("--lazy-write-reads", bm->UserFlags.lazy_write_reads,
+           "abstract a read over a long write chain to a fresh variable "
+           "constrained by refinement lemmas, instead of expanding the "
+           "whole if-then-else chain",
+           refinement_group);
+  int64_arg("--lazy-write-reads-depth",
+            bm->UserFlags.lazy_write_reads_depth,
+            "may-alias write levels a read still expands eagerly before the "
+            "rest of its chain is abstracted",
+            refinement_group);
 
   const char* const bb_group = "Bit-blasting options";
   bool_arg("--bb.div-v1", bm->UserFlags.division_variant_1,
