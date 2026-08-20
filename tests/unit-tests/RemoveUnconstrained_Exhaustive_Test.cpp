@@ -1208,14 +1208,14 @@ TEST(RemoveUnconstrained_GroundPath, ite_three_frames_with_suffixes)
 
 TEST(RemoveUnconstrained_GroundPath, ite_frame_cap_declines)
 {
-  // Five stacked frames exceed MAX_ITE_FRAMES: x must survive. One
+  // Nine stacked frames exceed MAX_ITE_FRAMES: x must survive. One
   // shared condition variable keeps the equivalence check enumerable.
   Context c;
   ASTNode x = c.bv();
   ASTNode y = c.bv();
   ASTNode t = c.hf->CreateTerm(BVMOD, W, x, c.konst(4));
-  for (int i = 0; i < 5; i++)
-    t = c.hf->CreateTerm(ITE, W, c.hf->CreateNode(EQ, y, c.konst(i)), t,
+  for (int i = 0; i < 9; i++)
+    t = c.hf->CreateTerm(ITE, W, c.hf->CreateNode(EQ, y, c.konst(i % 8)), t,
                          c.konst(7));
   ASTNode top = c.hf->CreateNode(EQ, t, c.konst(2));
 

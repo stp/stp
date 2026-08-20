@@ -636,7 +636,7 @@ bool RemoveUnconstrained::tryGroundPathCollapse(
     bool pathThen;
     size_t stepsBelow;
   };
-  const size_t MAX_ITE_FRAMES = 4;
+  const size_t MAX_ITE_FRAMES = 8;
   std::vector<IteFrame> frames;
 
   MutableASTNode* cur = &muteNode;
