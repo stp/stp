@@ -508,6 +508,24 @@ public:
   // entered the clause). Cumulative over the context lifetime.
   int lemmaAtomsFolded;
 
+  // Encoding rounds, and the largest single round. The checker
+  // deliberately collects every independent conflict a fixed point finds
+  // rather than stopping at the first, so a round has no upper bound, and
+  // neither the total nor the mean says whether that mattered: seventeen
+  // arrays asserted pairwise distinct take 54 rounds for 1477 lemmas, an
+  // average of 27, and the largest single round of that run is 120. These
+  // are what a decision about capping a round would have to be made on.
+  int lemmaRounds;
+  int lemmasInLargestRound;
+
+  // Print the four counters above under -s / --print-functionstat. Both
+  // the batch pipeline and the incremental driver call this where they
+  // print the rest of their per-solve statistics; the driver has its own
+  // encoding path and never enters the batch refinement loop, and it is
+  // the mode that accumulates the most rounds. Silent when the checker
+  // has encoded no round.
+  void reportLemmaStats() const;
+
 private:
   STPMgr* bm;
 

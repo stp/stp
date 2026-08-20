@@ -216,6 +216,12 @@ SOLVER_RETURN_TYPE IncrementalSolver::checkSat(const ASTVec& assertionsSMT2,
   const SOLVER_RETURN_TYPE result = checkSatBody(
       assertionsSMT2, assumeLastLevelPerConjunct, firstForcedIncrementalSolve);
   impl->finishProfile();
+  // The driver has its own encoding path and never enters the batch
+  // refinement loop, so the batch pipeline's report never runs here;
+  // without this the checker's rounds are invisible in exactly the mode
+  // that accumulates the most of them.
+  if (ExtensionalityContext* ext = impl->bm->getExtensionalityIfAny())
+    ext->reportLemmaStats();
   return result;
 }
 

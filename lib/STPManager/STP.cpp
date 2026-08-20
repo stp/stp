@@ -888,6 +888,12 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     if (toSATAIG.cbIsDestructed())
       cleaner.release();
 
+    // The counters are cumulative over the checker's lifetime, so a batch
+    // query decided before the refinement loop still has rounds to report
+    // -- earlier queries' rounds. Both decision exits report, or a later
+    // query would silently drop the line the driver prints for it.
+    if (ext != NULL)
+      ext->reportLemmaStats();
     CountersAndStats("print_func_stats", bm);
     return res;
   }
@@ -924,6 +930,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
       if (toSATAIG.cbIsDestructed())
         cleaner.release();
 
+      if (ext != NULL)
+        ext->reportLemmaStats();
       CountersAndStats("print_func_stats", bm);
       return res;
     }
