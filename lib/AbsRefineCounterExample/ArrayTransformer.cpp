@@ -84,6 +84,7 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
 
   assert(TransformMap == NULL);
   TransformMap = new ASTNodeMap(100);
+  cellSortConstraints.clear();
 
   ExtensionalityContext* ext = bm->getExtensionalityIfAny();
   // Constant-bit propagation also creates local ArrayTransformers for
@@ -111,6 +112,8 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
 
   if (bm->UserFlags.stats_flag)
     printArrayStats();
+
+  ASTVec sideConstraints;
 
   // This establishes equalities between every indexes, and a fresh variable.
   if (!bm->UserFlags.ackermannisation)
@@ -177,18 +180,24 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
       }
     }
 
-    runTimes->stop(RunTimes::Transforming);
+    sideConstraints.insert(sideConstraints.end(), equalsNodes.begin(),
+                           equalsNodes.end());
+  }
 
-    if (equalsNodes.size() > 0)
-      return nf->CreateNode(AND, result, equalsNodes);
-    else
-      return result;
-  }
-  else
-  {
-    runTimes->stop(RunTimes::Transforming);
-    return result;
-  }
+  // The sort constraints the fresh read abstractions owe. Not inside the
+  // branch above: eager Ackermannisation abstracts each read to one of
+  // these variables too -- it builds the if-then-else over them instead of
+  // leaving the refinement loop to relate them -- so the cells are exactly
+  // as much in need of pinning either way.
+  sideConstraints.insert(sideConstraints.end(), cellSortConstraints.begin(),
+                         cellSortConstraints.end());
+  cellSortConstraints.clear();
+
+  runTimes->stop(RunTimes::Transforming);
+
+  if (sideConstraints.size() > 0)
+    return nf->CreateNode(AND, result, sideConstraints);
+  return result;
 }
 
 ArrayTransformer::TransformResult
@@ -357,10 +366,31 @@ class ArrayTransformer::TransformDriver
   std::map<ASTNode, vector<std::pair<ASTNode, ASTNode>>>& ack_pair;
   const bool& recordTouchedReads;
   std::vector<std::pair<ASTNode, ASTNode>>& touchedReads;
+  ASTVec& cellSortConstraints;
 
   ASTNode finishTransformTerm(const ASTNode& term, const ASTNode& result)
   {
     return owner.finishTransformTerm(term, result);
+  }
+
+  // A cell of an array of modes holds a mode, and five bits carry one only
+  // through five of their thirty-two patterns. FpTotalise pins the reads the
+  // formula names, and it has run by now; a read minted here is either newer
+  // than that pass -- the ones read-over-write and read-over-if-then-else
+  // expansion introduce over a base array, and the ones a solved write chain
+  // or a refinement lemma introduces -- or is one the pass did cover, in
+  // which case this is the same constraint again and the conjunction absorbs
+  // it. Left free, such a cell is not merely an unanswered don't-care: the
+  // solve is entitled to witness a disequality of two arrays of modes with
+  // carriers that name no mode at all, and every reader downstream -- the
+  // congruence axioms, which compare the carriers, and the model, which must
+  // publish a mode -- is then reading a different cell than the other. Pin it
+  // where the array-equality checker pins its own virtual reads, so that
+  // there is one answer.
+  void pinRoundingModeCell(const ASTNode& arrName, const ASTNode& cell)
+  {
+    if (bm->arrayHasRmElement(arrName))
+      cellSortConstraints.push_back(bm->roundingModeValidConstraint(cell));
   }
 
   struct Frame
@@ -889,6 +919,13 @@ class ArrayTransformer::TransformDriver
           CurrentSymbol.SetExpWidth(term.GetExpWidth());
           CurrentSymbol.SetSigWidth(term.GetSigWidth());
 
+          // See pinRoundingModeCell. A write chain equated with its own base
+          // is rewritten rather than abstracted, so the cells it names are
+          // reads of the base minted right here, after totalisation -- and
+          // the equality it replaced leaves no record for the checker to pin
+          // them through either.
+          pinRoundingModeCell(arrName, CurrentSymbol);
+
           result = CurrentSymbol;
           arrayToIndexToRead[arrName].insert(
               make_pair(readIndex, ArrayRead(result, CurrentSymbol)));
@@ -941,6 +978,9 @@ class ArrayTransformer::TransformDriver
           // a formatless bitvector.
           CurrentSymbol.SetExpWidth(term.GetExpWidth());
           CurrentSymbol.SetSigWidth(term.GetSigWidth());
+
+          // See pinRoundingModeCell.
+          pinRoundingModeCell(arrName, CurrentSymbol);
 
           ASTNode symbolResult = CurrentSymbol;
 
@@ -1143,7 +1183,8 @@ public:
         ASTFalse(owner.ASTFalse), ASTUndefined(owner.ASTUndefined),
         arrayToIndexToRead(owner.arrayToIndexToRead), ack_pair(owner.ack_pair),
         recordTouchedReads(owner.recordTouchedReads),
-        touchedReads(owner.touchedReads)
+        touchedReads(owner.touchedReads),
+        cellSortConstraints(owner.cellSortConstraints)
   {
   }
 

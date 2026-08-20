@@ -114,6 +114,14 @@ private:
   bool recordTouchedReads = false;
   ReadKeys touchedReads;
 
+  // The sort constraints owed by the read abstractions this run minted, to
+  // be conjoined onto the formula that minted them. Emptied at the start of
+  // every top-level transform: a row the registry already held was pinned
+  // onto the formula it was created for, exactly as its index anchor was,
+  // and re-emitting it here would attach the whole table's pins to every
+  // formula transformed afterwards. See TransformFormula_TopLevel.
+  ASTVec cellSortConstraints;
+
   // Under eager Ackermannisation: each array's reads in the order they
   // were seen, from which a new read's nested if-then-else over the
   // existing reads is built. Persistent callers carry this inside Registry
