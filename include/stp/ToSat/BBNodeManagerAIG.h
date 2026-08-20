@@ -26,6 +26,7 @@ THE SOFTWARE.
 #define BBNodeManagerAIG_H_
 
 #include <cstdint>
+#include <stdexcept>
 
 #include "BBNodeAIG.h"
 #include "stp/ToSat/ToSATBase.h"
@@ -85,11 +86,29 @@ inline Aig_Obj_t* orderedAigMux(Aig_Man_t* p, Aig_Obj_t* pC, Aig_Obj_t* p1,
   return Aig_Or(p, thn, els);
 }
 
+// Thrown by BBNodeManagerAIG::checkBudget() when the AND-gate count passes
+// the manager's nodeBudget. Whoever set the budget owns the abandonment
+// policy, so this escapes CreateNode() and every BitBlaster frame above it;
+// only a caller that set a budget can see it.
+struct AIGBudgetExhausted : public std::runtime_error
+{
+  // The AND-gate count reached, always strictly greater than the budget.
+  int nodeCount;
+
+  explicit AIGBudgetExhausted(int n)
+      : std::runtime_error("AIG node budget exhausted"), nodeCount(n) {}
+};
+
 // Creates AIG nodes with ABC and wraps them in BBNodeAIG's.
 class BBNodeManagerAIG
 {
 public:
   Aig_Man_t* aigMgr;
+
+  // Hard cap on AND gates; -1 (the default) is no limit, 0 permits none.
+  // Set it before any blasting starts -- checkBudget() reads it on every
+  // CreateNode().
+  int64_t nodeBudget = -1;
 
   // Map from symbols to their AIG nodes.
   typedef std::map<ASTNode, vector<BBNodeAIG>> SymbolToBBNode;
@@ -98,6 +117,17 @@ public:
   int totalNumberOfNodes()
   {
     return aigMgr->nObjs[AIG_OBJ_AND]; // without having removed non-reachable.
+  }
+
+  // Called after every CreateNode(). A single node can add a whole fan-in
+  // tower before this runs, so the count at the throw can overshoot the
+  // budget by the width of one operator -- the cap is a bound on the order
+  // of magnitude, not an exact ceiling.
+  void checkBudget() const
+  {
+    if (nodeBudget >= 0 &&
+        static_cast<int64_t>(aigMgr->nObjs[AIG_OBJ_AND]) > nodeBudget)
+      throw AIGBudgetExhausted(aigMgr->nObjs[AIG_OBJ_AND]);
   }
 
 private:
@@ -277,6 +307,7 @@ public:
         assert(false);
         exit(-1);
     }
+    checkBudget();
     return BBNodeAIG(pNode);
   }
 

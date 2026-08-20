@@ -216,6 +216,14 @@ private:
 
   void buildPendingModel();
 
+  // Latched by the first checkSat() of a session that set
+  // UserDefinedFlags::aig_node_budget. The driver's AIG is persistent --
+  // it outlives the check that grew it and is read again by every later
+  // one -- so a check cannot walk away from a half-built encoding the way
+  // the batch blaster can, and the cap is not enforced here. Say so once,
+  // rather than letting a memory cap look as if it were in force.
+  bool budgetNotEnforcedWarned = false;
+
   std::unique_ptr<Impl> impl;
 };
 

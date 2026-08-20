@@ -75,6 +75,11 @@ private:
 
 public:
   void add_cnf_to_solver(SATSolver& satSolver, Cnf_Dat_t* cnfData);
+
+  // Blast `input` and convert it to CNF. Returns NULL, having freed the AIG
+  // and the constant-bit propagator, when UserFlags::aig_node_budget is set
+  // and the blast exceeds it -- there is no CNF in that case, and the caller
+  // must abandon the query rather than treat the absence as unsatisfiable.
   Cnf_Dat_t* bitblast(const ASTNode& input, bool needAbsRef);
   void release_cnf_memory(Cnf_Dat_t* cnfData);
 

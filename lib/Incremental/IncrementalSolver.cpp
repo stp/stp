@@ -204,6 +204,14 @@ SOLVER_RETURN_TYPE IncrementalSolver::checkSat(const ASTVec& assertionsSMT2,
                                                bool assumeLastLevelPerConjunct,
                                                bool firstForcedIncrementalSolve)
 {
+  if (impl->bm->UserFlags.aig_node_budget >= 0 && !budgetNotEnforcedWarned)
+  {
+    budgetNotEnforcedWarned = true;
+    std::cerr << "Warning: --aig-node-budget is not enforced on the "
+                 "incremental encoder; the cap covers batch solves only."
+              << std::endl;
+  }
+
   impl->beginProfile(assertionsSMT2.size());
   const SOLVER_RETURN_TYPE result = checkSatBody(
       assertionsSMT2, assumeLastLevelPerConjunct, firstForcedIncrementalSolve);

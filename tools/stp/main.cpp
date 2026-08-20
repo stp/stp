@@ -26,6 +26,7 @@ THE SOFTWARE.
 
 #include <CLI/CLI.hpp>
 
+#include <climits>
 #include <initializer_list>
 #include <iterator>
 #include <string>
@@ -370,6 +371,18 @@ void ExtraMain::create_options()
            "the rewriting simplifier, so not with --disable-opt-inc or "
            "--disable-simplifications",
            bb_group);
+
+  int64_arg("--aig-node-budget", bm->UserFlags.aig_node_budget,
+            "Number of AIG AND gates after which one query's bit-blast gives "
+            "up. -1 means never, 0 means give up without blasting. Exceeding "
+            "it abandons the query through the soft-timeout path, so the "
+            "answer is \"Timed Out.\" -- the same one --max-time gives. "
+            "Batch solves only: the incremental encoder's AIG outlives the "
+            "check that grew it and is never capped, so engaging it with a "
+            "budget set warns once instead. Bounds the blast, not the "
+            "process -- CNF conversion and the SAT search allocate on top "
+            "of it",
+            bb_group);
 
   const char* const print_group = "Printing options";
   app.add_flag("--print-stpinput,-b", bm->UserFlags.print_STPinput_back_flag,
@@ -881,6 +894,23 @@ int ExtraMain::parse_options(int argc, char** argv)
   if (bm->UserFlags.timeout_max_time < -1)
   {
     cerr << "ERROR: --max-time must be -1 (no limit) or greater" << endl;
+    std::exit(-1);
+  }
+
+  if (bm->UserFlags.aig_node_budget < -1)
+  {
+    cerr << "ERROR: --aig-node-budget must be -1 (no limit) or greater"
+         << endl;
+    std::exit(-1);
+  }
+
+  // The AND-gate counter the budget is compared against is ABC's
+  // Aig_Man_t::nObjs[], an int. A budget it can never reach would be a cap
+  // that silently never fires, which is worse than no cap at all.
+  if (bm->UserFlags.aig_node_budget > INT_MAX)
+  {
+    cerr << "ERROR: --aig-node-budget must be at most " << INT_MAX
+         << "; larger caps can never be reached" << endl;
     std::exit(-1);
   }
 

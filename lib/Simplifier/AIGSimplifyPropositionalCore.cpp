@@ -45,6 +45,8 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/ToSat/BitBlaster.h"
 
+#include <iostream>
+
 namespace stp
 {
 using std::make_pair;
@@ -181,8 +183,26 @@ ASTNode AIGSimplifyPropositionalCore::topLevel(const ASTNode& top)
   SubstitutionMap sm (bm);
   Simplifier simplifier(bm, &sm );
   BBNodeManagerAIG mgr;
+  mgr.nodeBudget = bm->UserFlags.aig_node_budget;
   BitBlaster bb(&mgr, &simplifier, bm->defaultNodeFactory, &bm->UserFlags);
-  BBNodeAIG blasted = bb.BBForm(replaced);
+
+  // This pass is an optimisation, so an exhausted budget costs nothing but
+  // the work already done: hand back the formula that came in and let the
+  // ordinary bit-blaster -- which enforces the same cap -- decide the query.
+  BBNodeAIG blasted;
+  try
+  {
+    blasted = bb.BBForm(replaced);
+  }
+  catch (const AIGBudgetExhausted& e)
+  {
+    if (bm->UserFlags.stats_flag)
+      std::cerr << "AIG core simplification abandoned at " << e.nodeCount
+                << " nodes: node budget exhausted" << std::endl;
+    mgr.stop();
+    bm->GetRunTimes()->stop(RunTimes::AIGSimplifyCore);
+    return top;
+  }
 
   Aig_ObjCreateCo(mgr.aigMgr, blasted.n);
   Aig_ManCleanup(mgr.aigMgr);       // remove nodes not connected to the PO.
