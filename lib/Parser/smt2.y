@@ -2472,6 +2472,18 @@ FORMID_TOK
     $$ = (forms.size() == 1) ?
       stp::GlobalParserInterface->newNode(forms[0]) :
       stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(AND, forms));
+    // Remember the group. Dissolving distinct here loses the fact that its
+    // operands are interchangeable, and a later pass cannot recover it from a
+    // clique of disequalities; recording it costs a vector and commits to
+    // nothing, since that pass re-checks the symmetry against the real formula.
+    // A distinct the cardinality guard refused never reaches here: it has no
+    // operands left to order.
+    {
+      stp::DistinctGroup group;
+      group.operands = terms;
+      group.emitted = *$$;
+      stp::GlobalParserBM->distinctGroups.push_back(group);
+    }
   }
 
   delete $3;

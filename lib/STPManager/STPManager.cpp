@@ -919,6 +919,12 @@ STPMgr::~STPMgr()
   if (NULL != CreateBVConstVal)
     CONSTANTBV::BitVector_Destroy(CreateBVConstVal);
 
+  // Released here, in the body, for the same reason as every other member
+  // above: destroying a node reaches back into this manager (ASTSymbol::CleanUp
+  // unindexes its name, ASTInterior::CleanUp erases from the interior table),
+  // and the implicit member-destruction phase runs after those tables are gone.
+  distinctGroups.clear();
+
   Introduced_SymbolsSet.clear();
   _symbol_unique_table.clear();
   _symbol_name_index.clear();

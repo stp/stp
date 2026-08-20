@@ -545,6 +545,13 @@ void Cpp_interface::reset()
   discardExtensionalitySolveState();
   resetIncrementalSolver();
 
+  // Recorded distinct groups name nodes from assertions that no longer
+  // exist. The ordering pass ignores a group its walk cannot reach, so
+  // keeping them would be harmless; dropping them keeps a long session's
+  // registry proportional to what is asserted rather than to what has ever
+  // been asserted.
+  bm.distinctGroups.clear();
+
   cleanUp();
 
   checkInvariant();
@@ -589,6 +596,7 @@ void Cpp_interface::resetAssertions()
   if (!global_declarations)
     removeFrame();
   cache.clear();
+  bm.distinctGroups.clear();
 
   // These tables may retain the discarded assertions or declarations.
   resetSolver();
