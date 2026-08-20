@@ -334,6 +334,7 @@ struct IncrementalSolver::Impl
   // shadows an active cell with a floating value, makes the checker
   // reject every candidate, and refinement cannot converge.
   std::map<ASTNode, std::vector<std::pair<ASTNode, ASTNode>>> readsOfEncoded;
+  std::map<ASTNode, std::vector<std::pair<ASTNode, ASTNode>>> chainsOfEncoded;
 
   IncrementalSymbolMapCache symbolMapCache;
 
@@ -2152,6 +2153,7 @@ struct IncrementalSolver::Impl
           batchAT->TransformFormulaWithRegistry(toEncode, arrayRegistry);
       toEncode = transformed.formula;
       readsOfEncoded[key].swap(transformed.touchedReads);
+      chainsOfEncoded[key].swap(transformed.touchedChains);
       assert(!containsArrayOps(toEncode, bm));
       totalizeRegistrySymbols();
 
@@ -2186,6 +2188,34 @@ struct IncrementalSolver::Impl
           binds.push_back(
               bm->defaultNodeFactory->CreateNode(EQ, ai.second, indexSym));
         }
+        // An abstracted chain row's anchors bind the same way, and for
+        // the same reason: a hit row's equations were conjoined by
+        // whichever conjunct created it, possibly a popped one.
+        for (const std::pair<ASTNode, ASTNode>& ci : chainsOfEncoded[key])
+        {
+          ArrayTransformer::ChainReadsMap::const_iterator cmit =
+              arrayRegistry.chains.find(ci.first);
+          if (cmit == arrayRegistry.chains.end())
+            continue;
+          ArrayTransformer::ChainIndexMap::const_iterator crit =
+              cmit->second.find(ci.second);
+          if (crit == cmit->second.end())
+            continue;
+          const ArrayTransformer::ChainRow& row = crit->second;
+          if (row.index != row.indexAnchor)
+            binds.push_back(bm->defaultNodeFactory->CreateNode(
+                EQ, row.index, row.indexAnchor));
+          for (const ArrayTransformer::ChainLevel& lvl : row.levels)
+          {
+            if (lvl.index != lvl.indexAnchor)
+              binds.push_back(bm->defaultNodeFactory->CreateNode(
+                  EQ, lvl.index, lvl.indexAnchor));
+            if (lvl.value != lvl.valueAnchor)
+              binds.push_back(bm->defaultNodeFactory->CreateNode(
+                  EQ, lvl.value, lvl.valueAnchor));
+          }
+        }
+
         if (!binds.empty())
         {
           binds.push_back(toEncode);
@@ -2358,6 +2388,8 @@ struct IncrementalSolver::Impl
   // no-progress guard on the divergence.
   std::map<std::pair<ASTNode, ASTNode>, size_t> seededRowRef;
   std::map<ASTNode, std::vector<std::pair<ASTNode, ASTNode>>> foldedRowsOf;
+  std::map<std::pair<ASTNode, ASTNode>, size_t> seededChainRef;
+  std::map<ASTNode, std::vector<std::pair<ASTNode, ASTNode>>> foldedChainsOf;
   std::vector<ASTNode> pendingBaseSeed;
 
   // The PUSHED keys seedActiveReads last folded, sorted by node number; base
@@ -2389,6 +2421,17 @@ struct IncrementalSolver::Impl
       seededRowRef[ai]++;
       folded.push_back(ai);
     }
+
+    std::vector<std::pair<ASTNode, ASTNode>>& foldedChains =
+        foldedChainsOf[key];
+    std::map<ASTNode, std::vector<std::pair<ASTNode, ASTNode>>>::
+        const_iterator cit = chainsOfEncoded.find(key);
+    if (cit != chainsOfEncoded.end())
+      for (const std::pair<ASTNode, ASTNode>& ci : cit->second)
+      {
+        seededChainRef[ci]++;
+        foldedChains.push_back(ci);
+      }
   }
 
   void unfoldKeyReads(const ASTNode& key)
@@ -2407,6 +2450,20 @@ struct IncrementalSolver::Impl
         seededRowRef.erase(rr);
     }
     foldedRowsOf.erase(fit);
+
+    std::map<ASTNode, std::vector<std::pair<ASTNode, ASTNode>>>::iterator
+        cfit = foldedChainsOf.find(key);
+    if (cfit != foldedChainsOf.end())
+    {
+      for (const std::pair<ASTNode, ASTNode>& ci : cfit->second)
+      {
+        std::map<std::pair<ASTNode, ASTNode>, size_t>::iterator cr =
+            seededChainRef.find(ci);
+        if (cr != seededChainRef.end() && --cr->second == 0)
+          seededChainRef.erase(cr);
+      }
+      foldedChainsOf.erase(cfit);
+    }
   }
 
   void seedActiveReads(const std::vector<ASTNode>& pushedActiveKeys)
@@ -2472,6 +2529,24 @@ struct IncrementalSolver::Impl
       fresh[ai.first].insert(*iit);
     }
     batchAT->arrayToIndexToRead = fresh;
+
+    ArrayTransformer::ChainReadsMap freshChains;
+    for (std::map<std::pair<ASTNode, ASTNode>, size_t>::const_iterator it =
+             seededChainRef.begin();
+         it != seededChainRef.end(); ++it)
+    {
+      const std::pair<ASTNode, ASTNode>& ci = it->first;
+      ArrayTransformer::ChainReadsMap::const_iterator cmit =
+          arrayRegistry.chains.find(ci.first);
+      if (cmit == arrayRegistry.chains.end())
+        continue;
+      ArrayTransformer::ChainIndexMap::const_iterator crit =
+          cmit->second.find(ci.second);
+      if (crit == cmit->second.end())
+        continue;
+      freshChains[ci.first].insert(*crit);
+    }
+    batchAT->chainReads = freshChains;
     lastSeededKeys.swap(sortedPushed);
     if (profile.enabled)
       profile.readRowsLive = seededRowRef.size();
@@ -2501,6 +2576,31 @@ struct IncrementalSolver::Impl
     if (bm->UserFlags.ackermannisation)
       return;
     totalizeReadTable(arrayRegistry.reads);
+
+    // The chain rows' lemma leaves need whole encodings for the same
+    // reason: a partially-propagated-away symbol cannot carry an axiom.
+    for (ArrayTransformer::ChainReadsMap::const_iterator it =
+             arrayRegistry.chains.begin();
+         it != arrayRegistry.chains.end(); ++it)
+      for (ArrayTransformer::ChainIndexMap::const_iterator rit =
+               it->second.begin();
+           rit != it->second.end(); ++rit)
+      {
+        const ArrayTransformer::ChainRow& row = rit->second;
+        totalizeSymbol(row.symbol);
+        if (row.indexAnchor.GetKind() == SYMBOL)
+          totalizeSymbol(row.indexAnchor);
+        if (!row.baseReadSymbol.IsNull() &&
+            row.baseReadSymbol.GetKind() == SYMBOL)
+          totalizeSymbol(row.baseReadSymbol);
+        for (const ArrayTransformer::ChainLevel& lvl : row.levels)
+        {
+          if (lvl.indexAnchor.GetKind() == SYMBOL)
+            totalizeSymbol(lvl.indexAnchor);
+          if (lvl.valueAnchor.GetKind() == SYMBOL)
+            totalizeSymbol(lvl.valueAnchor);
+        }
+      }
   }
 
   // The same guarantee for the rows an extensionality round refines over.

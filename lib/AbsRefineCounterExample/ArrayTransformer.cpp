@@ -52,6 +52,7 @@ class ArrayTransformer::RegistryScope
   Registry& registry;
   bool savedRecordTouchedReads;
   ReadKeys savedTouchedReads;
+  ReadKeys savedTouchedChains;
 
 public:
   RegistryScope(ArrayTransformer& owner, Registry& registry)
@@ -62,7 +63,10 @@ public:
     assert(!owner.recordTouchedReads);
     owner.arrayToIndexToRead.swap(registry.reads);
     owner.ack_pair.swap(registry.ackPairs);
+    owner.chainReads.swap(registry.chains);
+    owner.chainAnchorOf.swap(registry.chainAnchors);
     owner.touchedReads.swap(savedTouchedReads);
+    owner.touchedChains.swap(savedTouchedChains);
     owner.recordTouchedReads = true;
   }
 
@@ -71,8 +75,12 @@ public:
     owner.recordTouchedReads = savedRecordTouchedReads;
     owner.touchedReads.clear();
     owner.touchedReads.swap(savedTouchedReads);
+    owner.touchedChains.clear();
+    owner.touchedChains.swap(savedTouchedChains);
     owner.arrayToIndexToRead.swap(registry.reads);
     owner.ack_pair.swap(registry.ackPairs);
+    owner.chainReads.swap(registry.chains);
+    owner.chainAnchorOf.swap(registry.chainAnchors);
   }
 };
 
@@ -177,6 +185,12 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
       }
     }
 
+    // The anchors minted for abstracted write chains bind the same way the
+    // index variables above do.
+    equalsNodes.insert(equalsNodes.end(), chainAnchorEquations.begin(),
+                       chainAnchorEquations.end());
+    chainAnchorEquations.clear();
+
     runTimes->stop(RunTimes::Transforming);
 
     if (equalsNodes.size() > 0)
@@ -197,7 +211,70 @@ ArrayTransformer::TransformFormulaWithRegistry(const ASTNode& form,
 {
   RegistryScope scope(*this, registry);
   const ASTNode transformed = TransformFormula_TopLevel(form);
-  return TransformResult(transformed, touchedReads);
+  return TransformResult(transformed, touchedReads, touchedChains);
+}
+
+// Choose where a read of this write chain stops being expanded eagerly:
+// after the configured number of may-alias levels the rest of the chain is
+// abstracted to a refinement row, provided it runs through writes to a
+// plain array symbol and still holds at least two may-alias levels (a
+// shorter tail is cheaper expanded). May-aliasing is judged on the raw
+// index terms; a comparison that only resolves after transformation costs
+// eagerness, never soundness. Called once per (top read, index); the
+// suffix reads the eager expansion creates skip it (see the WRITE arm).
+bool ArrayTransformer::markLazyChainCut(const ASTNode& writeNode,
+                                        const ASTNode& readIndex)
+{
+  if (!bm->UserFlags.lazy_write_reads || bm->UserFlags.ackermannisation)
+    return false;
+  ExtensionalityContext* ext = bm->getExtensionalityIfAny();
+  if (ext != NULL && ext->active())
+    return false;
+
+  const int64_t budget =
+      std::max<int64_t>(0, bm->UserFlags.lazy_write_reads_depth);
+  int64_t unresolved = 0;
+  ASTNode cut;
+  ASTNode n = writeNode;
+  while (n.GetKind() == WRITE)
+  {
+    const ASTNode cond = simp->CreateSimplifiedEQ(n[1], readIndex);
+    if (cond == ASTTrue)
+      break; // the read resolves here; the levels below are dead
+    if (cond != ASTFalse)
+    {
+      if (unresolved == budget)
+        cut = n;
+      unresolved++;
+    }
+    n = n[0];
+  }
+  if (cut.IsNull() || n.GetKind() != SYMBOL || unresolved < budget + 2)
+    return false;
+  lazyCutTargets[cut].insert(readIndex);
+  qualifiedScansOf[n]++;
+  cutDepthOf[cut] = (size_t)(unresolved - budget);
+  return true;
+}
+
+// The variable that carries a chain term's bits into the SAT encoding, so
+// refinement lemmas can be stated over it: the term itself when it already
+// is a symbol or a constant, otherwise a deterministic fresh variable
+// bound by an equation conjoined at top level.
+ASTNode ArrayTransformer::anchorForChainTerm(const ASTNode& term)
+{
+  if (term.GetKind() == SYMBOL || term.isConstant())
+    return term;
+  ASTNodeMap::const_iterator it = chainAnchorOf.find(term);
+  if (it != chainAnchorOf.end())
+    return it->second;
+  ASTNode anchor = bm->CreateDeterministicVariable(
+      0, term.GetValueWidth(), "STP__ChainAnchor", term);
+  anchor.SetExpWidth(term.GetExpWidth());
+  anchor.SetSigWidth(term.GetSigWidth());
+  chainAnchorOf.insert(std::make_pair(term, anchor));
+  chainAnchorEquations.push_back(nf->CreateNode(EQ, term, anchor));
+  return anchor;
 }
 
 // Check that the transformations have occurred.
@@ -358,6 +435,10 @@ class ArrayTransformer::TransformDriver
   const bool& recordTouchedReads;
   std::vector<std::pair<ASTNode, ASTNode>>& touchedReads;
 
+  // Tail reads created by eager expansions still in progress: they skip
+  // the chain-cut scan (the original read's scan covered their spine).
+  ASTNodeSet internalTailReads;
+
   ASTNode finishTransformTerm(const ASTNode& term, const ASTNode& result)
   {
     return owner.finishTransformTerm(term, result);
@@ -398,6 +479,7 @@ class ArrayTransformer::TransformDriver
       AfterWriteIndex,
       AfterWriteValue,
       AfterPushedRead,
+      ChainLevel,
       AfterIteCondition,
       AfterIteSelectedBranch,
       AfterIteThen,
@@ -482,6 +564,17 @@ class ArrayTransformer::TransformDriver
     WriteValueSlot,
     ElseReadSlot,
     ReadStateSlots
+  };
+
+  // The chain-collection frames use a different layout: the fixed slots,
+  // then two slots per residual level holding the raw index and value
+  // until their transforms overwrite them in place.
+  enum ChainStateSlot : size_t
+  {
+    ChainReadIndexSlot,
+    ChainBaseSlot,
+    ChainCountSlot,
+    ChainFixedSlots
   };
 
   static_assert(sizeof(Frame) <= 56,
@@ -1005,6 +1098,105 @@ class ArrayTransformer::TransformDriver
            * 5. arrName[2] is the WRITE value i.e. val (val can inturn
            *    be an array read)
            */
+
+          // A read this pair already abstracted reuses its row.
+          {
+            ChainReadsMap::const_iterator cit = owner.chainReads.find(arrName);
+            if (cit != owner.chainReads.end())
+            {
+              ChainIndexMap::const_iterator rit = cit->second.find(readIndex);
+              if (rit != cit->second.end())
+              {
+                if (recordTouchedReads)
+                {
+                  owner.touchedChains.push_back(
+                      std::make_pair(arrName, readIndex));
+                  if (!rit->second.baseArray.IsNull())
+                    touchedReads.push_back(
+                        std::make_pair(rit->second.baseArray, readIndex));
+                }
+                return finishRead(rit->second.symbol);
+              }
+            }
+          }
+
+          // Each original read scans its chain once for a cut; the suffix
+          // reads the eager expansion itself creates skip the scan (their
+          // spine is already covered by the original's mark).
+          const bool internalTail = internalTailReads.erase(term) > 0;
+          if (!internalTail)
+            owner.markLazyChainCut(arrName, readIndex);
+
+          {
+            std::map<ASTNode, ASTNodeSet>::const_iterator cit =
+                owner.lazyCutTargets.find(arrName);
+            // The abstraction pays off when many reads share a chain:
+            // the eager expansion is then levels x reads, while the rows
+            // and their lemmas stay near-linear. A chain read a handful
+            // of times is cheaper expanded -- abstracting it saves little
+            // encoding and buys refinement rounds -- so a cut activates
+            // only once its base array's qualified reads both exceed a
+            // floor and amount to a fair share of the residual depth.
+            // The first arrivals stay eager; in the incremental setting
+            // the later conjuncts' reads are the ones that matter.
+            bool activated = false;
+            if (cit != owner.lazyCutTargets.end() &&
+                cit->second.find(readIndex) != cit->second.end())
+            {
+              ASTNode base = arrName;
+              while (base.GetKind() == WRITE)
+                base = base[0];
+              const size_t scans = owner.qualifiedScansOf[base];
+              const size_t depth = owner.cutDepthOf[arrName];
+              activated = scans > 4 && scans * 4 >= depth;
+            }
+            if (activated)
+            {
+              // Collect the residual chain: every level whose write may
+              // alias the read, top-down. Provably-disjoint levels are
+              // dropped; a provably-hit level ends the walk and stands in
+              // for the fall-through (the base is then unreachable and
+              // stays null). The walk repeats markLazyChainCut's
+              // simplifications, so the two always agree.
+              ASTVec rawParts;
+              ASTNode base;
+              ASTNode w = arrName;
+              while (w.GetKind() == WRITE)
+              {
+                const ASTNode cond = simp->CreateSimplifiedEQ(w[1], readIndex);
+                if (cond != ASTFalse)
+                {
+                  rawParts.push_back(w[1]);
+                  rawParts.push_back(w[2]);
+                }
+                if (cond == ASTTrue)
+                  break;
+                w = w[0];
+              }
+              if (w.GetKind() == SYMBOL)
+                base = w;
+              assert(rawParts.size() >= 2);
+
+              f.storage = activeParts.size();
+              activeParts.resize(f.storage + ChainFixedSlots +
+                                 rawParts.size());
+              state = activeParts.data() + f.storage;
+              state[ChainReadIndexSlot] = readIndex;
+              state[ChainBaseSlot] = base;
+              // Nested transforms grow the arena above these slots, so the
+              // level count cannot be recovered from its size later.
+              state[ChainCountSlot] =
+                  bm->CreateBVConst(32, rawParts.size() / 2);
+              for (size_t k = 0; k < rawParts.size(); k++)
+                state[ChainFixedSlots + k] = rawParts[k];
+              f.i = 0;
+              const ASTNode firstRaw = state[ChainFixedSlots];
+              if (requestTerm(f, Frame::ReadPhase::ChainLevel, firstRaw))
+                return true;
+              break;
+            }
+          }
+
           f.storage = activeParts.size();
           activeParts.resize(f.storage + ReadStateSlots);
           state = activeParts.data() + f.storage;
@@ -1074,6 +1266,11 @@ class ArrayTransformer::TransformDriver
           nf->CreateTerm(READ, width, arrName[0], state[ReadIndexSlot]);
       assert(BVTypeCheck(readTerm));
 
+      // A tail read of an expansion in progress: its spine is covered by
+      // the original read's cut scan, so it must not scan again.
+      if (readTerm.GetKind() == READ)
+        internalTailReads.insert(readTerm);
+
       // The simplifying node factory may have produced
       // something that's not a READ.
       if (requestTerm(f, Frame::ReadPhase::AfterPushedRead, readTerm))
@@ -1086,6 +1283,78 @@ class ArrayTransformer::TransformDriver
       assert(BVTypeCheck(const_cast<ASTNode&>(readPushedIn)));
       return finishRead(simp->CreateSimplifiedTermITE(
           f.cond, state[WriteValueSlot], readPushedIn));
+    }
+
+    if (f.readPhase == Frame::ReadPhase::ChainLevel)
+    {
+      for (;;)
+      {
+        state = activeParts.data() + f.storage;
+        state[ChainFixedSlots + f.i] = result;
+        f.i++;
+        const size_t total =
+            2 * (size_t)state[ChainCountSlot].GetUnsignedConst();
+        if (f.i < total)
+        {
+          const ASTNode nextRaw = state[ChainFixedSlots + f.i];
+          if (requestTerm(f, Frame::ReadPhase::ChainLevel, nextRaw))
+            return true;
+          continue;
+        }
+
+        // Every residual level is transformed: build the row.
+        ChainRow row;
+        row.index = state[ChainReadIndexSlot];
+        row.indexAnchor = owner.anchorForChainTerm(row.index);
+        row.baseArray = state[ChainBaseSlot];
+        const size_t nLevels = total / 2;
+        row.levels.reserve(nLevels);
+        for (size_t k = 0; k < nLevels; k++)
+        {
+          ChainLevel lvl;
+          lvl.index = state[ChainFixedSlots + 2 * k];
+          lvl.indexAnchor = owner.anchorForChainTerm(lvl.index);
+          lvl.value = state[ChainFixedSlots + 2 * k + 1];
+          lvl.valueAnchor = owner.anchorForChainTerm(lvl.value);
+          row.levels.push_back(lvl);
+        }
+
+        if (!row.baseArray.IsNull())
+        {
+          // The fall-through is the ordinary read abstraction of
+          // (base, index): reuse its row, or create it exactly as a direct
+          // read would so a later direct read shares it.
+          arrTypeMap& baseMap = arrayToIndexToRead[row.baseArray];
+          arrTypeMap::const_iterator bit = baseMap.find(row.index);
+          if (bit != baseMap.end())
+            row.baseReadSymbol = bit->second.symbol;
+          else
+          {
+            ASTNode baseVar = bm->CreateDeterministicVariable(
+                term.GetIndexWidth(), term.GetValueWidth(),
+                "array_" + std::string(row.baseArray.GetName()), row.index);
+            baseVar.SetExpWidth(term.GetExpWidth());
+            baseVar.SetSigWidth(term.GetSigWidth());
+            baseMap.insert(
+                std::make_pair(row.index, ArrayRead(baseVar, baseVar)));
+            row.baseReadSymbol = baseVar;
+          }
+          if (recordTouchedReads)
+            touchedReads.push_back(std::make_pair(row.baseArray, row.index));
+        }
+
+        ASTNode readVar = bm->CreateDeterministicVariable(
+            term.GetIndexWidth(), term.GetValueWidth(), "chain_read",
+            term[0], row.index);
+        readVar.SetExpWidth(term.GetExpWidth());
+        readVar.SetSigWidth(term.GetSigWidth());
+        row.symbol = readVar;
+
+        owner.chainReads[term[0]][row.index] = row;
+        if (recordTouchedReads)
+          owner.touchedChains.push_back(std::make_pair(term[0], row.index));
+        return finishRead(readVar);
+      }
     }
 
     if (f.readPhase == Frame::ReadPhase::AfterIteCondition)
@@ -1190,7 +1459,13 @@ public:
       {
         if (current.ownsReadState())
         {
-          assert(current.storage + ReadStateSlots == activeParts.size());
+          size_t slots = ReadStateSlots;
+          if (current.readPhase == Frame::ReadPhase::ChainLevel)
+            slots = ChainFixedSlots +
+                    2 * (size_t)activeParts[current.storage + ChainCountSlot]
+                            .GetUnsignedConst();
+          assert(current.storage + slots == activeParts.size());
+          (void)slots;
           activeParts.resize(current.storage);
         }
       }
