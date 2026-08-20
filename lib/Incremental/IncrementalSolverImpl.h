@@ -1470,9 +1470,30 @@ struct IncrementalSolver::Impl
   std::vector<int> lastFailedLits;
   size_t lastLevelCount;
 
+  // A granular core is trustworthy only if every literal that could fail is
+  // one this call can attribute. The accessors go the other way -- they keep
+  // the failed literals they can find in assumedLitLevels and
+  // lastLevelLitConjuncts, and silently drop the rest -- so an assumed
+  // literal missing from those tables does not widen the reported core, it
+  // narrows it. The extensionality block literal is exactly such a literal
+  // (assumed, deliberately unrecorded), and a round that assumed one would
+  // report a core too shallow, letting the frontend cache unsat at a level
+  // that is satisfiable. Those rounds are routed to coarse today; this is
+  // the statement of why that routing is load-bearing, and it re-establishes
+  // the conclusion rather than trusting the routing, because coarse is
+  // always a correct answer and a wrong unsat is not.
   void recordUnsat(const SATSolver::vec_literals& assumptions,
                    size_t levelCount, bool coarse)
   {
+    if (!coarse)
+    {
+      std::unordered_set<int> attributable;
+      for (const std::pair<int, size_t>& ll : assumedLitLevels)
+        attributable.insert(ll.first);
+      for (int i = 0; i < assumptions.size() && !coarse; i++)
+        coarse = attributable.count(assumptions[i].x) == 0;
+      assert(!coarse && "granular unsat with an unattributable assumption");
+    }
     lastUnsat = true;
     lastUnsatCoarse = coarse;
     lastLevelCount = levelCount;

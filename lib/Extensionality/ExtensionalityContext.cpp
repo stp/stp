@@ -181,7 +181,8 @@ ASTNode recoverAnchoredOperand(const ASTNode& rhs, const ASTNode& lambda,
 } // namespace
 
 ExtensionalityContext::ExtensionalityContext(STPMgr* bm_)
-    : lemmasEmitted(0), lemmaAtomsFolded(0), bm(bm_), solveInProgress(false),
+    : lemmasEmitted(0), lemmaAtomsFolded(0), lemmaRounds(0),
+      lemmasInLargestRound(0), bm(bm_), solveInProgress(false),
       registrySealed(false),
       arrayGraphIsFrozen(false), graphBound(false),
       readTransformInProgress(false), readTransformComplete(false),
@@ -1871,10 +1872,27 @@ void ExtensionalityContext::encodePendingLemmas(SATSolver& solver,
   if (!pendingLemmaValid || pendingLemmas.empty())
     FatalError("array-equality: lemma encoding began without a pending "
                "certificate");
+  lemmaRounds++;
+  if ((int)pendingLemmas.size() > lemmasInLargestRound)
+    lemmasInLargestRound = (int)pendingLemmas.size();
   for (size_t i = 0; i < pendingLemmas.size(); i++)
     encodeOneLemma(pendingLemmas[i], solver, tosat, guardLit);
   pendingLemmas.clear();
   pendingLemmaValid = false;
+}
+
+// See the header. Every figure is cumulative over the context lifetime -- a
+// running total and a lifetime maximum -- and only the printing is per
+// solve, so that a multi-query file shows how the accounting grew rather
+// than only where it ended up.
+void ExtensionalityContext::reportLemmaStats() const
+{
+  if (!bm->UserFlags.stats_flag || lemmaRounds == 0)
+    return;
+  std::cerr << "Array equality: " << lemmasEmitted << " lemmas, "
+            << lemmaRounds << " rounds, largest " << lemmasInLargestRound
+            << ", " << lemmaAtomsFolded << " atoms folded (cumulative)."
+            << std::endl;
 }
 
 // See the header. A premise is dropped when it is valid, the
