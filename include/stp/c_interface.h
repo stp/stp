@@ -305,6 +305,14 @@ DLL_PUBLIC Expr vc_varExpr(VC vc, const char* name, Type type);
 //! The variable name must only consist of alphanumerics and underscore
 //! characters, otherwise this may behave in undefined ways, e.g. segfault.
 //!
+//! A positive 'indexwidth' asks for an array, whose elements are
+//! 'valuewidth' bits wide; a zero 'indexwidth' asks for a bit-vector of
+//! 'valuewidth' bits, or for a Boolean when 'valuewidth' is zero too.
+//! A zero-width bit-vector is not a sort, so an array whose element width
+//! is not positive is a fatal error, as it is in vc_bvType: the message
+//! reaches any handler registered with vc_registerErrorHandler and the
+//! call does not return.
+//!
 DLL_PUBLIC Expr vc_varExpr1(VC vc, const char* name, int indexwidth,
                             int valuewidth);
 

@@ -673,6 +673,18 @@ namespace stp
     return n;
   }
 
+  // (_ BitVec 0) is not a sort. SourceSort::bitVector asserts a positive
+  // width, so without this the asserting build aborts inside a header and the
+  // NDEBUG build carries a zero-width symbol through the pipeline as a
+  // Boolean. The array-component rule was the only one that refused it; every
+  // (_ BitVec N) sort production goes through here now, so there is one
+  // wording for one mistake rather than a copy per rule.
+  void checkBitVectorWidth(unsigned int width)
+  {
+    if (width == 0)
+      fatal_yyerror("bit-vectors must be of positive length");
+  }
+
   // The indexed to_fp forms and the special values carry the format as
   // numerals; apply the floor the sort rule enforces.
   void checkFpFormatWidths(unsigned int exp_width, unsigned int sig_width)
@@ -1777,6 +1789,7 @@ cmdi:
 function_param:
 LPAREN_TOK STRING_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK RPAREN_TOK
 {
+  checkBitVectorWidth($6);
   $$ = new ASTNode(stp::GlobalParserInterface->CreateSourceSymbol(
       $2->c_str(), stp::SourceSort::bitVector($6)));
   stp::GlobalParserInterface->addSymbol(*$$);
@@ -1820,6 +1833,7 @@ function_param
 function_def:
 STRING_TOK LPAREN_TOK function_params RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK  an_term
 {
+  checkBitVectorWidth($8);
   checkBitVectorTerm(*$10);
   if ($10->GetValueWidth() != $8)
   {
@@ -1932,6 +1946,7 @@ STRING_TOK LPAREN_TOK function_params RPAREN_TOK an_fp_sort an_term
 |
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK an_term
 {
+  checkBitVectorWidth($7);
   checkBitVectorTerm(*$9);
   if ($9->GetValueWidth() != $7)
   {
@@ -2105,8 +2120,7 @@ an_array_sort_component:
   // construction, so the array declarations need no further checks.
   LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
 {
-  if ($4 == 0)
-    fatal_yyerror("bit-vectors must be of positive length");
+  checkBitVectorWidth($4);
   $$ = new stp::array_sort_component{stp::array_sort_component::BITVECTOR,
                                      $4, 0, 0};
 }
@@ -2138,6 +2152,7 @@ LPAREN_TOK ARRAY_TOK an_array_sort_component an_array_sort_component RPAREN_TOK
 var_decl:
 STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
 {
+  checkBitVectorWidth($7);
   ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
       $1->c_str(), stp::SourceSort::bitVector($7));
   stp::GlobalParserInterface->addSymbol(s);
@@ -2203,6 +2218,7 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
 const_decl:
 STRING_TOK  LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
 {
+  checkBitVectorWidth($5);
   ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
       $1->c_str(), stp::SourceSort::bitVector($5));
   stp::GlobalParserInterface->addSymbol(s);

@@ -1070,6 +1070,23 @@ Expr vc_varExpr1(VC vc, const char* name, int indexwidth, int valuewidth)
 {
   stp::STPMgr* b = mgr(vc);
 
+  // An array of zero-width elements is not a sort, and SourceSort::bitVector
+  // asserts as much -- which is an abort inside a header on an asserting build
+  // and a zero-width element carried onward without one. vc_bvType has
+  // refused a zero width by the other route for years; this entrance did not,
+  // so the precondition stayed reachable from the C API after the parser had
+  // been closed against it.
+  //
+  // FatalError rather than a NULL return: every other refusal in this file is
+  // fatal, the registered error handler is documented as being called for each
+  // fatal error, and a caller that ignored a NULL would fault later on a null
+  // Expr instead of here, where the message names the mistake.
+  if (indexwidth > 0 && valuewidth <= 0)
+  {
+    stp::FatalError("CInterface: vc_varExpr1: number of bits in an array's "
+                    "elements must be a positive integer");
+  }
+
   stp::SourceSort source_sort;
   if (indexwidth > 0)
     source_sort = stp::SourceSort::array(
