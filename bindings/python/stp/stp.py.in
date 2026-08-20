@@ -540,18 +540,36 @@ class Solver(object):
     def _counterexample_int(self, expr, width):
         """The unsigned value of an (unboxed) expression in the current
         model, at any width. getBVUnsignedLongLong saturates at 64 bits,
-        so wider values are assembled from 64-bit extracts."""
+        so wider values are assembled from 64-bit extracts.
+
+        vc_getCounterExample and vc_bvExtract each hand back a handle this
+        binding owns and has to release; the carrier is the one handle here
+        that it does not (see _bit_carrier). Releasing them matters because
+        reading a model is something callers do in a loop.
+        """
         if width <= 64:
             value = _lib.vc_getCounterExample(self.vc, expr)
-            return _lib.getBVUnsignedLongLong(value)
-        carrier = self._bit_carrier(expr)
-        extract = 0
+            try:
+                return _lib.getBVUnsignedLongLong(value)
+            finally:
+                _lib.vc_DeleteExpr(value)
+
+        carrier = self._bit_carrier(expr)  # borrowed, not owned
+        result = 0
         for i in range((width - 1) // 64 + 1):
-            extractExpr = _lib.vc_bvExtract(self.vc, carrier,
-                                            min((i+1)*64, width)-1, i*64)
-            bvExpr = _lib.vc_getCounterExample(self.vc, extractExpr)
-            extract += (_lib.getBVUnsignedLongLong(bvExpr) << (64 * i))
-        return extract
+            slice_expr = _lib.vc_bvExtract(self.vc, carrier,
+                                           min((i + 1) * 64, width) - 1,
+                                           i * 64)
+            try:
+                slice_value = _lib.vc_getCounterExample(self.vc, slice_expr)
+                try:
+                    result += (_lib.getBVUnsignedLongLong(slice_value)
+                               << (64 * i))
+                finally:
+                    _lib.vc_DeleteExpr(slice_value)
+            finally:
+                _lib.vc_DeleteExpr(slice_expr)
+        return result
 
     def model(self, key=None, expr=None):
         """
@@ -609,6 +627,11 @@ class Solver(object):
         be sliced through its IEEE bits, which vc_fpToIEEEBV supplies and
         which are exactly the packed bits the slicing wants. A bit-vector is
         already its own carrier.
+
+        The result is borrowed, not owned. For a bit-vector it is the
+        caller's own argument, and for a float it is a handle vc_fpToIEEEBV
+        has already registered with the manager, which deletes it again at
+        vc_Destroy; passing either to vc_DeleteExpr is a double free.
         """
         if _lib.vc_getExpWidth(expr):
             return _lib.vc_fpToIEEEBV(self.vc, expr)
@@ -736,11 +759,18 @@ class Expr(AnyExpr):
         return Expr(self.s, self.width, expr)
 
     def _toexpr(self, other):
-        if isinstance(other, int):
-            return self.s.bitvecval(self.width, other)
-
         if isinstance(other, bool):
-            return self.s.true() if other else self.s.false()
+            # Python bool is an int subclass.  Preserve the historical
+            # bit-vector shorthand (True == 1, False == 0), while a Bool
+            # expression such as a UF predicate must stay in Bool sort.
+            if self.width is None:
+                return self.s.true() if other else self.s.false()
+            return self.s.bitvecval(self.width, int(other))
+
+        if isinstance(other, int):
+            if self.width is None:
+                raise TypeError('an integer is not a Boolean expression')
+            return self.s.bitvecval(self.width, other)
 
         return other
 
@@ -841,7 +871,22 @@ class Expr(AnyExpr):
         return self._2w(_lib.vc_sbvRemExpr, other, self)
 
     def eq(self, other):
-        return self._2(_lib.vc_eqExpr, other)
+        """Equality, in whichever sort the operands are.
+
+        A Boolean carries no bits, so two Booleans are compared with IFF;
+        vc_eqExpr would build a bit-vector equality over them and libstp
+        would then ask a Boolean for a value it has not got.
+        """
+        other = self._toexpr(other)
+        assert isinstance(other, Expr), 'Other object must be an Expr instance'
+        if (self.width is None) != (other.width is None):
+            raise TypeError('a Boolean expression compares only against '
+                            'another Boolean expression')
+        if self.width is None:
+            return Expr(self.s, None,
+                        _lib.vc_iffExpr(self.s.vc, self.expr, other.expr))
+        return Expr(self.s, self.width,
+                    _lib.vc_eqExpr(self.s.vc, self.expr, other.expr))
 
     __eq__ = eq
 

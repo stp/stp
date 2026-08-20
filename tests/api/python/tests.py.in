@@ -34,6 +34,7 @@ sys.path.insert(0, "@PYTHON_INTERFACE_DIR@")
 import stp
 import unittest
 import ctypes
+import gc
 import importlib
 
 
@@ -46,6 +47,37 @@ def test0_foo(a, b):
 @stp.stp
 def test0_bar(a, b):
     return a * b == 12345
+
+
+class _MallInfo2(ctypes.Structure):
+    """glibc's struct mallinfo2, as of glibc 2.33."""
+    _fields_ = [(field, ctypes.c_size_t) for field in (
+        'arena', 'ordblks', 'smblks', 'hblks', 'hblkhd', 'usmblks',
+        'fsmblks', 'uordblks', 'fordblks', 'keepcost')]
+
+
+try:
+    _mallinfo2 = ctypes.CDLL('libc.so.6').mallinfo2
+    _mallinfo2.restype = _MallInfo2
+    _mallinfo2.argtypes = []
+except (OSError, AttributeError):  # not glibc, or older than 2.33
+    _mallinfo2 = None
+
+
+def _allocated_bytes():
+    """How many bytes the process allocator currently has handed out, or
+    None where it cannot be asked.
+
+    A leak inside libstp is invisible to the interpreter -- no Python object
+    holds the memory -- and invisible to the resident set as well, because a
+    heap that has been running for a while holds enough free space to absorb
+    megabytes of small allocations without faulting a single new page. The
+    allocator itself is the only witness.
+    """
+    if _mallinfo2 is None:
+        return None
+    gc.collect()
+    return _mallinfo2().uordblks
 
 
 class TestSTP(unittest.TestCase):
@@ -455,6 +487,107 @@ class TestSTP(unittest.TestCase):
         expr_for_add = x.add(bitvecval.mul(2))
         value_from_model = solver.model(expr=expr_for_add)
         self.assertEqual(value_from_model, value_for_x + (value_for_bitvecval * 2))
+
+    def test_model_reads_release_the_expressions_they_are_handed(self):
+        # vc_getCounterExample hands back a freshly allocated expression that
+        # the caller owns, and so does every vc_bvExtract used to slice a
+        # value wider than 64 bits. _counterexample_int dropped all of them
+        # on the floor: 32 bytes for an 8-bit read, and 128 for a 128-bit one
+        # -- two slices, each costing an extract and a counterexample.
+        # Polling a model in a loop, which is what enumerating solutions
+        # looks like, therefore grew the process for as long as it ran.
+        #
+        # Only bit-vectors are measured. A float wider than binary64 is
+        # sliced through vc_fpToIEEEBV, whose result libstp registers for
+        # destruction with the manager, so that read still grows the persist
+        # list by one entry -- 44 bytes a read here against master's 172, but
+        # not nothing. Emptying it needs a C entry point that does not exist.
+        if _allocated_bytes() is None:
+            self.skipTest('the leak is in libstp\'s heap, and only the '
+                          'process allocator can see it; this one cannot '
+                          'be asked')
+
+        s = stp.Solver()
+        narrow = s.bitvec('narrow', 8)
+        wide = s.bitvec('wide', 128)
+        wide_value = (1 << 100) + 5
+        s.add(narrow == 3, wide == wide_value)
+        self.assertTrue(s.check())
+
+        # The leak costs 640 KiB over the first loop and 512 KiB over the
+        # second, so eight kibibytes is two orders of magnitude clear of it
+        # -- and clear the other way too, since a loop that releases what it
+        # takes drifts by nothing at all once its first few reads have
+        # populated the caches they touch.
+        budget = 8 << 10
+
+        for _ in range(2000):
+            narrow.value
+        before = _allocated_bytes()
+        for _ in range(20000):
+            narrow.value
+        self.assertEqual(narrow.value, 3)
+        self.assertLess(_allocated_bytes() - before, budget,
+                        'reading an 8-bit model value leaks')
+
+        for _ in range(1000):
+            wide.value
+        before = _allocated_bytes()
+        for _ in range(4000):
+            wide.value
+        self.assertEqual(wide.value, wide_value)
+        self.assertLess(_allocated_bytes() - before, budget,
+                        'reading a 128-bit model value leaks')
+
+    def test_a_boolean_literal_stays_in_boolean_sort(self):
+        # A Python bool is an int, so the literal coercion has to ask about
+        # bool before it asks about int, or True and False never reach their
+        # own arm: a Boolean expression compared against True asked for a
+        # bit-vector constant of width None and died three frames inside the
+        # binding. Comparing two Booleans then has to be IFF -- a Boolean has
+        # no bits for a bit-vector equality to compare, and libstp ends the
+        # process rather than answer for them.
+        s = self.s
+        a, b = s.bitvecs('a b', 8)
+        overflow = a.uaddo(b)
+        self.assertIsNone(overflow.width)
+
+        # An integer is not a Boolean, and now says so where a caller can
+        # hear it.
+        with self.assertRaises(TypeError):
+            overflow.eq(1)
+
+        # Neither do the two sorts mix, in either order.
+        with self.assertRaises(TypeError):
+            overflow.eq(a)
+        with self.assertRaises(TypeError):
+            a.eq(overflow)
+
+        # Every spelling of "this Boolean holds" builds a formula the solver
+        # accepts, and they all say the same thing.
+        for formula in (overflow == True, overflow.eq(True),
+                        overflow != False,
+                        s.and_(overflow, b.uaddo(a)) == True):
+            self.assertIsNone(formula.width)
+            s.add(formula)
+        self.assertTrue(s.check())
+        self.assertGreaterEqual(a.value + b.value, 1 << 8)
+
+        # ...and the same spellings can deny it, so this is not vacuous.
+        denied = stp.Solver()
+        x, y = denied.bitvecs('x y', 8)
+        denied.add(x.uaddo(y) == False, x == 200)
+        self.assertTrue(denied.check())
+        self.assertLess(x.value + y.value, 1 << 8)
+
+        # Against a bit-vector the historical shorthand is unchanged: True is
+        # one and False is zero.
+        shorthand = stp.Solver()
+        p, q = shorthand.bitvecs('p q', 8)
+        shorthand.add(p == True, q == False)
+        self.assertTrue(shorthand.check())
+        self.assertEqual(p.value, 1)
+        self.assertEqual(q.value, 0)
 
     def test_floating_point(self):
         #
