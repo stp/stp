@@ -2345,6 +2345,27 @@ struct IncrementalSolver::Impl
     return fpCtx.get();
   }
 
+  // Publish this epoch's floating-point context to the model machinery,
+  // before any model this driver produced can be read. Unconditional, and
+  // that is the whole point of it having a name.
+  //
+  // A NULL context there has to mean exactly one thing -- no solve has run --
+  // because that is what every reader of it takes it to mean: the fatal in
+  // requireFpEncodingContext, and the "the question cannot be put" answer
+  // arrayEqualityIsModelDecidable gives. Installing only when this epoch
+  // happened to lower a float makes NULL mean two things at once, and the
+  // model machinery has no way to tell them apart. It read the second as the
+  // first, and took abort() out of a legal C API call over a float term the
+  // assertion stack never mentioned -- which is answerable, and which the
+  // batch driver answers, from the context it builds per solve whether or not
+  // that solve had a float anywhere in it (STP.cpp, TopLevelSTP).
+  //
+  // What it costs on a stack with no float in it is one context per encoding
+  // epoch: two small allocations over empty caches, made once and reused by
+  // every check-sat of the epoch -- less than the batch side already pays,
+  // which is one per solve.
+  void publishFpContext() { ce->setFpEncodingContext(fpContext()); }
+
   // Give every bit of a symbol a CNF variable, allocating unconstrained
   // ones where the encoded cones never needed the bit. The refinement
   // machinery encodes congruence axioms straight over the bit variables of
