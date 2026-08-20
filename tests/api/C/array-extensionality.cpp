@@ -490,10 +490,11 @@ TEST(array_extensionality, store_chain_equals_base_solved_by_rewrite)
   Expr v = vc_varExpr(vc, "v", bv8);
 
   Expr eq = vc_eqExpr(vc, vc_writeExpr(vc, a, i, v), a);
-  // The complete handle remains opaque; solve-boundary lowering rewrites a
-  // single write to exactly read(a, i) = v.
+  // The node factory folds a single self-store to exactly
+  // read(a, i) = v at creation, so no whole-array equality ever forms
+  // and the extensionality context is never brought up.
   ASSERT_EQ(EQ, getExprKind(eq));
-  ASSERT_EQ(stp::ARRAY_EQ, static_cast<stp::ASTNode*>(eq)->GetKind());
+  ASSERT_EQ(stp::EQ, static_cast<stp::ASTNode*>(eq)->GetKind());
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
   EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
@@ -502,9 +503,7 @@ TEST(array_extensionality, store_chain_equals_base_solved_by_rewrite)
   vc_assertFormula(
       vc, vc_notExpr(vc, vc_eqExpr(vc, vc_readExpr(vc, a, i), v)));
   ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
-  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  ASSERT_NE(nullptr, ext);
-  EXPECT_EQ(0u, ext->getRecords().size());
+  EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
   vc_Destroy(vc);
 }
 
@@ -534,17 +533,17 @@ TEST(array_extensionality, store_chain_shadowed_write_is_unconstrained)
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
   EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
 
-  // w is unconstrained: satisfiable.
+  // w is unconstrained: satisfiable. (The factory collapses the shadowed
+  // write and then folds the single self-store, so the extensionality
+  // context is never brought up.)
   ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
-  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  ASSERT_NE(nullptr, ext);
-  EXPECT_EQ(0u, ext->getRecords().size());
+  EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
 
   // v is forced: contradicting read(a,i) = v flips the verdict.
   vc_assertFormula(
       vc, vc_notExpr(vc, vc_eqExpr(vc, vc_readExpr(vc, a, i), v)));
   ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
-  EXPECT_EQ(0u, ext->getRecords().size());
+  EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
   vc_Destroy(vc);
 }
 
@@ -613,10 +612,10 @@ TEST(array_extensionality, store_chain_over_write_base)
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
   EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
 
+  // The factory's self-store fold applies whatever the base is -- here a
+  // write -- so the extensionality context is never brought up.
   ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
-  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  ASSERT_NE(nullptr, ext);
-  EXPECT_EQ(0u, ext->getRecords().size());
+  EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
   vc_Destroy(vc);
 }
 

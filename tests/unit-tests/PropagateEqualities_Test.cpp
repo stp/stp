@@ -457,8 +457,11 @@ TEST(PropagateEquality_Test, array_eq_chain)
 TEST(PropagateEquality_Test, array_eq_occurs_check)
 {
   // A appears on both sides; the candidate must be rejected, not looped.
+  // (Two writes at distinct indices: the factory folds a SINGLE
+  // self-store to its read equality, which would dissolve the scenario
+  // before the propagator saw it.)
   propagateArray(R"(
-   (assert (= A (store A x y)))
+   (assert (= A (store (store A x y) i y)))
   )",
                  [](const stp::ASTNode& n) {
                    ASSERT_TRUE(containsSymbolNamed(n, "A"));
