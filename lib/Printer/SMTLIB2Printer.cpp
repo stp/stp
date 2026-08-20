@@ -466,4 +466,11 @@ void SMTLIB2_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
 {
   SMTLIB_Print1(os, n, indentation, letize);
 }
+
+// Thin wrapper over the letizing single-term print. Declared in printers.h
+// because get-value echoes the term it was asked about through it.
+void SMTLIB2_PrintTerm(ostream& os, STPMgr* stp, const ASTNode& n)
+{
+  SMTLIB_PrintTerm(os, stp, n);
+}
 }

@@ -1228,12 +1228,14 @@ void Cpp_interface::getValue(const ASTVec& v)
 
   for (ASTNode n : v)
   {
-    // Array-valued get-value is explicitly unsupported when array
-    // equality is enabled; use (get-model), which prints the completed
-    // array interpretations. With the feature disabled the
-    // pre-extension behavior is preserved unchanged.
-    if (n.GetKind() != SYMBOL ||
-        (n.GetType() == ARRAY_TYPE && bm.UserFlags.enable_array_equality))
+    // (get-value ...) asks for the value of arbitrary well-sorted terms and
+    // not just of variables, and the model evaluator already decides all of
+    // them. The one shape with no value to print is an array: (get-model)
+    // prints the completed array interpretations instead. That refusal is
+    // unconditional, because reaching the printer with an array aborted the
+    // process rather than answering when array equality was disabled -- and
+    // disabled is the default.
+    if (n.GetType() == ARRAY_TYPE)
     {
       unsupported();
       return;

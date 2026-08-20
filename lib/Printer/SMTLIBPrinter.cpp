@@ -372,6 +372,61 @@ ostream& SMTLIB_Print(ostream& os, STPMgr* mgr, const ASTNode n,
   return os;
 }
 
+// One term, printed so that a repeated subterm is written once: the letize
+// pass names every non-atomic subterm that occurs more than once, and the
+// bindings are emitted as a chain of lets around the body.
+//
+// Without this a shared DAG is written out as a tree. get-value answers about
+// arbitrary terms now, and terms built by a chain of define-funs share
+// aggressively: twenty steps of t[i+1] = (bvxor (bvand t[i] y) (bvor t[i] x))
+// wrote 40MB for one (get-value (t20)), twenty-four steps wrote 638MB, and
+// twenty-six steps wrote 2.5GB while holding 4.9GB.
+//
+// Unlike SMTLIB_Print this writes no newline anywhere, because the caller is
+// composing one line of a response, and it leaves the letize maps empty on
+// exit rather than populated. That second part matters twice: nothing it did
+// is visible to a later SMTLIB_Print1, and the let variables -- which are
+// real, interned symbols -- lose their last reference with the maps, so they
+// leave the symbol table that (get-model) enumerates.
+ostream& SMTLIB_PrintTerm(ostream& os, STPMgr* mgr, const ASTNode n)
+{
+  NodeLetVarMap.clear();
+  NodeLetVarVec.clear();
+  NodeLetVarMap1.clear();
+
+  {
+    ASTNodeSet seen;
+    LetizeState st = {seen, NodeLetVarMap, NodeLetVarVec, "?let_k_"};
+    LetizeNode(n, st, mgr);
+  }
+
+  const bool letized = !NodeLetVarVec.empty();
+  string closing;
+  for (auto it = NodeLetVarVec.begin(), itend = NodeLetVarVec.end();
+       it != itend; it++)
+  {
+    os << "(let ((";
+    SMTLIB_Print1(os, it->first, 0, false);
+    os << " ";
+    // A binding's right-hand side sees the bindings already made and not the
+    // ones still to come, which is why NodeLetVarMap1 is filled in as we go.
+    // The letize pass finishes a subterm before it can name it, so a subterm
+    // repeated inside this right-hand side was named before it -- each
+    // binding therefore prints its own sub-DAG once.
+    SMTLIB_Print1(os, it->second, 0, false);
+    os << ")) ";
+    NodeLetVarMap1[it->second] = it->first;
+    closing += ")";
+  }
+  SMTLIB_Print1(os, n, 0, letized);
+  os << closing;
+
+  NodeLetVarMap.clear();
+  NodeLetVarVec.clear();
+  NodeLetVarMap1.clear();
+  return os;
+}
+
 void LetizeNode(const ASTNode& n, LetizeState& st, STPMgr* stp)
 {
   if (n.isAtom())
