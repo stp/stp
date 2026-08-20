@@ -55,6 +55,17 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
 
   first = false;
   Cnf_Dat_t* cnfData = bitblast(input, needAbsRef);
+
+  // Only an exhausted AIG budget returns NULL: the query has no answer, and
+  // `false` alone would be read as UNSAT. Raising the soft-timeout flag is
+  // what makes CallSAT_ResultCheck report SOLVER_TIMEOUT instead -- it tests
+  // that flag before it tests this return value.
+  if (cnfData == NULL)
+  {
+    bm->soft_timeout_expired = true;
+    return false;
+  }
+
   handle_cnf_options(cnfData, needAbsRef);
 
   assert(satSolver.nVars() == 0);
@@ -112,10 +123,35 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
   Simplifier simp(bm, &sm);
 
   BBNodeManagerAIG mgr;
+  mgr.nodeBudget = bm->UserFlags.aig_node_budget;
   BitBlaster bb(&mgr, &simp, bm->defaultNodeFactory, &bm->UserFlags, cb);
 
+  BBNodeAIG BBFormula;
+
   bm->GetRunTimes()->start(RunTimes::BitBlasting);
-  BBNodeAIG BBFormula = bb.BBForm(input);
+
+  // Only BBForm() creates AIG nodes, so only it can exceed the budget --
+  // ToCNFAIG drives ABC directly and never calls mgr.CreateNode(). Keeping
+  // the try that narrow is what lets the handler close RunTimes::BitBlasting
+  // unconditionally; RunTimes::stop() FatalErrors on a category mismatch, so
+  // a try wide enough to span CNFConversion would abort instead of report.
+  try
+  {
+    BBFormula = bb.BBForm(input);
+  }
+  catch (const AIGBudgetExhausted& e)
+  {
+    bm->GetRunTimes()->stop(RunTimes::BitBlasting);
+    if (bm->UserFlags.stats_flag)
+      cerr << "AIG node budget exhausted at " << e.nodeCount << " nodes"
+           << endl;
+    delete cb;
+    cb = NULL;
+    bb.cb = NULL;
+    mgr.stop();
+    return NULL;
+  }
+
   bm->GetRunTimes()->stop(RunTimes::BitBlasting);
 
   delete cb;

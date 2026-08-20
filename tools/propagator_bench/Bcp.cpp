@@ -94,6 +94,12 @@ struct BcpEncoding
     constraint = at.TransformFormula_TopLevel(constraint);
 
     cnf = aig.bitblast(constraint, false);
+    // NULL means the AIG node budget stopped the blast. This tool never sets
+    // one, so it cannot happen today -- but leaving `ok` false is the honest
+    // answer for a layout with no CNF, and costs a single branch.
+    if (cnf == NULL)
+      return;
+
     const ToSATBase::ASTNodeToSATVar& map = aig.SATVar_to_SymbolIndexMap();
 
     // The varying children, in layout order, then the result. GetChildren()

@@ -207,6 +207,28 @@ public:
 
   /* Bitblasting options */
 
+  // Hard cap on the AND gates the batch bit-blaster may build for one query.
+  // -1 (the default) is no limit and leaves the blaster exactly as it was;
+  // 0 gives up before the first gate. That is the same -1/0 convention
+  // `--max-num-confl` and `--max-time` use, and deliberately so: a reader
+  // who transfers their intuition here must not get the opposite of what
+  // they asked for. Exceeding the cap abandons the query through the
+  // soft-timeout path, so the answer is the same one a `--max-time` expiry
+  // gives -- `Timed Out.` on stdout with exit status 0, and SOLVER_TIMEOUT
+  // from the library.
+  //
+  // The cap governs the two AIGs a batch solve builds -- the bit-blast in
+  // ToSATAIG::bitblast() and the optional `--aig-core-simplification` pass,
+  // which simply keeps its input when the cap fires. It is NOT enforced on
+  // the incremental driver's persistent encoder, whose AIG outlives the
+  // check that grew it and cannot be abandoned mid-blast; engaging that
+  // driver with a budget set warns once on stderr rather than pretending
+  // the cap is in force.
+  //
+  // It bounds the blast, not the process: CNF conversion (Aig_ManDupDfs plus
+  // DAG-aware rewriting) and the SAT search itself allocate on top of it.
+  int64_t aig_node_budget = -1;
+
   // You can select these with any combination you want of true & false.
   bool division_variant_1 = true;
   bool division_variant_2 = true;
