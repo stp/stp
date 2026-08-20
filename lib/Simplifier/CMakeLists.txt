@@ -23,6 +23,7 @@ add_library(simplifier OBJECT
     BVSolver.cpp
     consteval.cpp
     PropagateEqualities.cpp
+    DistinctOrdering.cpp
     RemoveUnconstrained.cpp
     Simplifier.cpp
     SubstitutionMap.cpp

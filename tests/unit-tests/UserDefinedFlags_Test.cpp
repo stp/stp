@@ -32,6 +32,17 @@ TEST(UserDefinedFlags_Test, disable_simplifications_clears_flattening_stack)
   EXPECT_FALSE(uf.enable_pair_extract);
 }
 
+// A rewrite that defaults on has to be reachable by the same escape hatch as
+// the rest: --disable-simplifications is how a wrong answer gets bisected down
+// to a minimal pipeline, and a rewrite that survives it is never bisected out.
+TEST(UserDefinedFlags_Test, disable_simplifications_clears_distinct_ordering)
+{
+  stp::UserDefinedFlags uf;
+  EXPECT_TRUE(uf.distinct_ordering);
+  uf.disableSimplifications();
+  EXPECT_FALSE(uf.distinct_ordering);
+}
+
 TEST(UserDefinedFlags_Test, caller_model_request_is_derived_from_source_flags)
 {
   stp::UserDefinedFlags uf;

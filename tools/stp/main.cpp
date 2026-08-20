@@ -236,6 +236,13 @@ void ExtraMain::create_options()
            "problem simpler",
            simp_group);
 
+  bool_arg("--distinct-ordering", bm->UserFlags.distinct_ordering,
+           "replace a (distinct ...) over variables that occur nowhere else "
+           "with a strict chain, which fixes one of the n! equivalent "
+           "orderings the bit-blaster would otherwise search. Batch pipeline "
+           "only; --incremental=on never applies it",
+           simp_group);
+
   const char* const solver_group = "SAT Solver options";
 
 #ifdef USE_CADICAL
@@ -304,7 +311,6 @@ void ExtraMain::create_options()
                "decide whole-array equality/disequality (extensional arrays) "
                "by lemmas on demand")
       ->group(refinement_group);
-
   const char* const bb_group = "Bit-blasting options";
   bool_arg("--bb.div-v1", bm->UserFlags.division_variant_1,
            "unsigned division encoding variant 1", bb_group);
@@ -631,7 +637,7 @@ void ExtraMain::create_options()
                 "--flattening", "--rewriting", "--split-extracts",
                 "--ite-context-simplifications", "--use-intervals",
                 "--pure-literals", "--common-subsum", "--pair-extract",
-                "--merge-same"});
+                "--merge-same", "--distinct-ordering"});
 
   // Likewise for what disableSizeIncreasingSimplifications() forces.
   excludes_all("--size-reducing-only",

@@ -35,6 +35,7 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/AIGSimplifyPropositionalCore.h"
 #include "stp/Simplifier/DifficultyScore.h"
+#include "stp/Simplifier/DistinctOrdering.h"
 #include "stp/Simplifier/FindPureLiterals.h"
 #include "stp/Simplifier/RemoveUnconstrained.h"
 #include "stp/Simplifier/UnsignedIntervalAnalysis.h"
@@ -128,6 +129,21 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   else
   {
     original_input = inputasserts;
+  }
+
+  // Order fully symmetric distincts before anything else looks at the
+  // formula. It runs here, on this solve's own assembled root, rather than
+  // in the parser: only the whole formula shows whether the operands really
+  // do occur nowhere else, and re-deciding it per solve is what keeps a
+  // later assert from inheriting an ordering it never earned.
+  if (bm->UserFlags.distinct_ordering && !bm->distinctGroups.empty())
+  {
+    size_t ordered = 0;
+    original_input = applyDistinctOrdering(bm, original_input,
+                                           bm->distinctGroups, &ordered);
+    if (ordered > 0 && bm->UserFlags.stats_flag)
+      std::cerr << "Ordered " << ordered << " symmetric distinct group(s)."
+                << std::endl;
   }
 
   // The latch is the same kind of cheap fast-negative the lowering test below
