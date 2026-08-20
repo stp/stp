@@ -51,7 +51,8 @@ With the option enabled:
 * ``vc_getCounterExampleArray`` returns one entry per concrete index in
   ascending index order;
 * array-valued ``(get-value ...)`` is rejected as unsupported (use
-  ``(get-model)``).
+  ``(get-model)``). This is not conditional on the option: an array has no
+  value spelling in a valuation pair either way.
 
 Nullary array-sorted ``define-fun`` is accepted by the SMT-LIB2 parser
 whether or not the option is on: such a definition is a pure name for its
