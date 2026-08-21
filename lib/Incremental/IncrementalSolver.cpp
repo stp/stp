@@ -196,6 +196,15 @@ bool IncrementalSolver::canHandle(const ASTVec& assertionsSMT2)
   // bit-vectors, arrays (lazy or --ackermanize), floating point, and
   // whole-array equality. The method remains the seam for any future
   // exclusion.
+  //
+  // TEMPORARY: a stack that applies an uninterpreted function is refused,
+  // which routes every one of its checks through the batch pipeline. The
+  // persistent driver has no exact-stack lowering for durable applications
+  // yet; the change that adds one deletes this refusal.
+  if (impl->bm->UserFlags.enable_uninterpreted_functions)
+    for (const ASTNode& levelConjunction : assertionsSMT2)
+      if (containsKind(levelConjunction, UF_APPLY))
+        return false;
   (void)assertionsSMT2;
   return true;
 }

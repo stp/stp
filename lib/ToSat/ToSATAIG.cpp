@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/ToSat/ToSATAIG.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include <sstream>
@@ -52,7 +53,24 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
     return false;
 
   if (input == ASTTrue)
-    return true;
+  {
+    // A formula which preprocessing proved true can still own active UF
+    // results and argument names.  They are the sole candidate authority for
+    // the checker and future congruence lemmas, so the ordinary constant-root
+    // shortcut is legal only when there are no such scalars.  Register and
+    // solve the disconnected variables here instead of letting the model
+    // evaluator invent values for symbols which never reached SAT.
+    UFContext* uf = bm->getUFContextIfAny();
+    if (uf == NULL || !uf->activeInSolve() || uf->getSolveScalars().empty())
+      return true;
+
+    first = false;
+    delete cb;
+    cb = NULL;
+    assert(satSolver.nVars() == 0);
+    mark_variables_as_frozen(satSolver);
+    return runSolver(satSolver);
+  }
 
   first = false;
   Cnf_Dat_t* cnfData = bitblast(input, needAbsRef);
@@ -373,6 +391,39 @@ void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
   // restores an eliminated variable on contact or never eliminates one --
   // makeBackend refuses the simplifying MiniSat outright.
   abstraction_.freezeVariables(satSolver, nodeToSATVar);
+
+  // Give every checker-visible scalar one complete mapping in this backend.
+  // Connected bits retain their CNF variables; missing/disconnected bits get
+  // fresh unconstrained variables, which is exactly their formula semantics.
+  // Registration happens after CNF conversion so no second AIG-side meaning
+  // can compete with the mapping the checker and lemma encoder both consume.
+  UFContext* ufContext = bm->getUFContextIfAny();
+  if (ufContext != NULL && ufContext->activeInSolve())
+  {
+    for (const ASTNode& symbol : ufContext->getSolveScalars())
+    {
+      if (symbol.GetKind() != SYMBOL)
+        FatalError("UF solve-scalar registrar received a non-symbol", symbol);
+      const unsigned width = std::max((unsigned)1, symbol.GetValueWidth());
+      ASTNodeToSATVar::iterator found = nodeToSATVar.find(symbol);
+      if (found == nodeToSATVar.end())
+        found = nodeToSATVar
+                    .insert(std::make_pair(
+                        symbol, vector<unsigned>(width, ~((unsigned)0))))
+                    .first;
+      if (found->second.size() > width)
+        FatalError("UF batch liveness mapping has the wrong width", symbol);
+      if (found->second.size() < width)
+        found->second.resize(width, ~((unsigned)0));
+      for (unsigned bit = 0; bit < width; ++bit)
+      {
+        if (found->second[bit] == ~((unsigned)0))
+          found->second[bit] = satSolver.newVar();
+        satSolver.setFrozen(found->second[bit]);
+      }
+    }
+  }
+
 }
 
 bool ToSATAIG::runSolver(SATSolver& satSolver)

@@ -30,6 +30,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Util/Attributes.h"
 #include <cstdio>
+#include <string>
 
 namespace stp
 {
@@ -62,6 +63,48 @@ void SMT2SetFloatTokens(bool enable);
 // rules: define-sort's body is swallowed whole and re-tokenised by hand in
 // the grammar, so it has to consult the gate itself.
 bool SMT2FloatTokensActive();
+
+// The next ordinary identifier is the declaration site of a define-fun
+// formal.  The lexer must return its spelling rather than resolving it in a
+// top-level namespace; once installed, that temporary binding takes
+// precedence while the function body is parsed.
+void SMT2ExpectFunctionParameterName();
+
+// Clear command-local lexer expectations after parser recovery/abort and
+// before the next top-level command. This includes declaration-name and
+// define-fun-formal latches and the declassified-name record below, none of
+// which may leak across commands.
+void SMT2ResetCommandLexerState();
+
+// The declassified declare-fun name. With uninterpreted functions enabled,
+// a name in exactly the declare-fun name position that the lexer WOULD
+// classify into a typed token (TERMID_TOK, a *_FUNCTIONID_TOK, a
+// UF_*_FUNCTIONID_TOK -- none of which any var_decl alternative accepts) is
+// handed back as a plain STRING_TOK instead, and the classification it would
+// have received is recorded here: token kind, line, and the token text
+// exactly as yyerror would have printed it. That lets the grammar see the
+// declaration's SHAPE: only a nonzero-arity declaration continues into the
+// nonfatal UF declaration funnel (which consumes the record); every zero-arity
+// shape replicates the pinned classified-token syntax error byte-for-byte
+// from the record and abandons the parse, exactly as the legacy grammar did
+// at the name. Unknown names, and every other position, are untouched.
+bool SMT2DeclassifiedNamePending();
+int SMT2DeclassifiedNameToken();
+int SMT2DeclassifiedNameLine();
+const std::string& SMT2DeclassifiedNameText();
+void SMT2ConsumeDeclassifiedName();
+
+// Thrown when the parse fails downstream of a declassified declare-fun name
+// somewhere bison cannot unwind by itself -- a fatal sort rule, an illegal
+// character in the lexer. The pinned response is the name-position error
+// ALONE, so the failure in progress must not add its own message or its own
+// exit path. Caught in SMT2Parse(), which answers 1 exactly as an ordinary
+// abandoned parse does. (A bison syntax error downstream of the name needs
+// no throw: yyerror prints the name-position error and returns, and bison's
+// own abort reclaims its stack.)
+struct DeclassifiedNameAbandon
+{
+};
 
 // Whether `text` is a floating-point name that the gate above handed to the
 // grammar as an ordinary undeclared identifier. The grammar cannot tell that

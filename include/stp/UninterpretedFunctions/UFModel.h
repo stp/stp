@@ -35,7 +35,9 @@ THE SOFTWARE.
 namespace stp
 {
 
+class AbsRefine_CounterExample;
 class STPMgr;
+class UFTheoryAdapter;
 
 // The only boundary from UFCHK's representation-independent values to host
 // ASTs and public output. Lowered result/name symbols never cross it.
@@ -54,6 +56,47 @@ public:
   // becomes a float again here.
   static ASTNode concreteValue(STPMgr* manager, const UFConcreteValue& value,
                                const SourceSort& declared);
+
+  // Evaluate one context-owned, active, registered durable application from
+  // the most recently certified solve map. Failures are nonfatal and leave
+  // value undefined.
+  static bool evaluateApplication(STPMgr* manager,
+                                  const UFTheoryAdapter* adapter,
+                                  const ASTNode& durableHandle,
+                                  ASTNode& value,
+                                  std::string& diagnostic);
+
+  // Evaluate a durable application when it appears *inside* a larger term
+  // being read against the model, where refusing is not an option: the
+  // enclosing operator needs a constant operand.
+  //
+  // An application the certified solve reached resolves exactly as
+  // evaluateApplication does. One it did not reach is completed through the
+  // certified function-model seed, keyed on `actualValues` -- the actuals
+  // already evaluated to Bool/BV constants, in declaration order. That is the
+  // same total interpretation printSMTLIB2 emits, so model output and model
+  // evaluation cannot disagree, and equal argument tuples always give equal
+  // results (completing with an arbitrary constant instead would break
+  // congruence). A declaration with no certified observations at all is
+  // completed with its codomain's zero.
+  //
+  // Failures are nonfatal and leave value undefined.
+  static bool evaluateApplicationInTerm(
+      STPMgr* manager, const UFTheoryAdapter* adapter,
+      const ASTNode& durableHandle, const std::vector<ASTNode>& actualValues,
+      ASTNode& value, std::string& diagnostic);
+
+  // Complete every durable application in the preserved public root with its
+  // certified value. This is used for the final pointwise model replay; the
+  // returned root contains no UF_APPLY and no solve-local symbol.
+  static bool completePublicRoot(STPMgr* manager,
+                                 const UFTheoryAdapter& adapter,
+                                 ASTNode& completed,
+                                 std::string& diagnostic);
+
+  static bool replayPublicRoot(AbsRefine_CounterExample& counterexample,
+                               const UFTheoryAdapter& adapter,
+                               std::string& diagnostic);
 
   // Vacuous certified interpretation for active declarations when the
   // completed root contains no UF application at all.
