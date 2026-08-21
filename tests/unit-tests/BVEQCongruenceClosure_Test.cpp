@@ -18,18 +18,162 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **********************/
 
+#include "stp/STPManager/STPManager.h"
+#include "stp/STPManager/STP.h"
 #include "stp/ToSat/BVEQCongruenceClosure.h"
+#include "stp/FloatBlaster/rounding_modes.h"
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <set>
-#include <utility>
 #include <vector>
 
 using namespace stp;
 
 namespace
 {
+
+class BVEQCCTest : public ::testing::Test
+{
+protected:
+  STPMgr mgr;
+  NodeFactory* factory;
+
+  void SetUp() override { factory = mgr.defaultNodeFactory; }
+
+  ASTNode makeSymbol(const char* name, unsigned width)
+  {
+    return mgr.CreateSymbol(name, 0, width);
+  }
+};
+
+TEST_F(BVEQCCTest, TransitivityConflictDetected)
+{
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+
+  ASTNode a = makeSymbol("cc_a", 256);
+  ASTNode b = makeSymbol("cc_b", 256);
+  ASTNode c = makeSymbol("cc_c", 256);
+
+  ASTNode eq_ab = factory->CreateNode(EQ, a, b);
+  ASTNode eq_bc = factory->CreateNode(EQ, b, c);
+  ASTNode neq_ac = factory->CreateNode(NOT, factory->CreateNode(EQ, a, c));
+
+  // (= a b) & (= b c) & !(= a c) is UNSAT by transitivity
+  ASTNode formula = factory->CreateNode(AND, eq_ab,
+      factory->CreateNode(AND, eq_bc, neq_ac));
+
+  STP stp(&mgr);
+  SOLVER_RETURN_TYPE result = stp.TopLevelSTP(formula, mgr.ASTFalse);
+  EXPECT_EQ(SOLVER_VALID, result);
+}
+
+TEST_F(BVEQCCTest, ConsistentModelNoConflict)
+{
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+
+  ASTNode a = makeSymbol("cc2_a", 256);
+  ASTNode b = makeSymbol("cc2_b", 256);
+  ASTNode c = makeSymbol("cc2_c", 256);
+
+  ASTNode eq_ab = factory->CreateNode(EQ, a, b);
+  ASTNode eq_bc = factory->CreateNode(EQ, b, c);
+
+  // (= a b) & (= b c) is SAT
+  ASTNode formula = factory->CreateNode(AND, eq_ab, eq_bc);
+
+  STP stp(&mgr);
+  SOLVER_RETURN_TYPE result = stp.TopLevelSTP(formula, mgr.ASTFalse);
+  EXPECT_EQ(SOLVER_INVALID, result);
+}
+
+TEST_F(BVEQCCTest, LongerTransitivityChain)
+{
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+
+  ASTNode a = makeSymbol("ch_a", 256);
+  ASTNode b = makeSymbol("ch_b", 256);
+  ASTNode c = makeSymbol("ch_c", 256);
+  ASTNode d = makeSymbol("ch_d", 256);
+
+  ASTNode eq_ab = factory->CreateNode(EQ, a, b);
+  ASTNode eq_bc = factory->CreateNode(EQ, b, c);
+  ASTNode eq_cd = factory->CreateNode(EQ, c, d);
+  ASTNode neq_ad = factory->CreateNode(NOT, factory->CreateNode(EQ, a, d));
+
+  // a=b & b=c & c=d & !(a=d) is UNSAT by transitivity chain
+  ASTNode formula = factory->CreateNode(AND,
+      factory->CreateNode(AND, eq_ab, eq_bc),
+      factory->CreateNode(AND, eq_cd, neq_ad));
+
+  STP stp(&mgr);
+  SOLVER_RETURN_TYPE result = stp.TopLevelSTP(formula, mgr.ASTFalse);
+  EXPECT_EQ(SOLVER_VALID, result);
+}
+
+TEST_F(BVEQCCTest, ManySymbolsInEquivalenceClasses)
+{
+  // 12 symbols in 3 equivalence classes of 4.
+  // All within-class equalities hold; no cross-class equalities.
+  // CC should find no conflicts and the formula should be SAT.
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+
+  const unsigned numClasses = 3;
+  const unsigned classSize = 4;
+  std::vector<std::vector<ASTNode>> classes(numClasses);
+
+  for (unsigned c = 0; c < numClasses; ++c)
+    for (unsigned i = 0; i < classSize; ++i)
+    {
+      std::string name = "mc_" + std::to_string(c) + "_" + std::to_string(i);
+      classes[c].push_back(makeSymbol(name.c_str(), 256));
+    }
+
+  // Chain equalities within each class: s0=s1, s1=s2, s2=s3
+  ASTVec conjuncts;
+  for (unsigned c = 0; c < numClasses; ++c)
+    for (unsigned i = 0; i + 1 < classSize; ++i)
+      conjuncts.push_back(
+          factory->CreateNode(EQ, classes[c][i], classes[c][i + 1]));
+
+  ASTNode formula = conjuncts[0];
+  for (unsigned i = 1; i < conjuncts.size(); ++i)
+    formula = factory->CreateNode(AND, formula, conjuncts[i]);
+
+  STP stp(&mgr);
+  SOLVER_RETURN_TYPE result = stp.TopLevelSTP(formula, mgr.ASTFalse);
+  EXPECT_EQ(SOLVER_INVALID, result);
+}
+
+TEST_F(BVEQCCTest, CrossClassDisequalityWithTransitivityConflict)
+{
+  // 3 classes: {a,b}, {c,d}, with a=b, c=d, b=c, but ¬(a=d).
+  // b=c merges the two classes, so a=d by transitivity → UNSAT.
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+
+  ASTNode a = makeSymbol("xc_a", 256);
+  ASTNode b = makeSymbol("xc_b", 256);
+  ASTNode c = makeSymbol("xc_c", 256);
+  ASTNode d = makeSymbol("xc_d", 256);
+
+  ASTNode formula = factory->CreateNode(AND,
+      factory->CreateNode(AND,
+          factory->CreateNode(EQ, a, b),
+          factory->CreateNode(EQ, c, d)),
+      factory->CreateNode(AND,
+          factory->CreateNode(EQ, b, c),
+          factory->CreateNode(NOT, factory->CreateNode(EQ, a, d))));
+
+  STP stp(&mgr);
+  SOLVER_RETURN_TYPE result = stp.TopLevelSTP(formula, mgr.ASTFalse);
+  EXPECT_EQ(SOLVER_VALID, result);
+}
 
 // ---------------------------------------------------------------------------
 // The explanation a conflict is reported with, read directly off the class.
@@ -252,6 +396,69 @@ TEST(BVEQCCExplanation, DisequalityAcrossClassesIsNotAConflict)
 
   EXPECT_EQ(0u, cc.check(eqs, solver));
   EXPECT_TRUE(solver.clauses.empty());
+}
+
+// ---------------------------------------------------------------------------
+// The query the explanation defect was found on.
+
+TEST_F(BVEQCCTest, ThreeWayRoundingModeDistinctIsSatisfiable)
+{
+  // RoundingMode has five values and three pairwise distinct ones exist, so
+  // this is satisfiable -- but only the abstraction's narrow width floor lets
+  // the equality abstraction reach the five-bit carrier at all. Each of the
+  // two symbols carries a validity constraint that is a disjunction of
+  // equalities against the mode constants, so a candidate model asserts
+  // several equalities through one hub term, and the disequalities the
+  // distinct expands to are exactly the conflicts whose explanation has to
+  // name the whole chain.
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 1;
+
+  ASTNode x0 = mgr.CreateSourceSymbol("rm_x0", SourceSort::roundingMode());
+  ASTNode x1 = mgr.CreateSourceSymbol("rm_x1", SourceSort::roundingMode());
+  ASTNode rtz = mgr.CreateRMConst(symbolic_fp::ROUND_TOWARD_ZERO);
+
+  ASTVec conjuncts;
+  conjuncts.push_back(mgr.roundingModeValidConstraint(x0));
+  conjuncts.push_back(mgr.roundingModeValidConstraint(x1));
+  conjuncts.push_back(
+      factory->CreateNode(NOT, factory->CreateNode(EQ, rtz, x1)));
+  conjuncts.push_back(
+      factory->CreateNode(NOT, factory->CreateNode(EQ, rtz, x0)));
+  conjuncts.push_back(
+      factory->CreateNode(NOT, factory->CreateNode(EQ, x1, x0)));
+
+  ASTNode formula = factory->CreateNode(AND, conjuncts);
+
+  STP stp(&mgr);
+  EXPECT_EQ(SOLVER_INVALID, stp.TopLevelSTP(formula, mgr.ASTFalse));
+}
+
+TEST_F(BVEQCCTest, HubEqualitiesWithASpokeDisequalityStaySatisfiable)
+{
+  // The same shape without the floating-point vocabulary: a hub equal to one
+  // of several terms, and two of those terms held apart. Satisfiable, and it
+  // is satisfiable through the abstraction only if the transitivity clauses
+  // name every equality they lean on.
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 1;
+
+  ASTNode hub = makeSymbol("hub", 8);
+  ASTNode s0 = makeSymbol("spoke0", 8);
+  ASTNode s1 = makeSymbol("spoke1", 8);
+  ASTNode s2 = makeSymbol("spoke2", 8);
+
+  ASTNode formula = factory->CreateNode(
+      AND,
+      {factory->CreateNode(OR, factory->CreateNode(EQ, hub, s0),
+                           factory->CreateNode(EQ, hub, s1),
+                           factory->CreateNode(EQ, hub, s2)),
+       factory->CreateNode(NOT, factory->CreateNode(EQ, s0, s1)),
+       factory->CreateNode(NOT, factory->CreateNode(EQ, s1, s2)),
+       factory->CreateNode(NOT, factory->CreateNode(EQ, s0, s2))});
+
+  STP stp(&mgr);
+  EXPECT_EQ(SOLVER_INVALID, stp.TopLevelSTP(formula, mgr.ASTFalse));
 }
 
 } // namespace

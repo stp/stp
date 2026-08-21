@@ -312,6 +312,43 @@ void ExtraMain::create_options()
                "decide whole-array equality/disequality (extensional arrays) "
                "by lemmas on demand")
       ->group(refinement_group);
+  bool_arg("--bv-eq-abstraction", bm->UserFlags.bv_eq_abstraction,
+           "replace wide BV equalities -- whatever their operands; the "
+           "bit-blaster proxies non-input ones -- with fresh Boolean "
+           "variables during bit-blasting, refining lazily via CEGAR",
+           refinement_group);
+  app.add_option("--bv-abstraction-width",
+                 bm->UserFlags.bv_abstraction_width,
+                 "minimum operand width at which --bv-eq-abstraction and "
+                 "--bv-term-abstraction abstract an operation")
+      ->group(refinement_group)
+      ->capture_default_str();
+  app.add_option("--bv-eq-refine-width",
+                 bm->UserFlags.bv_eq_refine_width,
+                 "initial prefix width for lazy BV equality refinement (0 = full)")
+      ->group(refinement_group)
+      ->capture_default_str();
+
+  bool_arg("--bv-term-abstraction", bm->UserFlags.bv_term_abstraction,
+           "abstract wide BV arithmetic and comparisons (BVPLUS, BVMULT, "
+           "BVDIV, BVMOD, ITE and the inequalities) during bit-blasting, "
+           "refining lazily via CEGAR",
+           refinement_group);
+  bool_arg("--bv-term-abstraction-mult", bm->UserFlags.bv_term_abstraction_mult,
+           "include BVMULT, BVDIV and BVMOD in BV term abstraction; they are "
+           "the ones refined by ruling out one pair of operand values at a "
+           "time, so turning them off leaves only the operations that define "
+           "themselves in a single round",
+           refinement_group);
+  app.add_option("--bv-term-abstraction-rounds",
+                 bm->UserFlags.bv_term_abstraction_rounds,
+                 "blocking lemmas one abstracted BVMULT/BVDIV/BVMOD may take "
+                 "before its refinement encodes the operation exactly instead "
+                 "of enumerating further operand pairs (0: never; enumerate "
+                 "without limit)")
+      ->group(refinement_group)
+      ->capture_default_str();
+
   const char* const bb_group = "Bit-blasting options";
   bool_arg("--bb.div-v1", bm->UserFlags.division_variant_1,
            "unsigned division encoding variant 1", bb_group);

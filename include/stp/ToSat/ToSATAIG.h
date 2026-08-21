@@ -32,6 +32,7 @@ THE SOFTWARE.
 #include "stp/ToSat/BBNodeManagerAIG.h"
 #include "stp/ToSat/ToCNFAIG.h"
 #include "stp/ToSat/BitBlaster.h"
+#include "stp/ToSat/BVAbstractionRefiner.h"
 #include "stp/Util/RunTimes.h"
 
 namespace stp
@@ -65,6 +66,11 @@ private:
 
   ToCNFAIG toCNF;
 
+  // The abstractions this lowering minted, and the CEGAR loop that
+  // refines them. Both live here for the batch pipeline's lifetime of one
+  // query; the incremental driver keeps its own across a session.
+  BVAbstractionRefiner abstraction_;
+
   void init()
   {
     count = 0;
@@ -86,7 +92,7 @@ public:
   bool cbIsDestructed() { return cb == NULL; }
 
   ToSATAIG(STPMgr* bm, ArrayTransformer* at)
-      : ToSATBase(bm), toCNF(bm->UserFlags)
+      : ToSATBase(bm), toCNF(bm->UserFlags), abstraction_(bm)
   {
     cb = NULL;
     init();
@@ -95,7 +101,7 @@ public:
 
   ToSATAIG(STPMgr* bm, simplifier::constantBitP::ConstantBitPropagation* cb_,
            ArrayTransformer* at)
-      : ToSATBase(bm), cb(cb_), toCNF(bm->UserFlags)
+      : ToSATBase(bm), cb(cb_), toCNF(bm->UserFlags), abstraction_(bm)
   {
     cb = cb_;
     init();
@@ -104,12 +110,22 @@ public:
 
   ~ToSATAIG();
 
-  void ClearAllTables() { nodeToSATVar.clear(); }
+  void ClearAllTables() override { nodeToSATVar.clear(); }
 
   // Used to read out the satisfiable answer.
-  ASTNodeToSATVar& SATVar_to_SymbolIndexMap() { return nodeToSATVar; }
+  ASTNodeToSATVar& SATVar_to_SymbolIndexMap() override { return nodeToSATVar; }
 
-  bool CallSAT(SATSolver& satSolver, const ASTNode& input, bool needAbsRef);
+  bool CallSAT(SATSolver& satSolver, const ASTNode& input,
+               bool needAbsRef) override;
+
+  bool hasBVEQAbstractions() const { return abstraction_.hasEqualities(); }
+  bool hasBVTermAbstractions() const { return abstraction_.hasTerms(); }
+
+  unsigned refineAbstractions(SATSolver& solver) override;
+  uint64_t abstractionRefinements() const override
+  {
+    return abstraction_.refinements();
+  }
 };
 }
 

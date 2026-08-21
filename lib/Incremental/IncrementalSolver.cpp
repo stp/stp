@@ -263,6 +263,16 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   STPMgr* bm = impl->bm;
   UserDefinedFlags& uf = bm->UserFlags;
 
+  // The persistent bit-blaster mints BV abstractions under these flags,
+  // but this driver does not yet own the refinement loop that is their
+  // other half -- without it a candidate is answered straight from the
+  // unrefined relaxation and the proxy constraints are never asserted.
+  // Refuse rather than answer wrongly; the commit that gives this driver
+  // the loop removes this.
+  if (uf.bv_eq_abstraction || uf.bv_term_abstraction)
+    FatalError("--bv-eq-abstraction / --bv-term-abstraction are not yet "
+               "supported by the incremental driver; use --incremental=off");
+
   assert(!assertionsSMT2.empty());
   // A frontend may claim a forced FIRST solve only before this driver has
   // engaged at all; otherwise the first-solve policies the stages below key

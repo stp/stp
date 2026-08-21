@@ -18,12 +18,16 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 **********************/
 
+#include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include "stp/STPManager/STPManager.h"
+#include "stp/Simplifier/constantBitP/ConstantBitP_MaxPrecision.h"
+#include "stp/STPManager/STP.h"
 #include "stp/Sat/SATSolver.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
 #include "stp/ToSat/BitBlaster.h"
 #include "stp/ToSat/BVAbstractionRefiner.h"
+#include "stp/ToSat/ToSATAIG.h"
 
 #include <gtest/gtest.h>
 
@@ -196,6 +200,59 @@ TEST_F(BVEQAbstractionTest, DagSharingReusesAbstraction)
   EXPECT_EQ(1u, bb.abstractedEQs().size());
 }
 
+TEST_F(BVEQAbstractionTest, PrefixRefinementSatResult)
+{
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+  mgr.UserFlags.bv_eq_refine_width = 32;
+
+  ASTNode a = makeSymbol("pr_a", 256);
+  ASTNode b = makeSymbol("pr_b", 256);
+  ASTNode eq = factory->CreateNode(EQ, a, b);
+
+  STP stp(&mgr);
+  SOLVER_RETURN_TYPE result = stp.TopLevelSTP(eq, mgr.ASTFalse);
+  EXPECT_EQ(SOLVER_INVALID, result);
+}
+
+TEST_F(BVEQAbstractionTest, PrefixRefinementUnsatTransitivity)
+{
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+  mgr.UserFlags.bv_eq_refine_width = 32;
+
+  ASTNode a = makeSymbol("pru_a", 256);
+  ASTNode b = makeSymbol("pru_b", 256);
+  ASTNode c = makeSymbol("pru_c", 256);
+
+  ASTNode eq_ab = factory->CreateNode(EQ, a, b);
+  ASTNode eq_bc = factory->CreateNode(EQ, b, c);
+  ASTNode neq_ac = factory->CreateNode(NOT, factory->CreateNode(EQ, a, c));
+
+  ASTNode formula = factory->CreateNode(AND, eq_ab,
+      factory->CreateNode(AND, eq_bc, neq_ac));
+
+  STP stp(&mgr);
+  SOLVER_RETURN_TYPE result = stp.TopLevelSTP(formula, mgr.ASTFalse);
+  EXPECT_EQ(SOLVER_VALID, result);
+}
+
+TEST_F(BVEQAbstractionTest, PrefixRefinementSmallWidth)
+{
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+  mgr.UserFlags.bv_eq_refine_width = 8;
+
+  ASTNode a = makeSymbol("psm_a", 256);
+  ASTNode b = makeSymbol("psm_b", 256);
+
+  ASTNode eq = factory->CreateNode(EQ, a, b);
+
+  STP stp(&mgr);
+  SOLVER_RETURN_TYPE result = stp.TopLevelSTP(eq, mgr.ASTFalse);
+  EXPECT_EQ(SOLVER_INVALID, result);
+}
+
 TEST_F(BVEQAbstractionTest, BVPLUSAbstractionCreatesAbstraction)
 {
   mgr.UserFlags.bv_term_abstraction = true;
@@ -216,6 +273,106 @@ TEST_F(BVEQAbstractionTest, BVPLUSAbstractionCreatesAbstraction)
 
   EXPECT_GE(bb.abstractedTerms().size(), 1u);
   EXPECT_EQ(BVPLUS, bb.abstractedTerms()[0].opKind);
+}
+
+TEST_F(BVEQAbstractionTest, BVPLUSAbstractionSatResult)
+{
+  mgr.UserFlags.bv_term_abstraction = true;
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+
+  ASTNode x = makeSymbol("tas_x", 256);
+  ASTNode y = makeSymbol("tas_y", 256);
+  ASTNode sum = factory->CreateTerm(BVPLUS, 256, x, y);
+  ASTNode z = makeSymbol("tas_z", 256);
+  ASTNode eq = factory->CreateNode(EQ, sum, z);
+
+  STP stp(&mgr);
+  SOLVER_RETURN_TYPE result = stp.TopLevelSTP(eq, mgr.ASTFalse);
+  EXPECT_EQ(SOLVER_INVALID, result);
+}
+
+TEST_F(BVEQAbstractionTest, BVPLUSAbstractionUnsatResult)
+{
+  mgr.UserFlags.bv_term_abstraction = true;
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+
+  ASTNode x = makeSymbol("tau_x", 256);
+  ASTNode y = makeSymbol("tau_y", 256);
+  ASTNode z = makeSymbol("tau_z", 256);
+  ASTNode sum = factory->CreateTerm(BVPLUS, 256, x, y);
+  ASTNode eqSumZ = factory->CreateNode(EQ, sum, z);
+  ASTNode eqXZ = factory->CreateNode(EQ, x, z);
+  ASTNode yNeq0 = factory->CreateNode(NOT,
+      factory->CreateNode(EQ, y, mgr.CreateBVConst(256, 0)));
+  ASTNode formula = factory->CreateNode(AND,
+      factory->CreateNode(AND, eqSumZ, eqXZ), yNeq0);
+
+  STP stp(&mgr);
+  SOLVER_RETURN_TYPE result = stp.TopLevelSTP(formula, mgr.ASTFalse);
+  EXPECT_EQ(SOLVER_VALID, result);
+}
+
+TEST_F(BVEQAbstractionTest, BVPLUSSubtractionAbstraction)
+{
+  mgr.UserFlags.bv_term_abstraction = true;
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+
+  // x - y = z (encoded as x + (-y) = z) is SAT
+  ASTNode x = makeSymbol("sub_x", 256);
+  ASTNode y = makeSymbol("sub_y", 256);
+  ASTNode z = makeSymbol("sub_z", 256);
+  ASTNode negY = factory->CreateTerm(BVUMINUS, 256, y);
+  ASTNode diff = factory->CreateTerm(BVPLUS, 256, x, negY);
+  ASTNode eq = factory->CreateNode(EQ, diff, z);
+
+  STP stp(&mgr);
+  SOLVER_RETURN_TYPE result = stp.TopLevelSTP(eq, mgr.ASTFalse);
+  EXPECT_EQ(SOLVER_INVALID, result);
+}
+
+TEST_F(BVEQAbstractionTest, BVPLUSSubtractionUnsatResult)
+{
+  mgr.UserFlags.bv_term_abstraction = true;
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+
+  // x - y = z AND x = z AND y != 0 → UNSAT (forces y = 0 but y ≠ 0)
+  ASTNode x = makeSymbol("subu_x", 256);
+  ASTNode y = makeSymbol("subu_y", 256);
+  ASTNode z = makeSymbol("subu_z", 256);
+  ASTNode negY = factory->CreateTerm(BVUMINUS, 256, y);
+  ASTNode diff = factory->CreateTerm(BVPLUS, 256, x, negY);
+  ASTNode eqDiffZ = factory->CreateNode(EQ, diff, z);
+  ASTNode eqXZ = factory->CreateNode(EQ, x, z);
+  ASTNode yNeq0 = factory->CreateNode(NOT,
+      factory->CreateNode(EQ, y, mgr.CreateBVConst(256, 0)));
+  ASTNode formula = factory->CreateNode(AND,
+      factory->CreateNode(AND, eqDiffZ, eqXZ), yNeq0);
+
+  STP stp(&mgr);
+  SOLVER_RETURN_TYPE result = stp.TopLevelSTP(formula, mgr.ASTFalse);
+  EXPECT_EQ(SOLVER_VALID, result);
+}
+
+TEST_F(BVEQAbstractionTest, BVPLUSConstantOperandAbstraction)
+{
+  mgr.UserFlags.bv_term_abstraction = true;
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+
+  // x + 1 = y is SAT
+  ASTNode x = makeSymbol("ca_x", 256);
+  ASTNode y = makeSymbol("ca_y", 256);
+  ASTNode one = mgr.CreateBVConst(256, 1);
+  ASTNode sum = factory->CreateTerm(BVPLUS, 256, x, one);
+  ASTNode eq = factory->CreateNode(EQ, sum, y);
+
+  STP stp(&mgr);
+  SOLVER_RETURN_TYPE result = stp.TopLevelSTP(eq, mgr.ASTFalse);
+  EXPECT_EQ(SOLVER_INVALID, result);
 }
 
 TEST_F(BVEQAbstractionTest, ITEAbstractionCreatesAbstraction)
@@ -242,6 +399,48 @@ TEST_F(BVEQAbstractionTest, ITEAbstractionCreatesAbstraction)
     if (a.opKind == ITE) foundITE = true;
   EXPECT_TRUE(foundITE);
   EXPECT_FALSE(bb.sideConstraints().empty());
+}
+
+TEST_F(BVEQAbstractionTest, ITEAbstractionSatResult)
+{
+  mgr.UserFlags.bv_term_abstraction = true;
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+
+  // ite(p, x, y) = z is trivially SAT
+  ASTNode p = makeSymbol("ites_p", 0);
+  ASTNode x = makeSymbol("ites_x", 256);
+  ASTNode y = makeSymbol("ites_y", 256);
+  ASTNode z = makeSymbol("ites_z", 256);
+  ASTNode ite = factory->CreateTerm(ITE, 256, p, x, y);
+  ASTNode eq = factory->CreateNode(EQ, ite, z);
+
+  STP stp(&mgr);
+  SOLVER_RETURN_TYPE result = stp.TopLevelSTP(eq, mgr.ASTFalse);
+  EXPECT_EQ(SOLVER_INVALID, result);
+}
+
+TEST_F(BVEQAbstractionTest, ITEAbstractionUnsatResult)
+{
+  mgr.UserFlags.bv_term_abstraction = true;
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+
+  // ite(p, x, y) = z AND x != z AND y != z → UNSAT
+  ASTNode p = makeSymbol("iteu_p", 0);
+  ASTNode x = makeSymbol("iteu_x", 256);
+  ASTNode y = makeSymbol("iteu_y", 256);
+  ASTNode z = makeSymbol("iteu_z", 256);
+  ASTNode ite = factory->CreateTerm(ITE, 256, p, x, y);
+  ASTNode eqIteZ = factory->CreateNode(EQ, ite, z);
+  ASTNode xNeqZ = factory->CreateNode(NOT, factory->CreateNode(EQ, x, z));
+  ASTNode yNeqZ = factory->CreateNode(NOT, factory->CreateNode(EQ, y, z));
+  ASTNode formula = factory->CreateNode(AND,
+      factory->CreateNode(AND, eqIteZ, xNeqZ), yNeqZ);
+
+  STP stp(&mgr);
+  SOLVER_RETURN_TYPE result = stp.TopLevelSTP(formula, mgr.ASTFalse);
+  EXPECT_EQ(SOLVER_VALID, result);
 }
 
 // A candidate is only an assignment of the query once every abstraction in it
@@ -560,6 +759,58 @@ TEST_F(BVEQAbstractionTest, BlockingRoundReusesTheRegisteredConstant)
   EXPECT_FALSE(refiner.terms()[0].defined);
   EXPECT_EQ(0u, solver.newVarCalls);
   EXPECT_TRUE(solver.someClauseBlocksModel());
+}
+
+// maxPrecision's auxiliary SAT queries must not themselves be abstracted:
+// a refinement round answers SOLVER_UNDECIDED, which its result handling
+// reads as "error from solver" and aborts on. The entry points clear the
+// two flags for their own scope and restore them on the way out, so a
+// query narrow enough to abstract at this floor still runs exact inside.
+TEST_F(BVEQAbstractionTest, MaxPrecisionRunsExactUnderAbstractionFlags)
+{
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_term_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 1;
+
+  simplifier::constantBitP::FixedBits a(4, false);
+  simplifier::constantBitP::FixedBits b(4, false);
+  simplifier::constantBitP::FixedBits out(4, false);
+  std::vector<simplifier::constantBitP::FixedBits*> children = {&a, &b};
+
+  const bool noSolution =
+      simplifier::constantBitP::maxPrecision(children, out, BVMULT, &mgr);
+
+  // An unconstrained multiplication has solutions, and none of its bits is
+  // common to all of them.
+  EXPECT_FALSE(noSolution);
+  EXPECT_EQ(0, out.countFixed());
+  EXPECT_TRUE(mgr.UserFlags.bv_eq_abstraction);
+  EXPECT_TRUE(mgr.UserFlags.bv_term_abstraction);
+}
+
+// The batch lowering is the party that has to make that freeze happen,
+// after the CNF lands in the backend and before the first solve. No arrays
+// and no array-equality context here, so every setFrozen this run performs
+// is the abstraction's own: the equality's Boolean plus both 256-bit
+// operands' bits.
+TEST_F(BVEQAbstractionTest, BatchLoweringFreezesAbstractionVariables)
+{
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+
+  ASTNode x = makeSymbol("bf_x", 256);
+  ASTNode y = makeSymbol("bf_y", 256);
+  ASTNode eq = factory->CreateNode(EQ, x, y);
+
+  stp::SubstitutionMap sm(&mgr);
+  Simplifier simp(&mgr, &sm);
+  ArrayTransformer at(&mgr, &simp);
+  ToSATAIG tosat(&mgr, &at);
+
+  RecordingSolver solver;
+  EXPECT_TRUE(tosat.CallSAT(solver, eq, true));
+  EXPECT_TRUE(tosat.hasBVEQAbstractions());
+  EXPECT_GE(solver.frozen.size(), 513u);
 }
 
 TEST_F(BVEQAbstractionTest, RefusesAnEqualityWhoseOperandsAreNotEncoded)
