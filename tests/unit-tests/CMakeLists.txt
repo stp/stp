@@ -58,6 +58,7 @@ add_dependencies(BBNodeManagerAIG_TestTests libabc-pic)
 AddSTPGTest(AIGBudget_Test.cpp)
 target_link_libraries(AIGBudget_TestTests $<TARGET_FILE:libabc-pic>)
 add_dependencies(AIGBudget_TestTests libabc-pic)
+AddSTPGTest(BVEQCongruenceClosure_Test.cpp)
 AddSTPGTest(FPPrintBack_Test.cpp)
 AddSTPGTest(FloatBlast_Test.cpp)
 # The native-comparison differential instantiates BBNodeManagerAIG, whose
