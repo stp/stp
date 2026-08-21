@@ -331,6 +331,27 @@ public:
   // of bitvectors is.
   ASTNode defaultCellValue(const ASTNode& arrayTerm) const;
 
+  // The mode a RoundingMode carrier with nothing behind it denotes.
+  // defaultCellValue publishes it for an unobserved cell of an array of
+  // modes, and the symbol and read arms of the evaluator publish it for a
+  // term the model records nothing for. It is spelled out once here so
+  // that a carrier the model *does* record, and no live constraint
+  // reached, is completed with the same mode rather than a second choice.
+  ASTNode defaultRoundingMode() const;
+
+  // The value to publish for a RoundingMode-sorted term the solve
+  // assigned `carrier` bits.
+  //
+  // Twenty-seven of the carrier's thirty-two patterns denote no mode, and
+  // every mode the current formula names is pinned to the five -- by the
+  // declaration, by FpTotalise, by the array transform where it mints a
+  // cell. So a carrier that denotes nothing did not escape a pin: it is
+  // bits no constraint of this solve reached, a don't-care exactly like
+  // the cell no observation covers, and owed the same completion.
+  // Anything that does denote a mode is the solve's answer and is
+  // returned untouched.
+  ASTNode completeRoundingMode(const ASTNode& carrier) const;
+
   // ComputeFormulaUsingModel for a caller asking a question about the
   // model rather than assembling it: whatever the evaluation would
   // have recorded is rolled back. See the note on ModelQuery in the
