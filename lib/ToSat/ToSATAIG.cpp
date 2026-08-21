@@ -26,6 +26,7 @@ THE SOFTWARE.
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
+#include <sstream>
 
 namespace stp
 {
@@ -145,6 +146,23 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
     if (bm->UserFlags.stats_flag)
       cerr << "AIG node budget exhausted at " << e.nodeCount << " nodes"
            << endl;
+    // Say so here, where the reason is known. The no-answer leaves through the
+    // same door a clock expiry does -- soft_timeout_expired, so that the whole
+    // pipeline unwinds the one way it knows -- and by the time it surfaces
+    // nothing can tell the two apart. This is not a clock: more time on the
+    // same machine reproduces it exactly, and what a caller can act on is the
+    // flag to raise.
+    //
+    // Phrased alongside the conflict budget's own sentence, and carrying the
+    // count it stopped at, which is the one number that says how much higher
+    // to set it. AND gates rather than nodes, because that is what the budget
+    // counts. -1 rather than 0 is what lifts the limit: 0 is a budget of no
+    // gates at all, which gives up before the first one.
+    std::ostringstream detail;
+    detail << "the AIG node budget set by --aig-node-budget ("
+           << bm->UserFlags.aig_node_budget << ") ran out at " << e.nodeCount
+           << " AND gates; raise it, or set it to -1 for no limit";
+    bm->noteUnknown(UnknownReason::Incomplete, detail.str());
     delete cb;
     cb = NULL;
     bb.cb = NULL;
@@ -288,6 +306,9 @@ bool ToSATAIG::runSolver(SATSolver& satSolver)
   bm->GetRunTimes()->start(RunTimes::Solving);
   bool result = satSolver.solve(bm->soft_timeout_expired);
   bm->GetRunTimes()->stop(RunTimes::Solving);
+
+  if (bm->soft_timeout_expired)
+    bm->noteBudgetExhausted(satSolver);
 
   if (bm->UserFlags.stats_flag)
     satSolver.printStats();

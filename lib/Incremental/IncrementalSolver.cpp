@@ -502,6 +502,14 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   }
   bm->GetRunTimes()->stop(RunTimes::Solving);
 
+  // Say which budget stopped the search while the solver is still here to be
+  // asked, the way the batch pipeline does in ToSATAIG::runSolver. The
+  // SOLVER_TIMEOUT below is all that survives this frame, and it is the same
+  // value a clock expiry returns, so a reason not taken here is one
+  // (get-info :reason-unknown) can never give.
+  if (bm->soft_timeout_expired)
+    bm->noteBudgetExhausted(*impl->solver);
+
   if (uf.stats_flag)
     impl->solver->printStats();
 

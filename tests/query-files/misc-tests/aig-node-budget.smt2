@@ -14,9 +14,10 @@
 ; RUN: %solver --SMTLIB2 --aig-node-budget 100000 %s | %OutputCheck --check-prefix=UNCAPPED %s
 ;
 ; An exhausted budget leaves through the soft-timeout path, so the answer is
-; the one --max-time gives -- and, like a timeout, exit status 0. -1 is no
-; limit and 0 is no gates at all, the same convention --max-num-confl and
-; --max-time already use; the two sentinels must not be confusable.
+; the one --max-time gives -- `unknown` in this mode, and, like a timeout,
+; exit status 0. -1 is no limit and 0 is no gates at all, the same convention
+; --max-num-confl and --max-time already use; the two sentinels must not be
+; confusable.
 ; RUN: %solver --SMTLIB2 --aig-node-budget 1000 %s | %OutputCheck --check-prefix=CAPPED %s
 ; RUN: %solver --SMTLIB2 --aig-node-budget 0 %s | %OutputCheck --check-prefix=CAPPED %s
 ;
@@ -40,12 +41,12 @@
 ; RUN: %solver --SMTLIB2 -s --incremental=on %s 2>&1 >/dev/null | %OutputCheck --check-prefix=NOINCWARN %s
 ;
 ; UNCAPPED: ^sat$
-; CAPPED: ^Timed Out\.$
+; CAPPED: ^unknown$
 ; TOOSMALL: ^ERROR: --aig-node-budget must be -1 \(no limit\) or greater$
 ; TOOBIG: ^ERROR: --aig-node-budget must be at most 2147483647
 ; STATS: AIG node budget exhausted at [0-9]+ nodes
 ; QUIET-NOT: AIG node budget exhausted
-; QUIET: ^Timed Out\.$
+; QUIET: ^unknown$
 ; QUIET-NOT: AIG node budget exhausted
 ; INCWARN: --aig-node-budget is not enforced on the incremental encoder
 ; NOINCWARN-NOT: aig-node-budget

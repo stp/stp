@@ -143,6 +143,48 @@ public:
 
   bool soft_timeout_expired;
 
+  // Why the last solve had no answer, and the sentence to give a caller who
+  // asks. Recorded rather than derived because the reasons are produced in
+  // different places -- a spent search budget wherever the solver was asked
+  // to run, an abandoned encoding before it ever was -- and only one of them
+  // has anything to say beyond its name. The SMT-LIB frontend clears this at
+  // the top of every check-sat and on reset / reset-assertions, which is
+  // where (get-info :reason-unknown) reads it; no other caller can.
+  UnknownReason unknown_reason = UnknownReason::None;
+  std::string unknown_detail;
+
+  void noteUnknown(UnknownReason reason, const std::string& detail = "")
+  {
+    unknown_reason = reason;
+    unknown_detail = detail;
+  }
+
+  // Called by whoever just watched this solver give up. Two budgets share the
+  // no-answer exit and they are not the same claim to a caller: the wall
+  // clock may succeed with more time on the same machine, while the conflict
+  // budget is deterministic and will not. The solver is asked which it was
+  // rather than guessed at from the flags -- a zero-second limit and no limit
+  // at all look identical from there, and the first is a clock expiry.
+  //
+  // Lives here rather than in one driver so that every driver answers the
+  // question the same way, and so that the rule below is stated once. An
+  // earlier reason wins: a solve is free to call this on each refinement
+  // round, and a round that gave up for a reason of its own has already said
+  // what that was.
+  void noteBudgetExhausted(const SATSolver& solver)
+  {
+    if (unknown_reason != UnknownReason::None)
+      return;
+    noteUnknown(solver.timeLimitExpired() ? UnknownReason::Timeout
+                                          : UnknownReason::ConflictBudget);
+  }
+
+  void clearUnknown()
+  {
+    unknown_reason = UnknownReason::None;
+    unknown_detail.clear();
+  }
+
   // No nodes should already have the iteration number that is returned from
   // here. This never returns zero.
   uint8_t getNextIteration()

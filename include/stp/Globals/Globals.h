@@ -79,10 +79,34 @@ enum SOLVER_RETURN_TYPE
   SOLVER_INVALID = 0,
   SOLVER_VALID = 1,
   SOLVER_UNDECIDED = 2,
+  // Every way of giving up shares this value, whichever budget ran out: a
+  // caller that only wants to know whether there is an answer keeps the one
+  // test it already had, and the budgets are told apart by
+  // (get-info :reason-unknown) rather than by the verdict.
   SOLVER_TIMEOUT = 3,
   SOLVER_ERROR = -100,
   SOLVER_UNSATISFIABLE = 1,
   SOLVER_SATISFIABLE = 0
+};
+
+// Why the last solve had no answer, for (get-info :reason-unknown). SMT-LIB 2
+// predefines two spellings for that flag, `memout` and `incomplete`, and
+// admits any other s-expression besides; `incomplete` is what a spent budget
+// is, and `timeout` is the free-form spelling for the one budget a caller may
+// beat by re-running.
+enum class UnknownReason
+{
+  None,
+  Timeout,
+  // The conflict budget (--max-num-confl) ran out. Told apart from the clock
+  // because a caller acts differently on the two: a wall-clock timeout may
+  // succeed with more time on the same machine, while a conflict budget is
+  // deterministic and will not.
+  ConflictBudget,
+  // Something other than a budget on the search: the encoding itself was
+  // abandoned. Carries its own sentence in STPMgr::unknown_detail, because
+  // the name alone does not say what was abandoned or what to do about it.
+  Incomplete
 };
 
 // Empty vector. Useful commonly used ASTNodes
