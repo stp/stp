@@ -20,6 +20,9 @@ THE SOFTWARE.
 
 #include "stp/STPManager/STPManager.h"
 #include "stp/Sat/SATSolver.h"
+#include "stp/Simplifier/Simplifier.h"
+#include "stp/ToSat/BBNodeManagerAIG.h"
+#include "stp/ToSat/BitBlaster.h"
 #include "stp/ToSat/BVAbstractionRefiner.h"
 
 #include <gtest/gtest.h>
@@ -47,6 +50,199 @@ protected:
     return mgr.CreateSymbol(name, 0, width);
   }
 };
+
+TEST_F(BVEQAbstractionTest, AbstractsWideSymbolEquality)
+{
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+
+  ASTNode x = makeSymbol("x", 256);
+  ASTNode y = makeSymbol("y", 256);
+  ASTNode eq = factory->CreateNode(EQ, x, y);
+
+  BBNodeManagerAIG aigMgr;
+  stp::SubstitutionMap sm(&mgr);
+  Simplifier simp(&mgr, &sm);
+  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+
+  bb.BBForm(eq);
+
+  EXPECT_EQ(1u, bb.abstractedEQs().size());
+  EXPECT_EQ(eq, bb.abstractedEQs()[0].eqNode);
+  EXPECT_EQ(x, bb.abstractedEQs()[0].leftSymbol);
+  EXPECT_EQ(y, bb.abstractedEQs()[0].rightSymbol);
+}
+
+TEST_F(BVEQAbstractionTest, NoAbstractionWhenDisabled)
+{
+  mgr.UserFlags.bv_eq_abstraction = false;
+
+  ASTNode x = makeSymbol("x2", 256);
+  ASTNode y = makeSymbol("y2", 256);
+  ASTNode eq = factory->CreateNode(EQ, x, y);
+
+  BBNodeManagerAIG aigMgr;
+  stp::SubstitutionMap sm(&mgr);
+  Simplifier simp(&mgr, &sm);
+  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+
+  bb.BBForm(eq);
+
+  EXPECT_TRUE(bb.abstractedEQs().empty());
+}
+
+TEST_F(BVEQAbstractionTest, NoAbstractionBelowWidthThreshold)
+{
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+
+  ASTNode x = makeSymbol("x3", 32);
+  ASTNode y = makeSymbol("y3", 32);
+  ASTNode eq = factory->CreateNode(EQ, x, y);
+
+  BBNodeManagerAIG aigMgr;
+  stp::SubstitutionMap sm(&mgr);
+  Simplifier simp(&mgr, &sm);
+  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+
+  bb.BBForm(eq);
+
+  EXPECT_TRUE(bb.abstractedEQs().empty());
+}
+
+TEST_F(BVEQAbstractionTest, AbstractionWithNonSymbolOperandsViaProxyCIs)
+{
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+
+  ASTNode x = makeSymbol("x4", 256);
+  ASTNode one = mgr.CreateBVConst(256, 1);
+  ASTNode sum = factory->CreateTerm(BVPLUS, 256, x, one);
+  ASTNode y = makeSymbol("y4", 256);
+  ASTNode eq = factory->CreateNode(EQ, sum, y);
+
+  BBNodeManagerAIG aigMgr;
+  stp::SubstitutionMap sm(&mgr);
+  Simplifier simp(&mgr, &sm);
+  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+
+  bb.BBForm(eq);
+
+  EXPECT_EQ(1u, bb.abstractedEQs().size());
+  EXPECT_FALSE(bb.sideConstraints().empty());
+}
+
+TEST_F(BVEQAbstractionTest, BooleanSkeletonContradictionIsUnsatWithoutRefinement)
+{
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+
+  ASTNode x = makeSymbol("x5", 256);
+  ASTNode y = makeSymbol("y5", 256);
+  ASTNode eq = factory->CreateNode(EQ, x, y);
+  ASTNode neq = factory->CreateNode(NOT, eq);
+  ASTNode conj = factory->CreateNode(AND, eq, neq);
+
+  BBNodeManagerAIG aigMgr;
+  stp::SubstitutionMap sm(&mgr);
+  Simplifier simp(&mgr, &sm);
+  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+
+  BBNodeAIG result = bb.BBForm(conj);
+
+  EXPECT_EQ(1u, bb.abstractedEQs().size());
+  EXPECT_EQ(aigMgr.getFalse(), result);
+}
+
+TEST_F(BVEQAbstractionTest, MultipleEqualitiesAbstracted)
+{
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+
+  ASTNode a = makeSymbol("a", 256);
+  ASTNode b = makeSymbol("b", 256);
+  ASTNode c = makeSymbol("c", 256);
+  ASTNode eq1 = factory->CreateNode(EQ, a, b);
+  ASTNode eq2 = factory->CreateNode(EQ, b, c);
+  ASTNode conj = factory->CreateNode(AND, eq1, eq2);
+
+  BBNodeManagerAIG aigMgr;
+  stp::SubstitutionMap sm(&mgr);
+  Simplifier simp(&mgr, &sm);
+  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+
+  bb.BBForm(conj);
+
+  EXPECT_EQ(2u, bb.abstractedEQs().size());
+}
+
+TEST_F(BVEQAbstractionTest, DagSharingReusesAbstraction)
+{
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+
+  ASTNode x = makeSymbol("x6", 256);
+  ASTNode y = makeSymbol("y6", 256);
+  ASTNode eq = factory->CreateNode(EQ, x, y);
+  ASTNode conj = factory->CreateNode(AND, eq, eq);
+
+  BBNodeManagerAIG aigMgr;
+  stp::SubstitutionMap sm(&mgr);
+  Simplifier simp(&mgr, &sm);
+  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+
+  bb.BBForm(conj);
+
+  EXPECT_EQ(1u, bb.abstractedEQs().size());
+}
+
+TEST_F(BVEQAbstractionTest, BVPLUSAbstractionCreatesAbstraction)
+{
+  mgr.UserFlags.bv_term_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+
+  ASTNode x = makeSymbol("ta_x", 256);
+  ASTNode y = makeSymbol("ta_y", 256);
+  ASTNode sum = factory->CreateTerm(BVPLUS, 256, x, y);
+  ASTNode z = makeSymbol("ta_z", 256);
+  ASTNode eq = factory->CreateNode(EQ, sum, z);
+
+  BBNodeManagerAIG aigMgr;
+  stp::SubstitutionMap sm(&mgr);
+  Simplifier simp(&mgr, &sm);
+  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+
+  bb.BBForm(eq);
+
+  EXPECT_GE(bb.abstractedTerms().size(), 1u);
+  EXPECT_EQ(BVPLUS, bb.abstractedTerms()[0].opKind);
+}
+
+TEST_F(BVEQAbstractionTest, ITEAbstractionCreatesAbstraction)
+{
+  mgr.UserFlags.bv_term_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+
+  ASTNode p = makeSymbol("ite_p", 0);
+  ASTNode x = makeSymbol("ite_x", 256);
+  ASTNode y = makeSymbol("ite_y", 256);
+  ASTNode ite = factory->CreateTerm(ITE, 256, p, x, y);
+  ASTNode z = makeSymbol("ite_z", 256);
+  ASTNode eq = factory->CreateNode(EQ, ite, z);
+
+  BBNodeManagerAIG aigMgr;
+  stp::SubstitutionMap sm(&mgr);
+  Simplifier simp(&mgr, &sm);
+  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+
+  bb.BBForm(eq);
+
+  bool foundITE = false;
+  for (const auto& a : bb.abstractedTerms())
+    if (a.opKind == ITE) foundITE = true;
+  EXPECT_TRUE(foundITE);
+  EXPECT_FALSE(bb.sideConstraints().empty());
+}
 
 // A candidate is only an assignment of the query once every abstraction in it
 // has been checked against the operands it stands for. Refinement checks them
