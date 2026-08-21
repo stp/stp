@@ -263,16 +263,6 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   STPMgr* bm = impl->bm;
   UserDefinedFlags& uf = bm->UserFlags;
 
-  // The persistent bit-blaster mints BV abstractions under these flags,
-  // but this driver does not yet own the refinement loop that is their
-  // other half -- without it a candidate is answered straight from the
-  // unrefined relaxation and the proxy constraints are never asserted.
-  // Refuse rather than answer wrongly; the commit that gives this driver
-  // the loop removes this.
-  if (uf.bv_eq_abstraction || uf.bv_term_abstraction)
-    FatalError("--bv-eq-abstraction / --bv-term-abstraction are not yet "
-               "supported by the incremental driver; use --incremental=off");
-
   assert(!assertionsSMT2.empty());
   // A frontend may claim a forced FIRST solve only before this driver has
   // engaged at all; otherwise the first-solve policies the stages below key
@@ -318,6 +308,11 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   SATSolver::vec_literals assumptions;
   const size_t contextEntries = impl->prepareAndEncodePushedLevels(
       assertionsSMT2, assumeLastLevelPerConjunct, assumptions);
+
+  // Every route bit-blasts before it solves, and the abstractions the
+  // blaster made are this driver's to refine. Taken across here, once all
+  // of this call's encoding is done and before any search.
+  impl->syncAbstractions();
 
   const ASTVec& activeEncodedKeys = impl->scopes.activeSemanticKeys();
   impl->hintRetractedLevels(assumptions);
@@ -454,12 +449,27 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
         impl->solver->submittedClauses();
     size_t refinementRounds = 0;
     ArrayReadRefinementProgress refinementProgress;
+    uint64_t abstractionsRefined = impl->bvAbstraction.refinements();
     SOLVER_RETURN_TYPE res = impl->ce->CallSAT_ResultCheck(
         *impl->solver, bm->ASTTrue, activeConjunction, activeConjunction,
         adapter, true);
     while (res == SOLVER_UNDECIDED)
     {
       refinementRounds++;
+      // A candidate rejected because it contradicted a bit-vector
+      // abstraction has already been ruled out, inside the call above and
+      // ahead of everything else that reads a candidate. Nothing is owed
+      // to the array axioms for it -- it was never a model of the reads
+      // either -- so the round is just the next search.
+      const uint64_t refinedNow = impl->bvAbstraction.refinements();
+      if (refinedNow != abstractionsRefined)
+      {
+        abstractionsRefined = refinedNow;
+        res = impl->ce->CallSAT_ResultCheck(*impl->solver, bm->ASTTrue,
+                                            activeConjunction,
+                                            activeConjunction, adapter, true);
+        continue;
+      }
       res = impl->runGuardedReadRefinementRound(
           activeConjunction, adapter, refinementProgress,
           "IncrementalSolver: an array refinement round rejected "
@@ -512,6 +522,43 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   }
   bm->GetRunTimes()->stop(RunTimes::Solving);
 
+  // No candidate leaves this route until every bit-vector abstraction in it
+  // agrees with the operands it stands for. The refinement loops above reach
+  // that through CallSAT_ResultCheck; this route never enters it, so the loop
+  // is written out. It terminates because every round either rules out the
+  // candidate it was shown -- each term family, congruence clause and
+  // said-unequal equality round adds a clause that candidate violates -- or
+  // strictly grows an equality's refined prefix, which its width bounds; a
+  // ruled-out candidate never returns, and the solver's models are finite.
+  // The working bounds per record: one round for a comparison, addition or
+  // if-then-else, log2(width) for an equality, and the blocking allowance
+  // plus one exact encoding for a multiplication, division or remainder --
+  // whose enumeration, with the allowance set to zero, is instead bounded
+  // by the operand pairs the search can propose.
+  const uint64_t abstractionClausesBefore = impl->solver->submittedClauses();
+  while (sat && !bm->soft_timeout_expired &&
+         impl->refineAbstractions(*impl->solver) > 0)
+  {
+    bm->GetRunTimes()->start(RunTimes::Solving);
+    if (impl->profile.enabled)
+    {
+      impl->profile.satCalls++;
+      impl->profile.refinementSatCalls++;
+      impl->profile.refinementRounds++;
+    }
+    {
+      ScopedProfileTimer satTimer(impl->profile.enabled, impl->profile.satNs);
+      ScopedProfileTimer refineSatTimer(impl->profile.enabled,
+                                        impl->profile.refinementSatNs);
+      if (assumptions.size() == 0)
+        sat = impl->solver->solve(bm->soft_timeout_expired);
+      else
+        sat = impl->solver->solveWithAssumptions(assumptions,
+                                                 bm->soft_timeout_expired);
+    }
+    bm->GetRunTimes()->stop(RunTimes::Solving);
+  }
+
   // Say which budget stopped the search while the solver is still here to be
   // asked, the way the batch pipeline does in ToSATAIG::runSolver. The
   // SOLVER_TIMEOUT below is all that survives this frame, and it is the same
@@ -519,6 +566,24 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   // (get-info :reason-unknown) can never give.
   if (bm->soft_timeout_expired)
     bm->noteBudgetExhausted(*impl->solver);
+
+  // Whatever the loop pinned is part of what this stack costs from now on;
+  // re-stage the mass over it, as the refinement branch above does for its
+  // axioms.
+  {
+    const uint64_t pinnedMass = impl->accountRefinementClauses(
+        ordinaryOwner, abstractionClausesBefore);
+    if (pinnedMass > 0)
+    {
+      uint64_t nonStructuralMass =
+          Impl::addMass(impl->permanentUnitMass, activationMass);
+      nonStructuralMass = Impl::addMass(nonStructuralMass,
+                                        impl->refinementMass(ordinaryOwner));
+      impl->stageLiveConeMass(
+          ordinaryCurrentRoots,
+          Impl::addMass(ordinaryLiveMass, pinnedMass), nonStructuralMass);
+    }
+  }
 
   if (uf.stats_flag)
     impl->solver->printStats();

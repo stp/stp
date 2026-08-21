@@ -184,16 +184,54 @@ SOLVER_RETURN_TYPE IncrementalSolver::Impl::solvePlainExactStack(
   }
   bm->GetRunTimes()->stop(RunTimes::Solving);
 
+  // No candidate leaves this route until every bit-vector abstraction in it
+  // agrees with the operands it stands for. The refinement routes reach that
+  // through CallSAT_ResultCheck; this one never enters it, so the loop is
+  // written out. It terminates because every round either rules out the
+  // candidate it was shown -- each term family, congruence clause and
+  // said-unequal equality round adds a clause that candidate violates -- or
+  // strictly grows an equality's refined prefix, which its width bounds; a
+  // ruled-out candidate never returns, and the solver's models are finite.
+  // The working bounds per record: one round for a comparison, addition or
+  // if-then-else, log2(width) for an equality, and the blocking allowance
+  // plus one exact encoding for a multiplication, division or remainder --
+  // whose enumeration, with the allowance set to zero, is instead bounded
+  // by the operand pairs the search can propose.
+  const uint64_t refinementClausesBefore = solver->submittedClauses();
+  while (sat && !bm->soft_timeout_expired && refineAbstractions(*solver) > 0)
+  {
+    bm->GetRunTimes()->start(RunTimes::Solving);
+    if (profile.enabled)
+    {
+      profile.satCalls++;
+      profile.refinementSatCalls++;
+      profile.refinementRounds++;
+    }
+    {
+      ScopedProfileTimer satTimer(profile.enabled, profile.satNs);
+      ScopedProfileTimer refineSatTimer(profile.enabled,
+                                        profile.refinementSatNs);
+      sat = solver->solveWithAssumptions(assumptions, bm->soft_timeout_expired);
+    }
+    bm->GetRunTimes()->stop(RunTimes::Solving);
+  }
+
   // As in IncrementalSolver::checkSat: the SOLVER_TIMEOUT below is the same
   // value a clock expiry returns, so which budget it was has to be taken from
   // the solver here or not at all.
   if (bm->soft_timeout_expired)
     bm->noteBudgetExhausted(*solver);
 
-  const uint64_t cheapLiveMass =
-      addMass(baseLiveMass, clauseMassOf[inputToSat]);
+  // Whatever the loop pinned is part of what this stack costs from now on,
+  // so it is accounted before the mass is staged -- the same treatment the
+  // array-equality route gives its lemmas.
+  const uint64_t theoryMass =
+      accountRefinementClauses(inputToSat, refinementClausesBefore);
+  uint64_t cheapLiveMass = addMass(baseLiveMass, clauseMassOf[inputToSat]);
+  cheapLiveMass = addMass(cheapLiveMass, theoryMass);
   std::vector<Aig_Obj_t*> currentRoots(1, blockRegular);
-  stageLiveConeMass(currentRoots, cheapLiveMass, permanentUnitMass);
+  stageLiveConeMass(currentRoots, cheapLiveMass,
+                    addMass(permanentUnitMass, theoryMass));
   stageSemanticLiveStack(assertionsSMT2, ASTVec(1, inputToSat));
 
   if (uf.stats_flag)
@@ -481,6 +519,11 @@ IncrementalSolver::Impl::exactStackCheckSat(
               << solver->nVars() << " variables" << std::endl;
   }
 
+  // Every route bit-blasts before it solves, and the abstractions the
+  // blaster made are this driver's to refine. Taken across here, once this
+  // round's block is encoded and before any search.
+  syncAbstractions();
+
   applySolveBudgets(*solver, uf);
   bm->soft_timeout_expired = false;
 
@@ -531,6 +574,10 @@ IncrementalSolver::Impl::exactStackCheckSat(
 
   const uint64_t refinementClausesBefore = solver->submittedClauses();
   ScopedProfileTimer refinementTimer(profile.enabled, profile.refinementNs);
+  // Snapshotted before the first solve: that call refines the bit-vector
+  // abstractions too, and the loop below reads the count to decide whether
+  // the round it is looking at made progress.
+  uint64_t abstractionsRefined = bvAbstraction.refinements();
   SOLVER_RETURN_TYPE res = ce->CallSAT_ResultCheck(
       *solver, bm->ASTTrue, semantic, prepared, tosat, true);
 
@@ -541,6 +588,19 @@ IncrementalSolver::Impl::exactStackCheckSat(
   while (res == SOLVER_UNDECIDED)
   {
     refinementRounds++;
+    // A candidate rejected because it contradicted a bit-vector abstraction
+    // has already been ruled out, inside the call above and ahead of
+    // everything else that reads a candidate. No theory owes a lemma for it
+    // -- it was never a model of the reads either -- so the round is just
+    // the next search.
+    const uint64_t refinedNow = bvAbstraction.refinements();
+    if (refinedNow != abstractionsRefined)
+    {
+      abstractionsRefined = refinedNow;
+      res = ce->CallSAT_ResultCheck(*solver, bm->ASTTrue, semantic, prepared,
+                                    tosat, true);
+      continue;
+    }
     // Re-totalize: the checker's lemma encodings can introduce new reads,
     // whose rows joined the table after the pass above. Memoised, so a
     // round that added nothing pays nothing.
