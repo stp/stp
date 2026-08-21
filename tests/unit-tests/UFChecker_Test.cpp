@@ -89,6 +89,7 @@ struct UnaryFixture
   UnaryFixture() : context(NULL), f(NULL)
   {
     manager.UserFlags.enable_uninterpreted_functions = true;
+    manager.UserFlags.uf_narrow_results = false;
     context = manager.getUFContext();
     std::string diagnostic;
     f = context->declareFunction(
@@ -169,6 +170,7 @@ struct CollidingFixture
   CollidingFixture() : context(NULL), f(NULL)
   {
     manager.UserFlags.enable_uninterpreted_functions = true;
+    manager.UserFlags.uf_narrow_results = false;
     context = manager.getUFContext();
     std::string diagnostic;
     f = context->declareFunction("f", {SourceSort::bitVector(8)},
@@ -404,6 +406,7 @@ TEST(UFChecker, KeepsTuplePositionsAndDeclarationsIndependent)
 {
   STPMgr manager;
   manager.UserFlags.enable_uninterpreted_functions = true;
+  manager.UserFlags.uf_narrow_results = false;
   UFContext* context = manager.getUFContext();
   std::string diagnostic;
   const SourceSort bv = SourceSort::bitVector(4);
@@ -449,6 +452,7 @@ TEST(UFChecker, SupportsMixedBooleanAndBitVectorTuples)
 {
   STPMgr manager;
   manager.UserFlags.enable_uninterpreted_functions = true;
+  manager.UserFlags.uf_narrow_results = false;
   UFContext* context = manager.getUFContext();
   std::string diagnostic;
   const UFDecl* p = context->declareFunction(
@@ -492,6 +496,7 @@ TEST(UFChecker, PreservesValuesWiderThanMachineWords)
 {
   STPMgr manager;
   manager.UserFlags.enable_uninterpreted_functions = true;
+  manager.UserFlags.uf_narrow_results = false;
   UFContext* context = manager.getUFContext();
   std::string diagnostic;
   const SourceSort wide = SourceSort::bitVector(129);
@@ -539,6 +544,7 @@ TEST(UFChecker, OmitsOnlyIdenticalAndDuplicatePremises)
 {
   STPMgr manager;
   manager.UserFlags.enable_uninterpreted_functions = true;
+  manager.UserFlags.uf_narrow_results = false;
   UFContext* context = manager.getUFContext();
   std::string diagnostic;
   const SourceSort bv = SourceSort::bitVector(8);
@@ -582,6 +588,7 @@ TEST(UFChecker, DeduplicatesExactlyRepeatedPremiseAtoms)
 {
   STPMgr manager;
   manager.UserFlags.enable_uninterpreted_functions = true;
+  manager.UserFlags.uf_narrow_results = false;
   UFContext* context = manager.getUFContext();
   std::string diagnostic;
   const SourceSort bv = SourceSort::bitVector(8);
@@ -681,6 +688,7 @@ struct RoundingModeFixture
   RoundingModeFixture() : context(NULL), k(NULL)
   {
     manager.UserFlags.enable_uninterpreted_functions = true;
+    manager.UserFlags.uf_narrow_results = false;
     context = manager.getUFContext();
     std::string diagnostic;
     k = context->declareFunction("k", {SourceSort::roundingMode()},

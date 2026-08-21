@@ -391,13 +391,25 @@ UFCheckPlan UFChecker::validate(
     // the declared sort everywhere but FloatingPoint, which the core never
     // sees: it is solved as its canonical packed carrier and only becomes a
     // float again at the model boundary.
+    //
+    // uf_narrow_results may have reduced the result width; the symbol then
+    // carries a BitVector sort narrower than the declared codomain, and that
+    // is legal as long as the kind stays BitVector.
     {
       const SourceSort expected =
           UFSignature::loweringSort(signature.codomain());
-      if (record.resultSymbol.GetSourceSort() != expected)
+      const SourceSort actual = record.resultSymbol.GetSourceSort();
+      if (actual != expected)
       {
-        plan.diagnostic_ = "UFCHK result symbol has the wrong SourceSort";
-        return plan;
+        const bool narrowedBV =
+            expected.kind() == SourceSort::Kind::BitVector &&
+            actual.kind() == SourceSort::Kind::BitVector &&
+            actual.bitVectorWidth() < expected.bitVectorWidth();
+        if (!narrowedBV)
+        {
+          plan.diagnostic_ = "UFCHK result symbol has the wrong SourceSort";
+          return plan;
+        }
       }
     }
     for (size_t i = 0; i < signature.arity(); ++i)

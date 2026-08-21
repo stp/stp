@@ -515,11 +515,14 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
     case CADICAL:
       b->UserFlags.solver_to_use = stp::UserDefinedFlags::CADICAL_SOLVER;
       break;
-    // The refinement knobs the CLI exposes as --distinct-ordering,
-    // --uf-lemmas-per-round, --uf-sort-width and --aig-node-budget. Each sets
-    // the same UserFlags field the CLI parser writes, so a C API client
-    // reaches the encodings that until now only a query read from a file
-    // could.
+    // The refinement knobs the CLI exposes as --uf-narrow-results,
+    // --bv-eq-abstraction, --bv-eq-abstraction-width,
+    // --bv-eq-refine-width and --bv-term-abstraction. Each sets the same
+    // UserFlags field the CLI parser writes, so a C API client reaches the
+    // encodings that until now only a query read from a file could.
+    case UF_NARROW_RESULTS:
+      b->UserFlags.uf_narrow_results = param_value != 0;
+      break;
     case DISTINCT_ORDERING:
       b->UserFlags.distinct_ordering = param_value != 0;
       break;
