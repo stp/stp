@@ -82,8 +82,8 @@ class STP
   std::unique_ptr<FpEncodingContext> fpEncodingContext;
 
   // Public and semantic UF roots for the most recent fresh-query solve. The
-  // value remains alive with the model, while all SAT/checker mutation belongs
-  // to the batch adapter added at M4.
+  // value remains alive with the model, while batchUFAdapter owns the
+  // query-local SAT/checker mutation.
   std::unique_ptr<LoweredApplicationView> batchUFView;
   std::unique_ptr<UFBatchAdapter> batchUFAdapter;
   uint64_t batchUFScopeGeneration = 0;

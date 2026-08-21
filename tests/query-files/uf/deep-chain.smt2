@@ -2,8 +2,8 @@
 ; RUN: %solver --uninterpreted-functions --incremental=on %s | %OutputCheck %s
 ; RUN: %solver --uninterpreted-functions %s | %OutputCheck %s
 ; CHECK-NEXT: ^unsat
-; T-UF-09: a deeper hidden application chain through completed-root
-; traversal and up-front liveness.
+; A deeper hidden application chain exercises completed-root traversal and
+; the up-front registration needed to read every checker scalar.
 (set-logic QF_UFBV)
 (declare-fun g ((_ BitVec 4)) (_ BitVec 4))
 (declare-fun f ((_ BitVec 4)) (_ BitVec 4))

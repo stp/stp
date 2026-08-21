@@ -8,8 +8,8 @@ model replaces the corresponding declarations in a replay of the assertion
 stack active at that check, and every validator must answer SAT.
 
 Cases are explicit inputs.  The harness rejects reset-driven scripts because
-their declaration policy belongs to UFSTP v2's native lifecycle suite rather
-than to this branch-neutral model relay.
+their declaration scoping and reset behavior belong to STP's native UF
+lifecycle suite rather than to this branch-neutral model relay.
 """
 
 import argparse
@@ -110,7 +110,8 @@ def parse_count(command_text):
 
 def parse_case(source):
     if re.search(r"\(reset(?:-assertions)?\b", source):
-        raise ValueError("reset/reset-assertions cases are v2-policy-owned")
+        raise ValueError(
+            "reset/reset-assertions cases need native lifecycle validation")
     levels = [[]]
     checks = []
     producer = ["(set-option :produce-models true)"]

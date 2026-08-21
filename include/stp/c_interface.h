@@ -143,7 +143,7 @@ DLL_PUBLIC const char* get_compilation_env(void);
 //!  - 'r': Enables accermannisation.
 //!  - 's': Sets the status flag to true. TODO: What consequenses does this have?
 //!  - 't': Enables quick statistics. TODO: What is this?
-//!  - 'u': Enables the UFSTP v2 uninterpreted-functions profile.
+//!  - 'u': Enables uninterpreted-function support.
 //!  - 'v': Enables printing of nodes.
 //!  - 'w': *Disables* word-level solving, despite the name.
 //!  - 'x': Enables deciding equality between whole arrays (the extensional
@@ -287,9 +287,9 @@ enum ifaceflag_t
   //! uninterpreted-function refinement (default 8).
   //!
   //! `param_value` is that count: zero installs every conflict the candidate
-  //! exposes, and one is the one-lemma-per-round reference profile. This is
-  //! the C API's way to reach --uf-lemmas-per-round. A negative value is
-  //! refused with a nonfatal diagnostic.
+  //! exposes, and one restricts each candidate to a single installed lemma.
+  //! This is the C API's way to reach --uf-lemmas-per-round. A negative value
+  //! is refused with a nonfatal diagnostic.
   //!
   UF_LEMMAS_PER_ROUND,
 

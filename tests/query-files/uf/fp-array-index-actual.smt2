@@ -1,5 +1,5 @@
-; A floating-point UF argument that is also a float array index -- the case
-; §6 of the design names as the one that proves the pass ordering.
+; A floating-point UF argument that is also a float array index exercises the
+; pass-ordering boundary directly.
 ;
 ; FpTotalise is deliberately not idempotent: feeding its output back through
 ; it would canonicalise a float array index a second time. UF lowering runs

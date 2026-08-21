@@ -2,10 +2,10 @@
 """Run the branch-neutral QF_UFBV slice of peer regression suites.
 
 The peer trees remain external inputs: this script deliberately selects only
-ordinary sat/unsat queries whose semantics agree with UFSTP v2.  Parser-error,
-lifecycle-policy, higher-order, unsupported-sort, and public-model tests are
-left to the native v2 suite instead of importing a peer project's contract by
-accident.
+ordinary sat/unsat queries in STP's supported quantifier-free UF fragment.
+Parser-error, lifecycle-policy, higher-order, unsupported-sort, and
+public-model tests are left to STP's native UF suite instead of importing a
+peer project's contract by accident.
 """
 
 import argparse
@@ -73,7 +73,7 @@ def classify(path, max_bytes):
     if any(UF_ARRAY_SIGNATURE.search(line) for line in text.splitlines()):
         return None, "array-in-uf-signature"
     if LIFECYCLE_OR_MODEL.search(text):
-        return None, "v2-policy-owned"
+        return None, "lifecycle-or-model"
     if has_higher_order_use(text):
         return None, "higher-order"
     expected = expected_verdicts(text)

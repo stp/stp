@@ -12,16 +12,16 @@
 ; SINGLE-NOT: candidate refuted by
 ; SINGLE: ^unsat$
 ;
-; T-OPT-01. The three actuals are forced equal, so every candidate puts all
-; three applications in one bucket, and the disequality forces three distinct
+; The three actuals are forced equal, so every candidate puts all three
+; applications in one bucket, and the disequality forces three distinct
 ; results: two records disagree with the bucket's representative in the very
 ; first candidate, whatever the backend assigns. Both are refuted by that one
-; unchanged assignment, so both clauses are validated and installed before the
-; solver is asked again.
+; unchanged assignment, so both clauses are validated and installed before
+; the solver is asked again.
 ;
-; --uf-lemmas-per-round=1 keeps the one-lemma-per-round reference profile,
-; which reaches the same verdict; the batched and single paths must never
-; disagree, only differ in how many rounds they take.
+; --uf-lemmas-per-round=1 restricts each candidate to one installed lemma and
+; reaches the same verdict; the batched and single paths must never disagree,
+; only differ in how many rounds they take.
 (set-logic QF_UFBV)
 (declare-fun f ((_ BitVec 4)) (_ BitVec 4))
 (declare-const a0 (_ BitVec 4))
