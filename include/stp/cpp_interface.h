@@ -587,6 +587,11 @@ public:
   DLL_PUBLIC void setOption(std::string, std::string);
   DLL_PUBLIC void getOption(std::string);
   DLL_PUBLIC void getInfo(std::string);
+  // True when some declared sort's carrier cannot hold the terms this query
+  // names of it, with a sentence saying which and what to raise. Neither
+  // verdict is reportable then -- see the call site in checkSat.
+  bool sortCarrierExhausted(const ASTVec& assertions,
+                            std::string& detail) const;
 
   DLL_PUBLIC void getAssertions();
 

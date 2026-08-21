@@ -111,6 +111,15 @@ TEST(UninterpretedFunctionsFrontend, SignatureUsesRestrictedSourceSorts)
             UFSignature::loweringSort(SourceSort::roundingMode()));
   EXPECT_EQ(SourceSort::bitVector(17),
             UFSignature::loweringSort(SourceSort::bitVector(17)));
+
+  // A sort declared by declare-sort is solved at its own sort, like a rounding
+  // mode and unlike a float: equality is its only operation and bit equality on
+  // its carrier is exactly that. Mapping it to its carrier here would compile,
+  // pass everything else, and make models print at the carrier again.
+  const SourceSort declared = registerUninterpretedSort("Loose", 16);
+  EXPECT_TRUE(UFSignature::isSupportedSort(declared));
+  EXPECT_EQ(declared, UFSignature::loweringSort(declared));
+  EXPECT_NE(SourceSort::bitVector(16), UFSignature::loweringSort(declared));
 }
 
 TEST(UninterpretedFunctionsFrontend,
@@ -135,8 +144,9 @@ TEST(UninterpretedFunctionsFrontend,
             context->declareFunction("array", {array}, bv8, &diagnostic));
   EXPECT_EQ("uninterpreted functions: declaration of array: unsupported "
             "domain sort (Array (_ BitVec 8) (_ BitVec 8)) at argument 0 "
-            "(only Bool, RoundingMode, FloatingPoint and nonzero-width "
-            "bit-vector sorts are supported)",
+            "(only Bool, RoundingMode, FloatingPoint, nonzero-width "
+            "bit-vector sorts and sorts introduced by declare-sort are "
+            "supported)",
             diagnostic);
   EXPECT_EQ(nullptr, context->declareFunction(
                          "unknown", {SourceSort::unknown()}, bv8,
@@ -145,8 +155,8 @@ TEST(UninterpretedFunctionsFrontend,
             context->declareFunction("result", {bv8}, array, &diagnostic));
   EXPECT_EQ("uninterpreted functions: declaration of result: unsupported "
             "result sort (Array (_ BitVec 8) (_ BitVec 8)) (only Bool, "
-            "RoundingMode, FloatingPoint and nonzero-width bit-vector "
-            "sorts are supported)",
+            "RoundingMode, FloatingPoint, nonzero-width bit-vector sorts "
+            "and sorts introduced by declare-sort are supported)",
             diagnostic);
   EXPECT_EQ(0u, context->declarationCount());
   EXPECT_EQ(0u, context->registeredApplicationCount());

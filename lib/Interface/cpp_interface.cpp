@@ -970,6 +970,9 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
 
   bm.GetRunTimes()->stop(RunTimes::Parsing);
   bm.clearUnknown();
+  // Element names belong to one model. Cleared here rather than in getModel so
+  // that get-value and get-model agree within a solve whichever is asked first.
+  bm.clearUninterpretedElements();
 
   // Bracket the solve so (get-info :all-statistics) can report on this check
   // alone. Taken here rather than at entry so the parse that preceded the
@@ -978,6 +981,32 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
 
   checkInvariant();
   assert(assertionsSMT2.size() == cache.size());
+
+  // A sort declared by declare-sort is unbounded and its carrier is not, so a
+  // query needing more elements of one sort than the carrier can tell apart may
+  // be unsatisfiable in the encoding while being satisfiable in the theory.
+  // Which way that can go wrong is not symmetric: every carrier pattern denotes
+  // an element and bit equality on the carrier is the sort's equality, so any
+  // satisfying carrier assignment is a genuine model and `sat` is always sound.
+  // Only `unsat` can be an artefact, and it is also the one answer a caller
+  // cannot tell from a real refutation.
+  //
+  // So the query is SOLVED and only an `unsat` is withheld -- see the
+  // conversion after the solve below. Refusing before solving would have
+  // thrown away sound `sat` answers too, which is a plain loss for the users
+  // who narrowed the carrier deliberately.
+  //
+  // Decided here rather than in either engine because both are reachable from
+  // this one funnel and the question is about the input, not about how it was
+  // solved. Conservative: it counts terms that could need an element of their
+  // own, not elements actually forced apart, so an over-capacity query that is
+  // unsatisfiable for unrelated reasons is withheld too. At the default width
+  // that takes 65537 terms of one sort -- reachable by a generated query, and
+  // measured at 0.27 s, so it is no hand-written query that gets there rather
+  // than none at all.
+  std::string carrierExhausted;
+  const bool carrierMayBeShort =
+      sortCarrierExhausted(assertionsSMT2, carrierExhausted);
 
   Entry& last_run = cache.back();
   if ((last_run.node_number != assertionsSMT2.back().GetNodeNum()) &&
@@ -1075,6 +1104,17 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
   {
     std::cerr << "Incremental: unsat answered from a cached core, no solve"
               << std::endl;
+  }
+
+  // An `unsat` reached over a carrier too narrow for the query may be an
+  // artefact of the encoding rather than a refutation, and nothing in the
+  // output would distinguish the two. Withhold it. `sat` is kept: every
+  // carrier assignment denotes a real assignment of elements, so a model found
+  // this way is a genuine one whatever the carrier's width.
+  if (carrierMayBeShort && last_run.result == SOLVER_UNSATISFIABLE)
+  {
+    last_run.result = SOLVER_TIMEOUT;
+    bm.noteUnknown(UnknownReason::CarrierExhausted, carrierExhausted);
   }
 
   // A model exists exactly when this check concluded SAT and the solve
@@ -1449,10 +1489,13 @@ void Cpp_interface::getInfo(std::string flag)
         cout << "(:reason-unknown (incomplete \"the conflict budget set by "
                 "--max-num-confl ran out\"))" << endl;
         break;
+      case UnknownReason::CarrierExhausted:
       case UnknownReason::Incomplete:
         // The predefined SMT-LIB spelling, followed by what was incomplete:
         // the flag admits an s-expression, and a bare "incomplete" tells a
-        // caller nothing they can act on.
+        // caller nothing they can act on. Both share it because the
+        // sentence is what says which, and SMT-LIB2 has no spelling that
+        // would say it better.
         cout << "(:reason-unknown (incomplete \"" << bm.unknown_detail
              << "\"))" << endl;
         break;
@@ -1486,6 +1529,88 @@ void Cpp_interface::getInfo(std::string flag)
   }
 
   flush(cout);
+}
+
+// How many elements of one declared sort the query could need at once, counted
+// per sort, against what its carrier can hold. See the caller for what is done
+// with the answer.
+bool Cpp_interface::sortCarrierExhausted(const ASTVec& assertions,
+                                         std::string& detail) const
+{
+  // Nothing to count when no sort was ever declared, which is almost every
+  // query. Checked before the walk rather than inside it: this runs on every
+  // check-sat ahead of the result cache, and an O(DAG) sweep that always
+  // answers no cost 6.7x on a session of repeated check-sats over a 60k-node
+  // formula with no declare-sort in it at all.
+  if (!bm.UserFlags.enable_uninterpreted_functions || sort_aliases.empty())
+    return false;
+  bool anyDeclared = false;
+  for (const std::pair<const std::string, SourceSort>& alias : sort_aliases)
+    anyDeclared = anyDeclared ||
+                  alias.second.kind() == SourceSort::Kind::Uninterpreted;
+  if (!anyDeclared)
+    return false;
+
+  // What counts is a term that could need an element of its own, so two node
+  // shapes carrying the sort are excluded and neither is an edge case:
+  //
+  //  - a declaration's identity symbol. It carries the codomain sort so that an
+  //    application can derive its own, but it denotes the function, not an
+  //    element, and counting it refused a query with one constant and one
+  //    application at width 1 -- where one element suffices.
+  //  - an if-then-else. Its value is always one of its branches, which are
+  //    counted already, so it can never require a fresh element. Four
+  //    constants and one ite over them read as five terms against a capacity
+  //    of four.
+  std::map<unsigned, uint64_t> named;
+  std::map<unsigned, unsigned> widths;
+  ASTNodeSet visited;
+  ASTNodeSet identities;
+  const UFContext* const context = bm.getUFContextIfAny();
+  if (context != NULL)
+    context->collectIdentitySymbols(identities);
+  std::vector<ASTNode> pending(assertions.begin(), assertions.end());
+  while (!pending.empty())
+  {
+    const ASTNode current = pending.back();
+    pending.pop_back();
+    if (current.IsNull() || !visited.insert(current).second)
+      continue;
+    const SourceSort sort = current.GetSourceSort();
+    if (sort.kind() == SourceSort::Kind::Uninterpreted &&
+        current.GetKind() != ITE && identities.count(current) == 0)
+    {
+      named[sort.uninterpretedId()] += 1;
+      widths[sort.uninterpretedId()] = sort.packedWidth();
+    }
+    for (size_t i = 0; i < current.Degree(); ++i)
+      pending.push_back(current[i]);
+  }
+
+  for (const std::pair<const unsigned, uint64_t>& entry : named)
+  {
+    const unsigned width = widths[entry.first];
+    if (width >= 64)
+      continue; // a carrier that wide holds more elements than can be named
+    const uint64_t capacity = (uint64_t)1 << width;
+    if (entry.second <= capacity)
+      continue;
+    // The remedy is a WIDTH, not a term count. Saying "raise it to at least 5"
+    // for five terms named a value four times larger than needed, and above
+    // 1024 named one the flag's own range check refuses -- so the advice was
+    // unfollowable exactly where it was most needed.
+    unsigned needed = width;
+    while (needed < 64 && ((uint64_t)1 << needed) < entry.second)
+      needed++;
+    std::ostringstream message;
+    message << "the query needs up to " << entry.second
+            << " elements of sort " << uninterpretedSortName(entry.first)
+            << ", and --uf-sort-width=" << width << " tells only " << capacity
+            << " apart; raise --uf-sort-width to at least " << needed;
+    detail = message.str();
+    return true;
+  }
+  return false;
 }
 
 void Cpp_interface::getAssertions()
@@ -1566,7 +1691,16 @@ void Cpp_interface::getValue(const ASTVec& v)
       // input text.
       printer::SMTLIB2_PrintTerm(os, &bm, n);
       os << " ";
-      printer::SMTLIB2_Print1(os, value, 0, false);
+      // The value is printed at the application's own sort, not by handing the
+      // node to the term printer -- which prints a node and would print an
+      // element of a declared sort as the carrier pattern it is represented
+      // by. The sort is recoverable here: a UF_APPLY's source sort is its
+      // declaration's codomain.
+      if (bm.isUninterpretedSortedTerm(n))
+        os << "|"
+           << bm.uninterpretedElementName(n.GetSourceSort(), value) << "|";
+      else
+        printer::SMTLIB2_Print1(os, value, 0, false);
       os << " )" << std::endl;
       continue;
     }
@@ -1687,9 +1821,30 @@ void Cpp_interface::getModel()
   if (GlobalSTP != NULL && GlobalSTP->hasIncrementalSolver())
     GlobalSTP->getIncrementalSolver()->materializePendingModel();
 
-  cout << "(" << std::endl;
+  // The body is rendered first because rendering it is what names the
+  // elements of any declared sort, and the preamble that declares them has to
+  // come before the definitions that use them.
   std::ostringstream os;
   GlobalSTP->Ctr_Example->PrintFullCounterExampleSMTLIB2(os);
+
+  cout << "(" << std::endl;
+
+  // A model that mentions a sort declared by declare-sort has to say so, or it
+  // cannot be read back: the sort has no elements anyone else knows about. So
+  // it declares the sort, then one constant per element the model mentions,
+  // and the definitions refer to those. Distinct names denote distinct
+  // elements -- the convention every solver's models rest on, and the only
+  // thing this format cannot state outright.
+  // Every sort the body mentioned, not only those that named an element. A
+  // sort can reach the text through a function signature alone -- a predicate
+  // over an opaque sort, which is the commonest shape of all -- and a model
+  // that used a sort it never declared cannot be read back at all.
+  for (const SourceSort& sort : bm.uninterpretedSortsPrinted())
+    cout << "(declare-sort " << sourceSortToSMTLib(sort) << " 0)" << std::endl;
+  for (const STPMgr::UninterpretedElement& element : bm.uninterpretedElements())
+    cout << "(declare-fun |" << element.name << "| () "
+         << sourceSortToSMTLib(element.sort) << ")" << std::endl;
+
   cout << os.str();
   cout << ")" << std::endl;
 }

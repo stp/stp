@@ -297,6 +297,8 @@ namespace stp
               return FLOATINGPOINT_FUNCTIONID_TOK;
             case stp::SourceSort::Kind::Array:
               return ARRAY_FUNCTIONID_TOK;
+            case stp::SourceSort::Kind::Uninterpreted:
+              return DECLAREDSORT_FUNCTIONID_TOK;
             case stp::SourceSort::Kind::Unknown:
               smt2error("Function with underivable return sort.");
           }
