@@ -147,11 +147,13 @@ AbsRefine_CounterExample::requireFpEncodingContext() const
  * populate the CounterExampleMap data structure (ASTNode -> BVConst)
  */
 void AbsRefine_CounterExample::ConstructCounterExample(
-    SATSolver& newS, const ToSATBase::ASTNodeToSATVar& satVarToSymbol)
+    SATSolver& newS, const ToSATBase::ASTNodeToSATVar& satVarToSymbol,
+    bool internalCandidateRequired)
 {
   if (!newS.okay())
     return;
-  if (!bm->UserFlags.construct_counterexample_flag)
+  if (!bm->UserFlags.construct_counterexample_flag &&
+      !internalCandidateRequired)
     return;
 
   assert(CounterExampleMap.size() == 0);
