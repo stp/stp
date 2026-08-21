@@ -151,6 +151,31 @@ Expr wrap(const stp::ASTNode& n)
   return new stp::ASTNode(n);
 }
 
+// Whether the query that just returned this leaves anything to read. VALID
+// counts: there is no counterexample to a valid query, but that is the
+// decided answer to the question rather than an absence of one, and
+// GetCounterExample has its own arm for saying so. A timeout or an error
+// decided nothing and cleared the tables on the way in.
+static int recordQueryOutcome(stp::STP* stp_i, int outcome)
+{
+  stp_i->queryAnswered = (outcome == stp::SOLVER_INVALID ||
+                          outcome == stp::SOLVER_VALID);
+  return outcome;
+}
+
+// Nonfatal diagnostic through the handler vc_registerErrorHandler installs,
+// falling back to stderr when there is none. Deliberately not both, which is
+// what FatalError does: that one is on its way to abort() and has to be seen,
+// whereas a caller that registered a handler for this has already said where
+// it wants to be told, and the call returns for it to act on.
+static void reportCAPIError(const std::string& message)
+{
+  if (stp::vc_error_hdlr != NULL)
+    stp::vc_error_hdlr(message.c_str());
+  else
+    std::cerr << "CInterface: " << message << std::endl;
+}
+
 /* this method is purposefully not public! */
 std::pair<unsigned int, unsigned int> getTypeSizes(Type type)
 {
@@ -834,7 +859,8 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_max_conflicts, int timeout_
 
     stp::IncrementalSolver* inc = stp_i->getIncrementalSolver();
     if (inc->canHandle(levels))
-      return inc->checkSat(levels, false, firstForcedIncrementalSolve);
+      return recordQueryOutcome(
+          stp_i, inc->checkSat(levels, false, firstForcedIncrementalSolve));
   }
 
   const stp::ASTVec v = b->GetAsserts();
@@ -856,7 +882,7 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_max_conflicts, int timeout_
     output = stp_i->TopLevelSTP(b->CreateNode(stp::TRUE), *a);
   }
 
-  return output;
+  return recordQueryOutcome(stp_i, output);
 }
 
 // int vc_absRefineQuery(VC vc, Expr e) {
@@ -955,9 +981,34 @@ void vc_printCounterExampleSMTLIB2(VC vc)
 
 Expr vc_getCounterExample(VC vc, Expr e)
 {
-  materializePendingModel(vc);
   stp::STP* stp_i = (stp::STP*)vc;
   stp::ASTNode* a = (stp::ASTNode*)e;
+
+  // A constant already is its own value. Nothing about it is read out of a
+  // model, so the refusal below has nothing to protect it from: it answers
+  // with no query behind it, which is what this entry point has always done
+  // and what reading the value of a literal through the bindings relies on.
+  // The narrowing is to constants alone -- a symbol, or any term that has to
+  // be evaluated to reach a value, still has nothing to say without a model.
+  const bool isOwnValue = (a != NULL && a->isConstant());
+
+  // For everything else, no decided query behind this call means no model to
+  // read: either none has been run, or the last one timed out or errored, or
+  // a vc_push or vc_query has discarded the one there was. Refuse, rather
+  // than evaluate against an empty counterexample map -- which returned an
+  // invented value for a bit-vector or a Boolean, and for a float reached the
+  // model evaluator's fatal and took the process down. The SMT-LIB2 frontend
+  // has always answered this "unsupported"; this is the same refusal in the
+  // shape this interface already uses for a nonfatal misuse -- a diagnostic
+  // through the handler vc_registerErrorHandler installs, and NULL.
+  if (!isOwnValue && !stp_i->queryAnswered)
+  {
+    reportCAPIError("vc_getCounterExample: no model to read -- no query has "
+                    "been answered since the last vc_push or vc_query");
+    return NULL;
+  }
+
+  materializePendingModel(vc);
 
   // Reading a floating-point value blasts the term, so this checker's manager
   // must be current (see vc_query_with_timeout).

@@ -288,6 +288,24 @@ def _decode_fp(bits, eb, sb):
     return struct.unpack(fcode, struct.pack(icode, bits & ((1 << (8 * nbytes)) - 1)))[0]
 
 
+def _model_value(vc, expr):
+    """vc_getCounterExample, with its refusal raised rather than dereferenced.
+
+    A model read with no model behind it is refused at the C boundary: the
+    library reports through its error handler and returns NULL, which arrives
+    here as None. Handing that on to getBVUnsignedLongLong would dereference
+    it and take the interpreter down, so the refusal is raised instead, where
+    a caller can catch it.
+    """
+    value = _lib.vc_getCounterExample(vc, expr)
+    if value is None:
+        raise RuntimeError(
+            'there is no model to read: a value is only defined by a '
+            'satisfying assignment, so check() has to have been run and to '
+            'have succeeded')
+    return value
+
+
 class Solver(object):
     current = None
 
@@ -546,9 +564,12 @@ class Solver(object):
         binding owns and has to release; the carrier is the one handle here
         that it does not (see _bit_carrier). Releasing them matters because
         reading a model is something callers do in a loop.
+
+        Every counterexample read goes through _model_value, which raises
+        rather than let the C boundary's refusal through as a null pointer.
         """
         if width <= 64:
-            value = _lib.vc_getCounterExample(self.vc, expr)
+            value = _model_value(self.vc, expr)
             try:
                 return _lib.getBVUnsignedLongLong(value)
             finally:
@@ -561,7 +582,7 @@ class Solver(object):
                                            min((i + 1) * 64, width) - 1,
                                            i * 64)
             try:
-                slice_value = _lib.vc_getCounterExample(self.vc, slice_expr)
+                slice_value = _model_value(self.vc, slice_expr)
                 try:
                     result += (_lib.getBVUnsignedLongLong(slice_value)
                                << (64 * i))
@@ -743,7 +764,12 @@ class AnyExpr(object):
 
     @property
     def value(self):
-        """This expression's value in the current model."""
+        """This expression's value in the current model.
+
+        A constant is its own value and needs no model. Anything else does,
+        so with no solved query behind it this raises RuntimeError rather
+        than hand back a value nothing decided.
+        """
         return self.s.model(expr=self)
 
 

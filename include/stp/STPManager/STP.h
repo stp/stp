@@ -105,6 +105,22 @@ public:
   bool sessionIncremental = false;
   size_t incrementalSolvesRun = 0;
 
+  // Whether a query has been decided and its counterexample tables have not
+  // been discarded since -- that is, whether there is a model to read at all.
+  //
+  // The C API's contract in as much state as it needs: a counterexample
+  // describes the last query, survives vc_pop, and is discarded by the next
+  // vc_push or vc_query. ClearAllTables is where that discarding happens, so
+  // that is where this is cleared; vc_query_with_timeout sets it again when
+  // the query comes back decided, and leaves it clear when the answer was a
+  // timeout or an error, because neither leaves a model behind.
+  //
+  // The SMT-LIB2 frontend has always kept the equivalent (model_valid) and
+  // answers "unsupported" without it. Nothing on the C API side did, so a
+  // model query with no solve behind it read an empty counterexample map
+  // instead of being refused.
+  bool queryAnswered = false;
+
   DLL_PUBLIC IncrementalSolver* getIncrementalSolver();
   DLL_PUBLIC void resetIncrementalSolver();
   bool hasIncrementalSolver() const { return incrementalSolver != nullptr; }
@@ -165,6 +181,10 @@ public:
 
   void ClearAllTables(void)
   {
+    // The counterexample goes with them, so there is no longer a model to
+    // read. Whoever decides the next query says so again.
+    queryAnswered = false;
+
     if (simp != NULL)
       simp->ClearAllTables();
     if (arrayTransformer != NULL)
