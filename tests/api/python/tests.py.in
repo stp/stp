@@ -36,6 +36,9 @@ import unittest
 import ctypes
 import gc
 import importlib
+import os
+import subprocess
+import textwrap
 
 
 @stp.stp
@@ -121,6 +124,35 @@ class TestSTP(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(value & (value - 1), 0)
 
+    def assert_python_probe_survives(self, body):
+        """Run a ctypes edge case out of process.
+
+        A native abort or invalid-handle segfault must be reported as an
+        ordinary unittest failure, rather than taking the rest of the Python
+        API suite down with it.
+        """
+        package_root = os.path.dirname(os.path.dirname(stp.__file__))
+        environment = os.environ.copy()
+        old_pythonpath = environment.get('PYTHONPATH')
+        environment['PYTHONPATH'] = package_root + (
+            os.pathsep + old_pythonpath if old_pythonpath else '')
+        program = (
+            'import importlib\nimport stp\n'
+            '_stp_native = importlib.import_module("stp.stp")\n' +
+            textwrap.dedent(body))
+        completed = subprocess.run(
+            [sys.executable, '-c', program],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=environment,
+            timeout=30)
+        self.assertEqual(
+            completed.returncode, 0,
+            'isolated Python UF probe did not survive (return code %d)\n'
+            'stdout:\n%s\nstderr:\n%s' %
+            (completed.returncode, completed.stdout, completed.stderr))
+
     def test_long(self):
         s = self.s
         a = s.bitvec('a', 256)
@@ -138,6 +170,328 @@ class TestSTP(unittest.TestCase):
         d = s.bitvecval(32, 42)
         self.assertTrue(s.check(b.eq(d), a.add(b).eq(c)))
         self.assertEqual(s.model(), {'a': 1337-42, 'b': 42})
+
+    def test_uninterpreted_function_durable_values(self):
+        s = stp.Solver(uninterpreted_functions=True)
+        f = s.function('f', [8, None], 16)
+        x = s.bitvec('x', 8)
+        b = s.true()
+        application = f(x, b)
+        s.add(x == 7, application == s.bitvecval(16, 0x1234))
+        self.assertTrue(s.check())
+        self.assertEqual(application.value, 0x1234)
+
+        predicate = s.function('predicate', [None], None)
+        observed = predicate(b)
+        s.add(observed)
+        self.assertTrue(s.check())
+        self.assertIs(observed.value, True)
+
+        with self.assertRaises(ValueError):
+            f(x)
+        with self.assertRaises(ValueError):
+            f(b, b)
+
+    def test_uninterpreted_function_float_and_rounding_mode_sorts(self):
+        """Sorts that have no integer spelling, which is why Sort exists."""
+        s = stp.Solver(uninterpreted_functions=True)
+        single = stp.Sort.float(8, 24)
+
+        # A float codomain comes back as a FloatExpr of the declared format,
+        # so it is usable as a floating-point operand rather than as bits.
+        q = s.function('q', [stp.Sort.bitvec(4)], single)
+        i = s.bitvec('i', 4)
+        result = q(i)
+        self.assertIsInstance(result, stp.FloatExpr)
+        self.assertEqual((result.eb, result.sb), (8, 24))
+        s.add(i == 3, result == s.fpval(8, 24, 1.5))
+        self.assertTrue(s.check())
+        self.assertEqual(result.value, 1.5)
+
+        # A rounding-mode codomain comes back as one of the five modes, never
+        # as a bare five-bit vector.
+        s2 = stp.Solver(uninterpreted_functions=True)
+        k = s2.function('k', [stp.Sort.bitvec(4)], stp.Sort.rounding_mode())
+        j = s2.bitvec('j', 4)
+        mode = k(j)
+        self.assertIsInstance(mode, stp.RoundingModeExpr)
+        s2.add(j == 1, mode == stp.RTP)
+        self.assertTrue(s2.check())
+        self.assertEqual(mode.value, stp.RTP)
+
+    def test_uninterpreted_function_float_arguments_compare_by_value(self):
+        """A float argument is compared as a value, not as a bit pattern.
+
+        Every NaN is one value, so f(x) and f(y) agree when both are NaN --
+        the query below is unsatisfiable. -0 and +0 are two values, so the
+        same shape over them is satisfiable.
+        """
+        single = stp.Sort.float(8, 24)
+        s = stp.Solver(uninterpreted_functions=True)
+        f = s.function('f', [single], stp.Sort.bitvec(4))
+        x = s.fp('x', 8, 24)
+        y = s.fp('y', 8, 24)
+        self.assertFalse(s.check(x.is_nan(), y.is_nan(), f(x) != f(y)))
+
+        s2 = stp.Solver(uninterpreted_functions=True)
+        g = s2.function('g', [single], stp.Sort.bitvec(4))
+        u = s2.fp('u', 8, 24)
+        v = s2.fp('v', 8, 24)
+        self.assertTrue(s2.check(u == s2.fpval_from_bits(8, 24, 1 << 31),
+                                 v == s2.fpval_from_bits(8, 24, 0),
+                                 g(u) != g(v)))
+
+    def test_uninterpreted_function_rounding_mode_arguments(self):
+        s = stp.Solver(uninterpreted_functions=True)
+        rm = stp.Sort.rounding_mode()
+        f = s.function('f', [rm], stp.Sort.bitvec(4))
+
+        # The five mode constants are accepted directly, and a symbolic mode
+        # pinned to one of them has to agree with it.
+        r = s.rounding_mode_var('r')
+        self.assertIsInstance(r, stp.RoundingModeExpr)
+        self.assertFalse(s.check(r == s.rounding_mode_val(stp.RTZ),
+                                 f(r) != f(stp.RTZ)))
+
+        # Distinct modes are distinct values and put no obligation on f.
+        s2 = stp.Solver(uninterpreted_functions=True)
+        g = s2.function('g', [rm], stp.Sort.bitvec(4))
+        self.assertTrue(s2.check(g(stp.RNE) != g(stp.RTZ)))
+
+    def test_uninterpreted_function_sort_mismatches_are_rejected(self):
+        def expect_message(action, expected):
+            with self.assertRaises(ValueError) as raised:
+                action()
+            self.assertEqual(str(raised.exception), expected)
+
+        s = stp.Solver(uninterpreted_functions=True)
+        f = s.function('f', [stp.Sort.float(8, 24)], stp.Sort.bitvec(4))
+        expect_message(
+            lambda: f(s.fp('wrong', 11, 53)),
+            'argument 0 of f has sort (_ FloatingPoint 11 53) but the '
+            'declaration requires (_ FloatingPoint 8 24)')
+        expect_message(
+            lambda: f(s.bitvec('bits', 32)),
+            'argument 0 of f must be a FloatExpr from the same Solver, or a '
+            'Python value matching the declared sort (_ FloatingPoint 8 24)')
+
+        k = s.function('k', [stp.Sort.rounding_mode()], stp.Sort.bitvec(4))
+        expect_message(
+            lambda: k(s.bitvec('five', 5)),
+            'argument 0 of k must be a RoundingModeExpr from the same '
+            'Solver, or a Python value matching the declared sort '
+            'RoundingMode')
+
+        # Array sorts have no Sort factory at all, and the shorthand cannot
+        # name one either.
+        expect_message(
+            lambda: s.function('bad', [object()], 8),
+            "domain sort 0 of 'bad' must be a Sort, or the shorthand None/0 "
+            'for Bool or a positive integer for a BitVec width')
+
+    def test_uninterpreted_function_diagnostics_are_actionable(self):
+        def expect_message(action, expected):
+            with self.assertRaises(ValueError) as raised:
+                action()
+            self.assertEqual(str(raised.exception), expected)
+
+        disabled = stp.Solver()
+        expect_message(
+            lambda: disabled.function('off', [8], 8),
+            'uninterpreted functions were not enabled (construct Solver with '
+            'uninterpreted_functions=True)')
+
+        s = stp.Solver(uninterpreted_functions=True)
+        expect_message(
+            lambda: s.function('negative-domain', [-1], 8),
+            "domain sort 0 of 'negative-domain' must be a Sort, or the "
+            'shorthand None/0 for Bool or a positive integer for a BitVec '
+            'width')
+        expect_message(
+            lambda: s.function('zero', [], 8),
+            "'zero' needs at least one domain sort; a zero-arity declaration "
+            'is an ordinary symbol, not an uninterpreted function')
+        expect_message(
+            lambda: s.function('negative-result', [8], -1),
+            "the codomain of 'negative-result' must be a Sort, or the "
+            'shorthand None/0 for Bool or a positive integer for a BitVec '
+            'width')
+
+        f = s.function('diagnostic_f', [8], 8)
+        expect_message(
+            lambda: f(),
+            'diagnostic_f expects 1 argument, got 0')
+        expect_message(
+            lambda: f(s.true()),
+            'argument 0 of diagnostic_f has sort Bool but the declaration '
+            'requires (_ BitVec 8)')
+
+        other = stp.Solver(uninterpreted_functions=True)
+        expect_message(
+            lambda: f(other.bitvec('foreign', 8)),
+            'argument 0 of diagnostic_f must be a Expr from the same Solver, '
+            "or a Python value matching the declared sort (_ BitVec 8)")
+        expect_message(
+            lambda: s.function('diagnostic_f', [8], 8),
+            "the declaration of 'diagnostic_f' was rejected by the solver "
+            '(check the name, solver lifetime, and supported sorts)')
+
+        x = s.bitvec('diagnostic_x', 8)
+        f.declaration = 1
+        expect_message(
+            lambda: f(x),
+            'the application of diagnostic_f was rejected by the solver (a '
+            'declaration or expression handle may be stale, foreign, or '
+            'invalid)')
+
+    def test_uninterpreted_function_python_literals(self):
+        s = stp.Solver(uninterpreted_functions=True)
+        f = s.function('literal_f', [8, None], 8)
+        application = f(7, True)
+        predicate = s.function('literal_predicate', [None], None)
+        observed = predicate(False)
+        legacy_bitvector_bool = s.bitvec('legacy_bitvector_bool', 8)
+        s.add(application == 3, observed == False,
+              legacy_bitvector_bool == True)
+        self.assertTrue(s.check())
+        self.assertEqual(application.value, 3)
+        self.assertIs(observed.value, False)
+        self.assertEqual(legacy_bitvector_bool.value, 1)
+
+    def test_uninterpreted_function_inactive_bitvector_value_is_exception(self):
+        self.assert_python_probe_survives('''
+            s = stp.Solver(uninterpreted_functions=True)
+            f = s.function('f', [8], 8)
+            application = f(s.bitvec('x', 8))
+            try:
+                application.value
+            except RuntimeError:
+                pass
+            else:
+                raise AssertionError('inactive UF application returned a value')
+        ''')
+
+    def test_uninterpreted_function_stale_bitvector_value_is_exception(self):
+        self.assert_python_probe_survives('''
+            s = stp.Solver(uninterpreted_functions=True)
+            f = s.function('f', [8], 8)
+            application = f(s.bitvec('x', 8))
+            s.add(application == s.bitvecval(8, 23))
+            assert s.check()
+            assert application.value == 23
+            s.add(s.true())
+            try:
+                application.value
+            except RuntimeError:
+                pass
+            else:
+                raise AssertionError('stale UF application returned a value')
+        ''')
+
+    def test_uninterpreted_function_inactive_boolean_value_is_exception(self):
+        self.assert_python_probe_survives('''
+            s = stp.Solver(uninterpreted_functions=True)
+            predicate = s.function('predicate', [None], None)
+            application = predicate(s.true())
+            try:
+                application.value
+            except RuntimeError:
+                pass
+            else:
+                raise AssertionError('inactive Bool UF returned a value')
+        ''')
+
+    def test_uninterpreted_function_stale_boolean_value_is_exception(self):
+        self.assert_python_probe_survives('''
+            s = stp.Solver(uninterpreted_functions=True)
+            predicate = s.function('predicate', [None], None)
+            application = predicate(s.true())
+            s.add(application)
+            assert s.check()
+            assert application.value is True
+            s.add(s.true())
+            try:
+                application.value
+            except RuntimeError:
+                pass
+            else:
+                raise AssertionError('stale Bool UF returned a value')
+        ''')
+
+    def test_uninterpreted_function_boolean_false_value(self):
+        self.assert_python_probe_survives('''
+            s = stp.Solver(uninterpreted_functions=True)
+            predicate = s.function('predicate', [None], None)
+            application = predicate(s.true())
+            s.add(s.not_(application))
+            assert s.check()
+            assert application.value is False
+        ''')
+
+    def test_uninterpreted_function_cross_context_argument_is_exception(self):
+        first = stp.Solver(uninterpreted_functions=True)
+        second = stp.Solver(uninterpreted_functions=True)
+        f = first.function('f', [8], 8)
+        foreign = second.bitvec('foreign', 8)
+        with self.assertRaises(ValueError):
+            f(foreign)
+
+    def test_uninterpreted_function_invalid_declaration_is_exception(self):
+        s = stp.Solver(uninterpreted_functions=True)
+        f = s.function('f', [8], 8)
+        f.declaration = 1
+        with self.assertRaises(ValueError):
+            f(s.bitvec('x', 8))
+
+    def test_uninterpreted_function_destroyed_argument_is_exception(self):
+        self.assert_python_probe_survives('''
+            s = stp.Solver(uninterpreted_functions=True)
+            f = s.function('f', [8], 8)
+            x = s.bitvec('x', 8)
+            _stp_native._lib.vc_DeleteExpr(x.expr)
+            try:
+                f(x)
+            except ValueError:
+                pass
+            else:
+                raise AssertionError('destroyed argument was accepted')
+        ''')
+
+    def test_uninterpreted_function_destroyed_declaration_is_exception(self):
+        self.assert_python_probe_survives('''
+            owner = stp.Solver(uninterpreted_functions=True)
+            f = owner.function('f', [8], 8)
+            stale = f.declaration
+            _stp_native._lib.vc_Destroy(owner.vc)
+            owner.vc = None
+
+            live = stp.Solver(uninterpreted_functions=True)
+            x = live.bitvec('x', 8)
+            raw = (_stp_native._Expr * 1)(x.expr)
+            result = _stp_native._lib.vc_applyUninterpretedFunction(live.vc, stale, raw, 1)
+            if result:
+                raise AssertionError('destroyed declaration was accepted')
+        ''')
+
+    def test_uninterpreted_function_namespace_is_consistent(self):
+        first = stp.Solver(uninterpreted_functions=True)
+        f = first.function('f', [8], 8)
+        with self.assertRaises(ValueError):
+            first.bitvec('f', 8)
+        with self.assertRaises(ValueError):
+            first.fp('f', 5, 11)
+        with self.assertRaises(ValueError):
+            first.array('f', 8, 8)
+        # A rejected colliding symbol must not displace the UF declaration.
+        self.assertIsInstance(f(first.bitvec('x', 8)), stp.Expr)
+
+        second = stp.Solver(uninterpreted_functions=True)
+        x = second.bitvec('x', 8)
+        with self.assertRaises(ValueError):
+            second.function('x', [8], 8)
+        # A rejected colliding UF must not displace the ordinary symbol.
+        x_again = second.bitvec('x', 8)
+        self.assertTrue(second.check(x == x_again))
 
     def test_equal(self):
       s = self.s
@@ -957,6 +1311,27 @@ class TestSTP(unittest.TestCase):
     def test_zero_conflict_budget_gives_up_immediately(self):
         self._hard_instance()
         self.assertEqual(self.s.check_with_timeout(max_conflicts=0), 3)
+
+    def test_check_still_brackets_its_query_in_a_frame(self):
+        """
+        check() opens a frame around the query and closes it again. Nothing
+        is ever asserted into that frame -- what it is for is vc_push, which
+        is what marks a C API session incremental, so after the first few
+        checks the persistent driver decides the query where the batch
+        pipeline used to. A zero time budget is where that becomes visible:
+        the driver reports the budget it was given, while the batch pipeline
+        settles this instance by substitution without consulting the clock.
+
+        A solver built with uninterpreted_functions=True is the one solver
+        that gets no frame, because vc_pop would discard the certified model
+        an application's value is read from. Every other solver keeps the
+        behaviour it has always had, which is what this pins.
+        """
+        s = self.s
+        x = s.bitvec('x', 8)
+        s.add(x == 5)
+        answers = [s.check_with_timeout(max_time=0) for _ in range(8)]
+        self.assertIn(3, answers)
 
     def test_no_limit_reaches_the_solver(self):
         """
