@@ -39,6 +39,8 @@ void IncrementalSolver::Impl::maintainBackendForCheck(
   lastUnsatCoarse = false;
   lastLevelIndividual = false;
   modelPending = false;
+  if (ufAdapter)
+    ufAdapter->invalidateCertifiedModel();
   assumedLitLevels.clear();
   lastLevelLitConjuncts.clear();
   lastFailedLits.clear();
@@ -163,11 +165,12 @@ bool IncrementalSolver::Impl::tryExactStackRoute(
 {
   UserDefinedFlags& uf = bm->UserFlags;
 
-  // Whole-array equality owns the round's complete array graph, so no
-  // conjunct may be encoded separately this round.
+  // Whole-array equality and UF completed-root lowering each own the round's
+  // complete active stack, so no conjunct may be encoded separately.
   for (const ASTNode& levelConjunction : assertionsSMT2)
   {
-    if (fragment(levelConjunction).arrayEq)
+    const Fragment& f = fragment(levelConjunction);
+    if (f.arrayEq || f.ufApply)
     {
       result = exactStackCheckSat(assertionsSMT2,
                                   firstForcedIncrementalSolve);
@@ -189,7 +192,7 @@ bool IncrementalSolver::Impl::tryExactStackRoute(
     for (const ASTNode& levelConjunction : assertionsSMT2)
     {
       const Fragment& f = fragment(levelConjunction);
-      if (f.arrays || f.arrayEq || f.fp)
+      if (f.arrays || f.arrayEq || f.fp || f.ufApply)
       {
         plainBv = false;
         break;

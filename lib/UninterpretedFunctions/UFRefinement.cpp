@@ -74,6 +74,22 @@ EqualityKey equalityKey(ASTNode left, ASTNode right, const SourceSort& sort)
   return key;
 }
 
+struct PersistentScopeKey
+{
+  uint64_t epoch = 0;
+  uint64_t backendGeneration = 0;
+  uint64_t block = 0;
+
+  bool operator<(const PersistentScopeKey& other) const
+  {
+    if (epoch != other.epoch)
+      return epoch < other.epoch;
+    return backendGeneration != other.backendGeneration
+               ? backendGeneration < other.backendGeneration
+               : block < other.block;
+  }
+};
+
 class CounterExampleCandidate final : public UFScalarCandidate
 {
 public:
@@ -811,6 +827,122 @@ uint64_t UFBatchAdapter::candidateChecks() const
   return impl_->state.candidateCheckCount;
 }
 uint64_t UFBatchAdapter::lemmasEmitted() const
+{
+  return impl_->state.emittedLemmaCount;
+}
+
+class UFPersistentAdapter::Impl
+{
+public:
+  explicit Impl(STPMgr* manager) : state(manager) {}
+  MutableAdapterState state;
+  PersistentScopeKey activeScope;
+  int positiveBlockLiteral = -1;
+  uint64_t backendGeneration = 0;
+  std::map<PersistentScopeKey, std::map<EqualityKey, CachedEquality>>
+      equalityCaches;
+};
+
+UFPersistentAdapter::UFPersistentAdapter(STPMgr* manager)
+    : impl_(new Impl(manager))
+{
+  assert(manager != NULL);
+}
+UFPersistentAdapter::~UFPersistentAdapter() = default;
+void UFPersistentAdapter::beginBlock(const LoweredApplicationView* view,
+                                     uint64_t epoch,
+                                     uint64_t backendGeneration,
+                                     uint64_t blockId,
+                                     int positiveBlockLiteral)
+{
+  // Defend the adapter boundary as well as the driver's explicit reset hook:
+  // a caller cannot accidentally reuse reification literals after replacing
+  // its SAT solver merely by forgetting the notification.
+  if (impl_->backendGeneration != backendGeneration)
+    advanceBackendGeneration(backendGeneration);
+  impl_->state.beginView(view);
+  impl_->activeScope.epoch = epoch;
+  impl_->activeScope.backendGeneration = backendGeneration;
+  impl_->activeScope.block = blockId;
+  impl_->positiveBlockLiteral = positiveBlockLiteral;
+}
+void UFPersistentAdapter::advanceBackendGeneration(
+    uint64_t backendGeneration)
+{
+  if (impl_->backendGeneration == backendGeneration)
+    return;
+  clearActiveBlock();
+  impl_->equalityCaches.clear();
+  impl_->backendGeneration = backendGeneration;
+  impl_->activeScope = PersistentScopeKey();
+}
+void UFPersistentAdapter::clearActiveBlock()
+{
+  impl_->state.clearActive();
+  impl_->positiveBlockLiteral = -1;
+}
+void UFPersistentAdapter::clearEncodingEpoch()
+{
+  clearActiveBlock();
+  impl_->equalityCaches.clear();
+  impl_->activeScope = PersistentScopeKey();
+}
+void UFPersistentAdapter::invalidateCertifiedModel()
+{
+  impl_->state.certified = false;
+  impl_->state.seed = UFFunctionModelSeedSet();
+  impl_->state.handleValues.clear();
+}
+bool UFPersistentAdapter::active() const
+{
+  return impl_->state.view != NULL && impl_->state.view->active() &&
+         impl_->positiveBlockLiteral >= 0;
+}
+UFCandidateOutcome UFPersistentAdapter::checkCandidate(
+    AbsRefine_CounterExample& counterexample)
+{
+  return checkOneCandidate(impl_->state, counterexample);
+}
+bool UFPersistentAdapter::hasPendingLemma() const
+{
+  return !impl_->state.pending.empty();
+}
+void UFPersistentAdapter::encodePendingLemmas(SATSolver& solver,
+                                              ToSATBase* tosat)
+{
+  if (!active())
+    FatalError("persistent UF lemma has no active block scope");
+  std::map<EqualityKey, CachedEquality>& cache =
+      impl_->equalityCaches[impl_->activeScope];
+  encodeLemmas(impl_->state, solver, tosat,
+               impl_->positiveBlockLiteral ^ 1, cache);
+}
+bool UFPersistentAdapter::hasCertifiedModel() const
+{
+  return impl_->state.certified;
+}
+const UFFunctionModelSeedSet* UFPersistentAdapter::certifiedModelSeed() const
+{
+  return impl_->state.certified ? &impl_->state.seed : NULL;
+}
+bool UFPersistentAdapter::lookupCertifiedApplication(
+    const ASTNode& durableHandle, UFConcreteValue& value) const
+{
+  return lookupCertified(impl_->state, durableHandle, value);
+}
+const LoweredApplicationView* UFPersistentAdapter::applicationView() const
+{
+  return impl_->state.view;
+}
+const std::string& UFPersistentAdapter::diagnostic() const
+{
+  return impl_->state.diagnostic;
+}
+uint64_t UFPersistentAdapter::candidateChecks() const
+{
+  return impl_->state.candidateCheckCount;
+}
+uint64_t UFPersistentAdapter::lemmasEmitted() const
 {
   return impl_->state.emittedLemmaCount;
 }

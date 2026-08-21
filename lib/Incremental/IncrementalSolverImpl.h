@@ -53,6 +53,9 @@ THE SOFTWARE.
 #include "stp/Simplifier/RemoveUnconstrained.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/FloatBlaster/FpEncodingContext.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
+#include "stp/UninterpretedFunctions/UFLowering.h"
+#include "stp/UninterpretedFunctions/UFRefinement.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Sat/SATSolverFactory.h"
 #include "stp/Simplifier/Simplifier.h"
@@ -199,6 +202,7 @@ struct Fragment
   bool arrays;
   bool fp;
   bool arrayEq;
+  bool ufApply;
 };
 typedef std::unordered_map<ASTNode, Fragment, ASTNode::ASTNodeHasher,
                            ASTNode::ASTNodeEqual>
@@ -368,6 +372,13 @@ struct IncrementalSolver::Impl
 
   // Created on first floating-point use; see fpContext().
   std::unique_ptr<FpEncodingContext> fpCtx;
+
+  // The completed public block and its current solve-local UF lowering.
+  // Clause/cache ownership is added by UFPersistentAdapter at M5; keeping the
+  // lowering value here already separates it from context-owned handles and
+  // makes the exact-stack block the sole persistent lowering boundary.
+  LoweredApplicationView activeUFView;
+  std::unique_ptr<UFPersistentAdapter> ufAdapter;
 
   // Nodes the block cache's determinism depends on. STP garbage-collects
   // unreferenced interior nodes and re-mints their numbers, and the
@@ -1632,6 +1643,12 @@ struct IncrementalSolver::Impl
   // configuration rebuilds do not advance it; a relief rebuild does.
   uint64_t encodingEpochGeneration = 0;
 
+  // Ownership generation of the concrete SAT backend.  Unlike the semantic
+  // epoch, this advances on every solver replacement (promotion, inprobing,
+  // trail retirement, and relief).  Cached UF equality/reification literals
+  // are meaningful only in the generation which allocated them.
+  uint64_t satBackendGeneration = 0;
+
   uint64_t lifetimeClauseSubmissions() const
   {
     return addMass(retiredClauseSubmissions, solver->submittedClauses());
@@ -1666,6 +1683,7 @@ struct IncrementalSolver::Impl
         policy(bm_->UserFlags.incremental_core_only),
         solver(makeBackend(bm_->UserFlags, true)), encoding(bm_),
         walks(bm_->ASTFalse), cnf(solver.get()), bvAbstraction(bm_),
+        ufAdapter(new UFPersistentAdapter(bm_)),
         lastUnsat(false), lastUnsatCoarse(false),
         lastLevelIndividual(false), modelPending(false),
         trailReuseAllowed(!policy.coreOnly()), lastLevelCount(0),
@@ -2144,7 +2162,9 @@ struct IncrementalSolver::Impl
   // variable from the dropped set before encoding, so the chain
   // terminates and a definition never restores itself twice.
   // Restore one dropped base definition before any route mints the source
-  // symbol's raw bits.
+  // symbol's raw bits.  UF solve scalars include leaf actuals which may no
+  // longer occur in the preprocessed formula passed to encodePrepared(), so
+  // the completed-block lowering path also calls this operation directly.
   void restoreDroppedSigma0Symbol(const ASTNode& s)
   {
     if (sigma0Dropped.erase(s) == 0)
@@ -2330,6 +2350,9 @@ struct IncrementalSolver::Impl
         bm->has_floating_point_theory && containsFloatingPointTheory(n, bm);
     f.arrayEq =
         bm->UserFlags.enable_array_equality && containsKind(n, ARRAY_EQ);
+    f.ufApply = bm->UserFlags.enable_uninterpreted_functions &&
+                bm->getUFContextIfAny() != NULL &&
+                containsKind(n, UF_APPLY);
     f.sourceArrays = containsArrayOps(n, bm);
 
     // Arrayness must be judged on the form that will be encoded: totalising
@@ -2626,6 +2649,12 @@ struct IncrementalSolver::Impl
     ExtensionalityContext* ext = bm->getExtensionalityIfAny();
     if (ext != NULL)
       ext->releaseSolveStorage();
+    UFContext* ufContext = bm->getUFContextIfAny();
+    if (ufContext != NULL)
+      ufContext->releaseSolveProtection();
+    activeUFView = LoweredApplicationView();
+    if (ufAdapter)
+      ufAdapter->clearEncodingEpoch();
 
     // The old model has already been invalidated by entry into this check.
     // Withdraw shared model-channel seeds before dropping the ASTs they pin.
@@ -2824,6 +2853,9 @@ struct IncrementalSolver::Impl
     retiredClauseSubmissions =
         addMass(retiredClauseSubmissions, solver->submittedClauses());
     solver.reset(makeBackend(bm->UserFlags, false));
+    ++satBackendGeneration;
+    if (ufAdapter)
+      ufAdapter->advanceBackendGeneration(satBackendGeneration);
     solver->enableRefinement(true);
     if (trailReuseAllowed)
       solver->enableTrailReuse();
