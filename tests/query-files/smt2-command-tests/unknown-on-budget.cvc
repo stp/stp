@@ -1,0 +1,20 @@
+% The legacy CVC output says "Timed Out." where SMT-LIB says "unknown".
+%
+% That wording is kept deliberately rather than unified: this input language
+% has no (get-info :reason-unknown) to carry a reason, so the sentence is the
+% whole of what a caller gets, and it is what every existing consumer of this
+% mode reads. The parser is selected by file extension, so this is the only
+% kind of file that can exercise it.
+%
+% A zero-second budget, so the result does not depend on the machine.
+%
+% RUN: %solver -k 0 %s 2>&1 | %OutputCheck %s
+% CHECK: Timed Out
+% CHECK-NOT: ^unknown$
+
+a, b, c : BITVECTOR(32);
+
+ASSERT(BVMULT(32, a, b) = c);
+ASSERT(BVGT(a, 0hex00010000));
+ASSERT(BVGT(b, 0hex00010000));
+QUERY(c = 0hex00000000);

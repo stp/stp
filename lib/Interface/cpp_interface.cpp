@@ -545,6 +545,9 @@ void Cpp_interface::reset()
   discardExtensionalitySolveState();
   resetIncrementalSolver();
 
+  // A reason-unknown belongs to the session that produced it.
+  bm.clearUnknown();
+
   // Recorded distinct groups name nodes from assertions that no longer
   // exist. The ordering pass ignores a group its walk cannot reach, so
   // keeping them would be harmless; dropping them keeps a long session's
@@ -597,6 +600,7 @@ void Cpp_interface::resetAssertions()
     removeFrame();
   cache.clear();
   bm.distinctGroups.clear();
+  bm.clearUnknown();
 
   // These tables may retain the discarded assertions or declarations.
   resetSolver();
@@ -735,6 +739,7 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
   session_touched = true;
 
   bm.GetRunTimes()->stop(RunTimes::Parsing);
+  bm.clearUnknown();
 
   // Bracket the solve so (get-info :all-statistics) can report on this check
   // alone. Taken here rather than at entry so the parse that preceded the
@@ -1187,11 +1192,60 @@ void Cpp_interface::getInfo(std::string flag)
     cout << "(:assertion-stack-levels "
          << (frames.size() > 0 ? frames.size() - 1 : 0) << ")" << endl;
   }
+  else if (flag == "reason-unknown")
+  {
+    // Only meaningful after an answer of `unknown`, which is the one case
+    // SMT-LIB defines it for. Asked at any other time the honest answer is
+    // that there is no unknown to explain, and saying so beats inventing a
+    // reason or reporting the flag as unsupported when it is implemented.
+    // That answer is carried inside the info response rather than raised as
+    // an error response, for the reason :all-statistics gives above: under an
+    // immediate-exit error behaviour, raising one would kill the session over
+    // a diagnostic query.
+    switch (bm.unknown_reason)
+    {
+      case UnknownReason::Timeout:
+        cout << "(:reason-unknown timeout)" << endl;
+        break;
+      case UnknownReason::ConflictBudget:
+        // Not `timeout`: this one is deterministic and re-running with more
+        // time will reproduce it exactly. SMT-LIB admits an s-expression here,
+        // and naming the flag is what a caller can act on.
+        cout << "(:reason-unknown (incomplete \"the conflict budget set by "
+                "--max-num-confl ran out\"))" << endl;
+        break;
+      case UnknownReason::Incomplete:
+        // The predefined SMT-LIB spelling, followed by what was incomplete:
+        // the flag admits an s-expression, and a bare "incomplete" tells a
+        // caller nothing they can act on.
+        cout << "(:reason-unknown (incomplete \"" << bm.unknown_detail
+             << "\"))" << endl;
+        break;
+      case UnknownReason::None:
+        // Two shapes reach here: no unknown to explain, and an unknown whose
+        // producer recorded no reason. Told apart by the verdict, because
+        // answering "not unknown" after an unknown would be a plain lie.
+        //
+        // SOLVER_TIMEOUT is the verdict every no-answer carries, whichever
+        // budget ran out, and PrintOutput answers `unknown` for all of them --
+        // so a check-sat that gave up and recorded nothing lands here holding
+        // exactly that, and saying "not unknown" would contradict the line
+        // above it. Every producer of that verdict does record a reason today;
+        // this arm is what keeps a future one that forgets from turning a
+        // missing explanation into a false statement. SOLVER_UNDECIDED is
+        // deliberately not here: it is what the cache holds before a level has
+        // been solved and what a stale entry is reset to, so admitting it
+        // would answer for a check-sat that never ran.
+        if (cache.size() > 0 && cache.back().result == SOLVER_TIMEOUT)
+          cout << "(:reason-unknown unknown)" << endl;
+        else
+          cout << "(:reason-unknown (error \"the last answer was not "
+                  "unknown\"))" << endl;
+        break;
+    }
+  }
   else
   {
-    // :reason-unknown, the one standard flag left, is optional and not
-    // reported: STP does not answer unknown, so there is never a reason to
-    // give for one.
     unsupported();
     return;
   }

@@ -184,6 +184,12 @@ SOLVER_RETURN_TYPE IncrementalSolver::Impl::solvePlainExactStack(
   }
   bm->GetRunTimes()->stop(RunTimes::Solving);
 
+  // As in IncrementalSolver::checkSat: the SOLVER_TIMEOUT below is the same
+  // value a clock expiry returns, so which budget it was has to be taken from
+  // the solver here or not at all.
+  if (bm->soft_timeout_expired)
+    bm->noteBudgetExhausted(*solver);
+
   const uint64_t cheapLiveMass =
       addMass(baseLiveMass, clauseMassOf[inputToSat]);
   std::vector<Aig_Obj_t*> currentRoots(1, blockRegular);

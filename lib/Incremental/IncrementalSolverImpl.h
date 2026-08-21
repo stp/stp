@@ -3537,6 +3537,12 @@ public:
     else
       sat = SatSolver.solve(bm->soft_timeout_expired);
     bm->GetRunTimes()->stop(RunTimes::Solving);
+    // The refinement rounds, which give up through CallSAT_ResultCheck rather
+    // than through the driver's own check. Same reason as there: the reason
+    // is only knowable here. The first round to run out is the one that names
+    // the budget, which is why noteBudgetExhausted keeps an earlier answer.
+    if (bm->soft_timeout_expired)
+      bm->noteBudgetExhausted(SatSolver);
     return sat;
   }
 

@@ -29,7 +29,10 @@
 ; CHECK-NEXT: ^ :cpu-time
 ; CHECK-NEXT: ^ :peak-memory-mb
 (get-info :all-statistics)
-; CHECK-NEXT: ^unsupported
+; :reason-unknown is implemented, so it is answered rather than refused --
+; and asked when the last answer was not unknown it says that, which is the
+; only honest thing it can say and is not the same as being unsupported.
+; CHECK-NEXT: ^\(:reason-unknown \(error "the last answer was not unknown"\)\)$
 (get-info :reason-unknown)
 ; CHECK-NEXT: ^unsupported
 (get-info :some-unknown-flag)

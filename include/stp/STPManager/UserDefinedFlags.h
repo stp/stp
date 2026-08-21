@@ -224,8 +224,9 @@ public:
   // who transfers their intuition here must not get the opposite of what
   // they asked for. Exceeding the cap abandons the query through the
   // soft-timeout path, so the answer is the same one a `--max-time` expiry
-  // gives -- `Timed Out.` on stdout with exit status 0, and SOLVER_TIMEOUT
-  // from the library.
+  // gives -- `unknown` on stdout in SMT-LIB mode (`Timed Out.` in the CVC
+  // language) with exit status 0, and SOLVER_TIMEOUT from the library.
+  // (get-info :reason-unknown) is what tells this budget from the clock.
   //
   // The cap governs the two AIGs a batch solve builds -- the bit-blast in
   // ToSATAIG::bitblast() and the optional `--aig-core-simplification` pass,
