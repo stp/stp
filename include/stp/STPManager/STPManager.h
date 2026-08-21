@@ -693,6 +693,14 @@ public:
     return current;
   }
 
+  // SourceSort-preserving deterministic scalar allocation. UF lowering runs
+  // before FP/array carrier erasure and must retain Bool versus nonzero BV as
+  // immutable symbol identity, including for a Boolean whose carrier width is
+  // historically zero.
+  ASTNode CreateDeterministicSourceVariable(const SourceSort& sourceSort,
+                                            const std::string& prefix,
+                                            const ASTNode& key);
+
   bool FoundIntroducedSymbolSet(const ASTNode& in)
   {
     if (Introduced_SymbolsSet.find(in) != Introduced_SymbolsSet.end())
