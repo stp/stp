@@ -380,6 +380,12 @@ struct IncrementalSolver::Impl
   LoweredApplicationView activeUFView;
   std::unique_ptr<UFPersistentAdapter> ufAdapter;
 
+  // This solve's hold on the injectivity assumption --uf-inject-args
+  // installed, if any. Per solve, not per session: the exact-stack route
+  // re-lowers the whole active stack whenever a level applies an
+  // uninterpreted function, so each solve mints and holds its own guard.
+  STPMgr::InjectivityAssumption injectivity;
+
   // Nodes the block cache's determinism depends on. STP garbage-collects
   // unreferenced interior nodes and re-mints their numbers, and the
   // deterministic generated names are keyed on node numbers -- so every
@@ -3636,6 +3642,31 @@ struct IncrementalSolver::Impl
     return bvAbstraction.refine(satSolver, operands);
   }
 
+  // Decide how this block holds the injectivity guard, and keep the manager's
+  // record honest about it -- the batch pipeline's bind_injectivity_guard does
+  // the same job for its encoding, and for the same reason: the record says an
+  // unsat may be the assumption's, which is only true while something is
+  // holding the assumption up.
+  //
+  // The guard is an ordinary Boolean symbol of the lowered block, so the
+  // blaster has a node for it whenever any implication behind it was encoded;
+  // the implications mention it, so no node means none of them are binding.
+  void bindInjectivityGuard(SATSolver::vec_literals& assumptions)
+  {
+    if (bm->uf_injectivity_guard.IsNull() || injectivity.assumed ||
+        injectivity.retracted)
+      return;
+    BBNodeManagerAIG::SymbolToBBNode::const_iterator it =
+        encoding.nodes().symbolToBBNode.find(bm->uf_injectivity_guard);
+    if (it == encoding.nodes().symbolToBBNode.end() || it->second.empty() ||
+        it->second[0].IsNull() || !solver->supportsAssumptions())
+      return; // nothing to assume, so nothing has asked about the assumption
+    Aig_Obj_t* const regular = Aig_Regular(it->second[0].n);
+    ensureEncoded(regular);
+    injectivity.variable = (unsigned)varOfAig(regular);
+    injectivity.assumeInto(assumptions);
+  }
+
   // Values for every symbol the persistent encoding knows about. Symbols
   // from popped scopes are included -- their SAT variables are merely
   // unconstrained -- which the model printers tolerate (they iterate the
@@ -3747,7 +3778,9 @@ struct IncrementalSolver::Impl
 class IncrementalToSAT : public ToSATBase
 {
   IncrementalSolver::Impl* d;
-  const SATSolver::vec_literals* assumps;
+  // Not const: retracting the injectivity guard pops it off this vector, and
+  // the pop has to be visible to the refinement rounds that follow.
+  SATSolver::vec_literals* assumps;
 
 public:
   IncrementalToSAT(STPMgr* bm, IncrementalSolver::Impl* d_)
@@ -3755,7 +3788,7 @@ public:
   {
   }
 
-  void setAssumptions(const SATSolver::vec_literals* a) { assumps = a; }
+  void setAssumptions(SATSolver::vec_literals* a) { assumps = a; }
 
   bool CallSAT(SATSolver& SatSolver, const ASTNode& input,
                bool /*doesAbsRef*/) override
@@ -3778,8 +3811,8 @@ public:
     ScopedProfileTimer phaseSatTimer(d->profile.enabled, phaseSatNs);
     bm->GetRunTimes()->start(RunTimes::Solving);
     bool sat;
-    if (assumps != NULL && assumps->size() > 0)
-      sat = SatSolver.solveWithAssumptions(*assumps, bm->soft_timeout_expired);
+    if (assumps != NULL)
+      sat = bm->solveRetractingInjectivity(SatSolver, *assumps, d->injectivity);
     else
       sat = SatSolver.solve(bm->soft_timeout_expired);
     bm->GetRunTimes()->stop(RunTimes::Solving);

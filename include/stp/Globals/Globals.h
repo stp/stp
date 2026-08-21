@@ -106,16 +106,22 @@ enum class UnknownReason
   // Something other than a budget on the search: the encoding itself was
   // abandoned. Carries its own sentence in STPMgr::unknown_detail, because
   // the name alone does not say what was abandoned or what to do about it.
-  // The one below is that same claim with a name of its own, appended
+  // The two below are that same claim with a name of their own, appended
   // rather than inserted so that nothing already reporting Incomplete moves.
-  // SMT-LIB2 spells both the same, as (incomplete "..."), since the
+  // SMT-LIB2 spells all three the same, as (incomplete "..."), since the
   // sentence already says which; they are separate values because a caller
-  // holding only the value has nothing to read the sentence for, and the
-  // action differs: each names a different flag.
+  // holding only the value -- vc_getReasonUnknown -- has nothing to read the
+  // sentence for, and the action differs: each names a different flag.
   Incomplete,
   // A declared sort's carrier was too narrow for the query, so an unsat that
   // may be an artefact of the encoding was withheld. Raise --uf-sort-width.
-  CarrierExhausted
+  CarrierExhausted,
+  // --uf-inject-args put injectivity into the encoding and the driver that
+  // holds the verdict could neither confirm nor take back a refutation that
+  // may rest on it, so the unsat was withheld. Both shipped drivers do close
+  // that question -- see STPMgr::solveRetractingInjectivity -- so this is the
+  // floor a driver falls to rather than report an unsat nobody can attribute.
+  AssumedInjectivity
 };
 
 // Empty vector. Useful commonly used ASTNodes

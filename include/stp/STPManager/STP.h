@@ -173,6 +173,12 @@ public:
 
   // The absolute TopLevel function that invokes STP on the input
   // formula
+  // One run of the pipeline: lower, preprocess, bit-blast, solve, refine.
+  // TopLevelSTP calls it a second time when the first run reached an unsat
+  // nobody could attribute -- see the comment there.
+  SOLVER_RETURN_TYPE topLevelSTPOnce(const ASTNode& inputasserts,
+                                     const ASTNode& query);
+
   DLL_PUBLIC SOLVER_RETURN_TYPE TopLevelSTP(const ASTNode& inputasserts,
                                             const ASTNode& query);
 

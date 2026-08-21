@@ -115,6 +115,14 @@ struct DLL_PUBLIC UFEagerDeclarationStat
   uint64_t enumeratedPairs = 0;
   uint64_t skippedImpossiblePairs = 0;
   uint64_t emittedConstraints = 0;
+  // Of those constraints, the ones that are the converse of congruence --
+  // results equal implies arguments equal -- installed only under
+  // --uf-inject-args. Counted apart from the rest because they are the only
+  // ones that can remove a model: the query the encoding then describes is
+  // the caller's query with injectivity assumed on top, so a solve that
+  // reaches unsat over any of them has refuted that, not the query. Whoever
+  // reports the verdict needs to know one was installed.
+  uint64_t emittedInjectivity = 0;
   Outcome outcome = Outcome::NoComparablePairs;
 
   const char* outcomeName() const
@@ -145,6 +153,20 @@ struct DLL_PUBLIC UFEagerStats
     uint64_t total = 0;
     for (const UFEagerDeclarationStat& stat : declarations)
       total += stat.emittedConstraints;
+    return total;
+  }
+  uint64_t emittedInjectivity() const
+  {
+    uint64_t total = 0;
+    for (const UFEagerDeclarationStat& stat : declarations)
+      total += stat.emittedInjectivity;
+    return total;
+  }
+  uint64_t injectiveDeclarations() const
+  {
+    uint64_t total = 0;
+    for (const UFEagerDeclarationStat& stat : declarations)
+      total += stat.emittedInjectivity != 0 ? 1 : 0;
     return total;
   }
   uint64_t selectedDeclarations() const
@@ -178,8 +200,21 @@ public:
   ASTVec sortConstraints;
   // Pairwise congruence constraints installed before the first solve for the
   // declarations the eager policy selected. Empty in the reference profile,
-  // where every congruence clause is earned by a refuted candidate.
+  // where every congruence clause is earned by a refuted candidate. Under
+  // --uf-inject-args this vector also holds the converse implications, which
+  // eagerStats.emittedInjectivity() counts.
   ASTVec congruenceConstraints;
+  // The activation symbol every converse implication is installed behind, so
+  // that a driver can withdraw the whole assumption without re-encoding: each
+  // one is `guard => (results equal => arguments equal)`, and a guard that is
+  // not assumed is free, which the solver satisfies by making it false. Null
+  // unless --uf-inject-args installed at least one such implication.
+  //
+  // This is what makes the assumption an abstraction rather than an axiom.
+  // Nothing else in the encoding is retractable, and nothing else needs to
+  // be: congruence is entailed by the query, so no answer ever has to be
+  // taken back on its account.
+  ASTNode injectivityGuard;
   // What the policy decided, and what it cost. Reported under -s.
   UFEagerStats eagerStats;
   ASTNodeSet protectedSymbols;
@@ -211,8 +246,11 @@ public:
 
 private:
   // Fills view.congruenceConstraints for the declarations the eager policy
-  // selects. A no-op in the reference profile.
-  void installEagerCongruence(LoweredApplicationView& view) const;
+  // selects. A no-op in the reference profile. `guard`, when not null, is the
+  // activation symbol each converse implication is installed behind.
+  void installEagerCongruence(LoweredApplicationView& view,
+                              const std::set<const UFDecl*>& injectable,
+                              const ASTNode& guard) const;
 
   // Prints view.eagerStats under -s. Called once per lowering, so a persistent
   // solve reports the decision it took for each block.

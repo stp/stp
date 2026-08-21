@@ -279,6 +279,28 @@ public:
   // declaration. Enabled by default; set to false if it causes trouble.
   bool uf_narrow_results = true;
 
+  // For declarations whose results appear only in equality contexts, add
+  // the reverse implication (= result_i result_j) => (= arg_i arg_j) in
+  // the eager congruence encoding. This asserts injectivity, giving the
+  // SAT solver bidirectional propagation between argument and result
+  // equalities.
+  //
+  // Congruence itself is entailed by the query; its converse is not. So this
+  // is the one thing the lowering installs that changes what the encoding
+  // means: it describes the query with injectivity conjoined. Only models are
+  // lost by that, so a `sat` found over it is a model of the query and needs
+  // nothing done to it, while an `unsat` refutes the strengthened query and
+  // may be the assumption's rather than the query's.
+  //
+  // So it is installed behind one activation symbol and assumed rather than
+  // asserted: a refutation that used the assumption is taken back and the
+  // query decided without it, which makes the flag verdict-preserving. See
+  // STPMgr::solveRetractingInjectivity for the rule and STP::TopLevelSTP for
+  // the case it cannot cover. Off by default, and not free: what it buys is
+  // faster model-finding on a query whose functions are injective anyway, and
+  // it costs a second search on one that is not.
+  bool uf_inject_args = false;
+
   // Replace a (distinct x1 ... xn) whose operands are variables occurring
   // nowhere else with the strict chain x1 < x2 < ... < xn. Every permutation
   // of such operands maps the formula to itself, so fixing one of the n!

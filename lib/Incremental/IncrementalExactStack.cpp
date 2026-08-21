@@ -620,6 +620,12 @@ IncrementalSolver::Impl::exactStackCheckSat(
 
   seedEliminatedIntoModelChannel();
 
+  // After the block is encoded and before any search: the guard is a symbol of
+  // this block, so its node exists only once the block has been blasted, and
+  // it has to be in the assumption vector before the first solve rather than
+  // after the first refutation.
+  bindInjectivityGuard(assumptions);
+
   IncrementalToSAT* tosat = static_cast<IncrementalToSAT*>(ensureAdapter());
   tosat->setAssumptions(&assumptions);
 

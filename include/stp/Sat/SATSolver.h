@@ -60,6 +60,10 @@ public:
   public:
     int size() const { return static_cast<int>(lits.size()); }
     void push(Lit l) { lits.push_back(l); }
+    // Drop the last literal. Retraction is why this exists: an assumption
+    // installed for one solve and withdrawn for the next is pushed last, so
+    // withdrawing it is a pop rather than a search.
+    void pop() { lits.pop_back(); }
     void clear() { lits.clear(); }
     Lit operator[](int i) const { return lits[static_cast<size_t>(i)]; }
   };

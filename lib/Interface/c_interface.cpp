@@ -516,12 +516,15 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
       b->UserFlags.solver_to_use = stp::UserDefinedFlags::CADICAL_SOLVER;
       break;
     // The refinement knobs the CLI exposes as --uf-narrow-results,
-    // --bv-eq-abstraction, --bv-eq-abstraction-width,
+    // --uf-inject-args, --bv-eq-abstraction, --bv-eq-abstraction-width,
     // --bv-eq-refine-width and --bv-term-abstraction. Each sets the same
     // UserFlags field the CLI parser writes, so a C API client reaches the
     // encodings that until now only a query read from a file could.
     case UF_NARROW_RESULTS:
       b->UserFlags.uf_narrow_results = param_value != 0;
+      break;
+    case UF_EQUALITY_INJECTIVITY:
+      b->UserFlags.uf_inject_args = param_value != 0;
       break;
     case UF_PHASE_HINTS:
       b->UserFlags.uf_phase_hints = param_value != 0;
@@ -839,6 +842,8 @@ enum reason_unknown_t vc_getReasonUnknown(VC vc)
       return REASON_UNKNOWN_INCOMPLETE;
     case stp::UnknownReason::CarrierExhausted:
       return REASON_UNKNOWN_CARRIER_EXHAUSTED;
+    case stp::UnknownReason::AssumedInjectivity:
+      return REASON_UNKNOWN_ASSUMED_INJECTIVITY;
     case stp::UnknownReason::None:
       break;
   }

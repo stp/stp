@@ -1034,6 +1034,7 @@ STPMgr::~STPMgr()
   distinctGroups.clear();
   uninterpreted_elements.clear();
   uninterpreted_sorts_printed.clear();
+  uf_injectivity_guard = ASTNode();
 
   Introduced_SymbolsSet.clear();
   _symbol_unique_table.clear();
