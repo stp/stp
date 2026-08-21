@@ -636,6 +636,22 @@ DLL_PUBLIC int vc_query(VC vc, Expr e);
 //! packed bits. So it can be fed straight back -- vc_eqExpr(vc, e, value) is
 //! well sorted, and asserting it pins 'e' to the value.
 //!
+//! There has to be a model to read. A query must have been answered -- VALID
+//! or INVALID, not a timeout or an error -- and it must still be the last
+//! thing to have happened: as vc_pop and vc_push document, a counterexample
+//! survives vc_pop and is discarded by the next vc_push or vc_query. Called
+//! with no model behind it, this reports a nonfatal diagnostic through
+//! vc_registerErrorHandler (or stderr) and returns NULL, rather than failing
+//! fatally. It used to answer from the empty counterexample map instead,
+//! which invented a value for a bit-vector or a Boolean and was fatal for a
+//! float.
+//!
+//! A constant is the exception, and needs no query behind it: it already is
+//! its own value, so there is nothing for it to read out of a model and
+//! nothing to invent. That covers a bit-vector constant and the Boolean
+//! constants; a symbol, and any term that has to be evaluated to reach a
+//! value, needs a model like everything else.
+//!
 DLL_PUBLIC Expr vc_getCounterExample(VC vc, Expr e);
 
 //! \brief Returns an array from a counter example after an invalid query.
@@ -1451,6 +1467,11 @@ DLL_PUBLIC int vc_isBool(Expr e);
 
 //! \brief Registers the given error handler function to be called for each
 //!        fatal error that occures while running STP.
+//!
+//! One nonfatal diagnostic reaches it as well: vc_getCounterExample reports a
+//! model read with no model behind it this way and then returns NULL, rather
+//! than ending the process. A handler must therefore not assume that it is
+//! only ever called on the way to abort().
 //!
 DLL_PUBLIC void
 vc_registerErrorHandler(void (*error_hdlr)(const char* err_msg));

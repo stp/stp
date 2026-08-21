@@ -468,17 +468,31 @@ class TestSTP(unittest.TestCase):
 
     def test_get_value_for_bitvecval(self):
         solver = self.s
-        name_for_x = "x"
-        value_for_x = 0
-        x = solver.bitvec(name_for_x)
-        self.assertEqual(x.name, name_for_x)
-        self.assertEqual(x.value, value_for_x)
 
+        #
+        # A constant carries its own value, so it reads back with no query
+        # behind it -- there is nothing about it to take from a model.
+        #
         name_for_bitvecval = None
         value_for_bitvecval = 18
         bitvecval = solver.bitvecval(32, value_for_bitvecval)
         self.assertEqual(bitvecval.name, name_for_bitvecval)
         self.assertEqual(bitvecval.value, value_for_bitvecval)
+
+        #
+        # A symbol's value is the model's to give, so reading one takes a
+        # query. With no model behind it the API says so, rather than handing
+        # back a value invented out of an empty model, which is what it used
+        # to do -- and what this test used to assert.
+        #
+        name_for_x = "x"
+        value_for_x = 0
+        x = solver.bitvec(name_for_x)
+        self.assertEqual(x.name, name_for_x)
+        with self.assertRaises(RuntimeError):
+            x.value
+        self.assertTrue(solver.check(x == value_for_x))
+        self.assertEqual(x.value, value_for_x)
 
         #
         # Build up a complex expression and check we can look it up from the

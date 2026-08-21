@@ -350,23 +350,27 @@ TEST(fp_model_no_fp_in_query, incremental_answers_either_side_of_a_scope)
 // context per solve rather than conjuring one at read time: with no solve
 // there is no model, and a model value asked for anyway must not be invented.
 //
-// The abort itself is a separate defect -- a model query with no solve behind
-// it should be refused through the API, not by taking the process down, and
-// it reaches this same message from the same NULL. This test does not bless
-// it. It pins the part that matters here: whatever that refusal is later made
-// to look like, it stays a refusal.
+// This case was written against the abort that used to stand here, saying
+// that whatever the refusal was later made to look like, it had to stay a
+// refusal. It has since been made to look like the API refusal it should
+// always have been -- see model-read-with-no-solve.cpp, which owns that
+// behaviour and covers it across sorts and drivers -- so the case now reads
+// the way it does. The property it is here for has not moved: publishing a
+// context per solve is what keeps a NULL one meaning "no solve has run", and
+// this is what would catch a future fix that made one up at read time
+// instead.
 TEST(fp_model_no_fp_in_query, no_solve_is_still_not_answered)
 {
-  EXPECT_DEATH(
-      {
-        VC vc = vc_createValidityChecker();
-        vc_setFlag(vc, 'i');
-        Expr sign;
-        Expr exponent;
-        Expr f = buildFloat(vc, &sign, &exponent);
-        (void)vc_getCounterExample(vc, f);
-      },
-      "no solve encoding context");
+  VC vc = vc_createValidityChecker();
+  vc_setFlag(vc, 'i');
+
+  Expr sign;
+  Expr exponent;
+  Expr f = buildFloat(vc, &sign, &exponent);
+
+  EXPECT_EQ((Expr)NULL, vc_getCounterExample(vc, f));
+
+  vc_Destroy(vc);
 }
 
 // The other reader of the same published context, and the other place the
