@@ -24,6 +24,8 @@ THE SOFTWARE.
 
 #include "stp/Printer/SMTLIBPrinter.h"
 #include "stp/Printer/printers.h"
+#include "stp/STPManager/STPManager.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
 #include <cassert>
 
 // Functions shared between the printers: the letize pass used by all of
@@ -126,6 +128,24 @@ void SMTLIB_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
       n.nodeprint(os);
       os << "|";
       break;
+    case UF_APPLY:
+    {
+      STPMgr* manager = n.GetNodeManager();
+      UFContext* context =
+          manager == NULL ? NULL : manager->getUFContextIfAny();
+      const UFDecl* declaration =
+          context == NULL || c.empty() ? NULL : context->lookupIdentity(c[0]);
+      if (declaration == NULL)
+        FatalError("cannot print an unregistered UF_APPLY", n);
+      os << "(|" << declaration->name() << '|';
+      for (size_t i = 1; i < c.size(); ++i)
+      {
+        os << ' ';
+        SMTLIB_Print1(os, c[i], 0, letize);
+      }
+      os << ')';
+      break;
+    }
     case FALSE:
       os << "false";
       break;

@@ -25,6 +25,7 @@ THE SOFTWARE.
 #include "stp/NodeFactory/HashingNodeFactory.h"
 #include "stp/AST/AST.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/STPManager/STP.h"
 
 using namespace stp;
@@ -37,6 +38,15 @@ HashingNodeFactory::~HashingNodeFactory()
 ASTNode HashingNodeFactory::CreateNode(const Kind kind,
                                        const ASTChildren back_children)
 {
+  if (kind == UF_APPLY)
+  {
+    std::string error;
+    UFContext* context = bm.getUFContextIfAny();
+    if (context == NULL ||
+        !context->validateApplicationChildren(back_children, &error))
+      FatalError(("UF_APPLY: " + error).c_str());
+  }
+
   // We can't create NOT(NOT (..)) nodes because of how the numbering scheme we
   // use works. So you can't trust the hashing node factory even to return
   // nodes of the same kind that you ask for.
@@ -85,19 +95,28 @@ ASTNode HashingNodeFactory::CreateNode(const Kind kind,
   if (back_children.size()  <= 1 || !isCommutative(kind))
   {
     // Don't create a new vector if it won't be sorted.
-    return ASTNode(bm.LookupOrCreateInterior(kind, back_children));
+    ASTNode result(bm.LookupOrCreateInterior(kind, back_children));
+    if (kind == UF_APPLY)
+      bm.getUFContext()->noteApplication(result);
+    return result;
   }
   else if (is_Form_kind(kind)) // formula and commutative.
   {
     const bool isSorted =  std::is_sorted(back_children.begin(),back_children.end(),stp::ExprLess{});
     if (isSorted)
     {
-      return ASTNode(bm.LookupOrCreateInterior(kind, back_children));
+      ASTNode result(bm.LookupOrCreateInterior(kind, back_children));
+      if (kind == UF_APPLY)
+        bm.getUFContext()->noteApplication(result);
+      return result;
     }
 
     ASTVec sorted_children(back_children.begin(), back_children.end());
     SortByExprNum(sorted_children);
-    return ASTNode(bm.LookupOrCreateInterior(kind, sorted_children));
+    ASTNode result(bm.LookupOrCreateInterior(kind, sorted_children));
+    if (kind == UF_APPLY)
+      bm.getUFContext()->noteApplication(result);
+    return result;
   }
   else
   {
@@ -105,7 +124,10 @@ ASTNode HashingNodeFactory::CreateNode(const Kind kind,
                        stp::ArithLess{}))
     {
       // Don't create a new vector if it's already sorted.
-      return ASTNode(bm.LookupOrCreateInterior(kind, back_children));
+      ASTNode result(bm.LookupOrCreateInterior(kind, back_children));
+      if (kind == UF_APPLY)
+        bm.getUFContext()->noteApplication(result);
+      return result;
     }
 
     ASTVec children(back_children.begin(), back_children.end());
@@ -113,7 +135,10 @@ ASTNode HashingNodeFactory::CreateNode(const Kind kind,
     // LHS.
     SortByArith(children);
 
-    return ASTNode(bm.LookupOrCreateInterior(kind, children));
+    ASTNode result(bm.LookupOrCreateInterior(kind, children));
+    if (kind == UF_APPLY)
+      bm.getUFContext()->noteApplication(result);
+    return result;
   }
 }
 

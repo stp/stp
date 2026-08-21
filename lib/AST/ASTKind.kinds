@@ -213,3 +213,9 @@ FP_SMT_EQ           2    2    Form    FP
 # c_interface.h remain stable. The extensionality prepass lowers this before
 # ordinary solving.
 ARRAY_EQ        2       2       Form
+
+# Durable, typed application of an uninterpreted function. Child 0 is the
+# manager-owned declaration identity; the remaining children are the ordered
+# source-language actuals. This stays opaque until solve-boundary UF lowering.
+# Keep this last: existing public kind values are ABI-visible.
+UF_APPLY        2       -       Term    Form

@@ -13,6 +13,7 @@
 #include <cassert>
 #include <cstddef>
 #include <memory>
+#include <string>
 #include <unordered_set>
 
 namespace stp
@@ -193,6 +194,11 @@ public:
     size_t operator()(const SourceSort& sort) const { return sort.hash(); }
   };
 };
+
+// Return the canonical SMT-LIB2 spelling used in diagnostics and model text.
+// Unknown is rendered explicitly rather than making diagnostic construction
+// itself partial.
+std::string sourceSortToSMTLib(const SourceSort& sort);
 
 } // namespace stp
 

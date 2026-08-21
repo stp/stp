@@ -54,6 +54,7 @@ add_subdirectory(Globals)
 add_subdirectory(AST)
 add_subdirectory(AbsRefineCounterExample)
 add_subdirectory(Extensionality)
+add_subdirectory(UninterpretedFunctions)
 add_subdirectory(FloatBlaster)
 add_subdirectory(Simplifier)
 add_subdirectory(Printer)
@@ -80,6 +81,7 @@ set(stp_lib_targets
     stpmgr
     abstractionrefinement
     extensionality
+    uninterpretedfunctions
     tosat
     sat
     incremental

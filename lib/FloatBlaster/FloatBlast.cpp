@@ -347,6 +347,12 @@ private:
 
   ASTNode rebuild(const ASTNode& n, const ASTVec& children)
   {
+    // Nothing rebuilds a UF application: every path that could reach one
+    // returns it untouched (see lower). Substituting here would hand the
+    // node factory an application whose actual sorts no longer match its
+    // declaration, and the factory's job is to refuse that.
+    assert(n.GetKind() != UF_APPLY);
+
     if (n.GetType() == BOOLEAN_TYPE)
       return node_factory->CreateNode(n.GetKind(), children);
 
@@ -362,6 +368,21 @@ private:
   // this function and consume the unpacked view directly.
   ASTNode lower(const ASTNode& n)
   {
+    // A UF application is opaque to this pass, whatever its codomain. Its
+    // actuals are stated in source sorts and the UF layer both validates and
+    // compares them there, so lowering one underneath the application
+    // changes what the application denotes -- when it is admitted at all;
+    // an application of f to a float that arrives as the bits the float
+    // lowered to is exactly what the declaration check refuses.
+    //
+    // There is nothing to lower in return for that. The application already
+    // is the bits of its result: UFContext::apply builds it at the
+    // codomain's packed width, and its actuals are resolved at their source
+    // sorts by whoever consumes the application -- the UF lowering pass
+    // before a solve, the model evaluator's UF_APPLY arm after one.
+    if (n.GetKind() == UF_APPLY)
+      return n;
+
     if (n.GetSourceSort().kind() == SourceSort::Kind::FloatingPoint)
       return asPacked(n);
 
@@ -427,6 +448,16 @@ private:
     ASTNode out;
     if (n.Degree() == 0)
     {
+      out = n;
+    }
+    else if (n.GetKind() == UF_APPLY)
+    {
+      // Opaque carrier, like a leaf: the application's own bits are the
+      // packed value of its result, and nothing under it is lowered
+      // (lower). Deliberately not canonicalised -- the payload of a NaN the
+      // solve chose for an application is its payload, exactly as for a
+      // float symbol; canonicalPacked is where a caller that needs the
+      // quotient asks for it.
       out = n;
     }
     else if (n.GetKind() == READ)
@@ -550,6 +581,16 @@ private:
 
     if (n.Degree() == 0)
       return decodeCarrier(n, n);
+
+    if (kind == UF_APPLY)
+    {
+      // An opaque packed cell whose subterms stay as they are: unlike a
+      // READ, an application's children are its declaration identity and
+      // its actuals, and neither may be rewritten into the target language
+      // (lower).
+      packed_cache[n] = n;
+      return decodeCarrier(n, n);
+    }
 
     if (kind == READ)
     {

@@ -25,6 +25,7 @@ THE SOFTWARE.
 // to get the PRIu64 macro from inttypes, this needs to be defined.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/Printer/SMTLIBPrinter.h"
 #include "stp/Util/CBVOps.h"
@@ -892,12 +893,22 @@ ExtensionalityContext* STPMgr::getExtensionality()
   return extensionality;
 }
 
+UFContext* STPMgr::getUFContext()
+{
+  if (uninterpretedFunctions == NULL)
+    uninterpretedFunctions = new UFContext(this);
+  return uninterpretedFunctions;
+}
+
 STPMgr::~STPMgr()
 {
   ClearAllTables();
 
   delete extensionality;
   extensionality = NULL;
+
+  delete uninterpretedFunctions;
+  uninterpretedFunctions = NULL;
 
   printer::NodeLetVarMap.clear();
   printer::NodeLetVarVec.clear();
