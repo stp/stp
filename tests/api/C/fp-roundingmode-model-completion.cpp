@@ -13,12 +13,12 @@
 //
 // The sort is carried in five bits, one-hot, so twenty-seven of the
 // thirty-two patterns name nothing. Every mode a formula names is pinned
-// to the five -- by its declaration, by FpTotalise at solve time, and by
-// the array transform where it mints a cell -- but a pin belongs to the
-// assertion level it was made at, while the incremental encoding keeps a
-// symbol's SAT variables after that level is popped. The bits behind a
-// mode-sorted symbol the last solve never named are therefore free, and
-// the backend leaves whatever it likes in them.
+// to the five -- by its declaration, by UF lowering, by FpTotalise at solve
+// time, and by the array transform where it mints a cell -- but a pin
+// belongs to the assertion level it was made at, while the incremental
+// encoding keeps a symbol's SAT variables after that level is popped. The
+// bits behind a mode-sorted symbol the last solve never named are therefore
+// free, and the backend leaves whatever it likes in them.
 //
 // Publishing those bits as the symbol's value took the process down:
 // vc_getCounterExample lifts a RoundingMode carrier back to a mode, and a
