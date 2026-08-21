@@ -63,6 +63,25 @@ public:
 
   virtual ASTNodeToSATVar& SATVar_to_SymbolIndexMap() = 0;
 
+  // The lowering may have replaced a bit-vector operation by a free
+  // Boolean or a free vector of bits -- an over-approximation which is
+  // only a faithful encoding once refinement has pinned it to the
+  // operands it stands for. A candidate that contradicts one of those
+  // abstractions is not an assignment of the query at all, so it must be
+  // ruled out before anything downstream reads it: the theory checkers
+  // and the model evaluator are entitled to assume the bit-vector layer
+  // means what it says, and report a candidate that does not as an
+  // internal error.
+  //
+  // Returns the number of abstractions whose definition grew, which is
+  // also the caller's progress measure: non-zero means clauses were added
+  // and the search must run again.
+  virtual unsigned refineAbstractions(SATSolver& /*SatSolver*/) { return 0; }
+
+  // Total across the session, so a driver can tell whether the round it
+  // just ran refined anything without owning the abstraction tables.
+  virtual uint64_t abstractionRefinements() const { return 0; }
+
   virtual void ClearAllTables(void) = 0;
 };
 }

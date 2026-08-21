@@ -24,6 +24,7 @@ add_library(tosat OBJECT
     BBNodeManagerAIG.cpp
     ToCNFAIG.cpp
     ToSATAIG.cpp
+    BVAbstractionRefiner.cpp
     BVEQCongruenceClosure.cpp
 )
 
