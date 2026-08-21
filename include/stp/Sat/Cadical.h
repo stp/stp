@@ -105,6 +105,7 @@ public:
   bool enableTrailReuseInternal() override;
 
   void suggestPhase(uint32_t var, bool value) override;
+  void declarePendingVariables() override;
 
   void unsatAssumptions(const vec_literals& assumps,
                         std::vector<int>& out) override;

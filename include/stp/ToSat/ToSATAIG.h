@@ -57,6 +57,9 @@ private:
   // simplified-away variables. Here we mark them as frozen which prevents them
   // from being removed.
   void mark_variables_as_frozen(SATSolver& satSolver);
+  // Advisory first-candidate bias for the congruence checker's scalars;
+  // a no-op unless --uf-phase-hints is set.
+  void suggest_uf_scalar_phases(SATSolver& satSolver);
 
   bool runSolver(SATSolver& satSolver);
   void handle_cnf_options(Cnf_Dat_t* cnfData, bool needAbsRef);

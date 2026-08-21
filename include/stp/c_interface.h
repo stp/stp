@@ -288,6 +288,15 @@ enum ifaceflag_t
   //!
   UF_ACKERMANN_BUDGET,
 
+  //! Bias the first candidate so the congruence checker's scalars start out
+  //! pairwise different.
+  //!
+  //! `param_value` nonzero enables, zero disables (the default). This is the
+  //! C API's way to reach --uf-phase-hints. It is advisory and affects search
+  //! order only, so it cannot change an answer.
+  //!
+  UF_PHASE_HINTS,
+
   //! The bit-vector width given to a sort introduced by (declare-sort S 0),
   //! which bounds how many elements of that sort a query can tell apart
   //! (default 16).
