@@ -244,8 +244,7 @@ void IncrementalSolver::buildPendingModel()
   // The solve that deferred this model may not have wired the context
   // itself (the plain exact-stack route does not); lowered floating-point
   // terms evaluate through the context that lowered them.
-  if (impl->fpCtx)
-    impl->ce->setFpEncodingContext(impl->fpCtx.get());
+  impl->publishFpContext();
 
   ToSATBase::ASTNodeToSATVar symbolMap;
   impl->buildSymbolMap(symbolMap);
@@ -408,8 +407,7 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   // Model evaluation of floating-point terms needs the encoding context
   // that lowered them. Batch fallback rounds install their own per solve;
   // this keeps the driver's rounds coherent the same way.
-  if (impl->fpCtx)
-    impl->ce->setFpEncodingContext(impl->fpCtx.get());
+  impl->publishFpContext();
 
   // Budgets are per check-sat, as solve_by_sat_solver arms them per query.
   applySolveBudgets(*impl->solver, uf);

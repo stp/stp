@@ -220,8 +220,7 @@ SOLVER_RETURN_TYPE IncrementalSolver::Impl::solvePlainExactStack(
   // Eagerly instantiated array-equality rounds land here with lowered
   // floating-point terms in the block; model evaluation needs the context
   // that lowered them, exactly as the refinement paths wire it.
-  if (fpCtx)
-    ce->setFpEncodingContext(fpCtx.get());
+  publishFpContext();
 
   ToSATBase::ASTNodeToSATVar symbolMap;
   buildSymbolMap(symbolMap);
@@ -507,8 +506,7 @@ IncrementalSolver::Impl::exactStackCheckSat(
   const bool constructForCaller = uf.modelConstructionRequired();
   uf.construct_counterexample_flag = true;
 
-  if (fpCtx)
-    ce->setFpEncodingContext(fpCtx.get());
+  publishFpContext();
 
   seedEliminatedIntoModelChannel();
 
