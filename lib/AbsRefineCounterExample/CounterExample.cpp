@@ -164,8 +164,26 @@ void AbsRefine_CounterExample::ConstructCounterExample(
     const ASTNode& symbol = it->first;
     const vector<unsigned>& v = it->second;
 
+    // Not everything the bit-blaster registers here is a symbol. A BV
+    // abstraction replaces a term -- a BVPLUS, BVMULT, BVDIV, BVMOD, ITE or
+    // comparison -- with fresh combinational inputs and keys them by the term
+    // itself, so that refinement can read back the bits the solver chose for
+    // it. Those bits are the abstraction's value; until refinement has ruled
+    // the abstraction out they are not the term's value.
+    //
+    // A model must not carry them, and not merely because the loop below
+    // would take GetValueWidth() off a term. TermToConstTermUsingModel
+    // answers from CounterExampleMap for any term it finds there, so an
+    // abstracted term in the model is handed straight back to the check meant
+    // to test it: ComputeFormulaUsingModel would confirm the candidate from
+    // the abstraction instead of from the symbols underneath it, which is the
+    // one thing that check exists to rule out. Skipping keeps it honest --
+    // the term is recomputed from its operands, and the disagreement that
+    // recomputation finds is what the next refinement round acts on.
+    if (symbol.GetKind() != SYMBOL)
+      continue;
+
     const unsigned int symbolWidth = symbol.GetValueWidth();
-    assert(symbol.GetKind() == SYMBOL);
     vector<bool> bitVector_array(symbolWidth, false);
 
     for (size_t index = 0; index < v.size(); index++)
@@ -2781,6 +2799,24 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
   }
   else if (SatSolver.okay())
   {
+    // Before anything else looks at this candidate. The bit-vector
+    // abstractions are an over-approximation: an abstracted equality or
+    // operation is a free Boolean, or a free vector of bits, until
+    // refinement pins it to the operands it stands for, and a candidate
+    // which gives it a value the operands do not justify is not an
+    // assignment of the query. Both theory checkers and the model
+    // evaluation below treat exactly that as an internal error -- they
+    // are entitled to, since every other producer of a candidate hands
+    // them a faithful bit-vector layer -- so the abstraction has to be
+    // the first refinement owner consulted, not a later one in the
+    // driver's loop. It is also the only one whose progress does not
+    // depend on a constructed counterexample: it reads the SAT model
+    // directly, which is what lets it run ahead of the shortcut below
+    // and keeps a query that asked for no model from being answered
+    // from an unrefined abstraction.
+    if (tosat->refineAbstractions(SatSolver) > 0)
+      return SOLVER_UNDECIDED;
+
     if (!bm->UserFlags.construct_counterexample_flag)
       return SOLVER_INVALID;
 

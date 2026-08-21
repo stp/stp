@@ -131,14 +131,42 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
 
   bm->GetRunTimes()->start(RunTimes::BitBlasting);
 
-  // Only BBForm() creates AIG nodes, so only it can exceed the budget --
-  // ToCNFAIG drives ABC directly and never calls mgr.CreateNode(). Keeping
-  // the try that narrow is what lets the handler close RunTimes::BitBlasting
-  // unconditionally; RunTimes::stop() FatalErrors on a category mismatch, so
-  // a try wide enough to span CNFConversion would abort instead of report.
+  // Only BBForm() and the side-constraint fold below create AIG nodes, so
+  // only they can exceed the budget -- ToCNFAIG drives ABC directly and never
+  // calls mgr.CreateNode(). Keeping the try that narrow is what lets the
+  // handler close RunTimes::BitBlasting unconditionally; RunTimes::stop()
+  // FatalErrors on a category mismatch, so a try wide enough to span
+  // CNFConversion would abort instead of report.
   try
   {
     BBFormula = bb.BBForm(input);
+
+    // Hand the side constraints over as one variadic AND, so that
+    // CreateNode folds them into a log-height tower.
+    //
+    // Conjoining them one at a time instead -- BBFormula =
+    // Aig_And(BBFormula, sc) once per constraint -- leaves an AIG whose
+    // depth is the number of constraints, and every AIG -> CNF walk ABC
+    // has is a plain recursive DFS: Cnf_ManScanMapping_rec under
+    // Cnf_Derive, Cnf_CollectVolume_rec under Cnf_DeriveFast, and so on
+    // for the Mf_ManGenerateCnf routes. One frame per link exhausts an
+    // 8 MiB stack at around 105k links, and there is one link per bit of
+    // each distinct abstracted operand, so a query carrying a few
+    // thousand wide equalities took the process out. How many there are
+    // is chosen by whoever wrote the input, so no stack size is a fix.
+    //
+    // The incremental route never had this: syncAbstractions() asserts
+    // each constraint as its own permanent unit clause and builds no
+    // chain at all.
+    const std::vector<BBNodeAIG>& side = bb.sideConstraints();
+    if (!side.empty())
+    {
+      std::vector<BBNodeAIG> conjuncts;
+      conjuncts.reserve(side.size() + 1);
+      conjuncts.push_back(BBFormula);
+      conjuncts.insert(conjuncts.end(), side.begin(), side.end());
+      BBFormula = mgr.CreateNode(AND, conjuncts);
+    }
   }
   catch (const AIGBudgetExhausted& e)
   {
@@ -180,6 +208,43 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
   Cnf_Dat_t* cnfData = NULL;
   toCNF.toCNF(BBFormula, cnfData, nodeToSATVar, needAbsRef, mgr);
   bm->GetRunTimes()->stop(RunTimes::CNFConversion);
+
+  // Record what each abstraction stands for, now that CNF conversion has
+  // assigned the SAT variable its combinational input carries. Refinement
+  // reads these back to compare the candidate against the operands.
+  for (const auto& raw : bb.abstractedEQs())
+  {
+    BVEQAbstraction a;
+    a.eqNode = raw.eqNode;
+    Aig_Obj_t* pObj = (Aig_Obj_t*)Vec_PtrEntry(
+        mgr.aigMgr->vCis, raw.abstractionCI.symbol_index);
+    a.abstractionSATVar = cnfData->pVarNums[pObj->Id];
+    a.leftSymbol = raw.leftSymbol;
+    a.rightSymbol = raw.rightSymbol;
+    a.width = std::max(1u, raw.leftSymbol.GetValueWidth());
+    abstraction_.equalities().push_back(std::move(a));
+  }
+
+  for (const auto& raw : bb.abstractedTerms())
+  {
+    BVTermAbstraction a;
+    a.termNode = raw.termNode;
+    a.opKind = raw.opKind;
+    for (unsigned i = 0; i < raw.numOperands; i++)
+    {
+      a.operands[i] = raw.operands[i];
+      a.operandNegated[i] = raw.operandNegated[i];
+    }
+    a.numOperands = raw.numOperands;
+    a.width = raw.width;
+    if (raw.condCISymbolIndex >= 0)
+    {
+      Aig_Obj_t* condObj = (Aig_Obj_t*)Vec_PtrEntry(
+          mgr.aigMgr->vCis, raw.condCISymbolIndex);
+      a.condSATVar = cnfData->pVarNums[condObj->Id];
+    }
+    abstraction_.terms().push_back(std::move(a));
+  }
 
   // Free the memory in the AIGs.
   BBFormula = BBNodeAIG(); // null node
@@ -299,6 +364,15 @@ void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
       nodeToSATVar.insert(make_pair(*it, v));
     }
   }
+
+  // The BV abstraction's refinement writes clauses over the abstraction
+  // variables and the operand bits in later solve calls, the same way the
+  // array machinery above writes its lemmas; a simplifying backend must not
+  // eliminate any of them in the meantime. The incremental driver has no
+  // counterpart to this call because every backend it admits either
+  // restores an eliminated variable on contact or never eliminates one --
+  // makeBackend refuses the simplifying MiniSat outright.
+  abstraction_.freezeVariables(satSolver, nodeToSATVar);
 }
 
 bool ToSATAIG::runSolver(SATSolver& satSolver)
@@ -314,6 +388,11 @@ bool ToSATAIG::runSolver(SATSolver& satSolver)
     satSolver.printStats();
 
   return result;
+}
+
+unsigned ToSATAIG::refineAbstractions(SATSolver& solver)
+{
+  return abstraction_.refine(solver, nodeToSATVar);
 }
 
 ToSATAIG::~ToSATAIG()
