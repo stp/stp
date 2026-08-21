@@ -240,6 +240,27 @@ public:
   // DAG-aware rewriting) and the SAT search itself allocate on top of it.
   int64_t aig_node_budget = -1;
 
+  bool bv_eq_abstraction = false;
+  // One width floor for both abstraction families: equalities and the
+  // abstracted terms (comparisons, ITE, BVPLUS, BVMULT, BVDIV, BVMOD)
+  // all abstract only at or above this operand width.
+  unsigned bv_abstraction_width = 64;
+  unsigned bv_eq_refine_width = 0;
+  bool bv_term_abstraction = false;
+  // BVMULT, BVDIV and BVMOD are the operations whose refinement has no compact
+  // exact lemma: it rules out one pair of operand values at a time. They are
+  // abstracted with everything else, and this turns just those three off for a
+  // query that would rather not pay for the rounds at all.
+  bool bv_term_abstraction_mult = true;
+  // How many times one of those three may be blocked before its refinement
+  // stops enumerating and encodes the operation exactly instead. Measured:
+  // through about thirty rounds the abstraction is still two to four times
+  // faster than not abstracting, by sixty it is break-even, and past that it
+  // collapses -- a 64-bit factorisation spent 5816 rounds and ninety seconds
+  // on a query the unabstracted solve answers in five hundredths of one.
+  // Zero never escalates, which is what this was before.
+  unsigned bv_term_abstraction_rounds = 32;
+
   // You can select these with any combination you want of true & false.
   bool division_variant_1 = true;
   bool division_variant_2 = true;
