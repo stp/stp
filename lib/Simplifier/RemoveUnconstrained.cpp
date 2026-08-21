@@ -95,15 +95,15 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier,
       (ext != NULL && ext->activeInSolve()) ? &ext->getFrozenSymbols() : NULL;
   std::set<ASTNode> mergedUntouchable;
   const std::set<ASTNode>* effective = NULL;
-  if (extSet != NULL && alsoUntouchable != NULL)
+  if (extSet != NULL || alsoUntouchable != NULL)
   {
-    mergedUntouchable = *extSet;
-    mergedUntouchable.insert(alsoUntouchable->begin(),
-                             alsoUntouchable->end());
+    if (extSet != NULL)
+      mergedUntouchable.insert(extSet->begin(), extSet->end());
+    if (alsoUntouchable != NULL)
+      mergedUntouchable.insert(alsoUntouchable->begin(),
+                               alsoUntouchable->end());
     effective = &mergedUntouchable;
   }
-  else
-    effective = (extSet != NULL) ? extSet : alsoUntouchable;
   MutableASTNode::UntouchableScope protect(effective);
 
   bm.GetRunTimes()->start(RunTimes::RemoveUnconstrained);
@@ -217,7 +217,7 @@ void RemoveUnconstrained::replace(const ASTNode& from, const ASTNode to)
   if (simplifier->UpdateSubstitutionMapFewChecks(from, to))
     return;
 
-  // Refused (only SubstitutionMap::extensionalityProtected refuses).
+  // Refused (only SubstitutionMap::theoryProtected refuses).
   // The caller has already rewritten the graph to remove whatever
   // constrained "from", so dropping the definition here would leave it
   // free. Keep it as an ordinary conjunct instead; topLevel() attaches
