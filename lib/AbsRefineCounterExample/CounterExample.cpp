@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/FloatBlaster/FpEncodingContext.h"
 #include "stp/Printer/printers.h"
+#include "stp/Simplifier/DistinctOrdering.h"
 #include "stp/ToSat/ToSATAIG.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/UninterpretedFunctions/UFModel.h"
@@ -395,6 +396,7 @@ class AbsRefine_CounterExample::EvaluationDriver
     {
       Start,
       AfterSymbolValue,
+      AfterDistinctLowering,
       AfterArrayEqualityLowering,
       AfterBoolExtractOperand,
       AfterOperand,
@@ -765,6 +767,13 @@ class AbsRefine_CounterExample::EvaluationDriver
         }
         // Has been simplified out. Can take any value.
         return finish(ASTFalse);
+      }
+      case DISTINCT:
+      {
+        if (f.formulaPhase == Frame::FormulaPhase::AfterDistinctLowering)
+          return finish(result);
+        return requestFormula(f, Frame::FormulaPhase::AfterDistinctLowering,
+                              lowerDistinct(bm, form));
       }
       case ARRAY_EQ:
       {

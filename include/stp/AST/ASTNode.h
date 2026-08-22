@@ -164,7 +164,7 @@ public:
     return k == BVLT || k == BVLE || k == BVGT || k == BVGE || k == BVSLT ||
            k == BVSLE || k == BVSGT || k == BVSGE || k == BVUADDO ||
            k == BVSADDO || k == BVUMULO || k == BVSMULO || k == BVUSUBO ||
-           k == BVSSUBO || k == EQ || k == ARRAY_EQ;
+           k == BVSSUBO || k == EQ || k == ARRAY_EQ || k == DISTINCT;
   }
 
   // delegates to the ASTInternal node.

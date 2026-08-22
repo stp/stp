@@ -246,8 +246,8 @@ void ExtraMain::create_options()
   bool_arg("--distinct-ordering", bm->UserFlags.distinct_ordering,
            "replace a (distinct ...) over variables that occur nowhere else "
            "with a strict chain, which fixes one of the n! equivalent "
-           "orderings the bit-blaster would otherwise search. Batch pipeline "
-           "only; --incremental=on never applies it",
+           "orderings the bit-blaster would otherwise search. Incremental "
+           "solves keep the rewrite behind a retractable root assumption",
            simp_group);
 
   const char* const solver_group = "SAT Solver options";

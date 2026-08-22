@@ -34,17 +34,18 @@ THE SOFTWARE.
 #include <unordered_set>
 #include <vector>
 
+#include "stp/FloatBlaster/FloatBlaster.h"
+#include "stp/FloatBlaster/FpTotalise.h"
 #include "stp/Incremental/IncrementalSolver.h"
 #include "stp/Interface/FdOStream.h"
 #include "stp/Parser/parser.h"
 #include "stp/Printer/printers.h"
-#include "stp/cpp_interface.h"
-#include "stp/FloatBlaster/FloatBlaster.h"
-#include "stp/FloatBlaster/FpTotalise.h"
-#include "stp/Util/GitSHA1.h"
+#include "stp/Simplifier/DistinctOrdering.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/UninterpretedFunctions/UFModel.h"
 #include "stp/UninterpretedFunctions/UFRefinement.h"
+#include "stp/Util/GitSHA1.h"
+#include "stp/cpp_interface.h"
 
 // From ABC
 #include "sat/cnf/cnf.h"
@@ -764,8 +765,10 @@ static void vc_printAssertsToStream(VC vc, ostream& os, int simplify_print)
   stp::Simplifier simp(b, &sm );
   for (stp::ASTVec::iterator i = v.begin(), iend = v.end(); i != iend; i++)
   {
-    stp::ASTNode q =
-        (simplify_print == 1) ? simp.SimplifyFormula_TopLevel(*i, false) : *i;
+    stp::ASTNode q = *i;
+    if (simplify_print == 1 && b->has_distinct)
+      q = stp::lowerDistinct(b, q);
+    q = (simplify_print == 1) ? simp.SimplifyFormula_TopLevel(q, false) : q;
     q = (simplify_print == 1) ? simp.SimplifyFormula_TopLevel(q, false) : q;
     os << "ASSERT( ";
     q.PL_Print(os, b);
@@ -797,10 +800,11 @@ void vc_printQueryStateToBuffer(VC vc, Expr e, char** buf, size_t* len,
   vc_printAssertsToStream(vc, os, simplify_print);
   os << "%----------------------------------------------------" << endl;
   os << "QUERY( ";
-  stp::ASTNode q =
-      (simplify_print == 1)
-          ? simp.SimplifyFormula_TopLevel(*((stp::ASTNode*)e), false)
-          : *(stp::ASTNode*)e;
+  stp::ASTNode q = *(stp::ASTNode*)e;
+  if (simplify_print == 1 && b->has_distinct)
+    q = stp::lowerDistinct(b, q);
+  if (simplify_print == 1)
+    q = simp.SimplifyFormula_TopLevel(q, false);
   q.PL_Print(os, b);
   os << " );" << endl;
 
@@ -3490,15 +3494,15 @@ Expr vc_simplify(VC vc, Expr e)
   stp::Simplifier* simp = (stp::Simplifier*)(stp_i->simp);
   stp::ASTNode* a = (stp::ASTNode*)e;
 
-  // Simplification is a public entrance to the same source-level FP graph as
-  // solving.  In particular, fp.min/fp.max and fp.to_{u,s}bv are deliberately
-  // built at their SMT-LIB arity; FpTotalise supplies the internal child that
-  // makes their otherwise-unspecified result a congruent total function.  The
-  // solve path already does this before any simplifier can constant-evaluate
-  // those nodes.  Do it here too, rather than letting the constant evaluator
-  // hand the raw node to FloatBlaster, which requires the internal child.
+  // Simplification is a public entrance to the same source-level graph as
+  // solving. Lower native distinct before the ordinary simplifier, then give
+  // partial floating-point operations the internal child that makes their
+  // otherwise-unspecified result a congruent total function. The solve paths
+  // establish these same boundaries before preprocessing.
+  const stp::ASTNode semantic =
+      stp_i->bm->has_distinct ? stp::lowerDistinct(stp_i->bm, *a) : *a;
   stp::FpTotalise totalise(stp_i->bm);
-  const stp::ASTNode totalised = totalise.topLevel(*a);
+  const stp::ASTNode totalised = totalise.topLevel(semantic);
 
   if (stp::BOOLEAN_TYPE == totalised.GetType())
   {
@@ -3867,6 +3871,7 @@ static_assert((int)FP_TO_IEEE_BV == (int)stp::FP_TO_IEEE_BV,
               "exprkind_t drift");
 static_assert((int)FP_SMT_EQ == (int)stp::FP_SMT_EQ, "exprkind_t drift");
 static_assert((int)UF_APPLY == (int)stp::UF_APPLY, "exprkind_t drift");
+static_assert((int)DISTINCT == (int)stp::DISTINCT, "exprkind_t drift");
 static_assert((int)BOOLEAN_TYPE == (int)stp::BOOLEAN_TYPE &&
                   (int)FLOATINGPOINT_TYPE == (int)stp::FLOATINGPOINT_TYPE &&
                   (int)UNKNOWN_TYPE == (int)stp::UNKNOWN_TYPE,

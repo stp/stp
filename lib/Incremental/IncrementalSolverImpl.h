@@ -1671,10 +1671,13 @@ struct IncrementalSolver::Impl
   // The ordinary check-sat path is deliberately staged here rather than
   // represented by a mutable solve-plan object. Each stage owns the local
   // bookkeeping it creates and exposes only the value the next stage needs.
-  void maintainBackendForCheck(const ASTVec& assertionsSMT2);
+  void maintainBackendForCheck(const ASTVec& assertionsSMT2,
+                               const ASTNode& classificationRoot);
   bool tryExactStackRoute(const ASTVec& assertionsSMT2,
                           bool assumeLastLevelPerConjunct,
                           bool firstForcedIncrementalSolve,
+                          const ASTNode& assumptionScopedRoot,
+                          size_t orderedDistincts,
                           SOLVER_RETURN_TYPE& result);
   void synchronizeCbpPrefix(const ASTVec& assertionsSMT2,
                             bool firstForcedIncrementalSolve);
@@ -2387,7 +2390,9 @@ struct IncrementalSolver::Impl
   SOLVER_RETURN_TYPE exactStackCheckSat(const ASTVec& assertionsSMT2,
                                         bool firstForcedIncrementalSolve,
                                         bool requireScopedCollapse = false,
-                                        bool* scopedAccepted = NULL);
+                                        bool* scopedAccepted = NULL,
+                                        const ASTNode& completedRoot = ASTNode(),
+                                        size_t orderedDistincts = 0);
   SOLVER_RETURN_TYPE
   solvePlainExactStack(const ASTVec& assertionsSMT2,
                        const SATSolver::vec_literals& assumptions,
@@ -3356,7 +3361,8 @@ struct IncrementalSolver::Impl
   // registry keeps the answer stable across a rebuild whose live stack
   // happens to be array-free at that moment. Under --ackermanize arrays
   // never reach the solver as arrays, so AUTO stays off, as in batch.
-  void decideBVA(const ASTVec& assertionsSMT2)
+  void decideBVA(const ASTVec& assertionsSMT2,
+                 const ASTNode& classificationRoot)
   {
     if (bvaDecided)
       return;
@@ -3369,10 +3375,19 @@ struct IncrementalSolver::Impl
         !uf.ackermannisation)
     {
       wants = !arrayRegistry.reads.empty();
-      for (size_t i = 0; !wants && i < assertionsSMT2.size(); i++)
+      if (!wants)
       {
-        const Fragment& f = fragment(assertionsSMT2[i]);
-        wants = f.arrays || f.arrayEq;
+        if (!classificationRoot.IsNull())
+        {
+          const Fragment& f = fragment(classificationRoot);
+          wants = f.arrays || f.arrayEq;
+        }
+        else
+          for (size_t i = 0; !wants && i < assertionsSMT2.size(); i++)
+          {
+            const Fragment& f = fragment(assertionsSMT2[i]);
+            wants = f.arrays || f.arrayEq;
+          }
       }
     }
 

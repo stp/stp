@@ -1283,6 +1283,22 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
       }
       break;
 
+    case DISTINCT:
+    {
+      if (n.Degree() < 2)
+        FatalError("BVTypeCheck: DISTINCT requires at least 2 operands", n);
+      const SourceSort sort = n[0].GetSourceSort();
+      if (!sort.isKnown())
+        FatalError("BVTypeCheck: DISTINCT operands need a known source sort",
+                   n);
+      for (size_t i = 1; i < n.Degree(); ++i)
+        if (n[i].GetSourceSort() != sort)
+          FatalError("BVTypeCheck: DISTINCT operands have different source "
+                     "sorts",
+                     n);
+      break;
+    }
+
     case BVLT:
     case BVLE:
     case BVGT:

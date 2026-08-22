@@ -24,10 +24,11 @@ THE SOFTWARE.
 
 // The exact-stack route: the whole active stack encoded as one
 // assumption-scoped block. Whole-array equality always takes it (the
-// lazy checker owns the complete array graph), eagerly instantiated
-// equality rounds and the first-engagement plain-BV shortcut solve the
-// block like an ordinary formula. Route-specific preprocessing, the
-// block solve, and the array-equality refinement driver live here;
+// lazy checker owns the complete array graph), DISTINCT ordering takes it so
+// its equisatisfiable rewrite remains retractable, and eagerly instantiated
+// equality rounds plus the first-engagement plain-BV shortcut solve the block
+// like an ordinary formula. Route-specific preprocessing, the block solve,
+// and the array-equality refinement driver live here;
 // everything they share with the per-level route stays on Impl
 // (IncrementalSolverImpl.h).
 
@@ -278,8 +279,10 @@ SOLVER_RETURN_TYPE IncrementalSolver::Impl::solvePlainExactStack(
 
 // Encode the complete active stack as one assumption-scoped block. Whole-array
 // equality always needs this route: extensionality owns the complete array
-// graph, so every active read must be lowered and checked together. Explicit
-// first engagement can also use it for a plain-BV stack, but only after the
+// graph, so every active read must be lowered and checked together. DISTINCT
+// ordering supplies a completed-root override so its symmetry choice is
+// assumed rather than asserted permanently. Explicit first engagement can
+// also use it for a plain-BV stack, but only after the
 // whole-stack preprocessing trial has at least halved the DAG; that narrowly
 // recovers cases where a deep fact collapses a huge shallow root before the
 // ordinary per-level driver would encode it. Generated names and the block
@@ -289,20 +292,30 @@ SOLVER_RETURN_TYPE IncrementalSolver::Impl::solvePlainExactStack(
 SOLVER_RETURN_TYPE
 IncrementalSolver::Impl::exactStackCheckSat(
     const ASTVec& assertionsSMT2, bool firstForcedIncrementalSolve,
-    bool requireScopedCollapse, bool* scopedAccepted)
+    bool requireScopedCollapse, bool* scopedAccepted,
+    const ASTNode& completedRoot, size_t orderedDistincts)
 {
   UserDefinedFlags& uf = bm->UserFlags;
+  assert(orderedDistincts == 0 || !completedRoot.IsNull());
 
   bool arrayEqualityRound = false;
   bool ufRound = false;
   bool activeHasFp = false;
-  for (const ASTNode& levelConjunction : assertionsSMT2)
+  if (!completedRoot.IsNull())
   {
-    const Fragment& f = fragment(levelConjunction);
-    arrayEqualityRound = arrayEqualityRound || f.arrayEq;
-    ufRound = ufRound || f.ufApply;
-    activeHasFp = activeHasFp || f.fp;
+    const Fragment& f = fragment(completedRoot);
+    arrayEqualityRound = f.arrayEq;
+    ufRound = f.ufApply;
+    activeHasFp = f.fp;
   }
+  else
+    for (const ASTNode& levelConjunction : assertionsSMT2)
+    {
+      const Fragment& f = fragment(levelConjunction);
+      arrayEqualityRound = arrayEqualityRound || f.arrayEq;
+      ufRound = ufRound || f.ufApply;
+      activeHasFp = activeHasFp || f.fp;
+    }
   profile.extensionality = arrayEqualityRound;
   ScopedProfileTimer extensionalityTimer(
       profile.enabled && arrayEqualityRound, profile.extensionalityNs);
@@ -317,11 +330,11 @@ IncrementalSolver::Impl::exactStackCheckSat(
   // the flag disabled and the batch pipeline's warning.
   const bool savedAck = uf.ackermannisation;
 
-  ASTNode activeConjunction;
-  if (assertionsSMT2.size() > 1)
-    activeConjunction = bm->CreateNode(AND, assertionsSMT2);
-  else
-    activeConjunction = assertionsSMT2[0];
+  ASTNode activeConjunction = completedRoot;
+  if (activeConjunction.IsNull())
+    activeConjunction = assertionsSMT2.size() > 1
+                            ? bm->CreateNode(AND, assertionsSMT2)
+                            : assertionsSMT2[0];
 
   // The exact stack has now been fully assembled, including every frontend
   // substitution and let expansion. Lower its durable applications before FP
@@ -474,6 +487,8 @@ IncrementalSolver::Impl::exactStackCheckSat(
                inputToSat);
   if (uf.enable_uninterpreted_functions && containsKind(inputToSat, UF_APPLY))
     FatalError("IncrementalSolver: UF_APPLY reached bit-blast", inputToSat);
+  if (containsKind(inputToSat, DISTINCT))
+    FatalError("IncrementalSolver: DISTINCT reached bit-blast", inputToSat);
 
   // A fresh per-round registry: the whole-graph transform must neither see
   // the persistent lazy rows (it refuses reused legacy rows) nor leak its
@@ -557,9 +572,13 @@ IncrementalSolver::Impl::exactStackCheckSat(
 
   if (uf.stats_flag)
   {
-    std::cerr << "Incremental: "
-              << (arrayEqualityRound ? "array-equality" : "first scoped BV")
-              << " round, block of "
+    std::cerr << "Incremental: ";
+    if (orderedDistincts > 0)
+      std::cerr << "distinct-ordering";
+    else
+      std::cerr << (arrayEqualityRound ? "array-equality"
+                                       : "first scoped BV");
+    std::cerr << " round, block of "
               << assertionsSMT2.size() << " levels "
               << (blockReused ? "reused" : "encoded") << ", solver has "
               << solver->nVars() << " variables" << std::endl;
@@ -588,8 +607,12 @@ IncrementalSolver::Impl::exactStackCheckSat(
   // or simplified away before lowering -- while --ackermanize remains in
   // force has been compiled onto the ordinary eager path: reads expanded
   // by the transform above, nothing for the lazy checker or read
-  // refinement to do. Solve it like the plain block it now is.
-  if ((!arrayEqualityRound && !ufRound) ||
+  // refinement to do. A DISTINCT-ordered block can reach this route with
+  // ordinary lazy reads but no opaque array equality; those reads still need
+  // the refinement driver below, so it is plain only when it has no arrays or
+  // eager Ackermannisation compiled them away.
+  if ((!arrayEqualityRound && !ufRound &&
+       (!arrayops || uf.ackermannisation)) ||
       (!ufRound && uf.ackermannisation && !extActive))
     return solvePlainExactStack(assertionsSMT2, assumptions, inputToSat,
                                 blockRegular);
@@ -730,8 +753,10 @@ IncrementalSolver::Impl::exactStackCheckSat(
     modelPending = true;
 
   if (uf.stats_flag && refinementRounds > 0)
-    std::cerr << "Incremental: array-equality refinement converged after "
-              << refinementRounds << " rounds" << std::endl;
+    std::cerr << "Incremental: "
+              << (arrayEqualityRound ? "array-equality" : "array")
+              << " refinement converged after " << refinementRounds
+              << " rounds" << std::endl;
   if (profile.enabled)
     profile.refinementRounds += refinementRounds;
 

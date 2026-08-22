@@ -129,6 +129,8 @@ these, and rejects any other name:
      - bitvectors
    * - ``QF_ABV``
      - bitvectors and arrays
+   * - ``QF_UF``
+     - uninterpreted functions and uninterpreted sorts
    * - ``QF_UFBV``, ``QF_AUFBV``
      - bitvectors and uninterpreted functions, optionally with arrays
    * - ``QF_FP``

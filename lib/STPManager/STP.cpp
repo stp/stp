@@ -249,14 +249,24 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
   // in the parser: only the whole formula shows whether the operands really
   // do occur nowhere else, and re-deciding it per solve is what keeps a
   // later assert from inheriting an ordering it never earned.
-  if (bm->UserFlags.distinct_ordering && !bm->distinctGroups.empty())
+  if (bm->UserFlags.distinct_ordering && bm->has_distinct)
   {
     size_t ordered = 0;
-    original_input = applyDistinctOrdering(bm, original_input,
-                                           bm->distinctGroups, &ordered);
+    original_input = applyDistinctOrdering(bm, original_input, &ordered);
     if (ordered > 0 && bm->UserFlags.stats_flag)
       std::cerr << "Ordered " << ordered << " symmetric distinct group(s)."
                 << std::endl;
+  }
+
+  // Whatever the optional symmetry pass did not consume now acquires its
+  // ordinary pairwise semantics. This is deliberately after completed-root
+  // ordering and before UF, FP, array, or generic preprocessing.
+  if (bm->has_distinct)
+  {
+    original_input = lowerDistinct(bm, original_input);
+    if (containsKind(original_input, DISTINCT))
+      FatalError("DISTINCT crossed the batch completed-root lowering barrier",
+                 original_input);
   }
 
   // Durable UF nodes stay visible through frontend substitution and query
@@ -423,6 +433,8 @@ SOLVER_RETURN_TYPE
 STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
                     const ASTNodeMap& arrayEqualityRewrites)
 {
+  if (bm->has_distinct && containsKind(original_input, DISTINCT))
+    FatalError("DISTINCT reached ordinary batch preprocessing", original_input);
   if (bm->UserFlags.enable_uninterpreted_functions &&
       containsKind(original_input, UF_APPLY))
     FatalError("UF_APPLY reached ordinary batch preprocessing",
