@@ -23,6 +23,7 @@
 # C API tests (these should be .cpp or .cxx files because GTest needs C++)
 # -----------------------------------------------------------------------------
 AddSTPGTest(array-cvcl-02.cpp)
+AddSTPGTest(array-equality-retired-after-pop.cpp)
 AddSTPGTest(array-extensionality.cpp)
 AddSTPGTest(array-ite.cpp)
 AddSTPGTest(b4-c2.cpp)
@@ -95,3 +96,5 @@ AddSTPGTest(fp-printing.cpp)
 AddSTPGTest(cadical.cpp)
 AddSTPGTest(new-expr-kinds.cpp)
 AddSTPGTest(varexpr-widths.cpp)
+AddSTPGTest(uninterpreted-functions-api.cpp)
+AddSTPGTest(uninterpreted-functions-handle-safety.cpp)

@@ -44,7 +44,8 @@ THE SOFTWARE.
 // same way whatever the sort. The shape of the refusal is the one this
 // interface already uses for a nonfatal misuse -- a diagnostic through the
 // handler vc_registerErrorHandler installs, and NULL -- which is what the
-// header documents for this call.
+// header documents for this call, and for the sibling entry point
+// vc_getUninterpretedFunctionValue.
 //
 // Note what is NOT being changed. A model read after a query that came back
 // VALID is a different question, with a different answer: the query was
