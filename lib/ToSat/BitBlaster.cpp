@@ -1013,9 +1013,13 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
       const BBNodeVec& thn = BBTerm(term[1], support);
       const BBNodeVec& els = BBTerm(term[2], support);
 
+      if (num_bits >= uf->bv_abstraction_width)
+        uf->coverage.bv_candidates[UserDefinedFlags::ABSTRACT_ITE]++;
+
       if (uf->bv_term_abstraction &&
           num_bits >= uf->bv_abstraction_width)
       {
+        uf->coverage.bv_abstracted[UserDefinedFlags::ABSTRACT_ITE]++;
         ensureProxyCIs(nf, term[1], thn, sideConstraints_);
         ensureProxyCIs(nf, term[2], els, sideConstraints_);
 
@@ -1129,6 +1133,49 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
     {
       assert(term.Degree() >= 1);
 
+      // The abstraction below takes two operands, and Flatten folds every
+      // chain of additions into one n-ary node, so an addition of three or
+      // more operands would reach the exact adder however wide it is -- the
+      // arity the front end happened to build would decide what gets
+      // abstracted, rather than the width floor that is meant to. Lower it to
+      // genuine two-operand nodes first, as BVMULT does, and only when the
+      // abstraction would take them, so a query that is not being abstracted
+      // keeps the n-ary adder it had. Addition is associative and commutative
+      // modulo 2^n, so the tree computes the same value; the sort keeps the
+      // shape it takes deterministic.
+      if (uf->bv_term_abstraction && uf->bvplus_variant &&
+          term.Degree() > 2 && num_bits >= uf->bv_abstraction_width)
+      {
+        std::deque<ASTNode> names(term.begin(), term.end());
+        std::sort(names.begin(), names.end(), stp::ExprLess{});
+        while (names.size() > 1)
+        {
+          ASTNode a = names.front();
+          names.pop_front();
+          ASTNode b = names.front();
+          names.pop_front();
+          names.push_back(ASTNF->CreateTerm(BVPLUS, num_bits, a, b));
+        }
+        result = BBTerm(names.front(), support);
+        break;
+      }
+
+      if (term.Degree() == 2 && num_bits >= uf->bv_abstraction_width)
+        uf->coverage.bv_candidates[UserDefinedFlags::ABSTRACT_PLUS]++;
+
+      // A wide n-ary addition that was not decomposed above -- because the
+      // abstraction is off -- still offered it the Degree-1 binary adds the
+      // decomposition would have made. Counting them keeps the candidate
+      // number comparable between a run with the flag and a run without,
+      // which is the whole use of it: a zero has to mean "no wide addition
+      // here", not "the flag that lowers them was off".
+      if (term.Degree() > 2 && num_bits >= uf->bv_abstraction_width &&
+          !(uf->bv_term_abstraction && uf->bvplus_variant))
+      {
+        uf->coverage.bv_candidates[UserDefinedFlags::ABSTRACT_PLUS] +=
+            term.Degree() - 1;
+      }
+
       if (uf->bv_term_abstraction &&
           uf->bvplus_variant &&
           term.Degree() == 2 &&
@@ -1165,6 +1212,7 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
             abstracted[i] = BBNodeAIG(Aig_ObjCreateCi(nf->aigMgr));
             abstracted[i].symbol_index = nf->aigMgr->vCis->nSize - 1;
           }
+          uf->coverage.bv_abstracted[UserDefinedFlags::ABSTRACT_PLUS]++;
           nf->symbolToBBNode[term] = abstracted;
           for (int i = 0; i < 2; i++)
             if (realOp[i].GetKind() != BVCONST)
@@ -1265,9 +1313,13 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
       updateTerm(term[0], mpcd1, support);
       assert(mpcd1.size() == mpcd2.size());
 
+      if (num_bits >= uf->bv_abstraction_width)
+        uf->coverage.bv_candidates[UserDefinedFlags::ABSTRACT_MULT]++;
+
       if (uf->bv_term_abstraction && uf->bv_term_abstraction_mult &&
           num_bits >= uf->bv_abstraction_width)
       {
+        uf->coverage.bv_abstracted[UserDefinedFlags::ABSTRACT_MULT]++;
         BBNodeVec op0 = ensureProxyCIs(nf, term[0], mpcd1, sideConstraints_);
         BBNodeVec op1 = ensureProxyCIs(nf, term[1], mpcd2, sideConstraints_);
 
@@ -1312,9 +1364,13 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
       assert(dvdd.size() == num_bits);
       assert(dvsr.size() == num_bits);
 
+      if (num_bits >= uf->bv_abstraction_width)
+        uf->coverage.bv_candidates[UserDefinedFlags::ABSTRACT_DIVMOD]++;
+
       if (uf->bv_term_abstraction && uf->bv_term_abstraction_mult &&
           num_bits >= uf->bv_abstraction_width)
       {
+        uf->coverage.bv_abstracted[UserDefinedFlags::ABSTRACT_DIVMOD]++;
         ensureProxyCIs(nf, term[0], dvdd, sideConstraints_);
         ensureProxyCIs(nf, term[1], dvsr, sideConstraints_);
 
@@ -1732,9 +1788,13 @@ const BBNode BitBlaster::BBForm(const ASTNode& form, BBNodeSet& support,
       const BBNodeVec right = BBTerm(form[1], support);
       assert(left.size() == right.size());
 
+      if (left.size() >= uf->bv_abstraction_width)
+        uf->coverage.bv_candidates[UserDefinedFlags::ABSTRACT_EQ]++;
+
       if (uf->bv_eq_abstraction &&
           left.size() >= uf->bv_abstraction_width)
       {
+        uf->coverage.bv_abstracted[UserDefinedFlags::ABSTRACT_EQ]++;
         ensureProxyCIs(nf, form[0], left, sideConstraints_);
         ensureProxyCIs(nf, form[1], right, sideConstraints_);
         BBNodeAIG abstractCI(Aig_ObjCreateCi(nf->aigMgr));
@@ -1758,12 +1818,16 @@ const BBNode BitBlaster::BBForm(const ASTNode& form, BBNodeSet& support,
     case BVSGT:
     case BVSLT:
     {
+      if (form[0].GetValueWidth() >= uf->bv_abstraction_width)
+        uf->coverage.bv_candidates[UserDefinedFlags::ABSTRACT_COMPARE]++;
+
       if (uf->bv_term_abstraction)
       {
         const BBNodeVec& left = BBTerm(form[0], support);
         const BBNodeVec& right = BBTerm(form[1], support);
         if (left.size() >= uf->bv_abstraction_width)
         {
+          uf->coverage.bv_abstracted[UserDefinedFlags::ABSTRACT_COMPARE]++;
           ensureProxyCIs(nf, form[0], left, sideConstraints_);
           ensureProxyCIs(nf, form[1], right, sideConstraints_);
           BBNodeAIG abstractCI(Aig_ObjCreateCi(nf->aigMgr));

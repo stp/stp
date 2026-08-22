@@ -522,6 +522,7 @@ void UFLowering::installEagerCongruence(
                 : premise.size() == 1
                       ? premise[0]
                       : factory->CreateNode(AND, premise);
+        manager_->UserFlags.coverage.uf_constraints_installed++;
         view.congruenceConstraints.push_back(
             premise.empty()
                 ? conclusion
@@ -542,6 +543,7 @@ void UFLowering::installEagerCongruence(
           stat.emittedInjectivity++;
           const ASTNode converse =
               factory->CreateNode(IMPLIES, conclusion, premiseConj);
+          manager_->UserFlags.coverage.uf_constraints_installed++;
           view.congruenceConstraints.push_back(
               guard.IsNull() ? converse
                              : factory->CreateNode(IMPLIES, guard, converse));
@@ -870,6 +872,7 @@ UFLowering::lowerCompletedRoot(const ASTNode& publicRoot,
         view.handleToResult.insert(
             std::make_pair(application, record.resultSymbol));
         view.applications.push_back(record);
+        manager_->UserFlags.coverage.uf_applications_lowered++;
         // A float result is solved as a packed bit-vector but the formula it
         // replaces expects a float, so it goes back in through the exact
         // inverse of the boundary its arguments came through: the three-child

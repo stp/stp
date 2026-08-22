@@ -186,6 +186,7 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
 
   BBNodeAIG BBFormula;
 
+  bm->UserFlags.coverage.queries_bitblasted++;
   bm->GetRunTimes()->start(RunTimes::BitBlasting);
 
   // Only BBForm() and the side-constraint fold below create AIG nodes, so

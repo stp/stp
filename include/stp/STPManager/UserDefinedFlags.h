@@ -578,6 +578,48 @@ public:
      difficulty_reversion = false;
   }
 
+  // What the encoding options above actually did, as against what they were
+  // allowed to do. Not settings: a caller that turns an abstraction on wants
+  // to know it engaged, and a flag that reached no eligible operation and a
+  // flag that is broken both abstract nothing -- only the candidate count
+  // tells them apart. Cumulative over the manager's lifetime, and read
+  // through vc_getCounter.
+  //
+  // Lives here rather than in STPMgr because the bit-blaster holds only these
+  // flags, and the sites that would have to be counted are all inside it.
+  struct EncodingCoverage
+  {
+    // One per abstractable node kind, indexed by AbstractionKind below.
+    static const unsigned KINDS = 6;
+    // Operations reaching the bit-blaster at or above bv_abstraction_width:
+    // what the abstraction could have taken, whether or not it was on.
+    uint64_t bv_candidates[KINDS] = {};
+    // ... and what it did take.
+    uint64_t bv_abstracted[KINDS] = {};
+    // Rounds the CEGAR refiner ran, and blocking lemmas it installed.
+    uint64_t bv_refinement_rounds = 0;
+    uint64_t bv_blocking_lemmas = 0;
+    // Uninterpreted-function applications the lowering decided, and the
+    // constraints it installed for them.
+    uint64_t uf_applications_lowered = 0;
+    uint64_t uf_constraints_installed = 0;
+    // Queries that reached bit-blasting at all: the denominator, without
+    // which a zero above cannot be told from a query the simplifier settled.
+    uint64_t queries_bitblasted = 0;
+  };
+
+  enum AbstractionKind
+  {
+    ABSTRACT_EQ = 0,
+    ABSTRACT_COMPARE,
+    ABSTRACT_ITE,
+    ABSTRACT_PLUS,
+    ABSTRACT_MULT,
+    ABSTRACT_DIVMOD
+  };
+
+  EncodingCoverage coverage;
+
   UserDefinedFlags()
   {
 #ifdef USE_CADICAL

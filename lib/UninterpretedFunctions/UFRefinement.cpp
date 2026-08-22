@@ -696,6 +696,7 @@ void encodeOneLemma(MutableAdapterState& state, const PendingLemma& entry,
     body.push_back(conclusion);
   addGuardedClause(solver, body, guardLiteral);
   state.emittedLemmaCount++;
+  state.manager->UserFlags.coverage.uf_constraints_installed++;
   // Observability under -s: every lemma that reaches this path was earned by
   // a refuted candidate; constraints installed eagerly during lowering do not
   // pass through here. One line per installation names the declaration and

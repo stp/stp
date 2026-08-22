@@ -48,6 +48,7 @@ unsigned BVAbstractionRefiner::refine(
   if (refined > 0)
   {
     refinements_ += refined;
+    bm->UserFlags.coverage.bv_refinement_rounds++;
     if (bm->UserFlags.stats_flag)
       std::cerr << "BV abstraction: refined " << refined << " operations"
                 << std::endl;
@@ -1147,6 +1148,7 @@ unsigned BVAbstractionRefiner::refineTerms(
       continue;
     }
     abs.blockedRounds++;
+    bm->UserFlags.coverage.bv_blocking_lemmas++;
 
     for (unsigned bit = 0; bit < W; ++bit)
     {

@@ -641,6 +641,58 @@ enum reason_unknown_t
   REASON_UNKNOWN_AIG_BUDGET
 };
 
+//! What the encoding options did to the queries this checker has run, as
+//! against what they were allowed to do. Cumulative over the checker's
+//! lifetime, so a caller samples the difference across a solve, or reads the
+//! totals once at the end of a session.
+//!
+//! A caller that enables an abstraction and wants to know it engaged needs
+//! both halves: CANDIDATES counts the operations that reached bit-blasting at
+//! or above BV_ABSTRACTION_WIDTH -- what the abstraction could have taken,
+//! whether or not it was on -- and ABSTRACTED counts what it did take. Zero
+//! of both means the query never built an operation wide enough, or never
+//! reached the bit-blaster at all, which QUERIES_BITBLASTED tells apart.
+enum stp_counter_t
+{
+  //! Queries that reached bit-blasting. A query the simplifier settled never
+  //! gets there, and none of the counters below can move for it.
+  STP_COUNTER_QUERIES_BITBLASTED = 0,
+
+  //! Wide operations reaching the bit-blaster, by kind.
+  STP_COUNTER_BV_CANDIDATES_EQ,
+  STP_COUNTER_BV_CANDIDATES_COMPARE,
+  STP_COUNTER_BV_CANDIDATES_ITE,
+  STP_COUNTER_BV_CANDIDATES_PLUS,
+  STP_COUNTER_BV_CANDIDATES_MULT,
+  STP_COUNTER_BV_CANDIDATES_DIVMOD,
+
+  //! ... and the ones actually replaced by a fresh input.
+  STP_COUNTER_BV_ABSTRACTED_EQ,
+  STP_COUNTER_BV_ABSTRACTED_COMPARE,
+  STP_COUNTER_BV_ABSTRACTED_ITE,
+  STP_COUNTER_BV_ABSTRACTED_PLUS,
+  STP_COUNTER_BV_ABSTRACTED_MULT,
+  STP_COUNTER_BV_ABSTRACTED_DIVMOD,
+
+  //! Rounds the CEGAR refiner ran, and blocking lemmas it installed for an
+  //! abstracted BVMULT, BVDIV or BVMOD.
+  STP_COUNTER_BV_REFINEMENT_ROUNDS,
+  STP_COUNTER_BV_BLOCKING_LEMMAS,
+
+  //! Uninterpreted-function applications the lowering decided, and the
+  //! constraints installed for them -- eagerly during lowering, or by the
+  //! refinement that a refuted candidate earned.
+  STP_COUNTER_UF_APPLICATIONS_LOWERED,
+  STP_COUNTER_UF_CONSTRAINTS_INSTALLED
+};
+
+//! \brief Reads one of the counters above.
+//!
+//! An unrecognised counter reads 0 and reports a nonfatal diagnostic, so a
+//! caller built against a later header keeps working against an earlier
+//! library.
+DLL_PUBLIC unsigned long long vc_getCounter(VC vc, enum stp_counter_t counter);
+
 //! \brief Returns why the last query had no answer.
 //!
 //! Meaningful after vc_query returns 3; REASON_UNKNOWN_NONE at any other
