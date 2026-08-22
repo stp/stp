@@ -154,6 +154,87 @@ bool numberOfReadsLessThan(const ASTNode& n, int limit)
   }
 }
 
+// A bounded estimate of eager array Ackermannisation's structural cost.
+//
+// The read count the policy gates on is a proxy for how much the transform
+// builds, and it is a bad one: a read whose array operand is a chain of
+// WRITEs becomes one if-then-else per link in that chain, so nine reads over a
+// four-thousand-deep store chain add thirty-six thousand nodes beyond the
+// flat-array baseline. Measured, that is the difference between 0.12s and 5.8s
+// on the same query -- the eager path is 48x SLOWER there than leaving it to
+// read refinement.
+//
+// So this charges each distinct read for the WRITE and array-valued ITE nodes
+// reachable beneath its array operand, and stops as soon as the bound is
+// reached. It says nothing about the index-equality axioms the transform also
+// builds; it is the structural term that makes the difference between a cheap
+// eager expansion and a catastrophic one.
+bool arrayEagerCostLessThan(const ASTNode& n, uint64_t limit)
+{
+  if (limit == 0)
+    return false;
+
+  uint64_t cost = 0;
+  const auto charge = [&]() {
+    // The predicate is strict. Checking before incrementing also avoids
+    // wrapping when a caller supplies the largest possible bound.
+    if (cost >= limit - 1)
+      return false;
+    ++cost;
+    return true;
+  };
+
+  // Charge the structural expansion under one read. The transform pushes a
+  // read through both branches of an array-valued ITE, so both branches must
+  // be visited: following only one makes the policy depend on branch order.
+  // Shared array nodes are charged once per read, matching the transform map's
+  // sharing, while a shared spine reached by different reads is charged once
+  // for each read because each index produces its own expansion.
+  const auto chargeExpansion = [&](const ASTNode& start) {
+    std::unordered_set<uint64_t> expanded;
+    std::vector<ASTNode> pending(1, start);
+    while (!pending.empty())
+    {
+      const ASTNode current = pending.back();
+      pending.pop_back();
+      const auto kind = current.GetKind();
+      const bool arrayIte = kind == ITE && current.GetIndexWidth() > 0;
+      if ((kind != WRITE && !arrayIte) ||
+          !expanded.insert(current.GetNodeNum()).second)
+        continue;
+
+      if (!charge())
+        return false;
+      if (kind == WRITE)
+        pending.push_back(current[0]);
+      else
+      {
+        pending.push_back(current[1]);
+        pending.push_back(current[2]);
+      }
+    }
+    return true;
+  };
+
+  std::unordered_set<uint64_t> visited;
+  std::vector<ASTNode> pending(1, n);
+  while (!pending.empty())
+  {
+    const ASTNode current = pending.back();
+    pending.pop_back();
+    if (current.isAtom() || !visited.insert(current.GetNodeNum()).second)
+      continue;
+    if (current.GetKind() == READ)
+    {
+      if (!charge() || !chargeExpansion(current[0]))
+        return false;
+    }
+    for (size_t i = 0; i < current.Degree(); ++i)
+      pending.push_back(current[i]);
+  }
+  return true;
+}
+
 // See the declaration for why this exists: constants of one value need
 // not be one node, because a floating-point constant interns apart from
 // the plain constant with its bits.
