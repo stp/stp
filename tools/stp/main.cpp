@@ -362,6 +362,22 @@ void ExtraMain::create_options()
                  "one-lemma-per-round reference profile)")
       ->group(refinement_group)
       ->capture_default_str();
+  app.add_option("--uf-sort-width", bm->UserFlags.uf_sort_width,
+                 "bit-vector width given to a sort introduced by "
+                 "(declare-sort S 0); it bounds how many elements of that "
+                 "sort a query can tell apart, so a larger value is always "
+                 "sound and only a smaller one is not")
+      ->group(refinement_group)
+      // Bounded because both ends were reachable and neither failed cleanly.
+      // Zero made every element of the sort a zero-width term, which the
+      // legacy width checks read as a Boolean -- an abort on an asserting
+      // build and a silently retyped model otherwise. The top end overflows
+      // the (width + 63) / 64 word arithmetic the bit-vector layer is built
+      // on and answered unsat for two elements of an unbounded sort. The
+      // ceiling is well above any carrier a query can exhaust: 1024 bits
+      // distinguishes more elements than a query can name.
+      ->check(CLI::Range(1u, 1024u))
+      ->capture_default_str();
   const char* const bb_group = "Bit-blasting options";
   bool_arg("--bb.div-v1", bm->UserFlags.division_variant_1,
            "unsigned division encoding variant 1", bb_group);

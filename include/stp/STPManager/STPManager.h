@@ -161,6 +161,20 @@ public:
   UnknownReason unknown_reason = UnknownReason::None;
   std::string unknown_detail;
 
+  // One named element of a declared sort: the sort, the name the model gives
+  // it, and the carrier pattern it stands for.
+  struct UninterpretedElement
+  {
+    SourceSort sort;
+    std::string name;
+    ASTNode carrier;
+  };
+
+  // See uninterpretedElementName. Public because it is model state, not
+  // solver state, and the printers are its only readers.
+  std::vector<UninterpretedElement> uninterpreted_elements;
+  std::vector<SourceSort> uninterpreted_sorts_printed;
+
   void noteUnknown(UnknownReason reason, const std::string& detail = "")
   {
     unknown_reason = reason;
@@ -454,6 +468,58 @@ public:
   // when every mode equality is false -- a sixth, non-IEEE mode. Accepting a
   // bare (_ BitVec 5) there let an input compute under it.
   bool isRoundingModeSortedTerm(const ASTNode& n) const;
+
+  // Whether `n` denotes a value of a sort introduced by (declare-sort S 0).
+  // Named alongside the RoundingMode predicate above so the places that have
+  // to discriminate on a source sort stay findable from one another.
+  bool isUninterpretedSortedTerm(const ASTNode& n) const;
+
+  // ── Model vocabulary for declared sorts ───────────────────────────
+  //
+  // An element of a sort introduced by declare-sort has no literal. Its
+  // carrier pattern is not one: printing #x0000 for it would name a
+  // bit-vector, which is the sort the whole representation exists to say it
+  // is not. SMT-LIB's answer, and every solver's, is to give the elements
+  // names and let distinct names denote distinct elements -- so a model
+  // declares the sort, declares one constant per element it mentions, and
+  // refers to those.
+  //
+  // Names are handed out per sort in first-request order, so the same solve
+  // always prints the same model and two solves of the same query agree.
+  // Reset with the counterexample.
+  std::string uninterpretedElementName(const SourceSort& sort,
+                                       const ASTNode& carrier);
+
+  // Every (sort, element name, carrier) the model has named so far, in the
+  // order the names were issued. What the model's preamble is printed from.
+  const std::vector<UninterpretedElement>& uninterpretedElements() const
+  {
+    return uninterpreted_elements;
+  }
+
+  // Declared sorts the model has printed anywhere, element or not. A sort can
+  // reach the text through a function signature alone -- a predicate over an
+  // opaque sort is the commonest such shape -- and a model that used the sort
+  // without declaring it cannot be read back.
+  void noteUninterpretedSortPrinted(const SourceSort& sort)
+  {
+    if (sort.kind() != SourceSort::Kind::Uninterpreted)
+      return;
+    for (const SourceSort& seen : uninterpreted_sorts_printed)
+      if (seen == sort)
+        return;
+    uninterpreted_sorts_printed.push_back(sort);
+  }
+  const std::vector<SourceSort>& uninterpretedSortsPrinted() const
+  {
+    return uninterpreted_sorts_printed;
+  }
+
+  void clearUninterpretedElements()
+  {
+    uninterpreted_elements.clear();
+    uninterpreted_sorts_printed.clear();
+  }
 
   DLL_PUBLIC ASTNode CreateFPSpecialConst(FPSpecial which, unsigned exp_width,
                                           unsigned sig_width);

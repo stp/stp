@@ -2285,6 +2285,14 @@ void AbsRefine_CounterExample::PrintSMTLIB2(std::ostream& os, const ASTNode& n)
     // bit-vector literal where an operand of floating-point sort is expected.
     printer::outputFloatingPointSMTLIB2(TermToConstTermUsingModel(n, false),
                                         os, n);
+  else if (bm->isUninterpretedSortedTerm(n))
+    // As in outputLine: an element of a declared sort has a name in the
+    // model, not a carrier pattern. get-value must agree with get-model or a
+    // caller is handed a bit-vector literal where a term of the sort belongs.
+    os << "|"
+       << bm->uninterpretedElementName(n.GetSourceSort(),
+                                       TermToConstTermUsingModel(n, false))
+       << "|";
   else if (n.GetType() == stp::BITVECTOR_TYPE)
     printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(n, false), os);
   else
@@ -2333,6 +2341,19 @@ void AbsRefine_CounterExample::outputLine(std::ostream& os, const ASTNode &f, AS
           os << name;
         else
           printer::outputBitVecSMTLIB2(v, os);
+      }
+      else if (bm->isUninterpretedSortedTerm(f))
+      {
+        // At the sort the query declared, and named, not numbered: the carrier
+        // pattern is not a literal of this sort, and printing one would name a
+        // bit-vector -- the one thing the sort exists to say it is not. The
+        // element names are declared in the model's preamble.
+        bm->noteUninterpretedSortPrinted(f.GetSourceSort());
+        os << " () " << sourceSortToSMTLib(f.GetSourceSort()) << " |"
+           << bm->uninterpretedElementName(
+                  f.GetSourceSort(),
+                  TermToConstTermUsingModel(se, false))
+           << "|";
       }
       else if (f.GetType() == stp::BITVECTOR_TYPE)
       {

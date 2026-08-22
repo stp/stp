@@ -201,6 +201,21 @@ public:
   // the one-lemma-per-round reference profile.
   unsigned uf_lemmas_per_round = 8;
 
+  // The carrier width given to a sort introduced by (declare-sort S 0).
+  //
+  // An uninterpreted sort has no operations but equality, so a query
+  // mentioning k terms of that sort is satisfiable exactly when it is
+  // satisfiable over a domain of k elements. Any carrier with at least k
+  // values therefore answers it, and a carrier with more values than the
+  // query can distinguish costs only the bits nothing constrains -- so
+  // over-approximating is sound and only under-approximating is not.
+  //
+  // The width has to be fixed when the sort is declared, before any term of
+  // it exists, so it cannot be derived from k. 16 bits admits 65536 distinct
+  // elements, which is far beyond the number of terms of a single
+  // uninterpreted sort in practice; raise it if a query ever needs more.
+  unsigned uf_sort_width = 16;
+
   // Replace a (distinct x1 ... xn) whose operands are variables occurring
   // nowhere else with the strict chain x1 < x2 < ... < xn. Every permutation
   // of such operands maps the formula to itself, so fixing one of the n!

@@ -520,6 +520,17 @@ ASTNode STPMgr::LiftSourceValue(const ASTNode& carrier,
           carrier.GetValueWidth() != source_sort.bitVectorWidth())
         FatalError("LiftSourceValue: invalid bitvector carrier: ", carrier);
       return carrier;
+    case SourceSort::Kind::Uninterpreted:
+      // Returned unchanged, like a bit-vector and unlike a float or a rounding
+      // mode: bit equality on the carrier *is* this sort's equality, so the
+      // carrier pattern is the element and there is nothing to lift it into.
+      // Which element of the sort a given pattern denotes is a question for the
+      // printer, not for this function.
+      if (carrier.GetKind() != BVCONST ||
+          carrier.GetValueWidth() != source_sort.packedWidth())
+        FatalError("LiftSourceValue: invalid uninterpreted-sort carrier: ",
+                   carrier);
+      return carrier;
     default:
       FatalError("LiftSourceValue: cannot lift this source sort");
   }
@@ -542,6 +553,54 @@ ASTNode STPMgr::roundingModeValidConstraint(const ASTNode& s)
 bool STPMgr::isRoundingModeSortedTerm(const ASTNode& n) const
 {
   return n.GetSourceSort().kind() == SourceSort::Kind::RoundingMode;
+}
+
+bool STPMgr::isUninterpretedSortedTerm(const ASTNode& n) const
+{
+  return n.GetSourceSort().kind() == SourceSort::Kind::Uninterpreted;
+}
+
+std::string STPMgr::uninterpretedElementName(const SourceSort& sort,
+                                            const ASTNode& carrier)
+{
+  assert(sort.kind() == SourceSort::Kind::Uninterpreted);
+  for (const UninterpretedElement& element : uninterpreted_elements)
+    if (element.sort == sort && element.carrier == carrier)
+      return element.name;
+
+  // Numbered per sort rather than globally, so a model reads as one sort's
+  // elements enumerated from zero and does not change when an unrelated sort
+  // gains an element.
+  size_t ordinal = 0;
+  for (const UninterpretedElement& element : uninterpreted_elements)
+    if (element.sort == sort)
+      ordinal++;
+
+  // The name has to be one nothing else in this query answers to, because the
+  // model declares it as a fresh constant: an input free to declare |S!0|
+  // itself would get a model that both invents S!0 and defines the input's own
+  // S!0 as something else, and reading it back is then a redeclaration. Step
+  // past any name already taken rather than assume the shape is private.
+  const std::string base = uninterpretedSortName(sort.uninterpretedId()) + "!";
+  std::string name;
+  while (true)
+  {
+    name = base + std::to_string(ordinal);
+    bool taken = LookupSymbol(name.c_str());
+    for (const UninterpretedElement& element : uninterpreted_elements)
+      taken = taken || element.name == name;
+    if (!taken)
+      break;
+    ordinal++;
+  }
+
+  UninterpretedElement fresh;
+  fresh.sort = sort;
+  fresh.name = name;
+  fresh.carrier = carrier;
+  uninterpreted_elements.push_back(fresh);
+  noteUninterpretedSortPrinted(sort);
+  return fresh.name;
 }
 
 ASTNode STPMgr::arrayBaseSymbol(const ASTNode& arr) const
@@ -973,6 +1032,8 @@ STPMgr::~STPMgr()
   // unindexes its name, ASTInterior::CleanUp erases from the interior table),
   // and the implicit member-destruction phase runs after those tables are gone.
   distinctGroups.clear();
+  uninterpreted_elements.clear();
+  uninterpreted_sorts_printed.clear();
 
   Introduced_SymbolsSet.clear();
   _symbol_unique_table.clear();

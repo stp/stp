@@ -173,6 +173,12 @@ public:
       case SourceSort::Kind::RoundingMode:
         _value_width = _source_sort.packedWidth();
         break;
+      case SourceSort::Kind::Uninterpreted:
+        // Its carrier, exactly as RoundingMode takes its carrier. Missing this
+        // arm leaves the width at zero, which the legacy width checks read as
+        // a Boolean -- and locally that is a warning, not an error.
+        _value_width = _source_sort.packedWidth();
+        break;
       case SourceSort::Kind::Array:
         _index_width = _source_sort.index().packedWidth();
         _value_width = _source_sort.element().packedWidth();
