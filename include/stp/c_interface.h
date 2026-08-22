@@ -257,6 +257,32 @@ enum ifaceflag_t
   //!
   UF_NARROW_RESULTS,
 
+  //! Assert injectivity for equality-only UF declarations in the eager
+  //! congruence encoding, so that equal results force equal arguments.
+  //!
+  //! `param_value` nonzero enables, zero disables (the default). This is the
+  //! C API's way to reach --uf-inject-args.
+  //!
+  //! Injectivity is an assumption the query did not make, so the encoding
+  //! describes the query with that assumption conjoined. Only models are lost
+  //! by that, never gained, which is why the two answers are not treated
+  //! alike: a `sat` is a genuine model of the query, while an `unsat` refutes
+  //! only the strengthened query.
+  //!
+  //! STP therefore installs the assumption retractably and settles the
+  //! question itself -- a refutation that used it is taken back and the query
+  //! decided without it -- so vc_query answers the same thing with this flag
+  //! set as without it. It is a search hint, not a change of semantics.
+  //!
+  //! What it buys is faster model-finding on a query whose functions are
+  //! injective anyway. What it costs is a second search on a query where the
+  //! assumption turns out to be wrong, so it is worth setting for the shape
+  //! it suits and not as a general optimisation.
+  //!
+  //! Set this before the query it should apply to, as for UF_NARROW_RESULTS.
+  //!
+  UF_EQUALITY_INJECTIVITY,
+
   //! How many congruence lemmas one refuted candidate may install during
   //! uninterpreted-function refinement (default 8).
   //!
@@ -518,7 +544,7 @@ enum reason_unknown_t
   //! Something stopped before an answer and has no value of its own here yet.
   //! vc_getReasonUnknownToBuffer gives the sentence, which says what.
   //!
-  //! The one below was this until it was named, and is appended rather
+  //! The two below were this until they were named, and are appended rather
   //! than inserted so that nothing already reporting as incomplete moves. A
   //! caller that has not heard of a later addition compares unequal to every
   //! value it knows and still has the sentence to fall back on, which is what
@@ -534,8 +560,20 @@ enum reason_unknown_t
   //! here are built by vc_boolType, vc_bvType, vc_fpType and
   //! vc_fpRoundingModeType. Named for what it is so that reading the sentence
   //! is not the only way to know it, if that ever changes.
-  REASON_UNKNOWN_CARRIER_EXHAUSTED
+  REASON_UNKNOWN_CARRIER_EXHAUSTED,
 
+  //! UF_EQUALITY_INJECTIVITY put injectivity into the encoding, and the driver
+  //! holding the verdict could neither confirm nor take back a refutation that
+  //! may rest on it, so the unsat was withheld rather than reported. Clearing
+  //! that flag and asking again decides the query.
+  //!
+  //! Not reachable through either shipped driver today: both install the
+  //! assumption behind an activation literal, ask the search whether the
+  //! refutation used it, and decide the query without it when it did. Named
+  //! for what it is because it is the floor those drivers would fall to, and
+  //! because a caller reading a value it does not recognise is better served
+  //! than one reading `unsat`.
+  REASON_UNKNOWN_ASSUMED_INJECTIVITY
 };
 
 //! \brief Returns why the last query had no answer.
@@ -553,9 +591,10 @@ DLL_PUBLIC enum reason_unknown_t vc_getReasonUnknown(VC vc);
 //! 'len'. It is the responsibility of the caller to free the memory
 //! afterwards.
 //!
-//! REASON_UNKNOWN_INCOMPLETE and REASON_UNKNOWN_CARRIER_EXHAUSTED carry a
-//! sentence, saying what was reached; the causes their name alone is enough
-//! to act on write an empty string. Prose for a person to read: a caller deciding
+//! REASON_UNKNOWN_INCOMPLETE, REASON_UNKNOWN_CARRIER_EXHAUSTED and
+//! REASON_UNKNOWN_ASSUMED_INJECTIVITY carry a sentence, saying what was
+//! reached or what was assumed; the causes their name alone is enough to act
+//! on write an empty string. Prose for a person to read: a caller deciding
 //! what to do next wants vc_getReasonUnknown, which is why the two are
 //! separate.
 DLL_PUBLIC void vc_getReasonUnknownToBuffer(VC vc, char** buf, size_t* len);

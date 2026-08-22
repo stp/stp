@@ -207,6 +207,165 @@ public:
     unknown_detail.clear();
   }
 
+  // How much injectivity --uf-inject-args put into the encoding this solve is
+  // about to run over, recorded by UF lowering. Zero whenever the flag is off,
+  // and also whenever it is on but no declaration qualified -- an encoding
+  // nothing was assumed about is an encoding whose unsat means what it says.
+  uint64_t uf_injectivity_assumed = 0;
+  uint64_t uf_injectivity_declarations = 0;
+  // The activation symbol those implications sit behind, when there is one.
+  // A driver that can assume it holds the assumption retractably and never
+  // has to withhold anything; one that cannot is back to the rule below.
+  ASTNode uf_injectivity_guard;
+
+  void noteInjectivityAssumed(uint64_t implications, uint64_t declarations,
+                              const ASTNode& guard)
+  {
+    uf_injectivity_assumed += implications;
+    uf_injectivity_declarations += declarations;
+    if (!guard.IsNull())
+      uf_injectivity_guard = guard;
+  }
+
+  // Called at the top of a solve, by the driver that is about to build the
+  // encoding. The record describes one solve's encoding, not the session.
+  void clearInjectivityAssumed()
+  {
+    uf_injectivity_assumed = 0;
+    uf_injectivity_declarations = 0;
+    uf_injectivity_guard = ASTNode();
+  }
+
+  // One driver's hold on the injectivity assumption for one encoding: the
+  // literal it assumes, and whether this solve has already given it up.
+  struct InjectivityAssumption
+  {
+    // ~0u until a driver has resolved the guard symbol to a SAT variable;
+    // a guard that never reached one is simply never assumed, and then the
+    // implications behind it are vacuous, which is the safe direction.
+    unsigned variable = ~((unsigned)0);
+    bool assumed = false;
+    bool retracted = false;
+
+    bool holding() const { return assumed && !retracted; }
+
+    // Push the guard, positively, as the LAST assumption -- which is what
+    // makes retracting it a pop. A guard with no variable, or one already
+    // given up on this solve, adds nothing and leaves the implications
+    // behind it vacuous.
+    void assumeInto(SATSolver::vec_literals& assumps)
+    {
+      if (variable == ~((unsigned)0) || retracted)
+        return;
+      assumps.push(SATSolver::mkLit(variable, false));
+      assumed = true;
+    }
+  };
+
+  // Solve, and take the assumption back if the refutation rested on it.
+  //
+  // The assumption is an under-approximation, so its `sat` is a real model of
+  // the query and needs nothing done to it. Its `unsat` is a refutation of the
+  // query strengthened by injectivity, which is two different things depending
+  // on whether the strengthening was used:
+  //
+  //   - the guard is not among the failed assumptions: the refutation rests
+  //     only on the query, on congruence (which the query entails) and on the
+  //     naming definitions (a conservative extension). It is a refutation of
+  //     the query. Report it, and drop the record so nothing withholds it.
+  //   - the guard is among them: it may be an artefact. Withdraw the guard --
+  //     which the solver then satisfies by making it false, so every
+  //     implication behind it goes vacuous -- and search again. The second
+  //     answer is about the query alone, whichever way it goes.
+  //
+  // Two searches at most, on one encoding, with every clause retained. A
+  // backend that cannot answer which assumptions failed reports all of them,
+  // which costs the first case and leaves the second correct.
+  //
+  // `assumps` must carry the guard literal LAST, because retracting is a pop.
+  bool solveRetractingInjectivity(SATSolver& solver,
+                                  SATSolver::vec_literals& assumps,
+                                  InjectivityAssumption& state)
+  {
+    const bool holding = state.holding();
+    bool sat = assumps.size() > 0
+                   ? solver.solveWithAssumptions(assumps, soft_timeout_expired)
+                   : solver.solve(soft_timeout_expired);
+    if (sat || !holding || soft_timeout_expired)
+      return sat;
+
+    std::vector<int> failed;
+    solver.unsatAssumptions(assumps, failed);
+    const uint32_t guardLit = SATSolver::mkLit(state.variable, false).x;
+    bool guardFailed = false;
+    for (size_t i = 0; i < failed.size(); ++i)
+      guardFailed = guardFailed || (uint32_t)failed[i] == guardLit;
+
+    if (!guardFailed)
+    {
+      // A refutation that never needed the assumption. The query is
+      // unsatisfiable on its own account.
+      if (UserFlags.stats_flag)
+        std::cerr << "UF: injectivity assumption not in the refutation, "
+                  << "unsat stands" << std::endl;
+      uf_injectivity_assumed = 0;
+      return false;
+    }
+
+    if (UserFlags.stats_flag)
+      std::cerr << "UF: refutation used the injectivity assumption, "
+                << "retracting " << uf_injectivity_assumed
+                << " implication(s) and re-solving" << std::endl;
+    state.retracted = true;
+    assert(assumps.size() > 0);
+    assumps.pop();
+    uf_injectivity_assumed = 0;
+    return assumps.size() > 0
+               ? solver.solveWithAssumptions(assumps, soft_timeout_expired)
+               : solver.solve(soft_timeout_expired);
+  }
+
+  // The floor: what a driver leaves with when it holds an unsat and nobody has
+  // established whose refutation it is. Both shipped drivers do establish that
+  // -- solveRetractingInjectivity asks the search, and each driver runs the
+  // query again without the flag when the search never got to be asked -- so
+  // this is unreachable through them. It stays because it is the rule that
+  // says what uf_injectivity_assumed MEANS, and because a driver that forgets
+  // to close the question should report no answer rather than a refutation it
+  // cannot attribute.
+  //
+  // Congruence is entailed by the query, so every other constraint UF lowering
+  // installs preserves both answers. The converse implication --uf-inject-args
+  // installs is not: it asserts that a declaration is injective, which the
+  // caller never wrote, and it can only remove models. That makes the two
+  // answers unequal in standing. `sat` is sound whatever was assumed -- a model
+  // of the strengthened formula is a model of the query, conjuncts having only
+  // been added -- and is kept. `unsat` refutes the query with injectivity on
+  // top of it, which is not the query, and nothing in the output would tell
+  // that from a refutation. So it is withheld, exactly as an unsat reached over
+  // a carrier too narrow for the query is withheld.
+  //
+  // Lives here rather than in one driver so that the batch pipeline and the
+  // incremental driver answer the question the same way, and so that the rule
+  // is stated once.
+  SOLVER_RETURN_TYPE withholdAssumedUnsat(SOLVER_RETURN_TYPE result)
+  {
+    if (result != SOLVER_UNSATISFIABLE || uf_injectivity_assumed == 0)
+      return result;
+    noteUnknown(UnknownReason::AssumedInjectivity,
+                "--uf-inject-args assumed " +
+                    std::to_string(uf_injectivity_declarations) +
+                    " uninterpreted function(s) injective, adding " +
+                    std::to_string(uf_injectivity_assumed) +
+                    " implication(s) the query does not entail, so this unsat "
+                    "may be an artefact of that assumption rather than a "
+                    "refutation; re-run without --uf-inject-args to decide the "
+                    "query");
+    // SOLVER_TIMEOUT is what every way of giving up returns; which cause it
+    // was is a question for (get-info :reason-unknown), recorded just above.
+    return SOLVER_TIMEOUT;
+  }
+
   // No nodes should already have the iteration number that is returned from
   // here. This never returns zero.
   uint8_t getNextIteration()

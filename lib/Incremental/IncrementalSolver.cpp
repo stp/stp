@@ -215,8 +215,38 @@ SOLVER_RETURN_TYPE IncrementalSolver::checkSat(const ASTVec& assertionsSMT2,
   }
 
   impl->beginProfile(assertionsSMT2.size());
-  const SOLVER_RETURN_TYPE result = checkSatBody(
+  // What the encoding assumed on its own account belongs to the solve that is
+  // about to build it. The exact-stack route lowers the whole active stack
+  // whenever any level applies an uninterpreted function, so what this solve
+  // records is what this solve's block asserts.
+  impl->bm->clearInjectivityAssumed();
+  impl->injectivity = STPMgr::InjectivityAssumption();
+  SOLVER_RETURN_TYPE result = checkSatBody(
       assertionsSMT2, assumeLastLevelPerConjunct, firstForcedIncrementalSolve);
+
+  // As in STP::TopLevelSTP, and for the same reason. The search settles for
+  // itself whether a refutation used the injectivity --uf-inject-args
+  // assumed, because the implications sit behind an assumption it can be
+  // asked about and can withdraw. A block that scoped preprocessing proved
+  // false never got that far, and preprocessing saw the strengthened block,
+  // so the record is still standing and there is nothing left to interrogate.
+  // Ask the only remaining question: decide the stack again with the flag
+  // off. The second answer is about the query alone whichever way it goes.
+  if (result == SOLVER_UNSATISFIABLE && impl->bm->uf_injectivity_assumed != 0)
+  {
+    if (impl->bm->UserFlags.stats_flag)
+      std::cerr << "UF: refuted before the search could be asked about the "
+                << "injectivity assumption, deciding the stack without it"
+                << std::endl;
+    const bool saved = impl->bm->UserFlags.uf_inject_args;
+    impl->bm->UserFlags.uf_inject_args = false;
+    impl->bm->clearInjectivityAssumed();
+    impl->injectivity = STPMgr::InjectivityAssumption();
+    // Never a forced first solve: the run above has already engaged.
+    result = checkSatBody(assertionsSMT2, assumeLastLevelPerConjunct, false);
+    impl->bm->UserFlags.uf_inject_args = saved;
+    impl->bm->clearInjectivityAssumed();
+  }
   impl->finishProfile();
   // The driver has its own encoding path and never enters the batch
   // refinement loop, so the batch pipeline's report never runs here;
@@ -224,7 +254,10 @@ SOLVER_RETURN_TYPE IncrementalSolver::checkSat(const ASTVec& assertionsSMT2,
   // that accumulates the most of them.
   if (ExtensionalityContext* ext = impl->bm->getExtensionalityIfAny())
     ext->reportLemmaStats();
-  return result;
+  // Before the caller sees it, and before the frontend's core-aware cache
+  // records it: an unsat that --uf-inject-args may have caused must not be
+  // remembered as one either.
+  return impl->bm->withholdAssumedUnsat(result);
 }
 
 void IncrementalSolver::materializePendingModel()

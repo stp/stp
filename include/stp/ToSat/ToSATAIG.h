@@ -63,6 +63,18 @@ private:
 
   bool runSolver(SATSolver& satSolver);
   void handle_cnf_options(Cnf_Dat_t* cnfData, bool needAbsRef);
+
+  // Resolve the injectivity guard to a SAT variable and decide how it is
+  // held: assumed (and so retractable) on a backend that can assume, and
+  // asserted as a unit otherwise. Called once, with the rest of the
+  // freezing, so that every refinement round after it holds the same thing.
+  void bind_injectivity_guard(SATSolver& satSolver);
+
+  // The guard's variable and whether this query is still holding it. Lives
+  // on the lowering rather than on the manager because retraction is a
+  // property of one encoding, and the batch pipeline builds a fresh one per
+  // query.
+  STPMgr::InjectivityAssumption injectivity_;
  
   int count;
   bool first;

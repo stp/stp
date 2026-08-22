@@ -69,6 +69,7 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
     cb = NULL;
     assert(satSolver.nVars() == 0);
     mark_variables_as_frozen(satSolver);
+    bind_injectivity_guard(satSolver);
     return runSolver(satSolver);
   }
 
@@ -93,8 +94,46 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
   release_cnf_memory(cnfData);
 
   mark_variables_as_frozen(satSolver);
+  bind_injectivity_guard(satSolver);
 
   return runSolver(satSolver);
+}
+
+// Decide how this encoding holds the injectivity guard, once, with the rest of
+// the freezing -- so that every refinement round after it holds the same thing.
+//
+// Leaving the manager's record alone is deliberate. That record means "nobody
+// has established that an unsat here belongs to the query", and only the two
+// places that can establish it -- solveRetractingInjectivity, which asks the
+// solver, and the second pipeline run in TopLevelSTP -- may clear it. A guard
+// this function cannot bind is a guard nothing asked about.
+void ToSATAIG::bind_injectivity_guard(SATSolver& satSolver)
+{
+  if (bm->uf_injectivity_guard.IsNull() || injectivity_.assumed ||
+      injectivity_.retracted)
+    return;
+
+  const ASTNodeToSATVar::const_iterator found =
+      nodeToSATVar.find(bm->uf_injectivity_guard);
+  if (found == nodeToSATVar.end() || found->second.empty() ||
+      found->second[0] == ~((unsigned)0))
+    return; // never reached a variable; the second run decides the query
+
+  satSolver.setFrozen(found->second[0]);
+
+  if (satSolver.supportsAssumptions())
+  {
+    injectivity_.variable = found->second[0];
+    return;
+  }
+
+  // No retraction on this backend, so the guard cannot be an abstraction
+  // here. Assert it instead, which restores the plain strengthened encoding,
+  // and leave the record standing so the verdict rule withholds an unsat over
+  // it rather than reporting one nobody can take back.
+  SATSolver::vec_literals unit;
+  unit.push(SATSolver::mkLit(found->second[0], false));
+  satSolver.addClause(unit);
 }
 
 void ToSATAIG::release_cnf_memory(Cnf_Dat_t* cnfData)
@@ -485,7 +524,14 @@ void ToSATAIG::suggest_uf_scalar_phases(SATSolver& satSolver)
 bool ToSATAIG::runSolver(SATSolver& satSolver)
 {
   bm->GetRunTimes()->start(RunTimes::Solving);
-  bool result = satSolver.solve(bm->soft_timeout_expired);
+  // The injectivity guard is the only assumption the batch pipeline makes,
+  // and it is rebuilt on every round because a round that retracted it must
+  // not put it back. Every other clause in this encoding is asserted, so an
+  // empty vector here is the ordinary case and the helper solves plainly.
+  SATSolver::vec_literals assumps;
+  injectivity_.assumeInto(assumps);
+  bool result =
+      bm->solveRetractingInjectivity(satSolver, assumps, injectivity_);
   bm->GetRunTimes()->stop(RunTimes::Solving);
 
   if (bm->soft_timeout_expired)
