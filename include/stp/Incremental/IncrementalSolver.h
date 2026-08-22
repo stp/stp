@@ -45,6 +45,10 @@ THE SOFTWARE.
 // and pops by construction. A memory-relief rebuild rotates the complete
 // semantic/AIG epoch and reconstructs only the live stack, bounding dead
 // historical state; SAT-only policy rebuilds retain the AIG epoch.
+// Whole-formula, satisfiability-only rewrites such as DISTINCT ordering also
+// ride one assumed completed root. Their occurrence guards are re-evaluated
+// against every active snapshot, so a later assertion retracts a symmetry
+// choice without requiring clause deletion.
 //
 // The whole input language is covered -- plain bit-vectors, arrays (lazy
 // refinement or --ackermanize), floating point, and --array-equality --
@@ -211,8 +215,10 @@ private:
   // profile bracket and the pending-model latch enclose every path through
   // them -- both bodies return from many places.
   SOLVER_RETURN_TYPE checkSatBody(const ASTVec& assertionsSMT2,
-                                            bool assumeLastLevelPerConjunct,
-                                            bool firstForcedIncrementalSolve);
+                                  bool assumeLastLevelPerConjunct,
+                                  bool firstForcedIncrementalSolve,
+                                  const ASTNode& assumptionScopedRoot,
+                                  size_t orderedDistincts);
 
   void buildPendingModel();
 

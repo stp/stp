@@ -314,8 +314,9 @@ TEST(FloatBlast, every_floating_point_kind_is_lowered)
 
   // Every FP kind in the tree is represented, so adding one without adding
   // an arm for it fails here rather than at the first input that uses it.
-  // FP_SMT_EQ is the last kind in ASTKind.kinds; a new one is appended after
-  // it, so the scan has to reach it.
+  // FP_SMT_EQ is the end of the contiguous FP block in ASTKind.kinds;
+  // append-only non-FP public kinds follow it. A new FP kind extends this
+  // bound deliberately, so the scan has to reach it.
   std::set<int> covered;
   for (const auto& c : cases)
     covered.insert(static_cast<int>(c.first));

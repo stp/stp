@@ -506,24 +506,10 @@ TRUE_TOK
   using namespace stp;
 
   ASTVec terms = *$3;
-  ASTVec forms;
+  if (terms.size() < 2)
+    FatalError("too few arguments to distinct");
 
-  for(ASTVec::const_iterator it=terms.begin(),itend=terms.end();
-      it!=itend; it++) {
-    for(ASTVec::const_iterator it2=it+1; it2!=itend; it2++) {
-      ASTNode n = (GlobalParserInterface->nf->CreateNode(NOT, GlobalParserInterface->CreateNode(EQ, *it, *it2)));
-
-          
-      forms.push_back(n); 
-    }
-  }
-
-  if(forms.size() == 0) 
-    FatalError("empty distinct");
- 
-  $$ = (forms.size() == 1) ?
-    new ASTNode(forms[0]) :
-    new ASTNode(GlobalParserInterface->CreateNode(AND, forms));
+  $$ = new ASTNode(GlobalParserInterface->CreateNode(DISTINCT, terms));
 
   delete $3;
 }

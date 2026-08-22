@@ -28,19 +28,24 @@ THE SOFTWARE.
 #define STP_DISTINCTORDERING_H
 
 #include "stp/AST/AST.h"
-#include <vector>
 
 namespace stp
 {
 
 class STPMgr;
-struct DistinctGroup;
 
-// If the operands of a recorded distinct (see STPMgr::distinctGroups) are
-// variables that occur nowhere else, every permutation of them maps the
-// formula to itself, so requiring them to be strictly increasing loses no
-// models up to that symmetry -- and n-1 comparisons replace n(n-1)/2
-// disequalities.
+// Lower every native DISTINCT reachable from `root` to the corresponding
+// conjunction of pairwise disequalities. Boolean operands use IFF,
+// floating-point operands use SMT equality, and every other source sort uses
+// EQ (including ARRAY_EQ through the hashing factory). This is the semantic
+// solve-boundary operation; no ordinary preprocessor or bit-blaster accepts a
+// DISTINCT node.
+ASTNode lowerDistinct(STPMgr* manager, const ASTNode& root);
+
+// If the operands of a native distinct are variables that occur nowhere else,
+// every permutation of them maps the formula to itself, so requiring them to
+// be strictly increasing loses no models up to that symmetry -- and n-1
+// comparisons replace n(n-1)/2 disequalities.
 //
 // The gain is not marginal. Three hundred unconstrained 32-bit variables
 // under one distinct take 172s pairwise and 0.2s chained (RelWithDebInfo,
@@ -56,7 +61,6 @@ struct DistinctGroup;
 // occurrence guard buys, and it is checked against `root` itself rather than
 // assumed from the parse.
 ASTNode applyDistinctOrdering(STPMgr* manager, const ASTNode& root,
-                              const std::vector<DistinctGroup>& groups,
                               size_t* ordered = NULL);
 
 } // namespace stp

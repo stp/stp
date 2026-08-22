@@ -24,18 +24,19 @@ THE SOFTWARE.
 
 #include "stp/cpp_interface.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/Incremental/IncrementalSolver.h"
 #include "stp/Parser/LetMgr.h"
 #include "stp/Parser/parser.h"
 #include "stp/Printer/printers.h"
-#include "stp/Sat/SATSolverFactory.h"
-#include "stp/Util/GitSHA1.h"
-#include "stp/Incremental/IncrementalSolver.h"
 #include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
+#include "stp/Sat/SATSolverFactory.h"
+#include "stp/Simplifier/DistinctOrdering.h"
 #include "stp/ToSat/ToSATAIG.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/UninterpretedFunctions/UFModel.h"
 #include "stp/UninterpretedFunctions/UFRefinement.h"
+#include "stp/Util/GitSHA1.h"
 #include <cassert>
 
 using std::cerr;
@@ -795,13 +796,6 @@ void Cpp_interface::reset()
   // A reason-unknown belongs to the session that produced it.
   bm.clearUnknown();
 
-  // Recorded distinct groups name nodes from assertions that no longer
-  // exist. The ordering pass ignores a group its walk cannot reach, so
-  // keeping them would be harmless; dropping them keeps a long session's
-  // registry proportional to what is asserted rather than to what has ever
-  // been asserted.
-  bm.distinctGroups.clear();
-
   cleanUp();
 
   checkInvariant();
@@ -846,7 +840,6 @@ void Cpp_interface::resetAssertions()
   if (!global_declarations)
     removeFrame();
   cache.clear();
-  bm.distinctGroups.clear();
   bm.clearUnknown();
 
   // These tables may retain the discarded assertions or declarations.
@@ -1796,17 +1789,57 @@ void Cpp_interface::getUnsatAssumptions()
   }
   const ASTNodeSet failedSet(failed.begin(), failed.end());
 
+  ASTVec semanticAssumptions;
+  const ASTVec* assumptionsForMatching = &lastAssumptionTerms;
+  if (granular && bm.has_distinct)
+  {
+    semanticAssumptions.reserve(lastAssumptionTerms.size());
+    for (const ASTNode& a : lastAssumptionTerms)
+      semanticAssumptions.push_back(lowerDistinct(&bm, a));
+    assumptionsForMatching = &semanticAssumptions;
+  }
+
+  // Ordinarily each failed driver conjunct is exactly one flattened conjunct
+  // of a lowered source assumption. The simplifying factory may instead
+  // collapse the assumptions level as a whole (for example, p and (not p))
+  // before the driver assigns its per-conjunct literals. If a reported
+  // conjunct cannot be mapped back, falling back to the full source set is a
+  // correct core; silently dropping it can produce an empty, invalid one.
+  bool completeMapping = true;
+  if (granular)
+  {
+    for (const ASTNode& failedConjunct : failedSet)
+    {
+      const ASTNodeSet singleton{failedConjunct};
+      bool found = false;
+      for (const ASTNode& a : *assumptionsForMatching)
+      {
+        if (assumptionFailed(a, singleton, bm.ASTTrue))
+        {
+          found = true;
+          break;
+        }
+      }
+      if (!found)
+      {
+        completeMapping = false;
+        break;
+      }
+    }
+  }
+
   std::ostringstream os;
   os << "(";
   bool first = true;
-  for (const ASTNode& a : lastAssumptionTerms)
+  for (size_t i = 0; i < lastAssumptionTerms.size(); ++i)
   {
-    if (granular && !assumptionFailed(a, failedSet, bm.ASTTrue))
+    if (granular && completeMapping &&
+        !assumptionFailed((*assumptionsForMatching)[i], failedSet, bm.ASTTrue))
       continue;
     if (!first)
       os << " ";
     first = false;
-    printer::SMTLIB2_Print1(os, a, 0, false);
+    printer::SMTLIB2_Print1(os, lastAssumptionTerms[i], 0, false);
   }
   os << ")";
   cout << os.str() << endl;

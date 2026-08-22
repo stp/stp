@@ -812,7 +812,7 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
   if (kind != stp::UNDEFINED && kind != stp::BOOLEAN &&
       kind != stp::BITVECTOR && kind != stp::ARRAY &&
       kind != stp::FLOATINGPOINT && kind != stp::ROUNDINGMODE &&
-      children_all_constants(children))
+      kind != stp::DISTINCT && children_all_constants(children))
   {
     const ASTNode& hash = hashing.CreateNode(kind, children);
     const ASTNode& c = NonMemberBVConstEvaluator(&bm, hash);

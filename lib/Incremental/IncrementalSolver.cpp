@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "IncrementalSolverImpl.h"
+#include "stp/Simplifier/DistinctOrdering.h"
 
 namespace stp
 {
@@ -214,15 +215,68 @@ SOLVER_RETURN_TYPE IncrementalSolver::checkSat(const ASTVec& assertionsSMT2,
               << std::endl;
   }
 
-  impl->beginProfile(assertionsSMT2.size());
+  // Survey the complete active formula while DISTINCT is still native. An
+  // earned ordering is passed as a whole-formula override and encoded behind
+  // an assumption: unlike a base-level unit, that root can be withdrawn on the
+  // next check if a new assertion makes one of the ordered symbols escape. Do
+  // not lower the per-level assertions in that case -- besides being unused by
+  // the exact-block route, doing so would build the quadratic clique this
+  // optimization exists to avoid.
+  ASTNode assumptionScopedRoot;
+  size_t orderedDistincts = 0;
+  if (impl->bm->UserFlags.distinct_ordering && impl->bm->has_distinct)
+  {
+    const ASTNode active = assertionsSMT2.size() == 1
+                               ? assertionsSMT2[0]
+                               : impl->bm->CreateNode(AND, assertionsSMT2);
+    const ASTNode ordered =
+        applyDistinctOrdering(impl->bm, active, &orderedDistincts);
+    if (orderedDistincts > 0)
+    {
+      assumptionScopedRoot = lowerDistinct(impl->bm, ordered);
+      if (containsKind(assumptionScopedRoot, DISTINCT))
+        FatalError("DISTINCT crossed the incremental ordered-root lowering "
+                   "barrier",
+                   assumptionScopedRoot);
+      if (impl->bm->UserFlags.stats_flag)
+        std::cerr << "Ordered " << orderedDistincts
+                  << " symmetric distinct group(s) in an assumption-scoped "
+                     "incremental block."
+                  << std::endl;
+    }
+  }
+
+  // With no ordering to consume a group, ordinary semantic lowering is stable
+  // across checks and must happen before any incremental preprocessing or
+  // bit-blasting.
+  ASTVec loweredAssertions;
+  const ASTVec* solverAssertions = &assertionsSMT2;
+  if (assumptionScopedRoot.IsNull() && impl->bm->has_distinct)
+  {
+    loweredAssertions.reserve(assertionsSMT2.size());
+    for (const ASTNode& assertion : assertionsSMT2)
+    {
+      const ASTNode lowered = lowerDistinct(impl->bm, assertion);
+      if (containsKind(lowered, DISTINCT))
+        FatalError("DISTINCT crossed the incremental completed-root lowering "
+                   "barrier",
+                   lowered);
+      loweredAssertions.push_back(lowered);
+    }
+    solverAssertions = &loweredAssertions;
+  }
+
+  impl->beginProfile(solverAssertions->size());
   // What the encoding assumed on its own account belongs to the solve that is
   // about to build it. The exact-stack route lowers the whole active stack
   // whenever any level applies an uninterpreted function, so what this solve
   // records is what this solve's block asserts.
   impl->bm->clearInjectivityAssumed();
   impl->injectivity = STPMgr::InjectivityAssumption();
-  SOLVER_RETURN_TYPE result = checkSatBody(
-      assertionsSMT2, assumeLastLevelPerConjunct, firstForcedIncrementalSolve);
+  SOLVER_RETURN_TYPE result =
+      checkSatBody(*solverAssertions, assumeLastLevelPerConjunct,
+                   firstForcedIncrementalSolve, assumptionScopedRoot,
+                   orderedDistincts);
 
   // As in STP::TopLevelSTP, and for the same reason. The search settles for
   // itself whether a refutation used the injectivity --uf-inject-args
@@ -243,7 +297,8 @@ SOLVER_RETURN_TYPE IncrementalSolver::checkSat(const ASTVec& assertionsSMT2,
     impl->bm->clearInjectivityAssumed();
     impl->injectivity = STPMgr::InjectivityAssumption();
     // Never a forced first solve: the run above has already engaged.
-    result = checkSatBody(assertionsSMT2, assumeLastLevelPerConjunct, false);
+    result = checkSatBody(*solverAssertions, assumeLastLevelPerConjunct, false,
+                          assumptionScopedRoot, orderedDistincts);
     impl->bm->UserFlags.uf_inject_args = saved;
     impl->bm->clearInjectivityAssumed();
   }
@@ -293,7 +348,9 @@ void IncrementalSolver::buildPendingModel()
 SOLVER_RETURN_TYPE
 IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
                                 bool assumeLastLevelPerConjunct,
-                                bool firstForcedIncrementalSolve)
+                                bool firstForcedIncrementalSolve,
+                                const ASTNode& assumptionScopedRoot,
+                                size_t orderedDistincts)
 {
   STPMgr* bm = impl->bm;
   UserDefinedFlags& uf = bm->UserFlags;
@@ -309,7 +366,7 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   assert((!firstForcedIncrementalSolve || impl->engagedSolves == 0) &&
          "a forced first solve was claimed after the driver had engaged");
 
-  impl->maintainBackendForCheck(assertionsSMT2);
+  impl->maintainBackendForCheck(assertionsSMT2, assumptionScopedRoot);
 
   // No stale equality state may survive into this round: the consistency
   // checker keys off ext->active(), and a previous round's solve-local
@@ -333,7 +390,9 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   SOLVER_RETURN_TYPE exactResult;
   if (impl->tryExactStackRoute(assertionsSMT2,
                                assumeLastLevelPerConjunct,
-                               firstForcedIncrementalSolve, exactResult))
+                               firstForcedIncrementalSolve,
+                               assumptionScopedRoot, orderedDistincts,
+                               exactResult))
     return exactResult;
 
   UFContext* staleUF = bm->getUFContextIfAny();

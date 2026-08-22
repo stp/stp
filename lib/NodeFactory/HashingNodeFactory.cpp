@@ -38,6 +38,29 @@ HashingNodeFactory::~HashingNodeFactory()
 ASTNode HashingNodeFactory::CreateNode(const Kind kind,
                                        const ASTChildren back_children)
 {
+  if (kind == DISTINCT)
+  {
+    if (back_children.size() < 2)
+      FatalError("distinct: expected at least two operands");
+
+    const SourceSort sort = back_children[0].GetSourceSort();
+    if (!sort.isKnown())
+      FatalError("distinct: operands must have a known source sort");
+    for (size_t i = 1; i < back_children.size(); ++i)
+      if (back_children[i].GetSourceSort() != sort)
+        FatalError("distinct: operands must have identical source sorts");
+
+    // Lowering an array-valued distinct creates whole-array equalities, so
+    // enforce the same public option at construction time as source `=`.
+    if (sort.kind() == SourceSort::Kind::Array &&
+        !bm.UserFlags.enable_array_equality)
+      FatalError("STP cannot decide equality between whole array terms "
+                 "without --array-equality (the C API's vc_setFlag(vc, "
+                 "'x'), or Solver(array_equality=True) in Python).");
+
+    bm.noteDistinct();
+  }
+
   if (kind == UF_APPLY)
   {
     std::string error;

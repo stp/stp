@@ -57,16 +57,6 @@ enum class FPSpecial
   MinusZero,
 };
 
-// One (distinct t1 ... tn) as the parser saw it, before it was dissolved into
-// pairwise disequalities: the operands in source order, and the node the
-// dissolution produced. Declared here rather than beside the pass that reads
-// it, so that a core header does not have to include a Simplifier one.
-struct DLL_PUBLIC DistinctGroup
-{
-  ASTVec operands;
-  ASTNode emitted;
-};
-
 /*
  * STP Node Manager. Tools for managing AST nodes.
  */
@@ -134,12 +124,6 @@ private:
 public:
   HashingNodeFactory* hashingNodeFactory;
   NodeFactory* defaultNodeFactory;
-
-  // (distinct ...) groups as the parser saw them, before it dissolved each
-  // into pairwise disequalities. Kept so a later pass can ask whether the
-  // operands are symmetric and, if they are, state an order instead. Cleared
-  // whenever the assertion stack is.
-  std::vector<DistinctGroup> distinctGroups;
 
   // State of the array-equality (extensional arrays) decision procedure:
   // solve-local equality records, the complete per-solve array graph, and
@@ -616,6 +600,17 @@ public:
   bool has_floating_point_theory = false;
 
   void noteFloatingPointTheory() { has_floating_point_theory = true; }
+
+  // Conservative manager-lifetime hint, like the two floating-point latches
+  // above: false proves no DISTINCT node can occur in a query and avoids a
+  // completed-DAG walk on the overwhelmingly common negative path. The
+  // hashing factory is the construction funnel and sets it for every durable
+  // node. True is deliberately not query state -- a popped or otherwise
+  // unused expression may have set it -- so lowering still inspects the
+  // current roots.
+  bool has_distinct = false;
+
+  void noteDistinct() { has_distinct = true; }
 
   // Record that a float of a real format has been built. Every float's format
   // arrives through one of the funnels above, so calling this there is what

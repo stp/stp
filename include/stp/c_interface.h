@@ -2030,6 +2030,8 @@ enum exprkind_t
   //! Durable uninterpreted-function application. ARRAY_EQ is the unexposed
   //! internal kind between FP_SMT_EQ and UF_APPLY.
   UF_APPLY = FP_SMT_EQ + 2,
+  //! Native variadic SMT-LIB distinct predicate.
+  DISTINCT = UF_APPLY + 1,
 };
 
 //! \brief Returns the expression-kind of the given expression.

@@ -510,6 +510,8 @@ string functionToSMTLIBName(const Kind k)
   {
     case IFF:
       return "=";
+    case DISTINCT:
+      return "distinct";
     case IMPLIES:
       return "=>";
     case AND:

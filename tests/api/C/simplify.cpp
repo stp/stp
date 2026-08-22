@@ -25,6 +25,8 @@ THE SOFTWARE.
 /* g++ -I/home/vganesh/stp/c_interface simplify.c -L/home/vganesh/stp/lib -lstp
  * -g */
 
+#include "stp/STPManager/STP.h"
+#include "stp/STPManager/STPManager.h"
 #include "stp/c_interface.h"
 #include <gtest/gtest.h>
 #include <stdio.h>
@@ -77,4 +79,26 @@ TEST(simplify, two)
   }
   // FIXME: Actually test something
   // ASSERT_TRUE(false && "FIXME: Actually test something");
+}
+
+TEST(simplify, native_distinct_is_lowered_before_preprocessing)
+{
+  VC vc = vc_createValidityChecker();
+  stp::STPMgr* mgr = static_cast<stp::STP*>(vc)->bm;
+  const stp::ASTNode x =
+      mgr->CreateSourceSymbol("x", stp::SourceSort::bitVector(8));
+  const stp::ASTNode y =
+      mgr->CreateSourceSymbol("y", stp::SourceSort::bitVector(8));
+  const stp::ASTNode z =
+      mgr->CreateSourceSymbol("z", stp::SourceSort::bitVector(8));
+  stp::ASTNode* native =
+      new stp::ASTNode(mgr->CreateNode(stp::DISTINCT, stp::ASTVec{x, y, z}));
+
+  Expr simplified = vc_simplify(vc, static_cast<Expr>(native));
+  EXPECT_FALSE(stp::containsKind(*static_cast<stp::ASTNode*>(simplified),
+                                 stp::DISTINCT));
+
+  vc_DeleteExpr(static_cast<Expr>(native));
+  vc_DeleteExpr(simplified);
+  vc_Destroy(vc);
 }

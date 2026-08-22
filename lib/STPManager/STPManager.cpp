@@ -1031,7 +1031,6 @@ STPMgr::~STPMgr()
   // above: destroying a node reaches back into this manager (ASTSymbol::CleanUp
   // unindexes its name, ASTInterior::CleanUp erases from the interior table),
   // and the implicit member-destruction phase runs after those tables are gone.
-  distinctGroups.clear();
   uninterpreted_elements.clear();
   uninterpreted_sorts_printed.clear();
   uf_injectivity_guard = ASTNode();

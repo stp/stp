@@ -1713,6 +1713,12 @@ const BBNode BitBlaster::BBForm(const ASTNode& form, BBNodeSet& support,
   switch (k)
   {
 
+    case DISTINCT:
+      FatalError("BBForm: DISTINCT crossed the completed-root lowering "
+                 "barrier",
+                 form);
+      break;
+
     case UF_APPLY:
       FatalError("BBForm: UF_APPLY crossed the completed-root lowering "
                  "barrier",

@@ -46,8 +46,11 @@ unsigned flipped(const unsigned polarity)
   return result;
 }
 
-// A node under XOR, boolean EQ, or an ITE condition is used both ways at
-// once, and so is everything beneath it.
+// A node under XOR, boolean EQ, an ITE, or an uninterpreted application is
+// used both ways at once, and so is everything beneath it. An arbitrary
+// function need not be monotone in a Boolean actual: g(false) may be true
+// while g(true) is false, so strengthening a distinct inside that actual can
+// change satisfiability.
 //
 // IMPLIES is here for safety rather than because it is reached: the node
 // factory rewrites (=> x y) to (or (not x) y) before this pass sees the
@@ -58,7 +61,7 @@ unsigned flipped(const unsigned polarity)
 bool usedBothWays(const Kind kind)
 {
   return kind == XOR || kind == IFF || kind == EQ || kind == ITE ||
-         kind == IMPLIES;
+         kind == IMPLIES || kind == DISTINCT || kind == UF_APPLY;
 }
 
 // How a distinct's operands can be interchangeable.
@@ -83,7 +86,7 @@ enum class Form
 // `ordered`, and neither form gets to state its own version of it.
 struct Candidate
 {
-  const DistinctGroup* group;
+  ASTNode distinct;
   Form form;
   ASTVec ordered;
 };
@@ -149,14 +152,16 @@ bool orderableSymbols(const ASTVec& symbols)
 // Which form a group has, if any. Fewer than three operands is left alone:
 // two are a single disequality, so there is nothing to order and the guard
 // would only be risk without reward.
-Form classify(const DistinctGroup& group, ASTVec& ordered)
+Form classify(const ASTNode& distinct, ASTVec& ordered)
 {
-  if (group.operands.size() < 3 || group.emitted.IsNull())
+  if (distinct.GetKind() != DISTINCT || distinct.Degree() < 3)
     return Form::None;
 
-  if (orderableSymbols(group.operands))
+  const ASTVec operands(distinct.begin(), distinct.end());
+
+  if (orderableSymbols(operands))
   {
-    ordered = group.operands;
+    ordered = operands;
     return Form::Variables;
   }
 
@@ -166,9 +171,9 @@ Form classify(const DistinctGroup& group, ASTVec& ordered)
   // where two of them coincide, and those are reachable -- f(a,b1) and
   // f(a,b2) differ perfectly well.
   ASTVec arguments;
-  arguments.reserve(group.operands.size());
+  arguments.reserve(operands.size());
   ASTNode declaration;
-  for (const ASTNode& operand : group.operands)
+  for (const ASTNode& operand : operands)
   {
     if (operand.GetKind() != UF_APPLY || operand.Degree() != 2)
       return Form::None;
@@ -264,28 +269,92 @@ ASTNode chainFor(STPMgr* manager, const ASTVec& ordered)
              : manager->defaultNodeFactory->CreateNode(AND, conjuncts);
 }
 
+ASTNode rebuildWithChildren(STPMgr* manager, const ASTNode& node,
+                            const ASTVec& children)
+{
+  bool changed = false;
+  for (size_t i = 0; i < children.size() && !changed; ++i)
+    changed = children[i] != node[i];
+  if (!changed)
+    return node;
+  if (node.GetType() == BOOLEAN_TYPE)
+    return manager->defaultNodeFactory->CreateNode(node.GetKind(), children);
+  return manager->defaultNodeFactory->CreateArrayTerm(
+      node.GetKind(), node.GetIndexWidth(), node.GetValueWidth(), children);
+}
+
 } // namespace
 
+ASTNode lowerDistinct(STPMgr* manager, const ASTNode& root)
+{
+  if (root.IsNull())
+    return root;
+
+  DenseNodeMap lowered;
+  return postOrderRebuild(
+      root, lowered,
+      [&](const ASTNode& node, const ASTVec& children) -> ASTNode
+      {
+        if (node.GetKind() != DISTINCT)
+          return rebuildWithChildren(manager, node, children);
+
+        if (children.size() < 2)
+          FatalError("distinct lowering: expected at least two operands", node);
+
+        Kind equality = EQ;
+        const SourceSort::Kind sort = children[0].GetSourceSort().kind();
+        if (sort == SourceSort::Kind::Bool)
+          equality = IFF;
+        else if (sort == SourceSort::Kind::FloatingPoint)
+          equality = FP_SMT_EQ;
+
+        ASTVec disequalities;
+        disequalities.reserve(children.size() * (children.size() - 1) / 2);
+        for (size_t i = 0; i < children.size(); ++i)
+          for (size_t j = i + 1; j < children.size(); ++j)
+            disequalities.push_back(manager->defaultNodeFactory->CreateNode(
+                NOT, manager->defaultNodeFactory->CreateNode(
+                         equality, children[i], children[j])));
+
+        assert(!disequalities.empty());
+        return disequalities.size() == 1
+                   ? disequalities[0]
+                   : manager->defaultNodeFactory->CreateNode(AND,
+                                                             disequalities);
+      });
+}
+
 ASTNode applyDistinctOrdering(STPMgr* manager, const ASTNode& root,
-                              const std::vector<DistinctGroup>& groups,
                               size_t* ordered)
 {
   if (ordered != NULL)
     *ordered = 0;
-  if (groups.empty() || root.IsNull() || root.GetType() != BOOLEAN_TYPE)
+  if (root.IsNull() || root.GetType() != BOOLEAN_TYPE)
     return root;
 
   std::vector<Candidate> candidates;
   ASTNodeSet opaque;
-  for (const DistinctGroup& group : groups)
+  ASTNodeSet visited;
+  ASTVec pending(1, root);
+  while (!pending.empty())
   {
+    const ASTNode node = pending.back();
+    pending.pop_back();
+    if (!visited.insert(node).second)
+      continue;
+
+    for (const ASTNode& child : node)
+      pending.push_back(child);
+    if (node.GetKind() != DISTINCT)
+      continue;
+
     Candidate candidate;
-    candidate.group = &group;
-    candidate.form = classify(group, candidate.ordered);
+    candidate.distinct = node;
+    candidate.form = classify(node, candidate.ordered);
     if (candidate.form == Form::None)
       continue;
     candidates.push_back(candidate);
-    opaque.insert(group.emitted);
+    opaque.insert(node);
   }
   if (candidates.empty())
     return root;
@@ -294,37 +363,32 @@ ASTNode applyDistinctOrdering(STPMgr* manager, const ASTNode& root,
   ASTNodeCountMap polarity;
   surveyOutside(root, opaque, outside, polarity);
 
-  // The registry spans a whole session, so most of it is usually about some
-  // other query. A group whose node the walk never reached is not part of
-  // this formula and must not constrain what this formula may do -- in
-  // particular it must not be counted as an overlap. Duplicate registrations
-  // of one node -- the same distinct parsed twice -- are one group, or every
-  // symbol would look shared with itself.
+  // A candidate concealed inside another candidate is not reached by the
+  // polarity walk (the outer node is intentionally opaque), so retain the
+  // reached filter even though the native-node collection itself is local to
+  // this root.
   std::vector<const Candidate*> reached;
   std::vector<ASTNodeSet> concealed;
-  ASTNodeSet counted;
   for (const Candidate& candidate : candidates)
   {
-    if (polarity.find(candidate.group->emitted) == polarity.end())
-      continue;
-    if (!counted.insert(candidate.group->emitted).second)
+    if (polarity.find(candidate.distinct) == polarity.end())
       continue;
     reached.push_back(&candidate);
     concealed.push_back(ASTNodeSet());
-    collectInside(candidate.group->emitted, concealed.back());
+    collectInside(candidate.distinct, concealed.back());
   }
 
   ASTNodeMap replacements;
   for (size_t i = 0; i < reached.size(); ++i)
   {
     const Candidate& candidate = *reached[i];
-    const ASTNode& emitted = candidate.group->emitted;
+    const ASTNode& distinct = candidate.distinct;
     // Positive occurrences only. The chain is the stronger claim, so under a
     // negation it becomes the weaker one, and while that stays
     // equisatisfiable under this same guard it stops the reported model from
     // being a model of the input -- a price this pass is not entitled to
     // charge.
-    if (polarity.find(emitted)->second != (int32_t)POSITIVE)
+    if (polarity.find(distinct)->second != (int32_t)POSITIVE)
       continue;
     // Each ordered symbol must occur nowhere but the positions this group
     // treats as interchangeable: not outside any candidate's node, and not
@@ -348,10 +412,10 @@ ASTNode applyDistinctOrdering(STPMgr* manager, const ASTNode& root,
     const ASTNode chain = chainFor(manager, candidate.ordered);
     // The clique goes only when the chain implies it.
     replacements.insert(std::make_pair(
-        emitted, candidate.form == Form::Variables
-                     ? chain
-                     : manager->defaultNodeFactory->CreateNode(AND, emitted,
-                                                               chain)));
+        distinct,
+        candidate.form == Form::Variables
+            ? chain
+            : manager->defaultNodeFactory->CreateNode(AND, distinct, chain)));
   }
   if (ordered != NULL)
     *ordered = replacements.size();
@@ -366,22 +430,7 @@ ASTNode applyDistinctOrdering(STPMgr* manager, const ASTNode& root,
         const ASTNodeMap::const_iterator found = replacements.find(node);
         if (found != replacements.end())
           return found->second;
-        bool changed = false;
-        for (size_t i = 0; i < children.size() && !changed; ++i)
-          changed = children[i] != node[i];
-        if (!changed)
-          return node;
-        if (node.GetType() == BOOLEAN_TYPE)
-          return manager->defaultNodeFactory->CreateNode(node.GetKind(),
-                                                         children);
-        // A replacement is a formula, and the one place a formula sits under
-        // a term is an if-then-else condition -- which this pass reads as
-        // both polarities and therefore never rewrites. So no term should
-        // reach here; rebuilding it correctly costs a line and means the
-        // rebuild does not quietly depend on that argument staying true.
-        return manager->defaultNodeFactory->CreateArrayTerm(
-            node.GetKind(), node.GetIndexWidth(), node.GetValueWidth(),
-            children);
+        return rebuildWithChildren(manager, node, children);
       });
 }
 

@@ -84,6 +84,8 @@ string functionToCVCName(const Kind k)
     case EQ:
     case ARRAY_EQ:
       return "=";
+    case DISTINCT:
+      return "DISTINCT";
     case BVCONCAT:
       return "@";
     case BVOR:
@@ -351,6 +353,18 @@ void PL_Print1(ostream& os, const ASTNode& n, int indentation, bool letize,
       os << n.GetValueWidth();
       os << ")" << endl;
       break;
+    case DISTINCT:
+    {
+      os << "DISTINCT(";
+      for (size_t i = 0; i < c.size(); ++i)
+      {
+        if (i != 0)
+          os << ", ";
+        PL_Print1(os, c[i], indentation, letize, bm);
+      }
+      os << ")";
+      break;
+    }
     default:
       // remember to use LispPrinter here. Otherwise this function will
       // go into an infinite loop. Recall that "<<" is overloaded to

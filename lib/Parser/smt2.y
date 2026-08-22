@@ -374,12 +374,12 @@ namespace stp
 
   // (distinct t1 ... tn) is unsatisfiable as soon as n exceeds the number of
   // values its operands' sort has: n terms cannot take n different values out
-  // of fewer than n. That is pigeonhole, and this parser expands distinct into
-  // C(n, 2) disequalities, so what would otherwise reach the solver is the
-  // binary-encoded form of it -- a shape whose cost to a CDCL search is out of
-  // all proportion to how it reads. Measured on this tree: sixteen operands
-  // over (_ BitVec 4) answer in 0.02s, seventeen take over seven minutes. The
-  // cliff is one operand wide, and n is already known here.
+  // of fewer than n. That is pigeonhole. Although distinct now stays native
+  // through query assembly, unmatched instances are eventually lowered to
+  // C(n, 2) disequalities, whose CDCL cost is out of all proportion to how the
+  // source reads. Measured on this tree: sixteen operands over (_ BitVec 4)
+  // answer in 0.02s, seventeen take over seven minutes. The cliff is one
+  // operand wide, and n is already known here.
   //
   // Only a sort whose value count is exact is guarded, which here means Bool
   // and the bit-vectors.
@@ -2024,6 +2024,7 @@ cmdi:
             0 == strcmp($2->c_str(),"QF_AUFBVFPLRA") ||
             0 == strcmp($2->c_str(),"QF_UFABVFPLRA");
       const bool uf_logic =
+            0 == strcmp($2->c_str(),"QF_UF") ||
             0 == strcmp($2->c_str(),"QF_UFBV") ||
             0 == strcmp($2->c_str(),"QF_AUFBV") ||
             uf_fp_logic;
@@ -2952,7 +2953,6 @@ FORMID_TOK
   using namespace stp;
 
   ASTVec terms = *$3;
-  ASTVec forms;
 
   checkSameSourceSort(terms, "distinct requires operands of the same sort");
 
@@ -2966,41 +2966,10 @@ FORMID_TOK
   }
   else
   {
-    for(ASTVec::const_iterator it=terms.begin(),itend=terms.end();
-        it!=itend; it++)
-    {
-      for(ASTVec::const_iterator it2=it+1; it2!=itend; it2++) {
-        // Equality of floats is FP_SMT_EQ, not the generic EQ -- the same
-        // distinction the (= ...) rule makes. Building plain EQ over float
-        // operands produces a node the later passes reject as a non-formula.
-        const Kind eqk =
-          ((*it).GetSourceSort().kind() ==
-           stp::SourceSort::Kind::FloatingPoint) ? FP_SMT_EQ : EQ;
-        ASTNode n =
-          stp::GlobalParserInterface->nf->CreateNode(NOT, stp::GlobalParserInterface->CreateNode(eqk, *it, *it2));
-
-        forms.push_back(n);
-      }
-    }
-
-    if(forms.size() == 0)
-      fatal_yyerror("empty distinct");
-
-    $$ = (forms.size() == 1) ?
-      stp::GlobalParserInterface->newNode(forms[0]) :
-      stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(AND, forms));
-    // Remember the group. Dissolving distinct here loses the fact that its
-    // operands are interchangeable, and a later pass cannot recover it from a
-    // clique of disequalities; recording it costs a vector and commits to
-    // nothing, since that pass re-checks the symmetry against the real formula.
-    // A distinct the cardinality guard refused never reaches here: it has no
-    // operands left to order.
-    {
-      stp::DistinctGroup group;
-      group.operands = terms;
-      group.emitted = *$$;
-      stp::GlobalParserBM->distinctGroups.push_back(group);
-    }
+    if (terms.size() < 2)
+      fatal_yyerror("too few arguments to distinct");
+    $$ = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->CreateNode(DISTINCT, terms));
   }
 
   delete $3;
@@ -3010,7 +2979,6 @@ FORMID_TOK
   using namespace stp;
 
   ASTVec terms = *$3;
-  ASTVec forms;
 
   checkSameSourceSort(terms, "distinct requires operands of the same sort");
 
@@ -3024,26 +2992,10 @@ FORMID_TOK
   }
   else
   {
-    for(ASTVec::const_iterator it=terms.begin(),itend=terms.end();
-        it!=itend; it++) {
-      for(ASTVec::const_iterator it2=it+1; it2!=itend; it2++) {
-        // Floats reach this (an_formulas) distinct rule too, since a
-        // floating-point function-id reduces as a formula. Their equality is
-        // FP_SMT_EQ, not IFF, which only holds between Booleans.
-        const Kind eqk =
-          ((*it).GetSourceSort().kind() ==
-           stp::SourceSort::Kind::FloatingPoint) ? FP_SMT_EQ : IFF;
-        ASTNode n = (stp::GlobalParserInterface->nf->CreateNode(NOT, stp::GlobalParserInterface->CreateNode(eqk, *it, *it2)));
-        forms.push_back(n);
-      }
-    }
-
-    if(forms.size() == 0)
-      fatal_yyerror("empty distinct");
-
-    $$ = (forms.size() == 1) ?
-      stp::GlobalParserInterface->newNode(forms[0]) :
-      stp::GlobalParserInterface->newNode(stp::GlobalParserInterface->CreateNode(AND, forms));
+    if (terms.size() < 2)
+      fatal_yyerror("too few arguments to distinct");
+    $$ = stp::GlobalParserInterface->newNode(
+        stp::GlobalParserInterface->CreateNode(DISTINCT, terms));
   }
 
   delete $3;

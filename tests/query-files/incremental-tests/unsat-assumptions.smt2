@@ -28,3 +28,12 @@
 ; CHECK: ^sat
 (get-unsat-assumptions)
 ; CHECK: ^\(\)$
+; A native distinct is lowered for the persistent solver but retained for
+; reporting. Matching the driver's failed conjunct back to the source
+; assumption therefore has to use the same lowering, while printing the raw
+; term still has to say `distinct`.
+(check-sat-assuming ((bvult x #x02) (bvugt x #x00)
+                     (distinct x #x01) p))
+; CHECK: ^unsat
+(get-unsat-assumptions)
+; CHECK: ^\(\(bvugt  #x02 \|x\|\) \(not \(= \|x\|  #x00\)\) \(distinct \|x\|  #x01\)\)$
