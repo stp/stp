@@ -7,11 +7,10 @@
 ; SourceSort and each already refused a float of the same packed width. They
 ; were being asked a question that had been answered against the carrier.
 ;
-; They abort rather than reporting a recoverable error, which is the same thing
-; the identical guards do for a float in the same position, and is a deliberate
-; decision recorded in UF-DECLARED-SORT-DESIGN.md: an input that relied on the
-; laxity stops at the offending command rather than continuing with a term
-; whose sort nothing can state.
+; They abort rather than reporting a recoverable error, matching the identical
+; guards for a float in the same position. The rejection is deliberate: an
+; input that relied on the laxity stops at the offending command rather than
+; continuing with a term whose sort nothing can state.
 ;
 ; One block per position because each aborts, so each needs its own run. The
 ; last two are the pair that matter most: an array's index and element sorts

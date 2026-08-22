@@ -374,9 +374,10 @@ struct IncrementalSolver::Impl
   std::unique_ptr<FpEncodingContext> fpCtx;
 
   // The completed public block and its current solve-local UF lowering.
-  // Clause/cache ownership is added by UFPersistentAdapter at M5; keeping the
-  // lowering value here already separates it from context-owned handles and
-  // makes the exact-stack block the sole persistent lowering boundary.
+  // UFPersistentAdapter owns block- and encoding-epoch-qualified clauses and
+  // caches; keeping the lowering value here separates it from context-owned
+  // handles and makes the exact-stack block the sole persistent lowering
+  // boundary.
   LoweredApplicationView activeUFView;
   std::unique_ptr<UFPersistentAdapter> ufAdapter;
 

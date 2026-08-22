@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Differential fuzzing for UFSTP.
+"""Differential fuzzing for STP's uninterpreted-function solver.
 
 Each round generates one random quantifier-free Bool/BV UF instance and
 decides it several independent ways:
 
-  1. UFSTP (the implementation under test), forced batch and forced
-     persistent, on every requested backend;
+  1. STP's UF implementation (the implementation under test), forced batch
+     and forced persistent, on every requested backend;
   2. a generator-side EAGER Ackermannization of the same instance --
      fresh result variables plus all-pairs congruence implications --
      handed to classic STP with the UF feature OFF (a pre-existing,

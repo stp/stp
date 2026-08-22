@@ -588,12 +588,12 @@ struct EagerFixture
 
 } // namespace
 
-TEST(UninterpretedFunctionsFrontend, EagerCongruenceIsAbsentInReferenceProfile)
+TEST(UninterpretedFunctionsFrontend, EagerCongruenceIsAbsentWhenPolicyIsOff)
 {
   const EagerFixture fixture(4, 0, UserDefinedFlags::UFEagerMode::OFF);
   ASSERT_EQ(4u, fixture.view.size());
-  // T-NOEAGER-01: nothing but the query and its naming definitions exists
-  // before a candidate is refuted.
+  // With eager encoding off, nothing but the query and its naming definitions
+  // exists before a candidate is refuted.
   EXPECT_TRUE(fixture.view.congruenceConstraints.empty());
 }
 

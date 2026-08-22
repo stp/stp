@@ -1,8 +1,9 @@
 ; RUN: %solver --uninterpreted-functions --ackermanize --incremental=off %s | %OutputCheck %s
 ; RUN: %solver --uninterpreted-functions --ackermanize --incremental=on %s | %OutputCheck %s
 ; CHECK-NEXT: ^unsat
-; GATE-03 boundary: --ackermanize eagerly compiles ARRAYS only; UF
-; stays on the dynamic reference profile and still refines.
+; --ackermanize eagerly compiles arrays only; it does not route UF through the
+; array transform. UF congruence remains governed by its own eager policy and
+; dynamic checker.
 (set-logic QF_AUFBV)
 (declare-fun a () (Array (_ BitVec 4) (_ BitVec 8)))
 (declare-fun i () (_ BitVec 4))

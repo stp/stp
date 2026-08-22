@@ -2,8 +2,8 @@
 ; CHECK: ^UF: installed congruence lemma 1 for f \(block guarded\)$
 ; CHECK: ^unsat$
 ; CHECK-NOT: installed congruence lemma 2
-; UF2-INC-02: the persistent form of the same refinement carries the
-; exact-stack block guard, and -s names the host. --uf-ackermann=off keeps
+; The persistent adapter carries this refinement under the exact-stack block
+; guard, and -s names the host. --uf-ackermann=off keeps
 ; the lemma dynamic; eagerly encoded, this query would install none.
 (set-logic QF_UFBV)
 (declare-fun x () (_ BitVec 4))

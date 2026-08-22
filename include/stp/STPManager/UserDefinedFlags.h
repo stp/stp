@@ -181,12 +181,11 @@ public:
   // ARRAY_EQ, which is lowered only after the complete query is assembled.
   bool enable_array_equality = false;
 
-  // Decide nonzero-arity uninterpreted functions over Bool, BitVec,
-  // RoundingMode and FloatingPoint
-  // using the UFSTP v2 dynamic-Ackermann reference profile. Logic names never
-  // toggle this runtime semantic option -- though the UF+FP logic names are
-  // only accepted while it is set, since they exist to let one query name
-  // both fragments.
+  // Decide nonzero-arity uninterpreted functions over Bool, BitVec, declared
+  // sorts, RoundingMode and FloatingPoint using dynamic Ackermann refinement.
+  // Logic names never toggle this runtime semantic option -- though the UF+FP
+  // logic names are only accepted while it is set, since they exist to let
+  // one query name both fragments.
   bool enable_uninterpreted_functions = false;
 
   // How many congruence lemmas one refuted candidate may install before the
@@ -197,8 +196,8 @@ public:
   // quadratic congruence encoding a round at a time and is slower than
   // emitting one. Measured over collision and pigeonhole families at 30..100
   // applications, 8 was the best of 1/2/4/8/16/32/unlimited everywhere and
-  // 2.3x-4x faster than 1; unlimited was the worst setting tried. 1 restores
-  // the one-lemma-per-round reference profile.
+  // 2.3x-4x faster than 1; unlimited was the worst setting tried. Setting 1
+  // restricts each candidate to one installed congruence lemma.
   unsigned uf_lemmas_per_round = 8;
 
   // Whether to install a declaration's pairwise congruence constraints before
@@ -206,11 +205,11 @@ public:
   //
   // AUTO -- the default -- selects declarations whose pair count the policy
   // predicts is worth encoding up front, cheapest first, until the budget
-  // below is spent. ON selects every declaration whatever the count. OFF is
-  // the UFSTP reference profile: no congruence clause exists until a
-  // candidate is refuted. The dynamic checker runs in every mode, so an
-  // eagerly encoded declaration that still produced a conflict would be
-  // caught rather than silently answered.
+  // below is spent. ON selects every declaration whatever the count. OFF
+  // installs no congruence clause before the first solve, so a refuted
+  // candidate has to earn each one. The dynamic checker runs in every mode,
+  // so an eagerly encoded declaration that still produced a conflict would
+  // be caught rather than silently answered.
   enum class UFEagerMode
   {
     AUTO = 0,

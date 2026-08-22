@@ -3,9 +3,9 @@
 ; CHECK-NEXT: ^sat
 ; CHECK-NEXT: ^unsat
 ; CHECK-NEXT: ^sat
-; MDL-07 / OBL-04: --check-sanity replays every certified model
-; against the raw stack (durable applications resolved through the
-; certified handle map) across a mixed sat/unsat session.
+; --check-sanity replays every certified model against the raw stack, resolving
+; durable applications through the certified handle map. This mixed
+; sat/unsat session also checks that no stale rejected model is replayed.
 (set-logic QF_UFBV)
 (declare-fun f ((_ BitVec 8)) (_ BitVec 8))
 (declare-fun g ((_ BitVec 8)) Bool)

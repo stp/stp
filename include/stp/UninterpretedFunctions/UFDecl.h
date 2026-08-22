@@ -23,7 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 /********************************************************************
- * Typed declaration identities for UFSTP v2.
+ * Typed declaration identities for uninterpreted functions.
  ********************************************************************/
 #ifndef STP_UFDECL_H
 #define STP_UFDECL_H

@@ -696,11 +696,11 @@ void encodeOneLemma(MutableAdapterState& state, const PendingLemma& entry,
     body.push_back(conclusion);
   addGuardedClause(solver, body, guardLiteral);
   state.emittedLemmaCount++;
-  // Observability under -s: the reference profile installs no congruence
-  // clause up front, so every lemma here was earned by a refuted candidate.
-  // One line per installation names the declaration and the host: a batch
-  // lemma is query-local, a persistent one carries the exact-stack block
-  // guard.
+  // Observability under -s: every lemma that reaches this path was earned by
+  // a refuted candidate; constraints installed eagerly during lowering do not
+  // pass through here. One line per installation names the declaration and
+  // the host: a batch lemma is query-local, while a persistent one carries the
+  // exact-stack block guard.
   if (state.manager->UserFlags.stats_flag)
     std::cerr << "UF: installed congruence lemma " << state.emittedLemmaCount
               << " for "

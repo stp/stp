@@ -215,8 +215,8 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
 SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
                                         const ASTNode& query)
 {
-  // Candidate construction is an implementation requirement; publication is
-  // a caller permission. TopLevelSTPAux may force construction for array/UF
+  // Candidate construction and publication are separate decisions.
+  // TopLevelSTPAux may force construction for array/UF
   // refinement, but nothing after this solve may interpret that as an SMT-LIB
   // get-model/get-value request.
   const bool constructForCaller = bm->UserFlags.callerRequestedModel();

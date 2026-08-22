@@ -329,12 +329,14 @@ PositionVerdict comparePosition(NodeFactory* factory, const ASTNode& left,
 
 } // namespace
 
-// Eager congruence (UFSTP OPT-02/OPT-03). The constraints are built as AST and
-// conjoined to the semantic root rather than encoded straight to CNF, which
-// buys three things: both solve modes pick them up through the one function
-// that already attaches naming definitions, a persistent block inherits its
-// guard with no new guard logic, and ordinary preprocessing gets to simplify
-// or delete constraints whose results nothing constrains.
+// Optional eager congruence. The policy may select every declaration or a
+// cost-bounded subset, while the dynamic checker remains available to catch
+// any missed conflict. The constraints are built as AST and conjoined to the
+// semantic root rather than encoded straight to CNF, which buys three things:
+// both solve modes pick them up through the one function that already attaches
+// naming definitions, a persistent block inherits its guard with no new guard
+// logic, and ordinary preprocessing gets to simplify or delete constraints
+// whose results nothing constrains.
 void UFLowering::installEagerCongruence(
     LoweredApplicationView& view, const std::set<const UFDecl*>& injectable,
     const ASTNode& guard) const

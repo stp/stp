@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Deterministic UFSTP v2 benchmark-family runner.
+"""Deterministic benchmark-family runner for STP's UF implementation.
 
 This is acceptance evidence, not a pass/fail micro-optimization target.  It
-checks every answer while timing the six M7 families named by T-PERF-01 in
-both fresh-query and persistent exact-stack modes, plus one family each for
-the floating-point and rounding-mode sorts, which do not scale like the
-bit-vector ones.  Two fixed scales make unexpected nonlinear regressions
-visible in the emitted JSON.
+checks every answer while timing six core families -- durable traversal and
+lowering, define-fun reuse, nested let, persistent identical-block reuse, pop
+scope, and encoding-epoch rebuild -- in both fresh-query and persistent
+exact-stack modes. It adds one family each for floating-point and
+rounding-mode sorts, which do not scale like the bit-vector ones. Two fixed
+scales make unexpected nonlinear regressions visible in the emitted JSON.
 """
 
 import argparse

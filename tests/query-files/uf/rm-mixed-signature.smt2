@@ -1,5 +1,5 @@
-; A signature that mixes RoundingMode with the sorts UFSTP already admitted,
-; in both directions, in the shape of 08-mixed-signature-roundtrip.smt2. The
+; A signature that mixes RoundingMode, Bool, and bit-vector sorts in both its
+; domain and codomain, in the shape of 08-mixed-signature-roundtrip.smt2. The
 ; first pair of applications is forced congruent and the second is not, so a
 ; lowering that dropped a RoundingMode position from the argument tuple would
 ; show up as a wrong unsat here rather than as a missing lemma.

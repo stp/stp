@@ -364,16 +364,16 @@ void ExtraMain::create_options()
   app.add_option("--uf-lemmas-per-round",
                  bm->UserFlags.uf_lemmas_per_round,
                  "how many congruence lemmas one refuted candidate may "
-                 "install (0: every conflict it exposes; 1: the "
-                 "one-lemma-per-round reference profile)")
+                 "install (0: every conflict it exposes; 1: one conflict "
+                 "per round)")
       ->group(refinement_group)
       ->capture_default_str();
   uf_ackermann_option =
       app.add_option("--uf-ackermann", uf_ackermann,
                      "whether to install a function's pairwise congruence "
                      "constraints before the first solve: 'on' (every "
-                     "declaration), 'off' (none -- the reference profile, "
-                     "where a candidate has to earn each lemma), or 'auto' "
+                     "declaration), 'off' (none, so a candidate has to earn "
+                     "each lemma), or 'auto' "
                      "(the default: the declarations whose pair count fits "
                      "the budget, cheapest first)")
           ->group(refinement_group);

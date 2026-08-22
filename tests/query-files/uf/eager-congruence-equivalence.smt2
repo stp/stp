@@ -14,16 +14,16 @@
 ;
 ; ANSWER: ^unsat$
 ;
-; T-EAGER-01. The two applications are congruent because their actuals are
-; forced equal, so the query is unsatisfiable either way: with the reference
-; profile a candidate has to expose the conflict and earn the lemma, while an
-; eagerly encoded f already carries the implication and the checker never sees
-; a conflict at all. Both must reach unsat, and the dynamic checker stays
-; active in every mode -- an eagerly encoded declaration that still produced a
-; conflict would be a bug in the encoder, not a silent wrong answer.
+; The two applications are congruent because their actuals are forced equal,
+; so the query is unsatisfiable either way. With eager encoding off, a
+; candidate has to expose the conflict and earn the lemma; an eagerly encoded
+; f already carries the implication, so the checker never sees a conflict.
+; Both must reach unsat, and the dynamic checker stays active in every mode:
+; an eagerly encoded declaration that still produced a conflict would expose
+; a bug in the encoder rather than permit a silent wrong answer.
 ;
-; A zero budget makes 'auto' select nothing, which is the reference profile
-; again by a different route.
+; A zero budget makes 'auto' select no declaration, exercising the same
+; dynamic-only route as explicitly turning eager encoding off.
 (set-logic QF_UFBV)
 (declare-fun f ((_ BitVec 8)) (_ BitVec 8))
 (declare-const p (_ BitVec 8))

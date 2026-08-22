@@ -3,8 +3,8 @@
 ; RUN: %solver --uninterpreted-functions %s | %OutputCheck %s
 ; CHECK-NEXT: ^sat
 ; CHECK-NEXT: ^"REACHED-END"
-; T-DNH-01 (flag-on arm): declarations with no reachable application
-; engage nothing -- no lowering work, no checker, ordinary answers.
+; Enabling UF support with no reachable application engages no lowering or
+; checker work, so the ordinary solver path still supplies the answer.
 (set-logic QF_UFBV)
 (declare-fun f ((_ BitVec 8)) (_ BitVec 8))
 (declare-const x (_ BitVec 8))

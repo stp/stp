@@ -179,8 +179,8 @@ struct DLL_PUBLIC UFEagerStats
 };
 
 // Value object owned by a solve-mode adapter. It deliberately contains no SAT
-// state: M3's checker consumes it as immutable semantic input, while the batch
-// and persistent adapters own their distinct clause/cache lifetimes.
+// state: the pure checker consumes it as immutable semantic input, while the
+// batch and persistent adapters own their distinct clause/cache lifetimes.
 class DLL_PUBLIC LoweredApplicationView final
 {
 public:
@@ -199,10 +199,10 @@ public:
   // a model's legality depend on a pass ordering rather than on lowering.
   ASTVec sortConstraints;
   // Pairwise congruence constraints installed before the first solve for the
-  // declarations the eager policy selected. Empty in the reference profile,
-  // where every congruence clause is earned by a refuted candidate. Under
-  // --uf-inject-args this vector also holds the converse implications, which
-  // eagerStats.emittedInjectivity() counts.
+  // declarations the eager policy selected. Empty when that policy selects
+  // no declarations, in which case every congruence clause is earned by a
+  // refuted candidate. Under --uf-inject-args this vector also holds the
+  // converse implications, which eagerStats.emittedInjectivity() counts.
   ASTVec congruenceConstraints;
   // The activation symbol every converse implication is installed behind, so
   // that a driver can withdraw the whole assumption without re-encoding: each
@@ -246,7 +246,7 @@ public:
 
 private:
   // Fills view.congruenceConstraints for the declarations the eager policy
-  // selects. A no-op in the reference profile. `guard`, when not null, is the
+  // selects. A no-op when eager mode is off. `guard`, when not null, is the
   // activation symbol each converse implication is installed behind.
   void installEagerCongruence(LoweredApplicationView& view,
                               const std::set<const UFDecl*>& injectable,

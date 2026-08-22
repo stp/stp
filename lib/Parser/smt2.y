@@ -536,10 +536,10 @@ namespace stp
 
   static bool acceptTopLevelDeclarationName(const std::string& name)
   {
-    // Preserve the pinned frontend byte-for-byte when UFSTP is disabled.
-    // The additional shared-namespace check exists only because an enabled
-    // UFDecl registry is otherwise invisible to the legacy symbol/function
-    // tables.
+    // Preserve the pinned frontend byte-for-byte when uninterpreted-function
+    // support is disabled. The additional shared-namespace check exists only
+    // because an enabled UFDecl registry is otherwise invisible to the legacy
+    // symbol/function tables.
     if (!stp::GlobalParserInterface->getUserFlags()
              .enable_uninterpreted_functions)
       return true;

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic UFSTP differential campaign.
+"""Deterministic differential campaign for STP's UF implementation.
 
 The generated corpus exercises nested applications, Bool/BV/RoundingMode
 signatures, define-fun specialization, let resolution, non-injectivity,
