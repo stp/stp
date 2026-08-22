@@ -30,7 +30,10 @@ THE SOFTWARE.
 // UserFlags field the CLI parser writes -- the two refinement profiles
 // (--uf-narrow-results, --uf-inject-args), the eager congruence encoding
 // (--uf-ackermann, --uf-ackermann-budget, --uf-lemmas-per-round,
-// --uf-phase-hints), the declared-sort carrier (--uf-sort-width), the distinct
+// --uf-phase-hints), the declared-sort carrier (--uf-sort-width), the BV
+// abstractions and what bounds them (--bv-eq-abstraction,
+// --bv-abstraction-width, --bv-eq-refine-width, --bv-term-abstraction,
+// --bv-term-abstraction-mult, --bv-term-abstraction-rounds), the distinct
 // rewrite (--distinct-ordering) and the bit-blasting limit
 // (--aig-node-budget). --uninterpreted-functions itself already had a route,
 // through vc_setFlag(vc, 'u').
@@ -71,6 +74,12 @@ TEST(refinement_flags, DefaultsAreTheOnesTheCommandLineDocuments)
   EXPECT_EQ(16u, flags(vc).uf_sort_width);
   EXPECT_TRUE(flags(vc).distinct_ordering);
   EXPECT_EQ(-1, flags(vc).aig_node_budget);
+  EXPECT_FALSE(flags(vc).bv_eq_abstraction);
+  EXPECT_EQ(64u, flags(vc).bv_abstraction_width);
+  EXPECT_EQ(0u, flags(vc).bv_eq_refine_width);
+  EXPECT_FALSE(flags(vc).bv_term_abstraction);
+  EXPECT_TRUE(flags(vc).bv_term_abstraction_mult);
+  EXPECT_EQ(32u, flags(vc).bv_term_abstraction_rounds);
   vc_Destroy(vc);
 }
 
@@ -106,6 +115,38 @@ TEST(refinement_flags, EachFlagReachesTheFieldTheCLIWrites)
   vc_setInterfaceFlags(vc, DISTINCT_ORDERING, 1);
   EXPECT_TRUE(flags(vc).distinct_ordering);
 
+  vc_setInterfaceFlags(vc, BV_EQ_ABSTRACTION, 1);
+  EXPECT_TRUE(flags(vc).bv_eq_abstraction);
+  vc_setInterfaceFlags(vc, BV_EQ_ABSTRACTION, 0);
+  EXPECT_FALSE(flags(vc).bv_eq_abstraction);
+
+  vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION, 1);
+  EXPECT_TRUE(flags(vc).bv_term_abstraction);
+  vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION, 0);
+  EXPECT_FALSE(flags(vc).bv_term_abstraction);
+
+  vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_MULT, 0);
+  EXPECT_FALSE(flags(vc).bv_term_abstraction_mult);
+  vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_MULT, 1);
+  EXPECT_TRUE(flags(vc).bv_term_abstraction_mult);
+
+  // Any nonzero enables, as everywhere else in this call.
+  vc_setInterfaceFlags(vc, BV_EQ_ABSTRACTION, 2);
+  EXPECT_TRUE(flags(vc).bv_eq_abstraction);
+
+  vc_setInterfaceFlags(vc, BV_ABSTRACTION_WIDTH, 1);
+  EXPECT_EQ(1u, flags(vc).bv_abstraction_width);
+  vc_setInterfaceFlags(vc, BV_ABSTRACTION_WIDTH, 0);
+  EXPECT_EQ(0u, flags(vc).bv_abstraction_width);
+
+  vc_setInterfaceFlags(vc, BV_EQ_REFINE_WIDTH, 8);
+  EXPECT_EQ(8u, flags(vc).bv_eq_refine_width);
+
+  vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_ROUNDS, 0);
+  EXPECT_EQ(0u, flags(vc).bv_term_abstraction_rounds);
+  vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_ROUNDS, 4);
+  EXPECT_EQ(4u, flags(vc).bv_term_abstraction_rounds);
+
   // Zero is a meaning of its own for both of these, not an absence: install
   // every conflict the candidate exposes, and a budget of no gates at all.
   vc_setInterfaceFlags(vc, UF_LEMMAS_PER_ROUND, 0);
@@ -138,27 +179,38 @@ TEST(refinement_flags, EachFlagReachesTheFieldTheCLIWrites)
   vc_Destroy(vc);
 }
 
-// A negative count would wrap to a budget nothing can exhaust, silently
-// removing the limit the caller was asking for. It is refused with a
-// diagnostic and the field it would have wrecked is left as it was.
-TEST(refinement_flags, ANegativeCountIsRefusedAndLeavesTheFieldAlone)
+// A negative value would wrap in every unsigned field below, silently
+// disabling an abstraction or removing the limit the caller asked for. It is
+// refused with a diagnostic and the field it would have wrecked is unchanged.
+TEST(refinement_flags, ANegativeUnsignedValueIsRefusedAndLeavesTheFieldAlone)
 {
   vc_registerErrorHandler(countError);
   errors = 0;
 
   VC vc = vc_createValidityChecker();
+  vc_setInterfaceFlags(vc, BV_ABSTRACTION_WIDTH, 32);
+  vc_setInterfaceFlags(vc, BV_EQ_REFINE_WIDTH, 4);
+  vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_ROUNDS, 12);
+
+  vc_setInterfaceFlags(vc, BV_ABSTRACTION_WIDTH, -1);
+  EXPECT_EQ(32u, flags(vc).bv_abstraction_width);
+  vc_setInterfaceFlags(vc, BV_EQ_REFINE_WIDTH, -64);
+  EXPECT_EQ(4u, flags(vc).bv_eq_refine_width);
+  vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_ROUNDS, -2);
+  EXPECT_EQ(12u, flags(vc).bv_term_abstraction_rounds);
+
   vc_setInterfaceFlags(vc, UF_LEMMAS_PER_ROUND, -1);
   EXPECT_EQ(8u, flags(vc).uf_lemmas_per_round);
   vc_setInterfaceFlags(vc, UF_ACKERMANN_BUDGET, -1);
   EXPECT_EQ(256u, flags(vc).uf_eager_budget);
-  EXPECT_EQ(2, errors);
+  EXPECT_EQ(5, errors);
 
   // The AIG budget is signed underneath and -1 is a value of its own there,
   // so only a value below it names nothing and only that is refused.
   vc_setInterfaceFlags(vc, AIG_NODE_BUDGET, 7);
   vc_setInterfaceFlags(vc, AIG_NODE_BUDGET, -2);
   EXPECT_EQ(7, flags(vc).aig_node_budget);
-  EXPECT_EQ(3, errors);
+  EXPECT_EQ(6, errors);
 
   vc_Destroy(vc);
   vc_registerErrorHandler(nullptr);
