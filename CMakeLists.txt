@@ -1072,6 +1072,18 @@ endif()
 # -----------------------------------------------------------------------------
 set(STP_EXPORT_NAME "STPTargets")
 
+# Tests which exercise the staged install tree are configured before the
+# install rules below.  Publish the package location now so those tests and
+# the eventual install(EXPORT) use the same cache-controlled destination.
+if(WIN32 AND NOT CYGWIN)
+  set(DEF_INSTALL_CMAKE_DIR CMake)
+else()
+  set(DEF_INSTALL_CMAKE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/STP)
+endif()
+set(STP_INSTALL_CMAKE_DIR ${DEF_INSTALL_CMAKE_DIR} CACHE PATH
+  "Installation directory for STP CMake files"
+)
+
 # -----------------------------------------------------------------------------
 # Testing and Python interface options
 # -----------------------------------------------------------------------------
@@ -1227,15 +1239,6 @@ install(FILES
 # Export our targets so that other CMake based projects can interface with
 # the build of STP that is installed.
 # -----------------------------------------------------------------------------
-if(WIN32 AND NOT CYGWIN)
-  set(DEF_INSTALL_CMAKE_DIR CMake)
-else()
-  set(DEF_INSTALL_CMAKE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/STP)
-endif()
-set(STP_INSTALL_CMAKE_DIR ${DEF_INSTALL_CMAKE_DIR} CACHE PATH
-  "Installation directory for STP CMake files"
-)
-
 # Create STPConfig file
 set(EXPORT_TYPE "installed")
 set(CONF_INCLUDE_DIRS "${CMAKE_INSTALL_FULL_INCLUDEDIR}")

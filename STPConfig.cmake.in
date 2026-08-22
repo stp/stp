@@ -14,6 +14,14 @@ set(STP_INCLUDE_DIRS "@CONF_INCLUDE_DIRS@")
 
 if ("@USE_CRYPTOMINISAT@" STREQUAL "ON")
     include(CMakeFindDependencyMacro)
+    # CryptoMiniSat >= 5.14 installs its bundled CaDiCaL and cadiback as
+    # sibling packages, and cryptominisat5Targets.cmake requires imported
+    # targets by those names to already exist: CryptoMiniSat's own config
+    # does not find them, so its consumer has to. Quiet and optional,
+    # exactly as STP's own configure does the same two lookups -- an older
+    # or shared CryptoMiniSat needs neither.
+    find_package(cadical CONFIG QUIET)
+    find_package(cadiback CONFIG QUIET)
     find_dependency(cryptominisat5)
 endif()
 

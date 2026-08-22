@@ -613,3 +613,44 @@ TEST(UninterpretedFunctionsFrontend, BooleanLoweringRetainsBoolSourceSort)
   EXPECT_EQ(SourceSort::boolean(), record->namedActuals[0].GetSourceSort());
   EXPECT_EQ(IFF, view.namingDefinitions[0].GetKind());
 }
+
+TEST(UninterpretedFunctionsFrontend, CppAPIReadsOnlyCertifiedDurableHandle)
+{
+  STPMgr manager;
+  manager.UserFlags.enable_uninterpreted_functions = true;
+  STP solver(&manager);
+  STP* const saved = GlobalSTP;
+  GlobalSTP = &solver;
+  {
+    Cpp_interface interface(manager, manager.defaultNodeFactory);
+    interface.setOption("produce-models", "true");
+    std::string diagnostic;
+    const UFDecl* function = interface.declareUninterpretedFunction(
+        "f", {SourceSort::bitVector(8)}, SourceSort::bitVector(8),
+        &diagnostic);
+    ASSERT_NE(nullptr, function) << diagnostic;
+    const ASTNode x = interface.CreateSourceSymbol(
+        "x", SourceSort::bitVector(8));
+    const ASTNode application =
+        interface.applyUninterpretedFunction(function, {x}, &diagnostic);
+    ASSERT_EQ(UF_APPLY, application.GetKind()) << diagnostic;
+    const ASTNode expected = manager.CreateBVConst(8, 37);
+    interface.AddAssert(manager.defaultNodeFactory->CreateNode(
+        EQ, application, expected));
+    manager.GetRunTimes()->start(RunTimes::Parsing);
+    interface.checkSat(interface.getAssertVector());
+
+    const ASTNode value =
+        interface.getUninterpretedApplicationValue(application, &diagnostic);
+    ASSERT_EQ(BVCONST, value.GetKind()) << diagnostic;
+    EXPECT_EQ(37u, value.GetUnsignedConst());
+    EXPECT_FALSE(manager.FoundIntroducedSymbolSet(value));
+
+    interface.push();
+    EXPECT_EQ(UNDEFINED,
+              interface
+                  .getUninterpretedApplicationValue(application, &diagnostic)
+                  .GetKind());
+  }
+  GlobalSTP = saved;
+}
