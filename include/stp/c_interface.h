@@ -240,6 +240,23 @@ enum ifaceflag_t
   //!
   INCREMENTAL_AUTO_ENGAGE_AT,
 
+  //! Narrow the result sort of a UF declaration whose applications are only
+  //! ever compared for equality, to ceil(log2(N)) bits, where N is how many
+  //! applications the query has.
+  //!
+  //! `param_value` nonzero enables (the default), zero disables. This is the
+  //! C API's way to reach --uf-narrow-results. The analysis is conservative:
+  //! any non-equality use of an application leaves that declaration at its
+  //! declared width, so the narrowing is invisible to a caller -- a model
+  //! value still reads back at the declared sort.
+  //!
+  //! Set this before the query it should apply to; it is read while the
+  //! query's applications are lowered, not when a declaration is registered.
+  //!
+  //! Note: appended so the values of the flags above are unchanged.
+  //!
+  UF_NARROW_RESULTS,
+
   //! How many congruence lemmas one refuted candidate may install during
   //! uninterpreted-function refinement (default 8).
   //!

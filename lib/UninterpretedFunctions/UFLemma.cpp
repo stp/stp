@@ -106,10 +106,15 @@ bool UFLemmaOracle::buildAndValidate(const UFCongruenceConflict& conflict,
   // for FloatingPoint, whose bit-equality is not its equality -- so a float
   // reaches this oracle already quotiented to its canonical packed bits, and
   // never as a float.
-  const SourceSort resultSort = UFSignature::loweringSort(
+  const SourceSort codomain = UFSignature::loweringSort(
       conflict.declaration->signature().codomain());
+  const SourceSort resultSort = conflict.leftResult.GetSourceSort();
+  const bool narrowedBV =
+      codomain.kind() == SourceSort::Kind::BitVector &&
+      resultSort.kind() == SourceSort::Kind::BitVector &&
+      resultSort.bitVectorWidth() <= codomain.bitVectorWidth();
   if (!supported(resultSort) ||
-      conflict.leftResult.GetSourceSort() != resultSort ||
+      (resultSort != codomain && !narrowedBV) ||
       conflict.rightResult.GetSourceSort() != resultSort ||
       conflict.leftResultValue.sort() != resultSort ||
       conflict.rightResultValue.sort() != resultSort)

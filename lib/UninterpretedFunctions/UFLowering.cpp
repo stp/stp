@@ -37,6 +37,74 @@ namespace stp
 namespace
 {
 
+unsigned bitsForDistinct(unsigned n)
+{
+  if (n <= 1)
+    return 1;
+  unsigned bits = 0;
+  unsigned v = n;
+  while (v > 0)
+  {
+    bits++;
+    v >>= 1;
+  }
+  if (n == (1u << (bits - 1)))
+    return bits - 1;
+  return bits;
+}
+
+struct NarrowAnalysis
+{
+  std::map<const UFDecl*, unsigned> applicationCount;
+  std::set<const UFDecl*> nonNarrowable;
+};
+
+NarrowAnalysis analyzeNarrowability(const ASTNode& root, UFContext* context)
+{
+  NarrowAnalysis result;
+  ASTNodeSet visited;
+  walkPreOrder(root, [&](const ASTNode& n) -> bool {
+    if (!visited.insert(n).second)
+      return false;
+
+    if (n.GetKind() == UF_APPLY)
+    {
+      const UFDecl* decl = context->lookupIdentity(n[0]);
+      if (decl)
+        result.applicationCount[decl]++;
+    }
+
+    for (size_t i = 0; i < n.Degree(); i++)
+    {
+      if (n[i].GetKind() != UF_APPLY)
+        continue;
+      const UFDecl* childDecl = context->lookupIdentity(n[i][0]);
+      if (!childDecl)
+        continue;
+
+      if (n.GetKind() != EQ)
+      {
+        result.nonNarrowable.insert(childDecl);
+        continue;
+      }
+      size_t other = (i == 0) ? 1 : 0;
+      if (other >= n.Degree() || n[other].GetKind() != UF_APPLY)
+      {
+        result.nonNarrowable.insert(childDecl);
+        continue;
+      }
+      const UFDecl* otherDecl = context->lookupIdentity(n[other][0]);
+      if (otherDecl != childDecl)
+      {
+        result.nonNarrowable.insert(childDecl);
+        result.nonNarrowable.insert(otherDecl);
+      }
+    }
+    return true;
+  });
+  return result;
+}
+
 bool isLeafActual(const ASTNode& actual)
 {
   return actual.GetKind() == SYMBOL || actual.isConstant();
@@ -541,6 +609,15 @@ UFLowering::lowerCompletedRoot(const ASTNode& publicRoot,
   }
   context->beginSolveProtection();
 
+  // Pre-analysis: detect UF declarations whose results are used only for
+  // equality with other results of the same declaration. Their result sort
+  // can be narrowed from the declared width to ceil(log2(N+1)) bits,
+  // cutting the AIG cost of every congruence constraint from O(width) to
+  // O(log N).
+  NarrowAnalysis narrowing;
+  if (manager_->UserFlags.uf_narrow_results)
+    narrowing = analyzeNarrowability(publicRoot, context);
+
   // A name is canonical per lowered expression, matching the reference
   // oracle. This both avoids redundant definitions and makes an identical
   // persistent block reconstruct the identical semantic root.
@@ -604,6 +681,8 @@ UFLowering::lowerCompletedRoot(const ASTNode& publicRoot,
                  reinterpreted);
     return reinterpreted;
   };
+
+  std::set<const UFDecl*> reportedNarrow;
 
   // A compound actual cannot be named while the walk is running: whether the
   // name is needed depends on how many applications its declaration turns out
@@ -712,7 +791,45 @@ UFLowering::lowerCompletedRoot(const ASTNode& publicRoot,
                      "SourceSort",
                      application);
         SourceSort solvedCodomain = UFSignature::loweringSort(codomain);
+        // The name a narrowed result gets has to say how wide it is. The
+        // deterministic namespace keys a symbol on the application alone, and
+        // its contract is that the key settles the sort -- one key, one
+        // symbol, one sort, so that an identical block rebuilds an identical
+        // root. A narrowed width does not keep that bargain: it is read off
+        // how many applications the *current* root has, and the same durable
+        // application is lowered again in the next solve with a different
+        // count behind it. Two applications of f under a push, three after
+        // the pop, and the same handle wants one bit and then two.
+        //
+        // So the width joins the key rather than silently disagreeing with
+        // it. Only a result that was actually narrowed is tagged, which
+        // leaves every unnarrowed name exactly as it was -- including the
+        // rounding-mode results a persistent block has to rebuild and re-pin
+        // by name.
         std::string resultPrefix = "uf_result";
+        if (manager_->UserFlags.uf_narrow_results &&
+            solvedCodomain.kind() == SourceSort::Kind::BitVector &&
+            narrowing.nonNarrowable.count(declaration) == 0)
+        {
+          auto it = narrowing.applicationCount.find(declaration);
+          if (it != narrowing.applicationCount.end())
+          {
+            const unsigned narrowWidth =
+                bitsForDistinct(it->second);
+            if (narrowWidth < solvedCodomain.bitVectorWidth())
+            {
+              solvedCodomain = SourceSort::bitVector(narrowWidth);
+              resultPrefix += "_w" + std::to_string(narrowWidth);
+              if (manager_->UserFlags.stats_flag &&
+                  reportedNarrow.insert(declaration).second)
+                std::cerr << "UF: narrowing result of "
+                          << declaration->name() << " from "
+                          << codomain.bitVectorWidth() << " to "
+                          << narrowWidth << " bits (" << it->second
+                          << " applications)" << std::endl;
+            }
+          }
+        }
         record.resultSymbol = manager_->CreateDeterministicSourceVariable(
             solvedCodomain, resultPrefix, application);
         if (record.resultSymbol.GetSourceSort() != solvedCodomain)

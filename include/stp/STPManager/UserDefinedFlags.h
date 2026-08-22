@@ -259,6 +259,14 @@ public:
   // uninterpreted sort in practice; raise it if a query ever needs more.
   unsigned uf_sort_width = 16;
 
+  // Narrow the result sort of a UF declaration whose applications are used
+  // only for equality comparisons (both sides of the same declaration).
+  // Reducing a 256-bit result to ceil(log2(N+1)) bits cuts the number of
+  // AIG nodes per congruence constraint from ~511 to a handful. The
+  // analysis is conservative: any non-equality use disqualifies the
+  // declaration. Enabled by default; set to false if it causes trouble.
+  bool uf_narrow_results = true;
+
   // Replace a (distinct x1 ... xn) whose operands are variables occurring
   // nowhere else with the strict chain x1 < x2 < ... < xn. Every permutation
   // of such operands maps the formula to itself, so fixing one of the n!
