@@ -39,6 +39,7 @@ add_library(AST OBJECT
     ${CMAKE_CURRENT_BINARY_DIR}/ASTKind.cpp
     ASTInterior.cpp
     ASTNode.cpp
+    SourceSort.cpp
     ASTUtil.cpp
     ASTBVConst.cpp
     ASTFPConst.cpp

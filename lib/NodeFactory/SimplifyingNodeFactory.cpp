@@ -42,6 +42,7 @@ using stp::BVMULT;
 using stp::ITE;
 using stp::EQ;
 using stp::ARRAY_EQ;
+using stp::UF_APPLY;
 using stp::BVSRSHIFT;
 using stp::SBVREM;
 using stp::SBVMOD;
@@ -1039,6 +1040,10 @@ ASTNode SimplifyingNodeFactory::CreateNode(Kind kind,
         result = simplifyArrayEquality(children[0], children[1]);
       if (result.IsNull())
         result = hashing.CreateNode(ARRAY_EQ, children);
+      break;
+    case UF_APPLY:
+      // Durable applications are opaque until completed-root lowering.
+      result = hashing.CreateNode(UF_APPLY, children);
       break;
     case stp::IFF:
     {
@@ -3391,6 +3396,9 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
   const bool is_partial_fp_operation =
       kind == stp::FP_MIN || kind == stp::FP_MAX || kind == stp::FP_TO_UBV ||
       kind == stp::FP_TO_SBV;
+
+  if (kind == stp::UF_APPLY)
+    return hashing.CreateTerm(kind, width, children);
 
   // If all the parameters are constant, return the constant value.
   if (children_all_constants(children) && !is_partial_fp_operation)

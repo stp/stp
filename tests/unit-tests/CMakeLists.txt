@@ -77,6 +77,7 @@ AddSTPGTest(FpTotalise_Test.cpp)
 # equalities; the circuit's answers are covered elsewhere.
 AddSTPGTest(FpModelEquality_Test.cpp)
 AddSTPGTest(SourceSort_Test.cpp)
+AddSTPGTest(UninterpretedFunctionsFrontend_Test.cpp)
 # Builds float/rounding-mode constants, which is the whole point.
 AddSTPGTest(ConstantIdentity_Test.cpp)
 AddSTPGTest(FpConstantFold_Test.cpp)

@@ -43,6 +43,7 @@ THE SOFTWARE.
 namespace stp
 {
 class ExtensionalityContext;
+class UFContext;
 
 // The five SMT-LIB floating-point special values. Their nodes are ordinary
 // packed interned constants (see STPMgr::CreateFPSpecialConst); a childless
@@ -112,6 +113,7 @@ private:
   ASTSymbolSet _symbol_unique_table;
 
   ExtensionalityContext* extensionality = nullptr;
+  UFContext* uninterpretedFunctions = nullptr;
 
   // Table to uniquefy bvconst
   ASTBVConstSet _bvconst_unique_table;
@@ -137,6 +139,12 @@ public:
   {
     return extensionality;
   }
+
+  // Manager-lifetime UF declarations and durable applications. Solve-local
+  // lowering/checker/model state is owned below this context and reset at the
+  // completed-root boundary.
+  DLL_PUBLIC UFContext* getUFContext();
+  UFContext* getUFContextIfAny() const { return uninterpretedFunctions; }
 
   // frequently used nodes
   ASTNode ASTFalse, ASTTrue, ASTUndefined;

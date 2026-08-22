@@ -181,6 +181,11 @@ public:
   // ARRAY_EQ, which is lowered only after the complete query is assembled.
   bool enable_array_equality = false;
 
+  // Decide nonzero-arity uninterpreted functions over Bool, BitVec,
+  // RoundingMode and FloatingPoint
+  // using the UFSTP v2 dynamic-Ackermann reference profile.
+  bool enable_uninterpreted_functions = false;
+
   // Replace a (distinct x1 ... xn) whose operands are variables occurring
   // nowhere else with the strict chain x1 < x2 < ... < xn. Every permutation
   // of such operands maps the formula to itself, so fixing one of the n!
