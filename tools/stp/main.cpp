@@ -113,6 +113,12 @@ public:
   // option was given, so the value needs its own presence check.
   bool interactive = false;
   CLI::Option* interactive_option = nullptr;
+
+  // Likewise for UserFlags.uf_eager_mode. An option rather than a flag: it
+  // has no legacy bare spelling to preserve, and an option cannot swallow the
+  // input file.
+  std::string uf_ackermann;
+  CLI::Option* uf_ackermann_option = nullptr;
 };
 
 int ExtraMain::create_and_parse_options(int argc, char** argv)
@@ -360,6 +366,20 @@ void ExtraMain::create_options()
                  "how many congruence lemmas one refuted candidate may "
                  "install (0: every conflict it exposes; 1: the "
                  "one-lemma-per-round reference profile)")
+      ->group(refinement_group)
+      ->capture_default_str();
+  uf_ackermann_option =
+      app.add_option("--uf-ackermann", uf_ackermann,
+                     "whether to install a function's pairwise congruence "
+                     "constraints before the first solve: 'on' (every "
+                     "declaration), 'off' (none -- the reference profile, "
+                     "where a candidate has to earn each lemma), or 'auto' "
+                     "(the default: the declarations whose pair count fits "
+                     "the budget, cheapest first)")
+          ->group(refinement_group);
+  app.add_option("--uf-ackermann-budget", bm->UserFlags.uf_eager_budget,
+                 "how many congruence constraints --uf-ackermann=auto may "
+                 "install up front")
       ->group(refinement_group)
       ->capture_default_str();
   app.add_option("--uf-sort-width", bm->UserFlags.uf_sort_width,
@@ -914,6 +934,23 @@ int ExtraMain::parse_options(int argc, char** argv)
     }
   }
 #endif
+
+  if (uf_ackermann_option->count())
+  {
+    typedef UserDefinedFlags::UFEagerMode Mode;
+    if (uf_ackermann == "on")
+      bm->UserFlags.uf_eager_mode = Mode::ON;
+    else if (uf_ackermann == "off")
+      bm->UserFlags.uf_eager_mode = Mode::OFF;
+    else if (uf_ackermann == "auto")
+      bm->UserFlags.uf_eager_mode = Mode::AUTO;
+    else
+    {
+      cerr << "ERROR: --uf-ackermann must be one of 'on', 'off' or 'auto'"
+           << endl;
+      std::exit(-1);
+    }
+  }
 
   if (incremental_option->count())
   {

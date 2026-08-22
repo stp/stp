@@ -250,6 +250,27 @@ enum ifaceflag_t
   //!
   UF_LEMMAS_PER_ROUND,
 
+  //! Whether a function's pairwise congruence constraints are installed
+  //! before the first solve rather than earned by a refuted candidate.
+  //!
+  //! `param_value` is 0 for 'auto' (the default: the declarations whose pair
+  //! count fits UF_ACKERMANN_BUDGET, cheapest first), 1 for 'on' (every
+  //! declaration) and 2 for 'off' (none). This is the C API's way to reach
+  //! --uf-ackermann. Any other value is refused with a nonfatal diagnostic
+  //! and leaves the mode unchanged, because the field is an enumeration and
+  //! a value outside it names no mode at all.
+  //!
+  UF_ACKERMANN,
+
+  //! How many congruence constraints UF_ACKERMANN's 'auto' mode may install
+  //! up front (default 256).
+  //!
+  //! `param_value` is that count. This is the C API's way to reach
+  //! --uf-ackermann-budget. A negative value is refused with a nonfatal
+  //! diagnostic.
+  //!
+  UF_ACKERMANN_BUDGET,
+
   //! The bit-vector width given to a sort introduced by (declare-sort S 0),
   //! which bounds how many elements of that sort a query can tell apart
   //! (default 16).

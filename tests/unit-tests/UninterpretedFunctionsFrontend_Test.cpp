@@ -541,6 +541,92 @@ TEST(UninterpretedFunctionsFrontend, LoneApplicationLeavesCompoundActualUnnamed)
   EXPECT_TRUE(context->isProtected(view.applications[0].resultSymbol));
   EXPECT_TRUE(context->isSolveScalar(view.applications[0].resultSymbol));
 }
+
+namespace
+{
+
+// n applications of one freshly declared function over distinct symbols, all
+// reachable from one root, plus whichever extra actuals the caller names.
+struct EagerFixture
+{
+  STPMgr manager;
+  UFContext* context;
+  const UFDecl* f;
+  LoweredApplicationView view;
+
+  EagerFixture(size_t symbolic, size_t constants,
+               UserDefinedFlags::UFEagerMode mode, unsigned budget = 4096)
+      : context(NULL), f(NULL)
+  {
+    manager.UserFlags.enable_uninterpreted_functions = true;
+    manager.UserFlags.uf_eager_mode = mode;
+    manager.UserFlags.uf_eager_budget = budget;
+    context = manager.getUFContext();
+    std::string diagnostic;
+    f = context->declareFunction("f", {SourceSort::bitVector(8)},
+                                 SourceSort::bitVector(8), &diagnostic);
+    ASTVec actuals;
+    for (size_t i = 0; i < symbolic; ++i)
+      actuals.push_back(manager.CreateSourceSymbol(
+          ("s" + std::to_string(i)).c_str(), SourceSort::bitVector(8)));
+    for (size_t i = 0; i < constants; ++i)
+      actuals.push_back(manager.CreateBVConst(8, 200 + i));
+
+    ASTVec conjuncts;
+    for (size_t i = 0; i < actuals.size(); ++i)
+      conjuncts.push_back(manager.defaultNodeFactory->CreateNode(
+          EQ, context->apply(f, {actuals[i]}, &diagnostic),
+          manager.CreateBVConst(8, i)));
+    const ASTNode root =
+        conjuncts.size() == 1
+            ? conjuncts[0]
+            : manager.defaultNodeFactory->CreateNode(AND, conjuncts);
+    UFLowering lowerer(&manager);
+    view = lowerer.lowerCompletedRoot(root, UFSolveScope::batch(50));
+  }
+};
+
+} // namespace
+
+TEST(UninterpretedFunctionsFrontend, EagerCongruenceIsAbsentInReferenceProfile)
+{
+  const EagerFixture fixture(4, 0, UserDefinedFlags::UFEagerMode::OFF);
+  ASSERT_EQ(4u, fixture.view.size());
+  // T-NOEAGER-01: nothing but the query and its naming definitions exists
+  // before a candidate is refuted.
+  EXPECT_TRUE(fixture.view.congruenceConstraints.empty());
+}
+
+TEST(UninterpretedFunctionsFrontend, EagerCongruenceConstrainsEveryPair)
+{
+  const EagerFixture fixture(4, 0, UserDefinedFlags::UFEagerMode::ON);
+  ASSERT_EQ(4u, fixture.view.size());
+  EXPECT_EQ(6u, fixture.view.congruenceConstraints.size()); // C(4, 2)
+  for (const ASTNode& constraint : fixture.view.congruenceConstraints)
+    EXPECT_EQ(IMPLIES, constraint.GetKind());
+}
+
+TEST(UninterpretedFunctionsFrontend, EagerCongruenceSkipsIncongruentPairs)
+{
+  // One symbolic actual and two distinct constant ones. The two constant
+  // applications can never be congruent with each other, so only the two
+  // pairs involving the symbol are constrained, not all three.
+  const EagerFixture fixture(1, 2, UserDefinedFlags::UFEagerMode::ON);
+  ASSERT_EQ(3u, fixture.view.size());
+  EXPECT_EQ(2u, fixture.view.congruenceConstraints.size());
+}
+
+TEST(UninterpretedFunctionsFrontend, EagerCongruenceRespectsItsBudget)
+{
+  // C(4, 2) is 6, so a budget of 5 buys nothing and a budget of 6 buys the
+  // whole declaration; a declaration is never half-encoded.
+  const EagerFixture tooSmall(4, 0, UserDefinedFlags::UFEagerMode::AUTO, 5);
+  EXPECT_TRUE(tooSmall.view.congruenceConstraints.empty());
+
+  const EagerFixture exact(4, 0, UserDefinedFlags::UFEagerMode::AUTO, 6);
+  EXPECT_EQ(6u, exact.view.congruenceConstraints.size());
+}
+
 TEST(UninterpretedFunctionsFrontend, LoneApplicationReusesAnExistingName)
 {
   STPMgr manager;

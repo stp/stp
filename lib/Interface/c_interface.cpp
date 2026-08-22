@@ -523,12 +523,16 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
     case DISTINCT_ORDERING:
       b->UserFlags.distinct_ordering = param_value != 0;
       break;
-    // The field below is unsigned in UserFlags, so a negative value
+    // The two fields below are unsigned in UserFlags, so a negative value
     // would wrap to something enormous: a budget so large it is no budget at
     // all. Refuse it and leave the field as it was.
     case UF_LEMMAS_PER_ROUND:
       if (nonNegativeFlag(param_value, "UF_LEMMAS_PER_ROUND"))
         b->UserFlags.uf_lemmas_per_round = static_cast<unsigned>(param_value);
+      break;
+    case UF_ACKERMANN_BUDGET:
+      if (nonNegativeFlag(param_value, "UF_ACKERMANN_BUDGET"))
+        b->UserFlags.uf_eager_budget = static_cast<unsigned>(param_value);
       break;
     // Signed in UserFlags, and -1 is a value of its own there: no limit,
     // which is the default. 0 is a budget of no gates at all. So only a
@@ -553,6 +557,26 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
         break;
       }
       b->UserFlags.uf_sort_width = static_cast<unsigned>(param_value);
+      break;
+    // An enumeration, so a value outside it names no mode; taking it would
+    // leave the field holding something no arm of the lowering tests for.
+    case UF_ACKERMANN:
+      switch (param_value)
+      {
+        case 0:
+          b->UserFlags.uf_eager_mode =
+              stp::UserDefinedFlags::UFEagerMode::AUTO;
+          break;
+        case 1:
+          b->UserFlags.uf_eager_mode = stp::UserDefinedFlags::UFEagerMode::ON;
+          break;
+        case 2:
+          b->UserFlags.uf_eager_mode = stp::UserDefinedFlags::UFEagerMode::OFF;
+          break;
+        default:
+          reportCAPIError("UF_ACKERMANN must be 0 (auto), 1 (on) or 2 (off)");
+          break;
+      }
       break;
     default:
       stp::FatalError("C_interface: vc_setInterfaceFlags: Unrecognized flag\n");
