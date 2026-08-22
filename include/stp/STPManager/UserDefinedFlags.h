@@ -244,6 +244,18 @@ public:
   // the old behaviour for a query known to be that shape.
   unsigned uf_eager_budget = 256;
 
+  // Whether to bias the first candidate so that the scalars the congruence
+  // checker reads start out pairwise different.
+  //
+  // The checker's work is driven by collisions: two applications whose
+  // argument tuples read the same value and whose results do not. A solver
+  // left to its own default phase has no reason to spread unconstrained
+  // arguments out, so the first candidate collides on many of them at once
+  // and each collision costs a lemma and a round. A phase hint is advisory --
+  // it moves the search order and nothing else -- so biasing those scalars
+  // apart can only change how quickly an answer is found, never which answer.
+  bool uf_phase_hints = false;
+
   // The carrier width given to a sort introduced by (declare-sort S 0).
   //
   // An uninterpreted sort has no operations but equality, so a query

@@ -291,6 +291,12 @@ void Cadical::unsatAssumptions(const vec_literals& assumps,
   }
 }
 
+void Cadical::declarePendingVariables()
+{
+  if (factor_enabled && ext_of_stp.size() <= next_variable)
+    declareNewVariables();
+}
+
 void Cadical::suggestPhase(uint32_t var, bool value)
 {
   // No declareNewVariables() here, deliberately. Declaring can reach

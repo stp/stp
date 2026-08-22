@@ -247,6 +247,17 @@ public:
     (void)value;
   }
 
+  // Bring every variable created so far to the backend's attention.
+  //
+  // A backend may declare variables lazily -- CaDiCaL's factoring layer
+  // declares on a clause, an assumption, or at the start of a solve -- which
+  // leaves a variable that no clause mentions unknown to it, and an advisory
+  // phase for such a variable is dropped. suggestPhase deliberately does not
+  // declare, because declaring can reset a model extension and that is too
+  // much for a hint to do; a caller that knows it is between construction and
+  // the first solve can ask for it explicitly here instead.
+  virtual void declarePendingVariables() {}
+
   // ---------------------------------------------------------------------
   // Resource budgets.
   //

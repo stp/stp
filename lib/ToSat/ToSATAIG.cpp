@@ -422,8 +422,64 @@ void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
         satSolver.setFrozen(found->second[bit]);
       }
     }
+    suggest_uf_scalar_phases(satSolver);
   }
 
+}
+
+// Bias the first candidate so the checker's scalars start out pairwise
+// different.
+//
+// The refinement loop's cost is collisions: two applications whose arguments
+// read the same values and whose results do not. Nothing tells the backend
+// that spreading unconstrained scalars out is worth anything, so its default
+// phase puts many of them on the same value at once and each collision is
+// paid for with a lemma and another full solve. Counting the scalars off
+// against an increasing value is the same trick Bitwuzla plays for DISTINCT,
+// applied to what the congruence checker reads.
+//
+// This is only a hint: it reorders the search and cannot change which answers
+// are reachable, so no soundness argument rests on the choice being good. A
+// backend without a phase interface ignores it. Scalars are visited in node
+// order rather than the set's, so the same query gets the same hints.
+void ToSATAIG::suggest_uf_scalar_phases(SATSolver& satSolver)
+{
+  if (!bm->UserFlags.uf_phase_hints)
+    return;
+  UFContext* ufContext = bm->getUFContextIfAny();
+  if (ufContext == NULL)
+    return;
+
+  std::vector<ASTNode> scalars(ufContext->getSolveScalars().begin(),
+                               ufContext->getSolveScalars().end());
+  std::sort(scalars.begin(), scalars.end(),
+            [](const ASTNode& left, const ASTNode& right)
+            { return left.GetNodeNum() < right.GetNodeNum(); });
+
+  // The hints have to land on variables the backend has already declared.
+  // CaDiCaL's factoring layer declares lazily -- on a clause, an assumption,
+  // or at the start of a solve -- and silently ignores a phase for anything
+  // it has not seen, which is every scalar registered above, since those are
+  // fresh variables no clause mentions. Declaring is the caller's job, not an
+  // advisory hint's: done here, before the first solve, it cannot disturb a
+  // model, which is the reason suggestPhase itself must not do it.
+  satSolver.declarePendingVariables();
+
+  uint64_t counter = 0;
+  for (const ASTNode& symbol : scalars)
+  {
+    const ASTNodeToSATVar::const_iterator found = nodeToSATVar.find(symbol);
+    if (found == nodeToSATVar.end())
+      continue;
+    const uint64_t value = counter++;
+    for (unsigned bit = 0; bit < found->second.size(); ++bit)
+    {
+      if (found->second[bit] == ~((unsigned)0))
+        continue;
+      const bool on = bit < 64 && ((value >> bit) & 1ULL) != 0;
+      satSolver.suggestPhase(found->second[bit], on);
+    }
+  }
 }
 
 bool ToSATAIG::runSolver(SATSolver& satSolver)
