@@ -25,6 +25,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/SubstitutionMap.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/Simplifier/Simplifier.h"
 #include <vector>
 
@@ -609,6 +610,15 @@ bool SubstitutionMap::theoryProtected(const ASTNode& key,
       return true;
     // The equation-deleting orientation: the read itself is the key.
     if (key.GetKind() == READ)
+      return true;
+  }
+
+  UFContext* uf = bm->getUFContextIfAny();
+  if (uf != NULL && uf->activeInSolve())
+  {
+    if (key.GetKind() == SYMBOL && uf->isProtected(key))
+      return true;
+    if (value.GetKind() == SYMBOL && uf->isProtected(value))
       return true;
   }
   return false;

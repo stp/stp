@@ -26,10 +26,28 @@ THE SOFTWARE.
 #include "stp/Globals/Globals.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
+#include "stp/UninterpretedFunctions/UFLowering.h"
 
 #include <gtest/gtest.h>
 
 using namespace stp;
+
+namespace
+{
+
+// Lowering order follows the post-order walk, so a test that adds
+// applications to reach a comparable declaration should not also have to
+// predict where each one lands.
+const LoweredApplicationRecord* recordFor(const LoweredApplicationView& view,
+                                          const ASTNode& durableHandle)
+{
+  for (const LoweredApplicationRecord& record : view.applications)
+    if (record.durableHandle == durableHandle)
+      return &record;
+  return NULL;
+}
+
+} // namespace
 
 TEST(UninterpretedFunctionsFrontend, IsDisabledByDefault)
 {
@@ -273,4 +291,221 @@ TEST(UninterpretedFunctionsFrontend, SubstitutionRebuildsDurableApplication)
   EXPECT_EQ(declaration->identityNode(), specialized[0]);
   EXPECT_EQ(actual, specialized[1]);
   EXPECT_TRUE(context->isRegisteredApplication(specialized));
+}
+
+TEST(UninterpretedFunctionsFrontend,
+     CompletedRootLoweringBuildsOnlyReachableNestedClosure)
+{
+  STPMgr manager;
+  manager.UserFlags.enable_uninterpreted_functions = true;
+  UFContext* context = manager.getUFContext();
+  std::string diagnostic;
+  const UFDecl* declaration = context->declareFunction(
+      "f", {SourceSort::bitVector(8)}, SourceSort::bitVector(8),
+      &diagnostic);
+  ASSERT_NE(nullptr, declaration) << diagnostic;
+
+  const ASTNode x =
+      manager.CreateSourceSymbol("x", SourceSort::bitVector(8));
+  const ASTNode inner = context->apply(declaration, {x}, &diagnostic);
+  const ASTNode outer = context->apply(declaration, {inner}, &diagnostic);
+  const ASTNode unreachable = context->apply(
+      declaration, {manager.CreateBVConst(8, 9)}, &diagnostic);
+  ASSERT_FALSE(unreachable.IsNull());
+  const ASTNode root =
+      manager.defaultNodeFactory->CreateNode(EQ, outer, x);
+
+  UFLowering lowerer(&manager);
+  const LoweredApplicationView view =
+      lowerer.lowerCompletedRoot(root, UFSolveScope::batch(17));
+
+  ASSERT_EQ(2u, view.size());
+  EXPECT_EQ(root, view.publicRoot);
+  EXPECT_FALSE(containsKind(view.semanticRoot, UF_APPLY));
+  EXPECT_TRUE(view.handleToResult.find(inner) != view.handleToResult.end());
+  EXPECT_TRUE(view.handleToResult.find(outer) != view.handleToResult.end());
+  EXPECT_TRUE(view.handleToResult.find(unreachable) ==
+              view.handleToResult.end());
+  EXPECT_EQ(inner, view.applications[0].durableHandle);
+  EXPECT_EQ(outer, view.applications[1].durableHandle);
+  ASSERT_EQ(1u, view.applications[1].namedActuals.size());
+  EXPECT_EQ(view.applications[0].resultSymbol,
+            view.applications[1].namedActuals[0]);
+  EXPECT_TRUE(context->isProtected(view.applications[0].resultSymbol));
+  EXPECT_TRUE(context->isProtected(view.applications[1].resultSymbol));
+  EXPECT_TRUE(context->isSolveScalar(view.applications[0].resultSymbol));
+  EXPECT_TRUE(context->isSolveScalar(view.applications[1].resultSymbol));
+}
+
+TEST(UninterpretedFunctionsFrontend,
+     CompletedRootLoweringNamesEachComplexActualOnce)
+{
+  STPMgr manager;
+  manager.UserFlags.enable_uninterpreted_functions = true;
+  UFContext* context = manager.getUFContext();
+  std::string diagnostic;
+  const UFDecl* f = context->declareFunction(
+      "f", {SourceSort::bitVector(8)}, SourceSort::bitVector(8),
+      &diagnostic);
+  const UFDecl* g = context->declareFunction(
+      "g", {SourceSort::bitVector(8)}, SourceSort::bitVector(8),
+      &diagnostic);
+  ASSERT_NE(nullptr, f);
+  ASSERT_NE(nullptr, g);
+  const ASTNode x =
+      manager.CreateSourceSymbol("x", SourceSort::bitVector(8));
+  const ASTNode one = manager.CreateBVConst(8, 1);
+  const ASTNode complex = manager.defaultNodeFactory->CreateTerm(
+      BVPLUS, 8, x, one);
+  const ASTNode fx = context->apply(f, {complex}, &diagnostic);
+  const ASTNode gx = context->apply(g, {complex}, &diagnostic);
+  // A compound actual is named only where a congruence lemma could mention
+  // it, so each declaration needs a second application; both are given a leaf
+  // actual, which introduces no further name.
+  const ASTNode fLeaf = context->apply(f, {x}, &diagnostic);
+  const ASTNode gLeaf = context->apply(g, {one}, &diagnostic);
+  const ASTNode root = manager.defaultNodeFactory->CreateNode(
+      AND, manager.defaultNodeFactory->CreateNode(EQ, fx, gx),
+      manager.defaultNodeFactory->CreateNode(EQ, fLeaf, gLeaf));
+
+  UFLowering lowerer(&manager);
+  const LoweredApplicationView view =
+      lowerer.lowerCompletedRoot(root, UFSolveScope::batch(18));
+  ASSERT_EQ(4u, view.size());
+  ASSERT_EQ(1u, view.namingDefinitions.size());
+  ASSERT_EQ(1u, view.nameToTerm.size());
+  const LoweredApplicationRecord* const fRecord = recordFor(view, fx);
+  const LoweredApplicationRecord* const gRecord = recordFor(view, gx);
+  ASSERT_NE(nullptr, fRecord);
+  ASSERT_NE(nullptr, gRecord);
+  EXPECT_TRUE(fRecord->observableArguments);
+  EXPECT_TRUE(gRecord->observableArguments);
+  EXPECT_EQ(fRecord->namedActuals[0], gRecord->namedActuals[0]);
+  EXPECT_TRUE(context->isProtected(fRecord->namedActuals[0]));
+  EXPECT_TRUE(context->isSolveScalar(fRecord->namedActuals[0]));
+  EXPECT_FALSE(containsKind(view.semanticRootWithDefinitions(&manager),
+                            UF_APPLY));
+
+  // The ordinary substitution funnel must not delete either a UF result or
+  // its argument-name definition after the lowering barrier.
+  SubstitutionMap substitutions(&manager);
+  EXPECT_FALSE(context->activeInSolve());
+  {
+    UFContext::SolveScope scope(context);
+    EXPECT_TRUE(context->activeInSolve());
+    EXPECT_FALSE(substitutions.UpdateSolverMap(fRecord->resultSymbol,
+                                               manager.CreateBVConst(8, 3)));
+    EXPECT_FALSE(
+        substitutions.UpdateSolverMap(fRecord->namedActuals[0], complex));
+  }
+  EXPECT_FALSE(context->activeInSolve());
+}
+
+TEST(UninterpretedFunctionsFrontend, LoneApplicationLeavesCompoundActualUnnamed)
+{
+  STPMgr manager;
+  manager.UserFlags.enable_uninterpreted_functions = true;
+  UFContext* context = manager.getUFContext();
+  std::string diagnostic;
+  const UFDecl* f = context->declareFunction(
+      "f", {SourceSort::bitVector(8)}, SourceSort::bitVector(8), &diagnostic);
+  ASSERT_NE(nullptr, f);
+  const ASTNode x = manager.CreateSourceSymbol("x", SourceSort::bitVector(8));
+  const ASTNode y = manager.CreateSourceSymbol("y", SourceSort::bitVector(8));
+  const ASTNode complex =
+      manager.defaultNodeFactory->CreateTerm(BVPLUS, 8, x, y);
+  const ASTNode fx = context->apply(f, {complex}, &diagnostic);
+  const ASTNode root = manager.defaultNodeFactory->CreateNode(
+      EQ, fx, manager.CreateBVConst(8, 3));
+
+  UFLowering lowerer(&manager);
+  const LoweredApplicationView view =
+      lowerer.lowerCompletedRoot(root, UFSolveScope::batch(30));
+  ASSERT_EQ(1u, view.size());
+  // No second application of f exists, so no congruence lemma can ever equate
+  // this actual with anything: naming it would only drag BVPLUS into the
+  // bit-blast where nothing can observe it.
+  EXPECT_FALSE(view.applications[0].observableArguments);
+  EXPECT_TRUE(view.applications[0].namedActuals.empty());
+  EXPECT_TRUE(view.namingDefinitions.empty());
+  EXPECT_TRUE(view.nameToTerm.empty());
+  EXPECT_FALSE(containsKind(view.semanticRootWithDefinitions(&manager),
+                            BVPLUS));
+
+  // The result symbol is still a protected solve scalar: it stands in for the
+  // application in the formula and carries the certified value.
+  EXPECT_TRUE(context->isProtected(view.applications[0].resultSymbol));
+  EXPECT_TRUE(context->isSolveScalar(view.applications[0].resultSymbol));
+}
+TEST(UninterpretedFunctionsFrontend, LoneApplicationReusesAnExistingName)
+{
+  STPMgr manager;
+  manager.UserFlags.enable_uninterpreted_functions = true;
+  UFContext* context = manager.getUFContext();
+  std::string diagnostic;
+  const UFDecl* f = context->declareFunction(
+      "f", {SourceSort::bitVector(8)}, SourceSort::bitVector(8), &diagnostic);
+  const UFDecl* g = context->declareFunction(
+      "g", {SourceSort::bitVector(8)}, SourceSort::bitVector(8), &diagnostic);
+  ASSERT_NE(nullptr, f);
+  ASSERT_NE(nullptr, g);
+  const ASTNode x = manager.CreateSourceSymbol("x", SourceSort::bitVector(8));
+  const ASTNode y = manager.CreateSourceSymbol("y", SourceSort::bitVector(8));
+  const ASTNode complex =
+      manager.defaultNodeFactory->CreateTerm(BVPLUS, 8, x, y);
+  // f is comparable and names `complex`; g's single application shares that
+  // term, so it costs nothing to keep g readable too.
+  const ASTNode fComplex = context->apply(f, {complex}, &diagnostic);
+  const ASTNode fLeaf = context->apply(f, {x}, &diagnostic);
+  const ASTNode gComplex = context->apply(g, {complex}, &diagnostic);
+  const ASTNode root = manager.defaultNodeFactory->CreateNode(
+      AND, manager.defaultNodeFactory->CreateNode(EQ, fComplex, fLeaf),
+      manager.defaultNodeFactory->CreateNode(EQ, gComplex,
+                                             manager.CreateBVConst(8, 3)));
+
+  UFLowering lowerer(&manager);
+  const LoweredApplicationView view =
+      lowerer.lowerCompletedRoot(root, UFSolveScope::batch(31));
+  ASSERT_EQ(3u, view.size());
+  ASSERT_EQ(1u, view.namingDefinitions.size());
+  const LoweredApplicationRecord* const fRecord = recordFor(view, fComplex);
+  const LoweredApplicationRecord* const gRecord = recordFor(view, gComplex);
+  ASSERT_NE(nullptr, fRecord);
+  ASSERT_NE(nullptr, gRecord);
+  EXPECT_TRUE(gRecord->observableArguments);
+  ASSERT_EQ(1u, gRecord->namedActuals.size());
+  EXPECT_EQ(fRecord->namedActuals[0], gRecord->namedActuals[0]);
+}
+
+TEST(UninterpretedFunctionsFrontend, BooleanLoweringRetainsBoolSourceSort)
+{
+  STPMgr manager;
+  manager.UserFlags.enable_uninterpreted_functions = true;
+  UFContext* context = manager.getUFContext();
+  std::string diagnostic;
+  const UFDecl* pred = context->declareFunction(
+      "p", {SourceSort::boolean()}, SourceSort::boolean(), &diagnostic);
+  ASSERT_NE(nullptr, pred);
+  const ASTNode a =
+      manager.CreateSourceSymbol("a", SourceSort::boolean());
+  const ASTNode b =
+      manager.CreateSourceSymbol("b", SourceSort::boolean());
+  const ASTNode complex =
+      manager.defaultNodeFactory->CreateNode(XOR, a, b);
+  const ASTNode app = context->apply(pred, {complex}, &diagnostic);
+  // Two applications, so the compound actual earns a name to be equated in.
+  const ASTNode leafApp = context->apply(pred, {a}, &diagnostic);
+  const ASTNode root =
+      manager.defaultNodeFactory->CreateNode(AND, app, leafApp);
+
+  UFLowering lowerer(&manager);
+  const LoweredApplicationView view =
+      lowerer.lowerCompletedRoot(root, UFSolveScope::batch(19));
+  ASSERT_EQ(2u, view.size());
+  ASSERT_EQ(1u, view.namingDefinitions.size());
+  const LoweredApplicationRecord* const record = recordFor(view, app);
+  ASSERT_NE(nullptr, record);
+  EXPECT_EQ(SourceSort::boolean(), record->resultSymbol.GetSourceSort());
+  EXPECT_EQ(SourceSort::boolean(), record->namedActuals[0].GetSourceSort());
+  EXPECT_EQ(IFF, view.namingDefinitions[0].GetKind());
 }

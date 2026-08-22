@@ -73,6 +73,8 @@ THE SOFTWARE.
 #include "stp/ToSat/BBNodeManagerAIG.h"
 #include "stp/ToSat/BitBlaster.h"
 #include "stp/ToSat/ToSATAIG.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
+#include "stp/UninterpretedFunctions/UFLowering.h"
 #include "stp/Util/NodeIterator.h"
 #include "stp/Simplifier/StrengthReduction.h"
 #include "stp/Simplifier/SubstitutionMap.h"
@@ -282,6 +284,41 @@ ASTNode storeChain(Context& c, unsigned depth, const ASTNode& base,
 ASTNode storeChain(Context& c, unsigned depth)
 {
   return storeChain(c, depth, c.mgr.CreateSymbol("A", 8, 8));
+}
+
+// Completed-root UF lowering must keep the nesting chosen by the input off
+// the call stack. Each application is a child of the next one, so the
+// innermost result also has to be available before its parent is recorded.
+bool ufLoweringOk(Context& c, unsigned depth)
+{
+  c.mgr.UserFlags.enable_uninterpreted_functions = true;
+  UFContext* const context = c.mgr.getUFContext();
+  const SourceSort bv8 = SourceSort::bitVector(8);
+  std::string diagnostic;
+  const UFDecl* const f =
+      context->declareFunction("deep_uf", {bv8}, bv8, &diagnostic);
+  if (f == NULL)
+    return false;
+
+  const ASTNode x = c.mgr.CreateSourceSymbol("deep_uf_x", bv8);
+  ASTNode application = x;
+  for (unsigned i = 0; i < depth; ++i)
+  {
+    application = context->apply(f, {application}, &diagnostic);
+    if (application.IsNull())
+      return false;
+  }
+  const ASTNode root = c.hf->CreateNode(EQ, application, x);
+  c.roots.push_back(root);
+
+  UFLowering lowerer(&c.mgr);
+  const LoweredApplicationView view =
+      lowerer.lowerCompletedRoot(root, UFSolveScope::batch(1));
+  return view.size() == depth &&
+         view.applications.front().stableOrder == 0 &&
+         view.applications.back().stableOrder == depth - 1 &&
+         !containsKind(view.semanticRoot, UF_APPLY) &&
+         !containsKind(view.semanticRootWithDefinitions(&c.mgr), UF_APPLY);
 }
 
 // Dependencies::build, the parent map constant-bit propagation runs on.
@@ -2821,6 +2858,7 @@ TEST(DeepDag, deep_array_equality_lowering)
 }
 TEST(DeepDag, deep_transform_formula_spine) { EXPECT_STACK_SAFE(transformFormulaSpineOk, 20000); }
 TEST(DeepDag, deep_fp_totalise)        { EXPECT_STACK_SAFE(fpTotaliseChainOk, 20000); }
+TEST(DeepDag, deep_uf_lowering)        { EXPECT_STACK_SAFE(ufLoweringOk, 20000); }
 
 TEST(DeepDag, deep_printer_lisp)       { EXPECT_STACK_SAFE(printerLispOk, 20000); }
 TEST(DeepDag, deep_counterexample_eval) { EXPECT_STACK_SAFE(counterExampleEvalOk, 20000); }
