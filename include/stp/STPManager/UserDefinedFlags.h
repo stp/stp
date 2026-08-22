@@ -183,9 +183,8 @@ public:
 
   // Decide nonzero-arity uninterpreted functions over Bool, BitVec, declared
   // sorts, RoundingMode and FloatingPoint using dynamic Ackermann refinement.
-  // Logic names never toggle this runtime semantic option -- though the UF+FP
-  // logic names are only accepted while it is set, since they exist to let
-  // one query name both fragments.
+  // An SMT-LIB logic containing UF enables it; this runtime option also lets
+  // callers enable the theory for inputs whose declared logic omits UF.
   bool enable_uninterpreted_functions = false;
 
   // How many congruence lemmas one refuted candidate may install before the

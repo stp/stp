@@ -162,11 +162,34 @@ UserDefinedFlags& Cpp_interface::getUserFlags()
 
 void Cpp_interface::setLogic(const std::string& logic)
 {
+  const bool selectsUF =
+      logic.compare(0, 5, "QF_UF") == 0 ||
+      logic.compare(0, 6, "QF_AUF") == 0;
+  if (selectsUF)
+  {
+    if (!uf_enabled_by_logic)
+    {
+      uf_option_before_logic = bm.UserFlags.enable_uninterpreted_functions;
+      uf_enabled_by_logic = true;
+    }
+    bm.UserFlags.enable_uninterpreted_functions = true;
+  }
+  else
+    restoreUFOptionAfterLogic();
+
   // This policy is intentionally limited to the two fragments measured in
   // the threshold sweep. QF_AUFBV, the FP logics, legacy parsers, and native
   // API clients retain the established solve-3 policy until separately
   // measured. An explicit --incremental-auto-engage-at still wins below.
   delayed_bv_auto_engagement = logic == "QF_BV" || logic == "QF_ABV";
+}
+
+void Cpp_interface::restoreUFOptionAfterLogic()
+{
+  if (!uf_enabled_by_logic)
+    return;
+  bm.UserFlags.enable_uninterpreted_functions = uf_option_before_logic;
+  uf_enabled_by_logic = false;
 }
 
 void Cpp_interface::AddAssert(const ASTNode& assert)
@@ -1180,6 +1203,8 @@ void Cpp_interface::cleanUp()
   {
     removeFrame();
   }
+
+  restoreUFOptionAfterLogic();
 }
 
 // SMT-LIB gives these options a <b_value> argument (2.6, figure 3.9), so a

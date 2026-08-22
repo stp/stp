@@ -1,12 +1,12 @@
-; QF_AUFBVFP is gated on the feature exactly as its aliases and QF_UFBV are:
-; with --uninterpreted-functions absent it is not a logic STP admits, and the
-; report is the ordinary recoverable wrong-logic error rather than anything
-; UF-specific.
+; The canonical array+UF+BV+FP spelling selects both FP tokens and the UF
+; frontend without an extra command-line option.
 ;
 ; RUN: %solver --incremental=off %s 2>&1 | %OutputCheck %s
 ; RUN: %solver --incremental=on %s 2>&1 | %OutputCheck %s
-; CHECK: Wrong input logic
-; CHECK-NEXT: ^sat
+; CHECK-NOT: Wrong input logic
+; CHECK: ^unsat
 ;
 (set-logic QF_AUFBVFP)
+(declare-fun f (RoundingMode) RoundingMode)
+(assert (distinct (f RNE) (f RNE)))
 (check-sat)
