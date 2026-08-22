@@ -130,6 +130,8 @@ std::vector<size_t> IncrementalSolver::lastUnsatCoreLevels() const
 
 IncrementalSolver::~IncrementalSolver()
 {
+  if (impl->ce->getUFTheoryAdapter() == impl->ufAdapter.get())
+    impl->ce->setUFTheoryAdapter(NULL);
   // The counterexample machinery may still point at our floating-point
   // encoding context; whoever solves next installs their own before any
   // model is read (and model_valid already refuses stale reads).
@@ -196,15 +198,6 @@ bool IncrementalSolver::canHandle(const ASTVec& assertionsSMT2)
   // bit-vectors, arrays (lazy or --ackermanize), floating point, and
   // whole-array equality. The method remains the seam for any future
   // exclusion.
-  //
-  // TEMPORARY: a stack that applies an uninterpreted function is refused,
-  // which routes every one of its checks through the batch pipeline. The
-  // persistent driver has no exact-stack lowering for durable applications
-  // yet; the change that adds one deletes this refusal.
-  if (impl->bm->UserFlags.enable_uninterpreted_functions)
-    for (const ASTNode& levelConjunction : assertionsSMT2)
-      if (containsKind(levelConjunction, UF_APPLY))
-        return false;
   (void)assertionsSMT2;
   return true;
 }
@@ -285,22 +278,38 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
 
   impl->maintainBackendForCheck(assertionsSMT2);
 
+  // No stale equality state may survive into this round: the consistency
+  // checker keys off ext->active(), and a previous round's solve-local
+  // records would send this round's candidate to a checker expecting values
+  // for symbols this round never encoded. active() deliberately outlives the
+  // solve that set it -- the model surfaces read the frozen graph after the
+  // solve returns -- so only the next round can retire it, and the SMT-LIB2
+  // pop is the only caller that does so itself: the C API's vc_pop
+  // deliberately clears nothing (its model outlives the bracket), and
+  // check-sat-assuming's frame pop keeps the model too.
+  //
+  // This is ahead of the routing because every route materializes candidates.
+  // The exact-stack route begins a solve of its own only for an
+  // array-equality round, yet it also owns rounds that merely apply an
+  // uninterpreted function, and those would otherwise run the previous
+  // round's checker over the current round's assignment.
+  ExtensionalityContext* staleExt = bm->getExtensionalityIfAny();
+  if (staleExt != NULL && staleExt->active())
+    staleExt->beginSolve();
+
   SOLVER_RETURN_TYPE exactResult;
   if (impl->tryExactStackRoute(assertionsSMT2,
                                assumeLastLevelPerConjunct,
                                firstForcedIncrementalSolve, exactResult))
     return exactResult;
 
-  // No active equality this round, so no stale equality state may survive
-  // into it: the consistency checker keys off ext->active(), and a
-  // previous round's solve-local records would send this round's model to
-  // a checker expecting values for symbols it never encoded. The SMT-LIB2
-  // pop clears this itself, but the C API's vc_pop deliberately clears
-  // nothing (its model outlives the bracket), and check-sat-assuming's
-  // frame pop keeps the model too -- so the round boundary is here.
-  ExtensionalityContext* staleExt = bm->getExtensionalityIfAny();
-  if (staleExt != NULL && staleExt->active())
-    staleExt->beginSolve();
+  UFContext* staleUF = bm->getUFContextIfAny();
+  if (staleUF != NULL)
+    staleUF->releaseSolveProtection();
+  impl->activeUFView = LoweredApplicationView();
+  impl->ufAdapter->clearActiveBlock();
+  if (impl->ce->getUFTheoryAdapter() == impl->ufAdapter.get())
+    impl->ce->setUFTheoryAdapter(NULL);
 
   const uint64_t clausesBefore = impl->lifetimeClauseSubmissions();
   impl->encodesThisCall = 0;

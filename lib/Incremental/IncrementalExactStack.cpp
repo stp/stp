@@ -294,11 +294,13 @@ IncrementalSolver::Impl::exactStackCheckSat(
   UserDefinedFlags& uf = bm->UserFlags;
 
   bool arrayEqualityRound = false;
+  bool ufRound = false;
   bool activeHasFp = false;
   for (const ASTNode& levelConjunction : assertionsSMT2)
   {
     const Fragment& f = fragment(levelConjunction);
     arrayEqualityRound = arrayEqualityRound || f.arrayEq;
+    ufRound = ufRound || f.ufApply;
     activeHasFp = activeHasFp || f.fp;
   }
   profile.extensionality = arrayEqualityRound;
@@ -321,6 +323,44 @@ IncrementalSolver::Impl::exactStackCheckSat(
   else
     activeConjunction = assertionsSMT2[0];
 
+  // The exact stack has now been fully assembled, including every frontend
+  // substitution and let expansion. Lower its durable applications before FP
+  // totalisation, opaque array equality, or scoped preprocessing. Retain the
+  // public conjunction separately in activeUFView.
+  activeUFView = LoweredApplicationView();
+  ASTNode ufSemantic = activeConjunction;
+  if (ufRound)
+  {
+    UFLowering lowerer(bm);
+    activeUFView = lowerer.lowerCompletedRoot(
+        activeConjunction,
+        UFSolveScope::persistent(activeConjunction.GetNodeNum(),
+                                 encodingEpochGeneration));
+    ufSemantic = activeUFView.semanticRootWithDefinitions(bm);
+    if (containsKind(ufSemantic, UF_APPLY))
+      FatalError("UF_APPLY crossed the persistent completed-block lowering "
+                 "barrier",
+                 ufSemantic);
+  }
+  else if (bm->getUFContextIfAny() != NULL)
+    bm->getUFContextIfAny()->releaseSolveProtection();
+
+  // Scope the solve-local UF indexes across every persistent preprocessing,
+  // encoding, candidate and refinement path, including early rejection.
+  UFContext* ufSolveContext =
+      activeUFView.active() ? bm->getUFContextIfAny() : NULL;
+  UFContext::SolveScope ufSolveScope(ufSolveContext);
+
+  // A UF leaf actual is a solve scalar even when scoped preprocessing removes
+  // every occurrence of it from the block formula.  If an earlier ordinary
+  // solve dropped that symbol's sigma0 base definition, totalization would
+  // otherwise mint unconstrained SAT bits which neither the formula walk nor
+  // encodePrepared() can discover.  Restore these definitions before the
+  // block's preprocessing trial records any new eliminations.
+  if (activeUFView.active())
+    for (const ASTNode& scalar : activeUFView.solveScalars)
+      restoreDroppedSigma0Symbol(scalar);
+
   // Plain-BV exact blocks have no extensionality state at all. Avoid creating
   // a context for them; besides the allocation, an empty context makes this
   // representation look needlessly like a theory-refinement solve.
@@ -332,7 +372,7 @@ IncrementalSolver::Impl::exactStackCheckSat(
   }
 
   ASTNodeMap arrayEqualityRewrites;
-  ASTNode prepared = activeConjunction;
+  ASTNode prepared = ufSemantic;
   if (activeHasFp)
   {
     prepared = fpContext()->prepare(prepared);
@@ -354,7 +394,6 @@ IncrementalSolver::Impl::exactStackCheckSat(
     inputToSat = ext->prepareInitialFormula(inputToSat);
     extActive = ext->active();
   }
-
   // Automatic engagement already received two batch-preprocessed solves, so
   // its first persistent exact-stack block keeps the raw search shape and a
   // genuinely new later stack takes this pass. Explicit first engagement has
@@ -419,10 +458,12 @@ IncrementalSolver::Impl::exactStackCheckSat(
     inputToSat = ext->prepare(inputToSat);
 
   exactStackKeepAlive.insert(activeConjunction);
+  exactStackKeepAlive.insert(ufSemantic);
   exactStackKeepAlive.insert(prepared);
   exactStackKeepAlive.insert(semantic);
   exactStackKeepAlive.insert(inputToSat);
   chargeSemanticRoot(activeConjunction);
+  chargeSemanticRoot(ufSemantic);
   chargeSemanticRoot(prepared);
   chargeSemanticRoot(semantic);
   chargeSemanticRoot(inputToSat);
@@ -431,6 +472,8 @@ IncrementalSolver::Impl::exactStackCheckSat(
     FatalError("IncrementalSolver: an opaque array equality reached the "
                "final array transformation boundary",
                inputToSat);
+  if (uf.enable_uninterpreted_functions && containsKind(inputToSat, UF_APPLY))
+    FatalError("IncrementalSolver: UF_APPLY reached bit-blast", inputToSat);
 
   // A fresh per-round registry: the whole-graph transform must neither see
   // the persistent lazy rows (it refuses reused legacy rows) nor leak its
@@ -508,6 +551,9 @@ IncrementalSolver::Impl::exactStackCheckSat(
     for (const ASTNode& s : ext->getLemmaOnlySymbols())
       totalizeSymbol(s);
   }
+  if (activeUFView.active())
+    for (const ASTNode& s : activeUFView.solveScalars)
+      totalizeSymbol(s);
 
   if (uf.stats_flag)
   {
@@ -543,7 +589,8 @@ IncrementalSolver::Impl::exactStackCheckSat(
   // force has been compiled onto the ordinary eager path: reads expanded
   // by the transform above, nothing for the lazy checker or read
   // refinement to do. Solve it like the plain block it now is.
-  if (!arrayEqualityRound || (uf.ackermannisation && !extActive))
+  if ((!arrayEqualityRound && !ufRound) ||
+      (!ufRound && uf.ackermannisation && !extActive))
     return solvePlainExactStack(assertionsSMT2, assumptions, inputToSat,
                                 blockRegular);
 
@@ -552,8 +599,22 @@ IncrementalSolver::Impl::exactStackCheckSat(
   // entitled to observe the resulting model. In particular, the incoming
   // derived flag may still describe an earlier query (and is false before a
   // session's first query), so restoring it would lose :produce-models.
-  const bool constructForCaller = uf.modelConstructionRequired();
+  const bool constructForCaller = uf.callerRequestedModel();
   uf.construct_counterexample_flag = true;
+
+  if (activeUFView.active())
+  {
+    ufAdapter->beginBlock(&activeUFView, encodingEpochGeneration,
+                          satBackendGeneration, activeUFView.scope.id,
+                          blockLit);
+    ce->setUFTheoryAdapter(ufAdapter.get());
+  }
+  else
+  {
+    ufAdapter->clearActiveBlock();
+    if (ce->getUFTheoryAdapter() == ufAdapter.get())
+      ce->setUFTheoryAdapter(NULL);
+  }
 
   publishFpContext();
 
@@ -605,11 +666,8 @@ IncrementalSolver::Impl::exactStackCheckSat(
     // whose rows joined the table after the pass above. Memoised, so a
     // round that added nothing pays nothing.
     totalizeBatchRegistrySymbols();
-    if (extActive)
+    if (extActive && ext->hasPendingLemma())
     {
-      if (!ext->hasPendingLemma())
-        FatalError("IncrementalSolver: an active array-equality refinement "
-                   "round has neither a decision nor a pending lemma");
       // The lemmas persist in this session's solver, but their symbols
       // mean what THIS block's anchor and naming equations say they
       // mean -- and the whole-block preprocessing above may have
@@ -626,8 +684,20 @@ IncrementalSolver::Impl::exactStackCheckSat(
       res = ce->CallSAT_ResultCheck(*solver, bm->ASTTrue, semantic, prepared,
                                     tosat, true);
     }
+    else if (activeUFView.active() && ufAdapter->hasPendingLemma())
+    {
+      ufAdapter->encodePendingLemmas(*solver, tosat);
+      res = ce->CallSAT_ResultCheck(*solver, bm->ASTTrue, semantic, prepared,
+                                    tosat, true);
+    }
     else
     {
+      if (!arrayops)
+        FatalError("IncrementalSolver: UF refinement rejected a candidate "
+                   "without retaining a block-scoped lemma");
+      if (extActive)
+        FatalError("IncrementalSolver: EXTCHK accepted no ordinary read "
+                   "refinement owner for its complete graph");
       // The hybrid case: routed here for an array equality that simplified
       // away, so ordinary read refinement runs.
       res = runGuardedReadRefinementRound(
@@ -642,6 +712,16 @@ IncrementalSolver::Impl::exactStackCheckSat(
   tosat->setAssumptions(NULL);
   uf.ackermannisation = savedAck;
   uf.construct_counterexample_flag = constructForCaller;
+
+  // UF certification necessarily materialized an internal candidate, but
+  // that is distinct from publishing the caller-visible model. Preserve the
+  // persistent driver's ordinary deferred-reader contract: after the seed
+  // and durable-handle map have been certified, get-model/get-value performs
+  // the public materialization on demand. The adapter state remains the
+  // certified pending interpretation throughout.
+  if (activeUFView.active() && res == SOLVER_SATISFIABLE && constructForCaller &&
+      !uf.check_counterexample_flag)
+    modelPending = true;
 
   if (uf.stats_flag && refinementRounds > 0)
     std::cerr << "Incremental: array-equality refinement converged after "

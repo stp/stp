@@ -338,6 +338,11 @@ bool satisfies(const std::vector<std::vector<int>>& clauses,
   return true;
 }
 
+bool containsLiteral(const std::vector<int>& clause, int literal)
+{
+  return std::find(clause.begin(), clause.end(), literal) != clause.end();
+}
+
 } // namespace
 
 TEST(UFRefinement, CompletesACachedHelperUsedInBothPolarities)
@@ -500,6 +505,22 @@ TEST(UFRefinement, BatchCNFFoldsBoolAndBitVectorConstantOperands)
   }
 }
 
+TEST(UFRefinement, PersistentCNFGuardsEveryFoldedEqualityHelper)
+{
+  ConstantOperandFixture fixture;
+  UFPersistentAdapter adapter(&fixture.manager);
+  adapter.beginBlock(&fixture.persistentView, 7, 3, 11, 300);
+  ASSERT_EQ(UFCandidateOutcome::Conflict,
+            adapter.checkCandidate(fixture.counterexample));
+
+  RecordingSolver solver(7);
+  adapter.encodePendingLemmas(solver, &fixture.tosat);
+  ASSERT_EQ(8u, solver.clauses().size());
+  ASSERT_EQ(11u, solver.nextVariable());
+  for (const std::vector<int>& clause : solver.clauses())
+    EXPECT_TRUE(containsLiteral(clause, 301));
+}
+
 TEST(UFRefinement, RejectsMalformedPreencodedLeavesBeforeSATMutation)
 {
   RefinementFixture fixture;
@@ -559,3 +580,96 @@ TEST(UFRefinement, BatchCNFEliminatesIdenticalPremiseAndReusesCache)
   EXPECT_EQ(16u, solver.nextVariable());
 }
 
+TEST(UFRefinement, PersistentCNFGuardsHelpersAndScopesItsCache)
+{
+  RefinementFixture fixture;
+  UFPersistentAdapter adapter(&fixture.manager);
+  RecordingSolver solver(6);
+
+  // Positive block literal 200 has negation 201. Every helper definition
+  // and the final semantic clause must contain that guard.
+  adapter.beginBlock(&fixture.persistentView, 7, 3, 9, 200);
+  ASSERT_EQ(UFCandidateOutcome::Conflict,
+            adapter.checkCandidate(fixture.counterexample));
+  adapter.encodePendingLemmas(solver, &fixture.tosat);
+  ASSERT_EQ(9u, solver.clauses().size());
+  for (const std::vector<int>& clause : solver.clauses())
+    EXPECT_TRUE(containsLiteral(clause, 201));
+
+  // With the block active, guarded helper definitions and the guarded final
+  // implication have exactly the batch semantics.  This checks more than
+  // merely finding the guard syntactically in every clause.
+  const unsigned helperCount = solver.nextVariable() - 6;
+  for (unsigned original = 0; original < (1u << 6); ++original)
+  {
+    const bool argumentEqual =
+        ((original >> 0) & 1u) == ((original >> 1) & 1u);
+    const bool resultEqual =
+        ((original >> 2) & 1u) == ((original >> 4) & 1u) &&
+        ((original >> 3) & 1u) == ((original >> 5) & 1u);
+    const bool expected = !argumentEqual || resultEqual;
+    bool encoded = false;
+    for (unsigned helpers = 0; helpers < (1u << helperCount); ++helpers)
+    {
+      std::vector<bool> assignment(101, false);
+      for (unsigned bit = 0; bit < 6; ++bit)
+        assignment[bit] = ((original >> bit) & 1u) != 0;
+      for (unsigned bit = 0; bit < helperCount; ++bit)
+        assignment[6 + bit] = ((helpers >> bit) & 1u) != 0;
+      assignment[100] = true;
+      if (satisfies(solver.clauses(), assignment))
+      {
+        encoded = true;
+        break;
+      }
+    }
+    EXPECT_EQ(expected, encoded) << "active original assignment " << original;
+  }
+
+  // With the block inactive, its negated guard satisfies the entire bundle.
+  std::vector<bool> inactive(101, false);
+  EXPECT_TRUE(satisfies(solver.clauses(), inactive));
+
+  // Same epoch, backend, and block: equality helpers are cached, so only one
+  // final implication is emitted.
+  ASSERT_EQ(UFCandidateOutcome::Conflict,
+            adapter.checkCandidate(fixture.counterexample));
+  adapter.encodePendingLemmas(solver, &fixture.tosat);
+  ASSERT_EQ(10u, solver.clauses().size());
+  EXPECT_TRUE(containsLiteral(solver.clauses().back(), 201));
+
+  // Replacing only the SAT backend invalidates every cached helper even when
+  // both the semantic epoch and exact-stack block are unchanged.  All helper
+  // definitions in the new generation remain guarded by its block literal.
+  adapter.advanceBackendGeneration(4);
+  adapter.beginBlock(&fixture.persistentView, 7, 4, 9, 202);
+  ASSERT_EQ(UFCandidateOutcome::Conflict,
+            adapter.checkCandidate(fixture.counterexample));
+  adapter.encodePendingLemmas(solver, &fixture.tosat);
+  ASSERT_EQ(19u, solver.clauses().size());
+  for (std::size_t i = 10; i < 19; ++i)
+    EXPECT_TRUE(containsLiteral(solver.clauses()[i], 203));
+
+  // A different block in the same backend cannot reuse guarded helpers.
+  adapter.beginBlock(&fixture.persistentView, 7, 4, 10, 204);
+  ASSERT_EQ(UFCandidateOutcome::Conflict,
+            adapter.checkCandidate(fixture.counterexample));
+  adapter.encodePendingLemmas(solver, &fixture.tosat);
+  ASSERT_EQ(28u, solver.clauses().size());
+  for (std::size_t i = 19; i < 28; ++i)
+    EXPECT_TRUE(containsLiteral(solver.clauses()[i], 205));
+
+  // Epoch identity is also part of the cache key, and explicit epoch clear
+  // must reclaim even a cache that would otherwise have matched.
+  adapter.beginBlock(&fixture.persistentView, 8, 4, 10, 206);
+  ASSERT_EQ(UFCandidateOutcome::Conflict,
+            adapter.checkCandidate(fixture.counterexample));
+  adapter.encodePendingLemmas(solver, &fixture.tosat);
+  ASSERT_EQ(37u, solver.clauses().size());
+  adapter.clearEncodingEpoch();
+  adapter.beginBlock(&fixture.persistentView, 8, 4, 10, 208);
+  ASSERT_EQ(UFCandidateOutcome::Conflict,
+            adapter.checkCandidate(fixture.counterexample));
+  adapter.encodePendingLemmas(solver, &fixture.tosat);
+  EXPECT_EQ(46u, solver.clauses().size());
+}

@@ -111,6 +111,46 @@ private:
   std::unique_ptr<Impl> impl_;
 };
 
+// Persistent exact-stack owner. Every helper definition and semantic clause
+// carries the negated current block literal. Equality caches are partitioned
+// by semantic encoding epoch, SAT-backend generation, and block identity.
+// A backend replacement invalidates them even when its AIG epoch survives.
+class DLL_PUBLIC UFPersistentAdapter final : public UFTheoryAdapter
+{
+public:
+  explicit UFPersistentAdapter(STPMgr* manager);
+  ~UFPersistentAdapter() override;
+
+  UFPersistentAdapter(const UFPersistentAdapter&) = delete;
+  UFPersistentAdapter& operator=(const UFPersistentAdapter&) = delete;
+
+  void beginBlock(const LoweredApplicationView* view, uint64_t epoch,
+                  uint64_t backendGeneration, uint64_t blockId,
+                  int positiveBlockLiteral);
+  void advanceBackendGeneration(uint64_t backendGeneration);
+  void clearActiveBlock();
+  void clearEncodingEpoch();
+  void invalidateCertifiedModel() override;
+
+  bool active() const override;
+  UFCandidateOutcome
+  checkCandidate(AbsRefine_CounterExample& counterexample) override;
+  bool hasPendingLemma() const override;
+  void encodePendingLemmas(SATSolver& solver, ToSATBase* tosat) override;
+  bool hasCertifiedModel() const override;
+  const UFFunctionModelSeedSet* certifiedModelSeed() const override;
+  bool lookupCertifiedApplication(const ASTNode& durableHandle,
+                                  UFConcreteValue& value) const override;
+  const LoweredApplicationView* applicationView() const override;
+  const std::string& diagnostic() const override;
+  uint64_t candidateChecks() const override;
+  uint64_t lemmasEmitted() const override;
+
+private:
+  class Impl;
+  std::unique_ptr<Impl> impl_;
+};
+
 } // namespace stp
 
 #endif
