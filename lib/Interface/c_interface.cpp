@@ -515,11 +515,9 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
     case CADICAL:
       b->UserFlags.solver_to_use = stp::UserDefinedFlags::CADICAL_SOLVER;
       break;
-    // The refinement knobs the CLI exposes as --uf-narrow-results,
-    // --uf-inject-args, --bv-eq-abstraction, --bv-eq-abstraction-width,
-    // --bv-eq-refine-width and --bv-term-abstraction. Each sets the same
-    // UserFlags field the CLI parser writes, so a C API client reaches the
-    // encodings that until now only a query read from a file could.
+    // The refinement knobs the CLI exposes. Each sets the same UserFlags
+    // field the CLI parser writes, so a C API client reaches the encodings
+    // that until now only a query read from a file could.
     case UF_NARROW_RESULTS:
       b->UserFlags.uf_narrow_results = param_value != 0;
       break;
@@ -532,9 +530,32 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
     case DISTINCT_ORDERING:
       b->UserFlags.distinct_ordering = param_value != 0;
       break;
-    // The two fields below are unsigned in UserFlags, so a negative value
-    // would wrap to something enormous: a budget so large it is no budget at
-    // all. Refuse it and leave the field as it was.
+    case BV_EQ_ABSTRACTION:
+      b->UserFlags.bv_eq_abstraction = param_value != 0;
+      break;
+    case BV_TERM_ABSTRACTION:
+      b->UserFlags.bv_term_abstraction = param_value != 0;
+      break;
+    case BV_TERM_ABSTRACTION_MULT:
+      b->UserFlags.bv_term_abstraction_mult = param_value != 0;
+      break;
+    // Every field below is unsigned in UserFlags, so a negative value would
+    // wrap to something enormous: for a width, a threshold no term can reach;
+    // for a budget, no limit at all. Refuse it and leave the field as it was.
+    case BV_ABSTRACTION_WIDTH:
+      if (nonNegativeFlag(param_value, "BV_ABSTRACTION_WIDTH"))
+        b->UserFlags.bv_abstraction_width =
+            static_cast<unsigned>(param_value);
+      break;
+    case BV_EQ_REFINE_WIDTH:
+      if (nonNegativeFlag(param_value, "BV_EQ_REFINE_WIDTH"))
+        b->UserFlags.bv_eq_refine_width = static_cast<unsigned>(param_value);
+      break;
+    case BV_TERM_ABSTRACTION_ROUNDS:
+      if (nonNegativeFlag(param_value, "BV_TERM_ABSTRACTION_ROUNDS"))
+        b->UserFlags.bv_term_abstraction_rounds =
+            static_cast<unsigned>(param_value);
+      break;
     case UF_LEMMAS_PER_ROUND:
       if (nonNegativeFlag(param_value, "UF_LEMMAS_PER_ROUND"))
         b->UserFlags.uf_lemmas_per_round = static_cast<unsigned>(param_value);

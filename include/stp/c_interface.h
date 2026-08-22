@@ -364,7 +364,67 @@ enum ifaceflag_t
   //! count it stopped at -- the same sentence SMT-LIB2 reads through
   //! (get-info :reason-unknown).
   //!
-  AIG_NODE_BUDGET
+  AIG_NODE_BUDGET,
+
+  //! Replace a wide bit-vector equality with a fresh Boolean during
+  //! bit-blasting, refining it lazily via CEGAR.
+  //!
+  //! `param_value` nonzero enables, zero disables (the default). This is the
+  //! C API's way to reach --bv-eq-abstraction. Only equalities at least
+  //! BV_ABSTRACTION_WIDTH bits wide are abstracted.
+  //!
+  BV_EQ_ABSTRACTION,
+
+  //! The narrowest bit-vector operand width at which BV_EQ_ABSTRACTION and
+  //! BV_TERM_ABSTRACTION engage (default 64).
+  //!
+  //! `param_value` is that width. One abstracts every candidate; a width
+  //! wider than any term in the query leaves the query unabstracted. A
+  //! negative value is refused with a nonfatal diagnostic and leaves the
+  //! width unchanged, because the flag it sets is unsigned and would
+  //! otherwise wrap to a width nothing can reach. This is the C API's way to
+  //! reach --bv-abstraction-width.
+  //!
+  BV_ABSTRACTION_WIDTH,
+
+  //! The initial prefix width refined when an abstracted equality is found
+  //! inconsistent with the candidate model (default 0: refine the whole
+  //! width at once).
+  //!
+  //! `param_value` is that width; each further refinement of the same
+  //! equality doubles it, up to the equality's width. A negative value is
+  //! refused with a nonfatal diagnostic, as for BV_ABSTRACTION_WIDTH. This
+  //! is the C API's way to reach --bv-eq-refine-width.
+  //!
+  BV_EQ_REFINE_WIDTH,
+
+  //! Abstract wide bit-vector arithmetic, comparisons and ITE during
+  //! bit-blasting, refining them lazily via CEGAR.
+  //!
+  //! `param_value` nonzero enables, zero disables (the default). This is the
+  //! C API's way to reach --bv-term-abstraction. It shares the width floor
+  //! set by BV_ABSTRACTION_WIDTH.
+  //!
+  BV_TERM_ABSTRACTION,
+
+  //! Whether BV_TERM_ABSTRACTION covers BVMULT, BVDIV and BVMOD as well.
+  //!
+  //! `param_value` nonzero includes them (the default), zero leaves them
+  //! encoded exactly from the start. This is the C API's way to reach
+  //! --bv-term-abstraction-mult.
+  //!
+  BV_TERM_ABSTRACTION_MULT,
+
+  //! How many blocking lemmas one abstracted BVMULT, BVDIV or BVMOD may take
+  //! before its refinement encodes the operation exactly instead of ruling
+  //! out further operand pairs (default 32).
+  //!
+  //! `param_value` is that count; zero never escalates and enumerates without
+  //! limit. A negative value is refused with a nonfatal diagnostic and leaves
+  //! the count unchanged. This is the C API's way to reach
+  //! --bv-term-abstraction-rounds.
+  //!
+  BV_TERM_ABSTRACTION_ROUNDS
 
 };
 

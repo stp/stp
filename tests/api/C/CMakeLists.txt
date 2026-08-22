@@ -24,6 +24,7 @@
 # -----------------------------------------------------------------------------
 AddSTPGTest(array-cvcl-02.cpp)
 AddSTPGTest(array-equality-retired-after-pop.cpp)
+AddSTPGTest(bv-abstraction-array-candidate-is-bound.cpp)
 AddSTPGTest(array-extensionality.cpp)
 AddSTPGTest(array-ite.cpp)
 AddSTPGTest(b4-c2.cpp)
