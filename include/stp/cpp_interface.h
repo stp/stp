@@ -115,7 +115,11 @@ struct TransparentStringHash
 class Cpp_interface
 {
   STPMgr& bm;
-  std::map<std::string, std::pair<unsigned, unsigned>> sort_aliases;
+  // Sort names the script introduced: define-sort's nullary floating-point
+  // aliases, and declare-sort's uninterpreted sorts. Both resolve to a
+  // SourceSort, so a name in sort position needs one lookup whichever
+  // command introduced it.
+  std::map<std::string, SourceSort> sort_aliases;
   bool print_success;
   bool ignoreCheckSatRequest;
 
@@ -163,7 +167,7 @@ private:
     // the global functions to be able to remove functions when we pop
     SolverFrame(ankerl::unordered_dense::map<std::string, Function>*
                     global_function_context,
-                std::map<std::string, std::pair<unsigned, unsigned>>*
+                std::map<std::string, SourceSort>*
                     global_sort_alias_context);
     virtual ~SolverFrame();
 
@@ -197,7 +201,7 @@ private:
         _symbol_bindings;
     ankerl::unordered_dense::map<std::string, Function>*
         _global_function_context;
-    std::map<std::string, std::pair<unsigned, unsigned>>*
+    std::map<std::string, SourceSort>*
         _global_sort_alias_context;
   };
 
@@ -344,10 +348,16 @@ public:
                                           unsigned exp_width,
                                           unsigned sig_width);
 
-  // define-sort aliases for floating-point sorts. A real table: the alias
-  // name is NOT interned as a symbol (the old scheme made the sort name
-  // resolvable as a term variable). Aliases follow assertion-frame scope,
-  // and :global-declarations along with the other declarations.
+  // Sort names the script introduced. A real table: the alias name is NOT
+  // interned as a symbol (the old scheme made the sort name resolvable as a
+  // term variable). Aliases follow assertion-frame scope, and
+  // :global-declarations along with the other declarations.
+  DLL_PUBLIC void addSortAlias(const std::string& name, const SourceSort& sort);
+  DLL_PUBLIC bool lookupSortAlias(const std::string& name,
+                                  SourceSort& sort) const;
+
+  // The floating-point spelling of the same pair, kept because define-sort's
+  // callers speak in exponent/significand widths.
   DLL_PUBLIC void addSortAlias(const std::string& name, unsigned exp_width,
                                unsigned sig_width);
   DLL_PUBLIC bool lookupSortAlias(const std::string& name,

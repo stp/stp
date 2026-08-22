@@ -207,26 +207,43 @@ ASTNode Cpp_interface::CreateFPSpecialConst(stp::FPSpecial which,
   return bm.CreateFPSpecialConst(which, exp_width, sig_width);
 }
 
-void Cpp_interface::addSortAlias(const std::string& name, unsigned exp_width,
-                                 unsigned sig_width)
+void Cpp_interface::addSortAlias(const std::string& name,
+                                 const SourceSort& sort)
 {
   // SMT-LIB does not allow redefining a sort name.
   if (sort_aliases.find(name) != sort_aliases.end())
-    FatalError("define-sort: the sort name is already defined");
-  sort_aliases[name] = std::make_pair(exp_width, sig_width);
+    FatalError("the sort name is already defined");
+  sort_aliases[name] = sort;
   frames.back()->addSortAlias(name);
   session_touched = true;
+}
+
+bool Cpp_interface::lookupSortAlias(const std::string& name,
+                                    SourceSort& sort) const
+{
+  const auto found = sort_aliases.find(name);
+  if (found == sort_aliases.end())
+    return false;
+  sort = found->second;
+  return true;
+}
+
+void Cpp_interface::addSortAlias(const std::string& name, unsigned exp_width,
+                                 unsigned sig_width)
+{
+  addSortAlias(name, SourceSort::floatingPoint(exp_width, sig_width));
 }
 
 bool Cpp_interface::lookupSortAlias(const std::string& name,
                                     unsigned& exp_width,
                                     unsigned& sig_width) const
 {
-  const auto found = sort_aliases.find(name);
-  if (found == sort_aliases.end())
+  SourceSort sort;
+  if (!lookupSortAlias(name, sort) ||
+      sort.kind() != SourceSort::Kind::FloatingPoint)
     return false;
-  exp_width = found->second.first;
-  sig_width = found->second.second;
+  exp_width = sort.exponentWidth();
+  sig_width = sort.significandWidth();
   return true;
 }
 
@@ -1421,7 +1438,7 @@ void CNFClearMemory()
 Cpp_interface::SolverFrame::SolverFrame(
     ankerl::unordered_dense::map<std::string, Function>*
         global_function_context,
-    std::map<std::string, std::pair<unsigned, unsigned>>*
+    std::map<std::string, SourceSort>*
         global_sort_alias_context)
     : _global_function_context(global_function_context),
       _global_sort_alias_context(global_sort_alias_context)
