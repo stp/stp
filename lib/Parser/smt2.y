@@ -293,7 +293,8 @@ namespace stp
     if (stp::SMT2FpKeywordNeedsLogic(smt2text))
       o << "  hint: " << smt2text << " is a floating-point name; those are "
            "recognised only after a floating-point (set-logic): QF_FP, "
-           "QF_BVFP, QF_ABVFP or one of their LRA variants";
+           "QF_BVFP, QF_ABVFP, QF_UFFP, QF_UFBVFP, QF_AUFBVFP or one of "
+           "their LRA variants";
     // Likewise, a numeral the parser would not take is not a malformed
     // numeral: it is one too large to be the index, width or count that the
     // position calls for. Without this the report is bison's token name.
@@ -2000,24 +2001,32 @@ cmdi:
       // Anything more (a Real declaration, arithmetic over reals) has no
       // production and is a syntax error, so accepting the name here cannot
       // answer a query STP could not decide.
-      // The UF+FP names are gated on the feature exactly as QF_UFBV is, and
-      // are floating-point logics in their own right: without them no query
-      // can name a fragment admitting both uninterpreted functions and the
-      // floating-point keywords, and outside an FP logic "RoundingMode" is
-      // not even a token (see SMT2SetFloatTokens below).
+      // A logic containing UF enables the SMT-LIB UF frontend. The command
+      // line flag remains useful for inputs whose declared logic omits UF,
+      // but a correctly classified input must not need a second, nonstandard
+      // switch to make its own logic work. The UF+FP names are floating-point
+      // logics in their own right: outside one, "RoundingMode" is not even a
+      // token (see SMT2SetFloatTokens below).
       //
       // SMT-LIB orders the theory letters A, UF, BV, FP, so the name a
       // benchmark carries for arrays with uninterpreted functions and floats
       // is QF_AUFBVFP -- the same order this file already uses for QF_AUFBV.
       // QF_UFABVFP is accepted as an alias for it: it is the spelling this
-      // branch shipped first and several fixtures name it.
+      // branch shipped first and several fixtures name it. Apply the same
+      // rule to the FPLRA forms accepted for each non-UF FP logic.
       const bool uf_fp_logic =
-            (0 == strcmp($2->c_str(),"QF_UFFP") ||
-             0 == strcmp($2->c_str(),"QF_UFBVFP") ||
-             0 == strcmp($2->c_str(),"QF_AUFBVFP") ||
-             0 == strcmp($2->c_str(),"QF_UFABVFP")) &&
-            stp::GlobalParserInterface->getUserFlags()
-                .enable_uninterpreted_functions;
+            0 == strcmp($2->c_str(),"QF_UFFP") ||
+            0 == strcmp($2->c_str(),"QF_UFBVFP") ||
+            0 == strcmp($2->c_str(),"QF_AUFBVFP") ||
+            0 == strcmp($2->c_str(),"QF_UFABVFP") ||
+            0 == strcmp($2->c_str(),"QF_UFFPLRA") ||
+            0 == strcmp($2->c_str(),"QF_UFBVFPLRA") ||
+            0 == strcmp($2->c_str(),"QF_AUFBVFPLRA") ||
+            0 == strcmp($2->c_str(),"QF_UFABVFPLRA");
+      const bool uf_logic =
+            0 == strcmp($2->c_str(),"QF_UFBV") ||
+            0 == strcmp($2->c_str(),"QF_AUFBV") ||
+            uf_fp_logic;
       const bool fp_logic =
             0 == strcmp($2->c_str(),"QF_FP") ||
             0 == strcmp($2->c_str(),"QF_BVFP") ||
@@ -2026,21 +2035,19 @@ cmdi:
             0 == strcmp($2->c_str(),"QF_BVFPLRA") ||
             0 == strcmp($2->c_str(),"QF_ABVFPLRA") ||
             uf_fp_logic;
-      if (!(
+      const bool supported_logic =
             0 == strcmp($2->c_str(),"QF_BV") ||
             0 == strcmp($2->c_str(),"QF_ABV") ||
-            0 == strcmp($2->c_str(),"QF_AUFBV") ||
-            (0 == strcmp($2->c_str(),"QF_UFBV") &&
-             stp::GlobalParserInterface->getUserFlags()
-                 .enable_uninterpreted_functions) ||
-            fp_logic
-            )) {
+            uf_logic ||
+            fp_logic;
+      if (!supported_logic) {
         yyerror("Wrong input logic");
       }
       // The incremental frontend needs only this validated logic name to
       // choose its measured automatic-engagement policy. reset clears the
       // classification; reset-assertions retains it with the SMT-LIB logic.
-      stp::GlobalParserInterface->setLogic(*$2);
+      if (supported_logic)
+        stp::GlobalParserInterface->setLogic(*$2);
       // The floating-point keywords exist only inside the FP logics;
       // everywhere else names like "fp" or "NaN" stay ordinary symbols,
       // exactly as before floating-point support existed.

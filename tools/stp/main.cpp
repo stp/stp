@@ -359,7 +359,7 @@ void ExtraMain::create_options()
                bm->UserFlags.enable_uninterpreted_functions,
                "decide uninterpreted functions over Bool, bit-vector, "
                "RoundingMode and floating-point sorts by dynamic Ackermann "
-               "refinement")
+               "refinement, including when the input logic omits UF")
       ->group(refinement_group);
   app.add_option("--uf-lemmas-per-round",
                  bm->UserFlags.uf_lemmas_per_round,

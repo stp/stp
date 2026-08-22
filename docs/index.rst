@@ -129,9 +129,8 @@ these, and rejects any other name:
      - bitvectors
    * - ``QF_ABV``
      - bitvectors and arrays
-   * - ``QF_AUFBV``
-     - bitvectors and arrays; the uninterpreted functions the name also
-       allows are not supported, function declarations being nullary
+   * - ``QF_UFBV``, ``QF_AUFBV``
+     - bitvectors and uninterpreted functions, optionally with arrays
    * - ``QF_FP``
      - floating-point
    * - ``QF_BVFP``
@@ -141,6 +140,18 @@ these, and rejects any other name:
    * - ``QF_FPLRA``, ``QF_BVFPLRA``, ``QF_ABVFPLRA``
      - as the three above, plus the real constants that appear as the
        argument of ``to_fp``; no other use of reals is supported
+   * - ``QF_UFFP``, ``QF_UFBVFP``, ``QF_AUFBVFP``
+     - uninterpreted functions and floating-point, optionally with explicit
+       bitvectors and arrays
+   * - ``QF_UFFPLRA``, ``QF_UFBVFPLRA``, ``QF_AUFBVFPLRA``
+     - as the three UF+FP logics above, plus real constants used as the
+       argument of ``to_fp``
+
+For compatibility, ``QF_UFABVFP`` and ``QF_UFABVFPLRA`` are accepted as
+aliases of the corresponding ``QF_AUFBV*`` spellings.  A logic containing
+``UF`` enables uninterpreted-function support itself.  The
+``--uninterpreted-functions`` option is still available for an input whose
+logic name omits ``UF``.
 
 Declarations
 ------------
@@ -160,6 +171,15 @@ results is:
 .. code-block:: lisp
 
     (declare-fun a () (Array (_ BitVec 32) (_ BitVec 7)))
+
+A ``declare-fun`` with a nonempty domain declares an uninterpreted function.
+Its arguments and result may be ``Bool``, bitvectors, declared sorts,
+``RoundingMode`` or floating-point sorts.  For example:
+
+.. code-block:: lisp
+
+    (set-logic QF_UFBVFP)
+    (declare-fun classify ((_ FloatingPoint 8 24)) (_ BitVec 8))
 
 Functions and terms
 -------------------
@@ -608,4 +628,3 @@ Many people have contributed:
 And many others: the `contributors
 page <https://github.com/stp/stp/graphs/contributors>`__ lists everyone
 who has committed to STP.
-

@@ -313,6 +313,14 @@ private:
   bool current_command_rejected;
   bool current_command_active;
 
+  // set-logic may select UF for this SMT-LIB session without changing the
+  // caller's lasting runtime configuration. Remember that configuration so
+  // reset (which clears the logic) and parser teardown can restore it, while
+  // reset-assertions deliberately retains both the logic and this selection.
+  bool uf_enabled_by_logic = false;
+  bool uf_option_before_logic = false;
+  void restoreUFOptionAfterLogic();
+
   // Unless --incremental=on or an explicit threshold overrides it, pure
   // QF_BV/QF_ABV sessions delay the persistent driver until solve 32; other
   // and unknown logics retain solve 3. The first solves carry the largest
@@ -480,7 +488,8 @@ public:
   DLL_PUBLIC bool isSymbolAlreadyDeclared(std::string name);
 
   // Retain the SMT-LIB2 set-logic classification needed by automatic
-  // incremental engagement. reset clears it; reset-assertions retains it.
+  // incremental engagement and select UF when the logic names it. reset
+  // clears both selections; reset-assertions retains them.
   DLL_PUBLIC void setLogic(const std::string& logic);
 
   // Create the node, then "new" it.

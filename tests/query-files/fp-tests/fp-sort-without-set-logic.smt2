@@ -9,6 +9,6 @@
 ;
 ; Recovery is non-fatal here, so the process still exits zero: the check is
 ; the error response, not the exit code.
-; CHECK-L: hint: FloatingPoint is a floating-point name; those are recognised only after a floating-point (set-logic): QF_FP, QF_BVFP, QF_ABVFP or one of their LRA variants
+; CHECK-L: hint: FloatingPoint is a floating-point name; those are recognised only after a floating-point (set-logic): QF_FP, QF_BVFP, QF_ABVFP, QF_UFFP, QF_UFBVFP, QF_AUFBVFP or one of their LRA variants
 (declare-const x (_ FloatingPoint 11 53))
 (check-sat)
