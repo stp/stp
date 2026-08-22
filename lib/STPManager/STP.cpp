@@ -714,7 +714,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     tmp_inputToSAT = inputToSat;
 
     if (bm->soft_timeout_expired)
-      return SOLVER_TIMEOUT;
+      return bm->unknownResult();
 
     if (bm->UserFlags.optimize_flag)
     {
@@ -818,7 +818,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   }
 
   if (bm->soft_timeout_expired)
-    return SOLVER_TIMEOUT;
+    return bm->unknownResult();
 
   if (bm->UserFlags.enable_ite_context)
   {
@@ -1021,7 +1021,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   ToSATBase* satBase = &toSATAIG;
 
   if (bm->soft_timeout_expired)
-    return SOLVER_TIMEOUT;
+    return bm->unknownResult();
 
   NewSolver.enableRefinement(maybeRefinement);
 
@@ -1050,7 +1050,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     if (toSATAIG.cbIsDestructed())
       cleaner.release();
 
-    return SOLVER_TIMEOUT;
+    return bm->unknownResult();
   }
 
   if (SOLVER_UNDECIDED != res)
@@ -1152,7 +1152,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     {
       if (toSATAIG.cbIsDestructed())
         cleaner.release();
-      return SOLVER_TIMEOUT;
+      return bm->unknownResult();
     }
 
     if (!toSATAIG.hasBVEQAbstractions() && !toSATAIG.hasBVTermAbstractions() &&

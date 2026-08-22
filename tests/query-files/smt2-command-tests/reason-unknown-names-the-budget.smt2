@@ -1,7 +1,7 @@
 ; Both drivers name the budget that stopped them, and name the same one.
 ;
-; A no-answer leaves either driver as SOLVER_TIMEOUT, which is the same value
-; whichever budget ran out, so which one it was has to be taken from the SAT
+; A no-answer leaves either driver as SOLVER_UNKNOWN, which deliberately says
+; nothing about which budget ran out, so that has to be taken from the SAT
 ; solver while it is still there to be asked. The batch pipeline did that in
 ; ToSATAIG::runSolver and the incremental driver did not, so the same query
 ; stopped by the same flag was named through one and denied through the other:

@@ -1,16 +1,15 @@
-% The legacy CVC output says "Timed Out." where SMT-LIB says "unknown".
+% A CVC query with no answer reports that verdict without guessing why.
 %
-% That wording is kept deliberately rather than unified: this input language
-% has no (get-info :reason-unknown) to carry a reason, so the sentence is the
-% whole of what a caller gets, and it is what every existing consumer of this
-% mode reads. The parser is selected by file extension, so this is the only
-% kind of file that can exercise it.
+% This input language has no (get-info :reason-unknown), but calling every
+% no-answer a timeout would still be wrong: a deterministic conflict or AIG
+% budget reaches the same verdict. The parser is selected by file extension,
+% so this is the only kind of file that can exercise the CVC rendering.
 %
 % A zero-second budget, so the result does not depend on the machine.
 %
 % RUN: %solver -k 0 %s 2>&1 | %OutputCheck %s
-% CHECK: Timed Out
-% CHECK-NOT: ^unknown$
+% CHECK: ^Unknown\.$
+% CHECK-NOT: Timed Out
 
 a, b, c : BITVECTOR(32);
 

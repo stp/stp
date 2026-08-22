@@ -12,10 +12,10 @@
 ; version of this fixture ran -g and pinned `timeout`, in a run that finished
 ; in a tenth of a second.
 ;
-; The legacy CVC wording is pinned in unknown-on-budget.cvc rather than here:
-; the parser is chosen by file extension, so a .smt2 file cannot produce it and
-; a leg claiming to test it would be testing the SMT-LIB path under another
-; name.
+; The CVC rendering is pinned in unknown-on-budget.cvc rather than here: that
+; language has no reason command, so it reports the generic verdict as
+; `Unknown.`. The parser is chosen by file extension, so a .smt2 file cannot
+; exercise that path.
 ;
 ; The clock leg asks for zero seconds. That is deterministic -- the budget is
 ; spent before the solver is entered, which is the case the pre-check exists

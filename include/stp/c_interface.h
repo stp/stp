@@ -360,7 +360,7 @@ enum ifaceflag_t
   //!
   //! Exceeding it ends the query without an answer: vc_query returns 3, the
   //! value every way of giving up returns, and vc_getReasonUnknown returns
-  //! REASON_UNKNOWN_INCOMPLETE with a sentence naming this budget and the
+  //! REASON_UNKNOWN_AIG_BUDGET with a sentence naming this budget and the
   //! count it stopped at -- the same sentence SMT-LIB2 reads through
   //! (get-info :reason-unknown).
   //!
@@ -544,11 +544,10 @@ enum reason_unknown_t
   //! Something stopped before an answer and has no value of its own here yet.
   //! vc_getReasonUnknownToBuffer gives the sentence, which says what.
   //!
-  //! The two below were this until they were named, and are appended rather
-  //! than inserted so that nothing already reporting as incomplete moves. A
-  //! caller that has not heard of a later addition compares unequal to every
-  //! value it knows and still has the sentence to fall back on, which is what
-  //! makes naming a cause a safe change to make.
+  //! Later named causes are appended rather than inserted so that nothing
+  //! already reporting as incomplete moves. A caller that has not heard of a
+  //! later addition compares unequal to every value it knows and still has the
+  //! sentence to fall back on, which makes naming a cause safe.
   REASON_UNKNOWN_INCOMPLETE,
 
   //! A sort introduced by (declare-sort S 0) had a carrier too narrow for the
@@ -573,7 +572,13 @@ enum reason_unknown_t
   //! for what it is because it is the floor those drivers would fall to, and
   //! because a caller reading a value it does not recognise is better served
   //! than one reading `unsat`.
-  REASON_UNKNOWN_ASSUMED_INJECTIVITY
+  REASON_UNKNOWN_ASSUMED_INJECTIVITY,
+
+  //! AIG_NODE_BUDGET stopped bit-blasting before the AIG exhausted memory.
+  //! Deterministic: re-running reproduces it exactly, so what is worth doing
+  //! is raising that budget. vc_getReasonUnknownToBuffer says how many AND
+  //! gates had been built when it stopped.
+  REASON_UNKNOWN_AIG_BUDGET
 };
 
 //! \brief Returns why the last query had no answer.
@@ -591,10 +596,10 @@ DLL_PUBLIC enum reason_unknown_t vc_getReasonUnknown(VC vc);
 //! 'len'. It is the responsibility of the caller to free the memory
 //! afterwards.
 //!
-//! REASON_UNKNOWN_INCOMPLETE, REASON_UNKNOWN_CARRIER_EXHAUSTED and
-//! REASON_UNKNOWN_ASSUMED_INJECTIVITY carry a sentence, saying what was
-//! reached or what was assumed; the causes their name alone is enough to act
-//! on write an empty string. Prose for a person to read: a caller deciding
+//! REASON_UNKNOWN_INCOMPLETE, REASON_UNKNOWN_CARRIER_EXHAUSTED,
+//! REASON_UNKNOWN_ASSUMED_INJECTIVITY and REASON_UNKNOWN_AIG_BUDGET carry a
+//! sentence, saying what was reached or what was assumed; the AIG sentence
+//! also gives the gate count. Prose is for a person to read: a caller deciding
 //! what to do next wants vc_getReasonUnknown, which is why the two are
 //! separate.
 DLL_PUBLIC void vc_getReasonUnknownToBuffer(VC vc, char** buf, size_t* len);
@@ -893,7 +898,7 @@ DLL_PUBLIC Expr vc_simplify(VC vc, Expr e);
 //!   0: if 'e' is INVALID
 //!   1: if 'e' is VALID
 //!   2: if errors occured
-//!   3: if the timeout was reached
+//!   3: if the query could not be answered; call vc_getReasonUnknown for why
 //!
 //! Note: only the cryptominisat and cadical solvers can abandon a search that
 //!       is already running. With the other solvers 'timeout_max_time' is
@@ -920,7 +925,7 @@ DLL_PUBLIC int vc_query(VC vc, Expr e);
 //! well sorted, and asserting it pins 'e' to the value.
 //!
 //! There has to be a model to read. A query must have been answered -- VALID
-//! or INVALID, not a timeout or an error -- and it must still be the last
+//! or INVALID, not UNKNOWN or an error -- and it must still be the last
 //! thing to have happened: as vc_pop and vc_push document, a counterexample
 //! survives vc_pop and is discarded by the next vc_push or vc_query. Called
 //! with no model behind it, this reports a nonfatal diagnostic through

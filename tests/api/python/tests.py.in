@@ -1337,11 +1337,11 @@ class TestSTP(unittest.TestCase):
         """
         An unlimited query must still reach the SAT solver and come back with
         an answer: a backend that mistook "no budget configured" for a budget
-        of zero would report a timeout here.
+        of zero would report unknown here.
 
         60491 == 251 * 241, factored in milliseconds. Given a budget of zero
-        conflicts this same instance times out, so the answer really does
-        come from the SAT solver.
+        conflicts this same instance returns unknown, so the answer really
+        does come from the SAT solver.
         """
         s = self.s
         a = s.bitvec('a', 32)

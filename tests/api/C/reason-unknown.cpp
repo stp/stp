@@ -104,16 +104,16 @@ TEST(reason_unknown, TheClockAndTheConflictBudgetAreToldApartByTheReason)
   vc_Destroy(conflicts);
 }
 
-// The AIG budget is neither of those two, so the clock's name is not what it
-// reports: it is an encoding STP abandoned, and the sentence behind the value
-// names the flag and the count it stopped at -- which the value alone cannot.
+// The AIG budget is neither of those two and has a value of its own rather
+// than the catch-all it used to report as. A caller sets this budget in order
+// to act on it firing; the sentence still supplies the count the value cannot.
 TEST(reason_unknown, TheAigBudgetIsNotReportedAsAClock)
 {
   VC vc = vc_createValidityChecker();
   vc_setInterfaceFlags(vc, AIG_NODE_BUDGET, 50);
   assertFactoring(vc);
   EXPECT_EQ(3, vc_query_with_timeout(vc, vc_falseExpr(vc), -1, -1));
-  EXPECT_EQ(REASON_UNKNOWN_INCOMPLETE, vc_getReasonUnknown(vc));
+  EXPECT_EQ(REASON_UNKNOWN_AIG_BUDGET, vc_getReasonUnknown(vc));
 
   const std::string why = detail(vc);
   EXPECT_NE(std::string::npos, why.find("--aig-node-budget")) << why;

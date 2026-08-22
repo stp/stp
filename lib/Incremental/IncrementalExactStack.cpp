@@ -216,9 +216,9 @@ SOLVER_RETURN_TYPE IncrementalSolver::Impl::solvePlainExactStack(
     bm->GetRunTimes()->stop(RunTimes::Solving);
   }
 
-  // As in IncrementalSolver::checkSat: the SOLVER_TIMEOUT below is the same
-  // value a clock expiry returns, so which budget it was has to be taken from
-  // the solver here or not at all.
+  // As in IncrementalSolver::checkSat, the verdict below deliberately does
+  // not identify the exhausted budget, so the reason has to be taken from the
+  // solver here or not at all.
   if (bm->soft_timeout_expired)
     bm->noteBudgetExhausted(*solver);
 
@@ -238,7 +238,7 @@ SOLVER_RETURN_TYPE IncrementalSolver::Impl::solvePlainExactStack(
     solver->printStats();
 
   if (bm->soft_timeout_expired)
-    return SOLVER_TIMEOUT;
+    return bm->unknownResult();
 
   if (!sat)
   {

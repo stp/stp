@@ -74,7 +74,7 @@ void test_timeout(bool test_with_time, uint32_t max_value, bool use_cms)
     }
     std::cout << timeout_type << " : " << limit << " : result " << std::flush;
 
-    // returns 3 on timeout
+    // returns unknown (3), with timeout available through the reason API
     int query = vc_query_with_timeout(vc, vc_falseExpr(vc), max_conflicts, max_time);
     ASSERT_TRUE(query == 3);
 

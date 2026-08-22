@@ -248,7 +248,7 @@ namespace stp
   using stp::SOLVER_INVALID;
   using stp::SOLVER_VALID;
   using stp::SOLVER_UNDECIDED;
-  using stp::SOLVER_TIMEOUT;
+  using stp::SOLVER_UNKNOWN;
   using stp::SOLVER_ERROR;
   using stp::SOLVER_UNSATISFIABLE;
   using stp::SOLVER_SATISFIABLE;
