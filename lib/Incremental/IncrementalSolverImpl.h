@@ -2274,6 +2274,7 @@ struct IncrementalSolver::Impl
     }
 
     const uint64_t clausesPre = solver->submittedClauses();
+    bm->UserFlags.coverage.queries_bitblasted++;
     bm->GetRunTimes()->start(RunTimes::BitBlasting);
     BBNodeAIG root = encoding.blaster().BBForm(toEncode);
     bm->GetRunTimes()->stop(RunTimes::BitBlasting);

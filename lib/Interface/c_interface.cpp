@@ -853,6 +853,52 @@ void vc_printCounterExampleToBuffer(VC vc, char** buf, size_t* len)
   memcpy(*buf, cstr, size);
 }
 
+unsigned long long vc_getCounter(VC vc, enum stp_counter_t counter)
+{
+  const stp::UserDefinedFlags::EncodingCoverage& c =
+      mgr(vc)->UserFlags.coverage;
+  typedef stp::UserDefinedFlags UF;
+  switch (counter)
+  {
+    case STP_COUNTER_QUERIES_BITBLASTED: return c.queries_bitblasted;
+
+    case STP_COUNTER_BV_CANDIDATES_EQ:
+      return c.bv_candidates[UF::ABSTRACT_EQ];
+    case STP_COUNTER_BV_CANDIDATES_COMPARE:
+      return c.bv_candidates[UF::ABSTRACT_COMPARE];
+    case STP_COUNTER_BV_CANDIDATES_ITE:
+      return c.bv_candidates[UF::ABSTRACT_ITE];
+    case STP_COUNTER_BV_CANDIDATES_PLUS:
+      return c.bv_candidates[UF::ABSTRACT_PLUS];
+    case STP_COUNTER_BV_CANDIDATES_MULT:
+      return c.bv_candidates[UF::ABSTRACT_MULT];
+    case STP_COUNTER_BV_CANDIDATES_DIVMOD:
+      return c.bv_candidates[UF::ABSTRACT_DIVMOD];
+
+    case STP_COUNTER_BV_ABSTRACTED_EQ:
+      return c.bv_abstracted[UF::ABSTRACT_EQ];
+    case STP_COUNTER_BV_ABSTRACTED_COMPARE:
+      return c.bv_abstracted[UF::ABSTRACT_COMPARE];
+    case STP_COUNTER_BV_ABSTRACTED_ITE:
+      return c.bv_abstracted[UF::ABSTRACT_ITE];
+    case STP_COUNTER_BV_ABSTRACTED_PLUS:
+      return c.bv_abstracted[UF::ABSTRACT_PLUS];
+    case STP_COUNTER_BV_ABSTRACTED_MULT:
+      return c.bv_abstracted[UF::ABSTRACT_MULT];
+    case STP_COUNTER_BV_ABSTRACTED_DIVMOD:
+      return c.bv_abstracted[UF::ABSTRACT_DIVMOD];
+
+    case STP_COUNTER_BV_REFINEMENT_ROUNDS: return c.bv_refinement_rounds;
+    case STP_COUNTER_BV_BLOCKING_LEMMAS: return c.bv_blocking_lemmas;
+    case STP_COUNTER_UF_APPLICATIONS_LOWERED:
+      return c.uf_applications_lowered;
+    case STP_COUNTER_UF_CONSTRAINTS_INSTALLED:
+      return c.uf_constraints_installed;
+  }
+  reportCAPIError("vc_getCounter: unrecognised counter");
+  return 0;
+}
+
 enum reason_unknown_t vc_getReasonUnknown(VC vc)
 {
   switch (mgr(vc)->getUnknownReason())
