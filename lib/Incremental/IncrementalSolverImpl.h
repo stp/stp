@@ -2143,30 +2143,35 @@ struct IncrementalSolver::Impl
   // rootLit's encode runs this same guard, and each step removes its
   // variable from the dropped set before encoding, so the chain
   // terminates and a definition never restores itself twice.
+  // Restore one dropped base definition before any route mints the source
+  // symbol's raw bits.
+  void restoreDroppedSigma0Symbol(const ASTNode& s)
+  {
+    if (sigma0Dropped.erase(s) == 0)
+      return;
+    const ASTNode conj = sigma0DefiningConjunctOf.at(s);
+    mustKeepRaw.insert(conj);
+    // The conjunct's cached encoding is the eliminated TRUE form; evict it so
+    // the re-encode below produces the raw equation.
+    rootLitOf.erase(conj);
+    const int lit = rootLit(conj);
+    SATSolver::vec_literals unit;
+    unit.push(SATSolver::mkLit(lit >> 1, lit & 1));
+    addClause(unit);
+    baseLiveMass = addMass(baseLiveMass, addMass(clauseMassOf[conj], 1));
+    recordPermanentRoot(conj);
+    if (bm->UserFlags.stats_flag)
+      std::cerr << "Incremental: restored an eliminated base definition "
+                   "before its variable was encoded raw"
+                << std::endl;
+  }
+
   void restoreDroppedSigma0(const ASTNode& toEncode)
   {
     if (sigma0Dropped.empty())
       return;
     for (const ASTNode& s : symbolsOf(toEncode))
-    {
-      if (sigma0Dropped.erase(s) == 0)
-        continue;
-      const ASTNode conj = sigma0DefiningConjunctOf.at(s);
-      mustKeepRaw.insert(conj);
-      // The conjunct's cached encoding is the eliminated TRUE form; evict
-      // it so the re-encode below produces the raw equation.
-      rootLitOf.erase(conj);
-      const int lit = rootLit(conj);
-      SATSolver::vec_literals unit;
-      unit.push(SATSolver::mkLit(lit >> 1, lit & 1));
-      addClause(unit);
-      baseLiveMass = addMass(baseLiveMass, addMass(clauseMassOf[conj], 1));
-      recordPermanentRoot(conj);
-      if (bm->UserFlags.stats_flag)
-        std::cerr << "Incremental: restored an eliminated base definition "
-                     "before its variable was encoded raw"
-                  << std::endl;
-    }
+      restoreDroppedSigma0Symbol(s);
   }
 
   // Lower, transform and bit-blast a fully rewritten word-level formula
