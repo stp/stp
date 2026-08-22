@@ -25,6 +25,7 @@ THE SOFTWARE.
 #include "stp/cpp_interface.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/Parser/LetMgr.h"
+#include "stp/Parser/parser.h"
 #include "stp/Printer/printers.h"
 #include "stp/Sat/SATSolverFactory.h"
 #include "stp/Util/GitSHA1.h"
@@ -32,6 +33,9 @@ THE SOFTWARE.
 #include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/ToSat/ToSATAIG.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
+#include "stp/UninterpretedFunctions/UFModel.h"
+#include "stp/UninterpretedFunctions/UFRefinement.h"
 #include <cassert>
 
 using std::cerr;
@@ -67,6 +71,8 @@ void Cpp_interface::init()
   produce_models = false;
   session_touched = false;
   model_valid = false;
+  current_command_rejected = false;
+  current_command_active = false;
   incremental_from_start =
       bm.UserFlags.incremental_mode == UserDefinedFlags::IncrementalMode::ON;
   session_incremental = incremental_from_start;
@@ -77,7 +83,7 @@ void Cpp_interface::init()
 void Cpp_interface::addFrame()
 {
   // create a new frame
-  SolverFrame* new_frame = new SolverFrame(&functions, &sort_aliases);
+  SolverFrame* new_frame = new SolverFrame(&functions, &sort_aliases, &bm);
 
   // store the new frame
   frames.push_back(new_frame);
@@ -165,6 +171,8 @@ void Cpp_interface::setLogic(const std::string& logic)
 
 void Cpp_interface::AddAssert(const ASTNode& assert)
 {
+  if (current_command_rejected)
+    return;
   bm.AddAssert(assert);
   session_touched = true;
 
@@ -312,6 +320,8 @@ void Cpp_interface::removeSymbol(ASTNode to_remove)
 void Cpp_interface::storeFunction(const string& name, const ASTVec& params,
                                   const ASTNode& function)
 {
+  if (current_command_rejected)
+    return;
   Function f;
   f.name = name;
 
@@ -393,6 +403,100 @@ SourceSort Cpp_interface::functionReturnSourceSort(const string& name)
                                   : found->second.function.GetSourceSort();
 }
 
+const UFDecl* Cpp_interface::declareUninterpretedFunction(
+    const std::string& name, const std::vector<SourceSort>& domain,
+    const SourceSort& codomain, std::string* diagnostic)
+{
+  if (lookupFunction(name) != NULL)
+  {
+    if (diagnostic != NULL)
+      *diagnostic = "name '" + name + "' already denotes a define-fun";
+    return NULL;
+  }
+  ASTNode symbol;
+  if (LookupSymbol(name.c_str(), symbol))
+  {
+    if (diagnostic != NULL)
+      *diagnostic = "name '" + name + "' already denotes an ordinary symbol";
+    return NULL;
+  }
+  const UFDecl* result =
+      bm.getUFContext()->declareFunction(name, domain, codomain, diagnostic);
+  if (result != NULL)
+  {
+    session_touched = true;
+    model_valid = false;
+    if (GlobalSTP != NULL &&
+        GlobalSTP->Ctr_Example->getUFTheoryAdapter() != NULL)
+      GlobalSTP->Ctr_Example->getUFTheoryAdapter()
+          ->invalidateCertifiedModel();
+  }
+  return result;
+}
+
+const UFDecl* Cpp_interface::declareScopedUninterpretedFunction(
+    const std::string& name, const std::vector<SourceSort>& domain,
+    const SourceSort& codomain, std::string* diagnostic)
+{
+  const UFDecl* result =
+      declareUninterpretedFunction(name, domain, codomain, diagnostic);
+  if (result != NULL)
+    frames.back()->addUFDeclaration(result);
+  return result;
+}
+
+const UFDecl*
+Cpp_interface::lookupUninterpretedFunction(const std::string& name) const
+{
+  const UFContext* context = bm.getUFContextIfAny();
+  return context == NULL ? NULL : context->lookup(name);
+}
+
+ASTNode Cpp_interface::applyUninterpretedFunction(
+    const UFDecl* declaration, const ASTVec& actuals,
+    std::string* diagnostic)
+{
+  UFContext* context = bm.getUFContextIfAny();
+  if (context == NULL)
+  {
+    if (diagnostic != NULL)
+      *diagnostic = "uninterpreted-function declaration is not owned by this "
+                    "context";
+    return bm.ASTUndefined;
+  }
+  return context->apply(declaration, actuals, diagnostic);
+}
+
+ASTNode Cpp_interface::getUninterpretedApplicationValue(
+    const ASTNode& application, std::string* diagnostic)
+{
+  if (!model_valid || GlobalSTP == NULL)
+  {
+    if (diagnostic != NULL)
+      *diagnostic = "no current certified model is available";
+    return bm.ASTUndefined;
+  }
+  if (GlobalSTP->hasIncrementalSolver())
+    GlobalSTP->getIncrementalSolver()->materializePendingModel();
+  ASTNode value;
+  std::string localDiagnostic;
+  if (!UFModel::evaluateApplication(
+          &bm, GlobalSTP->Ctr_Example->getUFTheoryAdapter(), application,
+          value, localDiagnostic))
+  {
+    if (diagnostic != NULL)
+      *diagnostic = localDiagnostic;
+    return bm.ASTUndefined;
+  }
+  return value;
+}
+
+bool Cpp_interface::hasUninterpretedFunctions() const
+{
+  const UFContext* context = bm.getUFContextIfAny();
+  return context != NULL && context->activeDeclarationCount() != 0;
+}
+
 ASTNode Cpp_interface::LookupOrCreateSymbol(string name)
 {
   return LookupOrCreateSymbol(name.c_str());
@@ -405,6 +509,18 @@ bool Cpp_interface::LookupSymbol(const char* const name, ASTNode& output)
   for (auto it = frames.rbegin(); it != frames.rend(); ++it)
   {
     if ((*it)->lookupSymbol(sv, output))
+      return true;
+  }
+  return false;
+}
+
+bool Cpp_interface::LookupTemporarySymbol(const char* const name,
+                                          ASTNode& output)
+{
+  const std::string_view sv(name);
+  for (auto it = frames.rbegin(); it != frames.rend(); ++it)
+  {
+    if ((*it)->lookupTemporarySymbol(sv, output))
       return true;
   }
   return false;
@@ -458,8 +574,40 @@ void Cpp_interface::deleteNode(ASTNode* n)
 
 void Cpp_interface::addSymbol(ASTNode& s)
 {
+  if (current_command_rejected)
+    return;
   frames.back()->addSymbol(s);
   session_touched = true;
+}
+
+void Cpp_interface::addTemporarySymbol(ASTNode& s)
+{
+  // A formal is parser-local scratch, not a declaration. The successful
+  // storeFunction call is what makes the command observable and marks the
+  // session touched; a rejected define-fun leaves neither behind.
+  frames.back()->addTemporarySymbol(s);
+}
+
+bool Cpp_interface::validateTopLevelDeclarationName(
+    const std::string& name, std::string* diagnostic)
+{
+  std::string message;
+  if (lookupFunction(name) != NULL)
+    message = "name '" + name + "' already denotes a define-fun";
+  else if (lookupUninterpretedFunction(name) != NULL)
+    message = "name '" + name +
+              "' already denotes an uninterpreted function";
+  else
+  {
+    ASTNode symbol;
+    if (LookupSymbol(name.c_str(), symbol))
+      message = "name '" + name + "' already denotes an ordinary symbol";
+  }
+  if (message.empty())
+    return true;
+  if (diagnostic != NULL)
+    *diagnostic = message;
+  return false;
 }
 
 void Cpp_interface::addRoundingModeSymbol(ASTNode& s)
@@ -494,6 +642,8 @@ bool Cpp_interface::arraySortsAgree(const ASTNode& arr, const array_sort& sort)
 
 void Cpp_interface::success()
 {
+  if (current_command_rejected)
+    return;
   if (print_success)
   {
     cout << "success" << endl;
@@ -512,6 +662,57 @@ void Cpp_interface::unsupported()
 {
   cout << "unsupported" << endl;
   flush(cout);
+}
+
+void Cpp_interface::beginCurrentCommand()
+{
+  // A prior parse may have aborted while reducing a formal declaration. Its
+  // command and lexer state are not part of this new top-level command.
+  if (current_command_active)
+    abortCurrentCommand();
+  SMT2ResetCommandLexerState();
+  current_command_active = true;
+  current_command_rejected = false;
+  if (UFContext* context = bm.getUFContextIfAny())
+    context->beginParserCommand();
+}
+
+void Cpp_interface::abortCurrentCommand()
+{
+  if (current_command_active)
+  {
+    if (UFContext* context = bm.getUFContextIfAny())
+      context->finishParserCommand(false);
+    frames.back()->clearTemporarySymbols();
+  }
+  current_command_rejected = false;
+  current_command_active = false;
+  SMT2ResetCommandLexerState();
+}
+
+void Cpp_interface::rejectCurrentCommand(const std::string& diagnostic)
+{
+  // One command has one rejection response. Continue reducing with typed
+  // carriers, but do not emit a diagnostic for every malformed descendant.
+  if (current_command_rejected)
+    return;
+  current_command_rejected = true;
+  error(diagnostic);
+}
+
+void Cpp_interface::finishCurrentCommand()
+{
+  if (current_command_active)
+  {
+    if (UFContext* context = bm.getUFContextIfAny())
+      context->finishParserCommand(!current_command_rejected);
+    // Function formals are command-local even if error recovery skipped a
+    // define-fun production's ordinary removal loop.
+    frames.back()->clearTemporarySymbols();
+  }
+  current_command_rejected = false;
+  current_command_active = false;
+  SMT2ResetCommandLexerState();
 }
 
 void Cpp_interface::resetSolver()
@@ -544,6 +745,12 @@ void Cpp_interface::discardExtensionalitySolveState()
 // Can clear away the base frame..
 void Cpp_interface::reset()
 {
+  // reset destroys the current frame and UF context itself, so close its
+  // accepted command transaction while both are still alive. The grammar's
+  // outer finish becomes a harmless no-op after init().
+  if (current_command_active)
+    finishCurrentCommand();
+
   popToFirstLevel();
 
   if (frames.size() > 0)
@@ -713,6 +920,12 @@ void Cpp_interface::popAssumptionFrame()
 
 void Cpp_interface::checkSatAssuming(const ASTVec& assumptions)
 {
+  // The parser reduces a malformed UF subexpression to a typed carrier so it
+  // can reach this outer boundary. Rejection is transactional: in particular
+  // do not push, invalidate a model, solve the base stack, or print a verdict.
+  if (current_command_rejected)
+    return;
+
   // An internal assertion level holding exactly the assumptions. push()
   // inherits a known-UNSAT verdict from the level below, and a SAT answer
   // propagates to the levels beneath, so the verdict cache keeps working
@@ -909,6 +1122,11 @@ Cpp_interface::Cpp_interface(STPMgr& bm_)
 
 void Cpp_interface::cleanUp()
 {
+  // exit and reset perform cleanup from inside their command action and do
+  // not return through the ordinary closing-parenthesis reduction.
+  if (current_command_active)
+    finishCurrentCommand();
+
   letMgr->cleanupParserSymbolTable();
   cache.clear();
 
@@ -1288,6 +1506,8 @@ void Cpp_interface::getAssertions()
 
 void Cpp_interface::getValue(const ASTVec& v)
 {
+  if (current_command_rejected)
+    return;
   if (!bm.UserFlags.construct_counterexample_flag || !model_valid)
   {
     unsupported();
@@ -1307,10 +1527,54 @@ void Cpp_interface::getValue(const ASTVec& v)
 
   for (ASTNode n : v)
   {
+    if (n.GetKind() == UF_APPLY)
+    {
+      std::string diagnostic;
+      const ASTNode value =
+          getUninterpretedApplicationValue(n, &diagnostic);
+      if (value.GetKind() == UNDEFINED)
+      {
+        // The solve never reached this application, so there is no certified
+        // value to hand back -- but there is still an answer, and the same
+        // command list was already giving it: an application nested inside a
+        // term goes through the model evaluator, which completes it against
+        // the published interpretation, so (bvadd (f #x07) #x01) answered
+        // while the bare (f #x07) was refused. The printed model is total and
+        // says what (f #x07) is; refusing to repeat it here was the one place
+        // the two disagreed.
+        //
+        // Fall through to the ordinary term path, which is that evaluator.
+        // Anything genuinely unanswerable -- no model at all, an application
+        // from another context, one whose model has been invalidated -- fails
+        // there too, and the diagnostic computed above is what it reports.
+        if (!model_valid || GlobalSTP == NULL)
+        {
+          if (diagnostic.empty())
+            diagnostic = "uninterpreted-function application has no certified "
+                         "value";
+          rejectCurrentCommand(diagnostic);
+          return;
+        }
+        GlobalSTP->Ctr_Example->PrintSMTLIB2(os, n);
+        os << std::endl;
+        continue;
+      }
+      os << "( ";
+      // Through the letizing entry point, for the reason the note above
+      // AbsRefine_CounterExample::PrintSMTLIB2 gives: an application's
+      // arguments may be a shared DAG a caller built out of very little
+      // input text.
+      printer::SMTLIB2_PrintTerm(os, &bm, n);
+      os << " ";
+      printer::SMTLIB2_Print1(os, value, 0, false);
+      os << " )" << std::endl;
+      continue;
+    }
     // (get-value ...) asks for the value of arbitrary well-sorted terms and
     // not just of variables, and the model evaluator already decides all of
-    // them. The one shape with no value to print is an array: (get-model)
-    // prints the completed array interpretations instead. That refusal is
+    // them -- including terms built over uninterpreted applications. The one
+    // shape with no value to print is an array: (get-model) prints the
+    // completed array interpretations instead. That refusal is
     // unconditional, because reaching the printer with an array aborted the
     // process rather than answering when array equality was disabled -- and
     // disabled is the default.
@@ -1439,9 +1703,10 @@ Cpp_interface::SolverFrame::SolverFrame(
     ankerl::unordered_dense::map<std::string, Function>*
         global_function_context,
     std::map<std::string, SourceSort>*
-        global_sort_alias_context)
+        global_sort_alias_context,
+    STPMgr* manager)
     : _global_function_context(global_function_context),
-      _global_sort_alias_context(global_sort_alias_context)
+      _global_sort_alias_context(global_sort_alias_context), _manager(manager)
 {
 }
 
@@ -1452,6 +1717,18 @@ Cpp_interface::SolverFrame::SolverFrame(
 // function declarations are correctly decremented.
 Cpp_interface::SolverFrame::~SolverFrame()
 {
+  UFContext* uf = _manager->getUFContextIfAny();
+  if (uf != NULL)
+  {
+    for (const UFDecl* declaration : _scoped_uf_declarations)
+    {
+      std::string ignored;
+      const bool removed = uf->deactivate(declaration, &ignored);
+      assert(removed);
+      (void)removed;
+    }
+  }
+
   // Iterate on the function names in our current scope
   for (const auto& scoped_function_name : getFunctions())
   {
@@ -1497,14 +1774,47 @@ void Cpp_interface::SolverFrame::addSortAlias(const std::string& name)
   _scoped_sort_aliases.push_back(name);
 }
 
+void Cpp_interface::SolverFrame::addUFDeclaration(const UFDecl* declaration)
+{
+  assert(declaration != NULL);
+  _scoped_uf_declarations.push_back(declaration);
+}
+
 void Cpp_interface::SolverFrame::addSymbol(const ASTNode& symbol)
 {
   _scoped_symbols.push_back(symbol);
   _symbol_bindings[std::string(symbol.GetName())].push_back(symbol);
 }
 
+void Cpp_interface::SolverFrame::addTemporarySymbol(const ASTNode& symbol)
+{
+  addSymbol(symbol);
+  _temporary_symbol_bindings[std::string(symbol.GetName())].push_back(symbol);
+}
+
+void Cpp_interface::SolverFrame::clearTemporarySymbols()
+{
+  while (!_temporary_symbol_bindings.empty())
+  {
+    const ASTNode symbol = _temporary_symbol_bindings.begin()->second.back();
+    const bool removed = removeSymbol(symbol);
+    assert(removed);
+    (void)removed;
+  }
+}
+
 bool Cpp_interface::SolverFrame::removeSymbol(const ASTNode& symbol)
 {
+  const auto temporary =
+      _temporary_symbol_bindings.find(std::string_view(symbol.GetName()));
+  if (temporary != _temporary_symbol_bindings.end() &&
+      !temporary->second.empty() && temporary->second.back() == symbol)
+  {
+    temporary->second.pop_back();
+    if (temporary->second.empty())
+      _temporary_symbol_bindings.erase(temporary);
+  }
+
   const auto binding = _symbol_bindings.find(std::string_view(symbol.GetName()));
   if (binding == _symbol_bindings.end() || binding->second.empty() ||
       binding->second.back() != symbol)
@@ -1547,6 +1857,11 @@ void Cpp_interface::SolverFrame::adoptDeclarations(SolverFrame& donor)
                               donor._scoped_sort_aliases.begin(),
                               donor._scoped_sort_aliases.end());
   donor._scoped_sort_aliases.clear();
+
+  _scoped_uf_declarations.insert(_scoped_uf_declarations.end(),
+                                 donor._scoped_uf_declarations.begin(),
+                                 donor._scoped_uf_declarations.end());
+  donor._scoped_uf_declarations.clear();
 }
 
 bool Cpp_interface::SolverFrame::lookupSymbol(std::string_view name,
@@ -1554,6 +1869,16 @@ bool Cpp_interface::SolverFrame::lookupSymbol(std::string_view name,
 {
   const auto found = _symbol_bindings.find(name);
   if (found == _symbol_bindings.end() || found->second.empty())
+    return false;
+  output = found->second.back();
+  return true;
+}
+
+bool Cpp_interface::SolverFrame::lookupTemporarySymbol(
+    const std::string_view name, ASTNode& output) const
+{
+  const auto found = _temporary_symbol_bindings.find(name);
+  if (found == _temporary_symbol_bindings.end() || found->second.empty())
     return false;
   output = found->second.back();
   return true;

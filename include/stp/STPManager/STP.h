@@ -37,12 +37,13 @@ THE SOFTWARE.
 #include "stp/Util/Attributes.h"
 #include "stp/ToSat/ToSATAIG.h"
 #include "stp/Simplifier/NodeDomainAnalysis.h"
-
 #include <memory>
 
 namespace stp
 {
 class IncrementalSolver;
+class LoweredApplicationView;
+class UFBatchAdapter;
 
 // FIXME: This needs a better name
 class STP
@@ -79,6 +80,13 @@ class STP
   // The source-to-carrier mapping for the most recent solve. It remains
   // alive after TopLevelSTP returns so model queries use that exact encoding.
   std::unique_ptr<FpEncodingContext> fpEncodingContext;
+
+  // Public and semantic UF roots for the most recent fresh-query solve. The
+  // value remains alive with the model, while all SAT/checker mutation belongs
+  // to the batch adapter added at M4.
+  std::unique_ptr<LoweredApplicationView> batchUFView;
+  std::unique_ptr<UFBatchAdapter> batchUFAdapter;
+  uint64_t batchUFScopeGeneration = 0;
 
 public:
   STPMgr* bm;
@@ -124,26 +132,16 @@ public:
   DLL_PUBLIC IncrementalSolver* getIncrementalSolver();
   DLL_PUBLIC void resetIncrementalSolver();
   bool hasIncrementalSolver() const { return incrementalSolver != nullptr; }
+  const LoweredApplicationView& lastBatchUFView() const;
 
 public:
-  STP(STPMgr* b)
-  {
-    bm = b;
-    substitutionMap = new stp::SubstitutionMap(bm);
-    simp = new Simplifier(bm,substitutionMap);
-    arrayTransformer = new ArrayTransformer(bm, simp);
-    Ctr_Example = new AbsRefine_CounterExample(bm, simp, arrayTransformer);
-    tosat = new ToSATAIG(bm, arrayTransformer);
-  }
+  // Out of line so the UF implementation types above remain incomplete here.
+  DLL_PUBLIC STP(STPMgr* b);
 
-  STP( const STP& ) = delete; 
-  STP& operator=( const STP& ) = delete; 
+  STP(const STP&) = delete;
+  STP& operator=(const STP&) = delete;
 
-  ~STP() 
-  { 
-    ClearAllTables(); 
-    deleteObjects();
-  }
+  DLL_PUBLIC ~STP();
 
   // NB doesn't delete the STPMgr.
   void deleteObjects()
@@ -151,7 +149,10 @@ public:
     resetIncrementalSolver();
 
     if (Ctr_Example != NULL)
+    {
       Ctr_Example->setFpEncodingContext(NULL);
+      Ctr_Example->setUFTheoryAdapter(NULL);
+    }
     fpEncodingContext.reset();
 
     delete Ctr_Example;
@@ -179,26 +180,7 @@ public:
   ASTNode callSizeReducing(ASTNode simplified_solved_InputToSAT,
                            BVSolver* bvSolver, PropagateEqualities* pe, NodeDomainAnalysis* domain);
 
-  void ClearAllTables(void)
-  {
-    // The counterexample goes with them, so there is no longer a model to
-    // read. Whoever decides the next query says so again.
-    queryAnswered = false;
-
-    if (simp != NULL)
-      simp->ClearAllTables();
-    if (arrayTransformer != NULL)
-      arrayTransformer->ClearAllTables();
-    if (tosat != NULL)
-      tosat->ClearAllTables();
-    if (Ctr_Example != NULL)
-    {
-      Ctr_Example->ClearAllTables();
-      Ctr_Example->setFpEncodingContext(NULL);
-    }
-    fpEncodingContext.reset();
-    // bm->ClearAllTables();
-  }
+  DLL_PUBLIC void ClearAllTables(void);
 };
 } // end of namespace
 #endif

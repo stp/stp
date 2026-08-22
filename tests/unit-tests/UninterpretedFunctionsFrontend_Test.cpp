@@ -24,7 +24,10 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/SubstitutionMap.h"
 #include "stp/Globals/Globals.h"
+#include "stp/Parser/parser.h"
+#include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
+#include "stp/cpp_interface.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/UninterpretedFunctions/UFLowering.h"
 
@@ -263,6 +266,97 @@ TEST(UninterpretedFunctionsFrontend, FailedApplicationsRegisterNothing)
   EXPECT_EQ(UNDEFINED,
             context->apply(declaration, {x}, &diagnostic).GetKind());
   EXPECT_EQ(0u, context->registeredApplicationCount());
+}
+
+TEST(UninterpretedFunctionsFrontend,
+     MalformedParserApplicationRejectsWholeCommandAndContinues)
+{
+  STPMgr manager;
+  Cpp_interface interface(manager, manager.defaultNodeFactory);
+  STPMgr* const savedManager = GlobalParserBM;
+  Cpp_interface* const savedInterface = GlobalParserInterface;
+  GlobalParserBM = &manager;
+  GlobalParserInterface = &interface;
+  interface.startup();
+  manager.UserFlags.enable_uninterpreted_functions = true;
+
+  // The first assertion has a valid application followed by one with the
+  // wrong arity. Its valid prefix and parser-side carrier must both roll back:
+  // neither may become an assertion or a registered durable application.
+  // Parsing must nevertheless continue to the independent assertion.
+  const char* const input = R"(
+    (set-logic QF_UFBV)
+    (declare-fun f ((_ BitVec 8)) (_ BitVec 8))
+    (declare-const x (_ BitVec 8))
+    (assert (and (= (f x) x) (= (f x x) x)))
+    (assert (= x #x00))
+  )";
+  SMT2ScanString(input);
+  EXPECT_EQ(0, SMT2Parse());
+  smt2lex_destroy();
+
+  const std::size_t applicationCount =
+      manager.getUFContext()->registeredApplicationCount();
+  const std::size_t declarationCount =
+      manager.getUFContext()->declarationCount();
+  const bool xIsUF = manager.getUFContext()->lookup("x") != nullptr;
+  const ASTVec assertions = manager.GetAsserts();
+  const bool containsApplication =
+      !assertions.empty() && containsKind(assertions[0], UF_APPLY);
+  const bool rejected = interface.currentCommandRejected();
+
+  GlobalParserBM = savedManager;
+  GlobalParserInterface = savedInterface;
+
+  EXPECT_EQ(0u, applicationCount);
+  EXPECT_EQ(1u, declarationCount);
+  EXPECT_FALSE(xIsUF);
+  ASSERT_EQ(1u, assertions.size());
+  EXPECT_FALSE(containsApplication);
+  EXPECT_FALSE(rejected);
+}
+
+TEST(UninterpretedFunctionsFrontend,
+     MalformedFormalCannotLeakLexerOrTemporaryStateAcrossParses)
+{
+  STPMgr manager;
+  Cpp_interface interface(manager, manager.defaultNodeFactory);
+  STPMgr* const savedManager = GlobalParserBM;
+  Cpp_interface* const savedInterface = GlobalParserInterface;
+  GlobalParserBM = &manager;
+  GlobalParserInterface = &interface;
+  interface.startup();
+  manager.UserFlags.enable_uninterpreted_functions = true;
+
+  // The empty formal reaches function_param_open but supplies no identifier,
+  // leaving the lexer's next-name expectation armed unless parse-abort cleanup
+  // explicitly clears it.
+  SMT2ScanString(R"(
+    (set-logic QF_UFBV)
+    (define-fun broken (() Bool) Bool true)
+  )");
+  EXPECT_NE(0, SMT2Parse());
+  smt2lex_destroy();
+
+  // A second parse on the same interface must start a fresh command and may
+  // declare/use another formal normally.
+  SMT2ScanString(R"(
+    (define-fun good ((fresh Bool)) Bool fresh)
+    (declare-const witness Bool)
+    (assert (good witness))
+  )");
+  EXPECT_EQ(0, SMT2Parse());
+  smt2lex_destroy();
+
+  const ASTVec assertions = manager.GetAsserts();
+
+  GlobalParserBM = savedManager;
+  GlobalParserInterface = savedInterface;
+
+  ASSERT_EQ(1u, assertions.size());
+  EXPECT_EQ(SYMBOL, assertions[0].GetKind());
+  EXPECT_STREQ("witness", assertions[0].GetName());
+  EXPECT_EQ(SourceSort::boolean(), assertions[0].GetSourceSort());
 }
 
 TEST(UninterpretedFunctionsFrontend, SubstitutionRebuildsDurableApplication)

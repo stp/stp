@@ -81,6 +81,34 @@
   // "fp" is using its own symbol and must not be told about FP logics.
   static thread_local std::string unresolvedFpKeyword;
 
+  // With the UF feature enabled, the next identifier sits in declare-fun's
+  // name position. A name that is already classified in some namespace is
+  // handed back UNclassified there -- as a plain STRING_TOK -- so that the
+  // grammar can see the declaration's shape and route a NONZERO-ARITY
+  // collision into the nonfatal UF declaration funnel. Every other shape
+  // owes the pinned legacy response, so what the classification would have
+  // been is recorded (below) for the grammar to replicate it from. Only the
+  // declare-fun name is treated this way: declare-const and define-fun are
+  // UF-free shapes and keep the legacy classified-token syntax error at
+  // the name, feature on or off. Feature-off lexing remains byte-for-byte
+  // on the legacy path.
+  static thread_local bool ufDeclarationNamePending = false;
+
+  // The declassification record (see SMT2DeclassifiedNamePending in
+  // parser.h): the token kind the name would have carried, where, and the
+  // token text exactly as yyerror would have printed it. For |quoted| names
+  // lookup() chops the closing bar in place, so smt2text is "|name" --
+  // that is what the legacy error printed, and what is recorded.
+  static thread_local bool declassifiedNamePending = false;
+  static thread_local int declassifiedNameToken = 0;
+  static thread_local int declassifiedNameLine = 0;
+  static thread_local std::string declassifiedNameText;
+
+  // Set by the grammar immediately after the '(' that opens one define-fun
+  // formal. The following identifier is a declaration site, not a reference
+  // to a top-level function, UF, or symbol.
+  static thread_local bool functionParameterNamePending = false;
+
 #ifdef _MSC_VER
   #include <io.h>
   // defining isatty to avoid dll symbol export inconsistencies
@@ -125,6 +153,28 @@ namespace stp
   // gate itself rather than being answered by it. See tryRegisterFpSortAlias.
   bool SMT2FloatTokensActive() { return floatTokensActive; }
 
+  void SMT2ExpectFunctionParameterName()
+  {
+    assert(!functionParameterNamePending);
+    functionParameterNamePending = true;
+  }
+
+  void SMT2ResetCommandLexerState()
+  {
+    ufDeclarationNamePending = false;
+    functionParameterNamePending = false;
+    declassifiedNamePending = false;
+  }
+
+  bool SMT2DeclassifiedNamePending() { return declassifiedNamePending; }
+  int SMT2DeclassifiedNameToken() { return declassifiedNameToken; }
+  int SMT2DeclassifiedNameLine() { return declassifiedNameLine; }
+  const std::string& SMT2DeclassifiedNameText()
+  {
+    return declassifiedNameText;
+  }
+  void SMT2ConsumeDeclassifiedName() { declassifiedNamePending = false; }
+
   // Whether the token a diagnostic is about is a floating-point name that the
   // gate demoted for want of an FP set-logic. Matched against the offending
   // text rather than answered from the flag alone, so that an unrelated error
@@ -135,6 +185,8 @@ namespace stp
            unresolvedFpKeyword == text;
   }
 }
+
+  static int classify(char* s);
 
   static int lookup(char* s)
   {
@@ -159,56 +211,116 @@ namespace stp
       return STRING_TOK;
     }
 
+    if (ufDeclarationNamePending)
+    {
+      // Declare-fun's name position, feature on. Classify exactly as the
+      // legacy lexer would, then hand a classified name back unclassified
+      // and record what it would have been (see the statics above).
+      ufDeclarationNamePending = false;
+      const int token = classify(s);
+      if (token == STRING_TOK)
+        return token;
+      if (token == FORMID_TOK || token == TERMID_TOK)
+      {
+        // classify() handed the grammar a fresh node it will never see.
+        stp::GlobalParserInterface->deleteNode(smt2lval.node);
+        smt2lval.node = NULL;
+      }
+      declassifiedNamePending = true;
+      declassifiedNameToken = token;
+      declassifiedNameLine = smt2lineno;
+      declassifiedNameText = smt2text;
+      smt2lval.str = new std::string(s);
+      return STRING_TOK;
+    }
+
+    return classify(s);
+  }
+
+  // The legacy classification of an identifier: a let binder, a define-fun
+  // formal, a define-fun, an uninterpreted function, a declared symbol, or
+  // -- unseen before -- a plain string carrying its spelling.
+  static int classify(char* s)
+  {
     stp::ASTNode nptr;
     bool found = false;
 
-    if (const stp::ASTNode* let = stp::GlobalParserInterface->letMgr->lookupLet(s)) // Lets shadow everything else.
+    if (functionParameterNamePending)
     {
-      nptr = *let;
+      functionParameterNamePending = false;
+      // Preserve the existing rejection of duplicate formals: an earlier
+      // formal with this spelling is already a binder, not a global name to
+      // be shadowed. Every other spelling is returned unresolved here.
+      if (!stp::GlobalParserInterface->LookupTemporarySymbol(s, nptr))
+      {
+        smt2lval.str = new std::string(s);
+        return STRING_TOK;
+      }
       found = true;
     }
-    // Checking the functions before the symbols saves a symbol-table
-    // probe in files built almost entirely from define-funs. A name can't
-    // legally be both, so the order isn't observable on valid input. One
-    // map probe resolves the name; the token carries the resolved function
-    // so the grammar never probes again, and the sort of the stored body
-    // (memoised on the node) classifies the token.
-    else if (stp::GlobalParserInterface->hasFunctions())
+
+    if (!found)
     {
-      const stp::Cpp_interface::Function* fn =
-          stp::GlobalParserInterface->lookupFunction(s);
-      if (fn != NULL)
+      if (const stp::ASTNode* let =
+              stp::GlobalParserInterface->letMgr->lookupLet(s))
       {
-        smt2lval.fn = fn;
-        switch (fn->function.GetSourceSort().kind())
-        {
-          case stp::SourceSort::Kind::RoundingMode:
-            return ROUNDINGMODE_FUNCTIONID_TOK;
-          case stp::SourceSort::Kind::BitVector:
-            return BITVECTOR_FUNCTIONID_TOK;
-          case stp::SourceSort::Kind::Bool:
-            return BOOLEAN_FUNCTIONID_TOK;
-          case stp::SourceSort::Kind::FloatingPoint:
-            return FLOATINGPOINT_FUNCTIONID_TOK;
-          // A nullary define-fun whose body has array type is a pure name
-          // for that body, so it is accepted whether or not --array-equality
-          // is on (QF_ABVFP benchmarks use them with no whole-array
-          // equalities in sight). Uses of the name expand to the body in
-          // the grammar.
-          case stp::SourceSort::Kind::Array:
-            return ARRAY_FUNCTIONID_TOK;
-          case stp::SourceSort::Kind::Unknown:
-            smt2error("Function with underivable return sort.");
-        }
-      }
-      else if (stp::GlobalParserInterface->LookupSymbol(s,nptr)) // it's a symbol.
-      {
+        nptr = *let;
         found = true;
       }
+      // Function formals are lexical binders and therefore resolve before
+      // all top-level namespaces. Lets remain first because a nested let may
+      // shadow a formal in the define-fun body.
+      else if (stp::GlobalParserInterface->LookupTemporarySymbol(s, nptr))
+        found = true;
     }
-    else if (stp::GlobalParserInterface->LookupSymbol(s,nptr)) // it's a symbol.
+    if (!found)
     {
-      found = true;
+      // Checking functions before ordinary top-level symbols saves a symbol
+      // table probe in files built almost entirely from define-funs. Legal
+      // top-level input cannot occupy both namespaces.
+      if (stp::GlobalParserInterface->hasFunctions())
+      {
+        const stp::Cpp_interface::Function* fn =
+            stp::GlobalParserInterface->lookupFunction(s);
+        if (fn != NULL)
+        {
+          smt2lval.fn = fn;
+          switch (fn->function.GetSourceSort().kind())
+          {
+            case stp::SourceSort::Kind::RoundingMode:
+              return ROUNDINGMODE_FUNCTIONID_TOK;
+            case stp::SourceSort::Kind::BitVector:
+              return BITVECTOR_FUNCTIONID_TOK;
+            case stp::SourceSort::Kind::Bool:
+              return BOOLEAN_FUNCTIONID_TOK;
+            case stp::SourceSort::Kind::FloatingPoint:
+              return FLOATINGPOINT_FUNCTIONID_TOK;
+            case stp::SourceSort::Kind::Array:
+              return ARRAY_FUNCTIONID_TOK;
+            case stp::SourceSort::Kind::Unknown:
+              smt2error("Function with underivable return sort.");
+          }
+        }
+      }
+
+      if (stp::GlobalParserInterface->getUserFlags()
+              .enable_uninterpreted_functions &&
+          stp::GlobalParserInterface->hasUninterpretedFunctions())
+      {
+        const stp::UFDecl* declaration =
+            stp::GlobalParserInterface->lookupUninterpretedFunction(s);
+        if (declaration != NULL)
+        {
+          smt2lval.ufdecl = declaration;
+          return declaration->signature().codomain().kind() ==
+                         stp::SourceSort::Kind::Bool
+                     ? UF_BOOL_FUNCTIONID_TOK
+                     : UF_BV_FUNCTIONID_TOK;
+        }
+      }
+
+      if (stp::GlobalParserInterface->LookupSymbol(s,nptr))
+        found = true;
     }
 
     if (found)
@@ -329,8 +441,13 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 "assert"                  { return ASSERT_TOK; }
 "check-sat"               { return CHECK_SAT_TOK; }
 "check-sat-assuming"      { return CHECK_SAT_ASSUMING_TOK;}
-"declare-const"           { return DECLARE_CONST_TOK;}
-"declare-fun"             { return DECLARE_FUNCTION_TOK; }
+"declare-const"           { return DECLARE_CONST_TOK; }
+"declare-fun"             {
+                              ufDeclarationNamePending =
+                                  stp::GlobalParserInterface->getUserFlags()
+                                      .enable_uninterpreted_functions;
+                              return DECLARE_FUNCTION_TOK;
+                            }
 "declare-sort"            { return DECLARE_SORT_TOK;}
 "define-fun"              { return DEFINE_FUNCTION_TOK; }
 "echo"                    { return ECHO_TOK;}
@@ -543,7 +660,16 @@ bv{DIGIT}+             { smt2lval.str = new std::string(smt2text+2); return BVCO
 ({LETTER}|{OPCHAR})({ANYTHING})*  {return lookup(smt2text);}
 \|([^\|]|[\x80-\xff]|\n)*\| { countNewlines(smt2text, smt2leng); return lookup(smt2text); }
 
-. { smt2error("Illegal input character."); }
+. {
+    // Downstream of a declassified declare-fun name the pinned response is
+    // the name-position error alone (smt2error prints it in place of this
+    // message), and the parse abandons there: the legacy grammar never
+    // reached this character. Otherwise report and keep scanning, as ever.
+    const bool abandon = stp::SMT2DeclassifiedNamePending();
+    smt2error("Illegal input character.");
+    if (abandon)
+      throw stp::DeclassifiedNameAbandon();
+  }
 %%
 
 namespace stp {

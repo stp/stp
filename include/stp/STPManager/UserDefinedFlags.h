@@ -183,8 +183,23 @@ public:
 
   // Decide nonzero-arity uninterpreted functions over Bool, BitVec,
   // RoundingMode and FloatingPoint
-  // using the UFSTP v2 dynamic-Ackermann reference profile.
+  // using the UFSTP v2 dynamic-Ackermann reference profile. Logic names never
+  // toggle this runtime semantic option -- though the UF+FP logic names are
+  // only accepted while it is set, since they exist to let one query name
+  // both fragments.
   bool enable_uninterpreted_functions = false;
+
+  // How many congruence lemmas one refuted candidate may install before the
+  // solver is asked again; 0 is unlimited. Every conflict a candidate exposes
+  // is refuted by that same assignment, so installing several together trades
+  // clauses for whole SAT calls. The trade is not monotone: a small batch is
+  // worth several rounds, while draining every conflict installs most of the
+  // quadratic congruence encoding a round at a time and is slower than
+  // emitting one. Measured over collision and pigeonhole families at 30..100
+  // applications, 8 was the best of 1/2/4/8/16/32/unlimited everywhere and
+  // 2.3x-4x faster than 1; unlimited was the worst setting tried. 1 restores
+  // the one-lemma-per-round reference profile.
+  unsigned uf_lemmas_per_round = 8;
 
   // Replace a (distinct x1 ... xn) whose operands are variables occurring
   // nowhere else with the strict chain x1 < x2 < ... < xn. Every permutation

@@ -4,6 +4,7 @@ add_library(uninterpretedfunctions OBJECT
     UFLowering.cpp
     UFChecker.cpp
     UFLemma.cpp
+    UFRefinement.cpp
     UFModel.cpp
 )
 

@@ -29,6 +29,9 @@ THE SOFTWARE.
 #include "stp/FloatBlaster/FpEncodingContext.h"
 #include "stp/Printer/printers.h"
 #include "stp/ToSat/ToSATAIG.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
+#include "stp/UninterpretedFunctions/UFModel.h"
+#include "stp/UninterpretedFunctions/UFRefinement.h"
 #include <vector>
 
 const bool debug_counterexample = false;
@@ -235,6 +238,27 @@ void AbsRefine_CounterExample::ConstructCounterExample(
       CounterExampleMap[symbol] = bm->isRoundingModeSortedTerm(symbol)
                                       ? completeRoundingMode(assigned)
                                       : assigned;
+    }
+  }
+
+  // UFCHK consumes an internal scalar candidate independently of public
+  // model settings. Backends may leave an unconstrained Boolean don't-care
+  // undefined; complete every registered UF Boolean deterministically to false,
+  // just as the BV path above completes undefined bits to zero.
+  UFContext* ufContext = bm->getUFContextIfAny();
+  if (ufContext != NULL && ufContext->activeInSolve())
+  {
+    for (const ASTNode& symbol : ufContext->getSolveScalars())
+    {
+      if (symbol.GetSourceSort().kind() != SourceSort::Kind::Bool)
+        continue;
+      ASTNodeMap::iterator assigned = CounterExampleMap.find(symbol);
+      if (assigned == CounterExampleMap.end())
+        CounterExampleMap[symbol] = ASTFalse;
+      else if (assigned->second.GetKind() != TRUE &&
+               assigned->second.GetKind() != FALSE)
+        FatalError("UF solve scalar has a non-Boolean candidate value",
+                   symbol);
     }
   }
 
@@ -667,6 +691,24 @@ class AbsRefine_CounterExample::EvaluationDriver
     return StepResult::Pushed;
   }
 
+  /* One actual of an uninterpreted-function application. Each is needed as a
+   * constant to key the certified function seed, so anything but a Bool is
+   * requested strictly (ArrayReadFlag false) rather than being allowed back
+   * as a symbolic read. Bool is the only admitted domain sort that is not a
+   * bit-vector carrier: RoundingMode is BITVECTOR_TYPE (five bits) and a
+   * float is FLOATINGPOINT_TYPE, and both belong on the term walk, so the
+   * split is on the carrier's type rather than on the source sort.
+   * Both walks reach this, so the resume phase is the caller's own.
+   */
+  template <typename ResumePhase>
+  StepResult requestUFActual(Frame& f, const ResumePhase resume,
+                             const ASTNode& actual)
+  {
+    if (actual.GetType() == BOOLEAN_TYPE)
+      return requestFormula(f, resume, actual);
+    return requestTerm(f, resume, actual, false);
+  }
+
   /* One step of ComputeFormulaUsingModel, which accepts a non-constant
    * formula and checks if the formula is ASTTrue or ASTFalse w.r.t to a
    * model.
@@ -910,6 +952,36 @@ class AbsRefine_CounterExample::EvaluationDriver
         assert(blasted != form);
 
         return requestFormula(f, Frame::FormulaPhase::AfterFpBlast, blasted);
+      }
+      case UF_APPLY:
+      {
+        // A Bool-codomain application reaches the formula walk rather than the
+        // term walk; the resolution is otherwise identical to the UF_APPLY arm
+        // of stepTerm, which documents it.
+        if (f.formulaPhase == Frame::FormulaPhase::AfterOperand)
+        {
+          f.parts.push_back(result);
+          f.i++;
+        }
+        else
+        {
+          f.parts.reserve(form.Degree() - 1);
+          f.i = 1;
+        }
+
+        if (f.i < form.Degree())
+          return requestUFActual(f, Frame::FormulaPhase::AfterOperand,
+                                 form[f.i]);
+
+        ASTNode value;
+        std::string diagnostic;
+        if (!UFModel::evaluateApplicationInTerm(bm, owner.getUFTheoryAdapter(),
+                                                form, f.parts, value,
+                                                diagnostic))
+          FatalError(
+              (" ComputeFormulaUsingModel: " + diagnostic + ": ").c_str(),
+              form);
+        return finish(value);
       }
       default:
         cerr << _kind_names[k];
@@ -1321,6 +1393,40 @@ class AbsRefine_CounterExample::EvaluationDriver
         }
 
         return finish(result);
+      }
+      case UF_APPLY:
+      {
+        // Child 0 is the declaration identity, which is not a value; children
+        // 1.. are the actuals. Evaluate each actual to a constant -- a Bool
+        // one through the formula walk, as everywhere else -- then resolve the
+        // application against the certified model. Reaching here at all means
+        // the application sits inside a larger term, so refusing is not an
+        // option: the enclosing operator needs a constant operand. UFModel
+        // completes an application the solve never reached through the
+        // certified function seed rather than failing.
+        if (f.termPhase == Frame::TermPhase::AfterOperand)
+        {
+          f.parts.push_back(result);
+          f.i++;
+        }
+        else
+        {
+          f.parts.reserve(term.Degree() - 1);
+          f.i = 1;
+        }
+
+        if (f.i < term.Degree())
+          return requestUFActual(f, Frame::TermPhase::AfterOperand,
+                                 term[f.i]);
+
+        ASTNode value;
+        std::string diagnostic;
+        if (!UFModel::evaluateApplicationInTerm(bm, owner.getUFTheoryAdapter(),
+                                                term, f.parts, value,
+                                                diagnostic))
+          FatalError(("TermToConstTermUsingModel: " + diagnostic + ": ").c_str(),
+                     term);
+        return finish(value);
       }
       default:
       {
@@ -2404,6 +2510,19 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
     {
       outputLine(os, e.first, e.second);
     }
+    if (ufTheoryAdapter != NULL && ufTheoryAdapter->hasCertifiedModel())
+    {
+      const UFFunctionModelSeedSet* seed =
+          ufTheoryAdapter->certifiedModelSeed();
+      if (seed == NULL)
+        FatalError("certified UF adapter has no model seed");
+      UFModel::printSMTLIB2(os, *seed);
+    }
+    else if (bm->UserFlags.enable_uninterpreted_functions &&
+             bm->getUFContextIfAny() != NULL)
+      UFModel::printSMTLIB2(
+          os, UFModel::defaultSeed(
+                  bm->getUFContextIfAny()->activeDeclarations()));
     os.flush();
     return;
   }
@@ -2530,6 +2649,20 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
     os << ")" << std::endl;
   }
 
+  if (ufTheoryAdapter != NULL && ufTheoryAdapter->hasCertifiedModel())
+  {
+    const UFFunctionModelSeedSet* seed =
+        ufTheoryAdapter->certifiedModelSeed();
+    if (seed == NULL)
+      FatalError("certified UF adapter has no model seed");
+    UFModel::printSMTLIB2(os, *seed);
+  }
+  else if (bm->UserFlags.enable_uninterpreted_functions &&
+           bm->getUFContextIfAny() != NULL)
+    UFModel::printSMTLIB2(
+        os, UFModel::defaultSeed(
+                bm->getUFContextIfAny()->activeDeclarations()));
+
   os.flush();
 }
 
@@ -2549,6 +2682,19 @@ void AbsRefine_CounterExample::PrintCounterExampleSMTLIB2(std::ostream& os)
     outputLine(os, f,se);
 
   }
+  if (ufTheoryAdapter != NULL && ufTheoryAdapter->hasCertifiedModel())
+  {
+    const UFFunctionModelSeedSet* seed =
+        ufTheoryAdapter->certifiedModelSeed();
+    if (seed == NULL)
+      FatalError("certified UF adapter has no model seed");
+    UFModel::printSMTLIB2(os, *seed);
+  }
+  else if (bm->UserFlags.enable_uninterpreted_functions &&
+           bm->getUFContextIfAny() != NULL)
+    UFModel::printSMTLIB2(
+        os, UFModel::defaultSeed(
+                bm->getUFContextIfAny()->activeDeclarations()));
   os.flush();
 }
 
@@ -2791,12 +2937,16 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
                                               ToSATBase* tosat, bool refinement)
 {
   bool sat = tosat->CallSAT(SatSolver, modified_input, refinement);
+  const bool ufActive =
+      ufTheoryAdapter != NULL && ufTheoryAdapter->active();
 
   if (bm->soft_timeout_expired)
     return SOLVER_TIMEOUT;
 
   if (!sat)
   {
+    if (ufActive)
+      ufTheoryAdapter->invalidateCertifiedModel();
     return SOLVER_VALID;
   }
   else if (SatSolver.okay())
@@ -2819,7 +2969,7 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
     if (tosat->refineAbstractions(SatSolver) > 0)
       return SOLVER_UNDECIDED;
 
-    if (!bm->UserFlags.construct_counterexample_flag)
+    if (!bm->UserFlags.construct_counterexample_flag && !ufActive)
       return SOLVER_INVALID;
 
     bm->GetRunTimes()->start(RunTimes::CounterExampleGeneration);
@@ -2831,7 +2981,7 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
     // ConstructCounterExample only ever iterates it.
     const ToSATBase::ASTNodeToSATVar& satVarToSymbol =
         tosat->SATVar_to_SymbolIndexMap();
-    ConstructCounterExample(SatSolver, satVarToSymbol);
+    ConstructCounterExample(SatSolver, satVarToSymbol, ufActive);
     if (bm->UserFlags.stats_flag && bm->UserFlags.print_nodes_flag)
     {
       ToSATBase::ASTNodeToSATVar m = tosat->SATVar_to_SymbolIndexMap();
@@ -2875,6 +3025,10 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
     {
       if (!ext->hasPendingLemma())
         FatalError("array-equality: a checker conflict has no pending lemma");
+      if (bm->UserFlags.stats_flag)
+        std::cerr << "Theory coordination: EXTCHK conflict; UFCHK and "
+                     "ordinary replay skipped"
+                  << std::endl;
       bm->GetRunTimes()->stop(RunTimes::CounterExampleGeneration);
       return SOLVER_UNDECIDED;
     }
@@ -2882,12 +3036,58 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
       FatalError("array-equality: the checker could neither certify nor "
                  "refute a materialized candidate");
 
+    // Theory ownership remains disjoint. The coordinator invokes UFCHK only
+    // after EXTCHK accepted this exact candidate, and a UF conflict ends the
+    // round before any ordinary model replay.
+    UFCandidateOutcome ufOutcome = UFCandidateOutcome::Skipped;
+    if (ufActive)
+      ufOutcome = ufTheoryAdapter->checkCandidate(*this);
+    if (ufOutcome == UFCandidateOutcome::Conflict)
+    {
+      if (!ufTheoryAdapter->hasPendingLemma())
+        FatalError("UFCHK reported a conflict without a pending lemma");
+      if (bm->UserFlags.stats_flag)
+        std::cerr << "Theory coordination: EXTCHK "
+                  << (extActive ? "accepted" : "skipped")
+                  << "; UFCHK conflict; ordinary replay skipped"
+                  << std::endl;
+      bm->GetRunTimes()->stop(RunTimes::CounterExampleGeneration);
+      return SOLVER_UNDECIDED;
+    }
+    if (ufOutcome == UFCandidateOutcome::InternalError)
+      FatalError(("UFCHK internal error: " + ufTheoryAdapter->diagnostic())
+                     .c_str());
+    if (ufActive && ufOutcome != UFCandidateOutcome::Consistent)
+      FatalError("UFCHK could neither certify nor refute an active candidate");
+
     // check if the counterexample is good or not
     ASTNode orig_result = ComputeFormulaUsingModel(original_input);
     if (!(ASTTrue == orig_result || ASTFalse == orig_result))
       FatalError("TopLevelSat: Original input must compute to "
                  "true or false against model");
     bm->GetRunTimes()->stop(RunTimes::CounterExampleGeneration);
+
+    // A consistency seed is certified only if the ordinary lowered-root
+    // replay accepts the same candidate. Legacy array-read refinement can
+    // still reject after both independent theory checkers accepted.
+    if (ufActive && orig_result != ASTTrue)
+      ufTheoryAdapter->invalidateCertifiedModel();
+
+    // The scalar replay above deliberately sees the semantic root. Once it
+    // accepts, complete the independently retained public root pointwise from
+    // the certified durable-handle map and replay that too. This is both the
+    // model sanity check and the proof that no public reader needs a lowered
+    // @uf_result symbol. Publication in checkCandidate precedes both replays;
+    // a failure withdraws it before reporting the integration error.
+    if (ufActive && orig_result == ASTTrue)
+    {
+      std::string diagnostic;
+      if (!UFModel::replayPublicRoot(*this, *ufTheoryAdapter, diagnostic))
+      {
+        ufTheoryAdapter->invalidateCertifiedModel();
+        FatalError(("UF public-model replay failed: " + diagnostic).c_str());
+      }
+    }
 
     switch (ExtensionalityContext::decideCertification(
         ASTTrue == orig_result, extActive, extOutcome))

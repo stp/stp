@@ -23,8 +23,12 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/UninterpretedFunctions/UFModel.h"
+#include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/Printer/printers.h"
 #include "stp/STPManager/STPManager.h"
+#include "stp/Simplifier/SubstitutionMap.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
+#include "stp/UninterpretedFunctions/UFRefinement.h"
 #include "extlib-constbv/constantbv.h"
 #include <algorithm>
 #include <cctype>
@@ -56,9 +60,9 @@ void printQuotedSymbol(std::ostream& os, const std::string& name)
 
 void printSort(std::ostream& os, STPMgr* manager, const SourceSort& sort)
 {
-  (void)manager;
   if (!UFSignature::isSupportedSort(sort))
     FatalError("UF model tried to print an unsupported SourceSort");
+  (void)manager;
   os << sourceSortToSMTLib(sort);
 }
 
@@ -125,6 +129,28 @@ void printCondition(std::ostream& os, STPMgr* manager,
     os << ')';
 }
 
+// A floating-point actual as the checker would have bucketed it: its
+// canonical packed bits.
+//
+// The value arrives either as a float constant or as the bare carrier the SAT
+// assignment materialised, so it is lifted to the declared sort first --
+// which is where NaN gets quotiented, since STPMgr::CreateFPConst interns
+// every NaN pattern as the one canonical quiet NaN -- and then taken back
+// through the same FP_TO_IEEE_BV boundary UF lowering puts on the argument
+// side. Over a constant that folds rather than building a circuit; a null
+// return means it did not, which the caller reports rather than guessing.
+ASTNode canonicalConstant(STPMgr* manager, const ASTNode& constant,
+                          const SourceSort& declared)
+{
+  if (constant.GetKind() != BVCONST ||
+      constant.GetValueWidth() != declared.packedWidth())
+    return ASTNode();
+  const ASTNode packed = manager->defaultNodeFactory->CreateTerm(
+      FP_TO_IEEE_BV, declared.packedWidth(),
+      manager->LiftSourceValue(constant, declared));
+  return packed.GetKind() == BVCONST ? packed : ASTNode();
+}
+
 bool seedFunctionBefore(const UFFunctionModelSeed* left,
                         const UFFunctionModelSeed* right)
 {
@@ -178,6 +204,235 @@ ASTNode UFModel::concreteValue(STPMgr* manager, const UFConcreteValue& value,
   if (declared.kind() != SourceSort::Kind::FloatingPoint)
     return solved;
   return manager->LiftSourceValue(solved, declared);
+}
+
+bool UFModel::evaluateApplication(STPMgr* manager,
+                                  const UFTheoryAdapter* adapter,
+                                  const ASTNode& durableHandle,
+                                  ASTNode& value,
+                                  std::string& diagnostic)
+{
+  value = ASTNode();
+  if (manager == NULL || durableHandle.IsNull() ||
+      !durableHandle.IsOwnedBy(manager))
+  {
+    diagnostic = "uninterpreted-function application belongs to another "
+                 "context or is invalid";
+    return false;
+  }
+  UFContext* context = manager->getUFContextIfAny();
+  if (context == NULL ||
+      !context->isRegisteredApplication(durableHandle))
+  {
+    diagnostic = "expression is not a registered durable "
+                 "uninterpreted-function application";
+    return false;
+  }
+  if (!context->isActiveApplication(durableHandle))
+  {
+    diagnostic = "uninterpreted-function application is stale or inactive";
+    return false;
+  }
+  if (adapter == NULL || !adapter->hasCertifiedModel())
+  {
+    diagnostic = "no certified uninterpreted-function model is available";
+    return false;
+  }
+  UFConcreteValue concrete;
+  if (!adapter->lookupCertifiedApplication(durableHandle, concrete))
+  {
+    diagnostic = "uninterpreted-function application was not active in the "
+                 "certified solve";
+    return false;
+  }
+  const SourceSort declared = durableHandle.GetSourceSort();
+  const SourceSort expected = UFSignature::loweringSort(declared);
+  if (concrete.sort() != expected)
+  {
+    diagnostic = "certified uninterpreted-function value has the wrong "
+                 "SourceSort";
+    return false;
+  }
+  value = concreteValue(manager, concrete, declared);
+  return true;
+}
+
+bool UFModel::evaluateApplicationInTerm(
+    STPMgr* manager, const UFTheoryAdapter* adapter,
+    const ASTNode& durableHandle, const std::vector<ASTNode>& actualValues,
+    ASTNode& value, std::string& diagnostic)
+{
+  // An application the solve reached has a certified value; prefer it.
+  if (evaluateApplication(manager, adapter, durableHandle, value, diagnostic))
+    return true;
+
+  value = ASTNode();
+  if (manager == NULL || durableHandle.IsNull() ||
+      !durableHandle.IsOwnedBy(manager) ||
+      durableHandle.GetKind() != UF_APPLY || durableHandle.Degree() == 0)
+  {
+    diagnostic = "uninterpreted-function application belongs to another "
+                 "context or is invalid";
+    return false;
+  }
+  UFContext* context = manager->getUFContextIfAny();
+  const UFDecl* declaration =
+      context == NULL ? NULL : context->lookupIdentity(durableHandle[0]);
+  if (declaration == NULL)
+  {
+    diagnostic = "expression is not a registered durable "
+                 "uninterpreted-function application";
+    return false;
+  }
+  const UFSignature& signature = declaration->signature();
+  if (actualValues.size() != signature.arity())
+  {
+    diagnostic = "uninterpreted-function application was given the wrong "
+                 "number of evaluated actuals";
+    return false;
+  }
+
+  // The actuals, as the seed keys them -- which is at the lowering sort, and
+  // canonicalised.
+  //
+  // This is the quiet half of the boundary. The checker observed the
+  // canonically-packed actual, so a query that supplies a differently
+  // payloaded NaN for the same argument is asking about the same value and
+  // must reach the same case. Keying the seed with the raw constant instead
+  // would fall through to the default, and model evaluation would disagree
+  // with the interpretation the define-fun printed -- silently, because both
+  // answers are well-sorted.
+  UFConcreteTuple arguments;
+  arguments.reserve(actualValues.size());
+  for (size_t i = 0; i < actualValues.size(); ++i)
+  {
+    const SourceSort& declared = signature.domain()[i];
+    ASTNode actual = actualValues[i];
+    if (declared.kind() == SourceSort::Kind::FloatingPoint)
+    {
+      actual = canonicalConstant(manager, actual, declared);
+      if (actual.IsNull())
+      {
+        diagnostic = "uninterpreted-function application was given a "
+                     "floating-point actual that does not fold to a "
+                     "canonical value";
+        return false;
+      }
+    }
+    UFConcreteValue argument;
+    if (!UFConcreteValue::fromConstant(
+            actual, UFSignature::loweringSort(declared), argument, diagnostic))
+      return false;
+    arguments.push_back(argument);
+  }
+
+  // The certified seed is a total function: a case per observed tuple, then a
+  // default. Nothing certified for this declaration means no application of
+  // it was observed, so any constant interpretation is consistent.
+  const UFFunctionModelSeedSet* seed =
+      (adapter != NULL && adapter->hasCertifiedModel())
+          ? adapter->certifiedModelSeed()
+          : NULL;
+  const UFFunctionModelSeed* function = NULL;
+  if (seed != NULL)
+  {
+    for (const UFFunctionModelSeed& candidate : seed->functions)
+      if (candidate.declaration == declaration)
+      {
+        function = &candidate;
+        break;
+      }
+  }
+  if (function == NULL)
+  {
+    value = concreteValue(
+        manager,
+        UFConcreteValue::zero(
+            UFSignature::loweringSort(signature.codomain())),
+        signature.codomain());
+    return true;
+  }
+
+  for (const UFModelCase& entry : function->cases)
+    if (entry.arguments == arguments)
+    {
+      requireValueSort(entry.result, signature.codomain());
+      value = concreteValue(manager, entry.result, signature.codomain());
+      return true;
+    }
+
+  requireValueSort(function->defaultValue, signature.codomain());
+  value = concreteValue(manager, function->defaultValue, signature.codomain());
+  return true;
+}
+
+bool UFModel::completePublicRoot(STPMgr* manager,
+                                 const UFTheoryAdapter& adapter,
+                                 ASTNode& completed,
+                                 std::string& diagnostic)
+{
+  completed = ASTNode();
+  const LoweredApplicationView* view = adapter.applicationView();
+  if (manager == NULL || view == NULL || !view->active() ||
+      view->publicRoot.IsNull() || !view->publicRoot.IsOwnedBy(manager))
+  {
+    diagnostic = "certified UF adapter has no owned active public root";
+    return false;
+  }
+  if (!adapter.hasCertifiedModel())
+  {
+    diagnostic = "UF public-root completion began before certification";
+    return false;
+  }
+
+  ASTNodeMap replacements;
+  for (const LoweredApplicationRecord& record : view->applications)
+  {
+    ASTNode constant;
+    if (!evaluateApplication(manager, &adapter, record.durableHandle,
+                             constant, diagnostic))
+      return false;
+    if (!replacements.insert(
+             std::make_pair(record.durableHandle, constant)).second)
+    {
+      diagnostic = "UF public-root completion saw a duplicate handle";
+      return false;
+    }
+  }
+  ASTNodeMap cache;
+  completed = SubstitutionMap::replace(view->publicRoot, replacements, cache,
+                                       manager->defaultNodeFactory);
+  if (containsKind(completed, UF_APPLY))
+  {
+    diagnostic = "UF public-root completion left an application behind";
+    completed = ASTNode();
+    return false;
+  }
+  return true;
+}
+
+bool UFModel::replayPublicRoot(
+    AbsRefine_CounterExample& counterexample,
+    const UFTheoryAdapter& adapter, std::string& diagnostic)
+{
+  const LoweredApplicationView* view = adapter.applicationView();
+  STPMgr* manager = view == NULL || view->publicRoot.IsNull()
+                        ? NULL
+                        : view->publicRoot.GetNodeManager();
+  ASTNode completed;
+  if (!completePublicRoot(manager, adapter, completed, diagnostic))
+    return false;
+  const ASTNode result = counterexample.QueryFormulaAgainstModel(completed);
+  if (result != manager->ASTTrue)
+  {
+    diagnostic = result == manager->ASTFalse
+                     ? "certified UF interpretation does not satisfy the "
+                       "preserved public root"
+                     : "preserved UF public root did not replay to a Boolean "
+                       "constant";
+    return false;
+  }
+  return true;
 }
 
 UFFunctionModelSeedSet

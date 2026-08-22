@@ -143,6 +143,20 @@ jobs:
       run: ctest --parallel "$(nproc)" -VV --output-on-failure
       working-directory: build
 
+    # Independently lower generated UF problems to eager Ackermann constraints
+    # and decide those through the classic feature-off path.  Compare that
+    # oracle with both lazy UF adapters, including push/pop verdict sequences.
+    # Run once per matrix rather than once per compiler: this checks semantics,
+    # while the full suite above supplies compiler/build-mode coverage.
+    - name: UF differential oracle and trend corpus
+      if: matrix.name == 'gcc'
+      run: |
+        python3 scripts/fuzz/uf-differential-fuzz.py \
+          --stp build/stp --seed 42 --rounds 150
+        python3 tests/ufstp/performance.py \
+          --stp build/stp --scales 16 --repeats 1 \
+          --evidence-out build/uf-performance-evidence.json
+
     # BUILD_EXTRA_TOOLS is off by default and nothing else compiles these five
     # tools, so all of them had quietly stopped building: headers that were
     # never self-contained, and calls into APIs that had changed shape. Getting

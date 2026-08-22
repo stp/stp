@@ -822,3 +822,33 @@ TEST(UFChecker, RoundingModeCongruenceAndSeed)
             "  (ite (= x0 RTZ) RTP RNE))\n",
             printed.str());
 }
+
+TEST(UFChecker, RoundingModeApplicationInTermCompletesToALegalMode)
+{
+  using namespace symbolic_fp;
+  RoundingModeFixture fixture;
+
+  // No adapter at all: nothing was certified for this declaration, so the
+  // application is completed with the codomain's default. It is handed to the
+  // enclosing operator as a constant operand, so an illegal mode here would
+  // not merely print badly -- it would be evaluated.
+  ASTNode value;
+  std::string diagnostic;
+  ASSERT_TRUE(UFModel::evaluateApplicationInTerm(
+      &fixture.manager, NULL, fixture.kr,
+      {fixture.manager.CreateRMConst(ROUND_TOWARD_ZERO)}, value, diagnostic))
+      << diagnostic;
+  EXPECT_EQ(SourceSort::Kind::RoundingMode, value.GetSourceSort().kind());
+  EXPECT_EQ(static_cast<unsigned>(ROUND_NEAREST_TIES_TO_EVEN),
+            value.GetUnsignedConst());
+
+  // The actual may equally arrive as its bare carrier, which is what the
+  // counterexample walk produces for a RoundingMode symbol.
+  ASSERT_TRUE(UFModel::evaluateApplicationInTerm(
+      &fixture.manager, NULL, fixture.kr,
+      {fixture.manager.CreateBVConst(5, ROUND_TOWARD_ZERO)}, value,
+      diagnostic))
+      << diagnostic;
+  EXPECT_EQ(static_cast<unsigned>(ROUND_NEAREST_TIES_TO_EVEN),
+            value.GetUnsignedConst());
+}
