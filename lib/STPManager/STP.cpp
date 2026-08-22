@@ -567,9 +567,22 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // TODO: I chose the number of reads we perform this operation at randomly.
   bool removed = false;
   const int arrayReadLimit = bm->UserFlags.ackermannisation ? 50 : 10;
+  // The read count is a proxy for what the transform builds, and on its own a
+  // poor one: a read over a chain of WRITEs becomes one ITE per link, so nine
+  // reads over a deep store chain expand into tens of thousands of nodes and
+  // take 48x longer than leaving them to read refinement. Ask what the
+  // expansion would actually cost as well, so the flat-array queries this
+  // threshold was tuned for still take it and the deep-chain ones do not.
+  // Give each read admitted by the count policy twenty structural expansion
+  // units before preferring refinement. This is a safety threshold, not a
+  // prediction of total solver work.
+  constexpr uint64_t arrayEagerCostPerRead = 20;
+  const uint64_t arrayEagerCostLimit =
+      static_cast<uint64_t>(arrayReadLimit) * arrayEagerCostPerRead;
   if (arrayops &&
       !extActive && // array equality needs the refinement loop
-      numberOfReadsLessThan(inputToSat, arrayReadLimit))
+      numberOfReadsLessThan(inputToSat, arrayReadLimit) &&
+      arrayEagerCostLessThan(inputToSat, arrayEagerCostLimit))
   {
     // If the number of axioms that would be added it small. Remove them.
     bm->UserFlags.ackermannisation = true;

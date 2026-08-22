@@ -74,6 +74,11 @@ bool containsArrayOps(const ASTNode& n, STPMgr* stp);
 bool containsFloatingPoint(const ASTNode& n, STPMgr* stp);
 bool containsFloatingPointTheory(const ASTNode& n, STPMgr* stp);
 bool numberOfReadsLessThan(const ASTNode& n, int v);
+// Whether the estimated structural cost of eagerly expanding every array read
+// is less than `limit`. See the definition: the read count alone does not
+// distinguish a cheap expansion from one that is dozens of times slower than
+// refinement.
+bool arrayEagerCostLessThan(const ASTNode& n, uint64_t limit);
 
 // Whether two constants spell the same bits. Node identity understates
 // this: a floating-point constant interns apart from the plain bitvector
