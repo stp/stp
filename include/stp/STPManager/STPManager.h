@@ -115,6 +115,17 @@ private:
   ExtensionalityContext* extensionality = nullptr;
   UFContext* uninterpretedFunctions = nullptr;
 
+  // Why the last solve had no answer, and the sentence to give a caller who
+  // asks. Recorded rather than derived because the reasons are produced in
+  // different places -- a spent search budget wherever the solver was asked
+  // to run, an abandoned encoding before it ever was -- and only one of them
+  // has anything to say beyond its name. The SMT-LIB frontend clears this at
+  // the top of every check-sat and on reset / reset-assertions. SMT-LIB reads
+  // it through (get-info :reason-unknown), and the C API through
+  // vc_getReasonUnknown.
+  UnknownReason unknown_reason = UnknownReason::None;
+  std::string unknown_detail;
+
   // Table to uniquefy bvconst
   ASTBVConstSet _bvconst_unique_table;
 
@@ -151,16 +162,6 @@ public:
 
   bool soft_timeout_expired;
 
-  // Why the last solve had no answer, and the sentence to give a caller who
-  // asks. Recorded rather than derived because the reasons are produced in
-  // different places -- a spent search budget wherever the solver was asked
-  // to run, an abandoned encoding before it ever was -- and only one of them
-  // has anything to say beyond its name. The SMT-LIB frontend clears this at
-  // the top of every check-sat and on reset / reset-assertions, which is
-  // where (get-info :reason-unknown) reads it; no other caller can.
-  UnknownReason unknown_reason = UnknownReason::None;
-  std::string unknown_detail;
-
   // One named element of a declared sort: the sort, the name the model gives
   // it, and the carrier pattern it stands for.
   struct UninterpretedElement
@@ -177,9 +178,14 @@ public:
 
   void noteUnknown(UnknownReason reason, const std::string& detail = "")
   {
+    assert(reason != UnknownReason::None);
     unknown_reason = reason;
     unknown_detail = detail;
   }
+
+  UnknownReason getUnknownReason() const { return unknown_reason; }
+
+  const std::string& getUnknownReasonDetail() const { return unknown_detail; }
 
   // Called by whoever just watched this solver give up. Two budgets share the
   // no-answer exit and they are not the same claim to a caller: the wall
@@ -205,6 +211,17 @@ public:
   {
     unknown_reason = UnknownReason::None;
     unknown_detail.clear();
+  }
+
+  // The verdict deliberately says only that there was no answer; the reason
+  // is a separate, mandatory part of that result. Keeping the invariant at
+  // the point an unknown is returned prevents a new producer from silently
+  // resurrecting an unexplained timeout-shaped result.
+  SOLVER_RETURN_TYPE unknownResult() const
+  {
+    if (unknown_reason == UnknownReason::None)
+      FatalError("solver returned SOLVER_UNKNOWN without recording why");
+    return SOLVER_UNKNOWN;
   }
 
   // How much injectivity --uf-inject-args put into the encoding this solve is
@@ -361,9 +378,9 @@ public:
                     "may be an artefact of that assumption rather than a "
                     "refutation; re-run without --uf-inject-args to decide the "
                     "query");
-    // SOLVER_TIMEOUT is what every way of giving up returns; which cause it
-    // was is a question for (get-info :reason-unknown), recorded just above.
-    return SOLVER_TIMEOUT;
+    // SOLVER_UNKNOWN says only that there is no answer; the cause was
+    // recorded just above for the reason API.
+    return unknownResult();
   }
 
   // No nodes should already have the iteration number that is returned from

@@ -182,7 +182,7 @@ TEST(model_read_with_no_solve, incremental_is_refused_too)
 //
 // The budget is zero conflicts, which is a budget rather than the absence of
 // one, so the give-up is decided before the search rather than by the clock.
-TEST(model_read_with_no_solve, a_timed_out_query_leaves_no_model)
+TEST(model_read_with_no_solve, an_unknown_query_leaves_no_model)
 {
   VC vc = vc_createValidityChecker();
 
@@ -211,7 +211,8 @@ TEST(model_read_with_no_solve, a_timed_out_query_leaves_no_model)
   vc_assertFormula(vc, vc_bvLtExpr(vc, b, limit));
   vc_assertFormula(vc, vc_bvLeExpr(vc, a, b));
 
-  ASSERT_EQ(3, vc_query_with_timeout(vc, vc_falseExpr(vc), 0, -1)); // 3 == timeout
+  ASSERT_EQ(3, vc_query_with_timeout(vc, vc_falseExpr(vc), 0, -1));
+  ASSERT_EQ(REASON_UNKNOWN_CONFLICT_BUDGET, vc_getReasonUnknown(vc));
 
   EXPECT_EQ((Expr)NULL, vc_getCounterExample(vc, x));
 

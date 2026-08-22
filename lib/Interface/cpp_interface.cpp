@@ -1085,7 +1085,7 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
       last_result = GlobalSTP->TopLevelSTP(query, bm.ASTFalse);
     }
 
-    // Store away the answer. Might be timeout, or error though..
+    // Store away the answer. It may also be unknown or an error.
     last_run = Entry(last_result);
     last_run.node_number = assertionsSMT2.back().GetNodeNum();
 
@@ -1113,8 +1113,8 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
   // this way is a genuine one whatever the carrier's width.
   if (carrierMayBeShort && last_run.result == SOLVER_UNSATISFIABLE)
   {
-    last_run.result = SOLVER_TIMEOUT;
     bm.noteUnknown(UnknownReason::CarrierExhausted, carrierExhausted);
+    last_run.result = bm.unknownResult();
   }
 
   // A model exists exactly when this check concluded SAT and the solve
@@ -1477,7 +1477,7 @@ void Cpp_interface::getInfo(std::string flag)
     // an error response, for the reason :all-statistics gives above: under an
     // immediate-exit error behaviour, raising one would kill the session over
     // a diagnostic query.
-    switch (bm.unknown_reason)
+    switch (bm.getUnknownReason())
     {
       case UnknownReason::Timeout:
         cout << "(:reason-unknown timeout)" << endl;
@@ -1491,35 +1491,23 @@ void Cpp_interface::getInfo(std::string flag)
         break;
       case UnknownReason::CarrierExhausted:
       case UnknownReason::AssumedInjectivity:
+      case UnknownReason::AIGBudget:
       case UnknownReason::Incomplete:
         // The predefined SMT-LIB spelling, followed by what was incomplete:
         // the flag admits an s-expression, and a bare "incomplete" tells a
-        // caller nothing they can act on. All three share it because the
+        // caller nothing they can act on. All four share it because the
         // sentence is what says which, and SMT-LIB2 has no spelling that
         // would say it better.
-        cout << "(:reason-unknown (incomplete \"" << bm.unknown_detail
+        cout << "(:reason-unknown (incomplete \""
+             << bm.getUnknownReasonDetail()
              << "\"))" << endl;
         break;
       case UnknownReason::None:
-        // Two shapes reach here: no unknown to explain, and an unknown whose
-        // producer recorded no reason. Told apart by the verdict, because
-        // answering "not unknown" after an unknown would be a plain lie.
-        //
-        // SOLVER_TIMEOUT is the verdict every no-answer carries, whichever
-        // budget ran out, and PrintOutput answers `unknown` for all of them --
-        // so a check-sat that gave up and recorded nothing lands here holding
-        // exactly that, and saying "not unknown" would contradict the line
-        // above it. Every producer of that verdict does record a reason today;
-        // this arm is what keeps a future one that forgets from turning a
-        // missing explanation into a false statement. SOLVER_UNDECIDED is
-        // deliberately not here: it is what the cache holds before a level has
-        // been solved and what a stale entry is reset to, so admitting it
-        // would answer for a check-sat that never ran.
-        if (cache.size() > 0 && cache.back().result == SOLVER_TIMEOUT)
-          cout << "(:reason-unknown unknown)" << endl;
-        else
-          cout << "(:reason-unknown (error \"the last answer was not "
-                  "unknown\"))" << endl;
+        // SOLVER_UNKNOWN cannot reach the frontend without a reason: both
+        // output boundaries enforce that invariant. None therefore means
+        // there was no unknown result to explain.
+        cout << "(:reason-unknown (error \"the last answer was not "
+                "unknown\"))" << endl;
         break;
     }
   }

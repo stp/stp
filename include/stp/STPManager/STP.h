@@ -121,7 +121,7 @@ public:
   // vc_push or vc_query. ClearAllTables is where that discarding happens, so
   // that is where this is cleared; vc_query_with_timeout sets it again when
   // the query comes back decided, and leaves it clear when the answer was a
-  // timeout or an error, because neither leaves a model behind.
+  // unknown or an error, because neither leaves a model behind.
   //
   // The SMT-LIB2 frontend has always kept the equivalent (model_valid) and
   // answers "unsupported" without it. Nothing on the C API side did, so a

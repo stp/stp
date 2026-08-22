@@ -33,24 +33,28 @@ using std::endl;
 // This function prints the output of the STP solver
 void ToSATBase::PrintOutput(STPMgr* bm, SOLVER_RETURN_TYPE ret)
 {
-  if (ret == SOLVER_TIMEOUT || ret == SOLVER_UNDECIDED)
+  if (ret == SOLVER_UNDECIDED)
+    FatalError("SOLVER_UNDECIDED escaped the solver's refinement loop");
+
+  if (ret == SOLVER_UNKNOWN)
   {
-    // SMT-LIB has a word for this and it is not "Timed Out.": a caller cannot
-    // act on prose, and the clock is only one of the reasons there may be no
-    // answer. Which reason it was is (get-info :reason-unknown)'s job. The
-    // legacy CVC output keeps its own wording, where no such command exists.
+    // The verdict says only that there is no answer. Which reason it was is
+    // (get-info :reason-unknown)'s job in SMT-LIB and the reason API's job for
+    // library callers; calling every such result a timeout would misdescribe
+    // deterministic conflict and AIG budgets.
     //
     // Gated like the two verdicts below it, rather than printed
     // unconditionally as this arm used to be: a caller that did not ask for
     // output does not want the no-answer narrated either, and a library that
     // stays quiet about sat and unsat has no business narrating this one.
+    bm->unknownResult();
     if (bm->UserFlags.print_output_flag)
     {
       if (bm->UserFlags.smtlib1_parser_flag ||
           bm->UserFlags.smtlib2_parser_flag)
         cout << "unknown" << endl;
       else
-        cout << "Timed Out." << endl;
+        cout << "Unknown." << endl;
     }
     return;
   }

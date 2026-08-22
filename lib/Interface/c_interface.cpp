@@ -368,10 +368,12 @@ Expr wrap(const stp::ASTNode& n)
 // Whether the query that just returned this leaves anything to read. VALID
 // counts: there is no counterexample to a valid query, but that is the
 // decided answer to the question rather than an absence of one, and
-// GetCounterExample has its own arm for saying so. A timeout or an error
+// GetCounterExample has its own arm for saying so. An unknown or an error
 // decided nothing and cleared the tables on the way in.
 static int recordQueryOutcome(stp::STP* stp_i, int outcome)
 {
+  if (outcome == stp::SOLVER_UNKNOWN)
+    outcome = stp_i->bm->unknownResult();
   stp_i->queryAnswered = (outcome == stp::SOLVER_INVALID ||
                           outcome == stp::SOLVER_VALID);
   return outcome;
@@ -832,7 +834,7 @@ void vc_printCounterExampleToBuffer(VC vc, char** buf, size_t* len)
 
 enum reason_unknown_t vc_getReasonUnknown(VC vc)
 {
-  switch (mgr(vc)->unknown_reason)
+  switch (mgr(vc)->getUnknownReason())
   {
     case stp::UnknownReason::Timeout:
       return REASON_UNKNOWN_TIMEOUT;
@@ -844,6 +846,8 @@ enum reason_unknown_t vc_getReasonUnknown(VC vc)
       return REASON_UNKNOWN_CARRIER_EXHAUSTED;
     case stp::UnknownReason::AssumedInjectivity:
       return REASON_UNKNOWN_ASSUMED_INJECTIVITY;
+    case stp::UnknownReason::AIGBudget:
+      return REASON_UNKNOWN_AIG_BUDGET;
     case stp::UnknownReason::None:
       break;
   }
@@ -854,7 +858,7 @@ void vc_getReasonUnknownToBuffer(VC vc, char** buf, size_t* len)
 {
   // Empty rather than absent when there is nothing to say, so that a caller
   // has one shape to handle and always something to free.
-  const std::string& detail = mgr(vc)->unknown_detail;
+  const std::string& detail = mgr(vc)->getUnknownReasonDetail();
   const size_t size = detail.size() + 1; // chars plus the terminating null
   *buf = (char*)malloc(size);
   *len = size;

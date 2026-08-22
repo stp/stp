@@ -83,7 +83,7 @@ enum SOLVER_RETURN_TYPE
   // caller that only wants to know whether there is an answer keeps the one
   // test it already had, and the budgets are told apart by
   // (get-info :reason-unknown) rather than by the verdict.
-  SOLVER_TIMEOUT = 3,
+  SOLVER_UNKNOWN = 3,
   SOLVER_ERROR = -100,
   SOLVER_UNSATISFIABLE = 1,
   SOLVER_SATISFIABLE = 0
@@ -104,14 +104,14 @@ enum class UnknownReason
   // deterministic and will not.
   ConflictBudget,
   // Something other than a budget on the search: the encoding itself was
-  // abandoned. Carries its own sentence in STPMgr::unknown_detail, because
+  // abandoned. Carries its own sentence in STPMgr's unknown detail, because
   // the name alone does not say what was abandoned or what to do about it.
-  // The two below are that same claim with a name of their own, appended
-  // rather than inserted so that nothing already reporting Incomplete moves.
-  // SMT-LIB2 spells all three the same, as (incomplete "..."), since the
-  // sentence already says which; they are separate values because a caller
-  // holding only the value -- vc_getReasonUnknown -- has nothing to read the
-  // sentence for, and the action differs: each names a different flag.
+  // The named causes below are that same claim with a name of their own,
+  // appended rather than inserted so that nothing already reporting
+  // Incomplete moves. SMT-LIB2 spells all of them the same, as (incomplete
+  // "..."), since the sentence already says which; they are separate values
+  // because a caller holding only the value -- vc_getReasonUnknown -- has
+  // nothing to read the sentence for, and the action differs.
   Incomplete,
   // A declared sort's carrier was too narrow for the query, so an unsat that
   // may be an artefact of the encoding was withheld. Raise --uf-sort-width.
@@ -121,7 +121,10 @@ enum class UnknownReason
   // may rest on it, so the unsat was withheld. Both shipped drivers do close
   // that question -- see STPMgr::solveRetractingInjectivity -- so this is the
   // floor a driver falls to rather than report an unsat nobody can attribute.
-  AssumedInjectivity
+  AssumedInjectivity,
+  // --aig-node-budget stopped bit-blasting before the AIG exhausted memory.
+  // Raise that budget; the accompanying sentence says what it stopped at.
+  AIGBudget
 };
 
 // Empty vector. Useful commonly used ASTNodes

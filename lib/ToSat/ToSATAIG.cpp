@@ -78,7 +78,7 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
 
   // Only an exhausted AIG budget returns NULL: the query has no answer, and
   // `false` alone would be read as UNSAT. Raising the soft-timeout flag is
-  // what makes CallSAT_ResultCheck report SOLVER_TIMEOUT instead -- it tests
+  // what makes CallSAT_ResultCheck report SOLVER_UNKNOWN instead -- it tests
   // that flag before it tests this return value.
   if (cnfData == NULL)
   {
@@ -247,7 +247,7 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
     detail << "the AIG node budget set by --aig-node-budget ("
            << bm->UserFlags.aig_node_budget << ") ran out at " << e.nodeCount
            << " AND gates; raise it, or set it to -1 for no limit";
-    bm->noteUnknown(UnknownReason::Incomplete, detail.str());
+    bm->noteUnknown(UnknownReason::AIGBudget, detail.str());
     delete cb;
     cb = NULL;
     bb.cb = NULL;

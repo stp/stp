@@ -484,7 +484,7 @@ void ExtraMain::create_options()
             "it abandons the query through the soft-timeout path, so the "
             "answer is the one --max-time gives -- \"unknown\" in SMT-LIB "
             "mode, with (get-info :reason-unknown) naming this budget, and "
-            "\"Timed Out.\" in the CVC language. "
+            "\"Unknown.\" in the CVC language. "
             "Batch solves only: the incremental encoder's AIG outlives the "
             "check that grew it and is never capped, so engaging it with a "
             "budget set warns once instead. Bounds the blast, not the "

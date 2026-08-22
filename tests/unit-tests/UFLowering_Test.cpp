@@ -360,18 +360,18 @@ TEST(UFLowering, InjectArgsInstallsARetractableAssumptionAndCountsIt)
       guarded++;
   EXPECT_EQ(viewWith.eagerStats.emittedInjectivity(), guarded);
 
-  EXPECT_EQ(SOLVER_TIMEOUT,
+  EXPECT_EQ(SOLVER_UNKNOWN,
             manager.withholdAssumedUnsat(SOLVER_UNSATISFIABLE));
-  EXPECT_EQ(UnknownReason::AssumedInjectivity, manager.unknown_reason);
+  EXPECT_EQ(UnknownReason::AssumedInjectivity, manager.getUnknownReason());
   EXPECT_NE(std::string::npos,
-            manager.unknown_detail.find("--uf-inject-args"))
-      << manager.unknown_detail;
+            manager.getUnknownReasonDetail().find("--uf-inject-args"))
+      << manager.getUnknownReasonDetail();
 
   manager.clearUnknown();
   EXPECT_EQ(SOLVER_SATISFIABLE,
             manager.withholdAssumedUnsat(SOLVER_SATISFIABLE))
       << "a model of the strengthened formula is a model of the query";
-  EXPECT_EQ(UnknownReason::None, manager.unknown_reason);
+  EXPECT_EQ(UnknownReason::None, manager.getUnknownReason());
 
   // A driver that established whose refutation it holds says so by clearing
   // the record, and then the same unsat is reported rather than withheld.
@@ -379,7 +379,7 @@ TEST(UFLowering, InjectArgsInstallsARetractableAssumptionAndCountsIt)
   manager.uf_injectivity_assumed = 0;
   EXPECT_EQ(SOLVER_UNSATISFIABLE,
             manager.withholdAssumedUnsat(SOLVER_UNSATISFIABLE));
-  EXPECT_EQ(UnknownReason::None, manager.unknown_reason);
+  EXPECT_EQ(UnknownReason::None, manager.getUnknownReason());
 
   // Nothing assumed, no guard, nothing to retract, nothing withheld. The rule
   // keys on what was installed rather than on the flag.
@@ -397,5 +397,5 @@ TEST(UFLowering, InjectArgsInstallsARetractableAssumptionAndCountsIt)
   EXPECT_EQ(0u, manager.uf_injectivity_assumed);
   EXPECT_EQ(SOLVER_UNSATISFIABLE,
             manager.withholdAssumedUnsat(SOLVER_UNSATISFIABLE));
-  EXPECT_EQ(UnknownReason::None, manager.unknown_reason);
+  EXPECT_EQ(UnknownReason::None, manager.getUnknownReason());
 }
