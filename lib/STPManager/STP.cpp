@@ -980,9 +980,6 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
       return res;
     }
 
-    // Refinement reached no decision but the soft timeout has expired:
-    // report the timeout instead of iterating further (or falling into
-    // the fatal error below when nothing more is pending).
     if (bm->soft_timeout_expired)
     {
       if (toSATAIG.cbIsDestructed())
