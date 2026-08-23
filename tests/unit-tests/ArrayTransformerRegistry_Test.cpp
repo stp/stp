@@ -90,7 +90,7 @@ TEST(ArrayTransformerRegistry, eager_ackermann_pairs_persist_with_reads)
                                                persistent);
   ASSERT_EQ(1u, first.touchedReads.size());
   ASSERT_EQ(1u, persistent.ackPairs.count(array));
-  EXPECT_EQ(1u, persistent.ackPairs.at(array).size());
+  EXPECT_EQ(1u, persistent.ackPairs.at(array).all.size());
 
   ArrayTransformer::TransformResult second =
       transformer.TransformFormulaWithRegistry(readEquals(mgr, array, j, 2),
@@ -98,7 +98,7 @@ TEST(ArrayTransformerRegistry, eager_ackermann_pairs_persist_with_reads)
   ASSERT_EQ(1u, second.touchedReads.size());
   EXPECT_EQ(ArrayTransformer::ReadKey(array, j), second.touchedReads[0]);
   EXPECT_EQ(2u, persistent.reads.at(array).size());
-  EXPECT_EQ(2u, persistent.ackPairs.at(array).size());
+  EXPECT_EQ(2u, persistent.ackPairs.at(array).all.size());
 
   persistent.releaseStorage();
   EXPECT_TRUE(persistent.reads.empty());
