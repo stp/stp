@@ -69,8 +69,16 @@ onto it, then moving the pin here.
 SAT backends
 ------------
 
-CryptoMiniSat is the default backend, and the one the install
-instructions build. CMake finds it automatically when it is installed,
+CaDiCaL is the default backend: it is the one enabled when nothing is
+said, it needs no system library, and the build can produce one itself.
+The others are asked for by name.
+
+CryptoMiniSat used to be linked in whenever it happened to be installed.
+It no longer is -- a build whose set of backends depends on what the
+machine has lying around cannot be reproduced from its flags. Ask for it
+with ``-DUSE_CRYPTOMINISAT=ON``, which also makes a missing one a
+configuration error; ``-DUSE_CRYPTOMINISAT=AUTO`` restores the old
+"use it if it is there" behaviour by name. It is found when installed,
 including into ``deps/install``, where ``scripts/deps/setup-cms.sh``
 puts it:
 
@@ -84,10 +92,13 @@ puts it:
     sudo cmake --install .
     command -v ldconfig && sudo ldconfig
 
-``-DUSE_CRYPTOMINISAT=OFF`` ignores an installed copy.
+It is the one dependency STP does not build for you: it reaches the build
+as a CMake package rather than as a header and a library, and an
+ExternalProject would write that package only after the configure that
+has to read it. Install it, or run the script.
 
-CaDiCaL is the alternative, and is worth trying on hard bitvector
-problems. It is opt-in rather than auto-detected. With
+CaDiCaL is what you get by default, and is worth having on hard
+bitvector problems. With
 ``-DENABLE_AUTO_DOWNLOAD=ON`` there is nothing to do but ask for it;
 otherwise an installed CaDiCaL is found the way any library is, or
 ``CADICAL_DIR`` points at a checkout:
@@ -216,12 +227,12 @@ These apply to all generators:
 -  ``BUILD_SHARED_LIBS`` -- build ``libstp`` as a shared library
    (default ON; forced OFF by ``STATICCOMPILE``)
 -  ``USE_CRYPTOMINISAT`` -- ``ON`` requires CryptoMiniSat and fails
-   configuration if it is missing, ``OFF`` never uses it even if it is
-   installed, and the default uses it when it happens to be installed.
-   (It replaces ``NOCRYPTOMINISAT`` and ``FORCE_CMS``, both of which are
-   still accepted and warn)
--  ``USE_CADICAL`` and ``CADICAL_DIR`` -- build against a CaDiCaL
-   checkout
+   configuration if it is missing, ``AUTO`` uses it when it happens to be
+   installed, and ``OFF`` -- the default -- never uses it. (It replaces
+   ``NOCRYPTOMINISAT`` and ``FORCE_CMS``, both of which are still accepted
+   and warn)
+-  ``USE_CADICAL`` and ``CADICAL_DIR`` -- build the CaDiCaL backend
+   (on by default), optionally against a named checkout
 -  ``USE_MINISAT`` -- build the MiniSat backend
 -  ``USE_RISS`` -- build the Riss backend
 -  ``TUNE_NATIVE`` -- build with ``-mtune=native``

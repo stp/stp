@@ -27,31 +27,28 @@ On a Debian-like platform, from a clean checkout:
 
 .. code-block:: bash
 
-    sudo apt-get install git build-essential cmake bison flex curl patch \
-        python3 libgmp-dev
+    sudo apt-get install git build-essential cmake bison flex python3
     git clone https://github.com/stp/stp
     cd stp
     git submodule init && git submodule update
-    ./scripts/deps/setup-cms.sh
-    ./scripts/deps/setup-libbf.sh
-    mkdir build && cd build
-    cmake ..
-    cmake --build . -j$(nproc)
-    sudo cmake --install .
+    ./configure.sh --auto-download
+    cmake --build build -j$(nproc)
+    sudo cmake --install build
 
-Every step is needed. ABC, mimalloc, CLI11 and SymFPU are submodules and
-are built as part of STP; LibBF is required; and a build with no SAT backend enabled
-does not configure. The two ``setup`` scripts fetch and build LibBF and
-the SAT solver into ``deps/``, where the build finds them without being
-told where to look. ``libgmp-dev`` is in the list for CryptoMiniSat's sake
--- it is the only thing that needs it, and a build without CryptoMiniSat
-does not.
+ABC, mimalloc, CLI11 and SymFPU are submodules and are built as part of
+STP, which is what the ``git submodule`` line is for. Everything else --
+LibBF, which is required, and CaDiCaL, the SAT backend -- is downloaded
+and built by that ``--auto-download``, with this build's own compiler and
+flags. Without it, configuration stops and says what to install or where
+to point it: nothing here reaches the network unless it is asked to.
 
-That gives a solver backed by CryptoMiniSat, which is the default when it
-is the only backend compiled in. CaDiCaL is also supported and becomes the
-default when it is compiled in; either way ``--cryptominisat``, ``--cadical``
-and ``--minisat`` pick a compiled-in backend at run time. :doc:`building`
-has the recipe.
+That gives a solver backed by CaDiCaL. CryptoMiniSat, MiniSat and Riss
+are also supported, and are asked for by name --
+``./configure.sh --cryptominisat``, ``--minisat``, ``--riss``; at run time
+``--cryptominisat``, ``--cadical`` and ``--minisat`` pick between the
+backends that were compiled in. CryptoMiniSat is the one dependency STP
+does not build for you, and the one that needs ``libgmp-dev``.
+:doc:`building` has the detail.
 
 With `Homebrew <https://brew.sh>`__:
 

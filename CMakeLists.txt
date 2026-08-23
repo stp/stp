@@ -648,7 +648,13 @@ endif()
 # -----------------------------------------------------------------------------
 # Setup Cadical
 # -----------------------------------------------------------------------------
-option(USE_CADICAL "Try to use Cadical" OFF)
+# On by default, and the only backend that is. Something has to be, or a plain
+# `cmake ..` has no way to solve anything now that CryptoMiniSat is no longer
+# picked up merely for being installed -- and CaDiCaL is the one to pick: it
+# needs no system library (CryptoMiniSat wants GMP, MiniSat wants zlib), it is
+# the backend the documentation recommends for hard bitvector problems, and
+# with -DENABLE_AUTO_DOWNLOAD=ON the build can produce one itself.
+option(USE_CADICAL "Use the CaDiCaL solver backend" ON)
 add_feature_info(Cadical USE_CADICAL "Enables Cadical solver")
 
 if (USE_CADICAL)
@@ -763,39 +769,56 @@ add_feature_info(Allocator "NOT STP_ALLOCATOR STREQUAL system"
 # Three-valued, because "use CryptoMiniSat" has three answers and this used to
 # need three variables to say them:
 #
-#   OFF     do not look for it                       (was -DNOCRYPTOMINISAT=ON)
-#   ON      it is required; fail if it is missing     (was -DFORCE_CMS=ON)
-#   IGNORE  use it if it happens to be installed      (was the default)
+#   OFF   (default) do not look for it              (was -DNOCRYPTOMINISAT=ON)
+#   ON    it is required; fail if it is missing     (was -DFORCE_CMS=ON)
+#   AUTO  use it if it happens to be installed      (was the old default)
 #
-# IGNORE is still the default, so this changes nothing for an existing build.
-# It is the rung that will go: a build whose backend set depends on what the
-# machine happens to have installed cannot be reproduced from its flags, which
-# is the whole reason the dependencies are moving to a declared, downloadable
-# set. When that lands, the default becomes OFF and CaDiCaL is what a plain
-# configure gets.
-set(CMS_OPTION_DOC "Use the CryptoMiniSat solver backend (ON = required, OFF = never, IGNORE = if installed)")
-stp_option(USE_CRYPTOMINISAT "${CMS_OPTION_DOC}")
+# The default is OFF, and that is the change: CryptoMiniSat used to be linked
+# in whenever it happened to be installed. A build whose set of SAT backends
+# depends on what the machine has lying around cannot be reproduced from its
+# flags, which is most of what moving the dependencies to a declared,
+# downloadable set is for. AUTO is still there for anyone who wants the old
+# behaviour by name.
+set(CMS_OPTION_DOC "Use the CryptoMiniSat solver backend: ON requires it, OFF never uses it, AUTO uses it if installed")
+set(USE_CRYPTOMINISAT "OFF" CACHE STRING "${CMS_OPTION_DOC}")
+set_property(CACHE USE_CRYPTOMINISAT PROPERTY STRINGS OFF ON AUTO)
 
 # Back-compat for the two variables this replaces. Both are still accepted and
-# still mean what they meant. Translated once and then remembered, the way
-# USE_TCMALLOC -> STP_ALLOCATOR is below: a deprecated name left sitting in the
-# cache must not keep overruling a later -DUSE_CRYPTOMINISAT=, and the warning
-# should be seen once rather than on every reconfigure.
+# still mean what they meant -- including NOCRYPTOMINISAT=OFF, which meant "do
+# look for it", and so translates to AUTO rather than to ON. Translated once
+# and then remembered, the way USE_TCMALLOC -> STP_ALLOCATOR is below: a
+# deprecated name left sitting in a build directory's cache must not go on
+# overruling a later -DUSE_CRYPTOMINISAT=, and the warning should be seen once
+# rather than on every reconfigure.
 if (NOT DEFINED _STP_CMS_FROM_LEGACY_OPTION)
-    if (DEFINED NOCRYPTOMINISAT AND NOCRYPTOMINISAT)
-        message(WARNING "NOCRYPTOMINISAT is deprecated, use -DUSE_CRYPTOMINISAT=OFF")
-        set(USE_CRYPTOMINISAT OFF CACHE STRING "${CMS_OPTION_DOC}" FORCE)
-        set(_STP_CMS_FROM_LEGACY_OPTION ON CACHE INTERNAL "")
-    elseif (DEFINED FORCE_CMS AND FORCE_CMS)
+    if (DEFINED FORCE_CMS AND FORCE_CMS)
         message(WARNING "FORCE_CMS is deprecated, use -DUSE_CRYPTOMINISAT=ON")
         set(USE_CRYPTOMINISAT ON CACHE STRING "${CMS_OPTION_DOC}" FORCE)
+        set(_STP_CMS_FROM_LEGACY_OPTION ON CACHE INTERNAL "")
+    elseif (DEFINED NOCRYPTOMINISAT)
+        if (NOCRYPTOMINISAT)
+            message(WARNING "NOCRYPTOMINISAT is deprecated, use -DUSE_CRYPTOMINISAT=OFF")
+            set(USE_CRYPTOMINISAT OFF CACHE STRING "${CMS_OPTION_DOC}" FORCE)
+        else()
+            message(WARNING "NOCRYPTOMINISAT=OFF is deprecated, use -DUSE_CRYPTOMINISAT=AUTO")
+            set(USE_CRYPTOMINISAT AUTO CACHE STRING "${CMS_OPTION_DOC}" FORCE)
+        endif()
         set(_STP_CMS_FROM_LEGACY_OPTION ON CACHE INTERNAL "")
     endif()
 endif()
 
-# Was it asked for, or merely not refused? The two differ only when the lookup
-# fails: an explicit ON is a configuration error, an unset one is not.
-stp_option_is_explicit(USE_CRYPTOMINISAT CMS_EXPLICITLY_REQUESTED)
+if (NOT USE_CRYPTOMINISAT MATCHES "^(ON|OFF|AUTO)$")
+    message(FATAL_ERROR "USE_CRYPTOMINISAT must be ON, OFF or AUTO, not "
+            "'${USE_CRYPTOMINISAT}'")
+endif()
+
+# Asked for by name, or merely not refused? The two differ only when the lookup
+# fails: an explicit ON is a configuration error, AUTO is not.
+if (USE_CRYPTOMINISAT STREQUAL "ON")
+    set(CMS_EXPLICITLY_REQUESTED TRUE)
+else()
+    set(CMS_EXPLICITLY_REQUESTED FALSE)
+endif()
 
 if (NOT USE_CRYPTOMINISAT STREQUAL "OFF")
   # REQUIRED only when it was asked for by name: an explicit ON makes a missing
