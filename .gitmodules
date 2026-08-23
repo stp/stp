@@ -10,3 +10,6 @@
 [submodule "lib/extlib-cli11"]
 	path = lib/extlib-cli11
 	url = https://github.com/CLIUtils/CLI11.git
+[submodule "lib/extlib-libbf"]
+	path = lib/extlib-libbf
+	url = https://github.com/stp/libbf.git

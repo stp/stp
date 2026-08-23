@@ -60,6 +60,15 @@ Third-party code that is compiled into STP also lives under ``lib/``:
 -  ``extlib-cli11``: `CLI11 <https://github.com/CLIUtils/CLI11>`__, the
    command-line parser of the ``stp`` executable. Header-only, so it is
    compiled into the tool but never into ``libstp``. A git submodule.
+-  ``extlib-libbf``: `LibBF <https://bellard.org/libbf/>`__, Fabrice
+   Bellard's arbitrary-precision floating-point library, used by
+   ``FloatBlaster`` to convert the real literals in floating-point input.
+   A git submodule pointing at `stp/libbf <https://github.com/stp/libbf>`__,
+   a mirror laid out like the ABC fork above: upstream publishes release
+   tarballs and no repository, so ``master`` holds the tarballs verbatim
+   and ``stp`` -- the branch the submodule is pinned to -- carries STP's
+   MSVC portability changes. Only ``libbf.c`` and ``cutils.c`` are
+   compiled; ``lib/CMakeLists.txt`` folds them into ``libstp``.
 -  ``extlib-constbv``: A library that implements multi-word fixed-length
    integers, based on Steffen Beyer's
    `Bit::Vector <https://metacpan.org/pod/Bit::Vector>`__ perl module.

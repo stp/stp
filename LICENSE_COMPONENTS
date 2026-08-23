@@ -168,8 +168,9 @@ LibBF
 	MIT License
 
 	STP builds the library proper out of a mirror of the upstream release
-	tarballs (https://github.com/stp/libbf), which is two pairs of files,
-	carrying a copyright line each:
+	tarballs (https://github.com/stp/libbf), vendored as the submodule at
+	lib/extlib-libbf. It is two pairs of files, carrying a copyright line
+	each:
 
 	libbf.c and libbf.h: Copyright (c) 2017-2025 Fabrice Bellard
 	cutils.c and cutils.h: Copyright (c) 2017 Fabrice Bellard

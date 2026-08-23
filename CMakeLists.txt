@@ -1003,26 +1003,19 @@ endif()
 include_directories(SYSTEM ${SYMFPU_INCLUDE_DIRS})
 
 # LibBF folds the real literals in floating-point input -- ((_ to_fp 8 24)
-# RNE 1.5) -- to their exactly-rounded bits while parsing. Upstream
-# publishes release tarballs rather than a repository, so STP mirrors them
-# in stp/libbf; scripts/deps/setup-libbf.sh clones that at a pinned commit
-# and builds it into deps/libbf, where this looks by default.
-set(LIBBF_DIR "${PROJECT_SOURCE_DIR}/deps/libbf" CACHE PATH "Path to a built LibBF (the directory containing libbf.h and libbf.a, as laid out by scripts/deps/setup-libbf.sh)")
-find_path(LIBBF_INCLUDE_DIR NAMES libbf.h HINTS ${LIBBF_DIR})
-find_library(LIBBF_LIBRARY NAMES bf HINTS ${LIBBF_DIR})
-if (NOT LIBBF_INCLUDE_DIR OR NOT LIBBF_LIBRARY)
+# RNE 1.5) -- to their exactly-rounded bits while parsing. A submodule
+# pointing at stp/libbf, which mirrors the release tarballs upstream
+# publishes in place of a repository; lib/CMakeLists.txt compiles the two
+# C files it consists of into libstp.
+if (NOT EXISTS "${PROJECT_SOURCE_DIR}/lib/extlib-libbf/libbf.h")
     message(FATAL_ERROR "LibBF (required; it folds the real literals in "
-            "floating-point input) was not found. Run "
-            "scripts/deps/setup-libbf.sh from the top of the source tree "
-            "-- it fetches and builds LibBF into deps/libbf, where this "
-            "looks by default -- or point LIBBF_DIR at an existing build")
+            "floating-point input) is missing. Run: "
+            "git submodule update --init lib/extlib-libbf")
 endif()
-message(STATUS "Found LibBF: ${LIBBF_LIBRARY}")
 # SYSTEM, the way ABC and SymFPU are consumed: the header typedefs
 # __int128 on 64-bit targets, which gcc's -pedantic rejects in the one
 # C++ translation unit that includes it.
-include_directories(SYSTEM ${LIBBF_INCLUDE_DIR})
-link_libraries(${LIBBF_LIBRARY})
+include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/lib/extlib-libbf)
 
 # -----------------------------------------------------------------------------
 # Query definitions
