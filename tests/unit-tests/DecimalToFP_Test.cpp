@@ -64,6 +64,17 @@ std::string bitsOfU64(uint64_t v, unsigned width)
   return s;
 }
 
+std::string binary(const std::string& left, const std::string& right,
+                   unsigned eb, unsigned sb, unsigned rm,
+                   PackedFpBinaryOp operation)
+{
+  std::string bits, err;
+  const bool ok = packedFPBinaryOp(left, right, eb, sb, rm, operation, bits,
+                                   err);
+  EXPECT_TRUE(ok) << "(" << eb << "," << sb << "): " << err;
+  return ok ? bits : "";
+}
+
 std::string hostFloatBits(const std::string& dec)
 {
   const float f = strtof(dec.c_str(), nullptr);
@@ -376,6 +387,107 @@ TEST(DecimalToFP, unsupportedExponentWidths)
   EXPECT_FALSE(decimalToPackedFPBits("1.5", 62, 8,
                                      ROUND_NEAREST_TIES_TO_EVEN, bits, err));
   EXPECT_NE(err.find("exponent widths"), std::string::npos) << err;
+}
+
+TEST(PackedFpBinaryOp, exactArithmeticAndCancellation)
+{
+  const std::string one = bitsOfU64(0x3c00, 16);
+  const std::string onePointFive = bitsOfU64(0x3e00, 16);
+  const std::string two = bitsOfU64(0x4000, 16);
+
+  EXPECT_EQ(binary(onePointFive, two, 5, 11, ROUND_NEAREST_TIES_TO_EVEN,
+                   PackedFpBinaryOp::Add),
+            bitsOfU64(0x4300, 16)); // 3.5
+  EXPECT_EQ(binary(two, onePointFive, 5, 11,
+                   ROUND_NEAREST_TIES_TO_EVEN,
+                   PackedFpBinaryOp::Subtract),
+            bitsOfU64(0x3800, 16)); // 0.5
+  EXPECT_EQ(binary(onePointFive, two, 5, 11,
+                   ROUND_NEAREST_TIES_TO_EVEN,
+                   PackedFpBinaryOp::Multiply),
+            bitsOfU64(0x4200, 16)); // 3.0
+
+  EXPECT_EQ(binary(one, one, 5, 11, ROUND_NEAREST_TIES_TO_EVEN,
+                   PackedFpBinaryOp::Subtract),
+            bitsOfU64(0x0000, 16));
+  EXPECT_EQ(binary(one, one, 5, 11, ROUND_TOWARD_NEGATIVE,
+                   PackedFpBinaryOp::Subtract),
+            bitsOfU64(0x8000, 16));
+}
+
+TEST(PackedFpBinaryOp, underflowUsesTheRequestedRoundingMode)
+{
+  const std::string minSub = bitsOfU64(0x0001, 16);
+  const std::string minusMinSub = bitsOfU64(0x8001, 16);
+  const std::string half = bitsOfU64(0x3800, 16);
+
+  EXPECT_EQ(binary(minSub, half, 5, 11, ROUND_NEAREST_TIES_TO_EVEN,
+                   PackedFpBinaryOp::Multiply),
+            bitsOfU64(0x0000, 16));
+  EXPECT_EQ(binary(minSub, half, 5, 11, ROUND_NEAREST_TIES_TO_AWAY,
+                   PackedFpBinaryOp::Multiply),
+            minSub);
+  EXPECT_EQ(binary(minSub, half, 5, 11, ROUND_TOWARD_POSITIVE,
+                   PackedFpBinaryOp::Multiply),
+            minSub);
+  EXPECT_EQ(binary(minusMinSub, half, 5, 11, ROUND_TOWARD_POSITIVE,
+                   PackedFpBinaryOp::Multiply),
+            bitsOfU64(0x8000, 16));
+  EXPECT_EQ(binary(minusMinSub, half, 5, 11, ROUND_TOWARD_NEGATIVE,
+                   PackedFpBinaryOp::Multiply),
+            minusMinSub);
+}
+
+TEST(PackedFpBinaryOp, overflowUsesTheRequestedRoundingMode)
+{
+  const std::string maxFinite = bitsOfU64(0x7bff, 16);
+  const std::string two = bitsOfU64(0x4000, 16);
+  EXPECT_EQ(binary(maxFinite, two, 5, 11, ROUND_NEAREST_TIES_TO_EVEN,
+                   PackedFpBinaryOp::Multiply),
+            bitsOfU64(0x7c00, 16));
+  EXPECT_EQ(binary(maxFinite, two, 5, 11, ROUND_TOWARD_POSITIVE,
+                   PackedFpBinaryOp::Multiply),
+            bitsOfU64(0x7c00, 16));
+  EXPECT_EQ(binary(maxFinite, two, 5, 11, ROUND_TOWARD_NEGATIVE,
+                   PackedFpBinaryOp::Multiply),
+            maxFinite);
+  EXPECT_EQ(binary(maxFinite, two, 5, 11, ROUND_TOWARD_ZERO,
+                   PackedFpBinaryOp::Multiply),
+            maxFinite);
+}
+
+TEST(PackedFpBinaryOp, signedZerosArePreserved)
+{
+  const std::string minusZero = bitsOfU64(0x8000, 16);
+  const std::string two = bitsOfU64(0x4000, 16);
+  const std::string minusTwo = bitsOfU64(0xc000, 16);
+  EXPECT_EQ(binary(minusZero, two, 5, 11, ROUND_NEAREST_TIES_TO_EVEN,
+                   PackedFpBinaryOp::Multiply),
+            minusZero);
+  EXPECT_EQ(binary(minusZero, minusTwo, 5, 11,
+                   ROUND_NEAREST_TIES_TO_EVEN,
+                   PackedFpBinaryOp::Multiply),
+            bitsOfU64(0x0000, 16));
+}
+
+TEST(PackedFpBinaryOp, rejectsMalformedAndNonfiniteInputs)
+{
+  const std::string one = bitsOfU64(0x3c00, 16);
+  std::string bits, err;
+  EXPECT_FALSE(packedFPBinaryOp(bitsOfU64(0x7c00, 16), one, 5, 11,
+                                ROUND_NEAREST_TIES_TO_EVEN,
+                                PackedFpBinaryOp::Add, bits, err));
+  EXPECT_NE(err.find("finite operands"), std::string::npos) << err;
+  err.clear();
+  EXPECT_FALSE(packedFPBinaryOp("000000000000000x", one, 5, 11,
+                                ROUND_NEAREST_TIES_TO_EVEN,
+                                PackedFpBinaryOp::Add, bits, err));
+  EXPECT_NE(err.find("non-bit"), std::string::npos) << err;
+  err.clear();
+  EXPECT_FALSE(packedFPBinaryOp("0", one, 5, 11,
+                                ROUND_NEAREST_TIES_TO_EVEN,
+                                PackedFpBinaryOp::Add, bits, err));
+  EXPECT_NE(err.find("wrong width"), std::string::npos) << err;
 }
 
 } // namespace

@@ -9,7 +9,8 @@ namespace stp
 {
 
 FpEncodingContext::FpEncodingContext(STPMgr* bm_)
-    : bm(bm_), node_factory(bm_->defaultNodeFactory), totalise(bm_), blast(bm_)
+    : bm(bm_), node_factory(bm_->defaultNodeFactory), totalise(bm_),
+      domain(bm_), blast(bm_)
 {
 }
 
@@ -25,7 +26,29 @@ void FpEncodingContext::requireOriginalNodeFactory() const
 ASTNode FpEncodingContext::prepare(const ASTNode& source)
 {
   requireOriginalNodeFactory();
-  return totalise.topLevel(source);
+  ASTNode out = totalise.topLevel(source);
+  if (bm->UserFlags.fp_domain_simplify ||
+      bm->UserFlags.fp_domain_sound_zero_facts ||
+      bm->UserFlags.fp_domain_row_bounds)
+  {
+    out = domain.topLevel(out);
+    if (bm->UserFlags.stats_flag)
+    {
+      const FpDomainSimplify::Statistics& s = domain.statistics();
+      std::cerr << "FpDomainSimplify: " << s.boxed_symbols
+                << " boxed symbols, " << s.interval_true
+                << " interval-true, " << s.interval_false
+                << " interval-false, " << s.classifier_false
+                << " classifier-false, " << s.difference_zero_equalities
+                << " diff-zero-eq, " << s.nonnegative_zero_sums
+                << " nonnegative-zero-sum, " << s.sound_zero_rows
+                << " sound-zero-rows, " << s.sound_zero_facts
+                << " sound-zero-facts, " << s.row_bound_rows
+                << " row-bound-rows, " << s.row_bound_false
+                << " row-bound-false" << std::endl;
+    }
+  }
+  return out;
 }
 
 void FpEncodingContext::copyArrayEqualityRewrites(ASTNodeMap& out) const
