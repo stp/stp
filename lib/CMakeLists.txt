@@ -125,6 +125,7 @@ foreach(target ${stp_lib_targets})
     endif()
 endforeach()
 
+
 if(CMAKE_GENERATOR STREQUAL Xcode)
     # XCode has a serious bug where the XCode project produces an invalid target that will not get
     # linked if it consists only of objects from object libraries, it will not generate any

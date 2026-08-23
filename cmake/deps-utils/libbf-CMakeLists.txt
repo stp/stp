@@ -16,6 +16,20 @@ add_library(bf STATIC libbf.c cutils.c)
 # it is ever configured on its own.
 set_target_properties(bf PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
+# LibBF is C11, and MSVC compiles .c as C89-with-extensions unless told
+# otherwise. C_STANDARD covers every other compiler; MSVC's mapping of it needs
+# a newer cmake_minimum_required than this sets, so name the flag directly.
+set_target_properties(bf PROPERTIES C_STANDARD 11)
+if(MSVC)
+    target_compile_options(bf PRIVATE /std:c11)
+endif()
+
+# A section per function and per data object, so that the --gc-sections on
+# libstp can drop what STP never calls -- the same treatment ABC gets.
+if(NOT MSVC)
+    target_compile_options(bf PRIVATE -ffunction-sections -fdata-sections)
+endif()
+
 include(GNUInstallDirs)
 install(TARGETS bf ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}")
 install(FILES libbf.h cutils.h DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")

@@ -49,8 +49,10 @@ jobs:
         # this job only builds the tests and never runs them.
         sudo pip3 install -U lit
 
-    # The solver libraries and LibBF are built before CodeQL is
-    # initialized, so their compilation is not traced into the database.
+    # The solver libraries are built before CodeQL is initialized, so
+    # their compilation is not traced into the database. LibBF is a
+    # submodule compiled as part of STP, so it is traced -- and, being
+    # third-party, filtered out of the results below alongside gtest.
     # gtest cannot be handled the same way (tests/CMakeLists.txt compiles
     # it as part of the STP build); it is cloned here and filtered out of
     # the results below.

@@ -6,6 +6,7 @@
 
 #include "stp/AST/AST.h"
 #include "stp/FloatBlaster/FloatBlast.h"
+#include "stp/FloatBlaster/FpDomainSimplify.h"
 #include "stp/FloatBlaster/FpTotalise.h"
 #include "stp/STPManager/STPManager.h"
 
@@ -47,6 +48,7 @@ private:
   STPMgr* bm;
   NodeFactory* node_factory;
   FpTotalise totalise;
+  FpDomainSimplify domain;
   FloatBlast blast;
 };
 

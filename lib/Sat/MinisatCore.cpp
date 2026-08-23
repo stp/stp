@@ -25,6 +25,7 @@ THE SOFTWARE.
 #define __STDC_FORMAT_MACROS
 #include "stp/Sat/MinisatCore.h"
 #include "minisat/core/Solver.h"
+#include <iostream>
 //#include "utils/System.h"
 //#include "simp/SimpSolver.h"
 
@@ -151,7 +152,35 @@ uint32_t MinisatCore::nVars() const
 
 void MinisatCore::printStats() const
 {
-  //s->printStats();
+  // MiniSat's periodic table is useful while a long search is running, but
+  // fixed-conflict profiles also need exact final totals. In particular,
+  // propagations/conflict distinguishes SAT-search work from front-end time.
+  std::cerr << "MiniSat starts: " << s->starts << '\n';
+  std::cerr << "MiniSat conflicts: " << s->conflicts << '\n';
+  std::cerr << "MiniSat decisions: " << s->decisions << '\n';
+  std::cerr << "MiniSat propagations: " << s->propagations << '\n';
+  std::cerr << "MiniSat variables: " << s->nVars() << '\n';
+  if (s->conflicts != 0)
+  {
+    std::cerr << "MiniSat decisions per conflict: "
+              << static_cast<double>(s->decisions) / s->conflicts << '\n';
+    std::cerr << "MiniSat propagations per conflict: "
+              << static_cast<double>(s->propagations) / s->conflicts << '\n';
+  }
+  std::cerr << "MiniSat active original clauses: " << s->nClauses() << '\n';
+  std::cerr << "MiniSat active original literals: " << s->clauses_literals
+            << '\n';
+  std::cerr << "MiniSat active learnt clauses: " << s->nLearnts() << '\n';
+  std::cerr << "MiniSat active learnt literals: " << s->learnts_literals
+            << '\n';
+  if (s->nLearnts() != 0)
+    std::cerr << "MiniSat active learnt literals per clause: "
+              << static_cast<double>(s->learnts_literals) / s->nLearnts()
+              << '\n';
+  std::cerr << "MiniSat learnt literals before minimization: "
+            << s->max_literals << '\n';
+  std::cerr << "MiniSat learnt literals after minimization: "
+            << s->tot_literals << '\n';
 }
 
 int MinisatCore::nClauses()

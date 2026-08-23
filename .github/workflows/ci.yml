@@ -1231,8 +1231,9 @@ jobs:
 
     - name: Build minisat
       run: |
-        git clone --depth 1 https://github.com/stp/minisat
+        git clone https://github.com/stp/minisat
         cd minisat
+        git checkout 14c78206cd12d1d36b7e042fa758747c135670a4
         cmake -B build -A x64 -DSTATICCOMPILE=ON "-DCMAKE_POLICY_VERSION_MINIMUM=3.12" "-DCMAKE_INSTALL_PREFIX=$env:MINISAT_ROOT" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
         cmake --build build --config Release --target install
 
@@ -1328,7 +1329,7 @@ jobs:
         "fp solver output: '$($outfp.Trim())'"
         "fp solver exit code: $LASTEXITCODE"
         if ($outfp.Trim() -ne "sat") { exit 1 }
-        # Real-literal folding through the MSVC-built LibBF: the decimal
+        # Real-literal folding through LibBF as MSVC compiled it: the decimal
         # fold must equal its packed-bits spelling, and a rational under a
         # symbolic rounding mode pinned to RTZ must pick that conversion.
         "(set-logic QF_FP)(declare-fun x () (_ FloatingPoint 8 24))(assert (= x ((_ to_fp 8 24) RNE 1.5)))(assert (distinct x ((_ to_fp 8 24) #x3fc00000)))(check-sat)" | Out-File -Encoding ascii testlit.smt2
@@ -1449,7 +1450,7 @@ jobs:
         out=$("$stp" testsat.smt2)
         echo "sat-backend output: '$out'"
         [ "$out" = "sat" ]
-        # Real-literal folding through the MinGW-built LibBF: the decimal
+        # Real-literal folding through LibBF as MinGW compiled it: the decimal
         # fold must equal its packed-bits spelling.
         echo '(set-logic QF_FP)(declare-fun x () (_ FloatingPoint 8 24))(assert (= x ((_ to_fp 8 24) RNE 1.5)))(assert (distinct x ((_ to_fp 8 24) #x3fc00000)))(check-sat)' > testlit.smt2
         out=$("$stp" testlit.smt2)

@@ -78,6 +78,11 @@ if(NOT LibBF_FOUND_SYSTEM)
     set(LibBF_ARCHIVE
         "${CMAKE_STATIC_LIBRARY_PREFIX}bf${CMAKE_STATIC_LIBRARY_SUFFIX}")
 
+    set(LibBF_EXTRA_C_FLAGS "")
+    if(NOT MSVC)
+        set(LibBF_EXTRA_C_FLAGS "-Wno-error")
+    endif()
+
     ExternalProject_Add(
         LibBF-EP
         ${STP_EP_COMMON_CONFIG}
@@ -92,6 +97,10 @@ if(NOT LibBF_FOUND_SYSTEM)
         CMAKE_ARGS ${STP_EP_COMMON_CMAKE_ARGS}
                    -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
                    -DCMAKE_INSTALL_LIBDIR=lib
+                   # STP's own flags are forwarded, -Werror among them when
+                   # WERROR is on, and LibBF is upstream code whose warnings
+                   # STP does not control.
+                   "-DCMAKE_C_FLAGS=${CMAKE_C_FLAGS} ${LibBF_EXTRA_C_FLAGS}"
         # Without this Ninja refuses to generate: the archive is a link input
         # that does not exist when the generator runs.
         BUILD_BYPRODUCTS <INSTALL_DIR>/lib/${LibBF_ARCHIVE}

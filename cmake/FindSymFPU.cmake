@@ -57,44 +57,20 @@ if(NOT SymFPU_FOUND_SYSTEM)
         check_auto_download("SymFPU" "" SYMFPU_INCLUDE_DIRS)
     endif()
 
-    set(SymFPU_COMMIT "502cd63f7626d1f691c8df3869d76a37ae572556")
-    set(SymFPU_CHECKSUM "238fc92456032230495d681ae6868b3c9488fd9b9394ca01e9c9b77098d2c336")
-
-    # STP carries four fixes to SymFPU that upstream has not taken. They used
-    # to be applied to a submodule working tree at configure time, by a
-    # function that had to check whether each one was already applied -- since
-    # the tree persisted between configures, and a second build directory
-    # against the same source would otherwise have applied them twice. An
-    # ExternalProject unpacks a fresh tree and patches it once, so all of that
-    # goes away.
-    #
-    # A tarball rather than a git clone, deliberately: ExternalProject's update
-    # step for a git source re-runs `git checkout`, which reverts a patched
-    # working tree. A URL has no update step to fight.
-    find_program(PATCH_EXECUTABLE patch)
-    if(NOT PATCH_EXECUTABLE)
-        message(FATAL_ERROR
-            "SymFPU has to be patched before it can be built, and `patch` was "
-            "not found. Install it, or point SYMFPU_INCLUDE_DIRS at a copy "
-            "that has been patched already.")
-    endif()
-
-    file(GLOB SymFPU_PATCHES "${CMAKE_CURRENT_LIST_DIR}/deps-utils/symfpu/*.patch")
-    list(SORT SymFPU_PATCHES)
-    set(SymFPU_PATCH_COMMAND "")
-    foreach(_patch ${SymFPU_PATCHES})
-        list(APPEND SymFPU_PATCH_COMMAND
-             COMMAND ${PATCH_EXECUTABLE} -p1 -d <SOURCE_DIR> -i "${_patch}")
-    endforeach()
-    # PATCH_COMMAND expects the first command without the COMMAND keyword.
-    list(REMOVE_AT SymFPU_PATCH_COMMAND 0)
+    # stp/symfpu is a fork laid out like the ABC one: main tracks upstream and
+    # the `stp` branch, which this pins a commit of, carries STP's four
+    # correctness fixes as commits. They used to be patch files applied at
+    # configure time; as commits each one names what it fixes, and a bump is a
+    # rebase in that repository where a conflict says which change upstream has
+    # met.
+    set(SymFPU_COMMIT "d358a6defeace0cd44695e7d922fc62c2f8b8ee8")
+    set(SymFPU_CHECKSUM "2557cc598ebde7e6d673cbb7f48a6f0928a18e38bbd3a5b00d126c0f45ba79f1")
 
     ExternalProject_Add(
         SymFPU-EP
         ${STP_EP_COMMON_CONFIG}
-        URL https://github.com/martin-cs/symfpu/archive/${SymFPU_COMMIT}.tar.gz
+        URL https://github.com/stp/symfpu/archive/${SymFPU_COMMIT}.tar.gz
         URL_HASH SHA256=${SymFPU_CHECKSUM}
-        PATCH_COMMAND ${SymFPU_PATCH_COMMAND}
         # Header-only: nothing to configure, nothing to build. STP includes
         # "symfpu/core/...", so the headers go under a symfpu/ directory and
         # the include path is its parent.
