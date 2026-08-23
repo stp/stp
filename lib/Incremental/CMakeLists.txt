@@ -32,3 +32,10 @@ add_library(incremental OBJECT
 # The AST headers this pulls in include the generated ASTKind.h; without the
 # explicit dependency a fresh build directory can race the generator.
 add_dependencies(incremental ASTKind_header)
+
+# IncrementalSolverImpl.h includes stp/Sat/MinisatCore.h, which reaches
+# MiniSat's own headers. The MiniSat target carries them, and zlib with them --
+# this used to arrive through a project-wide include_directories().
+if (USE_MINISAT)
+    target_link_libraries(incremental PRIVATE MiniSat)
+endif()

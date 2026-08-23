@@ -59,22 +59,28 @@ function(AddSTPGTest sourcefile)
         set(test_allocator ${STP_ALLOCATOR_LIBRARY})
     endif()
 
-    # Several unit tests include stp/Sat/Cadical.h directly (each guarded by
-    # #ifdef USE_CADICAL), which pulls in CaDiCaL's own header; and a shared
-    # libstp localises the symbols it took from libcadical.a (--exclude-libs),
-    # so a test that reaches CaDiCaL needs its own copy -- the same arrangement
-    # as the $<TARGET_FILE:libabc-pic> on the tests that instantiate
-    # BBNodeManagerAIG. Given to every unit test rather than tracked per file:
-    # this is what the project-wide link_libraries() it replaces already did,
-    # an archive contributes nothing to a test that does not reference it, and
-    # a list kept by hand would rot the first time a test grew the include.
-    set(test_cadical "")
+    # A number of unit tests include a SAT backend's own header directly --
+    # stp/Sat/Cadical.h, stp/Sat/MinisatCore.h -- each guarded by the #ifdef
+    # for that backend, and each pulling in the backend's headers with it. A
+    # shared libstp also localises the symbols it took from those archives
+    # (--exclude-libs), so a test that reaches one needs its own copy: the
+    # arrangement the tests that instantiate BBNodeManagerAIG already use for
+    # ABC through $<TARGET_FILE:libabc-pic>.
+    #
+    # Handed to every unit test rather than tracked per file. That is what the
+    # project-wide link_libraries() these replace already did, an archive
+    # contributes nothing to a test that does not reference it, and a list kept
+    # by hand would rot the first time a test grew the include.
+    set(test_backends "")
     if(USE_CADICAL)
-        set(test_cadical CaDiCaL)
+        list(APPEND test_backends CaDiCaL)
+    endif()
+    if(USE_MINISAT)
+        list(APPEND test_backends MiniSat)
     endif()
 
     target_link_libraries(${testname}
-        ${test_allocator} stp ${GTEST_BOTH_LIBRARIES} ${test_cadical}
+        ${test_allocator} stp ${GTEST_BOTH_LIBRARIES} ${test_backends}
     )
 
     # Add dependency so that building the testsuite

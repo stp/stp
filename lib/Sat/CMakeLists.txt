@@ -72,3 +72,10 @@ endif()
 if (USE_CADICAL)
     target_link_libraries(sat PRIVATE CaDiCaL)
 endif()
+
+# And for MiniSat, whose target additionally carries zlib: its public headers
+# include zlib.h, so anything compiling against it needs zlib's include
+# directory as well as its own.
+if (USE_MINISAT)
+    target_link_libraries(sat PRIVATE MiniSat)
+endif()

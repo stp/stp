@@ -115,8 +115,13 @@ default until bounded variable addition was measured on bitvector-only
 problems and found to pay there too.
 
 MiniSat is optional and off by default; enable it with
-``-DUSE_MINISAT:BOOL=ON``, which also needs zlib. Your distribution's
-minisat package works, or STP maintains an updated fork:
+``-DUSE_MINISAT:BOOL=ON``, which also needs zlib -- MiniSat reads gzipped
+DIMACS and says so in its public headers, so configuration fails without
+it. With ``-DENABLE_AUTO_DOWNLOAD=ON`` there is nothing else to do: STP
+clones and builds `stp/minisat <https://github.com/stp/minisat>`__ at a
+pinned commit, which is an updated fork of a MiniSat that has not been
+touched upstream since 2010 and no longer compiles as it stands. Your
+distribution's minisat package works too, as does one built by hand:
 
 .. code-block:: bash
 

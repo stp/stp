@@ -994,20 +994,6 @@ if (NOT USE_MINISAT AND NOT USE_CRYPTOMINISAT AND NOT USE_CADICAL AND NOT USE_RI
             "    -DUSE_RISS=ON -DRISS_DIR=<checkout>")
 endif()
 
-# -----------------------------------------------------------------------------
-# Find ZLIB (needed for MiniSat)
-# yes, we need to include the zlib header location or STP will not build
-# thanks to MiniSat include-ing it n the header
-# -----------------------------------------------------------------------------
-if (USE_MINISAT)
-    # REQUIRED: MiniSat's public headers include zlib.h, so a build without it
-    # cannot compile the MiniSat backend. Unqualified, find_package left
-    # ZLIB_INCLUDE_DIR empty and the failure surfaced minutes later, inside a
-    # MiniSat header, as a missing zlib.h with nothing to connect it back here.
-    find_package(ZLIB REQUIRED)
-    include_directories(${ZLIB_INCLUDE_DIR})
-endif()
-
 # ----------
 # manpage
 # ----------
@@ -1077,26 +1063,16 @@ add_feature_info(Manpage BUILD_MANPAGE "Builds and installs the stp(1) manpage")
 # -----------------------------------------------------------------------------
 
 if (USE_MINISAT)
-    find_package(minisat)
-    set(MINISAT_INCLUDE_DIR "" CACHE PATH "MiniSat include directory")
-    set(MINISAT_LIBRARY "" CACHE PATH "MiniSat library directory")
-
-    if (minisat_FOUND)
-        message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIRS}")
-    else()
-        message(STATUS "Not found using installed MiniSat, looking for built MiniSat")
-        find_package(minisat CONFIG)
-
-        if (minisat_FOUND)
-            message(STATUS "OK, found Minisat library under ${MINISAT_LIBRARIES} and Minisat include dirs under ${MINISAT_INCLUDE_DIRS}")
-        else()
-            message(FATAL_ERROR "USE_MINISAT is set but MiniSat was not found. Install it from https://github.com/stp/minisat")
-        endif()
-    endif()
-
+    # MINISAT_INCLUDE_DIRS and MINISAT_LIBDIR still name a MiniSat that was
+    # built but not installed, and zlib is still required -- both now live in
+    # cmake/FindMiniSat.cmake, along with the ability to build one.
+    find_package(MiniSat REQUIRED)
     add_definitions(-DUSE_MINISAT)
-    include_directories(SYSTEM ${MINISAT_INCLUDE_DIRS})
-    set(LIBS ${LIBS} ${MINISAT_LIBRARIES})
+    # The include directory is no longer added project-wide: the MiniSat target
+    # carries it to lib/Sat and lib/Incremental, which are the two object
+    # libraries whose sources reach a MiniSat header, and to the unit tests
+    # through AddSTPGTest. (There used to be a `set(LIBS ...)` here too, whose
+    # value nothing ever read.)
 endif()
 
 # -----------------------------------------------------------------------------
