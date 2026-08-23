@@ -383,8 +383,15 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   // array-equality round, yet it also owns rounds that merely apply an
   // uninterpreted function, and those would otherwise run the previous
   // round's checker over the current round's assignment.
+  //
+  // The condition is what the context still holds, not what it still owns.
+  // A round taken eagerly retires its records as it instantiates them, so
+  // it ends inactive while its lowerings remain -- and the lowering half of
+  // the consistency check is deliberately ungated, because an equality
+  // solved outright mints no record to gate on. Asking active() here left
+  // exactly that half pointed at the previous round.
   ExtensionalityContext* staleExt = bm->getExtensionalityIfAny();
-  if (staleExt != NULL && staleExt->active())
+  if (staleExt != NULL && staleExt->holdsSolveState())
     staleExt->beginSolve();
 
   SOLVER_RETURN_TYPE exactResult;

@@ -189,6 +189,20 @@ public:
   // SolveScope marks the window, and every pass gate tests this instead.
   bool activeInSolve() const { return solveInProgress && active(); }
 
+  // Whether an earlier solve left state behind that the next round has to
+  // retire before it materializes a candidate of its own.
+  //
+  // Not active(): the eager arm retires its records inside the solve that
+  // built them, because the lemma block stands in for the checker and
+  // nothing should consult it afterwards. Such a round ends reporting no
+  // active records while still holding the lowerings the model surfaces
+  // read -- and a later round that runs the consistency check over them
+  // asks this round's assignment about the last round's equalities.
+  bool holdsSolveState() const
+  {
+    return !records.empty() || !currentLowerings.empty();
+  }
+
   const std::vector<Record>& getRecords() const { return records; }
   size_t getActiveRecordCount() const { return activeRecordIds.size(); }
 
