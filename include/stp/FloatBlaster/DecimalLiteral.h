@@ -72,6 +72,25 @@ bool rationalToPackedFPBits(const std::string& numerator,
                             unsigned rounding_mode, std::string& bits,
                             std::string& err);
 
+enum class PackedFpBinaryOp
+{
+  Add,
+  Subtract,
+  Multiply
+};
+
+// Evaluate one binary operation on two finite packed values exactly in the
+// target format. Inputs and output use the same MSB-first packed-bit spelling
+// as decimalToPackedFPBits. LibBF first reconstructs each input as an exact
+// dyadic value, then performs a single target-format rounding under
+// `rounding_mode`; host floating-point arithmetic is never involved. An
+// IEEE overflow result may be infinity. NaN/infinity inputs, malformed bit
+// strings, unsupported formats, and allocation failures return false.
+bool packedFPBinaryOp(const std::string& left, const std::string& right,
+                      unsigned exp_width, unsigned sig_width,
+                      unsigned rounding_mode, PackedFpBinaryOp operation,
+                      std::string& bits, std::string& err);
+
 } // namespace stp
 
 #endif
