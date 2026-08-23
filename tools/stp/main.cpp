@@ -477,6 +477,38 @@ void ExtraMain::create_options()
            "requires --bb.fp-native-arith)",
            bb_group);
 
+  bool_arg("--bb.fp-native-domain", bm->UserFlags.fp_native_domain,
+           "Experimental native FP bit-blaster strengthening: mine simple "
+           "finite box bounds and omit NaN/infinity cases that are impossible "
+           "under those top-level facts",
+           bb_group);
+
+  bool_arg("--bb.fp-native-known-sign",
+           bm->UserFlags.fp_native_known_sign,
+           "Use finite semantic-sign facts in native fp.add/fp.mul to omit "
+           "opposite-sign/sign-dependent circuitry while preserving signed "
+           "zero (experimental; requires --bb.fp-native-domain)",
+           bb_group);
+
+  bool_arg("--fp-domain-simplify", bm->UserFlags.fp_domain_simplify,
+           "Experimental FP prepass: mine boxed variable bounds, use boxed FP "
+           "domain facts, and discharge ordered FP "
+           "comparisons or zero-sum rows decided by those facts",
+           bb_group);
+
+  bool_arg("--fp-domain-sound-zero-facts",
+           bm->UserFlags.fp_domain_sound_zero_facts,
+           "Experimental FP prepass: derive sound zero facts from "
+           "association-safe same-sign boxed +/-1 rows and encode them as "
+           "zero magnitude bits, preserving the +0/-0 distinction",
+           bb_group);
+
+  bool_arg("--fp-domain-row-bounds", bm->UserFlags.fp_domain_row_bounds,
+           "Experimental FP prepass: recognise linear FP zero rows and "
+           "rewrite them to false when association-preserving target-format "
+           "interval endpoints exclude zero",
+           bb_group);
+
   bool_arg("--bb.simplify-during-bb", bm->UserFlags.simplify_during_BB_flag,
            "When bit-blasting discovers that a non-constant child of a term "
            "blasts to an all-constant vector, rebuild the term with that "
