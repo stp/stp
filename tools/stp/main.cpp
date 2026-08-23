@@ -470,6 +470,13 @@ void ExtraMain::create_options()
            "SymFPU unpacking circuits (experimental)",
            bb_group);
 
+  bool_arg("--bb.fp-native-add-iszero",
+           bm->UserFlags.fp_native_add_iszero,
+           "Encode fp.isZero(fp.add ...) directly from the packed operands "
+           "without constructing the complete rounded sum (experimental; "
+           "requires --bb.fp-native-arith)",
+           bb_group);
+
   bool_arg("--bb.simplify-during-bb", bm->UserFlags.simplify_during_BB_flag,
            "When bit-blasting discovers that a non-constant child of a term "
            "blasts to an all-constant vector, rebuild the term with that "

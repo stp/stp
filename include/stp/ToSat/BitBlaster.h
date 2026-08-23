@@ -222,7 +222,10 @@ class BitBlaster
   // (--bb.fp-native-arith)
   BBNodeVec BBfpMul(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpAdd(const ASTNode& term, BBNodeSet& support);
+  BBNode BBfpAddIsZero(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpToFp(const ASTNode& term, BBNodeSet& support);
+
+  size_t fpNativeAddIsZeroFusions = 0;
 
   // A packed operand split for the native arithmetic circuits: fields,
   // classification, and the significand with its hidden bit made explicit
@@ -398,6 +401,7 @@ public:
   {
     BBTermMemo.clear();
     BBFormMemo.clear();
+    fpNativeAddIsZeroFusions = 0;
   }
 
   // Bitblast a formula

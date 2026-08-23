@@ -399,6 +399,11 @@ public:
   // circuits. Experimental; off by default.
   bool fp_native_arith = false;
 
+  // Recognise fp.isZero(fp.add ...) and encode only the observed zero-result
+  // condition instead of constructing and packing every result bit.
+  // Experimental; requires native arithmetic and is off by default.
+  bool fp_native_add_iszero = false;
+
   int64_t multiplication_variant = 1;
 
   // If the bit-blaster discovers new constants, should the term simplifier be
