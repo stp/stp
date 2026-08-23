@@ -102,12 +102,10 @@ public:
   static SourceSort array(const SourceSort& index, const SourceSort& element)
   {
     assert(index.isScalar() && element.isScalar());
-    // isScalar() admits an uninterpreted sort, and this assert is the only
-    // thing standing between that and an array whose component has no
-    // representable element vocabulary. Stated separately from the isScalar
-    // test so widening that predicate again cannot quietly admit it here.
-    assert(index.kind() != Kind::Uninterpreted &&
-           element.kind() != Kind::Uninterpreted);
+    // A declared sort is represented by its finite bit-vector carrier below
+    // the source boundary, so it is just as usable as the other scalar sorts
+    // as an array index or element. Its identity remains in SourceSort: two
+    // declared sorts with the same carrier width are still different sorts.
     return SourceSort(index, element);
   }
 

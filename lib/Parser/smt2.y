@@ -626,6 +626,11 @@ namespace stp
     {
       fatal_yyerror("array index is not of sort RoundingMode");
     }
+    if (array_sort.index().kind() ==
+        stp::SourceSort::Kind::Uninterpreted)
+    {
+      fatal_yyerror("array index is not of the declared sort");
+    }
     fatal_yyerror("array index is not of the declared bitvector sort");
   }
 
@@ -645,6 +650,11 @@ namespace stp
     if (array_sort.element().kind() == stp::SourceSort::Kind::RoundingMode)
     {
       fatal_yyerror("stored value is not of sort RoundingMode");
+    }
+    if (array_sort.element().kind() ==
+        stp::SourceSort::Kind::Uninterpreted)
+    {
+      fatal_yyerror("stored value is not of the declared sort");
     }
     fatal_yyerror("stored value is not of the declared bitvector sort");
   }
@@ -1919,13 +1929,13 @@ cmdi:
         every one of them already refuses a float of the same packed width;
         none of them was at fault.
 
-        Parametric sorts (arity > 0) have no such reading and stay
-        unsupported, as does every sort declaration when the uninterpreted
-        function feature is off: the sort exists to be a function's domain. */
+       Parametric sorts (arity > 0) have no such reading and stay
+       unsupported. Nullary sorts are accepted either when the UF frontend is
+       enabled or when QF_AX selected them for array indices and elements. */
      DECLARE_SORT_TOK STRING_TOK NUMERAL_TOK
     {
-       if ($3 != 0 || !stp::GlobalParserInterface->getUserFlags()
-                           .enable_uninterpreted_functions)
+       if ($3 != 0 ||
+           !stp::GlobalParserInterface->declaredSortsEnabled())
          stp::GlobalParserInterface->unsupported();
        else
        {
@@ -2039,6 +2049,7 @@ cmdi:
       const bool supported_logic =
             0 == strcmp($2->c_str(),"QF_BV") ||
             0 == strcmp($2->c_str(),"QF_ABV") ||
+            0 == strcmp($2->c_str(),"QF_AX") ||
             uf_logic ||
             fp_logic;
       if (!supported_logic) {
@@ -2382,14 +2393,14 @@ function_def_name LPAREN_TOK RPAREN_TOK an_array_sort an_term
   // -- and still stored, so parsing continues. The sorts that share one
   // bit layout (a float index or element format, RoundingMode on either
   // side) get their own check: the widths cannot tell them apart.
-  if ($5->GetIndexWidth() != $4->index.width ||
-      $5->GetValueWidth() != $4->elem.width)
+  if ($5->GetIndexWidth() != $4->index.width() ||
+      $5->GetValueWidth() != $4->elem.width())
   {
     char msg [100];
     snprintf(msg, sizeof(msg),
              "Different array widths specified: (%u %u) vs (%u %u)",
-             $5->GetIndexWidth(), $5->GetValueWidth(), $4->index.width,
-             $4->elem.width);
+             $5->GetIndexWidth(), $5->GetValueWidth(), $4->index.width(),
+             $4->elem.width());
     yyerror(msg);
   }
   else if (!stp::GlobalParserInterface->arraySortsAgree(*$5, *$4))
@@ -2509,28 +2520,32 @@ an_fp_sort:
 ;
 
 an_array_sort_component:
-  // An index or element sort of an (Array X Y) sort: a bitvector, a
-  // floating-point sort, or RoundingMode. Widths are positive by
-  // construction, so the array declarations need no further checks.
+  // An index or element sort of an (Array X Y) sort. Every supported scalar
+  // keeps its full source identity here even though the solver sees its
+  // packed bit-vector carrier below this boundary.
   LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TOK RPAREN_TOK
 {
   checkBitVectorWidth($4);
-  $$ = new stp::array_sort_component{stp::array_sort_component::BITVECTOR,
-                                     $4, 0, 0};
+  $$ = new stp::array_sort_component(stp::SourceSort::bitVector($4));
 }
 | an_fp_sort
 {
-  $$ = new stp::array_sort_component{
-      stp::array_sort_component::FLOATINGPOINT,
-      (unsigned)($1->exp_bits + $1->sig_bits), (unsigned)$1->exp_bits,
-      (unsigned)$1->sig_bits};
+  $$ = new stp::array_sort_component(stp::SourceSort::floatingPoint(
+      (unsigned)$1->exp_bits, (unsigned)$1->sig_bits));
   delete $1;
 }
 | ROUNDINGMODE_TOK
 {
-  // Carried as a 5-bit one-hot bitvector, like every rounding mode.
-  $$ = new stp::array_sort_component{stp::array_sort_component::ROUNDINGMODE,
-                                     5, 0, 0};
+  $$ = new stp::array_sort_component(stp::SourceSort::roundingMode());
+}
+| STRING_TOK
+{
+  stp::SourceSort resolved;
+  if (!stp::GlobalParserInterface->lookupSortAlias(*$1, resolved) ||
+      !resolved.isScalar())
+    fatal_yyerror("unknown array component sort");
+  $$ = new stp::array_sort_component(resolved);
+  delete $1;
 }
 ;
 
@@ -2572,8 +2587,8 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
 | STRING_TOK LPAREN_TOK RPAREN_TOK an_array_sort
 {
   ABANDON_IF_REDECLARED_ZERO_ARITY((delete $1, delete $4));
-  // An array over any pairing of bitvector, floating-point and RoundingMode
-  // index/element sorts. A float element's format lives on the array node
+  // An array over any pairing of supported scalar index/element sorts. A
+  // float element's format lives on the array node
   // -- a read off it inherits the format (see deriveFPFormat) -- while a
   // float index format and the RoundingMode sorts land in the manager's
   // registries (see addArraySymbol). Either way the widths lay the array

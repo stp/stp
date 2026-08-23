@@ -192,3 +192,16 @@ TEST(SourceSort, UninterpretedSymbolsCarryTheirSortAndWidth)
   EXPECT_NE(e, same_name);
   EXPECT_EQ(other, same_name.GetSourceSort());
 }
+
+TEST(SourceSort, UninterpretedSortsAreArrayComponents)
+{
+  const SourceSort index = registerUninterpretedSort("Index", 16);
+  const SourceSort element = registerUninterpretedSort("Element", 16);
+  const SourceSort array = SourceSort::array(index, element);
+
+  EXPECT_EQ(SourceSort::Kind::Array, array.kind());
+  EXPECT_EQ(index, array.index());
+  EXPECT_EQ(element, array.element());
+  EXPECT_NE(array, SourceSort::array(element, index));
+  EXPECT_EQ("(Array Index Element)", sourceSortToSMTLib(array));
+}

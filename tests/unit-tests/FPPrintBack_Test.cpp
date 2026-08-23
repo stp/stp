@@ -317,6 +317,30 @@ TEST(FPPrintBack, rounding_mode_only_selects_fp_logic)
               "(declare-fun |r| () RoundingMode)", "(= |r| RNE)"});
 }
 
+// Declared sorts are represented by finite bit-vector carriers internally,
+// but print-back must expose the source sorts and select QF_AX. Otherwise a
+// printed formula silently becomes an array-of-bitvectors problem.
+TEST(FPPrintBack, qf_ax_declared_array_sorts_round_trip)
+{
+  roundTrips(R"(
+    (set-logic QF_AX)
+    (declare-sort Index 0)
+    (declare-sort Element 0)
+    (declare-const a (Array Index Element))
+    (declare-const b (Array Index Element))
+    (declare-const i Index)
+    (declare-const e Element)
+    (assert (= (select a i) e))
+    (assert (not (= a b)))
+  )",
+             {"(set-logic QF_AX)",
+              "(declare-sort Index 0)",
+              "(declare-sort Element 0)",
+              "(declare-fun |a| () (Array Index Element))",
+              "(declare-fun |i| () Index)",
+              "(declare-fun |e| () Element)"});
+}
+
 // A term is a DAG, and rounding-mode ites share their operands freely.
 //
 // The walk that decides which 5-bit bitvectors are modes has to descend into
