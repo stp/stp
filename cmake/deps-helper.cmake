@@ -155,10 +155,16 @@ set(STP_EP_COMMON_CONFIG
 # deliberately is not: several build types sharing one dependency directory is
 # the ordinary use, and warning about it would make the warning worthless.
 function(stp_check_dep_dir_config)
+    # ABC's defines are in here and the build type is not, which looks
+    # inconsistent and is not. Sharing an ABC compiled at a different
+    # optimisation level is merely a choice; sharing one compiled with a
+    # different ABC_PTRUINT_T width than STP's own translation units assume is
+    # a crash in CNF generation.
     set(_now
         "compiler=${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}\n"
         "sanitize=${SANITIZE}\n"
-        "toolchain=${CMAKE_TOOLCHAIN_FILE}\n")
+        "toolchain=${CMAKE_TOOLCHAIN_FILE}\n"
+        "abc_abi=${ABC_ABI_DEFINITIONS}\n")
     string(JOIN "" _now ${_now})
 
     set(_stamp "${STP_DEP_DIR}/.stp-dep-config")

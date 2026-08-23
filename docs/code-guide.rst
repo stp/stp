@@ -54,10 +54,9 @@ own targets; the other two are small enough to be carried in the tree:
    top of the upstream revision we have taken. Bumping ABC means rebasing
    ``stp`` onto a newer ``master`` in that repository, then moving that pin.
 
-   To work on the fork, clone it and configure with
-   ``-DFETCHCONTENT_SOURCE_DIR_ABC=<clone>``: the build then uses that
-   checkout in place and fetches nothing, so it can be edited, committed and
-   pushed from where it is.
+   To work on the fork, clone it, build ``libabc-pic`` in it, and configure
+   with ``-DABC_DIR=<clone>``: the build then uses that copy and fetches
+   nothing, so it can be edited, committed and pushed from where it is.
 
    The fork exists because the changes cannot live upstream: some are fixes
    that were offered to ABC and not taken, and the rest adjust which parts of

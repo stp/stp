@@ -54,14 +54,11 @@ AddSTPGTest(SourceSortMemo_Test.cpp)
 # localises ABC's symbols (--exclude-libs), so this links its own copy the
 # way FloatBlast_Test does below.
 AddSTPGTest(BBNodeManagerAIG_Test.cpp)
-target_link_libraries(BBNodeManagerAIG_TestTests $<TARGET_FILE:libabc-pic>)
-add_dependencies(BBNodeManagerAIG_TestTests libabc-pic)
+target_link_libraries(BBNodeManagerAIG_TestTests ABC)
 AddSTPGTest(AIGBudget_Test.cpp)
-target_link_libraries(AIGBudget_TestTests $<TARGET_FILE:libabc-pic>)
-add_dependencies(AIGBudget_TestTests libabc-pic)
+target_link_libraries(AIGBudget_TestTests ABC)
 AddSTPGTest(BVEQAbstraction_Test.cpp)
-target_link_libraries(BVEQAbstraction_TestTests $<TARGET_FILE:libabc-pic>)
-add_dependencies(BVEQAbstraction_TestTests libabc-pic)
+target_link_libraries(BVEQAbstraction_TestTests ABC)
 AddSTPGTest(BVEQCongruenceClosure_Test.cpp)
 AddSTPGTest(FPPrintBack_Test.cpp)
 AddSTPGTest(FloatBlast_Test.cpp)
@@ -71,8 +68,7 @@ AddSTPGTest(FloatBlast_Test.cpp)
 # all of its state in the manager struct, which is shared fine. Linking
 # the archive by file keeps ABC's interface flags (-fno-exceptions) off
 # the test's own compilation.
-target_link_libraries(FloatBlast_TestTests $<TARGET_FILE:libabc-pic>)
-add_dependencies(FloatBlast_TestTests libabc-pic)
+target_link_libraries(FloatBlast_TestTests ABC)
 AddSTPGTest(FpTotalise_Test.cpp)
 # Truth values the model-formula evaluator gives the two float
 # equalities; the circuit's answers are covered elsewhere.
@@ -116,8 +112,7 @@ AddSTPGTest(StrengthReduction_Test.cpp)
 # AIG really costs, so it instantiates BBNodeManagerAIG and needs its own
 # copy of ABC for the same reason FloatBlast_Test does.
 AddSTPGTest(DifficultyScore_Test.cpp)
-target_link_libraries(DifficultyScore_TestTests $<TARGET_FILE:libabc-pic>)
-add_dependencies(DifficultyScore_TestTests libabc-pic)
+target_link_libraries(DifficultyScore_TestTests ABC)
 AddSTPGTest(StrengthReduction_Exhaustive_Test.cpp)
 AddSTPGTest(RemoveUnconstrained_Exhaustive_Test.cpp)
 AddSTPGTest(RemoveUnconstrainedFpDiv_Test.cpp)
@@ -150,8 +145,7 @@ AddSTPGTest(DeepDag_Test.cpp)
 # Instantiates BBNodeManagerAIG, whose inline members call ABC; a shared
 # libstp localises ABC's symbols, so this links its own copy the way
 # FloatBlast_Test does.
-target_link_libraries(DeepDag_TestTests $<TARGET_FILE:libabc-pic>)
-add_dependencies(DeepDag_TestTests libabc-pic)
+target_link_libraries(DeepDag_TestTests ABC)
 # The check that a primed pass still walks what its priming visits. Debug-only,
 # like the audit it drives: under NDEBUG the cases compile away and the binary
 # reports nothing to run.

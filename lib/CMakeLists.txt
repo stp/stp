@@ -97,6 +97,20 @@ set(stp_lib_targets
     ${PLATFORM_COMPAT_LIBRARIES}
 )
 
+# ABC's headers reach further than the sources that name it: stp/ToSat/BBNodeAIG.h
+# includes aig/aig/aig.h, and that header is pulled in from most of the tree --
+# Globals.cpp, ASTNode.cpp, HashingNodeFactory.cpp and so on. So every object
+# library gets the ABC target, which carries the include directory and, when
+# ABC is being built rather than found, the dependency edge that makes those
+# headers exist before anything compiles against them. This is what the
+# project-wide include_directories() used to do, minus the ordering it could
+# not express.
+foreach(_stp_obj_lib ${stp_lib_targets})
+    if(TARGET ${_stp_obj_lib})
+        target_link_libraries(${_stp_obj_lib} PRIVATE ABC)
+    endif()
+endforeach()
+
 # Create list of objects and gather list of
 # associated public headers.
 set(stp_lib_objects "")
@@ -167,86 +181,13 @@ else()
 endif()
 
 
-# Configure ABC library build options
-set(READLINE_FOUND FALSE CACHE BOOL "Disable readline for ABC" FORCE)
-set(ABC_SKIP_TESTS ON CACHE BOOL "Skip ABC tests" FORCE)
-
-# ABC has no CMake cache variables for the options below: its CMakeLists runs
-# ABC's own Makefile to extract the source list and flags, forwarding only the
-# readline and namespace settings. The Makefile gates these on ifndef, and make
-# honours the environment for that, which the inherited environment of ABC's
-# execute_process() reaches. So set them here rather than patching the submodule.
-#
-# CUDD: pulls in nine BDD modules (src/bdd/{cudd,extrab,dsd,epd,mtr,reo,cas,bbr,
-# llb}), 123 files and ~110k lines that STP never uses -- we only touch AIG
-# construction, Dar rewriting and CNF derivation. Safe for our include set:
-# ABC_USE_CUDD guards only Abc_Frame_t's DdManager field in base/main/mainInt.h
-# and three Kit_*ToBdd declarations in bool/kit/kit.h, and neither header is
-# reachable from aig/aig/aig.h, opt/dar/dar.h or sat/cnf/cnf.h.
-set(ENV{ABC_USE_NO_CUDD} 1)
-# pthreads: every ABC file we compile that calls pthread_* guards on
-# ABC_USE_PTHREADS (src/starter.c does not, but is in no module.make and is
-# never built). Dropping it also keeps the macro consistent between ABC's own
-# translation units and STP's, which include ABC headers without ABC's flags --
-# see the note on $<TARGET_FILE:libabc-pic> below.
-set(ENV{ABC_USE_NO_PTHREADS} 1)
-
-# EXCLUDE_FROM_ALL: ABC marks libabc and libabc-pic EXCLUDE_FROM_ALL but not its
-# abc executable, which links libabc (non-PIC) and so compiles all of ABC a
-# second time. STP only ever links libabc-pic, pulled in by the dependency
-# below; the executable is dead weight worth ~50% of ABC's build cost.
-#
-# BUILD_SHARED_LIBS: ABC's add_library() calls name neither STATIC nor SHARED,
-# so they follow BUILD_SHARED_LIBS, which defaults to ON. That made libabc-pic a
-# 17MB shared library which libstp.so recorded as a NEEDED entry even though ABC
-# has no install() rules, so an installed libstp.so named a library that was
-# never installed; only the build-tree RUNPATH kept it working. Building it as an
-# archive links the ABC code into libstp.so instead, which is self-contained and
-# installable. libabc-pic is already POSITION_INDEPENDENT_CODE, which is what
-# linking it into a shared library needs. Note the archive does not shrink the
-# result much: ABC is interconnected enough that our ~30 entry points transitively
-# pull in most of it either way -- what changes is that the symbols stop being
-# public, see --exclude-libs at the bottom of this file.
-# The normal variable shadows the cache entry for this scope only; unset()
-# restores the cached value for the rest of lib/.
-set(BUILD_SHARED_LIBS OFF)
-# Populated by the top-level CMakeLists, which needs ABC's include directory
-# before this point; added here, where the settings that govern its build are.
-add_subdirectory(${abc_SOURCE_DIR} ${abc_BINARY_DIR} EXCLUDE_FROM_ALL)
-unset(BUILD_SHARED_LIBS)
-
-# ABC is upstream code (through the stp/abc fork) whose warnings we
-# don't control, so keep WERROR from turning them into build failures. The
-# -Wno-error comes after the global -Werror, so it wins for these targets only;
-# STP's own code stays gated on warnings.
-if (WERROR AND NOT MSVC)
-    foreach(_abc_target abc libabc libabc-pic)
-        if (TARGET ${_abc_target})
-            target_compile_options(${_abc_target} PRIVATE -Wno-error)
-        endif()
-    endforeach()
-endif()
-
-# Give each ABC function and data object its own section so the --gc-sections
-# below can drop the ones we never call. Applied to ABC only: the dead weight is
-# all on this side, and confining it keeps STP's own codegen unchanged.
-if (NOT MSVC)
-    foreach(_abc_target libabc libabc-pic)
-        if (TARGET ${_abc_target})
-            target_compile_options(${_abc_target} PRIVATE
-                -ffunction-sections -fdata-sections)
-        endif()
-    endforeach()
-endif()
-
-# Link to the ABC library target
-add_dependencies(stp libabc-pic)
-# Use the full path to the library instead of the target name for export
-# compatibility. Note this bypasses ABC's PUBLIC usage requirements, so the
-# flags ABC sets for its own translation units do not reach STP's: any ABC
-# option that changes a declaration in aig.h, dar.h or cnf.h would have to be
-# defined for STP's sources too.
-set(stp_link_libs ${MINISAT_LIBRARIES} $<TARGET_FILE:libabc-pic>)
+# ABC's archive, by path rather than by target name, for the
+# export-compatibility reason given over the LibBF entry below. Note this does
+# not carry ABC's own compile flags to STP's sources: any ABC option that
+# changes a declaration in aig.h, dar.h or cnf.h has to be defined for STP's
+# sources too, which is what ABC_ABI_DEFINITIONS in the top-level CMakeLists is
+# for.
+set(stp_link_libs ${MINISAT_LIBRARIES} ${ABC_LIBRARY})
 
 # LibBF is not optional -- folding the real literals in floating-point input is
 # part of every build -- so it is always on the link line. Named by path rather
@@ -316,6 +257,12 @@ target_link_libraries(stp
 # consumer of an installed STP has, and none of them need it: the headers STP
 # installs (c_interface.h, fp.hpp, uf.hpp) do not include it.
 target_link_libraries(stp INTERFACE $<BUILD_INTERFACE:SymFPU>)
+
+# And ABC, for the tools and tests that include stp/ToSat/BBNodeAIG.h. Only the
+# include directory travels this way; the archive is named on stp's own link
+# line above, and the handful of tests that call into ABC directly link it
+# themselves because a shared libstp localises its symbols.
+target_link_libraries(stp INTERFACE $<BUILD_INTERFACE:ABC>)
 
 # ABC is interconnected enough that satisfying our ~30 entry points transitively
 # drags in most of the archive, including its vendored zlib and bzlib (gzopen,

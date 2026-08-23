@@ -553,45 +553,9 @@ include_directories(SYSTEM ${unordereddense_SOURCE_DIR}/include)
 # -----------------------------------------------------------------------------
 # ABC
 # -----------------------------------------------------------------------------
-# Fetched rather than linked: STP does not consume ABC as a library, it builds
-# ABC as part of itself -- shadowing BUILD_SHARED_LIBS around it, handing its
-# targets compile options of STP's own, and linking the archive by file. All of
-# that needs add_subdirectory(), and add_subdirectory() needs the source during
-# *this* configure, which is FetchContent's job and not ExternalProject's.
-#
-# stp/abc is a fork: master tracks upstream untouched and the `stp` branch
-# carries STP's changes as commits on top. To work on those, clone it and point
-# -DFETCHCONTENT_SOURCE_DIR_ABC at the clone -- the build then uses it in place,
-# fetches nothing, and you commit and push from there before moving the pin
-# below. See docs/code-guide.rst.
-set(ABC_GIT_TAG "d0d28eb26a8f3655d806c30d394a738dad6ba5be")
+# Looked for after the word-size check below, because ABC_ABI_DEFINITIONS has
+# to exist before the Find module can forward it.
 
-if(NOT DEFINED FETCHCONTENT_SOURCE_DIR_ABC AND NOT ENABLE_AUTO_DOWNLOAD)
-    message(FATAL_ERROR
-        "ABC is required, and configuring without it is not possible: STP's "
-        "bit-blasting is built on it. Configure with -DENABLE_AUTO_DOWNLOAD=ON "
-        "to have it cloned here, or point -DFETCHCONTENT_SOURCE_DIR_ABC at an "
-        "existing stp/abc checkout.")
-endif()
-
-# SOURCE_SUBDIR names a directory ABC has not got, which is what stops
-# FetchContent_MakeAvailable() calling add_subdirectory() itself: ABC has to be
-# added with EXCLUDE_FROM_ALL and inside a BUILD_SHARED_LIBS of STP's choosing,
-# and MakeAvailable grew no way to say either until CMake 3.28. lib/CMakeLists
-# adds it, where the rest of its build settings are.
-FetchContent_Declare(
-    abc
-    GIT_REPOSITORY https://github.com/stp/abc.git
-    GIT_TAG ${ABC_GIT_TAG}
-    SOURCE_SUBDIR stp-adds-this-subdirectory-itself
-)
-FetchContent_MakeAvailable(abc)
-message(STATUS "ABC: ${abc_SOURCE_DIR}")
-
-# Mark ABC's headers SYSTEM so their warnings (e.g. -Wpedantic zero-size
-# arrays, -Wunused-parameter in inline helpers) don't trip -Werror in the STP
-# translation units that include them.
-include_directories(SYSTEM ${abc_SOURCE_DIR}/src)
 # abc related word size check
 include(CheckTypeSize)
 # Check size of void pointer (void*)
@@ -603,29 +567,45 @@ CHECK_TYPE_SIZE("void*" SIZEOF_VOID_P)
 # (Aig_Not/Aig_Regular) truncate 64-bit heap pointers -- the first query
 # to reach ABC's CNF generation then dies with an access violation.
 # 32-bit Windows is already correct via the WIN32 fallback.)
+# These are collected rather than added one at a time, because ABC has to be
+# compiled with exactly the same set. They decide the width of ABC_PTRUINT_T,
+# and STP's own translation units include ABC's headers -- so if the two
+# disagree, ABC's tagged AIG pointers (Aig_Not/Aig_Regular) truncate on one
+# side of the boundary and not the other, and the first query to reach CNF
+# generation dies. That used to be guaranteed by ABC being added with
+# add_subdirectory(), which inherited them; ABC is built separately now, so
+# they are forwarded to it explicitly and recorded in the dependency
+# directory's stamp.
+set(ABC_ABI_DEFINITIONS "")
 if(NOT WIN32)
     if(SIZEOF_VOID_P EQUAL 8)
-        add_definitions(-DLIN64)
+        list(APPEND ABC_ABI_DEFINITIONS -DLIN64)
     else()
-        add_definitions(-DLIN)
+        list(APPEND ABC_ABI_DEFINITIONS -DLIN)
     endif()
 else()
     if(SIZEOF_VOID_P EQUAL 8)
-        add_definitions(-DNT64)
+        list(APPEND ABC_ABI_DEFINITIONS -DNT64)
     endif()
     # ABC is linked statically; without this its headers declare the
     # ABC API __declspec(dllimport), producing unresolved __imp_ symbols.
-    add_definitions(-DWIN32_NO_DLL)
+    list(APPEND ABC_ABI_DEFINITIONS -DWIN32_NO_DLL)
 endif()
-add_definitions(-DSIZEOF_VOID_P=${SIZEOF_VOID_P})
+list(APPEND ABC_ABI_DEFINITIONS -DSIZEOF_VOID_P=${SIZEOF_VOID_P})
 
 # Check size of long
 CHECK_TYPE_SIZE("long" SIZEOF_LONG)
-add_definitions(-DSIZEOF_LONG=${SIZEOF_LONG})
+list(APPEND ABC_ABI_DEFINITIONS -DSIZEOF_LONG=${SIZEOF_LONG})
 
 # Check size of int
 CHECK_TYPE_SIZE("int" SIZEOF_INT)
-add_definitions(-DSIZEOF_INT=${SIZEOF_INT})
+list(APPEND ABC_ABI_DEFINITIONS -DSIZEOF_INT=${SIZEOF_INT})
+
+# STP's own sources need them too, for the reason above.
+add_definitions(${ABC_ABI_DEFINITIONS})
+
+# ABC itself, now that the defines it must be compiled with are known.
+find_package(ABC REQUIRED)
 
 # Declared here, well before its first use (the manpage rule); the subdirs it
 # gates are added at the bottom of this file.

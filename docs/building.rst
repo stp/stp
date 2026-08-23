@@ -41,15 +41,24 @@ STP has no submodules. Everything it does not contain itself is fetched
 at a pinned revision, and with ``-DENABLE_AUTO_DOWNLOAD=ON`` that needs
 nothing installed beforehand.
 
-Two of them are *built as part of STP* rather than linked as libraries:
-ABC, whose targets STP gives compile options of its own, and mimalloc,
-whose build STP configures. Those are fetched with CMake's FetchContent,
-which downloads during configuration so that ``add_subdirectory`` has
-something to descend into; everything else is an ExternalProject, built
-at build time. Point ``-DFETCHCONTENT_SOURCE_DIR_ABC`` or
-``-DFETCHCONTENT_SOURCE_DIR_MIMALLOC`` at a checkout to use one in place
--- which is how to work on the ``stp/abc`` fork, see
-:doc:`code-guide`.
+Most are ExternalProjects: built at build time, installed into
+``STP_DEP_DIR``, and so built once however many build directories are
+pointed at the same one. ABC is among them, which matters because it is
+920 C files -- but it also means every build sharing a dependency
+directory shares one ABC, compiled with one set of flags. Its
+optimisation level is whichever configuration built it first; its
+*defines* are not left to chance, because STP's own sources include
+ABC's headers and the two have to agree, so they are recorded in the
+directory's stamp and a mismatch is reported.
+
+``-DABC_DIR`` points at an existing ABC build, which is how to work on
+the ``stp/abc`` fork -- see :doc:`code-guide`.
+
+mimalloc is the exception: STP configures its build rather than
+consuming its output, so it is fetched with CMake's FetchContent, which
+downloads during configuration so that ``add_subdirectory`` has
+something to descend into. ``-DFETCHCONTENT_SOURCE_DIR_MIMALLOC``
+names an existing checkout.
 
 The command-line parser `CLI11 <https://github.com/CLIUtils/CLI11>`__ and
 the header-only floating-point library
