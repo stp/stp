@@ -21,13 +21,62 @@
 # -----------------------------------------------------------------------------
 # Check we can find the lit tool
 # -----------------------------------------------------------------------------
-find_program(LIT_TOOL
-             lit
-             DOC "Path to lit tool"
-            )
+# lit is the last thing here that a machine had to have been prepared for: it
+# is not a library STP links but a program the tests are driven by, it is not
+# packaged by every distribution, and `pip install lit` into the system
+# interpreter is not something a build should ask for. So it is treated like
+# every other dependency -- named explicitly, found if installed, and otherwise
+# fetched, which for a Python program means a virtual environment of its own in
+# the build tree.
+#
+#   LIT_TOOL              rung 0, an absolute path to a lit
+#   an installed lit      rung 1
+#   ENABLE_AUTO_DOWNLOAD  rung 3, pip install into ${CMAKE_BINARY_DIR}/venv
+set(LIT_VERSION "18.1.8" CACHE STRING "lit version to install when one has to be")
+mark_as_advanced(LIT_VERSION)
+
+find_program(LIT_TOOL lit DOC "Path to lit tool")
+
+if(NOT LIT_TOOL AND ENABLE_AUTO_DOWNLOAD)
+    set(STP_VENV_DIR "${PROJECT_BINARY_DIR}/venv")
+    # Created once and reused: pip is slow, and reconfiguring is not rare.
+    if(NOT EXISTS "${STP_VENV_DIR}/bin/lit")
+        message(STATUS "Creating a virtual environment for lit: ${STP_VENV_DIR}")
+        execute_process(
+            COMMAND "${PYTHON_EXECUTABLE}" -m venv "${STP_VENV_DIR}"
+            RESULT_VARIABLE _venv_rc OUTPUT_QUIET)
+        if(NOT _venv_rc EQUAL 0)
+            message(FATAL_ERROR
+                "Could not create a virtual environment with "
+                "${PYTHON_EXECUTABLE} -m venv. On Debian-likes the venv module "
+                "is a separate package (python3-venv); install it, or install "
+                "lit yourself and point -DLIT_TOOL at it.")
+        endif()
+        # Quiet unless it fails, in which case pip's own diagnosis is the
+        # useful part and gets printed with ours.
+        execute_process(
+            COMMAND "${STP_VENV_DIR}/bin/pip" install --quiet
+                    --disable-pip-version-check "lit==${LIT_VERSION}"
+            RESULT_VARIABLE _pip_rc
+            OUTPUT_VARIABLE _pip_out ERROR_VARIABLE _pip_out)
+        if(NOT _pip_rc EQUAL 0)
+            message(FATAL_ERROR
+                "Could not install lit==${LIT_VERSION} into ${STP_VENV_DIR}:\n"
+                "${_pip_out}\n"
+                "Install lit yourself and point -DLIT_TOOL at it.")
+        endif()
+    endif()
+    set(LIT_TOOL "${STP_VENV_DIR}/bin/lit" CACHE FILEPATH "Path to lit tool" FORCE)
+    message(STATUS "Using lit ${LIT_VERSION} from ${STP_VENV_DIR}")
+endif()
 
 if(NOT LIT_TOOL)
-    message(FATAL_ERROR "Could not find 'lit' tool. You need to install it by e.g. 'pip install lit' If it's already installed, set LIT_TOOL to the full path for lit")
+    message(FATAL_ERROR
+        "Could not find the 'lit' tool, which the tests are driven by. "
+        "Configure with -DENABLE_AUTO_DOWNLOAD=ON to have it installed into a "
+        "virtual environment in the build tree, install it yourself "
+        "(pip install lit) and put it on PATH, or point -DLIT_TOOL at one. "
+        "To build without the tests, configure with -DENABLE_TESTING=OFF.")
 endif()
 
 # Checking absolute path because if(EXISTS ...) behaviour only well
