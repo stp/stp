@@ -80,6 +80,14 @@ Third-party code that is compiled into STP also lives under ``lib/``:
    is pinned to -- carries STP's changes as commits on top. They are four
    correctness fixes for the narrowest formats SMT-LIB permits, none of
    which the common formats reach.
+
+   This is the one submodule that sits a level down from its ``extlib-``
+   directory, at ``extlib-symfpu/symfpu``. SymFPU's headers include each
+   other as ``symfpu/core/...``, so the include root has to be a directory
+   *containing* one named ``symfpu``; ``extlib-symfpu`` is that root, and is
+   what ``SYMFPU_INCLUDE_DIRS`` names. ``extlib-libbf`` needs no such wrapper
+   because its header is included as ``<libbf.h>``, so the submodule
+   directory is itself the include root.
 -  ``extlib-mimalloc``:
    `mimalloc <https://github.com/microsoft/mimalloc>`__, the allocator
    the STP executables link against by default. A git submodule; see
