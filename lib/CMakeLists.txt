@@ -241,8 +241,48 @@ endif()
 # ABC archive is linked into the library (with its symbols localised, see
 # --exclude-libs below) and minisat is picked up transitively through
 # DT_NEEDED.
+# PRIVATE keeps these out of a *shared* libstp's link interface entirely,
+# which is what the note above is about. A static one is different: CMake has
+# to propagate a static library's private dependencies to its consumers,
+# because nothing else can resolve them, and they arrive in the exported
+# STPTargets.cmake wrapped in $<LINK_ONLY:>. Named as they are here that is the
+# path each was linked from -- inside this build's dependency directory, or
+# inside the source tree, or wherever on this machine it was found. All three
+# are correct here and meaningless to whoever installs the package.
+#
+# So a static build ships them. Every absolute path to a static archive on
+# libstp's link line is installed beside libstp and named relative to the
+# install prefix in the export, which is what makes an installed static STP
+# self-contained: unpack it anywhere and a consumer can link it.
+# $<INSTALL_PREFIX> is what makes that relocatable -- it becomes the importing
+# file's own prefix rather than this build's.
+#
+# The test is the shape of the entry rather than where it came from. A
+# dependency found on the system is no more resolvable by a consumer than one
+# this build fetched, if it was found somewhere like deps/; and entries that
+# are not archive paths at all -- the -lgmp and -lz in CryptoMiniSat's static
+# dependency list, and any shared library -- must be passed through untouched.
+set(stp_export_libs "")
+foreach(_stp_dep ${stp_link_libs})
+    set(_stp_shipped FALSE)
+    if(NOT BUILD_SHARED_LIBS AND IS_ABSOLUTE "${_stp_dep}"
+       AND _stp_dep MATCHES "\\${CMAKE_STATIC_LIBRARY_SUFFIX}$")
+        set(_stp_shipped TRUE)
+    endif()
+
+    if(_stp_shipped)
+        get_filename_component(_stp_dep_name "${_stp_dep}" NAME)
+        install(FILES "${_stp_dep}" DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+        list(APPEND stp_export_libs
+             "$<BUILD_INTERFACE:${_stp_dep}>"
+             "$<INSTALL_INTERFACE:$<INSTALL_PREFIX>/${CMAKE_INSTALL_LIBDIR}/${_stp_dep_name}>")
+    else()
+        list(APPEND stp_export_libs "${_stp_dep}")
+    endif()
+endforeach()
+
 target_link_libraries(stp
-    PRIVATE ${stp_link_libs}
+    PRIVATE ${stp_export_libs}
 )
 
 # SymFPU reaches further than the sources that name it. It is header-only, and

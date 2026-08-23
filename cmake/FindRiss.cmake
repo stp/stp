@@ -141,9 +141,6 @@ if(Riss_FOUND_SYSTEM)
 else()
     message(STATUS "Building Riss ${Riss_VERSION}: ${RISS_LIBRARY}")
     add_dependencies(Riss Riss-EP)
-    if(NOT BUILD_SHARED_LIBS)
-        install(FILES ${RISS_LIBRARY} DESTINATION "${CMAKE_INSTALL_LIBDIR}")
-    endif()
 endif()
 
 # EOF

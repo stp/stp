@@ -195,9 +195,6 @@ if(CaDiCaL_FOUND_SYSTEM)
 else()
     message(STATUS "Building CaDiCaL ${CADICAL_VERSION}: ${CADICAL_LIBRARY}")
     add_dependencies(CaDiCaL CaDiCaL-EP)
-    if(NOT BUILD_SHARED_LIBS)
-        install(FILES ${CADICAL_LIBRARY} DESTINATION "${CMAKE_INSTALL_LIBDIR}")
-    endif()
 endif()
 
 # EOF

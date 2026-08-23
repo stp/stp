@@ -129,12 +129,6 @@ if(LibBF_FOUND_SYSTEM)
 else()
     message(STATUS "Building LibBF ${LibBF_VERSION}: ${LIBBF_LIBRARY}")
     add_dependencies(LibBF LibBF-EP)
-    # A consumer of a static libstp has to resolve libstp's own dependencies,
-    # so the archive has to be installed alongside it. A shared libstp has
-    # already absorbed it.
-    if(NOT BUILD_SHARED_LIBS)
-        install(FILES ${LIBBF_LIBRARY} DESTINATION "${CMAKE_INSTALL_LIBDIR}")
-    endif()
 endif()
 
 # EOF

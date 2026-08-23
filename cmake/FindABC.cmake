@@ -184,9 +184,6 @@ if(ABC_FOUND_SYSTEM)
 else()
     message(STATUS "Building ABC ${ABC_GIT_TAG}: ${ABC_LIBRARY}")
     add_dependencies(ABC ABC-EP)
-    if(NOT BUILD_SHARED_LIBS)
-        install(FILES ${ABC_LIBRARY} DESTINATION "${CMAKE_INSTALL_LIBDIR}")
-    endif()
 endif()
 
 # EOF

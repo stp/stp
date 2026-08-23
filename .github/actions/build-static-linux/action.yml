@@ -201,4 +201,32 @@ runs:
       echo "lit.smt2: '$got'"
       [ "$got" = "unsat" ] || exit 1
 
+  # A static libstp does not absorb the archives it links, so a consumer has
+  # to resolve them itself -- which means an installed static STP has to ship
+  # them and its STPTargets.cmake has to name them somewhere that still exists
+  # on the machine doing the consuming. Nothing else checks that: the
+  # install-tree consumer test in the suite runs only in shared builds, because
+  # ENABLE_TESTING is forced off when BUILD_SHARED_LIBS is.
+  #
+  # The build tree and the dependency directory are moved out of the way first.
+  # Without that this passes on paths that happen to still be there, which is
+  # exactly how it passed while naming paths no other machine would have.
+  - name: Installed static package is self-contained
+    shell: bash
+    run: |
+      prefix="$GITHUB_WORKSPACE/static-install"
+      cmake --install build --prefix "$prefix"
+      mv "$prefix" "$prefix-moved"
+      mv build build-away
+      mv deps deps-away
+      cmakedir=$(dirname "$(find "$prefix-moved" -name STPConfig.cmake | head -1)")
+      echo "consuming $cmakedir"
+      cmake -S tests/api/install/uf-public-header-consumer -B consumer \
+            -DSTP_DIR="$cmakedir" \
+            -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/deps-away/install"
+      cmake --build consumer --parallel "$(nproc)"
+      ctest --test-dir consumer --output-on-failure
+      mv build-away build
+      mv deps-away deps
+
 # EOF

@@ -150,9 +150,6 @@ if(MiniSat_FOUND_SYSTEM)
 else()
     message(STATUS "Building MiniSat ${MiniSat_VERSION}: ${MINISAT_LIBRARY}")
     add_dependencies(MiniSat MiniSat-EP)
-    if(NOT BUILD_SHARED_LIBS)
-        install(FILES ${MINISAT_LIBRARY} DESTINATION "${CMAKE_INSTALL_LIBDIR}")
-    endif()
 endif()
 
 # EOF
