@@ -630,6 +630,10 @@ TEST(array_extensionality, lemma_atoms_fold_at_encoding)
   // through.
   VC vc = vc_createValidityChecker();
   vc_setFlag(vc, 'x');
+  // Lemmas are the observation, so the refinement arm has to be the one
+  // taken: the automatic policy would find a query this small affordable
+  // and instantiate it eagerly instead, emitting none.
+  static_cast<stp::STP*>(vc)->bm->UserFlags.array_eager_budget = 0;
 
   Type bv8 = vc_bvType(vc, 8);
   Type bv32 = vc_bvType(vc, 32);
@@ -678,6 +682,9 @@ TEST(array_extensionality, equality_under_push_pops_away)
   // test pins the abstraction/checker path itself, so keep the
   // equality there.
   static_cast<stp::STP*>(vc)->bm->UserFlags.propagate_equalities = false;
+  // The record count is the observation, and the eager arm retires the
+  // records as it instantiates them. Pin the refinement arm.
+  static_cast<stp::STP*>(vc)->bm->UserFlags.array_eager_budget = 0;
 
   Type bv8 = vc_bvType(vc, 8);
   Type bv4 = vc_bvType(vc, 4);
@@ -747,6 +754,9 @@ TEST(array_extensionality, active_equalities_follow_assertions_and_query)
 {
   VC vc = vc_createValidityChecker();
   vc_setFlag(vc, 'x');
+  // The record count is the observation, and the eager arm retires the
+  // records as it instantiates them. Pin the refinement arm.
+  static_cast<stp::STP*>(vc)->bm->UserFlags.array_eager_budget = 0;
 
   Type bv1 = vc_bvType(vc, 1);
   Type arrT = vc_arrayType(vc, bv1, bv1);
@@ -1008,6 +1018,9 @@ TEST(array_extensionality, active_checker_owns_complete_array_graph)
   // test pins the abstraction/checker path itself, so keep the
   // equality there.
   static_cast<stp::STP*>(vc)->bm->UserFlags.propagate_equalities = false;
+  // The verdict is pinned to the lemma path, so the refinement arm has to
+  // be the one taken.
+  static_cast<stp::STP*>(vc)->bm->UserFlags.array_eager_budget = 0;
 
   Type bv8 = vc_bvType(vc, 8);
   Type bv4 = vc_bvType(vc, 4);
@@ -1188,6 +1201,9 @@ TEST(array_extensionality, refinement_on_the_cadical_backend)
   }
   vc_setFlag(vc, 'x');
   ASSERT_TRUE(vc_useCadical(vc));
+  // Clause restoration is what is under test, so the round has to reach
+  // refinement rather than be instantiated eagerly.
+  static_cast<stp::STP*>(vc)->bm->UserFlags.array_eager_budget = 0;
 
   Type bv8 = vc_bvType(vc, 8);
   Type arrT = vc_arrayType(vc, bv8, bv8);
@@ -1295,6 +1311,9 @@ TEST(array_extensionality,
   // test pins the abstraction/checker path itself, so keep the
   // equality there.
   static_cast<stp::STP*>(vc)->bm->UserFlags.propagate_equalities = false;
+  // The conflict has to be raised as an extensionality lemma for the
+  // ownership claim to mean anything, so pin the refinement arm.
+  static_cast<stp::STP*>(vc)->bm->UserFlags.array_eager_budget = 0;
 
   Type bv8 = vc_bvType(vc, 8);
   Type arrT = vc_arrayType(vc, bv8, bv8);

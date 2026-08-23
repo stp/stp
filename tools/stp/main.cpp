@@ -382,6 +382,12 @@ void ExtraMain::create_options()
                  "install up front")
       ->group(refinement_group)
       ->capture_default_str();
+  app.add_option("--array-ackermann-budget", bm->UserFlags.array_eager_budget,
+                 "how many index comparisons eager array Ackermannisation may "
+                 "introduce before read refinement is preferred; 0 selects it "
+                 "only when asked for by name")
+      ->group(refinement_group)
+      ->capture_default_str();
   bool_arg("--uf-phase-hints", bm->UserFlags.uf_phase_hints,
            "bias the first candidate so the congruence checker's scalars "
            "start out pairwise different (advisory; affects search order "

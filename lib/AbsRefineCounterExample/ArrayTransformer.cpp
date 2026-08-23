@@ -363,7 +363,7 @@ class ArrayTransformer::TransformDriver
   ASTNode& ASTFalse;
   ASTNode& ASTUndefined;
   ArrType& arrayToIndexToRead;
-  std::map<ASTNode, vector<std::pair<ASTNode, ASTNode>>>& ack_pair;
+  ArrayTransformer::AckPairMap& ack_pair;
   const bool& recordTouchedReads;
   std::vector<std::pair<ASTNode, ASTNode>>& touchedReads;
   ASTVec& cellSortConstraints;
@@ -995,12 +995,14 @@ class ArrayTransformer::TransformDriver
 
             // list of array-read indices corresponding to arrName, seen while
             // traversing the AST tree. we need this list to construct the ITEs
-            vector<std::pair<ASTNode, ASTNode>> p = ack_pair[arrName];
+            // Only the entries this index can produce a comparison from:
+            // constant-against-constant is decided, and walking it is the
+            // quadratic cost the estimate deliberately does not charge for.
+            const ArrayTransformer::ReadKeys& p =
+                ack_pair[arrName].walkFor(readIndex);
 
-            vector<std::pair<ASTNode, ASTNode>>::const_reverse_iterator it2 =
-                p.rbegin();
-            vector<std::pair<ASTNode, ASTNode>>::const_reverse_iterator it2end =
-                p.rend();
+            ArrayTransformer::ReadKeys::const_reverse_iterator it2 = p.rbegin();
+            ArrayTransformer::ReadKeys::const_reverse_iterator it2end = p.rend();
             for (; it2 != it2end; it2++)
             {
               ASTNode cond = simp->CreateSimplifiedEQ(readIndex, it2->first);
@@ -1016,7 +1018,7 @@ class ArrayTransformer::TransformDriver
                                                              symbolResult);
             }
 
-            ack_pair[arrName].push_back(make_pair(readIndex, CurrentSymbol));
+            ack_pair[arrName].add(readIndex, CurrentSymbol);
           }
 
           assert(arrName.GetType() == ARRAY_TYPE);
@@ -1279,7 +1281,7 @@ void ArrayTransformer::FillUp_ArrReadIndex_Vec(const ASTNode& e0,
 
   arrayToIndexToRead[e0[0]].insert(make_pair(e0[1], ArrayRead(e1, e1)));
 
-  ack_pair[e0[0]].push_back(make_pair(e0[1], e1));
+  ack_pair[e0[0]].add(e0[1], e1);
 }
 
 } // end of namespace stp
