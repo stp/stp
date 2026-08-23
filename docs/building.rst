@@ -57,8 +57,7 @@ get it, tried in this order:
 
 -  ``-DLIBBF_DIR=<path>`` naming a directory that holds ``libbf.h`` and a
    built ``bf`` library. It defaults to ``deps/libbf``, which is where
-   ``scripts/deps/setup-libbf.sh`` puts one, so a tree that has run that
-   script needs no flag
+   an earlier build put one
 -  an installed copy, found the way any library is -- including one that
    an earlier build installed into ``STP_DEP_DIR`` (see below)
 -  ``-DENABLE_AUTO_DOWNLOAD=ON``, which clones
@@ -123,8 +122,7 @@ otherwise an installed CaDiCaL is found the way any library is, or
 Then configure STP with ``-DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH=<path>``,
 where ``<path>`` is the checkout containing ``src/cadical.hpp`` and
 ``build/libcadical.a``. ``-fPIC`` is required, because ``libcadical.a``
-is linked into STP's shared library. These commands are pre-configured in
-``scripts/deps/setup-cadical.sh``.
+is linked into STP's shared library. 
 
 Whichever way it arrives, STP works out which CaDiCaL it has: a checkout
 carries a ``VERSION`` file, and an installed copy is asked directly, by
@@ -160,15 +158,15 @@ distribution's minisat package works too, as does one built by hand:
     sudo cmake --install .
     command -v ldconfig && sudo ldconfig
 
-The MiniSat and CryptoMiniSat recipes above are pre-configured in
-``scripts/deps/setup-minisat.sh`` and ``scripts/deps/setup-cms.sh``.
-Those scripts install into ``deps/install``, which CMake searches without
-any extra flags.
+The CryptoMiniSat recipe above is pre-configured in
+``scripts/deps/setup-cms.sh``, which installs into ``deps/install`` --
+searched without any extra flags. It is the only such script left: every
+other dependency is now fetched and built by the build itself.
 
 The Riss solver can be enabled with ``-DUSE_RISS``. Either point
 ``-DRISS_DIR=<path>`` at a Riss checkout that contains
 ``riss/core/Solver.h`` and ``build/lib/libriss-coprocessor.a`` --
-``scripts/deps/setup-riss.sh`` builds one -- or configure with
+or configure with
 ``-DENABLE_AUTO_DOWNLOAD=ON`` and let STP build it. Riss needs flags of
 its own either way: it does not compile warning-free under current
 compilers and does not build as C++17, so STP builds it with ``-w`` and
@@ -259,8 +257,7 @@ These apply to all generators:
    clone)
 -  ``CLI11_DIR`` -- build against an existing CLI11 rather than fetching
    one
--  ``LIBBF_DIR`` -- where to find a built LibBF (defaults to
-   ``deps/libbf``, where ``scripts/deps/setup-libbf.sh`` puts it)
+-  ``LIBBF_DIR`` -- where to find an already-built LibBF
 -  ``ENABLE_AUTO_DOWNLOAD`` -- download and build dependencies that were
    not found, rather than failing. Off by default: a build that reaches
    the network should be asked to

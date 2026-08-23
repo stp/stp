@@ -34,8 +34,6 @@ more):
 ::
 
     $ cd /path/to/stp
-    $ ./scripts/deps/setup-gtest.sh
-    $ ./scripts/deps/setup-outputcheck.sh
 
 You also need the lit tool, which is available from
 `PyPI <https://pypi.org/project/lit/>`__:

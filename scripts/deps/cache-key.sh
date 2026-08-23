@@ -31,7 +31,7 @@ hash=$(
   {
     cat "${root}"/cmake/Find*.cmake
     cat "${root}"/cmake/deps-helper.cmake
-    cat "${root}"/cmake/deps-utils/*
+    find "${root}"/cmake/deps-utils -type f | sort | xargs cat
     cat "${here}"/setup-*.sh
     # The two FetchContent pins live here rather than in a Find module.
     grep -E "GIT_TAG|GIT_REPOSITORY" "${root}"/tests/CMakeLists.txt

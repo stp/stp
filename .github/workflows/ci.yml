@@ -87,35 +87,29 @@ jobs:
           zlib1g-dev
         sudo pip3 install -U lit
 
-    # Most of these are cloned without a pinned revision, so the cache key
-    # tracks what their default branches currently point at: a new upstream
-    # commit gets a new key rather than a stale cache.
+    # Every dependency is pinned in the file that fetches it, so this hashes
+    # those files and nothing else -- it used to have to resolve a revision
+    # over the network, because OutputCheck was cloned without one.
     - name: Resolve dependency revisions
       id: deps-key
       run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
 
+    # One directory, because the build now installs everything it fetches into
+    # STP_DEP_DIR, and setup-cms.sh installs beside it. Everything else the
+    # configure step below downloads and builds for itself.
     - name: Restore dependencies
       id: deps-cache
       uses: actions/cache@v4
       with:
-        path: |
-          deps/install
-          deps/gtest
-          deps/OutputCheck
+        path: deps
         key: deps-x86_64-${{ steps.deps-key.outputs.key }}
 
+    # CryptoMiniSat is the one dependency STP does not build: it reaches the
+    # build as a CMake package, which an ExternalProject would only write after
+    # the configure that has to read it.
     - name: Dependencies
       if: steps.deps-cache.outputs.cache-hit != 'true'
-      run: |
-        ./scripts/deps/setup-cms.sh
-        ./scripts/deps/setup-gtest.sh
-        ./scripts/deps/setup-outputcheck.sh
-
-    # Deliberately outside the cached Dependencies step: the pinned mirror
-    # is small and builds in seconds, so caching it would only complicate
-    # the cache key for nothing.
-    - name: LibBF (real-literal folding)
-      run: ./scripts/deps/setup-libbf.sh
+      run: ./scripts/deps/setup-cms.sh
 
     # Keyed per run so every build writes a fresh entry; restore-keys picks
     # up the most recent one from this branch, or from the base branch.
@@ -130,7 +124,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        ${{ matrix.env }} cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DUSE_CRYPTOMINISAT:STRING=ON -DUSE_CADICAL:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DBUILD_EXTRA_TOOLS:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        ${{ matrix.env }} cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DUSE_CRYPTOMINISAT:STRING=ON -DUSE_CADICAL:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DBUILD_EXTRA_TOOLS:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -189,7 +183,7 @@ jobs:
     # CryptoMiniSat >= 5.14 builds its own CaDiCaL (the meelgroup fork, 2.1.3
     # as of 5.14.7) and installs it into the same prefix as itself, so
     # deps/install holds a second CaDiCaL that has nothing to do with the one
-    # setup-cadical.sh builds. This is the leg that can check they stay apart:
+    # this leg clones below. This is the leg that can check they stay apart:
     # it is the only one with a static CryptoMiniSat in deps/install, which is
     # exactly the prefix the bundled copy lands in. Both properties below are
     # settled during configure, so neither costs a build.
@@ -201,7 +195,12 @@ jobs:
     - name: CaDiCaL alongside CryptoMiniSat
       if: matrix.name == 'gcc'
       run: |
-        ./scripts/deps/setup-cadical.sh
+        # Cloned here rather than through the build's own CaDiCaL: the point
+        # of this leg is that there are two distinct CaDiCaLs about, and one
+        # of them has to be somewhere the build did not put it.
+        git clone --depth 1 --branch rel-3.0.1 \
+          https://github.com/arminbiere/cadical deps/cadical
+        ( cd deps/cadical && ./configure -fPIC && make -j"$(nproc)" )
 
         # CADICAL_DIR has to outrank the CaDiCaL in deps/install. find_library
         # reaches CMAKE_PREFIX_PATH before HINTS, and CMakeLists puts
@@ -418,10 +417,7 @@ jobs:
       id: deps-cache
       uses: actions/cache@v4
       with:
-        path: |
-          deps/cadical
-          deps/gtest
-          deps/OutputCheck
+        path: deps
         key: deps-x86_64-ubsan-${{ steps.deps-key.outputs.key }}
 
     # CaDiCaL, and only CaDiCaL. The backend is built by its own script,
@@ -430,12 +426,8 @@ jobs:
     - name: Dependencies
       if: steps.deps-cache.outputs.cache-hit != 'true'
       run: |
-        ./scripts/deps/setup-cadical.sh
-        ./scripts/deps/setup-gtest.sh
-        ./scripts/deps/setup-outputcheck.sh
+        :  # everything here is fetched by the configure step below
 
-    - name: LibBF (real-literal folding)
-      run: ./scripts/deps/setup-libbf.sh
 
     - name: Compiler cache
       uses: actions/cache@v4
@@ -576,10 +568,7 @@ jobs:
       id: deps-cache
       uses: actions/cache@v4
       with:
-        path: |
-          deps/cadical
-          deps/gtest
-          deps/OutputCheck
+        path: deps
         # The tag is part of the key by hand: cache-key.sh hashes the setup
         # scripts, and the matrix override never changes their content.
         key: deps-x86_64-cadical-${{ matrix.cadical_tag }}-${{ steps.deps-key.outputs.key }}
@@ -593,13 +582,9 @@ jobs:
     - name: Dependencies
       if: steps.deps-cache.outputs.cache-hit != 'true'
       run: |
-        CADICAL_TAG=${{ matrix.cadical_tag }} ./scripts/deps/setup-cadical.sh
-        ./scripts/deps/setup-gtest.sh
-        ./scripts/deps/setup-outputcheck.sh
+        :  # everything here is fetched by the configure step below
 
     # Outside the cached step, as in the main job: tiny and quick to build.
-    - name: LibBF (real-literal folding)
-      run: ./scripts/deps/setup-libbf.sh
 
     - name: Compiler cache
       uses: actions/cache@v4
@@ -619,7 +604,7 @@ jobs:
         mkdir build
         mkdir -p "$GITHUB_WORKSPACE/install/pylib"
         cd build
-        cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DUSE_CRYPTOMINISAT:STRING=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_INSTALL_PREFIX:PATH="$GITHUB_WORKSPACE/install" -DPYTHON_LIB_INSTALL_DIR:PATH="$GITHUB_WORKSPACE/install/pylib" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DUSE_CRYPTOMINISAT:STRING=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_INSTALL_PREFIX:PATH="$GITHUB_WORKSPACE/install" -DPYTHON_LIB_INSTALL_DIR:PATH="$GITHUB_WORKSPACE/install/pylib" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -702,7 +687,7 @@ jobs:
   # its link interface, so both CaDiCaLs reach libstp's link line and collide.
   # CMakeLists refuses that combination outright, and the gcc leg checks that
   # it does. A shared libcryptominisat5 resolves the dependency inside the .so
-  # and exports no CaDiCaL symbols, so only the CaDiCaL from setup-cadical.sh
+  # and exports no CaDiCaL symbols, so only the CaDiCaL the build fetched
   # is ever linked or called -- which is what this job builds and tests.
   cms-cadical:
     name: cms + cadical
@@ -751,25 +736,18 @@ jobs:
       id: deps-cache
       uses: actions/cache@v4
       with:
-        path: |
-          deps/install
-          deps/cadical
-          deps/gtest
-          deps/OutputCheck
+        path: deps
         key: deps-x86_64-cms-shared-cadical-${{ steps.deps-key.outputs.key }}
 
     - name: Dependencies
       if: steps.deps-cache.outputs.cache-hit != 'true'
       run: |
+        # Shared, so its bundled CaDiCaL stays inside libcryptominisat5.so
+        # and does not collide with the one this build fetches.
         ./scripts/deps/setup-cms.sh -DBUILD_SHARED_LIBS=ON
-        ./scripts/deps/setup-cadical.sh
-        ./scripts/deps/setup-gtest.sh
-        ./scripts/deps/setup-outputcheck.sh
 
     # Outside the cached step, as in the gcc/clang job: the pinned mirror
     # is small and builds in seconds.
-    - name: LibBF (real-literal folding)
-      run: ./scripts/deps/setup-libbf.sh
 
     - name: Compiler cache
       uses: actions/cache@v4
@@ -782,7 +760,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DUSE_CRYPTOMINISAT:STRING=ON -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DUSE_CRYPTOMINISAT:STRING=ON -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -909,14 +887,13 @@ jobs:
 
     - name: Dependencies
       run: |
-        ./scripts/deps/setup-minisat.sh
-        ./scripts/deps/setup-libbf.sh
+        :  # everything here is fetched by the configure step below
 
     - name: Configure
       run: |
         mkdir build
         cd build
-        cmake -DUSE_MINISAT:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=OFF -DUSE_CADICAL:BOOL=OFF -DWERROR:BOOL=ON -DBUILD_SHARED_LIBS:BOOL=ON -DENABLE_TESTING:BOOL=OFF -DBUILD_EXTRA_TOOLS:BOOL=OFF -G Ninja ..
+        cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_MINISAT:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=OFF -DUSE_CADICAL:BOOL=OFF -DWERROR:BOOL=ON -DBUILD_SHARED_LIBS:BOOL=ON -DENABLE_TESTING:BOOL=OFF -DBUILD_EXTRA_TOOLS:BOOL=OFF -G Ninja ..
 
     - name: Build
       run: cmake --build build --parallel "$(nproc)"
@@ -966,16 +943,13 @@ jobs:
 
     - name: Dependencies
       run: |
-        ./scripts/deps/setup-minisat.sh
-        ./scripts/deps/setup-gtest.sh
-        ./scripts/deps/setup-outputcheck.sh
-        ./scripts/deps/setup-libbf.sh
+        :  # everything here is fetched by the configure step below
 
     - name: Configure
       run: |
         mkdir build
         cd build
-        cmake -DUSE_MINISAT:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=OFF -DUSE_CADICAL:BOOL=OFF -DWERROR:BOOL=ON -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -G Ninja ..
+        cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_MINISAT:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=OFF -DUSE_CADICAL:BOOL=OFF -DWERROR:BOOL=ON -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -G Ninja ..
 
     - name: Build
       run: cmake --build build --parallel "$(nproc)"
@@ -1032,16 +1006,13 @@ jobs:
 
     - name: Dependencies
       run: |
-        ./scripts/deps/setup-riss.sh
-        ./scripts/deps/setup-gtest.sh
-        ./scripts/deps/setup-outputcheck.sh
-        ./scripts/deps/setup-libbf.sh
+        :  # everything here is fetched by the configure step below
 
     - name: Configure
       run: |
         mkdir build
         cd build
-        cmake -DUSE_RISS:BOOL=ON -DRISS_DIR:PATH="$GITHUB_WORKSPACE/deps/riss" -DUSE_CRYPTOMINISAT:STRING=OFF -DUSE_CADICAL:BOOL=OFF -DWERROR:BOOL=ON -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -G Ninja ..
+        cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_RISS:BOOL=ON -DRISS_DIR:PATH="$GITHUB_WORKSPACE/deps/riss" -DUSE_CRYPTOMINISAT:STRING=OFF -DUSE_CADICAL:BOOL=OFF -DWERROR:BOOL=ON -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -G Ninja ..
 
     - name: Build
       run: cmake --build build --parallel "$(nproc)"
@@ -1083,10 +1054,7 @@ jobs:
     - name: Restore dependencies
       uses: actions/cache@v4
       with:
-        path: |
-          deps/cadical
-          deps/gtest
-          deps/OutputCheck
+        path: deps
         # "cadical" in the prefix: the path set changed when the job moved
         # off MiniSat, and the old entries (same script hashes) would
         # otherwise hit forever without ever containing deps/cadical.
@@ -1275,23 +1243,11 @@ jobs:
     # stale hit is not expressible.
     - uses: mozilla-actions/sccache-action@v0.0.11
 
-    # The script's clone half is portable -- git is what runs this step's
-    # shell -- while the compile half is cc/ar, so it stops before that and
-    # cl takes over below.
-    - name: Fetch LibBF (real-literal folding)
-      shell: bash
-      run: LIBBF_NO_BUILD=1 ./scripts/deps/setup-libbf.sh
-
-    # The MSVC branch of the stp branch's shims is what this compiles. Two
-    # files, so it is left out of the cache rather than given a launcher.
-    - name: Build LibBF (MSVC)
-      run: |
-        Set-Location deps\libbf
-        cl /nologo /std:c11 /O2 /c libbf.c cutils.c
-        if ($LASTEXITCODE -ne 0) { exit 1 }
-        lib /nologo /OUT:bf.lib libbf.obj cutils.obj
-        if ($LASTEXITCODE -ne 0) { exit 1 }
-        dir
+    # LibBF used to be fetched with the script's clone half and then compiled
+    # here by hand, because the script's compile half is cc/ar and this job has
+    # cl. cmake/FindLibBF.cmake supplies LibBF with a CMakeLists of its own, so
+    # the configure step below builds it with whatever compiler this build is
+    # using -- cl included -- and there is nothing Windows-specific left to do.
 
     - name: Build minisat
       run: |
@@ -1335,6 +1291,7 @@ jobs:
         -DCMAKE_POLICY_DEFAULT_CMP0141=NEW -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded
         -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl
         -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
+        -DENABLE_AUTO_DOWNLOAD=ON
         -DSTATICCOMPILE=ON -DUSE_MINISAT=ON -DUSE_CRYPTOMINISAT=OFF -DUSE_CADICAL=OFF
         -DENABLE_PYTHON_INTERFACE=OFF
         "-DMINISAT_LIBDIR=$env:MINISAT_ROOT"
@@ -1479,35 +1436,16 @@ jobs:
           mingw-w64-ucrt-x86_64-gcc
           mingw-w64-ucrt-x86_64-ninja
 
-    # CaDiCaL's own build system, with the flags its BUILD.md prescribes for
-    # MinGW: -lpsapi for the resource-usage calls, and only the 'cadical'
-    # target, since mobical does not compile on MinGW. The tag matches
-    # scripts/deps/setup-cadical.sh's pin; the script itself is not used
-    # because its plain 'make' would build mobical too.
-    - name: Build CaDiCaL
-      run: |
-        git clone https://github.com/arminbiere/cadical deps/cadical
-        cd deps/cadical
-        git checkout rel-3.0.1
-        ./configure -static -lpsapi
-        make -j"$(nproc)" cadical
-
-    # The script's clone half runs under git-bash, exactly as the MSVC
-    # leg's does; the compile half then uses the UCRT64 gcc this job builds
-    # everything else with. gcc rather than the script's cc, which MinGW
-    # does not provide.
-    - name: Fetch LibBF (real-literal folding)
-      shell: bash
-      run: LIBBF_NO_BUILD=1 ./scripts/deps/setup-libbf.sh
-
-    - name: Build LibBF (MinGW)
-      run: |
-        cd deps/libbf
-        gcc -O2 -Wall -c libbf.c cutils.c
-        ar rcs libbf.a libbf.o cutils.o
+    # CaDiCaL and LibBF used to be built by hand here, each with flags this
+    # toolchain needs and the setup scripts did not have. Both are now the
+    # build's own job: cmake/FindCaDiCaL.cmake drives CaDiCaL's configure
+    # script and builds libcadical.a alone -- which is what the hand-written
+    # step was for, since CaDiCaL's default target also builds mobical, and
+    # mobical does not compile on MinGW -- and cmake/FindLibBF.cmake gives
+    # LibBF a CMakeLists, so the UCRT64 gcc compiles it like everything else.
 
     - name: Configure
-      run: cmake -B build -G Ninja -DSTATICCOMPILE:BOOL=ON -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$(pwd)/deps/cadical" -DUSE_CRYPTOMINISAT:STRING=OFF -DENABLE_PYTHON_INTERFACE:BOOL=OFF -DCMAKE_C_COMPILER_LAUNCHER="$SCCACHE" -DCMAKE_CXX_COMPILER_LAUNCHER="$SCCACHE" .
+      run: cmake -B build -G Ninja -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DSTATICCOMPILE:BOOL=ON -DUSE_CADICAL:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=OFF -DENABLE_PYTHON_INTERFACE:BOOL=OFF -DCMAKE_C_COMPILER_LAUNCHER="$SCCACHE" -DCMAKE_CXX_COMPILER_LAUNCHER="$SCCACHE" .
 
     # CaDiCaL above is built by its own makefile and so is not cached; ABC and
     # STP are, which is the bulk of this step. The stats are printed so a run
