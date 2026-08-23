@@ -150,6 +150,49 @@ if(MSVC)
          -DCMAKE_POLICY_DEFAULT_CMP0141=NEW
          "-DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=${_stp_ep_msvc_debug}")
     unset(_stp_ep_msvc_debug)
+
+    # Same shape of problem, one step further along: which C runtime everyone
+    # links. A static STP switches itself to /MT -- by rewriting its own
+    # per-configuration flags, and by add_compile_options(/MT), neither of
+    # which a separately configured sub-build can see. The dependency keeps
+    # CMake's default /MD, and the two archives cannot be linked together:
+    #
+    #   error LNK2038: mismatch detected for 'RuntimeLibrary': value
+    #   'MD_DynamicRelease' doesn't match value 'MT_StaticRelease'
+    #
+    # with a run of LNK2005 duplicate-symbol errors against msvcprt.lib and
+    # unresolved __imp_-prefixed CRT symbols behind it, all one cause.
+    #
+    # CMAKE_MSVC_RUNTIME_LIBRARY is the abstraction for this, and CMP0141's
+    # neighbour CMP0091 is what makes it mean anything -- without the policy,
+    # the choice stays welded into the default flags where we cannot reach it.
+    # An explicit setting from the user wins; otherwise follow the same rule
+    # STP applies to itself, keyed on BUILD_SHARED_LIBS, which STATICCOMPILE
+    # has already turned off by the time this file is included.
+    if(CMAKE_MSVC_RUNTIME_LIBRARY)
+        set(_stp_ep_msvc_runtime "${CMAKE_MSVC_RUNTIME_LIBRARY}")
+    else()
+        # A multi-config generator has no CMAKE_BUILD_TYPE to read, so leave
+        # the configuration to a generator expression there and settle it here
+        # everywhere else.
+        if(CMAKE_BUILD_TYPE)
+            if(CMAKE_BUILD_TYPE MATCHES "^[Dd][Ee][Bb][Uu][Gg]$")
+                set(_stp_ep_msvc_runtime "MultiThreadedDebug")
+            else()
+                set(_stp_ep_msvc_runtime "MultiThreaded")
+            endif()
+        else()
+            set(_stp_ep_msvc_runtime "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+        endif()
+        if(BUILD_SHARED_LIBS)
+            string(APPEND _stp_ep_msvc_runtime "DLL")
+        endif()
+    endif()
+    list(APPEND STP_EP_COMMON_CMAKE_ARGS
+         -DCMAKE_POLICY_DEFAULT_CMP0091=NEW
+         "-DCMAKE_MSVC_RUNTIME_LIBRARY=${_stp_ep_msvc_runtime}")
+    message(STATUS "Dependency MSVC runtime: ${_stp_ep_msvc_runtime}")
+    unset(_stp_ep_msvc_runtime)
 endif()
 
 set(STP_EP_COMMON_CONFIG
