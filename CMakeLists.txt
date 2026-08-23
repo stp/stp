@@ -652,100 +652,15 @@ option(USE_CADICAL "Try to use Cadical" OFF)
 add_feature_info(Cadical USE_CADICAL "Enables Cadical solver")
 
 if (USE_CADICAL)
-    set(CADICAL_DIR "" CACHE PATH "Path to a CaDiCaL checkout (the directory containing src/cadical.hpp and build/libcadical.a)")
-    # PATHS with NO_DEFAULT_PATH rather than HINTS, so that CADICAL_DIR decides
-    # and nothing else gets a say. find_library searches CMAKE_PREFIX_PATH
-    # before it reaches HINTS, and this file puts deps/install on that path, so
-    # any libcadical.a installed there outranked the checkout the caller named.
-    # CryptoMiniSat >= 5.14 installs exactly that: its own bundled CaDiCaL.
-    #
-    # The header lookup never went wrong in the same way -- src/cadical.hpp is
-    # a checkout-only path, absent from any install tree -- and that asymmetry
-    # was the whole problem. STP compiled against the headers CADICAL_DIR named
-    # and linked against a different CaDiCaL's library. Pinning both to
-    # CADICAL_DIR is what stops the two disagreeing.
-    find_path(CADICAL_INCLUDE_DIR NAMES src/cadical.hpp PATHS ${CADICAL_DIR} NO_DEFAULT_PATH)
-    find_library(CADICAL_LIBRARY NAMES cadical PATHS ${CADICAL_DIR}/build NO_DEFAULT_PATH)
-    if (NOT CADICAL_INCLUDE_DIR OR NOT CADICAL_LIBRARY)
-        message(FATAL_ERROR "USE_CADICAL is set but CaDiCaL was not found. "
-                "Set CADICAL_DIR to a CaDiCaL checkout containing src/cadical.hpp and build/libcadical.a")
-    endif()
-    message(STATUS "Found CaDiCaL: ${CADICAL_LIBRARY}")
+    # CADICAL_DIR still names a checkout, and is still what decides when it is
+    # set; cmake/FindCaDiCaL.cmake keeps that, adds an installed CaDiCaL as a
+    # second choice, and can build one otherwise. It is also where the version
+    # is worked out, and with it whether bounded variable addition
+    # (--cadical-factor) can be compiled in.
+    find_package(CaDiCaL REQUIRED)
     add_definitions(-DUSE_CADICAL)
-
-    # CaDiCaL's header is consumed as <cadical/cadical.hpp>, which is where an
-    # installed CaDiCaL puts it. A checkout has it at src/cadical.hpp instead,
-    # so stage a copy under that name in the build tree and let everything
-    # downstream see one layout.
-    #
-    # This is what stp/Sat/Cadical.h used to spell #include "src/cadical.hpp",
-    # and that spelling is why CADICAL_DIR has to be a build tree: no installed
-    # CaDiCaL anywhere has a src/ directory, so STP could not be built against
-    # one at all. Restaging costs a file copy and removes that restriction.
-    set(CADICAL_STAGED_INCLUDE_DIR "${PROJECT_BINARY_DIR}/deps/include")
-    configure_file(
-        "${CADICAL_INCLUDE_DIR}/src/cadical.hpp"
-        "${CADICAL_STAGED_INCLUDE_DIR}/cadical/cadical.hpp"
-        COPYONLY
-    )
-
-    # An imported target rather than the project-wide include_directories() and
-    # link_libraries() this replaces. Those reached every target in the build,
-    # including the ones that have nothing to do with SAT solving, and -- more
-    # to the point -- link_libraries() names a file, which leaves nothing for a
-    # later add_dependencies() to order against once CaDiCaL is something this
-    # build can fetch and compile for itself.
-    #
-    # UNKNOWN, not STATIC: what find_library returns is whatever CADICAL_DIR
-    # holds, and CMake puts the path on the link line either way.
-    #
-    # Both include properties are set, and both are needed:
-    # INTERFACE_INCLUDE_DIRECTORIES is what actually puts the directory on a
-    # consumer's compile line, while INTERFACE_SYSTEM_INCLUDE_DIRECTORIES only
-    # says that whatever is already there should be spelled -isystem. Setting
-    # the second alone -- which is what cvc5's equivalent modules do, getting
-    # away with it because they add every dependency's include directory to the
-    # consuming target by hand as well -- silently adds nothing.
-    #
-    # Carrying both on the target is worth the extra line: the header and the
-    # archive then travel together, and cannot be made to disagree by a caller
-    # who links one and includes the other. That disagreement is exactly the
-    # bug the CADICAL_DIR note above describes.
-    add_library(CaDiCaL UNKNOWN IMPORTED GLOBAL)
-    set_target_properties(CaDiCaL PROPERTIES
-        IMPORTED_LOCATION "${CADICAL_LIBRARY}"
-        INTERFACE_INCLUDE_DIRECTORIES "${CADICAL_STAGED_INCLUDE_DIR}"
-        INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${CADICAL_STAGED_INCLUDE_DIR}"
-    )
-
-    # Bounded variable addition (--cadical-factor) needs the
-    # declare_more_variables API. That appeared in CaDiCaL 2.2.0, but the
-    # 2.2 line shipped it with different contract-checking defaults and was
-    # never tested here, so support is only compiled in against the 3.x
-    # series. Older checkouts still build and solve; STP just warns if the
-    # factor flag is explicitly requested. The checkout root carries its
-    # version in a VERSION file, which is what CADICAL_INCLUDE_DIR points at --
-    # a checkout-only file, so an installed CaDiCaL reads as "unknown" here and
-    # loses the factor support. Replacing this probe with one that compiles and
-    # runs CaDiCaL::Solver::version() belongs with the Find module.
-    set(CADICAL_VERSION "unknown")
-    if (EXISTS "${CADICAL_INCLUDE_DIR}/VERSION")
-        file(READ "${CADICAL_INCLUDE_DIR}/VERSION" CADICAL_VERSION)
-        string(STRIP "${CADICAL_VERSION}" CADICAL_VERSION)
-    endif()
-    if (CADICAL_VERSION VERSION_GREATER_EQUAL "3.0.0")
-        message(STATUS "CaDiCaL ${CADICAL_VERSION}: bounded variable addition (--cadical-factor) enabled")
+    if (CADICAL_HAS_FACTOR)
         add_definitions(-DSTP_CADICAL_HAS_FACTOR)
-        # Mirrored as a variable so the test tree can register the
-        # factor-forced lit sweep only when the flag can actually engage.
-        set(CADICAL_HAS_FACTOR ON)
-        # The "inprobing" option arrived in the same 3.0 series. The
-        # incremental driver probes for it at runtime and simply declines to
-        # retire inprocessing without it, so this gates only the tests that
-        # assert the retirement happens.
-        set(CADICAL_HAS_INPROBING ON)
-    else()
-        message(STATUS "CaDiCaL ${CADICAL_VERSION} predates 3.0.0: --cadical-factor will be unavailable")
     endif()
 endif()
 

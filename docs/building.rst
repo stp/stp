@@ -87,9 +87,10 @@ puts it:
 ``-DUSE_CRYPTOMINISAT=OFF`` ignores an installed copy.
 
 CaDiCaL is the alternative, and is worth trying on hard bitvector
-problems. It is opt-in rather than auto-detected, and is consumed from a
-build tree rather than an installation, so ``CADICAL_DIR`` points at the
-checkout:
+problems. It is opt-in rather than auto-detected. With
+``-DENABLE_AUTO_DOWNLOAD=ON`` there is nothing to do but ask for it;
+otherwise an installed CaDiCaL is found the way any library is, or
+``CADICAL_DIR`` points at a checkout:
 
 .. code-block:: bash
 
@@ -104,6 +105,12 @@ where ``<path>`` is the checkout containing ``src/cadical.hpp`` and
 ``build/libcadical.a``. ``-fPIC`` is required, because ``libcadical.a``
 is linked into STP's shared library. These commands are pre-configured in
 ``scripts/deps/setup-cadical.sh``.
+
+Whichever way it arrives, STP works out which CaDiCaL it has: a checkout
+carries a ``VERSION`` file, and an installed copy is asked directly, by
+compiling and running ``CaDiCaL::Solver::version()``. That decides
+whether ``--cadical-factor`` can be compiled in, and the answer is
+printed at configure time.
 
 Enabling CaDiCaL makes it the default for that build, in place of
 CryptoMiniSat; ``--cryptominisat`` (or ``--minisat``, in a
