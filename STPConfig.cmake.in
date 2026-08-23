@@ -22,6 +22,11 @@ if ("@USE_CRYPTOMINISAT@" STREQUAL "ON")
     # or shared CryptoMiniSat needs neither.
     find_package(cadical CONFIG QUIET)
     find_package(cadiback CONFIG QUIET)
+    # cryptominisat5Targets names Threads::Threads in its link interface, and
+    # nothing recreates it for a consumer. It only bites a static STP, which
+    # is the only kind that propagates CryptoMiniSat at all -- a shared one
+    # resolved it inside libstp.so long before the package was written.
+    find_dependency(Threads)
     find_dependency(cryptominisat5)
 endif()
 

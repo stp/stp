@@ -204,6 +204,9 @@ jobs:
         # reaches CMAKE_PREFIX_PATH before HINTS, and CMakeLists puts
         # deps/install on that path, so a HINTS lookup resolved to the wrong one.
         cmake -S . -B build-cadical-pick -G Ninja \
+          -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" \
+          -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" \
+          -DENABLE_AUTO_DOWNLOAD:BOOL=ON \
           -DUSE_CADICAL:BOOL=ON \
           -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" \
           -DUSE_CRYPTOMINISAT:STRING=OFF
@@ -217,6 +220,9 @@ jobs:
         # A static CryptoMiniSat alongside USE_CADICAL has to be refused, and
         # has to say why. Without the guard this reaches the linker instead.
         if cmake -S . -B build-cadical-clash -G Ninja \
+             -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" \
+             -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" \
+             -DENABLE_AUTO_DOWNLOAD:BOOL=ON \
              -DUSE_CADICAL:BOOL=ON \
              -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" \
              -DUSE_CRYPTOMINISAT:STRING=ON > clash.log 2>&1; then
@@ -1302,6 +1308,19 @@ jobs:
     # the per-config target property -- and a per-config property beats the plain
     # one. Ninja has no per-config property, so the tool's own setting wins and
     # the binary lands where every Linux job already finds it.
+
+    # ExternalProject logs each step to a file and prints only a truncated tail
+    # when one fails, so a dependency that emits many warnings hides its own
+    # error. Keep the logs: they are the only way to diagnose a Windows-only
+    # failure from here.
+    - name: Keep the dependency build logs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ep-logs-${{ github.job }}
+        path: |
+          build/deps/src/*-stamp/*.log
+        if-no-files-found: ignore
     - name: Smoke test
       run: |
         $stp = "build\stp.exe"
@@ -1439,6 +1458,19 @@ jobs:
 
     # The first query is answered during simplification; the second cannot
     # be, so it exercises bitblasting, ABC's CNF generation and CaDiCaL.
+
+    # ExternalProject logs each step to a file and prints only a truncated tail
+    # when one fails, so a dependency that emits many warnings hides its own
+    # error. Keep the logs: they are the only way to diagnose a Windows-only
+    # failure from here.
+    - name: Keep the dependency build logs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ep-logs-${{ github.job }}
+        path: |
+          build/deps/src/*-stamp/*.log
+        if-no-files-found: ignore
     - name: Smoke test
       run: |
         stp=$(find build -name 'stp.exe' | head -1)

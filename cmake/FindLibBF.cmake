@@ -73,7 +73,7 @@ if(NOT LibBF_FOUND_SYSTEM)
     # top. A commit rather than a tag, because that branch is rebased onto each
     # new import and a tag on it would not survive -- which is also why this is
     # a git clone rather than a tarball with a checksum.
-    set(LibBF_VERSION "334e7aeec2b0b2be7768285f279b99d1368c5fa9")
+    set(LibBF_VERSION "3df8db0a56efd2a621cd04dd16c881be66403f2a")
 
     set(LibBF_ARCHIVE
         "${CMAKE_STATIC_LIBRARY_PREFIX}bf${CMAKE_STATIC_LIBRARY_SUFFIX}")
