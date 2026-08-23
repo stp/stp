@@ -38,6 +38,7 @@ THE SOFTWARE.
 #include "stp/UninterpretedFunctions/UFRefinement.h"
 #include "stp/Util/GitSHA1.h"
 #include <cassert>
+#include <limits>
 
 using std::cerr;
 using std::cout;
@@ -161,6 +162,11 @@ UserDefinedFlags& Cpp_interface::getUserFlags()
   return bm.UserFlags;
 }
 
+bool Cpp_interface::declaredSortsEnabled() const
+{
+  return bm.UserFlags.enable_uninterpreted_functions || ax_enabled_by_logic;
+}
+
 void Cpp_interface::setLogic(const std::string& logic)
 {
   const bool selectsUF =
@@ -178,6 +184,20 @@ void Cpp_interface::setLogic(const std::string& logic)
   else
     restoreUFOptionAfterLogic();
 
+  const bool selectsAX = logic == "QF_AX";
+  if (selectsAX)
+  {
+    if (!ax_enabled_by_logic)
+    {
+      array_equality_option_before_logic =
+          bm.UserFlags.enable_array_equality;
+      ax_enabled_by_logic = true;
+    }
+    bm.UserFlags.enable_array_equality = true;
+  }
+  else
+    restoreArrayEqualityOptionAfterLogic();
+
   // This policy is intentionally limited to the two fragments measured in
   // the threshold sweep. QF_AUFBV, the FP logics, legacy parsers, and native
   // API clients retain the established solve-3 policy until separately
@@ -191,6 +211,14 @@ void Cpp_interface::restoreUFOptionAfterLogic()
     return;
   bm.UserFlags.enable_uninterpreted_functions = uf_option_before_logic;
   uf_enabled_by_logic = false;
+}
+
+void Cpp_interface::restoreArrayEqualityOptionAfterLogic()
+{
+  if (!ax_enabled_by_logic)
+    return;
+  bm.UserFlags.enable_array_equality = array_equality_option_before_logic;
+  ax_enabled_by_logic = false;
 }
 
 void Cpp_interface::AddAssert(const ASTNode& assert)
@@ -1198,6 +1226,7 @@ void Cpp_interface::cleanUp()
   }
 
   restoreUFOptionAfterLogic();
+  restoreArrayEqualityOptionAfterLogic();
 }
 
 // SMT-LIB gives these options a <b_value> argument (2.6, figure 3.9), so a
@@ -1549,7 +1578,7 @@ bool Cpp_interface::sortCarrierExhausted(const ASTVec& assertions,
   // check-sat ahead of the result cache, and an O(DAG) sweep that always
   // answers no cost 6.7x on a session of repeated check-sats over a 60k-node
   // formula with no declare-sort in it at all.
-  if (!bm.UserFlags.enable_uninterpreted_functions || sort_aliases.empty())
+  if (sort_aliases.empty())
     return false;
   bool anyDeclared = false;
   for (const std::pair<const std::string, SourceSort>& alias : sort_aliases)
@@ -1571,6 +1600,17 @@ bool Cpp_interface::sortCarrierExhausted(const ASTVec& assertions,
   //    of four.
   std::map<unsigned, uint64_t> named;
   std::map<unsigned, unsigned> widths;
+  const auto reserve = [&named, &widths](const SourceSort& sort,
+                                         uint64_t count) {
+    if (sort.kind() != SourceSort::Kind::Uninterpreted || count == 0)
+      return;
+    uint64_t& total = named[sort.uninterpretedId()];
+    if (std::numeric_limits<uint64_t>::max() - total < count)
+      total = std::numeric_limits<uint64_t>::max();
+    else
+      total += count;
+    widths[sort.uninterpretedId()] = sort.packedWidth();
+  };
   ASTNodeSet visited;
   ASTNodeSet identities;
   const UFContext* const context = bm.getUFContextIfAny();
@@ -1586,9 +1626,39 @@ bool Cpp_interface::sortCarrierExhausted(const ASTVec& assertions,
     const SourceSort sort = current.GetSourceSort();
     if (sort.kind() == SourceSort::Kind::Uninterpreted &&
         current.GetKind() != ITE && identities.count(current) == 0)
+      reserve(sort, 1);
+
+    // Array extensionality introduces one witness index and two witness
+    // reads for each distinct equality record. Those nodes deliberately use
+    // raw bit-vector sorts because they live below the source boundary, so
+    // the ordinary term count above cannot see their demand on a declared
+    // component sort. Reserve their source-level elements here before the
+    // lowering happens. This matters only for deliberately tiny
+    // --uf-sort-width values; at the default width the bound is remote.
+    if (current.GetKind() == ARRAY_EQ && current.Degree() == 2)
     {
-      named[sort.uninterpretedId()] += 1;
-      widths[sort.uninterpretedId()] = sort.packedWidth();
+      const SourceSort array = current[0].GetSourceSort();
+      if (array.kind() == SourceSort::Kind::Array)
+      {
+        reserve(array.index(), 1);
+        reserve(array.element(), 2);
+      }
+    }
+    else if (current.GetKind() == DISTINCT && current.Degree() >= 2 &&
+             current[0].GetSourceSort().kind() == SourceSort::Kind::Array)
+    {
+      // lowerDistinct creates one equality record for every operand pair.
+      const uint64_t count = current.Degree();
+      const uint64_t pairs =
+          count > std::numeric_limits<uint64_t>::max() / (count - 1)
+              ? std::numeric_limits<uint64_t>::max()
+              : count * (count - 1) / 2;
+      const SourceSort array = current[0].GetSourceSort();
+      reserve(array.index(), pairs);
+      reserve(array.element(),
+              pairs > std::numeric_limits<uint64_t>::max() / 2
+                  ? std::numeric_limits<uint64_t>::max()
+                  : pairs * 2);
     }
     for (size_t i = 0; i < current.Degree(); ++i)
       pending.push_back(current[i]);

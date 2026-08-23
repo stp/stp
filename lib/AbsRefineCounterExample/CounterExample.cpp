@@ -2586,8 +2586,11 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
     vector<std::pair<ASTNode, ASTNode>> entries =
         GetSortedArrayModelEntries(array);
 
-    const unsigned iw = array.GetIndexWidth();
-    const unsigned vw = array.GetValueWidth();
+    const SourceSort arraySort = array.GetSourceSort();
+    if (arraySort.kind() != SourceSort::Kind::Array)
+      FatalError("array model: symbol has no array source sort", array);
+    const SourceSort indexSort = arraySort.index();
+    const SourceSort elementSort = arraySort.element();
 
     // The define-fun prints the array's true sorts -- the element float
     // format lives on the symbol, a float index format and RoundingMode
@@ -2602,24 +2605,20 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
     const bool rmIndex = bm->arrayHasRmIndex(array);
     const bool rmElement = bm->arrayHasRmElement(array);
 
-    std::ostringstream sortText;
-    sortText << "(Array ";
-    if (fpIndex)
-      sortText << "(_ FloatingPoint " << ieb << " " << isb << ")";
-    else if (rmIndex)
-      sortText << "RoundingMode";
-    else
-      sortText << "(_ BitVec " << iw << ")";
-    sortText << " ";
-    if (eb != 0)
-      sortText << "(_ FloatingPoint " << eb << " " << sb << ")";
-    else if (rmElement)
-      sortText << "RoundingMode";
-    else
-      sortText << "(_ BitVec " << vw << ")";
-    sortText << ")";
+    // The declaration and both `as const` occurrences must use the source
+    // sorts, not their packed carriers. In particular, (Array Index Element)
+    // is not (Array (_ BitVec 16) (_ BitVec 16)), even though that is how it
+    // is represented below this boundary.
+    const std::string sortText = sourceSortToSMTLib(arraySort);
+    bm->noteUninterpretedSortPrinted(indexSort);
+    bm->noteUninterpretedSortPrinted(elementSort);
 
     const auto printCell = [&](const ASTNode& cell) {
+      if (elementSort.kind() == SourceSort::Kind::Uninterpreted)
+      {
+        os << " |" << bm->uninterpretedElementName(elementSort, cell) << "|";
+        return;
+      }
       if (eb != 0)
       {
         os << " ";
@@ -2639,6 +2638,11 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
       printer::outputBitVecSMTLIB2(cell, os);
     };
     const auto printIndex = [&](const ASTNode& index) {
+      if (indexSort.kind() == SourceSort::Kind::Uninterpreted)
+      {
+        os << " |" << bm->uninterpretedElementName(indexSort, index) << "|";
+        return;
+      }
       if (fpIndex)
       {
         os << " ";
@@ -2660,10 +2664,10 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
 
     os << "(define-fun |";
     array.nodeprint(os);
-    os << "| () " << sortText.str();
+    os << "| () " << sortText;
     for (size_t i = 0; i < entries.size(); i++)
       os << " (store";
-    os << " ((as const " << sortText.str() << ")";
+    os << " ((as const " << sortText << ")";
     // The unobserved cells' value, printed through the same cell
     // printer as an observed one, so that what is published here is
     // demonstrably the value every other reader completes with rather

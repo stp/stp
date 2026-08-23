@@ -59,35 +59,20 @@ struct float_size
 };
 
 // One component -- index or element -- of a parsed (Array X Y) sort, and
-// the assembled pair; parser plumbing like float_size. `width` is the bit
-// width the sort is laid out on: the declared width for a bitvector, the
-// packed width for a float, five for a rounding mode.
+// the assembled pair; parser plumbing like float_size. Keeping the complete
+// SourceSort here, rather than just a carrier width and a few special cases,
+// preserves the identity of a sort introduced by declare-sort.
 struct array_sort_component
 {
-  enum Kind
+  explicit array_sort_component(const SourceSort& source_sort)
+      : sort(source_sort)
   {
-    BITVECTOR,
-    FLOATINGPOINT,
-    ROUNDINGMODE
-  };
-  Kind kind;
-  unsigned width;
-  unsigned exp_bits; // FLOATINGPOINT only
-  unsigned sig_bits; // FLOATINGPOINT only
-
-  SourceSort sourceSort() const
-  {
-    switch (kind)
-    {
-      case BITVECTOR:
-        return SourceSort::bitVector(width);
-      case FLOATINGPOINT:
-        return SourceSort::floatingPoint(exp_bits, sig_bits);
-      case ROUNDINGMODE:
-        return SourceSort::roundingMode();
-    }
-    return SourceSort::unknown();
+    assert(sort.isScalar());
   }
+
+  SourceSort sort;
+  unsigned width() const { return sort.packedWidth(); }
+  SourceSort sourceSort() const { return sort; }
 };
 
 struct array_sort
@@ -321,6 +306,14 @@ private:
   bool uf_option_before_logic = false;
   void restoreUFOptionAfterLogic();
 
+  // QF_AX needs declared sorts and extensional array equality, but it does
+  // not contain uninterpreted functions. Keep that selection separate from
+  // enable_uninterpreted_functions and restore the caller's array-equality
+  // option when reset clears the logic or parser teardown ends the session.
+  bool ax_enabled_by_logic = false;
+  bool array_equality_option_before_logic = false;
+  void restoreArrayEqualityOptionAfterLogic();
+
   // Unless --incremental=on or an explicit threshold overrides it, pure
   // QF_BV/QF_ABV sessions delay the persistent driver until solve 32; other
   // and unknown logics retain solve 3. The first solves carry the largest
@@ -488,9 +481,14 @@ public:
   DLL_PUBLIC bool isSymbolAlreadyDeclared(std::string name);
 
   // Retain the SMT-LIB2 set-logic classification needed by automatic
-  // incremental engagement and select UF when the logic names it. reset
-  // clears both selections; reset-assertions retains them.
+  // incremental engagement, select UF when the logic names it, and select
+  // declared-sort arrays plus extensional equality for QF_AX. reset clears
+  // these selections; reset-assertions retains them.
   DLL_PUBLIC void setLogic(const std::string& logic);
+
+  // declare-sort is part of the UF logics and QF_AX. The latter deliberately
+  // does not turn on nonzero-arity UF declarations in the lexer/parser.
+  bool declaredSortsEnabled() const;
 
   // Create the node, then "new" it.
   DLL_PUBLIC ASTNode* newNode(const Kind k, const ASTNode& n0,
