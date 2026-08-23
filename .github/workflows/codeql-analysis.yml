@@ -91,6 +91,7 @@ jobs:
         cd build
         cmake \
           -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" \
+          -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" \
           -DENABLE_AUTO_DOWNLOAD:BOOL=ON \
           -DUSE_MINISAT:BOOL=ON \
           -DUSE_CRYPTOMINISAT:STRING=ON \

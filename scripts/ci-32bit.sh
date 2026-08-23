@@ -47,6 +47,7 @@ cd build-32bit
 cmake \
   -DUSE_CADICAL:BOOL=ON \
   -DSTP_DEP_DIR:PATH="${stp_root}/deps/install" \
+  -DFETCHCONTENT_BASE_DIR:PATH="${stp_root}/deps/fetch" \
   -DENABLE_AUTO_DOWNLOAD:BOOL=ON \
   -DUSE_CRYPTOMINISAT:STRING=OFF \
   -DENABLE_TESTING:BOOL=ON \
