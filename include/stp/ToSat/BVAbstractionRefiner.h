@@ -187,6 +187,10 @@ struct BVTermAbstraction
   unsigned schemaRounds = 0;
   // Which of the unconditional schemas are already in the solver.
   unsigned installedSchemas = 0;
+  // How far up the exact encoding has been pushed, for an escalation that
+  // goes a piece at a time; see bv_term_abstraction_inc_bitblast. Zero
+  // until the first piece, and equal to the width once `defined` is set.
+  unsigned blastedBits = 0;
   // The bits of -operand[i], minted on first use by the NegPow2 schema and
   // kept because that schema can fire once per power of two and would
   // otherwise pay for the same negation circuit every time.

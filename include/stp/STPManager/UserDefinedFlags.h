@@ -392,6 +392,17 @@ public:
   // Zero turns the scaling off and leaves the flat ceiling as the
   // allowance, which is the configuration this replaced.
   unsigned bv_term_abstraction_value_divisor = 8;
+  // Escalate an abstracted BVMULT a piece at a time rather than all at once:
+  // encode only the bits up to and a little past the lowest one the
+  // candidate got wrong, and come back for more if that does not settle the
+  // query. The low bits of a truncated product depend only on the low bits
+  // of its operands, which is what makes the partial encoding a theorem
+  // rather than a guess -- and is why it is BVMULT alone. A quotient's low
+  // bits depend on the whole of both operands.
+  //
+  // Off by default: its benefit has not been measured, and each partial
+  // encoding repeats the work for all lower bits.
+  bool bv_term_abstraction_inc_bitblast = false;
   // Refine an abstracted BVMULT with an algebraic fact about every pair of
   // operands -- see MulSchema -- whenever the candidate contradicts one,
   // and only fall back on ruling out the pair it holds when none of them

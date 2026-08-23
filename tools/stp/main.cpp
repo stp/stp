@@ -372,6 +372,13 @@ void ExtraMain::create_options()
       ->group(refinement_group)
       ->capture_default_str();
 
+  bool_arg("--bv-term-abstraction-inc-bitblast",
+           bm->UserFlags.bv_term_abstraction_inc_bitblast,
+           "escalate an abstracted BVMULT a piece at a time: encode the bits "
+           "up to and a little past the lowest one the candidate got wrong, "
+           "rather than the whole width at once",
+           refinement_group);
+
   app.add_flag("--uninterpreted-functions",
                bm->UserFlags.enable_uninterpreted_functions,
                "decide uninterpreted functions over Bool, bit-vector, "

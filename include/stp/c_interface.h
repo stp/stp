@@ -446,7 +446,19 @@ enum ifaceflag_t
   //! negative value is refused with a nonfatal diagnostic. This is the C
   //! API's way to reach --bv-term-abstraction-value-divisor (default 8).
   //!
-  BV_TERM_ABSTRACTION_VALUE_DIVISOR
+  BV_TERM_ABSTRACTION_VALUE_DIVISOR,
+
+  //! Whether an abstracted BVMULT escalates a piece at a time rather than
+  //! encoding its whole width at once.
+  //!
+  //! `param_value` nonzero encodes only the bits up to and a little past
+  //! the lowest one the candidate got wrong; zero (the default) encodes the
+  //! whole operation. BVMULT alone, because the low bits of a truncated
+  //! product depend only on the low bits of its operands and a quotient's
+  //! do not. This is the C API's way to reach
+  //! --bv-term-abstraction-inc-bitblast.
+  //!
+  BV_TERM_ABSTRACTION_INC_BITBLAST
 
 };
 

@@ -710,6 +710,44 @@ MulSchemaChoice chooseMulSchema(const std::vector<bool>& aBits,
   return MulSchemaChoice();
 }
 
+// How far past the lowest wrong bit a piece-at-a-time escalation reaches.
+// A fixed 32-bit step; there is no measurement behind this value, which is
+// part of why the flag that reaches it is off.
+static const unsigned BV_INC_BITBLAST_STEP = 32;
+
+// The operation again, narrowed to its low `upto` bits.
+//
+// The low bits of a truncated product depend only on the low bits of its
+// operands, so `t[u:0] = (a[u:0] * b[u:0])[u:0]` is a theorem about the
+// whole multiplication rather than an approximation of it -- which is what
+// lets a piece of the encoding be installed and the rest left for later.
+// The narrowed operands are real extracts and not merely a smaller width
+// passed alongside the same node, because the multiplier reads its operands
+// for constant detection and Booth recoding and would read the wrong values
+// out of the wider ones.
+//
+// A null node comes back where the narrowing does not leave a
+// multiplication standing -- the factory folds a product of two constants,
+// which cannot reach here from a query the simplifier has been over, but
+// costs one branch to be sure of. The caller encodes the whole width
+// instead.
+static ASTNode narrowedProduct(STPMgr* bm, const ASTNode& term, unsigned upto)
+{
+  NodeFactory* nf = bm->defaultNodeFactory;
+  const ASTNode high = bm->CreateBVConst(32, upto - 1);
+  const ASTNode low = bm->CreateZeroConst(32);
+
+  ASTNode operands[2];
+  for (unsigned i = 0; i < 2; ++i)
+    operands[i] = (term[i].GetValueWidth() == upto)
+                      ? term[i]
+                      : nf->CreateTerm(BVEXTRACT, upto, term[i], high, low);
+
+  const ASTNode narrowed =
+      nf->CreateTerm(BVMULT, upto, operands[0], operands[1]);
+  return narrowed.GetKind() == BVMULT ? narrowed : ASTNode();
+}
+
 unsigned valueLemmaAllowance(const UserDefinedFlags& uf, unsigned width)
 {
   const unsigned ceiling = uf.bv_term_abstraction_rounds;
@@ -838,6 +876,10 @@ unsigned BVAbstractionRefiner::refineTerms(
     // rather than below because it is read off the model and the clause
     // phase must not touch the model.
     MulSchemaChoice schema;
+    // The lowest bit the candidate's result got wrong, which is where a
+    // piece-at-a-time escalation starts from. Always below the width: this
+    // record exists because some bit is wrong.
+    unsigned lowestWrongBit;
   };
 
   std::vector<InconsistentCmp> incCmps;
@@ -1025,10 +1067,10 @@ unsigned BVAbstractionRefiner::refineTerms(
         actual[bit] =
             (solver.modelValue(resultVars[bit]) == solver.true_literal());
 
-      bool consistent = true;
+      unsigned lowestWrongBit = W;
       for (unsigned bit = 0; bit < W; ++bit)
-        if (actual[bit] != expected[bit]) { consistent = false; break; }
-      if (consistent) continue;
+        if (actual[bit] != expected[bit]) { lowestWrongBit = bit; break; }
+      if (lowestWrongBit == W) continue;
 
       // Only BVMULT, and only while there is allowance left. Schemas are
       // spent from a separate purse: one is both cheaper and stronger than
@@ -1048,7 +1090,7 @@ unsigned BVAbstractionRefiner::refineTerms(
         schema = chooseMulSchema(aBits, bBits, actual, abs.installedSchemas);
 
       incDivMul.push_back({idx, std::move(aBits), std::move(bBits),
-                            std::move(expected), schema});
+                            std::move(expected), schema, lowestWrongBit});
     }
   }
 
@@ -1320,13 +1362,50 @@ unsigned BVAbstractionRefiner::refineTerms(
     const unsigned limit = valueLemmaAllowance(bm->UserFlags, W);
     if (limit != 0 && abs.blockedRounds >= limit)
     {
-      BVExactEncoder(bm).encode(solver, abs.termNode, W, aVars, bVars,
+      // All of it, unless the piece-at-a-time escalation is on and this is
+      // a multiplication. A piece reaches past the lowest bit the candidate
+      // got wrong, which is at or above everything already encoded -- the
+      // bits below are pinned exactly, so no candidate can disagree there
+      // -- and so every round pushes the encoding strictly further up and
+      // the last one finishes it.
+      //
+      // Each piece is a whole circuit for the bits below it, so a
+      // multiplication that takes several of them pays for the low bits
+      // more than once. This implementation does not reuse the lower-bit
+      // circuit from an earlier piece, which is one reason the flag is off
+      // until something measures it.
+      unsigned upto = W;
+      ASTNode encodeAs = abs.termNode;
+      if (bm->UserFlags.bv_term_abstraction_inc_bitblast &&
+          abs.opKind == BVMULT && inc.lowestWrongBit + 1 < W)
+      {
+        const unsigned reach = inc.lowestWrongBit + BV_INC_BITBLAST_STEP + 1;
+        if (reach < W)
+        {
+          const ASTNode narrowed = narrowedProduct(bm, abs.termNode, reach);
+          if (!narrowed.IsNull())
+          {
+            upto = reach;
+            encodeAs = narrowed;
+          }
+        }
+      }
+
+      BVExactEncoder(bm).encode(solver, encodeAs, upto, aVars, bVars,
                                 resultVars);
+      abs.blastedBits = upto;
+      abs.defined = (upto == W);
+
       if (bm->UserFlags.stats_flag)
-        std::cerr << "BV abstraction: encoding "
-                  << _kind_names[abs.opKind] << " exactly after "
-                  << abs.blockedRounds << " blocking lemmas" << std::endl;
-      abs.defined = true;
+      {
+        std::cerr << "BV abstraction: encoding " << _kind_names[abs.opKind];
+        if (!abs.defined)
+          std::cerr << " up to bit " << (upto - 1);
+        else
+          std::cerr << " exactly";
+        std::cerr << " after " << abs.blockedRounds << " blocking lemmas"
+                  << std::endl;
+      }
       refined++;
       continue;
     }

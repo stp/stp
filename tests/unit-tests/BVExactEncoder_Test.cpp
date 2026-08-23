@@ -286,4 +286,46 @@ TEST_F(BVExactEncoderTest, TheMappedEncodingCostsFewerClausesThanWrittenOutGates
     }
 }
 
+// Why the piece-at-a-time escalation is BVMULT and nothing else.
+//
+// --bv-term-abstraction-inc-bitblast encodes only the low bits of an
+// abstracted operation and comes back for the rest, which is sound exactly
+// when those bits are a function of the operands' low bits alone. For a
+// truncated product they are: carries travel upwards and never down. So the
+// narrowed encoding the refinement installs is a theorem about the whole
+// multiplication and not an approximation of it, and the bits it leaves free
+// stay free rather than being pinned to something wrong.
+TEST_F(BVExactEncoderTest, ANarrowedProductAgreesWithTheWideOneOnTheLowBits)
+{
+  const unsigned wide = 8;
+  const unsigned wideValues = 1u << wide;
+
+  for (unsigned a = 0; a < wideValues; ++a)
+    for (unsigned b = 0; b < wideValues; ++b)
+    {
+      const unsigned product = (a * b) & (wideValues - 1);
+      for (unsigned upto = 1; upto <= wide; ++upto)
+      {
+        const unsigned mask = (1u << upto) - 1;
+        EXPECT_EQ(product & mask, ((a & mask) * (b & mask)) & mask)
+            << "a=" << a << " b=" << b << " upto=" << upto;
+      }
+    }
+}
+
+// ... and division is not like that, which is why it escalates whole. 8 / 5
+// is 1, but the low two bits of the operands are 0 and 1, and 0 / 1 is 0.
+// A quotient's low bits depend on the whole of both operands, so a narrowed
+// encoding of one is not a weaker claim than the right one but a different
+// claim, and installing it would pin the abstraction to a value the query
+// does not give it.
+TEST_F(BVExactEncoderTest, ANarrowedQuotientDoesNotAgreeWithTheWideOne)
+{
+  const unsigned mask = 0x3u;
+  EXPECT_EQ(1u, 8u / 5u);
+  EXPECT_NE((8u / 5u) & mask, ((8u & mask) / ((5u & mask) == 0 ? 1u
+                                                              : (5u & mask)))
+                                  & mask);
+}
+
 } // namespace

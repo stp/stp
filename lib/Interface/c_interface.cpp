@@ -545,6 +545,9 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
     case BV_TERM_ABSTRACTION_SCHEMAS:
       b->UserFlags.bv_term_abstraction_schemas = param_value != 0;
       break;
+    case BV_TERM_ABSTRACTION_INC_BITBLAST:
+      b->UserFlags.bv_term_abstraction_inc_bitblast = param_value != 0;
+      break;
     // Every field below is unsigned in UserFlags, so a negative value would
     // wrap to something enormous: for a width, a threshold no term can reach;
     // for a budget, no limit at all. Refuse it and leave the field as it was.

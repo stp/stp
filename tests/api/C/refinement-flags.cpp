@@ -82,6 +82,7 @@ TEST(refinement_flags, DefaultsAreTheOnesTheCommandLineDocuments)
   EXPECT_EQ(32u, flags(vc).bv_term_abstraction_rounds);
   EXPECT_TRUE(flags(vc).bv_term_abstraction_schemas);
   EXPECT_EQ(8u, flags(vc).bv_term_abstraction_value_divisor);
+  EXPECT_FALSE(flags(vc).bv_term_abstraction_inc_bitblast);
   vc_Destroy(vc);
 }
 
@@ -160,6 +161,11 @@ TEST(refinement_flags, EachFlagReachesTheFieldTheCLIWrites)
   EXPECT_EQ(0u, flags(vc).bv_term_abstraction_value_divisor);
   vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_VALUE_DIVISOR, 16);
   EXPECT_EQ(16u, flags(vc).bv_term_abstraction_value_divisor);
+
+  vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_INC_BITBLAST, 1);
+  EXPECT_TRUE(flags(vc).bv_term_abstraction_inc_bitblast);
+  vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_INC_BITBLAST, 0);
+  EXPECT_FALSE(flags(vc).bv_term_abstraction_inc_bitblast);
 
   // Zero is a meaning of its own for both of these, not an absence: install
   // every conflict the candidate exposes, and a budget of no gates at all.
