@@ -4427,6 +4427,7 @@ BBNode BitBlaster::BBfpAddIsZero(const ASTNode& term, BBNodeSet& support)
   const unsigned sb = sort.significandWidth();
   const unsigned w = sort.packedWidth();
   const unsigned eb = sort.exponentWidth();
+  (void)eb;
   assert(sb >= 2 && eb >= 2 && w == sb + eb);
 
   const BBNodeVec pa = BBTerm(term[1], support);
