@@ -99,7 +99,7 @@ runs:
       ./scripts/deps/setup-cms.sh
 
   # Outside the cached step, as in ci.yml's gcc/clang job: the pinned
-  # tarball is ~300KB and builds in seconds.
+  # mirror is small and builds in seconds.
   - name: LibBF (real-literal folding)
     shell: bash
     run: ./scripts/deps/setup-libbf.sh

@@ -22,12 +22,12 @@ On a Debian-like platform most of it comes from the package manager:
 
 .. code-block:: bash
 
-    sudo apt-get install git build-essential cmake bison flex patch python3
+    sudo apt-get install git build-essential cmake bison flex python3
 
 A python3 interpreter is needed at build time -- it generates the AST kind
 tables -- and also for the Python interface and the test suite. git is needed
-for the submodules and for the vendored-patch step that runs at configure
-time; ``patch`` is used when building LibBF.
+for the submodules, for the vendored-patch step that runs at configure time,
+and to fetch LibBF.
 
 The SAT backends bring their own dependencies, which are needed only if you
 build that backend, and which the ``scripts/deps`` script for each one names:
@@ -45,11 +45,17 @@ One is fetched and built by a script rather than vendored:
 `LibBF <https://bellard.org/libbf/>`__, which converts the real literals
 in floating-point input -- ``((_ to_fp 8 24) RNE 1.5)``. It is required.
 Run ``scripts/deps/setup-libbf.sh`` from the top of the source tree
-before configuring: it downloads the pinned release tarball, checks its
-hash, applies STP's MSVC portability patch, and builds ``libbf.a`` into
-``deps/libbf``, where the build looks by default. Set ``LIBBF_TARBALL``
-to a pre-downloaded copy for an offline build, or ``LIBBF_DIR`` at
-configure time to consume a copy built somewhere else.
+before configuring: it clones `stp/libbf <https://github.com/stp/libbf>`__
+at a pinned commit and builds ``libbf.a`` into ``deps/libbf``, where the
+build looks by default. Point ``LIBBF_DIR`` at a copy built somewhere else
+to skip the script -- an offline build wants that, since the script clones.
+
+Upstream LibBF publishes release tarballs and no git repository, which is
+what ``stp/libbf`` is for. It is laid out like STP's ABC fork: ``master``
+holds the release tarballs verbatim, one commit each, and ``stp`` -- the
+branch the pin names -- adds STP's MSVC portability changes on top. Moving
+to a newer release means importing its tarball there and rebasing ``stp``
+onto it, then moving the pin here.
 
 SAT backends
 ------------
