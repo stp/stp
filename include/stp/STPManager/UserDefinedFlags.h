@@ -378,6 +378,13 @@ public:
   // on a query the unabstracted solve answers in five hundredths of one.
   // Zero never escalates, which is what this was before.
   unsigned bv_term_abstraction_rounds = 32;
+  // Refine an abstracted BVMULT with an algebraic fact about every pair of
+  // operands -- see MulSchema -- whenever the candidate contradicts one,
+  // and only fall back on ruling out the pair it holds when none of them
+  // does. Off restores the blocking lemma as the only refinement there is,
+  // which is what this was; it is the comparison the schemas have to earn
+  // their keep against.
+  bool bv_term_abstraction_schemas = true;
 
   // You can select these with any combination you want of true & false.
   bool division_variant_1 = true;
@@ -599,6 +606,11 @@ public:
     // Rounds the CEGAR refiner ran, and blocking lemmas it installed.
     uint64_t bv_refinement_rounds = 0;
     uint64_t bv_blocking_lemmas = 0;
+    // Algebraic schema lemmas installed over an abstracted BVMULT. Counted
+    // apart from the blocking lemmas above because the two are not
+    // interchangeable: the same number of each says very different things
+    // about how a query was decided.
+    uint64_t bv_schema_lemmas = 0;
     // Uninterpreted-function applications the lowering decided, and the
     // constraints it installed for them.
     uint64_t uf_applications_lowered = 0;

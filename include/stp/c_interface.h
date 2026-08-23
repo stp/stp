@@ -424,7 +424,17 @@ enum ifaceflag_t
   //! the count unchanged. This is the C API's way to reach
   //! --bv-term-abstraction-rounds.
   //!
-  BV_TERM_ABSTRACTION_ROUNDS
+  BV_TERM_ABSTRACTION_ROUNDS,
+
+  //! Whether an abstracted BVMULT is refined with algebraic facts about
+  //! every pair of operands before falling back on ruling out the pair the
+  //! candidate holds.
+  //!
+  //! `param_value` nonzero turns them on (the default), zero leaves the
+  //! blocking lemma as the only refinement. This is the C API's way to
+  //! reach --bv-term-abstraction-schemas.
+  //!
+  BV_TERM_ABSTRACTION_SCHEMAS
 
 };
 
@@ -678,6 +688,11 @@ enum stp_counter_t
   //! abstracted BVMULT, BVDIV or BVMOD.
   STP_COUNTER_BV_REFINEMENT_ROUNDS,
   STP_COUNTER_BV_BLOCKING_LEMMAS,
+
+  //! ... and the algebraic schema lemmas it installed over an abstracted
+  //! BVMULT instead. A round spends one or the other, never both, so these
+  //! two split STP_COUNTER_BV_REFINEMENT_ROUNDS by what it bought.
+  STP_COUNTER_BV_SCHEMA_LEMMAS,
 
   //! Uninterpreted-function applications the lowering decided, and the
   //! constraints installed for them -- eagerly during lowering, or by the

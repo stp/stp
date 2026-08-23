@@ -718,8 +718,15 @@ TEST_F(BVEQAbstractionTest, CongruenceChainsRunThroughDefinedEqualities)
 // blaster proxies constants too, pinning them by biconditionals -- so
 // refinement has no variables to mint. It used to mint a fresh pinned
 // vector for a constant operand on every round of the enumeration.
+//
+// The schemas are turned off for it. They are what a round spends *instead*
+// of a blocking lemma, and this candidate contradicts one of them -- its
+// first operand is a power of two -- so with them on there is no blocking
+// round here to examine. The round that fires instead is the test below.
 TEST_F(BVEQAbstractionTest, BlockingRoundReusesTheRegisteredConstant)
 {
+  mgr.UserFlags.bv_term_abstraction_schemas = false;
+
   ASTNode a = makeSymbol("mc_a", 4);
   ASTNode three = mgr.CreateBVConst(4, 3);
   ASTNode product = factory->CreateTerm(BVMULT, 4, a, three);
@@ -756,6 +763,59 @@ TEST_F(BVEQAbstractionTest, BlockingRoundReusesTheRegisteredConstant)
 
   EXPECT_EQ(1u, refiner.refine(solver, bits));
   EXPECT_EQ(1u, refiner.terms()[0].blockedRounds);
+  EXPECT_EQ(0u, refiner.terms()[0].schemaRounds);
+  EXPECT_FALSE(refiner.terms()[0].defined);
+  EXPECT_EQ(0u, solver.newVarCalls);
+  EXPECT_TRUE(solver.someClauseBlocksModel());
+}
+
+// The same candidate with the schemas left on, which is the default: the
+// round is spent on the fact that a power-of-two operand turns the product
+// into a shift, and not on ruling out the one pair of values.
+//
+// Both counters are checked, because they are what tells the two apart from
+// outside -- a round spends one or the other and never both. The lemma still
+// blocks the candidate, which is what refinement owes whoever called it, and
+// it still mints nothing: the shift is written over the operand proxies and
+// the abstraction's own result bits, all of which are already in the solver.
+TEST_F(BVEQAbstractionTest, ASchemaRoundIsSpentWhereTheCandidateContradictsOne)
+{
+  ASTNode a = makeSymbol("ms_a", 4);
+  ASTNode three = mgr.CreateBVConst(4, 3);
+  ASTNode product = factory->CreateTerm(BVMULT, 4, a, three);
+
+  BVAbstractionRefiner refiner(&mgr);
+  BVTermAbstraction record;
+  record.termNode = product;
+  record.opKind = BVMULT;
+  record.operands[0] = a;
+  record.operands[1] = three;
+  record.numOperands = 2;
+  record.width = 4;
+  refiner.terms().push_back(record);
+
+  ToSATBase::ASTNodeToSATVar bits;
+  bits[a] = std::vector<unsigned>{10, 11, 12, 13};
+  bits[three] = std::vector<unsigned>{20, 21, 22, 23};
+  bits[product] = std::vector<unsigned>{30, 31, 32, 33};
+
+  RecordingSolver solver;
+  // a = 2, the proxies hold the constant's own 3, and the result reads 0
+  // where 2 * 3 is 6. Two is a power of two, so what the round owes is
+  // "a = 2 -> t = 3 << 1" rather than "not (a = 2 and b = 3) -> t = 6".
+  const bool scripted[12] = {false, true, false, false,  // a = 0b0010
+                             true,  true, false, false,  // proxies = 0b0011
+                             false, false, false, false}; // result = 0
+  for (unsigned i = 0; i < 4; i++)
+  {
+    solver.model[10 + i] = scripted[i];
+    solver.model[20 + i] = scripted[4 + i];
+    solver.model[30 + i] = scripted[8 + i];
+  }
+
+  EXPECT_EQ(1u, refiner.refine(solver, bits));
+  EXPECT_EQ(1u, refiner.terms()[0].schemaRounds);
+  EXPECT_EQ(0u, refiner.terms()[0].blockedRounds);
   EXPECT_FALSE(refiner.terms()[0].defined);
   EXPECT_EQ(0u, solver.newVarCalls);
   EXPECT_TRUE(solver.someClauseBlocksModel());

@@ -726,6 +726,247 @@ static void encodeDivMod(SATSolver& solver, const std::vector<unsigned>& a,
     addEquiv(solver, result[j], answer[j]);
 }
 
+// z <-> x | y
+static unsigned mkOr(SATSolver& solver, unsigned x, unsigned y)
+{
+  const unsigned z = freshVar(solver);
+  SATSolver::vec_literals cl;
+  cl.clear(); cl.push(SATSolver::mkLit(x, true));  cl.push(SATSolver::mkLit(z, false)); solver.addClause(cl);
+  cl.clear(); cl.push(SATSolver::mkLit(y, true));  cl.push(SATSolver::mkLit(z, false)); solver.addClause(cl);
+  cl.clear(); cl.push(SATSolver::mkLit(x, false)); cl.push(SATSolver::mkLit(y, false)); cl.push(SATSolver::mkLit(z, true)); solver.addClause(cl);
+  return z;
+}
+
+// z <-> x ^ y
+static unsigned mkXor(SATSolver& solver, unsigned x, unsigned y)
+{
+  const unsigned z = freshVar(solver);
+  SATSolver::vec_literals cl;
+  cl.clear(); cl.push(SATSolver::mkLit(x, true));  cl.push(SATSolver::mkLit(y, true));  cl.push(SATSolver::mkLit(z, true));  solver.addClause(cl);
+  cl.clear(); cl.push(SATSolver::mkLit(x, false)); cl.push(SATSolver::mkLit(y, false)); cl.push(SATSolver::mkLit(z, true));  solver.addClause(cl);
+  cl.clear(); cl.push(SATSolver::mkLit(x, true));  cl.push(SATSolver::mkLit(y, false)); cl.push(SATSolver::mkLit(z, false)); solver.addClause(cl);
+  cl.clear(); cl.push(SATSolver::mkLit(x, false)); cl.push(SATSolver::mkLit(y, true));  cl.push(SATSolver::mkLit(z, false)); solver.addClause(cl);
+  return z;
+}
+
+// The bits of -x. Two's complement negation is ~x + 1, and the whole of that
+// carry is a prefix OR: bit j comes out flipped exactly when some bit below
+// j is set. Below the lowest set bit nothing flips, at it the 1 survives,
+// and above it every bit is complemented -- which is the same three cases
+// read off the addition.
+static std::vector<unsigned> encodeNegate(SATSolver& solver,
+                                          const std::vector<unsigned>& x,
+                                          unsigned width)
+{
+  std::vector<unsigned> neg(width);
+  unsigned lower = pinnedVar(solver, false);
+  for (unsigned j = 0; j < width; ++j)
+  {
+    neg[j] = mkXor(solver, x[j], lower);
+    if (j + 1 < width)
+      lower = mkOr(solver, lower, x[j]);
+  }
+  return neg;
+}
+
+// The exponent of a power of two, or -1 for anything else. Exactly one bit
+// set: zero has none and is not one.
+static int powerOfTwoExponent(const std::vector<bool>& bits)
+{
+  int found = -1;
+  for (unsigned i = 0; i < bits.size(); ++i)
+    if (bits[i])
+    {
+      if (found >= 0)
+        return -1;
+      found = (int)i;
+    }
+  return found;
+}
+
+// The same negation encodeNegate() builds, over values rather than
+// variables, so that the scan can decide whether the schema applies without
+// putting a single clause in the solver.
+static std::vector<bool> negatedValue(const std::vector<bool>& bits)
+{
+  std::vector<bool> out(bits.size());
+  bool lower = false;
+  for (unsigned j = 0; j < bits.size(); ++j)
+  {
+    out[j] = (bits[j] != lower);
+    lower = lower || bits[j];
+  }
+  return out;
+}
+
+// Trailing zeros, which is the whole width when nothing is set.
+static unsigned trailingZeros(const std::vector<bool>& bits)
+{
+  for (unsigned i = 0; i < bits.size(); ++i)
+    if (bits[i])
+      return i;
+  return bits.size();
+}
+
+// Does the candidate's product agree with `other` shifted up by `shift`?
+static bool productIsShift(const std::vector<bool>& other, unsigned shift,
+                           const std::vector<bool>& tBits)
+{
+  for (unsigned j = 0; j < tBits.size(); ++j)
+  {
+    const bool shifted = (j >= shift) && other[j - shift];
+    if (tBits[j] != shifted)
+      return false;
+  }
+  return true;
+}
+
+MulSchemaChoice chooseMulSchema(const std::vector<bool>& aBits,
+                                const std::vector<bool>& bBits,
+                                const std::vector<bool>& tBits,
+                                unsigned installedSchemas)
+{
+  const std::vector<bool>* ops[2] = {&aBits, &bBits};
+
+  // a = 2^k -> t = b << k, and the same read the other way round. Where it
+  // applies it says the most of the four: the shift *is* the product for
+  // that operand value, so one lemma settles every b at once where a
+  // blocking lemma settles one pair. It therefore also always fires when it
+  // applies -- this is only ever called over a candidate whose product is
+  // already known wrong, and for a power-of-two operand "wrong" and
+  // "disagrees with the shift" are the same statement.
+  for (unsigned i = 0; i < 2; ++i)
+  {
+    const int k = powerOfTwoExponent(*ops[i]);
+    if (k >= 0 && !productIsShift(*ops[1 - i], (unsigned)k, tBits))
+      return {MulSchema::Pow2, i, (unsigned)k};
+  }
+
+  // a = -2^k -> t = (-b) << k. A power of two is skipped rather than
+  // excluded by name: that covers the minimum signed value, which is its own
+  // negation and which the schema above has already taken.
+  for (unsigned i = 0; i < 2; ++i)
+  {
+    if (powerOfTwoExponent(*ops[i]) >= 0)
+      continue;
+    const int k = powerOfTwoExponent(negatedValue(*ops[i]));
+    if (k >= 0 &&
+        !productIsShift(negatedValue(*ops[1 - i]), (unsigned)k, tBits))
+      return {MulSchema::NegPow2, i, (unsigned)k};
+  }
+
+  // The product carries at least as many trailing zeros as either operand.
+  // Check operand 1 before operand 0 so schema selection remains
+  // deterministic for this commutative operator.
+  static const unsigned tzInstalled[2] = {
+      MUL_SCHEMA_INSTALLED_TRAILING_ZEROS_0,
+      MUL_SCHEMA_INSTALLED_TRAILING_ZEROS_1};
+  for (unsigned pass = 0; pass < 2; ++pass)
+  {
+    const unsigned i = 1 - pass;
+    if ((installedSchemas & tzInstalled[i]) != 0)
+      continue;
+    const unsigned zeros = trailingZeros(*ops[i]);
+    for (unsigned bit = 0; bit < zeros; ++bit)
+      if (tBits[bit])
+        return {MulSchema::TrailingZeros, i, 0};
+  }
+
+  // t[0] = a[0] & b[0].
+  if ((installedSchemas & MUL_SCHEMA_INSTALLED_ODD) == 0 &&
+      tBits[0] != (aBits[0] && bBits[0]))
+    return {MulSchema::Odd, 0, 0};
+
+  return MulSchemaChoice();
+}
+
+static const char* mulSchemaName(MulSchema schema)
+{
+  switch (schema)
+  {
+    case MulSchema::Odd: return "odd";
+    case MulSchema::TrailingZeros: return "trailing-zeros";
+    case MulSchema::Pow2: return "power-of-two";
+    case MulSchema::NegPow2: return "negated-power-of-two";
+    case MulSchema::None: break;
+  }
+  return "none";
+}
+
+// result[0] <-> a[0] & b[0].
+static void encodeMulOdd(SATSolver& solver, const std::vector<unsigned>& a,
+                         const std::vector<unsigned>& b,
+                         const std::vector<unsigned>& result)
+{
+  SATSolver::vec_literals cl;
+  cl.clear(); cl.push(SATSolver::mkLit(result[0], true));  cl.push(SATSolver::mkLit(a[0], false)); solver.addClause(cl);
+  cl.clear(); cl.push(SATSolver::mkLit(result[0], true));  cl.push(SATSolver::mkLit(b[0], false)); solver.addClause(cl);
+  cl.clear(); cl.push(SATSolver::mkLit(result[0], false)); cl.push(SATSolver::mkLit(a[0], true)); cl.push(SATSolver::mkLit(b[0], true)); solver.addClause(cl);
+}
+
+// result[i] -> some bit of `op` at or below i, one clause per bit. The
+// product cannot have fewer trailing zeros than an operand, and truncating
+// it to the width does not change its low bits, so this holds of the
+// truncated product too.
+static void encodeMulTrailingZeros(SATSolver& solver,
+                                   const std::vector<unsigned>& op,
+                                   const std::vector<unsigned>& result,
+                                   unsigned width)
+{
+  for (unsigned bit = 0; bit < width; ++bit)
+  {
+    SATSolver::vec_literals cl;
+    cl.push(SATSolver::mkLit(result[bit], true));
+    for (unsigned j = 0; j <= bit; ++j)
+      cl.push(SATSolver::mkLit(op[j], false));
+    solver.addClause(cl);
+  }
+}
+
+// fixed = fixedBits -> result = source << shift.
+//
+// The premise is the very disjunction a blocking lemma opens with -- false
+// exactly on the candidate's own operand value -- and that is the whole
+// difference between the two: this leaves the other operand free, so it
+// rules out 2^W pairs where the blocking lemma rules out one.
+static void encodeMulShiftUnderValue(SATSolver& solver,
+                                     const std::vector<unsigned>& fixedVars,
+                                     const std::vector<bool>& fixedBits,
+                                     const std::vector<unsigned>& source,
+                                     const std::vector<unsigned>& result,
+                                     unsigned width, unsigned shift)
+{
+  const auto guard = [&](SATSolver::vec_literals& cl) {
+    cl.clear();
+    for (unsigned i = 0; i < width; ++i)
+      cl.push(SATSolver::mkLit(fixedVars[i], fixedBits[i]));
+  };
+
+  SATSolver::vec_literals cl;
+  for (unsigned bit = 0; bit < width; ++bit)
+  {
+    if (bit < shift)
+    {
+      // Shifted in from below: zero, whatever the source holds.
+      guard(cl);
+      cl.push(SATSolver::mkLit(result[bit], true));
+      solver.addClause(cl);
+      continue;
+    }
+
+    const unsigned src = source[bit - shift];
+    guard(cl);
+    cl.push(SATSolver::mkLit(result[bit], true));
+    cl.push(SATSolver::mkLit(src, false));
+    solver.addClause(cl);
+
+    guard(cl);
+    cl.push(SATSolver::mkLit(result[bit], false));
+    cl.push(SATSolver::mkLit(src, true));
+    solver.addClause(cl);
+  }
+}
+
 unsigned BVAbstractionRefiner::refineTerms(
     SATSolver& solver, const ToSATBase::ASTNodeToSATVar& nodeToSATVar)
 {
@@ -744,6 +985,10 @@ unsigned BVAbstractionRefiner::refineTerms(
   struct InconsistentDivMul {
     size_t absIdx;
     std::vector<bool> aBits, bBits, expected;
+    // The algebraic fact this candidate contradicts, if any. Decided here
+    // rather than below because it is read off the model and the clause
+    // phase must not touch the model.
+    MulSchemaChoice schema;
   };
 
   std::vector<InconsistentCmp> incCmps;
@@ -923,16 +1168,34 @@ unsigned BVAbstractionRefiner::refineTerms(
         }
       }
 
+      // Read out in full rather than stopping at the first disagreement:
+      // the schemas below are chosen by what the candidate's own product
+      // *is*, not merely by the fact that it is wrong.
+      std::vector<bool> actual(W);
+      for (unsigned bit = 0; bit < W; ++bit)
+        actual[bit] =
+            (solver.modelValue(resultVars[bit]) == solver.true_literal());
+
       bool consistent = true;
       for (unsigned bit = 0; bit < W; ++bit)
-      {
-        bool r = (solver.modelValue(resultVars[bit]) == solver.true_literal());
-        if (r != expected[bit]) { consistent = false; break; }
-      }
+        if (actual[bit] != expected[bit]) { consistent = false; break; }
       if (consistent) continue;
 
+      // Only BVMULT, and only while there is allowance left. The allowance
+      // is the blocking lemmas' own, spent from a separate purse: a schema
+      // is both cheaper and stronger, so it should not bring the escalation
+      // forward -- but it must not push it out of reach either, and a
+      // candidate that keeps landing on fresh powers of two would buy a
+      // solve for each one. Division and remainder keep the blocking lemma
+      // as their only refinement; the facts here are about multiplication.
+      MulSchemaChoice schema;
+      const unsigned schemaLimit = bm->UserFlags.bv_term_abstraction_rounds;
+      if (abs.opKind == BVMULT && bm->UserFlags.bv_term_abstraction_schemas &&
+          (schemaLimit == 0 || abs.schemaRounds < schemaLimit))
+        schema = chooseMulSchema(aBits, bBits, actual, abs.installedSchemas);
+
       incDivMul.push_back({idx, std::move(aBits), std::move(bBits),
-                            std::move(expected)});
+                            std::move(expected), schema});
     }
   }
 
@@ -1122,6 +1385,69 @@ unsigned BVAbstractionRefiner::refineTerms(
     const std::vector<unsigned>& resultVars =
         encodedBitsOf(abs.termNode, abs.width, nodeToSATVar);
     unsigned W = abs.width;
+
+    // An algebraic fact the candidate contradicts, where there is one.
+    // Every branch here writes a theorem about the operation over the
+    // variables already in the solver -- the operand proxies and the
+    // abstraction's own result bits -- so none of it is retractable and
+    // none of it needs to be. What the candidate chose is only *which*
+    // theorem to spend a round on.
+    if (inc.schema.schema != MulSchema::None)
+    {
+      const unsigned chosen = inc.schema.operand;
+      const std::vector<unsigned>* opVars[2] = {&aVars, &bVars};
+      const std::vector<bool>* opBits[2] = {&inc.aBits, &inc.bBits};
+
+      switch (inc.schema.schema)
+      {
+        case MulSchema::Odd:
+          encodeMulOdd(solver, aVars, bVars, resultVars);
+          abs.installedSchemas |= MUL_SCHEMA_INSTALLED_ODD;
+          break;
+
+        case MulSchema::TrailingZeros:
+          encodeMulTrailingZeros(solver, *opVars[chosen], resultVars, W);
+          abs.installedSchemas |=
+              (chosen == 0 ? MUL_SCHEMA_INSTALLED_TRAILING_ZEROS_0
+                           : MUL_SCHEMA_INSTALLED_TRAILING_ZEROS_1);
+          break;
+
+        case MulSchema::Pow2:
+          encodeMulShiftUnderValue(solver, *opVars[chosen], *opBits[chosen],
+                                   *opVars[1 - chosen], resultVars, W,
+                                   inc.schema.shift);
+          break;
+
+        case MulSchema::NegPow2:
+        {
+          // The negation circuit is minted once and kept: this schema can
+          // fire once per power of two, and the operand proxies it is
+          // written over are the same variables every round -- the blaster
+          // registers them, so getOperandVars hands back the registry's
+          // entry rather than fresh bits.
+          const unsigned other = 1 - chosen;
+          if (abs.negatedOperand[other].empty())
+            abs.negatedOperand[other] =
+                encodeNegate(solver, *opVars[other], W);
+          encodeMulShiftUnderValue(solver, *opVars[chosen], *opBits[chosen],
+                                   abs.negatedOperand[other], resultVars, W,
+                                   inc.schema.shift);
+          break;
+        }
+
+        case MulSchema::None:
+          break;
+      }
+
+      abs.schemaRounds++;
+      bm->UserFlags.coverage.bv_schema_lemmas++;
+      if (bm->UserFlags.stats_flag)
+        std::cerr << "BV abstraction: BVMULT "
+                  << mulSchemaName(inc.schema.schema) << " lemma over operand "
+                  << chosen << std::endl;
+      refined++;
+      continue;
+    }
 
     // Once this abstraction has been blocked its allowance of times, stop
     // ruling out operand pairs one at a time and say what the operation is.

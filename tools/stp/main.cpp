@@ -346,6 +346,14 @@ void ExtraMain::create_options()
            "time, so turning them off leaves only the operations that define "
            "themselves in a single round",
            refinement_group);
+  bool_arg("--bv-term-abstraction-schemas",
+           bm->UserFlags.bv_term_abstraction_schemas,
+           "refine an abstracted BVMULT with algebraic facts that hold for "
+           "every pair of operands -- the product's trailing zeros, its low "
+           "bit, and the shift a power-of-two operand turns it into -- "
+           "before falling back on ruling out the one pair the candidate "
+           "holds",
+           refinement_group);
   app.add_option("--bv-term-abstraction-rounds",
                  bm->UserFlags.bv_term_abstraction_rounds,
                  "blocking lemmas one abstracted BVMULT/BVDIV/BVMOD may take "
