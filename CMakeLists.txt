@@ -987,39 +987,76 @@ endif()
 # thanks to MiniSat include-ing it n the header
 # -----------------------------------------------------------------------------
 if (USE_MINISAT)
-    find_package(ZLIB)
+    # REQUIRED: MiniSat's public headers include zlib.h, so a build without it
+    # cannot compile the MiniSat backend. Unqualified, find_package left
+    # ZLIB_INCLUDE_DIR empty and the failure surfaced minutes later, inside a
+    # MiniSat header, as a missing zlib.h with nothing to connect it back here.
+    find_package(ZLIB REQUIRED)
     include_directories(${ZLIB_INCLUDE_DIR})
 endif()
 
 # ----------
 # manpage
 # ----------
-if (${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+# Three-valued, because whether stp.1 is built and installed used to be decided
+# entirely by whether help2man happened to be on the build machine. That made
+# the contents of an install depend on something nobody had asked for and which
+# did not appear in the feature summary -- awkward for a packager, who wants
+# either a guarantee the page is there or a guarantee it is not.
+#
+#   IGNORE  build it if help2man is available          (the historical default)
+#   ON      build it; fail configure if help2man is missing
+#   OFF     never build it
+stp_option(BUILD_MANPAGE "Build and install the stp(1) manpage with help2man")
+
+if (NOT ${CMAKE_SYSTEM_NAME} MATCHES "Linux")
+    # help2man runs the binary it documents, so it is not something to attempt
+    # when the build may not be able to run its own output.
+    if (BUILD_MANPAGE)
+        message(FATAL_ERROR "BUILD_MANPAGE is ON but the manpage is only built on Linux")
+    endif()
+    set(BUILD_MANPAGE OFF)
+    message(STATUS "Not on Linux, not creating manpage")
+elseif (NOT BUILD_EXECUTABLES)
+    # There is no stp binary to extract --help from.
+    if (BUILD_MANPAGE)
+        message(FATAL_ERROR "BUILD_MANPAGE is ON but BUILD_EXECUTABLES is OFF, "
+                            "so there is no stp binary to document")
+    endif()
+    set(BUILD_MANPAGE OFF)
+elseif (NOT BUILD_MANPAGE STREQUAL "OFF")
     find_program(HELP2MAN_FOUND help2man)
     if (HELP2MAN_FOUND)
-        if (BUILD_EXECUTABLES)
-            ADD_CUSTOM_TARGET(man_stp
-                ALL
-                DEPENDS stp-bin
-            )
-
-            ADD_CUSTOM_COMMAND(
-                TARGET man_stp
-                COMMAND help2man
-                ARGS  --name="Simple Theorem Prover SMT solver" --version-string=${STP_FULL_VERSION} --help-option="--help" $<TARGET_FILE:stp-bin> -o ${CMAKE_CURRENT_BINARY_DIR}/stp.1
-            )
-
-            INSTALL(
-                FILES ${CMAKE_CURRENT_BINARY_DIR}/stp.1
-                DESTINATION ${CMAKE_INSTALL_PREFIX}/man/man1)
-            message(STATUS "Manpage will be created and installed")
-        endif()
+        set(BUILD_MANPAGE ON)
+    elseif (BUILD_MANPAGE)
+        message(FATAL_ERROR "BUILD_MANPAGE is ON but help2man was not found. "
+                            "Install help2man, or configure with -DBUILD_MANPAGE=OFF.")
     else()
-        MESSAGE(STATUS "Cannot find help2man, not creating manpage")
+        set(BUILD_MANPAGE OFF)
+        message(STATUS "Cannot find help2man, not creating manpage")
     endif()
 else()
-    MESSAGE(STATUS "Not on Linux, not creating manpage")
+    set(BUILD_MANPAGE OFF)
 endif()
+
+if (BUILD_MANPAGE)
+    ADD_CUSTOM_TARGET(man_stp
+        ALL
+        DEPENDS stp-bin
+    )
+
+    ADD_CUSTOM_COMMAND(
+        TARGET man_stp
+        COMMAND help2man
+        ARGS  --name="Simple Theorem Prover SMT solver" --version-string=${STP_FULL_VERSION} --help-option="--help" $<TARGET_FILE:stp-bin> -o ${CMAKE_CURRENT_BINARY_DIR}/stp.1
+    )
+
+    INSTALL(
+        FILES ${CMAKE_CURRENT_BINARY_DIR}/stp.1
+        DESTINATION ${CMAKE_INSTALL_PREFIX}/man/man1)
+    message(STATUS "Manpage will be created and installed")
+endif()
+add_feature_info(Manpage BUILD_MANPAGE "Builds and installs the stp(1) manpage")
 
 
 # -----------------------------------------------------------------------------

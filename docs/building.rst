@@ -200,6 +200,12 @@ These apply to all generators:
 -  ``USE_RISS`` -- build the Riss backend
 -  ``TUNE_NATIVE`` -- build with ``-mtune=native``
 -  ``WERROR`` -- treat compiler warnings as errors
+-  ``BUILD_MANPAGE`` -- build and install the ``stp(1)`` manpage, which
+   needs help2man. Three-valued: ``ON`` requires help2man and fails
+   configuration without it, ``OFF`` never builds the page, and if it is
+   left unset the page is built when help2man happens to be installed.
+   Packagers who need the page either present or absent for certain should
+   say which
 -  ``SYMFPU_INCLUDE_DIRS`` -- build against an external SymFPU clone
    rather than the vendored submodule (point it at the directory
    *containing* the clone)
