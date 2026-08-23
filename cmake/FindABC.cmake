@@ -97,11 +97,25 @@ if(NOT ABC_FOUND_SYSTEM)
     # ABC names its own CMAKE_C_FLAGS below, which replaces the common ones, so
     # the silencing every dependency gets has to be repeated here -- on every
     # compiler, not just the ones with a -ffunction-sections to go with it.
-    # Left out under MSVC, ABC emits warnings by the thousand, which is enough
-    # to get the interesting part of a failing build's log truncated away.
+    #
+    # This wins for GCC and Clang and loses to ABC under MSVC, where it is kept
+    # for the compilers it does help. ABC's CMakeLists runs ABC's Makefile to
+    # recover its CFLAGS and applies them with target_compile_options, which
+    # land after CMAKE_C_FLAGS; one of them is -Wall, which cl.exe accepts as a
+    # spelling of /Wall, so the last word is ABC's. That is why a failing MSVC
+    # dependency build is worth an uploaded log rather than the tail CMake
+    # prints: the error arrives under tens of thousands of warnings.
     string(APPEND ABC_EXTRA_FLAGS " ${STP_EP_NO_WARNINGS}")
     if(NOT MSVC)
         string(APPEND ABC_EXTRA_FLAGS " -ffunction-sections -fdata-sections")
+    else()
+        # abc_global.h does `#define inline __inline` for MSVC's benefit, and
+        # <xkeycheck.h> makes macroizing a keyword a hard #error. Only one
+        # translation unit in ABC is C++ and so reaches that header --
+        # src/map/if/acd/ac_wrapper.cpp -- but one is enough to stop the build.
+        # _ALLOW_KEYWORD_MACROS is the escape hatch MSVC documents for exactly
+        # this, and it is scoped to ABC's own compilation.
+        string(APPEND ABC_EXTRA_FLAGS " -D_ALLOW_KEYWORD_MACROS")
     endif()
 
     set(ABC_CMAKE_ARGS

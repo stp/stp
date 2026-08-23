@@ -24,7 +24,7 @@ rest come from the system.
 
 | Dependency | Pin | Built how | Consumed how |
 |---|---|---|---|
-| **LibBF** | `stp/libbf` @ `334e7aee` | `cc -O2 -fPIC -c` ×2, `ar rcs` | `LIBBF_DIR` (default `deps/libbf`) → `find_path`/`find_library`, then **global** `include_directories(SYSTEM)` + `link_libraries()`. Required. |
+| **LibBF** | `stp/libbf` @ `3df8db0a` | `cc -O2 -fPIC -c` ×2, `ar rcs` | `LIBBF_DIR` (default `deps/libbf`) → `find_path`/`find_library`, then **global** `include_directories(SYSTEM)` + `link_libraries()`. Required. |
 | **CaDiCaL** | `arminbiere/cadical` @ `rel-3.0.1`, overridable via `$CADICAL_TAG` | `./configure -fPIC && make` | `CADICAL_DIR` → `find_path(src/cadical.hpp)` + `find_library(... PATHS <dir>/build)`, both `NO_DEFAULT_PATH`; version read from the checkout's `VERSION` file; **global** `include_directories` + `link_libraries` |
 | **CryptoMiniSat** | `msoos/cryptominisat` @ `release/v5.14.7` | CMake, static+PIC, installed to `deps/install` | `find_package(cryptominisat5 CONFIG)` via `CMAKE_PREFIX_PATH`; needs `find_package(cadical/cadiback CONFIG QUIET)` first |
 | **MiniSat** | `stp/minisat` @ `14c78206` | CMake, static+PIC, installed to `deps/install` | `find_package(minisat)` then `find_package(minisat CONFIG)` |
@@ -505,7 +505,7 @@ if(NOT LibBF_FOUND_SYSTEM)
   # mirrors them: master holds the releases verbatim, the stp branch adds
   # the MSVC portability shims. A commit, not a tag -- that branch is
   # rebased onto each import.
-  set(LibBF_VERSION "334e7aeec2b0b2be7768285f279b99d1368c5fa9")
+  set(LibBF_VERSION "3df8db0a56efd2a621cd04dd16c881be66403f2a")
 
   ExternalProject_Add(LibBF-EP
     ${COMMON_EP_CONFIG}
