@@ -1,5 +1,8 @@
-; RUN: %solver --uninterpreted-functions --uf-ackermann=off --array-equality --incremental=off -s %s 2>&1 | %OutputCheck %s
-; RUN: %solver --uninterpreted-functions --uf-ackermann=off --array-equality --incremental=on -s %s 2>&1 | %OutputCheck %s
+; Both checkers have to be on the refinement path for their coordination to
+; be observable at all, so the array budget is pinned to zero. The eager arm
+; would retire the equality records and EXTCHK would never run.
+; RUN: %solver --uninterpreted-functions --uf-ackermann=off --array-equality --incremental=off --array-ackermann-budget=0 -s %s 2>&1 | %OutputCheck %s
+; RUN: %solver --uninterpreted-functions --uf-ackermann=off --array-equality --incremental=on --array-ackermann-budget=0 -s %s 2>&1 | %OutputCheck %s
 ; CHECK: Theory coordination: EXTCHK conflict; UFCHK and ordinary replay skipped
 ; CHECK: ^unsat
 ; CHECK: Theory coordination: EXTCHK skipped; UFCHK conflict; ordinary replay skipped

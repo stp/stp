@@ -963,6 +963,13 @@ bool ExtensionalityContext::eagerEqualityPreferred(const ASTNode& root) const
 {
   constexpr uint64_t expansionLimit = 1000;
 
+  // Zero is off, not "only what costs nothing". A query whose indexes are
+  // all constant estimates no comparisons at all, so a bare <= would take
+  // the arm at a budget of zero -- which is the one setting whose whole
+  // purpose is to leave the solve alone.
+  if (bm->UserFlags.array_eager_budget == 0)
+    return false;
+
   return arrayCongruenceEstimate(root) <= bm->UserFlags.array_eager_budget &&
          arrayEagerCostLessThan(root, expansionLimit);
 }

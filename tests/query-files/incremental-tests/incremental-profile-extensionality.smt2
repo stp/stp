@@ -1,7 +1,11 @@
 ; Extensionality emits its refinement lemma directly through SATSolver. The
 ; solver-wide submission counter must include that work in both the check and
 ; session totals, while the dedicated field identifies the refinement share.
-; RUN: %solver --incremental --array-equality --incremental-profile %s 2>&1 | %OutputCheck %s
+; The budget is pinned to zero to keep this on the refinement path: the
+; query is now affordable enough for the eager arm, which retires the
+; records and reports no rounds. The counters below are what refinement
+; does, which is what this profiles.
+; RUN: %solver --incremental --array-equality --incremental-profile --array-ackermann-budget=0 %s 2>&1 | %OutputCheck %s
 (set-logic QF_ABV)
 (declare-fun a () (Array (_ BitVec 4) (_ BitVec 8)))
 (declare-fun b () (Array (_ BitVec 4) (_ BitVec 8)))
