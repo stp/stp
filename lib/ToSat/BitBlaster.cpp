@@ -1491,6 +1491,8 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
 const BBNode BitBlaster::BBForm(const ASTNode& form)
 {
 
+  fpNativeAddIsZeroFusions = 0;
+
   if (uf->conjoin_to_top && cb != NULL)
   {
     ASTNodeMap n = cb->getAllFixed();
@@ -1519,6 +1521,9 @@ const BBNode BitBlaster::BBForm(const ASTNode& form)
     ASTNodeSet visited;
     assert(cb->checkAtFixedPoint(form, visited));
   }
+  if (uf->stats_flag && uf->fp_native_add_iszero)
+    std::cerr << "FP native add-isZero fused predicates: "
+              << fpNativeAddIsZeroFusions << '\n';
   if (v.size() == 1)
     return v[0];
   else
@@ -3945,6 +3950,18 @@ BBNode BitBlaster::BBclassifyFP(const ASTNode& form, BBNodeSet& support)
   assert(form[0].GetValueWidth() == w);
   assert(sb >= 2 && w >= sb + 1);
 
+  // A complete packed sum is useful only when another consumer observes it.
+  // If it has already been memoised, retain the ordinary path so this
+  // predicate shares that result rather than building a second circuit.
+  if (k == FP_ISZERO && uf->fp_native_arith &&
+      uf->fp_native_add_iszero && form[0].GetKind() == FP_ADD &&
+      form[0].Degree() == 3 &&
+      BBTermMemo.find(form[0]) == BBTermMemo.end())
+  {
+    ++fpNativeAddIsZeroFusions;
+    return BBfpAddIsZero(form[0], support);
+  }
+
   const BBNodeVec p = BBTerm(form[0], support);
 
   switch (k)
@@ -4391,6 +4408,46 @@ BBNodeVec BitBlaster::BBfpMul(const ASTNode& term, BBNodeSet& support)
   res = BBITE(anyInf, packSpecial(false, true), res);
   res = BBITE(anyNaN, packSpecial(true, false), res);
   return res;
+}
+
+// fp.isZero needs much less than a packed result. Every finite value in a
+// binary IEEE format is an integer multiple of that format's minimum
+// subnormal, so a nonzero exact sum of two format values cannot round to
+// zero. The result is therefore a semantic zero exactly when both operands
+// are finite and their exact real sum is zero: equal magnitudes with opposite
+// signs, or any pair of signed zeros. The rounding mode cannot change this
+// predicate.
+BBNode BitBlaster::BBfpAddIsZero(const ASTNode& term, BBNodeSet& support)
+{
+  assert(term.GetKind() == FP_ADD);
+  assert(term.Degree() == 3);
+
+  const SourceSort sort = term.GetSourceSort();
+  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb = sort.significandWidth();
+  const unsigned w = sort.packedWidth();
+  const unsigned eb = sort.exponentWidth();
+  assert(sb >= 2 && eb >= 2 && w == sb + eb);
+
+  const BBNodeVec pa = BBTerm(term[1], support);
+  const BBNodeVec pb = BBTerm(term[2], support);
+  assert(pa.size() == w && pb.size() == w);
+
+  BBNodeVec aMagnitude(pa.begin(), pa.begin() + (w - 1));
+  const BBNodeVec bMagnitude(pb.begin(), pb.begin() + (w - 1));
+  const BBNode sameMagnitude = BBEQ(aMagnitude, bMagnitude);
+  const BBNode oppositeSigns = nf->CreateNode(XOR, pa[w - 1], pb[w - 1]);
+  // With equal magnitudes, testing either operand suffices to prove both are
+  // signed zeros.
+  const BBNode bothZero = nf->CreateNode(NOR, aMagnitude);
+  const BBNode exactZero = nf->CreateNode(
+      AND, sameMagnitude, nf->CreateNode(OR, oppositeSigns, bothZero));
+
+  auto finite = [&](const BBNodeVec& p) {
+    BBNodeVec exponent(p.begin() + (sb - 1), p.begin() + (w - 1));
+    return nf->CreateNode(NOT, nf->CreateNode(AND, exponent));
+  };
+  return nf->CreateNode(AND, finite(pa), finite(pb), exactZero);
 }
 
 // Bit-blasted fp.add over packed IEEE-754 operands, under the same flag
