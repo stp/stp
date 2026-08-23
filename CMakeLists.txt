@@ -35,8 +35,14 @@ set(CMAKE_CXX_STANDARD 17)
 include(GNUInstallDirs)
 include(FeatureSummary)
 
-# Search paths for custom CMake modules
-set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
+# Search paths for custom CMake modules. cmake/ holds the per-dependency Find
+# modules; cmake/modules/ holds everything else STP carries.
+set(CMAKE_MODULE_PATH
+    ${PROJECT_SOURCE_DIR}/cmake
+    ${PROJECT_SOURCE_DIR}/cmake/modules
+)
+
+include(STPOptions)
 
 # Search for packages in the deps directory
 list(APPEND CMAKE_PREFIX_PATH "${PROJECT_SOURCE_DIR}/deps/install")
@@ -84,10 +90,18 @@ foreach (build_config ${build_types})
     endforeach()
 endforeach()
 
-option(ENABLE_ASSERTIONS "Build with assertions enabled" ON)
+# Three-valued, so that the build type can supply a default without silently
+# overruling a choice. It used to be a plain option() defaulting ON with an
+# unconditional set(ENABLE_ASSERTIONS OFF) for Release underneath it, which
+# meant -DENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release quietly produced a
+# build with no assertions in it -- the request was accepted and discarded.
+stp_migrate_bool_option(ENABLE_ASSERTIONS)
+stp_option(ENABLE_ASSERTIONS "Build with assertions enabled")
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(ENABLE_ASSERTIONS OFF)
+    # Release means "ship this", so no assertions unless they were asked for.
+    stp_set_option(ENABLE_ASSERTIONS OFF)
 endif()
+stp_set_option(ENABLE_ASSERTIONS ON)
 
 if (ENABLE_ASSERTIONS)
     # NDEBUG was already removed.

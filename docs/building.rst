@@ -170,7 +170,12 @@ These apply to all generators:
 -  ``CMAKE_BUILD_TYPE`` -- the build type, e.g. Release
 -  ``CMAKE_INSTALL_PREFIX`` -- the prefix to install under, e.g.
    ``/usr/local``
--  ``ENABLE_ASSERTIONS`` -- build with assertions
+-  ``ENABLE_ASSERTIONS`` -- build with assertions. Three-valued: ``ON``
+   and ``OFF`` are honoured as given, and if it is left unset the build
+   type decides -- off for ``Release``, on for everything else. It used to
+   be a plain on/off flag that ``Release`` overrode unconditionally, so
+   ``-DENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release`` silently produced
+   a build without them; it now produces an asserting Release build
 -  ``ENABLE_TESTING`` -- enable running the tests
 -  ``ENABLE_PYTHON_INTERFACE`` -- build the Python interface (Python 3
    only)
