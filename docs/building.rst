@@ -34,12 +34,21 @@ build that backend, and which the ``scripts/deps`` script for each one names:
 CryptoMiniSat needs GMP (``libgmp-dev``), MiniSat needs zlib
 (``zlib1g-dev``). Neither is used by STP itself.
 
-Four dependencies are vendored as submodules and need nothing installed:
-ABC, mimalloc, the command-line parser
-`CLI11 <https://github.com/CLIUtils/CLI11>`__, and the header-only
-floating-point library `SymFPU <https://github.com/martin-cs/symfpu>`__.
-Run ``git submodule update --init`` after cloning; the build does not
-configure without them.
+Two dependencies are vendored as submodules and need nothing installed:
+ABC and mimalloc. Run ``git submodule update --init`` after cloning; the
+build does not configure without them. They stay submodules because STP
+builds them as part of itself rather than linking them as libraries --
+ABC's targets are given compile options of STP's own, and mimalloc's
+build is configured by STP -- and an ExternalProject cannot express
+that. ABC is additionally an STP fork, which is what a submodule is for.
+
+Two more used to be submodules and are now fetched like everything else:
+the command-line parser `CLI11 <https://github.com/CLIUtils/CLI11>`__ and
+the header-only floating-point library
+`SymFPU <https://github.com/martin-cs/symfpu>`__. Both are headers, so
+there is nothing for STP's own flags to reach. ``CLI11_DIR`` and
+``SYMFPU_INCLUDE_DIRS`` name existing copies; otherwise
+``-DENABLE_AUTO_DOWNLOAD=ON`` fetches them at pinned revisions.
 
 One is not vendored: `LibBF <https://bellard.org/libbf/>`__, which
 converts the real literals in floating-point input --
@@ -185,10 +194,12 @@ CryptoMiniSat's.
 Floating-point support
 ----------------------
 
-Floating-point support is always built, backed by the vendored SymFPU
-submodule (``git submodule update --init lib/extlib-symfpu/symfpu`` if
-you cloned without ``--recursive``). An external SymFPU clone can be used
-instead, via ``-DSYMFPU_INCLUDE_DIRS=<directory containing the clone>``.
+Floating-point support is always built, backed by SymFPU. STP carries
+four fixes to it that upstream has not taken; they are applied to the
+copy the build fetches, so there is nothing to do. An existing clone can
+be used instead, via ``-DSYMFPU_INCLUDE_DIRS=<directory containing the
+clone>`` -- that one is taken as-is, so it must already carry those
+fixes, which are in ``cmake/deps-utils/symfpu``.
 
 STP solves the SMT-LIB floating-point theory and exposes floating-point
 terms through the C, C++ (``stp/fp.hpp``) and Python APIs. Real literals
@@ -243,9 +254,11 @@ These apply to all generators:
    left unset the page is built when help2man happens to be installed.
    Packagers who need the page either present or absent for certain should
    say which
--  ``SYMFPU_INCLUDE_DIRS`` -- build against an external SymFPU clone
-   rather than the vendored submodule (point it at the directory
-   *containing* the clone)
+-  ``SYMFPU_INCLUDE_DIRS`` -- build against an existing SymFPU clone
+   rather than fetching one (point it at the directory *containing* the
+   clone)
+-  ``CLI11_DIR`` -- build against an existing CLI11 rather than fetching
+   one
 -  ``LIBBF_DIR`` -- where to find a built LibBF (defaults to
    ``deps/libbf``, where ``scripts/deps/setup-libbf.sh`` puts it)
 -  ``ENABLE_AUTO_DOWNLOAD`` -- download and build dependencies that were

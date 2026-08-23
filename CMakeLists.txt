@@ -508,67 +508,6 @@ include_directories("${CMAKE_CURRENT_BINARY_DIR}/include")
 include_directories(# For extlib-constbv
                     ${PROJECT_SOURCE_DIR}/lib
                    )
-# A submodule that points straight at its upstream cannot be committed to, so
-# local fixes to one are carried as patches and applied here, at configure
-# time, before anything is built. Each such submodule has its own directory
-# under patches/, named for the library; the patches inside are relative to
-# that submodule's own root, so they are the plain `git diff` its checkout
-# produces.
-#
-# ABC is no longer among them: lib/extlib-abc points at stp/abc, a fork, so
-# its fixes are ordinary commits on that repository's `stp` branch. See
-# docs/code-guide.rst for how that fork is laid out.
-#
-# Applying is idempotent: a patch that reverse-applies cleanly is already in
-# the tree and is skipped, so re-running cmake, or configuring a second build
-# directory against the same source, does not double-apply. A patch that does
-# neither is a hard error rather than a silent miscompile -- that happens when
-# the submodule is bumped past the code the patch was written against, and the
-# patch then needs rebasing or, if upstream has taken it, deleting.
-#
-# The sentinel is a file the submodule is known to contain; it distinguishes a
-# checked-out submodule from the empty directory an uninitialised one leaves,
-# so a build without submodules is not turned into a patch failure.
-function(stp_apply_vendored_patches _label _subdir _sentinel)
-  set(_patchdir "${PROJECT_SOURCE_DIR}/patches/${_label}")
-  file(GLOB _patches "${_patchdir}/*.patch")
-  list(SORT _patches)
-  if(NOT _patches)
-    return()
-  endif()
-  if(NOT EXISTS "${PROJECT_SOURCE_DIR}/${_subdir}/${_sentinel}")
-    return() # submodule not checked out; nothing to patch
-  endif()
-  if(NOT GIT_EXECUTABLE)
-    message(FATAL_ERROR
-            "patches/${_label}/ contains patches for the vendored ${_label} "
-            "but git was not found to apply them. Install git, or remove the "
-            "patches.")
-  endif()
-  foreach(_patch ${_patches})
-    get_filename_component(_patch_name "${_patch}" NAME)
-    execute_process(COMMAND "${GIT_EXECUTABLE}" apply --reverse --check "${_patch}"
-                    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/${_subdir}"
-                    RESULT_VARIABLE _already OUTPUT_QUIET ERROR_QUIET)
-    if(_already EQUAL 0)
-      message(STATUS "${_label} patch already applied: ${_patch_name}")
-    else()
-      execute_process(COMMAND "${GIT_EXECUTABLE}" apply "${_patch}"
-                      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/${_subdir}"
-                      RESULT_VARIABLE _rc ERROR_VARIABLE _err)
-      if(NOT _rc EQUAL 0)
-        message(FATAL_ERROR
-                "Failed to apply ${_patch_name} to ${_subdir}:\n${_err}"
-                "It neither applies nor is already applied. If the ${_label} "
-                "submodule was bumped, rebase the patch onto the new revision, "
-                "or delete it if upstream has taken the change.")
-      endif()
-      message(STATUS "Applied ${_label} patch: ${_patch_name}")
-    endif()
-  endforeach()
-endfunction()
-
-stp_apply_vendored_patches(symfpu "lib/extlib-symfpu/symfpu" "core/convert.h")
 
 # ABC is a vendored submodule; mark its headers as
 # SYSTEM so their warnings (e.g. -Wpedantic zero-size arrays, -Wunused-parameter
@@ -1023,32 +962,10 @@ endif()
 # -----------------------------------------------------------------------------
 # Floating-point support (uses the header-only SymFPU library)
 # -----------------------------------------------------------------------------
-# SymFPU (BSD 3-Clause) is vendored as a pinned submodule, the same
-# arrangement as mimalloc above, so there is nothing to install and every
-# build supports the SMT-LIB floating-point theory.
-
-# The vendored submodule is the default; -DSYMFPU_INCLUDE_DIRS=<dir
-# that CONTAINS a symfpu clone> overrides it with an external copy.
-if (NOT SYMFPU_INCLUDE_DIRS)
-    set(SYMFPU_INCLUDE_DIRS "${PROJECT_SOURCE_DIR}/lib/extlib-symfpu")
-endif()
-
-find_package(SymFPU)
-
-if (SymFPU_FOUND)
-    message(STATUS "OK, found SymFPU include dirs under ${SYMFPU_INCLUDE_DIRS}")
-else()
-    message(FATAL_ERROR
-        "SymFPU (header-only, required for the floating-point support) "
-        "was not found. It is vendored as a submodule: run "
-        "git submodule update --init lib/extlib-symfpu/symfpu. An "
-        "external clone of https://github.com/martin-cs/symfpu works "
-        "too, via -DSYMFPU_INCLUDE_DIRS=<directory that CONTAINS the "
-        "symfpu clone>.")
-endif()
-
-# Let's get clean builds ...
-include_directories(SYSTEM ${SYMFPU_INCLUDE_DIRS})
+# Required: every build of STP solves the SMT-LIB floating-point theory.
+# SYMFPU_INCLUDE_DIRS still names a directory containing a symfpu clone, and
+# cmake/FindSymFPU.cmake can fetch and patch one otherwise.
+find_package(SymFPU REQUIRED)
 
 # LibBF folds the real literals in floating-point input -- ((_ to_fp 8 24)
 # RNE 1.5) -- to their exactly-rounded bits while parsing. It is required, and
@@ -1181,6 +1098,12 @@ add_feature_info(PythonInterface ENABLE_PYTHON_INTERFACE "Enables Python interfa
 message(STATUS "Final CXX flags ${CMAKE_CXX_FLAGS}")
 
 add_subdirectory(lib)
+
+# Only tools/stp/main.cpp includes CLI11, so it is looked for only when there
+# is a binary to build.
+if (BUILD_EXECUTABLES)
+    find_package(CLI11 REQUIRED)
+endif()
 add_subdirectory(tools)
 add_subdirectory(bindings)
 add_feature_info(Executables BUILD_EXECUTABLES "Enables executables compilation")

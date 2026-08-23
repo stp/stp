@@ -4,9 +4,3 @@
 [submodule "lib/extlib-mimalloc"]
 	path = lib/extlib-mimalloc
 	url = https://github.com/microsoft/mimalloc.git
-[submodule "lib/extlib-symfpu/symfpu"]
-	path = lib/extlib-symfpu/symfpu
-	url = https://github.com/martin-cs/symfpu.git
-[submodule "lib/extlib-cli11"]
-	path = lib/extlib-cli11
-	url = https://github.com/CLIUtils/CLI11.git

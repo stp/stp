@@ -57,15 +57,9 @@ Third-party code that is compiled into STP also lives under ``lib/``:
    ABC get built. STP uses four of its packages -- ``aig/aig``, ``aig/gia``,
    ``opt/dar`` and ``sat/cnf`` -- and ABC's build compiles every other one
    too, including SAT solvers that STP already links its own copies of.
--  ``extlib-cli11``: `CLI11 <https://github.com/CLIUtils/CLI11>`__, the
-   command-line parser of the ``stp`` executable. Header-only, so it is
-   compiled into the tool but never into ``libstp``. A git submodule.
 -  ``extlib-constbv``: A library that implements multi-word fixed-length
    integers, based on Steffen Beyer's
    `Bit::Vector <https://metacpan.org/pod/Bit::Vector>`__ perl module.
--  ``extlib-symfpu``: `SymFPU <https://github.com/martin-cs/symfpu>`__, a
-   header-only implementation of the floating-point operations in terms of
-   bitvectors, used by ``FloatBlaster``. A git submodule.
 -  ``extlib-mimalloc``:
    `mimalloc <https://github.com/microsoft/mimalloc>`__, the allocator
    the STP executables link against by default. A git submodule; see
@@ -74,6 +68,15 @@ Third-party code that is compiled into STP also lives under ``lib/``:
    `ankerl::unordered_dense <https://github.com/martinus/unordered_dense>`__,
    a densely stored hash map and set, used in place of
    ``std::unordered_map`` where it pays off.
+
+CLI11, the command-line parser of the ``stp`` executable, and SymFPU, the
+header-only implementation of the floating-point operations in terms of
+bitvectors that ``FloatBlaster`` uses, used to sit here as submodules too.
+Both are now fetched by ``cmake/FindCLI11.cmake`` and
+``cmake/FindSymFPU.cmake`` -- being headers, there is nothing about them
+for STP's own build to reach into, which is what keeps ABC and mimalloc
+here. STP's four local fixes to SymFPU live in ``cmake/deps-utils/symfpu``
+and are applied to the copy the build fetches.
 
 The executables are built from ``tools/``:
 

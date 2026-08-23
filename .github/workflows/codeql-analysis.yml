@@ -119,8 +119,10 @@ jobs:
         patterns: |
           -lib/extlib-abc/**
           -lib/extlib-mimalloc/**
-          -lib/extlib-symfpu/**
           -deps/**
+          # Where the build unpacks what it fetches, SymFPU among it.
+          -**/deps/src/**
+          -**/_deps/**
         input: sarif-results/${{ matrix.language }}.sarif
         output: sarif-results/${{ matrix.language }}.sarif
 

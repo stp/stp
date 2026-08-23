@@ -79,6 +79,9 @@ function(AddSTPGTest sourcefile)
         list(APPEND test_backends MiniSat)
     endif()
 
+    # SymFPU is not named here: stp carries it as a BUILD_INTERFACE
+    # requirement, because the internal header that reaches it can be included
+    # from anywhere in the tree.
     target_link_libraries(${testname}
         ${test_allocator} stp ${GTEST_BOTH_LIBRARIES} ${test_backends}
     )

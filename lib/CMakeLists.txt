@@ -302,6 +302,19 @@ target_link_libraries(stp
     PRIVATE ${stp_link_libs}
 )
 
+# SymFPU reaches further than the sources that name it. It is header-only, and
+# stp/FloatBlaster/symbolic_fp.h -- an internal header, but one any part of the
+# tree may include -- includes symfpu/core/unpackedFloat.h. So the tools and
+# tests that include it need SymFPU's include directory too, and listing them
+# one by one is a list that rots: it was already wrong by two targets when
+# first written.
+#
+# BUILD_INTERFACE, so it reaches everything in this build that links stp and
+# nothing at all in the exported STPTargets.cmake -- SymFPU is a target no
+# consumer of an installed STP has, and none of them need it: the headers STP
+# installs (c_interface.h, fp.hpp, uf.hpp) do not include it.
+target_link_libraries(stp INTERFACE $<BUILD_INTERFACE:SymFPU>)
+
 # ABC is interconnected enough that satisfying our ~30 entry points transitively
 # drags in most of the archive, including its vendored zlib and bzlib (gzopen,
 # inflate, deflate, crc32, BZ2_*). Left with default visibility those would be
