@@ -25,9 +25,8 @@ On a Debian-like platform most of it comes from the package manager:
     sudo apt-get install git build-essential cmake bison flex python3
 
 A python3 interpreter is needed at build time -- it generates the AST kind
-tables -- and also for the Python interface and the test suite. git is needed
-for the submodules and for the vendored-patch step that runs at configure
-time.
+tables -- and also for the Python interface and the test suite. git is
+needed for the submodules.
 
 The SAT backends bring their own dependencies, which are needed only if you
 build that backend, and which the ``scripts/deps`` script for each one names:
