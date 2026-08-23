@@ -1,17 +1,17 @@
 ; REQUIRES: minisat
 ; RUN: %solver --minisat -s %s 2>&1 | %OutputCheck --check-prefix=STATS %s
 ; RUN: %solver --simplifying-minisat -s %s 2>&1 | %OutputCheck --check-prefix=STATS %s
-; STATS: MiniSat starts: {{[0-9]+}}
-; STATS: MiniSat conflicts: {{[0-9]+}}
-; STATS: MiniSat decisions: {{[0-9]+}}
-; STATS: MiniSat propagations: {{[0-9]+}}
-; STATS: MiniSat variables: {{[0-9]+}}
-; STATS: MiniSat active original clauses: {{[0-9]+}}
-; STATS: MiniSat active original literals: {{[0-9]+}}
-; STATS: MiniSat active learnt clauses: {{[0-9]+}}
-; STATS: MiniSat active learnt literals: {{[0-9]+}}
-; STATS: MiniSat learnt literals before minimization: {{[0-9]+}}
-; STATS: MiniSat learnt literals after minimization: {{[0-9]+}}
+; STATS: MiniSat starts: [0-9]+
+; STATS: MiniSat conflicts: [0-9]+
+; STATS: MiniSat decisions: [0-9]+
+; STATS: MiniSat propagations: [0-9]+
+; STATS: MiniSat variables: [0-9]+
+; STATS: MiniSat active original clauses: [0-9]+
+; STATS: MiniSat active original literals: [0-9]+
+; STATS: MiniSat active learnt clauses: [0-9]+
+; STATS: MiniSat active learnt literals: [0-9]+
+; STATS: MiniSat learnt literals before minimization: [0-9]+
+; STATS: MiniSat learnt literals after minimization: [0-9]+
 ; STATS: ^sat
 ; Keep enough coupled structure to reach the SAT backend instead of being
 ; discharged by unconstrained-variable elimination.

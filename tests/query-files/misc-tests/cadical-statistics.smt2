@@ -1,9 +1,9 @@
 ; REQUIRES: cadical-inprobing
 ; RUN: %solver --cadical -s %s 2>&1 | %OutputCheck %s
-; CHECK: CaDiCaL conflicts: {{[0-9]+}}
-; CHECK: CaDiCaL decisions: {{[0-9]+}}
-; CHECK: CaDiCaL search propagations: {{[0-9]+}}
-; CHECK: CaDiCaL search ticks: {{[0-9]+}}
+; CHECK: CaDiCaL conflicts: [0-9]+
+; CHECK: CaDiCaL decisions: [0-9]+
+; CHECK: CaDiCaL search propagations: [0-9]+
+; CHECK: CaDiCaL search ticks: [0-9]+
 ; CHECK-NOT: print stats not yet implemented
 ; CHECK: ^sat
 ; Keep enough coupled structure to reach the SAT backend instead of being
