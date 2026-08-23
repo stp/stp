@@ -74,7 +74,12 @@ Third-party code that is compiled into STP also lives under ``lib/``:
    `Bit::Vector <https://metacpan.org/pod/Bit::Vector>`__ perl module.
 -  ``extlib-symfpu``: `SymFPU <https://github.com/martin-cs/symfpu>`__, a
    header-only implementation of the floating-point operations in terms of
-   bitvectors, used by ``FloatBlaster``. A git submodule.
+   bitvectors, used by ``FloatBlaster``. A git submodule, pointing at
+   `stp/symfpu <https://github.com/stp/symfpu>`__, a fork laid out like the
+   ABC one: ``main`` tracks upstream and ``stp`` -- the branch the submodule
+   is pinned to -- carries STP's changes as commits on top. They are four
+   correctness fixes for the narrowest formats SMT-LIB permits, none of
+   which the common formats reach.
 -  ``extlib-mimalloc``:
    `mimalloc <https://github.com/microsoft/mimalloc>`__, the allocator
    the STP executables link against by default. A git submodule; see
