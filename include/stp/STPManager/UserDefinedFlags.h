@@ -401,8 +401,8 @@ public:
 
   // Recognise fp.isZero(fp.add ...) and encode the observed zero-result
   // condition directly instead of constructing and packing every result bit.
-  // Experimental; requires native arithmetic and is off by default.
-  bool fp_native_add_iszero = false;
+  // Enabled by default, but only active when native arithmetic is selected.
+  bool fp_native_add_iszero = true;
 
   // Experimental strengthening for the native FP bit-blaster: mine simple
   // top-level finite box bounds and use them to omit NaN/infinity cases from

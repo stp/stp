@@ -2,7 +2,7 @@
 ; have an exact real sum of zero. Exhaust the small (3,4) format and all five
 ; rounding modes by asking for a disagreement with that packed-value law.
 ;
-; RUN: %solver --disable-equality --unconstrained-variable-elimination=0 --bb.fp-native-arith=1 --bb.fp-native-add-iszero=1 -s %s 2>&1 | %OutputCheck --check-prefix=FUSED %s
+; RUN: %solver --disable-equality --unconstrained-variable-elimination=0 --bb.fp-native-arith=1 -s %s 2>&1 | %OutputCheck --check-prefix=FUSED %s
 ; RUN: %solver --disable-equality --unconstrained-variable-elimination=0 --bb.fp-native-arith=1 --bb.fp-native-add-iszero=0 %s | %OutputCheck --check-prefix=RESULT %s
 ; RUN: %solver --bb.fp-native-cmp=false %s | %OutputCheck --check-prefix=RESULT %s
 ;
