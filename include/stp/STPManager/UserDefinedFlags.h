@@ -438,7 +438,8 @@ public:
   // derives zero facts from same-sign rows whose terms are +/- one boxed
   // symbol. Two-term differences may propagate an already-established zero,
   // but terms are never algebraically cancelled through a rounded row. Zero
-  // is encoded as zero magnitude bits so +0/-0 remain distinct.
+  // is encoded as zero magnitude bits so +0/-0 remain distinct. This does not
+  // enable the general floating-point domain rewrite prepass.
   bool fp_domain_sound_zero_facts = false;
 
   // Sound row-level FP zero refutation. It recognises linear FP expressions
