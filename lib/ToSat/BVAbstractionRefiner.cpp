@@ -24,6 +24,7 @@ THE SOFTWARE.
 
 #include "stp/ToSat/BVAbstractionRefiner.h"
 #include "stp/ToSat/BVEQCongruenceClosure.h"
+#include "stp/ToSat/BVExactEncoder.h"
 
 #include <algorithm>
 #include <iostream>
@@ -533,23 +534,10 @@ static bool computeBVCompare(Kind k, const std::vector<bool>& aBits,
   return form.negateResult ? !le : le;
 }
 
-// Exact CNF for the operations whose refinement would otherwise enumerate.
-//
-// A blocking lemma rules out one pair of operand values, so a query the solver
-// has to search through can need more rounds than there are pairs of operands:
-// a 64-bit factorisation spent 5816 of them and ninety seconds on a query the
-// unabstracted solve answers in five hundredths of one. Past
-// bv_term_abstraction_rounds the refinement stops enumerating and says what
-// the operation is, over the same variables it has been talking about all
-// along -- the operand proxies and the abstraction's own result bits, which
-// are already in the solver and already frozen. The abstraction is then
-// defined, so it is never revisited and the solve ends on the next round with
-// the answer it would have given had the term never been abstracted.
-//
-// Everything below is built from three gates, so that nothing here is a fresh
-// hand-written clause block; each is written out of the row of the truth table
-// it rules out. mkLit(v, sign) is false exactly when v equals sign, so a
-// literal at `bit` is false exactly when that input is `bit`, and a clause
+// The gates the refinement's own lemmas are built from, so that nothing here
+// is a hand-written clause block; each is written out of the row of the truth
+// table it rules out. mkLit(v, sign) is false exactly when v equals sign, so
+// a literal at `bit` is false exactly when that input is `bit`, and a clause
 // listing one row is falsified only on that row.
 
 static unsigned freshVar(SATSolver& solver)
@@ -566,164 +554,6 @@ static unsigned pinnedVar(SATSolver& solver, bool value)
   cl.push(SATSolver::mkLit(v, !value));
   solver.addClause(cl);
   return v;
-}
-
-// z <-> x & y
-static unsigned mkAnd(SATSolver& solver, unsigned x, unsigned y)
-{
-  const unsigned z = freshVar(solver);
-  SATSolver::vec_literals cl;
-  cl.clear(); cl.push(SATSolver::mkLit(x, true));  cl.push(SATSolver::mkLit(y, true));  cl.push(SATSolver::mkLit(z, false)); solver.addClause(cl);
-  cl.clear(); cl.push(SATSolver::mkLit(x, false)); cl.push(SATSolver::mkLit(z, true));  solver.addClause(cl);
-  cl.clear(); cl.push(SATSolver::mkLit(y, false)); cl.push(SATSolver::mkLit(z, true));  solver.addClause(cl);
-  return z;
-}
-
-// z <-> (sel ? t : e)
-static unsigned mkMux(SATSolver& solver, unsigned sel, unsigned t, unsigned e)
-{
-  const unsigned z = freshVar(solver);
-  SATSolver::vec_literals cl;
-  cl.clear(); cl.push(SATSolver::mkLit(sel, true));  cl.push(SATSolver::mkLit(t, true));  cl.push(SATSolver::mkLit(z, false)); solver.addClause(cl);
-  cl.clear(); cl.push(SATSolver::mkLit(sel, true));  cl.push(SATSolver::mkLit(t, false)); cl.push(SATSolver::mkLit(z, true));  solver.addClause(cl);
-  cl.clear(); cl.push(SATSolver::mkLit(sel, false)); cl.push(SATSolver::mkLit(e, true));  cl.push(SATSolver::mkLit(z, false)); solver.addClause(cl);
-  cl.clear(); cl.push(SATSolver::mkLit(sel, false)); cl.push(SATSolver::mkLit(e, false)); cl.push(SATSolver::mkLit(z, true));  solver.addClause(cl);
-  return z;
-}
-
-// x <-> y
-static void addEquiv(SATSolver& solver, unsigned x, unsigned y)
-{
-  SATSolver::vec_literals cl;
-  cl.clear(); cl.push(SATSolver::mkLit(x, true));  cl.push(SATSolver::mkLit(y, false)); solver.addClause(cl);
-  cl.clear(); cl.push(SATSolver::mkLit(x, false)); cl.push(SATSolver::mkLit(y, true));  solver.addClause(cl);
-}
-
-// sum <-> a ^ b ^ cin, carry <-> at least two of the three. `aNeg` reads a
-// complemented, which is how the subtractor below gets its ~b.
-static void addFullAdder(SATSolver& solver, unsigned a, bool aNeg, unsigned b,
-                         unsigned cin, unsigned& sum, unsigned& carry)
-{
-  sum = freshVar(solver);
-  carry = freshVar(solver);
-  SATSolver::vec_literals cl;
-
-  for (unsigned row = 0; row < 8; ++row)
-  {
-    const bool aBit = (row & 1) != 0;
-    const bool bBit = (row & 2) != 0;
-    const bool cBit = (row & 4) != 0;
-    const bool s = aBit ^ bBit ^ cBit;
-    const bool co = (aBit + bBit + cBit) >= 2;
-    cl.clear();
-    cl.push(SATSolver::mkLit(a, aBit != aNeg));
-    cl.push(SATSolver::mkLit(b, bBit));
-    cl.push(SATSolver::mkLit(cin, cBit));
-    cl.push(SATSolver::mkLit(sum, !s));
-    solver.addClause(cl);
-
-    cl.clear();
-    cl.push(SATSolver::mkLit(a, aBit != aNeg));
-    cl.push(SATSolver::mkLit(b, bBit));
-    cl.push(SATSolver::mkLit(cin, cBit));
-    cl.push(SATSolver::mkLit(carry, !co));
-    solver.addClause(cl);
-  }
-}
-
-// z <-> (x <= y), unsigned, from the least significant bit up so that the most
-// significant differing bit decides -- the same chain the comparison lemma
-// uses, for the same reason.
-static unsigned mkUnsignedLE(SATSolver& solver, const std::vector<unsigned>& x,
-                             const std::vector<unsigned>& y, unsigned width)
-{
-  unsigned acc = pinnedVar(solver, true);
-  SATSolver::vec_literals cl;
-  for (unsigned bit = 0; bit < width; ++bit)
-  {
-    const unsigned nc = freshVar(solver);
-    const unsigned a = x[bit];
-    const unsigned b = y[bit];
-    cl.clear(); cl.push(SATSolver::mkLit(a, false)); cl.push(SATSolver::mkLit(b, true));  cl.push(SATSolver::mkLit(nc, false)); solver.addClause(cl);
-    cl.clear(); cl.push(SATSolver::mkLit(a, false)); cl.push(SATSolver::mkLit(acc, true)); cl.push(SATSolver::mkLit(nc, false)); solver.addClause(cl);
-    cl.clear(); cl.push(SATSolver::mkLit(b, true));  cl.push(SATSolver::mkLit(acc, true)); cl.push(SATSolver::mkLit(nc, false)); solver.addClause(cl);
-    cl.clear(); cl.push(SATSolver::mkLit(a, true));  cl.push(SATSolver::mkLit(b, false)); cl.push(SATSolver::mkLit(nc, true)); solver.addClause(cl);
-    cl.clear(); cl.push(SATSolver::mkLit(a, true));  cl.push(SATSolver::mkLit(acc, false)); cl.push(SATSolver::mkLit(nc, true)); solver.addClause(cl);
-    cl.clear(); cl.push(SATSolver::mkLit(b, false)); cl.push(SATSolver::mkLit(acc, false)); cl.push(SATSolver::mkLit(nc, true)); solver.addClause(cl);
-    acc = nc;
-  }
-  return acc;
-}
-
-// result <-> a * b, truncated, by shift and add: one conditional row per bit
-// of b, each added in at its own offset. Rows below the offset are zero, so
-// the accumulator keeps those bits and the row's carry starts there.
-static void encodeMultiply(SATSolver& solver, const std::vector<unsigned>& a,
-                           const std::vector<unsigned>& b,
-                           const std::vector<unsigned>& result, unsigned width)
-{
-  std::vector<unsigned> acc(width);
-  for (unsigned j = 0; j < width; ++j)
-    acc[j] = mkAnd(solver, a[j], b[0]);
-
-  for (unsigned i = 1; i < width; ++i)
-  {
-    unsigned carry = pinnedVar(solver, false);
-    for (unsigned j = i; j < width; ++j)
-    {
-      const unsigned pp = mkAnd(solver, a[j - i], b[i]);
-      unsigned sum, cout;
-      addFullAdder(solver, acc[j], false, pp, carry, sum, cout);
-      acc[j] = sum;
-      carry = cout;
-    }
-  }
-
-  for (unsigned j = 0; j < width; ++j)
-    addEquiv(solver, result[j], acc[j]);
-}
-
-// result <-> a / b or a % b, by restoring division. A zero divisor needs no
-// special case: every shifted remainder is at or above it, so each step
-// subtracts nothing and the quotient comes out all ones with the dividend left
-// in the remainder -- which is what SMT-LIB asks for and what the unabstracted
-// BBDivMod produces.
-static void encodeDivMod(SATSolver& solver, const std::vector<unsigned>& a,
-                         const std::vector<unsigned>& b,
-                         const std::vector<unsigned>& result, unsigned width,
-                         bool isDiv)
-{
-  const unsigned zero = pinnedVar(solver, false);
-  std::vector<unsigned> quotient(width, zero);
-  std::vector<unsigned> rem(width, zero);
-
-  for (int i = (int)width - 1; i >= 0; --i)
-  {
-    // rem = (rem << 1) | a[i]
-    for (unsigned j = width - 1; j > 0; --j)
-      rem[j] = rem[j - 1];
-    rem[0] = a[i];
-
-    const unsigned geq = mkUnsignedLE(solver, b, rem, width);
-    quotient[i] = geq;
-
-    // rem - b, as rem + ~b + 1, kept only where the subtraction was taken.
-    unsigned carry = pinnedVar(solver, true);
-    std::vector<unsigned> sub(width);
-    for (unsigned j = 0; j < width; ++j)
-    {
-      unsigned s, cout;
-      addFullAdder(solver, b[j], true, rem[j], carry, s, cout);
-      sub[j] = s;
-      carry = cout;
-    }
-    for (unsigned j = 0; j < width; ++j)
-      rem[j] = mkMux(solver, geq, sub[j], rem[j]);
-  }
-
-  const std::vector<unsigned>& answer = isDiv ? quotient : rem;
-  for (unsigned j = 0; j < width; ++j)
-    addEquiv(solver, result[j], answer[j]);
 }
 
 // z <-> x | y
@@ -1457,14 +1287,18 @@ unsigned BVAbstractionRefiner::refineTerms(
     // one of those is a variable the CNF has -- encodedBitsOf above will not
     // hand back a vector holding anything else -- so there is no incomplete
     // mapping to fall back off, only the choice of when to stop enumerating.
+    //
+    // What it says is the encoding the query would have had if the term had
+    // never been abstracted -- literally so: the same bit-blaster entry
+    // point BBTerm uses, mapped to CNF by the same ABC pass. See
+    // BVExactEncoder. Two independent encodings of a divider that agree
+    // today are two that can stop agreeing, and these two already had: the
+    // written-out one and BBDivMod disagreed about a zero divisor.
     const unsigned limit = bm->UserFlags.bv_term_abstraction_rounds;
     if (limit != 0 && abs.blockedRounds >= limit)
     {
-      if (abs.opKind == BVMULT)
-        encodeMultiply(solver, aVars, bVars, resultVars, W);
-      else
-        encodeDivMod(solver, aVars, bVars, resultVars, W,
-                     abs.opKind == BVDIV);
+      BVExactEncoder(bm).encode(solver, abs.termNode, W, aVars, bVars,
+                                resultVars);
       if (bm->UserFlags.stats_flag)
         std::cerr << "BV abstraction: encoding "
                   << _kind_names[abs.opKind] << " exactly after "

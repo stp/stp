@@ -59,10 +59,12 @@ using ASTVec = vector<ASTNode>;
 // only types it is ever used with.
 using BBNode = BBNodeAIG;
 using BBNodeVec = std::vector<BBNodeAIG>;
+// Alongside the other two rather than inside the class, because
+// BBExactBinaryOp takes one and its callers are outside.
+using BBNodeSet = std::unordered_set<BBNodeAIG>;
 
 class BitBlaster
 {
-  using BBNodeSet = std::unordered_set<BBNode>;
 
   BBNode BBTrue, BBFalse;
 
@@ -377,6 +379,24 @@ public:
   // bitvector term.  Result is a ref to a vector of formula nodes
   // representing the boolean formula.
   const BBNodeVec BBTerm(const ASTNode& term, BBNodeSet& support);
+
+  // The exact circuit for one of the three operations --bv-term-abstraction
+  // replaces by free result bits, over operand bits the caller supplies
+  // rather than the ones under `term`.
+  //
+  // This is what BBTerm builds when the abstraction declines a node, and it
+  // is the same code: the refiner reaches it to encode an operation it has
+  // given up on abstracting, and "the answer it would have given had the
+  // term never been abstracted" is only true of an encoding that is the
+  // same one. Two copies of a divider that agree today are two copies that
+  // can stop agreeing.
+  //
+  // `term` is the operation's own node, which the multiplier reads for
+  // constant detection and Booth recoding; `x` and `y` stand in for its
+  // operands. Anything the circuit needs conjoined to the top is added to
+  // `support`, as everywhere else here.
+  BBNodeVec BBExactBinaryOp(const ASTNode& term, const BBNodeVec& x,
+                            const BBNodeVec& y, BBNodeSet& support);
 
   std::unordered_map<ASTNode, BBNodeVec, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>::iterator
   simplify_during_bb(ASTNode& term, BBNodeSet& support);
