@@ -111,8 +111,8 @@ jobs:
         ./scripts/deps/setup-gtest.sh
         ./scripts/deps/setup-outputcheck.sh
 
-    # Deliberately outside the cached Dependencies step: the pinned tarball
-    # is ~300KB and builds in seconds, so caching it would only complicate
+    # Deliberately outside the cached Dependencies step: the pinned mirror
+    # is small and builds in seconds, so caching it would only complicate
     # the cache key for nothing.
     - name: LibBF (real-literal folding)
       run: ./scripts/deps/setup-libbf.sh
@@ -766,8 +766,8 @@ jobs:
         ./scripts/deps/setup-gtest.sh
         ./scripts/deps/setup-outputcheck.sh
 
-    # Outside the cached step, as in the gcc/clang job: the pinned tarball
-    # is ~300KB and builds in seconds.
+    # Outside the cached step, as in the gcc/clang job: the pinned mirror
+    # is small and builds in seconds.
     - name: LibBF (real-literal folding)
       run: ./scripts/deps/setup-libbf.sh
 
@@ -1275,14 +1275,14 @@ jobs:
     # stale hit is not expressible.
     - uses: mozilla-actions/sccache-action@v0.0.11
 
-    # The script's fetch/verify/patch half is portable (curl, sha256sum,
-    # tar and patch all ship with Git for Windows); the compile half is
-    # cc/ar, so it stops before that and cl takes over below.
+    # The script's clone half is portable -- git is what runs this step's
+    # shell -- while the compile half is cc/ar, so it stops before that and
+    # cl takes over below.
     - name: Fetch LibBF (real-literal folding)
       shell: bash
       run: LIBBF_NO_BUILD=1 ./scripts/deps/setup-libbf.sh
 
-    # The MSVC branch of the vendored-patch shims is what this compiles. Two
+    # The MSVC branch of the stp branch's shims is what this compiles. Two
     # files, so it is left out of the cache rather than given a launcher.
     - name: Build LibBF (MSVC)
       run: |
@@ -1475,7 +1475,6 @@ jobs:
           flex
           git
           make
-          patch
           mingw-w64-ucrt-x86_64-cmake
           mingw-w64-ucrt-x86_64-gcc
           mingw-w64-ucrt-x86_64-ninja
@@ -1493,10 +1492,10 @@ jobs:
         ./configure -static -lpsapi
         make -j"$(nproc)" cadical
 
-    # The script's fetch/verify/patch half runs under git-bash, exactly as
-    # the MSVC leg's does; the compile half then uses the UCRT64 gcc this
-    # job builds everything else with. gcc rather than the script's cc,
-    # which MinGW does not provide.
+    # The script's clone half runs under git-bash, exactly as the MSVC
+    # leg's does; the compile half then uses the UCRT64 gcc this job builds
+    # everything else with. gcc rather than the script's cc, which MinGW
+    # does not provide.
     - name: Fetch LibBF (real-literal folding)
       shell: bash
       run: LIBBF_NO_BUILD=1 ./scripts/deps/setup-libbf.sh

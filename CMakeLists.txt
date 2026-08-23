@@ -1004,9 +1004,9 @@ include_directories(SYSTEM ${SYMFPU_INCLUDE_DIRS})
 
 # LibBF folds the real literals in floating-point input -- ((_ to_fp 8 24)
 # RNE 1.5) -- to their exactly-rounded bits while parsing. Upstream
-# publishes release tarballs rather than a repository, so it is fetched,
-# verified and built by scripts/deps/setup-libbf.sh, which lands it in
-# deps/libbf, where this looks by default.
+# publishes release tarballs rather than a repository, so STP mirrors them
+# in stp/libbf; scripts/deps/setup-libbf.sh clones that at a pinned commit
+# and builds it into deps/libbf, where this looks by default.
 set(LIBBF_DIR "${PROJECT_SOURCE_DIR}/deps/libbf" CACHE PATH "Path to a built LibBF (the directory containing libbf.h and libbf.a, as laid out by scripts/deps/setup-libbf.sh)")
 find_path(LIBBF_INCLUDE_DIR NAMES libbf.h HINTS ${LIBBF_DIR})
 find_library(LIBBF_LIBRARY NAMES bf HINTS ${LIBBF_DIR})

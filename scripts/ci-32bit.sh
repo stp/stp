@@ -18,11 +18,9 @@ apt-get install -y --no-install-recommends \
   ca-certificates \
   ccache \
   cmake \
-  curl \
   flex \
   git \
   ninja-build \
-  patch \
   python3 \
   python3-pip \
   python3-setuptools \
@@ -38,7 +36,7 @@ git config --global --add safe.directory '*'
 [ -d deps/gtest ] || ./scripts/deps/setup-gtest.sh
 [ -d deps/OutputCheck ] || ./scripts/deps/setup-outputcheck.sh
 
-# Not cached (the tarball is tiny and builds in seconds), and worth having
+# Not cached (the mirror is tiny and builds in seconds), and worth having
 # here specifically: a 32-bit toolchain gives LibBF its 32-bit limb build
 # (LIMB_BITS = 32, BF_EXP_BITS_MAX = 29), which no other job exercises.
 ./scripts/deps/setup-libbf.sh
