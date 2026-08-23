@@ -244,6 +244,10 @@ TEST(ArrayEqualityAstTest, InitialFormulaProtocolKeepsTheLazyArmActive)
   STPMgr mgr;
   mgr.UserFlags.enable_array_equality = true;
   ASSERT_FALSE(mgr.UserFlags.ackermannisation);
+  // Not asking for the eager arm is no longer enough to be left on the lazy
+  // one: the automatic policy would find this query affordable. Zero is the
+  // setting that declines every unasked selection.
+  mgr.UserFlags.array_eager_budget = 0;
   ExtensionalityContext ext(&mgr);
   NodeFactory* hf = mgr.hashingNodeFactory;
 
