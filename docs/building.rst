@@ -41,14 +41,23 @@ floating-point library `SymFPU <https://github.com/martin-cs/symfpu>`__.
 Run ``git submodule update --init`` after cloning; the build does not
 configure without them.
 
-One is fetched and built by a script rather than vendored:
-`LibBF <https://bellard.org/libbf/>`__, which converts the real literals
-in floating-point input -- ``((_ to_fp 8 24) RNE 1.5)``. It is required.
-Run ``scripts/deps/setup-libbf.sh`` from the top of the source tree
-before configuring: it clones `stp/libbf <https://github.com/stp/libbf>`__
-at a pinned commit and builds ``libbf.a`` into ``deps/libbf``, where the
-build looks by default. Point ``LIBBF_DIR`` at a copy built somewhere else
-to skip the script -- an offline build wants that, since the script clones.
+One is not vendored: `LibBF <https://bellard.org/libbf/>`__, which
+converts the real literals in floating-point input --
+``((_ to_fp 8 24) RNE 1.5)``. It is required, and there are three ways to
+get it, tried in this order:
+
+-  ``-DLIBBF_DIR=<path>`` naming a directory that holds ``libbf.h`` and a
+   built ``bf`` library. It defaults to ``deps/libbf``, which is where
+   ``scripts/deps/setup-libbf.sh`` puts one, so a tree that has run that
+   script needs no flag
+-  an installed copy, found the way any library is -- including one that
+   an earlier build installed into ``STP_DEP_DIR`` (see below)
+-  ``-DENABLE_AUTO_DOWNLOAD=ON``, which clones
+   `stp/libbf <https://github.com/stp/libbf>`__ at a pinned commit and
+   builds it as part of this build, with this build's compiler and flags
+
+Without any of the three, configuration fails and says so. An offline
+build wants the first.
 
 Upstream LibBF publishes release tarballs and no git repository, which is
 what ``stp/libbf`` is for. It is laid out like STP's ABC fork: ``master``
@@ -209,8 +218,27 @@ These apply to all generators:
 -  ``SYMFPU_INCLUDE_DIRS`` -- build against an external SymFPU clone
    rather than the vendored submodule (point it at the directory
    *containing* the clone)
--  ``LIBBF_DIR`` -- where to find the built LibBF (defaults to
+-  ``LIBBF_DIR`` -- where to find a built LibBF (defaults to
    ``deps/libbf``, where ``scripts/deps/setup-libbf.sh`` puts it)
+-  ``ENABLE_AUTO_DOWNLOAD`` -- download and build dependencies that were
+   not found, rather than failing. Off by default: a build that reaches
+   the network should be asked to
+-  ``STP_DEP_DIR`` -- where dependencies this build downloads are
+   installed, and where dependencies are looked for. It defaults to
+   ``<build>/deps/install``, so a build directory is self-contained.
+   Point several build directories at one path and only the first pays
+   to build anything: the rest find what it installed and download
+   nothing, so they do not even need ``ENABLE_AUTO_DOWNLOAD``. To fill
+   such a directory ahead of time, configure one build with
+   ``-DSTP_DEP_DIR=<path> -DENABLE_AUTO_DOWNLOAD=ON`` and build its
+   ``deps`` target, which builds the dependencies and nothing else.
+
+   Only the *installed* dependencies are shared. ExternalProject's own
+   scratch and stamp files stay in the build directory, so two builds
+   sharing a path cannot corrupt each other's state -- though a shared
+   directory does hold one copy of each library, whatever compiled it,
+   and STP warns when the compiler or sanitizer settings that filled it
+   differ from the ones now building against it
 -  ``STP_ALLOCATOR`` -- which memory allocator the ``stp`` binary uses.
    STP is allocation-heavy and the C library allocator is a significant
    bottleneck, so this defaults to ``mimalloc``, which is vendored and

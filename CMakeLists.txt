@@ -44,7 +44,9 @@ set(CMAKE_MODULE_PATH
 
 include(STPOptions)
 
-# Search for packages in the deps directory
+# Where the scripts/deps/*.sh scripts install. Appended, so that a dependency
+# this build produced in STP_DEP_DIR -- which deps-helper prepends -- outranks
+# one left behind by an earlier hand-run script.
 list(APPEND CMAKE_PREFIX_PATH "${PROJECT_SOURCE_DIR}/deps/install")
 
 # generate JSON file of compile commands -- useful for code extension
@@ -613,6 +615,17 @@ add_definitions(-DSIZEOF_INT=${SIZEOF_INT})
 option(BUILD_EXECUTABLES "Build executables" ON)
 
 # -----------------------------------------------------------------------------
+# Dependency machinery
+# -----------------------------------------------------------------------------
+# Included here, and not up with the other includes, because
+# STP_EP_COMMON_CMAKE_ARGS captures CMAKE_CXX_FLAGS in order to hand STP's own
+# toolchain to anything it builds -- and those flags are not finished being
+# assembled until above this line. Included from up there, a sanitizer build
+# would compile its dependencies without the sanitizer, and the mismatch would
+# surface as a link failure with nothing pointing back here.
+include(deps-helper)
+
+# -----------------------------------------------------------------------------
 # Find Riss
 # -----------------------------------------------------------------------------
 option(USE_MINISAT "Use the MiniSat solver backend" OFF)
@@ -1155,39 +1168,14 @@ endif()
 include_directories(SYSTEM ${SYMFPU_INCLUDE_DIRS})
 
 # LibBF folds the real literals in floating-point input -- ((_ to_fp 8 24)
-# RNE 1.5) -- to their exactly-rounded bits while parsing. Upstream
-# publishes release tarballs rather than a repository, so STP mirrors them
-# in stp/libbf; scripts/deps/setup-libbf.sh clones that at a pinned commit
-# and builds it into deps/libbf, where this looks by default.
-set(LIBBF_DIR "${PROJECT_SOURCE_DIR}/deps/libbf" CACHE PATH "Path to a built LibBF (the directory containing libbf.h and libbf.a, as laid out by scripts/deps/setup-libbf.sh)")
-find_path(LIBBF_INCLUDE_DIR NAMES libbf.h HINTS ${LIBBF_DIR})
-find_library(LIBBF_LIBRARY NAMES bf HINTS ${LIBBF_DIR})
-if (NOT LIBBF_INCLUDE_DIR OR NOT LIBBF_LIBRARY)
-    message(FATAL_ERROR "LibBF (required; it folds the real literals in "
-            "floating-point input) was not found. Run "
-            "scripts/deps/setup-libbf.sh from the top of the source tree "
-            "-- it fetches and builds LibBF into deps/libbf, where this "
-            "looks by default -- or point LIBBF_DIR at an existing build")
-endif()
-message(STATUS "Found LibBF: ${LIBBF_LIBRARY}")
+# RNE 1.5) -- to their exactly-rounded bits while parsing. It is required, and
+# with -DENABLE_AUTO_DOWNLOAD=ON it does not have to be installed: see
+# cmake/FindLibBF.cmake.
+find_package(LibBF REQUIRED)
 
-# An imported target rather than the project-wide include_directories() and
-# link_libraries() this replaces, for the reasons given over the CaDiCaL target
-# above. Exactly one translation unit includes libbf.h
-# (lib/FloatBlaster/DecimalLiteral.cpp), so the include directory has no
-# business being on every compile in the project.
-#
-# SYSTEM, the way ABC and SymFPU are consumed: the header typedefs __int128 on
-# 64-bit targets, which gcc's -pedantic rejects in the one C++ translation unit
-# that includes it.
-#
-# Both include properties, for the reason spelled out over the CaDiCaL target.
-add_library(LibBF UNKNOWN IMPORTED GLOBAL)
-set_target_properties(LibBF PROPERTIES
-    IMPORTED_LOCATION "${LIBBF_LIBRARY}"
-    INTERFACE_INCLUDE_DIRECTORIES "${LIBBF_INCLUDE_DIR}"
-    INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${LIBBF_INCLUDE_DIR}"
-)
+# The shared dependency directory, if there is one, now holds whatever this
+# configure decided to build. Check it was not filled by an incompatible build.
+stp_check_dep_dir_config()
 
 # -----------------------------------------------------------------------------
 # Query definitions

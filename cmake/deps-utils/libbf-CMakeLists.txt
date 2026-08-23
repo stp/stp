@@ -1,0 +1,23 @@
+# Build system for LibBF, injected by cmake/FindLibBF.cmake.
+#
+# LibBF ships as loose C files with a hand-written makefile that also builds
+# its tests, benchmarks and calculator demo, none of which STP uses -- and that
+# makefile knows nothing of MSVC, cross-compilation or a compiler launcher. Two
+# translation units is little enough that supplying a CMakeLists is easier than
+# driving that makefile, and it makes LibBF build the same way everywhere: the
+# separate `cl` recipe the Windows CI job used to carry is exactly this.
+cmake_minimum_required(VERSION 3.18)
+project(libbf C)
+
+add_library(bf STATIC libbf.c cutils.c)
+
+# libbf.a is linked into libstp.so. The parent build already passes
+# CMAKE_POSITION_INDEPENDENT_CODE, but say it here too so this stays correct if
+# it is ever configured on its own.
+set_target_properties(bf PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+include(GNUInstallDirs)
+install(TARGETS bf ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+install(FILES libbf.h cutils.h DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+
+# EOF
