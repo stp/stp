@@ -101,9 +101,9 @@ set(LIT_ARGS -s CACHE STRING "Arguments to pass to lit")
 # so ``find_package(GTest REQUIRED)`` fails.
 #
 # Instead it is recommended that projects build their own copy of GTest, which
-# is what happens here: scripts/deps/setup-gtest.sh clones upstream googletest
-# at a pinned tag into deps/gtest, and it is built from source as part of this
-# build. Everyone therefore compiles the same GTest with the same flags as STP.
+# is what happens here: it is fetched at a pinned tag and built from source as
+# part of this build, so everyone compiles the same GTest with the same flags
+# as STP.
 #
 # So GTest is the one dependency here that is fetched but not built by an
 # ExternalProject. An ExternalProject builds in a separate CMake invocation,
@@ -113,11 +113,9 @@ set(LIT_ARGS -s CACHE STRING "Arguments to pass to lit")
 # needs add_subdirectory(), which needs the source to exist during *this*
 # configure -- which is what FetchContent is for and ExternalProject is not.
 #
-# GTEST_DIR is rung 0 and defaults to where scripts/deps/setup-gtest.sh clones,
-# so a tree that has run that script needs no flags and downloads nothing.
-# Handing it to FetchContent as the source directory rather than branching on
-# it keeps one code path: FetchContent skips the download entirely when it is
-# told where the source already is.
+# GTEST_DIR is rung 0, and handing it to FetchContent as the source directory
+# rather than branching on it keeps one code path: FetchContent skips the
+# download entirely when it is told where the source already is.
 include(FetchContent)
 
 set(GTEST_DIR "${PROJECT_SOURCE_DIR}/deps/gtest" CACHE PATH
@@ -132,10 +130,10 @@ elseif (NOT DEFINED FETCHCONTENT_SOURCE_DIR_GOOGLETEST AND NOT ENABLE_AUTO_DOWNL
     # there is no deferred rung to fall through to and the gate has to be
     # checked by hand.
     message(FATAL_ERROR
-        "Could not find googletest, which ENABLE_TESTING needs. Run "
-        "scripts/deps/setup-gtest.sh, which clones it into deps/gtest where "
-        "this looks by default; or point -DGTEST_DIR at a checkout; or "
-        "configure with -DENABLE_AUTO_DOWNLOAD=ON to have it cloned here.")
+        "Could not find googletest, which ENABLE_TESTING needs. Configure "
+        "with -DENABLE_AUTO_DOWNLOAD=ON to have it cloned here, point "
+        "-DGTEST_DIR at an existing checkout, or build without the tests "
+        "with -DENABLE_TESTING=OFF.")
 endif()
 
 FetchContent_Declare(
@@ -195,11 +193,10 @@ if (EXISTS "${OUTPUTCHECK_DIR}/bin/OutputCheck")
     endif()
 elseif (NOT DEFINED FETCHCONTENT_SOURCE_DIR_OUTPUTCHECK AND NOT ENABLE_AUTO_DOWNLOAD)
     message(FATAL_ERROR
-        "Could not find OutputCheck, which the query-file tests need. Run "
-        "scripts/deps/setup-outputcheck.sh, which clones it into "
-        "deps/OutputCheck where this looks by default; or point "
-        "-DOUTPUTCHECK_DIR at a checkout; or configure with "
-        "-DENABLE_AUTO_DOWNLOAD=ON to have it cloned here.")
+        "Could not find OutputCheck, which the query-file tests need. "
+        "Configure with -DENABLE_AUTO_DOWNLOAD=ON to have it cloned here, "
+        "point -DOUTPUTCHECK_DIR at an existing checkout, or build without "
+        "the tests with -DENABLE_TESTING=OFF.")
 endif()
 
 FetchContent_Declare(

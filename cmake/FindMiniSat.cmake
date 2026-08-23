@@ -63,7 +63,7 @@ if(MINISAT_INCLUDE_DIRS OR MINISAT_LIBDIR)
     set(MiniSat_FOUND_SYSTEM TRUE)
 else()
     # Rung 1. Includes anything installed into STP_DEP_DIR by another build
-    # directory, and the deps/install that scripts/deps/setup-minisat.sh writes.
+    # directory.
     find_path(MINISAT_INCLUDE_DIR NAMES minisat/core/Solver.h
               PATH_SUFFIXES minisat minisat2)
     find_library(MINISAT_LIBRARY NAMES minisat minisat2)

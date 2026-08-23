@@ -29,10 +29,10 @@
 
 include(deps-helper)
 
-# Rung 0. LIBBF_DIR has a default rather than being empty, because
-# scripts/deps/setup-libbf.sh wrote to deps/libbf and CI, the docs and existing
-# checkouts all expect that to be found with no flags. So "set" is not the test
-# -- whether it holds a LibBF is.
+# Rung 0. LIBBF_DIR has a default rather than being empty, so that a checkout
+# with a LibBF already built at deps/libbf -- which is where the setup script
+# this replaces put one -- is still found with no flags. So "set" is not the
+# test; whether it holds a LibBF is.
 set(LIBBF_DIR "${PROJECT_SOURCE_DIR}/deps/libbf" CACHE PATH
     "Path to a built LibBF: the directory containing libbf.h and the bf library")
 

@@ -24,6 +24,7 @@ General options:
 
 Dependencies:
   --auto-download     download and build dependencies that are not installed
+  --abc-dir=PATH      an existing ABC build, rather than fetching one
   --dep-dir=PATH      install dependencies here, and look for them here.
                       Point several build directories at one path and only the
                       first builds anything. Defaults to \$STP_DEP_DIR if that
@@ -74,6 +75,7 @@ buildtype=default
 generator=default
 install_prefix=default
 
+abc_dir=default
 auto_download=default
 dep_dir=${STP_DEP_DIR:-default}
 dep_path=""
@@ -119,6 +121,9 @@ do
 
     --auto-download) auto_download=ON;;
     --no-auto-download) auto_download=OFF;;
+
+    --abc-dir) die "missing argument to $1 (try -h)";;
+    --abc-dir=*) abc_dir=${1##*=};;
 
     --dep-dir) die "missing argument to $1 (try -h)";;
     --dep-dir=*) dep_dir=${1##*=};;
@@ -195,6 +200,7 @@ add () { [ "$2" != default ] && cmake_opts+=("-D$1=$2"); return 0; }
 add CMAKE_BUILD_TYPE       "$buildtype"
 add CMAKE_INSTALL_PREFIX   "$install_prefix"
 add ENABLE_AUTO_DOWNLOAD   "$auto_download"
+add ABC_DIR                "$abc_dir"
 add STP_DEP_DIR            "$dep_dir"
 add USE_CADICAL            "$cadical"
 add CADICAL_DIR            "$cadical_dir"

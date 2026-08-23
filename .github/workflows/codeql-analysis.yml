@@ -116,8 +116,6 @@ jobs:
       uses: advanced-security/filter-sarif@v1
       with:
         patterns: |
-          -lib/extlib-abc/**
-          -lib/extlib-mimalloc/**
           -deps/**
           # Where the build unpacks what it fetches, SymFPU among it.
           -**/deps/src/**

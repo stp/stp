@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-# 3.18 is what lib/extlib-mimalloc requires, and mimalloc is the default
+# 3.18 is what mimalloc requires, and mimalloc is the default
 # STP_ALLOCATOR, so a default build already needs it. Anyone on an older CMake
 # can configure with -DSTP_ALLOCATOR=system, which skips that subdirectory.
 #
@@ -917,10 +917,10 @@ if (NOT USE_MINISAT AND NOT USE_CRYPTOMINISAT AND NOT USE_CADICAL AND NOT USE_RI
     message(FATAL_ERROR
             "No SAT backend is enabled, so this build could not solve "
             "anything. Enable at least one of:\n"
-            "    -DUSE_CADICAL=ON -DCADICAL_DIR=<checkout>  (see scripts/deps/setup-cadical.sh)\n"
-            "    -DUSE_CRYPTOMINISAT=ON                     (must already be installed)\n"
+            "    -DUSE_CADICAL=ON     (on by default; -DENABLE_AUTO_DOWNLOAD=ON builds one)\n"
+            "    -DUSE_CRYPTOMINISAT=ON  (5.11 or newer, and must already be installed)\n"
             "    -DUSE_MINISAT=ON\n"
-            "    -DUSE_RISS=ON -DRISS_DIR=<checkout>")
+            "    -DUSE_RISS=ON")
 endif()
 
 # ----------
