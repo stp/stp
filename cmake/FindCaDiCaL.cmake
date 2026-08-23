@@ -115,30 +115,25 @@ if(NOT CaDiCaL_FOUND_SYSTEM)
     set(CaDiCaL_ARCHIVE
         "${CMAKE_STATIC_LIBRARY_PREFIX}cadical${CMAKE_STATIC_LIBRARY_SUFFIX}")
 
-    # CaDiCaL has no CMake. It has a configure script that writes a makefile
-    # into build/, which is what STP's own recipe has always driven, so drive
-    # the same one: -fPIC because libcadical.a is linked into libstp.so, and
-    # CaDiCaL's configure does not build position-independent code by default.
+    # CaDiCaL has no CMake of its own, so it is given one -- see
+    # cmake/deps-utils/cadical-CMakeLists.txt for why driving its configure
+    # script instead does not survive a Windows host.
     #
-    # BUILD_IN_SOURCE, because that is where its configure puts build/.
+    # Only libcadical: CaDiCaL's default target also builds its command-line
+    # solver and its model-based tester, and STP runs neither.
     ExternalProject_Add(
         CaDiCaL-EP
         ${STP_EP_COMMON_CONFIG}
         GIT_REPOSITORY https://github.com/arminbiere/cadical
         GIT_TAG ${CaDiCaL_TAG}
-        BUILD_IN_SOURCE ON
-        CONFIGURE_COMMAND <SOURCE_DIR>/configure -fPIC
-        # Only the library: CaDiCaL's default target also builds its
-        # command-line solver and its test programs, and STP runs neither.
-        BUILD_COMMAND ${CMAKE_COMMAND} -E chdir <SOURCE_DIR>/build
-                      ${CMAKE_MAKE_PROGRAM} libcadical.a
-        # No install rules of its own, and the header has to land under the
-        # cadical/ directory that <cadical/cadical.hpp> names.
-        INSTALL_COMMAND ${CMAKE_COMMAND} -E copy
-                        <SOURCE_DIR>/build/libcadical.a
-                        <INSTALL_DIR>/lib/${CaDiCaL_ARCHIVE}
-        COMMAND ${CMAKE_COMMAND} -E copy <SOURCE_DIR>/src/cadical.hpp
-                <INSTALL_DIR>/include/cadical/cadical.hpp
+        PATCH_COMMAND ${CMAKE_COMMAND} -E copy
+                      "${CMAKE_CURRENT_LIST_DIR}/deps-utils/cadical-CMakeLists.txt"
+                      <SOURCE_DIR>/CMakeLists.txt
+        CMAKE_ARGS ${STP_EP_COMMON_CMAKE_ARGS}
+                   -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
+                   -DCMAKE_INSTALL_LIBDIR=lib
+                   -DCADICAL_VERSION=${CADICAL_VERSION}
+                   -DCADICAL_IDENTIFIER=${CaDiCaL_TAG}
         BUILD_BYPRODUCTS <INSTALL_DIR>/lib/${CaDiCaL_ARCHIVE}
     )
     add_dependencies(deps CaDiCaL-EP)
@@ -183,6 +178,15 @@ set_target_properties(CaDiCaL PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${CADICAL_INCLUDE_DIR}"
     INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${CADICAL_INCLUDE_DIR}"
 )
+
+# CaDiCaL reads its own resource usage through GetProcessMemoryInfo on
+# Windows, which lives in the Process Status API. Without naming it here, a
+# static link of STP fails on an unresolved symbol that says nothing about
+# CaDiCaL.
+if(WIN32)
+    set_target_properties(CaDiCaL PROPERTIES
+        IMPORTED_LINK_INTERFACE_LIBRARIES psapi)
+endif()
 
 mark_as_advanced(CaDiCaL_FOUND)
 mark_as_advanced(CaDiCaL_FOUND_SYSTEM)

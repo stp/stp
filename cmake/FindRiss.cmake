@@ -79,15 +79,13 @@ if(NOT Riss_FOUND_SYSTEM)
     # wins over the one in STP_EP_COMMON_CMAKE_ARGS. STP's flags are still
     # carried in front of Riss's, so a sanitizer build reaches it:
     #
-    #   -w              Riss does not compile warning-free under current
-    #                   compilers, and it is upstream code STP does not
-    #                   maintain. STP's own sources keep their warnings; the
-    #                   one file that includes a Riss header takes them as
-    #                   system headers, in lib/Sat/CMakeLists.txt.
     #   -std=gnu++14    Riss does not build as C++17. Only its own translation
     #                   units need this -- the headers STP includes are
     #                   C++17-clean.
-    set(Riss_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w -std=gnu++14")
+    #
+    # The warning silencing every dependency gets comes from
+    # STP_EP_NO_WARNINGS; this only has to add what is particular to Riss.
+    set(Riss_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${STP_EP_NO_WARNINGS} -std=gnu++14")
 
     ExternalProject_Add(
         Riss-EP

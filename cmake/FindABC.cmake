@@ -88,9 +88,6 @@ if(NOT ABC_FOUND_SYSTEM)
     set(ABC_ARCHIVE
         "${CMAKE_STATIC_LIBRARY_PREFIX}abc-pic${CMAKE_STATIC_LIBRARY_SUFFIX}")
 
-    # -Wno-error: ABC is upstream code whose warnings STP does not control, and
-    #   a WERROR build would otherwise fail inside it. STP's own sources stay
-    #   gated on warnings; this applies to the separate build only.
     # -ffunction-sections -fdata-sections: so the --gc-sections on libstp can
     #   drop the ABC that nothing reaches. ABC is interconnected enough that
     #   satisfying STP's ~30 entry points pulls in most of the archive
@@ -98,7 +95,7 @@ if(NOT ABC_FOUND_SYSTEM)
     set(ABC_EXTRA_FLAGS "${ABC_ABI_DEFINITIONS}")
     string(REPLACE ";" " " ABC_EXTRA_FLAGS "${ABC_EXTRA_FLAGS}")
     if(NOT MSVC)
-        string(APPEND ABC_EXTRA_FLAGS " -Wno-error -ffunction-sections -fdata-sections")
+        string(APPEND ABC_EXTRA_FLAGS " ${STP_EP_NO_WARNINGS} -ffunction-sections -fdata-sections")
     endif()
 
     set(ABC_CMAKE_ARGS

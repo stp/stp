@@ -103,12 +103,25 @@ endif()
 # POSITION_INDEPENDENT_CODE unconditionally: every static dependency STP has is
 # linked into libstp.so, and each of the scripts this replaces had to remember
 # that separately.
+# STP's warning set and -Werror are about STP's code. Forwarded into a
+# dependency's build they make it fail on warnings nobody here can fix, which
+# is why every dependency STP used to compile in-tree was handed -Wno-error
+# one at a time. A separate build needs the same and gets it here, once: STP
+# does not police upstream code's warnings, and an ExternalProject's output is
+# logged to a file rather than the console anyway, so silencing beats
+# demoting.
+if(MSVC)
+    set(STP_EP_NO_WARNINGS "/w")
+else()
+    set(STP_EP_NO_WARNINGS "-w")
+endif()
+
 set(STP_EP_COMMON_CMAKE_ARGS
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
     -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-    -DCMAKE_C_FLAGS=${CMAKE_C_FLAGS}
-    -DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS}
+    "-DCMAKE_C_FLAGS=${CMAKE_C_FLAGS} ${STP_EP_NO_WARNINGS}"
+    "-DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS} ${STP_EP_NO_WARNINGS}"
     -DCMAKE_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER}
     -DCMAKE_CXX_COMPILER_LAUNCHER=${CMAKE_CXX_COMPILER_LAUNCHER}
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON
@@ -121,6 +134,23 @@ set(STP_EP_COMMON_CMAKE_ARGS
     # Several of these projects predate the minimum CMake 4 accepts.
     -DCMAKE_POLICY_VERSION_MINIMUM=3.12
 )
+
+# MSVC writes debug information to a shared program database by default, and
+# two source files compiling in parallel then race for it -- "cannot open
+# program database", which is what a Windows job gets. STP's own MSVC build
+# already avoids this by asking for embedded debug info; a dependency built
+# separately does not inherit that, so say it again here. CMP0141 is what makes
+# the variable mean anything.
+if(MSVC)
+    set(_stp_ep_msvc_debug "${CMAKE_MSVC_DEBUG_INFORMATION_FORMAT}")
+    if(NOT _stp_ep_msvc_debug)
+        set(_stp_ep_msvc_debug "Embedded")
+    endif()
+    list(APPEND STP_EP_COMMON_CMAKE_ARGS
+         -DCMAKE_POLICY_DEFAULT_CMP0141=NEW
+         "-DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=${_stp_ep_msvc_debug}")
+    unset(_stp_ep_msvc_debug)
+endif()
 
 set(STP_EP_COMMON_CONFIG
     PREFIX "${STP_DEPS_PREFIX}"
