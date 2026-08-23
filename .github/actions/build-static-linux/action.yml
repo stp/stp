@@ -210,12 +210,16 @@ runs:
   - name: Installed static package is self-contained
     shell: bash
     run: |
-      prefix="$GITHUB_WORKSPACE/static-install"
-      cmake --install build --prefix "$prefix"
-      mv "$prefix" "$prefix-moved"
+      # DESTDIR rather than --install --prefix: STP installs its public
+      # headers to an absolute CMAKE_INSTALL_FULL_INCLUDEDIR, which --prefix
+      # cannot redirect, so the install would land in /usr/local and fail on
+      # permissions. Staging is what the in-suite consumer test does too.
+      stage="$GITHUB_WORKSPACE/static-install"
+      cmake -E env DESTDIR="$stage" cmake --install build
+      mv "$stage" "$stage-moved"
       mv build build-away
       mv deps deps-away
-      cmakedir=$(dirname "$(find "$prefix-moved" -name STPConfig.cmake | head -1)")
+      cmakedir=$(dirname "$(find "$stage-moved" -name STPConfig.cmake | head -1)")
       echo "consuming $cmakedir"
       cmake -S tests/api/install/uf-public-header-consumer -B consumer \
             -DSTP_DIR="$cmakedir" \

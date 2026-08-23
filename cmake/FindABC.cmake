@@ -94,8 +94,14 @@ if(NOT ABC_FOUND_SYSTEM)
     #   otherwise, and libstp grows from ~2MB to ~18MB.
     set(ABC_EXTRA_FLAGS "${ABC_ABI_DEFINITIONS}")
     string(REPLACE ";" " " ABC_EXTRA_FLAGS "${ABC_EXTRA_FLAGS}")
+    # ABC names its own CMAKE_C_FLAGS below, which replaces the common ones, so
+    # the silencing every dependency gets has to be repeated here -- on every
+    # compiler, not just the ones with a -ffunction-sections to go with it.
+    # Left out under MSVC, ABC emits warnings by the thousand, which is enough
+    # to get the interesting part of a failing build's log truncated away.
+    string(APPEND ABC_EXTRA_FLAGS " ${STP_EP_NO_WARNINGS}")
     if(NOT MSVC)
-        string(APPEND ABC_EXTRA_FLAGS " ${STP_EP_NO_WARNINGS} -ffunction-sections -fdata-sections")
+        string(APPEND ABC_EXTRA_FLAGS " -ffunction-sections -fdata-sections")
     endif()
 
     set(ABC_CMAKE_ARGS
