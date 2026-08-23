@@ -35,7 +35,6 @@ if (USE_CRYPTOMINISAT)
 endif()
 
 if (USE_CADICAL)
-    include_directories(${CADICAL_INCLUDE_DIR})
     set(sat_lib_to_add ${sat_lib_to_add} Cadical.cpp)
 endif()
 
@@ -63,4 +62,13 @@ add_library(sat OBJECT ${sat_lib_to_add})
 # CryptoMiniSat's own include directory, only the variable does.
 if (USE_CRYPTOMINISAT)
     target_link_libraries(sat PRIVATE ${CRYPTOMINISAT5_LIBRARIES})
+endif()
+
+# Likewise for CaDiCaL, whose imported target carries the (staged) include
+# directory holding cadical/cadical.hpp. This replaces a project-wide
+# include_directories(); only Cadical.cpp and SATSolverFactory.cpp reach that
+# header. The archive itself is named on libstp's own link line, in
+# lib/CMakeLists.txt, alongside the other backends.
+if (USE_CADICAL)
+    target_link_libraries(sat PRIVATE CaDiCaL)
 endif()

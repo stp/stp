@@ -686,8 +686,34 @@ if (USE_CADICAL)
         COPYONLY
     )
 
-    include_directories(${CADICAL_STAGED_INCLUDE_DIR})
-    link_libraries(${CADICAL_LIBRARY})
+    # An imported target rather than the project-wide include_directories() and
+    # link_libraries() this replaces. Those reached every target in the build,
+    # including the ones that have nothing to do with SAT solving, and -- more
+    # to the point -- link_libraries() names a file, which leaves nothing for a
+    # later add_dependencies() to order against once CaDiCaL is something this
+    # build can fetch and compile for itself.
+    #
+    # UNKNOWN, not STATIC: what find_library returns is whatever CADICAL_DIR
+    # holds, and CMake puts the path on the link line either way.
+    #
+    # Both include properties are set, and both are needed:
+    # INTERFACE_INCLUDE_DIRECTORIES is what actually puts the directory on a
+    # consumer's compile line, while INTERFACE_SYSTEM_INCLUDE_DIRECTORIES only
+    # says that whatever is already there should be spelled -isystem. Setting
+    # the second alone -- which is what cvc5's equivalent modules do, getting
+    # away with it because they add every dependency's include directory to the
+    # consuming target by hand as well -- silently adds nothing.
+    #
+    # Carrying both on the target is worth the extra line: the header and the
+    # archive then travel together, and cannot be made to disagree by a caller
+    # who links one and includes the other. That disagreement is exactly the
+    # bug the CADICAL_DIR note above describes.
+    add_library(CaDiCaL UNKNOWN IMPORTED GLOBAL)
+    set_target_properties(CaDiCaL PROPERTIES
+        IMPORTED_LOCATION "${CADICAL_LIBRARY}"
+        INTERFACE_INCLUDE_DIRECTORIES "${CADICAL_STAGED_INCLUDE_DIR}"
+        INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${CADICAL_STAGED_INCLUDE_DIR}"
+    )
 
     # Bounded variable addition (--cadical-factor) needs the
     # declare_more_variables API. That appeared in CaDiCaL 2.2.0, but the
@@ -1052,11 +1078,24 @@ if (NOT LIBBF_INCLUDE_DIR OR NOT LIBBF_LIBRARY)
             "looks by default -- or point LIBBF_DIR at an existing build")
 endif()
 message(STATUS "Found LibBF: ${LIBBF_LIBRARY}")
-# SYSTEM, the way ABC and SymFPU are consumed: the header typedefs
-# __int128 on 64-bit targets, which gcc's -pedantic rejects in the one
-# C++ translation unit that includes it.
-include_directories(SYSTEM ${LIBBF_INCLUDE_DIR})
-link_libraries(${LIBBF_LIBRARY})
+
+# An imported target rather than the project-wide include_directories() and
+# link_libraries() this replaces, for the reasons given over the CaDiCaL target
+# above. Exactly one translation unit includes libbf.h
+# (lib/FloatBlaster/DecimalLiteral.cpp), so the include directory has no
+# business being on every compile in the project.
+#
+# SYSTEM, the way ABC and SymFPU are consumed: the header typedefs __int128 on
+# 64-bit targets, which gcc's -pedantic rejects in the one C++ translation unit
+# that includes it.
+#
+# Both include properties, for the reason spelled out over the CaDiCaL target.
+add_library(LibBF UNKNOWN IMPORTED GLOBAL)
+set_target_properties(LibBF PROPERTIES
+    IMPORTED_LOCATION "${LIBBF_LIBRARY}"
+    INTERFACE_INCLUDE_DIRECTORIES "${LIBBF_INCLUDE_DIR}"
+    INTERFACE_SYSTEM_INCLUDE_DIRECTORIES "${LIBBF_INCLUDE_DIR}"
+)
 
 # -----------------------------------------------------------------------------
 # Query definitions

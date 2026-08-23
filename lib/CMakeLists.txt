@@ -246,6 +246,15 @@ add_dependencies(stp libabc-pic)
 # defined for STP's sources too.
 set(stp_link_libs ${MINISAT_LIBRARIES} $<TARGET_FILE:libabc-pic>)
 
+# LibBF is not optional -- folding the real literals in floating-point input is
+# part of every build -- so it is always on the link line. Named by path rather
+# than by its imported target, for the export-compatibility reason given over
+# $<TARGET_FILE:libabc-pic> above: a target name here would be written into
+# STPTargets.cmake, where no consumer has a target to resolve it against. The
+# target itself is used where it does belong, on the one object library that
+# compiles against the header (lib/FloatBlaster).
+set(stp_link_libs ${stp_link_libs} ${LIBBF_LIBRARY})
+
 # RunTimes reads the process's peak memory through GetProcessMemoryInfo,
 # which lives in psapi. ABC's sclLiberty.c calls PathMatchSpec from
 # shlwapi; MSVC picks that library up through ABC's #pragma comment(lib),
@@ -270,6 +279,13 @@ endif()
 if (USE_RISS)
     set(stp_link_libs
         ${stp_link_libs} ${RISS_LIBRARY})
+endif()
+
+# By path, for the same reason as LibBF above; lib/Sat links the CaDiCaL target
+# itself, which is what carries the include directory to the compile.
+if (USE_CADICAL)
+    set(stp_link_libs
+        ${stp_link_libs} ${CADICAL_LIBRARY})
 endif()
 
 # PRIVATE, not LINK_PUBLIC: these are implementation details of libstp, and

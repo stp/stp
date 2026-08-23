@@ -28,3 +28,9 @@ add_library(floatblaster OBJECT
     symbolic_fp.cpp
 )
 add_dependencies(floatblaster ASTKind_header)
+
+# DecimalLiteral.cpp is the only translation unit in STP that includes libbf.h;
+# the imported target carries that include directory as SYSTEM. This replaces a
+# project-wide include_directories(SYSTEM). The archive is named on libstp's
+# own link line, in lib/CMakeLists.txt.
+target_link_libraries(floatblaster PRIVATE LibBF)
