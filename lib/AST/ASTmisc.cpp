@@ -26,6 +26,9 @@ THE SOFTWARE.
 #include "stp/UninterpretedFunctions/UFDecl.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Util/NodeIterator.h"
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 #if !defined(_MSC_VER)
 // Needed for signal()
@@ -1435,6 +1438,90 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
   }
   return true;
 }
+
+namespace
+{
+// The base array terms an array operand resolves to: down through write
+// chains, and through both arms of an array-valued if-then-else. Anything
+// else -- a symbol, or a term this cannot see through -- is a base.
+void collectArrayBases(const ASTNode& array, std::vector<ASTNode>& bases)
+{
+  std::unordered_set<uint64_t> seen;
+  std::vector<ASTNode> pending(1, array);
+  while (!pending.empty())
+  {
+    const ASTNode current = pending.back();
+    pending.pop_back();
+    if (!seen.insert(current.GetNodeNum()).second)
+      continue;
+
+    const Kind kind = current.GetKind();
+    if (kind == WRITE)
+      pending.push_back(current[0]);
+    else if (kind == ITE && current.GetIndexWidth() > 0)
+    {
+      pending.push_back(current[1]);
+      pending.push_back(current[2]);
+    }
+    else
+      bases.push_back(current);
+  }
+}
+
+// The distinct constant and symbolic access indexes reaching one base array.
+struct ArrayAccess
+{
+  std::unordered_set<uint64_t> constants;
+  std::unordered_set<uint64_t> symbolic;
+};
+} // namespace
+
+uint64_t arrayCongruenceEstimate(const ASTNode& n)
+{
+  // Node numbers stand in for the index nodes: only distinctness matters.
+  std::unordered_map<uint64_t, ArrayAccess> byBase;
+
+  const auto note = [&](const ASTNode& array, const ASTNode& index) {
+    std::vector<ASTNode> bases;
+    collectArrayBases(array, bases);
+    for (size_t i = 0; i < bases.size(); i++)
+    {
+      ArrayAccess& a = byBase[bases[i].GetNodeNum()];
+      if (index.isConstant())
+        a.constants.insert(index.GetNodeNum());
+      else
+        a.symbolic.insert(index.GetNodeNum());
+    }
+  };
+
+  std::unordered_set<uint64_t> visited;
+  std::vector<ASTNode> pending(1, n);
+  while (!pending.empty())
+  {
+    const ASTNode current = pending.back();
+    pending.pop_back();
+    if (current.isAtom() || !visited.insert(current.GetNodeNum()).second)
+      continue;
+
+    const Kind kind = current.GetKind();
+    if (kind == READ || kind == WRITE)
+      note(current[0], current[1]);
+
+    for (size_t i = 0; i < current.Degree(); i++)
+      pending.push_back(current[i]);
+  }
+
+  uint64_t total = 0;
+  for (std::unordered_map<uint64_t, ArrayAccess>::const_iterator it =
+           byBase.begin(); it != byBase.end(); ++it)
+  {
+    const uint64_t c = it->second.constants.size();
+    const uint64_t s = it->second.symbolic.size();
+    total += c * s + s * (s - 1) / 2;
+  }
+  return total;
+}
+
 
 /* FUNCTION: Typechecker for terms and formulas
  *

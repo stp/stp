@@ -55,6 +55,7 @@ THE SOFTWARE.
 #include "stp/ToSat/ToSATBase.h"
 #include <map>
 #include <set>
+#include <utility>
 #include <vector>
 
 namespace stp
@@ -234,6 +235,11 @@ public:
   // remain structural and are handled by the checker's T rules.
   ASTNode conjoinRecordConstraints(const ASTNode& root);
 
+  // Access indexes grouped by (index width, value width) of the array
+  // they access.
+  typedef std::pair<unsigned, unsigned> ArrayShape;
+  typedef std::map<ArrayShape, std::set<ASTNode>> IndexInventory;
+
   // Eager Ackermann reduction of the active equalities, the classical
   // eager alternative to the refinement loop, taken when the user asked
   // for --ackermanize. The negative direction of every equality is
@@ -260,7 +266,26 @@ public:
   // pointwise bit-equality is stronger than value equality there (NaN
   // payloads, non-denoting patterns), so a packed instantiation could
   // refuse a genuine model. Such solves stay on lemmas on demand.
-  ASTNode instantiateEagerAckermann(const ASTNode& root);
+  ASTNode instantiateEagerAckermann(const ASTNode& root,
+                                    const IndexInventory& indexesByShape);
+
+  // Every distinct access index in the solve, grouped by accessed array
+  // shape. Built once per solve and shared by the policy and the
+  // instantiation, which must agree on the inventory they count and use.
+  void collectIndexInventory(const ASTNode& root,
+                             IndexInventory& indexesByShape) const;
+
+  // How many lemmas instantiateEagerAckermann would conjoin for that
+  // inventory: one per active record per index of the record's shape.
+  uint64_t eagerLemmaCount(const IndexInventory& indexesByShape) const;
+
+  // True when a record's construction operands quotient their bit patterns
+  // (float or RoundingMode cells or indexes), which the eager arm cannot
+  // express.
+  bool equalityQuotientsBitPatterns() const;
+
+  // Whether to take the eager arm when the user did not ask for it by name.
+  bool eagerEqualityPreferred(const ASTNode& root) const;
 
   // The initial formula protocol shared by the batch and persistent drivers,
   // after opaque equalities have been lowered and before ordinary

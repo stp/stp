@@ -887,32 +887,32 @@ ASTNode ExtensionalityContext::conjoinRecordConstraints(const ASTNode& root)
   return out;
 }
 
-ASTNode ExtensionalityContext::instantiateEagerAckermann(const ASTNode& root)
+bool ExtensionalityContext::equalityQuotientsBitPatterns() const
 {
-  assert(!activeRecordIds.empty());
-  assert(registrySealed); // the witness bundles are already in `root`
-
   for (size_t i = 0; i < activeRecordIds.size(); i++)
   {
     const SourceSort sort =
         records[activeRecordIds[i]].constructionLeft.GetSourceSort();
     assert(sort.kind() == SourceSort::Kind::Array);
     if (sort.usesFloatingPointTheory())
-      return ASTNode();
+      return true;
   }
+  return false;
+}
 
-  // Every distinct access-index term in the solve, grouped by the
-  // accessed array's shape. Writes are accesses exactly as they are for
-  // the lazy checker (paper section 11.4): equal stores at equal
-  // indices force equal values with no read anywhere near, so a write
-  // index is a point where an equality is observed and must be
-  // instantiated. One shared inventory per shape rather than one per
-  // equality-connected component: extra indexes only add valid
-  // implications of the guarding proxy, and sharing is what lets a
-  // chain a = b, b = c contradict a witness for a distinct (a, c) --
-  // the (a, c) record's lambda reaches the other two records' lemmas.
-  typedef std::pair<unsigned, unsigned> ArrayShape;
-  std::map<ArrayShape, std::set<ASTNode>> indexesByShape;
+// Every distinct access-index term in the solve, grouped by the
+// accessed array's shape. Writes are accesses exactly as they are for
+// the lazy checker (paper section 11.4): equal stores at equal
+// indices force equal values with no read anywhere near, so a write
+// index is a point where an equality is observed and must be
+// instantiated. One shared inventory per shape rather than one per
+// equality-connected component: extra indexes only add valid
+// implications of the guarding proxy, and sharing is what lets a
+// chain a = b, b = c contradict a witness for a distinct (a, c) --
+// the (a, c) record's lambda reaches the other two records' lemmas.
+void ExtensionalityContext::collectIndexInventory(
+    const ASTNode& root, IndexInventory& indexesByShape) const
+{
   ASTNodeSet nodes;
   collectDag(root, nodes);
   for (ASTNodeSet::const_iterator it = nodes.begin(); it != nodes.end(); ++it)
@@ -926,6 +926,53 @@ ASTNode ExtensionalityContext::instantiateEagerAckermann(const ASTNode& root)
       indexesByShape[ArrayShape(it->GetIndexWidth(), it->GetValueWidth())]
           .insert((*it)[1]);
   }
+}
+
+uint64_t ExtensionalityContext::eagerLemmaCount(
+    const IndexInventory& indexesByShape) const
+{
+  uint64_t lemmas = 0;
+  for (size_t i = 0; i < activeRecordIds.size(); i++)
+  {
+    const Record& r = records[activeRecordIds[i]];
+    const IndexInventory::const_iterator it = indexesByShape.find(ArrayShape(
+        r.constructionLeft.GetIndexWidth(), r.constructionLeft.GetValueWidth()));
+    if (it != indexesByShape.end())
+      lemmas += it->second.size();
+  }
+  return lemmas;
+}
+
+// The eager arm replaces the refinement loop with one conjoined block of
+// records-times-indexes lemmas, and puts the solve on the eager read path
+// besides. Both halves of that trade are decided on the same currency the
+// array policy uses -- the index comparisons the transform would introduce,
+// with constant-against-constant pairs charged nothing because they are
+// decided rather than built -- so one budget governs both, and a query is
+// judged on the work it causes rather than on how many reads it contains.
+//
+// The lemma block itself is deliberately not charged. It is linear in
+// records times indexes and it is what pays for retiring the refinement
+// loop; measured over the QF_AX corpus, a large block is the case that wins
+// 3-5x, so charging for it would refuse exactly the queries worth taking.
+//
+// The structural cost of the read side is a different unit and keeps its own
+// bound: a read over a chain of writes expands per link and is catastrophic
+// eagerly. Both bounds short-circuit, and this runs once per solve.
+bool ExtensionalityContext::eagerEqualityPreferred(const ASTNode& root) const
+{
+  constexpr uint64_t expansionLimit = 1000;
+
+  return arrayCongruenceEstimate(root) <= bm->UserFlags.array_eager_budget &&
+         arrayEagerCostLessThan(root, expansionLimit);
+}
+
+ASTNode ExtensionalityContext::instantiateEagerAckermann(
+    const ASTNode& root, const IndexInventory& indexesByShape)
+{
+  assert(!activeRecordIds.empty());
+  assert(registrySealed); // the witness bundles are already in `root`
+  assert(!equalityQuotientsBitPatterns());
 
   // records-times-indexes lemmas, before the transform's own quadratic
   // read expansion. That cost is what the user's --ackermanize opted
@@ -937,10 +984,12 @@ ASTNode ExtensionalityContext::instantiateEagerAckermann(const ASTNode& root)
   {
     const Record& r = records[activeRecordIds[i]];
     const unsigned ew = r.constructionLeft.GetValueWidth();
-    const std::set<ASTNode>& indexes = indexesByShape[ArrayShape(
-        r.constructionLeft.GetIndexWidth(), ew)];
-    for (std::set<ASTNode>::const_iterator idx = indexes.begin();
-         idx != indexes.end(); ++idx)
+    const IndexInventory::const_iterator shape = indexesByShape.find(
+        ArrayShape(r.constructionLeft.GetIndexWidth(), ew));
+    if (shape == indexesByShape.end())
+      continue;
+    for (std::set<ASTNode>::const_iterator idx = shape->second.begin();
+         idx != shape->second.end(); ++idx)
     {
       const ASTNode readL = hf->CreateTerm(READ, ew, r.constructionLeft, *idx);
       const ASTNode readR = hf->CreateTerm(READ, ew, r.constructionRight, *idx);
@@ -963,19 +1012,37 @@ ASTNode ExtensionalityContext::prepareInitialFormula(const ASTNode& root)
     return root;
 
   const ASTNode constrained = conjoinRecordConstraints(root);
-  if (!bm->UserFlags.ackermannisation)
-    return constrained;
 
-  const ASTNode eager = instantiateEagerAckermann(constrained);
-  if (eager.IsNull())
+  // Pointwise bit-equality is stronger than value equality for a sort that
+  // quotients its bit patterns (NaN payloads, non-denoting patterns), so a
+  // packed instantiation could refuse a genuine model. Such solves stay on
+  // lemmas on demand; only a request by name is worth a warning.
+  if (equalityQuotientsBitPatterns())
   {
-    std::cerr << "Warning: --ackermanize is disabled for queries with "
-                 "array equality over floating-point sorts."
-              << std::endl;
-    bm->UserFlags.ackermannisation = false;
+    if (bm->UserFlags.ackermannisation)
+    {
+      std::cerr << "Warning: --ackermanize is disabled for queries with "
+                   "array equality over floating-point sorts."
+                << std::endl;
+      bm->UserFlags.ackermannisation = false;
+    }
     return constrained;
   }
 
+  IndexInventory indexesByShape;
+  collectIndexInventory(constrained, indexesByShape);
+
+  if (!bm->UserFlags.ackermannisation && !eagerEqualityPreferred(constrained))
+    return constrained;
+
+  // The lemma block stands in for the equality refinement loop, and the read
+  // side has to match it: retiring the records leaves ordinary array
+  // operations behind, and the eager transform is what removes them. Both
+  // drivers save and restore this flag around the solve, so selecting it
+  // here cannot outlive the query.
+  bm->UserFlags.ackermannisation = true;
+
+  const ASTNode eager = instantiateEagerAckermann(constrained, indexesByShape);
   bm->ASTNodeStats("after eager equality instantiation: ", eager);
   return eager;
 }
