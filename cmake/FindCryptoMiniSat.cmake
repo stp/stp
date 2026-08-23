@@ -77,12 +77,20 @@ find_package(cadiback CONFIG QUIET)
 # Rungs 0 and 1 in one call: find_package(CONFIG) honours cryptominisat5_DIR
 # first and CMAKE_PREFIX_PATH -- which carries STP_DEP_DIR and deps/install --
 # after it.
-find_package(cryptominisat5 ${CryptoMiniSat_FIND_VERSION} CONFIG)
+#
+# Deliberately not asking find_package for the version: it is checked here
+# instead, so that a copy which is present but too old can be reported as
+# exactly that. "Could not find CryptoMiniSat" is a confusing thing to be told
+# about a library that is plainly installed.
+find_package(cryptominisat5 CONFIG)
 
 set(CryptoMiniSat_FOUND_SYSTEM FALSE)
 if(cryptominisat5_FOUND)
     set(CryptoMiniSat_FOUND_SYSTEM TRUE)
     set(CryptoMiniSat_VERSION "${cryptominisat5_VERSION}")
+    # Clears CryptoMiniSat_FOUND_SYSTEM if it is outside the range STP asked
+    # for, and says so.
+    check_system_version("CryptoMiniSat")
 endif()
 
 if(NOT CryptoMiniSat_FOUND_SYSTEM)
@@ -90,8 +98,19 @@ if(NOT CryptoMiniSat_FOUND_SYSTEM)
     # Deliberately not check_auto_download(): --auto-download cannot help here,
     # so offering it would be a false lead.
     if(CryptoMiniSat_FIND_REQUIRED)
+        if(cryptominisat5_FOUND)
+            message(FATAL_ERROR
+                "Found CryptoMiniSat ${CryptoMiniSat_VERSION}, but STP needs "
+                "at least ${CryptoMiniSat_FIND_VERSION}. Every method STP "
+                "calls on it exists from that release; older ones are not "
+                "refused for being known broken, they are refused for being "
+                "untested here -- nothing in this repository builds one.\n"
+                "Run scripts/deps/setup-cms.sh, which builds a pinned release "
+                "into deps/install where this looks with no further flags, or "
+                "build without it: -DUSE_CRYPTOMINISAT=OFF.")
+        endif()
         message(FATAL_ERROR
-            "CryptoMiniSat 5.x was not found, and it is the one dependency STP "
+            "CryptoMiniSat was not found, and it is the one dependency STP "
             "does not build for you -- it reaches STP through the CMake "
             "package it installs, which an ExternalProject could not write "
             "until after this configure had needed to read it.\n"

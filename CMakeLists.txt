@@ -844,10 +844,14 @@ if (NOT USE_CRYPTOMINISAT STREQUAL "OFF")
   # "use it if it is there". cmake/FindCryptoMiniSat.cmake carries the GMP
   # warning, the cadical/cadiback preamble and the reason it is the one
   # dependency STP does not build for you.
+  # 5.11 is the floor, and it is chosen from evidence rather than taste: it is
+  # the oldest release anything in this repository builds -- the Dockerfiles do
+  # -- and every method lib/Sat/CryptoMinisat5.cpp calls exists in it. Nothing
+  # here builds anything older, so nothing here can say an older one works.
   if (CMS_EXPLICITLY_REQUESTED)
-      find_package(CryptoMiniSat REQUIRED)
+      find_package(CryptoMiniSat 5.11 REQUIRED)
   else()
-      find_package(CryptoMiniSat)
+      find_package(CryptoMiniSat 5.11)
   endif()
   # HAVE_FLAG_STD_CPP11 is in the condition because CryptoMiniSat's headers are
   # C++11: a compiler that cannot be told to accept them cannot compile against

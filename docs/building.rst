@@ -250,9 +250,10 @@ These apply to all generators:
    dynamic
 -  ``BUILD_SHARED_LIBS`` -- build ``libstp`` as a shared library
    (default ON; forced OFF by ``STATICCOMPILE``)
--  ``USE_CRYPTOMINISAT`` -- ``ON`` requires CryptoMiniSat and fails
-   configuration if it is missing, ``AUTO`` uses it when it happens to be
-   installed, and ``OFF`` -- the default -- never uses it. (It replaces
+-  ``USE_CRYPTOMINISAT`` -- ``ON`` requires CryptoMiniSat 5.11 or newer and
+   fails configuration if it is missing or older, ``AUTO`` uses it when a
+   new enough one happens to be installed, and ``OFF`` -- the default --
+   never uses it. (It replaces
    ``NOCRYPTOMINISAT`` and ``FORCE_CMS``, both of which are still accepted
    and warn)
 -  ``USE_CADICAL`` and ``CADICAL_DIR`` -- build the CaDiCaL backend
