@@ -281,10 +281,39 @@ public:
   // circuits. Experimental; off by default.
   bool fp_native_arith = false;
 
-  // Recognise fp.isZero(fp.add ...) and encode only the observed zero-result
-  // condition instead of constructing and packing every result bit.
+  // Recognise fp.isZero(fp.add ...) and encode the observed zero-result
+  // condition directly instead of constructing and packing every result bit.
   // Experimental; requires native arithmetic and is off by default.
   bool fp_native_add_iszero = false;
+
+  // Experimental strengthening for the native FP bit-blaster: mine simple
+  // top-level finite box bounds and use them to omit NaN/infinity cases from
+  // native packed-field circuits when those cases are already impossible.
+  bool fp_native_domain = false;
+
+  // Experimental native-domain arithmetic specialization. A known finite
+  // semantic sign removes fp.add's opposite-sign cancellation datapath and
+  // fp.mul's sign-dependent rounding, while explicit muxes retain signed zero.
+  bool fp_native_known_sign = false;
+
+  // Experimental floating-point domain prepass. It mines simple boxed
+  // variable bounds from ordered FP comparisons and uses them to discharge
+  // non-box ordered comparisons and zero-sum rows whose interval/domain facts
+  // decide them.
+  bool fp_domain_simplify = false;
+
+  // Sound zero-fact extraction for boxed nonnegative FP symbols. It only
+  // derives zero facts from same-sign rows whose terms are +/- one boxed
+  // symbol. Two-term differences may propagate an already-established zero,
+  // but terms are never algebraically cancelled through a rounded row. Zero
+  // is encoded as zero magnitude bits so +0/-0 remain distinct.
+  bool fp_domain_sound_zero_facts = false;
+
+  // Sound row-level FP zero refutation. It recognises linear FP expressions
+  // over boxed finite variables and rewrites a zero-row to false only when a
+  // conservative target-format interval, evaluated in the original AST
+  // association with rounding at every operation, excludes zero.
+  bool fp_domain_row_bounds = false;
 
   int64_t multiplication_variant = 1;
 
