@@ -29,7 +29,7 @@ THE SOFTWARE.
 #define CADICAL_H_
 
 #include "SATSolver.h"
-#include "src/cadical.hpp"
+#include <cadical/cadical.hpp>
 #include <chrono>
 
 namespace stp

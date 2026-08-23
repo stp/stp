@@ -669,7 +669,24 @@ if (USE_CADICAL)
     endif()
     message(STATUS "Found CaDiCaL: ${CADICAL_LIBRARY}")
     add_definitions(-DUSE_CADICAL)
-    include_directories(${CADICAL_INCLUDE_DIR})
+
+    # CaDiCaL's header is consumed as <cadical/cadical.hpp>, which is where an
+    # installed CaDiCaL puts it. A checkout has it at src/cadical.hpp instead,
+    # so stage a copy under that name in the build tree and let everything
+    # downstream see one layout.
+    #
+    # This is what stp/Sat/Cadical.h used to spell #include "src/cadical.hpp",
+    # and that spelling is why CADICAL_DIR has to be a build tree: no installed
+    # CaDiCaL anywhere has a src/ directory, so STP could not be built against
+    # one at all. Restaging costs a file copy and removes that restriction.
+    set(CADICAL_STAGED_INCLUDE_DIR "${PROJECT_BINARY_DIR}/deps/include")
+    configure_file(
+        "${CADICAL_INCLUDE_DIR}/src/cadical.hpp"
+        "${CADICAL_STAGED_INCLUDE_DIR}/cadical/cadical.hpp"
+        COPYONLY
+    )
+
+    include_directories(${CADICAL_STAGED_INCLUDE_DIR})
     link_libraries(${CADICAL_LIBRARY})
 
     # Bounded variable addition (--cadical-factor) needs the
@@ -678,7 +695,10 @@ if (USE_CADICAL)
     # never tested here, so support is only compiled in against the 3.x
     # series. Older checkouts still build and solve; STP just warns if the
     # factor flag is explicitly requested. The checkout root carries its
-    # version in a VERSION file, which is what CADICAL_INCLUDE_DIR points at.
+    # version in a VERSION file, which is what CADICAL_INCLUDE_DIR points at --
+    # a checkout-only file, so an installed CaDiCaL reads as "unknown" here and
+    # loses the factor support. Replacing this probe with one that compiles and
+    # runs CaDiCaL::Solver::version() belongs with the Find module.
     set(CADICAL_VERSION "unknown")
     if (EXISTS "${CADICAL_INCLUDE_DIR}/VERSION")
         file(READ "${CADICAL_INCLUDE_DIR}/VERSION" CADICAL_VERSION)
