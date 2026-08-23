@@ -60,12 +60,26 @@ Third-party code that is compiled into STP also lives under ``lib/``:
 -  ``extlib-cli11``: `CLI11 <https://github.com/CLIUtils/CLI11>`__, the
    command-line parser of the ``stp`` executable. Header-only, so it is
    compiled into the tool but never into ``libstp``. A git submodule.
+-  ``extlib-libbf``: `LibBF <https://bellard.org/libbf/>`__, Fabrice
+   Bellard's arbitrary-precision floating-point library, used by
+   ``FloatBlaster`` to convert the real literals in floating-point input.
+   A git submodule pointing at `stp/libbf <https://github.com/stp/libbf>`__,
+   a mirror laid out like the ABC fork above: upstream publishes release
+   tarballs and no repository, so ``master`` holds the tarballs verbatim
+   and ``stp`` -- the branch the submodule is pinned to -- carries STP's
+   MSVC portability changes. Only ``libbf.c`` and ``cutils.c`` are
+   compiled; ``lib/CMakeLists.txt`` folds them into ``libstp``.
 -  ``extlib-constbv``: A library that implements multi-word fixed-length
    integers, based on Steffen Beyer's
    `Bit::Vector <https://metacpan.org/pod/Bit::Vector>`__ perl module.
 -  ``extlib-symfpu``: `SymFPU <https://github.com/martin-cs/symfpu>`__, a
    header-only implementation of the floating-point operations in terms of
-   bitvectors, used by ``FloatBlaster``. A git submodule.
+   bitvectors, used by ``FloatBlaster``. A git submodule, pointing at
+   `stp/symfpu <https://github.com/stp/symfpu>`__, a fork laid out like the
+   ABC one: ``main`` tracks upstream and ``stp`` -- the branch the submodule
+   is pinned to -- carries STP's changes as commits on top. They are four
+   correctness fixes for the narrowest formats SMT-LIB permits, none of
+   which the common formats reach.
 -  ``extlib-mimalloc``:
    `mimalloc <https://github.com/microsoft/mimalloc>`__, the allocator
    the STP executables link against by default. A git submodule; see

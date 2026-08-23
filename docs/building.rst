@@ -25,37 +25,30 @@ On a Debian-like platform most of it comes from the package manager:
     sudo apt-get install git build-essential cmake bison flex python3
 
 A python3 interpreter is needed at build time -- it generates the AST kind
-tables -- and also for the Python interface and the test suite. git is needed
-for the submodules, for the vendored-patch step that runs at configure time,
-and to fetch LibBF.
+tables -- and also for the Python interface and the test suite. git is
+needed for the submodules.
 
 The SAT backends bring their own dependencies, which are needed only if you
 build that backend, and which the ``scripts/deps`` script for each one names:
 CryptoMiniSat needs GMP (``libgmp-dev``), MiniSat needs zlib
 (``zlib1g-dev``). Neither is used by STP itself.
 
-Four dependencies are vendored as submodules and need nothing installed:
+Five dependencies are vendored as submodules and need nothing installed:
 ABC, mimalloc, the command-line parser
-`CLI11 <https://github.com/CLIUtils/CLI11>`__, and the header-only
-floating-point library `SymFPU <https://github.com/martin-cs/symfpu>`__.
-Run ``git submodule update --init`` after cloning; the build does not
+`CLI11 <https://github.com/CLIUtils/CLI11>`__, the header-only
+floating-point library `SymFPU <https://github.com/martin-cs/symfpu>`__,
+and `LibBF <https://bellard.org/libbf/>`__, which converts the real
+literals in floating-point input -- ``((_ to_fp 8 24) RNE 1.5)``. Run
+``git submodule update --init`` after cloning; the build does not
 configure without them.
 
-One is fetched and built by a script rather than vendored:
-`LibBF <https://bellard.org/libbf/>`__, which converts the real literals
-in floating-point input -- ``((_ to_fp 8 24) RNE 1.5)``. It is required.
-Run ``scripts/deps/setup-libbf.sh`` from the top of the source tree
-before configuring: it clones `stp/libbf <https://github.com/stp/libbf>`__
-at a pinned commit and builds ``libbf.a`` into ``deps/libbf``, where the
-build looks by default. Point ``LIBBF_DIR`` at a copy built somewhere else
-to skip the script -- an offline build wants that, since the script clones.
-
-Upstream LibBF publishes release tarballs and no git repository, which is
-what ``stp/libbf`` is for. It is laid out like STP's ABC fork: ``master``
-holds the release tarballs verbatim, one commit each, and ``stp`` -- the
-branch the pin names -- adds STP's MSVC portability changes on top. Moving
-to a newer release means importing its tarball there and rebasing ``stp``
-onto it, then moving the pin here.
+LibBF is pointed at `stp/libbf <https://github.com/stp/libbf>`__ rather
+than upstream, which publishes release tarballs and no git repository.
+That mirror is laid out like STP's ABC fork: ``master`` holds the release
+tarballs verbatim, one commit each, and ``stp`` -- the branch the submodule
+is pinned to -- adds STP's MSVC portability changes on top. Moving to a
+newer release means importing its tarball there and rebasing ``stp`` onto
+it, then moving the pin here. Its two C files are compiled as part of STP.
 
 SAT backends
 ------------
@@ -195,8 +188,6 @@ These apply to all generators:
 -  ``SYMFPU_INCLUDE_DIRS`` -- build against an external SymFPU clone
    rather than the vendored submodule (point it at the directory
    *containing* the clone)
--  ``LIBBF_DIR`` -- where to find the built LibBF (defaults to
-   ``deps/libbf``, where ``scripts/deps/setup-libbf.sh`` puts it)
 -  ``STP_ALLOCATOR`` -- which memory allocator the ``stp`` binary uses.
    STP is allocation-heavy and the C library allocator is a significant
    bottleneck, so this defaults to ``mimalloc``, which is vendored and
@@ -237,7 +228,7 @@ Building on Windows and Visual Studio
 Install `CMake <https://cmake.org/download/>`__ and follow the steps that
 one of the two Windows jobs in
 `.github/workflows/ci.yml <https://github.com/stp/stp/blob/master/.github/workflows/ci.yml>`__
-runs. Both install flex and bison, build LibBF, and configure with
+runs. Both install flex and bison and configure with
 ``-DNOCRYPTOMINISAT=ON``, CryptoMiniSat not being buildable there.
 
 ``windows (cadical, MinGW)`` is the one to follow for a solver to use: it
