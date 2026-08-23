@@ -55,10 +55,45 @@ set(LIT_ARGS -s CACHE STRING "Arguments to pass to lit")
 # is what happens here: scripts/deps/setup-gtest.sh clones upstream googletest
 # at a pinned tag into deps/gtest, and it is built from source as part of this
 # build. Everyone therefore compiles the same GTest with the same flags as STP.
-set(GTEST_PREFIX ${PROJECT_SOURCE_DIR}/deps/gtest)
-if (NOT EXISTS "${GTEST_PREFIX}/CMakeLists.txt")
-    message(FATAL_ERROR "Could not find GTest. Did you run scripts/deps/setup-gtest.sh?")
+#
+# So GTest is the one dependency here that is fetched but not built by an
+# ExternalProject. An ExternalProject builds in a separate CMake invocation,
+# with its own cache and its own flags, which is exactly what must not happen:
+# GTest has to be compiled with STP's flags, with gtest_force_shared_crt under
+# MSVC, and with whatever a sanitizer build has put in CMAKE_CXX_FLAGS. That
+# needs add_subdirectory(), which needs the source to exist during *this*
+# configure -- which is what FetchContent is for and ExternalProject is not.
+#
+# GTEST_DIR is rung 0 and defaults to where scripts/deps/setup-gtest.sh clones,
+# so a tree that has run that script needs no flags and downloads nothing.
+# Handing it to FetchContent as the source directory rather than branching on
+# it keeps one code path: FetchContent skips the download entirely when it is
+# told where the source already is.
+include(FetchContent)
+
+set(GTEST_DIR "${PROJECT_SOURCE_DIR}/deps/gtest" CACHE PATH
+    "Path to a googletest checkout to build GTest from")
+
+if (EXISTS "${GTEST_DIR}/CMakeLists.txt")
+    if (NOT DEFINED FETCHCONTENT_SOURCE_DIR_GOOGLETEST)
+        set(FETCHCONTENT_SOURCE_DIR_GOOGLETEST "${GTEST_DIR}")
+    endif()
+elseif (NOT DEFINED FETCHCONTENT_SOURCE_DIR_GOOGLETEST AND NOT ENABLE_AUTO_DOWNLOAD)
+    # Unlike an ExternalProject, FetchContent downloads at configure time, so
+    # there is no deferred rung to fall through to and the gate has to be
+    # checked by hand.
+    message(FATAL_ERROR
+        "Could not find googletest, which ENABLE_TESTING needs. Run "
+        "scripts/deps/setup-gtest.sh, which clones it into deps/gtest where "
+        "this looks by default; or point -DGTEST_DIR at a checkout; or "
+        "configure with -DENABLE_AUTO_DOWNLOAD=ON to have it cloned here.")
 endif()
+
+FetchContent_Declare(
+    googletest
+    GIT_REPOSITORY https://github.com/google/googletest
+    GIT_TAG v1.17.0
+)
 
 if (MSVC)
   # STP is built with the shared version of the CRT, gtest defaults to the
@@ -79,7 +114,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-format-nonliteral -Wno-missing-fiel
 if (WERROR AND NOT MSVC)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error")
 endif()
-add_subdirectory(${GTEST_PREFIX} gtest)
+# Does the add_subdirectory(), inside the flags set just above.
+FetchContent_MakeAvailable(googletest)
 set(CMAKE_CXX_FLAGS "${PREV_CMAKE_CXX_FLAGS}")
 set(GTEST_BOTH_LIBRARIES gtest gtest_main)
 
@@ -88,7 +124,71 @@ set(GTEST_BOTH_LIBRARIES gtest gtest_main)
 # STP's own test translation units that include them. The gtest target carries
 # the same directory as a SYSTEM INTERFACE include, so this is belt and braces
 # for any test target that includes the header without linking the library.
-include_directories(SYSTEM ${GTEST_PREFIX}/googletest/include)
+include_directories(SYSTEM ${googletest_SOURCE_DIR}/googletest/include)
+
+# -----------------------------------------------------------------------------
+# Find OutputCheck, which the query-file tests match solver output with
+# -----------------------------------------------------------------------------
+# A tree of Python, so there is nothing to build and nothing to install --
+# FetchContent populates it and stops, because it has no CMakeLists for
+# MakeAvailable to descend into.
+#
+# Pinned, which it never was before. It was the one dependency whose revision
+# nothing recorded, which is why scripts/deps/cache-key.sh has to resolve its
+# HEAD over the network to build a CI cache key: with a pin here, the key can
+# be a hash of these files and nothing else.
+set(OUTPUTCHECK_DIR "${PROJECT_SOURCE_DIR}/deps/OutputCheck" CACHE PATH
+    "Path to an OutputCheck checkout")
+
+if (EXISTS "${OUTPUTCHECK_DIR}/bin/OutputCheck")
+    if (NOT DEFINED FETCHCONTENT_SOURCE_DIR_OUTPUTCHECK)
+        set(FETCHCONTENT_SOURCE_DIR_OUTPUTCHECK "${OUTPUTCHECK_DIR}")
+    endif()
+elseif (NOT DEFINED FETCHCONTENT_SOURCE_DIR_OUTPUTCHECK AND NOT ENABLE_AUTO_DOWNLOAD)
+    message(FATAL_ERROR
+        "Could not find OutputCheck, which the query-file tests need. Run "
+        "scripts/deps/setup-outputcheck.sh, which clones it into "
+        "deps/OutputCheck where this looks by default; or point "
+        "-DOUTPUTCHECK_DIR at a checkout; or configure with "
+        "-DENABLE_AUTO_DOWNLOAD=ON to have it cloned here.")
+endif()
+
+FetchContent_Declare(
+    outputcheck
+    GIT_REPOSITORY https://github.com/stp/OutputCheck
+    GIT_TAG e0133ed42b091a7ddea6b901055e142447819a9e
+)
+FetchContent_MakeAvailable(outputcheck)
+
+# Handed to lit through lit.site.cfg rather than worked out inside lit.cfg from
+# the source tree, which is where it used to be assumed to sit.
+set(STP_OUTPUTCHECK_TOOL "${outputcheck_SOURCE_DIR}/bin/OutputCheck")
+if (NOT EXISTS "${STP_OUTPUTCHECK_TOOL}")
+    message(FATAL_ERROR "OutputCheck was found at ${outputcheck_SOURCE_DIR} "
+                        "but has no bin/OutputCheck in it")
+endif()
+message(STATUS "Found OutputCheck: ${STP_OUTPUTCHECK_TOOL}")
+
+# OutputCheck ships a `not` helper whose shebang is #!/usr/bin/env python, and
+# a great many systems have no bare `python` -- only python3. lit already puts
+# OutputCheck's bin/ on PATH so that helper can be found; give it a `python` to
+# find there too, pointing at the interpreter this build already settled on.
+#
+# Without this every error-path test -- each one a `not %solver ...` -- fails,
+# because the shebang cannot be resolved and the helper feeds OutputCheck an
+# empty stream. That was already true of any freshly cloned OutputCheck; it
+# simply used to be worked around by hand, one machine at a time.
+#
+# Not on Windows: `not` is a shell script with a POSIX shebang, so it would not
+# run there whatever is on PATH, and the Windows jobs do not run lit.
+if (NOT WIN32)
+    set(STP_PYTHON_SHIM_DIR "${CMAKE_CURRENT_BINARY_DIR}/python-shim")
+    file(MAKE_DIRECTORY "${STP_PYTHON_SHIM_DIR}")
+    file(CREATE_LINK "${PYTHON_EXECUTABLE}" "${STP_PYTHON_SHIM_DIR}/python"
+         SYMBOLIC)
+else()
+    set(STP_PYTHON_SHIM_DIR "")
+endif()
 
 # Add handy macros/functions
 include(AddSTPGTest)

@@ -25,7 +25,9 @@ Getting started
 ---------------
 
 We depend on a few external tools for testing. You need python3, and you
-need GoogleTest and OutputCheck, which are downloaded into ``deps/`` by
+need GoogleTest and OutputCheck. With ``-DENABLE_AUTO_DOWNLOAD=ON`` the
+build fetches both itself, at pinned revisions, into the build tree.
+Otherwise they are downloaded into ``deps/`` by
 the setup scripts (they used to be git submodules, they are not any
 more):
 
