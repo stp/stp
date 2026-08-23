@@ -1254,10 +1254,14 @@ jobs:
     # stale hit is not expressible.
     - uses: mozilla-actions/sccache-action@v0.0.11
 
+    # The commit scripts/deps/setup-minisat.sh pins, so this leg builds the
+    # same MiniSat as every other one; the two move together. Not --depth 1:
+    # a shallow clone fetches only the tip, which the checkout cannot resolve.
     - name: Build minisat
       run: |
-        git clone --depth 1 https://github.com/stp/minisat
+        git clone https://github.com/stp/minisat
         cd minisat
+        git checkout 14c78206cd12d1d36b7e042fa758747c135670a4
         cmake -B build -A x64 -DSTATICCOMPILE=ON "-DCMAKE_POLICY_VERSION_MINIMUM=3.12" "-DCMAKE_INSTALL_PREFIX=$env:MINISAT_ROOT" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
         cmake --build build --config Release --target install
 
