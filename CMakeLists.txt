@@ -509,11 +509,50 @@ include_directories(# For extlib-constbv
                     ${PROJECT_SOURCE_DIR}/lib
                    )
 
-# ABC is a vendored submodule; mark its headers as
-# SYSTEM so their warnings (e.g. -Wpedantic zero-size arrays, -Wunused-parameter
-# in inline helpers) don't trip -Werror in the STP translation units that
-# include them.
-include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/lib/extlib-abc/src)
+# -----------------------------------------------------------------------------
+# ABC
+# -----------------------------------------------------------------------------
+# Fetched rather than linked: STP does not consume ABC as a library, it builds
+# ABC as part of itself -- shadowing BUILD_SHARED_LIBS around it, handing its
+# targets compile options of STP's own, and linking the archive by file. All of
+# that needs add_subdirectory(), and add_subdirectory() needs the source during
+# *this* configure, which is FetchContent's job and not ExternalProject's.
+#
+# stp/abc is a fork: master tracks upstream untouched and the `stp` branch
+# carries STP's changes as commits on top. To work on those, clone it and point
+# -DFETCHCONTENT_SOURCE_DIR_ABC at the clone -- the build then uses it in place,
+# fetches nothing, and you commit and push from there before moving the pin
+# below. See docs/code-guide.rst.
+include(FetchContent)
+
+set(ABC_GIT_TAG "d0d28eb26a8f3655d806c30d394a738dad6ba5be")
+
+if(NOT DEFINED FETCHCONTENT_SOURCE_DIR_ABC AND NOT ENABLE_AUTO_DOWNLOAD)
+    message(FATAL_ERROR
+        "ABC is required, and configuring without it is not possible: STP's "
+        "bit-blasting is built on it. Configure with -DENABLE_AUTO_DOWNLOAD=ON "
+        "to have it cloned here, or point -DFETCHCONTENT_SOURCE_DIR_ABC at an "
+        "existing stp/abc checkout.")
+endif()
+
+# SOURCE_SUBDIR names a directory ABC has not got, which is what stops
+# FetchContent_MakeAvailable() calling add_subdirectory() itself: ABC has to be
+# added with EXCLUDE_FROM_ALL and inside a BUILD_SHARED_LIBS of STP's choosing,
+# and MakeAvailable grew no way to say either until CMake 3.28. lib/CMakeLists
+# adds it, where the rest of its build settings are.
+FetchContent_Declare(
+    abc
+    GIT_REPOSITORY https://github.com/stp/abc.git
+    GIT_TAG ${ABC_GIT_TAG}
+    SOURCE_SUBDIR stp-adds-this-subdirectory-itself
+)
+FetchContent_MakeAvailable(abc)
+message(STATUS "ABC: ${abc_SOURCE_DIR}")
+
+# Mark ABC's headers SYSTEM so their warnings (e.g. -Wpedantic zero-size
+# arrays, -Wunused-parameter in inline helpers) don't trip -Werror in the STP
+# translation units that include them.
+include_directories(SYSTEM ${abc_SOURCE_DIR}/src)
 # abc related word size check
 include(CheckTypeSize)
 # Check size of void pointer (void*)
@@ -616,10 +655,11 @@ endif()
 # the AIG and CNF data structures, and the SAT solvers churn clause memory.
 # The C library allocator is the bottleneck; any of the modern replacements is
 # ~15% faster to CNF, ~14% faster for CaDiCaL solving and ~7% for CryptoMiniSat,
-# with identical results. mimalloc is vendored as a submodule so that a fast
-# allocator is always available and is what you get unless you ask otherwise.
+# with identical results. mimalloc is fetched and built as part of STP so that
+# a fast allocator is always available, and is what you get unless you ask
+# otherwise.
 #
-#   mimalloc  (default) build and link the vendored lib/extlib-mimalloc
+#   mimalloc  (default) fetch and build mimalloc, and link it
 #   tcmalloc            link the system gperftools tcmalloc, if it can be found
 #   system              plain malloc from the C library
 set(STP_ALLOCATOR "mimalloc" CACHE STRING
@@ -642,11 +682,21 @@ endif()
 set(STP_ALLOCATOR_LIBRARY "")
 
 if (STP_ALLOCATOR STREQUAL "mimalloc")
-    if (NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/lib/extlib-mimalloc/CMakeLists.txt")
+    # Fetched, not linked, for the same reason as ABC: STP configures
+    # mimalloc's build rather than consuming its output, and that needs
+    # add_subdirectory().
+    #
+    # A hard error rather than a quiet fall back to system malloc, which the
+    # documentation measures at roughly 14% slower. An allocator silently
+    # changing under a build is exactly the kind of thing nobody notices until
+    # a benchmark disagrees with the last one.
+    if (NOT DEFINED FETCHCONTENT_SOURCE_DIR_MIMALLOC AND NOT ENABLE_AUTO_DOWNLOAD)
         message(FATAL_ERROR
-            "STP_ALLOCATOR=mimalloc but lib/extlib-mimalloc is empty. "
-            "Run: git submodule update --init lib/extlib-mimalloc "
-            "(or configure with -DSTP_ALLOCATOR=system).")
+            "STP_ALLOCATOR is mimalloc, which has to be fetched. Configure "
+            "with -DENABLE_AUTO_DOWNLOAD=ON to have it cloned here, point "
+            "-DFETCHCONTENT_SOURCE_DIR_MIMALLOC at an existing checkout, or "
+            "choose another allocator with -DSTP_ALLOCATOR=tcmalloc or "
+            "-DSTP_ALLOCATOR=system (the last is about 14% slower).")
     endif()
     # The static library is what the executables link: it keeps them
     # self-contained, with nothing extra to install or ship. The shared one is
@@ -658,7 +708,17 @@ if (STP_ALLOCATOR STREQUAL "mimalloc")
     set(MI_BUILD_TESTS  OFF CACHE BOOL "" FORCE)
     set(MI_BUILD_STATIC ON  CACHE BOOL "" FORCE)
     set(MI_OVERRIDE     ON  CACHE BOOL "" FORCE)
-    add_subdirectory(lib/extlib-mimalloc EXCLUDE_FROM_ALL)
+    # SOURCE_SUBDIR names a directory mimalloc has not got, so MakeAvailable
+    # populates without calling add_subdirectory(): this one needs
+    # EXCLUDE_FROM_ALL, which MakeAvailable could not be told until CMake 3.28.
+    FetchContent_Declare(
+        mimalloc
+        GIT_REPOSITORY https://github.com/microsoft/mimalloc.git
+        GIT_TAG 30ac9d56b8b9ea57ae84bc8ef17ef39000da08fe  # v2.4.1
+        SOURCE_SUBDIR stp-adds-this-subdirectory-itself
+    )
+    FetchContent_MakeAvailable(mimalloc)
+    add_subdirectory(${mimalloc_SOURCE_DIR} ${mimalloc_BINARY_DIR} EXCLUDE_FROM_ALL)
     # Vendored upstream code whose warnings we do not control.
     if (WERROR AND NOT MSVC)
         target_compile_options(mimalloc-static PRIVATE -Wno-error)
@@ -670,7 +730,7 @@ if (STP_ALLOCATOR STREQUAL "mimalloc")
     # back in.
     set_target_properties(mimalloc PROPERTIES EXCLUDE_FROM_ALL FALSE)
     set(STP_ALLOCATOR_PRELOADABLE mimalloc)
-    message(STATUS "Allocator: vendored mimalloc (lib/extlib-mimalloc)")
+    message(STATUS "Allocator: mimalloc (${mimalloc_SOURCE_DIR})")
 
 elseif (STP_ALLOCATOR STREQUAL "tcmalloc")
     if (NOT BUILD_SHARED_LIBS)

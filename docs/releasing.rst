@@ -235,7 +235,7 @@ you want to reproduce a build that has MiniSat compiled in.
 
 Prefer the workflow for anything you intend to publish: it checks out the
 tag, so the binary provably comes from the released commit rather than from
-whatever is in your working tree -- easy to get wrong with the submodules
+whatever is in your working tree -- easy to get wrong with the dependencies
 STP compiles in.
 
 After the release

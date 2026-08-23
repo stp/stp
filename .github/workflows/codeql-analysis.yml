@@ -27,8 +27,6 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v7
-      with:
-        submodules: 'true'
 
     # libgmp-dev is CryptoMiniSat's, which setup-cms.sh builds below and this
     # job links; STP itself does not use GMP.

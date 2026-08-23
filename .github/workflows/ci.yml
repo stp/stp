@@ -61,8 +61,6 @@ jobs:
     steps:
 
     - uses: actions/checkout@v7
-      with:
-          submodules: 'true'
 
     # libgmp-dev is CryptoMiniSat's, which setup-cms.sh builds below and this
     # job links; STP itself does not use GMP. The runner image happens to ship
@@ -361,7 +359,7 @@ jobs:
   # signed int once the AIG passes ~270,600 nodes. The first two are issue
   # #881; the third turned up on fp-tests/rem-exponent-width-boundary.smt2
   # when the whole suite was swept rather than that one regression. All three
-  # are fixed on the `stp` branch of the ABC fork the submodule points at, and
+  # are fixed on the `stp` branch of the ABC fork the build pins, and
   # this job is what keeps them fixed.
   #
   # -fno-sanitize-recover=all rather than UBSAN_OPTIONS=halt_on_error=1,
@@ -385,8 +383,6 @@ jobs:
     steps:
 
     - uses: actions/checkout@v7
-      with:
-          submodules: 'true'
 
     # llvm for llvm-symbolizer, which is what turns the frames of a stack
     # trace into names and line numbers.
@@ -535,8 +531,6 @@ jobs:
     steps:
 
     - uses: actions/checkout@v7
-      with:
-          submodules: 'true'
 
     - name: Packages
       run: |
@@ -700,8 +694,6 @@ jobs:
     steps:
 
     - uses: actions/checkout@v7
-      with:
-          submodules: 'true'
 
     # libgmp-dev is CryptoMiniSat's, which setup-cms.sh builds below and this
     # job links; STP itself does not use GMP.
@@ -835,8 +827,6 @@ jobs:
     steps:
 
     - uses: actions/checkout@v7
-      with:
-          submodules: 'true'
 
     - uses: ./.github/actions/build-static-linux
       with:
@@ -869,8 +859,6 @@ jobs:
     steps:
 
     - uses: actions/checkout@v7
-      with:
-          submodules: 'true'
 
     - name: Packages
       run: |
@@ -922,8 +910,6 @@ jobs:
     steps:
 
     - uses: actions/checkout@v7
-      with:
-          submodules: 'true'
 
     - name: Packages
       run: |
@@ -985,8 +971,6 @@ jobs:
     steps:
 
     - uses: actions/checkout@v7
-      with:
-          submodules: 'true'
 
     - name: Packages
       run: |
@@ -1044,8 +1028,6 @@ jobs:
     steps:
 
     - uses: actions/checkout@v7
-      with:
-          submodules: 'true'
 
     - name: Resolve dependency revisions
       id: deps-key
@@ -1110,8 +1092,6 @@ jobs:
     steps:
 
     - uses: actions/checkout@v7
-      with:
-          submodules: 'true'
 
     # Fetched straight from the upstream release rather than via
     # 'choco install winflexbison3': community.chocolatey.org intermittently
@@ -1236,7 +1216,7 @@ jobs:
 
     # sccache keys each compiled object on the preprocessed source, the compiler
     # and its flags, and stores it in the GitHub Actions cache. ABC is 920 C
-    # files pinned at a submodule revision, so it recompiles identically every
+    # files pinned at a fixed revision, so it recompiles identically every
     # run and hits in full; STP's own objects hit for whatever the branch did not
     # touch. Nothing here needs a cache key maintained by hand, the way the
     # actions/cache steps in the Linux jobs do -- sccache derives its own, so a
@@ -1393,12 +1373,10 @@ jobs:
     steps:
 
     - uses: actions/checkout@v7
-      with:
-          submodules: 'true'
 
     # sccache keys each compiled object on the preprocessed source, the compiler
     # and its flags, and stores it in the GitHub Actions cache. ABC is 920 C
-    # files pinned at a submodule revision, so it recompiles identically every
+    # files pinned at a fixed revision, so it recompiles identically every
     # run and hits in full; STP's own objects hit for whatever the branch did not
     # touch. Nothing here needs a cache key maintained by hand, the way the
     # actions/cache steps in the Linux jobs do -- sccache derives its own, so a

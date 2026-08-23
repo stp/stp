@@ -33,8 +33,11 @@ hash=$(
     cat "${root}"/cmake/deps-helper.cmake
     find "${root}"/cmake/deps-utils -type f | sort | xargs cat
     cat "${here}"/setup-*.sh
-    # The two FetchContent pins live here rather than in a Find module.
-    grep -E "GIT_TAG|GIT_REPOSITORY" "${root}"/tests/CMakeLists.txt
+    # The FetchContent pins live beside what they are added to rather than in
+    # a Find module: ABC and mimalloc in the top-level CMakeLists and lib's,
+    # GoogleTest and OutputCheck in the test tree.
+    grep -hE "GIT_TAG|GIT_REPOSITORY|ABC_GIT_TAG" \
+        "${root}"/CMakeLists.txt "${root}"/tests/CMakeLists.txt
   } | sha256sum | cut -d' ' -f1
 )
 

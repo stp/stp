@@ -210,10 +210,12 @@ set(ENV{ABC_USE_NO_PTHREADS} 1)
 # The normal variable shadows the cache entry for this scope only; unset()
 # restores the cached value for the rest of lib/.
 set(BUILD_SHARED_LIBS OFF)
-add_subdirectory(extlib-abc EXCLUDE_FROM_ALL)
+# Populated by the top-level CMakeLists, which needs ABC's include directory
+# before this point; added here, where the settings that govern its build are.
+add_subdirectory(${abc_SOURCE_DIR} ${abc_BINARY_DIR} EXCLUDE_FROM_ALL)
 unset(BUILD_SHARED_LIBS)
 
-# ABC is a vendored, upstream submodule (berkeley-abc/abc) whose warnings we
+# ABC is upstream code (through the stp/abc fork) whose warnings we
 # don't control, so keep WERROR from turning them into build failures. The
 # -Wno-error comes after the global -Werror, so it wins for these targets only;
 # STP's own code stays gated on warnings.

@@ -1,7 +1,7 @@
 name: Build a static Linux stp
 description: >
-  Build a statically linked stp and smoke-test it. The repository, including
-  submodules, must already be checked out. The CI jobs that keep static
+  Build a statically linked stp and smoke-test it. The repository must
+  already be checked out. The CI jobs that keep static
   linking working and the release workflow that ships the binary all use
   this, so that what gets published is built exactly the way CI builds it.
   CI runs it in both configurations, including the one the release uses.

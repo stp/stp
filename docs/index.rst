@@ -30,17 +30,17 @@ On a Debian-like platform, from a clean checkout:
     sudo apt-get install git build-essential cmake bison flex python3
     git clone https://github.com/stp/stp
     cd stp
-    git submodule init && git submodule update
     ./configure.sh --auto-download
     cmake --build build -j$(nproc)
     sudo cmake --install build
 
-ABC and mimalloc are submodules and are built as part of STP, which is
-what the ``git submodule`` line is for. Everything else -- SymFPU and
-CLI11, LibBF, and CaDiCaL, the SAT backend -- is downloaded
-and built by that ``--auto-download``, with this build's own compiler and
-flags. Without it, configuration stops and says what to install or where
-to point it: nothing here reaches the network unless it is asked to.
+There are no submodules: everything STP does not itself contain --
+ABC and mimalloc, which are built as part of STP; SymFPU, CLI11 and
+LibBF; and CaDiCaL, the SAT backend -- is fetched by that
+``--auto-download``, at pinned revisions, and built with this build's own
+compiler and flags. Without it, configuration stops and says what to
+install or where to point it: nothing here reaches the network unless it
+is asked to.
 
 That gives a solver backed by CaDiCaL. CryptoMiniSat, MiniSat and Riss
 are also supported, and are asked for by name --

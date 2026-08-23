@@ -26,29 +26,32 @@ On a Debian-like platform most of it comes from the package manager:
 
 A python3 interpreter is needed at build time -- it generates the AST kind
 tables -- and also for the Python interface and the test suite. git is needed
-for the submodules, for the vendored-patch step that runs at configure time,
-and to fetch LibBF.
+to fetch the dependencies, which are cloned rather than downloaded as
+archives where their revision is a commit rather than a release.
 
 The SAT backends bring their own dependencies, which are needed only if you
 build that backend, and which the ``scripts/deps`` script for each one names:
 CryptoMiniSat needs GMP (``libgmp-dev``), MiniSat needs zlib
 (``zlib1g-dev``). Neither is used by STP itself.
 
-Two dependencies are vendored as submodules and need nothing installed:
-ABC and mimalloc. Run ``git submodule update --init`` after cloning; the
-build does not configure without them. They stay submodules because STP
-builds them as part of itself rather than linking them as libraries --
-ABC's targets are given compile options of STP's own, and mimalloc's
-build is configured by STP -- and an ExternalProject cannot express
-that. ABC is additionally an STP fork, which is what a submodule is for.
+STP has no submodules. Everything it does not contain itself is fetched
+at a pinned revision, and with ``-DENABLE_AUTO_DOWNLOAD=ON`` that needs
+nothing installed beforehand.
 
-Two more used to be submodules and are now fetched like everything else:
-the command-line parser `CLI11 <https://github.com/CLIUtils/CLI11>`__ and
+Two of them are *built as part of STP* rather than linked as libraries:
+ABC, whose targets STP gives compile options of its own, and mimalloc,
+whose build STP configures. Those are fetched with CMake's FetchContent,
+which downloads during configuration so that ``add_subdirectory`` has
+something to descend into; everything else is an ExternalProject, built
+at build time. Point ``-DFETCHCONTENT_SOURCE_DIR_ABC`` or
+``-DFETCHCONTENT_SOURCE_DIR_MIMALLOC`` at a checkout to use one in place
+-- which is how to work on the ``stp/abc`` fork, see
+:doc:`code-guide`.
+
+The command-line parser `CLI11 <https://github.com/CLIUtils/CLI11>`__ and
 the header-only floating-point library
-`SymFPU <https://github.com/martin-cs/symfpu>`__. Both are headers, so
-there is nothing for STP's own flags to reach. ``CLI11_DIR`` and
-``SYMFPU_INCLUDE_DIRS`` name existing copies; otherwise
-``-DENABLE_AUTO_DOWNLOAD=ON`` fetches them at pinned revisions.
+`SymFPU <https://github.com/martin-cs/symfpu>`__ are headers and nothing
+more; ``CLI11_DIR`` and ``SYMFPU_INCLUDE_DIRS`` name existing copies.
 
 One is not vendored: `LibBF <https://bellard.org/libbf/>`__, which
 converts the real literals in floating-point input --
