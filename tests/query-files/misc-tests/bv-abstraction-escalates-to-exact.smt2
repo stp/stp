@@ -16,11 +16,12 @@
 ; point, so it is never revisited, and the solve ends with the answer it would
 ; have given had the term never been abstracted.
 ;
-; Thirty-two is where the measurements put the crossover. Through about thirty
-; rounds the abstraction is still two to four times faster than not
-; abstracting; by sixty it is break-even; past that it collapses. Escalating
-; there keeps the win and bounds the tail, and the rounds already spent cost
-; hundredths of a second.
+; Thirty-two is where the measurements put the crossover, and it is the
+; ceiling on the allowance rather than the allowance itself: what one blocking
+; lemma is worth falls away as the operands widen, so the allowance is
+; width/--bv-term-abstraction-value-divisor held under that ceiling. See
+; bv-abstraction-value-budget-scales.smt2, which is about the arithmetic; this
+; one is about the escalation happening at all and the answer surviving it.
 ;
 ; The count is pinned loosely: which candidates the solver offers is its own
 ; business, so what this fixture holds is that the escalation happens and the

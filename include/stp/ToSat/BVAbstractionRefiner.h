@@ -152,6 +152,19 @@ DLL_PUBLIC MulSchemaChoice chooseMulSchema(const std::vector<bool>& aBits,
                                            const std::vector<bool>& tBits,
                                            unsigned installedSchemas);
 
+// The blocking lemmas one abstraction of this width may spend before the
+// refinement gives up on it and encodes the operation exactly.
+//
+// A blocking lemma rules out one pair of operand values out of 2^(2W), so
+// what one is worth falls away as the operands widen and a flat allowance
+// means something quite different at either end of the range. The allowance
+// is a rate instead -- `width / bv_term_abstraction_value_divisor` -- held
+// under the flat ceiling `bv_term_abstraction_rounds`, which keeps every
+// spelling that ceiling already had: zero still never escalates, and an
+// explicit count still caps.
+DLL_PUBLIC unsigned valueLemmaAllowance(const UserDefinedFlags& uf,
+                                        unsigned width);
+
 struct BVTermAbstraction
 {
   ASTNode termNode;

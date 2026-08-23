@@ -81,6 +81,7 @@ TEST(refinement_flags, DefaultsAreTheOnesTheCommandLineDocuments)
   EXPECT_TRUE(flags(vc).bv_term_abstraction_mult);
   EXPECT_EQ(32u, flags(vc).bv_term_abstraction_rounds);
   EXPECT_TRUE(flags(vc).bv_term_abstraction_schemas);
+  EXPECT_EQ(8u, flags(vc).bv_term_abstraction_value_divisor);
   vc_Destroy(vc);
 }
 
@@ -153,6 +154,13 @@ TEST(refinement_flags, EachFlagReachesTheFieldTheCLIWrites)
   vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_SCHEMAS, 1);
   EXPECT_TRUE(flags(vc).bv_term_abstraction_schemas);
 
+  // Zero is a meaning of its own here too: do not scale, and leave the flat
+  // ceiling above as the allowance.
+  vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_VALUE_DIVISOR, 0);
+  EXPECT_EQ(0u, flags(vc).bv_term_abstraction_value_divisor);
+  vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_VALUE_DIVISOR, 16);
+  EXPECT_EQ(16u, flags(vc).bv_term_abstraction_value_divisor);
+
   // Zero is a meaning of its own for both of these, not an absence: install
   // every conflict the candidate exposes, and a budget of no gates at all.
   vc_setInterfaceFlags(vc, UF_LEMMAS_PER_ROUND, 0);
@@ -204,19 +212,21 @@ TEST(refinement_flags, ANegativeUnsignedValueIsRefusedAndLeavesTheFieldAlone)
   EXPECT_EQ(4u, flags(vc).bv_eq_refine_width);
   vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_ROUNDS, -2);
   EXPECT_EQ(12u, flags(vc).bv_term_abstraction_rounds);
+  vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_VALUE_DIVISOR, -3);
+  EXPECT_EQ(8u, flags(vc).bv_term_abstraction_value_divisor);
 
   vc_setInterfaceFlags(vc, UF_LEMMAS_PER_ROUND, -1);
   EXPECT_EQ(8u, flags(vc).uf_lemmas_per_round);
   vc_setInterfaceFlags(vc, UF_ACKERMANN_BUDGET, -1);
   EXPECT_EQ(256u, flags(vc).uf_eager_budget);
-  EXPECT_EQ(5, errors);
+  EXPECT_EQ(6, errors);
 
   // The AIG budget is signed underneath and -1 is a value of its own there,
   // so only a value below it names nothing and only that is refused.
   vc_setInterfaceFlags(vc, AIG_NODE_BUDGET, 7);
   vc_setInterfaceFlags(vc, AIG_NODE_BUDGET, -2);
   EXPECT_EQ(7, flags(vc).aig_node_budget);
-  EXPECT_EQ(6, errors);
+  EXPECT_EQ(7, errors);
 
   vc_Destroy(vc);
   vc_registerErrorHandler(nullptr);

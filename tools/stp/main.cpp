@@ -356,10 +356,19 @@ void ExtraMain::create_options()
            refinement_group);
   app.add_option("--bv-term-abstraction-rounds",
                  bm->UserFlags.bv_term_abstraction_rounds,
-                 "blocking lemmas one abstracted BVMULT/BVDIV/BVMOD may take "
-                 "before its refinement encodes the operation exactly instead "
-                 "of enumerating further operand pairs (0: never; enumerate "
-                 "without limit)")
+                 "ceiling on the blocking lemmas one abstracted "
+                 "BVMULT/BVDIV/BVMOD may take before its refinement encodes "
+                 "the operation exactly instead of enumerating further "
+                 "operand pairs (0: never; enumerate without limit)")
+      ->group(refinement_group)
+      ->capture_default_str();
+  app.add_option("--bv-term-abstraction-value-divisor",
+                 bm->UserFlags.bv_term_abstraction_value_divisor,
+                 "scale that allowance with the operand width, as "
+                 "width/divisor floored at one and capped by the ceiling "
+                 "above; a blocking lemma rules out one pair of operand "
+                 "values, so what one is worth falls away as the operands "
+                 "widen (0: do not scale, use the flat ceiling)")
       ->group(refinement_group)
       ->capture_default_str();
 

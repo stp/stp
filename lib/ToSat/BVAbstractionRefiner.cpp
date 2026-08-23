@@ -710,6 +710,25 @@ MulSchemaChoice chooseMulSchema(const std::vector<bool>& aBits,
   return MulSchemaChoice();
 }
 
+unsigned valueLemmaAllowance(const UserDefinedFlags& uf, unsigned width)
+{
+  const unsigned ceiling = uf.bv_term_abstraction_rounds;
+  if (ceiling == 0)
+    return 0; // never escalate: enumerate without limit
+
+  const unsigned divisor = uf.bv_term_abstraction_value_divisor;
+  if (divisor == 0)
+    return ceiling; // the flat allowance this replaced
+
+  // At least one. A rate that rounds to nothing would escalate before the
+  // abstraction has been given a single chance to pay, which is not what
+  // "scale it with the width" is meant to mean at narrow widths -- and
+  // width zero does not occur, since the type checker gives every operation
+  // a width and the abstraction has a floor besides.
+  const unsigned scaled = width / divisor;
+  return std::min(ceiling, scaled == 0 ? 1u : scaled);
+}
+
 static const char* mulSchemaName(MulSchema schema)
 {
   switch (schema)
@@ -1011,13 +1030,17 @@ unsigned BVAbstractionRefiner::refineTerms(
         if (actual[bit] != expected[bit]) { consistent = false; break; }
       if (consistent) continue;
 
-      // Only BVMULT, and only while there is allowance left. The allowance
-      // is the blocking lemmas' own, spent from a separate purse: a schema
-      // is both cheaper and stronger, so it should not bring the escalation
-      // forward -- but it must not push it out of reach either, and a
-      // candidate that keeps landing on fresh powers of two would buy a
-      // solve for each one. Division and remainder keep the blocking lemma
-      // as their only refinement; the facts here are about multiplication.
+      // Only BVMULT, and only while there is allowance left. Schemas are
+      // spent from a separate purse: one is both cheaper and stronger than
+      // a blocking lemma, so it should not bring the escalation forward --
+      // but it must not push it out of reach either, and a candidate that
+      // keeps landing on fresh powers of two would buy a solve for each
+      // one. The bound is the flat ceiling rather than the width-scaled
+      // allowance below, because what makes that allowance narrow is
+      // exactly what a schema does not suffer from: a blocking lemma is
+      // worth less as the operands widen, and a fact about every pair is
+      // worth the same. Division and remainder keep the blocking lemma as
+      // their only refinement; the facts here are about multiplication.
       MulSchemaChoice schema;
       const unsigned schemaLimit = bm->UserFlags.bv_term_abstraction_rounds;
       if (abs.opKind == BVMULT && bm->UserFlags.bv_term_abstraction_schemas &&
@@ -1294,7 +1317,7 @@ unsigned BVAbstractionRefiner::refineTerms(
     // BVExactEncoder. Two independent encodings of a divider that agree
     // today are two that can stop agreeing, and these two already had: the
     // written-out one and BBDivMod disagreed about a zero divisor.
-    const unsigned limit = bm->UserFlags.bv_term_abstraction_rounds;
+    const unsigned limit = valueLemmaAllowance(bm->UserFlags, W);
     if (limit != 0 && abs.blockedRounds >= limit)
     {
       BVExactEncoder(bm).encode(solver, abs.termNode, W, aVars, bVars,

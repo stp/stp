@@ -434,7 +434,19 @@ enum ifaceflag_t
   //! blocking lemma as the only refinement. This is the C API's way to
   //! reach --bv-term-abstraction-schemas.
   //!
-  BV_TERM_ABSTRACTION_SCHEMAS
+  BV_TERM_ABSTRACTION_SCHEMAS,
+
+  //! Scales that ceiling with the operand width: the allowance becomes
+  //! width/`param_value`, floored at one and capped by the ceiling.
+  //!
+  //! A blocking lemma rules out one pair of operand values out of 2^(2W),
+  //! so what one is worth falls away as the operands widen and a flat
+  //! allowance means something quite different at either end. Zero turns
+  //! the scaling off and leaves the flat ceiling as the allowance. A
+  //! negative value is refused with a nonfatal diagnostic. This is the C
+  //! API's way to reach --bv-term-abstraction-value-divisor (default 8).
+  //!
+  BV_TERM_ABSTRACTION_VALUE_DIVISOR
 
 };
 

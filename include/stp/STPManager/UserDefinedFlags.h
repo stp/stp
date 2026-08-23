@@ -370,14 +370,28 @@ public:
   // abstracted with everything else, and this turns just those three off for a
   // query that would rather not pay for the rounds at all.
   bool bv_term_abstraction_mult = true;
-  // How many times one of those three may be blocked before its refinement
-  // stops enumerating and encodes the operation exactly instead. Measured:
-  // through about thirty rounds the abstraction is still two to four times
-  // faster than not abstracting, by sixty it is break-even, and past that it
-  // collapses -- a 64-bit factorisation spent 5816 rounds and ninety seconds
-  // on a query the unabstracted solve answers in five hundredths of one.
-  // Zero never escalates, which is what this was before.
+  // The ceiling on how many times one of those three may be blocked before
+  // its refinement stops enumerating and encodes the operation exactly
+  // instead. Measured: through about thirty rounds the abstraction is still
+  // two to four times faster than not abstracting, by sixty it is
+  // break-even, and past that it collapses -- a 64-bit factorisation spent
+  // 5816 rounds and ninety seconds on a query the unabstracted solve
+  // answers in five hundredths of one. Zero never escalates, which is what
+  // this was before.
+  //
+  // A ceiling and no longer the allowance itself: see the divisor below.
   unsigned bv_term_abstraction_rounds = 32;
+  // ... which is `width / this`, floored at one and capped by the ceiling
+  // above. A blocking lemma rules out one pair of operand values, so what
+  // it is worth falls away as the operands widen -- one of 2^16 pairs at
+  // eight bits, one of 2^106 at fifty-three -- and a flat allowance
+  // therefore means something quite different at either end. A divisor of
+  // eight puts a 53-bit multiply's allowance at six against the flat
+  // thirty-two this had.
+  //
+  // Zero turns the scaling off and leaves the flat ceiling as the
+  // allowance, which is the configuration this replaced.
+  unsigned bv_term_abstraction_value_divisor = 8;
   // Refine an abstracted BVMULT with an algebraic fact about every pair of
   // operands -- see MulSchema -- whenever the candidate contradicts one,
   // and only fall back on ruling out the pair it holds when none of them

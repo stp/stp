@@ -562,6 +562,11 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
         b->UserFlags.bv_term_abstraction_rounds =
             static_cast<unsigned>(param_value);
       break;
+    case BV_TERM_ABSTRACTION_VALUE_DIVISOR:
+      if (nonNegativeFlag(param_value, "BV_TERM_ABSTRACTION_VALUE_DIVISOR"))
+        b->UserFlags.bv_term_abstraction_value_divisor =
+            static_cast<unsigned>(param_value);
+      break;
     case UF_LEMMAS_PER_ROUND:
       if (nonNegativeFlag(param_value, "UF_LEMMAS_PER_ROUND"))
         b->UserFlags.uf_lemmas_per_round = static_cast<unsigned>(param_value);
