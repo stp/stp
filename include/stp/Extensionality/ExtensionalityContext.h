@@ -284,8 +284,15 @@ public:
   // express.
   bool equalityQuotientsBitPatterns() const;
 
+  // The congruence expansion instantiation itself will add: an operand that
+  // is not a write chain acquires the whole shared inventory, and the read
+  // side then squares it.
+  uint64_t eagerInstantiationCongruence(
+      const IndexInventory& indexesByShape) const;
+
   // Whether to take the eager arm when the user did not ask for it by name.
-  bool eagerEqualityPreferred(const ASTNode& root) const;
+  bool eagerEqualityPreferred(const ASTNode& root,
+                              const IndexInventory& indexesByShape) const;
 
   // The initial formula protocol shared by the batch and persistent drivers,
   // after opaque equalities have been lowered and before ordinary

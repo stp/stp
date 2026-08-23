@@ -943,6 +943,48 @@ uint64_t ExtensionalityContext::eagerLemmaCount(
   return lemmas;
 }
 
+// The reads instantiation is about to create, and what they cost the read
+// side afterwards.
+//
+// Every lemma reads both of its record's operands at every index of the
+// record's shape, so an operand that is a bare array symbol acquires the
+// whole shared inventory: its abstraction variables are fresh, nothing
+// folds them, and read congruence then squares the inventory for that one
+// array. An operand that is a write chain does not, because the read folds
+// through the chain and lands on a base the input estimate already counted.
+//
+// This is the term that matters and the input formula does not show it. One
+// query of thirty-six same-shape arrays reads 2036 comparisons before
+// instantiation and 608685 after -- against a store-permutation query that
+// reads 1830 before and none after. Judged on the input alone the two are
+// indistinguishable, and taking the first one costs 6 GB against 129 MB.
+uint64_t ExtensionalityContext::eagerInstantiationCongruence(
+    const IndexInventory& indexesByShape) const
+{
+  uint64_t total = 0;
+  for (size_t i = 0; i < activeRecordIds.size(); i++)
+  {
+    const Record& r = records[activeRecordIds[i]];
+    const IndexInventory::const_iterator it = indexesByShape.find(ArrayShape(
+        r.constructionLeft.GetIndexWidth(),
+        r.constructionLeft.GetValueWidth()));
+    if (it == indexesByShape.end())
+      continue;
+    const uint64_t size = it->second.size();
+    const ASTNode operands[2] = {r.constructionLeft, r.constructionRight};
+    for (int k = 0; k < 2; k++)
+    {
+      // Only a write chain is known to fold. Anything else -- a symbol, an
+      // array-valued if-then-else, a term this cannot see through -- is
+      // charged in full, because being wrong in that direction costs a
+      // solve that refines instead of one that exhausts memory.
+      if (operands[k].GetKind() != WRITE)
+        total += size * (size - 1) / 2;
+    }
+  }
+  return total;
+}
+
 // The eager arm replaces the refinement loop with one conjoined block of
 // records-times-indexes lemmas, and puts the solve on the eager read path
 // besides. Both halves of that trade are decided on the same currency the
@@ -959,7 +1001,8 @@ uint64_t ExtensionalityContext::eagerLemmaCount(
 // The structural cost of the read side is a different unit and keeps its own
 // bound: a read over a chain of writes expands per link and is catastrophic
 // eagerly. Both bounds short-circuit, and this runs once per solve.
-bool ExtensionalityContext::eagerEqualityPreferred(const ASTNode& root) const
+bool ExtensionalityContext::eagerEqualityPreferred(
+    const ASTNode& root, const IndexInventory& indexesByShape) const
 {
   constexpr uint64_t expansionLimit = 1000;
 
@@ -970,7 +1013,12 @@ bool ExtensionalityContext::eagerEqualityPreferred(const ASTNode& root) const
   if (bm->UserFlags.array_eager_budget == 0)
     return false;
 
-  return arrayCongruenceEstimate(root) <= bm->UserFlags.array_eager_budget &&
+  // What the solve pays is what the input already costs plus what
+  // instantiation adds to it.
+  const uint64_t cost = arrayCongruenceEstimate(root) +
+                        eagerInstantiationCongruence(indexesByShape);
+
+  return cost <= bm->UserFlags.array_eager_budget &&
          arrayEagerCostLessThan(root, expansionLimit);
 }
 
@@ -1039,7 +1087,8 @@ ASTNode ExtensionalityContext::prepareInitialFormula(const ASTNode& root)
   IndexInventory indexesByShape;
   collectIndexInventory(constrained, indexesByShape);
 
-  if (!bm->UserFlags.ackermannisation && !eagerEqualityPreferred(constrained))
+  if (!bm->UserFlags.ackermannisation &&
+      !eagerEqualityPreferred(constrained, indexesByShape))
     return constrained;
 
   // The lemma block stands in for the equality refinement loop, and the read
