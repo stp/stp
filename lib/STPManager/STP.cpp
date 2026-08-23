@@ -569,27 +569,31 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // counts as array operations for the refinement machinery.
   bool arrayops = containsArrayOps(inputToSat, bm) || extActive;
 
-  // If eager expansion of the array reads is cheap, rewrite them through:
-  // the bit-vector simplifications are more thorough than the array ones.
-  // For example, we don't currently do unconstrained elimination on
-  // arrays--- but we do for bit-vectors.
-  //
-  // What "cheap" means is the number of index comparisons the transform
-  // would introduce, charged the way the transform pays for them: a
-  // comparison between two constant indexes is decided rather than built,
-  // so three hundred constant indexes and two symbolic ones cost 601, not
-  // the 45451 a pairwise count reports or the 302 a read count reports.
-  // Read counts refused that query outright, which is what this replaces.
+  // If the number of array reads is small. We rewrite them through.
+  // The bit-vector simplifications are more thorough than the array
+  // simplifications. For example,
+  // we don't currently do unconstrained elimination on arrays--- but we do for
+  // bit-vectors.
+  // A better way to do this would be to estimate the number of axioms
+  // introduced.
+  // TODO: I chose the number of reads we perform this operation at randomly.
   bool removed = false;
-  // The comparison count says nothing about the structure underneath a
-  // read: pushed through a chain of WRITEs a read becomes one ITE per link,
-  // so nine reads over a deep store chain expand into tens of thousands of
-  // nodes and take 48x longer than leaving them to read refinement. That is
-  // a different cost in a different unit, so it keeps its own bound.
-  constexpr uint64_t arrayEagerCostLimit = 1000;
+  const int arrayReadLimit = bm->UserFlags.ackermannisation ? 50 : 10;
+  // The read count is a proxy for what the transform builds, and on its own a
+  // poor one: a read over a chain of WRITEs becomes one ITE per link, so nine
+  // reads over a deep store chain expand into tens of thousands of nodes and
+  // take 48x longer than leaving them to read refinement. Ask what the
+  // expansion would actually cost as well, so the flat-array queries this
+  // threshold was tuned for still take it and the deep-chain ones do not.
+  // Give each read admitted by the count policy twenty structural expansion
+  // units before preferring refinement. This is a safety threshold, not a
+  // prediction of total solver work.
+  constexpr uint64_t arrayEagerCostPerRead = 20;
+  const uint64_t arrayEagerCostLimit =
+      static_cast<uint64_t>(arrayReadLimit) * arrayEagerCostPerRead;
   if (arrayops &&
       !extActive && // array equality needs the refinement loop
-      arrayCongruenceEstimate(inputToSat) <= bm->UserFlags.array_eager_budget &&
+      numberOfReadsLessThan(inputToSat, arrayReadLimit) &&
       arrayEagerCostLessThan(inputToSat, arrayEagerCostLimit))
   {
     // If the number of axioms that would be added it small. Remove them.

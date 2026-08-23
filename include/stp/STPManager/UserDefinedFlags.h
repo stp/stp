@@ -242,14 +242,19 @@ public:
   // the old behaviour for a query known to be that shape.
   unsigned uf_eager_budget = 256;
 
-  // The same currency for arrays: how many index comparisons eager array
-  // Ackermannisation may introduce before the policy prefers read
-  // refinement. Counted by arrayCongruenceEstimate, which charges only the
-  // comparisons that survive constant folding, so a query whose indexes are
-  // mostly literals is judged on the work it actually causes rather than on
-  // how many reads it happens to contain. --ackermanize is a request and
-  // ignores this; a budget of 0 refuses every unasked selection.
-  unsigned array_eager_budget = 1000;
+  // How many index comparisons the eager array-equality arm may introduce
+  // before the solve is left to refinement. Counted by
+  // arrayCongruenceEstimate, which charges only the comparisons that survive
+  // constant folding, so a query whose indexes are mostly literals is judged
+  // on the work it actually causes rather than on how many reads it happens
+  // to contain.
+  //
+  // 4000 admits the whole array-equality band that measurement says is worth
+  // taking -- the store-permutation queries that pay for the arm score up to
+  // 1830 -- with room above it. The value is a ceiling on a cost, not a
+  // target: nothing is gained by being nearer it. --ackermanize is a request
+  // and ignores this; 0 refuses every unasked selection.
+  unsigned array_eager_budget = 4000;
 
   // Whether to bias the first candidate so that the scalars the congruence
   // checker reads start out pairwise different.
