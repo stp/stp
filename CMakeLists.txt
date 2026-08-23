@@ -798,43 +798,22 @@ endif()
 stp_option_is_explicit(USE_CRYPTOMINISAT CMS_EXPLICITLY_REQUESTED)
 
 if (NOT USE_CRYPTOMINISAT STREQUAL "OFF")
-  set(cryptominisat5_DIR "" CACHE PATH "Path to directory containing cryptominisat5Config.cmake")
-  # STP does not look for GMP. It is CryptoMiniSat's dependency, not STP's:
-  # no STP source includes it, and it reaches STP through the cryptominisat5
-  # imported target, whose link interface names PkgConfig::GMP (its header
-  # includes gmpxx.h, so the include path travels the same way; see
-  # lib/Sat/CMakeLists.txt). cryptominisat5Config.cmake asks pkg-config for
-  # gmp with REQUIRED, which is a FATAL_ERROR raised from inside that file
-  # when CryptoMiniSat is installed but its gmp.pc is not, and nothing STP
-  # does can turn it into "not found". So say what is about to be asked, and
-  # of whom, before asking: nothing can be printed after the abort, and the
-  # error itself names gmp but not the fix.
-  message(STATUS "Looking for CryptoMiniSat5 (its CMake package needs GMP via "
-                 "pkg-config; if this fails on 'gmp', install libgmp-dev or "
-                 "configure with -DUSE_CRYPTOMINISAT=OFF)")
-  # A static CryptoMiniSat references cadical/cadiback imported targets but its
-  # config file does not find them itself; a shared CryptoMiniSat has no such
-  # packages, hence QUIET. cadical's export in turn references Threads::Threads.
-  find_package(Threads QUIET)
-  find_package(cadical CONFIG QUIET)
-  find_package(cadiback CONFIG QUIET)
-  find_package(cryptominisat5 CONFIG)
-  if (cryptominisat5_FOUND AND HAVE_FLAG_STD_CPP11)
-    message(STATUS "CryptoMiniSat5 dynamic lib: ${CRYPTOMINISAT5_LIBRARIES}")
-    message(STATUS "CryptoMiniSat5 static lib:  ${CRYPTOMINISAT5_STATIC_LIBRARIES}")
-    message(STATUS "CryptoMiniSat5 static lib deps: ${CRYPTOMINISAT5_STATIC_LIBRARIES_DEPS}")
-    message(STATUS "CryptoMiniSat5 include dirs: ${CRYPTOMINISAT5_INCLUDE_DIRS}")
+  # REQUIRED only when it was asked for by name: an explicit ON makes a missing
+  # CryptoMiniSat a configuration error, while leaving the option unset means
+  # "use it if it is there". cmake/FindCryptoMiniSat.cmake carries the GMP
+  # warning, the cadical/cadiback preamble and the reason it is the one
+  # dependency STP does not build for you.
+  if (CMS_EXPLICITLY_REQUESTED)
+      find_package(CryptoMiniSat REQUIRED)
+  else()
+      find_package(CryptoMiniSat)
+  endif()
+  # HAVE_FLAG_STD_CPP11 is in the condition because CryptoMiniSat's headers are
+  # C++11: a compiler that cannot be told to accept them cannot compile against
+  # it whether or not the package was found.
+  if (CryptoMiniSat_FOUND AND HAVE_FLAG_STD_CPP11)
     add_definitions(-DUSE_CRYPTOMINISAT)
     set(USE_CRYPTOMINISAT ON)
-  elseif (CMS_EXPLICITLY_REQUESTED)
-    # HAVE_FLAG_STD_CPP11 is in the condition above because CryptoMiniSat's
-    # headers are C++11; a compiler that cannot be told to accept them cannot
-    # compile against it whether or not the package was found.
-    message(FATAL_ERROR
-        "USE_CRYPTOMINISAT is ON but CryptoMiniSat 5.x was not found. Install "
-        "it, point -Dcryptominisat5_DIR at the directory containing "
-        "cryptominisat5Config.cmake, or configure with "
-        "-DUSE_CRYPTOMINISAT=OFF.")
   else()
     set(USE_CRYPTOMINISAT OFF)
   endif()
