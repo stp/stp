@@ -94,7 +94,7 @@ jobs:
         cd build
         cmake \
           -DUSE_MINISAT:BOOL=ON \
-          -DNOCRYPTOMINISAT:BOOL=OFF \
+          -DUSE_CRYPTOMINISAT:STRING=ON \
           -DUSE_CADICAL:BOOL=ON \
           -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" \
           -DENABLE_TESTING:BOOL=ON \

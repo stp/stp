@@ -109,7 +109,7 @@ fi
 # ---------------------------------------------------------- baseline build
 CMAKE_ARGS=(-DCMAKE_BUILD_TYPE="${BUILD_TYPE:-RelWithDebInfo}"
             -DENABLE_TESTING=OFF
-            -DNOCRYPTOMINISAT=ON
+            -DUSE_CRYPTOMINISAT=OFF
             -Wno-dev)
 [ -n "$GENERATOR" ] && CMAKE_ARGS+=(-G "$GENERATOR")
 [ -n "$MINISAT_INC" ] && CMAKE_ARGS+=(-DMINISAT_INCLUDE_DIRS="$MINISAT_INC")

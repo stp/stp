@@ -148,7 +148,7 @@ uses it internally.
 Two configure arguments matter, and ``publish`` confirms both in the
 finished binary rather than trusting the command line:
 
-``-DFORCE_CMS=ON``
+``-DUSE_CRYPTOMINISAT=ON``
    A ``find_package(cryptominisat5)`` that misses is otherwise silent --
    the build falls through and produces a working MiniSat binary.
 
@@ -220,7 +220,7 @@ For testing the release build, or if Actions is unavailable:
     ./scripts/deps/setup-minisat.sh
     ./scripts/deps/setup-cms.sh
     mkdir build-static && cd build-static
-    cmake -DSTATICCOMPILE=ON -DCMAKE_BUILD_TYPE=Release -DFORCE_CMS=ON \
+    cmake -DSTATICCOMPILE=ON -DCMAKE_BUILD_TYPE=Release -DUSE_CRYPTOMINISAT=ON \
           -Dcryptominisat5_DIR=$PWD/../deps/install/lib/cmake/cryptominisat5 ..
     cmake --build . -j$(nproc)
     ./stp --version   # the new version and the tagged SHA, and both

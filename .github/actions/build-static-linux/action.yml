@@ -128,7 +128,7 @@ runs:
   # above. The runner image happens to ship that package already, but the
   # dependency is this action's, so it is named rather than assumed.
   #
-  # FORCE_CMS turns a CryptoMiniSat that was not found into a configure-time
+  # USE_CRYPTOMINISAT=ON turns a CryptoMiniSat that was not found into a configure-time
   # error. Without it find_package failing is silent: the build simply falls
   # through to MiniSat and the mistake surfaces at the smoke test below,
   # after a full build has been paid for. The smoke test stays anyway --
@@ -149,7 +149,7 @@ runs:
       if [ -n "$BUILD_TYPE" ]; then
         args+=("-DCMAKE_BUILD_TYPE=$BUILD_TYPE")
       fi
-      cmake -DSTATICCOMPILE:BOOL=ON -Dcryptominisat5_DIR:PATH="$GITHUB_WORKSPACE/deps/install/lib/cmake/cryptominisat5" -DFORCE_CMS:BOOL=ON -DWERROR:BOOL="$WERROR" "${args[@]}" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+      cmake -DSTATICCOMPILE:BOOL=ON -Dcryptominisat5_DIR:PATH="$GITHUB_WORKSPACE/deps/install/lib/cmake/cryptominisat5" -DUSE_CRYPTOMINISAT:STRING=ON -DWERROR:BOOL="$WERROR" "${args[@]}" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
   - name: Build
     id: build

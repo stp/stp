@@ -160,7 +160,7 @@ or a global relation -- `bvadd`, `bvmul`, `bvudiv`, `bvult` -- do not, which
 is where the propagator earns its keep. `concat` and the two extends
 need an even width, so choose W accordingly; `extract` only needs at least 2.
 
-Both options need a CryptoMiniSat build (`-DNOCRYPTOMINISAT=OFF`); they are
+Both options need a CryptoMiniSat build (`-DUSE_CRYPTOMINISAT=ON`); they are
 refused otherwise rather than quietly reporting nothing. It is much slower
 per case than the propagator it measures -- a fresh solver and a full CNF
 load each time -- so `--bcp-budget` caps it, and the reported per-case cost

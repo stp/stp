@@ -130,7 +130,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        ${{ matrix.env }} cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DBUILD_EXTRA_TOOLS:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        ${{ matrix.env }} cmake -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DUSE_CRYPTOMINISAT:STRING=ON -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DBUILD_EXTRA_TOOLS:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -209,7 +209,7 @@ jobs:
         cmake -S . -B build-cadical-pick -G Ninja \
           -DUSE_CADICAL:BOOL=ON \
           -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" \
-          -DNOCRYPTOMINISAT:BOOL=ON
+          -DUSE_CRYPTOMINISAT:STRING=OFF
         picked=$(sed -n 's/^CADICAL_LIBRARY:FILEPATH=//p' build-cadical-pick/CMakeCache.txt)
         echo "CADICAL_LIBRARY=$picked"
         if [ "$picked" != "$GITHUB_WORKSPACE/deps/cadical/build/libcadical.a" ]; then
@@ -222,7 +222,7 @@ jobs:
         if cmake -S . -B build-cadical-clash -G Ninja \
              -DUSE_CADICAL:BOOL=ON \
              -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" \
-             -DNOCRYPTOMINISAT:BOOL=OFF > clash.log 2>&1; then
+             -DUSE_CRYPTOMINISAT:STRING=ON > clash.log 2>&1; then
           echo "::error::a static CryptoMiniSat with USE_CADICAL configured successfully; it should have been refused"
           exit 1
         fi
@@ -481,7 +481,7 @@ jobs:
         mkdir build
         cd build
         CC=clang CXX=clang++ cmake \
-          -DNOCRYPTOMINISAT:BOOL=ON \
+          -DUSE_CRYPTOMINISAT:STRING=OFF \
           -DUSE_CADICAL:BOOL=ON \
           -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" \
           -DSTP_ALLOCATOR=system \
@@ -619,7 +619,7 @@ jobs:
         mkdir build
         mkdir -p "$GITHUB_WORKSPACE/install/pylib"
         cd build
-        cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DNOCRYPTOMINISAT:BOOL=ON -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_INSTALL_PREFIX:PATH="$GITHUB_WORKSPACE/install" -DPYTHON_LIB_INSTALL_DIR:PATH="$GITHUB_WORKSPACE/install/pylib" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DUSE_CRYPTOMINISAT:STRING=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_INSTALL_PREFIX:PATH="$GITHUB_WORKSPACE/install" -DPYTHON_LIB_INSTALL_DIR:PATH="$GITHUB_WORKSPACE/install/pylib" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -673,7 +673,7 @@ jobs:
     # README documents and the one downstream users actually get: this
     # exercises `cmake --install` and the installed STPConfig.cmake together.
     # This job is the one to do it in because it configures with
-    # NOCRYPTOMINISAT, so the generated STPConfig.cmake has no
+    # USE_CRYPTOMINISAT=OFF, so the generated STPConfig.cmake has no
     # find_dependency(cryptominisat5) to satisfy.
     #
     # The prefix comes from CMAKE_INSTALL_PREFIX at configure time rather than
@@ -782,7 +782,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DNOCRYPTOMINISAT:BOOL=OFF -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        cmake -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" -DUSE_CRYPTOMINISAT:STRING=ON -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -916,7 +916,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake -DUSE_MINISAT:BOOL=ON -DNOCRYPTOMINISAT:BOOL=ON -DWERROR:BOOL=ON -DBUILD_SHARED_LIBS:BOOL=ON -DENABLE_TESTING:BOOL=OFF -DBUILD_EXTRA_TOOLS:BOOL=OFF -G Ninja ..
+        cmake -DUSE_MINISAT:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=OFF -DWERROR:BOOL=ON -DBUILD_SHARED_LIBS:BOOL=ON -DENABLE_TESTING:BOOL=OFF -DBUILD_EXTRA_TOOLS:BOOL=OFF -G Ninja ..
 
     - name: Build
       run: cmake --build build --parallel "$(nproc)"
@@ -975,7 +975,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake -DUSE_MINISAT:BOOL=ON -DNOCRYPTOMINISAT:BOOL=ON -DWERROR:BOOL=ON -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -G Ninja ..
+        cmake -DUSE_MINISAT:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=OFF -DWERROR:BOOL=ON -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -G Ninja ..
 
     - name: Build
       run: cmake --build build --parallel "$(nproc)"
@@ -1041,7 +1041,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        cmake -DUSE_RISS:BOOL=ON -DRISS_DIR:PATH="$GITHUB_WORKSPACE/deps/riss" -DNOCRYPTOMINISAT:BOOL=ON -DWERROR:BOOL=ON -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -G Ninja ..
+        cmake -DUSE_RISS:BOOL=ON -DRISS_DIR:PATH="$GITHUB_WORKSPACE/deps/riss" -DUSE_CRYPTOMINISAT:STRING=OFF -DWERROR:BOOL=ON -DENABLE_TESTING:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -G Ninja ..
 
     - name: Build
       run: cmake --build build --parallel "$(nproc)"
@@ -1325,7 +1325,7 @@ jobs:
     # Getting it wrong is silent -- /Zi survives and nothing is ever cached --
     # which is what the hit rate printed after the build is there to catch.
     #
-    # NOCRYPTOMINISAT: CryptoMiniSat does not build with MSVC (CaDiCaL
+    # USE_CRYPTOMINISAT=OFF: CryptoMiniSat does not build with MSVC (CaDiCaL
     # and CMS's oracle use POSIX-only code); upstream CMS only supports
     # MinGW on Windows.
     - name: Configure
@@ -1335,7 +1335,7 @@ jobs:
         -DCMAKE_POLICY_DEFAULT_CMP0141=NEW -DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded
         -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl
         -DCMAKE_C_COMPILER_LAUNCHER=sccache -DCMAKE_CXX_COMPILER_LAUNCHER=sccache
-        -DSTATICCOMPILE=ON -DUSE_MINISAT=ON -DNOCRYPTOMINISAT=ON
+        -DSTATICCOMPILE=ON -DUSE_MINISAT=ON -DUSE_CRYPTOMINISAT=OFF
         -DENABLE_PYTHON_INTERFACE=OFF
         "-DMINISAT_LIBDIR=$env:MINISAT_ROOT"
         "-DMINISAT_INCLUDE_DIRS=$env:MINISAT_ROOT\include"
@@ -1507,7 +1507,7 @@ jobs:
         ar rcs libbf.a libbf.o cutils.o
 
     - name: Configure
-      run: cmake -B build -G Ninja -DSTATICCOMPILE:BOOL=ON -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$(pwd)/deps/cadical" -DNOCRYPTOMINISAT:BOOL=ON -DENABLE_PYTHON_INTERFACE:BOOL=OFF -DCMAKE_C_COMPILER_LAUNCHER="$SCCACHE" -DCMAKE_CXX_COMPILER_LAUNCHER="$SCCACHE" .
+      run: cmake -B build -G Ninja -DSTATICCOMPILE:BOOL=ON -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$(pwd)/deps/cadical" -DUSE_CRYPTOMINISAT:STRING=OFF -DENABLE_PYTHON_INTERFACE:BOOL=OFF -DCMAKE_C_COMPILER_LAUNCHER="$SCCACHE" -DCMAKE_CXX_COMPILER_LAUNCHER="$SCCACHE" .
 
     # CaDiCaL above is built by its own makefile and so is not cached; ABC and
     # STP are, which is the bulk of this step. The stats are printed so a run

@@ -75,7 +75,7 @@ puts it:
     sudo cmake --install .
     command -v ldconfig && sudo ldconfig
 
-``-DNOCRYPTOMINISAT=ON`` ignores an installed copy.
+``-DUSE_CRYPTOMINISAT=OFF`` ignores an installed copy.
 
 CaDiCaL is the alternative, and is worth trying on hard bitvector
 problems. It is opt-in rather than auto-detected, and is consumed from a
@@ -189,8 +189,11 @@ These apply to all generators:
    dynamic
 -  ``BUILD_SHARED_LIBS`` -- build ``libstp`` as a shared library
    (default ON; forced OFF by ``STATICCOMPILE``)
--  ``NOCRYPTOMINISAT`` -- do not use CryptoMiniSat, even if it is
-   installed
+-  ``USE_CRYPTOMINISAT`` -- ``ON`` requires CryptoMiniSat and fails
+   configuration if it is missing, ``OFF`` never uses it even if it is
+   installed, and the default uses it when it happens to be installed.
+   (It replaces ``NOCRYPTOMINISAT`` and ``FORCE_CMS``, both of which are
+   still accepted and warn)
 -  ``USE_CADICAL`` and ``CADICAL_DIR`` -- build against a CaDiCaL
    checkout
 -  ``USE_MINISAT`` -- build the MiniSat backend
@@ -243,7 +246,7 @@ Install `CMake <https://cmake.org/download/>`__ and follow the steps that
 one of the two Windows jobs in
 `.github/workflows/ci.yml <https://github.com/stp/stp/blob/master/.github/workflows/ci.yml>`__
 runs. Both install flex and bison, build LibBF, and configure with
-``-DNOCRYPTOMINISAT=ON``, CryptoMiniSat not being buildable there.
+``-DUSE_CRYPTOMINISAT=OFF``, CryptoMiniSat not being buildable there.
 
 ``windows (cadical, MinGW)`` is the one to follow for a solver to use: it
 builds CaDiCaL under MinGW/UCRT64 and links a fully static ``stp.exe``

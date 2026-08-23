@@ -842,9 +842,44 @@ add_feature_info(Allocator "NOT STP_ALLOCATOR STREQUAL system"
 # -----------------------------------------------------------------------------
 # Find CryptoMiniSat
 # -----------------------------------------------------------------------------
-option(NOCRYPTOMINISAT "Don't try to use cryptominisat" OFF)
+# Three-valued, because "use CryptoMiniSat" has three answers and this used to
+# need three variables to say them:
+#
+#   OFF     do not look for it                       (was -DNOCRYPTOMINISAT=ON)
+#   ON      it is required; fail if it is missing     (was -DFORCE_CMS=ON)
+#   IGNORE  use it if it happens to be installed      (was the default)
+#
+# IGNORE is still the default, so this changes nothing for an existing build.
+# It is the rung that will go: a build whose backend set depends on what the
+# machine happens to have installed cannot be reproduced from its flags, which
+# is the whole reason the dependencies are moving to a declared, downloadable
+# set. When that lands, the default becomes OFF and CaDiCaL is what a plain
+# configure gets.
+set(CMS_OPTION_DOC "Use the CryptoMiniSat solver backend (ON = required, OFF = never, IGNORE = if installed)")
+stp_option(USE_CRYPTOMINISAT "${CMS_OPTION_DOC}")
 
-if (NOT NOCRYPTOMINISAT)
+# Back-compat for the two variables this replaces. Both are still accepted and
+# still mean what they meant. Translated once and then remembered, the way
+# USE_TCMALLOC -> STP_ALLOCATOR is below: a deprecated name left sitting in the
+# cache must not keep overruling a later -DUSE_CRYPTOMINISAT=, and the warning
+# should be seen once rather than on every reconfigure.
+if (NOT DEFINED _STP_CMS_FROM_LEGACY_OPTION)
+    if (DEFINED NOCRYPTOMINISAT AND NOCRYPTOMINISAT)
+        message(WARNING "NOCRYPTOMINISAT is deprecated, use -DUSE_CRYPTOMINISAT=OFF")
+        set(USE_CRYPTOMINISAT OFF CACHE STRING "${CMS_OPTION_DOC}" FORCE)
+        set(_STP_CMS_FROM_LEGACY_OPTION ON CACHE INTERNAL "")
+    elseif (DEFINED FORCE_CMS AND FORCE_CMS)
+        message(WARNING "FORCE_CMS is deprecated, use -DUSE_CRYPTOMINISAT=ON")
+        set(USE_CRYPTOMINISAT ON CACHE STRING "${CMS_OPTION_DOC}" FORCE)
+        set(_STP_CMS_FROM_LEGACY_OPTION ON CACHE INTERNAL "")
+    endif()
+endif()
+
+# Was it asked for, or merely not refused? The two differ only when the lookup
+# fails: an explicit ON is a configuration error, an unset one is not.
+stp_option_is_explicit(USE_CRYPTOMINISAT CMS_EXPLICITLY_REQUESTED)
+
+if (NOT USE_CRYPTOMINISAT STREQUAL "OFF")
   set(cryptominisat5_DIR "" CACHE PATH "Path to directory containing cryptominisat5Config.cmake")
   # STP does not look for GMP. It is CryptoMiniSat's dependency, not STP's:
   # no STP source includes it, and it reaches STP through the cryptominisat5
@@ -858,7 +893,7 @@ if (NOT NOCRYPTOMINISAT)
   # error itself names gmp but not the fix.
   message(STATUS "Looking for CryptoMiniSat5 (its CMake package needs GMP via "
                  "pkg-config; if this fails on 'gmp', install libgmp-dev or "
-                 "configure with -DNOCRYPTOMINISAT=ON)")
+                 "configure with -DUSE_CRYPTOMINISAT=OFF)")
   # A static CryptoMiniSat references cadical/cadiback imported targets but its
   # config file does not find them itself; a shared CryptoMiniSat has no such
   # packages, hence QUIET. cadical's export in turn references Threads::Threads.
@@ -866,21 +901,29 @@ if (NOT NOCRYPTOMINISAT)
   find_package(cadical CONFIG QUIET)
   find_package(cadiback CONFIG QUIET)
   find_package(cryptominisat5 CONFIG)
-  if (cryptominisat5_FOUND AND HAVE_FLAG_STD_CPP11 AND (NOT NOCRYPTOMINISAT))
+  if (cryptominisat5_FOUND AND HAVE_FLAG_STD_CPP11)
     message(STATUS "CryptoMiniSat5 dynamic lib: ${CRYPTOMINISAT5_LIBRARIES}")
     message(STATUS "CryptoMiniSat5 static lib:  ${CRYPTOMINISAT5_STATIC_LIBRARIES}")
     message(STATUS "CryptoMiniSat5 static lib deps: ${CRYPTOMINISAT5_STATIC_LIBRARIES_DEPS}")
     message(STATUS "CryptoMiniSat5 include dirs: ${CRYPTOMINISAT5_INCLUDE_DIRS}")
     add_definitions(-DUSE_CRYPTOMINISAT)
     set(USE_CRYPTOMINISAT ON)
+  elseif (CMS_EXPLICITLY_REQUESTED)
+    # HAVE_FLAG_STD_CPP11 is in the condition above because CryptoMiniSat's
+    # headers are C++11; a compiler that cannot be told to accept them cannot
+    # compile against it whether or not the package was found.
+    message(FATAL_ERROR
+        "USE_CRYPTOMINISAT is ON but CryptoMiniSat 5.x was not found. Install "
+        "it, point -Dcryptominisat5_DIR at the directory containing "
+        "cryptominisat5Config.cmake, or configure with "
+        "-DUSE_CRYPTOMINISAT=OFF.")
+  else()
+    set(USE_CRYPTOMINISAT OFF)
   endif()
+else()
+  set(USE_CRYPTOMINISAT OFF)
 endif()
 add_feature_info(CryptoMiniSat USE_CRYPTOMINISAT "Enables CryptoMiniSat solver, allows --cryptominisat5 option")
-
-option(FORCE_CMS "Must build with CryptoMiniSat" OFF)
-if (FORCE_CMS AND NOT USE_CRYPTOMINISAT)
-    message(FATAL_ERROR "CryptoMiniSat 5.x was not found but it was requested. Exiting.")
-endif()
 
 # CryptoMiniSat >= 5.14 builds its own CaDiCaL -- the meelgroup fork, 2.1.3 as
 # of 5.14.7 -- and installs it beside itself, exported as an imported target
@@ -914,8 +957,28 @@ if (USE_CADICAL AND USE_CRYPTOMINISAT AND TARGET cryptominisat5 AND TARGET cadic
             "Either build CryptoMiniSat as a shared library "
             "(scripts/deps/setup-cms.sh -DBUILD_SHARED_LIBS=ON), which keeps "
             "its bundled CaDiCaL to itself, or leave CryptoMiniSat out with "
-            "-DNOCRYPTOMINISAT=ON.")
+            "-DUSE_CRYPTOMINISAT=OFF.")
     endif()
+endif()
+
+# -----------------------------------------------------------------------------
+# Every backend is optional, but a solver with no SAT backend at all cannot
+# solve anything, so insist that at least one made it in.
+#
+# This is the point at which all four are settled: USE_MINISAT, USE_CADICAL and
+# USE_RISS are plain options decided above, and USE_CRYPTOMINISAT has just been
+# resolved from its three-valued form to a definite ON or OFF. Asking here,
+# rather than after MiniSat has been searched for, means the answer arrives
+# before any of the per-backend lookups spend time or produce their own errors.
+# -----------------------------------------------------------------------------
+if (NOT USE_MINISAT AND NOT USE_CRYPTOMINISAT AND NOT USE_CADICAL AND NOT USE_RISS)
+    message(FATAL_ERROR
+            "No SAT backend is enabled, so this build could not solve "
+            "anything. Enable at least one of:\n"
+            "    -DUSE_CADICAL=ON -DCADICAL_DIR=<checkout>  (see scripts/deps/setup-cadical.sh)\n"
+            "    -DUSE_CRYPTOMINISAT=ON                     (must already be installed)\n"
+            "    -DUSE_MINISAT=ON\n"
+            "    -DUSE_RISS=ON -DRISS_DIR=<checkout>")
 endif()
 
 # -----------------------------------------------------------------------------
@@ -984,14 +1047,6 @@ if (USE_MINISAT)
     add_definitions(-DUSE_MINISAT)
     include_directories(SYSTEM ${MINISAT_INCLUDE_DIRS})
     set(LIBS ${LIBS} ${MINISAT_LIBRARIES})
-endif()
-
-# Every backend is optional, but a solver with no SAT backend at all cannot
-# solve anything, so insist that at least one made it in.
-if (NOT USE_MINISAT AND NOT USE_CRYPTOMINISAT AND NOT USE_CADICAL AND NOT USE_RISS)
-    message(FATAL_ERROR "No SAT backend is enabled. Enable at least one of: "
-            "-DUSE_CADICAL=ON, CryptoMiniSat (found automatically when "
-            "installed), -DUSE_MINISAT=ON, or -DUSE_RISS=ON.")
 endif()
 
 # -----------------------------------------------------------------------------
