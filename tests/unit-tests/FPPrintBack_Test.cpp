@@ -186,17 +186,21 @@ TEST(FPPrintBack, constants_and_conversions)
   roundTrips(R"(
     (set-logic QF_BVFP)
     (declare-fun x () (_ FloatingPoint 5 11))
+    (declare-fun y () (_ FloatingPoint 8 24))
     (declare-fun b () (_ BitVec 16))
     (declare-fun w () (_ BitVec 8))
     (assert (fp.eq x (fp #b0 #b10000 #b0000000001)))
     (assert (fp.isNormal ((_ to_fp 5 11) b)))
-    (assert (not (fp.isNaN ((_ to_fp 5 11) RNE x))))
+    (assert (not (fp.isNaN ((_ to_fp 5 11) RNE y))))
     (assert (fp.isPositive ((_ to_fp_unsigned 5 11) RTN w)))
     (assert (= w ((_ fp.to_ubv 8) RTZ x)))
     (assert (= x (_ NaN 5 11)))
   )",
+             // The rounding conversion narrows y: a widening (an identity
+             // included) folds through the classification and would not
+             // survive to be printed.
              {"(fp #b0 #b10000 #b0000000001)", "((_ to_fp 5 11) |b|)",
-              "((_ to_fp 5 11) RNE |x|)", "((_ to_fp_unsigned 5 11) RTN |w|)",
+              "((_ to_fp 5 11) RNE |y|)", "((_ to_fp_unsigned 5 11) RTN |w|)",
               "((_ fp.to_ubv 8) RTZ |x|)", "fp.isNormal", "fp.isNaN",
               // The NaN special is a packed constant: symfpu's canonical
               // quiet NaN, with the top stored-significand bit set.
@@ -311,6 +315,30 @@ TEST(FPPrintBack, rounding_mode_only_selects_fp_logic)
   )",
              {"(set-logic QF_BVFP)",
               "(declare-fun |r| () RoundingMode)", "(= |r| RNE)"});
+}
+
+// Declared sorts are represented by finite bit-vector carriers internally,
+// but print-back must expose the source sorts and select QF_AX. Otherwise a
+// printed formula silently becomes an array-of-bitvectors problem.
+TEST(FPPrintBack, qf_ax_declared_array_sorts_round_trip)
+{
+  roundTrips(R"(
+    (set-logic QF_AX)
+    (declare-sort Index 0)
+    (declare-sort Element 0)
+    (declare-const a (Array Index Element))
+    (declare-const b (Array Index Element))
+    (declare-const i Index)
+    (declare-const e Element)
+    (assert (= (select a i) e))
+    (assert (not (= a b)))
+  )",
+             {"(set-logic QF_AX)",
+              "(declare-sort Index 0)",
+              "(declare-sort Element 0)",
+              "(declare-fun |a| () (Array Index Element))",
+              "(declare-fun |i| () Index)",
+              "(declare-fun |e| () Element)"});
 }
 
 // A term is a DAG, and rounding-mode ites share their operands freely.

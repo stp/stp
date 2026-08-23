@@ -35,6 +35,7 @@ namespace stp
 {
 using std::ostream;
 class ASTInternal;
+class UFContext;
 
 /******************************************************************
  *  A Kind of Smart pointer to actual ASTInternal datastructure.  *
@@ -45,6 +46,7 @@ class ASTNode
 {
   friend class STPMgr;
   friend class ASTInterior;
+  friend class UFContext;
   friend class vector<ASTNode>;
   friend ASTNode HashingNodeFactory::CreateNode(
       stp::Kind kind, stp::ASTChildren back_children);
@@ -120,6 +122,21 @@ public:
   // Check if it points to a null node
   inline bool IsNull() const { return _int_node_ptr == NULL; }
 
+  // Public construction APIs use this to reject cross-context operands before
+  // asking a node factory to build anything. Node ownership is immutable.
+  bool IsOwnedBy(const STPMgr* manager) const
+  {
+    return !IsNull() && GetSTPMgr() == manager;
+  }
+
+  // The owning manager is immutable. Public printers for context-owned
+  // durable nodes need to recover their declaration registry without relying
+  // on a process-global parser manager.
+  STPMgr* GetNodeManager() const
+  {
+    return IsNull() ? NULL : GetSTPMgr();
+  }
+
   bool isSimplfied() const;
   void hasBeenSimplfied() const;
 
@@ -147,7 +164,7 @@ public:
     return k == BVLT || k == BVLE || k == BVGT || k == BVGE || k == BVSLT ||
            k == BVSLE || k == BVSGT || k == BVSGE || k == BVUADDO ||
            k == BVSADDO || k == BVUMULO || k == BVSMULO || k == BVUSUBO ||
-           k == BVSSUBO || k == EQ || k == ARRAY_EQ;
+           k == BVSSUBO || k == EQ || k == ARRAY_EQ || k == DISTINCT;
   }
 
   // delegates to the ASTInternal node.

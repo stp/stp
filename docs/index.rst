@@ -27,22 +27,21 @@ On a Debian-like platform, from a clean checkout:
 
 .. code-block:: bash
 
-    sudo apt-get install git build-essential cmake bison flex curl patch \
+    sudo apt-get install git build-essential cmake bison flex \
         python3 libgmp-dev
     git clone https://github.com/stp/stp
     cd stp
     git submodule init && git submodule update
     ./scripts/deps/setup-cms.sh
-    ./scripts/deps/setup-libbf.sh
     mkdir build && cd build
     cmake ..
     cmake --build . -j$(nproc)
     sudo cmake --install .
 
-Every step is needed. ABC, mimalloc, CLI11 and SymFPU are submodules and
-are built as part of STP; LibBF is required; and a build with no SAT backend enabled
-does not configure. The two ``setup`` scripts fetch and build LibBF and
-the SAT solver into ``deps/``, where the build finds them without being
+Every step is needed. ABC, mimalloc, CLI11, SymFPU and LibBF are
+submodules and are built as part of STP, and a build with no SAT backend
+enabled does not configure. The ``setup`` script fetches and builds the
+SAT solver into ``deps/``, where the build finds it without being
 told where to look. ``libgmp-dev`` is in the list for CryptoMiniSat's sake
 -- it is the only thing that needs it, and a build without CryptoMiniSat
 does not.
@@ -129,9 +128,10 @@ these, and rejects any other name:
      - bitvectors
    * - ``QF_ABV``
      - bitvectors and arrays
-   * - ``QF_AUFBV``
-     - bitvectors and arrays; the uninterpreted functions the name also
-       allows are not supported, function declarations being nullary
+   * - ``QF_UF``
+     - uninterpreted functions and uninterpreted sorts
+   * - ``QF_UFBV``, ``QF_AUFBV``
+     - bitvectors and uninterpreted functions, optionally with arrays
    * - ``QF_FP``
      - floating-point
    * - ``QF_BVFP``
@@ -141,6 +141,18 @@ these, and rejects any other name:
    * - ``QF_FPLRA``, ``QF_BVFPLRA``, ``QF_ABVFPLRA``
      - as the three above, plus the real constants that appear as the
        argument of ``to_fp``; no other use of reals is supported
+   * - ``QF_UFFP``, ``QF_UFBVFP``, ``QF_AUFBVFP``
+     - uninterpreted functions and floating-point, optionally with explicit
+       bitvectors and arrays
+   * - ``QF_UFFPLRA``, ``QF_UFBVFPLRA``, ``QF_AUFBVFPLRA``
+     - as the three UF+FP logics above, plus real constants used as the
+       argument of ``to_fp``
+
+For compatibility, ``QF_UFABVFP`` and ``QF_UFABVFPLRA`` are accepted as
+aliases of the corresponding ``QF_AUFBV*`` spellings.  A logic containing
+``UF`` enables uninterpreted-function support itself.  The
+``--uninterpreted-functions`` option is still available for an input whose
+logic name omits ``UF``.
 
 Declarations
 ------------
@@ -160,6 +172,15 @@ results is:
 .. code-block:: lisp
 
     (declare-fun a () (Array (_ BitVec 32) (_ BitVec 7)))
+
+A ``declare-fun`` with a nonempty domain declares an uninterpreted function.
+Its arguments and result may be ``Bool``, bitvectors, declared sorts,
+``RoundingMode`` or floating-point sorts.  For example:
+
+.. code-block:: lisp
+
+    (set-logic QF_UFBVFP)
+    (declare-fun classify ((_ FloatingPoint 8 24)) (_ BitVec 8))
 
 Functions and terms
 -------------------
@@ -608,4 +629,3 @@ Many people have contributed:
 And many others: the `contributors
 page <https://github.com/stp/stp/graphs/contributors>`__ lists everyone
 who has committed to STP.
-

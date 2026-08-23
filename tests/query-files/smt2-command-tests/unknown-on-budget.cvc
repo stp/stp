@@ -1,0 +1,19 @@
+% A CVC query with no answer reports that verdict without guessing why.
+%
+% This input language has no (get-info :reason-unknown), but calling every
+% no-answer a timeout would still be wrong: a deterministic conflict or AIG
+% budget reaches the same verdict. The parser is selected by file extension,
+% so this is the only kind of file that can exercise the CVC rendering.
+%
+% A zero-second budget, so the result does not depend on the machine.
+%
+% RUN: %solver -k 0 %s 2>&1 | %OutputCheck %s
+% CHECK: ^Unknown\.$
+% CHECK-NOT: Timed Out
+
+a, b, c : BITVECTOR(32);
+
+ASSERT(BVMULT(32, a, b) = c);
+ASSERT(BVGT(a, 0hex00010000));
+ASSERT(BVGT(b, 0hex00010000));
+QUERY(c = 0hex00000000);

@@ -98,12 +98,6 @@ runs:
     run: |
       ./scripts/deps/setup-cms.sh
 
-  # Outside the cached step, as in ci.yml's gcc/clang job: the pinned
-  # tarball is ~300KB and builds in seconds.
-  - name: LibBF (real-literal folding)
-    shell: bash
-    run: ./scripts/deps/setup-libbf.sh
-
   # Keyed by build type as well: the two differ in optimisation level and in
   # whether NDEBUG is defined, so they share no compilations. One key would
   # have them evicting each other's entries inside the 800M budget while

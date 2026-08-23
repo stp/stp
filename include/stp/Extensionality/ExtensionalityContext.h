@@ -55,6 +55,7 @@ THE SOFTWARE.
 #include "stp/ToSat/ToSATBase.h"
 #include <map>
 #include <set>
+#include <utility>
 #include <vector>
 
 namespace stp
@@ -188,6 +189,20 @@ public:
   // SolveScope marks the window, and every pass gate tests this instead.
   bool activeInSolve() const { return solveInProgress && active(); }
 
+  // Whether an earlier solve left state behind that the next round has to
+  // retire before it materializes a candidate of its own.
+  //
+  // Not active(): the eager arm retires its records inside the solve that
+  // built them, because the lemma block stands in for the checker and
+  // nothing should consult it afterwards. Such a round ends reporting no
+  // active records while still holding the lowerings the model surfaces
+  // read -- and a later round that runs the consistency check over them
+  // asks this round's assignment about the last round's equalities.
+  bool holdsSolveState() const
+  {
+    return !records.empty() || !currentLowerings.empty();
+  }
+
   const std::vector<Record>& getRecords() const { return records; }
   size_t getActiveRecordCount() const { return activeRecordIds.size(); }
 
@@ -234,6 +249,11 @@ public:
   // remain structural and are handled by the checker's T rules.
   ASTNode conjoinRecordConstraints(const ASTNode& root);
 
+  // Access indexes grouped by (index width, value width) of the array
+  // they access.
+  typedef std::pair<unsigned, unsigned> ArrayShape;
+  typedef std::map<ArrayShape, std::set<ASTNode>> IndexInventory;
+
   // Eager Ackermann reduction of the active equalities, the classical
   // eager alternative to the refinement loop, taken when the user asked
   // for --ackermanize. The negative direction of every equality is
@@ -260,7 +280,33 @@ public:
   // pointwise bit-equality is stronger than value equality there (NaN
   // payloads, non-denoting patterns), so a packed instantiation could
   // refuse a genuine model. Such solves stay on lemmas on demand.
-  ASTNode instantiateEagerAckermann(const ASTNode& root);
+  ASTNode instantiateEagerAckermann(const ASTNode& root,
+                                    const IndexInventory& indexesByShape);
+
+  // Every distinct access index in the solve, grouped by accessed array
+  // shape. Built once per solve and shared by the policy and the
+  // instantiation, which must agree on the inventory they count and use.
+  void collectIndexInventory(const ASTNode& root,
+                             IndexInventory& indexesByShape) const;
+
+  // How many lemmas instantiateEagerAckermann would conjoin for that
+  // inventory: one per active record per index of the record's shape.
+  uint64_t eagerLemmaCount(const IndexInventory& indexesByShape) const;
+
+  // True when a record's construction operands quotient their bit patterns
+  // (float or RoundingMode cells or indexes), which the eager arm cannot
+  // express.
+  bool equalityQuotientsBitPatterns() const;
+
+  // The congruence expansion instantiation itself will add: an operand that
+  // is not a write chain acquires the whole shared inventory, and the read
+  // side then squares it.
+  uint64_t eagerInstantiationCongruence(
+      const IndexInventory& indexesByShape) const;
+
+  // Whether to take the eager arm when the user did not ask for it by name.
+  bool eagerEqualityPreferred(const ASTNode& root,
+                              const IndexInventory& indexesByShape) const;
 
   // The initial formula protocol shared by the batch and persistent drivers,
   // after opaque equalities have been lowered and before ordinary
@@ -507,6 +553,24 @@ public:
   // encoding time (no equality circuit was built and no literal
   // entered the clause). Cumulative over the context lifetime.
   int lemmaAtomsFolded;
+
+  // Encoding rounds, and the largest single round. The checker
+  // deliberately collects every independent conflict a fixed point finds
+  // rather than stopping at the first, so a round has no upper bound, and
+  // neither the total nor the mean says whether that mattered: seventeen
+  // arrays asserted pairwise distinct take 54 rounds for 1477 lemmas, an
+  // average of 27, and the largest single round of that run is 120. These
+  // are what a decision about capping a round would have to be made on.
+  int lemmaRounds;
+  int lemmasInLargestRound;
+
+  // Print the four counters above under -s / --print-functionstat. Both
+  // the batch pipeline and the incremental driver call this where they
+  // print the rest of their per-solve statistics; the driver has its own
+  // encoding path and never enters the batch refinement loop, and it is
+  // the mode that accumulates the most rounds. Silent when the checker
+  // has encoded no round.
+  void reportLemmaStats() const;
 
 private:
   STPMgr* bm;

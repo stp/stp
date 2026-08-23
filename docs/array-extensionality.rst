@@ -51,7 +51,8 @@ With the option enabled:
 * ``vc_getCounterExampleArray`` returns one entry per concrete index in
   ascending index order;
 * array-valued ``(get-value ...)`` is rejected as unsupported (use
-  ``(get-model)``).
+  ``(get-model)``). This is not conditional on the option: an array has no
+  value spelling in a valuation pair either way.
 
 Nullary array-sorted ``define-fun`` is accepted by the SMT-LIB2 parser
 whether or not the option is on: such a definition is a pure name for its
@@ -81,8 +82,8 @@ whole-array equality is refused with an error naming the option, where
 the baseline warned and continued (pinned by a lit test). One
 behavioral corner also deliberately differs: when the
 soft timeout expires while lazy refinement is still undecided, the
-solve now reports a timeout where it previously aborted with an
-internal error.
+solve now reports ``unknown`` with a timeout reason where it previously
+aborted with an internal error.
 
 Limitations: arrays of arrays are not supported (STP's sort system has
 no nested array sorts), and there is no constant-array

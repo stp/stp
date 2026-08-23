@@ -445,6 +445,21 @@ particular -- from each call's own output and conjoins it onto that
 result: a conjunct's lowered form carries its own conditions and retracts
 with its level, while the persistent caches hold only term rewrites.
 
+Distinct ordering
+-----------------
+
+The ``--distinct-ordering`` symmetry rewrite is decided against the complete
+active formula on every check while ``distinct`` is still a native predicate.
+When the occurrence guard succeeds, the rewritten formula is encoded as one
+exact-stack block and its root is assumed for that solve. The quadratic
+pairwise lowering is therefore never built for a variable group replaced by a
+linear strict chain. If a later assertion mentions one of the ordered symbols,
+the guard fails and the old block root is simply omitted from the assumption
+set; the ordinary pairwise semantics are then lowered and encoded. Persistent
+Tseitin and learned clauses remain sound because none of them asserts the
+retired block root. If a pop restores the same symmetric stack, its
+deterministically keyed block can be assumed and reused again.
+
 Whole-array equality
 --------------------
 

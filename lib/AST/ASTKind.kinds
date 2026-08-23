@@ -209,7 +209,18 @@ FP_SMT_EQ           2    2    Form    FP
 # of their own: they are ordinary packed constants, built interned by
 # STPMgr::CreateFPSpecialConst so that the format is part of node identity.
 
-# Opaque whole-array equality. Kept last so the numeric values exported by
-# c_interface.h remain stable. The extensionality prepass lowers this before
-# ordinary solving.
+# Opaque whole-array equality. The extensionality prepass lowers this before
+# ordinary solving. Public kinds are append-only so their exported numeric
+# values remain stable.
 ARRAY_EQ        2       2       Form
+
+# Durable, typed application of an uninterpreted function. Child 0 is the
+# manager-owned declaration identity; the remaining children are the ordered
+# source-language actuals. This stays opaque until solve-boundary UF lowering.
+UF_APPLY        2       -       Term    Form
+
+# Durable SMT-LIB distinct predicate. Its operands remain together through
+# frontend substitution and query assembly, then the completed-root distinct
+# pass either exploits their symmetry or lowers them to pairwise disequalities.
+# Keep new public kinds at the end: their numeric values are ABI-visible.
+DISTINCT        2       -       Form

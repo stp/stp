@@ -23,8 +23,12 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/AST/AST.h"
+#include "stp/UninterpretedFunctions/UFDecl.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Util/NodeIterator.h"
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 #if !defined(_MSC_VER)
 // Needed for signal()
@@ -151,6 +155,87 @@ bool numberOfReadsLessThan(const ASTNode& n, int limit)
     current = parents.back();
     parents.pop_back();
   }
+}
+
+// A bounded estimate of eager array Ackermannisation's structural cost.
+//
+// The read count the policy gates on is a proxy for how much the transform
+// builds, and it is a bad one: a read whose array operand is a chain of
+// WRITEs becomes one if-then-else per link in that chain, so nine reads over a
+// four-thousand-deep store chain add thirty-six thousand nodes beyond the
+// flat-array baseline. Measured, that is the difference between 0.12s and 5.8s
+// on the same query -- the eager path is 48x SLOWER there than leaving it to
+// read refinement.
+//
+// So this charges each distinct read for the WRITE and array-valued ITE nodes
+// reachable beneath its array operand, and stops as soon as the bound is
+// reached. It says nothing about the index-equality axioms the transform also
+// builds; it is the structural term that makes the difference between a cheap
+// eager expansion and a catastrophic one.
+bool arrayEagerCostLessThan(const ASTNode& n, uint64_t limit)
+{
+  if (limit == 0)
+    return false;
+
+  uint64_t cost = 0;
+  const auto charge = [&]() {
+    // The predicate is strict. Checking before incrementing also avoids
+    // wrapping when a caller supplies the largest possible bound.
+    if (cost >= limit - 1)
+      return false;
+    ++cost;
+    return true;
+  };
+
+  // Charge the structural expansion under one read. The transform pushes a
+  // read through both branches of an array-valued ITE, so both branches must
+  // be visited: following only one makes the policy depend on branch order.
+  // Shared array nodes are charged once per read, matching the transform map's
+  // sharing, while a shared spine reached by different reads is charged once
+  // for each read because each index produces its own expansion.
+  const auto chargeExpansion = [&](const ASTNode& start) {
+    std::unordered_set<uint64_t> expanded;
+    std::vector<ASTNode> pending(1, start);
+    while (!pending.empty())
+    {
+      const ASTNode current = pending.back();
+      pending.pop_back();
+      const auto kind = current.GetKind();
+      const bool arrayIte = kind == ITE && current.GetIndexWidth() > 0;
+      if ((kind != WRITE && !arrayIte) ||
+          !expanded.insert(current.GetNodeNum()).second)
+        continue;
+
+      if (!charge())
+        return false;
+      if (kind == WRITE)
+        pending.push_back(current[0]);
+      else
+      {
+        pending.push_back(current[1]);
+        pending.push_back(current[2]);
+      }
+    }
+    return true;
+  };
+
+  std::unordered_set<uint64_t> visited;
+  std::vector<ASTNode> pending(1, n);
+  while (!pending.empty())
+  {
+    const ASTNode current = pending.back();
+    pending.pop_back();
+    if (current.isAtom() || !visited.insert(current.GetNodeNum()).second)
+      continue;
+    if (current.GetKind() == READ)
+    {
+      if (!charge() || !chargeExpansion(current[0]))
+        return false;
+    }
+    for (size_t i = 0; i < current.Degree(); ++i)
+      pending.push_back(current[i]);
+  }
+  return true;
 }
 
 // See the declaration for why this exists: constants of one value need
@@ -633,6 +718,35 @@ bool BVTypeCheck_term_kind(const ASTNode& n, const Kind& k)
 
   switch (k)
   {
+    case UF_APPLY:
+    {
+      if (n.Degree() < 2 || n[0].GetKind() != SYMBOL)
+        FatalError("BVTypeCheck: malformed UF_APPLY declaration/arity", n);
+      const SourceSort sort = n.GetSourceSort();
+      if (!UFSignature::isSupportedSort(sort))
+        FatalError("BVTypeCheck: unsupported UF_APPLY result sort", n);
+      if (sort.kind() == SourceSort::Kind::Bool)
+      {
+        if (n.GetType() != BOOLEAN_TYPE)
+          FatalError("BVTypeCheck: Bool UF_APPLY has a non-Bool carrier", n);
+      }
+      // A float-codomain application derives its format from the same
+      // declaration identity its sort comes from, so it types as a float
+      // rather than as its packed carrier. Every other admitted sort has a
+      // bit-vector carrier of the packed width.
+      else if (sort.kind() == SourceSort::Kind::FloatingPoint)
+      {
+        if (n.GetType() != FLOATINGPOINT_TYPE ||
+            n.GetExpWidth() != sort.exponentWidth() ||
+            n.GetSigWidth() != sort.significandWidth())
+          FatalError("BVTypeCheck: float UF_APPLY has the wrong format", n);
+      }
+      else if (n.GetType() != BITVECTOR_TYPE ||
+               n.GetValueWidth() != sort.packedWidth())
+        FatalError("BVTypeCheck: UF_APPLY has the wrong carrier width", n);
+      break;
+    }
+
     case BVCONST:
       if (BITVECTOR_TYPE != n.GetType() && FLOATINGPOINT_TYPE != n.GetType())
         FatalError("BVTypeCheck: The term t does not typecheck, where t = \n",
@@ -1172,6 +1286,22 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
       }
       break;
 
+    case DISTINCT:
+    {
+      if (n.Degree() < 2)
+        FatalError("BVTypeCheck: DISTINCT requires at least 2 operands", n);
+      const SourceSort sort = n[0].GetSourceSort();
+      if (!sort.isKnown())
+        FatalError("BVTypeCheck: DISTINCT operands need a known source sort",
+                   n);
+      for (size_t i = 1; i < n.Degree(); ++i)
+        if (n[i].GetSourceSort() != sort)
+          FatalError("BVTypeCheck: DISTINCT operands have different source "
+                     "sorts",
+                     n);
+      break;
+    }
+
     case BVLT:
     case BVLE:
     case BVGT:
@@ -1308,6 +1438,90 @@ bool BVTypeCheck_nonterm_kind(const ASTNode& n, const Kind& k)
   }
   return true;
 }
+
+namespace
+{
+// The base array terms an array operand resolves to: down through write
+// chains, and through both arms of an array-valued if-then-else. Anything
+// else -- a symbol, or a term this cannot see through -- is a base.
+void collectArrayBases(const ASTNode& array, std::vector<ASTNode>& bases)
+{
+  std::unordered_set<uint64_t> seen;
+  std::vector<ASTNode> pending(1, array);
+  while (!pending.empty())
+  {
+    const ASTNode current = pending.back();
+    pending.pop_back();
+    if (!seen.insert(current.GetNodeNum()).second)
+      continue;
+
+    const Kind kind = current.GetKind();
+    if (kind == WRITE)
+      pending.push_back(current[0]);
+    else if (kind == ITE && current.GetIndexWidth() > 0)
+    {
+      pending.push_back(current[1]);
+      pending.push_back(current[2]);
+    }
+    else
+      bases.push_back(current);
+  }
+}
+
+// The distinct constant and symbolic access indexes reaching one base array.
+struct ArrayAccess
+{
+  std::unordered_set<uint64_t> constants;
+  std::unordered_set<uint64_t> symbolic;
+};
+} // namespace
+
+uint64_t arrayCongruenceEstimate(const ASTNode& n)
+{
+  // Node numbers stand in for the index nodes: only distinctness matters.
+  std::unordered_map<uint64_t, ArrayAccess> byBase;
+
+  const auto note = [&](const ASTNode& array, const ASTNode& index) {
+    std::vector<ASTNode> bases;
+    collectArrayBases(array, bases);
+    for (size_t i = 0; i < bases.size(); i++)
+    {
+      ArrayAccess& a = byBase[bases[i].GetNodeNum()];
+      if (index.isConstant())
+        a.constants.insert(index.GetNodeNum());
+      else
+        a.symbolic.insert(index.GetNodeNum());
+    }
+  };
+
+  std::unordered_set<uint64_t> visited;
+  std::vector<ASTNode> pending(1, n);
+  while (!pending.empty())
+  {
+    const ASTNode current = pending.back();
+    pending.pop_back();
+    if (current.isAtom() || !visited.insert(current.GetNodeNum()).second)
+      continue;
+
+    const Kind kind = current.GetKind();
+    if (kind == READ || kind == WRITE)
+      note(current[0], current[1]);
+
+    for (size_t i = 0; i < current.Degree(); i++)
+      pending.push_back(current[i]);
+  }
+
+  uint64_t total = 0;
+  for (std::unordered_map<uint64_t, ArrayAccess>::const_iterator it =
+           byBase.begin(); it != byBase.end(); ++it)
+  {
+    const uint64_t c = it->second.constants.size();
+    const uint64_t s = it->second.symbolic.size();
+    total += c * s + s * (s - 1) / 2;
+  }
+  return total;
+}
+
 
 /* FUNCTION: Typechecker for terms and formulas
  *

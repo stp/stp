@@ -198,6 +198,39 @@ static void collectArrayIndexSorts(const ASTNode& n, STPMgr* mgr,
     collectArrayIndexSorts(n[i], mgr, visited, out);
 }
 
+static bool sortContainsUninterpreted(const SourceSort& sort)
+{
+  if (sort.kind() == SourceSort::Kind::Uninterpreted)
+    return true;
+  return sort.kind() == SourceSort::Kind::Array &&
+         (sortContainsUninterpreted(sort.index()) ||
+          sortContainsUninterpreted(sort.element()));
+}
+
+static bool sortContainsBitVector(const SourceSort& sort)
+{
+  if (sort.kind() == SourceSort::Kind::BitVector)
+    return true;
+  return sort.kind() == SourceSort::Kind::Array &&
+         (sortContainsBitVector(sort.index()) ||
+          sortContainsBitVector(sort.element()));
+}
+
+static void collectUninterpretedSorts(
+    const SourceSort& sort, std::map<unsigned, SourceSort>& out)
+{
+  if (sort.kind() == SourceSort::Kind::Uninterpreted)
+  {
+    out.emplace(sort.uninterpretedId(), sort);
+    return;
+  }
+  if (sort.kind() == SourceSort::Kind::Array)
+  {
+    collectUninterpretedSorts(sort.index(), out);
+    collectUninterpretedSorts(sort.element(), out);
+  }
+}
+
 void printVarDeclsToStream(STPMgr* mgr, ASTNodeSet& symbols,
                            const UsedSorts& used, ostream& os);
 
@@ -225,12 +258,36 @@ void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr,
                        const bool definately_bv)
 {
   const bool has_arrays = !definately_bv && containsArrayOps(n, mgr);
+  ASTNodeSet visited, symbols;
+  buildListOfSymbols(n, visited, symbols);
+
+  std::map<unsigned, SourceSort> uninterpreted_sorts;
+  bool has_bv_sort = false;
+  for (const ASTNode& symbol : symbols)
+  {
+    const SourceSort sort = symbol.GetSourceSort();
+    collectUninterpretedSorts(sort, uninterpreted_sorts);
+    has_bv_sort = has_bv_sort || sortContainsBitVector(sort);
+  }
+  const bool has_uninterpreted = !uninterpreted_sorts.empty();
+
   // Logic selection describes this expression, not every term ever interned
   // by the manager. Include RoundingMode-only formulas: that source sort is
   // part of the FP theory even when no FloatingPoint value occurs.
   const bool has_fp = containsFloatingPointTheory(n, mgr);
-  if (has_fp)
+  if (has_fp && has_uninterpreted)
+    os << (has_arrays ? "(set-logic QF_AUFBVFP)\n"
+                      : "(set-logic QF_UFBVFP)\n");
+  else if (has_fp)
     os << (has_arrays ? "(set-logic QF_ABVFP)\n" : "(set-logic QF_BVFP)\n");
+  else if (has_uninterpreted && has_arrays && !has_bv_sort)
+    // This is the pure extensional-array fragment: choosing QF_AX also makes
+    // the printed whole-array equalities available without a nonstandard
+    // command-line option when the text is read back.
+    os << "(set-logic QF_AX)\n";
+  else if (has_uninterpreted)
+    os << (has_arrays ? "(set-logic QF_AUFBV)\n"
+                      : "(set-logic QF_UFBV)\n");
   else
     os << (has_arrays ? "(set-logic QF_ABV)\n" : "(set-logic QF_BV)\n");
 
@@ -247,8 +304,9 @@ void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* mgr,
   else
     os << "(set-info :status unknown)\n";
 
-  ASTNodeSet visited, symbols;
-  buildListOfSymbols(n, visited, symbols);
+  for (const auto& declared : uninterpreted_sorts)
+    os << "(declare-sort " << sourceSortToSMTLib(declared.second)
+       << " 0)\n";
 
   UsedSorts used;
   {
@@ -282,6 +340,17 @@ void printVarDeclsToStream(STPMgr* mgr, ASTNodeSet& symbols,
     os << "|";
     a.nodeprint(os);
     os << "|";
+
+    // A declared sort is not its carrier. This fast path covers both scalar
+    // elements and arrays with a declared index or element sort; the older
+    // registry-based cases below remain for legacy API nodes whose richer
+    // RoundingMode/FP source sort is reconstructed from use sites.
+    const SourceSort source_sort = a.GetSourceSort();
+    if (sortContainsUninterpreted(source_sort))
+    {
+      os << " () " << sourceSortToSMTLib(source_sort) << ")\n";
+      continue;
+    }
 
     // The sorts the node cannot say for itself: a RoundingMode is a plain
     // 5-bit bitvector, and an array's index sort is only ever a width. Print
@@ -465,5 +534,12 @@ void outputFloatingPointSMTLIB2(const ASTNode n, ostream& os,
 void SMTLIB2_Print1(ostream& os, const ASTNode n, int indentation, bool letize)
 {
   SMTLIB_Print1(os, n, indentation, letize);
+}
+
+// Thin wrapper over the letizing single-term print. Declared in printers.h
+// because get-value echoes the term it was asked about through it.
+void SMTLIB2_PrintTerm(ostream& os, STPMgr* stp, const ASTNode& n)
+{
+  SMTLIB_PrintTerm(os, stp, n);
 }
 }

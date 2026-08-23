@@ -28,7 +28,11 @@ THE SOFTWARE.
 #include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/FloatBlaster/FpEncodingContext.h"
 #include "stp/Printer/printers.h"
+#include "stp/Simplifier/DistinctOrdering.h"
 #include "stp/ToSat/ToSATAIG.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
+#include "stp/UninterpretedFunctions/UFModel.h"
+#include "stp/UninterpretedFunctions/UFRefinement.h"
 #include <vector>
 
 const bool debug_counterexample = false;
@@ -147,11 +151,13 @@ AbsRefine_CounterExample::requireFpEncodingContext() const
  * populate the CounterExampleMap data structure (ASTNode -> BVConst)
  */
 void AbsRefine_CounterExample::ConstructCounterExample(
-    SATSolver& newS, const ToSATBase::ASTNodeToSATVar& satVarToSymbol)
+    SATSolver& newS, const ToSATBase::ASTNodeToSATVar& satVarToSymbol,
+    bool internalCandidateRequired)
 {
   if (!newS.okay())
     return;
-  if (!bm->UserFlags.construct_counterexample_flag)
+  if (!bm->UserFlags.construct_counterexample_flag &&
+      !internalCandidateRequired)
     return;
 
   assert(CounterExampleMap.size() == 0);
@@ -164,8 +170,26 @@ void AbsRefine_CounterExample::ConstructCounterExample(
     const ASTNode& symbol = it->first;
     const vector<unsigned>& v = it->second;
 
+    // Not everything the bit-blaster registers here is a symbol. A BV
+    // abstraction replaces a term -- a BVPLUS, BVMULT, BVDIV, BVMOD, ITE or
+    // comparison -- with fresh combinational inputs and keys them by the term
+    // itself, so that refinement can read back the bits the solver chose for
+    // it. Those bits are the abstraction's value; until refinement has ruled
+    // the abstraction out they are not the term's value.
+    //
+    // A model must not carry them, and not merely because the loop below
+    // would take GetValueWidth() off a term. TermToConstTermUsingModel
+    // answers from CounterExampleMap for any term it finds there, so an
+    // abstracted term in the model is handed straight back to the check meant
+    // to test it: ComputeFormulaUsingModel would confirm the candidate from
+    // the abstraction instead of from the symbols underneath it, which is the
+    // one thing that check exists to rule out. Skipping keeps it honest --
+    // the term is recomputed from its operands, and the disagreement that
+    // recomputation finds is what the next refinement round acts on.
+    if (symbol.GetKind() != SYMBOL)
+      continue;
+
     const unsigned int symbolWidth = symbol.GetValueWidth();
-    assert(symbol.GetKind() == SYMBOL);
     vector<bool> bitVector_array(symbolWidth, false);
 
     for (size_t index = 0; index < v.size(); index++)
@@ -202,8 +226,40 @@ void AbsRefine_CounterExample::ConstructCounterExample(
     if (symbol.GetType() == BITVECTOR_TYPE ||
         symbol.GetType() == FLOATINGPOINT_TYPE)
     {
-      CounterExampleMap[symbol] =
+      const ASTNode assigned =
           BoolVectoBVConst(&bitVector_array, symbol.GetValueWidth());
+
+      // Bits the solve left free arrive here as freely as bits it decided:
+      // an undefined literal completes to zero just above, and a symbol
+      // the current solve never constrained -- one whose pin was popped,
+      // whose variables the persistent encoding still holds -- gets
+      // whatever the backend happened to leave in them. Every carrier
+      // pattern is a bitvector and every one is a float, so only
+      // RoundingMode can be handed a pattern that denotes nothing.
+      CounterExampleMap[symbol] = bm->isRoundingModeSortedTerm(symbol)
+                                      ? completeRoundingMode(assigned)
+                                      : assigned;
+    }
+  }
+
+  // UFCHK consumes an internal scalar candidate independently of public
+  // model settings. Backends may leave an unconstrained Boolean don't-care
+  // undefined; complete every registered UF Boolean deterministically to false,
+  // just as the BV path above completes undefined bits to zero.
+  UFContext* ufContext = bm->getUFContextIfAny();
+  if (ufContext != NULL && ufContext->activeInSolve())
+  {
+    for (const ASTNode& symbol : ufContext->getSolveScalars())
+    {
+      if (symbol.GetSourceSort().kind() != SourceSort::Kind::Bool)
+        continue;
+      ASTNodeMap::iterator assigned = CounterExampleMap.find(symbol);
+      if (assigned == CounterExampleMap.end())
+        CounterExampleMap[symbol] = ASTFalse;
+      else if (assigned->second.GetKind() != TRUE &&
+               assigned->second.GetKind() != FALSE)
+        FatalError("UF solve scalar has a non-Boolean candidate value",
+                   symbol);
     }
   }
 
@@ -332,12 +388,15 @@ class AbsRefine_CounterExample::EvaluationDriver
     return owner.defaultCellValue(arrayTerm);
   }
 
+  ASTNode defaultRoundingMode() const { return owner.defaultRoundingMode(); }
+
   struct Frame
   {
     enum class FormulaPhase : uint8_t
     {
       Start,
       AfterSymbolValue,
+      AfterDistinctLowering,
       AfterArrayEqualityLowering,
       AfterBoolExtractOperand,
       AfterOperand,
@@ -634,6 +693,24 @@ class AbsRefine_CounterExample::EvaluationDriver
     return StepResult::Pushed;
   }
 
+  /* One actual of an uninterpreted-function application. Each is needed as a
+   * constant to key the certified function seed, so anything but a Bool is
+   * requested strictly (ArrayReadFlag false) rather than being allowed back
+   * as a symbolic read. Bool is the only admitted domain sort that is not a
+   * bit-vector carrier: RoundingMode is BITVECTOR_TYPE (five bits) and a
+   * float is FLOATINGPOINT_TYPE, and both belong on the term walk, so the
+   * split is on the carrier's type rather than on the source sort.
+   * Both walks reach this, so the resume phase is the caller's own.
+   */
+  template <typename ResumePhase>
+  StepResult requestUFActual(Frame& f, const ResumePhase resume,
+                             const ASTNode& actual)
+  {
+    if (actual.GetType() == BOOLEAN_TYPE)
+      return requestFormula(f, resume, actual);
+    return requestTerm(f, resume, actual, false);
+  }
+
   /* One step of ComputeFormulaUsingModel, which accepts a non-constant
    * formula and checks if the formula is ASTTrue or ASTFalse w.r.t to a
    * model.
@@ -690,6 +767,13 @@ class AbsRefine_CounterExample::EvaluationDriver
         }
         // Has been simplified out. Can take any value.
         return finish(ASTFalse);
+      }
+      case DISTINCT:
+      {
+        if (f.formulaPhase == Frame::FormulaPhase::AfterDistinctLowering)
+          return finish(result);
+        return requestFormula(f, Frame::FormulaPhase::AfterDistinctLowering,
+                              lowerDistinct(bm, form));
       }
       case ARRAY_EQ:
       {
@@ -878,6 +962,36 @@ class AbsRefine_CounterExample::EvaluationDriver
 
         return requestFormula(f, Frame::FormulaPhase::AfterFpBlast, blasted);
       }
+      case UF_APPLY:
+      {
+        // A Bool-codomain application reaches the formula walk rather than the
+        // term walk; the resolution is otherwise identical to the UF_APPLY arm
+        // of stepTerm, which documents it.
+        if (f.formulaPhase == Frame::FormulaPhase::AfterOperand)
+        {
+          f.parts.push_back(result);
+          f.i++;
+        }
+        else
+        {
+          f.parts.reserve(form.Degree() - 1);
+          f.i = 1;
+        }
+
+        if (f.i < form.Degree())
+          return requestUFActual(f, Frame::FormulaPhase::AfterOperand,
+                                 form[f.i]);
+
+        ASTNode value;
+        std::string diagnostic;
+        if (!UFModel::evaluateApplicationInTerm(bm, owner.getUFTheoryAdapter(),
+                                                form, f.parts, value,
+                                                diagnostic))
+          FatalError(
+              (" ComputeFormulaUsingModel: " + diagnostic + ": ").c_str(),
+              form);
+        return finish(value);
+      }
       default:
         cerr << _kind_names[k];
         FatalError(" ComputeFormulaUsingModel: "
@@ -997,10 +1111,9 @@ class AbsRefine_CounterExample::EvaluationDriver
         // Has been simplified out and can take any value. A RoundingMode's
         // 5-bit representation has 27 junk patterns, though, so complete that
         // sort with a real value rather than the ordinary all-zero default.
-        return finish(
-            bm->isRoundingModeSortedTerm(term)
-                ? bm->CreateBVConst(5, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN)
-                : bm->CreateZeroConst(term.GetValueWidth()));
+        return finish(bm->isRoundingModeSortedTerm(term)
+                          ? defaultRoundingMode()
+                          : bm->CreateZeroConst(term.GetValueWidth()));
       }
       case READ:
       {
@@ -1260,8 +1373,7 @@ class AbsRefine_CounterExample::EvaluationDriver
           // RoundingMode: 0b11111 is not one of that sort's five values and can
           // make SymFPU exhibit a non-IEEE sixth rounding behaviour.
           return finish(bm->isRoundingModeSortedTerm(f.entry)
-                            ? bm->CreateBVConst(
-                                  5, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN)
+                            ? defaultRoundingMode()
                             : bm->CreateMaxConst(f.entry.GetValueWidth()));
         }
 
@@ -1290,6 +1402,40 @@ class AbsRefine_CounterExample::EvaluationDriver
         }
 
         return finish(result);
+      }
+      case UF_APPLY:
+      {
+        // Child 0 is the declaration identity, which is not a value; children
+        // 1.. are the actuals. Evaluate each actual to a constant -- a Bool
+        // one through the formula walk, as everywhere else -- then resolve the
+        // application against the certified model. Reaching here at all means
+        // the application sits inside a larger term, so refusing is not an
+        // option: the enclosing operator needs a constant operand. UFModel
+        // completes an application the solve never reached through the
+        // certified function seed rather than failing.
+        if (f.termPhase == Frame::TermPhase::AfterOperand)
+        {
+          f.parts.push_back(result);
+          f.i++;
+        }
+        else
+        {
+          f.parts.reserve(term.Degree() - 1);
+          f.i = 1;
+        }
+
+        if (f.i < term.Degree())
+          return requestUFActual(f, Frame::TermPhase::AfterOperand,
+                                 term[f.i]);
+
+        ASTNode value;
+        std::string diagnostic;
+        if (!UFModel::evaluateApplicationInTerm(bm, owner.getUFTheoryAdapter(),
+                                                term, f.parts, value,
+                                                diagnostic))
+          FatalError(("TermToConstTermUsingModel: " + diagnostic + ": ").c_str(),
+                     term);
+        return finish(value);
       }
       default:
       {
@@ -1659,18 +1805,37 @@ void AbsRefine_CounterExample::CollectArrayNodes(const ASTNode& arrayTerm,
   }
 }
 
+// See the header. RNE -- the same choice cvc5 makes, and IEEE 754's
+// default rounding direction.
+ASTNode AbsRefine_CounterExample::defaultRoundingMode() const
+{
+  return bm->CreateBVConst(5, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+}
+
+// See the header.
+ASTNode
+AbsRefine_CounterExample::completeRoundingMode(const ASTNode& carrier) const
+{
+  if (carrier.GetKind() != BVCONST || carrier.GetValueWidth() != 5)
+    FatalError("a RoundingMode carrier is not a five-bit constant: ", carrier);
+
+  // roundingModeName answers NULL for exactly the patterns that name no
+  // mode -- the printers' own test for a carrier they can spell.
+  if (printer::roundingModeName(carrier.GetUnsignedConst()) != NULL)
+    return carrier;
+  return defaultRoundingMode();
+}
+
 // See the header. Zero bits is +0.0 for a float element and a perfectly
 // ordinary bitvector otherwise, so the only sort needing its own answer
 // is RoundingMode, whose one-hot encoding leaves all-zero denoting
-// nothing at all. RNE is the mode published for such a cell -- the same
-// choice cvc5 makes, and IEEE 754's default rounding direction; the
-// value is a don't-care, so what matters is that every site takes it
-// from here and none of them invents its own.
+// nothing at all; the value is a don't-care, so what matters is that
+// every site takes it from here and none of them invents its own.
 ASTNode
 AbsRefine_CounterExample::defaultCellValue(const ASTNode& arrayTerm) const
 {
   if (bm->arrayHasRmElement(arrayTerm))
-    return bm->CreateBVConst(5, symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+    return defaultRoundingMode();
   return bm->CreateZeroConst(arrayTerm.GetValueWidth());
 }
 
@@ -2079,49 +2244,74 @@ AbsRefine_CounterExample::GetCounterExampleArray(bool t, const ASTNode& e)
   return entries;
 }
 
-// TODO printing of expressions.
 // TODO move to printer file.
+//
+// One (term value) pair of a get-value response. `n` is any non-array term
+// the caller asked about, printed back as SMT-LIB2 followed by the value the
+// model gives it. Arrays are the caller's to refuse: they have no value
+// spelling here, and (get-model) prints their completed interpretations.
+//
+// The term printed is STP's node for it, which is what a get-value response
+// can be built from: hash-consing and rewriting happen in the node factory
+// as the parser builds each term, so the text the caller wrote is gone by
+// the time anything can be asked about the term. The node is equivalent to
+// what was asked about but frequently not equal to it in spelling -- (bvule
+// x y) comes back as (not (bvugt |x| |y|)), and a term the factory folds
+// comes back as the constant it folded to. Pairs are therefore matched
+// positionally: response i answers term i, as SMT-LIB requires.
 void AbsRefine_CounterExample::PrintSMTLIB2(std::ostream& os, const ASTNode& n)
 {
-  if (n.GetKind() == SYMBOL)
+  if (n.GetType() == stp::ARRAY_TYPE)
+    FatalError("get-value: an array-valued term has no printable value", n);
+
+  os << "( ";
+  // The first component of the pair is a term, not just a name: a symbol
+  // prints as |x| exactly as it did when this only accepted symbols, and a
+  // compound term prints as itself. Not, however, as the caller spelled it --
+  // see the note above PrintSMTLIB2. Printed through the letizing entry
+  // point, because the node may be a shared DAG and a caller can build a
+  // large one out of very little input text.
+  printer::SMTLIB2_PrintTerm(os, bm, n);
+  os << " ";
+
+  if (bm->isRoundingModeSortedTerm(n))
   {
-    os << "( ";
-
-    os << "|";
-    n.nodeprint(os);
-    os << "| ";
-
-    if (bm->isRoundingModeSymbol(n))
-    {
-      // A RoundingMode value must print as a mode name -- a legal term of
-      // the sort -- not as its raw 5-bit carrier. The declaration pinned the
-      // symbol one-hot, so the model value always names a mode; anything
-      // else would be a bug, but print the bits rather than crash.
-      const ASTNode v = TermToConstTermUsingModel(n, false);
-      const char* name = printer::roundingModeName(v.GetUnsignedConst());
-      if (name != NULL)
-        os << name;
-      else
-        printer::outputBitVecSMTLIB2(v, os);
-    }
-    else if (n.GetType() == stp::FLOATINGPOINT_TYPE)
-      // A floating-point value must be printed in floating-point syntax
-      // (fp #bS #bE #bM), not as the raw packed bit-vector -- the get-model
-      // path (outputLine) does this; get-value must match, or it hands back a
-      // bit-vector literal where an operand of floating-point sort is expected.
-      printer::outputFloatingPointSMTLIB2(TermToConstTermUsingModel(n, false),
-                                          os, n);
-    else if (n.GetType() == stp::BITVECTOR_TYPE)
-      printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(n, false), os);
+    // A RoundingMode value must print as a mode name -- a legal term of
+    // the sort -- not as its raw 5-bit carrier. Every rounding mode a query
+    // can name is pinned one-hot, so the model value always names a mode;
+    // anything else would be a bug, but print the bits rather than crash.
+    const ASTNode v = TermToConstTermUsingModel(n, false);
+    const char* name = printer::roundingModeName(v.GetUnsignedConst());
+    if (name != NULL)
+      os << name;
     else
-    {
-      if (ASTTrue == ComputeFormulaUsingModel(n))
-        os << "true";
-      else
-        os << "false";
-    }
-    os << " )";
+      printer::outputBitVecSMTLIB2(v, os);
   }
+  else if (n.GetType() == stp::FLOATINGPOINT_TYPE)
+    // A floating-point value must be printed in floating-point syntax
+    // (fp #bS #bE #bM), not as the raw packed bit-vector -- the get-model
+    // path (outputLine) does this; get-value must match, or it hands back a
+    // bit-vector literal where an operand of floating-point sort is expected.
+    printer::outputFloatingPointSMTLIB2(TermToConstTermUsingModel(n, false),
+                                        os, n);
+  else if (bm->isUninterpretedSortedTerm(n))
+    // As in outputLine: an element of a declared sort has a name in the
+    // model, not a carrier pattern. get-value must agree with get-model or a
+    // caller is handed a bit-vector literal where a term of the sort belongs.
+    os << "|"
+       << bm->uninterpretedElementName(n.GetSourceSort(),
+                                       TermToConstTermUsingModel(n, false))
+       << "|";
+  else if (n.GetType() == stp::BITVECTOR_TYPE)
+    printer::outputBitVecSMTLIB2(TermToConstTermUsingModel(n, false), os);
+  else
+  {
+    if (ASTTrue == ComputeFormulaUsingModel(n))
+      os << "true";
+    else
+      os << "false";
+  }
+  os << " )";
 }
 
 //todo does it need to be member?
@@ -2160,6 +2350,19 @@ void AbsRefine_CounterExample::outputLine(std::ostream& os, const ASTNode &f, AS
           os << name;
         else
           printer::outputBitVecSMTLIB2(v, os);
+      }
+      else if (bm->isUninterpretedSortedTerm(f))
+      {
+        // At the sort the query declared, and named, not numbered: the carrier
+        // pattern is not a literal of this sort, and printing one would name a
+        // bit-vector -- the one thing the sort exists to say it is not. The
+        // element names are declared in the model's preamble.
+        bm->noteUninterpretedSortPrinted(f.GetSourceSort());
+        os << " () " << sourceSortToSMTLib(f.GetSourceSort()) << " |"
+           << bm->uninterpretedElementName(
+                  f.GetSourceSort(),
+                  TermToConstTermUsingModel(se, false))
+           << "|";
       }
       else if (f.GetType() == stp::BITVECTOR_TYPE)
       {
@@ -2337,6 +2540,19 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
     {
       outputLine(os, e.first, e.second);
     }
+    if (ufTheoryAdapter != NULL && ufTheoryAdapter->hasCertifiedModel())
+    {
+      const UFFunctionModelSeedSet* seed =
+          ufTheoryAdapter->certifiedModelSeed();
+      if (seed == NULL)
+        FatalError("certified UF adapter has no model seed");
+      UFModel::printSMTLIB2(os, *seed);
+    }
+    else if (bm->UserFlags.enable_uninterpreted_functions &&
+             bm->getUFContextIfAny() != NULL)
+      UFModel::printSMTLIB2(
+          os, UFModel::defaultSeed(
+                  bm->getUFContextIfAny()->activeDeclarations()));
     os.flush();
     return;
   }
@@ -2370,8 +2586,11 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
     vector<std::pair<ASTNode, ASTNode>> entries =
         GetSortedArrayModelEntries(array);
 
-    const unsigned iw = array.GetIndexWidth();
-    const unsigned vw = array.GetValueWidth();
+    const SourceSort arraySort = array.GetSourceSort();
+    if (arraySort.kind() != SourceSort::Kind::Array)
+      FatalError("array model: symbol has no array source sort", array);
+    const SourceSort indexSort = arraySort.index();
+    const SourceSort elementSort = arraySort.element();
 
     // The define-fun prints the array's true sorts -- the element float
     // format lives on the symbol, a float index format and RoundingMode
@@ -2386,24 +2605,20 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
     const bool rmIndex = bm->arrayHasRmIndex(array);
     const bool rmElement = bm->arrayHasRmElement(array);
 
-    std::ostringstream sortText;
-    sortText << "(Array ";
-    if (fpIndex)
-      sortText << "(_ FloatingPoint " << ieb << " " << isb << ")";
-    else if (rmIndex)
-      sortText << "RoundingMode";
-    else
-      sortText << "(_ BitVec " << iw << ")";
-    sortText << " ";
-    if (eb != 0)
-      sortText << "(_ FloatingPoint " << eb << " " << sb << ")";
-    else if (rmElement)
-      sortText << "RoundingMode";
-    else
-      sortText << "(_ BitVec " << vw << ")";
-    sortText << ")";
+    // The declaration and both `as const` occurrences must use the source
+    // sorts, not their packed carriers. In particular, (Array Index Element)
+    // is not (Array (_ BitVec 16) (_ BitVec 16)), even though that is how it
+    // is represented below this boundary.
+    const std::string sortText = sourceSortToSMTLib(arraySort);
+    bm->noteUninterpretedSortPrinted(indexSort);
+    bm->noteUninterpretedSortPrinted(elementSort);
 
     const auto printCell = [&](const ASTNode& cell) {
+      if (elementSort.kind() == SourceSort::Kind::Uninterpreted)
+      {
+        os << " |" << bm->uninterpretedElementName(elementSort, cell) << "|";
+        return;
+      }
       if (eb != 0)
       {
         os << " ";
@@ -2423,6 +2638,11 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
       printer::outputBitVecSMTLIB2(cell, os);
     };
     const auto printIndex = [&](const ASTNode& index) {
+      if (indexSort.kind() == SourceSort::Kind::Uninterpreted)
+      {
+        os << " |" << bm->uninterpretedElementName(indexSort, index) << "|";
+        return;
+      }
       if (fpIndex)
       {
         os << " ";
@@ -2444,10 +2664,10 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
 
     os << "(define-fun |";
     array.nodeprint(os);
-    os << "| () " << sortText.str();
+    os << "| () " << sortText;
     for (size_t i = 0; i < entries.size(); i++)
       os << " (store";
-    os << " ((as const " << sortText.str() << ")";
+    os << " ((as const " << sortText << ")";
     // The unobserved cells' value, printed through the same cell
     // printer as an observed one, so that what is published here is
     // demonstrably the value every other reader completes with rather
@@ -2462,6 +2682,20 @@ void AbsRefine_CounterExample::PrintFullCounterExampleSMTLIB2(std::ostream& os)
     }
     os << ")" << std::endl;
   }
+
+  if (ufTheoryAdapter != NULL && ufTheoryAdapter->hasCertifiedModel())
+  {
+    const UFFunctionModelSeedSet* seed =
+        ufTheoryAdapter->certifiedModelSeed();
+    if (seed == NULL)
+      FatalError("certified UF adapter has no model seed");
+    UFModel::printSMTLIB2(os, *seed);
+  }
+  else if (bm->UserFlags.enable_uninterpreted_functions &&
+           bm->getUFContextIfAny() != NULL)
+    UFModel::printSMTLIB2(
+        os, UFModel::defaultSeed(
+                bm->getUFContextIfAny()->activeDeclarations()));
 
   os.flush();
 }
@@ -2482,6 +2716,19 @@ void AbsRefine_CounterExample::PrintCounterExampleSMTLIB2(std::ostream& os)
     outputLine(os, f,se);
 
   }
+  if (ufTheoryAdapter != NULL && ufTheoryAdapter->hasCertifiedModel())
+  {
+    const UFFunctionModelSeedSet* seed =
+        ufTheoryAdapter->certifiedModelSeed();
+    if (seed == NULL)
+      FatalError("certified UF adapter has no model seed");
+    UFModel::printSMTLIB2(os, *seed);
+  }
+  else if (bm->UserFlags.enable_uninterpreted_functions &&
+           bm->getUFContextIfAny() != NULL)
+    UFModel::printSMTLIB2(
+        os, UFModel::defaultSeed(
+                bm->getUFContextIfAny()->activeDeclarations()));
   os.flush();
 }
 
@@ -2724,17 +2971,39 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
                                               ToSATBase* tosat, bool refinement)
 {
   bool sat = tosat->CallSAT(SatSolver, modified_input, refinement);
+  const bool ufActive =
+      ufTheoryAdapter != NULL && ufTheoryAdapter->active();
 
   if (bm->soft_timeout_expired)
-    return SOLVER_TIMEOUT;
+    return bm->unknownResult();
 
   if (!sat)
   {
+    if (ufActive)
+      ufTheoryAdapter->invalidateCertifiedModel();
     return SOLVER_VALID;
   }
   else if (SatSolver.okay())
   {
-    if (!bm->UserFlags.construct_counterexample_flag)
+    // Before anything else looks at this candidate. The bit-vector
+    // abstractions are an over-approximation: an abstracted equality or
+    // operation is a free Boolean, or a free vector of bits, until
+    // refinement pins it to the operands it stands for, and a candidate
+    // which gives it a value the operands do not justify is not an
+    // assignment of the query. Both theory checkers and the model
+    // evaluation below treat exactly that as an internal error -- they
+    // are entitled to, since every other producer of a candidate hands
+    // them a faithful bit-vector layer -- so the abstraction has to be
+    // the first refinement owner consulted, not a later one in the
+    // driver's loop. It is also the only one whose progress does not
+    // depend on a constructed counterexample: it reads the SAT model
+    // directly, which is what lets it run ahead of the shortcut below
+    // and keeps a query that asked for no model from being answered
+    // from an unrefined abstraction.
+    if (tosat->refineAbstractions(SatSolver) > 0)
+      return SOLVER_UNDECIDED;
+
+    if (!bm->UserFlags.construct_counterexample_flag && !ufActive)
       return SOLVER_INVALID;
 
     bm->GetRunTimes()->start(RunTimes::CounterExampleGeneration);
@@ -2746,7 +3015,7 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
     // ConstructCounterExample only ever iterates it.
     const ToSATBase::ASTNodeToSATVar& satVarToSymbol =
         tosat->SATVar_to_SymbolIndexMap();
-    ConstructCounterExample(SatSolver, satVarToSymbol);
+    ConstructCounterExample(SatSolver, satVarToSymbol, ufActive);
     if (bm->UserFlags.stats_flag && bm->UserFlags.print_nodes_flag)
     {
       ToSATBase::ASTNodeToSATVar m = tosat->SATVar_to_SymbolIndexMap();
@@ -2790,6 +3059,10 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
     {
       if (!ext->hasPendingLemma())
         FatalError("array-equality: a checker conflict has no pending lemma");
+      if (bm->UserFlags.stats_flag)
+        std::cerr << "Theory coordination: EXTCHK conflict; UFCHK and "
+                     "ordinary replay skipped"
+                  << std::endl;
       bm->GetRunTimes()->stop(RunTimes::CounterExampleGeneration);
       return SOLVER_UNDECIDED;
     }
@@ -2797,12 +3070,58 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
       FatalError("array-equality: the checker could neither certify nor "
                  "refute a materialized candidate");
 
+    // Theory ownership remains disjoint. The coordinator invokes UFCHK only
+    // after EXTCHK accepted this exact candidate, and a UF conflict ends the
+    // round before any ordinary model replay.
+    UFCandidateOutcome ufOutcome = UFCandidateOutcome::Skipped;
+    if (ufActive)
+      ufOutcome = ufTheoryAdapter->checkCandidate(*this);
+    if (ufOutcome == UFCandidateOutcome::Conflict)
+    {
+      if (!ufTheoryAdapter->hasPendingLemma())
+        FatalError("UFCHK reported a conflict without a pending lemma");
+      if (bm->UserFlags.stats_flag)
+        std::cerr << "Theory coordination: EXTCHK "
+                  << (extActive ? "accepted" : "skipped")
+                  << "; UFCHK conflict; ordinary replay skipped"
+                  << std::endl;
+      bm->GetRunTimes()->stop(RunTimes::CounterExampleGeneration);
+      return SOLVER_UNDECIDED;
+    }
+    if (ufOutcome == UFCandidateOutcome::InternalError)
+      FatalError(("UFCHK internal error: " + ufTheoryAdapter->diagnostic())
+                     .c_str());
+    if (ufActive && ufOutcome != UFCandidateOutcome::Consistent)
+      FatalError("UFCHK could neither certify nor refute an active candidate");
+
     // check if the counterexample is good or not
     ASTNode orig_result = ComputeFormulaUsingModel(original_input);
     if (!(ASTTrue == orig_result || ASTFalse == orig_result))
       FatalError("TopLevelSat: Original input must compute to "
                  "true or false against model");
     bm->GetRunTimes()->stop(RunTimes::CounterExampleGeneration);
+
+    // A consistency seed is certified only if the ordinary lowered-root
+    // replay accepts the same candidate. Legacy array-read refinement can
+    // still reject after both independent theory checkers accepted.
+    if (ufActive && orig_result != ASTTrue)
+      ufTheoryAdapter->invalidateCertifiedModel();
+
+    // The scalar replay above deliberately sees the semantic root. Once it
+    // accepts, complete the independently retained public root pointwise from
+    // the certified durable-handle map and replay that too. This is both the
+    // model sanity check and the proof that no public reader needs a lowered
+    // @uf_result symbol. Publication in checkCandidate precedes both replays;
+    // a failure withdraws it before reporting the integration error.
+    if (ufActive && orig_result == ASTTrue)
+    {
+      std::string diagnostic;
+      if (!UFModel::replayPublicRoot(*this, *ufTheoryAdapter, diagnostic))
+      {
+        ufTheoryAdapter->invalidateCertifiedModel();
+        FatalError(("UF public-model replay failed: " + diagnostic).c_str());
+      }
+    }
 
     switch (ExtensionalityContext::decideCertification(
         ASTTrue == orig_result, extActive, extOutcome))

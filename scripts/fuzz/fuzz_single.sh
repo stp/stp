@@ -166,6 +166,21 @@ TIMEOUT=${TIMEOUT:-10}
 FAIL_DIR=${FAIL_DIR:-${TMPDIR:-/tmp}/stp-fuzz-failures}
 mkdir -p "$FAIL_DIR" || exit 1
 
+# STP runs with an 80MB stack. The abc library STP bit-blasts through walks
+# AIGs recursively, one stack frame per level (Gia_ManFromAig_rec, and
+# formerly Aig_ObjReplace), so a deep AIG segfaults at the default 8MB and
+# lands in FAIL_DIR as a bogus mismatch. 80MB is ~10x the deepest observed.
+# The checker keeps its default: its stack is its own business.
+# Probed here so a hard limit below it stops the run at startup, not as a
+# confusing ulimit error in every iteration's second-err.txt.
+STP_STACK_KB=81920
+if ! (ulimit -S -s "$STP_STACK_KB") 2> /dev/null; then
+  echo "Cannot raise the stack soft limit to ${STP_STACK_KB}kB (hard limit:" >&2
+  echo "$(ulimit -H -s)kB). STP needs it for deep AIG recursions in abc;" >&2
+  echo "raise the hard limit or run as a user allowed to." >&2
+  exit 1
+fi
+
 path=${1:-$(mktemp -d "${TMPDIR:-/tmp}/stp-fuzz.XXXXXX")}
 mkdir -p "$path" || exit 1
 cd "$path" || exit 1
@@ -608,8 +623,12 @@ while (true)
       # hard instance) from stalling the run.
       timeout "$TIMEOUT" "$CHECKER" "$problem" > first.txt 2> first-err.txt &
       checker_job=$!
-      # $se is deliberately unquoted, some entries are two options.
-      timeout "$TIMEOUT" "$STP" $se -d "$problem" > second.txt 2> second-err.txt
+      # $se is deliberately unquoted, some entries are two options. The
+      # subshell is where the stack limit checked at startup takes effect;
+      # timeout and STP inherit it.
+      (ulimit -S -s "$STP_STACK_KB" &&
+       exec timeout "$TIMEOUT" "$STP" $se -d "$problem") \
+        > second.txt 2> second-err.txt
       stp_rc=$?
       wait "$checker_job"
       checker_rc=$?

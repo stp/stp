@@ -54,6 +54,7 @@ add_subdirectory(Globals)
 add_subdirectory(AST)
 add_subdirectory(AbsRefineCounterExample)
 add_subdirectory(Extensionality)
+add_subdirectory(UninterpretedFunctions)
 add_subdirectory(FloatBlaster)
 add_subdirectory(Simplifier)
 add_subdirectory(Printer)
@@ -80,6 +81,7 @@ set(stp_lib_targets
     stpmgr
     abstractionrefinement
     extensionality
+    uninterpretedfunctions
     tosat
     sat
     incremental
@@ -108,6 +110,39 @@ foreach(target ${stp_lib_targets})
         message("Adding public header(s) ${TARGETS_PUBLIC_HEADERS} to target stp")
     endif()
 endforeach()
+
+# LibBF, the submodule at extlib-libbf, is two C files with no build system
+# of its own beyond a Makefile. Compile them here as an object library and
+# fold the objects into libstp alongside STP's own: no link interface, so
+# nothing to export or to hunt for at configure time, and the two files
+# follow the build type and land in the compiler cache like everything else.
+add_library(libbf OBJECT
+    extlib-libbf/libbf.c
+    extlib-libbf/cutils.c
+)
+# libstp is shared by default, so the objects going into it must be PIC.
+set_target_properties(libbf PROPERTIES POSITION_INDEPENDENT_CODE ON)
+# MSVC compiles .c as C89-with-extensions unless told otherwise, and LibBF
+# is C11. C_STANDARD covers the rest; MSVC's mapping of it needs a newer
+# cmake_minimum_required than STP sets, so name the flag directly.
+set_target_properties(libbf PROPERTIES C_STANDARD 11)
+if (MSVC)
+    target_compile_options(libbf PRIVATE /std:c11)
+endif()
+# Upstream code, so keep WERROR from turning its warnings into failures --
+# the same treatment the ABC submodule gets below.
+if (WERROR AND NOT MSVC)
+    target_compile_options(libbf PRIVATE -Wno-error)
+endif()
+# Also as for ABC: a section per function and per data object, so the
+# --gc-sections at the bottom of this file can drop what STP never calls.
+# An archive member was pulled in only if something referenced it; objects
+# named as sources are linked whole, and LibBF's transcendental functions
+# and radix conversions are most of it.
+if (NOT MSVC)
+    target_compile_options(libbf PRIVATE -ffunction-sections -fdata-sections)
+endif()
+list(APPEND stp_lib_objects $<TARGET_OBJECTS:libbf>)
 
 if(CMAKE_GENERATOR STREQUAL Xcode)
     # XCode has a serious bug where the XCode project produces an invalid target that will not get
@@ -141,10 +176,15 @@ target_compile_definitions(stp PRIVATE STP_EXPORTS)
 if (BUILD_SHARED_LIBS)
     target_compile_definitions(stp INTERFACE STP_SHARED_LIB)
 endif()
+target_include_directories(stp INTERFACE
+    $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
+    $<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
 
 # Set the public header so it will be installed
 set_target_properties(stp PROPERTIES
-    PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/c_interface.h;${PROJECT_SOURCE_DIR}/include/stp/fp.hpp"
+    PUBLIC_HEADER "${PROJECT_SOURCE_DIR}/include/stp/c_interface.h;${PROJECT_SOURCE_DIR}/include/stp/fp.hpp;${PROJECT_SOURCE_DIR}/include/stp/uf.hpp"
     VERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     SOVERSION ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
 )

@@ -25,6 +25,7 @@ THE SOFTWARE.
 // to get the PRIu64 macro from inttypes, this needs to be defined.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/Printer/SMTLIBPrinter.h"
 #include "stp/Util/CBVOps.h"
@@ -164,6 +165,44 @@ ASTNode STPMgr::introducedSymbol(const std::string& name,
       defaultNodeFactory->CreateSymbol(name.c_str(), index_width, value_width);
   noteIntroducedSymbol(symbol);
   _introduced_by_name[name] = symbol;
+  return symbol;
+}
+
+ASTNode STPMgr::CreateDeterministicSourceVariable(
+    const SourceSort& sourceSort, const std::string& prefix,
+    const ASTNode& key)
+{
+  // Bool, or any scalar sort with a carrier to blast: BitVec, RoundingMode
+  // and FloatingPoint all answer packedWidth(). A symbol whose sort needs a
+  // side condition to denote (RoundingMode is one-hot in five of thirty-two
+  // patterns) is still created here; asserting that condition belongs to
+  // whoever introduces the symbol, not to the factory.
+  if (!(sourceSort.kind() == SourceSort::Kind::Bool ||
+        (sourceSort.isScalar() && sourceSort.packedWidth() > 0)))
+    FatalError("CreateDeterministicSourceVariable requires Bool or a "
+               "nonzero-width scalar source sort");
+  if (key.IsNull() || !key.IsOwnedBy(this))
+    FatalError("CreateDeterministicSourceVariable requires a live local key");
+
+  std::ostringstream name;
+  name << '@' << prefix << "_k" << key.GetNodeNum();
+  const std::map<std::string, ASTNode>::const_iterator found =
+      _introduced_by_name.find(name.str());
+  if (found != _introduced_by_name.end())
+  {
+    if (found->second.GetSourceSort() != sourceSort)
+      FatalError("a deterministic introduced symbol was requested at two "
+                 "different source sorts",
+                 found->second);
+    return found->second;
+  }
+
+  if (LookupSymbol(name.str().c_str()))
+    FatalError("a symbol in STP's reserved deterministic namespace already "
+               "exists");
+  const ASTNode symbol = CreateSourceSymbol(name.str().c_str(), sourceSort);
+  noteIntroducedSymbol(symbol);
+  _introduced_by_name[name.str()] = symbol;
   return symbol;
 }
 
@@ -481,6 +520,17 @@ ASTNode STPMgr::LiftSourceValue(const ASTNode& carrier,
           carrier.GetValueWidth() != source_sort.bitVectorWidth())
         FatalError("LiftSourceValue: invalid bitvector carrier: ", carrier);
       return carrier;
+    case SourceSort::Kind::Uninterpreted:
+      // Returned unchanged, like a bit-vector and unlike a float or a rounding
+      // mode: bit equality on the carrier *is* this sort's equality, so the
+      // carrier pattern is the element and there is nothing to lift it into.
+      // Which element of the sort a given pattern denotes is a question for the
+      // printer, not for this function.
+      if (carrier.GetKind() != BVCONST ||
+          carrier.GetValueWidth() != source_sort.packedWidth())
+        FatalError("LiftSourceValue: invalid uninterpreted-sort carrier: ",
+                   carrier);
+      return carrier;
     default:
       FatalError("LiftSourceValue: cannot lift this source sort");
   }
@@ -503,6 +553,54 @@ ASTNode STPMgr::roundingModeValidConstraint(const ASTNode& s)
 bool STPMgr::isRoundingModeSortedTerm(const ASTNode& n) const
 {
   return n.GetSourceSort().kind() == SourceSort::Kind::RoundingMode;
+}
+
+bool STPMgr::isUninterpretedSortedTerm(const ASTNode& n) const
+{
+  return n.GetSourceSort().kind() == SourceSort::Kind::Uninterpreted;
+}
+
+std::string STPMgr::uninterpretedElementName(const SourceSort& sort,
+                                            const ASTNode& carrier)
+{
+  assert(sort.kind() == SourceSort::Kind::Uninterpreted);
+  for (const UninterpretedElement& element : uninterpreted_elements)
+    if (element.sort == sort && element.carrier == carrier)
+      return element.name;
+
+  // Numbered per sort rather than globally, so a model reads as one sort's
+  // elements enumerated from zero and does not change when an unrelated sort
+  // gains an element.
+  size_t ordinal = 0;
+  for (const UninterpretedElement& element : uninterpreted_elements)
+    if (element.sort == sort)
+      ordinal++;
+
+  // The name has to be one nothing else in this query answers to, because the
+  // model declares it as a fresh constant: an input free to declare |S!0|
+  // itself would get a model that both invents S!0 and defines the input's own
+  // S!0 as something else, and reading it back is then a redeclaration. Step
+  // past any name already taken rather than assume the shape is private.
+  const std::string base = uninterpretedSortName(sort.uninterpretedId()) + "!";
+  std::string name;
+  while (true)
+  {
+    name = base + std::to_string(ordinal);
+    bool taken = LookupSymbol(name.c_str());
+    for (const UninterpretedElement& element : uninterpreted_elements)
+      taken = taken || element.name == name;
+    if (!taken)
+      break;
+    ordinal++;
+  }
+
+  UninterpretedElement fresh;
+  fresh.sort = sort;
+  fresh.name = name;
+  fresh.carrier = carrier;
+  uninterpreted_elements.push_back(fresh);
+  noteUninterpretedSortPrinted(sort);
+  return fresh.name;
 }
 
 ASTNode STPMgr::arrayBaseSymbol(const ASTNode& arr) const
@@ -892,12 +990,22 @@ ExtensionalityContext* STPMgr::getExtensionality()
   return extensionality;
 }
 
+UFContext* STPMgr::getUFContext()
+{
+  if (uninterpretedFunctions == NULL)
+    uninterpretedFunctions = new UFContext(this);
+  return uninterpretedFunctions;
+}
+
 STPMgr::~STPMgr()
 {
   ClearAllTables();
 
   delete extensionality;
   extensionality = NULL;
+
+  delete uninterpretedFunctions;
+  uninterpretedFunctions = NULL;
 
   printer::NodeLetVarMap.clear();
   printer::NodeLetVarVec.clear();
@@ -918,6 +1026,14 @@ STPMgr::~STPMgr()
 
   if (NULL != CreateBVConstVal)
     CONSTANTBV::BitVector_Destroy(CreateBVConstVal);
+
+  // Released here, in the body, for the same reason as every other member
+  // above: destroying a node reaches back into this manager (ASTSymbol::CleanUp
+  // unindexes its name, ASTInterior::CleanUp erases from the interior table),
+  // and the implicit member-destruction phase runs after those tables are gone.
+  uninterpreted_elements.clear();
+  uninterpreted_sorts_printed.clear();
+  uf_injectivity_guard = ASTNode();
 
   Introduced_SymbolsSet.clear();
   _symbol_unique_table.clear();

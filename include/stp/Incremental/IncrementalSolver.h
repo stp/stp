@@ -45,6 +45,10 @@ THE SOFTWARE.
 // and pops by construction. A memory-relief rebuild rotates the complete
 // semantic/AIG epoch and reconstructs only the live stack, bounding dead
 // historical state; SAT-only policy rebuilds retain the AIG epoch.
+// Whole-formula, satisfiability-only rewrites such as DISTINCT ordering also
+// ride one assumed completed root. Their occurrence guards are re-evaluated
+// against every active snapshot, so a later assertion retracts a symmetry
+// choice without requiring clause deletion.
 //
 // The whole input language is covered -- plain bit-vectors, arrays (lazy
 // refinement or --ackermanize), floating point, and --array-equality --
@@ -211,10 +215,20 @@ private:
   // profile bracket and the pending-model latch enclose every path through
   // them -- both bodies return from many places.
   SOLVER_RETURN_TYPE checkSatBody(const ASTVec& assertionsSMT2,
-                                            bool assumeLastLevelPerConjunct,
-                                            bool firstForcedIncrementalSolve);
+                                  bool assumeLastLevelPerConjunct,
+                                  bool firstForcedIncrementalSolve,
+                                  const ASTNode& assumptionScopedRoot,
+                                  size_t orderedDistincts);
 
   void buildPendingModel();
+
+  // Latched by the first checkSat() of a session that set
+  // UserDefinedFlags::aig_node_budget. The driver's AIG is persistent --
+  // it outlives the check that grew it and is read again by every later
+  // one -- so a check cannot walk away from a half-built encoding the way
+  // the batch blaster can, and the cap is not enforced here. Say so once,
+  // rather than letting a memory cap look as if it were in force.
+  bool budgetNotEnforcedWarned = false;
 
   std::unique_ptr<Impl> impl;
 };

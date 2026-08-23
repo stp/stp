@@ -13,12 +13,11 @@ Comprehensive details are provided in the manual and homepage: https://stp.githu
 For a quick install:
 
 ```
-sudo apt-get install git build-essential cmake bison flex curl patch libgmp-dev python3
+sudo apt-get install git build-essential cmake bison flex libgmp-dev python3
 git clone https://github.com/stp/stp
 cd stp
 git submodule init && git submodule update
 ./scripts/deps/setup-cms.sh
-./scripts/deps/setup-libbf.sh
 mkdir build
 cd build
 cmake ..
@@ -28,7 +27,7 @@ sudo cmake --install .
 
 That builds against [CryptoMiniSat](https://github.com/msoos/cryptominisat), which is the default SAT backend. CaDiCaL is also supported, chosen at configure time; see [Building STP](https://stp.github.io/stp/building.html).
 
-Every step is needed: ABC and mimalloc are submodules built as part of STP, LibBF is required, and a build with no SAT backend enabled does not configure. The two `setup` scripts put LibBF and the SAT solver in `deps/`, where the build finds them without being told where to look.
+Every step is needed: ABC, mimalloc and LibBF are submodules built as part of STP, and a build with no SAT backend enabled does not configure. The `setup` script puts the SAT solver in `deps/`, where the build finds it without being told where to look.
 
 Or, using [Homebrew](https://brew.sh):
 ```

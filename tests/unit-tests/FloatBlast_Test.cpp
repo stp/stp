@@ -10,6 +10,7 @@
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
 #include "stp/ToSat/BitBlaster.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
 
 #include <gtest/gtest.h>
 #include <set>
@@ -62,6 +63,52 @@ ASTNode rne(STPMgr& mgr)
 {
   return mgr.CreateRMConst(
       symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
+}
+
+bool contains(const ASTNode& haystack, const ASTNode& needle,
+              ASTNodeSet& visited)
+{
+  if (!visited.insert(haystack).second)
+    return false;
+  if (haystack == needle)
+    return true;
+  for (size_t i = 0; i < haystack.Degree(); ++i)
+    if (contains(haystack[i], needle, visited))
+      return true;
+  return false;
+}
+
+bool contains(const ASTNode& haystack, const ASTNode& needle)
+{
+  ASTNodeSet visited;
+  return contains(haystack, needle, visited);
+}
+
+// The one node of `kind` in `n`, or null if `n` holds none or several.
+ASTNode soleNodeOfKind(const ASTNode& n, Kind kind, ASTNodeSet& visited,
+                       ASTNode& found, bool& unique)
+{
+  if (!visited.insert(n).second)
+    return found;
+
+  if (n.GetKind() == kind)
+  {
+    if (!found.IsNull() && found != n)
+      unique = false;
+    found = n;
+  }
+  for (size_t i = 0; i < n.Degree(); ++i)
+    soleNodeOfKind(n[i], kind, visited, found, unique);
+  return found;
+}
+
+ASTNode soleNodeOfKind(const ASTNode& n, Kind kind)
+{
+  ASTNodeSet visited;
+  ASTNode found;
+  bool unique = true;
+  const ASTNode answer = soleNodeOfKind(n, kind, visited, found, unique);
+  return unique ? answer : ASTNode();
 }
 
 } // namespace
@@ -267,8 +314,9 @@ TEST(FloatBlast, every_floating_point_kind_is_lowered)
 
   // Every FP kind in the tree is represented, so adding one without adding
   // an arm for it fails here rather than at the first input that uses it.
-  // FP_SMT_EQ is the last kind in ASTKind.kinds; a new one is appended after
-  // it, so the scan has to reach it.
+  // FP_SMT_EQ is the end of the contiguous FP block in ASTKind.kinds;
+  // append-only non-FP public kinds follow it. A new FP kind extends this
+  // bound deliberately, so the scan has to reach it.
   std::set<int> covered;
   for (const auto& c : cases)
     covered.insert(static_cast<int>(c.first));
@@ -628,4 +676,127 @@ TEST(FloatBlast, native_comparison_agrees_with_symfpu_exhaustively)
     }
   }
   EXPECT_EQ(2 * values * values, muxed);
+}
+
+// A UF application is opaque to this pass.
+//
+// The generic rebuild substitutes lowered children into whatever node it is
+// rebuilding, and doing that under an application is wrong twice over: the
+// actuals are stated in source sorts and the UF layer both validates and
+// compares them there, so a float actual replaced by the bits it lowered to
+// no longer denotes the same argument -- and the node factory refuses to
+// build the application at all, which took the process down.
+//
+// It takes a *computed* actual to reach it. A symbol or a constant lowers to
+// itself, so the rebuild never fires; the second half of this test is that
+// case, which has to keep behaving the same way.
+TEST(FloatBlast, uf_application_is_an_opaque_carrier)
+{
+  STPMgr mgr;
+  mgr.UserFlags.enable_uninterpreted_functions = true;
+  UFContext* const context = mgr.getUFContext();
+  const SourceSort fp16 = SourceSort::floatingPoint(5, 11);
+  std::string diagnostic;
+  const UFDecl* const f =
+      context->declareFunction("f", {fp16}, fp16, &diagnostic);
+  ASSERT_NE(nullptr, f) << diagnostic;
+
+  const ASTNode x = mgr.CreateSourceSymbol("x", fp16);
+  const ASTNode magnitude = mgr.CreateTerm(FP_ABS, 16, x);
+  const ASTNode applied = context->apply(f, {magnitude}, &diagnostic);
+  ASSERT_FALSE(applied.IsNull()) << diagnostic;
+
+  // The actual is shared with the enclosing operation, which is what made
+  // the defect fire: fp.abs is lowered in its non-UF position first, and the
+  // cached lowering is what the rebuild then substituted under f.
+  const ASTNode sum = mgr.CreateTerm(
+      FP_ADD, 16, ASTVec{rne(mgr), magnitude, applied});
+
+  FloatBlast lower(&mgr);
+  const ASTNode lowered = lower.topLevel(sum);
+
+  // The application survives as itself -- same node, same actual, still at
+  // the declared float sort -- so the model evaluator can resolve it against
+  // the certified interpretation.
+  const ASTNode survivor = soleNodeOfKind(lowered, UF_APPLY);
+  ASSERT_FALSE(survivor.IsNull());
+  EXPECT_EQ(applied, survivor);
+  ASSERT_EQ(2u, survivor.Degree());
+  EXPECT_EQ(magnitude, survivor[1]);
+  EXPECT_EQ(fp16, survivor[1].GetSourceSort());
+
+  // Everything else is bits. The float operation under the application is
+  // deliberately among the exceptions: nothing below an application is
+  // lowered, so its fp.abs is still there, inside it and nowhere else.
+  EXPECT_EQ(1u, countKind(lowered, FP_ABS));
+  EXPECT_EQ(0u, countKind(lowered, FP_ADD));
+
+  // Two decodes: x, which the shared fp.abs consumes, and the application's
+  // own bits. An application is a carrier like any other leaf, not an
+  // operation to build a circuit for.
+  EXPECT_EQ(2u, lower.statistics().unpack_builds);
+  EXPECT_EQ(2u, lower.statistics().unpacked_operation_builds);
+
+  // A leaf actual takes the same route, and always did: the application is
+  // returned untouched because there was nothing to substitute.
+  const ASTNode leafApplied = context->apply(f, {x}, &diagnostic);
+  ASSERT_FALSE(leafApplied.IsNull()) << diagnostic;
+  const ASTNode leafSum = mgr.CreateTerm(
+      FP_ADD, 16, ASTVec{rne(mgr), x, leafApplied});
+
+  FloatBlast leafLower(&mgr);
+  const ASTNode leafLowered = leafLower.topLevel(leafSum);
+  const ASTNode leafSurvivor = soleNodeOfKind(leafLowered, UF_APPLY);
+  ASSERT_FALSE(leafSurvivor.IsNull());
+  EXPECT_EQ(leafApplied, leafSurvivor);
+}
+
+// The same rule, for the codomains that never reach the packed/unpacked
+// views at all. A Bool or bit-vector result puts the application on lower()'s
+// generic path, where the substitution was equally fatal -- the argument
+// sorts are what the factory checks, and they do not depend on the result.
+TEST(FloatBlast, uf_application_with_a_non_float_result_is_opaque_too)
+{
+  STPMgr mgr;
+  mgr.UserFlags.enable_uninterpreted_functions = true;
+  UFContext* const context = mgr.getUFContext();
+  const SourceSort fp16 = SourceSort::floatingPoint(5, 11);
+  std::string diagnostic;
+  const UFDecl* const p =
+      context->declareFunction("p", {fp16}, SourceSort::boolean(), &diagnostic);
+  const UFDecl* const w = context->declareFunction(
+      "w", {fp16}, SourceSort::bitVector(16), &diagnostic);
+  ASSERT_NE(nullptr, p) << diagnostic;
+  ASSERT_NE(nullptr, w) << diagnostic;
+
+  const ASTNode x = mgr.CreateSourceSymbol("x", fp16);
+  const ASTNode magnitude = mgr.CreateTerm(FP_ABS, 16, x);
+  const ASTNode predicate = context->apply(p, {magnitude}, &diagnostic);
+  const ASTNode bits = context->apply(w, {magnitude}, &diagnostic);
+  ASSERT_FALSE(predicate.IsNull()) << diagnostic;
+  ASSERT_FALSE(bits.IsNull()) << diagnostic;
+
+  // The bit-vector result is reinterpreted back into the float layer, so
+  // both applications sit under one float-valued term.
+  const ASTNode reinterpreted = mgr.CreateTerm(
+      FP_TOFP, 16,
+      ASTVec{mgr.CreateBVConst(32, 5), mgr.CreateBVConst(32, 11), bits});
+  const ASTNode mux = mgr.CreateTerm(
+      ITE, 16, ASTVec{predicate, magnitude, reinterpreted});
+  const ASTNode sum =
+      mgr.CreateTerm(FP_ADD, 16, ASTVec{rne(mgr), magnitude, mux});
+
+  FloatBlast lower(&mgr);
+  const ASTNode lowered = lower.topLevel(sum);
+
+  // Both applications survive as the nodes that were built, actuals and all.
+  EXPECT_EQ(2u, countKind(lowered, UF_APPLY));
+  EXPECT_TRUE(contains(lowered, predicate));
+  EXPECT_TRUE(contains(lowered, bits));
+
+  // Their shared fp.abs is the only float operation left, and it is left
+  // only because it is under them.
+  EXPECT_EQ(1u, countKind(lowered, FP_ABS));
+  EXPECT_EQ(0u, countKind(lowered, FP_ADD));
+  EXPECT_EQ(0u, countKind(lowered, FP_TOFP));
 }

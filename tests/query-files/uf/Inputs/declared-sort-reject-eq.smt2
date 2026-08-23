@@ -1,0 +1,8 @@
+(set-logic QF_UFBV)
+(declare-sort S 0)
+(declare-sort T 0)
+(declare-const s S)
+(declare-const t T)
+(declare-const z (_ BitVec 16))
+(assert (= s t))
+(check-sat)

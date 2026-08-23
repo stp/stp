@@ -43,6 +43,7 @@ THE SOFTWARE.
 namespace stp
 {
 class ExtensionalityContext;
+class UFContext;
 
 // The five SMT-LIB floating-point special values. Their nodes are ordinary
 // packed interned constants (see STPMgr::CreateFPSpecialConst); a childless
@@ -102,6 +103,18 @@ private:
   ASTSymbolSet _symbol_unique_table;
 
   ExtensionalityContext* extensionality = nullptr;
+  UFContext* uninterpretedFunctions = nullptr;
+
+  // Why the last solve had no answer, and the sentence to give a caller who
+  // asks. Recorded rather than derived because the reasons are produced in
+  // different places -- a spent search budget wherever the solver was asked
+  // to run, an abandoned encoding before it ever was -- and only one of them
+  // has anything to say beyond its name. The SMT-LIB frontend clears this at
+  // the top of every check-sat and on reset / reset-assertions. SMT-LIB reads
+  // it through (get-info :reason-unknown), and the C API through
+  // vc_getReasonUnknown.
+  UnknownReason unknown_reason = UnknownReason::None;
+  std::string unknown_detail;
 
   // Table to uniquefy bvconst
   ASTBVConstSet _bvconst_unique_table;
@@ -122,10 +135,237 @@ public:
     return extensionality;
   }
 
+  // Manager-lifetime UF declarations and durable applications. Solve-local
+  // lowering/checker/model state is owned below this context and reset at the
+  // completed-root boundary.
+  DLL_PUBLIC UFContext* getUFContext();
+  UFContext* getUFContextIfAny() const { return uninterpretedFunctions; }
+
   // frequently used nodes
   ASTNode ASTFalse, ASTTrue, ASTUndefined;
 
   bool soft_timeout_expired;
+
+  // One named element of a declared sort: the sort, the name the model gives
+  // it, and the carrier pattern it stands for.
+  struct UninterpretedElement
+  {
+    SourceSort sort;
+    std::string name;
+    ASTNode carrier;
+  };
+
+  // See uninterpretedElementName. Public because it is model state, not
+  // solver state, and the printers are its only readers.
+  std::vector<UninterpretedElement> uninterpreted_elements;
+  std::vector<SourceSort> uninterpreted_sorts_printed;
+
+  void noteUnknown(UnknownReason reason, const std::string& detail = "")
+  {
+    assert(reason != UnknownReason::None);
+    unknown_reason = reason;
+    unknown_detail = detail;
+  }
+
+  UnknownReason getUnknownReason() const { return unknown_reason; }
+
+  const std::string& getUnknownReasonDetail() const { return unknown_detail; }
+
+  // Called by whoever just watched this solver give up. Two budgets share the
+  // no-answer exit and they are not the same claim to a caller: the wall
+  // clock may succeed with more time on the same machine, while the conflict
+  // budget is deterministic and will not. The solver is asked which it was
+  // rather than guessed at from the flags -- a zero-second limit and no limit
+  // at all look identical from there, and the first is a clock expiry.
+  //
+  // Lives here rather than in one driver so that every driver answers the
+  // question the same way, and so that the rule below is stated once. An
+  // earlier reason wins: a solve is free to call this on each refinement
+  // round, and a round that gave up for a reason of its own has already said
+  // what that was.
+  void noteBudgetExhausted(const SATSolver& solver)
+  {
+    if (unknown_reason != UnknownReason::None)
+      return;
+    noteUnknown(solver.timeLimitExpired() ? UnknownReason::Timeout
+                                          : UnknownReason::ConflictBudget);
+  }
+
+  void clearUnknown()
+  {
+    unknown_reason = UnknownReason::None;
+    unknown_detail.clear();
+  }
+
+  // The verdict deliberately says only that there was no answer; the reason
+  // is a separate, mandatory part of that result. Keeping the invariant at
+  // the point an unknown is returned prevents a new producer from silently
+  // resurrecting an unexplained timeout-shaped result.
+  SOLVER_RETURN_TYPE unknownResult() const
+  {
+    if (unknown_reason == UnknownReason::None)
+      FatalError("solver returned SOLVER_UNKNOWN without recording why");
+    return SOLVER_UNKNOWN;
+  }
+
+  // How much injectivity --uf-inject-args put into the encoding this solve is
+  // about to run over, recorded by UF lowering. Zero whenever the flag is off,
+  // and also whenever it is on but no declaration qualified -- an encoding
+  // nothing was assumed about is an encoding whose unsat means what it says.
+  uint64_t uf_injectivity_assumed = 0;
+  uint64_t uf_injectivity_declarations = 0;
+  // The activation symbol those implications sit behind, when there is one.
+  // A driver that can assume it holds the assumption retractably and never
+  // has to withhold anything; one that cannot is back to the rule below.
+  ASTNode uf_injectivity_guard;
+
+  void noteInjectivityAssumed(uint64_t implications, uint64_t declarations,
+                              const ASTNode& guard)
+  {
+    uf_injectivity_assumed += implications;
+    uf_injectivity_declarations += declarations;
+    if (!guard.IsNull())
+      uf_injectivity_guard = guard;
+  }
+
+  // Called at the top of a solve, by the driver that is about to build the
+  // encoding. The record describes one solve's encoding, not the session.
+  void clearInjectivityAssumed()
+  {
+    uf_injectivity_assumed = 0;
+    uf_injectivity_declarations = 0;
+    uf_injectivity_guard = ASTNode();
+  }
+
+  // One driver's hold on the injectivity assumption for one encoding: the
+  // literal it assumes, and whether this solve has already given it up.
+  struct InjectivityAssumption
+  {
+    // ~0u until a driver has resolved the guard symbol to a SAT variable;
+    // a guard that never reached one is simply never assumed, and then the
+    // implications behind it are vacuous, which is the safe direction.
+    unsigned variable = ~((unsigned)0);
+    bool assumed = false;
+    bool retracted = false;
+
+    bool holding() const { return assumed && !retracted; }
+
+    // Push the guard, positively, as the LAST assumption -- which is what
+    // makes retracting it a pop. A guard with no variable, or one already
+    // given up on this solve, adds nothing and leaves the implications
+    // behind it vacuous.
+    void assumeInto(SATSolver::vec_literals& assumps)
+    {
+      if (variable == ~((unsigned)0) || retracted)
+        return;
+      assumps.push(SATSolver::mkLit(variable, false));
+      assumed = true;
+    }
+  };
+
+  // Solve, and take the assumption back if the refutation rested on it.
+  //
+  // The assumption is an under-approximation, so its `sat` is a real model of
+  // the query and needs nothing done to it. Its `unsat` is a refutation of the
+  // query strengthened by injectivity, which is two different things depending
+  // on whether the strengthening was used:
+  //
+  //   - the guard is not among the failed assumptions: the refutation rests
+  //     only on the query, on congruence (which the query entails) and on the
+  //     naming definitions (a conservative extension). It is a refutation of
+  //     the query. Report it, and drop the record so nothing withholds it.
+  //   - the guard is among them: it may be an artefact. Withdraw the guard --
+  //     which the solver then satisfies by making it false, so every
+  //     implication behind it goes vacuous -- and search again. The second
+  //     answer is about the query alone, whichever way it goes.
+  //
+  // Two searches at most, on one encoding, with every clause retained. A
+  // backend that cannot answer which assumptions failed reports all of them,
+  // which costs the first case and leaves the second correct.
+  //
+  // `assumps` must carry the guard literal LAST, because retracting is a pop.
+  bool solveRetractingInjectivity(SATSolver& solver,
+                                  SATSolver::vec_literals& assumps,
+                                  InjectivityAssumption& state)
+  {
+    const bool holding = state.holding();
+    bool sat = assumps.size() > 0
+                   ? solver.solveWithAssumptions(assumps, soft_timeout_expired)
+                   : solver.solve(soft_timeout_expired);
+    if (sat || !holding || soft_timeout_expired)
+      return sat;
+
+    std::vector<int> failed;
+    solver.unsatAssumptions(assumps, failed);
+    const uint32_t guardLit = SATSolver::mkLit(state.variable, false).x;
+    bool guardFailed = false;
+    for (size_t i = 0; i < failed.size(); ++i)
+      guardFailed = guardFailed || (uint32_t)failed[i] == guardLit;
+
+    if (!guardFailed)
+    {
+      // A refutation that never needed the assumption. The query is
+      // unsatisfiable on its own account.
+      if (UserFlags.stats_flag)
+        std::cerr << "UF: injectivity assumption not in the refutation, "
+                  << "unsat stands" << std::endl;
+      uf_injectivity_assumed = 0;
+      return false;
+    }
+
+    if (UserFlags.stats_flag)
+      std::cerr << "UF: refutation used the injectivity assumption, "
+                << "retracting " << uf_injectivity_assumed
+                << " implication(s) and re-solving" << std::endl;
+    state.retracted = true;
+    assert(assumps.size() > 0);
+    assumps.pop();
+    uf_injectivity_assumed = 0;
+    return assumps.size() > 0
+               ? solver.solveWithAssumptions(assumps, soft_timeout_expired)
+               : solver.solve(soft_timeout_expired);
+  }
+
+  // The floor: what a driver leaves with when it holds an unsat and nobody has
+  // established whose refutation it is. Both shipped drivers do establish that
+  // -- solveRetractingInjectivity asks the search, and each driver runs the
+  // query again without the flag when the search never got to be asked -- so
+  // this is unreachable through them. It stays because it is the rule that
+  // says what uf_injectivity_assumed MEANS, and because a driver that forgets
+  // to close the question should report no answer rather than a refutation it
+  // cannot attribute.
+  //
+  // Congruence is entailed by the query, so every other constraint UF lowering
+  // installs preserves both answers. The converse implication --uf-inject-args
+  // installs is not: it asserts that a declaration is injective, which the
+  // caller never wrote, and it can only remove models. That makes the two
+  // answers unequal in standing. `sat` is sound whatever was assumed -- a model
+  // of the strengthened formula is a model of the query, conjuncts having only
+  // been added -- and is kept. `unsat` refutes the query with injectivity on
+  // top of it, which is not the query, and nothing in the output would tell
+  // that from a refutation. So it is withheld, exactly as an unsat reached over
+  // a carrier too narrow for the query is withheld.
+  //
+  // Lives here rather than in one driver so that the batch pipeline and the
+  // incremental driver answer the question the same way, and so that the rule
+  // is stated once.
+  SOLVER_RETURN_TYPE withholdAssumedUnsat(SOLVER_RETURN_TYPE result)
+  {
+    if (result != SOLVER_UNSATISFIABLE || uf_injectivity_assumed == 0)
+      return result;
+    noteUnknown(UnknownReason::AssumedInjectivity,
+                "--uf-inject-args assumed " +
+                    std::to_string(uf_injectivity_declarations) +
+                    " uninterpreted function(s) injective, adding " +
+                    std::to_string(uf_injectivity_assumed) +
+                    " implication(s) the query does not entail, so this unsat "
+                    "may be an artefact of that assumption rather than a "
+                    "refutation; re-run without --uf-inject-args to decide the "
+                    "query");
+    // SOLVER_UNKNOWN says only that there is no answer; the cause was
+    // recorded just above for the reason API.
+    return unknownResult();
+  }
 
   // No nodes should already have the iteration number that is returned from
   // here. This never returns zero.
@@ -361,6 +601,17 @@ public:
 
   void noteFloatingPointTheory() { has_floating_point_theory = true; }
 
+  // Conservative manager-lifetime hint, like the two floating-point latches
+  // above: false proves no DISTINCT node can occur in a query and avoids a
+  // completed-DAG walk on the overwhelmingly common negative path. The
+  // hashing factory is the construction funnel and sets it for every durable
+  // node. True is deliberately not query state -- a popped or otherwise
+  // unused expression may have set it -- so lowering still inspects the
+  // current roots.
+  bool has_distinct = false;
+
+  void noteDistinct() { has_distinct = true; }
+
   // Record that a float of a real format has been built. Every float's format
   // arrives through one of the funnels above, so calling this there is what
   // makes the fast-negative hint complete -- and it must be called whether or
@@ -388,6 +639,58 @@ public:
   // when every mode equality is false -- a sixth, non-IEEE mode. Accepting a
   // bare (_ BitVec 5) there let an input compute under it.
   bool isRoundingModeSortedTerm(const ASTNode& n) const;
+
+  // Whether `n` denotes a value of a sort introduced by (declare-sort S 0).
+  // Named alongside the RoundingMode predicate above so the places that have
+  // to discriminate on a source sort stay findable from one another.
+  bool isUninterpretedSortedTerm(const ASTNode& n) const;
+
+  // ── Model vocabulary for declared sorts ───────────────────────────
+  //
+  // An element of a sort introduced by declare-sort has no literal. Its
+  // carrier pattern is not one: printing #x0000 for it would name a
+  // bit-vector, which is the sort the whole representation exists to say it
+  // is not. SMT-LIB's answer, and every solver's, is to give the elements
+  // names and let distinct names denote distinct elements -- so a model
+  // declares the sort, declares one constant per element it mentions, and
+  // refers to those.
+  //
+  // Names are handed out per sort in first-request order, so the same solve
+  // always prints the same model and two solves of the same query agree.
+  // Reset with the counterexample.
+  std::string uninterpretedElementName(const SourceSort& sort,
+                                       const ASTNode& carrier);
+
+  // Every (sort, element name, carrier) the model has named so far, in the
+  // order the names were issued. What the model's preamble is printed from.
+  const std::vector<UninterpretedElement>& uninterpretedElements() const
+  {
+    return uninterpreted_elements;
+  }
+
+  // Declared sorts the model has printed anywhere, element or not. A sort can
+  // reach the text through a function signature alone -- a predicate over an
+  // opaque sort is the commonest such shape -- and a model that used the sort
+  // without declaring it cannot be read back.
+  void noteUninterpretedSortPrinted(const SourceSort& sort)
+  {
+    if (sort.kind() != SourceSort::Kind::Uninterpreted)
+      return;
+    for (const SourceSort& seen : uninterpreted_sorts_printed)
+      if (seen == sort)
+        return;
+    uninterpreted_sorts_printed.push_back(sort);
+  }
+  const std::vector<SourceSort>& uninterpretedSortsPrinted() const
+  {
+    return uninterpreted_sorts_printed;
+  }
+
+  void clearUninterpretedElements()
+  {
+    uninterpreted_elements.clear();
+    uninterpreted_sorts_printed.clear();
+  }
 
   DLL_PUBLIC ASTNode CreateFPSpecialConst(FPSpecial which, unsigned exp_width,
                                           unsigned sig_width);
@@ -626,6 +929,14 @@ public:
     Introduced_SymbolsSet.insert(current);
     return current;
   }
+
+  // SourceSort-preserving deterministic scalar allocation. UF lowering runs
+  // before FP/array carrier erasure and must retain Bool versus nonzero BV as
+  // immutable symbol identity, including for a Boolean whose carrier width is
+  // historically zero.
+  ASTNode CreateDeterministicSourceVariable(const SourceSort& sourceSort,
+                                            const std::string& prefix,
+                                            const ASTNode& key);
 
   bool FoundIntroducedSymbolSet(const ASTNode& in)
   {

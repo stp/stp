@@ -188,6 +188,148 @@ public:
   // ARRAY_EQ, which is lowered only after the complete query is assembled.
   bool enable_array_equality = false;
 
+  // Decide nonzero-arity uninterpreted functions over Bool, BitVec, declared
+  // sorts, RoundingMode and FloatingPoint using dynamic Ackermann refinement.
+  // An SMT-LIB logic containing UF enables it; this runtime option also lets
+  // callers enable the theory for inputs whose declared logic omits UF.
+  bool enable_uninterpreted_functions = false;
+
+  // How many congruence lemmas one refuted candidate may install before the
+  // solver is asked again; 0 is unlimited. Every conflict a candidate exposes
+  // is refuted by that same assignment, so installing several together trades
+  // clauses for whole SAT calls. The trade is not monotone: a small batch is
+  // worth several rounds, while draining every conflict installs most of the
+  // quadratic congruence encoding a round at a time and is slower than
+  // emitting one. Measured over collision and pigeonhole families at 30..100
+  // applications, 8 was the best of 1/2/4/8/16/32/unlimited everywhere and
+  // 2.3x-4x faster than 1; unlimited was the worst setting tried. Setting 1
+  // restricts each candidate to one installed congruence lemma.
+  unsigned uf_lemmas_per_round = 8;
+
+  // Whether to install a declaration's pairwise congruence constraints before
+  // the first solve instead of waiting for a candidate to earn them.
+  //
+  // AUTO -- the default -- selects declarations whose pair count the policy
+  // predicts is worth encoding up front, cheapest first, until the budget
+  // below is spent. ON selects every declaration whatever the count. OFF
+  // installs no congruence clause before the first solve, so a refuted
+  // candidate has to earn each one. The dynamic checker runs in every mode,
+  // so an eagerly encoded declaration that still produced a conflict would
+  // be caught rather than silently answered.
+  enum class UFEagerMode
+  {
+    AUTO = 0,
+    ON,
+    OFF
+  };
+  UFEagerMode uf_eager_mode = UFEagerMode::AUTO;
+
+  // The AUTO budget, in congruence constraints. A declaration costs
+  // C(v, 2) + c*v, where c counts its applications whose actuals are all
+  // constants: two such applications either are the same hash-consed handle
+  // or differ in some position, so they never need a constraint between them.
+  //
+  // Swept over 363 QF_UFBV benchmarks (every seventh of the local corpus,
+  // 30s each, settings interleaved so none sits systematically early in the
+  // schedule). Solved, of 363:
+  //
+  //   off  253 | 128  268 | 256  281 | 512  271 | 1536  247 | 4096  250
+  //
+  // The curve is unimodal: a little eager congruence beats none by a wide
+  // margin, and a lot is worse than none, because the declarations a large
+  // budget buys are the expensive ones whose pairs mostly go unused. Rerun
+  // at 256 against 4096 it is 287 against 251 solved, 39 files gained
+  // against 3 lost, and 16% less wall clock, with no verdict disagreeing.
+  //
+  // The counterweight, recorded because it is the evidence the previous
+  // value was chosen on: a synthetic family of n applications that all
+  // collide wants every one of its C(n, 2) pairs, so 256 declines it and it
+  // slows down several-fold. Nothing in the tree pins that family, and the
+  // corpus is what the default should serve; --uf-ackermann-budget restores
+  // the old behaviour for a query known to be that shape.
+  unsigned uf_eager_budget = 256;
+
+  // How many index comparisons the eager array-equality arm may introduce
+  // before the solve is left to refinement. Counted by
+  // arrayCongruenceEstimate, which charges only the comparisons that survive
+  // constant folding, so a query whose indexes are mostly literals is judged
+  // on the work it actually causes rather than on how many reads it happens
+  // to contain.
+  //
+  // 4000 admits the whole array-equality band that measurement says is worth
+  // taking -- the store-permutation queries that pay for the arm score up to
+  // 1830 -- with room above it. The value is a ceiling on a cost, not a
+  // target: nothing is gained by being nearer it. --ackermanize is a request
+  // and ignores this; 0 refuses every unasked selection.
+  unsigned array_eager_budget = 4000;
+
+  // Whether to bias the first candidate so that the scalars the congruence
+  // checker reads start out pairwise different.
+  //
+  // The checker's work is driven by collisions: two applications whose
+  // argument tuples read the same value and whose results do not. A solver
+  // left to its own default phase has no reason to spread unconstrained
+  // arguments out, so the first candidate collides on many of them at once
+  // and each collision costs a lemma and a round. A phase hint is advisory --
+  // it moves the search order and nothing else -- so biasing those scalars
+  // apart can only change how quickly an answer is found, never which answer.
+  bool uf_phase_hints = false;
+
+  // The carrier width given to a sort introduced by (declare-sort S 0).
+  //
+  // An uninterpreted sort has no operations but equality, so a query
+  // mentioning k terms of that sort is satisfiable exactly when it is
+  // satisfiable over a domain of k elements. Any carrier with at least k
+  // values therefore answers it, and a carrier with more values than the
+  // query can distinguish costs only the bits nothing constrains -- so
+  // over-approximating is sound and only under-approximating is not.
+  //
+  // The width has to be fixed when the sort is declared, before any term of
+  // it exists, so it cannot be derived from k. 16 bits admits 65536 distinct
+  // elements, which is far beyond the number of terms of a single
+  // uninterpreted sort in practice; raise it if a query ever needs more.
+  unsigned uf_sort_width = 16;
+
+  // Narrow the result sort of a UF declaration whose applications are used
+  // only for equality comparisons (both sides of the same declaration).
+  // Reducing a 256-bit result to ceil(log2(N+1)) bits cuts the number of
+  // AIG nodes per congruence constraint from ~511 to a handful. The
+  // analysis is conservative: any non-equality use disqualifies the
+  // declaration. Enabled by default; set to false if it causes trouble.
+  bool uf_narrow_results = true;
+
+  // For declarations whose results appear only in equality contexts, add
+  // the reverse implication (= result_i result_j) => (= arg_i arg_j) in
+  // the eager congruence encoding. This asserts injectivity, giving the
+  // SAT solver bidirectional propagation between argument and result
+  // equalities.
+  //
+  // Congruence itself is entailed by the query; its converse is not. So this
+  // is the one thing the lowering installs that changes what the encoding
+  // means: it describes the query with injectivity conjoined. Only models are
+  // lost by that, so a `sat` found over it is a model of the query and needs
+  // nothing done to it, while an `unsat` refutes the strengthened query and
+  // may be the assumption's rather than the query's.
+  //
+  // So it is installed behind one activation symbol and assumed rather than
+  // asserted: a refutation that used the assumption is taken back and the
+  // query decided without it, which makes the flag verdict-preserving. See
+  // STPMgr::solveRetractingInjectivity for the rule and STP::TopLevelSTP for
+  // the case it cannot cover. Off by default, and not free: what it buys is
+  // faster model-finding on a query whose functions are injective anyway, and
+  // it costs a second search on one that is not.
+  bool uf_inject_args = false;
+
+  // Replace a (distinct x1 ... xn) whose operands are variables occurring
+  // nowhere else with the strict chain x1 < x2 < ... < xn. Every permutation
+  // of such operands maps the formula to itself, so fixing one of the n!
+  // orderings loses no answer, and n-1 comparisons replace n(n-1)/2
+  // disequalities that a bit-blaster would otherwise have to order for
+  // itself. Batch pipeline only: the guard is re-checked against each
+  // solve's own formula, so a later assert that mentions an operand simply
+  // stops the rewrite from applying on the next solve.
+  bool distinct_ordering = true;
+
   // construct the counterexample in terms of original variable based
   // on the counterexample returned by SAT solver
   bool print_counterexample_flag = false;
@@ -214,6 +356,50 @@ public:
 
   /* Bitblasting options */
 
+  // Hard cap on the AND gates the batch bit-blaster may build for one query.
+  // -1 (the default) is no limit and leaves the blaster exactly as it was;
+  // 0 gives up before the first gate. That is the same -1/0 convention
+  // `--max-num-confl` and `--max-time` use, and deliberately so: a reader
+  // who transfers their intuition here must not get the opposite of what
+  // they asked for. Exceeding the cap abandons the query through the
+  // soft-timeout path, so the answer is the same one a `--max-time` expiry
+  // gives -- `unknown` on stdout in SMT-LIB mode (`Unknown.` in the CVC
+  // language) with exit status 0, and SOLVER_UNKNOWN from the library.
+  // (get-info :reason-unknown) is what tells this budget from the clock.
+  //
+  // The cap governs the two AIGs a batch solve builds -- the bit-blast in
+  // ToSATAIG::bitblast() and the optional `--aig-core-simplification` pass,
+  // which simply keeps its input when the cap fires. It is NOT enforced on
+  // the incremental driver's persistent encoder, whose AIG outlives the
+  // check that grew it and cannot be abandoned mid-blast; engaging that
+  // driver with a budget set warns once on stderr rather than pretending
+  // the cap is in force.
+  //
+  // It bounds the blast, not the process: CNF conversion (Aig_ManDupDfs plus
+  // DAG-aware rewriting) and the SAT search itself allocate on top of it.
+  int64_t aig_node_budget = -1;
+
+  bool bv_eq_abstraction = false;
+  // One width floor for both abstraction families: equalities and the
+  // abstracted terms (comparisons, ITE, BVPLUS, BVMULT, BVDIV, BVMOD)
+  // all abstract only at or above this operand width.
+  unsigned bv_abstraction_width = 64;
+  unsigned bv_eq_refine_width = 0;
+  bool bv_term_abstraction = false;
+  // BVMULT, BVDIV and BVMOD are the operations whose refinement has no compact
+  // exact lemma: it rules out one pair of operand values at a time. They are
+  // abstracted with everything else, and this turns just those three off for a
+  // query that would rather not pay for the rounds at all.
+  bool bv_term_abstraction_mult = true;
+  // How many times one of those three may be blocked before its refinement
+  // stops enumerating and encodes the operation exactly instead. Measured:
+  // through about thirty rounds the abstraction is still two to four times
+  // faster than not abstracting, by sixty it is break-even, and past that it
+  // collapses -- a 64-bit factorisation spent 5816 rounds and ninety seconds
+  // on a query the unabstracted solve answers in five hundredths of one.
+  // Zero never escalates, which is what this was before.
+  unsigned bv_term_abstraction_rounds = 32;
+
   // You can select these with any combination you want of true & false.
   bool division_variant_1 = true;
   bool division_variant_2 = true;
@@ -233,6 +419,40 @@ public:
   // packed-operand circuit (BBfpMul) instead of the SymFPU unpacking
   // circuits. Experimental; off by default.
   bool fp_native_arith = false;
+
+  // Recognise fp.isZero(fp.add ...) and encode the observed zero-result
+  // condition directly instead of constructing and packing every result bit.
+  // Enabled by default, but only active when native arithmetic is selected.
+  bool fp_native_add_iszero = true;
+
+  // Experimental strengthening for the native FP bit-blaster: mine simple
+  // top-level finite box bounds and use them to omit NaN/infinity cases from
+  // native packed-field circuits when those cases are already impossible.
+  bool fp_native_domain = false;
+
+  // Experimental native-domain arithmetic specialization. A known finite
+  // semantic sign removes fp.add's opposite-sign cancellation datapath and
+  // fp.mul's sign-dependent rounding, while explicit muxes retain signed zero.
+  bool fp_native_known_sign = false;
+
+  // Experimental floating-point domain prepass. It mines simple boxed
+  // variable bounds from ordered FP comparisons and uses them to discharge
+  // non-box ordered comparisons and zero-sum rows whose interval/domain facts
+  // decide them.
+  bool fp_domain_simplify = false;
+
+  // Sound zero-fact extraction for boxed nonnegative FP symbols. It only
+  // derives zero facts from same-sign rows whose terms are +/- one boxed
+  // symbol. Two-term differences may propagate an already-established zero,
+  // but terms are never algebraically cancelled through a rounded row. Zero
+  // is encoded as zero magnitude bits so +0/-0 remain distinct.
+  bool fp_domain_sound_zero_facts = false;
+
+  // Sound row-level FP zero refutation. It recognises linear FP expressions
+  // over boxed finite variables and rewrites a zero-row to false only when a
+  // conservative target-format interval, evaluated in the original AST
+  // association with rounding at every operation, excludes zero.
+  bool fp_domain_row_bounds = false;
 
   int64_t multiplication_variant = 1;
 
@@ -398,6 +618,7 @@ public:
     enable_pair_extract = false;
     enable_common_subsum = false;
     enable_ite_context = false;
+    distinct_ordering = false;
 
     simple_cnf=true;
   }
@@ -411,6 +632,48 @@ public:
      array_difficulty_reversion = false;
      difficulty_reversion = false;
   }
+
+  // What the encoding options above actually did, as against what they were
+  // allowed to do. Not settings: a caller that turns an abstraction on wants
+  // to know it engaged, and a flag that reached no eligible operation and a
+  // flag that is broken both abstract nothing -- only the candidate count
+  // tells them apart. Cumulative over the manager's lifetime, and read
+  // through vc_getCounter.
+  //
+  // Lives here rather than in STPMgr because the bit-blaster holds only these
+  // flags, and the sites that would have to be counted are all inside it.
+  struct EncodingCoverage
+  {
+    // One per abstractable node kind, indexed by AbstractionKind below.
+    static const unsigned KINDS = 6;
+    // Operations reaching the bit-blaster at or above bv_abstraction_width:
+    // what the abstraction could have taken, whether or not it was on.
+    uint64_t bv_candidates[KINDS] = {};
+    // ... and what it did take.
+    uint64_t bv_abstracted[KINDS] = {};
+    // Rounds the CEGAR refiner ran, and blocking lemmas it installed.
+    uint64_t bv_refinement_rounds = 0;
+    uint64_t bv_blocking_lemmas = 0;
+    // Uninterpreted-function applications the lowering decided, and the
+    // constraints it installed for them.
+    uint64_t uf_applications_lowered = 0;
+    uint64_t uf_constraints_installed = 0;
+    // Queries that reached bit-blasting at all: the denominator, without
+    // which a zero above cannot be told from a query the simplifier settled.
+    uint64_t queries_bitblasted = 0;
+  };
+
+  enum AbstractionKind
+  {
+    ABSTRACT_EQ = 0,
+    ABSTRACT_COMPARE,
+    ABSTRACT_ITE,
+    ABSTRACT_PLUS,
+    ABSTRACT_MULT,
+    ABSTRACT_DIVMOD
+  };
+
+  EncodingCoverage coverage;
 
   UserDefinedFlags()
   {

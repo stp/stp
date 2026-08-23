@@ -34,6 +34,7 @@ THE SOFTWARE.
 // Impl's route-specific methods next to their own concerns.
 
 #include "stp/Incremental/IncrementalSolver.h"
+#include "stp/ToSat/BVAbstractionRefiner.h"
 
 #include "IncrementalLifetimeState.h"
 
@@ -52,6 +53,9 @@ THE SOFTWARE.
 #include "stp/Simplifier/RemoveUnconstrained.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/FloatBlaster/FpEncodingContext.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
+#include "stp/UninterpretedFunctions/UFLowering.h"
+#include "stp/UninterpretedFunctions/UFRefinement.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Sat/SATSolverFactory.h"
 #include "stp/Simplifier/Simplifier.h"
@@ -198,6 +202,7 @@ struct Fragment
   bool arrays;
   bool fp;
   bool arrayEq;
+  bool ufApply;
 };
 typedef std::unordered_map<ASTNode, Fragment, ASTNode::ASTNodeHasher,
                            ASTNode::ASTNodeEqual>
@@ -288,6 +293,31 @@ struct IncrementalSolver::Impl
   // cached symbol map.
   IncrementalCnfEncoder cnf;
 
+  // ── Bit-vector abstraction: --bv-eq-abstraction, --bv-term-abstraction ──
+  //
+  // The persistent bit-blaster abstracts on this route exactly as the batch
+  // lowering does, which leaves this route owing the same CEGAR loop: an
+  // abstracted equality or operation is a free input, so a candidate is an
+  // assignment of the stack only once every abstraction in it has been
+  // checked against the operands underneath and, where they disagree,
+  // pinned. Without an owner the checks never happened, and models that
+  // falsify an asserted formula, and downstream theory checkers reading
+  // values no equation ever constrained, both followed.
+  //
+  // Nothing this adds is retractable, and nothing needs to be. Every clause
+  // it emits -- the operand proxies' defining biconditionals and the pinning
+  // lemmas alike -- says only what a variable means in terms of AIG bits the
+  // encoding already carries, which holds under any set of assumptions.
+  BVAbstractionRefiner bvAbstraction;
+
+  // How much of the blaster's growing state has been taken across. Reset
+  // together with the SAT backend: a fresh solver holds none of the clauses
+  // these produced, and none of the variables they were written over, so the
+  // records have to be harvested and refined again from nothing.
+  size_t harvestedEQAbstractions = 0;
+  size_t harvestedTermAbstractions = 0;
+  size_t assertedSideConstraints = 0;
+
   // conjunct -> root literal (2*var + sign). Epoch-persistent: the encoding
   // of a formula is a definition, valid in every context using this AIG/SAT
   // epoch.
@@ -343,6 +373,20 @@ struct IncrementalSolver::Impl
 
   // Created on first floating-point use; see fpContext().
   std::unique_ptr<FpEncodingContext> fpCtx;
+
+  // The completed public block and its current solve-local UF lowering.
+  // UFPersistentAdapter owns block- and encoding-epoch-qualified clauses and
+  // caches; keeping the lowering value here separates it from context-owned
+  // handles and makes the exact-stack block the sole persistent lowering
+  // boundary.
+  LoweredApplicationView activeUFView;
+  std::unique_ptr<UFPersistentAdapter> ufAdapter;
+
+  // This solve's hold on the injectivity assumption --uf-inject-args
+  // installed, if any. Per solve, not per session: the exact-stack route
+  // re-lowers the whole active stack whenever a level applies an
+  // uninterpreted function, so each solve mints and holds its own guard.
+  STPMgr::InjectivityAssumption injectivity;
 
   // Nodes the block cache's determinism depends on. STP garbage-collects
   // unreferenced interior nodes and re-mints their numbers, and the
@@ -1471,9 +1515,30 @@ struct IncrementalSolver::Impl
   std::vector<int> lastFailedLits;
   size_t lastLevelCount;
 
+  // A granular core is trustworthy only if every literal that could fail is
+  // one this call can attribute. The accessors go the other way -- they keep
+  // the failed literals they can find in assumedLitLevels and
+  // lastLevelLitConjuncts, and silently drop the rest -- so an assumed
+  // literal missing from those tables does not widen the reported core, it
+  // narrows it. The extensionality block literal is exactly such a literal
+  // (assumed, deliberately unrecorded), and a round that assumed one would
+  // report a core too shallow, letting the frontend cache unsat at a level
+  // that is satisfiable. Those rounds are routed to coarse today; this is
+  // the statement of why that routing is load-bearing, and it re-establishes
+  // the conclusion rather than trusting the routing, because coarse is
+  // always a correct answer and a wrong unsat is not.
   void recordUnsat(const SATSolver::vec_literals& assumptions,
                    size_t levelCount, bool coarse)
   {
+    if (!coarse)
+    {
+      std::unordered_set<int> attributable;
+      for (const std::pair<int, size_t>& ll : assumedLitLevels)
+        attributable.insert(ll.first);
+      for (int i = 0; i < assumptions.size() && !coarse; i++)
+        coarse = attributable.count(assumptions[i].x) == 0;
+      assert(!coarse && "granular unsat with an unattributable assumption");
+    }
     lastUnsat = true;
     lastUnsatCoarse = coarse;
     lastLevelCount = levelCount;
@@ -1586,6 +1651,12 @@ struct IncrementalSolver::Impl
   // configuration rebuilds do not advance it; a relief rebuild does.
   uint64_t encodingEpochGeneration = 0;
 
+  // Ownership generation of the concrete SAT backend.  Unlike the semantic
+  // epoch, this advances on every solver replacement (promotion, inprobing,
+  // trail retirement, and relief).  Cached UF equality/reification literals
+  // are meaningful only in the generation which allocated them.
+  uint64_t satBackendGeneration = 0;
+
   uint64_t lifetimeClauseSubmissions() const
   {
     return addMass(retiredClauseSubmissions, solver->submittedClauses());
@@ -1601,10 +1672,13 @@ struct IncrementalSolver::Impl
   // The ordinary check-sat path is deliberately staged here rather than
   // represented by a mutable solve-plan object. Each stage owns the local
   // bookkeeping it creates and exposes only the value the next stage needs.
-  void maintainBackendForCheck(const ASTVec& assertionsSMT2);
+  void maintainBackendForCheck(const ASTVec& assertionsSMT2,
+                               const ASTNode& classificationRoot);
   bool tryExactStackRoute(const ASTVec& assertionsSMT2,
                           bool assumeLastLevelPerConjunct,
                           bool firstForcedIncrementalSolve,
+                          const ASTNode& assumptionScopedRoot,
+                          size_t orderedDistincts,
                           SOLVER_RETURN_TYPE& result);
   void synchronizeCbpPrefix(const ASTVec& assertionsSMT2,
                             bool firstForcedIncrementalSolve);
@@ -1619,7 +1693,8 @@ struct IncrementalSolver::Impl
       : bm(bm_), ce(ce_), batchSimp(batchSimp_), batchAT(batchAT_),
         policy(bm_->UserFlags.incremental_core_only),
         solver(makeBackend(bm_->UserFlags, true)), encoding(bm_),
-        walks(bm_->ASTFalse), cnf(solver.get()),
+        walks(bm_->ASTFalse), cnf(solver.get()), bvAbstraction(bm_),
+        ufAdapter(new UFPersistentAdapter(bm_)),
         lastUnsat(false), lastUnsatCoarse(false),
         lastLevelIndividual(false), modelPending(false),
         trailReuseAllowed(!policy.coreOnly()), lastLevelCount(0),
@@ -2097,30 +2172,37 @@ struct IncrementalSolver::Impl
   // rootLit's encode runs this same guard, and each step removes its
   // variable from the dropped set before encoding, so the chain
   // terminates and a definition never restores itself twice.
+  // Restore one dropped base definition before any route mints the source
+  // symbol's raw bits.  UF solve scalars include leaf actuals which may no
+  // longer occur in the preprocessed formula passed to encodePrepared(), so
+  // the completed-block lowering path also calls this operation directly.
+  void restoreDroppedSigma0Symbol(const ASTNode& s)
+  {
+    if (sigma0Dropped.erase(s) == 0)
+      return;
+    const ASTNode conj = sigma0DefiningConjunctOf.at(s);
+    mustKeepRaw.insert(conj);
+    // The conjunct's cached encoding is the eliminated TRUE form; evict it so
+    // the re-encode below produces the raw equation.
+    rootLitOf.erase(conj);
+    const int lit = rootLit(conj);
+    SATSolver::vec_literals unit;
+    unit.push(SATSolver::mkLit(lit >> 1, lit & 1));
+    addClause(unit);
+    baseLiveMass = addMass(baseLiveMass, addMass(clauseMassOf[conj], 1));
+    recordPermanentRoot(conj);
+    if (bm->UserFlags.stats_flag)
+      std::cerr << "Incremental: restored an eliminated base definition "
+                   "before its variable was encoded raw"
+                << std::endl;
+  }
+
   void restoreDroppedSigma0(const ASTNode& toEncode)
   {
     if (sigma0Dropped.empty())
       return;
     for (const ASTNode& s : symbolsOf(toEncode))
-    {
-      if (sigma0Dropped.erase(s) == 0)
-        continue;
-      const ASTNode conj = sigma0DefiningConjunctOf.at(s);
-      mustKeepRaw.insert(conj);
-      // The conjunct's cached encoding is the eliminated TRUE form; evict
-      // it so the re-encode below produces the raw equation.
-      rootLitOf.erase(conj);
-      const int lit = rootLit(conj);
-      SATSolver::vec_literals unit;
-      unit.push(SATSolver::mkLit(lit >> 1, lit & 1));
-      addClause(unit);
-      baseLiveMass = addMass(baseLiveMass, addMass(clauseMassOf[conj], 1));
-      recordPermanentRoot(conj);
-      if (bm->UserFlags.stats_flag)
-        std::cerr << "Incremental: restored an eliminated base definition "
-                     "before its variable was encoded raw"
-                  << std::endl;
-    }
+      restoreDroppedSigma0Symbol(s);
   }
 
   // Lower, transform and bit-blast a fully rewritten word-level formula
@@ -2225,6 +2307,7 @@ struct IncrementalSolver::Impl
     }
 
     const uint64_t clausesPre = solver->submittedClauses();
+    bm->UserFlags.coverage.queries_bitblasted++;
     bm->GetRunTimes()->start(RunTimes::BitBlasting);
     BBNodeAIG root = encoding.blaster().BBForm(toEncode);
     bm->GetRunTimes()->stop(RunTimes::BitBlasting);
@@ -2308,6 +2391,9 @@ struct IncrementalSolver::Impl
         bm->has_floating_point_theory && containsFloatingPointTheory(n, bm);
     f.arrayEq =
         bm->UserFlags.enable_array_equality && containsKind(n, ARRAY_EQ);
+    f.ufApply = bm->UserFlags.enable_uninterpreted_functions &&
+                bm->getUFContextIfAny() != NULL &&
+                containsKind(n, UF_APPLY);
     f.sourceArrays = containsArrayOps(n, bm);
 
     // Arrayness must be judged on the form that will be encoded: totalising
@@ -2334,7 +2420,9 @@ struct IncrementalSolver::Impl
   SOLVER_RETURN_TYPE exactStackCheckSat(const ASTVec& assertionsSMT2,
                                         bool firstForcedIncrementalSolve,
                                         bool requireScopedCollapse = false,
-                                        bool* scopedAccepted = NULL);
+                                        bool* scopedAccepted = NULL,
+                                        const ASTNode& completedRoot = ASTNode(),
+                                        size_t orderedDistincts = 0);
   SOLVER_RETURN_TYPE
   solvePlainExactStack(const ASTVec& assertionsSMT2,
                        const SATSolver::vec_literals& assumptions,
@@ -2353,6 +2441,27 @@ struct IncrementalSolver::Impl
       fpCtx.reset(new FpEncodingContext(bm));
     return fpCtx.get();
   }
+
+  // Publish this epoch's floating-point context to the model machinery,
+  // before any model this driver produced can be read. Unconditional, and
+  // that is the whole point of it having a name.
+  //
+  // A NULL context there has to mean exactly one thing -- no solve has run --
+  // because that is what every reader of it takes it to mean: the fatal in
+  // requireFpEncodingContext, and the "the question cannot be put" answer
+  // arrayEqualityIsModelDecidable gives. Installing only when this epoch
+  // happened to lower a float makes NULL mean two things at once, and the
+  // model machinery has no way to tell them apart. It read the second as the
+  // first, and took abort() out of a legal C API call over a float term the
+  // assertion stack never mentioned -- which is answerable, and which the
+  // batch driver answers, from the context it builds per solve whether or not
+  // that solve had a float anywhere in it (STP.cpp, TopLevelSTP).
+  //
+  // What it costs on a stack with no float in it is one context per encoding
+  // epoch: two small allocations over empty caches, made once and reused by
+  // every check-sat of the epoch -- less than the batch side already pays,
+  // which is one per solve.
+  void publishFpContext() { ce->setFpEncodingContext(fpContext()); }
 
   // Give every bit of a symbol a CNF variable, allocating unconstrained
   // ones where the encoded cones never needed the bit. The refinement
@@ -2653,6 +2762,12 @@ struct IncrementalSolver::Impl
     ExtensionalityContext* ext = bm->getExtensionalityIfAny();
     if (ext != NULL)
       ext->releaseSolveStorage();
+    UFContext* ufContext = bm->getUFContextIfAny();
+    if (ufContext != NULL)
+      ufContext->releaseSolveProtection();
+    activeUFView = LoweredApplicationView();
+    if (ufAdapter)
+      ufAdapter->clearEncodingEpoch();
 
     // The old model has already been invalidated by entry into this check.
     // Withdraw shared model-channel seeds before dropping the ASTs they pin.
@@ -2851,6 +2966,9 @@ struct IncrementalSolver::Impl
     retiredClauseSubmissions =
         addMass(retiredClauseSubmissions, solver->submittedClauses());
     solver.reset(makeBackend(bm->UserFlags, false));
+    ++satBackendGeneration;
+    if (ufAdapter)
+      ufAdapter->advanceBackendGeneration(satBackendGeneration);
     solver->enableRefinement(true);
     if (trailReuseAllowed)
       solver->enableTrailReuse();
@@ -2876,6 +2994,16 @@ struct IncrementalSolver::Impl
 
     cnf.reset(solver.get());
     symbolMapCache.invalidate();
+    // The fresh backend holds none of the abstraction's pinning clauses and
+    // none of the variables they named, and its proxy constraints were
+    // units that only syncAbstractions re-asserts. Forget what refinement
+    // had established so that every record is taken across again -- from a
+    // rotated epoch there are none left to take, and from a policy rebuild
+    // the blaster still has them all.
+    bvAbstraction.clear();
+    harvestedEQAbstractions = 0;
+    harvestedTermAbstractions = 0;
+    assertedSideConstraints = 0;
     rootLitOf.clear();
     actLitOf.clear();
     everAssumedLits.clear();
@@ -3333,7 +3461,8 @@ struct IncrementalSolver::Impl
   // registry keeps the answer stable across a rebuild whose live stack
   // happens to be array-free at that moment. Under --ackermanize arrays
   // never reach the solver as arrays, so AUTO stays off, as in batch.
-  void decideBVA(const ASTVec& assertionsSMT2)
+  void decideBVA(const ASTVec& assertionsSMT2,
+                 const ASTNode& classificationRoot)
   {
     if (bvaDecided)
       return;
@@ -3346,10 +3475,19 @@ struct IncrementalSolver::Impl
         !uf.ackermannisation)
     {
       wants = !arrayRegistry.reads.empty();
-      for (size_t i = 0; !wants && i < assertionsSMT2.size(); i++)
+      if (!wants)
       {
-        const Fragment& f = fragment(assertionsSMT2[i]);
-        wants = f.arrays || f.arrayEq;
+        if (!classificationRoot.IsNull())
+        {
+          const Fragment& f = fragment(classificationRoot);
+          wants = f.arrays || f.arrayEq;
+        }
+        else
+          for (size_t i = 0; !wants && i < assertionsSMT2.size(); i++)
+          {
+            const Fragment& f = fragment(assertionsSMT2[i]);
+            wants = f.arrays || f.arrayEq;
+          }
       }
     }
 
@@ -3446,6 +3584,204 @@ struct IncrementalSolver::Impl
       (*channel)[it->first] = it->second.value;
       seededModelKeys.insert(it->first);
     }
+  }
+
+  // ── Bit-vector abstraction ownership ─────────────────────────────────
+
+  // The SAT variable of an abstraction's own combinational input, named by
+  // the index the blaster recorded. The input sits in the cone of whatever
+  // conjunct it replaced an operation in, so it is normally already
+  // encoded; encoding it here as well costs nothing and covers the case
+  // where a later simplification kept the record but not the cone.
+  unsigned abstractionVarOf(int ciSymbolIndex)
+  {
+    Aig_Obj_t* ci = (Aig_Obj_t*)Vec_PtrEntry(
+        encoding.nodes().aigMgr->vCis, ciSymbolIndex);
+    ensureEncoded(ci);
+    return (unsigned)varOfAig(ci);
+  }
+
+  // Take across everything the blaster has produced since the last call:
+  // the operand proxies' defining constraints, and the abstraction records
+  // themselves. Called once per solve, after all of this call's encoding
+  // and before the search, so it covers every route's bit-blasting without
+  // each route having to know about it.
+  //
+  // Unlike the batch lowering, no freezeVariables() pass follows: every
+  // backend makeBackend admits either restores an eliminated variable the
+  // moment a clause mentions it (CaDiCaL) or never eliminates one (plain
+  // MiniSat), and the one family that can take neither back -- the
+  // simplifying MiniSat -- makeBackend refuses for this driver.
+  void syncAbstractions()
+  {
+    BitBlaster& bb = encoding.blaster();
+
+    // An abstraction reads its operands through proxy inputs, tied to the
+    // real bits by one biconditional each -- the blaster mints them
+    // because the bits themselves need not be inputs, and refinement can
+    // only write clauses over variables. The batch lowering conjoins those
+    // biconditionals into the formula it blasts; here they are permanent
+    // units, which says the same thing: each defines a fresh variable that
+    // nothing else mentions, so it constrains no assignment of the query.
+    // Dropped, as they were, the proxies stand for nothing and every
+    // operand the refinement reads through one is noise.
+    const std::vector<BBNodeAIG>& side = bb.sideConstraints();
+    for (; assertedSideConstraints < side.size(); assertedSideConstraints++)
+    {
+      const BBNodeAIG& sc = side[assertedSideConstraints];
+      Aig_Obj_t* regular = Aig_Regular(sc.n);
+      ensureEncoded(regular);
+      const int lit =
+          2 * varOfAig(regular) + (Aig_IsComplement(sc.n) ? 1 : 0);
+      SATSolver::vec_literals unit;
+      unit.push(SATSolver::mkLit(lit >> 1, lit & 1));
+      addClause(unit);
+      permanentAigRoots.push_back(regular);
+      permanentUnitMass = addMass(permanentUnitMass, 1);
+    }
+
+    const std::vector<BitBlaster::RawBVEQAbstraction>& rawEQs =
+        bb.abstractedEQs();
+    for (; harvestedEQAbstractions < rawEQs.size(); harvestedEQAbstractions++)
+    {
+      const BitBlaster::RawBVEQAbstraction& raw =
+          rawEQs[harvestedEQAbstractions];
+      BVEQAbstraction a;
+      a.eqNode = raw.eqNode;
+      a.abstractionSATVar = abstractionVarOf(raw.abstractionCI.symbol_index);
+      a.leftSymbol = raw.leftSymbol;
+      a.rightSymbol = raw.rightSymbol;
+      a.width = std::max(1u, raw.leftSymbol.GetValueWidth());
+      encodeAbstractionNode(a.leftSymbol);
+      encodeAbstractionNode(a.rightSymbol);
+      bvAbstraction.equalities().push_back(std::move(a));
+    }
+
+    const std::vector<BitBlaster::RawBVTermAbstraction>& rawTerms =
+        bb.abstractedTerms();
+    for (; harvestedTermAbstractions < rawTerms.size();
+         harvestedTermAbstractions++)
+    {
+      const BitBlaster::RawBVTermAbstraction& raw =
+          rawTerms[harvestedTermAbstractions];
+      BVTermAbstraction a;
+      a.termNode = raw.termNode;
+      a.opKind = raw.opKind;
+      for (unsigned i = 0; i < raw.numOperands; i++)
+      {
+        a.operands[i] = raw.operands[i];
+        a.operandNegated[i] = raw.operandNegated[i];
+        encodeAbstractionNode(a.operands[i]);
+      }
+      a.numOperands = raw.numOperands;
+      a.width = raw.width;
+      if (raw.condCISymbolIndex >= 0)
+        a.condSATVar = abstractionVarOf(raw.condCISymbolIndex);
+      encodeAbstractionNode(a.termNode);
+      bvAbstraction.terms().push_back(std::move(a));
+    }
+  }
+
+  // Every bit a record can be checked against gets its SAT variable here,
+  // BEFORE the solve whose candidate the check will read. Encoding them on
+  // demand at refinement time -- which is when the operand map used to
+  // first touch them -- minted variables the solve just finished had never
+  // assigned: an abstracted operand or result whose cone reaches no clause
+  // (a symbol that occurs only under an abstracted equality, say) has
+  // perfectly valid AIG bits and no CNF presence at all. A backend without
+  // a default answer for such a read answers from garbage -- MiniSat
+  // indexes its model out of bounds -- and a candidate certified against
+  // garbage published a model the raw stack refutes. Encoded up front, the
+  // variables are decision variables like any other: the search assigns
+  // them, the scan reads what the search chose, and the same variables are
+  // what the model channel later publishes.
+  void encodeAbstractionNode(const ASTNode& n)
+  {
+    if (n.IsNull())
+      return;
+    BBNodeManagerAIG::SymbolToBBNode::const_iterator it =
+        encoding.nodes().symbolToBBNode.find(n);
+    if (it == encoding.nodes().symbolToBBNode.end())
+      return; // a constant the record folds in; the scan reads its bits
+    for (const BBNodeAIG& bit : it->second)
+      if (!bit.IsNull())
+        ensureEncoded(Aig_Regular(bit.n));
+  }
+
+  // One node's bits, for the refinement's use. Deliberately not through
+  // buildSymbolMap: that is the model channel's view and drops scoped
+  // eliminations and popped content, while a refinement clause is a
+  // statement about the circuit -- this abstraction variable means these
+  // AIG bits -- and is true of it whatever else is asserted. Every bit is
+  // given a variable, since a clause written over one that never reached
+  // the solver would name a variable that does not exist.
+  void addAbstractionOperand(ToSATBase::ASTNodeToSATVar& out,
+                             const ASTNode& n)
+  {
+    if (n.IsNull() || out.find(n) != out.end())
+      return;
+    BBNodeManagerAIG::SymbolToBBNode::const_iterator it =
+        encoding.nodes().symbolToBBNode.find(n);
+    if (it == encoding.nodes().symbolToBBNode.end())
+      return;
+    const std::vector<BBNodeAIG>& bits = it->second;
+    std::vector<unsigned> vars(bits.size(), ~((unsigned)0));
+    for (size_t i = 0; i < bits.size(); i++)
+    {
+      if (bits[i].IsNull())
+        continue;
+      Aig_Obj_t* regular = Aig_Regular(bits[i].n);
+      ensureEncoded(regular);
+      vars[i] = (unsigned)varOfAig(regular);
+    }
+    out.insert(std::make_pair(n, vars));
+  }
+
+  // Check the candidate the solver is holding against every abstraction and
+  // pin the ones it contradicts; the count is how many were pinned, so zero
+  // means the candidate is faithful and may be handed on.
+  unsigned refineAbstractions(SATSolver& satSolver)
+  {
+    if (bvAbstraction.empty())
+      return 0;
+    ToSATBase::ASTNodeToSATVar operands;
+    for (const BVEQAbstraction& a : bvAbstraction.equalities())
+    {
+      addAbstractionOperand(operands, a.leftSymbol);
+      addAbstractionOperand(operands, a.rightSymbol);
+    }
+    for (const BVTermAbstraction& a : bvAbstraction.terms())
+    {
+      addAbstractionOperand(operands, a.termNode);
+      for (unsigned i = 0; i < a.numOperands; i++)
+        addAbstractionOperand(operands, a.operands[i]);
+    }
+    return bvAbstraction.refine(satSolver, operands);
+  }
+
+  // Decide how this block holds the injectivity guard, and keep the manager's
+  // record honest about it -- the batch pipeline's bind_injectivity_guard does
+  // the same job for its encoding, and for the same reason: the record says an
+  // unsat may be the assumption's, which is only true while something is
+  // holding the assumption up.
+  //
+  // The guard is an ordinary Boolean symbol of the lowered block, so the
+  // blaster has a node for it whenever any implication behind it was encoded;
+  // the implications mention it, so no node means none of them are binding.
+  void bindInjectivityGuard(SATSolver::vec_literals& assumptions)
+  {
+    if (bm->uf_injectivity_guard.IsNull() || injectivity.assumed ||
+        injectivity.retracted)
+      return;
+    BBNodeManagerAIG::SymbolToBBNode::const_iterator it =
+        encoding.nodes().symbolToBBNode.find(bm->uf_injectivity_guard);
+    if (it == encoding.nodes().symbolToBBNode.end() || it->second.empty() ||
+        it->second[0].IsNull() || !solver->supportsAssumptions())
+      return; // nothing to assume, so nothing has asked about the assumption
+    Aig_Obj_t* const regular = Aig_Regular(it->second[0].n);
+    ensureEncoded(regular);
+    injectivity.variable = (unsigned)varOfAig(regular);
+    injectivity.assumeInto(assumptions);
   }
 
   // Values for every symbol the persistent encoding knows about. Symbols
@@ -3559,7 +3895,9 @@ struct IncrementalSolver::Impl
 class IncrementalToSAT : public ToSATBase
 {
   IncrementalSolver::Impl* d;
-  const SATSolver::vec_literals* assumps;
+  // Not const: retracting the injectivity guard pops it off this vector, and
+  // the pop has to be visible to the refinement rounds that follow.
+  SATSolver::vec_literals* assumps;
 
 public:
   IncrementalToSAT(STPMgr* bm, IncrementalSolver::Impl* d_)
@@ -3567,7 +3905,7 @@ public:
   {
   }
 
-  void setAssumptions(const SATSolver::vec_literals* a) { assumps = a; }
+  void setAssumptions(SATSolver::vec_literals* a) { assumps = a; }
 
   bool CallSAT(SATSolver& SatSolver, const ASTNode& input,
                bool /*doesAbsRef*/) override
@@ -3590,12 +3928,28 @@ public:
     ScopedProfileTimer phaseSatTimer(d->profile.enabled, phaseSatNs);
     bm->GetRunTimes()->start(RunTimes::Solving);
     bool sat;
-    if (assumps != NULL && assumps->size() > 0)
-      sat = SatSolver.solveWithAssumptions(*assumps, bm->soft_timeout_expired);
+    if (assumps != NULL)
+      sat = bm->solveRetractingInjectivity(SatSolver, *assumps, d->injectivity);
     else
       sat = SatSolver.solve(bm->soft_timeout_expired);
     bm->GetRunTimes()->stop(RunTimes::Solving);
+    // The refinement rounds, which give up through CallSAT_ResultCheck rather
+    // than through the driver's own check. Same reason as there: the reason
+    // is only knowable here. The first round to run out is the one that names
+    // the budget, which is why noteBudgetExhausted keeps an earlier answer.
+    if (bm->soft_timeout_expired)
+      bm->noteBudgetExhausted(SatSolver);
     return sat;
+  }
+
+  unsigned refineAbstractions(SATSolver& SatSolver) override
+  {
+    return d->refineAbstractions(SatSolver);
+  }
+
+  uint64_t abstractionRefinements() const override
+  {
+    return d->bvAbstraction.refinements();
   }
 
   ASTNodeToSATVar& SATVar_to_SymbolIndexMap() override

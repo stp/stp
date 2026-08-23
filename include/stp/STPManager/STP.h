@@ -37,12 +37,13 @@ THE SOFTWARE.
 #include "stp/Util/Attributes.h"
 #include "stp/ToSat/ToSATAIG.h"
 #include "stp/Simplifier/NodeDomainAnalysis.h"
-
 #include <memory>
 
 namespace stp
 {
 class IncrementalSolver;
+class LoweredApplicationView;
+class UFBatchAdapter;
 
 // FIXME: This needs a better name
 class STP
@@ -80,6 +81,13 @@ class STP
   // alive after TopLevelSTP returns so model queries use that exact encoding.
   std::unique_ptr<FpEncodingContext> fpEncodingContext;
 
+  // Public and semantic UF roots for the most recent fresh-query solve. The
+  // value remains alive with the model, while batchUFAdapter owns the
+  // query-local SAT/checker mutation.
+  std::unique_ptr<LoweredApplicationView> batchUFView;
+  std::unique_ptr<UFBatchAdapter> batchUFAdapter;
+  uint64_t batchUFScopeGeneration = 0;
+
 public:
   STPMgr* bm;
   Simplifier* simp;
@@ -105,29 +113,35 @@ public:
   bool sessionIncremental = false;
   size_t incrementalSolvesRun = 0;
 
+  // Whether a query has been decided and its counterexample tables have not
+  // been discarded since -- that is, whether there is a model to read at all.
+  //
+  // The C API's contract in as much state as it needs: a counterexample
+  // describes the last query, survives vc_pop, and is discarded by the next
+  // vc_push or vc_query. ClearAllTables is where that discarding happens, so
+  // that is where this is cleared; vc_query_with_timeout sets it again when
+  // the query comes back decided, and leaves it clear when the answer was a
+  // unknown or an error, because neither leaves a model behind.
+  //
+  // The SMT-LIB2 frontend has always kept the equivalent (model_valid) and
+  // answers "unsupported" without it. Nothing on the C API side did, so a
+  // model query with no solve behind it read an empty counterexample map
+  // instead of being refused.
+  bool queryAnswered = false;
+
   DLL_PUBLIC IncrementalSolver* getIncrementalSolver();
   DLL_PUBLIC void resetIncrementalSolver();
   bool hasIncrementalSolver() const { return incrementalSolver != nullptr; }
+  const LoweredApplicationView& lastBatchUFView() const;
 
 public:
-  STP(STPMgr* b)
-  {
-    bm = b;
-    substitutionMap = new stp::SubstitutionMap(bm);
-    simp = new Simplifier(bm,substitutionMap);
-    arrayTransformer = new ArrayTransformer(bm, simp);
-    Ctr_Example = new AbsRefine_CounterExample(bm, simp, arrayTransformer);
-    tosat = new ToSATAIG(bm, arrayTransformer);
-  }
+  // Out of line so the UF implementation types above remain incomplete here.
+  DLL_PUBLIC STP(STPMgr* b);
 
-  STP( const STP& ) = delete; 
-  STP& operator=( const STP& ) = delete; 
+  STP(const STP&) = delete;
+  STP& operator=(const STP&) = delete;
 
-  ~STP() 
-  { 
-    ClearAllTables(); 
-    deleteObjects();
-  }
+  DLL_PUBLIC ~STP();
 
   // NB doesn't delete the STPMgr.
   void deleteObjects()
@@ -135,7 +149,10 @@ public:
     resetIncrementalSolver();
 
     if (Ctr_Example != NULL)
+    {
       Ctr_Example->setFpEncodingContext(NULL);
+      Ctr_Example->setUFTheoryAdapter(NULL);
+    }
     fpEncodingContext.reset();
 
     delete Ctr_Example;
@@ -156,6 +173,12 @@ public:
 
   // The absolute TopLevel function that invokes STP on the input
   // formula
+  // One run of the pipeline: lower, preprocess, bit-blast, solve, refine.
+  // TopLevelSTP calls it a second time when the first run reached an unsat
+  // nobody could attribute -- see the comment there.
+  SOLVER_RETURN_TYPE topLevelSTPOnce(const ASTNode& inputasserts,
+                                     const ASTNode& query);
+
   DLL_PUBLIC SOLVER_RETURN_TYPE TopLevelSTP(const ASTNode& inputasserts,
                                             const ASTNode& query);
 
@@ -163,22 +186,7 @@ public:
   ASTNode callSizeReducing(ASTNode simplified_solved_InputToSAT,
                            BVSolver* bvSolver, PropagateEqualities* pe, NodeDomainAnalysis* domain);
 
-  void ClearAllTables(void)
-  {
-    if (simp != NULL)
-      simp->ClearAllTables();
-    if (arrayTransformer != NULL)
-      arrayTransformer->ClearAllTables();
-    if (tosat != NULL)
-      tosat->ClearAllTables();
-    if (Ctr_Example != NULL)
-    {
-      Ctr_Example->ClearAllTables();
-      Ctr_Example->setFpEncodingContext(NULL);
-    }
-    fpEncodingContext.reset();
-    // bm->ClearAllTables();
-  }
+  DLL_PUBLIC void ClearAllTables(void);
 };
 } // end of namespace
 #endif

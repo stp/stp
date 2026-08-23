@@ -72,6 +72,9 @@ THE SOFTWARE.
 #include "stp/Simplifier/VariablesInExpression.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
 #include "stp/ToSat/BitBlaster.h"
+#include "stp/ToSat/ToSATAIG.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
+#include "stp/UninterpretedFunctions/UFLowering.h"
 #include "stp/Util/NodeIterator.h"
 #include "stp/Simplifier/StrengthReduction.h"
 #include "stp/Simplifier/SubstitutionMap.h"
@@ -281,6 +284,41 @@ ASTNode storeChain(Context& c, unsigned depth, const ASTNode& base,
 ASTNode storeChain(Context& c, unsigned depth)
 {
   return storeChain(c, depth, c.mgr.CreateSymbol("A", 8, 8));
+}
+
+// Completed-root UF lowering must keep the nesting chosen by the input off
+// the call stack. Each application is a child of the next one, so the
+// innermost result also has to be available before its parent is recorded.
+bool ufLoweringOk(Context& c, unsigned depth)
+{
+  c.mgr.UserFlags.enable_uninterpreted_functions = true;
+  UFContext* const context = c.mgr.getUFContext();
+  const SourceSort bv8 = SourceSort::bitVector(8);
+  std::string diagnostic;
+  const UFDecl* const f =
+      context->declareFunction("deep_uf", {bv8}, bv8, &diagnostic);
+  if (f == NULL)
+    return false;
+
+  const ASTNode x = c.mgr.CreateSourceSymbol("deep_uf_x", bv8);
+  ASTNode application = x;
+  for (unsigned i = 0; i < depth; ++i)
+  {
+    application = context->apply(f, {application}, &diagnostic);
+    if (application.IsNull())
+      return false;
+  }
+  const ASTNode root = c.hf->CreateNode(EQ, application, x);
+  c.roots.push_back(root);
+
+  UFLowering lowerer(&c.mgr);
+  const LoweredApplicationView view =
+      lowerer.lowerCompletedRoot(root, UFSolveScope::batch(1));
+  return view.size() == depth &&
+         view.applications.front().stableOrder == 0 &&
+         view.applications.back().stableOrder == depth - 1 &&
+         !containsKind(view.semanticRoot, UF_APPLY) &&
+         !containsKind(view.semanticRootWithDefinitions(&c.mgr), UF_APPLY);
 }
 
 // Dependencies::build, the parent map constant-bit propagation runs on.
@@ -726,6 +764,57 @@ bool bitBlastOk(Context& c, unsigned depth)
 
   // One AIG node per conjunct at the very least.
   return nm.totalNumberOfNodes() >= static_cast<int>(depth);
+}
+
+// ToSATAIG::bitblast handing the abstraction's side constraints to the CNF
+// converter. An abstracted operand that is not already an AIG input gets a
+// proxy input per bit, tied to the real bit by one biconditional, and the
+// batch route has to conjoin those onto the blasted formula. Conjoined one
+// at a time they are a chain as deep as there are constraints, and ABC's
+// AIG -> CNF conversion walks the graph by recursion -- so instead of an
+// answer the query got a stack overflow inside Cnf_Derive.
+//
+// `depth` is the number of abstracted equalities and each contributes WIDTH
+// constraints, so the chain this used to build is WIDTH * depth links --
+// several times what 1 MiB of frames holds. The margin is deliberate: right
+// at the boundary whether it overflows turns on ASLR and on how big the
+// environment is, which is what made the first reproducer for this flaky.
+//
+// The conjunction is flat on purpose. Nested, the blaster would put a chain
+// of its own into the AIG and the case would stop being about the side
+// constraints; flat, CreateNode towers it and the fold under test is the
+// only chain left.
+bool abstractionSideConstraintsOk(Context& c, unsigned depth)
+{
+  const unsigned WIDTH = 4;
+  c.mgr.UserFlags.bv_eq_abstraction = true;
+  c.mgr.UserFlags.bv_abstraction_width = 1;
+
+  ASTVec conjuncts;
+  conjuncts.reserve(depth);
+  for (unsigned i = 0; i < depth; i++)
+  {
+    const std::string suffix = std::to_string(i);
+    const ASTNode x = c.mgr.CreateSymbol(("p" + suffix).c_str(), 0, WIDTH);
+    const ASTNode y = c.mgr.CreateSymbol(("q" + suffix).c_str(), 0, WIDTH);
+    const ASTNode z = c.mgr.CreateSymbol(("r" + suffix).c_str(), 0, WIDTH);
+    // A BVAND is not an input, so the abstraction has to mint proxies for
+    // it. The symbol on the other side already is one and gets none.
+    const ASTNode masked = c.hf->CreateTerm(BVAND, WIDTH, x, y);
+    conjuncts.push_back(c.hf->CreateNode(EQ, masked, z));
+  }
+  const ASTNode top = c.hf->CreateNode(AND, conjuncts);
+  c.roots.push_back(top);
+
+  SubstitutionMap sm(&c.mgr);
+  Simplifier simp(&c.mgr, &sm);
+  ArrayTransformer at(&c.mgr, &simp);
+  ToSATAIG toSAT(&c.mgr, &at);
+
+  // Every conjunct has to reach the CNF, and each brings clauses of its
+  // own, so fewer clauses than conjuncts would not be this formula.
+  Cnf_Dat_t* cnf = toSAT.bitblast(top, false);
+  return cnf != NULL && cnf->nClauses > static_cast<int>(depth);
 }
 
 // Simplifier's term side. The job machine must use the same flattened operand
@@ -2120,6 +2209,12 @@ TEST(DeepDag, shallow_bit_blast_nested)
   EXPECT_TRUE(bitBlastNestedOk(c, SHALLOW));
 }
 
+TEST(DeepDag, shallow_abstraction_side_constraints)
+{
+  Context c;
+  EXPECT_TRUE(abstractionSideConstraintsOk(c, SHALLOW));
+}
+
 TEST(DeepDag, simplify_term_preserves_mixed_operand_positions)
 {
   Context c;
@@ -2706,6 +2801,11 @@ TEST(DeepDag, deep_bit_blast_nested)
   EXPECT_STACK_SAFE(bitBlastNestedOk, 20000);
 }
 
+TEST(DeepDag, deep_abstraction_side_constraints)
+{
+  EXPECT_STACK_SAFE(abstractionSideConstraintsOk, 20000);
+}
+
 TEST(DeepDag, deep_common_sub_sum)              { EXPECT_STACK_SAFE(commonSubSumOk, 20000); }
 TEST(DeepDag, deep_work_list)          { EXPECT_STACK_SAFE(workListOk, 20000); }
 TEST(DeepDag, deep_remove_unconstrained) { EXPECT_STACK_SAFE(removeUnconstrainedOk, 20000); }
@@ -2758,6 +2858,7 @@ TEST(DeepDag, deep_array_equality_lowering)
 }
 TEST(DeepDag, deep_transform_formula_spine) { EXPECT_STACK_SAFE(transformFormulaSpineOk, 20000); }
 TEST(DeepDag, deep_fp_totalise)        { EXPECT_STACK_SAFE(fpTotaliseChainOk, 20000); }
+TEST(DeepDag, deep_uf_lowering)        { EXPECT_STACK_SAFE(ufLoweringOk, 20000); }
 
 TEST(DeepDag, deep_printer_lisp)       { EXPECT_STACK_SAFE(printerLispOk, 20000); }
 TEST(DeepDag, deep_counterexample_eval) { EXPECT_STACK_SAFE(counterExampleEvalOk, 20000); }

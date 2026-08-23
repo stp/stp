@@ -8,7 +8,7 @@
 ;
 ; Resolving a sort is fatal where recovering from a bison error is not, so
 ; this one does exit non-zero.
-; CHECK-L: unknown sort (not built in, and not a define-sort alias)  token: Real
+; CHECK-L: unknown sort (not built in, and not a declared sort)  token: Real
 ; NOANSWER-NOT: ^sat$
 ; NOANSWER-NOT: ^unsat$
 (set-logic QF_BVFPLRA)

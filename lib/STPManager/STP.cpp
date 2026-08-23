@@ -24,6 +24,9 @@ THE SOFTWARE.
 
 #include "stp/STPManager/STP.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
+#include "stp/UninterpretedFunctions/UFLowering.h"
+#include "stp/UninterpretedFunctions/UFRefinement.h"
 #include "stp/Incremental/IncrementalSolver.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/NodeToFixedBitsMap.h"
@@ -35,6 +38,7 @@ THE SOFTWARE.
 
 #include "stp/Simplifier/AIGSimplifyPropositionalCore.h"
 #include "stp/Simplifier/DifficultyScore.h"
+#include "stp/Simplifier/DistinctOrdering.h"
 #include "stp/Simplifier/FindPureLiterals.h"
 #include "stp/Simplifier/RemoveUnconstrained.h"
 #include "stp/Simplifier/UnsignedIntervalAnalysis.h"
@@ -60,6 +64,57 @@ const static string size_inc_message = "After Speculative Simplifications. ";
 const static string pe_message = "After Propagating Equalities. ";
 const static string domain_message = "After Domain Analysis. ";
 const static string se_message = "After Split Extracts. ";
+
+STP::STP(STPMgr* b)
+{
+  bm = b;
+  substitutionMap = new stp::SubstitutionMap(bm);
+  simp = new Simplifier(bm, substitutionMap);
+  arrayTransformer = new ArrayTransformer(bm, simp);
+  Ctr_Example = new AbsRefine_CounterExample(bm, simp, arrayTransformer);
+  batchUFView.reset(new LoweredApplicationView());
+  batchUFAdapter.reset(new UFBatchAdapter(bm));
+  tosat = new ToSATAIG(bm, arrayTransformer);
+}
+
+STP::~STP()
+{
+  ClearAllTables();
+  deleteObjects();
+}
+
+const LoweredApplicationView& STP::lastBatchUFView() const
+{
+  return *batchUFView;
+}
+
+void STP::ClearAllTables(void)
+{
+  // The counterexample goes with them, so there is no longer a model to read.
+  // Whoever decides the next query says so again.
+  queryAnswered = false;
+
+  if (simp != NULL)
+    simp->ClearAllTables();
+  if (arrayTransformer != NULL)
+    arrayTransformer->ClearAllTables();
+  if (tosat != NULL)
+    tosat->ClearAllTables();
+  if (Ctr_Example != NULL)
+  {
+    Ctr_Example->ClearAllTables();
+    Ctr_Example->setFpEncodingContext(NULL);
+  }
+  fpEncodingContext.reset();
+  *batchUFView = LoweredApplicationView();
+  if (batchUFAdapter)
+    batchUFAdapter->clear();
+  if (Ctr_Example != NULL)
+    Ctr_Example->setUFTheoryAdapter(NULL);
+  if (bm != NULL && bm->getUFContextIfAny() != NULL)
+    bm->getUFContextIfAny()->releaseSolveProtection();
+  // bm->ClearAllTables();
+}
 
 SOLVER_RETURN_TYPE STP::solve_by_sat_solver(SATSolver* newS,
                                             ASTNode original_input,
@@ -103,9 +158,68 @@ SATSolver* STP::get_new_sat_solver()
 
 // The absolute TopLevel function that invokes STP on the input
 // formula
+// Decide one query, twice if the first run cannot say whose refutation it
+// reached.
+//
+// --uf-inject-args puts injectivity into the encoding, which the query never
+// asserted, so an unsat over it may be the assumption's rather than the
+// query's. Normally the solver settles that itself: the implications sit
+// behind an assumption the search can be asked about and, if the refutation
+// used it, withdrawn -- two searches on one encoding, no second pipeline run.
+// See STPMgr::solveRetractingInjectivity.
+//
+// What that cannot cover is a refutation reached before the solver was ever
+// asked. Preprocessing works on the strengthened formula, so a formula it
+// proves false may have been proved false with the assumption's help, and
+// there is no assumption trail to interrogate afterwards. Nor is there a
+// cheaper question to ask than the one below: run the query again with the
+// flag off, and report what that says. bm->uf_injectivity_assumed is exactly
+// the "nobody established this" record -- both resolvers clear it -- so this
+// second run happens only in the case the first run could not close.
 SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
                                     const ASTNode& query)
 {
+  const SOLVER_RETURN_TYPE first = topLevelSTPOnce(inputasserts, query);
+  if (first != SOLVER_UNSATISFIABLE || bm->uf_injectivity_assumed == 0)
+    return first;
+
+  if (bm->UserFlags.stats_flag)
+    std::cerr << "UF: refuted before the search could be asked about the "
+              << "injectivity assumption, deciding the query without it"
+              << std::endl;
+
+  const bool saved = bm->UserFlags.uf_inject_args;
+  bm->UserFlags.uf_inject_args = false;
+  // A second run of the pipeline is a second solve, and every solve reaches
+  // topLevelSTPOnce over tables nobody has written yet: the SMT-LIB2 frontend
+  // clears them in Cpp_interface::resetSolver, the C API in vc_query, and the
+  // single-query tool has never run anything. This one is reached from inside
+  // the driver, so nothing did it here, and the run inherits the first run's
+  // substitution map, array-transform tables and bit-blasting cache.
+  //
+  // The substitution map is the one that bites rather than merely wastes:
+  // RemoveUnconstrained's array rules meet a symbol the first run already
+  // substituted and call UpdateSubstitutionMapFewChecks, whose whole contract
+  // is that its caller has established the symbol is not in the map. Same
+  // clearing as the frontends do, and in the same place relative to the solve
+  // -- before it, so the first run's answer is complete and the second run's
+  // model is built over its own encoding.
+  bm->ClearAllTables();
+  ClearAllTables();
+  const SOLVER_RETURN_TYPE second = topLevelSTPOnce(inputasserts, query);
+  bm->UserFlags.uf_inject_args = saved;
+  bm->clearInjectivityAssumed();
+  return second;
+}
+
+SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
+                                        const ASTNode& query)
+{
+  // Candidate construction and publication are separate decisions.
+  // TopLevelSTPAux may force construction for array/UF
+  // refinement, but nothing after this solve may interpret that as an SMT-LIB
+  // get-model/get-value request.
+  const bool constructForCaller = bm->UserFlags.callerRequestedModel();
 
   // One encoding context per actual solve. Keep it after this function
   // returns so counterexample/get-value requests reuse the exact mappings
@@ -129,6 +243,58 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   {
     original_input = inputasserts;
   }
+
+  // Order fully symmetric distincts before anything else looks at the
+  // formula. It runs here, on this solve's own assembled root, rather than
+  // in the parser: only the whole formula shows whether the operands really
+  // do occur nowhere else, and re-deciding it per solve is what keeps a
+  // later assert from inheriting an ordering it never earned.
+  if (bm->UserFlags.distinct_ordering && bm->has_distinct)
+  {
+    size_t ordered = 0;
+    original_input = applyDistinctOrdering(bm, original_input, &ordered);
+    if (ordered > 0 && bm->UserFlags.stats_flag)
+      std::cerr << "Ordered " << ordered << " symmetric distinct group(s)."
+                << std::endl;
+  }
+
+  // Whatever the optional symmetry pass did not consume now acquires its
+  // ordinary pairwise semantics. This is deliberately after completed-root
+  // ordering and before UF, FP, array, or generic preprocessing.
+  if (bm->has_distinct)
+  {
+    original_input = lowerDistinct(bm, original_input);
+    if (containsKind(original_input, DISTINCT))
+      FatalError("DISTINCT crossed the batch completed-root lowering barrier",
+                 original_input);
+  }
+
+  // Durable UF nodes stay visible through frontend substitution and query
+  // assembly. This is their one batch lowering boundary: before FP
+  // totalisation, opaque array equality, or any ordinary preprocessor. Keep
+  // the submitted root in batchUFView and pass only its semantic replacement
+  // plus query-local naming definitions onward.
+  *batchUFView = LoweredApplicationView();
+  // Each batch query builds its encoding from nothing, so what the last one
+  // assumed says nothing about this one.
+  bm->clearInjectivityAssumed();
+  if (bm->UserFlags.enable_uninterpreted_functions)
+  {
+    UFLowering lowerer(bm);
+    *batchUFView = lowerer.lowerCompletedRoot(
+        original_input, UFSolveScope::batch(++batchUFScopeGeneration));
+    original_input = batchUFView->semanticRootWithDefinitions(bm);
+    if (containsKind(original_input, UF_APPLY))
+      FatalError("UF_APPLY crossed the batch completed-root lowering barrier",
+                 original_input);
+  }
+  else if (bm->getUFContextIfAny() != NULL)
+    bm->getUFContextIfAny()->releaseSolveProtection();
+
+  batchUFAdapter->beginQuery(batchUFView.get());
+  Ctr_Example->setUFTheoryAdapter(batchUFView->active()
+                                      ? batchUFAdapter.get()
+                                      : NULL);
 
   // The latch is the same kind of cheap fast-negative the lowering test below
   // uses, widened to cover RoundingMode -- which carries no format, so it
@@ -158,7 +324,10 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
       solve_by_sat_solver(newS, original_input, arrayEqualityRewrites);
   delete newS;
 
+  bm->UserFlags.construct_counterexample_flag = constructForCaller;
   bm->UserFlags.ackermannisation = saved_ack;
+  // Raw: whether an unsat here is the query's is TopLevelSTP's question, and
+  // it has a second run to answer it with.
   return result;
 }
 
@@ -264,6 +433,20 @@ SOLVER_RETURN_TYPE
 STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
                     const ASTNodeMap& arrayEqualityRewrites)
 {
+  if (bm->has_distinct && containsKind(original_input, DISTINCT))
+    FatalError("DISTINCT reached ordinary batch preprocessing", original_input);
+  if (bm->UserFlags.enable_uninterpreted_functions &&
+      containsKind(original_input, UF_APPLY))
+    FatalError("UF_APPLY reached ordinary batch preprocessing",
+               original_input);
+
+  // Lowering has installed the current view's protected/registered scalars.
+  // Activate them for exactly the preprocessing, SAT and refinement window;
+  // retained batch model data remains readable after this scope closes.
+  UFContext* ufSolveContext =
+      batchUFView->active() ? bm->getUFContextIfAny() : NULL;
+  UFContext::SolveScope ufSolveScope(ufSolveContext);
+
   // ARRAY_EQ remains a normal, traversable AST node through query assembly
   // and macro/function substitution. Lower it only now, at the complete-query
   // boundary and before any ordinary simplifier or array transform runs.
@@ -396,9 +579,22 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // TODO: I chose the number of reads we perform this operation at randomly.
   bool removed = false;
   const int arrayReadLimit = bm->UserFlags.ackermannisation ? 50 : 10;
+  // The read count is a proxy for what the transform builds, and on its own a
+  // poor one: a read over a chain of WRITEs becomes one ITE per link, so nine
+  // reads over a deep store chain expand into tens of thousands of nodes and
+  // take 48x longer than leaving them to read refinement. Ask what the
+  // expansion would actually cost as well, so the flat-array queries this
+  // threshold was tuned for still take it and the deep-chain ones do not.
+  // Give each read admitted by the count policy twenty structural expansion
+  // units before preferring refinement. This is a safety threshold, not a
+  // prediction of total solver work.
+  constexpr uint64_t arrayEagerCostPerRead = 20;
+  const uint64_t arrayEagerCostLimit =
+      static_cast<uint64_t>(arrayReadLimit) * arrayEagerCostPerRead;
   if (arrayops &&
       !extActive && // array equality needs the refinement loop
-      numberOfReadsLessThan(inputToSat, arrayReadLimit))
+      numberOfReadsLessThan(inputToSat, arrayReadLimit) &&
+      arrayEagerCostLessThan(inputToSat, arrayEagerCostLimit))
   {
     // If the number of axioms that would be added it small. Remove them.
     bm->UserFlags.ackermannisation = true;
@@ -435,7 +631,8 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // candidate model cannot leave construction switched on for the rest of
   // the session.
   bm->UserFlags.construct_counterexample_flag =
-      bm->UserFlags.modelConstructionRequired(arrayops && !removed);
+      bm->UserFlags.modelConstructionRequired(
+          (arrayops && !removed) || batchUFView->active());
 
   if (bm->UserFlags.enable_flatten)
   {
@@ -542,7 +739,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     tmp_inputToSAT = inputToSat;
 
     if (bm->soft_timeout_expired)
-      return SOLVER_TIMEOUT;
+      return bm->unknownResult();
 
     if (bm->UserFlags.optimize_flag)
     {
@@ -572,12 +769,16 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
           // These replacements are not recorded in the solver map, so
           // a symbol the array-equality procedure depends on must not
           // be replaced away.
-          if (extActive)
+          UFContext* ufContext = bm->getUFContextIfAny();
+          if (extActive ||
+              (ufContext != NULL && ufContext->activeInSolve()))
             for (ASTNodeMap::iterator cit = constants.begin();
                  cit != constants.end();)
             {
               if (cit->first.GetKind() == SYMBOL &&
-                  ext->isProtected(cit->first))
+                  ((extActive && ext->isProtected(cit->first)) ||
+                   (ufContext != NULL &&
+                    ufContext->isProtected(cit->first))))
                 cit = constants.erase(cit);
               else
                 ++cit;
@@ -642,7 +843,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   }
 
   if (bm->soft_timeout_expired)
-    return SOLVER_TIMEOUT;
+    return bm->unknownResult();
 
   if (bm->UserFlags.enable_ite_context)
   {
@@ -815,7 +1016,13 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   if (bm->UserFlags.stats_flag)
     simp->printCacheStatus();
 
-  const bool maybeRefinement = arrayops && !bm->UserFlags.ackermannisation;
+  // The bit-vector abstractions are refined from candidate models too, so a
+  // query carrying one needs the refinement machinery kept alive even with no
+  // array operation in it.
+  const bool maybeRefinement = (arrayops && !bm->UserFlags.ackermannisation) ||
+                               bm->UserFlags.bv_eq_abstraction ||
+                               bm->UserFlags.bv_term_abstraction ||
+                               batchUFView->active();
 
   simplifier::constantBitP::ConstantBitPropagation* cb = NULL;
   std::unique_ptr<simplifier::constantBitP::ConstantBitPropagation> cleaner;
@@ -839,7 +1046,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   ToSATBase* satBase = &toSATAIG;
 
   if (bm->soft_timeout_expired)
-    return SOLVER_TIMEOUT;
+    return bm->unknownResult();
 
   NewSolver.enableRefinement(maybeRefinement);
 
@@ -853,6 +1060,12 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   // skeleton the lowering rebuilt rather than repeating the question
   // just answered. The equalities themselves are checked against the
   // published array cells, not re-evaluated here.
+
+  // Snapshotted before the first solve: that call refines the bit-vector
+  // abstractions too, and the driver's loop below reads the count to decide
+  // whether the round it is looking at made progress.
+  uint64_t abstractionsRefined = satBase->abstractionRefinements();
+
   res = Ctr_Example->CallSAT_ResultCheck(NewSolver, inputToSat, semantic_input,
                                          original_input, satBase,
                                          maybeRefinement);
@@ -862,7 +1075,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     if (toSATAIG.cbIsDestructed())
       cleaner.release();
 
-    return SOLVER_TIMEOUT;
+    return bm->unknownResult();
   }
 
   if (SOLVER_UNDECIDED != res)
@@ -872,33 +1085,79 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     if (toSATAIG.cbIsDestructed())
       cleaner.release();
 
+    // The counters are cumulative over the checker's lifetime, so a batch
+    // query decided before the refinement loop still has rounds to report
+    // -- earlier queries' rounds. Both decision exits report, or a later
+    // query would silently drop the line the driver prints for it.
+    if (ext != NULL)
+      ext->reportLemmaStats();
     CountersAndStats("print_func_stats", bm);
     return res;
   }
 
-  // should only go to abstraction refinement if there are array ops.
-  assert(arrayops);
-  assert(!bm->UserFlags.ackermannisation); // Refinement must be enabled too.
+  // An undecided result belongs to an active array, bit-vector abstraction
+  // or UF refinement owner.
+  assert(arrayops || toSATAIG.hasBVEQAbstractions() ||
+         toSATAIG.hasBVTermAbstractions() || batchUFView->active());
+  // Refinement must be enabled too, unless an abstraction or UF owns the
+  // round.
+  assert(toSATAIG.hasBVEQAbstractions() || toSATAIG.hasBVTermAbstractions() ||
+         batchUFView->active() || !bm->UserFlags.ackermannisation);
 
-  // Refinement driver. In an active equality solve the extensionality
-  // checker owns the complete array graph, so each undecided candidate
-  // must carry a pending theory lemma and legacy read refinement is
-  // never entered. Without an active equality, retain STP's ordinary
-  // read-refinement path unchanged.
+  // Refinement driver. Every owner that retained a candidate-blocking
+  // lemma is drained before the next solve, rather than the first one
+  // that has something: the round has to leave no certificate behind.
+  // The bit-vector abstractions are refined inside CallSAT_ResultCheck,
+  // ahead of the checkers, so a round that refined one arrives here with
+  // nothing pending and the raised count is what says the search has
+  // somewhere to go. Encoding only the abstraction's clauses and
+  // re-solving instead would present the array checker with a second
+  // candidate while its certificate for the first was still pending --
+  // which the checker refuses outright, and is right to: dropping the
+  // certificate would lose the conflict.
+  //
+  // In an active equality solve the extensionality checker owns the
+  // complete array graph, so each undecided candidate must carry a
+  // pending theory lemma and legacy read refinement is never entered.
+  // Without an active equality, retain STP's ordinary read-refinement
+  // path unchanged.
   while (true)
   {
+    const uint64_t refinedNow = satBase->abstractionRefinements();
+    bool progress = refinedNow != abstractionsRefined;
+    abstractionsRefined = refinedNow;
+
     if (extActive)
     {
-      if (!ext->hasPendingLemma())
+      // An undecided candidate the abstraction did not account for is
+      // still a checker's, and one of them still owes a lemma for it.
+      if (!progress && !ext->hasPendingLemma() &&
+          !(batchUFView->active() && batchUFAdapter->hasPendingLemma()))
         FatalError("array-equality: an active refinement round has neither "
                    "a decision nor a pending theory lemma");
-      ext->encodePendingLemmas(NewSolver, satBase);
+      if (ext->hasPendingLemma())
+      {
+        ext->encodePendingLemmas(NewSolver, satBase);
+        progress = true;
+      }
+    }
+    if (batchUFView->active() && batchUFAdapter->hasPendingLemma())
+    {
+      batchUFAdapter->encodePendingLemmas(NewSolver, satBase);
+      progress = true;
+    }
+
+    if (progress)
+    {
       res = Ctr_Example->CallSAT_ResultCheck(NewSolver, bm->ASTTrue,
                                              semantic_input, original_input,
                                              satBase, true);
     }
     else
     {
+      if (!arrayops)
+        FatalError("refinement reached undecided without a pending "
+                   "candidate-blocking lemma");
       res = Ctr_Example->SATBased_ArrayReadRefinement(NewSolver,
                                                       semantic_input, satBase);
     }
@@ -908,21 +1167,21 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
       if (toSATAIG.cbIsDestructed())
         cleaner.release();
 
+      if (ext != NULL)
+        ext->reportLemmaStats();
       CountersAndStats("print_func_stats", bm);
       return res;
     }
 
-    // Refinement reached no decision but the soft timeout has expired:
-    // report the timeout instead of iterating further (or falling into
-    // the fatal error below when nothing more is pending).
     if (bm->soft_timeout_expired)
     {
       if (toSATAIG.cbIsDestructed())
         cleaner.release();
-      return SOLVER_TIMEOUT;
+      return bm->unknownResult();
     }
 
-    if (!extActive)
+    if (!toSATAIG.hasBVEQAbstractions() && !toSATAIG.hasBVTermAbstractions() &&
+        !extActive && !batchUFView->active())
       break;
   }
 

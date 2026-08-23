@@ -74,6 +74,30 @@ bool containsArrayOps(const ASTNode& n, STPMgr* stp);
 bool containsFloatingPoint(const ASTNode& n, STPMgr* stp);
 bool containsFloatingPointTheory(const ASTNode& n, STPMgr* stp);
 bool numberOfReadsLessThan(const ASTNode& n, int v);
+// Whether the estimated structural cost of eagerly expanding every array read
+// is less than `limit`. See the definition: the read count alone does not
+// distinguish a cheap expansion from one that is dozens of times slower than
+// refinement.
+bool arrayEagerCostLessThan(const ASTNode& n, uint64_t limit);
+
+// A constant-aware estimate of how many index comparisons eager array
+// Ackermannisation would introduce.
+//
+// The transform compares each read's index against every earlier index on the
+// same base array, but CreateSimplifiedEQ decides a comparison between two
+// constants, so constant-against-constant pairs cost nothing. For a base
+// array reached by C distinct constant indexes and S symbolic ones, the
+// comparisons that survive are |C|*|S| + |S|*(|S|-1)/2: three hundred
+// constants against two symbolic indexes is 601, where a raw pairwise count
+// reports 45451 and a raw read count reports 302. Neither of those is a
+// number a policy can use.
+//
+// Writes are accesses -- a read pushed through a write chain is compared
+// against each link's index. Indexes are attributed to the base symbols an
+// array term resolves to, matching how the transform keys its read table.
+// An array-valued if-then-else contributes to both branches, because the
+// transform pushes reads through both.
+uint64_t arrayCongruenceEstimate(const ASTNode& n);
 
 // Whether two constants spell the same bits. Node identity understates
 // this: a floating-point constant interns apart from the plain bitvector

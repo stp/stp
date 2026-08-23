@@ -280,7 +280,7 @@ public:
   }
 
   // Solving. check() is true iff the assertions are satisfiable; a solver
-  // error or timeout throws rather than masquerading as unsatisfiable.
+  // unknown result or error throws rather than masquerading as unsatisfiable.
   void add(const Bool& b) { vc_assertFormula(vc_, b.raw()); }
   bool check()
   {
@@ -290,7 +290,8 @@ public:
     if (r == 1)
       return false;
     throw std::runtime_error(
-        "stp::fp::Solver::check: solver error or timeout (vc_query returned " +
+        "stp::fp::Solver::check: solver error or unknown result (vc_query "
+        "returned " +
         std::to_string(r) + ")");
   }
 

@@ -67,7 +67,69 @@ public:
   typedef std::map<ASTNode, arrTypeMap> ArrType;
   typedef std::pair<ASTNode, ASTNode> ReadKey;
   typedef std::vector<ReadKey> ReadKeys;
-  typedef std::map<ASTNode, ReadKeys> AckPairMap;
+
+  // One array's reads under eager Ackermannisation, in the order they were
+  // seen, plus the subset a constant index has to be compared against.
+  //
+  // A new read is compared against every earlier index on the same array,
+  // but a comparison between two constant indexes is decided, not built --
+  // so it must not be walked either. Walking it anyway is quadratic in a
+  // count the policy charges nothing for: sixty thousand constant indexes
+  // estimate zero comparisons and enumerate 1.8 billion pairs. Keeping the
+  // symbolic subset lets a constant index walk only what it can produce
+  // anything from, and the term built is identical because every pair
+  // skipped decided false.
+  //
+  // Constants are only decidable against each other when they share a
+  // format: a float constant interns apart from the bit-vector constant
+  // with its bits, so two distinct nodes can spell one value (see
+  // constantsSameBits). An array whose constant indexes are not all one
+  // format gives up the shortcut and walks everything.
+  struct AckReads
+  {
+    ReadKeys all;
+    ReadKeys symbolic;
+
+    void add(const ASTNode& index, const ASTNode& symbol)
+    {
+      all.push_back(std::make_pair(index, symbol));
+      if (index.GetKind() != BVCONST)
+      {
+        symbolic.push_back(std::make_pair(index, symbol));
+        return;
+      }
+      if (!haveConstant)
+      {
+        haveConstant = true;
+        constantFormat = formatOf(index);
+      }
+      else if (constantFormat != formatOf(index))
+        uniformConstants = false;
+    }
+
+    // What `index` must be compared against.
+    const ReadKeys& walkFor(const ASTNode& index) const
+    {
+      if (index.GetKind() == BVCONST && uniformConstants &&
+          (!haveConstant || constantFormat == formatOf(index)))
+        return symbolic;
+      return all;
+    }
+
+  private:
+    typedef std::pair<unsigned, std::pair<unsigned, unsigned>> Format;
+    static Format formatOf(const ASTNode& n)
+    {
+      return Format(n.GetValueWidth(),
+                    std::make_pair(n.GetExpWidth(), n.GetSigWidth()));
+    }
+
+    Format constantFormat = Format(0, std::make_pair(0, 0));
+    bool haveConstant = false;
+    bool uniformConstants = true;
+  };
+
+  typedef std::map<ASTNode, AckReads> AckPairMap;
 
   // One level of an abstracted write chain: the transformed write index
   // and value, each paired with the anchor that carries its bits into the
@@ -174,6 +236,14 @@ private:
 
   bool markLazyChainCut(const ASTNode& writeNode, const ASTNode& readIndex);
   ASTNode anchorForChainTerm(const ASTNode& term);
+
+  // The sort constraints owed by the read abstractions this run minted, to
+  // be conjoined onto the formula that minted them. Emptied at the start of
+  // every top-level transform: a row the registry already held was pinned
+  // onto the formula it was created for, exactly as its index anchor was,
+  // and re-emitting it here would attach the whole table's pins to every
+  // formula transformed afterwards. See TransformFormula_TopLevel.
+  ASTVec cellSortConstraints;
 
   // Under eager Ackermannisation: each array's reads in the order they
   // were seen, from which a new read's nested if-then-else over the

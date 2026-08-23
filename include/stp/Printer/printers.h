@@ -77,6 +77,13 @@ DLL_PUBLIC void SMTLIB2_PrintBack(ostream& os, const ASTNode& n, STPMgr* stp,
 DLL_PUBLIC void SMTLIB2_Print1(ostream& os, const stp::ASTNode n,
                                int indentation, bool letize);
 
+// Prints one term on one line, without declarations and without a trailing
+// newline, sharing every repeated subterm through `let`. Used by get-value,
+// which echoes back a term the caller chose and so cannot assume it is small
+// or unshared -- printing a DAG as a tree is exponential in its sharing.
+DLL_PUBLIC void SMTLIB2_PrintTerm(ostream& os, STPMgr* stp,
+                                  const stp::ASTNode& n);
+
 // Emitters for a BVCONST (or a BITVECTOR wrapping one).
 void outputBitVecSMTLIB2(const ASTNode n, ostream& os);
 void outputFloatingPointSMTLIB2(const ASTNode n, ostream& os,

@@ -492,68 +492,6 @@ include_directories("${CMAKE_CURRENT_BINARY_DIR}/include")
 include_directories(# For extlib-constbv
                     ${PROJECT_SOURCE_DIR}/lib
                    )
-# A submodule that points straight at its upstream cannot be committed to, so
-# local fixes to one are carried as patches and applied here, at configure
-# time, before anything is built. Each such submodule has its own directory
-# under patches/, named for the library; the patches inside are relative to
-# that submodule's own root, so they are the plain `git diff` its checkout
-# produces.
-#
-# ABC is no longer among them: lib/extlib-abc points at stp/abc, a fork, so
-# its fixes are ordinary commits on that repository's `stp` branch. See
-# docs/code-guide.rst for how that fork is laid out.
-#
-# Applying is idempotent: a patch that reverse-applies cleanly is already in
-# the tree and is skipped, so re-running cmake, or configuring a second build
-# directory against the same source, does not double-apply. A patch that does
-# neither is a hard error rather than a silent miscompile -- that happens when
-# the submodule is bumped past the code the patch was written against, and the
-# patch then needs rebasing or, if upstream has taken it, deleting.
-#
-# The sentinel is a file the submodule is known to contain; it distinguishes a
-# checked-out submodule from the empty directory an uninitialised one leaves,
-# so a build without submodules is not turned into a patch failure.
-function(stp_apply_vendored_patches _label _subdir _sentinel)
-  set(_patchdir "${PROJECT_SOURCE_DIR}/patches/${_label}")
-  file(GLOB _patches "${_patchdir}/*.patch")
-  list(SORT _patches)
-  if(NOT _patches)
-    return()
-  endif()
-  if(NOT EXISTS "${PROJECT_SOURCE_DIR}/${_subdir}/${_sentinel}")
-    return() # submodule not checked out; nothing to patch
-  endif()
-  if(NOT GIT_EXECUTABLE)
-    message(FATAL_ERROR
-            "patches/${_label}/ contains patches for the vendored ${_label} "
-            "but git was not found to apply them. Install git, or remove the "
-            "patches.")
-  endif()
-  foreach(_patch ${_patches})
-    get_filename_component(_patch_name "${_patch}" NAME)
-    execute_process(COMMAND "${GIT_EXECUTABLE}" apply --reverse --check "${_patch}"
-                    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/${_subdir}"
-                    RESULT_VARIABLE _already OUTPUT_QUIET ERROR_QUIET)
-    if(_already EQUAL 0)
-      message(STATUS "${_label} patch already applied: ${_patch_name}")
-    else()
-      execute_process(COMMAND "${GIT_EXECUTABLE}" apply "${_patch}"
-                      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/${_subdir}"
-                      RESULT_VARIABLE _rc ERROR_VARIABLE _err)
-      if(NOT _rc EQUAL 0)
-        message(FATAL_ERROR
-                "Failed to apply ${_patch_name} to ${_subdir}:\n${_err}"
-                "It neither applies nor is already applied. If the ${_label} "
-                "submodule was bumped, rebase the patch onto the new revision, "
-                "or delete it if upstream has taken the change.")
-      endif()
-      message(STATUS "Applied ${_label} patch: ${_patch_name}")
-    endif()
-  endforeach()
-endfunction()
-
-stp_apply_vendored_patches(symfpu "lib/extlib-symfpu/symfpu" "core/convert.h")
-
 # ABC is a vendored submodule; mark its headers as
 # SYSTEM so their warnings (e.g. -Wpedantic zero-size arrays, -Wunused-parameter
 # in inline helpers) don't trip -Werror in the STP translation units that
@@ -1003,26 +941,19 @@ endif()
 include_directories(SYSTEM ${SYMFPU_INCLUDE_DIRS})
 
 # LibBF folds the real literals in floating-point input -- ((_ to_fp 8 24)
-# RNE 1.5) -- to their exactly-rounded bits while parsing. Upstream
-# publishes release tarballs rather than a repository, so it is fetched,
-# verified and built by scripts/deps/setup-libbf.sh, which lands it in
-# deps/libbf, where this looks by default.
-set(LIBBF_DIR "${PROJECT_SOURCE_DIR}/deps/libbf" CACHE PATH "Path to a built LibBF (the directory containing libbf.h and libbf.a, as laid out by scripts/deps/setup-libbf.sh)")
-find_path(LIBBF_INCLUDE_DIR NAMES libbf.h HINTS ${LIBBF_DIR})
-find_library(LIBBF_LIBRARY NAMES bf HINTS ${LIBBF_DIR})
-if (NOT LIBBF_INCLUDE_DIR OR NOT LIBBF_LIBRARY)
+# RNE 1.5) -- to their exactly-rounded bits while parsing. A submodule
+# pointing at stp/libbf, which mirrors the release tarballs upstream
+# publishes in place of a repository; lib/CMakeLists.txt compiles the two
+# C files it consists of into libstp.
+if (NOT EXISTS "${PROJECT_SOURCE_DIR}/lib/extlib-libbf/libbf.h")
     message(FATAL_ERROR "LibBF (required; it folds the real literals in "
-            "floating-point input) was not found. Run "
-            "scripts/deps/setup-libbf.sh from the top of the source tree "
-            "-- it fetches and builds LibBF into deps/libbf, where this "
-            "looks by default -- or point LIBBF_DIR at an existing build")
+            "floating-point input) is missing. Run: "
+            "git submodule update --init lib/extlib-libbf")
 endif()
-message(STATUS "Found LibBF: ${LIBBF_LIBRARY}")
 # SYSTEM, the way ABC and SymFPU are consumed: the header typedefs
 # __int128 on 64-bit targets, which gcc's -pedantic rejects in the one
 # C++ translation unit that includes it.
-include_directories(SYSTEM ${LIBBF_INCLUDE_DIR})
-link_libraries(${LIBBF_LIBRARY})
+include_directories(SYSTEM ${PROJECT_SOURCE_DIR}/lib/extlib-libbf)
 
 # -----------------------------------------------------------------------------
 # Query definitions
@@ -1071,6 +1002,18 @@ endif()
 # Provide an export name to be used by targets that wish to export themselves.
 # -----------------------------------------------------------------------------
 set(STP_EXPORT_NAME "STPTargets")
+
+# Tests which exercise the staged install tree are configured before the
+# install rules below.  Publish the package location now so those tests and
+# the eventual install(EXPORT) use the same cache-controlled destination.
+if(WIN32 AND NOT CYGWIN)
+  set(DEF_INSTALL_CMAKE_DIR CMake)
+else()
+  set(DEF_INSTALL_CMAKE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/STP)
+endif()
+set(STP_INSTALL_CMAKE_DIR ${DEF_INSTALL_CMAKE_DIR} CACHE PATH
+  "Installation directory for STP CMake files"
+)
 
 # -----------------------------------------------------------------------------
 # Testing and Python interface options
@@ -1227,15 +1170,6 @@ install(FILES
 # Export our targets so that other CMake based projects can interface with
 # the build of STP that is installed.
 # -----------------------------------------------------------------------------
-if(WIN32 AND NOT CYGWIN)
-  set(DEF_INSTALL_CMAKE_DIR CMake)
-else()
-  set(DEF_INSTALL_CMAKE_DIR ${CMAKE_INSTALL_LIBDIR}/cmake/STP)
-endif()
-set(STP_INSTALL_CMAKE_DIR ${DEF_INSTALL_CMAKE_DIR} CACHE PATH
-  "Installation directory for STP CMake files"
-)
-
 # Create STPConfig file
 set(EXPORT_TYPE "installed")
 set(CONF_INCLUDE_DIRS "${CMAKE_INSTALL_FULL_INCLUDEDIR}")

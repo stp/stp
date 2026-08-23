@@ -45,6 +45,7 @@ endif()
 if (ENABLE_TESTING OR BUILD_EXTRA_TOOLS)
     add_subdirectory(test_fpbackend)
     add_subdirectory(test_fprewrites)
+    add_subdirectory(c_handle_churn_benchmark)
 endif()
 
 # The floating-point rewrite-rule generator: enumerates small terms over a

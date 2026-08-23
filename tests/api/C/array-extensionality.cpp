@@ -490,10 +490,11 @@ TEST(array_extensionality, store_chain_equals_base_solved_by_rewrite)
   Expr v = vc_varExpr(vc, "v", bv8);
 
   Expr eq = vc_eqExpr(vc, vc_writeExpr(vc, a, i, v), a);
-  // The complete handle remains opaque; solve-boundary lowering rewrites a
-  // single write to exactly read(a, i) = v.
+  // The node factory folds a single self-store to exactly
+  // read(a, i) = v at creation, so no whole-array equality ever forms
+  // and the extensionality context is never brought up.
   ASSERT_EQ(EQ, getExprKind(eq));
-  ASSERT_EQ(stp::ARRAY_EQ, static_cast<stp::ASTNode*>(eq)->GetKind());
+  ASSERT_EQ(stp::EQ, static_cast<stp::ASTNode*>(eq)->GetKind());
 
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
   EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
@@ -502,9 +503,7 @@ TEST(array_extensionality, store_chain_equals_base_solved_by_rewrite)
   vc_assertFormula(
       vc, vc_notExpr(vc, vc_eqExpr(vc, vc_readExpr(vc, a, i), v)));
   ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
-  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  ASSERT_NE(nullptr, ext);
-  EXPECT_EQ(0u, ext->getRecords().size());
+  EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
   vc_Destroy(vc);
 }
 
@@ -534,17 +533,17 @@ TEST(array_extensionality, store_chain_shadowed_write_is_unconstrained)
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
   EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
 
-  // w is unconstrained: satisfiable.
+  // w is unconstrained: satisfiable. (The factory collapses the shadowed
+  // write and then folds the single self-store, so the extensionality
+  // context is never brought up.)
   ASSERT_EQ(0, vc_query(vc, vc_falseExpr(vc)));
-  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  ASSERT_NE(nullptr, ext);
-  EXPECT_EQ(0u, ext->getRecords().size());
+  EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
 
   // v is forced: contradicting read(a,i) = v flips the verdict.
   vc_assertFormula(
       vc, vc_notExpr(vc, vc_eqExpr(vc, vc_readExpr(vc, a, i), v)));
   ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
-  EXPECT_EQ(0u, ext->getRecords().size());
+  EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
   vc_Destroy(vc);
 }
 
@@ -613,10 +612,10 @@ TEST(array_extensionality, store_chain_over_write_base)
   stp::STPMgr* bm = ((stp::STP*)vc)->bm;
   EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
 
+  // The factory's self-store fold applies whatever the base is -- here a
+  // write -- so the extensionality context is never brought up.
   ASSERT_EQ(1, vc_query(vc, vc_falseExpr(vc)));
-  stp::ExtensionalityContext* ext = bm->getExtensionalityIfAny();
-  ASSERT_NE(nullptr, ext);
-  EXPECT_EQ(0u, ext->getRecords().size());
+  EXPECT_EQ(nullptr, bm->getExtensionalityIfAny());
   vc_Destroy(vc);
 }
 
@@ -631,6 +630,10 @@ TEST(array_extensionality, lemma_atoms_fold_at_encoding)
   // through.
   VC vc = vc_createValidityChecker();
   vc_setFlag(vc, 'x');
+  // Lemmas are the observation, so the refinement arm has to be the one
+  // taken: the automatic policy would find a query this small affordable
+  // and instantiate it eagerly instead, emitting none.
+  static_cast<stp::STP*>(vc)->bm->UserFlags.array_eager_budget = 0;
 
   Type bv8 = vc_bvType(vc, 8);
   Type bv32 = vc_bvType(vc, 32);
@@ -679,6 +682,9 @@ TEST(array_extensionality, equality_under_push_pops_away)
   // test pins the abstraction/checker path itself, so keep the
   // equality there.
   static_cast<stp::STP*>(vc)->bm->UserFlags.propagate_equalities = false;
+  // The record count is the observation, and the eager arm retires the
+  // records as it instantiates them. Pin the refinement arm.
+  static_cast<stp::STP*>(vc)->bm->UserFlags.array_eager_budget = 0;
 
   Type bv8 = vc_bvType(vc, 8);
   Type bv4 = vc_bvType(vc, 4);
@@ -748,6 +754,9 @@ TEST(array_extensionality, active_equalities_follow_assertions_and_query)
 {
   VC vc = vc_createValidityChecker();
   vc_setFlag(vc, 'x');
+  // The record count is the observation, and the eager arm retires the
+  // records as it instantiates them. Pin the refinement arm.
+  static_cast<stp::STP*>(vc)->bm->UserFlags.array_eager_budget = 0;
 
   Type bv1 = vc_bvType(vc, 1);
   Type arrT = vc_arrayType(vc, bv1, bv1);
@@ -1009,6 +1018,9 @@ TEST(array_extensionality, active_checker_owns_complete_array_graph)
   // test pins the abstraction/checker path itself, so keep the
   // equality there.
   static_cast<stp::STP*>(vc)->bm->UserFlags.propagate_equalities = false;
+  // The verdict is pinned to the lemma path, so the refinement arm has to
+  // be the one taken.
+  static_cast<stp::STP*>(vc)->bm->UserFlags.array_eager_budget = 0;
 
   Type bv8 = vc_bvType(vc, 8);
   Type bv4 = vc_bvType(vc, 4);
@@ -1189,6 +1201,9 @@ TEST(array_extensionality, refinement_on_the_cadical_backend)
   }
   vc_setFlag(vc, 'x');
   ASSERT_TRUE(vc_useCadical(vc));
+  // Clause restoration is what is under test, so the round has to reach
+  // refinement rather than be instantiated eagerly.
+  static_cast<stp::STP*>(vc)->bm->UserFlags.array_eager_budget = 0;
 
   Type bv8 = vc_bvType(vc, 8);
   Type arrT = vc_arrayType(vc, bv8, bv8);
@@ -1296,6 +1311,9 @@ TEST(array_extensionality,
   // test pins the abstraction/checker path itself, so keep the
   // equality there.
   static_cast<stp::STP*>(vc)->bm->UserFlags.propagate_equalities = false;
+  // The conflict has to be raised as an extensionality lemma for the
+  // ownership claim to mean anything, so pin the refinement arm.
+  static_cast<stp::STP*>(vc)->bm->UserFlags.array_eager_budget = 0;
 
   Type bv8 = vc_bvType(vc, 8);
   Type arrT = vc_arrayType(vc, bv8, bv8);

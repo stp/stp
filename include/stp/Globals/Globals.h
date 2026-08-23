@@ -79,10 +79,52 @@ enum SOLVER_RETURN_TYPE
   SOLVER_INVALID = 0,
   SOLVER_VALID = 1,
   SOLVER_UNDECIDED = 2,
-  SOLVER_TIMEOUT = 3,
+  // Every way of giving up shares this value, whichever budget ran out: a
+  // caller that only wants to know whether there is an answer keeps the one
+  // test it already had, and the budgets are told apart by
+  // (get-info :reason-unknown) rather than by the verdict.
+  SOLVER_UNKNOWN = 3,
   SOLVER_ERROR = -100,
   SOLVER_UNSATISFIABLE = 1,
   SOLVER_SATISFIABLE = 0
+};
+
+// Why the last solve had no answer, for (get-info :reason-unknown). SMT-LIB 2
+// predefines two spellings for that flag, `memout` and `incomplete`, and
+// admits any other s-expression besides; `incomplete` is what a spent budget
+// is, and `timeout` is the free-form spelling for the one budget a caller may
+// beat by re-running.
+enum class UnknownReason
+{
+  None,
+  Timeout,
+  // The conflict budget (--max-num-confl) ran out. Told apart from the clock
+  // because a caller acts differently on the two: a wall-clock timeout may
+  // succeed with more time on the same machine, while a conflict budget is
+  // deterministic and will not.
+  ConflictBudget,
+  // Something other than a budget on the search: the encoding itself was
+  // abandoned. Carries its own sentence in STPMgr's unknown detail, because
+  // the name alone does not say what was abandoned or what to do about it.
+  // The named causes below are that same claim with a name of their own,
+  // appended rather than inserted so that nothing already reporting
+  // Incomplete moves. SMT-LIB2 spells all of them the same, as (incomplete
+  // "..."), since the sentence already says which; they are separate values
+  // because a caller holding only the value -- vc_getReasonUnknown -- has
+  // nothing to read the sentence for, and the action differs.
+  Incomplete,
+  // A declared sort's carrier was too narrow for the query, so an unsat that
+  // may be an artefact of the encoding was withheld. Raise --uf-sort-width.
+  CarrierExhausted,
+  // --uf-inject-args put injectivity into the encoding and the driver that
+  // holds the verdict could neither confirm nor take back a refutation that
+  // may rest on it, so the unsat was withheld. Both shipped drivers do close
+  // that question -- see STPMgr::solveRetractingInjectivity -- so this is the
+  // floor a driver falls to rather than report an unsat nobody can attribute.
+  AssumedInjectivity,
+  // --aig-node-budget stopped bit-blasting before the AIG exhausted memory.
+  // Raise that budget; the accompanying sentence says what it stopped at.
+  AIGBudget
 };
 
 // Empty vector. Useful commonly used ASTNodes

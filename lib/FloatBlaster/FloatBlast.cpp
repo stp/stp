@@ -29,6 +29,8 @@ THE SOFTWARE.
 #include "stp/FloatBlaster/symbolic_fp.h"
 
 #include <cassert>
+#include <cstdint>
+#include <limits>
 #include <unordered_map>
 
 namespace stp
@@ -63,6 +65,86 @@ private:
   typedef std::unordered_map<ASTNode, std::unique_ptr<symbolic_fp::uf>,
                              ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
       UnpackedMap;
+
+  // The native arithmetic circuits currently materialise IEEE biases and
+  // exponent envelopes in `unsigned`, and their logarithmic-width helpers
+  // use `1u << bit`. Keep every such value strictly below unsigned's sign
+  // bit and every shift count within the host type. SMT-LIB admits wider
+  // formats; those remain supported through the ordinary SymFPU lowering.
+  static bool consumeNativeFpEnvelope(std::uintmax_t& remaining,
+                                      std::uintmax_t amount)
+  {
+    if (amount >= remaining)
+      return false;
+    remaining -= amount;
+    return true;
+  }
+
+  static bool nativeFpExponentIsSafe(unsigned eb)
+  {
+    const unsigned digits = std::numeric_limits<unsigned>::digits;
+    return eb >= 2 && eb <= digits - 2;
+  }
+
+  static std::uintmax_t nativeFpBias(unsigned eb)
+  {
+    assert(nativeFpExponentIsSafe(eb));
+    return (std::uintmax_t{1} << (eb - 1)) - 1;
+  }
+
+  static std::uintmax_t nativeFpEnvelopeLimit()
+  {
+    // 2^(digits - 1), without adding one to unsigned's maximum.
+    return static_cast<std::uintmax_t>(std::numeric_limits<unsigned>::max() /
+                                       2) +
+           1;
+  }
+
+  static bool nativeFpArithmeticFormatIsSafe(const SourceSort& sort)
+  {
+    if (sort.kind() != SourceSort::Kind::FloatingPoint)
+      return false;
+
+    const unsigned eb = sort.exponentWidth();
+    const unsigned sb = sort.significandWidth();
+    if (sb < 2 || !nativeFpExponentIsSafe(eb))
+      return false;
+
+    // BBfpExpWidth must represent bias + 2*sb + 4 without reaching a
+    // shift by numeric_limits<unsigned>::digits. This also bounds every
+    // doubled width and logarithmic shift amount used by BBfpAdd/BBfpMul.
+    std::uintmax_t remaining = nativeFpEnvelopeLimit();
+    return consumeNativeFpEnvelope(remaining, nativeFpBias(eb)) &&
+           consumeNativeFpEnvelope(remaining, sb) &&
+           consumeNativeFpEnvelope(remaining, sb) &&
+           consumeNativeFpEnvelope(remaining, 4);
+  }
+
+  static bool nativeFpToFpFormatsAreSafe(const SourceSort& source,
+                                         const SourceSort& target)
+  {
+    if (source.kind() != SourceSort::Kind::FloatingPoint ||
+        target.kind() != SourceSort::Kind::FloatingPoint)
+      return false;
+
+    const unsigned eb1 = source.exponentWidth();
+    const unsigned sb1 = source.significandWidth();
+    const unsigned eb2 = target.exponentWidth();
+    const unsigned sb2 = target.significandWidth();
+    if (sb1 < 2 || sb2 < 2 || !nativeFpExponentIsSafe(eb1) ||
+        !nativeFpExponentIsSafe(eb2))
+      return false;
+
+    // BBfpToFp sizes its signed exponent for the complete source/target
+    // envelope: bias1 + sb1 + bias2 + 2*sb2 + 4.
+    std::uintmax_t remaining = nativeFpEnvelopeLimit();
+    return consumeNativeFpEnvelope(remaining, nativeFpBias(eb1)) &&
+           consumeNativeFpEnvelope(remaining, sb1) &&
+           consumeNativeFpEnvelope(remaining, nativeFpBias(eb2)) &&
+           consumeNativeFpEnvelope(remaining, sb2) &&
+           consumeNativeFpEnvelope(remaining, sb2) &&
+           consumeNativeFpEnvelope(remaining, 4);
+  }
 
   symbolic_fp::floatingPointTypeInfo formatOf(const ASTNode& n) const
   {
@@ -162,15 +244,17 @@ private:
     // hand-written packed circuits (BBfpMul, BBfpAdd) take over from
     // SymFPU when both float operands resolve to packed views and the
     // rounding mode is immediate (a constant, or a declared symbol --
-    // whose one-hot validity is asserted at declaration). The rebuild
-    // goes through the factory, so constant operands fold (a fully
-    // constant operation never survives, keeping the lowering-must-change
-    // invariant of constant folding and model evaluation) and the
-    // identity rules still fire. fp.sub needs no arm: the factory already
-    // lowers it to fp.add of the negation.
+    // whose one-hot validity is asserted at declaration), and the format's
+    // host-sized intermediate calculations are safe. Wider legal formats
+    // fall back to SymFPU. The rebuild goes through the factory, so constant
+    // operands fold (a fully constant operation never survives, keeping the
+    // lowering-must-change invariant of constant folding and model
+    // evaluation) and the identity rules still fire. fp.sub needs no arm:
+    // the factory already lowers it to fp.add of the negation.
     if ((n.GetKind() == FP_MUL || n.GetKind() == FP_ADD) &&
         bm->UserFlags.fp_native_arith && n.Degree() == 3 &&
-        (n[0].GetKind() == SYMBOL || n[0].GetKind() == BVCONST))
+        (n[0].GetKind() == SYMBOL || n[0].GetKind() == BVCONST) &&
+        nativeFpArithmeticFormatIsSafe(n.GetSourceSort()))
     {
       const ASTNode left = comparisonLeaf(n[1]);
       if (left.IsNull())
@@ -202,7 +286,8 @@ private:
     if (n.GetKind() == FP_TOFP && bm->UserFlags.fp_native_arith &&
         n.Degree() == 4 &&
         (n[2].GetKind() == SYMBOL || n[2].GetKind() == BVCONST) &&
-        n[0].GetUnsignedConst() >= 3)
+        n[0].GetUnsignedConst() >= 3 &&
+        nativeFpToFpFormatsAreSafe(n[3].GetSourceSort(), n.GetSourceSort()))
     {
       const ASTNode operand = comparisonLeaf(n[3]);
       if (operand.IsNull())
@@ -347,6 +432,12 @@ private:
 
   ASTNode rebuild(const ASTNode& n, const ASTVec& children)
   {
+    // Nothing rebuilds a UF application: every path that could reach one
+    // returns it untouched (see lower). Substituting here would hand the
+    // node factory an application whose actual sorts no longer match its
+    // declaration, and the factory's job is to refuse that.
+    assert(n.GetKind() != UF_APPLY);
+
     if (n.GetType() == BOOLEAN_TYPE)
       return node_factory->CreateNode(n.GetKind(), children);
 
@@ -362,6 +453,21 @@ private:
   // this function and consume the unpacked view directly.
   ASTNode lower(const ASTNode& n)
   {
+    // A UF application is opaque to this pass, whatever its codomain. Its
+    // actuals are stated in source sorts and the UF layer both validates and
+    // compares them there, so lowering one underneath the application
+    // changes what the application denotes -- when it is admitted at all;
+    // an application of f to a float that arrives as the bits the float
+    // lowered to is exactly what the declaration check refuses.
+    //
+    // There is nothing to lower in return for that. The application already
+    // is the bits of its result: UFContext::apply builds it at the
+    // codomain's packed width, and its actuals are resolved at their source
+    // sorts by whoever consumes the application -- the UF lowering pass
+    // before a solve, the model evaluator's UF_APPLY arm after one.
+    if (n.GetKind() == UF_APPLY)
+      return n;
+
     if (n.GetSourceSort().kind() == SourceSort::Kind::FloatingPoint)
       return asPacked(n);
 
@@ -427,6 +533,16 @@ private:
     ASTNode out;
     if (n.Degree() == 0)
     {
+      out = n;
+    }
+    else if (n.GetKind() == UF_APPLY)
+    {
+      // Opaque carrier, like a leaf: the application's own bits are the
+      // packed value of its result, and nothing under it is lowered
+      // (lower). Deliberately not canonicalised -- the payload of a NaN the
+      // solve chose for an application is its payload, exactly as for a
+      // float symbol; canonicalPacked is where a caller that needs the
+      // quotient asks for it.
       out = n;
     }
     else if (n.GetKind() == READ)
@@ -550,6 +666,16 @@ private:
 
     if (n.Degree() == 0)
       return decodeCarrier(n, n);
+
+    if (kind == UF_APPLY)
+    {
+      // An opaque packed cell whose subterms stay as they are: unlike a
+      // READ, an application's children are its declaration identity and
+      // its actuals, and neither may be rewritten into the target language
+      // (lower).
+      packed_cache[n] = n;
+      return decodeCarrier(n, n);
+    }
 
     if (kind == READ)
     {

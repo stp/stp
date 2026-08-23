@@ -139,10 +139,22 @@ Cadical::~Cadical()
 
 void Cadical::printStats() const
 {
-    // The newline matters: without it this stderr fragment glues onto the
-    // next stdout line (the check-sat verdict) in a combined stream, which
-    // is exactly what line-anchored test checks read.
-    std::cerr << "print stats not yet implemented." << std::endl;
+#if defined(CADICAL_MAJOR) && CADICAL_MAJOR >= 3
+  // These counters remain available in the UNKNOWN state produced by our
+  // Terminator. Keep this compact: CaDiCaL's full reporter is several hundred
+  // lines, while these are the search quantities benchmark logs consume.
+  std::cerr << "CaDiCaL conflicts: "
+            << s->get_statistic_value("conflicts") << std::endl;
+  std::cerr << "CaDiCaL decisions: "
+            << s->get_statistic_value("decisions") << std::endl;
+  std::cerr << "CaDiCaL search propagations: "
+            << s->get_statistic_value("propagations") << std::endl;
+  std::cerr << "CaDiCaL search ticks: "
+            << s->get_statistic_value("ticks") << std::endl;
+#else
+  // get_statistic_value() is unavailable in the oldest supported releases.
+  s->statistics();
+#endif
 }
 
 uint32_t Cadical::newVar()
@@ -289,6 +301,12 @@ void Cadical::unsatAssumptions(const vec_literals& assumps,
     if (s->failed(polarity ? -(int)var : (int)var))
       out.push_back(assumps[i].x);
   }
+}
+
+void Cadical::declarePendingVariables()
+{
+  if (factor_enabled && ext_of_stp.size() <= next_variable)
+    declareNewVariables();
 }
 
 void Cadical::suggestPhase(uint32_t var, bool value)

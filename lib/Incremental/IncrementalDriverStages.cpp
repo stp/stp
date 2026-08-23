@@ -28,7 +28,7 @@ namespace stp
 {
 
 void IncrementalSolver::Impl::maintainBackendForCheck(
-    const ASTVec& assertionsSMT2)
+    const ASTVec& assertionsSMT2, const ASTNode& classificationRoot)
 {
   UserDefinedFlags& uf = bm->UserFlags;
 
@@ -39,6 +39,8 @@ void IncrementalSolver::Impl::maintainBackendForCheck(
   lastUnsatCoarse = false;
   lastLevelIndividual = false;
   modelPending = false;
+  if (ufAdapter)
+    ufAdapter->invalidateCertifiedModel();
   assumedLitLevels.clear();
   lastLevelLitConjuncts.clear();
   lastFailedLits.clear();
@@ -108,8 +110,11 @@ void IncrementalSolver::Impl::maintainBackendForCheck(
   {
     bool retire = solver->nVars() >= trailReuseVarLimit;
     bool hasFp = false;
-    for (size_t i = 0; !hasFp && i < assertionsSMT2.size(); i++)
-      hasFp = fragment(assertionsSMT2[i]).fp;
+    if (!classificationRoot.IsNull())
+      hasFp = fragment(classificationRoot).fp;
+    else
+      for (size_t i = 0; !hasFp && i < assertionsSMT2.size(); i++)
+        hasFp = fragment(assertionsSMT2[i]).fp;
     if (!retire && hasFp)
     {
       const bool earlyFp = engagedSolves < trailReuseFpRetireSolves;
@@ -149,7 +154,7 @@ void IncrementalSolver::Impl::maintainBackendForCheck(
   // The backend's configuration window closes at its first clause. This must
   // precede extensionality routing because an equality round encodes into the
   // same persistent solver.
-  decideBVA(assertionsSMT2);
+  decideBVA(assertionsSMT2, classificationRoot);
 
   // Activation-literal pins are clauses, so stale retraction bookkeeping may
   // be retired only after the configuration window has closed.
@@ -159,15 +164,31 @@ void IncrementalSolver::Impl::maintainBackendForCheck(
 
 bool IncrementalSolver::Impl::tryExactStackRoute(
     const ASTVec& assertionsSMT2, bool assumeLastLevelPerConjunct,
-    bool firstForcedIncrementalSolve, SOLVER_RETURN_TYPE& result)
+    bool firstForcedIncrementalSolve, const ASTNode& assumptionScopedRoot,
+    size_t orderedDistincts, SOLVER_RETURN_TYPE& result)
 {
   UserDefinedFlags& uf = bm->UserFlags;
 
-  // Whole-array equality owns the round's complete array graph, so no
-  // conjunct may be encoded separately this round.
+  // DISTINCT ordering is an equisatisfiable whole-formula rewrite, not a
+  // permanent fact. Encode its completed root as the same retractable block
+  // used by the other whole-stack routes: this check assumes the block's root,
+  // and a later check whose occurrence survey no longer earns the ordering
+  // simply does not assume it. In particular, do this before the ordinary
+  // per-level route can turn a base-level chain into an irrevocable unit.
+  if (!assumptionScopedRoot.IsNull())
+  {
+    result = exactStackCheckSat(assertionsSMT2,
+                                firstForcedIncrementalSolve, false, NULL,
+                                assumptionScopedRoot, orderedDistincts);
+    return true;
+  }
+
+  // Whole-array equality and UF completed-root lowering each own the round's
+  // complete active stack, so no conjunct may be encoded separately.
   for (const ASTNode& levelConjunction : assertionsSMT2)
   {
-    if (fragment(levelConjunction).arrayEq)
+    const Fragment& f = fragment(levelConjunction);
+    if (f.arrayEq || f.ufApply)
     {
       result = exactStackCheckSat(assertionsSMT2,
                                   firstForcedIncrementalSolve);
@@ -189,7 +210,7 @@ bool IncrementalSolver::Impl::tryExactStackRoute(
     for (const ASTNode& levelConjunction : assertionsSMT2)
     {
       const Fragment& f = fragment(levelConjunction);
-      if (f.arrays || f.arrayEq || f.fp)
+      if (f.arrays || f.arrayEq || f.fp || f.ufApply)
       {
         plainBv = false;
         break;

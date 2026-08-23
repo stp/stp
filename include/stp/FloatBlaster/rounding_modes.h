@@ -47,6 +47,19 @@ enum rounding_modes
   ROUND_NEAREST_TIES_TO_AWAY = ROUND_TOWARD_ZERO << 1,
 };
 
+// Whether a 5-bit carrier value denotes a rounding mode at all. Twenty-seven
+// of the thirty-two patterns denote nothing, so anything that reads a mode
+// back out of a carrier -- a model value, a checker candidate -- has to ask
+// rather than assume.
+inline bool isRoundingModeEncoding(unsigned encoding)
+{
+  return encoding == ROUND_NEAREST_TIES_TO_EVEN ||
+         encoding == ROUND_TOWARD_POSITIVE ||
+         encoding == ROUND_TOWARD_NEGATIVE ||
+         encoding == ROUND_TOWARD_ZERO ||
+         encoding == ROUND_NEAREST_TIES_TO_AWAY;
+}
+
 } // namespace symbolic_fp
 } // namespace stp
 

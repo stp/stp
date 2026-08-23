@@ -58,6 +58,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/RemoveUnconstrained.h"
 #include "stp/AST/MutableASTNode.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/Simplifier/AchievableImage.h"
@@ -93,17 +94,22 @@ ASTNode RemoveUnconstrained::topLevel(const ASTNode& n, Simplifier* simplifier,
   arrayRules = (ext == NULL || !ext->activeInSolve());
   const std::set<ASTNode>* extSet =
       (ext != NULL && ext->activeInSolve()) ? &ext->getFrozenSymbols() : NULL;
+  UFContext* uf = bm.getUFContextIfAny();
+  const ASTNodeSet* ufSet =
+      (uf != NULL && uf->activeInSolve()) ? &uf->getProtectedSymbols() : NULL;
   std::set<ASTNode> mergedUntouchable;
   const std::set<ASTNode>* effective = NULL;
-  if (extSet != NULL && alsoUntouchable != NULL)
+  if (extSet != NULL || ufSet != NULL || alsoUntouchable != NULL)
   {
-    mergedUntouchable = *extSet;
-    mergedUntouchable.insert(alsoUntouchable->begin(),
-                             alsoUntouchable->end());
+    if (extSet != NULL)
+      mergedUntouchable.insert(extSet->begin(), extSet->end());
+    if (ufSet != NULL)
+      mergedUntouchable.insert(ufSet->begin(), ufSet->end());
+    if (alsoUntouchable != NULL)
+      mergedUntouchable.insert(alsoUntouchable->begin(),
+                               alsoUntouchable->end());
     effective = &mergedUntouchable;
   }
-  else
-    effective = (extSet != NULL) ? extSet : alsoUntouchable;
   MutableASTNode::UntouchableScope protect(effective);
 
   bm.GetRunTimes()->start(RunTimes::RemoveUnconstrained);
@@ -217,7 +223,7 @@ void RemoveUnconstrained::replace(const ASTNode& from, const ASTNode to)
   if (simplifier->UpdateSubstitutionMapFewChecks(from, to))
     return;
 
-  // Refused (only SubstitutionMap::extensionalityProtected refuses).
+  // Refused (only SubstitutionMap::theoryProtected refuses).
   // The caller has already rewritten the graph to remove whatever
   // constrained "from", so dropping the definition here would leave it
   // free. Keep it as an ordinary conjunct instead; topLevel() attaches

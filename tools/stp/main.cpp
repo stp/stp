@@ -26,6 +26,7 @@ THE SOFTWARE.
 
 #include <CLI/CLI.hpp>
 
+#include <climits>
 #include <initializer_list>
 #include <iterator>
 #include <string>
@@ -112,6 +113,12 @@ public:
   // option was given, so the value needs its own presence check.
   bool interactive = false;
   CLI::Option* interactive_option = nullptr;
+
+  // Likewise for UserFlags.uf_eager_mode. An option rather than a flag: it
+  // has no legacy bare spelling to preserve, and an option cannot swallow the
+  // input file.
+  std::string uf_ackermann;
+  CLI::Option* uf_ackermann_option = nullptr;
 };
 
 int ExtraMain::create_and_parse_options(int argc, char** argv)
@@ -236,6 +243,13 @@ void ExtraMain::create_options()
            "problem simpler",
            simp_group);
 
+  bool_arg("--distinct-ordering", bm->UserFlags.distinct_ordering,
+           "replace a (distinct ...) over variables that occur nowhere else "
+           "with a strict chain, which fixes one of the n! equivalent "
+           "orderings the bit-blaster would otherwise search. Incremental "
+           "solves keep the rewrite behind a retractable root assumption",
+           simp_group);
+
   const char* const solver_group = "SAT Solver options";
 
 #ifdef USE_CADICAL
@@ -314,6 +328,111 @@ void ExtraMain::create_options()
             "may-alias write levels a read still expands eagerly before the "
             "rest of its chain is abstracted",
             refinement_group);
+  bool_arg("--bv-eq-abstraction", bm->UserFlags.bv_eq_abstraction,
+           "replace wide BV equalities -- whatever their operands; the "
+           "bit-blaster proxies non-input ones -- with fresh Boolean "
+           "variables during bit-blasting, refining lazily via CEGAR",
+           refinement_group);
+  app.add_option("--bv-abstraction-width",
+                 bm->UserFlags.bv_abstraction_width,
+                 "minimum operand width at which --bv-eq-abstraction and "
+                 "--bv-term-abstraction abstract an operation")
+      ->group(refinement_group)
+      ->capture_default_str();
+  app.add_option("--bv-eq-refine-width",
+                 bm->UserFlags.bv_eq_refine_width,
+                 "initial prefix width for lazy BV equality refinement (0 = full)")
+      ->group(refinement_group)
+      ->capture_default_str();
+
+  bool_arg("--bv-term-abstraction", bm->UserFlags.bv_term_abstraction,
+           "abstract wide BV arithmetic and comparisons (BVPLUS, BVMULT, "
+           "BVDIV, BVMOD, ITE and the inequalities) during bit-blasting, "
+           "refining lazily via CEGAR",
+           refinement_group);
+  bool_arg("--bv-term-abstraction-mult", bm->UserFlags.bv_term_abstraction_mult,
+           "include BVMULT, BVDIV and BVMOD in BV term abstraction; they are "
+           "the ones refined by ruling out one pair of operand values at a "
+           "time, so turning them off leaves only the operations that define "
+           "themselves in a single round",
+           refinement_group);
+  app.add_option("--bv-term-abstraction-rounds",
+                 bm->UserFlags.bv_term_abstraction_rounds,
+                 "blocking lemmas one abstracted BVMULT/BVDIV/BVMOD may take "
+                 "before its refinement encodes the operation exactly instead "
+                 "of enumerating further operand pairs (0: never; enumerate "
+                 "without limit)")
+      ->group(refinement_group)
+      ->capture_default_str();
+
+  app.add_flag("--uninterpreted-functions",
+               bm->UserFlags.enable_uninterpreted_functions,
+               "decide uninterpreted functions over Bool, bit-vector, "
+               "RoundingMode and floating-point sorts by dynamic Ackermann "
+               "refinement, including when the input logic omits UF")
+      ->group(refinement_group);
+  app.add_option("--uf-lemmas-per-round",
+                 bm->UserFlags.uf_lemmas_per_round,
+                 "how many congruence lemmas one refuted candidate may "
+                 "install (0: every conflict it exposes; 1: one conflict "
+                 "per round)")
+      ->group(refinement_group)
+      ->capture_default_str();
+  uf_ackermann_option =
+      app.add_option("--uf-ackermann", uf_ackermann,
+                     "whether to install a function's pairwise congruence "
+                     "constraints before the first solve: 'on' (every "
+                     "declaration), 'off' (none, so a candidate has to earn "
+                     "each lemma), or 'auto' "
+                     "(the default: the declarations whose pair count fits "
+                     "the budget, cheapest first)")
+          ->group(refinement_group);
+  app.add_option("--uf-ackermann-budget", bm->UserFlags.uf_eager_budget,
+                 "how many congruence constraints --uf-ackermann=auto may "
+                 "install up front")
+      ->group(refinement_group)
+      ->capture_default_str();
+  app.add_option("--array-ackermann-budget", bm->UserFlags.array_eager_budget,
+                 "how many index comparisons eager array Ackermannisation may "
+                 "introduce before read refinement is preferred; 0 selects it "
+                 "only when asked for by name")
+      ->group(refinement_group)
+      ->capture_default_str();
+  bool_arg("--uf-phase-hints", bm->UserFlags.uf_phase_hints,
+           "bias the first candidate so the congruence checker's scalars "
+           "start out pairwise different (advisory; affects search order "
+           "only)", refinement_group);
+  app.add_option("--uf-sort-width", bm->UserFlags.uf_sort_width,
+                 "bit-vector width given to a sort introduced by "
+                 "(declare-sort S 0); it bounds how many elements of that "
+                 "sort a query can tell apart, so a larger value is always "
+                 "sound and only a smaller one is not")
+      ->group(refinement_group)
+      // Bounded because both ends were reachable and neither failed cleanly.
+      // Zero made every element of the sort a zero-width term, which the
+      // legacy width checks read as a Boolean -- an abort on an asserting
+      // build and a silently retyped model otherwise. The top end overflows
+      // the (width + 63) / 64 word arithmetic the bit-vector layer is built
+      // on and answered unsat for two elements of an unbounded sort. The
+      // ceiling is well above any carrier a query can exhaust: 1024 bits
+      // distinguishes more elements than a query can name.
+      ->check(CLI::Range(1u, 1024u))
+      ->capture_default_str();
+  bool_arg("--uf-narrow-results", bm->UserFlags.uf_narrow_results,
+           "narrow UF result sorts whose applications are used only for "
+           "equality to ceil(log2(N+1)) bits, cutting the AIG cost of each "
+           "congruence constraint from O(width) to O(log N)",
+           refinement_group);
+  bool_arg("--uf-inject-args", bm->UserFlags.uf_inject_args,
+           "assume equality-only UF declarations are injective and encode it, "
+           "giving the SAT solver bidirectional propagation between argument "
+           "and result equalities. The assumption is not entailed by the "
+           "query, so it is installed retractably: a refutation that used it "
+           "is taken back and the query decided without it. Verdicts are "
+           "unchanged; what this buys is faster model-finding on a query "
+           "whose functions are injective anyway, and it costs a second "
+           "search on one that is not",
+           refinement_group);
 
   const char* const bb_group = "Bit-blasting options";
   bool_arg("--bb.div-v1", bm->UserFlags.division_variant_1,
@@ -367,6 +486,45 @@ void ExtraMain::create_options()
            "SymFPU unpacking circuits (experimental)",
            bb_group);
 
+  bool_arg("--bb.fp-native-add-iszero",
+           bm->UserFlags.fp_native_add_iszero,
+           "Encode fp.isZero(fp.add ...) directly from the packed operands "
+           "without constructing the complete rounded sum (enabled by "
+           "default; requires --bb.fp-native-arith)",
+           bb_group);
+
+  bool_arg("--bb.fp-native-domain", bm->UserFlags.fp_native_domain,
+           "Experimental native FP bit-blaster strengthening: mine simple "
+           "finite box bounds and omit NaN/infinity cases that are impossible "
+           "under those top-level facts",
+           bb_group);
+
+  bool_arg("--bb.fp-native-known-sign",
+           bm->UserFlags.fp_native_known_sign,
+           "Use finite semantic-sign facts in native fp.add/fp.mul to omit "
+           "opposite-sign/sign-dependent circuitry while preserving signed "
+           "zero (experimental; requires --bb.fp-native-domain)",
+           bb_group);
+
+  bool_arg("--fp-domain-simplify", bm->UserFlags.fp_domain_simplify,
+           "Experimental FP prepass: mine boxed variable bounds, use boxed FP "
+           "domain facts, and discharge ordered FP "
+           "comparisons or zero-sum rows decided by those facts",
+           bb_group);
+
+  bool_arg("--fp-domain-sound-zero-facts",
+           bm->UserFlags.fp_domain_sound_zero_facts,
+           "Experimental FP prepass: derive sound zero facts from "
+           "association-safe same-sign boxed +/-1 rows and encode them as "
+           "zero magnitude bits, preserving the +0/-0 distinction",
+           bb_group);
+
+  bool_arg("--fp-domain-row-bounds", bm->UserFlags.fp_domain_row_bounds,
+           "Experimental FP prepass: recognise linear FP zero rows and "
+           "rewrite them to false when association-preserving target-format "
+           "interval endpoints exclude zero",
+           bb_group);
+
   bool_arg("--bb.simplify-during-bb", bm->UserFlags.simplify_during_BB_flag,
            "When bit-blasting discovers that a non-constant child of a term "
            "blasts to an all-constant vector, rebuild the term with that "
@@ -374,6 +532,20 @@ void ExtraMain::create_options()
            "the rewriting simplifier, so not with --disable-opt-inc or "
            "--disable-simplifications",
            bb_group);
+
+  int64_arg("--aig-node-budget", bm->UserFlags.aig_node_budget,
+            "Number of AIG AND gates after which one query's bit-blast gives "
+            "up. -1 means never, 0 means give up without blasting. Exceeding "
+            "it abandons the query through the soft-timeout path, so the "
+            "answer is the one --max-time gives -- \"unknown\" in SMT-LIB "
+            "mode, with (get-info :reason-unknown) naming this budget, and "
+            "\"Unknown.\" in the CVC language. "
+            "Batch solves only: the incremental encoder's AIG outlives the "
+            "check that grew it and is never capped, so engaging it with a "
+            "budget set warns once instead. Bounds the blast, not the "
+            "process -- CNF conversion and the SAT search allocate on top "
+            "of it",
+            bb_group);
 
   const char* const print_group = "Printing options";
   app.add_flag("--print-stpinput,-b", bm->UserFlags.print_STPinput_back_flag,
@@ -641,7 +813,7 @@ void ExtraMain::create_options()
                 "--flattening", "--rewriting", "--split-extracts",
                 "--ite-context-simplifications", "--use-intervals",
                 "--pure-literals", "--common-subsum", "--pair-extract",
-                "--merge-same"});
+                "--merge-same", "--distinct-ordering"});
 
   // Likewise for what disableSizeIncreasingSimplifications() forces.
   excludes_all("--size-reducing-only",
@@ -838,6 +1010,23 @@ int ExtraMain::parse_options(int argc, char** argv)
   }
 #endif
 
+  if (uf_ackermann_option->count())
+  {
+    typedef UserDefinedFlags::UFEagerMode Mode;
+    if (uf_ackermann == "on")
+      bm->UserFlags.uf_eager_mode = Mode::ON;
+    else if (uf_ackermann == "off")
+      bm->UserFlags.uf_eager_mode = Mode::OFF;
+    else if (uf_ackermann == "auto")
+      bm->UserFlags.uf_eager_mode = Mode::AUTO;
+    else
+    {
+      cerr << "ERROR: --uf-ackermann must be one of 'on', 'off' or 'auto'"
+           << endl;
+      std::exit(-1);
+    }
+  }
+
   if (incremental_option->count())
   {
     if (incremental == "on")
@@ -885,6 +1074,23 @@ int ExtraMain::parse_options(int argc, char** argv)
   if (bm->UserFlags.timeout_max_time < -1)
   {
     cerr << "ERROR: --max-time must be -1 (no limit) or greater" << endl;
+    std::exit(-1);
+  }
+
+  if (bm->UserFlags.aig_node_budget < -1)
+  {
+    cerr << "ERROR: --aig-node-budget must be -1 (no limit) or greater"
+         << endl;
+    std::exit(-1);
+  }
+
+  // The AND-gate counter the budget is compared against is ABC's
+  // Aig_Man_t::nObjs[], an int. A budget it can never reach would be a cap
+  // that silently never fires, which is worse than no cap at all.
+  if (bm->UserFlags.aig_node_budget > INT_MAX)
+  {
+    cerr << "ERROR: --aig-node-budget must be at most " << INT_MAX
+         << "; larger caps can never be reached" << endl;
     std::exit(-1);
   }
 

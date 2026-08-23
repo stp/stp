@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "IncrementalSolverImpl.h"
+#include "stp/Simplifier/DistinctOrdering.h"
 
 namespace stp
 {
@@ -130,6 +131,8 @@ std::vector<size_t> IncrementalSolver::lastUnsatCoreLevels() const
 
 IncrementalSolver::~IncrementalSolver()
 {
+  if (impl->ce->getUFTheoryAdapter() == impl->ufAdapter.get())
+    impl->ce->setUFTheoryAdapter(NULL);
   // The counterexample machinery may still point at our floating-point
   // encoding context; whoever solves next installs their own before any
   // model is read (and model_valid already refuses stale reads).
@@ -204,11 +207,112 @@ SOLVER_RETURN_TYPE IncrementalSolver::checkSat(const ASTVec& assertionsSMT2,
                                                bool assumeLastLevelPerConjunct,
                                                bool firstForcedIncrementalSolve)
 {
-  impl->beginProfile(assertionsSMT2.size());
-  const SOLVER_RETURN_TYPE result = checkSatBody(
-      assertionsSMT2, assumeLastLevelPerConjunct, firstForcedIncrementalSolve);
+  if (impl->bm->UserFlags.aig_node_budget >= 0 && !budgetNotEnforcedWarned)
+  {
+    budgetNotEnforcedWarned = true;
+    std::cerr << "Warning: --aig-node-budget is not enforced on the "
+                 "incremental encoder; the cap covers batch solves only."
+              << std::endl;
+  }
+
+  // Survey the complete active formula while DISTINCT is still native. An
+  // earned ordering is passed as a whole-formula override and encoded behind
+  // an assumption: unlike a base-level unit, that root can be withdrawn on the
+  // next check if a new assertion makes one of the ordered symbols escape. Do
+  // not lower the per-level assertions in that case -- besides being unused by
+  // the exact-block route, doing so would build the quadratic clique this
+  // optimization exists to avoid.
+  ASTNode assumptionScopedRoot;
+  size_t orderedDistincts = 0;
+  if (impl->bm->UserFlags.distinct_ordering && impl->bm->has_distinct)
+  {
+    const ASTNode active = assertionsSMT2.size() == 1
+                               ? assertionsSMT2[0]
+                               : impl->bm->CreateNode(AND, assertionsSMT2);
+    const ASTNode ordered =
+        applyDistinctOrdering(impl->bm, active, &orderedDistincts);
+    if (orderedDistincts > 0)
+    {
+      assumptionScopedRoot = lowerDistinct(impl->bm, ordered);
+      if (containsKind(assumptionScopedRoot, DISTINCT))
+        FatalError("DISTINCT crossed the incremental ordered-root lowering "
+                   "barrier",
+                   assumptionScopedRoot);
+      if (impl->bm->UserFlags.stats_flag)
+        std::cerr << "Ordered " << orderedDistincts
+                  << " symmetric distinct group(s) in an assumption-scoped "
+                     "incremental block."
+                  << std::endl;
+    }
+  }
+
+  // With no ordering to consume a group, ordinary semantic lowering is stable
+  // across checks and must happen before any incremental preprocessing or
+  // bit-blasting.
+  ASTVec loweredAssertions;
+  const ASTVec* solverAssertions = &assertionsSMT2;
+  if (assumptionScopedRoot.IsNull() && impl->bm->has_distinct)
+  {
+    loweredAssertions.reserve(assertionsSMT2.size());
+    for (const ASTNode& assertion : assertionsSMT2)
+    {
+      const ASTNode lowered = lowerDistinct(impl->bm, assertion);
+      if (containsKind(lowered, DISTINCT))
+        FatalError("DISTINCT crossed the incremental completed-root lowering "
+                   "barrier",
+                   lowered);
+      loweredAssertions.push_back(lowered);
+    }
+    solverAssertions = &loweredAssertions;
+  }
+
+  impl->beginProfile(solverAssertions->size());
+  // What the encoding assumed on its own account belongs to the solve that is
+  // about to build it. The exact-stack route lowers the whole active stack
+  // whenever any level applies an uninterpreted function, so what this solve
+  // records is what this solve's block asserts.
+  impl->bm->clearInjectivityAssumed();
+  impl->injectivity = STPMgr::InjectivityAssumption();
+  SOLVER_RETURN_TYPE result =
+      checkSatBody(*solverAssertions, assumeLastLevelPerConjunct,
+                   firstForcedIncrementalSolve, assumptionScopedRoot,
+                   orderedDistincts);
+
+  // As in STP::TopLevelSTP, and for the same reason. The search settles for
+  // itself whether a refutation used the injectivity --uf-inject-args
+  // assumed, because the implications sit behind an assumption it can be
+  // asked about and can withdraw. A block that scoped preprocessing proved
+  // false never got that far, and preprocessing saw the strengthened block,
+  // so the record is still standing and there is nothing left to interrogate.
+  // Ask the only remaining question: decide the stack again with the flag
+  // off. The second answer is about the query alone whichever way it goes.
+  if (result == SOLVER_UNSATISFIABLE && impl->bm->uf_injectivity_assumed != 0)
+  {
+    if (impl->bm->UserFlags.stats_flag)
+      std::cerr << "UF: refuted before the search could be asked about the "
+                << "injectivity assumption, deciding the stack without it"
+                << std::endl;
+    const bool saved = impl->bm->UserFlags.uf_inject_args;
+    impl->bm->UserFlags.uf_inject_args = false;
+    impl->bm->clearInjectivityAssumed();
+    impl->injectivity = STPMgr::InjectivityAssumption();
+    // Never a forced first solve: the run above has already engaged.
+    result = checkSatBody(*solverAssertions, assumeLastLevelPerConjunct, false,
+                          assumptionScopedRoot, orderedDistincts);
+    impl->bm->UserFlags.uf_inject_args = saved;
+    impl->bm->clearInjectivityAssumed();
+  }
   impl->finishProfile();
-  return result;
+  // The driver has its own encoding path and never enters the batch
+  // refinement loop, so the batch pipeline's report never runs here;
+  // without this the checker's rounds are invisible in exactly the mode
+  // that accumulates the most of them.
+  if (ExtensionalityContext* ext = impl->bm->getExtensionalityIfAny())
+    ext->reportLemmaStats();
+  // Before the caller sees it, and before the frontend's core-aware cache
+  // records it: an unsat that --uf-inject-args may have caused must not be
+  // remembered as one either.
+  return impl->bm->withholdAssumedUnsat(result);
 }
 
 void IncrementalSolver::materializePendingModel()
@@ -230,8 +334,7 @@ void IncrementalSolver::buildPendingModel()
   // The solve that deferred this model may not have wired the context
   // itself (the plain exact-stack route does not); lowered floating-point
   // terms evaluate through the context that lowered them.
-  if (impl->fpCtx)
-    impl->ce->setFpEncodingContext(impl->fpCtx.get());
+  impl->publishFpContext();
 
   ToSATBase::ASTNodeToSATVar symbolMap;
   impl->buildSymbolMap(symbolMap);
@@ -245,7 +348,9 @@ void IncrementalSolver::buildPendingModel()
 SOLVER_RETURN_TYPE
 IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
                                 bool assumeLastLevelPerConjunct,
-                                bool firstForcedIncrementalSolve)
+                                bool firstForcedIncrementalSolve,
+                                const ASTNode& assumptionScopedRoot,
+                                size_t orderedDistincts)
 {
   STPMgr* bm = impl->bm;
   UserDefinedFlags& uf = bm->UserFlags;
@@ -261,24 +366,49 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   assert((!firstForcedIncrementalSolve || impl->engagedSolves == 0) &&
          "a forced first solve was claimed after the driver had engaged");
 
-  impl->maintainBackendForCheck(assertionsSMT2);
+  impl->maintainBackendForCheck(assertionsSMT2, assumptionScopedRoot);
+
+  // No stale equality state may survive into this round: the consistency
+  // checker keys off ext->active(), and a previous round's solve-local
+  // records would send this round's candidate to a checker expecting values
+  // for symbols this round never encoded. active() deliberately outlives the
+  // solve that set it -- the model surfaces read the frozen graph after the
+  // solve returns -- so only the next round can retire it, and the SMT-LIB2
+  // pop is the only caller that does so itself: the C API's vc_pop
+  // deliberately clears nothing (its model outlives the bracket), and
+  // check-sat-assuming's frame pop keeps the model too.
+  //
+  // This is ahead of the routing because every route materializes candidates.
+  // The exact-stack route begins a solve of its own only for an
+  // array-equality round, yet it also owns rounds that merely apply an
+  // uninterpreted function, and those would otherwise run the previous
+  // round's checker over the current round's assignment.
+  //
+  // The condition is what the context still holds, not what it still owns.
+  // A round taken eagerly retires its records as it instantiates them, so
+  // it ends inactive while its lowerings remain -- and the lowering half of
+  // the consistency check is deliberately ungated, because an equality
+  // solved outright mints no record to gate on. Asking active() here left
+  // exactly that half pointed at the previous round.
+  ExtensionalityContext* staleExt = bm->getExtensionalityIfAny();
+  if (staleExt != NULL && staleExt->holdsSolveState())
+    staleExt->beginSolve();
 
   SOLVER_RETURN_TYPE exactResult;
   if (impl->tryExactStackRoute(assertionsSMT2,
                                assumeLastLevelPerConjunct,
-                               firstForcedIncrementalSolve, exactResult))
+                               firstForcedIncrementalSolve,
+                               assumptionScopedRoot, orderedDistincts,
+                               exactResult))
     return exactResult;
 
-  // No active equality this round, so no stale equality state may survive
-  // into it: the consistency checker keys off ext->active(), and a
-  // previous round's solve-local records would send this round's model to
-  // a checker expecting values for symbols it never encoded. The SMT-LIB2
-  // pop clears this itself, but the C API's vc_pop deliberately clears
-  // nothing (its model outlives the bracket), and check-sat-assuming's
-  // frame pop keeps the model too -- so the round boundary is here.
-  ExtensionalityContext* staleExt = bm->getExtensionalityIfAny();
-  if (staleExt != NULL && staleExt->active())
-    staleExt->beginSolve();
+  UFContext* staleUF = bm->getUFContextIfAny();
+  if (staleUF != NULL)
+    staleUF->releaseSolveProtection();
+  impl->activeUFView = LoweredApplicationView();
+  impl->ufAdapter->clearActiveBlock();
+  if (impl->ce->getUFTheoryAdapter() == impl->ufAdapter.get())
+    impl->ce->setUFTheoryAdapter(NULL);
 
   const uint64_t clausesBefore = impl->lifetimeClauseSubmissions();
   impl->encodesThisCall = 0;
@@ -295,6 +425,11 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   SATSolver::vec_literals assumptions;
   const size_t contextEntries = impl->prepareAndEncodePushedLevels(
       assertionsSMT2, assumeLastLevelPerConjunct, assumptions);
+
+  // Every route bit-blasts before it solves, and the abstractions the
+  // blaster made are this driver's to refine. Taken across here, once all
+  // of this call's encoding is done and before any search.
+  impl->syncAbstractions();
 
   const ASTVec& activeEncodedKeys = impl->scopes.activeSemanticKeys();
   impl->hintRetractedLevels(assumptions);
@@ -394,8 +529,7 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   // Model evaluation of floating-point terms needs the encoding context
   // that lowered them. Batch fallback rounds install their own per solve;
   // this keeps the driver's rounds coherent the same way.
-  if (impl->fpCtx)
-    impl->ce->setFpEncodingContext(impl->fpCtx.get());
+  impl->publishFpContext();
 
   // Budgets are per check-sat, as solve_by_sat_solver arms them per query.
   applySolveBudgets(*impl->solver, uf);
@@ -432,12 +566,27 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
         impl->solver->submittedClauses();
     size_t refinementRounds = 0;
     ArrayReadRefinementProgress refinementProgress;
+    uint64_t abstractionsRefined = impl->bvAbstraction.refinements();
     SOLVER_RETURN_TYPE res = impl->ce->CallSAT_ResultCheck(
         *impl->solver, bm->ASTTrue, activeConjunction, activeConjunction,
         adapter, true);
     while (res == SOLVER_UNDECIDED)
     {
       refinementRounds++;
+      // A candidate rejected because it contradicted a bit-vector
+      // abstraction has already been ruled out, inside the call above and
+      // ahead of everything else that reads a candidate. Nothing is owed
+      // to the array axioms for it -- it was never a model of the reads
+      // either -- so the round is just the next search.
+      const uint64_t refinedNow = impl->bvAbstraction.refinements();
+      if (refinedNow != abstractionsRefined)
+      {
+        abstractionsRefined = refinedNow;
+        res = impl->ce->CallSAT_ResultCheck(*impl->solver, bm->ASTTrue,
+                                            activeConjunction,
+                                            activeConjunction, adapter, true);
+        continue;
+      }
       res = impl->runGuardedReadRefinementRound(
           activeConjunction, adapter, refinementProgress,
           "IncrementalSolver: an array refinement round rejected "
@@ -490,11 +639,74 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   }
   bm->GetRunTimes()->stop(RunTimes::Solving);
 
+  // No candidate leaves this route until every bit-vector abstraction in it
+  // agrees with the operands it stands for. The refinement loops above reach
+  // that through CallSAT_ResultCheck; this route never enters it, so the loop
+  // is written out. It terminates because every round either rules out the
+  // candidate it was shown -- each term family, congruence clause and
+  // said-unequal equality round adds a clause that candidate violates -- or
+  // strictly grows an equality's refined prefix, which its width bounds; a
+  // ruled-out candidate never returns, and the solver's models are finite.
+  // The working bounds per record: one round for a comparison, addition or
+  // if-then-else, log2(width) for an equality, and the blocking allowance
+  // plus one exact encoding for a multiplication, division or remainder --
+  // whose enumeration, with the allowance set to zero, is instead bounded
+  // by the operand pairs the search can propose.
+  const uint64_t abstractionClausesBefore = impl->solver->submittedClauses();
+  while (sat && !bm->soft_timeout_expired &&
+         impl->refineAbstractions(*impl->solver) > 0)
+  {
+    bm->GetRunTimes()->start(RunTimes::Solving);
+    if (impl->profile.enabled)
+    {
+      impl->profile.satCalls++;
+      impl->profile.refinementSatCalls++;
+      impl->profile.refinementRounds++;
+    }
+    {
+      ScopedProfileTimer satTimer(impl->profile.enabled, impl->profile.satNs);
+      ScopedProfileTimer refineSatTimer(impl->profile.enabled,
+                                        impl->profile.refinementSatNs);
+      if (assumptions.size() == 0)
+        sat = impl->solver->solve(bm->soft_timeout_expired);
+      else
+        sat = impl->solver->solveWithAssumptions(assumptions,
+                                                 bm->soft_timeout_expired);
+    }
+    bm->GetRunTimes()->stop(RunTimes::Solving);
+  }
+
+  // Say which budget stopped the search while the solver is still here to be
+  // asked, the way the batch pipeline does in ToSATAIG::runSolver. The
+  // SOLVER_UNKNOWN below is all that survives this frame, so a reason not
+  // taken here is one
+  // (get-info :reason-unknown) can never give.
+  if (bm->soft_timeout_expired)
+    bm->noteBudgetExhausted(*impl->solver);
+
+  // Whatever the loop pinned is part of what this stack costs from now on;
+  // re-stage the mass over it, as the refinement branch above does for its
+  // axioms.
+  {
+    const uint64_t pinnedMass = impl->accountRefinementClauses(
+        ordinaryOwner, abstractionClausesBefore);
+    if (pinnedMass > 0)
+    {
+      uint64_t nonStructuralMass =
+          Impl::addMass(impl->permanentUnitMass, activationMass);
+      nonStructuralMass = Impl::addMass(nonStructuralMass,
+                                        impl->refinementMass(ordinaryOwner));
+      impl->stageLiveConeMass(
+          ordinaryCurrentRoots,
+          Impl::addMass(ordinaryLiveMass, pinnedMass), nonStructuralMass);
+    }
+  }
+
   if (uf.stats_flag)
     impl->solver->printStats();
 
   if (bm->soft_timeout_expired)
-    return SOLVER_TIMEOUT;
+    return bm->unknownResult();
 
   if (!sat)
   {

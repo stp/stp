@@ -49,6 +49,9 @@ void SMTLIB_Print1(ostream& os, const stp::ASTNode n, int indentation,
 
 ostream& SMTLIB_Print(ostream& os, STPMgr*, const ASTNode n,
                       const int indentation);
+
+// Prints one term on one line, sharing repeated subterms through `let`.
+ostream& SMTLIB_PrintTerm(ostream& os, STPMgr*, const ASTNode n);
 }
 
 #endif

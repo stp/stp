@@ -60,6 +60,10 @@ public:
   public:
     int size() const { return static_cast<int>(lits.size()); }
     void push(Lit l) { lits.push_back(l); }
+    // Drop the last literal. Retraction is why this exists: an assumption
+    // installed for one solve and withdrawn for the next is pushed last, so
+    // withdrawing it is a pop rather than a search.
+    void pop() { lits.pop_back(); }
     void clear() { lits.clear(); }
     Lit operator[](int i) const { return lits[static_cast<size_t>(i)]; }
   };
@@ -246,6 +250,17 @@ public:
     (void)var;
     (void)value;
   }
+
+  // Bring every variable created so far to the backend's attention.
+  //
+  // A backend may declare variables lazily -- CaDiCaL's factoring layer
+  // declares on a clause, an assumption, or at the start of a solve -- which
+  // leaves a variable that no clause mentions unknown to it, and an advisory
+  // phase for such a variable is dropped. suggestPhase deliberately does not
+  // declare, because declaring can reset a model extension and that is too
+  // much for a hint to do; a caller that knows it is between construction and
+  // the first solve can ask for it explicitly here instead.
+  virtual void declarePendingVariables() {}
 
   // ---------------------------------------------------------------------
   // Resource budgets.

@@ -24,15 +24,21 @@ THE SOFTWARE.
 
 #include "stp/cpp_interface.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
-#include "stp/Parser/LetMgr.h"
-#include "stp/Printer/printers.h"
-#include "stp/Sat/SATSolverFactory.h"
-#include "stp/Util/GitSHA1.h"
 #include "stp/Incremental/IncrementalSolver.h"
+#include "stp/Parser/LetMgr.h"
+#include "stp/Parser/parser.h"
+#include "stp/Printer/printers.h"
 #include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
+#include "stp/Sat/SATSolverFactory.h"
+#include "stp/Simplifier/DistinctOrdering.h"
 #include "stp/ToSat/ToSATAIG.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
+#include "stp/UninterpretedFunctions/UFModel.h"
+#include "stp/UninterpretedFunctions/UFRefinement.h"
+#include "stp/Util/GitSHA1.h"
 #include <cassert>
+#include <limits>
 
 using std::cerr;
 using std::cout;
@@ -67,6 +73,8 @@ void Cpp_interface::init()
   produce_models = false;
   session_touched = false;
   model_valid = false;
+  current_command_rejected = false;
+  current_command_active = false;
   incremental_from_start =
       bm.UserFlags.incremental_mode == UserDefinedFlags::IncrementalMode::ON;
   session_incremental = incremental_from_start;
@@ -77,7 +85,7 @@ void Cpp_interface::init()
 void Cpp_interface::addFrame()
 {
   // create a new frame
-  SolverFrame* new_frame = new SolverFrame(&functions, &sort_aliases);
+  SolverFrame* new_frame = new SolverFrame(&functions, &sort_aliases, &bm);
 
   // store the new frame
   frames.push_back(new_frame);
@@ -154,8 +162,42 @@ UserDefinedFlags& Cpp_interface::getUserFlags()
   return bm.UserFlags;
 }
 
+bool Cpp_interface::declaredSortsEnabled() const
+{
+  return bm.UserFlags.enable_uninterpreted_functions || ax_enabled_by_logic;
+}
+
 void Cpp_interface::setLogic(const std::string& logic)
 {
+  const bool selectsUF =
+      logic.compare(0, 5, "QF_UF") == 0 ||
+      logic.compare(0, 6, "QF_AUF") == 0;
+  if (selectsUF)
+  {
+    if (!uf_enabled_by_logic)
+    {
+      uf_option_before_logic = bm.UserFlags.enable_uninterpreted_functions;
+      uf_enabled_by_logic = true;
+    }
+    bm.UserFlags.enable_uninterpreted_functions = true;
+  }
+  else
+    restoreUFOptionAfterLogic();
+
+  const bool selectsAX = logic == "QF_AX";
+  if (selectsAX)
+  {
+    if (!ax_enabled_by_logic)
+    {
+      array_equality_option_before_logic =
+          bm.UserFlags.enable_array_equality;
+      ax_enabled_by_logic = true;
+    }
+    bm.UserFlags.enable_array_equality = true;
+  }
+  else
+    restoreArrayEqualityOptionAfterLogic();
+
   // This policy is intentionally limited to the two fragments measured in
   // the threshold sweep. QF_AUFBV, the FP logics, legacy parsers, and native
   // API clients retain the established solve-3 policy until separately
@@ -163,8 +205,26 @@ void Cpp_interface::setLogic(const std::string& logic)
   delayed_bv_auto_engagement = logic == "QF_BV" || logic == "QF_ABV";
 }
 
+void Cpp_interface::restoreUFOptionAfterLogic()
+{
+  if (!uf_enabled_by_logic)
+    return;
+  bm.UserFlags.enable_uninterpreted_functions = uf_option_before_logic;
+  uf_enabled_by_logic = false;
+}
+
+void Cpp_interface::restoreArrayEqualityOptionAfterLogic()
+{
+  if (!ax_enabled_by_logic)
+    return;
+  bm.UserFlags.enable_array_equality = array_equality_option_before_logic;
+  ax_enabled_by_logic = false;
+}
+
 void Cpp_interface::AddAssert(const ASTNode& assert)
 {
+  if (current_command_rejected)
+    return;
   bm.AddAssert(assert);
   session_touched = true;
 
@@ -207,26 +267,43 @@ ASTNode Cpp_interface::CreateFPSpecialConst(stp::FPSpecial which,
   return bm.CreateFPSpecialConst(which, exp_width, sig_width);
 }
 
-void Cpp_interface::addSortAlias(const std::string& name, unsigned exp_width,
-                                 unsigned sig_width)
+void Cpp_interface::addSortAlias(const std::string& name,
+                                 const SourceSort& sort)
 {
   // SMT-LIB does not allow redefining a sort name.
   if (sort_aliases.find(name) != sort_aliases.end())
-    FatalError("define-sort: the sort name is already defined");
-  sort_aliases[name] = std::make_pair(exp_width, sig_width);
+    FatalError("the sort name is already defined");
+  sort_aliases[name] = sort;
   frames.back()->addSortAlias(name);
   session_touched = true;
+}
+
+bool Cpp_interface::lookupSortAlias(const std::string& name,
+                                    SourceSort& sort) const
+{
+  const auto found = sort_aliases.find(name);
+  if (found == sort_aliases.end())
+    return false;
+  sort = found->second;
+  return true;
+}
+
+void Cpp_interface::addSortAlias(const std::string& name, unsigned exp_width,
+                                 unsigned sig_width)
+{
+  addSortAlias(name, SourceSort::floatingPoint(exp_width, sig_width));
 }
 
 bool Cpp_interface::lookupSortAlias(const std::string& name,
                                     unsigned& exp_width,
                                     unsigned& sig_width) const
 {
-  const auto found = sort_aliases.find(name);
-  if (found == sort_aliases.end())
+  SourceSort sort;
+  if (!lookupSortAlias(name, sort) ||
+      sort.kind() != SourceSort::Kind::FloatingPoint)
     return false;
-  exp_width = found->second.first;
-  sig_width = found->second.second;
+  exp_width = sort.exponentWidth();
+  sig_width = sort.significandWidth();
   return true;
 }
 
@@ -295,6 +372,8 @@ void Cpp_interface::removeSymbol(ASTNode to_remove)
 void Cpp_interface::storeFunction(const string& name, const ASTVec& params,
                                   const ASTNode& function)
 {
+  if (current_command_rejected)
+    return;
   Function f;
   f.name = name;
 
@@ -376,6 +455,100 @@ SourceSort Cpp_interface::functionReturnSourceSort(const string& name)
                                   : found->second.function.GetSourceSort();
 }
 
+const UFDecl* Cpp_interface::declareUninterpretedFunction(
+    const std::string& name, const std::vector<SourceSort>& domain,
+    const SourceSort& codomain, std::string* diagnostic)
+{
+  if (lookupFunction(name) != NULL)
+  {
+    if (diagnostic != NULL)
+      *diagnostic = "name '" + name + "' already denotes a define-fun";
+    return NULL;
+  }
+  ASTNode symbol;
+  if (LookupSymbol(name.c_str(), symbol))
+  {
+    if (diagnostic != NULL)
+      *diagnostic = "name '" + name + "' already denotes an ordinary symbol";
+    return NULL;
+  }
+  const UFDecl* result =
+      bm.getUFContext()->declareFunction(name, domain, codomain, diagnostic);
+  if (result != NULL)
+  {
+    session_touched = true;
+    model_valid = false;
+    if (GlobalSTP != NULL &&
+        GlobalSTP->Ctr_Example->getUFTheoryAdapter() != NULL)
+      GlobalSTP->Ctr_Example->getUFTheoryAdapter()
+          ->invalidateCertifiedModel();
+  }
+  return result;
+}
+
+const UFDecl* Cpp_interface::declareScopedUninterpretedFunction(
+    const std::string& name, const std::vector<SourceSort>& domain,
+    const SourceSort& codomain, std::string* diagnostic)
+{
+  const UFDecl* result =
+      declareUninterpretedFunction(name, domain, codomain, diagnostic);
+  if (result != NULL)
+    frames.back()->addUFDeclaration(result);
+  return result;
+}
+
+const UFDecl*
+Cpp_interface::lookupUninterpretedFunction(const std::string& name) const
+{
+  const UFContext* context = bm.getUFContextIfAny();
+  return context == NULL ? NULL : context->lookup(name);
+}
+
+ASTNode Cpp_interface::applyUninterpretedFunction(
+    const UFDecl* declaration, const ASTVec& actuals,
+    std::string* diagnostic)
+{
+  UFContext* context = bm.getUFContextIfAny();
+  if (context == NULL)
+  {
+    if (diagnostic != NULL)
+      *diagnostic = "uninterpreted-function declaration is not owned by this "
+                    "context";
+    return bm.ASTUndefined;
+  }
+  return context->apply(declaration, actuals, diagnostic);
+}
+
+ASTNode Cpp_interface::getUninterpretedApplicationValue(
+    const ASTNode& application, std::string* diagnostic)
+{
+  if (!model_valid || GlobalSTP == NULL)
+  {
+    if (diagnostic != NULL)
+      *diagnostic = "no current certified model is available";
+    return bm.ASTUndefined;
+  }
+  if (GlobalSTP->hasIncrementalSolver())
+    GlobalSTP->getIncrementalSolver()->materializePendingModel();
+  ASTNode value;
+  std::string localDiagnostic;
+  if (!UFModel::evaluateApplication(
+          &bm, GlobalSTP->Ctr_Example->getUFTheoryAdapter(), application,
+          value, localDiagnostic))
+  {
+    if (diagnostic != NULL)
+      *diagnostic = localDiagnostic;
+    return bm.ASTUndefined;
+  }
+  return value;
+}
+
+bool Cpp_interface::hasUninterpretedFunctions() const
+{
+  const UFContext* context = bm.getUFContextIfAny();
+  return context != NULL && context->activeDeclarationCount() != 0;
+}
+
 ASTNode Cpp_interface::LookupOrCreateSymbol(string name)
 {
   return LookupOrCreateSymbol(name.c_str());
@@ -388,6 +561,18 @@ bool Cpp_interface::LookupSymbol(const char* const name, ASTNode& output)
   for (auto it = frames.rbegin(); it != frames.rend(); ++it)
   {
     if ((*it)->lookupSymbol(sv, output))
+      return true;
+  }
+  return false;
+}
+
+bool Cpp_interface::LookupTemporarySymbol(const char* const name,
+                                          ASTNode& output)
+{
+  const std::string_view sv(name);
+  for (auto it = frames.rbegin(); it != frames.rend(); ++it)
+  {
+    if ((*it)->lookupTemporarySymbol(sv, output))
       return true;
   }
   return false;
@@ -441,8 +626,40 @@ void Cpp_interface::deleteNode(ASTNode* n)
 
 void Cpp_interface::addSymbol(ASTNode& s)
 {
+  if (current_command_rejected)
+    return;
   frames.back()->addSymbol(s);
   session_touched = true;
+}
+
+void Cpp_interface::addTemporarySymbol(ASTNode& s)
+{
+  // A formal is parser-local scratch, not a declaration. The successful
+  // storeFunction call is what makes the command observable and marks the
+  // session touched; a rejected define-fun leaves neither behind.
+  frames.back()->addTemporarySymbol(s);
+}
+
+bool Cpp_interface::validateTopLevelDeclarationName(
+    const std::string& name, std::string* diagnostic)
+{
+  std::string message;
+  if (lookupFunction(name) != NULL)
+    message = "name '" + name + "' already denotes a define-fun";
+  else if (lookupUninterpretedFunction(name) != NULL)
+    message = "name '" + name +
+              "' already denotes an uninterpreted function";
+  else
+  {
+    ASTNode symbol;
+    if (LookupSymbol(name.c_str(), symbol))
+      message = "name '" + name + "' already denotes an ordinary symbol";
+  }
+  if (message.empty())
+    return true;
+  if (diagnostic != NULL)
+    *diagnostic = message;
+  return false;
 }
 
 void Cpp_interface::addRoundingModeSymbol(ASTNode& s)
@@ -477,6 +694,8 @@ bool Cpp_interface::arraySortsAgree(const ASTNode& arr, const array_sort& sort)
 
 void Cpp_interface::success()
 {
+  if (current_command_rejected)
+    return;
   if (print_success)
   {
     cout << "success" << endl;
@@ -495,6 +714,57 @@ void Cpp_interface::unsupported()
 {
   cout << "unsupported" << endl;
   flush(cout);
+}
+
+void Cpp_interface::beginCurrentCommand()
+{
+  // A prior parse may have aborted while reducing a formal declaration. Its
+  // command and lexer state are not part of this new top-level command.
+  if (current_command_active)
+    abortCurrentCommand();
+  SMT2ResetCommandLexerState();
+  current_command_active = true;
+  current_command_rejected = false;
+  if (UFContext* context = bm.getUFContextIfAny())
+    context->beginParserCommand();
+}
+
+void Cpp_interface::abortCurrentCommand()
+{
+  if (current_command_active)
+  {
+    if (UFContext* context = bm.getUFContextIfAny())
+      context->finishParserCommand(false);
+    frames.back()->clearTemporarySymbols();
+  }
+  current_command_rejected = false;
+  current_command_active = false;
+  SMT2ResetCommandLexerState();
+}
+
+void Cpp_interface::rejectCurrentCommand(const std::string& diagnostic)
+{
+  // One command has one rejection response. Continue reducing with typed
+  // carriers, but do not emit a diagnostic for every malformed descendant.
+  if (current_command_rejected)
+    return;
+  current_command_rejected = true;
+  error(diagnostic);
+}
+
+void Cpp_interface::finishCurrentCommand()
+{
+  if (current_command_active)
+  {
+    if (UFContext* context = bm.getUFContextIfAny())
+      context->finishParserCommand(!current_command_rejected);
+    // Function formals are command-local even if error recovery skipped a
+    // define-fun production's ordinary removal loop.
+    frames.back()->clearTemporarySymbols();
+  }
+  current_command_rejected = false;
+  current_command_active = false;
+  SMT2ResetCommandLexerState();
 }
 
 void Cpp_interface::resetSolver()
@@ -527,6 +797,12 @@ void Cpp_interface::discardExtensionalitySolveState()
 // Can clear away the base frame..
 void Cpp_interface::reset()
 {
+  // reset destroys the current frame and UF context itself, so close its
+  // accepted command transaction while both are still alive. The grammar's
+  // outer finish becomes a harmless no-op after init().
+  if (current_command_active)
+    finishCurrentCommand();
+
   popToFirstLevel();
 
   if (frames.size() > 0)
@@ -544,6 +820,9 @@ void Cpp_interface::reset()
   resetSolver();
   discardExtensionalitySolveState();
   resetIncrementalSolver();
+
+  // A reason-unknown belongs to the session that produced it.
+  bm.clearUnknown();
 
   cleanUp();
 
@@ -589,6 +868,7 @@ void Cpp_interface::resetAssertions()
   if (!global_declarations)
     removeFrame();
   cache.clear();
+  bm.clearUnknown();
 
   // These tables may retain the discarded assertions or declarations.
   resetSolver();
@@ -684,6 +964,12 @@ void Cpp_interface::popAssumptionFrame()
 
 void Cpp_interface::checkSatAssuming(const ASTVec& assumptions)
 {
+  // The parser reduces a malformed UF subexpression to a typed carrier so it
+  // can reach this outer boundary. Rejection is transactional: in particular
+  // do not push, invalidate a model, solve the base stack, or print a verdict.
+  if (current_command_rejected)
+    return;
+
   // An internal assertion level holding exactly the assumptions. push()
   // inherits a known-UNSAT verdict from the level below, and a SAT answer
   // propagates to the levels beneath, so the verdict cache keeps working
@@ -727,6 +1013,10 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
   session_touched = true;
 
   bm.GetRunTimes()->stop(RunTimes::Parsing);
+  bm.clearUnknown();
+  // Element names belong to one model. Cleared here rather than in getModel so
+  // that get-value and get-model agree within a solve whichever is asked first.
+  bm.clearUninterpretedElements();
 
   // Bracket the solve so (get-info :all-statistics) can report on this check
   // alone. Taken here rather than at entry so the parse that preceded the
@@ -735,6 +1025,32 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
 
   checkInvariant();
   assert(assertionsSMT2.size() == cache.size());
+
+  // A sort declared by declare-sort is unbounded and its carrier is not, so a
+  // query needing more elements of one sort than the carrier can tell apart may
+  // be unsatisfiable in the encoding while being satisfiable in the theory.
+  // Which way that can go wrong is not symmetric: every carrier pattern denotes
+  // an element and bit equality on the carrier is the sort's equality, so any
+  // satisfying carrier assignment is a genuine model and `sat` is always sound.
+  // Only `unsat` can be an artefact, and it is also the one answer a caller
+  // cannot tell from a real refutation.
+  //
+  // So the query is SOLVED and only an `unsat` is withheld -- see the
+  // conversion after the solve below. Refusing before solving would have
+  // thrown away sound `sat` answers too, which is a plain loss for the users
+  // who narrowed the carrier deliberately.
+  //
+  // Decided here rather than in either engine because both are reachable from
+  // this one funnel and the question is about the input, not about how it was
+  // solved. Conservative: it counts terms that could need an element of their
+  // own, not elements actually forced apart, so an over-capacity query that is
+  // unsatisfiable for unrelated reasons is withheld too. At the default width
+  // that takes 65537 terms of one sort -- reachable by a generated query, and
+  // measured at 0.27 s, so it is no hand-written query that gets there rather
+  // than none at all.
+  std::string carrierExhausted;
+  const bool carrierMayBeShort =
+      sortCarrierExhausted(assertionsSMT2, carrierExhausted);
 
   Entry& last_run = cache.back();
   if ((last_run.node_number != assertionsSMT2.back().GetNodeNum()) &&
@@ -813,7 +1129,7 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
       last_result = GlobalSTP->TopLevelSTP(query, bm.ASTFalse);
     }
 
-    // Store away the answer. Might be timeout, or error though..
+    // Store away the answer. It may also be unknown or an error.
     last_run = Entry(last_result);
     last_run.node_number = assertionsSMT2.back().GetNodeNum();
 
@@ -832,6 +1148,17 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
   {
     std::cerr << "Incremental: unsat answered from a cached core, no solve"
               << std::endl;
+  }
+
+  // An `unsat` reached over a carrier too narrow for the query may be an
+  // artefact of the encoding rather than a refutation, and nothing in the
+  // output would distinguish the two. Withhold it. `sat` is kept: every
+  // carrier assignment denotes a real assignment of elements, so a model found
+  // this way is a genuine one whatever the carrier's width.
+  if (carrierMayBeShort && last_run.result == SOLVER_UNSATISFIABLE)
+  {
+    bm.noteUnknown(UnknownReason::CarrierExhausted, carrierExhausted);
+    last_run.result = bm.unknownResult();
   }
 
   // A model exists exactly when this check concluded SAT and the solve
@@ -879,6 +1206,11 @@ Cpp_interface::Cpp_interface(STPMgr& bm_)
 
 void Cpp_interface::cleanUp()
 {
+  // exit and reset perform cleanup from inside their command action and do
+  // not return through the ordinary closing-parenthesis reduction.
+  if (current_command_active)
+    finishCurrentCommand();
+
   letMgr->cleanupParserSymbolTable();
   cache.clear();
 
@@ -892,6 +1224,9 @@ void Cpp_interface::cleanUp()
   {
     removeFrame();
   }
+
+  restoreUFOptionAfterLogic();
+  restoreArrayEqualityOptionAfterLogic();
 }
 
 // SMT-LIB gives these options a <b_value> argument (2.6, figure 3.9), so a
@@ -1179,16 +1514,180 @@ void Cpp_interface::getInfo(std::string flag)
     cout << "(:assertion-stack-levels "
          << (frames.size() > 0 ? frames.size() - 1 : 0) << ")" << endl;
   }
+  else if (flag == "reason-unknown")
+  {
+    // Only meaningful after an answer of `unknown`, which is the one case
+    // SMT-LIB defines it for. Asked at any other time the honest answer is
+    // that there is no unknown to explain, and saying so beats inventing a
+    // reason or reporting the flag as unsupported when it is implemented.
+    // That answer is carried inside the info response rather than raised as
+    // an error response, for the reason :all-statistics gives above: under an
+    // immediate-exit error behaviour, raising one would kill the session over
+    // a diagnostic query.
+    switch (bm.getUnknownReason())
+    {
+      case UnknownReason::Timeout:
+        cout << "(:reason-unknown timeout)" << endl;
+        break;
+      case UnknownReason::ConflictBudget:
+        // Not `timeout`: this one is deterministic and re-running with more
+        // time will reproduce it exactly. SMT-LIB admits an s-expression here,
+        // and naming the flag is what a caller can act on.
+        cout << "(:reason-unknown (incomplete \"the conflict budget set by "
+                "--max-num-confl ran out\"))" << endl;
+        break;
+      case UnknownReason::CarrierExhausted:
+      case UnknownReason::AssumedInjectivity:
+      case UnknownReason::AIGBudget:
+      case UnknownReason::Incomplete:
+        // The predefined SMT-LIB spelling, followed by what was incomplete:
+        // the flag admits an s-expression, and a bare "incomplete" tells a
+        // caller nothing they can act on. All four share it because the
+        // sentence is what says which, and SMT-LIB2 has no spelling that
+        // would say it better.
+        cout << "(:reason-unknown (incomplete \""
+             << bm.getUnknownReasonDetail()
+             << "\"))" << endl;
+        break;
+      case UnknownReason::None:
+        // SOLVER_UNKNOWN cannot reach the frontend without a reason: both
+        // output boundaries enforce that invariant. None therefore means
+        // there was no unknown result to explain.
+        cout << "(:reason-unknown (error \"the last answer was not "
+                "unknown\"))" << endl;
+        break;
+    }
+  }
   else
   {
-    // :reason-unknown, the one standard flag left, is optional and not
-    // reported: STP does not answer unknown, so there is never a reason to
-    // give for one.
     unsupported();
     return;
   }
 
   flush(cout);
+}
+
+// How many elements of one declared sort the query could need at once, counted
+// per sort, against what its carrier can hold. See the caller for what is done
+// with the answer.
+bool Cpp_interface::sortCarrierExhausted(const ASTVec& assertions,
+                                         std::string& detail) const
+{
+  // Nothing to count when no sort was ever declared, which is almost every
+  // query. Checked before the walk rather than inside it: this runs on every
+  // check-sat ahead of the result cache, and an O(DAG) sweep that always
+  // answers no cost 6.7x on a session of repeated check-sats over a 60k-node
+  // formula with no declare-sort in it at all.
+  if (sort_aliases.empty())
+    return false;
+  bool anyDeclared = false;
+  for (const std::pair<const std::string, SourceSort>& alias : sort_aliases)
+    anyDeclared = anyDeclared ||
+                  alias.second.kind() == SourceSort::Kind::Uninterpreted;
+  if (!anyDeclared)
+    return false;
+
+  // What counts is a term that could need an element of its own, so two node
+  // shapes carrying the sort are excluded and neither is an edge case:
+  //
+  //  - a declaration's identity symbol. It carries the codomain sort so that an
+  //    application can derive its own, but it denotes the function, not an
+  //    element, and counting it refused a query with one constant and one
+  //    application at width 1 -- where one element suffices.
+  //  - an if-then-else. Its value is always one of its branches, which are
+  //    counted already, so it can never require a fresh element. Four
+  //    constants and one ite over them read as five terms against a capacity
+  //    of four.
+  std::map<unsigned, uint64_t> named;
+  std::map<unsigned, unsigned> widths;
+  const auto reserve = [&named, &widths](const SourceSort& sort,
+                                         uint64_t count) {
+    if (sort.kind() != SourceSort::Kind::Uninterpreted || count == 0)
+      return;
+    uint64_t& total = named[sort.uninterpretedId()];
+    if (std::numeric_limits<uint64_t>::max() - total < count)
+      total = std::numeric_limits<uint64_t>::max();
+    else
+      total += count;
+    widths[sort.uninterpretedId()] = sort.packedWidth();
+  };
+  ASTNodeSet visited;
+  ASTNodeSet identities;
+  const UFContext* const context = bm.getUFContextIfAny();
+  if (context != NULL)
+    context->collectIdentitySymbols(identities);
+  std::vector<ASTNode> pending(assertions.begin(), assertions.end());
+  while (!pending.empty())
+  {
+    const ASTNode current = pending.back();
+    pending.pop_back();
+    if (current.IsNull() || !visited.insert(current).second)
+      continue;
+    const SourceSort sort = current.GetSourceSort();
+    if (sort.kind() == SourceSort::Kind::Uninterpreted &&
+        current.GetKind() != ITE && identities.count(current) == 0)
+      reserve(sort, 1);
+
+    // Array extensionality introduces one witness index and two witness
+    // reads for each distinct equality record. Those nodes deliberately use
+    // raw bit-vector sorts because they live below the source boundary, so
+    // the ordinary term count above cannot see their demand on a declared
+    // component sort. Reserve their source-level elements here before the
+    // lowering happens. This matters only for deliberately tiny
+    // --uf-sort-width values; at the default width the bound is remote.
+    if (current.GetKind() == ARRAY_EQ && current.Degree() == 2)
+    {
+      const SourceSort array = current[0].GetSourceSort();
+      if (array.kind() == SourceSort::Kind::Array)
+      {
+        reserve(array.index(), 1);
+        reserve(array.element(), 2);
+      }
+    }
+    else if (current.GetKind() == DISTINCT && current.Degree() >= 2 &&
+             current[0].GetSourceSort().kind() == SourceSort::Kind::Array)
+    {
+      // lowerDistinct creates one equality record for every operand pair.
+      const uint64_t count = current.Degree();
+      const uint64_t pairs =
+          count > std::numeric_limits<uint64_t>::max() / (count - 1)
+              ? std::numeric_limits<uint64_t>::max()
+              : count * (count - 1) / 2;
+      const SourceSort array = current[0].GetSourceSort();
+      reserve(array.index(), pairs);
+      reserve(array.element(),
+              pairs > std::numeric_limits<uint64_t>::max() / 2
+                  ? std::numeric_limits<uint64_t>::max()
+                  : pairs * 2);
+    }
+    for (size_t i = 0; i < current.Degree(); ++i)
+      pending.push_back(current[i]);
+  }
+
+  for (const std::pair<const unsigned, uint64_t>& entry : named)
+  {
+    const unsigned width = widths[entry.first];
+    if (width >= 64)
+      continue; // a carrier that wide holds more elements than can be named
+    const uint64_t capacity = (uint64_t)1 << width;
+    if (entry.second <= capacity)
+      continue;
+    // The remedy is a WIDTH, not a term count. Saying "raise it to at least 5"
+    // for five terms named a value four times larger than needed, and above
+    // 1024 named one the flag's own range check refuses -- so the advice was
+    // unfollowable exactly where it was most needed.
+    unsigned needed = width;
+    while (needed < 64 && ((uint64_t)1 << needed) < entry.second)
+      needed++;
+    std::ostringstream message;
+    message << "the query needs up to " << entry.second
+            << " elements of sort " << uninterpretedSortName(entry.first)
+            << ", and --uf-sort-width=" << width << " tells only " << capacity
+            << " apart; raise --uf-sort-width to at least " << needed;
+    detail = message.str();
+    return true;
+  }
+  return false;
 }
 
 void Cpp_interface::getAssertions()
@@ -1209,6 +1708,8 @@ void Cpp_interface::getAssertions()
 
 void Cpp_interface::getValue(const ASTVec& v)
 {
+  if (current_command_rejected)
+    return;
   if (!bm.UserFlags.construct_counterexample_flag || !model_valid)
   {
     unsupported();
@@ -1228,12 +1729,67 @@ void Cpp_interface::getValue(const ASTVec& v)
 
   for (ASTNode n : v)
   {
-    // Array-valued get-value is explicitly unsupported when array
-    // equality is enabled; use (get-model), which prints the completed
-    // array interpretations. With the feature disabled the
-    // pre-extension behavior is preserved unchanged.
-    if (n.GetKind() != SYMBOL ||
-        (n.GetType() == ARRAY_TYPE && bm.UserFlags.enable_array_equality))
+    if (n.GetKind() == UF_APPLY)
+    {
+      std::string diagnostic;
+      const ASTNode value =
+          getUninterpretedApplicationValue(n, &diagnostic);
+      if (value.GetKind() == UNDEFINED)
+      {
+        // The solve never reached this application, so there is no certified
+        // value to hand back -- but there is still an answer, and the same
+        // command list was already giving it: an application nested inside a
+        // term goes through the model evaluator, which completes it against
+        // the published interpretation, so (bvadd (f #x07) #x01) answered
+        // while the bare (f #x07) was refused. The printed model is total and
+        // says what (f #x07) is; refusing to repeat it here was the one place
+        // the two disagreed.
+        //
+        // Fall through to the ordinary term path, which is that evaluator.
+        // Anything genuinely unanswerable -- no model at all, an application
+        // from another context, one whose model has been invalidated -- fails
+        // there too, and the diagnostic computed above is what it reports.
+        if (!model_valid || GlobalSTP == NULL)
+        {
+          if (diagnostic.empty())
+            diagnostic = "uninterpreted-function application has no certified "
+                         "value";
+          rejectCurrentCommand(diagnostic);
+          return;
+        }
+        GlobalSTP->Ctr_Example->PrintSMTLIB2(os, n);
+        os << std::endl;
+        continue;
+      }
+      os << "( ";
+      // Through the letizing entry point, for the reason the note above
+      // AbsRefine_CounterExample::PrintSMTLIB2 gives: an application's
+      // arguments may be a shared DAG a caller built out of very little
+      // input text.
+      printer::SMTLIB2_PrintTerm(os, &bm, n);
+      os << " ";
+      // The value is printed at the application's own sort, not by handing the
+      // node to the term printer -- which prints a node and would print an
+      // element of a declared sort as the carrier pattern it is represented
+      // by. The sort is recoverable here: a UF_APPLY's source sort is its
+      // declaration's codomain.
+      if (bm.isUninterpretedSortedTerm(n))
+        os << "|"
+           << bm.uninterpretedElementName(n.GetSourceSort(), value) << "|";
+      else
+        printer::SMTLIB2_Print1(os, value, 0, false);
+      os << " )" << std::endl;
+      continue;
+    }
+    // (get-value ...) asks for the value of arbitrary well-sorted terms and
+    // not just of variables, and the model evaluator already decides all of
+    // them -- including terms built over uninterpreted applications. The one
+    // shape with no value to print is an array: (get-model) prints the
+    // completed array interpretations instead. That refusal is
+    // unconditional, because reaching the printer with an array aborted the
+    // process rather than answering when array equality was disabled -- and
+    // disabled is the default.
+    if (n.GetType() == ARRAY_TYPE)
     {
       unsupported();
       return;
@@ -1303,17 +1859,57 @@ void Cpp_interface::getUnsatAssumptions()
   }
   const ASTNodeSet failedSet(failed.begin(), failed.end());
 
+  ASTVec semanticAssumptions;
+  const ASTVec* assumptionsForMatching = &lastAssumptionTerms;
+  if (granular && bm.has_distinct)
+  {
+    semanticAssumptions.reserve(lastAssumptionTerms.size());
+    for (const ASTNode& a : lastAssumptionTerms)
+      semanticAssumptions.push_back(lowerDistinct(&bm, a));
+    assumptionsForMatching = &semanticAssumptions;
+  }
+
+  // Ordinarily each failed driver conjunct is exactly one flattened conjunct
+  // of a lowered source assumption. The simplifying factory may instead
+  // collapse the assumptions level as a whole (for example, p and (not p))
+  // before the driver assigns its per-conjunct literals. If a reported
+  // conjunct cannot be mapped back, falling back to the full source set is a
+  // correct core; silently dropping it can produce an empty, invalid one.
+  bool completeMapping = true;
+  if (granular)
+  {
+    for (const ASTNode& failedConjunct : failedSet)
+    {
+      const ASTNodeSet singleton{failedConjunct};
+      bool found = false;
+      for (const ASTNode& a : *assumptionsForMatching)
+      {
+        if (assumptionFailed(a, singleton, bm.ASTTrue))
+        {
+          found = true;
+          break;
+        }
+      }
+      if (!found)
+      {
+        completeMapping = false;
+        break;
+      }
+    }
+  }
+
   std::ostringstream os;
   os << "(";
   bool first = true;
-  for (const ASTNode& a : lastAssumptionTerms)
+  for (size_t i = 0; i < lastAssumptionTerms.size(); ++i)
   {
-    if (granular && !assumptionFailed(a, failedSet, bm.ASTTrue))
+    if (granular && completeMapping &&
+        !assumptionFailed((*assumptionsForMatching)[i], failedSet, bm.ASTTrue))
       continue;
     if (!first)
       os << " ";
     first = false;
-    printer::SMTLIB2_Print1(os, a, 0, false);
+    printer::SMTLIB2_Print1(os, lastAssumptionTerms[i], 0, false);
   }
   os << ")";
   cout << os.str() << endl;
@@ -1342,9 +1938,30 @@ void Cpp_interface::getModel()
   if (GlobalSTP != NULL && GlobalSTP->hasIncrementalSolver())
     GlobalSTP->getIncrementalSolver()->materializePendingModel();
 
-  cout << "(" << std::endl;
+  // The body is rendered first because rendering it is what names the
+  // elements of any declared sort, and the preamble that declares them has to
+  // come before the definitions that use them.
   std::ostringstream os;
   GlobalSTP->Ctr_Example->PrintFullCounterExampleSMTLIB2(os);
+
+  cout << "(" << std::endl;
+
+  // A model that mentions a sort declared by declare-sort has to say so, or it
+  // cannot be read back: the sort has no elements anyone else knows about. So
+  // it declares the sort, then one constant per element the model mentions,
+  // and the definitions refer to those. Distinct names denote distinct
+  // elements -- the convention every solver's models rest on, and the only
+  // thing this format cannot state outright.
+  // Every sort the body mentioned, not only those that named an element. A
+  // sort can reach the text through a function signature alone -- a predicate
+  // over an opaque sort, which is the commonest shape of all -- and a model
+  // that used a sort it never declared cannot be read back at all.
+  for (const SourceSort& sort : bm.uninterpretedSortsPrinted())
+    cout << "(declare-sort " << sourceSortToSMTLib(sort) << " 0)" << std::endl;
+  for (const STPMgr::UninterpretedElement& element : bm.uninterpretedElements())
+    cout << "(declare-fun |" << element.name << "| () "
+         << sourceSortToSMTLib(element.sort) << ")" << std::endl;
+
   cout << os.str();
   cout << ")" << std::endl;
 }
@@ -1357,10 +1974,11 @@ void CNFClearMemory()
 Cpp_interface::SolverFrame::SolverFrame(
     ankerl::unordered_dense::map<std::string, Function>*
         global_function_context,
-    std::map<std::string, std::pair<unsigned, unsigned>>*
-        global_sort_alias_context)
+    std::map<std::string, SourceSort>*
+        global_sort_alias_context,
+    STPMgr* manager)
     : _global_function_context(global_function_context),
-      _global_sort_alias_context(global_sort_alias_context)
+      _global_sort_alias_context(global_sort_alias_context), _manager(manager)
 {
 }
 
@@ -1371,6 +1989,18 @@ Cpp_interface::SolverFrame::SolverFrame(
 // function declarations are correctly decremented.
 Cpp_interface::SolverFrame::~SolverFrame()
 {
+  UFContext* uf = _manager->getUFContextIfAny();
+  if (uf != NULL)
+  {
+    for (const UFDecl* declaration : _scoped_uf_declarations)
+    {
+      std::string ignored;
+      const bool removed = uf->deactivate(declaration, &ignored);
+      assert(removed);
+      (void)removed;
+    }
+  }
+
   // Iterate on the function names in our current scope
   for (const auto& scoped_function_name : getFunctions())
   {
@@ -1416,14 +2046,47 @@ void Cpp_interface::SolverFrame::addSortAlias(const std::string& name)
   _scoped_sort_aliases.push_back(name);
 }
 
+void Cpp_interface::SolverFrame::addUFDeclaration(const UFDecl* declaration)
+{
+  assert(declaration != NULL);
+  _scoped_uf_declarations.push_back(declaration);
+}
+
 void Cpp_interface::SolverFrame::addSymbol(const ASTNode& symbol)
 {
   _scoped_symbols.push_back(symbol);
   _symbol_bindings[std::string(symbol.GetName())].push_back(symbol);
 }
 
+void Cpp_interface::SolverFrame::addTemporarySymbol(const ASTNode& symbol)
+{
+  addSymbol(symbol);
+  _temporary_symbol_bindings[std::string(symbol.GetName())].push_back(symbol);
+}
+
+void Cpp_interface::SolverFrame::clearTemporarySymbols()
+{
+  while (!_temporary_symbol_bindings.empty())
+  {
+    const ASTNode symbol = _temporary_symbol_bindings.begin()->second.back();
+    const bool removed = removeSymbol(symbol);
+    assert(removed);
+    (void)removed;
+  }
+}
+
 bool Cpp_interface::SolverFrame::removeSymbol(const ASTNode& symbol)
 {
+  const auto temporary =
+      _temporary_symbol_bindings.find(std::string_view(symbol.GetName()));
+  if (temporary != _temporary_symbol_bindings.end() &&
+      !temporary->second.empty() && temporary->second.back() == symbol)
+  {
+    temporary->second.pop_back();
+    if (temporary->second.empty())
+      _temporary_symbol_bindings.erase(temporary);
+  }
+
   const auto binding = _symbol_bindings.find(std::string_view(symbol.GetName()));
   if (binding == _symbol_bindings.end() || binding->second.empty() ||
       binding->second.back() != symbol)
@@ -1466,6 +2129,11 @@ void Cpp_interface::SolverFrame::adoptDeclarations(SolverFrame& donor)
                               donor._scoped_sort_aliases.begin(),
                               donor._scoped_sort_aliases.end());
   donor._scoped_sort_aliases.clear();
+
+  _scoped_uf_declarations.insert(_scoped_uf_declarations.end(),
+                                 donor._scoped_uf_declarations.begin(),
+                                 donor._scoped_uf_declarations.end());
+  donor._scoped_uf_declarations.clear();
 }
 
 bool Cpp_interface::SolverFrame::lookupSymbol(std::string_view name,
@@ -1473,6 +2141,16 @@ bool Cpp_interface::SolverFrame::lookupSymbol(std::string_view name,
 {
   const auto found = _symbol_bindings.find(name);
   if (found == _symbol_bindings.end() || found->second.empty())
+    return false;
+  output = found->second.back();
+  return true;
+}
+
+bool Cpp_interface::SolverFrame::lookupTemporarySymbol(
+    const std::string_view name, ASTNode& output) const
+{
+  const auto found = _temporary_symbol_bindings.find(name);
+  if (found == _temporary_symbol_bindings.end() || found->second.empty())
     return false;
   output = found->second.back();
   return true;

@@ -26,6 +26,7 @@ THE SOFTWARE.
 #define CPP_INTERFACE_H_
 
 #include "stp/AST/AST.h"
+#include "stp/UninterpretedFunctions/UFDecl.h"
 #include "stp/NodeFactory/NodeFactory.h"
 #include "stp/Util/Attributes.h"
 #include "extlib-unordered-dense/ankerl/unordered_dense.h"
@@ -34,6 +35,7 @@ THE SOFTWARE.
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace stp
@@ -57,35 +59,20 @@ struct float_size
 };
 
 // One component -- index or element -- of a parsed (Array X Y) sort, and
-// the assembled pair; parser plumbing like float_size. `width` is the bit
-// width the sort is laid out on: the declared width for a bitvector, the
-// packed width for a float, five for a rounding mode.
+// the assembled pair; parser plumbing like float_size. Keeping the complete
+// SourceSort here, rather than just a carrier width and a few special cases,
+// preserves the identity of a sort introduced by declare-sort.
 struct array_sort_component
 {
-  enum Kind
+  explicit array_sort_component(const SourceSort& source_sort)
+      : sort(source_sort)
   {
-    BITVECTOR,
-    FLOATINGPOINT,
-    ROUNDINGMODE
-  };
-  Kind kind;
-  unsigned width;
-  unsigned exp_bits; // FLOATINGPOINT only
-  unsigned sig_bits; // FLOATINGPOINT only
-
-  SourceSort sourceSort() const
-  {
-    switch (kind)
-    {
-      case BITVECTOR:
-        return SourceSort::bitVector(width);
-      case FLOATINGPOINT:
-        return SourceSort::floatingPoint(exp_bits, sig_bits);
-      case ROUNDINGMODE:
-        return SourceSort::roundingMode();
-    }
-    return SourceSort::unknown();
+    assert(sort.isScalar());
   }
+
+  SourceSort sort;
+  unsigned width() const { return sort.packedWidth(); }
+  SourceSort sourceSort() const { return sort; }
 };
 
 struct array_sort
@@ -97,6 +84,25 @@ struct array_sort
   {
     return SourceSort::array(index.sourceSort(), elem.sourceSort());
   }
+};
+
+// Command-local semantic carrier for one sort in a nonzero-arity
+// declare-fun. Keeping unsupported sorts as data lets the enclosing
+// declaration report its name and argument position without parser-global
+// latches, while still postponing every mutation until the signature is valid.
+struct parsed_uf_sort
+{
+  parsed_uf_sort(SourceSort sourceSort, std::string display,
+                 bool isSupported, bool isKnown = true)
+      : sort(std::move(sourceSort)), spelling(std::move(display)),
+        supported(isSupported), known(isKnown)
+  {
+  }
+
+  SourceSort sort;
+  std::string spelling;
+  bool supported;
+  bool known;
 };
 
 // Heterogeneous string hash: lets a string-keyed table be probed with a
@@ -115,7 +121,11 @@ struct TransparentStringHash
 class Cpp_interface
 {
   STPMgr& bm;
-  std::map<std::string, std::pair<unsigned, unsigned>> sort_aliases;
+  // Sort names the script introduced: define-sort's nullary floating-point
+  // aliases, and declare-sort's uninterpreted sorts. Both resolve to a
+  // SourceSort, so a name in sort position needs one lookup whichever
+  // command introduced it.
+  std::map<std::string, SourceSort> sort_aliases;
   bool print_success;
   bool ignoreCheckSatRequest;
 
@@ -163,8 +173,9 @@ private:
     // the global functions to be able to remove functions when we pop
     SolverFrame(ankerl::unordered_dense::map<std::string, Function>*
                     global_function_context,
-                std::map<std::string, std::pair<unsigned, unsigned>>*
-                    global_sort_alias_context);
+                std::map<std::string, SourceSort>*
+                    global_sort_alias_context,
+                STPMgr* manager);
     virtual ~SolverFrame();
 
     // Obtain the functions for the current frame
@@ -175,8 +186,12 @@ private:
 
     void addSortAlias(const std::string& name);
     void addSymbol(const ASTNode& symbol);
+    void addTemporarySymbol(const ASTNode& symbol);
+    void clearTemporarySymbols();
+    void addUFDeclaration(const UFDecl* declaration);
     bool removeSymbol(const ASTNode& symbol);
     bool lookupSymbol(std::string_view name, ASTNode& output) const;
+    bool lookupTemporarySymbol(std::string_view name, ASTNode& output) const;
 
     // Take over every declaration made in `donor`, leaving it empty. Used
     // for :global-declarations true, where a pop removes the assertion
@@ -188,6 +203,7 @@ private:
   private:
     vector<std::string> _scoped_functions;
     vector<std::string> _scoped_sort_aliases;
+    vector<const UFDecl*> _scoped_uf_declarations;
     ASTVec _scoped_symbols;
     // Hash map, not std::map: files declare tens of thousands of symbols
     // with long common prefixes, and a tree walk memcmps the prefix at
@@ -195,10 +211,14 @@ private:
     ankerl::unordered_dense::map<std::string, std::vector<ASTNode>,
                                  TransparentStringHash, std::equal_to<>>
         _symbol_bindings;
+    ankerl::unordered_dense::map<std::string, std::vector<ASTNode>,
+                                 TransparentStringHash, std::equal_to<>>
+        _temporary_symbol_bindings;
     ankerl::unordered_dense::map<std::string, Function>*
         _global_function_context;
-    std::map<std::string, std::pair<unsigned, unsigned>>*
+    std::map<std::string, SourceSort>*
         _global_sort_alias_context;
+    STPMgr* _manager;
   };
 
   // The vector of all frames that have been created by calling push
@@ -268,6 +288,31 @@ private:
   // pop, reset, reset-assertions). get-value/get-model refuse when false
   // rather than print a model of an assertion set that no longer exists.
   bool model_valid;
+
+  // A malformed UF expression is diagnosed without aborting the SMT-LIB
+  // script.  The parser still has to reduce the enclosing typed production,
+  // so it carries a canonical value of the declared result sort to the end
+  // of the command.  This latch prevents that parser-only carrier (or any
+  // other side effect in the rejected command) from entering solver state.
+  // It is cleared exactly at the outer command boundary.
+  bool current_command_rejected;
+  bool current_command_active;
+
+  // set-logic may select UF for this SMT-LIB session without changing the
+  // caller's lasting runtime configuration. Remember that configuration so
+  // reset (which clears the logic) and parser teardown can restore it, while
+  // reset-assertions deliberately retains both the logic and this selection.
+  bool uf_enabled_by_logic = false;
+  bool uf_option_before_logic = false;
+  void restoreUFOptionAfterLogic();
+
+  // QF_AX needs declared sorts and extensional array equality, but it does
+  // not contain uninterpreted functions. Keep that selection separate from
+  // enable_uninterpreted_functions and restore the caller's array-equality
+  // option when reset clears the logic or parser teardown ends the session.
+  bool ax_enabled_by_logic = false;
+  bool array_equality_option_before_logic = false;
+  void restoreArrayEqualityOptionAfterLogic();
 
   // Unless --incremental=on or an explicit threshold overrides it, pure
   // QF_BV/QF_ABV sessions delay the persistent driver until solve 32; other
@@ -344,10 +389,16 @@ public:
                                           unsigned exp_width,
                                           unsigned sig_width);
 
-  // define-sort aliases for floating-point sorts. A real table: the alias
-  // name is NOT interned as a symbol (the old scheme made the sort name
-  // resolvable as a term variable). Aliases follow assertion-frame scope,
-  // and :global-declarations along with the other declarations.
+  // Sort names the script introduced. A real table: the alias name is NOT
+  // interned as a symbol (the old scheme made the sort name resolvable as a
+  // term variable). Aliases follow assertion-frame scope, and
+  // :global-declarations along with the other declarations.
+  DLL_PUBLIC void addSortAlias(const std::string& name, const SourceSort& sort);
+  DLL_PUBLIC bool lookupSortAlias(const std::string& name,
+                                  SourceSort& sort) const;
+
+  // The floating-point spelling of the same pair, kept because define-sort's
+  // callers speak in exponent/significand widths.
   DLL_PUBLIC void addSortAlias(const std::string& name, unsigned exp_width,
                                unsigned sig_width);
   DLL_PUBLIC bool lookupSortAlias(const std::string& name,
@@ -401,15 +452,43 @@ public:
   DLL_PUBLIC SourceSort functionReturnSourceSort(const std::string& name);
   bool hasFunctions() const { return !functions.empty(); }
 
+  // Context-owned uninterpreted declarations are distinct from stored
+  // define-fun macros. The general forms are the direct C++ API (context
+  // lifetime); the scoped declaration form is the SMT-LIB frame funnel.
+  DLL_PUBLIC const UFDecl* declareUninterpretedFunction(
+      const std::string& name, const std::vector<SourceSort>& domain,
+      const SourceSort& codomain, std::string* diagnostic = NULL);
+  DLL_PUBLIC const UFDecl* declareScopedUninterpretedFunction(
+      const std::string& name, const std::vector<SourceSort>& domain,
+      const SourceSort& codomain, std::string* diagnostic = NULL);
+  DLL_PUBLIC const UFDecl* lookupUninterpretedFunction(
+      const std::string& name) const;
+  DLL_PUBLIC ASTNode applyUninterpretedFunction(
+      const UFDecl* declaration, const ASTVec& actuals,
+      std::string* diagnostic = NULL);
+  // Evaluate an active durable UF_APPLY in the most recently certified
+  // model. The returned node is a public Bool/BV constant, never a lowered
+  // result symbol. Failure is nonfatal and returns ASTUndefined.
+  DLL_PUBLIC ASTNode getUninterpretedApplicationValue(
+      const ASTNode& application, std::string* diagnostic = NULL);
+  bool hasUninterpretedFunctions() const;
+
   DLL_PUBLIC ASTNode LookupOrCreateSymbol(std::string name);
   DLL_PUBLIC bool LookupSymbol(const char* const name, ASTNode& output);
+  DLL_PUBLIC bool LookupTemporarySymbol(const char* name, ASTNode& output);
   DLL_PUBLIC bool isSymbolAlreadyDeclared(char* name);
   DLL_PUBLIC void setPrintSuccess(bool ps);
   DLL_PUBLIC bool isSymbolAlreadyDeclared(std::string name);
 
   // Retain the SMT-LIB2 set-logic classification needed by automatic
-  // incremental engagement. reset clears it; reset-assertions retains it.
+  // incremental engagement, select UF when the logic names it, and select
+  // declared-sort arrays plus extensional equality for QF_AX. reset clears
+  // these selections; reset-assertions retains them.
   DLL_PUBLIC void setLogic(const std::string& logic);
+
+  // declare-sort is part of the UF logics and QF_AX. The latter deliberately
+  // does not turn on nonzero-arity UF declarations in the lexer/parser.
+  bool declaredSortsEnabled() const;
 
   // Create the node, then "new" it.
   DLL_PUBLIC ASTNode* newNode(const Kind k, const ASTNode& n0,
@@ -428,6 +507,20 @@ public:
 
   DLL_PUBLIC void deleteNode(ASTNode* n);
   DLL_PUBLIC void addSymbol(ASTNode& s);
+  // Function formal parameters are parser-local bindings. They may shadow a
+  // top-level declaration and must still be installed temporarily while a
+  // containing define-fun command is being rejected and reduced.
+  DLL_PUBLIC void addTemporarySymbol(ASTNode& s);
+
+  // Check the shared top-level name space before the parser mutates a frame.
+  // With UF enabled, a NONZERO-ARITY declare-fun name is deliberately lexed
+  // unclassified so that a collision reaches this semantic check and is
+  // reported nonfatally. Every UF-free shape (zero-arity declare-fun,
+  // declare-const, define-fun) keeps the legacy classified-token syntax error
+  // at the name instead; for those this check is a backstop the lexer
+  // normally pre-empts.
+  DLL_PUBLIC bool validateTopLevelDeclarationName(
+      const std::string& name, std::string* diagnostic = NULL);
 
   // Declare a symbol of SMT-LIB's RoundingMode sort: registers it like
   // addSymbol, marks it for the model printers, and asserts that it takes
@@ -454,6 +547,14 @@ public:
   DLL_PUBLIC void success();
   DLL_PUBLIC void error(std::string msg);
   DLL_PUBLIC void unsupported();
+
+  // Nonfatal SMT-LIB command rejection used by the typed UF funnel.  No
+  // malformed UF_APPLY or fresh placeholder is constructed or registered.
+  DLL_PUBLIC void beginCurrentCommand();
+  DLL_PUBLIC void abortCurrentCommand();
+  DLL_PUBLIC void rejectCurrentCommand(const std::string& diagnostic);
+  DLL_PUBLIC void finishCurrentCommand();
+  bool currentCommandRejected() const { return current_command_rejected; }
 
   // Resets the tables used by STP, but keeps all the nodes that have been
   // created.
@@ -493,6 +594,12 @@ public:
   DLL_PUBLIC void setOption(std::string, std::string);
   DLL_PUBLIC void getOption(std::string);
   DLL_PUBLIC void getInfo(std::string);
+  // True when some declared sort's carrier cannot hold the terms this query
+  // names of it, with a sentence saying which and what to raise. Neither
+  // verdict is reportable then -- see the call site in checkSat.
+  bool sortCarrierExhausted(const ASTVec& assertions,
+                            std::string& detail) const;
+
   DLL_PUBLIC void getAssertions();
 
   DLL_PUBLIC void getModel();

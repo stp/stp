@@ -94,6 +94,28 @@ static bool deriveFPFormat(const ASTNode& n, unsigned int& e, unsigned int& s)
       return e != 0 && s != 0;
     }
 
+    // An application of an uninterpreted function whose codomain is a float
+    // yields a float in the codomain's format. That format is not carried by
+    // any operand -- the declaration identity in child 0 names it, in the
+    // same immutable source sort deriveSourceSort reads for the node's sort.
+    // Without this the application would be an FP-sorted node of no format,
+    // which types as a plain bit-vector: fp.add would refuse it as having a
+    // different format from its other operand, and fp.abs would build a
+    // (0, 0)-format result that blasts to the wrong bits.
+    case UF_APPLY:
+    {
+      if (n.Degree() < 1)
+        return false;
+
+      const SourceSort codomain = n[0].GetSourceSort();
+      if (codomain.kind() != SourceSort::Kind::FloatingPoint)
+        return false;
+
+      e = codomain.exponentWidth();
+      s = codomain.significandWidth();
+      return e != 0 && s != 0;
+    }
+
     // A read from an array of floats yields a float in the element's format,
     // which the array node carries.
     case READ:
@@ -198,6 +220,11 @@ static void fpFormatOperands(const ASTNode& n, size_t& from, size_t& to)
   {
     case READ:
     case WRITE:
+      to = (n.Degree() >= 1) ? 1 : 0;
+      break;
+
+    case UF_APPLY:
+      // The declaration identity's immutable source sort is the codomain.
       to = (n.Degree() >= 1) ? 1 : 0;
       break;
 
@@ -533,6 +560,9 @@ SourceSort ASTNode::deriveSourceSort() const
 {
   if (GetKind() == UNDEFINED)
     return SourceSort::unknown();
+
+  if (GetKind() == UF_APPLY && Degree() >= 1)
+    return (*this)[0].GetSourceSort();
 
   // API type nodes denote the corresponding source sort even though they
   // are not themselves value-bearing terms.

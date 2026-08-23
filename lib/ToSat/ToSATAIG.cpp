@@ -24,8 +24,10 @@ THE SOFTWARE.
 
 #include "stp/ToSat/ToSATAIG.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
+#include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
+#include <sstream>
 
 namespace stp
 {
@@ -51,10 +53,39 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
     return false;
 
   if (input == ASTTrue)
-    return true;
+  {
+    // A formula which preprocessing proved true can still own active UF
+    // results and argument names.  They are the sole candidate authority for
+    // the checker and future congruence lemmas, so the ordinary constant-root
+    // shortcut is legal only when there are no such scalars.  Register and
+    // solve the disconnected variables here instead of letting the model
+    // evaluator invent values for symbols which never reached SAT.
+    UFContext* uf = bm->getUFContextIfAny();
+    if (uf == NULL || !uf->activeInSolve() || uf->getSolveScalars().empty())
+      return true;
+
+    first = false;
+    delete cb;
+    cb = NULL;
+    assert(satSolver.nVars() == 0);
+    mark_variables_as_frozen(satSolver);
+    bind_injectivity_guard(satSolver);
+    return runSolver(satSolver);
+  }
 
   first = false;
   Cnf_Dat_t* cnfData = bitblast(input, needAbsRef);
+
+  // Only an exhausted AIG budget returns NULL: the query has no answer, and
+  // `false` alone would be read as UNSAT. Raising the soft-timeout flag is
+  // what makes CallSAT_ResultCheck report SOLVER_UNKNOWN instead -- it tests
+  // that flag before it tests this return value.
+  if (cnfData == NULL)
+  {
+    bm->soft_timeout_expired = true;
+    return false;
+  }
+
   handle_cnf_options(cnfData, needAbsRef);
 
   assert(satSolver.nVars() == 0);
@@ -63,8 +94,46 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
   release_cnf_memory(cnfData);
 
   mark_variables_as_frozen(satSolver);
+  bind_injectivity_guard(satSolver);
 
   return runSolver(satSolver);
+}
+
+// Decide how this encoding holds the injectivity guard, once, with the rest of
+// the freezing -- so that every refinement round after it holds the same thing.
+//
+// Leaving the manager's record alone is deliberate. That record means "nobody
+// has established that an unsat here belongs to the query", and only the two
+// places that can establish it -- solveRetractingInjectivity, which asks the
+// solver, and the second pipeline run in TopLevelSTP -- may clear it. A guard
+// this function cannot bind is a guard nothing asked about.
+void ToSATAIG::bind_injectivity_guard(SATSolver& satSolver)
+{
+  if (bm->uf_injectivity_guard.IsNull() || injectivity_.assumed ||
+      injectivity_.retracted)
+    return;
+
+  const ASTNodeToSATVar::const_iterator found =
+      nodeToSATVar.find(bm->uf_injectivity_guard);
+  if (found == nodeToSATVar.end() || found->second.empty() ||
+      found->second[0] == ~((unsigned)0))
+    return; // never reached a variable; the second run decides the query
+
+  satSolver.setFrozen(found->second[0]);
+
+  if (satSolver.supportsAssumptions())
+  {
+    injectivity_.variable = found->second[0];
+    return;
+  }
+
+  // No retraction on this backend, so the guard cannot be an abstraction
+  // here. Assert it instead, which restores the plain strengthened encoding,
+  // and leave the record standing so the verdict rule withholds an unsat over
+  // it rather than reporting one nobody can take back.
+  SATSolver::vec_literals unit;
+  unit.push(SATSolver::mkLit(found->second[0], false));
+  satSolver.addClause(unit);
 }
 
 void ToSATAIG::release_cnf_memory(Cnf_Dat_t* cnfData)
@@ -112,10 +181,81 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
   Simplifier simp(bm, &sm);
 
   BBNodeManagerAIG mgr;
+  mgr.nodeBudget = bm->UserFlags.aig_node_budget;
   BitBlaster bb(&mgr, &simp, bm->defaultNodeFactory, &bm->UserFlags, cb);
 
+  BBNodeAIG BBFormula;
+
+  bm->UserFlags.coverage.queries_bitblasted++;
   bm->GetRunTimes()->start(RunTimes::BitBlasting);
-  BBNodeAIG BBFormula = bb.BBForm(input);
+
+  // Only BBForm() and the side-constraint fold below create AIG nodes, so
+  // only they can exceed the budget -- ToCNFAIG drives ABC directly and never
+  // calls mgr.CreateNode(). Keeping the try that narrow is what lets the
+  // handler close RunTimes::BitBlasting unconditionally; RunTimes::stop()
+  // FatalErrors on a category mismatch, so a try wide enough to span
+  // CNFConversion would abort instead of report.
+  try
+  {
+    BBFormula = bb.BBForm(input);
+
+    // Hand the side constraints over as one variadic AND, so that
+    // CreateNode folds them into a log-height tower.
+    //
+    // Conjoining them one at a time instead -- BBFormula =
+    // Aig_And(BBFormula, sc) once per constraint -- leaves an AIG whose
+    // depth is the number of constraints, and every AIG -> CNF walk ABC
+    // has is a plain recursive DFS: Cnf_ManScanMapping_rec under
+    // Cnf_Derive, Cnf_CollectVolume_rec under Cnf_DeriveFast, and so on
+    // for the Mf_ManGenerateCnf routes. One frame per link exhausts an
+    // 8 MiB stack at around 105k links, and there is one link per bit of
+    // each distinct abstracted operand, so a query carrying a few
+    // thousand wide equalities took the process out. How many there are
+    // is chosen by whoever wrote the input, so no stack size is a fix.
+    //
+    // The incremental route never had this: syncAbstractions() asserts
+    // each constraint as its own permanent unit clause and builds no
+    // chain at all.
+    const std::vector<BBNodeAIG>& side = bb.sideConstraints();
+    if (!side.empty())
+    {
+      std::vector<BBNodeAIG> conjuncts;
+      conjuncts.reserve(side.size() + 1);
+      conjuncts.push_back(BBFormula);
+      conjuncts.insert(conjuncts.end(), side.begin(), side.end());
+      BBFormula = mgr.CreateNode(AND, conjuncts);
+    }
+  }
+  catch (const AIGBudgetExhausted& e)
+  {
+    bm->GetRunTimes()->stop(RunTimes::BitBlasting);
+    if (bm->UserFlags.stats_flag)
+      cerr << "AIG node budget exhausted at " << e.nodeCount << " nodes"
+           << endl;
+    // Say so here, where the reason is known. The no-answer leaves through the
+    // same door a clock expiry does -- soft_timeout_expired, so that the whole
+    // pipeline unwinds the one way it knows -- and by the time it surfaces
+    // nothing can tell the two apart. This is not a clock: more time on the
+    // same machine reproduces it exactly, and what a caller can act on is the
+    // flag to raise.
+    //
+    // Phrased alongside the conflict budget's own sentence, and carrying the
+    // count it stopped at, which is the one number that says how much higher
+    // to set it. AND gates rather than nodes, because that is what the budget
+    // counts. -1 rather than 0 is what lifts the limit: 0 is a budget of no
+    // gates at all, which gives up before the first one.
+    std::ostringstream detail;
+    detail << "the AIG node budget set by --aig-node-budget ("
+           << bm->UserFlags.aig_node_budget << ") ran out at " << e.nodeCount
+           << " AND gates; raise it, or set it to -1 for no limit";
+    bm->noteUnknown(UnknownReason::AIGBudget, detail.str());
+    delete cb;
+    cb = NULL;
+    bb.cb = NULL;
+    mgr.stop();
+    return NULL;
+  }
+
   bm->GetRunTimes()->stop(RunTimes::BitBlasting);
 
   delete cb;
@@ -126,6 +266,43 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
   Cnf_Dat_t* cnfData = NULL;
   toCNF.toCNF(BBFormula, cnfData, nodeToSATVar, needAbsRef, mgr);
   bm->GetRunTimes()->stop(RunTimes::CNFConversion);
+
+  // Record what each abstraction stands for, now that CNF conversion has
+  // assigned the SAT variable its combinational input carries. Refinement
+  // reads these back to compare the candidate against the operands.
+  for (const auto& raw : bb.abstractedEQs())
+  {
+    BVEQAbstraction a;
+    a.eqNode = raw.eqNode;
+    Aig_Obj_t* pObj = (Aig_Obj_t*)Vec_PtrEntry(
+        mgr.aigMgr->vCis, raw.abstractionCI.symbol_index);
+    a.abstractionSATVar = cnfData->pVarNums[pObj->Id];
+    a.leftSymbol = raw.leftSymbol;
+    a.rightSymbol = raw.rightSymbol;
+    a.width = std::max(1u, raw.leftSymbol.GetValueWidth());
+    abstraction_.equalities().push_back(std::move(a));
+  }
+
+  for (const auto& raw : bb.abstractedTerms())
+  {
+    BVTermAbstraction a;
+    a.termNode = raw.termNode;
+    a.opKind = raw.opKind;
+    for (unsigned i = 0; i < raw.numOperands; i++)
+    {
+      a.operands[i] = raw.operands[i];
+      a.operandNegated[i] = raw.operandNegated[i];
+    }
+    a.numOperands = raw.numOperands;
+    a.width = raw.width;
+    if (raw.condCISymbolIndex >= 0)
+    {
+      Aig_Obj_t* condObj = (Aig_Obj_t*)Vec_PtrEntry(
+          mgr.aigMgr->vCis, raw.condCISymbolIndex);
+      a.condSATVar = cnfData->pVarNums[condObj->Id];
+    }
+    abstraction_.terms().push_back(std::move(a));
+  }
 
   // Free the memory in the AIGs.
   BBFormula = BBNodeAIG(); // null node
@@ -245,18 +422,131 @@ void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
       nodeToSATVar.insert(make_pair(*it, v));
     }
   }
+
+  // The BV abstraction's refinement writes clauses over the abstraction
+  // variables and the operand bits in later solve calls, the same way the
+  // array machinery above writes its lemmas; a simplifying backend must not
+  // eliminate any of them in the meantime. The incremental driver has no
+  // counterpart to this call because every backend it admits either
+  // restores an eliminated variable on contact or never eliminates one --
+  // makeBackend refuses the simplifying MiniSat outright.
+  abstraction_.freezeVariables(satSolver, nodeToSATVar);
+
+  // Give every checker-visible scalar one complete mapping in this backend.
+  // Connected bits retain their CNF variables; missing/disconnected bits get
+  // fresh unconstrained variables, which is exactly their formula semantics.
+  // Registration happens after CNF conversion so no second AIG-side meaning
+  // can compete with the mapping the checker and lemma encoder both consume.
+  UFContext* ufContext = bm->getUFContextIfAny();
+  if (ufContext != NULL && ufContext->activeInSolve())
+  {
+    for (const ASTNode& symbol : ufContext->getSolveScalars())
+    {
+      if (symbol.GetKind() != SYMBOL)
+        FatalError("UF solve-scalar registrar received a non-symbol", symbol);
+      const unsigned width = std::max((unsigned)1, symbol.GetValueWidth());
+      ASTNodeToSATVar::iterator found = nodeToSATVar.find(symbol);
+      if (found == nodeToSATVar.end())
+        found = nodeToSATVar
+                    .insert(std::make_pair(
+                        symbol, vector<unsigned>(width, ~((unsigned)0))))
+                    .first;
+      if (found->second.size() > width)
+        FatalError("UF batch liveness mapping has the wrong width", symbol);
+      if (found->second.size() < width)
+        found->second.resize(width, ~((unsigned)0));
+      for (unsigned bit = 0; bit < width; ++bit)
+      {
+        if (found->second[bit] == ~((unsigned)0))
+          found->second[bit] = satSolver.newVar();
+        satSolver.setFrozen(found->second[bit]);
+      }
+    }
+    suggest_uf_scalar_phases(satSolver);
+  }
+
+}
+
+// Bias the first candidate so the checker's scalars start out pairwise
+// different.
+//
+// The refinement loop's cost is collisions: two applications whose arguments
+// read the same values and whose results do not. Nothing tells the backend
+// that spreading unconstrained scalars out is worth anything, so its default
+// phase puts many of them on the same value at once and each collision is
+// paid for with a lemma and another full solve. Counting the scalars off
+// against an increasing value is the same trick Bitwuzla plays for DISTINCT,
+// applied to what the congruence checker reads.
+//
+// This is only a hint: it reorders the search and cannot change which answers
+// are reachable, so no soundness argument rests on the choice being good. A
+// backend without a phase interface ignores it. Scalars are visited in node
+// order rather than the set's, so the same query gets the same hints.
+void ToSATAIG::suggest_uf_scalar_phases(SATSolver& satSolver)
+{
+  if (!bm->UserFlags.uf_phase_hints)
+    return;
+  UFContext* ufContext = bm->getUFContextIfAny();
+  if (ufContext == NULL)
+    return;
+
+  std::vector<ASTNode> scalars(ufContext->getSolveScalars().begin(),
+                               ufContext->getSolveScalars().end());
+  std::sort(scalars.begin(), scalars.end(),
+            [](const ASTNode& left, const ASTNode& right)
+            { return left.GetNodeNum() < right.GetNodeNum(); });
+
+  // The hints have to land on variables the backend has already declared.
+  // CaDiCaL's factoring layer declares lazily -- on a clause, an assumption,
+  // or at the start of a solve -- and silently ignores a phase for anything
+  // it has not seen, which is every scalar registered above, since those are
+  // fresh variables no clause mentions. Declaring is the caller's job, not an
+  // advisory hint's: done here, before the first solve, it cannot disturb a
+  // model, which is the reason suggestPhase itself must not do it.
+  satSolver.declarePendingVariables();
+
+  uint64_t counter = 0;
+  for (const ASTNode& symbol : scalars)
+  {
+    const ASTNodeToSATVar::const_iterator found = nodeToSATVar.find(symbol);
+    if (found == nodeToSATVar.end())
+      continue;
+    const uint64_t value = counter++;
+    for (unsigned bit = 0; bit < found->second.size(); ++bit)
+    {
+      if (found->second[bit] == ~((unsigned)0))
+        continue;
+      const bool on = bit < 64 && ((value >> bit) & 1ULL) != 0;
+      satSolver.suggestPhase(found->second[bit], on);
+    }
+  }
 }
 
 bool ToSATAIG::runSolver(SATSolver& satSolver)
 {
   bm->GetRunTimes()->start(RunTimes::Solving);
-  bool result = satSolver.solve(bm->soft_timeout_expired);
+  // The injectivity guard is the only assumption the batch pipeline makes,
+  // and it is rebuilt on every round because a round that retracted it must
+  // not put it back. Every other clause in this encoding is asserted, so an
+  // empty vector here is the ordinary case and the helper solves plainly.
+  SATSolver::vec_literals assumps;
+  injectivity_.assumeInto(assumps);
+  bool result =
+      bm->solveRetractingInjectivity(satSolver, assumps, injectivity_);
   bm->GetRunTimes()->stop(RunTimes::Solving);
+
+  if (bm->soft_timeout_expired)
+    bm->noteBudgetExhausted(satSolver);
 
   if (bm->UserFlags.stats_flag)
     satSolver.printStats();
 
   return result;
+}
+
+unsigned ToSATAIG::refineAbstractions(SATSolver& solver)
+{
+  return abstraction_.refine(solver, nodeToSATVar);
 }
 
 ToSATAIG::~ToSATAIG()
