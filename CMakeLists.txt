@@ -635,23 +635,13 @@ option(USE_RISS "Try to use Riss" OFF)
 add_feature_info(Riss USE_RISS "Enables Riss solver")
 
 if (USE_RISS)
-    set(RISS_DIR "" CACHE PATH "Path to a Riss checkout (the directory containing riss/core/Solver.h and build/lib/libriss-coprocessor.a)")
-    # PATHS with NO_DEFAULT_PATH rather than HINTS, for the reason spelled out
-    # over the CaDiCaL lookup below: find_library reaches CMAKE_PREFIX_PATH
-    # before HINTS, and this file puts deps/install on that path, so anything
-    # installed there would outrank the checkout RISS_DIR names.
-    find_path(RISS_INCLUDE_DIR NAMES riss/core/Solver.h PATHS ${RISS_DIR} NO_DEFAULT_PATH)
-    find_library(RISS_LIBRARY NAMES riss-coprocessor PATHS ${RISS_DIR}/build/lib NO_DEFAULT_PATH)
-    if (NOT RISS_INCLUDE_DIR OR NOT RISS_LIBRARY)
-        message(FATAL_ERROR "USE_RISS is set but Riss was not found. "
-                "Set RISS_DIR to a Riss checkout containing riss/core/Solver.h "
-                "and build/lib/libriss-coprocessor.a")
-    endif()
-    message(STATUS "Found Riss: ${RISS_LIBRARY}")
+    # RISS_DIR still names a Riss checkout; cmake/FindRiss.cmake keeps that as
+    # its first choice and can build one otherwise.
+    find_package(Riss REQUIRED)
     # USE_RISS reaches headers (UserDefinedFlags.h picks the default backend
     # from it), so it has to stay a global definition. The include directory
-    # does not: only lib/Sat/RissCore.cpp includes a Riss header, and it is
-    # added there.
+    # does not: only lib/Sat/RissCore.cpp includes a Riss header, and the Riss
+    # target carries it there.
     add_definitions(-DUSE_RISS)
 endif()
 

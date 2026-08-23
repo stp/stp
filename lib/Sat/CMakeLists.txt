@@ -40,13 +40,6 @@ endif()
 
 
 if (USE_RISS)
-    # SYSTEM: Riss is upstream code whose warnings we do not control, and it is
-    # consumed as headers rather than as an STP-built target, so there is no
-    # target to hang a -Wno-error on. Without this a WERROR build fails inside
-    # Riss's own headers (~90 diagnostics across a dozen files), the same
-    # outcome the -Wno-error exemptions give abc and mimalloc. STP's own code
-    # in RissCore.cpp stays gated on warnings.
-    include_directories(SYSTEM ${RISS_INCLUDE_DIR})
     set(sat_lib_to_add ${sat_lib_to_add} RissCore.cpp)
 endif()
 
@@ -78,4 +71,14 @@ endif()
 # directory as well as its own.
 if (USE_MINISAT)
     target_link_libraries(sat PRIVATE MiniSat)
+endif()
+
+# And Riss, whose target carries its headers as SYSTEM headers: Riss is
+# upstream code whose warnings STP does not control, and it is consumed as
+# headers rather than as a target STP builds, so there is no target to hang a
+# -Wno-error on. Without that a WERROR build fails inside Riss's own headers,
+# some ninety diagnostics across a dozen files. STP's own code in RissCore.cpp
+# stays gated on warnings.
+if (USE_RISS)
+    target_link_libraries(sat PRIVATE Riss)
 endif()

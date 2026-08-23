@@ -138,10 +138,15 @@ The MiniSat and CryptoMiniSat recipes above are pre-configured in
 Those scripts install into ``deps/install``, which CMake searches without
 any extra flags.
 
-The Riss solver can be enabled with ``-DUSE_RISS``, which also needs
-``-DRISS_DIR=<path>`` naming a Riss checkout that contains
-``riss/core/Solver.h`` and ``build/lib/libriss-coprocessor.a``;
-configuration fails without it. ``scripts/deps/setup-riss.sh`` builds one.
+The Riss solver can be enabled with ``-DUSE_RISS``. Either point
+``-DRISS_DIR=<path>`` at a Riss checkout that contains
+``riss/core/Solver.h`` and ``build/lib/libriss-coprocessor.a`` --
+``scripts/deps/setup-riss.sh`` builds one -- or configure with
+``-DENABLE_AUTO_DOWNLOAD=ON`` and let STP build it. Riss needs flags of
+its own either way: it does not compile warning-free under current
+compilers and does not build as C++17, so STP builds it with ``-w`` and
+``-std=gnu++14``, and takes its headers as system headers so that a
+``WERROR`` build does not fail inside them.
 
 Building against non-installed libraries
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
