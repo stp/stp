@@ -184,6 +184,78 @@ void packToBits(const bf_t* v, unsigned exp_width, unsigned sig_width,
   }
 }
 
+// Reconstruct a finite packed IEEE value as an exact LibBF dyadic. Parsing
+// the significand as a base-two integer and applying its power-of-two scale
+// avoids both host precision and a decimal round trip.
+bool unpackFiniteBits(const std::string& bits, unsigned exp_width,
+                      unsigned sig_width, bf_t* value, std::string& err)
+{
+  const unsigned width = exp_width + sig_width;
+  if (bits.size() != width)
+  {
+    err = "a packed floating-point operand has the wrong width";
+    return false;
+  }
+  for (const char c : bits)
+    if (c != '0' && c != '1')
+    {
+      err = "a packed floating-point operand contains a non-bit character";
+      return false;
+    }
+
+  uint64_t exponent = 0;
+  for (unsigned i = 0; i < exp_width; i++)
+    exponent = (exponent << 1) | static_cast<uint64_t>(bits[1 + i] - '0');
+  const uint64_t max_exponent =
+      (static_cast<uint64_t>(1) << exp_width) - 1;
+  if (exponent == max_exponent)
+  {
+    err = "packedFPBinaryOp requires finite operands";
+    return false;
+  }
+
+  const std::string fraction = bits.substr(1 + exp_width);
+  bool fraction_nonzero = false;
+  for (const char c : fraction)
+    fraction_nonzero = fraction_nonzero || c == '1';
+  if (exponent == 0 && !fraction_nonzero)
+  {
+    bf_set_zero(value, bits[0] == '1');
+    return true;
+  }
+
+  std::string significand;
+  if (bits[0] == '1')
+    significand.push_back('-');
+  significand.push_back(exponent == 0 ? '0' : '1');
+  significand += fraction;
+
+  const char* next = nullptr;
+  int status = bf_atof(value, significand.c_str(), &next, 2, BF_PREC_INF,
+                       BF_RNDZ | BF_ATOF_NO_NAN_INF);
+  if ((status & (BF_ST_MEM_ERROR | BF_ST_INEXACT)) != 0 ||
+      next != significand.c_str() + significand.size())
+  {
+    err = "failed to reconstruct a packed floating-point operand";
+    return false;
+  }
+
+  const int64_t bias =
+      (static_cast<int64_t>(1) << (exp_width - 1)) - 1;
+  const int64_t unbiased = exponent == 0
+                               ? 1 - bias
+                               : static_cast<int64_t>(exponent) - bias;
+  const int64_t scale = unbiased - static_cast<int64_t>(sig_width - 1);
+  status = bf_mul_2exp(value, static_cast<slimb_t>(scale), BF_PREC_INF,
+                       BF_RNDZ);
+  if ((status & (BF_ST_MEM_ERROR | BF_ST_INEXACT)) != 0)
+  {
+    err = "failed to scale a packed floating-point operand";
+    return false;
+  }
+  return true;
+}
+
 } // namespace
 
 bool decimalToPackedFPBits(const std::string& decimal, unsigned exp_width,
@@ -365,6 +437,63 @@ bool rationalToPackedFPBits(const std::string& numerator,
   bf_delete(&v);
   bf_delete(&d);
   bf_delete(&n);
+  bf_context_end(&ctx);
+  return ok;
+}
+
+bool packedFPBinaryOp(const std::string& left, const std::string& right,
+                      unsigned exp_width, unsigned sig_width,
+                      unsigned rounding_mode, PackedFpBinaryOp operation,
+                      std::string& bits, std::string& err)
+{
+  if (!checkFormat(exp_width, sig_width, err))
+    return false;
+
+  bf_context_t ctx;
+  bf_context_init(&ctx, bfRealloc, nullptr);
+  bf_t a, b, result;
+  bf_init(&ctx, &a);
+  bf_init(&ctx, &b);
+  bf_init(&ctx, &result);
+
+  bool ok = unpackFiniteBits(left, exp_width, sig_width, &a, err) &&
+            unpackFiniteBits(right, exp_width, sig_width, &b, err);
+  if (ok)
+  {
+    const bf_flags_t flags = (bf_flags_t)bfRounding(rounding_mode) |
+                             bf_set_exp_bits((int)exp_width) |
+                             BF_FLAG_SUBNORMAL;
+    int status = 0;
+    switch (operation)
+    {
+      case PackedFpBinaryOp::Add:
+        status = bf_add(&result, &a, &b, (limb_t)sig_width, flags);
+        break;
+      case PackedFpBinaryOp::Subtract:
+        status = bf_sub(&result, &a, &b, (limb_t)sig_width, flags);
+        break;
+      case PackedFpBinaryOp::Multiply:
+        status = bf_mul(&result, &a, &b, (limb_t)sig_width, flags);
+        break;
+    }
+
+    if ((status & BF_ST_MEM_ERROR) != 0)
+    {
+      err = "out of memory while evaluating a packed floating-point operation";
+      ok = false;
+    }
+    else if (bf_is_nan(&result))
+    {
+      err = "a finite packed floating-point operation produced NaN";
+      ok = false;
+    }
+    else
+      packToBits(&result, exp_width, sig_width, bits);
+  }
+
+  bf_delete(&result);
+  bf_delete(&b);
+  bf_delete(&a);
   bf_context_end(&ctx);
   return ok;
 }
