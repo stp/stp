@@ -26,7 +26,7 @@ THE SOFTWARE.
 #define DEPENDENCIES_H_
 
 #include "stp/AST/AST.h"
-#include "extlib-unordered-dense/ankerl/unordered_dense.h"
+#include <ankerl/unordered_dense.h>
 #include <cstdint>
 #include <utility>
 #include <vector>

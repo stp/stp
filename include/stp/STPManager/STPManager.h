@@ -37,7 +37,7 @@ THE SOFTWARE.
 #include "stp/STPManager/UserDefinedFlags.h"
 #include "stp/Sat/SATSolver.h"
 #include "stp/Util/Attributes.h"
-#include "extlib-unordered-dense/ankerl/unordered_dense.h"
+#include <ankerl/unordered_dense.h>
 #include <cstdint>
 
 namespace stp

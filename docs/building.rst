@@ -16,6 +16,9 @@ Dependencies
 ------------
 
 STP relies on flex, bison and python3, plus at least one SAT backend.
+Nothing else has to be installed: with ``-DENABLE_AUTO_DOWNLOAD=ON`` the
+build fetches every library it needs, and ``lit``, which drives the
+tests, into a virtual environment of its own.
 Configuration fails if no backend is enabled.
 
 On a Debian-like platform most of it comes from the package manager:

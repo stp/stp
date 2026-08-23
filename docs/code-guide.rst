@@ -71,10 +71,10 @@ own targets; the other two are small enough to be carried in the tree:
    allocator the STP executables link against by default. Fetched, and
    built as part of STP; see ``STP_ALLOCATOR`` in :doc:`building` for the
    alternatives.
--  ``extlib-unordered-dense``:
-   `ankerl::unordered_dense <https://github.com/martinus/unordered_dense>`__,
-   a densely stored hash map and set, used in place of
-   ``std::unordered_map`` where it pays off.
+-  ankerl::unordered_dense:
+   `a densely stored hash map and set <https://github.com/martinus/unordered_dense>`__,
+   used in place of ``std::unordered_map`` where it pays off. A single
+   header, fetched at a pinned release.
 
 CLI11, the command-line parser of the ``stp`` executable, and SymFPU, the
 header-only implementation of the floating-point operations in terms of

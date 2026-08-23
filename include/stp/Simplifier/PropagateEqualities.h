@@ -30,7 +30,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/PropagateEqualities.h"
 #include "stp/Simplifier/NodeSimplifier.h"
-#include "extlib-unordered-dense/ankerl/unordered_dense.h"
+#include <ankerl/unordered_dense.h>
 
 /* 
   Finds formulae asserted at the top level, and removes the variables, e.g:

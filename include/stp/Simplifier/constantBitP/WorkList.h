@@ -28,7 +28,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/AST/ASTNode.h"
 #include "stp/Util/BitOps.h"
-#include "extlib-unordered-dense/ankerl/unordered_dense.h"
+#include <ankerl/unordered_dense.h>
 #include <vector>
 
 namespace simplifier

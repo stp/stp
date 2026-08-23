@@ -43,6 +43,7 @@ set(CMAKE_MODULE_PATH
 )
 
 include(STPOptions)
+include(FetchContent)
 
 # Where the scripts/deps/*.sh scripts install. Appended, so that a dependency
 # this build produced in STP_DEP_DIR -- which deps-helper prepends -- outranks
@@ -510,6 +511,46 @@ include_directories(# For extlib-constbv
                    )
 
 # -----------------------------------------------------------------------------
+# ankerl::unordered_dense
+# -----------------------------------------------------------------------------
+# A single header, used in place of std::unordered_map where it pays off. It
+# used to be a copy of that header sitting in lib/extlib-unordered-dense; there
+# is no reason for STP to carry upstream's file, so it is fetched at a pinned
+# release like everything else.
+#
+# FetchContent rather than an ExternalProject, and for once not because
+# anything has to be compiled: stp/AST/AST.h includes it, so effectively every
+# translation unit in STP does, and it is reached through a project-wide
+# include rather than through any one target. That leaves nothing for an
+# ExternalProject's dependency edge to attach to -- the header would be
+# installed at build time, with no ordering guarantee that it lands before the
+# first compile that needs it. FetchContent populates during configuration,
+# which is the guarantee. There is nothing to build, so that costs nothing.
+set(UNORDERED_DENSE_VERSION "4.5.0")
+set(UNORDERED_DENSE_CHECKSUM "2364ce4bc4c23bd02549bbb3a7572d881684cd46057f3737fd53be53669743aa")
+
+if(NOT DEFINED FETCHCONTENT_SOURCE_DIR_UNORDEREDDENSE AND NOT ENABLE_AUTO_DOWNLOAD)
+    message(FATAL_ERROR
+        "ankerl::unordered_dense is required. Configure with "
+        "-DENABLE_AUTO_DOWNLOAD=ON to have it fetched, or point "
+        "-DFETCHCONTENT_SOURCE_DIR_UNORDEREDDENSE at a checkout.")
+endif()
+
+FetchContent_Declare(
+    unordereddense
+    URL https://github.com/martinus/unordered_dense/archive/refs/tags/v${UNORDERED_DENSE_VERSION}.tar.gz
+    URL_HASH SHA256=${UNORDERED_DENSE_CHECKSUM}
+    SOURCE_SUBDIR stp-does-not-build-this
+)
+FetchContent_MakeAvailable(unordereddense)
+message(STATUS "ankerl::unordered_dense ${UNORDERED_DENSE_VERSION}: ${unordereddense_SOURCE_DIR}")
+
+# SYSTEM, and project-wide because stp/AST/AST.h reaches it: upstream code
+# whose warnings STP does not control, compiled into nearly every translation
+# unit here.
+include_directories(SYSTEM ${unordereddense_SOURCE_DIR}/include)
+
+# -----------------------------------------------------------------------------
 # ABC
 # -----------------------------------------------------------------------------
 # Fetched rather than linked: STP does not consume ABC as a library, it builds
@@ -523,8 +564,6 @@ include_directories(# For extlib-constbv
 # -DFETCHCONTENT_SOURCE_DIR_ABC at the clone -- the build then uses it in place,
 # fetches nothing, and you commit and push from there before moving the pin
 # below. See docs/code-guide.rst.
-include(FetchContent)
-
 set(ABC_GIT_TAG "d0d28eb26a8f3655d806c30d394a738dad6ba5be")
 
 if(NOT DEFINED FETCHCONTENT_SOURCE_DIR_ABC AND NOT ENABLE_AUTO_DOWNLOAD)

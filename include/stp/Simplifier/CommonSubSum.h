@@ -54,7 +54,7 @@ THE SOFTWARE.
 #ifndef COMMONSUBSUM_H_
 #define COMMONSUBSUM_H_
 
-#include "extlib-unordered-dense/ankerl/unordered_dense.h"
+#include <ankerl/unordered_dense.h>
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include <map>
