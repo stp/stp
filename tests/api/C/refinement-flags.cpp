@@ -81,7 +81,7 @@ TEST(refinement_flags, DefaultsAreTheOnesTheCommandLineDocuments)
   EXPECT_TRUE(flags(vc).bv_term_abstraction_mult);
   EXPECT_EQ(32u, flags(vc).bv_term_abstraction_rounds);
   EXPECT_TRUE(flags(vc).bv_term_abstraction_schemas);
-  EXPECT_EQ(8u, flags(vc).bv_term_abstraction_value_divisor);
+  EXPECT_EQ(0u, flags(vc).bv_term_abstraction_value_divisor);
   EXPECT_FALSE(flags(vc).bv_term_abstraction_inc_bitblast);
   vc_Destroy(vc);
 }
@@ -218,6 +218,9 @@ TEST(refinement_flags, ANegativeUnsignedValueIsRefusedAndLeavesTheFieldAlone)
   EXPECT_EQ(4u, flags(vc).bv_eq_refine_width);
   vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_ROUNDS, -2);
   EXPECT_EQ(12u, flags(vc).bv_term_abstraction_rounds);
+  // Set to something that is not the default first, so that "unchanged" and
+  // "reset to the default" are different answers here.
+  vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_VALUE_DIVISOR, 8);
   vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_VALUE_DIVISOR, -3);
   EXPECT_EQ(8u, flags(vc).bv_term_abstraction_value_divisor);
 

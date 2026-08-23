@@ -442,9 +442,11 @@ enum ifaceflag_t
   //! A blocking lemma rules out one pair of operand values out of 2^(2W),
   //! so what one is worth falls away as the operands widen and a flat
   //! allowance means something quite different at either end. Zero turns
-  //! the scaling off and leaves the flat ceiling as the allowance. A
-  //! negative value is refused with a nonfatal diagnostic. This is the C
-  //! API's way to reach --bv-term-abstraction-value-divisor (default 8).
+  //! the scaling off and leaves the flat ceiling as the allowance, and is
+  //! the default: the rate measured as a wash against the flat allowance at
+  //! two widths, so it is available rather than assumed. A negative value is
+  //! refused with a nonfatal diagnostic. This is the C API's way to reach
+  //! --bv-term-abstraction-value-divisor.
   //!
   BV_TERM_ABSTRACTION_VALUE_DIVISOR,
 

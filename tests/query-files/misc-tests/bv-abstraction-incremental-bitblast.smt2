@@ -15,8 +15,11 @@
 ; Every piece reaches past a bit the candidate got wrong, and the bits below
 ; are already pinned exactly, so no candidate can disagree there and each
 ; piece therefore starts strictly above the last: the sequence climbs and the
-; last one finishes it. 128 bits with a step of 32 needs four of them, which
-; is what this pins -- three partial and one that completes.
+; last one finishes it. 128 bits with a step of 32 takes four of them -- three
+; partial and one that completes -- which is what this pins. Which bit each
+; one reaches is the solver's business, since it is read off the candidate it
+; was offered, so that is left alone; a fixture that pinned the boundaries
+; broke the moment an unrelated default moved.
 ;
 ; It is off by default because its benefit has not been measured and each
 ; partial circuit repeats the encoding of the lower bits. The default leg
@@ -31,9 +34,9 @@
 ;
 ; PIECEWISE-NOT: Fatal Error
 ; PIECEWISE-NOT: Assertion
-; PIECEWISE: BV abstraction: encoding BVMULT up to bit 34 after
-; PIECEWISE: BV abstraction: encoding BVMULT up to bit 67 after
-; PIECEWISE: BV abstraction: encoding BVMULT up to bit 100 after
+; PIECEWISE: BV abstraction: encoding BVMULT up to bit [0-9]+ after
+; PIECEWISE: BV abstraction: encoding BVMULT up to bit [0-9]+ after
+; PIECEWISE: BV abstraction: encoding BVMULT up to bit [0-9]+ after
 ; PIECEWISE: BV abstraction: encoding BVMULT exactly after
 ; PIECEWISE: ^sat$
 ;

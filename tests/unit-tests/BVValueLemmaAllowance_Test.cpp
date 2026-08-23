@@ -21,19 +21,22 @@ THE SOFTWARE.
 // How many blocking lemmas one abstracted multiplication, division or
 // remainder gets before the refinement gives up on it.
 //
-// This used to be one number for every width. It is a rate now, and the
-// change is not cosmetic: a blocking lemma rules out one pair of operand
-// values out of 2^(2W), so thirty-two of them is a third of an eight-bit
-// operand's pairs and one part in 2^101 of a fifty-three-bit one's. The
-// same allowance therefore means "enumerate a good deal of it" at one end
-// and "enumerate none of it" at the other, and only one of those is a
-// budget anyone chose.
+// It can be one number for every width, and it can be a rate. The argument
+// for the rate is that a blocking lemma rules out one pair of operand values
+// out of 2^(2W), so thirty-two of them is a third of an eight-bit operand's
+// pairs and one part in 2^101 of a fifty-three-bit one's: the same allowance
+// means "enumerate a good deal of it" at one end and "enumerate none of it"
+// at the other.
 //
-// Every spelling the flag had still means what it meant, which is the point
-// of keeping the ceiling and adding the divisor beside it rather than
-// redefining the one number: zero still never escalates, an explicit count
-// still caps, and turning the divisor off restores the flat allowance
-// exactly.
+// It is off by default all the same, because the argument did not survive
+// measurement -- see bv_term_abstraction_value_divisor for the numbers.
+// What is pinned here is the arithmetic of both, since the flag exists for
+// whoever can show the rate paying on a workload this one does not cover.
+//
+// Every spelling the ceiling had still means what it meant, which is the
+// point of adding the divisor beside it rather than redefining the one
+// number: zero still never escalates, an explicit count still caps, and the
+// default divisor leaves the flat allowance exactly as it was.
 #include "stp/STPManager/UserDefinedFlags.h"
 #include "stp/ToSat/BVAbstractionRefiner.h"
 
@@ -54,17 +57,23 @@ unsigned allowance(unsigned ceiling, unsigned divisor, unsigned width)
 
 } // namespace
 
-// The defaults, across the widths that actually turn up: 32-bit and 64-bit
-// machine words, and the 53-bit significand product that made this worth
-// changing -- an fp.mul is where klee-float's queries spend their time, and
-// the abstraction was giving that multiply thirty-two attempts at a space it
-// cannot enumerate.
-TEST(bv_value_lemma_allowance, TheDefaultScalesWithTheWidth)
+// The default is the flat allowance, at every width, and the rate is what a
+// caller opts into.
+TEST(bv_value_lemma_allowance, TheDefaultIsFlat)
 {
   UserDefinedFlags defaults;
   EXPECT_EQ(32u, defaults.bv_term_abstraction_rounds);
-  EXPECT_EQ(8u, defaults.bv_term_abstraction_value_divisor);
+  EXPECT_EQ(0u, defaults.bv_term_abstraction_value_divisor);
 
+  for (unsigned width : {8u, 16u, 24u, 33u, 53u, 64u})
+    EXPECT_EQ(32u, valueLemmaAllowance(defaults, width)) << "width=" << width;
+}
+
+// What the rate gives when it is asked for, across the widths that actually
+// turn up: 32-bit and 64-bit machine words, and the 53-bit significand
+// product of a binary64 fp.mul.
+TEST(bv_value_lemma_allowance, TheRateScalesWithTheWidthWhenAskedFor)
+{
   EXPECT_EQ(2u, allowance(32, 8, 16));
   EXPECT_EQ(4u, allowance(32, 8, 32));
   EXPECT_EQ(6u, allowance(32, 8, 53));
@@ -95,11 +104,11 @@ TEST(bv_value_lemma_allowance, ZeroStillNeverEscalates)
   }
 }
 
-// Turning the divisor off restores exactly the flat allowance this
-// replaced, which is what makes the two configurations comparable: a
-// measurement of whether the scaling helps has to be able to ask for the
-// thing it replaced.
-TEST(bv_value_lemma_allowance, ADivisorOfZeroRestoresTheFlatAllowance)
+// A divisor of zero is exactly the flat allowance, which is what makes the
+// two configurations comparable: measuring whether the rate helps means
+// being able to ask for the thing it would replace, in the same binary and
+// on the same query.
+TEST(bv_value_lemma_allowance, ADivisorOfZeroIsTheFlatAllowance)
 {
   for (unsigned width : {1u, 8u, 53u, 64u, 4096u})
   {

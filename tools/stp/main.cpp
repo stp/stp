@@ -368,7 +368,8 @@ void ExtraMain::create_options()
                  "width/divisor floored at one and capped by the ceiling "
                  "above; a blocking lemma rules out one pair of operand "
                  "values, so what one is worth falls away as the operands "
-                 "widen (0: do not scale, use the flat ceiling)")
+                 "widen (0, the default: do not scale, which measured no "
+                 "slower and no faster)")
       ->group(refinement_group)
       ->capture_default_str();
 

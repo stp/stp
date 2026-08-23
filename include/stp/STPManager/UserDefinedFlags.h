@@ -381,17 +381,33 @@ public:
   //
   // A ceiling and no longer the allowance itself: see the divisor below.
   unsigned bv_term_abstraction_rounds = 32;
-  // ... which is `width / this`, floored at one and capped by the ceiling
-  // above. A blocking lemma rules out one pair of operand values, so what
-  // it is worth falls away as the operands widen -- one of 2^16 pairs at
-  // eight bits, one of 2^106 at fifty-three -- and a flat allowance
-  // therefore means something quite different at either end. A divisor of
-  // eight puts a 53-bit multiply's allowance at six against the flat
-  // thirty-two this had.
+  // Optionally make that a rate instead: `width / this`, floored at one and
+  // capped by the ceiling above. The argument for it is that a blocking
+  // lemma rules out one pair of operand values, so what one is worth falls
+  // away as the operands widen -- one of 2^16 pairs at eight bits, one of
+  // 2^106 at fifty-three -- and a flat allowance therefore means something
+  // quite different at either end. A divisor of eight puts a 53-bit
+  // multiply at six attempts and a 64-bit one at eight.
   //
-  // Zero turns the scaling off and leaves the flat ceiling as the
-  // allowance, which is the configuration this replaced.
-  unsigned bv_term_abstraction_value_divisor = 8;
+  // Zero, which leaves the flat ceiling as the allowance, because the
+  // argument did not survive measurement. Over 39 floating-point queries,
+  // three interleaved repetitions, at two abstraction widths -- where the
+  // rate gives an allowance of four and of three against the flat
+  // thirty-two, an eight- to tenfold difference in what is spent:
+  //
+  //   width 33   flat 65.5s (52-66)   rate 60.7s (55-63)
+  //   width 24   flat 112.4s (105-116) rate 110.1s (105-130)
+  //
+  // Ranges overlap at both, and at 33 the sign flips between repetitions.
+  // That is not a result, and a default should not move without one.
+  //
+  // The likeliest reason it does not matter is the escalation this shares a
+  // budget with: once giving up is cheap -- see BVExactEncoder, which is
+  // what made the abstraction usable at all -- *when* you give up stops
+  // being worth tuning. The corpus is also all binary32, so the widths the
+  // rate is really aimed at are not in it; someone with 53- or 64-bit
+  // operands may find otherwise, which is why the flag stays.
+  unsigned bv_term_abstraction_value_divisor = 0;
   // Escalate an abstracted BVMULT a piece at a time rather than all at once:
   // encode only the bits up to and a little past the lowest one the
   // candidate got wrong, and come back for more if that does not settle the
