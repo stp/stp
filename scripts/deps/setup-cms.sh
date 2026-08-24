@@ -33,15 +33,24 @@ cd "${dep_dir}"
 #     file that includes cryptominisat.h and to nothing else -- see the note in
 #     lib/Sat/CMakeLists.txt, and the assertion at the top of
 #     include/stp/Sat/Cadical.h that catches it if that ever lapses.
-#   - Which one gets picked. The top-level CMakeLists puts ${install_dir} on
-#     CMAKE_PREFIX_PATH unconditionally, so that the other scripts here are
-#     found without further flags -- which means every unpinned CaDiCaL lookup
-#     reaches the copy this script installed, finds it, and stops. STP then
-#     silently builds against CryptoMiniSat's CaDiCaL and never fetches its
-#     own. Pass CADICAL_DIR, the one lookup that does not search that path.
-#     Moving STP_DEP_DIR elsewhere does not help. ci.yml's cms-cadical job
-#     passes CADICAL_DIR and checks the linked version afterwards for exactly
-#     this reason.
+#   - The prefix. ${install_dir} defaults to deps/install, which is also
+#     STP_DEP_DIR, and that is the arrangement to avoid when USE_CADICAL is on
+#     as well. Two things go wrong with it, and neither is fixable from the
+#     STP side:
+#
+#       * That prefix's include directory is a usage requirement of every
+#         dependency STP builds, so it reaches nearly every compile -- and the
+#         cadical/cadical.hpp installed here then shadows STP's. The two
+#         directories arrive from different targets, so no include order fixes
+#         it; it came out wrong for the unit tests while the library was fine.
+#       * It is on CMAKE_PREFIX_PATH unconditionally, so that the other scripts
+#         here are found without flags, which means STP's own CaDiCaL lookup
+#         finds this copy and stops. CADICAL_DIR pins past that one, but only
+#         that one.
+#
+#     So install elsewhere when both backends are wanted. Trailing arguments
+#     reach CMake, so -DCMAKE_INSTALL_PREFIX overrides the default; ci.yml's
+#     cms-cadical job does that and checks the linked version afterwards.
 #
 # And then the link. Building CMS shared (-DBUILD_SHARED_LIBS=ON) is what makes
 # the combination work, because the bundled CaDiCaL then stays inside
