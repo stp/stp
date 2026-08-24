@@ -441,6 +441,92 @@ public:
   // Off by default: its benefit has not been measured, and each partial
   // encoding repeats the work for all lower bits.
   bool bv_term_abstraction_inc_bitblast = false;
+
+  // Offer the whole active stack to the exact-stack preprocessor on every
+  // check, not only on an explicitly forced first engagement, and offer it
+  // stacks carrying plain array reads and floating point rather than plain
+  // bit-vectors alone.
+  //
+  // What this is for: the per-level route encodes each level as it arrives
+  // and never simplifies across the stack, so the SAT solver is handed a
+  // formula nobody has been over. Measured on one floating-point query, the
+  // batch pipeline spends 13ms in the simplifier, constant-bit propagation,
+  // unconstrained removal, pure literals and strength reduction, and the
+  // search then costs 10.1s; the per-level incremental route skips all five
+  // and the same search costs 31.1s. Thirteen milliseconds is worth
+  // twenty-one seconds.
+  //
+  // It is safe to offer speculatively. The trial preprocesses into an
+  // assumption-scoped block, adopts it only when the complete DAG at least
+  // halves, and otherwise returns before committing a clause or a model
+  // definition, leaving the caller to continue down the ordinary path.
+  //
+  // Off, because what it buys is not one-signed. Over five KLEE sessions
+  // driven incrementally from the third query, solver seconds:
+  //
+  //                             batch   per-level   with this
+  //   sqr_longdouble-noflow      14.5        46.9        17.2
+  //   sparse_matrices_klee_bug    8.7        53.9        38.4
+  //   libmatheval_sym_f           7.3        42.9        40.7
+  //   vectors_klee                9.3        31.6        47.0
+  //   vectors_klee_bug            8.9        28.5        38.8
+  //
+  // It nearly closes the gap on the first, narrows it on the next two, and
+  // opens it further on the last two -- and never reaches the batch column,
+  // because the block is re-encoded per check where the batch pipeline pays
+  // for its encoding once. Which of those a session gets is not predictable
+  // from anything visible up front, so this is an interface rather than a
+  // new default.
+  //
+  // What it is NOT is a fix for assumptions being weaker than units. That
+  // was the other suspect and it is not the cause: the same query asserted
+  // at base level and inside a pushed scope costs the same to within noise
+  // (1.47s against 1.11s on one, 0.22s against 0.19s on another), while both
+  // sit two to three times above the batch pipeline. The gap is the missing
+  // simplification and nothing else.
+  bool incremental_scoped_preprocessing = false;
+
+  // Run the rewriting passes the batch pipeline runs -- strength reduction
+  // over a derived interval domain, and common sub-sum extraction -- on each
+  // piece the incremental driver prepares.
+  //
+  // The driver trades whole-formula simplification for a retained encoding,
+  // and those two only conflict because what it retains is the encoding of
+  // unsimplified terms. These passes do not force the trade: each is a
+  // function of the piece it is handed and of nothing else, so a rewritten
+  // piece is equivalent to the piece whatever the rest of the stack says now
+  // or asserts later. The result caches beside the rest of preparePiece's
+  // work and the encoding built from it stays valid for the session.
+  //
+  // Unconstrained-variable elimination is deliberately not among them: that
+  // one needs to know what the rest of the formula does NOT contain, and a
+  // later assertion can make it false.
+  //
+  // Off, and the reason is the interesting part: the retainable
+  // simplification is not the valuable simplification. This buys 8% on one
+  // standalone query (1.02s to 0.94s against a batch 0.41s) and nothing at
+  // all on the workload it was written for -- four KLEE sessions driven
+  // incrementally, solver seconds, plain against with:
+  //
+  //   sort_smallest_klee        13.1   13.7
+  //   count_klee                 2.6    2.7
+  //   sort_smallest_klee_bug    17.7   17.7
+  //   sparse_matrices_klee_bug  46.5   48.3
+  //
+  // Nor is the rest of the gap conjuncts being prepared in isolation:
+  // handing the driver the whole stack as a single conjunct, so that its own
+  // simplification sees everything at once, changes nothing (1.04s against
+  // 1.06s) while the batch pipeline is still 2.4x faster on the same
+  // formula.
+  //
+  // What is left is constant-bit propagation over the whole formula,
+  // unconstrained-variable elimination, pure literals and bit-vector
+  // solving -- every one of them a pass whose conclusions depend on what the
+  // formula does NOT contain, and every one therefore invalidated by the
+  // next assertion. The driver trades simplification for a retained
+  // encoding because for this class of pass the trade is forced. Choosing
+  // per session which side of it to be on is the remedy that works.
+  bool incremental_piece_rewriting = false;
   // Refine an abstracted BVMULT with an algebraic fact about every pair of
   // operands -- see MulSchema -- whenever the candidate contradicts one,
   // and only fall back on ruling out the pair it holds when none of them
