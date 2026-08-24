@@ -154,6 +154,42 @@ enables it only for problems with array operations. ``auto`` was the
 default until bounded variable addition was measured on bitvector-only
 problems and found to pay there too.
 
+CryptoMiniSat and CaDiCaL together
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Enabling both is supported, and needs one thing said about it, because
+CryptoMiniSat 5.14 and later fetch, build and *install* a CaDiCaL of their
+own -- currently the meelgroup fork at 2.1.3. Its prefix therefore holds a
+``libcadical.a``, a ``cadical/cadical.hpp`` and a CMake package under the
+same names STP's own CaDiCaL uses.
+
+Keep the two prefixes apart. Concretely, do not pass CryptoMiniSat's
+install prefix as ``STP_DEP_DIR``: STP's CaDiCaL lookup searches there,
+finds the bundled copy, and stops, so the build silently gets a 2.x
+CaDiCaL and ``--cadical-factor`` disappears. Point at CryptoMiniSat with
+``-Dcryptominisat5_DIR`` instead, which names the package without putting
+its prefix on ``CMAKE_PREFIX_PATH``:
+
+.. code-block:: bash
+
+    cmake -S . -B build \
+      -DUSE_CADICAL=ON -DCADICAL_DIR=<cadical checkout> \
+      -DUSE_CRYPTOMINISAT=ON \
+      -Dcryptominisat5_DIR=<cms prefix>/lib/cmake/cryptominisat5
+
+``stp --version`` reports the version of each backend actually linked, so
+it is the quickest way to confirm which CaDiCaL you ended up with.
+
+One combination is refused rather than arranged: a *static*
+``libcryptominisat5`` puts its bundled CaDiCaL on STP's link line
+alongside STP's, and the two sets of symbols collide. Build CryptoMiniSat
+shared (``scripts/deps/setup-cms.sh -DBUILD_SHARED_LIBS=ON``), which keeps
+its CaDiCaL inside the ``.so``. Or, if it must be static, have STP use the
+very same archive so there is only one --
+``-DCADICAL_LIBRARY=<cms prefix>/lib/libcadical.a
+-DCADICAL_INCLUDE_DIR=<cms prefix>/include``, with ``CADICAL_DIR`` unset --
+at the cost of the 3.x features. The configure error spells out all three.
+
 MiniSat is optional and off by default; enable it with
 ``-DUSE_MINISAT:BOOL=ON``, which also needs zlib -- MiniSat reads gzipped
 DIMACS and says so in its public headers, so configuration fails without

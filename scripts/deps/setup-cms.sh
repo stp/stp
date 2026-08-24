@@ -22,12 +22,29 @@ cd "${dep_dir}"
 # It also installs them, which matters to anything else using this prefix:
 # ${install_dir} ends up holding a libcadical.a, its headers and its CMake
 # package, none of which have anything to do with the CaDiCaL that
-# the build produces for itself. STP pins its own lookup to CADICAL_DIR so the two
-# cannot be confused, and refuses at configure time to link both at once --
-# see the USE_CADICAL block and the guard after the CryptoMiniSat block in
-# the top-level CMakeLists. Building CMS shared (-DBUILD_SHARED_LIBS=ON) is
-# what makes the combination work, because the bundled CaDiCaL then stays
-# inside libcryptominisat5.so; ci.yml's cms-cadical job does exactly that.
+# the build produces for itself. Three separate things keep the two apart, and
+# each of them had to be arranged:
+#
+#   - The library. CADICAL_DIR pins it with NO_DEFAULT_PATH, so this prefix
+#     cannot supply it -- see the note in cmake/FindCaDiCaL.cmake.
+#   - The header. Pinning the library does nothing for it: the header is found
+#     on the include path, and this prefix puts a cadical/cadical.hpp there
+#     under the very name STP uses. So the include directory goes to the one
+#     file that includes cryptominisat.h and to nothing else -- see the note in
+#     lib/Sat/CMakeLists.txt, and the assertion at the top of
+#     include/stp/Sat/Cadical.h that catches it if that ever lapses.
+#   - The prefix itself. Do not make ${install_dir} STP_DEP_DIR as well. STP's
+#     own CaDiCaL lookup searches there, finds the copy this script installed,
+#     and stops -- so STP silently builds against CryptoMiniSat's CaDiCaL and
+#     never fetches its own. ci.yml's cms-cadical job keeps the two prefixes
+#     apart and checks the linked version afterwards for exactly this reason.
+#
+# And then the link. Building CMS shared (-DBUILD_SHARED_LIBS=ON) is what makes
+# the combination work, because the bundled CaDiCaL then stays inside
+# libcryptominisat5.so; ci.yml's cms-cadical job does exactly that. A static
+# CryptoMiniSat puts both archives on libstp's link line, which the guard after
+# the CryptoMiniSat block in the top-level CMakeLists refuses -- unless STP is
+# pointed at this prefix's CaDiCaL too, so that there is only one.
 #
 # Note also that the tag below does not pin the bundle: CMS fetches cadical
 # and cadiback from meelgroup's default branches, so which version arrives
