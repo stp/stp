@@ -168,11 +168,15 @@ TEST(bv_mult_schema, EveryFactHoldsOfTheRealProduct)
         for (unsigned k = 0; k < WIDTH; ++k)
         {
           if (chosen == (1u << k))
+          {
             EXPECT_TRUE(shiftHolds(other, k, t))
                 << "a=" << a << " b=" << b << " k=" << k;
+          }
           if (negated(chosen) == (1u << k) && chosen != (1u << k))
+          {
             EXPECT_TRUE(shiftHolds(negated(other), k, t))
                 << "a=" << a << " b=" << b << " k=" << k;
+          }
         }
       }
     }
@@ -236,7 +240,9 @@ TEST(bv_mult_schema, APowerOfTwoOperandIsAlwaysTakenAsTheShift)
         const MulSchemaChoice second = choose(other, pow2, t);
         EXPECT_EQ(MulSchema::Pow2, second.schema);
         if (second.operand == 1u)
+        {
           EXPECT_EQ(k, second.shift);
+        }
       }
   }
 }
