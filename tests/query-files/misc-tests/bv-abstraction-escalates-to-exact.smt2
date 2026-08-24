@@ -1,4 +1,5 @@
 ; An abstracted multiply stops enumerating and says what it is.
+; REQUIRES: minisat
 ;
 ; BVMULT, BVDIV and BVMOD are refined by ruling out one pair of operand values
 ; at a time, which is the only compact lemma there is for them and is why they
@@ -25,12 +26,15 @@
 ;
 ; The count is pinned loosely: which candidates the solver offers is its own
 ; business, so what this fixture holds is that the escalation happens and the
-; answer survives it, not the exact round it happens on.
+; answer survives it, not the exact round it happens on. Whether the fallback
+; is reached at all is candidate-dependent too, so this trace selects MiniSat;
+; the exact encoder itself is checked with every configured backend by its
+; unit test.
 ;
-; RUN: %solver --incremental=off -d -s --bv-eq-abstraction=1 --bv-term-abstraction=1 %s 2>&1 | %OutputCheck --check-prefix=ABSTRACTED %s
-; RUN: %solver --incremental=off -d %s 2>&1 | %OutputCheck --check-prefix=PLAIN %s
-; RUN: %solver --incremental=off -d --bv-eq-abstraction=1 --bv-term-abstraction=1 --bv-term-abstraction-mult=0 %s 2>&1 | %OutputCheck --check-prefix=NOMULT %s
-; RUN: %solver --incremental=off -s --aig-node-budget=200 --bv-eq-abstraction=1 --bv-term-abstraction=1 --bv-term-abstraction-schemas=0 --bv-term-abstraction-rounds=1 %s 2>&1 | %OutputCheck --check-prefix=BUDGET %s
+; RUN: %solver --minisat --incremental=off -d -s --bv-eq-abstraction=1 --bv-term-abstraction=1 %s 2>&1 | %OutputCheck --check-prefix=ABSTRACTED %s
+; RUN: %solver --minisat --incremental=off -d %s 2>&1 | %OutputCheck --check-prefix=PLAIN %s
+; RUN: %solver --minisat --incremental=off -d --bv-eq-abstraction=1 --bv-term-abstraction=1 --bv-term-abstraction-mult=0 %s 2>&1 | %OutputCheck --check-prefix=NOMULT %s
+; RUN: %solver --minisat --incremental=off -s --aig-node-budget=200 --bv-eq-abstraction=1 --bv-term-abstraction=1 --bv-term-abstraction-schemas=0 --bv-term-abstraction-rounds=1 %s 2>&1 | %OutputCheck --check-prefix=BUDGET %s
 ;
 ; ABSTRACTED-NOT: Fatal Error
 ; ABSTRACTED: BV abstraction: encoding BVMULT exactly after [0-9]+ blocking lemmas

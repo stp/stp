@@ -1,4 +1,5 @@
 ; The allowance a blocking lemma is spent from is a rate, not a number.
+; REQUIRES: minisat
 ;
 ; --bv-term-abstraction refines an abstracted BVMULT, BVDIV or BVMOD by ruling
 ; out the one pair of operand values the candidate holds, and gives up after a
@@ -19,16 +20,17 @@
 ; This multiply is 64 bits, so the four legs below ask for the flat default,
 ; 64/8, 64/4, and a ceiling that bites before any of them.
 ;
-; The count is pinned exactly here, unlike the neighbouring escalation test:
-; which candidates the solver offers is its own business, but *how many* it is
-; allowed to be offered before the refinement gives up is not -- that is the
-; arithmetic this test is about, and it is the same whatever the solver does.
+; The count is pinned exactly here, unlike the neighbouring escalation test.
+; The allowance arithmetic itself is backend-independent and is covered by
+; BVValueLemmaAllowance_Test. This end-to-end trace also needs a solver to keep
+; returning inconsistent candidates until that allowance is spent, so it
+; selects MiniSat rather than depending on another backend's candidate order.
 ;
-; RUN: %solver --incremental=off -d -s --bv-eq-abstraction=1 --bv-term-abstraction=1 --bv-term-abstraction-value-divisor=8 %s 2>&1 | %OutputCheck --check-prefix=SCALED %s
-; RUN: %solver --incremental=off -d -s --bv-eq-abstraction=1 --bv-term-abstraction=1 %s 2>&1 | %OutputCheck --check-prefix=FLAT %s
-; RUN: %solver --incremental=off -d -s --bv-eq-abstraction=1 --bv-term-abstraction=1 --bv-term-abstraction-value-divisor=4 %s 2>&1 | %OutputCheck --check-prefix=HALFRATE %s
-; RUN: %solver --incremental=off -d -s --bv-eq-abstraction=1 --bv-term-abstraction=1 --bv-term-abstraction-rounds=3 %s 2>&1 | %OutputCheck --check-prefix=CEILING %s
-; RUN: %solver --incremental=off -d %s 2>&1 | %OutputCheck --check-prefix=PLAIN %s
+; RUN: %solver --minisat --incremental=off -d -s --bv-eq-abstraction=1 --bv-term-abstraction=1 --bv-term-abstraction-value-divisor=8 %s 2>&1 | %OutputCheck --check-prefix=SCALED %s
+; RUN: %solver --minisat --incremental=off -d -s --bv-eq-abstraction=1 --bv-term-abstraction=1 %s 2>&1 | %OutputCheck --check-prefix=FLAT %s
+; RUN: %solver --minisat --incremental=off -d -s --bv-eq-abstraction=1 --bv-term-abstraction=1 --bv-term-abstraction-value-divisor=4 %s 2>&1 | %OutputCheck --check-prefix=HALFRATE %s
+; RUN: %solver --minisat --incremental=off -d -s --bv-eq-abstraction=1 --bv-term-abstraction=1 --bv-term-abstraction-rounds=3 %s 2>&1 | %OutputCheck --check-prefix=CEILING %s
+; RUN: %solver --minisat --incremental=off -d %s 2>&1 | %OutputCheck --check-prefix=PLAIN %s
 ;
 ; SCALED-NOT: Fatal Error
 ; SCALED: BV abstraction: encoding BVMULT exactly after 8 blocking lemmas

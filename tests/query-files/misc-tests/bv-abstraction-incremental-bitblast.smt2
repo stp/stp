@@ -1,4 +1,5 @@
 ; Escalating an abstracted multiply a piece at a time.
+; REQUIRES: minisat
 ;
 ; When the refinement gives up on a BVMULT it says what the operation is, and
 ; --bv-term-abstraction-inc-bitblast says only part of it: the bits up to and
@@ -26,11 +27,13 @@
 ; below is the control: the same query escalating whole, to the same answer.
 ;
 ; -d re-derives the query under the published model, so both legs check the
-; answer is a real one and not only that a line was printed.
+; answer is a real one and not only that a line was printed. The candidate
+; sequence decides whether these particular partial boundaries are visited,
+; so this integration trace selects MiniSat explicitly.
 ;
-; RUN: %solver --incremental=off -d -s --bv-eq-abstraction=1 --bv-term-abstraction=1 --bv-term-abstraction-inc-bitblast=1 %s 2>&1 | %OutputCheck --check-prefix=PIECEWISE %s
-; RUN: %solver --incremental=off -d -s --bv-eq-abstraction=1 --bv-term-abstraction=1 %s 2>&1 | %OutputCheck --check-prefix=WHOLE %s
-; RUN: %solver --incremental=off -d %s 2>&1 | %OutputCheck --check-prefix=PLAIN %s
+; RUN: %solver --minisat --incremental=off -d -s --bv-eq-abstraction=1 --bv-term-abstraction=1 --bv-term-abstraction-inc-bitblast=1 %s 2>&1 | %OutputCheck --check-prefix=PIECEWISE %s
+; RUN: %solver --minisat --incremental=off -d -s --bv-eq-abstraction=1 --bv-term-abstraction=1 %s 2>&1 | %OutputCheck --check-prefix=WHOLE %s
+; RUN: %solver --minisat --incremental=off -d %s 2>&1 | %OutputCheck --check-prefix=PLAIN %s
 ;
 ; PIECEWISE-NOT: Fatal Error
 ; PIECEWISE-NOT: Assertion
