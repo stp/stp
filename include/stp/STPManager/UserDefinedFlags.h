@@ -346,13 +346,14 @@ public:
   // language) with exit status 0, and SOLVER_UNKNOWN from the library.
   // (get-info :reason-unknown) is what tells this budget from the clock.
   //
-  // The cap governs the two AIGs a batch solve builds -- the bit-blast in
-  // ToSATAIG::bitblast() and the optional `--aig-core-simplification` pass,
-  // which simply keeps its input when the cap fires. It is NOT enforced on
-  // the incremental driver's persistent encoder, whose AIG outlives the
-  // check that grew it and cannot be abandoned mid-blast; engaging that
-  // driver with a budget set warns once on stderr rather than pretending
-  // the cap is in force.
+  // The cap governs the transient AIGs a solve builds -- the batch bit-blast
+  // in ToSATAIG::bitblast(), the optional `--aig-core-simplification` pass
+  // (which simply keeps its input when the cap fires), and the exact AIG used
+  // when a bit-vector abstraction gives up. It is NOT enforced on the
+  // incremental driver's persistent encoder, whose AIG outlives the check
+  // that grew it and cannot be abandoned mid-blast; engaging that driver with
+  // a budget set warns once on stderr rather than pretending the cap is in
+  // force.
   //
   // It bounds the blast, not the process: CNF conversion (Aig_ManDupDfs plus
   // DAG-aware rewriting) and the SAT search itself allocate on top of it.

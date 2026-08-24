@@ -244,11 +244,7 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
     // to set it. AND gates rather than nodes, because that is what the budget
     // counts. -1 rather than 0 is what lifts the limit: 0 is a budget of no
     // gates at all, which gives up before the first one.
-    std::ostringstream detail;
-    detail << "the AIG node budget set by --aig-node-budget ("
-           << bm->UserFlags.aig_node_budget << ") ran out at " << e.nodeCount
-           << " AND gates; raise it, or set it to -1 for no limit";
-    bm->noteUnknown(UnknownReason::AIGBudget, detail.str());
+    bm->noteAIGBudgetExhausted(e.nodeCount);
     delete cb;
     cb = NULL;
     bb.cb = NULL;

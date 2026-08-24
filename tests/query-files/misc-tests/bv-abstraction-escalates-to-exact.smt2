@@ -30,6 +30,7 @@
 ; RUN: %solver --incremental=off -d -s --bv-eq-abstraction=1 --bv-term-abstraction=1 %s 2>&1 | %OutputCheck --check-prefix=ABSTRACTED %s
 ; RUN: %solver --incremental=off -d %s 2>&1 | %OutputCheck --check-prefix=PLAIN %s
 ; RUN: %solver --incremental=off -d --bv-eq-abstraction=1 --bv-term-abstraction=1 --bv-term-abstraction-mult=0 %s 2>&1 | %OutputCheck --check-prefix=NOMULT %s
+; RUN: %solver --incremental=off -s --aig-node-budget=200 --bv-eq-abstraction=1 --bv-term-abstraction=1 --bv-term-abstraction-schemas=0 --bv-term-abstraction-rounds=1 %s 2>&1 | %OutputCheck --check-prefix=BUDGET %s
 ;
 ; ABSTRACTED-NOT: Fatal Error
 ; ABSTRACTED: BV abstraction: encoding BVMULT exactly after [0-9]+ blocking lemmas
@@ -41,6 +42,12 @@
 ; enumerates.
 ; NOMULT-NOT: encoding BVMULT
 ; NOMULT: ^sat$
+;
+; The abstract skeleton fits within this budget; the exact fallback does not.
+; Exhausting it must abandon the query instead of silently building an
+; unbounded second AIG.
+; BUDGET: AIG node budget exhausted during exact BV refinement at [0-9]+ nodes
+; BUDGET: ^unknown$
 ;
 (set-logic QF_BV)
 (declare-fun a () (_ BitVec 64))

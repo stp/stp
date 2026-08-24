@@ -191,6 +191,11 @@ public:
                                           : UnknownReason::ConflictBudget);
   }
 
+  // Record an AIG cap at the point where the gate count is still available.
+  // This is shared by the initial batch blast and by a transient exact
+  // refinement blast; both abandon the query through the same unknown path.
+  void noteAIGBudgetExhausted(int nodeCount);
+
   void clearUnknown()
   {
     unknown_reason = UnknownReason::None;

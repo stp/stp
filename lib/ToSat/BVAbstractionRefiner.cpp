@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/ToSat/BVAbstractionRefiner.h"
+#include "stp/ToSat/BBNodeManagerAIG.h"
 #include "stp/ToSat/BVEQCongruenceClosure.h"
 #include "stp/ToSat/BVExactEncoder.h"
 
@@ -45,7 +46,20 @@ unsigned BVAbstractionRefiner::refine(
   if (hasEqualities())
     refined = refineEqualities(solver, nodeToSATVar);
   if (refined == 0 && hasTerms())
-    refined = refineTerms(solver, nodeToSATVar);
+  {
+    try
+    {
+      refined = refineTerms(solver, nodeToSATVar);
+    }
+    catch (const AIGBudgetExhausted& e)
+    {
+      if (bm->UserFlags.stats_flag)
+        std::cerr << "AIG node budget exhausted during exact BV refinement at "
+                  << e.nodeCount << " nodes" << std::endl;
+      bm->noteAIGBudgetExhausted(e.nodeCount);
+      return 0;
+    }
+  }
   if (refined > 0)
   {
     refinements_ += refined;

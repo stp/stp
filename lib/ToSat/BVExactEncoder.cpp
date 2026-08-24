@@ -127,6 +127,7 @@ void BVExactEncoder::encode(SATSolver& solver, const ASTNode& term,
   AbstractionOff scope(bm->UserFlags);
 
   BBNodeManagerAIG mgr;
+  mgr.nodeBudget = bm->UserFlags.aig_node_budget;
   SubstitutionMap sm(bm);
   Simplifier simp(bm, &sm);
   // No constant-bit propagation: its results belong to the blast that ran
