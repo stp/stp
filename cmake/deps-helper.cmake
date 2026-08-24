@@ -213,6 +213,25 @@ endif()
 set(STP_EP_COMMON_CONFIG
     PREFIX "${STP_DEPS_PREFIX}"
     INSTALL_DIR "${STP_DEP_DIR}"
+    # Every dependency here is pinned to an exact revision, so there is never
+    # anything for the update step to update. Left on, it is worse than
+    # useless: ExternalProject gives a git update step no stamp file, so the
+    # generator treats it as permanently out of date --
+    #
+    #   ninja explain: output deps/src/ABC-EP-stamp/ABC-EP-update doesn't exist
+    #
+    # and re-runs it, and then patch, configure, build and install behind it,
+    # on every incremental build. The archive it reinstalls looks newer than
+    # libstp, so libstp relinks, and so does everything that links libstp.
+    # Building twice in a row with nothing changed relinks the whole library
+    # the second time.
+    #
+    # Disconnecting it does not pin the pin any harder than it already is: a
+    # changed GIT_TAG still takes effect, because that changes the download
+    # step's own inputs rather than the update step's. The two dependencies
+    # fetched as tarballs never had this problem, having no update step at
+    # all, which is why only the git-fetched ones show up as dirty.
+    UPDATE_DISCONNECTED ON
     # Quiet by default, because a dependency's build is not what anyone
     # configuring STP is trying to read -- but printed in full if it fails,
     # which is the property the shell scripts had for free and an
