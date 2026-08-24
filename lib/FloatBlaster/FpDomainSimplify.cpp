@@ -499,7 +499,14 @@ public:
     if (bm->UserFlags.fp_domain_sound_zero_facts)
       inferSoundZeroRows(root);
 
-    ASTNode out = rewrite(root);
+    // Zero-fact extraction is an independent strengthening. Enabling it must
+    // not also select the general domain-rewrite prepass. The inferred facts
+    // are conjoined below with the original formula unless one of the rewrite
+    // passes was explicitly requested as well.
+    ASTNode out = root;
+    if (bm->UserFlags.fp_domain_simplify ||
+        bm->UserFlags.fp_domain_row_bounds)
+      out = rewrite(root);
     if (!soundZeroSymbols.empty())
     {
       ASTVec conjuncts;
