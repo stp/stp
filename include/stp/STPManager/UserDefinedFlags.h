@@ -441,6 +441,50 @@ public:
   // Off by default: its benefit has not been measured, and each partial
   // encoding repeats the work for all lower bits.
   bool bv_term_abstraction_inc_bitblast = false;
+
+  // Offer the whole active stack to the exact-stack preprocessor on every
+  // check, not only on an explicitly forced first engagement, and offer it
+  // stacks carrying plain array reads and floating point rather than plain
+  // bit-vectors alone.
+  //
+  // What this is for: the per-level route encodes each level as it arrives
+  // and never simplifies across the stack, so the SAT solver is handed a
+  // formula nobody has been over. Measured on one floating-point query, the
+  // batch pipeline spends 13ms in the simplifier, constant-bit propagation,
+  // unconstrained removal, pure literals and strength reduction, and the
+  // search then costs 10.1s; the per-level incremental route skips all five
+  // and the same search costs 31.1s. Thirteen milliseconds is worth
+  // twenty-one seconds.
+  //
+  // It is safe to offer speculatively. The trial preprocesses into an
+  // assumption-scoped block, adopts it only when the complete DAG at least
+  // halves, and otherwise returns before committing a clause or a model
+  // definition, leaving the caller to continue down the ordinary path.
+  //
+  // Off, because what it buys is not one-signed. Over five KLEE sessions
+  // driven incrementally from the third query, solver seconds:
+  //
+  //                             batch   per-level   with this
+  //   sqr_longdouble-noflow      14.5        46.9        17.2
+  //   sparse_matrices_klee_bug    8.7        53.9        38.4
+  //   libmatheval_sym_f           7.3        42.9        40.7
+  //   vectors_klee                9.3        31.6        47.0
+  //   vectors_klee_bug            8.9        28.5        38.8
+  //
+  // It nearly closes the gap on the first, narrows it on the next two, and
+  // opens it further on the last two -- and never reaches the batch column,
+  // because the block is re-encoded per check where the batch pipeline pays
+  // for its encoding once. Which of those a session gets is not predictable
+  // from anything visible up front, so this is an interface rather than a
+  // new default.
+  //
+  // What it is NOT is a fix for assumptions being weaker than units. That
+  // was the other suspect and it is not the cause: the same query asserted
+  // at base level and inside a pushed scope costs the same to within noise
+  // (1.47s against 1.11s on one, 0.22s against 0.19s on another), while both
+  // sit two to three times above the batch pipeline. The gap is the missing
+  // simplification and nothing else.
+  bool incremental_scoped_preprocessing = false;
   // Refine an abstracted BVMULT with an algebraic fact about every pair of
   // operands -- see MulSchema -- whenever the candidate contradicts one,
   // and only fall back on ruling out the pair it holds when none of them

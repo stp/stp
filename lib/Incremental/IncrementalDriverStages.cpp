@@ -202,7 +202,8 @@ bool IncrementalSolver::Impl::tryExactStackRoute(
   const bool provisionalBlockAllowed =
       uf.incremental_reencode_limit == 0 ||
       uf.incremental_reencode_limit >= firstStackMinReencodeLimit;
-  if (policy.firstSolveShortcuts() && firstForcedIncrementalSolve &&
+  if (policy.firstSolveShortcuts() &&
+      (firstForcedIncrementalSolve || uf.incremental_scoped_preprocessing) &&
       !assumeLastLevelPerConjunct && provisionalBlockAllowed &&
       assertionsSMT2.size() > 1)
   {
@@ -210,7 +211,14 @@ bool IncrementalSolver::Impl::tryExactStackRoute(
     for (const ASTNode& levelConjunction : assertionsSMT2)
     {
       const Fragment& f = fragment(levelConjunction);
-      if (f.arrays || f.arrayEq || f.fp || f.ufApply)
+      // Array equality and uninterpreted functions have routes of their own
+      // above; plain array reads and floating point do not, and were
+      // excluded here only because the shortcut was written for the one case
+      // that had been measured. See incremental_scoped_preprocessing.
+      const bool excluded = uf.incremental_scoped_preprocessing
+                                ? (f.arrayEq || f.ufApply)
+                                : (f.arrays || f.arrayEq || f.fp || f.ufApply);
+      if (excluded)
       {
         plainBv = false;
         break;

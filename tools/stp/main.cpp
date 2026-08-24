@@ -390,6 +390,14 @@ void ExtraMain::create_options()
            "rather than the whole width at once",
            refinement_group);
 
+  bool_arg("--incremental-scoped-preprocessing",
+           bm->UserFlags.incremental_scoped_preprocessing,
+           "offer the whole active stack to the exact-stack preprocessor on "
+           "every incremental check rather than only on a forced first "
+           "engagement, and offer it stacks carrying array reads and "
+           "floating point rather than plain bit-vectors alone",
+           refinement_group);
+
   app.add_flag("--uninterpreted-functions",
                bm->UserFlags.enable_uninterpreted_functions,
                "decide uninterpreted functions over Bool, bit-vector, "
