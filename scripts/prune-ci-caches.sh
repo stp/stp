@@ -78,14 +78,20 @@ report() {
 }
 report "in the cache" "$work/all.tsv" 5
 
-# Superseded compiler caches. The key is <prefix>-<run id>; strip the run id to
+# Superseded compiler caches. The key is <prefix>/<run id>; strip the run id to
 # get the group, sort each group newest first, and mark everything after the
 # first. Restricted to ccache-* because that is the family whose key encodes
 # when it was written rather than what it contains -- applying this to a
 # content-keyed family would delete live entries.
-awk -F'\t' '$3 ~ /^ccache-.+-[0-9]+$/ {
+#
+# Either separator is accepted. The keys used to be <prefix>-<run id>, and a
+# hyphen there was what let one leg's restore-keys reach into another's
+# entries; entries written before that changed are still here, still worth
+# pruning, and group with their replacements because stripping either
+# separator leaves the same prefix.
+awk -F'\t' '$3 ~ /^ccache-.+[-\/][0-9]+$/ {
     prefix = $3
-    sub(/-[0-9]+$/, "", prefix)
+    sub(/[-\/][0-9]+$/, "", prefix)
     print $2 "\t" prefix "\t" $4 "\t" $1 "\t" $5
 }' "$work/all.tsv" |
     sort -t"$(printf '\t')" -k1,1 -k2,2 -k3,3r |

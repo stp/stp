@@ -111,12 +111,19 @@ jobs:
 
     # Keyed per run so every build writes a fresh entry; restore-keys picks
     # up the most recent one from this branch, or from the base branch.
+    #
+    # The separator before the run id is a slash rather than a hyphen, and
+    # has to be something a leg's name cannot contain. restore-keys matches
+    # by prefix, so while it was a hyphen `ccache-gcc-` also matched
+    # `ccache-gcc-release-...`: the gcc leg restored the release leg's cache
+    # every run, shared nothing with it, and recompiled all 311 files from
+    # cold while every other leg sat at 96-99% hits.
     - name: Compiler cache
       uses: actions/cache@v4
       with:
         path: ~/.cache/ccache
-        key: ccache-${{ matrix.name }}-${{ github.run_id }}
-        restore-keys: ccache-${{ matrix.name }}-
+        key: ccache-${{ matrix.name }}/${{ github.run_id }}
+        restore-keys: ccache-${{ matrix.name }}/
 
     - name: Configure
       run: |
@@ -435,8 +442,8 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/ccache
-        key: ccache-ubsan-${{ github.run_id }}
-        restore-keys: ccache-ubsan-
+        key: ccache-ubsan/${{ github.run_id }}
+        restore-keys: ccache-ubsan/
 
     # CMAKE_C_FLAGS is the half that matters most: ABC is C, and it is where
     # the CNF that every query is decided from is built.
@@ -592,8 +599,8 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/ccache
-        key: ccache-cadical-${{ matrix.cadical_tag }}-${{ github.run_id }}
-        restore-keys: ccache-cadical-${{ matrix.cadical_tag }}-
+        key: ccache-cadical-${{ matrix.cadical_tag }}/${{ github.run_id }}
+        restore-keys: ccache-cadical-${{ matrix.cadical_tag }}/
 
     # CMAKE_INSTALL_PREFIX and PYTHON_LIB_INSTALL_DIR are set so that the
     # install steps below land in the workspace rather than needing root.
@@ -753,8 +760,8 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/ccache
-        key: ccache-cms-cadical-${{ github.run_id }}
-        restore-keys: ccache-cms-cadical-
+        key: ccache-cms-cadical/${{ github.run_id }}
+        restore-keys: ccache-cms-cadical/
 
     - name: Configure
       run: |
@@ -1056,8 +1063,8 @@ jobs:
       uses: actions/cache@v4
       with:
         path: .ccache
-        key: ccache-i386-${{ github.run_id }}
-        restore-keys: ccache-i386-
+        key: ccache-i386/${{ github.run_id }}
+        restore-keys: ccache-i386/
 
     - name: Build and test in a 32-bit container
       run: |
