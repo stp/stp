@@ -328,10 +328,10 @@ that, and they are separate because the dependencies come in two kinds.
 
 ``STP_DEP_DIR``, described above, holds the ones STP *links*.
 ``FETCHCONTENT_BASE_DIR`` holds the ones it *compiles*:
-``unordered_dense``, mimalloc, googletest and OutputCheck. Sharing the
-second saves the download but not the compile -- mimalloc and googletest
-are added to the build with ``add_subdirectory``, so they are compiled
-once per build directory whatever you do.
+``unordered_dense``, mimalloc, googletest and OutputCheck. Share that one
+for the download only, and read the note on it below before pointing two
+build trees at the same one: FetchContent builds a dependency inside the
+base directory too, so sharing it shares more than the download.
 
 Warm both once:
 
@@ -407,9 +407,30 @@ The build type is deliberately not recorded, except on MSVC: sharing a
 differently-optimised ABC is a choice rather than a fault, but on MSVC
 the runtime library follows the build type and mixing them does not link.
 
-``FETCHCONTENT_BASE_DIR`` has no such stamp, and each configure rewrites
-the ``*-subbuild`` scratch inside it, so two configures running against
-one base directory *at the same time* can race. Sequential use is fine.
+``FETCHCONTENT_BASE_DIR`` has no such stamp, and it wants more care than
+``STP_DEP_DIR`` does. The dependencies STP compiles are added with
+``add_subdirectory``, and FetchContent builds those in
+``<base>/<name>-build``, so sharing the base directory shares the *build*
+rather than only the download. Two build trees whose compiler or build
+type differ then own the same object directory, and each recompiles all
+of mimalloc the next time it is built -- a gcc tree and a clang tree
+pointed at one base directory leave each other 37 steps to redo on every
+alternation, indefinitely. This is not a race that running them one after
+another avoids: both builds legitimately own the path they were given.
+
+Share the sources and keep the builds apart instead. Give each build tree
+its own base directory, and point each fetched source at one copy:
+
+.. code-block:: bash
+
+    cmake -S . -B build -G Ninja \
+      -DFETCHCONTENT_BASE_DIR=$PWD/build/_deps \
+      -DFETCHCONTENT_SOURCE_DIR_MIMALLOC=~/.cache/stp/fetch/mimalloc-src \
+      -DFETCHCONTENT_SOURCE_DIR_UNORDEREDDENSE=~/.cache/stp/fetch/unordereddense-src
+
+Name only the sources that exist: ``FETCHCONTENT_SOURCE_DIR_*`` pointed at
+a directory that is not there fails the configure rather than falling back
+to downloading it.
 
 Tests across worktrees
 ~~~~~~~~~~~~~~~~~~~~~~
