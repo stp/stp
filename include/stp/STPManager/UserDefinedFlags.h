@@ -84,6 +84,13 @@ public:
   // eagerly write through the array's function congruence axioms.
   bool ackermannisation = false;
 
+  // Abstract a read over a long write chain to a fresh variable constrained
+  // by refinement lemmas, instead of expanding the full if-then-else chain.
+  // The depth is how many may-alias write levels a read still expands
+  // eagerly before the rest of its chain is abstracted.
+  bool lazy_write_reads = true;
+  int64_t lazy_write_reads_depth = 2;
+
   // Incremental solving (docs/incremental-solving.rst): keep one SAT solver
   // and one bit-blast/CNF encoding alive across (check-sat) calls, asserting
   // retractable formulas as SAT assumptions instead of re-solving from

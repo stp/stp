@@ -391,6 +391,24 @@ public:
                                ToSATBase* tosat,
                                ArrayReadRefinementProgress* progress = NULL);
 
+  // Per-refinement-call state for the chain lemmas: each row's emission
+  // frontier and its guard-equality SAT variables, kept across rounds so
+  // circuits are built once and clauses never repeat.
+  struct ChainLemmaState
+  {
+    std::map<ASTNode, size_t> frontiers;
+    std::map<ASTNode, std::vector<int64_t>> guards;
+  };
+
+  // Path lemmas for the abstracted write-chain reads: with emitAll false,
+  // every clause up to each violated row's model resolution point; with
+  // emitAll true, every clause of every row (the complete case split, so
+  // the next solve decides). Returns how many lemmas were added.
+  size_t emitChainReadLemmas(SATSolver& SatSolver, ToSATBase* tosat,
+                             bool emitAll,
+                             ArrayReadRefinementProgress* progress,
+                             ChainLemmaState* state);
+
   void applyAllCongruenceConstraints(SATSolver& SatSolver, ToSATBase* tosat);
 
 #if 0
