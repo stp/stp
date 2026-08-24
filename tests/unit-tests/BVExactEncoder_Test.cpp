@@ -36,18 +36,10 @@ THE SOFTWARE.
 // truncation, and the two divisions' behaviour on a zero divisor, none of
 // which have anywhere to hide under it.
 #include "stp/AST/AST.h"
+#include "stp/Sat/SATSolverFactory.h"
 #include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/ToSat/BVExactEncoder.h"
-#ifdef USE_MINISAT
-#include "stp/Sat/MinisatCore.h"
-#endif
-#ifdef USE_CADICAL
-#include "stp/Sat/Cadical.h"
-#endif
-#ifdef USE_CRYPTOMINISAT
-#include "stp/Sat/CryptoMinisat5.h"
-#endif
 
 #include <gtest/gtest.h>
 
@@ -64,17 +56,9 @@ namespace
 const unsigned WIDTH = 4;
 const unsigned VALUES = 1u << WIDTH;
 
-std::unique_ptr<SATSolver> makeSolver()
+std::unique_ptr<SATSolver> makeSolver(const UserDefinedFlags& flags)
 {
-#if defined(USE_MINISAT)
-  return std::unique_ptr<SATSolver>(new MinisatCore());
-#elif defined(USE_CADICAL)
-  return std::unique_ptr<SATSolver>(new Cadical());
-#elif defined(USE_CRYPTOMINISAT)
-  return std::unique_ptr<SATSolver>(new CryptoMinisat5());
-#else
-  return std::unique_ptr<SATSolver>();
-#endif
+  return std::unique_ptr<SATSolver>(createSATSolver(flags));
 }
 
 // What the operation should give, at this width, including the two
@@ -112,7 +96,7 @@ protected:
     for (unsigned a = 0; a < VALUES; ++a)
       for (unsigned b = 0; b < VALUES; ++b)
       {
-        std::unique_ptr<SATSolver> solver = makeSolver();
+        std::unique_ptr<SATSolver> solver = makeSolver(mgr.UserFlags);
         ASSERT_TRUE(solver != NULL) << "no SAT backend was compiled in";
 
         std::vector<unsigned> aVars(WIDTH), bVars(WIDTH), resultVars(WIDTH);
@@ -187,7 +171,7 @@ TEST_F(BVExactEncoderTest, TheOperandsReachTheCircuitInOrder)
 {
   const ASTNode term = operation(BVDIV, "ord_a", "ord_b");
 
-  std::unique_ptr<SATSolver> solver = makeSolver();
+  std::unique_ptr<SATSolver> solver = makeSolver(mgr.UserFlags);
   ASSERT_TRUE(solver != NULL);
 
   std::vector<unsigned> aVars(WIDTH), bVars(WIDTH), resultVars(WIDTH);
@@ -259,7 +243,7 @@ TEST_F(BVExactEncoderTest, TheMappedEncodingCostsFewerClausesThanWrittenOutGates
   for (unsigned w : {8u, 16u, 32u, 64u})
     for (Kind kind : {BVMULT, BVDIV, BVMOD})
     {
-      std::unique_ptr<SATSolver> solver = makeSolver();
+      std::unique_ptr<SATSolver> solver = makeSolver(mgr.UserFlags);
       ASSERT_TRUE(solver != NULL);
 
       char aName[64], bName[64];
@@ -304,7 +288,7 @@ TEST_F(BVExactEncoderTest, TheSelectedCNFStrategyReachesExactEncoding)
 
   auto encodeAndCheck = [&](bool simple) -> uint64_t
   {
-    std::unique_ptr<SATSolver> solver = makeSolver();
+    std::unique_ptr<SATSolver> solver = makeSolver(mgr.UserFlags);
     EXPECT_TRUE(solver != NULL);
     if (solver == NULL)
       return 0;
