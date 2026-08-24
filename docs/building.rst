@@ -293,6 +293,12 @@ These apply to all generators:
    directory does hold one copy of each library, whatever compiled it,
    and STP warns when the compiler or sanitizer settings that filled it
    differ from the ones now building against it
+
+   The dependencies STP compiles rather than links are unpacked under
+   ``FETCHCONTENT_BASE_DIR`` instead, which is worth sharing for the same
+   reason. ``DEVELOPER_NOTES.md`` at the top of the tree puts both of
+   them, and a compiler cache, into one recipe for working across several
+   worktrees
 -  ``STP_ALLOCATOR`` -- which memory allocator the ``stp`` binary uses.
    STP is allocation-heavy and the C library allocator is a significant
    bottleneck, so this defaults to ``mimalloc``, which is vendored and
