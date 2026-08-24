@@ -29,6 +29,7 @@ THE SOFTWARE.
 #define CRYPTOMINISAT5_H_
 
 #include "stp/Sat/SATSolver.h"
+#include <string>
 #include <unordered_set>
 
 namespace CMSat
@@ -48,6 +49,12 @@ namespace stp
   CMSat::SATSolver* s;
 
 public:
+  // The version of the CryptoMiniSat that is actually linked. Kept here, and
+  // not read from CMSat::SATSolver directly at the call site, so that
+  // cryptominisat.h is needed by this wrapper's own translation unit and by
+  // nothing else -- see the include-directory note in lib/Sat/CMakeLists.txt.
+  static std::string version();
+
   CryptoMiniSat5(int num_threads);
 
   ~CryptoMiniSat5();

@@ -31,6 +31,11 @@ using std::vector;
 namespace stp
 {
 
+std::string CryptoMiniSat5::version()
+{
+  return CMSat::SATSolver::get_version();
+}
+
 void CryptoMiniSat5::enableRefinement(const bool enable)
 {
   // might break if we simplify with refinement enabled..
