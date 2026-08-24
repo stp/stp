@@ -33,6 +33,7 @@ THE SOFTWARE.
 #include <cmath>
 #include <list>
 #include <map>
+#include <string>
 
 namespace simplifier
 {
@@ -219,12 +220,64 @@ class BitBlaster
   BBNode BBfpIsNaN(const BBNodeVec& p, unsigned sb, unsigned w);
   BBNode BBfpIsZero(const BBNodeVec& p, unsigned w);
 
+  struct FpNativeBounds
+  {
+    bool hasLower = false;
+    bool hasUpper = false;
+    long double lower = 0.0L;
+    long double upper = 0.0L;
+    bool lowerExact = false;
+    bool upperExact = false;
+    std::string lowerBits;
+    std::string upperBits;
+  };
+
+  struct FpNativeInterval
+  {
+    bool known = false;
+    bool exact = false;
+    long double lower = 0.0L;
+    long double upper = 0.0L;
+    std::string lowerBits;
+    std::string upperBits;
+  };
+
+  void collectFpNativeDomainFacts(const ASTNode& root);
+  void collectFpNativeDomainBounds(const ASTNode& n);
+  bool fpNativeBoundPredicate(const ASTNode& n, ASTNode& symbol,
+                              ASTNode& constant, long double& value,
+                              bool& lowerBound) const;
+  bool fpNativeMagnitudeZeroPredicate(const ASTNode& n,
+                                      ASTNode& term) const;
+  bool fpNativeConstantZeroMagnitude(const ASTNode& n) const;
+  bool fpNativeConstantFinite(const ASTNode& n) const;
+  bool fpNativeConstantValue(const ASTNode& n, long double& out) const;
+  bool fpNativeConstantBits(const ASTNode& n, std::string& out) const;
+  bool fpNativeMaxFiniteValue(const SourceSort& sort, long double& out) const;
+  FpNativeInterval fpNativeRoundedRange(const SourceSort& sort,
+                                        long double lower,
+                                        long double upper) const;
+  FpNativeInterval fpNativeInterval(const ASTNode& n);
+  FpNativeInterval fpNativeIntervalUncached(const ASTNode& n);
+  FpNativeInterval fpNativeExactRoundedRange(
+      const SourceSort& sort, Kind kind, const ASTNode& roundingMode,
+      const FpNativeInterval& a, const FpNativeInterval& b) const;
+  bool fpNativeKnownFinite(const ASTNode& n);
+  bool fpNativeKnownZeroMagnitude(const ASTNode& n);
+  bool fpNativeKnownFiniteNonnegative(const ASTNode& n);
+  bool fpNativeKnownFiniteNonpositive(const ASTNode& n);
+
   // bit blast fp.mul / fp.add / float-to-float to_fp over packed operands:
   // hand-written unpack/compute/round/pack circuits, no SymFPU
   // (--bb.fp-native-arith)
   BBNodeVec BBfpMul(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpAdd(const ASTNode& term, BBNodeSet& support);
+  BBNode BBfpAddIsZero(const ASTNode& term, BBNodeSet& support);
   BBNodeVec BBfpToFp(const ASTNode& term, BBNodeSet& support);
+
+  // Kept separate from the native-domain profiling counters so the stacked
+  // add-isZero optimization retains its standalone statistics contract.
+  size_t fpNativeAddIsZeroFusions = 0;
 
   // A packed operand split for the native arithmetic circuits: fields,
   // classification, and the significand with its hidden bit made explicit
@@ -237,7 +290,9 @@ class BitBlaster
     BBNodeVec eUnb; // E bits, signed, unbiased (subnormals read exp as 1)
   };
   FpOperand BBfpUnpack(const BBNodeVec& p, unsigned sb, unsigned w,
-                       unsigned E, BBNodeSet& support);
+                       unsigned E, BBNodeSet& support,
+                       bool knownFinite = false,
+                       bool knownZeroMagnitude = false);
 
   // The shared tail of the native arithmetic circuits: denormalise into
   // the subnormal range when the biased exponent be is <= 0, round rsig
@@ -247,7 +302,8 @@ class BitBlaster
   BBNodeVec BBfpRoundPack(const BBNodeVec& rm, const BBNode& sgn,
                           const BBNodeVec& rsig, const BBNode& guard,
                           const BBNode& sticky, const BBNodeVec& be,
-                          unsigned sb, unsigned eb, BBNodeSet& support);
+                          unsigned sb, unsigned eb, BBNodeSet& support,
+                          bool resultKnownFinite = false);
 
   // Width of the internal signed exponent for format (eb, sb): eb+2
   // widened until the subnormal shift distance (up to bias + 2sb + 3,
@@ -319,7 +375,54 @@ class BitBlaster
   // Nodes in this set can be replaced by their constant values, without being
   // conjoined to the top..
   ASTNodeSet fixedFromBottom;
-
+  ASTNodeSet fpNativeFiniteTerms;
+  ASTNodeSet fpNativeZeroMagnitudeFacts;
+  ASTNodeSet fpNativeZeroMagnitudeTerms;
+  // Negative lookup cache only: membership means "not currently proven
+  // zero", not that the term is known nonzero.
+  ASTNodeSet fpNativeUnknownZeroMagnitudeTerms;
+  ASTNodeSet fpNativeFiniteNonnegativeTerms;
+  // As above, this is a proof-failure cache, not a proof that a term is
+  // negative or non-finite.
+  ASTNodeSet fpNativeUnknownFiniteNonnegativeTerms;
+  ASTNodeSet fpNativeFiniteNonpositiveTerms;
+  // As above, this records only failure to prove semantic nonpositivity.
+  ASTNodeSet fpNativeUnknownFiniteNonpositiveTerms;
+  std::unordered_map<ASTNode, FpNativeBounds, ASTNode::ASTNodeHasher,
+                     ASTNode::ASTNodeEqual>
+      fpNativeBounds;
+  std::unordered_map<ASTNode, FpNativeInterval, ASTNode::ASTNodeHasher,
+                     ASTNode::ASTNodeEqual>
+      fpNativeIntervals;
+  std::unordered_map<ASTNode, size_t, ASTNode::ASTNodeHasher,
+                     ASTNode::ASTNodeEqual>
+      fpNativeParentUses;
+  ASTNode fpNativeDomainRoot;
+  size_t fpNativeFiniteCmpOperands = 0;
+  size_t fpNativeFiniteEqOperands = 0;
+  size_t fpNativeFiniteClassifications = 0;
+  size_t fpNativeFiniteArithOperands = 0;
+  size_t fpNativeFiniteRoundPacks = 0;
+  size_t fpNativeZeroCmpOperands = 0;
+  size_t fpNativeZeroEqOperands = 0;
+  size_t fpNativeZeroClassifications = 0;
+  size_t fpNativeIsZeroPredicates = 0;
+  size_t fpNativeIsZeroAddPredicates = 0;
+  size_t fpNativeIsZeroAddFusedPredicates = 0;
+  size_t fpNativeIsZeroAddExclusiveResults = 0;
+  size_t fpNativeIsZeroAddMemoizedResults = 0;
+  size_t fpNativeIsZeroAddKnownZeroResults = 0;
+  size_t fpNativeIsZeroAddBothFiniteOperands = 0;
+  size_t fpNativeIsZeroAddKnownSameSignOperands = 0;
+  size_t fpNativeIsZeroAddKnownOppositeSignOperands = 0;
+  size_t fpNativeIsZeroAddOneKnownSignOperand = 0;
+  size_t fpNativeZeroAddFastPaths = 0;
+  size_t fpNativeZeroMulFastPaths = 0;
+  size_t fpNativeZeroToFpFastPaths = 0;
+  size_t fpNativeKnownPositiveAddPaths = 0;
+  size_t fpNativeKnownNegativeAddPaths = 0;
+  size_t fpNativeKnownPositiveMulPaths = 0;
+  size_t fpNativeKnownNegativeMulPaths = 0;
   UserDefinedFlags* uf;
   NodeFactory* ASTNF;
   Simplifier* simp;
@@ -418,6 +521,44 @@ public:
   {
     BBTermMemo.clear();
     BBFormMemo.clear();
+    fpNativeFiniteTerms.clear();
+    fpNativeZeroMagnitudeFacts.clear();
+    fpNativeZeroMagnitudeTerms.clear();
+    fpNativeUnknownZeroMagnitudeTerms.clear();
+    fpNativeFiniteNonnegativeTerms.clear();
+    fpNativeUnknownFiniteNonnegativeTerms.clear();
+    fpNativeFiniteNonpositiveTerms.clear();
+    fpNativeUnknownFiniteNonpositiveTerms.clear();
+    fpNativeBounds.clear();
+    fpNativeIntervals.clear();
+    fpNativeParentUses.clear();
+    fpNativeDomainRoot = ASTNode();
+    fpNativeAddIsZeroFusions = 0;
+    fpNativeFiniteCmpOperands = 0;
+    fpNativeFiniteEqOperands = 0;
+    fpNativeFiniteClassifications = 0;
+    fpNativeFiniteArithOperands = 0;
+    fpNativeFiniteRoundPacks = 0;
+    fpNativeZeroCmpOperands = 0;
+    fpNativeZeroEqOperands = 0;
+    fpNativeZeroClassifications = 0;
+    fpNativeIsZeroPredicates = 0;
+    fpNativeIsZeroAddPredicates = 0;
+    fpNativeIsZeroAddFusedPredicates = 0;
+    fpNativeIsZeroAddExclusiveResults = 0;
+    fpNativeIsZeroAddMemoizedResults = 0;
+    fpNativeIsZeroAddKnownZeroResults = 0;
+    fpNativeIsZeroAddBothFiniteOperands = 0;
+    fpNativeIsZeroAddKnownSameSignOperands = 0;
+    fpNativeIsZeroAddKnownOppositeSignOperands = 0;
+    fpNativeIsZeroAddOneKnownSignOperand = 0;
+    fpNativeZeroAddFastPaths = 0;
+    fpNativeZeroMulFastPaths = 0;
+    fpNativeZeroToFpFastPaths = 0;
+    fpNativeKnownPositiveAddPaths = 0;
+    fpNativeKnownNegativeAddPaths = 0;
+    fpNativeKnownPositiveMulPaths = 0;
+    fpNativeKnownNegativeMulPaths = 0;
   }
 
   // Bitblast a formula

@@ -111,12 +111,6 @@ jobs:
         ./scripts/deps/setup-gtest.sh
         ./scripts/deps/setup-outputcheck.sh
 
-    # Deliberately outside the cached Dependencies step: the pinned mirror
-    # is small and builds in seconds, so caching it would only complicate
-    # the cache key for nothing.
-    - name: LibBF (real-literal folding)
-      run: ./scripts/deps/setup-libbf.sh
-
     # Keyed per run so every build writes a fresh entry; restore-keys picks
     # up the most recent one from this branch, or from the base branch.
     - name: Compiler cache
@@ -434,9 +428,6 @@ jobs:
         ./scripts/deps/setup-gtest.sh
         ./scripts/deps/setup-outputcheck.sh
 
-    - name: LibBF (real-literal folding)
-      run: ./scripts/deps/setup-libbf.sh
-
     - name: Compiler cache
       uses: actions/cache@v4
       with:
@@ -596,10 +587,6 @@ jobs:
         CADICAL_TAG=${{ matrix.cadical_tag }} ./scripts/deps/setup-cadical.sh
         ./scripts/deps/setup-gtest.sh
         ./scripts/deps/setup-outputcheck.sh
-
-    # Outside the cached step, as in the main job: tiny and quick to build.
-    - name: LibBF (real-literal folding)
-      run: ./scripts/deps/setup-libbf.sh
 
     - name: Compiler cache
       uses: actions/cache@v4
@@ -766,11 +753,6 @@ jobs:
         ./scripts/deps/setup-gtest.sh
         ./scripts/deps/setup-outputcheck.sh
 
-    # Outside the cached step, as in the gcc/clang job: the pinned mirror
-    # is small and builds in seconds.
-    - name: LibBF (real-literal folding)
-      run: ./scripts/deps/setup-libbf.sh
-
     - name: Compiler cache
       uses: actions/cache@v4
       with:
@@ -910,7 +892,6 @@ jobs:
     - name: Dependencies
       run: |
         ./scripts/deps/setup-minisat.sh
-        ./scripts/deps/setup-libbf.sh
 
     - name: Configure
       run: |
@@ -969,7 +950,6 @@ jobs:
         ./scripts/deps/setup-minisat.sh
         ./scripts/deps/setup-gtest.sh
         ./scripts/deps/setup-outputcheck.sh
-        ./scripts/deps/setup-libbf.sh
 
     - name: Configure
       run: |
@@ -1035,7 +1015,6 @@ jobs:
         ./scripts/deps/setup-riss.sh
         ./scripts/deps/setup-gtest.sh
         ./scripts/deps/setup-outputcheck.sh
-        ./scripts/deps/setup-libbf.sh
 
     - name: Configure
       run: |
@@ -1275,28 +1254,14 @@ jobs:
     # stale hit is not expressible.
     - uses: mozilla-actions/sccache-action@v0.0.11
 
-    # The script's clone half is portable -- git is what runs this step's
-    # shell -- while the compile half is cc/ar, so it stops before that and
-    # cl takes over below.
-    - name: Fetch LibBF (real-literal folding)
-      shell: bash
-      run: LIBBF_NO_BUILD=1 ./scripts/deps/setup-libbf.sh
-
-    # The MSVC branch of the stp branch's shims is what this compiles. Two
-    # files, so it is left out of the cache rather than given a launcher.
-    - name: Build LibBF (MSVC)
-      run: |
-        Set-Location deps\libbf
-        cl /nologo /std:c11 /O2 /c libbf.c cutils.c
-        if ($LASTEXITCODE -ne 0) { exit 1 }
-        lib /nologo /OUT:bf.lib libbf.obj cutils.obj
-        if ($LASTEXITCODE -ne 0) { exit 1 }
-        dir
-
+    # The commit scripts/deps/setup-minisat.sh pins, so this leg builds the
+    # same MiniSat as every other one; the two move together. Not --depth 1:
+    # a shallow clone fetches only the tip, which the checkout cannot resolve.
     - name: Build minisat
       run: |
-        git clone --depth 1 https://github.com/stp/minisat
+        git clone https://github.com/stp/minisat
         cd minisat
+        git checkout 14c78206cd12d1d36b7e042fa758747c135670a4
         cmake -B build -A x64 -DSTATICCOMPILE=ON "-DCMAKE_POLICY_VERSION_MINIMUM=3.12" "-DCMAKE_INSTALL_PREFIX=$env:MINISAT_ROOT" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
         cmake --build build --config Release --target install
 
@@ -1391,7 +1356,7 @@ jobs:
         "fp solver output: '$($outfp.Trim())'"
         "fp solver exit code: $LASTEXITCODE"
         if ($outfp.Trim() -ne "sat") { exit 1 }
-        # Real-literal folding through the MSVC-built LibBF: the decimal
+        # Real-literal folding through LibBF as MSVC compiled it: the decimal
         # fold must equal its packed-bits spelling, and a rational under a
         # symbolic rounding mode pinned to RTZ must pick that conversion.
         "(set-logic QF_FP)(declare-fun x () (_ FloatingPoint 8 24))(assert (= x ((_ to_fp 8 24) RNE 1.5)))(assert (distinct x ((_ to_fp 8 24) #x3fc00000)))(check-sat)" | Out-File -Encoding ascii testlit.smt2
@@ -1492,20 +1457,6 @@ jobs:
         ./configure -static -lpsapi
         make -j"$(nproc)" cadical
 
-    # The script's clone half runs under git-bash, exactly as the MSVC
-    # leg's does; the compile half then uses the UCRT64 gcc this job builds
-    # everything else with. gcc rather than the script's cc, which MinGW
-    # does not provide.
-    - name: Fetch LibBF (real-literal folding)
-      shell: bash
-      run: LIBBF_NO_BUILD=1 ./scripts/deps/setup-libbf.sh
-
-    - name: Build LibBF (MinGW)
-      run: |
-        cd deps/libbf
-        gcc -O2 -Wall -c libbf.c cutils.c
-        ar rcs libbf.a libbf.o cutils.o
-
     - name: Configure
       run: cmake -B build -G Ninja -DSTATICCOMPILE:BOOL=ON -DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH="$(pwd)/deps/cadical" -DNOCRYPTOMINISAT:BOOL=ON -DENABLE_PYTHON_INTERFACE:BOOL=OFF -DCMAKE_C_COMPILER_LAUNCHER="$SCCACHE" -DCMAKE_CXX_COMPILER_LAUNCHER="$SCCACHE" .
 
@@ -1533,7 +1484,7 @@ jobs:
         out=$("$stp" testsat.smt2)
         echo "sat-backend output: '$out'"
         [ "$out" = "sat" ]
-        # Real-literal folding through the MinGW-built LibBF: the decimal
+        # Real-literal folding through LibBF as MinGW compiled it: the decimal
         # fold must equal its packed-bits spelling.
         echo '(set-logic QF_FP)(declare-fun x () (_ FloatingPoint 8 24))(assert (= x ((_ to_fp 8 24) RNE 1.5)))(assert (distinct x ((_ to_fp 8 24) #x3fc00000)))(check-sat)' > testlit.smt2
         out=$("$stp" testlit.smt2)

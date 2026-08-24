@@ -56,6 +56,7 @@ THE SOFTWARE.
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/FloatBlaster/FpEncodingContext.h"
+#include "stp/FloatBlaster/FpDomainSimplify.h"
 #include "stp/FloatBlaster/FpTotalise.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/Printer/printers.h"
@@ -1195,6 +1196,29 @@ bool nodeDomainOk(Context& c, unsigned depth)
   NodeDomainAnalysis nda(&c.mgr);
   nda.buildMap(f);
   return true;
+}
+
+// FpDomainSimplify scans the top-level conjunction once for finite bounds and
+// again for sound zero rows. Zero-fact inference is opt-in today, but enabling
+// it must not put an input-controlled AND depth back on the C++ call stack.
+bool fpDomainZeroFactsOk(Context& c, unsigned depth)
+{
+  ASTNode f = c.mgr.CreateSymbol("fp-domain-conjunct-0", 0, 0);
+  for (unsigned i = 1; i < depth; ++i)
+  {
+    const std::string name = "fp-domain-conjunct-" + std::to_string(i);
+    f = c.hf->CreateNode(
+        AND, c.mgr.CreateSymbol(name.c_str(), 0, 0), f);
+  }
+  c.roots.push_back(f);
+
+  c.mgr.UserFlags.fp_domain_sound_zero_facts = true;
+  FpDomainSimplify domain(&c.mgr);
+  const ASTNode result = domain.topLevel(f);
+  c.roots.push_back(result);
+  const FpDomainSimplify::Statistics& stats = domain.statistics();
+  return result == f && stats.boxed_symbols == 0 &&
+         stats.sound_zero_rows == 0 && stats.sound_zero_facts == 0;
 }
 
 // NodeIterator historically visits children right-to-left. Put the deep
@@ -2838,6 +2862,10 @@ TEST(DeepDag, deep_mutable_dag_walks)
 }
 TEST(DeepDag, DISABLED_deep_use_ite_context)    { EXPECT_STACK_SAFE(useITEContextOk, 20000); }
 TEST(DeepDag, deep_node_domain)        { EXPECT_STACK_SAFE(nodeDomainOk, 20000); }
+TEST(DeepDag, deep_fp_domain_zero_facts)
+{
+  EXPECT_STACK_SAFE(fpDomainZeroFactsOk, 20000);
+}
 TEST(DeepDag, deep_node_iterator)      { EXPECT_STACK_SAFE(nodeIteratorOk, 20000); }
 TEST(DeepDag, deep_vars_in_expression) { EXPECT_STACK_SAFE(varsInExpressionOk, 20000); }
 TEST(DeepDag, deep_propagate_equalities) { EXPECT_STACK_SAFE(propagateEqualitiesOk, 20000); }

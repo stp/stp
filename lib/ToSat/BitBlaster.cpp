@@ -22,16 +22,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 #include "stp/ToSat/BitBlaster.h"
+#include "stp/FloatBlaster/DecimalLiteral.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
+#include "stp/FloatBlaster/rounding_modes.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
 #include "stp/Simplifier/constantBitP/FixedBits.h"
 #include "stp/Simplifier/constantBitP/NodeToFixedBitsMap.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
 #include "stp/Util/DagWalk.h"
+#include <algorithm>
 #include <cassert>
 #include <deque>
 #include <cmath>
+#include <limits>
 
 namespace stp
 {
@@ -1542,6 +1546,19 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
 
 const BBNode BitBlaster::BBForm(const ASTNode& form)
 {
+  fpNativeAddIsZeroFusions = 0;
+
+  if (uf->fp_native_domain &&
+      (fpNativeDomainRoot.IsNull() || !(fpNativeDomainRoot == form)))
+  {
+    if (!fpNativeDomainRoot.IsNull())
+    {
+      BBTermMemo.clear();
+      BBFormMemo.clear();
+    }
+    fpNativeDomainRoot = form;
+    collectFpNativeDomainFacts(form);
+  }
 
   if (uf->conjoin_to_top && cb != NULL)
   {
@@ -1571,6 +1588,73 @@ const BBNode BitBlaster::BBForm(const ASTNode& form)
     ASTNodeSet visited;
     assert(cb->checkAtFixedPoint(form, visited));
   }
+  if (uf->stats_flag && uf->fp_native_domain)
+  {
+    std::cerr << "FP native domain finite terms: "
+              << fpNativeFiniteTerms.size() << '\n';
+    std::cerr << "FP native domain cmp finite operands: "
+              << fpNativeFiniteCmpOperands << '\n';
+    std::cerr << "FP native domain eq finite operands: "
+              << fpNativeFiniteEqOperands << '\n';
+    std::cerr << "FP native domain classifications: "
+              << fpNativeFiniteClassifications << '\n';
+    std::cerr << "FP native domain arith finite operands: "
+              << fpNativeFiniteArithOperands << '\n';
+    std::cerr << "FP native domain finite round-packs: "
+              << fpNativeFiniteRoundPacks << '\n';
+    std::cerr << "FP native domain zero-magnitude facts: "
+              << fpNativeZeroMagnitudeFacts.size() << '\n';
+    std::cerr << "FP native domain zero-magnitude terms: "
+              << fpNativeZeroMagnitudeTerms.size() << '\n';
+    std::cerr << "FP native domain zero cmp operands: "
+              << fpNativeZeroCmpOperands << '\n';
+    std::cerr << "FP native domain zero eq operands: "
+              << fpNativeZeroEqOperands << '\n';
+    std::cerr << "FP native domain zero classifications: "
+              << fpNativeZeroClassifications << '\n';
+    std::cerr << "FP native domain isZero predicates: "
+              << fpNativeIsZeroPredicates << '\n';
+    std::cerr << "FP native domain isZero add predicates: "
+              << fpNativeIsZeroAddPredicates << '\n';
+    std::cerr << "FP native domain isZero add fused predicates: "
+              << fpNativeIsZeroAddFusedPredicates << '\n';
+    std::cerr << "FP native domain isZero add exclusive results: "
+              << fpNativeIsZeroAddExclusiveResults << '\n';
+    std::cerr << "FP native domain isZero add pre-memoized results: "
+              << fpNativeIsZeroAddMemoizedResults << '\n';
+    std::cerr << "FP native domain isZero add known-zero results: "
+              << fpNativeIsZeroAddKnownZeroResults << '\n';
+    std::cerr << "FP native domain isZero add both-finite operands: "
+              << fpNativeIsZeroAddBothFiniteOperands << '\n';
+    std::cerr << "FP native domain isZero add known-same-sign operands: "
+              << fpNativeIsZeroAddKnownSameSignOperands << '\n';
+    std::cerr << "FP native domain isZero add known-opposite-sign operands: "
+              << fpNativeIsZeroAddKnownOppositeSignOperands << '\n';
+    std::cerr << "FP native domain isZero add one-known-sign operand: "
+              << fpNativeIsZeroAddOneKnownSignOperand << '\n';
+    std::cerr << "FP native domain zero add fast-paths: "
+              << fpNativeZeroAddFastPaths << '\n';
+    std::cerr << "FP native domain zero mul fast-paths: "
+              << fpNativeZeroMulFastPaths << '\n';
+    std::cerr << "FP native domain zero to-fp fast-paths: "
+              << fpNativeZeroToFpFastPaths << '\n';
+    std::cerr << "FP native domain finite nonnegative terms: "
+              << fpNativeFiniteNonnegativeTerms.size() << '\n';
+    std::cerr << "FP native domain finite nonpositive terms: "
+              << fpNativeFiniteNonpositiveTerms.size() << '\n';
+    std::cerr << "FP native domain known-positive add paths: "
+              << fpNativeKnownPositiveAddPaths << '\n';
+    std::cerr << "FP native domain known-negative add paths: "
+              << fpNativeKnownNegativeAddPaths << '\n';
+    std::cerr << "FP native domain known-positive mul paths: "
+              << fpNativeKnownPositiveMulPaths << '\n';
+    std::cerr << "FP native domain known-negative mul paths: "
+              << fpNativeKnownNegativeMulPaths << '\n';
+  }
+  if (uf->stats_flag && uf->fp_native_add_iszero)
+    std::cerr << "FP native add-isZero fused predicates: "
+              << fpNativeAddIsZeroFusions << '\n';
+
   if (v.size() == 1)
     return v[0];
   else
@@ -3878,6 +3962,1031 @@ BBNode BitBlaster::BBfpIsZero(const BBNodeVec& p, unsigned w)
   return nf->CreateNode(NOR, magnitude);
 }
 
+namespace
+{
+bool fpNativePackedFiniteBits(const std::string& bits, const unsigned eb)
+{
+  if (bits.size() <= eb)
+    return false;
+  for (unsigned i = 0; i < eb; ++i)
+    if (bits[1 + i] != '1')
+      return true;
+  return false;
+}
+
+bool fpNativePackedZeroMagnitudeBits(const std::string& bits)
+{
+  if (bits.empty())
+    return false;
+  for (size_t i = 1; i < bits.size(); ++i)
+    if (bits[i] != '0')
+      return false;
+  return true;
+}
+
+// Numeric ordering for finite packed IEEE values. The two signed zeros are
+// equal; otherwise the magnitude order reverses on the negative side.
+int fpNativePackedCompareBits(const std::string& a, const std::string& b)
+{
+  assert(a.size() == b.size() && !a.empty());
+  if (fpNativePackedZeroMagnitudeBits(a) &&
+      fpNativePackedZeroMagnitudeBits(b))
+    return 0;
+  if (a[0] != b[0])
+    return a[0] == '1' ? -1 : 1;
+  const int magnitude = a.substr(1).compare(b.substr(1));
+  if (magnitude == 0)
+    return 0;
+  const int ordered = magnitude < 0 ? -1 : 1;
+  return a[0] == '1' ? -ordered : ordered;
+}
+
+std::string fpNativePackedNegateBits(std::string bits)
+{
+  assert(!bits.empty());
+  bits[0] = bits[0] == '1' ? '0' : '1';
+  return bits;
+}
+
+std::string fpNativePackedAbsBits(std::string bits)
+{
+  assert(!bits.empty());
+  bits[0] = '0';
+  return bits;
+}
+
+bool fpNativePackedValueBits(const SourceSort& sort,
+                             const std::string& bits, long double& out)
+{
+  if (sort.kind() != SourceSort::Kind::FloatingPoint)
+    return false;
+  const unsigned eb = sort.exponentWidth();
+  const unsigned sb = sort.significandWidth();
+  if (bits.size() != eb + sb || eb < 2 || sb < 2 || eb >= 31 ||
+      sb > static_cast<unsigned>(std::numeric_limits<long double>::digits))
+    return false;
+
+  unsigned exponent = 0;
+  for (unsigned i = 0; i < eb; ++i)
+    exponent = (exponent << 1) |
+               static_cast<unsigned>(bits[1 + i] == '1');
+  if (exponent == (1u << eb) - 1)
+    return false;
+
+  long double significand = 0.0L;
+  for (unsigned i = 0; i + 1 < sb; ++i)
+    if (bits[1 + eb + i] == '1')
+      significand +=
+          std::ldexp(1.0L, static_cast<int>(sb - 2 - i));
+
+  const int bias = static_cast<int>((1u << (eb - 1)) - 1);
+  if (exponent == 0)
+    out = std::ldexp(significand,
+                     1 - bias - static_cast<int>(sb - 1));
+  else
+  {
+    significand += std::ldexp(1.0L, static_cast<int>(sb - 1));
+    out = std::ldexp(significand,
+                     static_cast<int>(exponent) - bias -
+                         static_cast<int>(sb - 1));
+  }
+  if (bits[0] == '1')
+    out = -out;
+  return std::isfinite(out) &&
+         (out != 0.0L || (exponent == 0 && significand == 0.0L));
+}
+
+bool fpNativeFixedRoundingMode(const ASTNode& n, unsigned& mode)
+{
+  if (n.GetKind() != BVCONST || n.GetValueWidth() != 5)
+    return false;
+  mode = static_cast<unsigned>(n.GetUnsignedConst());
+  switch (mode)
+  {
+    case symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN:
+    case symbolic_fp::ROUND_NEAREST_TIES_TO_AWAY:
+    case symbolic_fp::ROUND_TOWARD_POSITIVE:
+    case symbolic_fp::ROUND_TOWARD_NEGATIVE:
+    case symbolic_fp::ROUND_TOWARD_ZERO: return true;
+    default: return false;
+  }
+}
+
+bool fpNativeExactBinaryEndpoint(const SourceSort& sort, const Kind kind,
+                                 const std::string& left,
+                                 const std::string& right,
+                                 const unsigned mode, std::string& result)
+{
+  PackedFpBinaryOp operation;
+  switch (kind)
+  {
+    case FP_ADD: operation = PackedFpBinaryOp::Add; break;
+    case FP_SUB: operation = PackedFpBinaryOp::Subtract; break;
+    case FP_MUL: operation = PackedFpBinaryOp::Multiply; break;
+    default: return false;
+  }
+
+  std::string error;
+  if (!packedFPBinaryOp(left, right, sort.exponentWidth(),
+                        sort.significandWidth(), mode, operation, result,
+                        error))
+    return false;
+  return fpNativePackedFiniteBits(result, sort.exponentWidth());
+}
+
+} // namespace
+
+bool BitBlaster::fpNativeConstantZeroMagnitude(const ASTNode& n) const
+{
+  const SourceSort sort = n.GetSourceSort();
+  if (n.GetKind() != BVCONST ||
+      sort.kind() != SourceSort::Kind::FloatingPoint)
+    return false;
+
+  const unsigned w = sort.packedWidth();
+  if (w < 2 || n.GetValueWidth() != w)
+    return false;
+
+  for (unsigned i = 0; i + 1 < w; ++i)
+    if (CONSTANTBV::BitVector_bit_test(n.GetBVConst(), i))
+      return false;
+  return true;
+}
+
+bool BitBlaster::fpNativeConstantFinite(const ASTNode& n) const
+{
+  long double ignored = 0.0L;
+  return fpNativeConstantValue(n, ignored);
+}
+
+bool BitBlaster::fpNativeConstantValue(const ASTNode& n,
+                                       long double& out) const
+{
+  const SourceSort sort = n.GetSourceSort();
+  if (n.GetKind() != BVCONST ||
+      sort.kind() != SourceSort::Kind::FloatingPoint)
+    return false;
+
+  const unsigned sb = sort.significandWidth();
+  const unsigned w = sort.packedWidth();
+  const unsigned eb = sort.exponentWidth();
+  if (sb < 2 || w <= sb || eb >= 31 ||
+      sb > static_cast<unsigned>(std::numeric_limits<long double>::digits))
+    return false;
+
+  CBV bv = n.GetBVConst();
+  bool expAllOnes = true;
+  for (unsigned i = sb - 1; i < w - 1; i++)
+    expAllOnes &= CONSTANTBV::BitVector_bit_test(bv, i);
+  if (expAllOnes)
+    return false;
+
+  const bool negative = CONSTANTBV::BitVector_bit_test(bv, w - 1);
+  unsigned exponent = 0;
+  for (unsigned i = 0; i < eb; i++)
+    if (CONSTANTBV::BitVector_bit_test(bv, sb - 1 + i))
+      exponent |= 1u << i;
+
+  long double significand = 0.0L;
+  for (unsigned i = 0; i + 1 < sb; i++)
+    if (CONSTANTBV::BitVector_bit_test(bv, i))
+      significand += std::ldexp(1.0L, static_cast<int>(i));
+
+  const int bias = static_cast<int>((1u << (eb - 1)) - 1);
+  if (exponent == 0)
+  {
+    out = std::ldexp(significand,
+                     static_cast<int>(1 - bias - (sb - 1)));
+  }
+  else
+  {
+    significand += std::ldexp(1.0L, static_cast<int>(sb - 1));
+    out = std::ldexp(significand,
+                     static_cast<int>(exponent) - bias -
+                         static_cast<int>(sb - 1));
+  }
+  if (negative)
+    out = -out;
+  // Reject a target nonzero that lies outside the host exponent range. In
+  // particular, decoding a negative tiny value as host -0 must never turn a
+  // negative lower bound into a semantic nonnegativity proof.
+  return std::isfinite(out) &&
+         (out != 0.0L || (exponent == 0 && significand == 0.0L));
+}
+
+bool BitBlaster::fpNativeConstantBits(const ASTNode& n,
+                                     std::string& out) const
+{
+  const SourceSort sort = n.GetSourceSort();
+  if (n.GetKind() != BVCONST ||
+      sort.kind() != SourceSort::Kind::FloatingPoint ||
+      n.GetValueWidth() != sort.packedWidth())
+    return false;
+
+  const unsigned width = n.GetValueWidth();
+  out.resize(width);
+  for (unsigned i = 0; i < width; ++i)
+    out[width - 1 - i] =
+        CONSTANTBV::BitVector_bit_test(n.GetBVConst(), i) ? '1' : '0';
+  return true;
+}
+
+bool BitBlaster::fpNativeMaxFiniteValue(const SourceSort& sort,
+                                        long double& out) const
+{
+  if (sort.kind() != SourceSort::Kind::FloatingPoint)
+    return false;
+
+  const unsigned eb = sort.exponentWidth();
+  const unsigned sb = sort.significandWidth();
+  if (eb < 2 || sb < 2 || eb >= 31 || sb > 113)
+    return false;
+
+  const int bias = static_cast<int>((1u << (eb - 1)) - 1);
+  const int maxExp = static_cast<int>((1u << eb) - 2) - bias;
+  const long double sig =
+      2.0L - std::ldexp(1.0L, -static_cast<int>(sb - 1));
+  out = std::ldexp(sig, maxExp);
+  return std::isfinite(out);
+}
+
+BitBlaster::FpNativeInterval BitBlaster::fpNativeRoundedRange(
+    const SourceSort& sort, const long double lower,
+    const long double upper) const
+{
+  FpNativeInterval out;
+  if (!std::isfinite(lower) || !std::isfinite(upper))
+    return out;
+
+  long double maxFinite = 0.0L;
+  if (!fpNativeMaxFiniteValue(sort, maxFinite))
+    return out;
+
+  if (lower < -maxFinite || upper > maxFinite)
+    return out;
+
+  const unsigned eb = sort.exponentWidth();
+  const unsigned sb = sort.significandWidth();
+  const int bias = static_cast<int>((1u << (eb - 1)) - 1);
+  const int maxExp = static_cast<int>((1u << eb) - 2) - bias;
+  const long double maxUlp =
+      std::ldexp(1.0L, maxExp - static_cast<int>(sb - 1));
+  const long double lo = std::max(-maxFinite, lower - maxUlp);
+  const long double hi = std::min(maxFinite, upper + maxUlp);
+
+  out.known = true;
+  out.lower = lo;
+  out.upper = hi;
+  return out;
+}
+
+BitBlaster::FpNativeInterval BitBlaster::fpNativeExactRoundedRange(
+    const SourceSort& sort, const Kind kind, const ASTNode& roundingMode,
+    const FpNativeInterval& a, const FpNativeInterval& b) const
+{
+  FpNativeInterval out;
+  if (!a.exact || !b.exact)
+    return out;
+
+  unsigned fixedMode = 0;
+  const bool fixed = fpNativeFixedRoundingMode(roundingMode, fixedMode);
+  const unsigned lowerMode =
+      fixed ? fixedMode
+            : static_cast<unsigned>(symbolic_fp::ROUND_TOWARD_NEGATIVE);
+  const unsigned upperMode =
+      fixed ? fixedMode
+            : static_cast<unsigned>(symbolic_fp::ROUND_TOWARD_POSITIVE);
+
+  using EndpointPair = std::pair<std::string, std::string>;
+  std::vector<EndpointPair> lowerInputs;
+  std::vector<EndpointPair> upperInputs;
+  if (kind == FP_ADD)
+  {
+    lowerInputs.emplace_back(a.lowerBits, b.lowerBits);
+    upperInputs.emplace_back(a.upperBits, b.upperBits);
+  }
+  else if (kind == FP_SUB)
+  {
+    lowerInputs.emplace_back(a.lowerBits, b.upperBits);
+    upperInputs.emplace_back(a.upperBits, b.lowerBits);
+  }
+  else if (kind == FP_MUL)
+  {
+    const std::string as[2] = {a.lowerBits, a.upperBits};
+    const std::string bs[2] = {b.lowerBits, b.upperBits};
+    for (const std::string& av : as)
+      for (const std::string& bv : bs)
+      {
+        lowerInputs.emplace_back(av, bv);
+        upperInputs.emplace_back(av, bv);
+      }
+  }
+  else
+    return out;
+
+  std::string lower;
+  for (const EndpointPair& input : lowerInputs)
+  {
+    std::string value;
+    if (!fpNativeExactBinaryEndpoint(sort, kind, input.first, input.second,
+                                     lowerMode, value))
+      return out;
+    if (lower.empty() || fpNativePackedCompareBits(value, lower) < 0)
+      lower = value;
+  }
+
+  std::string upper;
+  for (const EndpointPair& input : upperInputs)
+  {
+    std::string value;
+    if (!fpNativeExactBinaryEndpoint(sort, kind, input.first, input.second,
+                                     upperMode, value))
+      return out;
+    if (upper.empty() || fpNativePackedCompareBits(value, upper) > 0)
+      upper = value;
+  }
+
+  long double lo = 0.0L;
+  long double hi = 0.0L;
+  if (lower.empty() || upper.empty() ||
+      fpNativePackedCompareBits(lower, upper) > 0 ||
+      !fpNativePackedValueBits(sort, lower, lo) ||
+      !fpNativePackedValueBits(sort, upper, hi))
+    return out;
+
+  out.known = true;
+  out.exact = true;
+  out.lower = lo;
+  out.upper = hi;
+  out.lowerBits = lower;
+  out.upperBits = upper;
+  return out;
+}
+
+BitBlaster::FpNativeInterval BitBlaster::fpNativeInterval(const ASTNode& n)
+{
+  const auto cached = fpNativeIntervals.find(n);
+  if (cached != fpNativeIntervals.end())
+    return cached->second;
+
+  FpNativeInterval out = fpNativeIntervalUncached(n);
+  fpNativeIntervals.emplace(n, out);
+  return out;
+}
+
+BitBlaster::FpNativeInterval BitBlaster::fpNativeIntervalUncached(
+    const ASTNode& n)
+{
+  FpNativeInterval out;
+  if (!uf->fp_native_domain)
+    return out;
+
+  const SourceSort sort = n.GetSourceSort();
+  if (sort.kind() != SourceSort::Kind::FloatingPoint)
+    return out;
+
+  long double value = 0.0L;
+  if (fpNativeConstantValue(n, value))
+  {
+    out.known = true;
+    out.lower = value;
+    out.upper = value;
+    out.exact = fpNativeConstantBits(n, out.lowerBits);
+    if (out.exact)
+      out.upperBits = out.lowerBits;
+    return out;
+  }
+
+  if (fpNativeKnownZeroMagnitude(n))
+  {
+    out.known = true;
+    out.exact = true;
+    out.lower = 0.0L;
+    out.upper = 0.0L;
+    out.lowerBits.assign(sort.packedWidth(), '0');
+    out.upperBits = out.lowerBits;
+    return out;
+  }
+
+  if (n.GetKind() == SYMBOL)
+  {
+    const auto it = fpNativeBounds.find(n);
+    if (it != fpNativeBounds.end() && it->second.hasLower &&
+        it->second.hasUpper && it->second.lower <= it->second.upper)
+    {
+      out.known = true;
+      out.lower = it->second.lower;
+      out.upper = it->second.upper;
+      if (it->second.lowerExact && it->second.upperExact &&
+          fpNativePackedCompareBits(it->second.lowerBits,
+                                    it->second.upperBits) <= 0)
+      {
+        out.exact = true;
+        out.lowerBits = it->second.lowerBits;
+        out.upperBits = it->second.upperBits;
+      }
+    }
+    return out;
+  }
+
+  switch (n.GetKind())
+  {
+    case FP_NEG:
+    {
+      const FpNativeInterval x = fpNativeInterval(n[0]);
+      if (!x.known)
+        return out;
+      out.known = true;
+      out.lower = -x.upper;
+      out.upper = -x.lower;
+      if (x.exact)
+      {
+        out.exact = true;
+        out.lowerBits = fpNativePackedNegateBits(x.upperBits);
+        out.upperBits = fpNativePackedNegateBits(x.lowerBits);
+      }
+      return out;
+    }
+
+    case FP_ABS:
+    {
+      const FpNativeInterval x = fpNativeInterval(n[0]);
+      if (!x.known)
+        return out;
+      out.known = true;
+      if (x.lower >= 0.0L)
+      {
+        out.lower = x.lower;
+        out.upper = x.upper;
+        if (x.exact)
+        {
+          out.exact = true;
+          out.lowerBits = fpNativePackedAbsBits(x.lowerBits);
+          out.upperBits = fpNativePackedAbsBits(x.upperBits);
+        }
+      }
+      else if (x.upper <= 0.0L)
+      {
+        out.lower = -x.upper;
+        out.upper = -x.lower;
+        if (x.exact)
+        {
+          out.exact = true;
+          out.lowerBits = fpNativePackedAbsBits(x.upperBits);
+          out.upperBits = fpNativePackedAbsBits(x.lowerBits);
+        }
+      }
+      else
+      {
+        out.lower = 0.0L;
+        out.upper = std::max(-x.lower, x.upper);
+        if (x.exact)
+        {
+          out.exact = true;
+          out.lowerBits.assign(sort.packedWidth(), '0');
+          const std::string negativeMagnitude =
+              fpNativePackedAbsBits(x.lowerBits);
+          const std::string positiveMagnitude =
+              fpNativePackedAbsBits(x.upperBits);
+          out.upperBits =
+              fpNativePackedCompareBits(negativeMagnitude,
+                                        positiveMagnitude) >= 0
+                  ? negativeMagnitude
+                  : positiveMagnitude;
+        }
+      }
+      return out;
+    }
+
+    case ITE:
+    {
+      if (n.Degree() != 3)
+        return out;
+      const FpNativeInterval t = fpNativeInterval(n[1]);
+      const FpNativeInterval e = fpNativeInterval(n[2]);
+      if (!t.known || !e.known)
+        return out;
+      out.known = true;
+      out.lower = std::min(t.lower, e.lower);
+      out.upper = std::max(t.upper, e.upper);
+      if (t.exact && e.exact)
+      {
+        out.exact = true;
+        out.lowerBits = fpNativePackedCompareBits(t.lowerBits, e.lowerBits) <= 0
+                            ? t.lowerBits
+                            : e.lowerBits;
+        out.upperBits = fpNativePackedCompareBits(t.upperBits, e.upperBits) >= 0
+                            ? t.upperBits
+                            : e.upperBits;
+      }
+      return out;
+    }
+
+    case FP_ADD:
+    case FP_SUB:
+    case FP_MUL:
+    {
+      if (n.Degree() != 3)
+        return out;
+      const FpNativeInterval a = fpNativeInterval(n[1]);
+      const FpNativeInterval b = fpNativeInterval(n[2]);
+      if (!a.known || !b.known)
+        return out;
+
+      const FpNativeInterval exact =
+          fpNativeExactRoundedRange(sort, n.GetKind(), n[0], a, b);
+      if (exact.known)
+        return exact;
+
+      if (n.GetKind() == FP_ADD)
+        return fpNativeRoundedRange(sort, a.lower + b.lower,
+                                    a.upper + b.upper);
+      if (n.GetKind() == FP_SUB)
+        return fpNativeRoundedRange(sort, a.lower - b.upper,
+                                    a.upper - b.lower);
+
+      const long double vals[4] = {a.lower * b.lower, a.lower * b.upper,
+                                   a.upper * b.lower, a.upper * b.upper};
+      return fpNativeRoundedRange(sort, *std::min_element(vals, vals + 4),
+                                  *std::max_element(vals, vals + 4));
+    }
+
+    default:
+      return out;
+  }
+}
+
+bool BitBlaster::fpNativeKnownFinite(const ASTNode& n)
+{
+  return fpNativeInterval(n).known;
+}
+
+bool BitBlaster::fpNativeKnownZeroMagnitude(const ASTNode& n)
+{
+  if (!uf->fp_native_domain ||
+      n.GetSourceSort().kind() != SourceSort::Kind::FloatingPoint)
+    return false;
+
+  if (fpNativeZeroMagnitudeTerms.find(n) !=
+      fpNativeZeroMagnitudeTerms.end())
+    return true;
+  if (fpNativeUnknownZeroMagnitudeTerms.find(n) !=
+      fpNativeUnknownZeroMagnitudeTerms.end())
+    return false;
+
+  bool knownZero = fpNativeConstantZeroMagnitude(n);
+  if (!knownZero)
+  {
+    switch (n.GetKind())
+    {
+      case FP_NEG:
+      case FP_ABS:
+        knownZero = n.Degree() == 1 && fpNativeKnownZeroMagnitude(n[0]);
+        break;
+
+      case ITE:
+        knownZero = n.Degree() == 3 &&
+                    fpNativeKnownZeroMagnitude(n[1]) &&
+                    fpNativeKnownZeroMagnitude(n[2]);
+        break;
+
+      case FP_ADD:
+      case FP_SUB:
+        knownZero = n.Degree() == 3 &&
+                    fpNativeKnownZeroMagnitude(n[1]) &&
+                    fpNativeKnownZeroMagnitude(n[2]);
+        break;
+
+      case FP_MUL:
+        if (n.Degree() == 3)
+        {
+          const bool aZero = fpNativeKnownZeroMagnitude(n[1]);
+          knownZero =
+              (aZero && fpNativeKnownFinite(n[2])) ||
+              (fpNativeKnownZeroMagnitude(n[2]) &&
+               fpNativeKnownFinite(n[1]));
+        }
+        break;
+
+      case FP_TOFP:
+        knownZero = n.Degree() == 4 && fpNativeKnownZeroMagnitude(n[3]);
+        break;
+
+      default:
+        break;
+    }
+  }
+
+  if (knownZero)
+  {
+    if (n.GetKind() != BVCONST)
+      fpNativeZeroMagnitudeTerms.insert(n);
+  }
+  else
+    fpNativeUnknownZeroMagnitudeTerms.insert(n);
+  return knownZero;
+}
+
+bool BitBlaster::fpNativeKnownFiniteNonnegative(const ASTNode& n)
+{
+  if (!uf->fp_native_domain ||
+      n.GetSourceSort().kind() != SourceSort::Kind::FloatingPoint)
+    return false;
+
+  if (fpNativeFiniteNonnegativeTerms.find(n) !=
+      fpNativeFiniteNonnegativeTerms.end())
+    return true;
+  if (fpNativeUnknownFiniteNonnegativeTerms.find(n) !=
+      fpNativeUnknownFiniteNonnegativeTerms.end())
+    return false;
+
+  // A magnitude-zero fact proves semantic nonnegativity even for -0. It
+  // deliberately does not prove that the packed sign bit is clear.
+  bool known = fpNativeKnownZeroMagnitude(n);
+  if (!known)
+  {
+    long double value = 0.0L;
+    if (fpNativeConstantValue(n, value))
+      known = value >= 0.0L;
+    else
+    {
+      switch (n.GetKind())
+      {
+        case SYMBOL:
+        {
+          const auto it = fpNativeBounds.find(n);
+          known = it != fpNativeBounds.end() && it->second.hasLower &&
+                  it->second.hasUpper && it->second.lower >= 0.0L &&
+                  fpNativeKnownFinite(n);
+          break;
+        }
+
+        case FP_ABS:
+          known = n.Degree() == 1 && fpNativeKnownFinite(n[0]);
+          break;
+
+        case FP_NEG:
+          known = n.Degree() == 1 &&
+                  fpNativeKnownFiniteNonpositive(n[0]);
+          break;
+
+        case ITE:
+          known = n.Degree() == 3 &&
+                  fpNativeKnownFiniteNonnegative(n[1]) &&
+                  fpNativeKnownFiniteNonnegative(n[2]);
+          break;
+
+        case FP_ADD:
+          // The operands establish the result's mathematical sign. A
+          // separate finite-result proof is required before propagating the
+          // fact through this term: positive overflow is infinity.
+          known = n.Degree() == 3 &&
+                  fpNativeKnownFiniteNonnegative(n[1]) &&
+                  fpNativeKnownFiniteNonnegative(n[2]) &&
+                  fpNativeKnownFinite(n);
+          break;
+
+        case FP_SUB:
+          known = n.Degree() == 3 &&
+                  fpNativeKnownFiniteNonnegative(n[1]) &&
+                  fpNativeKnownFiniteNonpositive(n[2]) &&
+                  fpNativeKnownFinite(n);
+          break;
+
+        case FP_MUL:
+          if (n.Degree() == 3)
+          {
+            const bool aNonnegative =
+                fpNativeKnownFiniteNonnegative(n[1]);
+            const bool aNonpositive =
+                fpNativeKnownFiniteNonpositive(n[1]);
+            const bool bNonnegative =
+                fpNativeKnownFiniteNonnegative(n[2]);
+            const bool bNonpositive =
+                fpNativeKnownFiniteNonpositive(n[2]);
+            known = ((aNonnegative && bNonnegative) ||
+                     (aNonpositive && bNonpositive)) &&
+                    fpNativeKnownFinite(n);
+          }
+          break;
+
+        case FP_TOFP:
+          known = n.Degree() == 4 &&
+                  fpNativeKnownFiniteNonnegative(n[3]) &&
+                  fpNativeKnownFinite(n);
+          break;
+
+        default:
+          break;
+      }
+    }
+  }
+
+  if (known)
+  {
+    if (n.GetKind() != BVCONST)
+      fpNativeFiniteNonnegativeTerms.insert(n);
+  }
+  else
+    fpNativeUnknownFiniteNonnegativeTerms.insert(n);
+  return known;
+}
+
+bool BitBlaster::fpNativeKnownFiniteNonpositive(const ASTNode& n)
+{
+  if (!uf->fp_native_domain ||
+      n.GetSourceSort().kind() != SourceSort::Kind::FloatingPoint)
+    return false;
+
+  if (fpNativeFiniteNonpositiveTerms.find(n) !=
+      fpNativeFiniteNonpositiveTerms.end())
+    return true;
+  if (fpNativeUnknownFiniteNonpositiveTerms.find(n) !=
+      fpNativeUnknownFiniteNonpositiveTerms.end())
+    return false;
+
+  // Magnitude zero belongs to both semantic sign domains. In particular,
+  // neither this predicate nor its nonnegative twin constrains the packed
+  // sign bit of zero.
+  bool known = fpNativeKnownZeroMagnitude(n);
+  if (!known)
+  {
+    long double value = 0.0L;
+    if (fpNativeConstantValue(n, value))
+      known = value <= 0.0L;
+    else
+    {
+      switch (n.GetKind())
+      {
+        case SYMBOL:
+        {
+          const auto it = fpNativeBounds.find(n);
+          known = it != fpNativeBounds.end() && it->second.hasLower &&
+                  it->second.hasUpper && it->second.upper <= 0.0L &&
+                  fpNativeKnownFinite(n);
+          break;
+        }
+
+        case FP_NEG:
+          known = n.Degree() == 1 &&
+                  fpNativeKnownFiniteNonnegative(n[0]);
+          break;
+
+        case ITE:
+          known = n.Degree() == 3 &&
+                  fpNativeKnownFiniteNonpositive(n[1]) &&
+                  fpNativeKnownFiniteNonpositive(n[2]);
+          break;
+
+        case FP_ADD:
+          known = n.Degree() == 3 &&
+                  fpNativeKnownFiniteNonpositive(n[1]) &&
+                  fpNativeKnownFiniteNonpositive(n[2]) &&
+                  fpNativeKnownFinite(n);
+          break;
+
+        case FP_SUB:
+          known = n.Degree() == 3 &&
+                  fpNativeKnownFiniteNonpositive(n[1]) &&
+                  fpNativeKnownFiniteNonnegative(n[2]) &&
+                  fpNativeKnownFinite(n);
+          break;
+
+        case FP_MUL:
+          if (n.Degree() == 3)
+          {
+            const bool aNonnegative =
+                fpNativeKnownFiniteNonnegative(n[1]);
+            const bool aNonpositive =
+                fpNativeKnownFiniteNonpositive(n[1]);
+            const bool bNonnegative =
+                fpNativeKnownFiniteNonnegative(n[2]);
+            const bool bNonpositive =
+                fpNativeKnownFiniteNonpositive(n[2]);
+            known = ((aNonnegative && bNonpositive) ||
+                     (aNonpositive && bNonnegative)) &&
+                    fpNativeKnownFinite(n);
+          }
+          break;
+
+        case FP_TOFP:
+          known = n.Degree() == 4 &&
+                  fpNativeKnownFiniteNonpositive(n[3]) &&
+                  fpNativeKnownFinite(n);
+          break;
+
+        default:
+          break;
+      }
+    }
+  }
+
+  if (known)
+  {
+    if (n.GetKind() != BVCONST)
+      fpNativeFiniteNonpositiveTerms.insert(n);
+  }
+  else
+    fpNativeUnknownFiniteNonpositiveTerms.insert(n);
+  return known;
+}
+
+
+bool BitBlaster::fpNativeBoundPredicate(const ASTNode& n, ASTNode& symbol,
+                                        ASTNode& constant,
+                                        long double& value,
+                                        bool& lowerBound) const
+{
+  const Kind k = n.GetKind();
+  if ((k != FP_LT && k != FP_LEQ && k != FP_GT && k != FP_GEQ) ||
+      n.Degree() != 2)
+    return false;
+
+  const bool flipped = (k == FP_GT || k == FP_GEQ);
+  const ASTNode& left = flipped ? n[1] : n[0];
+  const ASTNode& right = flipped ? n[0] : n[1];
+
+  if (left.GetKind() == SYMBOL &&
+      left.GetSourceSort().kind() == SourceSort::Kind::FloatingPoint &&
+      fpNativeConstantValue(right, value))
+  {
+    symbol = left;
+    constant = right;
+    lowerBound = false;
+    return true;
+  }
+
+  if (right.GetKind() == SYMBOL &&
+      right.GetSourceSort().kind() == SourceSort::Kind::FloatingPoint &&
+      fpNativeConstantValue(left, value))
+  {
+    symbol = right;
+    constant = left;
+    lowerBound = true;
+    return true;
+  }
+
+  return false;
+}
+
+bool BitBlaster::fpNativeMagnitudeZeroPredicate(const ASTNode& n,
+                                                ASTNode& term) const
+{
+  if (n.GetKind() == FP_ISZERO && n.Degree() == 1 &&
+      n[0].GetKind() == FP_MUL &&
+      n[0].GetSourceSort().kind() == SourceSort::Kind::FloatingPoint)
+  {
+    term = n[0];
+    return true;
+  }
+
+  if (n.GetKind() != EQ || n.Degree() != 2)
+    return false;
+
+  auto match = [&](const ASTNode& extract, const ASTNode& zero) {
+    if (extract.GetKind() != BVEXTRACT || extract.Degree() != 3 ||
+        zero.GetKind() != BVCONST ||
+        !CONSTANTBV::BitVector_is_empty(zero.GetBVConst()))
+      return false;
+
+    const ASTNode& candidate = extract[0];
+    const SourceSort sort = candidate.GetSourceSort();
+    if (candidate.GetKind() != SYMBOL ||
+        sort.kind() != SourceSort::Kind::FloatingPoint)
+      return false;
+
+    const unsigned w = sort.packedWidth();
+    if (w < 2 || candidate.GetValueWidth() != w ||
+        extract.GetValueWidth() != w - 1 || zero.GetValueWidth() != w - 1 ||
+        extract[1].GetUnsignedConst() != w - 2 ||
+        extract[2].GetUnsignedConst() != 0)
+      return false;
+
+    term = candidate;
+    return true;
+  };
+
+  return match(n[0], n[1]) || match(n[1], n[0]);
+}
+
+void BitBlaster::collectFpNativeDomainBounds(const ASTNode& n)
+{
+  // Bounds are useful only when they occur in the top-level conjunction.
+  // Walk that conjunction explicitly: native-domain collection is enabled
+  // for every query, including deep formulas with no floating-point terms.
+  // Recursing down a long AND spine would therefore reintroduce a stack limit
+  // into the otherwise stack-safe bit-blaster.
+  ASTVec pending(1, n);
+  while (!pending.empty())
+  {
+    const ASTNode current = pending.back();
+    pending.pop_back();
+    if (current.GetKind() == AND)
+    {
+      for (auto it = current.end(); it != current.begin();)
+        pending.push_back(*--it);
+      continue;
+    }
+
+    ASTNode zeroSymbol;
+    if (fpNativeMagnitudeZeroPredicate(current, zeroSymbol))
+    {
+      fpNativeZeroMagnitudeFacts.insert(zeroSymbol);
+      fpNativeZeroMagnitudeTerms.insert(zeroSymbol);
+      fpNativeFiniteTerms.insert(zeroSymbol);
+    }
+
+    ASTNode symbol;
+    ASTNode constant;
+    long double value = 0.0L;
+    bool lowerBound = false;
+    if (!fpNativeBoundPredicate(current, symbol, constant, value, lowerBound))
+      continue;
+
+    FpNativeBounds& seen = fpNativeBounds[symbol];
+    if (lowerBound)
+    {
+      if (!seen.hasLower || value >= seen.lower)
+      {
+        seen.lower = value;
+        seen.lowerExact = fpNativeConstantBits(constant, seen.lowerBits);
+      }
+      seen.hasLower = true;
+    }
+    else
+    {
+      if (!seen.hasUpper || value <= seen.upper)
+      {
+        seen.upper = value;
+        seen.upperExact = fpNativeConstantBits(constant, seen.upperBits);
+      }
+      seen.hasUpper = true;
+    }
+  }
+}
+
+void BitBlaster::collectFpNativeDomainFacts(const ASTNode& root)
+{
+  fpNativeFiniteTerms.clear();
+  fpNativeZeroMagnitudeFacts.clear();
+  fpNativeZeroMagnitudeTerms.clear();
+  fpNativeUnknownZeroMagnitudeTerms.clear();
+  fpNativeFiniteNonnegativeTerms.clear();
+  fpNativeUnknownFiniteNonnegativeTerms.clear();
+  fpNativeFiniteNonpositiveTerms.clear();
+  fpNativeUnknownFiniteNonpositiveTerms.clear();
+  fpNativeBounds.clear();
+  fpNativeIntervals.clear();
+  fpNativeParentUses.clear();
+  fpNativeFiniteCmpOperands = 0;
+  fpNativeFiniteEqOperands = 0;
+  fpNativeFiniteClassifications = 0;
+  fpNativeFiniteArithOperands = 0;
+  fpNativeFiniteRoundPacks = 0;
+  fpNativeZeroCmpOperands = 0;
+  fpNativeZeroEqOperands = 0;
+  fpNativeZeroClassifications = 0;
+  fpNativeIsZeroPredicates = 0;
+  fpNativeIsZeroAddPredicates = 0;
+  fpNativeIsZeroAddFusedPredicates = 0;
+  fpNativeIsZeroAddExclusiveResults = 0;
+  fpNativeIsZeroAddMemoizedResults = 0;
+  fpNativeIsZeroAddKnownZeroResults = 0;
+  fpNativeIsZeroAddBothFiniteOperands = 0;
+  fpNativeIsZeroAddKnownSameSignOperands = 0;
+  fpNativeIsZeroAddKnownOppositeSignOperands = 0;
+  fpNativeIsZeroAddOneKnownSignOperand = 0;
+  fpNativeZeroAddFastPaths = 0;
+  fpNativeZeroMulFastPaths = 0;
+  fpNativeZeroToFpFastPaths = 0;
+  fpNativeKnownPositiveAddPaths = 0;
+  fpNativeKnownNegativeAddPaths = 0;
+  fpNativeKnownPositiveMulPaths = 0;
+  fpNativeKnownNegativeMulPaths = 0;
+  if (uf->stats_flag)
+  {
+    ASTNodeSet visited;
+    std::vector<ASTNode> pending(1, root);
+    while (!pending.empty())
+    {
+      const ASTNode n = pending.back();
+      pending.pop_back();
+      if (!visited.insert(n).second)
+        continue;
+      for (const ASTNode& child : n)
+      {
+        ++fpNativeParentUses[child];
+        pending.push_back(child);
+      }
+    }
+  }
+
+  collectFpNativeDomainBounds(root);
+  for (const auto& entry : fpNativeBounds)
+    if (entry.second.hasLower && entry.second.hasUpper)
+      fpNativeFiniteTerms.insert(entry.first);
+}
+
 // Bit-blasted form for the four ordering comparisons (FP_GT, FP_LT, FP_GEQ,
 // FP_LEQ) over packed IEEE-754 operands. FloatBlast leaves these comparisons
 // in place when both operands are packed views (symbols, interned
@@ -3921,6 +5030,48 @@ BBNode BitBlaster::BBcompareFP(const ASTNode& form, BBNodeSet& support)
   // w-1.
   const BBNodeVec aBits = BBTerm(a, support);
   const BBNodeVec bBits = BBTerm(b, support);
+  const bool aFinite = fpNativeKnownFinite(a);
+  const bool bFinite = fpNativeKnownFinite(b);
+  const bool aKnownZero = fpNativeKnownZeroMagnitude(a);
+  const bool bKnownZero = fpNativeKnownZeroMagnitude(b);
+  fpNativeFiniteCmpOperands += static_cast<size_t>(aFinite) +
+                               static_cast<size_t>(bFinite);
+  fpNativeZeroCmpOperands += static_cast<size_t>(aKnownZero) +
+                             static_cast<size_t>(bKnownZero);
+
+  // Once a top-level magnitude constraint establishes an operand as either
+  // signed zero, comparison with it only needs the other operand's sign,
+  // zero test, and (unless finite) NaN test. This retains the SMT-LIB rule
+  // that +0 and -0 compare equal.
+  if (aKnownZero && bKnownZero)
+    return strict ? nf->getFalse() : nf->getTrue();
+
+  if (aKnownZero || bKnownZero)
+  {
+    const bool zeroOnLeft = aKnownZero;
+    const BBNodeVec& otherBits = zeroOnLeft ? bBits : aBits;
+    const bool otherFinite = zeroOnLeft ? bFinite : aFinite;
+    const BBNode otherZero = BBfpIsZero(otherBits, w);
+    const BBNode sign = otherBits[w - 1];
+    BBNode ordered;
+    if (zeroOnLeft)
+      ordered = strict
+                    ? nf->CreateNode(AND, sign,
+                                     nf->CreateNode(NOT, otherZero))
+                    : nf->CreateNode(OR, sign, otherZero);
+    else
+      ordered = strict
+                    ? nf->CreateNode(AND, nf->CreateNode(NOT, sign),
+                                     nf->CreateNode(NOT, otherZero))
+                    : nf->CreateNode(OR, nf->CreateNode(NOT, sign),
+                                     otherZero);
+
+    if (otherFinite)
+      return ordered;
+    const BBNode notNaN =
+        nf->CreateNode(NOT, BBfpIsNaN(otherBits, sb, w));
+    return nf->CreateNode(AND, notNaN, ordered);
+  }
 
   auto key = [this](const BBNodeVec& p, unsigned width) {
     const BBNode& sign = p[width - 1];
@@ -3932,8 +5083,10 @@ BBNode BitBlaster::BBcompareFP(const ASTNode& form, BBNodeSet& support)
     return k;
   };
 
-  const BBNode aNotNaN = nf->CreateNode(NOT, BBfpIsNaN(aBits, sb, w));
-  const BBNode bNotNaN = nf->CreateNode(NOT, BBfpIsNaN(bBits, sb, w));
+  const BBNode aIsNaN = aFinite ? nf->getFalse() : BBfpIsNaN(aBits, sb, w);
+  const BBNode bIsNaN = bFinite ? nf->getFalse() : BBfpIsNaN(bBits, sb, w);
+  const BBNode aNotNaN = nf->CreateNode(NOT, aIsNaN);
+  const BBNode bNotNaN = nf->CreateNode(NOT, bIsNaN);
   // Both operands' circuits are built before they are combined. Written as
   // two statements because C++ does not sequence a call's arguments against
   // each other: as one expression, which operand's AIG nodes get built first
@@ -3949,6 +5102,9 @@ BBNode BitBlaster::BBcompareFP(const ASTNode& form, BBNodeSet& support)
   const BBNode zeroCorrected =
       strict ? nf->CreateNode(AND, nf->CreateNode(NOT, bothZero), ordered)
              : nf->CreateNode(OR, bothZero, ordered);
+
+  if (aFinite && bFinite)
+    return zeroCorrected;
 
   BBNodeVec conjuncts;
   conjuncts.reserve(3);
@@ -3987,10 +5143,52 @@ BBNode BitBlaster::BBeqFP(const ASTNode& form, BBNodeSet& support)
 
   const BBNodeVec aBits = BBTerm(form[0], support);
   const BBNodeVec bBits = BBTerm(form[1], support);
+  const bool aFinite = fpNativeKnownFinite(form[0]);
+  const bool bFinite = fpNativeKnownFinite(form[1]);
+  // A direct product-zero fact must retain one predicate that checks the
+  // product bits; otherwise simplifying that very predicate to true would
+  // discard the operand restriction the fact represents. Consumers can use
+  // the fact, while this witness equality keeps the producer relation live.
+  const bool aDirectProductZero =
+      form[0].GetKind() == FP_MUL &&
+      fpNativeZeroMagnitudeFacts.find(form[0]) !=
+          fpNativeZeroMagnitudeFacts.end();
+  const bool bDirectProductZero =
+      form[1].GetKind() == FP_MUL &&
+      fpNativeZeroMagnitudeFacts.find(form[1]) !=
+          fpNativeZeroMagnitudeFacts.end();
+  const bool aKnownZero =
+      fpNativeKnownZeroMagnitude(form[0]) && !aDirectProductZero;
+  const bool bKnownZero =
+      fpNativeKnownZeroMagnitude(form[1]) && !bDirectProductZero;
+  fpNativeFiniteEqOperands += static_cast<size_t>(aFinite) +
+                              static_cast<size_t>(bFinite);
+  fpNativeZeroEqOperands += static_cast<size_t>(aKnownZero) +
+                            static_cast<size_t>(bKnownZero);
+
+  if (aKnownZero || bKnownZero)
+  {
+    const BBNode otherZero =
+        (aKnownZero && bKnownZero)
+            ? nf->getTrue()
+            : BBfpIsZero(aKnownZero ? bBits : aBits, w);
+
+    // fp.eq identifies the two signed zeros. Structural SMT equality keeps
+    // them distinct, so it additionally compares the surviving sign bits.
+    if (k == FP_EQ)
+      return otherZero;
+    const BBNode signsEqual =
+        nf->CreateNode(IFF, aBits[w - 1], bBits[w - 1]);
+    return nf->CreateNode(AND, otherZero, signsEqual);
+  }
+
   const BBNode sameBits = BBEQ(aBits, bBits);
 
   if (k == FP_SMT_EQ)
   {
+    if (aFinite || bFinite)
+      return sameBits;
+
     // Sequenced deliberately; see the note in BBcompareFP.
     const BBNode aNaN = BBfpIsNaN(aBits, sb, w);
     const BBNode bNaN = BBfpIsNaN(bBits, sb, w);
@@ -4005,17 +5203,20 @@ BBNode BitBlaster::BBeqFP(const ASTNode& form, BBNodeSet& support)
   // computes the same Boolean function (the exhaustive differential
   // passes with either or both tests; no test CAN distinguish them, so
   // this comment is the argument that keeps the dropped test dropped).
-  // Test the constant side when there is one: its isNaN folds away
-  // entirely and the symbolic side's isNaN circuit is never built. The
-  // choice is per-node and deterministic.
-  const BBNodeVec& nanSide = form[0].isConstant() ? aBits : bBits;
-  const BBNode notNaN = nf->CreateNode(NOT, BBfpIsNaN(nanSide, sb, w));
   // Sequenced deliberately; see the note in BBcompareFP.
   const BBNode aZero = BBfpIsZero(aBits, w);
   const BBNode bZero = BBfpIsZero(bBits, w);
   const BBNode bothZero = nf->CreateNode(AND, aZero, bZero);
   const BBNode sameValue = nf->CreateNode(OR, sameBits, bothZero);
 
+  if (aFinite || bFinite)
+    return sameValue;
+
+  // Test the constant side when there is one: its isNaN folds away
+  // entirely and the symbolic side's isNaN circuit is never built. The
+  // choice is per-node and deterministic.
+  const BBNodeVec& nanSide = form[0].isConstant() ? aBits : bBits;
+  const BBNode notNaN = nf->CreateNode(NOT, BBfpIsNaN(nanSide, sb, w));
   return nf->CreateNode(AND, notNaN, sameValue);
 }
 
@@ -4048,18 +5249,90 @@ BBNode BitBlaster::BBclassifyFP(const ASTNode& form, BBNodeSet& support)
   assert(form[0].GetValueWidth() == w);
   assert(sb >= 2 && w >= sb + 1);
 
+  const bool isZeroAdd =
+      k == FP_ISZERO && form[0].GetKind() == FP_ADD &&
+      form[0].Degree() == 3 && uf->fp_native_arith;
+  const bool addMemoizedBefore =
+      isZeroAdd && BBTermMemo.find(form[0]) != BBTermMemo.end();
+  // As in BBeqFP, a product's own asserted/derived zero predicate is the
+  // witness that must continue checking its computed magnitude.
+  const bool directProductZero =
+      form[0].GetKind() == FP_MUL &&
+      fpNativeZeroMagnitudeFacts.find(form[0]) !=
+          fpNativeZeroMagnitudeFacts.end();
+  const bool knownZero =
+      fpNativeKnownZeroMagnitude(form[0]) && !directProductZero;
+  const bool knownFinite = fpNativeKnownFinite(form[0]);
+  if (knownFinite)
+    ++fpNativeFiniteClassifications;
+  if (knownZero)
+    ++fpNativeZeroClassifications;
+
+  if (uf->stats_flag && k == FP_ISZERO)
+  {
+    ++fpNativeIsZeroPredicates;
+    if (isZeroAdd)
+    {
+      ++fpNativeIsZeroAddPredicates;
+      const auto uses = fpNativeParentUses.find(form[0]);
+      if (uses != fpNativeParentUses.end() && uses->second == 1)
+        ++fpNativeIsZeroAddExclusiveResults;
+      if (addMemoizedBefore)
+        ++fpNativeIsZeroAddMemoizedResults;
+      if (knownZero)
+        ++fpNativeIsZeroAddKnownZeroResults;
+
+      const bool aFinite = fpNativeKnownFinite(form[0][1]);
+      const bool bFinite = fpNativeKnownFinite(form[0][2]);
+      if (aFinite && bFinite)
+        ++fpNativeIsZeroAddBothFiniteOperands;
+
+      if (uf->fp_native_known_sign)
+      {
+        const bool aNonnegative =
+            fpNativeKnownFiniteNonnegative(form[0][1]);
+        const bool aNonpositive =
+            fpNativeKnownFiniteNonpositive(form[0][1]);
+        const bool bNonnegative =
+            fpNativeKnownFiniteNonnegative(form[0][2]);
+        const bool bNonpositive =
+            fpNativeKnownFiniteNonpositive(form[0][2]);
+        const bool aKnownSign = aNonnegative || aNonpositive;
+        const bool bKnownSign = bNonnegative || bNonpositive;
+        if ((aNonnegative && bNonnegative) ||
+            (aNonpositive && bNonpositive))
+          ++fpNativeIsZeroAddKnownSameSignOperands;
+        if ((aNonnegative && bNonpositive) ||
+            (aNonpositive && bNonnegative))
+          ++fpNativeIsZeroAddKnownOppositeSignOperands;
+        if (aKnownSign != bKnownSign)
+          ++fpNativeIsZeroAddOneKnownSignOperand;
+      }
+    }
+  }
+
+  if (isZeroAdd && uf->fp_native_add_iszero && !addMemoizedBefore)
+  {
+    ++fpNativeAddIsZeroFusions;
+    if (uf->stats_flag)
+      ++fpNativeIsZeroAddFusedPredicates;
+    return knownZero ? nf->getTrue() : BBfpAddIsZero(form[0], support);
+  }
+
   const BBNodeVec p = BBTerm(form[0], support);
 
   switch (k)
   {
     case FP_ISZERO:
-      return BBfpIsZero(p, w);
+      return knownZero ? nf->getTrue() : BBfpIsZero(p, w);
 
     case FP_ISNAN:
-      return BBfpIsNaN(p, sb, w);
+      return knownFinite ? nf->getFalse() : BBfpIsNaN(p, sb, w);
 
     case FP_ISSUBNORMAL:
     {
+      if (knownZero)
+        return nf->getFalse();
       BBNodeVec expField(p.begin() + (sb - 1), p.begin() + (w - 1));
       BBNodeVec sigField(p.begin(), p.begin() + (sb - 1));
       const BBNode expZero = nf->CreateNode(NOR, expField);
@@ -4069,10 +5342,14 @@ BBNode BitBlaster::BBclassifyFP(const ASTNode& form, BBNodeSet& support)
 
     case FP_ISNORMAL:
     {
+      if (knownZero)
+        return nf->getFalse();
       // Built as NOT(AND(e)) rather than NAND(e) so the all-ones test is
       // the same AIG node isNaN and isInfinite build over this operand.
       BBNodeVec expField(p.begin() + (sb - 1), p.begin() + (w - 1));
       const BBNode expNonZero = nf->CreateNode(OR, expField);
+      if (knownFinite)
+        return expNonZero;
       const BBNode expAllOnes = nf->CreateNode(AND, expField);
       const BBNode expNotOnes = nf->CreateNode(NOT, expAllOnes);
       return nf->CreateNode(AND, expNonZero, expNotOnes);
@@ -4080,6 +5357,8 @@ BBNode BitBlaster::BBclassifyFP(const ASTNode& form, BBNodeSet& support)
 
     case FP_ISINFINITE:
     {
+      if (knownFinite)
+        return nf->getFalse();
       BBNodeVec expField(p.begin() + (sb - 1), p.begin() + (w - 1));
       BBNodeVec sigField(p.begin(), p.begin() + (sb - 1));
       const BBNode expAllOnes = nf->CreateNode(AND, expField);
@@ -4089,14 +5368,18 @@ BBNode BitBlaster::BBclassifyFP(const ASTNode& form, BBNodeSet& support)
 
     case FP_ISNEGATIVE:
     {
+      if (knownFinite)
+        return p[w - 1];
       const BBNode notNaN = nf->CreateNode(NOT, BBfpIsNaN(p, sb, w));
       return nf->CreateNode(AND, p[w - 1], notNaN);
     }
 
     case FP_ISPOSITIVE:
     {
-      const BBNode notNaN = nf->CreateNode(NOT, BBfpIsNaN(p, sb, w));
       const BBNode signClear = nf->CreateNode(NOT, p[w - 1]);
+      if (knownFinite)
+        return signClear;
+      const BBNode notNaN = nf->CreateNode(NOT, BBfpIsNaN(p, sb, w));
       return nf->CreateNode(AND, signClear, notNaN);
     }
 
@@ -4207,21 +5490,37 @@ unsigned BitBlaster::BBfpExpWidth(unsigned eb, unsigned sb)
 
 BitBlaster::FpOperand BitBlaster::BBfpUnpack(const BBNodeVec& p, unsigned sb,
                                              unsigned w, unsigned E,
-                                             BBNodeSet& support)
+                                             BBNodeSet& support,
+                                             const bool knownFinite,
+                                             const bool knownZeroMagnitude)
 {
   const unsigned eb = w - sb;
   const unsigned bias = (1u << (eb - 1)) - 1;
   FpOperand o;
   o.sign = p[w - 1];
-  BBNodeVec exp(p.begin() + (sb - 1), p.begin() + (w - 1));
-  BBNodeVec sig(p.begin(), p.begin() + (sb - 1));
+  BBNodeVec exp = knownZeroMagnitude
+                      ? BBfill(eb, nf->getFalse())
+                      : BBNodeVec(p.begin() + (sb - 1), p.begin() + (w - 1));
+  BBNodeVec sig = knownZeroMagnitude
+                      ? BBfill(sb - 1, nf->getFalse())
+                      : BBNodeVec(p.begin(), p.begin() + (sb - 1));
   const BBNode expZero = nf->CreateNode(NOR, exp);
-  const BBNode expOnes = nf->CreateNode(AND, exp);
   const BBNode sigZero = nf->CreateNode(NOR, sig);
-  const BBNode sigNonzero = nf->CreateNode(OR, sig);
-  o.isZero = nf->CreateNode(AND, expZero, sigZero);
-  o.isInf = nf->CreateNode(AND, expOnes, sigZero);
-  o.isNaN = nf->CreateNode(AND, expOnes, sigNonzero);
+  o.isZero = knownZeroMagnitude
+                 ? nf->getTrue()
+                 : nf->CreateNode(AND, expZero, sigZero);
+  if (knownFinite || knownZeroMagnitude)
+  {
+    o.isInf = nf->getFalse();
+    o.isNaN = nf->getFalse();
+  }
+  else
+  {
+    const BBNode expOnes = nf->CreateNode(AND, exp);
+    const BBNode sigNonzero = nf->CreateNode(OR, sig);
+    o.isInf = nf->CreateNode(AND, expOnes, sigZero);
+    o.isNaN = nf->CreateNode(AND, expOnes, sigNonzero);
+  }
   const BBNode hidden = nf->CreateNode(NOT, expZero);
   o.msig = sig;
   o.msig.push_back(hidden);
@@ -4246,7 +5545,8 @@ BBNodeVec BitBlaster::BBfpRoundPack(const BBNodeVec& rm, const BBNode& sgn,
                                     const BBNode& guardIn,
                                     const BBNode& stickyIn,
                                     const BBNodeVec& beIn, unsigned sb,
-                                    unsigned eb, BBNodeSet& support)
+                                    unsigned eb, BBNodeSet& support,
+                                    const bool resultKnownFinite)
 {
   const unsigned w = eb + sb;
   const unsigned maxbe = (1u << eb) - 2;
@@ -4320,6 +5620,22 @@ BBNodeVec BitBlaster::BBfpRoundPack(const BBNodeVec& rm, const BBNode& sgn,
   BBNodeVec beF = beAfter;
   BBPlus2(beF, BBfill(E, nf->getFalse()), carry);
 
+  // Pack the finite result. A significand without its leading 1 is
+  // subnormal: exponent field 0 (beAfter is 1 there, the same scale).
+  const BBNode isNormRes = rsigF[sb - 1];
+  BBNodeVec res(w);
+  for (unsigned i = 0; i < sb - 1; i++)
+    res[i] = rsigF[i];
+  for (unsigned i = 0; i < eb; i++)
+    res[sb - 1 + i] = nf->CreateNode(AND, isNormRes, beF[i]);
+  res[w - 1] = sgn;
+
+  if (resultKnownFinite)
+  {
+    ++fpNativeFiniteRoundPacks;
+    return res;
+  }
+
   // Overflow, checked after rounding; saturation is mode- and sign-
   // dependent: to infinity for the nearest modes, to the largest finite
   // value for RTZ and for the directed mode pointing away from the sign.
@@ -4331,16 +5647,6 @@ BBNodeVec BitBlaster::BBfpRoundPack(const BBNodeVec& rm, const BBNode& sgn,
   infCases.push_back(nf->CreateNode(AND, rtp, nf->CreateNode(NOT, sgn)));
   infCases.push_back(nf->CreateNode(AND, rtn, sgn));
   const BBNode roundsToInf = nf->CreateNode(OR, infCases);
-
-  // Pack the finite result. A significand without its leading 1 is
-  // subnormal: exponent field 0 (beAfter is 1 there, the same scale).
-  const BBNode isNormRes = rsigF[sb - 1];
-  BBNodeVec res(w);
-  for (unsigned i = 0; i < sb - 1; i++)
-    res[i] = rsigF[i];
-  for (unsigned i = 0; i < eb; i++)
-    res[sb - 1 + i] = nf->CreateNode(AND, isNormRes, beF[i]);
-  res[w - 1] = sgn;
 
   BBNodeVec inf(w, nf->getFalse());
   BBNodeVec maxFin(w, nf->getFalse());
@@ -4404,6 +5710,50 @@ BBNodeVec BitBlaster::BBfpMul(const ASTNode& term, BBNodeSet& support)
   const BBNodeVec pb = BBTerm(term[2], support);
   assert(pa.size() == w && pb.size() == w);
 
+  const bool aKnownZero = fpNativeKnownZeroMagnitude(term[1]);
+  const bool bKnownZero = fpNativeKnownZeroMagnitude(term[2]);
+  const bool aFinite = fpNativeKnownFinite(term[1]);
+  const bool bFinite = fpNativeKnownFinite(term[2]);
+  const bool knownSignEnabled = uf->fp_native_known_sign;
+  const bool aNonnegative =
+      knownSignEnabled && fpNativeKnownFiniteNonnegative(term[1]);
+  const bool aNonpositive =
+      knownSignEnabled && fpNativeKnownFiniteNonpositive(term[1]);
+  const bool bNonnegative =
+      knownSignEnabled && fpNativeKnownFiniteNonnegative(term[2]);
+  const bool bNonpositive =
+      knownSignEnabled && fpNativeKnownFiniteNonpositive(term[2]);
+  const bool knownSignOperands =
+      (aNonnegative || aNonpositive) && (bNonnegative || bNonpositive);
+  // A term proved both nonnegative and nonpositive is semantically zero. Its
+  // core sign is immaterial because the exact packed zero sign is muxed below.
+  const bool knownNegativeProduct =
+      knownSignOperands &&
+      ((aNonpositive && !aNonnegative) !=
+       (bNonpositive && !bNonnegative));
+  fpNativeFiniteArithOperands += static_cast<size_t>(aFinite) +
+                                 static_cast<size_t>(bFinite);
+
+  // zero * finite is an exact signed zero in every rounding mode. Requiring
+  // the other operand to be finite is essential: zero * infinity and zero *
+  // NaN must still take the invalid/NaN special paths below.
+  if ((aKnownZero && bFinite) || (bKnownZero && aFinite))
+  {
+    ++fpNativeZeroMulFastPaths;
+    BBNodeVec zero(w, nf->getFalse());
+    zero[w - 1] = nf->CreateNode(XOR, pa[w - 1], pb[w - 1]);
+    return zero;
+  }
+
+  if (knownSignOperands)
+  {
+    assert(aFinite && bFinite);
+    if (knownNegativeProduct)
+      ++fpNativeKnownNegativeMulPaths;
+    else
+      ++fpNativeKnownPositiveMulPaths;
+  }
+
   auto constVec = [&](unsigned value, unsigned width) {
     BBNodeVec c(width);
     for (unsigned i = 0; i < width; i++)
@@ -4420,10 +5770,19 @@ BBNodeVec BitBlaster::BBfpMul(const ASTNode& term, BBNodeSet& support)
   // The un-normalised field split (see BBfpUnpack): consuming a packed
   // operand -- a leaf or a chained native result -- is only wiring and
   // four classification gates; normalisation is deferred to the product.
-  const FpOperand a = BBfpUnpack(pa, sb, w, E, support);
-  const FpOperand b = BBfpUnpack(pb, sb, w, E, support);
+  const FpOperand a =
+      BBfpUnpack(pa, sb, w, E, support, aFinite, aKnownZero);
+  const FpOperand b =
+      BBfpUnpack(pb, sb, w, E, support, bFinite, bKnownZero);
 
-  const BBNode sgn = nf->CreateNode(XOR, a.sign, b.sign);
+  // A semantic-sign fact does not fix the packed sign of zero. Raw operand
+  // signs therefore select an exact zero result, while every nonzero result
+  // rounds with the constant product sign proved above.
+  const BBNode zeroSign = nf->CreateNode(XOR, a.sign, b.sign);
+  const BBNode roundSign = knownSignOperands
+                               ? (knownNegativeProduct ? nf->getTrue()
+                                                       : nf->getFalse())
+                               : zeroSign;
 
   // Significand product, 2sb bits, of the raw hidden-bit significands --
   // in [0, 4) counting subnormal fractions.
@@ -4465,8 +5824,18 @@ BBNodeVec BitBlaster::BBfpMul(const ASTNode& term, BBNodeSet& support)
   BBNodeVec ellE = zext(ell, E);
   BBSub(be, ellE, support);
 
-  BBNodeVec res = BBfpRoundPack(rm, sgn, rsig, guard, sticky, be, sb, eb,
-                                support);
+  // A top-level magnitude constraint on this product is useful to consumers,
+  // but must not erase the producer relation that enforces the constraint.
+  // In particular, do not simplify this product's overflow path merely by
+  // assuming its own output is zero; the full product circuit remains the
+  // witness that restricts its operands.
+  const bool directlyConstrainedZero =
+      fpNativeZeroMagnitudeFacts.find(term) !=
+      fpNativeZeroMagnitudeFacts.end();
+  const bool resultFinite =
+      !directlyConstrainedZero && fpNativeKnownFinite(term);
+  BBNodeVec res = BBfpRoundPack(rm, roundSign, rsig, guard, sticky, be, sb, eb,
+                                support, resultFinite);
 
   // Specials, outermost first: NaN (any NaN operand, or zero times
   // infinity), then infinity, then zero.
@@ -4478,21 +5847,31 @@ BBNodeVec BitBlaster::BBfpMul(const ASTNode& term, BBNodeSet& support)
     if (isnan)
       s[sb - 2] = nf->getTrue(); // canonical quiet NaN, positive
     else
-      s[w - 1] = sgn;
+      s[w - 1] = zeroSign;
     return s;
   };
   BBNodeVec nanCases;
-  nanCases.push_back(a.isNaN);
-  nanCases.push_back(b.isNaN);
-  nanCases.push_back(nf->CreateNode(AND, a.isZero, b.isInf));
-  nanCases.push_back(nf->CreateNode(AND, a.isInf, b.isZero));
-  const BBNode anyNaN = nf->CreateNode(OR, nanCases);
-  const BBNode anyInf = nf->CreateNode(OR, a.isInf, b.isInf);
+  if (!aFinite)
+    nanCases.push_back(a.isNaN);
+  if (!bFinite)
+    nanCases.push_back(b.isNaN);
+  if (!bFinite)
+    nanCases.push_back(nf->CreateNode(AND, a.isZero, b.isInf));
+  if (!aFinite)
+    nanCases.push_back(nf->CreateNode(AND, a.isInf, b.isZero));
+  const BBNode anyNaN =
+      nanCases.empty() ? nf->getFalse() : nf->CreateNode(OR, nanCases);
+  const BBNode anyInf =
+      aFinite ? (bFinite ? nf->getFalse() : b.isInf)
+              : (bFinite ? a.isInf : nf->CreateNode(OR, a.isInf, b.isInf));
   const BBNode anyZero = nf->CreateNode(OR, a.isZero, b.isZero);
 
   res = BBITE(anyZero, packSpecial(false, false), res);
-  res = BBITE(anyInf, packSpecial(false, true), res);
-  res = BBITE(anyNaN, packSpecial(true, false), res);
+  if (!(aFinite && bFinite))
+  {
+    res = BBITE(anyInf, packSpecial(false, true), res);
+    res = BBITE(anyNaN, packSpecial(true, false), res);
+  }
   return res;
 }
 
@@ -4518,6 +5897,70 @@ BBNodeVec BitBlaster::BBfpMul(const ASTNode& term, BBNodeSet& support)
 //      EXACT zero result is mode-dependent: -0 under RTN, else +0.
 //   6. Specials: NaN operands and infinity minus infinity give NaN;
 //      otherwise any infinite operand's infinity wins, keeping its sign.
+//
+// fp.isZero needs much less than this packed result. Every finite value in a
+// binary IEEE format is an integer multiple of that format's minimum
+// subnormal. The exact sum of two finite operands is therefore another such
+// multiple. If it is nonzero but smaller than the minimum normal it is itself
+// an exactly representable subnormal; if it is at least the minimum normal,
+// no rounding mode can turn it into zero. Thus fp.add rounds to either signed
+// zero iff the exact real sum is zero. For nonzero operands that means equal
+// packed magnitudes and opposite signs; every combination of signed zeros is
+// also zero. NaNs and infinities are excluded explicitly.
+BBNode BitBlaster::BBfpAddIsZero(const ASTNode& term, BBNodeSet& support)
+{
+  assert(term.GetKind() == FP_ADD);
+  assert(term.Degree() == 3);
+
+  const SourceSort sort = term.GetSourceSort();
+  assert(sort.kind() == SourceSort::Kind::FloatingPoint);
+  const unsigned sb = sort.significandWidth();
+  const unsigned w = sort.packedWidth();
+  const unsigned eb = sort.exponentWidth();
+  (void)eb;
+  assert(sb >= 2 && eb >= 2 && w == sb + eb);
+
+  const bool aKnownZero = fpNativeKnownZeroMagnitude(term[1]);
+  const bool bKnownZero = fpNativeKnownZeroMagnitude(term[2]);
+  if (aKnownZero && bKnownZero)
+    return nf->getTrue();
+
+  if (aKnownZero || bKnownZero)
+  {
+    const BBNodeVec other = BBTerm(aKnownZero ? term[2] : term[1], support);
+    return BBfpIsZero(other, w);
+  }
+
+  const BBNodeVec pa = BBTerm(term[1], support);
+  const BBNodeVec pb = BBTerm(term[2], support);
+  assert(pa.size() == w && pb.size() == w);
+
+  BBNodeVec aMagnitude(pa.begin(), pa.begin() + (w - 1));
+  const BBNodeVec bMagnitude(pb.begin(), pb.begin() + (w - 1));
+  const BBNode sameMagnitude = BBEQ(aMagnitude, bMagnitude);
+  const BBNode oppositeSigns = nf->CreateNode(XOR, pa[w - 1], pb[w - 1]);
+  // Under sameMagnitude, testing one side for magnitude zero proves that
+  // both operands are signed zeros.
+  const BBNode bothZero = nf->CreateNode(NOR, aMagnitude);
+  const BBNode exactZero = nf->CreateNode(
+      AND, sameMagnitude, nf->CreateNode(OR, oppositeSigns, bothZero));
+
+  const bool aFinite = fpNativeKnownFinite(term[1]);
+  const bool bFinite = fpNativeKnownFinite(term[2]);
+  if (aFinite && bFinite)
+    return exactZero;
+
+  auto finite = [&](const BBNodeVec& p) {
+    BBNodeVec exponent(p.begin() + (sb - 1), p.begin() + (w - 1));
+    return nf->CreateNode(NOT, nf->CreateNode(AND, exponent));
+  };
+  if (aFinite)
+    return nf->CreateNode(AND, finite(pb), exactZero);
+  if (bFinite)
+    return nf->CreateNode(AND, finite(pa), exactZero);
+  return nf->CreateNode(AND, finite(pa), finite(pb), exactZero);
+}
+
 BBNodeVec BitBlaster::BBfpAdd(const ASTNode& term, BBNodeSet& support)
 {
   assert(term.GetKind() == FP_ADD);
@@ -4537,6 +5980,66 @@ BBNodeVec BitBlaster::BBfpAdd(const ASTNode& term, BBNodeSet& support)
   const BBNodeVec pb = BBTerm(term[2], support);
   assert(pa.size() == w && pb.size() == w);
 
+  const bool aKnownZero = fpNativeKnownZeroMagnitude(term[1]);
+  const bool bKnownZero = fpNativeKnownZeroMagnitude(term[2]);
+  const bool aFinite = fpNativeKnownFinite(term[1]);
+  const bool bFinite = fpNativeKnownFinite(term[2]);
+  const bool knownSignEnabled = uf->fp_native_known_sign;
+  const bool aNonnegative =
+      knownSignEnabled && fpNativeKnownFiniteNonnegative(term[1]);
+  const bool aNonpositive =
+      knownSignEnabled && fpNativeKnownFiniteNonpositive(term[1]);
+  const bool bNonnegative =
+      knownSignEnabled && fpNativeKnownFiniteNonnegative(term[2]);
+  const bool bNonpositive =
+      knownSignEnabled && fpNativeKnownFiniteNonpositive(term[2]);
+  const bool sameNonnegative = aNonnegative && bNonnegative;
+  const bool sameNonpositive = aNonpositive && bNonpositive;
+  const bool knownSameSign = sameNonnegative || sameNonpositive;
+  // If both sides hold, both operands are semantic zeros; choose a positive
+  // core and let the explicit zero-sign mux below select the packed result.
+  const bool knownNegativeSum = sameNonpositive && !sameNonnegative;
+  fpNativeFiniteArithOperands += static_cast<size_t>(aFinite) +
+                                 static_cast<size_t>(bFinite);
+
+  // A signed zero is an additive identity for every nonzero finite value.
+  // When the other operand is also zero, IEEE-754 chooses the common sign,
+  // or -0 only under RTN when the signs differ.
+  if ((aKnownZero && bFinite) || (bKnownZero && aFinite))
+  {
+    ++fpNativeZeroAddFastPaths;
+    const bool zeroOnLeft = aKnownZero;
+    const BBNodeVec& zeroBits = zeroOnLeft ? pa : pb;
+    const BBNodeVec& otherBits = zeroOnLeft ? pb : pa;
+    const bool otherKnownZero = zeroOnLeft ? bKnownZero : aKnownZero;
+    const BBNode otherZero = otherKnownZero
+                                 ? nf->getTrue()
+                                 : BBfpIsZero(otherBits, w);
+    const BBNode oppositeSigns = nf->CreateNode(
+        XOR, zeroBits[w - 1], otherBits[w - 1]);
+    const BBNode bothNegative = nf->CreateNode(
+        AND, zeroBits[w - 1], otherBits[w - 1]);
+    const BBNode zeroSign = nf->CreateNode(
+        OR, bothNegative,
+        nf->CreateNode(AND, oppositeSigns, rm[2]));
+
+    BBNodeVec result = otherKnownZero
+                           ? BBfill(w, nf->getFalse())
+                           : otherBits;
+    result[w - 1] =
+        nf->CreateNode(ITE, otherZero, zeroSign, otherBits[w - 1]);
+    return result;
+  }
+
+  if (knownSameSign)
+  {
+    assert(aFinite && bFinite);
+    if (knownNegativeSum)
+      ++fpNativeKnownNegativeAddPaths;
+    else
+      ++fpNativeKnownPositiveAddPaths;
+  }
+
   auto constVec = [&](unsigned value, unsigned width) {
     BBNodeVec c(width);
     for (unsigned i = 0; i < width; i++)
@@ -4550,21 +6053,35 @@ BBNodeVec BitBlaster::BBfpAdd(const ASTNode& term, BBNodeSet& support)
     return c;
   };
 
-  const FpOperand a = BBfpUnpack(pa, sb, w, E, support);
-  const FpOperand b = BBfpUnpack(pb, sb, w, E, support);
-  const BBNode effSub = nf->CreateNode(XOR, a.sign, b.sign);
+  const FpOperand a =
+      BBfpUnpack(pa, sb, w, E, support, aFinite, aKnownZero);
+  const FpOperand b =
+      BBfpUnpack(pb, sb, w, E, support, bFinite, bKnownZero);
+  const BBNode effSub = knownSameSign
+                            ? nf->getFalse()
+                            : nf->CreateNode(XOR, a.sign, b.sign);
 
-  // Order by magnitude: (eUnb, msig) lexicographically.
+  // General addition orders by magnitude: (eUnb, msig)
+  // lexicographically. For finite operands with the same known semantic sign
+  // the operation is always magnitude addition; when exponents tie either
+  // operand may be aligned, so the significand comparison and cancellation
+  // logic are unnecessary.
   const BBNode eLess = BBBVLE(a.eUnb, b.eUnb, true /*signed*/, true);
-  const BBNode eEq = BBEQ(a.eUnb, b.eUnb);
-  const BBNode mLess = BBBVLE(a.msig, b.msig, false, true);
-  const BBNode swap =
-      nf->CreateNode(OR, eLess, nf->CreateNode(AND, eEq, mLess));
+  BBNode swap = eLess;
+  if (!knownSameSign)
+  {
+    const BBNode eEq = BBEQ(a.eUnb, b.eUnb);
+    const BBNode mLess = BBBVLE(a.msig, b.msig, false, true);
+    swap = nf->CreateNode(OR, eLess, nf->CreateNode(AND, eEq, mLess));
+  }
   const BBNodeVec msigBig = BBITE(swap, b.msig, a.msig);
   const BBNodeVec msigSmall = BBITE(swap, a.msig, b.msig);
   const BBNodeVec eBig = BBITE(swap, b.eUnb, a.eUnb);
   const BBNodeVec eSmall = BBITE(swap, a.eUnb, b.eUnb);
-  const BBNode signBig = nf->CreateNode(ITE, swap, b.sign, a.sign);
+  const BBNode signBig = knownSameSign
+                             ? (knownNegativeSum ? nf->getTrue()
+                                                 : nf->getFalse())
+                             : nf->CreateNode(ITE, swap, b.sign, a.sign);
 
   // Alignment distance, clamped into the frame.
   const unsigned dmaxA = sb + 3;
@@ -4602,44 +6119,108 @@ BBNodeVec BitBlaster::BBfpAdd(const ASTNode& term, BBNodeSet& support)
   // sticky tail: the true small operand is (aligned + fraction), so the
   // true difference is (big - aligned - 1) plus a nonzero fraction; the
   // borrowed carry-in and the kept sticky express exactly that.
-  BBNodeVec addend(W);
-  for (unsigned i = 0; i < W; i++)
-    addend[i] = nf->CreateNode(XOR, small[i], effSub);
-  const BBNode cin =
-      nf->CreateNode(AND, effSub, nf->CreateNode(NOT, stickyTail));
+  BBNodeVec addend = small;
+  BBNode cin = nf->getFalse();
+  if (!knownSameSign)
+  {
+    for (unsigned i = 0; i < W; i++)
+      addend[i] = nf->CreateNode(XOR, small[i], effSub);
+    cin = nf->CreateNode(AND, effSub,
+                         nf->CreateNode(NOT, stickyTail));
+  }
   BBNodeVec sum = big;
   BBPlus2(sum, addend, cin);
 
-  // One normalisation for carry and cancellation alike.
-  const unsigned lwA = [](unsigned x) {
-    unsigned bb = 1;
-    while ((1u << bb) <= x)
-      bb++;
-    return bb;
-  }(W);
-  const BBNodeVec ell = BBfpCLZ(sum, lwA);
-  const BBNodeVec sn = BBfpShiftLeft(sum, ell);
-  BBNodeVec rsig(sn.begin() + (W - sb), sn.end());
-  const BBNode guard = sn[W - sb - 1];
-  BBNodeVec lowBits(sn.begin(), sn.begin() + (W - sb - 1));
-  BBNode sticky = nf->CreateNode(OR, nf->CreateNode(OR, lowBits), stickyTail);
+  BBNodeVec rsig;
+  BBNode guard = nf->getFalse();
+  BBNode sticky = nf->getFalse();
+  BBNodeVec be;
+  if (knownSameSign)
+  {
+    // No cancellation means no arbitrary left normalisation. If the larger
+    // scale is normal, the leading bit either stays at W-2 or carries once to
+    // W-1. If both operands are subnormal (or one is the minimum normal at
+    // the shared exponent), their unshifted sum can be packed directly at
+    // biased exponent 1; a missing hidden bit then denotes a subnormal.
+    const BBNode carry = sum[W - 1];
+    const BBNodeVec rsigNoCarry(sum.begin() + dmaxA,
+                                sum.begin() + dmaxA + sb);
+    const BBNodeVec rsigCarry(sum.begin() + dmaxA + 1, sum.end());
+    rsig = BBITE(carry, rsigCarry, rsigNoCarry);
+    guard = nf->CreateNode(ITE, carry, sum[dmaxA], sum[dmaxA - 1]);
 
-  // be = eBig + bias + 1 - leading zeros, exactly as the multiplier.
-  BBNodeVec be = eBig;
-  BBPlus2(be, constVec(bias, E), nf->getTrue());
-  BBNodeVec ellE = zext(ell, E);
-  BBSub(be, ellE, support);
+    BBNodeVec lowNoCarry(sum.begin(), sum.begin() + dmaxA - 1);
+    BBNodeVec lowCarry(sum.begin(), sum.begin() + dmaxA);
+    const BBNode stickyNoCarry = nf->CreateNode(
+        OR, nf->CreateNode(OR, lowNoCarry), stickyTail);
+    const BBNode stickyCarry = nf->CreateNode(
+        OR, nf->CreateNode(OR, lowCarry), stickyTail);
+    sticky = nf->CreateNode(ITE, carry, stickyCarry, stickyNoCarry);
 
-  // An EXACT zero result (cancellation of equal values -- only possible
-  // unshifted, so the sticky tail is clear) is +0 in every mode but RTN.
-  const BBNode sumZero = nf->CreateNode(NOR, sum);
-  const BBNode exactZero = nf->CreateNode(
-      AND, effSub, sumZero, nf->CreateNode(NOT, stickyTail));
-  const BBNode& rtn = rm[2];
-  const BBNode sgn = nf->CreateNode(ITE, exactZero, rtn, signBig);
+    // eBig is unbiased. The direct subnormal scale gives 1 here; a normal
+    // carry increments the ordinary biased exponent once.
+    be = eBig;
+    BBPlus2(be, constVec(bias, E), carry);
+  }
+  else
+  {
+    // General opposite-sign addition needs a leading-zero count and shift for
+    // arbitrary cancellation.
+    const unsigned lwA = [](unsigned x) {
+      unsigned bb = 1;
+      while ((1u << bb) <= x)
+        bb++;
+      return bb;
+    }(W);
+    const BBNodeVec ell = BBfpCLZ(sum, lwA);
+    const BBNodeVec sn = BBfpShiftLeft(sum, ell);
+    rsig.assign(sn.begin() + (W - sb), sn.end());
+    guard = sn[W - sb - 1];
+    BBNodeVec lowBits(sn.begin(), sn.begin() + (W - sb - 1));
+    sticky =
+        nf->CreateNode(OR, nf->CreateNode(OR, lowBits), stickyTail);
 
+    // be = eBig + bias + 1 - leading zeros, exactly as the multiplier.
+    be = eBig;
+    BBPlus2(be, constVec(bias, E), nf->getTrue());
+    BBNodeVec ellE = zext(ell, E);
+    BBSub(be, ellE, support);
+  }
+
+  BBNode bothZero = nf->getFalse();
+  BBNode knownSignZeroSign = nf->getFalse();
+  BBNode sgn = signBig;
+  if (knownSameSign)
+  {
+    // Nonzero sums round with the proven constant sign. If both magnitudes
+    // are zero, equal signs are retained and opposite signs choose -0 only
+    // in RTN. The final result-sign mux keeps this exceptional packed sign
+    // out of the rounding and overflow circuitry.
+    bothZero = nf->CreateNode(AND, a.isZero, b.isZero);
+    const BBNode oppositeSigns = nf->CreateNode(XOR, a.sign, b.sign);
+    const BBNode bothNegative = nf->CreateNode(AND, a.sign, b.sign);
+    knownSignZeroSign = nf->CreateNode(
+        OR, bothNegative,
+        nf->CreateNode(AND, oppositeSigns, rm[2]));
+    sgn = knownNegativeSum ? nf->getTrue() : nf->getFalse();
+  }
+  else
+  {
+    // An EXACT zero result (cancellation of equal values -- only possible
+    // unshifted, so the sticky tail is clear) is +0 in every mode but RTN.
+    const BBNode sumZero = nf->CreateNode(NOR, sum);
+    const BBNode exactZero = nf->CreateNode(
+        AND, effSub, sumZero, nf->CreateNode(NOT, stickyTail));
+    sgn = nf->CreateNode(ITE, exactZero, rm[2], signBig);
+  }
+
+  const bool resultFinite = fpNativeKnownFinite(term);
   BBNodeVec res =
-      BBfpRoundPack(rm, sgn, rsig, guard, sticky, be, sb, eb, support);
+      BBfpRoundPack(rm, sgn, rsig, guard, sticky, be, sb, eb, support,
+                    resultFinite);
+
+  if (knownSameSign)
+    res[w - 1] = nf->CreateNode(ITE, bothZero, knownSignZeroSign, sgn);
 
   // Specials: NaN operands, or subtracting infinities; otherwise an
   // infinite operand's infinity, keeping that operand's sign.
@@ -4654,15 +6235,28 @@ BBNodeVec BitBlaster::BBfpAdd(const ASTNode& term, BBNodeSet& support)
     return s;
   };
   BBNodeVec nanCases;
-  nanCases.push_back(a.isNaN);
-  nanCases.push_back(b.isNaN);
-  nanCases.push_back(nf->CreateNode(AND, a.isInf, b.isInf, effSub));
-  const BBNode anyNaN = nf->CreateNode(OR, nanCases);
-  const BBNode anyInf = nf->CreateNode(OR, a.isInf, b.isInf);
-  const BBNode infSign = nf->CreateNode(ITE, a.isInf, a.sign, b.sign);
+  if (!aFinite)
+    nanCases.push_back(a.isNaN);
+  if (!bFinite)
+    nanCases.push_back(b.isNaN);
+  if (!aFinite && !bFinite)
+    nanCases.push_back(nf->CreateNode(AND, a.isInf, b.isInf, effSub));
+  const BBNode anyNaN =
+      nanCases.empty() ? nf->getFalse() : nf->CreateNode(OR, nanCases);
+  const BBNode anyInf =
+      aFinite ? (bFinite ? nf->getFalse() : b.isInf)
+              : (bFinite ? a.isInf : nf->CreateNode(OR, a.isInf, b.isInf));
 
-  res = BBITE(anyInf, packSpecial(false, infSign), res);
-  res = BBITE(anyNaN, packSpecial(true, nf->getFalse()), res);
+  if (!(aFinite && bFinite))
+  {
+    const BBNode infSign = aFinite ? b.sign
+                                   : (bFinite ? a.sign
+                                              : nf->CreateNode(ITE, a.isInf,
+                                                               a.sign,
+                                                               b.sign));
+    res = BBITE(anyInf, packSpecial(false, infSign), res);
+    res = BBITE(anyNaN, packSpecial(true, nf->getFalse()), res);
+  }
   return res;
 }
 
@@ -4701,6 +6295,15 @@ BBNodeVec BitBlaster::BBfpToFp(const ASTNode& term, BBNodeSet& support)
   const BBNodeVec p = BBTerm(term[3], support);
   assert(p.size() == w1);
 
+  const bool sourceKnownZero = fpNativeKnownZeroMagnitude(term[3]);
+  if (sourceKnownZero)
+  {
+    ++fpNativeZeroToFpFastPaths;
+    BBNodeVec zero(w2, nf->getFalse());
+    zero[w2 - 1] = p[w1 - 1];
+    return zero;
+  }
+
   auto constVec = [&](unsigned value, unsigned width) {
     BBNodeVec c(width);
     for (unsigned i = 0; i < width; i++)
@@ -4714,7 +6317,9 @@ BBNodeVec BitBlaster::BBfpToFp(const ASTNode& term, BBNodeSet& support)
     return c;
   };
 
-  const FpOperand s = BBfpUnpack(p, sb1, w1, E, support);
+  const bool sourceFinite = fpNativeKnownFinite(term[3]);
+  const FpOperand s =
+      BBfpUnpack(p, sb1, w1, E, support, sourceFinite, sourceKnownZero);
 
   // Normalise the source significand; the count also lets a subnormal
   // source become normal in a wider target range.

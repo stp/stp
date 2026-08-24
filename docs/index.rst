@@ -27,22 +27,21 @@ On a Debian-like platform, from a clean checkout:
 
 .. code-block:: bash
 
-    sudo apt-get install git build-essential cmake bison flex curl patch \
+    sudo apt-get install git build-essential cmake bison flex \
         python3 libgmp-dev
     git clone https://github.com/stp/stp
     cd stp
     git submodule init && git submodule update
     ./scripts/deps/setup-cms.sh
-    ./scripts/deps/setup-libbf.sh
     mkdir build && cd build
     cmake ..
     cmake --build . -j$(nproc)
     sudo cmake --install .
 
-Every step is needed. ABC, mimalloc, CLI11 and SymFPU are submodules and
-are built as part of STP; LibBF is required; and a build with no SAT backend enabled
-does not configure. The two ``setup`` scripts fetch and build LibBF and
-the SAT solver into ``deps/``, where the build finds them without being
+Every step is needed. ABC, mimalloc, CLI11, SymFPU and LibBF are
+submodules and are built as part of STP, and a build with no SAT backend
+enabled does not configure. The ``setup`` script fetches and builds the
+SAT solver into ``deps/``, where the build finds it without being
 told where to look. ``libgmp-dev`` is in the list for CryptoMiniSat's sake
 -- it is the only thing that needs it, and a build without CryptoMiniSat
 does not.

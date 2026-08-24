@@ -242,6 +242,20 @@ public:
   // the old behaviour for a query known to be that shape.
   unsigned uf_eager_budget = 256;
 
+  // How many index comparisons the eager array-equality arm may introduce
+  // before the solve is left to refinement. Counted by
+  // arrayCongruenceEstimate, which charges only the comparisons that survive
+  // constant folding, so a query whose indexes are mostly literals is judged
+  // on the work it actually causes rather than on how many reads it happens
+  // to contain.
+  //
+  // 4000 admits the whole array-equality band that measurement says is worth
+  // taking -- the store-permutation queries that pay for the arm score up to
+  // 1830 -- with room above it. The value is a ceiling on a cost, not a
+  // target: nothing is gained by being nearer it. --ackermanize is a request
+  // and ignores this; 0 refuses every unasked selection.
+  unsigned array_eager_budget = 4000;
+
   // Whether to bias the first candidate so that the scalars the congruence
   // checker reads start out pairwise different.
   //
@@ -447,6 +461,42 @@ public:
   // packed-operand circuit (BBfpMul) instead of the SymFPU unpacking
   // circuits. Experimental; off by default.
   bool fp_native_arith = false;
+
+  // Recognise fp.isZero(fp.add ...) and encode the observed zero-result
+  // condition directly instead of constructing and packing every result bit.
+  // Enabled by default, but only active when native arithmetic is selected.
+  bool fp_native_add_iszero = true;
+
+  // Mine simple top-level finite box bounds and use them to omit NaN/infinity
+  // cases from native packed-field circuits when those cases are already
+  // impossible. This does not enable the separate domain prepass or its
+  // known-sign arithmetic specialization.
+  bool fp_native_domain = true;
+
+  // Experimental native-domain arithmetic specialization. A known finite
+  // semantic sign removes fp.add's opposite-sign cancellation datapath and
+  // fp.mul's sign-dependent rounding, while explicit muxes retain signed zero.
+  bool fp_native_known_sign = false;
+
+  // Experimental floating-point domain prepass. It mines simple boxed
+  // variable bounds from ordered FP comparisons and uses them to discharge
+  // non-box ordered comparisons and zero-sum rows whose interval/domain facts
+  // decide them.
+  bool fp_domain_simplify = false;
+
+  // Sound zero-fact extraction for boxed nonnegative FP symbols. It only
+  // derives zero facts from same-sign rows whose terms are +/- one boxed
+  // symbol. Two-term differences may propagate an already-established zero,
+  // but terms are never algebraically cancelled through a rounded row. Zero
+  // is encoded as zero magnitude bits so +0/-0 remain distinct. This does not
+  // enable the general floating-point domain rewrite prepass.
+  bool fp_domain_sound_zero_facts = false;
+
+  // Sound row-level FP zero refutation. It recognises linear FP expressions
+  // over boxed finite variables and rewrites a zero-row to false only when a
+  // conservative target-format interval, evaluated in the original AST
+  // association with rounding at every operation, excludes zero.
+  bool fp_domain_row_bounds = false;
 
   int64_t multiplication_variant = 1;
 

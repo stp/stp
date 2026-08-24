@@ -407,6 +407,12 @@ void ExtraMain::create_options()
                  "install up front")
       ->group(refinement_group)
       ->capture_default_str();
+  app.add_option("--array-ackermann-budget", bm->UserFlags.array_eager_budget,
+                 "how many index comparisons eager array Ackermannisation may "
+                 "introduce before read refinement is preferred; 0 selects it "
+                 "only when asked for by name")
+      ->group(refinement_group)
+      ->capture_default_str();
   bool_arg("--uf-phase-hints", bm->UserFlags.uf_phase_hints,
            "bias the first candidate so the congruence checker's scalars "
            "start out pairwise different (advisory; affects search order "
@@ -493,6 +499,45 @@ void ExtraMain::create_options()
            "Bit-blast fp.add and fp.mul under surviving native predicates "
            "with the hand-written packed-operand circuits instead of the "
            "SymFPU unpacking circuits (experimental)",
+           bb_group);
+
+  bool_arg("--bb.fp-native-add-iszero",
+           bm->UserFlags.fp_native_add_iszero,
+           "Encode fp.isZero(fp.add ...) directly from the packed operands "
+           "without constructing the complete rounded sum (enabled by "
+           "default; requires --bb.fp-native-arith)",
+           bb_group);
+
+  bool_arg("--bb.fp-native-domain", bm->UserFlags.fp_native_domain,
+           "Mine simple finite box bounds and omit NaN/infinity cases that "
+           "are impossible under those top-level facts (enabled by default)",
+           bb_group);
+
+  bool_arg("--bb.fp-native-known-sign",
+           bm->UserFlags.fp_native_known_sign,
+           "Use finite semantic-sign facts in native fp.add/fp.mul to omit "
+           "opposite-sign/sign-dependent circuitry while preserving signed "
+           "zero (experimental; requires --bb.fp-native-domain)",
+           bb_group);
+
+  bool_arg("--fp-domain-simplify", bm->UserFlags.fp_domain_simplify,
+           "Experimental FP prepass: mine boxed variable bounds, use boxed FP "
+           "domain facts, and discharge ordered FP "
+           "comparisons or zero-sum rows decided by those facts",
+           bb_group);
+
+  bool_arg("--fp-domain-sound-zero-facts",
+           bm->UserFlags.fp_domain_sound_zero_facts,
+           "Experimental FP prepass: derive sound zero facts from "
+           "association-safe same-sign boxed +/-1 rows and encode them as "
+           "zero magnitude bits, preserving the +0/-0 distinction; does not "
+           "enable --fp-domain-simplify",
+           bb_group);
+
+  bool_arg("--fp-domain-row-bounds", bm->UserFlags.fp_domain_row_bounds,
+           "Experimental FP prepass: recognise linear FP zero rows and "
+           "rewrite them to false when association-preserving target-format "
+           "interval endpoints exclude zero",
            bb_group);
 
   bool_arg("--bb.simplify-during-bb", bm->UserFlags.simplify_during_BB_flag,

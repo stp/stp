@@ -26,8 +26,12 @@
 ; loop's exit dropped the line for exactly this query in batch, while the
 ; driver printed it.
 ;
-; RUN: %solver -s --array-equality --incremental=off %s 2>&1 | %OutputCheck %s
-; RUN: %solver -s --array-equality --incremental=on %s 2>&1 | %OutputCheck %s
+; The budget is pinned to zero because this query is now affordable enough
+; for the eager arm, which retires the records and reports no rounds at all.
+; What is under test is the round reporting, not which arm the default picks
+; for this shape, and at a budget of zero the figures below are unchanged.
+; RUN: %solver -s --array-equality --incremental=off --array-ackermann-budget=0 %s 2>&1 | %OutputCheck %s
+; RUN: %solver -s --array-equality --incremental=on --array-ackermann-budget=0 %s 2>&1 | %OutputCheck %s
 ; CHECK: Array equality: [0-9]+ lemmas, [0-9]+ rounds, largest [0-9]+, [0-9]+ atoms folded
 ; CHECK: ^sat
 ; CHECK: Array equality: [0-9]+ lemmas, [0-9]+ rounds, largest [0-9]+, [0-9]+ atoms folded
