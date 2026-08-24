@@ -503,10 +503,10 @@ void ExtraMain::create_options()
 
   bool_arg("--fp-domain-sound-zero-facts",
            bm->UserFlags.fp_domain_sound_zero_facts,
-           "Experimental FP prepass: derive sound zero facts from "
+           "Derive sound zero facts from "
            "association-safe same-sign boxed +/-1 rows and encode them as "
-           "zero magnitude bits, preserving the +0/-0 distinction; does not "
-           "enable --fp-domain-simplify",
+           "zero magnitude bits, preserving the +0/-0 distinction (enabled "
+           "by default; does not enable --fp-domain-simplify)",
            bb_group);
 
   bool_arg("--fp-domain-row-bounds", bm->UserFlags.fp_domain_row_bounds,

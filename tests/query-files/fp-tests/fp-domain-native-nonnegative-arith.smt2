@@ -1,10 +1,11 @@
 ; Finite semantic-sign facts let native add/mul omit sign-controlled
 ; cancellation and rounding circuitry. The nonnegative lower bounds
 ; intentionally admit -0, so the specialized paths must retain explicit
-; signed-zero handling.
+; signed-zero handling. Disable the independent zero-fact pass so this test's
+; counters continue to isolate known-sign lowering.
 ;
-; RUN: %solver --bb.fp-native-arith=1 --fp-domain-simplify=1 --bb.fp-native-domain=1 --bb.fp-native-known-sign=1 -s %s 2>&1 | %OutputCheck --check-prefix=NATIVE %s
-; RUN: %solver --bb.fp-native-arith=1 --fp-domain-simplify=1 --bb.fp-native-domain=1 --bb.fp-native-known-sign=1 -s %s 2>&1 | %OutputCheck --check-prefix=COUNTERS %s
+; RUN: %solver --bb.fp-native-arith=1 --fp-domain-simplify=1 --fp-domain-sound-zero-facts=0 --bb.fp-native-domain=1 --bb.fp-native-known-sign=1 -s %s 2>&1 | %OutputCheck --check-prefix=NATIVE %s
+; RUN: %solver --bb.fp-native-arith=1 --fp-domain-simplify=1 --fp-domain-sound-zero-facts=0 --bb.fp-native-domain=1 --bb.fp-native-known-sign=1 -s %s 2>&1 | %OutputCheck --check-prefix=COUNTERS %s
 ; RUN: %solver --bb.fp-native-cmp=false %s | %OutputCheck --check-prefix=SYMFPU %s
 ;
 ; NATIVE: ^unsat
