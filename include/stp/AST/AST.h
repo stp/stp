@@ -28,7 +28,7 @@ THE SOFTWARE.
 #include "ASTNode.h"
 #include "UsefulDefs.h"
 #include "stp/Util/Attributes.h"
-#include "extlib-unordered-dense/ankerl/unordered_dense.h"
+#include <ankerl/unordered_dense.h>
 
 namespace stp
 {

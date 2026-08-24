@@ -22,11 +22,6 @@
 # Create binary
 # -----------------------------------------------------------------------------
 if(BUILD_EXECUTABLES)
-    if(NOT EXISTS "${PROJECT_SOURCE_DIR}/lib/extlib-cli11/include/CLI/CLI.hpp")
-        message(FATAL_ERROR "The CLI11 submodule is missing. Run: "
-                            "git submodule update --init lib/extlib-cli11")
-    endif()
-
     add_executable(stp-bin
         main.cpp
         main_common.cpp
@@ -35,13 +30,6 @@ if(BUILD_EXECUTABLES)
     # so name the generator here or a parallel build can compile this TU
     # before ASTKind.h exists.
     add_dependencies(stp-bin ASTKind_header)
-
-    # CLI11 is header-only and used by this one translation unit, so the
-    # vendored include directory is all it needs; nothing is linked and
-    # nothing leaks into libstp's link interface.
-    target_include_directories(stp-bin PRIVATE
-        "${PROJECT_SOURCE_DIR}/lib/extlib-cli11/include"
-    )
 
     set_target_properties(stp-bin PROPERTIES
         OUTPUT_NAME stp
@@ -53,9 +41,16 @@ if(BUILD_EXECUTABLES)
     # malloc for the whole process, and an embedder of libstp gets to keep
     # whatever allocator it chose. Listing it first keeps its definitions ahead
     # of libc for static archives.
+    #
+    # CLI11 is header-only and used by main.cpp alone, so all it contributes is
+    # an include directory; nothing of it is linked. It is named here rather
+    # than in a second target_link_libraries() call because CMake refuses to
+    # mix the plain and keyword signatures on one target, and this one is
+    # plain.
     target_link_libraries(stp-bin
         ${STP_ALLOCATOR_LIBRARY}
         stp
+        CLI11
     )
 
     install(TARGETS stp-bin

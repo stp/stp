@@ -25,7 +25,7 @@ THE SOFTWARE.
 #include "stp/UninterpretedFunctions/UFChecker.h"
 #include "stp/FloatBlaster/rounding_modes.h"
 #include "extlib-constbv/constantbv.h"
-#include "extlib-unordered-dense/ankerl/unordered_dense.h"
+#include <ankerl/unordered_dense.h>
 #include <algorithm>
 
 namespace stp

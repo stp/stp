@@ -96,8 +96,6 @@ jobs:
     steps:
 
     - uses: actions/checkout@v7
-      with:
-          submodules: 'true'
 
     # Release, not the RelWithDebInfo most of CI leaves it at: CMakeLists only
     # turns ENABLE_ASSERTIONS off for an exact "Release", and a published

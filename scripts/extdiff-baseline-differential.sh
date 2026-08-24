@@ -86,16 +86,33 @@ else
   rm -rf "$BASE_BUILD"
 fi
 
-# Vendored submodule content is not populated in a fresh worktree; share
-# the candidate's copies (the baseline commit references the same
-# submodule revisions). mimalloc has to be here as well as ABC: it is the
-# default allocator, and configure fails outright rather than falling
-# back when its directory is empty. The pre-feature pin predated it, so
-# linking ABC alone was enough only for as long as the pin stayed there.
-for sub in lib/extlib-abc lib/extlib-mimalloc; do
+# The baseline commit predates ABC and mimalloc being fetched, so its tree
+# still expects them checked out at lib/extlib-abc and lib/extlib-mimalloc --
+# and a bare checkout of a commit populates no submodule. Point both at the
+# copies the candidate build already has, which is also what keeps the two
+# builds comparable: the same ABC, compiled the same way.
+#
+# The candidate's copies now live wherever FetchContent put them, which is
+# under its build tree unless FETCHCONTENT_SOURCE_DIR_* named somewhere else.
+# mimalloc has to be here as well as ABC: it is the default allocator, and
+# configure fails outright rather than falling back when it is missing.
+fetched_dir() {
+  local name=$1 upper=$2 from
+  from=$(cache_val "FETCHCONTENT_SOURCE_DIR_${upper}")
+  [ -n "$from" ] || from="$CAND_BUILD/_deps/${name}-src"
+  echo "$from"
+}
+
+for pair in "abc:ABC:lib/extlib-abc" "mimalloc:MIMALLOC:lib/extlib-mimalloc"; do
+  name=${pair%%:*}; rest=${pair#*:}; upper=${rest%%:*}; sub=${rest#*:}
   if [ ! -f "$BASE_TREE/$sub/CMakeLists.txt" ]; then
+    src=$(fetched_dir "$name" "$upper")
+    if [ ! -d "$src" ]; then
+      log "cannot find the candidate's $name at $src; skipping"
+      exit 77
+    fi
     rm -rf "${BASE_TREE:?}/$sub"
-    ln -s "$SRC_DIR/$sub" "$BASE_TREE/$sub"
+    ln -s "$src" "$BASE_TREE/$sub"
   fi
 done
 
@@ -109,7 +126,7 @@ fi
 # ---------------------------------------------------------- baseline build
 CMAKE_ARGS=(-DCMAKE_BUILD_TYPE="${BUILD_TYPE:-RelWithDebInfo}"
             -DENABLE_TESTING=OFF
-            -DNOCRYPTOMINISAT=ON
+            -DUSE_CRYPTOMINISAT=OFF
             -Wno-dev)
 [ -n "$GENERATOR" ] && CMAKE_ARGS+=(-G "$GENERATOR")
 [ -n "$MINISAT_INC" ] && CMAKE_ARGS+=(-DMINISAT_INCLUDE_DIRS="$MINISAT_INC")

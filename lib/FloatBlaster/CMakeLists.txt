@@ -29,3 +29,16 @@ add_library(floatblaster OBJECT
     symbolic_fp.cpp
 )
 add_dependencies(floatblaster ASTKind_header)
+
+# DecimalLiteral.cpp is the only translation unit in STP that includes libbf.h;
+# the imported target carries that include directory as SYSTEM. This replaces a
+# project-wide include_directories(SYSTEM). The archive is named on libstp's
+# own link line, in lib/CMakeLists.txt.
+target_link_libraries(floatblaster PRIVATE LibBF)
+
+# SymFPU is where the floating-point circuits come from: three of the sources
+# here include "symfpu/core/...", and so does the internal header
+# stp/FloatBlaster/symbolic_fp.h. Header-only, so the target carries an include
+# directory and nothing else. This replaces a project-wide
+# include_directories(SYSTEM).
+target_link_libraries(floatblaster PRIVATE SymFPU)

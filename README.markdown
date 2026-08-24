@@ -13,21 +13,17 @@ Comprehensive details are provided in the manual and homepage: https://stp.githu
 For a quick install:
 
 ```
-sudo apt-get install git build-essential cmake bison flex libgmp-dev python3
+sudo apt-get install git build-essential cmake bison flex python3
 git clone https://github.com/stp/stp
 cd stp
-git submodule init && git submodule update
-./scripts/deps/setup-cms.sh
-mkdir build
-cd build
-cmake ..
-cmake --build . -j$(nproc)
-sudo cmake --install .
+./configure.sh --auto-download
+cmake --build build -j$(nproc)
+sudo cmake --install build
 ```
 
-That builds against [CryptoMiniSat](https://github.com/msoos/cryptominisat), which is the default SAT backend. CaDiCaL is also supported, chosen at configure time; see [Building STP](https://stp.github.io/stp/building.html).
+That builds against [CaDiCaL](https://github.com/arminbiere/cadical), which is the default SAT backend. CryptoMiniSat, MiniSat and Riss are also supported, asked for at configure time; see [Building STP](https://stp.github.io/stp/building.html).
 
-Every step is needed: ABC, mimalloc and LibBF are submodules built as part of STP, and a build with no SAT backend enabled does not configure. The `setup` script puts the SAT solver in `deps/`, where the build finds it without being told where to look.
+There are no submodules: `--auto-download` fetches every dependency at a pinned revision and builds it with this build's own compiler and flags. Without it, configuration stops and says what to install or where to point it -- nothing here reaches the network unless it is asked to. CryptoMiniSat is the exception, and the one thing `libgmp-dev` is for: install it, or run `./scripts/deps/setup-cms.sh`.
 
 Or, using [Homebrew](https://brew.sh):
 ```

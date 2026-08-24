@@ -1,7 +1,7 @@
 name: Build a static Linux stp
 description: >
-  Build a statically linked stp and smoke-test it. The repository, including
-  submodules, must already be checked out. The CI jobs that keep static
+  Build a statically linked stp and smoke-test it. The repository must
+  already be checked out. The CI jobs that keep static
   linking working and the release workflow that ships the binary all use
   this, so that what gets published is built exactly the way CI builds it.
   CI runs it in both configurations, including the one the release uses.
@@ -122,7 +122,7 @@ runs:
   # above. The runner image happens to ship that package already, but the
   # dependency is this action's, so it is named rather than assumed.
   #
-  # FORCE_CMS turns a CryptoMiniSat that was not found into a configure-time
+  # USE_CRYPTOMINISAT=ON turns a CryptoMiniSat that was not found into a configure-time
   # error. Without it find_package failing is silent: the build simply falls
   # through to MiniSat and the mistake surfaces at the smoke test below,
   # after a full build has been paid for. The smoke test stays anyway --
@@ -143,7 +143,7 @@ runs:
       if [ -n "$BUILD_TYPE" ]; then
         args+=("-DCMAKE_BUILD_TYPE=$BUILD_TYPE")
       fi
-      cmake -DSTATICCOMPILE:BOOL=ON -Dcryptominisat5_DIR:PATH="$GITHUB_WORKSPACE/deps/install/lib/cmake/cryptominisat5" -DFORCE_CMS:BOOL=ON -DWERROR:BOOL="$WERROR" "${args[@]}" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+      cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DSTATICCOMPILE:BOOL=ON -Dcryptominisat5_DIR:PATH="$GITHUB_WORKSPACE/deps/install/lib/cmake/cryptominisat5" -DUSE_CRYPTOMINISAT:STRING=ON -DUSE_CADICAL:BOOL=OFF -DWERROR:BOOL="$WERROR" "${args[@]}" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
   - name: Build
     id: build
@@ -196,5 +196,37 @@ runs:
       got=$("$stp" lit.smt2)
       echo "lit.smt2: '$got'"
       [ "$got" = "unsat" ] || exit 1
+
+  # A static libstp does not absorb the archives it links, so a consumer has
+  # to resolve them itself -- which means an installed static STP has to ship
+  # them and its STPTargets.cmake has to name them somewhere that still exists
+  # on the machine doing the consuming. Nothing else checks that: the
+  # install-tree consumer test in the suite runs only in shared builds, because
+  # ENABLE_TESTING is forced off when BUILD_SHARED_LIBS is.
+  #
+  # The build tree and the dependency directory are moved out of the way first.
+  # Without that this passes on paths that happen to still be there, which is
+  # exactly how it passed while naming paths no other machine would have.
+  - name: Installed static package is self-contained
+    shell: bash
+    run: |
+      # DESTDIR rather than --install --prefix: STP installs its public
+      # headers to an absolute CMAKE_INSTALL_FULL_INCLUDEDIR, which --prefix
+      # cannot redirect, so the install would land in /usr/local and fail on
+      # permissions. Staging is what the in-suite consumer test does too.
+      stage="$GITHUB_WORKSPACE/static-install"
+      cmake -E env DESTDIR="$stage" cmake --install build
+      mv "$stage" "$stage-moved"
+      mv build build-away
+      mv deps deps-away
+      cmakedir=$(dirname "$(find "$stage-moved" -name STPConfig.cmake | head -1)")
+      echo "consuming $cmakedir"
+      cmake -S tests/api/install/uf-public-header-consumer -B consumer \
+            -DSTP_DIR="$cmakedir" \
+            -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/deps-away/install"
+      cmake --build consumer --parallel "$(nproc)"
+      ctest --test-dir consumer --output-on-failure
+      mv build-away build
+      mv deps-away deps
 
 # EOF

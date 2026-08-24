@@ -148,7 +148,7 @@ uses it internally.
 Two configure arguments matter, and ``publish`` confirms both in the
 finished binary rather than trusting the command line:
 
-``-DFORCE_CMS=ON``
+``-DUSE_CRYPTOMINISAT=ON``
    A ``find_package(cryptominisat5)`` that misses is otherwise silent --
    the build falls through and produces a working MiniSat binary.
 
@@ -181,7 +181,7 @@ and builds for itself are not pinned by anything: CryptoMiniSat takes them
 from their default branches, so which revision arrives depends on the day,
 and ``cache-key.sh`` does not track it. That one is a real gap, described at
 the top of ``setup-cms.sh``. It is unrelated to
-``scripts/deps/setup-cadical.sh``, which pins ``rel-3.0.1`` and which the
+``cmake/FindCaDiCaL.cmake``, which pins ``rel-3.0.1`` and which the
 release does not run.
 
 ``setup-cms.sh`` builds the solver stack in ``Release`` rather than CMake's
@@ -217,10 +217,9 @@ For testing the release build, or if Actions is unavailable:
 
 .. code-block:: bash
 
-    ./scripts/deps/setup-minisat.sh
     ./scripts/deps/setup-cms.sh
     mkdir build-static && cd build-static
-    cmake -DSTATICCOMPILE=ON -DCMAKE_BUILD_TYPE=Release -DFORCE_CMS=ON \
+    cmake -DSTATICCOMPILE=ON -DCMAKE_BUILD_TYPE=Release -DUSE_CRYPTOMINISAT=ON \
           -Dcryptominisat5_DIR=$PWD/../deps/install/lib/cmake/cryptominisat5 ..
     cmake --build . -j$(nproc)
     ./stp --version   # the new version and the tagged SHA, and both
@@ -231,12 +230,12 @@ Neither setup script needs arguments: both already build the static PIC
 libraries a static STP links against. Note that the configure line above does
 not pass ``-DUSE_MINISAT=ON``, so it does not in fact link minisat --
 ``USE_MINISAT`` has defaulted to off since that backend became opt-in, and
-the release workflow does not run ``setup-minisat.sh`` at all. Run it only if
+the release workflow does not build MiniSat at all. Enable it only if
 you want to reproduce a build that has MiniSat compiled in.
 
 Prefer the workflow for anything you intend to publish: it checks out the
 tag, so the binary provably comes from the released commit rather than from
-whatever is in your working tree -- easy to get wrong with the submodules
+whatever is in your working tree -- easy to get wrong with the dependencies
 STP compiles in.
 
 After the release

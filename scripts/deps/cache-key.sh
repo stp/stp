@@ -2,32 +2,42 @@
 
 # Print "key=<hash>" for use as a CI cache key for the deps directory.
 #
-# A setup script that clones without pinning a revision would keep being
-# served a cache built from whatever that repository happened to contain the
-# first time, so for those the commit the default branch currently points at
-# is folded in: upstream movement then produces a new key. CryptoMiniSat,
-# CaDiCaL, GTest and minisat are pinned to a tag or commit inside their
-# scripts, which the script hash already covers -- OutputCheck, a test-only
-# dependency that is never linked into anything, is the one that is not.
+# Every dependency is now pinned in the file that knows how to get it -- the
+# Find modules under cmake/ for the ones the build can produce itself, and the
+# scripts here for the ones a CI job still fetches by hand -- so hashing those
+# files is enough. Move a pin, get a new key.
+#
+# This used to have to resolve a revision over the network, because OutputCheck
+# was cloned without one and a cache built from it would otherwise be served
+# for ever. It is pinned in tests/CMakeLists.txt now, so the key is a pure
+# function of the tree.
 #
 # One gap is known and deliberately left open. CryptoMiniSat's own tag is
 # pinned, but from 5.14 it fetches cadical and cadiback from meelgroup's
 # default branches, so what it bundles is pinned by nothing here and a cached
 # deps/install can hold an older bundle than a fresh build would produce.
 # Folding those two in would invalidate this key -- and so rebuild
-# CryptoMiniSat, the most expensive dependency in CI -- every time an
-# unrelated fork moves. The bundle stays inside CryptoMiniSat, and STP's own
-# CaDiCaL comes from CADICAL_DIR and nowhere else, so the drift is not worth
-# paying that for.
+# CryptoMiniSat, the most expensive dependency in CI -- every time an unrelated
+# fork moves. The bundle stays inside CryptoMiniSat, and STP's own CaDiCaL
+# comes from CADICAL_DIR or from cmake/FindCaDiCaL.cmake and nowhere else, so
+# the drift is not worth paying that for.
 
 set -e -u -o pipefail
 
+here=$(dirname "$0")
+root=$(cd "${here}/../.." && pwd)
+
 hash=$(
   {
-    for repo in stp/OutputCheck; do
-      git ls-remote "https://github.com/${repo}" HEAD
-    done
-    cat "$(dirname "$0")"/setup-*.sh
+    cat "${root}"/cmake/Find*.cmake
+    cat "${root}"/cmake/deps-helper.cmake
+    find "${root}"/cmake/deps-utils -type f | sort | xargs cat
+    cat "${here}"/setup-*.sh
+    # The FetchContent pins live beside what they are added to rather than in
+    # a Find module: mimalloc and unordered_dense in the top-level CMakeLists,
+    # GoogleTest and OutputCheck in the test tree.
+    grep -hE "GIT_TAG|GIT_REPOSITORY|ABC_GIT_TAG" \
+        "${root}"/CMakeLists.txt "${root}"/tests/CMakeLists.txt
   } | sha256sum | cut -d' ' -f1
 )
 

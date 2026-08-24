@@ -29,8 +29,7 @@ add_executable(difficulty_bench
 # link it directly.
 target_link_libraries(difficulty_bench
     stp
-    $<TARGET_FILE:libabc-pic>
+    ABC
 )
 # $<TARGET_FILE:...> names a file rather than a target, so the build order has
 # to be spelled out, exactly as lib/CMakeLists.txt does for libstp.
-add_dependencies(difficulty_bench libabc-pic)

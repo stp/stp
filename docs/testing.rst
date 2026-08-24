@@ -24,109 +24,37 @@ runs everything.
 Getting started
 ---------------
 
-We depend on a few external tools for testing. You need python3, and you
-need GoogleTest and OutputCheck, which are downloaded into ``deps/`` by
-the setup scripts (they used to be git submodules, they are not any
-more):
+We depend on a few external tools for testing: python3, GoogleTest,
+OutputCheck, and `lit <https://pypi.org/project/lit/>`__, which drives
+most of the suite. With ``-DENABLE_AUTO_DOWNLOAD=ON`` the build supplies
+all of them -- GoogleTest and OutputCheck are fetched at pinned
+revisions, and lit is installed into a virtual environment under the
+build directory, so nothing is added to the system interpreter.
 
-::
-
-    $ cd /path/to/stp
-    $ ./scripts/deps/setup-gtest.sh
-    $ ./scripts/deps/setup-outputcheck.sh
-
-You also need the lit tool, which is available from
-`PyPI <https://pypi.org/project/lit/>`__:
-
-::
-
-    $ pip install lit
+Each can be supplied instead: ``-DGTEST_DIR``, ``-DOUTPUTCHECK_DIR`` and
+``-DLIT_TOOL`` point at existing copies, and an installed lit on
+``PATH`` is found without any flag.
 
 Installing lit without root access
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If you don't want to install lit system-wide you can put it in a virtual
-environment:
+This is what ``-DENABLE_AUTO_DOWNLOAD=ON`` does for you: it creates
+``venv/`` under the build directory, installs lit into it, and uses it
+from there. Nothing is added to the system interpreter, and nothing has
+to be activated in your shell -- the build records the absolute path.
+
+To use an environment of your own instead, create it and point
+``-DLIT_TOOL`` at the lit inside it:
 
 ::
 
     $ python3 -m venv venv
-    $ . venv/bin/activate
-    (venv) $ pip install lit
+    $ venv/bin/pip install lit
+    $ cmake -S . -B build -DLIT_TOOL="$(pwd)/venv/bin/lit" ...
 
-Note how the shell prompt changes when the ``venv/bin/activate`` script
-is executed from your shell. This is a hint that you are now using the
-python virtual environment named ``venv``.
-
-If you do this you need to make sure CMake picks up the python executable
-in your virtual environment and not the system python executable. If you
-have never executed CMake previously then configuring from a shell where
-the environment is activated is enough -- CMake will find that python.
-
-If you have configured previously (e.g. because you built STP with
-testing disabled) then, from a shell with the environment activated, run
-``make edit_cache`` in the build directory (``ninja edit_cache`` for
-ninja) and either
-
--  Delete the ``PYTHON_EXECUTABLE`` cache variable and then configure. If
-   all goes well you will see ``PYTHON_EXECUTABLE`` reappear, set to the
-   full path of your virtual environment python. Once you have
-   configured successfully you should regenerate the build system (i.e.
-   press the generate button).
-
-OR
-
--  Set the ``PYTHON_EXECUTABLE`` cache variable manually to the path of
-   your virtual environment python and then configure and generate.
-
-The same applies to ``LIT_TOOL``, which CMake sets to the first ``lit``
-it finds in ``PATH``.
-
-CMake options
-~~~~~~~~~~~~~
-
-There are various CMake options that allow control over testing. You can
-easily configure these by…
-
--  When configuring for the first time use the ``cmake-gui`` or
-   ``ccmake`` tool.
--  If you've already configured/built previously by running
-   ``make edit_cache`` or ``ninja edit_cache`` in the build directory
-   (this assumes you used the ``cmake-gui`` or ``ccmake`` tool when you
-   first built).
-
-At the time of writing the following options are available
-
--  ``ENABLE_TESTING`` - If enabled other testing options will be
-   available. Note that testing needs a shared library build, so it is
-   forced off when ``STATICCOMPILE`` is on, and it is forced off again
-   when no Python 3 interpreter was found.
--  ``LIT_TOOL`` - Path to the ``lit`` executable (you shouldn't need to
-   modify this normally)
--  ``LIT_ARGS`` - Arguments passed to ``lit`` when CTest invokes it,
-   ``-s`` by default. Set it to e.g. ``-v`` to see the output of failing
-   tests.
--  ``PYTHON_EXECUTABLE`` - Path to the python executable to use for
-   testing programs. If you used a virtual environment to install
-   ``lit`` you should ensure that this CMake variable is set to the
-   virtual environment's python executable. This will happen
-   automatically if you activated the environment before configuring.
--  ``TEST_QUERY_FILES`` - If enabled the query file tests under
-   ``tests/query-files`` will become available for testing.
--  ``TEST_UNITS`` - If enabled the unit tests under ``tests/unit-tests``
-   will become available for building/testing.
--  ``TEST_APIS`` - If enabled the tests under ``tests/api`` will become
-   available.
--  ``TEST_C_API`` - If enabled the C API unit tests will be available
-   for building/testing.
--  ``USE_VALGRIND`` - If enabled, every GoogleTest executable is run under
-   valgrind's memcheck rather than directly, and memory errors fail the
-   test. See :ref:`valgrind` below.
--  ``VALGRIND_ARGS`` - The flags CTest passes to valgrind. See
-   :ref:`valgrind`.
--  ``VALGRIND_TEST_TIMEOUT`` - Per-test CTest timeout in seconds when
-   ``USE_VALGRIND`` is on, three hours by default. The default timeout is
-   not enough for the exhaustive tests once valgrind's slowdown is applied.
+Naming the path directly is what avoids the older advice about making
+CMake pick up the right interpreter: ``LIT_TOOL`` is absolute, so which
+python is on ``PATH`` when you configure no longer matters.
 
 Running tests
 -------------

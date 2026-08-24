@@ -16,6 +16,7 @@ RUN apt-get update \
         flex \
         g++ \
         gcc \
+        git \
         libgmp-dev \
         libm4ri-dev \
         libncurses-dev \
@@ -47,15 +48,28 @@ RUN wget -O minisat.tgz https://github.com/stp/minisat/archive/releases/2.2.1.ta
  && cmake --build . \
  && cmake --install .
 
-# Build STP
-WORKDIR /stp/build
+# Build STP.
+#
+# --auto-download supplies LibBF, which is required and which nothing above
+# builds -- this image could not have built at all without a deps/libbf that
+# happened to be sitting in the build context. git and ca-certificates are in
+# the package list above for its sake.
+#
+# The two solvers are named explicitly rather than left to whatever is
+# installed, and CaDiCaL is turned off: it is on by default, and this image
+# links CryptoMiniSat and MiniSat instead.
+WORKDIR /stp
 COPY . /stp
-RUN cmake .. \
+RUN cmake -S . -B build \
         -DCMAKE_BUILD_TYPE=Release \
         -DENABLE_ASSERTIONS=OFF \
         -DSTATICCOMPILE=ON \
- && cmake --build . \
- && cmake --install .
+        -DENABLE_AUTO_DOWNLOAD=ON \
+        -DUSE_CRYPTOMINISAT=ON \
+        -DUSE_MINISAT=ON \
+        -DUSE_CADICAL=OFF \
+ && cmake --build build \
+ && cmake --install build
 
 # Set up to run in a minimal container
 FROM scratch

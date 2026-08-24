@@ -41,53 +41,48 @@ component of STP. The headers that go with them live under
 -  ``ToSat``: Conversion of AST to SAT.
 -  ``Util``: Handy utilities for smaller tasks.
 
-Third-party code that is compiled into STP also lives under ``lib/``:
+Third-party code compiled into STP. Two of these are fetched during
+configuration rather than living under ``lib/``, because STP builds them as
+part of itself and so needs their sources present before it configures its
+own targets; the other two are small enough to be carried in the tree:
 
--  ``extlib-abc``: The `ABC <https://github.com/berkeley-abc/abc>`__
-   package, used to build AIGs and convert them to CNF. A git submodule,
-   pointing at `stp/abc <https://github.com/stp/abc>`__ rather than at ABC
-   itself. That fork keeps two branches: ``master`` mirrors upstream
-   untouched, and ``stp`` -- the branch the submodule is pinned to -- carries
-   our changes as commits on top of the upstream revision we have taken.
-   Bumping ABC means rebasing ``stp`` onto a newer ``master`` in that
-   repository, then moving the pin here.
+-  ABC: The `ABC <https://github.com/berkeley-abc/abc>`__ package, used to
+   build AIGs and convert them to CNF. Fetched from
+   `stp/abc <https://github.com/stp/abc>`__ rather than from ABC itself. That fork keeps two branches: ``master`` mirrors upstream
+   untouched, and ``stp`` -- the branch ``ABC_GIT_TAG`` in the top-level
+   ``CMakeLists.txt`` pins a commit of -- carries our changes as commits on
+   top of the upstream revision we have taken. Bumping ABC means rebasing
+   ``stp`` onto a newer ``master`` in that repository, then moving that pin.
+
+   To work on the fork, clone it, build ``libabc-pic`` in it, and configure
+   with ``-DABC_DIR=<clone>``: the build then uses that copy and fetches
+   nothing, so it can be edited, committed and pushed from where it is.
 
    The fork exists because the changes cannot live upstream: some are fixes
    that were offered to ABC and not taken, and the rest adjust which parts of
    ABC get built. STP uses four of its packages -- ``aig/aig``, ``aig/gia``,
    ``opt/dar`` and ``sat/cnf`` -- and ABC's build compiles every other one
    too, including SAT solvers that STP already links its own copies of.
--  ``extlib-cli11``: `CLI11 <https://github.com/CLIUtils/CLI11>`__, the
-   command-line parser of the ``stp`` executable. Header-only, so it is
-   compiled into the tool but never into ``libstp``. A git submodule.
--  ``extlib-libbf``: `LibBF <https://bellard.org/libbf/>`__, Fabrice
-   Bellard's arbitrary-precision floating-point library, used by
-   ``FloatBlaster`` to convert the real literals in floating-point input.
-   A git submodule pointing at `stp/libbf <https://github.com/stp/libbf>`__,
-   a mirror laid out like the ABC fork above: upstream publishes release
-   tarballs and no repository, so ``master`` holds the tarballs verbatim
-   and ``stp`` -- the branch the submodule is pinned to -- carries STP's
-   MSVC portability changes. Only ``libbf.c`` and ``cutils.c`` are
-   compiled; ``lib/CMakeLists.txt`` folds them into ``libstp``.
 -  ``extlib-constbv``: A library that implements multi-word fixed-length
    integers, based on Steffen Beyer's
    `Bit::Vector <https://metacpan.org/pod/Bit::Vector>`__ perl module.
--  ``extlib-symfpu``: `SymFPU <https://github.com/martin-cs/symfpu>`__, a
-   header-only implementation of the floating-point operations in terms of
-   bitvectors, used by ``FloatBlaster``. A git submodule, pointing at
-   `stp/symfpu <https://github.com/stp/symfpu>`__, a fork laid out like the
-   ABC one: ``main`` tracks upstream and ``stp`` -- the branch the submodule
-   is pinned to -- carries STP's changes as commits on top. They are four
-   correctness fixes for the narrowest formats SMT-LIB permits, none of
-   which the common formats reach.
--  ``extlib-mimalloc``:
-   `mimalloc <https://github.com/microsoft/mimalloc>`__, the allocator
-   the STP executables link against by default. A git submodule; see
-   ``STP_ALLOCATOR`` in :doc:`building` for the alternatives.
--  ``extlib-unordered-dense``:
-   `ankerl::unordered_dense <https://github.com/martinus/unordered_dense>`__,
-   a densely stored hash map and set, used in place of
-   ``std::unordered_map`` where it pays off.
+-  mimalloc: `mimalloc <https://github.com/microsoft/mimalloc>`__, the
+   allocator the STP executables link against by default. Fetched, and
+   built as part of STP; see ``STP_ALLOCATOR`` in :doc:`building` for the
+   alternatives.
+-  ankerl::unordered_dense:
+   `a densely stored hash map and set <https://github.com/martinus/unordered_dense>`__,
+   used in place of ``std::unordered_map`` where it pays off. A single
+   header, fetched at a pinned release.
+
+CLI11, the command-line parser of the ``stp`` executable, and SymFPU, the
+header-only implementation of the floating-point operations in terms of
+bitvectors that ``FloatBlaster`` uses, used to sit here as submodules too.
+Both are now fetched by ``cmake/FindCLI11.cmake`` and
+``cmake/FindSymFPU.cmake`` -- being headers, there is nothing about them
+for STP's own build to reach into, which is what keeps ABC and mimalloc
+here. STP's four local fixes to SymFPU live in ``cmake/deps-utils/symfpu``
+and are applied to the copy the build fetches.
 
 The executables are built from ``tools/``:
 

@@ -29,7 +29,7 @@ THE SOFTWARE.
 #include "stp/UninterpretedFunctions/UFDecl.h"
 #include "stp/NodeFactory/NodeFactory.h"
 #include "stp/Util/Attributes.h"
-#include "extlib-unordered-dense/ankerl/unordered_dense.h"
+#include <ankerl/unordered_dense.h>
 #include <cstdint>
 #include <map>
 #include <memory>

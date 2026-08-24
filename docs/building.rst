@@ -16,6 +16,9 @@ Dependencies
 ------------
 
 STP relies on flex, bison and python3, plus at least one SAT backend.
+Nothing else has to be installed: with ``-DENABLE_AUTO_DOWNLOAD=ON`` the
+build fetches every library it needs, and ``lit``, which drives the
+tests, into a virtual environment of its own.
 Configuration fails if no backend is enabled.
 
 On a Debian-like platform most of it comes from the package manager:
@@ -25,36 +28,80 @@ On a Debian-like platform most of it comes from the package manager:
     sudo apt-get install git build-essential cmake bison flex python3
 
 A python3 interpreter is needed at build time -- it generates the AST kind
-tables -- and also for the Python interface and the test suite. git is
-needed for the submodules.
+tables -- and also for the Python interface and the test suite. git is needed
+to fetch the dependencies, which are cloned rather than downloaded as
+archives where their revision is a commit rather than a release.
 
 The SAT backends bring their own dependencies, which are needed only if you
 build that backend, and which the ``scripts/deps`` script for each one names:
 CryptoMiniSat needs GMP (``libgmp-dev``), MiniSat needs zlib
 (``zlib1g-dev``). Neither is used by STP itself.
 
-Five dependencies are vendored as submodules and need nothing installed:
-ABC, mimalloc, the command-line parser
-`CLI11 <https://github.com/CLIUtils/CLI11>`__, the header-only
-floating-point library `SymFPU <https://github.com/martin-cs/symfpu>`__,
-and `LibBF <https://bellard.org/libbf/>`__, which converts the real
-literals in floating-point input -- ``((_ to_fp 8 24) RNE 1.5)``. Run
-``git submodule update --init`` after cloning; the build does not
-configure without them.
+STP has no submodules. Everything it does not contain itself is fetched
+at a pinned revision, and with ``-DENABLE_AUTO_DOWNLOAD=ON`` that needs
+nothing installed beforehand.
 
-LibBF is pointed at `stp/libbf <https://github.com/stp/libbf>`__ rather
-than upstream, which publishes release tarballs and no git repository.
-That mirror is laid out like STP's ABC fork: ``master`` holds the release
-tarballs verbatim, one commit each, and ``stp`` -- the branch the submodule
-is pinned to -- adds STP's MSVC portability changes on top. Moving to a
-newer release means importing its tarball there and rebasing ``stp`` onto
-it, then moving the pin here. Its two C files are compiled as part of STP.
+Most are ExternalProjects: built at build time, installed into
+``STP_DEP_DIR``, and so built once however many build directories are
+pointed at the same one. ABC is among them, which matters because it is
+920 C files -- but it also means every build sharing a dependency
+directory shares one ABC, compiled with one set of flags. Its
+optimisation level is whichever configuration built it first; its
+*defines* are not left to chance, because STP's own sources include
+ABC's headers and the two have to agree, so they are recorded in the
+directory's stamp and a mismatch is reported.
+
+``-DABC_DIR`` points at an existing ABC build, which is how to work on
+the ``stp/abc`` fork -- see :doc:`code-guide`.
+
+mimalloc is the exception: STP configures its build rather than
+consuming its output, so it is fetched with CMake's FetchContent, which
+downloads during configuration so that ``add_subdirectory`` has
+something to descend into. ``-DFETCHCONTENT_SOURCE_DIR_MIMALLOC``
+names an existing checkout.
+
+The command-line parser `CLI11 <https://github.com/CLIUtils/CLI11>`__ and
+the header-only floating-point library
+`SymFPU <https://github.com/martin-cs/symfpu>`__ are headers and nothing
+more; ``CLI11_DIR`` and ``SYMFPU_INCLUDE_DIRS`` name existing copies.
+
+One is not vendored: `LibBF <https://bellard.org/libbf/>`__, which
+converts the real literals in floating-point input --
+``((_ to_fp 8 24) RNE 1.5)``. It is required, and there are three ways to
+get it, tried in this order:
+
+-  ``-DLIBBF_DIR=<path>`` naming a directory that holds ``libbf.h`` and a
+   built ``bf`` library. It defaults to ``deps/libbf``, which is where
+   an earlier build put one
+-  an installed copy, found the way any library is -- including one that
+   an earlier build installed into ``STP_DEP_DIR`` (see below)
+-  ``-DENABLE_AUTO_DOWNLOAD=ON``, which clones
+   `stp/libbf <https://github.com/stp/libbf>`__ at a pinned commit and
+   builds it as part of this build, with this build's compiler and flags
+
+Without any of the three, configuration fails and says so. An offline
+build wants the first.
+
+Upstream LibBF publishes release tarballs and no git repository, which is
+what ``stp/libbf`` is for. It is laid out like STP's ABC fork: ``master``
+holds the release tarballs verbatim, one commit each, and ``stp`` -- the
+branch the pin names -- adds STP's MSVC portability changes on top. Moving
+to a newer release means importing its tarball there and rebasing ``stp``
+onto it, then moving the pin here.
 
 SAT backends
 ------------
 
-CryptoMiniSat is the default backend, and the one the install
-instructions build. CMake finds it automatically when it is installed,
+CaDiCaL is the default backend: it is the one enabled when nothing is
+said, it needs no system library, and the build can produce one itself.
+The others are asked for by name.
+
+CryptoMiniSat used to be linked in whenever it happened to be installed.
+It no longer is -- a build whose set of backends depends on what the
+machine has lying around cannot be reproduced from its flags. Ask for it
+with ``-DUSE_CRYPTOMINISAT=ON``, which also makes a missing one a
+configuration error; ``-DUSE_CRYPTOMINISAT=AUTO`` restores the old
+"use it if it is there" behaviour by name. It is found when installed,
 including into ``deps/install``, where ``scripts/deps/setup-cms.sh``
 puts it:
 
@@ -68,12 +115,16 @@ puts it:
     sudo cmake --install .
     command -v ldconfig && sudo ldconfig
 
-``-DNOCRYPTOMINISAT=ON`` ignores an installed copy.
+It is the one dependency STP does not build for you: it reaches the build
+as a CMake package rather than as a header and a library, and an
+ExternalProject would write that package only after the configure that
+has to read it. Install it, or run the script.
 
-CaDiCaL is the alternative, and is worth trying on hard bitvector
-problems. It is opt-in rather than auto-detected, and is consumed from a
-build tree rather than an installation, so ``CADICAL_DIR`` points at the
-checkout:
+CaDiCaL is what you get by default, and is worth having on hard
+bitvector problems. With
+``-DENABLE_AUTO_DOWNLOAD=ON`` there is nothing to do but ask for it;
+otherwise an installed CaDiCaL is found the way any library is, or
+``CADICAL_DIR`` points at a checkout:
 
 .. code-block:: bash
 
@@ -86,8 +137,13 @@ checkout:
 Then configure STP with ``-DUSE_CADICAL:BOOL=ON -DCADICAL_DIR:PATH=<path>``,
 where ``<path>`` is the checkout containing ``src/cadical.hpp`` and
 ``build/libcadical.a``. ``-fPIC`` is required, because ``libcadical.a``
-is linked into STP's shared library. These commands are pre-configured in
-``scripts/deps/setup-cadical.sh``.
+is linked into STP's shared library. 
+
+Whichever way it arrives, STP works out which CaDiCaL it has: a checkout
+carries a ``VERSION`` file, and an installed copy is asked directly, by
+compiling and running ``CaDiCaL::Solver::version()``. That decides
+whether ``--cadical-factor`` can be compiled in, and the answer is
+printed at configure time.
 
 Enabling CaDiCaL makes it the default for that build, in place of
 CryptoMiniSat; ``--cryptominisat`` (or ``--minisat``, in a
@@ -99,8 +155,13 @@ default until bounded variable addition was measured on bitvector-only
 problems and found to pay there too.
 
 MiniSat is optional and off by default; enable it with
-``-DUSE_MINISAT:BOOL=ON``, which also needs zlib. Your distribution's
-minisat package works, or STP maintains an updated fork:
+``-DUSE_MINISAT:BOOL=ON``, which also needs zlib -- MiniSat reads gzipped
+DIMACS and says so in its public headers, so configuration fails without
+it. With ``-DENABLE_AUTO_DOWNLOAD=ON`` there is nothing else to do: STP
+clones and builds `stp/minisat <https://github.com/stp/minisat>`__ at a
+pinned commit, which is an updated fork of a MiniSat that has not been
+touched upstream since 2010 and no longer compiles as it stands. Your
+distribution's minisat package works too, as does one built by hand:
 
 .. code-block:: bash
 
@@ -112,15 +173,20 @@ minisat package works, or STP maintains an updated fork:
     sudo cmake --install .
     command -v ldconfig && sudo ldconfig
 
-The MiniSat and CryptoMiniSat recipes above are pre-configured in
-``scripts/deps/setup-minisat.sh`` and ``scripts/deps/setup-cms.sh``.
-Those scripts install into ``deps/install``, which CMake searches without
-any extra flags.
+The CryptoMiniSat recipe above is pre-configured in
+``scripts/deps/setup-cms.sh``, which installs into ``deps/install`` --
+searched without any extra flags. It is the only such script left: every
+other dependency is now fetched and built by the build itself.
 
-The Riss solver can be enabled with ``-DUSE_RISS``, which also needs
-``-DRISS_DIR=<path>`` naming a Riss checkout that contains
-``riss/core/Solver.h`` and ``build/lib/libriss-coprocessor.a``;
-configuration fails without it. ``scripts/deps/setup-riss.sh`` builds one.
+The Riss solver can be enabled with ``-DUSE_RISS``. Either point
+``-DRISS_DIR=<path>`` at a Riss checkout that contains
+``riss/core/Solver.h`` and ``build/lib/libriss-coprocessor.a`` --
+or configure with
+``-DENABLE_AUTO_DOWNLOAD=ON`` and let STP build it. Riss needs flags of
+its own either way: it does not compile warning-free under current
+compilers and does not build as C++17, so STP builds it with ``-w`` and
+``-std=gnu++14``, and takes its headers as system headers so that a
+``WERROR`` build does not fail inside them.
 
 Building against non-installed libraries
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -141,10 +207,12 @@ CryptoMiniSat's.
 Floating-point support
 ----------------------
 
-Floating-point support is always built, backed by the vendored SymFPU
-submodule (``git submodule update --init lib/extlib-symfpu/symfpu`` if
-you cloned without ``--recursive``). An external SymFPU clone can be used
-instead, via ``-DSYMFPU_INCLUDE_DIRS=<directory containing the clone>``.
+Floating-point support is always built, backed by SymFPU. STP carries
+four fixes to it that upstream has not taken; they are applied to the
+copy the build fetches, so there is nothing to do. An existing clone can
+be used instead, via ``-DSYMFPU_INCLUDE_DIRS=<directory containing the
+clone>`` -- that one is taken as-is, so it must already carry those
+fixes, which are in ``cmake/deps-utils/symfpu``.
 
 STP solves the SMT-LIB floating-point theory and exposes floating-point
 terms through the C, C++ (``stp/fp.hpp``) and Python APIs. Real literals
@@ -163,7 +231,12 @@ These apply to all generators:
 -  ``CMAKE_BUILD_TYPE`` -- the build type, e.g. Release
 -  ``CMAKE_INSTALL_PREFIX`` -- the prefix to install under, e.g.
    ``/usr/local``
--  ``ENABLE_ASSERTIONS`` -- build with assertions
+-  ``ENABLE_ASSERTIONS`` -- build with assertions. Three-valued: ``ON``
+   and ``OFF`` are honoured as given, and if it is left unset the build
+   type decides -- off for ``Release``, on for everything else. It used to
+   be a plain on/off flag that ``Release`` overrode unconditionally, so
+   ``-DENABLE_ASSERTIONS=ON -DCMAKE_BUILD_TYPE=Release`` silently produced
+   a build without them; it now produces an asserting Release build
 -  ``ENABLE_TESTING`` -- enable running the tests
 -  ``ENABLE_PYTHON_INTERFACE`` -- build the Python interface (Python 3
    only)
@@ -177,17 +250,49 @@ These apply to all generators:
    dynamic
 -  ``BUILD_SHARED_LIBS`` -- build ``libstp`` as a shared library
    (default ON; forced OFF by ``STATICCOMPILE``)
--  ``NOCRYPTOMINISAT`` -- do not use CryptoMiniSat, even if it is
-   installed
--  ``USE_CADICAL`` and ``CADICAL_DIR`` -- build against a CaDiCaL
-   checkout
+-  ``USE_CRYPTOMINISAT`` -- ``ON`` requires CryptoMiniSat 5.11 or newer and
+   fails configuration if it is missing or older, ``AUTO`` uses it when a
+   new enough one happens to be installed, and ``OFF`` -- the default --
+   never uses it. (It replaces
+   ``NOCRYPTOMINISAT`` and ``FORCE_CMS``, both of which are still accepted
+   and warn)
+-  ``USE_CADICAL`` and ``CADICAL_DIR`` -- build the CaDiCaL backend
+   (on by default), optionally against a named checkout
 -  ``USE_MINISAT`` -- build the MiniSat backend
 -  ``USE_RISS`` -- build the Riss backend
 -  ``TUNE_NATIVE`` -- build with ``-mtune=native``
 -  ``WERROR`` -- treat compiler warnings as errors
--  ``SYMFPU_INCLUDE_DIRS`` -- build against an external SymFPU clone
-   rather than the vendored submodule (point it at the directory
-   *containing* the clone)
+-  ``BUILD_MANPAGE`` -- build and install the ``stp(1)`` manpage, which
+   needs help2man. Three-valued: ``ON`` requires help2man and fails
+   configuration without it, ``OFF`` never builds the page, and if it is
+   left unset the page is built when help2man happens to be installed.
+   Packagers who need the page either present or absent for certain should
+   say which
+-  ``SYMFPU_INCLUDE_DIRS`` -- build against an existing SymFPU clone
+   rather than fetching one (point it at the directory *containing* the
+   clone)
+-  ``CLI11_DIR`` -- build against an existing CLI11 rather than fetching
+   one
+-  ``LIBBF_DIR`` -- where to find an already-built LibBF
+-  ``ENABLE_AUTO_DOWNLOAD`` -- download and build dependencies that were
+   not found, rather than failing. Off by default: a build that reaches
+   the network should be asked to
+-  ``STP_DEP_DIR`` -- where dependencies this build downloads are
+   installed, and where dependencies are looked for. It defaults to
+   ``<build>/deps/install``, so a build directory is self-contained.
+   Point several build directories at one path and only the first pays
+   to build anything: the rest find what it installed and download
+   nothing, so they do not even need ``ENABLE_AUTO_DOWNLOAD``. To fill
+   such a directory ahead of time, configure one build with
+   ``-DSTP_DEP_DIR=<path> -DENABLE_AUTO_DOWNLOAD=ON`` and build its
+   ``deps`` target, which builds the dependencies and nothing else.
+
+   Only the *installed* dependencies are shared. ExternalProject's own
+   scratch and stamp files stay in the build directory, so two builds
+   sharing a path cannot corrupt each other's state -- though a shared
+   directory does hold one copy of each library, whatever compiled it,
+   and STP warns when the compiler or sanitizer settings that filled it
+   differ from the ones now building against it
 -  ``STP_ALLOCATOR`` -- which memory allocator the ``stp`` binary uses.
    STP is allocation-heavy and the C library allocator is a significant
    bottleneck, so this defaults to ``mimalloc``, which is vendored and
@@ -228,8 +333,8 @@ Building on Windows and Visual Studio
 Install `CMake <https://cmake.org/download/>`__ and follow the steps that
 one of the two Windows jobs in
 `.github/workflows/ci.yml <https://github.com/stp/stp/blob/master/.github/workflows/ci.yml>`__
-runs. Both install flex and bison and configure with
-``-DNOCRYPTOMINISAT=ON``, CryptoMiniSat not being buildable there.
+runs. Both install flex and bison, build LibBF, and configure with
+``-DUSE_CRYPTOMINISAT=OFF``, CryptoMiniSat not being buildable there.
 
 ``windows (cadical, MinGW)`` is the one to follow for a solver to use: it
 builds CaDiCaL under MinGW/UCRT64 and links a fully static ``stp.exe``

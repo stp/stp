@@ -14,6 +14,7 @@ RUN apt-get update \
         ca-certificates \
         cmake \
         flex \
+        git \
         g++ \
         gcc \
         libgmp-dev \
@@ -47,15 +48,25 @@ RUN wget -O minisat.tgz https://github.com/stp/minisat/archive/releases/2.2.1.ta
  && cmake --build . \
  && cmake --install .
 
-# Build STP
-WORKDIR /stp/build
+# Build STP.
+#
+# --auto-download supplies everything this image does not build above --
+# LibBF, ABC, SymFPU, CLI11 and the rest -- so git and ca-certificates are in
+# the package list for its sake. The two solvers are named explicitly rather
+# than left to whatever is installed, and CaDiCaL is turned off: it is on by
+# default, and this image links CryptoMiniSat and MiniSat instead.
+WORKDIR /stp
 COPY . /stp
-RUN cmake .. \
+RUN cmake -S . -B build \
         -DCMAKE_BUILD_TYPE=Release \
         -DENABLE_ASSERTIONS=OFF \
         -DSTATICCOMPILE=ON \
- && cmake --build . \
- && cmake --install .
+        -DENABLE_AUTO_DOWNLOAD=ON \
+        -DUSE_CRYPTOMINISAT=ON \
+        -DUSE_MINISAT=ON \
+        -DUSE_CADICAL=OFF \
+ && cmake --build build \
+ && cmake --install build
 
 # Set up to run in a minimal container
 FROM scratch
