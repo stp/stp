@@ -882,6 +882,34 @@ ASTNode lessThanOrEqual(const floatingPointTypeInfo& size, const uf& lhs,
   return symfpu::lessThanOrEqual<traits>(size, lhs, rhs);
 }
 
+ASTNode addIsZero(const floatingPointTypeInfo& size, const uf& lhs,
+                  const uf& rhs)
+{
+  assertUnpackedFormat(size, lhs);
+  assertUnpackedFormat(size, rhs);
+
+  // Every finite value in one binary IEEE format is an integer multiple of
+  // that format's minimum subnormal.  Consequently the exact sum of two
+  // values in the format is either zero or has magnitude at least one
+  // minimum subnormal: rounding cannot turn a nonzero sum into zero, in any
+  // rounding mode.  Apart from two signed zeros, exact cancellation is
+  // therefore precisely opposite signs and equal normalized magnitudes.
+  //
+  // Keep the class tests explicit.  The exponent and significand fields of
+  // a SymFPU special value are harmless defaults, not part of that value's
+  // semantics, and must never make an infinity or NaN look cancellable.
+  const proposition finite =
+      !lhs.getNaN() && !lhs.getInf() && !rhs.getNaN() && !rhs.getInf();
+  const proposition bothZero = lhs.getZero() && rhs.getZero();
+  const proposition neitherZero = !lhs.getZero() && !rhs.getZero();
+  const proposition sameMagnitude =
+      (lhs.getExponent() == rhs.getExponent()) &&
+      (lhs.getSignificand() == rhs.getSignificand());
+  const proposition cancellation =
+      neitherZero && (lhs.getSign() ^ rhs.getSign()) && sameMagnitude;
+  return finite && (bothZero || cancellation);
+}
+
 #define STP_UNPACKED_CLASSIFY(name, symfpu_fn)                                 \
   ASTNode name(const floatingPointTypeInfo& size, const uf& value)             \
   {                                                                            \

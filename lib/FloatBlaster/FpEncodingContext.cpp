@@ -84,7 +84,8 @@ ASTNode FpEncodingContext::lowerPrepared(const ASTNode& prepared)
         s.unpacked_operation_builds + s.unpack_builds + s.pack_builds == 0;
     std::cerr << "FloatBlast: " << s.unpacked_operation_builds
               << " SymFPU operations, " << s.unpack_builds << " unpacks, "
-              << s.pack_builds << " packs"
+              << s.pack_builds << " packs, " << s.add_iszero_builds
+              << " direct add-isZero predicates"
               << (noop ? " (no-op: everything passed through natively)" : "")
               << std::endl;
   }
