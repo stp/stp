@@ -293,12 +293,6 @@ These apply to all generators:
    directory does hold one copy of each library, whatever compiled it,
    and STP warns when the compiler or sanitizer settings that filled it
    differ from the ones now building against it
-
-   The dependencies STP compiles rather than links are unpacked under
-   ``FETCHCONTENT_BASE_DIR`` instead, which is worth sharing for the same
-   reason. ``DEVELOPER_NOTES.md`` at the top of the tree puts both of
-   them, and a compiler cache, into one recipe for working across several
-   worktrees
 -  ``STP_ALLOCATOR`` -- which memory allocator the ``stp`` binary uses.
    STP is allocation-heavy and the C library allocator is a significant
    bottleneck, so this defaults to ``mimalloc``, which is vendored and
@@ -314,6 +308,123 @@ lets you pick the generator; run ``ccmake``, which is the same idea in an
 ncurses terminal interface; or pass ``-D<VARIABLE>=<VALUE>`` to ``cmake``,
 which is best kept for scripts. An already-configured build can be
 changed with ``make edit_cache``, which reconfigures and regenerates.
+
+Working across several worktrees
+--------------------------------
+
+Working on STP usually means several branches alive at once, and a ``git
+worktree`` each is the pleasant way to hold them: every worktree is a real
+checkout with its own build directory, so branches do not disturb each
+other and a long build is never invalidated by switching branch.
+
+.. code-block:: bash
+
+    git worktree add ../my-feature -b my-feature
+
+The catch is that a fresh worktree looks like a fresh machine to the
+build. None of the dependencies live inside the repository any more, so
+a naive worktree downloads and rebuilds all of them. Two caches prevent
+that, and they are separate because the dependencies come in two kinds.
+
+``STP_DEP_DIR``, described above, holds the ones STP *links*.
+``FETCHCONTENT_BASE_DIR`` holds the ones it *compiles*:
+``unordered_dense``, mimalloc, googletest and OutputCheck. Sharing the
+second saves the download but not the compile -- mimalloc and googletest
+are added to the build with ``add_subdirectory``, so they are compiled
+once per build directory whatever you do.
+
+Warm both once:
+
+.. code-block:: bash
+
+    export STP_DEP_DIR=~/.cache/stp/deps          # configure.sh honours this
+    cmake -S . -B warm -G Ninja \
+      -DSTP_DEP_DIR=$STP_DEP_DIR \
+      -DFETCHCONTENT_BASE_DIR=~/.cache/stp/fetch \
+      -DENABLE_AUTO_DOWNLOAD=ON
+    cmake --build warm --target deps
+
+then in every worktree:
+
+.. code-block:: bash
+
+    cmake -S . -B build -G Ninja \
+      -DSTP_DEP_DIR=$STP_DEP_DIR \
+      -DFETCHCONTENT_BASE_DIR=~/.cache/stp/fetch \
+      -DENABLE_AUTO_DOWNLOAD=ON \
+      -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+
+``ENABLE_AUTO_DOWNLOAD=ON`` is still wanted even though everything is
+already local, because a pinned revision can move under you and this is
+what says the build may go and get it. To promise that it will not, leave
+it off and pass ``-DFETCHCONTENT_FULLY_DISCONNECTED=ON`` instead: CMake
+then skips the download and update steps outright, and a moved pin
+becomes an error rather than a download. Nothing is re-fetched either
+way -- against a warm base directory the ``*-src`` trees are not touched.
+
+Sharing the compilation
+~~~~~~~~~~~~~~~~~~~~~~~
+
+A compiler launcher is worth setting, but on its own it shares nothing
+between worktrees. STP compiles with ``-g``, and ccache hashes the
+absolute path of the source when debug information is on, so the same
+file in two worktrees hashes differently. Measured on one machine,
+building an identical tree from a second worktree:
+
+=========================================================  ===================
+Setting                                                    Cross-worktree hits
+=========================================================  ===================
+``CMAKE_<LANG>_COMPILER_LAUNCHER=ccache`` alone            0 / 282 (0%)
+plus ``CCACHE_BASEDIR`` and ``CCACHE_NOHASHDIR``           131 / 141 (93%)
+=========================================================  ===================
+
+which took that second build from 26s to 9s. So set them once, for the
+directory the worktrees live under:
+
+.. code-block:: bash
+
+    export CCACHE_BASEDIR=~/clones/stp    # the parent of your worktrees
+    export CCACHE_NOHASHDIR=1
+
+``CCACHE_BASEDIR`` only rewrites paths *below* it, so keep the build
+directory inside the worktree (``-B build``) rather than off in ``/tmp``,
+or the include paths are left alone and the hits do not come.
+
+The trade is that a cached object's debug information names the directory
+of whichever worktree compiled it first. For everyday work that is a fair
+price; before debugging something subtle, build that worktree with the
+launcher off.
+
+What invalidates a shared directory
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+One ``STP_DEP_DIR`` holds one copy of each library, whatever compiled it.
+STP records what filled it in ``.stp-dep-config`` and warns when the
+compiler, sanitizer, toolchain or ABC ABI settings differ from the build
+now using it. An ASan build in particular wants a directory of its own.
+
+The build type is deliberately not recorded, except on MSVC: sharing a
+differently-optimised ABC is a choice rather than a fault, but on MSVC
+the runtime library follows the build type and mixing them does not link.
+
+``FETCHCONTENT_BASE_DIR`` has no such stamp, and each configure rewrites
+the ``*-subbuild`` scratch inside it, so two configures running against
+one base directory *at the same time* can race. Sequential use is fine.
+
+Tests across worktrees
+~~~~~~~~~~~~~~~~~~~~~~
+
+``ENABLE_TESTING=ON`` also needs lit, which is not a fetched dependency:
+it is pip-installed into a virtual environment inside the build
+directory, so it is per-build-tree and none of the above shares it. An
+installed lit is used if there is one. Otherwise, when configuring with
+``FETCHCONTENT_FULLY_DISCONNECTED=ON`` and no ``ENABLE_AUTO_DOWNLOAD``,
+point ``LIT_TOOL`` at one -- the warm build's copy will do:
+
+.. code-block:: bash
+
+    -DLIT_TOOL=$PWD/warm/venv/bin/lit
+
 
 Building a static library and binary
 ------------------------------------
