@@ -1,4 +1,4 @@
-; RUN: %solver --fp-domain-derived-bounds=0 --fp-domain-row-bounds=1 -s %s 2>&1 | %OutputCheck %s
+; RUN: %solver --fp-domain-derived-bounds=0 --fp-domain-extremal-selectors=0 --fp-domain-row-bounds=1 -s %s 2>&1 | %OutputCheck %s
 ; CHECK: row-bound-rows, 1 row-bound-false
 ; CHECK: unsat
 (set-logic QF_FP)
