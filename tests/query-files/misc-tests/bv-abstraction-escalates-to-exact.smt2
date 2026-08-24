@@ -1,4 +1,5 @@
 ; An abstracted multiply stops enumerating and says what it is.
+; REQUIRES: minisat
 ;
 ; BVMULT, BVDIV and BVMOD are refined by ruling out one pair of operand values
 ; at a time, which is the only compact lemma there is for them and is why they
@@ -16,19 +17,24 @@
 ; point, so it is never revisited, and the solve ends with the answer it would
 ; have given had the term never been abstracted.
 ;
-; Thirty-two is where the measurements put the crossover. Through about thirty
-; rounds the abstraction is still two to four times faster than not
-; abstracting; by sixty it is break-even; past that it collapses. Escalating
-; there keeps the win and bounds the tail, and the rounds already spent cost
-; hundredths of a second.
+; Thirty-two is where the measurements put the crossover, and it is the
+; ceiling on the allowance rather than the allowance itself: what one blocking
+; lemma is worth falls away as the operands widen, so the allowance is
+; width/--bv-term-abstraction-value-divisor held under that ceiling. See
+; bv-abstraction-value-budget-scales.smt2, which is about the arithmetic; this
+; one is about the escalation happening at all and the answer surviving it.
 ;
 ; The count is pinned loosely: which candidates the solver offers is its own
 ; business, so what this fixture holds is that the escalation happens and the
-; answer survives it, not the exact round it happens on.
+; answer survives it, not the exact round it happens on. Whether the fallback
+; is reached at all is candidate-dependent too, so this trace selects MiniSat;
+; the exact encoder itself is checked with every configured backend by its
+; unit test.
 ;
-; RUN: %solver --incremental=off -d -s --bv-eq-abstraction=1 --bv-term-abstraction=1 %s 2>&1 | %OutputCheck --check-prefix=ABSTRACTED %s
-; RUN: %solver --incremental=off -d %s 2>&1 | %OutputCheck --check-prefix=PLAIN %s
-; RUN: %solver --incremental=off -d --bv-eq-abstraction=1 --bv-term-abstraction=1 --bv-term-abstraction-mult=0 %s 2>&1 | %OutputCheck --check-prefix=NOMULT %s
+; RUN: %solver --minisat --incremental=off -d -s --bv-eq-abstraction=1 --bv-term-abstraction=1 %s 2>&1 | %OutputCheck --check-prefix=ABSTRACTED %s
+; RUN: %solver --minisat --incremental=off -d %s 2>&1 | %OutputCheck --check-prefix=PLAIN %s
+; RUN: %solver --minisat --incremental=off -d --bv-eq-abstraction=1 --bv-term-abstraction=1 --bv-term-abstraction-mult=0 %s 2>&1 | %OutputCheck --check-prefix=NOMULT %s
+; RUN: %solver --minisat --incremental=off -s --aig-node-budget=200 --bv-eq-abstraction=1 --bv-term-abstraction=1 --bv-term-abstraction-schemas=0 --bv-term-abstraction-rounds=1 %s 2>&1 | %OutputCheck --check-prefix=BUDGET %s
 ;
 ; ABSTRACTED-NOT: Fatal Error
 ; ABSTRACTED: BV abstraction: encoding BVMULT exactly after [0-9]+ blocking lemmas
@@ -40,6 +46,12 @@
 ; enumerates.
 ; NOMULT-NOT: encoding BVMULT
 ; NOMULT: ^sat$
+;
+; The abstract skeleton fits within this budget; the exact fallback does not.
+; Exhausting it must abandon the query instead of silently building an
+; unbounded second AIG.
+; BUDGET: AIG node budget exhausted during exact BV refinement at [0-9]+ nodes
+; BUDGET: ^unknown$
 ;
 (set-logic QF_BV)
 (declare-fun a () (_ BitVec 64))

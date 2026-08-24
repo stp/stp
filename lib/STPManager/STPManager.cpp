@@ -32,11 +32,22 @@ THE SOFTWARE.
 #include "stp/Util/NodeIterator.h"
 #include <cmath>
 #include <cstdint>
+#include <sstream>
 
 namespace stp
 {
 using std::cout;
 using std::endl;
+
+void STPMgr::noteAIGBudgetExhausted(int nodeCount)
+{
+  std::ostringstream detail;
+  detail << "the AIG node budget set by --aig-node-budget ("
+         << UserFlags.aig_node_budget << ") ran out at " << nodeCount
+         << " AND gates; raise it, or set it to -1 for no limit";
+  noteUnknown(UnknownReason::AIGBudget, detail.str());
+  soft_timeout_expired = true;
+}
 
 // Probe the unique table with a non-owning (kind, borrowed children) key. On
 // a hit nothing is built; only on a miss is the tail-allocated node created.

@@ -1,0 +1,129 @@
+/********************************************************************
+ * AUTHORS: Andrew Teylu
+ *
+ * BEGIN DATE: Aug, 2026
+ *
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+********************************************************************/
+
+// How much effort the CNF generator spends, reachable from the C API.
+//
+// --cnf-generation-effort has been a command-line option for as long as the
+// generator has had levels, and an embedder could not ask for any of them.
+// That is not a cosmetic gap: the level is a genuine trade rather than a
+// quality dial, and which end of it a query wants depends on the query.
+// A floating-point square root over a wide significand builds an enormous
+// circuit that the SAT solver then disposes of at once -- one such query
+// spent 983ms of its 1.28s in cut enumeration and none at all in search --
+// while a query whose search is the expensive part wants the other end.
+//
+// An embedder that cannot reach the level is stuck with whichever end its
+// workload happens to disagree with.
+#include "stp/STPManager/STP.h"
+#include "stp/c_interface.h"
+#include <gtest/gtest.h>
+
+namespace
+{
+// The flags the checker is actually carrying, which is what a setter has to
+// be shown to reach: an enumerator the switch does not handle would fall
+// through and change nothing.
+const stp::UserDefinedFlags& flags(VC vc)
+{
+  return ((stp::STP*)vc)->bm->UserFlags;
+}
+
+int errors = 0;
+void countError(const char*)
+{
+  errors++;
+}
+} // namespace
+
+TEST(cnf_effort_flag, TheDefaultIsMedium)
+{
+  VC vc = vc_createValidityChecker();
+  EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_MEDIUM, flags(vc).cnf_effort);
+  vc_Destroy(vc);
+}
+
+// Every level the command line names, by the ordinal the header documents.
+TEST(cnf_effort_flag, EveryLevelIsReachable)
+{
+  VC vc = vc_createValidityChecker();
+
+  vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, 0);
+  EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_VERY_LOW, flags(vc).cnf_effort);
+  vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, 1);
+  EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_LOW, flags(vc).cnf_effort);
+  vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, 2);
+  EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_MEDIUM, flags(vc).cnf_effort);
+  vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, 3);
+  EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_HIGH, flags(vc).cnf_effort);
+  vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, 4);
+  EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_VERY_HIGH, flags(vc).cnf_effort);
+
+  vc_Destroy(vc);
+}
+
+// Out of range is refused and leaves the level alone. The field is an enum,
+// so an accepted 5 or -1 would be a value no switch in the generator handles
+// -- it would fall to whichever arm happens to be the default and the caller
+// would never learn that what they asked for did not happen.
+TEST(cnf_effort_flag, OutOfRangeIsRefusedAndLeavesTheLevelAlone)
+{
+  vc_registerErrorHandler(countError);
+  errors = 0;
+
+  VC vc = vc_createValidityChecker();
+  vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, 3);
+  EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_HIGH, flags(vc).cnf_effort);
+
+  vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, 5);
+  EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_HIGH, flags(vc).cnf_effort);
+  vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, -1);
+  EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_HIGH, flags(vc).cnf_effort);
+  EXPECT_EQ(2, errors);
+
+  vc_Destroy(vc);
+  vc_registerErrorHandler(nullptr);
+}
+
+// The level reaches the solve, and every one of them answers the same
+// question the same way. A level that changed a verdict would be a bug in
+// the generator, not a setting.
+TEST(cnf_effort_flag, EveryLevelDecidesTheSameQuery)
+{
+  for (int effort = 0; effort <= 4; ++effort)
+  {
+    VC vc = vc_createValidityChecker();
+    vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, effort);
+
+    Type bv = vc_bvType(vc, 32);
+    Expr a = vc_varExpr(vc, "a", bv);
+    Expr b = vc_varExpr(vc, "b", bv);
+    vc_assertFormula(vc, vc_eqExpr(vc, vc_bvMultExpr(vc, 32, a, b),
+                                   vc_bvConstExprFromInt(vc, 32, 3037 * 3041)));
+    vc_assertFormula(vc, vc_bvGtExpr(vc, a, vc_bvConstExprFromInt(vc, 32, 1)));
+    vc_assertFormula(vc, vc_bvGtExpr(vc, b, vc_bvConstExprFromInt(vc, 32, 1)));
+
+    EXPECT_EQ(0, vc_query(vc, vc_falseExpr(vc))) << "effort=" << effort;
+    vc_Destroy(vc);
+  }
+}

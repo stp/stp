@@ -25,6 +25,7 @@ add_library(tosat OBJECT
     ToCNFAIG.cpp
     ToSATAIG.cpp
     BVAbstractionRefiner.cpp
+    BVExactEncoder.cpp
     BVEQCongruenceClosure.cpp
 )
 

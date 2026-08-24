@@ -1347,7 +1347,7 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
       }
       else
       {
-        result = BBMult(mpcd1, mpcd2, support, term);
+        result = BBExactBinaryOp(term, mpcd1, mpcd2, support);
       }
       break;
     }
@@ -1398,18 +1398,7 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
       }
       else
       {
-        BBNodeVec q(num_bits);
-        BBNodeVec r(num_bits);
-        BBDivMod(dvdd, dvsr, q, r, num_bits, support);
-        if (k == BVDIV)
-        {
-          BBNodeVec zero(term.GetValueWidth(), BBFalse);
-          BBNode eq = BBEQ(zero, dvsr);
-          BBNodeVec max(term.GetValueWidth(), BBTrue);
-          result = BBITE(eq, max, q);
-        }
-        else
-          result = r;
+        result = BBExactBinaryOp(term, dvdd, dvsr, support);
       }
       break;
     }
@@ -2943,6 +2932,37 @@ bool BitBlaster::mult_Booth_constant(const BBNodeVec& x, const BBNodeVec& y,
 }
 
 // Multiply two bitblasted numbers
+// The exact circuit for BVMULT, BVDIV and BVMOD, which are the three the
+// term abstraction can replace by free bits. Division and remainder share a
+// blast, and division's zero divisor is totalised here rather than inside
+// it: BBDivMod's restoring loop finds every shifted remainder at or above a
+// zero divisor and hands the dividend back, which is what SMT-LIB asks of
+// the remainder but not of the quotient.
+BBNodeVec BitBlaster::BBExactBinaryOp(const ASTNode& term, const BBNodeVec& x,
+                                      const BBNodeVec& y, BBNodeSet& support)
+{
+  const Kind k = term.GetKind();
+  const unsigned width = term.GetValueWidth();
+  assert(x.size() == width);
+  assert(y.size() == width);
+
+  if (k == BVMULT)
+    return BBMult(x, y, support, term);
+
+  assert(k == BVDIV || k == BVMOD);
+
+  BBNodeVec q(width);
+  BBNodeVec r(width);
+  BBDivMod(x, y, q, r, width, support);
+
+  if (k == BVMOD)
+    return r;
+
+  BBNodeVec zero(width, BBFalse);
+  BBNodeVec max(width, BBTrue);
+  return BBITE(BBEQ(zero, y), max, q);
+}
+
 BBNodeVec BitBlaster::BBMult(const BBNodeVec& _x,
                              const BBNodeVec& _y,
                              BBNodeSet& support,

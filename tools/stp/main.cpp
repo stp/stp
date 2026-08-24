@@ -356,14 +356,39 @@ void ExtraMain::create_options()
            "time, so turning them off leaves only the operations that define "
            "themselves in a single round",
            refinement_group);
+  bool_arg("--bv-term-abstraction-schemas",
+           bm->UserFlags.bv_term_abstraction_schemas,
+           "refine an abstracted BVMULT with algebraic facts that hold for "
+           "every pair of operands -- the product's trailing zeros, its low "
+           "bit, and the shift a power-of-two operand turns it into -- "
+           "before falling back on ruling out the one pair the candidate "
+           "holds",
+           refinement_group);
   app.add_option("--bv-term-abstraction-rounds",
                  bm->UserFlags.bv_term_abstraction_rounds,
-                 "blocking lemmas one abstracted BVMULT/BVDIV/BVMOD may take "
-                 "before its refinement encodes the operation exactly instead "
-                 "of enumerating further operand pairs (0: never; enumerate "
-                 "without limit)")
+                 "ceiling on the blocking lemmas one abstracted "
+                 "BVMULT/BVDIV/BVMOD may take before its refinement encodes "
+                 "the operation exactly instead of enumerating further "
+                 "operand pairs (0: never; enumerate without limit)")
       ->group(refinement_group)
       ->capture_default_str();
+  app.add_option("--bv-term-abstraction-value-divisor",
+                 bm->UserFlags.bv_term_abstraction_value_divisor,
+                 "scale that allowance with the operand width, as "
+                 "width/divisor floored at one and capped by the ceiling "
+                 "above; a blocking lemma rules out one pair of operand "
+                 "values, so what one is worth falls away as the operands "
+                 "widen (0, the default: do not scale, which measured no "
+                 "slower and no faster)")
+      ->group(refinement_group)
+      ->capture_default_str();
+
+  bool_arg("--bv-term-abstraction-inc-bitblast",
+           bm->UserFlags.bv_term_abstraction_inc_bitblast,
+           "escalate an abstracted BVMULT a piece at a time: encode the bits "
+           "up to and a little past the lowest one the candidate got wrong, "
+           "rather than the whole width at once",
+           refinement_group);
 
   app.add_flag("--uninterpreted-functions",
                bm->UserFlags.enable_uninterpreted_functions,
