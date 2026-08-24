@@ -1379,6 +1379,7 @@ class ArrayTransformer::TransformDriver
             baseVar.SetSigWidth(term.GetSigWidth());
             baseMap.insert(
                 std::make_pair(row.index, ArrayRead(baseVar, baseVar)));
+            pinRoundingModeCell(row.baseArray, baseVar);
             row.baseReadSymbol = baseVar;
           }
           if (recordTouchedReads)
@@ -1390,6 +1391,7 @@ class ArrayTransformer::TransformDriver
             term[0], row.index);
         readVar.SetExpWidth(term.GetExpWidth());
         readVar.SetSigWidth(term.GetSigWidth());
+        pinRoundingModeCell(term[0], readVar);
         row.symbol = readVar;
 
         owner.chainReads[term[0]][row.index] = row;
