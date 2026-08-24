@@ -773,11 +773,12 @@ TEST_F(BVEQAbstractionTest, BlockingRoundReusesTheRegisteredConstant)
 // round is spent on the fact that a power-of-two operand turns the product
 // into a shift, and not on ruling out the one pair of values.
 //
-// Both counters are checked, because they are what tells the two apart from
-// outside -- a round spends one or the other and never both. The lemma still
-// blocks the candidate, which is what refinement owes whoever called it, and
-// it still mints nothing: the shift is written over the operand proxies and
-// the abstraction's own result bits, all of which are already in the solver.
+// Both per-operation counters are checked, because they tell the two choices
+// apart from outside: this one record gets a schema rather than a blocking
+// lemma. The lemma still blocks the candidate, which is what refinement owes
+// whoever called it, and it still mints nothing: the shift is written over
+// the operand proxies and the abstraction's own result bits, all of which are
+// already in the solver.
 TEST_F(BVEQAbstractionTest, ASchemaRoundIsSpentWhereTheCandidateContradictsOne)
 {
   ASTNode a = makeSymbol("ms_a", 4);
@@ -818,6 +819,77 @@ TEST_F(BVEQAbstractionTest, ASchemaRoundIsSpentWhereTheCandidateContradictsOne)
   EXPECT_EQ(0u, refiner.terms()[0].blockedRounds);
   EXPECT_FALSE(refiner.terms()[0].defined);
   EXPECT_EQ(0u, solver.newVarCalls);
+  EXPECT_TRUE(solver.someClauseBlocksModel());
+}
+
+// The public refinement-round counter counts calls that installed at least
+// one constraint, while the two lemma counters count operations. One call can
+// therefore increment both: the first product below contradicts a power-of-
+// two schema, while the second has no violated schema and needs a blocking
+// lemma. This is why the lemma counters do not partition refinement rounds.
+TEST_F(BVEQAbstractionTest, OnePassCanInstallBothKindsOfMultiplicationLemma)
+{
+  ASTNode a = makeSymbol("mix_a", 4);
+  ASTNode b = makeSymbol("mix_b", 4);
+  ASTNode firstProduct = factory->CreateTerm(BVMULT, 4, a, b);
+  ASTNode c = makeSymbol("mix_c", 4);
+  ASTNode d = makeSymbol("mix_d", 4);
+  ASTNode secondProduct = factory->CreateTerm(BVMULT, 4, c, d);
+
+  BVAbstractionRefiner refiner(&mgr);
+  BVTermAbstraction first;
+  first.termNode = firstProduct;
+  first.opKind = BVMULT;
+  first.operands[0] = a;
+  first.operands[1] = b;
+  first.numOperands = 2;
+  first.width = 4;
+  refiner.terms().push_back(first);
+
+  BVTermAbstraction second;
+  second.termNode = secondProduct;
+  second.opKind = BVMULT;
+  second.operands[0] = c;
+  second.operands[1] = d;
+  second.numOperands = 2;
+  second.width = 4;
+  refiner.terms().push_back(second);
+
+  ToSATBase::ASTNodeToSATVar bits;
+  bits[a] = std::vector<unsigned>{10, 11, 12, 13};
+  bits[b] = std::vector<unsigned>{20, 21, 22, 23};
+  bits[firstProduct] = std::vector<unsigned>{30, 31, 32, 33};
+  bits[c] = std::vector<unsigned>{40, 41, 42, 43};
+  bits[d] = std::vector<unsigned>{50, 51, 52, 53};
+  bits[secondProduct] = std::vector<unsigned>{60, 61, 62, 63};
+
+  RecordingSolver solver;
+  // First: 2 * 3 is 6, not the candidate zero. The power-of-two operand
+  // earns a schema. Second: 3 * 5 is 15, not the candidate one; both operands
+  // and both products are odd, so every applicable algebraic fact already
+  // holds and the candidate needs an ordinary blocking lemma.
+  const bool scripted[24] = {
+      false, true,  false, false, // a = 2
+      true,  true,  false, false, // b = 3
+      false, false, false, false, // first candidate = 0
+      true,  true,  false, false, // c = 3
+      true,  false, true,  false, // d = 5
+      true,  false, false, false  // second candidate = 1
+  };
+  for (unsigned i = 0; i < 4; ++i)
+  {
+    solver.model[10 + i] = scripted[i];
+    solver.model[20 + i] = scripted[4 + i];
+    solver.model[30 + i] = scripted[8 + i];
+    solver.model[40 + i] = scripted[12 + i];
+    solver.model[50 + i] = scripted[16 + i];
+    solver.model[60 + i] = scripted[20 + i];
+  }
+
+  EXPECT_EQ(2u, refiner.refine(solver, bits));
+  EXPECT_EQ(1u, mgr.UserFlags.coverage.bv_refinement_rounds);
+  EXPECT_EQ(1u, mgr.UserFlags.coverage.bv_schema_lemmas);
+  EXPECT_EQ(1u, mgr.UserFlags.coverage.bv_blocking_lemmas);
   EXPECT_TRUE(solver.someClauseBlocksModel());
 }
 

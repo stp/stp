@@ -101,10 +101,12 @@ unsigned long long counter(VC vc, enum stp_counter_t c)
 
 } // namespace
 
-// The schemas engage, and they engage in place of the blocking lemmas rather
-// than alongside them: a round spends one or the other. A caller that turns
-// them on and reads a zero here is being told the flag did nothing, which is
-// the whole reason the two counters are separate.
+// The schemas engage. For one inconsistent multiplication the chosen schema
+// is installed in place of that multiplication's blocking lemma; a refiner
+// pass can visit several operations, so the public counters themselves are
+// not a partition of passes. A caller that turns schemas on and reads a zero
+// here is being told the flag did nothing, which is why the lemma counters are
+// separate.
 TEST(bv_abstraction_mult_schemas, ASchemaLemmaIsSpentOnAnAbstractedMultiply)
 {
   VC vc = checker(1);

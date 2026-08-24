@@ -645,7 +645,8 @@ public:
     uint64_t bv_candidates[KINDS] = {};
     // ... and what it did take.
     uint64_t bv_abstracted[KINDS] = {};
-    // Rounds the CEGAR refiner ran, and blocking lemmas it installed.
+    // Refinement passes that installed something, and individual blocking
+    // lemmas they installed. A pass can install more than one lemma.
     uint64_t bv_refinement_rounds = 0;
     uint64_t bv_blocking_lemmas = 0;
     // Algebraic schema lemmas installed over an abstracted BVMULT. Counted

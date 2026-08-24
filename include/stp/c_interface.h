@@ -725,8 +725,10 @@ enum stp_counter_t
   STP_COUNTER_BV_ABSTRACTED_MULT,
   STP_COUNTER_BV_ABSTRACTED_DIVMOD,
 
-  //! Rounds the CEGAR refiner ran, and blocking lemmas it installed for an
-  //! abstracted BVMULT, BVDIV or BVMOD.
+  //! Refinement passes that installed one or more constraints, and individual
+  //! blocking lemmas installed for abstracted BVMULT, BVDIV or BVMOD nodes.
+  //! One pass may refine several nodes, so these counters have different
+  //! units.
   STP_COUNTER_BV_REFINEMENT_ROUNDS,
   STP_COUNTER_BV_BLOCKING_LEMMAS,
 
@@ -736,9 +738,12 @@ enum stp_counter_t
   STP_COUNTER_UF_APPLICATIONS_LOWERED = 15,
   STP_COUNTER_UF_CONSTRAINTS_INSTALLED = 16,
 
-  //! ... and the algebraic schema lemmas it installed over an abstracted
-  //! BVMULT instead. A round spends one or the other, never both, so these
-  //! two split STP_COUNTER_BV_REFINEMENT_ROUNDS by what it bought.
+  //! Individual algebraic schema lemmas installed over abstracted BVMULT
+  //! nodes. For one inconsistent multiplication a schema lemma replaces a
+  //! blocking lemma, but a pass may visit several operations and increment
+  //! both counters. Other abstraction kinds increment the pass counter
+  //! without incrementing either lemma counter, so the two lemma counts do
+  //! not partition STP_COUNTER_BV_REFINEMENT_ROUNDS.
   STP_COUNTER_BV_SCHEMA_LEMMAS = 17
 };
 
