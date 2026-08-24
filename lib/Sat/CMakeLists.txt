@@ -30,7 +30,6 @@ if (USE_MINISAT)
 endif()
 
 if (USE_CRYPTOMINISAT)
-    include_directories(${CRYPTOMINISAT5_INCLUDE_DIRS})
     set(sat_lib_to_add ${sat_lib_to_add} CryptoMinisat5.cpp)
 endif()
 
@@ -51,10 +50,32 @@ add_library(sat OBJECT ${sat_lib_to_add})
 # the compile of CryptoMinisat5.cpp; STP has no GMP lookup of its own. Only
 # the usage requirements travel: sat's objects reach libstp through
 # $<TARGET_OBJECTS:sat>, and libstp names the target on its own link line.
-# CRYPTOMINISAT5_INCLUDE_DIRS above stays because the target does not carry
-# CryptoMiniSat's own include directory, only the variable does.
 if (USE_CRYPTOMINISAT)
     target_link_libraries(sat PRIVATE ${CRYPTOMINISAT5_LIBRARIES})
+endif()
+
+# The target does not carry CryptoMiniSat's own include directory, only
+# CRYPTOMINISAT5_INCLUDE_DIRS does -- and that directory is given to the one
+# file that includes cryptominisat.h rather than to the target or the
+# directory. That is not tidiness.
+#
+# CryptoMiniSat >= 5.14 builds and installs its own bundled CaDiCaL into its
+# prefix, where the header lands as include/cadical/cadical.hpp: the exact
+# spelling include/stp/Sat/Cadical.h uses to reach the CaDiCaL that CADICAL_DIR
+# or STP_DEP_DIR named. Anything wider than one file therefore puts a second,
+# older cadical/cadical.hpp on the search path of files that want STP's, and
+# the compiler prefers the wrong one twice over: an include_directories() is
+# emitted ahead of any target's own directories, and the CaDiCaL target
+# contributes its directory as -isystem, which every -I outranks whatever the
+# order. What that produced was Cadical.cpp compiled against
+# CryptoMiniSat's 2.1.3 header while the configure had already read 3.0.1 from
+# the checkout and defined STP_CADICAL_HAS_FACTOR -- an error on
+# declare_more_variables, and, for any API that had happened to line up, a
+# silent header/library mismatch instead. Cadical.h asserts the pairing so a
+# future recurrence says so; this keeps it from arising.
+if (USE_CRYPTOMINISAT)
+    set_source_files_properties(CryptoMinisat5.cpp PROPERTIES
+        INCLUDE_DIRECTORIES "${CRYPTOMINISAT5_INCLUDE_DIRS}")
 endif()
 
 # Likewise for CaDiCaL, whose imported target carries the (staged) include

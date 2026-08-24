@@ -154,6 +154,61 @@ enables it only for problems with array operations. ``auto`` was the
 default until bounded variable addition was measured on bitvector-only
 problems and found to pay there too.
 
+CryptoMiniSat and CaDiCaL together
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Enabling both is supported, and needs one thing said about it, because
+CryptoMiniSat 5.14 and later fetch, build and *install* a CaDiCaL of their
+own -- currently the meelgroup fork at 2.1.3. Its prefix therefore holds a
+``libcadical.a``, a ``cadical/cadical.hpp`` and a CMake package under the
+same names STP's own CaDiCaL uses.
+
+Do not put it in ``deps/install``, which is where ``setup-cms.sh`` writes
+by default and where STP keeps its own dependencies. Give CryptoMiniSat a
+prefix of its own and name it, which is two extra arguments -- the script
+forwards trailing ones to CMake, so its install prefix is overridable like
+any other default:
+
+.. code-block:: bash
+
+    ./scripts/deps/setup-cms.sh -DBUILD_SHARED_LIBS=ON \
+      -DCMAKE_INSTALL_PREFIX=$PWD/deps/cms-install
+
+    cmake -S . -B build -DUSE_CADICAL=ON -DUSE_CRYPTOMINISAT=ON \
+      -Dcryptominisat5_DIR=$PWD/deps/cms-install/lib/cmake/cryptominisat5
+
+Sharing the one directory goes wrong in two independent ways, which is why
+this is worth the two arguments.
+
+``deps/install`` is ``STP_DEP_DIR``. Its include directory is a usage
+requirement of every dependency STP builds, so it reaches the compile line
+of nearly every file in the project -- and CryptoMiniSat's
+``cadical/cadical.hpp`` sitting in it then shadows the one STP means to
+use. There is no include order that fixes that: the two directories arrive
+from different targets, so which comes first varies from target to target.
+``include/stp/Sat/Cadical.h`` refuses to compile rather than let this pass
+silently, so you get an error naming the cause.
+
+``deps/install`` is also on ``CMAKE_PREFIX_PATH`` unconditionally, so that
+the other ``scripts/deps/*.sh`` are found without flags. STP's own CaDiCaL
+lookup therefore reaches the bundled copy, finds it, and stops -- building
+against 2.x with ``--cadical-factor`` silently gone. ``CADICAL_DIR`` pins
+that one lookup past it, and is worth passing if you have a checkout to
+point at, but it does nothing about the shadowing above.
+
+``stp --version`` reports the version of each backend actually linked, so
+it is the quickest way to confirm which CaDiCaL you ended up with.
+
+One combination is refused rather than arranged: a *static*
+``libcryptominisat5`` puts its bundled CaDiCaL on STP's link line
+alongside STP's, and the two sets of symbols collide. Build CryptoMiniSat
+shared (``scripts/deps/setup-cms.sh -DBUILD_SHARED_LIBS=ON``), which keeps
+its CaDiCaL inside the ``.so``. Or, if it must be static, have STP use the
+very same archive so there is only one --
+``-DCADICAL_LIBRARY=<cms prefix>/lib/libcadical.a
+-DCADICAL_INCLUDE_DIR=<cms prefix>/include``, with ``CADICAL_DIR`` unset --
+at the cost of the 3.x features. The configure error spells out all three.
+
 MiniSat is optional and off by default; enable it with
 ``-DUSE_MINISAT:BOOL=ON``, which also needs zlib -- MiniSat reads gzipped
 DIMACS and says so in its public headers, so configuration fails without

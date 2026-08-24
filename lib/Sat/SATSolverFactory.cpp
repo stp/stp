@@ -30,7 +30,6 @@ THE SOFTWARE.
 
 #ifdef USE_CRYPTOMINISAT
 #include "stp/Sat/CryptoMinisat5.h"
-#include "cryptominisat5/cryptominisat.h"
 #endif
 
 #ifdef USE_RISS
@@ -85,8 +84,7 @@ std::vector<std::string> compiledSolverVersions()
 #endif
 
 #ifdef USE_CRYPTOMINISAT
-  solvers.push_back(std::string("cryptominisat ") +
-                    CMSat::SATSolver::get_version());
+  solvers.push_back("cryptominisat " + CryptoMiniSat5::version());
 #endif
 
 #ifdef USE_MINISAT

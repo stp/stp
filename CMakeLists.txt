@@ -922,18 +922,49 @@ if (USE_CADICAL AND USE_CRYPTOMINISAT AND TARGET cryptominisat5 AND TARGET cadic
         if (NOT _cms_cadical)
             get_target_property(_cms_cadical cadical IMPORTED_LOCATION)
         endif()
-        if (NOT _cms_cadical)
-            set(_cms_cadical "the copy in CryptoMiniSat's install prefix")
+
+        # Two names for one archive are not two CaDiCaLs. Pointing
+        # CADICAL_INCLUDE_DIR and CADICAL_LIBRARY at the copy CryptoMiniSat
+        # installed is how both backends fit against a static CryptoMiniSat:
+        # one library on the link line, one set of symbols. It costs whatever
+        # that copy is behind on -- the version probe reads 2.1.3 off it, so
+        # --cadical-factor turns itself off -- which is a trade to be told
+        # about rather than one to be refused.
+        set(_cadicals_are_one FALSE)
+        if (_cms_cadical AND CADICAL_LIBRARY)
+            get_filename_component(_cms_cadical_real "${_cms_cadical}" REALPATH)
+            get_filename_component(_stp_cadical_real "${CADICAL_LIBRARY}" REALPATH)
+            if (_cms_cadical_real STREQUAL _stp_cadical_real)
+                set(_cadicals_are_one TRUE)
+            endif()
         endif()
-        message(FATAL_ERROR
-            "A static CryptoMiniSat cannot be combined with USE_CADICAL. Both "
-            "put a CaDiCaL on libstp's link line and their symbols collide:\n"
-            "    CryptoMiniSat's bundled CaDiCaL: ${_cms_cadical}\n"
-            "    CADICAL_DIR's CaDiCaL:           ${CADICAL_LIBRARY}\n"
-            "Either build CryptoMiniSat as a shared library "
-            "(scripts/deps/setup-cms.sh -DBUILD_SHARED_LIBS=ON), which keeps "
-            "its bundled CaDiCaL to itself, or leave CryptoMiniSat out with "
-            "-DUSE_CRYPTOMINISAT=OFF.")
+
+        if (_cadicals_are_one)
+            message(STATUS
+                "CryptoMiniSat is static and STP is using the CaDiCaL it "
+                "bundles: ${_stp_cadical_real}")
+        else()
+            if (NOT _cms_cadical)
+                set(_cms_cadical "the copy in CryptoMiniSat's install prefix")
+            endif()
+            message(FATAL_ERROR
+                "A static CryptoMiniSat cannot be combined with a second "
+                "CaDiCaL. Both put one on libstp's link line and their symbols "
+                "collide:\n"
+                "    CryptoMiniSat's bundled CaDiCaL: ${_cms_cadical}\n"
+                "    STP's CaDiCaL:                   ${CADICAL_LIBRARY}\n"
+                "Left to the linker it surfaces as pages of duplicate "
+                "definitions that never mention CryptoMiniSat. Three ways "
+                "out.\n"
+                "  Build CryptoMiniSat as a shared library "
+                "(scripts/deps/setup-cms.sh -DBUILD_SHARED_LIBS=ON), which "
+                "keeps its bundled CaDiCaL to itself and leaves STP's own "
+                "choice of CaDiCaL alone.\n"
+                "  Or share the one it bundles, giving up the 3.x features: "
+                "-UCADICAL_DIR -DCADICAL_LIBRARY=${_cms_cadical} "
+                "-DCADICAL_INCLUDE_DIR=<CryptoMiniSat prefix>/include.\n"
+                "  Or leave CryptoMiniSat out: -DUSE_CRYPTOMINISAT=OFF.")
+        endif()
     endif()
 endif()
 
