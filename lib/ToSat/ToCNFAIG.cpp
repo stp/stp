@@ -120,12 +120,12 @@ void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
 Cnf_Dat_t* ToCNFAIG::derive_cnf_mf(BBNodeManagerAIG& mgr, int nLutSize,
                                     unsigned namedOutputs)
 {
-  const unsigned outputs = (unsigned)Aig_ManCoNum(mgr.aigMgr);
   // The two callers need either a formula (one asserted CO) or a fragment
   // (all COs named). Mf_ManGenerateCnf can express those two forms directly;
   // unlike the older generators it cannot assert a prefix while naming a
   // trailing subset.
-  assert(namedOutputs == 0 || namedOutputs == outputs);
+  assert(namedOutputs == 0 ||
+         namedOutputs == (unsigned)Aig_ManCoNum(mgr.aigMgr));
   Gia_Man_t* pGia = Gia_ManFromAig(mgr.aigMgr);
 
   // For an asserted formula, fAddOrCla must be set. Cnf_Derive(pAig, 0)
