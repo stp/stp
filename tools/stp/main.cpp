@@ -560,6 +560,13 @@ void ExtraMain::create_options()
            "additions, then discharge comparisons or contradictory boxes",
            bb_group);
 
+  bool_arg("--fp-domain-extremal-selectors",
+           bm->UserFlags.fp_domain_extremal_selectors,
+           "Experimental FP prepass: replace an objective by necessary "
+           "semantic {0,1} selector values only after proving their "
+           "conjunction sufficient (primarily exact extrema)",
+           bb_group);
+
   bool_arg("--fp-domain-sound-zero-facts",
            bm->UserFlags.fp_domain_sound_zero_facts,
            "Derive sound zero facts from "
