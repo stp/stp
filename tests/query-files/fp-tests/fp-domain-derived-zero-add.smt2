@@ -4,9 +4,12 @@
 ; contradicting the asserted upper bound 49.
 ;
 ; RUN: %solver --fp-domain-sound-zero-facts=0 --fp-domain-derived-bounds=1 -s %s 2>&1 | %OutputCheck --check-prefix=DERIVED %s
-; RUN: %solver --fp-domain-sound-zero-facts=0 %s | %OutputCheck --check-prefix=BASE %s
+; RUN: %solver --fp-domain-sound-zero-facts=0 -s %s 2>&1 | %OutputCheck --check-prefix=DEFAULT %s
+; RUN: %solver --fp-domain-sound-zero-facts=0 --fp-domain-derived-bounds=0 %s | %OutputCheck --check-prefix=BASE %s
 ; DERIVED: 1 zero-add-bounds, 1 inconsistent-boxes
 ; DERIVED: unsat
+; DEFAULT: 1 zero-add-bounds, 1 inconsistent-boxes
+; DEFAULT: unsat
 ; BASE: unsat
 
 (set-logic QF_FP)

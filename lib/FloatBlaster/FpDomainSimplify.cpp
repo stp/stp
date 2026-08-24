@@ -5,13 +5,16 @@
 
 #include "stp/FloatBlaster/DecimalLiteral.h"
 #include "stp/FloatBlaster/rounding_modes.h"
+#include "stp/Util/DagWalk.h"
 
 #include "extlib-constbv/constantbv.h"
 
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <deque>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <unordered_map>
 #include <vector>
@@ -1145,9 +1148,69 @@ private:
 
   Interval interval(const ASTNode& n)
   {
+    PrimeAudit::Running running(intervalAudit, n);
+
     const IntervalMap::const_iterator cached = intervals.find(n);
     if (cached != intervals.end())
       return cached->second;
+
+    // intervalUncached is memoised by node alone and reaches only the
+    // expression operands described below. Fill those answers bottom-up so
+    // its calls on children stop at the cache instead of consuming one C++
+    // frame per FP operation. In particular, an ITE condition and an
+    // arithmetic rounding-mode operand are deliberately not interval
+    // expressions and must not be visited here.
+    primeMemo(
+        n,
+        [this](const ASTNode& current)
+        {
+          if (intervals.find(current) != intervals.end())
+            return Walk::Skip;
+
+          switch (current.GetKind())
+          {
+            case ITE:
+              return current.Degree() == 3 && fpSort(current)
+                         ? Walk::Descend
+                         : Walk::Visit;
+            case FP_ABS:
+            case FP_NEG:
+              return current.Degree() == 1 ? Walk::Descend : Walk::Visit;
+            case FP_ADD:
+            case FP_SUB:
+            case FP_MUL:
+              return current.Degree() == 3 ? Walk::Descend : Walk::Visit;
+            default: return Walk::Visit;
+          }
+        },
+        [](const ASTNode& current)
+        {
+          switch (current.GetKind())
+          {
+            case ITE: return WalkOperands::range(1, 3);
+            case FP_ABS:
+            case FP_NEG: return WalkOperands::range(0, 1);
+            case FP_ADD:
+            case FP_SUB:
+            case FP_MUL: return WalkOperands::range(1, 3);
+            default:
+              assert(false && "interval walk descended an unsupported node");
+              return WalkOperands();
+          }
+        },
+        [this](const ASTNode& current, PrimeMemoReady)
+        {
+          const bool inserted =
+              intervals.emplace(current, intervalUncached(current)).second;
+          assert(inserted);
+          (void)inserted;
+        });
+
+    // primeMemo leaves an uncached leaf or unsupported top-level node for
+    // its caller. Supported compound expressions were recorded by the walk.
+    const IntervalMap::const_iterator primed = intervals.find(n);
+    if (primed != intervals.end())
+      return primed->second;
 
     Interval out = intervalUncached(n);
     intervals.emplace(n, out);
@@ -1678,12 +1741,8 @@ private:
     return nf->CreateNode(AND, conjuncts);
   }
 
-  ASTNode rewrite(const ASTNode& n)
+  ASTNode localRewrite(const ASTNode& n)
   {
-    const ASTNodeMap::const_iterator cached = rewriteCache.find(n);
-    if (cached != rewriteCache.end())
-      return cached->second;
-
     ASTNode out;
     const bool legacyRewrite = bm->UserFlags.fp_domain_simplify ||
                                bm->UserFlags.fp_domain_row_bounds;
@@ -1740,27 +1799,117 @@ private:
       }
     }
 
-    if (out.IsNull())
-    {
-      if (n.Degree() == 0)
-        out = n;
-      else
-      {
-        ASTVec children;
-        children.reserve(n.Degree());
-        bool changed = false;
-        for (const ASTNode& child : n)
-        {
-          const ASTNode r = rewrite(child);
-          changed = changed || r != child;
-          children.push_back(r);
-        }
-        out = changed ? rebuild(nf, n, children) : n;
-      }
-    }
-
-    rewriteCache[n] = out;
     return out;
+  }
+
+  ASTNode rewrite(const ASTNode& n)
+  {
+    ASTNode result;
+
+    // Match the recursive implementation's entry sequence exactly: consult
+    // the memo, try a node-local replacement (which also prunes boxed
+    // predicates), and only then consider children. Keeping this decision
+    // ahead of descent avoids both unnecessary work below proof predicates
+    // and changes to node-factory/counter ordering.
+    auto known = [this, &result](const ASTNode& current)
+    {
+      const ASTNodeMap::const_iterator cached = rewriteCache.find(current);
+      if (cached != rewriteCache.end())
+      {
+        result = cached->second;
+        return true;
+      }
+
+      result = localRewrite(current);
+      if (result.IsNull() && current.Degree() == 0)
+        result = current;
+      if (result.IsNull())
+        return false;
+
+      rewriteCache[current] = result;
+      return true;
+    };
+
+    if (known(n))
+      return result;
+
+    struct Frame
+    {
+      ASTNode node;
+      size_t childrenBegin;
+      size_t nextChild = 0;
+      bool waiting = false;
+      bool changed = false;
+
+      Frame(const ASTNode& n_, size_t begin)
+          : node(n_), childrenBegin(begin)
+      {
+      }
+    };
+
+    // Results for all suspended parents share one arena. This keeps a deep
+    // unary FP chain to O(depth) compact frames instead of one separately
+    // allocated child vector per level.
+    ASTVec activeChildren;
+    ASTVec rebuiltChildren;
+    std::deque<Frame> stack;
+    stack.emplace_back(n, 0);
+
+    while (true)
+    {
+      Frame& current = stack.back();
+      if (current.waiting)
+      {
+        current.waiting = false;
+        current.changed =
+            current.changed || result != current.node[current.nextChild];
+        activeChildren.push_back(result);
+        ++current.nextChild;
+      }
+
+      bool descended = false;
+      while (current.nextChild < current.node.Degree())
+      {
+        const ASTNode child = current.node[current.nextChild];
+        if (known(child))
+        {
+          current.changed = current.changed || result != child;
+          activeChildren.push_back(result);
+          ++current.nextChild;
+          continue;
+        }
+
+        // A deque keeps `current` valid across the push, but no reference to
+        // it is used until the next loop iteration regardless.
+        current.waiting = true;
+        stack.emplace_back(child, activeChildren.size());
+        descended = true;
+        break;
+      }
+      if (descended)
+        continue;
+
+      assert(activeChildren.size() - current.childrenBegin ==
+             current.node.Degree());
+      if (current.changed)
+      {
+        rebuiltChildren.clear();
+        rebuiltChildren.insert(
+            rebuiltChildren.end(),
+            std::make_move_iterator(activeChildren.begin() +
+                                    current.childrenBegin),
+            std::make_move_iterator(activeChildren.end()));
+        result = rebuild(nf, current.node, rebuiltChildren);
+      }
+      else
+        result = current.node;
+      activeChildren.resize(current.childrenBegin);
+
+      rewriteCache[current.node] = result;
+      stack.pop_back();
+      if (stack.empty())
+        return result;
+    }
   }
 
   STPMgr* bm;
@@ -1779,6 +1928,7 @@ private:
   ASTNodeSet soundZeroSymbols;
   ASTNodeMap soundParent;
   IntervalMap intervals;
+  PrimeAudit intervalAudit{"FpDomainSimplify::interval", 2};
   ASTNodeMap extremalRewrites;
   ASTNodeMap rewriteCache;
 };

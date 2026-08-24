@@ -555,9 +555,10 @@ void ExtraMain::create_options()
 
   bool_arg("--fp-domain-derived-bounds",
            bm->UserFlags.fp_domain_derived_bounds,
-           "Experimental decision-only FP prepass: derive finite symbol "
-           "bounds from top-level symbol/expression relations and zero-result "
-           "additions, then discharge comparisons or contradictory boxes",
+           "Decision-only FP prepass (enabled by default): derive finite "
+           "symbol bounds from top-level symbol/expression relations and "
+           "zero-result additions, then discharge comparisons or "
+           "contradictory boxes",
            bb_group);
 
   bool_arg("--fp-domain-extremal-selectors",

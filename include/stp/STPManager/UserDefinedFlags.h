@@ -577,12 +577,12 @@ public:
   // decide them.
   bool fp_domain_simplify = false;
 
-  // Experimental decision-only extension of the FP domain prepass. Derive
-  // symbol endpoints from top-level symbol/expression inequalities and from
-  // a narrowly recognised zero-result addition. The derived facts may
-  // discharge comparisons or expose contradictory boxes, but are not
-  // emitted as additional constraints.
-  bool fp_domain_derived_bounds = false;
+  // Decision-only extension of the FP domain prepass. Derive symbol endpoints
+  // from top-level symbol/expression inequalities and from a narrowly
+  // recognised zero-result addition. The derived facts may discharge
+  // comparisons or expose contradictory boxes, but are not emitted as
+  // additional constraints. Enabled by default; retain the flag for ablation.
+  bool fp_domain_derived_bounds = true;
 
   // Experimental propagation through an objective over semantic {0, 1}
   // floating-point selector symbols. Replace the objective only when
