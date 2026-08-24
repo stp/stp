@@ -49,6 +49,7 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
+#include "stp/ToSat/BVExactEncoder.h"
 #include "stp/ToSat/ToSATBase.h"
 
 #include <cstdint>
@@ -194,7 +195,13 @@ enum class DivSchema
   // b != 0 -> t <=u a. Dividing by one leaves the dividend and dividing by
   // more only shrinks it; the premise is there for the zero divisor, whose
   // totalised all-ones quotient is the one case that breaks it.
-  QuotientAtMostDividend
+  QuotientAtMostDividend,
+  // One of the DivLemma facts, named by DivSchemaChoice::lemmaIndex. They
+  // are inequalities over the quotient rather than statements of what it
+  // is, and several shift by a variable amount, so unlike everything above
+  // they are built by the bit-blaster rather than written a clause at a
+  // time.
+  Lemma
 };
 
 // Bits of BVTermAbstraction::installedSchemas for the three unconditional
@@ -205,14 +212,32 @@ enum
 {
   DIV_SCHEMA_INSTALLED_REMAINDER_AT_MOST_DIVIDEND = 8u,
   DIV_SCHEMA_INSTALLED_REMAINDER_BELOW_DIVISOR = 16u,
-  DIV_SCHEMA_INSTALLED_QUOTIENT_AT_MOST_DIVIDEND = 32u
+  DIV_SCHEMA_INSTALLED_QUOTIENT_AT_MOST_DIVIDEND = 32u,
+  // ... and one apiece for the seven DivLemma facts, which are
+  // unconditional for the same reason and tracked the same way. The first
+  // of them is 64; `DIV_LEMMA_INSTALLED(i)` is the bit for the i'th.
+  DIV_LEMMA_INSTALLED_FIRST = 64u
 };
+
+inline unsigned divLemmaInstalledBit(unsigned index)
+{
+  return DIV_LEMMA_INSTALLED_FIRST << index;
+}
+
+// The DivLemma facts the chooser offers, in the order it offers them, and
+// how many there are. Exposed so a test can walk the same table the refiner
+// does rather than keeping a second copy of it in step with this one.
+DLL_PUBLIC const DivLemma* divLemmaTable(unsigned& count);
 
 struct DivSchemaChoice
 {
   DivSchema schema = DivSchema::None;
   // log2 of the divisor, for the schema that has one.
   unsigned shift = 0;
+  // Set when `schema` is Lemma: which of the DivLemma facts to install, as
+  // an index into the table the refiner keeps. Held as an index rather than
+  // the enum so this header does not need the one that defines it.
+  unsigned lemmaIndex = 0;
 };
 
 // Where each bit of the result comes from once a schema has fixed the

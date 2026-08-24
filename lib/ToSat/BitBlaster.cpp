@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 ********************************************************************/
 #include "stp/ToSat/BitBlaster.h"
+#include "stp/ToSat/BVExactEncoder.h"
 #include "stp/FloatBlaster/DecimalLiteral.h"
 #include "stp/FloatBlaster/FloatBlaster.h"
 #include "stp/FloatBlaster/rounding_modes.h"
@@ -2938,6 +2939,98 @@ bool BitBlaster::mult_Booth_constant(const BBNodeVec& x, const BBNodeVec& y,
 // it: BBDivMod's restoring loop finds every shifted remainder at or above a
 // zero divisor and hands the dividend back, which is what SMT-LIB asks of
 // the remainder but not of the quotient.
+// A logical right shift by a variable amount, out of constant shifts and
+// multiplexers: stage i shifts by 2^i when bit i of the amount is set. Any
+// amount at or above the width clears the vector, which is handled once
+// after the stages rather than inside them -- past log2(width) every
+// remaining bit of the amount means "at least the width".
+BBNodeVec BitBlaster::BBShiftRightByVariable(const BBNodeVec& value,
+                                             const BBNodeVec& amount,
+                                             unsigned width)
+{
+  BBNodeVec result = value;
+
+  unsigned stage = 0;
+  for (; (1u << stage) < width; ++stage)
+  {
+    BBNodeVec shifted = result;
+    BBRShift(shifted, 1u << stage);
+    result = BBITE(amount[stage], shifted, result);
+  }
+
+  const BBNodeVec zero = BBfill(width, BBFalse);
+  for (unsigned i = stage; i < width; ++i)
+    result = BBITE(amount[i], zero, result);
+
+  return result;
+}
+
+BBNode BitBlaster::BBDivLemma(DivLemma lemma, const BBNodeVec& x,
+                              const BBNodeVec& s, const BBNodeVec& t,
+                              BBNodeSet& support)
+{
+  const unsigned width = (unsigned)x.size();
+  assert(s.size() == width);
+  assert(t.size() == width);
+
+  const BBNodeVec zero = BBfill(width, BBFalse);
+  const BBNodeVec ones = BBfill(width, BBTrue);
+  BBNodeVec one = zero;
+  one[0] = BBTrue;
+
+  switch (lemma)
+  {
+    case DivLemma::DividendZero:
+      // x = 0 and s != 0 -> t = 0
+      return nf->CreateNode(OR, nf->CreateNode(NOT, BBEQ(x, zero)),
+                            BBEQ(s, zero), BBEQ(t, zero));
+
+    case DivLemma::DivisorEqualsDividend:
+      // s = x and s != 0 -> t = 1
+      return nf->CreateNode(OR, nf->CreateNode(NOT, BBEQ(s, x)),
+                            BBEQ(s, zero), BBEQ(t, one));
+
+    case DivLemma::DivisorAllOnes:
+      // s = ~0 and x != ~0 -> t = 0
+      return nf->CreateNode(OR, nf->CreateNode(NOT, BBEQ(s, ones)),
+                            BBEQ(x, ones), BBEQ(t, zero));
+
+    case DivLemma::QuotientBelowNegatedDivisor:
+    {
+      // t <=u -(s | 1). Setting the bottom bit is all `s | 1` does.
+      BBNodeVec sOr1 = s;
+      sOr1[0] = BBTrue;
+      return BBBVLE(t, BBUminus(sOr1), false);
+    }
+
+    case DivLemma::DividendAboveNegatedAnd:
+    {
+      // x >=u -((-s) & (-t))
+      const BBNodeVec negS = BBUminus(s);
+      const BBNodeVec negT = BBUminus(t);
+      BBNodeVec conj(width);
+      for (unsigned i = 0; i < width; i++)
+        conj[i] = nf->CreateNode(AND, negS[i], negT[i]);
+      return BBBVLE(BBUminus(conj), x, false);
+    }
+
+    case DivLemma::DivisorAboveShiftedDividend:
+      // s >=u (x >> t)
+      return BBBVLE(BBShiftRightByVariable(x, t, width), s, false);
+
+    case DivLemma::DivisorLessOneAboveShiftedDividend:
+    {
+      // (s - 1) >=u (x >> t)
+      BBNodeVec sMinusOne = s;
+      BBSub(sMinusOne, one, support);
+      return BBBVLE(BBShiftRightByVariable(x, t, width), sMinusOne, false);
+    }
+  }
+
+  FatalError("BBDivLemma: unknown lemma");
+  return BBFalse;
+}
+
 BBNodeVec BitBlaster::BBExactBinaryOp(const ASTNode& term, const BBNodeVec& x,
                                       const BBNodeVec& y, BBNodeSet& support)
 {

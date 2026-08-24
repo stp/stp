@@ -802,6 +802,29 @@ static bool valueIsZero(const std::vector<bool>& bits)
   return true;
 }
 
+// The DivLemma facts, in the order the chooser offers them: by how often
+// they fired in the solver they come from, measured over the queries this
+// is for. A candidate usually breaks more than one, so the order decides
+// which round buys which fact, and buying the most productive first is the
+// cheapest guess available.
+static const DivLemma DIV_LEMMAS[] = {
+    DivLemma::DivisorAboveShiftedDividend,          // 280 firings
+    DivLemma::QuotientBelowNegatedDivisor,          // 200
+    DivLemma::DividendAboveNegatedAnd,              // 187
+    DivLemma::DividendZero,                         // 171
+    DivLemma::DivisorEqualsDividend,                // 162
+    DivLemma::DivisorLessOneAboveShiftedDividend,   // 161
+    DivLemma::DivisorAllOnes};                      // 59
+
+static const unsigned DIV_LEMMA_COUNT =
+    sizeof(DIV_LEMMAS) / sizeof(DIV_LEMMAS[0]);
+
+const DivLemma* divLemmaTable(unsigned& count)
+{
+  count = DIV_LEMMA_COUNT;
+  return DIV_LEMMAS;
+}
+
 DivSchemaChoice chooseDivSchema(Kind opKind, const std::vector<bool>& aBits,
                                 const std::vector<bool>& bBits,
                                 const std::vector<bool>& tBits,
@@ -859,7 +882,17 @@ DivSchemaChoice chooseDivSchema(Kind opKind, const std::vector<bool>& aBits,
     if ((installedSchemas &
          DIV_SCHEMA_INSTALLED_QUOTIENT_AT_MOST_DIVIDEND) == 0 &&
         !divisorZero && !valueLessOrEqual(tBits, aBits))
-      return {DivSchema::QuotientAtMostDividend, 0};
+      return {DivSchema::QuotientAtMostDividend, 0, 0};
+
+    // Then the wider facts, first one the candidate breaks. Quotients only:
+    // every one of them is about `t = a udiv b`.
+    for (unsigned i = 0; i < DIV_LEMMA_COUNT; ++i)
+    {
+      if ((installedSchemas & divLemmaInstalledBit(i)) != 0)
+        continue;
+      if (!divLemmaHolds(DIV_LEMMAS[i], aBits, bBits, tBits))
+        return {DivSchema::Lemma, 0, i};
+    }
   }
 
   return DivSchemaChoice();
@@ -874,6 +907,7 @@ static const char* divSchemaName(DivSchema schema)
     case DivSchema::RemainderAtMostDividend: return "remainder-at-most-dividend";
     case DivSchema::RemainderBelowDivisor: return "remainder-below-divisor";
     case DivSchema::QuotientAtMostDividend: return "quotient-at-most-dividend";
+    case DivSchema::Lemma: return "lemma";
     case DivSchema::None: break;
   }
   return "none";
@@ -1619,6 +1653,14 @@ unsigned BVAbstractionRefiner::refineTerms(
               DIV_SCHEMA_INSTALLED_QUOTIENT_AT_MOST_DIVIDEND;
           break;
 
+        case DivSchema::Lemma:
+          BVExactEncoder(bm).encodeDivLemma(solver,
+                                            DIV_LEMMAS[inc.divSchema.lemmaIndex],
+                                            W, aVars, bVars, resultVars);
+          abs.installedSchemas |=
+              divLemmaInstalledBit(inc.divSchema.lemmaIndex);
+          break;
+
         case DivSchema::None:
           break;
       }
@@ -1627,8 +1669,10 @@ unsigned BVAbstractionRefiner::refineTerms(
       bm->UserFlags.coverage.bv_schema_lemmas++;
       if (bm->UserFlags.stats_flag)
         std::cerr << "BV abstraction: " << _kind_names[abs.opKind] << " "
-                  << divSchemaName(inc.divSchema.schema) << " lemma"
-                  << std::endl;
+                  << (inc.divSchema.schema == DivSchema::Lemma
+                          ? divLemmaName(DIV_LEMMAS[inc.divSchema.lemmaIndex])
+                          : divSchemaName(inc.divSchema.schema))
+                  << " lemma" << std::endl;
       refined++;
       continue;
     }

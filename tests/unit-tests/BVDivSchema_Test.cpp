@@ -199,6 +199,19 @@ TEST(BVDivSchema, chosen_schema_is_violated_by_the_candidate)
           if (choice.schema == DivSchema::None)
             continue;
 
+          if (choice.schema == DivSchema::Lemma)
+          {
+            unsigned n = 0;
+            const DivLemma* table = divLemmaTable(n);
+            ASSERT_LT(choice.lemmaIndex, n);
+            ASSERT_FALSE(divLemmaHolds(table[choice.lemmaIndex], bitsOf(a),
+                                       bitsOf(b), bitsOf(t)))
+                << "lemma " << divLemmaName(table[choice.lemmaIndex])
+                << " at a=" << a << " b=" << b << " t=" << t
+                << " is already satisfied by the candidate";
+            continue;
+          }
+
           if (!namesADivisor(choice.schema))
           {
             ASSERT_FALSE(boundHolds(choice.schema, a, b, t))
@@ -258,11 +271,28 @@ TEST(BVDivSchema, wrong_candidates_are_only_declined_on_other_divisors)
           // decline is only ever "there is nothing left to say", never a
           // fact that was available and not offered.
           for (DivSchema bound : BOUNDS)
+          {
             if (boundApplies(opKind, bound))
+            {
               ASSERT_TRUE(boundHolds(bound, a, b, t))
                   << "bound " << (int)bound << " was available over "
                   << _kind_names[opKind] << " at a=" << a << " b=" << b
                   << " t=" << t << " and was not offered";
+            }
+          }
+
+          // ... and, for a quotient, every wider fact too.
+          if (opKind == BVDIV)
+          {
+            unsigned n = 0;
+            const DivLemma* table = divLemmaTable(n);
+            for (unsigned i = 0; i < n; ++i)
+              ASSERT_TRUE(
+                  divLemmaHolds(table[i], bitsOf(a), bitsOf(b), bitsOf(t)))
+                  << "lemma " << divLemmaName(table[i])
+                  << " was available at a=" << a << " b=" << b << " t=" << t
+                  << " and was not offered";
+          }
         }
 }
 
@@ -444,9 +474,13 @@ TEST(BVDivSchemaBounds, every_bound_is_true_of_the_operation)
 // one thing a refinement round is not allowed to do.
 TEST(BVDivSchemaBounds, an_installed_bound_is_not_offered_again)
 {
-  const unsigned all = DIV_SCHEMA_INSTALLED_REMAINDER_AT_MOST_DIVIDEND |
-                       DIV_SCHEMA_INSTALLED_REMAINDER_BELOW_DIVISOR |
-                       DIV_SCHEMA_INSTALLED_QUOTIENT_AT_MOST_DIVIDEND;
+  unsigned lemmaCount = 0;
+  divLemmaTable(lemmaCount);
+  unsigned all = DIV_SCHEMA_INSTALLED_REMAINDER_AT_MOST_DIVIDEND |
+                 DIV_SCHEMA_INSTALLED_REMAINDER_BELOW_DIVISOR |
+                 DIV_SCHEMA_INSTALLED_QUOTIENT_AT_MOST_DIVIDEND;
+  for (unsigned i = 0; i < lemmaCount; ++i)
+    all |= divLemmaInstalledBit(i);
 
   for (Kind opKind : KINDS)
     for (unsigned a = 0; a < VALUES; a++)

@@ -115,6 +115,262 @@ void rewrite(BBNodeManagerAIG& mgr, int64_t iterations)
 
 } // namespace
 
+// ---------------------------------------------------------------------------
+// The facts, as values.
+//
+// Written over unsigned arithmetic on the bit vectors rather than over the
+// circuits below, so that the test which checks the two against each other
+// is checking two things and not one.
+// ---------------------------------------------------------------------------
+
+namespace
+{
+
+bool allZero(const std::vector<bool>& v)
+{
+  for (bool b : v)
+    if (b)
+      return false;
+  return true;
+}
+
+bool allOnes(const std::vector<bool>& v)
+{
+  for (bool b : v)
+    if (!b)
+      return false;
+  return true;
+}
+
+bool ule(const std::vector<bool>& a, const std::vector<bool>& b)
+{
+  for (int i = (int)a.size() - 1; i >= 0; --i)
+    if (a[i] != b[i])
+      return b[i];
+  return true;
+}
+
+std::vector<bool> notOf(const std::vector<bool>& v)
+{
+  std::vector<bool> r(v.size());
+  for (unsigned i = 0; i < v.size(); ++i)
+    r[i] = !v[i];
+  return r;
+}
+
+// Two's complement negation: the bitwise complement plus one.
+std::vector<bool> negOf(const std::vector<bool>& v)
+{
+  std::vector<bool> r = notOf(v);
+  bool carry = true;
+  for (unsigned i = 0; i < r.size() && carry; ++i)
+  {
+    const bool sum = r[i] ^ carry;
+    carry = r[i] && carry;
+    r[i] = sum;
+  }
+  return r;
+}
+
+std::vector<bool> decOf(const std::vector<bool>& v)
+{
+  // v - 1, which is v + ~0.
+  std::vector<bool> r(v.size());
+  bool borrow = true;
+  for (unsigned i = 0; i < v.size(); ++i)
+  {
+    r[i] = v[i] ^ borrow;
+    borrow = !v[i] && borrow;
+  }
+  return r;
+}
+
+std::vector<bool> andOf(const std::vector<bool>& a, const std::vector<bool>& b)
+{
+  std::vector<bool> r(a.size());
+  for (unsigned i = 0; i < a.size(); ++i)
+    r[i] = a[i] && b[i];
+  return r;
+}
+
+// A logical right shift by the value `amt` holds. A shift at or past the
+// width clears the vector, which is what SMT-LIB's bvlshr does and what the
+// circuit below is built to match.
+std::vector<bool> shrOf(const std::vector<bool>& v, const std::vector<bool>& amt)
+{
+  const unsigned W = (unsigned)v.size();
+  unsigned long long by = 0;
+  for (unsigned i = 0; i < W; ++i)
+    if (amt[i])
+    {
+      if (i >= 64 || by > W)
+      {
+        by = W; // saturate rather than overflow; anything >= W clears it
+        break;
+      }
+      by += (1ull << i);
+      if (by > W)
+      {
+        by = W;
+        break;
+      }
+    }
+
+  std::vector<bool> r(W, false);
+  for (unsigned i = 0; i + by < W; ++i)
+    r[i] = v[i + (unsigned)by];
+  return r;
+}
+
+} // namespace
+
+bool divLemmaHolds(DivLemma lemma, const std::vector<bool>& x,
+                   const std::vector<bool>& s, const std::vector<bool>& t)
+{
+  const unsigned W = (unsigned)x.size();
+  const std::vector<bool> zero(W, false);
+  std::vector<bool> one(W, false);
+  one[0] = true;
+
+  switch (lemma)
+  {
+    case DivLemma::DividendZero:
+      return !(allZero(x) && !allZero(s)) || allZero(t);
+
+    case DivLemma::DivisorEqualsDividend:
+      return !(s == x && !allZero(s)) || t == one;
+
+    case DivLemma::DivisorAllOnes:
+      return !(allOnes(s) && !allOnes(x)) || allZero(t);
+
+    case DivLemma::QuotientBelowNegatedDivisor:
+    {
+      std::vector<bool> sOr1 = s;
+      sOr1[0] = true;
+      return ule(t, negOf(sOr1));
+    }
+
+    case DivLemma::DividendAboveNegatedAnd:
+      return ule(negOf(andOf(negOf(s), negOf(t))), x);
+
+    case DivLemma::DivisorAboveShiftedDividend:
+      return ule(shrOf(x, t), s);
+
+    case DivLemma::DivisorLessOneAboveShiftedDividend:
+      return ule(shrOf(x, t), decOf(s));
+  }
+  return true;
+}
+
+const char* divLemmaName(DivLemma lemma)
+{
+  switch (lemma)
+  {
+    case DivLemma::DividendZero: return "dividend-zero";
+    case DivLemma::DivisorEqualsDividend: return "divisor-equals-dividend";
+    case DivLemma::DivisorAllOnes: return "divisor-all-ones";
+    case DivLemma::QuotientBelowNegatedDivisor:
+      return "quotient-below-negated-divisor";
+    case DivLemma::DividendAboveNegatedAnd:
+      return "dividend-above-negated-and";
+    case DivLemma::DivisorAboveShiftedDividend:
+      return "divisor-above-shifted-dividend";
+    case DivLemma::DivisorLessOneAboveShiftedDividend:
+      return "divisor-less-one-above-shifted-dividend";
+  }
+  return "unknown";
+}
+
+void BVExactEncoder::encodeDivLemma(SATSolver& solver, DivLemma lemma,
+                                    unsigned width,
+                                    const std::vector<unsigned>& dividendVars,
+                                    const std::vector<unsigned>& divisorVars,
+                                    const std::vector<unsigned>& resultVars)
+{
+  assert(dividendVars.size() >= width);
+  assert(divisorVars.size() >= width);
+  assert(resultVars.size() >= width);
+
+  AbstractionOff scope(bm->UserFlags);
+
+  BBNodeManagerAIG mgr;
+  mgr.nodeBudget = bm->UserFlags.aig_node_budget;
+  SubstitutionMap sm(bm);
+  Simplifier simp(bm, &sm);
+  BitBlaster bb(&mgr, &simp, bm->defaultNodeFactory, &bm->UserFlags);
+
+  // Three input vectors this time, in the order the splice reads them back:
+  // the dividend, the divisor, then the abstraction's own result bits. The
+  // result is an input here and not an output -- the lemma constrains it
+  // without defining it, which is the whole difference from `encode`.
+  BBNodeVec x(width), s(width), t(width);
+  BBNodeVec* const ins[3] = {&x, &s, &t};
+  for (unsigned v = 0; v < 3; v++)
+    for (unsigned i = 0; i < width; i++)
+    {
+      (*ins[v])[i] = BBNodeAIG(Aig_ObjCreateCi(mgr.aigMgr));
+      (*ins[v])[i].symbol_index = mgr.aigMgr->vCis->nSize - 1;
+    }
+
+  BBNodeSet support;
+  const BBNodeAIG claim = bb.BBDivLemma(lemma, x, s, t, support);
+
+  Aig_ObjCreateCo(mgr.aigMgr, claim.n);
+  for (const BBNodeAIG& c : support)
+    Aig_ObjCreateCo(mgr.aigMgr, c.n);
+
+  const unsigned outputs = 1 + (unsigned)support.size();
+
+  rewrite(mgr, bm->UserFlags.AIG_rewrites_iterations);
+  assert(Aig_ManCheck(mgr.aigMgr));
+  assert((unsigned)Aig_ManCoNum(mgr.aigMgr) == outputs);
+
+  Cnf_Dat_t* cnf = ToCNFAIG(bm->UserFlags).derive_cnf(mgr, outputs);
+  assert(cnf != NULL);
+
+  std::vector<unsigned> cnfToSolver(cnf->nVars, ~((unsigned)0));
+  for (unsigned i = 0; i < 3 * width; i++)
+  {
+    const int var = cnf->pVarNums[Aig_ManCi(mgr.aigMgr, (int)i)->Id];
+    if (var < 0)
+      continue;
+    cnfToSolver[var] = (i < width)         ? dividendVars[i]
+                       : (i < 2 * width)   ? divisorVars[i - width]
+                                           : resultVars[i - 2 * width];
+  }
+
+  for (int var = 0; var < cnf->nVars; var++)
+    if (cnfToSolver[var] == ~((unsigned)0))
+    {
+      const unsigned fresh = solver.newVar();
+      solver.setFrozen(fresh);
+      cnfToSolver[var] = fresh;
+    }
+
+  SATSolver::vec_literals cl;
+  for (int i = 0; i < cnf->nClauses; i++)
+  {
+    cl.clear();
+    for (int *pLit = cnf->pClauses[i], *pStop = cnf->pClauses[i + 1];
+         pLit < pStop; pLit++)
+      cl.push(SATSolver::mkLit(cnfToSolver[(*pLit) >> 1], ((*pLit) & 1) != 0));
+    solver.addClause(cl);
+  }
+
+  // Every output is asserted: the claim itself, and whatever the circuit
+  // wanted conjoined to it.
+  for (unsigned i = 0; i < outputs; i++)
+  {
+    const unsigned var =
+        cnfToSolver[cnf->pVarNums[Aig_ManCo(mgr.aigMgr, (int)i)->Id]];
+    cl.clear();
+    cl.push(SATSolver::mkLit(var, false));
+    solver.addClause(cl);
+  }
+
+  Cnf_DataFree(cnf);
+}
+
 void BVExactEncoder::encode(SATSolver& solver, const ASTNode& term,
                             unsigned width,
                             const std::vector<unsigned>& aVars,
