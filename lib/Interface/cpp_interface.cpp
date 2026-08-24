@@ -1172,6 +1172,33 @@ void Cpp_interface::checkSat(const ASTVec& assertionsSMT2,
   if (bm.UserFlags.quick_statistics_flag)
   {
     bm.GetRunTimes()->print();
+    {
+      // What the bit-blaster was handed and what the abstraction took, per
+      // kind, and what the refinement then spent.
+      //
+      // The counters have always been kept; they had no route out but the C
+      // API, so the numbers that say how much wide arithmetic actually
+      // reached the blaster, and how many rounds were spent on it, could not
+      // be read off a run. That made them the numbers a comparison against
+      // another solver most wanted and least had: reading them off the query
+      // text instead over-counts, because it counts occurrences the
+      // simplifier has already retired.
+      const UserDefinedFlags::EncodingCoverage& c = bm.UserFlags.coverage;
+      // In AbstractionKind order; a kind added there needs a name here.
+      static const char* kindNames[] = {"eq",   "compare", "ite",
+                                        "plus", "mult",    "divmod"};
+      static_assert(sizeof(kindNames) / sizeof(kindNames[0]) ==
+                        UserDefinedFlags::EncodingCoverage::KINDS,
+                    "abstraction kind names are out of step with the counters");
+      std::cerr << "Abstraction coverage (candidates -> abstracted):";
+      for (unsigned i = 0; i < UserDefinedFlags::EncodingCoverage::KINDS; i++)
+        std::cerr << " " << kindNames[i] << "=" << c.bv_candidates[i] << "->"
+                  << c.bv_abstracted[i];
+      std::cerr << std::endl
+                << "Abstraction refinement: rounds=" << c.bv_refinement_rounds
+                << " blocking=" << c.bv_blocking_lemmas
+                << " schema=" << c.bv_schema_lemmas << std::endl;
+    }
   }
 
   ToSATBase::PrintOutput(&bm, last_run.result);

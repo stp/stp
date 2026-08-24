@@ -350,6 +350,14 @@ void ExtraMain::create_options()
            "BVDIV, BVMOD, ITE and the inequalities) during bit-blasting, "
            "refining lazily via CEGAR",
            refinement_group);
+  bool_arg("--bv-term-abstraction-ite", bm->UserFlags.bv_term_abstraction_ite,
+           "include wide if-then-else in BV term abstraction", refinement_group);
+  bool_arg("--bv-term-abstraction-plus", bm->UserFlags.bv_term_abstraction_plus,
+           "include wide BVPLUS in BV term abstraction", refinement_group);
+  bool_arg("--bv-term-abstraction-compare",
+           bm->UserFlags.bv_term_abstraction_compare,
+           "include wide inequalities in BV term abstraction",
+           refinement_group);
   bool_arg("--bv-term-abstraction-mult", bm->UserFlags.bv_term_abstraction_mult,
            "include BVMULT, BVDIV and BVMOD in BV term abstraction; they are "
            "the ones refined by ruling out one pair of operand values at a "
