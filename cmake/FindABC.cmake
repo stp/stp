@@ -108,15 +108,11 @@ if(NOT ABC_FOUND_SYSTEM)
     string(APPEND ABC_EXTRA_FLAGS " ${STP_EP_NO_WARNINGS}")
     if(NOT MSVC)
         string(APPEND ABC_EXTRA_FLAGS " -ffunction-sections -fdata-sections")
-    else()
-        # abc_global.h does `#define inline __inline` for MSVC's benefit, and
-        # <xkeycheck.h> makes macroizing a keyword a hard #error. Only one
-        # translation unit in ABC is C++ and so reaches that header --
-        # src/map/if/acd/ac_wrapper.cpp -- but one is enough to stop the build.
-        # _ALLOW_KEYWORD_MACROS is the escape hatch MSVC documents for exactly
-        # this, and it is scoped to ABC's own compilation.
-        string(APPEND ABC_EXTRA_FLAGS " -D_ALLOW_KEYWORD_MACROS")
     endif()
+    # _ALLOW_KEYWORD_MACROS is not repeated here: STP sets it globally for its
+    # own sake and lists it in STP_EP_INHERITED_DEFINITIONS, which reaches every
+    # dependency through the common flags. ABC needs it because abc_global.h
+    # defines `inline` as a macro and its one C++ file then meets <xkeycheck.h>.
 
     set(ABC_CMAKE_ARGS
         ${STP_EP_COMMON_CMAKE_ARGS}

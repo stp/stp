@@ -153,6 +153,19 @@ if (STATICCOMPILE)
 endif()
 add_feature_info(Static STATICCOMPILE "Compiles static library and executable")
 
+# Settings below that have to hold across the whole link, not just STP's
+# own objects, are collected here as well as applied. A dependency STP
+# builds for itself is a separate CMake project: it inherits none of the
+# directory-scope state set here, so anything it also needs has to be
+# handed over deliberately -- cmake/deps-helper.cmake forwards this list
+# to every one of them.
+#
+# Add to it whenever a global setting is about to be one both sides must
+# agree on. Getting that wrong does not show up here; it shows up as a
+# link error in a dependency, which is a long way from the line that
+# caused it.
+set(STP_EP_INHERITED_DEFINITIONS "")
+
 if ((${CMAKE_SYSTEM_NAME} MATCHES "Windows") OR (NOT BUILD_SHARED_LIBS))
     set(Minisat_USE_STATIC_LIBS ON)
 endif()
@@ -262,6 +275,11 @@ else()
 
         # Creates a multithreaded executable (static) file using LIBCMT.lib.
         add_compile_options(/MT)
+        # The same choice has to reach the dependencies, which cannot see
+        # this. deps-helper turns it into CMAKE_MSVC_RUNTIME_LIBRARY rather
+        # than a flag, because a sub-build's own per-configuration defaults
+        # would otherwise put /MD back after it.
+        set(STP_EP_INHERITED_STATIC_RUNTIME TRUE)
     endif()
 
     # buffers security check
@@ -313,6 +331,9 @@ else()
 
         # inline is not a keyword in visual studios old C version, allow its redefinition
         add_definitions("-D_ALLOW_KEYWORD_MACROS")
+        # ABC needs this too: it defines `inline` as a macro, and its one
+        # C++ file then meets <xkeycheck.h>, which makes that a hard error.
+        list(APPEND STP_EP_INHERITED_DEFINITIONS "-D_ALLOW_KEYWORD_MACROS")
     endif()
 
 endif()

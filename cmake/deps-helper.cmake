@@ -116,12 +116,17 @@ else()
     set(STP_EP_NO_WARNINGS "-w")
 endif()
 
+# Settings the top-level CMakeLists collected as ones both STP and everything
+# it builds have to agree on. It applies them to itself with add_definitions();
+# they reach a separately configured sub-build only by being handed over here.
+string(JOIN " " _stp_ep_inherited ${STP_EP_INHERITED_DEFINITIONS})
+
 set(STP_EP_COMMON_CMAKE_ARGS
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
     -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-    "-DCMAKE_C_FLAGS=${CMAKE_C_FLAGS} ${STP_EP_NO_WARNINGS}"
-    "-DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS} ${STP_EP_NO_WARNINGS}"
+    "-DCMAKE_C_FLAGS=${CMAKE_C_FLAGS} ${STP_EP_NO_WARNINGS} ${_stp_ep_inherited}"
+    "-DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS} ${STP_EP_NO_WARNINGS} ${_stp_ep_inherited}"
     -DCMAKE_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER}
     -DCMAKE_CXX_COMPILER_LAUNCHER=${CMAKE_CXX_COMPILER_LAUNCHER}
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON
@@ -184,7 +189,10 @@ if(MSVC)
         else()
             set(_stp_ep_msvc_runtime "MultiThreaded$<$<CONFIG:Debug>:Debug>")
         endif()
-        if(BUILD_SHARED_LIBS)
+        # STP_EP_INHERITED_STATIC_RUNTIME is set where STP decides this for
+        # itself, next to its own add_compile_options(/MT); reading it here is
+        # what keeps the two from drifting apart.
+        if(NOT STP_EP_INHERITED_STATIC_RUNTIME)
             string(APPEND _stp_ep_msvc_runtime "DLL")
         endif()
     endif()
