@@ -152,6 +152,77 @@ DLL_PUBLIC MulSchemaChoice chooseMulSchema(const std::vector<bool>& aBits,
                                            const std::vector<bool>& tBits,
                                            unsigned installedSchemas);
 
+// The algebraic facts an abstracted BVDIV or BVMOD is refined with.
+//
+// Division is not commutative and has no cheap unconditional fact about its
+// low bits to match the multiplication schemas: the low bits of a quotient
+// depend on the whole of both operands. Both facts here are value-guarded on
+// the *divisor* instead. Each says what the operation is for one divisor and
+// leaves the dividend free, which rules out 2^W pairs where a blocking lemma
+// rules out one, and neither needs an installed-flag -- fixing a divisor
+// value settles that value for good, and there are only as many of them as
+// the schemas can name.
+enum class DivSchema
+{
+  // Nothing the candidate contradicts. The round falls through to the
+  // blocking lemma and the escalation behind it.
+  None,
+  // b = 0 -> t = ~0 for BVDIV, t = a for BVMOD. SMT-LIB totalises both and
+  // the abstraction is told neither, so a candidate may divide by zero and
+  // call the answer anything at all. This is the one divisor a blocking
+  // lemma is worst at: it rules out the pair (a, 0) and leaves every other
+  // dividend over the same zero divisor still to be found.
+  DivisorZero,
+  // b = 2^k -> t = a >> k for BVDIV, t = a & (2^k - 1) for BVMOD. k = 0 is
+  // the useful degenerate reading: dividing by one is the dividend, and the
+  // remainder over one is zero.
+  Pow2Divisor
+};
+
+struct DivSchemaChoice
+{
+  DivSchema schema = DivSchema::None;
+  // log2 of the divisor, for the schema that has one.
+  unsigned shift = 0;
+};
+
+// Where each bit of the result comes from once a schema has fixed the
+// divisor: a bit of the dividend, or a constant. The fact is written this
+// way because it is exactly what the encoder can pin under a guard, which
+// keeps what the schema claims and what it installs from drifting apart --
+// and it lets a test check the claim without a solver.
+enum : int
+{
+  DIV_SOURCE_ZERO = -1,
+  DIV_SOURCE_ONE = -2
+};
+
+DLL_PUBLIC std::vector<int> divSchemaSources(Kind opKind, unsigned width,
+                                             const DivSchemaChoice& choice);
+
+// The first of the facts above that this candidate contradicts, or None.
+// Pure, and called under the same conditions as chooseMulSchema: `tBits` is
+// what the candidate holds for the result, already known to disagree with
+// what the operands say it should be.
+//
+// `opKind` is BVDIV or BVMOD. The two share both schemas and differ only in
+// what each one concludes.
+DLL_PUBLIC DivSchemaChoice chooseDivSchema(Kind opKind,
+                                           const std::vector<bool>& aBits,
+                                           const std::vector<bool>& bBits,
+                                           const std::vector<bool>& tBits);
+
+// divisor = divisorBits -> every result bit is a constant or a bit of the
+// dividend, as `source` says. Exposed for the tests: what the schema claims
+// is checked by evaluating `divSchemaSources`, and that the clauses say the
+// same thing is a separate question a solver has to answer.
+DLL_PUBLIC void encodeDivUnderDivisorValue(
+    SATSolver& solver, const std::vector<unsigned>& divisorVars,
+    const std::vector<bool>& divisorBits,
+    const std::vector<unsigned>& dividendVars,
+    const std::vector<unsigned>& resultVars, unsigned width,
+    const std::vector<int>& source);
+
 // The blocking lemmas one abstraction of this width may spend before the
 // refinement gives up on it and encodes the operation exactly.
 //

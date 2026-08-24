@@ -724,6 +724,109 @@ MulSchemaChoice chooseMulSchema(const std::vector<bool>& aBits,
   return MulSchemaChoice();
 }
 
+std::vector<int> divSchemaSources(Kind opKind, unsigned width,
+                                  const DivSchemaChoice& choice)
+{
+  std::vector<int> source(width, DIV_SOURCE_ZERO);
+
+  if (choice.schema == DivSchema::DivisorZero)
+  {
+    // What the unabstracted BBDivMod answers over a zero divisor, and what
+    // SMT-LIB says: the quotient is all ones and the remainder is the
+    // dividend. The two are not the same value, so each is written out.
+    for (unsigned i = 0; i < width; ++i)
+      source[i] = (opKind == BVDIV) ? DIV_SOURCE_ONE : (int)i;
+    return source;
+  }
+
+  if (choice.schema != DivSchema::Pow2Divisor)
+    return source;
+
+  const unsigned shift = choice.shift;
+  if (opKind == BVDIV)
+  {
+    // a >> shift. The bits above the shift come down and zeros arrive at
+    // the top, which is what the vector was filled with.
+    for (unsigned i = 0; i + shift < width; ++i)
+      source[i] = (int)(i + shift);
+  }
+  else
+  {
+    // a & (2^shift - 1). The bits below the shift stay where they are and
+    // everything at or above it goes.
+    for (unsigned i = 0; i < shift && i < width; ++i)
+      source[i] = (int)i;
+  }
+  return source;
+}
+
+// Does the candidate's result already say what these sources say it must?
+// A schema the candidate satisfies is no use as a refinement: it would let
+// the search offer the same model again, and the round would be spent for
+// nothing.
+static bool resultMatchesSources(const std::vector<int>& source,
+                                 const std::vector<bool>& aBits,
+                                 const std::vector<bool>& tBits)
+{
+  for (unsigned i = 0; i < source.size(); ++i)
+  {
+    const bool want = (source[i] == DIV_SOURCE_ZERO)  ? false
+                      : (source[i] == DIV_SOURCE_ONE) ? true
+                                                      : aBits[source[i]];
+    if (tBits[i] != want)
+      return false;
+  }
+  return true;
+}
+
+DivSchemaChoice chooseDivSchema(Kind opKind, const std::vector<bool>& aBits,
+                                const std::vector<bool>& bBits,
+                                const std::vector<bool>& tBits)
+{
+  const unsigned width = (unsigned)tBits.size();
+
+  bool divisorZero = true;
+  for (unsigned i = 0; i < width; ++i)
+    if (bBits[i])
+    {
+      divisorZero = false;
+      break;
+    }
+
+  // Zero first: it is not a power of two, so the two schemas never contend
+  // for the same divisor and the order between them is a formality.
+  if (divisorZero)
+  {
+    const DivSchemaChoice choice{DivSchema::DivisorZero, 0};
+    if (!resultMatchesSources(divSchemaSources(opKind, width, choice), aBits,
+                              tBits))
+      return choice;
+    return DivSchemaChoice();
+  }
+
+  const int k = powerOfTwoExponent(bBits);
+  if (k >= 0)
+  {
+    const DivSchemaChoice choice{DivSchema::Pow2Divisor, (unsigned)k};
+    if (!resultMatchesSources(divSchemaSources(opKind, width, choice), aBits,
+                              tBits))
+      return choice;
+  }
+
+  return DivSchemaChoice();
+}
+
+static const char* divSchemaName(DivSchema schema)
+{
+  switch (schema)
+  {
+    case DivSchema::DivisorZero: return "zero-divisor";
+    case DivSchema::Pow2Divisor: return "power-of-two-divisor";
+    case DivSchema::None: break;
+  }
+  return "none";
+}
+
 // How far past the lowest wrong bit a piece-at-a-time escalation reaches.
 // A fixed 32-bit step; there is no measurement behind this value, which is
 // part of why the flag that reaches it is off.
@@ -868,6 +971,50 @@ static void encodeMulShiftUnderValue(SATSolver& solver,
   }
 }
 
+// divisor = divisorBits -> every result bit is a constant or a bit of the
+// dividend, as `source` says.
+//
+// The premise is the blocking lemma's opening disjunction, exactly as the
+// multiplication schemas use it: false only on the candidate's own divisor,
+// and leaving the dividend entirely free. That is what makes one of these
+// worth 2^W blocking lemmas over the same divisor.
+void encodeDivUnderDivisorValue(
+    SATSolver& solver, const std::vector<unsigned>& divisorVars,
+    const std::vector<bool>& divisorBits,
+    const std::vector<unsigned>& dividendVars,
+    const std::vector<unsigned>& resultVars, unsigned width,
+    const std::vector<int>& source)
+{
+  const auto guard = [&](SATSolver::vec_literals& cl) {
+    cl.clear();
+    for (unsigned i = 0; i < width; ++i)
+      cl.push(SATSolver::mkLit(divisorVars[i], divisorBits[i]));
+  };
+
+  SATSolver::vec_literals cl;
+  for (unsigned bit = 0; bit < width; ++bit)
+  {
+    if (source[bit] == DIV_SOURCE_ZERO || source[bit] == DIV_SOURCE_ONE)
+    {
+      guard(cl);
+      cl.push(SATSolver::mkLit(resultVars[bit], source[bit] == DIV_SOURCE_ZERO));
+      solver.addClause(cl);
+      continue;
+    }
+
+    const unsigned src = dividendVars[source[bit]];
+    guard(cl);
+    cl.push(SATSolver::mkLit(resultVars[bit], true));
+    cl.push(SATSolver::mkLit(src, false));
+    solver.addClause(cl);
+
+    guard(cl);
+    cl.push(SATSolver::mkLit(resultVars[bit], false));
+    cl.push(SATSolver::mkLit(src, true));
+    solver.addClause(cl);
+  }
+}
+
 unsigned BVAbstractionRefiner::refineTerms(
     SATSolver& solver, const ToSATBase::ASTNodeToSATVar& nodeToSATVar)
 {
@@ -888,8 +1035,10 @@ unsigned BVAbstractionRefiner::refineTerms(
     std::vector<bool> aBits, bBits, expected;
     // The algebraic fact this candidate contradicts, if any. Decided here
     // rather than below because it is read off the model and the clause
-    // phase must not touch the model.
+    // phase must not touch the model. At most one of the two is ever set:
+    // an abstraction is a multiplication or a division, never both.
     MulSchemaChoice schema;
+    DivSchemaChoice divSchema;
     // The lowest bit the candidate's result got wrong, which is where a
     // piece-at-a-time escalation starts from. Always below the width: this
     // record exists because some bit is wrong.
@@ -1086,25 +1235,38 @@ unsigned BVAbstractionRefiner::refineTerms(
         if (actual[bit] != expected[bit]) { lowestWrongBit = bit; break; }
       if (lowestWrongBit == W) continue;
 
-      // Only BVMULT, and only while there is allowance left. Schemas are
-      // spent from a separate purse: one is both cheaper and stronger than
-      // a blocking lemma, so it should not bring the escalation forward --
-      // but it must not push it out of reach either, and a candidate that
-      // keeps landing on fresh powers of two would buy a solve for each
-      // one. The bound is the flat ceiling rather than the width-scaled
-      // allowance below, because what makes that allowance narrow is
-      // exactly what a schema does not suffer from: a blocking lemma is
-      // worth less as the operands widen, and a fact about every pair is
-      // worth the same. Division and remainder keep the blocking lemma as
-      // their only refinement; the facts here are about multiplication.
+      // Only while there is allowance left. Schemas are spent from a
+      // separate purse: one is both cheaper and stronger than a blocking
+      // lemma, so it should not bring the escalation forward -- but it must
+      // not push it out of reach either, and a candidate that keeps landing
+      // on fresh powers of two would buy a solve for each one. The bound is
+      // the flat ceiling rather than the width-scaled allowance below,
+      // because what makes that allowance narrow is exactly what a schema
+      // does not suffer from: a blocking lemma is worth less as the
+      // operands widen, and a fact about every pair is worth the same.
+      //
+      // Multiplication and division draw on the same purse and are asked
+      // separately, because what they can say about a candidate has nothing
+      // in common: the multiplication facts are about the low bits of a
+      // product and the commutativity that gives each of them two readings,
+      // and the division facts are about one divisor at a time.
       MulSchemaChoice schema;
+      DivSchemaChoice divSchema;
       const unsigned schemaLimit = bm->UserFlags.bv_term_abstraction_rounds;
-      if (abs.opKind == BVMULT && bm->UserFlags.bv_term_abstraction_schemas &&
-          (schemaLimit == 0 || abs.schemaRounds < schemaLimit))
-        schema = chooseMulSchema(aBits, bBits, actual, abs.installedSchemas);
+      const bool schemaAllowance =
+          bm->UserFlags.bv_term_abstraction_schemas &&
+          (schemaLimit == 0 || abs.schemaRounds < schemaLimit);
+      if (schemaAllowance)
+      {
+        if (abs.opKind == BVMULT)
+          schema = chooseMulSchema(aBits, bBits, actual, abs.installedSchemas);
+        else
+          divSchema = chooseDivSchema(abs.opKind, aBits, bBits, actual);
+      }
 
       incDivMul.push_back({idx, std::move(aBits), std::move(bBits),
-                            std::move(expected), schema, lowestWrongBit});
+                            std::move(expected), schema, divSchema,
+                            lowestWrongBit});
     }
   }
 
@@ -1301,6 +1463,21 @@ unsigned BVAbstractionRefiner::refineTerms(
     // abstraction's own result bits -- so none of it is retractable and
     // none of it needs to be. What the candidate chose is only *which*
     // theorem to spend a round on.
+    if (inc.divSchema.schema != DivSchema::None)
+    {
+      encodeDivUnderDivisorValue(solver, bVars, inc.bBits, aVars, resultVars, W,
+                                 divSchemaSources(abs.opKind, W, inc.divSchema));
+
+      abs.schemaRounds++;
+      bm->UserFlags.coverage.bv_schema_lemmas++;
+      if (bm->UserFlags.stats_flag)
+        std::cerr << "BV abstraction: " << _kind_names[abs.opKind] << " "
+                  << divSchemaName(inc.divSchema.schema) << " lemma"
+                  << std::endl;
+      refined++;
+      continue;
+    }
+
     if (inc.schema.schema != MulSchema::None)
     {
       const unsigned chosen = inc.schema.operand;
