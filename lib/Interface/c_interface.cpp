@@ -548,6 +548,12 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
     case BV_TERM_ABSTRACTION_INC_BITBLAST:
       b->UserFlags.bv_term_abstraction_inc_bitblast = param_value != 0;
       break;
+    case INCREMENTAL_PIECE_REWRITING:
+      b->UserFlags.incremental_piece_rewriting = param_value != 0;
+      break;
+    case INCREMENTAL_SCOPED_PREPROCESSING:
+      b->UserFlags.incremental_scoped_preprocessing = param_value != 0;
+      break;
     case CNF_GENERATION_EFFORT:
       if (param_value < 0 ||
           param_value > stp::UserDefinedFlags::CNF_EFFORT_VERY_HIGH)

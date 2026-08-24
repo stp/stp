@@ -475,7 +475,34 @@ enum ifaceflag_t
   //! the range is refused with a nonfatal diagnostic. This is the C API's
   //! way to reach --cnf-generation-effort.
   //!
-  CNF_GENERATION_EFFORT
+  CNF_GENERATION_EFFORT,
+
+  //! Whether the incremental driver offers the whole active stack to the
+  //! exact-stack preprocessor on every check, rather than only on an
+  //! explicitly forced first engagement, and offers it stacks carrying
+  //! array reads and floating point rather than plain bit-vectors alone.
+  //!
+  //! The per-level route encodes each level as it arrives and never
+  //! simplifies across the stack, so the SAT solver is handed a formula
+  //! nobody has been over. `param_value` nonzero offers it; zero (the
+  //! default) is the behaviour that has always been. This is the C API's
+  //! way to reach --incremental-scoped-preprocessing.
+  //!
+  INCREMENTAL_SCOPED_PREPROCESSING,
+
+  //! Whether the incremental driver runs the batch pipeline's rewriting
+  //! passes -- strength reduction over a derived interval domain, and
+  //! common sub-sum extraction -- on each piece it prepares.
+  //!
+  //! The driver trades whole-formula simplification for a retained
+  //! encoding. These passes do not force that trade: each is a function of
+  //! the piece it is handed and of nothing else, so the rewritten piece is
+  //! equivalent whatever the rest of the stack asserts later, and both the
+  //! rewriting and the encoding built from it can be kept. `param_value`
+  //! nonzero runs them. This is the C API's way to reach
+  //! --incremental-piece-rewriting.
+  //!
+  INCREMENTAL_PIECE_REWRITING
 
 };
 
