@@ -28,6 +28,7 @@ ASTNode FpEncodingContext::prepare(const ASTNode& source)
   requireOriginalNodeFactory();
   ASTNode out = totalise.topLevel(source);
   if (bm->UserFlags.fp_domain_simplify ||
+      bm->UserFlags.fp_domain_derived_bounds ||
       bm->UserFlags.fp_domain_sound_zero_facts ||
       bm->UserFlags.fp_domain_row_bounds)
   {
@@ -45,7 +46,11 @@ ASTNode FpEncodingContext::prepare(const ASTNode& source)
                 << " sound-zero-rows, " << s.sound_zero_facts
                 << " sound-zero-facts, " << s.row_bound_rows
                 << " row-bound-rows, " << s.row_bound_false
-                << " row-bound-false" << std::endl;
+                << " row-bound-false, " << s.derived_relations
+                << " derived-relations, " << s.derived_bounds
+                << " derived-bounds, " << s.zero_add_bounds
+                << " zero-add-bounds, " << s.inconsistent_boxes
+                << " inconsistent-boxes" << std::endl;
     }
   }
   return out;

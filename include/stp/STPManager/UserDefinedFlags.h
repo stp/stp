@@ -577,6 +577,13 @@ public:
   // decide them.
   bool fp_domain_simplify = false;
 
+  // Experimental decision-only extension of the FP domain prepass. Derive
+  // symbol endpoints from top-level symbol/expression inequalities and from
+  // a narrowly recognised zero-result addition. The derived facts may
+  // discharge comparisons or expose contradictory boxes, but are not
+  // emitted as additional constraints.
+  bool fp_domain_derived_bounds = false;
+
   // Sound zero-fact extraction for boxed nonnegative FP symbols. It only
   // derives zero facts from same-sign rows whose terms are +/- one boxed
   // symbol. Two-term differences may propagate an already-established zero,

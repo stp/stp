@@ -71,6 +71,14 @@ struct Interval
   }
 };
 
+struct RelationalBound
+{
+  ASTNode symbol;
+  ASTNode expression;
+  bool lower = false;
+  bool strict = false;
+};
+
 using BoundsMap =
     std::unordered_map<ASTNode, Bounds, ASTNode::ASTNodeHasher,
                        ASTNode::ASTNodeEqual>;
@@ -508,15 +516,26 @@ public:
   ASTNode run(const ASTNode& root)
   {
     collectConjunctiveBounds(root);
-    for (const auto& entry : bounds)
-      if (entry.second.hasLower && entry.second.hasUpper &&
-          entry.second.lower <= entry.second.upper)
-        boxed.insert(entry.first);
 
-    stats.boxed_symbols = boxed.size();
-
+    // Keep the default zero-fact pass dependent only on the literal boxes it
+    // has always consumed. The derived-bound experiment below is deliberately
+    // decision-only: when it cannot decide an assertion, enabling it must not
+    // alter the circuit by feeding extra facts into another optimization.
     if (bm->UserFlags.fp_domain_sound_zero_facts)
       inferSoundZeroRows(root);
+
+    if (bm->UserFlags.fp_domain_derived_bounds)
+    {
+      intervals.clear();
+      collectDerivedBounds(root);
+      propagateDerivedBounds();
+    }
+
+    rebuildBoxed();
+    stats.boxed_symbols = boxed.size();
+
+    if (bm->UserFlags.fp_domain_derived_bounds && contradictoryBox())
+      return bm->ASTFalse;
 
     // Zero-fact extraction is an independent strengthening. Enabling it must
     // not also select the general domain-rewrite prepass. The inferred facts
@@ -524,6 +543,7 @@ public:
     // passes was explicitly requested as well.
     ASTNode out = root;
     if (bm->UserFlags.fp_domain_simplify ||
+        bm->UserFlags.fp_domain_derived_bounds ||
         bm->UserFlags.fp_domain_row_bounds)
       out = rewrite(root);
     if (!soundZeroSymbols.empty())
@@ -541,6 +561,52 @@ public:
   }
 
 private:
+  int compareEndpoint(long double value, const std::string& bits, bool exact,
+                      long double oldValue, const std::string& oldBits,
+                      bool oldExact) const
+  {
+    if (exact && oldExact && bits.size() == oldBits.size())
+      return packedCompare(bits, oldBits);
+    return value < oldValue ? -1 : (value > oldValue ? 1 : 0);
+  }
+
+  bool updateBound(const ASTNode& symbol, bool lower, long double value,
+                   const std::string& bits, bool exact, bool strict)
+  {
+    assert(symbol.GetKind() == SYMBOL && fpSort(symbol));
+    Bounds& b = bounds[symbol];
+    bool& present = lower ? b.hasLower : b.hasUpper;
+    long double& oldValue = lower ? b.lower : b.upper;
+    std::string& oldBits = lower ? b.lowerBits : b.upperBits;
+    bool& oldExact = lower ? b.lowerExact : b.upperExact;
+    bool& oldStrict = lower ? b.lowerStrict : b.upperStrict;
+
+    bool replace = !present;
+    bool strengthenStrictness = false;
+    if (present)
+    {
+      const int comparison =
+          compareEndpoint(value, bits, exact, oldValue, oldBits, oldExact);
+      replace = lower ? comparison > 0 : comparison < 0;
+      strengthenStrictness = comparison == 0 && strict && !oldStrict;
+    }
+
+    if (!replace && !strengthenStrictness)
+      return false;
+
+    present = true;
+    if (replace)
+    {
+      oldValue = value;
+      oldBits = bits;
+      oldExact = exact;
+      oldStrict = strict;
+    }
+    else
+      oldStrict = true;
+    return true;
+  }
+
   void collectConjunctiveBounds(const ASTNode& root)
   {
     forEachConjunct(root, [&](const ASTNode& n) {
@@ -557,30 +623,306 @@ private:
       // because the interval assembled from the complete conjunction proves
       // them.
       boxPredicates.insert(n);
-      Bounds& b = bounds[symbol];
-      if (lowerBound)
+      std::string bits;
+      const bool exact = fpConstantBits(constant, bits);
+      if (updateBound(symbol, lowerBound, value, bits, exact, strict))
       {
-        if (!b.hasLower || value >= b.lower)
-        {
-          b.lower = value;
+        Bounds& b = bounds[symbol];
+        if (lowerBound)
           b.lowerConst = constant;
-          b.lowerStrict = strict;
-          b.lowerExact = fpConstantBits(constant, b.lowerBits);
-        }
-        b.hasLower = true;
-      }
-      else
-      {
-        if (!b.hasUpper || value <= b.upper)
-        {
-          b.upper = value;
+        else
           b.upperConst = constant;
-          b.upperStrict = strict;
-          b.upperExact = fpConstantBits(constant, b.upperBits);
-        }
-        b.hasUpper = true;
       }
     });
+  }
+
+  bool zeroRelationExpression(const ASTNode& n, ASTNode& expression) const
+  {
+    if (n.GetKind() == FP_ISZERO && n.Degree() == 1)
+    {
+      expression = n[0];
+      return true;
+    }
+    if (n.GetKind() != FP_EQ || n.Degree() != 2)
+      return false;
+    if (isFpZero(n[0]))
+      expression = n[1];
+    else if (isFpZero(n[1]))
+      expression = n[0];
+    else
+      return false;
+    return true;
+  }
+
+  void collectDerivedBounds(const ASTNode& root)
+  {
+    forEachConjunct(root, [&](const ASTNode& n) {
+      if (isOrderedComparison(n.GetKind()) && n.Degree() == 2)
+      {
+        derivedDecisionPredicates.insert(n);
+        ASTNode left;
+        ASTNode right;
+        if (!relationAsLeq(n, left, right))
+          return;
+
+        long double ignored = 0.0L;
+        bool used = false;
+        const bool strict = n.GetKind() == FP_LT || n.GetKind() == FP_GT;
+        if (left.GetKind() == SYMBOL && fpSort(left) && left != right &&
+            !fpConstantValue(right, ignored))
+        {
+          relationalBounds.push_back({left, right, false, strict});
+          used = true;
+        }
+        if (right.GetKind() == SYMBOL && fpSort(right) && left != right &&
+            !fpConstantValue(left, ignored))
+        {
+          relationalBounds.push_back({right, left, true, strict});
+          used = true;
+        }
+        if (used)
+        {
+          boxPredicates.insert(n);
+          ++stats.derived_relations;
+        }
+      }
+
+      ASTNode expression;
+      if (zeroRelationExpression(n, expression) &&
+          expression.GetKind() == FP_ADD && expression.Degree() == 3)
+        zeroAddRelations.push_back(expression);
+    });
+  }
+
+  bool numericAliasSymbol(const ASTNode& n, ASTNode& symbol,
+                          bool& negated) const
+  {
+    ASTNode current = n;
+    negated = false;
+    while (true)
+    {
+      if (current.GetKind() == SYMBOL && fpSort(current))
+      {
+        symbol = current;
+        return true;
+      }
+      if (current.GetKind() == FP_NEG && current.Degree() == 1)
+      {
+        negated = !negated;
+        current = current[0];
+        continue;
+      }
+      if (current.GetKind() != FP_ADD || current.Degree() != 3)
+        return false;
+      if (isFpZero(current[1]))
+        current = current[2];
+      else if (isFpZero(current[2]))
+        current = current[1];
+      else
+        return false;
+    }
+  }
+
+  Interval negateInterval(const Interval& x) const
+  {
+    if (!x.known || !x.finite)
+      return Interval::unknown();
+    if (x.exact)
+      return Interval::exactFiniteRange(
+          -x.upper, -x.lower, packedNegate(x.upperBits),
+          packedNegate(x.lowerBits));
+    return Interval::finiteRange(-x.upper, -x.lower);
+  }
+
+  bool applyIntervalBound(const ASTNode& symbol, const Interval& value,
+                          bool lower, bool strict)
+  {
+    if (!value.known || !value.finite)
+      return false;
+    const long double endpoint = lower ? value.lower : value.upper;
+    const std::string bits =
+        value.exact ? (lower ? value.lowerBits : value.upperBits)
+                    : std::string();
+    return updateBound(symbol, lower, endpoint, bits, value.exact, strict);
+  }
+
+  bool deriveRelationalBound(const RelationalBound& relation)
+  {
+    const Interval expression = interval(relation.expression);
+    if (!expression.known || !expression.finite)
+      return false;
+    if (applyIntervalBound(relation.symbol, expression, relation.lower,
+                           relation.strict))
+    {
+      ++stats.derived_bounds;
+      return true;
+    }
+    return false;
+  }
+
+  bool deriveZeroAddBound(const ASTNode& expression)
+  {
+    assert(expression.GetKind() == FP_ADD && expression.Degree() == 3);
+    bool changed = false;
+    for (unsigned aliasIndex = 1; aliasIndex <= 2; ++aliasIndex)
+    {
+      ASTNode symbol;
+      bool aliasNegated = false;
+      if (!numericAliasSymbol(expression[aliasIndex], symbol, aliasNegated))
+        continue;
+
+      const unsigned otherIndex = aliasIndex == 1 ? 2 : 1;
+      Interval value = negateInterval(interval(expression[otherIndex]));
+      if (aliasNegated)
+        value = negateInterval(value);
+      if (!value.known || !value.finite)
+        continue;
+
+      if (applyIntervalBound(symbol, value, true, false))
+      {
+        ++stats.zero_add_bounds;
+        changed = true;
+      }
+      if (applyIntervalBound(symbol, value, false, false))
+      {
+        ++stats.zero_add_bounds;
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  void propagateDerivedBounds()
+  {
+    const size_t maxRounds =
+        2 * (relationalBounds.size() + zeroAddRelations.size() +
+             bounds.size() + 1);
+    for (size_t round = 0; round < maxRounds; ++round)
+    {
+      bool changed = false;
+      for (const RelationalBound& relation : relationalBounds)
+        changed = deriveRelationalBound(relation) || changed;
+      for (const ASTNode& expression : zeroAddRelations)
+        changed = deriveZeroAddBound(expression) || changed;
+      intervals.clear();
+      if (!changed)
+        break;
+    }
+  }
+
+  int compareBounds(const Bounds& b) const
+  {
+    assert(b.hasLower && b.hasUpper);
+    return compareEndpoint(b.lower, b.lowerBits, b.lowerExact, b.upper,
+                           b.upperBits, b.upperExact);
+  }
+
+  void rebuildBoxed()
+  {
+    boxed.clear();
+    for (const auto& entry : bounds)
+      if (entry.second.hasLower && entry.second.hasUpper &&
+          compareBounds(entry.second) <= 0)
+        boxed.insert(entry.first);
+  }
+
+  bool contradictoryBox()
+  {
+    for (const auto& entry : bounds)
+    {
+      const Bounds& b = entry.second;
+      if (!b.hasLower || !b.hasUpper)
+        continue;
+      const int comparison = compareBounds(b);
+      if (comparison > 0 ||
+          (comparison == 0 && (b.lowerStrict || b.upperStrict)))
+      {
+        ++stats.inconsistent_boxes;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  int compareIntervalEndpoints(const Interval& left, bool leftUpper,
+                               const Interval& right,
+                               bool rightUpper) const
+  {
+    if (left.exact && right.exact)
+    {
+      const std::string& l = leftUpper ? left.upperBits : left.lowerBits;
+      const std::string& r = rightUpper ? right.upperBits : right.lowerBits;
+      return packedCompare(l, r);
+    }
+    const long double l = leftUpper ? left.upper : left.lower;
+    const long double r = rightUpper ? right.upper : right.lower;
+    return l < r ? -1 : (l > r ? 1 : 0);
+  }
+
+  bool predicateDecision(const ASTNode& predicate, bool& value)
+  {
+    if (predicate.Degree() != 2 ||
+        (!isOrderedComparison(predicate.GetKind()) &&
+         predicate.GetKind() != FP_EQ &&
+         predicate.GetKind() != FP_SMT_EQ))
+      return false;
+
+    const Interval left = interval(predicate[0]);
+    const Interval right = interval(predicate[1]);
+    if (!left.known || !right.known || !left.finite || !right.finite)
+      return false;
+
+    const int upperLower =
+        compareIntervalEndpoints(left, true, right, false);
+    const int lowerUpper =
+        compareIntervalEndpoints(left, false, right, true);
+    if (predicate.GetKind() == FP_EQ || predicate.GetKind() == FP_SMT_EQ)
+    {
+      if (upperLower < 0 || lowerUpper > 0)
+      {
+        value = false;
+        return true;
+      }
+      const bool leftSingleton =
+          compareIntervalEndpoints(left, false, left, true) == 0;
+      const bool rightSingleton =
+          compareIntervalEndpoints(right, false, right, true) == 0;
+      if (leftSingleton && rightSingleton && lowerUpper == 0)
+      {
+        value = true;
+        return true;
+      }
+      return false;
+    }
+
+    const bool strict =
+        predicate.GetKind() == FP_LT || predicate.GetKind() == FP_GT;
+    if (predicate.GetKind() == FP_LT || predicate.GetKind() == FP_LEQ)
+    {
+      if (strict ? upperLower < 0 : upperLower <= 0)
+      {
+        value = true;
+        return true;
+      }
+      if (strict ? lowerUpper >= 0 : lowerUpper > 0)
+      {
+        value = false;
+        return true;
+      }
+      return false;
+    }
+
+    if (strict ? lowerUpper > 0 : lowerUpper >= 0)
+    {
+      value = true;
+      return true;
+    }
+    if (strict ? upperLower <= 0 : upperLower < 0)
+    {
+      value = false;
+      return true;
+    }
+    return false;
   }
 
   Interval interval(const ASTNode& n)
@@ -608,15 +950,17 @@ private:
     if (n.GetKind() == SYMBOL && fpSort(n))
     {
       const BoundsMap::const_iterator it = bounds.find(n);
-      if (it == bounds.end() || !it->second.hasLower || !it->second.hasUpper)
-        return Interval::unknown();
-      if (it->second.lower > it->second.upper)
-        return Interval::unknown();
-      if (it->second.lowerExact && it->second.upperExact)
-        return Interval::exactFiniteRange(
-            it->second.lower, it->second.upper, it->second.lowerBits,
-            it->second.upperBits);
-      return Interval::finiteRange(it->second.lower, it->second.upper);
+      if (it != bounds.end() && it->second.hasLower && it->second.hasUpper)
+      {
+        if (compareBounds(it->second) > 0)
+          return Interval::unknown();
+        if (it->second.lowerExact && it->second.upperExact)
+          return Interval::exactFiniteRange(
+              it->second.lower, it->second.upper, it->second.lowerBits,
+              it->second.upperBits);
+        return Interval::finiteRange(it->second.lower, it->second.upper);
+      }
+      return Interval::unknown();
     }
 
     switch (n.GetKind())
@@ -1110,15 +1454,18 @@ private:
       return cached->second;
 
     ASTNode out;
+    const bool legacyRewrite = bm->UserFlags.fp_domain_simplify ||
+                               bm->UserFlags.fp_domain_row_bounds;
     if (boxPredicates.find(n) != boxPredicates.end())
       out = n;
-    else if (n.GetKind() == FP_ISZERO)
+    else if (n.GetKind() == FP_ISZERO && legacyRewrite)
     {
       out = rowBoundZeroRewrite(n[0]);
       if (out.IsNull())
         out = zeroPredicateRewrite(n[0]);
     }
-    else if (n.GetKind() == FP_ISNAN || n.GetKind() == FP_ISINFINITE)
+    else if (legacyRewrite &&
+             (n.GetKind() == FP_ISNAN || n.GetKind() == FP_ISINFINITE))
     {
       const Interval x = interval(n[0]);
       if (x.known && x.finite)
@@ -1127,73 +1474,23 @@ private:
         out = bm->ASTFalse;
       }
     }
-    else if (isOrderedComparison(n.GetKind()) && n.Degree() == 2)
+    else if ((legacyRewrite ||
+              (bm->UserFlags.fp_domain_derived_bounds &&
+               derivedDecisionPredicates.find(n) !=
+                   derivedDecisionPredicates.end())) &&
+             isOrderedComparison(n.GetKind()) && n.Degree() == 2)
     {
-      const Interval a = interval(n[0]);
-      const Interval b = interval(n[1]);
-      if (a.known && b.known && a.finite && b.finite)
+      bool value = false;
+      if (predicateDecision(n, value))
       {
-        const bool strict = n.GetKind() == FP_LT || n.GetKind() == FP_GT;
-        const auto compareEndpoints = [](const Interval& left,
-                                         bool leftUpper,
-                                         const Interval& right,
-                                         bool rightUpper) {
-          if (left.exact && right.exact)
-          {
-            const std::string& l =
-                leftUpper ? left.upperBits : left.lowerBits;
-            const std::string& r =
-                rightUpper ? right.upperBits : right.lowerBits;
-            return packedCompare(l, r);
-          }
-          const long double l = leftUpper ? left.upper : left.lower;
-          const long double r = rightUpper ? right.upper : right.lower;
-          return l < r ? -1 : (l > r ? 1 : 0);
-        };
-        const int upperLower =
-            compareEndpoints(a, true, b, false);
-        const int lowerUpper =
-            compareEndpoints(a, false, b, true);
-        bool decided = false;
-        bool value = false;
-        if (n.GetKind() == FP_LT || n.GetKind() == FP_LEQ)
-        {
-          if (strict ? upperLower < 0 : upperLower <= 0)
-          {
-            decided = true;
-            value = true;
-          }
-          else if (strict ? lowerUpper >= 0 : lowerUpper > 0)
-          {
-            decided = true;
-            value = false;
-          }
-        }
+        if (value)
+          ++stats.interval_true;
         else
-        {
-          if (strict ? lowerUpper > 0 : lowerUpper >= 0)
-          {
-            decided = true;
-            value = true;
-          }
-          else if (strict ? upperLower <= 0 : upperLower < 0)
-          {
-            decided = true;
-            value = false;
-          }
-        }
-
-        if (decided)
-        {
-          if (value)
-            ++stats.interval_true;
-          else
-            ++stats.interval_false;
-          out = value ? bm->ASTTrue : bm->ASTFalse;
-        }
+          ++stats.interval_false;
+        out = value ? bm->ASTTrue : bm->ASTFalse;
       }
     }
-    else if (n.GetKind() == FP_EQ && n.Degree() == 2)
+    else if (legacyRewrite && n.GetKind() == FP_EQ && n.Degree() == 2)
     {
       if (isFpZero(n[0]))
       {
@@ -1236,6 +1533,9 @@ private:
   NodeFactory* nf;
   FpDomainSimplify::Statistics& stats;
   BoundsMap bounds;
+  std::vector<RelationalBound> relationalBounds;
+  ASTVec zeroAddRelations;
+  ASTNodeSet derivedDecisionPredicates;
   std::vector<SignedTerms> soundRows;
   ASTNodeSet boxed;
   ASTNodeSet boxPredicates;
