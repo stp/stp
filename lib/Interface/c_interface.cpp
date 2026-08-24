@@ -548,6 +548,15 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
     case BV_TERM_ABSTRACTION_INC_BITBLAST:
       b->UserFlags.bv_term_abstraction_inc_bitblast = param_value != 0;
       break;
+    case CNF_GENERATION_EFFORT:
+      if (param_value < 0 ||
+          param_value > stp::UserDefinedFlags::CNF_EFFORT_VERY_HIGH)
+        reportCAPIError("CNF_GENERATION_EFFORT takes an effort ordinal from "
+                        "0 (very low) to 4 (very high)");
+      else
+        b->UserFlags.cnf_effort =
+            static_cast<stp::UserDefinedFlags::CNFEffort>(param_value);
+      break;
     // Every field below is unsigned in UserFlags, so a negative value would
     // wrap to something enormous: for a width, a threshold no term can reach;
     // for a budget, no limit at all. Refuse it and leave the field as it was.

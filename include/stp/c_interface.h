@@ -460,7 +460,22 @@ enum ifaceflag_t
   //! do not. This is the C API's way to reach
   //! --bv-term-abstraction-inc-bitblast.
   //!
-  BV_TERM_ABSTRACTION_INC_BITBLAST
+  BV_TERM_ABSTRACTION_INC_BITBLAST,
+
+  //! How much effort the CNF generator spends minimising the formula it
+  //! hands the SAT solver, as an ordinal: 0 very low, 1 low, 2 medium (the
+  //! default), 3 high, 4 very high. Higher is slower to generate and yields
+  //! a smaller CNF.
+  //!
+  //! It is a real trade and not a quality dial. A query whose search is
+  //! trivial but whose circuit is large -- a floating-point square root over
+  //! a wide significand, say -- can spend the whole of its time in cut
+  //! enumeration and none in the SAT solver, and wants the low end; a query
+  //! whose search is the expensive part wants the high end. A value outside
+  //! the range is refused with a nonfatal diagnostic. This is the C API's
+  //! way to reach --cnf-generation-effort.
+  //!
+  CNF_GENERATION_EFFORT
 
 };
 
