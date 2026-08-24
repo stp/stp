@@ -125,14 +125,20 @@ if (EXISTS "${GTEST_DIR}/CMakeLists.txt")
     if (NOT DEFINED FETCHCONTENT_SOURCE_DIR_GOOGLETEST)
         set(FETCHCONTENT_SOURCE_DIR_GOOGLETEST "${GTEST_DIR}")
     endif()
-elseif (NOT DEFINED FETCHCONTENT_SOURCE_DIR_GOOGLETEST AND NOT ENABLE_AUTO_DOWNLOAD)
+elseif (NOT DEFINED FETCHCONTENT_SOURCE_DIR_GOOGLETEST
+        AND NOT ENABLE_AUTO_DOWNLOAD
+        AND NOT FETCHCONTENT_FULLY_DISCONNECTED)
     # Unlike an ExternalProject, FetchContent downloads at configure time, so
     # there is no deferred rung to fall through to and the gate has to be
-    # checked by hand.
+    # checked by hand. FETCHCONTENT_FULLY_DISCONNECTED stands in for
+    # check_ep_downloaded(): an already-populated base directory, with CMake
+    # guaranteeing no download rather than us inferring it from what is there.
     message(FATAL_ERROR
         "Could not find googletest, which ENABLE_TESTING needs. Configure "
         "with -DENABLE_AUTO_DOWNLOAD=ON to have it cloned here, point "
-        "-DGTEST_DIR at an existing checkout, or build without the tests "
+        "-DGTEST_DIR at an existing checkout, set "
+        "-DFETCHCONTENT_FULLY_DISCONNECTED=ON if a shared "
+        "FETCHCONTENT_BASE_DIR already holds it, or build without the tests "
         "with -DENABLE_TESTING=OFF.")
 endif()
 
@@ -191,11 +197,15 @@ if (EXISTS "${OUTPUTCHECK_DIR}/bin/OutputCheck")
     if (NOT DEFINED FETCHCONTENT_SOURCE_DIR_OUTPUTCHECK)
         set(FETCHCONTENT_SOURCE_DIR_OUTPUTCHECK "${OUTPUTCHECK_DIR}")
     endif()
-elseif (NOT DEFINED FETCHCONTENT_SOURCE_DIR_OUTPUTCHECK AND NOT ENABLE_AUTO_DOWNLOAD)
+elseif (NOT DEFINED FETCHCONTENT_SOURCE_DIR_OUTPUTCHECK
+        AND NOT ENABLE_AUTO_DOWNLOAD
+        AND NOT FETCHCONTENT_FULLY_DISCONNECTED)
     message(FATAL_ERROR
         "Could not find OutputCheck, which the query-file tests need. "
         "Configure with -DENABLE_AUTO_DOWNLOAD=ON to have it cloned here, "
-        "point -DOUTPUTCHECK_DIR at an existing checkout, or build without "
+        "point -DOUTPUTCHECK_DIR at an existing checkout, set "
+        "-DFETCHCONTENT_FULLY_DISCONNECTED=ON if a shared "
+        "FETCHCONTENT_BASE_DIR already holds it, or build without "
         "the tests with -DENABLE_TESTING=OFF.")
 endif()
 

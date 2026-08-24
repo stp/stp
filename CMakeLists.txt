@@ -550,11 +550,20 @@ include_directories(# For extlib-constbv
 set(UNORDERED_DENSE_VERSION "4.5.0")
 set(UNORDERED_DENSE_CHECKSUM "2364ce4bc4c23bd02549bbb3a7572d881684cd46057f3737fd53be53669743aa")
 
-if(NOT DEFINED FETCHCONTENT_SOURCE_DIR_UNORDEREDDENSE AND NOT ENABLE_AUTO_DOWNLOAD)
+# FETCHCONTENT_FULLY_DISCONNECTED is the rung between the two: a base directory
+# some earlier build already populated. It is what the dependencies built by
+# ExternalProject get from check_ep_downloaded(), and asking for it is a promise
+# CMake keeps rather than a guess we make -- it skips the download and update
+# steps outright, so it cannot reach the network even if a pin has moved since.
+if(NOT DEFINED FETCHCONTENT_SOURCE_DIR_UNORDEREDDENSE
+   AND NOT ENABLE_AUTO_DOWNLOAD
+   AND NOT FETCHCONTENT_FULLY_DISCONNECTED)
     message(FATAL_ERROR
         "ankerl::unordered_dense is required. Configure with "
-        "-DENABLE_AUTO_DOWNLOAD=ON to have it fetched, or point "
-        "-DFETCHCONTENT_SOURCE_DIR_UNORDEREDDENSE at a checkout.")
+        "-DENABLE_AUTO_DOWNLOAD=ON to have it fetched, point "
+        "-DFETCHCONTENT_SOURCE_DIR_UNORDEREDDENSE at a checkout, or, if a "
+        "shared FETCHCONTENT_BASE_DIR already holds it, "
+        "-DFETCHCONTENT_FULLY_DISCONNECTED=ON.")
 endif()
 
 FetchContent_Declare(
@@ -730,11 +739,15 @@ if (STP_ALLOCATOR STREQUAL "mimalloc")
     # documentation measures at roughly 14% slower. An allocator silently
     # changing under a build is exactly the kind of thing nobody notices until
     # a benchmark disagrees with the last one.
-    if (NOT DEFINED FETCHCONTENT_SOURCE_DIR_MIMALLOC AND NOT ENABLE_AUTO_DOWNLOAD)
+    if (NOT DEFINED FETCHCONTENT_SOURCE_DIR_MIMALLOC
+        AND NOT ENABLE_AUTO_DOWNLOAD
+        AND NOT FETCHCONTENT_FULLY_DISCONNECTED)
         message(FATAL_ERROR
             "STP_ALLOCATOR is mimalloc, which has to be fetched. Configure "
             "with -DENABLE_AUTO_DOWNLOAD=ON to have it cloned here, point "
-            "-DFETCHCONTENT_SOURCE_DIR_MIMALLOC at an existing checkout, or "
+            "-DFETCHCONTENT_SOURCE_DIR_MIMALLOC at an existing checkout, set "
+            "-DFETCHCONTENT_FULLY_DISCONNECTED=ON if a shared "
+            "FETCHCONTENT_BASE_DIR already holds it, or "
             "choose another allocator with -DSTP_ALLOCATOR=tcmalloc or "
             "-DSTP_ALLOCATOR=system (the last is about 14% slower).")
     endif()
