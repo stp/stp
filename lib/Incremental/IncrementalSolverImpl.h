@@ -48,9 +48,12 @@ THE SOFTWARE.
 #include "stp/AbsRefineCounterExample/AbsRefine_CounterExample.h"
 #include "stp/AbsRefineCounterExample/ArrayReadRefinementProgress.h"
 #include "stp/AbsRefineCounterExample/ArrayTransformer.h"
+#include "stp/Simplifier/CommonSubSum.h"
 #include "stp/Simplifier/FindPureLiterals.h"
 #include "stp/Simplifier/PropagateEqualities.h"
 #include "stp/Simplifier/RemoveUnconstrained.h"
+#include "stp/Simplifier/StrengthReduction.h"
+#include "stp/Simplifier/UnsignedIntervalAnalysis.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/FloatBlaster/FpEncodingContext.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
@@ -1300,6 +1303,43 @@ struct IncrementalSolver::Impl
       }
       else
         trialOut = trial.SimplifyFormula_TopLevel(trialOut, false);
+
+      // The rewriting passes the batch pipeline runs and this one did not.
+      //
+      // They belong here and not only there because each is a function of
+      // the formula it is handed and of nothing else: strength reduction
+      // reads intervals it derives from this piece, and sub-sum extraction
+      // is structural. A piece rewritten by them is equivalent to the piece,
+      // whatever the rest of the stack says now or asserts later -- so the
+      // result is cacheable in preparedPieceOf beside everything else here,
+      // and the encoding built from it stays valid for the life of the
+      // session. That is what separates them from unconstrained-variable
+      // elimination, which is refused above: THAT one needs to know what the
+      // rest of the formula does not contain, and a later assertion can make
+      // it false.
+      //
+      // Measured on one query of the slowdown corpus: the batch pipeline
+      // spends 7ms in constant-bit propagation, 6ms in strength reduction
+      // and 1ms in sub-sum extraction and then searches for 371ms, where
+      // this route skipped all three and searched for 1068ms.
+      UserDefinedFlags& pieceFlags = bm->UserFlags;
+      if (!rejectedBeforeSimplify && pieceFlags.incremental_piece_rewriting &&
+          pieceFlags.optimize_flag)
+      {
+        if (pieceFlags.enable_use_intervals && pieceFlags.bitConstantProp_flag)
+        {
+          NodeDomainAnalysis domain(bm);
+          StrengthReduction sr(bm->defaultNodeFactory, &pieceFlags);
+          trialOut = sr.topLevel(trialOut, domain);
+        }
+        if (pieceFlags.enable_common_subsum)
+        {
+          CommonSubSum sums(bm, bm->defaultNodeFactory, BVPLUS);
+          trialOut = sums.topLevel(trialOut);
+          CommonSubSum products(bm, bm->defaultNodeFactory, BVMULT);
+          trialOut = products.topLevel(trialOut);
+        }
+      }
       // Unconstrained-variable elimination is deliberately NOT run on
       // pieces: a piece's untouchable set would have to protect every
       // symbol visible outside it, and with cross-level cascades off

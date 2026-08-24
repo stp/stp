@@ -488,7 +488,21 @@ enum ifaceflag_t
   //! default) is the behaviour that has always been. This is the C API's
   //! way to reach --incremental-scoped-preprocessing.
   //!
-  INCREMENTAL_SCOPED_PREPROCESSING
+  INCREMENTAL_SCOPED_PREPROCESSING,
+
+  //! Whether the incremental driver runs the batch pipeline's rewriting
+  //! passes -- strength reduction over a derived interval domain, and
+  //! common sub-sum extraction -- on each piece it prepares.
+  //!
+  //! The driver trades whole-formula simplification for a retained
+  //! encoding. These passes do not force that trade: each is a function of
+  //! the piece it is handed and of nothing else, so the rewritten piece is
+  //! equivalent whatever the rest of the stack asserts later, and both the
+  //! rewriting and the encoding built from it can be kept. `param_value`
+  //! nonzero runs them. This is the C API's way to reach
+  //! --incremental-piece-rewriting.
+  //!
+  INCREMENTAL_PIECE_REWRITING
 
 };
 

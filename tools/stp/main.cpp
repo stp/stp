@@ -390,6 +390,15 @@ void ExtraMain::create_options()
            "rather than the whole width at once",
            refinement_group);
 
+  bool_arg("--incremental-piece-rewriting",
+           bm->UserFlags.incremental_piece_rewriting,
+           "run the batch pipeline's rewriting passes -- strength reduction "
+           "over a derived interval domain, and common sub-sum extraction -- "
+           "on each piece the incremental driver prepares; each is a "
+           "function of its piece alone, so the result caches and the "
+           "encoding built from it stays valid",
+           refinement_group);
+
   bool_arg("--incremental-scoped-preprocessing",
            bm->UserFlags.incremental_scoped_preprocessing,
            "offer the whole active stack to the exact-stack preprocessor on "
