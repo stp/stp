@@ -3,9 +3,12 @@
 ; resulting [0,4] box only to refute the separate objective.
 ;
 ; RUN: %solver --fp-domain-sound-zero-facts=0 --fp-domain-derived-bounds=1 -s %s 2>&1 | %OutputCheck --check-prefix=DERIVED %s
-; RUN: %solver --fp-domain-sound-zero-facts=0 %s | %OutputCheck --check-prefix=BASE %s
+; RUN: %solver --fp-domain-sound-zero-facts=0 -s %s 2>&1 | %OutputCheck --check-prefix=DEFAULT %s
+; RUN: %solver --fp-domain-sound-zero-facts=0 --fp-domain-derived-bounds=0 %s | %OutputCheck --check-prefix=BASE %s
 ; DERIVED: FpDomainSimplify: 2 boxed symbols, 0 interval-true, 1 interval-false, .* 2 derived-relations, 2 derived-bounds
 ; DERIVED: unsat
+; DEFAULT: FpDomainSimplify: 2 boxed symbols, 0 interval-true, 1 interval-false, .* 2 derived-relations, 2 derived-bounds
+; DEFAULT: unsat
 ; BASE: unsat
 
 (set-logic QF_FP)

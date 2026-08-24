@@ -1198,9 +1198,10 @@ bool nodeDomainOk(Context& c, unsigned depth)
   return true;
 }
 
-// FpDomainSimplify scans the top-level conjunction once for finite bounds and
-// again for sound zero rows. Zero-fact inference is opt-in today, but enabling
-// it must not put an input-controlled AND depth back on the C++ call stack.
+// FpDomainSimplify scans the top-level conjunction for finite bounds and sound
+// zero rows, then its default derived-bound pass rewrites the formula. Neither
+// scan nor that rewrite may put an input-controlled AND depth back on the C++
+// call stack.
 bool fpDomainZeroFactsOk(Context& c, unsigned depth)
 {
   ASTNode f = c.mgr.CreateSymbol("fp-domain-conjunct-0", 0, 0);
@@ -1219,6 +1220,41 @@ bool fpDomainZeroFactsOk(Context& c, unsigned depth)
   const FpDomainSimplify::Statistics& stats = domain.statistics();
   return result == f && stats.boxed_symbols == 0 &&
          stats.sound_zero_rows == 0 && stats.sound_zero_facts == 0;
+}
+
+// Derived relational bounds evaluate an FP expression from its boxed leaves.
+// A nested expression used to recurse once per FP operation in interval(), so
+// exercise that path independently of the Boolean rewrite above. Negation is
+// enough to retain exact target-format endpoints while making the requested
+// interval depth entirely input-controlled.
+bool fpDomainDerivedIntervalsOk(Context& c, unsigned depth)
+{
+  const SourceSort fp16 = SourceSort::floatingPoint(5, 11);
+  const ASTNode x = c.mgr.CreateSourceSymbol("fp-domain-deep-x", fp16);
+  const ASTNode y = c.mgr.CreateSourceSymbol("fp-domain-deep-y", fp16);
+  const ASTNode negativeOne =
+      c.mgr.CreateFPConst(c.mgr.CreateBVConst(16, 0xbc00), 5, 11);
+  const ASTNode positiveOne =
+      c.mgr.CreateFPConst(c.mgr.CreateBVConst(16, 0x3c00), 5, 11);
+
+  ASTNode expression = x;
+  for (unsigned i = 0; i < depth; ++i)
+    expression = c.hf->CreateTerm(FP_NEG, 16, expression);
+
+  const ASTNode lower = c.hf->CreateNode(FP_GEQ, x, negativeOne);
+  const ASTNode upper = c.hf->CreateNode(FP_LEQ, x, positiveOne);
+  const ASTNode derived = c.hf->CreateNode(FP_LEQ, y, expression);
+  const ASTNode formula =
+      c.hf->CreateNode(AND, ASTVec{lower, upper, derived});
+  c.roots.push_back(formula);
+
+  c.mgr.UserFlags.fp_domain_derived_bounds = true;
+  FpDomainSimplify domain(&c.mgr);
+  const ASTNode result = domain.topLevel(formula);
+  c.roots.push_back(result);
+  const FpDomainSimplify::Statistics& stats = domain.statistics();
+  return result == formula && stats.boxed_symbols == 1 &&
+         stats.derived_relations == 1 && stats.derived_bounds == 1;
 }
 
 // NodeIterator historically visits children right-to-left. Put the deep
@@ -2865,6 +2901,10 @@ TEST(DeepDag, deep_node_domain)        { EXPECT_STACK_SAFE(nodeDomainOk, 20000);
 TEST(DeepDag, deep_fp_domain_zero_facts)
 {
   EXPECT_STACK_SAFE(fpDomainZeroFactsOk, 20000);
+}
+TEST(DeepDag, deep_fp_domain_derived_intervals)
+{
+  EXPECT_STACK_SAFE(fpDomainDerivedIntervalsOk, 20000);
 }
 TEST(DeepDag, deep_node_iterator)      { EXPECT_STACK_SAFE(nodeIteratorOk, 20000); }
 TEST(DeepDag, deep_vars_in_expression) { EXPECT_STACK_SAFE(varsInExpressionOk, 20000); }

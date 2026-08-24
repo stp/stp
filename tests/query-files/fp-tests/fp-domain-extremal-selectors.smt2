@@ -8,8 +8,8 @@
 ; The structural {+0,1} disjunction for w is deliberately not treated as a
 ; semantic selector domain.
 ;
-; RUN: %solver --fp-domain-sound-zero-facts=0 --fp-domain-extremal-selectors=1 -s %s 2>&1 | %OutputCheck --check-prefix=SELECTOR %s
-; RUN: %solver --fp-domain-sound-zero-facts=0 %s | %OutputCheck --check-prefix=BASE %s
+; RUN: %solver --fp-domain-sound-zero-facts=0 --fp-domain-derived-bounds=0 --fp-domain-extremal-selectors=1 -s %s 2>&1 | %OutputCheck --check-prefix=SELECTOR %s
+; RUN: %solver --fp-domain-sound-zero-facts=0 --fp-domain-derived-bounds=0 --fp-domain-extremal-selectors=0 %s | %OutputCheck --check-prefix=BASE %s
 ; SELECTOR: 4 extremal-selector-domains, 3 extremal-selector-predicates, 3 extremal-selector-facts, 2 extremal-selector-rewrites
 ; SELECTOR: sat
 ; BASE: sat
