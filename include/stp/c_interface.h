@@ -424,7 +424,58 @@ enum ifaceflag_t
   //! the count unchanged. This is the C API's way to reach
   //! --bv-term-abstraction-rounds.
   //!
-  BV_TERM_ABSTRACTION_ROUNDS
+  BV_TERM_ABSTRACTION_ROUNDS,
+
+  //! Whether an abstracted BVMULT is refined with algebraic facts about
+  //! every pair of operands before falling back on ruling out the pair the
+  //! candidate holds.
+  //!
+  //! `param_value` nonzero turns them on (the default), zero leaves the
+  //! blocking lemma as the only refinement. This is the C API's way to
+  //! reach --bv-term-abstraction-schemas.
+  //!
+  BV_TERM_ABSTRACTION_SCHEMAS,
+
+  //! Scales that ceiling with the operand width: the allowance becomes
+  //! width/`param_value`, floored at one and capped by the ceiling.
+  //!
+  //! A blocking lemma rules out one pair of operand values out of 2^(2W),
+  //! so what one is worth falls away as the operands widen and a flat
+  //! allowance means something quite different at either end. Zero turns
+  //! the scaling off and leaves the flat ceiling as the allowance, and is
+  //! the default: the rate measured as a wash against the flat allowance at
+  //! two widths, so it is available rather than assumed. A negative value is
+  //! refused with a nonfatal diagnostic. This is the C API's way to reach
+  //! --bv-term-abstraction-value-divisor.
+  //!
+  BV_TERM_ABSTRACTION_VALUE_DIVISOR,
+
+  //! Whether an abstracted BVMULT escalates a piece at a time rather than
+  //! encoding its whole width at once.
+  //!
+  //! `param_value` nonzero encodes only the bits up to and a little past
+  //! the lowest one the candidate got wrong; zero (the default) encodes the
+  //! whole operation. BVMULT alone, because the low bits of a truncated
+  //! product depend only on the low bits of its operands and a quotient's
+  //! do not. This is the C API's way to reach
+  //! --bv-term-abstraction-inc-bitblast.
+  //!
+  BV_TERM_ABSTRACTION_INC_BITBLAST,
+
+  //! How much effort the CNF generator spends minimising the formula it
+  //! hands the SAT solver, as an ordinal: 0 very low, 1 low, 2 medium (the
+  //! default), 3 high, 4 very high. Higher is slower to generate and yields
+  //! a smaller CNF.
+  //!
+  //! It is a real trade and not a quality dial. A query whose search is
+  //! trivial but whose circuit is large -- a floating-point square root over
+  //! a wide significand, say -- can spend the whole of its time in cut
+  //! enumeration and none in the SAT solver, and wants the low end; a query
+  //! whose search is the expensive part wants the high end. A value outside
+  //! the range is refused with a nonfatal diagnostic. This is the C API's
+  //! way to reach --cnf-generation-effort.
+  //!
+  CNF_GENERATION_EFFORT
 
 };
 
@@ -674,16 +725,26 @@ enum stp_counter_t
   STP_COUNTER_BV_ABSTRACTED_MULT,
   STP_COUNTER_BV_ABSTRACTED_DIVMOD,
 
-  //! Rounds the CEGAR refiner ran, and blocking lemmas it installed for an
-  //! abstracted BVMULT, BVDIV or BVMOD.
+  //! Refinement passes that installed one or more constraints, and individual
+  //! blocking lemmas installed for abstracted BVMULT, BVDIV or BVMOD nodes.
+  //! One pass may refine several nodes, so these counters have different
+  //! units.
   STP_COUNTER_BV_REFINEMENT_ROUNDS,
   STP_COUNTER_BV_BLOCKING_LEMMAS,
 
   //! Uninterpreted-function applications the lowering decided, and the
   //! constraints installed for them -- eagerly during lowering, or by the
   //! refinement that a refuted candidate earned.
-  STP_COUNTER_UF_APPLICATIONS_LOWERED,
-  STP_COUNTER_UF_CONSTRAINTS_INSTALLED
+  STP_COUNTER_UF_APPLICATIONS_LOWERED = 15,
+  STP_COUNTER_UF_CONSTRAINTS_INSTALLED = 16,
+
+  //! Individual algebraic schema lemmas installed over abstracted BVMULT
+  //! nodes. For one inconsistent multiplication a schema lemma replaces a
+  //! blocking lemma, but a pass may visit several operations and increment
+  //! both counters. Other abstraction kinds increment the pass counter
+  //! without incrementing either lemma counter, so the two lemma counts do
+  //! not partition STP_COUNTER_BV_REFINEMENT_ROUNDS.
+  STP_COUNTER_BV_SCHEMA_LEMMAS = 17
 };
 
 //! \brief Reads one of the counters above.

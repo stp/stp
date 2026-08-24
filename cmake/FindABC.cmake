@@ -81,7 +81,7 @@ if(NOT ABC_FOUND_SYSTEM)
     # stp/abc is a fork: master tracks upstream untouched and the `stp` branch
     # carries STP's changes as commits on top. To work on those, clone it and
     # point -DABC_DIR at a build of the clone. See docs/code-guide.rst.
-    set(ABC_GIT_TAG "d0d28eb26a8f3655d806c30d394a738dad6ba5be" CACHE STRING
+    set(ABC_GIT_TAG "c8920763e91c5fb7427444b6cd97d580224ae88b" CACHE STRING
         "ABC revision to build when one has to be built")
     mark_as_advanced(ABC_GIT_TAG)
 

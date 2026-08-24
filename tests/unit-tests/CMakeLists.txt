@@ -22,6 +22,7 @@
 # -----------------------------------------------------------------------------
 # C API tests (these should be .cpp or .cxx files because GTest needs C++)
 # -----------------------------------------------------------------------------
+AddSTPGTest(LazyWriteChainReads_Test.cpp)
 AddSTPGTest(IncrementalCBP_Test.cpp)
 AddSTPGTest(IncrementalEncodingEpoch_Test.cpp)
 AddSTPGTest(IncrementalLifetimeState_Test.cpp)
@@ -59,6 +60,9 @@ AddSTPGTest(AIGBudget_Test.cpp)
 target_link_libraries(AIGBudget_TestTests ABC)
 AddSTPGTest(BVEQAbstraction_Test.cpp)
 target_link_libraries(BVEQAbstraction_TestTests ABC)
+AddSTPGTest(BVMultSchema_Test.cpp)
+AddSTPGTest(BVExactEncoder_Test.cpp)
+AddSTPGTest(BVValueLemmaAllowance_Test.cpp)
 AddSTPGTest(BVEQCongruenceClosure_Test.cpp)
 AddSTPGTest(FPPrintBack_Test.cpp)
 AddSTPGTest(FloatBlast_Test.cpp)

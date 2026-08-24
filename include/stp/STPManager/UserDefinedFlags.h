@@ -84,6 +84,13 @@ public:
   // eagerly write through the array's function congruence axioms.
   bool ackermannisation = false;
 
+  // Abstract a read over a long write chain to a fresh variable constrained
+  // by refinement lemmas, instead of expanding the full if-then-else chain.
+  // The depth is how many may-alias write levels a read still expands
+  // eagerly before the rest of its chain is abstracted.
+  bool lazy_write_reads = true;
+  int64_t lazy_write_reads_depth = 2;
+
   // Incremental solving (docs/incremental-solving.rst): keep one SAT solver
   // and one bit-blast/CNF encoding alive across (check-sat) calls, asserting
   // retractable formulas as SAT assumptions instead of re-solving from
@@ -242,6 +249,20 @@ public:
   // the old behaviour for a query known to be that shape.
   unsigned uf_eager_budget = 256;
 
+  // How many index comparisons the eager array-equality arm may introduce
+  // before the solve is left to refinement. Counted by
+  // arrayCongruenceEstimate, which charges only the comparisons that survive
+  // constant folding, so a query whose indexes are mostly literals is judged
+  // on the work it actually causes rather than on how many reads it happens
+  // to contain.
+  //
+  // 4000 admits the whole array-equality band that measurement says is worth
+  // taking -- the store-permutation queries that pay for the arm score up to
+  // 1830 -- with room above it. The value is a ceiling on a cost, not a
+  // target: nothing is gained by being nearer it. --ackermanize is a request
+  // and ignores this; 0 refuses every unasked selection.
+  unsigned array_eager_budget = 4000;
+
   // Whether to bias the first candidate so that the scalars the congruence
   // checker reads start out pairwise different.
   //
@@ -346,13 +367,14 @@ public:
   // language) with exit status 0, and SOLVER_UNKNOWN from the library.
   // (get-info :reason-unknown) is what tells this budget from the clock.
   //
-  // The cap governs the two AIGs a batch solve builds -- the bit-blast in
-  // ToSATAIG::bitblast() and the optional `--aig-core-simplification` pass,
-  // which simply keeps its input when the cap fires. It is NOT enforced on
-  // the incremental driver's persistent encoder, whose AIG outlives the
-  // check that grew it and cannot be abandoned mid-blast; engaging that
-  // driver with a budget set warns once on stderr rather than pretending
-  // the cap is in force.
+  // The cap governs the transient AIGs a solve builds -- the batch bit-blast
+  // in ToSATAIG::bitblast(), the optional `--aig-core-simplification` pass
+  // (which simply keeps its input when the cap fires), and the exact AIG used
+  // when a bit-vector abstraction gives up. It is NOT enforced on the
+  // incremental driver's persistent encoder, whose AIG outlives the check
+  // that grew it and cannot be abandoned mid-blast; engaging that driver with
+  // a budget set warns once on stderr rather than pretending the cap is in
+  // force.
   //
   // It bounds the blast, not the process: CNF conversion (Aig_ManDupDfs plus
   // DAG-aware rewriting) and the SAT search itself allocate on top of it.
@@ -370,14 +392,62 @@ public:
   // abstracted with everything else, and this turns just those three off for a
   // query that would rather not pay for the rounds at all.
   bool bv_term_abstraction_mult = true;
-  // How many times one of those three may be blocked before its refinement
-  // stops enumerating and encodes the operation exactly instead. Measured:
-  // through about thirty rounds the abstraction is still two to four times
-  // faster than not abstracting, by sixty it is break-even, and past that it
-  // collapses -- a 64-bit factorisation spent 5816 rounds and ninety seconds
-  // on a query the unabstracted solve answers in five hundredths of one.
-  // Zero never escalates, which is what this was before.
+  // The ceiling on how many times one of those three may be blocked before
+  // its refinement stops enumerating and encodes the operation exactly
+  // instead. Measured: through about thirty rounds the abstraction is still
+  // two to four times faster than not abstracting, by sixty it is
+  // break-even, and past that it collapses -- a 64-bit factorisation spent
+  // 5816 rounds and ninety seconds on a query the unabstracted solve
+  // answers in five hundredths of one. Zero never escalates, which is what
+  // this was before.
+  //
+  // A ceiling and no longer the allowance itself: see the divisor below.
   unsigned bv_term_abstraction_rounds = 32;
+  // Optionally make that a rate instead: `width / this`, floored at one and
+  // capped by the ceiling above. The argument for it is that a blocking
+  // lemma rules out one pair of operand values, so what one is worth falls
+  // away as the operands widen -- one of 2^16 pairs at eight bits, one of
+  // 2^106 at fifty-three -- and a flat allowance therefore means something
+  // quite different at either end. A divisor of eight puts a 53-bit
+  // multiply at six attempts and a 64-bit one at eight.
+  //
+  // Zero, which leaves the flat ceiling as the allowance, because the
+  // argument did not survive measurement. Over 39 floating-point queries,
+  // three interleaved repetitions, at two abstraction widths -- where the
+  // rate gives an allowance of four and of three against the flat
+  // thirty-two, an eight- to tenfold difference in what is spent:
+  //
+  //   width 33   flat 65.5s (52-66)   rate 60.7s (55-63)
+  //   width 24   flat 112.4s (105-116) rate 110.1s (105-130)
+  //
+  // Ranges overlap at both, and at 33 the sign flips between repetitions.
+  // That is not a result, and a default should not move without one.
+  //
+  // The likeliest reason it does not matter is the escalation this shares a
+  // budget with: once giving up is cheap -- see BVExactEncoder, which is
+  // what made the abstraction usable at all -- *when* you give up stops
+  // being worth tuning. The corpus is also all binary32, so the widths the
+  // rate is really aimed at are not in it; someone with 53- or 64-bit
+  // operands may find otherwise, which is why the flag stays.
+  unsigned bv_term_abstraction_value_divisor = 0;
+  // Escalate an abstracted BVMULT a piece at a time rather than all at once:
+  // encode only the bits up to and a little past the lowest one the
+  // candidate got wrong, and come back for more if that does not settle the
+  // query. The low bits of a truncated product depend only on the low bits
+  // of its operands, which is what makes the partial encoding a theorem
+  // rather than a guess -- and is why it is BVMULT alone. A quotient's low
+  // bits depend on the whole of both operands.
+  //
+  // Off by default: its benefit has not been measured, and each partial
+  // encoding repeats the work for all lower bits.
+  bool bv_term_abstraction_inc_bitblast = false;
+  // Refine an abstracted BVMULT with an algebraic fact about every pair of
+  // operands -- see MulSchema -- whenever the candidate contradicts one,
+  // and only fall back on ruling out the pair it holds when none of them
+  // does. Off restores the blocking lemma as the only refinement there is,
+  // which is what this was; it is the comparison the schemas have to earn
+  // their keep against.
+  bool bv_term_abstraction_schemas = true;
 
   // You can select these with any combination you want of true & false.
   bool division_variant_1 = true;
@@ -404,10 +474,11 @@ public:
   // Enabled by default, but only active when native arithmetic is selected.
   bool fp_native_add_iszero = true;
 
-  // Experimental strengthening for the native FP bit-blaster: mine simple
-  // top-level finite box bounds and use them to omit NaN/infinity cases from
-  // native packed-field circuits when those cases are already impossible.
-  bool fp_native_domain = false;
+  // Mine simple top-level finite box bounds and use them to omit NaN/infinity
+  // cases from native packed-field circuits when those cases are already
+  // impossible. This does not enable the separate domain prepass or its
+  // known-sign arithmetic specialization.
+  bool fp_native_domain = true;
 
   // Experimental native-domain arithmetic specialization. A known finite
   // semantic sign removes fp.add's opposite-sign cancellation datapath and
@@ -424,8 +495,10 @@ public:
   // derives zero facts from same-sign rows whose terms are +/- one boxed
   // symbol. Two-term differences may propagate an already-established zero,
   // but terms are never algebraically cancelled through a rounded row. Zero
-  // is encoded as zero magnitude bits so +0/-0 remain distinct.
-  bool fp_domain_sound_zero_facts = false;
+  // is encoded as zero magnitude bits so +0/-0 remain distinct. Enabled by
+  // default; this does not enable the general floating-point domain rewrite
+  // prepass.
+  bool fp_domain_sound_zero_facts = true;
 
   // Sound row-level FP zero refutation. It recognises linear FP expressions
   // over boxed finite variables and rewrites a zero-row to false only when a
@@ -630,9 +703,15 @@ public:
     uint64_t bv_candidates[KINDS] = {};
     // ... and what it did take.
     uint64_t bv_abstracted[KINDS] = {};
-    // Rounds the CEGAR refiner ran, and blocking lemmas it installed.
+    // Refinement passes that installed something, and individual blocking
+    // lemmas they installed. A pass can install more than one lemma.
     uint64_t bv_refinement_rounds = 0;
     uint64_t bv_blocking_lemmas = 0;
+    // Algebraic schema lemmas installed over an abstracted BVMULT. Counted
+    // apart from the blocking lemmas above because the two are not
+    // interchangeable: the same number of each says very different things
+    // about how a query was decided.
+    uint64_t bv_schema_lemmas = 0;
     // Uninterpreted-function applications the lowering decided, and the
     // constraints it installed for them.
     uint64_t uf_applications_lowered = 0;

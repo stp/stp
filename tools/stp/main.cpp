@@ -318,6 +318,16 @@ void ExtraMain::create_options()
                "decide whole-array equality/disequality (extensional arrays) "
                "by lemmas on demand")
       ->group(refinement_group);
+  bool_arg("--lazy-write-reads", bm->UserFlags.lazy_write_reads,
+           "abstract a read over a long write chain to a fresh variable "
+           "constrained by refinement lemmas, instead of expanding the "
+           "whole if-then-else chain",
+           refinement_group);
+  int64_arg("--lazy-write-reads-depth",
+            bm->UserFlags.lazy_write_reads_depth,
+            "may-alias write levels a read still expands eagerly before the "
+            "rest of its chain is abstracted",
+            refinement_group);
   bool_arg("--bv-eq-abstraction", bm->UserFlags.bv_eq_abstraction,
            "replace wide BV equalities -- whatever their operands; the "
            "bit-blaster proxies non-input ones -- with fresh Boolean "
@@ -346,14 +356,39 @@ void ExtraMain::create_options()
            "time, so turning them off leaves only the operations that define "
            "themselves in a single round",
            refinement_group);
+  bool_arg("--bv-term-abstraction-schemas",
+           bm->UserFlags.bv_term_abstraction_schemas,
+           "refine an abstracted BVMULT with algebraic facts that hold for "
+           "every pair of operands -- the product's trailing zeros, its low "
+           "bit, and the shift a power-of-two operand turns it into -- "
+           "before falling back on ruling out the one pair the candidate "
+           "holds",
+           refinement_group);
   app.add_option("--bv-term-abstraction-rounds",
                  bm->UserFlags.bv_term_abstraction_rounds,
-                 "blocking lemmas one abstracted BVMULT/BVDIV/BVMOD may take "
-                 "before its refinement encodes the operation exactly instead "
-                 "of enumerating further operand pairs (0: never; enumerate "
-                 "without limit)")
+                 "ceiling on the blocking lemmas one abstracted "
+                 "BVMULT/BVDIV/BVMOD may take before its refinement encodes "
+                 "the operation exactly instead of enumerating further "
+                 "operand pairs (0: never; enumerate without limit)")
       ->group(refinement_group)
       ->capture_default_str();
+  app.add_option("--bv-term-abstraction-value-divisor",
+                 bm->UserFlags.bv_term_abstraction_value_divisor,
+                 "scale that allowance with the operand width, as "
+                 "width/divisor floored at one and capped by the ceiling "
+                 "above; a blocking lemma rules out one pair of operand "
+                 "values, so what one is worth falls away as the operands "
+                 "widen (0, the default: do not scale, which measured no "
+                 "slower and no faster)")
+      ->group(refinement_group)
+      ->capture_default_str();
+
+  bool_arg("--bv-term-abstraction-inc-bitblast",
+           bm->UserFlags.bv_term_abstraction_inc_bitblast,
+           "escalate an abstracted BVMULT a piece at a time: encode the bits "
+           "up to and a little past the lowest one the candidate got wrong, "
+           "rather than the whole width at once",
+           refinement_group);
 
   app.add_flag("--uninterpreted-functions",
                bm->UserFlags.enable_uninterpreted_functions,
@@ -380,6 +415,12 @@ void ExtraMain::create_options()
   app.add_option("--uf-ackermann-budget", bm->UserFlags.uf_eager_budget,
                  "how many congruence constraints --uf-ackermann=auto may "
                  "install up front")
+      ->group(refinement_group)
+      ->capture_default_str();
+  app.add_option("--array-ackermann-budget", bm->UserFlags.array_eager_budget,
+                 "how many index comparisons eager array Ackermannisation may "
+                 "introduce before read refinement is preferred; 0 selects it "
+                 "only when asked for by name")
       ->group(refinement_group)
       ->capture_default_str();
   bool_arg("--uf-phase-hints", bm->UserFlags.uf_phase_hints,
@@ -478,9 +519,8 @@ void ExtraMain::create_options()
            bb_group);
 
   bool_arg("--bb.fp-native-domain", bm->UserFlags.fp_native_domain,
-           "Experimental native FP bit-blaster strengthening: mine simple "
-           "finite box bounds and omit NaN/infinity cases that are impossible "
-           "under those top-level facts",
+           "Mine simple finite box bounds and omit NaN/infinity cases that "
+           "are impossible under those top-level facts (enabled by default)",
            bb_group);
 
   bool_arg("--bb.fp-native-known-sign",
@@ -498,9 +538,10 @@ void ExtraMain::create_options()
 
   bool_arg("--fp-domain-sound-zero-facts",
            bm->UserFlags.fp_domain_sound_zero_facts,
-           "Experimental FP prepass: derive sound zero facts from "
+           "Derive sound zero facts from "
            "association-safe same-sign boxed +/-1 rows and encode them as "
-           "zero magnitude bits, preserving the +0/-0 distinction",
+           "zero magnitude bits, preserving the +0/-0 distinction (enabled "
+           "by default; does not enable --fp-domain-simplify)",
            bb_group);
 
   bool_arg("--fp-domain-row-bounds", bm->UserFlags.fp_domain_row_bounds,

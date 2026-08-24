@@ -83,6 +83,88 @@ struct BVEQAbstraction
 
 // An operation replaced by free result bits (and, for a comparison or an
 // if-then-else, a free condition variable).
+// The algebraic facts about a multiplication that a refinement round may
+// spend in place of ruling out the one pair of operand values the candidate
+// happens to hold.
+//
+// A blocking lemma excludes a single point of a 2^(2W) space, so a
+// multiplication the search has to work through can need more rounds than
+// there are pairs of operands -- at 53 bits, one of 2^106. Each of these
+// excludes a slice instead: they are theorems about every pair, not about
+// the one in hand, and the candidate is read only to decide which of them
+// it contradicts.
+//
+// The four schemas cover low-bit parity, trailing-zero preservation, and
+// positive and negative powers of two.
+enum class MulSchema
+{
+  // Nothing the candidate contradicts. The round falls through to the
+  // blocking lemma and the escalation behind it.
+  None,
+  // t[0] = a[0] & b[0]: the product is odd exactly when both operands are.
+  Odd,
+  // The product carries at least as many trailing zeros as either operand,
+  // written per bit: t[i] holds only if some bit of that operand at or
+  // below i does. Equivalently, for operand s and product t:
+  // `(bvand (bvor (bvneg s) s) t) = t`.
+  TrailingZeros,
+  // An operand whose value is 2^k turns the product into a shift of the
+  // other one: a = 2^k -> t = b << k. The premise fixes one operand, so
+  // this still rules out 2^W pairs rather than one.
+  Pow2,
+  // ... and an operand whose value is -2^k turns it into a shift of the
+  // other one negated: a = -2^k -> t = (-b) << k.
+  NegPow2
+};
+
+// Which fact to spend, over which operand. Multiplication is commutative,
+// so each schema has two readings and they are separate lemmas.
+struct MulSchemaChoice
+{
+  MulSchema schema = MulSchema::None;
+  unsigned operand = 0;
+  // log2 of the power of two, for the two schemas that have one.
+  unsigned shift = 0;
+};
+
+// Bits of BVTermAbstraction::installedSchemas. Only the two unconditional
+// facts are tracked: once installed, no candidate can contradict them
+// again, so re-checking them is wasted and re-emitting them is worse.
+// The two value-guarded schemas need no flag -- installing one for a given
+// operand value settles that value for good, and there are only as many of
+// them as there are bits.
+enum
+{
+  MUL_SCHEMA_INSTALLED_ODD = 1u,
+  MUL_SCHEMA_INSTALLED_TRAILING_ZEROS_0 = 2u,
+  MUL_SCHEMA_INSTALLED_TRAILING_ZEROS_1 = 4u
+};
+
+// The first of the four facts above that this candidate contradicts, or
+// None. Pure: the caller has already read the model, and what comes back
+// depends on nothing else.
+//
+// `tBits` is the product bits the candidate holds, NOT the product of
+// `aBits` and `bBits` -- the whole point is that the two disagree. Called
+// only once they do.
+DLL_PUBLIC MulSchemaChoice chooseMulSchema(const std::vector<bool>& aBits,
+                                           const std::vector<bool>& bBits,
+                                           const std::vector<bool>& tBits,
+                                           unsigned installedSchemas);
+
+// The blocking lemmas one abstraction of this width may spend before the
+// refinement gives up on it and encodes the operation exactly.
+//
+// A blocking lemma rules out one pair of operand values out of 2^(2W), so
+// what one is worth falls away as the operands widen and a flat allowance
+// means something quite different at either end of the range. The allowance
+// is a rate instead -- `width / bv_term_abstraction_value_divisor` -- held
+// under the flat ceiling `bv_term_abstraction_rounds`, which keeps every
+// spelling that ceiling already had: zero still never escalates, and an
+// explicit count still caps.
+DLL_PUBLIC unsigned valueLemmaAllowance(const UserDefinedFlags& uf,
+                                        unsigned width);
+
 struct BVTermAbstraction
 {
   ASTNode termNode;
@@ -96,6 +178,23 @@ struct BVTermAbstraction
   // Blocking lemmas spent on this one abstraction so far; see
   // bv_term_abstraction_rounds.
   unsigned blockedRounds = 0;
+  // Algebraic schemas spent on it, counted separately: a schema is both
+  // cheaper and stronger than a blocking lemma, so it does not eat the
+  // budget that decides when to give up and encode the operation exactly.
+  // It is bounded by the same number, though, because a candidate that
+  // keeps landing on fresh powers of two would otherwise buy a solve for
+  // each one.
+  unsigned schemaRounds = 0;
+  // Which of the unconditional schemas are already in the solver.
+  unsigned installedSchemas = 0;
+  // How far up the exact encoding has been pushed, for an escalation that
+  // goes a piece at a time; see bv_term_abstraction_inc_bitblast. Zero
+  // until the first piece, and equal to the width once `defined` is set.
+  unsigned blastedBits = 0;
+  // The bits of -operand[i], minted on first use by the NegPow2 schema and
+  // kept because that schema can fire once per power of two and would
+  // otherwise pay for the same negation circuit every time.
+  std::vector<unsigned> negatedOperand[2];
 };
 
 class DLL_PUBLIC BVAbstractionRefiner

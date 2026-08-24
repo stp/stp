@@ -353,6 +353,119 @@ bool sortbyConstants(const AxiomToBe& a, const AxiomToBe& b)
   return a.numberOfConstants() > b.numberOfConstants();
 }
 
+// Path lemmas for one round over the abstracted write-chain reads
+// (ArrayTransformer::chainReads). A row's meaning is the first-match walk
+// down its levels; the lemma for a match at level k is the clause
+//
+//   (i_1 = j) or ... or (i_{k-1} = j) or not(i_k = j) or (R = v_k)
+//
+// and the fall-through lemma replaces the final two literals with the
+// base-read equality. Everything is stated over the anchors the transform
+// bound, so the equalities encode directly against live SAT variables; a
+// guard equality is used in both polarities across a row's clauses, so its
+// comparison circuit is built once per row with Polarity::BOTH and reused.
+// With emitAll false only the clause the current model violates is added
+// (absent, or the model could not violate it); emitAll true adds a row's
+// whole case split, which pins R completely.
+size_t AbsRefine_CounterExample::emitChainReadLemmas(
+    SATSolver& SatSolver, ToSATBase* tosat, bool emitAll,
+    ArrayReadRefinementProgress* progress, ChainLemmaState* state)
+{
+  const ArrayTransformer::ChainReadsMap& chains = ArrayTransform->chainReads;
+  if (chains.empty())
+    return 0;
+
+  ToSATBase::ASTNodeToSATVar& satVar = tosat->SATVar_to_SymbolIndexMap();
+  size_t emitted = 0;
+
+  for (ArrayTransformer::ChainReadsMap::const_iterator cit = chains.begin();
+       cit != chains.end(); cit++)
+  {
+    for (ArrayTransformer::ChainIndexMap::const_iterator rit =
+             cit->second.begin();
+         rit != cit->second.end(); rit++)
+    {
+      const ArrayTransformer::ChainRow& row = rit->second;
+      const size_t nLevels = row.levels.size();
+
+      // The position the model resolves the read at: the first level whose
+      // index matches, or nLevels for the fall-through.
+      size_t resolved = nLevels;
+      ASTNode expected;
+      if (!emitAll)
+      {
+        const ASTNode jVal = TermToConstTermUsingModel(row.indexAnchor);
+        for (size_t k = 0; k < nLevels; k++)
+        {
+          if (TermToConstTermUsingModel(row.levels[k].indexAnchor) == jVal)
+          {
+            resolved = k;
+            expected = TermToConstTermUsingModel(row.levels[k].valueAnchor);
+            break;
+          }
+        }
+        if (resolved == nLevels)
+        {
+          if (row.baseReadSymbol.IsNull())
+            continue; // a sure-hit tail: some level always matches
+          expected = TermToConstTermUsingModel(row.baseReadSymbol);
+        }
+        if (TermToConstTermUsingModel(row.symbol) == expected)
+          continue;
+      }
+
+      // Guard equality variables, cached across this check's rounds so a
+      // deep row does not rebuild its comparison circuits every round.
+      std::vector<int64_t>& guardVar = state->guards[row.symbol];
+      if (guardVar.empty())
+        guardVar.assign(nLevels, -1);
+      const auto guard = [&](size_t m) {
+        if (guardVar[m] < 0)
+          guardVar[m] = getEquals(SatSolver, row.levels[m].indexAnchor,
+                                  row.indexAnchor, satVar, Polarity::BOTH);
+        return (uint32_t)guardVar[m];
+      };
+
+      const auto emitAt = [&](size_t k) {
+        // Claimed under a key no congruence axiom can produce: the chain
+        // read's own symbol leads it.
+        const ASTNode& valueSide =
+            (k < nLevels) ? row.levels[k].valueAnchor : row.baseReadSymbol;
+        if (progress != NULL &&
+            !progress->claim(row.symbol,
+                             (k < nLevels) ? row.levels[k].indexAnchor
+                                           : row.indexAnchor,
+                             valueSide, row.symbol, satVar))
+          return;
+        SATSolver::vec_literals clause;
+        for (size_t m = 0; m < k && m < nLevels; m++)
+          clause.push(SATSolver::mkLit(guard(m), false));
+        if (k < nLevels)
+          clause.push(SATSolver::mkLit(guard(k), true));
+        const uint32_t valueEq = getEquals(SatSolver, row.symbol, valueSide,
+                                           satVar, Polarity::RIGHT_ONLY);
+        clause.push(SATSolver::mkLit(valueEq, false));
+        SatSolver.addClause(clause);
+        emitted++;
+      };
+
+      // The whole prefix up to the resolution point is emitted at once: a
+      // later round can then only be violated deeper (or at the model's
+      // next resolution point), so a row's rounds are bounded by how deep
+      // the models actually reach, not by one level per round.
+      size_t& frontier = state->frontiers[row.symbol];
+      const size_t last = emitAll ? nLevels : resolved;
+      for (size_t k = frontier; k <= last && k < nLevels; k++)
+        emitAt(k);
+      if (last == nLevels && !row.baseReadSymbol.IsNull())
+        emitAt(nLevels);
+      if (last + 1 > frontier)
+        frontier = last + 1;
+    }
+  }
+  return emitted;
+}
+
 SOLVER_RETURN_TYPE
 AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
     SATSolver& SatSolver, const ASTNode& original_input, ToSATBase* tosat,
@@ -376,6 +489,24 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
   if (extActive)
     FatalError("array-equality: legacy array-read refinement was invoked "
                "during a solve owned by the extensionality checker");
+
+  // The abstracted write-chain reads first: each round adds the one path
+  // lemma per row that the current model violates, and the loop runs the
+  // rows dry before the congruence axioms below are considered.
+  ChainLemmaState chainState;
+  for (;;)
+  {
+    const size_t chainEmitted =
+        emitChainReadLemmas(SatSolver, tosat, false, progress, &chainState);
+    if (chainEmitted == 0)
+      break;
+    bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
+    const SOLVER_RETURN_TYPE res2 = CallSAT_ResultCheck(
+        SatSolver, ASTTrue, original_input, original_input, tosat, true);
+    if (SOLVER_UNDECIDED != res2)
+      return res2;
+    bm->GetRunTimes()->start(RunTimes::ArrayReadRefinement);
+  }
 
   // In these loops we try to construct Leibnitz axioms and add it to
   // the solve(). We add only those axioms that are false in the
@@ -493,7 +624,7 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
     }
   }
 #if 1
-  if (RemainingAxiomsVec.size() > 0)
+  if (RemainingAxiomsVec.size() > 0 || !ArrayTransform->chainReads.empty())
   {
     if (bm->UserFlags.stats_flag)
     {
@@ -501,8 +632,13 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
                 << " read axioms " << std::endl;
     }
     ToSATBase::ASTNodeToSATVar& satVar = tosat->SATVar_to_SymbolIndexMap();
-    const size_t emitted = applyAxiomsToSolver(
+    size_t emitted = applyAxiomsToSolver(
         satVar, RemainingAxiomsVec, SatSolver, progress);
+    // The model-guided rounds above ran the rows dry against one model;
+    // adding every remaining path lemma pins the chain reads completely,
+    // so the final call cannot come back undecided for their sake.
+    emitted += emitChainReadLemmas(SatSolver, tosat, true, progress,
+                                   &chainState);
 
     bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
     if (emitted > 0)

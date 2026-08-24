@@ -106,18 +106,9 @@ void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
 
   dag_aware_aig_rewrite(needAbsRef, mgr);
 
-  if (!uf.simple_cnf)
-  {
-    cnfData = derive_cnf(mgr);
-    if (uf.stats_flag)
-      cerr << "advanced CNF" << endl;
-  }
-  else
-  {
-    cnfData = Cnf_DeriveSimple(mgr.aigMgr, 0);
-    if (uf.stats_flag)
-      cerr << "simple CNF" << endl;
-  }
+  cnfData = derive_cnf(mgr);
+  if (uf.stats_flag)
+    cerr << (uf.simple_cnf ? "simple CNF" : "advanced CNF") << endl;
   assert(cnfData != NULL);
 
   fill_node_to_var(cnfData, nodeToVars, mgr);
@@ -126,22 +117,29 @@ void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
 // ABC's newer CNF generator. It works on a Gia_Man_t, so the AIG is converted
 // first. nLutSize bounds the cuts it considers: larger means a smaller CNF for
 // steeply more work.
-Cnf_Dat_t* ToCNFAIG::derive_cnf_mf(BBNodeManagerAIG& mgr, int nLutSize)
+Cnf_Dat_t* ToCNFAIG::derive_cnf_mf(BBNodeManagerAIG& mgr, int nLutSize,
+                                    unsigned namedOutputs)
 {
+  // The two callers need either a formula (one asserted CO) or a fragment
+  // (all COs named). Mf_ManGenerateCnf can express those two forms directly;
+  // unlike the older generators it cannot assert a prefix while naming a
+  // trailing subset.
+  assert(namedOutputs == 0 ||
+         namedOutputs == (unsigned)Aig_ManCoNum(mgr.aigMgr));
   Gia_Man_t* pGia = Gia_ManFromAig(mgr.aigMgr);
 
-  // fAddOrCla must be set. Cnf_Derive(pAig, 0) emits the clauses asserting the
-  // COs itself, but this generator only does so on request: it adds a single
-  // clause OR-ing all COs, and toCNF() has already established there is exactly
-  // one, so that clause is the unit which asserts the top-level formula.
-  // Without it the CNF is trivially satisfiable.
-  Cnf_Dat_t* cnfData =
-      (Cnf_Dat_t*)Mf_ManGenerateCnf(pGia, nLutSize, 0, 1, 0, 0);
+  // For an asserted formula, fAddOrCla must be set. Cnf_Derive(pAig, 0)
+  // asserts the COs itself, but this generator only does so on request: it
+  // adds a single clause OR-ing all COs, and toCNF() has already established
+  // there is exactly one. A fragment instead leaves that clause out and uses
+  // the CO variables below to connect its outputs to the live solver.
+  const int assertOutputs = namedOutputs == 0 ? 1 : 0;
+  Cnf_Dat_t* cnfData = (Cnf_Dat_t*)Mf_ManGenerateCnf(
+      pGia, nLutSize, 0, assertOutputs, 0, 0);
 
-  // pVarNums comes back indexed by Gia object id, but fill_node_to_var()
-  // indexes it by Aig CI object id. Rebuild it over the Aig id space so that
-  // caller needs no special case; only CIs are ever looked up, so everything
-  // else stays -1.
+  // pVarNums comes back indexed by Gia object id, but the users of this class
+  // index it by Aig object id. Rebuild it over the Aig id space for the CIs
+  // and COs they can ask for; everything else stays -1.
   //
   // Aig_ManObjNumMax(), not Aig_ManObjNum(): the latter subtracts nDeleted, and
   // the Aig_ManCleanup() in toCNF() deletes nodes, so ids run past the count of
@@ -162,6 +160,11 @@ Cnf_Dat_t* ToCNFAIG::derive_cnf_mf(BBNodeManagerAIG& mgr, int nLutSize)
   Aig_ManForEachCi(mgr.aigMgr, pCi, ci)
     pRemap[pCi->Id] = cnfData->pVarNums[Gia_ObjId(pGia, Gia_ManCi(pGia, ci))];
 
+  Aig_Obj_t* pCo;
+  int co;
+  Aig_ManForEachCo(mgr.aigMgr, pCo, co)
+    pRemap[pCo->Id] = cnfData->pVarNums[Gia_ObjId(pGia, Gia_ManCo(pGia, co))];
+
   ABC_FREE(cnfData->pVarNums);
   cnfData->pVarNums = pRemap;
 
@@ -174,8 +177,13 @@ Cnf_Dat_t* ToCNFAIG::derive_cnf_mf(BBNodeManagerAIG& mgr, int nLutSize)
   return cnfData;
 }
 
-Cnf_Dat_t* ToCNFAIG::derive_cnf(BBNodeManagerAIG& mgr)
+Cnf_Dat_t* ToCNFAIG::derive_cnf(BBNodeManagerAIG& mgr,
+                                 unsigned namedOutputs)
 {
+  assert(namedOutputs <= (unsigned)Aig_ManCoNum(mgr.aigMgr));
+  if (uf.simple_cnf)
+    return Cnf_DeriveSimple(mgr.aigMgr, (int)namedOutputs);
+
   switch (uf.cnf_effort)
   {
     case UserDefinedFlags::CNF_EFFORT_VERY_LOW:
@@ -185,16 +193,16 @@ Cnf_Dat_t* ToCNFAIG::derive_cnf(BBNodeManagerAIG& mgr)
       // Cnf_DeriveSimple buys about 12% off generation time for roughly 1.9x
       // the clauses -- measured on one input at 51.7M clauses against 27.6M
       // here. That trade is not worth a level.
-      return Cnf_DeriveFast(mgr.aigMgr, 0);
+      return Cnf_DeriveFast(mgr.aigMgr, (int)namedOutputs);
 
     case UserDefinedFlags::CNF_EFFORT_LOW:
-      return derive_cnf_mf(mgr, 3);
+      return derive_cnf_mf(mgr, 3, namedOutputs);
 
     case UserDefinedFlags::CNF_EFFORT_HIGH:
-      return derive_cnf_mf(mgr, 6);
+      return derive_cnf_mf(mgr, 6, namedOutputs);
 
     case UserDefinedFlags::CNF_EFFORT_VERY_HIGH:
-      return derive_cnf_mf(mgr, 8);
+      return derive_cnf_mf(mgr, 8, namedOutputs);
 
     case UserDefinedFlags::CNF_EFFORT_MEDIUM:
     default:
@@ -205,7 +213,8 @@ Cnf_Dat_t* ToCNFAIG::derive_cnf(BBNodeManagerAIG& mgr)
       // same cut/mapping state. ABC exposes the underlying per-manager entry
       // point; keep the manager local to this conversion instead.
       Cnf_Man_t* cnfMan = Cnf_ManStart();
-      Cnf_Dat_t* result = Cnf_DeriveWithMan(cnfMan, mgr.aigMgr, 0);
+      Cnf_Dat_t* result =
+          Cnf_DeriveWithMan(cnfMan, mgr.aigMgr, (int)namedOutputs);
       Cnf_ManStop(cnfMan);
       return result;
     }

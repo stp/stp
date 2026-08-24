@@ -23,7 +23,9 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/ToSat/BVAbstractionRefiner.h"
+#include "stp/ToSat/BBNodeManagerAIG.h"
 #include "stp/ToSat/BVEQCongruenceClosure.h"
+#include "stp/ToSat/BVExactEncoder.h"
 
 #include <algorithm>
 #include <iostream>
@@ -44,7 +46,20 @@ unsigned BVAbstractionRefiner::refine(
   if (hasEqualities())
     refined = refineEqualities(solver, nodeToSATVar);
   if (refined == 0 && hasTerms())
-    refined = refineTerms(solver, nodeToSATVar);
+  {
+    try
+    {
+      refined = refineTerms(solver, nodeToSATVar);
+    }
+    catch (const AIGBudgetExhausted& e)
+    {
+      if (bm->UserFlags.stats_flag)
+        std::cerr << "AIG node budget exhausted during exact BV refinement at "
+                  << e.nodeCount << " nodes" << std::endl;
+      bm->noteAIGBudgetExhausted(e.nodeCount);
+      return 0;
+    }
+  }
   if (refined > 0)
   {
     refinements_ += refined;
@@ -533,23 +548,10 @@ static bool computeBVCompare(Kind k, const std::vector<bool>& aBits,
   return form.negateResult ? !le : le;
 }
 
-// Exact CNF for the operations whose refinement would otherwise enumerate.
-//
-// A blocking lemma rules out one pair of operand values, so a query the solver
-// has to search through can need more rounds than there are pairs of operands:
-// a 64-bit factorisation spent 5816 of them and ninety seconds on a query the
-// unabstracted solve answers in five hundredths of one. Past
-// bv_term_abstraction_rounds the refinement stops enumerating and says what
-// the operation is, over the same variables it has been talking about all
-// along -- the operand proxies and the abstraction's own result bits, which
-// are already in the solver and already frozen. The abstraction is then
-// defined, so it is never revisited and the solve ends on the next round with
-// the answer it would have given had the term never been abstracted.
-//
-// Everything below is built from three gates, so that nothing here is a fresh
-// hand-written clause block; each is written out of the row of the truth table
-// it rules out. mkLit(v, sign) is false exactly when v equals sign, so a
-// literal at `bit` is false exactly when that input is `bit`, and a clause
+// The gates the refinement's own lemmas are built from, so that nothing here
+// is a hand-written clause block; each is written out of the row of the truth
+// table it rules out. mkLit(v, sign) is false exactly when v equals sign, so
+// a literal at `bit` is false exactly when that input is `bit`, and a clause
 // listing one row is falsified only on that row.
 
 static unsigned freshVar(SATSolver& solver)
@@ -568,162 +570,302 @@ static unsigned pinnedVar(SATSolver& solver, bool value)
   return v;
 }
 
-// z <-> x & y
-static unsigned mkAnd(SATSolver& solver, unsigned x, unsigned y)
+// z <-> x | y
+static unsigned mkOr(SATSolver& solver, unsigned x, unsigned y)
 {
   const unsigned z = freshVar(solver);
   SATSolver::vec_literals cl;
-  cl.clear(); cl.push(SATSolver::mkLit(x, true));  cl.push(SATSolver::mkLit(y, true));  cl.push(SATSolver::mkLit(z, false)); solver.addClause(cl);
-  cl.clear(); cl.push(SATSolver::mkLit(x, false)); cl.push(SATSolver::mkLit(z, true));  solver.addClause(cl);
-  cl.clear(); cl.push(SATSolver::mkLit(y, false)); cl.push(SATSolver::mkLit(z, true));  solver.addClause(cl);
+  cl.clear(); cl.push(SATSolver::mkLit(x, true));  cl.push(SATSolver::mkLit(z, false)); solver.addClause(cl);
+  cl.clear(); cl.push(SATSolver::mkLit(y, true));  cl.push(SATSolver::mkLit(z, false)); solver.addClause(cl);
+  cl.clear(); cl.push(SATSolver::mkLit(x, false)); cl.push(SATSolver::mkLit(y, false)); cl.push(SATSolver::mkLit(z, true)); solver.addClause(cl);
   return z;
 }
 
-// z <-> (sel ? t : e)
-static unsigned mkMux(SATSolver& solver, unsigned sel, unsigned t, unsigned e)
+// z <-> x ^ y
+static unsigned mkXor(SATSolver& solver, unsigned x, unsigned y)
 {
   const unsigned z = freshVar(solver);
   SATSolver::vec_literals cl;
-  cl.clear(); cl.push(SATSolver::mkLit(sel, true));  cl.push(SATSolver::mkLit(t, true));  cl.push(SATSolver::mkLit(z, false)); solver.addClause(cl);
-  cl.clear(); cl.push(SATSolver::mkLit(sel, true));  cl.push(SATSolver::mkLit(t, false)); cl.push(SATSolver::mkLit(z, true));  solver.addClause(cl);
-  cl.clear(); cl.push(SATSolver::mkLit(sel, false)); cl.push(SATSolver::mkLit(e, true));  cl.push(SATSolver::mkLit(z, false)); solver.addClause(cl);
-  cl.clear(); cl.push(SATSolver::mkLit(sel, false)); cl.push(SATSolver::mkLit(e, false)); cl.push(SATSolver::mkLit(z, true));  solver.addClause(cl);
+  cl.clear(); cl.push(SATSolver::mkLit(x, true));  cl.push(SATSolver::mkLit(y, true));  cl.push(SATSolver::mkLit(z, true));  solver.addClause(cl);
+  cl.clear(); cl.push(SATSolver::mkLit(x, false)); cl.push(SATSolver::mkLit(y, false)); cl.push(SATSolver::mkLit(z, true));  solver.addClause(cl);
+  cl.clear(); cl.push(SATSolver::mkLit(x, true));  cl.push(SATSolver::mkLit(y, false)); cl.push(SATSolver::mkLit(z, false)); solver.addClause(cl);
+  cl.clear(); cl.push(SATSolver::mkLit(x, false)); cl.push(SATSolver::mkLit(y, true));  cl.push(SATSolver::mkLit(z, false)); solver.addClause(cl);
   return z;
 }
 
-// x <-> y
-static void addEquiv(SATSolver& solver, unsigned x, unsigned y)
+// The bits of -x. Two's complement negation is ~x + 1, and the whole of that
+// carry is a prefix OR: bit j comes out flipped exactly when some bit below
+// j is set. Below the lowest set bit nothing flips, at it the 1 survives,
+// and above it every bit is complemented -- which is the same three cases
+// read off the addition.
+static std::vector<unsigned> encodeNegate(SATSolver& solver,
+                                          const std::vector<unsigned>& x,
+                                          unsigned width)
 {
-  SATSolver::vec_literals cl;
-  cl.clear(); cl.push(SATSolver::mkLit(x, true));  cl.push(SATSolver::mkLit(y, false)); solver.addClause(cl);
-  cl.clear(); cl.push(SATSolver::mkLit(x, false)); cl.push(SATSolver::mkLit(y, true));  solver.addClause(cl);
-}
-
-// sum <-> a ^ b ^ cin, carry <-> at least two of the three. `aNeg` reads a
-// complemented, which is how the subtractor below gets its ~b.
-static void addFullAdder(SATSolver& solver, unsigned a, bool aNeg, unsigned b,
-                         unsigned cin, unsigned& sum, unsigned& carry)
-{
-  sum = freshVar(solver);
-  carry = freshVar(solver);
-  SATSolver::vec_literals cl;
-
-  for (unsigned row = 0; row < 8; ++row)
+  std::vector<unsigned> neg(width);
+  unsigned lower = pinnedVar(solver, false);
+  for (unsigned j = 0; j < width; ++j)
   {
-    const bool aBit = (row & 1) != 0;
-    const bool bBit = (row & 2) != 0;
-    const bool cBit = (row & 4) != 0;
-    const bool s = aBit ^ bBit ^ cBit;
-    const bool co = (aBit + bBit + cBit) >= 2;
-    cl.clear();
-    cl.push(SATSolver::mkLit(a, aBit != aNeg));
-    cl.push(SATSolver::mkLit(b, bBit));
-    cl.push(SATSolver::mkLit(cin, cBit));
-    cl.push(SATSolver::mkLit(sum, !s));
-    solver.addClause(cl);
+    neg[j] = mkXor(solver, x[j], lower);
+    if (j + 1 < width)
+      lower = mkOr(solver, lower, x[j]);
+  }
+  return neg;
+}
 
-    cl.clear();
-    cl.push(SATSolver::mkLit(a, aBit != aNeg));
-    cl.push(SATSolver::mkLit(b, bBit));
-    cl.push(SATSolver::mkLit(cin, cBit));
-    cl.push(SATSolver::mkLit(carry, !co));
+// The exponent of a power of two, or -1 for anything else. Exactly one bit
+// set: zero has none and is not one.
+static int powerOfTwoExponent(const std::vector<bool>& bits)
+{
+  int found = -1;
+  for (unsigned i = 0; i < bits.size(); ++i)
+    if (bits[i])
+    {
+      if (found >= 0)
+        return -1;
+      found = (int)i;
+    }
+  return found;
+}
+
+// The same negation encodeNegate() builds, over values rather than
+// variables, so that the scan can decide whether the schema applies without
+// putting a single clause in the solver.
+static std::vector<bool> negatedValue(const std::vector<bool>& bits)
+{
+  std::vector<bool> out(bits.size());
+  bool lower = false;
+  for (unsigned j = 0; j < bits.size(); ++j)
+  {
+    out[j] = (bits[j] != lower);
+    lower = lower || bits[j];
+  }
+  return out;
+}
+
+// Trailing zeros, which is the whole width when nothing is set.
+static unsigned trailingZeros(const std::vector<bool>& bits)
+{
+  for (unsigned i = 0; i < bits.size(); ++i)
+    if (bits[i])
+      return i;
+  return bits.size();
+}
+
+// Does the candidate's product agree with `other` shifted up by `shift`?
+static bool productIsShift(const std::vector<bool>& other, unsigned shift,
+                           const std::vector<bool>& tBits)
+{
+  for (unsigned j = 0; j < tBits.size(); ++j)
+  {
+    const bool shifted = (j >= shift) && other[j - shift];
+    if (tBits[j] != shifted)
+      return false;
+  }
+  return true;
+}
+
+MulSchemaChoice chooseMulSchema(const std::vector<bool>& aBits,
+                                const std::vector<bool>& bBits,
+                                const std::vector<bool>& tBits,
+                                unsigned installedSchemas)
+{
+  const std::vector<bool>* ops[2] = {&aBits, &bBits};
+
+  // a = 2^k -> t = b << k, and the same read the other way round. Where it
+  // applies it says the most of the four: the shift *is* the product for
+  // that operand value, so one lemma settles every b at once where a
+  // blocking lemma settles one pair. It therefore also always fires when it
+  // applies -- this is only ever called over a candidate whose product is
+  // already known wrong, and for a power-of-two operand "wrong" and
+  // "disagrees with the shift" are the same statement.
+  for (unsigned i = 0; i < 2; ++i)
+  {
+    const int k = powerOfTwoExponent(*ops[i]);
+    if (k >= 0 && !productIsShift(*ops[1 - i], (unsigned)k, tBits))
+      return {MulSchema::Pow2, i, (unsigned)k};
+  }
+
+  // a = -2^k -> t = (-b) << k. A power of two is skipped rather than
+  // excluded by name: that covers the minimum signed value, which is its own
+  // negation and which the schema above has already taken.
+  for (unsigned i = 0; i < 2; ++i)
+  {
+    if (powerOfTwoExponent(*ops[i]) >= 0)
+      continue;
+    const int k = powerOfTwoExponent(negatedValue(*ops[i]));
+    if (k >= 0 &&
+        !productIsShift(negatedValue(*ops[1 - i]), (unsigned)k, tBits))
+      return {MulSchema::NegPow2, i, (unsigned)k};
+  }
+
+  // The product carries at least as many trailing zeros as either operand.
+  // Check operand 1 before operand 0 so schema selection remains
+  // deterministic for this commutative operator.
+  static const unsigned tzInstalled[2] = {
+      MUL_SCHEMA_INSTALLED_TRAILING_ZEROS_0,
+      MUL_SCHEMA_INSTALLED_TRAILING_ZEROS_1};
+  for (unsigned pass = 0; pass < 2; ++pass)
+  {
+    const unsigned i = 1 - pass;
+    if ((installedSchemas & tzInstalled[i]) != 0)
+      continue;
+    const unsigned zeros = trailingZeros(*ops[i]);
+    for (unsigned bit = 0; bit < zeros; ++bit)
+      if (tBits[bit])
+        return {MulSchema::TrailingZeros, i, 0};
+  }
+
+  // t[0] = a[0] & b[0].
+  if ((installedSchemas & MUL_SCHEMA_INSTALLED_ODD) == 0 &&
+      tBits[0] != (aBits[0] && bBits[0]))
+    return {MulSchema::Odd, 0, 0};
+
+  return MulSchemaChoice();
+}
+
+// How far past the lowest wrong bit a piece-at-a-time escalation reaches.
+// A fixed 32-bit step; there is no measurement behind this value, which is
+// part of why the flag that reaches it is off.
+static const unsigned BV_INC_BITBLAST_STEP = 32;
+
+// The operation again, narrowed to its low `upto` bits.
+//
+// The low bits of a truncated product depend only on the low bits of its
+// operands, so `t[u:0] = (a[u:0] * b[u:0])[u:0]` is a theorem about the
+// whole multiplication rather than an approximation of it -- which is what
+// lets a piece of the encoding be installed and the rest left for later.
+// The narrowed operands are real extracts and not merely a smaller width
+// passed alongside the same node, because the multiplier reads its operands
+// for constant detection and Booth recoding and would read the wrong values
+// out of the wider ones.
+//
+// A null node comes back where the narrowing does not leave a
+// multiplication standing -- the factory folds a product of two constants,
+// which cannot reach here from a query the simplifier has been over, but
+// costs one branch to be sure of. The caller encodes the whole width
+// instead.
+static ASTNode narrowedProduct(STPMgr* bm, const ASTNode& term, unsigned upto)
+{
+  NodeFactory* nf = bm->defaultNodeFactory;
+  const ASTNode high = bm->CreateBVConst(32, upto - 1);
+  const ASTNode low = bm->CreateZeroConst(32);
+
+  ASTNode operands[2];
+  for (unsigned i = 0; i < 2; ++i)
+    operands[i] = (term[i].GetValueWidth() == upto)
+                      ? term[i]
+                      : nf->CreateTerm(BVEXTRACT, upto, term[i], high, low);
+
+  const ASTNode narrowed =
+      nf->CreateTerm(BVMULT, upto, operands[0], operands[1]);
+  return narrowed.GetKind() == BVMULT ? narrowed : ASTNode();
+}
+
+unsigned valueLemmaAllowance(const UserDefinedFlags& uf, unsigned width)
+{
+  const unsigned ceiling = uf.bv_term_abstraction_rounds;
+  if (ceiling == 0)
+    return 0; // never escalate: enumerate without limit
+
+  const unsigned divisor = uf.bv_term_abstraction_value_divisor;
+  if (divisor == 0)
+    return ceiling; // the flat allowance this replaced
+
+  // At least one. A rate that rounds to nothing would escalate before the
+  // abstraction has been given a single chance to pay, which is not what
+  // "scale it with the width" is meant to mean at narrow widths -- and
+  // width zero does not occur, since the type checker gives every operation
+  // a width and the abstraction has a floor besides.
+  const unsigned scaled = width / divisor;
+  return std::min(ceiling, scaled == 0 ? 1u : scaled);
+}
+
+static const char* mulSchemaName(MulSchema schema)
+{
+  switch (schema)
+  {
+    case MulSchema::Odd: return "odd";
+    case MulSchema::TrailingZeros: return "trailing-zeros";
+    case MulSchema::Pow2: return "power-of-two";
+    case MulSchema::NegPow2: return "negated-power-of-two";
+    case MulSchema::None: break;
+  }
+  return "none";
+}
+
+// result[0] <-> a[0] & b[0].
+static void encodeMulOdd(SATSolver& solver, const std::vector<unsigned>& a,
+                         const std::vector<unsigned>& b,
+                         const std::vector<unsigned>& result)
+{
+  SATSolver::vec_literals cl;
+  cl.clear(); cl.push(SATSolver::mkLit(result[0], true));  cl.push(SATSolver::mkLit(a[0], false)); solver.addClause(cl);
+  cl.clear(); cl.push(SATSolver::mkLit(result[0], true));  cl.push(SATSolver::mkLit(b[0], false)); solver.addClause(cl);
+  cl.clear(); cl.push(SATSolver::mkLit(result[0], false)); cl.push(SATSolver::mkLit(a[0], true)); cl.push(SATSolver::mkLit(b[0], true)); solver.addClause(cl);
+}
+
+// result[i] -> some bit of `op` at or below i, one clause per bit. The
+// product cannot have fewer trailing zeros than an operand, and truncating
+// it to the width does not change its low bits, so this holds of the
+// truncated product too.
+static void encodeMulTrailingZeros(SATSolver& solver,
+                                   const std::vector<unsigned>& op,
+                                   const std::vector<unsigned>& result,
+                                   unsigned width)
+{
+  for (unsigned bit = 0; bit < width; ++bit)
+  {
+    SATSolver::vec_literals cl;
+    cl.push(SATSolver::mkLit(result[bit], true));
+    for (unsigned j = 0; j <= bit; ++j)
+      cl.push(SATSolver::mkLit(op[j], false));
     solver.addClause(cl);
   }
 }
 
-// z <-> (x <= y), unsigned, from the least significant bit up so that the most
-// significant differing bit decides -- the same chain the comparison lemma
-// uses, for the same reason.
-static unsigned mkUnsignedLE(SATSolver& solver, const std::vector<unsigned>& x,
-                             const std::vector<unsigned>& y, unsigned width)
+// fixed = fixedBits -> result = source << shift.
+//
+// The premise is the very disjunction a blocking lemma opens with -- false
+// exactly on the candidate's own operand value -- and that is the whole
+// difference between the two: this leaves the other operand free, so it
+// rules out 2^W pairs where the blocking lemma rules out one.
+static void encodeMulShiftUnderValue(SATSolver& solver,
+                                     const std::vector<unsigned>& fixedVars,
+                                     const std::vector<bool>& fixedBits,
+                                     const std::vector<unsigned>& source,
+                                     const std::vector<unsigned>& result,
+                                     unsigned width, unsigned shift)
 {
-  unsigned acc = pinnedVar(solver, true);
+  const auto guard = [&](SATSolver::vec_literals& cl) {
+    cl.clear();
+    for (unsigned i = 0; i < width; ++i)
+      cl.push(SATSolver::mkLit(fixedVars[i], fixedBits[i]));
+  };
+
   SATSolver::vec_literals cl;
   for (unsigned bit = 0; bit < width; ++bit)
   {
-    const unsigned nc = freshVar(solver);
-    const unsigned a = x[bit];
-    const unsigned b = y[bit];
-    cl.clear(); cl.push(SATSolver::mkLit(a, false)); cl.push(SATSolver::mkLit(b, true));  cl.push(SATSolver::mkLit(nc, false)); solver.addClause(cl);
-    cl.clear(); cl.push(SATSolver::mkLit(a, false)); cl.push(SATSolver::mkLit(acc, true)); cl.push(SATSolver::mkLit(nc, false)); solver.addClause(cl);
-    cl.clear(); cl.push(SATSolver::mkLit(b, true));  cl.push(SATSolver::mkLit(acc, true)); cl.push(SATSolver::mkLit(nc, false)); solver.addClause(cl);
-    cl.clear(); cl.push(SATSolver::mkLit(a, true));  cl.push(SATSolver::mkLit(b, false)); cl.push(SATSolver::mkLit(nc, true)); solver.addClause(cl);
-    cl.clear(); cl.push(SATSolver::mkLit(a, true));  cl.push(SATSolver::mkLit(acc, false)); cl.push(SATSolver::mkLit(nc, true)); solver.addClause(cl);
-    cl.clear(); cl.push(SATSolver::mkLit(b, false)); cl.push(SATSolver::mkLit(acc, false)); cl.push(SATSolver::mkLit(nc, true)); solver.addClause(cl);
-    acc = nc;
-  }
-  return acc;
-}
-
-// result <-> a * b, truncated, by shift and add: one conditional row per bit
-// of b, each added in at its own offset. Rows below the offset are zero, so
-// the accumulator keeps those bits and the row's carry starts there.
-static void encodeMultiply(SATSolver& solver, const std::vector<unsigned>& a,
-                           const std::vector<unsigned>& b,
-                           const std::vector<unsigned>& result, unsigned width)
-{
-  std::vector<unsigned> acc(width);
-  for (unsigned j = 0; j < width; ++j)
-    acc[j] = mkAnd(solver, a[j], b[0]);
-
-  for (unsigned i = 1; i < width; ++i)
-  {
-    unsigned carry = pinnedVar(solver, false);
-    for (unsigned j = i; j < width; ++j)
+    if (bit < shift)
     {
-      const unsigned pp = mkAnd(solver, a[j - i], b[i]);
-      unsigned sum, cout;
-      addFullAdder(solver, acc[j], false, pp, carry, sum, cout);
-      acc[j] = sum;
-      carry = cout;
+      // Shifted in from below: zero, whatever the source holds.
+      guard(cl);
+      cl.push(SATSolver::mkLit(result[bit], true));
+      solver.addClause(cl);
+      continue;
     }
+
+    const unsigned src = source[bit - shift];
+    guard(cl);
+    cl.push(SATSolver::mkLit(result[bit], true));
+    cl.push(SATSolver::mkLit(src, false));
+    solver.addClause(cl);
+
+    guard(cl);
+    cl.push(SATSolver::mkLit(result[bit], false));
+    cl.push(SATSolver::mkLit(src, true));
+    solver.addClause(cl);
   }
-
-  for (unsigned j = 0; j < width; ++j)
-    addEquiv(solver, result[j], acc[j]);
-}
-
-// result <-> a / b or a % b, by restoring division. A zero divisor needs no
-// special case: every shifted remainder is at or above it, so each step
-// subtracts nothing and the quotient comes out all ones with the dividend left
-// in the remainder -- which is what SMT-LIB asks for and what the unabstracted
-// BBDivMod produces.
-static void encodeDivMod(SATSolver& solver, const std::vector<unsigned>& a,
-                         const std::vector<unsigned>& b,
-                         const std::vector<unsigned>& result, unsigned width,
-                         bool isDiv)
-{
-  const unsigned zero = pinnedVar(solver, false);
-  std::vector<unsigned> quotient(width, zero);
-  std::vector<unsigned> rem(width, zero);
-
-  for (int i = (int)width - 1; i >= 0; --i)
-  {
-    // rem = (rem << 1) | a[i]
-    for (unsigned j = width - 1; j > 0; --j)
-      rem[j] = rem[j - 1];
-    rem[0] = a[i];
-
-    const unsigned geq = mkUnsignedLE(solver, b, rem, width);
-    quotient[i] = geq;
-
-    // rem - b, as rem + ~b + 1, kept only where the subtraction was taken.
-    unsigned carry = pinnedVar(solver, true);
-    std::vector<unsigned> sub(width);
-    for (unsigned j = 0; j < width; ++j)
-    {
-      unsigned s, cout;
-      addFullAdder(solver, b[j], true, rem[j], carry, s, cout);
-      sub[j] = s;
-      carry = cout;
-    }
-    for (unsigned j = 0; j < width; ++j)
-      rem[j] = mkMux(solver, geq, sub[j], rem[j]);
-  }
-
-  const std::vector<unsigned>& answer = isDiv ? quotient : rem;
-  for (unsigned j = 0; j < width; ++j)
-    addEquiv(solver, result[j], answer[j]);
 }
 
 unsigned BVAbstractionRefiner::refineTerms(
@@ -744,6 +886,14 @@ unsigned BVAbstractionRefiner::refineTerms(
   struct InconsistentDivMul {
     size_t absIdx;
     std::vector<bool> aBits, bBits, expected;
+    // The algebraic fact this candidate contradicts, if any. Decided here
+    // rather than below because it is read off the model and the clause
+    // phase must not touch the model.
+    MulSchemaChoice schema;
+    // The lowest bit the candidate's result got wrong, which is where a
+    // piece-at-a-time escalation starts from. Always below the width: this
+    // record exists because some bit is wrong.
+    unsigned lowestWrongBit;
   };
 
   std::vector<InconsistentCmp> incCmps;
@@ -923,16 +1073,38 @@ unsigned BVAbstractionRefiner::refineTerms(
         }
       }
 
-      bool consistent = true;
+      // Read out in full rather than stopping at the first disagreement:
+      // the schemas below are chosen by what the candidate's own product
+      // *is*, not merely by the fact that it is wrong.
+      std::vector<bool> actual(W);
       for (unsigned bit = 0; bit < W; ++bit)
-      {
-        bool r = (solver.modelValue(resultVars[bit]) == solver.true_literal());
-        if (r != expected[bit]) { consistent = false; break; }
-      }
-      if (consistent) continue;
+        actual[bit] =
+            (solver.modelValue(resultVars[bit]) == solver.true_literal());
+
+      unsigned lowestWrongBit = W;
+      for (unsigned bit = 0; bit < W; ++bit)
+        if (actual[bit] != expected[bit]) { lowestWrongBit = bit; break; }
+      if (lowestWrongBit == W) continue;
+
+      // Only BVMULT, and only while there is allowance left. Schemas are
+      // spent from a separate purse: one is both cheaper and stronger than
+      // a blocking lemma, so it should not bring the escalation forward --
+      // but it must not push it out of reach either, and a candidate that
+      // keeps landing on fresh powers of two would buy a solve for each
+      // one. The bound is the flat ceiling rather than the width-scaled
+      // allowance below, because what makes that allowance narrow is
+      // exactly what a schema does not suffer from: a blocking lemma is
+      // worth less as the operands widen, and a fact about every pair is
+      // worth the same. Division and remainder keep the blocking lemma as
+      // their only refinement; the facts here are about multiplication.
+      MulSchemaChoice schema;
+      const unsigned schemaLimit = bm->UserFlags.bv_term_abstraction_rounds;
+      if (abs.opKind == BVMULT && bm->UserFlags.bv_term_abstraction_schemas &&
+          (schemaLimit == 0 || abs.schemaRounds < schemaLimit))
+        schema = chooseMulSchema(aBits, bBits, actual, abs.installedSchemas);
 
       incDivMul.push_back({idx, std::move(aBits), std::move(bBits),
-                            std::move(expected)});
+                            std::move(expected), schema, lowestWrongBit});
     }
   }
 
@@ -1123,6 +1295,69 @@ unsigned BVAbstractionRefiner::refineTerms(
         encodedBitsOf(abs.termNode, abs.width, nodeToSATVar);
     unsigned W = abs.width;
 
+    // An algebraic fact the candidate contradicts, where there is one.
+    // Every branch here writes a theorem about the operation over the
+    // variables already in the solver -- the operand proxies and the
+    // abstraction's own result bits -- so none of it is retractable and
+    // none of it needs to be. What the candidate chose is only *which*
+    // theorem to spend a round on.
+    if (inc.schema.schema != MulSchema::None)
+    {
+      const unsigned chosen = inc.schema.operand;
+      const std::vector<unsigned>* opVars[2] = {&aVars, &bVars};
+      const std::vector<bool>* opBits[2] = {&inc.aBits, &inc.bBits};
+
+      switch (inc.schema.schema)
+      {
+        case MulSchema::Odd:
+          encodeMulOdd(solver, aVars, bVars, resultVars);
+          abs.installedSchemas |= MUL_SCHEMA_INSTALLED_ODD;
+          break;
+
+        case MulSchema::TrailingZeros:
+          encodeMulTrailingZeros(solver, *opVars[chosen], resultVars, W);
+          abs.installedSchemas |=
+              (chosen == 0 ? MUL_SCHEMA_INSTALLED_TRAILING_ZEROS_0
+                           : MUL_SCHEMA_INSTALLED_TRAILING_ZEROS_1);
+          break;
+
+        case MulSchema::Pow2:
+          encodeMulShiftUnderValue(solver, *opVars[chosen], *opBits[chosen],
+                                   *opVars[1 - chosen], resultVars, W,
+                                   inc.schema.shift);
+          break;
+
+        case MulSchema::NegPow2:
+        {
+          // The negation circuit is minted once and kept: this schema can
+          // fire once per power of two, and the operand proxies it is
+          // written over are the same variables every round -- the blaster
+          // registers them, so getOperandVars hands back the registry's
+          // entry rather than fresh bits.
+          const unsigned other = 1 - chosen;
+          if (abs.negatedOperand[other].empty())
+            abs.negatedOperand[other] =
+                encodeNegate(solver, *opVars[other], W);
+          encodeMulShiftUnderValue(solver, *opVars[chosen], *opBits[chosen],
+                                   abs.negatedOperand[other], resultVars, W,
+                                   inc.schema.shift);
+          break;
+        }
+
+        case MulSchema::None:
+          break;
+      }
+
+      abs.schemaRounds++;
+      bm->UserFlags.coverage.bv_schema_lemmas++;
+      if (bm->UserFlags.stats_flag)
+        std::cerr << "BV abstraction: BVMULT "
+                  << mulSchemaName(inc.schema.schema) << " lemma over operand "
+                  << chosen << std::endl;
+      refined++;
+      continue;
+    }
+
     // Once this abstraction has been blocked its allowance of times, stop
     // ruling out operand pairs one at a time and say what the operation is.
     // Everything the encoding needs is already here and already frozen: the
@@ -1131,19 +1366,60 @@ unsigned BVAbstractionRefiner::refineTerms(
     // one of those is a variable the CNF has -- encodedBitsOf above will not
     // hand back a vector holding anything else -- so there is no incomplete
     // mapping to fall back off, only the choice of when to stop enumerating.
-    const unsigned limit = bm->UserFlags.bv_term_abstraction_rounds;
+    //
+    // What it says is the encoding the query would have had if the term had
+    // never been abstracted -- literally so: the same bit-blaster entry
+    // point BBTerm uses, mapped to CNF by the same ABC pass. See
+    // BVExactEncoder. Two independent encodings of a divider that agree
+    // today are two that can stop agreeing, and these two already had: the
+    // written-out one and BBDivMod disagreed about a zero divisor.
+    const unsigned limit = valueLemmaAllowance(bm->UserFlags, W);
     if (limit != 0 && abs.blockedRounds >= limit)
     {
-      if (abs.opKind == BVMULT)
-        encodeMultiply(solver, aVars, bVars, resultVars, W);
-      else
-        encodeDivMod(solver, aVars, bVars, resultVars, W,
-                     abs.opKind == BVDIV);
+      // All of it, unless the piece-at-a-time escalation is on and this is
+      // a multiplication. A piece reaches past the lowest bit the candidate
+      // got wrong, which is at or above everything already encoded -- the
+      // bits below are pinned exactly, so no candidate can disagree there
+      // -- and so every round pushes the encoding strictly further up and
+      // the last one finishes it.
+      //
+      // Each piece is a whole circuit for the bits below it, so a
+      // multiplication that takes several of them pays for the low bits
+      // more than once. This implementation does not reuse the lower-bit
+      // circuit from an earlier piece, which is one reason the flag is off
+      // until something measures it.
+      unsigned upto = W;
+      ASTNode encodeAs = abs.termNode;
+      if (bm->UserFlags.bv_term_abstraction_inc_bitblast &&
+          abs.opKind == BVMULT && inc.lowestWrongBit + 1 < W)
+      {
+        const unsigned reach = inc.lowestWrongBit + BV_INC_BITBLAST_STEP + 1;
+        if (reach < W)
+        {
+          const ASTNode narrowed = narrowedProduct(bm, abs.termNode, reach);
+          if (!narrowed.IsNull())
+          {
+            upto = reach;
+            encodeAs = narrowed;
+          }
+        }
+      }
+
+      BVExactEncoder(bm).encode(solver, encodeAs, upto, aVars, bVars,
+                                resultVars);
+      abs.blastedBits = upto;
+      abs.defined = (upto == W);
+
       if (bm->UserFlags.stats_flag)
-        std::cerr << "BV abstraction: encoding "
-                  << _kind_names[abs.opKind] << " exactly after "
-                  << abs.blockedRounds << " blocking lemmas" << std::endl;
-      abs.defined = true;
+      {
+        std::cerr << "BV abstraction: encoding " << _kind_names[abs.opKind];
+        if (!abs.defined)
+          std::cerr << " up to bit " << (upto - 1);
+        else
+          std::cerr << " exactly";
+        std::cerr << " after " << abs.blockedRounds << " blocking lemmas"
+                  << std::endl;
+      }
       refined++;
       continue;
     }

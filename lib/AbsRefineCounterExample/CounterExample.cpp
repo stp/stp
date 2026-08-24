@@ -3000,7 +3000,10 @@ AbsRefine_CounterExample::CallSAT_ResultCheck(SATSolver& SatSolver,
     // directly, which is what lets it run ahead of the shortcut below
     // and keeps a query that asked for no model from being answered
     // from an unrefined abstraction.
-    if (tosat->refineAbstractions(SatSolver) > 0)
+    const unsigned bvRefined = tosat->refineAbstractions(SatSolver);
+    if (bm->soft_timeout_expired)
+      return bm->unknownResult();
+    if (bvRefined > 0)
       return SOLVER_UNDECIDED;
 
     if (!bm->UserFlags.construct_counterexample_flag && !ufActive)

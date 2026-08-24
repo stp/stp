@@ -477,6 +477,25 @@ ASTNode rebuild(NodeFactory* nf, const ASTNode& n, const ASTVec& children)
   return nf->CreateTerm(n.GetKind(), n.GetValueWidth(), children);
 }
 
+template <typename Visitor>
+void forEachConjunct(const ASTNode& root, Visitor visitor)
+{
+  ASTVec pending(1, root);
+  while (!pending.empty())
+  {
+    const ASTNode current = pending.back();
+    pending.pop_back();
+    if (current.GetKind() == AND)
+    {
+      // Reverse-push to preserve recursive left-to-right visitation order.
+      for (auto it = current.end(); it != current.begin();)
+        pending.push_back(*--it);
+      continue;
+    }
+    visitor(current);
+  }
+}
+
 class DomainPass
 {
 public:
@@ -499,7 +518,14 @@ public:
     if (bm->UserFlags.fp_domain_sound_zero_facts)
       inferSoundZeroRows(root);
 
-    ASTNode out = rewrite(root);
+    // Zero-fact extraction is an independent strengthening. Enabling it must
+    // not also select the general domain-rewrite prepass. The inferred facts
+    // are conjoined below with the original formula unless one of the rewrite
+    // passes was explicitly requested as well.
+    ASTNode out = root;
+    if (bm->UserFlags.fp_domain_simplify ||
+        bm->UserFlags.fp_domain_row_bounds)
+      out = rewrite(root);
     if (!soundZeroSymbols.empty())
     {
       ASTVec conjuncts;
@@ -515,50 +541,46 @@ public:
   }
 
 private:
-  void collectConjunctiveBounds(const ASTNode& n)
+  void collectConjunctiveBounds(const ASTNode& root)
   {
-    if (n.GetKind() == AND)
-    {
-      for (const ASTNode& child : n)
-        collectConjunctiveBounds(child);
-      return;
-    }
+    forEachConjunct(root, [&](const ASTNode& n) {
+      ASTNode symbol;
+      ASTNode constant;
+      long double value = 0.0L;
+      bool lowerBound = false;
+      bool strict = false;
+      if (!boundPredicate(n, symbol, constant, value, lowerBound, strict))
+        return;
 
-    ASTNode symbol;
-    ASTNode constant;
-    long double value = 0.0L;
-    bool lowerBound = false;
-    bool strict = false;
-    if (!boundPredicate(n, symbol, constant, value, lowerBound, strict))
-      return;
-
-    // These predicates are both the proof source for this pass and the facts
-    // consumed later by native lowering. Do not fold them away merely because
-    // the interval assembled from the complete conjunction proves them.
-    boxPredicates.insert(n);
-    Bounds& b = bounds[symbol];
-    if (lowerBound)
-    {
-      if (!b.hasLower || value >= b.lower)
+      // These predicates are both the proof source for this pass and the
+      // facts consumed later by native lowering. Do not fold them away merely
+      // because the interval assembled from the complete conjunction proves
+      // them.
+      boxPredicates.insert(n);
+      Bounds& b = bounds[symbol];
+      if (lowerBound)
       {
-        b.lower = value;
-        b.lowerConst = constant;
-        b.lowerStrict = strict;
-        b.lowerExact = fpConstantBits(constant, b.lowerBits);
+        if (!b.hasLower || value >= b.lower)
+        {
+          b.lower = value;
+          b.lowerConst = constant;
+          b.lowerStrict = strict;
+          b.lowerExact = fpConstantBits(constant, b.lowerBits);
+        }
+        b.hasLower = true;
       }
-      b.hasLower = true;
-    }
-    else
-    {
-      if (!b.hasUpper || value <= b.upper)
+      else
       {
-        b.upper = value;
-        b.upperConst = constant;
-        b.upperStrict = strict;
-        b.upperExact = fpConstantBits(constant, b.upperBits);
+        if (!b.hasUpper || value <= b.upper)
+        {
+          b.upper = value;
+          b.upperConst = constant;
+          b.upperStrict = strict;
+          b.upperExact = fpConstantBits(constant, b.upperBits);
+        }
+        b.hasUpper = true;
       }
-      b.hasUpper = true;
-    }
+    });
   }
 
   Interval interval(const ASTNode& n)
@@ -896,18 +918,13 @@ private:
     return true;
   }
 
-  void collectSoundRows(const ASTNode& n)
+  void collectSoundRows(const ASTNode& root)
   {
-    if (n.GetKind() == AND)
-    {
-      for (const ASTNode& child : n)
-        collectSoundRows(child);
-      return;
-    }
-
-    SignedTerms terms;
-    if (parseSoundZeroRow(n, terms))
-      soundRows.push_back(terms);
+    forEachConjunct(root, [&](const ASTNode& n) {
+      SignedTerms terms;
+      if (parseSoundZeroRow(n, terms))
+        soundRows.push_back(terms);
+    });
   }
 
   void normalizeSoundZeros()
