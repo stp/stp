@@ -26,6 +26,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
 #include "stp/ToSat/BitBlaster.h"
+#include "stp/ToSat/ToCNFAIG.h"
 
 #include <cassert>
 
@@ -173,14 +174,10 @@ void BVExactEncoder::encode(SATSolver& solver, const ASTNode& term,
   assert((unsigned)Aig_ManCoNum(mgr.aigMgr) == outputs);
   assert((unsigned)Aig_ManCiNum(mgr.aigMgr) == 2 * width);
 
-  // Cut enumeration and technology mapping, as in ToCNFAIG's default arm,
-  // and through the per-manager entry point for the same reason: ABC's
-  // Cnf_Derive() convenience wrapper keeps one process-global manager, and
-  // a refinement round can be running inside one STP instance while another
-  // is converting.
-  Cnf_Man_t* cnfMan = Cnf_ManStart();
-  Cnf_Dat_t* cnf = Cnf_DeriveWithMan(cnfMan, mgr.aigMgr, (int)outputs);
-  Cnf_ManStop(cnfMan);
+  // Use the query's selected CNF strategy. All outputs are named rather than
+  // asserted because the splice below connects each result bit explicitly
+  // and asserts only the side constraints.
+  Cnf_Dat_t* cnf = ToCNFAIG(bm->UserFlags).derive_cnf(mgr, outputs);
   assert(cnf != NULL);
 
   // The splice. Every variable of the derived CNF becomes a variable of the

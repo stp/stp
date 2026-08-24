@@ -51,6 +51,7 @@ THE SOFTWARE.
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cstdio>
 #include <memory>
 #include <vector>
@@ -284,6 +285,84 @@ TEST_F(BVExactEncoderTest, TheMappedEncodingCostsFewerClausesThanWrittenOutGates
       EXPECT_LT(added, writtenOutGateClauses(kind, w))
           << "kind=" << kind << " w=" << w;
     }
+}
+
+// Exact refinement is a second CNF conversion, after the abstract skeleton's
+// conversion. The caller's effort choice and the diagnostic simple-CNF mode
+// have to reach this conversion too; otherwise the expensive circuit built
+// when abstraction gives up silently falls back to medium effort.
+TEST_F(BVExactEncoderTest, TheSelectedCNFStrategyReachesExactEncoding)
+{
+  const unsigned w = 16;
+  ASTNode a = mgr.CreateSymbol("effort_a", 0, w);
+  ASTNode b = mgr.CreateSymbol("effort_b", 0, w);
+  const ASTNode term = mgr.defaultNodeFactory->CreateTerm(BVMULT, w, a, b);
+
+  const unsigned aValue = 3037;
+  const unsigned bValue = 3041;
+  const unsigned expected = (aValue * bValue) & ((1u << w) - 1);
+
+  auto encodeAndCheck = [&](bool simple) -> uint64_t
+  {
+    std::unique_ptr<SATSolver> solver = makeSolver();
+    EXPECT_TRUE(solver != NULL);
+    if (solver == NULL)
+      return 0;
+
+    std::vector<unsigned> aVars(w), bVars(w), resultVars(w);
+    for (unsigned i = 0; i < w; ++i)
+    {
+      aVars[i] = solver->newVar();
+      bVars[i] = solver->newVar();
+      resultVars[i] = solver->newVar();
+    }
+
+    mgr.UserFlags.simple_cnf = simple;
+    const uint64_t before = solver->submittedClauses();
+    BVExactEncoder(&mgr).encode(*solver, term, w, aVars, bVars, resultVars);
+    const uint64_t added = solver->submittedClauses() - before;
+
+    SATSolver::vec_literals unit;
+    for (unsigned i = 0; i < w; ++i)
+    {
+      unit.clear();
+      unit.push(SATSolver::mkLit(aVars[i], ((aValue >> i) & 1u) == 0));
+      solver->addClause(unit);
+      unit.clear();
+      unit.push(SATSolver::mkLit(bVars[i], ((bValue >> i) & 1u) == 0));
+      solver->addClause(unit);
+    }
+
+    bool timedOut = false;
+    EXPECT_TRUE(solver->solve(timedOut));
+    EXPECT_FALSE(timedOut);
+    unsigned got = 0;
+    for (unsigned i = 0; i < w; ++i)
+      if (solver->modelValue(resultVars[i]) == solver->true_literal())
+        got |= 1u << i;
+    EXPECT_EQ(expected, got);
+    return added;
+  };
+
+  std::array<uint64_t, 5> clauses;
+  for (int effort = UserDefinedFlags::CNF_EFFORT_VERY_LOW;
+       effort <= UserDefinedFlags::CNF_EFFORT_VERY_HIGH; ++effort)
+  {
+    mgr.UserFlags.cnf_effort =
+        static_cast<UserDefinedFlags::CNFEffort>(effort);
+    clauses[(size_t)effort] = encodeAndCheck(false);
+  }
+
+  // These strategies use different encodings for this nontrivial circuit.
+  // If exact refinement hard-codes medium effort, every count is the same.
+  EXPECT_NE(clauses[UserDefinedFlags::CNF_EFFORT_VERY_LOW],
+            clauses[UserDefinedFlags::CNF_EFFORT_MEDIUM]);
+  EXPECT_NE(clauses[UserDefinedFlags::CNF_EFFORT_LOW],
+            clauses[UserDefinedFlags::CNF_EFFORT_MEDIUM]);
+
+  mgr.UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_MEDIUM;
+  const uint64_t simpleClauses = encodeAndCheck(true);
+  EXPECT_NE(simpleClauses, clauses[UserDefinedFlags::CNF_EFFORT_MEDIUM]);
 }
 
 // Why the piece-at-a-time escalation is BVMULT and nothing else.

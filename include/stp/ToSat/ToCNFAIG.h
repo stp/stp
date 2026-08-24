@@ -43,9 +43,8 @@ class ToCNFAIG // not copyable
 
   void dag_aware_aig_rewrite(const bool needAbsRef, BBNodeManagerAIG& mgr);
 
-  // Turn the AIG into CNF, choosing the generator from uf.cnf_effort.
-  Cnf_Dat_t* derive_cnf(BBNodeManagerAIG& mgr);
-  Cnf_Dat_t* derive_cnf_mf(BBNodeManagerAIG& mgr, int nLutSize);
+  Cnf_Dat_t* derive_cnf_mf(BBNodeManagerAIG& mgr, int nLutSize,
+                            unsigned namedOutputs);
 
   void fill_node_to_var(Cnf_Dat_t* cnfData,
                         ToSATBase::ASTNodeToSATVar& nodeToVars,
@@ -53,6 +52,13 @@ class ToCNFAIG // not copyable
 
 public:
   ToCNFAIG(UserDefinedFlags& _uf) : uf(_uf) {}
+
+  // Turn an AIG into CNF with the configured generator. `namedOutputs` is
+  // the number of trailing combinational outputs that need variables instead
+  // of being asserted; passing every output is how a fragment such as
+  // BVExactEncoder obtains values to splice into an existing solver.
+  Cnf_Dat_t* derive_cnf(BBNodeManagerAIG& mgr,
+                        unsigned namedOutputs = 0);
 
   void toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
              ToSATBase::ASTNodeToSATVar& nodeToVars, bool needAbsRef,
