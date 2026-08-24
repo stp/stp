@@ -163,12 +163,15 @@ own -- currently the meelgroup fork at 2.1.3. Its prefix therefore holds a
 ``libcadical.a``, a ``cadical/cadical.hpp`` and a CMake package under the
 same names STP's own CaDiCaL uses.
 
-Keep the two prefixes apart. Concretely, do not pass CryptoMiniSat's
-install prefix as ``STP_DEP_DIR``: STP's CaDiCaL lookup searches there,
-finds the bundled copy, and stops, so the build silently gets a 2.x
-CaDiCaL and ``--cadical-factor`` disappears. Point at CryptoMiniSat with
-``-Dcryptominisat5_DIR`` instead, which names the package without putting
-its prefix on ``CMAKE_PREFIX_PATH``:
+Say which CaDiCaL you want, with ``CADICAL_DIR``. It is the one lookup
+that cannot reach CryptoMiniSat's copy, because it searches
+``NO_DEFAULT_PATH`` while every other route searches
+``CMAKE_PREFIX_PATH`` -- and ``CMAKE_PREFIX_PATH`` always carries
+``deps/install``, for the benefit of the other ``scripts/deps/*.sh``,
+which is exactly where ``setup-cms.sh`` puts CryptoMiniSat. Without it
+the build quietly takes the bundled 2.x CaDiCaL and ``--cadical-factor``
+disappears. Setting ``STP_DEP_DIR`` somewhere else does not help:
+``deps/install`` is searched whatever ``STP_DEP_DIR`` is:
 
 .. code-block:: bash
 

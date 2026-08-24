@@ -33,11 +33,15 @@ cd "${dep_dir}"
 #     file that includes cryptominisat.h and to nothing else -- see the note in
 #     lib/Sat/CMakeLists.txt, and the assertion at the top of
 #     include/stp/Sat/Cadical.h that catches it if that ever lapses.
-#   - The prefix itself. Do not make ${install_dir} STP_DEP_DIR as well. STP's
-#     own CaDiCaL lookup searches there, finds the copy this script installed,
-#     and stops -- so STP silently builds against CryptoMiniSat's CaDiCaL and
-#     never fetches its own. ci.yml's cms-cadical job keeps the two prefixes
-#     apart and checks the linked version afterwards for exactly this reason.
+#   - Which one gets picked. The top-level CMakeLists puts ${install_dir} on
+#     CMAKE_PREFIX_PATH unconditionally, so that the other scripts here are
+#     found without further flags -- which means every unpinned CaDiCaL lookup
+#     reaches the copy this script installed, finds it, and stops. STP then
+#     silently builds against CryptoMiniSat's CaDiCaL and never fetches its
+#     own. Pass CADICAL_DIR, the one lookup that does not search that path.
+#     Moving STP_DEP_DIR elsewhere does not help. ci.yml's cms-cadical job
+#     passes CADICAL_DIR and checks the linked version afterwards for exactly
+#     this reason.
 #
 # And then the link. Building CMS shared (-DBUILD_SHARED_LIBS=ON) is what makes
 # the combination work, because the bundled CaDiCaL then stays inside
