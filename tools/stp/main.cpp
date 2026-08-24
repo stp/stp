@@ -350,6 +350,12 @@ void ExtraMain::create_options()
            "BVDIV, BVMOD, ITE and the inequalities) during bit-blasting, "
            "refining lazily via CEGAR",
            refinement_group);
+  bool_arg("--skeleton-preproc", bm->UserFlags.skeleton_preproc,
+           "ask the query's propositional skeleton what it forces, and assert "
+           "that before solving", refinement_group);
+  bool_arg("--embedded-constraints", bm->UserFlags.embedded_constraints,
+           "replace an assertion where it occurs inside another assertion",
+           refinement_group);
   bool_arg("--bv-term-abstraction-mult", bm->UserFlags.bv_term_abstraction_mult,
            "include BVMULT, BVDIV and BVMOD in BV term abstraction; they are "
            "the ones refined by ruling out one pair of operand values at a "

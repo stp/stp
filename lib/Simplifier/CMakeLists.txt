@@ -21,6 +21,7 @@
 add_library(simplifier OBJECT
     AchievableImage.cpp
     BVSolver.cpp
+    SkeletonPreproc.cpp
     consteval.cpp
     PropagateEqualities.cpp
     DistinctOrdering.cpp

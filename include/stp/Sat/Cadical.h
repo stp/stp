@@ -93,6 +93,10 @@ public:
 
   void setFrozen(uint32_t var) override;
 
+  // Root-level facts CaDiCaL has derived; see SATSolver.
+  int simplifyOnly() override;
+  int rootFixed(unsigned var) override;
+
   bool setSearchBiasInternal(SearchBias bias) override;
 
   bool enableBVAInternal() override;
