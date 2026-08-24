@@ -50,12 +50,12 @@ jobs:
         sudo pip3 install -U lit
 
     # The solver libraries are built before CodeQL is initialized, so
-    # their compilation is not traced into the database. LibBF is a
-    # submodule compiled as part of STP, so it is traced -- and, being
-    # third-party, filtered out of the results below alongside gtest.
-    # gtest cannot be handled the same way (tests/CMakeLists.txt compiles
-    # it as part of the STP build); it is cloned here and filtered out of
-    # the results below.
+    # their compilation is not traced into the database. Everything the
+    # build fetches for itself -- LibBF, ABC and SymFPU among them -- is
+    # compiled during the traced build instead, so it *is* traced, and,
+    # being third-party, filtered out of the results below. gtest is the
+    # same story by another route: tests/CMakeLists.txt compiles it as
+    # part of the STP build.
     #
     # CryptoMiniSat is built shared, unlike everywhere else: this job links CMS
     # and CaDiCaL at the same time, and a static CMS drags its own
@@ -112,8 +112,9 @@ jobs:
         upload: failure-only
 
     # A CodeQL config's paths-ignore only filters interpreted languages, so
-    # vendored code the build compiles (extlib-abc, mimalloc, gtest) has to
-    # be dropped from the SARIF instead.
+    # third-party code the build compiles has to be dropped from the
+    # SARIF instead. The patterns cover both trees it can land in: what
+    # ExternalProject unpacks, and what FetchContent populates.
     - name: Filter out third-party code
       uses: advanced-security/filter-sarif@v1
       with:

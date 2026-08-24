@@ -192,6 +192,8 @@ if(MSVC)
          -DCMAKE_POLICY_DEFAULT_CMP0091=NEW
          "-DCMAKE_MSVC_RUNTIME_LIBRARY=${_stp_ep_msvc_runtime}")
     message(STATUS "Dependency MSVC runtime: ${_stp_ep_msvc_runtime}")
+    # Kept, not dropped: stp_check_dep_dir_config() records it below.
+    set(STP_EP_MSVC_RUNTIME "${_stp_ep_msvc_runtime}")
     unset(_stp_ep_msvc_runtime)
 endif()
 
@@ -233,11 +235,21 @@ function(stp_check_dep_dir_config)
     # optimisation level is merely a choice; sharing one compiled with a
     # different ABC_PTRUINT_T width than STP's own translation units assume is
     # a crash in CNF generation.
+    #
+    # The MSVC runtime library is in here for the same reason as ABC's defines,
+    # and it is the one entry the build type can change: it is derived from
+    # CMAKE_BUILD_TYPE and BUILD_SHARED_LIBS, so a directory shared between a
+    # Debug and a Release build -- or between a static and a shared one -- holds
+    # dependencies built against a different CRT than the build about to link
+    # them. That is not a choice, it is LNK2038 at the end of the build.
     set(_now
         "compiler=${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}\n"
         "sanitize=${SANITIZE}\n"
         "toolchain=${CMAKE_TOOLCHAIN_FILE}\n"
         "abc_abi=${ABC_ABI_DEFINITIONS}\n")
+    if(MSVC)
+        list(APPEND _now "msvc_runtime=${STP_EP_MSVC_RUNTIME}\n")
+    endif()
     string(JOIN "" _now ${_now})
 
     set(_stamp "${STP_DEP_DIR}/.stp-dep-config")
