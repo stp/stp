@@ -446,6 +446,20 @@ point ``LIT_TOOL`` at one -- the warm build's copy will do:
 
     -DLIT_TOOL=$PWD/warm/venv/bin/lit
 
+Doing all of this by hand
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Nothing above needs a tool: the flags are the whole of it, and they are
+written out so that they can be typed, scripted or put in a
+``CMakeUserPresets.json``, whichever suits.
+
+If a shell function is what suits, `stp.sh <https://github.com/stp/stp.sh>`__
+is a set of bash and zsh helpers that apply exactly these flags -- one
+command to warm the caches, one to make a worktree, one to build it. It is a
+convenience kept alongside STP rather than part of it, and it is not what the
+rest of this page assumes: everything here works without it, and on the
+platforms it does not cover.
+
 
 Building a static library and binary
 ------------------------------------
