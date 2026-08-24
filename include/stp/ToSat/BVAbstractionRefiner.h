@@ -176,7 +176,36 @@ enum class DivSchema
   // b = 2^k -> t = a >> k for BVDIV, t = a & (2^k - 1) for BVMOD. k = 0 is
   // the useful degenerate reading: dividing by one is the dividend, and the
   // remainder over one is zero.
-  Pow2Divisor
+  Pow2Divisor,
+  // The three below name no divisor at all, which is what makes them the
+  // ones that fire. A candidate handed a 256-bit divisor is almost never
+  // handed zero or a power of two, so the two schemas above sit idle on
+  // exactly the queries the abstraction exists for -- while a bound is
+  // contradicted by any candidate that overshoots, whatever the divisor is.
+  //
+  // Each is installed once and then never again: they are facts about every
+  // pair of operands, so a second copy would say nothing new.
+  //
+  // r <=u a. True over a zero divisor as well, where the remainder is the
+  // dividend, so this one carries no premise whatsoever.
+  RemainderAtMostDividend,
+  // b != 0 -> r <u b, which is what a remainder is.
+  RemainderBelowDivisor,
+  // b != 0 -> t <=u a. Dividing by one leaves the dividend and dividing by
+  // more only shrinks it; the premise is there for the zero divisor, whose
+  // totalised all-ones quotient is the one case that breaks it.
+  QuotientAtMostDividend
+};
+
+// Bits of BVTermAbstraction::installedSchemas for the three unconditional
+// division facts. They share the field with the multiplication flags, which
+// is safe because an abstraction is a multiplication or a division and
+// never both.
+enum
+{
+  DIV_SCHEMA_INSTALLED_REMAINDER_AT_MOST_DIVIDEND = 8u,
+  DIV_SCHEMA_INSTALLED_REMAINDER_BELOW_DIVISOR = 16u,
+  DIV_SCHEMA_INSTALLED_QUOTIENT_AT_MOST_DIVIDEND = 32u
 };
 
 struct DivSchemaChoice
@@ -210,7 +239,26 @@ DLL_PUBLIC std::vector<int> divSchemaSources(Kind opKind, unsigned width,
 DLL_PUBLIC DivSchemaChoice chooseDivSchema(Kind opKind,
                                            const std::vector<bool>& aBits,
                                            const std::vector<bool>& bBits,
-                                           const std::vector<bool>& tBits);
+                                           const std::vector<bool>& tBits,
+                                           unsigned installedSchemas);
+
+// A variable that holds exactly when `lv <= rv`. Shared by the comparison
+// refinement, which is where it comes from, and by the division bounds,
+// which are comparisons over the abstraction's own result bits.
+DLL_PUBLIC unsigned encodeLessOrEqual(SATSolver& solver,
+                                      const std::vector<unsigned>& lv,
+                                      const std::vector<unsigned>& rv,
+                                      unsigned width, bool isSigned);
+
+// One of the three bounds, over the operand proxies and the abstraction's
+// own result bits. Exposed for the same reason as the encoder above: that
+// the clauses say what the schema claims is a question only a solver can
+// answer.
+DLL_PUBLIC void encodeDivBound(SATSolver& solver, DivSchema schema,
+                               const std::vector<unsigned>& dividendVars,
+                               const std::vector<unsigned>& divisorVars,
+                               const std::vector<unsigned>& resultVars,
+                               unsigned width);
 
 // divisor = divisorBits -> every result bit is a constant or a bit of the
 // dividend, as `source` says. Exposed for the tests: what the schema claims

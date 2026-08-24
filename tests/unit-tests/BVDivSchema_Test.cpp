@@ -118,6 +118,42 @@ bool isPowerOfTwo(unsigned v)
 
 const Kind KINDS[2] = {BVDIV, BVMOD};
 
+const DivSchema BOUNDS[3] = {DivSchema::RemainderAtMostDividend,
+                             DivSchema::RemainderBelowDivisor,
+                             DivSchema::QuotientAtMostDividend};
+
+// The two that fix a divisor and pin the result bit by bit, as against the
+// three that bound it and name no divisor at all.
+bool namesADivisor(DivSchema schema)
+{
+  return schema == DivSchema::DivisorZero || schema == DivSchema::Pow2Divisor;
+}
+
+bool boundApplies(Kind opKind, DivSchema schema)
+{
+  if (opKind == BVMOD)
+    return schema == DivSchema::RemainderAtMostDividend ||
+           schema == DivSchema::RemainderBelowDivisor;
+  return schema == DivSchema::QuotientAtMostDividend;
+}
+
+// What each bound asserts, written out here rather than shared with the
+// refiner for the same reason the reference operations are.
+bool boundHolds(DivSchema schema, unsigned a, unsigned b, unsigned t)
+{
+  switch (schema)
+  {
+    case DivSchema::RemainderAtMostDividend:
+      return t <= a;
+    case DivSchema::RemainderBelowDivisor:
+      return b == 0 || t < b;
+    case DivSchema::QuotientAtMostDividend:
+      return b == 0 || t <= a;
+    default:
+      return true;
+  }
+}
+
 } // namespace
 
 // Every lemma this can install is true of the operation it is installed
@@ -130,8 +166,11 @@ TEST(BVDivSchema, chosen_schema_is_valid_for_every_dividend)
         for (unsigned t = 0; t < VALUES; t++)
         {
           const DivSchemaChoice choice =
-              chooseDivSchema(opKind, bitsOf(a), bitsOf(b), bitsOf(t));
+              chooseDivSchema(opKind, bitsOf(a), bitsOf(b), bitsOf(t), 0);
           if (choice.schema == DivSchema::None)
+            continue;
+
+          if (!namesADivisor(choice.schema))
             continue;
 
           const std::vector<int> source =
@@ -156,9 +195,18 @@ TEST(BVDivSchema, chosen_schema_is_violated_by_the_candidate)
         for (unsigned t = 0; t < VALUES; t++)
         {
           const DivSchemaChoice choice =
-              chooseDivSchema(opKind, bitsOf(a), bitsOf(b), bitsOf(t));
+              chooseDivSchema(opKind, bitsOf(a), bitsOf(b), bitsOf(t), 0);
           if (choice.schema == DivSchema::None)
             continue;
+
+          if (!namesADivisor(choice.schema))
+          {
+            ASSERT_FALSE(boundHolds(choice.schema, a, b, t))
+                << "bound " << (int)choice.schema << " over "
+                << _kind_names[opKind] << " at a=" << a << " b=" << b
+                << " t=" << t << " is already satisfied by the candidate";
+            continue;
+          }
 
           ASSERT_NE(sourcesValue(divSchemaSources(opKind, WIDTH, choice), a), t)
               << "schema " << (int)choice.schema << " over "
@@ -178,7 +226,7 @@ TEST(BVDivSchema, correct_candidates_choose_nothing)
       {
         const unsigned t = reference(opKind, a, b);
         const DivSchemaChoice choice =
-            chooseDivSchema(opKind, bitsOf(a), bitsOf(b), bitsOf(t));
+            chooseDivSchema(opKind, bitsOf(a), bitsOf(b), bitsOf(t), 0);
         ASSERT_EQ(choice.schema, DivSchema::None)
             << "a correct " << _kind_names[opKind] << " candidate at a=" << a
             << " b=" << b << " was offered a schema";
@@ -198,13 +246,23 @@ TEST(BVDivSchema, wrong_candidates_are_only_declined_on_other_divisors)
           if (t == reference(opKind, a, b))
             continue;
           const DivSchemaChoice choice =
-              chooseDivSchema(opKind, bitsOf(a), bitsOf(b), bitsOf(t));
+              chooseDivSchema(opKind, bitsOf(a), bitsOf(b), bitsOf(t), 0);
           if (choice.schema != DivSchema::None)
             continue;
 
           ASSERT_FALSE(b == 0 || isPowerOfTwo(b))
               << "a wrong " << _kind_names[opKind] << " candidate at a=" << a
               << " b=" << b << " t=" << t << " was declined a schema";
+
+          // ... and because it satisfies every bound its kind carries. A
+          // decline is only ever "there is nothing left to say", never a
+          // fact that was available and not offered.
+          for (DivSchema bound : BOUNDS)
+            if (boundApplies(opKind, bound))
+              ASSERT_TRUE(boundHolds(bound, a, b, t))
+                  << "bound " << (int)bound << " was available over "
+                  << _kind_names[opKind] << " at a=" << a << " b=" << b
+                  << " t=" << t << " and was not offered";
         }
 }
 
@@ -358,5 +416,180 @@ TEST_F(BVDivSchemaEncodingTest, clauses_are_silent_under_another_divisor)
       ASSERT_TRUE(solveUnder(opKind, choice, guard, 13, divisor, got))
           << "the guarded clauses forbid a divisor they do not name: "
           << _kind_names[opKind] << " b=" << divisor;
+    }
+}
+
+// The bounds hold of the operation itself, at every pair of operands. They
+// go into the solver with no premise beyond the divisor being non-zero and
+// are never taken back, so one that is merely usually true would turn a
+// satisfiable query unsat.
+TEST(BVDivSchemaBounds, every_bound_is_true_of_the_operation)
+{
+  for (Kind opKind : KINDS)
+    for (DivSchema bound : BOUNDS)
+    {
+      if (!boundApplies(opKind, bound))
+        continue;
+      for (unsigned a = 0; a < VALUES; a++)
+        for (unsigned b = 0; b < VALUES; b++)
+          ASSERT_TRUE(boundHolds(bound, a, b, reference(opKind, a, b)))
+              << "bound " << (int)bound << " is false of " << _kind_names[opKind]
+              << " at a=" << a << " b=" << b;
+    }
+}
+
+// A bound already in the solver is not offered a second time. It is
+// unconditional, so no later candidate can contradict it -- and a round
+// spent re-emitting a clause the solver has rules nothing out, which is the
+// one thing a refinement round is not allowed to do.
+TEST(BVDivSchemaBounds, an_installed_bound_is_not_offered_again)
+{
+  const unsigned all = DIV_SCHEMA_INSTALLED_REMAINDER_AT_MOST_DIVIDEND |
+                       DIV_SCHEMA_INSTALLED_REMAINDER_BELOW_DIVISOR |
+                       DIV_SCHEMA_INSTALLED_QUOTIENT_AT_MOST_DIVIDEND;
+
+  for (Kind opKind : KINDS)
+    for (unsigned a = 0; a < VALUES; a++)
+      for (unsigned b = 0; b < VALUES; b++)
+        for (unsigned t = 0; t < VALUES; t++)
+        {
+          const DivSchemaChoice choice =
+              chooseDivSchema(opKind, bitsOf(a), bitsOf(b), bitsOf(t), all);
+          ASSERT_TRUE(choice.schema == DivSchema::None ||
+                      namesADivisor(choice.schema))
+              << "a bound was offered again over " << _kind_names[opKind]
+              << " at a=" << a << " b=" << b << " t=" << t;
+        }
+}
+
+// A divisor the schemas can name settles the result outright, which is more
+// than any bound can say, so it is preferred where both are available.
+TEST(BVDivSchemaBounds, a_named_divisor_outranks_a_bound)
+{
+  // BVMOD, dividend 3, divisor 2 = 2^1: the remainder is 1, and a candidate
+  // holding 7 breaks both the power-of-two schema and both bounds.
+  const DivSchemaChoice choice =
+      chooseDivSchema(BVMOD, bitsOf(3), bitsOf(2), bitsOf(7), 0);
+  EXPECT_EQ(choice.schema, DivSchema::Pow2Divisor);
+  EXPECT_EQ(choice.shift, 1u);
+}
+
+namespace
+{
+
+// The bounds, and the comparison chain underneath them, in front of a real
+// solver. `encodeLessOrEqual` is the chain the comparison refinement has
+// always used; it moved here so the bounds could share it, and it had never
+// been pinned on its own -- the direction bug its comment records was found
+// on a query, not in a test.
+class BVDivBoundEncodingTest : public ::testing::Test
+{
+protected:
+  stp::STPMgr mgr;
+
+  std::unique_ptr<SATSolver> makeSolver()
+  {
+    return std::unique_ptr<SATSolver>(createSATSolver(mgr.UserFlags));
+  }
+
+  void pin(SATSolver& solver, const std::vector<unsigned>& vars, unsigned value)
+  {
+    SATSolver::vec_literals unit;
+    for (unsigned i = 0; i < WIDTH; ++i)
+    {
+      unit.clear();
+      unit.push(SATSolver::mkLit(vars[i], ((value >> i) & 1u) == 0));
+      solver.addClause(unit);
+    }
+  }
+};
+
+} // namespace
+
+TEST_F(BVDivBoundEncodingTest, the_comparison_chain_answers_every_pair)
+{
+  for (unsigned isSigned = 0; isSigned < 2; isSigned++)
+    for (unsigned x = 0; x < VALUES; x++)
+      for (unsigned y = 0; y < VALUES; y++)
+      {
+        std::unique_ptr<SATSolver> solver = makeSolver();
+        ASSERT_TRUE(solver != NULL) << "no SAT backend was compiled in";
+
+        std::vector<unsigned> xv(WIDTH), yv(WIDTH);
+        for (unsigned i = 0; i < WIDTH; ++i)
+        {
+          xv[i] = solver->newVar();
+          yv[i] = solver->newVar();
+          solver->setFrozen(xv[i]);
+          solver->setFrozen(yv[i]);
+        }
+
+        const unsigned le =
+            encodeLessOrEqual(*solver, xv, yv, WIDTH, isSigned != 0);
+        pin(*solver, xv, x);
+        pin(*solver, yv, y);
+
+        bool timedOut = false;
+        ASSERT_TRUE(solver->solve(timedOut));
+        ASSERT_FALSE(timedOut);
+
+        const bool got = solver->modelValue(le) == solver->true_literal();
+        bool want;
+        if (isSigned)
+        {
+          const int sx = (x >= VALUES / 2) ? (int)x - (int)VALUES : (int)x;
+          const int sy = (y >= VALUES / 2) ? (int)y - (int)VALUES : (int)y;
+          want = sx <= sy;
+        }
+        else
+          want = x <= y;
+
+        ASSERT_EQ(want, got) << (isSigned ? "signed" : "unsigned") << " " << x
+                             << " <= " << y;
+      }
+}
+
+// Each bound forbids exactly the candidates that break it, and no others:
+// the operation's own answer is always still reachable, and a result that
+// oversteps the bound is not.
+TEST_F(BVDivBoundEncodingTest, bounds_forbid_what_they_should_and_nothing_more)
+{
+  for (Kind opKind : KINDS)
+    for (DivSchema bound : BOUNDS)
+    {
+      if (!boundApplies(opKind, bound))
+        continue;
+
+      for (unsigned a = 0; a < VALUES; a++)
+        for (unsigned b = 0; b < VALUES; b++)
+          for (unsigned t = 0; t < VALUES; t++)
+          {
+            std::unique_ptr<SATSolver> solver = makeSolver();
+            ASSERT_TRUE(solver != NULL) << "no SAT backend was compiled in";
+
+            std::vector<unsigned> aVars(WIDTH), bVars(WIDTH), rVars(WIDTH);
+            for (unsigned i = 0; i < WIDTH; ++i)
+            {
+              aVars[i] = solver->newVar();
+              bVars[i] = solver->newVar();
+              rVars[i] = solver->newVar();
+              solver->setFrozen(aVars[i]);
+              solver->setFrozen(bVars[i]);
+              solver->setFrozen(rVars[i]);
+            }
+
+            encodeDivBound(*solver, bound, aVars, bVars, rVars, WIDTH);
+            pin(*solver, aVars, a);
+            pin(*solver, bVars, b);
+            pin(*solver, rVars, t);
+
+            bool timedOut = false;
+            const bool satisfiable = solver->solve(timedOut);
+            ASSERT_FALSE(timedOut);
+
+            ASSERT_EQ(boundHolds(bound, a, b, t), satisfiable)
+                << "bound " << (int)bound << " over " << _kind_names[opKind]
+                << " at a=" << a << " b=" << b << " t=" << t;
+          }
     }
 }
