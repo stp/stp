@@ -730,16 +730,16 @@ enum stp_counter_t
   STP_COUNTER_BV_REFINEMENT_ROUNDS,
   STP_COUNTER_BV_BLOCKING_LEMMAS,
 
-  //! ... and the algebraic schema lemmas it installed over an abstracted
-  //! BVMULT instead. A round spends one or the other, never both, so these
-  //! two split STP_COUNTER_BV_REFINEMENT_ROUNDS by what it bought.
-  STP_COUNTER_BV_SCHEMA_LEMMAS,
-
   //! Uninterpreted-function applications the lowering decided, and the
   //! constraints installed for them -- eagerly during lowering, or by the
   //! refinement that a refuted candidate earned.
-  STP_COUNTER_UF_APPLICATIONS_LOWERED,
-  STP_COUNTER_UF_CONSTRAINTS_INSTALLED
+  STP_COUNTER_UF_APPLICATIONS_LOWERED = 15,
+  STP_COUNTER_UF_CONSTRAINTS_INSTALLED = 16,
+
+  //! ... and the algebraic schema lemmas it installed over an abstracted
+  //! BVMULT instead. A round spends one or the other, never both, so these
+  //! two split STP_COUNTER_BV_REFINEMENT_ROUNDS by what it bought.
+  STP_COUNTER_BV_SCHEMA_LEMMAS = 17
 };
 
 //! \brief Reads one of the counters above.
