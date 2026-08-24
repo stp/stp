@@ -418,10 +418,11 @@ public:
   // Enabled by default, but only active when native arithmetic is selected.
   bool fp_native_add_iszero = true;
 
-  // Experimental strengthening for the native FP bit-blaster: mine simple
-  // top-level finite box bounds and use them to omit NaN/infinity cases from
-  // native packed-field circuits when those cases are already impossible.
-  bool fp_native_domain = false;
+  // Mine simple top-level finite box bounds and use them to omit NaN/infinity
+  // cases from native packed-field circuits when those cases are already
+  // impossible. This does not enable the separate domain prepass or its
+  // known-sign arithmetic specialization.
+  bool fp_native_domain = true;
 
   // Experimental native-domain arithmetic specialization. A known finite
   // semantic sign removes fp.add's opposite-sign cancellation datapath and

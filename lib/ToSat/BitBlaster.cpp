@@ -4851,46 +4851,57 @@ bool BitBlaster::fpNativeMagnitudeZeroPredicate(const ASTNode& n,
 
 void BitBlaster::collectFpNativeDomainBounds(const ASTNode& n)
 {
-  if (n.GetKind() == AND)
+  // Bounds are useful only when they occur in the top-level conjunction.
+  // Walk that conjunction explicitly: native-domain collection is enabled
+  // for every query, including deep formulas with no floating-point terms.
+  // Recursing down a long AND spine would therefore reintroduce a stack limit
+  // into the otherwise stack-safe bit-blaster.
+  ASTVec pending(1, n);
+  while (!pending.empty())
   {
-    for (const ASTNode& child : n)
-      collectFpNativeDomainBounds(child);
-    return;
-  }
-
-  ASTNode zeroSymbol;
-  if (fpNativeMagnitudeZeroPredicate(n, zeroSymbol))
-  {
-    fpNativeZeroMagnitudeFacts.insert(zeroSymbol);
-    fpNativeZeroMagnitudeTerms.insert(zeroSymbol);
-    fpNativeFiniteTerms.insert(zeroSymbol);
-  }
-
-  ASTNode symbol;
-  ASTNode constant;
-  long double value = 0.0L;
-  bool lowerBound = false;
-  if (!fpNativeBoundPredicate(n, symbol, constant, value, lowerBound))
-    return;
-
-  FpNativeBounds& seen = fpNativeBounds[symbol];
-  if (lowerBound)
-  {
-    if (!seen.hasLower || value >= seen.lower)
+    const ASTNode current = pending.back();
+    pending.pop_back();
+    if (current.GetKind() == AND)
     {
-      seen.lower = value;
-      seen.lowerExact = fpNativeConstantBits(constant, seen.lowerBits);
+      for (auto it = current.end(); it != current.begin();)
+        pending.push_back(*--it);
+      continue;
     }
-    seen.hasLower = true;
-  }
-  else
-  {
-    if (!seen.hasUpper || value <= seen.upper)
+
+    ASTNode zeroSymbol;
+    if (fpNativeMagnitudeZeroPredicate(current, zeroSymbol))
     {
-      seen.upper = value;
-      seen.upperExact = fpNativeConstantBits(constant, seen.upperBits);
+      fpNativeZeroMagnitudeFacts.insert(zeroSymbol);
+      fpNativeZeroMagnitudeTerms.insert(zeroSymbol);
+      fpNativeFiniteTerms.insert(zeroSymbol);
     }
-    seen.hasUpper = true;
+
+    ASTNode symbol;
+    ASTNode constant;
+    long double value = 0.0L;
+    bool lowerBound = false;
+    if (!fpNativeBoundPredicate(current, symbol, constant, value, lowerBound))
+      continue;
+
+    FpNativeBounds& seen = fpNativeBounds[symbol];
+    if (lowerBound)
+    {
+      if (!seen.hasLower || value >= seen.lower)
+      {
+        seen.lower = value;
+        seen.lowerExact = fpNativeConstantBits(constant, seen.lowerBits);
+      }
+      seen.hasLower = true;
+    }
+    else
+    {
+      if (!seen.hasUpper || value <= seen.upper)
+      {
+        seen.upper = value;
+        seen.upperExact = fpNativeConstantBits(constant, seen.upperBits);
+      }
+      seen.hasUpper = true;
+    }
   }
 }
 

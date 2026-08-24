@@ -484,9 +484,8 @@ void ExtraMain::create_options()
            bb_group);
 
   bool_arg("--bb.fp-native-domain", bm->UserFlags.fp_native_domain,
-           "Experimental native FP bit-blaster strengthening: mine simple "
-           "finite box bounds and omit NaN/infinity cases that are impossible "
-           "under those top-level facts",
+           "Mine simple finite box bounds and omit NaN/infinity cases that "
+           "are impossible under those top-level facts (enabled by default)",
            bb_group);
 
   bool_arg("--bb.fp-native-known-sign",
