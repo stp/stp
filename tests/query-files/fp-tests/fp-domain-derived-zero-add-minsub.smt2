@@ -3,9 +3,9 @@
 ; at x = minSub, so the strict upper endpoint is contradictory. The inner
 ; addition uses -zero to ensure the rule is numeric, not packed-zero equality.
 ;
-; RUN: %solver --fp-domain-sound-zero-facts=0 --fp-domain-derived-bounds=1 -s %s 2>&1 | %OutputCheck --check-prefix=DERIVED %s
+; RUN: %solver --fp-domain-sound-zero-facts=0 --fp-domain-derived-bounds=1 --fp-domain-extremal-selectors=0 -s %s 2>&1 | %OutputCheck --check-prefix=DERIVED %s
 ; RUN: %solver --fp-domain-sound-zero-facts=0 -s %s 2>&1 | %OutputCheck --check-prefix=DEFAULT %s
-; RUN: %solver --fp-domain-sound-zero-facts=0 --fp-domain-derived-bounds=0 %s | %OutputCheck --check-prefix=BASE %s
+; RUN: %solver --fp-domain-sound-zero-facts=0 --fp-domain-derived-bounds=0 --fp-domain-extremal-selectors=0 %s | %OutputCheck --check-prefix=BASE %s
 ; DERIVED: 1 zero-add-bounds, 1 inconsistent-boxes
 ; DERIVED: unsat
 ; DEFAULT: 1 zero-add-bounds, 1 inconsistent-boxes

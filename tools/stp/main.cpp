@@ -563,9 +563,9 @@ void ExtraMain::create_options()
 
   bool_arg("--fp-domain-extremal-selectors",
            bm->UserFlags.fp_domain_extremal_selectors,
-           "Experimental FP prepass: replace an objective by necessary "
-           "semantic {0,1} selector values only after proving their "
-           "conjunction sufficient (primarily exact extrema)",
+           "FP prepass (enabled by default): replace an objective by "
+           "necessary semantic {0,1} selector values only after proving "
+           "their conjunction sufficient (primarily exact extrema)",
            bb_group);
 
   bool_arg("--fp-domain-sound-zero-facts",

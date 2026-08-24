@@ -584,13 +584,12 @@ public:
   // additional constraints. Enabled by default; retain the flag for ablation.
   bool fp_domain_derived_bounds = true;
 
-  // Experimental propagation through an objective over semantic {0, 1}
-  // floating-point selector symbols. Replace the objective only when
-  // interval exclusion proves each selected endpoint necessary and their
-  // conjunction sufficient. Exact extrema are the primary case. Kept
-  // separate from the interval-bound experiment so their solver effects can
-  // be ablated.
-  bool fp_domain_extremal_selectors = false;
+  // Propagation through an objective over semantic {0, 1} floating-point
+  // selector symbols. Replace the objective only when interval exclusion
+  // proves each selected endpoint necessary and their conjunction sufficient.
+  // Exact extrema are the primary case. Enabled by default; retain the flag
+  // so its solver effects can be ablated independently.
+  bool fp_domain_extremal_selectors = true;
 
   // Sound zero-fact extraction for boxed nonnegative FP symbols. It only
   // derives zero facts from same-sign rows whose terms are +/- one boxed
