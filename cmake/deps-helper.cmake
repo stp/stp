@@ -119,14 +119,19 @@ endif()
 # Settings the top-level CMakeLists collected as ones both STP and everything
 # it builds have to agree on. It applies them to itself with add_definitions();
 # they reach a separately configured sub-build only by being handed over here.
-string(JOIN " " _stp_ep_inherited ${STP_EP_INHERITED_DEFINITIONS})
+#
+# Public, because the flags below are not the only channel: a dependency whose
+# own CMAKE_ARGS name CMAKE_<LANG>_FLAGS replaces this string rather than adding
+# to it, and has to restate STP_EP_INHERITED_FLAGS itself. ABC does exactly
+# that.
+string(JOIN " " STP_EP_INHERITED_FLAGS ${STP_EP_INHERITED_DEFINITIONS})
 
 set(STP_EP_COMMON_CMAKE_ARGS
     -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
     -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
     -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
-    "-DCMAKE_C_FLAGS=${CMAKE_C_FLAGS} ${STP_EP_NO_WARNINGS} ${_stp_ep_inherited}"
-    "-DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS} ${STP_EP_NO_WARNINGS} ${_stp_ep_inherited}"
+    "-DCMAKE_C_FLAGS=${CMAKE_C_FLAGS} ${STP_EP_NO_WARNINGS} ${STP_EP_INHERITED_FLAGS}"
+    "-DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS} ${STP_EP_NO_WARNINGS} ${STP_EP_INHERITED_FLAGS}"
     -DCMAKE_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER}
     -DCMAKE_CXX_COMPILER_LAUNCHER=${CMAKE_CXX_COMPILER_LAUNCHER}
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON

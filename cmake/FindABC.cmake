@@ -106,13 +106,15 @@ if(NOT ABC_FOUND_SYSTEM)
     # dependency build is worth an uploaded log rather than the tail CMake
     # prints: the error arrives under tens of thousands of warnings.
     string(APPEND ABC_EXTRA_FLAGS " ${STP_EP_NO_WARNINGS}")
+    # And for the same reason, the settings STP collected as ones every
+    # dependency shares -- ABC replaces the common CMAKE_<LANG>_FLAGS, so it
+    # does not receive them the way the others do. _ALLOW_KEYWORD_MACROS is in
+    # here: abc_global.h defines `inline` as a macro, and ABC's one C++ file
+    # then meets <xkeycheck.h>, which makes that a hard error.
+    string(APPEND ABC_EXTRA_FLAGS " ${STP_EP_INHERITED_FLAGS}")
     if(NOT MSVC)
         string(APPEND ABC_EXTRA_FLAGS " -ffunction-sections -fdata-sections")
     endif()
-    # _ALLOW_KEYWORD_MACROS is not repeated here: STP sets it globally for its
-    # own sake and lists it in STP_EP_INHERITED_DEFINITIONS, which reaches every
-    # dependency through the common flags. ABC needs it because abc_global.h
-    # defines `inline` as a macro and its one C++ file then meets <xkeycheck.h>.
 
     set(ABC_CMAKE_ARGS
         ${STP_EP_COMMON_CMAKE_ARGS}
