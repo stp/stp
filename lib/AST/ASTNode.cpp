@@ -374,7 +374,7 @@ unsigned int ASTNode::GetExpWidth() const
 // start reporting FLOATINGPOINT_TYPE solver-wide, bitvector operations over
 // them stop type checking, and to_fp reads an integer as a float. Lowering
 // therefore hands its format to the blaster as an argument instead (see
-// FloatBlaster::operandFormat and FloatBlast).
+// ASTNode::deriveFPFormat and FloatBlast).
 bool ASTNode::canStoreFPFormat() const
 {
   return Degree() == 0 || is_FP_kind(GetKind()) || GetKind() == FLOATINGPOINT ||

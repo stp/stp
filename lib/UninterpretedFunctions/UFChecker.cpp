@@ -487,8 +487,6 @@ UFCheckResult UFChecker::check(const UFCheckPlan& plan,
                          : plan.diagnostic_;
     return out;
   }
-  out.stats.activeApplications = plan.view_->applications.size();
-  out.stats.functions = plan.declarations_.size();
 
   size_t conflictOrder = 0;
   for (size_t declarationIndex = 0;
@@ -575,8 +573,6 @@ UFCheckResult UFChecker::check(const UFCheckPlan& plan,
       conflict.declaration = declaration;
       conflict.representativeHandle = representative.durableHandle;
       conflict.conflictingHandle = record->durableHandle;
-      conflict.representativeOrder = representative.stableOrder;
-      conflict.conflictingOrder = record->stableOrder;
       conflict.leftResult = representative.resultSymbol;
       conflict.rightResult = record->resultSymbol;
       conflict.leftResultValue = previousResult;

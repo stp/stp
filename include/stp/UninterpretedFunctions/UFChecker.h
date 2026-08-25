@@ -112,8 +112,6 @@ struct DLL_PUBLIC UFCongruenceConflict
   const UFDecl* declaration = NULL;
   ASTNode representativeHandle;
   ASTNode conflictingHandle;
-  size_t representativeOrder = 0;
-  size_t conflictingOrder = 0;
   std::vector<UFCongruenceArgument> arguments;
   ASTNode leftResult;
   ASTNode rightResult;
@@ -145,8 +143,6 @@ struct DLL_PUBLIC UFFunctionModelSeedSet
 
 struct DLL_PUBLIC UFCheckStats
 {
-  size_t functions = 0;
-  size_t activeApplications = 0;
   size_t insertions = 0;
   size_t comparisons = 0;
 };

@@ -928,21 +928,6 @@ void ExtensionalityContext::collectIndexInventory(
   }
 }
 
-uint64_t ExtensionalityContext::eagerLemmaCount(
-    const IndexInventory& indexesByShape) const
-{
-  uint64_t lemmas = 0;
-  for (size_t i = 0; i < activeRecordIds.size(); i++)
-  {
-    const Record& r = records[activeRecordIds[i]];
-    const IndexInventory::const_iterator it = indexesByShape.find(ArrayShape(
-        r.constructionLeft.GetIndexWidth(), r.constructionLeft.GetValueWidth()));
-    if (it != indexesByShape.end())
-      lemmas += it->second.size();
-  }
-  return lemmas;
-}
-
 // The reads instantiation is about to create, and what they cost the read
 // side afterwards.
 //

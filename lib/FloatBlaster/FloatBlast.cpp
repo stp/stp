@@ -706,7 +706,6 @@ private:
         // one packed carrier: decode that instead.
         if (n[1].GetSourceSort() != n[2].GetSourceSort())
           return decodeCarrier(n, asPacked(n));
-        requireSameFormat(n[1], n[2]);
         result.reset(new symbolic_fp::uf(symbolic_fp::unpacked::select(
             lower(n[0]), asUnpacked(n[1]), asUnpacked(n[2]))));
         break;
@@ -724,7 +723,6 @@ private:
       case FP_SUB:
       case FP_MUL:
       case FP_DIV:
-        requireSameFormat(n[1], n[2]);
         if (kind == FP_ADD)
           result.reset(new symbolic_fp::uf(symbolic_fp::unpacked::add(
               result_format, lower(n[0]), asUnpacked(n[1]),
@@ -744,7 +742,6 @@ private:
         break;
 
       case FP_FMA:
-        requireSameFormat(n[1], n[2]);
         requireSameFormat(n[1], n[3]);
         result.reset(new symbolic_fp::uf(symbolic_fp::unpacked::fma(
             result_format, lower(n[0]), asUnpacked(n[1]), asUnpacked(n[2]),

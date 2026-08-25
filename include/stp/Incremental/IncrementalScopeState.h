@@ -199,7 +199,6 @@ public:
   void commitLevel(size_t level,
                    const PreprocessingTransaction& transaction);
   void commitWholeStack(const PreprocessingTransaction& transaction);
-  bool hasWholeStackTransaction() const { return wholeStackActive; }
 
   const std::vector<ScopedElimination>& activeEliminations() const
   {

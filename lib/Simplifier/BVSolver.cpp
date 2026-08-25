@@ -66,7 +66,7 @@ const bool debug_bvsolver = false;
 // unlowered while the solver runs: FloatBlast comes after the size-reducing
 // passes, and it reads an operation's format off its operands, because by
 // then they are the only thing that still says what sort they are (see
-// FloatBlaster::operandFormat). So a float-typed variable rewritten into a
+// ASTNode::deriveFPFormat). So a float-typed variable rewritten into a
 // concatenation leaves fp.isZero and friends blasting against a format of
 // (0, 0) -- a packed width of zero against a 64-bit operand.
 //

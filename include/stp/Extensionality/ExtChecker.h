@@ -337,14 +337,11 @@ struct ExtEvent
     CONFLICT,
     WITNESS_CHECK
   };
-  int seq;
   Kind kind;
   const char* rule;
   ASTNode source; // null for seeds / witness checks
   ASTNode destination;
   size_t access;
-  ASTNode indexValue;  // null on SKIP_SEEN
-  ASTNode accessValue; // null on SKIP_SEEN
 };
 
 struct ExtCheckResult

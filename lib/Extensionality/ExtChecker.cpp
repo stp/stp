@@ -74,12 +74,10 @@ struct CheckerState
   std::map<ASTNode, std::vector<size_t>> rho; // insertion order preserved
   std::deque<PairKey> worklist;
   ExtCheckResult result;
-  int seq;
   size_t materializedGuardCount;
 
   CheckerState(const ExtGraph& g, ExtModelView& m, bool ev)
-      : graph(g), model(m), recordEvents(ev), seq(0),
-        materializedGuardCount(0)
+      : graph(g), model(m), recordEvents(ev), materializedGuardCount(0)
   {
   }
 
@@ -94,23 +92,16 @@ struct CheckerState
   }
 
   void event(ExtEvent::Kind kind, const char* rule, const ASTNode& source,
-             const ASTNode& destination, size_t access,
-             const ASTNode& indexValue, const ASTNode& accessValue)
+             const ASTNode& destination, size_t access)
   {
     if (!recordEvents)
-    {
-      seq++;
       return;
-    }
     ExtEvent e;
-    e.seq = seq++;
     e.kind = kind;
     e.rule = rule;
     e.source = source;
     e.destination = destination;
     e.access = access;
-    e.indexValue = indexValue;
-    e.accessValue = accessValue;
     result.events.push_back(e);
   }
 
@@ -173,8 +164,7 @@ struct CheckerState
     if (paths.find(key) != paths.end())
     {
       result.stats["skipped_seen"]++;
-      event(ExtEvent::SKIP_SEEN, rule, source, destination, accessId,
-            ASTNode(), ASTNode());
+      event(ExtEvent::SKIP_SEEN, rule, source, destination, accessId);
       return;
     }
 
@@ -218,8 +208,7 @@ struct CheckerState
         c.leftGuards = materializeGuards(otherPath->second);
         c.rightGuards = materializeGuards(candidatePath);
         result.stats["conflicts"]++;
-        event(ExtEvent::CONFLICT, rule, source, destination, accessId, idx,
-              val);
+        event(ExtEvent::CONFLICT, rule, source, destination, accessId);
         result.conflicts.push_back(std::move(c));
 
         // Record the pair as visited so a later path to it cannot report
@@ -242,8 +231,8 @@ struct CheckerState
         return;
       }
       result.stats["skipped_represented"]++;
-      event(ExtEvent::SKIP_REPRESENTED, rule, source, destination, accessId,
-            idx, val);
+      event(ExtEvent::SKIP_REPRESENTED, rule, source, destination,
+            accessId);
       return;
     }
 
@@ -264,7 +253,7 @@ struct CheckerState
       result.stats[std::string("rule_") + rule]++;
       kind = ExtEvent::PROPAGATE;
     }
-    event(kind, rule, source, destination, accessId, idx, val);
+    event(kind, rule, source, destination, accessId);
   }
 };
 
@@ -636,7 +625,7 @@ ExtCheckResult ExtChecker::check(const ExtGraph& graph, ExtModelView& model,
     const ASTNode leftVal = model.bvValue(w.leftValue);
     const ASTNode rightVal = model.bvValue(w.rightValue);
     st.event(ExtEvent::WITNESS_CHECK, "WITNESS", ASTNode(), ASTNode(),
-             w.record, model.bvValue(w.index), leftVal);
+             w.record);
     st.result.stats["witness_checks"]++;
     if (!proxyVal && leftVal == rightVal)
     {

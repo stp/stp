@@ -60,7 +60,6 @@ UFContext::~UFContext()
   byIdentity_.clear();
   activeByName_.clear();
   owned_.clear();
-  allById_.clear();
   declarations_.clear();
 }
 
@@ -123,7 +122,6 @@ UFContext::declareFunction(const std::string& name,
   const UFDecl* result = record.get();
   declarations_.push_back(std::move(record));
   activeByName_.insert(std::make_pair(name, result));
-  allById_.insert(std::make_pair(id, result));
   byIdentity_.insert(std::make_pair(identity, result));
   owned_.insert(result);
   return result;
@@ -146,11 +144,6 @@ bool UFContext::deactivate(const UFDecl* decl, std::string* error)
   }
   activeByName_.erase(found);
   return true;
-}
-
-void UFContext::deactivateAll()
-{
-  activeByName_.clear();
 }
 
 const UFDecl* UFContext::lookup(const std::string& name) const
