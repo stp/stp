@@ -50,7 +50,6 @@ class ASTNode
   friend class vector<ASTNode>;
   friend ASTNode HashingNodeFactory::CreateNode(
       stp::Kind kind, stp::ASTChildren back_children);
-  friend bool exprless(const ASTNode& n1, const ASTNode& n2);
   friend bool arithless(const ASTNode& n1, const ASTNode& n2);
 
   // Ptr to the read data
@@ -144,12 +143,6 @@ public:
   {
     const Kind k = GetKind();
     return k == BVCONST || k == TRUE || k == FALSE;
-  }
-
-  bool isITE() const
-  {
-    Kind k = GetKind();
-    return k == ITE;
   }
 
   bool isAtom() const
@@ -311,8 +304,6 @@ public:
 
   // Hash is the node's unique id. Inlined: used by every ==/</hash lookup.
   size_t Hash() const { return _int_node_ptr ? _int_node_ptr->node_uid : 0; }
-
-  void NFASTPrint(int l, int max, int prefix) const;
 
   // Lisp-form printer
   ostream& LispPrint(ostream& os, int indentation = 0) const;

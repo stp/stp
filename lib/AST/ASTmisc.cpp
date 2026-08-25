@@ -47,12 +47,6 @@ THREAD_LOCAL_IE uint64_t ASTInternal::node_uid_cntr = 0;
  * Universal Helper Functions                                   *
  ****************************************************************/
 
-// Sort ASTNodes by expression numbers
-bool exprless(const ASTNode& n1, const ASTNode& n2)
-{
-  return (n1.GetNodeNum() < n2.GetNodeNum());
-}
-
 // This is for sorting by arithmetic expressions (for
 // combining like terms, etc.)
 bool arithless(const ASTNode& n1, const ASTNode& n2)
@@ -380,8 +374,6 @@ bool isCommutative(const Kind k)
     default:
       return false;
   }
-
-  return false;
 }
 
 ATTR_NORETURN void FatalError(const char* str, const ASTNode& a, int w)

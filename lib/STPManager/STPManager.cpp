@@ -71,17 +71,6 @@ ASTInterior* STPMgr::LookupOrCreateInterior(Kind kind, ASTChildren children)
   return n_ptr;
 }
 
-ostream& operator<<(ostream& os, const ASTNodeMap& nmap)
-{
-  ASTNodeMap::const_iterator iend = nmap.end();
-  for (ASTNodeMap::const_iterator i = nmap.begin(); i != iend; i++)
-  {
-    os << "Key: " << i->first << endl;
-    os << "Value: " << i->second << endl;
-  }
-  return os;
-}
-
 ////////////////////////////////////////////////////////////////
 // STPMgr member functions to create ASTSymbol and ASTBVConst
 ////////////////////////////////////////////////////////////////
@@ -241,16 +230,6 @@ void STPMgr::unindexSymbolName(ASTSymbol* symbol)
 
   if (declared.empty())
     _symbol_name_index.erase(entry);
-}
-
-bool STPMgr::LookupSymbol(ASTSymbol& s)
-{
-  ASTSymbol* s_ptr = &s; // it's a temporary key.
-
-  if (_symbol_unique_table.find(s_ptr) == _symbol_unique_table.end())
-    return false;
-  else
-    return true;
 }
 
 // The two name-only lookups. A symbol's sort is part of its identity, so

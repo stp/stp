@@ -146,9 +146,7 @@ public:
 
   std::string getDifference();
 
-  void resetDifference() { getDifference(); }
 
-  void difference() { std::cout << getDifference() << std::endl << std::endl; }
 
   RunTimes() { lastTime = stp::getCurrentTime(); }
 

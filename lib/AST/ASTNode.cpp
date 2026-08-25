@@ -704,39 +704,6 @@ unsigned int ASTNode::GetUnsignedConst() const
 
 // Hash() is now inlined in ASTNode.h.
 
-void ASTNode::NFASTPrint(int l, int max, int prefix) const
-{
-  //****************************************
-  // stop
-  //****************************************
-  if (l > max)
-  {
-    return;
-  }
-
-  //****************************************
-  // print
-  //****************************************
-  printf("[%10d]", 0);
-  for (int i = 0; i < prefix; i++)
-  {
-    printf("    ");
-  }
-  std::cout << GetKind();
-  printf("\n");
-
-  //****************************************
-  // recurse
-  //****************************************
-
-  const ASTChildren children = GetChildren();
-  auto it = children.begin();
-  for (; it != children.end(); it++)
-  {
-    it->NFASTPrint(l + 1, max, prefix + 1);
-  }
-}
-
 bool ASTNode::isSimplfied() const
 {
   return _int_node_ptr->isSimplified();

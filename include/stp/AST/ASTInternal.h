@@ -154,9 +154,6 @@ protected:
    * Protected Member Functions                                   *
    ****************************************************************/
 
-  // Copying assign operator.  Also copies contents of children.
-  ASTInternal& operator=(const ASTInternal& int_node);
-
   // Cleanup function for removing from hash table
   virtual void CleanUp() = 0;
 

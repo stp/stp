@@ -59,7 +59,6 @@ namespace stp
 
 const static string cb_message = "After Constant Bit Propagation. ";
 const static string uc_message = "After Removing Unconstrained. ";
-const static string int_message = "After Unsigned Interval Analysis. ";
 const static string pl_message = "After Pure Literals. ";
 const static string bitvec_message = "After Bit-vector Solving. ";
 const static string size_inc_message = "After Speculative Simplifications. ";
@@ -83,11 +82,6 @@ STP::~STP()
 {
   ClearAllTables();
   deleteObjects();
-}
-
-const LoweredApplicationView& STP::lastBatchUFView() const
-{
-  return *batchUFView;
 }
 
 void STP::ClearAllTables(void)

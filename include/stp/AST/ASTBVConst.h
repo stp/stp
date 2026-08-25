@@ -38,8 +38,6 @@ class ASTBVConst : public ASTInternal
   friend class ASTNode;
   friend class ASTFPConst;
   friend class ASTRMConst;
-  friend class ASTNodeHasher;
-  friend class ASTNodeEqual;
 
 private:
   // CBV is actually an unsigned*. The bitvector constant is
@@ -60,7 +58,6 @@ private:
     bool operator()(const ASTBVConst* bvc1, const ASTBVConst* bvc2) const;
   };
 
-  ASTBVConst(CBV bv, unsigned int width);
   ASTBVConst(STPMgr* mgr, CBV bv, unsigned int /*width*/,
              bool managed_outside = false)
       : ASTInternal(mgr, BVCONST)
