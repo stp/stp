@@ -51,13 +51,34 @@ uint8_t MinisatCore::value(uint32_t x) const
   return Minisat::toInt(s->value(x));
 }
 
+namespace
+{
+// Reads the deadline the SATSolver base class keeps, so there is one notion of
+// "time left" across every backend rather than a second clock living in here.
+// MiniSat polls this on every conflict and every restart, so it has to be
+// cheap: one steady_clock read, no allocation, no locking.
+class DeadlineTerminator : public Minisat::Terminator
+{
+  const stp::SATSolver& owner;
+
+public:
+  explicit DeadlineTerminator(const stp::SATSolver& o) : owner(o) {}
+
+  bool terminate() override { return owner.timeLimitExpired(); }
+};
+} // namespace
+
 MinisatCore::MinisatCore()
 {
   s = new Minisat::Solver;
+  deadline_terminator.reset(new DeadlineTerminator(*this));
+  s->connectTerminator(deadline_terminator.get());
 }
 
 MinisatCore::~MinisatCore()
 {
+  // Before the terminator it points at.
+  s->connectTerminator(nullptr);
   delete s;
 }
 
