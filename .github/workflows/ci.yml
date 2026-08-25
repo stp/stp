@@ -83,7 +83,13 @@ jobs:
           python3-pip \
           python3-setuptools \
           zlib1g-dev
-        sudo pip3 install -U lit
+        # Pinned to the 23 series. lit is installed unpinned nowhere else,
+        # and an unpinned -U picks up whatever is newest: 23.1.0 landed on
+        # 2026-08-25 after fourteen months without a release and broke every
+        # job that runs this suite, because lit 23 refuses the external shell
+        # the config asked for. A major version of a test runner should be
+        # something this repository moves to deliberately.
+        sudo pip3 install -U 'lit~=23.1'
 
     # Every dependency is pinned in the file that fetches it, so this hashes
     # those files and nothing else -- it used to have to resolve a revision
