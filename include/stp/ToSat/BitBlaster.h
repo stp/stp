@@ -64,6 +64,8 @@ using BBNodeVec = std::vector<BBNodeAIG>;
 // BBExactBinaryOp takes one and its callers are outside.
 using BBNodeSet = std::unordered_set<BBNodeAIG>;
 
+enum class DivLemma;
+
 class BitBlaster
 {
 
@@ -500,6 +502,22 @@ public:
   // `support`, as everywhere else here.
   BBNodeVec BBExactBinaryOp(const ASTNode& term, const BBNodeVec& x,
                             const BBNodeVec& y, BBNodeSet& support);
+
+  // The circuit for one algebraic fact about `t = x udiv s`, returned as the
+  // single node that must hold.
+  //
+  // Here rather than in BVExactEncoder, which is what asks for it, because
+  // the facts are built out of BBEQ, BBBVLE, BBUminus and the rest, and
+  // those are this class's own. It is the same reason BBExactBinaryOp is
+  // here: the caller has the AIG manager and the splice, and this has the
+  // parts.
+  BBNode BBDivLemma(DivLemma lemma, const BBNodeVec& x, const BBNodeVec& s,
+                    const BBNodeVec& t, BBNodeSet& support);
+
+  // A logical right shift by a variable amount; several of the facts above
+  // are inequalities over one.
+  BBNodeVec BBShiftRightByVariable(const BBNodeVec& value,
+                                   const BBNodeVec& amount, unsigned width);
 
   std::unordered_map<ASTNode, BBNodeVec, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>::iterator
   simplify_during_bb(ASTNode& term, BBNodeSet& support);

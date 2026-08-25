@@ -724,6 +724,195 @@ MulSchemaChoice chooseMulSchema(const std::vector<bool>& aBits,
   return MulSchemaChoice();
 }
 
+std::vector<int> divSchemaSources(Kind opKind, unsigned width,
+                                  const DivSchemaChoice& choice)
+{
+  std::vector<int> source(width, DIV_SOURCE_ZERO);
+
+  if (choice.schema == DivSchema::DivisorZero)
+  {
+    // What the unabstracted BBDivMod answers over a zero divisor, and what
+    // SMT-LIB says: the quotient is all ones and the remainder is the
+    // dividend. The two are not the same value, so each is written out.
+    for (unsigned i = 0; i < width; ++i)
+      source[i] = (opKind == BVDIV) ? DIV_SOURCE_ONE : (int)i;
+    return source;
+  }
+
+  if (choice.schema != DivSchema::Pow2Divisor)
+    return source;
+
+  const unsigned shift = choice.shift;
+  if (opKind == BVDIV)
+  {
+    // a >> shift. The bits above the shift come down and zeros arrive at
+    // the top, which is what the vector was filled with.
+    for (unsigned i = 0; i + shift < width; ++i)
+      source[i] = (int)(i + shift);
+  }
+  else
+  {
+    // a & (2^shift - 1). The bits below the shift stay where they are and
+    // everything at or above it goes.
+    for (unsigned i = 0; i < shift && i < width; ++i)
+      source[i] = (int)i;
+  }
+  return source;
+}
+
+// Does the candidate's result already say what these sources say it must?
+// A schema the candidate satisfies is no use as a refinement: it would let
+// the search offer the same model again, and the round would be spent for
+// nothing.
+static bool resultMatchesSources(const std::vector<int>& source,
+                                 const std::vector<bool>& aBits,
+                                 const std::vector<bool>& tBits)
+{
+  for (unsigned i = 0; i < source.size(); ++i)
+  {
+    const bool want = (source[i] == DIV_SOURCE_ZERO)  ? false
+                      : (source[i] == DIV_SOURCE_ONE) ? true
+                                                      : aBits[source[i]];
+    if (tBits[i] != want)
+      return false;
+  }
+  return true;
+}
+
+// Unsigned comparison over the bit vectors a candidate holds, least
+// significant bit first. Written here rather than reusing computeBVLE
+// because that one is about the operands of an abstracted comparison and
+// this one is about a result the abstraction chose.
+static bool valueLessOrEqual(const std::vector<bool>& left,
+                             const std::vector<bool>& right)
+{
+  for (int i = (int)left.size() - 1; i >= 0; --i)
+  {
+    if (left[i] != right[i])
+      return right[i];
+  }
+  return true;
+}
+
+static bool valueIsZero(const std::vector<bool>& bits)
+{
+  for (unsigned i = 0; i < bits.size(); ++i)
+    if (bits[i])
+      return false;
+  return true;
+}
+
+// The DivLemma facts, in the order the chooser offers them: by how often
+// they fired in the solver they come from, measured over the queries this
+// is for. A candidate usually breaks more than one, so the order decides
+// which round buys which fact, and buying the most productive first is the
+// cheapest guess available.
+static const DivLemma DIV_LEMMAS[] = {
+    DivLemma::DivisorAboveShiftedDividend,          // 280 firings
+    DivLemma::QuotientBelowNegatedDivisor,          // 200
+    DivLemma::DividendAboveNegatedAnd,              // 187
+    DivLemma::DividendZero,                         // 171
+    DivLemma::DivisorEqualsDividend,                // 162
+    DivLemma::DivisorLessOneAboveShiftedDividend,   // 161
+    DivLemma::DivisorAllOnes};                      // 59
+
+static const unsigned DIV_LEMMA_COUNT =
+    sizeof(DIV_LEMMAS) / sizeof(DIV_LEMMAS[0]);
+
+const DivLemma* divLemmaTable(unsigned& count)
+{
+  count = DIV_LEMMA_COUNT;
+  return DIV_LEMMAS;
+}
+
+DivSchemaChoice chooseDivSchema(Kind opKind, const std::vector<bool>& aBits,
+                                const std::vector<bool>& bBits,
+                                const std::vector<bool>& tBits,
+                                unsigned installedSchemas)
+{
+  const unsigned width = (unsigned)tBits.size();
+  const bool divisorZero = valueIsZero(bBits);
+
+  // The divisor-guarded facts first, where they apply: each says what the
+  // operation *is* for that divisor, which is more than any bound can say.
+  // Zero is not a power of two, so the two never contend and the order
+  // between them is a formality.
+  if (divisorZero)
+  {
+    const DivSchemaChoice choice{DivSchema::DivisorZero, 0};
+    if (!resultMatchesSources(divSchemaSources(opKind, width, choice), aBits,
+                              tBits))
+      return choice;
+  }
+  else
+  {
+    const int k = powerOfTwoExponent(bBits);
+    if (k >= 0)
+    {
+      const DivSchemaChoice choice{DivSchema::Pow2Divisor, (unsigned)k};
+      if (!resultMatchesSources(divSchemaSources(opKind, width, choice), aBits,
+                                tBits))
+        return choice;
+    }
+  }
+
+  // Then the bounds, which name no divisor and so are the ones a candidate
+  // over a wide random divisor actually runs into. Each is offered only
+  // once: they are unconditional, so once installed no candidate can
+  // contradict them again and re-emitting one would spend a round on a
+  // clause the solver already has.
+  if (opKind == BVMOD)
+  {
+    // r <=u a, with no premise at all -- it holds over a zero divisor too,
+    // where the remainder is the dividend.
+    if ((installedSchemas &
+         DIV_SCHEMA_INSTALLED_REMAINDER_AT_MOST_DIVIDEND) == 0 &&
+        !valueLessOrEqual(tBits, aBits))
+      return {DivSchema::RemainderAtMostDividend, 0};
+
+    // b != 0 -> r <u b.
+    if ((installedSchemas & DIV_SCHEMA_INSTALLED_REMAINDER_BELOW_DIVISOR) ==
+            0 &&
+        !divisorZero && valueLessOrEqual(bBits, tBits))
+      return {DivSchema::RemainderBelowDivisor, 0};
+  }
+  else if (opKind == BVDIV)
+  {
+    // b != 0 -> t <=u a.
+    if ((installedSchemas &
+         DIV_SCHEMA_INSTALLED_QUOTIENT_AT_MOST_DIVIDEND) == 0 &&
+        !divisorZero && !valueLessOrEqual(tBits, aBits))
+      return {DivSchema::QuotientAtMostDividend, 0, 0};
+
+    // Then the wider facts, first one the candidate breaks. Quotients only:
+    // every one of them is about `t = a udiv b`.
+    for (unsigned i = 0; i < DIV_LEMMA_COUNT; ++i)
+    {
+      if ((installedSchemas & divLemmaInstalledBit(i)) != 0)
+        continue;
+      if (!divLemmaHolds(DIV_LEMMAS[i], aBits, bBits, tBits))
+        return {DivSchema::Lemma, 0, i};
+    }
+  }
+
+  return DivSchemaChoice();
+}
+
+static const char* divSchemaName(DivSchema schema)
+{
+  switch (schema)
+  {
+    case DivSchema::DivisorZero: return "zero-divisor";
+    case DivSchema::Pow2Divisor: return "power-of-two-divisor";
+    case DivSchema::RemainderAtMostDividend: return "remainder-at-most-dividend";
+    case DivSchema::RemainderBelowDivisor: return "remainder-below-divisor";
+    case DivSchema::QuotientAtMostDividend: return "quotient-at-most-dividend";
+    case DivSchema::Lemma: return "lemma";
+    case DivSchema::None: break;
+  }
+  return "none";
+}
+
 // How far past the lowest wrong bit a piece-at-a-time escalation reaches.
 // A fixed 32-bit step; there is no measurement behind this value, which is
 // part of why the flag that reaches it is off.
@@ -868,6 +1057,168 @@ static void encodeMulShiftUnderValue(SATSolver& solver,
   }
 }
 
+// divisor = divisorBits -> every result bit is a constant or a bit of the
+// dividend, as `source` says.
+//
+// The premise is the blocking lemma's opening disjunction, exactly as the
+// multiplication schemas use it: false only on the candidate's own divisor,
+// and leaving the dividend entirely free. That is what makes one of these
+// worth 2^W blocking lemmas over the same divisor.
+// A variable that holds exactly when `lv <= rv`, over the operand bits
+// already in the solver.
+//
+// From the least significant bit up, so that the most significant
+// *differing* bit is the one that decides. Each step keeps the accumulator
+// when the two bits agree and overrides it when they differ, so whichever
+// bit is visited last among the differing ones settles the answer -- which
+// is the top one only in this direction. Run downwards, as this once was,
+// the bottom differing bit won instead, and the chain answered something
+// that is not a comparison at all: it disagreed with `a <= b` on 31616 of
+// the 65536 pairs of eight-bit values. The lemma then pinned the abstraction
+// to that, and a query whose comparison the pinned value contradicted came
+// back unsat.
+//
+// The sign bit is therefore also the last step, which is where flipping its
+// sense belongs: for a signed comparison a leading 1 is the smaller side, so
+// the roles of the two operands invert at that bit alone.
+//
+// The accumulator starts true, which is what makes this `<=` rather than
+// `<`: two equal operands never reach a differing bit, so nothing overrides
+// it.
+unsigned encodeLessOrEqual(SATSolver& solver, const std::vector<unsigned>& lv,
+                           const std::vector<unsigned>& rv, unsigned width,
+                           bool isSigned)
+{
+  unsigned carryVar = solver.newVar();
+  solver.setFrozen(carryVar);
+  {
+    SATSolver::vec_literals cl;
+    cl.push(SATSolver::mkLit(carryVar, false));
+    solver.addClause(cl);
+  }
+
+  for (int bit = 0; bit < (int)width; ++bit)
+  {
+    unsigned a = lv[bit];
+    unsigned b = rv[bit];
+    bool flipSign = (isSigned && bit == (int)width - 1);
+
+    auto xP = SATSolver::mkLit(a, !flipSign);
+    auto xN = SATSolver::mkLit(a, flipSign);
+    auto yP = SATSolver::mkLit(b, flipSign);
+    auto yN = SATSolver::mkLit(b, !flipSign);
+    auto zP = SATSolver::mkLit(carryVar, false);
+    auto zN = SATSolver::mkLit(carryVar, true);
+
+    unsigned nc = solver.newVar();
+    solver.setFrozen(nc);
+
+    SATSolver::vec_literals cl;
+    cl.clear(); cl.push(xN); cl.push(yN); cl.push(SATSolver::mkLit(nc, false)); solver.addClause(cl);
+    cl.clear(); cl.push(xN); cl.push(zN); cl.push(SATSolver::mkLit(nc, false)); solver.addClause(cl);
+    cl.clear(); cl.push(yN); cl.push(zN); cl.push(SATSolver::mkLit(nc, false)); solver.addClause(cl);
+    cl.clear(); cl.push(xP); cl.push(yP); cl.push(SATSolver::mkLit(nc, true)); solver.addClause(cl);
+    cl.clear(); cl.push(xP); cl.push(zP); cl.push(SATSolver::mkLit(nc, true)); solver.addClause(cl);
+    cl.clear(); cl.push(yP); cl.push(zP); cl.push(SATSolver::mkLit(nc, true)); solver.addClause(cl);
+
+    carryVar = nc;
+  }
+
+  return carryVar;
+}
+
+// The three bounds, each written straight onto the comparison chain.
+//
+// Where a bound carries the premise `b != 0`, it is spent as its
+// contrapositive rather than through a fresh variable standing for the
+// premise: `b != 0 -> P` is `not P -> b = 0`, and `b = 0` is a conjunction,
+// so what goes in is one binary clause per divisor bit. No definition, no
+// extra variable, and the solver sees the premise on every bit rather than
+// behind one literal it has to reason through.
+void encodeDivBound(SATSolver& solver, DivSchema schema,
+                           const std::vector<unsigned>& dividendVars,
+                           const std::vector<unsigned>& divisorVars,
+                           const std::vector<unsigned>& resultVars,
+                           unsigned width)
+{
+  SATSolver::vec_literals cl;
+
+  if (schema == DivSchema::RemainderAtMostDividend)
+  {
+    // r <= a, unconditionally: a unit clause on the chain's answer.
+    const unsigned le =
+        encodeLessOrEqual(solver, resultVars, dividendVars, width, false);
+    cl.clear();
+    cl.push(SATSolver::mkLit(le, false));
+    solver.addClause(cl);
+    return;
+  }
+
+  if (schema == DivSchema::QuotientAtMostDividend)
+  {
+    // b != 0 -> t <= a, i.e. t > a -> b = 0.
+    const unsigned le =
+        encodeLessOrEqual(solver, resultVars, dividendVars, width, false);
+    for (unsigned i = 0; i < width; ++i)
+    {
+      cl.clear();
+      cl.push(SATSolver::mkLit(le, false));
+      cl.push(SATSolver::mkLit(divisorVars[i], true));
+      solver.addClause(cl);
+    }
+    return;
+  }
+
+  // b != 0 -> r < b. `r < b` is `not (b <= r)`, so the chain is run the
+  // other way round and its answer is the one that must be false.
+  const unsigned bLeR =
+      encodeLessOrEqual(solver, divisorVars, resultVars, width, false);
+  for (unsigned i = 0; i < width; ++i)
+  {
+    cl.clear();
+    cl.push(SATSolver::mkLit(bLeR, true));
+    cl.push(SATSolver::mkLit(divisorVars[i], true));
+    solver.addClause(cl);
+  }
+}
+
+void encodeDivUnderDivisorValue(
+    SATSolver& solver, const std::vector<unsigned>& divisorVars,
+    const std::vector<bool>& divisorBits,
+    const std::vector<unsigned>& dividendVars,
+    const std::vector<unsigned>& resultVars, unsigned width,
+    const std::vector<int>& source)
+{
+  const auto guard = [&](SATSolver::vec_literals& cl) {
+    cl.clear();
+    for (unsigned i = 0; i < width; ++i)
+      cl.push(SATSolver::mkLit(divisorVars[i], divisorBits[i]));
+  };
+
+  SATSolver::vec_literals cl;
+  for (unsigned bit = 0; bit < width; ++bit)
+  {
+    if (source[bit] == DIV_SOURCE_ZERO || source[bit] == DIV_SOURCE_ONE)
+    {
+      guard(cl);
+      cl.push(SATSolver::mkLit(resultVars[bit], source[bit] == DIV_SOURCE_ZERO));
+      solver.addClause(cl);
+      continue;
+    }
+
+    const unsigned src = dividendVars[source[bit]];
+    guard(cl);
+    cl.push(SATSolver::mkLit(resultVars[bit], true));
+    cl.push(SATSolver::mkLit(src, false));
+    solver.addClause(cl);
+
+    guard(cl);
+    cl.push(SATSolver::mkLit(resultVars[bit], false));
+    cl.push(SATSolver::mkLit(src, true));
+    solver.addClause(cl);
+  }
+}
+
 unsigned BVAbstractionRefiner::refineTerms(
     SATSolver& solver, const ToSATBase::ASTNodeToSATVar& nodeToSATVar)
 {
@@ -888,8 +1239,10 @@ unsigned BVAbstractionRefiner::refineTerms(
     std::vector<bool> aBits, bBits, expected;
     // The algebraic fact this candidate contradicts, if any. Decided here
     // rather than below because it is read off the model and the clause
-    // phase must not touch the model.
+    // phase must not touch the model. At most one of the two is ever set:
+    // an abstraction is a multiplication or a division, never both.
     MulSchemaChoice schema;
+    DivSchemaChoice divSchema;
     // The lowest bit the candidate's result got wrong, which is where a
     // piece-at-a-time escalation starts from. Always below the width: this
     // record exists because some bit is wrong.
@@ -1086,25 +1439,39 @@ unsigned BVAbstractionRefiner::refineTerms(
         if (actual[bit] != expected[bit]) { lowestWrongBit = bit; break; }
       if (lowestWrongBit == W) continue;
 
-      // Only BVMULT, and only while there is allowance left. Schemas are
-      // spent from a separate purse: one is both cheaper and stronger than
-      // a blocking lemma, so it should not bring the escalation forward --
-      // but it must not push it out of reach either, and a candidate that
-      // keeps landing on fresh powers of two would buy a solve for each
-      // one. The bound is the flat ceiling rather than the width-scaled
-      // allowance below, because what makes that allowance narrow is
-      // exactly what a schema does not suffer from: a blocking lemma is
-      // worth less as the operands widen, and a fact about every pair is
-      // worth the same. Division and remainder keep the blocking lemma as
-      // their only refinement; the facts here are about multiplication.
+      // Only while there is allowance left. Schemas are spent from a
+      // separate purse: one is both cheaper and stronger than a blocking
+      // lemma, so it should not bring the escalation forward -- but it must
+      // not push it out of reach either, and a candidate that keeps landing
+      // on fresh powers of two would buy a solve for each one. The bound is
+      // the flat ceiling rather than the width-scaled allowance below,
+      // because what makes that allowance narrow is exactly what a schema
+      // does not suffer from: a blocking lemma is worth less as the
+      // operands widen, and a fact about every pair is worth the same.
+      //
+      // Multiplication and division draw on the same purse and are asked
+      // separately, because what they can say about a candidate has nothing
+      // in common: the multiplication facts are about the low bits of a
+      // product and the commutativity that gives each of them two readings,
+      // and the division facts are about one divisor at a time.
       MulSchemaChoice schema;
+      DivSchemaChoice divSchema;
       const unsigned schemaLimit = bm->UserFlags.bv_term_abstraction_rounds;
-      if (abs.opKind == BVMULT && bm->UserFlags.bv_term_abstraction_schemas &&
-          (schemaLimit == 0 || abs.schemaRounds < schemaLimit))
-        schema = chooseMulSchema(aBits, bBits, actual, abs.installedSchemas);
+      const bool schemaAllowance =
+          bm->UserFlags.bv_term_abstraction_schemas &&
+          (schemaLimit == 0 || abs.schemaRounds < schemaLimit);
+      if (schemaAllowance)
+      {
+        if (abs.opKind == BVMULT)
+          schema = chooseMulSchema(aBits, bBits, actual, abs.installedSchemas);
+        else
+          divSchema = chooseDivSchema(abs.opKind, aBits, bBits, actual,
+                                      abs.installedSchemas);
+      }
 
       incDivMul.push_back({idx, std::move(aBits), std::move(bBits),
-                            std::move(expected), schema, lowestWrongBit});
+                            std::move(expected), schema, divSchema,
+                            lowestWrongBit});
     }
   }
 
@@ -1120,54 +1487,8 @@ unsigned BVAbstractionRefiner::refineTerms(
     const std::vector<unsigned>& lv = inc.swapOps ? rightVars : leftVars;
     const std::vector<unsigned>& rv = inc.swapOps ? leftVars : rightVars;
 
-    unsigned carryVar = solver.newVar();
-    solver.setFrozen(carryVar);
-    {
-      SATSolver::vec_literals cl;
-      cl.push(SATSolver::mkLit(carryVar, false));
-      solver.addClause(cl);
-    }
-
-    // From the least significant bit up, so that the most significant
-    // *differing* bit is the one that decides. Each step keeps the accumulator
-    // when the two bits agree and overrides it when they differ, so whichever
-    // bit is visited last among the differing ones settles the answer -- which
-    // is the top one only in this direction. Run downwards, as this was, the
-    // bottom differing bit won instead, and the chain answered something that
-    // is not a comparison at all: it disagreed with `a <= b` on 31616 of the
-    // 65536 pairs of eight-bit values. The lemma then pinned the abstraction
-    // to that, and a query whose comparison the pinned value contradicted came
-    // back unsat.
-    //
-    // The sign bit is therefore also the last step, which is where flipping
-    // its sense belongs: for a signed comparison a leading 1 is the smaller
-    // side, so the roles of the two operands invert at that bit alone.
-    for (int bit = 0; bit < (int)abs.width; ++bit)
-    {
-      unsigned a = lv[bit];
-      unsigned b = rv[bit];
-      bool flipSign = (inc.isSigned && bit == (int)abs.width - 1);
-
-      auto xP = SATSolver::mkLit(a, !flipSign);
-      auto xN = SATSolver::mkLit(a, flipSign);
-      auto yP = SATSolver::mkLit(b, flipSign);
-      auto yN = SATSolver::mkLit(b, !flipSign);
-      auto zP = SATSolver::mkLit(carryVar, false);
-      auto zN = SATSolver::mkLit(carryVar, true);
-
-      unsigned nc = solver.newVar();
-      solver.setFrozen(nc);
-
-      SATSolver::vec_literals cl;
-      cl.clear(); cl.push(xN); cl.push(yN); cl.push(SATSolver::mkLit(nc, false)); solver.addClause(cl);
-      cl.clear(); cl.push(xN); cl.push(zN); cl.push(SATSolver::mkLit(nc, false)); solver.addClause(cl);
-      cl.clear(); cl.push(yN); cl.push(zN); cl.push(SATSolver::mkLit(nc, false)); solver.addClause(cl);
-      cl.clear(); cl.push(xP); cl.push(yP); cl.push(SATSolver::mkLit(nc, true)); solver.addClause(cl);
-      cl.clear(); cl.push(xP); cl.push(zP); cl.push(SATSolver::mkLit(nc, true)); solver.addClause(cl);
-      cl.clear(); cl.push(yP); cl.push(zP); cl.push(SATSolver::mkLit(nc, true)); solver.addClause(cl);
-
-      carryVar = nc;
-    }
+    const unsigned carryVar =
+        encodeLessOrEqual(solver, lv, rv, abs.width, inc.isSigned);
 
     {
       SATSolver::vec_literals cl;
@@ -1301,6 +1622,61 @@ unsigned BVAbstractionRefiner::refineTerms(
     // abstraction's own result bits -- so none of it is retractable and
     // none of it needs to be. What the candidate chose is only *which*
     // theorem to spend a round on.
+    if (inc.divSchema.schema != DivSchema::None)
+    {
+      switch (inc.divSchema.schema)
+      {
+        case DivSchema::DivisorZero:
+        case DivSchema::Pow2Divisor:
+          encodeDivUnderDivisorValue(
+              solver, bVars, inc.bBits, aVars, resultVars, W,
+              divSchemaSources(abs.opKind, W, inc.divSchema));
+          break;
+
+        case DivSchema::RemainderAtMostDividend:
+          encodeDivBound(solver, inc.divSchema.schema, aVars, bVars, resultVars,
+                         W);
+          abs.installedSchemas |=
+              DIV_SCHEMA_INSTALLED_REMAINDER_AT_MOST_DIVIDEND;
+          break;
+
+        case DivSchema::RemainderBelowDivisor:
+          encodeDivBound(solver, inc.divSchema.schema, aVars, bVars, resultVars,
+                         W);
+          abs.installedSchemas |= DIV_SCHEMA_INSTALLED_REMAINDER_BELOW_DIVISOR;
+          break;
+
+        case DivSchema::QuotientAtMostDividend:
+          encodeDivBound(solver, inc.divSchema.schema, aVars, bVars, resultVars,
+                         W);
+          abs.installedSchemas |=
+              DIV_SCHEMA_INSTALLED_QUOTIENT_AT_MOST_DIVIDEND;
+          break;
+
+        case DivSchema::Lemma:
+          BVExactEncoder(bm).encodeDivLemma(solver,
+                                            DIV_LEMMAS[inc.divSchema.lemmaIndex],
+                                            W, aVars, bVars, resultVars);
+          abs.installedSchemas |=
+              divLemmaInstalledBit(inc.divSchema.lemmaIndex);
+          break;
+
+        case DivSchema::None:
+          break;
+      }
+
+      abs.schemaRounds++;
+      bm->UserFlags.coverage.bv_schema_lemmas++;
+      if (bm->UserFlags.stats_flag)
+        std::cerr << "BV abstraction: " << _kind_names[abs.opKind] << " "
+                  << (inc.divSchema.schema == DivSchema::Lemma
+                          ? divLemmaName(DIV_LEMMAS[inc.divSchema.lemmaIndex])
+                          : divSchemaName(inc.divSchema.schema))
+                  << " lemma" << std::endl;
+      refined++;
+      continue;
+    }
+
     if (inc.schema.schema != MulSchema::None)
     {
       const unsigned chosen = inc.schema.operand;
