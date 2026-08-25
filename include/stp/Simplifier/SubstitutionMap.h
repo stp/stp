@@ -36,7 +36,6 @@ namespace stp
 class Simplifier;
 class ArrayTransformer;
 
-const bool debug_substn = false;
 
 class DLL_PUBLIC SubstitutionMap
 {
@@ -54,7 +53,6 @@ class DLL_PUBLIC SubstitutionMap
   VariablesInExpression::SymbolPtrSet
       rhs_visited; // the rhs contains all the variables in here already.
 
-  int loopCount;
 
   void buildDepends(const ASTNode& n0, const ASTNode& n1);
   void loops_helper(const std::set<ASTNode>& varsToCheck,
@@ -80,7 +78,7 @@ public:
     ASTUndefined = bm->CreateNode(UNDEFINED);
 
     SolverMap = new DenseNodeMap(INITIAL_TABLE_SIZE);
-    loopCount = 0;
+
     substitutionsLastApplied = 0;
   }
 

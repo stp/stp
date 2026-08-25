@@ -464,7 +464,6 @@ void SubstitutionMap::buildDepends(const ASTNode& n0, const ASTNode& n1)
       continue;
     rhsAlreadyAdded.insert(sym);
 
-    // cout << loopCount++ << " ";
     // cout << "initial" << rhs.size() << " Adding: " <<sym->size();
     rhs.insert(sym->begin(), sym->end());
     // cout << "final:" << rhs.size();
@@ -541,18 +540,10 @@ bool SubstitutionMap::loops(const ASTNode& n0, const ASTNode& n1)
   if (n1.GetKind() == SYMBOL && dependsOn.find(n1) == dependsOn.end())
     return false; // The rhs is a symbol and doesn't appear.
 
-  if (debug_substn)
-    cout << loopCount++ << endl;
 
   bool destruct = true;
   ASTNodeSet* dependN = vars.SetofVarsSeenInTerm(n1, destruct);
 
-  if (debug_substn)
-  {
-    cout << n0 << " "
-         << n1.GetNodeNum(); //<< " Expression size:" << bm->NodeSize(n1,true);
-    cout << "Variables in expression: " << dependN->size() << endl;
-  }
 
   set<ASTNode> depend(dependN->begin(), dependN->end());
 
@@ -564,8 +555,6 @@ bool SubstitutionMap::loops(const ASTNode& n0, const ASTNode& n1)
 
   bool loops = visited.find(n0) != visited.end();
 
-  if (debug_substn)
-    cout << "Visited:" << visited.size() << "Loops:" << loops << endl;
 
   return (loops);
 }

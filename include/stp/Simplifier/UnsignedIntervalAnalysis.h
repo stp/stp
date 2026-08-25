@@ -78,10 +78,8 @@ public:
   ~UnsignedIntervalAnalysis();
 
   // Replace some of the things that unsigned intervals can figure out for us.
-  ASTNode topLevel(const ASTNode& top);
 
   UnsignedInterval* dispatchToTransferFunctions(const ASTNode&n, const vector<const UnsignedInterval*>& children);
-  UnsignedInterval* visit(const ASTNode& n, NodeToUnsignedIntervalMap& visited);
 
 
   void stats();

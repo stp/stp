@@ -53,8 +53,6 @@ THE SOFTWARE.
 // 4. Outside the solver, Substitute and Re-normalize the input DAG
 namespace stp
 {
-const bool flatten_ands = true;
-const bool debug_bvsolver = false;
 
 // Whether eliminating `var` in favour of `value` keeps the floating-point
 // format `var` carries.
@@ -259,12 +257,6 @@ ASTNode BVSolver::ChooseMonom(const ASTNode& eq, ASTNode& modifiedlhs,
   modifiedlhs =
       (o.size() > 1) ? _bm->CreateTerm(BVPLUS, lhs.GetValueWidth(), o) : o[0];
 
-  if (debug_bvsolver)
-  {
-    std::cerr << "Initial:" << eq;
-    std::cerr << "Chosen Monomial:" << outmonom;
-    std::cerr << "Output LHS:" << modifiedlhs;
-  }
 
   // can be SYMBOL or (BVUMINUS SYMBOL) or (BVMULT ODD_BVCONST SYMBOL) or
   // (BVMULT ODD_BVCONST (EXTRACT SYMBOL BV_CONST ZERO)) or
@@ -315,11 +307,6 @@ ASTNode BVSolver::substitute(const ASTNode& eq, const ASTNode& lhs,
 
       if (!(SYMBOL == lhs[0].GetKind() && BVCONST == lhs[1].GetKind() &&
             zero == lhs[2] && !vars.VarSeenInTerm(lhs[0], rhs)))
-      {
-        return eq;
-      }
-
-      if (vars.VarSeenInTerm(lhs[0], rhs))
       {
         return eq;
       }
@@ -555,7 +542,7 @@ ASTNode BVSolver::TopLevelBVSolve(const ASTNode& _input,
     return input;
   }
 
-  if (flatten_ands && AND == k)
+  if (AND == k)
   {
     ASTVec c = FlattenKind(AND, input.GetChildren());
     input = _bm->CreateNode(AND, c);
@@ -850,8 +837,6 @@ ASTNode BVSolver::BVSolve_Even(const ASTNode& input)
     }
 
     unsigned len = lhs.GetValueWidth();
-    ASTNode hi = _bm->CreateBVConst(32, len - 1);
-    ASTNode low = _bm->CreateBVConst(32, len - power_of_2);
     ASTNode low_minus_one = _bm->CreateBVConst(32, len - power_of_2 - 1);
     ASTNode low_zero = _bm->CreateZeroConst(32);
     unsigned newlen = len - power_of_2;
