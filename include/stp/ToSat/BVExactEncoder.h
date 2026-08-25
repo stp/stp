@@ -57,6 +57,59 @@ THE SOFTWARE.
 namespace stp
 {
 
+// The facts about division that STP had no way to state before this: each
+// is an inequality or an implication over the dividend, the divisor and the
+// quotient, rather than a value for the quotient.
+//
+// They are Bitwuzla's, taken from its abstraction module and reimplemented
+// here over the bit-blaster rather than copied. Both projects are MIT.
+//
+//   Aina Niemetz, Mathias Preiner, Yoni Zohar.
+//   Scalable Bit-Blasting with Abstractions.
+//   CAV 2024, LNCS 14681, pp. 178-200. doi:10.1007/978-3-031-65627-9_9
+//
+// The four with no premise are not facts anyone would derive by thinking
+// about division -- `x >=u -((-s) & (-t))` is the output of the syntax-guided
+// synthesis that paper describes -- which is the argument for porting them
+// rather than inventing a set.
+//
+// Which seven: the highest-firing ones measured on the queries that motivated
+// this, 1161 firings between them over the 73 files STP could not decide.
+// Fourteen more UDIV facts and sixteen UREM ones were left, the largest of
+// them firing 125 times against this set's 161 to 280. They were not skipped
+// on principle and the tail is not exhausted -- what stopped the porting is
+// that these seven are a wash on that family, which is measured in the commit
+// that adds them. Extending a set that does not pay needs a reason to expect
+// the next one to.
+enum class DivLemma
+{
+  // x = 0 and s != 0 -> t = 0
+  DividendZero,
+  // s = x and s != 0 -> t = 1
+  DivisorEqualsDividend,
+  // s = ~0 and x != ~0 -> t = 0
+  DivisorAllOnes,
+  // t <=u -(s | 1)
+  QuotientBelowNegatedDivisor,
+  // x >=u -((-s) & (-t))
+  DividendAboveNegatedAnd,
+  // s >=u (x >> t)
+  DivisorAboveShiftedDividend,
+  // (s - 1) >=u (x >> t)
+  DivisorLessOneAboveShiftedDividend
+};
+
+// Whether one of them holds of these three values. The refiner asks before
+// installing -- a lemma the candidate already satisfies rules nothing out --
+// and the tests ask to check the circuits say the same thing.
+//
+// Bit vectors, least significant bit first, all of the same width.
+DLL_PUBLIC bool divLemmaHolds(DivLemma lemma, const std::vector<bool>& xBits,
+                              const std::vector<bool>& sBits,
+                              const std::vector<bool>& tBits);
+
+DLL_PUBLIC const char* divLemmaName(DivLemma lemma);
+
 class DLL_PUBLIC BVExactEncoder
 {
   STPMgr* bm;
@@ -76,6 +129,25 @@ public:
               const std::vector<unsigned>& aVars,
               const std::vector<unsigned>& bVars,
               const std::vector<unsigned>& resultVars);
+
+  // One algebraic fact about `t = x udiv s`, spliced onto the variables the
+  // dividend, the divisor and the abstraction's result are already carried
+  // by, and asserted.
+  //
+  // The same splice as `encode` above and for the same reason: a lemma has
+  // to talk about the bits the rest of the query talks about. What differs
+  // is that this asserts a single Boolean rather than defining the result
+  // bits, so the abstraction stays an abstraction -- the fact constrains it
+  // without saying what it is.
+  //
+  // Going through the bit-blaster rather than emitting clauses by hand is
+  // what makes the facts below affordable at all: several are inequalities
+  // over a shift by a variable amount, which is a barrel shifter, which is
+  // not something to write a clause at a time.
+  void encodeDivLemma(SATSolver& solver, DivLemma lemma, unsigned width,
+                      const std::vector<unsigned>& dividendVars,
+                      const std::vector<unsigned>& divisorVars,
+                      const std::vector<unsigned>& resultVars);
 };
 
 } // namespace stp
