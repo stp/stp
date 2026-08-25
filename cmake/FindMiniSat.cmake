@@ -101,11 +101,23 @@ if(NOT MiniSat_FOUND_SYSTEM)
                    # build tree. STP_EP_COMMON_CMAKE_ARGS supplies the -fPIC
                    # this then needs; MiniSat's own CMake never sets it.
                    -DSTATICCOMPILE=ON
+                   # Somewhere other than the top of the build tree, which is
+                   # what stops the BUILD_COMMAND below meaning the wrong
+                   # thing. MiniSat gives minisat_simp an OUTPUT_NAME of
+                   # "minisat", so with the executables at the top the build
+                   # tree holds a *file* called minisat next to a *target*
+                   # called minisat, and Ninja resolves the name to the file:
+                   # asking for the library builds the program instead. The
+                   # Makefile generators have no such ambiguity, and neither
+                   # has Windows, where the file is minisat.exe -- so this was
+                   # every Ninja build on a Unix host, which is all of CI.
+                   -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=<BINARY_DIR>/bin
         # Only the library. MiniSat also builds two command-line programs that
         # STP never runs, and STATICCOMPILE puts -static on them, which needs a
         # static libz, libstdc++ and libc on the build machine -- a requirement
         # STP has no business imposing, and one a distribution that ships no
-        # libz.a cannot meet at all.
+        # libz.a cannot meet at all. Ubuntu ships one, which is why CI built
+        # those programs for as long as it did without saying so.
         BUILD_COMMAND ${CMAKE_COMMAND} --build . --config ${CMAKE_BUILD_TYPE}
                       --target minisat
         # ...which means upstream's install rule, which names those programs
