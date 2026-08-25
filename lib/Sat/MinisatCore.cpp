@@ -51,6 +51,7 @@ uint8_t MinisatCore::value(uint32_t x) const
   return Minisat::toInt(s->value(x));
 }
 
+#ifdef STP_MINISAT_HAS_TERMINATOR
 namespace
 {
 // Reads the deadline the SATSolver base class keeps, so there is one notion of
@@ -67,18 +68,23 @@ public:
   bool terminate() override { return owner.timeLimitExpired(); }
 };
 } // namespace
+#endif
 
 MinisatCore::MinisatCore()
 {
   s = new Minisat::Solver;
+#ifdef STP_MINISAT_HAS_TERMINATOR
   deadline_terminator.reset(new DeadlineTerminator(*this));
   s->connectTerminator(deadline_terminator.get());
+#endif
 }
 
 MinisatCore::~MinisatCore()
 {
+#ifdef STP_MINISAT_HAS_TERMINATOR
   // Before the terminator it points at.
   s->connectTerminator(nullptr);
+#endif
   delete s;
 }
 

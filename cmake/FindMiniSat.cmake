@@ -83,7 +83,7 @@ if(NOT MiniSat_FOUND_SYSTEM)
     # does not build with a current compiler. A commit rather than a tag,
     # because stp/minisat carries only the upstream 2.0/2.2.x release tags,
     # none of which name the fork's own history.
-    set(MiniSat_VERSION "14c78206cd12d1d36b7e042fa758747c135670a4")
+    set(MiniSat_VERSION "74c4aa2e450ef4eb6eb159e984d64d86a2a35058")
 
     set(MiniSat_ARCHIVE
         "${CMAKE_STATIC_LIBRARY_PREFIX}minisat${CMAKE_STATIC_LIBRARY_SUFFIX}")
@@ -140,6 +140,44 @@ set_target_properties(MiniSat PROPERTIES
     INTERFACE_LINK_LIBRARIES ZLIB::ZLIB
 )
 
+# Whether this MiniSat lets a caller stop a search already in progress.
+#
+# MiniSat counts work, not time, so a wall-clock budget can only be enforced
+# between calls into it unless something can end a search from outside. The
+# terminator hook that allows it is recent, and a distribution's MiniSat will
+# not have it -- so decide rather than require, and fall back to the older
+# behaviour where it is absent.
+if(NOT DEFINED MINISAT_HAS_TERMINATOR)
+    if(MiniSat_FOUND_SYSTEM)
+        # Somebody else's MiniSat: ask it.
+        set(_term_src "${PROJECT_BINARY_DIR}/MiniSat_terminator.cpp")
+        file(WRITE "${_term_src}"
+             "#include <minisat/core/Solver.h>\n"
+             "struct T : public Minisat::Terminator { bool terminate() { return false; } };\n"
+             "int main() { Minisat::Solver s; T t; s.connectTerminator(&t); return 0; }\n")
+        try_compile(MINISAT_HAS_TERMINATOR
+                    "${PROJECT_BINARY_DIR}" "${_term_src}"
+                    CMAKE_FLAGS "-DINCLUDE_DIRECTORIES=${MINISAT_INCLUDE_DIR}"
+                    LINK_LIBRARIES ${MINISAT_LIBRARY} ZLIB::ZLIB)
+    else()
+        # One this build is about to fetch at MiniSat_VERSION, which carries the
+        # hook. It cannot be probed: the ExternalProject builds during the build
+        # phase, so at configure time there is no header to compile against and
+        # a probe here answers "no" for the very MiniSat that was pinned for
+        # having it. Derived from the pin, as CaDiCaL's feature gates are
+        # derived from its tag.
+        set(MINISAT_HAS_TERMINATOR TRUE)
+    endif()
+endif()
+
+if(MINISAT_HAS_TERMINATOR)
+    message(STATUS "MiniSat can be stopped mid-search: a time budget is enforced during a solve")
+else()
+    message(STATUS "MiniSat has no terminator hook: a time budget is only "
+                   "enforced between calls into the solver")
+endif()
+
+mark_as_advanced(MINISAT_HAS_TERMINATOR)
 mark_as_advanced(MiniSat_FOUND)
 mark_as_advanced(MiniSat_FOUND_SYSTEM)
 mark_as_advanced(MINISAT_INCLUDE_DIR)

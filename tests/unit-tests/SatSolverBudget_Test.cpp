@@ -95,6 +95,9 @@ void budgetIsPerArming(stp::SATSolver& s)
   EXPECT_FALSE(timeout);
 }
 
+// Only compiled where something calls it: a MiniSat-only build against a
+// MiniSat with no terminator hook has neither caller.
+#if defined(USE_CRYPTOMINISAT) || defined(STP_MINISAT_HAS_TERMINATOR)
 // A time budget has to be able to stop a search already in progress, not only
 // be noticed between calls into the solver. MiniSat counts work rather than
 // time and cannot be handed a deadline, so STP connects a terminator that
@@ -129,6 +132,7 @@ void timeBudgetStopsASearchInProgress(stp::SATSolver& s)
   // instead, which takes far longer than the budget it was given.
   EXPECT_LT(elapsed, 30) << "the search was not stopped, it finished";
 }
+#endif
 
 #endif
 
@@ -149,11 +153,16 @@ TEST(SatSolverBudget, minisat_budget_is_per_arming)
   budgetIsPerArming(s);
 }
 
+// Only where the MiniSat underneath carries the terminator hook; without it
+// the budget is enforced between calls into the solver and this search runs to
+// completion, which is the behaviour, not a failure.
+#ifdef STP_MINISAT_HAS_TERMINATOR
 TEST(SatSolverBudget, minisat_time_budget_stops_a_search_in_progress)
 {
   stp::MinisatCore s;
   timeBudgetStopsASearchInProgress(s);
 }
+#endif
 #endif
 
 #ifdef USE_CRYPTOMINISAT

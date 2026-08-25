@@ -51,10 +51,12 @@ namespace stp
 {
   Minisat::Solver* s;
 
+#ifdef STP_MINISAT_HAS_TERMINATOR
   // Polled by MiniSat wherever its own budgets are, so that the deadline
   // SATSolver already owns can stop a search in progress. Held by pointer
   // because MiniSat's header is not included here.
   std::unique_ptr<Minisat::Terminator> deadline_terminator;
+#endif
 
 public:
   MinisatCore();
@@ -101,7 +103,13 @@ protected:
   // CryptoMiniSat can. It can be asked to stop, though, which is enough: the
   // terminator connected in the constructor reads the budget the base class is
   // already keeping, and MiniSat polls it on every conflict and every restart.
+  //
+  // A MiniSat without the hook -- a distribution's, or anything older than
+  // stp/minisat 74c4aa2 -- keeps the previous answer, and its budget is only
+  // enforced between calls into the solver.
+#ifdef STP_MINISAT_HAS_TERMINATOR
   bool canInterruptSearch() const override { return true; }
+#endif
 
   bool addClauseInternal(const vec_literals& ps) override;
   bool solveInternal(bool& timeout_expired) override;
