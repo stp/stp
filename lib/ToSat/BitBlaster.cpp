@@ -1020,7 +1020,7 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
       if (num_bits >= uf->bv_abstraction_width)
         uf->coverage.bv_candidates[UserDefinedFlags::ABSTRACT_ITE]++;
 
-      if (uf->bv_term_abstraction &&
+      if (uf->bv_term_abstraction && uf->bv_term_abstraction_ite &&
           num_bits >= uf->bv_abstraction_width)
       {
         uf->coverage.bv_abstracted[UserDefinedFlags::ABSTRACT_ITE]++;
@@ -1147,7 +1147,8 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
       // keeps the n-ary adder it had. Addition is associative and commutative
       // modulo 2^n, so the tree computes the same value; the sort keeps the
       // shape it takes deterministic.
-      if (uf->bv_term_abstraction && uf->bvplus_variant &&
+      if (uf->bv_term_abstraction && uf->bv_term_abstraction_plus &&
+          uf->bvplus_variant &&
           term.Degree() > 2 && num_bits >= uf->bv_abstraction_width)
       {
         std::deque<ASTNode> names(term.begin(), term.end());
@@ -1180,7 +1181,7 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
             term.Degree() - 1;
       }
 
-      if (uf->bv_term_abstraction &&
+      if (uf->bv_term_abstraction && uf->bv_term_abstraction_plus &&
           uf->bvplus_variant &&
           term.Degree() == 2 &&
           num_bits >= uf->bv_abstraction_width)
@@ -1900,7 +1901,7 @@ const BBNode BitBlaster::BBForm(const ASTNode& form, BBNodeSet& support,
       if (form[0].GetValueWidth() >= uf->bv_abstraction_width)
         uf->coverage.bv_candidates[UserDefinedFlags::ABSTRACT_COMPARE]++;
 
-      if (uf->bv_term_abstraction)
+      if (uf->bv_term_abstraction && uf->bv_term_abstraction_compare)
       {
         const BBNodeVec& left = BBTerm(form[0], support);
         const BBNodeVec& right = BBTerm(form[1], support);

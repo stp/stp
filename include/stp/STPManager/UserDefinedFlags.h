@@ -392,6 +392,33 @@ public:
   // abstracted with everything else, and this turns just those three off for a
   // query that would rather not pay for the rounds at all.
   bool bv_term_abstraction_mult = true;
+
+  // Which of the other abstractable kinds --bv-term-abstraction takes.
+  //
+  // It has always taken all of them, and the reason to doubt that looked
+  // strong: an ITE, an addition and a comparison each bit-blast in a number
+  // of gates linear in the width, where a multiplication is quadratic and a
+  // division worse, so abstracting a linear operation saves little and costs
+  // a free variable the refinement then has to pin down. On one 256-bit
+  // industrial query the blaster was handed 82 comparisons, 79 if-then-elses
+  // and 15 additions against 2 multiplications and 6 divisions: 184 free
+  // variables to avoid encoding 8 operations.
+  //
+  // Turning the three off changes nothing. On that query the refinement ran
+  // 35 rounds either way -- the same rounds, over the same 8 arithmetic
+  // abstractions -- and over 400 files of the same family it solved 245
+  // against 247, which is inside the run-to-run spread. The 176 cheap
+  // abstractions are not what the refinement loop is spent on, and the loop
+  // is not what separates this from a solver that decides these queries
+  // without refining at all.
+  //
+  // Kept because the question is a reasonable one to ask again of another
+  // workload, and because the answer above is worth more written down than
+  // rediscovered. Default true, which is what this did before the flags
+  // existed.
+  bool bv_term_abstraction_ite = true;
+  bool bv_term_abstraction_plus = true;
+  bool bv_term_abstraction_compare = true;
   // The ceiling on how many times one of those three may be blocked before
   // its refinement stops enumerating and encodes the operation exactly
   // instead. Measured: through about thirty rounds the abstraction is still
