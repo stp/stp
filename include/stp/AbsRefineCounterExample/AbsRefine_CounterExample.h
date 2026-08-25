@@ -409,23 +409,6 @@ public:
                              ArrayReadRefinementProgress* progress,
                              ChainLemmaState* state);
 
-  void applyAllCongruenceConstraints(SATSolver& SatSolver, ToSATBase* tosat);
-
-#if 0
-    SOLVER_RETURN_TYPE
-    SATBased_ArrayWriteRefinement(SATSolver& newS,
-                                  const ASTNode& orig_input,
-                                  ToSATBase *tosat);
-
-    //creates array write axiom only for the input term or formula, if
-    //necessary. If there are no axioms to produce then it simply
-    //generates TRUE
-    ASTNode
-    Create_ArrayWriteAxioms(const ASTNode& array_readoverwrite_term,
-                            const ASTNode& array_newname);
-
-#endif
-
   void ClearAllTables(void)
   {
     CounterExampleMap.clear();

@@ -75,8 +75,7 @@ private:
   // property of one encoding, and the batch pipeline builds a fresh one per
   // query.
   STPMgr::InjectivityAssumption injectivity_;
- 
-  int count;
+
   bool first;
 
   ToCNFAIG toCNF;
@@ -86,11 +85,7 @@ private:
   // query; the incremental driver keeps its own across a session.
   BVAbstractionRefiner abstraction_;
 
-  void init()
-  {
-    count = 0;
-    first = true;
-  }
+  void init() { first = true; }
 
   static THREAD_LOCAL_IE int cnf_calls;
 
@@ -118,7 +113,6 @@ public:
            ArrayTransformer* at)
       : ToSATBase(bm), cb(cb_), toCNF(bm->UserFlags), abstraction_(bm)
   {
-    cb = cb_;
     init();
     arrayTransformer = at;
   }

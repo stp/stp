@@ -279,9 +279,7 @@ private:
    * Private Member Functions                                     *
    ****************************************************************/
 
-  ASTNode TransformTerm(const ASTNode& inputterm);
   ASTNode finishTransformTerm(const ASTNode& term, const ASTNode& result);
-  void assertTransformPostConditions(const ASTNode& term, ASTNodeSet& visited);
 
   ASTNode TransformFormula(const ASTNode& form);
 
@@ -295,10 +293,6 @@ private:
   ASTNode transform(bool asFormula, const ASTNode& n);
 
 public:
-  // fill the arrayname_readindices vector if e0 is a READ(Arr,index)
-  // and index is a BVCONST
-  void FillUp_ArrReadIndex_Vec(const ASTNode& e0, const ASTNode& e1);
-
   /****************************************************************
    * Public Member Functions                                      *
    ****************************************************************/

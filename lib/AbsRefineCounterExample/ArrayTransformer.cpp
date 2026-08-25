@@ -107,13 +107,6 @@ ASTNode ArrayTransformer::TransformFormula_TopLevel(const ASTNode& form)
   if (extPrepared)
     ext->finishReadTransform();
 
-#if 0
-    {
-    	ASTNodeSet visited;
-    	assertTransformPostConditions(result,visited);
-    }
-#endif
-
   TransformMap->clear();
   delete TransformMap;
   TransformMap = NULL;
@@ -284,35 +277,6 @@ ASTNode ArrayTransformer::anchorForChainTerm(const ASTNode& term)
   chainAnchorOf.insert(std::make_pair(term, anchor));
   chainAnchorEquations.push_back(nf->CreateNode(EQ, term, anchor));
   return anchor;
-}
-
-// Check that the transformations have occurred.
-void ArrayTransformer::assertTransformPostConditions(const ASTNode& term,
-                                                     ASTNodeSet& visited)
-{
-
-  // I haven't measure whether this is the quickest way to do it?
-  std::pair<ASTNodeSet::iterator, bool> p = visited.insert(term);
-  if (!p.second)
-    return;
-
-  // Only consumed by the asserts, which an NDEBUG build compiles out.
-  [[maybe_unused]] const Kind k = term.GetKind();
-
-  // Check the array reads / writes have been removed
-  assert(READ != k);
-  assert(WRITE != k);
-
-  // There should be no nodes left of type array.
-  assert(0 == term.GetIndexWidth());
-
-  const ASTChildren c = term.GetChildren();
-  auto it = c.begin();
-  const auto itend = c.end();
-  for (; it != itend; it++)
-  {
-    assertTransformPostConditions(*it, visited);
-  }
 }
 
 // The tail every arm of TransformTerm shares.
@@ -1534,31 +1498,6 @@ ASTNode ArrayTransformer::transform(const bool asFormula, const ASTNode& top)
 ASTNode ArrayTransformer::TransformFormula(const ASTNode& simpleForm)
 {
   return transform(true, simpleForm);
-}
-
-ASTNode ArrayTransformer::TransformTerm(const ASTNode& term)
-{
-  return transform(false, term);
-}
-
-// Since these arrayreads are being nuked and recorded in the
-// substitutionmap, we have to also record the fact that each
-// arrayread (e0 is of the form READ(Arr,const) here is represented
-// by a BVCONST (e1). This is necessary for later Leibnitz Axiom
-// generation
-void ArrayTransformer::FillUp_ArrReadIndex_Vec(const ASTNode& e0,
-                                               const ASTNode& e1)
-{
-  assert(e0.GetKind() == READ);
-  assert(e0[0].GetKind() == SYMBOL);
-  assert(e0[1].GetKind() == BVCONST);
-  assert(e1.GetKind() == BVCONST);
-  assert(arrayToIndexToRead[e0[0]].find(e0[1]) ==
-         arrayToIndexToRead[e0[0]].end());
-
-  arrayToIndexToRead[e0[0]].insert(make_pair(e0[1], ArrayRead(e1, e1)));
-
-  ack_pair[e0[0]].add(e0[1], e1);
 }
 
 } // end of namespace stp

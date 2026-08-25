@@ -283,12 +283,6 @@ struct AxiomToBe
   }
   ASTNode index0, index1;
   ASTNode value0, value1;
-
-  int numberOfConstants() const
-  {
-    return ((index0.isConstant() ? 1 : 0) + (index1.isConstant() ? 1 : 0) +
-            (index0.isConstant() ? 1 : 0) + (index1.isConstant() ? 1 : 0));
-  }
 };
 
 void applyAxiomToSAT(SATSolver& SatSolver, AxiomToBe& toBe,
@@ -346,11 +340,6 @@ bool sortByIndexConstants(const pair<ASTNode, ArrayTransformer::ArrayRead>& a,
   int bCount = ((b.second.index_symbol.isConstant()) ? 2 : 0) +
                (b.second.symbol.isConstant() ? 1 : 0);
   return aCount > bCount;
-}
-
-bool sortbyConstants(const AxiomToBe& a, const AxiomToBe& b)
-{
-  return a.numberOfConstants() > b.numberOfConstants();
 }
 
 // Path lemmas for one round over the abstracted write-chain reads
@@ -623,7 +612,6 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
       }
     }
   }
-#if 1
   if (RemainingAxiomsVec.size() > 0 || !ArrayTransform->chainReads.empty())
   {
     if (bm->UserFlags.stats_flag)
@@ -646,143 +634,9 @@ AbsRefine_CounterExample::SATBased_ArrayReadRefinement(
                                  original_input, tosat, true);
     return SOLVER_UNDECIDED;
   }
-// For difficult problems, I suspec this is a better way to do it.
-// However because it can cause an extra three SAT solver calls, it slows down
-// easy problems.
-#else
-  if (RemainingAxiomsVec.size() > 0)
-  {
-    // Add the axioms in order of how many constants there are in each.
-
-    ToSATBase::ASTNodeToSATVar& satVar = tosat->SATVar_to_SymbolIndexMap();
-    sort(RemainingAxiomsVec.begin(), RemainingAxiomsVec.end(), sortbyConstants);
-    int current_position = 0;
-    for (int n_const = 4; n_const >= 0; n_const--)
-    {
-      bool added = false;
-      while (current_position < RemainingAxiomsVec.size() &&
-             RemainingAxiomsVec[current_position].numberOfConstants() ==
-                 n_const)
-      {
-        AxiomToBe& toBe = RemainingAxiomsVec[current_position];
-        applyAxiomToSAT(SatSolver, toBe, satVar);
-        current_position++;
-        added = true;
-      }
-      if (!added)
-        continue;
-      bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
-      SOLVER_RETURN_TYPE res2;
-      res2 =
-          CallSAT_ResultCheck(SatSolver, ASTTrue, original_input,
-                              original_input, tosat, true);
-      if (SOLVER_UNDECIDED != res2)
-        return res2;
-
-      bm->GetRunTimes()->start(RunTimes::ArrayReadRefinement);
-    }
-    assert(current_position == RemainingAxiomsVec.size());
-    RemainingAxiomsVec.clear();
-    assert(SOLVER_UNDECIDED == CallSAT_ResultCheck(SatSolver, ASTTrue,
-                                                   original_input,
-                                                   original_input, tosat,
-                                                   true));
-  }
-#endif
 
   bm->GetRunTimes()->stop(RunTimes::ArrayReadRefinement);
   return SOLVER_UNDECIDED;
-}
-
-// This is another way of performing Ackermannisation.
-void AbsRefine_CounterExample::applyAllCongruenceConstraints(
-    SATSolver& SatSolver, ToSATBase* tosat)
-{
-  // if (bm->UserFlags.stats_flag)
-  std::cerr << "~CNF~" << std::endl;
-
-  vector<pair<ASTNode, ArrayTransformer::arrTypeMap>> arrayToIndex;
-  arrayToIndex.insert(arrayToIndex.begin(),
-                      ArrayTransform->arrayToIndexToRead.begin(),
-                      ArrayTransform->arrayToIndexToRead.end());
-
-  ToSATBase::ASTNodeToSATVar& satVar = tosat->SATVar_to_SymbolIndexMap();
-
-  // for each array, fetch its list of indices seen so far
-  for (vector<pair<ASTNode, ArrayTransformer::arrTypeMap>>::const_iterator
-           iset = arrayToIndex.begin(),
-           iset_end = arrayToIndex.end();
-       iset != iset_end; iset++)
-  {
-    // const ASTNode& ArrName = iset->first;
-    const map<ASTNode, ArrayTransformer::ArrayRead>& mapper = iset->second;
-
-    vector<ASTNode> listOfIndices;
-    listOfIndices.reserve(mapper.size());
-
-    // Make a vector of the read symbols.
-    ASTVec read_node_symbols;
-    read_node_symbols.reserve(listOfIndices.size());
-
-    vector<Kind> jKind;
-    jKind.reserve(mapper.size());
-
-    ASTVec index_symbols;
-    index_symbols.reserve(mapper.size());
-
-    for (map<ASTNode, ArrayTransformer::ArrayRead>::const_iterator it =
-             mapper.begin();
-         it != mapper.end(); it++)
-    {
-      const ASTNode& the_index = it->first;
-      listOfIndices.push_back(the_index);
-
-      ASTNode arrsym = it->second.symbol;
-      read_node_symbols.push_back(arrsym);
-
-      index_symbols.push_back(it->second.index_symbol);
-
-      assert(read_node_symbols[0].GetValueWidth() == arrsym.GetValueWidth());
-      assert(listOfIndices[0].GetValueWidth() == the_index.GetValueWidth());
-
-      jKind.push_back(the_index.GetKind());
-    }
-
-    assert(listOfIndices.size() == mapper.size());
-
-    // loop over the list of indices for the array and create LA,
-    // and add to inputAlreadyInSAT
-    for (size_t i = 0; i < listOfIndices.size(); i++)
-    {
-      const ASTNode& index_i = listOfIndices[i];
-      const Kind iKind = index_i.GetKind();
-
-      // Create all distinct pairs of indexes.
-      for (size_t j = i + 1; j < listOfIndices.size(); j++)
-      {
-        const ASTNode& index_j = listOfIndices[j];
-
-        // If the indexes are constants of different values, the cells are
-        // distinct and no congruence is needed. Compare bits, not nodes:
-        // a float constant interns apart from the plain constant with its
-        // bits, and skipping such a pair drops a needed axiom for good.
-        if (BVCONST == iKind && jKind[j] == BVCONST &&
-            constantsDenoteDifferentValues(index_i, index_j))
-          continue;
-
-        if (ASTFalse == simp->CreateSimplifiedEQ(index_i, index_j))
-          continue; // shortcut.
-
-        if (index_i == index_j)
-          std::cerr << "EQUAL";
-
-        AxiomToBe o(index_symbols[i], index_symbols[j], read_node_symbols[i],
-                    read_node_symbols[j]);
-
-        applyAxiomToSAT(SatSolver, o, satVar);
-      }
-    }
-  }
 }
 
 } // end of namespace stp
