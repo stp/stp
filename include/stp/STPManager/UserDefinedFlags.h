@@ -419,6 +419,16 @@ public:
   bool bv_term_abstraction_ite = true;
   bool bv_term_abstraction_plus = true;
   bool bv_term_abstraction_compare = true;
+
+  // Ask the propositional structure what it settles before solving
+  // properly; see SkeletonPreproc. Off by default: what it costs is a SAT
+  // call over a formula the size of the query's Boolean skeleton, and what
+  // it buys depends entirely on whether that structure decides anything.
+  bool skeleton_preproc = false;
+
+  // Replace an assertion where it appears inside another assertion; see
+  // EmbeddedConstraints. Off by default while it is measured.
+  bool embedded_constraints = false;
   // The ceiling on how many times one of those three may be blocked before
   // its refinement stops enumerating and encodes the operation exactly
   // instead. Measured: through about thirty rounds the abstraction is still

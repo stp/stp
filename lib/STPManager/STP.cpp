@@ -25,6 +25,8 @@ THE SOFTWARE.
 #include "stp/STPManager/STP.h"
 #include "stp/Extensionality/ExtensionalityContext.h"
 #include "stp/UninterpretedFunctions/UFContext.h"
+#include "stp/Simplifier/EmbeddedConstraints.h"
+#include "stp/Simplifier/SkeletonPreproc.h"
 #include "stp/UninterpretedFunctions/UFLowering.h"
 #include "stp/UninterpretedFunctions/UFRefinement.h"
 #include "stp/Incremental/IncrementalSolver.h"
@@ -209,6 +211,7 @@ SOLVER_RETURN_TYPE STP::TopLevelSTP(const ASTNode& inputasserts,
   const SOLVER_RETURN_TYPE second = topLevelSTPOnce(inputasserts, query);
   bm->UserFlags.uf_inject_args = saved;
   bm->clearInjectivityAssumed();
+  skeletonAsked = false;
   return second;
 }
 
@@ -278,6 +281,7 @@ SOLVER_RETURN_TYPE STP::topLevelSTPOnce(const ASTNode& inputasserts,
   // Each batch query builds its encoding from nothing, so what the last one
   // assumed says nothing about this one.
   bm->clearInjectivityAssumed();
+  skeletonAsked = false;
   if (bm->UserFlags.enable_uninterpreted_functions)
   {
     UFLowering lowerer(bm);
@@ -355,6 +359,34 @@ ASTNode STP::sizeReducing(ASTNode inputToSat,
                           NodeDomainAnalysis* domain
                           )
 {
+
+  if (bm->UserFlags.skeleton_preproc && !skeletonAsked)
+  {
+    skeletonAsked = true;
+    // What the Boolean structure settles on its own, conjoined to the query
+    // so that the passes below can act on it. Every fact is already implied
+    // -- this makes it visible, which is the whole point: a forced equality
+    // is one PropagateEqualities can substitute, where the same equality
+    // buried inside an implication is not.
+    bool skeletonUnsat = false;
+    SkeletonPreproc skeleton(bm);
+    ASTVec facts = skeleton.derive(inputToSat, skeletonUnsat);
+    if (skeletonUnsat)
+      return bm->CreateNode(FALSE); // the structure alone refutes the query
+    if (!facts.empty())
+    {
+      facts.push_back(inputToSat);
+      inputToSat = bm->defaultNodeFactory->CreateNode(AND, facts);
+      bm->ASTNodeStats("After Skeleton Preprocessing: ", inputToSat);
+    }
+  }
+
+  if (bm->UserFlags.embedded_constraints)
+  {
+    EmbeddedConstraints ec(bm);
+    inputToSat = ec.topLevel(inputToSat);
+    bm->ASTNodeStats("After Embedded Constraints: ", inputToSat);
+  }
 
   if (bm->UserFlags.propagate_equalities)
   {

@@ -49,6 +49,14 @@ class UFBatchAdapter;
 class STP
 {
 
+  // Whether the skeleton has already been asked about this query.
+  //
+  // sizeReducing runs to a fixpoint, and asking again is both wasted and
+  // pointless: the facts from the first pass are top-level conjuncts by
+  // then, so the second pass rediscovers exactly them at the cost of
+  // another SAT call over the whole propositional structure.
+  bool skeletonAsked = false;
+
   ASTNode sizeReducing(ASTNode input, BVSolver* bvSolver,
                        PropagateEqualities* pe, NodeDomainAnalysis* domain);
 

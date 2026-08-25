@@ -237,6 +237,28 @@ public:
       out.push_back(assumps[i].x);
   }
 
+  // Run whatever simplification the backend can do without being asked to
+  // decide anything, so that what it derives at the root becomes visible to
+  // rootFixed() below. A backend with nothing to offer leaves the formula
+  // alone, which is always a correct answer to this.
+  // Returns 20 when the backend settled the formula unsatisfiable while
+  // simplifying, 10 when it settled it satisfiable, and 0 when it did not
+  // settle it -- which is also what a backend with nothing to offer says.
+  virtual int simplifyOnly() { return 0; }
+
+  // What the backend has established about a variable at the root, after
+  // simplifyOnly(): 1 if it is fixed true, -1 if fixed false, 0 if it is
+  // not fixed or the backend cannot say. Zero is always a sound answer --
+  // the caller may only use a non-zero one to learn something, never the
+  // absence of one to conclude anything.
+  virtual int rootFixed(unsigned /*var*/) { return 0; }
+
+  // Whether rootFixed() can ever answer anything but zero. A caller that
+  // only wants what the backend derived has nothing to gain from a backend
+  // that derives nothing, and asking anyway costs it a CNF and a solve --
+  // so this is what such a caller checks before building either.
+  virtual bool reportsRootFixed() const { return false; }
+
   // Suggest the value the decision heuristic should try first for a
   // variable. Pure search advice: it cannot change any verdict, only
   // which model is found first. The incremental driver uses it to steer

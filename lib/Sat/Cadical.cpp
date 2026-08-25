@@ -179,6 +179,31 @@ void Cadical::setFrozen(uint32_t var)
   (void)var;
 }
 
+int Cadical::simplifyOnly()
+{
+  // Rounds of CaDiCaL's own preprocessing. It is allowed to decide the
+  // formula outright, which is a perfectly good outcome for the caller:
+  // what it wants is whatever ends up fixed at the root, and a solved
+  // formula fixes everything.
+  return s->simplify();
+}
+
+int Cadical::rootFixed(unsigned x)
+{
+  // The same translation modelValue performs, and for the same reason:
+  // bounded variable addition renumbers, so a variable STP names is not
+  // necessarily the one CaDiCaL knows. newVar() already hands out
+  // one-based numbers, so there is nothing further to add here -- an
+  // off-by-one would read the neighbouring variable's verdict, which is a
+  // fact about some other atom entirely.
+  if (factor_enabled)
+    x = (x < ext_of_stp.size()) ? (uint32_t)ext_of_stp[x] : 0;
+  if (x == 0)
+    return 0;
+  return s->fixed((int)x);
+}
+
+
 bool Cadical::setSearchBiasInternal(SearchBias bias)
 {
   // Cadical has named configurations of its own, so this is a straight
