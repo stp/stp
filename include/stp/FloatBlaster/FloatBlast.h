@@ -82,6 +82,10 @@ public:
     // arithmetic entry is the operation's final, rounded SymFPU result.
     size_t unpacked_operation_builds = 0;
     size_t unpacked_cache_hits = 0;
+
+    // Predicates built directly from two unpacked operands, without
+    // constructing the rounded fp.add result they observe.
+    size_t add_iszero_builds = 0;
   };
 
   FloatBlast(STPMgr* bm_);

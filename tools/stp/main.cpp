@@ -530,9 +530,9 @@ void ExtraMain::create_options()
 
   bool_arg("--bb.fp-native-add-iszero",
            bm->UserFlags.fp_native_add_iszero,
-           "Encode fp.isZero(fp.add ...) directly from the packed operands "
-           "without constructing the complete rounded sum (enabled by "
-           "default; requires --bb.fp-native-arith)",
+           "Encode fp.isZero(fp.add ...) directly from its operands without "
+           "constructing the complete rounded sum (enabled by default; "
+           "works with both SymFPU and native arithmetic)",
            bb_group);
 
   bool_arg("--bb.fp-native-domain", bm->UserFlags.fp_native_domain,

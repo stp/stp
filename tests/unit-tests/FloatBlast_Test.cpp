@@ -151,6 +151,46 @@ TEST(FloatBlast, shared_chain_stays_unpacked_until_a_carrier_boundary)
   EXPECT_EQ(1u, lower.statistics().pack_builds);
 }
 
+TEST(FloatBlast, add_iszero_omits_only_the_observed_outer_addition)
+{
+  STPMgr mgr;
+  const SourceSort fp16 = SourceSort::floatingPoint(5, 11);
+  const ASTNode x = mgr.CreateSourceSymbol("x", fp16);
+  const ASTNode y = mgr.CreateSourceSymbol("y", fp16);
+  const ASTNode z = mgr.CreateSourceSymbol("z", fp16);
+  const ASTNode rounding_mode = rne(mgr);
+
+  // This is the accumulator shape the FBA rows use.  The inner addition is
+  // an operand value and still has to be rounded.  Only the outer result is
+  // unobserved: its sole consumer asks whether its magnitude is zero.
+  const ASTNode inner =
+      mgr.CreateTerm(FP_ADD, 16, ASTVec{rounding_mode, x, y});
+  const ASTNode outer =
+      mgr.CreateTerm(FP_ADD, 16, ASTVec{rounding_mode, inner, z});
+  const ASTNode predicate = mgr.CreateNode(FP_ISZERO, outer);
+
+  FloatBlast direct(&mgr);
+  const ASTNode direct_result = direct.topLevel(predicate);
+
+  EXPECT_FALSE(containsFloatingPointKind(direct_result));
+  EXPECT_EQ(3u, direct.statistics().unpack_builds);
+  EXPECT_EQ(1u, direct.statistics().unpacked_operation_builds);
+  EXPECT_EQ(0u, direct.statistics().pack_builds);
+  EXPECT_EQ(1u, direct.statistics().add_iszero_builds);
+
+  // Disabling the predicate specialization restores the ordinary SymFPU
+  // construction of both rounded additions.
+  mgr.UserFlags.fp_native_add_iszero = false;
+  FloatBlast generic(&mgr);
+  const ASTNode generic_result = generic.topLevel(predicate);
+
+  EXPECT_FALSE(containsFloatingPointKind(generic_result));
+  EXPECT_EQ(3u, generic.statistics().unpack_builds);
+  EXPECT_EQ(2u, generic.statistics().unpacked_operation_builds);
+  EXPECT_EQ(0u, generic.statistics().pack_builds);
+  EXPECT_EQ(0u, generic.statistics().add_iszero_builds);
+}
+
 TEST(FloatBlast, format_conversion_feeds_the_next_operation_unpacked)
 {
   STPMgr mgr;
