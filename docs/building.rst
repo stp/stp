@@ -154,6 +154,61 @@ enables it only for problems with array operations. ``auto`` was the
 default until bounded variable addition was measured on bitvector-only
 problems and found to pay there too.
 
+CryptoMiniSat and CaDiCaL together
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Enabling both is supported, and needs one thing said about it, because
+CryptoMiniSat 5.14 and later fetch, build and *install* a CaDiCaL of their
+own -- currently the meelgroup fork at 2.1.3. Its prefix therefore holds a
+``libcadical.a``, a ``cadical/cadical.hpp`` and a CMake package under the
+same names STP's own CaDiCaL uses.
+
+Do not put it in ``deps/install``, which is where ``setup-cms.sh`` writes
+by default and where STP keeps its own dependencies. Give CryptoMiniSat a
+prefix of its own and name it, which is two extra arguments -- the script
+forwards trailing ones to CMake, so its install prefix is overridable like
+any other default:
+
+.. code-block:: bash
+
+    ./scripts/deps/setup-cms.sh -DBUILD_SHARED_LIBS=ON \
+      -DCMAKE_INSTALL_PREFIX=$PWD/deps/cms-install
+
+    cmake -S . -B build -DUSE_CADICAL=ON -DUSE_CRYPTOMINISAT=ON \
+      -Dcryptominisat5_DIR=$PWD/deps/cms-install/lib/cmake/cryptominisat5
+
+Sharing the one directory goes wrong in two independent ways, which is why
+this is worth the two arguments.
+
+``deps/install`` is ``STP_DEP_DIR``. Its include directory is a usage
+requirement of every dependency STP builds, so it reaches the compile line
+of nearly every file in the project -- and CryptoMiniSat's
+``cadical/cadical.hpp`` sitting in it then shadows the one STP means to
+use. There is no include order that fixes that: the two directories arrive
+from different targets, so which comes first varies from target to target.
+``include/stp/Sat/Cadical.h`` refuses to compile rather than let this pass
+silently, so you get an error naming the cause.
+
+``deps/install`` is also on ``CMAKE_PREFIX_PATH`` unconditionally, so that
+the other ``scripts/deps/*.sh`` are found without flags. STP's own CaDiCaL
+lookup therefore reaches the bundled copy, finds it, and stops -- building
+against 2.x with ``--cadical-factor`` silently gone. ``CADICAL_DIR`` pins
+that one lookup past it, and is worth passing if you have a checkout to
+point at, but it does nothing about the shadowing above.
+
+``stp --version`` reports the version of each backend actually linked, so
+it is the quickest way to confirm which CaDiCaL you ended up with.
+
+One combination is refused rather than arranged: a *static*
+``libcryptominisat5`` puts its bundled CaDiCaL on STP's link line
+alongside STP's, and the two sets of symbols collide. Build CryptoMiniSat
+shared (``scripts/deps/setup-cms.sh -DBUILD_SHARED_LIBS=ON``), which keeps
+its CaDiCaL inside the ``.so``. Or, if it must be static, have STP use the
+very same archive so there is only one --
+``-DCADICAL_LIBRARY=<cms prefix>/lib/libcadical.a
+-DCADICAL_INCLUDE_DIR=<cms prefix>/include``, with ``CADICAL_DIR`` unset --
+at the cost of the 3.x features. The configure error spells out all three.
+
 MiniSat is optional and off by default; enable it with
 ``-DUSE_MINISAT:BOOL=ON``, which also needs zlib -- MiniSat reads gzipped
 DIMACS and says so in its public headers, so configuration fails without
@@ -328,10 +383,10 @@ that, and they are separate because the dependencies come in two kinds.
 
 ``STP_DEP_DIR``, described above, holds the ones STP *links*.
 ``FETCHCONTENT_BASE_DIR`` holds the ones it *compiles*:
-``unordered_dense``, mimalloc, googletest and OutputCheck. Sharing the
-second saves the download but not the compile -- mimalloc and googletest
-are added to the build with ``add_subdirectory``, so they are compiled
-once per build directory whatever you do.
+``unordered_dense``, mimalloc, googletest and OutputCheck. Share that one
+for the download only, and read the note on it below before pointing two
+build trees at the same one: FetchContent builds a dependency inside the
+base directory too, so sharing it shares more than the download.
 
 Warm both once:
 
@@ -407,9 +462,30 @@ The build type is deliberately not recorded, except on MSVC: sharing a
 differently-optimised ABC is a choice rather than a fault, but on MSVC
 the runtime library follows the build type and mixing them does not link.
 
-``FETCHCONTENT_BASE_DIR`` has no such stamp, and each configure rewrites
-the ``*-subbuild`` scratch inside it, so two configures running against
-one base directory *at the same time* can race. Sequential use is fine.
+``FETCHCONTENT_BASE_DIR`` has no such stamp, and it wants more care than
+``STP_DEP_DIR`` does. The dependencies STP compiles are added with
+``add_subdirectory``, and FetchContent builds those in
+``<base>/<name>-build``, so sharing the base directory shares the *build*
+rather than only the download. Two build trees whose compiler or build
+type differ then own the same object directory, and each recompiles all
+of mimalloc the next time it is built -- a gcc tree and a clang tree
+pointed at one base directory leave each other 37 steps to redo on every
+alternation, indefinitely. This is not a race that running them one after
+another avoids: both builds legitimately own the path they were given.
+
+Share the sources and keep the builds apart instead. Give each build tree
+its own base directory, and point each fetched source at one copy:
+
+.. code-block:: bash
+
+    cmake -S . -B build -G Ninja \
+      -DFETCHCONTENT_BASE_DIR=$PWD/build/_deps \
+      -DFETCHCONTENT_SOURCE_DIR_MIMALLOC=~/.cache/stp/fetch/mimalloc-src \
+      -DFETCHCONTENT_SOURCE_DIR_UNORDEREDDENSE=~/.cache/stp/fetch/unordereddense-src
+
+Name only the sources that exist: ``FETCHCONTENT_SOURCE_DIR_*`` pointed at
+a directory that is not there fails the configure rather than falling back
+to downloading it.
 
 Tests across worktrees
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -424,6 +500,20 @@ point ``LIT_TOOL`` at one -- the warm build's copy will do:
 .. code-block:: bash
 
     -DLIT_TOOL=$PWD/warm/venv/bin/lit
+
+Doing all of this by hand
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Nothing above needs a tool: the flags are the whole of it, and they are
+written out so that they can be typed, scripted or put in a
+``CMakeUserPresets.json``, whichever suits.
+
+If a shell function is what suits, `stp.sh <https://github.com/stp/stp.sh>`__
+is a set of bash and zsh helpers that apply exactly these flags -- one
+command to warm the caches, one to make a worktree, one to build it. It is a
+convenience kept alongside STP rather than part of it, and it is not what the
+rest of this page assumes: everything here works without it, and on the
+platforms it does not cover.
 
 
 Building a static library and binary
@@ -444,19 +534,130 @@ Installing
 installation is ``CMAKE_INSTALL_PREFIX``, set at configure time or
 changed later through ``make edit_cache``.
 
-Building on Windows and Visual Studio
--------------------------------------
+Building on Windows
+-------------------
 
-Install `CMake <https://cmake.org/download/>`__ and follow the steps that
-one of the two Windows jobs in
+Two toolchains are built and tested: Visual Studio's ``cl``, and the MSYS2
+UCRT64 gcc. Which SAT backend you get follows from which one you pick.
+Under MSVC that is MiniSat; under MinGW it is CaDiCaL, whose own
+``BUILD.md`` documents a MinGW build. CryptoMiniSat is not built on
+Windows at all -- upstream supports MinGW there, and STP does not package
+it -- so both configure with ``-DUSE_CRYPTOMINISAT=OFF``.
+
+Everything else is fetched. ``-DENABLE_AUTO_DOWNLOAD=ON`` builds ABC,
+LibBF, SymFPU, CLI11 and the SAT backend as part of the build, with its
+compiler and its flags, so the toolchain, flex, bison and -- for MiniSat
+-- a zlib are all that has to be installed beforehand.
+
+Both use the Ninja generator rather than the Visual Studio one. Ninja
+parallelises by default, where MSBuild without ``/m`` builds one project
+at a time, and it honours ``CMAKE_<LANG>_COMPILER_LAUNCHER``, which the
+Visual Studio generator ignores silently, so a compiler cache does
+nothing there. The cost is that Ninja does not locate the MSVC toolchain
+for itself: start from an *x64 Native Tools* developer prompt, or enter
+the developer shell first.
+
+The two CI jobs -- ``windows (minisat, MSVC)`` and
+``windows (cadical, MinGW)`` in
 `.github/workflows/ci.yml <https://github.com/stp/stp/blob/master/.github/workflows/ci.yml>`__
-runs. Both install flex and bison, build LibBF, and configure with
-``-DUSE_CRYPTOMINISAT=OFF``, CryptoMiniSat not being buildable there.
+-- do exactly what is below, and are the reference if a detail here is
+not enough.
 
-``windows (cadical, MinGW)`` is the one to follow for a solver to use: it
-builds CaDiCaL under MinGW/UCRT64 and links a fully static ``stp.exe``
-against it. ``windows (minisat, MSVC)`` builds with Visual Studio instead,
-where MiniSat is the only backend that compiles.
+Visual Studio
+~~~~~~~~~~~~~
+
+flex and bison do not come with Visual Studio.
+`winflexbison <https://github.com/lexxmark/winflexbison>`__ supplies
+``win_flex.exe`` and ``win_bison.exe``, which are the names CMake's
+``FindFLEX`` and ``FindBISON`` look for on Windows. Put its directory on
+``PATH`` and keep the extracted ``data/`` beside the executables, since
+bison finds its skeleton files relative to its own path.
+
+MiniSat's public headers include ``zlib.h``, so a zlib is needed too --
+vcpkg's ``zlib:x64-windows-static``, for one. Name the include directory
+and the library file rather than reaching for ``ZLIB_ROOT``: vcpkg
+installs that library as ``zs.lib``, which is not one of the names
+``FindZLIB`` searches for. What STP resolves is passed on to MiniSat's
+own build, which searches the default paths only, so one setting covers
+both.
+
+.. code-block:: bat
+
+    set ABC_USE_NO_PTHREADS=1
+
+    cmake -B build -G Ninja ^
+      -DCMAKE_BUILD_TYPE=RelWithDebInfo ^
+      -DENABLE_AUTO_DOWNLOAD=ON ^
+      -DSTATICCOMPILE=ON ^
+      -DUSE_MINISAT=ON -DUSE_CRYPTOMINISAT=OFF -DUSE_CADICAL=OFF ^
+      -DENABLE_PYTHON_INTERFACE=OFF ^
+      -DZLIB_INCLUDE_DIR=C:/vcpkg/installed/x64-windows-static/include ^
+      -DZLIB_LIBRARY=C:/vcpkg/installed/x64-windows-static/lib/zs.lib ^
+      .
+    cmake --build build
+
+``ZLIB_LIBRARY`` names the ``.lib`` itself, and vcpkg has not always
+spelled it the same way, so look in that ``lib\`` directory rather than
+copying the line verbatim.
+
+``ABC_USE_NO_PTHREADS`` is read by ABC's makefile while CMake configures.
+Without it ABC's threaded paths are compiled, and they do not build with
+``cl``.
+
+If a compiler cache is pointed at the build, add
+``-DCMAKE_POLICY_DEFAULT_CMP0141=NEW`` and
+``-DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded``. The default ``/Zi``
+writes a program database shared by every translation unit, which is
+neither cacheable nor safe to write from several compilations at once;
+those two move the build onto ``/Z7``.
+
+MinGW (MSYS2 UCRT64)
+~~~~~~~~~~~~~~~~~~~~
+
+From a UCRT64 shell:
+
+.. code-block:: bash
+
+    pacman -S --needed bison flex git make \
+        mingw-w64-ucrt-x86_64-cmake \
+        mingw-w64-ucrt-x86_64-gcc \
+        mingw-w64-ucrt-x86_64-ninja
+
+    export ABC_USE_NO_PTHREADS=1
+    export ABC_USE_STDINT_H=1
+
+    cmake -B build -G Ninja \
+        -DENABLE_AUTO_DOWNLOAD=ON \
+        -DSTATICCOMPILE=ON \
+        -DUSE_CADICAL=ON -DUSE_CRYPTOMINISAT=OFF \
+        -DENABLE_PYTHON_INTERFACE=OFF \
+        .
+    cmake --build build --parallel "$(nproc)"
+
+``ABC_USE_STDINT_H`` is the one that is easy to miss. ABC's architecture
+probe reads eight-byte pointers as 64-bit Linux and picks an integer type
+that is 32 bits wide under LLP64, and the pointer casts in its headers
+then do not compile; the variable routes them onto ``stdint.h`` instead.
+``ABC_USE_NO_PTHREADS`` is as above.
+
+CaDiCaL needs nothing extra here: ``cmake/FindCaDiCaL.cmake`` drives its
+configure script and builds the library alone, which is what this
+toolchain needs it to do.
+
+Common to both
+~~~~~~~~~~~~~~
+
+-  Ninja puts the binary at the top of the build tree: ``build\stp.exe``.
+-  ``-DSTATICCOMPILE=ON`` produces an ``stp.exe`` that needs nothing
+   beside it. Under MSVC it also moves STP *and its dependencies* onto
+   the static CRT, so a dependency directory filled by one choice cannot
+   be linked into a build that wants the other. STP records what filled
+   ``STP_DEP_DIR`` and warns when a later build disagrees.
+-  The Python interface is off in both jobs and is not exercised on
+   Windows.
+-  Neither job runs the lit suite; both run a handful of queries through
+   the binary they built. ``-DENABLE_TESTING=ON`` is correspondingly less
+   well trodden there.
 
 Testing
 -------

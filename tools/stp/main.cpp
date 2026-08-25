@@ -350,6 +350,14 @@ void ExtraMain::create_options()
            "BVDIV, BVMOD, ITE and the inequalities) during bit-blasting, "
            "refining lazily via CEGAR",
            refinement_group);
+  bool_arg("--bv-term-abstraction-ite", bm->UserFlags.bv_term_abstraction_ite,
+           "include wide if-then-else in BV term abstraction", refinement_group);
+  bool_arg("--bv-term-abstraction-plus", bm->UserFlags.bv_term_abstraction_plus,
+           "include wide BVPLUS in BV term abstraction", refinement_group);
+  bool_arg("--bv-term-abstraction-compare",
+           bm->UserFlags.bv_term_abstraction_compare,
+           "include wide inequalities in BV term abstraction",
+           refinement_group);
   bool_arg("--skeleton-preproc", bm->UserFlags.skeleton_preproc,
            "ask the query's propositional skeleton what it forces, and assert "
            "that before solving", refinement_group);
@@ -536,9 +544,9 @@ void ExtraMain::create_options()
 
   bool_arg("--bb.fp-native-add-iszero",
            bm->UserFlags.fp_native_add_iszero,
-           "Encode fp.isZero(fp.add ...) directly from the packed operands "
-           "without constructing the complete rounded sum (enabled by "
-           "default; requires --bb.fp-native-arith)",
+           "Encode fp.isZero(fp.add ...) directly from its operands without "
+           "constructing the complete rounded sum (enabled by default; "
+           "works with both SymFPU and native arithmetic)",
            bb_group);
 
   bool_arg("--bb.fp-native-domain", bm->UserFlags.fp_native_domain,
@@ -557,6 +565,21 @@ void ExtraMain::create_options()
            "Experimental FP prepass: mine boxed variable bounds, use boxed FP "
            "domain facts, and discharge ordered FP "
            "comparisons or zero-sum rows decided by those facts",
+           bb_group);
+
+  bool_arg("--fp-domain-derived-bounds",
+           bm->UserFlags.fp_domain_derived_bounds,
+           "Decision-only FP prepass (enabled by default): derive finite "
+           "symbol bounds from top-level symbol/expression relations and "
+           "zero-result additions, then discharge comparisons or "
+           "contradictory boxes",
+           bb_group);
+
+  bool_arg("--fp-domain-extremal-selectors",
+           bm->UserFlags.fp_domain_extremal_selectors,
+           "FP prepass (enabled by default): replace an objective by "
+           "necessary semantic {0,1} selector values only after proving "
+           "their conjunction sufficient (primarily exact extrema)",
            bb_group);
 
   bool_arg("--fp-domain-sound-zero-facts",

@@ -393,6 +393,33 @@ public:
   // query that would rather not pay for the rounds at all.
   bool bv_term_abstraction_mult = true;
 
+  // Which of the other abstractable kinds --bv-term-abstraction takes.
+  //
+  // It has always taken all of them, and the reason to doubt that looked
+  // strong: an ITE, an addition and a comparison each bit-blast in a number
+  // of gates linear in the width, where a multiplication is quadratic and a
+  // division worse, so abstracting a linear operation saves little and costs
+  // a free variable the refinement then has to pin down. On one 256-bit
+  // industrial query the blaster was handed 82 comparisons, 79 if-then-elses
+  // and 15 additions against 2 multiplications and 6 divisions: 184 free
+  // variables to avoid encoding 8 operations.
+  //
+  // Turning the three off changes nothing. On that query the refinement ran
+  // 35 rounds either way -- the same rounds, over the same 8 arithmetic
+  // abstractions -- and over 400 files of the same family it solved 245
+  // against 247, which is inside the run-to-run spread. The 176 cheap
+  // abstractions are not what the refinement loop is spent on, and the loop
+  // is not what separates this from a solver that decides these queries
+  // without refining at all.
+  //
+  // Kept because the question is a reasonable one to ask again of another
+  // workload, and because the answer above is worth more written down than
+  // rediscovered. Default true, which is what this did before the flags
+  // existed.
+  bool bv_term_abstraction_ite = true;
+  bool bv_term_abstraction_plus = true;
+  bool bv_term_abstraction_compare = true;
+
   // Ask the propositional structure what it settles before solving
   // properly; see SkeletonPreproc. Off by default: what it costs is a SAT
   // call over a formula the size of the query's Boolean skeleton, and what
@@ -586,6 +613,20 @@ public:
   // non-box ordered comparisons and zero-sum rows whose interval/domain facts
   // decide them.
   bool fp_domain_simplify = false;
+
+  // Decision-only extension of the FP domain prepass. Derive symbol endpoints
+  // from top-level symbol/expression inequalities and from a narrowly
+  // recognised zero-result addition. The derived facts may discharge
+  // comparisons or expose contradictory boxes, but are not emitted as
+  // additional constraints. Enabled by default; retain the flag for ablation.
+  bool fp_domain_derived_bounds = true;
+
+  // Propagation through an objective over semantic {0, 1} floating-point
+  // selector symbols. Replace the objective only when interval exclusion
+  // proves each selected endpoint necessary and their conjunction sufficient.
+  // Exact extrema are the primary case. Enabled by default; retain the flag
+  // so its solver effects can be ablated independently.
+  bool fp_domain_extremal_selectors = true;
 
   // Sound zero-fact extraction for boxed nonnegative FP symbols. It only
   // derives zero facts from same-sign rows whose terms are +/- one boxed

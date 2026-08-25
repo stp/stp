@@ -28,6 +28,8 @@ ASTNode FpEncodingContext::prepare(const ASTNode& source)
   requireOriginalNodeFactory();
   ASTNode out = totalise.topLevel(source);
   if (bm->UserFlags.fp_domain_simplify ||
+      bm->UserFlags.fp_domain_derived_bounds ||
+      bm->UserFlags.fp_domain_extremal_selectors ||
       bm->UserFlags.fp_domain_sound_zero_facts ||
       bm->UserFlags.fp_domain_row_bounds)
   {
@@ -45,7 +47,18 @@ ASTNode FpEncodingContext::prepare(const ASTNode& source)
                 << " sound-zero-rows, " << s.sound_zero_facts
                 << " sound-zero-facts, " << s.row_bound_rows
                 << " row-bound-rows, " << s.row_bound_false
-                << " row-bound-false" << std::endl;
+                << " row-bound-false, " << s.derived_relations
+                << " derived-relations, " << s.derived_bounds
+                << " derived-bounds, " << s.zero_add_bounds
+                << " zero-add-bounds, " << s.inconsistent_boxes
+                << " inconsistent-boxes, " << s.extremal_selector_domains
+                << " extremal-selector-domains, "
+                << s.extremal_selector_predicates
+                << " extremal-selector-predicates, "
+                << s.extremal_selector_facts
+                << " extremal-selector-facts, "
+                << s.extremal_selector_rewrites
+                << " extremal-selector-rewrites" << std::endl;
     }
   }
   return out;
@@ -71,7 +84,8 @@ ASTNode FpEncodingContext::lowerPrepared(const ASTNode& prepared)
         s.unpacked_operation_builds + s.unpack_builds + s.pack_builds == 0;
     std::cerr << "FloatBlast: " << s.unpacked_operation_builds
               << " SymFPU operations, " << s.unpack_builds << " unpacks, "
-              << s.pack_builds << " packs"
+              << s.pack_builds << " packs, " << s.add_iszero_builds
+              << " direct add-isZero predicates"
               << (noop ? " (no-op: everything passed through natively)" : "")
               << std::endl;
   }

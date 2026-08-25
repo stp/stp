@@ -23,6 +23,14 @@ public:
     size_t classifier_false = 0;
     size_t difference_zero_equalities = 0;
     size_t nonnegative_zero_sums = 0;
+    size_t derived_relations = 0;
+    size_t derived_bounds = 0;
+    size_t zero_add_bounds = 0;
+    size_t inconsistent_boxes = 0;
+    size_t extremal_selector_domains = 0;
+    size_t extremal_selector_predicates = 0;
+    size_t extremal_selector_facts = 0;
+    size_t extremal_selector_rewrites = 0;
     size_t sound_zero_rows = 0;
     size_t sound_zero_facts = 0;
     size_t row_bound_rows = 0;

@@ -344,6 +344,12 @@ ASTNode lessThan(const floatingPointTypeInfo& size, const uf& lhs,
                  const uf& rhs);
 ASTNode lessThanOrEqual(const floatingPointTypeInfo& size, const uf& lhs,
                         const uf& rhs);
+// Whether adding two already-rounded values of `size` can produce either
+// signed zero.  This deliberately consumes the operands rather than an
+// unpacked addition result, so callers that observe only zero magnitude do
+// not have to construct the complete rounded sum.
+ASTNode addIsZero(const floatingPointTypeInfo& size, const uf& lhs,
+                  const uf& rhs);
 ASTNode isNormal(const floatingPointTypeInfo& size, const uf& value);
 ASTNode isSubnormal(const floatingPointTypeInfo& size, const uf& value);
 ASTNode isZero(const floatingPointTypeInfo& size, const uf& value);

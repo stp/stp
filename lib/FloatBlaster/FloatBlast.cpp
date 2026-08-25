@@ -940,6 +940,14 @@ private:
         const ASTNode survivor = nativeClassificationSurvivor(n);
         if (!survivor.IsNull())
           return survivor;
+        if (bm->UserFlags.fp_native_add_iszero &&
+            n[0].GetKind() == FP_ADD && n[0].Degree() == 3)
+        {
+          requireSameFormat(n[0][1], n[0][2]);
+          ++stats.add_iszero_builds;
+          return symbolic_fp::unpacked::addIsZero(
+              formatOf(n[0]), asUnpacked(n[0][1]), asUnpacked(n[0][2]));
+        }
         return symbolic_fp::unpacked::isZero(formatOf(n[0]),
                                              asUnpacked(n[0]));
       }

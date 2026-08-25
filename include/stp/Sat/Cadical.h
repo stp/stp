@@ -32,6 +32,23 @@ THE SOFTWARE.
 #include <cadical/cadical.hpp>
 #include <chrono>
 
+// STP_CADICAL_HAS_FACTOR is decided by the configure, from the version of the
+// CaDiCaL it located; the header that actually arrives here is decided by the
+// include path. Those are two different answers to the same question, and they
+// have disagreed: CryptoMiniSat >= 5.14 installs a bundled CaDiCaL's header
+// under the same cadical/cadical.hpp, and once its prefix was on the search
+// path ahead of STP's, the 2.1.3 header was compiled against a build that had
+// read 3.0.1 off the checkout. lib/Sat/CMakeLists.txt keeps that from
+// happening; this says so if it ever does again, rather than leaving it to
+// surface as a missing member several hundred lines away -- or, for an API
+// that happens to line up in both, not surfacing at all.
+#if defined(STP_CADICAL_HAS_FACTOR) && \
+    (!defined(CADICAL_MAJOR) || CADICAL_MAJOR < 3)
+#error "cadical/cadical.hpp is older than the CaDiCaL this build configured \
+against. Some other dependency's include directory is shadowing it -- see the \
+CryptoMiniSat note in lib/Sat/CMakeLists.txt."
+#endif
+
 namespace stp
 {
 #if defined(__GNUC__) || defined(__clang__)
