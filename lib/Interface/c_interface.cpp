@@ -443,9 +443,6 @@ std::pair<unsigned int, unsigned int> getTypeSizes(Type type)
       break;
     default:
       stp::FatalError("CInterface: vc_varExpr: Unsupported type", *a);
-      assert(false);
-      exit(-1);
-      break;
   }
   return std::make_pair(valueWidth, indexWidth);
 }
@@ -1322,31 +1319,6 @@ int vc_query_with_timeout(VC vc, Expr e, int timeout_max_conflicts, int timeout_
 
   return recordQueryOutcome(stp_i, output);
 }
-
-// int vc_absRefineQuery(VC vc, Expr e) {
-//   stp::STP* stp_i = (stp::STP*)vc;
-//   stp::ASTNode* a = (stp::ASTNode*)e;
-//   stp::STPMgr* b   = stp_i->bm;
-
-//   if(!stp::is_Form_kind(a->GetKind()))
-//     stp::FatalError("CInterface: Trying to QUERY a NON formula: ",*a);
-
-//   //a->LispPrint(cout, 0);
-//   //printf("##################################################\n");
-//   BVTypeCheck(*a);
-//   b->AddQuery(*a);
-
-//   const stp::ASTVec v = b->GetAsserts();
-//   stp::ASTNode o;
-//   if(!v.empty()) {
-//     if(v.size()==1)
-//       return b->TopLevelSTP(v[0],*a);
-//     else
-//       return b->TopLevelSTP(b->CreateNode(stp::AND,v),*a);
-//   }
-//   else
-//     return b->TopLevelSTP(b->CreateNode(stp::TRUE),*a);
-// }
 
 void vc_push(VC vc)
 {
@@ -3619,22 +3591,6 @@ Expr vc_bv32ConstExprFromInt(VC vc, unsigned int value)
   return vc_bvConstExprFromInt(vc, 32, value);
 }
 
-#if 0
-static char *val_to_binary_str(unsigned nbits, unsigned long long val) {
-  char s[65];
-
-  assert(nbits < sizeof s);
-  strcpy(s, "");
-  while(nbits-- > 0) {
-    if((val >> nbits) & 1)
-      strcat(s, "1");
-    else
-      strcat(s, "0");
-  }
-  return strdup(s);
-}
-#endif
-
 Expr vc_parseExpr(VC vc, const char* infile)
 {
   stp::STP* stp_i = (stp::STP*)vc;
@@ -3732,7 +3688,6 @@ Expr getChild(Expr e, int i)
                     "in expression: ",
                     *a);
   }
-  return a;
 }
 
 void vc_registerErrorHandler(void (*error_hdlr)(const char* err_msg))
@@ -4093,40 +4048,25 @@ int vc_parseMemExpr(VC vc, const char* s, Expr* oquery, Expr* oasserts)
   stp::STP* stp_i = (stp::STP*)vc;
   stp::STPMgr* b = stp_i->bm;
 
-#if 0
- stp::GlobalSTP = (stp::STP*)vc;
-  CONSTANTBV::ErrCode c = CONSTANTBV::BitVector_Boot();
-  if(0 != c) {
-    cout << CONSTANTBV::BitVector_Error(c) << endl;
-    return 0;
-  }
-#endif
-
   stp::Cpp_interface pi(*b, b->defaultNodeFactory);
   stp::GlobalParserInterface = &pi;
 
   stp::ASTVec AssertsQuery;
   if (b->UserFlags.smtlib1_parser_flag)
   {
-    // YY_BUFFER_STATE bstat = smt_scan_string(s);
-    // smt_switch_to_buffer(bstat);
     stp::GlobalSTP = stp_i;
     stp::GlobalParserBM = b;
     stp::SMTScanString(s);
     smtparse((void*)&AssertsQuery);
-    // smt_delete_buffer(bstat);
     stp::GlobalSTP = NULL;
     stp::GlobalParserBM = NULL;
   }
   else
   {
-    // YY_BUFFER_STATE bstat = cvc_scan_string(s);
-    // cvc_switch_to_buffer(bstat);
     stp::GlobalSTP = stp_i;
     stp::GlobalParserBM = b;
     stp::CVCScanString(s);
     cvcparse((void*)&AssertsQuery);
-    // cvc_delete_buffer(bstat);
     stp::GlobalSTP = NULL;
     stp::GlobalParserBM = NULL;
   }

@@ -367,7 +367,6 @@ namespace stp
 
 %x  COMMENT
 %x  STRING_LITERAL
-%x  SYMBOL
 %x  SKIP_SEXPR
 
 LETTER  ([a-zA-Z])

@@ -37,8 +37,6 @@ using std::string;
 class LetMgr
 {
 private:
-  const ASTNode ASTUndefined;
-
   typedef ankerl::unordered_dense::map<string, ASTNode, TransparentStringHash,
                                        std::equal_to<>>
       MapType;
@@ -72,7 +70,7 @@ public:
   
   bool frameMode = true;
 
-  LetMgr(ASTNode undefined) : ASTUndefined(undefined)
+  LetMgr([[maybe_unused]] ASTNode undefined)
   {
     assert(!undefined.IsNull());
     push(); // CVC format has a global let scope.
@@ -89,14 +87,10 @@ public:
 
   void CleanupLetIDMap(void);
 
-  // Has a let with this name has already been declared.
-  bool isLetDeclared(const string& s) const;
-
   // The expression the innermost binding of s maps to, or nullptr.
   // The pointer is invalidated by any change to the bindings.
   const ASTNode* lookupLet(std::string_view s) const;
 
-  ASTNode resolveLet(const string& s) const;
   ASTNode ResolveID(const ASTNode& var);
 
   // Functions that are used to create LET expressions

@@ -87,9 +87,6 @@
   // FIXME: Why is this not an UNSIGNED int?
   int uintval;                  /* for numerals in types. */
 
-  // for BV32 BVCONST 
-  unsigned long long ullval;
-
   struct {
     //stores the indexwidth and valuewidth
     //indexwidth is 0 iff type is bitvector. positive iff type is
@@ -139,12 +136,9 @@
 %token OR_TOK
 %token XOR_TOK
 %token IFF_TOK
-%token EXISTS_TOK
-%token FORALL_TOK
 %token LET_TOK
 %token FLET_TOK
 %token NOTES_TOK
-%token CVC_COMMAND_TOK
 %token SORTS_TOK
 %token FUNS_TOK
 %token PREDS_TOK
@@ -171,16 +165,10 @@
 %token DOLLAR_TOK
 %token QUESTION_TOK
 %token DISTINCT_TOK
-%token SEMICOLON_TOK
-%token EOF_TOK
 %token EQ_TOK
  /*BV SPECIFIC TOKENS*/
 %token NAND_TOK
 %token NOR_TOK
-%token NEQ_TOK
-%token ASSIGN_TOK
-%token BV_TOK
-%token BOOLEAN_TOK
 %token BVLEFTSHIFT_1_TOK
 %token BVRIGHTSHIFT_1_TOK
 %token BVARITHRIGHTSHIFT_TOK
@@ -265,7 +253,6 @@ LPAREN_TOK BENCHMARK_TOK bench_name bench_attributes RPAREN_TOK
   }
   delete $3; //discard the benchmarkname.
 }
-/*   | EOF_TOK */
 /*     { */
 /*     } */
 ;

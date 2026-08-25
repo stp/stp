@@ -127,11 +127,6 @@ Cpp_interface::~Cpp_interface()
     GlobalParserBM = NULL;
 }
 
-ASTVec& Cpp_interface::getCurrentSymbols()
-{
-  return frames.back()->getSymbols();
-}
-
 vector<std::string>& Cpp_interface::getCurrentFunctions()
 {
   return frames.back()->getFunctions();
@@ -312,11 +307,6 @@ ASTNode Cpp_interface::CreateBVConst(string& strval, int base, int bit_width)
   return bm.CreateBVConst(strval, base, bit_width);
 }
 
-ASTNode Cpp_interface::CreateBVConst(const char* const strval, int base)
-{
-  return bm.CreateBVConst(strval, base);
-}
-
 // FIXME: unsigned long long int is wong. Use intN_t from cstdint
 ASTNode Cpp_interface::CreateBVConst(unsigned int width,
                                      uint64_t bvconst)
@@ -437,22 +427,6 @@ ASTNode Cpp_interface::applyFunction(const Function& f, const ASTVec& params)
 
   ASTNodeMap cache;
   return SubstitutionMap::replace(f.function, fromTo, cache, nf);
-}
-
-types Cpp_interface::functionReturnType(const string& name)
-{
-  const auto found = functions.find(name);
-  if (found == functions.end())
-    return UNKNOWN_TYPE;
-
-  return found->second.function.GetType();
-}
-
-SourceSort Cpp_interface::functionReturnSourceSort(const string& name)
-{
-  const auto found = functions.find(name);
-  return found == functions.end() ? SourceSort::unknown()
-                                  : found->second.function.GetSourceSort();
 }
 
 const UFDecl* Cpp_interface::declareUninterpretedFunction(
@@ -578,12 +552,6 @@ bool Cpp_interface::LookupTemporarySymbol(const char* const name,
   return false;
 }
 
-bool Cpp_interface::isSymbolAlreadyDeclared(char* name)
-{
-  ASTNode ignored;
-  return LookupSymbol(name, ignored);
-}
-
 void Cpp_interface::setPrintSuccess(bool ps)
 {
   print_success = ps;
@@ -607,12 +575,6 @@ ASTNode* Cpp_interface::newNode(const Kind k, const int width,
 {
   return newNode(nf->CreateTerm(k, width, n0, n1));
 }
-
-ASTNode* Cpp_interface::newNode(const Kind k, const int width, const ASTVec& v)
-{
-  return newNode(nf->CreateTerm(k, width, v));
-}
-
 
 ASTNode* Cpp_interface::newNode(const ASTNode& copyIn)
 {
@@ -2061,11 +2023,6 @@ Cpp_interface::SolverFrame::~SolverFrame()
 vector<std::string>& Cpp_interface::SolverFrame::getFunctions()
 {
   return _scoped_functions;
-}
-
-ASTVec& Cpp_interface::SolverFrame::getSymbols()
-{
-  return _scoped_symbols;
 }
 
 void Cpp_interface::SolverFrame::addSortAlias(const std::string& name)
