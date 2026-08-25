@@ -1062,6 +1062,9 @@ if (USE_MINISAT)
     # cmake/FindMiniSat.cmake, along with the ability to build one.
     find_package(MiniSat REQUIRED)
     add_definitions(-DUSE_MINISAT)
+    if (MINISAT_HAS_TERMINATOR)
+        add_definitions(-DSTP_MINISAT_HAS_TERMINATOR)
+    endif()
     # The include directory is no longer added project-wide: the MiniSat target
     # carries it to lib/Sat and lib/Incremental, which are the two object
     # libraries whose sources reach a MiniSat header, and to the unit tests
