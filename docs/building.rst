@@ -534,19 +534,130 @@ Installing
 installation is ``CMAKE_INSTALL_PREFIX``, set at configure time or
 changed later through ``make edit_cache``.
 
-Building on Windows and Visual Studio
--------------------------------------
+Building on Windows
+-------------------
 
-Install `CMake <https://cmake.org/download/>`__ and follow the steps that
-one of the two Windows jobs in
+Two toolchains are built and tested: Visual Studio's ``cl``, and the MSYS2
+UCRT64 gcc. Which SAT backend you get follows from which one you pick.
+Under MSVC that is MiniSat; under MinGW it is CaDiCaL, whose own
+``BUILD.md`` documents a MinGW build. CryptoMiniSat is not built on
+Windows at all -- upstream supports MinGW there, and STP does not package
+it -- so both configure with ``-DUSE_CRYPTOMINISAT=OFF``.
+
+Everything else is fetched. ``-DENABLE_AUTO_DOWNLOAD=ON`` builds ABC,
+LibBF, SymFPU, CLI11 and the SAT backend as part of the build, with its
+compiler and its flags, so the toolchain, flex, bison and -- for MiniSat
+-- a zlib are all that has to be installed beforehand.
+
+Both use the Ninja generator rather than the Visual Studio one. Ninja
+parallelises by default, where MSBuild without ``/m`` builds one project
+at a time, and it honours ``CMAKE_<LANG>_COMPILER_LAUNCHER``, which the
+Visual Studio generator ignores silently, so a compiler cache does
+nothing there. The cost is that Ninja does not locate the MSVC toolchain
+for itself: start from an *x64 Native Tools* developer prompt, or enter
+the developer shell first.
+
+The two CI jobs -- ``windows (minisat, MSVC)`` and
+``windows (cadical, MinGW)`` in
 `.github/workflows/ci.yml <https://github.com/stp/stp/blob/master/.github/workflows/ci.yml>`__
-runs. Both install flex and bison, build LibBF, and configure with
-``-DUSE_CRYPTOMINISAT=OFF``, CryptoMiniSat not being buildable there.
+-- do exactly what is below, and are the reference if a detail here is
+not enough.
 
-``windows (cadical, MinGW)`` is the one to follow for a solver to use: it
-builds CaDiCaL under MinGW/UCRT64 and links a fully static ``stp.exe``
-against it. ``windows (minisat, MSVC)`` builds with Visual Studio instead,
-where MiniSat is the only backend that compiles.
+Visual Studio
+~~~~~~~~~~~~~
+
+flex and bison do not come with Visual Studio.
+`winflexbison <https://github.com/lexxmark/winflexbison>`__ supplies
+``win_flex.exe`` and ``win_bison.exe``, which are the names CMake's
+``FindFLEX`` and ``FindBISON`` look for on Windows. Put its directory on
+``PATH`` and keep the extracted ``data/`` beside the executables, since
+bison finds its skeleton files relative to its own path.
+
+MiniSat's public headers include ``zlib.h``, so a zlib is needed too --
+vcpkg's ``zlib:x64-windows-static``, for one. Name the include directory
+and the library file rather than reaching for ``ZLIB_ROOT``: vcpkg
+installs that library as ``zs.lib``, which is not one of the names
+``FindZLIB`` searches for. What STP resolves is passed on to MiniSat's
+own build, which searches the default paths only, so one setting covers
+both.
+
+.. code-block:: bat
+
+    set ABC_USE_NO_PTHREADS=1
+
+    cmake -B build -G Ninja ^
+      -DCMAKE_BUILD_TYPE=RelWithDebInfo ^
+      -DENABLE_AUTO_DOWNLOAD=ON ^
+      -DSTATICCOMPILE=ON ^
+      -DUSE_MINISAT=ON -DUSE_CRYPTOMINISAT=OFF -DUSE_CADICAL=OFF ^
+      -DENABLE_PYTHON_INTERFACE=OFF ^
+      -DZLIB_INCLUDE_DIR=C:/vcpkg/installed/x64-windows-static/include ^
+      -DZLIB_LIBRARY=C:/vcpkg/installed/x64-windows-static/lib/zs.lib ^
+      .
+    cmake --build build
+
+``ZLIB_LIBRARY`` names the ``.lib`` itself, and vcpkg has not always
+spelled it the same way, so look in that ``lib\`` directory rather than
+copying the line verbatim.
+
+``ABC_USE_NO_PTHREADS`` is read by ABC's makefile while CMake configures.
+Without it ABC's threaded paths are compiled, and they do not build with
+``cl``.
+
+If a compiler cache is pointed at the build, add
+``-DCMAKE_POLICY_DEFAULT_CMP0141=NEW`` and
+``-DCMAKE_MSVC_DEBUG_INFORMATION_FORMAT=Embedded``. The default ``/Zi``
+writes a program database shared by every translation unit, which is
+neither cacheable nor safe to write from several compilations at once;
+those two move the build onto ``/Z7``.
+
+MinGW (MSYS2 UCRT64)
+~~~~~~~~~~~~~~~~~~~~
+
+From a UCRT64 shell:
+
+.. code-block:: bash
+
+    pacman -S --needed bison flex git make \
+        mingw-w64-ucrt-x86_64-cmake \
+        mingw-w64-ucrt-x86_64-gcc \
+        mingw-w64-ucrt-x86_64-ninja
+
+    export ABC_USE_NO_PTHREADS=1
+    export ABC_USE_STDINT_H=1
+
+    cmake -B build -G Ninja \
+        -DENABLE_AUTO_DOWNLOAD=ON \
+        -DSTATICCOMPILE=ON \
+        -DUSE_CADICAL=ON -DUSE_CRYPTOMINISAT=OFF \
+        -DENABLE_PYTHON_INTERFACE=OFF \
+        .
+    cmake --build build --parallel "$(nproc)"
+
+``ABC_USE_STDINT_H`` is the one that is easy to miss. ABC's architecture
+probe reads eight-byte pointers as 64-bit Linux and picks an integer type
+that is 32 bits wide under LLP64, and the pointer casts in its headers
+then do not compile; the variable routes them onto ``stdint.h`` instead.
+``ABC_USE_NO_PTHREADS`` is as above.
+
+CaDiCaL needs nothing extra here: ``cmake/FindCaDiCaL.cmake`` drives its
+configure script and builds the library alone, which is what this
+toolchain needs it to do.
+
+Common to both
+~~~~~~~~~~~~~~
+
+-  Ninja puts the binary at the top of the build tree: ``build\stp.exe``.
+-  ``-DSTATICCOMPILE=ON`` produces an ``stp.exe`` that needs nothing
+   beside it. Under MSVC it also moves STP *and its dependencies* onto
+   the static CRT, so a dependency directory filled by one choice cannot
+   be linked into a build that wants the other. STP records what filled
+   ``STP_DEP_DIR`` and warns when a later build disagrees.
+-  The Python interface is off in both jobs and is not exercised on
+   Windows.
+-  Neither job runs the lit suite; both run a handful of queries through
+   the binary they built. ``-DENABLE_TESTING=ON`` is correspondingly less
+   well trodden there.
 
 Testing
 -------

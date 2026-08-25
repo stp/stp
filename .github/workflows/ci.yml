@@ -1178,10 +1178,12 @@ jobs:
       # compile with MSVC. ABC's Makefile (run during CMake configure to
       # extract flags) reads this from the environment.
       ABC_USE_NO_PTHREADS: 1
-      # STP predates CMP0074, so ZLIB_ROOT is ignored; pass the include dir
-      # and library explicitly instead. cmake/FindMiniSat.cmake hands both on
-      # to MiniSat's own build, which searches the default paths only and so
-      # would never find the vcpkg copy by itself.
+      # vcpkg installs the static zlib as zs.lib, which is not one of the
+      # names FindZLIB searches for, so ZLIB_ROOT does not find it: name the
+      # include directory and the library file instead.
+      # cmake/FindMiniSat.cmake hands both on to MiniSat's own build, which
+      # searches the default paths only and so would never find the vcpkg
+      # copy by itself.
       # ZLIB_LIBRARY is located after the vcpkg install (see below).
       ZLIB_INCLUDE_DIR: C:\vcpkg\installed\x64-windows-static\include
       # Turns on sccache's GitHub Actions storage backend. It has to be set for
