@@ -1017,6 +1017,46 @@ jobs:
         echo "simplifying-minisat output: '$out'"
         [ "$out" = "sat" ]
 
+    # Rung 0 of the ladder in cmake/deps-helper.cmake: a MiniSat that is
+    # already built, named by MINISAT_INCLUDE_DIRS and MINISAT_LIBDIR. It is
+    # the only rung that decides MINISAT_HAS_TERMINATOR by compiling against
+    # the headers rather than deriving it from the pin, so it is the only one
+    # that would notice the probe going wrong -- and no job takes it since the
+    # MSVC leg moved onto the ExternalProject. The build above installed a
+    # MiniSat into deps/install; point a second configure straight at it.
+    #
+    # Configure only. What is under test is settled during configure, and
+    # rebuilding STP against the same archive it just linked would prove
+    # nothing the job has not already proved.
+    - name: Probe an already-built MiniSat
+      run: |
+        cmake -S . -B build-minisat-probe -G Ninja \
+          -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" \
+          -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" \
+          -DENABLE_AUTO_DOWNLOAD:BOOL=ON \
+          -DUSE_MINISAT:BOOL=ON \
+          -DUSE_CRYPTOMINISAT:STRING=OFF \
+          -DUSE_CADICAL:BOOL=OFF \
+          -DMINISAT_INCLUDE_DIRS:PATH="$GITHUB_WORKSPACE/deps/install/include" \
+          -DMINISAT_LIBDIR:PATH="$GITHUB_WORKSPACE/deps/install/lib" \
+          > probe.log 2>&1 || { cat probe.log; exit 1; }
+        grep -i minisat probe.log || true
+
+        # Without this the check below is vacuous: a configure that fell
+        # through to the ExternalProject would report the terminator too,
+        # having derived it from the pin rather than probed for it.
+        want="$GITHUB_WORKSPACE/deps/install/lib/libminisat.a"
+        if ! grep -qF "Found MiniSat: $want" probe.log; then
+          echo "::error::rung 0 did not resolve to $want, so nothing was probed"
+          cat probe.log
+          exit 1
+        fi
+        if ! grep -q "MiniSat can be stopped mid-search" probe.log; then
+          echo "::error::the terminator probe did not fire against the pinned MiniSat"
+          cat probe.log
+          exit 1
+        fi
+
   # USE_RISS is an advertised option -- the "no SAT backend" configure error
   # names it as one of the ways to get a solver, and --riss and vc_useRiss are
   # both wired up -- but no job built it, so nothing noticed when it stopped
@@ -1134,13 +1174,14 @@ jobs:
     runs-on: windows-2025
 
     env:
-      MINISAT_ROOT: ${{ github.workspace }}\minisat\install
       # Build ABC single-threaded: its pthread/atomics code paths don't
       # compile with MSVC. ABC's Makefile (run during CMake configure to
       # extract flags) reads this from the environment.
       ABC_USE_NO_PTHREADS: 1
-      # minisat and STP both predate CMP0074, so ZLIB_ROOT is ignored;
-      # pass the include dir and library explicitly instead.
+      # STP predates CMP0074, so ZLIB_ROOT is ignored; pass the include dir
+      # and library explicitly instead. cmake/FindMiniSat.cmake hands both on
+      # to MiniSat's own build, which searches the default paths only and so
+      # would never find the vcpkg copy by itself.
       # ZLIB_LIBRARY is located after the vcpkg install (see below).
       ZLIB_INCLUDE_DIR: C:\vcpkg\installed\x64-windows-static\include
       # Turns on sccache's GitHub Actions storage backend. It has to be set for
@@ -1287,14 +1328,13 @@ jobs:
     # cl. cmake/FindLibBF.cmake supplies LibBF with a CMakeLists of its own, so
     # the configure step below builds it with whatever compiler this build is
     # using -- cl included -- and there is nothing Windows-specific left to do.
-
-    - name: Build minisat
-      run: |
-        git clone https://github.com/stp/minisat
-        cd minisat
-        git checkout 74c4aa2e450ef4eb6eb159e984d64d86a2a35058
-        cmake -B build -A x64 -DSTATICCOMPILE=ON "-DCMAKE_POLICY_VERSION_MINIMUM=3.12" "-DCMAKE_INSTALL_PREFIX=$env:MINISAT_ROOT" "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR" "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY" .
-        cmake --build build --config Release --target install
+    #
+    # MiniSat was the last of those hand-built dependencies, and the only one
+    # whose pinned commit had to be written out twice -- once here and once in
+    # cmake/FindMiniSat.cmake, where the two drifting apart would have left
+    # this leg quietly testing a MiniSat no other job builds. It is an
+    # ExternalProject like the rest now: the configure step below fetches and
+    # builds it, with this job's compiler, flags and sccache.
 
     # Ninja rather than the Visual Studio generator, for two reasons. MSBuild
     # invoked without /m builds one project at a time, and its ClCompile task
@@ -1334,8 +1374,6 @@ jobs:
         -DENABLE_AUTO_DOWNLOAD=ON
         -DSTATICCOMPILE=ON -DUSE_MINISAT=ON -DUSE_CRYPTOMINISAT=OFF -DUSE_CADICAL=OFF
         -DENABLE_PYTHON_INTERFACE=OFF
-        "-DMINISAT_LIBDIR=$env:MINISAT_ROOT"
-        "-DMINISAT_INCLUDE_DIRS=$env:MINISAT_ROOT\include"
         "-DZLIB_INCLUDE_DIR=$env:ZLIB_INCLUDE_DIR"
         "-DZLIB_LIBRARY=$env:ZLIB_LIBRARY"
         .

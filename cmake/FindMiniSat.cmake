@@ -88,12 +88,85 @@ if(NOT MiniSat_FOUND_SYSTEM)
     set(MiniSat_ARCHIVE
         "${CMAKE_STATIC_LIBRARY_PREFIX}minisat${CMAKE_STATIC_LIBRARY_SUFFIX}")
 
+    # MiniSat looks for zlib itself -- in the default paths only, and without
+    # REQUIRED, so nothing this build was told about zlib reaches it and a
+    # miss is silent there: it arrives later as a missing zlib.h from inside
+    # minisat/utils/ParseUtils.h. On a Linux runner the default paths are
+    # where zlib is, which is why nothing noticed; the MSVC job's zlib comes
+    # from vcpkg and is found only because it was named. So hand over what the
+    # find_package(ZLIB REQUIRED) above resolved, in the spelling MiniSat's
+    # own find_package reads -- FindZLIB honours a ZLIB_LIBRARY it is given
+    # rather than searching again, so the two agree by construction.
+    #
+    # ZLIB_ROOT would be the tidier channel and does nothing: MiniSat's
+    # cmake_minimum_required is 2.6, so CMP0074 is OLD in that build and
+    # <PackageName>_ROOT is ignored.
+    #
+    # Both go through file(TO_CMAKE_PATH) first. ExternalProject writes its
+    # configure command into a generated .cmake script as a quoted string, so
+    # a native Windows path arrives there as a string literal and its
+    # separators as escape sequences -- and the MSVC job's zlib lives in
+    # C:\vcpkg, where the first one is the invalid escape \v:
+    #
+    #     Syntax error in cmake code ... Invalid character escape '\v'.
+    #
+    # A -D<var>:PATH= is normalised on the way into the cache and never shows
+    # this; a plain -D<var>= is not, and that is how a library path is
+    # usually given.
+    set(MiniSat_ZLIB_ARGS "")
+    if(ZLIB_INCLUDE_DIR)
+        file(TO_CMAKE_PATH "${ZLIB_INCLUDE_DIR}" _zlib_include_dir)
+        list(APPEND MiniSat_ZLIB_ARGS "-DZLIB_INCLUDE_DIR=${_zlib_include_dir}")
+        unset(_zlib_include_dir)
+    endif()
+    # select_library_configurations() can leave ZLIB_LIBRARY as an
+    # optimized/debug pair rather than one path, and a list does not survive
+    # the trip through CMAKE_ARGS. Take the release half when it does.
+    set(_zlib_library "${ZLIB_LIBRARY}")
+    list(LENGTH _zlib_library _zlib_library_count)
+    if(_zlib_library_count GREATER 1)
+        set(_zlib_library "${ZLIB_LIBRARY_RELEASE}")
+    endif()
+    if(_zlib_library)
+        file(TO_CMAKE_PATH "${_zlib_library}" _zlib_library)
+        list(APPEND MiniSat_ZLIB_ARGS "-DZLIB_LIBRARY=${_zlib_library}")
+    endif()
+    unset(_zlib_library)
+    unset(_zlib_library_count)
+
+    # The configuration MiniSat is built in. STP's own, except under MSVC,
+    # where MiniSat's CMakeLists puts
+    #
+    #     add_compile_options("$<$<CONFIG:RELWITHDEBINFO>:/ZI>")
+    #
+    # on the compile line after the /Z7 that
+    # CMAKE_MSVC_DEBUG_INFORMATION_FORMAT contributes, so /ZI is what cl
+    # reads: one program database shared by four translation units compiling
+    # in parallel, which is the race the MSVC block in deps-helper.cmake
+    # exists to prevent, and uncacheable besides -- sccache declines /ZI.
+    # Release carries no such option, and is the configuration the Windows CI
+    # job built by hand before this became an ExternalProject.
+    #
+    # Named twice deliberately: CMAKE_BUILD_TYPE is what a single-config
+    # generator reads and --config is what a multi-config one reads, and the
+    # sub-build inherits whichever generator this build is using.
+    if(MSVC)
+        set(MiniSat_BUILD_TYPE "Release")
+    else()
+        set(MiniSat_BUILD_TYPE "${CMAKE_BUILD_TYPE}")
+    endif()
+
     ExternalProject_Add(
         MiniSat-EP
         ${STP_EP_COMMON_CONFIG}
         GIT_REPOSITORY https://github.com/stp/minisat
         GIT_TAG ${MiniSat_VERSION}
         CMAKE_ARGS ${STP_EP_COMMON_CMAKE_ARGS}
+                   ${MiniSat_ZLIB_ARGS}
+                   # After STP_EP_COMMON_CMAKE_ARGS, which names it too: a
+                   # later -D wins, which is how a dependency that needs
+                   # something different says so.
+                   -DCMAKE_BUILD_TYPE=${MiniSat_BUILD_TYPE}
                    -DCMAKE_INSTALL_PREFIX=<INSTALL_DIR>
                    -DCMAKE_INSTALL_LIBDIR=lib
                    # The archive is linked into libstp, so that an installed
@@ -101,12 +174,24 @@ if(NOT MiniSat_FOUND_SYSTEM)
                    # build tree. STP_EP_COMMON_CMAKE_ARGS supplies the -fPIC
                    # this then needs; MiniSat's own CMake never sets it.
                    -DSTATICCOMPILE=ON
+                   # Somewhere other than the top of the build tree, which is
+                   # what stops the BUILD_COMMAND below meaning the wrong
+                   # thing. MiniSat gives minisat_simp an OUTPUT_NAME of
+                   # "minisat", so with the executables at the top the build
+                   # tree holds a *file* called minisat next to a *target*
+                   # called minisat, and Ninja resolves the name to the file:
+                   # asking for the library builds the program instead. The
+                   # Makefile generators have no such ambiguity, and neither
+                   # has Windows, where the file is minisat.exe -- so this was
+                   # every Ninja build on a Unix host, which is all of CI.
+                   -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=<BINARY_DIR>/bin
         # Only the library. MiniSat also builds two command-line programs that
         # STP never runs, and STATICCOMPILE puts -static on them, which needs a
         # static libz, libstdc++ and libc on the build machine -- a requirement
         # STP has no business imposing, and one a distribution that ships no
-        # libz.a cannot meet at all.
-        BUILD_COMMAND ${CMAKE_COMMAND} --build . --config ${CMAKE_BUILD_TYPE}
+        # libz.a cannot meet at all. Ubuntu ships one, which is why CI built
+        # those programs for as long as it did without saying so.
+        BUILD_COMMAND ${CMAKE_COMMAND} --build . --config ${MiniSat_BUILD_TYPE}
                       --target minisat
         # ...which means upstream's install rule, which names those programs
         # too, cannot be used either.
