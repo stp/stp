@@ -32,15 +32,40 @@
 #   LIT_TOOL              rung 0, an absolute path to a lit
 #   an installed lit      rung 1
 #   ENABLE_AUTO_DOWNLOAD  rung 3, pip install into ${CMAKE_BINARY_DIR}/venv
-set(LIT_VERSION "18.1.8" CACHE STRING "lit version to install when one has to be")
+# 23.1.0, not 18.1.8. lit 23 rejects the external shell this suite used to ask
+# for, so the two have to move together; pinning the venv to 18 while CI
+# installed whatever pip called latest is what let a lit release break every
+# job that runs these tests.
+set(LIT_VERSION "23.1.0" CACHE STRING "lit version to install when one has to be")
 mark_as_advanced(LIT_VERSION)
 
 find_program(LIT_TOOL lit DOC "Path to lit tool")
 
 if(NOT LIT_TOOL AND ENABLE_AUTO_DOWNLOAD)
     set(STP_VENV_DIR "${PROJECT_BINARY_DIR}/venv")
-    # Created once and reused: pip is slow, and reconfiguring is not rare.
-    if(NOT EXISTS "${STP_VENV_DIR}/bin/lit")
+    # Created once and reused: pip is slow, and reconfiguring is not rare. But
+    # reused only while it holds the version asked for -- a bumped LIT_VERSION
+    # against an existing build tree used to be ignored in silence, and the
+    # status line below would then report the version that was wanted rather
+    # than the one about to run the tests.
+    set(_venv_lit_ok FALSE)
+    if(EXISTS "${STP_VENV_DIR}/bin/lit")
+        execute_process(
+            COMMAND "${STP_VENV_DIR}/bin/lit" --version
+            OUTPUT_VARIABLE _venv_lit_version
+            ERROR_VARIABLE _venv_lit_version
+            OUTPUT_STRIP_TRAILING_WHITESPACE RESULT_VARIABLE _venv_lit_rc)
+        if(_venv_lit_rc EQUAL 0 AND
+           _venv_lit_version MATCHES "(^| )${LIT_VERSION}( |$)")
+            set(_venv_lit_ok TRUE)
+        else()
+            message(STATUS
+                "Replacing the lit virtual environment: wanted ${LIT_VERSION}, "
+                "found \"${_venv_lit_version}\"")
+            file(REMOVE_RECURSE "${STP_VENV_DIR}")
+        endif()
+    endif()
+    if(NOT _venv_lit_ok)
         message(STATUS "Creating a virtual environment for lit: ${STP_VENV_DIR}")
         execute_process(
             COMMAND "${PYTHON_EXECUTABLE}" -m venv "${STP_VENV_DIR}"
