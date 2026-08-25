@@ -36,16 +36,7 @@ namespace constantBitP
 {
 
 Result makeEqual(FixedBits& a, FixedBits& b, unsigned from, unsigned to);
-void setSignedMinMax(FixedBits& v, stp::CBV min, stp::CBV max);
 void setUnsignedMinMax(const FixedBits& v, stp::CBV min, stp::CBV max);
-void fixUnfixedTo(vector<FixedBits*>& operands, const unsigned position,
-                  bool toFix);
-int toInt(stp::CBV value);
-
-// wraps the comparison function, including a check that the bitWidth is the
-// same.
-int unsignedCompare(const stp::CBV& lhs, const stp::CBV& rhs);
-int signedCompare(const stp::CBV& lhs, const stp::CBV& rhs);
 
 struct stats
 {

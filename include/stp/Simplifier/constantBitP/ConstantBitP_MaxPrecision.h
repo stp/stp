@@ -35,31 +35,6 @@ namespace simplifier
 namespace constantBitP
 {
 
-enum Direction
-{
-  UPWARDS_ONLY,
-  BOTH_WAYS
-};
-
-// This is used for very specific purposes.
-enum Type
-{
-  BOOL_TYPE,
-  VALUE_TYPE
-};
-
-struct Signature
-{
-  stp::Kind kind;
-  Type resultType;
-  Type inputType;
-  int maxInputWidth;
-  int numberOfInputs;
-  Direction direction;
-  bool imprecise;
-  Signature() { imprecise = false; }
-};
-
 bool maxPrecision(vector<FixedBits*> children, FixedBits& output,
                   stp::Kind kind, stp::STPMgr* beev);
 }

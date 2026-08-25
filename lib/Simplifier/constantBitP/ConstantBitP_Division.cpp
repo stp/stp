@@ -28,7 +28,6 @@ THE SOFTWARE.
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
 #include "stp/Util/BitOps.h"
 #include <cstdint>
-#include <set>
 #include <stdexcept>
 
 namespace simplifier
@@ -36,11 +35,7 @@ namespace simplifier
 namespace constantBitP
 {
 using std::endl;
-using std::pair;
-using std::set;
 
-const bool debug_division = false;
-extern std::ostream& log;
 
 using stp::STPMgr;
 
@@ -323,16 +318,6 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
   stp::CBV copy2 = pool[13];
   stp::CBV multR = pool[14];
 
-  if (debug_division)
-  {
-    log << "--" << endl;
-    log << "initial" << endl;
-    log << "a:[" << *minTop << "," << *maxTop << "]";
-    log << " / b:[" << *minBottom << "," << *maxBottom << "] = ";
-    log << "[" << *minQuotient << "," << *maxQuotient << "]";
-    log << " rem [" << *minRemainder << "," << *maxRemainder << "]";
-    log << endl;
-  }
 
   // If a bit is changed, then we fixed point again.
   bool bitEverChanged = false;
@@ -383,13 +368,6 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
 
         if (CONSTANTBV::BitVector_Lexicompare(minQuotient, q) < 0)
         {
-          if (debug_division)
-          {
-            log << "1 minQ) " << *minTop;
-            log << " / " << *maxBottom;
-            log << " = " << *q;
-            log << " r " << *r << endl;
-          }
 
           // min quotient is bigger. Bring in.
           CONSTANTBV::BitVector_Copy(minQuotient, q);
@@ -407,13 +385,6 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
 
       if (CONSTANTBV::BitVector_Lexicompare(maxQuotient, q) > 0)
       {
-        if (debug_division)
-        {
-          log << "2 maxQ) " << *maxTop;
-          log << " / " << *minBottom;
-          log << " = " << *q;
-          log << " r " << *r << endl;
-        }
 
         CONSTANTBV::BitVector_Copy(maxQuotient,
                                    q); // copy the reduced value in.
@@ -438,12 +409,6 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
       if (e == CONSTANTBV::ErrCode_Ok &&
           CONSTANTBV::BitVector_Lexicompare(maxTop, multR) > 0)
       {
-        if (debug_division)
-        {
-          log << "3 maxT) " << *maxQuotient;
-          log << " * " << *maxBottom;
-          log << " = " << *multR << endl;
-        }
         CONSTANTBV::BitVector_Copy(maxTop, multR);
         changed = true;
       }
@@ -459,12 +424,6 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
       if (e == CONSTANTBV::ErrCode_Ok &&
           CONSTANTBV::BitVector_Lexicompare(minTop, multR) < 0)
       {
-        if (debug_division)
-        {
-          log << "4 minT) " << *minQuotient;
-          log << " * " << *minBottom;
-          log << " = " << *multR << endl;
-        }
         CONSTANTBV::BitVector_Copy(minTop, multR);
         changed = true;
       }
@@ -479,13 +438,6 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
 
         if (CONSTANTBV::BitVector_Lexicompare(maxBottom, q) > 0)
         {
-          if (debug_division)
-          {
-            log << "5 maxB) " << *maxTop;
-            log << " / " << *minQuotient;
-            log << " = " << *q;
-            log << " r " << *r << endl;
-          }
 
           // min quotient is bigger. Bring in.
           CONSTANTBV::BitVector_Copy(maxBottom, q);
@@ -516,12 +468,6 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
             if (!carry && (CONSTANTBV::BitVector_Lexicompare(minBottom, q) < 0))
             {
 
-              if (debug_division)
-              {
-                log << "6 min_3_B) ";
-                log << "minBottom" << *minBottom << " ";
-                log << "q" << *q << endl;
-              }
 
               // min quotient is bigger. Bring in.
               CONSTANTBV::BitVector_Copy(minBottom, q);
@@ -534,41 +480,17 @@ Result bvUnsignedQuotientAndRemainder(vector<FixedBits*>& children,
       // Don't know why we don't need to check the intervals on the others?
       if (CONSTANTBV::BitVector_Lexicompare(minQuotient, maxQuotient) > 0)
       {
-        if (debug_division)
-        {
-          log << "conflict" << endl;
-          log << "a:[" << *minTop << "," << *maxTop << "]";
-          log << " / b:[" << *minBottom << "," << *maxBottom << "] = ";
-          log << "[" << *minQuotient << "," << *maxQuotient << "]";
-          log << endl;
-        }
 
         result = CONFLICT;
         stopRefinement = true;
         break;
       }
 
-      if (debug_division)
-      {
-        log << "intermediate" << endl;
-        log << "a:[" << *minTop << "," << *maxTop << "]";
-        log << " / b:[" << *minBottom << "," << *maxBottom << "] = ";
-        log << "[" << *minQuotient << "," << *maxQuotient << "]";
-        log << endl;
-      }
     }
 
     if (stopRefinement)
       break;
 
-    if (debug_division)
-    {
-      log << "final" << endl;
-      log << "a:[" << *minTop << "," << *maxTop << "]";
-      log << " / b:[" << *minBottom << "," << *maxBottom << "] = ";
-      log << "[" << *minQuotient << "," << *maxQuotient << "]";
-      log << endl;
-    }
 
     {
       Result r1 = fix(a, minTop, maxTop);
@@ -736,11 +658,6 @@ Result bvUnsignedQuotientAndRemainder2(vector<FixedBits*>& children,
   bool ltDirty = true, multDirty = true, addDirty = true;
   while (ltDirty || multDirty || addDirty)
   {
-    if (debug_division)
-    {
-      log << "p1:" << a << "/" << b << "=" << q << "rem(" << r << ")" << endl;
-      log << "times" << times << endl;
-    }
 
     if (ltDirty)
     {
@@ -790,8 +707,6 @@ Result bvUnsignedQuotientAndRemainder2(vector<FixedBits*>& children,
   conflict |= fixFromLow(*children[0], a);
   conflict |= fixFromLow(*children[1], b);
 
-  if (debug_division)
-    cerr << endl;
 
   if (conflict)
     return CONFLICT;
@@ -815,26 +730,9 @@ Result bvUnsignedModulusBothWays(vector<FixedBits*>& children,
   if (children[1]->containsZero())
     return r1;
 
-  if (debug_division)
-    log << *(children[0]) << "bvmod" << *(children[1]) << "=" << output << endl;
 
   Result r =
       bvUnsignedQuotientAndRemainder(children, output, bm, REMAINDER_IS_OUTPUT);
-
-  // Doesn't even do constant propagation.
-  // <10>bvmod<11>=<-->
-  if (r != CONFLICT && children[0]->isTotallyFixed() &&
-      children[1]->isTotallyFixed() && !output.isTotallyFixed())
-  {
-
-    if (debug_division)
-    {
-      log << "Not even constant prop!" << *(children[0]) << "bvmod"
-          << *(children[1]) << "=" << output << endl;
-    }
-
-    // assert(output.isTotallyFixed());
-  }
 
   // bvUnsignedQuotientAndRemainder can fix bits yet report NOT_IMPLEMENTED,
   // so never let a NO_CHANGE from the comparison above win over it: the
@@ -948,18 +846,6 @@ struct Data
     tempB.setValue(signBit, bTop);
   }
 
-  void print()
-  {
-    cerr << "Working: ";
-    cerr << workingA << "/";
-    cerr << workingB << "=";
-    cerr << workingOutput << endl;
-
-    cerr << "Temps:    ";
-    cerr << tempA << "/";
-    cerr << tempB << "=";
-    cerr << tempOutput << endl;
-  }
 };
 
 Result negate(FixedBits& input, FixedBits& output)
@@ -1011,13 +897,6 @@ Result bvSignedDivisionRemainderBothWays(vector<FixedBits*>& children,
 
   while (true)
   {
-    if (debug_division)
-    {
-      cerr << "start:";
-      cerr << a << "/";
-      cerr << b << "=";
-      cerr << output << endl;
-    }
 
     bool first = true;
 
@@ -1030,8 +909,6 @@ Result bvSignedDivisionRemainderBothWays(vector<FixedBits*>& children,
       r = tf(tempChildren, tempOutput, bm);
       if (r != CONFLICT)
       {
-        if (debug_division)
-          cerr << "case A" << endl;
         data.process(first);
       }
     }
@@ -1079,12 +956,10 @@ Result bvSignedDivisionRemainderBothWays(vector<FixedBits*>& children,
             negChildren.push_back(&tempA);
             // cerr << negA << " " << tempA << endl;
             r = bvUnaryMinusBothWays(negChildren, negA);
-            // data.print();
+
             if (r != CONFLICT)
             {
 
-              if (debug_division)
-                cerr << "case B" << endl;
 
               data.process(first);
             }
@@ -1145,8 +1020,6 @@ Result bvSignedDivisionRemainderBothWays(vector<FixedBits*>& children,
             r = bvUnaryMinusBothWays(negChildren, negB);
             if (r != CONFLICT)
             {
-              if (debug_division)
-                cerr << "case C" << endl;
 
               data.process(first);
             }
@@ -1199,7 +1072,7 @@ Result bvSignedDivisionRemainderBothWays(vector<FixedBits*>& children,
           negChildren.clear();
           negChildren.push_back(&tempA);
           r = bvUnaryMinusBothWays(negChildren, negA);
-          // data.print();
+
           if (r != CONFLICT)
           {
             if (op == SIGNED_REMAINDER)
@@ -1211,8 +1084,6 @@ Result bvSignedDivisionRemainderBothWays(vector<FixedBits*>& children,
 
             if (r != CONFLICT)
             {
-              if (debug_division)
-                cerr << "case D" << endl;
 
               data.process(first);
             }

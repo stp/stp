@@ -44,20 +44,6 @@ namespace constantBitP
 
 using stp::CBV;
 
-// Find ALL the unfixed values in the column and fix it to the specified value.
-void fixUnfixedTo(vector<FixedBits*>& operands, const unsigned position,
-                  bool toFix)
-{
-  for (unsigned i = 0; i < operands.size(); i++)
-  {
-    if (!operands[i]->isFixed(position))
-    {
-      operands[i]->setFixed(position, true);
-      operands[i]->setValue(position, toFix);
-    }
-  }
-}
-
 // counts of how many of each in the column.
 stats getStats(const vector<FixedBits*>& operands, const unsigned position)
 {
@@ -109,43 +95,6 @@ Result makeEqual(FixedBits& a, FixedBits& b, unsigned from, unsigned to)
     }
   }
   return result;
-}
-
-void setSignedMinMax(FixedBits& v, CBV min, CBV max)
-{
-  const unsigned int msb = v.getWidth() - 1;
-
-  for (unsigned i = 0; i < (unsigned)v.getWidth(); i++)
-  {
-    if (v.isFixed(i))
-    {
-      if (v.getValue(i)) // if it's on. It's on.
-
-      {
-        CONSTANTBV::BitVector_Bit_On(max, i);
-        CONSTANTBV::BitVector_Bit_On(min, i);
-      }
-      else
-      {
-        CONSTANTBV::BitVector_Bit_Off(max, i);
-        CONSTANTBV::BitVector_Bit_Off(min, i);
-      }
-    }
-    else
-    {
-      if (i != msb)
-      { // not fixed. Make the maximum Maximum.
-        CONSTANTBV::BitVector_Bit_On(max, i);
-        CONSTANTBV::BitVector_Bit_Off(min, i);
-      }
-      else
-      { // except for the msb. Where we reduce the min.
-        CONSTANTBV::BitVector_Bit_On(min, i);
-        CONSTANTBV::BitVector_Bit_Off(max, i);
-      }
-    }
-  }
-  assert(CONSTANTBV::BitVector_Compare(min, max) <= 0);
 }
 
 #ifndef NDEBUG
@@ -207,22 +156,6 @@ void setUnsignedMinMax(const FixedBits& v, CBV min, CBV max)
   assert(CONSTANTBV::BitVector_Lexicompare(min, max) <= 0);
 }
 
-int unsignedCompare(const stp::CBV& lhs, const stp::CBV& rhs)
-{
-  /// NB: Uses the memory layout of the constant bit library to extract the
-  /// bitwidth.
-  // assert(*((unsigned *)&lhs-3) == *((unsigned *)&rhs-3));
-  return CONSTANTBV::BitVector_Lexicompare(lhs, rhs);
-}
-
-int signedCompare(const stp::CBV& lhs, const stp::CBV& rhs)
-{
-  /// NB: Uses the memory layout of the constant bit library to extract the
-  /// bitwidth.
-  // assert(*((unsigned *)&lhs-3) == *((unsigned *)&rhs-3));
-  return CONSTANTBV::BitVector_Compare(lhs, rhs);
-}
-
 Result merge(Result r1, Result r2)
 {
   if (r1 == CONFLICT || r2 == CONFLICT)
@@ -253,11 +186,6 @@ unsigned totalFixedBits(const vector<FixedBits*>& operands,
   for (const FixedBits* o : operands)
     count += o->countFixed();
   return count;
-}
-
-int toInt(const stp::CBV value)
-{
-  return *((unsigned int*)value);
 }
 }
 }

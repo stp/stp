@@ -165,19 +165,6 @@ class MultiplicationStatsMap
 public:
   typedef std::map<stp::ASTNode, MultiplicationStats> NodeToStats;
   NodeToStats map;
-
-  void print()
-  {
-    std::cout << "Size:" << map.size() << endl;
-
-    simplifier::constantBitP::MultiplicationStatsMap::NodeToStats::iterator it;
-
-    for (it = map.begin(); it != map.end(); it++)
-    {
-      std::cout << it->first;
-      it->second.print();
-    }
-  }
 };
 }
 }

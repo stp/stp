@@ -36,8 +36,6 @@ namespace simplifier
 namespace constantBitP
 {
 
-using std::cout;
-using std::endl;
 using stp::ASTNode;
 
 // From a child, get the parents of that node.
