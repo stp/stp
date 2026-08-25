@@ -40,6 +40,7 @@ namespace stp
 class ToCNFAIG // not copyable
 {
   UserDefinedFlags& uf;
+  bool allowAuto = true;
 
   void dag_aware_aig_rewrite(const bool needAbsRef, BBNodeManagerAIG& mgr);
 
@@ -51,7 +52,16 @@ class ToCNFAIG // not copyable
                         BBNodeManagerAIG& mgr);
 
 public:
-  ToCNFAIG(UserDefinedFlags& _uf) : uf(_uf) {}
+  // allowAuto: whether CNF_EFFORT_AUTO may decide from the AIG size here.
+  //
+  // It is off for exact refinement. AUTO was calibrated on whole-query
+  // conversion, where the CNF is built once and thrown away, so trading
+  // clauses for generation time is free. Refinement encodes into a live
+  // solver, where the clauses stay: a 64-bit BVMULT clears the threshold and
+  // AUTO would leave about 20% more clauses in the solver for the rest of the
+  // search. An explicitly chosen level still reaches both paths.
+  ToCNFAIG(UserDefinedFlags& _uf, bool _allowAuto = true)
+      : uf(_uf), allowAuto(_allowAuto) {}
 
   // Turn an AIG into CNF with the configured generator. `namedOutputs` is
   // the number of trailing combinational outputs that need variables instead

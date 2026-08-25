@@ -177,7 +177,7 @@ void BVExactEncoder::encode(SATSolver& solver, const ASTNode& term,
   // Use the query's selected CNF strategy. All outputs are named rather than
   // asserted because the splice below connects each result bit explicitly
   // and asserts only the side constraints.
-  Cnf_Dat_t* cnf = ToCNFAIG(bm->UserFlags).derive_cnf(mgr, outputs);
+  Cnf_Dat_t* cnf = ToCNFAIG(bm->UserFlags, /*allowAuto=*/false).derive_cnf(mgr, outputs);
   assert(cnf != NULL);
 
   // The splice. Every variable of the derived CNF becomes a variable of the
