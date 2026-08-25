@@ -102,6 +102,14 @@ ASTVec SkeletonPreproc::derive(const ASTNode& input, bool& unsat)
   if (solver == NULL)
     return ASTVec();
 
+  // Everything below reads what the backend fixed at the root. A backend
+  // that cannot report that would be handed a CNF, asked to simplify it and
+  // then asked nothing it can answer, so it is not handed one at all. The
+  // pass is a no-op there rather than a waste, and a no-op is sound: what
+  // it reports is only ever additional, never required.
+  if (!solver->reportsRootFixed())
+    return ASTVec();
+
   const ASTNode ASTTrue = bm->CreateNode(TRUE);
   const ASTNode ASTFalse = bm->CreateNode(FALSE);
 

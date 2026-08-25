@@ -1,3 +1,10 @@
+; REQUIRES: cadical
+;
+; The pass reads what the SAT backend fixed at the root while simplifying,
+; and CaDiCaL is the only backend that reports that. Everywhere else it is a
+; sound no-op -- it derives nothing rather than deriving something wrong --
+; so there is nothing for this to observe.
+;
 ; The skeleton pass exists to notice what the connectives settle without
 ; blasting anything. Here a fact follows only by chaining two implications
 ; over predicates it treats as opaque, which is exactly the shape

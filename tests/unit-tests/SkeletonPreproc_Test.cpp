@@ -36,12 +36,15 @@ THE SOFTWARE.
 // enumerating its models rather than by reasoning about it.
 #include "stp/Simplifier/SkeletonPreproc.h"
 
+#include "stp/Sat/SATSolverFactory.h"
+
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STP.h"
 #include "stp/STPManager/STPManager.h"
 
 #include <gtest/gtest.h>
 
+#include <memory>
 #include <vector>
 
 using namespace stp;
@@ -71,6 +74,17 @@ protected:
 
   ASTNode NOTof(const ASTNode& n) { return nf->CreateNode(NOT, n); }
 
+  // The pass reads what the SAT backend fixed at the root, and only CaDiCaL
+  // reports that; everywhere else it is a sound no-op. The checks below come
+  // in two kinds, and only one of them survives such a build: that a fact
+  // reported is right holds always, and that a fact is reported at all holds
+  // only where the backend can say so.
+  bool backendReports()
+  {
+    std::unique_ptr<SATSolver> s(createSATSolver(mgr.UserFlags));
+    return s != NULL && s->reportsRootFixed();
+  }
+
   // What the pass reports, as a signed verdict per atom: 1 forced true,
   // -1 forced false, 0 not forced.
   void verdicts(const ASTNode& query, int& va, int& vb, int& vc, bool& unsat)
@@ -95,6 +109,8 @@ protected:
 
 TEST_F(SkeletonTest, a_conjunction_forces_both_conjuncts)
 {
+  if (!backendReports())
+    GTEST_SKIP() << "this backend does not report root-fixed literals";
   int va, vb, vc; bool unsat;
   verdicts(nf->CreateNode(AND, a, b), va, vb, vc, unsat);
   EXPECT_FALSE(unsat);
@@ -105,6 +121,8 @@ TEST_F(SkeletonTest, a_conjunction_forces_both_conjuncts)
 
 TEST_F(SkeletonTest, a_negated_conjunct_is_forced_false)
 {
+  if (!backendReports())
+    GTEST_SKIP() << "this backend does not report root-fixed literals";
   int va, vb, vc; bool unsat;
   verdicts(nf->CreateNode(AND, a, NOTof(b)), va, vb, vc, unsat);
   EXPECT_FALSE(unsat);
@@ -125,6 +143,8 @@ TEST_F(SkeletonTest, a_disjunction_forces_nothing)
 // two assertions together.
 TEST_F(SkeletonTest, modus_ponens_is_derived)
 {
+  if (!backendReports())
+    GTEST_SKIP() << "this backend does not report root-fixed literals";
   int va, vb, vc; bool unsat;
   verdicts(nf->CreateNode(AND, a, nf->CreateNode(IMPLIES, a, b)), va, vb, vc,
            unsat);
@@ -135,6 +155,8 @@ TEST_F(SkeletonTest, modus_ponens_is_derived)
 
 TEST_F(SkeletonTest, a_contradictory_skeleton_is_reported_unsat)
 {
+  if (!backendReports())
+    GTEST_SKIP() << "this backend does not report root-fixed literals";
   int va, vb, vc; bool unsat;
   verdicts(nf->CreateNode(AND, a, NOTof(a)), va, vb, vc, unsat);
   EXPECT_TRUE(unsat) << "the structure alone refutes this query";
@@ -155,8 +177,9 @@ TEST_F(SkeletonTest, an_arithmetic_contradiction_is_left_alone)
   const ASTVec facts = sk.derive(nf->CreateNode(AND, lt, gt), unsat);
   EXPECT_FALSE(unsat) << "the skeleton cannot know these two conflict";
   // Both are top-level conjuncts, so both are forced -- which is true, and
-  // is exactly what the bit-blaster then has to refute.
-  EXPECT_EQ(facts.size(), 2u);
+  // is exactly what the bit-blaster then has to refute. Reported only where
+  // the backend can say what it fixed.
+  EXPECT_EQ(facts.size(), backendReports() ? 2u : 0u);
 }
 
 // Every Boolean function of three atoms, against what it really forces.

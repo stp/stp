@@ -113,6 +113,7 @@ public:
   // Root-level facts CaDiCaL has derived; see SATSolver.
   int simplifyOnly() override;
   int rootFixed(unsigned var) override;
+  bool reportsRootFixed() const override { return true; }
 
   bool setSearchBiasInternal(SearchBias bias) override;
 
