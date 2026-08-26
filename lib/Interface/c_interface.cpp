@@ -571,6 +571,10 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
         b->UserFlags.bv_abstraction_width =
             static_cast<unsigned>(param_value);
       break;
+    case CNF_AUTO_THRESHOLD:
+      if (nonNegativeFlag(param_value, "CNF_AUTO_THRESHOLD"))
+        b->UserFlags.cnf_auto_threshold = static_cast<unsigned>(param_value);
+      break;
     case BV_EQ_REFINE_WIDTH:
       if (nonNegativeFlag(param_value, "BV_EQ_REFINE_WIDTH"))
         b->UserFlags.bv_eq_refine_width = static_cast<unsigned>(param_value);

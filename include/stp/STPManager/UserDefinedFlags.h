@@ -662,16 +662,43 @@ public:
   // LOW, HIGH and VERY_HIGH use ABC's newer Mf_ManGenerateCnf() at LUT sizes
   // 3, 6 and 8; its cost grows steeply with LUT size for little further gain
   // past 6.
+  //
+  // AUTO picks between VERY_LOW and MEDIUM from the size of the AIG, because
+  // the trade the scale offers is only worth making when the SAT solver is
+  // what costs. Minimising the CNF is itself work, and on a large AIG it is
+  // most of the work: a floating-point query with three fp.div and two
+  // fp.sqrt blasts to 1.7M clauses, of which MEDIUM spends 1857ms generating
+  // and MiniSat then spends 137ms solving. VERY_LOW generates the same query
+  // in a fraction of that, and the larger CNF it leaves behind costs the
+  // solver almost nothing.
   enum CNFEffort
   {
     CNF_EFFORT_VERY_LOW = 0,
     CNF_EFFORT_LOW,
     CNF_EFFORT_MEDIUM,
     CNF_EFFORT_HIGH,
-    CNF_EFFORT_VERY_HIGH
+    CNF_EFFORT_VERY_HIGH,
+    CNF_EFFORT_AUTO
   };
 
-  enum CNFEffort cnf_effort = CNF_EFFORT_MEDIUM;
+  enum CNFEffort cnf_effort = CNF_EFFORT_AUTO;
+
+  // AIG AND-node count at or above which AUTO drops to VERY_LOW.
+  //
+  // High on purpose. Over a floating-point corpus, timed net of the ~9.5ms a
+  // process spends starting before it solves anything, VERY_LOW is the better
+  // choice at almost every size -- so the honest reading is that the crossover
+  // is a property of the workload rather than a constant, and that this
+  // heuristic should only override the effort where the evidence is
+  // unambiguous. At 200k it switches the queries whose circuits are large
+  // enough for minimising to be most of their cost -- six of the measured set,
+  // every one a gain, geometric mean 0.45 -- and leaves everything else alone.
+  //
+  // A lower threshold measured better on totals and worse on regressions: at
+  // 32k, fifteen gains against three losses. A caller who has measured their
+  // own workload can move it, from the command line or through the
+  // CNF_AUTO_THRESHOLD interface flag.
+  unsigned cnf_auto_threshold = 200000;
 
   bool exit_after_CNF = false;
 

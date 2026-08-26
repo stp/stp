@@ -56,10 +56,39 @@ void countError(const char*)
 }
 } // namespace
 
-TEST(cnf_effort_flag, TheDefaultIsMedium)
+TEST(cnf_effort_flag, TheDefaultIsAuto)
 {
   VC vc = vc_createValidityChecker();
-  EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_MEDIUM, flags(vc).cnf_effort);
+  EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_AUTO, flags(vc).cnf_effort);
+  // AUTO is not a level of its own at conversion time: it resolves to VERY_LOW
+  // or MEDIUM from the size of the AIG. The threshold has to be reachable, or
+  // the decision cannot be exercised or adjusted.
+  EXPECT_GT(flags(vc).cnf_auto_threshold, 0u);
+  vc_Destroy(vc);
+}
+
+// Where the crossover falls is a property of the workload, so a caller that
+// has measured its own has to be able to say so without a command line.
+TEST(cnf_effort_flag, TheAutoThresholdIsReachableThroughTheCAPI)
+{
+  VC vc = vc_createValidityChecker();
+  const unsigned before = flags(vc).cnf_auto_threshold;
+
+  vc_setInterfaceFlags(vc, CNF_AUTO_THRESHOLD, 32000);
+  EXPECT_EQ(32000u, flags(vc).cnf_auto_threshold);
+
+  // Zero is meaningful -- every AIG is at or above it, so AUTO becomes
+  // very-low everywhere -- and must not be mistaken for "unset".
+  vc_setInterfaceFlags(vc, CNF_AUTO_THRESHOLD, 0);
+  EXPECT_EQ(0u, flags(vc).cnf_auto_threshold);
+
+  // Negative would wrap to a threshold no AIG could reach, silently disabling
+  // the decision. Refused, and the field left as it was.
+  vc_setInterfaceFlags(vc, CNF_AUTO_THRESHOLD, -1);
+  EXPECT_EQ(0u, flags(vc).cnf_auto_threshold);
+
+  vc_setInterfaceFlags(vc, CNF_AUTO_THRESHOLD, (int)before);
+  EXPECT_EQ(before, flags(vc).cnf_auto_threshold);
   vc_Destroy(vc);
 }
 

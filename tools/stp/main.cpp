@@ -107,7 +107,7 @@ public:
 
   // Likewise for UserFlags.cnf_effort; always mapped, so it carries the
   // default spelling.
-  std::string cnf_effort = "medium";
+  std::string cnf_effort = "auto";
 
   // Tri-state: UserFlags.interactive_read is only overridden when the
   // option was given, so the value needs its own presence check.
@@ -675,10 +675,17 @@ void ExtraMain::create_options()
       ->group(output_group);
 
   const char* const misc_group = "Miscellaneous options";
+  app.add_option("--cnf-auto-threshold", bm->UserFlags.cnf_auto_threshold,
+                 "AIG AND-node count at or above which --cnf-generation-effort "
+                 "auto drops from medium to very-low")
+      ->capture_default_str()
+      ->group(misc_group);
   app.add_option("--cnf-generation-effort", cnf_effort,
-                 "effort spent minimising the CNF: very-low, low, medium, "
-                 "high, very-high. Higher is slower to generate but yields a "
-                 "smaller CNF")
+                 "effort spent minimising the CNF: auto, very-low, low, "
+                 "medium, high, very-high. Higher is slower to generate but "
+                 "yields a smaller CNF; auto picks between very-low and medium "
+                 "from the size of the AIG, since minimising a large one costs "
+                 "more than the solver saves")
       ->capture_default_str()
       ->group(misc_group);
 
@@ -953,10 +960,13 @@ int ExtraMain::parse_options(int argc, char** argv)
     bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_HIGH;
   else if (cnf_effort == "very-high")
     bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_VERY_HIGH;
+  else if (cnf_effort == "auto")
+    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_AUTO;
   else
   {
     std::cerr << "Unknown --cnf-generation-effort value '" << cnf_effort
-              << "'. Expected one of: very-low, low, medium, high, very-high."
+              << "'. Expected one of: auto, very-low, low, medium, high, "
+                 "very-high."
               << std::endl;
     return -1;
   }

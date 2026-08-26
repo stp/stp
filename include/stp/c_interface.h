@@ -502,7 +502,25 @@ enum ifaceflag_t
   //! nonzero runs them. This is the C API's way to reach
   //! --incremental-piece-rewriting.
   //!
-  INCREMENTAL_PIECE_REWRITING
+  INCREMENTAL_PIECE_REWRITING,
+
+  //! \brief The AIG size at which CNF_EFFORT_AUTO stops minimising.
+  //!
+  //! AUTO reads the AIG about to be converted and drops from medium effort to
+  //! very low at or above this many AND nodes. The default is deliberately
+  //! high, so that AUTO overrides the effort only where minimising is clearly
+  //! not worth its cost. Where the crossover really falls is a property of the
+  //! workload rather than a constant, so a caller who has measured their own
+  //! can move it here. Negative values are refused with a nonfatal diagnostic,
+  //! as for BV_ABSTRACTION_WIDTH. This is the C API's way to reach
+  //! --cnf-auto-threshold.
+  //!
+  //! Appended rather than filed next to CNF_GENERATION_EFFORT: these are
+  //! integers callers compile into their binaries before loading a newer
+  //! libstp, so the published prefix has to stay put -- the same rule
+  //! tests/api/C/counter-enum-abi.cpp keeps for stp_counter_t.
+  //!
+  CNF_AUTO_THRESHOLD
 
 };
 

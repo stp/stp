@@ -23,6 +23,7 @@ THE SOFTWARE.
 ********************************************************************/
 
 #include "stp/ToSat/ToCNFAIG.h"
+#include <iostream>
 
 namespace stp
 {
@@ -184,7 +185,37 @@ Cnf_Dat_t* ToCNFAIG::derive_cnf(BBNodeManagerAIG& mgr,
   if (uf.simple_cnf)
     return Cnf_DeriveSimple(mgr.aigMgr, (int)namedOutputs);
 
-  switch (uf.cnf_effort)
+  // AUTO: decide from the size of the AIG about to be converted.
+  //
+  // The scale trades generation time for a smaller CNF, and that is only worth
+  // paying for when the SAT solver is what costs. On a large AIG it is not:
+  // cut enumeration and technology mapping are superlinear in the AIG, while
+  // the extra clauses VERY_LOW leaves behind cost a modern SAT solver very
+  // little. Measured on a floating-point corpus, MEDIUM against VERY_LOW is
+  // 2.26x slower on the queries that blast big -- and on one of them the
+  // breakdown is 1857ms generating a 1.7M-clause CNF that MiniSat then
+  // disposes of in 137ms.
+  //
+  // The threshold is measured rather than reasoned: see
+  // tests/query-files/README-cnf-auto for the sweep it comes from.
+  enum UserDefinedFlags::CNFEffort effort = uf.cnf_effort;
+  if (effort == UserDefinedFlags::CNF_EFFORT_AUTO && !allowAuto)
+    effort = UserDefinedFlags::CNF_EFFORT_MEDIUM;
+  else if (effort == UserDefinedFlags::CNF_EFFORT_AUTO)
+  {
+    const unsigned nodes = (unsigned)Aig_ManNodeNum(mgr.aigMgr);
+    effort = nodes >= uf.cnf_auto_threshold
+                 ? UserDefinedFlags::CNF_EFFORT_VERY_LOW
+                 : UserDefinedFlags::CNF_EFFORT_MEDIUM;
+    if (uf.stats_flag)
+      std::cerr << "cnf-auto: " << nodes << " AIG nodes, chose "
+                << (effort == UserDefinedFlags::CNF_EFFORT_VERY_LOW
+                        ? "very-low"
+                        : "medium")
+                << std::endl;
+  }
+
+  switch (effort)
   {
     case UserDefinedFlags::CNF_EFFORT_VERY_LOW:
       // No cut enumeration at all: a marking pass, then clause generation.
@@ -204,6 +235,7 @@ Cnf_Dat_t* ToCNFAIG::derive_cnf(BBNodeManagerAIG& mgr,
     case UserDefinedFlags::CNF_EFFORT_VERY_HIGH:
       return derive_cnf_mf(mgr, 8, namedOutputs);
 
+    case UserDefinedFlags::CNF_EFFORT_AUTO: // resolved above; cannot reach here
     case UserDefinedFlags::CNF_EFFORT_MEDIUM:
     default:
     {
