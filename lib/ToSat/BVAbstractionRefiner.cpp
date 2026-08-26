@@ -193,6 +193,31 @@ encodedBitsOf(const ASTNode& node, unsigned width,
   return vars;
 }
 
+// A term record's own free result, rather than whichever result was most
+// recently registered under the same AST node. Whole-formula batch blasting
+// creates one result per term and retains its historical node map. The
+// incremental blaster also canonicalises repeated terms, but direct ownership
+// keeps the refiner sound if that producer-side invariant is ever broken.
+static const std::vector<unsigned>& encodedResultBitsOf(
+    const BVTermAbstraction& abstraction,
+    const ToSATBase::ASTNodeToSATVar& nodeToSATVar)
+{
+  if (abstraction.resultSATVars.empty())
+    return encodedBitsOf(abstraction.termNode, abstraction.width,
+                         nodeToSATVar);
+
+  if (abstraction.resultSATVars.size() < abstraction.width)
+    FatalError("BV abstraction: a term record has fewer direct result "
+               "variables than its width: ",
+               abstraction.termNode, (int)abstraction.width);
+  for (unsigned i = 0; i < abstraction.width; ++i)
+    if (abstraction.resultSATVars[i] == BV_ABSTRACTION_NO_VAR)
+      FatalError("BV abstraction: a term record's direct result bit never "
+                 "reached the CNF: ",
+                 abstraction.termNode, (int)i);
+  return abstraction.resultSATVars;
+}
+
 // A record's own variable: the Boolean an equality became, or the condition
 // input of a comparison or an if-then-else. ~0u is both "the family has none"
 // and "the one it has never reached the solver", and neither is a state any
@@ -1285,7 +1310,7 @@ unsigned BVAbstractionRefiner::refineTerms(
     }
 
     const std::vector<unsigned>& resultVars =
-        encodedBitsOf(abs.termNode, abs.width, nodeToSATVar);
+        encodedResultBitsOf(abs, nodeToSATVar);
 
     if (abs.opKind == BVPLUS)
     {
@@ -1507,7 +1532,7 @@ unsigned BVAbstractionRefiner::refineTerms(
     getOperandVars(abs.operands[0], abs.width, nodeToSATVar, solver, leftVars);
     getOperandVars(abs.operands[1], abs.width, nodeToSATVar, solver, rightVars);
     const std::vector<unsigned>& resultVars =
-        encodedBitsOf(abs.termNode, abs.width, nodeToSATVar);
+        encodedResultBitsOf(abs, nodeToSATVar);
     const bool lNeg = abs.operandNegated[0];
     const bool rNeg = abs.operandNegated[1];
     const bool carryInit = (lNeg != rNeg);
@@ -1585,7 +1610,7 @@ unsigned BVAbstractionRefiner::refineTerms(
     getOperandVars(abs.operands[1], abs.width, nodeToSATVar, solver, thenVars);
     getOperandVars(abs.operands[2], abs.width, nodeToSATVar, solver, elseVars);
     const std::vector<unsigned>& resultVars =
-        encodedBitsOf(abs.termNode, abs.width, nodeToSATVar);
+        encodedResultBitsOf(abs, nodeToSATVar);
     unsigned c = abs.condSATVar;
 
     for (unsigned bit = 0; bit < abs.width; ++bit)
@@ -1613,7 +1638,7 @@ unsigned BVAbstractionRefiner::refineTerms(
     getOperandVars(abs.operands[0], abs.width, nodeToSATVar, solver, aVars);
     getOperandVars(abs.operands[1], abs.width, nodeToSATVar, solver, bVars);
     const std::vector<unsigned>& resultVars =
-        encodedBitsOf(abs.termNode, abs.width, nodeToSATVar);
+        encodedResultBitsOf(abs, nodeToSATVar);
     unsigned W = abs.width;
 
     // An algebraic fact the candidate contradicts, where there is one.

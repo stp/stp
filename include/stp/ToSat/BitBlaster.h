@@ -459,6 +459,11 @@ public:
     unsigned width;
     bool operandNegated[3] = {false, false, false};
     int condCISymbolIndex = -1;
+    // The result inputs belonging to this record. Canonical reuse normally
+    // prevents duplicate records for one term, but ownership here keeps the
+    // lowering sound if another producer or a future memo boundary creates
+    // them: symbolToBBNode can identify only the latest registered vector.
+    std::vector<int> resultCISymbolIndices;
   };
 
 private:

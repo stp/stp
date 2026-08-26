@@ -10,6 +10,8 @@
 ; through holds one vector per node, so the second registration hid the
 ; first: both records were then defined over the second set and the first
 ; was left unconstrained, which is an assignment the search may answer from.
+; The blaster now abstracts the term once; the refiner reads each record's
+; own result variables, so it does not rest on that alone.
 ;
 ; Here `t` occurs in both conjuncts and its expansion is all if-then-else,
 ; so the width floor of 1 abstracts it. `bvsrem 1 x` is 1 for every x except

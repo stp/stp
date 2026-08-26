@@ -3715,6 +3715,12 @@ struct IncrementalSolver::Impl
       }
       a.numOperands = raw.numOperands;
       a.width = raw.width;
+      a.resultSATVars.reserve(raw.resultCISymbolIndices.size());
+      for (const int index : raw.resultCISymbolIndices)
+      {
+        assert(index >= 0);
+        a.resultSATVars.push_back(abstractionVarOf(index));
+      }
       if (raw.condCISymbolIndex >= 0)
         a.condSATVar = abstractionVarOf(raw.condCISymbolIndex);
       encodeAbstractionNode(a.termNode);
