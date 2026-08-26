@@ -81,63 +81,6 @@ namespace stp
   using std::cerr;
   using std::endl;
 
-  using stp::SYMBOL;       //!< Named expression (or variable), i.e. created via 'vc_varExpr'.
-  using stp::BVNOT;        //!< Bitvector bitwise-not
-  using stp::BVCONCAT;     //!< Bitvector concatenation
-  using stp::BVOR;         //!< Bitvector bitwise-or
-  using stp::BVAND;        //!< Bitvector bitwise-and
-  using stp::BVXOR;        //!< Bitvector bitwise-xor
-  using stp::BVNAND;       //!< Bitvector bitwise not-and; OR nand (TODO: does this still exist?)
-  using stp::BVNOR;        //!< Bitvector bitwise not-or; OR nor (TODO: does this still exist?)
-  using stp::BVXNOR;       //!< Bitvector bitwise not-xor; OR xnor (TODO: does this still exist?)
-  using stp::BVEXTRACT;    //!< Bitvector extraction, i.e. via 'vc_bvExtract'.
-  using stp::BVLEFTSHIFT;  //!< Bitvector left-shift
-  using stp::BVRIGHTSHIFT; //!< Bitvector right-right
-  using stp::BVSRSHIFT;    //!< Bitvector signed right-shift
-  using stp::BVPLUS;       //!< Bitvector addition
-  using stp::BVSUB;        //!< Bitvector subtraction
-  using stp::BVUMINUS;     //!< Bitvector unary minus; OR negate expression
-  using stp::BVMULT;       //!< Bitvector multiplication
-  using stp::BVDIV;        //!< Bitvector division
-  using stp::BVMOD;        //!< Bitvector modulo operation
-  using stp::SBVDIV;       //!< Signed bitvector division
-  using stp::SBVREM;       //!< Signed bitvector remainder
-  using stp::SBVMOD;       //!< Signed bitvector modulo operation
-  using stp::BVSX;         //!< Bitvector signed extend
-  using stp::BVZX;         //!< Bitvector zero extend
-  using stp::ITE;          //!< If-then-else
-  using stp::BOOLEXTRACT;  //!< Bitvector boolean extraction
-  using stp::BVLT;         //!< Bitvector less-than
-  using stp::BVLE;         //!< Bitvector less-equals
-  using stp::BVGT;         //!< Bitvector greater-than
-  using stp::BVGE;         //!< Bitvector greater-equals
-  using stp::BVSLT;        //!< Signed bitvector less-than
-  using stp::BVSLE;        //!< Signed bitvector less-equals
-  using stp::BVSGT;        //!< Signed bitvector greater-than
-  using stp::BVSGE;        //!< Signed bitvector greater-equals
-  using stp::BVUADDO;      //!< Unsigned addition overflow predicate
-  using stp::BVSADDO;      //!< Signed addition overflow predicate
-  using stp::BVUMULO;      //!< Unsigned multiplication overflow predicate
-  using stp::BVSMULO;      //!< Signed multiplication overflow predicate
-  using stp::BVUSUBO;      //!< Unsigned subtraction overflow predicate
-  using stp::BVSSUBO;      //!< Signed subtraction overflow predicate
-  using stp::EQ;           //!< Equality comparator
-  using stp::FALSE;        //!< Constant false boolean expression
-  using stp::TRUE;         //!< Constant true boolean expression
-  using stp::NOT;          //!< Logical-not boolean expression
-  using stp::AND;          //!< Logical-and boolean expression
-  using stp::OR;           //!< Logical-or boolean expression
-  using stp::NAND;         //!< Logical-not-and boolean expression (TODO: Does this still exist?)
-  using stp::NOR;          //!< Logical-not-or boolean expression (TODO: Does this still exist?)
-  using stp::XOR;          //!< Logical-xor (either-or) boolean expression
-  using stp::IFF;          //!< If-and-only-if boolean expression
-  using stp::IMPLIES;      //!< Implication boolean expression
-  using stp::READ;         //!< Array read expression
-  using stp::WRITE;        //!< Array write expression
-  using stp::ARRAY;        //!< Array creation expression
-  using stp::BITVECTOR;    //!< Bitvector creation expression
-  using stp::BOOLEAN;      //!< Boolean creation expression
-
   using stp::UNDEFINED;    //!< An undefined expression.
   using stp::SYMBOL;       //!< Named expression (or variable), i.e. created via 'vc_varExpr'.
   using stp::BVCONST;      //!< Bitvector constant expression, i.e. created via 'vc_bvConstExprFromInt'.
@@ -1495,7 +1438,6 @@ namespace stp
      pointer is named; the struct itself lives in the parser prologue. */
   struct ParsedRealConstant* realc;
   unsigned uintval; /* for numerals in types. */
-  stp::Kind kind;
   stp::float_size* fp_size;
   stp::array_sort_component* arr_component;
   stp::array_sort* arr_sort;

@@ -142,20 +142,7 @@ const ASTNode* LetMgr::lookupLet(std::string_view s) const
   return &found->second.back().second;
 }
 
-ASTNode LetMgr::resolveLet(const string& s) const
-{
-  const ASTNode* found = lookupLet(s);
-  if (found == nullptr)
-    FatalError("never here...");
-  return *found;
-}
-
-bool LetMgr::isLetDeclared(const string& s) const
-{
-  return lookupLet(s) != nullptr;
-}
-
-void LetMgr::cleanupParserSymbolTable() 
+void LetMgr::cleanupParserSymbolTable()
 {
   _parser_symbol_table.clear(); 
 }

@@ -26,7 +26,6 @@ THE SOFTWARE.
 #include "stp/Parser/parser.h"
 #include "stp/cpp_interface.h"
 #include "stp/Parser/LetMgr.h"
-#include "stp/Parser/parser.h"
 #include <sstream>
 #include <string>
 
@@ -236,21 +235,7 @@ counterexample  :      COUNTEREXAMPLE_TOK ';'
 ;
 
 other_cmd       :
-/* other_cmd1 */
-/* { */
-/*   ASTVec aaa = GlobalParserInterface->GetAsserts(); */
-/*   if(aaa.size() == 0) */
-/*     { */
-/*       yyerror("GetAsserts() call: no assertions"); */
-/*     } */
-
-/*   ASTNode asserts =  */
-/*     aaa.size() == 1 ?  */
-/*     aaa[0] : */
-/*     GlobalParserInterface->CreateNode(AND, aaa); */
-/*   ((ASTVec*)AssertsQuery)->push_back(asserts);   */
-/* } */
-|      Query 
+       Query 
 { 
   ((ASTVec*)AssertsQuery)->push_back(GlobalParserInterface->CreateNode(TRUE));
   ((ASTVec*)AssertsQuery)->push_back(*$1);                       
@@ -293,20 +278,6 @@ other_cmd1      :     VarDecls Asserts
   delete $3;
 }
 ;
-
-/* push            :     PUSH_TOK */
-/*                       { */
-/*                      GlobalParserBM->Push(); */
-/*                       } */
-/*                 | */
-/*                 ; */
-
-/* pop             :     POP_TOK */
-/*                       { */
-/*                      GlobalParserBM->Pop(); */
-/*                       } */
-/*                 | */
-/*                 ; */
 
 Asserts         :      Assert 
 {

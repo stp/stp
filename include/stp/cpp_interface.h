@@ -182,7 +182,6 @@ private:
     vector<std::string>& getFunctions();
 
     // Obtain the symbols for the current frame
-    ASTVec& getSymbols();
 
     void addSortAlias(const std::string& name);
     void addSymbol(const ASTNode& symbol);
@@ -225,7 +224,6 @@ private:
   std::vector< SolverFrame* > frames;
 
   // Obtain the symbols/functions for the current frame
-  ASTVec& getCurrentSymbols();
   vector<std::string>& getCurrentFunctions();
 
   // What the most recent check-sat charged to each pipeline stage: the
@@ -407,7 +405,6 @@ public:
 
   DLL_PUBLIC ASTNode CreateBVConst(std::string& strval, int base,
                                    int bit_width);
-  DLL_PUBLIC ASTNode CreateBVConst(const char* const strval, int base);
   DLL_PUBLIC ASTNode CreateBVConst(unsigned int width,
                                    uint64_t bvconst);
   DLL_PUBLIC ASTNode CreateRMConst(unsigned mode);
@@ -444,12 +441,6 @@ public:
   // Apply an already-resolved function, skipping the by-name map probe.
   DLL_PUBLIC ASTNode applyFunction(const Function& f, const ASTVec& params);
 
-  // Classify a name by its carrier return type in a single map probe:
-  // BITVECTOR_TYPE or BOOLEAN_TYPE, or UNKNOWN_TYPE when the name is not a
-  // stored function. Source-only distinctions are available from
-  // functionReturnSourceSort().
-  DLL_PUBLIC types functionReturnType(const std::string& name);
-  DLL_PUBLIC SourceSort functionReturnSourceSort(const std::string& name);
   bool hasFunctions() const { return !functions.empty(); }
 
   // Context-owned uninterpreted declarations are distinct from stored
@@ -476,7 +467,6 @@ public:
   DLL_PUBLIC ASTNode LookupOrCreateSymbol(std::string name);
   DLL_PUBLIC bool LookupSymbol(const char* const name, ASTNode& output);
   DLL_PUBLIC bool LookupTemporarySymbol(const char* name, ASTNode& output);
-  DLL_PUBLIC bool isSymbolAlreadyDeclared(char* name);
   DLL_PUBLIC void setPrintSuccess(bool ps);
   DLL_PUBLIC bool isSymbolAlreadyDeclared(std::string name);
 
@@ -499,7 +489,6 @@ public:
                               const ASTNode& n1);
 
   // Create the node, then "new" it.
-  DLL_PUBLIC ASTNode* newNode(const Kind k, const int width, const ASTVec& v);
 
   // On testcase20 it took about 4.2 seconds to parse using the standard
   // allocator and the pool allocator.

@@ -35,7 +35,6 @@ THE SOFTWARE.
 namespace stp
 {
 // external parser table for declared symbols.
-// extern ASTNodeSet _parser_symbol_table;
 
 // Symbols in generated  files used by tools/stp
 void SMTScanString(const char* yy_str);
