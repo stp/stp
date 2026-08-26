@@ -28,7 +28,6 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
-#include "stp/Simplifier/PropagateEqualities.h"
 #include "stp/Simplifier/NodeSimplifier.h"
 #include <ankerl/unordered_dense.h>
 
@@ -73,10 +72,8 @@ private:
 
   void buildCandidateList(const ASTNode& a);
   bool buildCandidateListNode(const ASTNode& a);
-  void replaceIfPossible(int line, ASTNode& output, const ASTNode& lhs, const ASTNode& rhs);
   void buildXORCandidates(const ASTNode a, bool negated);
   
-  //ASTNode AndPropagate(const ASTNode& a, ArrayTransformer* at);
 
   void addCandidate(const ASTNode a, const ASTNode b);
   ASTNode resolveFpLiteral(const ASTNode& n);

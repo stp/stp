@@ -34,58 +34,6 @@ namespace stp
   using std::make_pair;
   using simplifier::constantBitP::FixedBits;
 
-  // A special version that handles the lhs appearing in the rhs of the fromTo
-  // map.
-  ASTNode StrengthReduction::replace(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& cache)
-  {
-    if (n.isAtom())
-      return n;
-
-    {
-      const ASTNodeMap::const_iterator it = cache.find(n);
-      if (it != cache.end())
-        return it->second;
-    }
-
-    ASTNode result = n;
-
-    {
-      const ASTNodeMap::iterator it = fromTo.find(n);
-      if (it != fromTo.end())
-      {
-        result = it->second;
-        fromTo.erase(it); // this is how it differs from the everyday replace.
-      }
-    }
-
-    ASTVec new_children;
-    new_children.reserve(result.GetChildren().size());
-
-    for (size_t i = 0; i < result.Degree(); i++)
-      new_children.push_back(replace(result[i], fromTo, cache));
-
-    if (ASTChildren(new_children) == result.GetChildren())
-    {
-      cache.insert(make_pair(n, result));
-      return result;
-    }
-
-    if (n.GetValueWidth() == 0) // n.GetType() == BOOLEAN_TYPE
-    {
-      result = nf->CreateNode(result.GetKind(), new_children);
-    }
-    else
-    {
-      // If the index and value width aren't saved, they are reset sometimes
-      // (??)
-      result = nf->CreateArrayTerm(result.GetKind(), result.GetIndexWidth(),
-                                   result.GetValueWidth(), new_children);
-    }
-
-    cache.insert(make_pair(n, result));
-    return result;
-  }
-
   // visit each node apply strength reductions to it.
   //
   // postOrderRebuild does the walking, on the heap: how deeply the input

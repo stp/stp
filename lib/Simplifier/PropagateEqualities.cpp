@@ -30,13 +30,6 @@ THE SOFTWARE.
 namespace stp
 {
 
-void log([[maybe_unused]] std::string s)
-{
-#if 0
-  std::cerr << ">>" << s;
-#endif
-}
-
 typedef PropagateEqualities::IdSet IdSet;
 typedef ankerl::unordered_dense::map<uint64_t, uint64_t> IdToId;
 typedef ankerl::unordered_dense::map<uint64_t, IdSet> IdToIdSet;
@@ -319,10 +312,7 @@ ASTNode PropagateEqualities::topLevel(const ASTNode& a)
   result = simp->applySubstitutionMapAtTopLevel(result);
  
   bm->GetRunTimes()->start(RunTimes::PropagateEqualities);
-  
-  //if (AND == a.GetKind())
-    //result = AndPropagate(result, at);
-    // TODO should write the substitutions through?
+
   buildCandidateList(result);
   
   if (bm->UserFlags.stats_flag)
@@ -454,63 +444,6 @@ void PropagateEqualities::buildXORCandidates(const ASTNode a, bool negated)
       addCandidate(symbol, newN);
     }
 }
-
-#if 0
-ASTNode PropagateEqualities::AndPropagate(const ASTNode& input, ArrayTransformer* at)
-{
-  assert(input.GetKind() == AND);
-  ASTVec c = FlattenKind(AND, input.GetChildren());
-  
-  ASTVec result;
-
-  bool different = false;
-  for (const auto& it : c)
-  {
-    ASTNode changed = it;
-    const Kind k = changed.GetKind();
-    assert(k != AND); // Should have been flattened out already.
-
-    if (NOT == k && SYMBOL == it[0].GetKind()) // (NOT a)
-        changed = propagate(it,at);
-    else if (SYMBOL == k) // (a)
-        changed = propagate(it,at);
-    else if ((IFF == k || EQ == k) && (it[0].GetKind() == SYMBOL && it[1].GetChildren().size() == 0)) // (= x y), (= x 55)
-        changed = propagate(it,at);
-    else if ((IFF == k || EQ == k) && (it[0].GetKind() == SYMBOL && it[1].Degree() == 0 && it[1][0].GetKind() == SYMBOL))  // (= x (bvnot y)), 
-        changed = propagate(it,at);
-    else if (XOR == k && it.Degree() == 2 && it[0].GetKind() == SYMBOL && it[1].Degree() == 0) 
-        changed = propagate(it,at);
-    else if (NOT == k && XOR == it[0].GetKind() && it[0].Degree() == 2 && it[0][0].GetKind() == SYMBOL && it[0][1].Degree() == 0)
-        changed = propagate(it,at);
-  
-    if (!different && it != changed) 
-    {
-        different = true;
-        result.reserve(c.size());
-        for (ASTVec::iterator it1 = c.begin(); *it1 != it; it1++)
-           result.push_back(*it1);
-    }
-
-    if (changed != ASTTrue)
-       result.push_back(changed);
-
-     alreadyVisited.insert(it.GetNodeNum());
-  }
-
-  if (!different)
-    return input;
-
-  ASTNode output;
-  if (result.size() == 0)
-    output = ASTTrue;
-  else if (result.size() == 1)
-    output = result[0];
-  else 
-    output = nf->CreateNode(AND, result);
-
-  return output;
-}
-#endif
 
 bool PropagateEqualities::isSymbol(ASTNode c)
 {

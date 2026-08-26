@@ -1008,32 +1008,6 @@ namespace stp
     return r;
   }
 
-  // Replace some of the things that unsigned intervals can figure out for us.
-  ASTNode UnsignedIntervalAnalysis::topLevel(const ASTNode& top)
-  {
-    propagatorNotImplemented = 0;
-    iterations=0;
-
-    bm.GetRunTimes()->start(RunTimes::IntervalPropagation);
-
-    NodeToUnsignedIntervalMap visited;
-    visit(top, visited);
-
-    if (bm.UserFlags.stats_flag)
-      stats();
-
-    StrengthReduction sr(bm.defaultNodeFactory, &bm.UserFlags);
-    ASTNode result = sr.topLevel(top, visited);
-
-    // The intervals are only read during strength reduction, delete them now.
-    for (const auto& pair : visited)
-      delete pair.second;
-
-    bm.GetRunTimes()->stop(RunTimes::IntervalPropagation);
-
-    return result;
-  }
-
   UnsignedInterval* UnsignedIntervalAnalysis::dispatchToTransferFunctions(const ASTNode&n, const vector<const UnsignedInterval*>& _children)
   {
     const auto number_children = n.Degree();
@@ -2073,45 +2047,7 @@ namespace stp
     return result;
   }
 
-  UnsignedInterval* UnsignedIntervalAnalysis::visit(const ASTNode& n,
-                          NodeToUnsignedIntervalMap& visited)
-  {
-    {
-      NodeToUnsignedIntervalMap::iterator it;
-      if ((it = visited.find(n)) != visited.end())
-        return it->second;
-    }
-
-    if (n.GetKind() == SYMBOL || n.GetKind() == WRITE || n.GetKind() == READ)
-    {
-      // Never know anything about these.
-      visited.insert({n, NULL});
-      return NULL;
-    }
-
-    const auto number_children = n.Degree();
-    vector<const UnsignedInterval*> children;
-
-    children.reserve(number_children);
-
-    for (unsigned i = 0; i < number_children; i++)
-    {
-      UnsignedInterval* r = visit(n[i], visited);
-      if (r != NULL)
-      {
-        assert(!r->isComplete());
-      }
-      children.push_back(r);
-    }
-
-    UnsignedInterval* result = dispatchToTransferFunctions(n,children);
-
-    // result will often be null (which we take to mean the maximum range).
-    visited.insert({n, result});
-    return result;
-  }
-
-  UnsignedIntervalAnalysis::UnsignedIntervalAnalysis(STPMgr& _bm) : bm(_bm)
+  UnsignedIntervalAnalysis::UnsignedIntervalAnalysis()
   {
     littleZero = getEmptyCBV(1); // owned by emptyCBV, not by us.
     littleOne = mkOne(1);

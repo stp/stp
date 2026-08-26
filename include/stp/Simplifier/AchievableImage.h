@@ -96,7 +96,6 @@ public:
   // to samples, the hints (width-adapted) are tried as members first --
   // e.g. (x & 0x55) == 0x41 only finds the true-witness x = 0x41 this
   // way. Call before apply()ing the steps.
-  void addHint(const ASTNode& k);
 
   // Back-propagate the predicate constant `k` through the whole
   // collected path with a per-operator heuristic preimage, recording a
@@ -153,7 +152,7 @@ private:
   // invert an image value back to an x value.
   std::vector<std::pair<CBV, CBV>> exactBounds;
   std::vector<Sample> samples;
-  std::vector<CBV> hints; // owned; see addHint
+  std::vector<CBV> hints; // owned; see addHintChain
 
   bool applyExact(const GroundStep& step);
   void applyToSamples(const GroundStep& step);

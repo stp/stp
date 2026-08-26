@@ -222,7 +222,7 @@ PrecisionResult intervalPrecision(STPMgr* mgr, const OpSpec& op,
   result.ran = true;
   result.width = width;
 
-  UnsignedIntervalAnalysis analysis(*mgr);
+  UnsignedIntervalAnalysis analysis;
   const ASTNode node = buildNode(mgr, op, l);
   const vector<uint64_t> table = semanticsTable(mgr, op, l);
   const vector<unsigned> varying = l.varying();
@@ -444,7 +444,7 @@ PrecisionResult valueSetPrecision(STPMgr* mgr, const OpSpec& op,
 
 void runInterval(STPMgr* mgr, const Config& cfg, vector<Row>& out)
 {
-  UnsignedIntervalAnalysis analysis(*mgr);
+  UnsignedIntervalAnalysis analysis;
 
   for (const OpSpec& op : allOps())
   {

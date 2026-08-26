@@ -133,7 +133,6 @@ public:
   bool UpdateSubstitutionMapFewChecks(const ASTNode& e0, const ASTNode& e1);
 
   DLL_PUBLIC ASTNode applySubstitutionMap(const ASTNode& n);
-  DLL_PUBLIC ASTNode applySubstitutionMapUntilArrays(const ASTNode& n);
   ASTNode applySubstitutionMapUntilArrays(const ASTNode& n,
                                           DenseNodeMap& cache);
 
@@ -232,8 +231,6 @@ private:
   // depth becomes C++ call depth.
   ASTNode simplifyNode(const ASTNode& n, bool pushNeg, SimplifyJob job);
 
-  void checkIfInSimplifyMap(const ASTNode& n, ASTNodeSet visited);
-
   ASTNode makeTower(const Kind k, const ASTVec& children);
 
   ASTNode pullUpBVSX(const ASTNode output);
@@ -246,14 +243,9 @@ private:
 
   bool hasBeenSimplified(const ASTNode& n);
 
-  ASTNode SimplifyFormula_NoRemoveWrites(const ASTNode& a, bool pushNeg);
-
   ASTNode ITEOpt_InEqs(const ASTNode& in1, ASTNode& conditionToNegate);
 
   ASTNode PullUpITE(const ASTNode& in);
-
-  ASTNode CreateSimplifiedFormulaITE(const ASTNode& in0, const ASTNode& in1,
-                                     const ASTNode& in2);
 
   ASTNode CreateSimplifiedINEQ(const Kind k, const ASTNode& a0,
                                const ASTNode& a1, bool pushNeg);
@@ -272,13 +264,6 @@ private:
 
   ASTNode DistributeMultOverPlus(const ASTNode& a,
                                  bool startdistribution = false);
-
-  // Replaces WRITE(Arr,i,val) with ITE(j=i, val, READ(Arr,j))
-  ASTNode RemoveWrites_TopLevel(const ASTNode& term);
-  ASTNode RemoveWrites(const ASTNode& term);
-  ASTNode SimplifyWrites_InPlace(const ASTNode& term);
-
-  ASTNode SimplifyArrayTerm(const ASTNode& term);
 
 };
 } // end of namespace

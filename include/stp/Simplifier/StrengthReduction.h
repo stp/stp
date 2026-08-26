@@ -57,7 +57,6 @@ class StrengthReduction
 
   // A special version that handles the lhs appearing in the rhs of the fromTo
   // map.
-  ASTNode replace(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& cache);
 
   ASTNode visit(const ASTNode& n, stp::NodeDomainAnalysis& nda, ASTNodeMap& fromTo);
 

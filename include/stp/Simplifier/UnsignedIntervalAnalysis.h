@@ -50,7 +50,6 @@ using NodeToUnsignedIntervalMap =
 
 class UnsignedIntervalAnalysis
 {
-  STPMgr& bm;
   CBV littleOne;
   CBV littleZero;
 
@@ -70,18 +69,16 @@ class UnsignedIntervalAnalysis
 
 public:
 
-  UnsignedIntervalAnalysis(STPMgr& _bm);
-  
+  UnsignedIntervalAnalysis();
+
   UnsignedIntervalAnalysis(const UnsignedIntervalAnalysis&) = delete;
   UnsignedIntervalAnalysis & operator=(const UnsignedIntervalAnalysis&) = delete;
   
   ~UnsignedIntervalAnalysis();
 
   // Replace some of the things that unsigned intervals can figure out for us.
-  ASTNode topLevel(const ASTNode& top);
 
   UnsignedInterval* dispatchToTransferFunctions(const ASTNode&n, const vector<const UnsignedInterval*>& children);
-  UnsignedInterval* visit(const ASTNode& n, NodeToUnsignedIntervalMap& visited);
 
 
   void stats();

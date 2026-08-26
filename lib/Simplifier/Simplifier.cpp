@@ -145,11 +145,6 @@ ASTNode Simplifier::applySubstitutionMapAtTopLevel(const ASTNode& topLevel)
   return substitutionMap.applySubstitutionMapAtTopLevel(topLevel);
 }
 
-ASTNode Simplifier::applySubstitutionMapUntilArrays(const ASTNode& n)
-{
-  return substitutionMap.applySubstitutionMapUntilArrays(n);
-}
-
 ASTNode Simplifier::applySubstitutionMapUntilArrays(const ASTNode& n, DenseNodeMap& cache)
 {
   return substitutionMap.applySubstitutionMapUntilArrays(n,cache);
@@ -185,37 +180,6 @@ bool Simplifier::CheckMultInverseMap(const ASTNode& key, ASTNode& output)
 void Simplifier::UpdateMultInverseMap(const ASTNode& key, const ASTNode& value)
 {
   MultInverseMap[key] = value;
-}
-
-ASTNode Simplifier::SimplifyFormula_NoRemoveWrites(const ASTNode& b,
-                                                   bool pushNeg)
-{
-  ASTNode out = SimplifyFormula(b, pushNeg);
-  return out;
-}
-
-// I like simplify to have been run on all the nodes.
-void Simplifier::checkIfInSimplifyMap(const ASTNode& n, ASTNodeSet visited)
-{
-  if (n.isConstant() || (n.GetKind() == SYMBOL))
-    return;
-
-  if (visited.find(n) != visited.end())
-    return;
-
-  if (SimplifyMap->find(n) == SimplifyMap->end())
-  {
-    cerr << "not found";
-    cerr << n;
-    assert(false);
-  }
-
-  for (size_t i = 0; i < n.Degree(); i++)
-  {
-    checkIfInSimplifyMap(n[i], visited);
-  }
-
-  visited.insert(n);
 }
 
 ASTNodeMap Simplifier::FindConsts_TopLevel(const ASTNode& b, bool pushNeg)
@@ -254,8 +218,6 @@ ASTNode Simplifier::SimplifyFormula_TopLevel(const ASTNode& b, bool pushNeg)
   assert(_bm->UserFlags.optimize_flag);
   _bm->GetRunTimes()->start(RunTimes::SimplifyTopLevel);
   ASTNode out = SimplifyFormula(b, pushNeg);
-  ASTNodeSet visited;
-  // checkIfInSimplifyMap(out,visited);
   ResetSimplifyMaps();
   _bm->GetRunTimes()->stop(RunTimes::SimplifyTopLevel);
   return out;
@@ -737,29 +699,6 @@ ASTNode Simplifier::CreateSimplifiedTermITE(const ASTNode& in0,
 
   return nf->CreateArrayTerm(ITE, t1.GetIndexWidth(), t1.GetValueWidth(), t0,
                              t1, t2);
-}
-
-ASTNode Simplifier::CreateSimplifiedFormulaITE(const ASTNode& in0,
-                                               const ASTNode& in1,
-                                               const ASTNode& in2)
-{
-  const ASTNode& t0 = in0;
-  const ASTNode& t1 = in1;
-  const ASTNode& t2 = in2;
-  CountersAndStats("CreateSimplifiedFormulaITE", _bm);
-
-  if (_bm->UserFlags.optimize_flag)
-  {
-    if (t0 == ASTTrue)
-      return t1;
-    if (t0 == ASTFalse)
-      return t2;
-    if (t1 == t2)
-      return t1;
-  }
-  ASTNode result = nf->CreateNode(ITE, t0, t1, t2);
-  assert(BVTypeCheck(result));
-  return result;
 }
 
 // Every connective is where a formula nests: each operand is simplified by
@@ -2556,68 +2495,7 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
           break;
         }
 
-// This can increase the number of nodes exponentially.
-// If turned on bitrev2048 will blow out main memory, with
-// this disabled it takes 12MB.
-#if 0
-
-          case BVAND:
-          case BVOR:
-          case BVXOR:
-            {
-              assert(a0.Degree() == 2);
-
-              //assumes these operators are binary
-              //
-              // (t op u)[i:j] <==> t[i:j] op u[i:j]
-              ASTNode t = a0[0];
-              ASTNode u = a0[1];
-              t =
-              SimplifyTerm(nf->CreateTerm(BVEXTRACT,
-                      a_len, t, i, j));
-              u =
-              SimplifyTerm(nf->CreateTerm(BVEXTRACT,
-                      a_len, u, i, j));
-              BVTypeCheck(t);
-              BVTypeCheck(u);
-              //output = nf->CreateTerm(k1, a_len, t, u);
-
-              output = inputterm;
-              break;
-            }
-#endif
         // nb. (~t)[i:j] == ~(t[i:j]) is done by the simplifying node factory.
-        // case BVSX:{ //(BVSX(t,n)[i:j] <==> BVSX(t,i+1), if n
-        //        >= i+1 and j=0 ASTNode t = a0[0]; unsigned int
-        //        bvsx_len = a0.GetValueWidth(); if(bvsx_len <
-        //        a_len) { FatalError("SimplifyTerm: BVEXTRACT
-        //        over BVSX:" "the length of BVSX term must be
-        //        greater than extract-len",inputterm); } if(j
-        //        != zero) { output =
-        //        nf->CreateTerm(BVEXTRACT,a_len,a0,i,j); }
-        //        else { output =
-        //        nf->CreateTerm(BVSX,a_len,t,
-        //                        nf->CreateBVConst(32,a_len));
-        //        } break; }
-
-        /*
-         * On deeply nested ITES, this can cause an exponential number
-         * of nodes to be produced. Especially if there are different
-         * extracts over the same node.
-         *
-         case ITE:
-         {
-         const ASTNode& t0 = a0[0];
-         ASTNode t1 =
-         SimplifyTerm(nf->CreateTerm(BVEXTRACT,
-         a_len, a0[1], i, j));
-         ASTNode t2 =
-         SimplifyTerm(nf->CreateTerm(BVEXTRACT,
-         a_len, a0[2], i, j));
-         output = CreateSimplifiedTermITE(t0, t1, t2);
-         break;
-         }
-         */
         default:
         {
           output = inputterm;
@@ -3093,13 +2971,6 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
 
       assert(!out1.IsNull());
 
-// process only if not  in the substitution map. simplifymap
-// has been checked already
-#if 0
-        if (!InsideSubstitutionMap(out1, out1) && out1.GetKind() == READ && WRITE == out1[0].GetKind())
-          out1 = RemoveWrites_TopLevel(out1);
-#endif
-
       // it is possible that after all the procesing the READ term
       // reduces to READ(Symbol,const) and hence we should check the
       // substitutionmap once again.
@@ -3181,9 +3052,6 @@ ASTNode Simplifier::simplify_term_switch(const ASTNode& actualInputterm,
     default:
       FatalError("SimplifyTerm: Control should never reach here:", inputterm,
                  k);
-      assert(false);
-      exit(-1);
-      break;
   }
 
   return ASTUndefined;
@@ -3535,12 +3403,6 @@ ASTNode Simplifier::DistributeMultOverPlus(const ASTNode& a,
   return output;
 }
 
-// recursively simplify things that are of type array.
-ASTNode Simplifier::SimplifyArrayTerm(const ASTNode& term)
-{
-  return simplifyNode(term, false, SimplifyJob::Array);
-}
-
 // compute the multiplicative inverse of the input
 ASTNode Simplifier::MultiplicativeInverse(const ASTNode& d)
 {
@@ -3687,12 +3549,6 @@ void Simplifier::printCacheStatus()
   cerr << "MultInverseMap" << MultInverseMap.size() << ":"
        << MultInverseMap.bucket_count() << endl;
 
-#if 0
-    cerr << "ReadOverWrite_NewName_Map" << ReadOverWrite_NewName_Map->size() << ":"
-        << ReadOverWrite_NewName_Map->bucket_count() << endl;
-    cerr << "NewName_ReadOverWrite_Map" << NewName_ReadOverWrite_Map.size() << ":"
-        << NewName_ReadOverWrite_Map.bucket_count() << endl;
-#endif
   cerr << "substn_map" << substitutionMap.Return_SolverMap()->size() << ":"
        << substitutionMap.Return_SolverMap()->bucket_count() << endl;
 }

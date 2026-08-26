@@ -110,7 +110,7 @@ private:
 
 public:
   NodeDomainAnalysis(STPMgr* _bm)
-      : bm(*_bm), intervalAnalysis(*_bm), valueSetAnalysis(*_bm)
+      : bm(*_bm), valueSetAnalysis(*_bm)
   {
     emptyBoolean = new FixedBits(1, true);
   }
