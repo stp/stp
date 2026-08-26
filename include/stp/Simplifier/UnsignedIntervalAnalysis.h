@@ -50,7 +50,6 @@ using NodeToUnsignedIntervalMap =
 
 class UnsignedIntervalAnalysis
 {
-  STPMgr& bm;
   CBV littleOne;
   CBV littleZero;
 
@@ -70,8 +69,8 @@ class UnsignedIntervalAnalysis
 
 public:
 
-  UnsignedIntervalAnalysis(STPMgr& _bm);
-  
+  UnsignedIntervalAnalysis();
+
   UnsignedIntervalAnalysis(const UnsignedIntervalAnalysis&) = delete;
   UnsignedIntervalAnalysis & operator=(const UnsignedIntervalAnalysis&) = delete;
   

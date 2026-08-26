@@ -2047,7 +2047,7 @@ namespace stp
     return result;
   }
 
-  UnsignedIntervalAnalysis::UnsignedIntervalAnalysis(STPMgr& _bm) : bm(_bm)
+  UnsignedIntervalAnalysis::UnsignedIntervalAnalysis()
   {
     littleZero = getEmptyCBV(1); // owned by emptyCBV, not by us.
     littleOne = mkOne(1);
