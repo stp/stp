@@ -574,6 +574,8 @@ public:
 
   // Bitblast a formula
   const BBNode BBForm(const ASTNode& form);
+
+  void getConsts(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& equivs);
 };
 
 } // end of namespace

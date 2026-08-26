@@ -309,6 +309,161 @@ public:
   }
 };
 
+// Look through the maps to see what the bitblaster has discovered (if anything)
+// is constant.
+// Then look through for AIGS that are mapped to from different ASTNodes.
+void BitBlaster::getConsts(const ASTNode& form,
+                           ASTNodeMap& fromTo,
+                           ASTNodeMap& equivs)
+{
+  assert(form.GetType() == BOOLEAN_TYPE);
+
+  BBNodeSet support;
+  BBForm(form, support);
+  assert(support.size() == 0);
+
+  {
+    for (auto it = BBFormMemo.begin(); it != BBFormMemo.end(); it++)
+    {
+      const ASTNode& n = it->first;
+      const BBNode& x = it->second;
+      if (n.isConstant())
+        continue;
+
+      if (x != BBTrue && x != BBFalse)
+        continue;
+
+      assert(n.GetType() == BOOLEAN_TYPE);
+
+      ASTNode result;
+      if (x == BBTrue)
+        result = ASTNF->getTrue();
+      else
+        result = ASTNF->getFalse();
+
+      if (n.GetKind() != SYMBOL)
+        fromTo.insert(std::make_pair(n, result));
+      else
+        simp->UpdateSubstitutionMap(n, result);
+    }
+  }
+
+  for (auto it = BBTermMemo.begin(); it != BBTermMemo.end(); it++)
+  {
+    const ASTNode& n = it->first;
+    // FloatBlast removes FP operations but deliberately leaves float symbols
+    // and constants as their packed-bit leaves. They are bit-blaster terms at
+    // this internal boundary even though their public sort remains
+    // FLOATINGPOINT_TYPE for model reconstruction.
+    assert(isBitsValued(n));
+
+    if (n.isConstant())
+      continue;
+
+    vector<BBNode>& x = it->second;
+    assert(x.size() == n.GetValueWidth());
+
+    bool constNode = true;
+    for (int i = 0; i < (int)x.size(); i++)
+    {
+      if (x[i] != BBTrue && x[i] != BBFalse)
+      {
+        constNode = false;
+        break;
+      }
+    }
+    if (!constNode)
+      continue;
+
+    // getConstant re-makes a float's packed bits as an ASTFPConst, keeping
+    // the substitution type-correct.
+    ASTNode r = getConstant(x, n);
+    if (n.GetKind() == SYMBOL)
+      simp->UpdateSubstitutionMap(n, r);
+    else
+      fromTo.insert(std::make_pair(n, r));
+  }
+
+  if (true) //(uf->isSet("bb-equiv", "1"))
+  {
+    std::unordered_map<intptr_t, ASTNode> nodeToFn;
+    for (auto it = BBFormMemo.begin(); it != BBFormMemo.end(); it++)
+    {
+      const ASTNode& n = it->first;
+      if (n.isConstant())
+        continue;
+
+      const BBNode& x = it->second;
+      if (x == BBTrue || x == BBFalse)
+        continue;
+
+      if (nodeToFn.find(x.GetNodeNum()) == nodeToFn.end())
+      {
+        nodeToFn.insert(make_pair(x.GetNodeNum(), n));
+      }
+      else
+      {
+        const ASTNode other = (nodeToFn.find(x.GetNodeNum()))->second;
+        std::pair<ASTNode, ASTNode> p;
+        if (other.GetNodeNum() > n.GetNodeNum())
+          p = make_pair(other, n);
+        else
+          p = make_pair(n, other);
+
+        equivs.insert(p);
+        // std::cerr << "from" << p.first << " to" << p.second;
+        // ASTNode equals =
+        // ASTNF->CreateNode(NOT,ASTNF->CreateNode(EQ,p.first,p.second));
+        // printer::SMTLIB2_PrintBack(std::cerr,p.second);
+      }
+    }
+  }
+
+  if (true) //(uf->isSet("bb-equiv", "1"))
+  {
+    typedef std::unordered_map<vector<BBNode>, ASTNode, BBVecHasher, BBVecEquals>
+        M;
+    M lookup;
+    for (auto it = BBTermMemo.begin(); it != BBTermMemo.end(); it++)
+    {
+      const ASTNode& n = it->first;
+      if (n.isConstant())
+        continue;
+
+      const vector<BBNode>& x = it->second;
+
+      bool constNode = true;
+      for (int i = 0; i < (int)x.size(); i++)
+      {
+        if (x[i] != BBTrue && x[i] != BBFalse)
+        {
+          constNode = false;
+          break;
+        }
+      }
+      if (!constNode)
+        continue;
+
+      if (lookup.find(x) == lookup.end())
+      {
+        lookup.insert(make_pair(x, n));
+      }
+      else
+      {
+        const ASTNode other = (lookup.find(x))->second;
+        std::pair<ASTNode, ASTNode> p;
+        if (other.GetNodeNum() > n.GetNodeNum())
+          p = make_pair(other, n);
+        else
+          p = make_pair(n, other);
+
+        // cerr << "EQUIV";
+        equivs.insert(p);
+      }
+    }
+  }
+}
+
 void BitBlaster::commonCheck(const ASTNode& n)
 {
   cerr << "Non constant is constant:";
