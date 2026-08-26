@@ -71,6 +71,28 @@ unsigned BVAbstractionRefiner::refine(
   return refined;
 }
 
+// Which variables carry a term record's result: its own, where the lowering
+// filed them, and otherwise whatever the AST-keyed map holds for its term.
+// NULL when neither has an answer.
+//
+// Both readers of a result go through here, and that is the point. They are
+// entitled to different things -- freezing runs before the first solve and
+// tolerates a record whose bits are not encoded yet, refinement runs after it
+// and does not -- but neither is entitled to its own opinion about WHICH
+// variables the result is. A record frozen at one set and checked at another
+// is the shape of the bug the record-owned result exists to close, rebuilt
+// inside this file.
+static const std::vector<unsigned>*
+resultVarsOf(const BVTermAbstraction& abstraction,
+             const ToSATBase::ASTNodeToSATVar& nodeToSATVar)
+{
+  if (!abstraction.resultSATVars.empty())
+    return &abstraction.resultSATVars;
+
+  const auto it = nodeToSATVar.find(abstraction.termNode);
+  return it == nodeToSATVar.end() ? NULL : &it->second;
+}
+
 void BVAbstractionRefiner::freezeVariables(
     SATSolver& satSolver,
     const ToSATBase::ASTNodeToSATVar& nodeToSATVar) const
@@ -107,9 +129,9 @@ void BVAbstractionRefiner::freezeVariables(
 
   for (const auto& a : terms_)
   {
-    auto resultIt = nodeToSATVar.find(a.termNode);
-    if (resultIt != nodeToSATVar.end())
-      for (unsigned v : resultIt->second)
+    const std::vector<unsigned>* result = resultVarsOf(a, nodeToSATVar);
+    if (result != NULL)
+      for (unsigned v : *result)
         if (v != BV_ABSTRACTION_NO_VAR)
           satSolver.setFrozen(v);
     for (unsigned i = 0; i < a.numOperands; i++)
@@ -125,9 +147,10 @@ void BVAbstractionRefiner::freezeVariables(
   }
 }
 
-// The SAT variables one node of a record -- an operand, or the abstraction's
-// own result -- was encoded into, ready to be read out of a candidate or
-// written into a clause.
+// The SAT variables one operand of a record was encoded into, ready to be
+// read out of a candidate or written into a clause. A record's own result
+// does not come through here: it is the record's to name, and resultVarsOf
+// answers for it.
 //
 // Three things have to hold for the record to be checkable at all, and all
 // three hold by construction.
@@ -191,6 +214,35 @@ encodedBitsOf(const ASTNode& node, unsigned width,
                  node, (int)i);
 
   return vars;
+}
+
+// The same result, for refinement: every bit a variable the CNF has, or the
+// call does not come back. The three things checked here are the three
+// encodedBitsOf checks for an operand, and hold for the same reasons.
+static const std::vector<unsigned>&
+encodedResultBitsOf(const BVTermAbstraction& abstraction,
+                    const ToSATBase::ASTNodeToSATVar& nodeToSATVar)
+{
+  const std::vector<unsigned>* vars = resultVarsOf(abstraction, nodeToSATVar);
+  if (vars == NULL)
+    FatalError("BV abstraction: an abstracted operation has no result the "
+               "bit-blast encoded, so no candidate can be checked against "
+               "it: ",
+               abstraction.termNode);
+
+  if (vars->size() < abstraction.width)
+    FatalError("BV abstraction: an abstracted operation is recorded wider "
+               "than the result the bit-blast gave it; the record's width "
+               "is: ",
+               abstraction.termNode, (int)abstraction.width);
+
+  for (unsigned i = 0; i < abstraction.width; ++i)
+    if ((*vars)[i] == BV_ABSTRACTION_NO_VAR)
+      FatalError("BV abstraction: an abstracted operation's result names a "
+                 "bit that never reached the CNF; the bit is: ",
+                 abstraction.termNode, (int)i);
+
+  return *vars;
 }
 
 // A record's own variable: the Boolean an equality became, or the condition
@@ -1285,7 +1337,7 @@ unsigned BVAbstractionRefiner::refineTerms(
     }
 
     const std::vector<unsigned>& resultVars =
-        encodedBitsOf(abs.termNode, abs.width, nodeToSATVar);
+        encodedResultBitsOf(abs, nodeToSATVar);
 
     if (abs.opKind == BVPLUS)
     {
@@ -1507,7 +1559,7 @@ unsigned BVAbstractionRefiner::refineTerms(
     getOperandVars(abs.operands[0], abs.width, nodeToSATVar, solver, leftVars);
     getOperandVars(abs.operands[1], abs.width, nodeToSATVar, solver, rightVars);
     const std::vector<unsigned>& resultVars =
-        encodedBitsOf(abs.termNode, abs.width, nodeToSATVar);
+        encodedResultBitsOf(abs, nodeToSATVar);
     const bool lNeg = abs.operandNegated[0];
     const bool rNeg = abs.operandNegated[1];
     const bool carryInit = (lNeg != rNeg);
@@ -1585,7 +1637,7 @@ unsigned BVAbstractionRefiner::refineTerms(
     getOperandVars(abs.operands[1], abs.width, nodeToSATVar, solver, thenVars);
     getOperandVars(abs.operands[2], abs.width, nodeToSATVar, solver, elseVars);
     const std::vector<unsigned>& resultVars =
-        encodedBitsOf(abs.termNode, abs.width, nodeToSATVar);
+        encodedResultBitsOf(abs, nodeToSATVar);
     unsigned c = abs.condSATVar;
 
     for (unsigned bit = 0; bit < abs.width; ++bit)
@@ -1613,7 +1665,7 @@ unsigned BVAbstractionRefiner::refineTerms(
     getOperandVars(abs.operands[0], abs.width, nodeToSATVar, solver, aVars);
     getOperandVars(abs.operands[1], abs.width, nodeToSATVar, solver, bVars);
     const std::vector<unsigned>& resultVars =
-        encodedBitsOf(abs.termNode, abs.width, nodeToSATVar);
+        encodedResultBitsOf(abs, nodeToSATVar);
     unsigned W = abs.width;
 
     // An algebraic fact the candidate contradicts, where there is one.

@@ -49,6 +49,18 @@ static bool allBBNodesAreCIs(const BBNodeVec& vec)
   return !vec.empty();
 }
 
+static std::vector<int> ciSymbolIndices(const BBNodeVec& bits)
+{
+  std::vector<int> indices;
+  indices.reserve(bits.size());
+  for (const BBNode& bit : bits)
+  {
+    assert(!bit.IsNull() && bit.symbol_index >= 0);
+    indices.push_back(bit.symbol_index);
+  }
+  return indices;
+}
+
 // For operands that contain internal AIG nodes (e.g. BVAND results),
 // create fresh proxy CIs with biconditional side constraints so that
 // downstream abstraction can proceed.
@@ -80,6 +92,45 @@ static BBNodeVec ensureProxyCIs(
   }
   nf->symbolToBBNode[node] = proxies;
   return proxies;
+}
+
+// An abstraction stands for its term with fresh inputs, and refinement later
+// constrains those inputs through the record the blaster files here.
+//
+// The incremental driver blasts each conjunct as its own piece, and its
+// ordinary term memo is cleared between pieces -- fp_native_domain, which is
+// on by default, clears it on every new root -- so two pieces sharing a
+// subterm ask for it independently. Minting a second, independent set of
+// inputs for the second ask leaves two sets that are free to disagree, and
+// symbolToBBNode -- the registry refinement resolves a record's result
+// through -- holds one vector per node, so the second registration hides the
+// first: both records are then defined over the second set, the first stays
+// unconstrained, and the search is free to answer from it.
+//
+// A term has one value wherever it occurs, so reuse the vector it is already
+// registered as. An existing entry can also be an exact result or a proxy
+// tied to one; reusing either is stronger than abstracting the term again
+// and remains semantically exact.
+//
+// Incremental records also retain their own result variables, so a duplicate
+// that ever did arise would cost work rather than a verdict; canonicalising
+// here is the invariant, not the only line of defence.
+static bool reuseRegisteredTerm(BBNodeManagerAIG* nf, const ASTNode& term,
+                                unsigned width, BBNodeVec& reused)
+{
+  const BBNodeManagerAIG::SymbolToBBNode::const_iterator it =
+      nf->symbolToBBNode.find(term);
+  if (it == nf->symbolToBBNode.end() || it->second.size() != width)
+    return false;
+
+  // A width-sized entry whose bits were never filled in is a placeholder,
+  // not an abstraction to reuse.
+  for (unsigned i = 0; i < width; i++)
+    if (it->second[i].IsNull())
+      return false;
+
+  reused = it->second;
+  return true;
 }
 
 /********************************************************************
@@ -1024,6 +1075,14 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
       if (uf->bv_term_abstraction && uf->bv_term_abstraction_ite &&
           num_bits >= uf->bv_abstraction_width)
       {
+        {
+          BBNodeVec reused;
+          if (reuseRegisteredTerm(nf, term, num_bits, reused))
+          {
+            result = reused;
+            break;
+          }
+        }
         uf->coverage.bv_abstracted[UserDefinedFlags::ABSTRACT_ITE]++;
         ensureProxyCIs(nf, term[1], thn, sideConstraints_);
         ensureProxyCIs(nf, term[2], els, sideConstraints_);
@@ -1052,6 +1111,7 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
         raw.numOperands = 3;
         raw.width = num_bits;
         raw.condCISymbolIndex = condCI.symbol_index;
+        raw.resultCISymbolIndices = ciSymbolIndices(abstracted);
         abstractedTerms_.push_back(raw);
         result = abstracted;
       }
@@ -1187,6 +1247,14 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
           term.Degree() == 2 &&
           num_bits >= uf->bv_abstraction_width)
       {
+        {
+          BBNodeVec reused;
+          if (reuseRegisteredTerm(nf, term, num_bits, reused))
+          {
+            result = reused;
+            break;
+          }
+        }
         const BBNodeVec& left = BBTerm(term[0], support);
         const BBNodeVec& right = BBTerm(term[1], support);
 
@@ -1233,6 +1301,7 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
           raw.width = num_bits;
           raw.operandNegated[0] = negated[0];
           raw.operandNegated[1] = negated[1];
+          raw.resultCISymbolIndices = ciSymbolIndices(abstracted);
           abstractedTerms_.push_back(raw);
           result = abstracted;
           break;
@@ -1325,6 +1394,14 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
       if (uf->bv_term_abstraction && uf->bv_term_abstraction_mult &&
           num_bits >= uf->bv_abstraction_width)
       {
+        {
+          BBNodeVec reused;
+          if (reuseRegisteredTerm(nf, term, num_bits, reused))
+          {
+            result = reused;
+            break;
+          }
+        }
         uf->coverage.bv_abstracted[UserDefinedFlags::ABSTRACT_MULT]++;
         BBNodeVec op0 = ensureProxyCIs(nf, term[0], mpcd1, sideConstraints_);
         BBNodeVec op1 = ensureProxyCIs(nf, term[1], mpcd2, sideConstraints_);
@@ -1344,6 +1421,7 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
         raw.operands[1] = term[1];
         raw.numOperands = 2;
         raw.width = num_bits;
+        raw.resultCISymbolIndices = ciSymbolIndices(abstracted);
         abstractedTerms_.push_back(raw);
         result = abstracted;
       }
@@ -1376,6 +1454,14 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
       if (uf->bv_term_abstraction && uf->bv_term_abstraction_mult &&
           num_bits >= uf->bv_abstraction_width)
       {
+        {
+          BBNodeVec reused;
+          if (reuseRegisteredTerm(nf, term, num_bits, reused))
+          {
+            result = reused;
+            break;
+          }
+        }
         uf->coverage.bv_abstracted[UserDefinedFlags::ABSTRACT_DIVMOD]++;
         ensureProxyCIs(nf, term[0], dvdd, sideConstraints_);
         ensureProxyCIs(nf, term[1], dvsr, sideConstraints_);
@@ -1395,6 +1481,7 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
         raw.operands[1] = term[1];
         raw.numOperands = 2;
         raw.width = num_bits;
+        raw.resultCISymbolIndices = ciSymbolIndices(abstracted);
         abstractedTerms_.push_back(raw);
         result = abstracted;
       }

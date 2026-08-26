@@ -443,6 +443,63 @@ TEST_F(BVEQAbstractionTest, ITEAbstractionUnsatResult)
   EXPECT_EQ(SOLVER_VALID, result);
 }
 
+// Incremental pieces do not necessarily share the ordinary BBTerm memo. The
+// long-lived node registry is the canonical name of a term across that
+// boundary: revisiting an abstractable operation must return the first result
+// vector without filing another record. Per-record result ownership remains a
+// backstop, but the normal path should not pay for duplicate abstractions.
+TEST_F(BVEQAbstractionTest, ReusesTermAbstractionsAcrossMemoBoundaries)
+{
+  mgr.UserFlags.bv_term_abstraction = true;
+  mgr.UserFlags.bv_term_abstraction_ite = true;
+  mgr.UserFlags.bv_term_abstraction_plus = true;
+  mgr.UserFlags.bv_term_abstraction_mult = true;
+  mgr.UserFlags.bv_term_abstraction_compare = false;
+  mgr.UserFlags.bv_eq_abstraction = false;
+  mgr.UserFlags.bv_abstraction_width = 1;
+  mgr.UserFlags.fp_native_domain = true;
+
+  ASTNode condition = makeSymbol("reuse_abs_condition", 0);
+  ASTNode left = makeSymbol("reuse_abs_left", 8);
+  ASTNode right = makeSymbol("reuse_abs_right", 8);
+
+  BBNodeManagerAIG aigMgr;
+  stp::SubstitutionMap sm(&mgr);
+  Simplifier simp(&mgr, &sm);
+  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+
+  const auto expectReused = [&](const ASTNode& term, Kind expectedKind)
+  {
+    const size_t recordsBefore = bb.abstractedTerms().size();
+    const ASTNode firstRoot = factory->CreateNode(EQ, term, left);
+    const ASTNode secondRoot = factory->CreateNode(EQ, term, right);
+
+    bb.BBForm(firstRoot);
+
+    ASSERT_EQ(recordsBefore + 1, bb.abstractedTerms().size());
+    EXPECT_EQ(expectedKind, bb.abstractedTerms().back().opKind);
+    EXPECT_EQ(term.GetValueWidth(),
+              bb.abstractedTerms().back().resultCISymbolIndices.size());
+    const auto firstRegistration = aigMgr.symbolToBBNode.find(term);
+    ASSERT_TRUE(firstRegistration != aigMgr.symbolToBBNode.end());
+    const BBNodeVec first = firstRegistration->second;
+
+    // A different FP-domain root clears BBTermMemo before this visit, as the
+    // incremental per-piece route does for distinct conjuncts.
+    bb.BBForm(secondRoot);
+
+    const auto secondRegistration = aigMgr.symbolToBBNode.find(term);
+    ASSERT_TRUE(secondRegistration != aigMgr.symbolToBBNode.end());
+    EXPECT_EQ(first, secondRegistration->second);
+    EXPECT_EQ(recordsBefore + 1, bb.abstractedTerms().size());
+  };
+
+  expectReused(factory->CreateTerm(ITE, 8, condition, left, right), ITE);
+  expectReused(factory->CreateTerm(BVPLUS, 8, left, right), BVPLUS);
+  expectReused(factory->CreateTerm(BVMULT, 8, left, right), BVMULT);
+  expectReused(factory->CreateTerm(BVDIV, 8, left, right), BVDIV);
+}
+
 // A candidate is only an assignment of the query once every abstraction in it
 // has been checked against the operands it stands for. Refinement checks them
 // by reading the operands' bits out of one map from node to SAT variables, and
@@ -591,6 +648,15 @@ TEST_F(BVEQAbstractionTest, FreezeVariablesCoversEveryLemmaVariable)
   term.width = 4;
   refiner.terms().push_back(term);
 
+  // A record that owns its result, as the persistent incremental lowering
+  // files them. Freezing has to reach 40..43 and not whatever the node map
+  // says for the same term, or the backend is free to eliminate the very
+  // variables refinement will write its lemmas over. The record above owns
+  // nothing and keeps the map fallback covered.
+  BVTermAbstraction owned = term;
+  owned.resultSATVars = std::vector<unsigned>{40, 41, 42, 43};
+  refiner.terms().push_back(owned);
+
   ToSATBase::ASTNodeToSATVar bits;
   bits[x] = std::vector<unsigned>{10, 11, 12, 13};
   bits[y] = std::vector<unsigned>{20, 21, BV_ABSTRACTION_NO_VAR, 23};
@@ -599,9 +665,64 @@ TEST_F(BVEQAbstractionTest, FreezeVariablesCoversEveryLemmaVariable)
   RecordingSolver solver;
   refiner.freezeVariables(solver, bits);
 
-  const std::set<uint32_t> expected = {5,  10, 11, 12, 13, 20,
-                                       21, 23, 30, 31, 32, 33};
+  const std::set<uint32_t> expected = {5,  10, 11, 12, 13, 20, 21, 23,
+                                       30, 31, 32, 33, 40, 41, 42, 43};
   EXPECT_EQ(expected, solver.frozen);
+}
+
+// Canonical bit-blaster reuse normally prevents more than one abstraction
+// record for the same rewritten term. The refiner must not rely on that
+// producer-side invariant, though: the AST-keyed registry names only the
+// newest result, so every record must retain and refine its own free inputs.
+TEST_F(BVEQAbstractionTest, DuplicateTermsKeepTheirOwnResultVariables)
+{
+  mgr.UserFlags.bv_term_abstraction_schemas = false;
+
+  ASTNode a = makeSymbol("duplicate_result_a", 4);
+  ASTNode b = makeSymbol("duplicate_result_b", 4);
+  ASTNode product = factory->CreateTerm(BVMULT, 4, a, b);
+
+  BVAbstractionRefiner refiner(&mgr);
+  BVTermAbstraction older;
+  older.termNode = product;
+  older.opKind = BVMULT;
+  older.operands[0] = a;
+  older.operands[1] = b;
+  older.numOperands = 2;
+  older.width = 4;
+  older.resultSATVars = std::vector<unsigned>{40, 41, 42, 43};
+  refiner.terms().push_back(older);
+
+  BVTermAbstraction newer = older;
+  newer.resultSATVars = std::vector<unsigned>{30, 31, 32, 33};
+  refiner.terms().push_back(newer);
+
+  ToSATBase::ASTNodeToSATVar bits;
+  bits[a] = std::vector<unsigned>{10, 11, 12, 13};
+  bits[b] = std::vector<unsigned>{20, 21, 22, 23};
+  // The historical map has necessarily been overwritten by the newer
+  // record. It cannot identify the result still used by the older root.
+  bits[product] = newer.resultSATVars;
+
+  RecordingSolver solver;
+  // Both operands are 3, so their four-bit product is 9. The newer result is
+  // correct while the older result says zero. Looking up both records by AST
+  // would call the whole candidate consistent; record-owned variables expose
+  // and block the older inconsistency.
+  const bool operand[4] = {true, true, false, false};
+  const bool expected[4] = {true, false, false, true};
+  for (unsigned i = 0; i < 4; ++i)
+  {
+    solver.model[10 + i] = operand[i];
+    solver.model[20 + i] = operand[i];
+    solver.model[30 + i] = expected[i];
+    solver.model[40 + i] = false;
+  }
+
+  EXPECT_EQ(1u, refiner.refine(solver, bits));
+  EXPECT_EQ(1u, refiner.terms()[0].blockedRounds);
+  EXPECT_EQ(0u, refiner.terms()[1].blockedRounds);
+  EXPECT_TRUE(solver.someClauseBlocksModel());
 }
 
 // A partial prefix says nothing to a candidate that called the equality
