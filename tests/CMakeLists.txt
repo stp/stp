@@ -39,10 +39,38 @@
 set(LIT_VERSION "23.1.0" CACHE STRING "lit version to install when one has to be")
 mark_as_advanced(LIT_VERSION)
 
+set(STP_VENV_DIR "${PROJECT_BINARY_DIR}/venv")
+
+# find_program caches its answer, and the auto-download branch below ends by
+# FORCEing its own into that same cache entry. Left alone the two self-disable:
+# every reconfigure after the first finds LIT_TOOL already set, skips the
+# branch whole, and takes the version check inside it along too. Both failures
+# are quiet ones. A venv removed under a surviving cache -- a cleaned build
+# tree, a pruned scratch disk -- reaches the "path does not seem to exist"
+# error below and asks the user to edit a cache variable by hand, when
+# recreating what we put there ourselves is plainly what was wanted. And a
+# bumped LIT_VERSION goes unread, which is the one thing the check exists to
+# stop.
+#
+# So discard the cached answer before searching, when it no longer resolves or
+# when it is the one we installed. A lit named by the user or found on PATH is
+# left alone in both respects: it sits on a higher rung, and its version is
+# deliberately not our business -- see tests/query-files/lit.cfg, which is
+# written to parse on whatever lit is already installed rather than only the
+# newest.
+if(LIT_TOOL AND NOT EXISTS "${LIT_TOOL}")
+    message(STATUS
+        "Discarding LIT_TOOL (${LIT_TOOL}): the path no longer exists")
+    unset(LIT_TOOL CACHE)
+elseif(LIT_TOOL AND LIT_TOOL STREQUAL "${STP_VENV_DIR}/bin/lit")
+    # Ours from a previous configure. Re-derived below so that LIT_VERSION
+    # still governs; the venv itself survives when it already holds it.
+    unset(LIT_TOOL CACHE)
+endif()
+
 find_program(LIT_TOOL lit DOC "Path to lit tool")
 
 if(NOT LIT_TOOL AND ENABLE_AUTO_DOWNLOAD)
-    set(STP_VENV_DIR "${PROJECT_BINARY_DIR}/venv")
     # Created once and reused: pip is slow, and reconfiguring is not rare. But
     # reused only while it holds the version asked for -- a bumped LIT_VERSION
     # against an existing build tree used to be ignored in silence, and the
