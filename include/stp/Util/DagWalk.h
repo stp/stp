@@ -177,7 +177,6 @@ public:
     return out.str();
   }
 
-  size_t depth() const { return deepest; }
 
   void clear() { deepest = 0; }
 

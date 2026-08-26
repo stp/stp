@@ -1574,19 +1574,14 @@ ASTNode SimplifyingNodeFactory::CreateSimpleAndOr(bool IsAnd,
   {
     case 0:
       return identity;
-      break;
 
     case 1:
       return out[0];
-      break;
 
     default:
       // 2 or more children.  Create a new node.
       return hashing.CreateNode(IsAnd ? stp::AND : stp::OR, out);
-      break;
   }
-  assert(false);
-  exit(-1);
 }
 
 // Tries to simplify the input to TRUE/FALSE. if it fails, then

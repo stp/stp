@@ -34,7 +34,6 @@ namespace stp
 {
 class ASTNode;
 class STPMgr;
-typedef vector<ASTNode> ASTVec;
 
 /******************************************************************
  * Internal representation of an interior ASTNode.Generally, these*
@@ -44,8 +43,6 @@ class ASTInterior : public ASTInternal
 {
 
   friend class STPMgr;
-  friend class ASTNodeHasher;
-  friend class ASTNodeEqual;
   friend stp::ASTNode HashingNodeFactory::CreateNode(
       Kind kind, stp::ASTChildren back_children);
 

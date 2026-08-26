@@ -140,7 +140,6 @@ public:
   DLL_PUBLIC IncrementalSolver* getIncrementalSolver();
   DLL_PUBLIC void resetIncrementalSolver();
   bool hasIncrementalSolver() const { return incrementalSolver != nullptr; }
-  const LoweredApplicationView& lastBatchUFView() const;
 
 public:
   // Out of line so the UF implementation types above remain incomplete here.

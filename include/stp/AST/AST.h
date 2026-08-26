@@ -37,7 +37,6 @@ DLL_PUBLIC ATTR_NORETURN void FatalError(const char* str, const ASTNode& a,
 DLL_PUBLIC ATTR_NORETURN void FatalError(const char* str);
 void SortByExprNum(ASTVec& c);
 void SortByArith(ASTVec& c);
-bool exprless(const ASTNode& n1, const ASTNode& n2);
 bool arithless(const ASTNode& n1, const ASTNode& n2);
 
 // Functor form of exprless. Passing a free function to std::sort/is_sorted
@@ -219,22 +218,6 @@ typedef std::unordered_map<ASTNode, ASTVec, ASTNode::ASTNodeHasher,
 void FlattenKindNoDuplicates(const Kind k, const ASTChildren& children,
                              ASTVec& flat_children,
                              ASTNodeSet& alreadyFlattened);
-
-// Needed for defining the MAP below
-struct ltint
-{
-  bool operator()(int s1, int s2) const { return s1 < s2; }
-};
-
-class ClauseList;
-
-// Datatype for ClauseLists
-typedef std::map<int, ClauseList*, ltint> ClauseBuckets;
-
-typedef std::map<int, ASTVec*, ltint> IntToASTVecMap;
-
-// Function to dump contents of ASTNodeMap
-ostream& operator<<(ostream& os, const ASTNodeMap& nmap);
 
 void buildListOfSymbols(const ASTNode& n, ASTNodeSet& visited,
                         ASTNodeSet& symbols);
