@@ -648,6 +648,15 @@ TEST_F(BVEQAbstractionTest, FreezeVariablesCoversEveryLemmaVariable)
   term.width = 4;
   refiner.terms().push_back(term);
 
+  // A record that owns its result, as the persistent incremental lowering
+  // files them. Freezing has to reach 40..43 and not whatever the node map
+  // says for the same term, or the backend is free to eliminate the very
+  // variables refinement will write its lemmas over. The record above owns
+  // nothing and keeps the map fallback covered.
+  BVTermAbstraction owned = term;
+  owned.resultSATVars = std::vector<unsigned>{40, 41, 42, 43};
+  refiner.terms().push_back(owned);
+
   ToSATBase::ASTNodeToSATVar bits;
   bits[x] = std::vector<unsigned>{10, 11, 12, 13};
   bits[y] = std::vector<unsigned>{20, 21, BV_ABSTRACTION_NO_VAR, 23};
@@ -656,8 +665,8 @@ TEST_F(BVEQAbstractionTest, FreezeVariablesCoversEveryLemmaVariable)
   RecordingSolver solver;
   refiner.freezeVariables(solver, bits);
 
-  const std::set<uint32_t> expected = {5,  10, 11, 12, 13, 20,
-                                       21, 23, 30, 31, 32, 33};
+  const std::set<uint32_t> expected = {5,  10, 11, 12, 13, 20, 21, 23,
+                                       30, 31, 32, 33, 40, 41, 42, 43};
   EXPECT_EQ(expected, solver.frozen);
 }
 
