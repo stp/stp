@@ -35,8 +35,6 @@ namespace simplifier
 {
 namespace constantBitP
 {
-using std::cerr;
-using std::endl;
 
 // Nodes waiting to be propagated, taken cheapest-visit-first.
 //
@@ -229,16 +227,6 @@ public:
       lowest++;
     return lowest == bucketCount;
   }
-
-  void print()
-  {
-    cerr << "+Worklist" << endl;
-    for (unsigned b = 0; b < bucketCount; b++)
-      for (const auto& n : buckets[b])
-        cerr << n << " ";
-    cerr << "-Worklist" << endl;
-  }
-
 };
 }
 }

@@ -33,11 +33,6 @@ namespace simplifier
 namespace constantBitP
 {
 
-namespace stp
-{
-typedef unsigned int* CBV;
-}
-
 // Misc (easy) transfer functions.
 // Trevor Hansen. BSD License.
 
@@ -700,8 +695,6 @@ Result bvITEBothWays(vector<FixedBits*>& children, FixedBits& output)
     }
   }
 
-  if (result == CONFLICT)
-    return CONFLICT;
   if (changed)
     return CHANGED;
 

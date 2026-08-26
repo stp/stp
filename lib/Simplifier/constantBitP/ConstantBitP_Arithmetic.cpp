@@ -88,7 +88,6 @@ Result bvSubtractBothWays(vector<FixedBits*>& children, FixedBits& output)
 
 /////////////// ADDITION>
 
-const bool add_debug_messages = false;
 
 // For a given number of children. The maximum size of the carry in for
 // addition.
@@ -144,8 +143,6 @@ Result fixIfCanForAddition(vector<FixedBits*>& children, const int index,
   assert(inflowMax <= maxCarryIn);
   assert(sum <= (signed)children.size() + maxCarryIn);
 
-  if (add_debug_messages)
-    cerr << "fixIfCanForAddition " << index << " " << sum << endl;
 
   int unfixed = 0;
   int ones = 0;
@@ -248,13 +245,6 @@ void initialiseColumnCounts(int columnL[], int columnH[], const int bitWidth,
       }
     }
   }
-}
-
-void printArray(int f[], int width)
-{
-  for (int i = width - 1; i >= 0; i--)
-    std::cerr << f[i] << " ";
-  std::cerr << std::endl;
 }
 
 void setValue(FixedBits& a, const int i, bool v)
@@ -500,18 +490,6 @@ Result bvAddBothWays(vector<FixedBits*>& children, FixedBits& output)
       }
     }
 
-    if (add_debug_messages)
-    {
-      std::cerr << "bottom" << std::endl;
-      cerr << "columnL:";
-      printArray(columnL, bitWidth);
-      cerr << "columnH:";
-      printArray(columnH, bitWidth);
-      cerr << "sumL:";
-      printArray(sumL, bitWidth);
-      cerr << "sumH:";
-      printArray(sumH, bitWidth);
-    }
 
     for (unsigned column = 0; column < bitWidth; column++)
     {

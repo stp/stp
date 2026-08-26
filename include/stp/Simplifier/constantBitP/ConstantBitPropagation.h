@@ -74,7 +74,6 @@ class ConstantBitPropagation
   vector<unsigned> previousChildrenFixedCount;
   vector<FixedBits*> childrenBits;
 
-  void printNodeWithFixings();
 
   FixedBits* getUpdatedFixedBits(const ASTNode& n);
 
@@ -95,7 +94,6 @@ class ConstantBitPropagation
 
   FixedBits* createFixedBits(const ASTNode& n);
 
-  void scheduleDown(const ASTNode& n);
 
 public:
   NodeToFixedBitsMap* fixedMap;

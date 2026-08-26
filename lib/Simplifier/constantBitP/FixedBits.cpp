@@ -171,8 +171,6 @@ FixedBits::FixedBits(unsigned n, bool isbool)
   representsBoolean = isbool;
   if (isbool)
     assert(1 == width);
-
-  uniqueId = staticUniqueId++;
 }
 
 // There is no way to represent bottom. So we assume a and b are already at
@@ -234,66 +232,6 @@ void FixedBits::join(unsigned int a)
         setFixed(i, false);
     }
   }
-}
-
-bool FixedBits::unsignedHolds(unsigned val)
-{
-  bool r = unsignedHolds_new(val);
-  // assert (unsignedHolds_old(val) == r);
-  return r;
-}
-
-// Whether the set of values contains this one. Much faster than the _old
-// version.
-bool FixedBits::unsignedHolds_new(unsigned val)
-{
-  const unsigned initial_width =
-      std::min(width, (unsigned)sizeof(unsigned) * 8);
-
-  for (unsigned i = 0; i < initial_width; i++)
-  {
-    char v = (*this)[i];
-    if ('*' == v)
-    {
-    } // ok
-    else if ((v == '1') != ((val & 1) != 0))
-      return false;
-    val = val >> 1;
-  }
-
-  // If the unsigned representation is bigger, false if not zero.
-  if (sizeof(unsigned) * 8 > width && (val != 0))
-    return false;
-
-  for (unsigned i = sizeof(unsigned) * 8; i < width; i++)
-    if (isFixed(i) && getValue(i))
-      return false;
-
-  return true;
-}
-
-bool FixedBits::unsignedHolds_old(unsigned val)
-{
-  const unsigned maxWidth = std::max((unsigned)sizeof(unsigned) * 8, width);
-  for (unsigned i = 0; i < maxWidth; i++)
-  {
-    if (i < (unsigned)width && i < sizeof(unsigned) * 8)
-    {
-      if (isFixed(i) && (getValue(i) != (((val & (1u << i))) != 0)))
-        return false;
-    }
-    else if (i < (unsigned)width)
-    {
-      if (isFixed(i) && getValue(i))
-        return false;
-    }
-    else // The unsigned value is bigger than the bitwidth of this.
-    {
-      if (val & (1u << i))
-        return false;
-    }
-  }
-  return true;
 }
 
 FixedBits FixedBits::createRandom(const unsigned length,
@@ -419,30 +357,6 @@ FixedBits FixedBits::fromUnsignedInt(unsigned width, unsigned val)
   return output;
 }
 
-void FixedBits::fromUnsigned(unsigned val)
-{
-  for (unsigned i = 0; i < width; i++)
-  {
-    if (i < width && i < sizeof(unsigned) * 8)
-    {
-      setFixed(i, true);
-      setValue(i, (val & (1u << i)));
-    }
-    else if (i < width)
-    {
-      setFixed(i, true);
-      setValue(i, false);
-    }
-    else // The unsigned value is bigger than the bitwidth of this.
-    {    // so it can't be represented.
-      if (val & (1u << i))
-      {
-        stp::FatalError(LOCATION "Cant be represented.");
-      }
-    }
-  }
-}
-
 bool FixedBits::updateOK(const FixedBits& o, const FixedBits& n, const int upTo)
 {
   assert((int)n.getWidth() >= upTo);
@@ -507,48 +421,6 @@ bool FixedBits::in(const FixedBits& a, const FixedBits& b)
       return false;
   }
   return true;
-}
-
-// Gets the minimum and maximum unsigned values that are held in the current
-// set. It saturates to UINT_MAX.
-void FixedBits::getUnsignedMinMax(unsigned& minShift, unsigned& maxShift) const
-{
-  const unsigned bitWidth = this->getWidth();
-  unsigned unsignedBW = sizeof(unsigned) * 8;
-
-  minShift = 0;
-  maxShift = 0;
-
-  bool bigMax = false;
-  bool bigMin = false;
-
-  for (unsigned i = unsignedBW; i < bitWidth; i++)
-  {
-    if ((*this)[i] == '1' || (*this)[i] == '*')
-      bigMax = true;
-
-    if ((*this)[i] == '1')
-      bigMin = true;
-  }
-
-  for (unsigned i = 0; i < std::min(unsignedBW, bitWidth); i++)
-  {
-    if ((*this)[i] == '1')
-    {
-      minShift |= (1u << i);
-      maxShift |= (1u << i);
-    }
-    else if ((*this)[i] == '*')
-    {
-      maxShift |= (1u << i);
-    }
-  }
-
-  if (bigMax)
-    maxShift = UINT_MAX;
-
-  if (bigMin)
-    minShift = UINT_MAX;
 }
 
 bool FixedBits::equals(const FixedBits& a, const FixedBits& b)

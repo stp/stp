@@ -27,19 +27,15 @@ THE SOFTWARE.
 // FIXME: External library
 #include "extlib-constbv/constantbv.h"
 #include "stp/NodeFactory/NodeFactory.h"
-#include "stp/Printer/printers.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/Simplifier.h"
-#include "stp/Simplifier/constantBitP/ConstantBitP_MaxPrecision.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_TransferFunctions.h"
 #include "stp/Simplifier/constantBitP/ConstantBitP_Utility.h"
 #include <algorithm>
-#include <fstream>
 #include <iostream>
 #include <vector>
 
 using std::endl;
-using std::cout;
 using std::make_pair;
 using std::pair;
 
@@ -59,43 +55,6 @@ namespace simplifier
 {
 namespace constantBitP
 {
-THREAD_LOCAL_IE NodeToFixedBitsMap* PrintingHackfixedMap; // Used when debugging.
-
-const bool debug_cBitProp_messages = false;
-const bool output_mult_like = false;
-const bool debug_print_graph_after = false;
-
-////////////////////
-
-void ConstantBitPropagation::printNodeWithFixings()
-{
-  NodeToFixedBitsMap::NodeToFixedBitsMapType::const_iterator
-      it = fixedMap->map->begin(),
-      itEnd = fixedMap->map->end();
-
-  cerr << "+Nodes with fixings" << endl;
-
-  for (/**/; it != itEnd;
-       ++it) // iterates through all the pairs of node->fixedBits.
-  {
-    cerr << (it->first).GetNodeNum() << " " << *(it->second) << endl;
-  }
-  cerr << "-Nodes with fixings" << endl;
-}
-
-// Used when outputting when debugging.
-// Outputs the fixed bits for a particular node.
-string toString(const ASTNode& n)
-{
-  NodeToFixedBitsMap::NodeToFixedBitsMapType::const_iterator it =
-      PrintingHackfixedMap->map->find(n);
-  if (it == PrintingHackfixedMap->map->end())
-    return "";
-
-  std::stringstream s;
-  s << *it->second;
-  return s.str();
-}
 
 // If the bits are totally fixed, then return a new matching ASTNode.
 ASTNode ConstantBitPropagation::bitsToNode(NodeFactory* nf,
@@ -203,36 +162,6 @@ ConstantBitPropagation::ConstantBitPropagation(stp::STPMgr* mgr_,
   // not fixing the topnode.
   propagate();
 
-  if (debug_cBitProp_messages)
-  {
-    cerr << "status:" << status << endl;
-    cerr << "ended propagation" << endl;
-    printNodeWithFixings();
-  }
-
-// is there are good reason to clear out some of them??
-#if 0
-      // remove constants, and things with nothing fixed.
-      NodeToFixedBitsMap::NodeToFixedBitsMapType::iterator it =
-          fixedMap->map->begin();
-      NodeToFixedBitsMap::NodeToFixedBitsMapType::iterator it_end =
-          fixedMap->map->end();
-      while (it != it_end)
-        {
-          // No constants, nothing completely unfixed.
-          if (  (it->second)->countFixed() == 0 )
-            {
-              delete it->second;
-              // making this a reference causes reading from freed memory.
-              const ASTNode n = it->first;
-              it++;
-              fixedMap->map->erase(n);
-            }
-          else
-            it++;
-        }
-#endif
-
   topFixed = false;
 }
 
@@ -290,30 +219,10 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
     }
   }
 
-  if (debug_cBitProp_messages)
-  {
-    cerr << "Number removed by bottom UP:" << fromTo.size() << endl;
-  }
-
   if (setTopToTrue)
     setNodeToTrue(top);
 
-  if (debug_cBitProp_messages)
-  {
-    cerr << "starting propagation" << endl;
-    printNodeWithFixings();
-    cerr << "Initial Tree:" << endl;
-    cerr << top;
-  }
-
   propagate();
-
-  if (debug_cBitProp_messages)
-  {
-    cerr << "status:" << status << endl;
-    cerr << "ended propagation" << endl;
-    printNodeWithFixings();
-  }
 
   // propagate may have stopped with a conflict.
   if (CONFLICT == status)
@@ -439,27 +348,9 @@ ASTNode ConstantBitPropagation::topLevelBothWays(const ASTNode& top,
         nf->CreateNode(AND, result, conjunct); // conjoin the new conditions.
   }
 
-  if (debug_print_graph_after)
-  {
-    std::ofstream file;
-    file.open("afterCbitp.gdl");
-    PrintingHackfixedMap = fixedMap;
-    printer::GDL_Print(file, top, &toString);
-    file.close();
-  }
-
   assert(BVTypeCheck(result));
   assert(status != CONFLICT); // conflict should have been seen earlier.
   return result;
-}
-
-void notHandled(const Kind& k)
-{
-  if (READ != k && WRITE != k)
-    if (debug_cBitProp_messages)
-    {
-      cerr << "!" << k << endl;
-    }
 }
 
 // add to the work list any nodes that take the result of the "n" node.
@@ -467,12 +358,6 @@ void ConstantBitPropagation::scheduleUp(const ASTNode& n)
 {
   for (const auto &it : dependents->getDependents(n))
     workList->push(it);
-}
-
-void ConstantBitPropagation::scheduleDown(const ASTNode& n)
-{
-  for (const auto& c : n.GetChildren())
-    workList->push(c);
 }
 
 void ConstantBitPropagation::scheduleNode(const ASTNode& n)
@@ -510,7 +395,7 @@ bool ConstantBitPropagation::checkAtFixedPoint(const ASTNode& n,
   {
     if (!FixedBits::equals(*getUpdatedFixedBits(n[i]), childrenFixedBits[i]))
     {
-      cerr << "Not fixed point";
+      std::cerr << "Not fixed point";
       assert(false);
     }
 
@@ -533,12 +418,6 @@ void ConstantBitPropagation::propagate()
 
     assert(!n.isConstant());    // shouldn't get into the worklist..
     assert(CONFLICT != status); // should have stopped already.
-
-    if (debug_cBitProp_messages)
-    {
-      cerr << "[" << workList->size() << "]working on" << n.GetNodeNum()
-           << endl;
-    }
 
     // Fetch each FixedBits from the map once per visit; the map lookups
     // dominate the cost of propagation on large problems.
@@ -586,13 +465,6 @@ void ConstantBitPropagation::propagate()
       {
         if (childrenBits[i]->countFixed() != previousChildrenFixedCount[i])
         {
-          if (debug_cBitProp_messages)
-          {
-            cerr << "Changed: " << n[i].GetNodeNum()
-                 << " from:" << previousChildrenFixedCount[i]
-                 << "to:" << *childrenBits[i] << endl;
-          }
-
           assert(!n[i].isConstant());
 
           // All the immediate parents of this child need to be
@@ -710,7 +582,6 @@ Result ConstantBitPropagation::dispatchToTransferFunctions(
     case WRITE:
       // do nothing. Seems difficult to track properly.
       return NO_CHANGE;
-      break;
 
 #define MAPTFN(caseV, FN)                                                      \
   case caseV:                                                                  \
@@ -768,13 +639,10 @@ Result ConstantBitPropagation::dispatchToTransferFunctions(
 
     default:
     {
-      notHandled(k);
       return NO_CHANGE;
     }
   }
 #undef MAPTFN
-  bool mult_like = false;
-  const bool lift_to_max = false;
 
   // safe approximation to no overflow multiplication.
   if (k == BVMULT)
@@ -786,56 +654,19 @@ Result ConstantBitPropagation::dispatchToTransferFunctions(
     // bit-blaster's getMS() later reads.
     if (CONFLICT != result && children.size() == 2)
       msm->map[n] = ms;
-    mult_like = true;
   }
   else if (k == BVDIV)
-  {
     result = bvUnsignedDivisionBothWays(children, output, mgr);
-    mult_like = true;
-  }
   else if (k == BVMOD)
-  {
     result = bvUnsignedModulusBothWays(children, output, mgr);
-    mult_like = true;
-  }
   else if (k == SBVDIV)
-  {
     result = bvSignedDivisionBothWays(children, output, mgr);
-    mult_like = true;
-  }
   else if (k == SBVREM)
-  {
     result = bvSignedRemainderBothWays(children, output, mgr);
-    mult_like = true;
-  }
   else if (k == SBVMOD)
-  {
     result = bvSignedModulusBothWays(children, output, mgr);
-    mult_like = true;
-  }
   else
     result = transfer(children, output);
-
-  if (mult_like && lift_to_max)
-  {
-    int bits_before = output.countFixed() + children[0]->countFixed() +
-                      children[1]->countFixed();
-    result = merge(result,
-                   maxPrecision(children, output, k, mgr) ? CONFLICT
-                                                          : NOT_IMPLEMENTED);
-    int difference = (output.countFixed() + children[0]->countFixed() +
-                      children[1]->countFixed()) -
-                     bits_before;
-    assert(difference >= 0);
-    cerr << "Bits fixed" << difference << endl;
-  }
-
-  if (mult_like && output_mult_like)
-  {
-    cerr << output << "=";
-    cerr << *children[0] << k;
-    cerr << *children[1] << std::endl;
-  }
 
   return result;
 }

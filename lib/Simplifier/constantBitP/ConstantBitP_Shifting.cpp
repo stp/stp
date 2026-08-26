@@ -45,7 +45,6 @@ namespace simplifier
 namespace constantBitP
 {
 
-const bool debug_shift = false;
 
 namespace
 {
@@ -281,8 +280,8 @@ Result applyShiftUnion(const unsigned bitWidth, PackedBits& packedShift,
 }
 
 // Whether the concrete shift amount i is admitted by the fixed bits of the
-// shift operand. Equivalent to FixedBits::unsignedHolds(i) for i < 2^64,
-// given anyHighFixedOne = "some bit above word zero is fixed to one".
+// shift operand (for i < 2^64), given anyHighFixedOne = "some bit above
+// word zero is fixed to one".
 inline bool shiftHolds(const PackedBits& shift, bool anyHighFixedOne,
                        uint64_t i)
 {
@@ -468,9 +467,8 @@ static unsigned getMaxShiftFromValueViaAlternation(const unsigned bitWidth,
   return maxShiftFromValue;
 }
 
-// The range of the values the fixed bits admit, clamped as the original
-// FixedBits::getUnsignedMinMax: anything reaching past the low 32 bits
-// saturates to UINT_MAX.
+// The range of the values the fixed bits admit: anything reaching past
+// the low 32 bits saturates to UINT_MAX.
 static void packedUnsignedMinMax(const PackedBits& b, unsigned bitWidth,
                                  unsigned& min, unsigned& max)
 {
@@ -564,17 +562,9 @@ static Result ashrCore(const unsigned bitWidth, PackedBits& packedOp,
     {
       nOfPossibleShifts++;
       maxShiftFromShift = i;
-      if (debug_shift)
-      {
-        std::cerr << "Possible Shift:" << i << std::endl;
-      }
     }
   }
 
-  if (debug_shift)
-  {
-    std::cerr << "Number of possible shifts:" << nOfPossibleShifts << endl;
-  }
 
   // If it's empty. It's a conflict.
   if (0 == nOfPossibleShifts)

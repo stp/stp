@@ -256,12 +256,6 @@ Result bvSignedLessThanBothWays(vector<FixedBits*>& children, FixedBits& output)
   return bvSignedLessThanBothWays(*children[0], *children[1], output);
 }
 
-Result bvSignedGreaterThanBothWays(FixedBits& c0, FixedBits& c1,
-                                   FixedBits& output)
-{
-  return bvSignedLessThanBothWays(c1, c0, output);
-}
-
 Result bvSignedGreaterThanBothWays(vector<FixedBits*>& children,
                                    FixedBits& output)
 {
@@ -280,12 +274,6 @@ Result bvSignedLessThanEqualsBothWays(vector<FixedBits*>& children,
 {
   assert(children.size() == 2);
   return bvSignedLessThanEqualsBothWays(*children[0], *children[1], output);
-}
-
-Result bvSignedGreaterThanEqualsBothWays(FixedBits& c0, FixedBits& c1,
-                                         FixedBits& output)
-{
-  return bvSignedLessThanEqualsBothWays(c1, c0, output);
 }
 
 Result bvSignedGreaterThanEqualsBothWays(vector<FixedBits*>& children,
@@ -308,11 +296,6 @@ Result bvLessThanBothWays(vector<FixedBits*>& children, FixedBits& output)
   return bvLessThanBothWays(*children[0], *children[1], output);
 }
 
-Result bvGreaterThanBothWays(FixedBits& c0, FixedBits& c1, FixedBits& output)
-{
-  return bvLessThanBothWays(c1, c0, output);
-}
-
 Result bvGreaterThanBothWays(vector<FixedBits*>& children, FixedBits& output)
 {
   assert(children.size() == 2);
@@ -328,12 +311,6 @@ Result bvLessThanEqualsBothWays(vector<FixedBits*>& children, FixedBits& output)
 {
   assert(children.size() == 2);
   return bvLessThanEqualsBothWays(*children[0], *children[1], output);
-}
-
-Result bvGreaterThanEqualsBothWays(FixedBits& c0, FixedBits& c1,
-                                   FixedBits& output)
-{
-  return bvLessThanEqualsBothWays(c1, c0, output);
 }
 
 Result bvGreaterThanEqualsBothWays(vector<FixedBits*>& children,
