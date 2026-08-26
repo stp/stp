@@ -443,6 +443,61 @@ TEST_F(BVEQAbstractionTest, ITEAbstractionUnsatResult)
   EXPECT_EQ(SOLVER_VALID, result);
 }
 
+// Incremental pieces do not necessarily share the ordinary BBTerm memo. The
+// long-lived node registry is the canonical name of a term across that
+// boundary: revisiting an abstractable operation must return the first result
+// vector without filing another record. Per-record result ownership remains a
+// backstop, but the normal path should not pay for duplicate abstractions.
+TEST_F(BVEQAbstractionTest, ReusesTermAbstractionsAcrossMemoBoundaries)
+{
+  mgr.UserFlags.bv_term_abstraction = true;
+  mgr.UserFlags.bv_term_abstraction_ite = true;
+  mgr.UserFlags.bv_term_abstraction_plus = true;
+  mgr.UserFlags.bv_term_abstraction_mult = true;
+  mgr.UserFlags.bv_term_abstraction_compare = false;
+  mgr.UserFlags.bv_eq_abstraction = false;
+  mgr.UserFlags.bv_abstraction_width = 1;
+  mgr.UserFlags.fp_native_domain = true;
+
+  ASTNode condition = makeSymbol("reuse_abs_condition", 0);
+  ASTNode left = makeSymbol("reuse_abs_left", 8);
+  ASTNode right = makeSymbol("reuse_abs_right", 8);
+
+  BBNodeManagerAIG aigMgr;
+  stp::SubstitutionMap sm(&mgr);
+  Simplifier simp(&mgr, &sm);
+  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+
+  const auto expectReused = [&](const ASTNode& term, Kind expectedKind)
+  {
+    const size_t recordsBefore = bb.abstractedTerms().size();
+    const ASTNode firstRoot = factory->CreateNode(EQ, term, left);
+    const ASTNode secondRoot = factory->CreateNode(EQ, term, right);
+
+    bb.BBForm(firstRoot);
+
+    ASSERT_EQ(recordsBefore + 1, bb.abstractedTerms().size());
+    EXPECT_EQ(expectedKind, bb.abstractedTerms().back().opKind);
+    const auto firstRegistration = aigMgr.symbolToBBNode.find(term);
+    ASSERT_TRUE(firstRegistration != aigMgr.symbolToBBNode.end());
+    const BBNodeVec first = firstRegistration->second;
+
+    // A different FP-domain root clears BBTermMemo before this visit, as the
+    // incremental per-piece route does for distinct conjuncts.
+    bb.BBForm(secondRoot);
+
+    const auto secondRegistration = aigMgr.symbolToBBNode.find(term);
+    ASSERT_TRUE(secondRegistration != aigMgr.symbolToBBNode.end());
+    EXPECT_EQ(first, secondRegistration->second);
+    EXPECT_EQ(recordsBefore + 1, bb.abstractedTerms().size());
+  };
+
+  expectReused(factory->CreateTerm(ITE, 8, condition, left, right), ITE);
+  expectReused(factory->CreateTerm(BVPLUS, 8, left, right), BVPLUS);
+  expectReused(factory->CreateTerm(BVMULT, 8, left, right), BVMULT);
+  expectReused(factory->CreateTerm(BVDIV, 8, left, right), BVDIV);
+}
+
 // A candidate is only an assignment of the query once every abstraction in it
 // has been checked against the operands it stands for. Refinement checks them
 // by reading the operands' bits out of one map from node to SAT variables, and
