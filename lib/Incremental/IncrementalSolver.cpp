@@ -63,10 +63,6 @@ IncrementalSolver::encodingEpochStatsForTesting() const
   out.bitBlastedSymbols =
       impl->encoding.nodes().symbolToBBNode.size();
   out.semanticCacheEntries = impl->semanticCacheEntryCount();
-  for (ArrayTransformer::ArrType::const_iterator it =
-           impl->arrayRegistry.reads.begin();
-       it != impl->arrayRegistry.reads.end(); ++it)
-    out.arrayReadRows += it->second.size();
   return out;
 }
 

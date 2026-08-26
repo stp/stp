@@ -87,34 +87,6 @@ ASTNode FloatBlaster::withFormat(STPMgr* bm, const ASTNode& n,
   return out;
 }
 
-// Reads widths only; no SymFPU circuit is involved.
-std::pair<unsigned int, unsigned int>
-FloatBlaster::operandFormat(const ASTVec& children)
-{
-  for (size_t i = 0; i < children.size(); i++)
-  {
-    const unsigned int exp_width = children[i].GetExpWidth();
-    if (exp_width != 0)
-      return std::make_pair(exp_width, children[i].GetSigWidth());
-  }
-
-  // No float operand: ((_ to_fp e s) bits) and ((_ to_fp_unsigned e s) rm bv)
-  // read their source as bits, and name the only format they need in their
-  // own e/s children.
-  return std::make_pair(0u, 0u);
-}
-
-std::pair<unsigned int, unsigned int>
-FloatBlaster::operandFormat(const ASTNode& n)
-{
-  return operandFormat(toASTVec(n.GetChildren()));
-}
-
-ASTNode FloatBlaster::canonicalBits(STPMgr* bm, const ASTNode& f)
-{
-  return canonicalBits(bm, f, f.GetExpWidth(), f.GetSigWidth());
-}
-
 // The format-taking form, for callers that know the format but hold a term
 // that does not carry it -- a plain bitvector standing where a float-sorted
 // value belongs (an array index over a float-indexed array, say).

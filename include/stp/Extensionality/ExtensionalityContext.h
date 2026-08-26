@@ -291,7 +291,6 @@ public:
 
   // How many lemmas instantiateEagerAckermann would conjoin for that
   // inventory: one per active record per index of the record's shape.
-  uint64_t eagerLemmaCount(const IndexInventory& indexesByShape) const;
 
   // True when a record's construction operands quotient their bit patterns
   // (float or RoundingMode cells or indexes), which the eager arm cannot

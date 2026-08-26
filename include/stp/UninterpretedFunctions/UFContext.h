@@ -57,7 +57,6 @@ public:
                                 const SourceSort& codomain,
                                 std::string* error = NULL);
   bool deactivate(const UFDecl* decl, std::string* error = NULL);
-  void deactivateAll();
 
   const UFDecl* lookup(const std::string& name) const;
   const UFDecl* lookupIdentity(const ASTNode& identity) const;
@@ -136,7 +135,6 @@ private:
   uint64_t nextDeclarationId_ = 0;
   std::vector<std::unique_ptr<UFDecl>> declarations_;
   std::map<std::string, const UFDecl*> activeByName_;
-  std::map<uint64_t, const UFDecl*> allById_;
   std::map<ASTNode, const UFDecl*> byIdentity_;
   std::set<const UFDecl*> owned_;
   ASTNodeSet applications_;

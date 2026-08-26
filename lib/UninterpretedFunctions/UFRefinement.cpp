@@ -164,7 +164,6 @@ struct MutableAdapterState
   std::map<ASTNode, UFConcreteValue> handleValues;
   std::string diagnostic;
   uint64_t nextCandidateVersion = 0;
-  uint64_t candidateCheckCount = 0;
   uint64_t emittedLemmaCount = 0;
 
   void clearRound()
@@ -227,7 +226,6 @@ UFCandidateOutcome checkOneCandidate(
   }
 
   const uint64_t version = ++state.nextCandidateVersion;
-  state.candidateCheckCount++;
   CounterExampleCandidate candidate(counterexample, *context, version);
   UFCheckResult result = UFChecker::check(
       state.checkPlan, candidate,
@@ -823,10 +821,6 @@ const std::string& UFBatchAdapter::diagnostic() const
 {
   return impl_->state.diagnostic;
 }
-uint64_t UFBatchAdapter::candidateChecks() const
-{
-  return impl_->state.candidateCheckCount;
-}
 uint64_t UFBatchAdapter::lemmasEmitted() const
 {
   return impl_->state.emittedLemmaCount;
@@ -938,10 +932,6 @@ const LoweredApplicationView* UFPersistentAdapter::applicationView() const
 const std::string& UFPersistentAdapter::diagnostic() const
 {
   return impl_->state.diagnostic;
-}
-uint64_t UFPersistentAdapter::candidateChecks() const
-{
-  return impl_->state.candidateCheckCount;
 }
 uint64_t UFPersistentAdapter::lemmasEmitted() const
 {

@@ -40,24 +40,6 @@ namespace stp
 class FloatBlaster
 {
 public:
-  // The format of an operation's floating-point *operands*, which is what
-  // symfpu needs to unpack them, and which is not always the result's format:
-  // fp.to_ubv yields a bitvector, and to_fp's four-argument form converts
-  // between two formats.
-  //
-  // Read it off the node the input built, before blasting has replaced its
-  // children with bits. Taking it from a blasted operand is what made the
-  // blaster depend on the format being stamped onto those bits -- a stamp
-  // that lands on a hash-consed node the input may still be using as a plain
-  // bitvector, which is a whole family of wrong answers and aborts.
-  //
-  // Follows the same rule as deriveFPFormat: the first child that carries a
-  // format. The others are rounding modes, widths and to_fp's format
-  // arguments, none of which do.
-  static std::pair<unsigned int, unsigned int> operandFormat(const ASTNode& n);
-  static std::pair<unsigned int, unsigned int>
-  operandFormat(const ASTVec& children);
-
   // Return `n` carrying the floating-point format (exp_width, sig_width).
   //
   // A float's format is per-node state, so it is lost whenever a node is
@@ -70,9 +52,8 @@ public:
 
   // The canonical packed bits of a float: pack(unpack(f)). Collapses the NaN
   // payloads, which SMT-LIB equality does not distinguish, while keeping +0
-  // and -0 apart. The format-taking form serves callers holding a term that
-  // does not carry the format itself.
-  static ASTNode canonicalBits(STPMgr* bm, const ASTNode& f);
+  // and -0 apart. Takes the format from the caller, for terms that do not
+  // carry it themselves.
   static ASTNode canonicalBits(STPMgr* bm, const ASTNode& f,
                                unsigned int exp_width, unsigned int sig_width);
 

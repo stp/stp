@@ -197,7 +197,6 @@ public:
     size_t rootEncodings = 0;
     size_t bitBlastedSymbols = 0;
     size_t semanticCacheEntries = 0;
-    size_t arrayReadRows = 0;
   };
 
   // Test-only inspection of the resettable encoding store. A relief test

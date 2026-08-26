@@ -73,7 +73,6 @@ public:
                                           UFConcreteValue& value) const = 0;
   virtual const LoweredApplicationView* applicationView() const = 0;
   virtual const std::string& diagnostic() const = 0;
-  virtual uint64_t candidateChecks() const = 0;
   virtual uint64_t lemmasEmitted() const = 0;
 };
 
@@ -103,7 +102,6 @@ public:
                                   UFConcreteValue& value) const override;
   const LoweredApplicationView* applicationView() const override;
   const std::string& diagnostic() const override;
-  uint64_t candidateChecks() const override;
   uint64_t lemmasEmitted() const override;
 
 private:
@@ -143,7 +141,6 @@ public:
                                   UFConcreteValue& value) const override;
   const LoweredApplicationView* applicationView() const override;
   const std::string& diagnostic() const override;
-  uint64_t candidateChecks() const override;
   uint64_t lemmasEmitted() const override;
 
 private:
