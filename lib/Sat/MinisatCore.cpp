@@ -29,11 +29,6 @@ THE SOFTWARE.
 //#include "utils/System.h"
 //#include "simp/SimpSolver.h"
 
-namespace MiniSat
-{
-}
-using namespace MiniSat;
-
 namespace stp
 {
 
@@ -44,11 +39,6 @@ static void convert(const SATSolver::vec_literals& ps,
 {
   for (int i = 0; i < ps.size(); i++)
     out.push(Minisat::toLit(SATSolver::toInt(ps[i])));
-}
-
-uint8_t MinisatCore::value(uint32_t x) const
-{
-  return Minisat::toInt(s->value(x));
 }
 
 #ifdef STP_MINISAT_HAS_TERMINATOR

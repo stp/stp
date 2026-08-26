@@ -65,8 +65,6 @@ public:
 
   uint8_t modelValue(uint32_t x) const override;
 
-  uint8_t value(uint32_t x) const;
-
   uint32_t newVar() override;
 
   void setVerbosity(int v) override;
@@ -83,7 +81,6 @@ public:
 
   int nClauses() override;
 
-  //bool unitPropagate(const vec_literals& ps);
 
 public:
   bool supportsAssumptions() const override { return true; }

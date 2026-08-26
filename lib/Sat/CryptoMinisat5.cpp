@@ -250,14 +250,6 @@ void CryptoMiniSat5::printStats() const
   // s->printStats();
 }
 
-void CryptoMiniSat5::solveAndDump()
-  {
-     bool t;
-     solve(t);
-     s->open_file_and_dump_irred_clauses("clauses.txt");
-  }
-
-
 
 // Count how many literals/bits get fixed subject to the assumptions. Sets
 // `conflict` when unit propagation refutes them instead, in which case the

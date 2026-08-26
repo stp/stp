@@ -27,14 +27,8 @@ THE SOFTWARE.
 #include "minisat/simp/SimpSolver.h"
 #include <iostream>
 
-namespace MiniSat
-{
-}
-using namespace MiniSat;
-
 namespace stp
 {
-using std::cout;
 
 SimplifyingMinisat::SimplifyingMinisat()
 {

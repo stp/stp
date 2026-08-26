@@ -88,7 +88,6 @@ public:
   uint32_t getFixedCountWithAssumptions(const stp::SATSolver::vec_literals& assumps,  const std::unordered_set<unsigned>& literals, bool& conflict );
 
 
-  void solveAndDump();
 
   bool supportsAssumptions() const override { return true; }
 

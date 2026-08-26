@@ -38,11 +38,6 @@ THE SOFTWARE.
 namespace stp
 {
 
-uint8_t RissCore::value(uint32_t x) const
-{
-  return Riss::toInt(s->value(x));
-}
-
 RissCore::RissCore()
 {
   s = new Riss::Solver;

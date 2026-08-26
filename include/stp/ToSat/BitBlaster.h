@@ -162,12 +162,6 @@ class BitBlaster
 
   /////////// The end of the multiplication stuff..
 
-  void checkFixed(const BBNodeVec& v, const ASTNode& n);
-
-  // AND each bit of vector y with single bit b and return the result.
-  // (used in BBMult)
-  // BBNodeVec BBAndBit(const BBNodeVec& y, ASTNode b);
-
   // Returns BBNodeVec for result - y.  This destroys "result".
   void BBSub(BBNodeVec& result, const BBNodeVec& y,
              BBNodeSet& support);
@@ -252,7 +246,6 @@ class BitBlaster
   bool fpNativeMagnitudeZeroPredicate(const ASTNode& n,
                                       ASTNode& term) const;
   bool fpNativeConstantZeroMagnitude(const ASTNode& n) const;
-  bool fpNativeConstantFinite(const ASTNode& n) const;
   bool fpNativeConstantValue(const ASTNode& n, long double& out) const;
   bool fpNativeConstantBits(const ASTNode& n, std::string& out) const;
   bool fpNativeMaxFiniteValue(const SourceSort& sort, long double& out) const;

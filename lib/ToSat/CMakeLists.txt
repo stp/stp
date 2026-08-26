@@ -21,7 +21,6 @@
 add_library(tosat OBJECT
     BitBlaster.cpp
     ToSATBase.cpp
-    BBNodeManagerAIG.cpp
     ToCNFAIG.cpp
     ToSATAIG.cpp
     BVAbstractionRefiner.cpp

@@ -2878,49 +2878,6 @@ void BitBlaster::mult_BubbleSorterWithBounds(
   current.push_back(resultNode);
 }
 
-// If a bit has a fixed value, then it should equal BBTrue or BBFalse in the
-// input vectors.
-void BitBlaster::checkFixed(const BBNodeVec& v,
-                            const ASTNode& n)
-{
-  if (cb == NULL)
-  {
-    return;
-  }
-
-  if (cb->isUnsatisfiable())
-  {
-    return;
-  }
-
-  if (cb->fixedMap->map->find(n) != cb->fixedMap->map->end())
-  {
-    FixedBits* b = cb->fixedMap->map->find(n)->second;
-    for (unsigned i = 0; i < b->getWidth(); i++)
-    {
-      if (b->isFixed(i))
-      {
-        if (b->getValue(i))
-        {
-          assert(v[i] == BBTrue);
-        }
-        else
-        {
-          if (v[i] != BBFalse)
-          {
-            cerr << *b;
-            cerr << i << endl;
-            cerr << n;
-            cerr << (v[i] == BBTrue) << endl;
-          }
-
-          assert(v[i] == BBFalse);
-        }
-      }
-    }
-  }
-}
-
 // If it's not booth encoded, and the column sum is zero,
 // then set that all the partial products must be zero.
 // For this to do anything constant bit propagation must be
@@ -4292,12 +4249,6 @@ bool BitBlaster::fpNativeConstantZeroMagnitude(const ASTNode& n) const
     if (CONSTANTBV::BitVector_bit_test(n.GetBVConst(), i))
       return false;
   return true;
-}
-
-bool BitBlaster::fpNativeConstantFinite(const ASTNode& n) const
-{
-  long double ignored = 0.0L;
-  return fpNativeConstantValue(n, ignored);
 }
 
 bool BitBlaster::fpNativeConstantValue(const ASTNode& n,
