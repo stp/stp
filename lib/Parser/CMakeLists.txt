@@ -49,7 +49,11 @@ foreach(_file ${TOLEX})
 
     COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.c ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.cpp
 
-        COMMAND ${FLEX_EXECUTABLE} ${FLEX_COMPATIBILITY_ARGS} -Ce -8 --header-file=${CMAKE_CURRENT_BINARY_DIR}/${_file}_flex_header.h -o${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp --prefix=${_file} ${CMAKE_CURRENT_SOURCE_DIR}/${_file}.lex
+        # -Cf, not -Ce: an uncompressed scanner table indexes one array per
+        # character, where the compressed one walks equivalence-class and
+        # default-state tables per character. The tables are larger and the
+        # tokens are identical.
+        COMMAND ${FLEX_EXECUTABLE} ${FLEX_COMPATIBILITY_ARGS} -Cf -8 --header-file=${CMAKE_CURRENT_BINARY_DIR}/${_file}_flex_header.h -o${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp --prefix=${_file} ${CMAKE_CURRENT_SOURCE_DIR}/${_file}.lex
 
         DEPENDS ${_file}.lex ${_file}.y ASTKind_header
     )
