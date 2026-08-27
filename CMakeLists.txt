@@ -424,7 +424,8 @@ if(NOT MSVC)
 
         set(CMAKE_EXE_LINKER_FLAGS " ${CMAKE_EXE_LINKER_FLAGS} -Wl,--discard-all -Wl,--build-id=sha1")
     endif()
-    # add_cxx_flag_if_supported("-flto") # slow compile and not enough benefits
+    # LTO is not decided here any more; see ENABLE_LTO below, which has to set
+    # it late enough that cmake/deps-helper.cmake can forward it.
     set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 endif()
 
@@ -453,6 +454,255 @@ if(USE_POPCNT)
   if(HAVE_FLAG_-mpopcnt)
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -mpopcnt")
   endif()
+endif()
+
+# -----------------------------------------------------------------------------
+# Link-time optimisation
+# -----------------------------------------------------------------------------
+# Off by default, and set through CMAKE_<LANG>_FLAGS rather than with
+# add_compile_options() or CMAKE_INTERPROCEDURAL_OPTIMIZATION, for one reason:
+# that string is what cmake/deps-helper.cmake hands to every dependency this
+# build compiles.  ABC and CaDiCaL are where most of a hard query's time goes
+# -- CaDiCaL's propagate() alone is a quarter of the instructions retired on a
+# ten-second QF_BV query -- so an optimisation that stops at libstp's edge
+# reaches the smaller half of the program.
+#
+# Measured over 726 SMT-LIB queries against the same compiler's -O3 build, LTO
+# on its own is worth about 1%: within a percent of nothing on wall time, and
+# -0.5% on instructions retired.  It earns its place next to PGO rather than
+# instead of it -- see the PGO block below -- because a profile is what tells
+# LTO which of the call sites it has newly made visible are worth inlining.
+option(ENABLE_LTO "Build with link-time optimisation" OFF)
+add_feature_info(LTO ENABLE_LTO
+                 "Optimises across translation units, and across STP and the dependencies it builds")
+
+# A flag that has to reach C as well as C++.  add_cxx_flag_if_supported() only
+# does the latter, and the rest of this file works around that one flag at a
+# time (see USE_POPCNT above); LTO and PGO need it a dozen times between them.
+#
+# Set rather than probed: which of these flags to use is already decided per
+# compiler below, and several of them carry a path, which
+# check_cxx_compiler_flag() would turn into a cache variable name with slashes
+# in it.  What is worth probing -- that the toolchain can actually link LTO
+# bytecode -- is probed on its own, below.
+macro(add_c_cxx_flag flagname)
+  string(APPEND CMAKE_C_FLAGS " ${flagname}")
+  string(APPEND CMAKE_CXX_FLAGS " ${flagname}")
+endmacro()
+
+if(ENABLE_LTO)
+  # The C and the C++ compiler have to be the same one.  Without LTO they only
+  # have to agree on an ABI, and a machine whose `cc` and `g++` are different
+  # GCC releases -- which is what a distribution that ships several of them
+  # looks like -- builds STP quite happily.  With LTO they exchange bytecode,
+  # and bytecode has a version:
+  #
+  #   lto1: fatal error: bytecode stream in file 'libabc-pic.a' generated with
+  #   LTO version 15.1 instead of the expected 11.3
+  #
+  # at the end of the build, naming a dependency rather than the mismatch.
+  # Said here instead, before anything is compiled.
+  if(NOT CMAKE_C_COMPILER_ID STREQUAL CMAKE_CXX_COMPILER_ID
+     OR NOT CMAKE_C_COMPILER_VERSION VERSION_EQUAL CMAKE_CXX_COMPILER_VERSION)
+    message(FATAL_ERROR
+            "ENABLE_LTO needs one compiler, and this is two: C is "
+            "${CMAKE_C_COMPILER_ID} ${CMAKE_C_COMPILER_VERSION} "
+            "(${CMAKE_C_COMPILER}), C++ is ${CMAKE_CXX_COMPILER_ID} "
+            "${CMAKE_CXX_COMPILER_VERSION} (${CMAKE_CXX_COMPILER}). They "
+            "exchange bytecode under LTO and will not agree on its version. "
+            "Name both, as in CC=gcc-13 CXX=g++-13, or build without --lto.")
+  endif()
+
+  if(MSVC)
+    add_compile_options(/GL)
+    foreach(_stp_lto_linker EXE SHARED STATIC MODULE)
+      string(APPEND CMAKE_${_stp_lto_linker}_LINKER_FLAGS " /LTCG")
+    endforeach()
+  else()
+    # The two compilers want to be told different things.  Clang has two
+    # schemes, and ThinLTO is the one to ask for: measured, it lands within
+    # 0.3% of its full LTO, for a fraction of the link time and the link-time
+    # memory.  GCC has one scheme, and =auto is how it is told to parallelise
+    # it across this machine; -fno-fat-lto-objects is what stops it compiling
+    # every object twice, once to bytecode and once to machine code that is
+    # then thrown away at link time.
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+      set(_stp_lto_flags "-flto=thin")
+    else()
+      set(_stp_lto_flags "-flto=auto -fno-fat-lto-objects")
+    endif()
+
+    # Probed through CMAKE_REQUIRED_FLAGS rather than with
+    # add_cxx_flag_if_supported(), because an LTO flag has to reach the link
+    # and not just the compile.  check_cxx_compiler_flag() puts it on the
+    # compile line alone, so the try_compile emits an object of bytecode and
+    # then links it with a plain driver invocation:
+    #
+    #   src.cxx.o: file not recognized: file format not recognized
+    #
+    # which reports a flag that works perfectly well as unsupported -- and
+    # then, silently, ENABLE_LTO builds without LTO in it.  Which is what this
+    # used to do.
+    include(CheckCXXSourceCompiles)
+    set(_stp_lto_saved_required "${CMAKE_REQUIRED_FLAGS}")
+    string(APPEND CMAKE_REQUIRED_FLAGS " ${_stp_lto_flags}")
+    check_cxx_source_compiles("int main() { return 0; }" STP_LTO_WORKS)
+    set(CMAKE_REQUIRED_FLAGS "${_stp_lto_saved_required}")
+    unset(_stp_lto_saved_required)
+    if(NOT STP_LTO_WORKS)
+      # Fatal rather than a quiet fall back to a non-LTO build: an
+      # optimisation that was asked for and did not happen is worth stopping
+      # for, and the two-pass PGO build below would otherwise spend a training
+      # run producing a binary that is not the one being measured.
+      message(FATAL_ERROR
+              "ENABLE_LTO is on, but ${CMAKE_CXX_COMPILER_ID} cannot compile "
+              "and link a program with '${_stp_lto_flags}'. The usual cause "
+              "is a linker with no plugin for this compiler's bytecode; lld "
+              "or mold will do for either, and GNU ld needs the plugin its "
+              "distribution installs in bfd-plugins.")
+    endif()
+    add_c_cxx_flag("${_stp_lto_flags}")
+
+    # Which linker finishes an LTO build is not only a build-time question.
+    # Measured over the same queries, with the same objects and a bytecode-for-
+    # bytecode identical .text, clang's ThinLTO through lld came out about 2%
+    # ahead of GNU ld and of mold on the heaviest ones -- the same code, laid
+    # out differently.  Said rather than done: which linker to use belongs to
+    # whoever is packaging this, and lld is not installed everywhere.
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang"
+       AND NOT CMAKE_CXX_FLAGS MATCHES "-fuse-ld="
+       AND NOT CMAKE_EXE_LINKER_FLAGS MATCHES "-fuse-ld="
+       AND NOT CMAKE_LINKER_TYPE)
+      find_program(STP_LTO_LLD NAMES ld.lld)
+      mark_as_advanced(STP_LTO_LLD)
+      if(STP_LTO_LLD)
+        message(STATUS
+                "ENABLE_LTO: ${STP_LTO_LLD} is installed, and clang's ThinLTO "
+                "through it measured about 2% faster on hard queries than "
+                "through the default linker. To use it, add -fuse-ld=lld to "
+                "CMAKE_EXE_LINKER_FLAGS and CMAKE_SHARED_LINKER_FLAGS -- or, "
+                "on CMake 3.29 or newer, -DCMAKE_LINKER_TYPE=LLD.")
+      endif()
+    endif()
+
+    # ar, nm and ranlib have to understand the compiler's IR to index an
+    # archive of it.  Binutils can, through the plugin in its bfd-plugins
+    # directory, but only if the distribution installed one there -- and STP
+    # builds several static dependencies, so an archive it cannot index is a
+    # link failure at the end of a long build.  The compiler ships wrappers
+    # that pass the plugin explicitly; prefer those when they exist.
+    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+      set(_stp_lto_tool_prefix llvm)
+    else()
+      set(_stp_lto_tool_prefix gcc)
+    endif()
+    foreach(_stp_lto_tool AR NM RANLIB)
+      string(TOLOWER "${_stp_lto_tool}" _stp_lto_tool_lc)
+      find_program(STP_LTO_${_stp_lto_tool}
+                   NAMES "${_stp_lto_tool_prefix}-${_stp_lto_tool_lc}")
+      mark_as_advanced(STP_LTO_${_stp_lto_tool})
+      if(STP_LTO_${_stp_lto_tool})
+        set(CMAKE_${_stp_lto_tool} "${STP_LTO_${_stp_lto_tool}}")
+      endif()
+    endforeach()
+  endif()
+  message(STATUS "Link-time optimisation enabled")
+endif()
+
+# -----------------------------------------------------------------------------
+# Profile-guided optimisation
+# -----------------------------------------------------------------------------
+# A two-pass build: -DPGO=generate produces a binary that writes a profile as
+# it runs, something is run through it, and -DPGO=use compiles again with what
+# that recorded.  scripts/pgo-build.sh drives the whole cycle; this is the part
+# of it the build system owns.
+#
+# Worth, over the same 726 SMT-LIB queries and trained on nothing but
+# tests/query-files -- so on the test suite that comes with the source, not on
+# the queries it was measured against:
+#
+#                                clang 21   gcc 13
+#   PGO alone                       -3.7%    -1.5%
+#   PGO with ENABLE_LTO             -5.4%    -3.8%
+#
+# (geometric mean of per-query wall time, against the same compiler at -O3.)
+# Instructions retired fall by rather more than that -- 6.2% for gcc with both
+# -- which is the honest shape of the result: PGO removes work, and what is
+# left is increasingly waiting on memory rather than executing.
+#
+# Two properties of that number are worth keeping in mind before changing what
+# the training run does.  The first is that a bigger corpus does not buy more:
+# trained on a disjoint sample of 443 SMT-LIB queries, on 60 deliberately hard
+# ones, or on both corpora together, the same build lands within half a percent
+# either way, and which is ahead changes with the compiler.  The profile is
+# being used to decide inlining and code layout, and the small queries in
+# tests/query-files exercise the same code as the large ones, just less of it.
+# The second is that GCC needs -fprofile-partial-training to get there.  Without
+# it, code the training run never reached is optimised for size, and since
+# tests/query-files leaves most of CaDiCaL's search cold that is most of what a
+# hard query then runs.
+set(PGO "off" CACHE STRING
+    "Profile-guided optimisation: off, generate (instrument), or use (optimise)")
+set_property(CACHE PGO PROPERTY STRINGS off generate use)
+set(PGO_DIR "${PROJECT_BINARY_DIR}/pgo-data" CACHE PATH
+    "Where PGO=generate writes profiles and PGO=use reads them")
+add_feature_info(PGO "NOT PGO STREQUAL off" "Profile-guided optimisation (${PGO})")
+
+if(NOT PGO STREQUAL "off")
+  if(MSVC)
+    message(FATAL_ERROR "PGO is not wired up for MSVC; configure with -DPGO=off")
+  endif()
+  if(NOT PGO MATCHES "^(generate|use)$")
+    message(FATAL_ERROR "PGO is '${PGO}'; it has to be off, generate or use")
+  endif()
+
+  # GCC names each .gcda after the absolute path of the object file it came
+  # from, so a profile generated in one build directory is invisible from
+  # another.  Both passes therefore have to run in the same build directory --
+  # which is what scripts/pgo-build.sh does, and what anyone driving the two
+  # passes by hand has to do as well.
+  if(PGO STREQUAL "generate")
+    add_c_cxx_flag("-fprofile-generate=${PGO_DIR}")
+    if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+      # STP is single-threaded, but the counters live in libstp, and a caller
+      # that is not gets counter updates from several threads at once.
+      add_c_cxx_flag("-fprofile-update=prefer-atomic")
+    endif()
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    # Clang reads one merged file rather than a directory of raw counters;
+    # llvm-profdata produces it, and scripts/pgo-build.sh puts it here.
+    set(_stp_pgo_profdata "${PGO_DIR}/stp.profdata")
+    if(NOT EXISTS "${_stp_pgo_profdata}")
+      message(FATAL_ERROR
+              "PGO=use, but there is no profile at ${_stp_pgo_profdata}. Run "
+              "the generate pass first, or use scripts/pgo-build.sh, "
+              "runs both.")
+    endif()
+    add_c_cxx_flag("-fprofile-use=${_stp_pgo_profdata}")
+    # A profile is a snapshot of a source tree that has since been edited, and
+    # it is normal for some of it not to line up any more.  Say so once, here,
+    # rather than once per translation unit for the rest of the build.
+    add_c_cxx_flag("-Wno-profile-instr-out-of-date")
+    add_c_cxx_flag("-Wno-profile-instr-unprofiled")
+  else()
+    if(NOT EXISTS "${PGO_DIR}")
+      message(FATAL_ERROR
+              "PGO=use, but there is no profile in ${PGO_DIR}. Run the "
+              "generate pass first, or use scripts/pgo-build.sh, which "
+              "both -- from this same build directory, which is where GCC "
+              "looks for the counters it wrote.")
+    endif()
+    add_c_cxx_flag("-fprofile-use=${PGO_DIR}")
+    # Counters merged from many processes do not always add up to a consistent
+    # flow graph; without this, GCC discards such a function's profile rather
+    # than repairing it.
+    add_c_cxx_flag("-fprofile-correction")
+    # See the note above: without this, whatever the training run did not reach
+    # is optimised for size.
+    add_c_cxx_flag("-fprofile-partial-training")
+    add_c_cxx_flag("-Wno-missing-profile")
+  endif()
+  message(STATUS "Profile-guided optimisation: ${PGO} (${PGO_DIR})")
 endif()
 
 option(COVERAGE "Build with coverage check" OFF)

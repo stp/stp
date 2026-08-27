@@ -49,6 +49,11 @@ Features (disable with --no-<name>):
   --werror            treat compiler warnings as errors
   --sanitize          build with Clang's sanitizers
   --coverage          build with coverage instrumentation
+  --lto               build with link-time optimisation
+  --pgo=STEP          profile-guided optimisation: generate or use. Both steps
+                      have to run in the same build directory.
+                      scripts/pgo-build.sh runs them in order, training on
+                      tests/query-files in between
   --tune-native       build with -mtune=native
   --allocator=NAME    mimalloc (default), tcmalloc or system
 
@@ -90,7 +95,9 @@ riss_dir=default
 allocator=default
 assertions=default
 coverage=default
+lto=default
 manpage=default
+pgo=default
 python_bindings=default
 sanitize=default
 static=default
@@ -156,6 +163,17 @@ do
     --coverage) coverage=ON;;
     --no-coverage) coverage=OFF;;
 
+    --lto) lto=ON;;
+    --no-lto) lto=OFF;;
+
+    --pgo) die "missing argument to $1 (try -h)";;
+    --pgo=*) pgo=${1##*=}
+        case $pgo in
+          generate|use) ;;
+          *) die "--pgo takes generate or use, not '$pgo'";;
+        esac
+        ;;
+
     --manpage) manpage=ON;;
     --no-manpage) manpage=OFF;;
 
@@ -211,6 +229,8 @@ add RISS_DIR               "$riss_dir"
 add STP_ALLOCATOR          "$allocator"
 add ENABLE_ASSERTIONS      "$assertions"
 add COVERAGE               "$coverage"
+add ENABLE_LTO             "$lto"
+add PGO                    "$pgo"
 add BUILD_MANPAGE          "$manpage"
 add ENABLE_PYTHON_INTERFACE "$python_bindings"
 add SANITIZE               "$sanitize"

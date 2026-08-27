@@ -134,6 +134,14 @@ set(STP_EP_COMMON_CMAKE_ARGS
     "-DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS} ${STP_EP_NO_WARNINGS} ${STP_EP_INHERITED_FLAGS}"
     -DCMAKE_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER}
     -DCMAKE_CXX_COMPILER_LAUNCHER=${CMAKE_CXX_COMPILER_LAUNCHER}
+    # The archiver goes with the compiler, not with the machine. ENABLE_LTO
+    # switches these to the compiler's plugin-aware wrappers, because an
+    # archive of IR cannot be indexed by a plain ar -- and every dependency
+    # here is a static archive, so a sub-build left holding the plain one is a
+    # link failure at the end of the build rather than at the start.
+    -DCMAKE_AR=${CMAKE_AR}
+    -DCMAKE_NM=${CMAKE_NM}
+    -DCMAKE_RANLIB=${CMAKE_RANLIB}
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON
     -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
     -DCMAKE_OSX_SYSROOT=${CMAKE_OSX_SYSROOT}
