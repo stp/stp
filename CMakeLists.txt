@@ -185,6 +185,33 @@ if (NOT BUILD_SHARED_LIBS)
             #message("Original (${VAR_TO_MODIFY}) is ${${VAR_TO_MODIFY}} replacement is ${replacement}")
             set(${VAR_TO_MODIFY} "${replacement}" CACHE STRING "Default flags for ${build_config} configuration" FORCE)
         endforeach()
+
+        # -static needs a static libc, libstdc++ and libm to link against, and
+        # a machine can have the compiler without having those: they are a
+        # separate package almost everywhere, and one several distributions no
+        # longer ship at all. Ask now, because the alternative is asking at the
+        # end -- every object compiled, the dependencies built, and then
+        #
+        #   /usr/bin/ld: cannot find -lc: No such file or directory
+        #
+        # from the link of the last target in the build.
+        # Nothing is added to the probe: CMAKE_EXE_LINKER_FLAGS was given the
+        # -static two lines up and try_compile() links with it, which is what
+        # every other probe in this file was tripping over. So this one asks
+        # the question in exactly the form the real link will.
+        include(CheckCXXSourceCompiles)
+        check_cxx_source_compiles(
+            "#include <string>\nint main() { return (int)std::string(\"x\").size(); }"
+            STP_STATIC_LINK_WORKS)
+        if(NOT STP_STATIC_LINK_WORKS)
+            message(FATAL_ERROR
+                    "STATICCOMPILE is on, but ${CMAKE_CXX_COMPILER} cannot link "
+                    "a program with -static here. The usual cause is that the "
+                    "static C and C++ libraries are not installed -- glibc-static "
+                    "and libstdc++-devel-static on Fedora and openSUSE, "
+                    "libc6-dev and libstdc++-*-dev on Debian and Ubuntu. "
+                    "CMakeFiles/CMakeConfigureLog.yaml has what the linker said.")
+        endif()
     endif()
 else ()
     # use, i.e. don't skip the full RPATH for the build tree
@@ -344,8 +371,46 @@ endif()
 include(CheckCXXCompilerFlag)
 include(CheckLinkerFlag)
 
+# CMake's probes -- check_cxx_compiler_flag(), check_include_file(),
+# check_type_size() -- compile a program and then link it, and report the whole
+# thing as unsupported if either half fails.  Most of what STP asks them has
+# nothing to do with linking, and one thing STP does to itself makes the link
+# fail for reasons that have nothing to do with the question being asked:
+# STATICCOMPILE puts -static on every link, and on a machine with no static
+# libc that is
+#
+#   /usr/bin/ld: cannot find -lc: No such file or directory
+#
+# for every probe in the file.  Nothing announces it.  The build then carries
+# on having concluded that this compiler supports no warning flags, no
+# -fvisibility=hidden and no -mpopcnt, that unistd.h does not exist -- which
+# makes flex emit a scanner calling an isatty() it has not declared -- and that
+# a pointer is not eight bytes, which selects ABC's 32-bit ABI on a 64-bit host
+# and ends the build inside ABC's headers a few minutes later.
+#
+# So probes that only need to compile are told to stop at a static library and
+# never reach the linker.  Probes that really are about linking -- the
+# check_linker_flag() below, and the LTO check further down, which exists
+# precisely because a compile-only probe answered the wrong question -- are
+# deliberately left alone.
+#
+# Not nestable: one saved value, one restore.
+macro(stp_probe_without_linking)
+  set(_stp_saved_try_compile_target_type "${CMAKE_TRY_COMPILE_TARGET_TYPE}")
+  set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+endmacro()
+
+# Restored rather than unset: a toolchain file may have set it, for the same
+# reason this does.
+macro(stp_probe_with_linking_again)
+  set(CMAKE_TRY_COMPILE_TARGET_TYPE "${_stp_saved_try_compile_target_type}")
+  unset(_stp_saved_try_compile_target_type)
+endmacro()
+
 macro(add_cxx_flag_if_supported flagname)
+  stp_probe_without_linking()
   check_cxx_compiler_flag("${flagname}" HAVE_FLAG_${flagname})
+  stp_probe_with_linking_again()
 
   if(HAVE_FLAG_${flagname})
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${flagname}")
@@ -838,8 +903,33 @@ include_directories(SYSTEM ${unordereddense_SOURCE_DIR}/include)
 
 # abc related word size check
 include(CheckTypeSize)
-# Check size of void pointer (void*)
+
+# A word size is a property of the compiler, not of how the final binary will
+# be linked; see stp_probe_without_linking() above for what happens when these
+# are allowed to depend on a link that cannot be made.
+stp_probe_without_linking()
 CHECK_TYPE_SIZE("void*" SIZEOF_VOID_P)
+CHECK_TYPE_SIZE("long" SIZEOF_LONG)
+CHECK_TYPE_SIZE("int" SIZEOF_INT)
+stp_probe_with_linking_again()
+
+# And if one of them still does not come back, stop here.  Everything below is
+# derived from these three, and a wrong answer is not a configuration error
+# that reports itself: it is an ABI disagreement between STP's translation
+# units and ABC's, which surfaces as a compile error inside ABC's headers if
+# you are lucky, and as a truncated tagged pointer in CNF generation if you
+# are not.  Guessing is worse than stopping.
+foreach(_stp_size SIZEOF_VOID_P SIZEOF_LONG SIZEOF_INT)
+    if(NOT "${${_stp_size}}" MATCHES "^[0-9]+$")
+        message(FATAL_ERROR
+                "check_type_size() could not determine ${_stp_size}, and ABC's "
+                "ABI is selected from it -- so there is nothing safe to assume "
+                "here. The probe's own output is in "
+                "${PROJECT_BINARY_DIR}/CMakeFiles/CMakeConfigureLog.yaml.")
+    endif()
+endforeach()
+unset(_stp_size)
+
 # LIN/LIN64 select ABC's Linux code paths, and NT64 the 64-bit Windows
 # ones. (abc_global.h only detects the platform by itself when
 # ABC_USE_STDINT_H is set; without NT64 its fallback ladder sees MSVC's
@@ -872,13 +962,7 @@ else()
     list(APPEND ABC_ABI_DEFINITIONS -DWIN32_NO_DLL)
 endif()
 list(APPEND ABC_ABI_DEFINITIONS -DSIZEOF_VOID_P=${SIZEOF_VOID_P})
-
-# Check size of long
-CHECK_TYPE_SIZE("long" SIZEOF_LONG)
 list(APPEND ABC_ABI_DEFINITIONS -DSIZEOF_LONG=${SIZEOF_LONG})
-
-# Check size of int
-CHECK_TYPE_SIZE("int" SIZEOF_INT)
 list(APPEND ABC_ABI_DEFINITIONS -DSIZEOF_INT=${SIZEOF_INT})
 
 # STP's own sources need them too, for the reason above.
