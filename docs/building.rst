@@ -316,6 +316,14 @@ These apply to all generators:
 -  ``USE_MINISAT`` -- build the MiniSat backend
 -  ``USE_RISS`` -- build the Riss backend
 -  ``TUNE_NATIVE`` -- build with ``-mtune=native``
+-  ``ENABLE_LTO`` -- optimise across translation units, and across STP
+   and the dependencies it compiles. Off by default. On its own it is
+   worth about a percent; most of its value is in what it lets a profile
+   do, and the two are covered together in `Link-time and
+   profile-guided optimisation`_
+-  ``PGO`` and ``PGO_DIR`` -- ``generate`` or ``use``, and where the
+   profile lives. ``scripts/pgo-build.sh`` runs both passes with a
+   training run in between; the same section has the detail
 -  ``WERROR`` -- treat compiler warnings as errors
 -  ``BUILD_MANPAGE`` -- build and install the ``stp(1)`` manpage, which
    needs help2man. Three-valued: ``ON`` requires help2man and fails
@@ -363,6 +371,135 @@ lets you pick the generator; run ``ccmake``, which is the same idea in an
 ncurses terminal interface; or pass ``-D<VARIABLE>=<VALUE>`` to ``cmake``,
 which is best kept for scripts. An already-configured build can be
 changed with ``make edit_cache``, which reconfigures and regenerates.
+
+Link-time and profile-guided optimisation
+-----------------------------------------
+
+Two optimisations that are off by default and want to be turned on
+together. Neither changes what STP computes; both change how long it
+takes to compute it.
+
+``-DENABLE_LTO=ON`` optimises across translation units. It reaches the
+dependencies as well as STP itself, which is the point: most of a hard
+query's time is not spent in ``libstp`` at all. On a ten-second QF_BV
+query, ``CaDiCaL::Internal::propagate()`` alone is a quarter of the
+instructions retired, and CaDiCaL as a whole is most of the rest.
+
+``-DPGO=generate`` then ``-DPGO=use`` compiles twice, with a run of the
+first build in between to record which branches are taken and which code
+is hot. ``scripts/pgo-build.sh`` does all of it -- configure, build,
+train, configure, build:
+
+.. code-block:: bash
+
+   CC=clang CXX=clang++ ./scripts/pgo-build.sh release --lto --ninja --auto-download
+
+Options it does not recognise go to ``configure.sh``, so the build is
+configured as usual. ``--train=PATH`` names what to train on, and may be
+repeated; it defaults to ``tests/query-files``, the query suite in the
+source tree.
+
+What it is worth
+~~~~~~~~~~~~~~~~
+
+Measured over 726 SMT-LIB queries (QF_BV, QF_ABV, QF_FP, QF_BVFP,
+QF_ABVFP; 20-core Xeon, each configuration run interleaved with the
+others on a pinned core, best of three), against the same compiler's
+plain ``release`` build:
+
+=====================  ==============  ==============
+Configuration          clang 21        gcc 13
+=====================  ==============  ==============
+``--lto``              -1.0%           -1.0%
+``--pgo``              -3.7%           -1.5%
+both                   -5.4%           -3.8%
+=====================  ==============  ==============
+
+as the geometric mean of the per-query change, which weights a
+millisecond query and a ten-second one alike. Summed instead, so that the
+hard queries dominate, clang with both is 7% faster and gcc with both is
+1% faster: gcc's profile pays off on the front end, where a small query
+spends its time, and hardly at all inside CaDiCaL's search, where a large
+one does.
+
+The split is sharper still on queries that are entirely CaDiCaL. Over 57
+of them taking 12 to 123 seconds each, clang with both keeps its 4% --
+4.2% on the geometric mean, 4.4% at the median query -- and gcc with both
+has nothing left, at 0.1% on the median query.
+
+Instructions retired fall by more than the time does -- 6.2% for gcc with
+both, over the same queries under callgrind. That gap is the honest shape
+of the result: PGO removes work, and what remains is increasingly waiting
+on memory rather than executing.
+
+Training on tests/query-files
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The default training set is the test suite, which takes about fifteen
+seconds to run and needs nothing downloaded. It is not a compromise.
+Trained instead on a disjoint sample of 443 SMT-LIB queries, on 60
+deliberately hard ones, or on both corpora together, the same build lands
+within half a percent of it either way -- and which of them is ahead
+changes with the compiler and with the run. The profile is being used to
+decide inlining and code layout, and a small query exercises the same
+code as a large one, just less of it.
+
+Two things do matter more than the training set:
+
+-  **GCC needs** ``-fprofile-partial-training``, which the build passes
+   for it. Without it, code the training run never reached is optimised
+   for size, and a run of ``tests/query-files`` leaves most of CaDiCaL's
+   search cold. Turning it off cost 0.8% of the 3.8% above.
+-  **Clang wants the IR instrumentation**, ``-fprofile-generate``, which
+   is what the build uses -- not the frontend's
+   ``-fprofile-instr-generate``, which measured 1.5% worse here.
+
+Which linker
+~~~~~~~~~~~~
+
+With clang, it makes a difference of its own. The same objects, a
+bytecode-for-bytecode identical ``.text`` and an identical exported
+symbol set, linked three ways: through lld the heaviest queries ran about
+2% faster than through GNU ld or mold -- 2% at the median of the queries
+over three seconds, up to 15% on individual ones. That is code layout,
+and it is the one part of this that nothing in the source tree controls.
+
+lld is also required rather than merely preferable for the ``generate``
+pass. Clang finds its counters through ``__start___llvm_prf_*`` symbols
+that the linker synthesises; under ThinLTO the sections they refer to do
+not exist until the LTO backend has run, and GNU ld decides the symbols
+before that, so a target whose inputs are all bytecode -- which, with
+``--testing``, several of the unit tests are -- fails to link:
+
+.. code-block:: text
+
+   undefined reference to `__start___llvm_prf_names'
+
+``pgo-build.sh`` therefore links with lld when the compiler is clang and
+``ld.lld`` is installed, unless a linker was named on its command line.
+
+Caveats
+~~~~~~~
+
+-  Both passes have to use the same build directory. GCC names each
+   ``.gcda`` after the absolute path of the object file it came from, so
+   a profile collected in one build directory is invisible from another.
+   ``pgo-build.sh`` reconfigures in place for exactly this reason.
+-  The dependencies are rebuilt between the passes, since they are
+   compiled with the profile too. ``pgo-build.sh`` therefore keeps them
+   in the build directory and refuses ``--dep-dir``.
+-  ``ENABLE_LTO`` requires that ``CC`` and ``CXX`` be the same compiler
+   at the same version. Without LTO a mismatched pair -- which is what a
+   machine whose ``cc`` is gcc 15 and whose ``g++`` is gcc 11 has --
+   builds STP quite happily; with it they exchange bytecode, and the
+   build fails at the end with ``bytecode stream ... generated with LTO
+   version 15.1 instead of the expected 11.3``. Configuration checks for
+   this and stops first.
+-  A profile is not portable and not reproducible: it belongs to one
+   source tree and one compiler version, and two training runs of the
+   same build do not produce byte-identical binaries. For a build that
+   has to be reproducible, leave ``PGO`` off. ``ENABLE_LTO`` on its own
+   is deterministic.
 
 Working across several worktrees
 --------------------------------
