@@ -23,7 +23,13 @@ include(CheckIncludeFile)
 set(SOURCES LetMgr.cpp)
 set(TOLEX cvc smt2 smt)
 
+# Whether the header exists is a question for the preprocessor, so the probe is
+# kept away from the linker -- see stp_probe_without_linking() in the top-level
+# CMakeLists.txt. Answered wrongly, flex is handed --nounistd and emits a
+# scanner that calls isatty() without declaring it.
+stp_probe_without_linking()
 check_include_file("unistd.h" HAVE_UNISTD_H)
+stp_probe_with_linking_again()
 if (HAVE_UNISTD_H)
   set(FLEX_COMPATIBILITY_ARGS "")
 else()
