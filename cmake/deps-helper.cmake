@@ -35,7 +35,8 @@
 #
 # Rung 1 is what makes a shared dependency directory work: the second build
 # directory pointed at one finds the artefacts there and never creates an
-# ExternalProject at all.
+# ExternalProject at all. It is also the rung STP_DEPS_LOCAL_ONLY removes, for
+# a build that wants to depend on nothing it did not produce itself.
 
 include_guard(GLOBAL)
 
@@ -45,6 +46,21 @@ option(ENABLE_AUTO_DOWNLOAD
        "Download and build missing dependencies instead of failing" OFF)
 add_feature_info(AutoDownload ENABLE_AUTO_DOWNLOAD
                  "Downloads and builds dependencies that are not installed")
+
+# Rung 1 skipped: an installed ABC, CaDiCaL, CLI11, LibBF, MiniSat or SymFPU is
+# not looked for, and each is built into STP_DEP_DIR instead. Pair it with
+# ENABLE_AUTO_DOWNLOAD on a cold build directory, or there is nothing left for
+# the ladder to reach and configuration stops at rung 4.
+#
+# Rung 0 is deliberately untouched: -DABC_DIR and friends are an answer rather
+# than a search, and a caller who names a copy has said which one to use.
+# CryptoMiniSat, which has no rung 3 because STP cannot build it, is therefore
+# the one dependency this turns off rather than relocates -- see
+# cmake/FindCryptoMiniSat.cmake.
+option(STP_DEPS_LOCAL_ONLY
+       "Never satisfy a dependency from outside this build directory" OFF)
+add_feature_info(LocalDeps STP_DEPS_LOCAL_ONLY
+                 "Ignores installed dependencies and builds them here instead")
 
 # -----------------------------------------------------------------------------
 # Where dependencies are built, and where they are installed
@@ -73,6 +89,22 @@ file(MAKE_DIRECTORY "${STP_DEP_DIR}/include")
 # a system copy. deps/install -- where scripts/deps/*.sh installs -- is
 # appended by the top-level CMakeLists and stays behind it.
 list(PREPEND CMAKE_PREFIX_PATH "${STP_DEP_DIR}")
+
+# Each Find module skips its own rung 1 under STP_DEPS_LOCAL_ONLY; what is left
+# to do here is the prefix the top-level CMakeLists appended, which is in the
+# source tree rather than this build directory and so is not somewhere this
+# build may answer itself from either. STP_DEP_DIR stays on the path: it is
+# where the ExternalProjects install, and it is inside the build directory
+# unless the caller moved it.
+#
+# Nothing else comes off, and CMAKE_FIND_USE_CMAKE_SYSTEM_PATH stays on. The
+# same search also resolves flex, bison, zlib, GMP and python3, none of which
+# STP can build for itself, so turning it off wholesale does not fail later --
+# it fails here.
+if(STP_DEPS_LOCAL_ONLY)
+    list(REMOVE_ITEM CMAKE_PREFIX_PATH "${PROJECT_SOURCE_DIR}/deps/install")
+    message(STATUS "Dependencies: local only, installed copies will be ignored")
+endif()
 
 # Builds every dependency that this configure decided to build, and nothing
 # else, so that a shared STP_DEP_DIR can be warmed once before several build
@@ -332,17 +364,26 @@ macro(check_auto_download name disable_option)
         else()
             set(_depname "${name}")
         endif()
+        # An installed copy is exactly what STP_DEPS_LOCAL_ONLY was set to
+        # ignore, so it is not offered as a fix there.
+        if(STP_DEPS_LOCAL_ONLY)
+            string(CONCAT _how
+                "Point -D${_dirvar} at a copy, or configure with "
+                "-DENABLE_AUTO_DOWNLOAD=ON to have it built here. An "
+                "installed one will not be used: this build was configured "
+                "with -DSTP_DEPS_LOCAL_ONLY=ON")
+        else()
+            string(CONCAT _how
+                "Install it, point -D${_dirvar} at a copy, or configure with "
+                "-DENABLE_AUTO_DOWNLOAD=ON to have it downloaded and built "
+                "here")
+        endif()
         if("${disable_option}" STREQUAL "")
             message(FATAL_ERROR
-                "Could not find ${_depname}, which STP requires. Install it, "
-                "point -D${_dirvar} at a copy, or configure with "
-                "-DENABLE_AUTO_DOWNLOAD=ON to have it downloaded and built "
-                "here.")
+                "Could not find ${_depname}, which STP requires. ${_how}.")
         else()
             message(FATAL_ERROR
-                "Could not find ${_depname}. Install it, point -D${_dirvar} "
-                "at a copy, configure with -DENABLE_AUTO_DOWNLOAD=ON to have "
-                "it downloaded and built here, or leave it out with "
+                "Could not find ${_depname}. ${_how}. Or leave it out with "
                 "${disable_option}.")
         endif()
     endif()

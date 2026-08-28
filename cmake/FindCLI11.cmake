@@ -40,8 +40,9 @@ if(CLI11_DIR)
             "or in its include/ directory.")
     endif()
     set(CLI11_FOUND_SYSTEM TRUE)
-else()
-    # Rung 1. CLI11 is header-only and widely packaged, so this often answers.
+elseif(NOT STP_DEPS_LOCAL_ONLY)
+    # Rung 1, which STP_DEPS_LOCAL_ONLY skips. CLI11 is header-only and widely
+    # packaged, so this often answers.
     find_path(CLI11_INCLUDE_DIR NAMES CLI/CLI.hpp)
     if(CLI11_INCLUDE_DIR)
         set(CLI11_FOUND_SYSTEM TRUE)

@@ -61,9 +61,9 @@ if(MINISAT_INCLUDE_DIRS OR MINISAT_LIBDIR)
             "Correct them, or unset both to search the system instead.")
     endif()
     set(MiniSat_FOUND_SYSTEM TRUE)
-else()
-    # Rung 1. Includes anything installed into STP_DEP_DIR by another build
-    # directory.
+elseif(NOT STP_DEPS_LOCAL_ONLY)
+    # Rung 1, which STP_DEPS_LOCAL_ONLY skips. Includes anything installed into
+    # STP_DEP_DIR by another build directory.
     find_path(MINISAT_INCLUDE_DIR NAMES minisat/core/Solver.h
               PATH_SUFFIXES minisat minisat2)
     find_library(MINISAT_LIBRARY NAMES minisat minisat2)

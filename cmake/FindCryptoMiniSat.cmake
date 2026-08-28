@@ -28,6 +28,10 @@
 # (cryptominisat5_DIR), rung 1 (installed), and then a failure that says what
 # to do. STP does not build this one for you, and the message says so.
 #
+# Which also makes it the one dependency STP_DEPS_LOCAL_ONLY can turn off
+# rather than relocate: with rung 1 skipped and no rung 3 behind it, only
+# cryptominisat5_DIR is left.
+#
 # The reasons, because "we did not get round to it" is not one of them:
 #
 #   - An ExternalProject installs at *build* time, so the config package it
@@ -53,36 +57,44 @@ include(deps-helper)
 set(cryptominisat5_DIR "" CACHE PATH
     "Path to the directory containing cryptominisat5Config.cmake")
 
-# STP does not look for GMP. It is CryptoMiniSat's dependency, not STP's: no
-# STP source includes it, and it reaches STP through the cryptominisat5
-# imported target, whose link interface names PkgConfig::GMP (its header
-# includes gmpxx.h, so the include path travels the same way; see
-# lib/Sat/CMakeLists.txt). cryptominisat5Config.cmake asks pkg-config for gmp
-# with REQUIRED, which is a FATAL_ERROR raised from inside that file when
-# CryptoMiniSat is installed but its gmp.pc is not, and nothing STP does can
-# turn it into "not found". So say what is about to be asked, and of whom,
-# before asking: nothing can be printed after the abort, and the error itself
-# names gmp but not the fix.
-message(STATUS "Looking for CryptoMiniSat5 (its CMake package needs GMP via "
-               "pkg-config; if this fails on 'gmp', install libgmp-dev or "
-               "configure with -DUSE_CRYPTOMINISAT=OFF)")
+# Rungs 0 and 1 are one call here, so STP_DEPS_LOCAL_ONLY cannot skip the
+# second by itself: it skips the whole search unless cryptominisat5_DIR names a
+# copy, which is rung 0 and stays honoured. With no rung 3 to fall back on that
+# leaves nothing, which is the honest answer -- STP does not build this one, so
+# under that option a named copy is the only way to have it at all.
+if(cryptominisat5_DIR OR NOT STP_DEPS_LOCAL_ONLY)
+    # STP does not look for GMP. It is CryptoMiniSat's dependency, not STP's:
+    # no STP source includes it, and it reaches STP through the cryptominisat5
+    # imported target, whose link interface names PkgConfig::GMP (its header
+    # includes gmpxx.h, so the include path travels the same way; see
+    # lib/Sat/CMakeLists.txt). cryptominisat5Config.cmake asks pkg-config for
+    # gmp with REQUIRED, which is a FATAL_ERROR raised from inside that file
+    # when CryptoMiniSat is installed but its gmp.pc is not, and nothing STP
+    # does can turn it into "not found". So say what is about to be asked, and
+    # of whom, before asking: nothing can be printed after the abort, and the
+    # error itself names gmp but not the fix.
+    message(STATUS "Looking for CryptoMiniSat5 (its CMake package needs GMP via "
+                   "pkg-config; if this fails on 'gmp', install libgmp-dev or "
+                   "configure with -DUSE_CRYPTOMINISAT=OFF)")
 
-# A static CryptoMiniSat references cadical/cadiback imported targets but its
-# config file does not find them itself; a shared CryptoMiniSat has no such
-# packages, hence QUIET. cadical's export in turn references Threads::Threads.
-find_package(Threads QUIET)
-find_package(cadical CONFIG QUIET)
-find_package(cadiback CONFIG QUIET)
+    # A static CryptoMiniSat references cadical/cadiback imported targets but
+    # its config file does not find them itself; a shared CryptoMiniSat has no
+    # such packages, hence QUIET. cadical's export in turn references
+    # Threads::Threads.
+    find_package(Threads QUIET)
+    find_package(cadical CONFIG QUIET)
+    find_package(cadiback CONFIG QUIET)
 
-# Rungs 0 and 1 in one call: find_package(CONFIG) honours cryptominisat5_DIR
-# first and CMAKE_PREFIX_PATH -- which carries STP_DEP_DIR and deps/install --
-# after it.
-#
-# Deliberately not asking find_package for the version: it is checked here
-# instead, so that a copy which is present but too old can be reported as
-# exactly that. "Could not find CryptoMiniSat" is a confusing thing to be told
-# about a library that is plainly installed.
-find_package(cryptominisat5 CONFIG)
+    # find_package(CONFIG) honours cryptominisat5_DIR first and
+    # CMAKE_PREFIX_PATH -- which carries STP_DEP_DIR and deps/install -- after
+    # it.
+    #
+    # Deliberately not asking find_package for the version: it is checked here
+    # instead, so that a copy which is present but too old can be reported as
+    # exactly that. "Could not find CryptoMiniSat" is a confusing thing to be
+    # told about a library that is plainly installed.
+    find_package(cryptominisat5 CONFIG)
+endif()
 
 set(CryptoMiniSat_FOUND_SYSTEM FALSE)
 if(cryptominisat5_FOUND)
@@ -108,6 +120,18 @@ if(NOT CryptoMiniSat_FOUND_SYSTEM)
                 "Run scripts/deps/setup-cms.sh, which builds a pinned release "
                 "into deps/install where this looks with no further flags, or "
                 "build without it: -DUSE_CRYPTOMINISAT=OFF.")
+        endif()
+        if(STP_DEPS_LOCAL_ONLY)
+            message(FATAL_ERROR
+                "CryptoMiniSat was not looked for: -DSTP_DEPS_LOCAL_ONLY=ON "
+                "confines this build to dependencies inside the build "
+                "directory, and CryptoMiniSat is the one dependency STP does "
+                "not build for you -- it reaches STP through the CMake "
+                "package it installs, which an ExternalProject could not "
+                "write until after this configure had needed to read it.\n"
+                "Point -Dcryptominisat5_DIR at the directory holding "
+                "cryptominisat5Config.cmake, which is rung 0 and is still "
+                "honoured, or build without it: -DUSE_CRYPTOMINISAT=OFF.")
         endif()
         message(FATAL_ERROR
             "CryptoMiniSat was not found, and it is the one dependency STP "

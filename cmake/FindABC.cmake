@@ -61,9 +61,10 @@ if(ABC_DIR)
             "contain src/aig/aig/aig.h with a built libabc-pic beneath it.")
     endif()
     set(ABC_FOUND_SYSTEM TRUE)
-else()
-    # Rung 1. Nothing packages ABC this way, so in practice this finds a copy
-    # another build directory installed into STP_DEP_DIR.
+elseif(NOT STP_DEPS_LOCAL_ONLY)
+    # Rung 1, which STP_DEPS_LOCAL_ONLY skips. Nothing packages ABC this way,
+    # so in practice this finds a copy another build directory installed into
+    # STP_DEP_DIR.
     find_path(ABC_INCLUDE_DIR NAMES aig/aig/aig.h)
     find_library(ABC_LIBRARY NAMES abc-pic)
     if(ABC_INCLUDE_DIR AND ABC_LIBRARY)

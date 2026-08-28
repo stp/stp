@@ -29,16 +29,28 @@
 
 include(deps-helper)
 
-# Rung 0. LIBBF_DIR has a default rather than being empty, so that a checkout
-# with a LibBF already built at deps/libbf -- which is where the setup script
-# this replaces put one -- is still found with no flags. So "set" is not the
-# test; whether it holds a LibBF is.
-set(LIBBF_DIR "${PROJECT_SOURCE_DIR}/deps/libbf" CACHE PATH
+# Rung 0.
+set(LIBBF_DIR "" CACHE PATH
     "Path to a built LibBF: the directory containing libbf.h and the bf library")
+
+# A LibBF already built at deps/libbf -- which is where the setup script this
+# replaces put one -- is still used with no flags. That used to be LIBBF_DIR's
+# default, which made it indistinguishable from a LIBBF_DIR the caller named,
+# and the two are not the same thing: a named copy is an answer, a directory
+# that happens to hold one is a place to look. Only the second is skipped under
+# STP_DEPS_LOCAL_ONLY, being in the source tree rather than this build
+# directory -- and only by keeping them apart can an explicit
+# -DLIBBF_DIR=<source>/deps/libbf still mean what it says.
+if(NOT LIBBF_DIR AND NOT STP_DEPS_LOCAL_ONLY)
+    set(LIBBF_DIR "${PROJECT_SOURCE_DIR}/deps/libbf")
+endif()
 
 set(LibBF_FOUND_SYSTEM FALSE)
 
-if(EXISTS "${LIBBF_DIR}/libbf.h")
+# Whether LIBBF_DIR holds a LibBF is the test, not whether it is set: a path
+# that has none falls through to the rung below rather than failing, which is
+# what makes the deps/libbf fallback above a fallback.
+if(LIBBF_DIR AND EXISTS "${LIBBF_DIR}/libbf.h")
     find_path(LIBBF_INCLUDE_DIR NAMES libbf.h PATHS "${LIBBF_DIR}" NO_DEFAULT_PATH)
     find_library(LIBBF_LIBRARY NAMES bf PATHS "${LIBBF_DIR}" NO_DEFAULT_PATH)
     if(NOT LIBBF_INCLUDE_DIR OR NOT LIBBF_LIBRARY)
@@ -48,11 +60,11 @@ if(EXISTS "${LIBBF_DIR}/libbf.h")
             "somewhere else.")
     endif()
     set(LibBF_FOUND_SYSTEM TRUE)
-else()
-    # Rung 1. PATHS, not NO_DEFAULT_PATH: this is the rung that is meant to
-    # search the system, and STP_DEP_DIR is on CMAKE_PREFIX_PATH, so a LibBF
-    # that an earlier build directory installed there is found here and no
-    # ExternalProject is created below.
+elseif(NOT STP_DEPS_LOCAL_ONLY)
+    # Rung 1, which STP_DEPS_LOCAL_ONLY skips. PATHS, not NO_DEFAULT_PATH: this
+    # is the rung that is meant to search the system, and STP_DEP_DIR is on
+    # CMAKE_PREFIX_PATH, so a LibBF that an earlier build directory installed
+    # there is found here and no ExternalProject is created below.
     find_path(LIBBF_INCLUDE_DIR NAMES libbf.h)
     find_library(LIBBF_LIBRARY NAMES bf)
     if(LIBBF_INCLUDE_DIR AND LIBBF_LIBRARY)
