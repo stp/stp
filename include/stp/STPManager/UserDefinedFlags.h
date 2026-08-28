@@ -25,10 +25,20 @@ THE SOFTWARE.
 #define UDEFFLAGS_H
 
 #include "stp/Sat/SearchBias.h"
+#include "stp/Util/Attributes.h"
 #include <cstdint>
+#include <iosfwd>
 
 namespace stp
 {
+
+struct UserDefinedFlags;
+
+// Print the abstraction coverage, refinement and exact-escalation counters
+// reported by `-t`. The same reporter is used after an ordinary solve and by
+// --exit-after-CNF once bit-blasting has populated the coverage counters.
+DLL_PUBLIC void printAbstractionCoverage(const UserDefinedFlags& uf,
+                                         std::ostream& out);
 
 /******************************************************************
  * Struct UserDefFlags:
@@ -387,11 +397,28 @@ public:
   unsigned bv_abstraction_width = 64;
   unsigned bv_eq_refine_width = 0;
   bool bv_term_abstraction = false;
-  // BVMULT, BVDIV and BVMOD are the operations whose refinement has no compact
-  // exact lemma: it rules out one pair of operand values at a time. They are
-  // abstracted with everything else, and this turns just those three off for a
-  // query that would rather not pay for the rounds at all.
+  // BVMULT is one of the operations whose fallback rules out one pair of
+  // operand values at a time. Keep its scope independent of division: the
+  // circuit costs and the workloads which benefit from abstracting them are
+  // materially different.
   bool bv_term_abstraction_mult = true;
+  // BVDIV and BVMOD share an implementation and a refinement catalogue, but
+  // no longer share BVMULT's scope switch. A caller can therefore leave the
+  // expensive dividers abstract while encoding multiplication exactly, or
+  // vice versa. Both switches default on, preserving the historical scope.
+  bool bv_term_abstraction_divmod = true;
+  // Interface bookkeeping rather than a solver knob: whether a caller named
+  // the DIV/MOD scope itself.
+  //
+  // The older switch above it covered all three nonlinear operations, and
+  // still does when it is the only one given. Once DIV/MOD has been set
+  // explicitly it wins, whichever order the two arrive in -- which is what
+  // the command line does through CLI11's occurrence count, and what the C
+  // interface does through this flag. Without it the C interface would be
+  // last-writer-wins while the command line was not, and the same pair of
+  // settings would mean two different things depending on which one a caller
+  // reached for.
+  bool bv_term_abstraction_divmod_explicit = false;
 
   // Which of the other abstractable kinds --bv-term-abstraction takes.
   //
@@ -467,6 +494,20 @@ public:
   // rate is really aimed at are not in it; someone with 53- or 64-bit
   // operands may find otherwise, which is why the flag stays.
   unsigned bv_term_abstraction_value_divisor = 0;
+  // An independent cap on BVDIV/BVMOD value-pair blocking, after the round
+  // ceiling and optional width scaling above have been applied. This
+  // separates the experiment callers actually want to run -- four, eight,
+  // sixteen or thirty-two divider candidates -- from both multiplication and
+  // `bv_term_abstraction_rounds`, which also bounds algebraic-schema
+  // refinement. Zero means no additional cap, preserving every established
+  // profile and the default allowance exactly.
+  //
+  // This is a measurement control, not a recommended policy. On a broad
+  // 417-query floating-point-heavy population, 4 and 8 were clear regressions
+  // and 16 was slower in three interleaved runs. Records frequently settled
+  // after 16 bad candidates but before the old allowance, so repetition count
+  // by itself could not identify when paying for an exact divider would help.
+  unsigned bv_term_abstraction_divmod_value_limit = 0;
   // Escalate an abstracted BVMULT a piece at a time rather than all at once:
   // encode only the bits up to and a little past the lowest one the
   // candidate got wrong, and come back for more if that does not settle the
@@ -871,11 +912,68 @@ public:
     // lemmas they installed. A pass can install more than one lemma.
     uint64_t bv_refinement_rounds = 0;
     uint64_t bv_blocking_lemmas = 0;
-    // Algebraic schema lemmas installed over an abstracted BVMULT. Counted
+    // Algebraic schema lemmas installed over abstracted arithmetic. Counted
     // apart from the blocking lemmas above because the two are not
     // interchangeable: the same number of each says very different things
     // about how a query was decided.
     uint64_t bv_schema_lemmas = 0;
+    // Value-pair refinement which reached its allowance and installed the
+    // operation's exact circuit. Split by the only two operation families
+    // which use that path so a corpus can distinguish a divider problem from
+    // a multiplier one without scraping diagnostic prose.
+    uint64_t bv_exact_escalations = 0;
+    uint64_t bv_exact_escalations_mult = 0;
+    uint64_t bv_exact_escalations_divmod = 0;
+    // What the refinement's FULL-WIDTH installs cost: an escalation, and the
+    // paired DIV/REM recomposition, whose multiplier is as wide as one. The
+    // counts above say how often a refinement was abandoned; these say what
+    // was handed to the solver when it was. Publishing the totals makes the
+    // question answerable from ordinary statistics and the C API rather than
+    // only from the per-record fields the benchmark harness reads.
+    //
+    // Equal escalation counts can hide very different trades: an exact
+    // multiplier is affordable where an exact divider may not be. Clauses and
+    // variables come from the solver's own totals across the encode rather
+    // than a circuit estimate, and microseconds measure only that encode.
+    //
+    // Wider than the escalations, because the paired identity costs as much as
+    // one without any abstraction being given up -- it is why the aggressive
+    // profile is the slowest, and leaving it out would have hidden the trade
+    // these were added to expose. It is counted here and not in the escalation
+    // counts above, which mean something narrower: a refinement that gave up
+    // and said what the operation is.
+    //
+    // What is NOT here is the algebraic schemas, which have their own totals
+    // below. They are the thing the profiles vary, so putting them in one
+    // bucket with the full-width installs would make exactly the comparison
+    // these exist for unreadable.
+    uint64_t bv_exact_clauses = 0;
+    uint64_t bv_exact_variables = 0;
+    uint64_t bv_exact_microseconds = 0;
+    // What the algebraic schemas cost, on the same terms.
+    //
+    // bv_schema_lemmas counts how many were installed, and one lemma is not
+    // one price: the hand-written bounds are a comparison chain, the exact
+    // prefixes are three columns of a multiplier, and a registry fact like
+    // UDIV15 is three barrel shifters spliced through BVExactEncoder -- at
+    // 256 bits, 229,374 clauses for that one fact, and 2,376,088 for the whole
+    // UDIV registry. A profile is a choice of which schema families to enable,
+    // so a schema total that does not say what they cost cannot answer the
+    // question the profiles were built to ask, and for a while this one
+    // reported nothing at all: the four registry splices went through the same
+    // encoder as an escalation and were counted as neither.
+    //
+    // Written at every schema install, whichever mechanism installs it -- the
+    // clause emitters in the refiner and the circuit splices alike -- because
+    // which of the two a family happens to use is not something a reader
+    // comparing profiles should have to know.
+    //
+    // Value-pair blocking lemmas are in neither total. They are W clauses over
+    // known vectors, so reportRecords derives their cost from the round count
+    // rather than measuring it.
+    uint64_t bv_schema_clauses = 0;
+    uint64_t bv_schema_variables = 0;
+    uint64_t bv_schema_microseconds = 0;
     // Uninterpreted-function applications the lowering decided, and the
     // constraints it installed for them.
     uint64_t uf_applications_lowered = 0;

@@ -36,35 +36,6 @@ namespace stp
 namespace
 {
 
-// The abstraction, off for the length of one encoding.
-//
-// The blast below runs the ordinary BitBlaster, and the ordinary BitBlaster
-// abstracts every wide multiplication it is handed. Left on, the circuit
-// this is here to build would come back as another set of free bits and
-// another record -- and the record would be minted against an AIG that is
-// thrown away at the end of this function, so nothing could ever refine it.
-// The refinement that reaches this point has already decided the
-// abstraction is not paying; this is the encoding it decided in favour of.
-struct AbstractionOff
-{
-  UserDefinedFlags& uf;
-  const bool term;
-  const bool eq;
-
-  explicit AbstractionOff(UserDefinedFlags& uf_)
-      : uf(uf_), term(uf_.bv_term_abstraction), eq(uf_.bv_eq_abstraction)
-  {
-    uf.bv_term_abstraction = false;
-    uf.bv_eq_abstraction = false;
-  }
-
-  ~AbstractionOff()
-  {
-    uf.bv_term_abstraction = term;
-    uf.bv_eq_abstraction = eq;
-  }
-};
-
 // x <-> y
 void addEquiv(SATSolver& solver, unsigned x, unsigned y)
 {
@@ -291,13 +262,15 @@ void BVExactEncoder::encodeDivLemma(SATSolver& solver, DivLemma lemma,
   assert(divisorVars.size() >= width);
   assert(resultVars.size() >= width);
 
-  AbstractionOff scope(bm->UserFlags);
-
   BBNodeManagerAIG mgr;
   mgr.nodeBudget = bm->UserFlags.aig_node_budget;
   SubstitutionMap sm(bm);
   Simplifier simp(bm, &sm);
-  BitBlaster bb(&mgr, &simp, bm->defaultNodeFactory, &bm->UserFlags);
+  // Told not to abstract, for the reason encode() gives: the circuit here is
+  // spliced onto an abstraction's own variables, so a record minted inside it
+  // would be against an AIG this call throws away.
+  BitBlaster bb(&mgr, &simp, bm->defaultNodeFactory, &bm->UserFlags, NULL,
+                /*allowAbstraction=*/false);
 
   // Three input vectors this time, in the order the splice reads them back:
   // the dividend, the divisor, then the abstraction's own result bits. The
@@ -375,13 +348,13 @@ void BVExactEncoder::encode(SATSolver& solver, const ASTNode& term,
                             unsigned width,
                             const std::vector<unsigned>& aVars,
                             const std::vector<unsigned>& bVars,
-                            const std::vector<unsigned>& resultVars)
+                            const std::vector<unsigned>& resultVars,
+                            const std::vector<signed char>& knownA,
+                            const std::vector<signed char>& knownB)
 {
   assert(aVars.size() >= width);
   assert(bVars.size() >= width);
   assert(resultVars.size() >= width);
-
-  AbstractionOff scope(bm->UserFlags);
 
   BBNodeManagerAIG mgr;
   mgr.nodeBudget = bm->UserFlags.aig_node_budget;
@@ -390,24 +363,62 @@ void BVExactEncoder::encode(SATSolver& solver, const ASTNode& term,
   // No constant-bit propagation: its results belong to the blast that ran
   // over the whole query, and this one is a fragment of it. The multiplier
   // asks for them only through statsFound(), which answers no without it.
-  BitBlaster bb(&mgr, &simp, bm->defaultNodeFactory, &bm->UserFlags);
+  //
+  // And no abstraction: this circuit is what the refinement gave up in
+  // favour of, so re-abstracting it would put the record straight back --
+  // against an AIG thrown away at the end of this call, which nothing could
+  // ever refine. Said to this blast rather than by clearing the manager's
+  // flags around it, which let one blast see another's policy.
+  BitBlaster bb(&mgr, &simp, bm->defaultNodeFactory, &bm->UserFlags, NULL,
+                /*allowAbstraction=*/false);
 
-  // The operand bits, as combinational inputs, in the order the splice
-  // below reads them back: the first operand's `width` bits, then the
-  // second's. Nothing else creates an input, so their positions are their
-  // indices for the whole of this function -- which is what makes them
-  // findable after ABC has renumbered every object in the manager.
-  BBNodeVec x(width), y(width);
-  for (unsigned i = 0; i < width; i++)
-  {
-    x[i] = BBNodeAIG(Aig_ObjCreateCi(mgr.aigMgr));
-    x[i].symbol_index = mgr.aigMgr->vCis->nSize - 1;
-  }
-  for (unsigned i = 0; i < width; i++)
-  {
-    y[i] = BBNodeAIG(Aig_ObjCreateCi(mgr.aigMgr));
-    y[i].symbol_index = mgr.aigMgr->vCis->nSize - 1;
-  }
+  // The operand bits: a constant where the query's own blast had one, and a
+  // combinational input everywhere else.
+  //
+  // The constants are what make this the encoding the query would have had.
+  // Every constant shortcut in the operations reachable from here reads the
+  // bit vector rather than the AST -- mult_normal skips a false multiplier
+  // bit, Booth recoding classifies through convert(), and Aig_And folds a
+  // constant argument structurally -- so an operand rebuilt entirely out of
+  // free inputs gets none of them. A 64-bit multiply against a literal of
+  // popcount 8 built 64 partial-product rows rather than 8: 33,968 clauses
+  // where the unabstracted blast of the whole query was 12,380.
+  //
+  // Dropping the operand variable that a constant bit displaces is sound.
+  // The abstraction reads its operands through proxy inputs that
+  // ensureProxyCIs minted precisely because the vector was not all inputs,
+  // and each of those proxies is tied to its bit by a side constraint -- so
+  // the variable this circuit no longer mentions is already pinned to the
+  // same constant that replaced it.
+  //
+  // `ciVars` therefore carries the solver variable of each input actually
+  // created, in creation order, because that is the order the splice below
+  // reads them back in -- their positions are their indices for the whole of
+  // this function, which is what makes them findable after ABC has
+  // renumbered every object in the manager.
+  std::vector<unsigned> ciVars;
+  ciVars.reserve(2 * width);
+
+  const std::vector<signed char>* known[2] = {&knownA, &knownB};
+  const std::vector<unsigned>* opVars[2] = {&aVars, &bVars};
+  BBNodeVec operands[2] = {BBNodeVec(width), BBNodeVec(width)};
+
+  for (unsigned op = 0; op < 2; op++)
+    for (unsigned i = 0; i < width; i++)
+    {
+      const signed char bit = i < known[op]->size() ? (*known[op])[i] : -1;
+      if (bit >= 0)
+      {
+        operands[op][i] = bit != 0 ? mgr.getTrue() : mgr.getFalse();
+        continue;
+      }
+      operands[op][i] = BBNodeAIG(Aig_ObjCreateCi(mgr.aigMgr));
+      operands[op][i].symbol_index = mgr.aigMgr->vCis->nSize - 1;
+      ciVars.push_back((*opVars[op])[i]);
+    }
+
+  const BBNodeVec& x = operands[0];
+  const BBNodeVec& y = operands[1];
 
   BBNodeSet support;
   const BBNodeVec result = bb.BBExactBinaryOp(term, x, y, support);
@@ -428,7 +439,7 @@ void BVExactEncoder::encode(SATSolver& solver, const ASTNode& term,
   rewrite(mgr, bm->UserFlags.AIG_rewrites_iterations);
   assert(Aig_ManCheck(mgr.aigMgr));
   assert((unsigned)Aig_ManCoNum(mgr.aigMgr) == outputs);
-  assert((unsigned)Aig_ManCiNum(mgr.aigMgr) == 2 * width);
+  assert((unsigned)Aig_ManCiNum(mgr.aigMgr) == ciVars.size());
 
   // Use the query's selected CNF strategy. All outputs are named rather than
   // asserted because the splice below connects each result bit explicitly
@@ -444,14 +455,14 @@ void BVExactEncoder::encode(SATSolver& solver, const ASTNode& term,
   // the query talks about.
   std::vector<unsigned> cnfToSolver(cnf->nVars, ~((unsigned)0));
 
-  for (unsigned i = 0; i < 2 * width; i++)
+  for (unsigned i = 0; i < ciVars.size(); i++)
   {
     const int var = cnf->pVarNums[Aig_ManCi(mgr.aigMgr, (int)i)->Id];
     // An input the circuit never reads is given no variable, and needs
     // none: nothing the CNF says mentions it.
     if (var < 0)
       continue;
-    cnfToSolver[var] = (i < width) ? aVars[i] : bVars[i - width];
+    cnfToSolver[var] = ciVars[i];
   }
 
   for (int var = 0; var < cnf->nVars; var++)

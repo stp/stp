@@ -480,6 +480,23 @@ public:
     // lowering sound if another producer or a future memo boundary creates
     // them: symbolToBBNode can identify only the latest registered vector.
     std::vector<int> resultCISymbolIndices;
+    // What the blast already knew about each operand's bits: -1 where the bit
+    // is a live circuit node, 0 or 1 where it had folded to a constant.
+    //
+    // Kept because the abstraction throws it away and the exact escalation
+    // needs it back. An operand whose vector holds any constant bit fails
+    // allBBNodesAreCIs, so ensureProxyCIs replaces the whole vector with fresh
+    // proxy inputs -- correct, since a refinement clause has to name solver
+    // variables, and each proxy is pinned to its bit by a side constraint. But
+    // BVExactEncoder then rebuilds the operation over free inputs, and every
+    // constant shortcut in the multiplier reads the bit vector rather than the
+    // AST, so none of them fires. A 64-bit multiply against a literal of
+    // popcount 8 built 64 adder rows instead of 8: 33,968 clauses where the
+    // unabstracted blast of the whole query was 12,380.
+    //
+    // Empty means nothing is known, which is what an all-symbolic operand and
+    // every family that does not escalate leave behind.
+    std::vector<signed char> operandKnownBits[2];
   };
 
 private:
@@ -592,10 +609,18 @@ public:
   // same one. Two copies of a divider that agree today are two copies that
   // can stop agreeing.
   //
-  // `term` is the operation's own node, which the multiplier reads for
-  // constant detection and Booth recoding; `x` and `y` stand in for its
-  // operands. Anything the circuit needs conjoined to the top is added to
-  // `support`, as everywhere else here.
+  // `term` is the operation's own node; `x` and `y` stand in for its
+  // operands. What the node supplies is the kind, the width and the operand
+  // order -- not the operand *values*. Constant detection and Booth recoding
+  // read the bit vectors: mult_normal skips a false multiplier bit, Booth
+  // classifies through convert(), and Aig_And folds a constant argument
+  // structurally, all of them off `x` and `y`. So a caller that hands over
+  // free inputs where the query's own blast had constants gets the fully
+  // symbolic circuit however constant `term`'s children look, which is why
+  // BVExactEncoder::encode carries the known bits separately.
+  //
+  // Anything the circuit needs conjoined to the top is added to `support`,
+  // as everywhere else here.
   BBNodeVec BBExactBinaryOp(const ASTNode& term, const BBNodeVec& x,
                             const BBNodeVec& y, BBNodeSet& support);
 

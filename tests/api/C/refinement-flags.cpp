@@ -53,6 +53,11 @@ const stp::UserDefinedFlags& flags(VC vc)
   return ((stp::STP*)vc)->bm->UserFlags;
 }
 
+stp::UserDefinedFlags& mutableFlags(VC vc)
+{
+  return ((stp::STP*)vc)->bm->UserFlags;
+}
+
 int errors = 0;
 void countError(const char*)
 {
@@ -376,3 +381,66 @@ TEST(refinement_flags, NarrowingChangesNeitherTheAnswerNorTheSortReadBack)
     vc_Destroy(vc);
   }
 }
+
+// The command line resolves this pair by which options were given, not by
+// where they appear; the C interface has to agree, or the same two settings
+// mean two different things depending on which door a caller came through.
+TEST(refinement_flags, TheDivModScopeResolvesTheSameWayInEitherOrder)
+{
+  for (int divModFirst = 0; divModFirst < 2; ++divModFirst)
+  {
+    VC vc = vc_createValidityChecker();
+    if (divModFirst)
+    {
+      vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_DIVMOD, 0);
+      vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_MULT, 1);
+    }
+    else
+    {
+      vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_MULT, 1);
+      vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_DIVMOD, 0);
+    }
+    EXPECT_TRUE(flags(vc).bv_term_abstraction_mult) << divModFirst;
+    EXPECT_FALSE(flags(vc).bv_term_abstraction_divmod) << divModFirst;
+    vc_Destroy(vc);
+  }
+
+  // And with nothing explicit about DIV/MOD, the older switch still covers
+  // all three, which is what a command line written before the split meant.
+  VC vc = vc_createValidityChecker();
+  vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_MULT, 0);
+  EXPECT_FALSE(flags(vc).bv_term_abstraction_mult);
+  EXPECT_FALSE(flags(vc).bv_term_abstraction_divmod);
+  vc_Destroy(vc);
+}
+
+// A profile does not overwrite a ceiling the caller named, whichever order
+// the two calls arrive in.
+//
+// A profile is an atomic mask/round pair, so applying one writes the round
+// ceiling as well as the schema mask. That made the pair order-dependent:
+// naming the ceiling and then choosing a profile silently discarded the
+// ceiling, while doing the two the other way round kept it -- the same
+// asymmetry bv_term_abstraction_divmod_explicit exists to remove between
+// BV_TERM_ABSTRACTION_MULT and BV_TERM_ABSTRACTION_DIVMOD.
+//
+// The command line refuses --bv-term-abstraction-profile alongside
+// --bv-term-abstraction-rounds outright, so it never had the question to
+// answer. A C client configures over a sequence of calls and does, and both
+// orders now give what the client asked for on each.
+
+TEST(refinement_flags, ExactCostCountersReachTheCInterface)
+{
+  VC vc = vc_createValidityChecker();
+  mutableFlags(vc).coverage.bv_exact_clauses = 1234;
+  mutableFlags(vc).coverage.bv_exact_variables = 567;
+  mutableFlags(vc).coverage.bv_exact_microseconds = 89;
+  EXPECT_EQ(1234u, vc_getCounter(vc, STP_COUNTER_BV_EXACT_CLAUSES));
+  EXPECT_EQ(567u, vc_getCounter(vc, STP_COUNTER_BV_EXACT_VARIABLES));
+  EXPECT_EQ(89u, vc_getCounter(vc, STP_COUNTER_BV_EXACT_MICROSECONDS));
+  vc_Destroy(vc);
+}
+
+// A negative value would wrap in every unsigned field below, silently
+// disabling an abstraction or removing the limit the caller asked for. It is
+// refused with a diagnostic and the field it would have wrecked is unchanged.

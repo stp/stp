@@ -66,6 +66,11 @@ IncrementalSolver::encodingEpochStatsForTesting() const
   return out;
 }
 
+void IncrementalSolver::reportBVAbstractionRecords(std::ostream& out) const
+{
+  impl->bvAbstraction.reportRecords(out);
+}
+
 bool IncrementalSolver::lastSolveWasUnsat() const
 {
   return impl->lastUnsat;

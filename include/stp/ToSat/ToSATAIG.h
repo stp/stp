@@ -157,6 +157,10 @@ public:
   {
     return abstraction_.terms();
   }
+  void reportBVAbstractionRecords(std::ostream& out) const
+  {
+    abstraction_.reportRecords(out);
+  }
 
   AbstractionRefinementResult
   refineAbstractions(SATSolver& solver) override;

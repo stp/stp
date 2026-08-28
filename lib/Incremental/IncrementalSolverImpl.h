@@ -3830,6 +3830,8 @@ struct IncrementalSolver::Impl
       {
         a.operands[i] = raw.operands[i];
         a.operandNegated[i] = raw.operandNegated[i];
+        if (i < 2)
+          a.operandKnownBits[i] = raw.operandKnownBits[i];
         encodeAbstractionNode(a.operands[i]);
       }
       a.numOperands = raw.numOperands;

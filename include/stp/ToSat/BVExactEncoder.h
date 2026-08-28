@@ -118,17 +118,30 @@ public:
   explicit BVExactEncoder(STPMgr* bm_) : bm(bm_) {}
 
   // `term` is the operation's own node -- its kind is one of BVMULT, BVDIV
-  // and BVMOD, and the multiplier reads its operands for constant detection
-  // and Booth recoding. `aVars`, `bVars` and `resultVars` are the SAT
-  // variables the operands and the result are already carried by, each
-  // `width` bits wide; every one of them must be a variable the solver has.
+  // and BVMOD, and it supplies the width and the operand order. `aVars`,
+  // `bVars` and `resultVars` are the SAT variables the operands and the
+  // result are already carried by, each `width` bits wide; every one of them
+  // must be a variable the solver has.
+  //
+  // `knownA` and `knownB` are what the query's own blast knew about the
+  // operand bits before the abstraction replaced them with proxy inputs: -1
+  // for a live node, 0 or 1 for a constant, and empty for "nothing known".
+  // A known bit is built into the circuit as a constant instead of a free
+  // input, which is what makes this the encoding the query would have had
+  // rather than a fully symbolic one -- every constant shortcut in the
+  // multiplier and the divider tests the bit vector, not the AST, so without
+  // them none of them fires. It is sound to drop the corresponding operand
+  // variable from the splice: the proxy it names is pinned to that same
+  // constant by the side constraint that minted it.
   //
   // The clauses added define the result bits from the operand bits, so a
   // caller may mark the abstraction defined once this returns.
   void encode(SATSolver& solver, const ASTNode& term, unsigned width,
               const std::vector<unsigned>& aVars,
               const std::vector<unsigned>& bVars,
-              const std::vector<unsigned>& resultVars);
+              const std::vector<unsigned>& resultVars,
+              const std::vector<signed char>& knownA = {},
+              const std::vector<signed char>& knownB = {});
 
   // One algebraic fact about `t = x udiv s`, spliced onto the variables the
   // dividend, the divisor and the abstraction's result are already carried
