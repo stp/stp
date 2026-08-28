@@ -1,13 +1,18 @@
 name: "CodeQL"
 
+# Weekly, not per-change. The C++ half builds STP with every backend, the unit
+# tests and the extra tools, then analyses the result, which made it the
+# longest job on every pull request -- for findings that are about the state of
+# the tree rather than about the change under review, and that are read in the
+# code scanning tab rather than in the pull request. Alerts are dated by the
+# scan that found them, so a week's lag is visible rather than silent.
+#
+# Not on the hour: GitHub delays scheduled runs when the minute is congested,
+# and midnight UTC is the worst of them.
 on:
-  push:
-    branches: [master]
-  pull_request:
-    branches: [master]
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * 1'
+    - cron: '37 3 * * 1'
 
 jobs:
   analyze:
