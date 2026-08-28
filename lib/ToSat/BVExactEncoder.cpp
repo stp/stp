@@ -283,6 +283,27 @@ void BVExactEncoder::encodeAddLemma(SATSolver& solver, AddLemma lemma,
       });
 }
 
+void BVExactEncoder::encodeDivRemIdentity(
+    SATSolver& solver, const ASTNode& product, unsigned width,
+    const std::vector<unsigned>& dividendVars,
+    const std::vector<unsigned>& divisorVars,
+    const std::vector<unsigned>& quotientVars,
+    const std::vector<unsigned>& remainderVars)
+{
+  std::vector<const std::vector<unsigned>*> liveVars;
+  liveVars.push_back(&dividendVars);
+  liveVars.push_back(&divisorVars);
+  liveVars.push_back(&quotientVars);
+  liveVars.push_back(&remainderVars);
+  encodeNaryLemma(
+      bm, scratch_.get(), solver, width, liveVars,
+      [&product](BitBlaster& bb, const std::vector<BBNodeVec>& inputs,
+                 BBNodeSet& support) {
+        return bb.BBDivRemIdentity(product, inputs[0], inputs[1], inputs[2],
+                                   inputs[3], support);
+      });
+}
+
 void BVExactEncoder::encode(SATSolver& solver, const ASTNode& term,
                             unsigned width,
                             const std::vector<unsigned>& aVars,

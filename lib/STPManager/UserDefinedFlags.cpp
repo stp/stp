@@ -44,10 +44,14 @@ const char* const GROUP_NAMES[] = {"base",
                                    "urem",
                                    "quotient-one-quot",
                                    "quotient-one-rem",
+                                   "quotient-thresholds",
+                                   "divisor-magnitude",
+                                   "divrem-full",
                                    "mul8",
                                    "mul-ref3",
                                    "mul-tail",
-                                   "add"};
+                                   "add",
+                                   "low-prefix"};
 
 static_assert(sizeof(GROUP_NAMES) / sizeof(GROUP_NAMES[0]) ==
                   BV_SCHEMA_GROUP_COUNT,
@@ -75,7 +79,7 @@ std::string expectedGroups()
       out << ", ";
     out << GROUP_NAMES[i];
   }
-  out << ", udiv, mul6, quotient-one, all, or none";
+  out << ", udiv, mul6, quotient-one, divrem-identity, all, or none";
   return out.str();
 }
 
@@ -89,6 +93,8 @@ bool groupAliasMask(const std::string& token, uint32_t& aliasMask)
   else if (token == "quotient-one")
     aliasMask = bvSchemaGroupBit(BVSchemaGroup::QUOTIENT_ONE_REM) |
                 bvSchemaGroupBit(BVSchemaGroup::QUOTIENT_ONE_QUOT);
+  else if (token == "divrem-identity")
+    aliasMask = bvSchemaGroupBit(BVSchemaGroup::DIVREM_FULL);
   else
     return false;
   return true;

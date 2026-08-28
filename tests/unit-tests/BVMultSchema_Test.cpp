@@ -216,6 +216,11 @@ bool chosenSchemaHolds(const MulSchemaChoice& choice, unsigned a, unsigned b,
       return shiftHolds(other, choice.shift, t);
     case MulSchema::NegPow2:
       return shiftHolds(negated(other), choice.shift, t);
+    case MulSchema::LowPrefix:
+    {
+      const unsigned mask = (1u << choice.shift) - 1;
+      return (t & mask) == (truncatedProduct(a, b) & mask);
+    }
     case MulSchema::Lemma:
     {
       unsigned count = 0;
@@ -247,7 +252,8 @@ uint64_t allBoundedFactsInstalled()
 {
   uint64_t installed = MUL_SCHEMA_INSTALLED_ODD |
                        MUL_SCHEMA_INSTALLED_TRAILING_ZEROS_0 |
-                       MUL_SCHEMA_INSTALLED_TRAILING_ZEROS_1;
+                       MUL_SCHEMA_INSTALLED_TRAILING_ZEROS_1 |
+                       MUL_SCHEMA_INSTALLED_LOW_PREFIX;
   unsigned lemmaCount = 0;
   mulLemmaTable(lemmaCount);
   for (unsigned i = 0; i < lemmaCount; ++i)
@@ -319,6 +325,10 @@ TEST(bv_mult_schema, EveryFactHoldsOfTheRealProduct)
           << "a=" << a << " b=" << b;
       EXPECT_TRUE(trailingZerosHolds(a, t)) << "a=" << a << " b=" << b;
       EXPECT_TRUE(trailingZerosHolds(b, t)) << "a=" << a << " b=" << b;
+      EXPECT_TRUE(exactLowPrefixHolds(BVMULT, bitsOf(a), bitsOf(b), bitsOf(t),
+                                      3))
+          << "a=" << a << " b=" << b;
+
       // The two value-guarded ones, wherever their premise is met.
       for (unsigned i = 0; i < 2; ++i)
       {
@@ -358,7 +368,7 @@ TEST(bv_mult_schema, schema_groups_gate_multiplication_before_selection)
 {
   const BVSchemaGroup groups[] = {
       BVSchemaGroup::BASE, BVSchemaGroup::MUL8, BVSchemaGroup::MUL_REF3,
-      BVSchemaGroup::MUL_TAIL};
+      BVSchemaGroup::MUL_TAIL, BVSchemaGroup::LOW_PREFIX};
 
   for (const BVSchemaGroup group : groups)
   {
@@ -561,6 +571,7 @@ TEST(bv_mult_schema, AnInstalledFactIsNeverChosenAgain)
         const MulSchema schema = choose(a, b, t, all).schema;
         EXPECT_NE(MulSchema::Odd, schema);
         EXPECT_NE(MulSchema::TrailingZeros, schema);
+        EXPECT_NE(MulSchema::LowPrefix, schema);
         EXPECT_NE(MulSchema::Lemma, schema);
       }
 
@@ -570,6 +581,27 @@ TEST(bv_mult_schema, AnInstalledFactIsNeverChosenAgain)
       choose(6, 3, 1, MUL_SCHEMA_INSTALLED_TRAILING_ZEROS_1);
   EXPECT_EQ(MulSchema::TrailingZeros, stillFirst.schema);
   EXPECT_EQ(0u, stillFirst.operand);
+}
+
+TEST(bv_mult_schema, AResidualLowBitErrorTakesTheExactPrefix)
+{
+  uint64_t installed = MUL_SCHEMA_INSTALLED_ODD |
+                       MUL_SCHEMA_INSTALLED_TRAILING_ZEROS_0 |
+                       MUL_SCHEMA_INSTALLED_TRAILING_ZEROS_1;
+  unsigned lemmaCount = 0;
+  mulLemmaTable(lemmaCount);
+  for (unsigned i = 0; i < lemmaCount; ++i)
+    for (unsigned operand = 0; operand < 2; ++operand)
+      installed |= mulLemmaInstalledBit(i, operand);
+
+  const MulSchemaChoice choice = choose(3, 5, 8, installed);
+  EXPECT_EQ(MulSchema::LowPrefix, choice.schema);
+  EXPECT_EQ(3u, choice.shift);
+  EXPECT_FALSE(chosenSchemaHolds(choice, 3, 5, 8));
+
+  EXPECT_EQ(MulSchema::None,
+            choose(3, 5, 8, installed | MUL_SCHEMA_INSTALLED_LOW_PREFIX)
+                .schema);
 }
 
 // The odd-bit fact remains ahead of the zero-product fact, and it is reached:

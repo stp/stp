@@ -391,11 +391,13 @@ void ExtraMain::create_options()
       app.add_option("--bv-term-abstraction-schema-groups", bv_schema_groups,
                      "comma-separated schema families allowed by "
                      "--bv-term-abstraction-schemas: base, udiv15, "
-                     "udiv-observed, udiv-tail, urem, quotient-one-quot, "
-                     "quotient-one-rem, mul8, mul-ref3, mul-tail or add; "
-                     "'all' selects the complete experimental stack and "
-                     "'none' selects no schemas; semantic aliases are udiv, "
-                     "mul6 and quotient-one")
+                     "udiv-observed, udiv-tail, urem, mul8, mul-ref3, "
+                     "mul-tail, add, quotient-thresholds, low-prefix, "
+                     "quotient-one-rem, quotient-one-quot, "
+                     "divisor-magnitude, or divrem-full; 'all' selects the "
+                     "complete experimental stack and 'none' selects no "
+                     "schemas; semantic aliases are udiv, mul6, "
+                     "quotient-one and divrem-identity")
           ->group(refinement_group)
           ->capture_default_str();
   app.add_option("--bv-term-abstraction-rounds",

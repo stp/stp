@@ -144,6 +144,16 @@ public:
                       const std::vector<unsigned>& xVars,
                       const std::vector<unsigned>& sVars,
                       const std::vector<unsigned>& resultVars);
+
+  // Splice x = q*s+r over the four live vectors belonging to a paired BVDIV
+  // and BVMOD abstraction. Arithmetic is truncated to `width`, so this is a
+  // theorem of SMT-LIB's totalised division even when the divisor is zero.
+  void encodeDivRemIdentity(SATSolver& solver, const ASTNode& product,
+                            unsigned width,
+                            const std::vector<unsigned>& dividendVars,
+                            const std::vector<unsigned>& divisorVars,
+                            const std::vector<unsigned>& quotientVars,
+                            const std::vector<unsigned>& remainderVars);
 };
 
 } // namespace stp

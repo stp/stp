@@ -105,6 +105,10 @@ uint64_t referenceMul(uint64_t x, uint64_t s, unsigned width)
   // as truncating the exact one.
   return (x * s) & maskOf(width);
 }
+uint64_t referenceAdd(uint64_t x, uint64_t s, unsigned width)
+{
+  return (x + s) & maskOf(width);
+}
 
 // One arm at one parameterisation: the claim, the circuit, and the operation
 // the claim is about.
@@ -193,6 +197,16 @@ std::vector<Schema> schemas(unsigned width)
         };
         break;
       }
+      case DivSchema::QuotientPow2Threshold:
+        s.encode = [shift](SATSolver& solver, unsigned w, const Vars& a,
+                           const Vars& b, const Vars& t)
+        { encodeDivPow2Threshold(solver, a, b, t, w, shift); };
+        break;
+      case DivSchema::DivisorMagnitudeBound:
+        s.encode = [shift](SATSolver& solver, unsigned w, const Vars& a,
+                           const Vars& b, const Vars& t)
+        { encodeDivisorMagnitudeBound(solver, a, b, t, w, shift); };
+        break;
       default:
         s.encode = [schema](SATSolver& solver, unsigned w, const Vars& a,
                             const Vars& b, const Vars& t)
@@ -217,6 +231,14 @@ std::vector<Schema> schemas(unsigned width)
          "BVMOD remainder-below-divisor");
   divArm(BVDIV, DivSchema::QuotientAtMostDividend, 0,
          "BVDIV quotient-at-most-dividend");
+  for (unsigned k : exponents(width, 1))
+  {
+    divArm(BVDIV, DivSchema::QuotientPow2Threshold, k,
+           "BVDIV power-of-two-quotient-threshold 2^" + std::to_string(k));
+    divArm(BVDIV, DivSchema::DivisorMagnitudeBound, k,
+           "BVDIV divisor-magnitude-bound 2^" + std::to_string(k));
+  }
+
   const auto mulArm = [&](MulSchema schema, unsigned operand, unsigned shift,
                           const std::string& name) {
     Schema s;
@@ -268,6 +290,11 @@ std::vector<Schema> schemas(unsigned width)
         };
         break;
       }
+      case MulSchema::LowPrefix:
+        s.encode = [shift](SATSolver& solver, unsigned w, const Vars& a,
+                           const Vars& b, const Vars& t)
+        { encodeMulLowPrefix(solver, a, b, t, w, shift); };
+        break;
       default:
         ADD_FAILURE() << "unhandled multiplication schema";
         break;
@@ -290,6 +317,31 @@ std::vector<Schema> schemas(unsigned width)
                  " 2^" + std::to_string(k));
     }
   }
+  for (unsigned p = 1; p <= std::min(3u, width); ++p)
+    mulArm(MulSchema::LowPrefix, 0, p,
+           "BVMULT exact-low-prefix " + std::to_string(p));
+
+  // The addition prefix, in every operand spelling the bit-blaster records.
+  // At most one operand is ever negated, and the negated readings are the
+  // ones nothing else covers.
+  for (unsigned p = 1; p <= std::min(3u, width); ++p)
+    for (unsigned negated = 0; negated < 3; ++negated)
+    {
+      const bool aNeg = negated == 1;
+      const bool bNeg = negated == 2;
+      Schema s;
+      s.name = "BVPLUS exact-low-prefix " + std::to_string(p) +
+               (aNeg ? " (first operand negated)"
+                     : bNeg ? " (second operand negated)" : "");
+      s.reference = referenceAdd;
+      s.negatedOperand = aNeg ? 0 : bNeg ? 1 : -1;
+      s.holds = [p](const Bits& a, const Bits& b, const Bits& t)
+      { return exactLowPrefixHolds(BVPLUS, a, b, t, p); };
+      s.encode = [p, aNeg, bNeg](SATSolver& solver, unsigned w, const Vars& a,
+                                 const Vars& b, const Vars& t)
+      { encodeAddLowPrefix(solver, a, b, t, w, p, aNeg, bNeg); };
+      out.push_back(s);
+    }
 
   return out;
 }
@@ -528,10 +580,14 @@ TEST(BVSchemaCircuit, every_hand_written_schema_arm_is_covered)
                             "BVMOD remainder-at-most-dividend",
                             "BVMOD remainder-below-divisor",
                             "BVDIV quotient-at-most-dividend",
+                            "BVDIV power-of-two-quotient-threshold",
+                            "BVDIV divisor-magnitude-bound",
                             "BVMULT odd",
                             "BVMULT trailing-zeros",
                             "BVMULT power-of-two",
-                            "BVMULT negated-power-of-two"};
+                            "BVMULT negated-power-of-two",
+                            "BVMULT exact-low-prefix",
+                            "BVPLUS exact-low-prefix"};
   for (const char* name : expected)
     EXPECT_EQ(1u, arms.count(name))
         << name << " is no longer covered by this harness";

@@ -646,6 +646,13 @@ public:
   BBNode BBAddLemma(AddLemma lemma, const BBNodeVec& x, const BBNodeVec& s,
                     const BBNodeVec& t, BBNodeSet& support);
 
+  // The full modular recomposition theorem over a quotient/remainder pair:
+  // x = q*s+r. `product` is a BVMULT node standing for q*s and supplies the
+  // multiplier with the same AST metadata it receives on the exact path.
+  BBNode BBDivRemIdentity(const ASTNode& product, const BBNodeVec& x,
+                          const BBNodeVec& s, const BBNodeVec& q,
+                          const BBNodeVec& r, BBNodeSet& support);
+
   // Logical shifts by a variable amount. Both are logarithmic barrel
   // shifters, and any represented amount at or above the value width clears
   // the vector as SMT-LIB requires.

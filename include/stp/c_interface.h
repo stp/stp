@@ -885,7 +885,7 @@ DLL_PUBLIC int vc_setSchemaGroups(VC vc, const char* groups);
 //! group. It is also the bound on the index the two calls below take: an
 //! index runs from zero to one below this, in the order
 //! vc_schemaGroupName reports.
-#define STP_BV_SCHEMA_GROUP_COUNT 11
+#define STP_BV_SCHEMA_GROUP_COUNT 15
 
 //! \brief STP_COUNTER_BV_SCHEMA_LEMMAS, restricted to one schema group.
 //!
