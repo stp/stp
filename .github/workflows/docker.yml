@@ -16,6 +16,7 @@ on:
     branches: [master]
     paths:
       - 'Dockerfile'
+      - 'Docker.ubuntu24'
       - 'Docker.ubuntu22'
       - '.dockerignore'
       - 'CMakeLists.txt'
@@ -25,6 +26,7 @@ on:
   pull_request:
     paths:
       - 'Dockerfile'
+      - 'Docker.ubuntu24'
       - 'Docker.ubuntu22'
       - '.dockerignore'
       - 'CMakeLists.txt'
@@ -41,12 +43,12 @@ jobs:
   image:
     name: ${{ matrix.file }}
     runs-on: ubuntu-latest
-    # The two differ only in base image, so a failure in one is worth seeing
-    # beside the other's result rather than instead of it.
+    # They differ only in base image, so a failure in one is worth seeing
+    # beside the others' results rather than instead of them.
     strategy:
       fail-fast: false
       matrix:
-        file: [Dockerfile, Docker.ubuntu22]
+        file: [Dockerfile, Docker.ubuntu24, Docker.ubuntu22]
 
     steps:
     - uses: actions/checkout@v7

@@ -4,12 +4,8 @@ build
 .clang-format
 coverage.info
 .directory
-examples
 .git
 .gitignore
-.gitmodules
-LICENSE
-LICENSE_COMPONENTS
 papers
 README.markdown
 scripts
@@ -17,5 +13,5 @@ tests
 utils
 windows
 Dockerfile
-Docker.ubuntu20
 Docker.ubuntu22
+Docker.ubuntu24

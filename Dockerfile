@@ -5,7 +5,7 @@
 #     cat example.smt2 | docker run --rm -i stp/stp
 
 
-FROM ubuntu:24.04 AS builder
+FROM ubuntu:26.04 AS builder
 
 # Install dependencies
 RUN apt-get update \
