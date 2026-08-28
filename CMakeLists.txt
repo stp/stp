@@ -1010,12 +1010,14 @@ add_feature_info(MiniSat USE_MINISAT "Enables the MiniSat and simplifying-MiniSa
 # -----------------------------------------------------------------------------
 # Setup Cadical
 # -----------------------------------------------------------------------------
-# On by default, and the only backend that is. Something has to be, or a plain
-# `cmake ..` has no way to solve anything now that CryptoMiniSat is no longer
-# picked up merely for being installed -- and CaDiCaL is the one to pick: it
-# needs no system library (CryptoMiniSat wants GMP, MiniSat wants zlib), it is
-# the backend the documentation recommends for hard bitvector problems, and
-# with -DENABLE_AUTO_DOWNLOAD=ON the build can produce one itself.
+# Unconditionally on by default, and the only backend that is: CryptoMiniSat
+# is only linked when the machine already has one, so something has to be
+# there for a plain `cmake ..` to solve with -- and CaDiCaL is the one to
+# pick: it needs no system library (CryptoMiniSat wants GMP, MiniSat wants
+# zlib), it is the backend the documentation recommends for hard bitvector
+# problems, and with -DENABLE_AUTO_DOWNLOAD=ON the build can produce one
+# itself. A build that also finds CryptoMiniSat runs that by default and
+# keeps CaDiCaL behind --cadical.
 option(USE_CADICAL "Use the CaDiCaL solver backend" ON)
 add_feature_info(Cadical USE_CADICAL "Enables Cadical solver")
 
@@ -1156,18 +1158,17 @@ add_feature_info(Allocator "NOT STP_ALLOCATOR STREQUAL system"
 # Three-valued, because "use CryptoMiniSat" has three answers and this used to
 # need three variables to say them:
 #
-#   OFF   (default) do not look for it              (was -DNOCRYPTOMINISAT=ON)
-#   ON    it is required; fail if it is missing     (was -DFORCE_CMS=ON)
-#   AUTO  use it if it happens to be installed      (was the old default)
+#   OFF            do not look for it              (was -DNOCRYPTOMINISAT=ON)
+#   ON             it is required; fail if it is missing  (was -DFORCE_CMS=ON)
+#   AUTO (default) use it if it happens to be installed
 #
-# The default is OFF, and that is the change: CryptoMiniSat used to be linked
-# in whenever it happened to be installed. A build whose set of SAT backends
-# depends on what the machine has lying around cannot be reproduced from its
-# flags, which is most of what moving the dependencies to a declared,
-# downloadable set is for. AUTO is still there for anyone who wants the old
-# behaviour by name.
+# AUTO rather than ON because STP does not build CryptoMiniSat for you: an
+# installed one is linked and becomes the default backend, and a machine
+# without one still configures and still gets CaDiCaL. Say -DUSE_CRYPTOMINISAT=ON
+# to make a missing CryptoMiniSat a configuration error, or OFF to pin the
+# build to the backends it names regardless of what the machine has installed.
 set(CMS_OPTION_DOC "Use the CryptoMiniSat solver backend: ON requires it, OFF never uses it, AUTO uses it if installed")
-set(USE_CRYPTOMINISAT "OFF" CACHE STRING "${CMS_OPTION_DOC}")
+set(USE_CRYPTOMINISAT "AUTO" CACHE STRING "${CMS_OPTION_DOC}")
 set_property(CACHE USE_CRYPTOMINISAT PROPERTY STRINGS OFF ON AUTO)
 
 # Back-compat for the two variables this replaces. Both are still accepted and
@@ -1282,23 +1283,40 @@ if (USE_CADICAL AND USE_CRYPTOMINISAT AND TARGET cryptominisat5 AND TARGET cadic
             if (NOT _cms_cadical)
                 set(_cms_cadical "the copy in CryptoMiniSat's install prefix")
             endif()
-            message(FATAL_ERROR
-                "A static CryptoMiniSat cannot be combined with a second "
-                "CaDiCaL. Both put one on libstp's link line and their symbols "
-                "collide:\n"
-                "    CryptoMiniSat's bundled CaDiCaL: ${_cms_cadical}\n"
-                "    STP's CaDiCaL:                   ${CADICAL_LIBRARY}\n"
-                "Left to the linker it surfaces as pages of duplicate "
-                "definitions that never mention CryptoMiniSat. Three ways "
-                "out.\n"
-                "  Build CryptoMiniSat as a shared library "
-                "(scripts/deps/setup-cms.sh -DBUILD_SHARED_LIBS=ON), which "
-                "keeps its bundled CaDiCaL to itself and leaves STP's own "
-                "choice of CaDiCaL alone.\n"
-                "  Or share the one it bundles, giving up the 3.x features: "
-                "-UCADICAL_DIR -DCADICAL_LIBRARY=${_cms_cadical} "
-                "-DCADICAL_INCLUDE_DIR=<CryptoMiniSat prefix>/include.\n"
-                "  Or leave CryptoMiniSat out: -DUSE_CRYPTOMINISAT=OFF.")
+            # Refusing the combination is right when CryptoMiniSat was named,
+            # and wrong when it was merely found: AUTO means "use it if it
+            # happens to be installed", and a machine that happens to have an
+            # uncombinable one must still configure. So AUTO drops it here,
+            # with the reason, and the build goes on with CaDiCaL alone.
+            if (NOT CMS_EXPLICITLY_REQUESTED)
+                message(WARNING
+                    "Not using the CryptoMiniSat that is installed: it is "
+                    "static and bundles its own CaDiCaL "
+                    "(${_cms_cadical}), whose symbols would collide with "
+                    "STP's (${CADICAL_LIBRARY}). Say "
+                    "-DUSE_CRYPTOMINISAT=ON to make this an error instead, "
+                    "and see the ways out that it lists.")
+                remove_definitions(-DUSE_CRYPTOMINISAT)
+                set(USE_CRYPTOMINISAT OFF)
+            else()
+                message(FATAL_ERROR
+                    "A static CryptoMiniSat cannot be combined with a second "
+                    "CaDiCaL. Both put one on libstp's link line and their symbols "
+                    "collide:\n"
+                    "    CryptoMiniSat's bundled CaDiCaL: ${_cms_cadical}\n"
+                    "    STP's CaDiCaL:                   ${CADICAL_LIBRARY}\n"
+                    "Left to the linker it surfaces as pages of duplicate "
+                    "definitions that never mention CryptoMiniSat. Three ways "
+                    "out.\n"
+                    "  Build CryptoMiniSat as a shared library "
+                    "(scripts/deps/setup-cms.sh -DBUILD_SHARED_LIBS=ON), which "
+                    "keeps its bundled CaDiCaL to itself and leaves STP's own "
+                    "choice of CaDiCaL alone.\n"
+                    "  Or share the one it bundles, giving up the 3.x features: "
+                    "-UCADICAL_DIR -DCADICAL_LIBRARY=${_cms_cadical} "
+                    "-DCADICAL_INCLUDE_DIR=<CryptoMiniSat prefix>/include.\n"
+                    "  Or leave CryptoMiniSat out: -DUSE_CRYPTOMINISAT=OFF.")
+            endif()
         endif()
     endif()
 endif()

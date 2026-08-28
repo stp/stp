@@ -12,7 +12,7 @@
 ; Six distinct array queries establish the many-solve shape. The seventh adds
 ; FP while the solver is deliberately tiny. Its first three checks must not
 ; rebuild; the fourth classifies the state as stalled and retires the trail.
-; RUN: %solver --incremental --incremental-profile --check-sanity %s 2>&1 | %OutputCheck %s
+; RUN: %solver --cadical --incremental --incremental-profile --check-sanity %s 2>&1 | %OutputCheck %s
 (set-logic QF_ABVFP)
 (declare-fun A () (Array (_ BitVec 8) (_ BitVec 8)))
 (declare-fun f () (_ FloatingPoint 8 24))

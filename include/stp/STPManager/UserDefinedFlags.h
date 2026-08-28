@@ -1167,11 +1167,20 @@ public:
 
   UserDefinedFlags()
   {
-#ifdef USE_CADICAL
-    solver_to_use = CADICAL_SOLVER;
-#else
+    // The backend a query gets when no --cryptominisat/--cadical/--minisat
+    // was given. The order of preference is CryptoMiniSat, CaDiCaL,
+    // MiniSat, and the first of those this build compiled in wins.
+    // CryptoMiniSat leads because a build that went to the trouble of
+    // linking it meant to use it; CaDiCaL follows because it is the only
+    // backend on by default, so it is what a stock build solves with.
+    // MiniSat is the last resort and is not guarded: CMakeLists.txt refuses
+    // a build with no backend at all, so the fall-through is only reached
+    // when MiniSat is the one that is there.
 #ifdef USE_CRYPTOMINISAT
     solver_to_use = CRYPTOMINISAT5_SOLVER;
+#else
+#ifdef USE_CADICAL
+    solver_to_use = CADICAL_SOLVER;
 #else
     solver_to_use = MINISAT_SOLVER;
 #endif

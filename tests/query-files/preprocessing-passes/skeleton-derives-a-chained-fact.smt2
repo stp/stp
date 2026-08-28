@@ -14,7 +14,7 @@
 ; The count is checked loosely: what matters is that the structure was
 ; consulted and settled something, not how many facts a given SAT backend
 ; happens to fix while simplifying.
-; RUN: %solver -s --skeleton-preproc=1 %s 2>&1 | %OutputCheck %s
+; RUN: %solver --cadical -s --skeleton-preproc=1 %s 2>&1 | %OutputCheck %s
 (set-logic QF_BV)
 (declare-fun x () (_ BitVec 32))
 (declare-fun y () (_ BitVec 32))

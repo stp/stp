@@ -92,18 +92,27 @@ onto it, then moving the pin here.
 SAT backends
 ------------
 
-CaDiCaL is the default backend: it is the one enabled when nothing is
-said, it needs no system library, and the build can produce one itself.
-The others are asked for by name.
+A query with no solver flag on it goes to the first of these that the
+build compiled in:
 
-CryptoMiniSat used to be linked in whenever it happened to be installed.
-It no longer is -- a build whose set of backends depends on what the
-machine has lying around cannot be reproduced from its flags. Ask for it
-with ``-DUSE_CRYPTOMINISAT=ON``, which also makes a missing one a
-configuration error; ``-DUSE_CRYPTOMINISAT=AUTO`` restores the old
-"use it if it is there" behaviour by name. It is found when installed,
-including into ``deps/install``, where ``scripts/deps/setup-cms.sh``
-puts it:
+1. CryptoMiniSat
+2. CaDiCaL
+3. MiniSat
+
+CryptoMiniSat is therefore the default wherever it is linked, and
+CaDiCaL is what a stock build solves with. CaDiCaL is also the one
+always available: it is enabled when nothing is said, needs no system
+library, and the build can produce one itself, so a query is never left
+without a solver. CryptoMiniSat is linked whenever it is installed
+(``-DUSE_CRYPTOMINISAT=AUTO``, the default). Either way ``--cadical``,
+``--cryptominisat`` or ``--minisat`` overrides the order for one run.
+
+The two other values are for builds that would rather not depend on what
+the machine has lying around: ``-DUSE_CRYPTOMINISAT=ON`` makes a missing
+CryptoMiniSat a configuration error, and ``-DUSE_CRYPTOMINISAT=OFF``
+never looks for one, which is what pins a build's set of backends to the
+flags that produced it. It is found when installed, including into
+``deps/install``, where ``scripts/deps/setup-cms.sh`` puts it:
 
 .. code-block:: bash
 
@@ -120,8 +129,9 @@ as a CMake package rather than as a header and a library, and an
 ExternalProject would write that package only after the configure that
 has to read it. Install it, or run the script.
 
-CaDiCaL is what you get by default, and is worth having on hard
-bitvector problems. With
+CaDiCaL is compiled in by default, is what a build without
+CryptoMiniSat solves with, and is worth having on hard bitvector
+problems. With
 ``-DENABLE_AUTO_DOWNLOAD=ON`` there is nothing to do but ask for it;
 otherwise an installed CaDiCaL is found the way any library is, or
 ``CADICAL_DIR`` points at a checkout:
@@ -145,9 +155,9 @@ compiling and running ``CaDiCaL::Solver::version()``. That decides
 whether ``--cadical-factor`` can be compiled in, and the answer is
 printed at configure time.
 
-Enabling CaDiCaL makes it the default for that build, in place of
-CryptoMiniSat; ``--cryptominisat`` (or ``--minisat``, in a
-``-DUSE_MINISAT`` build) selects another backend at run time. With a
+CryptoMiniSat stays the default for a build that has it, and CaDiCaL is
+the default for one that does not; ``--cadical``, ``--cryptominisat`` or
+``--minisat`` selects a compiled-in backend at run time. With a
 CaDiCaL 3.x build, ``--cadical-factor`` controls CaDiCaL's bounded
 variable addition: ``on`` -- the default -- ``off``, or ``auto``, which
 enables it only for problems with array operations. ``auto`` was the
@@ -163,11 +173,20 @@ own -- currently the meelgroup fork at 2.1.3. Its prefix therefore holds a
 ``libcadical.a``, a ``cadical/cadical.hpp`` and a CMake package under the
 same names STP's own CaDiCaL uses.
 
-Do not put it in ``deps/install``, which is where ``setup-cms.sh`` writes
-by default and where STP keeps its own dependencies. Give CryptoMiniSat a
-prefix of its own and name it, which is two extra arguments -- the script
-forwards trailing ones to CMake, so its install prefix is overridable like
-any other default:
+What goes wrong is one prefix holding both, and that is narrower than it
+sounds. ``setup-cms.sh`` writes to ``<source>/deps/install``, which the
+build *searches* but which is not ``STP_DEP_DIR`` unless you say so --
+that defaults to ``<build>/deps/install``. So the bare script followed by
+a plain configure is fine, and is what the quick install in the README
+does; what it costs is CaDiCaL, because STP's lookup then finds
+CryptoMiniSat's 2.1.3 before it builds the revision STP pins, and
+``--cadical-factor`` turns itself off. Point ``STP_DEP_DIR`` at that same
+directory and the two really do collide, in the two ways below.
+
+To keep STP's own CaDiCaL, give CryptoMiniSat a prefix of its own and
+name it, which is two extra arguments -- the script forwards trailing
+ones to CMake, so its install prefix is overridable like any other
+default:
 
 .. code-block:: bash
 
@@ -177,10 +196,10 @@ any other default:
     cmake -S . -B build -DUSE_CADICAL=ON -DUSE_CRYPTOMINISAT=ON \
       -Dcryptominisat5_DIR=$PWD/deps/cms-install/lib/cmake/cryptominisat5
 
-Sharing the one directory goes wrong in two independent ways, which is why
+Sharing one directory goes wrong in two independent ways, which is why
 this is worth the two arguments.
 
-``deps/install`` is ``STP_DEP_DIR``. Its include directory is a usage
+Whatever ``STP_DEP_DIR`` names, its include directory is a usage
 requirement of every dependency STP builds, so it reaches the compile line
 of nearly every file in the project -- and CryptoMiniSat's
 ``cadical/cadical.hpp`` sitting in it then shadows the one STP means to
