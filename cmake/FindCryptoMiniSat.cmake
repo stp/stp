@@ -39,9 +39,9 @@
 #     Every other dependency here is a header and an archive, which a Find
 #     module can name for itself; this one is a package whose contents are
 #     decided by the package.
-#   - Installing it by hand instead -- as MiniSat and Riss are, neither of
-#     which publishes a config package -- would leave a CryptoMiniSat that a
-#     later build could not find by the same means, and would make STP's own
+#   - Installing it by hand instead -- as MiniSat is, which publishes no
+#     config package -- would leave a CryptoMiniSat that a later build could
+#     not find by the same means, and would make STP's own
 #     STPConfig.cmake name a cryptominisat5 package that did not exist.
 #   - CryptoMiniSat >= 5.14 also fetches and installs its own CaDiCaL, which
 #     collides with STP's when both are static (see the guard in the top-level

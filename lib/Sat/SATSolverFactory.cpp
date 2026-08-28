@@ -32,10 +32,6 @@ THE SOFTWARE.
 #include "stp/Sat/CryptoMinisat5.h"
 #endif
 
-#ifdef USE_RISS
-#include "stp/Sat/Riss.h"
-#endif
-
 #ifdef USE_CADICAL
 #include "stp/Sat/Cadical.h"
 #endif
@@ -93,10 +89,6 @@ std::vector<std::string> compiledSolverVersions()
   solvers.push_back("minisat (no version reported)");
 #endif
 
-#ifdef USE_RISS
-  solvers.push_back("riss (no version reported)");
-#endif
-
   return solvers;
 }
 
@@ -120,15 +112,6 @@ SATSolver* createSATSolver(const UserDefinedFlags& flags)
       newS = new CryptoMiniSat5(flags.num_solver_threads);
 #else
       std::cerr << "CryptoMiniSat5 support was not enabled at configure time."
-                << std::endl;
-      exit(-1);
-#endif
-      break;
-    case UserDefinedFlags::RISS_SOLVER:
-#ifdef USE_RISS
-      newS = new RissCore();
-#else
-      std::cerr << "Riss support was not enabled at configure time."
                 << std::endl;
       exit(-1);
 #endif

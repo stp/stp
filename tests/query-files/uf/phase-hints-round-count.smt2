@@ -6,7 +6,8 @@
 ; spreading unconstrained scalars out is worth anything, so its default phase
 ; puts many on the same value at once and each collision costs a lemma and
 ; another full solve. Counting them off against an increasing value is the
-; trick Bitwuzla plays for DISTINCT, pointed at what the checker reads.
+; ordinary way to seed a distinctness constraint, pointed at what the checker
+; reads.
 ;
 ; Here every argument is unconstrained and the results are forced apart, so
 ; the hint is exactly right: with it the first candidate already has distinct
@@ -23,13 +24,13 @@
 ;
 ; The observable here is the hint doing its job -- zero lemmas in the HINTED
 ; run -- and that needs the default backend to honour suggestPhase. CaDiCaL
-; does; MiniSat and Riss accept the call and ignore it, so on those builds
+; does; MiniSat accepts the call and ignores it, so on such a build
 ; the hinted run earns lemmas exactly as the plain one and the comparison
 ; below pins nothing.
 ; REQUIRES: cadical
 ;
-; RUN: %solver -s --uninterpreted-functions --uf-ackermann=off --uf-phase-hints=1 --distinct-ordering=0 --incremental=off %s 2>&1 | %OutputCheck --check-prefix=HINTED %s
-; RUN: %solver -s --uninterpreted-functions --uf-ackermann=off --uf-phase-hints=0 --distinct-ordering=0 --incremental=off %s 2>&1 | %OutputCheck --check-prefix=PLAIN %s
+; RUN: %solver --cadical -s --uninterpreted-functions --uf-ackermann=off --uf-phase-hints=1 --distinct-ordering=0 --incremental=off %s 2>&1 | %OutputCheck --check-prefix=HINTED %s
+; RUN: %solver --cadical -s --uninterpreted-functions --uf-ackermann=off --uf-phase-hints=0 --distinct-ordering=0 --incremental=off %s 2>&1 | %OutputCheck --check-prefix=PLAIN %s
 ;
 ; HINTED-NOT: installed congruence lemma
 ; HINTED: ^sat$

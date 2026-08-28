@@ -39,6 +39,14 @@
 ; BADEFFORT-NOT: terminate called
 ; BADEFFORT: Unknown --cnf-generation-effort value
 
+; RUN: not %solver --bv-term-abstraction-schema-groups=base,unknown %s 2>&1 | %OutputCheck %s --check-prefix=BADSCHEMAGROUP
+; BADSCHEMAGROUP-NOT: terminate called
+; BADSCHEMAGROUP: --bv-term-abstraction-schema-groups: unknown BV schema group 'unknown'
+
+; RUN: not %solver --bv-term-abstraction-profile=unknown %s 2>&1 | %OutputCheck %s --check-prefix=BADBVPROFILE
+; BADBVPROFILE-NOT: terminate called
+; BADBVPROFILE: --bv-term-abstraction-profile: unknown BV term-abstraction profile 'unknown'
+
 ; RUN: not %solver --search-bias=bogus %s 2>&1 | %OutputCheck %s --check-prefix=BADBIAS
 ; BADBIAS-NOT: terminate called
 ; BADBIAS: --search-bias must be one of
@@ -134,6 +142,7 @@
 
 ; RUN: %solver --help 2>&1 | %OutputCheck %s --check-prefix=HELP
 ; HELP: USAGE: stp
+; HELP: --bv-term-abstraction-profile
 
 ; RUN: %solver %s 2>&1 | %OutputCheck %s --check-prefix=SOLVE
 ; SOLVE: ^sat$

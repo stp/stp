@@ -80,6 +80,7 @@ THE SOFTWARE.
 #include <limits>
 #include <map>
 #include <memory>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -321,6 +322,23 @@ struct IncrementalSolver::Impl
   size_t harvestedTermAbstractions = 0;
   size_t assertedSideConstraints = 0;
 
+  // The records this solve semantically owns, closed over parent-to-child
+  // producer dependencies. Records outside this sparse view are logically
+  // retired until one of their cached roots becomes active again.
+  BVAbstractionScope abstractionScope;
+  bool abstractionScopeStale = true;
+  // Ownership is committed beside each successfully encoded semantic root.
+  // The values are the direct producer IDs visible at the AIG cut; closure
+  // below supplies producers hidden behind an abstract parent. A permanent
+  // semantic root contributes its IDs forever. Proxy-definition roots are
+  // intentionally absent: they carry provenance, but are implementation
+  // constraints rather than assertions owning the operation they alias.
+  std::map<ASTNode, std::vector<BVAbstractionId>> abstractionIdsOfEncodedRoot;
+  std::set<BVAbstractionId> permanentAbstractionIds;
+  std::vector<BVAbstractionId> liveAbstractionIds;
+  bool abstractionOwnershipComplete = true;
+  bool liveAbstractionOwnersKnown = false;
+
   // conjunct -> root literal (2*var + sign). Epoch-persistent: the encoding
   // of a formula is a definition, valid in every context using this AIG/SAT
   // epoch.
@@ -533,6 +551,11 @@ struct IncrementalSolver::Impl
   // profiling counters this is always maintained: the late-FP trail policy
   // uses it to avoid throwing away a substantial refined search state.
   uint64_t currentRefinementClauseMass = 0;
+  // Bit-vector abstraction clauses charged to the permanent buckets but still
+  // inside a window an outer accounting has yet to close. The outer window
+  // subtracts them rather than charging them to its owner; see
+  // accountPermanentRefinementClauses.
+  uint64_t unattributedAbstractionMass = 0;
 
   // The actual AIG root encoded under each formula key. Newly submitted
   // clause deltas are a cheap live-mass estimate, but not an exact one: a
@@ -1851,12 +1874,61 @@ struct IncrementalSolver::Impl
   {
     const uint64_t submittedAfter = solver->submittedClauses();
     assert(submittedAfter >= submittedBefore);
-    const uint64_t delta = submittedAfter - submittedBefore;
+    uint64_t delta = submittedAfter - submittedBefore;
+
+    // The abstraction's share of this window has already been charged, and
+    // charged somewhere else; see accountPermanentRefinementClauses. Every
+    // window a refinement round can happen inside runs through here, so
+    // taking it off here is what keeps it from being counted twice, and no
+    // caller has to know which of the two kinds of refinement it ran.
+    const uint64_t alreadyCharged =
+        std::min(delta, unattributedAbstractionMass);
+    delta -= alreadyCharged;
+    unattributedAbstractionMass -= alreadyCharged;
+
     if (delta == 0)
       return 0;
     refinementMassOf[owner] = addMass(refinementMassOf[owner], delta);
     currentRefinementClauseMass =
         addMass(currentRefinementClauseMass, delta);
+    if (profile.enabled)
+      profile.refinementClauses =
+          addMass(profile.refinementClauses, delta);
+    return delta;
+  }
+
+  // What a round of bit-vector abstraction refinement pinned.
+  //
+  // These clauses are not the array and UF lemmas the accounting above was
+  // written for. A read axiom is owed to the stack that provoked it, and
+  // charging it to that stack is what lets the relief valve read it as dead
+  // once the stack is gone. An abstraction's clauses are definitional facts
+  // about the circuit -- this abstraction variable means these operand bits
+  // -- true whatever is asserted, never retracted, and paid for by every
+  // later solve in the session. Charged to a stack-shaped owner they were
+  // read as dead the moment the stack changed shape, so a session that had
+  // retracted nothing could still measure as mostly dead and be rebuilt from
+  // scratch: reproduced as a clean A/B, one relief rebuild with the
+  // abstraction on and none with it off, on the same file at the same limit.
+  //
+  // So they go where the rest of the permanent content goes: into the live
+  // estimate every solve starts from, and into the non-structural mass the
+  // exact cone walk is completed with. Neither is structural -- the splice
+  // puts clauses straight into the solver rather than into the encoding's
+  // AIG -- so the walk cannot find them and they have to be carried.
+  uint64_t accountPermanentRefinementClauses(uint64_t submittedBefore)
+  {
+    const uint64_t submittedAfter = solver->submittedClauses();
+    assert(submittedAfter >= submittedBefore);
+    const uint64_t delta = submittedAfter - submittedBefore;
+    if (delta == 0)
+      return 0;
+    baseLiveMass = addMass(baseLiveMass, delta);
+    permanentUnitMass = addMass(permanentUnitMass, delta);
+    currentRefinementClauseMass =
+        addMass(currentRefinementClauseMass, delta);
+    unattributedAbstractionMass =
+        addMass(unattributedAbstractionMass, delta);
     if (profile.enabled)
       profile.refinementClauses =
           addMass(profile.refinementClauses, delta);
@@ -1884,10 +1956,29 @@ struct IncrementalSolver::Impl
     return it->second;
   }
 
+  void recordAbstractionOwner(const ASTNode& key, const BBNodeAIG& root)
+  {
+    abstractionIdsOfEncodedRoot[key] =
+        encoding.blaster().abstractionSourcesOf(root);
+    abstractionScopeStale = true;
+  }
+
   void recordPermanentRoot(const ASTNode& key)
   {
     permanentAigRoots.push_back(aigRoot(key));
     permanentUnitMass = addMass(permanentUnitMass, 1);
+    const auto owner = abstractionIdsOfEncodedRoot.find(key);
+    if (owner == abstractionIdsOfEncodedRoot.end())
+    {
+      // A root with no ownership transaction is not evidence that it owns no
+      // abstraction. Keep the conservative all-record scope until the next
+      // encoding epoch rather than silently omitting an unknown producer.
+      abstractionOwnershipComplete = false;
+      abstractionScopeStale = true;
+      return;
+    }
+    permanentAbstractionIds.insert(owner->second.begin(), owner->second.end());
+    abstractionScopeStale = true;
   }
 
   static void normalizeAigRoots(std::vector<Aig_Obj_t*>& roots)
@@ -2364,6 +2455,7 @@ struct IncrementalSolver::Impl
     const uint64_t delta = solver->submittedClauses() - clausesPre;
     clauseMassOf[key] = delta;
     aigRootOf[key] = regular;
+    recordAbstractionOwner(key, root);
 
     encodesThisCall++;
     return lit;
@@ -2787,7 +2879,8 @@ struct IncrementalSolver::Impl
            arrayRegistry.ackPairs.size() + exactStackKeepAlive.size() +
            exactScopedPreprocessOf.size() + preparedPieceOf.size() +
            eliminationUsers.size() + screenedContent.size() +
-           walks.cacheEntryCount() + scopedBlockOf.size();
+           walks.cacheEntryCount() + scopedBlockOf.size() +
+           abstractionIdsOfEncodedRoot.size();
   }
 
   // Release all state whose validity/reuse is tied to the word-to-AIG
@@ -2887,6 +2980,9 @@ struct IncrementalSolver::Impl
     cnf.releaseStorage();
     releaseContainer(rootLitOf);
     releaseContainer(aigRootOf);
+    releaseContainer(abstractionIdsOfEncodedRoot);
+    releaseContainer(permanentAbstractionIds);
+    releaseContainer(liveAbstractionIds);
     releaseContainer(permanentAigRoots);
     pendingLiveCone.releaseStorage();
     releaseContainer(actLitOf);
@@ -3055,6 +3151,13 @@ struct IncrementalSolver::Impl
     harvestedEQAbstractions = 0;
     harvestedTermAbstractions = 0;
     assertedSideConstraints = 0;
+    abstractionScope = BVAbstractionScope::all();
+    abstractionIdsOfEncodedRoot.clear();
+    permanentAbstractionIds.clear();
+    liveAbstractionIds.clear();
+    abstractionOwnershipComplete = true;
+    liveAbstractionOwnersKnown = false;
+    abstractionScopeStale = true;
     rootLitOf.clear();
     actLitOf.clear();
     everAssumedLits.clear();
@@ -3071,6 +3174,7 @@ struct IncrementalSolver::Impl
     walks.reclaimSymbolSets();
     refinementMassOf.clear();
     currentRefinementClauseMass = 0;
+    unattributedAbstractionMass = 0;
     aigRootOf.clear();
     pendingLiveCone.clear();
     activationMassOf.clear();
@@ -3698,6 +3802,8 @@ struct IncrementalSolver::Impl
       const BitBlaster::RawBVEQAbstraction& raw =
           rawEQs[harvestedEQAbstractions];
       BVEQAbstraction a;
+      a.id = raw.id;
+      a.dependencies = raw.dependencies;
       a.eqNode = raw.eqNode;
       a.abstractionSATVar = abstractionVarOf(raw.abstractionCI.symbol_index);
       a.leftSymbol = raw.leftSymbol;
@@ -3705,7 +3811,7 @@ struct IncrementalSolver::Impl
       a.width = std::max(1u, raw.leftSymbol.GetValueWidth());
       encodeAbstractionNode(a.leftSymbol);
       encodeAbstractionNode(a.rightSymbol);
-      bvAbstraction.equalities().push_back(std::move(a));
+      bvAbstraction.appendEquality(std::move(a));
     }
 
     const std::vector<BitBlaster::RawBVTermAbstraction>& rawTerms =
@@ -3716,12 +3822,16 @@ struct IncrementalSolver::Impl
       const BitBlaster::RawBVTermAbstraction& raw =
           rawTerms[harvestedTermAbstractions];
       BVTermAbstraction a;
+      a.id = raw.id;
+      a.dependencies = raw.dependencies;
       a.termNode = raw.termNode;
       a.opKind = raw.opKind;
       for (unsigned i = 0; i < raw.numOperands; i++)
       {
         a.operands[i] = raw.operands[i];
         a.operandNegated[i] = raw.operandNegated[i];
+        if (i < 2)
+          a.operandKnownBits[i] = raw.operandKnownBits[i];
         encodeAbstractionNode(a.operands[i]);
       }
       a.numOperands = raw.numOperands;
@@ -3735,8 +3845,20 @@ struct IncrementalSolver::Impl
       if (raw.condCISymbolIndex >= 0)
         a.condSATVar = abstractionVarOf(raw.condCISymbolIndex);
       encodeAbstractionNode(a.termNode);
-      bvAbstraction.terms().push_back(std::move(a));
+      bvAbstraction.appendTerm(std::move(a));
     }
+
+    // The record lists and the live stack have both just moved, so what this
+    // solve owns has to be worked out again -- and what the last solve said
+    // its owners were does not carry over to this one.
+    liveAbstractionIds.clear();
+    liveAbstractionOwnersKnown = false;
+    abstractionScopeStale = true;
+
+    // A query begins here, which is what the refinement budgets are counted
+    // in. Records outlive a query on this driver and do not on the batch one,
+    // so without this the same ceiling would mean two different things.
+    bvAbstraction.beginQuery();
   }
 
   // Every bit a record can be checked against gets its SAT variable here,
@@ -3794,26 +3916,125 @@ struct IncrementalSolver::Impl
     out.insert(std::make_pair(n, vars));
   }
 
-  // Check the candidate the solver is holding against every abstraction and
-  // pin the ones it contradicts; the count is how many were pinned, so zero
-  // means the candidate is faithful and may be handed on.
-  unsigned refineAbstractions(SATSolver& satSolver)
+  // Resolve the roots this route committed into a semantic, dependency-closed
+  // record view. A root sees only the outer producer CI when one abstraction
+  // consumes another, so direct AIG reachability is merely the seed; raw
+  // parent-to-child edges supply the fixed point. Defined parents are kept in
+  // the closure too, because their permanent exact clauses still consume the
+  // child abstraction's variables.
+  void refreshAbstractionScope()
+  {
+    if (!abstractionOwnershipComplete || !liveAbstractionOwnersKnown)
+    {
+      // Missing owner metadata cannot prove that a record is dormant. The
+      // conservative recovery is to check everything, which restores the
+      // pre-scoping algorithm without risking a false Faithful result.
+      abstractionScope = BVAbstractionScope::all();
+      return;
+    }
+
+    std::vector<BVAbstractionId> seeds(liveAbstractionIds);
+    seeds.insert(seeds.end(), permanentAbstractionIds.begin(),
+                 permanentAbstractionIds.end());
+    std::sort(seeds.begin(), seeds.end());
+    seeds.erase(std::unique(seeds.begin(), seeds.end()), seeds.end());
+    abstractionScope = bvAbstraction.dependencyClosure(seeds);
+  }
+
+  // The semantic encoding keys this solve asserts, from the route that knows
+  // them. Called after syncAbstractions and before the first search.
+  void setLiveAbstractionOwners(const ASTVec& keys)
+  {
+    liveAbstractionIds.clear();
+    liveAbstractionOwnersKnown = abstractionOwnershipComplete;
+    for (const ASTNode& key : keys)
+    {
+      const auto owner = abstractionIdsOfEncodedRoot.find(key);
+      if (owner == abstractionIdsOfEncodedRoot.end())
+      {
+        liveAbstractionOwnersKnown = false;
+        continue;
+      }
+      liveAbstractionIds.insert(liveAbstractionIds.end(),
+                                owner->second.begin(), owner->second.end());
+    }
+    std::sort(liveAbstractionIds.begin(), liveAbstractionIds.end());
+    liveAbstractionIds.erase(
+        std::unique(liveAbstractionIds.begin(), liveAbstractionIds.end()),
+        liveAbstractionIds.end());
+    abstractionScopeStale = true;
+  }
+
+  // Check the candidate the solver is holding against every abstraction this
+  // solve can reach and pin the ones it contradicts. Only Faithful permits
+  // the candidate to be handed on; Refined requires another solve, and
+  // Unknown withholds it.
+  AbstractionRefinementResult refineAbstractions(SATSolver& satSolver)
   {
     if (bvAbstraction.empty())
-      return 0;
+      return AbstractionRefinementResult::faithful();
+    if (abstractionScopeStale)
+    {
+      refreshAbstractionScope();
+      abstractionScopeStale = false;
+    }
+
+    // Do not try to materialize operands for a closure already known to be
+    // incomplete. The refiner owns the diagnostic/result transition, so pass
+    // the scope through with an intentionally empty map and fail closed
+    // before doing any post-solve encoding work.
+    if (!abstractionScope.complete)
+    {
+      ToSATBase::ASTNodeToSATVar noOperands;
+      return bvAbstraction.refine(satSolver, noOperands, abstractionScope);
+    }
+
+    // The operand map is cut to the same scope, so a solve that reaches no
+    // record does no work at all rather than resolving every operand any
+    // record has ever named. The two must agree: a record the scan checks
+    // whose operands the map left out reaches encodedBitsOf with nothing to
+    // read, which is a FatalError. They cannot disagree, because both read
+    // this one pair of sparse index lists (or the explicit all-record mode).
     ToSATBase::ASTNodeToSATVar operands;
-    for (const BVEQAbstraction& a : bvAbstraction.equalities())
+    const std::vector<BVEQAbstraction>& eqs = bvAbstraction.equalities();
+    const auto addEquality = [this, &operands, &eqs](size_t i)
     {
-      addAbstractionOperand(operands, a.leftSymbol);
-      addAbstractionOperand(operands, a.rightSymbol);
-    }
-    for (const BVTermAbstraction& a : bvAbstraction.terms())
+      assert(i < eqs.size());
+      addAbstractionOperand(operands, eqs[i].leftSymbol);
+      addAbstractionOperand(operands, eqs[i].rightSymbol);
+    };
+    if (abstractionScope.allRecords)
+      for (size_t i = 0; i < eqs.size(); ++i)
+        addEquality(i);
+    else
+      for (const size_t i : abstractionScope.equalityIndices)
+        addEquality(i);
+
+    const std::vector<BVTermAbstraction>& terms = bvAbstraction.terms();
+    const auto addTerm = [this, &operands, &terms](size_t i)
     {
-      addAbstractionOperand(operands, a.termNode);
-      for (unsigned i = 0; i < a.numOperands; i++)
-        addAbstractionOperand(operands, a.operands[i]);
-    }
-    return bvAbstraction.refine(satSolver, operands);
+      assert(i < terms.size());
+      addAbstractionOperand(operands, terms[i].termNode);
+      for (unsigned j = 0; j < terms[i].numOperands; j++)
+        addAbstractionOperand(operands, terms[i].operands[j]);
+    };
+    if (abstractionScope.allRecords)
+      for (size_t i = 0; i < terms.size(); ++i)
+        addTerm(i);
+    else
+      for (const size_t i : abstractionScope.termIndices)
+        addTerm(i);
+
+    // Every abstraction clause the session ever pins is submitted inside this
+    // call, so this is where they are charged -- to the permanent buckets,
+    // because that is what they are. The windows they happen inside belong to
+    // whatever route is solving and are keyed by the shape of its stack; they
+    // subtract this again rather than owning it.
+    const uint64_t before = solver->submittedClauses();
+    const AbstractionRefinementResult result = bvAbstraction.refine(
+        satSolver, operands, abstractionScope);
+    accountPermanentRefinementClauses(before);
+    return result;
   }
 
   // Decide how this block holds the injectivity guard, and keep the manager's
@@ -3999,7 +4220,8 @@ public:
     return sat;
   }
 
-  unsigned refineAbstractions(SATSolver& SatSolver) override
+  AbstractionRefinementResult
+  refineAbstractions(SATSolver& SatSolver) override
   {
     return d->refineAbstractions(SatSolver);
   }

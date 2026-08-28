@@ -19,9 +19,6 @@
 #ifdef USE_CRYPTOMINISAT
 #include "stp/Sat/CryptoMinisat5.h"
 #endif
-#ifdef USE_RISS
-#include "stp/Sat/Riss.h"
-#endif
 
 using stp::SATSolver;
 using stp::SearchBias;
@@ -157,26 +154,5 @@ TEST(SearchBias, CryptoMiniSatOnlyBiasesTowardsUnsat)
     stp::CryptoMiniSat5 s(1);
     EXPECT_FALSE(s.setSearchBias(SearchBias::SAT));
   }
-}
-#endif
-
-#ifdef USE_RISS
-TEST(SearchBias, RissVerdictsAreStable)
-{
-  const SolverFactory make = [] {
-    return std::unique_ptr<SATSolver>(new stp::RissCore);
-  };
-  checkUnsatVerdict(make, "riss");
-  checkSatVerdict(make, "riss");
-}
-
-// Riss is wrapped as a plain CDCL core -- nothing configures its search
-// direction -- so like MiniSat it has to decline rather than accept the
-// request and drop it.
-TEST(SearchBias, RissReportsNoSupport)
-{
-  stp::RissCore s;
-  EXPECT_FALSE(s.setSearchBias(SearchBias::SAT));
-  EXPECT_FALSE(s.setSearchBias(SearchBias::UNSAT));
 }
 #endif

@@ -160,9 +160,6 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind,
   bool printOutput = beev->UserFlags.print_output_flag;
   bool checkCounter = beev->UserFlags.check_counterexample_flag;
   bool constructCounter = beev->UserFlags.construct_counterexample_flag;
-  bool eqAbstraction = beev->UserFlags.bv_eq_abstraction;
-  bool termAbstraction = beev->UserFlags.bv_term_abstraction;
-
   beev->UserFlags.bitConstantProp_flag = false;
   beev->UserFlags.print_output_flag = false;
   beev->UserFlags.check_counterexample_flag = false;
@@ -170,15 +167,6 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind,
   // without this flag CallSAT_ResultCheck never constructs the model, every
   // "model" reads as all-zero, and the loop cannot terminate.
   beev->UserFlags.construct_counterexample_flag = true;
-  // The BV abstraction turns CallSAT_ResultCheck into a refinement
-  // producer: it can answer SOLVER_UNDECIDED (2) with no arrays involved,
-  // returning before the model this loop is about to read is constructed.
-  // The result handling below reads 2 as "error from solver" and aborts --
-  // a refinement round taken for a broken backend. These auxiliary
-  // queries are a few bits wide and gain nothing from abstracting anyway,
-  // so run them exact.
-  beev->UserFlags.bv_eq_abstraction = false;
-  beev->UserFlags.bv_term_abstraction = false;
 
   ASTVec initialFixing;
 
@@ -246,7 +234,18 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind,
   std::unique_ptr<SATSolver> newS_owner(createSATSolver(beev->UserFlags));
   SATSolver& newS = *newS_owner;
 
-  ToSATAIG tosat(beev, &at);
+  // Exactly, whatever the session's abstraction flags say. The BV abstraction
+  // turns CallSAT_ResultCheck into a refinement producer: it can answer
+  // SOLVER_UNDECIDED (2) with no arrays involved, returning before the model
+  // this loop is about to read is constructed, and the result handling below
+  // reads 2 as "error from solver" and aborts. These auxiliary queries are a
+  // few bits wide and gain nothing from abstracting anyway.
+  //
+  // Said to this encoding rather than by clearing the manager's flags and
+  // putting them back: that was a manager-wide write for a decision belonging
+  // to one lowering, invisible to anything else sharing the manager, and
+  // restored only on the paths that reach the bottom of this function.
+  ToSATAIG tosat(beev, &at, /*allowAbstraction=*/false);
 
   SATSolver::vec_literals satSolverClause;
 
@@ -325,8 +324,6 @@ bool maxPrecision(vector<FixedBits*> children, FixedBits& output, Kind kind,
   beev->UserFlags.print_output_flag = printOutput;
   beev->UserFlags.check_counterexample_flag = checkCounter;
   beev->UserFlags.construct_counterexample_flag = constructCounter;
-  beev->UserFlags.bv_eq_abstraction = eqAbstraction;
-  beev->UserFlags.bv_term_abstraction = termAbstraction;
 
   return first;
 }

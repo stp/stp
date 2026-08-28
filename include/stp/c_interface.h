@@ -172,6 +172,19 @@ DLL_PUBLIC void vc_setFlags(VC vc, char c,
 //!
 DLL_PUBLIC void vc_setFlag(VC vc, char c);
 
+//! Atomic mask/round pairs accepted by BV_TERM_ABSTRACTION_PROFILE.
+enum bv_term_abstraction_profile_t
+{
+  //! The inherited mask: base schemas, the UREM registry and MulRef3, at a
+  //! thirty-two round ceiling.
+  STP_BV_TERM_ABSTRACTION_PROFILE_QUALIFIED = 0,
+  //! The broad single-record catalogue, at sixteen.
+  STP_BV_TERM_ABSTRACTION_PROFILE_BROAD = 1,
+  //! The same catalogue plus the full-width paired identity, whose wide
+  //! multiplier is the reason it is not part of the profile above.
+  STP_BV_TERM_ABSTRACTION_PROFILE_AGGRESSIVE = 2
+};
+
 //! Interface-only flags.
 //!
 enum ifaceflag_t
@@ -206,24 +219,24 @@ enum ifaceflag_t
   //!
   CMS4,
 
-  //! Use the SAT solver Riss.
-  //!
-  RISS,
-
   //! \brief Deprecated: use `MS` instead!
   //!
   //! This used to be the array version of the minisat SAT solver.
   //!
   //! Currently simply forwards to MS.
   //!
-  MSP,
+  //! Note: 4 was `RISS`, removed along with the Riss backend. The value is
+  //! written out here so that this flag and the ones below keep the values
+  //! they had while Riss existed.
+  //!
+  MSP = 5,
 
   //! Use the SAT solver CaDiCaL.
   //!
   //! Note: this is last so that the values of the flags above are unchanged
   //! from the releases before CaDiCaL was added.
   //!
-  CADICAL,
+  CADICAL = 6,
 
   //! The real-query ordinal at which a session that never asked for the
   //! incremental driver starts using it anyway.
@@ -407,11 +420,15 @@ enum ifaceflag_t
   //!
   BV_TERM_ABSTRACTION,
 
-  //! Whether BV_TERM_ABSTRACTION covers BVMULT, BVDIV and BVMOD as well.
+  //! Scope switch for BVMULT, and for BVDIV and BVMOD unless those are named
+  //! separately.
   //!
   //! `param_value` nonzero includes them (the default), zero leaves them
-  //! encoded exactly from the start. This is the C API's way to reach
-  //! --bv-term-abstraction-mult.
+  //! encoded exactly from the start. This flag covered all three operations
+  //! before BV_TERM_ABSTRACTION_DIVMOD existed and still does when it is the
+  //! only one set; once DIV/MOD has been set explicitly that setting wins,
+  //! in either call order. This is the C API's way to reach
+  //! --bv-term-abstraction-mult, and it resolves the pair the same way.
   //!
   BV_TERM_ABSTRACTION_MULT,
 
@@ -426,13 +443,14 @@ enum ifaceflag_t
   //!
   BV_TERM_ABSTRACTION_ROUNDS,
 
-  //! Whether an abstracted BVMULT is refined with algebraic facts about
-  //! every pair of operands before falling back on ruling out the pair the
-  //! candidate holds.
+  //! Whether abstracted BVPLUS, BVMULT, BVDIV and BVMOD operations are
+  //! refined with algebraic facts about every pair of operands before their
+  //! operation-specific fallback.
   //!
-  //! `param_value` nonzero turns them on (the default), zero leaves the
-  //! blocking lemma as the only refinement. This is the C API's way to
-  //! reach --bv-term-abstraction-schemas.
+  //! `param_value` nonzero turns them on (the default). Zero makes an
+  //! inconsistent addition exact immediately and leaves value-pair blocking
+  //! as the only refinement for multiplication, division and remainder.
+  //! This is the C API's way to reach --bv-term-abstraction-schemas.
   //!
   BV_TERM_ABSTRACTION_SCHEMAS,
 
@@ -520,7 +538,40 @@ enum ifaceflag_t
   //! libstp, so the published prefix has to stay put -- the same rule
   //! tests/api/C/counter-enum-abi.cpp keeps for stp_counter_t.
   //!
-  CNF_AUTO_THRESHOLD
+  CNF_AUTO_THRESHOLD,
+
+  //! Whether BV_TERM_ABSTRACTION covers BVDIV and BVMOD.
+  //!
+  //! `param_value` nonzero includes them (the default), zero leaves them
+  //! encoded exactly from the start. Setting this at all takes division and
+  //! remainder out of BV_TERM_ABSTRACTION_MULT's scope, so the two may be
+  //! given in either order. This is the C API's way to reach
+  //! --bv-term-abstraction-divmod.
+  //!
+  BV_TERM_ABSTRACTION_DIVMOD,
+
+  //! Applies one complete BV term-abstraction schema profile. `param_value`
+  //! is a bv_term_abstraction_profile_t ordinal. QUALIFIED is the inherited
+  //! base/UREM/MulRef3 mask with a 32-round ceiling; BROAD selects the broad
+  //! single-record catalogue at 16 rounds; and AGGRESSIVE adds the
+  //! full-width paired DIV/REM identity to it. Invalid values
+  //! are refused without changing either field. This is the C API's way to
+  //! reach --bv-term-abstraction-profile.
+  //!
+  BV_TERM_ABSTRACTION_PROFILE,
+
+  //! Caps BVDIV/BVMOD value-pair blocking independently of
+  //! BV_TERM_ABSTRACTION_ROUNDS and BVMULT.
+  //!
+  //! `param_value` is the cap applied after the round ceiling and optional
+  //! width scaling. Unlike changing ROUNDS, this leaves the algebraic-schema
+  //! budget untouched, making 4/8/16/32 value-block experiments comparable.
+  //! Zero (the default) adds no cap and preserves the existing allowance; a
+  //! negative value is refused. Appended to preserve every published ordinal.
+  //! This is the C API's way to reach
+  //! --bv-term-abstraction-divmod-value-limit.
+  //!
+  BV_TERM_ABSTRACTION_DIVMOD_VALUE_LIMIT
 
 };
 
@@ -783,13 +834,49 @@ enum stp_counter_t
   STP_COUNTER_UF_APPLICATIONS_LOWERED = 15,
   STP_COUNTER_UF_CONSTRAINTS_INSTALLED = 16,
 
-  //! Individual algebraic schema lemmas installed over abstracted BVMULT
-  //! nodes. For one inconsistent multiplication a schema lemma replaces a
-  //! blocking lemma, but a pass may visit several operations and increment
-  //! both counters. Other abstraction kinds increment the pass counter
-  //! without incrementing either lemma counter, so the two lemma counts do
-  //! not partition STP_COUNTER_BV_REFINEMENT_ROUNDS.
-  STP_COUNTER_BV_SCHEMA_LEMMAS = 17
+  //! Individual algebraic schema lemmas installed over abstracted BVPLUS,
+  //! BVMULT, BVDIV and BVMOD nodes. For one inconsistent operation a schema
+  //! lemma replaces that operation's usual fallback, but a pass may visit
+  //! several operations and increment both lemma counters. Other abstraction
+  //! kinds increment the pass counter without incrementing either lemma
+  //! counter, so the two lemma counts do not partition
+  //! STP_COUNTER_BV_REFINEMENT_ROUNDS.
+  STP_COUNTER_BV_SCHEMA_LEMMAS = 17,
+
+  //! Value-pair refinements which spent their allowance and installed an
+  //! exact circuit, in total and partitioned between multiplication and
+  //! division/remainder.
+  STP_COUNTER_BV_EXACT_ESCALATIONS,
+  STP_COUNTER_BV_EXACT_ESCALATIONS_MULT,
+  STP_COUNTER_BV_EXACT_ESCALATIONS_DIVMOD,
+
+  //! What the refinement's FULL-WIDTH installs cost: clauses and variables
+  //! they added to the solver, and the wall-clock microseconds spent building
+  //! them. Read from the solver's own totals across each encode, not
+  //! estimated from the circuit.
+  //!
+  //! Wider than the escalations above. The paired DIV/REM recomposition lemma
+  //! builds a full-width multiplier without any abstraction being given up,
+  //! so it is counted here and not there -- it costs as much as an escalation
+  //! and is the reason the aggressive profile is the slowest, which is the
+  //! trade these exist to expose.
+  STP_COUNTER_BV_EXACT_CLAUSES,
+  STP_COUNTER_BV_EXACT_VARIABLES,
+  STP_COUNTER_BV_EXACT_MICROSECONDS,
+
+  //! What the algebraic schemas cost, on the same terms and in their own
+  //! bucket.
+  //!
+  //! STP_COUNTER_BV_SCHEMA_LEMMAS counts how many were installed, and one
+  //! lemma is not one price: a bound is a comparison chain and a registry fact
+  //! such as UDIV15 is three barrel shifters, which at 256 bits is 229,374
+  //! clauses. A schema profile is a choice of which families to enable, so a
+  //! count without a price cannot answer the question the profiles exist to
+  //! ask. Kept apart from the full-width totals above because rolled in with
+  //! one exact divider it would be invisible.
+  STP_COUNTER_BV_SCHEMA_CLAUSES,
+  STP_COUNTER_BV_SCHEMA_VARIABLES,
+  STP_COUNTER_BV_SCHEMA_MICROSECONDS
 };
 
 //! \brief Reads one of the counters above.
@@ -798,6 +885,57 @@ enum stp_counter_t
 //! caller built against a later header keeps working against an earlier
 //! library.
 DLL_PUBLIC unsigned long long vc_getCounter(VC vc, enum stp_counter_t counter);
+
+//! \brief Selects which families of algebraic facts
+//! BV_TERM_ABSTRACTION_SCHEMAS may offer.
+//!
+//! `groups` is spelled the way --bv-term-abstraction-schema-groups spells it:
+//! a comma-separated list of group names, or "all", or "none". The same
+//! parser answers both, so the two doors accept the same vocabulary,
+//! including its aliases, and reject with the same message.
+//!
+//! Returns 1 if the list was accepted. An unknown name is refused with a
+//! nonfatal diagnostic naming the valid set, and leaves the current selection
+//! unchanged -- so a caller that mistypes one group does not silently run
+//! with a narrower catalogue than it asked for.
+//!
+//! Names rather than published constants because the partition is a research
+//! instrument: which families exist, and how finely they are cut, is expected
+//! to change, and none of that should turn into an installed-header ABI
+//! break. BV_TERM_ABSTRACTION_PROFILE is the stable surface -- three levels
+//! that keep their meaning as the families beneath them move.
+DLL_PUBLIC int vc_setSchemaGroups(VC vc, const char* groups);
+
+//! How many BV schema groups there are, for sizing an array with one slot per
+//! group. It is also the bound on the index the two calls below take: an
+//! index runs from zero to one below this, in the order
+//! vc_schemaGroupName reports.
+#define STP_BV_SCHEMA_GROUP_COUNT 15
+
+//! \brief STP_COUNTER_BV_SCHEMA_LEMMAS, restricted to one schema group.
+//!
+//! The groups partition the aggregate exactly: every schema lemma the
+//! refinement installs increments the total and precisely one group. Read the
+//! breakdown with
+//!
+//!     for (unsigned i = 0; i < STP_BV_SCHEMA_GROUP_COUNT; i++)
+//!         printf("%s: %llu\n", vc_schemaGroupName(i),
+//!                vc_getSchemaGroupCounter(vc, i));
+//!
+//! An index at or above STP_BV_SCHEMA_GROUP_COUNT reads 0 and reports a
+//! nonfatal diagnostic, so a caller built against a later header keeps
+//! working against an earlier library.
+//!
+//! An index rather than one published ordinal per group, for the same reason
+//! vc_setSchemaGroups takes names: a family added, renamed or merged should
+//! not renumber stp_counter_t.
+DLL_PUBLIC unsigned long long vc_getSchemaGroupCounter(VC vc, unsigned group);
+
+//! \brief The command-line spelling of the group at this index, or NULL if
+//! the index is out of range. These are the names vc_setSchemaGroups and
+//! --bv-term-abstraction-schema-groups accept, so a breakdown can be fed
+//! straight back in.
+DLL_PUBLIC const char* vc_schemaGroupName(unsigned group);
 
 //! \brief Returns why the last query had no answer.
 //!
@@ -2247,18 +2385,6 @@ DLL_PUBLIC bool vc_useCryptominisat(VC vc);
 //! \brief Checks if underlying SAT solver is cryptominisat
 //!
 DLL_PUBLIC bool vc_isUsingCryptominisat(VC vc);
-
-//! \brief Checks if STP was compiled with support for riss
-//!
-DLL_PUBLIC bool vc_supportsRiss(VC vc);
-
-//! \brief Sets underlying SAT solver to riss
-//!
-DLL_PUBLIC bool vc_useRiss(VC vc);
-
-//! \brief Checks if underlying SAT solver is riss
-//!
-DLL_PUBLIC bool vc_isUsingRiss(VC vc);
 
 //! \brief Checks if STP was compiled with support for cadical
 //!

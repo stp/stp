@@ -87,7 +87,7 @@ class TestSTP(unittest.TestCase):
     def setUp(self):
         self.s = stp.Solver()
         self.stp_solvers = set(
-            ["Minisat", "SimplifyingMinisat", "Cryptominisat", "Riss", "Cadical"]
+            ["Minisat", "SimplifyingMinisat", "Cryptominisat", "Cadical"]
         )
 
     def test_package_reexports_everything_public(self):
@@ -1250,12 +1250,6 @@ class TestSTP(unittest.TestCase):
         Checks that the underlying solver can be set to be cryptominisat
         """
         self._test_solver("Cryptominisat", is_default_solver=False)
-
-    def test_riss(self):
-        """
-        Checks that the underlying solver can be set to be riss
-        """
-        self._test_solver("Riss", is_default_solver=False)
 
     def test_cadical(self):
         """

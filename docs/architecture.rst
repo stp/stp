@@ -17,8 +17,9 @@ between bitvector terms, and the ordering comparisons and the
 classifications over floating-point terms.
 
 The basic architecture of STP essentially follows the idea of word-level
-preprocessing followed by translation to SAT (CaDiCaL is the default SAT
-solver when it is compiled in, otherwise CryptoMiniSat; ``--cadical``,
+preprocessing followed by translation to SAT (a query with no solver
+flag goes to the first backend the build compiled in, preferring
+CryptoMiniSat, then CaDiCaL, then MiniSat; ``--cadical``,
 ``--cryptominisat`` and ``--minisat`` select a compiled-in backend at run
 time). In particular, we
 introduce several new heuristics for the preprocessing step, including
@@ -181,7 +182,7 @@ pipeline repeats itself.
    <title>SAT solver — click for a summary</title>
    <rect x="6" y="1034" width="404" height="45" rx="7" fill="#E7E2C6" stroke="#C9C3A4" stroke-width="1.4"/>
    <text x="22" y="1054" font-size="14.5" fill="#46433A" font-weight="600">SAT solver</text>
-   <text x="22" y="1071" font-size="11.5" fill="#8C8879">CaDiCaL, CryptoMiniSat, MiniSat or Riss</text>
+   <text x="22" y="1071" font-size="11.5" fill="#8C8879">CaDiCaL, CryptoMiniSat or MiniSat</text>
    </a>
    <path d="M410 455 H432 V398 H410" fill="none" stroke="#3F6B63" stroke-width="1.3" marker-end="url(#ahl)"/>
    <text x="442" y="410.0" font-size="11" fill="#3F6B63">run once, then</text>

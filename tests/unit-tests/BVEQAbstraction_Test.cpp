@@ -41,6 +41,28 @@ using namespace stp;
 namespace
 {
 
+unsigned refinedCount(const AbstractionRefinementResult& result)
+{
+  EXPECT_TRUE(result.madeProgress());
+  return result.refined;
+}
+
+void appendEqualityRecord(BVAbstractionRefiner& refiner,
+                          BVEQAbstraction record)
+{
+  static uint64_t nextId = 1;
+  record.id = BVAbstractionId(nextId++);
+  refiner.appendEquality(record);
+}
+
+void appendTermRecord(BVAbstractionRefiner& refiner,
+                      BVTermAbstraction record)
+{
+  static uint64_t nextId = UINT64_C(1) << 32;
+  record.id = BVAbstractionId(nextId++);
+  refiner.appendTerm(record);
+}
+
 class BVEQAbstractionTest : public ::testing::Test
 {
 protected:
@@ -478,6 +500,8 @@ TEST_F(BVEQAbstractionTest, ReusesTermAbstractionsAcrossMemoBoundaries)
 
     ASSERT_EQ(recordsBefore + 1, bb.abstractedTerms().size());
     EXPECT_EQ(expectedKind, bb.abstractedTerms().back().opKind);
+    const BVAbstractionId producer = bb.abstractedTerms().back().id;
+    ASSERT_TRUE(producer.valid());
     EXPECT_EQ(term.GetValueWidth(),
               bb.abstractedTerms().back().resultCISymbolIndices.size());
     const auto firstRegistration = aigMgr.symbolToBBNode.find(term);
@@ -492,12 +516,192 @@ TEST_F(BVEQAbstractionTest, ReusesTermAbstractionsAcrossMemoBoundaries)
     ASSERT_TRUE(secondRegistration != aigMgr.symbolToBBNode.end());
     EXPECT_EQ(first, secondRegistration->second);
     EXPECT_EQ(recordsBefore + 1, bb.abstractedTerms().size());
+    EXPECT_EQ(producer.value(), bb.abstractedTerms().back().id.value());
   };
 
   expectReused(factory->CreateTerm(ITE, 8, condition, left, right), ITE);
   expectReused(factory->CreateTerm(BVPLUS, 8, left, right), BVPLUS);
   expectReused(factory->CreateTerm(BVMULT, 8, left, right), BVMULT);
   expectReused(factory->CreateTerm(BVDIV, 8, left, right), BVDIV);
+}
+
+TEST_F(BVEQAbstractionTest,
+       RecordsParentDependencyThroughAnInternalOperandProxy)
+{
+  mgr.UserFlags.bv_term_abstraction = true;
+  mgr.UserFlags.bv_eq_abstraction = false;
+  mgr.UserFlags.bv_abstraction_width = 8;
+
+  const ASTNode x = makeSymbol("dependency_proxy_x", 8);
+  const ASTNode y = makeSymbol("dependency_proxy_y", 8);
+  const ASTNode z = makeSymbol("dependency_proxy_z", 8);
+  const ASTNode expected = makeSymbol("dependency_proxy_expected", 8);
+  const ASTNode child = factory->CreateTerm(BVMULT, 8, x, y);
+  const ASTNode composite = factory->CreateTerm(BVNOT, 8, child);
+  const ASTNode parent = factory->CreateTerm(BVPLUS, 8, composite, z);
+  const ASTNode root = factory->CreateNode(EQ, parent, expected);
+
+  BBNodeManagerAIG aigMgr;
+  stp::SubstitutionMap sm(&mgr);
+  Simplifier simp(&mgr, &sm);
+  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+
+  const BBNodeAIG rootAig = bb.BBForm(root);
+
+  const BitBlaster::RawBVTermAbstraction* childRecord = NULL;
+  const BitBlaster::RawBVTermAbstraction* parentRecord = NULL;
+  for (const auto& record : bb.abstractedTerms())
+  {
+    if (record.termNode == child)
+      childRecord = &record;
+    if (record.termNode == parent)
+      parentRecord = &record;
+  }
+  ASSERT_NE(nullptr, childRecord);
+  ASSERT_NE(nullptr, parentRecord);
+  ASSERT_TRUE(childRecord->id.valid());
+  ASSERT_TRUE(parentRecord->id.valid());
+  ASSERT_EQ(1u, parentRecord->dependencies.size());
+  EXPECT_EQ(childRecord->id.value(),
+            parentRecord->dependencies[0].value());
+
+  // The committed formula sees only the parent's result CI. The child is
+  // recovered by closing the raw dependency edge, not by a root-cone walk.
+  const std::vector<BVAbstractionId> owners =
+      bb.abstractionSourcesOf(rootAig);
+  ASSERT_EQ(1u, owners.size());
+  EXPECT_EQ(parentRecord->id.value(), owners[0].value());
+  EXPECT_FALSE(bb.sideConstraints().empty());
+}
+
+TEST_F(BVEQAbstractionTest,
+       RecordsEveryProducerInAnAllCICompositeOperand)
+{
+  mgr.UserFlags.bv_term_abstraction = true;
+  mgr.UserFlags.bv_eq_abstraction = false;
+  mgr.UserFlags.bv_abstraction_width = 32;
+
+  const ASTNode a = makeSymbol("dependency_concat_a", 32);
+  const ASTNode b = makeSymbol("dependency_concat_b", 32);
+  const ASTNode c = makeSymbol("dependency_concat_c", 32);
+  const ASTNode d = makeSymbol("dependency_concat_d", 32);
+  const ASTNode scale = makeSymbol("dependency_concat_scale", 64);
+  const ASTNode expected = makeSymbol("dependency_concat_expected", 64);
+  const ASTNode high = factory->CreateTerm(BVMULT, 32, a, b);
+  const ASTNode low = factory->CreateTerm(BVMULT, 32, c, d);
+  const ASTNode joined = factory->CreateTerm(BVCONCAT, 64, high, low);
+  const ASTNode parent = factory->CreateTerm(BVMULT, 64, joined, scale);
+  const ASTNode root = factory->CreateNode(EQ, parent, expected);
+
+  BBNodeManagerAIG aigMgr;
+  stp::SubstitutionMap sm(&mgr);
+  Simplifier simp(&mgr, &sm);
+  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+
+  const BBNodeAIG rootAig = bb.BBForm(root);
+
+  const BitBlaster::RawBVTermAbstraction* highRecord = NULL;
+  const BitBlaster::RawBVTermAbstraction* lowRecord = NULL;
+  const BitBlaster::RawBVTermAbstraction* parentRecord = NULL;
+  for (const auto& record : bb.abstractedTerms())
+  {
+    if (record.termNode == high)
+      highRecord = &record;
+    if (record.termNode == low)
+      lowRecord = &record;
+    if (record.termNode == parent)
+      parentRecord = &record;
+  }
+  ASSERT_NE(nullptr, highRecord);
+  ASSERT_NE(nullptr, lowRecord);
+  ASSERT_NE(nullptr, parentRecord);
+  ASSERT_EQ(2u, parentRecord->dependencies.size());
+
+  std::set<uint64_t> dependencyValues;
+  for (const BVAbstractionId id : parentRecord->dependencies)
+    dependencyValues.insert(id.value());
+  EXPECT_EQ(1u, dependencyValues.count(highRecord->id.value()));
+  EXPECT_EQ(1u, dependencyValues.count(lowRecord->id.value()));
+
+  const std::vector<BVAbstractionId> owners =
+      bb.abstractionSourcesOf(rootAig);
+  ASSERT_EQ(1u, owners.size());
+  EXPECT_EQ(parentRecord->id.value(), owners[0].value());
+}
+
+TEST_F(BVEQAbstractionTest,
+       DependencyClosureIsTransitiveSparseAndIndependentOfDefinitionState)
+{
+  BVAbstractionRefiner refiner(&mgr);
+
+  BVEQAbstraction outer;
+  outer.id = BVAbstractionId(10);
+  outer.dependencies = {BVAbstractionId(20), BVAbstractionId(30)};
+  outer.defined = true;
+  refiner.appendEquality(outer);
+
+  BVTermAbstraction middle;
+  middle.id = BVAbstractionId(20);
+  middle.dependencies = {BVAbstractionId(30)};
+  middle.defined = true;
+  refiner.appendTerm(middle);
+
+  BVTermAbstraction inner;
+  inner.id = BVAbstractionId(30);
+  // A defensive cycle must still reach a fixed point.
+  inner.dependencies = {BVAbstractionId(10)};
+  refiner.appendTerm(inner);
+
+  BVTermAbstraction dormant;
+  dormant.id = BVAbstractionId(40);
+  refiner.appendTerm(dormant);
+
+  const BVAbstractionScope scope =
+      refiner.dependencyClosure({BVAbstractionId(10)});
+  EXPECT_FALSE(scope.allRecords);
+  EXPECT_TRUE(scope.complete);
+  ASSERT_EQ(1u, scope.equalityIndices.size());
+  EXPECT_EQ(0u, scope.equalityIndices[0]);
+  ASSERT_EQ(2u, scope.termIndices.size());
+  EXPECT_EQ(0u, scope.termIndices[0]);
+  EXPECT_EQ(1u, scope.termIndices[1]);
+
+  const BVAbstractionScope empty = refiner.dependencyClosure({});
+  EXPECT_FALSE(empty.allRecords);
+  EXPECT_TRUE(empty.complete);
+  EXPECT_TRUE(empty.equalityIndices.empty());
+  EXPECT_TRUE(empty.termIndices.empty());
+}
+
+TEST_F(BVEQAbstractionTest, MissingDependencyMakesTheScopeIncomplete)
+{
+  BVAbstractionRefiner refiner(&mgr);
+  BVTermAbstraction record;
+  record.id = BVAbstractionId(1);
+  record.dependencies = {BVAbstractionId(2)};
+  refiner.appendTerm(record);
+
+  const BVAbstractionScope scope =
+      refiner.dependencyClosure({BVAbstractionId(1)});
+  EXPECT_FALSE(scope.allRecords);
+  EXPECT_FALSE(scope.complete);
+}
+
+TEST_F(BVEQAbstractionTest, InvalidProducerMakesTheScopeIncomplete)
+{
+  BVAbstractionRefiner refiner(&mgr);
+  BVTermAbstraction record;
+  record.id = BVAbstractionId(1);
+  record.dependencies = {BVAbstractionId()};
+  refiner.appendTerm(record);
+
+  const BVAbstractionScope invalidSeed =
+      refiner.dependencyClosure({BVAbstractionId()});
+  EXPECT_FALSE(invalidSeed.complete);
+
+  const BVAbstractionScope invalidDependency =
+      refiner.dependencyClosure({BVAbstractionId(1)});
+  EXPECT_FALSE(invalidDependency.complete);
 }
 
 // A candidate is only an assignment of the query once every abstraction in it
@@ -537,6 +741,80 @@ protected:
 private:
   uint32_t next = 1;
 };
+
+TEST_F(BVEQAbstractionTest, IncompleteScopeIsExplicitlyUnknown)
+{
+  BVAbstractionRefiner refiner(&mgr);
+  BVAbstractionScope scope = BVAbstractionScope::selected();
+  scope.complete = false;
+  NoModelSolver solver;
+  ToSATBase::ASTNodeToSATVar noOperands;
+
+  const AbstractionRefinementResult result =
+      refiner.refine(solver, noOperands, scope);
+  EXPECT_TRUE(result.isUnknown());
+  EXPECT_EQ(UnknownReason::Incomplete, mgr.getUnknownReason());
+}
+
+TEST_F(BVEQAbstractionTest, EmptySparseScopeIsFaithfulWithoutModelReads)
+{
+  BVAbstractionRefiner refiner(&mgr);
+  BVTermAbstraction record;
+  record.id = BVAbstractionId(1);
+  record.opKind = BVMULT;
+  record.width = 64;
+  record.numOperands = 2;
+  refiner.appendTerm(record);
+
+  NoModelSolver solver;
+  ToSATBase::ASTNodeToSATVar noOperands;
+  const AbstractionRefinementResult result = refiner.refine(
+      solver, noOperands, BVAbstractionScope::selected());
+  EXPECT_TRUE(result.isFaithful());
+}
+
+TEST_F(BVEQAbstractionTest, QueryBudgetsResetOnlyWhenARecordIsSelected)
+{
+  BVAbstractionRefiner refiner(&mgr);
+  const ASTNode a = makeSymbol("lazy_budget_a", 1);
+  const ASTNode b = makeSymbol("lazy_budget_b", 1);
+  const ASTNode product = factory->CreateTerm(BVMULT, 1, a, b);
+
+  BVTermAbstraction live;
+  live.id = BVAbstractionId(1);
+  live.termNode = product;
+  live.opKind = BVMULT;
+  live.operands[0] = a;
+  live.operands[1] = b;
+  live.numOperands = 2;
+  live.width = 1;
+  live.resultSATVars = {3};
+  live.blockedThisQuery = 4;
+  live.schemasThisQuery = 3;
+  refiner.appendTerm(live);
+
+  BVTermAbstraction dormant = live;
+  dormant.id = BVAbstractionId(2);
+  dormant.blockedThisQuery = 7;
+  dormant.schemasThisQuery = 6;
+  refiner.appendTerm(dormant);
+
+  NoModelSolver solver;
+  ToSATBase::ASTNodeToSATVar operands;
+  operands[a] = {1};
+  operands[b] = {2};
+  refiner.beginQuery();
+  BVAbstractionScope scope = BVAbstractionScope::selected();
+  scope.termIndices.push_back(0);
+
+  const AbstractionRefinementResult result =
+      refiner.refine(solver, operands, scope);
+  EXPECT_TRUE(result.isFaithful());
+  EXPECT_EQ(0u, refiner.terms()[0].blockedThisQuery);
+  EXPECT_EQ(0u, refiner.terms()[0].schemasThisQuery);
+  EXPECT_EQ(7u, refiner.terms()[1].blockedThisQuery);
+  EXPECT_EQ(6u, refiner.terms()[1].schemasThisQuery);
+}
 
 // A backend that records what STP does to it: the model is scripted per
 // variable (anything unscripted reads false), every added clause is kept
@@ -632,12 +910,12 @@ TEST_F(BVEQAbstractionTest, FreezeVariablesCoversEveryLemmaVariable)
   eq.leftSymbol = x;
   eq.rightSymbol = y;
   eq.width = 4;
-  refiner.equalities().push_back(eq);
+  appendEqualityRecord(refiner, eq);
 
   // Harvested with no variable yet: legal before the first solve, skipped.
   BVEQAbstraction pending = eq;
   pending.abstractionSATVar = BV_ABSTRACTION_NO_VAR;
-  refiner.equalities().push_back(pending);
+  appendEqualityRecord(refiner, pending);
 
   BVTermAbstraction term;
   term.termNode = sum;
@@ -646,7 +924,7 @@ TEST_F(BVEQAbstractionTest, FreezeVariablesCoversEveryLemmaVariable)
   term.operands[1] = y;
   term.numOperands = 2;
   term.width = 4;
-  refiner.terms().push_back(term);
+  appendTermRecord(refiner, term);
 
   // A record that owns its result, as the persistent incremental lowering
   // files them. Freezing has to reach 40..43 and not whatever the node map
@@ -655,7 +933,7 @@ TEST_F(BVEQAbstractionTest, FreezeVariablesCoversEveryLemmaVariable)
   // nothing and keeps the map fallback covered.
   BVTermAbstraction owned = term;
   owned.resultSATVars = std::vector<unsigned>{40, 41, 42, 43};
-  refiner.terms().push_back(owned);
+  appendTermRecord(refiner, owned);
 
   ToSATBase::ASTNodeToSATVar bits;
   bits[x] = std::vector<unsigned>{10, 11, 12, 13};
@@ -691,11 +969,11 @@ TEST_F(BVEQAbstractionTest, DuplicateTermsKeepTheirOwnResultVariables)
   older.numOperands = 2;
   older.width = 4;
   older.resultSATVars = std::vector<unsigned>{40, 41, 42, 43};
-  refiner.terms().push_back(older);
+  appendTermRecord(refiner, older);
 
   BVTermAbstraction newer = older;
   newer.resultSATVars = std::vector<unsigned>{30, 31, 32, 33};
-  refiner.terms().push_back(newer);
+  appendTermRecord(refiner, newer);
 
   ToSATBase::ASTNodeToSATVar bits;
   bits[a] = std::vector<unsigned>{10, 11, 12, 13};
@@ -719,7 +997,7 @@ TEST_F(BVEQAbstractionTest, DuplicateTermsKeepTheirOwnResultVariables)
     solver.model[40 + i] = false;
   }
 
-  EXPECT_EQ(1u, refiner.refine(solver, bits));
+  EXPECT_EQ(1u, refinedCount(refiner.refine(solver, bits)));
   EXPECT_EQ(1u, refiner.terms()[0].blockedRounds);
   EXPECT_EQ(0u, refiner.terms()[1].blockedRounds);
   EXPECT_TRUE(solver.someClauseBlocksModel());
@@ -746,7 +1024,7 @@ TEST_F(BVEQAbstractionTest, SaidUnequalRoundBlocksTheCandidate)
   record.leftSymbol = x;
   record.rightSymbol = y;
   record.width = 4;
-  refiner.equalities().push_back(record);
+  appendEqualityRecord(refiner, record);
 
   ToSATBase::ASTNodeToSATVar bits;
   bits[x] = std::vector<unsigned>{10, 11, 12, 13};
@@ -765,7 +1043,7 @@ TEST_F(BVEQAbstractionTest, SaidUnequalRoundBlocksTheCandidate)
   solver.model[22] = true;
   solver.model[23] = false;
 
-  EXPECT_EQ(1u, refiner.refine(solver, bits));
+  EXPECT_EQ(1u, refinedCount(refiner.refine(solver, bits)));
   // The prefix still grew -- the blocking clause is in addition to the
   // definition's progress, not instead of it.
   EXPECT_EQ(1u, refiner.equalities()[0].refinedBits);
@@ -797,7 +1075,7 @@ TEST_F(BVEQAbstractionTest, CongruenceChainsRunThroughDefinedEqualities)
   xy.width = 4;
   xy.defined = true;
   xy.refinedBits = 4;
-  refiner.equalities().push_back(xy);
+  appendEqualityRecord(refiner, xy);
 
   BVEQAbstraction yz;
   yz.eqNode = factory->CreateNode(EQ, y, z);
@@ -805,7 +1083,7 @@ TEST_F(BVEQAbstractionTest, CongruenceChainsRunThroughDefinedEqualities)
   yz.leftSymbol = y;
   yz.rightSymbol = z;
   yz.width = 4;
-  refiner.equalities().push_back(yz);
+  appendEqualityRecord(refiner, yz);
 
   BVEQAbstraction xz;
   xz.eqNode = factory->CreateNode(EQ, x, z);
@@ -813,7 +1091,7 @@ TEST_F(BVEQAbstractionTest, CongruenceChainsRunThroughDefinedEqualities)
   xz.leftSymbol = x;
   xz.rightSymbol = z;
   xz.width = 4;
-  refiner.equalities().push_back(xz);
+  appendEqualityRecord(refiner, xz);
 
   ToSATBase::ASTNodeToSATVar bits;
   bits[x] = std::vector<unsigned>{10, 11, 12, 13};
@@ -828,7 +1106,7 @@ TEST_F(BVEQAbstractionTest, CongruenceChainsRunThroughDefinedEqualities)
   solver.model[6] = true;
   solver.model[7] = false;
 
-  EXPECT_EQ(1u, refiner.refine(solver, bits));
+  EXPECT_EQ(1u, refinedCount(refiner.refine(solver, bits)));
   EXPECT_EQ(0u, refiner.equalities()[2].refinedBits);
   EXPECT_FALSE(refiner.equalities()[2].defined);
   EXPECT_TRUE(solver.someClauseBlocksModel());
@@ -860,7 +1138,7 @@ TEST_F(BVEQAbstractionTest, BlockingRoundReusesTheRegisteredConstant)
   record.operands[1] = three;
   record.numOperands = 2;
   record.width = 4;
-  refiner.terms().push_back(record);
+  appendTermRecord(refiner, record);
 
   ToSATBase::ASTNodeToSATVar bits;
   bits[a] = std::vector<unsigned>{10, 11, 12, 13};
@@ -882,7 +1160,7 @@ TEST_F(BVEQAbstractionTest, BlockingRoundReusesTheRegisteredConstant)
     solver.model[30 + i] = scripted[8 + i];
   }
 
-  EXPECT_EQ(1u, refiner.refine(solver, bits));
+  EXPECT_EQ(1u, refinedCount(refiner.refine(solver, bits)));
   EXPECT_EQ(1u, refiner.terms()[0].blockedRounds);
   EXPECT_EQ(0u, refiner.terms()[0].schemaRounds);
   EXPECT_FALSE(refiner.terms()[0].defined);
@@ -914,7 +1192,7 @@ TEST_F(BVEQAbstractionTest, ASchemaRoundIsSpentWhereTheCandidateContradictsOne)
   record.operands[1] = three;
   record.numOperands = 2;
   record.width = 4;
-  refiner.terms().push_back(record);
+  appendTermRecord(refiner, record);
 
   ToSATBase::ASTNodeToSATVar bits;
   bits[a] = std::vector<unsigned>{10, 11, 12, 13};
@@ -935,7 +1213,7 @@ TEST_F(BVEQAbstractionTest, ASchemaRoundIsSpentWhereTheCandidateContradictsOne)
     solver.model[30 + i] = scripted[8 + i];
   }
 
-  EXPECT_EQ(1u, refiner.refine(solver, bits));
+  EXPECT_EQ(1u, refinedCount(refiner.refine(solver, bits)));
   EXPECT_EQ(1u, refiner.terms()[0].schemaRounds);
   EXPECT_EQ(0u, refiner.terms()[0].blockedRounds);
   EXPECT_FALSE(refiner.terms()[0].defined);
@@ -965,7 +1243,7 @@ TEST_F(BVEQAbstractionTest, OnePassCanInstallBothKindsOfMultiplicationLemma)
   first.operands[1] = b;
   first.numOperands = 2;
   first.width = 4;
-  refiner.terms().push_back(first);
+  appendTermRecord(refiner, first);
 
   BVTermAbstraction second;
   second.termNode = secondProduct;
@@ -974,7 +1252,7 @@ TEST_F(BVEQAbstractionTest, OnePassCanInstallBothKindsOfMultiplicationLemma)
   second.operands[1] = d;
   second.numOperands = 2;
   second.width = 4;
-  refiner.terms().push_back(second);
+  appendTermRecord(refiner, second);
 
   ToSATBase::ASTNodeToSATVar bits;
   bits[a] = std::vector<unsigned>{10, 11, 12, 13};
@@ -986,39 +1264,109 @@ TEST_F(BVEQAbstractionTest, OnePassCanInstallBothKindsOfMultiplicationLemma)
 
   RecordingSolver solver;
   // First: 2 * 3 is 6, not the candidate zero. The power-of-two operand
-  // earns a schema. Second: 3 * 5 is 15, not the candidate one; both operands
-  // and both products are odd, so every applicable algebraic fact already
-  // holds and the candidate needs an ordinary blocking lemma.
-  const bool scripted[24] = {
-      false, true,  false, false, // a = 2
-      true,  true,  false, false, // b = 3
-      false, false, false, false, // first candidate = 0
-      true,  true,  false, false, // c = 3
-      true,  false, true,  false, // d = 5
-      true,  false, false, false  // second candidate = 1
-  };
+  // earns a schema. Find an independently inconsistent second candidate that
+  // satisfies every currently registered schema, so it genuinely exercises
+  // the ordinary blocking fallback even as that registry grows.
+  const unsigned firstValues[3] = {2, 3, 0};
+  unsigned secondValues[3] = {};
+  bool foundBlockingCandidate = false;
+  for (unsigned cv = 0; cv < 16 && !foundBlockingCandidate; ++cv)
+    for (unsigned dv = 0; dv < 16 && !foundBlockingCandidate; ++dv)
+      for (unsigned tv = 0; tv < 16; ++tv)
+      {
+        if (((cv * dv) & 15u) == tv)
+          continue;
+        std::vector<bool> cBits(4), dBits(4), tBits(4);
+        for (unsigned i = 0; i < 4; ++i)
+        {
+          cBits[i] = ((cv >> i) & 1u) != 0;
+          dBits[i] = ((dv >> i) & 1u) != 0;
+          tBits[i] = ((tv >> i) & 1u) != 0;
+        }
+        if (chooseMulSchema(cBits, dBits, tBits, 0).schema == MulSchema::None)
+        {
+          secondValues[0] = cv;
+          secondValues[1] = dv;
+          secondValues[2] = tv;
+          foundBlockingCandidate = true;
+          break;
+        }
+      }
+  ASSERT_TRUE(foundBlockingCandidate);
+
   for (unsigned i = 0; i < 4; ++i)
   {
-    solver.model[10 + i] = scripted[i];
-    solver.model[20 + i] = scripted[4 + i];
-    solver.model[30 + i] = scripted[8 + i];
-    solver.model[40 + i] = scripted[12 + i];
-    solver.model[50 + i] = scripted[16 + i];
-    solver.model[60 + i] = scripted[20 + i];
+    solver.model[10 + i] = ((firstValues[0] >> i) & 1u) != 0;
+    solver.model[20 + i] = ((firstValues[1] >> i) & 1u) != 0;
+    solver.model[30 + i] = ((firstValues[2] >> i) & 1u) != 0;
+    solver.model[40 + i] = ((secondValues[0] >> i) & 1u) != 0;
+    solver.model[50 + i] = ((secondValues[1] >> i) & 1u) != 0;
+    solver.model[60 + i] = ((secondValues[2] >> i) & 1u) != 0;
   }
 
-  EXPECT_EQ(2u, refiner.refine(solver, bits));
+  EXPECT_EQ(2u, refinedCount(refiner.refine(solver, bits)));
   EXPECT_EQ(1u, mgr.UserFlags.coverage.bv_refinement_rounds);
   EXPECT_EQ(1u, mgr.UserFlags.coverage.bv_schema_lemmas);
   EXPECT_EQ(1u, mgr.UserFlags.coverage.bv_blocking_lemmas);
   EXPECT_TRUE(solver.someClauseBlocksModel());
 }
 
-// maxPrecision's auxiliary SAT queries must not themselves be abstracted:
-// a refinement round answers SOLVER_UNDECIDED, which its result handling
-// reads as "error from solver" and aborts on. The entry points clear the
-// two flags for their own scope and restore them on the way out, so a
-// query narrow enough to abstract at this floor still runs exact inside.
+// A lowering told not to abstract does not, whatever the session's flags say.
+//
+// This is what maxPrecision needs and what it used to get by clearing the
+// manager's two feature flags and putting them back: a manager-wide write for
+// a decision belonging to one encoding. BitBlaster has taken the answer as a
+// constructor argument all along; ToSATAIG did not, which is why the only
+// in-tree caller that needs it had to reach around it.
+TEST_F(BVEQAbstractionTest, ALoweringToldNotToAbstractDoesNot)
+{
+  mgr.UserFlags.bv_eq_abstraction = true;
+  mgr.UserFlags.bv_term_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+
+  ASTNode a = makeSymbol("na_a", 128);
+  ASTNode b = makeSymbol("na_b", 128);
+  ASTNode product = factory->CreateTerm(BVMULT, 128, a, b);
+  ASTNode query = factory->CreateNode(EQ, product, a);
+
+  {
+    stp::SubstitutionMap sm(&mgr);
+    Simplifier simp(&mgr, &sm);
+    ArrayTransformer at(&mgr, &simp);
+    ToSATAIG tosat(&mgr, &at, /*allowAbstraction=*/false);
+
+    RecordingSolver solver;
+    EXPECT_TRUE(tosat.CallSAT(solver, query, true));
+    EXPECT_FALSE(tosat.hasBVTermAbstractions());
+    EXPECT_FALSE(tosat.hasBVEQAbstractions());
+  }
+
+  // The flags are still what the session set, because nothing wrote them --
+  // which is the half the old mechanism could only promise on the paths that
+  // reached its restore.
+  EXPECT_TRUE(mgr.UserFlags.bv_eq_abstraction);
+  EXPECT_TRUE(mgr.UserFlags.bv_term_abstraction);
+
+  // ... and the same query through a lowering that was not told anything
+  // abstracts, so the first half is the argument doing it and not the query
+  // being ineligible.
+  {
+    stp::SubstitutionMap sm(&mgr);
+    Simplifier simp(&mgr, &sm);
+    ArrayTransformer at(&mgr, &simp);
+    ToSATAIG tosat(&mgr, &at);
+
+    RecordingSolver solver;
+    EXPECT_TRUE(tosat.CallSAT(solver, query, true));
+    EXPECT_TRUE(tosat.hasBVTermAbstractions());
+  }
+}
+
+// maxPrecision's auxiliary SAT queries must not themselves be abstracted: a
+// refinement round answers SOLVER_UNDECIDED, which its result handling reads
+// as "error from solver" and aborts on. It gets that from the constructor
+// argument above now, so a query narrow enough to abstract at this floor
+// still runs exact inside and the session's flags are never written.
 TEST_F(BVEQAbstractionTest, MaxPrecisionRunsExactUnderAbstractionFlags)
 {
   mgr.UserFlags.bv_eq_abstraction = true;
@@ -1066,6 +1414,53 @@ TEST_F(BVEQAbstractionTest, BatchLoweringFreezesAbstractionVariables)
   EXPECT_GE(solver.frozen.size(), 513u);
 }
 
+// ... and it has to file each term record's own result variables while it is
+// there.
+//
+// The blaster computes them for every abstracted term, and the refiner
+// prefers them over the AST-keyed registry precisely because the registry
+// holds one vector per node and so names only the newest result registered
+// for it. The incremental lowering carried them across; this one dropped
+// them, leaving that registry as the single answer -- which is the shape
+// DuplicateTermsKeepTheirOwnResultVariables above shows going wrong.
+//
+// Nothing changes for a run where canonical reuse holds, which is what the
+// second half checks: the record's variables are the ones the registry has.
+TEST_F(BVEQAbstractionTest, BatchLoweringFilesEachTermsOwnResultVariables)
+{
+  mgr.UserFlags.bv_term_abstraction = true;
+  mgr.UserFlags.bv_abstraction_width = 64;
+
+  ASTNode a = makeSymbol("br_a", 128);
+  ASTNode b = makeSymbol("br_b", 128);
+  ASTNode product = factory->CreateTerm(BVMULT, 128, a, b);
+  ASTNode query = factory->CreateNode(EQ, product, a);
+
+  stp::SubstitutionMap sm(&mgr);
+  Simplifier simp(&mgr, &sm);
+  ArrayTransformer at(&mgr, &simp);
+  ToSATAIG tosat(&mgr, &at);
+
+  RecordingSolver solver;
+  EXPECT_TRUE(tosat.CallSAT(solver, query, true));
+  ASSERT_TRUE(tosat.hasBVTermAbstractions());
+
+  const ToSATBase::ASTNodeToSATVar& registry = tosat.SATVar_to_SymbolIndexMap();
+  bool sawProduct = false;
+  for (const BVTermAbstraction& record : tosat.termRecordsForTesting())
+  {
+    ASSERT_EQ(record.width, record.resultSATVars.size())
+        << "a record was filed without its own result variables";
+    const auto it = registry.find(record.termNode);
+    ASSERT_TRUE(it != registry.end());
+    for (unsigned i = 0; i < record.width; ++i)
+      EXPECT_EQ(it->second[i], record.resultSATVars[i])
+          << "record and registry disagree at bit " << i;
+    sawProduct = sawProduct || record.termNode == product;
+  }
+  EXPECT_TRUE(sawProduct) << "the multiplication was not abstracted";
+}
+
 TEST_F(BVEQAbstractionTest, RefusesAnEqualityWhoseOperandsAreNotEncoded)
 {
   ASTNode x = makeSymbol("nb_x", 8);
@@ -1078,7 +1473,7 @@ TEST_F(BVEQAbstractionTest, RefusesAnEqualityWhoseOperandsAreNotEncoded)
   record.leftSymbol = x;
   record.rightSymbol = y;
   record.width = 8;
-  refiner.equalities().push_back(record);
+  appendEqualityRecord(refiner, record);
 
   NoModelSolver solver;
   ToSATBase::ASTNodeToSATVar empty;
@@ -1097,7 +1492,7 @@ TEST_F(BVEQAbstractionTest, RefusesAnEqualityRecordedWiderThanItsOperands)
   record.leftSymbol = x;
   record.rightSymbol = y;
   record.width = 8;
-  refiner.equalities().push_back(record);
+  appendEqualityRecord(refiner, record);
 
   NoModelSolver solver;
   ToSATBase::ASTNodeToSATVar bits;
@@ -1118,7 +1513,7 @@ TEST_F(BVEQAbstractionTest, RefusesAnEqualityBitThatNeverReachedTheCNF)
   record.leftSymbol = x;
   record.rightSymbol = y;
   record.width = 8;
-  refiner.equalities().push_back(record);
+  appendEqualityRecord(refiner, record);
 
   NoModelSolver solver;
   ToSATBase::ASTNodeToSATVar bits;
@@ -1143,7 +1538,7 @@ TEST_F(BVEQAbstractionTest, RefusesAnAdditionWhoseOperandsAreNotEncoded)
   record.operands[1] = y;
   record.numOperands = 2;
   record.width = 8;
-  refiner.terms().push_back(record);
+  appendTermRecord(refiner, record);
 
   NoModelSolver solver;
   ToSATBase::ASTNodeToSATVar bits;
@@ -1152,6 +1547,43 @@ TEST_F(BVEQAbstractionTest, RefusesAnAdditionWhoseOperandsAreNotEncoded)
   // contradicts it.
   bits[sum] = std::vector<unsigned>(8, 4);
   EXPECT_DEATH(refiner.refine(solver, bits), "did not encode");
+}
+
+// A record of a kind the scan has no branch for is refused, not skipped.
+//
+// The scan dispatches on the record's kind and every branch ends in a
+// `continue` or a push onto one of the inconsistency lists. Without a final
+// else, a kind none of them claimed would fall off the end of the loop body:
+// nothing pushed, nothing refined, the abstraction never compared against its
+// operands. That is the failure the FatalErrors above exist to prevent,
+// reached by falling through rather than by a missing map entry -- a record
+// no candidate can contradict is one the search may answer from freely, so an
+// unsatisfiable query comes back sat with exit status zero.
+//
+// The blaster mints six kinds and the scan handles all six, so this is
+// unreachable through the ordinary path. It is reachable here because the
+// records are the refiner's public surface, which is also how a seventh kind
+// would arrive.
+TEST_F(BVEQAbstractionTest, RefusesARecordOfAnUnhandledKind)
+{
+  ASTNode x = makeSymbol("uk_x", 8);
+
+  BVAbstractionRefiner refiner(&mgr);
+  BVTermAbstraction record;
+  // BVUMINUS is not one of the six the blaster abstracts, and is the shape
+  // the next family added would have.
+  record.termNode = factory->CreateTerm(BVUMINUS, 8, x);
+  record.opKind = BVUMINUS;
+  record.operands[0] = x;
+  record.numOperands = 1;
+  record.width = 8;
+  appendTermRecord(refiner, record);
+
+  NoModelSolver solver;
+  ToSATBase::ASTNodeToSATVar bits;
+  bits[x] = std::vector<unsigned>(8, 3);
+  bits[record.termNode] = std::vector<unsigned>(8, 4);
+  EXPECT_DEATH(refiner.refine(solver, bits), "does not know how to check");
 }
 
 TEST_F(BVEQAbstractionTest, RefusesAComparisonWithNoInputOfItsOwn)
@@ -1169,7 +1601,7 @@ TEST_F(BVEQAbstractionTest, RefusesAComparisonWithNoInputOfItsOwn)
   record.width = 8;
   // condSATVar left at BV_ABSTRACTION_NO_VAR: the comparison's answer has
   // nowhere to be read from, so nothing about this candidate can be checked.
-  refiner.terms().push_back(record);
+  appendTermRecord(refiner, record);
 
   NoModelSolver solver;
   ToSATBase::ASTNodeToSATVar bits;

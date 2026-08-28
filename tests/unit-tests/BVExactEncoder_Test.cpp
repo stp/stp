@@ -76,6 +76,16 @@ unsigned reference(Kind kind, unsigned a, unsigned b)
   return 0;
 }
 
+// A value, in the form the encoder reads known operand bits back in: every
+// bit fixed, none left to a combinational input.
+std::vector<signed char> knownBitsOfValue(unsigned width, uint64_t value)
+{
+  std::vector<signed char> known(width, -1);
+  for (unsigned i = 0; i < width; ++i)
+    known[i] = (signed char)((value >> i) & 1u);
+  return known;
+}
+
 class BVExactEncoderTest : public ::testing::Test
 {
 protected:
@@ -86,6 +96,28 @@ protected:
     ASTNode a = mgr.CreateSymbol(aName, 0, WIDTH);
     ASTNode b = mgr.CreateSymbol(bName, 0, WIDTH);
     return mgr.defaultNodeFactory->CreateTerm(kind, WIDTH, a, b);
+  }
+
+  // What one exact encoding of `term` costs a solver of its own.
+  uint64_t clausesFor(const ASTNode& term, unsigned width,
+                      const std::vector<signed char>& knownA,
+                      const std::vector<signed char>& knownB)
+  {
+    std::unique_ptr<SATSolver> solver = makeSolver(mgr.UserFlags);
+    EXPECT_TRUE(solver != NULL) << "no SAT backend was compiled in";
+
+    std::vector<unsigned> aVars(width), bVars(width), resultVars(width);
+    for (unsigned i = 0; i < width; ++i)
+    {
+      aVars[i] = solver->newVar();
+      bVars[i] = solver->newVar();
+      resultVars[i] = solver->newVar();
+    }
+
+    const uint64_t before = solver->submittedClauses();
+    BVExactEncoder(&mgr).encode(*solver, term, width, aVars, bVars, resultVars,
+                                knownA, knownB);
+    return solver->submittedClauses() - before;
   }
 
   // Every operand pair, one solve each: the operands are pinned by unit
@@ -144,6 +176,164 @@ TEST_F(BVExactEncoderTest, MultiplicationOverEveryPair)
 {
   const ASTNode term = operation(BVMULT, "mul_a", "mul_b");
   checkEveryPair(BVMULT, term);
+}
+
+// The bits the query's own blast had already folded to constants, put back.
+//
+// An operand vector holding any constant bit fails allBBNodesAreCIs, so the
+// abstraction replaces the whole vector with proxy inputs -- it has to, since
+// a refinement clause can only name solver variables. What it must not do is
+// leave the escalation to rebuild the operation over free inputs, because
+// every constant shortcut in the multiplier and the divider tests the bit
+// vector rather than the AST. Passing the known bits back in is what makes
+// the fallback the encoding the query would have had.
+//
+// So: the same exhaustive pair check, with the first operand handed to the
+// encoder as constants instead of inputs. The operand variables are still
+// pinned, exactly as the side constraint that minted the proxies pins them --
+// which is also why dropping them from the splice is sound, and the encoding
+// must agree with the fully symbolic one on every pair regardless.
+TEST_F(BVExactEncoderTest, KnownOperandBitsEncodeTheSameOperation)
+{
+  for (Kind kind : {BVMULT, BVDIV, BVMOD})
+  {
+    char aName[64], bName[64];
+    snprintf(aName, sizeof aName, "known_a_%d", (int)kind);
+    snprintf(bName, sizeof bName, "known_b_%d", (int)kind);
+    const ASTNode term = operation(kind, aName, bName);
+
+    for (unsigned a = 0; a < VALUES; ++a)
+      for (unsigned b = 0; b < VALUES; ++b)
+      {
+        std::unique_ptr<SATSolver> solver = makeSolver(mgr.UserFlags);
+        ASSERT_TRUE(solver != NULL) << "no SAT backend was compiled in";
+
+        std::vector<unsigned> aVars(WIDTH), bVars(WIDTH), resultVars(WIDTH);
+        for (unsigned i = 0; i < WIDTH; ++i)
+        {
+          aVars[i] = solver->newVar();
+          bVars[i] = solver->newVar();
+          resultVars[i] = solver->newVar();
+          solver->setFrozen(aVars[i]);
+          solver->setFrozen(bVars[i]);
+          solver->setFrozen(resultVars[i]);
+        }
+
+        BVExactEncoder(&mgr).encode(*solver, term, WIDTH, aVars, bVars,
+                                    resultVars, knownBitsOfValue(WIDTH, a));
+
+        SATSolver::vec_literals unit;
+        for (unsigned i = 0; i < WIDTH; ++i)
+        {
+          unit.clear();
+          unit.push(SATSolver::mkLit(aVars[i], ((a >> i) & 1u) == 0));
+          solver->addClause(unit);
+          unit.clear();
+          unit.push(SATSolver::mkLit(bVars[i], ((b >> i) & 1u) == 0));
+          solver->addClause(unit);
+        }
+
+        bool timedOut = false;
+        ASSERT_TRUE(solver->solve(timedOut))
+            << "the encoding forbids " << a << " " << b;
+        ASSERT_FALSE(timedOut);
+
+        unsigned got = 0;
+        for (unsigned i = 0; i < WIDTH; ++i)
+          if (solver->modelValue(resultVars[i]) == solver->true_literal())
+            got |= (1u << i);
+
+        EXPECT_EQ(reference(kind, a, b), got)
+            << "kind=" << kind << " a=" << a << " b=" << b;
+      }
+  }
+}
+
+// The degenerate end of the same thing: both operands known, so the circuit
+// has no combinational inputs at all and every output is a constant. Nothing
+// in the query reaches this today -- the node factory folds a product of two
+// literals long before the blaster sees it -- but the blast can fold bits the
+// AST does not, so the splice is asked to survive an input count of zero
+// rather than assumed never to meet one.
+TEST_F(BVExactEncoderTest, BothOperandsKnownSplicesAConstantResult)
+{
+  for (Kind kind : {BVMULT, BVDIV, BVMOD})
+  {
+    char aName[64], bName[64];
+    snprintf(aName, sizeof aName, "both_a_%d", (int)kind);
+    snprintf(bName, sizeof bName, "both_b_%d", (int)kind);
+    const ASTNode term = operation(kind, aName, bName);
+
+    for (unsigned a = 0; a < VALUES; ++a)
+      for (unsigned b = 0; b < VALUES; ++b)
+      {
+        std::unique_ptr<SATSolver> solver = makeSolver(mgr.UserFlags);
+        ASSERT_TRUE(solver != NULL) << "no SAT backend was compiled in";
+
+        std::vector<unsigned> aVars(WIDTH), bVars(WIDTH), resultVars(WIDTH);
+        for (unsigned i = 0; i < WIDTH; ++i)
+        {
+          aVars[i] = solver->newVar();
+          bVars[i] = solver->newVar();
+          resultVars[i] = solver->newVar();
+          solver->setFrozen(resultVars[i]);
+        }
+
+        BVExactEncoder(&mgr).encode(*solver, term, WIDTH, aVars, bVars,
+                                    resultVars, knownBitsOfValue(WIDTH, a),
+                                    knownBitsOfValue(WIDTH, b));
+
+        bool timedOut = false;
+        ASSERT_TRUE(solver->solve(timedOut));
+        ASSERT_FALSE(timedOut);
+
+        unsigned got = 0;
+        for (unsigned i = 0; i < WIDTH; ++i)
+          if (solver->modelValue(resultVars[i]) == solver->true_literal())
+            got |= (1u << i);
+
+        EXPECT_EQ(reference(kind, a, b), got)
+            << "kind=" << kind << " a=" << a << " b=" << b;
+      }
+  }
+}
+
+// ... and the point of putting them back: a smaller circuit.
+//
+// Two shapes, because the loss is not confined to a literal operand. A
+// 64-bit multiply against 1000003 has eight set bits, so the query's own
+// blast builds eight partial-product rows and the abstraction's fallback
+// built sixty-four. A zero-extended eight-bit operand is fifty-six known
+// zeros, and the same thing happens to it -- which is why this is carried as
+// a bit mask rather than read off a BVCONST operand.
+//
+// The bound is a proportion rather than a count so it stays meaningful
+// whichever cuts ABC picks: half, which the measured numbers clear by a wide
+// margin, and which no reordering of an unchanged circuit could reach.
+TEST_F(BVExactEncoderTest, KnownOperandBitsShrinkTheCircuit)
+{
+  const unsigned w = 64;
+  const ASTNode a = mgr.CreateSymbol("shrink_a", 0, w);
+  const ASTNode b = mgr.CreateSymbol("shrink_b", 0, w);
+  const ASTNode term = mgr.defaultNodeFactory->CreateTerm(BVMULT, w, a, b);
+
+  std::vector<signed char> highBitsZero(w, -1);
+  for (unsigned i = 8; i < w; ++i)
+    highBitsZero[i] = 0;
+
+  const uint64_t symbolic = clausesFor(term, w, {}, {});
+  EXPECT_GT(symbolic, 0u);
+
+  const uint64_t literalOperand =
+      clausesFor(term, w, {}, knownBitsOfValue(w, 1000003));
+  EXPECT_LT(literalOperand * 2, symbolic)
+      << "a literal multiplier still costs " << literalOperand << " of "
+      << symbolic << " clauses";
+
+  const uint64_t zeroExtended = clausesFor(term, w, highBitsZero, {});
+  EXPECT_LT(zeroExtended * 2, symbolic)
+      << "a zero-extended operand still costs " << zeroExtended << " of "
+      << symbolic << " clauses";
 }
 
 // Division includes the divisor SMT-LIB totalises to all ones, which the
@@ -389,6 +579,72 @@ TEST_F(BVExactEncoderTest, ANarrowedQuotientDoesNotAgreeWithTheWideOne)
   EXPECT_NE((8u / 5u) & mask, ((8u & mask) / ((5u & mask) == 0 ? 1u
                                                               : (5u & mask)))
                                   & mask);
+}
+
+
+// The lemma splice is the same trade as the exact splice, so it makes the same
+// choice about AUTO.
+//
+// ToCNFAIG's AUTO level was calibrated on whole-query conversion, where the
+// CNF is built once, handed to the solver and thrown away -- so buying fewer
+// clauses with more generation time is free. A refinement splice is not that:
+// its clauses go into a solver that is already running and stay there for the
+// rest of the search. `encode` above has always turned AUTO off for that
+// reason; the lemma path left it on, and the lemma path is the one that
+// installs the full-width multiplier of the paired DIV/REM identity.
+//
+// Checked by making AUTO's decision unambiguous -- a threshold of one AND node
+// sends it to VERY_LOW for any circuit at all -- and asking whether the splice
+// took it. It must not, and an explicitly chosen level must still get through.
+TEST_F(BVExactEncoderTest, AutoCNFEffortDoesNotReachALemmaSplice)
+{
+  const unsigned w = 32;
+  ASTNode x = mgr.CreateSymbol("auto_x", 0, w);
+  ASTNode s = mgr.CreateSymbol("auto_s", 0, w);
+  const ASTNode product = mgr.defaultNodeFactory->CreateTerm(BVMULT, w, x, s);
+
+  const auto spliceIdentity = [&](UserDefinedFlags::CNFEffort effort,
+                                  unsigned threshold) -> uint64_t {
+    mgr.UserFlags.cnf_effort = effort;
+    mgr.UserFlags.cnf_auto_threshold = threshold;
+
+    std::unique_ptr<SATSolver> solver = makeSolver(mgr.UserFlags);
+    EXPECT_TRUE(solver != NULL);
+    if (solver == NULL)
+      return 0;
+
+    std::vector<unsigned> dividend(w), divisor(w), quotient(w), remainder(w);
+    std::vector<unsigned>* groups[] = {&dividend, &divisor, &quotient,
+                                       &remainder};
+    for (unsigned g = 0; g < 4; ++g)
+      for (unsigned i = 0; i < w; ++i)
+      {
+        (*groups[g])[i] = solver->newVar();
+        solver->setFrozen((*groups[g])[i]);
+      }
+
+    const uint64_t before = solver->submittedClauses();
+    BVExactEncoder(&mgr).encodeDivRemIdentity(*solver, product, w, dividend,
+                                              divisor, quotient, remainder);
+    return solver->submittedClauses() - before;
+  };
+
+  const uint64_t medium =
+      spliceIdentity(UserDefinedFlags::CNF_EFFORT_MEDIUM, 200000);
+  EXPECT_GT(medium, 0u);
+
+  // A threshold of one means AUTO would choose VERY_LOW for anything. If it
+  // reached the splice, this would not be the medium-effort clause count.
+  EXPECT_EQ(medium, spliceIdentity(UserDefinedFlags::CNF_EFFORT_AUTO, 1u))
+      << "AUTO reached the lemma splice";
+
+  // And the level the caller asks for by name still does, or turning AUTO off
+  // would have turned the whole option off with it.
+  EXPECT_NE(medium, spliceIdentity(UserDefinedFlags::CNF_EFFORT_VERY_LOW, 1u))
+      << "an explicitly chosen effort no longer reaches the lemma splice";
+
+  mgr.UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_AUTO;
+  mgr.UserFlags.cnf_auto_threshold = 200000;
 }
 
 } // namespace

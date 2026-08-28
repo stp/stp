@@ -119,6 +119,7 @@ if(NOT ABC_FOUND_SYSTEM)
 
     set(ABC_CMAKE_ARGS
         ${STP_EP_COMMON_CMAKE_ARGS}
+        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
         "-DCMAKE_C_FLAGS=${CMAKE_C_FLAGS} ${ABC_EXTRA_FLAGS}"
         "-DCMAKE_CXX_FLAGS=${CMAKE_CXX_FLAGS} ${ABC_EXTRA_FLAGS}"
         # A static archive: it is linked into libstp.so, which is

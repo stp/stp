@@ -559,8 +559,8 @@ variable elimination cannot accept later clauses over eliminated
 variables (the same gate cvc5 applies to SatELite). CryptoMiniSat and
 CaDiCaL eliminate variables internally but restore them the moment a new
 clause mentions them, which is what makes adding refinement lemmas
-between solves safe. When CaDiCaL is compiled in it is the default
-backend.
+between solves safe. When CryptoMiniSat is compiled in it is the default
+backend, and CaDiCaL is the default without it.
 
 CaDiCaL's bounded variable addition (``--cadical-factor``) follows the
 batch pipeline's policy on the persistent solver too: ON -- the default

@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/Globals/Globals.h"
 #include <cstdint>
+#include <iosfwd>
 #include <memory>
 
 // The incremental solving driver; docs/incremental-solving.rst tells the
@@ -180,6 +181,11 @@ public:
   // samples never pay for construction. Idempotent and cheap when
   // nothing is pending.
   void materializePendingModel();
+
+  // Snapshot every persistent BV term-abstraction record. Unlike the batch
+  // encoder these records outlive one check-sat, so callers should treat the
+  // output as session state rather than a per-query delta.
+  void reportBVAbstractionRecords(std::ostream& out) const;
 
   // Test-only inspection: the (array, index) rows the last refinement-driven
   // check-sat seeded into the batch-side read table. The invariant under

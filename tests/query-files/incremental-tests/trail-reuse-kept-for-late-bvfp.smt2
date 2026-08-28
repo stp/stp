@@ -8,7 +8,7 @@
 ; Six BV checks establish the late-transition window. All four checks after
 ; FP arrives keep the trail: the complementary source-array test
 ; trail-reuse-kept-for-late-fp.smt2 retires on its fourth small FP check.
-; RUN: %solver --incremental --incremental-profile --check-sanity %s 2>&1 | %OutputCheck %s
+; RUN: %solver --cadical --incremental --incremental-profile --check-sanity %s 2>&1 | %OutputCheck %s
 (set-logic QF_BVFP)
 (declare-fun x () (_ BitVec 8))
 (declare-fun f () (_ FloatingPoint 8 24))

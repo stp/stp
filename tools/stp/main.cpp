@@ -78,9 +78,6 @@ public:
 #ifdef USE_CADICAL
   bool use_cadical = false;
 #endif
-#ifdef USE_RISS
-  bool use_riss = false;
-#endif
 
   // Held as text until parse_options() turns it into UserFlags.search_bias.
   std::string search_bias;
@@ -108,6 +105,32 @@ public:
   // Likewise for UserFlags.cnf_effort; always mapped, so it carries the
   // default spelling.
   std::string cnf_effort = "auto";
+
+  // Likewise for the named mask of BV abstraction schema families.
+  std::string bv_schema_groups = formatBVSchemaGroups(BV_SCHEMA_GROUP_DEFAULT);
+
+  // A named, atomic schema-mask/refinement-round pair. Empty means the two
+  // lower-level options retain their independently parsed values.
+  std::string bv_abstraction_profile;
+
+  // Which of the two scope options were actually given. The older MULT
+  // switch covers all three nonlinear operations while it is the only one
+  // supplied, and DIV/MOD wins once it is named -- in either argument order,
+  // which is what makes this a presence check rather than a last-writer one.
+  // vc_setInterfaceFlags resolves the same pair the same way, through
+  // bv_term_abstraction_divmod_explicit.
+  CLI::Option* bv_term_abstraction_mult_option = nullptr;
+  CLI::Option* bv_term_abstraction_divmod_option = nullptr;
+
+  // And whether the round ceiling was given, for the same kind of reason:
+  // --bv-term-abstraction-profile carries a ceiling of its own, and the two
+  // options exclude each other here, so this records what a run named for
+  // bv_term_abstraction_rounds_explicit -- which is what the C interface
+  // resolves the same pair with, where they do not exclude each other.
+  CLI::Option* bv_rounds_option = nullptr;
+  // ... and the group list, for the same reason: it is the other half of the
+  // pair a profile applies, and resolves the same way.
+  CLI::Option* bv_schema_groups_option = nullptr;
 
   // Tri-state: UserFlags.interactive_read is only overridden when the
   // option was given, so the value needs its own presence check.
@@ -286,14 +309,6 @@ void ExtraMain::create_options()
       ->group(solver_group);
 #endif
 
-#ifdef USE_RISS
-  // Bound to a variable like the rest: without one the flag parsed and then
-  // selected nothing, so asking for Riss was silently ignored whenever
-  // another solver was compiled in to supply the default.
-  app.add_flag("--riss", use_riss, "use Riss as the solver")
-      ->group(solver_group);
-#endif
-
 #ifdef USE_MINISAT
   app.add_flag("--simplifying-minisat", use_simplifying_minisat,
                "use installed simplifying minisat version as the solver")
@@ -364,28 +379,55 @@ void ExtraMain::create_options()
   bool_arg("--embedded-constraints", bm->UserFlags.embedded_constraints,
            "replace an assertion where it occurs inside another assertion",
            refinement_group);
-  bool_arg("--bv-term-abstraction-mult", bm->UserFlags.bv_term_abstraction_mult,
-           "include BVMULT, BVDIV and BVMOD in BV term abstraction; they are "
-           "the ones refined by ruling out one pair of operand values at a "
-           "time, so turning them off leaves only the operations that define "
-           "themselves in a single round",
-           refinement_group);
+  bv_term_abstraction_mult_option = bool_arg(
+      "--bv-term-abstraction-mult", bm->UserFlags.bv_term_abstraction_mult,
+      "scope for BVMULT, and for BVDIV and BVMOD unless the separate DIV/MOD "
+      "option is also given, which overrides them in either order",
+      refinement_group);
+  bv_term_abstraction_divmod_option = bool_arg(
+      "--bv-term-abstraction-divmod", bm->UserFlags.bv_term_abstraction_divmod,
+      "independently override whether BVDIV and BVMOD are abstracted; turning "
+      "it off leaves division and remainder encoded exactly from the start",
+      refinement_group);
   bool_arg("--bv-term-abstraction-schemas",
            bm->UserFlags.bv_term_abstraction_schemas,
-           "refine an abstracted BVMULT with algebraic facts that hold for "
-           "every pair of operands -- the product's trailing zeros, its low "
-           "bit, and the shift a power-of-two operand turns it into -- "
-           "before falling back on ruling out the one pair the candidate "
-           "holds",
+           "refine abstracted BVPLUS, BVMULT, BVDIV and BVMOD operations "
+           "with algebraic facts that hold for every pair of operands before "
+           "their operation-specific fallback",
            refinement_group);
-  app.add_option("--bv-term-abstraction-rounds",
-                 bm->UserFlags.bv_term_abstraction_rounds,
-                 "ceiling on the blocking lemmas one abstracted "
-                 "BVMULT/BVDIV/BVMOD may take before its refinement encodes "
-                 "the operation exactly instead of enumerating further "
-                 "operand pairs (0: never; enumerate without limit)")
+  bv_schema_groups_option =
+      app.add_option("--bv-term-abstraction-schema-groups", bv_schema_groups,
+                     "comma-separated schema families allowed by "
+                     "--bv-term-abstraction-schemas: base, udiv15, "
+                     "udiv-observed, udiv-tail, urem, mul8, mul-ref3, "
+                     "mul-tail, add, quotient-thresholds, low-prefix, "
+                     "quotient-one-rem, quotient-one-quot, "
+                     "divisor-magnitude, or divrem-full; 'all' selects the "
+                     "complete experimental stack and 'none' selects no "
+                     "schemas; semantic aliases are udiv, mul6, "
+                     "quotient-one and divrem-identity")
+          ->group(refinement_group)
+          ->capture_default_str();
+  bv_rounds_option =
+      app.add_option("--bv-term-abstraction-rounds",
+                     bm->UserFlags.bv_term_abstraction_rounds,
+                     "ceiling on the blocking lemmas one abstracted "
+                     "BVMULT/BVDIV/BVMOD may take before its refinement "
+                     "encodes the operation exactly instead of enumerating "
+                     "further operand pairs (0: never; enumerate without "
+                     "limit)")
+          ->group(refinement_group)
+          ->capture_default_str();
+  app.add_option("--bv-term-abstraction-profile", bv_abstraction_profile,
+                 "apply an atomic schema-mask/round pair: 'qualified' is the "
+                 "inherited base, UREM and MulRef3 mask at 32 rounds; "
+                 "'broad' adds the observed UDIV and MUL8 facts, "
+                 "divisor-magnitude and quotient-one facts at 16 rounds but "
+                 "no paired DIV/REM relation; 'aggressive' adds the "
+                 "full-width paired DIV/REM identity to that")
       ->group(refinement_group)
-      ->capture_default_str();
+      ->excludes(bv_schema_groups_option)
+      ->excludes(bv_rounds_option);
   app.add_option("--bv-term-abstraction-value-divisor",
                  bm->UserFlags.bv_term_abstraction_value_divisor,
                  "scale that allowance with the operand width, as "
@@ -394,6 +436,14 @@ void ExtraMain::create_options()
                  "values, so what one is worth falls away as the operands "
                  "widen (0, the default: do not scale, which measured no "
                  "slower and no faster)")
+      ->group(refinement_group)
+      ->capture_default_str();
+  app.add_option("--bv-term-abstraction-divmod-value-limit",
+                 bm->UserFlags.bv_term_abstraction_divmod_value_limit,
+                 "independent cap on BVDIV/BVMOD value-pair blocking after "
+                 "the round ceiling and optional width scaling; unlike "
+                 "--rounds this changes neither the algebraic-schema budget "
+                 "nor BVMULT (0, the default: no additional cap)")
       ->group(refinement_group)
       ->capture_default_str();
 
@@ -847,9 +897,6 @@ void ExtraMain::create_options()
 #ifdef USE_CRYPTOMINISAT
   solver_flags.emplace_back("--cryptominisat");
 #endif
-#ifdef USE_RISS
-  solver_flags.emplace_back("--riss");
-#endif
 #ifdef USE_MINISAT
   solver_flags.emplace_back("--simplifying-minisat");
   solver_flags.emplace_back("--minisat");
@@ -926,6 +973,46 @@ int ExtraMain::parse_options(int argc, char** argv)
     cerr << "Error: " << e.what() << endl;
     cerr << "Please give '--help' to get help" << endl;
     exit(-1);
+  }
+
+  // The command line cannot reach the profile-versus-ceiling conflict at all
+  // -- the two options exclude each other -- but a run that named the ceiling
+  // records it anyway, so the flag means the same thing whichever front end
+  // set it. Likewise for the group list, which is the other half of the same
+  // pair and now resolves by the same rule.
+  if (bv_rounds_option->count() != 0)
+    bm->UserFlags.bv_term_abstraction_rounds_explicit = true;
+  if (bv_schema_groups_option->count() != 0)
+    bm->UserFlags.bv_term_abstraction_schema_groups_explicit = true;
+
+  if (bv_term_abstraction_divmod_option->count() != 0)
+    bm->UserFlags.bv_term_abstraction_divmod_explicit = true;
+  else if (bv_term_abstraction_mult_option->count() != 0)
+    bm->UserFlags.bv_term_abstraction_divmod =
+        bm->UserFlags.bv_term_abstraction_mult;
+
+  {
+    std::string error;
+    if (!parseBVSchemaGroups(bv_schema_groups,
+                             bm->UserFlags.bv_term_abstraction_schema_groups,
+                             error))
+    {
+      cerr << "ERROR: --bv-term-abstraction-schema-groups: " << error << endl;
+      return -1;
+    }
+  }
+
+  if (!bv_abstraction_profile.empty())
+  {
+    std::string error;
+    if (!parseBVTermAbstractionProfile(
+            bv_abstraction_profile,
+            bm->UserFlags.bv_term_abstraction_schema_groups,
+            bm->UserFlags.bv_term_abstraction_rounds, error))
+    {
+      cerr << "ERROR: --bv-term-abstraction-profile: " << error << endl;
+      return -1;
+    }
   }
 
   onePrintBack = bm->UserFlags.get_print_output_at_all();
@@ -1029,13 +1116,6 @@ int ExtraMain::parse_options(int argc, char** argv)
   if (use_cadical)
   {
     bm->UserFlags.solver_to_use = UserDefinedFlags::CADICAL_SOLVER;
-  }
-#endif
-
-#ifdef USE_RISS
-  if (use_riss)
-  {
-    bm->UserFlags.solver_to_use = UserDefinedFlags::RISS_SOLVER;
   }
 #endif
 

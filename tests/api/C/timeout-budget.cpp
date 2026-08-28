@@ -69,9 +69,6 @@ std::vector<Backend> backends()
 #ifdef USE_CRYPTOMINISAT
   result.push_back({"cryptominisat", vc_useCryptominisat, true});
 #endif
-#ifdef USE_RISS
-  result.push_back({"riss", vc_useRiss, false});
-#endif
 #ifdef USE_CADICAL
   result.push_back({"cadical", vc_useCadical, true});
 #endif

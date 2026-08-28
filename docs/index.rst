@@ -42,11 +42,10 @@ compiler and flags. Without it, configuration stops and says what to
 install or where to point it: nothing here reaches the network unless it
 is asked to.
 
-That gives a solver backed by CaDiCaL. CryptoMiniSat, MiniSat and Riss
-are also supported, and are asked for by name --
-``./configure.sh --cryptominisat``, ``--minisat``, ``--riss``; at run time
-``--cryptominisat``, ``--cadical`` and ``--minisat`` pick between the
-backends that were compiled in. CryptoMiniSat is the one dependency STP
+That gives a solver backed by CaDiCaL. CryptoMiniSat and MiniSat are also
+supported, and are asked for by name -- ``./configure.sh --cryptominisat``
+or ``--minisat``; at run time ``--cryptominisat``, ``--cadical`` and
+``--minisat`` pick between the backends that were compiled in. CryptoMiniSat is the one dependency STP
 does not build for you, and the one that needs ``libgmp-dev``.
 :doc:`building` has the detail.
 
@@ -98,8 +97,10 @@ page <https://smt-lib.org/>`__.
    :hidden:
    :maxdepth: 1
 
+   c-api-lifetime
    array-extensionality
    incremental-solving
+   bv-abstraction
 
 Header
 ------
@@ -384,12 +385,15 @@ An example C header usage can be as simple as:
 
     int main(int argc, char **argv) {
       VC vc = vc_createValidityChecker();
+      vc_setInterfaceFlags(vc, EXPRDELETE, 0);
+
+      Type bv32 = vc_bvType(vc, 32);
 
       // ask for a counterexample to be built, so it can be printed below
       vc_setFlags(vc, 'c');
 
       // 32-bit variable 'c'
-      Expr c = vc_varExpr(vc, "c", vc_bvType(vc, 32));
+      Expr c = vc_varExpr(vc, "c", bv32);
 
       // 32 bit constant value 5
       Expr a = vc_bvConstExprFromInt(vc, 32, 5);
@@ -411,7 +415,16 @@ An example C header usage can be as simple as:
       //print c = 11 counterexample
       vc_printCounterExample(vc);
 
-      //Delete validity checker
+      // Delete caller-owned children while their VC is still live.
+      vc_DeleteExpr(eq2);
+      vc_DeleteExpr(eq);
+      vc_DeleteExpr(xp1);
+      vc_DeleteExpr(b);
+      vc_DeleteExpr(a);
+      vc_DeleteExpr(c);
+      vc_DeleteExpr(bv32);
+
+      // Destroying the VC invalidates every remaining child handle.
       vc_Destroy(vc);
 
       return 0;

@@ -151,24 +151,60 @@ void ToSATAIG::release_cnf_memory(Cnf_Dat_t* cnfData)
 
 void ToSATAIG::handle_cnf_options(Cnf_Dat_t* cnfData, bool needAbsRef)
 {
+  // What makes this CNF partial, named so a reader can act on it.
+  //
+  // There are two reasons and they are not the same reason, which the one
+  // sentence that used to be here could not say. Array read refinement leaves
+  // out congruence axioms over a faithful bit-vector layer, and --ackermanize
+  // is the flag that puts them in up front. A bit-vector abstraction leaves
+  // out the arithmetic itself: the CNF over-approximates the query, and no
+  // flag completes it -- turning the abstraction off is the only way to get a
+  // total CNF, and that is a different encoding rather than the same one
+  // finished.
+  //
+  // Said at both exits. --output-CNF writes the file whether or not
+  // --exit-after-CNF is given, and it used to write an over-approximate one
+  // with no warning at all.
+  const bool abstracted = bm->UserFlags.bv_eq_abstraction ||
+                          bm->UserFlags.bv_term_abstraction;
+  const bool arrayRefinement = needAbsRef && !abstracted;
+  const auto sayWhyPartial = [&](const char* what) {
+    if (arrayRefinement)
+      cerr << "Warning: " << what << " is partial: array read refinement adds"
+           << " its congruence axioms as the search asks for them. Use"
+           << " --ackermanize to have them all up front." << endl;
+    else if (abstracted)
+      cerr << "Warning: " << what << " is an over-approximation of the query:"
+           << " --bv-eq-abstraction and --bv-term-abstraction replace"
+           << " operations with free inputs that refinement pins later. No"
+           << " flag completes this CNF; turn the abstraction off to get one"
+           << " that is the whole query." << endl;
+  };
+
   if (bm->UserFlags.output_CNF_flag)
   {
     std::stringstream fileName;
     fileName << "output_" << bm->CNFFileNameCounter++ << ".cnf";
     Cnf_DataWriteIntoFile(cnfData, (char*)fileName.str().c_str(), 0,0,0);
+    sayWhyPartial("the CNF written by --output-CNF");
   }
 
   if (bm->UserFlags.exit_after_CNF)
   {
     if (bm->UserFlags.quick_statistics_flag)
+    {
       bm->GetRunTimes()->print();
+      // Coverage is complete once bit-blasting finishes. Printing it here
+      // makes --exit-after-CNF -t a cheap population screen for queries that
+      // actually contain arithmetic wide enough to abstract.
+      printAbstractionCoverage(bm->UserFlags, cerr);
+    }
 
     if (needAbsRef)
     {
       cerr << "Warning: STP is exiting after generating the first CNF."
-           << " But the CNF is probably partial which you probably don't want."
-           << " You probably want to disable"
-           << " refinement with the \"-r\" command line option." << endl;
+           << endl;
+      sayWhyPartial("that CNF");
     }
 
     exit(0);
@@ -182,7 +218,8 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
 
   BBNodeManagerAIG mgr;
   mgr.nodeBudget = bm->UserFlags.aig_node_budget;
-  BitBlaster bb(&mgr, &simp, bm->defaultNodeFactory, &bm->UserFlags, cb);
+  BitBlaster bb(&mgr, &simp, bm->defaultNodeFactory, &bm->UserFlags, cb,
+                allowAbstraction_);
 
   BBNodeAIG BBFormula;
 
@@ -269,6 +306,8 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
   for (const auto& raw : bb.abstractedEQs())
   {
     BVEQAbstraction a;
+    a.id = raw.id;
+    a.dependencies = raw.dependencies;
     a.eqNode = raw.eqNode;
     Aig_Obj_t* pObj = (Aig_Obj_t*)Vec_PtrEntry(
         mgr.aigMgr->vCis, raw.abstractionCI.symbol_index);
@@ -276,18 +315,22 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
     a.leftSymbol = raw.leftSymbol;
     a.rightSymbol = raw.rightSymbol;
     a.width = std::max(1u, raw.leftSymbol.GetValueWidth());
-    abstraction_.equalities().push_back(std::move(a));
+    abstraction_.appendEquality(std::move(a));
   }
 
   for (const auto& raw : bb.abstractedTerms())
   {
     BVTermAbstraction a;
+    a.id = raw.id;
+    a.dependencies = raw.dependencies;
     a.termNode = raw.termNode;
     a.opKind = raw.opKind;
     for (unsigned i = 0; i < raw.numOperands; i++)
     {
       a.operands[i] = raw.operands[i];
       a.operandNegated[i] = raw.operandNegated[i];
+      if (i < 2)
+        a.operandKnownBits[i] = raw.operandKnownBits[i];
     }
     a.numOperands = raw.numOperands;
     a.width = raw.width;
@@ -297,7 +340,26 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
           mgr.aigMgr->vCis, raw.condCISymbolIndex);
       a.condSATVar = cnfData->pVarNums[condObj->Id];
     }
-    abstraction_.terms().push_back(std::move(a));
+    // The record's own result inputs, resolved the same way the condition
+    // above is. The blaster files them for every term family; the persistent
+    // incremental lowering has always carried them across and this one used
+    // to drop them, leaving the AST-keyed registry as the only answer to
+    // which variables a result is.
+    //
+    // That registry holds one vector per node, so it names only the newest
+    // one registered. Canonical reuse normally means there is only ever one,
+    // and nothing here relies on that any more: an unmapped input reads back
+    // as ~0u exactly as fill_node_to_var records it, so the values are the
+    // ones refinement would have found anyway, and a duplicate that ever did
+    // arise costs work rather than a verdict.
+    a.resultSATVars.reserve(raw.resultCISymbolIndices.size());
+    for (const int index : raw.resultCISymbolIndices)
+    {
+      Aig_Obj_t* resultObj =
+          (Aig_Obj_t*)Vec_PtrEntry(mgr.aigMgr->vCis, index);
+      a.resultSATVars.push_back(cnfData->pVarNums[resultObj->Id]);
+    }
+    abstraction_.appendTerm(std::move(a));
   }
 
   // Free the memory in the AIGs.
@@ -338,6 +400,23 @@ void ToSATAIG::add_cnf_to_solver(SATSolver& satSolver, Cnf_Dat_t* cnfData)
 
 void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
 {
+  // A bit that reached no SAT variable is marked with ~0u rather than
+  // omitted, so freezing has to skip it: the sentinel is not a variable
+  // index, and a backend that acts on setFrozen() writes out of bounds when
+  // handed it. A leaf with no mapping at all -- a constant anchor, or a
+  // symbol the blast never reached -- simply has no variables to keep.
+  const auto freezeLeaf = [&](const ASTNode& leaf) {
+    if (leaf.IsNull())
+      return;
+    ASTNodeToSATVar::const_iterator it = nodeToSATVar.find(leaf);
+    if (it == nodeToSATVar.end())
+      return;
+    const vector<unsigned>& v = it->second;
+    for (size_t i = 0, size = v.size(); i < size; ++i)
+      if (v[i] != ~((unsigned)0))
+        satSolver.setFrozen(v[i]);
+  };
+
   for (ArrayTransformer::ArrType::iterator it =
            arrayTransformer->arrayToIndexToRead.begin();
        it != arrayTransformer->arrayToIndexToRead.end(); it++)
@@ -347,27 +426,37 @@ void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
     for (ArrayTransformer::arrTypeMap::const_iterator arr_it = atm.begin();
          arr_it != atm.end(); arr_it++)
     {
-      // A bit that reached no SAT variable is marked with ~0u rather than
-      // omitted, so freezing has to skip it: the sentinel is not a variable
-      // index, and a backend that acts on setFrozen() writes out of bounds
-      // when handed it. The extensionality loop below already guards this.
       const ArrayTransformer::ArrayRead& ar = arr_it->second;
-      ASTNodeToSATVar::iterator it = nodeToSATVar.find(ar.index_symbol);
-      if (it != nodeToSATVar.end())
-      {
-        const vector<unsigned>& v = it->second;
-        for (size_t i = 0, size = v.size(); i < size; ++i)
-          if (v[i] != ~((unsigned)0))
-            satSolver.setFrozen(v[i]);
-      }
+      freezeLeaf(ar.index_symbol);
+      freezeLeaf(ar.symbol);
+    }
+  }
 
-      ASTNodeToSATVar::iterator it2 = nodeToSATVar.find(ar.symbol);
-      if (it2 != nodeToSATVar.end())
+  // The abstracted write-chain reads refine through their own table, and
+  // emitChainReadLemmas() writes its path lemmas over the same leaves the
+  // incremental driver totalises: the row symbol, the read index anchor,
+  // the fall-through base read symbol, and both anchors of every level.
+  // Those lemmas are added in later solve calls, so a backend that
+  // eliminates one of these leaves in the meantime is then handed a clause
+  // over an eliminated variable -- the simplifying MiniSat asserts on
+  // exactly that. Freezing the congruence rows above is not enough: a chain
+  // row's anchors need not appear in arrayToIndexToRead at all.
+  for (ArrayTransformer::ChainReadsMap::const_iterator cit =
+           arrayTransformer->chainReads.begin();
+       cit != arrayTransformer->chainReads.end(); cit++)
+  {
+    for (ArrayTransformer::ChainIndexMap::const_iterator rit =
+             cit->second.begin();
+         rit != cit->second.end(); rit++)
+    {
+      const ArrayTransformer::ChainRow& row = rit->second;
+      freezeLeaf(row.symbol);
+      freezeLeaf(row.indexAnchor);
+      freezeLeaf(row.baseReadSymbol);
+      for (const ArrayTransformer::ChainLevel& lvl : row.levels)
       {
-        const vector<unsigned>& v = it2->second;
-        for (size_t i = 0, size = v.size(); i < size; ++i)
-          if (v[i] != ~((unsigned)0))
-            satSolver.setFrozen(v[i]);
+        freezeLeaf(lvl.indexAnchor);
+        freezeLeaf(lvl.valueAnchor);
       }
     }
   }
@@ -471,8 +560,8 @@ void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
 // that spreading unconstrained scalars out is worth anything, so its default
 // phase puts many of them on the same value at once and each collision is
 // paid for with a lemma and another full solve. Counting the scalars off
-// against an increasing value is the same trick Bitwuzla plays for DISTINCT,
-// applied to what the congruence checker reads.
+// against an increasing value is the ordinary way to seed a distinctness
+// constraint, pointed here at what the congruence checker reads.
 //
 // This is only a hint: it reorders the search and cannot change which answers
 // are reachable, so no soundness argument rests on the choice being good. A
@@ -540,7 +629,8 @@ bool ToSATAIG::runSolver(SATSolver& satSolver)
   return result;
 }
 
-unsigned ToSATAIG::refineAbstractions(SATSolver& solver)
+AbstractionRefinementResult
+ToSATAIG::refineAbstractions(SATSolver& solver)
 {
   return abstraction_.refine(solver, nodeToSATVar);
 }

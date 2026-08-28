@@ -220,11 +220,6 @@ if (USE_CRYPTOMINISAT)
     endif()
 endif()
 
-if (USE_RISS)
-    set(stp_link_libs
-        ${stp_link_libs} ${RISS_LIBRARY})
-endif()
-
 # By path, for the same reason as LibBF above; lib/Sat links the CaDiCaL target
 # itself, which is what carries the include directory to the compile.
 if (USE_CADICAL)

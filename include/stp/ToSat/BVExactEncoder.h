@@ -28,10 +28,13 @@ THE SOFTWARE.
 // Puts `result = a op b` into a SAT solver that is already running, over
 // variables it already has.
 //
-// This is how --bv-term-abstraction gives up. A BVMULT, BVDIV or BVMOD it
-// abstracted is refined by ruling out one pair of operand values at a time,
-// and after a bounded number of those the refinement stops enumerating and
-// says what the operation is. What it says has to be worth having: an
+// This is how --bv-term-abstraction gives up, and how its algebraic schemas
+// are inserted. A BVMULT, BVDIV or BVMOD it abstracted is refined by ruling
+// out one pair of operand values at a time, and after a bounded number of
+// those the refinement stops enumerating and says what the operation is.
+// Addition, multiplication, division and remainder schemas use the same
+// circuit-to-live-CNF splice to assert facts that rule out larger candidate
+// regions. What any of those encodings says has to be worth having: an
 // abstraction that is abandoned late should leave the solver no worse off
 // than one that was never taken, and the only way that holds is if the
 // encoding it falls back on is the one the query would have had anyway.
@@ -51,84 +54,62 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 #include "stp/Sat/SATSolver.h"
+#include "stp/ToSat/BVLemmaCatalogue.h"
 
+#include <memory>
 #include <vector>
 
 namespace stp
 {
 
-// The facts about division that STP had no way to state before this: each
-// is an inequality or an implication over the dividend, the divisor and the
-// quotient, rather than a value for the quotient.
-//
-// They are Bitwuzla's, taken from its abstraction module and reimplemented
-// here over the bit-blaster rather than copied. Both projects are MIT.
-//
-//   Aina Niemetz, Mathias Preiner, Yoni Zohar.
-//   Scalable Bit-Blasting with Abstractions.
-//   CAV 2024, LNCS 14681, pp. 178-200. doi:10.1007/978-3-031-65627-9_9
-//
-// The four with no premise are not facts anyone would derive by thinking
-// about division -- `x >=u -((-s) & (-t))` is the output of the syntax-guided
-// synthesis that paper describes -- which is the argument for porting them
-// rather than inventing a set.
-//
-// Which seven: the highest-firing ones measured on the queries that motivated
-// this, 1161 firings between them over the 73 files STP could not decide.
-// Fourteen more UDIV facts and sixteen UREM ones were left, the largest of
-// them firing 125 times against this set's 161 to 280. They were not skipped
-// on principle and the tail is not exhausted -- what stopped the porting is
-// that these seven are a wash on that family, which is measured in the commit
-// that adds them. Extending a set that does not pay needs a reason to expect
-// the next one to.
-enum class DivLemma
-{
-  // x = 0 and s != 0 -> t = 0
-  DividendZero,
-  // s = x and s != 0 -> t = 1
-  DivisorEqualsDividend,
-  // s = ~0 and x != ~0 -> t = 0
-  DivisorAllOnes,
-  // t <=u -(s | 1)
-  QuotientBelowNegatedDivisor,
-  // x >=u -((-s) & (-t))
-  DividendAboveNegatedAnd,
-  // s >=u (x >> t)
-  DivisorAboveShiftedDividend,
-  // (s - 1) >=u (x >> t)
-  DivisorLessOneAboveShiftedDividend
-};
-
-// Whether one of them holds of these three values. The refiner asks before
-// installing -- a lemma the candidate already satisfies rules nothing out --
-// and the tests ask to check the circuits say the same thing.
-//
-// Bit vectors, least significant bit first, all of the same width.
-DLL_PUBLIC bool divLemmaHolds(DivLemma lemma, const std::vector<bool>& xBits,
-                              const std::vector<bool>& sBits,
-                              const std::vector<bool>& tBits);
-
-DLL_PUBLIC const char* divLemmaName(DivLemma lemma);
+class Simplifier;
+class SubstitutionMap;
 
 class DLL_PUBLIC BVExactEncoder
 {
   STPMgr* bm;
 
+  // A blast needs a Simplifier, and a Simplifier needs a SubstitutionMap.
+  // Neither carries anything from one call here to the next -- there is no
+  // constant-bit propagation for a fragment of a query, and the multiplier
+  // asks for it only through statsFound(), which answers no without one --
+  // but both allocate, and a refinement round installs one lemma per
+  // inconsistent record. Owned by the encoder rather than rebuilt per lemma.
+  std::unique_ptr<SubstitutionMap> substitutions_;
+  std::unique_ptr<Simplifier> scratch_;
+
 public:
-  explicit BVExactEncoder(STPMgr* bm_) : bm(bm_) {}
+  explicit BVExactEncoder(STPMgr* bm_);
+  ~BVExactEncoder();
+
+  BVExactEncoder(const BVExactEncoder&) = delete;
+  BVExactEncoder& operator=(const BVExactEncoder&) = delete;
 
   // `term` is the operation's own node -- its kind is one of BVMULT, BVDIV
-  // and BVMOD, and the multiplier reads its operands for constant detection
-  // and Booth recoding. `aVars`, `bVars` and `resultVars` are the SAT
-  // variables the operands and the result are already carried by, each
-  // `width` bits wide; every one of them must be a variable the solver has.
+  // and BVMOD, and it supplies the width and the operand order. `aVars`,
+  // `bVars` and `resultVars` are the SAT variables the operands and the
+  // result are already carried by, each `width` bits wide; every one of them
+  // must be a variable the solver has.
+  //
+  // `knownA` and `knownB` are what the query's own blast knew about the
+  // operand bits before the abstraction replaced them with proxy inputs: -1
+  // for a live node, 0 or 1 for a constant, and empty for "nothing known".
+  // A known bit is built into the circuit as a constant instead of a free
+  // input, which is what makes this the encoding the query would have had
+  // rather than a fully symbolic one -- every constant shortcut in the
+  // multiplier and the divider tests the bit vector, not the AST, so without
+  // them none of them fires. It is sound to drop the corresponding operand
+  // variable from the splice: the proxy it names is pinned to that same
+  // constant by the side constraint that minted it.
   //
   // The clauses added define the result bits from the operand bits, so a
   // caller may mark the abstraction defined once this returns.
   void encode(SATSolver& solver, const ASTNode& term, unsigned width,
               const std::vector<unsigned>& aVars,
               const std::vector<unsigned>& bVars,
-              const std::vector<unsigned>& resultVars);
+              const std::vector<unsigned>& resultVars,
+              const std::vector<signed char>& knownA = {},
+              const std::vector<signed char>& knownB = {});
 
   // One algebraic fact about `t = x udiv s`, spliced onto the variables the
   // dividend, the divisor and the abstraction's result are already carried
@@ -148,6 +129,31 @@ public:
                       const std::vector<unsigned>& dividendVars,
                       const std::vector<unsigned>& divisorVars,
                       const std::vector<unsigned>& resultVars);
+
+  void encodeRemLemma(SATSolver& solver, RemLemma lemma, unsigned width,
+                      const std::vector<unsigned>& dividendVars,
+                      const std::vector<unsigned>& divisorVars,
+                      const std::vector<unsigned>& resultVars);
+
+  void encodeMulLemma(SATSolver& solver, MulLemma lemma, unsigned width,
+                      const std::vector<unsigned>& xVars,
+                      const std::vector<unsigned>& sVars,
+                      const std::vector<unsigned>& resultVars);
+
+  void encodeAddLemma(SATSolver& solver, AddLemma lemma, unsigned width,
+                      const std::vector<unsigned>& xVars,
+                      const std::vector<unsigned>& sVars,
+                      const std::vector<unsigned>& resultVars);
+
+  // Splice x = q*s+r over the four live vectors belonging to a paired BVDIV
+  // and BVMOD abstraction. Arithmetic is truncated to `width`, so this is a
+  // theorem of SMT-LIB's totalised division even when the divisor is zero.
+  void encodeDivRemIdentity(SATSolver& solver, const ASTNode& product,
+                            unsigned width,
+                            const std::vector<unsigned>& dividendVars,
+                            const std::vector<unsigned>& divisorVars,
+                            const std::vector<unsigned>& quotientVars,
+                            const std::vector<unsigned>& remainderVars);
 };
 
 } // namespace stp

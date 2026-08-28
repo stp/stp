@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/constantBitP/MultiplicationStats.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
+#include "stp/ToSat/BVAbstractionTypes.h"
 #include "stp/Util/DagWalk.h"
 #include <cassert>
 #include <cmath>
@@ -65,6 +66,9 @@ using BBNodeVec = std::vector<BBNodeAIG>;
 using BBNodeSet = std::unordered_set<BBNodeAIG>;
 
 enum class DivLemma;
+enum class RemLemma;
+enum class MulLemma;
+enum class AddLemma;
 
 class BitBlaster
 {
@@ -93,6 +97,10 @@ class BitBlaster
 
   // Bitwise complement
   BBNodeVec BBNeg(const BBNodeVec& x);
+  BBNodeVec BBAnd(const BBNodeVec& x, const BBNodeVec& y);
+  BBNodeVec BBOr(const BBNodeVec& x, const BBNodeVec& y);
+  BBNodeVec BBXor(const BBNodeVec& x, const BBNodeVec& y);
+  BBNodeVec BBAdd(const BBNodeVec& x, const BBNodeVec& y);
 
   // Unary minus
   BBNodeVec BBUminus(const BBNodeVec& x);
@@ -309,8 +317,6 @@ class BitBlaster
   // Count of leading zeros of v (from the MSB down) as an unsigned binary
   // vector of `countWidth` bits; an all-zero v counts v.size().
   BBNodeVec BBfpCLZ(const BBNodeVec& v, unsigned countWidth);
-  // Left shift v by the unsigned binary amount `amt` (zero fill).
-  BBNodeVec BBfpShiftLeft(const BBNodeVec& v, const BBNodeVec& amt);
   // Right shift v by `amt`, ORing every shifted-out bit into `sticky`.
   BBNodeVec BBfpShiftRightSticky(const BBNodeVec& v, const BBNodeVec& amt,
                                  BBNode& sticky);
@@ -419,6 +425,7 @@ class BitBlaster
   size_t fpNativeKnownPositiveMulPaths = 0;
   size_t fpNativeKnownNegativeMulPaths = 0;
   UserDefinedFlags* uf;
+  const bool allowAbstraction_ = true;
   NodeFactory* ASTNF;
   Simplifier* simp;
   BBNodeManagerAIG* nf;
@@ -426,8 +433,27 @@ class BitBlaster
   ASTNodeSet booth_recoded; // Nodes that have been recoded.
 
 public:
+  // The two result shapes are deliberately different types. An entry in one
+  // of these registries is proof that the returned AIG input was minted by an
+  // abstraction, and carries the producer identity with it; symbolToBBNode is
+  // still the general symbol/proxy compatibility registry and is not such
+  // proof.
+  struct BooleanAbstractionResult
+  {
+    BVAbstractionId producer;
+    BBNodeAIG bit;
+  };
+
+  struct BitVectorAbstractionResult
+  {
+    BVAbstractionId producer;
+    BBNodeVec bits;
+  };
+
   struct RawBVEQAbstraction
   {
+    BVAbstractionId id;
+    std::vector<BVAbstractionId> dependencies;
     ASTNode eqNode;
     BBNodeAIG abstractionCI;
     ASTNode leftSymbol;
@@ -445,6 +471,8 @@ public:
 
   struct RawBVTermAbstraction
   {
+    BVAbstractionId id;
+    std::vector<BVAbstractionId> dependencies;
     ASTNode termNode;
     Kind opKind;
     ASTNode operands[3];
@@ -457,10 +485,96 @@ public:
     // lowering sound if another producer or a future memo boundary creates
     // them: symbolToBBNode can identify only the latest registered vector.
     std::vector<int> resultCISymbolIndices;
+    // What the blast already knew about each operand's bits: -1 where the bit
+    // is a live circuit node, 0 or 1 where it had folded to a constant.
+    //
+    // Kept because the abstraction throws it away and the exact escalation
+    // needs it back. An operand whose vector holds any constant bit fails
+    // allBBNodesAreCIs, so ensureProxyCIs replaces the whole vector with fresh
+    // proxy inputs -- correct, since a refinement clause has to name solver
+    // variables, and each proxy is pinned to its bit by a side constraint. But
+    // BVExactEncoder then rebuilds the operation over free inputs, and every
+    // constant shortcut in the multiplier reads the bit vector rather than the
+    // AST, so none of them fires. A 64-bit multiply against a literal of
+    // popcount 8 built 64 adder rows instead of 8: 33,968 clauses where the
+    // unabstracted blast of the whole query was 12,380.
+    //
+    // Empty means nothing is known, which is what an all-symbolic operand and
+    // every family that does not escalate leave behind.
+    std::vector<signed char> operandKnownBits[2];
   };
 
 private:
   std::vector<RawBVTermAbstraction> abstractedTerms_;
+  // The Boolean each abstracted equality and comparison was replaced by, so
+  // that a second occurrence of the same predicate reuses it.
+  //
+  // The term families get this from symbolToBBNode, which the node manager
+  // owns and which outlives a piece; a predicate is one Boolean rather than a
+  // vector and has no place there, so it has its own map. It is kept for the
+  // same reason and the reason is the incremental driver: BBForm clears its
+  // memo on every new root, so two conjuncts sharing a predicate ask for it
+  // independently, and minting a second Boolean for the second ask leaves two
+  // records over two inputs that are free to disagree. A predicate has one
+  // truth value wherever it occurs.
+  //
+  // Not cleared by ClearAllTables, which is deliberate and is what the raw
+  // record vectors beside it do: the abstraction state outlives the memos and
+  // is dropped only when the blaster is.
+  std::unordered_map<ASTNode, BooleanAbstractionResult,
+                     ASTNode::ASTNodeHasher,
+                     ASTNode::ASTNodeEqual>
+      abstractedFormulas_;
+  // Nodes whose blasted vector IS an abstraction's own result inputs.
+  //
+  // Constant-bit propagation must not rewrite one of these. The record was
+  // filed against those inputs and resolves them through the registry, while
+  // updateTerm rewrites the term MEMO -- so a bit it replaced with a constant
+  // would leave every parent that reads the term using a bit the record does
+  // not name, and the refinement pinning an input nothing reads.
+  //
+  // Nothing is lost by declining. Refinement pins the abstraction to the
+  // operands underneath it, which is a stronger statement than any single bit
+  // constant-bit propagation could fix, and the operands keep their own
+  // propagation either way.
+  std::unordered_map<ASTNode, BitVectorAbstractionResult,
+                     ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
+      abstractedResults_;
+
+  // Provenance is attached to AIG inputs because those are what survive all
+  // of the lowering's generated ASTs, memo aliases and proxy boundaries. An
+  // abstraction result input names exactly its producer. A proxy input names
+  // the producers reachable in the AIG bit it aliases. Internal-node results
+  // are memoised after an iterative walk; CI provenance never changes after
+  // that input is exposed to a parent.
+  uint64_t nextAbstractionId_ = 1;
+  std::unordered_map<unsigned, std::vector<BVAbstractionId>>
+      ciAbstractionSources_;
+  std::unordered_map<unsigned, std::vector<BVAbstractionId>>
+      aigAbstractionSourcesMemo_;
+
+  BVAbstractionId newAbstractionId();
+  void tagAbstractionSources(const BBNodeAIG& ci,
+                             const std::vector<BVAbstractionId>& sources);
+  BBNodeVec ensureProxyCIs(const ASTNode& node, const BBNodeVec& bits);
+  bool reuseRegisteredTerm(const ASTNode& term, unsigned width,
+                           BBNodeVec& reused) const;
+  // Operations already counted as abstraction candidates.
+  //
+  // bv_candidates says it counts operations reaching the bit-blaster at or
+  // above the width floor, and exists so that a flag which reached nothing
+  // eligible can be told from a flag that is broken. It was counted at the top
+  // of each abstraction arm, which is a bit-blaster VISIT: the incremental
+  // driver clears its term memo on every new root, so one operation is
+  // re-entered once per check-sat while bv_abstracted -- correctly -- counts
+  // the one record. Ten solves over one multiplication read mult=10->1, which
+  // says the abstraction took a tenth of what it could have.
+  //
+  // Counted once per node, so the ratio means what it is documented to mean
+  // and abstracted can never exceed candidates. In the batch pipeline the
+  // blaster lives for one query with one root, so nothing there moves.
+  std::unordered_set<ASTNode, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
+      countedCandidates_;
   std::vector<BBNode> sideConstraints_;
 
 public:
@@ -472,6 +586,12 @@ public:
   {
     return sideConstraints_;
   }
+
+  // Direct producer IDs reachable from an AIG result. Walking the committed
+  // root gives assertion ownership; walking the operands before a new result
+  // is tagged gives that producer's parent-to-child dependencies.
+  std::vector<BVAbstractionId> abstractionSourcesOf(const BBNodeAIG& root);
+  std::vector<BVAbstractionId> abstractionSourcesOf(const BBNodeVec& bits);
   BitBlaster& operator=(const BitBlaster& other) = delete;
   BitBlaster(const BitBlaster& other) = delete;
   ~BitBlaster() { ClearAllTables(); }
@@ -494,10 +614,18 @@ public:
   // same one. Two copies of a divider that agree today are two copies that
   // can stop agreeing.
   //
-  // `term` is the operation's own node, which the multiplier reads for
-  // constant detection and Booth recoding; `x` and `y` stand in for its
-  // operands. Anything the circuit needs conjoined to the top is added to
-  // `support`, as everywhere else here.
+  // `term` is the operation's own node; `x` and `y` stand in for its
+  // operands. What the node supplies is the kind, the width and the operand
+  // order -- not the operand *values*. Constant detection and Booth recoding
+  // read the bit vectors: mult_normal skips a false multiplier bit, Booth
+  // classifies through convert(), and Aig_And folds a constant argument
+  // structurally, all of them off `x` and `y`. So a caller that hands over
+  // free inputs where the query's own blast had constants gets the fully
+  // symbolic circuit however constant `term`'s children look, which is why
+  // BVExactEncoder::encode carries the known bits separately.
+  //
+  // Anything the circuit needs conjoined to the top is added to `support`,
+  // as everywhere else here.
   BBNodeVec BBExactBinaryOp(const ASTNode& term, const BBNodeVec& x,
                             const BBNodeVec& y, BBNodeSet& support);
 
@@ -511,19 +639,46 @@ public:
   // parts.
   BBNode BBDivLemma(DivLemma lemma, const BBNodeVec& x, const BBNodeVec& s,
                     const BBNodeVec& t, BBNodeSet& support);
+  BBNode BBRemLemma(RemLemma lemma, const BBNodeVec& x, const BBNodeVec& s,
+                    const BBNodeVec& t, BBNodeSet& support);
+  BBNode BBMulLemma(MulLemma lemma, const BBNodeVec& x, const BBNodeVec& s,
+                    const BBNodeVec& t, BBNodeSet& support);
+  BBNode BBAddLemma(AddLemma lemma, const BBNodeVec& x, const BBNodeVec& s,
+                    const BBNodeVec& t, BBNodeSet& support);
 
-  // A logical right shift by a variable amount; several of the facts above
-  // are inequalities over one.
+  // The full modular recomposition theorem over a quotient/remainder pair:
+  // x = q*s+r. `product` is a BVMULT node standing for q*s and supplies the
+  // multiplier with the same AST metadata it receives on the exact path.
+  BBNode BBDivRemIdentity(const ASTNode& product, const BBNodeVec& x,
+                          const BBNodeVec& s, const BBNodeVec& q,
+                          const BBNodeVec& r, BBNodeSet& support);
+
+  // Logical shifts by a variable amount. Both are logarithmic barrel
+  // shifters, and any represented amount at or above the value width clears
+  // the vector as SMT-LIB requires.
+  BBNodeVec BBShiftLeftByVariable(const BBNodeVec& value,
+                                  const BBNodeVec& amount);
   BBNodeVec BBShiftRightByVariable(const BBNodeVec& value,
                                    const BBNodeVec& amount, unsigned width);
+  // Shared premise for the quotient/remainder exact-one-band registry facts.
+  BBNode BBFitsExactlyOnce(const BBNodeVec& dividend,
+                           const BBNodeVec& divisor);
 
   std::unordered_map<ASTNode, BBNodeVec, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>::iterator
   simplify_during_bb(ASTNode& term, BBNodeSet& support);
 
+  // `allowAbstraction` is false for a blast whose circuit is itself the
+  // answer to an abstraction -- an exact escalation, or a lemma spliced onto
+  // an abstraction's own variables. Such a blast must not abstract anything:
+  // the record it minted would be against an AIG thrown away at the end of
+  // the call, so nothing could ever refine it. This used to be done by
+  // clearing the flags on the shared UserDefinedFlags for the duration, which
+  // meant one blast could see another's policy.
   BitBlaster(BBNodeManagerAIG* bnm, Simplifier* _simp, NodeFactory* astNodeF,
              UserDefinedFlags* _uf,
-             simplifier::constantBitP::ConstantBitPropagation* cb_ = NULL)
-      : uf(_uf)
+             simplifier::constantBitP::ConstantBitPropagation* cb_ = NULL,
+             bool allowAbstraction = true)
+      : uf(_uf), allowAbstraction_(allowAbstraction)
   {
     nf = bnm;
     cb = cb_;
@@ -531,6 +686,23 @@ public:
     BBFalse = nf->getFalse();
     simp = _simp;
     ASTNF = astNodeF;
+  }
+
+  // Whether this blast may replace a term or an equality with free inputs.
+  // Whether this operation has not been counted as a candidate before; see
+  // countedCandidates_.
+  bool firstCandidateSighting(const ASTNode& n)
+  {
+    return countedCandidates_.insert(n).second;
+  }
+
+  bool termAbstractionAllowed() const
+  {
+    return allowAbstraction_ && uf->bv_term_abstraction;
+  }
+  bool eqAbstractionAllowed() const
+  {
+    return allowAbstraction_ && uf->bv_eq_abstraction;
   }
 
   void ClearAllTables()

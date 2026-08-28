@@ -19,8 +19,8 @@
 ; nodes: a re-simplification pass would be well inside its size limit and
 ; would therefore run, and be reported, if the rebuild still asked for one.
 ; REQUIRES: cadical-inprobing
-; RUN: %solver --incremental -s %s 2>&1 | %OutputCheck %s
-; RUN: %solver --incremental-auto-engage-at 1 -s %s 2>&1 | %OutputCheck %s
+; RUN: %solver --cadical --incremental -s %s 2>&1 | %OutputCheck %s
+; RUN: %solver --cadical --incremental-auto-engage-at 1 -s %s 2>&1 | %OutputCheck %s
 ; CHECK: inprobing retired
 ; CHECK-NOT: base re-simplified at rebuild
 (set-logic QF_BVFP)

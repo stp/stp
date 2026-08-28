@@ -19,9 +19,6 @@
 #ifdef USE_CRYPTOMINISAT
 #include "stp/Sat/CryptoMinisat5.h"
 #endif
-#ifdef USE_RISS
-#include "stp/Sat/Riss.h"
-#endif
 
 using stp::SATSolver;
 
@@ -119,14 +116,6 @@ TEST(UnsatAssumptions, CadicalReportsCulpritUnderFactor)
 TEST(UnsatAssumptions, CryptoMiniSatReportsCulprit)
 {
   stp::CryptoMiniSat5 s(1);
-  culpritIsReported(s);
-}
-#endif
-
-#ifdef USE_RISS
-TEST(UnsatAssumptions, RissReportsCulprit)
-{
-  stp::RissCore s;
   culpritIsReported(s);
 }
 #endif

@@ -56,7 +56,7 @@ THE SOFTWARE.
 // compiled and dllimport for everyone else.
 //
 // The mechanism is currently dormant -- no shared MSVC build of STP is produced
-// (the only Windows CI job is STATICCOMPILE=ON, which forces BUILD_SHARED_LIBS
+// (both Windows CI jobs are STATICCOMPILE=ON, which forces BUILD_SHARED_LIBS
 // OFF), so neither __declspec arm is ever taken. It is kept correct so that
 // enabling a Windows DLL build later works.
 #if defined(STP_SHARED_LIB) && defined(STP_EXPORTS)

@@ -9,7 +9,7 @@
 ; multiplier circuit precisely to grow the encoding; a small solver must
 ; NOT retire, since the rebuild would outcost the savings). Answers must
 ; carry straight through the restart.
-; RUN: %solver -s --incremental %s 2>&1 | %OutputCheck %s
+; RUN: %solver --cadical -s --incremental %s 2>&1 | %OutputCheck %s
 (set-logic QF_FP)
 (declare-fun x () (_ FloatingPoint 8 24))
 (declare-fun y () (_ FloatingPoint 8 24))
