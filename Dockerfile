@@ -20,10 +20,8 @@ RUN apt-get update \
         cmake \
         flex \
         g++ \
-        gcc \
         git \
         libgmp-dev \
-        libncurses-dev \
         make \
         pkg-config \
         python3 \
