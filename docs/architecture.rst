@@ -17,8 +17,9 @@ between bitvector terms, and the ordering comparisons and the
 classifications over floating-point terms.
 
 The basic architecture of STP essentially follows the idea of word-level
-preprocessing followed by translation to SAT (CryptoMiniSat is the
-default SAT solver when it is compiled in, otherwise CaDiCaL; ``--cadical``,
+preprocessing followed by translation to SAT (a query with no solver
+flag goes to the first backend the build compiled in, preferring
+CryptoMiniSat, then CaDiCaL, then Riss, then MiniSat; ``--cadical``,
 ``--cryptominisat`` and ``--minisat`` select a compiled-in backend at run
 time). In particular, we
 introduce several new heuristics for the preprocessing step, including

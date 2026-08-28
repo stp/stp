@@ -92,12 +92,22 @@ onto it, then moving the pin here.
 SAT backends
 ------------
 
-CryptoMiniSat is the default backend at run time, and CaDiCaL is the
-one always available: CaDiCaL is enabled when nothing is said, needs no
-system library, and the build can produce one itself, so a query is
-never left without a solver. CryptoMiniSat is linked whenever it is
-installed (``-DUSE_CRYPTOMINISAT=AUTO``, the default), and a build that
-has it uses it unless ``--cadical`` or ``--minisat`` says otherwise.
+A query with no solver flag on it goes to the first of these that the
+build compiled in:
+
+1. CryptoMiniSat
+2. CaDiCaL
+3. Riss
+4. MiniSat
+
+CryptoMiniSat is therefore the default wherever it is linked, and
+CaDiCaL is what a stock build solves with. CaDiCaL is also the one
+always available: it is enabled when nothing is said, needs no system
+library, and the build can produce one itself, so a query is never left
+without a solver. CryptoMiniSat is linked whenever it is installed
+(``-DUSE_CRYPTOMINISAT=AUTO``, the default). Either way ``--cadical``,
+``--cryptominisat``, ``--riss`` or ``--minisat`` overrides the order for
+one run.
 
 The two other values are for builds that would rather not depend on what
 the machine has lying around: ``-DUSE_CRYPTOMINISAT=ON`` makes a missing
