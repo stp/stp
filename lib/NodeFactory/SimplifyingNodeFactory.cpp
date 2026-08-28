@@ -3409,7 +3409,11 @@ ASTNode SimplifyingNodeFactory::CreateTerm(Kind kind, unsigned int width,
   {
     case stp::BVZX:
     {
-      if (width - children[0].GetValueWidth() > 0)
+      // Compared as widths, not as a difference: both are unsigned, so
+      // width - GetValueWidth() > 0 held whenever the two differed at all,
+      // and a narrowing BVZX reached CreateZeroConst() with a wrapped length
+      // instead of the FatalError below.
+      if (width > children[0].GetValueWidth())
       {
         ASTNode zero = bm.CreateZeroConst(width - children[0].GetValueWidth());
         result = NodeFactory::CreateTerm(BVCONCAT, width, zero, children[0]);
