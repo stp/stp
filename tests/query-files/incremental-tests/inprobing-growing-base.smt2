@@ -8,7 +8,7 @@
 ; the same solver-size and solve-count thresholds, but a fresh permanent unit
 ; arrives between every query. Neither the ninth nor tenth check may rebuild
 ; to retire inprocessing.
-; RUN: %solver --incremental --incremental-profile %s 2>&1 | %OutputCheck %s
+; RUN: %solver --cadical --incremental --incremental-profile %s 2>&1 | %OutputCheck %s
 (set-logic QF_BVFP)
 (declare-fun x () (_ FloatingPoint 8 24))
 (declare-fun y () (_ FloatingPoint 8 24))

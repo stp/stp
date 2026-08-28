@@ -92,18 +92,19 @@ onto it, then moving the pin here.
 SAT backends
 ------------
 
-CaDiCaL is the default backend: it is the one enabled when nothing is
-said, it needs no system library, and the build can produce one itself.
-The others are asked for by name.
+CryptoMiniSat is the default backend at run time, and CaDiCaL is the
+one always available: CaDiCaL is enabled when nothing is said, needs no
+system library, and the build can produce one itself, so a query is
+never left without a solver. CryptoMiniSat is linked whenever it is
+installed (``-DUSE_CRYPTOMINISAT=AUTO``, the default), and a build that
+has it uses it unless ``--cadical`` or ``--minisat`` says otherwise.
 
-CryptoMiniSat used to be linked in whenever it happened to be installed.
-It no longer is -- a build whose set of backends depends on what the
-machine has lying around cannot be reproduced from its flags. Ask for it
-with ``-DUSE_CRYPTOMINISAT=ON``, which also makes a missing one a
-configuration error; ``-DUSE_CRYPTOMINISAT=AUTO`` restores the old
-"use it if it is there" behaviour by name. It is found when installed,
-including into ``deps/install``, where ``scripts/deps/setup-cms.sh``
-puts it:
+The two other values are for builds that would rather not depend on what
+the machine has lying around: ``-DUSE_CRYPTOMINISAT=ON`` makes a missing
+CryptoMiniSat a configuration error, and ``-DUSE_CRYPTOMINISAT=OFF``
+never looks for one, which is what pins a build's set of backends to the
+flags that produced it. It is found when installed, including into
+``deps/install``, where ``scripts/deps/setup-cms.sh`` puts it:
 
 .. code-block:: bash
 
@@ -120,8 +121,9 @@ as a CMake package rather than as a header and a library, and an
 ExternalProject would write that package only after the configure that
 has to read it. Install it, or run the script.
 
-CaDiCaL is what you get by default, and is worth having on hard
-bitvector problems. With
+CaDiCaL is compiled in by default, is what a build without
+CryptoMiniSat solves with, and is worth having on hard bitvector
+problems. With
 ``-DENABLE_AUTO_DOWNLOAD=ON`` there is nothing to do but ask for it;
 otherwise an installed CaDiCaL is found the way any library is, or
 ``CADICAL_DIR`` points at a checkout:
@@ -145,9 +147,9 @@ compiling and running ``CaDiCaL::Solver::version()``. That decides
 whether ``--cadical-factor`` can be compiled in, and the answer is
 printed at configure time.
 
-Enabling CaDiCaL makes it the default for that build, in place of
-CryptoMiniSat; ``--cryptominisat`` (or ``--minisat``, in a
-``-DUSE_MINISAT`` build) selects another backend at run time. With a
+CryptoMiniSat stays the default for a build that has it, and CaDiCaL is
+the default for one that does not; ``--cadical``, ``--cryptominisat`` or
+``--minisat`` selects a compiled-in backend at run time. With a
 CaDiCaL 3.x build, ``--cadical-factor`` controls CaDiCaL's bounded
 variable addition: ``on`` -- the default -- ``off``, or ``auto``, which
 enables it only for problems with array operations. ``auto`` was the

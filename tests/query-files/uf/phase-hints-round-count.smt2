@@ -28,8 +28,8 @@
 ; below pins nothing.
 ; REQUIRES: cadical
 ;
-; RUN: %solver -s --uninterpreted-functions --uf-ackermann=off --uf-phase-hints=1 --distinct-ordering=0 --incremental=off %s 2>&1 | %OutputCheck --check-prefix=HINTED %s
-; RUN: %solver -s --uninterpreted-functions --uf-ackermann=off --uf-phase-hints=0 --distinct-ordering=0 --incremental=off %s 2>&1 | %OutputCheck --check-prefix=PLAIN %s
+; RUN: %solver --cadical -s --uninterpreted-functions --uf-ackermann=off --uf-phase-hints=1 --distinct-ordering=0 --incremental=off %s 2>&1 | %OutputCheck --check-prefix=HINTED %s
+; RUN: %solver --cadical -s --uninterpreted-functions --uf-ackermann=off --uf-phase-hints=0 --distinct-ordering=0 --incremental=off %s 2>&1 | %OutputCheck --check-prefix=PLAIN %s
 ;
 ; HINTED-NOT: installed congruence lemma
 ; HINTED: ^sat$
