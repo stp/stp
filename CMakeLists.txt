@@ -221,17 +221,30 @@ else ()
     # (but later on when installing)
     SET(CMAKE_BUILD_WITH_INSTALL_RPATH FALSE)
 
-    SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_FULL_LIBDIR}")
+    # Relative to the loading binary, so the installation can be moved. An
+    # absolute CMAKE_INSTALL_FULL_LIBDIR here means a relocated tree -- a
+    # packager's staging root, a tarball unpacked elsewhere -- has binaries
+    # looking for libstp where it was configured, not where it is. Where some
+    # other libstp is installed the loader finds that one instead, and the
+    # mismatch surfaces as a crash rather than as a missing library. macOS has
+    # always used @loader_path below; $ORIGIN is the ELF equivalent.
+    #
+    # The same expression serves executables in BINDIR and libraries in LIBDIR
+    # as long as the two are siblings: from LIBDIR, "../<libdir>" is LIBDIR.
+    #
+    # Nothing is set when LIBDIR is a system directory: the loader searches
+    # those anyway, and an RPATH into one is what distribution packaging
+    # checks object to.
+    LIST(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES "${CMAKE_INSTALL_FULL_LIBDIR}" isSystemDir)
+    IF("${isSystemDir}" STREQUAL "-1")
+        FILE(RELATIVE_PATH _stp_bindir_to_libdir
+             "${CMAKE_INSTALL_FULL_BINDIR}" "${CMAKE_INSTALL_FULL_LIBDIR}")
+        SET(CMAKE_INSTALL_RPATH "$ORIGIN/${_stp_bindir_to_libdir}")
+    ENDIF("${isSystemDir}" STREQUAL "-1")
 
     # add the automatically determined parts of the RPATH
     # which point to directories outside the build tree to the install RPATH
     SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
-
-    # the RPATH to be used when installing, but only if it's not a system directory
-    LIST(FIND CMAKE_PLATFORM_IMPLICIT_LINK_DIRECTORIES "${CMAKE_INSTALL_FULL_LIBDIR}" isSystemDir)
-    IF("${isSystemDir}" STREQUAL "-1")
-        SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_FULL_LIBDIR}")
-    ENDIF("${isSystemDir}" STREQUAL "-1")
 
     if (APPLE)
       set(CMAKE_MACOSX_RPATH ON)
