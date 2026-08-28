@@ -720,6 +720,31 @@ jobs:
         "
         echo "ok: installed python module solves a query"
 
+        # And again from a different directory, which is what a packager
+        # staging into a temporary root or anyone unpacking a tarball
+        # elsewhere ends up with. This is what an absolute install RPATH
+        # breaks: the binary keeps looking where it was configured, and on a
+        # machine that has another libstp there it loads that one and crashes
+        # rather than reporting a missing library.
+        #
+        # The Python module is not retried here. Its library_path.py names
+        # ${prefix}/lib outright, so it is still tied to the configured
+        # prefix -- a separate matter from the RPATH.
+        mv "$prefix" "${prefix}-moved"
+        "${prefix}-moved/bin/stp" query.smt2 | grep -qx sat
+        ldd "${prefix}-moved/bin/stp" | grep -q "${prefix}-moved/bin/../lib/libstp"
+        echo "ok: relocated install tree runs and loads its own libstp"
+
+        cmake -S tests/api/install/uf-public-header-consumer -B consumer-moved \
+          -DSTP_DIR:PATH="${prefix}-moved/lib/cmake/STP" \
+          -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF \
+          -DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF \
+          -G Ninja
+        grep -qx "STP_DIR:PATH=${prefix}-moved/lib/cmake/STP" consumer-moved/CMakeCache.txt
+        cmake --build consumer-moved --parallel "$(nproc)"
+        ctest --test-dir consumer-moved --output-on-failure
+        echo "ok: consumer builds against the relocated package"
+
   # CryptoMiniSat and CaDiCaL in one binary. Every other Linux job enables
   # exactly one of them, so until this job existed nothing established that
   # the combination works -- the exclusions elsewhere were about build time,
