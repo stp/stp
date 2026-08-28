@@ -26,6 +26,7 @@ THE SOFTWARE.
 
 #include "stp/Sat/SearchBias.h"
 #include "stp/Util/Attributes.h"
+#include "stp/config.h"
 #include <cstdint>
 #include <iosfwd>
 #include <string>
@@ -1176,14 +1177,12 @@ public:
     // MiniSat is the last resort and is not guarded: CMakeLists.txt refuses
     // a build with no backend at all, so the fall-through is only reached
     // when MiniSat is the one that is there.
-#ifdef USE_CRYPTOMINISAT
+#if STP_BUILD_WITH_CRYPTOMINISAT
     solver_to_use = CRYPTOMINISAT5_SOLVER;
-#else
-#ifdef USE_CADICAL
+#elif STP_BUILD_WITH_CADICAL
     solver_to_use = CADICAL_SOLVER;
 #else
     solver_to_use = MINISAT_SOLVER;
-#endif
 #endif
   }
 };
