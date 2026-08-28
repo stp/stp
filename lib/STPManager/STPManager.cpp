@@ -30,6 +30,7 @@ THE SOFTWARE.
 #include "stp/Printer/SMTLIBPrinter.h"
 #include "stp/Util/CBVOps.h"
 #include "stp/Util/NodeIterator.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <sstream>
@@ -49,6 +50,29 @@ void STPMgr::noteAIGBudgetExhausted(int nodeCount)
   soft_timeout_expired = true;
 }
 
+namespace
+{
+// unordered_dense grows its value array before it grows/rebuilds the bucket
+// array.  An allocation failure while rebuilding the latter leaves the
+// container valid for destruction but not for another lookup.  AST hash-cons
+// tables must remain usable after a caught allocation failure, so perform a
+// potentially-growing reserve on a copy and publish it only after every
+// allocation succeeds.  This is paid only at geometric growth boundaries;
+// ordinary inserts retain the normal constant-time path.
+template <class DenseTable>
+void prepareStrongDenseInsert(DenseTable& table)
+{
+  if (!table.stp_insertion_may_rehash())
+    return;
+
+  DenseTable grown(table);
+  const std::size_t requested =
+      std::max<std::size_t>(table.size() + 1, table.size() * 2 + 8);
+  grown.reserve(requested);
+  table.swap(grown);
+}
+} // namespace
+
 // Probe the unique table with a non-owning (kind, borrowed children) key. On
 // a hit nothing is built; only on a miss is the tail-allocated node created.
 ASTInterior* STPMgr::LookupOrCreateInterior(Kind kind, ASTChildren children)
@@ -66,9 +90,28 @@ ASTInterior* STPMgr::LookupOrCreateInterior(Kind kind, ASTChildren children)
     assert(children[0].GetKind() != NOT);
   }
 
+  prepareStrongDenseInsert(_interior_unique_table);
   ASTInterior* n_ptr = ASTInterior::create(this, kind, children);
-  _interior_unique_table.insert(n_ptr);
-  return n_ptr;
+  try
+  {
+    const std::pair<ASTInteriorSet::iterator, bool> inserted =
+        _interior_unique_table.insert(n_ptr);
+    if (inserted.second)
+      return n_ptr;
+
+    // There is no concurrent construction, so the earlier lookup makes this
+    // unreachable.  Keep ownership correct if that invariant ever changes.
+    ASTInterior* const existing = *inserted.first;
+    delete n_ptr;
+    return existing;
+  }
+  catch (...)
+  {
+    // The node has not acquired a public ASTNode reference yet.  Destroying it
+    // directly releases the child references copied into its tail allocation.
+    delete n_ptr;
+    throw;
+  }
 }
 
 ////////////////////////////////////////////////////////////////

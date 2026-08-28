@@ -903,10 +903,12 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(unordereddense)
 message(STATUS "ankerl::unordered_dense ${UNORDERED_DENSE_VERSION}: ${unordereddense_SOURCE_DIR}")
 
+include(cmake/PrepareUnorderedDense.cmake)
+
 # SYSTEM, and project-wide because stp/AST/AST.h reaches it: upstream code
 # whose warnings STP does not control, compiled into nearly every translation
 # unit here.
-include_directories(SYSTEM ${unordereddense_SOURCE_DIR}/include)
+include_directories(SYSTEM ${STP_UNORDERED_DENSE_INCLUDE_DIR})
 
 # -----------------------------------------------------------------------------
 # ABC
