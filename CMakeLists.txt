@@ -1233,7 +1233,7 @@ if (NOT USE_CRYPTOMINISAT STREQUAL "OFF")
 else()
   set(USE_CRYPTOMINISAT OFF)
 endif()
-add_feature_info(CryptoMiniSat USE_CRYPTOMINISAT "Enables CryptoMiniSat solver, allows --cryptominisat5 option")
+add_feature_info(CryptoMiniSat USE_CRYPTOMINISAT "Enables CryptoMiniSat solver, allows --cryptominisat option")
 
 # CryptoMiniSat >= 5.14 builds its own CaDiCaL -- the meelgroup fork, 2.1.3 as
 # of 5.14.7 -- and installs it beside itself, exported as an imported target
