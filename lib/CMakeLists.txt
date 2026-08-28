@@ -287,24 +287,29 @@ target_link_libraries(stp
     PRIVATE ${stp_export_libs}
 )
 
-# SymFPU reaches further than the sources that name it. It is header-only, and
-# stp/FloatBlaster/symbolic_fp.h -- an internal header, but one any part of the
-# tree may include -- includes symfpu/core/unpackedFloat.h. So the tools and
-# tests that include it need SymFPU's include directory too, and listing them
-# one by one is a list that rots: it was already wrong by two targets when
-# first written.
+# SymFPU and ABC reach further than the sources that name them. SymFPU is
+# header-only, and stp/FloatBlaster/symbolic_fp.h -- an internal header, but one
+# any part of the tree may include -- includes symfpu/core/unpackedFloat.h; ABC
+# is reached the same way through stp/ToSat/BBNodeAIG.h. So the tools and tests
+# that include either need its include directory too, and listing them one by
+# one is a list that rots: it was already wrong by two targets when first
+# written.
 #
-# BUILD_INTERFACE, so it reaches everything in this build that links stp and
-# nothing at all in the exported STPTargets.cmake -- SymFPU is a target no
-# consumer of an installed STP has, and none of them need it: the headers STP
-# installs (c_interface.h, fp.hpp, uf.hpp) do not include it.
-target_link_libraries(stp INTERFACE $<BUILD_INTERFACE:SymFPU>)
-
-# And ABC, for the tools and tests that include stp/ToSat/BBNodeAIG.h. Only the
-# include directory travels this way; the archive is named on stp's own link
-# line above, and the handful of tests that call into ABC directly link it
+# The directories, not the targets. BUILD_INTERFACE means "when consumed from
+# the build tree", not "never exported": install(EXPORT) drops it, export()
+# keeps it. SymFPU and ABC are IMPORTED targets, which CMake exports as bare
+# names without complaint, so naming them here left the build-tree
+# STPTargets.cmake asking a consumer for -lSymFPU -lABC.
+#
+# An installed STP needs neither -- c_interface.h, fp.hpp and uf.hpp include
+# neither library. SYSTEM keeps the warning suppression both find modules set.
+# Only the include directory travels this way: ABC's archive is named on stp's
+# own link line above, and the tests that call into ABC directly link it
 # themselves because a shared libstp localises its symbols.
-target_link_libraries(stp INTERFACE $<BUILD_INTERFACE:ABC>)
+target_include_directories(stp SYSTEM INTERFACE
+    $<BUILD_INTERFACE:${SYMFPU_INCLUDE_DIRS}>
+    $<BUILD_INTERFACE:${ABC_INCLUDE_DIR}>
+)
 
 # ABC is interconnected enough that satisfying our ~30 entry points transitively
 # drags in most of the archive, including its vendored zlib and bzlib (gzopen,
