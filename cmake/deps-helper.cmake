@@ -97,8 +97,8 @@ endif()
 # survived a cross-compile, a sanitizer build or a compiler launcher.
 #
 # Individual modules append to this, and a later -D wins, so a dependency that
-# needs something different (Riss does not compile as C++17, MiniSat predates
-# CMake 4's floor) can still say so.
+# needs something different (MiniSat predates CMake 4's floor) can still say
+# so.
 #
 # POSITION_INDEPENDENT_CODE unconditionally: every static dependency STP has is
 # linked into libstp.so, and each of the scripts this replaces had to remember
@@ -318,7 +318,7 @@ endfunction()
 # "" for one that is not optional. An optional third argument names the variable
 # that points at an existing copy, for a dependency whose variable is not simply
 # the uppercased name -- cryptominisat5_DIR, spelled by its upstream package,
-# rather than LIBBF_DIR, CADICAL_DIR and RISS_DIR.
+# rather than LIBBF_DIR and CADICAL_DIR.
 macro(check_auto_download name disable_option)
     if(NOT ENABLE_AUTO_DOWNLOAD)
         if(${ARGC} GREATER 2)

@@ -20,9 +20,8 @@ file(COPY "${_lib}" DESTINATION "${DST}/lib")
 # Every header under src/, at the path it is included by: STP says
 # #include "aig/aig/aig.h", "opt/dar/dar.h", "sat/cnf/cnf.h" and so on, so
 # src/ is the include root. Copying the lot rather than the closure of those
-# three, for the reason Riss's install script gives -- ABC publishes no list of
-# its public headers, and a missing one would surface only as a compile error
-# in whichever STP build first needed it.
+# three, because ABC publishes no list of its public headers, and a missing one
+# would surface only as a compile error in whichever STP build first needed it.
 file(GLOB_RECURSE _headers RELATIVE "${SRC}/src" "${SRC}/src/*.h")
 foreach(_header ${_headers})
     get_filename_component(_dir "${_header}" DIRECTORY)
