@@ -457,6 +457,11 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
       if (trackOrdinaryRoots)
         ordinaryCurrentRoots.push_back(impl->aigRoot(k));
     }
+    // The same semantic keys seed abstraction ownership. Their committed AIG
+    // provenance names direct producers, and the refiner closes those over
+    // parent-to-child dependencies.
+    if (!impl->bvAbstraction.empty())
+      impl->setLiveAbstractionOwners(activeEncodedKeys);
     ordinaryLiveMass = Impl::addMass(ordinaryLiveMass, activationMass);
     ordinaryLiveMass = Impl::addMass(ordinaryLiveMass, oldRefinementMass);
     uint64_t nonStructuralMass =
@@ -649,9 +654,20 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   // whose enumeration, with the allowance set to zero, is instead bounded
   // by the operand pairs the search can propose.
   const uint64_t abstractionClausesBefore = impl->solver->submittedClauses();
-  while (sat && !bm->soft_timeout_expired &&
-         impl->refineAbstractions(*impl->solver) > 0)
+  bool abstractionRefinementUnknown = false;
+  while (sat && !bm->soft_timeout_expired)
   {
+    const AbstractionRefinementResult refinement =
+        impl->refineAbstractions(*impl->solver);
+    if (refinement.isUnknown())
+    {
+      abstractionRefinementUnknown = true;
+      break;
+    }
+    if (refinement.isFaithful())
+      break;
+    assert(refinement.madeProgress());
+
     bm->GetRunTimes()->start(RunTimes::Solving);
     if (impl->profile.enabled)
     {
@@ -677,7 +693,7 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   // SOLVER_UNKNOWN below is all that survives this frame, so a reason not
   // taken here is one
   // (get-info :reason-unknown) can never give.
-  if (bm->soft_timeout_expired)
+  if (abstractionRefinementUnknown || bm->soft_timeout_expired)
     bm->noteBudgetExhausted(*impl->solver);
 
   // Whatever the loop pinned is part of what this stack costs from now on;
@@ -701,7 +717,7 @@ IncrementalSolver::checkSatBody(const ASTVec& assertionsSMT2,
   if (uf.stats_flag)
     impl->solver->printStats();
 
-  if (bm->soft_timeout_expired)
+  if (abstractionRefinementUnknown || bm->soft_timeout_expired)
     return bm->unknownResult();
 
   if (!sat)

@@ -41,6 +41,12 @@ using namespace stp;
 namespace
 {
 
+unsigned refinedCount(const AbstractionRefinementResult& result)
+{
+  EXPECT_TRUE(result.madeProgress());
+  return result.refined;
+}
+
 void appendEqualityRecord(BVAbstractionRefiner& refiner,
                           BVEQAbstraction record)
 {
@@ -736,7 +742,7 @@ TEST_F(BVEQAbstractionTest, DuplicateTermsKeepTheirOwnResultVariables)
     solver.model[40 + i] = false;
   }
 
-  EXPECT_EQ(1u, refiner.refine(solver, bits));
+  EXPECT_EQ(1u, refinedCount(refiner.refine(solver, bits)));
   EXPECT_EQ(1u, refiner.terms()[0].blockedRounds);
   EXPECT_EQ(0u, refiner.terms()[1].blockedRounds);
   EXPECT_TRUE(solver.someClauseBlocksModel());
@@ -782,7 +788,7 @@ TEST_F(BVEQAbstractionTest, SaidUnequalRoundBlocksTheCandidate)
   solver.model[22] = true;
   solver.model[23] = false;
 
-  EXPECT_EQ(1u, refiner.refine(solver, bits));
+  EXPECT_EQ(1u, refinedCount(refiner.refine(solver, bits)));
   // The prefix still grew -- the blocking clause is in addition to the
   // definition's progress, not instead of it.
   EXPECT_EQ(1u, refiner.equalities()[0].refinedBits);
@@ -845,7 +851,7 @@ TEST_F(BVEQAbstractionTest, CongruenceChainsRunThroughDefinedEqualities)
   solver.model[6] = true;
   solver.model[7] = false;
 
-  EXPECT_EQ(1u, refiner.refine(solver, bits));
+  EXPECT_EQ(1u, refinedCount(refiner.refine(solver, bits)));
   EXPECT_EQ(0u, refiner.equalities()[2].refinedBits);
   EXPECT_FALSE(refiner.equalities()[2].defined);
   EXPECT_TRUE(solver.someClauseBlocksModel());
@@ -899,7 +905,7 @@ TEST_F(BVEQAbstractionTest, BlockingRoundReusesTheRegisteredConstant)
     solver.model[30 + i] = scripted[8 + i];
   }
 
-  EXPECT_EQ(1u, refiner.refine(solver, bits));
+  EXPECT_EQ(1u, refinedCount(refiner.refine(solver, bits)));
   EXPECT_EQ(1u, refiner.terms()[0].blockedRounds);
   EXPECT_EQ(0u, refiner.terms()[0].schemaRounds);
   EXPECT_FALSE(refiner.terms()[0].defined);
@@ -952,7 +958,7 @@ TEST_F(BVEQAbstractionTest, ASchemaRoundIsSpentWhereTheCandidateContradictsOne)
     solver.model[30 + i] = scripted[8 + i];
   }
 
-  EXPECT_EQ(1u, refiner.refine(solver, bits));
+  EXPECT_EQ(1u, refinedCount(refiner.refine(solver, bits)));
   EXPECT_EQ(1u, refiner.terms()[0].schemaRounds);
   EXPECT_EQ(0u, refiner.terms()[0].blockedRounds);
   EXPECT_FALSE(refiner.terms()[0].defined);
@@ -1024,7 +1030,7 @@ TEST_F(BVEQAbstractionTest, OnePassCanInstallBothKindsOfMultiplicationLemma)
     solver.model[60 + i] = scripted[20 + i];
   }
 
-  EXPECT_EQ(2u, refiner.refine(solver, bits));
+  EXPECT_EQ(2u, refinedCount(refiner.refine(solver, bits)));
   EXPECT_EQ(1u, mgr.UserFlags.coverage.bv_refinement_rounds);
   EXPECT_EQ(1u, mgr.UserFlags.coverage.bv_schema_lemmas);
   EXPECT_EQ(1u, mgr.UserFlags.coverage.bv_blocking_lemmas);

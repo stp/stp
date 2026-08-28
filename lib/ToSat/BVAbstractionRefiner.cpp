@@ -29,6 +29,7 @@ THE SOFTWARE.
 
 #include <algorithm>
 #include <iostream>
+#include <set>
 #include <unordered_map>
 
 namespace stp
@@ -39,6 +40,18 @@ namespace stp
 // without reading a single bit. A round that refined an equality stops
 // there rather than going on to the terms -- the term scan reads the same
 // model, and what it would find in it has already been ruled out.
+static size_t selectedSize(size_t all,
+                           const std::vector<size_t>* selected)
+{
+  return selected == NULL ? all : selected->size();
+}
+
+static size_t selectedIndex(size_t position,
+                            const std::vector<size_t>* selected)
+{
+  return selected == NULL ? position : (*selected)[position];
+}
+
 void BVAbstractionRefiner::rebuildRecordIndex()
 {
   recordOfId_.clear();
@@ -87,17 +100,97 @@ void BVAbstractionRefiner::appendTerm(BVTermAbstraction record)
   ++indexedRecords_;
 }
 
-unsigned BVAbstractionRefiner::refine(
+BVAbstractionScope BVAbstractionRefiner::dependencyClosure(
+    const std::vector<BVAbstractionId>& seeds)
+{
+  if (indexedRecords_ != eqs_.size() + terms_.size())
+    rebuildRecordIndex();
+
+  BVAbstractionScope scope = BVAbstractionScope::selected();
+  std::vector<BVAbstractionId> pending = seeds;
+  std::set<BVAbstractionId> reached;
+  while (!pending.empty())
+  {
+    const BVAbstractionId id = pending.back();
+    pending.pop_back();
+    if (!id.valid())
+    {
+      scope.complete = false;
+      return scope;
+    }
+    if (!reached.insert(id).second)
+      continue;
+
+    const auto found = recordOfId_.find(id);
+    if (found == recordOfId_.end())
+    {
+      scope.complete = false;
+      return scope;
+    }
+
+    const RecordLocation& location = found->second;
+    const std::vector<BVAbstractionId>* dependencies = NULL;
+    if (location.equality)
+    {
+      assert(location.index < eqs_.size());
+      scope.equalityIndices.push_back(location.index);
+      dependencies = &eqs_[location.index].dependencies;
+    }
+    else
+    {
+      assert(location.index < terms_.size());
+      scope.termIndices.push_back(location.index);
+      dependencies = &terms_[location.index].dependencies;
+    }
+    pending.insert(pending.end(), dependencies->begin(), dependencies->end());
+  }
+
+  std::sort(scope.equalityIndices.begin(), scope.equalityIndices.end());
+  std::sort(scope.termIndices.begin(), scope.termIndices.end());
+  return scope;
+}
+
+void BVAbstractionRefiner::prepareTermForQuery(BVTermAbstraction& term)
+{
+  if (term.queryGeneration == queryGeneration_)
+    return;
+  term.blockedThisQuery = 0;
+  term.schemasThisQuery = 0;
+  term.queryGeneration = queryGeneration_;
+}
+
+AbstractionRefinementResult BVAbstractionRefiner::refine(
     SATSolver& solver, const ToSATBase::ASTNodeToSATVar& nodeToSATVar)
 {
+  return refine(solver, nodeToSATVar, BVAbstractionScope::all());
+}
+
+AbstractionRefinementResult BVAbstractionRefiner::refine(
+    SATSolver& solver, const ToSATBase::ASTNodeToSATVar& nodeToSATVar,
+    const BVAbstractionScope& scope)
+{
+  if (!scope.complete)
+  {
+    bm->noteUnknown(
+        UnknownReason::Incomplete,
+        "a live BV abstraction dependency had no harvested producer record");
+    return AbstractionRefinementResult::unknown();
+  }
+
+  const std::vector<size_t>* selectedEqualities =
+      scope.allRecords ? NULL : &scope.equalityIndices;
+  const std::vector<size_t>* selectedTerms =
+      scope.allRecords ? NULL : &scope.termIndices;
   unsigned refined = 0;
+  AbstractionRefinementResult result =
+      AbstractionRefinementResult::faithful();
   if (hasEqualities())
-    refined = refineEqualities(solver, nodeToSATVar);
+    refined = refineEqualities(solver, nodeToSATVar, selectedEqualities);
   if (refined == 0 && hasTerms())
   {
     try
     {
-      refined = refineTerms(solver, nodeToSATVar);
+      result = refineTerms(solver, nodeToSATVar, selectedTerms);
     }
     catch (const AIGBudgetExhausted& e)
     {
@@ -105,9 +198,17 @@ unsigned BVAbstractionRefiner::refine(
         std::cerr << "AIG node budget exhausted during exact BV refinement at "
                   << e.nodeCount << " nodes" << std::endl;
       bm->noteAIGBudgetExhausted(e.nodeCount);
-      return 0;
+      // Not a fixed point. The candidate is still inconsistent with an
+      // operation whose exact encoding could not be built, so it must not be
+      // published as a model; that it refined nothing this round says only
+      // that nothing could be done about it.
+      return AbstractionRefinementResult::unknown();
     }
   }
+  else if (refined > 0)
+    result = AbstractionRefinementResult::progress(refined);
+
+  refined = result.refined;
   if (refined > 0)
   {
     refinements_ += refined;
@@ -116,7 +217,7 @@ unsigned BVAbstractionRefiner::refine(
       std::cerr << "BV abstraction: refined " << refined << " operations"
                 << std::endl;
   }
-  return refined;
+  return result;
 }
 
 // Which variables carry a term record's result: its own, where the lowering
@@ -311,7 +412,8 @@ static unsigned recordedVar(unsigned var, const ASTNode& node,
 }
 
 unsigned BVAbstractionRefiner::refineEqualities(
-    SATSolver& solver, const ToSATBase::ASTNodeToSATVar& nodeToSATVar)
+    SATSolver& solver, const ToSATBase::ASTNodeToSATVar& nodeToSATVar,
+    const std::vector<size_t>* selected)
 {
   // Phase 1: Congruence closure — detect transitivity conflicts at word level.
   //
@@ -329,17 +431,29 @@ unsigned BVAbstractionRefiner::refineEqualities(
     std::unordered_map<ASTNode, unsigned, ASTNode::ASTNodeHasher,
                        ASTNode::ASTNodeEqual> symbolToIdx;
     unsigned nextIdx = 0;
-    for (const auto& abs : eqs_)
+    const size_t count = selectedSize(eqs_.size(), selected);
+    for (size_t position = 0; position < count; ++position)
     {
+      const size_t idx = selectedIndex(position, selected);
+      assert(idx < eqs_.size());
+      const auto& abs = eqs_[idx];
       if (symbolToIdx.find(abs.leftSymbol) == symbolToIdx.end())
         symbolToIdx[abs.leftSymbol] = nextIdx++;
       if (symbolToIdx.find(abs.rightSymbol) == symbolToIdx.end())
         symbolToIdx[abs.rightSymbol] = nextIdx++;
     }
 
+    // Out-of-scope records are left out of the chains as well as out of the
+    // scan. Their Booleans are free, so a chain through one would build a
+    // conflict out of a value nothing in the query chose, and the
+    // explanation clause would be spent constraining a record the query
+    // cannot see.
     std::vector<BVEQCongruenceClosure::EqInfo> eqInfos;
-    for (const auto& abs : eqs_)
+    for (size_t position = 0; position < count; ++position)
     {
+      const size_t idx = selectedIndex(position, selected);
+      assert(idx < eqs_.size());
+      const auto& abs = eqs_[idx];
       // Read once and checked once: the closure both reads this variable's
       // value and writes the explanation clause over it.
       const unsigned eqVar = recordedVar(
@@ -378,8 +492,11 @@ unsigned BVAbstractionRefiner::refineEqualities(
   };
   std::vector<InconsistentEQ> incEQs;
 
-  for (size_t idx = 0; idx < eqs_.size(); ++idx)
+  const size_t count = selectedSize(eqs_.size(), selected);
+  for (size_t position = 0; position < count; ++position)
   {
+    const size_t idx = selectedIndex(position, selected);
+    assert(idx < eqs_.size());
     auto& abs = eqs_[idx];
     if (abs.defined)
       continue;
@@ -1319,8 +1436,9 @@ void encodeDivUnderDivisorValue(
   }
 }
 
-unsigned BVAbstractionRefiner::refineTerms(
-    SATSolver& solver, const ToSATBase::ASTNodeToSATVar& nodeToSATVar)
+AbstractionRefinementResult BVAbstractionRefiner::refineTerms(
+    SATSolver& solver, const ToSATBase::ASTNodeToSATVar& nodeToSATVar,
+    const std::vector<size_t>* selected)
 {
   // Phase 1: Scan all abstractions, reading model values to find inconsistencies.
   // Cache the data needed for clause generation so we don't need modelValue later.
@@ -1354,11 +1472,15 @@ unsigned BVAbstractionRefiner::refineTerms(
   std::vector<InconsistentITE> incITE;
   std::vector<InconsistentDivMul> incDivMul;
 
-  for (size_t idx = 0; idx < terms_.size(); ++idx)
+  const size_t selectedTermCount = selectedSize(terms_.size(), selected);
+  for (size_t position = 0; position < selectedTermCount; ++position)
   {
+    const size_t idx = selectedIndex(position, selected);
+    assert(idx < terms_.size());
     auto& abs = terms_[idx];
     if (abs.defined)
       continue;
+    prepareTermForQuery(abs);
 
     if (isBVCompare(abs.opKind))
     {
@@ -1559,7 +1681,7 @@ unsigned BVAbstractionRefiner::refineTerms(
       const unsigned schemaLimit = bm->UserFlags.bv_term_abstraction_rounds;
       const bool schemaAllowance =
           bm->UserFlags.bv_term_abstraction_schemas &&
-          (schemaLimit == 0 || abs.schemaRounds < schemaLimit);
+          (schemaLimit == 0 || abs.schemasThisQuery < schemaLimit);
       if (schemaAllowance)
       {
         if (abs.opKind == BVMULT)
@@ -1766,6 +1888,7 @@ unsigned BVAbstractionRefiner::refineTerms(
       }
 
       abs.schemaRounds++;
+      abs.schemasThisQuery++;
       bm->UserFlags.coverage.bv_schema_lemmas++;
       if (bm->UserFlags.stats_flag)
         std::cerr << "BV abstraction: " << _kind_names[abs.opKind] << " "
@@ -1825,6 +1948,7 @@ unsigned BVAbstractionRefiner::refineTerms(
       }
 
       abs.schemaRounds++;
+      abs.schemasThisQuery++;
       bm->UserFlags.coverage.bv_schema_lemmas++;
       if (bm->UserFlags.stats_flag)
         std::cerr << "BV abstraction: BVMULT "
@@ -1850,7 +1974,7 @@ unsigned BVAbstractionRefiner::refineTerms(
     // today are two that can stop agreeing, and these two already had: the
     // written-out one and BBDivMod disagreed about a zero divisor.
     const unsigned limit = valueLemmaAllowance(bm->UserFlags, W);
-    if (limit != 0 && abs.blockedRounds >= limit)
+    if (limit != 0 && abs.blockedThisQuery >= limit)
     {
       // All of it, unless the piece-at-a-time escalation is on and this is
       // a multiplication. A piece reaches past the lowest bit the candidate
@@ -1900,6 +2024,7 @@ unsigned BVAbstractionRefiner::refineTerms(
       continue;
     }
     abs.blockedRounds++;
+    abs.blockedThisQuery++;
     bm->UserFlags.coverage.bv_blocking_lemmas++;
 
     for (unsigned bit = 0; bit < W; ++bit)
@@ -1916,7 +2041,8 @@ unsigned BVAbstractionRefiner::refineTerms(
     refined++;
   }
 
-  return refined;
+  return refined > 0 ? AbstractionRefinementResult::progress(refined)
+                     : AbstractionRefinementResult::faithful();
 }
 
 } // namespace stp
