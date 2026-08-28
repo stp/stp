@@ -3,9 +3,14 @@
 #
 #     docker build --tag stp/stp .
 #     cat example.smt2 | docker run --rm -i stp/stp
+#
+# The base image only has to build STP; what it produces is a static binary on
+# scratch, which carries no distribution with it and so runs anywhere. There
+# used to be Docker.ubuntu22 and Docker.ubuntu24 alongside this file, differing
+# in nothing but this line, and neither had been built by anything.
 
 
-FROM ubuntu:24.04 AS builder
+FROM ubuntu:26.04 AS builder
 
 # Install dependencies
 RUN apt-get update \
@@ -15,49 +20,67 @@ RUN apt-get update \
         cmake \
         flex \
         g++ \
-        gcc \
         git \
         libgmp-dev \
-        libm4ri-dev \
-        libncurses-dev \
         make \
+        pkg-config \
         python3 \
-        wget \
         zlib1g-dev \
  && rm -rf /var/lib/apt/lists/*
 
-# Build CMS
+# Build CryptoMiniSat, at the release scripts/deps/setup-cms.sh pins and with
+# the flags it uses -- that is the combination CI exercises.
+#
+# BUILD_SHARED_LIBS=OFF rather than STATICCOMPILE=ON: 5.14 removed
+# STATICCOMPILE, and BUILD_SHARED_LIBS defaults to ON, so asking the old way
+# now yields a shared libcryptominisat5 that the scratch image below cannot
+# carry. STATIC_BINARY=OFF because only the library is wanted here; a fully
+# static cryptominisat5 executable would need static gmp and zlib.
+#
+# 5.14 fetches and builds its own CaDiCaL and cadiback, which is why git and
+# ca-certificates matter to this stage too, and it looks GMP up through
+# pkg-config, which is why that is in the package list. Its CaDiCaL is not a
+# second copy: USE_CADICAL is off below, so this image has exactly one.
 WORKDIR /cms
-RUN wget -O cryptominisat.tgz https://github.com/msoos/cryptominisat/archive/5.11.21.tar.gz \
- && tar xvf cryptominisat.tgz --strip-components 1 \
+RUN git clone --depth 1 --branch release/v5.14.7 \
+        https://github.com/msoos/cryptominisat . \
  && mkdir build && cd build \
  && cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DENABLE_ASSERTIONS=OFF \
-        -DSTATICCOMPILE=ON \
- && cmake --build . \
- && cmake --install .
-
-# Build MiniSat
-WORKDIR /minisat
-RUN wget -O minisat.tgz https://github.com/stp/minisat/archive/releases/2.2.1.tar.gz \
- && tar xvf minisat.tgz --strip-components 1 \
- && mkdir build && cd build \
- && cmake .. \
-        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DSTATIC_BINARY=OFF \
  && cmake --build . \
  && cmake --install .
 
 # Build STP.
 #
-# --auto-download supplies LibBF, which is required and which nothing above
-# builds -- this image could not have built at all without a deps/libbf that
-# happened to be sitting in the build context. git and ca-certificates are in
-# the package list above for its sake.
+# --auto-download supplies everything not built above: MiniSat, LibBF, ABC,
+# SymFPU, CLI11 and the rest. That is why git and ca-certificates are in the
+# package list, and it is also what makes MiniSat build at all -- 2.2.1
+# declares cmake_minimum_required(VERSION 2.6), which the CMake on this base
+# image refuses, and cmake/deps-helper.cmake passes the
+# -DCMAKE_POLICY_VERSION_MINIMUM that gets it through. Building it by hand
+# here, outside that, did not.
 #
-# The two solvers are named explicitly rather than left to whatever is
-# installed, and CaDiCaL is turned off: it is on by default, and this image
-# links CryptoMiniSat and MiniSat instead.
+# CryptoMiniSat is built above because it is the one dependency
+# --auto-download does not cover.
+#
+# All three backends are named explicitly rather than left to whatever is
+# installed. CaDiCaL is the subtle one: CryptoMiniSat 5.14 builds and installs
+# its own, so with a static libcryptominisat5 -- which is what a scratch image
+# needs -- both archives would reach libstp's link line and their symbols
+# would collide. The guard in the top-level CMakeLists refuses that, with one
+# exception: if STP resolves CaDiCaL to the same archive CryptoMiniSat
+# installed, there is only one library and one set of symbols. That is what
+# happens here, because rung 1 of cmake/FindCaDiCaL.cmake searches the system
+# prefixes and CryptoMiniSat put cadical/cadical.hpp and libcadical.a in
+# /usr/local above. Configure prints which copy it settled on.
+#
+# The cost is that CaDiCaL is then whatever CryptoMiniSat bundles rather than
+# the newer revision STP pins for itself, so --cadical-factor detects the older
+# version and turns itself off. Building CryptoMiniSat shared would avoid that,
+# but a scratch image cannot carry the .so.
 WORKDIR /stp
 COPY . /stp
 RUN cmake -S . -B build \
@@ -67,7 +90,7 @@ RUN cmake -S . -B build \
         -DENABLE_AUTO_DOWNLOAD=ON \
         -DUSE_CRYPTOMINISAT=ON \
         -DUSE_MINISAT=ON \
-        -DUSE_CADICAL=OFF \
+        -DUSE_CADICAL=ON \
  && cmake --build build \
  && cmake --install build
 
