@@ -420,6 +420,37 @@ macro(stp_probe_with_linking_again)
   unset(_stp_saved_try_compile_target_type)
 endmacro()
 
+# And one probe needs the optimiser kept away from it as well.
+# check_type_size() does not read its answer off an exit status: it compiles a
+# program with the size written into a string constant, and then greps that
+# constant out of the artifact it copied back.  Stopping at a static library
+# means the artifact is whatever the compiler emits without a link, and under
+# clang's -flto that is bytecode, which does not hold the string in a form
+# file(STRINGS) can see.  The compile succeeded, so the probe reports "done"
+# and hands back an empty size -- which is worse than a failure, because
+# everything downstream reads "" as "not 8" and configures ABC's 32-bit ABI on
+# a 64-bit host.  (GCC's bytecode keeps the string, so only clang shows it.)
+#
+# A word size is decided by the target, not by whether the build is optimised
+# across translation units, so the flag comes off for the probe and stays on
+# for the build.  The pattern matches -flto and -flto=thin as well as GCC's
+# -fno-fat-lto-objects, and not a path that happens to contain those letters.
+#
+# Not nestable either: one saved value, one restore.
+macro(stp_probe_without_lto)
+  set(_stp_saved_c_flags "${CMAKE_C_FLAGS}")
+  set(_stp_saved_cxx_flags "${CMAKE_CXX_FLAGS}")
+  string(REGEX REPLACE "-f[a-z-]*lto[^ ]*" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+  string(REGEX REPLACE "-f[a-z-]*lto[^ ]*" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+endmacro()
+
+macro(stp_probe_with_lto_again)
+  set(CMAKE_C_FLAGS "${_stp_saved_c_flags}")
+  set(CMAKE_CXX_FLAGS "${_stp_saved_cxx_flags}")
+  unset(_stp_saved_c_flags)
+  unset(_stp_saved_cxx_flags)
+endmacro()
+
 macro(add_cxx_flag_if_supported flagname)
   stp_probe_without_linking()
   check_cxx_compiler_flag("${flagname}" HAVE_FLAG_${flagname})
@@ -915,12 +946,16 @@ include_directories(SYSTEM ${STP_UNORDERED_DENSE_INCLUDE_DIR})
 include(CheckTypeSize)
 
 # A word size is a property of the compiler, not of how the final binary will
-# be linked; see stp_probe_without_linking() above for what happens when these
-# are allowed to depend on a link that cannot be made.
+# be linked or how hard it is optimised; see stp_probe_without_linking() above
+# for what happens when these are allowed to depend on a link that cannot be
+# made, and stp_probe_without_lto() for what LTO does to the way this
+# particular probe reports its answer.
 stp_probe_without_linking()
+stp_probe_without_lto()
 CHECK_TYPE_SIZE("void*" SIZEOF_VOID_P)
 CHECK_TYPE_SIZE("long" SIZEOF_LONG)
 CHECK_TYPE_SIZE("int" SIZEOF_INT)
+stp_probe_with_lto_again()
 stp_probe_with_linking_again()
 
 # And if one of them still does not come back, stop here.  Everything below is
