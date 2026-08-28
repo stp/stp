@@ -21,6 +21,8 @@ THE SOFTWARE.
 #include "stp/STPManager/UserDefinedFlags.h"
 #include <gtest/gtest.h>
 
+#include <string>
+
 // --disable-simplifications owns the whole stack: the bulk setter must
 // switch all of it off.
 TEST(UserDefinedFlags_Test, disable_simplifications_clears_flattening_stack)
@@ -74,4 +76,61 @@ TEST(UserDefinedFlags_Test, internal_model_consumer_is_a_separate_input)
 #else
   EXPECT_TRUE(uf.modelConstructionRequired(false));
 #endif
+}
+
+TEST(UserDefinedFlags_Test, every_bv_schema_group_round_trips_by_name)
+{
+  for (unsigned i = 0; i < stp::BV_SCHEMA_GROUP_COUNT; ++i)
+  {
+    const stp::BVSchemaGroup group = static_cast<stp::BVSchemaGroup>(i);
+    const uint32_t expected = stp::bvSchemaGroupBit(group);
+    uint32_t parsed = 0;
+    std::string error;
+    ASSERT_TRUE(
+        stp::parseBVSchemaGroups(stp::bvSchemaGroupName(group), parsed, error))
+        << error;
+    EXPECT_EQ(expected, parsed);
+    EXPECT_EQ(stp::bvSchemaGroupName(group), stp::formatBVSchemaGroups(parsed));
+    for (unsigned j = 0; j < stp::BV_SCHEMA_GROUP_COUNT; ++j)
+      EXPECT_EQ(i == j, stp::bvSchemaGroupEnabled(
+                            parsed, static_cast<stp::BVSchemaGroup>(j)));
+  }
+}
+TEST(UserDefinedFlags_Test, bv_schema_group_aliases_and_lists_parse)
+{
+  uint32_t parsed = 123;
+  std::string error;
+  ASSERT_TRUE(stp::parseBVSchemaGroups("all", parsed, error));
+  EXPECT_EQ(stp::BV_SCHEMA_GROUP_ALL, parsed);
+  EXPECT_EQ("all", stp::formatBVSchemaGroups(parsed));
+
+  ASSERT_TRUE(stp::parseBVSchemaGroups("none", parsed, error));
+  EXPECT_EQ(0u, parsed);
+  EXPECT_EQ("none", stp::formatBVSchemaGroups(parsed));
+
+  ASSERT_TRUE(
+      stp::parseBVSchemaGroups(" mul-ref3, base, urem,base ", parsed, error));
+  EXPECT_EQ(stp::BV_SCHEMA_GROUP_QUALIFIED, parsed);
+  // Formatting is canonical enum order, independent of input order.
+  EXPECT_EQ("base,urem,mul-ref3", stp::formatBVSchemaGroups(parsed));
+
+  ASSERT_TRUE(stp::parseBVSchemaGroups(
+      "base,udiv,urem,mul6,mul8,quotient-one", parsed, error));
+  EXPECT_EQ("base,udiv15,udiv-observed,urem,quotient-one-quot,"
+            "quotient-one-rem,mul8,mul-ref3",
+            stp::formatBVSchemaGroups(parsed));
+}
+
+TEST(UserDefinedFlags_Test, invalid_bv_schema_group_lists_are_atomic)
+{
+  const char* invalid[] = {"",        ",base",    "base,",    "base,,urem",
+                           "unknown", "all,base", "base,none"};
+  for (const char* text : invalid)
+  {
+    uint32_t parsed = 0x5a5u;
+    std::string error;
+    EXPECT_FALSE(stp::parseBVSchemaGroups(text, parsed, error)) << text;
+    EXPECT_EQ(0x5a5u, parsed) << text;
+    EXPECT_FALSE(error.empty()) << text;
+  }
 }

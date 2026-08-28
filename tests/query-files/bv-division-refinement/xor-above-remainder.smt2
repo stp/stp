@@ -1,6 +1,8 @@
-; What a remainder is. Same story as the quotient bound: unreachable for the
-; abstraction without the fact, immediate with it.
-; RUN: %solver --uninterpreted-functions --array-equality --uf-ackermann=auto --bv-term-abstraction=1 %s | %OutputCheck %s
+; ((-s) xor (x | s)) >=u r, for r = x urem s.
+; RUN: %solver --incremental=off -s --bv-term-abstraction=1 --bv-term-abstraction-plus=0 --bv-term-abstraction-compare=0 --bv-term-abstraction-schema-groups=urem %s 2>&1 | %OutputCheck %s
+; CHECK: BV abstraction: BVMOD xor-above-remainder lemma
+; CHECK-NEXT: BV abstraction: refined 1 operations
+; CHECK: ^unsat$
 ;
 ; There is no exact control leg here, and there cannot be an affordable one:
 ; the assertion is the negation of the fact, so anything that does not install
@@ -10,11 +12,9 @@
 ; BVAbstractionLemma_Test, which checks every fact against the operation
 ; exhaustively below seven bits, by sampling at eight through sixty-four, and
 ; against the circuit STP blasts for the operation itself.
-(set-logic QF_UFBV)
-(declare-fun a () (_ BitVec 256))
-(declare-fun b () (_ BitVec 256))
-(assert (distinct b (_ bv0 256)))
-(assert (bvuge (bvurem a b) b))
-; CHECK-NEXT: ^unsat
+(set-logic QF_BV)
+(declare-fun x () (_ BitVec 256))
+(declare-fun s () (_ BitVec 256))
+(assert (bvult (bvxor (bvneg s) (bvor x s)) (bvurem x s)))
 (check-sat)
 (exit)

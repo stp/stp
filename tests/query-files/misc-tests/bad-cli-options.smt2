@@ -39,6 +39,10 @@
 ; BADEFFORT-NOT: terminate called
 ; BADEFFORT: Unknown --cnf-generation-effort value
 
+; RUN: not %solver --bv-term-abstraction-schema-groups=base,unknown %s 2>&1 | %OutputCheck %s --check-prefix=BADSCHEMAGROUP
+; BADSCHEMAGROUP-NOT: terminate called
+; BADSCHEMAGROUP: --bv-term-abstraction-schema-groups: unknown BV schema group 'unknown'
+
 ; RUN: not %solver --search-bias=bogus %s 2>&1 | %OutputCheck %s --check-prefix=BADBIAS
 ; BADBIAS-NOT: terminate called
 ; BADBIAS: --search-bias must be one of

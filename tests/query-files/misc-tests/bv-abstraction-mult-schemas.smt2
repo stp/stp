@@ -11,6 +11,7 @@
 ;   the low bit          t[0] = a[0] & b[0]
 ;   the trailing zeros   t[i] holds only if some bit of the operand at or
 ;                        below i does
+;   an odd operand       t = 0 and a[0] = 1 imply b = 0
 ;   a power of two       a = 2^k -> t = b << k
 ;   its negation         a = -2^k -> t = (-b) << k
 ;

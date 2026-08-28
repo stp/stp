@@ -861,6 +861,57 @@ enum stp_counter_t
 //! library.
 DLL_PUBLIC unsigned long long vc_getCounter(VC vc, enum stp_counter_t counter);
 
+//! \brief Selects which families of algebraic facts
+//! BV_TERM_ABSTRACTION_SCHEMAS may offer.
+//!
+//! `groups` is spelled the way --bv-term-abstraction-schema-groups spells it:
+//! a comma-separated list of group names, or "all", or "none". The same
+//! parser answers both, so the two doors accept the same vocabulary,
+//! including its aliases, and reject with the same message.
+//!
+//! Returns 1 if the list was accepted. An unknown name is refused with a
+//! nonfatal diagnostic naming the valid set, and leaves the current selection
+//! unchanged -- so a caller that mistypes one group does not silently run
+//! with a narrower catalogue than it asked for.
+//!
+//! Names rather than published constants because the partition is a research
+//! instrument: which families exist, and how finely they are cut, is expected
+//! to change, and none of that should turn into an installed-header ABI
+//! break. A named profile is the stable surface, and arrives with the
+//! qualification that justifies one.
+DLL_PUBLIC int vc_setSchemaGroups(VC vc, const char* groups);
+
+//! How many BV schema groups there are, for sizing an array with one slot per
+//! group. It is also the bound on the index the two calls below take: an
+//! index runs from zero to one below this, in the order
+//! vc_schemaGroupName reports.
+#define STP_BV_SCHEMA_GROUP_COUNT 11
+
+//! \brief STP_COUNTER_BV_SCHEMA_LEMMAS, restricted to one schema group.
+//!
+//! The groups partition the aggregate exactly: every schema lemma the
+//! refinement installs increments the total and precisely one group. Read the
+//! breakdown with
+//!
+//!     for (unsigned i = 0; i < STP_BV_SCHEMA_GROUP_COUNT; i++)
+//!         printf("%s: %llu\n", vc_schemaGroupName(i),
+//!                vc_getSchemaGroupCounter(vc, i));
+//!
+//! An index at or above STP_BV_SCHEMA_GROUP_COUNT reads 0 and reports a
+//! nonfatal diagnostic, so a caller built against a later header keeps
+//! working against an earlier library.
+//!
+//! An index rather than one published ordinal per group, for the same reason
+//! vc_setSchemaGroups takes names: a family added, renamed or merged should
+//! not renumber stp_counter_t.
+DLL_PUBLIC unsigned long long vc_getSchemaGroupCounter(VC vc, unsigned group);
+
+//! \brief The command-line spelling of the group at this index, or NULL if
+//! the index is out of range. These are the names vc_setSchemaGroups and
+//! --bv-term-abstraction-schema-groups accept, so a breakdown can be fed
+//! straight back in.
+DLL_PUBLIC const char* vc_schemaGroupName(unsigned group);
+
 //! \brief Returns why the last query had no answer.
 //!
 //! Meaningful after vc_query returns 3; REASON_UNKNOWN_NONE at any other

@@ -66,6 +66,9 @@ using BBNodeVec = std::vector<BBNodeAIG>;
 using BBNodeSet = std::unordered_set<BBNodeAIG>;
 
 enum class DivLemma;
+enum class RemLemma;
+enum class MulLemma;
+enum class AddLemma;
 
 class BitBlaster
 {
@@ -94,6 +97,10 @@ class BitBlaster
 
   // Bitwise complement
   BBNodeVec BBNeg(const BBNodeVec& x);
+  BBNodeVec BBAnd(const BBNodeVec& x, const BBNodeVec& y);
+  BBNodeVec BBOr(const BBNodeVec& x, const BBNodeVec& y);
+  BBNodeVec BBXor(const BBNodeVec& x, const BBNodeVec& y);
+  BBNodeVec BBAdd(const BBNodeVec& x, const BBNodeVec& y);
 
   // Unary minus
   BBNodeVec BBUminus(const BBNodeVec& x);
@@ -310,8 +317,6 @@ class BitBlaster
   // Count of leading zeros of v (from the MSB down) as an unsigned binary
   // vector of `countWidth` bits; an all-zero v counts v.size().
   BBNodeVec BBfpCLZ(const BBNodeVec& v, unsigned countWidth);
-  // Left shift v by the unsigned binary amount `amt` (zero fill).
-  BBNodeVec BBfpShiftLeft(const BBNodeVec& v, const BBNodeVec& amt);
   // Right shift v by `amt`, ORing every shifted-out bit into `sticky`.
   BBNodeVec BBfpShiftRightSticky(const BBNodeVec& v, const BBNodeVec& amt,
                                  BBNode& sticky);
@@ -634,11 +639,23 @@ public:
   // parts.
   BBNode BBDivLemma(DivLemma lemma, const BBNodeVec& x, const BBNodeVec& s,
                     const BBNodeVec& t, BBNodeSet& support);
+  BBNode BBRemLemma(RemLemma lemma, const BBNodeVec& x, const BBNodeVec& s,
+                    const BBNodeVec& t, BBNodeSet& support);
+  BBNode BBMulLemma(MulLemma lemma, const BBNodeVec& x, const BBNodeVec& s,
+                    const BBNodeVec& t, BBNodeSet& support);
+  BBNode BBAddLemma(AddLemma lemma, const BBNodeVec& x, const BBNodeVec& s,
+                    const BBNodeVec& t, BBNodeSet& support);
 
-  // A logical right shift by a variable amount; several of the facts above
-  // are inequalities over one.
+  // Logical shifts by a variable amount. Both are logarithmic barrel
+  // shifters, and any represented amount at or above the value width clears
+  // the vector as SMT-LIB requires.
+  BBNodeVec BBShiftLeftByVariable(const BBNodeVec& value,
+                                  const BBNodeVec& amount);
   BBNodeVec BBShiftRightByVariable(const BBNodeVec& value,
                                    const BBNodeVec& amount, unsigned width);
+  // Shared premise for the quotient/remainder exact-one-band registry facts.
+  BBNode BBFitsExactlyOnce(const BBNodeVec& dividend,
+                           const BBNodeVec& divisor);
 
   std::unordered_map<ASTNode, BBNodeVec, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>::iterator
   simplify_during_bb(ASTNode& term, BBNodeSet& support);
