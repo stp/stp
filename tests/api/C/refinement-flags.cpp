@@ -53,7 +53,10 @@ static_assert(EXPRDELETE == 0, "published interface-flag ordinal changed");
 static_assert(MS == 1, "published interface-flag ordinal changed");
 static_assert(SMS == 2, "published interface-flag ordinal changed");
 static_assert(CMS4 == 3, "published interface-flag ordinal changed");
-static_assert(RISS == 4, "published interface-flag ordinal changed");
+// 4 was RISS, removed with the Riss backend. The value is retired rather than
+// reused -- c_interface.h writes `MSP = 5` out explicitly to keep this flag and
+// the ones below at the values they had while Riss existed -- so there is
+// nothing to pin at 4, and the run of ordinals below is deliberately unbroken.
 static_assert(MSP == 5, "published interface-flag ordinal changed");
 static_assert(CADICAL == 6, "published interface-flag ordinal changed");
 static_assert(INCREMENTAL_AUTO_ENGAGE_AT == 7,
