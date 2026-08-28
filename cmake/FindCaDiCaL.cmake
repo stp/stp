@@ -70,9 +70,9 @@ if(CADICAL_DIR)
         string(STRIP "${CADICAL_VERSION}" CADICAL_VERSION)
     endif()
     set(CaDiCaL_FOUND_SYSTEM TRUE)
-else()
-    # Rung 1. Includes a CaDiCaL that another build directory installed into
-    # STP_DEP_DIR.
+elseif(NOT STP_DEPS_LOCAL_ONLY)
+    # Rung 1, which STP_DEPS_LOCAL_ONLY skips. Includes a CaDiCaL that another
+    # build directory installed into STP_DEP_DIR.
     find_path(CADICAL_INCLUDE_DIR NAMES cadical/cadical.hpp)
     find_library(CADICAL_LIBRARY NAMES cadical)
     if(CADICAL_INCLUDE_DIR AND CADICAL_LIBRARY)

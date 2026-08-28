@@ -24,6 +24,10 @@ General options:
 
 Dependencies:
   --auto-download     download and build dependencies that are not installed
+  --local-deps        use no dependency from outside the build directory:
+                      ignore installed copies and build them here instead.
+                      Implies --auto-download unless --no-auto-download is
+                      also given. A --abc-dir or similar still names a copy
   --abc-dir=PATH      an existing ABC build, rather than fetching one
   --dep-dir=PATH      install dependencies here, and look for them here.
                       Point several build directories at one path and only the
@@ -82,6 +86,7 @@ install_prefix=default
 
 abc_dir=default
 auto_download=default
+local_deps=default
 dep_dir=${STP_DEP_DIR:-default}
 dep_path=""
 
@@ -128,6 +133,9 @@ do
 
     --auto-download) auto_download=ON;;
     --no-auto-download) auto_download=OFF;;
+
+    --local-deps) local_deps=ON;;
+    --no-local-deps) local_deps=OFF;;
 
     --abc-dir) die "missing argument to $1 (try -h)";;
     --abc-dir=*) abc_dir=${1##*=};;
@@ -213,11 +221,19 @@ done
 
 #--------------------------------------------------------------------------#
 
+# Nothing outside the build directory, and nothing in it yet, is a
+# configuration that can only fail -- so asking for the first asks for the
+# second. Settled here rather than in the case above so that the two flags may
+# be given in either order, and only when --no-auto-download did not say
+# otherwise.
+[ "$local_deps" = ON ] && [ "$auto_download" = default ] && auto_download=ON
+
 add () { [ "$2" != default ] && cmake_opts+=("-D$1=$2"); return 0; }
 
 add CMAKE_BUILD_TYPE       "$buildtype"
 add CMAKE_INSTALL_PREFIX   "$install_prefix"
 add ENABLE_AUTO_DOWNLOAD   "$auto_download"
+add STP_DEPS_LOCAL_ONLY    "$local_deps"
 add ABC_DIR                "$abc_dir"
 add STP_DEP_DIR            "$dep_dir"
 add USE_CADICAL            "$cadical"

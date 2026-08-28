@@ -50,10 +50,10 @@ if(RISS_DIR)
             "build/lib/libriss-coprocessor.a beneath it.")
     endif()
     set(Riss_FOUND_SYSTEM TRUE)
-else()
-    # Rung 1. Riss is not something a distribution packages, so in practice
-    # this finds a copy that another build directory installed into
-    # STP_DEP_DIR.
+elseif(NOT STP_DEPS_LOCAL_ONLY)
+    # Rung 1, which STP_DEPS_LOCAL_ONLY skips. Riss is not something a
+    # distribution packages, so in practice this finds a copy that another
+    # build directory installed into STP_DEP_DIR.
     find_path(RISS_INCLUDE_DIR NAMES riss/core/Solver.h)
     find_library(RISS_LIBRARY NAMES riss-coprocessor)
     if(RISS_INCLUDE_DIR AND RISS_LIBRARY)

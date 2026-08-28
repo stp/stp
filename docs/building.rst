@@ -71,8 +71,8 @@ converts the real literals in floating-point input --
 get it, tried in this order:
 
 -  ``-DLIBBF_DIR=<path>`` naming a directory that holds ``libbf.h`` and a
-   built ``bf`` library. It defaults to ``deps/libbf``, which is where
-   an earlier build put one
+   built ``bf`` library. With it unset, ``deps/libbf`` is used if it holds
+   one, which is where an earlier build put it
 -  an installed copy, found the way any library is -- including one that
    an earlier build installed into ``STP_DEP_DIR`` (see below)
 -  ``-DENABLE_AUTO_DOWNLOAD=ON``, which clones
@@ -195,6 +195,10 @@ lookup therefore reaches the bundled copy, finds it, and stops -- building
 against 2.x with ``--cadical-factor`` silently gone. ``CADICAL_DIR`` pins
 that one lookup past it, and is worth passing if you have a checkout to
 point at, but it does nothing about the shadowing above.
+
+``STP_DEPS_LOCAL_ONLY`` (below) is the blunt answer to all of this: with
+it, no installed CaDiCaL is a candidate at all, and the one this build
+compiles is the one it links.
 
 ``stp --version`` reports the version of each backend actually linked, so
 it is the quickest way to confirm which CaDiCaL you ended up with.
@@ -340,6 +344,33 @@ These apply to all generators:
 -  ``ENABLE_AUTO_DOWNLOAD`` -- download and build dependencies that were
    not found, rather than failing. Off by default: a build that reaches
    the network should be asked to
+-  ``STP_DEPS_LOCAL_ONLY`` -- use no dependency from outside the build
+   directory. Off by default. An installed ABC, CaDiCaL, CLI11, LibBF,
+   MiniSat, Riss or SymFPU is not looked for and not used; each is built
+   into ``STP_DEP_DIR`` instead, which is inside the build directory
+   unless it was pointed elsewhere. Pair it with ``ENABLE_AUTO_DOWNLOAD``
+   on a cold build directory, or there is nothing left to find and
+   configuration stops -- ``configure.sh --local-deps`` turns both on.
+
+   A ``-D<X>_DIR`` naming a copy is unaffected: that is an answer rather
+   than a search, and the build uses what it was given. LibBF is the one
+   to know about, because the ``deps/libbf`` it falls back on when
+   ``LIBBF_DIR`` says nothing *is* a search, and is skipped along with the
+   rest; pass ``-DLIBBF_DIR=<path>`` to use a LibBF there anyway.
+   CryptoMiniSat is the exception, being the one dependency STP cannot
+   build: under this option it is used only if ``cryptominisat5_DIR``
+   names one, and ``-DUSE_CRYPTOMINISAT=ON`` without that is a
+   configuration error. A *static* CryptoMiniSat named that way brings a
+   CaDiCaL of its own, which now meets one this build compiled rather
+   than the same installed copy, so the collision described above is
+   reached where it was not before: use a shared CryptoMiniSat, or
+   ``-DUSE_CADICAL=OFF``.
+
+   This is narrower than CMake's own
+   ``CMAKE_FIND_USE_CMAKE_SYSTEM_PATH=OFF``, and deliberately: the same
+   search also resolves flex, bison, zlib, GMP and python3, none of which
+   STP can build for itself, so disabling it wholesale fails during
+   configuration rather than confining anything
 -  ``STP_DEP_DIR`` -- where dependencies this build downloads are
    installed, and where dependencies are looked for. It defaults to
    ``<build>/deps/install``, so a build directory is self-contained.

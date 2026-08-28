@@ -41,8 +41,8 @@ if(SYMFPU_INCLUDE_DIRS)
             "*containing* a symfpu clone, not the clone itself.")
     endif()
     set(SymFPU_FOUND_SYSTEM TRUE)
-else()
-    # Rung 1.
+elseif(NOT STP_DEPS_LOCAL_ONLY)
+    # Rung 1, which STP_DEPS_LOCAL_ONLY skips.
     find_path(SYMFPU_INCLUDE_DIR NAMES symfpu/core/unpackedFloat.h)
     if(SYMFPU_INCLUDE_DIR)
         set(SYMFPU_INCLUDE_DIRS "${SYMFPU_INCLUDE_DIR}")
