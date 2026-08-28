@@ -161,3 +161,58 @@ jobs:
       with:
         category: "/language:${{ matrix.language }}"
         sarif_file: sarif-results/${{ matrix.language }}.sarif
+        # So the alerts are queryable by the step below rather than still
+        # being processed when it looks.
+        wait-for-processing: true
+
+    # A scan that finds something still exits 0: upload is failure-only, so
+    # findings do not fail the analysis, and the run is green either way. On a
+    # weekly schedule there is no pull request to annotate and nothing that
+    # says so out loud -- the alerts appear in the Security tab and wait to be
+    # noticed. Fail the job instead, so a new finding arrives as a broken
+    # scheduled run, which GitHub mails to whoever last edited the cron.
+    #
+    # Dismissed alerts are not open, so anything already triaged does not hold
+    # this red; only something new does.
+    - name: Report any open alerts
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        case "${{ matrix.language }}" in
+          cpp)    prefix=cpp/ ;;
+          python) prefix=py/  ;;
+          *)      echo "no rule-id prefix known for ${{ matrix.language }}"; exit 1 ;;
+        esac
+
+        # The upload waits for processing, but the alerts API can still lag it.
+        # Retrying is not optional: if every attempt failed and this treated
+        # that as "nothing found", the step would be silent in exactly the case
+        # it exists for.
+        body=""
+        for attempt in 1 2 3 4 5; do
+          if body=$(gh api \
+              "repos/${{ github.repository }}/code-scanning/alerts?state=open&per_page=100&ref=${{ github.ref }}"); then
+            break
+          fi
+          body=""
+          sleep 15
+        done
+        if [ -z "$body" ]; then
+          echo "Could not read the code scanning alerts API; not treating that as a clean scan."
+          exit 1
+        fi
+
+        open=$(printf '%s' "$body" | jq -r \
+          "[.[] | select(.rule.id | startswith(\"$prefix\"))]
+           | .[]
+           | \"  \(.rule.security_severity_level // .rule.severity)  \(.rule.id)\n      \(.most_recent_instance.location.path):\(.most_recent_instance.location.start_line)\"")
+
+        if [ -n "$open" ]; then
+          echo "Open ${{ matrix.language }} alerts on ${{ github.ref }}:"
+          echo "$open"
+          echo
+          echo "Fix them, or dismiss with a reason in the Security tab; a dismissed"
+          echo "alert does not count as open and will not keep this job red."
+          exit 1
+        fi
+        echo "ok: no open ${{ matrix.language }} alerts"
