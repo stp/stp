@@ -1,5 +1,5 @@
-; RUN: %solver --incremental=off %s 2>&1 | %OutputCheck %s
-; RUN: %solver --incremental=on %s 2>&1 | %OutputCheck %s
+; RUN: not %solver --incremental=off %s 2>&1 | %OutputCheck %s
+; RUN: not %solver --incremental=on %s 2>&1 | %OutputCheck %s
 ; CHECK-NEXT: ^\(error "syntax error: line 11 syntax error, unexpected NUMERAL_TOK, expecting RPAREN_TOK  token: 8"\)
 ; CHECK-NOT: REACHED-END
 ;

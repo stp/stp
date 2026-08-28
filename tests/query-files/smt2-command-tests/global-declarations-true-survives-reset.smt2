@@ -2,7 +2,7 @@
 ; global ones included -- but not the option itself, which says how the
 ; declarations made after it are to be scoped. A driver that resets between
 ; problems therefore does not have to set :global-declarations again.
-; RUN: %solver %s | %OutputCheck %s
+; RUN: not %solver %s | %OutputCheck %s
 (set-option :global-declarations true)
 (set-logic QF_BV)
 (push 1)

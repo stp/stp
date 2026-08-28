@@ -1,4 +1,4 @@
-; RUN: %solver --uninterpreted-functions %s 2>&1 | %OutputCheck %s
+; RUN: not %solver --uninterpreted-functions %s 2>&1 | %OutputCheck %s
 ; CHECK-NEXT: ^\(error "syntax error: line 10 syntax error, unexpected UF_BV_FUNCTIONID_TOK, expecting STRING_TOK  token: f"\)$
 ; CHECK-NOT: REACHED-END
 ; declare-const is a UF-free shape: its name is never declassified, so a

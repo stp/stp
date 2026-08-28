@@ -1,5 +1,5 @@
-; RUN: %solver --incremental=off %s 2>&1 | %OutputCheck %s
-; RUN: %solver --incremental=on %s 2>&1 | %OutputCheck %s
+; RUN: not %solver --incremental=off %s 2>&1 | %OutputCheck %s
+; RUN: not %solver --incremental=on %s 2>&1 | %OutputCheck %s
 ; CHECK: syntax error, unexpected LPAREN_TOK, expecting RPAREN_TOK
 ; CHECK-NOT: REACHED-END
 ;

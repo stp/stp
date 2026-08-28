@@ -2,9 +2,9 @@
 ; declarations.  Reusing the old application must fail before another
 ; check-sat is issued.
 ;
-; RUN: %solver --uninterpreted-functions --incremental=off %s 2>&1 | %OutputCheck %s
-; RUN: %solver --uninterpreted-functions --incremental=on %s 2>&1 | %OutputCheck %s
-; RUN: %solver --uninterpreted-functions %s 2>&1 | %OutputCheck %s
+; RUN: not %solver --uninterpreted-functions --incremental=off %s 2>&1 | %OutputCheck %s
+; RUN: not %solver --uninterpreted-functions --incremental=on %s 2>&1 | %OutputCheck %s
+; RUN: not %solver --uninterpreted-functions %s 2>&1 | %OutputCheck %s
 ; CHECK-NEXT: ^unsat
 ; CHECK-NEXT: ^\(error ".*f.*"\)
 ; CHECK-NOT: REACHED-END

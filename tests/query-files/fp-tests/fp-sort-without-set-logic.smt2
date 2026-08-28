@@ -1,4 +1,4 @@
-; RUN: %solver %s 2>&1 | %OutputCheck %s
+; RUN: not %solver %s 2>&1 | %OutputCheck %s
 ;
 ; The floating-point keywords are live only under an FP set-logic (the
 ; fpKeyword gate in smt2.lex), so a benchmark that omits set-logic entirely --

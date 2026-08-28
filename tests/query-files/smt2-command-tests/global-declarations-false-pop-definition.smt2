@@ -2,7 +2,7 @@
 ; :global-declarations false a define-fun made inside an assertion level goes
 ; away with it. A definition whose body mentions a symbol from the same level
 ; must not keep that symbol -- or itself -- alive past the pop.
-; RUN: %solver %s | %OutputCheck %s
+; RUN: not %solver %s | %OutputCheck %s
 (set-option :global-declarations false)
 (set-logic QF_BV)
 (push 1)

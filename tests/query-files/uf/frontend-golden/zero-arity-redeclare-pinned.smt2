@@ -1,4 +1,4 @@
-; RUN: %solver --uninterpreted-functions %s 2>&1 | %OutputCheck %s
+; RUN: not %solver --uninterpreted-functions %s 2>&1 | %OutputCheck %s
 ; CHECK-NEXT: ^\(error "syntax error: line 13 syntax error, unexpected TERMID_TOK, expecting STRING_TOK  token: s"\)$
 ; CHECK-NOT: REACHED-END
 ; Only malformed nonzero-arity UF declarations adopt report-and-continue.

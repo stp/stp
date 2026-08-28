@@ -1,5 +1,5 @@
-; RUN: %solver %s 2>&1 | %OutputCheck %s
-; RUN: %solver %s 2>&1 | %OutputCheck --check-prefix=NOHINT %s
+; RUN: not %solver %s 2>&1 | %OutputCheck %s
+; RUN: not %solver %s 2>&1 | %OutputCheck --check-prefix=NOHINT %s
 ;
 ; The hint keys off the offending token, so a file that declares a
 ; floating-point name and then makes an unrelated mistake *at* that name is
