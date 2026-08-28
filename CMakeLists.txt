@@ -1615,11 +1615,12 @@ if(ENABLE_TESTING AND NOT PYTHON_EXECUTABLE)
     set(ENABLE_TESTING OFF)
 endif()
 
-if(ENABLE_TESTING)
-    if (NOT BUILD_SHARED_LIBS)
-        set(ENABLE_TESTING OFF)
-    endif()
-endif()
+# Nothing forces ENABLE_TESTING off for a static build. The unit tests link
+# against a static libstp: the archives libstp does not absorb are on their own
+# link line, and the --exclude-libs localisation that would hide them from a
+# test is a shared-library link step that a static build never reaches. The
+# guard that used to sit here dated from 2016, and the per-target static link
+# handling it stood in for was deleted from AddSTPGTest.cmake in 2019.
 
 if(ENABLE_TESTING)
   enable_testing()

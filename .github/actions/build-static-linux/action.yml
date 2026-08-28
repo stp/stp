@@ -38,10 +38,10 @@ runs:
 
   steps:
 
-  # No lit and no gtest here: STATICCOMPILE turns BUILD_SHARED_LIBS off, and
-  # the top-level CMakeLists forces ENABLE_TESTING off when it is off (the
-  # Python bindings and the test harness both want a shared libstp), so a
-  # static build has no tests to run. See the smoke test at the end.
+  # No lit and no gtest here: this job leaves ENABLE_TESTING off, so there is
+  # no test harness to install or build. A static build can run the suite --
+  # nothing forces the option off any more -- but what this job exists to cover
+  # is the static link itself. See the smoke test at the end.
   - name: Packages
     shell: bash
     run: |
@@ -201,8 +201,8 @@ runs:
   # to resolve them itself -- which means an installed static STP has to ship
   # them and its STPTargets.cmake has to name them somewhere that still exists
   # on the machine doing the consuming. Nothing else checks that: the
-  # install-tree consumer test in the suite runs only in shared builds, because
-  # ENABLE_TESTING is forced off when BUILD_SHARED_LIBS is.
+  # install-tree consumer test in the suite runs only where ENABLE_TESTING is
+  # on, and this job leaves it off.
   #
   # The build tree and the dependency directory are moved out of the way first.
   # Without that this passes on paths that happen to still be there, which is
