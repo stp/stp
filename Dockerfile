@@ -27,7 +27,6 @@ RUN apt-get update \
         make \
         pkg-config \
         python3 \
-        wget \
         zlib1g-dev \
  && rm -rf /var/lib/apt/lists/*
 
@@ -56,21 +55,18 @@ RUN git clone --depth 1 --branch release/v5.14.7 \
  && cmake --build . \
  && cmake --install .
 
-# Build MiniSat
-WORKDIR /minisat
-RUN wget -O minisat.tgz https://github.com/stp/minisat/archive/releases/2.2.1.tar.gz \
- && tar xvf minisat.tgz --strip-components 1 \
- && mkdir build && cd build \
- && cmake .. \
-        -DCMAKE_BUILD_TYPE=Release \
- && cmake --build . \
- && cmake --install .
-
 # Build STP.
 #
-# --auto-download supplies everything this image does not build above --
-# LibBF, ABC, SymFPU, CLI11 and the rest -- so git and ca-certificates are in
-# the package list for its sake.
+# --auto-download supplies everything not built above: MiniSat, LibBF, ABC,
+# SymFPU, CLI11 and the rest. That is why git and ca-certificates are in the
+# package list, and it is also what makes MiniSat build at all -- 2.2.1
+# declares cmake_minimum_required(VERSION 2.6), which the CMake on this base
+# image refuses, and cmake/deps-helper.cmake passes the
+# -DCMAKE_POLICY_VERSION_MINIMUM that gets it through. Building it by hand
+# here, outside that, did not.
+#
+# CryptoMiniSat is built above because it is the one dependency
+# --auto-download does not cover.
 #
 # The two solvers are named explicitly rather than left to whatever is
 # installed, and CaDiCaL is turned off: it is on by default, and this image
