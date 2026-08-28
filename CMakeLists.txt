@@ -839,14 +839,9 @@ MESSAGE(STATUS "PROJECT_VERSION_MAJOR: ${PROJECT_VERSION_MAJOR}")
 MESSAGE(STATUS "PROJECT_VERSION_MINOR: ${PROJECT_VERSION_MINOR}")
 MESSAGE(STATUS "PROJECT_VERSION_PATCH: ${PROJECT_VERSION_PATCH}")
 
-# -----------------------------------------------------------------------------
-# Write out the config.h
-# -----------------------------------------------------------------------------
-
-configure_file(
-  "${CMAKE_CURRENT_SOURCE_DIR}/include/stp/config.h.in"
-  "${CMAKE_CURRENT_BINARY_DIR}/include/stp/config.h"
-)
+# config.h is materialized after SAT-backend discovery below.  Public C++
+# headers use its backend capability values, so generating it here would leave
+# installed clients with incomplete information.
 
 # -----------------------------------------------------------------------------
 # Set up includes
@@ -1029,6 +1024,7 @@ if (USE_CADICAL)
     # (--cadical-factor) can be compiled in.
     find_package(CaDiCaL REQUIRED)
     add_definitions(-DUSE_CADICAL)
+    set(STP_BUILD_WITH_CADICAL ON)
     if (CADICAL_HAS_FACTOR)
         add_definitions(-DSTP_CADICAL_HAS_FACTOR)
     endif()
@@ -1228,6 +1224,7 @@ if (NOT USE_CRYPTOMINISAT STREQUAL "OFF")
   # it whether or not the package was found.
   if (CryptoMiniSat_FOUND AND HAVE_FLAG_STD_CPP11)
     add_definitions(-DUSE_CRYPTOMINISAT)
+    set(STP_BUILD_WITH_CRYPTOMINISAT ON)
     set(USE_CRYPTOMINISAT ON)
   else()
     set(USE_CRYPTOMINISAT OFF)
@@ -1414,6 +1411,7 @@ if (USE_MINISAT)
     # cmake/FindMiniSat.cmake, along with the ability to build one.
     find_package(MiniSat REQUIRED)
     add_definitions(-DUSE_MINISAT)
+    set(STP_BUILD_WITH_MINISAT ON)
     if (MINISAT_HAS_TERMINATOR)
         add_definitions(-DSTP_MINISAT_HAS_TERMINATOR)
     endif()
@@ -1423,6 +1421,13 @@ if (USE_MINISAT)
     # through AddSTPGTest. (There used to be a `set(LIBS ...)` here too, whose
     # value nothing ever read.)
 endif()
+
+# Materialize config.h now that backend discovery is final so an installed C++
+# client gets the same inline UserDefinedFlags constructor as libstp itself.
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/include/stp/config.h.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/include/stp/config.h"
+)
 
 # -----------------------------------------------------------------------------
 # Find Parser and Lexer generators

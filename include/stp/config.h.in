@@ -52,6 +52,13 @@ OUT OF OR IN CONNECT
 #define STP_VERSION_MINOR ${PROJECT_VERSION_MINOR}
 #define STP_VERSION "${PROJECT_VERSION}"
 
+/* Public C++ headers construct the same default SAT-backend selection as the
+ * library, including when compiled by an installed-package client.  These are
+ * build capabilities, not runtime backend selectors. */
+#cmakedefine01 STP_BUILD_WITH_CADICAL
+#cmakedefine01 STP_BUILD_WITH_CRYPTOMINISAT
+#cmakedefine01 STP_BUILD_WITH_MINISAT
+
 
 #cmakedefine01 USE_THREAD_LOCAL
 
