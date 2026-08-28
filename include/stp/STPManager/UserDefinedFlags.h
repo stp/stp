@@ -57,9 +57,12 @@ enum class BVSchemaGroup : unsigned
   // Unsigned remainder.
   UREM,
 
-  // The exact quotient/remainder band the two registries share.
+  // Division and remainder mechanisms, rather than registry entries.
   QUOTIENT_ONE_QUOT,
   QUOTIENT_ONE_REM,
+  QUOTIENT_THRESHOLDS,
+  DIVISOR_MAGNITUDE,
+  DIVREM_FULL,
 
   // Multiplication.
   MUL8,
@@ -73,6 +76,10 @@ enum class BVSchemaGroup : unsigned
   // stays selectable so that result stays reproducible, and stays out of
   // every profile.
   ADD,
+  // The exact low-prefix mechanism addition and multiplication share. On the
+  // same 497 queries it fired 9,525 times and moved nothing: +0.4%, with the
+  // solved and timeout counts identical to the inherited mask.
+  LOW_PREFIX,
 
   COUNT
 };
@@ -93,8 +100,8 @@ constexpr uint32_t BV_SCHEMA_GROUP_ALL =
 // two families that were measured to decide queries on their own -- the UREM
 // registry, which turns the wide remainder cases from a two-gigabyte external
 // timeout into fractions of a second, and MulRef3, which takes one 512-bit
-// rewrite candidate from 3.66s/766MB to 0.12s/65MB. Every broader profile
-// below is an experiment that has to be asked for.
+// rewrite candidate from 3.66s/766MB to 0.12s/65MB. Everything broader is an
+// experiment that has to be asked for by name.
 constexpr uint32_t BV_SCHEMA_GROUP_QUALIFIED =
     bvSchemaGroupBit(BVSchemaGroup::BASE) |
     bvSchemaGroupBit(BVSchemaGroup::UREM) |

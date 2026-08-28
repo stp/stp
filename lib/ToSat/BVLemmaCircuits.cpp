@@ -529,6 +529,25 @@ BBNode BitBlaster::BBMulLemma(MulLemma lemma, const BBNodeVec& x,
   return BBFalse;
 }
 
+BBNode BitBlaster::BBDivRemIdentity(const ASTNode& product,
+                                    const BBNodeVec& x,
+                                    const BBNodeVec& s,
+                                    const BBNodeVec& q,
+                                    const BBNodeVec& r,
+                                    BBNodeSet& support)
+{
+  [[maybe_unused]] const unsigned width = (unsigned)x.size();
+  assert(s.size() == width);
+  assert(q.size() == width);
+  assert(r.size() == width);
+  assert(product.GetKind() == BVMULT);
+  assert(product.GetValueWidth() == width);
+
+  BBNodeVec sum = BBMult(q, s, support, product);
+  BBPlus2(sum, r, BBFalse);
+  return BBEQ(x, sum);
+}
+
 BBNode BitBlaster::BBAddLemma(AddLemma lemma, const BBNodeVec& x,
                               const BBNodeVec& s, const BBNodeVec& t,
                               BBNodeSet& /*support*/)

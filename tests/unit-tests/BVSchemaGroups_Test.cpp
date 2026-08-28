@@ -190,9 +190,14 @@ TEST(BVSchemaGroups, disabled_families_are_never_chosen)
         }
   }
 
-  // Every family must be reachable through the chooser it belongs to.
+  // The paired identity is scheduled across records and tested by
+  // BVDivRemSchema_Test. Every single-record family must be reachable here.
   for (unsigned i = 0; i < BV_SCHEMA_GROUP_COUNT; ++i)
-    EXPECT_TRUE(sawChoice[i])
-        << bvSchemaGroupName(static_cast<BVSchemaGroup>(i));
+  {
+    const BVSchemaGroup group = static_cast<BVSchemaGroup>(i);
+    if (group == BVSchemaGroup::DIVREM_FULL)
+      continue;
+    EXPECT_TRUE(sawChoice[i]) << bvSchemaGroupName(group);
+  }
 }
 

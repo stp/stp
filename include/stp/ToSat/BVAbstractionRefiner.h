@@ -122,6 +122,10 @@ enum class MulSchema
   // ... and an operand whose value is -2^k turns it into a shift of the
   // other one negated: a = -2^k -> t = (-b) << k.
   NegPow2,
+  // The exact low min(3, W) bits of the product. Unlike the later
+  // piece-at-a-time escalation, this is offered before any blocking lemma
+  // and is paid for only once.
+  LowPrefix,
   // One of the remaining synthesised facts, named by lemmaIndex.
   Lemma
 };
@@ -132,7 +136,8 @@ struct MulSchemaChoice
 {
   MulSchema schema = MulSchema::None;
   unsigned operand = 0;
-  // log2 of the power of two for the two shift schemas.
+  // log2 of the power of two for the two shift schemas, or the number of
+  // exact result bits for LowPrefix.
   unsigned shift = 0;
   // Set for Lemma: index in mulLemmaTable().
   unsigned lemmaIndex = 0;
@@ -154,7 +159,8 @@ enum : uint64_t
   MUL_SCHEMA_INSTALLED_TRAILING_ZEROS_1 = 1ull << 2,
   // One bit per registry entry per operand reading: fifteen lemmas in two
   // readings occupy bits 3 through 32.
-  MUL_LEMMA_INSTALLED_FIRST = 1ull << 3
+  MUL_LEMMA_INSTALLED_FIRST = 1ull << 3,
+  MUL_SCHEMA_INSTALLED_LOW_PREFIX = 1ull << 33
 };
 
 constexpr uint64_t mulLemmaInstalledBit(unsigned index, unsigned operand)
@@ -168,8 +174,13 @@ struct AddSchemaChoice
   bool found = false;
   unsigned operand = 0;
   unsigned lemmaIndex = 0;
+  // Nonzero selects the exact low-prefix schema instead of lemmaIndex.
+  unsigned prefixBits = 0;
   BVSchemaGroup group = BVSchemaGroup::BASE;
 };
+
+// Thirteen lemmas in two operand readings occupy bits 0 through 25.
+const uint64_t ADD_SCHEMA_INSTALLED_LOW_PREFIX = 1ull << 26;
 
 constexpr uint64_t addLemmaInstalledBitValue(unsigned index, unsigned operand)
 {
@@ -219,8 +230,8 @@ chooseMulSchema(const std::vector<bool>& aBits, const std::vector<bool>& bBits,
 // checked it -- which is what lets the same test ask both questions of them.
 //
 // `operand` selects the reading of the commutative operation; `shift` carries
-// the exponent for Pow2 and NegPow2, and is ignored by the arms that take no
-// parameter.
+// the exponent for Pow2 and NegPow2 and the prefix length for LowPrefix, and
+// is ignored by the arms that take no parameter.
 DLL_PUBLIC bool mulSchemaHolds(MulSchema schema, unsigned operand,
                                unsigned shift,
                                const std::vector<bool>& aBits,
@@ -267,16 +278,29 @@ DLL_PUBLIC std::vector<bool> bvOperationValue(Kind opKind,
                                               const std::vector<bool>& aBits,
                                               const std::vector<bool>& bBits);
 
-// The exact low `prefixBits` bits of an addition, over the operand proxies
-// and the abstraction's own result bits. `aNegated`/`bNegated` carry the
-// subtraction spelling STP lowers as an addition of a complement. The whole
-// addition is this with `prefixBits == width`, so the definition and any
-// partial pin cannot silently disagree about polarity.
+// Whether the candidate result agrees with the exact low `prefixBits` of an
+// addition or multiplication. All vectors are least-significant-bit first.
+// This is the predicate for both prefix schemas; `mulSchemaHolds` delegates
+// its LowPrefix arm here and `chooseAddSchema` calls it directly.
+DLL_PUBLIC bool exactLowPrefixHolds(Kind opKind,
+                                    const std::vector<bool>& aBits,
+                                    const std::vector<bool>& bBits,
+                                    const std::vector<bool>& resultBits,
+                                    unsigned prefixBits);
+
+// Exact low-prefix circuits over the live abstraction variables. Addition
+// accepts the negated-operand spelling recorded by the bit-blaster; at most
+// one operand is negated on every abstracted addition.
 DLL_PUBLIC void encodeAddLowPrefix(
     SATSolver& solver, const std::vector<unsigned>& aVars,
     const std::vector<unsigned>& bVars,
     const std::vector<unsigned>& resultVars, unsigned width,
     unsigned prefixBits, bool aNegated = false, bool bNegated = false);
+DLL_PUBLIC void encodeMulLowPrefix(
+    SATSolver& solver, const std::vector<unsigned>& aVars,
+    const std::vector<unsigned>& bVars,
+    const std::vector<unsigned>& resultVars, unsigned width,
+    unsigned prefixBits);
 
 // The algebraic facts an abstracted BVDIV or BVMOD is refined with.
 //
@@ -321,6 +345,21 @@ enum class DivSchema
   // more only shrinks it; the premise is there for the zero divisor, whose
   // totalised all-ones quotient is the one case that breaks it.
   QuotientAtMostDividend,
+  // For q = a udiv b and every 0 < k < W:
+  //   q >= 2^k <-> b <=u (a >> k).
+  // For a nonzero divisor this is the definition of floor division, moved
+  // across the fixed power of two. For a zero divisor both sides are true:
+  // SMT-LIB gives q the all-ones value, and zero is at most every shift.
+  // One violated threshold rules out a whole quotient-magnitude band with a
+  // fixed shift and one comparison, rather than constructing a divider.
+  QuotientPow2Threshold,
+  // If the divisor has magnitude at least 2^k, the quotient cannot exceed
+  // the dividend shifted right by k:
+  //   b >=u 2^k -> q <=u (a >> k).
+  // The chooser takes k from the candidate divisor's top bit and caps this
+  // family at two instances per abstraction; without that cap a search can
+  // walk through one divisor magnitude per refinement round.
+  DivisorMagnitudeBound,
   // One of the DivLemma facts, named by DivSchemaChoice::lemmaIndex. They
   // are inequalities over the quotient rather than statements of what it
   // is, and several shift by a variable amount, so unlike everything above
@@ -371,6 +410,10 @@ enum class BVSchemaFamily : unsigned
 {
   // DivSchema::DivisorZero and DivSchema::Pow2Divisor.
   DivisorValue = 0,
+  // DivSchema::QuotientPow2Threshold.
+  QuotientThreshold,
+  // DivSchema::DivisorMagnitudeBound.
+  DivisorMagnitude,
   // MulSchema::Pow2 and MulSchema::NegPow2.
   MulShiftValue,
   COUNT
@@ -388,13 +431,16 @@ constexpr uint64_t BV_SCHEMA_FAMILY_COUNTER_MASK =
 static_assert(BV_SCHEMA_FAMILY_COUNT * BV_SCHEMA_FAMILY_COUNTER_BITS <=
                   64 - BV_SCHEMA_FAMILY_COUNTER_FIRST,
               "the schema-family counters do not fit in installedSchemas");
+static_assert(MUL_SCHEMA_INSTALLED_LOW_PREFIX <
+                  (uint64_t{1} << BV_SCHEMA_FAMILY_COUNTER_FIRST),
+              "a multiplication schema bit overlaps the family counters");
 // Growing a catalogue eventually runs its per-entry bits into the low-prefix
 // bit above, or the family counters above that. Both are compile errors.
 static_assert(mulLemmaInstalledBit(BV_MUL_LEMMA_COUNT - 1, 1) <
-                  (uint64_t{1} << BV_SCHEMA_FAMILY_COUNTER_FIRST),
+                  MUL_SCHEMA_INSTALLED_LOW_PREFIX,
               "the MUL catalogue has outgrown its installed-lemma bits");
 static_assert(addLemmaInstalledBitValue(BV_ADD_LEMMA_COUNT - 1, 1) <
-                  (uint64_t{1} << BV_SCHEMA_FAMILY_COUNTER_FIRST),
+                  ADD_SCHEMA_INSTALLED_LOW_PREFIX,
               "the ADD catalogue has outgrown its installed-lemma bits");
 static_assert(divLemmaInstalledBitValue(BV_DIV_LEMMA_COUNT - 1) <
                   (uint64_t{1} << BV_SCHEMA_FAMILY_COUNTER_FIRST),
@@ -402,6 +448,9 @@ static_assert(divLemmaInstalledBitValue(BV_DIV_LEMMA_COUNT - 1) <
 static_assert(divLemmaInstalledBitValue(BV_REM_LEMMA_COUNT - 1) <
                   (uint64_t{1} << BV_SCHEMA_FAMILY_COUNTER_FIRST),
               "the UREM catalogue has outgrown its installed-lemma bits");
+static_assert(ADD_SCHEMA_INSTALLED_LOW_PREFIX <
+                  (uint64_t{1} << BV_SCHEMA_FAMILY_COUNTER_FIRST),
+              "an addition schema bit overlaps the family counters");
 
 // How many instances of a family one record may install; zero is no cap.
 //
@@ -412,9 +461,11 @@ static_assert(divLemmaInstalledBitValue(BV_REM_LEMMA_COUNT - 1) <
 // installed instance says what the operation *is* for that operand value
 // rather than bounding it, so capping them would be a policy change with no
 // evidence behind it. The mechanism is here for when there is some.
-constexpr unsigned bvSchemaFamilyAllowance(BVSchemaFamily)
+constexpr unsigned bvSchemaFamilyAllowance(BVSchemaFamily family)
 {
-  return 0u;
+  return family == BVSchemaFamily::QuotientThreshold ? 2u
+         : family == BVSchemaFamily::DivisorMagnitude ? 2u
+                                                      : 0u;
 }
 
 // Every allowance has to fit the nibble that counts it.
@@ -503,14 +554,15 @@ DLL_PUBLIC std::vector<int> divSchemaSources(Kind opKind, unsigned width,
 // values -- the same single-predicate arrangement `mulSchemaHolds` describes,
 // for the arms of DivSchema that are not registry rows.
 //
-// Every arm here is a theorem about the operation on its own. The two that
-// name a divisor carry their own guard: `DivisorZero` is vacuous over a
-// nonzero divisor and `Pow2Divisor` over a divisor that is not 2^shift. The
-// chooser reaches them only where the guard is already true, so asking this
-// is the same question it used to ask inline -- and it is now the same
-// question the circuit is checked against.
+// Every arm here is a theorem about the operation on its own. The three that
+// name a divisor or a magnitude carry their own guard: `DivisorZero` is
+// vacuous over a nonzero divisor, `Pow2Divisor` over a divisor that is not
+// 2^shift, `DivisorMagnitudeBound` over one below 2^shift. The chooser
+// reaches them only where the guard is already true, so asking this is the
+// same question it used to ask inline -- and it is now the same question the
+// circuit is checked against.
 //
-// `opKind` is BVDIV or BVMOD; `shift` carries the exponent for the
+// `opKind` is BVDIV or BVMOD; `shift` carries the exponent for the three
 // parameterised arms and is ignored by the rest. `DivSchema::Lemma` is a
 // registry row and belongs to `divLemmaHolds`/`remLemmaHolds`, not here.
 DLL_PUBLIC bool divSchemaHolds(Kind opKind, DivSchema schema, unsigned shift,
@@ -547,6 +599,30 @@ DLL_PUBLIC void encodeDivBound(SATSolver& solver, DivSchema schema,
                                const std::vector<unsigned>& divisorVars,
                                const std::vector<unsigned>& resultVars,
                                unsigned width);
+
+// q >= 2^shift <-> divisor <=u (dividend >> shift), written over an
+// abstracted BVDIV's operand proxies and result bits.
+DLL_PUBLIC void encodeDivPow2Threshold(
+    SATSolver& solver, const std::vector<unsigned>& dividendVars,
+    const std::vector<unsigned>& divisorVars,
+    const std::vector<unsigned>& quotientVars, unsigned width,
+    unsigned shift);
+
+// b >=u 2^shift -> q <=u (a >> shift).
+DLL_PUBLIC void encodeDivisorMagnitudeBound(
+    SATSolver& solver, const std::vector<unsigned>& dividendVars,
+    const std::vector<unsigned>& divisorVars,
+    const std::vector<unsigned>& quotientVars, unsigned width,
+    unsigned shift);
+
+// The modular quotient/remainder recomposition theorem:
+//   x = (q * s) + r,  taken mod 2^W.
+// It holds for the SMT-LIB zero-divisor values as well as ordinary division:
+// x /u 0 = ~0 and x %u 0 = x recompose to (~0 * 0) + x = x.
+DLL_PUBLIC bool divRemIdentityHolds(const std::vector<bool>& dividendBits,
+                                    const std::vector<bool>& divisorBits,
+                                    const std::vector<bool>& quotientBits,
+                                    const std::vector<bool>& remainderBits);
 
 // divisor = divisorBits -> every result bit is a constant or a bit of the
 // dividend, as `source` says. Exposed for the tests: what the schema claims
@@ -661,6 +737,15 @@ struct BVTermAbstraction
   // a memory guard into an exponential fallback.
   bool exactRefused = false;
   int exactRefusedAtNodeCount = -1;
+  // Set on both records once this BVDIV/BVMOD pair has received its shared
+  // full-width modular recomposition identity. It cannot use
+  // installedSchemas because that field describes one operation, while this
+  // fact belongs to two.
+  bool divRemFullInstalled = false;
+  // The paired identity is an optional strengthening. If its multiplier does
+  // not fit the AIG budget, disable just this schema and continue with the two
+  // ordinary per-record refinements instead of abandoning the query.
+  bool divRemFullRefused = false;
   // How many of this operation's low bits are encoded exactly. Zero for an
   // abstraction nothing has pinned exactly yet, the width once `defined` is
   // set, and something in between for the two ways a record gets there
@@ -814,6 +899,18 @@ public:
   }
 
   uint64_t refinements() const { return refinements_; }
+
+  // A BVDIV and a BVMOD over the same operands at the same width. Both the
+  // refinement that installs their shared relation and the diagnostic that
+  // reports it ask this question, so neither gets to answer it privately.
+  struct DivRemPair
+  {
+    size_t divIdx;
+    size_t remIdx;
+  };
+  static std::vector<DivRemPair>
+  divRemPairs(const std::vector<BVTermAbstraction>& terms,
+              const std::vector<size_t>* selected = NULL);
 
   // A stable, one-line snapshot for every term record. Quick-statistics
   // consumers use this instead of reconstructing records from free-form
