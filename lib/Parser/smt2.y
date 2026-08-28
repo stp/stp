@@ -248,6 +248,69 @@ namespace stp
     return o.str();
   }
 
+  // SMT-LIB spells a logic as an optional HO_ and QF_ prefix followed by the
+  // theory abbreviations it combines, written in a fixed order, and closed by
+  // at most one arithmetic fragment. Recognising that shape -- rather than
+  // carrying the standard's catalogue of names, which gains a division at a
+  // time -- separates the two mistakes a set-logic can make: naming a logic
+  // STP does not decide, and naming something that is not a logic at all.
+  // Both are refused, so an imprecise call here costs a word in a diagnostic
+  // and nothing else.
+  static bool consumeLogicPart(const std::string& name, size_t& at,
+                               const char* part)
+  {
+    const size_t length = strlen(part);
+    if (name.compare(at, length, part) != 0)
+      return false;
+    at += length;
+    return true;
+  }
+
+  static bool isSMTLIBLogicName(const std::string& name)
+  {
+    size_t at = 0;
+    consumeLogicPart(name, at, "HO_");
+    consumeLogicPart(name, at, "QF_");
+    const size_t afterPrefixes = at;
+
+    if (consumeLogicPart(name, at, "ALL"))
+      return at == name.size();
+
+    // AX first: the array logic with extensionality is a name in its own
+    // right, not arrays followed by a theory called X.
+    if (!consumeLogicPart(name, at, "AX"))
+      consumeLogicPart(name, at, "A");
+    consumeLogicPart(name, at, "UF");
+    consumeLogicPart(name, at, "BV");
+    consumeLogicPart(name, at, "FP");
+    consumeLogicPart(name, at, "DT");
+    consumeLogicPart(name, at, "FF");
+    consumeLogicPart(name, at, "S");
+
+    // Longest match first: the mixed fragments begin with the same letters as
+    // the single-sort ones they combine.
+    static const char* const arithmetics[] = {"LIRA", "NIRA", "LIA", "LRA",
+                                              "NIA",  "NRA",  "IDL", "RDL"};
+    for (const char* fragment : arithmetics)
+      if (consumeLogicPart(name, at, fragment))
+        break;
+
+    // A logic is the prefixes plus at least one theory, with nothing left
+    // over: "QF_" alone names nothing, and "QF_BVX" is not "QF_BV".
+    return at > afterPrefixes && at == name.size();
+  }
+
+  // How the set-logic test below reads out loud; a name added there belongs
+  // here too. The UF+FP aliases are deliberately absent: they are alternative
+  // spellings of names already listed, and a caller reading a refusal is
+  // looking for a fragment STP has, not for a synonym of one.
+  static const char* supportedLogicsPhrase()
+  {
+    return "QF_BV, QF_ABV, QF_AX, QF_UF, QF_UFBV, QF_AUFBV, the "
+           "floating-point logics QF_FP, QF_BVFP, QF_ABVFP, QF_UFFP, "
+           "QF_UFBVFP, QF_AUFBVFP, and their LRA variants";
+  }
+
   void reportRedeclaredName();
 
   int yyerror(const char *s) {
@@ -1994,14 +2057,26 @@ cmdi:
             0 == strcmp($2->c_str(),"QF_AX") ||
             uf_logic ||
             fp_logic;
-      if (!supported_logic) {
-        yyerror("Wrong input logic");
+      // A logic STP cannot decide ends the session. STP answers
+      // (get-info :error-behavior) with immediate-exit, and continuing here
+      // was the one place that answer was untrue: the refusal was printed,
+      // the rest of the script ran anyway, and a check-sat inside it reported
+      // a verdict for a benchmark STP had just said it could not accept.
+      // Which of the two diagnostics is right is the only thing left to
+      // decide, and neither one returns.
+      if (!supported_logic)
+      {
+        std::string message = isSMTLIBLogicName(*$2)
+                                  ? "unsupported logic: STP decides "
+                                  : "unknown logic: SMT-LIB names no logic "
+                                    "this way, and STP decides ";
+        message += supportedLogicsPhrase();
+        fatal_yyerror(message.c_str());
       }
       // The incremental frontend needs only this validated logic name to
       // choose its measured automatic-engagement policy. reset clears the
       // classification; reset-assertions retains it with the SMT-LIB logic.
-      if (supported_logic)
-        stp::GlobalParserInterface->setLogic(*$2);
+      stp::GlobalParserInterface->setLogic(*$2);
       // The floating-point keywords exist only inside the FP logics;
       // everywhere else names like "fp" or "NaN" stay ordinary symbols,
       // exactly as before floating-point support existed.
