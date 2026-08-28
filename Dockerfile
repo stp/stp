@@ -20,6 +20,7 @@ RUN apt-get update \
         libgmp-dev \
         libncurses-dev \
         make \
+        pkg-config \
         python3 \
         wget \
         zlib1g-dev \
@@ -35,8 +36,9 @@ RUN apt-get update \
 # static cryptominisat5 executable would need static gmp and zlib.
 #
 # 5.14 fetches and builds its own CaDiCaL and cadiback, which is why git and
-# ca-certificates matter to this stage too. That is not the CaDiCaL STP builds
-# for itself -- USE_CADICAL is off below, so this image has exactly one.
+# ca-certificates matter to this stage too, and it looks GMP up through
+# pkg-config, which is why that is in the package list. Its CaDiCaL is not a
+# second copy: USE_CADICAL is off below, so this image has exactly one.
 WORKDIR /cms
 RUN git clone --depth 1 --branch release/v5.14.7 \
         https://github.com/msoos/cryptominisat . \
