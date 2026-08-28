@@ -1,45 +1,61 @@
+# STP_CONSUMER_EXPORT picks which of the two exported STPTargets.cmake files
+# the consumer is pointed at. They are different files with different contents,
+# and only the install-tree one used to be tested: a build tree exports the
+# build interface, so anything wrapped in $<BUILD_INTERFACE:> that install()
+# would have dropped is still in it.
+if(NOT DEFINED STP_CONSUMER_EXPORT OR STP_CONSUMER_EXPORT STREQUAL "")
+  set(STP_CONSUMER_EXPORT "install-tree")
+endif()
+
 set(stp_build_dir "@PROJECT_BINARY_DIR@")
 set(consumer_source_dir
     "@CMAKE_CURRENT_SOURCE_DIR@/uf-public-header-consumer")
-set(scratch_dir "@CMAKE_CURRENT_BINARY_DIR@/uf-public-header-consumer-run")
+# Per export, so the two tests can run concurrently under ctest --parallel.
+set(scratch_dir
+    "@CMAKE_CURRENT_BINARY_DIR@/uf-consumer-run-${STP_CONSUMER_EXPORT}")
 set(stage_dir "${scratch_dir}/stage")
 set(consumer_build_dir "${scratch_dir}/build")
 
 file(REMOVE_RECURSE "${scratch_dir}")
-file(MAKE_DIRECTORY "${stage_dir}")
 
-set(install_command "@CMAKE_COMMAND@" --install "${stp_build_dir}")
-if(DEFINED STP_TEST_CONFIG AND NOT STP_TEST_CONFIG STREQUAL "")
-  list(APPEND install_command --config "${STP_TEST_CONFIG}")
-endif()
-execute_process(
-  COMMAND "@CMAKE_COMMAND@" -E env "DESTDIR=${stage_dir}" ${install_command}
-  RESULT_VARIABLE install_result
-  OUTPUT_VARIABLE install_stdout
-  ERROR_VARIABLE install_stderr
-)
-if(NOT install_result EQUAL 0)
-  message(FATAL_ERROR
-    "STP install failed (${install_result})\n${install_stdout}\n${install_stderr}")
-endif()
+if(STP_CONSUMER_EXPORT STREQUAL "build-tree")
+  set(stp_cmake_dir "${stp_build_dir}")
+else()
+  file(MAKE_DIRECTORY "${stage_dir}")
 
-# DESTDIR prepends the configured absolute prefix on Unix. Strip its leading
-# slash before joining so this remains a path below the test scratch tree.
-set(configured_prefix "@CMAKE_INSTALL_PREFIX@")
-string(REGEX REPLACE "^/+" "" relative_prefix "${configured_prefix}")
-set(staged_prefix "${stage_dir}/${relative_prefix}")
-
-function(staged_install_path output configured_path)
-  if(IS_ABSOLUTE "${configured_path}")
-    string(REGEX REPLACE "^/+" "" relative_path "${configured_path}")
-    set(result "${stage_dir}/${relative_path}")
-  else()
-    set(result "${staged_prefix}/${configured_path}")
+  set(install_command "@CMAKE_COMMAND@" --install "${stp_build_dir}")
+  if(DEFINED STP_TEST_CONFIG AND NOT STP_TEST_CONFIG STREQUAL "")
+    list(APPEND install_command --config "${STP_TEST_CONFIG}")
   endif()
-  set(${output} "${result}" PARENT_SCOPE)
-endfunction()
+  execute_process(
+    COMMAND "@CMAKE_COMMAND@" -E env "DESTDIR=${stage_dir}" ${install_command}
+    RESULT_VARIABLE install_result
+    OUTPUT_VARIABLE install_stdout
+    ERROR_VARIABLE install_stderr
+  )
+  if(NOT install_result EQUAL 0)
+    message(FATAL_ERROR
+      "STP install failed (${install_result})\n${install_stdout}\n${install_stderr}")
+  endif()
 
-staged_install_path(stp_cmake_dir "@STP_INSTALL_CMAKE_DIR@")
+  # DESTDIR prepends the configured absolute prefix on Unix. Strip its leading
+  # slash before joining so this remains a path below the test scratch tree.
+  set(configured_prefix "@CMAKE_INSTALL_PREFIX@")
+  string(REGEX REPLACE "^/+" "" relative_prefix "${configured_prefix}")
+  set(staged_prefix "${stage_dir}/${relative_prefix}")
+
+  function(staged_install_path output configured_path)
+    if(IS_ABSOLUTE "${configured_path}")
+      string(REGEX REPLACE "^/+" "" relative_path "${configured_path}")
+      set(result "${stage_dir}/${relative_path}")
+    else()
+      set(result "${staged_prefix}/${configured_path}")
+    endif()
+    set(${output} "${result}" PARENT_SCOPE)
+  endfunction()
+
+  staged_install_path(stp_cmake_dir "@STP_INSTALL_CMAKE_DIR@")
+endif()
 
 # CMAKE_PREFIX_PATH is a list, and all of it has to reach the consumer inside
 # one -D argument. execute_process() splits each element of its command on
@@ -87,7 +103,7 @@ execute_process(
 )
 if(NOT configure_result EQUAL 0)
   message(FATAL_ERROR
-    "UF install-tree consumer configure failed (${configure_result})\n"
+    "UF ${STP_CONSUMER_EXPORT} consumer configure failed (${configure_result})\n"
     "${configure_stdout}\n${configure_stderr}")
 endif()
 
@@ -103,7 +119,7 @@ execute_process(
 )
 if(NOT build_result EQUAL 0)
   message(FATAL_ERROR
-    "UF install-tree consumer build failed (${build_result})\n"
+    "UF ${STP_CONSUMER_EXPORT} consumer build failed (${build_result})\n"
     "${build_stdout}\n${build_stderr}")
 endif()
 
@@ -121,6 +137,6 @@ execute_process(
 )
 if(NOT test_result EQUAL 0)
   message(FATAL_ERROR
-    "UF install-tree consumer tests failed (${test_result})\n"
+    "UF ${STP_CONSUMER_EXPORT} consumer tests failed (${test_result})\n"
     "${test_stdout}\n${test_stderr}")
 endif()
