@@ -400,6 +400,23 @@ void ToSATAIG::add_cnf_to_solver(SATSolver& satSolver, Cnf_Dat_t* cnfData)
 
 void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
 {
+  // A bit that reached no SAT variable is marked with ~0u rather than
+  // omitted, so freezing has to skip it: the sentinel is not a variable
+  // index, and a backend that acts on setFrozen() writes out of bounds when
+  // handed it. A leaf with no mapping at all -- a constant anchor, or a
+  // symbol the blast never reached -- simply has no variables to keep.
+  const auto freezeLeaf = [&](const ASTNode& leaf) {
+    if (leaf.IsNull())
+      return;
+    ASTNodeToSATVar::const_iterator it = nodeToSATVar.find(leaf);
+    if (it == nodeToSATVar.end())
+      return;
+    const vector<unsigned>& v = it->second;
+    for (size_t i = 0, size = v.size(); i < size; ++i)
+      if (v[i] != ~((unsigned)0))
+        satSolver.setFrozen(v[i]);
+  };
+
   for (ArrayTransformer::ArrType::iterator it =
            arrayTransformer->arrayToIndexToRead.begin();
        it != arrayTransformer->arrayToIndexToRead.end(); it++)
@@ -409,27 +426,37 @@ void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
     for (ArrayTransformer::arrTypeMap::const_iterator arr_it = atm.begin();
          arr_it != atm.end(); arr_it++)
     {
-      // A bit that reached no SAT variable is marked with ~0u rather than
-      // omitted, so freezing has to skip it: the sentinel is not a variable
-      // index, and a backend that acts on setFrozen() writes out of bounds
-      // when handed it. The extensionality loop below already guards this.
       const ArrayTransformer::ArrayRead& ar = arr_it->second;
-      ASTNodeToSATVar::iterator it = nodeToSATVar.find(ar.index_symbol);
-      if (it != nodeToSATVar.end())
-      {
-        const vector<unsigned>& v = it->second;
-        for (size_t i = 0, size = v.size(); i < size; ++i)
-          if (v[i] != ~((unsigned)0))
-            satSolver.setFrozen(v[i]);
-      }
+      freezeLeaf(ar.index_symbol);
+      freezeLeaf(ar.symbol);
+    }
+  }
 
-      ASTNodeToSATVar::iterator it2 = nodeToSATVar.find(ar.symbol);
-      if (it2 != nodeToSATVar.end())
+  // The abstracted write-chain reads refine through their own table, and
+  // emitChainReadLemmas() writes its path lemmas over the same leaves the
+  // incremental driver totalises: the row symbol, the read index anchor,
+  // the fall-through base read symbol, and both anchors of every level.
+  // Those lemmas are added in later solve calls, so a backend that
+  // eliminates one of these leaves in the meantime is then handed a clause
+  // over an eliminated variable -- the simplifying MiniSat asserts on
+  // exactly that. Freezing the congruence rows above is not enough: a chain
+  // row's anchors need not appear in arrayToIndexToRead at all.
+  for (ArrayTransformer::ChainReadsMap::const_iterator cit =
+           arrayTransformer->chainReads.begin();
+       cit != arrayTransformer->chainReads.end(); cit++)
+  {
+    for (ArrayTransformer::ChainIndexMap::const_iterator rit =
+             cit->second.begin();
+         rit != cit->second.end(); rit++)
+    {
+      const ArrayTransformer::ChainRow& row = rit->second;
+      freezeLeaf(row.symbol);
+      freezeLeaf(row.indexAnchor);
+      freezeLeaf(row.baseReadSymbol);
+      for (const ArrayTransformer::ChainLevel& lvl : row.levels)
       {
-        const vector<unsigned>& v = it2->second;
-        for (size_t i = 0, size = v.size(); i < size; ++i)
-          if (v[i] != ~((unsigned)0))
-            satSolver.setFrozen(v[i]);
+        freezeLeaf(lvl.indexAnchor);
+        freezeLeaf(lvl.valueAnchor);
       }
     }
   }
