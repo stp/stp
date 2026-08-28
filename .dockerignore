@@ -13,5 +13,3 @@ tests
 utils
 windows
 Dockerfile
-Docker.ubuntu22
-Docker.ubuntu24

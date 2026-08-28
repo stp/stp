@@ -1,13 +1,14 @@
 name: Docker image
 
-# Nothing built the two Dockerfiles until this existed, so they could only be
-# found broken by someone running the command in the README. That is how the
-# CryptoMiniSat pin came to sit four minor releases behind, naming a flag the
-# version it pinned had already removed.
+# Nothing built the Dockerfile until this existed, so it could only be found
+# broken by someone following the README. It had been unbuildable since
+# e10a6b39 taught CMakeLists to install LICENSE and LICENSE_COMPONENTS, which
+# .dockerignore was keeping out of the build context, and its CryptoMiniSat
+# pin had drifted four minor releases onto a flag that release had removed.
 #
-# Both are a full static build of STP and its solvers, so this is expensive:
-# it runs only when the recipe or the dependency machinery it drives changes,
-# and on merges to master. workflow_dispatch adds a button for any branch.
+# It is a full static build of STP and its solvers, so it runs only when the
+# recipe or the dependency machinery it drives changes, and on merges to
+# master. workflow_dispatch adds a button for any branch.
 #
 # The two path lists are duplicated because GitHub Actions rejects YAML
 # anchors; keep them in step.
@@ -16,8 +17,6 @@ on:
     branches: [master]
     paths:
       - 'Dockerfile'
-      - 'Docker.ubuntu24'
-      - 'Docker.ubuntu22'
       - '.dockerignore'
       - 'CMakeLists.txt'
       - 'cmake/**'
@@ -26,8 +25,6 @@ on:
   pull_request:
     paths:
       - 'Dockerfile'
-      - 'Docker.ubuntu24'
-      - 'Docker.ubuntu22'
       - '.dockerignore'
       - 'CMakeLists.txt'
       - 'cmake/**'
@@ -41,20 +38,14 @@ concurrency:
 
 jobs:
   image:
-    name: ${{ matrix.file }}
+    name: Dockerfile
     runs-on: ubuntu-latest
-    # They differ only in base image, so a failure in one is worth seeing
-    # beside the others' results rather than instead of them.
-    strategy:
-      fail-fast: false
-      matrix:
-        file: [Dockerfile, Docker.ubuntu24, Docker.ubuntu22]
 
     steps:
     - uses: actions/checkout@v7
 
     - name: Build the image
-      run: docker build --tag stp-image --file "${{ matrix.file }}" .
+      run: docker build --tag stp-image .
 
     # The image is a single static binary on scratch, with stp as its
     # entrypoint reading a problem on standard input. That is the form the
@@ -72,6 +63,7 @@ jobs:
 
     # MIT and BSD components require their notices to accompany the binary,
     # and on a scratch image these two files are the only place they can be.
+    # Keeping them out of the build context is what broke the build before.
     - name: Check the licence notices are in the image
       run: |
         docker create --name notices stp-image

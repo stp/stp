@@ -3,6 +3,11 @@
 #
 #     docker build --tag stp/stp .
 #     cat example.smt2 | docker run --rm -i stp/stp
+#
+# The base image only has to build STP; what it produces is a static binary on
+# scratch, which carries no distribution with it and so runs anywhere. There
+# used to be Docker.ubuntu22 and Docker.ubuntu24 alongside this file, differing
+# in nothing but this line, and neither had been built by anything.
 
 
 FROM ubuntu:26.04 AS builder
