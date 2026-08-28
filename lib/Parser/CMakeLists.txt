@@ -66,6 +66,14 @@ foreach(_file ${TOLEX})
         ${CMAKE_CURRENT_BINARY_DIR}/lex${_file}.cpp
         ${CMAKE_CURRENT_BINARY_DIR}/parse${_file}.tab.cpp
     )
+    # api.prefix renames what a grammar exports, not the types it declares,
+    # so three grammars in one program leave three different `union yyalloc`
+    # and `yysymbol_kind_t` for LTO to report as ODR violations. Neither name
+    # reaches parse${_file}.tab.h, so the rename stays in this one file.
+    set_source_files_properties(parse${_file}.tab.cpp
+        PROPERTIES COMPILE_DEFINITIONS
+        "yyalloc=${_file}_yyalloc;yysymbol_kind_t=${_file}_yysymbol_kind_t")
+
     if (NOT MSVC)
         set_source_files_properties(lex${_file}.cpp
             PROPERTIES COMPILE_FLAGS
