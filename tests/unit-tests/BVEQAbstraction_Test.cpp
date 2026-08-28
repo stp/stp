@@ -41,6 +41,23 @@ using namespace stp;
 namespace
 {
 
+void appendEqualityRecord(BVAbstractionRefiner& refiner,
+                          BVEQAbstraction record)
+{
+  static uint64_t nextId = 1;
+  record.id = BVAbstractionId(nextId++);
+  refiner.appendEquality(record);
+}
+
+void appendTermRecord(BVAbstractionRefiner& refiner,
+                      BVTermAbstraction record)
+{
+  static uint64_t nextId = UINT64_C(1) << 32;
+  record.id = BVAbstractionId(nextId++);
+  refiner.appendTerm(record);
+}
+
+
 class BVEQAbstractionTest : public ::testing::Test
 {
 protected:
@@ -632,12 +649,12 @@ TEST_F(BVEQAbstractionTest, FreezeVariablesCoversEveryLemmaVariable)
   eq.leftSymbol = x;
   eq.rightSymbol = y;
   eq.width = 4;
-  refiner.equalities().push_back(eq);
+  appendEqualityRecord(refiner, eq);
 
   // Harvested with no variable yet: legal before the first solve, skipped.
   BVEQAbstraction pending = eq;
   pending.abstractionSATVar = BV_ABSTRACTION_NO_VAR;
-  refiner.equalities().push_back(pending);
+  appendEqualityRecord(refiner, pending);
 
   BVTermAbstraction term;
   term.termNode = sum;
@@ -646,7 +663,7 @@ TEST_F(BVEQAbstractionTest, FreezeVariablesCoversEveryLemmaVariable)
   term.operands[1] = y;
   term.numOperands = 2;
   term.width = 4;
-  refiner.terms().push_back(term);
+  appendTermRecord(refiner, term);
 
   // A record that owns its result, as the persistent incremental lowering
   // files them. Freezing has to reach 40..43 and not whatever the node map
@@ -655,7 +672,7 @@ TEST_F(BVEQAbstractionTest, FreezeVariablesCoversEveryLemmaVariable)
   // nothing and keeps the map fallback covered.
   BVTermAbstraction owned = term;
   owned.resultSATVars = std::vector<unsigned>{40, 41, 42, 43};
-  refiner.terms().push_back(owned);
+  appendTermRecord(refiner, owned);
 
   ToSATBase::ASTNodeToSATVar bits;
   bits[x] = std::vector<unsigned>{10, 11, 12, 13};
@@ -691,11 +708,11 @@ TEST_F(BVEQAbstractionTest, DuplicateTermsKeepTheirOwnResultVariables)
   older.numOperands = 2;
   older.width = 4;
   older.resultSATVars = std::vector<unsigned>{40, 41, 42, 43};
-  refiner.terms().push_back(older);
+  appendTermRecord(refiner, older);
 
   BVTermAbstraction newer = older;
   newer.resultSATVars = std::vector<unsigned>{30, 31, 32, 33};
-  refiner.terms().push_back(newer);
+  appendTermRecord(refiner, newer);
 
   ToSATBase::ASTNodeToSATVar bits;
   bits[a] = std::vector<unsigned>{10, 11, 12, 13};
@@ -746,7 +763,7 @@ TEST_F(BVEQAbstractionTest, SaidUnequalRoundBlocksTheCandidate)
   record.leftSymbol = x;
   record.rightSymbol = y;
   record.width = 4;
-  refiner.equalities().push_back(record);
+  appendEqualityRecord(refiner, record);
 
   ToSATBase::ASTNodeToSATVar bits;
   bits[x] = std::vector<unsigned>{10, 11, 12, 13};
@@ -797,7 +814,7 @@ TEST_F(BVEQAbstractionTest, CongruenceChainsRunThroughDefinedEqualities)
   xy.width = 4;
   xy.defined = true;
   xy.refinedBits = 4;
-  refiner.equalities().push_back(xy);
+  appendEqualityRecord(refiner, xy);
 
   BVEQAbstraction yz;
   yz.eqNode = factory->CreateNode(EQ, y, z);
@@ -805,7 +822,7 @@ TEST_F(BVEQAbstractionTest, CongruenceChainsRunThroughDefinedEqualities)
   yz.leftSymbol = y;
   yz.rightSymbol = z;
   yz.width = 4;
-  refiner.equalities().push_back(yz);
+  appendEqualityRecord(refiner, yz);
 
   BVEQAbstraction xz;
   xz.eqNode = factory->CreateNode(EQ, x, z);
@@ -813,7 +830,7 @@ TEST_F(BVEQAbstractionTest, CongruenceChainsRunThroughDefinedEqualities)
   xz.leftSymbol = x;
   xz.rightSymbol = z;
   xz.width = 4;
-  refiner.equalities().push_back(xz);
+  appendEqualityRecord(refiner, xz);
 
   ToSATBase::ASTNodeToSATVar bits;
   bits[x] = std::vector<unsigned>{10, 11, 12, 13};
@@ -860,7 +877,7 @@ TEST_F(BVEQAbstractionTest, BlockingRoundReusesTheRegisteredConstant)
   record.operands[1] = three;
   record.numOperands = 2;
   record.width = 4;
-  refiner.terms().push_back(record);
+  appendTermRecord(refiner, record);
 
   ToSATBase::ASTNodeToSATVar bits;
   bits[a] = std::vector<unsigned>{10, 11, 12, 13};
@@ -914,7 +931,7 @@ TEST_F(BVEQAbstractionTest, ASchemaRoundIsSpentWhereTheCandidateContradictsOne)
   record.operands[1] = three;
   record.numOperands = 2;
   record.width = 4;
-  refiner.terms().push_back(record);
+  appendTermRecord(refiner, record);
 
   ToSATBase::ASTNodeToSATVar bits;
   bits[a] = std::vector<unsigned>{10, 11, 12, 13};
@@ -965,7 +982,7 @@ TEST_F(BVEQAbstractionTest, OnePassCanInstallBothKindsOfMultiplicationLemma)
   first.operands[1] = b;
   first.numOperands = 2;
   first.width = 4;
-  refiner.terms().push_back(first);
+  appendTermRecord(refiner, first);
 
   BVTermAbstraction second;
   second.termNode = secondProduct;
@@ -974,7 +991,7 @@ TEST_F(BVEQAbstractionTest, OnePassCanInstallBothKindsOfMultiplicationLemma)
   second.operands[1] = d;
   second.numOperands = 2;
   second.width = 4;
-  refiner.terms().push_back(second);
+  appendTermRecord(refiner, second);
 
   ToSATBase::ASTNodeToSATVar bits;
   bits[a] = std::vector<unsigned>{10, 11, 12, 13};
@@ -1078,7 +1095,7 @@ TEST_F(BVEQAbstractionTest, RefusesAnEqualityWhoseOperandsAreNotEncoded)
   record.leftSymbol = x;
   record.rightSymbol = y;
   record.width = 8;
-  refiner.equalities().push_back(record);
+  appendEqualityRecord(refiner, record);
 
   NoModelSolver solver;
   ToSATBase::ASTNodeToSATVar empty;
@@ -1097,7 +1114,7 @@ TEST_F(BVEQAbstractionTest, RefusesAnEqualityRecordedWiderThanItsOperands)
   record.leftSymbol = x;
   record.rightSymbol = y;
   record.width = 8;
-  refiner.equalities().push_back(record);
+  appendEqualityRecord(refiner, record);
 
   NoModelSolver solver;
   ToSATBase::ASTNodeToSATVar bits;
@@ -1118,7 +1135,7 @@ TEST_F(BVEQAbstractionTest, RefusesAnEqualityBitThatNeverReachedTheCNF)
   record.leftSymbol = x;
   record.rightSymbol = y;
   record.width = 8;
-  refiner.equalities().push_back(record);
+  appendEqualityRecord(refiner, record);
 
   NoModelSolver solver;
   ToSATBase::ASTNodeToSATVar bits;
@@ -1143,7 +1160,7 @@ TEST_F(BVEQAbstractionTest, RefusesAnAdditionWhoseOperandsAreNotEncoded)
   record.operands[1] = y;
   record.numOperands = 2;
   record.width = 8;
-  refiner.terms().push_back(record);
+  appendTermRecord(refiner, record);
 
   NoModelSolver solver;
   ToSATBase::ASTNodeToSATVar bits;
@@ -1169,7 +1186,7 @@ TEST_F(BVEQAbstractionTest, RefusesAComparisonWithNoInputOfItsOwn)
   record.width = 8;
   // condSATVar left at BV_ABSTRACTION_NO_VAR: the comparison's answer has
   // nowhere to be read from, so nothing about this candidate can be checked.
-  refiner.terms().push_back(record);
+  appendTermRecord(refiner, record);
 
   NoModelSolver solver;
   ToSATBase::ASTNodeToSATVar bits;

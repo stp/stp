@@ -49,10 +49,12 @@ THE SOFTWARE.
 
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
+#include "stp/ToSat/BVAbstractionTypes.h"
 #include "stp/ToSat/BVExactEncoder.h"
 #include "stp/ToSat/ToSATBase.h"
 
 #include <cstdint>
+#include <map>
 #include <vector>
 
 namespace stp
@@ -72,6 +74,8 @@ const unsigned BV_ABSTRACTION_NO_VAR = ~((unsigned)0);
 // equality and the record is never revisited.
 struct BVEQAbstraction
 {
+  BVAbstractionId id;
+  std::vector<BVAbstractionId> dependencies;
   ASTNode eqNode;
   unsigned abstractionSATVar = BV_ABSTRACTION_NO_VAR;
   ASTNode leftSymbol;
@@ -311,6 +315,8 @@ DLL_PUBLIC unsigned valueLemmaAllowance(const UserDefinedFlags& uf,
 
 struct BVTermAbstraction
 {
+  BVAbstractionId id;
+  std::vector<BVAbstractionId> dependencies;
   ASTNode termNode;
   Kind opKind;
   ASTNode operands[3];
@@ -353,6 +359,14 @@ class DLL_PUBLIC BVAbstractionRefiner
   std::vector<BVEQAbstraction> eqs_;
   std::vector<BVTermAbstraction> terms_;
 
+  struct RecordLocation
+  {
+    bool equality;
+    size_t index;
+  };
+  std::map<BVAbstractionId, RecordLocation> recordOfId_;
+  size_t indexedRecords_ = 0;
+
   // Monotone across the session, including across a clear(): a driver
   // compares it either side of a round to learn whether that round found
   // anything, and a counter that went backwards would read as no progress.
@@ -362,6 +376,7 @@ class DLL_PUBLIC BVAbstractionRefiner
                             const ToSATBase::ASTNodeToSATVar& nodeToSATVar);
   unsigned refineTerms(SATSolver& solver,
                        const ToSATBase::ASTNodeToSATVar& nodeToSATVar);
+  void rebuildRecordIndex();
 
 public:
   explicit BVAbstractionRefiner(STPMgr* bm_) : bm(bm_) {}
@@ -373,13 +388,21 @@ public:
   // The records, for whoever mints them. Everything a refinement round
   // learns is written back into them, so an owner that discards its SAT
   // solver or its bit-blast has to discard these too.
-  std::vector<BVEQAbstraction>& equalities() { return eqs_; }
-  std::vector<BVTermAbstraction>& terms() { return terms_; }
+  const std::vector<BVEQAbstraction>& equalities() const { return eqs_; }
+  const std::vector<BVTermAbstraction>& terms() const { return terms_; }
+
+  // File a record. The identity a producer minted travels with it, so
+  // everything downstream can name the operation a record came from rather
+  // than the position it happens to occupy in these vectors.
+  void appendEquality(BVEQAbstraction record);
+  void appendTerm(BVTermAbstraction record);
 
   void clear()
   {
     eqs_.clear();
     terms_.clear();
+    recordOfId_.clear();
+    indexedRecords_ = 0;
   }
 
   uint64_t refinements() const { return refinements_; }

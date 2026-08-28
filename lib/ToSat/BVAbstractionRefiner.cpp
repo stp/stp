@@ -39,6 +39,54 @@ namespace stp
 // without reading a single bit. A round that refined an equality stops
 // there rather than going on to the terms -- the term scan reads the same
 // model, and what it would find in it has already been ruled out.
+void BVAbstractionRefiner::rebuildRecordIndex()
+{
+  recordOfId_.clear();
+  for (size_t i = 0; i < eqs_.size(); ++i)
+  {
+    if (!eqs_[i].id.valid())
+      continue;
+    [[maybe_unused]] const bool inserted =
+        recordOfId_.insert({eqs_[i].id, {true, i}}).second;
+    assert(inserted && "two BV abstraction records share one producer ID");
+  }
+  for (size_t i = 0; i < terms_.size(); ++i)
+  {
+    if (!terms_[i].id.valid())
+      continue;
+    [[maybe_unused]] const bool inserted =
+        recordOfId_.insert({terms_[i].id, {false, i}}).second;
+    assert(inserted && "two BV abstraction records share one producer ID");
+  }
+  indexedRecords_ = eqs_.size() + terms_.size();
+}
+
+void BVAbstractionRefiner::appendEquality(BVEQAbstraction record)
+{
+  assert(record.id.valid());
+  if (indexedRecords_ != eqs_.size() + terms_.size())
+    rebuildRecordIndex();
+  const size_t index = eqs_.size();
+  [[maybe_unused]] const bool inserted =
+      recordOfId_.insert({record.id, {true, index}}).second;
+  assert(inserted && "two BV abstraction records share one producer ID");
+  eqs_.push_back(std::move(record));
+  ++indexedRecords_;
+}
+
+void BVAbstractionRefiner::appendTerm(BVTermAbstraction record)
+{
+  assert(record.id.valid());
+  if (indexedRecords_ != eqs_.size() + terms_.size())
+    rebuildRecordIndex();
+  const size_t index = terms_.size();
+  [[maybe_unused]] const bool inserted =
+      recordOfId_.insert({record.id, {false, index}}).second;
+  assert(inserted && "two BV abstraction records share one producer ID");
+  terms_.push_back(std::move(record));
+  ++indexedRecords_;
+}
+
 unsigned BVAbstractionRefiner::refine(
     SATSolver& solver, const ToSATBase::ASTNodeToSATVar& nodeToSATVar)
 {
