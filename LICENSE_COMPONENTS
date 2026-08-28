@@ -24,12 +24,6 @@ build puts their code inside the binary, so the released binaries carry them:
 	* MiniSat Copyright (c) 2003-2010 Niklas Een, Niklas Sorensson, when
 		selected with -DUSE_MINISAT=ON.
 
-	Riss can also be selected, with -DUSE_RISS=ON. STP neither downloads nor
-	distributes Riss -- the build requires a checkout that the person building
-	it supplies -- so no licence for it is reproduced here. It is not MIT
-	licensed like the solvers above, and anyone redistributing a binary built
-	with it should check what its terms require.
-
 Our build system includes third-party CMake modules (these are not compiled
 into STP, but they are distributed with it):
 	* GetGitRevisionDescription.cmake Copyright Iowa State University 2009-2010.

@@ -20,7 +20,7 @@ cmake --build build -j$(nproc)
 sudo cmake --install build
 ```
 
-That builds against [CaDiCaL](https://github.com/arminbiere/cadical), which is the default SAT backend. CryptoMiniSat, MiniSat and Riss are also supported, asked for at configure time; see [Building STP](https://stp.github.io/stp/building.html).
+That builds against [CaDiCaL](https://github.com/arminbiere/cadical), which is the default SAT backend. CryptoMiniSat and MiniSat are also supported, asked for at configure time; see [Building STP](https://stp.github.io/stp/building.html).
 
 There are no submodules: `--auto-download` fetches every dependency at a pinned revision and builds it with this build's own compiler and flags. Without it, configuration stops and says what to install or where to point it -- nothing here reaches the network unless it is asked to. CryptoMiniSat is the exception, and the one thing `libgmp-dev` is for: install it, or run `./scripts/deps/setup-cms.sh`.
 

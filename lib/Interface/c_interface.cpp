@@ -500,9 +500,6 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
     case CMS4:
       b->UserFlags.solver_to_use = stp::UserDefinedFlags::CRYPTOMINISAT5_SOLVER;
       break;
-    case RISS:
-      b->UserFlags.solver_to_use = stp::UserDefinedFlags::RISS_SOLVER;
-      break;
     case MSP:
       //Array-based Minisat has been replaced with normal MiniSat
       b->UserFlags.solver_to_use = stp::UserDefinedFlags::MINISAT_SOLVER;
@@ -4209,42 +4206,6 @@ vc
 {
 #ifdef USE_CRYPTOMINISAT
   return _vc_isUsingSolver(vc, stp::UserDefinedFlags::CRYPTOMINISAT5_SOLVER);
-#else
-  return false;
-#endif
-}
-
-bool vc_supportsRiss(VC /*vc*/ )
-{
-#ifdef USE_RISS
-  return true;
-#else
-  return false;
-#endif
-}
-
-bool vc_useRiss(VC
-#ifdef USE_RISS
-vc
-#endif
-)
-{
-#ifdef USE_RISS
-  _vc_useSolver(vc, stp::UserDefinedFlags::RISS_SOLVER);
-  return true;
-#else
-  return false;
-#endif
-}
-
-bool vc_isUsingRiss(VC
-#ifdef USE_RISS
-vc
-#endif
-)
-{
-#ifdef USE_RISS
-  return _vc_isUsingSolver(vc, stp::UserDefinedFlags::RISS_SOLVER);
 #else
   return false;
 #endif

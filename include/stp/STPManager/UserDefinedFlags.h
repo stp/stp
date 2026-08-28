@@ -764,7 +764,6 @@ public:
     MINISAT_SOLVER = 0,
     SIMPLIFYING_MINISAT_SOLVER,
     CRYPTOMINISAT5_SOLVER,
-    RISS_SOLVER,
     CADICAL_SOLVER
   };
 
@@ -905,11 +904,7 @@ public:
 #ifdef USE_CRYPTOMINISAT
     solver_to_use = CRYPTOMINISAT5_SOLVER;
 #else
-#ifdef USE_RISS
-    solver_to_use = RISS_SOLVER;
-#else
     solver_to_use = MINISAT_SOLVER;
-#endif
 #endif
 #endif
   }

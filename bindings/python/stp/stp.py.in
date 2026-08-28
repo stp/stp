@@ -187,9 +187,6 @@ _set_func('vc_isUsingSimplifyingMinisat', c_bool, _VC)
 _set_func('vc_supportsCryptominisat', c_bool, _VC)
 _set_func('vc_useCryptominisat', c_bool, _VC)
 _set_func('vc_isUsingCryptominisat', c_bool, _VC)
-_set_func('vc_supportsRiss', c_bool, _VC)
-_set_func('vc_useRiss', c_bool, _VC)
-_set_func('vc_isUsingRiss', c_bool, _VC)
 _set_func('vc_supportsCadical', c_bool, _VC)
 _set_func('vc_useCadical', c_bool, _VC)
 _set_func('vc_isUsingCadical', c_bool, _VC)
@@ -481,15 +478,6 @@ class Solver(object):
 
     def isUsingCryptominisat(self):
         return _lib.vc_isUsingCryptominisat(self.vc)
-
-    def supportsRiss(self):
-        return _lib.vc_supportsRiss(self.vc)
-
-    def useRiss(self):
-        return _lib.vc_useRiss(self.vc)
-
-    def isUsingRiss(self):
-        return _lib.vc_isUsingRiss(self.vc)
 
     def supportsCadical(self):
         return _lib.vc_supportsCadical(self.vc)

@@ -30,9 +30,8 @@ component of STP. The headers that go with them live under
 -  ``Printer``: Implements various output formatters.
 -  ``Sat``: Adapters presenting each supported SAT solver --
    `MiniSat <https://github.com/stp/minisat>`__,
-   `CryptoMiniSat <https://github.com/msoos/cryptominisat>`__,
-   `CaDiCaL <https://github.com/arminbiere/cadical>`__ and
-   `Riss <https://github.com/nmanthey/riss-solver>`__ -- through STP's
+   `CryptoMiniSat <https://github.com/msoos/cryptominisat>`__ and
+   `CaDiCaL <https://github.com/arminbiere/cadical>`__ -- through STP's
    common ``SATSolver`` interface. The solvers themselves are external;
    only the wrappers live here.
 -  ``Simplifier``: Simplification algorithms for the AST, including the

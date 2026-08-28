@@ -42,11 +42,10 @@ compiler and flags. Without it, configuration stops and says what to
 install or where to point it: nothing here reaches the network unless it
 is asked to.
 
-That gives a solver backed by CaDiCaL. CryptoMiniSat, MiniSat and Riss
-are also supported, and are asked for by name --
-``./configure.sh --cryptominisat``, ``--minisat``, ``--riss``; at run time
-``--cryptominisat``, ``--cadical`` and ``--minisat`` pick between the
-backends that were compiled in. CryptoMiniSat is the one dependency STP
+That gives a solver backed by CaDiCaL. CryptoMiniSat and MiniSat are also
+supported, and are asked for by name -- ``./configure.sh --cryptominisat``
+or ``--minisat``; at run time ``--cryptominisat``, ``--cadical`` and
+``--minisat`` pick between the backends that were compiled in. CryptoMiniSat is the one dependency STP
 does not build for you, and the one that needs ``libgmp-dev``.
 :doc:`building` has the detail.
 

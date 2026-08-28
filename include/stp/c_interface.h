@@ -206,24 +206,24 @@ enum ifaceflag_t
   //!
   CMS4,
 
-  //! Use the SAT solver Riss.
-  //!
-  RISS,
-
   //! \brief Deprecated: use `MS` instead!
   //!
   //! This used to be the array version of the minisat SAT solver.
   //!
   //! Currently simply forwards to MS.
   //!
-  MSP,
+  //! Note: 4 was `RISS`, removed along with the Riss backend. The value is
+  //! written out here so that this flag and the ones below keep the values
+  //! they had while Riss existed.
+  //!
+  MSP = 5,
 
   //! Use the SAT solver CaDiCaL.
   //!
   //! Note: this is last so that the values of the flags above are unchanged
   //! from the releases before CaDiCaL was added.
   //!
-  CADICAL,
+  CADICAL = 6,
 
   //! The real-query ordinal at which a session that never asked for the
   //! incremental driver starts using it anyway.
@@ -2247,18 +2247,6 @@ DLL_PUBLIC bool vc_useCryptominisat(VC vc);
 //! \brief Checks if underlying SAT solver is cryptominisat
 //!
 DLL_PUBLIC bool vc_isUsingCryptominisat(VC vc);
-
-//! \brief Checks if STP was compiled with support for riss
-//!
-DLL_PUBLIC bool vc_supportsRiss(VC vc);
-
-//! \brief Sets underlying SAT solver to riss
-//!
-DLL_PUBLIC bool vc_useRiss(VC vc);
-
-//! \brief Checks if underlying SAT solver is riss
-//!
-DLL_PUBLIC bool vc_isUsingRiss(VC vc);
 
 //! \brief Checks if STP was compiled with support for cadical
 //!
