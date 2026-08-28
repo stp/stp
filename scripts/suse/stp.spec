@@ -90,9 +90,6 @@ Python bindings for stp library.
 %install
 %cmake_install
 
-%__install -d %{buildroot}/%{_docdir}/%{name}/example
-%__install -m 644 -t %{buildroot}/%{_docdir}/%{name}/example examples/simple/*
-
 %post -n libstp2_1 -p /sbin/ldconfig
 %postun -n libstp2_1 -p /sbin/ldconfig
 
@@ -100,7 +97,6 @@ Python bindings for stp library.
 %defattr(-,root,root)
 %doc AUTHORS README.markdown LICENSE
 %{_bindir}/stp*
-%exclude %{_docdir}/%{name}/example/
 
 %files -n libstp2_1
 %{_libdir}/libstp.so.*
@@ -112,7 +108,6 @@ Python bindings for stp library.
 %dir %{_libdir}/cmake/
 %{_libdir}/libstp.so
 %{_libdir}/cmake/STP/
-%{_docdir}/%{name}/example/
 
 %files python
 %defattr(-,root,root)

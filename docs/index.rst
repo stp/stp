@@ -417,14 +417,33 @@ An example C header usage can be as simple as:
       return 0;
     }
 
-If you use CMake as the build system for your project it is easy to use
-STP as an external project. An example can be found in the sources under |examples|_.
+If your project uses CMake, an installed STP is found with
+``find_package()`` in config mode. The imported ``stp`` target carries the
+include directories, so nothing else has to be set:
+
+.. code-block:: cmake
+
+    cmake_minimum_required(VERSION 3.18)
+    project(my_project C)
+
+    find_package(STP REQUIRED)
+
+    add_executable(my-tool main.c)
+    target_link_libraries(my-tool stp)
+
+Point ``CMAKE_PREFIX_PATH`` at the installation prefix, or set ``STP_DIR`` to
+the directory holding ``STPConfig.cmake`` -- under ``lib/cmake/STP/`` in the
+installation. A build tree is not a supported substitute: its exported targets
+name STP's own dependency targets, which only exist inside STP's build.
+
+A worked consumer of both interfaces, built and run against a staged
+installation by the test suite, is in |installtest|_.
 
 .. |queryfiles| replace:: ``tests/query-files``
 .. _queryfiles: https://github.com/stp/stp/tree/master/tests/query-files
 
-.. |examples| replace:: ``examples/simple``
-.. _examples: https://github.com/stp/stp/tree/master/examples/simple
+.. |installtest| replace:: ``tests/api/install``
+.. _installtest: https://github.com/stp/stp/tree/master/tests/api/install
 
 
 .. Hidden, so these pages are reached from the sidebar rather than from a

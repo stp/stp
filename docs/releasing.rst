@@ -243,9 +243,14 @@ After the release
 
 -  Nothing needs pushing to downstream packagers: Debian, Homebrew, and the
    KLEE and Souper build scripts pick releases up themselves.
--  ``find_package(STP <version>)`` is covered by the ``gcc (cadical ...)``
-   CI jobs -- a matrix over the supported CaDiCaL tags -- which install STP
-   and build ``examples/simple`` against the install tree on every push.
+-  ``find_package(STP)`` is covered by the ``uf-install-tree-public-header-consumer``
+   test, which installs STP into a staged prefix and then configures, builds
+   and runs ``tests/api/install/uf-public-header-consumer`` against it. It runs
+   wherever ``ENABLE_TESTING`` is on, including the ``gcc (cadical ...)`` CI
+   jobs -- a matrix over the supported CaDiCaL tags -- on every push.
+   The *version* half is not covered: no consumer asks for one, so
+   ``STPConfigVersion.cmake`` is never consulted. If a release changes it,
+   check it by hand with ``find_package(STP <version> REQUIRED)``.
 -  Bump the version again only when the next release is cut. Master carries
    the last released version between releases, so a build from master
    reports the release it followed rather than something like
