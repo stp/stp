@@ -1659,10 +1659,14 @@ configure_file(STPConfigVersion.cmake.in
   "${PROJECT_BINARY_DIR}/${STP_CONFIG_VERSION_FILENAME}" @ONLY
 )
 
-# Export this package to the CMake user package registry
-# Now the user can just use find_package(STP) on their system
-export(PACKAGE STP)
-
+# No export(PACKAGE STP) here. Under CMP0090, NEW since the 3.18 baseline, it
+# writes nothing unless CMAKE_EXPORT_PACKAGE_REGISTRY is on, so the comment it
+# used to carry -- that find_package(STP) would then just work -- had not been
+# true for some time. Switching it back on would not be an improvement: a
+# registry entry lets find_package(STP) resolve to a build tree the caller
+# never named, which is hard to notice and harder to attribute. Point
+# CMAKE_PREFIX_PATH at an installation, or STP_DIR at the directory holding
+# STPConfig.cmake.
 
 # -----------------------------------------------------------------------------
 # Install the licences
