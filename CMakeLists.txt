@@ -1703,7 +1703,23 @@ install(FILES
 # -----------------------------------------------------------------------------
 # Create STPConfig file
 set(EXPORT_TYPE "installed")
-set(CONF_INCLUDE_DIRS "${CMAKE_INSTALL_FULL_INCLUDEDIR}")
+# Relative to the config file, which knows where it is, rather than to the
+# prefix this build was configured with. STPConfig.cmake.in is configured
+# @ONLY, so ${STP_CMAKE_DIR} passes through and is evaluated by find_package()
+# in the installation the caller actually has. The imported target already
+# resolves its include directory this way through _IMPORT_PREFIX; this is the
+# variable half saying the same thing.
+# From wherever the config is actually installed: STP_INSTALL_CMAKE_DIR is a
+# cache variable, and is CMake/ rather than lib/cmake/STP on Windows.
+set(_stp_cmakedir "${STP_INSTALL_CMAKE_DIR}")
+if(NOT IS_ABSOLUTE "${_stp_cmakedir}")
+    set(_stp_cmakedir "${CMAKE_INSTALL_PREFIX}/${_stp_cmakedir}")
+endif()
+file(RELATIVE_PATH _stp_cmakedir_to_includedir
+     "${_stp_cmakedir}" "${CMAKE_INSTALL_FULL_INCLUDEDIR}")
+set(CONF_INCLUDE_DIRS "\${STP_CMAKE_DIR}/${_stp_cmakedir_to_includedir}")
+unset(_stp_cmakedir)
+unset(_stp_cmakedir_to_includedir)
 configure_file(STPConfig.cmake.in
   "${PROJECT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/${STP_CONFIG_FILENAME}" @ONLY
 )

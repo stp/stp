@@ -336,5 +336,9 @@ install(TARGETS stp
     LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     RUNTIME DESTINATION "${CMAKE_INSTALL_LIBDIR}"
-    PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_FULL_INCLUDEDIR}/stp"
+    # Relative, like the three above it. An absolute destination is fixed when
+    # the cache is written, so `cmake --install --prefix` moved the libraries
+    # and left the headers behind -- and DESTDIR staging wrote them outside the
+    # staging root.
+    PUBLIC_HEADER DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/stp"
 )

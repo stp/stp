@@ -4,11 +4,12 @@ configure_file(
   @ONLY
 )
 
-# One consumer, both exported STPTargets.cmake files. export() and
-# install(EXPORT) write different content -- $<BUILD_INTERFACE:> survives in the
-# first and is dropped from the second -- so passing against one says nothing
-# about the other.
-foreach(_stp_export IN ITEMS install-tree build-tree)
+# One consumer, three ways of producing the package it consumes: DESTDIR
+# staging, cmake --install --prefix, and the build tree. They fail differently
+# -- $<BUILD_INTERFACE:> survives export() and is dropped by install(EXPORT),
+# and an absolute install DESTINATION honours DESTDIR while ignoring --prefix
+# -- so passing under one says little about the others.
+foreach(_stp_export IN ITEMS install-tree install-prefix build-tree)
   add_test(
     NAME uf-${_stp_export}-public-header-consumer
     COMMAND ${CMAKE_COMMAND}
