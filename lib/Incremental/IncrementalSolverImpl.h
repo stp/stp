@@ -2718,6 +2718,33 @@ struct IncrementalSolver::Impl
     }
   }
 
+  // Every leaf emitChainReadLemmas() writes a path lemma over, for one
+  // chain table: the row symbol, the read index anchor, the fall-through
+  // base read symbol and both anchors of every level. They need whole
+  // encodings for the same reason the read rows do -- a
+  // partially-propagated-away symbol cannot carry an axiom -- and
+  // totalizeSymbol() drops the constants among them.
+  void totalizeChainTable(const ArrayTransformer::ChainReadsMap& table)
+  {
+    ScopedProfileTimer registryTimer(profile.enabled, profile.registryNs);
+    for (ArrayTransformer::ChainReadsMap::const_iterator it = table.begin();
+         it != table.end(); ++it)
+      for (ArrayTransformer::ChainIndexMap::const_iterator rit =
+               it->second.begin();
+           rit != it->second.end(); ++rit)
+      {
+        const ArrayTransformer::ChainRow& row = rit->second;
+        totalizeSymbol(row.symbol);
+        totalizeSymbol(row.indexAnchor);
+        totalizeSymbol(row.baseReadSymbol);
+        for (const ArrayTransformer::ChainLevel& lvl : row.levels)
+        {
+          totalizeSymbol(lvl.indexAnchor);
+          totalizeSymbol(lvl.valueAnchor);
+        }
+      }
+  }
+
   void totalizeRegistrySymbols()
   {
     // Only the refinement machinery encodes axioms over registry symbols,
@@ -2725,31 +2752,7 @@ struct IncrementalSolver::Impl
     if (bm->UserFlags.ackermannisation)
       return;
     totalizeReadTable(arrayRegistry.reads);
-
-    // The chain rows' lemma leaves need whole encodings for the same
-    // reason: a partially-propagated-away symbol cannot carry an axiom.
-    for (ArrayTransformer::ChainReadsMap::const_iterator it =
-             arrayRegistry.chains.begin();
-         it != arrayRegistry.chains.end(); ++it)
-      for (ArrayTransformer::ChainIndexMap::const_iterator rit =
-               it->second.begin();
-           rit != it->second.end(); ++rit)
-      {
-        const ArrayTransformer::ChainRow& row = rit->second;
-        totalizeSymbol(row.symbol);
-        if (row.indexAnchor.GetKind() == SYMBOL)
-          totalizeSymbol(row.indexAnchor);
-        if (!row.baseReadSymbol.IsNull() &&
-            row.baseReadSymbol.GetKind() == SYMBOL)
-          totalizeSymbol(row.baseReadSymbol);
-        for (const ArrayTransformer::ChainLevel& lvl : row.levels)
-        {
-          if (lvl.indexAnchor.GetKind() == SYMBOL)
-            totalizeSymbol(lvl.indexAnchor);
-          if (lvl.valueAnchor.GetKind() == SYMBOL)
-            totalizeSymbol(lvl.valueAnchor);
-        }
-      }
+    totalizeChainTable(arrayRegistry.chains);
   }
 
   // The same guarantee for the rows an extensionality round refines over.
@@ -2759,9 +2762,17 @@ struct IncrementalSolver::Impl
   // creation is memoised), so calling it before every refinement entry is
   // cheap, and necessary: the checker's lemma encodings can add rows
   // mid-round.
+  //
+  // The chain rows are covered here too, and not only in the registry pass:
+  // an exact-stack round reaches read refinement without ever running that
+  // pass, and a chain read's symbol is routinely only half-encoded (a read
+  // whose result is used through an extract blasts just the bits the
+  // extract takes). emitChainReadLemmas() then hands getEquals() a ~0u bit
+  // and refinement fails on a leaf it could have valued freely.
   void totalizeBatchRegistrySymbols()
   {
     totalizeReadTable(batchAT->arrayToIndexToRead);
+    totalizeChainTable(batchAT->chainReads);
   }
 
   size_t semanticCacheEntryCount() const

@@ -652,10 +652,10 @@ IncrementalSolver::Impl::exactStackCheckSat(
   IncrementalToSAT* tosat = static_cast<IncrementalToSAT*>(ensureAdapter());
   tosat->setAssumptions(&assumptions);
 
-  // Congruence axioms are encoded straight over the bit variables of the
-  // round registry's read symbols, and the block's cone may have needed
-  // only some of a symbol's bits (the frozen/lemma-only totalisation
-  // above covers the checker's symbols, not the registry rows). This
+  // Congruence and chain path axioms are encoded straight over the bit
+  // variables of the round registry's read and chain rows, and the block's
+  // cone may have needed only some of a symbol's bits (the frozen/lemma-only
+  // totalisation above covers the checker's symbols, not the rows). This
   // matters most for the hybrid below: a round routed here for an array
   // equality that simplified away runs ordinary read refinement with the
   // checker inactive.
