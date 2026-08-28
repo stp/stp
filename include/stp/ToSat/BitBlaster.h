@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/constantBitP/MultiplicationStats.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
+#include "stp/ToSat/BVAbstractionTypes.h"
 #include "stp/Util/DagWalk.h"
 #include <cassert>
 #include <cmath>
@@ -419,6 +420,7 @@ class BitBlaster
   size_t fpNativeKnownPositiveMulPaths = 0;
   size_t fpNativeKnownNegativeMulPaths = 0;
   UserDefinedFlags* uf;
+  const bool allowAbstraction_ = true;
   NodeFactory* ASTNF;
   Simplifier* simp;
   BBNodeManagerAIG* nf;
@@ -426,8 +428,27 @@ class BitBlaster
   ASTNodeSet booth_recoded; // Nodes that have been recoded.
 
 public:
+  // The two result shapes are deliberately different types. An entry in one
+  // of these registries is proof that the returned AIG input was minted by an
+  // abstraction, and carries the producer identity with it; symbolToBBNode is
+  // still the general symbol/proxy compatibility registry and is not such
+  // proof.
+  struct BooleanAbstractionResult
+  {
+    BVAbstractionId producer;
+    BBNodeAIG bit;
+  };
+
+  struct BitVectorAbstractionResult
+  {
+    BVAbstractionId producer;
+    BBNodeVec bits;
+  };
+
   struct RawBVEQAbstraction
   {
+    BVAbstractionId id;
+    std::vector<BVAbstractionId> dependencies;
     ASTNode eqNode;
     BBNodeAIG abstractionCI;
     ASTNode leftSymbol;
@@ -445,6 +466,8 @@ public:
 
   struct RawBVTermAbstraction
   {
+    BVAbstractionId id;
+    std::vector<BVAbstractionId> dependencies;
     ASTNode termNode;
     Kind opKind;
     ASTNode operands[3];
@@ -461,6 +484,75 @@ public:
 
 private:
   std::vector<RawBVTermAbstraction> abstractedTerms_;
+  // The Boolean each abstracted equality and comparison was replaced by, so
+  // that a second occurrence of the same predicate reuses it.
+  //
+  // The term families get this from symbolToBBNode, which the node manager
+  // owns and which outlives a piece; a predicate is one Boolean rather than a
+  // vector and has no place there, so it has its own map. It is kept for the
+  // same reason and the reason is the incremental driver: BBForm clears its
+  // memo on every new root, so two conjuncts sharing a predicate ask for it
+  // independently, and minting a second Boolean for the second ask leaves two
+  // records over two inputs that are free to disagree. A predicate has one
+  // truth value wherever it occurs.
+  //
+  // Not cleared by ClearAllTables, which is deliberate and is what the raw
+  // record vectors beside it do: the abstraction state outlives the memos and
+  // is dropped only when the blaster is.
+  std::unordered_map<ASTNode, BooleanAbstractionResult,
+                     ASTNode::ASTNodeHasher,
+                     ASTNode::ASTNodeEqual>
+      abstractedFormulas_;
+  // Nodes whose blasted vector IS an abstraction's own result inputs.
+  //
+  // Constant-bit propagation must not rewrite one of these. The record was
+  // filed against those inputs and resolves them through the registry, while
+  // updateTerm rewrites the term MEMO -- so a bit it replaced with a constant
+  // would leave every parent that reads the term using a bit the record does
+  // not name, and the refinement pinning an input nothing reads.
+  //
+  // Nothing is lost by declining. Refinement pins the abstraction to the
+  // operands underneath it, which is a stronger statement than any single bit
+  // constant-bit propagation could fix, and the operands keep their own
+  // propagation either way.
+  std::unordered_map<ASTNode, BitVectorAbstractionResult,
+                     ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
+      abstractedResults_;
+
+  // Provenance is attached to AIG inputs because those are what survive all
+  // of the lowering's generated ASTs, memo aliases and proxy boundaries. An
+  // abstraction result input names exactly its producer. A proxy input names
+  // the producers reachable in the AIG bit it aliases. Internal-node results
+  // are memoised after an iterative walk; CI provenance never changes after
+  // that input is exposed to a parent.
+  uint64_t nextAbstractionId_ = 1;
+  std::unordered_map<unsigned, std::vector<BVAbstractionId>>
+      ciAbstractionSources_;
+  std::unordered_map<unsigned, std::vector<BVAbstractionId>>
+      aigAbstractionSourcesMemo_;
+
+  BVAbstractionId newAbstractionId();
+  void tagAbstractionSources(const BBNodeAIG& ci,
+                             const std::vector<BVAbstractionId>& sources);
+  BBNodeVec ensureProxyCIs(const ASTNode& node, const BBNodeVec& bits);
+  bool reuseRegisteredTerm(const ASTNode& term, unsigned width,
+                           BBNodeVec& reused) const;
+  // Operations already counted as abstraction candidates.
+  //
+  // bv_candidates says it counts operations reaching the bit-blaster at or
+  // above the width floor, and exists so that a flag which reached nothing
+  // eligible can be told from a flag that is broken. It was counted at the top
+  // of each abstraction arm, which is a bit-blaster VISIT: the incremental
+  // driver clears its term memo on every new root, so one operation is
+  // re-entered once per check-sat while bv_abstracted -- correctly -- counts
+  // the one record. Ten solves over one multiplication read mult=10->1, which
+  // says the abstraction took a tenth of what it could have.
+  //
+  // Counted once per node, so the ratio means what it is documented to mean
+  // and abstracted can never exceed candidates. In the batch pipeline the
+  // blaster lives for one query with one root, so nothing there moves.
+  std::unordered_set<ASTNode, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>
+      countedCandidates_;
   std::vector<BBNode> sideConstraints_;
 
 public:
@@ -472,6 +564,12 @@ public:
   {
     return sideConstraints_;
   }
+
+  // Direct producer IDs reachable from an AIG result. Walking the committed
+  // root gives assertion ownership; walking the operands before a new result
+  // is tagged gives that producer's parent-to-child dependencies.
+  std::vector<BVAbstractionId> abstractionSourcesOf(const BBNodeAIG& root);
+  std::vector<BVAbstractionId> abstractionSourcesOf(const BBNodeVec& bits);
   BitBlaster& operator=(const BitBlaster& other) = delete;
   BitBlaster(const BitBlaster& other) = delete;
   ~BitBlaster() { ClearAllTables(); }
@@ -520,10 +618,18 @@ public:
   std::unordered_map<ASTNode, BBNodeVec, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>::iterator
   simplify_during_bb(ASTNode& term, BBNodeSet& support);
 
+  // `allowAbstraction` is false for a blast whose circuit is itself the
+  // answer to an abstraction -- an exact escalation, or a lemma spliced onto
+  // an abstraction's own variables. Such a blast must not abstract anything:
+  // the record it minted would be against an AIG thrown away at the end of
+  // the call, so nothing could ever refine it. This used to be done by
+  // clearing the flags on the shared UserDefinedFlags for the duration, which
+  // meant one blast could see another's policy.
   BitBlaster(BBNodeManagerAIG* bnm, Simplifier* _simp, NodeFactory* astNodeF,
              UserDefinedFlags* _uf,
-             simplifier::constantBitP::ConstantBitPropagation* cb_ = NULL)
-      : uf(_uf)
+             simplifier::constantBitP::ConstantBitPropagation* cb_ = NULL,
+             bool allowAbstraction = true)
+      : uf(_uf), allowAbstraction_(allowAbstraction)
   {
     nf = bnm;
     cb = cb_;
@@ -531,6 +637,23 @@ public:
     BBFalse = nf->getFalse();
     simp = _simp;
     ASTNF = astNodeF;
+  }
+
+  // Whether this blast may replace a term or an equality with free inputs.
+  // Whether this operation has not been counted as a candidate before; see
+  // countedCandidates_.
+  bool firstCandidateSighting(const ASTNode& n)
+  {
+    return countedCandidates_.insert(n).second;
+  }
+
+  bool termAbstractionAllowed() const
+  {
+    return allowAbstraction_ && uf->bv_term_abstraction;
+  }
+  bool eqAbstractionAllowed() const
+  {
+    return allowAbstraction_ && uf->bv_eq_abstraction;
   }
 
   void ClearAllTables()

@@ -182,7 +182,8 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
 
   BBNodeManagerAIG mgr;
   mgr.nodeBudget = bm->UserFlags.aig_node_budget;
-  BitBlaster bb(&mgr, &simp, bm->defaultNodeFactory, &bm->UserFlags, cb);
+  BitBlaster bb(&mgr, &simp, bm->defaultNodeFactory, &bm->UserFlags, cb,
+                allowAbstraction_);
 
   BBNodeAIG BBFormula;
 
@@ -269,6 +270,8 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
   for (const auto& raw : bb.abstractedEQs())
   {
     BVEQAbstraction a;
+    a.id = raw.id;
+    a.dependencies = raw.dependencies;
     a.eqNode = raw.eqNode;
     Aig_Obj_t* pObj = (Aig_Obj_t*)Vec_PtrEntry(
         mgr.aigMgr->vCis, raw.abstractionCI.symbol_index);
@@ -276,12 +279,14 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
     a.leftSymbol = raw.leftSymbol;
     a.rightSymbol = raw.rightSymbol;
     a.width = std::max(1u, raw.leftSymbol.GetValueWidth());
-    abstraction_.equalities().push_back(std::move(a));
+    abstraction_.appendEquality(std::move(a));
   }
 
   for (const auto& raw : bb.abstractedTerms())
   {
     BVTermAbstraction a;
+    a.id = raw.id;
+    a.dependencies = raw.dependencies;
     a.termNode = raw.termNode;
     a.opKind = raw.opKind;
     for (unsigned i = 0; i < raw.numOperands; i++)
@@ -297,7 +302,26 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
           mgr.aigMgr->vCis, raw.condCISymbolIndex);
       a.condSATVar = cnfData->pVarNums[condObj->Id];
     }
-    abstraction_.terms().push_back(std::move(a));
+    // The record's own result inputs, resolved the same way the condition
+    // above is. The blaster files them for every term family; the persistent
+    // incremental lowering has always carried them across and this one used
+    // to drop them, leaving the AST-keyed registry as the only answer to
+    // which variables a result is.
+    //
+    // That registry holds one vector per node, so it names only the newest
+    // one registered. Canonical reuse normally means there is only ever one,
+    // and nothing here relies on that any more: an unmapped input reads back
+    // as ~0u exactly as fill_node_to_var records it, so the values are the
+    // ones refinement would have found anyway, and a duplicate that ever did
+    // arise costs work rather than a verdict.
+    a.resultSATVars.reserve(raw.resultCISymbolIndices.size());
+    for (const int index : raw.resultCISymbolIndices)
+    {
+      Aig_Obj_t* resultObj =
+          (Aig_Obj_t*)Vec_PtrEntry(mgr.aigMgr->vCis, index);
+      a.resultSATVars.push_back(cnfData->pVarNums[resultObj->Id]);
+    }
+    abstraction_.appendTerm(std::move(a));
   }
 
   // Free the memory in the AIGs.
@@ -471,8 +495,8 @@ void ToSATAIG::mark_variables_as_frozen(SATSolver& satSolver)
 // that spreading unconstrained scalars out is worth anything, so its default
 // phase puts many of them on the same value at once and each collision is
 // paid for with a lemma and another full solve. Counting the scalars off
-// against an increasing value is the same trick Bitwuzla plays for DISTINCT,
-// applied to what the congruence checker reads.
+// against an increasing value is the ordinary way to seed a distinctness
+// constraint, pointed here at what the congruence checker reads.
 //
 // This is only a hint: it reorders the search and cannot change which answers
 // are reachable, so no soundness argument rests on the choice being good. A

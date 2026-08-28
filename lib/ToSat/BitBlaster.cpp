@@ -64,11 +64,109 @@ static std::vector<int> ciSymbolIndices(const BBNodeVec& bits)
 // For operands that contain internal AIG nodes (e.g. BVAND results),
 // create fresh proxy CIs with biconditional side constraints so that
 // downstream abstraction can proceed.
-static BBNodeVec ensureProxyCIs(
-    BBNodeManagerAIG* nf,
-    const ASTNode& node,
-    const BBNodeVec& bits,
-    std::vector<BBNode>& sideConstraints)
+static void appendAbstractionSources(
+    std::vector<BVAbstractionId>& into,
+    const std::vector<BVAbstractionId>& from)
+{
+  into.insert(into.end(), from.begin(), from.end());
+  std::sort(into.begin(), into.end());
+  into.erase(std::unique(into.begin(), into.end()), into.end());
+}
+
+BVAbstractionId BitBlaster::newAbstractionId()
+{
+  assert(nextAbstractionId_ != 0 &&
+         "the BV abstraction identity space wrapped");
+  return BVAbstractionId(nextAbstractionId_++);
+}
+
+void BitBlaster::tagAbstractionSources(
+    const BBNodeAIG& ci, const std::vector<BVAbstractionId>& sources)
+{
+  assert(!ci.IsNull());
+  Aig_Obj_t* regular = Aig_Regular(ci.n);
+  assert(Aig_ObjIsCi(regular));
+
+  std::vector<BVAbstractionId> normalized = sources;
+  std::sort(normalized.begin(), normalized.end());
+  normalized.erase(std::unique(normalized.begin(), normalized.end()),
+                   normalized.end());
+  for ([[maybe_unused]] const BVAbstractionId id : normalized)
+    assert(id.valid());
+
+  const unsigned aigId = Aig_ObjId(regular);
+  [[maybe_unused]] const auto inserted =
+      ciAbstractionSources_.insert(std::make_pair(aigId, normalized));
+  assert((inserted.second || inserted.first->second == normalized) &&
+         "an AIG input acquired two abstraction provenances");
+}
+
+std::vector<BVAbstractionId>
+BitBlaster::abstractionSourcesOf(const BBNodeAIG& root)
+{
+  if (root.IsNull())
+    return {};
+
+  Aig_Obj_t* rootRegular = Aig_Regular(root.n);
+  if (Aig_ObjIsConst1(rootRegular))
+    return {};
+  if (Aig_ObjIsCi(rootRegular))
+  {
+    const auto it = ciAbstractionSources_.find(Aig_ObjId(rootRegular));
+    return it == ciAbstractionSources_.end()
+               ? std::vector<BVAbstractionId>()
+               : it->second;
+  }
+
+  const unsigned rootId = Aig_ObjId(rootRegular);
+  const auto rootMemo = aigAbstractionSourcesMemo_.find(rootId);
+  if (rootMemo != aigAbstractionSourcesMemo_.end())
+    return rootMemo->second;
+
+  // Deep input terms reach tens of thousands of AIG levels in practice.
+  // Run the recursive two-visit post-order explicitly on the heap, computing
+  // each union only after both fanins. Memo hits also collapse shared cones.
+  typedef std::pair<Aig_Obj_t*, bool> PendingAig;
+  std::vector<PendingAig> pending(1, PendingAig(rootRegular, false));
+  while (!pending.empty())
+  {
+    Aig_Obj_t* node = Aig_Regular(pending.back().first);
+    const bool expanded = pending.back().second;
+    pending.pop_back();
+    if (Aig_ObjIsConst1(node) || Aig_ObjIsCi(node) ||
+        aigAbstractionSourcesMemo_.find(Aig_ObjId(node)) !=
+            aigAbstractionSourcesMemo_.end())
+      continue;
+    assert(Aig_ObjIsAnd(node));
+    if (!expanded)
+    {
+      pending.push_back(PendingAig(node, true));
+      pending.push_back(PendingAig(Aig_ObjFanin0(node), false));
+      pending.push_back(PendingAig(Aig_ObjFanin1(node), false));
+      continue;
+    }
+
+    std::vector<BVAbstractionId> sources =
+        abstractionSourcesOf(BBNodeAIG(Aig_ObjFanin0(node)));
+    appendAbstractionSources(
+        sources, abstractionSourcesOf(BBNodeAIG(Aig_ObjFanin1(node))));
+    aigAbstractionSourcesMemo_[Aig_ObjId(node)] = std::move(sources);
+  }
+
+  return aigAbstractionSourcesMemo_.at(rootId);
+}
+
+std::vector<BVAbstractionId>
+BitBlaster::abstractionSourcesOf(const BBNodeVec& bits)
+{
+  std::vector<BVAbstractionId> sources;
+  for (const BBNodeAIG& bit : bits)
+    appendAbstractionSources(sources, abstractionSourcesOf(bit));
+  return sources;
+}
+
+BBNodeVec BitBlaster::ensureProxyCIs(const ASTNode& node,
+                                     const BBNodeVec& bits)
 {
   auto it = nf->symbolToBBNode.find(node);
   if (it != nf->symbolToBBNode.end())
@@ -84,11 +182,14 @@ static BBNodeVec ensureProxyCIs(
   BBNodeVec proxies(width);
   for (unsigned i = 0; i < width; i++)
   {
+    const std::vector<BVAbstractionId> sources =
+        abstractionSourcesOf(bits[i]);
     proxies[i] = BBNodeAIG(Aig_ObjCreateCi(nf->aigMgr));
     proxies[i].symbol_index = nf->aigMgr->vCis->nSize - 1;
+    tagAbstractionSources(proxies[i], sources);
     Aig_Obj_t* bicond = Aig_Not(orderedAigExor(
         nf->aigMgr, proxies[i].n, bits[i].n));
-    sideConstraints.push_back(BBNodeAIG(bicond));
+    sideConstraints_.push_back(BBNodeAIG(bicond));
   }
   nf->symbolToBBNode[node] = proxies;
   return proxies;
@@ -115,9 +216,18 @@ static BBNodeVec ensureProxyCIs(
 // Incremental records also retain their own result variables, so a duplicate
 // that ever did arise would cost work rather than a verdict; canonicalising
 // here is the invariant, not the only line of defence.
-static bool reuseRegisteredTerm(BBNodeManagerAIG* nf, const ASTNode& term,
-                                unsigned width, BBNodeVec& reused)
+bool BitBlaster::reuseRegisteredTerm(const ASTNode& term, unsigned width,
+                                     BBNodeVec& reused) const
 {
+  const auto abstraction = abstractedResults_.find(term);
+  if (abstraction != abstractedResults_.end())
+  {
+    if (abstraction->second.bits.size() != width)
+      return false;
+    reused = abstraction->second.bits;
+    return true;
+  }
+
   const BBNodeManagerAIG::SymbolToBBNode::const_iterator it =
       nf->symbolToBBNode.find(term);
   if (it == nf->symbolToBBNode.end() || it->second.size() != width)
@@ -614,6 +724,29 @@ void BitBlaster::updateTerm(const ASTNode& n,
     return;
   }
 
+  // Never over an abstraction's own result inputs.
+  //
+  // The record was filed against those inputs and resolves them through
+  // symbolToBBNode, while this rewrites the term MEMO -- so a bit replaced
+  // here with a constant would leave every parent that reads the term using a
+  // bit the record does not name, and the refinement pinning an input nothing
+  // reads. The two would still agree about the value, because constant-bit
+  // propagation is sound, but the record would have stopped describing what
+  // the CNF computes, which is the property everything else in the refiner is
+  // written to preserve.
+  //
+  // This is a guard on an ordering, not a repair of an observed fault: on
+  // every query I could build, this function IS reached for abstracted
+  // results and constant-bit propagation DOES hold a FixedBits record for
+  // them, but that record has no fixed bit in it, so no rewrite ever
+  // happened. What the guard removes is the dependence on that staying true.
+  //
+  // Nothing is lost by declining. Refinement pins the abstraction to the
+  // operands underneath it, which is a stronger statement than any single bit
+  // this could fix, and the operands keep their own propagation regardless.
+  if (abstractedResults_.count(n) != 0)
+    return;
+
   bool bbFixed = false;
   for (int i = 0; i < (int)bb.size(); i++)
   {
@@ -1069,40 +1202,57 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
       const BBNodeVec& thn = BBTerm(term[1], support);
       const BBNodeVec& els = BBTerm(term[2], support);
 
-      if (num_bits >= uf->bv_abstraction_width)
+      if (num_bits >= uf->bv_abstraction_width &&
+          firstCandidateSighting(term))
         uf->coverage.bv_candidates[UserDefinedFlags::ABSTRACT_ITE]++;
 
-      if (uf->bv_term_abstraction && uf->bv_term_abstraction_ite &&
+      if (termAbstractionAllowed() && uf->bv_term_abstraction_ite &&
           num_bits >= uf->bv_abstraction_width)
       {
         {
           BBNodeVec reused;
-          if (reuseRegisteredTerm(nf, term, num_bits, reused))
+          if (reuseRegisteredTerm(term, num_bits, reused))
           {
             result = reused;
             break;
           }
         }
         uf->coverage.bv_abstracted[UserDefinedFlags::ABSTRACT_ITE]++;
-        ensureProxyCIs(nf, term[1], thn, sideConstraints_);
-        ensureProxyCIs(nf, term[2], els, sideConstraints_);
+        const BBNodeVec thnInputs = ensureProxyCIs(term[1], thn);
+        const BBNodeVec elsInputs = ensureProxyCIs(term[2], els);
+
+        std::vector<BVAbstractionId> dependencies =
+            abstractionSourcesOf(cond);
+        appendAbstractionSources(dependencies,
+                                 abstractionSourcesOf(thnInputs));
+        appendAbstractionSources(dependencies,
+                                 abstractionSourcesOf(elsInputs));
+        const BVAbstractionId id = newAbstractionId();
 
         BBNodeVec abstracted(num_bits);
         for (unsigned i = 0; i < num_bits; i++)
         {
           abstracted[i] = BBNodeAIG(Aig_ObjCreateCi(nf->aigMgr));
           abstracted[i].symbol_index = nf->aigMgr->vCis->nSize - 1;
+          tagAbstractionSources(abstracted[i], {id});
         }
         BBNodeAIG condCI(Aig_ObjCreateCi(nf->aigMgr));
         condCI.symbol_index = nf->aigMgr->vCis->nSize - 1;
+        // This is an operand proxy, not the ITE abstraction's answer. Keep
+        // the condition's producers on it so a future AIG alias does not
+        // turn the dependency cut into an unlabelled CI.
+        tagAbstractionSources(condCI, abstractionSourcesOf(cond));
 
         Aig_Obj_t* bicond = Aig_Not(orderedAigExor(
             nf->aigMgr, condCI.n, cond.n));
         sideConstraints_.push_back(BBNodeAIG(bicond));
 
         nf->symbolToBBNode[term] = abstracted;
+        abstractedResults_[term] = {id, abstracted};
 
         RawBVTermAbstraction raw;
+        raw.id = id;
+        raw.dependencies = std::move(dependencies);
         raw.termNode = term;
         raw.opKind = ITE;
         raw.operands[0] = term[0];
@@ -1208,8 +1358,7 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
       // keeps the n-ary adder it had. Addition is associative and commutative
       // modulo 2^n, so the tree computes the same value; the sort keeps the
       // shape it takes deterministic.
-      if (uf->bv_term_abstraction && uf->bv_term_abstraction_plus &&
-          uf->bvplus_variant &&
+      if (termAbstractionAllowed() && uf->bv_term_abstraction_plus &&
           term.Degree() > 2 && num_bits >= uf->bv_abstraction_width)
       {
         std::deque<ASTNode> names(term.begin(), term.end());
@@ -1226,7 +1375,8 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
         break;
       }
 
-      if (term.Degree() == 2 && num_bits >= uf->bv_abstraction_width)
+      if (term.Degree() == 2 && num_bits >= uf->bv_abstraction_width &&
+          firstCandidateSighting(term))
         uf->coverage.bv_candidates[UserDefinedFlags::ABSTRACT_PLUS]++;
 
       // A wide n-ary addition that was not decomposed above -- because the
@@ -1235,21 +1385,34 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
       // number comparable between a run with the flag and a run without,
       // which is the whole use of it: a zero has to mean "no wide addition
       // here", not "the flag that lowers them was off".
+      //
+      // Exactly the negation of the gate above, so the two cannot disagree
+      // about which additions the decomposition took. Restated in different
+      // terms they did: this one omitted bv_term_abstraction_plus, so turning
+      // that off alone gave the unreadable zero the count exists to prevent.
       if (term.Degree() > 2 && num_bits >= uf->bv_abstraction_width &&
-          !(uf->bv_term_abstraction && uf->bvplus_variant))
+          !(termAbstractionAllowed() && uf->bv_term_abstraction_plus) &&
+          firstCandidateSighting(term))
       {
         uf->coverage.bv_candidates[UserDefinedFlags::ABSTRACT_PLUS] +=
             term.Degree() - 1;
       }
 
-      if (uf->bv_term_abstraction && uf->bv_term_abstraction_plus &&
-          uf->bvplus_variant &&
+      // Not conditioned on bvplus_variant. That flag chooses between the two
+      // adder lowerings below -- pairwise BBPlus2 accumulation and the
+      // addition network -- and the abstraction reaches neither: it returns
+      // before them, and what it escalates to is spliced in at CNF level
+      // through BVExactEncoder. It sat in this condition by adjacency to the
+      // `if (uf->bvplus_variant)` block underneath, and the effect was that
+      // --bb.add-v2=0 silently abstracted no additions at all, which the fuzz
+      // harness draws often enough to have stopped covering this family.
+      if (termAbstractionAllowed() && uf->bv_term_abstraction_plus &&
           term.Degree() == 2 &&
           num_bits >= uf->bv_abstraction_width)
       {
         {
           BBNodeVec reused;
-          if (reuseRegisteredTerm(nf, term, num_bits, reused))
+          if (reuseRegisteredTerm(term, num_bits, reused))
           {
             result = reused;
             break;
@@ -1280,18 +1443,32 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
 
         if (!(negated[0] && negated[1]))
         {
+          // Constants included, as every other abstracted family does it: a
+          // constant operand gets a vector of inputs pinned to it. Left out,
+          // it is not in the registry refinement reads, and every round that
+          // touches the record has to mint a fresh pinned vector for it.
+          const BBNodeVec operandInputs[2] = {
+              ensureProxyCIs(realOp[0], *opVecs[0]),
+              ensureProxyCIs(realOp[1], *opVecs[1])};
+          std::vector<BVAbstractionId> dependencies =
+              abstractionSourcesOf(operandInputs[0]);
+          appendAbstractionSources(dependencies,
+                                   abstractionSourcesOf(operandInputs[1]));
+          const BVAbstractionId id = newAbstractionId();
+
           BBNodeVec abstracted(num_bits);
           for (unsigned i = 0; i < num_bits; i++)
           {
             abstracted[i] = BBNodeAIG(Aig_ObjCreateCi(nf->aigMgr));
             abstracted[i].symbol_index = nf->aigMgr->vCis->nSize - 1;
+            tagAbstractionSources(abstracted[i], {id});
           }
           uf->coverage.bv_abstracted[UserDefinedFlags::ABSTRACT_PLUS]++;
           nf->symbolToBBNode[term] = abstracted;
-          for (int i = 0; i < 2; i++)
-            if (realOp[i].GetKind() != BVCONST)
-              ensureProxyCIs(nf, realOp[i], *opVecs[i], sideConstraints_);
+          abstractedResults_[term] = {id, abstracted};
           RawBVTermAbstraction raw;
+          raw.id = id;
+          raw.dependencies = std::move(dependencies);
           raw.termNode = term;
           raw.opKind = BVPLUS;
           raw.operands[0] = realOp[0];
@@ -1388,33 +1565,42 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
       updateTerm(term[0], mpcd1, support);
       assert(mpcd1.size() == mpcd2.size());
 
-      if (num_bits >= uf->bv_abstraction_width)
+      if (num_bits >= uf->bv_abstraction_width &&
+          firstCandidateSighting(term))
         uf->coverage.bv_candidates[UserDefinedFlags::ABSTRACT_MULT]++;
 
-      if (uf->bv_term_abstraction && uf->bv_term_abstraction_mult &&
+      if (termAbstractionAllowed() && uf->bv_term_abstraction_mult &&
           num_bits >= uf->bv_abstraction_width)
       {
         {
           BBNodeVec reused;
-          if (reuseRegisteredTerm(nf, term, num_bits, reused))
+          if (reuseRegisteredTerm(term, num_bits, reused))
           {
             result = reused;
             break;
           }
         }
         uf->coverage.bv_abstracted[UserDefinedFlags::ABSTRACT_MULT]++;
-        BBNodeVec op0 = ensureProxyCIs(nf, term[0], mpcd1, sideConstraints_);
-        BBNodeVec op1 = ensureProxyCIs(nf, term[1], mpcd2, sideConstraints_);
+        const BBNodeVec op0 = ensureProxyCIs(term[0], mpcd1);
+        const BBNodeVec op1 = ensureProxyCIs(term[1], mpcd2);
+        std::vector<BVAbstractionId> dependencies =
+            abstractionSourcesOf(op0);
+        appendAbstractionSources(dependencies, abstractionSourcesOf(op1));
+        const BVAbstractionId id = newAbstractionId();
 
         BBNodeVec abstracted(num_bits);
         for (unsigned i = 0; i < num_bits; i++)
         {
           abstracted[i] = BBNodeAIG(Aig_ObjCreateCi(nf->aigMgr));
           abstracted[i].symbol_index = nf->aigMgr->vCis->nSize - 1;
+          tagAbstractionSources(abstracted[i], {id});
         }
         nf->symbolToBBNode[term] = abstracted;
+        abstractedResults_[term] = {id, abstracted};
 
         RawBVTermAbstraction raw;
+        raw.id = id;
+        raw.dependencies = std::move(dependencies);
         raw.termNode = term;
         raw.opKind = BVMULT;
         raw.operands[0] = term[0];
@@ -1448,33 +1634,43 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
       assert(dvdd.size() == num_bits);
       assert(dvsr.size() == num_bits);
 
-      if (num_bits >= uf->bv_abstraction_width)
+      if (num_bits >= uf->bv_abstraction_width &&
+          firstCandidateSighting(term))
         uf->coverage.bv_candidates[UserDefinedFlags::ABSTRACT_DIVMOD]++;
 
-      if (uf->bv_term_abstraction && uf->bv_term_abstraction_mult &&
+      if (termAbstractionAllowed() && uf->bv_term_abstraction_mult &&
           num_bits >= uf->bv_abstraction_width)
       {
         {
           BBNodeVec reused;
-          if (reuseRegisteredTerm(nf, term, num_bits, reused))
+          if (reuseRegisteredTerm(term, num_bits, reused))
           {
             result = reused;
             break;
           }
         }
         uf->coverage.bv_abstracted[UserDefinedFlags::ABSTRACT_DIVMOD]++;
-        ensureProxyCIs(nf, term[0], dvdd, sideConstraints_);
-        ensureProxyCIs(nf, term[1], dvsr, sideConstraints_);
+        const BBNodeVec dividendInputs = ensureProxyCIs(term[0], dvdd);
+        const BBNodeVec divisorInputs = ensureProxyCIs(term[1], dvsr);
+        std::vector<BVAbstractionId> dependencies =
+            abstractionSourcesOf(dividendInputs);
+        appendAbstractionSources(dependencies,
+                                 abstractionSourcesOf(divisorInputs));
+        const BVAbstractionId id = newAbstractionId();
 
         BBNodeVec abstracted(num_bits);
         for (unsigned i = 0; i < num_bits; i++)
         {
           abstracted[i] = BBNodeAIG(Aig_ObjCreateCi(nf->aigMgr));
           abstracted[i].symbol_index = nf->aigMgr->vCis->nSize - 1;
+          tagAbstractionSources(abstracted[i], {id});
         }
         nf->symbolToBBNode[term] = abstracted;
+        abstractedResults_[term] = {id, abstracted};
 
         RawBVTermAbstraction raw;
+        raw.id = id;
+        raw.dependencies = std::move(dependencies);
         raw.termNode = term;
         raw.opKind = k;
         raw.operands[0] = term[0];
@@ -1956,18 +2152,42 @@ const BBNode BitBlaster::BBForm(const ASTNode& form, BBNodeSet& support,
       const BBNodeVec right = BBTerm(form[1], support);
       assert(left.size() == right.size());
 
-      if (left.size() >= uf->bv_abstraction_width)
+      if (left.size() >= uf->bv_abstraction_width &&
+          firstCandidateSighting(form))
         uf->coverage.bv_candidates[UserDefinedFlags::ABSTRACT_EQ]++;
 
-      if (uf->bv_eq_abstraction &&
+      if (eqAbstractionAllowed() &&
           left.size() >= uf->bv_abstraction_width)
       {
+        // One Boolean per predicate, not per occurrence: see
+        // abstractedFormulas_ for why the term families' registry does not
+        // serve here and what two independent Booleans for one equality cost.
+        const auto reused = abstractedFormulas_.find(form);
+        if (reused != abstractedFormulas_.end())
+        {
+          result = reused->second.bit;
+          break;
+        }
         uf->coverage.bv_abstracted[UserDefinedFlags::ABSTRACT_EQ]++;
-        ensureProxyCIs(nf, form[0], left, sideConstraints_);
-        ensureProxyCIs(nf, form[1], right, sideConstraints_);
+        const BBNodeVec leftInputs = ensureProxyCIs(form[0], left);
+        const BBNodeVec rightInputs = ensureProxyCIs(form[1], right);
+        std::vector<BVAbstractionId> dependencies =
+            abstractionSourcesOf(leftInputs);
+        appendAbstractionSources(dependencies,
+                                 abstractionSourcesOf(rightInputs));
+        const BVAbstractionId id = newAbstractionId();
         BBNodeAIG abstractCI(Aig_ObjCreateCi(nf->aigMgr));
         abstractCI.symbol_index = nf->aigMgr->vCis->nSize - 1;
-        abstractedEQs_.push_back({form, abstractCI, form[0], form[1]});
+        tagAbstractionSources(abstractCI, {id});
+        RawBVEQAbstraction raw;
+        raw.id = id;
+        raw.dependencies = std::move(dependencies);
+        raw.eqNode = form;
+        raw.abstractionCI = abstractCI;
+        raw.leftSymbol = form[0];
+        raw.rightSymbol = form[1];
+        abstractedEQs_.push_back(std::move(raw));
+        abstractedFormulas_[form] = {id, abstractCI};
         result = abstractCI;
       }
       else
@@ -1986,22 +2206,39 @@ const BBNode BitBlaster::BBForm(const ASTNode& form, BBNodeSet& support,
     case BVSGT:
     case BVSLT:
     {
-      if (form[0].GetValueWidth() >= uf->bv_abstraction_width)
+      if (form[0].GetValueWidth() >= uf->bv_abstraction_width &&
+          firstCandidateSighting(form))
         uf->coverage.bv_candidates[UserDefinedFlags::ABSTRACT_COMPARE]++;
 
-      if (uf->bv_term_abstraction && uf->bv_term_abstraction_compare)
+      if (termAbstractionAllowed() && uf->bv_term_abstraction_compare)
       {
         const BBNodeVec& left = BBTerm(form[0], support);
         const BBNodeVec& right = BBTerm(form[1], support);
         if (left.size() >= uf->bv_abstraction_width)
         {
+          // One Boolean per predicate, as the equality above; the comparison
+          // families were the other half of the same gap.
+          const auto reused = abstractedFormulas_.find(form);
+          if (reused != abstractedFormulas_.end())
+          {
+            result = reused->second.bit;
+            break;
+          }
           uf->coverage.bv_abstracted[UserDefinedFlags::ABSTRACT_COMPARE]++;
-          ensureProxyCIs(nf, form[0], left, sideConstraints_);
-          ensureProxyCIs(nf, form[1], right, sideConstraints_);
+          const BBNodeVec leftInputs = ensureProxyCIs(form[0], left);
+          const BBNodeVec rightInputs = ensureProxyCIs(form[1], right);
+          std::vector<BVAbstractionId> dependencies =
+              abstractionSourcesOf(leftInputs);
+          appendAbstractionSources(dependencies,
+                                   abstractionSourcesOf(rightInputs));
+          const BVAbstractionId id = newAbstractionId();
           BBNodeAIG abstractCI(Aig_ObjCreateCi(nf->aigMgr));
           abstractCI.symbol_index = nf->aigMgr->vCis->nSize - 1;
+          tagAbstractionSources(abstractCI, {id});
 
           RawBVTermAbstraction raw;
+          raw.id = id;
+          raw.dependencies = std::move(dependencies);
           raw.termNode = form;
           raw.opKind = k;
           raw.operands[0] = form[0];
@@ -2010,6 +2247,7 @@ const BBNode BitBlaster::BBForm(const ASTNode& form, BBNodeSet& support,
           raw.width = left.size();
           raw.condCISymbolIndex = abstractCI.symbol_index;
           abstractedTerms_.push_back(raw);
+          abstractedFormulas_[form] = {id, abstractCI};
           result = abstractCI;
           break;
         }

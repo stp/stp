@@ -3698,6 +3698,8 @@ struct IncrementalSolver::Impl
       const BitBlaster::RawBVEQAbstraction& raw =
           rawEQs[harvestedEQAbstractions];
       BVEQAbstraction a;
+      a.id = raw.id;
+      a.dependencies = raw.dependencies;
       a.eqNode = raw.eqNode;
       a.abstractionSATVar = abstractionVarOf(raw.abstractionCI.symbol_index);
       a.leftSymbol = raw.leftSymbol;
@@ -3705,7 +3707,7 @@ struct IncrementalSolver::Impl
       a.width = std::max(1u, raw.leftSymbol.GetValueWidth());
       encodeAbstractionNode(a.leftSymbol);
       encodeAbstractionNode(a.rightSymbol);
-      bvAbstraction.equalities().push_back(std::move(a));
+      bvAbstraction.appendEquality(std::move(a));
     }
 
     const std::vector<BitBlaster::RawBVTermAbstraction>& rawTerms =
@@ -3716,6 +3718,8 @@ struct IncrementalSolver::Impl
       const BitBlaster::RawBVTermAbstraction& raw =
           rawTerms[harvestedTermAbstractions];
       BVTermAbstraction a;
+      a.id = raw.id;
+      a.dependencies = raw.dependencies;
       a.termNode = raw.termNode;
       a.opKind = raw.opKind;
       for (unsigned i = 0; i < raw.numOperands; i++)
@@ -3735,7 +3739,7 @@ struct IncrementalSolver::Impl
       if (raw.condCISymbolIndex >= 0)
         a.condSATVar = abstractionVarOf(raw.condCISymbolIndex);
       encodeAbstractionNode(a.termNode);
-      bvAbstraction.terms().push_back(std::move(a));
+      bvAbstraction.appendTerm(std::move(a));
     }
   }
 

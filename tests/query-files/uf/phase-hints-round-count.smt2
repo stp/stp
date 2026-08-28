@@ -6,7 +6,8 @@
 ; spreading unconstrained scalars out is worth anything, so its default phase
 ; puts many on the same value at once and each collision costs a lemma and
 ; another full solve. Counting them off against an increasing value is the
-; trick Bitwuzla plays for DISTINCT, pointed at what the checker reads.
+; ordinary way to seed a distinctness constraint, pointed at what the checker
+; reads.
 ;
 ; Here every argument is unconstrained and the results are forced apart, so
 ; the hint is exactly right: with it the first candidate already has distinct
