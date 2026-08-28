@@ -469,59 +469,7 @@ namespace stp
             declaration, *actuals, &diagnostic);
     delete actuals;
     if (application.GetKind() == UNDEFINED)
-    {
-      stp::GlobalParserInterface->rejectCurrentCommand(diagnostic);
-
-      // Bison still needs a value of the production's statically selected
-      // result sort in order to reduce the rest of this command.  Reuse a
-      // canonical constant and discard the command at its outer boundary;
-      // unlike the v1 sketch this creates neither a fresh malformed
-      // placeholder nor a UF application/registration.
-      //
-      // The enclosing production reduces before the command is discarded and
-      // sort-checks its operands, so the placeholder has to be a term of the
-      // declared sort and not merely of that sort's carrier width -- a bare
-      // five-bit zero where a RoundingMode is expected turns this nonfatal
-      // rejection into a fatal "operands of the same sort" error.
-      const stp::SourceSort resultSort =
-          declaration == NULL ? stp::SourceSort::boolean()
-                              : declaration->signature().codomain();
-      switch (resultSort.kind())
-      {
-        case stp::SourceSort::Kind::Bool:
-          application = stp::GlobalParserInterface->CreateNode(FALSE);
-          break;
-        case stp::SourceSort::Kind::RoundingMode:
-          application = stp::GlobalParserInterface->CreateRMConst(
-              stp::symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
-          break;
-        case stp::SourceSort::Kind::FloatingPoint:
-          application = stp::GlobalParserInterface->CreateFPSpecialConst(
-              stp::FPSpecial::PlusZero, resultSort.exponentWidth(),
-              resultSort.significandWidth());
-          break;
-        case stp::SourceSort::Kind::Uninterpreted:
-        {
-          // A sort declared by declare-sort has no constants, so the
-          // placeholder has to be a symbol of it. A zero of the carrier width
-          // would be a bit-vector term, and the enclosing production compares
-          // full sorts -- which is exactly the failure this switch exists to
-          // avoid, one kind further on. Minted through the manager because the
-          // name is reserved, and stable so repeated rejections in one query
-          // intern to one node.
-          std::ostringstream placeholder;
-          placeholder << "@declared_sort_placeholder_"
-                      << resultSort.uninterpretedId();
-          application = stp::GlobalParserBM->CreateSourceSymbol(
-              placeholder.str().c_str(), resultSort);
-          break;
-        }
-        default:
-          application = stp::GlobalParserInterface->CreateZeroConst(
-              resultSort.packedWidth());
-          break;
-      }
-    }
+      stp::GlobalParserInterface->refuseCurrentCommand(diagnostic);
     return stp::GlobalParserInterface->newNode(application);
   }
 
@@ -541,7 +489,9 @@ namespace stp
     }                                                                       \
   } while (0)
 
-  static bool acceptTopLevelDeclarationName(const std::string& name)
+  // Returns only when the name is free to declare; a collision ends the
+  // session, as every other rejection in this frontend now does.
+  static void requireFreeTopLevelDeclarationName(const std::string& name)
   {
     // Preserve the pinned frontend byte-for-byte when uninterpreted-function
     // support is disabled. The additional shared-namespace check exists only
@@ -549,13 +499,12 @@ namespace stp
     // symbol/function tables.
     if (!stp::GlobalParserInterface->getUserFlags()
              .enable_uninterpreted_functions)
-      return true;
+      return;
     std::string diagnostic;
     if (stp::GlobalParserInterface->validateTopLevelDeclarationName(
             name, &diagnostic))
-      return true;
-    stp::GlobalParserInterface->rejectCurrentCommand(diagnostic);
-    return false;
+      return;
+    stp::GlobalParserInterface->refuseCurrentCommand(diagnostic);
   }
 
   ASTNode* createNode(Kind k, ASTNode* c0, ASTNode *c1)
@@ -1450,36 +1399,31 @@ namespace stp
   // of the declare-fun and declare-const productions. Frees both arguments.
   void declareArraySymbol(std::string* name, stp::array_sort* sort)
   {
-    if (acceptTopLevelDeclarationName(*name))
-    {
-      ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
-          name->c_str(), sort->sourceSort());
-      stp::GlobalParserInterface->addArraySymbol(s, *sort);
+    requireFreeTopLevelDeclarationName(*name);
+    ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
+        name->c_str(), sort->sourceSort());
+    stp::GlobalParserInterface->addArraySymbol(s, *sort);
 
-      if (s.GetType() != ARRAY_TYPE)
-        fatal_yyerror("failed to declare an array.");
-    }
+    if (s.GetType() != ARRAY_TYPE)
+      fatal_yyerror("failed to declare an array.");
 
     delete name;
     delete sort;
   }
 
-  // Shared scalar declaration action. A rejected cross-namespace name is
-  // diagnosed before interning/registration and the rest of the command is
-  // reduced only for recovery.
+  // Shared scalar declaration action. A cross-namespace name is diagnosed
+  // before anything is interned or registered, and does not come back.
   void declareScalarSymbol(std::string* name,
                            const stp::SourceSort& sourceSort,
                            bool roundingMode = false)
   {
-    if (acceptTopLevelDeclarationName(*name))
-    {
-      ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
-          name->c_str(), sourceSort);
-      if (roundingMode)
-        stp::GlobalParserInterface->addRoundingModeSymbol(s);
-      else
-        stp::GlobalParserInterface->addSymbol(s);
-    }
+    requireFreeTopLevelDeclarationName(*name);
+    ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
+        name->c_str(), sourceSort);
+    if (roundingMode)
+      stp::GlobalParserInterface->addRoundingModeSymbol(s);
+    else
+      stp::GlobalParserInterface->addSymbol(s);
     delete name;
   }
 
@@ -2196,7 +2140,7 @@ function_param
 function_def_name:
 STRING_TOK
 {
-  (void)acceptTopLevelDeclarationName(*$1);
+  requireFreeTopLevelDeclarationName(*$1);
   $$ = $1;
 }
 ;
@@ -2632,38 +2576,28 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
 }
 | uf_decl_name uf_domain_sorts RPAREN_TOK uf_codomain_sort
 {
-  bool valid = true;
   std::vector<stp::SourceSort> domain;
   domain.reserve($2->size());
   for (size_t i = 0; i < $2->size(); ++i)
   {
     const stp::parsed_uf_sort& parsed = (*$2)[i];
+    // The first unsupported sort is the one reported: refusing does not come
+    // back, so there is no second one to suppress.
     if (!parsed.supported)
-    {
-      if (valid)
-        stp::GlobalParserInterface->rejectCurrentCommand(
-            unsupportedUFDomainSort(*$1, parsed, i));
-      valid = false;
-      continue;
-    }
+      stp::GlobalParserInterface->refuseCurrentCommand(
+          unsupportedUFDomainSort(*$1, parsed, i));
     domain.push_back(parsed.sort);
   }
   if (!$4->supported)
-  {
-    if (valid)
-      stp::GlobalParserInterface->rejectCurrentCommand(
-          unsupportedUFResultSort(*$1, *$4));
-    valid = false;
-  }
-  if (valid)
-  {
-    std::string diagnostic;
-    const stp::UFDecl* declaration =
-        stp::GlobalParserInterface->declareScopedUninterpretedFunction(
-            *$1, domain, $4->sort, &diagnostic);
-    if (declaration == NULL)
-      stp::GlobalParserInterface->rejectCurrentCommand(diagnostic);
-  }
+    stp::GlobalParserInterface->refuseCurrentCommand(
+        unsupportedUFResultSort(*$1, *$4));
+
+  std::string diagnostic;
+  const stp::UFDecl* declaration =
+      stp::GlobalParserInterface->declareScopedUninterpretedFunction(
+          *$1, domain, $4->sort, &diagnostic);
+  if (declaration == NULL)
+    stp::GlobalParserInterface->refuseCurrentCommand(diagnostic);
   delete $1;
   delete $2;
   delete $4;

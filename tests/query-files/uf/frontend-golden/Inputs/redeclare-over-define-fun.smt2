@@ -1,0 +1,5 @@
+(set-logic QF_UFBV)
+(define-fun d ((x (_ BitVec 8))) (_ BitVec 8) (bvnot x))
+(declare-fun d ((_ BitVec 8)) (_ BitVec 8))
+(check-sat)
+(echo "REACHED-END")

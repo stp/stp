@@ -279,21 +279,20 @@ TEST(UninterpretedFunctionsFrontend, FailedApplicationsRegisterNothing)
 }
 
 TEST(UninterpretedFunctionsFrontend,
-     MalformedParserApplicationRejectsWholeCommandAndContinues)
+     MalformedParserApplicationRefusesTheWholeCommand)
 {
-  STPMgr manager;
-  Cpp_interface interface(manager, manager.defaultNodeFactory);
-  STPMgr* const savedManager = GlobalParserBM;
-  Cpp_interface* const savedInterface = GlobalParserInterface;
-  GlobalParserBM = &manager;
-  GlobalParserInterface = &interface;
-  interface.startup();
-  manager.UserFlags.enable_uninterpreted_functions = true;
-
   // The first assertion has a valid application followed by one with the
-  // wrong arity. Its valid prefix and parser-side carrier must both roll back:
-  // neither may become an assertion or a registered durable application.
-  // Parsing must nevertheless continue to the independent assertion.
+  // wrong arity, and the command is refused as a unit -- it does not come
+  // back. Recovering from it used to cost the assertion the application sat
+  // in: the command was discarded whole, the conjunct went with it, and the
+  // next check-sat answered the query that was left.
+  //
+  // What the recovering version could also check here -- that neither the
+  // valid prefix nor a parser-side carrier was registered -- is no longer
+  // observable in-process, and is covered a layer down by
+  // FailedApplicationsRegisterNothing and
+  // UnsupportedDirectSignaturesMutateNoRegistry, which ask the registry
+  // directly.
   const char* const input = R"(
     (set-logic QF_UFBV)
     (declare-fun f ((_ BitVec 8)) (_ BitVec 8))
@@ -301,29 +300,20 @@ TEST(UninterpretedFunctionsFrontend,
     (assert (and (= (f x) x) (= (f x x) x)))
     (assert (= x #x00))
   )";
-  SMT2ScanString(input);
-  EXPECT_EQ(0, SMT2Parse());
-  smt2lex_destroy();
-
-  const std::size_t applicationCount =
-      manager.getUFContext()->registeredApplicationCount();
-  const std::size_t declarationCount =
-      manager.getUFContext()->declarationCount();
-  const bool xIsUF = manager.getUFContext()->lookup("x") != nullptr;
-  const ASTVec assertions = manager.GetAsserts();
-  const bool containsApplication =
-      !assertions.empty() && containsKind(assertions[0], UF_APPLY);
-  const bool rejected = interface.currentCommandRejected();
-
-  GlobalParserBM = savedManager;
-  GlobalParserInterface = savedInterface;
-
-  EXPECT_EQ(0u, applicationCount);
-  EXPECT_EQ(1u, declarationCount);
-  EXPECT_FALSE(xIsUF);
-  ASSERT_EQ(1u, assertions.size());
-  EXPECT_FALSE(containsApplication);
-  EXPECT_FALSE(rejected);
+  EXPECT_DEATH(
+      {
+        STPMgr manager;
+        Cpp_interface interface(manager, manager.defaultNodeFactory);
+        // Set in the forked child, so the parent's parser globals are
+        // untouched and need no saving.
+        GlobalParserBM = &manager;
+        GlobalParserInterface = &interface;
+        interface.startup();
+        manager.UserFlags.enable_uninterpreted_functions = true;
+        SMT2ScanString(input);
+        SMT2Parse();
+      },
+      "f expects 1 argument but was applied to 2");
 }
 
 TEST(UninterpretedFunctionsFrontend,
