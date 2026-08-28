@@ -1588,6 +1588,11 @@ if (BUILD_EXECUTABLES)
     find_package(CLI11 REQUIRED)
 endif()
 add_subdirectory(tools)
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/STPExecutableTargetGuard.cmake")
+stp_resolve_option_target_availability(
+  TARGET stp-bin
+  OPTION BUILD_EXECUTABLES
+  OUT_VAR STP_EXECUTABLE_AVAILABLE)
 add_subdirectory(bindings)
 add_feature_info(Executables BUILD_EXECUTABLES "Enables executables compilation")
 

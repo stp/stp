@@ -355,7 +355,7 @@ option(TEST_QUERY_FILES
        ON
       )
 
-if(TEST_QUERY_FILES)
+if(TEST_QUERY_FILES AND STP_EXECUTABLE_AVAILABLE)
     add_subdirectory(query-files)
 endif()
 
