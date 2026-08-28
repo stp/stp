@@ -78,9 +78,6 @@ public:
 #ifdef USE_CADICAL
   bool use_cadical = false;
 #endif
-#ifdef USE_RISS
-  bool use_riss = false;
-#endif
 
   // Held as text until parse_options() turns it into UserFlags.search_bias.
   std::string search_bias;
@@ -283,14 +280,6 @@ void ExtraMain::create_options()
   app.add_option("--threads", bm->UserFlags.num_solver_threads,
                  "Number of threads for cryptominisat")
       ->capture_default_str()
-      ->group(solver_group);
-#endif
-
-#ifdef USE_RISS
-  // Bound to a variable like the rest: without one the flag parsed and then
-  // selected nothing, so asking for Riss was silently ignored whenever
-  // another solver was compiled in to supply the default.
-  app.add_flag("--riss", use_riss, "use Riss as the solver")
       ->group(solver_group);
 #endif
 
@@ -847,9 +836,6 @@ void ExtraMain::create_options()
 #ifdef USE_CRYPTOMINISAT
   solver_flags.emplace_back("--cryptominisat");
 #endif
-#ifdef USE_RISS
-  solver_flags.emplace_back("--riss");
-#endif
 #ifdef USE_MINISAT
   solver_flags.emplace_back("--simplifying-minisat");
   solver_flags.emplace_back("--minisat");
@@ -1029,13 +1015,6 @@ int ExtraMain::parse_options(int argc, char** argv)
   if (use_cadical)
   {
     bm->UserFlags.solver_to_use = UserDefinedFlags::CADICAL_SOLVER;
-  }
-#endif
-
-#ifdef USE_RISS
-  if (use_riss)
-  {
-    bm->UserFlags.solver_to_use = UserDefinedFlags::RISS_SOLVER;
   }
 #endif
 

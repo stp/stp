@@ -37,8 +37,6 @@ SAT backends (disable with --no-<name>):
   --cryptominisat     require CryptoMiniSat; --no-cryptominisat never uses it.
                       Named neither way, it is used if it is installed
   --minisat           use MiniSat
-  --riss              use Riss
-  --riss-dir=PATH     a Riss checkout (implies --riss)
 
 Features (disable with --no-<name>):
   --assertions        build with assertions
@@ -89,8 +87,6 @@ cadical=default
 cadical_dir=default
 cryptominisat=default
 minisat=default
-riss=default
-riss_dir=default
 
 allocator=default
 assertions=default
@@ -148,11 +144,6 @@ do
 
     --minisat) minisat=ON;;
     --no-minisat) minisat=OFF;;
-
-    --riss) riss=ON;;
-    --no-riss) riss=OFF;;
-    --riss-dir) die "missing argument to $1 (try -h)";;
-    --riss-dir=*) riss_dir=${1##*=}; riss=ON;;
 
     --allocator) die "missing argument to $1 (try -h)";;
     --allocator=*) allocator=${1##*=};;
@@ -224,8 +215,6 @@ add USE_CADICAL            "$cadical"
 add CADICAL_DIR            "$cadical_dir"
 add USE_CRYPTOMINISAT      "$cryptominisat"
 add USE_MINISAT            "$minisat"
-add USE_RISS               "$riss"
-add RISS_DIR               "$riss_dir"
 add STP_ALLOCATOR          "$allocator"
 add ENABLE_ASSERTIONS      "$assertions"
 add COVERAGE               "$coverage"

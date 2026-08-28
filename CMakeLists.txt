@@ -1000,24 +1000,10 @@ option(BUILD_EXECUTABLES "Build executables" ON)
 include(deps-helper)
 
 # -----------------------------------------------------------------------------
-# Find Riss
+# MiniSat
 # -----------------------------------------------------------------------------
 option(USE_MINISAT "Use the MiniSat solver backend" OFF)
 add_feature_info(MiniSat USE_MINISAT "Enables the MiniSat and simplifying-MiniSat solvers")
-
-option(USE_RISS "Try to use Riss" OFF)
-add_feature_info(Riss USE_RISS "Enables Riss solver")
-
-if (USE_RISS)
-    # RISS_DIR still names a Riss checkout; cmake/FindRiss.cmake keeps that as
-    # its first choice and can build one otherwise.
-    find_package(Riss REQUIRED)
-    # USE_RISS reaches headers (UserDefinedFlags.h picks the default backend
-    # from it), so it has to stay a global definition. The include directory
-    # does not: only lib/Sat/RissCore.cpp includes a Riss header, and the Riss
-    # target carries it there.
-    add_definitions(-DUSE_RISS)
-endif()
 
 # -----------------------------------------------------------------------------
 # Setup Cadical
@@ -1337,20 +1323,19 @@ endif()
 # Every backend is optional, but a solver with no SAT backend at all cannot
 # solve anything, so insist that at least one made it in.
 #
-# This is the point at which all four are settled: USE_MINISAT, USE_CADICAL and
-# USE_RISS are plain options decided above, and USE_CRYPTOMINISAT has just been
-# resolved from its three-valued form to a definite ON or OFF. Asking here,
-# rather than after MiniSat has been searched for, means the answer arrives
-# before any of the per-backend lookups spend time or produce their own errors.
+# This is the point at which all three are settled: USE_MINISAT and USE_CADICAL
+# are plain options decided above, and USE_CRYPTOMINISAT has just been resolved
+# from its three-valued form to a definite ON or OFF. Asking here, rather than
+# after MiniSat has been searched for, means the answer arrives before any of
+# the per-backend lookups spend time or produce their own errors.
 # -----------------------------------------------------------------------------
-if (NOT USE_MINISAT AND NOT USE_CRYPTOMINISAT AND NOT USE_CADICAL AND NOT USE_RISS)
+if (NOT USE_MINISAT AND NOT USE_CRYPTOMINISAT AND NOT USE_CADICAL)
     message(FATAL_ERROR
             "No SAT backend is enabled, so this build could not solve "
             "anything. Enable at least one of:\n"
             "    -DUSE_CADICAL=ON     (on by default; -DENABLE_AUTO_DOWNLOAD=ON builds one)\n"
             "    -DUSE_CRYPTOMINISAT=ON  (5.11 or newer, and must already be installed)\n"
-            "    -DUSE_MINISAT=ON\n"
-            "    -DUSE_RISS=ON")
+            "    -DUSE_MINISAT=ON")
 endif()
 
 # ----------

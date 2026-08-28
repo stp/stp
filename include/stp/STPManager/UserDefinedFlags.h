@@ -764,7 +764,6 @@ public:
     MINISAT_SOLVER = 0,
     SIMPLIFYING_MINISAT_SOLVER,
     CRYPTOMINISAT5_SOLVER,
-    RISS_SOLVER,
     CADICAL_SOLVER
   };
 
@@ -899,10 +898,10 @@ public:
 
   UserDefinedFlags()
   {
-    // The backend a query gets when no --cryptominisat/--cadical/--riss/
-    // --minisat was given. The order of preference is CryptoMiniSat,
-    // CaDiCaL, Riss, MiniSat, and the first of those this build compiled in
-    // wins. CryptoMiniSat leads because a build that went to the trouble of
+    // The backend a query gets when no --cryptominisat/--cadical/--minisat
+    // was given. The order of preference is CryptoMiniSat, CaDiCaL,
+    // MiniSat, and the first of those this build compiled in wins.
+    // CryptoMiniSat leads because a build that went to the trouble of
     // linking it meant to use it; CaDiCaL follows because it is the only
     // backend on by default, so it is what a stock build solves with.
     // MiniSat is the last resort and is not guarded: CMakeLists.txt refuses
@@ -914,11 +913,7 @@ public:
 #ifdef USE_CADICAL
     solver_to_use = CADICAL_SOLVER;
 #else
-#ifdef USE_RISS
-    solver_to_use = RISS_SOLVER;
-#else
     solver_to_use = MINISAT_SOLVER;
-#endif
 #endif
 #endif
   }

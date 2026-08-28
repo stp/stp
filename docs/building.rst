@@ -97,8 +97,7 @@ build compiled in:
 
 1. CryptoMiniSat
 2. CaDiCaL
-3. Riss
-4. MiniSat
+3. MiniSat
 
 CryptoMiniSat is therefore the default wherever it is linked, and
 CaDiCaL is what a stock build solves with. CaDiCaL is also the one
@@ -106,8 +105,7 @@ always available: it is enabled when nothing is said, needs no system
 library, and the build can produce one itself, so a query is never left
 without a solver. CryptoMiniSat is linked whenever it is installed
 (``-DUSE_CRYPTOMINISAT=AUTO``, the default). Either way ``--cadical``,
-``--cryptominisat``, ``--riss`` or ``--minisat`` overrides the order for
-one run.
+``--cryptominisat`` or ``--minisat`` overrides the order for one run.
 
 The two other values are for builds that would rather not depend on what
 the machine has lying around: ``-DUSE_CRYPTOMINISAT=ON`` makes a missing
@@ -245,16 +243,6 @@ The CryptoMiniSat recipe above is pre-configured in
 searched without any extra flags. It is the only such script left: every
 other dependency is now fetched and built by the build itself.
 
-The Riss solver can be enabled with ``-DUSE_RISS``. Either point
-``-DRISS_DIR=<path>`` at a Riss checkout that contains
-``riss/core/Solver.h`` and ``build/lib/libriss-coprocessor.a`` --
-or configure with
-``-DENABLE_AUTO_DOWNLOAD=ON`` and let STP build it. Riss needs flags of
-its own either way: it does not compile warning-free under current
-compilers and does not build as C++17, so STP builds it with ``-w`` and
-``-std=gnu++14``, and takes its headers as system headers so that a
-``WERROR`` build does not fail inside them.
-
 Building against non-installed libraries
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -326,7 +314,6 @@ These apply to all generators:
 -  ``USE_CADICAL`` and ``CADICAL_DIR`` -- build the CaDiCaL backend
    (on by default), optionally against a named checkout
 -  ``USE_MINISAT`` -- build the MiniSat backend
--  ``USE_RISS`` -- build the Riss backend
 -  ``TUNE_NATIVE`` -- build with ``-mtune=native``
 -  ``ENABLE_LTO`` -- optimise across translation units, and across STP
    and the dependencies it compiles. Off by default. On its own it is

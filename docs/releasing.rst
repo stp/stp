@@ -134,9 +134,9 @@ The solver
 
 Which solver a binary uses with no flag given is decided at compile time:
 ``UserDefinedFlags``'s constructor picks CaDiCaL, then CryptoMiniSat, then
-Riss, then MiniSat, by whichever ``USE_*`` macro is defined. Linking
-CryptoMiniSat in is therefore the whole of what makes this a CryptoMiniSat
-release; there is no flag for users to remember.
+MiniSat, by whichever ``USE_*`` macro is defined. Linking CryptoMiniSat in
+is therefore the whole of what makes this a CryptoMiniSat release; there is
+no flag for users to remember.
 
 CryptoMiniSat rather than CaDiCaL because its author has contributed to
 STP, and STP ships his solver by preference. Note the consequence:

@@ -23,7 +23,7 @@
 ;
 ; The observable here is the hint doing its job -- zero lemmas in the HINTED
 ; run -- and that needs the default backend to honour suggestPhase. CaDiCaL
-; does; MiniSat and Riss accept the call and ignore it, so on those builds
+; does; MiniSat accepts the call and ignores it, so on such a build
 ; the hinted run earns lemmas exactly as the plain one and the comparison
 ; below pins nothing.
 ; REQUIRES: cadical
