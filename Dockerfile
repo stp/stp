@@ -18,7 +18,6 @@ RUN apt-get update \
         gcc \
         git \
         libgmp-dev \
-        libm4ri-dev \
         libncurses-dev \
         make \
         python3 \
@@ -26,15 +25,27 @@ RUN apt-get update \
         zlib1g-dev \
  && rm -rf /var/lib/apt/lists/*
 
-# Build CMS
+# Build CryptoMiniSat, at the release scripts/deps/setup-cms.sh pins and with
+# the flags it uses -- that is the combination CI exercises.
+#
+# BUILD_SHARED_LIBS=OFF rather than STATICCOMPILE=ON: 5.14 removed
+# STATICCOMPILE, and BUILD_SHARED_LIBS defaults to ON, so asking the old way
+# now yields a shared libcryptominisat5 that the scratch image below cannot
+# carry. STATIC_BINARY=OFF because only the library is wanted here; a fully
+# static cryptominisat5 executable would need static gmp and zlib.
+#
+# 5.14 fetches and builds its own CaDiCaL and cadiback, which is why git and
+# ca-certificates matter to this stage too. That is not the CaDiCaL STP builds
+# for itself -- USE_CADICAL is off below, so this image has exactly one.
 WORKDIR /cms
-RUN wget -O cryptominisat.tgz https://github.com/msoos/cryptominisat/archive/5.11.21.tar.gz \
- && tar xvf cryptominisat.tgz --strip-components 1 \
+RUN git clone --depth 1 --branch release/v5.14.7 \
+        https://github.com/msoos/cryptominisat . \
  && mkdir build && cd build \
  && cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DENABLE_ASSERTIONS=OFF \
-        -DSTATICCOMPILE=ON \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DSTATIC_BINARY=OFF \
  && cmake --build . \
  && cmake --install .
 
@@ -50,10 +61,9 @@ RUN wget -O minisat.tgz https://github.com/stp/minisat/archive/releases/2.2.1.ta
 
 # Build STP.
 #
-# --auto-download supplies LibBF, which is required and which nothing above
-# builds -- this image could not have built at all without a deps/libbf that
-# happened to be sitting in the build context. git and ca-certificates are in
-# the package list above for its sake.
+# --auto-download supplies everything this image does not build above --
+# LibBF, ABC, SymFPU, CLI11 and the rest -- so git and ca-certificates are in
+# the package list for its sake.
 #
 # The two solvers are named explicitly rather than left to whatever is
 # installed, and CaDiCaL is turned off: it is on by default, and this image
