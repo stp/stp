@@ -1,5 +1,5 @@
-; RUN: %solver %s 2>&1 | %OutputCheck %s
-; RUN: %solver %s 2>&1 | %OutputCheck --check-prefix=NOANSWER %s
+; RUN: not %solver %s 2>&1 | %OutputCheck %s
+; RUN: not %solver %s 2>&1 | %OutputCheck --check-prefix=NOANSWER %s
 ;
 ; A numeral too large for an unsigned, in a position that wants a width.
 ; The lexer assigned strtoul's result to an unsigned, so it wrapped: this

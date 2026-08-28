@@ -91,7 +91,7 @@ void Main::printVersionInfo()
 #endif
 }
 
-void Main::parse_file(ASTVec* AssertsQuery)
+int Main::parse_file(ASTVec* AssertsQuery)
 {
   TypeChecker nfTypeCheckSimp(*bm->defaultNodeFactory, *bm);
   TypeChecker nfTypeCheckDefault(*bm->hashingNodeFactory, *bm);
@@ -128,9 +128,10 @@ void Main::parse_file(ASTVec* AssertsQuery)
     }
   }
 
+  int result;
   if (bm->UserFlags.smtlib1_parser_flag)
   {
-    SMTParse((void*)AssertsQuery);
+    result = SMTParse((void*)AssertsQuery);
     smtlex_destroy();
   }
   else if (bm->UserFlags.smtlib2_parser_flag)
@@ -140,12 +141,12 @@ void Main::parse_file(ASTVec* AssertsQuery)
       interactive = bm->UserFlags.interactive_read != 0;
     setSMT2Interactive(interactive);
 
-    SMT2Parse();
+    result = SMT2Parse();
     smt2lex_destroy();
   }
   else
   {
-    CVCParse((void*)AssertsQuery);
+    result = CVCParse((void*)AssertsQuery);
     cvclex_destroy();
   }
   GlobalParserInterface = NULL;
@@ -153,6 +154,7 @@ void Main::parse_file(ASTVec* AssertsQuery)
   {
     fclose(toClose);
   }
+  return result;
 }
 
 void Main::print_back(ASTNode& query, ASTNode& asserts)
@@ -289,10 +291,21 @@ int Main::main(int argc, char** argv)
   ASTVec* AssertsQuery = new ASTVec;
 
   bm->GetRunTimes()->start(RunTimes::Parsing);
-  parse_file(AssertsQuery);
+  const int parse_result = parse_file(AssertsQuery);
   bm->GetRunTimes()->stop(RunTimes::Parsing);
 
   GlobalSTP = NULL;
+
+  // A parse that gave up has already printed the (error ...) response saying
+  // why, so there is nothing to add here; what it must not do is leave the
+  // exit status saying the run succeeded. Scripted callers have no other way
+  // to tell a rejected input from a solved one, and the SMTLIB2 command
+  // language means a script may legitimately have answered several check-sats
+  // before the one that broke -- those answers stand, and this is the status
+  // of the run as a whole. Only the SMTLIB2 parser reaches here nonzero: the
+  // other two report through FatalError, which does not return.
+  if (parse_result != 0)
+    std::exit(-1);
 
   /*  The SMTLIB2 has a command language. The parser calls all the functions,
    *  so when we get to here the parser has already called "exit". i.e. if the

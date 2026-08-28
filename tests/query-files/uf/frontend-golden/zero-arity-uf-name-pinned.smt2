@@ -1,4 +1,4 @@
-; RUN: %solver --uninterpreted-functions %s 2>&1 | %OutputCheck %s
+; RUN: not %solver --uninterpreted-functions %s 2>&1 | %OutputCheck %s
 ; CHECK-NEXT: ^\(error "syntax error: line 11 syntax error, unexpected UF_BV_FUNCTIONID_TOK, expecting STRING_TOK  token: g"\)$
 ; CHECK-NOT: REACHED-END
 ; The zero-arity pin holds for every classification a known name can

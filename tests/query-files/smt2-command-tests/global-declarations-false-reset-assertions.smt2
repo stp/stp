@@ -3,7 +3,7 @@
 ; and definitions along with the assertions, so afterwards the name is unknown.
 ; reset-assertions-drops-declarations covers the redeclaration side of this;
 ; here the popped name is used rather than redeclared.
-; RUN: %solver %s | %OutputCheck %s
+; RUN: not %solver %s | %OutputCheck %s
 (set-option :global-declarations false)
 (set-logic QF_BV)
 (declare-fun x () (_ BitVec 4))

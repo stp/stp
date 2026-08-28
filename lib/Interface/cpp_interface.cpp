@@ -714,6 +714,15 @@ void Cpp_interface::rejectCurrentCommand(const std::string& diagnostic)
   error(diagnostic);
 }
 
+void Cpp_interface::refuseCurrentCommand(const std::string& diagnostic)
+{
+  rejectCurrentCommand(diagnostic);
+  // Reducing the rest of the command first would only build carriers for a
+  // session that is over, so the report above is the last thing printed on
+  // stdout and FatalError takes it from here.
+  FatalError(diagnostic.c_str());
+}
+
 void Cpp_interface::finishCurrentCommand()
 {
   if (current_command_active)
@@ -1743,8 +1752,7 @@ void Cpp_interface::getValue(const ASTVec& v)
           if (diagnostic.empty())
             diagnostic = "uninterpreted-function application has no certified "
                          "value";
-          rejectCurrentCommand(diagnostic);
-          return;
+          refuseCurrentCommand(diagnostic);
         }
         GlobalSTP->Ctr_Example->PrintSMTLIB2(os, n);
         os << std::endl;

@@ -1,4 +1,4 @@
-; RUN: %solver %s 2>&1 | %OutputCheck %s
+; RUN: not %solver %s 2>&1 | %OutputCheck %s
 ;
 ; The third shape the gate's failures take: an operator rather than a sort.
 ; Here bison has no expected-token list to offer at all, so without the hint

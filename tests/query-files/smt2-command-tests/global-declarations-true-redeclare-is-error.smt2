@@ -3,7 +3,7 @@
 ; SMT-LIB 2.6 section 4.2.1 forbids declaring a symbol that is already in scope.
 ; Accepting this script under both settings of the option is the bug that makes
 ; the two settings indistinguishable.
-; RUN: %solver %s | %OutputCheck %s
+; RUN: not %solver %s | %OutputCheck %s
 (set-option :global-declarations true)
 (set-logic QF_BV)
 (push 1)

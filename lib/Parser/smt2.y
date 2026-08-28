@@ -248,6 +248,69 @@ namespace stp
     return o.str();
   }
 
+  // SMT-LIB spells a logic as an optional HO_ and QF_ prefix followed by the
+  // theory abbreviations it combines, written in a fixed order, and closed by
+  // at most one arithmetic fragment. Recognising that shape -- rather than
+  // carrying the standard's catalogue of names, which gains a division at a
+  // time -- separates the two mistakes a set-logic can make: naming a logic
+  // STP does not decide, and naming something that is not a logic at all.
+  // Both are refused, so an imprecise call here costs a word in a diagnostic
+  // and nothing else.
+  static bool consumeLogicPart(const std::string& name, size_t& at,
+                               const char* part)
+  {
+    const size_t length = strlen(part);
+    if (name.compare(at, length, part) != 0)
+      return false;
+    at += length;
+    return true;
+  }
+
+  static bool isSMTLIBLogicName(const std::string& name)
+  {
+    size_t at = 0;
+    consumeLogicPart(name, at, "HO_");
+    consumeLogicPart(name, at, "QF_");
+    const size_t afterPrefixes = at;
+
+    if (consumeLogicPart(name, at, "ALL"))
+      return at == name.size();
+
+    // AX first: the array logic with extensionality is a name in its own
+    // right, not arrays followed by a theory called X.
+    if (!consumeLogicPart(name, at, "AX"))
+      consumeLogicPart(name, at, "A");
+    consumeLogicPart(name, at, "UF");
+    consumeLogicPart(name, at, "BV");
+    consumeLogicPart(name, at, "FP");
+    consumeLogicPart(name, at, "DT");
+    consumeLogicPart(name, at, "FF");
+    consumeLogicPart(name, at, "S");
+
+    // Longest match first: the mixed fragments begin with the same letters as
+    // the single-sort ones they combine.
+    static const char* const arithmetics[] = {"LIRA", "NIRA", "LIA", "LRA",
+                                              "NIA",  "NRA",  "IDL", "RDL"};
+    for (const char* fragment : arithmetics)
+      if (consumeLogicPart(name, at, fragment))
+        break;
+
+    // A logic is the prefixes plus at least one theory, with nothing left
+    // over: "QF_" alone names nothing, and "QF_BVX" is not "QF_BV".
+    return at > afterPrefixes && at == name.size();
+  }
+
+  // How the set-logic test below reads out loud; a name added there belongs
+  // here too. The UF+FP aliases are deliberately absent: they are alternative
+  // spellings of names already listed, and a caller reading a refusal is
+  // looking for a fragment STP has, not for a synonym of one.
+  static const char* supportedLogicsPhrase()
+  {
+    return "QF_BV, QF_ABV, QF_AX, QF_UF, QF_UFBV, QF_AUFBV, the "
+           "floating-point logics QF_FP, QF_BVFP, QF_ABVFP, QF_UFFP, "
+           "QF_UFBVFP, QF_AUFBVFP, and their LRA variants";
+  }
+
   void reportRedeclaredName();
 
   int yyerror(const char *s) {
@@ -406,59 +469,7 @@ namespace stp
             declaration, *actuals, &diagnostic);
     delete actuals;
     if (application.GetKind() == UNDEFINED)
-    {
-      stp::GlobalParserInterface->rejectCurrentCommand(diagnostic);
-
-      // Bison still needs a value of the production's statically selected
-      // result sort in order to reduce the rest of this command.  Reuse a
-      // canonical constant and discard the command at its outer boundary;
-      // unlike the v1 sketch this creates neither a fresh malformed
-      // placeholder nor a UF application/registration.
-      //
-      // The enclosing production reduces before the command is discarded and
-      // sort-checks its operands, so the placeholder has to be a term of the
-      // declared sort and not merely of that sort's carrier width -- a bare
-      // five-bit zero where a RoundingMode is expected turns this nonfatal
-      // rejection into a fatal "operands of the same sort" error.
-      const stp::SourceSort resultSort =
-          declaration == NULL ? stp::SourceSort::boolean()
-                              : declaration->signature().codomain();
-      switch (resultSort.kind())
-      {
-        case stp::SourceSort::Kind::Bool:
-          application = stp::GlobalParserInterface->CreateNode(FALSE);
-          break;
-        case stp::SourceSort::Kind::RoundingMode:
-          application = stp::GlobalParserInterface->CreateRMConst(
-              stp::symbolic_fp::ROUND_NEAREST_TIES_TO_EVEN);
-          break;
-        case stp::SourceSort::Kind::FloatingPoint:
-          application = stp::GlobalParserInterface->CreateFPSpecialConst(
-              stp::FPSpecial::PlusZero, resultSort.exponentWidth(),
-              resultSort.significandWidth());
-          break;
-        case stp::SourceSort::Kind::Uninterpreted:
-        {
-          // A sort declared by declare-sort has no constants, so the
-          // placeholder has to be a symbol of it. A zero of the carrier width
-          // would be a bit-vector term, and the enclosing production compares
-          // full sorts -- which is exactly the failure this switch exists to
-          // avoid, one kind further on. Minted through the manager because the
-          // name is reserved, and stable so repeated rejections in one query
-          // intern to one node.
-          std::ostringstream placeholder;
-          placeholder << "@declared_sort_placeholder_"
-                      << resultSort.uninterpretedId();
-          application = stp::GlobalParserBM->CreateSourceSymbol(
-              placeholder.str().c_str(), resultSort);
-          break;
-        }
-        default:
-          application = stp::GlobalParserInterface->CreateZeroConst(
-              resultSort.packedWidth());
-          break;
-      }
-    }
+      stp::GlobalParserInterface->refuseCurrentCommand(diagnostic);
     return stp::GlobalParserInterface->newNode(application);
   }
 
@@ -478,7 +489,9 @@ namespace stp
     }                                                                       \
   } while (0)
 
-  static bool acceptTopLevelDeclarationName(const std::string& name)
+  // Returns only when the name is free to declare; a collision ends the
+  // session, as every other rejection in this frontend now does.
+  static void requireFreeTopLevelDeclarationName(const std::string& name)
   {
     // Preserve the pinned frontend byte-for-byte when uninterpreted-function
     // support is disabled. The additional shared-namespace check exists only
@@ -486,13 +499,12 @@ namespace stp
     // symbol/function tables.
     if (!stp::GlobalParserInterface->getUserFlags()
              .enable_uninterpreted_functions)
-      return true;
+      return;
     std::string diagnostic;
     if (stp::GlobalParserInterface->validateTopLevelDeclarationName(
             name, &diagnostic))
-      return true;
-    stp::GlobalParserInterface->rejectCurrentCommand(diagnostic);
-    return false;
+      return;
+    stp::GlobalParserInterface->refuseCurrentCommand(diagnostic);
   }
 
   ASTNode* createNode(Kind k, ASTNode* c0, ASTNode *c1)
@@ -1387,36 +1399,31 @@ namespace stp
   // of the declare-fun and declare-const productions. Frees both arguments.
   void declareArraySymbol(std::string* name, stp::array_sort* sort)
   {
-    if (acceptTopLevelDeclarationName(*name))
-    {
-      ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
-          name->c_str(), sort->sourceSort());
-      stp::GlobalParserInterface->addArraySymbol(s, *sort);
+    requireFreeTopLevelDeclarationName(*name);
+    ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
+        name->c_str(), sort->sourceSort());
+    stp::GlobalParserInterface->addArraySymbol(s, *sort);
 
-      if (s.GetType() != ARRAY_TYPE)
-        fatal_yyerror("failed to declare an array.");
-    }
+    if (s.GetType() != ARRAY_TYPE)
+      fatal_yyerror("failed to declare an array.");
 
     delete name;
     delete sort;
   }
 
-  // Shared scalar declaration action. A rejected cross-namespace name is
-  // diagnosed before interning/registration and the rest of the command is
-  // reduced only for recovery.
+  // Shared scalar declaration action. A cross-namespace name is diagnosed
+  // before anything is interned or registered, and does not come back.
   void declareScalarSymbol(std::string* name,
                            const stp::SourceSort& sourceSort,
                            bool roundingMode = false)
   {
-    if (acceptTopLevelDeclarationName(*name))
-    {
-      ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
-          name->c_str(), sourceSort);
-      if (roundingMode)
-        stp::GlobalParserInterface->addRoundingModeSymbol(s);
-      else
-        stp::GlobalParserInterface->addSymbol(s);
-    }
+    requireFreeTopLevelDeclarationName(*name);
+    ASTNode s = stp::GlobalParserInterface->CreateSourceSymbol(
+        name->c_str(), sourceSort);
+    if (roundingMode)
+      stp::GlobalParserInterface->addRoundingModeSymbol(s);
+    else
+      stp::GlobalParserInterface->addSymbol(s);
     delete name;
   }
 
@@ -1994,14 +2001,26 @@ cmdi:
             0 == strcmp($2->c_str(),"QF_AX") ||
             uf_logic ||
             fp_logic;
-      if (!supported_logic) {
-        yyerror("Wrong input logic");
+      // A logic STP cannot decide ends the session. STP answers
+      // (get-info :error-behavior) with immediate-exit, and continuing here
+      // was the one place that answer was untrue: the refusal was printed,
+      // the rest of the script ran anyway, and a check-sat inside it reported
+      // a verdict for a benchmark STP had just said it could not accept.
+      // Which of the two diagnostics is right is the only thing left to
+      // decide, and neither one returns.
+      if (!supported_logic)
+      {
+        std::string message = isSMTLIBLogicName(*$2)
+                                  ? "unsupported logic: STP decides "
+                                  : "unknown logic: SMT-LIB names no logic "
+                                    "this way, and STP decides ";
+        message += supportedLogicsPhrase();
+        fatal_yyerror(message.c_str());
       }
       // The incremental frontend needs only this validated logic name to
       // choose its measured automatic-engagement policy. reset clears the
       // classification; reset-assertions retains it with the SMT-LIB logic.
-      if (supported_logic)
-        stp::GlobalParserInterface->setLogic(*$2);
+      stp::GlobalParserInterface->setLogic(*$2);
       // The floating-point keywords exist only inside the FP logics;
       // everywhere else names like "fp" or "NaN" stay ordinary symbols,
       // exactly as before floating-point support existed.
@@ -2121,7 +2140,7 @@ function_param
 function_def_name:
 STRING_TOK
 {
-  (void)acceptTopLevelDeclarationName(*$1);
+  requireFreeTopLevelDeclarationName(*$1);
   $$ = $1;
 }
 ;
@@ -2557,38 +2576,28 @@ STRING_TOK LPAREN_TOK RPAREN_TOK LPAREN_TOK UNDERSCORE_TOK BITVEC_TOK NUMERAL_TO
 }
 | uf_decl_name uf_domain_sorts RPAREN_TOK uf_codomain_sort
 {
-  bool valid = true;
   std::vector<stp::SourceSort> domain;
   domain.reserve($2->size());
   for (size_t i = 0; i < $2->size(); ++i)
   {
     const stp::parsed_uf_sort& parsed = (*$2)[i];
+    // The first unsupported sort is the one reported: refusing does not come
+    // back, so there is no second one to suppress.
     if (!parsed.supported)
-    {
-      if (valid)
-        stp::GlobalParserInterface->rejectCurrentCommand(
-            unsupportedUFDomainSort(*$1, parsed, i));
-      valid = false;
-      continue;
-    }
+      stp::GlobalParserInterface->refuseCurrentCommand(
+          unsupportedUFDomainSort(*$1, parsed, i));
     domain.push_back(parsed.sort);
   }
   if (!$4->supported)
-  {
-    if (valid)
-      stp::GlobalParserInterface->rejectCurrentCommand(
-          unsupportedUFResultSort(*$1, *$4));
-    valid = false;
-  }
-  if (valid)
-  {
-    std::string diagnostic;
-    const stp::UFDecl* declaration =
-        stp::GlobalParserInterface->declareScopedUninterpretedFunction(
-            *$1, domain, $4->sort, &diagnostic);
-    if (declaration == NULL)
-      stp::GlobalParserInterface->rejectCurrentCommand(diagnostic);
-  }
+    stp::GlobalParserInterface->refuseCurrentCommand(
+        unsupportedUFResultSort(*$1, *$4));
+
+  std::string diagnostic;
+  const stp::UFDecl* declaration =
+      stp::GlobalParserInterface->declareScopedUninterpretedFunction(
+          *$1, domain, $4->sort, &diagnostic);
+  if (declaration == NULL)
+    stp::GlobalParserInterface->refuseCurrentCommand(diagnostic);
   delete $1;
   delete $2;
   delete $4;

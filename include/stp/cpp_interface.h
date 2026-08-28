@@ -497,17 +497,18 @@ public:
   DLL_PUBLIC void deleteNode(ASTNode* n);
   DLL_PUBLIC void addSymbol(ASTNode& s);
   // Function formal parameters are parser-local bindings. They may shadow a
-  // top-level declaration and must still be installed temporarily while a
-  // containing define-fun command is being rejected and reduced.
+  // top-level declaration, and are installed for as long as the containing
+  // define-fun command is being reduced.
   DLL_PUBLIC void addTemporarySymbol(ASTNode& s);
 
   // Check the shared top-level name space before the parser mutates a frame.
   // With UF enabled, a NONZERO-ARITY declare-fun name is deliberately lexed
-  // unclassified so that a collision reaches this semantic check and is
-  // reported nonfatally. Every UF-free shape (zero-arity declare-fun,
+  // unclassified so that a collision reaches this semantic check, which names
+  // the owner it collided with. Every UF-free shape (zero-arity declare-fun,
   // declare-const, define-fun) keeps the legacy classified-token syntax error
   // at the name instead; for those this check is a backstop the lexer
-  // normally pre-empts.
+  // normally pre-empts. Either way the collision ends the session -- the
+  // caller reports through refuseCurrentCommand.
   DLL_PUBLIC bool validateTopLevelDeclarationName(
       const std::string& name, std::string* diagnostic = NULL);
 
@@ -537,11 +538,24 @@ public:
   DLL_PUBLIC void error(std::string msg);
   DLL_PUBLIC void unsupported();
 
-  // Nonfatal SMT-LIB command rejection used by the typed UF funnel.  No
-  // malformed UF_APPLY or fresh placeholder is constructed or registered.
+  // Command bookkeeping for the typed UF funnel: a malformed subexpression
+  // is reduced to a carrier so the command can reach its outer boundary and
+  // be discarded whole, with no malformed UF_APPLY or fresh placeholder
+  // constructed or registered.
   DLL_PUBLIC void beginCurrentCommand();
   DLL_PUBLIC void abortCurrentCommand();
+  // Reports the diagnostic and marks the command discarded, but returns:
+  // for the parser's yyerror, where bison abandons the parse of its own
+  // accord and the caller decides what to do about it. A caller that would
+  // otherwise carry on wants refuseCurrentCommand.
   DLL_PUBLIC void rejectCurrentCommand(const std::string& diagnostic);
+  // The same report, and then out. STP answers (get-info :error-behavior)
+  // with immediate-exit, so an error it recovered from was a false claim --
+  // and, where the discarded command was an assert, a claim that cost a
+  // conjunct: the assertion went missing and the next check-sat answered
+  // the query that was left.
+  DLL_PUBLIC ATTR_NORETURN void refuseCurrentCommand(
+      const std::string& diagnostic);
   DLL_PUBLIC void finishCurrentCommand();
   bool currentCommandRejected() const { return current_command_rejected; }
 

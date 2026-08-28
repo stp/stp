@@ -1,7 +1,7 @@
 ; :global-declarations false is the option's required default (SMT-LIB 2.6,
 ; section 4.1.7): declarations belong to the assertion level that made them, so
 ; popping that level takes the name out of scope again.
-; RUN: %solver %s | %OutputCheck %s
+; RUN: not %solver %s | %OutputCheck %s
 (set-option :global-declarations false)
 (set-logic QF_BV)
 (push 1)

@@ -1,0 +1,7 @@
+(set-logic QF_UFBV)
+(declare-fun f ((_ BitVec 4)) (_ BitVec 4))
+(declare-const x (_ BitVec 4))
+(check-sat-assuming ((= (f x x) x)))
+(assert false)
+(check-sat)
+(echo "REACHED-END")
