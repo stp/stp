@@ -340,6 +340,30 @@ struct BVTermAbstraction
   // keeps landing on fresh powers of two would otherwise buy a solve for
   // each one.
   unsigned schemaRounds = 0;
+  // The same two, since this query began.
+  //
+  // bv_term_abstraction_rounds is a ceiling on what one abstraction may
+  // spend, and the number it defaults to was calibrated a query at a time.
+  // A record's life is one query in the batch pipeline -- ToSATAIG, and the
+  // record vector with it, is a local of the call that solves -- but a whole
+  // session under the incremental driver, where records are dropped only by
+  // a rebuild. Spending the ceiling from the lifetime counts would therefore
+  // mean two different things on the two drivers, and the incremental one
+  // would give up on an abstraction after thirty-two blocking lemmas spread
+  // over thirty-two queries rather than thirty-two within one.
+  //
+  // So the budgets are spent from these. BVAbstractionRefiner::beginQuery
+  // advances a generation, and the first live touch resets them lazily.
+  // Nothing a round bought is reset with them: installed schema bits, exact
+  // encodings and `defined` are permanent, and a fact each record can receive
+  // only once is still received only once, because what bounds that is its
+  // installed bit and not the purse.
+  unsigned blockedThisQuery = 0;
+  unsigned schemasThisQuery = 0;
+  // The refiner advances one generation per incremental query and resets the
+  // two purses lazily when this record is actually live. Dormant historical
+  // records therefore cost no per-query scan.
+  uint64_t queryGeneration = 0;
   // Which of the unconditional schemas are already in the solver.
   unsigned installedSchemas = 0;
   // How far up the exact encoding has been pushed, for an escalation that
@@ -350,6 +374,28 @@ struct BVTermAbstraction
   // kept because that schema can fire once per power of two and would
   // otherwise pay for the same negation circuit every time.
   std::vector<unsigned> negatedOperand[2];
+};
+
+// An explicit sparse view of the records one query semantically owns. Empty
+// selected lists mean no records, while allRecords is the separate batch-mode
+// spelling of every record; this avoids the old empty-means-all ambiguity.
+// `complete` is false only when dependency closure named an ID for which no
+// record exists, a state which must yield Unknown rather than certify a model.
+struct BVAbstractionScope
+{
+  bool allRecords = true;
+  bool complete = true;
+  std::vector<size_t> equalityIndices;
+  std::vector<size_t> termIndices;
+
+  static BVAbstractionScope all() { return BVAbstractionScope(); }
+
+  static BVAbstractionScope selected()
+  {
+    BVAbstractionScope scope;
+    scope.allRecords = false;
+    return scope;
+  }
 };
 
 class DLL_PUBLIC BVAbstractionRefiner
@@ -366,6 +412,7 @@ class DLL_PUBLIC BVAbstractionRefiner
   };
   std::map<BVAbstractionId, RecordLocation> recordOfId_;
   size_t indexedRecords_ = 0;
+  uint64_t queryGeneration_ = 1;
 
   // Monotone across the session, including across a clear(): a driver
   // compares it either side of a round to learn whether that round found
@@ -373,10 +420,14 @@ class DLL_PUBLIC BVAbstractionRefiner
   uint64_t refinements_ = 0;
 
   unsigned refineEqualities(SATSolver& solver,
-                            const ToSATBase::ASTNodeToSATVar& nodeToSATVar);
-  unsigned refineTerms(SATSolver& solver,
-                       const ToSATBase::ASTNodeToSATVar& nodeToSATVar);
+                            const ToSATBase::ASTNodeToSATVar& nodeToSATVar,
+                            const std::vector<size_t>* selected);
+  AbstractionRefinementResult
+  refineTerms(SATSolver& solver,
+              const ToSATBase::ASTNodeToSATVar& nodeToSATVar,
+              const std::vector<size_t>* selected);
   void rebuildRecordIndex();
+  void prepareTermForQuery(BVTermAbstraction& term);
 
 public:
   explicit BVAbstractionRefiner(STPMgr* bm_) : bm(bm_) {}
@@ -397,12 +448,43 @@ public:
   void appendEquality(BVEQAbstraction record);
   void appendTerm(BVTermAbstraction record);
 
+  // The records one solve semantically owns: the seeds, closed over
+  // parent-to-child producer dependencies. `complete` comes back false if a
+  // reachable ID has no retained record, which the caller must treat as
+  // Unknown rather than as a smaller scope.
+  BVAbstractionScope
+  dependencyClosure(const std::vector<BVAbstractionId>& seeds);
+
   void clear()
   {
     eqs_.clear();
     terms_.clear();
     recordOfId_.clear();
     indexedRecords_ = 0;
+  }
+
+  // A new query begins over the same records.
+  //
+  // The blocking allowance and the schema ceiling are spent per record, and
+  // the defaults behind them were calibrated a query at a time. A record's
+  // life is one query in the batch pipeline, so there the two units coincide
+  // and nothing has to call this; under the incremental driver a record
+  // outlives the query that minted it, and without this the same flag would
+  // mean "per session" there and "per query" here.
+  //
+  // The generation change is O(1); a purse is reset only when its record is
+  // selected by this query's sparse scope. What a round bought is permanent
+  // and stays -- installed schema bits, exact encodings, `defined` -- so this
+  // cannot buy a record a second copy of a fact it already has.
+  void beginQuery()
+  {
+    ++queryGeneration_;
+    if (queryGeneration_ == 0)
+    {
+      queryGeneration_ = 1;
+      for (BVTermAbstraction& term : terms_)
+        term.queryGeneration = 0;
+    }
   }
 
   uint64_t refinements() const { return refinements_; }
@@ -413,10 +495,35 @@ public:
                        const ToSATBase::ASTNodeToSATVar& nodeToSATVar) const;
 
   // Check every record against the current SAT model and pin the ones the
-  // model contradicts. Returns how many were pinned: zero means the
-  // candidate is faithful and may be handed on.
-  unsigned refine(SATSolver& solver,
-                  const ToSATBase::ASTNodeToSATVar& nodeToSATVar);
+  // model contradicts. Faithful is the only result which permits the
+  // candidate to be handed on; Refined requires another SAT call, and Unknown
+  // means a mandatory exact encoding was refused by the AIG budget.
+  //
+  // With no scope argument the batch pipeline checks every record, since its
+  // records live exactly as long as its one query. The incremental driver
+  // passes a dependency-closed sparse scope; selected-empty is a genuine
+  // fixed point over no records.
+  //
+  // The incremental driver retains records until the encoding epoch ends, so
+  // a pop leaves behind records for operations no live assertion mentions.
+  // Those records are logically retired by omitting them from the sparse
+  // dependency closure; a later activation of a cached owner can select them
+  // again without reconstructing their refinement state.
+  //
+  // Passing over such a record is sound. What still mentions it is the
+  // definitional encoding of the cone it was minted in, which no assumption
+  // asserts and which is satisfiable whatever the record holds, and the
+  // theorems earlier rounds installed over it, which are likewise
+  // satisfiable. Nothing the current query asserts reaches it, so no value it
+  // takes can change the answer. The safe direction is still to check too
+  // much: missing owner metadata selects all records, while a dependency ID
+  // with no retained record makes the result Unknown.
+  AbstractionRefinementResult
+  refine(SATSolver& solver,
+         const ToSATBase::ASTNodeToSATVar& nodeToSATVar);
+  AbstractionRefinementResult
+  refine(SATSolver& solver, const ToSATBase::ASTNodeToSATVar& nodeToSATVar,
+         const BVAbstractionScope& scope);
 };
 }
 

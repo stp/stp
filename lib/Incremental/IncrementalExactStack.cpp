@@ -199,8 +199,20 @@ SOLVER_RETURN_TYPE IncrementalSolver::Impl::solvePlainExactStack(
   // whose enumeration, with the allowance set to zero, is instead bounded
   // by the operand pairs the search can propose.
   const uint64_t refinementClausesBefore = solver->submittedClauses();
-  while (sat && !bm->soft_timeout_expired && refineAbstractions(*solver) > 0)
+  bool abstractionRefinementUnknown = false;
+  while (sat && !bm->soft_timeout_expired)
   {
+    const AbstractionRefinementResult refinement =
+        refineAbstractions(*solver);
+    if (refinement.isUnknown())
+    {
+      abstractionRefinementUnknown = true;
+      break;
+    }
+    if (refinement.isFaithful())
+      break;
+    assert(refinement.madeProgress());
+
     bm->GetRunTimes()->start(RunTimes::Solving);
     if (profile.enabled)
     {
@@ -220,7 +232,7 @@ SOLVER_RETURN_TYPE IncrementalSolver::Impl::solvePlainExactStack(
   // As in IncrementalSolver::checkSat, the verdict below deliberately does
   // not identify the exhausted budget, so the reason has to be taken from the
   // solver here or not at all.
-  if (bm->soft_timeout_expired)
+  if (abstractionRefinementUnknown || bm->soft_timeout_expired)
     bm->noteBudgetExhausted(*solver);
 
   // Whatever the loop pinned is part of what this stack costs from now on,
@@ -238,7 +250,7 @@ SOLVER_RETURN_TYPE IncrementalSolver::Impl::solvePlainExactStack(
   if (uf.stats_flag)
     solver->printStats();
 
-  if (bm->soft_timeout_expired)
+  if (abstractionRefinementUnknown || bm->soft_timeout_expired)
     return bm->unknownResult();
 
   if (!sat)
@@ -549,6 +561,7 @@ IncrementalSolver::Impl::exactStackCheckSat(
       bm->GetRunTimes()->stop(RunTimes::CNFConversion);
       rootLitOf[inputToSat] = blockLit;
       aigRootOf[inputToSat] = blockRegular;
+      recordAbstractionOwner(inputToSat, root);
       clauseMassOf[inputToSat] =
           solver->submittedClauses() - submittedBefore;
     }
@@ -588,6 +601,10 @@ IncrementalSolver::Impl::exactStackCheckSat(
   // blaster made are this driver's to refine. Taken across here, once this
   // round's block is encoded and before any search.
   syncAbstractions();
+  // This round asserts one root: the block. Both routes below refine against
+  // it, so the abstraction scope is named here rather than in each of them.
+  if (!bvAbstraction.empty())
+    setLiveAbstractionOwners(ASTVec(1, inputToSat));
 
   applySolveBudgets(*solver, uf);
   bm->soft_timeout_expired = false;

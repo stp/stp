@@ -158,7 +158,8 @@ public:
     return abstraction_.terms();
   }
 
-  unsigned refineAbstractions(SATSolver& solver) override;
+  AbstractionRefinementResult
+  refineAbstractions(SATSolver& solver) override;
   uint64_t abstractionRefinements() const override
   {
     return abstraction_.refinements();

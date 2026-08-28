@@ -564,7 +564,8 @@ bool ToSATAIG::runSolver(SATSolver& satSolver)
   return result;
 }
 
-unsigned ToSATAIG::refineAbstractions(SATSolver& solver)
+AbstractionRefinementResult
+ToSATAIG::refineAbstractions(SATSolver& solver)
 {
   return abstraction_.refine(solver, nodeToSATVar);
 }

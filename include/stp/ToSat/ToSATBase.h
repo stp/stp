@@ -28,8 +28,50 @@ THE SOFTWARE.
 #include "stp/AST/AST.h"
 #include "stp/STPManager/STPManager.h"
 
+#include <cassert>
+
 namespace stp
 {
+// The bit-vector abstraction checker has three materially different answers.
+// A zero refinement count is not enough to distinguish a faithful candidate
+// from one whose mandatory exact encoding could not be built, so callers must
+// branch on this status before publishing a SAT model.
+struct AbstractionRefinementResult
+{
+  enum class Status
+  {
+    Faithful,
+    Refined,
+    Unknown
+  };
+
+  Status status;
+  unsigned refined;
+
+  static AbstractionRefinementResult faithful()
+  {
+    return {Status::Faithful, 0};
+  }
+
+  static AbstractionRefinementResult progress(unsigned count)
+  {
+    assert(count > 0);
+    return {Status::Refined, count};
+  }
+
+  // A refinement may have installed clauses for earlier records before a
+  // later mandatory circuit exhausts the budget. They remain useful and are
+  // counted even though this candidate cannot be decided.
+  static AbstractionRefinementResult unknown(unsigned count = 0)
+  {
+    return {Status::Unknown, count};
+  }
+
+  bool isFaithful() const { return status == Status::Faithful; }
+  bool madeProgress() const { return status == Status::Refined; }
+  bool isUnknown() const { return status == Status::Unknown; }
+};
+
 class DLL_PUBLIC ToSATBase // not copyable
 {
 protected:
@@ -73,10 +115,15 @@ public:
   // means what it says, and report a candidate that does not as an
   // internal error.
   //
-  // Returns the number of abstractions whose definition grew, which is
-  // also the caller's progress measure: non-zero means clauses were added
-  // and the search must run again.
-  virtual unsigned refineAbstractions(SATSolver& /*SatSolver*/) { return 0; }
+  // Faithful means that the candidate may pass to the next checker. Refined
+  // means clauses were added and the search must run again. Unknown means a
+  // mandatory refinement could not be encoded within its resource budget;
+  // it must never be mistaken for the old zero-refinements fixed point.
+  virtual AbstractionRefinementResult
+  refineAbstractions(SATSolver& /*SatSolver*/)
+  {
+    return AbstractionRefinementResult::faithful();
+  }
 
   // Total across the session, so a driver can tell whether the round it
   // just ran refined anything without owning the abstraction tables.
