@@ -59,7 +59,22 @@ jobs:
           '(declare-fun x () (_ BitVec 8))' \
           '(assert (= (bvadd x x) (bvmul (_ bv2 8) x)))' \
           '(check-sat)' \
-          '(exit)' | docker run --rm -i stp-image | tee /dev/stderr | grep -qx sat
+          '(exit)' > query.smt2
+        docker run --rm -i stp-image < query.smt2 | tee /dev/stderr | grep -qx sat
+        echo "ok: default backend"
+
+    # Every backend the image is configured with, so that "it is compiled in"
+    # is established by running it rather than by the configure line saying so.
+    # This is what tells us CaDiCaL is present at all: it is resolved to the
+    # copy CryptoMiniSat installed, and a mismatch there is a link-time or
+    # run-time problem, not a configure-time one.
+    - name: Solve with each backend
+      run: |
+        for backend in --cadical --cryptominisat --minisat; do
+          docker run --rm -i --entrypoint /stp stp-image --SMTLIB2 "$backend" \
+            < query.smt2 | tee /dev/stderr | grep -qx sat
+          echo "ok: $backend"
+        done
 
     # MIT and BSD components require their notices to accompany the binary,
     # and on a scratch image these two files are the only place they can be.

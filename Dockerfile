@@ -66,9 +66,21 @@ RUN git clone --depth 1 --branch release/v5.14.7 \
 # CryptoMiniSat is built above because it is the one dependency
 # --auto-download does not cover.
 #
-# The two solvers are named explicitly rather than left to whatever is
-# installed, and CaDiCaL is turned off: it is on by default, and this image
-# links CryptoMiniSat and MiniSat instead.
+# All three backends are named explicitly rather than left to whatever is
+# installed. CaDiCaL is the subtle one: CryptoMiniSat 5.14 builds and installs
+# its own, so with a static libcryptominisat5 -- which is what a scratch image
+# needs -- both archives would reach libstp's link line and their symbols
+# would collide. The guard in the top-level CMakeLists refuses that, with one
+# exception: if STP resolves CaDiCaL to the same archive CryptoMiniSat
+# installed, there is only one library and one set of symbols. That is what
+# happens here, because rung 1 of cmake/FindCaDiCaL.cmake searches the system
+# prefixes and CryptoMiniSat put cadical/cadical.hpp and libcadical.a in
+# /usr/local above. Configure prints which copy it settled on.
+#
+# The cost is that CaDiCaL is then whatever CryptoMiniSat bundles rather than
+# the newer revision STP pins for itself, so --cadical-factor detects the older
+# version and turns itself off. Building CryptoMiniSat shared would avoid that,
+# but a scratch image cannot carry the .so.
 WORKDIR /stp
 COPY . /stp
 RUN cmake -S . -B build \
@@ -78,7 +90,7 @@ RUN cmake -S . -B build \
         -DENABLE_AUTO_DOWNLOAD=ON \
         -DUSE_CRYPTOMINISAT=ON \
         -DUSE_MINISAT=ON \
-        -DUSE_CADICAL=OFF \
+        -DUSE_CADICAL=ON \
  && cmake --build build \
  && cmake --install build
 
