@@ -79,6 +79,31 @@ jobs:
         # fetched by the configure step below.
         ./scripts/deps/setup-cms.sh -DBUILD_SHARED_LIBS=ON
 
+    # The Python that ships is generated. bindings/python/stp/*.py.in become
+    # build/bindings/python/stp/*.py through configure_file, so a checkout
+    # contains no copy of them and the analysis saw only docs/conf.py, the AST
+    # kind generator and the fuzz scripts -- about 2500 lines, none of which
+    # ship -- while missing the ~1900-line ctypes module that users import.
+    # It had never produced an alert.
+    #
+    # configure_file runs at configure time, so this needs no compilation.
+    # bison and flex are here because find_package(... REQUIRED) for them runs
+    # before CMake reaches anything Python-related.
+    - name: Generate the Python bindings
+      if: matrix.language == 'python'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y bison cmake flex python3
+        cmake -S . -B build \
+          -DENABLE_AUTO_DOWNLOAD:BOOL=ON \
+          -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" \
+          -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" \
+          -DPYTHON_EXECUTABLE:PATH="$(which python3)"
+        # The point of the step; a silent skip would leave the analysis
+        # looking healthy while covering nothing that ships.
+        test -s build/bindings/python/stp/stp.py
+        echo "ok: generated $(wc -l < build/bindings/python/stp/stp.py) lines of bindings"
+
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v4
       with:
