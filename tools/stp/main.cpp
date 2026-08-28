@@ -115,6 +115,13 @@ public:
   CLI::Option* bv_term_abstraction_mult_option = nullptr;
   CLI::Option* bv_term_abstraction_divmod_option = nullptr;
 
+  // Likewise for the named mask of BV abstraction schema families.
+  std::string bv_schema_groups = formatBVSchemaGroups(BV_SCHEMA_GROUP_DEFAULT);
+
+  // Whether the group list was given, so that the value the run actually
+  // named can be told from the default it inherited.
+  CLI::Option* bv_schema_groups_option = nullptr;
+
   // Tri-state: UserFlags.interactive_read is only overridden when the
   // option was given, so the value needs its own presence check.
   bool interactive = false;
@@ -380,6 +387,17 @@ void ExtraMain::create_options()
            "before falling back on ruling out the one pair the candidate "
            "holds",
            refinement_group);
+  bv_schema_groups_option =
+      app.add_option("--bv-term-abstraction-schema-groups", bv_schema_groups,
+                     "comma-separated schema families allowed by "
+                     "--bv-term-abstraction-schemas: base, udiv15, "
+                     "udiv-observed, udiv-tail, urem, quotient-one-quot, "
+                     "quotient-one-rem, mul8, mul-ref3, mul-tail or add; "
+                     "'all' selects the complete experimental stack and "
+                     "'none' selects no schemas; semantic aliases are udiv, "
+                     "mul6 and quotient-one")
+          ->group(refinement_group)
+          ->capture_default_str();
   app.add_option("--bv-term-abstraction-rounds",
                  bm->UserFlags.bv_term_abstraction_rounds,
                  "ceiling on the blocking lemmas one abstracted "
@@ -933,6 +951,17 @@ int ExtraMain::parse_options(int argc, char** argv)
     cerr << "Error: " << e.what() << endl;
     cerr << "Please give '--help' to get help" << endl;
     exit(-1);
+  }
+
+  {
+    std::string error;
+    if (!parseBVSchemaGroups(bv_schema_groups,
+                             bm->UserFlags.bv_term_abstraction_schema_groups,
+                             error))
+    {
+      cerr << "ERROR: --bv-term-abstraction-schema-groups: " << error << endl;
+      return -1;
+    }
   }
 
   if (bv_term_abstraction_divmod_option->count() != 0)

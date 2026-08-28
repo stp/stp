@@ -100,8 +100,9 @@ struct BVEQAbstraction
 // the one in hand, and the candidate is read only to decide which of them
 // it contradicts.
 //
-// The four schemas cover low-bit parity, trailing-zero preservation, and
-// positive and negative powers of two.
+// The hand-written schemas cover low-bit parity, trailing-zero preservation,
+// and positive and negative powers of two. Lemma carries the ranked upstream
+// registry, including MUL8's zero-product/odd-factor relationship.
 enum class MulSchema
 {
   // Nothing the candidate contradicts. The round falls through to the
@@ -120,7 +121,9 @@ enum class MulSchema
   Pow2,
   // ... and an operand whose value is -2^k turns it into a shift of the
   // other one negated: a = -2^k -> t = (-b) << k.
-  NegPow2
+  NegPow2,
+  // One of the remaining synthesised facts, named by lemmaIndex.
+  Lemma
 };
 
 // Which fact to spend, over which operand. Multiplication is commutative,
@@ -129,45 +132,162 @@ struct MulSchemaChoice
 {
   MulSchema schema = MulSchema::None;
   unsigned operand = 0;
-  // log2 of the power of two, for the two schemas that have one.
+  // log2 of the power of two for the two shift schemas.
   unsigned shift = 0;
+  // Set for Lemma: index in mulLemmaTable().
+  unsigned lemmaIndex = 0;
+  // The option family that admitted this choice. BASE is also the harmless
+  // default for None and for the established schemas' aggregate initialisers.
+  BVSchemaGroup group = BVSchemaGroup::BASE;
 };
 
-// Bits of BVTermAbstraction::installedSchemas. Only the two unconditional
-// facts are tracked: once installed, no candidate can contradict them
-// again, so re-checking them is wasted and re-emitting them is worse.
-// The two value-guarded schemas need no flag -- installing one for a given
-// operand value settles that value for good, and there are only as many of
-// them as there are bits.
-enum
+// Bits of BVTermAbstraction::installedSchemas. Only the unconditional facts
+// are tracked: once installed, no candidate can contradict them again, so
+// re-checking them is wasted and re-emitting them is worse. The two
+// value-guarded schemas need no flag -- installing one for a given operand
+// value settles that value for good, and there are only as many of them as
+// there are bits.
+enum : uint64_t
 {
-  MUL_SCHEMA_INSTALLED_ODD = 1u,
-  MUL_SCHEMA_INSTALLED_TRAILING_ZEROS_0 = 2u,
-  MUL_SCHEMA_INSTALLED_TRAILING_ZEROS_1 = 4u
+  MUL_SCHEMA_INSTALLED_ODD = 1ull << 0,
+  MUL_SCHEMA_INSTALLED_TRAILING_ZEROS_0 = 1ull << 1,
+  MUL_SCHEMA_INSTALLED_TRAILING_ZEROS_1 = 1ull << 2,
+  // One bit per registry entry per operand reading: fifteen lemmas in two
+  // readings occupy bits 3 through 32.
+  MUL_LEMMA_INSTALLED_FIRST = 1ull << 3
 };
 
-// The first of the four facts above that this candidate contradicts, or
-// None. Pure: the caller has already read the model, and what comes back
-// depends on nothing else.
+constexpr uint64_t mulLemmaInstalledBit(unsigned index, unsigned operand)
+{
+  return MUL_LEMMA_INSTALLED_FIRST << (2 * index + operand);
+}
+
+
+struct AddSchemaChoice
+{
+  bool found = false;
+  unsigned operand = 0;
+  unsigned lemmaIndex = 0;
+  BVSchemaGroup group = BVSchemaGroup::BASE;
+};
+
+constexpr uint64_t addLemmaInstalledBitValue(unsigned index, unsigned operand)
+{
+  return uint64_t{1} << (2 * index + operand);
+}
+
+inline uint64_t addLemmaInstalledBit(unsigned index, unsigned operand)
+{
+  return addLemmaInstalledBitValue(index, operand);
+}
+
+DLL_PUBLIC AddSchemaChoice
+chooseAddSchema(const std::vector<bool>& aBits, const std::vector<bool>& bBits,
+                const std::vector<bool>& tBits, uint64_t installedSchemas,
+                uint32_t enabledGroups = BV_SCHEMA_GROUP_ALL);
+
+// The first fact above that this candidate contradicts, or None. Pure: the
+// caller has already read the model, and what comes back depends on nothing
+// else.
 //
 // `tBits` is the product bits the candidate holds, NOT the product of
 // `aBits` and `bBits` -- the whole point is that the two disagree. Called
 // only once they do.
-DLL_PUBLIC MulSchemaChoice chooseMulSchema(const std::vector<bool>& aBits,
-                                           const std::vector<bool>& bBits,
-                                           const std::vector<bool>& tBits,
-                                           unsigned installedSchemas);
+DLL_PUBLIC MulSchemaChoice
+chooseMulSchema(const std::vector<bool>& aBits, const std::vector<bool>& bBits,
+                const std::vector<bool>& tBits, uint64_t installedSchemas,
+                uint32_t enabledGroups = BV_SCHEMA_GROUP_ALL);
+
+// Whether one hand-written multiplication schema holds of these values.
+//
+// The registry facts get their five faces from BVLemmaCatalogue: one
+// enumerator, one predicate, one circuit, one name, one group, one table row
+// apiece, and an exhaustive test that reconciles the predicate with the
+// circuit. The schemas here and the division ones below are not table rows --
+// each is parameterised by something the candidate supplies (an operand
+// reading, an exponent, a prefix length, a divisor value) and each has a
+// circuit of its own shape, so a row would have to carry a different
+// signature per arm. The reason the table exists applies to them unchanged
+// though: what the chooser reads off a candidate and what the clauses go on
+// to say have to be the same claim, and the only way to know that is to have
+// one predicate and check the circuit against it.
+//
+// So the claim is written once, here, the chooser calls exactly these, and
+// BVSchemaCircuit_Test drives the same functions against the circuits the
+// refiner installs. Each is a theorem of the operation on its own -- the
+// value-guarded arms carry their guard rather than assuming the caller has
+// checked it -- which is what lets the same test ask both questions of them.
+//
+// `operand` selects the reading of the commutative operation; `shift` carries
+// the exponent for Pow2 and NegPow2, and is ignored by the arms that take no
+// parameter.
+DLL_PUBLIC bool mulSchemaHolds(MulSchema schema, unsigned operand,
+                               unsigned shift,
+                               const std::vector<bool>& aBits,
+                               const std::vector<bool>& bBits,
+                               const std::vector<bool>& tBits);
+
+// The circuits those schemas install, over the operand proxies and the
+// abstraction's own result bits. Exposed for the same reason the division
+// encoders below are: whether the clauses say what the predicate above claims
+// is a question only a solver can answer.
+DLL_PUBLIC void encodeMulOdd(SATSolver& solver,
+                             const std::vector<unsigned>& aVars,
+                             const std::vector<unsigned>& bVars,
+                             const std::vector<unsigned>& resultVars);
+DLL_PUBLIC void encodeMulTrailingZeros(SATSolver& solver,
+                                       const std::vector<unsigned>& opVars,
+                                       const std::vector<unsigned>& resultVars,
+                                       unsigned width);
+DLL_PUBLIC void encodeMulShiftUnderValue(
+    SATSolver& solver, const std::vector<unsigned>& fixedVars,
+    const std::vector<bool>& fixedBits, const std::vector<unsigned>& sourceVars,
+    const std::vector<unsigned>& resultVars, unsigned width, unsigned shift);
+
+// The bits of -x. The negated-power-of-two schema is this composed with the
+// shift circuit above, so what it claims can only be checked against the two
+// together.
+DLL_PUBLIC std::vector<unsigned> encodeNegate(SATSolver& solver,
+                                              const std::vector<unsigned>& x,
+                                              unsigned width);
+
+// What the operation really is at these operand values: the oracle the whole
+// refinement rests on, since a candidate is faithful exactly when its result
+// agrees with this.
+//
+// It is STP's own constant evaluator rather than a second implementation kept
+// beside the loop -- `opKind` is BVMULT, BVDIV or BVMOD, and the two
+// totalisations SMT-LIB asks for over a zero divisor come from there rather
+// than from a special case written here. The one that was written here
+// answered zero for a division by zero, which made a bogus candidate look
+// consistent and left the loop with nothing to say about a model it had
+// already rejected. Exposed so that the oracle can be checked on its own
+// rather than only through the loop that depends on it.
+DLL_PUBLIC std::vector<bool> bvOperationValue(Kind opKind,
+                                              const std::vector<bool>& aBits,
+                                              const std::vector<bool>& bBits);
+
+// The exact low `prefixBits` bits of an addition, over the operand proxies
+// and the abstraction's own result bits. `aNegated`/`bNegated` carry the
+// subtraction spelling STP lowers as an addition of a complement. The whole
+// addition is this with `prefixBits == width`, so the definition and any
+// partial pin cannot silently disagree about polarity.
+DLL_PUBLIC void encodeAddLowPrefix(
+    SATSolver& solver, const std::vector<unsigned>& aVars,
+    const std::vector<unsigned>& bVars,
+    const std::vector<unsigned>& resultVars, unsigned width,
+    unsigned prefixBits, bool aNegated = false, bool bNegated = false);
 
 // The algebraic facts an abstracted BVDIV or BVMOD is refined with.
 //
 // Division is not commutative and has no cheap unconditional fact about its
 // low bits to match the multiplication schemas: the low bits of a quotient
-// depend on the whole of both operands. Both facts here are value-guarded on
-// the *divisor* instead. Each says what the operation is for one divisor and
+// depend on the whole of both operands. The first two facts are value-guarded
+// on the *divisor*. Each says what the operation is for one divisor and
 // leaves the dividend free, which rules out 2^W pairs where a blocking lemma
-// rules out one, and neither needs an installed-flag -- fixing a divisor
-// value settles that value for good, and there are only as many of them as
-// the schemas can name.
+// rules out one. They need no installed flag: fixing a divisor value settles
+// that value for good. The bounds and synthesised facts that follow apply to
+// whole candidate regions and are each installed once.
 enum class DivSchema
 {
   // Nothing the candidate contradicts. The round falls through to the
@@ -183,8 +303,8 @@ enum class DivSchema
   // the useful degenerate reading: dividing by one is the dividend, and the
   // remainder over one is zero.
   Pow2Divisor,
-  // The three below name no divisor at all, which is what makes them the
-  // ones that fire. A candidate handed a 256-bit divisor is almost never
+  // The facts below name no particular divisor, which is what makes them
+  // fire. A candidate handed a 256-bit divisor is almost never
   // handed zero or a power of two, so the two schemas above sit idle on
   // exactly the queries the abstraction exists for -- while a bound is
   // contradicted by any candidate that overshoots, whatever the divisor is.
@@ -209,40 +329,160 @@ enum class DivSchema
   Lemma
 };
 
-// Bits of BVTermAbstraction::installedSchemas for the three unconditional
-// division facts. They share the field with the multiplication flags, which
-// is safe because an abstraction is a multiplication or a division and
-// never both.
-enum
+// Bits of BVTermAbstraction::installedSchemas for the unconditional division
+// or remainder facts. They share the field with the multiplication and
+// addition flags, which is safe because an abstraction has only one kind.
+enum : uint64_t
 {
-  DIV_SCHEMA_INSTALLED_REMAINDER_AT_MOST_DIVIDEND = 8u,
-  DIV_SCHEMA_INSTALLED_REMAINDER_BELOW_DIVISOR = 16u,
-  DIV_SCHEMA_INSTALLED_QUOTIENT_AT_MOST_DIVIDEND = 32u,
-  // ... and one apiece for the seven DivLemma facts, which are
-  // unconditional for the same reason and tracked the same way. The first
-  // of them is 64; `DIV_LEMMA_INSTALLED(i)` is the bit for the i'th.
-  DIV_LEMMA_INSTALLED_FIRST = 64u
+  DIV_SCHEMA_INSTALLED_REMAINDER_AT_MOST_DIVIDEND = 1ull << 0,
+  DIV_SCHEMA_INSTALLED_REMAINDER_BELOW_DIVISOR = 1ull << 1,
+  DIV_SCHEMA_INSTALLED_QUOTIENT_AT_MOST_DIVIDEND = 1ull << 2,
+  // ... and one apiece for the DivLemma or RemLemma facts, which are
+  // unconditional for the same reason and tracked the same way;
+  // divLemmaInstalledBit(i) is the bit for the i'th.
+  DIV_LEMMA_INSTALLED_FIRST = 1ull << 3
 };
 
-inline unsigned divLemmaInstalledBit(unsigned index)
+constexpr uint64_t divLemmaInstalledBitValue(unsigned index)
 {
   return DIV_LEMMA_INSTALLED_FIRST << index;
 }
 
-// The DivLemma facts the chooser offers, in the order it offers them, and
-// how many there are. Exposed so a test can walk the same table the refiner
-// does rather than keeping a second copy of it in step with this one.
-DLL_PUBLIC const DivLemma* divLemmaTable(unsigned& count);
+inline uint64_t divLemmaInstalledBit(unsigned index)
+{
+  return divLemmaInstalledBitValue(index);
+}
+
+// The schema families whose guard is read off the candidate -- a divisor
+// value, a power-of-two exponent, a magnitude band -- rather than being a
+// fact about every pair of operands.
+//
+// An unconditional fact needs one `installedSchemas` bit: once it is in the
+// solver no candidate can contradict it again. These cannot be tracked that
+// way, because each fires once per distinct guard, and for several of them
+// the number of distinct guards grows with the width rather than being a
+// constant: a 256-bit divisor has 255 magnitudes to walk through and a
+// 256-bit quotient has 255 thresholds, at a comparator apiece. Both were
+// observed doing exactly that, and were patched in different ways -- one by
+// reordering the chooser, one by a hard cap of two. This is that cap,
+// generalised: every candidate-guarded family declares an instance budget,
+// and the counters live in the high bits of the same field.
+enum class BVSchemaFamily : unsigned
+{
+  // DivSchema::DivisorZero and DivSchema::Pow2Divisor.
+  DivisorValue = 0,
+  // MulSchema::Pow2 and MulSchema::NegPow2.
+  MulShiftValue,
+  COUNT
+};
+
+constexpr unsigned BV_SCHEMA_FAMILY_COUNT =
+    static_cast<unsigned>(BVSchemaFamily::COUNT);
+
+// Four bits apiece, above every per-lemma bit any operation uses.
+constexpr unsigned BV_SCHEMA_FAMILY_COUNTER_BITS = 4;
+constexpr unsigned BV_SCHEMA_FAMILY_COUNTER_FIRST = 48;
+constexpr uint64_t BV_SCHEMA_FAMILY_COUNTER_MASK =
+    (uint64_t{1} << BV_SCHEMA_FAMILY_COUNTER_BITS) - 1;
+
+static_assert(BV_SCHEMA_FAMILY_COUNT * BV_SCHEMA_FAMILY_COUNTER_BITS <=
+                  64 - BV_SCHEMA_FAMILY_COUNTER_FIRST,
+              "the schema-family counters do not fit in installedSchemas");
+// Growing a catalogue eventually runs its per-entry bits into the low-prefix
+// bit above, or the family counters above that. Both are compile errors.
+static_assert(mulLemmaInstalledBit(BV_MUL_LEMMA_COUNT - 1, 1) <
+                  (uint64_t{1} << BV_SCHEMA_FAMILY_COUNTER_FIRST),
+              "the MUL catalogue has outgrown its installed-lemma bits");
+static_assert(addLemmaInstalledBitValue(BV_ADD_LEMMA_COUNT - 1, 1) <
+                  (uint64_t{1} << BV_SCHEMA_FAMILY_COUNTER_FIRST),
+              "the ADD catalogue has outgrown its installed-lemma bits");
+static_assert(divLemmaInstalledBitValue(BV_DIV_LEMMA_COUNT - 1) <
+                  (uint64_t{1} << BV_SCHEMA_FAMILY_COUNTER_FIRST),
+              "the UDIV catalogue has outgrown its installed-lemma bits");
+static_assert(divLemmaInstalledBitValue(BV_REM_LEMMA_COUNT - 1) <
+                  (uint64_t{1} << BV_SCHEMA_FAMILY_COUNTER_FIRST),
+              "the UREM catalogue has outgrown its installed-lemma bits");
+
+// How many instances of a family one record may install; zero is no cap.
+//
+// Two is the number that removed the observed divisor-magnitude regression,
+// and the quotient thresholds have the same failure mode with no measurement
+// of their own, so they inherit it. The two value-guarded families are left
+// uncapped: they are what the established profile has always done, and each
+// installed instance says what the operation *is* for that operand value
+// rather than bounding it, so capping them would be a policy change with no
+// evidence behind it. The mechanism is here for when there is some.
+constexpr unsigned bvSchemaFamilyAllowance(BVSchemaFamily)
+{
+  return 0u;
+}
+
+// Every allowance has to fit the nibble that counts it.
+//
+// Five static assertions above guard the bit *layout* -- that the catalogues
+// have not outgrown their per-entry bits, that the low-prefix flags do not
+// overlap the counters, that the counters fit the word. The one thing the
+// counter arithmetic actually depends on was not among them, and it is the
+// one the header invites changing: raise an allowance past fifteen and
+// bvSchemaFamilyRecordInstance carries out of the nibble into the next
+// family's, so the family it belongs to becomes uncapped -- its count wraps
+// to zero and never reaches the allowance again -- while its neighbour loses
+// budget it was never asked to spend. Both failures are silent.
+constexpr bool bvSchemaFamilyAllowancesFit(unsigned family = 0)
+{
+  return family >= BV_SCHEMA_FAMILY_COUNT ||
+         (bvSchemaFamilyAllowance(static_cast<BVSchemaFamily>(family)) <=
+              BV_SCHEMA_FAMILY_COUNTER_MASK &&
+          bvSchemaFamilyAllowancesFit(family + 1));
+}
+
+static_assert(bvSchemaFamilyAllowancesFit(),
+              "a schema-family allowance does not fit its counter, so "
+              "recording an instance would carry into the next family");
+
+constexpr unsigned bvSchemaFamilyInstances(uint64_t installedSchemas,
+                                           BVSchemaFamily family)
+{
+  return (unsigned)((installedSchemas >>
+                     (BV_SCHEMA_FAMILY_COUNTER_FIRST +
+                      BV_SCHEMA_FAMILY_COUNTER_BITS *
+                          static_cast<unsigned>(family))) &
+                    BV_SCHEMA_FAMILY_COUNTER_MASK);
+}
+
+// Whether this record may still install one of this family.
+constexpr bool bvSchemaFamilyHasInstance(uint64_t installedSchemas,
+                                         BVSchemaFamily family)
+{
+  return bvSchemaFamilyAllowance(family) == 0 ||
+         bvSchemaFamilyInstances(installedSchemas, family) <
+             bvSchemaFamilyAllowance(family);
+}
+
+// `installedSchemas` with one more instance of this family recorded. An
+// uncapped family is not counted, so its nibble cannot wrap.
+constexpr uint64_t bvSchemaFamilyRecordInstance(uint64_t installedSchemas,
+                                                BVSchemaFamily family)
+{
+  return bvSchemaFamilyAllowance(family) == 0
+             ? installedSchemas
+             : installedSchemas +
+                   (uint64_t{1} << (BV_SCHEMA_FAMILY_COUNTER_FIRST +
+                                    BV_SCHEMA_FAMILY_COUNTER_BITS *
+                                        static_cast<unsigned>(family)));
+}
+
 
 struct DivSchemaChoice
 {
   DivSchema schema = DivSchema::None;
-  // log2 of the divisor, for the schema that has one.
+  // log2 of the divisor for Pow2Divisor, or the exponent used by one of the
+  // two power-of-two quotient bounds.
   unsigned shift = 0;
-  // Set when `schema` is Lemma: which of the DivLemma facts to install, as
-  // an index into the table the refiner keeps. Held as an index rather than
-  // the enum so this header does not need the one that defines it.
+  // Set when `schema` is Lemma: which DivLemma or RemLemma fact to install,
+  // as an index into the operation's table.
   unsigned lemmaIndex = 0;
+  BVSchemaGroup group = BVSchemaGroup::BASE;
 };
 
 // Where each bit of the result comes from once a schema has fixed the
@@ -259,6 +499,25 @@ enum : int
 DLL_PUBLIC std::vector<int> divSchemaSources(Kind opKind, unsigned width,
                                              const DivSchemaChoice& choice);
 
+// Whether one hand-written division or remainder schema holds of these
+// values -- the same single-predicate arrangement `mulSchemaHolds` describes,
+// for the arms of DivSchema that are not registry rows.
+//
+// Every arm here is a theorem about the operation on its own. The two that
+// name a divisor carry their own guard: `DivisorZero` is vacuous over a
+// nonzero divisor and `Pow2Divisor` over a divisor that is not 2^shift. The
+// chooser reaches them only where the guard is already true, so asking this
+// is the same question it used to ask inline -- and it is now the same
+// question the circuit is checked against.
+//
+// `opKind` is BVDIV or BVMOD; `shift` carries the exponent for the
+// parameterised arms and is ignored by the rest. `DivSchema::Lemma` is a
+// registry row and belongs to `divLemmaHolds`/`remLemmaHolds`, not here.
+DLL_PUBLIC bool divSchemaHolds(Kind opKind, DivSchema schema, unsigned shift,
+                               const std::vector<bool>& aBits,
+                               const std::vector<bool>& bBits,
+                               const std::vector<bool>& tBits);
+
 // The first of the facts above that this candidate contradicts, or None.
 // Pure, and called under the same conditions as chooseMulSchema: `tBits` is
 // what the candidate holds for the result, already known to disagree with
@@ -266,11 +525,10 @@ DLL_PUBLIC std::vector<int> divSchemaSources(Kind opKind, unsigned width,
 //
 // `opKind` is BVDIV or BVMOD. The two share both schemas and differ only in
 // what each one concludes.
-DLL_PUBLIC DivSchemaChoice chooseDivSchema(Kind opKind,
-                                           const std::vector<bool>& aBits,
-                                           const std::vector<bool>& bBits,
-                                           const std::vector<bool>& tBits,
-                                           unsigned installedSchemas);
+DLL_PUBLIC DivSchemaChoice chooseDivSchema(
+    Kind opKind, const std::vector<bool>& aBits, const std::vector<bool>& bBits,
+    const std::vector<bool>& tBits, uint64_t installedSchemas,
+    uint32_t enabledGroups = BV_SCHEMA_GROUP_ALL);
 
 // A variable that holds exactly when `lv <= rv`. Shared by the comparison
 // refinement, which is where it comes from, and by the division bounds,
@@ -306,11 +564,30 @@ DLL_PUBLIC void encodeDivUnderDivisorValue(
 //
 // A blocking lemma rules out one pair of operand values out of 2^(2W), so
 // what one is worth falls away as the operands widen and a flat allowance
-// means something quite different at either end of the range. The allowance
-// is a rate instead -- `width / bv_term_abstraction_value_divisor` -- held
-// under the flat ceiling `bv_term_abstraction_rounds`, which keeps every
-// spelling that ceiling already had: zero still never escalates, and an
-// explicit count still caps.
+// means something quite different at either end of the range. Three flags
+// therefore compose into this one number, and because they compose it is
+// written out here rather than left to be reassembled from three separate
+// pieces of documentation:
+//
+//   allowance(W, op) =
+//       rounds == 0            -> 0, meaning never escalate
+//       otherwise              -> min(rounds,
+//                                     divisor != 0 ? max(1, W / divisor) : rounds,
+//                                     op is DIV/MOD && divmodLimit != 0
+//                                         ? divmodLimit : rounds)
+//
+// where `rounds` is bv_term_abstraction_rounds, `divisor` is
+// bv_term_abstraction_value_divisor and `divmodLimit` is
+// bv_term_abstraction_divmod_value_limit.
+//
+// The zeros do not all mean the same thing, which is the part worth saying
+// out loud. Zero rounds means "never escalate, enumerate without limit" --
+// and, separately, that algebraic schemas are not capped either, since they
+// are bounded by the same flag. Zero for the other two means "this layer is
+// absent", leaving whatever the layers above it decided.
+//
+// Keeping the layers separate is what lets a benchmark vary value blocks
+// without also changing the number of schema rounds.
 DLL_PUBLIC unsigned valueLemmaAllowance(const UserDefinedFlags& uf,
                                         unsigned width);
 
@@ -338,15 +615,12 @@ struct BVTermAbstraction
   bool operandNegated[3] = {false, false, false};
   unsigned condSATVar = BV_ABSTRACTION_NO_VAR;
   bool defined = false;
-  // Blocking lemmas spent on this one abstraction so far; see
-  // bv_term_abstraction_rounds.
+  // Blocking lemmas spent on this one abstraction over its whole life, and
+  // algebraic schemas likewise -- counted separately, because a schema is
+  // both cheaper and stronger than a blocking lemma and should not bring the
+  // escalation forward. These are what the diagnostics report; the two
+  // below are what the budgets are spent from.
   unsigned blockedRounds = 0;
-  // Algebraic schemas spent on it, counted separately: a schema is both
-  // cheaper and stronger than a blocking lemma, so it does not eat the
-  // budget that decides when to give up and encode the operation exactly.
-  // It is bounded by the same number, though, because a candidate that
-  // keeps landing on fresh powers of two would otherwise buy a solve for
-  // each one.
   unsigned schemaRounds = 0;
   // The same two, since this query began.
   //
@@ -372,8 +646,10 @@ struct BVTermAbstraction
   // two purses lazily when this record is actually live. Dormant historical
   // records therefore cost no per-query scan.
   uint64_t queryGeneration = 0;
-  // Which of the unconditional schemas are already in the solver.
-  unsigned installedSchemas = 0;
+  // Which of the unconditional schemas will not be offered again: the ones
+  // already in the solver, and the ones the AIG node budget refused to build,
+  // which there is no point offering a second time either.
+  uint64_t installedSchemas = 0;
   // Set once the AIG node budget has refused this record's exact encoding.
   //
   // The budget is a memory guard, and a circuit it will not build this round
@@ -387,15 +663,17 @@ struct BVTermAbstraction
   int exactRefusedAtNodeCount = -1;
   // How many of this operation's low bits are encoded exactly. Zero for an
   // abstraction nothing has pinned exactly yet, the width once `defined` is
-  // set, and something in between for a piece-at-a-time escalation (see
+  // set, and something in between for the two ways a record gets there
+  // gradually: an exact low prefix, and a piece-at-a-time escalation (see
   // bv_term_abstraction_inc_bitblast).
   //
   // It used to say it was only the escalation's, and only ever zero or the
-  // width -- which the comparison, if-then-else and whole-addition
-  // definitions broke by setting `defined` and leaving this at zero.
-  // reportRecords publishes it, so a record could be `defined` and report
-  // `exact-bits=0`. Every path that pins bits exactly writes it now, and the
-  // field says what it counts.
+  // width -- which the low-prefix schemas broke by writing three, and which
+  // the comparison, if-then-else and whole-addition definitions broke by
+  // setting `defined` and leaving this at zero. reportRecords publishes it,
+  // so a record could be `defined` and report `exact-bits=0`, or report
+  // `partial` on a three-bit prefix with no piece ever blasted. Every path
+  // that pins bits exactly writes it now, and the field says what it counts.
   unsigned blastedBits = 0;
   // Times value-pair refinement reached its allowance and installed an exact
   // circuit. Normally zero or one; incremental multiplication bit-blasting
@@ -409,9 +687,9 @@ struct BVTermAbstraction
   uint64_t exactClauses = 0;
   uint64_t exactVariables = 0;
   uint64_t exactMicroseconds = 0;
-  // The bits of -operand[i], minted on first use by the NegPow2 schema and
-  // kept because that schema can fire once per power of two and would
-  // otherwise pay for the same negation circuit every time.
+  // The bits of -operand[i], minted on first use by a schema that needs the
+  // semantic operand and kept so later schemas do not pay for the same
+  // negation circuit again.
   std::vector<unsigned> negatedOperand[2];
   // What the blast knew about each operand's bits before the abstraction
   // replaced them with proxy inputs: -1 for a live node, 0 or 1 for a
@@ -448,6 +726,12 @@ class DLL_PUBLIC BVAbstractionRefiner
 {
   STPMgr* bm;
 
+  // One encoder for the session. Every schema lemma and every exact
+  // escalation goes through it, and it owns the scratch simplifier state
+  // those blasts need, so a refinement round does not rebuild that per
+  // lemma.
+  BVExactEncoder exact_;
+
   std::vector<BVEQAbstraction> eqs_;
   std::vector<BVTermAbstraction> terms_;
 
@@ -476,7 +760,7 @@ class DLL_PUBLIC BVAbstractionRefiner
   void prepareTermForQuery(BVTermAbstraction& term);
 
 public:
-  explicit BVAbstractionRefiner(STPMgr* bm_) : bm(bm_) {}
+  explicit BVAbstractionRefiner(STPMgr* bm_) : bm(bm_), exact_(bm_) {}
 
   bool empty() const { return eqs_.empty() && terms_.empty(); }
   bool hasEqualities() const { return !eqs_.empty(); }
@@ -488,16 +772,12 @@ public:
   const std::vector<BVEQAbstraction>& equalities() const { return eqs_; }
   const std::vector<BVTermAbstraction>& terms() const { return terms_; }
 
-  // File a record. The identity a producer minted travels with it, so
-  // everything downstream can name the operation a record came from rather
-  // than the position it happens to occupy in these vectors.
   void appendEquality(BVEQAbstraction record);
   void appendTerm(BVTermAbstraction record);
 
-  // The records one solve semantically owns: the seeds, closed over
-  // parent-to-child producer dependencies. `complete` comes back false if a
-  // reachable ID has no retained record, which the caller must treat as
-  // Unknown rather than as a smaller scope.
+  // Fixed-point closure from direct root producers to every child producer
+  // their defining records consume. The resulting indices are creation-order
+  // sorted so refinement scheduling stays deterministic.
   BVAbstractionScope
   dependencyClosure(const std::vector<BVAbstractionId>& seeds);
 

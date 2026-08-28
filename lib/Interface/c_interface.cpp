@@ -957,6 +957,58 @@ unsigned long long vc_getCounter(VC vc, enum stp_counter_t counter)
   return 0;
 }
 
+// The C header spells the group count as a macro so a C caller can size an
+// array with it; this is the only thing keeping the two in step.
+static_assert(STP_BV_SCHEMA_GROUP_COUNT == stp::BV_SCHEMA_GROUP_COUNT,
+              "the C schema-group count is out of step with BVSchemaGroup");
+
+int vc_setSchemaGroups(VC vc, const char* groups)
+{
+  if (groups == NULL)
+  {
+    reportCAPIError("vc_setSchemaGroups: no group list");
+    return 0;
+  }
+
+  // The same parser --bv-term-abstraction-schema-groups uses, so the two
+  // doors accept one vocabulary rather than two that can drift.
+  uint32_t mask = 0;
+  std::string error;
+  if (!stp::parseBVSchemaGroups(groups, mask, error))
+  {
+    reportCAPIError(("vc_setSchemaGroups: " + error).c_str());
+    return 0;
+  }
+
+  // Only on success: a caller that mistypes one group in a list should not
+  // end up running with a narrower catalogue than it asked for.
+  stp::STP* b = (stp::STP*)vc;
+  b->bm->UserFlags.bv_term_abstraction_schema_groups = mask;
+  return 1;
+}
+
+unsigned long long vc_getSchemaGroupCounter(VC vc, unsigned group)
+{
+  if (group >= stp::BV_SCHEMA_GROUP_COUNT)
+  {
+    reportCAPIError("vc_getSchemaGroupCounter: schema group index out of "
+                    "range");
+    return 0;
+  }
+  stp::STP* b = (stp::STP*)vc;
+  return b->bm->UserFlags.coverage.bv_schema_group_lemmas[group];
+}
+
+const char* vc_schemaGroupName(unsigned group)
+{
+  if (group >= stp::BV_SCHEMA_GROUP_COUNT)
+  {
+    reportCAPIError("vc_schemaGroupName: schema group index out of range");
+    return NULL;
+  }
+  return stp::bvSchemaGroupName(static_cast<stp::BVSchemaGroup>(group));
+}
+
 enum reason_unknown_t vc_getReasonUnknown(VC vc)
 {
   switch (mgr(vc)->getUnknownReason())

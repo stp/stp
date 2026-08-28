@@ -444,3 +444,106 @@ TEST(refinement_flags, ExactCostCountersReachTheCInterface)
 // A negative value would wrap in every unsigned field below, silently
 // disabling an abstraction or removing the limit the caller asked for. It is
 // refused with a diagnostic and the field it would have wrecked is unchanged.
+
+// A group list the parser refuses leaves the selection alone.
+//
+// The list is all-or-nothing on purpose: a caller that mistypes one name in a
+// list of five should not end up running with a catalogue narrower than the
+// one it asked for and no way to tell. `groups` is also the one string this
+// interface parses, so a null pointer is refused rather than dereferenced.
+TEST(refinement_flags, AnUnknownSchemaGroupNameIsRefused)
+{
+  vc_registerErrorHandler(countError);
+  errors = 0;
+
+  VC vc = vc_createValidityChecker();
+  EXPECT_EQ(1, vc_setSchemaGroups(vc, "base"));
+  const uint32_t base = stp::bvSchemaGroupBit(stp::BVSchemaGroup::BASE);
+  ASSERT_EQ(base, flags(vc).bv_term_abstraction_schema_groups);
+
+  const char* refused[] = {"", "nonesuch", "urem,nonesuch", "all,urem",
+                           "urem,,mul8", NULL};
+  for (const char* value : refused)
+  {
+    EXPECT_EQ(0, vc_setSchemaGroups(vc, value))
+        << "list [" << (value ? value : "(null)") << "]";
+    EXPECT_EQ(base, flags(vc).bv_term_abstraction_schema_groups)
+        << "list [" << (value ? value : "(null)") << "] changed the selection";
+  }
+  EXPECT_EQ((int)(sizeof(refused) / sizeof(refused[0])), errors);
+
+  vc_Destroy(vc);
+  vc_registerErrorHandler(nullptr);
+}
+
+// Each group index must read its own counter and name -- not a neighbour's.
+// Distinct values per slot are what makes an off-by-one visible; a uniform
+// value would pass whatever the indexing did.
+TEST(refinement_flags, EachSchemaGroupIndexReadsItsOwnCounterAndName)
+{
+  ASSERT_EQ(stp::BV_SCHEMA_GROUP_COUNT,
+            static_cast<unsigned>(STP_BV_SCHEMA_GROUP_COUNT));
+
+  VC vc = vc_createValidityChecker();
+  for (unsigned i = 0; i < STP_BV_SCHEMA_GROUP_COUNT; ++i)
+    mutableFlags(vc).coverage.bv_schema_group_lemmas[i] = 100 + i;
+
+  for (unsigned i = 0; i < STP_BV_SCHEMA_GROUP_COUNT; ++i)
+  {
+    EXPECT_EQ(100u + i, vc_getSchemaGroupCounter(vc, i));
+    EXPECT_STREQ(stp::bvSchemaGroupName(static_cast<stp::BVSchemaGroup>(i)),
+                 vc_schemaGroupName(i));
+  }
+  vc_Destroy(vc);
+}
+
+// The name a breakdown reports has to be a name the selector accepts, and it
+// has to select that group and no other.
+//
+// This is the whole contract now that the taxonomy is not in the header. The
+// two calls are the only spellings of a group a C client ever sees, and if
+// they drift apart a client that reads a breakdown and feeds one line of it
+// back in gets a different family than the one it named. Checking it by
+// round-trip rather than against a written-out table is what keeps a family
+// added tomorrow covered without anyone remembering to add it here.
+
+// The name a breakdown reports has to be a name the selector accepts, and it
+// has to select that group and no other.
+//
+// This is the whole contract now that the taxonomy is not in the header. The
+// two calls are the only spellings of a group a C client ever sees, and if
+// they drift apart a client that reads a breakdown and feeds one line of it
+// back in gets a different family than the one it named. Checking it by
+// round-trip rather than against a written-out table is what keeps a family
+// added tomorrow covered without anyone remembering to add it here.
+TEST(refinement_flags, EverySchemaGroupNameRoundTripsThroughTheSelector)
+{
+  VC vc = vc_createValidityChecker();
+  for (unsigned i = 0; i < STP_BV_SCHEMA_GROUP_COUNT; ++i)
+  {
+    const char* name = vc_schemaGroupName(i);
+    ASSERT_TRUE(name != NULL) << "index " << i;
+    EXPECT_EQ(1, vc_setSchemaGroups(vc, name)) << name;
+    EXPECT_EQ(stp::bvSchemaGroupBit(static_cast<stp::BVSchemaGroup>(i)),
+              flags(vc).bv_term_abstraction_schema_groups)
+        << name << " does not select itself";
+  }
+  vc_Destroy(vc);
+}
+
+// An index past the end is a diagnostic and a zero, not an out-of-bounds read.
+
+// An index past the end is a diagnostic and a zero, not an out-of-bounds read.
+TEST(refinement_flags, AnOutOfRangeSchemaGroupIndexIsRefused)
+{
+  vc_registerErrorHandler(countError);
+  errors = 0;
+
+  VC vc = vc_createValidityChecker();
+  EXPECT_EQ(0u, vc_getSchemaGroupCounter(vc, STP_BV_SCHEMA_GROUP_COUNT));
+  EXPECT_TRUE(vc_schemaGroupName(STP_BV_SCHEMA_GROUP_COUNT) == NULL);
+  EXPECT_EQ(2, errors);
+
+  vc_Destroy(vc);
+  vc_registerErrorHandler(nullptr);
+}

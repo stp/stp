@@ -24,10 +24,180 @@ THE SOFTWARE.
 
 #include "stp/STPManager/UserDefinedFlags.h"
 
+#include <cctype>
 #include <ostream>
+#include <sstream>
+#include <vector>
 
 namespace stp
 {
+
+namespace
+{
+
+// In BVSchemaGroup order; the static_assert below is the only thing that
+// keeps the two in step.
+const char* const GROUP_NAMES[] = {"base",
+                                   "udiv15",
+                                   "udiv-observed",
+                                   "udiv-tail",
+                                   "urem",
+                                   "quotient-one-quot",
+                                   "quotient-one-rem",
+                                   "mul8",
+                                   "mul-ref3",
+                                   "mul-tail",
+                                   "add"};
+
+static_assert(sizeof(GROUP_NAMES) / sizeof(GROUP_NAMES[0]) ==
+                  BV_SCHEMA_GROUP_COUNT,
+              "BV schema group names are out of step with the enum");
+
+std::string trim(const std::string& text)
+{
+  size_t first = 0;
+  while (first < text.size() &&
+         std::isspace(static_cast<unsigned char>(text[first])))
+    ++first;
+  size_t last = text.size();
+  while (last > first &&
+         std::isspace(static_cast<unsigned char>(text[last - 1])))
+    --last;
+  return text.substr(first, last - first);
+}
+
+std::string expectedGroups()
+{
+  std::ostringstream out;
+  for (unsigned i = 0; i < BV_SCHEMA_GROUP_COUNT; ++i)
+  {
+    if (i != 0)
+      out << ", ";
+    out << GROUP_NAMES[i];
+  }
+  out << ", udiv, mul6, quotient-one, all, or none";
+  return out.str();
+}
+
+bool groupAliasMask(const std::string& token, uint32_t& aliasMask)
+{
+  if (token == "udiv")
+    aliasMask = bvSchemaGroupBit(BVSchemaGroup::UDIV15) |
+                bvSchemaGroupBit(BVSchemaGroup::UDIV_OBSERVED);
+  else if (token == "mul6")
+    aliasMask = bvSchemaGroupBit(BVSchemaGroup::MUL_REF3);
+  else if (token == "quotient-one")
+    aliasMask = bvSchemaGroupBit(BVSchemaGroup::QUOTIENT_ONE_REM) |
+                bvSchemaGroupBit(BVSchemaGroup::QUOTIENT_ONE_QUOT);
+  else
+    return false;
+  return true;
+}
+
+} // namespace
+
+const char* bvSchemaGroupName(BVSchemaGroup group)
+{
+  const unsigned index = static_cast<unsigned>(group);
+  return index < BV_SCHEMA_GROUP_COUNT ? GROUP_NAMES[index] : "unknown";
+}
+
+bool parseBVSchemaGroups(const std::string& text, uint32_t& mask,
+                         std::string& error)
+{
+  std::vector<std::string> tokens;
+  size_t begin = 0;
+  while (begin <= text.size())
+  {
+    const size_t comma = text.find(',', begin);
+    const size_t end = comma == std::string::npos ? text.size() : comma;
+    const std::string token = trim(text.substr(begin, end - begin));
+    if (token.empty())
+    {
+      error = "empty BV schema group; expected " + expectedGroups();
+      return false;
+    }
+    tokens.push_back(token);
+    if (comma == std::string::npos)
+      break;
+    begin = comma + 1;
+  }
+
+  if (tokens.size() != 1 && (tokens[0] == "all" || tokens[0] == "none"))
+  {
+    error = "'all' and 'none' must be used alone";
+    return false;
+  }
+  for (size_t i = 1; i < tokens.size(); ++i)
+    if (tokens[i] == "all" || tokens[i] == "none")
+    {
+      error = "'all' and 'none' must be used alone";
+      return false;
+    }
+
+  if (tokens.size() == 1 && tokens[0] == "all")
+  {
+    mask = BV_SCHEMA_GROUP_ALL;
+    error.clear();
+    return true;
+  }
+  if (tokens.size() == 1 && tokens[0] == "none")
+  {
+    mask = 0;
+    error.clear();
+    return true;
+  }
+
+  uint32_t parsed = 0;
+  for (const std::string& token : tokens)
+  {
+    bool found = false;
+    for (unsigned i = 0; i < BV_SCHEMA_GROUP_COUNT; ++i)
+      if (token == GROUP_NAMES[i])
+      {
+        parsed |= bvSchemaGroupBit(static_cast<BVSchemaGroup>(i));
+        found = true;
+        break;
+      }
+    uint32_t aliasMask = 0;
+    if (!found && groupAliasMask(token, aliasMask))
+    {
+      parsed |= aliasMask;
+      found = true;
+    }
+    if (!found)
+    {
+      error = "unknown BV schema group '" + token + "'; expected " +
+              expectedGroups();
+      return false;
+    }
+  }
+
+  mask = parsed;
+  error.clear();
+  return true;
+}
+
+std::string formatBVSchemaGroups(uint32_t mask)
+{
+  if (mask == 0)
+    return "none";
+  if (mask == BV_SCHEMA_GROUP_ALL)
+    return "all";
+
+  std::ostringstream out;
+  bool first = true;
+  for (unsigned i = 0; i < BV_SCHEMA_GROUP_COUNT; ++i)
+    if (bvSchemaGroupEnabled(mask, static_cast<BVSchemaGroup>(i)))
+    {
+      if (!first)
+        out << ',';
+      out << GROUP_NAMES[i];
+      first = false;
+    }
+  return out.str();
+}
+
 
 void printAbstractionCoverage(const UserDefinedFlags& uf, std::ostream& out)
 {
@@ -70,6 +240,16 @@ void printAbstractionCoverage(const UserDefinedFlags& uf, std::ostream& out)
     out << "Abstraction schema cost: clauses=" << c.bv_schema_clauses
         << " variables=" << c.bv_schema_variables
         << " microseconds=" << c.bv_schema_microseconds << std::endl;
+
+  // Always the complete partition, zeros included: a zero says that an
+  // enabled family fired nothing, which is only readable next to the mask
+  // that was selected. Omitting the empty ones would make the two runs a
+  // comparison is between look like different reports.
+  out << "Abstraction schemas by group:";
+  for (unsigned i = 0; i < BV_SCHEMA_GROUP_COUNT; ++i)
+    out << " " << bvSchemaGroupName(static_cast<BVSchemaGroup>(i)) << "="
+        << c.bv_schema_group_lemmas[i];
+  out << std::endl;
 }
 
 } // namespace stp

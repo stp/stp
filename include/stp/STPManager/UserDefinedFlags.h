@@ -28,9 +28,93 @@ THE SOFTWARE.
 #include "stp/Util/Attributes.h"
 #include <cstdint>
 #include <iosfwd>
+#include <string>
 
 namespace stp
 {
+
+// Independently selectable families of algebraic facts used by BV term
+// abstraction. The ordinal is also the coverage-counter index; the mask
+// spelling keeps the command-line and C interfaces compact without turning
+// every individual lemma into a permanent public option.
+//
+// The groups are disjoint: every fact the refiner can offer has exactly one
+// owner here, so a mask with one bit set selects precisely that family and
+// the per-group counters partition the schema total. In operation order,
+// with each operation's mechanisms after its registries.
+enum class BVSchemaGroup : unsigned
+{
+  // The schemas an enabled abstraction inherits: the seven division facts
+  // that were already qualified, the divisor-value and bound schemas, and
+  // multiplication's parity, trailing-zero and power-of-two schemas.
+  BASE = 0,
+
+  // Unsigned division.
+  UDIV15,         // the highest-firing single fact outside BASE
+  UDIV_OBSERVED,  // the ranked facts that fired on the qualification corpus
+  UDIV_TAIL,      // the rest of the registry, which did not
+
+  // Unsigned remainder.
+  UREM,
+
+  // The exact quotient/remainder band the two registries share.
+  QUOTIENT_ONE_QUOT,
+  QUOTIENT_ONE_REM,
+
+  // Multiplication.
+  MUL8,
+  MUL_REF3,
+  MUL_TAIL,
+
+  // Addition. Measured, and deliberately not adopted: over 497 queries
+  // chosen because they abstract a wide addition -- this family's best case
+  // -- enabling it installed 30,519 lemmas and cost 19.9% and seven solves
+  // against the inherited mask, regressing 162 queries and improving 15. It
+  // stays selectable so that result stays reproducible, and stays out of
+  // every profile.
+  ADD,
+
+  COUNT
+};
+
+constexpr unsigned BV_SCHEMA_GROUP_COUNT =
+    static_cast<unsigned>(BVSchemaGroup::COUNT);
+
+constexpr uint32_t bvSchemaGroupBit(BVSchemaGroup group)
+{
+  return uint32_t{1} << static_cast<unsigned>(group);
+}
+
+constexpr uint32_t BV_SCHEMA_GROUP_ALL =
+    (uint32_t{1} << BV_SCHEMA_GROUP_COUNT) - 1;
+
+// The mask an explicitly enabled abstraction inherits, and the only one the
+// corpus qualification actually justified: the established schemas, plus the
+// two families that were measured to decide queries on their own -- the UREM
+// registry, which turns the wide remainder cases from a two-gigabyte external
+// timeout into fractions of a second, and MulRef3, which takes one 512-bit
+// rewrite candidate from 3.66s/766MB to 0.12s/65MB. Every broader profile
+// below is an experiment that has to be asked for.
+constexpr uint32_t BV_SCHEMA_GROUP_QUALIFIED =
+    bvSchemaGroupBit(BVSchemaGroup::BASE) |
+    bvSchemaGroupBit(BVSchemaGroup::UREM) |
+    bvSchemaGroupBit(BVSchemaGroup::MUL_REF3);
+
+constexpr uint32_t BV_SCHEMA_GROUP_DEFAULT = BV_SCHEMA_GROUP_QUALIFIED;
+
+constexpr bool bvSchemaGroupEnabled(uint32_t mask, BVSchemaGroup group)
+{
+  return (mask & bvSchemaGroupBit(group)) != 0;
+}
+
+DLL_PUBLIC const char* bvSchemaGroupName(BVSchemaGroup group);
+
+// Parse the comma-separated CLI spelling. `all` and `none` are aliases for
+// the complete and empty masks and must stand alone. The output mask is left
+// unchanged on error, with a diagnostic returned through `error`.
+DLL_PUBLIC bool parseBVSchemaGroups(const std::string& text, uint32_t& mask,
+                                    std::string& error);
+DLL_PUBLIC std::string formatBVSchemaGroups(uint32_t mask);
 
 struct UserDefinedFlags;
 
@@ -613,6 +697,12 @@ public:
   // their keep against.
   bool bv_term_abstraction_schemas = true;
 
+  // Which schema families the master switch above may offer. The default is
+  // `qualified`, the only mask the corpus qualification justified; `all`
+  // reproduces the complete experimental stack, and an empty mask leaves the
+  // operation-specific fallback exactly as the master switch being off does.
+  uint32_t bv_term_abstraction_schema_groups = BV_SCHEMA_GROUP_DEFAULT;
+
   // You can select these with any combination you want of true & false.
   bool division_variant_1 = true;
   bool division_variant_2 = true;
@@ -973,6 +1063,10 @@ public:
     uint64_t bv_schema_clauses = 0;
     uint64_t bv_schema_variables = 0;
     uint64_t bv_schema_microseconds = 0;
+    // The same total partitioned by BVSchemaGroup, so a mixed run can be
+    // attributed without parsing diagnostic text. Every schema increment
+    // must increment exactly one entry here as well.
+    uint64_t bv_schema_group_lemmas[BV_SCHEMA_GROUP_COUNT] = {};
     // Uninterpreted-function applications the lowering decided, and the
     // constraints it installed for them.
     uint64_t uf_applications_lowered = 0;

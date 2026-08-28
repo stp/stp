@@ -2448,6 +2448,41 @@ BBNodeVec BitBlaster::BBNeg(const BBNodeVec& x)
   return result;
 }
 
+BBNodeVec BitBlaster::BBAnd(const BBNodeVec& x, const BBNodeVec& y)
+{
+  assert(x.size() == y.size());
+  BBNodeVec result(x.size());
+  for (unsigned i = 0; i < x.size(); ++i)
+    result[i] = nf->CreateNode(AND, x[i], y[i]);
+  return result;
+}
+
+BBNodeVec BitBlaster::BBOr(const BBNodeVec& x, const BBNodeVec& y)
+{
+  assert(x.size() == y.size());
+  BBNodeVec result(x.size());
+  for (unsigned i = 0; i < x.size(); ++i)
+    result[i] = nf->CreateNode(OR, x[i], y[i]);
+  return result;
+}
+
+BBNodeVec BitBlaster::BBXor(const BBNodeVec& x, const BBNodeVec& y)
+{
+  assert(x.size() == y.size());
+  BBNodeVec result(x.size());
+  for (unsigned i = 0; i < x.size(); ++i)
+    result[i] = nf->CreateNode(XOR, x[i], y[i]);
+  return result;
+}
+
+BBNodeVec BitBlaster::BBAdd(const BBNodeVec& x, const BBNodeVec& y)
+{
+  assert(x.size() == y.size());
+  BBNodeVec result = x;
+  BBPlus2(result, y, nf->getFalse());
+  return result;
+}
+
 // Compute unary minus
 BBNodeVec BitBlaster::BBUminus(const BBNodeVec& x)
 {
@@ -3258,87 +3293,26 @@ BBNodeVec BitBlaster::BBShiftRightByVariable(const BBNodeVec& value,
                                              const BBNodeVec& amount,
                                              unsigned width)
 {
+  assert(value.size() == width);
   BBNodeVec result = value;
 
   unsigned stage = 0;
-  for (; (1u << stage) < width; ++stage)
+  for (; stage < amount.size() && stage < std::numeric_limits<unsigned>::digits;
+       ++stage)
   {
+    const unsigned shift = 1u << stage;
+    if (shift >= width)
+      break;
     BBNodeVec shifted = result;
-    BBRShift(shifted, 1u << stage);
+    BBRShift(shifted, shift);
     result = BBITE(amount[stage], shifted, result);
   }
 
   const BBNodeVec zero = BBfill(width, BBFalse);
-  for (unsigned i = stage; i < width; ++i)
+  for (unsigned i = stage; i < amount.size(); ++i)
     result = BBITE(amount[i], zero, result);
 
   return result;
-}
-
-BBNode BitBlaster::BBDivLemma(DivLemma lemma, const BBNodeVec& x,
-                              const BBNodeVec& s, const BBNodeVec& t,
-                              BBNodeSet& support)
-{
-  const unsigned width = (unsigned)x.size();
-  assert(s.size() == width);
-  assert(t.size() == width);
-
-  const BBNodeVec zero = BBfill(width, BBFalse);
-  const BBNodeVec ones = BBfill(width, BBTrue);
-  BBNodeVec one = zero;
-  one[0] = BBTrue;
-
-  switch (lemma)
-  {
-    case DivLemma::DividendZero:
-      // x = 0 and s != 0 -> t = 0
-      return nf->CreateNode(OR, nf->CreateNode(NOT, BBEQ(x, zero)),
-                            BBEQ(s, zero), BBEQ(t, zero));
-
-    case DivLemma::DivisorEqualsDividend:
-      // s = x and s != 0 -> t = 1
-      return nf->CreateNode(OR, nf->CreateNode(NOT, BBEQ(s, x)),
-                            BBEQ(s, zero), BBEQ(t, one));
-
-    case DivLemma::DivisorAllOnes:
-      // s = ~0 and x != ~0 -> t = 0
-      return nf->CreateNode(OR, nf->CreateNode(NOT, BBEQ(s, ones)),
-                            BBEQ(x, ones), BBEQ(t, zero));
-
-    case DivLemma::QuotientBelowNegatedDivisor:
-    {
-      // t <=u -(s | 1). Setting the bottom bit is all `s | 1` does.
-      BBNodeVec sOr1 = s;
-      sOr1[0] = BBTrue;
-      return BBBVLE(t, BBUminus(sOr1), false);
-    }
-
-    case DivLemma::DividendAboveNegatedAnd:
-    {
-      // x >=u -((-s) & (-t))
-      const BBNodeVec negS = BBUminus(s);
-      const BBNodeVec negT = BBUminus(t);
-      BBNodeVec conj(width);
-      for (unsigned i = 0; i < width; i++)
-        conj[i] = nf->CreateNode(AND, negS[i], negT[i]);
-      return BBBVLE(BBUminus(conj), x, false);
-    }
-
-    case DivLemma::DivisorAboveShiftedDividend:
-      // s >=u (x >> t)
-      return BBBVLE(BBShiftRightByVariable(x, t, width), s, false);
-
-    case DivLemma::DivisorLessOneAboveShiftedDividend:
-    {
-      // (s - 1) >=u (x >> t)
-      BBNodeVec sMinusOne = s;
-      BBSub(sMinusOne, one, support);
-      return BBBVLE(BBShiftRightByVariable(x, t, width), sMinusOne, false);
-    }
-  }
-
-  FatalError("BBDivLemma: unknown lemma");
-  return BBFalse;
 }
 
 BBNodeVec BitBlaster::BBExactBinaryOp(const ASTNode& term, const BBNodeVec& x,
@@ -5810,25 +5784,32 @@ BBNodeVec BitBlaster::BBfpCLZ(const BBNodeVec& v, unsigned countWidth)
 }
 
 // Logarithmic left shifter, zero fill. The amount is unsigned binary; any
-// amount >= v.size() shifts everything out.
-BBNodeVec BitBlaster::BBfpShiftLeft(const BBNodeVec& v, const BBNodeVec& amt)
+// amount >= value.size() shifts everything out. This used to be private to
+// the native floating-point circuits, whose shift amounts are narrow. Keep
+// the stage number bounded by the host unsigned width now that BV lemmas may
+// hand it an amount as wide as the value: every still-higher amount bit is
+// necessarily a shift past any vector whose size fits in unsigned.
+BBNodeVec BitBlaster::BBShiftLeftByVariable(const BBNodeVec& value,
+                                            const BBNodeVec& amount)
 {
-  BBNodeVec r = v;
-  for (unsigned s = 0; s < amt.size(); s++)
+  BBNodeVec result = value;
+  unsigned stage = 0;
+  for (; stage < amount.size() && stage < std::numeric_limits<unsigned>::digits;
+       ++stage)
   {
-    const unsigned k = 1u << s;
-    if (k >= r.size())
-    {
-      const BBNodeVec zeros = BBfill(r.size(), nf->getFalse());
-      r = BBITE(amt[s], zeros, r);
-      continue;
-    }
-    BBNodeVec shifted(r.size());
-    for (unsigned i = 0; i < r.size(); i++)
-      shifted[i] = (i >= k) ? r[i - k] : nf->getFalse();
-    r = BBITE(amt[s], shifted, r);
+    const unsigned shift = 1u << stage;
+    if (shift >= result.size())
+      break;
+    BBNodeVec shifted = result;
+    BBLShift(shifted, shift);
+    result = BBITE(amount[stage], shifted, result);
   }
-  return r;
+
+  const BBNodeVec zero = BBfill(result.size(), nf->getFalse());
+  for (; stage < amount.size(); ++stage)
+    result = BBITE(amount[stage], zero, result);
+
+  return result;
 }
 
 // Logarithmic right shifter that ORs every shifted-out bit into sticky --
@@ -6205,7 +6186,7 @@ BBNodeVec BitBlaster::BBfpMul(const ASTNode& term, BBNodeSet& support)
     return bb;
   }(2 * sb);
   const BBNodeVec ell = BBfpCLZ(prod, lw2);
-  const BBNodeVec pn = BBfpShiftLeft(prod, ell);
+  const BBNodeVec pn = BBShiftLeftByVariable(prod, ell);
   BBNodeVec rsig(pn.begin() + sb, pn.end()); // top sb bits: 1.frac
   BBNode guard = pn[sb - 1];
   auto orVec = [&](BBNodeVec v) {
@@ -6570,7 +6551,7 @@ BBNodeVec BitBlaster::BBfpAdd(const ASTNode& term, BBNodeSet& support)
       return bb;
     }(W);
     const BBNodeVec ell = BBfpCLZ(sum, lwA);
-    const BBNodeVec sn = BBfpShiftLeft(sum, ell);
+    const BBNodeVec sn = BBShiftLeftByVariable(sum, ell);
     rsig.assign(sn.begin() + (W - sb), sn.end());
     guard = sn[W - sb - 1];
     BBNodeVec lowBits(sn.begin(), sn.begin() + (W - sb - 1));
@@ -6727,7 +6708,7 @@ BBNodeVec BitBlaster::BBfpToFp(const ASTNode& term, BBNodeSet& support)
     return bb;
   }(sb1);
   const BBNodeVec clz = BBfpCLZ(s.msig, lw1);
-  const BBNodeVec sn = BBfpShiftLeft(s.msig, clz);
+  const BBNodeVec sn = BBShiftLeftByVariable(s.msig, clz);
 
   // Map onto the target significand width.
   BBNodeVec rsig(sb2);
