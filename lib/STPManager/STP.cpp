@@ -1070,6 +1070,10 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
 
   ToSATAIG toSATAIG(bm, cb, arrayTransformer);
   ToSATBase* satBase = &toSATAIG;
+  const auto reportBVAbstractionRecords = [&]() {
+    if (bm->UserFlags.quick_statistics_flag)
+      toSATAIG.reportBVAbstractionRecords(std::cerr);
+  };
 
   if (bm->soft_timeout_expired)
     return bm->unknownResult();
@@ -1101,6 +1105,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     if (toSATAIG.cbIsDestructed())
       cleaner.release();
 
+    reportBVAbstractionRecords();
     return bm->unknownResult();
   }
 
@@ -1117,6 +1122,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     // query would silently drop the line the driver prints for it.
     if (ext != NULL)
       ext->reportLemmaStats();
+    reportBVAbstractionRecords();
     CountersAndStats("print_func_stats", bm);
     return res;
   }
@@ -1195,6 +1201,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
 
       if (ext != NULL)
         ext->reportLemmaStats();
+      reportBVAbstractionRecords();
       CountersAndStats("print_func_stats", bm);
       return res;
     }
@@ -1203,6 +1210,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
     {
       if (toSATAIG.cbIsDestructed())
         cleaner.release();
+      reportBVAbstractionRecords();
       return bm->unknownResult();
     }
 

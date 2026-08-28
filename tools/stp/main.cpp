@@ -106,6 +106,15 @@ public:
   // default spelling.
   std::string cnf_effort = "auto";
 
+  // Which of the two scope options were actually given. The older MULT
+  // switch covers all three nonlinear operations while it is the only one
+  // supplied, and DIV/MOD wins once it is named -- in either argument order,
+  // which is what makes this a presence check rather than a last-writer one.
+  // vc_setInterfaceFlags resolves the same pair the same way, through
+  // bv_term_abstraction_divmod_explicit.
+  CLI::Option* bv_term_abstraction_mult_option = nullptr;
+  CLI::Option* bv_term_abstraction_divmod_option = nullptr;
+
   // Tri-state: UserFlags.interactive_read is only overridden when the
   // option was given, so the value needs its own presence check.
   bool interactive = false;
@@ -353,12 +362,16 @@ void ExtraMain::create_options()
   bool_arg("--embedded-constraints", bm->UserFlags.embedded_constraints,
            "replace an assertion where it occurs inside another assertion",
            refinement_group);
-  bool_arg("--bv-term-abstraction-mult", bm->UserFlags.bv_term_abstraction_mult,
-           "include BVMULT, BVDIV and BVMOD in BV term abstraction; they are "
-           "the ones refined by ruling out one pair of operand values at a "
-           "time, so turning them off leaves only the operations that define "
-           "themselves in a single round",
-           refinement_group);
+  bv_term_abstraction_mult_option = bool_arg(
+      "--bv-term-abstraction-mult", bm->UserFlags.bv_term_abstraction_mult,
+      "scope for BVMULT, and for BVDIV and BVMOD unless the separate DIV/MOD "
+      "option is also given, which overrides them in either order",
+      refinement_group);
+  bv_term_abstraction_divmod_option = bool_arg(
+      "--bv-term-abstraction-divmod", bm->UserFlags.bv_term_abstraction_divmod,
+      "independently override whether BVDIV and BVMOD are abstracted; turning "
+      "it off leaves division and remainder encoded exactly from the start",
+      refinement_group);
   bool_arg("--bv-term-abstraction-schemas",
            bm->UserFlags.bv_term_abstraction_schemas,
            "refine an abstracted BVMULT with algebraic facts that hold for "
@@ -383,6 +396,14 @@ void ExtraMain::create_options()
                  "values, so what one is worth falls away as the operands "
                  "widen (0, the default: do not scale, which measured no "
                  "slower and no faster)")
+      ->group(refinement_group)
+      ->capture_default_str();
+  app.add_option("--bv-term-abstraction-divmod-value-limit",
+                 bm->UserFlags.bv_term_abstraction_divmod_value_limit,
+                 "independent cap on BVDIV/BVMOD value-pair blocking after "
+                 "the round ceiling and optional width scaling; unlike "
+                 "--rounds this changes neither the algebraic-schema budget "
+                 "nor BVMULT (0, the default: no additional cap)")
       ->group(refinement_group)
       ->capture_default_str();
 
@@ -913,6 +934,12 @@ int ExtraMain::parse_options(int argc, char** argv)
     cerr << "Please give '--help' to get help" << endl;
     exit(-1);
   }
+
+  if (bv_term_abstraction_divmod_option->count() != 0)
+    bm->UserFlags.bv_term_abstraction_divmod_explicit = true;
+  else if (bv_term_abstraction_mult_option->count() != 0)
+    bm->UserFlags.bv_term_abstraction_divmod =
+        bm->UserFlags.bv_term_abstraction_mult;
 
   onePrintBack = bm->UserFlags.get_print_output_at_all();
 

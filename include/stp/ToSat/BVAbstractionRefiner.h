@@ -54,6 +54,7 @@ THE SOFTWARE.
 #include "stp/ToSat/ToSATBase.h"
 
 #include <cstdint>
+#include <iosfwd>
 #include <map>
 #include <vector>
 
@@ -313,6 +314,13 @@ DLL_PUBLIC void encodeDivUnderDivisorValue(
 DLL_PUBLIC unsigned valueLemmaAllowance(const UserDefinedFlags& uf,
                                         unsigned width);
 
+// The operation-specific allowance -- the third line of the composition
+// above. DIV/MOD may opt into the independent
+// `bv_term_abstraction_divmod_value_limit`; multiplication deliberately does
+// not, so a divider experiment cannot silently change a corpus's multipliers.
+DLL_PUBLIC unsigned valueLemmaAllowance(const UserDefinedFlags& uf,
+                                        unsigned width, Kind opKind);
+
 struct BVTermAbstraction
 {
   BVAbstractionId id;
@@ -366,14 +374,52 @@ struct BVTermAbstraction
   uint64_t queryGeneration = 0;
   // Which of the unconditional schemas are already in the solver.
   unsigned installedSchemas = 0;
-  // How far up the exact encoding has been pushed, for an escalation that
-  // goes a piece at a time; see bv_term_abstraction_inc_bitblast. Zero
-  // until the first piece, and equal to the width once `defined` is set.
+  // Set once the AIG node budget has refused this record's exact encoding.
+  //
+  // The budget is a memory guard, and a circuit it will not build this round
+  // is one it will not build on any later round either -- so without this the
+  // refinement offered the same escalation every round for the rest of the
+  // session, and every query after the first pinned itself to `unknown` on it.
+  // Refused, an inconsistent candidate which has exhausted its bounded value
+  // allowance is unknown: enumerating the remaining operand pairs would turn
+  // a memory guard into an exponential fallback.
+  bool exactRefused = false;
+  int exactRefusedAtNodeCount = -1;
+  // How many of this operation's low bits are encoded exactly. Zero for an
+  // abstraction nothing has pinned exactly yet, the width once `defined` is
+  // set, and something in between for a piece-at-a-time escalation (see
+  // bv_term_abstraction_inc_bitblast).
+  //
+  // It used to say it was only the escalation's, and only ever zero or the
+  // width -- which the comparison, if-then-else and whole-addition
+  // definitions broke by setting `defined` and leaving this at zero.
+  // reportRecords publishes it, so a record could be `defined` and report
+  // `exact-bits=0`. Every path that pins bits exactly writes it now, and the
+  // field says what it counts.
   unsigned blastedBits = 0;
+  // Times value-pair refinement reached its allowance and installed an exact
+  // circuit. Normally zero or one; incremental multiplication bit-blasting
+  // may install more than one increasingly wide piece.
+  unsigned exactEscalations = 0;
+  // Cost paid by those exact escalations. submittedClauses() is the common,
+  // monotone backend boundary, so this remains comparable when a backend's
+  // own clause count is unavailable or preprocessing has removed clauses.
+  // The timer covers circuit construction, CNF conversion and submission;
+  // it deliberately excludes the next SAT search.
+  uint64_t exactClauses = 0;
+  uint64_t exactVariables = 0;
+  uint64_t exactMicroseconds = 0;
   // The bits of -operand[i], minted on first use by the NegPow2 schema and
   // kept because that schema can fire once per power of two and would
   // otherwise pay for the same negation circuit every time.
   std::vector<unsigned> negatedOperand[2];
+  // What the blast knew about each operand's bits before the abstraction
+  // replaced them with proxy inputs: -1 for a live node, 0 or 1 for a
+  // constant. Carried so that an escalation can rebuild the operation over
+  // the same constants the query would have blasted it with, rather than
+  // over 2W free inputs; see BitBlaster::RawBVTermAbstraction for what that
+  // costs when it is thrown away. Empty means nothing is known.
+  std::vector<signed char> operandKnownBits[2];
 };
 
 // An explicit sparse view of the records one query semantically owns. Empty
@@ -488,6 +534,12 @@ public:
   }
 
   uint64_t refinements() const { return refinements_; }
+
+  // A stable, one-line snapshot for every term record. Quick-statistics
+  // consumers use this instead of reconstructing records from free-form
+  // schema diagnostics; in particular it exposes the blocking distribution
+  // which an aggregate total hides.
+  void reportRecords(std::ostream& out) const;
 
   // Keep a simplifying backend from eliminating anything a future lemma
   // will be written over.

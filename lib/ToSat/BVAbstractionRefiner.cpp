@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "stp/ToSat/BVExactEncoder.h"
 
 #include <algorithm>
+#include <chrono>
 #include <iostream>
 #include <set>
 #include <unordered_map>
@@ -40,6 +41,42 @@ namespace stp
 // without reading a single bit. A round that refined an equality stops
 // there rather than going on to the terms -- the term scan reads the same
 // model, and what it would find in it has already been ruled out.
+// The solver's totals before one schema install, so that the site which
+// counts the lemma also charges what it cost.
+//
+// One lemma is not one price: a bound is a comparison chain, while a fact
+// built by the bit-blaster and spliced through BVExactEncoder is a barrel
+// shifter or three. A comparison between refinement settings cannot be read
+// off the lemma count alone.
+struct SchemaInstallCost
+{
+  uint64_t clauses;
+  uint32_t variables;
+  std::chrono::steady_clock::time_point started;
+
+  explicit SchemaInstallCost(SATSolver& solver)
+      : clauses(solver.submittedClauses()), variables(solver.nVars()),
+        started(std::chrono::steady_clock::now())
+  {
+  }
+};
+
+// Count a schema lemma and charge what installing it cost. Taking the count
+// and the price in one call is what keeps a family from being counted without
+// its cost.
+static void countSchemaLemma(UserDefinedFlags& flags, SATSolver& solver,
+                             const SchemaInstallCost& before)
+{
+  flags.coverage.bv_schema_lemmas++;
+  flags.coverage.bv_schema_clauses +=
+      solver.submittedClauses() - before.clauses;
+  flags.coverage.bv_schema_variables += solver.nVars() - before.variables;
+  flags.coverage.bv_schema_microseconds += static_cast<uint64_t>(
+      std::chrono::duration_cast<std::chrono::microseconds>(
+          std::chrono::steady_clock::now() - before.started)
+          .count());
+}
+
 static size_t selectedSize(size_t all,
                            const std::vector<size_t>* selected)
 {
@@ -1187,6 +1224,64 @@ unsigned valueLemmaAllowance(const UserDefinedFlags& uf, unsigned width)
   return std::min(ceiling, scaled == 0 ? 1u : scaled);
 }
 
+unsigned valueLemmaAllowance(const UserDefinedFlags& uf, unsigned width,
+                             Kind opKind)
+{
+  unsigned allowance = valueLemmaAllowance(uf, width);
+  if (allowance == 0 || (opKind != BVDIV && opKind != BVMOD))
+    return allowance;
+
+  // Unlike the round ceiling, this does not alter how many algebraic schemas
+  // a record may receive, and unlike the older width scaling it does not alter
+  // BVMULT. It isolates the wide divider candidates which motivated the
+  // experiment. Zero deliberately means absent rather than "escalate
+  // immediately", leaving rounds=0 as the one spelling of never escalating.
+  const unsigned valueLimit =
+      uf.bv_term_abstraction_divmod_value_limit;
+  return valueLimit == 0 ? allowance : std::min(allowance, valueLimit);
+}
+
+void BVAbstractionRefiner::reportRecords(std::ostream& out) const
+{
+  for (size_t i = 0; i < terms_.size(); ++i)
+  {
+    const BVTermAbstraction& abs = terms_[i];
+    const char* state = "open";
+    if (abs.defined)
+      state = abs.exactEscalations == 0 ? "defined" : "exact";
+    else if (abs.blastedBits != 0)
+      state = "partial";
+
+    // Each value-pair block emits W clauses containing both W-bit operands
+    // and one result bit. These derived counts expose the accumulated SAT
+    // payload without adding bookkeeping to the hot path.
+    const uint64_t blockingClauses =
+        static_cast<uint64_t>(abs.blockedRounds) * abs.width;
+    const uint64_t blockingLiterals =
+        blockingClauses * (2 * static_cast<uint64_t>(abs.width) + 1);
+    const bool hasValueAllowance =
+        abs.opKind == BVMULT || abs.opKind == BVDIV || abs.opKind == BVMOD;
+    const unsigned allowance =
+        hasValueAllowance
+            ? valueLemmaAllowance(bm->UserFlags, abs.width, abs.opKind)
+            : 0;
+
+    out << "BV abstraction record: record=" << i
+        << " node=" << abs.termNode.GetNodeNum()
+        << " kind=" << _kind_names[abs.opKind] << " width=" << abs.width
+        << " state=" << state << " blocking=" << abs.blockedRounds
+        << " schemas=" << abs.schemaRounds
+        << " exact=" << abs.exactEscalations
+        << " exact-bits=" << abs.blastedBits
+        << " allowance=" << allowance
+        << " blocking-clauses=" << blockingClauses
+        << " blocking-literals=" << blockingLiterals
+        << " exact-clauses=" << abs.exactClauses
+        << " exact-vars=" << abs.exactVariables
+        << " exact-us=" << abs.exactMicroseconds << '\n';
+  }
+}
+
 static const char* mulSchemaName(MulSchema schema)
 {
   switch (schema)
@@ -1719,6 +1814,7 @@ AbstractionRefinementResult BVAbstractionRefiner::refineTerms(
     }
 
     abs.defined = true;
+    abs.blastedBits = abs.width;
     refined++;
   }
 
@@ -1794,6 +1890,7 @@ AbstractionRefinementResult BVAbstractionRefiner::refineTerms(
     }
 
     abs.defined = true;
+    abs.blastedBits = abs.width;
     refined++;
   }
 
@@ -1825,6 +1922,7 @@ AbstractionRefinementResult BVAbstractionRefiner::refineTerms(
     }
 
     abs.defined = true;
+    abs.blastedBits = abs.width;
     refined++;
   }
 
@@ -1846,6 +1944,7 @@ AbstractionRefinementResult BVAbstractionRefiner::refineTerms(
     // theorem to spend a round on.
     if (inc.divSchema.schema != DivSchema::None)
     {
+      const SchemaInstallCost cost(solver);
       switch (inc.divSchema.schema)
       {
         case DivSchema::DivisorZero:
@@ -1889,7 +1988,7 @@ AbstractionRefinementResult BVAbstractionRefiner::refineTerms(
 
       abs.schemaRounds++;
       abs.schemasThisQuery++;
-      bm->UserFlags.coverage.bv_schema_lemmas++;
+      countSchemaLemma(bm->UserFlags, solver, cost);
       if (bm->UserFlags.stats_flag)
         std::cerr << "BV abstraction: " << _kind_names[abs.opKind] << " "
                   << (inc.divSchema.schema == DivSchema::Lemma
@@ -1906,6 +2005,7 @@ AbstractionRefinementResult BVAbstractionRefiner::refineTerms(
       const std::vector<unsigned>* opVars[2] = {&aVars, &bVars};
       const std::vector<bool>* opBits[2] = {&inc.aBits, &inc.bBits};
 
+      const SchemaInstallCost cost(solver);
       switch (inc.schema.schema)
       {
         case MulSchema::Odd:
@@ -1949,7 +2049,7 @@ AbstractionRefinementResult BVAbstractionRefiner::refineTerms(
 
       abs.schemaRounds++;
       abs.schemasThisQuery++;
-      bm->UserFlags.coverage.bv_schema_lemmas++;
+      countSchemaLemma(bm->UserFlags, solver, cost);
       if (bm->UserFlags.stats_flag)
         std::cerr << "BV abstraction: BVMULT "
                   << mulSchemaName(inc.schema.schema) << " lemma over operand "
@@ -1973,9 +2073,20 @@ AbstractionRefinementResult BVAbstractionRefiner::refineTerms(
     // BVExactEncoder. Two independent encodings of a divider that agree
     // today are two that can stop agreeing, and these two already had: the
     // written-out one and BBDivMod disagreed about a zero divisor.
-    const unsigned limit = valueLemmaAllowance(bm->UserFlags, W);
+    const unsigned limit = valueLemmaAllowance(bm->UserFlags, W, abs.opKind);
     if (limit != 0 && abs.blockedThisQuery >= limit)
     {
+      // A previous query may already have established that this mandatory
+      // definition cannot fit. Value-pair enumeration beyond the bounded
+      // allowance is not an acceptable substitute: its search space is
+      // 2^(2W), so this candidate remains explicitly unknown.
+      if (abs.exactRefused)
+      {
+        assert(abs.exactRefusedAtNodeCount >= 0);
+        bm->noteAIGBudgetExhausted(abs.exactRefusedAtNodeCount);
+        return AbstractionRefinementResult::unknown(refined);
+      }
+
       // All of it, unless the piece-at-a-time escalation is on and this is
       // a multiplication. A piece reaches past the lowest bit the candidate
       // got wrong, which is at or above everything already encoded -- the
@@ -2005,10 +2116,61 @@ AbstractionRefinementResult BVAbstractionRefiner::refineTerms(
         }
       }
 
-      BVExactEncoder(bm).encode(solver, encodeAs, upto, aVars, bVars,
-                                resultVars);
+      const uint64_t exactClausesBefore = solver.submittedClauses();
+      const uint32_t exactVariablesBefore = solver.nVars();
+      const std::chrono::steady_clock::time_point exactStarted =
+          std::chrono::steady_clock::now();
+      // With the operand bits the blast already knew, so the circuit this
+      // falls back on is the one the query would have had rather than a
+      // fully symbolic one. A narrowed piece reads the same vectors: it is
+      // the low `upto` bits of the same operands, and the encoder only looks
+      // that far.
+      bool encoded = false;
+      try
+      {
+        BVExactEncoder(bm).encode(solver, encodeAs, upto, aVars, bVars,
+                                  resultVars, abs.operandKnownBits[0],
+                                  abs.operandKnownBits[1]);
+        encoded = true;
+      }
+      catch (const AIGBudgetExhausted& e)
+      {
+        abs.exactRefused = true;
+        abs.exactRefusedAtNodeCount = e.nodeCount;
+        if (bm->UserFlags.stats_flag)
+          std::cerr
+              << "AIG node budget exhausted during exact BV refinement at "
+              << e.nodeCount << " nodes" << std::endl;
+        bm->noteAIGBudgetExhausted(e.nodeCount);
+      }
+      if (!encoded)
+        return AbstractionRefinementResult::unknown(refined);
+
+      const uint64_t exactMicros = static_cast<uint64_t>(
+          std::chrono::duration_cast<std::chrono::microseconds>(
+              std::chrono::steady_clock::now() - exactStarted)
+              .count());
       abs.blastedBits = upto;
       abs.defined = (upto == W);
+      const uint64_t exactClauses =
+          solver.submittedClauses() - exactClausesBefore;
+      const uint64_t exactVariables = solver.nVars() - exactVariablesBefore;
+      abs.exactEscalations++;
+      abs.exactClauses += exactClauses;
+      abs.exactVariables += exactVariables;
+      abs.exactMicroseconds += exactMicros;
+      UserDefinedFlags::EncodingCoverage& coverage = bm->UserFlags.coverage;
+      coverage.bv_exact_escalations++;
+      if (abs.opKind == BVMULT)
+        coverage.bv_exact_escalations_mult++;
+      else
+      {
+        assert(abs.opKind == BVDIV || abs.opKind == BVMOD);
+        coverage.bv_exact_escalations_divmod++;
+      }
+      coverage.bv_exact_clauses += exactClauses;
+      coverage.bv_exact_variables += exactVariables;
+      coverage.bv_exact_microseconds += exactMicros;
 
       if (bm->UserFlags.stats_flag)
       {

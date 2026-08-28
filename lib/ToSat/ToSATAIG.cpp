@@ -151,24 +151,60 @@ void ToSATAIG::release_cnf_memory(Cnf_Dat_t* cnfData)
 
 void ToSATAIG::handle_cnf_options(Cnf_Dat_t* cnfData, bool needAbsRef)
 {
+  // What makes this CNF partial, named so a reader can act on it.
+  //
+  // There are two reasons and they are not the same reason, which the one
+  // sentence that used to be here could not say. Array read refinement leaves
+  // out congruence axioms over a faithful bit-vector layer, and --ackermanize
+  // is the flag that puts them in up front. A bit-vector abstraction leaves
+  // out the arithmetic itself: the CNF over-approximates the query, and no
+  // flag completes it -- turning the abstraction off is the only way to get a
+  // total CNF, and that is a different encoding rather than the same one
+  // finished.
+  //
+  // Said at both exits. --output-CNF writes the file whether or not
+  // --exit-after-CNF is given, and it used to write an over-approximate one
+  // with no warning at all.
+  const bool abstracted = bm->UserFlags.bv_eq_abstraction ||
+                          bm->UserFlags.bv_term_abstraction;
+  const bool arrayRefinement = needAbsRef && !abstracted;
+  const auto sayWhyPartial = [&](const char* what) {
+    if (arrayRefinement)
+      cerr << "Warning: " << what << " is partial: array read refinement adds"
+           << " its congruence axioms as the search asks for them. Use"
+           << " --ackermanize to have them all up front." << endl;
+    else if (abstracted)
+      cerr << "Warning: " << what << " is an over-approximation of the query:"
+           << " --bv-eq-abstraction and --bv-term-abstraction replace"
+           << " operations with free inputs that refinement pins later. No"
+           << " flag completes this CNF; turn the abstraction off to get one"
+           << " that is the whole query." << endl;
+  };
+
   if (bm->UserFlags.output_CNF_flag)
   {
     std::stringstream fileName;
     fileName << "output_" << bm->CNFFileNameCounter++ << ".cnf";
     Cnf_DataWriteIntoFile(cnfData, (char*)fileName.str().c_str(), 0,0,0);
+    sayWhyPartial("the CNF written by --output-CNF");
   }
 
   if (bm->UserFlags.exit_after_CNF)
   {
     if (bm->UserFlags.quick_statistics_flag)
+    {
       bm->GetRunTimes()->print();
+      // Coverage is complete once bit-blasting finishes. Printing it here
+      // makes --exit-after-CNF -t a cheap population screen for queries that
+      // actually contain arithmetic wide enough to abstract.
+      printAbstractionCoverage(bm->UserFlags, cerr);
+    }
 
     if (needAbsRef)
     {
       cerr << "Warning: STP is exiting after generating the first CNF."
-           << " But the CNF is probably partial which you probably don't want."
-           << " You probably want to disable"
-           << " refinement with the \"-r\" command line option." << endl;
+           << endl;
+      sayWhyPartial("that CNF");
     }
 
     exit(0);
@@ -293,6 +329,8 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
     {
       a.operands[i] = raw.operands[i];
       a.operandNegated[i] = raw.operandNegated[i];
+      if (i < 2)
+        a.operandKnownBits[i] = raw.operandKnownBits[i];
     }
     a.numOperands = raw.numOperands;
     a.width = raw.width;

@@ -407,11 +407,15 @@ enum ifaceflag_t
   //!
   BV_TERM_ABSTRACTION,
 
-  //! Whether BV_TERM_ABSTRACTION covers BVMULT, BVDIV and BVMOD as well.
+  //! Scope switch for BVMULT, and for BVDIV and BVMOD unless those are named
+  //! separately.
   //!
   //! `param_value` nonzero includes them (the default), zero leaves them
-  //! encoded exactly from the start. This is the C API's way to reach
-  //! --bv-term-abstraction-mult.
+  //! encoded exactly from the start. This flag covered all three operations
+  //! before BV_TERM_ABSTRACTION_DIVMOD existed and still does when it is the
+  //! only one set; once DIV/MOD has been set explicitly that setting wins,
+  //! in either call order. This is the C API's way to reach
+  //! --bv-term-abstraction-mult, and it resolves the pair the same way.
   //!
   BV_TERM_ABSTRACTION_MULT,
 
@@ -520,7 +524,30 @@ enum ifaceflag_t
   //! libstp, so the published prefix has to stay put -- the same rule
   //! tests/api/C/counter-enum-abi.cpp keeps for stp_counter_t.
   //!
-  CNF_AUTO_THRESHOLD
+  CNF_AUTO_THRESHOLD,
+
+  //! Whether BV_TERM_ABSTRACTION covers BVDIV and BVMOD.
+  //!
+  //! `param_value` nonzero includes them (the default), zero leaves them
+  //! encoded exactly from the start. Setting this at all takes division and
+  //! remainder out of BV_TERM_ABSTRACTION_MULT's scope, so the two may be
+  //! given in either order. This is the C API's way to reach
+  //! --bv-term-abstraction-divmod.
+  //!
+  BV_TERM_ABSTRACTION_DIVMOD,
+
+  //! Caps BVDIV/BVMOD value-pair blocking independently of
+  //! BV_TERM_ABSTRACTION_ROUNDS and BVMULT.
+  //!
+  //! `param_value` is the cap applied after the round ceiling and optional
+  //! width scaling. Unlike changing ROUNDS, this leaves the algebraic-schema
+  //! budget untouched, making 4/8/16/32 value-block experiments comparable.
+  //! Zero (the default) adds no cap and preserves the existing allowance; a
+  //! negative value is refused. Appended to preserve every published ordinal.
+  //! This is the C API's way to reach
+  //! --bv-term-abstraction-divmod-value-limit.
+  //!
+  BV_TERM_ABSTRACTION_DIVMOD_VALUE_LIMIT
 
 };
 
@@ -783,13 +810,48 @@ enum stp_counter_t
   STP_COUNTER_UF_APPLICATIONS_LOWERED = 15,
   STP_COUNTER_UF_CONSTRAINTS_INSTALLED = 16,
 
-  //! Individual algebraic schema lemmas installed over abstracted BVMULT
-  //! nodes. For one inconsistent multiplication a schema lemma replaces a
-  //! blocking lemma, but a pass may visit several operations and increment
-  //! both counters. Other abstraction kinds increment the pass counter
-  //! without incrementing either lemma counter, so the two lemma counts do
-  //! not partition STP_COUNTER_BV_REFINEMENT_ROUNDS.
-  STP_COUNTER_BV_SCHEMA_LEMMAS = 17
+  //! Individual algebraic schema lemmas installed over abstracted BVMULT,
+  //! BVDIV and BVMOD nodes. For one inconsistent operation a schema lemma
+  //! replaces that operation's usual fallback, but a pass may visit several
+  //! operations and increment both lemma counters. Other abstraction kinds
+  //! increment the pass counter without incrementing either lemma counter, so
+  //! the two lemma counts do not partition STP_COUNTER_BV_REFINEMENT_ROUNDS.
+  STP_COUNTER_BV_SCHEMA_LEMMAS = 17,
+
+  //! Value-pair refinements which spent their allowance and installed an
+  //! exact circuit, in total and partitioned between multiplication and
+  //! division/remainder.
+  STP_COUNTER_BV_EXACT_ESCALATIONS,
+  STP_COUNTER_BV_EXACT_ESCALATIONS_MULT,
+  STP_COUNTER_BV_EXACT_ESCALATIONS_DIVMOD,
+
+  //! What the refinement's FULL-WIDTH installs cost: clauses and variables
+  //! they added to the solver, and the wall-clock microseconds spent building
+  //! them. Read from the solver's own totals across each encode, not
+  //! estimated from the circuit.
+  //!
+  //! Wider than the escalations above. The paired DIV/REM recomposition lemma
+  //! builds a full-width multiplier without any abstraction being given up,
+  //! so it is counted here and not there -- it costs as much as an escalation
+  //! and is the reason the aggressive profile is the slowest, which is the
+  //! trade these exist to expose.
+  STP_COUNTER_BV_EXACT_CLAUSES,
+  STP_COUNTER_BV_EXACT_VARIABLES,
+  STP_COUNTER_BV_EXACT_MICROSECONDS,
+
+  //! What the algebraic schemas cost, on the same terms and in their own
+  //! bucket.
+  //!
+  //! STP_COUNTER_BV_SCHEMA_LEMMAS counts how many were installed, and one
+  //! lemma is not one price: a bound is a comparison chain and a registry fact
+  //! such as UDIV15 is three barrel shifters, which at 256 bits is 229,374
+  //! clauses. A schema profile is a choice of which families to enable, so a
+  //! count without a price cannot answer the question the profiles exist to
+  //! ask. Kept apart from the full-width totals above because rolled in with
+  //! one exact divider it would be invisible.
+  STP_COUNTER_BV_SCHEMA_CLAUSES,
+  STP_COUNTER_BV_SCHEMA_VARIABLES,
+  STP_COUNTER_BV_SCHEMA_MICROSECONDS
 };
 
 //! \brief Reads one of the counters above.
