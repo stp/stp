@@ -1,6 +1,5 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![CI](https://github.com/stp/stp/actions/workflows/ci.yml/badge.svg)](https://github.com/stp/stp/actions/workflows/ci.yml)
-[![Coverity](https://scan.coverity.com/projects/861/badge.svg)](https://scan.coverity.com/projects/861)
 
 # STP
 
