@@ -666,30 +666,6 @@ jobs:
         "$stp" --version > /dev/null
         echo "ok: ignored the decoy ./lib/$soname"
 
-    # examples/simple is not part of the main build - no add_subdirectory
-    # reaches it - so nothing used to compile it, and it sat at
-    # cmake_minimum_required(VERSION 2.8) until CMake 4 made that a hard
-    # error. Build it against an install tree, which is the arrangement its
-    # README documents and the one downstream users actually get: this
-    # exercises `cmake --install` and the installed STPConfig.cmake together.
-    # This job is the one to do it in because it configures with
-    # USE_CRYPTOMINISAT=OFF, so the generated STPConfig.cmake has no
-    # find_dependency(cryptominisat5) to satisfy.
-    #
-    # The prefix comes from CMAKE_INSTALL_PREFIX at configure time rather than
-    # `cmake --install --prefix` here, because the latter does not relocate the
-    # headers: lib/CMakeLists.txt installs PUBLIC_HEADER to the absolute
-    # CMAKE_INSTALL_FULL_INCLUDEDIR, which is fixed when the cache is written.
-    - name: Build the example against the install tree
-      run: |
-        cmake --install build
-        cmake -S examples/simple -B build-example \
-          -DCMAKE_PREFIX_PATH="$GITHUB_WORKSPACE/install" \
-          -G Ninja
-        cmake --build build-example --parallel "$(nproc)"
-        LD_LIBRARY_PATH="$GITHUB_WORKSPACE/install/lib:$GITHUB_WORKSPACE/deps/install/lib" \
-          ./build-example/stp-example
-
   # CryptoMiniSat and CaDiCaL in one binary. Every other Linux job enables
   # exactly one of them, so until this job existed nothing established that
   # the combination works -- the exclusions elsewhere were about build time,

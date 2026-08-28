@@ -237,8 +237,9 @@ endif()
 # where they were unusable - $<TARGET_FILE:libabc-pic> names a target no
 # consumer has, and the minisat entry was an absolute path into whichever build
 # tree happened to produce the package. find_package(STP) failed outright on
-# the generator expression, so no external project could link STP at all; see
-# examples/simple. A shared libstp needs none of this propagated anyway: the
+# the generator expression, so no external project could link STP at all; the
+# install-tree consumer under tests/api/install covers it. A shared libstp
+# needs none of this propagated anyway: the
 # ABC archive is linked into the library (with its symbols localised, see
 # --exclude-libs below) and minisat is picked up transitively through
 # DT_NEEDED.
