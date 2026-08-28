@@ -666,6 +666,60 @@ jobs:
         "$stp" --version > /dev/null
         echo "ok: ignored the decoy ./lib/$soname"
 
+    # Everything above ran with the build tree still there, so nothing had
+    # established that the install tree stands on its own: a RUNPATH, a
+    # generated path or an exported target could point back into build/ and
+    # every check would still have passed. Delete it and use only what was
+    # installed. CMAKE_INSTALL_PREFIX is $GITHUB_WORKSPACE/install, set at
+    # configure time, so this is also the not-in-/usr/local case.
+    #
+    # This is the last step in the job; nothing after it may use build/.
+    - name: Use the install tree with the build tree deleted
+      run: |
+        rm -rf build
+        prefix="$GITHUB_WORKSPACE/install"
+
+        printf '%s\n' \
+          '(set-logic QF_BV)' \
+          '(declare-fun x () (_ BitVec 8))' \
+          '(assert (= (bvadd x x) (bvmul (_ bv2 8) x)))' \
+          '(check-sat)' \
+          '(exit)' > query.smt2
+
+        "$prefix/bin/stp" query.smt2 | grep -qx sat
+        echo "ok: installed stp solves a query"
+
+        # A find_package(STP) that cannot see this prefix does not fail: it
+        # keeps searching and settles on any other STP present, so the step
+        # would report on a package this job did not build. Pinning STP_DIR
+        # and switching the registries off is not enough on its own -- the
+        # system prefixes are still searched, and a stale /usr/local/lib/cmake/STP
+        # answers -- so the check that matters is asserting afterwards which
+        # package was actually resolved.
+        cmake -S tests/api/install/uf-public-header-consumer -B consumer \
+          -DSTP_DIR:PATH="$prefix/lib/cmake/STP" \
+          -DCMAKE_FIND_USE_PACKAGE_REGISTRY=OFF \
+          -DCMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY=OFF \
+          -G Ninja
+        grep -qx "STP_DIR:PATH=$prefix/lib/cmake/STP" consumer/CMakeCache.txt
+        cmake --build consumer --parallel "$(nproc)"
+        ctest --test-dir consumer --output-on-failure
+        echo "ok: consumer builds and runs against the installed package"
+
+        # The installed Python package, whose library_path.py comes from
+        # library_path.py.in_install and names the install prefix. The
+        # build-tree template is a different file, and it is the only one the
+        # ctest suite imports, so this is the first time the installed one is
+        # loaded at all.
+        PYTHONPATH="$prefix/pylib" python3 -c "
+        import stp
+        s = stp.Solver()
+        x = s.bitvec('x', width=8)
+        s.add(x + x != 2 * x)
+        assert s.check() is False, 'installed python module gave the wrong answer'
+        "
+        echo "ok: installed python module solves a query"
+
   # CryptoMiniSat and CaDiCaL in one binary. Every other Linux job enables
   # exactly one of them, so until this job existed nothing established that
   # the combination works -- the exclusions elsewhere were about build time,
