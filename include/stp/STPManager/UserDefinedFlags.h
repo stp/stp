@@ -100,14 +100,45 @@ constexpr uint32_t BV_SCHEMA_GROUP_ALL =
 // two families that were measured to decide queries on their own -- the UREM
 // registry, which turns the wide remainder cases from a two-gigabyte external
 // timeout into fractions of a second, and MulRef3, which takes one 512-bit
-// rewrite candidate from 3.66s/766MB to 0.12s/65MB. Everything broader is an
-// experiment that has to be asked for by name.
+// rewrite candidate from 3.66s/766MB to 0.12s/65MB. Every broader profile
+// below is an experiment that has to be asked for.
 constexpr uint32_t BV_SCHEMA_GROUP_QUALIFIED =
     bvSchemaGroupBit(BVSchemaGroup::BASE) |
     bvSchemaGroupBit(BVSchemaGroup::UREM) |
     bvSchemaGroupBit(BVSchemaGroup::MUL_REF3);
 
+// The complete observed single-record catalogue. Every schema here states a
+// fact about one division, remainder, multiplication or addition on its own;
+// the one relation that spans a quotient and its remainder together builds a
+// full-width multiplier and stays out, in AGGRESSIVE below.
+constexpr uint32_t BV_SCHEMA_GROUP_BROAD =
+    bvSchemaGroupBit(BVSchemaGroup::BASE) |
+    bvSchemaGroupBit(BVSchemaGroup::UDIV15) |
+    bvSchemaGroupBit(BVSchemaGroup::UDIV_OBSERVED) |
+    bvSchemaGroupBit(BVSchemaGroup::UREM) |
+    bvSchemaGroupBit(BVSchemaGroup::MUL8) |
+    bvSchemaGroupBit(BVSchemaGroup::MUL_REF3) |
+    bvSchemaGroupBit(BVSchemaGroup::QUOTIENT_ONE_REM) |
+    bvSchemaGroupBit(BVSchemaGroup::QUOTIENT_ONE_QUOT) |
+    bvSchemaGroupBit(BVSchemaGroup::DIVISOR_MAGNITUDE);
+
+// The same catalogue plus the full-width modular identity, which ties a
+// quotient and its remainder to the dividend they came from. It reduces
+// blocking and exact escalation the most aggressively of any profile and is
+// still the slowest of them, because the identity builds a full-width
+// multiplier; it exists to make that trade reproducible.
+constexpr uint32_t BV_SCHEMA_GROUP_AGGRESSIVE =
+    BV_SCHEMA_GROUP_BROAD | bvSchemaGroupBit(BVSchemaGroup::DIVREM_FULL);
+
+constexpr unsigned BV_TERM_ABSTRACTION_QUALIFIED_ROUNDS = 32;
+constexpr unsigned BV_TERM_ABSTRACTION_BROAD_ROUNDS = 16;
+constexpr unsigned BV_TERM_ABSTRACTION_AGGRESSIVE_ROUNDS = 16;
+
+// These defaults matter only after a caller explicitly turns BV term
+// abstraction on. The global feature switch remains off.
 constexpr uint32_t BV_SCHEMA_GROUP_DEFAULT = BV_SCHEMA_GROUP_QUALIFIED;
+constexpr unsigned BV_TERM_ABSTRACTION_DEFAULT_ROUNDS =
+    BV_TERM_ABSTRACTION_QUALIFIED_ROUNDS;
 
 constexpr bool bvSchemaGroupEnabled(uint32_t mask, BVSchemaGroup group)
 {
@@ -122,6 +153,12 @@ DLL_PUBLIC const char* bvSchemaGroupName(BVSchemaGroup group);
 DLL_PUBLIC bool parseBVSchemaGroups(const std::string& text, uint32_t& mask,
                                     std::string& error);
 DLL_PUBLIC std::string formatBVSchemaGroups(uint32_t mask);
+
+// Parse one of the named mask/round pairs. Both outputs are left
+// unchanged on error, so callers cannot accidentally apply half a profile.
+DLL_PUBLIC bool parseBVTermAbstractionProfile(const std::string& text,
+                                              uint32_t& mask, unsigned& rounds,
+                                              std::string& error);
 
 struct UserDefinedFlags;
 
@@ -556,8 +593,29 @@ public:
   // answers in five hundredths of one. Zero never escalates, which is what
   // this was before.
   //
-  // A ceiling and no longer the allowance itself: see the divisor below.
-  unsigned bv_term_abstraction_rounds = 32;
+  // Thirty-two, because that is what the inherited mask was measured at:
+  // sixteen and thirty-two tied over 287 natural division/remainder
+  // consumers, and sixteen additionally failed to terminate within the
+  // external guard on one 512-bit case that thirty-two answered. The broad
+  // experimental profiles pair their catalogue with sixteen, and select both
+  // as one atomic decision.
+  //
+  // A ceiling and no longer the allowance itself: see the divisor below, and
+  // valueLemmaAllowance() for how the two compose.
+  unsigned bv_term_abstraction_rounds = BV_TERM_ABSTRACTION_DEFAULT_ROUNDS;
+  // Interface bookkeeping rather than a solver knob: whether a caller named
+  // the round ceiling itself, in the same shape and for the same reason as
+  // bv_term_abstraction_divmod_explicit above.
+  //
+  // A profile is an atomic mask/round pair, so applying one writes this field
+  // as well as the schema mask -- which means a caller who set the ceiling and
+  // then chose a profile silently lost the ceiling, while one who did the two
+  // the other way round kept it. The command line cannot reach that, because
+  // CLI11 refuses --bv-term-abstraction-profile alongside
+  // --bv-term-abstraction-rounds outright; only the C interface can, where a
+  // configuration is a sequence of calls rather than one line. Once the
+  // ceiling is named it survives a profile, whichever order the two arrive in.
+  bool bv_term_abstraction_rounds_explicit = false;
   // Optionally make that a rate instead: `width / this`, floored at one and
   // capped by the ceiling above. The argument for it is that a blocking
   // lemma rules out one pair of operand values, so what one is worth falls
@@ -696,19 +754,31 @@ public:
   // encoding because for this class of pass the trade is forced. Choosing
   // per session which side of it to be on is the remedy that works.
   bool incremental_piece_rewriting = false;
-  // Refine an abstracted BVMULT with an algebraic fact about every pair of
-  // operands -- see MulSchema -- whenever the candidate contradicts one,
-  // and only fall back on ruling out the pair it holds when none of them
-  // does. Off restores the blocking lemma as the only refinement there is,
-  // which is what this was; it is the comparison the schemas have to earn
-  // their keep against.
+  // Refine abstracted BVPLUS, BVMULT, BVDIV and BVMOD operations with
+  // algebraic facts about every pair of operands whenever the candidate
+  // contradicts one. Off restores the former operation-specific fallback:
+  // exact addition, or one value-pair blocking lemma for multiplication,
+  // division and remainder.
   bool bv_term_abstraction_schemas = true;
 
   // Which schema families the master switch above may offer. The default is
-  // `qualified`, the only mask the corpus qualification justified; `all`
-  // reproduces the complete experimental stack, and an empty mask leaves the
-  // operation-specific fallback exactly as the master switch being off does.
+  // `qualified`, the only mask the corpus qualification justified; the broad
+  // profiles are experiments a caller asks for, `all` reproduces the complete
+  // experimental stack, and an empty mask leaves the operation-specific
+  // fallback exactly as the master switch being off does.
   uint32_t bv_term_abstraction_schema_groups = BV_SCHEMA_GROUP_DEFAULT;
+  // Interface bookkeeping, the twin of bv_term_abstraction_rounds_explicit
+  // above and for the same reason.
+  //
+  // A profile is an atomic mask/round pair, and the ceiling half has been the
+  // caller's once they name it since the ordering was fixed. The mask half was
+  // left last-writer-wins, so the two halves of one pair resolved by opposite
+  // rules: naming a ceiling and then choosing a profile kept the ceiling,
+  // naming a group list and then choosing a profile lost the list. Whichever
+  // rule is right, they should be the same rule, and first-wins is the one
+  // that treats a caller's explicit choice as a choice -- which is what
+  // vc_setSchemaGroups is: a list of families spelled out by name.
+  bool bv_term_abstraction_schema_groups_explicit = false;
 
   // You can select these with any combination you want of true & false.
   bool division_variant_1 = true;

@@ -172,6 +172,19 @@ DLL_PUBLIC void vc_setFlags(VC vc, char c,
 //!
 DLL_PUBLIC void vc_setFlag(VC vc, char c);
 
+//! Atomic mask/round pairs accepted by BV_TERM_ABSTRACTION_PROFILE.
+enum bv_term_abstraction_profile_t
+{
+  //! The inherited mask: base schemas, the UREM registry and MulRef3, at a
+  //! thirty-two round ceiling.
+  STP_BV_TERM_ABSTRACTION_PROFILE_QUALIFIED = 0,
+  //! The broad single-record catalogue, at sixteen.
+  STP_BV_TERM_ABSTRACTION_PROFILE_BROAD = 1,
+  //! The same catalogue plus the full-width paired identity, whose wide
+  //! multiplier is the reason it is not part of the profile above.
+  STP_BV_TERM_ABSTRACTION_PROFILE_AGGRESSIVE = 2
+};
+
 //! Interface-only flags.
 //!
 enum ifaceflag_t
@@ -430,13 +443,14 @@ enum ifaceflag_t
   //!
   BV_TERM_ABSTRACTION_ROUNDS,
 
-  //! Whether an abstracted BVMULT is refined with algebraic facts about
-  //! every pair of operands before falling back on ruling out the pair the
-  //! candidate holds.
+  //! Whether abstracted BVPLUS, BVMULT, BVDIV and BVMOD operations are
+  //! refined with algebraic facts about every pair of operands before their
+  //! operation-specific fallback.
   //!
-  //! `param_value` nonzero turns them on (the default), zero leaves the
-  //! blocking lemma as the only refinement. This is the C API's way to
-  //! reach --bv-term-abstraction-schemas.
+  //! `param_value` nonzero turns them on (the default). Zero makes an
+  //! inconsistent addition exact immediately and leaves value-pair blocking
+  //! as the only refinement for multiplication, division and remainder.
+  //! This is the C API's way to reach --bv-term-abstraction-schemas.
   //!
   BV_TERM_ABSTRACTION_SCHEMAS,
 
@@ -535,6 +549,16 @@ enum ifaceflag_t
   //! --bv-term-abstraction-divmod.
   //!
   BV_TERM_ABSTRACTION_DIVMOD,
+
+  //! Applies one complete BV term-abstraction schema profile. `param_value`
+  //! is a bv_term_abstraction_profile_t ordinal. QUALIFIED is the inherited
+  //! base/UREM/MulRef3 mask with a 32-round ceiling; BROAD selects the broad
+  //! single-record catalogue at 16 rounds; and AGGRESSIVE adds the
+  //! full-width paired DIV/REM identity to it. Invalid values
+  //! are refused without changing either field. This is the C API's way to
+  //! reach --bv-term-abstraction-profile.
+  //!
+  BV_TERM_ABSTRACTION_PROFILE,
 
   //! Caps BVDIV/BVMOD value-pair blocking independently of
   //! BV_TERM_ABSTRACTION_ROUNDS and BVMULT.
@@ -810,12 +834,13 @@ enum stp_counter_t
   STP_COUNTER_UF_APPLICATIONS_LOWERED = 15,
   STP_COUNTER_UF_CONSTRAINTS_INSTALLED = 16,
 
-  //! Individual algebraic schema lemmas installed over abstracted BVMULT,
-  //! BVDIV and BVMOD nodes. For one inconsistent operation a schema lemma
-  //! replaces that operation's usual fallback, but a pass may visit several
-  //! operations and increment both lemma counters. Other abstraction kinds
-  //! increment the pass counter without incrementing either lemma counter, so
-  //! the two lemma counts do not partition STP_COUNTER_BV_REFINEMENT_ROUNDS.
+  //! Individual algebraic schema lemmas installed over abstracted BVPLUS,
+  //! BVMULT, BVDIV and BVMOD nodes. For one inconsistent operation a schema
+  //! lemma replaces that operation's usual fallback, but a pass may visit
+  //! several operations and increment both lemma counters. Other abstraction
+  //! kinds increment the pass counter without incrementing either lemma
+  //! counter, so the two lemma counts do not partition
+  //! STP_COUNTER_BV_REFINEMENT_ROUNDS.
   STP_COUNTER_BV_SCHEMA_LEMMAS = 17,
 
   //! Value-pair refinements which spent their allowance and installed an
@@ -877,8 +902,8 @@ DLL_PUBLIC unsigned long long vc_getCounter(VC vc, enum stp_counter_t counter);
 //! Names rather than published constants because the partition is a research
 //! instrument: which families exist, and how finely they are cut, is expected
 //! to change, and none of that should turn into an installed-header ABI
-//! break. A named profile is the stable surface, and arrives with the
-//! qualification that justifies one.
+//! break. BV_TERM_ABSTRACTION_PROFILE is the stable surface -- three levels
+//! that keep their meaning as the families beneath them move.
 DLL_PUBLIC int vc_setSchemaGroups(VC vc, const char* groups);
 
 //! How many BV schema groups there are, for sizing an array with one slot per

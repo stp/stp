@@ -581,4 +581,70 @@ TEST_F(BVExactEncoderTest, ANarrowedQuotientDoesNotAgreeWithTheWideOne)
                                   & mask);
 }
 
+
+// The lemma splice is the same trade as the exact splice, so it makes the same
+// choice about AUTO.
+//
+// ToCNFAIG's AUTO level was calibrated on whole-query conversion, where the
+// CNF is built once, handed to the solver and thrown away -- so buying fewer
+// clauses with more generation time is free. A refinement splice is not that:
+// its clauses go into a solver that is already running and stay there for the
+// rest of the search. `encode` above has always turned AUTO off for that
+// reason; the lemma path left it on, and the lemma path is the one that
+// installs the full-width multiplier of the paired DIV/REM identity.
+//
+// Checked by making AUTO's decision unambiguous -- a threshold of one AND node
+// sends it to VERY_LOW for any circuit at all -- and asking whether the splice
+// took it. It must not, and an explicitly chosen level must still get through.
+TEST_F(BVExactEncoderTest, AutoCNFEffortDoesNotReachALemmaSplice)
+{
+  const unsigned w = 32;
+  ASTNode x = mgr.CreateSymbol("auto_x", 0, w);
+  ASTNode s = mgr.CreateSymbol("auto_s", 0, w);
+  const ASTNode product = mgr.defaultNodeFactory->CreateTerm(BVMULT, w, x, s);
+
+  const auto spliceIdentity = [&](UserDefinedFlags::CNFEffort effort,
+                                  unsigned threshold) -> uint64_t {
+    mgr.UserFlags.cnf_effort = effort;
+    mgr.UserFlags.cnf_auto_threshold = threshold;
+
+    std::unique_ptr<SATSolver> solver = makeSolver(mgr.UserFlags);
+    EXPECT_TRUE(solver != NULL);
+    if (solver == NULL)
+      return 0;
+
+    std::vector<unsigned> dividend(w), divisor(w), quotient(w), remainder(w);
+    std::vector<unsigned>* groups[] = {&dividend, &divisor, &quotient,
+                                       &remainder};
+    for (unsigned g = 0; g < 4; ++g)
+      for (unsigned i = 0; i < w; ++i)
+      {
+        (*groups[g])[i] = solver->newVar();
+        solver->setFrozen((*groups[g])[i]);
+      }
+
+    const uint64_t before = solver->submittedClauses();
+    BVExactEncoder(&mgr).encodeDivRemIdentity(*solver, product, w, dividend,
+                                              divisor, quotient, remainder);
+    return solver->submittedClauses() - before;
+  };
+
+  const uint64_t medium =
+      spliceIdentity(UserDefinedFlags::CNF_EFFORT_MEDIUM, 200000);
+  EXPECT_GT(medium, 0u);
+
+  // A threshold of one means AUTO would choose VERY_LOW for anything. If it
+  // reached the splice, this would not be the medium-effort clause count.
+  EXPECT_EQ(medium, spliceIdentity(UserDefinedFlags::CNF_EFFORT_AUTO, 1u))
+      << "AUTO reached the lemma splice";
+
+  // And the level the caller asks for by name still does, or turning AUTO off
+  // would have turned the whole option off with it.
+  EXPECT_NE(medium, spliceIdentity(UserDefinedFlags::CNF_EFFORT_VERY_LOW, 1u))
+      << "an explicitly chosen effort no longer reaches the lemma splice";
+
+  mgr.UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_AUTO;
+  mgr.UserFlags.cnf_auto_threshold = 200000;
+}
+
 } // namespace

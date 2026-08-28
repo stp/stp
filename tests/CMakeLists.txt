@@ -395,6 +395,13 @@ endif()
 add_test(NAME test_fpbackend COMMAND test_fpbackend)
 add_test(NAME test_fprewrites COMMAND test_fprewrites)
 
+# scripts/benchmark-bv-refinement.sh is evaluation machinery, not solver code,
+# and scripts/check-benchmark-bv-refinement.sh exercises it against a fake
+# solver. Neither is wired into CTest: they need bash, timeout, sha256sum and
+# /usr/bin/time, so the coverage would silently disappear on a platform that
+# lacks one, and a self-check that is only sometimes run is worse than one a
+# person runs deliberately.
+
 # -----------------------------------------------------------------------------
 # Default-off baseline differential for the array-equality feature
 #

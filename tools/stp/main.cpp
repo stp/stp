@@ -109,6 +109,13 @@ public:
   // default spelling.
   std::string cnf_effort = "auto";
 
+  // Likewise for the named mask of BV abstraction schema families.
+  std::string bv_schema_groups = formatBVSchemaGroups(BV_SCHEMA_GROUP_DEFAULT);
+
+  // A named, atomic schema-mask/refinement-round pair. Empty means the two
+  // lower-level options retain their independently parsed values.
+  std::string bv_abstraction_profile;
+
   // Which of the two scope options were actually given. The older MULT
   // switch covers all three nonlinear operations while it is the only one
   // supplied, and DIV/MOD wins once it is named -- in either argument order,
@@ -118,11 +125,14 @@ public:
   CLI::Option* bv_term_abstraction_mult_option = nullptr;
   CLI::Option* bv_term_abstraction_divmod_option = nullptr;
 
-  // Likewise for the named mask of BV abstraction schema families.
-  std::string bv_schema_groups = formatBVSchemaGroups(BV_SCHEMA_GROUP_DEFAULT);
-
-  // Whether the group list was given, so that the value the run actually
-  // named can be told from the default it inherited.
+  // And whether the round ceiling was given, for the same kind of reason:
+  // --bv-term-abstraction-profile carries a ceiling of its own, and the two
+  // options exclude each other here, so this records what a run named for
+  // bv_term_abstraction_rounds_explicit -- which is what the C interface
+  // resolves the same pair with, where they do not exclude each other.
+  CLI::Option* bv_rounds_option = nullptr;
+  // ... and the group list, for the same reason: it is the other half of the
+  // pair a profile applies, and resolves the same way.
   CLI::Option* bv_schema_groups_option = nullptr;
 
   // Tri-state: UserFlags.interactive_read is only overridden when the
@@ -392,11 +402,9 @@ void ExtraMain::create_options()
       refinement_group);
   bool_arg("--bv-term-abstraction-schemas",
            bm->UserFlags.bv_term_abstraction_schemas,
-           "refine an abstracted BVMULT with algebraic facts that hold for "
-           "every pair of operands -- the product's trailing zeros, its low "
-           "bit, and the shift a power-of-two operand turns it into -- "
-           "before falling back on ruling out the one pair the candidate "
-           "holds",
+           "refine abstracted BVPLUS, BVMULT, BVDIV and BVMOD operations "
+           "with algebraic facts that hold for every pair of operands before "
+           "their operation-specific fallback",
            refinement_group);
   bv_schema_groups_option =
       app.add_option("--bv-term-abstraction-schema-groups", bv_schema_groups,
@@ -411,14 +419,26 @@ void ExtraMain::create_options()
                      "quotient-one and divrem-identity")
           ->group(refinement_group)
           ->capture_default_str();
-  app.add_option("--bv-term-abstraction-rounds",
-                 bm->UserFlags.bv_term_abstraction_rounds,
-                 "ceiling on the blocking lemmas one abstracted "
-                 "BVMULT/BVDIV/BVMOD may take before its refinement encodes "
-                 "the operation exactly instead of enumerating further "
-                 "operand pairs (0: never; enumerate without limit)")
+  bv_rounds_option =
+      app.add_option("--bv-term-abstraction-rounds",
+                     bm->UserFlags.bv_term_abstraction_rounds,
+                     "ceiling on the blocking lemmas one abstracted "
+                     "BVMULT/BVDIV/BVMOD may take before its refinement "
+                     "encodes the operation exactly instead of enumerating "
+                     "further operand pairs (0: never; enumerate without "
+                     "limit)")
+          ->group(refinement_group)
+          ->capture_default_str();
+  app.add_option("--bv-term-abstraction-profile", bv_abstraction_profile,
+                 "apply an atomic schema-mask/round pair: 'qualified' is the "
+                 "inherited base, UREM and MulRef3 mask at 32 rounds; "
+                 "'broad' adds the observed UDIV and MUL8 facts, "
+                 "divisor-magnitude and quotient-one facts at 16 rounds but "
+                 "no paired DIV/REM relation; 'aggressive' adds the "
+                 "full-width paired DIV/REM identity to that")
       ->group(refinement_group)
-      ->capture_default_str();
+      ->excludes(bv_schema_groups_option)
+      ->excludes(bv_rounds_option);
   app.add_option("--bv-term-abstraction-value-divisor",
                  bm->UserFlags.bv_term_abstraction_value_divisor,
                  "scale that allowance with the operand width, as "
@@ -969,6 +989,22 @@ int ExtraMain::parse_options(int argc, char** argv)
     exit(-1);
   }
 
+  // The command line cannot reach the profile-versus-ceiling conflict at all
+  // -- the two options exclude each other -- but a run that named the ceiling
+  // records it anyway, so the flag means the same thing whichever front end
+  // set it. Likewise for the group list, which is the other half of the same
+  // pair and now resolves by the same rule.
+  if (bv_rounds_option->count() != 0)
+    bm->UserFlags.bv_term_abstraction_rounds_explicit = true;
+  if (bv_schema_groups_option->count() != 0)
+    bm->UserFlags.bv_term_abstraction_schema_groups_explicit = true;
+
+  if (bv_term_abstraction_divmod_option->count() != 0)
+    bm->UserFlags.bv_term_abstraction_divmod_explicit = true;
+  else if (bv_term_abstraction_mult_option->count() != 0)
+    bm->UserFlags.bv_term_abstraction_divmod =
+        bm->UserFlags.bv_term_abstraction_mult;
+
   {
     std::string error;
     if (!parseBVSchemaGroups(bv_schema_groups,
@@ -980,11 +1016,18 @@ int ExtraMain::parse_options(int argc, char** argv)
     }
   }
 
-  if (bv_term_abstraction_divmod_option->count() != 0)
-    bm->UserFlags.bv_term_abstraction_divmod_explicit = true;
-  else if (bv_term_abstraction_mult_option->count() != 0)
-    bm->UserFlags.bv_term_abstraction_divmod =
-        bm->UserFlags.bv_term_abstraction_mult;
+  if (!bv_abstraction_profile.empty())
+  {
+    std::string error;
+    if (!parseBVTermAbstractionProfile(
+            bv_abstraction_profile,
+            bm->UserFlags.bv_term_abstraction_schema_groups,
+            bm->UserFlags.bv_term_abstraction_rounds, error))
+    {
+      cerr << "ERROR: --bv-term-abstraction-profile: " << error << endl;
+      return -1;
+    }
+  }
 
   onePrintBack = bm->UserFlags.get_print_output_at_all();
 
