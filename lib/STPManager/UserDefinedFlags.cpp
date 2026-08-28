@@ -31,7 +31,6 @@ THE SOFTWARE.
 
 namespace stp
 {
-
 namespace
 {
 
@@ -204,6 +203,38 @@ std::string formatBVSchemaGroups(uint32_t mask)
   return out.str();
 }
 
+bool parseBVTermAbstractionProfile(const std::string& text, uint32_t& mask,
+                                   unsigned& rounds, std::string& error)
+{
+  uint32_t parsedMask;
+  unsigned parsedRounds;
+  if (text == "qualified")
+  {
+    parsedMask = BV_SCHEMA_GROUP_QUALIFIED;
+    parsedRounds = BV_TERM_ABSTRACTION_QUALIFIED_ROUNDS;
+  }
+  else if (text == "aggressive")
+  {
+    parsedMask = BV_SCHEMA_GROUP_AGGRESSIVE;
+    parsedRounds = BV_TERM_ABSTRACTION_AGGRESSIVE_ROUNDS;
+  }
+  else if (text == "broad")
+  {
+    parsedMask = BV_SCHEMA_GROUP_BROAD;
+    parsedRounds = BV_TERM_ABSTRACTION_BROAD_ROUNDS;
+  }
+  else
+  {
+    error = "unknown BV term-abstraction profile '" + text +
+            "'; expected qualified, broad, or aggressive";
+    return false;
+  }
+
+  mask = parsedMask;
+  rounds = parsedRounds;
+  error.clear();
+  return true;
+}
 
 void printAbstractionCoverage(const UserDefinedFlags& uf, std::ostream& out)
 {
@@ -231,17 +262,19 @@ void printAbstractionCoverage(const UserDefinedFlags& uf, std::ostream& out)
       << " exact-divmod=" << c.bv_exact_escalations_divmod << std::endl;
 
   // Keep the established refinement line stable, and print this one whenever
-  // there is a cost to report rather than whenever a refinement gave up.
+  // there is a cost to report rather than whenever a refinement gave up: the
+  // paired DIV/REM identity splices a full-width multiplier without any
+  // escalation, and a run whose only cost was that used to report none.
   if (c.bv_exact_clauses != 0 || c.bv_exact_variables != 0)
     out << "Abstraction circuit cost: clauses=" << c.bv_exact_clauses
         << " variables=" << c.bv_exact_variables
         << " microseconds=" << c.bv_exact_microseconds << std::endl;
 
-  // Reported separately from the line above, because what the schemas cost is
-  // the thing a comparison between refinement settings is about. Rolled into
-  // the full-width installs it would be invisible next to one exact divider;
-  // reported on its own a run whose only refinement was schema lemmas has a
-  // price rather than a blank.
+  // Reported separately from the line above, because a profile is a choice of
+  // which schema families to enable and this is what that choice costs. Rolled
+  // into the full-width installs it would be invisible next to one exact
+  // divider; reported on its own a run whose only refinement was schema
+  // lemmas has a price rather than a blank.
   if (c.bv_schema_clauses != 0 || c.bv_schema_variables != 0)
     out << "Abstraction schema cost: clauses=" << c.bv_schema_clauses
         << " variables=" << c.bv_schema_variables

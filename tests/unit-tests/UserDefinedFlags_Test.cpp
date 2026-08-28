@@ -78,6 +78,73 @@ TEST(UserDefinedFlags_Test, internal_model_consumer_is_a_separate_input)
 #endif
 }
 
+TEST(UserDefinedFlags_Test, bv_schema_groups_default_to_the_qualified_profile)
+{
+  stp::UserDefinedFlags uf;
+  EXPECT_EQ(stp::BV_SCHEMA_GROUP_QUALIFIED,
+            uf.bv_term_abstraction_schema_groups);
+  EXPECT_EQ("base,urem,mul-ref3",
+            stp::formatBVSchemaGroups(uf.bv_term_abstraction_schema_groups));
+  EXPECT_EQ(stp::BV_TERM_ABSTRACTION_DEFAULT_ROUNDS,
+            uf.bv_term_abstraction_rounds);
+  EXPECT_EQ(stp::BV_TERM_ABSTRACTION_QUALIFIED_ROUNDS,
+            uf.bv_term_abstraction_rounds);
+  // The broader catalogues are experiments a caller asks for by name, so no
+  // group beyond the qualified three may reach a query that did not.
+  EXPECT_FALSE(stp::bvSchemaGroupEnabled(uf.bv_term_abstraction_schema_groups,
+                                         stp::BVSchemaGroup::DIVREM_FULL));
+  EXPECT_FALSE(stp::bvSchemaGroupEnabled(uf.bv_term_abstraction_schema_groups,
+                                         stp::BVSchemaGroup::UDIV_OBSERVED));
+  EXPECT_FALSE(stp::bvSchemaGroupEnabled(uf.bv_term_abstraction_schema_groups,
+                                         stp::BVSchemaGroup::MUL8));
+  EXPECT_FALSE(uf.bv_term_abstraction);
+  EXPECT_TRUE(uf.bv_term_abstraction_schemas);
+}
+
+TEST(UserDefinedFlags_Test, named_bv_profiles_apply_mask_and_rounds_atomically)
+{
+  uint32_t mask = 0;
+  unsigned rounds = 0;
+  std::string error;
+  ASSERT_TRUE(
+      stp::parseBVTermAbstractionProfile("aggressive", mask, rounds, error));
+  EXPECT_EQ(stp::BV_SCHEMA_GROUP_AGGRESSIVE, mask);
+  EXPECT_EQ(stp::BV_TERM_ABSTRACTION_AGGRESSIVE_ROUNDS, rounds);
+  EXPECT_TRUE(
+      stp::bvSchemaGroupEnabled(mask, stp::BVSchemaGroup::UDIV_OBSERVED));
+  EXPECT_TRUE(stp::bvSchemaGroupEnabled(mask, stp::BVSchemaGroup::DIVREM_FULL));
+  EXPECT_FALSE(stp::bvSchemaGroupEnabled(mask, stp::BVSchemaGroup::UDIV_TAIL));
+  EXPECT_FALSE(stp::bvSchemaGroupEnabled(mask, stp::BVSchemaGroup::MUL_TAIL));
+  EXPECT_FALSE(stp::bvSchemaGroupEnabled(mask, stp::BVSchemaGroup::ADD));
+  EXPECT_FALSE(
+      stp::bvSchemaGroupEnabled(mask, stp::BVSchemaGroup::QUOTIENT_THRESHOLDS));
+
+  ASSERT_TRUE(
+      stp::parseBVTermAbstractionProfile("broad", mask, rounds, error));
+  EXPECT_EQ(stp::BV_SCHEMA_GROUP_BROAD, mask);
+  EXPECT_EQ(stp::BV_TERM_ABSTRACTION_BROAD_ROUNDS, rounds);
+  EXPECT_TRUE(
+      stp::bvSchemaGroupEnabled(mask, stp::BVSchemaGroup::UDIV_OBSERVED));
+  EXPECT_TRUE(stp::bvSchemaGroupEnabled(mask, stp::BVSchemaGroup::MUL8));
+  EXPECT_TRUE(
+      stp::bvSchemaGroupEnabled(mask, stp::BVSchemaGroup::DIVISOR_MAGNITUDE));
+  EXPECT_FALSE(stp::bvSchemaGroupEnabled(mask, stp::BVSchemaGroup::DIVREM_FULL));
+
+  ASSERT_TRUE(
+      stp::parseBVTermAbstractionProfile("qualified", mask, rounds, error));
+  EXPECT_EQ(stp::BV_SCHEMA_GROUP_QUALIFIED, mask);
+  EXPECT_EQ(stp::BV_TERM_ABSTRACTION_QUALIFIED_ROUNDS, rounds);
+
+  mask = 0x5a5u;
+  rounds = 7;
+  EXPECT_FALSE(
+      stp::parseBVTermAbstractionProfile("unknown", mask, rounds, error));
+  EXPECT_EQ(0x5a5u, mask);
+  EXPECT_EQ(7u, rounds);
+  EXPECT_NE(std::string::npos,
+            error.find("qualified, broad, or aggressive"));
+}
+
 TEST(UserDefinedFlags_Test, every_bv_schema_group_round_trips_by_name)
 {
   for (unsigned i = 0; i < stp::BV_SCHEMA_GROUP_COUNT; ++i)
@@ -96,6 +163,7 @@ TEST(UserDefinedFlags_Test, every_bv_schema_group_round_trips_by_name)
                             parsed, static_cast<stp::BVSchemaGroup>(j)));
   }
 }
+
 TEST(UserDefinedFlags_Test, bv_schema_group_aliases_and_lists_parse)
 {
   uint32_t parsed = 123;
@@ -115,10 +183,15 @@ TEST(UserDefinedFlags_Test, bv_schema_group_aliases_and_lists_parse)
   EXPECT_EQ("base,urem,mul-ref3", stp::formatBVSchemaGroups(parsed));
 
   ASSERT_TRUE(stp::parseBVSchemaGroups(
-      "base,udiv,urem,mul6,mul8,quotient-one", parsed, error));
+      "base,udiv,urem,mul6,mul8,divisor-magnitude,quotient-one", parsed,
+      error));
+  EXPECT_EQ(stp::BV_SCHEMA_GROUP_BROAD, parsed);
   EXPECT_EQ("base,udiv15,udiv-observed,urem,quotient-one-quot,"
-            "quotient-one-rem,mul8,mul-ref3",
+            "quotient-one-rem,divisor-magnitude,mul8,mul-ref3",
             stp::formatBVSchemaGroups(parsed));
+
+  ASSERT_TRUE(stp::parseBVSchemaGroups("divrem-identity", parsed, error));
+  EXPECT_EQ(stp::bvSchemaGroupBit(stp::BVSchemaGroup::DIVREM_FULL), parsed);
 }
 
 TEST(UserDefinedFlags_Test, invalid_bv_schema_group_lists_are_atomic)

@@ -54,12 +54,14 @@ void appendTermRecord(BVAbstractionRefiner& refiner,
   refiner.appendTerm(record);
 }
 
-unsigned allowance(unsigned ceiling, unsigned divisor, unsigned width)
+unsigned allowance(unsigned ceiling, unsigned divisor, unsigned width,
+                   unsigned divmodValueLimit = 0, Kind opKind = BVDIV)
 {
   UserDefinedFlags uf;
   uf.bv_term_abstraction_rounds = ceiling;
   uf.bv_term_abstraction_value_divisor = divisor;
-  return valueLemmaAllowance(uf, width);
+  uf.bv_term_abstraction_divmod_value_limit = divmodValueLimit;
+  return valueLemmaAllowance(uf, width, opKind);
 }
 
 } // namespace
@@ -69,11 +71,54 @@ unsigned allowance(unsigned ceiling, unsigned divisor, unsigned width)
 TEST(bv_value_lemma_allowance, TheDefaultIsFlat)
 {
   UserDefinedFlags defaults;
+  EXPECT_EQ(BV_TERM_ABSTRACTION_DEFAULT_ROUNDS,
+            defaults.bv_term_abstraction_rounds);
   EXPECT_EQ(32u, defaults.bv_term_abstraction_rounds);
   EXPECT_EQ(0u, defaults.bv_term_abstraction_value_divisor);
+  EXPECT_EQ(0u, defaults.bv_term_abstraction_divmod_value_limit);
 
   for (unsigned width : {8u, 16u, 24u, 33u, 53u, 64u})
     EXPECT_EQ(32u, valueLemmaAllowance(defaults, width)) << "width=" << width;
+}
+
+// Varying the number of value blocks must not require changing the schema
+// ceiling. This is the experiment the independent cap exists to express.
+TEST(bv_value_lemma_allowance, TheDivModCapLeavesTheRoundCeilingAlone)
+{
+  for (unsigned cap : {4u, 8u, 16u, 32u})
+  {
+    EXPECT_EQ(cap, allowance(32, 0, 107, cap));
+    EXPECT_EQ(cap, allowance(64, 0, 107, cap));
+  }
+
+  // It can only reduce the allowance established by the older knobs.
+  EXPECT_EQ(3u, allowance(3, 0, 107, 8));
+  EXPECT_EQ(6u, allowance(32, 8, 53, 16));
+  EXPECT_EQ(4u, allowance(32, 8, 53, 4));
+}
+
+TEST(bv_value_lemma_allowance, TheDivModExperimentDoesNotChangeMultiplication)
+{
+  for (unsigned cap : {1u, 4u, 8u, 16u})
+    EXPECT_EQ(32u, allowance(32, 0, 107, cap, BVMULT));
+
+  // The older width scaling remains common to all three operation kinds.
+  EXPECT_EQ(6u, allowance(32, 8, 53, 4, BVMULT));
+}
+
+TEST(bv_value_lemma_allowance, AZeroIndependentCapPreservesEveryOldAnswer)
+{
+  for (unsigned ceiling : {0u, 1u, 7u, 32u})
+    for (unsigned divisor : {0u, 4u, 8u, 64u})
+      for (unsigned width : {1u, 8u, 53u, 107u})
+        EXPECT_EQ(allowance(ceiling, divisor, width),
+                  allowance(ceiling, divisor, width, 0));
+}
+
+TEST(bv_value_lemma_allowance, NeverEscalatingStillOverridesTheNewCap)
+{
+  for (unsigned cap : {1u, 4u, 8u, 32u})
+    EXPECT_EQ(0u, allowance(0, 0, 107, cap));
 }
 
 // What the rate gives when it is asked for, across the widths that actually
@@ -183,9 +228,13 @@ TEST(bv_value_lemma_allowance, BeginningAQueryDoesNotTouchDormantRecords)
   spent.schemaRounds = 7;
   spent.blockedThisQuery = 4;
   spent.schemasThisQuery = 3;
-  spent.installedSchemas = MUL_SCHEMA_INSTALLED_ODD;
+  spent.installedSchemas = MUL_SCHEMA_INSTALLED_ODD |
+                           bvSchemaFamilyRecordInstance(
+                               0, BVSchemaFamily::DivisorMagnitude);
   spent.defined = true;
   spent.blastedBits = 64;
+  spent.exactEscalations = 1;
+  spent.exactClauses = 33968;
   appendTermRecord(refiner, spent);
 
   refiner.beginQuery();
@@ -198,7 +247,9 @@ TEST(bv_value_lemma_allowance, BeginningAQueryDoesNotTouchDormantRecords)
   // query does not take any of it back.
   EXPECT_EQ(9u, after.blockedRounds);
   EXPECT_EQ(7u, after.schemaRounds);
-  EXPECT_EQ(MUL_SCHEMA_INSTALLED_ODD, after.installedSchemas);
+  EXPECT_EQ(spent.installedSchemas, after.installedSchemas);
   EXPECT_TRUE(after.defined);
   EXPECT_EQ(64u, after.blastedBits);
+  EXPECT_EQ(1u, after.exactEscalations);
+  EXPECT_EQ(33968u, after.exactClauses);
 }

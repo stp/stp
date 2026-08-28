@@ -69,8 +69,11 @@ TEST(BVSchemaGroups, every_group_has_a_unique_round_tripping_name)
     EXPECT_EQ(name, formatBVSchemaGroups(parsed));
   }
 
-  const uint32_t masks[] = {0u, BV_SCHEMA_GROUP_ALL,
-                            BV_SCHEMA_GROUP_DEFAULT};
+  const uint32_t masks[] = {0u,
+                            BV_SCHEMA_GROUP_ALL,
+                            BV_SCHEMA_GROUP_DEFAULT,
+                            BV_SCHEMA_GROUP_AGGRESSIVE,
+                            BV_SCHEMA_GROUP_BROAD};
   for (uint32_t mask : masks)
   {
     uint32_t parsed = ~0u;
@@ -125,7 +128,8 @@ TEST(BVSchemaGroups, every_group_name_round_trips_through_the_parser)
 // parser reads back as the same mask.
 TEST(BVSchemaGroups, formatting_a_mask_gives_a_list_the_parser_accepts)
 {
-  const uint32_t masks[] = {BV_SCHEMA_GROUP_QUALIFIED, BV_SCHEMA_GROUP_ALL};
+  const uint32_t masks[] = {BV_SCHEMA_GROUP_QUALIFIED, BV_SCHEMA_GROUP_BROAD,
+                            BV_SCHEMA_GROUP_AGGRESSIVE, BV_SCHEMA_GROUP_ALL};
   for (const uint32_t original : masks)
   {
     const std::string text = formatBVSchemaGroups(original);
@@ -201,3 +205,42 @@ TEST(BVSchemaGroups, disabled_families_are_never_chosen)
   }
 }
 
+TEST(BVSchemaGroups, broad_profile_excludes_the_paired_identity)
+{
+  EXPECT_EQ(16u, BV_TERM_ABSTRACTION_BROAD_ROUNDS);
+  EXPECT_FALSE(
+      bvSchemaGroupEnabled(BV_SCHEMA_GROUP_BROAD, BVSchemaGroup::DIVREM_FULL));
+  EXPECT_TRUE(bvSchemaGroupEnabled(BV_SCHEMA_GROUP_BROAD,
+                                   BVSchemaGroup::QUOTIENT_ONE_REM));
+  EXPECT_TRUE(bvSchemaGroupEnabled(BV_SCHEMA_GROUP_BROAD,
+                                   BVSchemaGroup::QUOTIENT_ONE_QUOT));
+}
+
+TEST(BVSchemaGroups, aggressive_profile_adds_only_the_paired_identity)
+{
+  EXPECT_EQ(16u, BV_TERM_ABSTRACTION_AGGRESSIVE_ROUNDS);
+  EXPECT_EQ(BV_SCHEMA_GROUP_BROAD |
+                bvSchemaGroupBit(BVSchemaGroup::DIVREM_FULL),
+            BV_SCHEMA_GROUP_AGGRESSIVE);
+}
+
+// Nothing an enabled abstraction inherits may come from a broad profile: the
+// corpus sweep put several of those families at or below break-even, and the
+// two that decided queries on their own are the two below.
+TEST(BVSchemaGroups, the_inherited_profile_is_the_qualified_one)
+{
+  EXPECT_EQ(BV_SCHEMA_GROUP_QUALIFIED, BV_SCHEMA_GROUP_DEFAULT);
+  EXPECT_EQ(BV_TERM_ABSTRACTION_QUALIFIED_ROUNDS,
+            BV_TERM_ABSTRACTION_DEFAULT_ROUNDS);
+  EXPECT_EQ(32u, BV_TERM_ABSTRACTION_DEFAULT_ROUNDS);
+
+  for (unsigned i = 0; i < BV_SCHEMA_GROUP_COUNT; ++i)
+  {
+    const BVSchemaGroup group = static_cast<BVSchemaGroup>(i);
+    const bool expected = group == BVSchemaGroup::BASE ||
+                          group == BVSchemaGroup::UREM ||
+                          group == BVSchemaGroup::MUL_REF3;
+    EXPECT_EQ(expected, bvSchemaGroupEnabled(BV_SCHEMA_GROUP_DEFAULT, group))
+        << bvSchemaGroupName(group);
+  }
+}

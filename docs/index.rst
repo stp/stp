@@ -99,6 +99,7 @@ page <https://smt-lib.org/>`__.
 
    array-extensionality
    incremental-solving
+   bv-abstraction
 
 Header
 ------
