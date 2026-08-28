@@ -98,6 +98,7 @@ page <https://smt-lib.org/>`__.
    :hidden:
    :maxdepth: 1
 
+   c-api-lifetime
    array-extensionality
    incremental-solving
 
@@ -384,12 +385,15 @@ An example C header usage can be as simple as:
 
     int main(int argc, char **argv) {
       VC vc = vc_createValidityChecker();
+      vc_setInterfaceFlags(vc, EXPRDELETE, 0);
+
+      Type bv32 = vc_bvType(vc, 32);
 
       // ask for a counterexample to be built, so it can be printed below
       vc_setFlags(vc, 'c');
 
       // 32-bit variable 'c'
-      Expr c = vc_varExpr(vc, "c", vc_bvType(vc, 32));
+      Expr c = vc_varExpr(vc, "c", bv32);
 
       // 32 bit constant value 5
       Expr a = vc_bvConstExprFromInt(vc, 32, 5);
@@ -411,7 +415,16 @@ An example C header usage can be as simple as:
       //print c = 11 counterexample
       vc_printCounterExample(vc);
 
-      //Delete validity checker
+      // Delete caller-owned children while their VC is still live.
+      vc_DeleteExpr(eq2);
+      vc_DeleteExpr(eq);
+      vc_DeleteExpr(xp1);
+      vc_DeleteExpr(b);
+      vc_DeleteExpr(a);
+      vc_DeleteExpr(c);
+      vc_DeleteExpr(bv32);
+
+      // Destroying the VC invalidates every remaining child handle.
       vc_Destroy(vc);
 
       return 0;
