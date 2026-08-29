@@ -89,7 +89,7 @@ TEST_F(BVEQAbstractionTest, AbstractsWideSymbolEquality)
   BBNodeManagerAIG aigMgr;
   stp::SubstitutionMap sm(&mgr);
   Simplifier simp(&mgr, &sm);
-  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+  BitBlasterAIG bb(&aigMgr, &simp, factory, &mgr.UserFlags);
 
   bb.BBForm(eq);
 
@@ -110,7 +110,7 @@ TEST_F(BVEQAbstractionTest, NoAbstractionWhenDisabled)
   BBNodeManagerAIG aigMgr;
   stp::SubstitutionMap sm(&mgr);
   Simplifier simp(&mgr, &sm);
-  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+  BitBlasterAIG bb(&aigMgr, &simp, factory, &mgr.UserFlags);
 
   bb.BBForm(eq);
 
@@ -129,7 +129,7 @@ TEST_F(BVEQAbstractionTest, NoAbstractionBelowWidthThreshold)
   BBNodeManagerAIG aigMgr;
   stp::SubstitutionMap sm(&mgr);
   Simplifier simp(&mgr, &sm);
-  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+  BitBlasterAIG bb(&aigMgr, &simp, factory, &mgr.UserFlags);
 
   bb.BBForm(eq);
 
@@ -150,7 +150,7 @@ TEST_F(BVEQAbstractionTest, AbstractionWithNonSymbolOperandsViaProxyCIs)
   BBNodeManagerAIG aigMgr;
   stp::SubstitutionMap sm(&mgr);
   Simplifier simp(&mgr, &sm);
-  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+  BitBlasterAIG bb(&aigMgr, &simp, factory, &mgr.UserFlags);
 
   bb.BBForm(eq);
 
@@ -172,7 +172,7 @@ TEST_F(BVEQAbstractionTest, BooleanSkeletonContradictionIsUnsatWithoutRefinement
   BBNodeManagerAIG aigMgr;
   stp::SubstitutionMap sm(&mgr);
   Simplifier simp(&mgr, &sm);
-  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+  BitBlasterAIG bb(&aigMgr, &simp, factory, &mgr.UserFlags);
 
   BBNodeAIG result = bb.BBForm(conj);
 
@@ -195,7 +195,7 @@ TEST_F(BVEQAbstractionTest, MultipleEqualitiesAbstracted)
   BBNodeManagerAIG aigMgr;
   stp::SubstitutionMap sm(&mgr);
   Simplifier simp(&mgr, &sm);
-  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+  BitBlasterAIG bb(&aigMgr, &simp, factory, &mgr.UserFlags);
 
   bb.BBForm(conj);
 
@@ -215,7 +215,7 @@ TEST_F(BVEQAbstractionTest, DagSharingReusesAbstraction)
   BBNodeManagerAIG aigMgr;
   stp::SubstitutionMap sm(&mgr);
   Simplifier simp(&mgr, &sm);
-  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+  BitBlasterAIG bb(&aigMgr, &simp, factory, &mgr.UserFlags);
 
   bb.BBForm(conj);
 
@@ -289,7 +289,7 @@ TEST_F(BVEQAbstractionTest, BVPLUSAbstractionCreatesAbstraction)
   BBNodeManagerAIG aigMgr;
   stp::SubstitutionMap sm(&mgr);
   Simplifier simp(&mgr, &sm);
-  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+  BitBlasterAIG bb(&aigMgr, &simp, factory, &mgr.UserFlags);
 
   bb.BBForm(eq);
 
@@ -412,7 +412,7 @@ TEST_F(BVEQAbstractionTest, ITEAbstractionCreatesAbstraction)
   BBNodeManagerAIG aigMgr;
   stp::SubstitutionMap sm(&mgr);
   Simplifier simp(&mgr, &sm);
-  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+  BitBlasterAIG bb(&aigMgr, &simp, factory, &mgr.UserFlags);
 
   bb.BBForm(eq);
 
@@ -488,7 +488,7 @@ TEST_F(BVEQAbstractionTest, ReusesTermAbstractionsAcrossMemoBoundaries)
   BBNodeManagerAIG aigMgr;
   stp::SubstitutionMap sm(&mgr);
   Simplifier simp(&mgr, &sm);
-  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+  BitBlasterAIG bb(&aigMgr, &simp, factory, &mgr.UserFlags);
 
   const auto expectReused = [&](const ASTNode& term, Kind expectedKind)
   {
@@ -506,7 +506,7 @@ TEST_F(BVEQAbstractionTest, ReusesTermAbstractionsAcrossMemoBoundaries)
               bb.abstractedTerms().back().resultCISymbolIndices.size());
     const auto firstRegistration = aigMgr.symbolToBBNode.find(term);
     ASSERT_TRUE(firstRegistration != aigMgr.symbolToBBNode.end());
-    const BBNodeVec first = firstRegistration->second;
+    const BBNodeVecAIG first = firstRegistration->second;
 
     // A different FP-domain root clears BBTermMemo before this visit, as the
     // incremental per-piece route does for distinct conjuncts.
@@ -544,12 +544,12 @@ TEST_F(BVEQAbstractionTest,
   BBNodeManagerAIG aigMgr;
   stp::SubstitutionMap sm(&mgr);
   Simplifier simp(&mgr, &sm);
-  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+  BitBlasterAIG bb(&aigMgr, &simp, factory, &mgr.UserFlags);
 
   const BBNodeAIG rootAig = bb.BBForm(root);
 
-  const BitBlaster::RawBVTermAbstraction* childRecord = NULL;
-  const BitBlaster::RawBVTermAbstraction* parentRecord = NULL;
+  const BitBlasterAIG::RawBVTermAbstraction* childRecord = NULL;
+  const BitBlasterAIG::RawBVTermAbstraction* parentRecord = NULL;
   for (const auto& record : bb.abstractedTerms())
   {
     if (record.termNode == child)
@@ -596,13 +596,13 @@ TEST_F(BVEQAbstractionTest,
   BBNodeManagerAIG aigMgr;
   stp::SubstitutionMap sm(&mgr);
   Simplifier simp(&mgr, &sm);
-  BitBlaster bb(&aigMgr, &simp, factory, &mgr.UserFlags);
+  BitBlasterAIG bb(&aigMgr, &simp, factory, &mgr.UserFlags);
 
   const BBNodeAIG rootAig = bb.BBForm(root);
 
-  const BitBlaster::RawBVTermAbstraction* highRecord = NULL;
-  const BitBlaster::RawBVTermAbstraction* lowRecord = NULL;
-  const BitBlaster::RawBVTermAbstraction* parentRecord = NULL;
+  const BitBlasterAIG::RawBVTermAbstraction* highRecord = NULL;
+  const BitBlasterAIG::RawBVTermAbstraction* lowRecord = NULL;
+  const BitBlasterAIG::RawBVTermAbstraction* parentRecord = NULL;
   for (const auto& record : bb.abstractedTerms())
   {
     if (record.termNode == high)

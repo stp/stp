@@ -118,7 +118,7 @@ class AigEncodingEpoch
   std::unique_ptr<SubstitutionMap> substitutionMap;
   std::unique_ptr<Simplifier> simplifier;
   std::unique_ptr<BBNodeManagerAIG> nodeManager;
-  std::unique_ptr<BitBlaster> bitBlaster;
+  std::unique_ptr<BitBlasterAIG> bitBlaster;
 
 public:
   explicit AigEncodingEpoch(STPMgr* bm_) : bm(bm_) { reset(); }
@@ -133,14 +133,14 @@ public:
     substitutionMap.reset(new SubstitutionMap(bm));
     simplifier.reset(new Simplifier(bm, substitutionMap.get()));
     nodeManager.reset(new BBNodeManagerAIG());
-    bitBlaster.reset(new BitBlaster(nodeManager.get(), simplifier.get(),
+    bitBlaster.reset(new BitBlasterAIG(nodeManager.get(), simplifier.get(),
                                     bm->defaultNodeFactory,
                                     &bm->UserFlags, NULL));
   }
 
   BBNodeManagerAIG& nodes() { return *nodeManager; }
   const BBNodeManagerAIG& nodes() const { return *nodeManager; }
-  BitBlaster& blaster() { return *bitBlaster; }
+  BitBlasterAIG& blaster() { return *bitBlaster; }
   size_t aigAndNodes() const
   {
     return static_cast<size_t>(nodeManager->totalNumberOfNodes());
@@ -3768,7 +3768,7 @@ struct IncrementalSolver::Impl
   // simplifying MiniSat -- makeBackend refuses for this driver.
   void syncAbstractions()
   {
-    BitBlaster& bb = encoding.blaster();
+    BitBlasterAIG& bb = encoding.blaster();
 
     // An abstraction reads its operands through proxy inputs, tied to the
     // real bits by one biconditional each -- the blaster mints them
@@ -3794,11 +3794,11 @@ struct IncrementalSolver::Impl
       permanentUnitMass = addMass(permanentUnitMass, 1);
     }
 
-    const std::vector<BitBlaster::RawBVEQAbstraction>& rawEQs =
+    const std::vector<BitBlasterAIG::RawBVEQAbstraction>& rawEQs =
         bb.abstractedEQs();
     for (; harvestedEQAbstractions < rawEQs.size(); harvestedEQAbstractions++)
     {
-      const BitBlaster::RawBVEQAbstraction& raw =
+      const BitBlasterAIG::RawBVEQAbstraction& raw =
           rawEQs[harvestedEQAbstractions];
       BVEQAbstraction a;
       a.id = raw.id;
@@ -3813,12 +3813,12 @@ struct IncrementalSolver::Impl
       bvAbstraction.appendEquality(std::move(a));
     }
 
-    const std::vector<BitBlaster::RawBVTermAbstraction>& rawTerms =
+    const std::vector<BitBlasterAIG::RawBVTermAbstraction>& rawTerms =
         bb.abstractedTerms();
     for (; harvestedTermAbstractions < rawTerms.size();
          harvestedTermAbstractions++)
     {
-      const BitBlaster::RawBVTermAbstraction& raw =
+      const BitBlasterAIG::RawBVTermAbstraction& raw =
           rawTerms[harvestedTermAbstractions];
       BVTermAbstraction a;
       a.id = raw.id;

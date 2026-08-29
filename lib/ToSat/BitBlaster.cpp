@@ -41,10 +41,11 @@ THE SOFTWARE.
 namespace stp
 {
 
-static bool allBBNodesAreCIs(const BBNodeVec& vec)
+template <class BBNode, class BBNodeManagerT>
+static bool allBBNodesAreCIs(BBNodeManagerT* nf, const std::vector<BBNode>& vec)
 {
   for (const auto& node : vec)
-    if (node.IsNull() || node.symbol_index < 0)
+    if (!nf->isNamedCI(node))
       return false;
   return !vec.empty();
 }
@@ -53,11 +54,12 @@ static bool allBBNodesAreCIs(const BBNodeVec& vec)
 // the form BVExactEncoder reads back: -1 for a live node, 0 or 1 for a
 // constant. Read off the same vector ensureProxyCIs is about to replace, so
 // what is recorded is what the query's own encoding knew.
-static std::vector<signed char> knownBitsOf(BBNodeManagerAIG* nf,
-                                            const BBNodeVec& bits)
+template <class BBNode, class BBNodeManagerT>
+static std::vector<signed char> knownBitsOf(BBNodeManagerT* nf,
+                                            const std::vector<BBNode>& bits)
 {
-  const BBNodeAIG constTrue = nf->getTrue();
-  const BBNodeAIG constFalse = nf->getFalse();
+  const BBNode constTrue = nf->getTrue();
+  const BBNode constFalse = nf->getFalse();
 
   std::vector<signed char> known(bits.size(), -1);
   for (unsigned i = 0; i < bits.size(); i++)
@@ -72,15 +74,14 @@ static std::vector<signed char> knownBitsOf(BBNodeManagerAIG* nf,
   return known;
 }
 
-static std::vector<int> ciSymbolIndices(const BBNodeVec& bits)
+template <class BBNode, class BBNodeManagerT>
+static std::vector<int> ciSymbolIndices(BBNodeManagerT* nf,
+                                        const std::vector<BBNode>& bits)
 {
   std::vector<int> indices;
   indices.reserve(bits.size());
   for (const BBNode& bit : bits)
-  {
-    assert(!bit.IsNull() && bit.symbol_index >= 0);
-    indices.push_back(bit.symbol_index);
-  }
+    indices.push_back(nf->ciOrdinal(bit));
   return indices;
 }
 
@@ -96,24 +97,28 @@ static void appendAbstractionSources(
   into.erase(std::unique(into.begin(), into.end()), into.end());
 }
 
-BVAbstractionId BitBlaster::newAbstractionId()
+template <class BBNode, class BBNodeManagerT>
+BVAbstractionId BitBlaster<BBNode, BBNodeManagerT>::newAbstractionId()
 {
   assert(nextAbstractionId_ != 0 &&
          "the BV abstraction identity space wrapped");
   return BVAbstractionId(nextAbstractionId_++);
 }
 
-const std::vector<BVAbstractionId>& BitBlaster::noSources()
+template <class BBNode, class BBNodeManagerT>
+const std::vector<BVAbstractionId>&
+BitBlaster<BBNode, BBNodeManagerT>::noSources()
 {
   static const std::vector<BVAbstractionId> empty;
   return empty;
 }
 
-void BitBlaster::tagAbstractionSources(
-    const BBNodeAIG& ci, const std::vector<BVAbstractionId>& sources)
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::tagAbstractionSources(
+    const BBNode& ci, const std::vector<BVAbstractionId>& sources)
 {
   assert(!ci.IsNull());
-  assert(BBNodeManagerAIG::isCI(ci));
+  assert(BBNodeManagerT::isCI(ci));
 
   std::vector<BVAbstractionId> normalized = sources;
   std::sort(normalized.begin(), normalized.end());
@@ -122,55 +127,56 @@ void BitBlaster::tagAbstractionSources(
   for ([[maybe_unused]] const BVAbstractionId id : normalized)
     assert(id.valid());
 
-  const unsigned aigId = BBNodeManagerAIG::nodeId(ci);
+  const unsigned aigId = BBNodeManagerT::nodeId(ci);
   assert((sourcesAt(ciAbstractionSources_, aigId).empty() ||
           sourcesAt(ciAbstractionSources_, aigId) == normalized) &&
          "an AIG input acquired two abstraction provenances");
   setSourcesAt(ciAbstractionSources_, aigId, std::move(normalized));
 }
 
+template <class BBNode, class BBNodeManagerT>
 std::vector<BVAbstractionId>
-BitBlaster::abstractionSourcesOf(const BBNodeAIG& root)
+BitBlaster<BBNode, BBNodeManagerT>::abstractionSourcesOf(const BBNode& root)
 {
   if (root.IsNull())
     return {};
 
-  if (BBNodeManagerAIG::isConstant(root))
+  if (BBNodeManagerT::isConstant(root))
     return {};
-  if (BBNodeManagerAIG::isCI(root))
-    return sourcesAt(ciAbstractionSources_, BBNodeManagerAIG::nodeId(root));
+  if (BBNodeManagerT::isCI(root))
+    return sourcesAt(ciAbstractionSources_, BBNodeManagerT::nodeId(root));
 
-  const unsigned rootId = BBNodeManagerAIG::nodeId(root);
+  const unsigned rootId = BBNodeManagerT::nodeId(root);
   if (aigSourcesComputed(rootId))
     return sourcesAt(aigAbstractionSourcesMemo_, rootId);
 
   // Deep input terms reach tens of thousands of AIG levels in practice.
   // Run the recursive two-visit post-order explicitly on the heap, computing
   // each union only after both fanins. Memo hits also collapse shared cones.
-  typedef std::pair<BBNodeAIG, bool> PendingAig;
+  typedef std::pair<BBNode, bool> PendingAig;
   std::vector<PendingAig> pending(1, PendingAig(root, false));
   while (!pending.empty())
   {
-    const BBNodeAIG node = pending.back().first;
+    const BBNode node = pending.back().first;
     const bool expanded = pending.back().second;
     pending.pop_back();
-    const unsigned id = BBNodeManagerAIG::nodeId(node);
-    if (BBNodeManagerAIG::isConstant(node) || BBNodeManagerAIG::isCI(node) ||
+    const unsigned id = BBNodeManagerT::nodeId(node);
+    if (BBNodeManagerT::isConstant(node) || BBNodeManagerT::isCI(node) ||
         aigSourcesComputed(id))
       continue;
-    assert(BBNodeManagerAIG::isAnd(node));
+    assert(BBNodeManagerT::isAnd(node));
     if (!expanded)
     {
       pending.push_back(PendingAig(node, true));
-      pending.push_back(PendingAig(BBNodeManagerAIG::fanin0(node), false));
-      pending.push_back(PendingAig(BBNodeManagerAIG::fanin1(node), false));
+      pending.push_back(PendingAig(BBNodeManagerT::fanin0(node), false));
+      pending.push_back(PendingAig(BBNodeManagerT::fanin1(node), false));
       continue;
     }
 
     std::vector<BVAbstractionId> sources =
-        abstractionSourcesOf(BBNodeManagerAIG::fanin0(node));
+        abstractionSourcesOf(BBNodeManagerT::fanin0(node));
     appendAbstractionSources(
-        sources, abstractionSourcesOf(BBNodeManagerAIG::fanin1(node)));
+        sources, abstractionSourcesOf(BBNodeManagerT::fanin1(node)));
     setSourcesAt(aigAbstractionSourcesMemo_, id, std::move(sources));
     markAigSourcesComputed(id);
   }
@@ -178,23 +184,26 @@ BitBlaster::abstractionSourcesOf(const BBNodeAIG& root)
   return sourcesAt(aigAbstractionSourcesMemo_, rootId);
 }
 
+template <class BBNode, class BBNodeManagerT>
 std::vector<BVAbstractionId>
-BitBlaster::abstractionSourcesOf(const BBNodeVec& bits)
+BitBlaster<BBNode, BBNodeManagerT>::abstractionSourcesOf(const BBNodeVec& bits)
 {
   std::vector<BVAbstractionId> sources;
-  for (const BBNodeAIG& bit : bits)
+  for (const BBNode& bit : bits)
     appendAbstractionSources(sources, abstractionSourcesOf(bit));
   return sources;
 }
 
-BBNodeVec BitBlaster::ensureProxyCIs(const ASTNode& node,
-                                     const BBNodeVec& bits)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::ensureProxyCIs(const ASTNode& node,
+                                                   const BBNodeVec& bits)
 {
   auto it = nf->symbolToBBNode.find(node);
   if (it != nf->symbolToBBNode.end())
     return it->second;
 
-  if (allBBNodesAreCIs(bits))
+  if (allBBNodesAreCIs(nf, bits))
   {
     nf->symbolToBBNode[node] = bits;
     return bits;
@@ -235,8 +244,9 @@ BBNodeVec BitBlaster::ensureProxyCIs(const ASTNode& node,
 // Incremental records also retain their own result variables, so a duplicate
 // that ever did arise would cost work rather than a verdict; canonicalising
 // here is the invariant, not the only line of defence.
-bool BitBlaster::reuseRegisteredTerm(const ASTNode& term, unsigned width,
-                                     BBNodeVec& reused) const
+template <class BBNode, class BBNodeManagerT>
+bool BitBlaster<BBNode, BBNodeManagerT>::reuseRegisteredTerm(
+    const ASTNode& term, unsigned width, BBNodeVec& reused) const
 {
   const auto abstraction = abstractedResults_.find(term);
   if (abstraction != abstractedResults_.end())
@@ -247,7 +257,7 @@ bool BitBlaster::reuseRegisteredTerm(const ASTNode& term, unsigned width,
     return true;
   }
 
-  const BBNodeManagerAIG::SymbolToBBNode::const_iterator it =
+  const typename BBNodeManagerT::SymbolToBBNode::const_iterator it =
       nf->symbolToBBNode.find(term);
   if (it == nf->symbolToBBNode.end() || it->second.size() != width)
     return false;
@@ -458,7 +468,7 @@ static ASTNode TranslateSignedDivModRem(const ASTNode& in, NodeFactory* nf)
 
 //"Hash" (=add) first 5 node IDs together
 //TODO pretty bad hash
-class BBVecHasher
+template <class BBNode> class BBVecHasher
 {
 public:
   size_t operator()(const vector<BBNode>& n) const
@@ -472,7 +482,7 @@ public:
   }
 };
 
-class BBVecEquals
+template <class BBNode> class BBVecEquals
 {
 public:
   bool operator()(const vector<BBNode>& n0, const vector<BBNode>& n1) const
@@ -492,9 +502,10 @@ public:
 // Look through the maps to see what the bitblaster has discovered (if anything)
 // is constant.
 // Then look through for AIGS that are mapped to from different ASTNodes.
-void BitBlaster::getConsts(const ASTNode& form,
-                           ASTNodeMap& fromTo,
-                           ASTNodeMap& equivs)
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::getConsts(const ASTNode& form,
+                                                   ASTNodeMap& fromTo,
+                                                   ASTNodeMap& equivs)
 {
   assert(form.GetType() == BOOLEAN_TYPE);
 
@@ -601,7 +612,8 @@ void BitBlaster::getConsts(const ASTNode& form,
 
   if (true) //(uf->isSet("bb-equiv", "1"))
   {
-    typedef std::unordered_map<vector<BBNode>, ASTNode, BBVecHasher, BBVecEquals>
+    typedef std::unordered_map<vector<BBNode>, ASTNode, BBVecHasher<BBNode>,
+                               BBVecEquals<BBNode>>
         M;
     M lookup;
     for (auto it = BBTermMemo.begin(); it != BBTermMemo.end(); it++)
@@ -644,7 +656,8 @@ void BitBlaster::getConsts(const ASTNode& form,
   }
 }
 
-void BitBlaster::commonCheck(const ASTNode& n)
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::commonCheck(const ASTNode& n)
 {
   cerr << "Non constant is constant:";
   cerr << n << endl;
@@ -660,8 +673,9 @@ void BitBlaster::commonCheck(const ASTNode& n)
 
 // If x isn't a constant, and the bit-blasted version is. Print out the
 // AST nodes and the fixed bits.
-void BitBlaster::check(const BBNode& x,
-                       const ASTNode& n)
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::check(const BBNode& x,
+                                               const ASTNode& n)
 {
   if (n.isConstant())
     return;
@@ -672,8 +686,9 @@ void BitBlaster::check(const BBNode& x,
   commonCheck(n);
 }
 
-void BitBlaster::check(const vector<BBNode>& x,
-                       const ASTNode& n)
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::check(const vector<BBNode>& x,
+                                               const ASTNode& n)
 {
   if (n.isConstant())
     return;
@@ -687,7 +702,8 @@ void BitBlaster::check(const vector<BBNode>& x,
   commonCheck(n);
 }
 
-bool BitBlaster::update(
+template <class BBNode, class BBNodeManagerT>
+bool BitBlaster<BBNode, BBNodeManagerT>::update(
     const ASTNode& n, const int i, simplifier::constantBitP::FixedBits* b,
     BBNode& bb, BBNodeSet& support)
 {
@@ -715,9 +731,10 @@ bool BitBlaster::update(
   return false;
 }
 
-void BitBlaster::updateForm(const ASTNode& n,
-                            BBNode& bb,
-                            BBNodeSet& support)
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::updateForm(const ASTNode& n,
+                                                    BBNode& bb,
+                                                    BBNodeSet& support)
 {
   if (cb == NULL || n.isConstant())
     return;
@@ -727,9 +744,10 @@ void BitBlaster::updateForm(const ASTNode& n,
   bb = v[0];
 }
 
-void BitBlaster::updateTerm(const ASTNode& n,
-                            BBNodeVec& bb,
-                            BBNodeSet& support)
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::updateTerm(const ASTNode& n,
+                                                    BBNodeVec& bb,
+                                                    BBNodeSet& support)
 {
 
   if (cb == NULL)
@@ -834,7 +852,8 @@ void BitBlaster::updateTerm(const ASTNode& n,
     }
 }
 
-bool BitBlaster::isConstant(const BBNodeVec& v)
+template <class BBNode, class BBNodeManagerT>
+bool BitBlaster<BBNode, BBNodeManagerT>::isConstant(const BBNodeVec& v)
 {
   for (unsigned i = 0; i < v.size(); i++)
   {
@@ -845,8 +864,9 @@ bool BitBlaster::isConstant(const BBNodeVec& v)
   return true;
 }
 
-ASTNode BitBlaster::getConstant(const BBNodeVec& v,
-                                const ASTNode& n)
+template <class BBNode, class BBNodeManagerT>
+ASTNode BitBlaster<BBNode, BBNodeManagerT>::getConstant(const BBNodeVec& v,
+                                                        const ASTNode& n)
 {
   if (n.GetType() == BOOLEAN_TYPE)
   {
@@ -884,9 +904,11 @@ ASTNode BitBlaster::getConstant(const BBNodeVec& v,
 // call SimplifyTerm on ite(true,y,z), which will do the expected
 // simplification.
 // Then the term that we bitblast will by "y".
-std::unordered_map<ASTNode, vector<BBNode>, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>::iterator
-BitBlaster::simplify_during_bb(ASTNode& term,
-                               BBNodeSet& support)
+template <class BBNode, class BBNodeManagerT>
+typename std::unordered_map<ASTNode, vector<BBNode>, ASTNode::ASTNodeHasher,
+                            ASTNode::ASTNodeEqual>::iterator
+BitBlaster<BBNode, BBNodeManagerT>::simplify_during_bb(ASTNode& term,
+                                                       BBNodeSet& support)
 {
   const int numberOfChildren = term.Degree();
   vector<BBNodeVec> ch;
@@ -1029,13 +1051,17 @@ BitBlaster::simplify_during_bb(ASTNode& term,
   return BBTermMemo.end();
 }
 
-const BBNodeVec BitBlaster::BBTerm(const ASTNode& term, BBNodeSet& support)
+template <class BBNode, class BBNodeManagerT>
+const vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::BBTerm(const ASTNode& term,
+                                           BBNodeSet& support)
 {
   return BBTerm(term, support, false);
 }
 
-const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
-                                   const bool knownMissing)
+template <class BBNode, class BBNodeManagerT>
+const vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBTerm(
+    const ASTNode& _term, BBNodeSet& support, const bool knownMissing)
 {
   ASTNode term = _term; // mutable local copy.
 
@@ -1254,7 +1280,7 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
           abstracted[i] = nf->CreateFreshInput();
           tagAbstractionSources(abstracted[i], {id});
         }
-        BBNodeAIG condCI = nf->CreateFreshInput();
+        BBNode condCI = nf->CreateFreshInput();
         // This is an operand proxy, not the ITE abstraction's answer. Keep
         // the condition's producers on it so a future AIG alias does not
         // turn the dependency cut into an unlabelled CI.
@@ -1275,8 +1301,8 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
         raw.operands[2] = term[2];
         raw.numOperands = 3;
         raw.width = num_bits;
-        raw.condCISymbolIndex = condCI.symbol_index;
-        raw.resultCISymbolIndices = ciSymbolIndices(abstracted);
+        raw.condCISymbolIndex = nf->ciOrdinal(condCI);
+        raw.resultCISymbolIndices = ciSymbolIndices(nf, abstracted);
         abstractedTerms_.push_back(raw);
         result = abstracted;
       }
@@ -1310,11 +1336,11 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
 
         BBNodeVec tmp_res(result_width);
 
-        BBNodeVec::const_iterator bb_it = bbarg.begin();
-        BBNodeVec::iterator res_it = tmp_res.begin();
-        BBNodeVec::iterator res_ext =
+        typename BBNodeVec::const_iterator bb_it = bbarg.begin();
+        typename BBNodeVec::iterator res_it = tmp_res.begin();
+        typename BBNodeVec::iterator res_ext =
             res_it + arg_width; // first bit of extended part
-        BBNodeVec::iterator res_end = tmp_res.end();
+        typename BBNodeVec::iterator res_end = tmp_res.end();
 
         // copy LSBs directly from bbvec
         for (; res_it < res_ext; (res_it++, bb_it++))
@@ -1343,7 +1369,7 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
       const unsigned int high = term[1].GetUnsignedConst();
       const unsigned int low = term[2].GetUnsignedConst();
 
-      BBNodeVec::const_iterator bbkfit = bbkids.begin();
+      typename BBNodeVec::const_iterator bbkfit = bbkids.begin();
       // I should have used pointers to BBNodeVec, to avoid this crock
 
       result = BBNodeVec(bbkfit + low, bbkfit + high + 1);
@@ -1492,7 +1518,7 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
           raw.width = num_bits;
           raw.operandNegated[0] = negated[0];
           raw.operandNegated[1] = negated[1];
-          raw.resultCISymbolIndices = ciSymbolIndices(abstracted);
+          raw.resultCISymbolIndices = ciSymbolIndices(nf, abstracted);
           abstractedTerms_.push_back(raw);
           result = abstracted;
           break;
@@ -1620,7 +1646,7 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
         raw.operands[1] = term[1];
         raw.numOperands = 2;
         raw.width = num_bits;
-        raw.resultCISymbolIndices = ciSymbolIndices(abstracted);
+        raw.resultCISymbolIndices = ciSymbolIndices(nf, abstracted);
         raw.operandKnownBits[0] = knownBitsOf(nf, mpcd1);
         raw.operandKnownBits[1] = knownBitsOf(nf, mpcd2);
         abstractedTerms_.push_back(raw);
@@ -1691,7 +1717,7 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
         raw.operands[1] = term[1];
         raw.numOperands = 2;
         raw.width = num_bits;
-        raw.resultCISymbolIndices = ciSymbolIndices(abstracted);
+        raw.resultCISymbolIndices = ciSymbolIndices(nf, abstracted);
         raw.operandKnownBits[0] = knownBitsOf(nf, dvdd);
         raw.operandKnownBits[1] = knownBitsOf(nf, dvsr);
         abstractedTerms_.push_back(raw);
@@ -1845,7 +1871,8 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
   return (BBTermMemo[term] = result);
 }
 
-const BBNode BitBlaster::BBForm(const ASTNode& form)
+template <class BBNode, class BBNodeManagerT>
+const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form)
 {
   fpNativeAddIsZeroFusions = 0;
 
@@ -1999,7 +2026,9 @@ static WalkOperands bbOperands(const ASTNode& n)
 // is load-bearing -- the CNF must not depend on the order operands happen to
 // be evaluated in, which is why BBForm blasts an ITE's arms into named
 // variables -- and it is what `bbOperands` above exists for.
-void BitBlaster::primeMemos(const ASTNode& n, BBNodeSet& support)
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::primeMemos(const ASTNode& n,
+                                                    BBNodeSet& support)
 {
   primeMemo(
       n,
@@ -2033,13 +2062,17 @@ void BitBlaster::primeMemos(const ASTNode& n, BBNodeSet& support)
 }
 
 // bit blast a formula (boolean term).  Result is one bit wide,
-const BBNode BitBlaster::BBForm(const ASTNode& form, BBNodeSet& support)
+template <class BBNode, class BBNodeManagerT>
+const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form,
+                                                        BBNodeSet& support)
 {
   return BBForm(form, support, false);
 }
 
-const BBNode BitBlaster::BBForm(const ASTNode& form, BBNodeSet& support,
-                                const bool knownMissing)
+template <class BBNode, class BBNodeManagerT>
+const BBNode BitBlaster<BBNode, BBNodeManagerT>::BBForm(const ASTNode& form,
+                                                        BBNodeSet& support,
+                                                        const bool knownMissing)
 {
   // The other half of the audit above: the two memos are primed by one walk,
   // so the walk is held to both functions at once.
@@ -2192,7 +2225,7 @@ const BBNode BitBlaster::BBForm(const ASTNode& form, BBNodeSet& support,
         appendAbstractionSources(dependencies,
                                  abstractionSourcesOf(rightInputs));
         const BVAbstractionId id = newAbstractionId();
-        BBNodeAIG abstractCI = nf->CreateFreshInput();
+        BBNode abstractCI = nf->CreateFreshInput();
         tagAbstractionSources(abstractCI, {id});
         RawBVEQAbstraction raw;
         raw.id = id;
@@ -2247,7 +2280,7 @@ const BBNode BitBlaster::BBForm(const ASTNode& form, BBNodeSet& support,
           appendAbstractionSources(dependencies,
                                    abstractionSourcesOf(rightInputs));
           const BVAbstractionId id = newAbstractionId();
-          BBNodeAIG abstractCI = nf->CreateFreshInput();
+          BBNode abstractCI = nf->CreateFreshInput();
           tagAbstractionSources(abstractCI, {id});
 
           RawBVTermAbstraction raw;
@@ -2259,7 +2292,7 @@ const BBNode BitBlaster::BBForm(const ASTNode& form, BBNodeSet& support,
           raw.operands[1] = form[1];
           raw.numOperands = 2;
           raw.width = left.size();
-          raw.condCISymbolIndex = abstractCI.symbol_index;
+          raw.condCISymbolIndex = nf->ciOrdinal(abstractCI);
           abstractedTerms_.push_back(raw);
           abstractedFormulas_[form] = {id, abstractCI};
           result = abstractCI;
@@ -2329,8 +2362,9 @@ const BBNode BitBlaster::BBForm(const ASTNode& form, BBNodeSet& support,
 
 // Bit blast a sum of two equal length BVs.
 // Update sum vector destructively with new sum.
-void BitBlaster::BBPlus2(BBNodeVec& sum,
-                         const BBNodeVec& y, BBNode cin)
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::BBPlus2(BBNodeVec& sum,
+                                                 const BBNodeVec& y, BBNode cin)
 {
 
   const int bitWidth = sum.size();
@@ -2345,22 +2379,24 @@ void BitBlaster::BBPlus2(BBNodeVec& sum,
 }
 
 // Stores result - x in result, destructively
-void BitBlaster::BBSub(BBNodeVec& result,
-                       const BBNodeVec& y,
-                       BBNodeSet& /*support*/)
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::BBSub(BBNodeVec& result,
+                                               const BBNodeVec& y,
+                                               BBNodeSet& /*support*/)
 {
   BBNodeVec compsubtrahend = BBNeg(y);
   BBPlus2(result, compsubtrahend, nf->getTrue());
 }
 
 // Add one bit
-BBNodeVec BitBlaster::BBAddOneBit(const BBNodeVec& x,
-                                  BBNode cin)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::BBAddOneBit(const BBNodeVec& x, BBNode cin)
 {
   BBNodeVec result;
   result.reserve(x.size());
-  const BBNodeVec::const_iterator itend = x.end();
-  for (BBNodeVec::const_iterator it = x.begin(); it < itend; it++)
+  const typename BBNodeVec::const_iterator itend = x.end();
+  for (typename BBNodeVec::const_iterator it = x.begin(); it < itend; it++)
   {
     BBNode nextcin = nf->CreateNode(AND, *it, cin);
     result.push_back(nf->CreateNode(XOR, *it, cin));
@@ -2370,16 +2406,18 @@ BBNodeVec BitBlaster::BBAddOneBit(const BBNodeVec& x,
 }
 
 // Increment bit-blasted vector and return result.
-BBNodeVec BitBlaster::BBInc(const BBNodeVec& x)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBInc(const BBNodeVec& x)
 {
   return BBAddOneBit(x, nf->getTrue());
 }
 
 // Return formula for majority function of three bits.
 // Pass arguments by reference to reduce refcounting.
-BBNode BitBlaster::Majority(const BBNode& a,
-                            const BBNode& b,
-                            const BBNode& c)
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode, BBNodeManagerT>::Majority(const BBNode& a,
+                                                    const BBNode& b,
+                                                    const BBNode& c)
 {
   // Checking explicitly for constant a, b and c could
   // be more efficient, because they are repeated in the logic.
@@ -2422,20 +2460,23 @@ BBNode BitBlaster::Majority(const BBNode& a,
 }
 
 // Bitwise complement
-BBNodeVec BitBlaster::BBNeg(const BBNodeVec& x)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBNeg(const BBNodeVec& x)
 {
   BBNodeVec result;
   result.reserve(x.size());
   // Negate each bit.
-  const BBNodeVec::const_iterator& xend = x.end();
-  for (BBNodeVec::const_iterator it = x.begin(); it < xend; it++)
+  const typename BBNodeVec::const_iterator& xend = x.end();
+  for (typename BBNodeVec::const_iterator it = x.begin(); it < xend; it++)
   {
     result.push_back(nf->CreateNode(NOT, *it));
   }
   return result;
 }
 
-BBNodeVec BitBlaster::BBAnd(const BBNodeVec& x, const BBNodeVec& y)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBAnd(const BBNodeVec& x,
+                                                         const BBNodeVec& y)
 {
   assert(x.size() == y.size());
   BBNodeVec result(x.size());
@@ -2444,7 +2485,9 @@ BBNodeVec BitBlaster::BBAnd(const BBNodeVec& x, const BBNodeVec& y)
   return result;
 }
 
-BBNodeVec BitBlaster::BBOr(const BBNodeVec& x, const BBNodeVec& y)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBOr(const BBNodeVec& x,
+                                                        const BBNodeVec& y)
 {
   assert(x.size() == y.size());
   BBNodeVec result(x.size());
@@ -2453,7 +2496,9 @@ BBNodeVec BitBlaster::BBOr(const BBNodeVec& x, const BBNodeVec& y)
   return result;
 }
 
-BBNodeVec BitBlaster::BBXor(const BBNodeVec& x, const BBNodeVec& y)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBXor(const BBNodeVec& x,
+                                                         const BBNodeVec& y)
 {
   assert(x.size() == y.size());
   BBNodeVec result(x.size());
@@ -2462,7 +2507,9 @@ BBNodeVec BitBlaster::BBXor(const BBNodeVec& x, const BBNodeVec& y)
   return result;
 }
 
-BBNodeVec BitBlaster::BBAdd(const BBNodeVec& x, const BBNodeVec& y)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBAdd(const BBNodeVec& x,
+                                                         const BBNodeVec& y)
 {
   assert(x.size() == y.size());
   BBNodeVec result = x;
@@ -2471,15 +2518,17 @@ BBNodeVec BitBlaster::BBAdd(const BBNodeVec& x, const BBNodeVec& y)
 }
 
 // Compute unary minus
-BBNodeVec BitBlaster::BBUminus(const BBNodeVec& x)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBUminus(const BBNodeVec& x)
 {
   BBNodeVec xneg = BBNeg(x);
   return BBInc(xneg);
 }
 
 // AND each bit of vector y with single bit b and return the result.
-BBNodeVec BitBlaster::BBAndBit(const BBNodeVec& y,
-                               BBNode b)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBAndBit(const BBNodeVec& y,
+                                                            BBNode b)
 {
   if (nf->getTrue() == b)
   {
@@ -2489,8 +2538,8 @@ BBNodeVec BitBlaster::BBAndBit(const BBNodeVec& y,
   BBNodeVec result;
   result.reserve(y.size());
 
-  const BBNodeVec::const_iterator yend = y.end();
-  for (BBNodeVec::const_iterator yit = y.begin(); yit < yend; yit++)
+  const typename BBNodeVec::const_iterator yend = y.end();
+  for (typename BBNodeVec::const_iterator yit = y.begin(); yit < yend; yit++)
   {
     result.push_back(nf->CreateNode(AND, *yit, b));
   }
@@ -2514,7 +2563,9 @@ void printP(mult_type* m, int width)
   }
 }
 
-void convert(const BBNodeVec& v, BBNodeManagerAIG* nf, mult_type* result)
+template <class BBNode, class BBNodeManagerT>
+void convert(const std::vector<BBNode>& v, BBNodeManagerT* nf,
+             mult_type* result)
 {
   const BBNode& BBTrue = nf->getTrue();
   const BBNode& BBFalse = nf->getFalse();
@@ -2579,7 +2630,8 @@ void convert(const BBNodeVec& v, BBNodeManagerAIG* nf, mult_type* result)
 // This asks convert(), so it sees whatever the bit-blasted vector actually
 // holds -- bits that constant bit propagation or simplification fixed count
 // just as much as the bits of a BVCONST term.
-int boothRows(const BBNodeVec& v, BBNodeManagerAIG* nf, int& recoded,
+template <class BBNode, class BBNodeManagerT>
+int boothRows(const std::vector<BBNode>& v, BBNodeManagerT* nf, int& recoded,
               int& symbolic)
 {
   recoded = 0;
@@ -2610,8 +2662,10 @@ int boothRows(const BBNodeVec& v, BBNodeManagerAIG* nf, int& recoded,
 }
 
 // Multiply "multiplier" by y[start ... bitWidth].
+template <class BBNode, class BBNodeManagerT>
 void pushP(vector<vector<BBNode>>& products, const int start,
-           const BBNodeVec& y, const BBNode& multiplier, BBNodeManagerAIG* nf)
+           const std::vector<BBNode>& y, const BBNode& multiplier,
+           BBNodeManagerT* nf)
 {
   const int bitWidth = y.size();
 
@@ -2627,7 +2681,8 @@ void pushP(vector<vector<BBNode>>& products, const int start,
 
 const bool debug_multiply = false;
 
-BBNodeVec BitBlaster::buildAdditionNetworkResult(
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::buildAdditionNetworkResult(
     vector<list<BBNode>>& products, BBNodeSet& support, const ASTNode& n)
 {
   const int bitWidth = n.GetValueWidth();
@@ -2659,9 +2714,10 @@ BBNodeVec BitBlaster::buildAdditionNetworkResult(
 // Use full adders to create an addition network that adds together each of the
 // partial products. Puts the carries into the "to" list.
 
-void BitBlaster::buildAdditionNetworkResult(
-    list<BBNode>& from, list<BBNode>& to, BBNodeSet& support,
-    const bool at_end, const bool all_false)
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::buildAdditionNetworkResult(
+    list<BBNode>& from, list<BBNode>& to, BBNodeSet& support, const bool at_end,
+    const bool all_false)
 {
 
   while (from.size() >= 2)
@@ -2734,7 +2790,8 @@ void BitBlaster::buildAdditionNetworkResult(
 
 const bool debug_bounds = false;
 
-bool BitBlaster::statsFound(const ASTNode& n)
+template <class BBNode, class BBNodeManagerT>
+bool BitBlaster<BBNode, BBNodeManagerT>::statsFound(const ASTNode& n)
 {
   if (NULL == cb)
     return false;
@@ -2754,7 +2811,8 @@ bool BitBlaster::statsFound(const ASTNode& n)
 
 // Make sure x and y are the parameters in the correct order. THIS ISNT
 // COMMUTATIVE.
-BBNodeVec BitBlaster::multWithBounds(
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::multWithBounds(
     const ASTNode& n, vector<list<BBNode>>& products, BBNodeSet& toConjoinToTop)
 {
   const int bitWidth = n.GetValueWidth();
@@ -2812,7 +2870,8 @@ BBNodeVec BitBlaster::multWithBounds(
   return result;
 }
 
-void BitBlaster::mult_Booth(
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::mult_Booth(
     const BBNodeVec& x_i, const BBNodeVec& y_i, BBNodeSet& /*support*/,
     const ASTNode& xN, const ASTNode& yN, vector<list<BBNode>>& products,
     const ASTNode& n)
@@ -2920,9 +2979,10 @@ void BitBlaster::mult_Booth(
 // Truncation keeps the negative digits honest: BVMULT is same-width, so bits
 // above the width are dropped and each row only needs to be right modulo
 // 2^width.
-void BitBlaster::mult_Booth_radix4(const BBNodeVec& x, const BBNodeVec& y,
-                                   vector<list<BBNode>>& products,
-                                   const ASTNode& n)
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::mult_Booth_radix4(
+    const BBNodeVec& x, const BBNodeVec& y, vector<list<BBNode>>& products,
+    const ASTNode& n)
 {
   const unsigned bitWidth = x.size();
   const BBNode& BBFalse = nf->getFalse();
@@ -2963,7 +3023,8 @@ void BitBlaster::mult_Booth_radix4(const BBNodeVec& x, const BBNodeVec& y,
   }
 }
 
-void BitBlaster::mult_allPairs(
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::mult_allPairs(
     const BBNodeVec& x, const BBNodeVec& y, BBNodeSet& /*support*/,
     vector<list<BBNode>>& products)
 {
@@ -2993,8 +3054,9 @@ void BitBlaster::mult_allPairs(
   }
 }
 
-MultiplicationStats* BitBlaster::getMS(const ASTNode& n,
-                                       int& highestZero)
+template <class BBNode, class BBNodeManagerT>
+MultiplicationStats* BitBlaster<BBNode, BBNodeManagerT>::getMS(const ASTNode& n,
+                                                               int& highestZero)
 {
   MultiplicationStats* ms = NULL;
   highestZero = -1;
@@ -3023,10 +3085,10 @@ MultiplicationStats* BitBlaster::getMS(const ASTNode& n,
 }
 
 // Each bit of 'x' is taken in turn and multiplied by a shifted y.
-BBNodeVec BitBlaster::mult_normal(const BBNodeVec& x,
-                                  const BBNodeVec& y,
-                                  BBNodeSet& support,
-                                  const ASTNode& n)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::mult_normal(
+    const BBNodeVec& x, const BBNodeVec& y, BBNodeSet& support,
+    const ASTNode& n)
 {
   const int bitWidth = n.GetValueWidth();
 
@@ -3079,7 +3141,8 @@ BBNodeVec BitBlaster::mult_normal(const BBNodeVec& x,
 }
 
 // assumes the prior column is sorted.
-void BitBlaster::mult_BubbleSorterWithBounds(
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::mult_BubbleSorterWithBounds(
     BBNodeSet& support, list<BBNode>& current, vector<BBNode>& currentSorted,
     vector<BBNode>& priorSorted, const int minTrue, const int maxTrue)
 {
@@ -3169,7 +3232,8 @@ void BitBlaster::mult_BubbleSorterWithBounds(
 // then set that all the partial products must be zero.
 // For this to do anything constant bit propagation must be
 // turned on, and upper_multiplication_bound must be set.
-void BitBlaster::setColumnsToZero(
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::setColumnsToZero(
     vector<list<BBNode>>& products, BBNodeSet& support, const ASTNode& n)
 {
   const int bitWidth = n.GetValueWidth();
@@ -3222,10 +3286,10 @@ void BitBlaster::setColumnsToZero(
 //
 // Returns false, leaving products untouched, when neither operand recodes.
 // That is the symbolic x symbolic case, and the caller picks the fallback.
-bool BitBlaster::mult_Booth_constant(const BBNodeVec& x, const BBNodeVec& y,
-                                     BBNodeSet& support,
-                                     vector<list<BBNode>>& products,
-                                     const ASTNode& n)
+template <class BBNode, class BBNodeManagerT>
+bool BitBlaster<BBNode, BBNodeManagerT>::mult_Booth_constant(
+    const BBNodeVec& x, const BBNodeVec& y, BBNodeSet& support,
+    vector<list<BBNode>>& products, const ASTNode& n)
 {
   int xRecoded = 0, yRecoded = 0, xSymbolic = 0, ySymbolic = 0;
   const int xRows = boothRows(x, nf, xRecoded, xSymbolic);
@@ -3276,9 +3340,9 @@ bool BitBlaster::mult_Booth_constant(const BBNodeVec& x, const BBNodeVec& y,
 // amount at or above the width clears the vector, which is handled once
 // after the stages rather than inside them -- past log2(width) every
 // remaining bit of the amount means "at least the width".
-BBNodeVec BitBlaster::BBShiftRightByVariable(const BBNodeVec& value,
-                                             const BBNodeVec& amount,
-                                             unsigned width)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBShiftRightByVariable(
+    const BBNodeVec& value, const BBNodeVec& amount, unsigned width)
 {
   assert(value.size() == width);
   BBNodeVec result = value;
@@ -3302,8 +3366,10 @@ BBNodeVec BitBlaster::BBShiftRightByVariable(const BBNodeVec& value,
   return result;
 }
 
-BBNodeVec BitBlaster::BBExactBinaryOp(const ASTNode& term, const BBNodeVec& x,
-                                      const BBNodeVec& y, BBNodeSet& support)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBExactBinaryOp(
+    const ASTNode& term, const BBNodeVec& x, const BBNodeVec& y,
+    BBNodeSet& support)
 {
   const Kind k = term.GetKind();
   const unsigned width = term.GetValueWidth();
@@ -3327,10 +3393,11 @@ BBNodeVec BitBlaster::BBExactBinaryOp(const ASTNode& term, const BBNodeVec& x,
   return BBITE(BBEQ(zero, y), max, q);
 }
 
-BBNodeVec BitBlaster::BBMult(const BBNodeVec& _x,
-                             const BBNodeVec& _y,
-                             BBNodeSet& support,
-                             const ASTNode& n)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBMult(const BBNodeVec& _x,
+                                                          const BBNodeVec& _y,
+                                                          BBNodeSet& support,
+                                                          const ASTNode& n)
 {
 
   //  if (uf->isSet("print_on_mult", "0"))
@@ -3489,7 +3556,9 @@ BBNodeVec BitBlaster::BBMult(const BBNodeVec& _x,
 }
 
 // Takes an unsorted array, and returns a sorted array.
-BBNodeVec BitBlaster::batcher(const vector<BBNode>& in)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::batcher(const vector<BBNode>& in)
 {
   assert(in.size() != 0);
 
@@ -3519,9 +3588,10 @@ BBNodeVec BitBlaster::batcher(const vector<BBNode>& in)
 }
 
 // assumes that the prior column is sorted.
-void BitBlaster::sortingNetworkAdd(
-    BBNodeSet& /*support*/, list<BBNode>& current, vector<BBNode>& currentSorted,
-    vector<BBNode>& priorSorted)
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::sortingNetworkAdd(
+    BBNodeSet& /*support*/, list<BBNode>& current,
+    vector<BBNode>& currentSorted, vector<BBNode>& priorSorted)
 {
 
   vector<BBNode> toSort;
@@ -3575,9 +3645,10 @@ void BitBlaster::sortingNetworkAdd(
   current.push_back(resultNode);
 }
 
-BBNodeVec BitBlaster::v6(vector<list<BBNode>>& products,
-                         BBNodeSet& support,
-                         const ASTNode& n)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::v6(vector<list<BBNode>>& products,
+                                       BBNodeSet& support, const ASTNode& n)
 {
   const int bitWidth = n.GetValueWidth();
 
@@ -3595,9 +3666,10 @@ BBNodeVec BitBlaster::v6(vector<list<BBNode>>& products,
   return buildAdditionNetworkResult(products, support, n);
 }
 
-BBNodeVec
-BitBlaster::v13(vector<list<BBNode>>& products,
-                BBNodeSet& support, const ASTNode& n)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::v13(vector<list<BBNode>>& products,
+                                        BBNodeSet& support, const ASTNode& n)
 {
   const int bitWidth = n.GetValueWidth();
 
@@ -3671,9 +3743,10 @@ BitBlaster::v13(vector<list<BBNode>>& products,
 // Sorting network that delivers carries directly to the correct column.
 // For instance, if there are 6 true in a column, then a carry will flow to
 // column+1, and column+2.
-BBNodeVec BitBlaster::v9(vector<list<BBNode>>& products,
-                         BBNodeSet& support,
-                         const ASTNode& n)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::v9(vector<list<BBNode>>& products,
+                                       BBNodeSet& support, const ASTNode& n)
 {
   const unsigned bitWidth = n.GetValueWidth();
 
@@ -3746,9 +3819,10 @@ BBNodeVec BitBlaster::v9(vector<list<BBNode>>& products,
   return buildAdditionNetworkResult(products, support, n);
 }
 
-BBNodeVec BitBlaster::v7(vector<list<BBNode>>& products,
-                         BBNodeSet& support,
-                         const ASTNode& n)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::v7(vector<list<BBNode>>& products,
+                                       BBNodeSet& support, const ASTNode& n)
 {
   const int bitWidth = n.GetValueWidth();
 
@@ -3815,9 +3889,10 @@ BBNodeVec BitBlaster::v7(vector<list<BBNode>>& products,
   return results;
 }
 
-BBNodeVec BitBlaster::v8(vector<list<BBNode>>& products,
-                         BBNodeSet& support,
-                         const ASTNode& n)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::v8(vector<list<BBNode>>& products,
+                                       BBNodeSet& support, const ASTNode& n)
 {
   const int bitWidth = n.GetValueWidth();
 
@@ -3884,8 +3959,9 @@ BBNodeVec BitBlaster::v8(vector<list<BBNode>>& products,
 }
 
 // compare element 1 with 2, 3 with 4, and so on.
+template <class BBNode, class BBNodeManagerT>
 vector<BBNode>
-BitBlaster::compareOddEven(const vector<BBNode>& in)
+BitBlaster<BBNode, BBNodeManagerT>::compareOddEven(const vector<BBNode>& in)
 {
   vector<BBNode> result(in);
 
@@ -3900,9 +3976,10 @@ BitBlaster::compareOddEven(const vector<BBNode>& in)
   return result;
 }
 
+template <class BBNode, class BBNodeManagerT>
 vector<BBNode>
-BitBlaster::mergeSorted(const vector<BBNode>& in1,
-                        const vector<BBNode>& in2)
+BitBlaster<BBNode, BBNodeManagerT>::mergeSorted(const vector<BBNode>& in1,
+                                                const vector<BBNode>& in2)
 {
 
   assert(in1.size() >= in2.size());
@@ -3966,11 +4043,12 @@ BitBlaster::mergeSorted(const vector<BBNode>& in1,
 // This implements a variant of binary long division.
 // q and r are "out" parameters.  rwidth puts a bound on the
 // recursion depth.
-void BitBlaster::BBDivMod(const BBNodeVec& y,
-                          const BBNodeVec& x,
-                          BBNodeVec& q, BBNodeVec& r,
-                          unsigned int rwidth,
-                          BBNodeSet& support)
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::BBDivMod(const BBNodeVec& y,
+                                                  const BBNodeVec& x,
+                                                  BBNodeVec& q, BBNodeVec& r,
+                                                  unsigned int rwidth,
+                                                  BBNodeSet& support)
 {
   const unsigned int width = y.size();
   const BBNodeVec zero = BBfill(width, nf->getFalse());
@@ -4090,9 +4168,10 @@ void BitBlaster::BBDivMod(const BBNodeVec& y,
 }
 
 // build ITE's (ITE cond then[i] else[i]) for each i.
-BBNodeVec BitBlaster::BBITE(const BBNode& cond,
-                            const BBNodeVec& thn,
-                            const BBNodeVec& els)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBITE(const BBNode& cond,
+                                                         const BBNodeVec& thn,
+                                                         const BBNodeVec& els)
 {
   // Fast exits.
   if (cond == nf->getTrue())
@@ -4106,9 +4185,9 @@ BBNodeVec BitBlaster::BBITE(const BBNode& cond,
 
   BBNodeVec result;
   result.reserve(els.size());
-  const BBNodeVec::const_iterator th_it_end = thn.end();
-  BBNodeVec::const_iterator el_it = els.begin();
-  for (BBNodeVec::const_iterator th_it = thn.begin();
+  const typename BBNodeVec::const_iterator th_it_end = thn.end();
+  typename BBNodeVec::const_iterator el_it = els.begin();
+  for (typename BBNodeVec::const_iterator th_it = thn.begin();
        th_it < th_it_end; th_it++, el_it++)
   {
     result.push_back(nf->CreateNode(ITE, cond, *th_it, *el_it));
@@ -4119,9 +4198,10 @@ BBNodeVec BitBlaster::BBITE(const BBNode& cond,
 // Workhorse for comparison routines.  This does a signed BVLE if is_signed
 // is true, else it's unsigned.  All other comparison operators can be reduced
 // to this by swapping args or complementing the result bit.
-BBNode BitBlaster::BBBVLE(const BBNodeVec& left,
-                          const BBNodeVec& right,
-                          bool is_signed, bool is_bvlt)
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode, BBNodeManagerT>::BBBVLE(const BBNodeVec& left,
+                                                  const BBNodeVec& right,
+                                                  bool is_signed, bool is_bvlt)
 {
   if (uf->bbbvle_variant)
     return BBBVLE_variant1(left, right, is_signed, is_bvlt);
@@ -4129,7 +4209,8 @@ BBNode BitBlaster::BBBVLE(const BBNodeVec& left,
     return BBBVLE_variant2(left, right, is_signed, is_bvlt);
 }
 
-BBNode BitBlaster::BBBVLE_variant1(
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode, BBNodeManagerT>::BBBVLE_variant1(
     const BBNodeVec& left_, const BBNodeVec& right_, bool is_signed,
     bool is_bvlt)
 {
@@ -4142,9 +4223,9 @@ BBNode BitBlaster::BBBVLE_variant1(
   // treated separately, because signed comparison is done by
   // complementing the MSB of each BV, then doing an unsigned
   // comparison.
-  BBNodeVec::const_iterator lit = left.begin();
-  BBNodeVec::const_iterator litend = left.end();
-  BBNodeVec::const_iterator rit = right.begin();
+  typename BBNodeVec::const_iterator lit = left.begin();
+  typename BBNodeVec::const_iterator litend = left.end();
+  typename BBNodeVec::const_iterator rit = right.begin();
   BBNode prevbit = nf->getTrue();
   for (; lit < litend - 1; lit++, rit++)
   {
@@ -4172,12 +4253,13 @@ BBNode BitBlaster::BBBVLE_variant1(
   return msb;
 }
 
-BBNode BitBlaster::BBBVLE_variant2(
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode, BBNodeManagerT>::BBBVLE_variant2(
     const BBNodeVec& left, const BBNodeVec& right, bool is_signed, bool is_bvlt)
 {
-  BBNodeVec::const_reverse_iterator lit = left.rbegin();
-  const BBNodeVec::const_reverse_iterator litend = left.rend();
-  BBNodeVec::const_reverse_iterator rit = right.rbegin();
+  typename BBNodeVec::const_reverse_iterator lit = left.rbegin();
+  const typename BBNodeVec::const_reverse_iterator litend = left.rend();
+  typename BBNodeVec::const_reverse_iterator rit = right.rbegin();
 
   BBNode this_compare_bit =
       is_signed ? nf->CreateNode(AND, *lit, nf->CreateNode(NOT, *rit))
@@ -4216,8 +4298,9 @@ BBNode BitBlaster::BBBVLE_variant2(
 
 // Left shift  within fixed field inserting zeros at LSB.
 // Writes result into first argument.
-void BitBlaster::BBLShift(BBNodeVec& x,
-                          unsigned int shift)
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::BBLShift(BBNodeVec& x,
+                                                  unsigned int shift)
 {
   // left shift x (destructively) within width.
   // loop backwards so that copy to self works correctly. (DON'T use STL
@@ -4233,12 +4316,13 @@ void BitBlaster::BBLShift(BBNodeVec& x,
 
 // Right shift within fixed field inserting zeros at MSB.
 // Writes result into first argument.
-void BitBlaster::BBRShift(BBNodeVec& x,
-                          unsigned int shift)
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::BBRShift(BBNodeVec& x,
+                                                  unsigned int shift)
 {
   // right shift x (destructively) within width.
-  const BBNodeVec::iterator xend = x.end();
-  BBNodeVec::iterator xit = x.begin();
+  const typename BBNodeVec::iterator xend = x.end();
+  typename BBNodeVec::iterator xit = x.begin();
   for (; xit < xend; xit++)
   {
     if (xit + shift < xend)
@@ -4249,8 +4333,9 @@ void BitBlaster::BBRShift(BBNodeVec& x,
 }
 
 // Return bit-blasted form for BVLE, BVGE, BVGT, SBLE, etc.
-BBNode BitBlaster::BBcompare(const ASTNode& form,
-                             BBNodeSet& support)
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode, BBNodeManagerT>::BBcompare(const ASTNode& form,
+                                                     BBNodeSet& support)
 {
   const BBNodeVec& left = BBTerm(form[0], support);
   const BBNodeVec& right = BBTerm(form[1], support);
@@ -4309,7 +4394,9 @@ BBNode BitBlaster::BBcompare(const ASTNode& form,
 // canonical pattern is assumed. Bit i is bit i of the IEEE encoding:
 // significand field in bits [0, sb-2], exponent field in bits [sb-1, w-2],
 // sign at w-1.
-BBNode BitBlaster::BBfpIsNaN(const BBNodeVec& p, unsigned sb, unsigned w)
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode, BBNodeManagerT>::BBfpIsNaN(const BBNodeVec& p,
+                                                     unsigned sb, unsigned w)
 {
   BBNodeVec expField(p.begin() + (sb - 1), p.begin() + (w - 1));
   BBNodeVec sigField(p.begin(), p.begin() + (sb - 1));
@@ -4320,7 +4407,9 @@ BBNode BitBlaster::BBfpIsNaN(const BBNodeVec& p, unsigned sb, unsigned w)
 
 // Zero iff the whole magnitude (everything below the sign bit) is zero, so
 // both +0 and -0 satisfy it.
-BBNode BitBlaster::BBfpIsZero(const BBNodeVec& p, unsigned w)
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode, BBNodeManagerT>::BBfpIsZero(const BBNodeVec& p,
+                                                      unsigned w)
 {
   BBNodeVec magnitude(p.begin(), p.begin() + (w - 1));
   return nf->CreateNode(NOR, magnitude);
@@ -4460,7 +4549,9 @@ bool fpNativeExactBinaryEndpoint(const SourceSort& sort, const Kind kind,
 
 } // namespace
 
-bool BitBlaster::fpNativeConstantZeroMagnitude(const ASTNode& n) const
+template <class BBNode, class BBNodeManagerT>
+bool BitBlaster<BBNode, BBNodeManagerT>::fpNativeConstantZeroMagnitude(
+    const ASTNode& n) const
 {
   const SourceSort sort = n.GetSourceSort();
   if (n.GetKind() != BVCONST ||
@@ -4477,8 +4568,9 @@ bool BitBlaster::fpNativeConstantZeroMagnitude(const ASTNode& n) const
   return true;
 }
 
-bool BitBlaster::fpNativeConstantValue(const ASTNode& n,
-                                       long double& out) const
+template <class BBNode, class BBNodeManagerT>
+bool BitBlaster<BBNode, BBNodeManagerT>::fpNativeConstantValue(
+    const ASTNode& n, long double& out) const
 {
   const SourceSort sort = n.GetSourceSort();
   if (n.GetKind() != BVCONST ||
@@ -4532,8 +4624,9 @@ bool BitBlaster::fpNativeConstantValue(const ASTNode& n,
          (out != 0.0L || (exponent == 0 && significand == 0.0L));
 }
 
-bool BitBlaster::fpNativeConstantBits(const ASTNode& n,
-                                     std::string& out) const
+template <class BBNode, class BBNodeManagerT>
+bool BitBlaster<BBNode, BBNodeManagerT>::fpNativeConstantBits(
+    const ASTNode& n, std::string& out) const
 {
   const SourceSort sort = n.GetSourceSort();
   if (n.GetKind() != BVCONST ||
@@ -4549,8 +4642,9 @@ bool BitBlaster::fpNativeConstantBits(const ASTNode& n,
   return true;
 }
 
-bool BitBlaster::fpNativeMaxFiniteValue(const SourceSort& sort,
-                                        long double& out) const
+template <class BBNode, class BBNodeManagerT>
+bool BitBlaster<BBNode, BBNodeManagerT>::fpNativeMaxFiniteValue(
+    const SourceSort& sort, long double& out) const
 {
   if (sort.kind() != SourceSort::Kind::FloatingPoint)
     return false;
@@ -4568,7 +4662,9 @@ bool BitBlaster::fpNativeMaxFiniteValue(const SourceSort& sort,
   return std::isfinite(out);
 }
 
-BitBlaster::FpNativeInterval BitBlaster::fpNativeRoundedRange(
+template <class BBNode, class BBNodeManagerT>
+typename BitBlaster<BBNode, BBNodeManagerT>::FpNativeInterval
+BitBlaster<BBNode, BBNodeManagerT>::fpNativeRoundedRange(
     const SourceSort& sort, const long double lower,
     const long double upper) const
 {
@@ -4598,7 +4694,9 @@ BitBlaster::FpNativeInterval BitBlaster::fpNativeRoundedRange(
   return out;
 }
 
-BitBlaster::FpNativeInterval BitBlaster::fpNativeExactRoundedRange(
+template <class BBNode, class BBNodeManagerT>
+typename BitBlaster<BBNode, BBNodeManagerT>::FpNativeInterval
+BitBlaster<BBNode, BBNodeManagerT>::fpNativeExactRoundedRange(
     const SourceSort& sort, const Kind kind, const ASTNode& roundingMode,
     const FpNativeInterval& a, const FpNativeInterval& b) const
 {
@@ -4681,7 +4779,9 @@ BitBlaster::FpNativeInterval BitBlaster::fpNativeExactRoundedRange(
   return out;
 }
 
-BitBlaster::FpNativeInterval BitBlaster::fpNativeInterval(const ASTNode& n)
+template <class BBNode, class BBNodeManagerT>
+typename BitBlaster<BBNode, BBNodeManagerT>::FpNativeInterval
+BitBlaster<BBNode, BBNodeManagerT>::fpNativeInterval(const ASTNode& n)
 {
   const auto cached = fpNativeIntervals.find(n);
   if (cached != fpNativeIntervals.end())
@@ -4692,8 +4792,9 @@ BitBlaster::FpNativeInterval BitBlaster::fpNativeInterval(const ASTNode& n)
   return out;
 }
 
-BitBlaster::FpNativeInterval BitBlaster::fpNativeIntervalUncached(
-    const ASTNode& n)
+template <class BBNode, class BBNodeManagerT>
+typename BitBlaster<BBNode, BBNodeManagerT>::FpNativeInterval
+BitBlaster<BBNode, BBNodeManagerT>::fpNativeIntervalUncached(const ASTNode& n)
 {
   FpNativeInterval out;
   if (!uf->fp_native_domain)
@@ -4874,12 +4975,15 @@ BitBlaster::FpNativeInterval BitBlaster::fpNativeIntervalUncached(
   }
 }
 
-bool BitBlaster::fpNativeKnownFinite(const ASTNode& n)
+template <class BBNode, class BBNodeManagerT>
+bool BitBlaster<BBNode, BBNodeManagerT>::fpNativeKnownFinite(const ASTNode& n)
 {
   return fpNativeInterval(n).known;
 }
 
-bool BitBlaster::fpNativeKnownZeroMagnitude(const ASTNode& n)
+template <class BBNode, class BBNodeManagerT>
+bool BitBlaster<BBNode, BBNodeManagerT>::fpNativeKnownZeroMagnitude(
+    const ASTNode& n)
 {
   if (!uf->fp_native_domain ||
       n.GetSourceSort().kind() != SourceSort::Kind::FloatingPoint)
@@ -4945,7 +5049,9 @@ bool BitBlaster::fpNativeKnownZeroMagnitude(const ASTNode& n)
   return knownZero;
 }
 
-bool BitBlaster::fpNativeKnownFiniteNonnegative(const ASTNode& n)
+template <class BBNode, class BBNodeManagerT>
+bool BitBlaster<BBNode, BBNodeManagerT>::fpNativeKnownFiniteNonnegative(
+    const ASTNode& n)
 {
   if (!uf->fp_native_domain ||
       n.GetSourceSort().kind() != SourceSort::Kind::FloatingPoint)
@@ -5050,7 +5156,9 @@ bool BitBlaster::fpNativeKnownFiniteNonnegative(const ASTNode& n)
   return known;
 }
 
-bool BitBlaster::fpNativeKnownFiniteNonpositive(const ASTNode& n)
+template <class BBNode, class BBNodeManagerT>
+bool BitBlaster<BBNode, BBNodeManagerT>::fpNativeKnownFiniteNonpositive(
+    const ASTNode& n)
 {
   if (!uf->fp_native_domain ||
       n.GetSourceSort().kind() != SourceSort::Kind::FloatingPoint)
@@ -5149,11 +5257,10 @@ bool BitBlaster::fpNativeKnownFiniteNonpositive(const ASTNode& n)
   return known;
 }
 
-
-bool BitBlaster::fpNativeBoundPredicate(const ASTNode& n, ASTNode& symbol,
-                                        ASTNode& constant,
-                                        long double& value,
-                                        bool& lowerBound) const
+template <class BBNode, class BBNodeManagerT>
+bool BitBlaster<BBNode, BBNodeManagerT>::fpNativeBoundPredicate(
+    const ASTNode& n, ASTNode& symbol, ASTNode& constant, long double& value,
+    bool& lowerBound) const
 {
   const Kind k = n.GetKind();
   if ((k != FP_LT && k != FP_LEQ && k != FP_GT && k != FP_GEQ) ||
@@ -5187,8 +5294,9 @@ bool BitBlaster::fpNativeBoundPredicate(const ASTNode& n, ASTNode& symbol,
   return false;
 }
 
-bool BitBlaster::fpNativeMagnitudeZeroPredicate(const ASTNode& n,
-                                                ASTNode& term) const
+template <class BBNode, class BBNodeManagerT>
+bool BitBlaster<BBNode, BBNodeManagerT>::fpNativeMagnitudeZeroPredicate(
+    const ASTNode& n, ASTNode& term) const
 {
   if (n.GetKind() == FP_ISZERO && n.Degree() == 1 &&
       n[0].GetKind() == FP_MUL &&
@@ -5227,7 +5335,9 @@ bool BitBlaster::fpNativeMagnitudeZeroPredicate(const ASTNode& n,
   return match(n[0], n[1]) || match(n[1], n[0]);
 }
 
-void BitBlaster::collectFpNativeDomainBounds(const ASTNode& n)
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::collectFpNativeDomainBounds(
+    const ASTNode& n)
 {
   // Bounds are useful only when they occur in the top-level conjunction.
   // Walk that conjunction explicitly: native-domain collection is enabled
@@ -5283,7 +5393,9 @@ void BitBlaster::collectFpNativeDomainBounds(const ASTNode& n)
   }
 }
 
-void BitBlaster::collectFpNativeDomainFacts(const ASTNode& root)
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::collectFpNativeDomainFacts(
+    const ASTNode& root)
 {
   fpNativeFiniteTerms.clear();
   fpNativeZeroMagnitudeFacts.clear();
@@ -5365,7 +5477,9 @@ void BitBlaster::collectFpNativeDomainFacts(const ASTNode& root)
 // non-strictly, key(-0) >= key(+0) must be granted (the both-zero
 // disjunct). isNaN tests the exponent and significand fields, so operands
 // with arbitrary NaN payloads compare as NaN.
-BBNode BitBlaster::BBcompareFP(const ASTNode& form, BBNodeSet& support)
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode, BBNodeManagerT>::BBcompareFP(const ASTNode& form,
+                                                       BBNodeSet& support)
 {
   const Kind k = form.GetKind();
   assert(k == FP_GT || k == FP_LT || k == FP_GEQ || k == FP_LEQ);
@@ -5486,7 +5600,9 @@ BBNode BitBlaster::BBcompareFP(const ASTNode& form, BBNodeSet& support)
 //   SMT =: the SMT domain has one abstract NaN, so all NaN payloads are
 //   equal, and two distinct zeros, so +0 and -0 are not.
 //     a = b = (isNaN(a) and isNaN(b)) or bits(a) = bits(b)
-BBNode BitBlaster::BBeqFP(const ASTNode& form, BBNodeSet& support)
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode, BBNodeManagerT>::BBeqFP(const ASTNode& form,
+                                                  BBNodeSet& support)
 {
   const Kind k = form.GetKind();
   assert(k == FP_EQ || k == FP_SMT_EQ);
@@ -5596,7 +5712,9 @@ BBNode BitBlaster::BBeqFP(const ASTNode& form, BBNodeSet& support)
 // NaN is neither, because its sign bit carries no meaning. isNormal has to
 // exclude the all-ones exponent as well as the zero one, or infinities and
 // NaNs count as normal.
-BBNode BitBlaster::BBclassifyFP(const ASTNode& form, BBNodeSet& support)
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode, BBNodeManagerT>::BBclassifyFP(const ASTNode& form,
+                                                        BBNodeSet& support)
 {
   const Kind k = form.GetKind();
 
@@ -5755,7 +5873,9 @@ BBNode BitBlaster::BBclassifyFP(const ASTNode& form, BBNodeSet& support)
 // binary vector of countWidth bits. An all-zero v counts v.size(). Built as
 // a priority chain: scanning positions from the LSB up, each set bit
 // overrides the count implied by the lower ones, so the MSB wins.
-BBNodeVec BitBlaster::BBfpCLZ(const BBNodeVec& v, unsigned countWidth)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpCLZ(const BBNodeVec& v,
+                                                           unsigned countWidth)
 {
   const unsigned n = v.size();
   auto constVec = [&](unsigned value) {
@@ -5776,8 +5896,9 @@ BBNodeVec BitBlaster::BBfpCLZ(const BBNodeVec& v, unsigned countWidth)
 // the stage number bounded by the host unsigned width now that BV lemmas may
 // hand it an amount as wide as the value: every still-higher amount bit is
 // necessarily a shift past any vector whose size fits in unsigned.
-BBNodeVec BitBlaster::BBShiftLeftByVariable(const BBNodeVec& value,
-                                            const BBNodeVec& amount)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBShiftLeftByVariable(
+    const BBNodeVec& value, const BBNodeVec& amount)
 {
   BBNodeVec result = value;
   unsigned stage = 0;
@@ -5801,9 +5922,9 @@ BBNodeVec BitBlaster::BBShiftLeftByVariable(const BBNodeVec& value,
 
 // Logarithmic right shifter that ORs every shifted-out bit into sticky --
 // the rounding circuits must not lose shifted-out precision.
-BBNodeVec BitBlaster::BBfpShiftRightSticky(const BBNodeVec& v,
-                                           const BBNodeVec& amt,
-                                           BBNode& sticky)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpShiftRightSticky(
+    const BBNodeVec& v, const BBNodeVec& amt, BBNode& sticky)
 {
   BBNodeVec r = v;
   for (unsigned s = 0; s < amt.size(); s++)
@@ -5831,7 +5952,10 @@ BBNodeVec BitBlaster::BBfpShiftRightSticky(const BBNodeVec& v,
 
 // v + inc (a single carry-in bit), one bit wider than v -- the rounding
 // increment, whose carry-out is the significand overflowing to 10...0.
-BBNodeVec BitBlaster::BBfpIncrement(const BBNodeVec& v, const BBNode& inc)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode>
+BitBlaster<BBNode, BBNodeManagerT>::BBfpIncrement(const BBNodeVec& v,
+                                                  const BBNode& inc)
 {
   BBNodeVec r(v.size() + 1);
   BBNode carry = inc;
@@ -5844,7 +5968,9 @@ BBNodeVec BitBlaster::BBfpIncrement(const BBNodeVec& v, const BBNode& inc)
   return r;
 }
 
-unsigned BitBlaster::BBfpExpWidth(unsigned eb, unsigned sb)
+template <class BBNode, class BBNodeManagerT>
+unsigned BitBlaster<BBNode, BBNodeManagerT>::BBfpExpWidth(unsigned eb,
+                                                          unsigned sb)
 {
   const unsigned bias = (1u << (eb - 1)) - 1;
   unsigned E = eb + 2;
@@ -5853,11 +5979,13 @@ unsigned BitBlaster::BBfpExpWidth(unsigned eb, unsigned sb)
   return E;
 }
 
-BitBlaster::FpOperand BitBlaster::BBfpUnpack(const BBNodeVec& p, unsigned sb,
-                                             unsigned w, unsigned E,
-                                             BBNodeSet& support,
-                                             const bool knownFinite,
-                                             const bool knownZeroMagnitude)
+template <class BBNode, class BBNodeManagerT>
+typename BitBlaster<BBNode, BBNodeManagerT>::FpOperand
+BitBlaster<BBNode, BBNodeManagerT>::BBfpUnpack(const BBNodeVec& p, unsigned sb,
+                                               unsigned w, unsigned E,
+                                               BBNodeSet& support,
+                                               const bool knownFinite,
+                                               const bool knownZeroMagnitude)
 {
   const unsigned eb = w - sb;
   const unsigned bias = (1u << (eb - 1)) - 1;
@@ -5905,13 +6033,11 @@ BitBlaster::FpOperand BitBlaster::BBfpUnpack(const BBNodeVec& p, unsigned sb,
   return o;
 }
 
-BBNodeVec BitBlaster::BBfpRoundPack(const BBNodeVec& rm, const BBNode& sgn,
-                                    const BBNodeVec& rsigIn,
-                                    const BBNode& guardIn,
-                                    const BBNode& stickyIn,
-                                    const BBNodeVec& beIn, unsigned sb,
-                                    unsigned eb, BBNodeSet& support,
-                                    const bool resultKnownFinite)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpRoundPack(
+    const BBNodeVec& rm, const BBNode& sgn, const BBNodeVec& rsigIn,
+    const BBNode& guardIn, const BBNode& stickyIn, const BBNodeVec& beIn,
+    unsigned sb, unsigned eb, BBNodeSet& support, const bool resultKnownFinite)
 {
   const unsigned w = eb + sb;
   const unsigned maxbe = (1u << eb) - 2;
@@ -6055,7 +6181,9 @@ BBNodeVec BitBlaster::BBfpRoundPack(const BBNodeVec& rm, const BBNode& sgn,
 //      or zero times infinity), then infinity, then zero. The NaN produced
 //      is the canonical quiet NaN (positive, significand MSB set), the
 //      same value the SymFPU path packs.
-BBNodeVec BitBlaster::BBfpMul(const ASTNode& term, BBNodeSet& support)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpMul(const ASTNode& term,
+                                                           BBNodeSet& support)
 {
   assert(term.GetKind() == FP_MUL);
   assert(term.Degree() == 3);
@@ -6272,7 +6400,9 @@ BBNodeVec BitBlaster::BBfpMul(const ASTNode& term, BBNodeSet& support)
 // zero iff the exact real sum is zero. For nonzero operands that means equal
 // packed magnitudes and opposite signs; every combination of signed zeros is
 // also zero. NaNs and infinities are excluded explicitly.
-BBNode BitBlaster::BBfpAddIsZero(const ASTNode& term, BBNodeSet& support)
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode, BBNodeManagerT>::BBfpAddIsZero(const ASTNode& term,
+                                                         BBNodeSet& support)
 {
   assert(term.GetKind() == FP_ADD);
   assert(term.Degree() == 3);
@@ -6326,7 +6456,9 @@ BBNode BitBlaster::BBfpAddIsZero(const ASTNode& term, BBNodeSet& support)
   return nf->CreateNode(AND, finite(pa), finite(pb), exactZero);
 }
 
-BBNodeVec BitBlaster::BBfpAdd(const ASTNode& term, BBNodeSet& support)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpAdd(const ASTNode& term,
+                                                           BBNodeSet& support)
 {
   assert(term.GetKind() == FP_ADD);
   assert(term.Degree() == 3);
@@ -6635,7 +6767,9 @@ BBNodeVec BitBlaster::BBfpAdd(const ASTNode& term, BBNodeSet& support)
 // covering the source's, so the rounder never fires. The internal
 // exponent covers BOTH formats' ranges: a double's subnormal scale is far
 // outside a half's eb+2 bits.
-BBNodeVec BitBlaster::BBfpToFp(const ASTNode& term, BBNodeSet& support)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfpToFp(const ASTNode& term,
+                                                            BBNodeSet& support)
 {
   assert(term.GetKind() == FP_TOFP);
   assert(term.Degree() == 4);
@@ -6748,8 +6882,9 @@ BBNodeVec BitBlaster::BBfpToFp(const ASTNode& term, BBNodeSet& support)
 
 // Return bit-blasted form for the overflow predicates BVUADDO, BVSADDO,
 // BVUMULO, BVSMULO. Each returns a single boolean.
-BBNode BitBlaster::BBOverflow(const ASTNode& form,
-                              BBNodeSet& support)
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode, BBNodeManagerT>::BBOverflow(const ASTNode& form,
+                                                      BBNodeSet& support)
 {
   const Kind k = form.GetKind();
   const unsigned w = form[0].GetValueWidth();
@@ -6838,21 +6973,23 @@ BBNode BitBlaster::BBOverflow(const ASTNode& form,
 }
 
 // return a vector with n copies of fillval
-BBNodeVec BitBlaster::BBfill(unsigned int width,
-                             BBNode fillval)
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBfill(unsigned int width,
+                                                          BBNode fillval)
 {
   BBNodeVec zvec(width, fillval);
   return zvec;
 }
 
-BBNode BitBlaster::BBEQ(const BBNodeVec& left,
-                        const BBNodeVec& right)
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode, BBNodeManagerT>::BBEQ(const BBNodeVec& left,
+                                                const BBNodeVec& right)
 {
   BBNodeVec andvec;
   andvec.reserve(left.size());
-  BBNodeVec::const_iterator lit = left.begin();
-  const BBNodeVec::const_iterator litend = left.end();
-  BBNodeVec::const_iterator rit = right.begin();
+  typename BBNodeVec::const_iterator lit = left.begin();
+  const typename BBNodeVec::const_iterator litend = left.end();
+  typename BBNodeVec::const_iterator rit = right.begin();
 
   if (left.size() > 1)
   {
@@ -6881,5 +7018,9 @@ std::ostream& operator<<(std::ostream& output, const BBNodeAIG& /*h*/)
   FatalError("This isn't implemented  yet sorry;");
   return output;
 }
+
+// Every specialisation that exists. A second backend adds a line here, which
+// is the point of the whole file being a template again.
+template class BitBlaster<BBNodeAIG, BBNodeManagerAIG>;
 
 } // stp namespace

@@ -702,7 +702,7 @@ bool bitBlastTermOk(Context& c, unsigned depth)
   SubstitutionMap sm(&c.mgr);
   Simplifier simp(&c.mgr, &sm);
   BBNodeManagerAIG nm;
-  BitBlaster bb(&nm, &simp, c.nf, &c.mgr.UserFlags);
+  BitBlasterAIG bb(&nm, &simp, c.nf, &c.mgr.UserFlags);
   bb.BBForm(f);
 
   // Every xor in the chain is 8 bits of AIG, so this cannot pass without
@@ -735,7 +735,7 @@ bool bitBlastNestedOk(Context& c, unsigned depth)
   SubstitutionMap sm(&c.mgr);
   Simplifier simp(&c.mgr, &sm);
   BBNodeManagerAIG nm;
-  BitBlaster bb(&nm, &simp, c.nf, &c.mgr.UserFlags);
+  BitBlasterAIG bb(&nm, &simp, c.nf, &c.mgr.UserFlags);
   bb.BBForm(f);
 
   // The chain is under the condition, so it cannot have been blasted
@@ -760,7 +760,7 @@ bool bitBlastOk(Context& c, unsigned depth)
   SubstitutionMap sm(&c.mgr);
   Simplifier simp(&c.mgr, &sm);
   BBNodeManagerAIG nm;
-  BitBlaster bb(&nm, &simp, c.nf, &c.mgr.UserFlags);
+  BitBlasterAIG bb(&nm, &simp, c.nf, &c.mgr.UserFlags);
   bb.BBForm(f);
 
   // One AIG node per conjunct at the very least.
