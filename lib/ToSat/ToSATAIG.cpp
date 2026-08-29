@@ -218,7 +218,7 @@ bool ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef, CNF& cnf)
 
   BBNodeManagerAIG mgr;
   mgr.nodeBudget = bm->UserFlags.aig_node_budget;
-  BitBlaster bb(&mgr, &simp, bm->defaultNodeFactory, &bm->UserFlags, cb,
+  BitBlasterAIG bb(&mgr, &simp, bm->defaultNodeFactory, &bm->UserFlags, cb,
                 allowAbstraction_);
 
   BBNodeAIG BBFormula;

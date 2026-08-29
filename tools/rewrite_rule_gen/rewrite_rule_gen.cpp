@@ -644,7 +644,7 @@ int getDifficulty(const ASTNode& n_)
     return -1;
 
   BBNodeManagerAIG nm;
-  BitBlaster bb(&nm, simp, mgr->defaultNodeFactory, &mgr->UserFlags);
+  BitBlasterAIG bb(&nm, simp, mgr->defaultNodeFactory, &mgr->UserFlags);
 
   // equals fresh variable to convert to boolean type.
   ASTNode f = mgr->CreateFreshVariable(0, widen_to, "ffff");
@@ -3090,7 +3090,7 @@ ASTNode rewriteThroughWithAIGS(const ASTNode& n_)
   ASTNode n = create(EQ, n_, f);
 
   BBNodeManagerAIG nm;
-  BitBlaster bb(&nm, simp, mgr->defaultNodeFactory, &mgr->UserFlags);
+  BitBlasterAIG bb(&nm, simp, mgr->defaultNodeFactory, &mgr->UserFlags);
   ASTNodeMap fromTo;
   ASTNodeMap equivs;
   bb.getConsts(n, fromTo, equivs);

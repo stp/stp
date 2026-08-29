@@ -121,19 +121,19 @@ void encodeNaryLemma(
   // Nothing this blast produces may itself be abstracted: the record would
   // be minted against an AIG thrown away when this returns, so nothing could
   // ever refine it.
-  BitBlaster bb(&mgr, scratch, bm->defaultNodeFactory, &bm->UserFlags, NULL,
-                /*allowAbstraction=*/false);
+  BitBlasterAIG bb(&mgr, scratch, bm->defaultNodeFactory, &bm->UserFlags,
+                   NULL, /*allowAbstraction=*/false);
 
   // Every live vector is an input here. Abstract results are not circuit
   // outputs: the theorem constrains them without defining the operations.
-  std::vector<BBNodeVec> inputs(liveVars.size(), BBNodeVec(width));
+  std::vector<BBNodeVecAIG> inputs(liveVars.size(), BBNodeVecAIG(width));
   for (unsigned v = 0; v < inputs.size(); ++v)
     for (unsigned i = 0; i < width; i++)
     {
       inputs[v][i] = mgr.CreateFreshInput();
     }
 
-  BBNodeSet support;
+  BBNodeSetAIG support;
   const BBNodeAIG claim = buildClaim(bb, inputs, support);
 
   Aig_ObjCreateCo(mgr.aigMgr, claim.n);
@@ -224,8 +224,8 @@ void encodeTernaryLemma(STPMgr* bm, Simplifier* scratch, SATSolver& solver,
   liveVars.push_back(&tVars);
   encodeNaryLemma(
       bm, scratch, solver, width, liveVars,
-      [&buildClaim](BitBlaster& bb, const std::vector<BBNodeVec>& inputs,
-                    BBNodeSet& support) {
+      [&buildClaim](BitBlasterAIG& bb, const std::vector<BBNodeVecAIG>& inputs,
+                    BBNodeSetAIG& support) {
         return buildClaim(bb, inputs[0], inputs[1], inputs[2], support);
       });
 }
@@ -240,8 +240,8 @@ void BVExactEncoder::encodeDivLemma(SATSolver& solver, DivLemma lemma,
 {
   encodeTernaryLemma(
       bm, scratch_.get(), solver, width, dividendVars, divisorVars, resultVars,
-      [lemma](BitBlaster& bb, const BBNodeVec& x, const BBNodeVec& s,
-              const BBNodeVec& t, BBNodeSet& support) {
+      [lemma](BitBlasterAIG& bb, const BBNodeVecAIG& x, const BBNodeVecAIG& s,
+              const BBNodeVecAIG& t, BBNodeSetAIG& support) {
         return bb.BBDivLemma(lemma, x, s, t, support);
       });
 }
@@ -254,8 +254,8 @@ void BVExactEncoder::encodeRemLemma(SATSolver& solver, RemLemma lemma,
 {
   encodeTernaryLemma(
       bm, scratch_.get(), solver, width, dividendVars, divisorVars, resultVars,
-      [lemma](BitBlaster& bb, const BBNodeVec& x, const BBNodeVec& s,
-              const BBNodeVec& t, BBNodeSet& support) {
+      [lemma](BitBlasterAIG& bb, const BBNodeVecAIG& x, const BBNodeVecAIG& s,
+              const BBNodeVecAIG& t, BBNodeSetAIG& support) {
         return bb.BBRemLemma(lemma, x, s, t, support);
       });
 }
@@ -268,8 +268,8 @@ void BVExactEncoder::encodeMulLemma(SATSolver& solver, MulLemma lemma,
 {
   encodeTernaryLemma(
       bm, scratch_.get(), solver, width, xVars, sVars, resultVars,
-      [lemma](BitBlaster& bb, const BBNodeVec& x, const BBNodeVec& s,
-              const BBNodeVec& t, BBNodeSet& support) {
+      [lemma](BitBlasterAIG& bb, const BBNodeVecAIG& x, const BBNodeVecAIG& s,
+              const BBNodeVecAIG& t, BBNodeSetAIG& support) {
         return bb.BBMulLemma(lemma, x, s, t, support);
       });
 }
@@ -282,8 +282,8 @@ void BVExactEncoder::encodeAddLemma(SATSolver& solver, AddLemma lemma,
 {
   encodeTernaryLemma(
       bm, scratch_.get(), solver, width, xVars, sVars, resultVars,
-      [lemma](BitBlaster& bb, const BBNodeVec& x, const BBNodeVec& s,
-              const BBNodeVec& t, BBNodeSet& support) {
+      [lemma](BitBlasterAIG& bb, const BBNodeVecAIG& x, const BBNodeVecAIG& s,
+              const BBNodeVecAIG& t, BBNodeSetAIG& support) {
         return bb.BBAddLemma(lemma, x, s, t, support);
       });
 }
@@ -302,8 +302,8 @@ void BVExactEncoder::encodeDivRemIdentity(
   liveVars.push_back(&remainderVars);
   encodeNaryLemma(
       bm, scratch_.get(), solver, width, liveVars,
-      [&product](BitBlaster& bb, const std::vector<BBNodeVec>& inputs,
-                 BBNodeSet& support) {
+      [&product](BitBlasterAIG& bb, const std::vector<BBNodeVecAIG>& inputs,
+                 BBNodeSetAIG& support) {
         return bb.BBDivRemIdentity(product, inputs[0], inputs[1], inputs[2],
                                    inputs[3], support);
       });
@@ -328,8 +328,8 @@ void BVExactEncoder::encode(SATSolver& solver, const ASTNode& term,
   // asks for them only through statsFound(), which answers no without it.
   // And no abstraction: this circuit is what the refinement gave up in
   // favour of, so re-abstracting it would put the record straight back.
-  BitBlaster bb(&mgr, scratch_.get(), bm->defaultNodeFactory, &bm->UserFlags, NULL,
-                /*allowAbstraction=*/false);
+  BitBlasterAIG bb(&mgr, scratch_.get(), bm->defaultNodeFactory,
+                   &bm->UserFlags, NULL, /*allowAbstraction=*/false);
 
   // The operand bits: a constant where the query's own blast had one, and a
   // combinational input everywhere else.
@@ -359,7 +359,7 @@ void BVExactEncoder::encode(SATSolver& solver, const ASTNode& term,
 
   const std::vector<signed char>* known[2] = {&knownA, &knownB};
   const std::vector<unsigned>* opVars[2] = {&aVars, &bVars};
-  BBNodeVec operands[2] = {BBNodeVec(width), BBNodeVec(width)};
+  BBNodeVecAIG operands[2] = {BBNodeVecAIG(width), BBNodeVecAIG(width)};
 
   for (unsigned op = 0; op < 2; op++)
     for (unsigned i = 0; i < width; i++)
@@ -374,11 +374,11 @@ void BVExactEncoder::encode(SATSolver& solver, const ASTNode& term,
       ciVars.push_back((*opVars[op])[i]);
     }
 
-  const BBNodeVec& x = operands[0];
-  const BBNodeVec& y = operands[1];
+  const BBNodeVecAIG& x = operands[0];
+  const BBNodeVecAIG& y = operands[1];
 
-  BBNodeSet support;
-  const BBNodeVec result = bb.BBExactBinaryOp(term, x, y, support);
+  BBNodeSetAIG support;
+  const BBNodeVecAIG result = bb.BBExactBinaryOp(term, x, y, support);
   assert(result.size() == width);
 
   // Outputs, then whatever the circuit wants conjoined to the top. Both are
