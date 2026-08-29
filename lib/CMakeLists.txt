@@ -51,6 +51,7 @@ if (BUILD_SHARED_LIBS)
 endif()
 
 add_subdirectory(Globals)
+add_subdirectory(AIG)
 add_subdirectory(AST)
 add_subdirectory(AbsRefineCounterExample)
 add_subdirectory(Extensionality)
@@ -77,6 +78,7 @@ add_subdirectory(NodeFactory)
 # library?
 set(stp_lib_targets
     stpglobals
+    aig
     AST
     stpmgr
     abstractionrefinement
