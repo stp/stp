@@ -227,7 +227,7 @@ ASTNode AIGSimplifyPropositionalCore::topLevel(const ASTNode& top)
   Simplifier simplifier(bm, &sm );
   BBNodeManagerAIG mgr;
   mgr.nodeBudget = bm->UserFlags.aig_node_budget;
-  BitBlaster bb(&mgr, &simplifier, bm->defaultNodeFactory, &bm->UserFlags);
+  BitBlasterAIG bb(&mgr, &simplifier, bm->defaultNodeFactory, &bm->UserFlags);
 
   // This pass is an optimisation, so an exhausted budget costs nothing but
   // the work already done: hand back the formula that came in and let the

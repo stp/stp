@@ -618,7 +618,7 @@ TEST(FloatBlast, native_comparison_agrees_with_symfpu_exhaustively)
   SubstitutionMap substitutions(&mgr);
   Simplifier simp(&mgr, &substitutions);
   BBNodeManagerAIG aig;
-  BitBlaster bb(&aig, &simp, mgr.defaultNodeFactory, &mgr.UserFlags);
+  BitBlasterAIG bb(&aig, &simp, mgr.defaultNodeFactory, &mgr.UserFlags);
 
   const unsigned eb = 3, sb = 4;
   const unsigned width = eb + sb;
@@ -642,7 +642,7 @@ TEST(FloatBlast, native_comparison_agrees_with_symfpu_exhaustively)
         const ASTNode reference = NonMemberBVConstEvaluator(&mgr, comparison);
         ASSERT_TRUE(reference == mgr.ASTTrue || reference == mgr.ASTFalse);
 
-        const BBNode native = bb.BBForm(comparison);
+        const BBNodeAIG native = bb.BBForm(comparison);
         ASSERT_TRUE(native == aig.getTrue() || native == aig.getFalse());
 
         ASSERT_EQ(reference == mgr.ASTTrue, native == aig.getTrue())
@@ -666,7 +666,7 @@ TEST(FloatBlast, native_comparison_agrees_with_symfpu_exhaustively)
       const ASTNode reference = NonMemberBVConstEvaluator(&mgr, classification);
       ASSERT_TRUE(reference == mgr.ASTTrue || reference == mgr.ASTFalse);
 
-      const BBNode native = bb.BBForm(classification);
+      const BBNodeAIG native = bb.BBForm(classification);
       ASSERT_TRUE(native == aig.getTrue() || native == aig.getFalse());
 
       ASSERT_EQ(reference == mgr.ASTTrue, native == aig.getTrue())
@@ -706,7 +706,7 @@ TEST(FloatBlast, native_comparison_agrees_with_symfpu_exhaustively)
             &mgr, mgr.CreateNode(FP_GT, selected, constants[j]));
         ASSERT_TRUE(reference == mgr.ASTTrue || reference == mgr.ASTFalse);
 
-        const BBNode native = bb.BBForm(comparison);
+        const BBNodeAIG native = bb.BBForm(comparison);
         ASSERT_TRUE(native == aig.getTrue() || native == aig.getFalse());
 
         ASSERT_EQ(reference == mgr.ASTTrue, native == aig.getTrue())

@@ -58,8 +58,9 @@ namespace stp
 // `s <=u x <u 2s`, with doubling interpreted in the integers. A divisor
 // whose top bit is set doubles past the vector width, making the upper test
 // automatic. A zero divisor cannot satisfy both halves of the premise.
-BBNode BitBlaster::BBFitsExactlyOnce(const BBNodeVec& x,
-                                     const BBNodeVec& s)
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode, BBNodeManagerT>::BBFitsExactlyOnce(const BBNodeVec& x,
+                                                             const BBNodeVec& s)
 {
   const unsigned width = (unsigned)x.size();
   BBNodeVec twice = s;
@@ -70,9 +71,12 @@ BBNode BitBlaster::BBFitsExactlyOnce(const BBNodeVec& x,
                      nf->CreateNode(NOT, BBBVLE(twice, x, false))));
 }
 
-BBNode BitBlaster::BBDivLemma(DivLemma lemma, const BBNodeVec& x,
-                              const BBNodeVec& s, const BBNodeVec& t,
-                              BBNodeSet& support)
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode, BBNodeManagerT>::BBDivLemma(DivLemma lemma,
+                                                      const BBNodeVec& x,
+                                                      const BBNodeVec& s,
+                                                      const BBNodeVec& t,
+                                                      BBNodeSet& support)
 {
   const unsigned width = (unsigned)x.size();
   assert(s.size() == width);
@@ -320,9 +324,12 @@ BBNode BitBlaster::BBDivLemma(DivLemma lemma, const BBNodeVec& x,
   return BBFalse;
 }
 
-BBNode BitBlaster::BBRemLemma(RemLemma lemma, const BBNodeVec& x,
-                              const BBNodeVec& s, const BBNodeVec& t,
-                              BBNodeSet& support)
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode, BBNodeManagerT>::BBRemLemma(RemLemma lemma,
+                                                      const BBNodeVec& x,
+                                                      const BBNodeVec& s,
+                                                      const BBNodeVec& t,
+                                                      BBNodeSet& support)
 {
   const unsigned width = (unsigned)x.size();
   assert(s.size() == width);
@@ -398,9 +405,12 @@ BBNode BitBlaster::BBRemLemma(RemLemma lemma, const BBNodeVec& x,
   return BBFalse;
 }
 
-BBNode BitBlaster::BBMulLemma(MulLemma lemma, const BBNodeVec& x,
-                              const BBNodeVec& s, const BBNodeVec& t,
-                              BBNodeSet& support)
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode, BBNodeManagerT>::BBMulLemma(MulLemma lemma,
+                                                      const BBNodeVec& x,
+                                                      const BBNodeVec& s,
+                                                      const BBNodeVec& t,
+                                                      BBNodeSet& support)
 {
   const unsigned width = (unsigned)x.size();
   assert(s.size() == width);
@@ -529,12 +539,10 @@ BBNode BitBlaster::BBMulLemma(MulLemma lemma, const BBNodeVec& x,
   return BBFalse;
 }
 
-BBNode BitBlaster::BBDivRemIdentity(const ASTNode& product,
-                                    const BBNodeVec& x,
-                                    const BBNodeVec& s,
-                                    const BBNodeVec& q,
-                                    const BBNodeVec& r,
-                                    BBNodeSet& support)
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode, BBNodeManagerT>::BBDivRemIdentity(
+    const ASTNode& product, const BBNodeVec& x, const BBNodeVec& s,
+    const BBNodeVec& q, const BBNodeVec& r, BBNodeSet& support)
 {
   [[maybe_unused]] const unsigned width = (unsigned)x.size();
   assert(s.size() == width);
@@ -548,9 +556,12 @@ BBNode BitBlaster::BBDivRemIdentity(const ASTNode& product,
   return BBEQ(x, sum);
 }
 
-BBNode BitBlaster::BBAddLemma(AddLemma lemma, const BBNodeVec& x,
-                              const BBNodeVec& s, const BBNodeVec& t,
-                              BBNodeSet& /*support*/)
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode, BBNodeManagerT>::BBAddLemma(AddLemma lemma,
+                                                      const BBNodeVec& x,
+                                                      const BBNodeVec& s,
+                                                      const BBNodeVec& t,
+                                                      BBNodeSet& /*support*/)
 {
   const unsigned width = (unsigned)x.size();
   assert(width > 0);
@@ -630,5 +641,33 @@ BBNode BitBlaster::BBAddLemma(AddLemma lemma, const BBNodeVec& x,
   FatalError("BBAddLemma: unknown lemma");
   return BBFalse;
 }
+
+// These six are the blaster's only members defined outside BitBlaster.cpp, so
+// the explicit instantiation there cannot reach them -- an explicit
+// instantiation only instantiates what its own translation unit can see.
+// Named one at a time rather than repeating `template class BitBlaster<...>`
+// here, which would be a second explicit instantiation of one specialisation.
+//
+// Spelled out rather than through the BitBlasterAIG alias: the qualifier of
+// an explicit instantiation has to be a template-id, and a typedef naming the
+// same specialisation is not one. gcc takes the alias; clang -pedantic is
+// right to refuse it.
+template BBNodeAIG BitBlaster<BBNodeAIG, BBNodeManagerAIG>::BBFitsExactlyOnce(
+    const BBNodeVecAIG&, const BBNodeVecAIG&);
+template BBNodeAIG BitBlaster<BBNodeAIG, BBNodeManagerAIG>::BBDivLemma(
+    DivLemma, const BBNodeVecAIG&, const BBNodeVecAIG&, const BBNodeVecAIG&,
+    BBNodeSetAIG&);
+template BBNodeAIG BitBlaster<BBNodeAIG, BBNodeManagerAIG>::BBRemLemma(
+    RemLemma, const BBNodeVecAIG&, const BBNodeVecAIG&, const BBNodeVecAIG&,
+    BBNodeSetAIG&);
+template BBNodeAIG BitBlaster<BBNodeAIG, BBNodeManagerAIG>::BBMulLemma(
+    MulLemma, const BBNodeVecAIG&, const BBNodeVecAIG&, const BBNodeVecAIG&,
+    BBNodeSetAIG&);
+template BBNodeAIG BitBlaster<BBNodeAIG, BBNodeManagerAIG>::BBAddLemma(
+    AddLemma, const BBNodeVecAIG&, const BBNodeVecAIG&, const BBNodeVecAIG&,
+    BBNodeSetAIG&);
+template BBNodeAIG BitBlaster<BBNodeAIG, BBNodeManagerAIG>::BBDivRemIdentity(
+    const ASTNode&, const BBNodeVecAIG&, const BBNodeVecAIG&,
+    const BBNodeVecAIG&, const BBNodeVecAIG&, BBNodeSetAIG&);
 
 } // namespace stp

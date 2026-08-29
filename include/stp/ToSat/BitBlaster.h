@@ -56,39 +56,41 @@ class ASTNode;
 
 using ASTVec = vector<ASTNode>;
 
-// BitBlaster used to be a template over the node representation and its
-// manager. The AIG backend is the only one that remains, so these are the
-// only types it is ever used with.
-using BBNode = BBNodeAIG;
-using BBNodeVec = std::vector<BBNodeAIG>;
-// Alongside the other two rather than inside the class, because
-// BBExactBinaryOp takes one and its callers are outside.
-//
-// Insertion-ordered rather than a bare std::unordered_set. Its iteration
-// order reaches the emitted formula in two places -- the support conjunction
-// under --conjoin-to-top, and the combinational-output order BVExactEncoder
-// gives the circuit it splices into a live solver -- and an unordered_set's
-// order is a property of the standard library's bucket policy and of
-// std::hash<BBNodeAIG>, not of the query. So the CNF depended on which
-// library STP was built against. Insertion order depends on the blast alone.
+// The support set a blast accumulates, insertion-ordered rather than a bare
+// std::unordered_set. Its iteration order reaches the emitted formula in two
+// places -- the support conjunction under --conjoin-to-top, and the
+// combinational-output order BVExactEncoder gives the circuit it splices into
+// a live solver -- and an unordered_set's order is a property of the standard
+// library's bucket policy and of std::hash, not of the query. So the CNF
+// depended on which library STP was built against. Insertion order depends on
+// the blast alone.
 //
 // The set is small (it holds side conditions, not gates), so the vector is
 // the cheap part; the hash set is only here to keep insert() a set operation.
-class BBNodeSet
+//
+// At namespace scope rather than inside the blaster because BBExactBinaryOp
+// takes one and its callers are outside.
+template <class BBNode> class BBNodeOrderedSet
 {
-  std::vector<BBNodeAIG> order_;
-  std::unordered_set<BBNodeAIG> seen_;
+  std::vector<BBNode> order_;
+  std::unordered_set<BBNode> seen_;
 
 public:
-  void insert(const BBNodeAIG& n)
+  void insert(const BBNode& n)
   {
     if (seen_.insert(n).second)
       order_.push_back(n);
   }
   size_t size() const { return order_.size(); }
   bool empty() const { return order_.empty(); }
-  std::vector<BBNodeAIG>::const_iterator begin() const { return order_.begin(); }
-  std::vector<BBNodeAIG>::const_iterator end() const { return order_.end(); }
+  typename std::vector<BBNode>::const_iterator begin() const
+  {
+    return order_.begin();
+  }
+  typename std::vector<BBNode>::const_iterator end() const
+  {
+    return order_.end();
+  }
 };
 
 enum class DivLemma;
@@ -96,8 +98,16 @@ enum class RemLemma;
 enum class MulLemma;
 enum class AddLemma;
 
-class BitBlaster
+// Templated over the node representation and the manager that mints them.
+// One instantiation exists -- BitBlasterAIG, at the bottom of this file --
+// and the parameters are here so that a second can arrive without the 6900
+// lines of blasting logic learning anything about it. Nothing in this class
+// may name a backend's own types: BBNodeAIG appears nowhere in the class
+// body, only in the alias under it.
+template <class BBNode, class BBNodeManagerT> class BitBlaster
 {
+  using BBNodeVec = std::vector<BBNode>;
+  using BBNodeSet = BBNodeOrderedSet<BBNode>;
 
   BBNode BBTrue, BBFalse;
 
@@ -454,7 +464,7 @@ class BitBlaster
   const bool allowAbstraction_ = true;
   NodeFactory* ASTNF;
   Simplifier* simp;
-  BBNodeManagerAIG* nf;
+  BBNodeManagerT* nf;
 
   ASTNodeSet booth_recoded; // Nodes that have been recoded.
 
@@ -467,7 +477,7 @@ public:
   struct BooleanAbstractionResult
   {
     BVAbstractionId producer;
-    BBNodeAIG bit;
+    BBNode bit;
   };
 
   struct BitVectorAbstractionResult
@@ -481,7 +491,7 @@ public:
     BVAbstractionId id;
     std::vector<BVAbstractionId> dependencies;
     ASTNode eqNode;
-    BBNodeAIG abstractionCI;
+    BBNode abstractionCI;
     ASTNode leftSymbol;
     ASTNode rightSymbol;
   };
@@ -617,7 +627,7 @@ private:
   }
 
   BVAbstractionId newAbstractionId();
-  void tagAbstractionSources(const BBNodeAIG& ci,
+  void tagAbstractionSources(const BBNode& ci,
                              const std::vector<BVAbstractionId>& sources);
   BBNodeVec ensureProxyCIs(const ASTNode& node, const BBNodeVec& bits);
   bool reuseRegisteredTerm(const ASTNode& term, unsigned width,
@@ -653,7 +663,7 @@ public:
   // Direct producer IDs reachable from an AIG result. Walking the committed
   // root gives assertion ownership; walking the operands before a new result
   // is tagged gives that producer's parent-to-child dependencies.
-  std::vector<BVAbstractionId> abstractionSourcesOf(const BBNodeAIG& root);
+  std::vector<BVAbstractionId> abstractionSourcesOf(const BBNode& root);
   std::vector<BVAbstractionId> abstractionSourcesOf(const BBNodeVec& bits);
   BitBlaster& operator=(const BitBlaster& other) = delete;
   BitBlaster(const BitBlaster& other) = delete;
@@ -727,7 +737,8 @@ public:
   BBNode BBFitsExactlyOnce(const BBNodeVec& dividend,
                            const BBNodeVec& divisor);
 
-  std::unordered_map<ASTNode, BBNodeVec, ASTNode::ASTNodeHasher, ASTNode::ASTNodeEqual>::iterator
+  typename std::unordered_map<ASTNode, BBNodeVec, ASTNode::ASTNodeHasher,
+                              ASTNode::ASTNodeEqual>::iterator
   simplify_during_bb(ASTNode& term, BBNodeSet& support);
 
   // `allowAbstraction` is false for a blast whose circuit is itself the
@@ -737,7 +748,7 @@ public:
   // the call, so nothing could ever refine it. This used to be done by
   // clearing the flags on the shared UserDefinedFlags for the duration, which
   // meant one blast could see another's policy.
-  BitBlaster(BBNodeManagerAIG* bnm, Simplifier* _simp, NodeFactory* astNodeF,
+  BitBlaster(BBNodeManagerT* bnm, Simplifier* _simp, NodeFactory* astNodeF,
              UserDefinedFlags* _uf,
              simplifier::constantBitP::ConstantBitPropagation* cb_ = NULL,
              bool allowAbstraction = true)
@@ -817,6 +828,13 @@ public:
 
   void getConsts(const ASTNode& n, ASTNodeMap& fromTo, ASTNodeMap& equivs);
 };
+
+// The one instantiation the tree has, and the name everything outside the
+// blaster uses. A second backend adds an alias beside this one rather than an
+// edit at every use.
+using BitBlasterAIG = BitBlaster<BBNodeAIG, BBNodeManagerAIG>;
+using BBNodeVecAIG = std::vector<BBNodeAIG>;
+using BBNodeSetAIG = BBNodeOrderedSet<BBNodeAIG>;
 
 } // end of namespace
 

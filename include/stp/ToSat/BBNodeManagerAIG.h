@@ -175,6 +175,25 @@ public:
   // Node-level queries, all on the uncomplemented node: a literal and its
   // negation answer these identically.
   static bool isCI(const BBNodeAIG& n) { return Aig_ObjIsCi(Aig_Regular(n.n)); }
+
+  // Whether this handle is an input of this manager's own making, held
+  // uncomplemented so that its ordinal is meaningful -- and that ordinal.
+  //
+  // Not the same question as isCI(), which strips the complement bit before
+  // asking: a complemented input is still an input, but it is not one the
+  // blaster can name, and an abstraction record that stored its ordinal would
+  // be recording the wrong polarity. The blaster asks these rather than
+  // reading BBNodeAIG::symbol_index, so that the shared blasting code does
+  // not depend on one backend's handle carrying an ordinal at all.
+  static bool isNamedCI(const BBNodeAIG& n)
+  {
+    return !n.IsNull() && n.symbol_index >= 0;
+  }
+  static int ciOrdinal(const BBNodeAIG& n)
+  {
+    assert(isNamedCI(n));
+    return n.symbol_index;
+  }
   static bool isConstant(const BBNodeAIG& n)
   {
     return Aig_ObjIsConst1(Aig_Regular(n.n));

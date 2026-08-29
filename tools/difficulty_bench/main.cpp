@@ -80,12 +80,12 @@ ASTNode freshBool()
 int aigNodes(const ASTNode& n)
 {
   BBNodeManagerAIG nm;
-  BitBlaster bb(&nm, simp, mgr->defaultNodeFactory, &mgr->UserFlags);
+  BitBlasterAIG bb(&nm, simp, mgr->defaultNodeFactory, &mgr->UserFlags);
   if (n.GetType() == BOOLEAN_TYPE)
     bb.BBForm(n);
   else
   {
-    BBNodeSet support;
+    BBNodeSetAIG support;
     bb.BBTerm(n, support);
   }
   return nm.totalNumberOfNodes();
