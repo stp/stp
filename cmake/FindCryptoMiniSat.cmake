@@ -209,10 +209,34 @@ if(NOT CryptoMiniSat_FOUND_SYSTEM)
     # "cannot find .../libcryptominisat5.a" from ld and not from CMake.
     add_dependencies(cryptominisat5 CryptoMiniSat-EP)
 
-    # The names the rest of the tree reads, spelled as the package spells them.
+    # The names the rest of the tree reads, spelled as the package spells them
+    # -- with one difference that matters.
+    #
+    # The target is what lib/Sat compiles against, and carries GMP's include
+    # directory to the one file that includes cryptominisat.h. But a *static*
+    # libstp propagates its private dependencies into the exported
+    # STPTargets.cmake, and a target name written there is one no consumer has:
+    # on rungs 0 and 1 STPConfig.cmake.in asks it to find_dependency() the
+    # cryptominisat5 package, and on this rung there is no package to find. So
+    # the static link names the archive by path, exactly as LibBF and CaDiCaL
+    # are named in lib/CMakeLists.txt and for the same reason -- and its
+    # dependencies come along by path too, since nothing else will supply them.
+    # tests/api/install is what catches this: -lcryptominisat5, from a consumer
+    # linking an installed static STP.
     set(CRYPTOMINISAT5_LIBRARIES cryptominisat5)
-    set(CRYPTOMINISAT5_STATIC_LIBRARIES cryptominisat5)
+    set(CRYPTOMINISAT5_STATIC_LIBRARIES
+        "${STP_DEP_DIR}/lib/${CryptoMiniSat_ARCHIVE}")
+    #
+    # By link name, not by absolute path: lib/CMakeLists.txt ships and relocates
+    # the archive entries and passes everything else through untouched, so an
+    # absolute /usr/lib/... here would be written into the installed package as
+    # a path that only this machine has. The package's own dependency list is
+    # -lgmp and -lz for the same reason.
     set(CRYPTOMINISAT5_STATIC_LIBRARIES_DEPS "")
+    if(GMPXX_LIBRARY)
+        list(APPEND CRYPTOMINISAT5_STATIC_LIBRARIES_DEPS gmpxx)
+    endif()
+    list(APPEND CRYPTOMINISAT5_STATIC_LIBRARIES_DEPS ${GMP_LIBRARIES} Threads::Threads)
     set(CRYPTOMINISAT5_INCLUDE_DIRS "${STP_DEP_DIR}/include")
 endif()
 
