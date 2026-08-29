@@ -32,6 +32,9 @@ THE SOFTWARE.
 #include "sat/cnf/cnf.h"
 #include "opt/dar/dar.h"
 
+#include <functional>
+
+#include "stp/AIG/CNF.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
 #include "stp/ToSat/ToSATBase.h"
 
@@ -44,10 +47,19 @@ class ToCNFAIG // not copyable
 
   void dag_aware_aig_rewrite(const bool needAbsRef, BBNodeManagerAIG& mgr);
 
-  Cnf_Dat_t* derive_cnf_mf(BBNodeManagerAIG& mgr, int nLutSize,
-                            unsigned namedOutputs);
+  CNF derive_cnf_mf(BBNodeManagerAIG& mgr, int nLutSize,
+                    unsigned namedOutputs);
 
-  void fill_node_to_var(Cnf_Dat_t* cnfData,
+  // Take over an ABC-generated formula, projecting its per-object pVarNums
+  // down to the CI and CO variables that are the only ones anybody asks for.
+  // The clauses are adopted, not copied: ABC's layout is already the one CNF
+  // exposes. `objectVar` reads pVarNums for one object id, which is the only
+  // thing that differs between the Aig-based generators and the Gia-based
+  // one -- they index it by ids of their own manager.
+  static CNF adopt(Cnf_Dat_t* cnfData, unsigned nCi, unsigned nCo,
+                   const std::function<int(bool isCo, unsigned)>& objectVar);
+
+  void fill_node_to_var(const CNF& cnf,
                         ToSATBase::ASTNodeToSATVar& nodeToVars,
                         BBNodeManagerAIG& mgr);
 
@@ -67,10 +79,9 @@ public:
   // the number of trailing combinational outputs that need variables instead
   // of being asserted; passing every output is how a fragment such as
   // BVExactEncoder obtains values to splice into an existing solver.
-  Cnf_Dat_t* derive_cnf(BBNodeManagerAIG& mgr,
-                        unsigned namedOutputs = 0);
+  CNF derive_cnf(BBNodeManagerAIG& mgr, unsigned namedOutputs = 0);
 
-  void toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
+  void toCNF(const BBNodeAIG& top, CNF& cnf,
              ToSATBase::ASTNodeToSATVar& nodeToVars, bool needAbsRef,
              BBNodeManagerAIG& _mgr);
 };

@@ -151,8 +151,10 @@ public:
   }
 
   // How many combinational inputs exist, and the object id of one of them by
-  // creation order. Callers index Cnf_Dat_t::pVarNums by that id; when the
-  // CNF seam lands they ask the CNF for the variable instead and this goes.
+  // creation order. The CNF seam left one caller for the id -- the
+  // propositional core's map back to the AIG it rewrote -- and everything
+  // that wanted a SAT variable now asks CNF::varOfCi() for it by the same
+  // ordinal.
   //
   // Positional rather than by node, because dag-aware rewriting replaces the
   // manager wholesale and only the position in vCis survives it.

@@ -814,8 +814,8 @@ bool abstractionSideConstraintsOk(Context& c, unsigned depth)
 
   // Every conjunct has to reach the CNF, and each brings clauses of its
   // own, so fewer clauses than conjuncts would not be this formula.
-  Cnf_Dat_t* cnf = toSAT.bitblast(top, false);
-  return cnf != NULL && cnf->nClauses > static_cast<int>(depth);
+  CNF cnf;
+  return toSAT.bitblast(top, false, cnf) && cnf.clauseCount() > depth;
 }
 
 // Simplifier's term side. The job machine must use the same flattened operand

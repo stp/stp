@@ -160,26 +160,25 @@ void encodeNaryLemma(
   // search. The paired DIV/REM identity is a full-width multiplier, which is
   // exactly the circuit that argument is about. An explicitly chosen level
   // still reaches here.
-  Cnf_Dat_t* cnf =
+  const CNF cnf =
       ToCNFAIG(bm->UserFlags, /*allowAuto=*/false).derive_cnf(mgr, outputs);
-  assert(cnf != NULL);
 
-  std::vector<unsigned> cnfToSolver(cnf->nVars, ~((unsigned)0));
+  std::vector<unsigned> cnfToSolver(cnf.varCount(), ~((unsigned)0));
   for (unsigned i = 0; i < liveVars.size() * width; ++i)
   {
-    const int var = cnf->pVarNums[mgr.ciObjectId((int)i)];
-    if (var < 0)
+    const uint32_t var = cnf.varOfCi(i);
+    if (var == 0)
       continue;
     cnfToSolver[var] = (*liveVars[i / width])[i % width];
   }
 
-  // From 1: every ABC CNF generator numbers variables from 1 and reports
-  // nVars as one past the last, so index 0 names nothing. Allocating a solver
-  // variable for it, and freezing it, left one unreachable variable in the
-  // live solver per splice. The assertion in the clause loop below is what
+  // From 1: every CNF generator numbers variables from 1 and reports
+  // varCount() as one past the last, so index 0 names nothing. Allocating a
+  // solver variable for it, and freezing it, left one unreachable variable in
+  // the live solver per splice. The assertion in the clause loop below is what
   // holds this: a literal over variable 0 would mean a generator numbered
   // from 0 after all.
-  for (int var = 1; var < cnf->nVars; var++)
+  for (uint32_t var = 1; var < cnf.varCount(); var++)
     if (cnfToSolver[var] == ~((unsigned)0))
     {
       const unsigned fresh = solver.newVar();
@@ -188,10 +187,10 @@ void encodeNaryLemma(
     }
 
   SATSolver::vec_literals cl;
-  for (int i = 0; i < cnf->nClauses; i++)
+  for (uint64_t i = 0; i < cnf.clauseCount(); i++)
   {
     cl.clear();
-    for (int *pLit = cnf->pClauses[i], *pStop = cnf->pClauses[i + 1];
+    for (const int *pLit = cnf.clauseBegin(i), *pStop = cnf.clauseEnd(i);
          pLit < pStop; pLit++)
     {
       assert(((*pLit) >> 1) != 0 && "a CNF generator numbered variables from 0");
@@ -204,14 +203,12 @@ void encodeNaryLemma(
   // wanted conjoined to it.
   for (unsigned i = 0; i < outputs; i++)
   {
-    const unsigned var =
-        cnfToSolver[cnf->pVarNums[Aig_ManCo(mgr.aigMgr, (int)i)->Id]];
+    assert(cnf.varOfCo(i) != 0 && "a named output with no variable");
+    const unsigned var = cnfToSolver[cnf.varOfCo(i)];
     cl.clear();
     cl.push(SATSolver::mkLit(var, false));
     solver.addClause(cl);
   }
-
-  Cnf_DataFree(cnf);
 }
 
 template <typename BuildClaim>
@@ -404,8 +401,8 @@ void BVExactEncoder::encode(SATSolver& solver, const ASTNode& term,
   // Use the query's selected CNF strategy. All outputs are named rather than
   // asserted because the splice below connects each result bit explicitly
   // and asserts only the side constraints.
-  Cnf_Dat_t* cnf = ToCNFAIG(bm->UserFlags, /*allowAuto=*/false).derive_cnf(mgr, outputs);
-  assert(cnf != NULL);
+  const CNF cnf =
+      ToCNFAIG(bm->UserFlags, /*allowAuto=*/false).derive_cnf(mgr, outputs);
 
   // The splice. Every variable of the derived CNF becomes a variable of the
   // live solver: the inputs become the ones the operands are already
@@ -413,25 +410,25 @@ void BVExactEncoder::encode(SATSolver& solver, const ASTNode& term,
   // operands' own variables rather than minting a copy and equating it is
   // the whole point -- the clauses have to talk about the bits the rest of
   // the query talks about.
-  std::vector<unsigned> cnfToSolver(cnf->nVars, ~((unsigned)0));
+  std::vector<unsigned> cnfToSolver(cnf.varCount(), ~((unsigned)0));
 
   for (unsigned i = 0; i < ciVars.size(); i++)
   {
-    const int var = cnf->pVarNums[mgr.ciObjectId((int)i)];
+    const uint32_t var = cnf.varOfCi(i);
     // An input the circuit never reads is given no variable, and needs
     // none: nothing the CNF says mentions it.
-    if (var < 0)
+    if (var == 0)
       continue;
     cnfToSolver[var] = ciVars[i];
   }
 
-  // From 1: every ABC CNF generator numbers variables from 1 and reports
-  // nVars as one past the last, so index 0 names nothing. Allocating a solver
-  // variable for it, and freezing it, left one unreachable variable in the
-  // live solver per splice. The assertion in the clause loop below is what
+  // From 1: every CNF generator numbers variables from 1 and reports
+  // varCount() as one past the last, so index 0 names nothing. Allocating a
+  // solver variable for it, and freezing it, left one unreachable variable in
+  // the live solver per splice. The assertion in the clause loop below is what
   // holds this: a literal over variable 0 would mean a generator numbered
   // from 0 after all.
-  for (int var = 1; var < cnf->nVars; var++)
+  for (uint32_t var = 1; var < cnf.varCount(); var++)
     if (cnfToSolver[var] == ~((unsigned)0))
     {
       const unsigned fresh = solver.newVar();
@@ -440,10 +437,10 @@ void BVExactEncoder::encode(SATSolver& solver, const ASTNode& term,
     }
 
   SATSolver::vec_literals cl;
-  for (int i = 0; i < cnf->nClauses; i++)
+  for (uint64_t i = 0; i < cnf.clauseCount(); i++)
   {
     cl.clear();
-    for (int *pLit = cnf->pClauses[i], *pStop = cnf->pClauses[i + 1];
+    for (const int *pLit = cnf.clauseBegin(i), *pStop = cnf.clauseEnd(i);
          pLit < pStop; pLit++)
     {
       assert(((*pLit) >> 1) != 0 && "a CNF generator numbered variables from 0");
@@ -454,8 +451,8 @@ void BVExactEncoder::encode(SATSolver& solver, const ASTNode& term,
 
   for (unsigned i = 0; i < outputs; i++)
   {
-    const unsigned var =
-        cnfToSolver[cnf->pVarNums[Aig_ManCo(mgr.aigMgr, (int)i)->Id]];
+    assert(cnf.varOfCo(i) != 0 && "a named output with no variable");
+    const unsigned var = cnfToSolver[cnf.varOfCo(i)];
     if (i < width)
     {
       addEquiv(solver, resultVars[i], var);
@@ -465,8 +462,6 @@ void BVExactEncoder::encode(SATSolver& solver, const ASTNode& term,
     cl.push(SATSolver::mkLit(var, false));
     solver.addClause(cl);
   }
-
-  Cnf_DataFree(cnf);
 }
 
 } // namespace stp

@@ -80,11 +80,11 @@ void ToCNFAIG::dag_aware_aig_rewrite(const bool needAbsRef,
   }
 }
 
-void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
+void ToCNFAIG::toCNF(const BBNodeAIG& top, CNF& cnf,
                      ToSATBase::ASTNodeToSATVar& nodeToVars, bool needAbsRef,
                      BBNodeManagerAIG& mgr)
 {
-  assert(cnfData == NULL);
+  assert(cnf.clauseCount() == 0);
 
   Aig_ObjCreateCo(mgr.aigMgr, top.n);
   if (!needAbsRef)
@@ -107,19 +107,38 @@ void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
 
   dag_aware_aig_rewrite(needAbsRef, mgr);
 
-  cnfData = derive_cnf(mgr);
+  cnf = derive_cnf(mgr);
   if (uf.stats_flag)
     cerr << (uf.simple_cnf ? "simple CNF" : "advanced CNF") << endl;
-  assert(cnfData != NULL);
 
-  fill_node_to_var(cnfData, nodeToVars, mgr);
+  fill_node_to_var(cnf, nodeToVars, mgr);
+}
+
+CNF ToCNFAIG::adopt(Cnf_Dat_t* cnfData, unsigned nCi, unsigned nCo,
+                    const std::function<int(bool, unsigned)>& objectVar)
+{
+  assert(cnfData != NULL);
+  CNF cnf;
+  cnf.adopt(cnfData, [](void* p) { Cnf_DataFree((Cnf_Dat_t*)p); },
+            cnfData->pClauses, (uint64_t)cnfData->nClauses,
+            (uint64_t)cnfData->nLiterals, (uint32_t)cnfData->nVars, nCi, nCo);
+
+  // -1 is ABC's "this object has no variable" -- a CI outside the cone of the
+  // outputs, or a CO that was asserted rather than named. CNF spells that 0,
+  // for the reason its header gives.
+  const auto var = [](int v) { return v < 0 ? 0u : (uint32_t)v; };
+  for (unsigned i = 0; i < nCi; i++)
+    cnf.mapCi(i, var(objectVar(false, i)));
+  for (unsigned i = 0; i < nCo; i++)
+    cnf.mapCo(i, var(objectVar(true, i)));
+  return cnf;
 }
 
 // ABC's newer CNF generator. It works on a Gia_Man_t, so the AIG is converted
 // first. nLutSize bounds the cuts it considers: larger means a smaller CNF for
 // steeply more work.
-Cnf_Dat_t* ToCNFAIG::derive_cnf_mf(BBNodeManagerAIG& mgr, int nLutSize,
-                                    unsigned namedOutputs)
+CNF ToCNFAIG::derive_cnf_mf(BBNodeManagerAIG& mgr, int nLutSize,
+                            unsigned namedOutputs)
 {
   // The two callers need either a formula (one asserted CO) or a fragment
   // (all COs named). Mf_ManGenerateCnf can express those two forms directly;
@@ -138,36 +157,20 @@ Cnf_Dat_t* ToCNFAIG::derive_cnf_mf(BBNodeManagerAIG& mgr, int nLutSize,
   Cnf_Dat_t* cnfData = (Cnf_Dat_t*)Mf_ManGenerateCnf(
       pGia, nLutSize, 0, assertOutputs, 0, 0);
 
-  // pVarNums comes back indexed by Gia object id, but the users of this class
-  // index it by Aig object id. Rebuild it over the Aig id space for the CIs
-  // and COs they can ask for; everything else stays -1.
-  //
-  // Aig_ManObjNumMax(), not Aig_ManObjNum(): the latter subtracts nDeleted, and
-  // the Aig_ManCleanup() in toCNF() deletes nodes, so ids run past the count of
-  // live objects. Sizing by the count under-allocates by exactly nDeleted, and
-  // fill_node_to_var() then reads off the end of the array.
+  // pVarNums comes back indexed by Gia object id, and the only entries anyone
+  // wants are the CIs' and the COs'. Project those out here; the per-object
+  // array goes with the Cnf_Dat_t.
   //
   // Reading Gia CI ids is safe even though this generator may derive the CNF
   // over a coarsened copy of the Gia (Gia_ManDupMuxes, when fCnfObjIds is 0):
-  // both managers append CIs before any AND node, so CI ids are 1..nCi in each,
-  // and pVarNums is sized by an object count that includes them.
-  const int nAigObjs = Aig_ManObjNumMax(mgr.aigMgr);
-  int* pRemap = ABC_ALLOC(int, nAigObjs);
-  for (int i = 0; i < nAigObjs; i++)
-    pRemap[i] = -1;
-
-  Aig_Obj_t* pCi;
-  int ci;
-  Aig_ManForEachCi(mgr.aigMgr, pCi, ci)
-    pRemap[pCi->Id] = cnfData->pVarNums[Gia_ObjId(pGia, Gia_ManCi(pGia, ci))];
-
-  Aig_Obj_t* pCo;
-  int co;
-  Aig_ManForEachCo(mgr.aigMgr, pCo, co)
-    pRemap[pCo->Id] = cnfData->pVarNums[Gia_ObjId(pGia, Gia_ManCo(pGia, co))];
-
-  ABC_FREE(cnfData->pVarNums);
-  cnfData->pVarNums = pRemap;
+  // both managers append CIs before any AND node, so CI ids are 1..nCi in
+  // each, and pVarNums is sized by an object count that includes them.
+  CNF cnf = adopt(
+      cnfData, (unsigned)Aig_ManCiNum(mgr.aigMgr),
+      (unsigned)Aig_ManCoNum(mgr.aigMgr), [&](bool isCo, unsigned i) {
+        Gia_Obj_t* o = isCo ? Gia_ManCo(pGia, (int)i) : Gia_ManCi(pGia, (int)i);
+        return cnfData->pVarNums[Gia_ObjId(pGia, o)];
+      });
 
   // Mf_ManGenerateCnf leaves pMan pointing at the Gia, cast to Aig_Man_t*.
   // Nothing in STP reads pMan and Cnf_DataFree() does not touch it, so the Gia
@@ -175,15 +178,26 @@ Cnf_Dat_t* ToCNFAIG::derive_cnf_mf(BBNodeManagerAIG& mgr, int nLutSize,
   cnfData->pMan = NULL;
   Gia_ManStop(pGia);
 
-  return cnfData;
+  return cnf;
 }
 
-Cnf_Dat_t* ToCNFAIG::derive_cnf(BBNodeManagerAIG& mgr,
-                                 unsigned namedOutputs)
+CNF ToCNFAIG::derive_cnf(BBNodeManagerAIG& mgr, unsigned namedOutputs)
 {
   assert(namedOutputs <= (unsigned)Aig_ManCoNum(mgr.aigMgr));
+
+  // Every generator below one indexes pVarNums by Aig object id.
+  const auto fromAig = [&](Cnf_Dat_t* d) {
+    return adopt(d, (unsigned)Aig_ManCiNum(mgr.aigMgr),
+                 (unsigned)Aig_ManCoNum(mgr.aigMgr),
+                 [&](bool isCo, unsigned i) {
+                   Aig_Obj_t* o = isCo ? Aig_ManCo(mgr.aigMgr, (int)i)
+                                       : Aig_ManCi(mgr.aigMgr, (int)i);
+                   return d->pVarNums[Aig_ObjId(o)];
+                 });
+  };
+
   if (uf.simple_cnf)
-    return Cnf_DeriveSimple(mgr.aigMgr, (int)namedOutputs);
+    return fromAig(Cnf_DeriveSimple(mgr.aigMgr, (int)namedOutputs));
 
   // AUTO: decide from the size of the AIG about to be converted.
   //
@@ -224,7 +238,7 @@ Cnf_Dat_t* ToCNFAIG::derive_cnf(BBNodeManagerAIG& mgr,
       // Cnf_DeriveSimple buys about 12% off generation time for roughly 1.9x
       // the clauses -- measured on one input at 51.7M clauses against 27.6M
       // here. That trade is not worth a level.
-      return Cnf_DeriveFast(mgr.aigMgr, (int)namedOutputs);
+      return fromAig(Cnf_DeriveFast(mgr.aigMgr, (int)namedOutputs));
 
     case UserDefinedFlags::CNF_EFFORT_LOW:
       return derive_cnf_mf(mgr, 3, namedOutputs);
@@ -248,12 +262,12 @@ Cnf_Dat_t* ToCNFAIG::derive_cnf(BBNodeManagerAIG& mgr,
       Cnf_Dat_t* result =
           Cnf_DeriveWithMan(cnfMan, mgr.aigMgr, (int)namedOutputs);
       Cnf_ManStop(cnfMan);
-      return result;
+      return fromAig(result);
     }
   }
 }
 
-void ToCNFAIG::fill_node_to_var(Cnf_Dat_t* cnfData,
+void ToCNFAIG::fill_node_to_var(const CNF& cnf,
                                 ToSATBase::ASTNodeToSATVar& nodeToVars,
                                 BBNodeManagerAIG& mgr)
 {
@@ -276,7 +290,13 @@ void ToCNFAIG::fill_node_to_var(Cnf_Dat_t* cnfData,
     {
       if (!b[i].IsNull())
       {
-        v[i] = cnfData->pVarNums[mgr.ciObjectId(b[i].symbol_index)];
+        // 0 is CNF's "no variable"; ~0u is this map's, and the two have to be
+        // translated rather than assumed equal. pVarNums said -1, which
+        // became ~0u by the conversion into an unsigned, so nothing here
+        // used to need saying.
+        const uint32_t var = cnf.varOfCi((uint32_t)b[i].symbol_index);
+        if (var != 0)
+          v[i] = var;
       }
     }
 
