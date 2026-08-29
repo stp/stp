@@ -57,7 +57,7 @@ public:
       bb.BBForm(n);
     else
     {
-      std::unordered_set<BBNodeAIG> support;
+      BBNodeSet support;
       bb.BBTerm(n, support);
     }
     return nm.totalNumberOfNodes();

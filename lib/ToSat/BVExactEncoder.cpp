@@ -173,7 +173,13 @@ void encodeNaryLemma(
     cnfToSolver[var] = (*liveVars[i / width])[i % width];
   }
 
-  for (int var = 0; var < cnf->nVars; var++)
+  // From 1: every ABC CNF generator numbers variables from 1 and reports
+  // nVars as one past the last, so index 0 names nothing. Allocating a solver
+  // variable for it, and freezing it, left one unreachable variable in the
+  // live solver per splice. The assertion in the clause loop below is what
+  // holds this: a literal over variable 0 would mean a generator numbered
+  // from 0 after all.
+  for (int var = 1; var < cnf->nVars; var++)
     if (cnfToSolver[var] == ~((unsigned)0))
     {
       const unsigned fresh = solver.newVar();
@@ -187,7 +193,10 @@ void encodeNaryLemma(
     cl.clear();
     for (int *pLit = cnf->pClauses[i], *pStop = cnf->pClauses[i + 1];
          pLit < pStop; pLit++)
+    {
+      assert(((*pLit) >> 1) != 0 && "a CNF generator numbered variables from 0");
       cl.push(SATSolver::mkLit(cnfToSolver[(*pLit) >> 1], ((*pLit) & 1) != 0));
+    }
     solver.addClause(cl);
   }
 
@@ -416,7 +425,13 @@ void BVExactEncoder::encode(SATSolver& solver, const ASTNode& term,
     cnfToSolver[var] = ciVars[i];
   }
 
-  for (int var = 0; var < cnf->nVars; var++)
+  // From 1: every ABC CNF generator numbers variables from 1 and reports
+  // nVars as one past the last, so index 0 names nothing. Allocating a solver
+  // variable for it, and freezing it, left one unreachable variable in the
+  // live solver per splice. The assertion in the clause loop below is what
+  // holds this: a literal over variable 0 would mean a generator numbered
+  // from 0 after all.
+  for (int var = 1; var < cnf->nVars; var++)
     if (cnfToSolver[var] == ~((unsigned)0))
     {
       const unsigned fresh = solver.newVar();
@@ -430,7 +445,10 @@ void BVExactEncoder::encode(SATSolver& solver, const ASTNode& term,
     cl.clear();
     for (int *pLit = cnf->pClauses[i], *pStop = cnf->pClauses[i + 1];
          pLit < pStop; pLit++)
+    {
+      assert(((*pLit) >> 1) != 0 && "a CNF generator numbered variables from 0");
       cl.push(SATSolver::mkLit(cnfToSolver[(*pLit) >> 1], ((*pLit) & 1) != 0));
+    }
     solver.addClause(cl);
   }
 

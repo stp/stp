@@ -63,7 +63,33 @@ using BBNode = BBNodeAIG;
 using BBNodeVec = std::vector<BBNodeAIG>;
 // Alongside the other two rather than inside the class, because
 // BBExactBinaryOp takes one and its callers are outside.
-using BBNodeSet = std::unordered_set<BBNodeAIG>;
+//
+// Insertion-ordered rather than a bare std::unordered_set. Its iteration
+// order reaches the emitted formula in two places -- the support conjunction
+// under --conjoin-to-top, and the combinational-output order BVExactEncoder
+// gives the circuit it splices into a live solver -- and an unordered_set's
+// order is a property of the standard library's bucket policy and of
+// std::hash<BBNodeAIG>, not of the query. So the CNF depended on which
+// library STP was built against. Insertion order depends on the blast alone.
+//
+// The set is small (it holds side conditions, not gates), so the vector is
+// the cheap part; the hash set is only here to keep insert() a set operation.
+class BBNodeSet
+{
+  std::vector<BBNodeAIG> order_;
+  std::unordered_set<BBNodeAIG> seen_;
+
+public:
+  void insert(const BBNodeAIG& n)
+  {
+    if (seen_.insert(n).second)
+      order_.push_back(n);
+  }
+  size_t size() const { return order_.size(); }
+  bool empty() const { return order_.empty(); }
+  std::vector<BBNodeAIG>::const_iterator begin() const { return order_.begin(); }
+  std::vector<BBNodeAIG>::const_iterator end() const { return order_.end(); }
+};
 
 enum class DivLemma;
 enum class RemLemma;
