@@ -16,7 +16,11 @@ get_filename_component(STP_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
 get_filename_component(STP_INCLUDE_DIRS "@CONF_INCLUDE_DIRS@" ABSOLUTE)
 
 
-if ("@USE_CRYPTOMINISAT@" STREQUAL "ON")
+# Only when it came from a CMake package. A CryptoMiniSat this build built
+# itself (rung 3 of cmake/FindCryptoMiniSat.cmake) is named by archive path in
+# the targets file below, like every other dependency built here, and there is
+# no package for a consumer to find.
+if ("@USE_CRYPTOMINISAT@" STREQUAL "ON" AND "@STP_CMS_FROM_PACKAGE@")
     include(CMakeFindDependencyMacro)
     # CryptoMiniSat >= 5.14 installs its bundled CaDiCaL and cadiback as
     # sibling packages, and cryptominisat5Targets.cmake requires imported

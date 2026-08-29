@@ -16,61 +16,37 @@ dep="cms"
 
 cd "${dep_dir}"
 
-# CMS >= 5.14 builds its cadical/cadiback dependencies itself (via CMake
-# FetchContent), so they no longer need to be built here.
+# Built with -DNOCADICAL=ON, so this CryptoMiniSat has no CaDiCaL in it.
 #
-# It also installs them, which matters to anything else using this prefix:
-# ${install_dir} ends up holding a libcadical.a, its headers and its CMake
-# package, none of which have anything to do with the CaDiCaL that
-# the build produces for itself. Three separate things keep the two apart, and
-# each of them had to be arranged:
+# CMS >= 5.14 otherwise fetches cadical and cadiback itself (via CMake
+# FetchContent) and installs them beside itself, and that copy is what the
+# CaDiCaL machinery elsewhere in this tree exists to keep apart from STP's own:
+# a libcadical.a and a cadical/cadical.hpp landing in ${install_dir} under the
+# very names STP uses, plus an imported target named plainly `cadical` that a
+# static libcryptominisat5 puts on libstp's link line -- which the guard after
+# the CryptoMiniSat block in the top-level CMakeLists refuses, because two
+# CaDiCaLs there collide. Fitting both in meant pointing STP at CryptoMiniSat's
+# copy, one version behind (2.1.3 against the rel-3.0.1 this builds), which
+# turns --cadical-factor off.
 #
-#   - The library. CADICAL_DIR pins it with NO_DEFAULT_PATH, so this prefix
-#     cannot supply it -- see the note in cmake/FindCaDiCaL.cmake.
-#   - The header. Pinning the library does nothing for it: the header is found
-#     on the include path, and this prefix puts a cadical/cadical.hpp there
-#     under the very name STP uses. So the include directory goes to the one
-#     file that includes cryptominisat.h and to nothing else -- see the note in
-#     lib/Sat/CMakeLists.txt, and the assertion at the top of
-#     include/stp/Sat/Cadical.h that catches it if that ever lapses.
-#   - The prefix. ${install_dir} defaults to deps/install, which is also
-#     STP_DEP_DIR, and that is the arrangement to avoid when USE_CADICAL is on
-#     as well. Two things go wrong with it, and neither is fixable from the
-#     STP side:
+# NOCADICAL=ON removes the whole question: nothing is fetched, nothing is
+# installed, no `cadical` target exists, and STP links its own pinned CaDiCaL
+# next to a static CryptoMiniSat with no accommodation on either side. It is
+# sound because STP never asks for the one thing CryptoMiniSat wants CaDiCaL
+# for -- backbone extraction, reached only through the "backbone" simplification
+# token or backbone_simpl(), neither of which is in a default schedule or in any
+# STP call. See stp/cryptominisat, branch stp.
 #
-#       * That prefix's include directory is a usage requirement of every
-#         dependency STP builds, so it reaches nearly every compile -- and the
-#         cadical/cadical.hpp installed here then shadows STP's. The two
-#         directories arrive from different targets, so no include order fixes
-#         it; it came out wrong for the unit tests while the library was fine.
-#       * It is on CMAKE_PREFIX_PATH unconditionally, so that the other scripts
-#         here are found without flags, which means STP's own CaDiCaL lookup
-#         finds this copy and stops. CADICAL_DIR pins past that one, but only
-#         that one.
-#
-#     So install elsewhere when both backends are wanted. Trailing arguments
-#     reach CMake, so -DCMAKE_INSTALL_PREFIX overrides the default; ci.yml's
-#     cms-cadical job does that and checks the linked version afterwards.
-#
-# And then the link. Building CMS shared (-DBUILD_SHARED_LIBS=ON) is what makes
-# the combination work, because the bundled CaDiCaL then stays inside
-# libcryptominisat5.so; ci.yml's cms-cadical job does exactly that. A static
-# CryptoMiniSat puts both archives on libstp's link line, which the guard after
-# the CryptoMiniSat block in the top-level CMakeLists refuses -- unless STP is
-# pointed at this prefix's CaDiCaL too, so that there is only one.
-#
-# Note also that the tag below does not pin the bundle: CMS fetches cadical
-# and cadiback from meelgroup's default branches, so which version arrives
-# depends on the day (5.14.7 brought CaDiCaL 2.1.3). cache-key.sh does not
-# track that -- it folds in a revision only for repositories its own scripts
-# clone unpinned -- so a cached deps/install can hold a bundle older than a
-# fresh build would produce. That drift stays inside CryptoMiniSat, which is
-# why it is tolerated rather than chased.
+# That branch is release/v5.14.7 plus the option, so the version is the one
+# this pinned before. cache-key.sh's note about an unpinned meelgroup bundle
+# drifting no longer applies here: there is no bundle.
 
-git clone https://github.com/msoos/cryptominisat "${dep}"
+git clone https://github.com/stp/cryptominisat "${dep}"
 cd "${dep}"
-# We specify the tags/commits for the other repositories, so do for this too
-git checkout release/v5.14.7
+# We specify the tags/commits for the other repositories, so do for this too.
+# The branch is `stp`, as on the other forks in that organisation; this is
+# its head, pinned the way FindMiniSat/FindLibBF/FindABC pin theirs.
+git checkout 261392c4e993f40638392012b689a0a4a7794355
 mkdir build && cd build
 # Build a static (PIC) library. It gets linked into libstp, so the installed
 # stp/libstp do not depend on a libcryptominisat5.so that this script only
@@ -92,7 +68,7 @@ mkdir build && cd build
 # type: pass -DCMAKE_BUILD_TYPE=RelWithDebInfo to get a solver a debugger can
 # see into, at the cost of the archive sizes described above.
 cmake -DENABLE_ASSERTIONS=OFF -DBUILD_SHARED_LIBS=OFF -DSTATIC_BINARY=OFF \
-      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_BUILD_TYPE=Release -DNOCADICAL=ON \
       -DCMAKE_INSTALL_PREFIX:PATH="${install_dir}" "$@" ..
 cmake --build . --parallel "$(nproc)"
 cmake --install .

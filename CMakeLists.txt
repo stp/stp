@@ -1248,7 +1248,26 @@ add_feature_info(CryptoMiniSat USE_CRYPTOMINISAT "Enables CryptoMiniSat solver, 
 # A shared libcryptominisat5 is fine and is not rejected: CMake resolves its
 # private dependencies inside the .so, which exports no CaDiCaL symbols at all,
 # so only the CaDiCaL that CADICAL_DIR names is ever linked or called.
-if (USE_CADICAL AND USE_CRYPTOMINISAT AND TARGET cryptominisat5 AND TARGET cadical)
+# `TARGET cadical` is not the same question as "CryptoMiniSat brings one".
+# cmake/FindCryptoMiniSat.cmake find_package()es cadical unconditionally, to
+# satisfy the imported targets a static CryptoMiniSat's export names -- so the
+# target can equally come from a copy installed on the machine that nothing
+# here ever links. And a CryptoMiniSat built -DNOCADICAL=ON names no CaDiCaL in
+# its export at all. Either way the collision this guards against is decided by
+# what is on CryptoMiniSat's link interface, which is what reaches libstp, and
+# not by which targets happen to be defined.
+set(_cms_brings_cadical FALSE)
+if (TARGET cryptominisat5)
+    get_target_property(_cms_link_iface cryptominisat5 INTERFACE_LINK_LIBRARIES)
+    if (_cms_link_iface MATCHES "cadical|cadiback")
+        set(_cms_brings_cadical TRUE)
+    endif()
+endif()
+
+unset(_cms_link_iface)
+
+if (USE_CADICAL AND USE_CRYPTOMINISAT AND TARGET cryptominisat5 AND TARGET cadical
+    AND _cms_brings_cadical)
     get_target_property(_cms_type cryptominisat5 TYPE)
     if (_cms_type STREQUAL "STATIC_LIBRARY")
         get_target_property(_cms_cadical cadical IMPORTED_LOCATION_RELEASE)
@@ -1317,6 +1336,7 @@ if (USE_CADICAL AND USE_CRYPTOMINISAT AND TARGET cryptominisat5 AND TARGET cadic
         endif()
     endif()
 endif()
+unset(_cms_brings_cadical)
 
 # -----------------------------------------------------------------------------
 # Every backend is optional, but a solver with no SAT backend at all cannot
