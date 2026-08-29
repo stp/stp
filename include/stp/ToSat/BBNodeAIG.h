@@ -136,12 +136,21 @@ public:
 }
 
 namespace std {
+    // The AIG literal: 2*id + complement. Hashing the id alone put x and !x
+    // in the same bucket, which they never are under operator==, so every
+    // set holding both ran at twice the collision rate it needed.
+    //
+    // This is only a hash-quality change. It used to decide the iteration
+    // order of BBNodeSet, and that order reached the emitted CNF -- but
+    // BBNodeSet is insertion-ordered now, so nothing observable depends on
+    // the bucket layout any more.
     template <>
         class hash<stp::BBNodeAIG>{
         public :
             size_t operator()(const stp::BBNodeAIG & node ) const
             {
-                return Aig_Regular(node.n)->Id ;
+                return 2 * (size_t)Aig_Regular(node.n)->Id +
+                       (Aig_IsComplement(node.n) ? 1 : 0);
             }
     };
 }
