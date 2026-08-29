@@ -208,9 +208,7 @@ BBNodeVec BitBlaster::ensureProxyCIs(const ASTNode& node,
         abstractionSourcesOf(bits[i]);
     proxies[i] = nf->CreateFreshInput();
     tagAbstractionSources(proxies[i], sources);
-    Aig_Obj_t* bicond = Aig_Not(orderedAigExor(
-        nf->aigMgr, proxies[i].n, bits[i].n));
-    sideConstraints_.push_back(BBNodeAIG(bicond));
+    sideConstraints_.push_back(nf->CreateNode(IFF, proxies[i], bits[i]));
   }
   nf->symbolToBBNode[node] = proxies;
   return proxies;
@@ -1262,9 +1260,7 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
         // turn the dependency cut into an unlabelled CI.
         tagAbstractionSources(condCI, abstractionSourcesOf(cond));
 
-        Aig_Obj_t* bicond = Aig_Not(orderedAigExor(
-            nf->aigMgr, condCI.n, cond.n));
-        sideConstraints_.push_back(BBNodeAIG(bicond));
+        sideConstraints_.push_back(nf->CreateNode(IFF, condCI, cond));
 
         nf->symbolToBBNode[term] = abstracted;
         abstractedResults_[term] = {id, abstracted};
