@@ -54,6 +54,10 @@ AddSTPGTest(SourceSortMemo_Test.cpp)
 # BBNodeManagerAIG calls ABC through its inline members, and a shared libstp
 # localises ABC's symbols (--exclude-libs), so this links its own copy the
 # way FloatBlast_Test does below.
+# The in-house AIG, compared against ABC's, so it links ABC directly for the
+# same reason the tests below do.
+AddSTPGTest(AIG_Test.cpp)
+target_link_libraries(AIG_TestTests ABC)
 AddSTPGTest(BBNodeManagerAIG_Test.cpp)
 target_link_libraries(BBNodeManagerAIG_TestTests ABC)
 AddSTPGTest(AIGBudget_Test.cpp)
