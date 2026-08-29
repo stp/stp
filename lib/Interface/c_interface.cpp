@@ -3913,7 +3913,6 @@ void vc_Destroy(VC vc)
     b->persist.clear();
   }
 
-  Cnf_ManFree();
   vc_clearDecls(vc);
   retireCContext(vc);
   stp_i->deleteObjects();

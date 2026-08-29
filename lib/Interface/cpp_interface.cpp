@@ -1942,11 +1942,6 @@ void Cpp_interface::getModel()
   cout << ")" << std::endl;
 }
 
-void CNFClearMemory()
-{
-  Cnf_ManFree();
-}
-
 Cpp_interface::SolverFrame::SolverFrame(
     ankerl::unordered_dense::map<std::string, Function>*
         global_function_context,

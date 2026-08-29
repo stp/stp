@@ -32,7 +32,6 @@ THE SOFTWARE.
 namespace stp
 {
 
-THREAD_LOCAL_IE int ToSATAIG::cnf_calls = 0;
 
 bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
                        bool needAbsRef)
@@ -138,15 +137,12 @@ void ToSATAIG::bind_injectivity_guard(SATSolver& satSolver)
 
 void ToSATAIG::release_cnf_memory(Cnf_Dat_t* cnfData)
 {
-  // This releases the memory used by the CNF generator, particularly some data
-  // tables.
-  // If CNF generation is going to be called lots, we'd rather keep it around.
-  // because the datatables are expensive to generate.
-  if (cnf_calls == 0)
-    Cnf_ManFree();
-
+  // Cnf_ManFree() used to be called here on the first conversion, to release
+  // ABC's precomputed clause-cost tables. It only ever freed the manager that
+  // Cnf_Derive() lazily creates, and STP calls Cnf_DeriveWithMan() with a
+  // manager of its own instead -- so ABC's global was always NULL and the call
+  // always a no-op. The counter that guarded it went with it.
   Cnf_DataFree(cnfData);
-  cnf_calls++;
 }
 
 void ToSATAIG::handle_cnf_options(Cnf_Dat_t* cnfData, bool needAbsRef)
@@ -309,9 +305,8 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
     a.id = raw.id;
     a.dependencies = raw.dependencies;
     a.eqNode = raw.eqNode;
-    Aig_Obj_t* pObj = (Aig_Obj_t*)Vec_PtrEntry(
-        mgr.aigMgr->vCis, raw.abstractionCI.symbol_index);
-    a.abstractionSATVar = cnfData->pVarNums[pObj->Id];
+    a.abstractionSATVar =
+        cnfData->pVarNums[mgr.ciObjectId(raw.abstractionCI.symbol_index)];
     a.leftSymbol = raw.leftSymbol;
     a.rightSymbol = raw.rightSymbol;
     a.width = std::max(1u, raw.leftSymbol.GetValueWidth());
@@ -336,9 +331,7 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
     a.width = raw.width;
     if (raw.condCISymbolIndex >= 0)
     {
-      Aig_Obj_t* condObj = (Aig_Obj_t*)Vec_PtrEntry(
-          mgr.aigMgr->vCis, raw.condCISymbolIndex);
-      a.condSATVar = cnfData->pVarNums[condObj->Id];
+      a.condSATVar = cnfData->pVarNums[mgr.ciObjectId(raw.condCISymbolIndex)];
     }
     // The record's own result inputs, resolved the same way the condition
     // above is. The blaster files them for every term family; the persistent
@@ -355,9 +348,7 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
     a.resultSATVars.reserve(raw.resultCISymbolIndices.size());
     for (const int index : raw.resultCISymbolIndices)
     {
-      Aig_Obj_t* resultObj =
-          (Aig_Obj_t*)Vec_PtrEntry(mgr.aigMgr->vCis, index);
-      a.resultSATVars.push_back(cnfData->pVarNums[resultObj->Id]);
+      a.resultSATVars.push_back(cnfData->pVarNums[mgr.ciObjectId(index)]);
     }
     abstraction_.appendTerm(std::move(a));
   }
