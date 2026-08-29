@@ -548,10 +548,47 @@ private:
   // are memoised after an iterative walk; CI provenance never changes after
   // that input is exposed to a parent.
   uint64_t nextAbstractionId_ = 1;
-  std::unordered_map<unsigned, std::vector<BVAbstractionId>>
-      ciAbstractionSources_;
-  std::unordered_map<unsigned, std::vector<BVAbstractionId>>
-      aigAbstractionSourcesMemo_;
+  // Both are indexed by AIG node id, which is dense and never reused within a
+  // manager, so a vector beats a hash map: the second is walked once per
+  // abstracted bit, and this removes a hash from every node of every visit.
+  // An empty entry means "nothing recorded", which is the same answer the
+  // maps gave by not finding the key.
+  std::vector<std::vector<BVAbstractionId>> ciAbstractionSources_;
+  std::vector<std::vector<BVAbstractionId>> aigAbstractionSourcesMemo_;
+  // "this id's union has been computed", which an empty entry cannot say on
+  // its own -- and a node whose cone holds no abstraction has an empty union,
+  // which is the common case because abstraction is off by default. Keeping
+  // this separate from the memo is what stops those cones being re-walked on
+  // every visit. It must live here rather than in the walk: the walk recurses
+  // into itself for the fanins, so a local marker is void at each descent.
+  std::vector<bool> aigAbstractionSourcesComputed_;
+
+  // Grow-on-demand accessors for the two above; `at` returns the empty vector
+  // for an id past the end rather than resizing, so a read never allocates.
+  static const std::vector<BVAbstractionId>& noSources();
+  static const std::vector<BVAbstractionId>&
+  sourcesAt(const std::vector<std::vector<BVAbstractionId>>& table, unsigned id)
+  {
+    return id < table.size() ? table[id] : noSources();
+  }
+  static void setSourcesAt(std::vector<std::vector<BVAbstractionId>>& table,
+                           unsigned id, std::vector<BVAbstractionId> sources)
+  {
+    if (id >= table.size())
+      table.resize(id + 1);
+    table[id] = std::move(sources);
+  }
+  bool aigSourcesComputed(unsigned id) const
+  {
+    return id < aigAbstractionSourcesComputed_.size() &&
+           aigAbstractionSourcesComputed_[id];
+  }
+  void markAigSourcesComputed(unsigned id)
+  {
+    if (id >= aigAbstractionSourcesComputed_.size())
+      aigAbstractionSourcesComputed_.resize(id + 1, false);
+    aigAbstractionSourcesComputed_[id] = true;
+  }
 
   BVAbstractionId newAbstractionId();
   void tagAbstractionSources(const BBNodeAIG& ci,

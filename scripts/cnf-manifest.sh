@@ -27,13 +27,18 @@
 set -u -o pipefail
 
 if [ $# -lt 2 ]; then
-    echo "usage: $0 <stp binary> <corpus directory> [timeout seconds]" >&2
+    echo "usage: $0 <stp binary> <corpus directory> [timeout seconds] [stp arg ...]" >&2
     exit 2
 fi
 
 solver=$(readlink -f "$1")
 corpus=$(readlink -f "$2")
 per_file_timeout=${3:-60}
+# Anything further is handed to stp. The paths this pass touches are mostly
+# off by default -- --aig-core-simplification, --aig-rewrite-passes,
+# --disable-simplifications -- so a manifest taken without them proves nothing
+# about the code they reach.
+if [ $# -gt 3 ]; then shift 3; extra_args=("$@"); else extra_args=(); fi
 
 if [ ! -x "$solver" ]; then
     echo "$0: '$1' is not an executable" >&2
@@ -66,10 +71,15 @@ while IFS= read -r input; do
     rm -rf "$work/run"
     mkdir -p "$work/run"
 
-    if ! (cd "$work/run" && timeout "$per_file_timeout" \
-              "$solver" --array-equality --output-CNF --exit-after-CNF "$input" \
-              >/dev/null 2>&1); then
-        status=$?
+    # Run first and capture the status separately: inside `if ! cmd; then`,
+    # $? is the status of the negation -- always 0 there -- not the command's,
+    # so every timeout used to be recorded as an error.
+    (cd "$work/run" && timeout "$per_file_timeout" \
+         "$solver" --array-equality --output-CNF --exit-after-CNF \
+         ${extra_args+"${extra_args[@]}"} "$input" \
+         >/dev/null 2>&1)
+    status=$?
+    if [ "$status" -ne 0 ]; then
         # 124 is timeout(1) killing it. Anything else is stp declining the
         # input -- an unsupported logic, a deliberate error-path test. Both
         # are recorded rather than skipped: a build that starts timing out, or

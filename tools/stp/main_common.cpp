@@ -360,7 +360,6 @@ int Main::main(int argc, char** argv)
   delete AssertsQuery;
   _empty_ASTVec.clear();
   delete stp;
-  CNFClearMemory();
 
   return 0;
 }

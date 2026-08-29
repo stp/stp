@@ -33,7 +33,7 @@ void ToCNFAIG::dag_aware_aig_rewrite(const bool needAbsRef,
 {
   if (!needAbsRef && uf.AIG_rewrites_iterations)
   {
-    Dar_LibStart();
+    ensureDarLibrary();
     Dar_RwrPar_t Pars, *pPars = &Pars;
     Dar_ManDefaultRwrParams(pPars);
 
@@ -47,7 +47,7 @@ void ToCNFAIG::dag_aware_aig_rewrite(const bool needAbsRef,
     // The rewriting doesn't remove as many nodes of course..
     for (int i = 0; i < uf.AIG_rewrites_iterations; i++)
     {
-      int nodeCount = mgr.aigMgr->nObjs[AIG_OBJ_AND];
+      int nodeCount = mgr.totalNumberOfNodes();
 
       Aig_Man_t* pTemp;
       mgr.aigMgr = Aig_ManDupDfs(pTemp = mgr.aigMgr);
@@ -71,10 +71,10 @@ void ToCNFAIG::dag_aware_aig_rewrite(const bool needAbsRef,
 
       if (uf.stats_flag)
         cerr << "After rewrite [" << i
-             << "]  nodes:" << mgr.aigMgr->nObjs[AIG_OBJ_AND] << endl;
+             << "]  nodes:" << mgr.totalNumberOfNodes() << endl;
 
       //Fixedpoint reached?
-      if (nodeCount == mgr.aigMgr->nObjs[AIG_OBJ_AND])
+      if (nodeCount == mgr.totalNumberOfNodes())
         break;
     }
   }
@@ -101,7 +101,7 @@ void ToCNFAIG::toCNF(const BBNodeAIG& top, Cnf_Dat_t*& cnfData,
 
   if (uf.stats_flag)
   {
-    cerr << "Nodes before AIG rewrite:" << mgr.aigMgr->nObjs[AIG_OBJ_AND]
+    cerr << "Nodes before AIG rewrite:" << mgr.totalNumberOfNodes()
          << endl;
   }
 
@@ -276,9 +276,7 @@ void ToCNFAIG::fill_node_to_var(Cnf_Dat_t* cnfData,
     {
       if (!b[i].IsNull())
       {
-        Aig_Obj_t* pObj;
-        pObj = (Aig_Obj_t*)Vec_PtrEntry(mgr.aigMgr->vCis, b[i].symbol_index);
-        v[i] = cnfData->pVarNums[pObj->Id];
+        v[i] = cnfData->pVarNums[mgr.ciObjectId(b[i].symbol_index)];
       }
     }
 

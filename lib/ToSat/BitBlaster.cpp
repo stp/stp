@@ -103,12 +103,17 @@ BVAbstractionId BitBlaster::newAbstractionId()
   return BVAbstractionId(nextAbstractionId_++);
 }
 
+const std::vector<BVAbstractionId>& BitBlaster::noSources()
+{
+  static const std::vector<BVAbstractionId> empty;
+  return empty;
+}
+
 void BitBlaster::tagAbstractionSources(
     const BBNodeAIG& ci, const std::vector<BVAbstractionId>& sources)
 {
   assert(!ci.IsNull());
-  Aig_Obj_t* regular = Aig_Regular(ci.n);
-  assert(Aig_ObjIsCi(regular));
+  assert(BBNodeManagerAIG::isCI(ci));
 
   std::vector<BVAbstractionId> normalized = sources;
   std::sort(normalized.begin(), normalized.end());
@@ -117,11 +122,11 @@ void BitBlaster::tagAbstractionSources(
   for ([[maybe_unused]] const BVAbstractionId id : normalized)
     assert(id.valid());
 
-  const unsigned aigId = Aig_ObjId(regular);
-  [[maybe_unused]] const auto inserted =
-      ciAbstractionSources_.insert(std::make_pair(aigId, normalized));
-  assert((inserted.second || inserted.first->second == normalized) &&
+  const unsigned aigId = BBNodeManagerAIG::nodeId(ci);
+  assert((sourcesAt(ciAbstractionSources_, aigId).empty() ||
+          sourcesAt(ciAbstractionSources_, aigId) == normalized) &&
          "an AIG input acquired two abstraction provenances");
+  setSourcesAt(ciAbstractionSources_, aigId, std::move(normalized));
 }
 
 std::vector<BVAbstractionId>
@@ -130,53 +135,47 @@ BitBlaster::abstractionSourcesOf(const BBNodeAIG& root)
   if (root.IsNull())
     return {};
 
-  Aig_Obj_t* rootRegular = Aig_Regular(root.n);
-  if (Aig_ObjIsConst1(rootRegular))
+  if (BBNodeManagerAIG::isConstant(root))
     return {};
-  if (Aig_ObjIsCi(rootRegular))
-  {
-    const auto it = ciAbstractionSources_.find(Aig_ObjId(rootRegular));
-    return it == ciAbstractionSources_.end()
-               ? std::vector<BVAbstractionId>()
-               : it->second;
-  }
+  if (BBNodeManagerAIG::isCI(root))
+    return sourcesAt(ciAbstractionSources_, BBNodeManagerAIG::nodeId(root));
 
-  const unsigned rootId = Aig_ObjId(rootRegular);
-  const auto rootMemo = aigAbstractionSourcesMemo_.find(rootId);
-  if (rootMemo != aigAbstractionSourcesMemo_.end())
-    return rootMemo->second;
+  const unsigned rootId = BBNodeManagerAIG::nodeId(root);
+  if (aigSourcesComputed(rootId))
+    return sourcesAt(aigAbstractionSourcesMemo_, rootId);
 
   // Deep input terms reach tens of thousands of AIG levels in practice.
   // Run the recursive two-visit post-order explicitly on the heap, computing
   // each union only after both fanins. Memo hits also collapse shared cones.
-  typedef std::pair<Aig_Obj_t*, bool> PendingAig;
-  std::vector<PendingAig> pending(1, PendingAig(rootRegular, false));
+  typedef std::pair<BBNodeAIG, bool> PendingAig;
+  std::vector<PendingAig> pending(1, PendingAig(root, false));
   while (!pending.empty())
   {
-    Aig_Obj_t* node = Aig_Regular(pending.back().first);
+    const BBNodeAIG node = pending.back().first;
     const bool expanded = pending.back().second;
     pending.pop_back();
-    if (Aig_ObjIsConst1(node) || Aig_ObjIsCi(node) ||
-        aigAbstractionSourcesMemo_.find(Aig_ObjId(node)) !=
-            aigAbstractionSourcesMemo_.end())
+    const unsigned id = BBNodeManagerAIG::nodeId(node);
+    if (BBNodeManagerAIG::isConstant(node) || BBNodeManagerAIG::isCI(node) ||
+        aigSourcesComputed(id))
       continue;
-    assert(Aig_ObjIsAnd(node));
+    assert(BBNodeManagerAIG::isAnd(node));
     if (!expanded)
     {
       pending.push_back(PendingAig(node, true));
-      pending.push_back(PendingAig(Aig_ObjFanin0(node), false));
-      pending.push_back(PendingAig(Aig_ObjFanin1(node), false));
+      pending.push_back(PendingAig(BBNodeManagerAIG::fanin0(node), false));
+      pending.push_back(PendingAig(BBNodeManagerAIG::fanin1(node), false));
       continue;
     }
 
     std::vector<BVAbstractionId> sources =
-        abstractionSourcesOf(BBNodeAIG(Aig_ObjFanin0(node)));
+        abstractionSourcesOf(BBNodeManagerAIG::fanin0(node));
     appendAbstractionSources(
-        sources, abstractionSourcesOf(BBNodeAIG(Aig_ObjFanin1(node))));
-    aigAbstractionSourcesMemo_[Aig_ObjId(node)] = std::move(sources);
+        sources, abstractionSourcesOf(BBNodeManagerAIG::fanin1(node)));
+    setSourcesAt(aigAbstractionSourcesMemo_, id, std::move(sources));
+    markAigSourcesComputed(id);
   }
 
-  return aigAbstractionSourcesMemo_.at(rootId);
+  return sourcesAt(aigAbstractionSourcesMemo_, rootId);
 }
 
 std::vector<BVAbstractionId>
@@ -207,8 +206,7 @@ BBNodeVec BitBlaster::ensureProxyCIs(const ASTNode& node,
   {
     const std::vector<BVAbstractionId> sources =
         abstractionSourcesOf(bits[i]);
-    proxies[i] = BBNodeAIG(Aig_ObjCreateCi(nf->aigMgr));
-    proxies[i].symbol_index = nf->aigMgr->vCis->nSize - 1;
+    proxies[i] = nf->CreateFreshInput();
     tagAbstractionSources(proxies[i], sources);
     Aig_Obj_t* bicond = Aig_Not(orderedAigExor(
         nf->aigMgr, proxies[i].n, bits[i].n));
@@ -1255,12 +1253,10 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
         BBNodeVec abstracted(num_bits);
         for (unsigned i = 0; i < num_bits; i++)
         {
-          abstracted[i] = BBNodeAIG(Aig_ObjCreateCi(nf->aigMgr));
-          abstracted[i].symbol_index = nf->aigMgr->vCis->nSize - 1;
+          abstracted[i] = nf->CreateFreshInput();
           tagAbstractionSources(abstracted[i], {id});
         }
-        BBNodeAIG condCI(Aig_ObjCreateCi(nf->aigMgr));
-        condCI.symbol_index = nf->aigMgr->vCis->nSize - 1;
+        BBNodeAIG condCI = nf->CreateFreshInput();
         // This is an operand proxy, not the ITE abstraction's answer. Keep
         // the condition's producers on it so a future AIG alias does not
         // turn the dependency cut into an unlabelled CI.
@@ -1482,8 +1478,7 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
           BBNodeVec abstracted(num_bits);
           for (unsigned i = 0; i < num_bits; i++)
           {
-            abstracted[i] = BBNodeAIG(Aig_ObjCreateCi(nf->aigMgr));
-            abstracted[i].symbol_index = nf->aigMgr->vCis->nSize - 1;
+            abstracted[i] = nf->CreateFreshInput();
             tagAbstractionSources(abstracted[i], {id});
           }
           uf->coverage.bv_abstracted[UserDefinedFlags::ABSTRACT_PLUS]++;
@@ -1614,8 +1609,7 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
         BBNodeVec abstracted(num_bits);
         for (unsigned i = 0; i < num_bits; i++)
         {
-          abstracted[i] = BBNodeAIG(Aig_ObjCreateCi(nf->aigMgr));
-          abstracted[i].symbol_index = nf->aigMgr->vCis->nSize - 1;
+          abstracted[i] = nf->CreateFreshInput();
           tagAbstractionSources(abstracted[i], {id});
         }
         nf->symbolToBBNode[term] = abstracted;
@@ -1686,8 +1680,7 @@ const BBNodeVec BitBlaster::BBTerm(const ASTNode& _term, BBNodeSet& support,
         BBNodeVec abstracted(num_bits);
         for (unsigned i = 0; i < num_bits; i++)
         {
-          abstracted[i] = BBNodeAIG(Aig_ObjCreateCi(nf->aigMgr));
-          abstracted[i].symbol_index = nf->aigMgr->vCis->nSize - 1;
+          abstracted[i] = nf->CreateFreshInput();
           tagAbstractionSources(abstracted[i], {id});
         }
         nf->symbolToBBNode[term] = abstracted;
@@ -2203,8 +2196,7 @@ const BBNode BitBlaster::BBForm(const ASTNode& form, BBNodeSet& support,
         appendAbstractionSources(dependencies,
                                  abstractionSourcesOf(rightInputs));
         const BVAbstractionId id = newAbstractionId();
-        BBNodeAIG abstractCI(Aig_ObjCreateCi(nf->aigMgr));
-        abstractCI.symbol_index = nf->aigMgr->vCis->nSize - 1;
+        BBNodeAIG abstractCI = nf->CreateFreshInput();
         tagAbstractionSources(abstractCI, {id});
         RawBVEQAbstraction raw;
         raw.id = id;
@@ -2259,8 +2251,7 @@ const BBNode BitBlaster::BBForm(const ASTNode& form, BBNodeSet& support,
           appendAbstractionSources(dependencies,
                                    abstractionSourcesOf(rightInputs));
           const BVAbstractionId id = newAbstractionId();
-          BBNodeAIG abstractCI(Aig_ObjCreateCi(nf->aigMgr));
-          abstractCI.symbol_index = nf->aigMgr->vCis->nSize - 1;
+          BBNodeAIG abstractCI = nf->CreateFreshInput();
           tagAbstractionSources(abstractCI, {id});
 
           RawBVTermAbstraction raw;

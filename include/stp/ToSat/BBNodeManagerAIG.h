@@ -36,9 +36,6 @@ THE SOFTWARE.
 #include "sat/cnf/cnf.h"
 #include "opt/dar/dar.h"
 
-typedef Cnf_Dat_t_ CNFData;
-typedef Aig_Obj_t AIGNode;
-
 namespace stp
 {
 class ASTNode;
@@ -86,6 +83,23 @@ inline Aig_Obj_t* orderedAigMux(Aig_Man_t* p, Aig_Obj_t* pC, Aig_Obj_t* p1,
   return Aig_Or(p, thn, els);
 }
 
+// The DAR 4-input subgraph library is a process-global that costs roughly
+// 150M instructions to build, and all three of its users -- AIG rewriting
+// inside CNF conversion, the exact-encoder's rewrite, and the propositional
+// core simplifier -- share the one copy.
+//
+// It used to have three callers of Dar_LibStart() and a single Dar_LibStop(),
+// so the core simplifier tore down the library the other two were still
+// relying on and the next rewrite re-paid the build. Dar_LibStop() also
+// asserts the library is live, making a second call an abort rather than a
+// no-op. One owner, started on demand and kept for the process: Dar_LibStart()
+// is already idempotent, so the cost is paid once however many callers there
+// are.
+inline void ensureDarLibrary()
+{
+  Dar_LibStart();
+}
+
 // Thrown by BBNodeManagerAIG::checkBudget() when the AND-gate count passes
 // the manager's nodeBudget. Whoever set the budget owns the abandonment
 // policy, so this escapes CreateNode() and every BitBlaster frame above it;
@@ -117,6 +131,68 @@ public:
   int totalNumberOfNodes()
   {
     return aigMgr->nObjs[AIG_OBJ_AND]; // without having removed non-reachable.
+  }
+
+  // --- the interface everything above the manager is allowed to use --------
+  //
+  // These exist so that no caller reaches through `aigMgr` into ABC. That is
+  // not tidiness: BitBlaster cannot be instantiated over a second node
+  // representation while it names Aig_Obj_t directly, and every one of these
+  // is a method that representation would have to provide anyway.
+
+  // A combinational input that stands for no symbol. The BV abstraction
+  // machinery mints these for proxies and for abstracted results, which is
+  // why it does not go through CreateSymbol.
+  BBNodeAIG CreateFreshInput()
+  {
+    BBNodeAIG fresh(Aig_ObjCreateCi(aigMgr));
+    fresh.symbol_index = aigMgr->vCis->nSize - 1;
+    return fresh;
+  }
+
+  // How many combinational inputs exist, and the object id of one of them by
+  // creation order. Callers index Cnf_Dat_t::pVarNums by that id; when the
+  // CNF seam lands they ask the CNF for the variable instead and this goes.
+  //
+  // Positional rather than by node, because dag-aware rewriting replaces the
+  // manager wholesale and only the position in vCis survives it.
+  int ciCount() const { return aigMgr->vCis->nSize; }
+
+  int ciObjectId(int ordinal) const
+  {
+    assert(ordinal >= 0 && ordinal < ciCount());
+    return Aig_ObjId((Aig_Obj_t*)Vec_PtrEntry(aigMgr->vCis, ordinal));
+  }
+
+  BBNodeAIG ciNode(int ordinal) const
+  {
+    assert(ordinal >= 0 && ordinal < ciCount());
+    return BBNodeAIG((Aig_Obj_t*)Vec_PtrEntry(aigMgr->vCis, ordinal));
+  }
+
+  // Node-level queries, all on the uncomplemented node: a literal and its
+  // negation answer these identically.
+  static bool isCI(const BBNodeAIG& n) { return Aig_ObjIsCi(Aig_Regular(n.n)); }
+  static bool isConstant(const BBNodeAIG& n)
+  {
+    return Aig_ObjIsConst1(Aig_Regular(n.n));
+  }
+  static bool isAnd(const BBNodeAIG& n) { return Aig_ObjIsAnd(Aig_Regular(n.n)); }
+  static unsigned nodeId(const BBNodeAIG& n)
+  {
+    return Aig_ObjId(Aig_Regular(n.n));
+  }
+
+  // The fanins of an AND, with the sign stripped. Provenance and traversal
+  // are both sign-insensitive; returning the signed edge here would key two
+  // memo entries per node.
+  static BBNodeAIG fanin0(const BBNodeAIG& n)
+  {
+    return BBNodeAIG(Aig_ObjFanin0(Aig_Regular(n.n)));
+  }
+  static BBNodeAIG fanin1(const BBNodeAIG& n)
+  {
+    return BBNodeAIG(Aig_ObjFanin1(Aig_Regular(n.n)));
   }
 
   // Called after every CreateNode(). A single node can add a whole fan-in

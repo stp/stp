@@ -89,8 +89,6 @@ private:
 
   void init() { first = true; }
 
-  static THREAD_LOCAL_IE int cnf_calls;
-
 public:
   void add_cnf_to_solver(SATSolver& satSolver, Cnf_Dat_t* cnfData);
 

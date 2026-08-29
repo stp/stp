@@ -68,13 +68,13 @@ void rewrite(BBNodeManagerAIG& mgr, int64_t iterations)
   if (iterations <= 0)
     return;
 
-  Dar_LibStart();
+  ensureDarLibrary();
   Dar_RwrPar_t Pars;
   Dar_ManDefaultRwrParams(&Pars);
 
   for (int64_t i = 0; i < iterations; i++)
   {
-    const int before = mgr.aigMgr->nObjs[AIG_OBJ_AND];
+    const int before = mgr.totalNumberOfNodes();
 
     Aig_Man_t* pTemp;
     mgr.aigMgr = Aig_ManDupDfs(pTemp = mgr.aigMgr);
@@ -88,7 +88,7 @@ void rewrite(BBNodeManagerAIG& mgr, int64_t iterations)
     mgr.aigMgr = Aig_ManDupDfs(pTemp = mgr.aigMgr);
     Aig_ManStop(pTemp);
 
-    if (before == mgr.aigMgr->nObjs[AIG_OBJ_AND])
+    if (before == mgr.totalNumberOfNodes())
       break;
   }
 }
@@ -130,8 +130,7 @@ void encodeNaryLemma(
   for (unsigned v = 0; v < inputs.size(); ++v)
     for (unsigned i = 0; i < width; i++)
     {
-      inputs[v][i] = BBNodeAIG(Aig_ObjCreateCi(mgr.aigMgr));
-      inputs[v][i].symbol_index = mgr.aigMgr->vCis->nSize - 1;
+      inputs[v][i] = mgr.CreateFreshInput();
     }
 
   BBNodeSet support;
@@ -168,7 +167,7 @@ void encodeNaryLemma(
   std::vector<unsigned> cnfToSolver(cnf->nVars, ~((unsigned)0));
   for (unsigned i = 0; i < liveVars.size() * width; ++i)
   {
-    const int var = cnf->pVarNums[Aig_ManCi(mgr.aigMgr, (int)i)->Id];
+    const int var = cnf->pVarNums[mgr.ciObjectId((int)i)];
     if (var < 0)
       continue;
     cnfToSolver[var] = (*liveVars[i / width])[i % width];
@@ -365,8 +364,7 @@ void BVExactEncoder::encode(SATSolver& solver, const ASTNode& term,
         operands[op][i] = bit != 0 ? mgr.getTrue() : mgr.getFalse();
         continue;
       }
-      operands[op][i] = BBNodeAIG(Aig_ObjCreateCi(mgr.aigMgr));
-      operands[op][i].symbol_index = mgr.aigMgr->vCis->nSize - 1;
+      operands[op][i] = mgr.CreateFreshInput();
       ciVars.push_back((*opVars[op])[i]);
     }
 
@@ -410,7 +408,7 @@ void BVExactEncoder::encode(SATSolver& solver, const ASTNode& term,
 
   for (unsigned i = 0; i < ciVars.size(); i++)
   {
-    const int var = cnf->pVarNums[Aig_ManCi(mgr.aigMgr, (int)i)->Id];
+    const int var = cnf->pVarNums[mgr.ciObjectId((int)i)];
     // An input the circuit never reads is given no variable, and needs
     // none: nothing the CNF says mentions it.
     if (var < 0)

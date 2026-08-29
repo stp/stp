@@ -3750,8 +3750,7 @@ struct IncrementalSolver::Impl
   // where a later simplification kept the record but not the cone.
   unsigned abstractionVarOf(int ciSymbolIndex)
   {
-    Aig_Obj_t* ci = (Aig_Obj_t*)Vec_PtrEntry(
-        encoding.nodes().aigMgr->vCis, ciSymbolIndex);
+    Aig_Obj_t* ci = encoding.nodes().ciNode(ciSymbolIndex).n;
     ensureEncoded(ci);
     return (unsigned)varOfAig(ci);
   }
