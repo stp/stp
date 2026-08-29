@@ -49,7 +49,8 @@ class ToCNFTseitin
 public:
   explicit ToCNFTseitin(UserDefinedFlags& _uf) : uf(_uf) {}
 
-  // Same shape as ToCNFAIG::toCNF so that one templated body drives either.
+  // The same signature as ToCNFAIG::toCNF, so one templated body drives
+  // either.
   //
   // needAbsRef is taken and ignored. It exists on the ABC side to suppress
   // Aig_ManCleanup, because a cleanup renumbers and refinement has to be able

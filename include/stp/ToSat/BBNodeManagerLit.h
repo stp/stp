@@ -259,9 +259,9 @@ public:
 
 private:
   // A two-input gate takes two operands, so a wide one becomes a log-height
-  // tower. Same shape as BBNodeManagerAIG::makeTower -- front two off, result
-  // to the back -- because the shape decides which operands share subterms
-  // and so decides the gate count.
+  // tower. Built the same way as BBNodeManagerAIG::makeTower -- front two
+  // off, result to the back -- because which operands end up paired decides
+  // which subterms are shared, and so decides the gate count.
   aig::Lit tower(aig::Lit (aig::Manager::*op)(aig::Lit, aig::Lit),
                  const std::vector<BBNodeLit>& children)
   {
