@@ -23,6 +23,7 @@
 #include <gtest/gtest.h>
 
 #include <cstdint>
+#include <cstdlib>
 #include <random>
 #include <sstream>
 #include <vector>
@@ -520,7 +521,8 @@ TEST(Tseitin, IsDeterministic)
   }
 }
 
-// The DIMACS header names the highest variable, not one past it.
+// The DIMACS file is byte-compatible with the one Cnf_DataWriteIntoFile()
+// wrote, including its habit of numbering variables one above the formula's.
 TEST(Tseitin, WritesDimacs)
 {
   aig::Manager m;
@@ -531,19 +533,30 @@ TEST(Tseitin, WritesDimacs)
   std::ostringstream out;
   cnf.writeDimacs(out);
 
-  std::istringstream in(out.str());
+  const std::string text = out.str();
+  ASSERT_EQ(text.compare(0, 1, "c"), 0) << "the banner line is part of the format";
+
+  std::istringstream in(text.substr(text.find('\n') + 1));
   std::string p, fmt;
   int vars = 0, clauses = 0;
   in >> p >> fmt >> vars >> clauses;
   EXPECT_EQ(p, "p");
   EXPECT_EQ(fmt, "cnf");
-  EXPECT_EQ(vars, static_cast<int>(cnf.varCount()) - 1);
+  EXPECT_EQ(vars, static_cast<int>(cnf.varCount()));
   EXPECT_EQ(clauses, static_cast<int>(cnf.clauseCount()));
 
   unsigned terminators = 0;
   int token = 0;
   while (in >> token)
+  {
     if (token == 0)
       terminators++;
+    else
+    {
+      // Variables are one above the formula's, so 1 is never named.
+      EXPECT_GE(std::abs(token), 2);
+      EXPECT_LE(std::abs(token), static_cast<int>(cnf.varCount()));
+    }
+  }
   EXPECT_EQ(terminators, cnf.clauseCount());
 }

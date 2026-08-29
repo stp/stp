@@ -27,6 +27,7 @@ THE SOFTWARE.
 #include "stp/UninterpretedFunctions/UFContext.h"
 #include "stp/Simplifier/Simplifier.h"
 #include "stp/Simplifier/constantBitP/ConstantBitPropagation.h"
+#include <fstream>
 #include <sstream>
 
 namespace stp
@@ -73,24 +74,30 @@ bool ToSATAIG::CallSAT(SATSolver& satSolver, const ASTNode& input,
   }
 
   first = false;
-  Cnf_Dat_t* cnfData = bitblast(input, needAbsRef);
+  CNF cnf;
 
-  // Only an exhausted AIG budget returns NULL: the query has no answer, and
+  // Only an exhausted AIG budget returns false: the query has no answer, and
   // `false` alone would be read as UNSAT. Raising the soft-timeout flag is
   // what makes CallSAT_ResultCheck report SOLVER_UNKNOWN instead -- it tests
   // that flag before it tests this return value.
-  if (cnfData == NULL)
+  if (!bitblast(input, needAbsRef, cnf))
   {
     bm->soft_timeout_expired = true;
     return false;
   }
 
-  handle_cnf_options(cnfData, needAbsRef);
+  handle_cnf_options(cnf, needAbsRef);
 
   assert(satSolver.nVars() == 0);
-  add_cnf_to_solver(satSolver, cnfData);
+  add_cnf_to_solver(satSolver, cnf);
 
-  release_cnf_memory(cnfData);
+  // The clauses are in the solver now; give the formula back before the
+  // search allocates. Cnf_ManFree() used to be called here too, to release
+  // ABC's precomputed clause-cost tables -- it only ever freed the manager
+  // that Cnf_Derive() lazily creates, and STP calls Cnf_DeriveWithMan() with
+  // a manager of its own instead, so ABC's global was always NULL and the
+  // call always a no-op.
+  cnf.clear();
 
   mark_variables_as_frozen(satSolver);
   bind_injectivity_guard(satSolver);
@@ -135,17 +142,7 @@ void ToSATAIG::bind_injectivity_guard(SATSolver& satSolver)
   satSolver.addClause(unit);
 }
 
-void ToSATAIG::release_cnf_memory(Cnf_Dat_t* cnfData)
-{
-  // Cnf_ManFree() used to be called here on the first conversion, to release
-  // ABC's precomputed clause-cost tables. It only ever freed the manager that
-  // Cnf_Derive() lazily creates, and STP calls Cnf_DeriveWithMan() with a
-  // manager of its own instead -- so ABC's global was always NULL and the call
-  // always a no-op. The counter that guarded it went with it.
-  Cnf_DataFree(cnfData);
-}
-
-void ToSATAIG::handle_cnf_options(Cnf_Dat_t* cnfData, bool needAbsRef)
+void ToSATAIG::handle_cnf_options(const CNF& cnf, bool needAbsRef)
 {
   // What makes this CNF partial, named so a reader can act on it.
   //
@@ -181,8 +178,15 @@ void ToSATAIG::handle_cnf_options(Cnf_Dat_t* cnfData, bool needAbsRef)
   {
     std::stringstream fileName;
     fileName << "output_" << bm->CNFFileNameCounter++ << ".cnf";
-    Cnf_DataWriteIntoFile(cnfData, (char*)fileName.str().c_str(), 0,0,0);
-    sayWhyPartial("the CNF written by --output-CNF");
+    std::ofstream out(fileName.str().c_str());
+    if (!out)
+      cerr << "Warning: could not open " << fileName.str() << " for writing."
+           << endl;
+    else
+    {
+      cnf.writeDimacs(out);
+      sayWhyPartial("the CNF written by --output-CNF");
+    }
   }
 
   if (bm->UserFlags.exit_after_CNF)
@@ -207,7 +211,7 @@ void ToSATAIG::handle_cnf_options(Cnf_Dat_t* cnfData, bool needAbsRef)
   }
 }
 
-Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
+bool ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef, CNF& cnf)
 {
   stp::SubstitutionMap sm(bm);
   Simplifier simp(bm, &sm);
@@ -282,7 +286,7 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
     cb = NULL;
     bb.cb = NULL;
     mgr.stop();
-    return NULL;
+    return false;
   }
 
   bm->GetRunTimes()->stop(RunTimes::BitBlasting);
@@ -292,9 +296,18 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
   bb.cb = NULL;
 
   bm->GetRunTimes()->start(RunTimes::CNFConversion);
-  Cnf_Dat_t* cnfData = NULL;
-  toCNF.toCNF(BBFormula, cnfData, nodeToSATVar, needAbsRef, mgr);
+  toCNF.toCNF(BBFormula, cnf, nodeToSATVar, needAbsRef, mgr);
   bm->GetRunTimes()->stop(RunTimes::CNFConversion);
+
+  // The abstraction records below name their combinational inputs by ordinal,
+  // which is what the CI projection is indexed by. 0 is CNF's "no variable"
+  // and BV_ABSTRACTION_NO_VAR is theirs; pVarNums said -1, which became the
+  // latter by the conversion into an unsigned, so the translation used to be
+  // invisible.
+  const auto satVarOfCi = [&cnf](int ordinal) {
+    const uint32_t v = cnf.varOfCi((uint32_t)ordinal);
+    return v == 0 ? BV_ABSTRACTION_NO_VAR : v;
+  };
 
   // Record what each abstraction stands for, now that CNF conversion has
   // assigned the SAT variable its combinational input carries. Refinement
@@ -305,8 +318,7 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
     a.id = raw.id;
     a.dependencies = raw.dependencies;
     a.eqNode = raw.eqNode;
-    a.abstractionSATVar =
-        cnfData->pVarNums[mgr.ciObjectId(raw.abstractionCI.symbol_index)];
+    a.abstractionSATVar = satVarOfCi(raw.abstractionCI.symbol_index);
     a.leftSymbol = raw.leftSymbol;
     a.rightSymbol = raw.rightSymbol;
     a.width = std::max(1u, raw.leftSymbol.GetValueWidth());
@@ -331,7 +343,7 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
     a.width = raw.width;
     if (raw.condCISymbolIndex >= 0)
     {
-      a.condSATVar = cnfData->pVarNums[mgr.ciObjectId(raw.condCISymbolIndex)];
+      a.condSATVar = satVarOfCi(raw.condCISymbolIndex);
     }
     // The record's own result inputs, resolved the same way the condition
     // above is. The blaster files them for every term family; the persistent
@@ -348,7 +360,7 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
     a.resultSATVars.reserve(raw.resultCISymbolIndices.size());
     for (const int index : raw.resultCISymbolIndices)
     {
-      a.resultSATVars.push_back(cnfData->pVarNums[mgr.ciObjectId(index)]);
+      a.resultSATVars.push_back(satVarOfCi(index));
     }
     abstraction_.appendTerm(std::move(a));
   }
@@ -357,23 +369,23 @@ Cnf_Dat_t* ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef)
   BBFormula = BBNodeAIG(); // null node
   mgr.stop();
 
-  return cnfData;
+  return true;
 }
 
-void ToSATAIG::add_cnf_to_solver(SATSolver& satSolver, Cnf_Dat_t* cnfData)
+void ToSATAIG::add_cnf_to_solver(SATSolver& satSolver, const CNF& cnf)
 {
   bm->GetRunTimes()->start(RunTimes::SendingToSAT);
 
   // Create a new sat variable for each of the variables in the CNF.
   int satV = satSolver.nVars();
-  for (int i = 0; i < cnfData->nVars - satV; i++)
+  for (int i = 0; i < (int)cnf.varCount() - satV; i++)
     satSolver.newVar();
 
   SATSolver::vec_literals satSolverClause;
-  for (int i = 0; i < cnfData->nClauses; i++)
+  for (uint64_t i = 0; i < cnf.clauseCount(); i++)
   {
     satSolverClause.clear();
-    for (int *pLit = cnfData->pClauses[i], *pStop = cnfData->pClauses[i + 1];
+    for (const int *pLit = cnf.clauseBegin(i), *pStop = cnf.clauseEnd(i);
          pLit < pStop; pLit++)
     {
       uint32_t var = (*pLit) >> 1;

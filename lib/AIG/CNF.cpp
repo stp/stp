@@ -32,9 +32,7 @@ namespace stp
 void CNF::begin(uint32_t nVars, uint64_t nClauses, uint64_t nLiterals,
                 uint32_t nCi, uint32_t nCo)
 {
-  lits_.clear();
-  offsets_.clear();
-  emptyClause_ = false;
+  discard();
 
   nVars_ = nVars;
   expectedClauses_ = nClauses;
@@ -52,29 +50,101 @@ void CNF::begin(uint32_t nVars, uint64_t nClauses, uint64_t nLiterals,
 
 void CNF::end()
 {
-  assert(clauseCount() == expectedClauses_);
-  assert(literalCount() == expectedLiterals_);
-  (void)expectedClauses_;
-  (void)expectedLiterals_;
+  assert(nClauses_ == expectedClauses_);
+  assert(nLiterals_ == expectedLiterals_);
 }
 
-// DIMACS numbers variables 1..N, which is ours minus the variable 0 that does
-// not exist -- so N is one less than varCount(), not equal to it. ABC writes
-// its nVars here and therefore declares one variable more than it uses; that
-// is harmless but it is not the file the formula asks for.
+void CNF::adopt(void* owner, void (*release)(void*), const int* const* clauses,
+                uint64_t nClauses, uint64_t nLiterals, uint32_t nVars,
+                uint32_t nCi, uint32_t nCo)
+{
+  discard();
+
+  adopted_ = clauses;
+  owner_ = owner;
+  release_ = release;
+  nClauses_ = nClauses;
+  nLiterals_ = nLiterals;
+  nVars_ = nVars;
+  ciVar_.assign(nCi, 0);
+  coVar_.assign(nCo, 0);
+}
+
+void CNF::discard()
+{
+  if (release_ != nullptr)
+    release_(owner_);
+  adopted_ = nullptr;
+  owner_ = nullptr;
+  release_ = nullptr;
+
+  // Actually give the memory back rather than clearing: a CNF is reset only
+  // when it is about to hold a different formula, and the two must not be
+  // resident at once.
+  std::vector<int>().swap(lits_);
+  std::vector<uint64_t>().swap(offsets_);
+  ciVar_.clear();
+  coVar_.clear();
+
+  nClauses_ = 0;
+  nLiterals_ = 0;
+  expectedClauses_ = 0;
+  expectedLiterals_ = 0;
+  nVars_ = 1;
+  emptyClause_ = false;
+}
+
+void CNF::steal(CNF& o)
+{
+  lits_ = std::move(o.lits_);
+  offsets_ = std::move(o.offsets_);
+  adopted_ = o.adopted_;
+  owner_ = o.owner_;
+  release_ = o.release_;
+  ciVar_ = std::move(o.ciVar_);
+  coVar_ = std::move(o.coVar_);
+  nClauses_ = o.nClauses_;
+  nLiterals_ = o.nLiterals_;
+  expectedClauses_ = o.expectedClauses_;
+  expectedLiterals_ = o.expectedLiterals_;
+  nVars_ = o.nVars_;
+  emptyClause_ = o.emptyClause_;
+
+  // The source must not free what we now own.
+  o.adopted_ = nullptr;
+  o.owner_ = nullptr;
+  o.release_ = nullptr;
+  o.nClauses_ = 0;
+  o.nLiterals_ = 0;
+  o.nVars_ = 1;
+  o.emptyClause_ = false;
+}
+
+// Byte for byte what Cnf_DataWriteIntoFile() produced, because --output-CNF
+// is a user-facing file and an internal reshuffle is no reason for it to
+// change -- and because CNF byte-identity across a refactor is only evidence
+// if the bytes are of the formula rather than of the writer.
+//
+// Two things are ABC's rather than ours, and are kept deliberately. The
+// banner names the package that used to write this. And the variable numbers
+// are one *above* the formula's, so a file declaring N variables uses 2..N
+// and leaves 1 unused: ABC numbered from 1 internally and then added another
+// 1 on the way out. Both are worth revisiting when the ABC generators go, and
+// neither before.
 void CNF::writeDimacs(std::ostream& out) const
 {
-  out << "p cnf " << (nVars_ == 0 ? 0 : nVars_ - 1) << ' ' << clauseCount()
-      << '\n';
+  out << "c Result of efficient AIG-to-CNF conversion using package CNF\n";
+  out << "p cnf " << nVars_ << ' ' << clauseCount() << '\n';
   for (uint64_t i = 0, n = clauseCount(); i < n; i++)
   {
     for (const int *p = clauseBegin(i), *stop = clauseEnd(i); p < stop; p++)
     {
-      const int var = *p >> 1;
+      const int var = (*p >> 1) + 1;
       out << ((*p & 1) ? -var : var) << ' ';
     }
     out << "0\n";
   }
+  out << '\n';
 }
 
 } // namespace stp

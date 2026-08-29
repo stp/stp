@@ -654,7 +654,7 @@ int getDifficulty(const ASTNode& n_)
 
   clearSAT();
 
-  Cnf_Dat_t* cnfData = NULL;
+  CNF cnfData;
   ToCNFAIG toCNF(mgr->UserFlags);
   ToSATBase::ASTNodeToSATVar nodeToSATVar;
   toCNF.toCNF(BBFormula, cnfData, nodeToSATVar, false, nm);
@@ -668,14 +668,15 @@ int getDifficulty(const ASTNode& n_)
   {
     // Create a new sat variable for each of the variables in the CNF.
     assert(ss->nVars() == 0);
-    for (int i = 0; i < cnfData->nVars; i++)
+    for (uint32_t i = 0; i < cnfData.varCount(); i++)
       ss->newVar();
 
     SATSolver::vec_literals satSolverClause;
-    for (int i = 0; i < cnfData->nClauses; i++)
+    for (uint64_t i = 0; i < cnfData.clauseCount(); i++)
     {
       satSolverClause.clear();
-      for (int *pLit = cnfData->pClauses[i], *pStop = cnfData->pClauses[i + 1];
+      for (const int *pLit = cnfData.clauseBegin(i),
+                     *pStop = cnfData.clauseEnd(i);
            pLit < pStop; pLit++)
       {
         uint32_t var = (*pLit) >> 1;
@@ -693,17 +694,15 @@ int getDifficulty(const ASTNode& n_)
 
     // Why we go to all this trouble. The number of clauses.
     score = ss->nClauses();
-    assert(score <= cnfData->nClauses);
+    assert(score <= (int)cnfData.clauseCount());
   }
   else
   {
-    score = cnfData->nClauses;
+    score = (int)cnfData.clauseCount();
   }
   //////////////
 
-  // Cnf_ClearMemory();
-  Cnf_DataFree(cnfData);
-  cnfData = NULL;
+  cnfData.clear();
 
   // Free the memory in the AIGs.
   BBFormula = BBNodeAIG(); // null node
