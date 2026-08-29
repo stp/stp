@@ -28,8 +28,10 @@ RUN apt-get update \
         zlib1g-dev \
  && rm -rf /var/lib/apt/lists/*
 
-# Build CryptoMiniSat, at the release scripts/deps/setup-cms.sh pins and with
-# the flags it uses -- that is the combination CI exercises.
+# Build CryptoMiniSat, at the commit cmake/FindCryptoMiniSat.cmake pins and
+# with the flags it uses -- that is the combination CI exercises. Built here
+# rather than left to the build's own ExternalProject so that this stage is
+# cached separately from the STP compile below.
 #
 # BUILD_SHARED_LIBS=OFF rather than STATICCOMPILE=ON: 5.14 removed
 # STATICCOMPILE, and BUILD_SHARED_LIBS defaults to ON, so asking the old way
@@ -37,19 +39,21 @@ RUN apt-get update \
 # carry. STATIC_BINARY=OFF because only the library is wanted here; a fully
 # static cryptominisat5 executable would need static gmp and zlib.
 #
-# 5.14 fetches and builds its own CaDiCaL and cadiback, which is why git and
-# ca-certificates matter to this stage too, and it looks GMP up through
-# pkg-config, which is why that is in the package list. Its CaDiCaL is not a
-# second copy: USE_CADICAL is off below, so this image has exactly one.
+# NOCADICAL=ON, so 5.14 fetches and builds neither CaDiCaL nor cadiback: STP
+# reaches backbone extraction, the only thing CryptoMiniSat wants CaDiCaL for,
+# from nowhere. git and ca-certificates are still needed for the clone itself,
+# and GMP is looked up through pkg-config, which is why that is in the package
+# list above.
 WORKDIR /cms
-RUN git clone --depth 1 --branch release/v5.14.7 \
-        https://github.com/msoos/cryptominisat . \
+RUN git clone https://github.com/stp/cryptominisat . \
+ && git checkout 261392c4e993f40638392012b689a0a4a7794355 \
  && mkdir build && cd build \
  && cmake .. \
         -DCMAKE_BUILD_TYPE=Release \
         -DENABLE_ASSERTIONS=OFF \
         -DBUILD_SHARED_LIBS=OFF \
         -DSTATIC_BINARY=OFF \
+        -DNOCADICAL=ON \
  && cmake --build . \
  && cmake --install .
 

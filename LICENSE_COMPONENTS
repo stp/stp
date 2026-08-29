@@ -251,7 +251,7 @@ CryptoMiniSat
 	licensed or compatible (see the copyright headers.)
 
 	[STP note: STP links the CryptoMiniSat library, which is the MIT licensed
-	part, and scripts/deps/setup-cms.sh does not build it with Bliss. The MIT
+	part, and STP does not build it with Bliss. The MIT
 	terms are reproduced here; for the GPLv2 text covering the parts STP does
 	not link, see the LICENSE.txt of a CryptoMiniSat checkout.]
 

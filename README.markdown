@@ -16,17 +16,16 @@ sudo apt-get install git build-essential cmake bison flex python3 \
                      libgmp-dev pkg-config zlib1g-dev
 git clone https://github.com/stp/stp
 cd stp
-./scripts/deps/setup-cms.sh
 ./configure.sh --auto-download
 cmake --build build -j$(nproc)
 sudo cmake --install build
 ```
 
-[CryptoMiniSat](https://github.com/msoos/cryptominisat) is the backend STP solves with by default, and the one dependency `--auto-download` does not cover -- it reaches the build as a CMake package rather than as a header and a library, which an ExternalProject would only write after the configure that has to read it. `setup-cms.sh` builds the release CI pins and installs it into `deps/`, inside the checkout and without root; the configure below finds it there with nothing said. `libgmp-dev`, `pkg-config` and `zlib1g-dev` are its packages, not STP's.
+[CryptoMiniSat](https://github.com/msoos/cryptominisat) is the backend STP solves with by default, and `--auto-download` covers it like every other dependency: STP clones and builds [stp/cryptominisat](https://github.com/stp/cryptominisat) at a pinned commit. An installed one is found and preferred. `libgmp-dev`, `pkg-config` and `zlib1g-dev` are its packages, not STP's.
 
-Leaving that line out is fine and still gives a working solver: [CaDiCaL](https://github.com/arminbiere/cadical) is compiled in whatever else is present, and is what a build without CryptoMiniSat solves with. `--cryptominisat`, `--cadical` or `--minisat` selects a compiled-in backend for one run.
+[CaDiCaL](https://github.com/arminbiere/cadical) is compiled in alongside it, and is what a build without CryptoMiniSat solves with. `--cryptominisat`, `--cadical` or `--minisat` selects a compiled-in backend for one run.
 
-CryptoMiniSat installs a CaDiCaL of its own beside itself, and STP uses that one rather than the newer revision it pins, so `--cadical-factor` detects the older version and turns itself off. Nothing else changes. To have both -- CryptoMiniSat and the CaDiCaL STP pins -- give CryptoMiniSat a prefix of its own, which [Building STP](https://stp.github.io/stp/building.html) covers in two extra arguments.
+STP builds CryptoMiniSat with `-DNOCADICAL=ON`, so it bundles no CaDiCaL of its own and STP links the revision it pins -- which is what keeps `--cadical-factor` available. That option removes only backbone extraction, which STP never asks for.
 
 There are no submodules: `--auto-download` fetches every dependency at a pinned revision and builds it with this build's own compiler and flags. Without it, configuration stops and says what to install or where to point it -- nothing here reaches the network unless it is asked to.
 

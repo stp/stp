@@ -89,15 +89,6 @@ runs:
       path: deps/install
       key: deps-x86_64-static-cms-${{ steps.deps-key.outputs.key }}
 
-  # The script needs no argument here: it already builds a static (PIC)
-  # CryptoMiniSat in Release, which is what a static STP links against and
-  # what gets folded into a shared libstp otherwise.
-  - name: Dependencies
-    if: steps.deps-cache.outputs.cache-hit != 'true'
-    shell: bash
-    run: |
-      ./scripts/deps/setup-cms.sh
-
   # Keyed by build type as well: the two differ in optimisation level and in
   # whether NDEBUG is defined, so they share no compilations. One key would
   # have them evicting each other's entries inside the 800M budget while
@@ -143,7 +134,7 @@ runs:
       if [ -n "$BUILD_TYPE" ]; then
         args+=("-DCMAKE_BUILD_TYPE=$BUILD_TYPE")
       fi
-      cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DSTATICCOMPILE:BOOL=ON -Dcryptominisat5_DIR:PATH="$GITHUB_WORKSPACE/deps/install/lib/cmake/cryptominisat5" -DUSE_CRYPTOMINISAT:STRING=ON -DUSE_CADICAL:BOOL=OFF -DWERROR:BOOL="$WERROR" "${args[@]}" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+      cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DSTATICCOMPILE:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=ON -DUSE_CADICAL:BOOL=OFF -DWERROR:BOOL="$WERROR" "${args[@]}" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
   - name: Build
     id: build

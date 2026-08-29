@@ -112,7 +112,7 @@ jobs:
         build-type: Release
         werror: 'OFF'
 
-    # Stripped: worth ~1.7M (24M -> 22M) now that setup-cms.sh builds the
+    # Stripped: worth ~1.7M (24M -> 22M) now that the build builds the
     # solver stack in Release, which is where the bulk of the debug info used
     # to come from. Kept because it still removes the symbol table, and
     # because a release asset has no use for either.
