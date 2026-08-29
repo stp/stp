@@ -61,6 +61,10 @@ target_link_libraries(AIG_TestTests ABC)
 # The Tseitin writer over that AIG. Needs no ABC: it checks the CNF against
 # the circuit it came from, by simulation and unit propagation.
 AddSTPGTest(Tseitin_Test.cpp)
+# The blaster over its second backend, compared against its first by
+# simulating both circuits, so this one links ABC.
+AddSTPGTest(BitBlasterLit_Test.cpp)
+target_link_libraries(BitBlasterLit_TestTests ABC)
 AddSTPGTest(BBNodeManagerAIG_Test.cpp)
 target_link_libraries(BBNodeManagerAIG_TestTests ABC)
 AddSTPGTest(AIGBudget_Test.cpp)

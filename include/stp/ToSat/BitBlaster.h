@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/constantBitP/MultiplicationStats.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
+#include "stp/ToSat/BBNodeManagerLit.h"
 #include "stp/ToSat/BVAbstractionTypes.h"
 #include "stp/Util/DagWalk.h"
 #include <cassert>
@@ -835,6 +836,11 @@ public:
 using BitBlasterAIG = BitBlaster<BBNodeAIG, BBNodeManagerAIG>;
 using BBNodeVecAIG = std::vector<BBNodeAIG>;
 using BBNodeSetAIG = BBNodeOrderedSet<BBNodeAIG>;
+
+// The second, over the in-house AIG.
+using BitBlasterLit = BitBlaster<BBNodeLit, BBNodeManagerLit>;
+using BBNodeVecLit = std::vector<BBNodeLit>;
+using BBNodeSetLit = BBNodeOrderedSet<BBNodeLit>;
 
 } // end of namespace
 

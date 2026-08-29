@@ -118,7 +118,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::tagAbstractionSources(
     const BBNode& ci, const std::vector<BVAbstractionId>& sources)
 {
   assert(!ci.IsNull());
-  assert(BBNodeManagerT::isCI(ci));
+  assert(nf->isCI(ci));
 
   std::vector<BVAbstractionId> normalized = sources;
   std::sort(normalized.begin(), normalized.end());
@@ -127,7 +127,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::tagAbstractionSources(
   for ([[maybe_unused]] const BVAbstractionId id : normalized)
     assert(id.valid());
 
-  const unsigned aigId = BBNodeManagerT::nodeId(ci);
+  const unsigned aigId = nf->nodeId(ci);
   assert((sourcesAt(ciAbstractionSources_, aigId).empty() ||
           sourcesAt(ciAbstractionSources_, aigId) == normalized) &&
          "an AIG input acquired two abstraction provenances");
@@ -141,12 +141,12 @@ BitBlaster<BBNode, BBNodeManagerT>::abstractionSourcesOf(const BBNode& root)
   if (root.IsNull())
     return {};
 
-  if (BBNodeManagerT::isConstant(root))
+  if (nf->isConstant(root))
     return {};
-  if (BBNodeManagerT::isCI(root))
-    return sourcesAt(ciAbstractionSources_, BBNodeManagerT::nodeId(root));
+  if (nf->isCI(root))
+    return sourcesAt(ciAbstractionSources_, nf->nodeId(root));
 
-  const unsigned rootId = BBNodeManagerT::nodeId(root);
+  const unsigned rootId = nf->nodeId(root);
   if (aigSourcesComputed(rootId))
     return sourcesAt(aigAbstractionSourcesMemo_, rootId);
 
@@ -160,23 +160,23 @@ BitBlaster<BBNode, BBNodeManagerT>::abstractionSourcesOf(const BBNode& root)
     const BBNode node = pending.back().first;
     const bool expanded = pending.back().second;
     pending.pop_back();
-    const unsigned id = BBNodeManagerT::nodeId(node);
-    if (BBNodeManagerT::isConstant(node) || BBNodeManagerT::isCI(node) ||
+    const unsigned id = nf->nodeId(node);
+    if (nf->isConstant(node) || nf->isCI(node) ||
         aigSourcesComputed(id))
       continue;
-    assert(BBNodeManagerT::isAnd(node));
+    assert(nf->isAnd(node));
     if (!expanded)
     {
       pending.push_back(PendingAig(node, true));
-      pending.push_back(PendingAig(BBNodeManagerT::fanin0(node), false));
-      pending.push_back(PendingAig(BBNodeManagerT::fanin1(node), false));
+      pending.push_back(PendingAig(nf->fanin0(node), false));
+      pending.push_back(PendingAig(nf->fanin1(node), false));
       continue;
     }
 
     std::vector<BVAbstractionId> sources =
-        abstractionSourcesOf(BBNodeManagerT::fanin0(node));
+        abstractionSourcesOf(nf->fanin0(node));
     appendAbstractionSources(
-        sources, abstractionSourcesOf(BBNodeManagerT::fanin1(node)));
+        sources, abstractionSourcesOf(nf->fanin1(node)));
     setSourcesAt(aigAbstractionSourcesMemo_, id, std::move(sources));
     markAigSourcesComputed(id);
   }
@@ -7019,8 +7019,8 @@ std::ostream& operator<<(std::ostream& output, const BBNodeAIG& /*h*/)
   return output;
 }
 
-// Every specialisation that exists. A second backend adds a line here, which
-// is the point of the whole file being a template again.
+// Every specialisation that exists.
 template class BitBlaster<BBNodeAIG, BBNodeManagerAIG>;
+template class BitBlaster<BBNodeLit, BBNodeManagerLit>;
 
 } // stp namespace
