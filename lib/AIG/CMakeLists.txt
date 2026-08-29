@@ -23,4 +23,6 @@
 # add_dependencies(aig ASTKind_header), something has leaked into it.
 add_library(aig OBJECT
     Manager.cpp
+    CNF.cpp
+    Tseitin.cpp
 )
