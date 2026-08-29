@@ -16,22 +16,35 @@ get_filename_component(STP_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
 get_filename_component(STP_INCLUDE_DIRS "@CONF_INCLUDE_DIRS@" ABSOLUTE)
 
 
+# Only when it came from a CMake package. A CryptoMiniSat this build built
+# itself (rung 3 of cmake/FindCryptoMiniSat.cmake) is named by archive path in
+# the targets file below, like every other dependency built here, and there is
+# no package for a consumer to find.
 if ("@USE_CRYPTOMINISAT@" STREQUAL "ON")
     include(CMakeFindDependencyMacro)
-    # CryptoMiniSat >= 5.14 installs its bundled CaDiCaL and cadiback as
-    # sibling packages, and cryptominisat5Targets.cmake requires imported
-    # targets by those names to already exist: CryptoMiniSat's own config
-    # does not find them, so its consumer has to. Quiet and optional,
-    # exactly as STP's own configure does the same two lookups -- an older
-    # or shared CryptoMiniSat needs neither.
-    find_package(cadical CONFIG QUIET)
-    find_package(cadiback CONFIG QUIET)
-    # cryptominisat5Targets names Threads::Threads in its link interface, and
-    # nothing recreates it for a consumer. It only bites a static STP, which
-    # is the only kind that propagates CryptoMiniSat at all -- a shared one
+    # Threads::Threads is named in the link interface whichever way
+    # CryptoMiniSat arrived -- by its own targets file when it came from a
+    # package, and by CRYPTOMINISAT5_STATIC_LIBRARIES_DEPS when STP built it --
+    # and nothing recreates it for a consumer. It only bites a static STP,
+    # which is the only kind that propagates CryptoMiniSat at all; a shared one
     # resolved it inside libstp.so long before the package was written.
     find_dependency(Threads)
-    find_dependency(cryptominisat5)
+
+    # The rest is only for a CryptoMiniSat that came from a CMake package. One
+    # this build built itself (rung 3 of cmake/FindCryptoMiniSat.cmake) is
+    # named by archive path in the targets file below, like every other
+    # dependency built here, and there is no package for a consumer to find.
+    if ("@STP_CMS_FROM_PACKAGE@")
+        # CryptoMiniSat >= 5.14 installs its bundled CaDiCaL and cadiback as
+        # sibling packages, and cryptominisat5Targets.cmake requires imported
+        # targets by those names to already exist: CryptoMiniSat's own config
+        # does not find them, so its consumer has to. Quiet and optional,
+        # exactly as STP's own configure does the same two lookups -- an older
+        # or shared CryptoMiniSat needs neither.
+        find_package(cadical CONFIG QUIET)
+        find_package(cadiback CONFIG QUIET)
+        find_dependency(cryptominisat5)
+    endif()
 endif()
 
 # Our library dependencies (contains definitions for IMPORTED targets)

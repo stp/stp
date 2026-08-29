@@ -1283,7 +1283,26 @@ add_feature_info(CryptoMiniSat USE_CRYPTOMINISAT "Enables CryptoMiniSat solver, 
 # A shared libcryptominisat5 is fine and is not rejected: CMake resolves its
 # private dependencies inside the .so, which exports no CaDiCaL symbols at all,
 # so only the CaDiCaL that CADICAL_DIR names is ever linked or called.
-if (USE_CADICAL AND USE_CRYPTOMINISAT AND TARGET cryptominisat5 AND TARGET cadical)
+# `TARGET cadical` is not the same question as "CryptoMiniSat brings one".
+# cmake/FindCryptoMiniSat.cmake find_package()es cadical unconditionally, to
+# satisfy the imported targets a static CryptoMiniSat's export names -- so the
+# target can equally come from a copy installed on the machine that nothing
+# here ever links. And a CryptoMiniSat built -DNOCADICAL=ON names no CaDiCaL in
+# its export at all. Either way the collision this guards against is decided by
+# what is on CryptoMiniSat's link interface, which is what reaches libstp, and
+# not by which targets happen to be defined.
+set(_cms_brings_cadical FALSE)
+if (TARGET cryptominisat5)
+    get_target_property(_cms_link_iface cryptominisat5 INTERFACE_LINK_LIBRARIES)
+    if (_cms_link_iface MATCHES "cadical|cadiback")
+        set(_cms_brings_cadical TRUE)
+    endif()
+endif()
+
+unset(_cms_link_iface)
+
+if (USE_CADICAL AND USE_CRYPTOMINISAT AND TARGET cryptominisat5 AND TARGET cadical
+    AND _cms_brings_cadical)
     get_target_property(_cms_type cryptominisat5 TYPE)
     if (_cms_type STREQUAL "STATIC_LIBRARY")
         get_target_property(_cms_cadical cadical IMPORTED_LOCATION_RELEASE)
@@ -1338,12 +1357,13 @@ if (USE_CADICAL AND USE_CRYPTOMINISAT AND TARGET cryptominisat5 AND TARGET cadic
                     "    CryptoMiniSat's bundled CaDiCaL: ${_cms_cadical}\n"
                     "    STP's CaDiCaL:                   ${CADICAL_LIBRARY}\n"
                     "Left to the linker it surfaces as pages of duplicate "
-                    "definitions that never mention CryptoMiniSat. Three ways "
-                    "out.\n"
-                    "  Build CryptoMiniSat as a shared library "
-                    "(scripts/deps/setup-cms.sh -DBUILD_SHARED_LIBS=ON), which "
-                    "keeps its bundled CaDiCaL to itself and leaves STP's own "
-                    "choice of CaDiCaL alone.\n"
+                    "definitions that never mention CryptoMiniSat. Ways out.\n"
+                    "  Build CryptoMiniSat with -DNOCADICAL=ON, which is "
+                    "what STP's own build of it does: it then bundles no "
+                    "CaDiCaL and there is nothing to collide.\n"
+                    "  Or build it as a shared library, which keeps its "
+                    "bundled CaDiCaL to itself and leaves STP's own choice of "
+                    "CaDiCaL alone.\n"
                     "  Or share the one it bundles, giving up the 3.x features: "
                     "-UCADICAL_DIR -DCADICAL_LIBRARY=${_cms_cadical} "
                     "-DCADICAL_INCLUDE_DIR=<CryptoMiniSat prefix>/include.\n"
@@ -1352,6 +1372,7 @@ if (USE_CADICAL AND USE_CRYPTOMINISAT AND TARGET cryptominisat5 AND TARGET cadic
         endif()
     endif()
 endif()
+unset(_cms_brings_cadical)
 
 # -----------------------------------------------------------------------------
 # Every backend is optional, but a solver with no SAT backend at all cannot

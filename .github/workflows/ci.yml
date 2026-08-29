@@ -62,8 +62,8 @@ jobs:
 
     - uses: actions/checkout@v7
 
-    # libgmp-dev is CryptoMiniSat's, which setup-cms.sh builds below and this
-    # job links; STP itself does not use GMP. The runner image happens to ship
+    # libgmp-dev is CryptoMiniSat's, which the build builds and this job
+    # links; STP itself does not use GMP. The runner image happens to ship
     # it already, but the dependency is this job's, so it is named here.
     - name: Packages
       run: |
@@ -98,22 +98,15 @@ jobs:
       id: deps-key
       run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
 
-    # One directory, because the build now installs everything it fetches into
-    # STP_DEP_DIR, and setup-cms.sh installs beside it. Everything else the
-    # configure step below downloads and builds for itself.
+    # One directory, because the build installs everything it fetches into
+    # STP_DEP_DIR -- CryptoMiniSat included, now that it is built here like
+    # every other dependency.
     - name: Restore dependencies
       id: deps-cache
       uses: actions/cache@v4
       with:
         path: deps
         key: deps-x86_64-${{ steps.deps-key.outputs.key }}
-
-    # CryptoMiniSat is the one dependency STP does not build: it reaches the
-    # build as a CMake package, which an ExternalProject would only write after
-    # the configure that has to read it.
-    - name: Dependencies
-      if: steps.deps-cache.outputs.cache-hit != 'true'
-      run: ./scripts/deps/setup-cms.sh
 
     # Keyed per run so every build writes a fresh entry; restore-keys picks
     # up the most recent one from this branch, or from the base branch.
@@ -230,21 +223,28 @@ jobs:
           exit 1
         fi
 
-        # A static CryptoMiniSat alongside USE_CADICAL has to be refused, and
-        # has to say why. Without the guard this reaches the linker instead.
-        if cmake -S . -B build-cadical-clash -G Ninja \
+        # This combination used to have to be refused: a static CryptoMiniSat
+        # brought its own CaDiCaL, both archives reached libstp's link line and
+        # their symbols collided. Built NOCADICAL it brings none, so there is
+        # one CaDiCaL -- the CADICAL_DIR copy -- and the combination has to
+        # configure, and has to actually use CryptoMiniSat rather than quietly
+        # dropping it, which is the shape the old guard's AUTO branch had.
+        cmake -S . -B build-cadical-cms -G Ninja \
              -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" \
              -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" \
              -DENABLE_AUTO_DOWNLOAD:BOOL=ON \
              -DUSE_CADICAL:BOOL=ON \
              -DCADICAL_DIR:PATH="$GITHUB_WORKSPACE/deps/cadical" \
-             -DUSE_CRYPTOMINISAT:STRING=ON > clash.log 2>&1; then
-          echo "::error::a static CryptoMiniSat with USE_CADICAL configured successfully; it should have been refused"
+             -DUSE_CRYPTOMINISAT:STRING=ON
+        if ! grep -q "^USE_CRYPTOMINISAT:STRING=ON" build-cadical-cms/CMakeCache.txt; then
+          echo "::error::CryptoMiniSat was dropped from a build that asked for it alongside CaDiCaL"
           exit 1
         fi
-        if ! grep -q "static CryptoMiniSat cannot be combined" clash.log; then
-          echo "::error::configure failed, but not on the CryptoMiniSat/CaDiCaL guard"
-          cat clash.log
+        # And the CaDiCaL it uses is still the CADICAL_DIR one, not something
+        # CryptoMiniSat dragged in.
+        picked=$(sed -n 's/^CADICAL_LIBRARY:FILEPATH=//p' build-cadical-cms/CMakeCache.txt)
+        if [ "$picked" != "$GITHUB_WORKSPACE/deps/cadical/build/libcadical.a" ]; then
+          echo "::error::with CryptoMiniSat on, CADICAL_LIBRARY resolved to '$picked'"
           exit 1
         fi
 
@@ -751,14 +751,13 @@ jobs:
   # not about it being known-good, and a user who wanted both had only a link
   # error to go on.
   #
-  # CryptoMiniSat has to be built shared here, and that is the whole subtlety.
-  # Since 5.14 it builds its own CaDiCaL and exports it as an imported target
-  # named plainly `cadical`; a static libcryptominisat5 carries that target in
-  # its link interface, so both CaDiCaLs reach libstp's link line and collide.
-  # CMakeLists refuses that combination outright, and the gcc leg checks that
-  # it does. A shared libcryptominisat5 resolves the dependency inside the .so
-  # and exports no CaDiCaL symbols, so only the CaDiCaL the build fetched
-  # is ever linked or called -- which is what this job builds and tests.
+  # This used to be the subtle job. CryptoMiniSat >= 5.14 built its own CaDiCaL
+  # and exported it as an imported target named plainly `cadical`, which a
+  # static libcryptominisat5 carried in its link interface -- so both CaDiCaLs
+  # reached libstp's link line and collided, and fitting them in one binary
+  # took a shared CryptoMiniSat installed into a prefix of its own, plus an
+  # LD_LIBRARY_PATH to run it. Built NOCADICAL it brings no CaDiCaL, so this is
+  # now an ordinary build with both backends on and no accommodation anywhere.
   cms-cadical:
     name: cms + cadical
     runs-on: ubuntu-latest
@@ -771,8 +770,8 @@ jobs:
 
     - uses: actions/checkout@v7
 
-    # libgmp-dev is CryptoMiniSat's, which setup-cms.sh builds below and this
-    # job links; STP itself does not use GMP.
+    # libgmp-dev is CryptoMiniSat's, which the build builds and this job
+    # links; STP itself does not use GMP.
     - name: Packages
       run: |
         sudo apt-get update
@@ -796,36 +795,14 @@ jobs:
       id: deps-key
       run: ./scripts/deps/cache-key.sh >> "$GITHUB_OUTPUT"
 
-    # Its own key prefix, and not just because the dependency set differs: this
-    # is the only job with a *shared* CryptoMiniSat, and the only one that puts
-    # it outside deps/install. Restoring the static one another job cached
-    # would land precisely the configuration this job exists to keep out.
+    # Its own key prefix because the dependency set differs: this is the only
+    # Linux job that builds both backends, so its deps/install holds both.
     - name: Restore dependencies
       id: deps-cache
       uses: actions/cache@v4
       with:
         path: deps
-        key: deps-x86_64-cms-shared-cadical-${{ steps.deps-key.outputs.key }}
-
-    # Two overrides, for the two different ways CryptoMiniSat's own CaDiCaL
-    # collides with STP's.
-    #
-    # Shared, so that its bundled CaDiCaL stays inside libcryptominisat5.so
-    # rather than reaching libstp's link line, where the symbols would clash.
-    #
-    # And installed somewhere that is not deps/install, which is STP_DEP_DIR.
-    # That prefix's include directory travels with STP's own dependencies and
-    # so is on the compile line of anything using any of them -- the unit
-    # tests among them -- and CryptoMiniSat puts a cadical/cadical.hpp in it,
-    # under the name include/stp/Sat/Cadical.h asks for. There is no ordering
-    # to fix that with: the two directories arrive from different targets, so
-    # which comes first varies per target, and it came out wrong for the test
-    # tree. Keep the foreign header out of the prefix instead.
-    - name: Dependencies
-      if: steps.deps-cache.outputs.cache-hit != 'true'
-      run: |
-        ./scripts/deps/setup-cms.sh -DBUILD_SHARED_LIBS=ON \
-          -DCMAKE_INSTALL_PREFIX:PATH="$GITHUB_WORKSPACE/deps/cms-install"
+        key: deps-x86_64-cms-cadical-${{ steps.deps-key.outputs.key }}
 
     # Outside the cached step, as in the gcc/clang job: the pinned mirror
     # is small and builds in seconds.
@@ -849,10 +826,7 @@ jobs:
       run: |
         mkdir build
         cd build
-        # lib or lib64 depending on the runner, so ask rather than assume.
-        cms_config=$(find "$GITHUB_WORKSPACE/deps/cms-install" -name cryptominisat5Config.cmake -print -quit)
-        test -n "$cms_config" || { echo "::error::no cryptominisat5Config.cmake under deps/cms-install"; exit 1; }
-        cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_CADICAL:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=ON -Dcryptominisat5_DIR:PATH="$(dirname "$cms_config")" -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
+        cmake -DSTP_DEP_DIR:PATH="$GITHUB_WORKSPACE/deps/install" -DFETCHCONTENT_BASE_DIR:PATH="$GITHUB_WORKSPACE/deps/fetch" -DENABLE_AUTO_DOWNLOAD:BOOL=ON -DUSE_CADICAL:BOOL=ON -DUSE_CRYPTOMINISAT:STRING=ON -DENABLE_TESTING:BOOL=ON -DWERROR:BOOL=ON -DPYTHON_EXECUTABLE:PATH="$(which python3)" -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -G Ninja ..
 
     - name: Build
       run: |
@@ -861,43 +835,40 @@ jobs:
         ccache --show-stats
       working-directory: build
 
-    # libcryptominisat5.so is in the dependency prefix, which is not on the
-    # loader's default path.
     - name: Test
-      run: |
-        LD_LIBRARY_PATH="$GITHUB_WORKSPACE/deps/cms-install/lib:$GITHUB_WORKSPACE/deps/cms-install/lib64" \
-          ctest --parallel "$(nproc)" -VV --output-on-failure
+      run: ctest --parallel "$(nproc)" -VV --output-on-failure
       working-directory: build
 
     # ctest only ever reaches the default backend, which USE_CADICAL makes
-    # CaDiCaL. Linking is not the property under test here -- having two
-    # CaDiCaLs in one process is -- so solve through each backend by name and
-    # check the answers. A binary that links but whose CryptoMiniSat calls are
-    # bound to the wrong CaDiCaL would pass everything above and fail here.
+    # CaDiCaL, so solve through each backend by name and check the answers. A
+    # binary that links both and calls one of them wrongly passes everything
+    # above and fails here.
     - name: Both backends solve
       run: |
-        export LD_LIBRARY_PATH="$GITHUB_WORKSPACE/deps/cms-install/lib:$GITHUB_WORKSPACE/deps/cms-install/lib64"
         stp=build/stp
 
-        # First that there are two CaDiCaLs at all. Separate prefixes are what
-        # arrange that (see the Configure step), and the lapse is silent: a
-        # build that fell back to the one CryptoMiniSat bundles links, solves,
-        # and passes everything below while testing nothing this job is for.
-        # STP reports the version of the CaDiCaL it actually linked, so ask it.
+        # The CaDiCaL linked is STP's own pin, which is what sharing the one
+        # CryptoMiniSat used to bundle gave up: that copy was 2.1.3, and the
+        # fallback to it was silent -- the build linked, solved, and passed
+        # everything below a version behind. Nothing bundles one now, so a 2.x
+        # here means something has gone back to finding one that does.
         versions=$("$stp" --version | sed -n 's/^STP SAT solvers //p')
         echo "linked: $versions"
         case "$versions" in
           *"cadical 3."*) ;;
           *)
-            echo "::error::expected a 3.x CaDiCaL, got '$versions' -- STP has most likely fallen back to the 2.x one CryptoMiniSat bundles, leaving only one CaDiCaL in the process"
+            echo "::error::expected a 3.x CaDiCaL, got '$versions'"
             exit 1 ;;
         esac
         case "$versions" in
           *"cryptominisat "*) ;;
           *) echo "::error::CryptoMiniSat is not in '$versions'"; exit 1 ;;
         esac
-        ls "$GITHUB_WORKSPACE/deps/cms-install"/lib*/libcadical.a \
-          || { echo "::error::CryptoMiniSat installed no CaDiCaL, so there was never a second one"; exit 1; }
+        # And nothing installed a second CaDiCaL beside it.
+        if ls "$GITHUB_WORKSPACE"/deps/install/lib*/libcadiback.a >/dev/null 2>&1; then
+          echo "::error::CadiBack was installed, so CryptoMiniSat was not built NOCADICAL"
+          exit 1
+        fi
         echo '(set-logic QF_BV)(declare-fun a () (_ BitVec 8))(declare-fun b () (_ BitVec 8))(assert (= (bvmul a b) #x21))(assert (bvult a b))(check-sat)' > sat.smt2
         echo '(set-logic QF_BV)(declare-fun a () (_ BitVec 8))(assert (and (= a #x01) (= a #x02)))(check-sat)' > unsat.smt2
         for backend in --cadical --cryptominisat; do

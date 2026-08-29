@@ -165,32 +165,29 @@ assuming it.
 Pinned revisions
 ~~~~~~~~~~~~~~~~
 
-The release links CryptoMiniSat, pinned by ``setup-cms.sh`` at
-``release/v5.14.7``, and minisat, pinned by commit since ``stp/minisat``
-carries only upstream's 2.0 and 2.2.x tags. This matters more here than in
-CI, because the workflow restores a dependency cache rather than rebuilding:
-an unpinned dependency would mean linking against whatever a default branch
-held when some earlier CI run populated that cache.
-``scripts/deps/cache-key.sh`` hashes the setup scripts, so moving a pin
-invalidates the cache.
+The release links CryptoMiniSat, pinned by commit in
+``cmake/FindCryptoMiniSat.cmake``, and minisat, pinned by commit since
+``stp/minisat`` carries only upstream's 2.0 and 2.2.x tags. This matters
+more here than in CI, because the workflow restores a dependency cache
+rather than rebuilding: an unpinned dependency would mean linking against
+whatever a default branch held when some earlier CI run populated that
+cache. ``scripts/deps/cache-key.sh`` hashes the Find modules, so moving a
+pin invalidates the cache.
 
-Two things are not pinned. OutputCheck is resolved with ``git ls-remote`` on
+One thing is not pinned: OutputCheck is resolved with ``git ls-remote`` on
 every run, which is harmless -- it is a test-only tool that never gets
-linked into anything. The CaDiCaL and cadiback that CryptoMiniSat fetches
-and builds for itself are not pinned by anything: CryptoMiniSat takes them
-from their default branches, so which revision arrives depends on the day,
-and ``cache-key.sh`` does not track it. That one is a real gap, described at
-the top of ``setup-cms.sh``. It is unrelated to
-``cmake/FindCaDiCaL.cmake``, which pins ``rel-3.0.1`` and which the
-release does not run.
+linked into anything. CryptoMiniSat used to bring a second, larger gap,
+fetching cadical and cadiback from their default branches so that which
+revision arrived depended on the day; it is built ``-DNOCADICAL=ON`` and
+fetches neither.
 
-``setup-cms.sh`` builds the solver stack in ``Release`` rather than CMake's
-default, which had CryptoMiniSat compiling at ``-g -ggdb3`` and took the
-static ``stp`` from 76M to 24M. The published asset is stripped either way,
-so what this changes is the dependency tree, the CI cache and every
+The dependencies are built in ``Release`` rather than CMake's default,
+which had CryptoMiniSat compiling at ``-g -ggdb3`` and took the static
+``stp`` from 76M to 24M. The published asset is stripped either way, so
+what this changes is the dependency tree, the CI cache and every
 unstripped build -- at the cost of backtraces no longer resolving inside
-CryptoMiniSat, CaDiCaL or cadiback. Pass
-``-DCMAKE_BUILD_TYPE=RelWithDebInfo`` to the script to get that back.
+CryptoMiniSat. Configure with ``-DCMAKE_BUILD_TYPE=RelWithDebInfo`` to get
+that back.
 
 What is not shipped
 ~~~~~~~~~~~~~~~~~~~
@@ -217,10 +214,9 @@ For testing the release build, or if Actions is unavailable:
 
 .. code-block:: bash
 
-    ./scripts/deps/setup-cms.sh
     mkdir build-static && cd build-static
     cmake -DSTATICCOMPILE=ON -DCMAKE_BUILD_TYPE=Release -DUSE_CRYPTOMINISAT=ON \
-          -Dcryptominisat5_DIR=$PWD/../deps/install/lib/cmake/cryptominisat5 ..
+          -DENABLE_AUTO_DOWNLOAD=ON ..
     cmake --build . -j$(nproc)
     ./stp --version   # the new version and the tagged SHA, and both
                       # -DNDEBUG and -DUSE_CRYPTOMINISAT in COMPILE_DEFINES

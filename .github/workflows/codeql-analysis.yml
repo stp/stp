@@ -33,7 +33,7 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v7
 
-    # libgmp-dev is CryptoMiniSat's, which setup-cms.sh builds below and this
+    # libgmp-dev is CryptoMiniSat's, which the build builds and this
     # job links; STP itself does not use GMP.
     - name: Packages
       if: matrix.language == 'cpp'
@@ -61,23 +61,6 @@ jobs:
     # being third-party, filtered out of the results below. gtest is the
     # same story by another route: tests/CMakeLists.txt compiles it as
     # part of the STP build.
-    #
-    # CryptoMiniSat is built shared, unlike everywhere else: this job links CMS
-    # and CaDiCaL at the same time, and a static CMS drags its own
-    # FetchContent-built libcadical.a onto libstp's link line, where it
-    # collides with the CaDiCaL the build fetches. A shared
-    # libcryptominisat5 resolves that dependency inside the .so and exports no
-    # CaDiCaL symbols, so only the fetched copy is linked. Dropping the
-    # flag no longer fails at link time -- CMakeLists rejects a static CMS
-    # alongside USE_CADICAL outright, and the cms-cadical job in ci.yml covers
-    # both halves of that.
-    - name: Dependencies
-      if: matrix.language == 'cpp'
-      run: |
-        # Shared, so its bundled CaDiCaL stays inside libcryptominisat5.so and
-        # does not collide with the one the build fetches. Everything else is
-        # fetched by the configure step below.
-        ./scripts/deps/setup-cms.sh -DBUILD_SHARED_LIBS=ON
 
     # The Python that ships is generated. bindings/python/stp/*.py.in become
     # build/bindings/python/stp/*.py through configure_file, so a checkout

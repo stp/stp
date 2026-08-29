@@ -111,8 +111,10 @@ The two other values are for builds that would rather not depend on what
 the machine has lying around: ``-DUSE_CRYPTOMINISAT=ON`` makes a missing
 CryptoMiniSat a configuration error, and ``-DUSE_CRYPTOMINISAT=OFF``
 never looks for one, which is what pins a build's set of backends to the
-flags that produced it. It is found when installed, including into
-``deps/install``, where ``scripts/deps/setup-cms.sh`` puts it:
+flags that produced it. With ``-DENABLE_AUTO_DOWNLOAD=ON`` there is nothing to do: STP clones and
+builds `stp/cryptominisat <https://github.com/stp/cryptominisat>`__ at a
+pinned commit, as it does for its other dependencies. An installed one is
+found and preferred, including one installed into ``deps/install``:
 
 .. code-block:: bash
 
@@ -167,70 +169,27 @@ problems and found to pay there too.
 CryptoMiniSat and CaDiCaL together
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Enabling both is supported, and needs one thing said about it, because
+Enabling both is supported and needs nothing said about it. It used to:
 CryptoMiniSat 5.14 and later fetch, build and *install* a CaDiCaL of their
-own -- currently the meelgroup fork at 2.1.3. Its prefix therefore holds a
-``libcadical.a``, a ``cadical/cadical.hpp`` and a CMake package under the
-same names STP's own CaDiCaL uses.
+own, so its prefix held a ``libcadical.a``, a ``cadical/cadical.hpp`` and a
+CMake package under the same names STP's own CaDiCaL uses -- which shadowed
+STP's header, captured STP's lookup, and, when ``libcryptominisat5`` was
+static, put two sets of CaDiCaL symbols on one link line. Fitting both
+backends in took a shared CryptoMiniSat in a prefix of its own, or giving
+up STP's pinned CaDiCaL for the 2.x copy CryptoMiniSat carried.
 
-What goes wrong is one prefix holding both, and that is narrower than it
-sounds. ``setup-cms.sh`` writes to ``<source>/deps/install``, which the
-build *searches* but which is not ``STP_DEP_DIR`` unless you say so --
-that defaults to ``<build>/deps/install``. So the bare script followed by
-a plain configure is fine, and is what the quick install in the README
-does; what it costs is CaDiCaL, because STP's lookup then finds
-CryptoMiniSat's 2.1.3 before it builds the revision STP pins, and
-``--cadical-factor`` turns itself off. Point ``STP_DEP_DIR`` at that same
-directory and the two really do collide, in the two ways below.
+STP builds `stp/cryptominisat <https://github.com/stp/cryptominisat>`__
+with ``-DNOCADICAL=ON``, which fetches and installs no CaDiCaL at all, so
+none of that arises. ``-DUSE_CADICAL=ON -DUSE_CRYPTOMINISAT=ON`` is an
+ordinary configure, and the CaDiCaL linked is the one STP pins.
 
-To keep STP's own CaDiCaL, give CryptoMiniSat a prefix of its own and
-name it, which is two extra arguments -- the script forwards trailing
-ones to CMake, so its install prefix is overridable like any other
-default:
-
-.. code-block:: bash
-
-    ./scripts/deps/setup-cms.sh -DBUILD_SHARED_LIBS=ON \
-      -DCMAKE_INSTALL_PREFIX=$PWD/deps/cms-install
-
-    cmake -S . -B build -DUSE_CADICAL=ON -DUSE_CRYPTOMINISAT=ON \
-      -Dcryptominisat5_DIR=$PWD/deps/cms-install/lib/cmake/cryptominisat5
-
-Sharing one directory goes wrong in two independent ways, which is why
-this is worth the two arguments.
-
-Whatever ``STP_DEP_DIR`` names, its include directory is a usage
-requirement of every dependency STP builds, so it reaches the compile line
-of nearly every file in the project -- and CryptoMiniSat's
-``cadical/cadical.hpp`` sitting in it then shadows the one STP means to
-use. There is no include order that fixes that: the two directories arrive
-from different targets, so which comes first varies from target to target.
-``include/stp/Sat/Cadical.h`` refuses to compile rather than let this pass
-silently, so you get an error naming the cause.
-
-``deps/install`` is also on ``CMAKE_PREFIX_PATH`` unconditionally, so that
-the other ``scripts/deps/*.sh`` are found without flags. STP's own CaDiCaL
-lookup therefore reaches the bundled copy, finds it, and stops -- building
-against 2.x with ``--cadical-factor`` silently gone. ``CADICAL_DIR`` pins
-that one lookup past it, and is worth passing if you have a checkout to
-point at, but it does nothing about the shadowing above.
-
-``STP_DEPS_LOCAL_ONLY`` (below) is the blunt answer to all of this: with
-it, no installed CaDiCaL is a candidate at all, and the one this build
-compiles is the one it links.
+That option is sound because backbone extraction -- reached only through
+CryptoMiniSat's ``backbone`` simplification token or its
+``backbone_simpl()`` API, and in neither default schedule -- is the only
+thing CryptoMiniSat uses CaDiCaL for, and STP calls neither.
 
 ``stp --version`` reports the version of each backend actually linked, so
-it is the quickest way to confirm which CaDiCaL you ended up with.
-
-One combination is refused rather than arranged: a *static*
-``libcryptominisat5`` puts its bundled CaDiCaL on STP's link line
-alongside STP's, and the two sets of symbols collide. Build CryptoMiniSat
-shared (``scripts/deps/setup-cms.sh -DBUILD_SHARED_LIBS=ON``), which keeps
-its CaDiCaL inside the ``.so``. Or, if it must be static, have STP use the
-very same archive so there is only one --
-``-DCADICAL_LIBRARY=<cms prefix>/lib/libcadical.a
--DCADICAL_INCLUDE_DIR=<cms prefix>/include``, with ``CADICAL_DIR`` unset --
-at the cost of the 3.x features. The configure error spells out all three.
+it is the quickest way to confirm what you ended up with.
 
 MiniSat is optional and off by default; enable it with
 ``-DUSE_MINISAT:BOOL=ON``, which also needs zlib -- MiniSat reads gzipped
@@ -251,10 +210,8 @@ distribution's minisat package works too, as does one built by hand:
     sudo cmake --install .
     command -v ldconfig && sudo ldconfig
 
-The CryptoMiniSat recipe above is pre-configured in
-``scripts/deps/setup-cms.sh``, which installs into ``deps/install`` --
-searched without any extra flags. It is the only such script left: every
-other dependency is now fetched and built by the build itself.
+Every dependency is fetched and built by the build itself under
+``-DENABLE_AUTO_DOWNLOAD=ON``; none of them needs a script beforehand.
 
 Building against non-installed libraries
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
