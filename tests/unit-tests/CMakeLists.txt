@@ -58,6 +58,9 @@ AddSTPGTest(SourceSortMemo_Test.cpp)
 # same reason the tests below do.
 AddSTPGTest(AIG_Test.cpp)
 target_link_libraries(AIG_TestTests ABC)
+# The Tseitin writer over that AIG. Needs no ABC: it checks the CNF against
+# the circuit it came from, by simulation and unit propagation.
+AddSTPGTest(Tseitin_Test.cpp)
 AddSTPGTest(BBNodeManagerAIG_Test.cpp)
 target_link_libraries(BBNodeManagerAIG_TestTests ABC)
 AddSTPGTest(AIGBudget_Test.cpp)
