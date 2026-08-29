@@ -161,6 +161,16 @@ private:
   // the manager. The fingerprint is what makes that affordable: a probe that
   // fails on it costs nothing beyond the word already in the register, so the
   // node array is touched only when the fingerprint agrees.
+  //
+  // Carrying the whole key instead was measured, since it would let a rehash
+  // read only the table and a probe skip nodes_ entirely. On four million
+  // gates it is a wash on time -- both variants land inside a 953-1340 ms
+  // run-to-run spread -- and costs 45% more peak memory with the table
+  // pre-sized, 75% more when it grows by doubling. The saving it buys is
+  // small because the fingerprint already avoids the node read on a *failed*
+  // probe, and the read on a successful one is of a node about to be used;
+  // meanwhile a 16-byte slot halves the slots per cache line, which makes
+  // every ordinary probe worse. Not taken.
   std::vector<uint64_t> table_;
   uint64_t mask_ = 0;
   uint64_t occupied_ = 0;
