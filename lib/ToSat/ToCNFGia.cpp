@@ -96,6 +96,12 @@ void ToCNFGia::toCNF(const BBNodeGia& top, CNF& cnf,
   // pointer so a dangling one cannot be followed.
   cnfData->pMan = NULL;
 
+  // Mf also hangs the CNF off the graph it was given. Here that graph is the
+  // blaster's own manager, which outlives this call, while the CNF is about
+  // to belong to `cnf` and be freed with it -- and Gia_ManStop frees pData2
+  // but never pData, so nothing else clears it. Same reason as pMan above.
+  p->pData = NULL;
+
   // Each symbol maps to the variables its bits carry. ~0u for a bit that
   // reached no variable, which is the same sentinel the other two lowerings
   // write and what the freezing pass and the model builder expect.

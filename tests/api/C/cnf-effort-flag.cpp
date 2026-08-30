@@ -108,13 +108,37 @@ TEST(cnf_effort_flag, EveryLevelIsReachable)
   vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, 4);
   EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_VERY_HIGH, flags(vc).cnf_effort);
 
+  // Auto is a level like the others here, and the only one that matters to a
+  // caller that has already set another: it is the default, so without it
+  // there is no way back to where the checker started.
+  vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, 5);
+  EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_AUTO, flags(vc).cnf_effort);
+
+  // The rungs that name a backend rather than an effort. They are on the same
+  // ordinal scale by construction -- a new rung goes on the end -- so an
+  // embedder reaches them the same way.
+  vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, 6);
+  EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_NEW_VERY_LOW,
+            flags(vc).cnf_effort);
+  vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, 7);
+  EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_NEW_LOW, flags(vc).cnf_effort);
+  vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, 8);
+  EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_NEW_MEDIUM, flags(vc).cnf_effort);
+  vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, 9);
+  EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_GIA_LOW, flags(vc).cnf_effort);
+  vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, 10);
+  EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_GIA_HIGH, flags(vc).cnf_effort);
+  vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, 11);
+  EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_GIA_VERY_HIGH,
+            flags(vc).cnf_effort);
+
   vc_Destroy(vc);
 }
 
 // Out of range is refused and leaves the level alone. The field is an enum,
-// so an accepted 5 or -1 would be a value no switch in the generator handles
-// -- it would fall to whichever arm happens to be the default and the caller
-// would never learn that what they asked for did not happen.
+// so an accepted value past the end would be one no switch in the generator
+// handles -- it would fall to whichever arm happens to be first and the
+// caller would never learn that what they asked for did not happen.
 TEST(cnf_effort_flag, OutOfRangeIsRefusedAndLeavesTheLevelAlone)
 {
   vc_registerErrorHandler(countError);
@@ -124,7 +148,8 @@ TEST(cnf_effort_flag, OutOfRangeIsRefusedAndLeavesTheLevelAlone)
   vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, 3);
   EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_HIGH, flags(vc).cnf_effort);
 
-  vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, 5);
+  // One past the last enumerator.
+  vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, 12);
   EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_HIGH, flags(vc).cnf_effort);
   vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, -1);
   EXPECT_EQ(stp::UserDefinedFlags::CNF_EFFORT_HIGH, flags(vc).cnf_effort);
@@ -136,10 +161,12 @@ TEST(cnf_effort_flag, OutOfRangeIsRefusedAndLeavesTheLevelAlone)
 
 // The level reaches the solve, and every one of them answers the same
 // question the same way. A level that changed a verdict would be a bug in
-// the generator, not a setting.
+// the generator, not a setting -- and since six of the twelve pick a whole
+// bit-blasting backend rather than an effort, this is where a backend that
+// encoded the query wrongly would be caught.
 TEST(cnf_effort_flag, EveryLevelDecidesTheSameQuery)
 {
-  for (int effort = 0; effort <= 4; ++effort)
+  for (int effort = 0; effort <= 11; ++effort)
   {
     VC vc = vc_createValidityChecker();
     vc_setInterfaceFlags(vc, CNF_GENERATION_EFFORT, effort);

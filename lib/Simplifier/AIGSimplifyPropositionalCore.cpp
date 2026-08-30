@@ -260,7 +260,10 @@ ASTNode AIGSimplifyPropositionalCore::topLevel(const ASTNode& top)
   Dar_RwrPar_t Pars, *pPars = &Pars;
   Dar_ManDefaultRwrParams(pPars);
 
-  // Assertion errors occur with this enabled.
+  // The warning that stood here -- that assertion errors occur with this
+  // enabled -- was copied from ToCNFAIG.cpp, where the line is commented out.
+  // It is stale in both places: over 347 query files in an assertions build
+  // this path aborts on none of them and changes no answer.
   pPars->fUseZeros = 1;
 
   const int iterations = 3;

@@ -600,10 +600,14 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
       b->UserFlags.incremental_scoped_preprocessing = param_value != 0;
       break;
     case CNF_GENERATION_EFFORT:
+      // Every rung, up to and including the last enumerator. AUTO in
+      // particular: it is the default, so refusing it leaves a caller that
+      // has set any other level with no way back to the one it started with.
+      // The bound tracks the enum, and the numbers in the message with it.
       if (param_value < 0 ||
-          param_value > stp::UserDefinedFlags::CNF_EFFORT_VERY_HIGH)
+          param_value > stp::UserDefinedFlags::CNF_EFFORT_GIA_VERY_HIGH)
         reportCAPIError("CNF_GENERATION_EFFORT takes an effort ordinal from "
-                        "0 (very low) to 4 (very high)");
+                        "0 (very low) to 11 (gia very high)");
       else
         b->UserFlags.cnf_effort =
             static_cast<stp::UserDefinedFlags::CNFEffort>(param_value);
