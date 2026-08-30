@@ -2,8 +2,12 @@
 ; lowest rung before the size-based choice is made, and says so; an explicit
 ; level is left alone, and so is a query the abstraction is not on for.
 ;
-; RUN: %solver -s --bv-term-abstraction=1 %s 2>&1 | %OutputCheck --check-prefix=ABS %s
-; RUN: %solver -s --bv-term-abstraction=1 --cnf-generation-effort auto %s 2>&1 | %OutputCheck --check-prefix=ABS %s
+; The resolution below requires the CaDiCaL backend, so the test does too:
+; a build without it keeps the size-based choice and has nothing to say, and
+; a build whose default backend is CryptoMiniSat must ask for CaDiCaL.
+; REQUIRES: cadical
+; RUN: %solver --cadical -s --bv-term-abstraction=1 %s 2>&1 | %OutputCheck --check-prefix=ABS %s
+; RUN: %solver --cadical -s --bv-term-abstraction=1 --cnf-generation-effort auto %s 2>&1 | %OutputCheck --check-prefix=ABS %s
 ; RUN: %solver -s --bv-term-abstraction=1 --cnf-generation-effort very-low %s 2>&1 | %OutputCheck --check-prefix=EXPLICIT %s
 ; RUN: %solver -s %s 2>&1 | %OutputCheck --check-prefix=OFF %s
 ;

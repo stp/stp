@@ -234,8 +234,13 @@ bool ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef, CNF& cnf)
   // Written back rather than resolved locally so that the splices the
   // refinement adds later convert at the same rung; an explicit level is
   // left alone.
+  // Only under CaDiCaL: the corpus that justified this rung was solved
+  // with it, no other backend was measured, and MiniSat demonstrably
+  // cannot finish some escalated division proofs on the gia-low CNF that
+  // it finishes at the size-based rung.
   if (bm->UserFlags.cnf_effort == UserDefinedFlags::CNF_EFFORT_AUTO &&
-      allowAbstraction_ && bm->UserFlags.bv_term_abstraction)
+      allowAbstraction_ && bm->UserFlags.bv_term_abstraction &&
+      bm->UserFlags.solver_to_use == UserDefinedFlags::CADICAL_SOLVER)
   {
     bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_GIA_LOW;
     if (bm->UserFlags.stats_flag)
