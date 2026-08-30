@@ -29,6 +29,7 @@ THE SOFTWARE.
 #include <stdexcept>
 
 #include "BBNodeAIG.h"
+#include "stp/ToSat/AIGBudget.h"
 #include "stp/ToSat/ToSATBase.h"
 
 // From ABC
@@ -99,19 +100,6 @@ inline void ensureDarLibrary()
 {
   Dar_LibStart();
 }
-
-// Thrown by BBNodeManagerAIG::checkBudget() when the AND-gate count passes
-// the manager's nodeBudget. Whoever set the budget owns the abandonment
-// policy, so this escapes CreateNode() and every BitBlaster frame above it;
-// only a caller that set a budget can see it.
-struct AIGBudgetExhausted : public std::runtime_error
-{
-  // The AND-gate count reached, always strictly greater than the budget.
-  int nodeCount;
-
-  explicit AIGBudgetExhausted(int n)
-      : std::runtime_error("AIG node budget exhausted"), nodeCount(n) {}
-};
 
 // Creates AIG nodes with ABC and wraps them in BBNodeAIG's.
 class BBNodeManagerAIG

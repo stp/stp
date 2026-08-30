@@ -670,4 +670,22 @@ template BBNodeAIG BitBlaster<BBNodeAIG, BBNodeManagerAIG>::BBDivRemIdentity(
     const ASTNode&, const BBNodeVecAIG&, const BBNodeVecAIG&,
     const BBNodeVecAIG&, const BBNodeVecAIG&, BBNodeSetAIG&);
 
+template BBNodeLit BitBlaster<BBNodeLit, BBNodeManagerLit>::BBFitsExactlyOnce(
+    const BBNodeVecLit&, const BBNodeVecLit&);
+template BBNodeLit BitBlaster<BBNodeLit, BBNodeManagerLit>::BBDivLemma(
+    DivLemma, const BBNodeVecLit&, const BBNodeVecLit&, const BBNodeVecLit&,
+    BBNodeSetLit&);
+template BBNodeLit BitBlaster<BBNodeLit, BBNodeManagerLit>::BBRemLemma(
+    RemLemma, const BBNodeVecLit&, const BBNodeVecLit&, const BBNodeVecLit&,
+    BBNodeSetLit&);
+template BBNodeLit BitBlaster<BBNodeLit, BBNodeManagerLit>::BBMulLemma(
+    MulLemma, const BBNodeVecLit&, const BBNodeVecLit&, const BBNodeVecLit&,
+    BBNodeSetLit&);
+template BBNodeLit BitBlaster<BBNodeLit, BBNodeManagerLit>::BBAddLemma(
+    AddLemma, const BBNodeVecLit&, const BBNodeVecLit&, const BBNodeVecLit&,
+    BBNodeSetLit&);
+template BBNodeLit BitBlaster<BBNodeLit, BBNodeManagerLit>::BBDivRemIdentity(
+    const ASTNode&, const BBNodeVecLit&, const BBNodeVecLit&,
+    const BBNodeVecLit&, const BBNodeVecLit&, BBNodeSetLit&);
+
 } // namespace stp

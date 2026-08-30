@@ -887,7 +887,14 @@ public:
     CNF_EFFORT_MEDIUM,
     CNF_EFFORT_HIGH,
     CNF_EFFORT_VERY_HIGH,
-    CNF_EFFORT_AUTO
+    CNF_EFFORT_AUTO,
+    // The in-house Tseitin writer, over the in-house AIG. Below very-low on
+    // the scale and last in the enum, which are different facts: the ordinals
+    // are the C interface's contract, so a new rung goes on the end however
+    // little effort it spends. AUTO never picks it -- AUTO chooses from the
+    // AIG's node count, which means blasting through ABC first, so reaching
+    // this rung has to be an explicit request.
+    CNF_EFFORT_NEW_VERY_LOW
   };
 
   enum CNFEffort cnf_effort = CNF_EFFORT_AUTO;

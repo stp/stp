@@ -13,6 +13,7 @@
 ; RUN: %solver --SMTLIB2 -s --cnf-generation-effort auto --cnf-auto-threshold 1 %s 2>&1 | %OutputCheck --check-prefix=BIG %s
 ;
 ; SMALL: ^cnf-auto: [0-9]+ AIG nodes, chose medium$
+; SMALL: ^cnf: [0-9]+ clauses, [0-9]+ variables, [0-9]+ literals$
 ; SMALL: sat
 ; BIG: ^cnf-auto: [0-9]+ AIG nodes, chose very-low$
 ; BIG: sat
@@ -30,7 +31,19 @@
 ;
 ; RUN: not %solver --SMTLIB2 --cnf-generation-effort nonsense %s 2>&1 | %OutputCheck --check-prefix=BADLEVEL %s
 ;
-; BADLEVEL: Unknown --cnf-generation-effort value 'nonsense'\. Expected one of: auto, very-low, low, medium, high, very-high\.
+; BADLEVEL: Unknown --cnf-generation-effort value 'nonsense'\. Expected one of: auto, very-low, low, medium, high, very-high, new_very_low\.
+;
+; The new_very_low rung is a different generator over a different AIG, so it
+; says so rather than printing one of the ABC lines, and auto never reaches it:
+; auto decides from ABC's node count, which means blasting through ABC first.
+;
+; RUN: %solver --SMTLIB2 -s --cnf-generation-effort new_very_low %s 2>&1 | %OutputCheck --check-prefix=NEWVERYLOW %s
+;
+; NEWVERYLOW-NOT: cnf-auto:
+; NEWVERYLOW-NOT: advanced CNF
+; NEWVERYLOW: ^new_very_low CNF$
+; NEWVERYLOW: ^cnf: [0-9]+ clauses, [0-9]+ variables, [0-9]+ literals$
+; NEWVERYLOW: sat
 
 (set-logic QF_BV)
 (declare-fun a () (_ BitVec 8))

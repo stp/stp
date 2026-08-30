@@ -22,6 +22,7 @@ add_library(tosat OBJECT
     BitBlaster.cpp
     ToSATBase.cpp
     ToCNFAIG.cpp
+    ToCNFTseitin.cpp
     ToSATAIG.cpp
     BVAbstractionRefiner.cpp
     BVExactEncoder.cpp
