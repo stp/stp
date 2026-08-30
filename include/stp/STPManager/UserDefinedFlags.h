@@ -895,13 +895,15 @@ public:
     // AIG's node count, which means blasting through ABC first, so reaching
     // this rung has to be an explicit request.
     CNF_EFFORT_NEW_VERY_LOW,
+    CNF_EFFORT_NEW_LOW,
+    CNF_EFFORT_NEW_MEDIUM,
 
     // Mf_ManGenerateCnf again -- the same generator low, high and very-high
     // reach -- but over a Gia the blaster built itself rather than one
     // converted from an ABC Aig. Same LUT sizes, 3, 6 and 8, so gia-low
     // against low is a comparison of the two backends and nothing else.
     //
-    // AUTO never picks these, for the reason it never picks the rung above:
+    // AUTO never picks these, for the reason it never picks the rungs above:
     // it decides from ABC's Aig node count, which means blasting through ABC
     // first, and the point of these is that no ABC Aig is built at all.
     CNF_EFFORT_GIA_LOW,

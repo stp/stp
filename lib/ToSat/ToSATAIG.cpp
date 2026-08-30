@@ -221,7 +221,10 @@ void ToSATAIG::handle_cnf_options(const CNF& cnf, bool needAbsRef)
 // knows there is more than one backend. Everything below is written once.
 bool ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef, CNF& cnf)
 {
-  if (bm->UserFlags.cnf_effort == UserDefinedFlags::CNF_EFFORT_NEW_VERY_LOW)
+  const enum UserDefinedFlags::CNFEffort e = bm->UserFlags.cnf_effort;
+  if (e == UserDefinedFlags::CNF_EFFORT_NEW_VERY_LOW ||
+      e == UserDefinedFlags::CNF_EFFORT_NEW_LOW ||
+      e == UserDefinedFlags::CNF_EFFORT_NEW_MEDIUM)
     return bitblastWith<BBNodeLit, BBNodeManagerLit, BitBlasterLit,
                         ToCNFTseitin>(input, needAbsRef, cnf);
   if (UserDefinedFlags::isGiaEffort(bm->UserFlags.cnf_effort))

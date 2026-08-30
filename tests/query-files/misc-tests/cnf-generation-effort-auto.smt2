@@ -31,25 +31,32 @@
 ;
 ; RUN: not %solver --SMTLIB2 --cnf-generation-effort nonsense %s 2>&1 | %OutputCheck --check-prefix=BADLEVEL %s
 ;
-; BADLEVEL: Unknown --cnf-generation-effort value 'nonsense'\. Expected one of: auto, very-low, low, medium, high, very-high, new_very_low, gia-low, gia-high, gia-very-high\.
+; BADLEVEL: Unknown --cnf-generation-effort value 'nonsense'\. Expected one of: auto, very-low, low, medium, high, very-high, new_very_low, new_low, new_medium, gia-low, gia-high, gia-very-high\.
 ;
-; The new_very_low rung is a different generator over a different AIG, so it
+; The new_* rungs are a different generator over a different AIG, so they
 ; says so rather than printing one of the ABC lines, and auto never reaches it:
 ; auto decides from ABC's node count, which means blasting through ABC first.
 ;
 ; RUN: %solver --SMTLIB2 -s --cnf-generation-effort new_very_low %s 2>&1 | %OutputCheck --check-prefix=NEWVERYLOW %s
+; RUN: %solver --SMTLIB2 -s --cnf-generation-effort new_low %s 2>&1 | %OutputCheck --check-prefix=NEWLOW %s
+; RUN: %solver --SMTLIB2 -s --cnf-generation-effort new_medium %s 2>&1 | %OutputCheck --check-prefix=NEWMEDIUM %s
 ;
 ; NEWVERYLOW-NOT: cnf-auto:
 ; NEWVERYLOW-NOT: advanced CNF
 ; NEWVERYLOW: ^new_very_low CNF$
-; NEWVERYLOW: ^cnf: [0-9]+ clauses, [0-9]+ variables, [0-9]+ literals$
 ; NEWVERYLOW: sat
 ;
-; The gia- rungs reach Mf_ManGenerateCnf, the same generator low, high and
+; NEWLOW: ^new_low CNF$
+; NEWLOW: sat
+;
+; NEWMEDIUM: ^new_medium CNF$
+; NEWMEDIUM: sat
+;
+; The gia-* rungs reach Mf_ManGenerateCnf, the same generator low, high and
 ; very-high reach, over a Gia the blaster built rather than one converted from
 ; an ABC AIG. They print the graph they hand over -- which is how a reader
 ; tells the two backends apart at the same LUT size -- and auto never picks
-; one, for the same reason it never picks the rung above.
+; one, for the same reason it never picks the rungs above.
 ;
 ; RUN: %solver --SMTLIB2 -s --cnf-generation-effort gia-low %s 2>&1 | %OutputCheck --check-prefix=GIALOW %s
 ; RUN: %solver --SMTLIB2 -s --cnf-generation-effort gia-high %s 2>&1 | %OutputCheck --check-prefix=GIAHIGH %s

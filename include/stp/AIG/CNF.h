@@ -27,6 +27,7 @@ THE SOFTWARE.
 
 #include <cassert>
 #include <cstdint>
+#include <cstddef>
 #include <iosfwd>
 #include <utility>
 #include <vector>
@@ -148,6 +149,14 @@ public:
     lits_.push_back(a);
     lits_.push_back(b);
     lits_.push_back(c);
+    closeClause();
+  }
+  // A clause of any length, for the n-ary ANDs: a query's top-level
+  // conjunction reaches a thousand leaves, so this one cannot be an overload
+  // set over fixed arities like the three above.
+  void clause(const int* lits, size_t n)
+  {
+    lits_.insert(lits_.end(), lits, lits + n);
     closeClause();
   }
   void emptyClause()

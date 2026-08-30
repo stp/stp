@@ -75,7 +75,29 @@ bool matchIte(const Manager& m, Node n, Lit& c, Lit& t, Lit& e)
   return true;
 }
 
-Cone::Cone(const Manager& m, unsigned namedOutputs, bool matchPatterns)
+void collectAndLeaves(const Manager& m, Node n,
+                      const std::vector<uint64_t>& absorbed,
+                      std::vector<Lit>& into, std::vector<Lit>& stack)
+{
+  stack.clear();
+  stack.push_back(m.fanin1(n));
+  stack.push_back(m.fanin0(n));
+  while (!stack.empty())
+  {
+    const Lit f = stack.back();
+    stack.pop_back();
+    const Node x = nodeOf(f);
+    if (!isNeg(f) && ((absorbed[x >> 6] >> (x & 63)) & 1u))
+    {
+      stack.push_back(m.fanin1(x));
+      stack.push_back(m.fanin0(x));
+    }
+    else
+      into.push_back(f);
+  }
+}
+
+Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
 {
   const uint32_t nCo = m.outputCount();
   assert(namedOutputs <= nCo);
@@ -88,6 +110,7 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, bool matchPatterns)
   const size_t words = static_cast<size_t>((nNodes + 63) / 64);
   live_.assign(words, 0);
   pattern_.assign(words, 0);
+  absorbed_.assign(words, 0);
 
   // A pattern is only taken when it removes its two intermediates outright,
   // which needs to know whether anything else uses them. Nothing does if they
@@ -103,6 +126,9 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, bool matchPatterns)
   //
   // One byte each, saturating at two, and it is gone when this constructor
   // returns.
+  const bool matchPatterns = recover != Recover::Nothing;
+  const bool collapseAnds = recover == Recover::PatternsAndAnds;
+
   std::vector<uint8_t> refs;
   if (matchPatterns)
   {
@@ -126,30 +152,72 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, bool matchPatterns)
     if (!isConst(m.output(i)))
       setLive(nodeOf(m.output(i)));
 
+  // Would this node be folded as an ITE?  Asked in two places -- of the node
+  // being decided, and of a fanin about to be absorbed -- so it is written
+  // once. An ITE-shaped node must not be absorbed into its parent's
+  // conjunction: absorbing it saves the parent two clauses, while folding it
+  // saves five by removing both of its intermediates, and the two are
+  // mutually exclusive.
+  const auto wouldPattern = [&](Node x) {
+    Lit c, t, e;
+    return matchPatterns && m.isAnd(x) &&
+           refs[nodeOf(m.fanin0(x))] == 1 && refs[nodeOf(m.fanin1(x))] == 1 &&
+           matchIte(m, x, c, t, e);
+  };
+
   for (Node n = static_cast<Node>(nNodes); n-- > 1;)
   {
     if (!live(n) || !m.isAnd(n))
       continue;
-    ++nAnds_;
 
     Lit c, t, e;
-    if (matchPatterns && refs[nodeOf(m.fanin0(n))] == 1 &&
-        refs[nodeOf(m.fanin1(n))] == 1 && matchIte(m, n, c, t, e))
+    if (wouldPattern(n))
     {
+      const bool matched = matchIte(m, n, c, t, e);
+      assert(matched);
+      (void)matched;
       setPatterned(n);
       setLive(nodeOf(c));
       setLive(nodeOf(t));
       setLive(nodeOf(e));
+      continue;
+    }
+
+    // Otherwise this is an AND, and each uncomplemented fanin that nothing
+    // else needs folds into it. Marking the fanin absorbed rather than only
+    // live is what makes the collection transitive: the sweep reaches that
+    // fanin later, finds it absorbed, and marks *its* private fanins in
+    // turn, so a whole chain collapses in one descending pass.
+    for (const Lit f : {m.fanin0(n), m.fanin1(n)})
+    {
+      const Node x = nodeOf(f);
+      setLive(x);
+      if (collapseAnds && !isNeg(f) && m.isAnd(x) && refs[x] == 1 &&
+          !wouldPattern(x))
+        setAbsorbed(x);
+    }
+  }
+
+  // Now price it. Absorbed nodes cost nothing; every other live AND node is
+  // either an ITE or the root of an n-ary AND whose leaves have to be
+  // counted, and counted the same way pass B will collect them.
+  std::vector<Lit> leaves, stack;
+  for (Node n = 1; n < nNodes; ++n)
+  {
+    if (!live(n) || !m.isAnd(n) || absorbed(n))
+      continue;
+    ++nAnds_;
+    if (patterned(n))
+    {
       nClauses_ += 4;
       nLiterals_ += 12;
+      continue;
     }
-    else
-    {
-      setLive(nodeOf(m.fanin0(n)));
-      setLive(nodeOf(m.fanin1(n)));
-      nClauses_ += 3;
-      nLiterals_ += 7;
-    }
+    leaves.clear();
+    collectAndLeaves(m, n, absorbed_, leaves, stack);
+    const uint64_t k = leaves.size();
+    nClauses_ += k + 1;      // one big clause, and k implications
+    nLiterals_ += 3 * k + 1; // (k+1) + 2k
   }
 
   for (uint32_t i = 0; i < nCo; i++)
@@ -184,9 +252,9 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, bool matchPatterns)
   nVars_ = static_cast<uint32_t>(vars);
 }
 
-CNF deriveTseitin(const Manager& m, unsigned namedOutputs, bool matchPatterns)
+CNF deriveTseitin(const Manager& m, unsigned namedOutputs, Recover recover)
 {
-  const Cone cone(m, namedOutputs, matchPatterns);
+  const Cone cone(m, namedOutputs, recover);
   CNF cnf;
   writeTseitin(m, cone, cnf);
   return cnf;

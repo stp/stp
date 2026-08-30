@@ -732,15 +732,18 @@ void ExtraMain::create_options()
       ->group(misc_group);
   app.add_option("--cnf-generation-effort", cnf_effort,
                  "effort spent minimising the CNF: auto, very-low, low, "
-                 "medium, high, very-high, new_very_low. Higher is slower to "
+                 "medium, high, very-high, new_very_low, new_low, new_medium. "
+                 "Higher is slower to "
                  "generate but yields a smaller CNF; auto picks between "
                  "very-low and medium from the size of the AIG, since "
                  "minimising a large one costs more than the solver saves. "
-                 "new_very_low blasts through STP's own AIG instead of ABC's "
-                 "and writes the CNF directly. gia-low, gia-high and "
-                 "gia-very-high are low, high and very-high again, reaching "
-                 "the same generator over a Gia the blaster built rather than "
-                 "one converted from an ABC AIG")
+                 "The new_* rungs blast through STP's own AIG instead of "
+                 "ABC's and write the CNF directly: new_very_low is plain "
+                 "Tseitin, new_low recovers XOR and if-then-else, new_medium "
+                 "also collapses n-ary ANDs and ORs. The gia-* rungs are low, "
+                 "high and very-high again, reaching the same generator over "
+                 "a Gia the blaster built rather than one converted from an "
+                 "ABC AIG")
       ->capture_default_str()
       ->group(misc_group);
 
@@ -1056,6 +1059,10 @@ int ExtraMain::parse_options(int argc, char** argv)
     bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_AUTO;
   else if (cnf_effort == "new_very_low")
     bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_NEW_VERY_LOW;
+  else if (cnf_effort == "new_low")
+    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_NEW_LOW;
+  else if (cnf_effort == "new_medium")
+    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_NEW_MEDIUM;
   else if (cnf_effort == "gia-low")
     bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_GIA_LOW;
   else if (cnf_effort == "gia-high")
@@ -1066,7 +1073,8 @@ int ExtraMain::parse_options(int argc, char** argv)
   {
     std::cerr << "Unknown --cnf-generation-effort value '" << cnf_effort
               << "'. Expected one of: auto, very-low, low, medium, high, "
-                 "very-high, new_very_low, gia-low, gia-high, gia-very-high."
+                 "very-high, new_very_low, new_low, new_medium, gia-low, "
+                 "gia-high, gia-very-high."
               << std::endl;
     return -1;
   }

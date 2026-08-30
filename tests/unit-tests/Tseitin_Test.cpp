@@ -84,7 +84,7 @@ Layout layoutOf(const aig::Manager& m, const aig::Cone& cone)
 
   uint32_t next = cone.andVarBase();
   for (aig::Node n = 1; n < m.nodeCount(); ++n)
-    if (m.isAnd(n) && cone.live(n))
+    if (m.isAnd(n) && cone.live(n) && !cone.absorbed(n))
       l.nodeVar[n] = next++;
   l.nVars = next;
   return l;
@@ -193,10 +193,10 @@ void buildRandom(aig::Manager& m, std::mt19937& rng, unsigned nCi,
 // Exhaustive over the CIs: every clause holds under the circuit's own values,
 // and BCP from the CIs reproduces every one of them.
 void checkExact(const aig::Manager& m, unsigned namedOutputs,
-                bool matchPatterns)
+                aig::Recover recover)
 {
-  const aig::Cone cone(m, namedOutputs, matchPatterns);
-  const CNF cnf = aig::deriveTseitin(m, namedOutputs, matchPatterns);
+  const aig::Cone cone(m, namedOutputs, recover);
+  const CNF cnf = aig::deriveTseitin(m, namedOutputs, recover);
   const Layout l = layoutOf(m, cone);
 
   ASSERT_EQ(cnf.varCount(), l.nVars);
@@ -263,8 +263,8 @@ TEST(Tseitin, NamedOutputsEncodeTheCircuitExactly)
     for (unsigned i = 0; i < 3; i++)
       m.createOutput(pool[rng() % pool.size()]);
 
-    ASSERT_NO_FATAL_FAILURE(checkExact(m, m.outputCount(), true)) << seed;
-    ASSERT_NO_FATAL_FAILURE(checkExact(m, m.outputCount(), false)) << seed;
+    ASSERT_NO_FATAL_FAILURE(checkExact(m, m.outputCount(), aig::Recover::PatternsAndAnds)) << seed;
+    ASSERT_NO_FATAL_FAILURE(checkExact(m, m.outputCount(), aig::Recover::Nothing)) << seed;
   }
 }
 
@@ -281,8 +281,8 @@ TEST(Tseitin, AssertedOutputIsUnsatWhereTheCircuitIsFalse)
     buildRandom(m, rng, 3 + (seed % 6), 25, pool);
     m.createOutput(pool[rng() % pool.size()]);
 
-    ASSERT_NO_FATAL_FAILURE(checkExact(m, 0, true)) << seed;
-    ASSERT_NO_FATAL_FAILURE(checkExact(m, 0, false)) << seed;
+    ASSERT_NO_FATAL_FAILURE(checkExact(m, 0, aig::Recover::PatternsAndAnds)) << seed;
+    ASSERT_NO_FATAL_FAILURE(checkExact(m, 0, aig::Recover::Nothing)) << seed;
   }
 }
 
@@ -298,7 +298,7 @@ TEST(Tseitin, MixedAssertedAndNamedOutputs)
     for (unsigned i = 0; i < 4; i++)
       m.createOutput(pool[rng() % pool.size()]);
 
-    ASSERT_NO_FATAL_FAILURE(checkExact(m, 2, true)) << seed;
+    ASSERT_NO_FATAL_FAILURE(checkExact(m, 2, aig::Recover::PatternsAndAnds)) << seed;
   }
 }
 
@@ -312,8 +312,8 @@ TEST(Tseitin, MuxCostsFourClausesInsteadOfNine)
   m.createOutput(m.Mux(c, t, e));
   ASSERT_EQ(m.andCount(), 3u);
 
-  const CNF plain = aig::deriveTseitin(m, 1, false);
-  const CNF folded = aig::deriveTseitin(m, 1, true);
+  const CNF plain = aig::deriveTseitin(m, 1, aig::Recover::Nothing);
+  const CNF folded = aig::deriveTseitin(m, 1, aig::Recover::PatternsAndAnds);
 
   // Three ANDs at 3 clauses / 7 literals each, plus the named output's two.
   EXPECT_EQ(plain.clauseCount(), 11u);
@@ -334,8 +334,8 @@ TEST(Tseitin, XorCostsFourClausesInsteadOfNine)
   m.createOutput(m.Xor(a, b));
   ASSERT_EQ(m.andCount(), 3u);
 
-  EXPECT_EQ(aig::deriveTseitin(m, 1, false).clauseCount(), 11u);
-  EXPECT_EQ(aig::deriveTseitin(m, 1, true).clauseCount(), 6u);
+  EXPECT_EQ(aig::deriveTseitin(m, 1, aig::Recover::Nothing).clauseCount(), 11u);
+  EXPECT_EQ(aig::deriveTseitin(m, 1, aig::Recover::PatternsAndAnds).clauseCount(), 6u);
 }
 
 // The guard on the merge.  If one of the intermediates is wanted elsewhere it
@@ -349,8 +349,8 @@ TEST(Tseitin, SharedIntermediateDeclinesTheMerge)
   m.createOutput(mux);
   m.createOutput(m.And(c, t)); // the MUX's own then-branch, hash-consed
 
-  const CNF plain = aig::deriveTseitin(m, 2, false);
-  const CNF folded = aig::deriveTseitin(m, 2, true);
+  const CNF plain = aig::deriveTseitin(m, 2, aig::Recover::Nothing);
+  const CNF folded = aig::deriveTseitin(m, 2, aig::Recover::PatternsAndAnds);
   EXPECT_EQ(plain.clauseCount(), folded.clauseCount());
   EXPECT_EQ(plain.varCount(), folded.varCount());
 }
@@ -369,8 +369,8 @@ TEST(Tseitin, MatchingNeverCostsAnything)
     for (unsigned i = 0; i < 2; i++)
       m.createOutput(pool[rng() % pool.size()]);
 
-    const CNF plain = aig::deriveTseitin(m, 0, false);
-    const CNF folded = aig::deriveTseitin(m, 0, true);
+    const CNF plain = aig::deriveTseitin(m, 0, aig::Recover::Nothing);
+    const CNF folded = aig::deriveTseitin(m, 0, aig::Recover::PatternsAndAnds);
     ASSERT_LE(folded.clauseCount(), plain.clauseCount()) << seed;
     ASSERT_LE(folded.literalCount(), plain.literalCount()) << seed;
     ASSERT_LE(folded.varCount(), plain.varCount()) << seed;
@@ -408,8 +408,13 @@ TEST(Tseitin, DeadNodesAreNotEncoded)
   EXPECT_EQ(after.varOfCi(2), 3u);
 }
 
-// Both passes are sweeps over the node array.  A chain this deep overflows a
-// default stack many times over if either of them recurses.
+// Both passes are sweeps over the node array, and the leaf collection is an
+// explicit stack. A chain this deep overflows a default stack many times over
+// if any of the three recurses.
+//
+// It is also the extreme case of the n-ary AND: every link is a private,
+// uncomplemented fanin of the next, so the whole million-node chain collapses
+// into a single conjunction of its inputs -- one variable, not a million.
 TEST(Tseitin, DeepChainNeedsNoStack)
 {
   aig::Manager m;
@@ -419,6 +424,25 @@ TEST(Tseitin, DeepChainNeedsNoStack)
   m.createOutput(acc);
 
   const CNF cnf = aig::deriveTseitin(m);
+  const uint64_t k = 1000001; // every input is a leaf of the one AND
+
+  EXPECT_EQ(cnf.clauseCount(), k + 1 + 1);   // k+1 defining, 1 asserted output
+  EXPECT_EQ(cnf.literalCount(), 3 * k + 1 + 1);
+  EXPECT_EQ(cnf.varCount(), 1u + 1000001u + 1u); // constant, inputs, one AND
+}
+
+// The same chain with matching off, which is what it used to cost: one
+// variable and three clauses per link. Also the guard that says the switch
+// really does turn the collection off, not just the ITE fold.
+TEST(Tseitin, DeepChainWithoutMatchingIsOneNodePerLink)
+{
+  aig::Manager m;
+  aig::Lit acc = m.createCi();
+  for (unsigned i = 0; i < 1000000; i++)
+    acc = m.And(acc, m.createCi());
+  m.createOutput(acc);
+
+  const CNF cnf = aig::deriveTseitin(m, 0, aig::Recover::Nothing);
   EXPECT_EQ(cnf.clauseCount(), 3ull * 1000000 + 1);
   EXPECT_EQ(cnf.literalCount(), 7ull * 1000000 + 1);
   EXPECT_EQ(cnf.varCount(), 1u + 1000001u + 1000000u);

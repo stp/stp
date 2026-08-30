@@ -55,6 +55,33 @@ namespace aig
 // isAnd() has agreed, so c, t and e always name real nodes.
 bool matchIte(const Manager& m, Node n, Lit& c, Lit& t, Lit& e);
 
+// The leaves of the maximal AND rooted at `n`, appended to `into`.
+//
+// An AIG has no OR node: `a | b` is `!(!a & !b)`, one AND with the
+// complements on the edges. So an n-ary OR *is* an n-ary AND over negated
+// leaves, with the output polarity carried by the edge above it -- and one
+// collector recovers both. Nothing here looks at the sign above `n`.
+//
+// Descends through an uncomplemented fanin whose node `absorbed` marks, and
+// stops everywhere else. Stopping at a complemented edge is what keeps a
+// conjunction from swallowing a disjunction: an alternation of the two shows
+// up as a complemented edge and cuts the collection there.
+//
+// Iterative: a query's top-level conjunction reaches a thousand leaves, and
+// this runs once per root over the whole cone.
+void collectAndLeaves(const Manager& m, Node n, const std::vector<uint64_t>& absorbed,
+                      std::vector<Lit>& into, std::vector<Lit>& stack);
+
+// What the writer recovers from the AIG before emitting. Each rung adds to
+// the one above it, and each is a strict size reduction -- see the report in
+// bench-hard for what each is worth.
+enum class Recover
+{
+  Nothing,        // plain Tseitin: three clauses for every AND node
+  Patterns,       // + XOR and if-then-else, four clauses instead of nine
+  PatternsAndAnds // + maximal n-ary ANDs, and so n-ary ORs, collapsed
+};
+
 // Which nodes the CNF will talk about, and how many clauses that will take.
 //
 // Pass A of the writer, split out because it is the same work whatever the
@@ -73,7 +100,8 @@ public:
   // variable of their own instead of being asserted. That is the split
   // Cnf_DeriveSimple takes, and the two callers want its ends: a formula
   // asserts its single output, a fragment names all of them.
-  Cone(const Manager& m, unsigned namedOutputs = 0, bool matchPatterns = true);
+  Cone(const Manager& m, unsigned namedOutputs = 0,
+       Recover recover = Recover::PatternsAndAnds);
 
   // In the cone, so it gets a variable and its defining clauses.
   bool live(Node n) const { return (live_[n >> 6] >> (n & 63)) & 1u; }
@@ -89,7 +117,17 @@ public:
   uint64_t clauseCount() const { return nClauses_; }
   uint64_t literalCount() const { return nLiterals_; }
   // Live AND nodes, which is how many variables the cone itself needs.
+  // Absorbed into the n-ary AND of its parent: no variable, no clauses of
+  // its own, and its leaves appear in the parent's big clause instead.
+  bool absorbed(Node n) const
+  {
+    return (absorbed_[n >> 6] >> (n & 63)) & 1u;
+  }
+
   uint64_t liveAndCount() const { return nAnds_; }
+
+  // For the emit pass, which has to collect the same leaves this counted.
+  const std::vector<uint64_t>& absorbedBits() const { return absorbed_; }
 
   // Variable layout, closed form and no lookup table:
   //   1 .. nCi                      the CIs, in ordinal order
@@ -105,9 +143,11 @@ public:
 private:
   void setLive(Node n) { live_[n >> 6] |= 1ull << (n & 63); }
   void setPatterned(Node n) { pattern_[n >> 6] |= 1ull << (n & 63); }
+  void setAbsorbed(Node n) { absorbed_[n >> 6] |= 1ull << (n & 63); }
 
   std::vector<uint64_t> live_;
   std::vector<uint64_t> pattern_;
+  std::vector<uint64_t> absorbed_;
   uint64_t nClauses_ = 0;
   uint64_t nLiterals_ = 0;
   uint64_t nAnds_ = 0;
@@ -133,6 +173,12 @@ void writeTseitin(const Manager& m, const Cone& cone, Sink& sink)
   sink.begin(cone.varCount(), cone.clauseCount(), cone.literalCount(), nCi,
              nCo);
 
+  // Scratch for the n-ary AND collection, hoisted so the whole emit pass
+  // reuses one allocation rather than one per root.
+  std::vector<Lit> leaves;
+  std::vector<Lit> stack;
+  std::vector<int> clause;
+
   // Four bytes a node, and it dies with this function. The CNF that outlives
   // it carries no node map at all -- which is the whole difference from
   // Cnf_Dat_t::pVarNums, held for the length of the solve.
@@ -155,7 +201,7 @@ void writeTseitin(const Manager& m, const Cone& cone, Sink& sink)
   uint32_t next = cone.andVarBase();
   for (Node n = 1; n < m.nodeCount(); ++n)
   {
-    if (!m.isAnd(n) || !cone.live(n))
+    if (!m.isAnd(n) || !cone.live(n) || cone.absorbed(n))
       continue;
     const uint32_t x = next++;
     var[n] = x;
@@ -175,10 +221,20 @@ void writeTseitin(const Manager& m, const Cone& cone, Sink& sink)
     }
     else
     {
-      const int a = cnfLit(m.fanin0(n)), b = cnfLit(m.fanin1(n));
-      sink.clause(px, a ^ 1, b ^ 1);
-      sink.clause(nx, a);
-      sink.clause(nx, b);
+      // The n-ary AND. Collected exactly as Cone counted it -- same
+      // function, same bitmap -- because the arena was reserved from that
+      // count and CNF::end() checks the two agree.
+      leaves.clear();
+      collectAndLeaves(m, n, cone.absorbedBits(), leaves, stack);
+
+      // x -> every leaf, and every leaf together -> x.
+      clause.clear();
+      clause.push_back(px);
+      for (const Lit l : leaves)
+        clause.push_back(cnfLit(l) ^ 1);
+      sink.clause(clause.data(), clause.size());
+      for (const Lit l : leaves)
+        sink.clause(nx, cnfLit(l));
     }
   }
   assert(next == cone.varCount());
@@ -218,7 +274,7 @@ void writeTseitin(const Manager& m, const Cone& cone, Sink& sink)
 
 // Both passes, into a materialised CNF.
 CNF deriveTseitin(const Manager& m, unsigned namedOutputs = 0,
-                  bool matchPatterns = true);
+                  Recover recover = Recover::PatternsAndAnds);
 
 } // namespace aig
 } // namespace stp
