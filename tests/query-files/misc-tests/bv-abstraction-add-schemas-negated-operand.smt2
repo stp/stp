@@ -16,8 +16,8 @@
 ; schema is what refined it, which is the difference between the two legs
 ; below.
 ;
-; RUN: %solver --incremental=off --disable-simplifications -s --bv-abstraction-width=1 --bv-term-abstraction=1 --bv-term-abstraction-schema-groups=add %s 2>&1 | %OutputCheck --check-prefix=SCHEMAS %s
-; RUN: %solver --incremental=off --disable-simplifications -s --bv-abstraction-width=1 --bv-term-abstraction=1 --bv-term-abstraction-schemas=0 --bv-term-abstraction-schema-groups=add %s 2>&1 | %OutputCheck --check-prefix=NOSCHEMAS %s
+; RUN: %solver --incremental=off --disable-simplifications -s --bv-abstraction-width=1 --bv-term-abstraction=1 --bv-term-abstraction-plus=1 --bv-term-abstraction-schema-groups=add %s 2>&1 | %OutputCheck --check-prefix=SCHEMAS %s
+; RUN: %solver --incremental=off --disable-simplifications -s --bv-abstraction-width=1 --bv-term-abstraction=1 --bv-term-abstraction-plus=1 --bv-term-abstraction-schemas=0 --bv-term-abstraction-schema-groups=add %s 2>&1 | %OutputCheck --check-prefix=NOSCHEMAS %s
 ; RUN: %solver --incremental=off --disable-simplifications %s 2>&1 | %OutputCheck --check-prefix=PLAIN %s
 ;
 ; SCHEMAS-NOT: Fatal Error

@@ -3,8 +3,8 @@
 ; comparison, if-then-else, addition and multiplication, each of which the
 ; abstraction takes at this width, and two equalities which it does not --
 ; --bv-eq-abstraction is a separate switch and is off here.
-; RUN: %solver -t --bv-term-abstraction=1 %s 2>&1 | %OutputCheck %s
-; RUN: %solver -t --exit-after-CNF --bv-term-abstraction=1 %s 2>&1 | %OutputCheck %s --check-prefix=EARLY
+; RUN: %solver -t --bv-term-abstraction=1 --bv-term-abstraction-compare=1 --bv-term-abstraction-ite=1 --bv-term-abstraction-plus=1 %s 2>&1 | %OutputCheck %s
+; RUN: %solver -t --exit-after-CNF --bv-term-abstraction=1 --bv-term-abstraction-compare=1 --bv-term-abstraction-ite=1 --bv-term-abstraction-plus=1 %s 2>&1 | %OutputCheck %s --check-prefix=EARLY
 (set-logic QF_BV)
 (declare-fun a () (_ BitVec 128))
 (declare-fun b () (_ BitVec 128))

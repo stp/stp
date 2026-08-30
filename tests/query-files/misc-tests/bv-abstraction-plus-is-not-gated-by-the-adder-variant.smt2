@@ -18,8 +18,8 @@
 ; --bv-term-abstraction-plus, so turning that off alone produced exactly the
 ; unreadable number it exists to prevent: one candidate rather than three.
 ;
-; RUN: %solver --incremental=off -t --bv-term-abstraction=1 --bv-term-abstraction-compare=0 %s 2>&1 | %OutputCheck --check-prefix=DEFAULT %s
-; RUN: %solver --incremental=off -t --bv-term-abstraction=1 --bv-term-abstraction-compare=0 --bb.add-v2 0 %s 2>&1 | %OutputCheck --check-prefix=ADDV1 %s
+; RUN: %solver --incremental=off -t --bv-term-abstraction=1 --bv-term-abstraction-plus=1 --bv-term-abstraction-compare=0 %s 2>&1 | %OutputCheck --check-prefix=DEFAULT %s
+; RUN: %solver --incremental=off -t --bv-term-abstraction=1 --bv-term-abstraction-plus=1 --bv-term-abstraction-compare=0 --bb.add-v2 0 %s 2>&1 | %OutputCheck --check-prefix=ADDV1 %s
 ; RUN: %solver --incremental=off -t --bv-term-abstraction=1 --bv-term-abstraction-compare=0 --bv-term-abstraction-plus 0 %s 2>&1 | %OutputCheck --check-prefix=NOPLUS %s
 ;
 ; DEFAULT: plus=2->2

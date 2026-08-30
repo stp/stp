@@ -551,7 +551,7 @@ public:
 
   // Which of the other abstractable kinds --bv-term-abstraction takes.
   //
-  // It has always taken all of them, and the reason to doubt that looked
+  // It used to take all of them, and the reason to doubt that looked
   // strong: an ITE, an addition and a comparison each bit-blast in a number
   // of gates linear in the width, where a multiplication is quadratic and a
   // division worse, so abstracting a linear operation saves little and costs
@@ -560,21 +560,28 @@ public:
   // and 15 additions against 2 multiplications and 6 divisions: 184 free
   // variables to avoid encoding 8 operations.
   //
-  // Turning the three off changes nothing. On that query the refinement ran
-  // 35 rounds either way -- the same rounds, over the same 8 arithmetic
+  // There, turning the three off changed nothing: the refinement ran 35
+  // rounds either way -- the same rounds, over the same 8 arithmetic
   // abstractions -- and over 400 files of the same family it solved 245
-  // against 247, which is inside the run-to-run spread. The 176 cheap
-  // abstractions are not what the refinement loop is spent on, and the loop
-  // is not what separates this from a solver that decides these queries
-  // without refining at all.
+  // against 247, inside the run-to-run spread. Over 329 SMT-LIB QF_BV
+  // files the abstraction engages on, the same: 204 solved against 203,
+  // PAR2 within half a percent.
   //
-  // Kept because the question is a reasonable one to ask again of another
-  // workload, and because the answer above is worth more written down than
-  // rediscovered. Default true, which is what this did before the flags
-  // existed.
-  bool bv_term_abstraction_ite = true;
-  bool bv_term_abstraction_plus = true;
-  bool bv_term_abstraction_compare = true;
+  // Inside a floating-point circuit it is not nothing. SymFPU lowers one
+  // binary128 operation to hundreds of 106- to 229-bit if-then-elses,
+  // adders and comparisons around one or two multiplications or divisions:
+  // on a KLEE query of 25 such operations the blaster abstracted 348 ITEs,
+  // 30 additions and 4 comparisons against 4 multiplications and 6
+  // dividers, every round refined some 230 of them, and the solve took 34 s
+  // where the arithmetic alone takes 3.4 s and, with the value lemma below
+  // written compactly, 0.4 s. Bitwuzla's abstraction, which this is
+  // measured against, abstracts multiplication, division and remainder
+  // only. Off by default therefore: what the three buy on bit-vector
+  // workloads is noise, and what they cost on floating-point ones is the
+  // whole benefit.
+  bool bv_term_abstraction_ite = false;
+  bool bv_term_abstraction_plus = false;
+  bool bv_term_abstraction_compare = false;
 
   // Ask the propositional structure what it settles before solving
   // properly; see SkeletonPreproc. Off by default: what it costs is a SAT

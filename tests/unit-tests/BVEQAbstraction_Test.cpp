@@ -69,7 +69,17 @@ protected:
   STPMgr mgr;
   NodeFactory* factory;
 
-  void SetUp() override { factory = mgr.defaultNodeFactory; }
+  void SetUp() override
+  {
+    factory = mgr.defaultNodeFactory;
+    // These tests exercise every abstractable kind, and were written when
+    // --bv-term-abstraction took every kind. It now takes multiplication
+    // and division alone, so the fixture asks for the other three; a test
+    // that wants one of them off says so itself.
+    mgr.UserFlags.bv_term_abstraction_ite = true;
+    mgr.UserFlags.bv_term_abstraction_plus = true;
+    mgr.UserFlags.bv_term_abstraction_compare = true;
+  }
 
   ASTNode makeSymbol(const char* name, unsigned width)
   {

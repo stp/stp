@@ -28,8 +28,8 @@ Two independent switches turn abstraction on, and nothing happens without at
 least one of them:
 
 ``--bv-term-abstraction``
-  Abstract wide arithmetic: ``bvmul``, ``bvudiv``, ``bvurem``, ``bvadd``,
-  ``ite`` over bit-vectors, and the bit-vector comparisons.
+  Abstract wide ``bvmul``, ``bvudiv`` and ``bvurem``; ``bvadd``, ``ite``
+  over bit-vectors and the bit-vector comparisons can be added, see below.
 
 ``--bv-eq-abstraction``
   Abstract wide equalities, refining them through congruence closure at word
@@ -65,20 +65,27 @@ Once ``--bv-term-abstraction`` is on, each family can be excluded:
      - ``bvudiv`` and ``bvurem``, overriding the option above in either
        argument order
    * - ``--bv-term-abstraction-plus``
-     - on
+     - off
      - ``bvadd``
    * - ``--bv-term-abstraction-ite``
-     - on
+     - off
      - ``ite`` over bit-vector terms
    * - ``--bv-term-abstraction-compare``
-     - on
+     - off
      - the bit-vector comparison predicates
 
 Multiplication and division are separable because their circuits cost very
 differently and the workloads that benefit from abstracting them are not the
 same. The comparison, ``ite`` and addition families are cheap either way:
 each defines itself in a single refinement round rather than by enumerating
-operand values, so turning them off changes little.
+operand values, so abstracting them saves little. On bit-vector workloads
+turning them on or off is noise -- 204 against 203 solved over 329 QF_BV
+files the abstraction engages on, and 247 against 245 over 400 256-bit
+industrial queries -- but inside a floating-point circuit they are hundreds
+of 106- to 229-bit if-then-elses and adders around a handful of
+multiplications and dividers, and abstracting them cost one KLEE binary128
+query 34 s where the arithmetic alone takes 3.4 s. They are off by default
+for that reason.
 
 How a wrong candidate is refined
 --------------------------------
@@ -237,7 +244,7 @@ what refinement spent:
 
 .. code-block:: text
 
-    Abstraction coverage (candidates -> abstracted): eq=2->0 compare=2->2 ite=1->1 plus=1->1 mult=1->1 divmod=0->0
+    Abstraction coverage (candidates -> abstracted): eq=2->0 compare=2->0 ite=1->0 plus=1->0 mult=1->1 divmod=0->0
     Abstraction refinement: rounds=6 blocking=1 schema=4 exact=1 exact-mult=1 exact-divmod=0
     Abstraction circuit cost: clauses=33968 variables=8160 microseconds=4210
     Abstraction schema cost: clauses=512 variables=64 microseconds=95

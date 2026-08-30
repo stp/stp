@@ -567,6 +567,15 @@ void vc_setInterfaceFlags(VC vc, enum ifaceflag_t f, int param_value)
       b->UserFlags.bv_term_abstraction_divmod = param_value != 0;
       b->UserFlags.bv_term_abstraction_divmod_explicit = true;
       break;
+    case BV_TERM_ABSTRACTION_PLUS:
+      b->UserFlags.bv_term_abstraction_plus = param_value != 0;
+      break;
+    case BV_TERM_ABSTRACTION_ITE:
+      b->UserFlags.bv_term_abstraction_ite = param_value != 0;
+      break;
+    case BV_TERM_ABSTRACTION_COMPARE:
+      b->UserFlags.bv_term_abstraction_compare = param_value != 0;
+      break;
     case BV_TERM_ABSTRACTION_PROFILE:
       if (param_value == STP_BV_TERM_ABSTRACTION_PROFILE_QUALIFIED)
       {
