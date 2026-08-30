@@ -65,6 +65,11 @@ AddSTPGTest(Tseitin_Test.cpp)
 # simulating both circuits, so this one links ABC.
 AddSTPGTest(BitBlasterLit_Test.cpp)
 target_link_libraries(BitBlasterLit_TestTests ABC)
+# The blaster over its third backend, ABC's Gia, compared against the first
+# the same way -- and the CNF seam with it, which on this backend is the part
+# that could be wrong without any circuit being wrong.
+AddSTPGTest(BitBlasterGia_Test.cpp)
+target_link_libraries(BitBlasterGia_TestTests ABC)
 AddSTPGTest(BBNodeManagerAIG_Test.cpp)
 target_link_libraries(BBNodeManagerAIG_TestTests ABC)
 AddSTPGTest(AIGBudget_Test.cpp)
