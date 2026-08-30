@@ -26,6 +26,7 @@ THE SOFTWARE.
 #define TOCNFTSEITIN_H_
 
 #include "stp/AIG/CNF.h"
+#include "stp/AIG/Tseitin.h"
 #include "stp/STPManager/UserDefinedFlags.h"
 #include "stp/ToSat/BBNodeManagerLit.h"
 #include "stp/ToSat/ToSATBase.h"

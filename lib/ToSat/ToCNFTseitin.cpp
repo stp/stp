@@ -42,7 +42,15 @@ void ToCNFTseitin::toCNF(const BBNodeLit& top, CNF& cnf,
   // which is the point in the pipeline where the process is largest.
   mgr.mgr.freeStrash();
 
-  cnf = aig::deriveTseitin(mgr.mgr, 0);
+  // The three in-house rungs differ only in what the writer recovers before
+  // emitting; the blast above them is the same either way.
+  aig::Recover recover = aig::Recover::PatternsAndAnds;
+  if (uf.cnf_effort == UserDefinedFlags::CNF_EFFORT_NEW_VERY_LOW)
+    recover = aig::Recover::Nothing;
+  else if (uf.cnf_effort == UserDefinedFlags::CNF_EFFORT_NEW_LOW)
+    recover = aig::Recover::Patterns;
+
+  cnf = aig::deriveTseitin(mgr.mgr, 0, recover);
 
   // Each symbol maps to the variables its bits carry. ~0u for a bit that
   // reached no variable, which is the same sentinel fill_node_to_var writes
@@ -68,7 +76,10 @@ void ToCNFTseitin::toCNF(const BBNodeLit& top, CNF& cnf,
   }
 
   if (uf.stats_flag)
-    std::cerr << "new_very_low CNF" << std::endl;
+    std::cerr << (recover == aig::Recover::Nothing    ? "new_very_low CNF"
+                  : recover == aig::Recover::Patterns ? "new_low CNF"
+                                                      : "new_medium CNF")
+              << std::endl;
 }
 
 } // namespace stp

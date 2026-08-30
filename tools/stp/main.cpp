@@ -732,11 +732,15 @@ void ExtraMain::create_options()
       ->group(misc_group);
   app.add_option("--cnf-generation-effort", cnf_effort,
                  "effort spent minimising the CNF: auto, very-low, low, "
-                 "medium, high, very-high, new_very_low. Higher is slower to "
+                 "medium, high, very-high, new_very_low, new_low, new_medium. "
+                 "Higher is slower to "
                  "generate but yields a smaller CNF; auto picks between "
                  "very-low and medium from the size of the AIG, since "
                  "minimising a large one costs more than the solver saves. "
-                 "new_very_low blasts through STP's own AIG instead of ABC's "
+                 "The new_* rungs blast through STP's own AIG instead of "
+                 "ABC's and write the CNF directly: new_very_low is plain "
+                 "Tseitin, new_low recovers XOR and if-then-else, new_medium "
+                 "also collapses n-ary ANDs and ORs. "
                  "and writes the CNF directly")
       ->capture_default_str()
       ->group(misc_group);
@@ -1053,11 +1057,15 @@ int ExtraMain::parse_options(int argc, char** argv)
     bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_AUTO;
   else if (cnf_effort == "new_very_low")
     bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_NEW_VERY_LOW;
+  else if (cnf_effort == "new_low")
+    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_NEW_LOW;
+  else if (cnf_effort == "new_medium")
+    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_NEW_MEDIUM;
   else
   {
     std::cerr << "Unknown --cnf-generation-effort value '" << cnf_effort
               << "'. Expected one of: auto, very-low, low, medium, high, "
-                 "very-high, new_very_low."
+                 "very-high, new_very_low, new_low, new_medium."
               << std::endl;
     return -1;
   }

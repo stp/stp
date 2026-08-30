@@ -894,7 +894,9 @@ public:
     // little effort it spends. AUTO never picks it -- AUTO chooses from the
     // AIG's node count, which means blasting through ABC first, so reaching
     // this rung has to be an explicit request.
-    CNF_EFFORT_NEW_VERY_LOW
+    CNF_EFFORT_NEW_VERY_LOW,
+    CNF_EFFORT_NEW_LOW,
+    CNF_EFFORT_NEW_MEDIUM
   };
 
   enum CNFEffort cnf_effort = CNF_EFFORT_AUTO;
