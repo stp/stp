@@ -14,9 +14,9 @@
 ;
 ; SMALL: ^cnf-auto: [0-9]+ AIG nodes, chose medium$
 ; SMALL: ^cnf: [0-9]+ clauses, [0-9]+ variables, [0-9]+ literals$
-; SMALL: sat
+; SMALL: ^sat$
 ; BIG: ^cnf-auto: [0-9]+ AIG nodes, chose very-low$
-; BIG: sat
+; BIG: ^sat$
 ;
 ; The fixed levels stay reachable and stay silent: nothing decides anything, so
 ; there is no line to print.
@@ -25,7 +25,7 @@
 ; RUN: %solver --SMTLIB2 -s --cnf-generation-effort very-low %s 2>&1 | %OutputCheck --check-prefix=FIXED %s
 ;
 ; FIXED-NOT: cnf-auto:
-; FIXED: sat
+; FIXED: ^sat$
 ;
 ; And an unknown level is still refused, with auto now among those offered.
 ;
@@ -44,13 +44,13 @@
 ; NEWVERYLOW-NOT: cnf-auto:
 ; NEWVERYLOW-NOT: advanced CNF
 ; NEWVERYLOW: ^new-very-low CNF$
-; NEWVERYLOW: sat
+; NEWVERYLOW: ^sat$
 ;
 ; NEWLOW: ^new-low CNF$
-; NEWLOW: sat
+; NEWLOW: ^sat$
 ;
 ; NEWMEDIUM: ^new-medium CNF$
-; NEWMEDIUM: sat
+; NEWMEDIUM: ^sat$
 ;
 ; The gia-* rungs reach Mf_ManGenerateCnf, the same generator low, high and
 ; very-high reach, over a Gia the blaster built rather than one converted from
@@ -66,13 +66,13 @@
 ; GIALOW-NOT: Nodes before AIG rewrite:
 ; GIALOW: ^gia: [0-9]+ AND nodes, [0-9]+ inputs, LUT3$
 ; GIALOW: ^cnf: [0-9]+ clauses, [0-9]+ variables, [0-9]+ literals$
-; GIALOW: sat
+; GIALOW: ^sat$
 ;
 ; GIAHIGH: ^gia: [0-9]+ AND nodes, [0-9]+ inputs, LUT6$
-; GIAHIGH: sat
+; GIAHIGH: ^sat$
 ;
 ; GIAVHIGH: ^gia: [0-9]+ AND nodes, [0-9]+ inputs, LUT8$
-; GIAVHIGH: sat
+; GIAVHIGH: ^sat$
 
 (set-logic QF_BV)
 (declare-fun a () (_ BitVec 8))
