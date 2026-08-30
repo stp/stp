@@ -35,6 +35,7 @@ THE SOFTWARE.
 #include <functional>
 
 #include "stp/AIG/CNF.h"
+#include "stp/ToSat/AbcCnfAdopt.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
 #include "stp/ToSat/ToSATBase.h"
 
@@ -49,15 +50,6 @@ class ToCNFAIG // not copyable
 
   CNF derive_cnf_mf(BBNodeManagerAIG& mgr, int nLutSize,
                     unsigned namedOutputs);
-
-  // Take over an ABC-generated formula, projecting its per-object pVarNums
-  // down to the CI and CO variables that are the only ones anybody asks for.
-  // The clauses are adopted, not copied: ABC's layout is already the one CNF
-  // exposes. `objectVar` reads pVarNums for one object id, which is the only
-  // thing that differs between the Aig-based generators and the Gia-based
-  // one -- they index it by ids of their own manager.
-  static CNF adopt(Cnf_Dat_t* cnfData, unsigned nCi, unsigned nCo,
-                   const std::function<int(bool isCo, unsigned)>& objectVar);
 
   void fill_node_to_var(const CNF& cnf,
                         ToSATBase::ASTNodeToSATVar& nodeToVars,

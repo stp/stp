@@ -7022,5 +7022,6 @@ std::ostream& operator<<(std::ostream& output, const BBNodeAIG& /*h*/)
 // Every specialisation that exists.
 template class BitBlaster<BBNodeAIG, BBNodeManagerAIG>;
 template class BitBlaster<BBNodeLit, BBNodeManagerLit>;
+template class BitBlaster<BBNodeGia, BBNodeManagerGia>;
 
 } // stp namespace

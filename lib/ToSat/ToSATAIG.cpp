@@ -224,6 +224,9 @@ bool ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef, CNF& cnf)
   if (bm->UserFlags.cnf_effort == UserDefinedFlags::CNF_EFFORT_NEW_VERY_LOW)
     return bitblastWith<BBNodeLit, BBNodeManagerLit, BitBlasterLit,
                         ToCNFTseitin>(input, needAbsRef, cnf);
+  if (UserDefinedFlags::isGiaEffort(bm->UserFlags.cnf_effort))
+    return bitblastWith<BBNodeGia, BBNodeManagerGia, BitBlasterGia, ToCNFGia>(
+        input, needAbsRef, cnf);
   return bitblastWith<BBNodeAIG, BBNodeManagerAIG, BitBlasterAIG, ToCNFAIG>(
       input, needAbsRef, cnf);
 }

@@ -31,6 +31,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
 #include "stp/ToSat/ToCNFAIG.h"
+#include "stp/ToSat/ToCNFGia.h"
 #include "stp/ToSat/ToCNFTseitin.h"
 #include "stp/ToSat/BitBlaster.h"
 #include "stp/ToSat/BVAbstractionRefiner.h"

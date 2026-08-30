@@ -28,6 +28,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/Simplifier/constantBitP/MultiplicationStats.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
+#include "stp/ToSat/BBNodeManagerGia.h"
 #include "stp/ToSat/BBNodeManagerLit.h"
 #include "stp/ToSat/BVAbstractionTypes.h"
 #include "stp/Util/DagWalk.h"
@@ -841,6 +842,13 @@ using BBNodeSetAIG = BBNodeOrderedSet<BBNodeAIG>;
 using BitBlasterLit = BitBlaster<BBNodeLit, BBNodeManagerLit>;
 using BBNodeVecLit = std::vector<BBNodeLit>;
 using BBNodeSetLit = BBNodeOrderedSet<BBNodeLit>;
+
+// The third, over ABC's Gia. It exists for the CNF generator on the far side
+// rather than for the graph itself -- Mf_ManGenerateCnf takes a Gia, and this
+// is how it is reached without building an ABC Aig first.
+using BitBlasterGia = BitBlaster<BBNodeGia, BBNodeManagerGia>;
+using BBNodeVecGia = std::vector<BBNodeGia>;
+using BBNodeSetGia = BBNodeOrderedSet<BBNodeGia>;
 
 } // end of namespace
 
