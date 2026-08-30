@@ -3425,6 +3425,30 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBExactBinaryOp(
   return BBITE(BBEQ(zero, y), max, q);
 }
 
+// x * x over the columns of the addition network. Column 2i carries the
+// diagonal a_i -- a_i AND a_i is a_i -- and column i+j+1, for i < j,
+// carries a_i AND a_j once: the pair occurs twice in the product, and
+// twice a partial product is that product one column up. Half the
+// conjunctions of the general multiplier, and the network then sums
+// columns that are half as deep.
+template <class BBNode, class BBNodeManagerT>
+vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBSquare(
+    const BBNodeVec& x, BBNodeSet& support, const ASTNode& n)
+{
+  const unsigned bitWidth = n.GetValueWidth();
+  assert(x.size() == bitWidth);
+
+  vector<list<BBNode>> products(bitWidth +
+                                1); // One extra, as in BBMult.
+  for (unsigned i = 0; 2 * i < bitWidth; i++)
+    products[2 * i].push_back(x[i]);
+  for (unsigned i = 0; i < bitWidth; i++)
+    for (unsigned j = i + 1; i + j + 1 < bitWidth; j++)
+      products[i + j + 1].push_back(nf->CreateNode(AND, x[i], x[j]));
+
+  return buildAdditionNetworkResult(products, support, n);
+}
+
 template <class BBNode, class BBNodeManagerT>
 vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBMult(const BBNodeVec& _x,
                                                           const BBNodeVec& _y,
@@ -3447,6 +3471,15 @@ vector<BBNode> BitBlaster<BBNode, BBNodeManagerT>::BBMult(const BBNodeVec& _x,
   const unsigned bitWidth = n.GetValueWidth();
   assert(x.size() == bitWidth);
   assert(y.size() == bitWidth);
+
+  // A square, whichever variant is selected: x * x needs only half the
+  // partial products, because a_i * a_j and a_j * a_i are the same
+  // conjunction and their sum is a shift, and the diagonal a_i * a_i is
+  // a_i itself. The fixed-point square root that symfpu builds a
+  // floating-point square root from squares its candidate once per result
+  // bit, so at binary128 this halves the dominant circuit of fp.sqrt.
+  if (n[0] == n[1])
+    return BBSquare(x, support, n);
 
   vector<list<BBNode>> products(bitWidth +
                                 1); // Create one extra to avoid special cases.

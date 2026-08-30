@@ -198,6 +198,9 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   void buildAdditionNetworkResult(list<BBNode>& from, list<BBNode>& to,
                                   BBNodeSet& support, const bool top,
                                   const bool empty);
+  // x * x: half the partial products of the general multiplier.
+  BBNodeVec BBSquare(const BBNodeVec& x, BBNodeSet& support, const ASTNode& n);
+
   BBNodeVec buildAdditionNetworkResult(vector<list<BBNode>>& products,
                                             BBNodeSet& support,
                                             const ASTNode& n);
