@@ -330,6 +330,12 @@ private:
     if (children.size() == 1)
       return children[0].n;
 
+    // Two is the overwhelming majority of what a blast emits, and the deque
+    // below would allocate twice to pair them. The tower reduces to the same
+    // call.
+    if (children.size() == 2)
+      return op(giaMgr, children[0].n, children[1].n);
+
     std::deque<int> names;
     for (size_t i = 0, size = children.size(); i < size; ++i)
       names.push_back(children[i].n);
