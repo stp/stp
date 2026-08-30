@@ -76,9 +76,9 @@ void ToCNFTseitin::toCNF(const BBNodeLit& top, CNF& cnf,
   }
 
   if (uf.stats_flag)
-    std::cerr << (recover == aig::Recover::Nothing    ? "new_very_low CNF"
-                  : recover == aig::Recover::Patterns ? "new_low CNF"
-                                                      : "new_medium CNF")
+    std::cerr << (recover == aig::Recover::Nothing    ? "new-very-low CNF"
+                  : recover == aig::Recover::Patterns ? "new-low CNF"
+                                                      : "new-medium CNF")
               << std::endl;
 }
 
