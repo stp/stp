@@ -23,6 +23,7 @@ add_library(tosat OBJECT
     ToSATBase.cpp
     ToCNFAIG.cpp
     ToCNFTseitin.cpp
+    ToCNFGia.cpp
     ToSATAIG.cpp
     BVAbstractionRefiner.cpp
     BVExactEncoder.cpp

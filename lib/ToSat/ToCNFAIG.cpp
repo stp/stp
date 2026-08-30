@@ -114,26 +114,6 @@ void ToCNFAIG::toCNF(const BBNodeAIG& top, CNF& cnf,
   fill_node_to_var(cnf, nodeToVars, mgr);
 }
 
-CNF ToCNFAIG::adopt(Cnf_Dat_t* cnfData, unsigned nCi, unsigned nCo,
-                    const std::function<int(bool, unsigned)>& objectVar)
-{
-  assert(cnfData != NULL);
-  CNF cnf;
-  cnf.adopt(cnfData, [](void* p) { Cnf_DataFree((Cnf_Dat_t*)p); },
-            cnfData->pClauses, (uint64_t)cnfData->nClauses,
-            (uint64_t)cnfData->nLiterals, (uint32_t)cnfData->nVars, nCi, nCo);
-
-  // -1 is ABC's "this object has no variable" -- a CI outside the cone of the
-  // outputs, or a CO that was asserted rather than named. CNF spells that 0,
-  // for the reason its header gives.
-  const auto var = [](int v) { return v < 0 ? 0u : (uint32_t)v; };
-  for (unsigned i = 0; i < nCi; i++)
-    cnf.mapCi(i, var(objectVar(false, i)));
-  for (unsigned i = 0; i < nCo; i++)
-    cnf.mapCo(i, var(objectVar(true, i)));
-  return cnf;
-}
-
 // ABC's newer CNF generator. It works on a Gia_Man_t, so the AIG is converted
 // first. nLutSize bounds the cuts it considers: larger means a smaller CNF for
 // steeply more work.
@@ -165,7 +145,7 @@ CNF ToCNFAIG::derive_cnf_mf(BBNodeManagerAIG& mgr, int nLutSize,
   // over a coarsened copy of the Gia (Gia_ManDupMuxes, when fCnfObjIds is 0):
   // both managers append CIs before any AND node, so CI ids are 1..nCi in
   // each, and pVarNums is sized by an object count that includes them.
-  CNF cnf = adopt(
+  CNF cnf = adoptAbcCnf(
       cnfData, (unsigned)Aig_ManCiNum(mgr.aigMgr),
       (unsigned)Aig_ManCoNum(mgr.aigMgr), [&](bool isCo, unsigned i) {
         Gia_Obj_t* o = isCo ? Gia_ManCo(pGia, (int)i) : Gia_ManCi(pGia, (int)i);
@@ -187,13 +167,13 @@ CNF ToCNFAIG::derive_cnf(BBNodeManagerAIG& mgr, unsigned namedOutputs)
 
   // Every generator below one indexes pVarNums by Aig object id.
   const auto fromAig = [&](Cnf_Dat_t* d) {
-    return adopt(d, (unsigned)Aig_ManCiNum(mgr.aigMgr),
-                 (unsigned)Aig_ManCoNum(mgr.aigMgr),
-                 [&](bool isCo, unsigned i) {
-                   Aig_Obj_t* o = isCo ? Aig_ManCo(mgr.aigMgr, (int)i)
-                                       : Aig_ManCi(mgr.aigMgr, (int)i);
-                   return d->pVarNums[Aig_ObjId(o)];
-                 });
+    return adoptAbcCnf(d, (unsigned)Aig_ManCiNum(mgr.aigMgr),
+                       (unsigned)Aig_ManCoNum(mgr.aigMgr),
+                       [&](bool isCo, unsigned i) {
+                         Aig_Obj_t* o = isCo ? Aig_ManCo(mgr.aigMgr, (int)i)
+                                             : Aig_ManCi(mgr.aigMgr, (int)i);
+                         return d->pVarNums[Aig_ObjId(o)];
+                       });
   };
 
   if (uf.simple_cnf)
