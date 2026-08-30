@@ -54,7 +54,7 @@
 ; experiment by changing this multiplication's allowance or outcome. Quick
 ; statistics still exposes the effective per-record allowance.
 ; CAP: BV abstraction: encoding BVMULT exactly after 32 blocking lemmas
-; CAP: BV abstraction record: record=0 node=[0-9]+ kind=BVMULT width=64 state=exact blocking=32 schemas=[0-9]+ exact=1 exact-bits=64 allowance=32 paired=0 pair-full=0 blocking-clauses=2048 blocking-literals=264192 exact-clauses=[1-9][0-9]* exact-vars=[1-9][0-9]* exact-us=[0-9]+
+; CAP: BV abstraction record: record=0 node=[0-9]+ kind=BVMULT width=64 state=exact blocking=32 schemas=[0-9]+ exact=1 exact-bits=64 allowance=32 paired=0 pair-full=0 blocking-clauses=2080 blocking-literals=8224 exact-clauses=[1-9][0-9]* exact-vars=[1-9][0-9]* exact-us=[0-9]+
 ; CAP: Abstraction refinement: rounds=[0-9]+ blocking=32 schema=[0-9]+ exact=1 exact-mult=1 exact-divmod=0
 ; CAP: Abstraction circuit cost: clauses=[1-9][0-9]* variables=[1-9][0-9]* microseconds=[0-9]+
 ; CAP: ^sat$

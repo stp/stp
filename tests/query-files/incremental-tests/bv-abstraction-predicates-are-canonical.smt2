@@ -23,7 +23,7 @@
 ; matters if the reuse were wrong: a Boolean shared between two predicates that
 ; are not the same predicate would report sat on a model the raw stack rejects.
 ;
-; RUN: %solver --incremental=on -d -t --bv-eq-abstraction=1 --bv-term-abstraction=1 %s 2>&1 | %OutputCheck --check-prefix=SHARED %s
+; RUN: %solver --incremental=on -d -t --bv-eq-abstraction=1 --bv-term-abstraction=1 --bv-term-abstraction-compare=1 %s 2>&1 | %OutputCheck --check-prefix=SHARED %s
 ; RUN: %solver --incremental=on -d %s 2>&1 | %OutputCheck --check-prefix=PLAIN %s
 ;
 ; SHARED: Abstraction coverage \(candidates -> abstracted\): eq=1->1 compare=1->1

@@ -361,17 +361,20 @@ void ExtraMain::create_options()
       ->capture_default_str();
 
   bool_arg("--bv-term-abstraction", bm->UserFlags.bv_term_abstraction,
-           "abstract wide BV arithmetic and comparisons (BVPLUS, BVMULT, "
-           "BVDIV, BVMOD, ITE and the inequalities) during bit-blasting, "
-           "refining lazily via CEGAR",
+           "abstract wide BVMULT, BVDIV and BVMOD during bit-blasting, "
+           "refining lazily via CEGAR; the three options below add the "
+           "cheaper kinds",
            refinement_group);
   bool_arg("--bv-term-abstraction-ite", bm->UserFlags.bv_term_abstraction_ite,
-           "include wide if-then-else in BV term abstraction", refinement_group);
+           "also abstract wide if-then-else (off: it is noise on bit-vector "
+           "workloads and the whole benefit on floating-point ones)",
+           refinement_group);
   bool_arg("--bv-term-abstraction-plus", bm->UserFlags.bv_term_abstraction_plus,
-           "include wide BVPLUS in BV term abstraction", refinement_group);
+           "also abstract wide BVPLUS (off, for the same reason)",
+           refinement_group);
   bool_arg("--bv-term-abstraction-compare",
            bm->UserFlags.bv_term_abstraction_compare,
-           "include wide inequalities in BV term abstraction",
+           "also abstract wide inequalities (off, for the same reason)",
            refinement_group);
   bool_arg("--skeleton-preproc", bm->UserFlags.skeleton_preproc,
            "ask the query's propositional skeleton what it forces, and assert "
@@ -736,7 +739,8 @@ void ExtraMain::create_options()
                  "Higher is slower to "
                  "generate but yields a smaller CNF; auto picks between "
                  "very-low and medium from the size of the AIG, since "
-                 "minimising a large one costs more than the solver saves. "
+                 "minimising a large one costs more than the solver saves, "
+                 "and gia-low when --bv-term-abstraction is on. "
                  "The new-* rungs blast through STP's own AIG instead of "
                  "ABC's and write the CNF directly: new-very-low is plain "
                  "Tseitin, new-low recovers XOR and if-then-else, new-medium "

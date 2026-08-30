@@ -411,8 +411,10 @@ enum ifaceflag_t
   //!
   BV_EQ_REFINE_WIDTH,
 
-  //! Abstract wide bit-vector arithmetic, comparisons and ITE during
-  //! bit-blasting, refining them lazily via CEGAR.
+  //! Abstract wide bit-vector multiplication, division and remainder
+  //! during bit-blasting, refining them lazily via CEGAR; BVPLUS,
+  //! if-then-else and the comparisons join through the three flags at the
+  //! end of this enumeration.
   //!
   //! `param_value` nonzero enables, zero disables (the default). This is the
   //! C API's way to reach --bv-term-abstraction. It shares the width floor
@@ -579,7 +581,23 @@ enum ifaceflag_t
   //! This is the C API's way to reach
   //! --bv-term-abstraction-divmod-value-limit.
   //!
-  BV_TERM_ABSTRACTION_DIVMOD_VALUE_LIMIT
+  BV_TERM_ABSTRACTION_DIVMOD_VALUE_LIMIT,
+
+  //! Whether BV_TERM_ABSTRACTION also abstracts wide BVPLUS, wide
+  //! if-then-else over bit-vector terms, and the wide bit-vector
+  //! comparisons.
+  //!
+  //! `param_value` nonzero includes the kind, zero leaves it encoded
+  //! exactly (the default for all three). Each is a linear circuit that
+  //! refinement pins exactly the first time a candidate contradicts it, so
+  //! abstracting it saves little; inside a floating-point circuit it costs
+  //! a free variable per one of hundreds of them. These are the C API's
+  //! way to reach --bv-term-abstraction-plus, --bv-term-abstraction-ite and
+  //! --bv-term-abstraction-compare.
+  //!
+  BV_TERM_ABSTRACTION_PLUS,
+  BV_TERM_ABSTRACTION_ITE,
+  BV_TERM_ABSTRACTION_COMPARE
 
 };
 

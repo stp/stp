@@ -69,7 +69,17 @@ protected:
   STPMgr mgr;
   NodeFactory* factory;
 
-  void SetUp() override { factory = mgr.defaultNodeFactory; }
+  void SetUp() override
+  {
+    factory = mgr.defaultNodeFactory;
+    // These tests exercise every abstractable kind, and were written when
+    // --bv-term-abstraction took every kind. It now takes multiplication
+    // and division alone, so the fixture asks for the other three; a test
+    // that wants one of them off says so itself.
+    mgr.UserFlags.bv_term_abstraction_ite = true;
+    mgr.UserFlags.bv_term_abstraction_plus = true;
+    mgr.UserFlags.bv_term_abstraction_compare = true;
+  }
 
   ASTNode makeSymbol(const char* name, unsigned width)
   {
@@ -876,6 +886,51 @@ public:
     return false;
   }
 
+  // The same question when a lemma introduces variables of its own: a
+  // value lemma is one clause from the operand bits to a fresh premise
+  // variable and binary clauses from that variable to the result bits, so
+  // no single clause is false under the scripted model until the premise
+  // has been propagated. Unit-propagate over the unscripted variables and
+  // ask whether that reaches a clause with every literal false.
+  bool addedClausesContradictModel() const
+  {
+    std::map<unsigned, bool> assigned(model.begin(), model.end());
+    bool progress = true;
+    while (progress)
+    {
+      progress = false;
+      for (const auto& clause : clauses)
+      {
+        unsigned unassigned = 0;
+        const std::pair<unsigned, bool>* last = NULL;
+        bool satisfied = false;
+        for (const auto& lit : clause)
+        {
+          auto it = assigned.find(lit.first);
+          if (it == assigned.end())
+          {
+            unassigned++;
+            last = &lit;
+          }
+          else if (it->second != lit.second)
+            satisfied = true;
+        }
+        if (satisfied)
+          continue;
+        if (unassigned == 0)
+          return true;
+        if (unassigned == 1)
+        {
+          // The one literal left must be true: a negated literal wants the
+          // variable false.
+          assigned[last->first] = !last->second;
+          progress = true;
+        }
+      }
+    }
+    return false;
+  }
+
 protected:
   bool addClauseInternal(const vec_literals& ps) override
   {
@@ -1000,7 +1055,7 @@ TEST_F(BVEQAbstractionTest, DuplicateTermsKeepTheirOwnResultVariables)
   EXPECT_EQ(1u, refinedCount(refiner.refine(solver, bits)));
   EXPECT_EQ(1u, refiner.terms()[0].blockedRounds);
   EXPECT_EQ(0u, refiner.terms()[1].blockedRounds);
-  EXPECT_TRUE(solver.someClauseBlocksModel());
+  EXPECT_TRUE(solver.addedClausesContradictModel());
 }
 
 // A partial prefix says nothing to a candidate that called the equality
@@ -1164,8 +1219,10 @@ TEST_F(BVEQAbstractionTest, BlockingRoundReusesTheRegisteredConstant)
   EXPECT_EQ(1u, refiner.terms()[0].blockedRounds);
   EXPECT_EQ(0u, refiner.terms()[0].schemaRounds);
   EXPECT_FALSE(refiner.terms()[0].defined);
-  EXPECT_EQ(0u, solver.newVarCalls);
-  EXPECT_TRUE(solver.someClauseBlocksModel());
+  // The one variable the round minted is the value lemma's premise; the
+  // constant's proxies were reused, not re-registered.
+  EXPECT_EQ(1u, solver.newVarCalls);
+  EXPECT_TRUE(solver.addedClausesContradictModel());
 }
 
 // The same candidate with the schemas left on, which is the default: the

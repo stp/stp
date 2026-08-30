@@ -51,6 +51,7 @@ VC checkerOverANAryAddition(int abstraction)
 {
   VC vc = vc_createValidityChecker();
   vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION, abstraction);
+  vc_setInterfaceFlags(vc, BV_TERM_ABSTRACTION_PLUS, abstraction);
   vc_setInterfaceFlags(vc, BV_EQ_ABSTRACTION, abstraction);
   // Every operand qualifies, so the arity is the only thing under test here.
   vc_setInterfaceFlags(vc, BV_ABSTRACTION_WIDTH, 1);

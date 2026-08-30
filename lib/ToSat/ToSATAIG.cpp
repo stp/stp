@@ -221,6 +221,27 @@ void ToSATAIG::handle_cnf_options(const CNF& cnf, bool needAbsRef)
 // knows there is more than one backend. Everything below is written once.
 bool ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef, CNF& cnf)
 {
+  // AUTO under the BV term abstraction goes to the Gia backend at its
+  // lowest rung, before the size-based choice inside the ABC path can be
+  // made. The abstraction's search is many-solve -- every refinement round
+  // is another call on a solver that keeps the whole CNF -- and which CNF it
+  // keeps decides how that search goes far more than it decides one solve.
+  // Over 311 KLEE binary128 queries with multiplication and division
+  // abstracted, the ABC rung AUTO picks solved 300 with PAR2 2024; the
+  // Gia backend at LUT3 solved 306 with PAR2 1356, against Bitwuzla's 308
+  // and 1647. Without the abstraction the same rung is worth far less (286
+  // against 283 solved), so the size-based choice stays for everything else.
+  // Written back rather than resolved locally so that the splices the
+  // refinement adds later convert at the same rung; an explicit level is
+  // left alone.
+  if (bm->UserFlags.cnf_effort == UserDefinedFlags::CNF_EFFORT_AUTO &&
+      allowAbstraction_ && bm->UserFlags.bv_term_abstraction)
+  {
+    bm->UserFlags.cnf_effort = UserDefinedFlags::CNF_EFFORT_GIA_LOW;
+    if (bm->UserFlags.stats_flag)
+      std::cerr << "cnf-auto: BV term abstraction on, chose gia-low"
+                << std::endl;
+  }
   const enum UserDefinedFlags::CNFEffort e = bm->UserFlags.cnf_effort;
   if (e == UserDefinedFlags::CNF_EFFORT_NEW_VERY_LOW ||
       e == UserDefinedFlags::CNF_EFFORT_NEW_LOW ||

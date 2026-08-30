@@ -28,8 +28,8 @@ Two independent switches turn abstraction on, and nothing happens without at
 least one of them:
 
 ``--bv-term-abstraction``
-  Abstract wide arithmetic: ``bvmul``, ``bvudiv``, ``bvurem``, ``bvadd``,
-  ``ite`` over bit-vectors, and the bit-vector comparisons.
+  Abstract wide ``bvmul``, ``bvudiv`` and ``bvurem``; ``bvadd``, ``ite``
+  over bit-vectors and the bit-vector comparisons can be added, see below.
 
 ``--bv-eq-abstraction``
   Abstract wide equalities, refining them through congruence closure at word
@@ -65,20 +65,27 @@ Once ``--bv-term-abstraction`` is on, each family can be excluded:
      - ``bvudiv`` and ``bvurem``, overriding the option above in either
        argument order
    * - ``--bv-term-abstraction-plus``
-     - on
+     - off
      - ``bvadd``
    * - ``--bv-term-abstraction-ite``
-     - on
+     - off
      - ``ite`` over bit-vector terms
    * - ``--bv-term-abstraction-compare``
-     - on
+     - off
      - the bit-vector comparison predicates
 
 Multiplication and division are separable because their circuits cost very
 differently and the workloads that benefit from abstracting them are not the
 same. The comparison, ``ite`` and addition families are cheap either way:
 each defines itself in a single refinement round rather than by enumerating
-operand values, so turning them off changes little.
+operand values, so abstracting them saves little. On bit-vector workloads
+turning them on or off is noise -- 204 against 203 solved over 329 QF_BV
+files the abstraction engages on, and 247 against 245 over 400 256-bit
+industrial queries -- but inside a floating-point circuit they are hundreds
+of 106- to 229-bit if-then-elses and adders around a handful of
+multiplications and dividers, and abstracting them cost one KLEE binary128
+query 34 s where the arithmetic alone takes 3.4 s. They are off by default
+for that reason.
 
 How a wrong candidate is refined
 --------------------------------
@@ -95,8 +102,14 @@ refinement has three tiers:
    One such fact excludes a region of the candidate space.
 
 2. **A blocking lemma.** When no fact is contradicted, the one pair of
-   operand values the candidate holds is ruled out. This excludes one pair
-   out of 2^(2W), which is why there is a bound on how many are spent.
+   operand values the candidate holds is settled: ``a = va /\ b = vb ->
+   t = va op vb``. This excludes one pair out of 2^(2W), which is why there
+   is a bound on how many are spent. It is written through one fresh
+   variable standing for the premise -- a clause of 2W+1 literals and then
+   W binary clauses -- rather than repeating the premise in every result
+   clause, which at the widths of binary128 significand arithmetic made
+   each lemma a hundred thousand literals that every later SAT call paid
+   for.
 
 3. **The exact circuit.** Once the blocking allowance is gone, refinement
    stops enumerating and says what the operation is, using the same
@@ -223,6 +236,29 @@ solves, and regressed 162 queries while improving 15; ``low-prefix`` fired
 9,525 times and moved nothing. They stay selectable so those results stay
 reproducible.
 
+Which CNF generator
+-------------------
+
+The abstraction's search is many-solve: every refinement round is another
+call on a solver that keeps the whole CNF, and which CNF it keeps decides
+how that search goes far more than it decides one solve. With
+``--cnf-generation-effort`` at its default ``auto``, turning
+``--bv-term-abstraction`` on therefore selects the Gia backend at its lowest
+rung (``gia-low``) rather than the size-based choice between ``very-low``
+and ``medium``, and ``-s`` says so:
+
+.. code-block:: text
+
+    cnf-auto: BV term abstraction on, chose gia-low
+
+Over 311 KLEE binary128 queries with multiplication and division abstracted,
+the size-based rung solved 300 with PAR2 2024 and ``gia-low`` 306 with PAR2
+1356 (Bitwuzla: 308 and 1647); without the abstraction the same rung is
+worth far less there, 286 against 283 solved, which is why the size-based
+choice stays for everything else. On 329 SMT-LIB QF_BV files where the
+abstraction engages it costs nothing, 216 solved against 204 either way.
+An explicit level is always left alone.
+
 Reading what happened
 ---------------------
 
@@ -231,7 +267,7 @@ what refinement spent:
 
 .. code-block:: text
 
-    Abstraction coverage (candidates -> abstracted): eq=2->0 compare=2->2 ite=1->1 plus=1->1 mult=1->1 divmod=0->0
+    Abstraction coverage (candidates -> abstracted): eq=2->0 compare=2->0 ite=1->0 plus=1->0 mult=1->1 divmod=0->0
     Abstraction refinement: rounds=6 blocking=1 schema=4 exact=1 exact-mult=1 exact-divmod=0
     Abstraction circuit cost: clauses=33968 variables=8160 microseconds=4210
     Abstraction schema cost: clauses=512 variables=64 microseconds=95
