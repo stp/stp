@@ -4101,6 +4101,80 @@ void BitBlaster<BBNode, BBNodeManagerT>::BBDivMod(const BBNodeVec& y,
   // shifted-in bits -- the remainder comes out as the dividend, which is
   // what SMT-LIB asks of bvurem, and the quotient bits are all one, which
   // is what the caller's totalisation asserts anyway.
+  // A fully constant operand goes to the recursive circuit below: it prunes
+  // against known bits -- a constant divisor bounds the quotient's width and
+  // each level's subtract to the divisor's own span, dividing by 2^30 at 32
+  // bits in a few hundred gates -- where this circuit's chains fold only
+  // gate by gate. Floating-point significand arithmetic never divides by a
+  // constant, so the case costs it nothing.
+  bool operandConstant = true;
+  for (unsigned j = 0; j < y.size() && operandConstant; j++)
+    if (!(x[j] == nf->getTrue() || x[j] == nf->getFalse()))
+      operandConstant = false;
+  if (!operandConstant)
+  {
+    operandConstant = true;
+    for (unsigned j = 0; j < y.size() && operandConstant; j++)
+      if (!(y[j] == nf->getTrue() || y[j] == nf->getFalse()))
+        operandConstant = false;
+  }
+
+  if (uf->division_variant_4 && !operandConstant)
+  {
+    const unsigned int w = y.size();
+    assert(x.size() == w);
+    assert(rwidth == w);
+
+    // The divisor's complement, once.
+    BBNodeVec dinv;
+    dinv.reserve(w);
+    for (unsigned j = 0; j < w; j++)
+      dinv.push_back(nf->CreateNode(NOT, x[j]));
+
+    // rem[0] is the bit shifted in this step; rem[j+1] holds result bit j
+    // of the running remainder. carry[j] feeds position j.
+    BBNodeVec rem(w + 1, nf->getFalse());
+    BBNodeVec carry(w + 1, nf->getFalse());
+    q = BBNodeVec(w, nf->getFalse());
+
+    for (unsigned step = 0; step < w; step++)
+    {
+      const unsigned i = w - 1 - step; // dividend bit, most significant first
+      rem[0] = y[i];
+      carry[0] = nf->getTrue(); // the +1 of the complement subtraction
+
+      // First stage: the borrow chain alone. Named variables fix the node
+      // creation order, as everywhere else in this file.
+      for (unsigned j = 0; j < w; j++)
+      {
+        const BBNode dOrC = nf->CreateNode(OR, dinv[j], carry[j]);
+        const BBNode dAndC = nf->CreateNode(AND, dinv[j], carry[j]);
+        const BBNode propagate = nf->CreateNode(AND, dOrC, rem[j]);
+        carry[j + 1] = nf->CreateNode(OR, propagate, dAndC);
+      }
+      q[i] = carry[w];
+
+      // Second stage: the subtracted remainder, shifted up as it is
+      // written. xorWithSharing(dinv, carry) reuses the conjunction and
+      // disjunction the first stage built, so the sum bit costs the
+      // guard and one exclusive-or on top of the chain.
+      BBNode prev = rem[0];
+      for (unsigned j = 0; j < w; j++)
+      {
+        const BBNode dXorC = xorWithSharing(dinv[j], carry[j]);
+        const BBNode guarded = nf->CreateNode(AND, dXorC, q[i]);
+        const BBNode next = xorWithSharing(guarded, prev);
+        prev = rem[j + 1];
+        rem[j + 1] = next;
+      }
+    }
+
+    r = BBNodeVec(rem.begin() + 1, rem.end());
+    assert(q.size() == w);
+    assert(r.size() == w);
+    return;
+  }
+
   const unsigned int width = y.size();
   const BBNodeVec zero = BBfill(width, nf->getFalse());
   BBNodeVec one = zero;

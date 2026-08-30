@@ -1,3 +1,7 @@
+; The recursive divider, pinned: division encoding variant 4 would take this
+; escalated proof from seconds to minutes -- its borrow-chain circuit hides
+; the word-level slices this refutation leans on -- and the record counts
+; checked below are the recursive circuit's shape.
 ; If exactly one subtraction of b fits in a, the quotient is one:
 ;
 ;   b <=u a and (a-b) <u b -> a udiv b = 1.
@@ -9,8 +13,8 @@
 ;
 ; The schema below is chosen off the first candidate model, which rides on
 ; the CNF: the rung is pinned so a backend or compiler change cannot move it.
-; RUN: %solver --incremental=off -s --cnf-generation-effort=medium --bv-term-abstraction=1 --bv-term-abstraction-mult=0 --bv-term-abstraction-divmod=1 --bv-term-abstraction-plus=0 --bv-term-abstraction-compare=0 --bv-term-abstraction-schema-groups=quotient-one-quot %s 2>&1 | %OutputCheck %s
-; RUN: %solver --incremental=off -s --cnf-generation-effort=medium -t --bv-term-abstraction=1 --bv-term-abstraction-mult=0 --bv-term-abstraction-divmod=1 --bv-term-abstraction-plus=0 --bv-term-abstraction-compare=0 --bv-term-abstraction-schemas=0 --bv-term-abstraction-divmod-value-limit=1 %s 2>&1 | %OutputCheck --check-prefix=CAP %s
+; RUN: %solver --bb.div-v4=0 --incremental=off -s --cnf-generation-effort=medium --bv-term-abstraction=1 --bv-term-abstraction-mult=0 --bv-term-abstraction-divmod=1 --bv-term-abstraction-plus=0 --bv-term-abstraction-compare=0 --bv-term-abstraction-schema-groups=quotient-one-quot %s 2>&1 | %OutputCheck %s
+; RUN: %solver --bb.div-v4=0 --incremental=off -s --cnf-generation-effort=medium -t --bv-term-abstraction=1 --bv-term-abstraction-mult=0 --bv-term-abstraction-divmod=1 --bv-term-abstraction-plus=0 --bv-term-abstraction-compare=0 --bv-term-abstraction-schemas=0 --bv-term-abstraction-divmod-value-limit=1 %s 2>&1 | %OutputCheck --check-prefix=CAP %s
 ; CHECK: BV abstraction: BVDIV quotient-is-one lemma
 ; CHECK-NEXT: BV abstraction: refined 1 operations
 ; CHECK: ^unsat$
