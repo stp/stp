@@ -234,9 +234,32 @@ CNF ToCNFAIG::derive_cnf(BBNodeManagerAIG& mgr, unsigned namedOutputs)
     case UserDefinedFlags::CNF_EFFORT_VERY_HIGH:
       return derive_cnf_mf(mgr, 8, namedOutputs);
 
+    // The rungs that name a different backend still have to answer here,
+    // because this conversion is reached from places that have an ABC Aig and
+    // nothing else -- the BV-abstraction refinement splices above all. Each
+    // maps to the level on this scale that spends comparable effort, so the
+    // splices track the level that was asked for instead of silently running
+    // whatever the default arm happened to be.
+    //
+    // The gia rungs drive the same generator at the same three LUT sizes, so
+    // the mapping is exact. The in-house rungs sit below very-low, and
+    // very-low is as far down as this scale goes.
+    case UserDefinedFlags::CNF_EFFORT_NEW_VERY_LOW:
+    case UserDefinedFlags::CNF_EFFORT_NEW_LOW:
+    case UserDefinedFlags::CNF_EFFORT_NEW_MEDIUM:
+      return fromAig(Cnf_DeriveFast(mgr.aigMgr, (int)namedOutputs));
+
+    case UserDefinedFlags::CNF_EFFORT_GIA_LOW:
+      return derive_cnf_mf(mgr, 3, namedOutputs);
+
+    case UserDefinedFlags::CNF_EFFORT_GIA_HIGH:
+      return derive_cnf_mf(mgr, 6, namedOutputs);
+
+    case UserDefinedFlags::CNF_EFFORT_GIA_VERY_HIGH:
+      return derive_cnf_mf(mgr, 8, namedOutputs);
+
     case UserDefinedFlags::CNF_EFFORT_AUTO: // resolved above; cannot reach here
     case UserDefinedFlags::CNF_EFFORT_MEDIUM:
-    default:
     {
       // Cut enumeration and technology mapping, as in ABC's Cnf_Derive().
       // That convenience wrapper reuses one process-global Cnf_Man_t, so two
@@ -250,6 +273,10 @@ CNF ToCNFAIG::derive_cnf(BBNodeManagerAIG& mgr, unsigned namedOutputs)
       return fromAig(result);
     }
   }
+
+  // No default arm above: -Wswitch is what makes a new rung choose what this
+  // conversion does with it, rather than inheriting an arm by accident.
+  FatalError("ToCNFAIG: unhandled CNF generation effort");
 }
 
 void ToCNFAIG::fill_node_to_var(const CNF& cnf,
