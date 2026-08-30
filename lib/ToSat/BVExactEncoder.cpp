@@ -68,6 +68,15 @@ void rewrite(BBNodeManagerAIG& mgr, int64_t iterations)
   if (iterations <= 0)
     return;
 
+  // Blasting a claim leaves AND nodes behind that no CO reaches: a bit of an
+  // intermediate vector nothing reads, an operand a later structural-hash hit
+  // dropped the last reference to. Aig_ManDupDfs does not copy those, but it
+  // asserts that it copied everything, so it aborts an assertions build below.
+  // ToCNFAIG::toCNF cleans up before it rewrites for the same reason; these
+  // AIGs are built here, so clean up here. Only unreferenced AND nodes go, so
+  // the CI order the callers splice by is untouched.
+  Aig_ManCleanup(mgr.aigMgr);
+
   ensureDarLibrary();
   Dar_RwrPar_t Pars;
   Dar_ManDefaultRwrParams(&Pars);
