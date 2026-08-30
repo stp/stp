@@ -174,6 +174,12 @@ void ToSATAIG::handle_cnf_options(const CNF& cnf, bool needAbsRef)
            << " that is the whole query." << endl;
   };
 
+  // One line, whichever generator ran, so that a sweep over the levels can be
+  // read without knowing which of them prints what.
+  if (bm->UserFlags.stats_flag)
+    cerr << "cnf: " << cnf.clauseCount() << " clauses, " << cnf.varCount() - 1
+         << " variables, " << cnf.literalCount() << " literals" << endl;
+
   if (bm->UserFlags.output_CNF_flag)
   {
     std::stringstream fileName;
@@ -211,17 +217,29 @@ void ToSATAIG::handle_cnf_options(const CNF& cnf, bool needAbsRef)
   }
 }
 
+// One branch, at the top, and it is the only place in the pipeline that
+// knows there is more than one backend. Everything below is written once.
 bool ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef, CNF& cnf)
+{
+  if (bm->UserFlags.cnf_effort == UserDefinedFlags::CNF_EFFORT_NEW_VERY_LOW)
+    return bitblastWith<BBNodeLit, BBNodeManagerLit, BitBlasterLit,
+                        ToCNFTseitin>(input, needAbsRef, cnf);
+  return bitblastWith<BBNodeAIG, BBNodeManagerAIG, BitBlasterAIG, ToCNFAIG>(
+      input, needAbsRef, cnf);
+}
+
+template <class BBNodeT, class ManagerT, class BlasterT, class LoweringT>
+bool ToSATAIG::bitblastWith(const ASTNode& input, bool needAbsRef, CNF& cnf)
 {
   stp::SubstitutionMap sm(bm);
   Simplifier simp(bm, &sm);
 
-  BBNodeManagerAIG mgr;
+  ManagerT mgr;
   mgr.nodeBudget = bm->UserFlags.aig_node_budget;
-  BitBlasterAIG bb(&mgr, &simp, bm->defaultNodeFactory, &bm->UserFlags, cb,
+  BlasterT bb(&mgr, &simp, bm->defaultNodeFactory, &bm->UserFlags, cb,
                 allowAbstraction_);
 
-  BBNodeAIG BBFormula;
+  BBNodeT BBFormula;
 
   bm->UserFlags.coverage.queries_bitblasted++;
   bm->GetRunTimes()->start(RunTimes::BitBlasting);
@@ -253,10 +271,10 @@ bool ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef, CNF& cnf)
     // The incremental route never had this: syncAbstractions() asserts
     // each constraint as its own permanent unit clause and builds no
     // chain at all.
-    const std::vector<BBNodeAIG>& side = bb.sideConstraints();
+    const std::vector<BBNodeT>& side = bb.sideConstraints();
     if (!side.empty())
     {
-      std::vector<BBNodeAIG> conjuncts;
+      std::vector<BBNodeT> conjuncts;
       conjuncts.reserve(side.size() + 1);
       conjuncts.push_back(BBFormula);
       conjuncts.insert(conjuncts.end(), side.begin(), side.end());
@@ -296,7 +314,8 @@ bool ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef, CNF& cnf)
   bb.cb = NULL;
 
   bm->GetRunTimes()->start(RunTimes::CNFConversion);
-  toCNF.toCNF(BBFormula, cnf, nodeToSATVar, needAbsRef, mgr);
+  LoweringT lowering(bm->UserFlags);
+  lowering.toCNF(BBFormula, cnf, nodeToSATVar, needAbsRef, mgr);
   bm->GetRunTimes()->stop(RunTimes::CNFConversion);
 
   // The abstraction records below name their combinational inputs by ordinal,
@@ -318,7 +337,7 @@ bool ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef, CNF& cnf)
     a.id = raw.id;
     a.dependencies = raw.dependencies;
     a.eqNode = raw.eqNode;
-    a.abstractionSATVar = satVarOfCi(raw.abstractionCI.symbol_index);
+    a.abstractionSATVar = satVarOfCi(mgr.ciOrdinal(raw.abstractionCI));
     a.leftSymbol = raw.leftSymbol;
     a.rightSymbol = raw.rightSymbol;
     a.width = std::max(1u, raw.leftSymbol.GetValueWidth());
@@ -366,7 +385,7 @@ bool ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef, CNF& cnf)
   }
 
   // Free the memory in the AIGs.
-  BBFormula = BBNodeAIG(); // null node
+  BBFormula = BBNodeT(); // null node
   mgr.stop();
 
   return true;

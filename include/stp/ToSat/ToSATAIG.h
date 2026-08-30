@@ -31,6 +31,7 @@ THE SOFTWARE.
 #include "stp/STPManager/STPManager.h"
 #include "stp/ToSat/BBNodeManagerAIG.h"
 #include "stp/ToSat/ToCNFAIG.h"
+#include "stp/ToSat/ToCNFTseitin.h"
 #include "stp/ToSat/BitBlaster.h"
 #include "stp/ToSat/BVAbstractionRefiner.h"
 #include "stp/Util/RunTimes.h"
@@ -78,7 +79,6 @@ private:
 
   bool first;
 
-  ToCNFAIG toCNF;
 
   // The abstractions this lowering minted, and the CEGAR loop that
   // refines them. Both live here for the batch pipeline's lifetime of one
@@ -99,6 +99,15 @@ public:
   // the absence as unsatisfiable.
   bool bitblast(const ASTNode& input, bool needAbsRef, CNF& cnf);
 
+private:
+  // The body of bitblast(), over whichever node representation, manager and
+  // lowering the flags selected. Defined in the .cpp; both instantiations are
+  // used there and nowhere else.
+  template <class BBNodeT, class ManagerT, class BlasterT, class LoweringT>
+  bool bitblastWith(const ASTNode& input, bool needAbsRef, CNF& cnf);
+
+public:
+
   bool cbIsDestructed() { return cb == NULL; }
 
   // `allowAbstraction` is false for a lowering whose query must be encoded
@@ -115,7 +124,7 @@ public:
   // the manager, and undone only on the paths that reach the bottom of the
   // function.
   ToSATAIG(STPMgr* bm, ArrayTransformer* at, bool allowAbstraction = true)
-      : ToSATBase(bm), toCNF(bm->UserFlags), abstraction_(bm),
+      : ToSATBase(bm), abstraction_(bm),
         allowAbstraction_(allowAbstraction)
   {
     cb = NULL;
@@ -125,7 +134,7 @@ public:
 
   ToSATAIG(STPMgr* bm, simplifier::constantBitP::ConstantBitPropagation* cb_,
            ArrayTransformer* at, bool allowAbstraction = true)
-      : ToSATBase(bm), cb(cb_), toCNF(bm->UserFlags), abstraction_(bm),
+      : ToSATBase(bm), cb(cb_), abstraction_(bm),
         allowAbstraction_(allowAbstraction)
   {
     init();
