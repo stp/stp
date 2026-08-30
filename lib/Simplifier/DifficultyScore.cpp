@@ -89,7 +89,9 @@ bool anyConstantChild(const ASTNode& b)
   return constantChildren(b) > 0;
 }
 
-// A ripple-carry adder over w bits costs 11w-7; adding a constant instead
+// A ripple-carry adder over w bits costs 7w-4 -- two half adders whose
+// carries the sums already built; see BitBlaster::fullAdder -- adding a
+// constant instead
 // costs 4w-6, because a known addend fixes one input of every full adder.
 // Subtracting a constant is cheaper again -- the negation of a constant is
 // itself a constant, so no carry chain is built for it.
@@ -101,7 +103,7 @@ int64_t addCost(const ASTNode& b, int64_t w, bool subtract)
 
   int64_t score = 0;
   if (symbolic >= 2)
-    score += (11 * w - 7) * static_cast<int64_t>(symbolic - 1);
+    score += (7 * w - 4) * static_cast<int64_t>(symbolic - 1);
   if (constants > 0 && symbolic > 0)
     score += subtract ? (3 * w - 1) : (4 * w - 6);
   return std::max<int64_t>(0, score);
@@ -115,8 +117,8 @@ int64_t addCost(const ASTNode& b, int64_t w, bool subtract)
 // for an add over the (w-i) columns above it, 11(w-i)-7 nodes. With a
 // constant operand only its set bits are built, which is why multiplying by
 // a constant with few -- or high -- set bits is so much cheaper than the
-// symbolic case. Summing that series over every bit gives the symmetric
-// case, 6(w-1)^2+1, which the measurements reproduce exactly out to w=256.
+// symbolic case. Each add is 7(w-i)-4 with the shared full adder, and the
+// series sums to about 4(w-1)^2 in the symmetric case.
 int64_t multiplyCost(const ASTNode& b, int64_t w)
 {
   const ASTNode* constant = NULL;
@@ -129,7 +131,7 @@ int64_t multiplyCost(const ASTNode& b, int64_t w)
   }
 
   if (constant == NULL)
-    return 6 * (w - 1) * (w - 1) + 1;
+    return 4 * (w - 1) * (w - 1) + 1;
 
   const CBV cbv = constant->GetBVConst();
   int64_t score = 0;
@@ -143,7 +145,7 @@ int64_t multiplyCost(const ASTNode& b, int64_t w)
       seenLowestSetBit = true;
       continue;
     }
-    score += 11 * (w - i) - 7;
+    score += 7 * (w - i) - 4;
   }
   return score;
 }

@@ -17,43 +17,43 @@
 (set-logic QF_BV)
 (declare-fun a () (_ BitVec 8))
 (declare-fun y () (_ BitVec 8))
-(declare-fun y1 () (_ BitVec 8))
-(declare-fun y2 () (_ BitVec 8))
-(declare-fun y3 () (_ BitVec 8))
-(declare-fun y4 () (_ BitVec 8))
-(declare-fun y5 () (_ BitVec 8))
-(declare-fun y6 () (_ BitVec 8))
+(declare-fun y1 () (_ BitVec 12))
+(declare-fun y2 () (_ BitVec 12))
+(declare-fun y3 () (_ BitVec 12))
+(declare-fun y4 () (_ BitVec 12))
+(declare-fun y5 () (_ BitVec 12))
+(declare-fun y6 () (_ BitVec 12))
 (assert (= (bvand a #x0f) #x0f))
 (assert (= (bvor a #x0f) #xff))
 ; heavy throwaway rounds accumulate dead clause mass -- each a distinct
 ; multiplier circuit -- until the valve's mass ratio trips
 (push 1)
-(assert (bvugt (bvmul y1 y1) #x03))
+(assert (bvugt (bvmul y1 y1) #x003))
 ; CHECK: ^sat
 (check-sat)
 (pop 1)
 (push 1)
-(assert (bvugt (bvmul y2 y2) #x03))
+(assert (bvugt (bvmul y2 y2) #x003))
 ; CHECK: ^sat
 (check-sat)
 (pop 1)
 (push 1)
-(assert (bvugt (bvmul y3 y3) #x03))
+(assert (bvugt (bvmul y3 y3) #x003))
 ; CHECK: ^sat
 (check-sat)
 (pop 1)
 (push 1)
-(assert (bvugt (bvmul y4 y4) #x03))
+(assert (bvugt (bvmul y4 y4) #x003))
 ; CHECK: ^sat
 (check-sat)
 (pop 1)
 (push 1)
-(assert (bvugt (bvmul y5 y5) #x03))
+(assert (bvugt (bvmul y5 y5) #x003))
 ; CHECK: ^sat
 (check-sat)
 (pop 1)
 (push 1)
-(assert (bvugt (bvmul y6 y6) #x03))
+(assert (bvugt (bvmul y6 y6) #x003))
 ; five dead rounds exceed four times the peak working set: the valve
 ; fires at this solve and the rebuild runs the global base pass
 ; CHECK: base re-simplified at rebuild

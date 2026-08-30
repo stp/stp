@@ -2369,13 +2369,46 @@ void BitBlaster<BBNode, BBNodeManagerT>::BBPlus2(BBNodeVec& sum,
 
   const int bitWidth = sum.size();
   assert(y.size() == (unsigned)bitWidth);
-  // Revision 320 avoided creating the nextcin, at I suspect unjustified cost.
   for (int i = 0; i < bitWidth; i++)
   {
-    BBNode nextcin = Majority(sum[i], y[i], cin);
-    sum[i] = nf->CreateNode(XOR, sum[i], y[i], cin);
+    BBNode nextcin, s;
+    fullAdder(sum[i], y[i], cin, s, nextcin);
+    sum[i] = s;
     cin = nextcin;
   }
+}
+
+// a XOR b as AND(OR(a, b), NOT(AND(a, b))): three gates, and the inner
+// conjunction is the half adder's carry, so a caller that wants both pays
+// for the exclusive-or alone. The ordered-exor lowering behind
+// CreateNode(XOR, ..) builds two conjunctions nothing else asks for.
+template <class BBNode, class BBNodeManagerT>
+BBNode BitBlaster<BBNode, BBNodeManagerT>::xorWithSharing(const BBNode& a,
+                                                          const BBNode& b)
+{
+  // Built into named variables so the nodes are created in a fixed order,
+  // as in Majority(): argument evaluation order is compiler-dependent.
+  const BBNode conj = nf->CreateNode(AND, a, b);
+  const BBNode disj = nf->CreateNode(OR, a, b);
+  return nf->CreateNode(AND, disj, nf->CreateNode(NOT, conj));
+}
+
+// sum = a + b + cin over one bit. Two half adders: the first's carry is
+// AND(a, b), which its sum -- xorWithSharing(a, b) -- already created, and
+// likewise for the second, so the whole adder is seven gates where the
+// majority-carry form is eleven. On a 226-bit significand product the
+// difference between the two spellings is a third of the multiplier.
+template <class BBNode, class BBNodeManagerT>
+void BitBlaster<BBNode, BBNodeManagerT>::fullAdder(const BBNode& a,
+                                                   const BBNode& b,
+                                                   const BBNode& cin,
+                                                   BBNode& sum, BBNode& carry)
+{
+  const BBNode axb = xorWithSharing(a, b);
+  const BBNode carry1 = nf->CreateNode(AND, a, b);
+  sum = xorWithSharing(axb, cin);
+  const BBNode carry2 = nf->CreateNode(AND, axb, cin);
+  carry = nf->CreateNode(OR, carry1, carry2);
 }
 
 // Stores result - x in result, destructively
@@ -2753,8 +2786,7 @@ void BitBlaster<BBNode, BBNodeManagerT>::buildAdditionNetworkResult(
 
     if (uf->adder_variant)
     {
-      carry = Majority(a, b, c);
-      sum = nf->CreateNode(XOR, a, b, c);
+      fullAdder(a, b, c, sum, carry);
     }
     else
     {
@@ -4050,6 +4082,25 @@ void BitBlaster<BBNode, BBNodeManagerT>::BBDivMod(const BBNodeVec& y,
                                                   unsigned int rwidth,
                                                   BBNodeSet& support)
 {
+  // The two-stage shift/subtract divider. y is the dividend and x the
+  // divisor, both least-significant-bit first. One step per dividend bit,
+  // most significant first: shift the working remainder up one and bring
+  // that dividend bit in, then subtract the divisor by adding its
+  // complement with a carry-in of one -- but in two stages. The first
+  // computes only the carry chain, whose final carry says whether the
+  // subtraction succeeds, and that is the quotient bit; the second reuses
+  // those same carries to write the subtracted remainder, guarded by the
+  // quotient bit, without a comparison, a second adder, or a multiplexer
+  // layer. Three-and-a-bit gates a bit for the carries and five for the
+  // conditional sum, against the recursive circuit below with its full
+  // subtractor, comparison and multiplexers per level: 460k gates against
+  // a million at 226 bits.
+  //
+  // A zero divisor needs no special case: its complement is all ones, so
+  // every step's subtraction succeeds and takes the remainder back to the
+  // shifted-in bits -- the remainder comes out as the dividend, which is
+  // what SMT-LIB asks of bvurem, and the quotient bits are all one, which
+  // is what the caller's totalisation asserts anyway.
   const unsigned int width = y.size();
   const BBNodeVec zero = BBfill(width, nf->getFalse());
   BBNodeVec one = zero;
