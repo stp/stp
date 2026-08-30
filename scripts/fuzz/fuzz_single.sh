@@ -20,7 +20,7 @@
 #
 # Environment:
 #   STP           STP binary. Default: the first of build_static_debug/stp,
-#                 build/stp, build_debug/stp, build-release/stp in the source
+#                 build/stp, build-debug/stp, build-release/stp in the source
 #                 tree, else stp on PATH. A build with assertions enabled finds
 #                 more, which is why the release directory comes last.
 #   CHECKER       Reference solver, invoked as "$CHECKER file.smt2".
@@ -69,7 +69,7 @@ source_root=$(cd -- "$script_dir/../.." && pwd)
 if [ -z "${STP:-}" ]; then
   for candidate in  "$source_root"/build_static_debug/stp \
                     "$source_root"/build/stp  \
-                    "$source_root"/build_debug/stp \
+                    "$source_root"/build-debug/stp \
                     "$source_root"/build-release/stp \
                    ; do
     if [ -x "$candidate" ]; then STP=$candidate; break; fi
@@ -129,6 +129,11 @@ declare -a LOGIC_SETS=(
 # --common-subsum and --pair-extract leave the CNF byte-identical on every
 # generated file. -nary 8 -ref 3 is where they start to bite.
 "QF_BV -nary 8 -ref 3"
+# Wide operands, which is what the abstraction group needs: at the shipped
+# --bv-abstraction-width of 64 nothing generated at the default -Mbw 16 is
+# wide enough, and this is the only entry where that group bites without the
+# width being spelled out (13/30 for the equality family, 18/30 for terms).
+"QF_BV -mbw 24 -Mbw 96 -Mc 4"
 "QF_ABV"
 # Array extensionality: -mxn/-Mxn are how many array pairs FuzzSMT compares
 # with = or distinct. Without them it never equates two arrays, so the whole
@@ -146,6 +151,31 @@ declare -a LOGIC_SETS=(
 # files in 100. --array-equality because the generated files compare whole
 # arrays by default (-mxn/-Mxn default to 0..2 for this logic).
 "QF_ABVFP -mr 12 -Mr 30 -mw 4 -Mw 12 -Mar 3 | --array-equality"
+# Floating point with nothing else in the query, so the arithmetic circuits
+# rather than the array machinery decide the encoding. -ref 3 is what makes
+# the generator reuse a term, which is what puts an fp.add under an
+# fp.isZero: --bb.fp-native-add-iszero changes 7 of 30 files here against 2
+# of 20 on the array entry, and --bb.fp-native-domain 3 of 30 against 1.
+"QF_FP -mvf 3 -Mvf 8 -mcf 2 -Mcf 6 -mvrm 1 -Mvrm 2 -ref 3"
+# One array under a deep write chain, read many times. Every array entry
+# above sits inside the eager-Ackermannisation regime -- the default budget
+# of 4000 index comparisons covers them -- so there --ackermanize asks for
+# what already happens and changes nothing; here it changes 18 of 30. It is
+# also the only entry where the lazy write-chain cut has a chain long enough
+# to cut (--lazy-write-reads-depth=0 changes 18/30, --lazy-write-reads=0
+# 2/30), because that pass stands down whenever extensionality is active,
+# which rules out the -mxn entries.
+"QF_ABV -mar 1 -Mar 1 -mw 20 -Mw 40 -mr 8 -Mr 20 -mv 4 -Mv 8"
+# Uninterpreted functions. -mf/-Mf and -mp/-Mp are how many uninterpreted
+# functions and predicates FuzzSMT declares, and -ref 3 is what makes it
+# apply one of them to arguments that may be equal, which is what the
+# congruence checker exists for. At the generator's defaults the refinement
+# loop never installs a lemma; at these counts --uf-ackermann off changes 23
+# files in 30.
+"QF_UFBV -mf 3 -Mf 5 -mp 2 -Mp 4 -ma 1 -Ma 2 -ref 3 -mv 2 -Mv 4 -mbw 2 -Mbw 8"
+# The same with arrays in the query as well, so array read refinement and UF
+# congruence refinement run in the one solve.
+"QF_AUFBV -mf 2 -Mf 4 -mp 1 -Mp 3 -ref 3 -mr 4 -Mr 12 -mw 2 -Mw 8"
 )
 
 # LOGICS overrides the list, LOGIC gives a single entry. Split on both newlines
@@ -330,6 +360,11 @@ rm -f probe.smt2
 #   stp --output-CNF --exit-after-CNF f.smt2                  # baseline
 #   stp <entry> --output-CNF --exit-after-CNF f.smt2          # with the entry
 #
+# A CNF compare cannot see an option that only steers refinement: --output-CNF
+# writes the first encoding and nothing after it. Those are checked against the
+# counters `stp -t` prints instead -- the "Abstraction refinement:" line for the
+# entries in the abstraction group below.
+#
 # --bb.mult-v2=1 on its own looked reasonable and failed exactly that test:
 # byte-identical CNF on every one of 49 QF_BV and QF_ABV files, because each
 # site reading upper_multiplication_bound is gated behind constant-bit
@@ -337,7 +372,8 @@ rm -f probe.smt2
 # the default multiplication variant. Paired with variant 5 it does bite, so
 # that is the form kept below.
 
-declare -a OPTION_GROUPS=(simplify mult bitblast fp cnf solver bias misc)
+declare -a OPTION_GROUPS=(simplify mult bitblast abstract array uf fp cnf
+                          solver bias misc)
 
 # A group named here is drawn only when the iteration's logic matches the
 # pattern, which is how options that do nothing outside one theory stay out of
@@ -345,12 +381,13 @@ declare -a OPTION_GROUPS=(simplify mult bitblast fp cnf solver bias misc)
 # logic name.
 declare -A GROUP_LOGIC_FILTER=(
 [fp]='*FP*'
+[array]='*A*'
+[uf]='*UF*'
 )
 
 declare -a g_simplify=(
 ""
 "--disable-simplifications"
-"--switch-word"
 "--disable-opt-inc"
 "--disable-cbitp"
 "--disable-equality"
@@ -360,17 +397,19 @@ declare -a g_simplify=(
 "--use-intervals=0"
 "--pure-literals=0"
 "--difficulty-reversion=0"
-"--flattening=1"
+"--flattening=0"
 "--ite-context-simplifications=1"
 "--merge-same=1"
 "--simplify-to-constants-only=1"
 "--size-reducing-fixed-point-limit=-1"
 "--aig-core-simplification=1"
 
-# Both are documented as needing --flattening, and both do nothing without it
-# on a generated file, so they are paired with it rather than listed alone.
-"--flattening=1 --common-subsum=1"
-"--flattening=1 --pair-extract=1"
+# This and the --flattening entry above are opt-outs because the flattening
+# stack is on by default since #838, so an opt-in form only re-runs the
+# baseline. Its third member --common-subsum has no entry either way: opting
+# out of it is byte-identical on every generated file, the n-ary entry
+# included, because the pass finds nothing to factor there.
+"--pair-extract=0"
 
 # A bit-blasting option, but it lives here because #789 made it exclude
 # --disable-opt-inc and --disable-simplifications, which are entries above.
@@ -382,6 +421,10 @@ declare -a g_simplify=(
 # here rather than being trusted.
 "--unconstrained-variable-elimination=0"
 "--aig-rewrite-passes=1"
+
+# Not here: --switch-word, which turns the word-level solver off. A generated
+# file has no top-level equation for it to solve, so both settings emit the
+# same CNF on all 170 files measured across the logic entries below.
 )
 
 # Multiplication: the variants are alternative settings of one option, so they
@@ -413,6 +456,14 @@ declare -a g_mult=(
 
 # The rest of bit-blasting. These are independent of each other, but keeping
 # them in one group bounds how far a single iteration strays from the default.
+#
+# --bb.div-v2 and --bb.add-v1 are the exception to the rule that an entry has
+# to change the output: both alternatives are the same function written two
+# ways -- a strict less-than against the negation of the reversed one, and
+# Majority() against the three-conjunction OR -- and structural hashing folds
+# them back together, so the CNF is byte-identical on all 170 files measured,
+# under every rung of the cnf group. They are kept because the alternative
+# encoder does run: what is being fuzzed is the code, not the difference.
 declare -a g_bitblast=(
 ""
 "--bb.div-v1=0"
@@ -424,20 +475,110 @@ declare -a g_bitblast=(
 "--bb.conjoin-constant=1"
 )
 
+# Lazy bit-vector abstraction, the CEGAR path that replaces a wide operation
+# or equality with a fresh variable and refines it. The width has to be
+# spelled out: --bv-abstraction-width defaults to 64 while FuzzSMT's -Mbw
+# defaults to 16, so on most entries nothing generated is wide enough at the
+# shipped width and the family would be byte-identical to the baseline. At 8
+# it changes the CNF on about half the files. Two logic entries reach it
+# without help and are why the last entry carries no width: the wide-operand
+# one, and the floating-point-array one, whose terms are 32 and 64 bits.
+#
+# The knobs under each family steer refinement, which happens after the first
+# CNF is written and so is invisible to a CNF compare. They were checked
+# against the "Abstraction refinement:" counters `stp -t` prints, and move
+# them on 4 to 9 files in 30.
+declare -a g_abstract=(
+""
+"--bv-eq-abstraction=1 --bv-abstraction-width=8"
+"--bv-eq-abstraction=1 --bv-abstraction-width=8 --bv-eq-refine-width=1"
+"--bv-term-abstraction=1 --bv-abstraction-width=8"
+"--bv-term-abstraction=1 --bv-abstraction-width=8 --bv-term-abstraction-schemas=0"
+"--bv-term-abstraction=1 --bv-abstraction-width=8 --bv-term-abstraction-profile=aggressive"
+"--bv-term-abstraction=1 --bv-abstraction-width=8 --bv-term-abstraction-inc-bitblast=1"
+"--bv-term-abstraction=1 --bv-term-abstraction-inc-bitblast=1"
+)
+
+# Arrays, drawn only for the logics that have them. One group because these
+# are alternatives in fact as well as in form: --ackermanize turns the lazy
+# write-chain cut off outright -- markLazyChainCut stands down for it -- so an
+# iteration drawing both would be testing the first alone.
+#
+# Which entry bites depends on which array entry the iteration drew. The
+# budget default of 4000 index comparisons covers every array file the
+# generator writes except the deep-chain one, so --ackermanize is inert on the
+# rest (0/30) and changes 18/30 there; a budget of zero is the opposite
+# setting, and changes 9/30 on the extensional entry and nothing on the chain.
+declare -a g_array=(
+""
+"--ackermanize"
+"--array-ackermann-budget=0"
+"--lazy-write-reads=0"
+"--lazy-write-reads-depth=0"
+"--lazy-write-reads-depth=1"
+"--lazy-write-reads-depth=8"
+)
+
+# Uninterpreted functions, drawn only for the UF logics. The eager policy and
+# its budget set the same thing two ways, so they share a group with the
+# refinement knobs that only matter once the policy is out of the way -- hence
+# the pairings. --uf-lemmas-per-round is invisible to a CNF compare and was
+# measured against `stp -s` with the timings scrubbed: 17/30.
+declare -a g_uf=(
+""
+"--uf-ackermann on"
+"--uf-ackermann off"
+"--uf-ackermann-budget=0"
+"--uf-ackermann off --uf-lemmas-per-round=1"
+"--uf-ackermann off --uf-lemmas-per-round=0"
+"--uf-ackermann off --uf-phase-hints=1"
+)
+
 # Floating-point bit-blasting, drawn only for the FP logics: with no FP in the
 # input both settings leave the CNF byte-identical, so anywhere else they are a
 # wasted iteration. --bb.fp-native-arith only applies to predicates that stayed
 # native, so it is not combined with turning --bb.fp-native-cmp off.
+#
+# The last two are packed-operand shortcuts that are on by default, so the
+# entries opt out. Each wants a particular term under the predicate, so it is
+# the plain floating-point entry that reaches them -- 7/30 and 3/30 there
+# against 2/20 and 1/20 on the array one. Deliberately absent:
+# --bb.fp-native-known-sign, which reads zero on both entries even paired with
+# the --bb.fp-native-domain it needs, and the whole --fp-domain-* prepass
+# family, which wants asserted bounds a generated file does not carry.
 declare -a g_fp=(
 ""
 "--bb.fp-native-cmp=0"
 "--bb.fp-native-arith=1"
+"--bb.fp-native-add-iszero=0"
+"--bb.fp-native-domain=0"
 )
 
+# CNF generation. One option selects between three encoders, so the rungs
+# belong in one group: very-low..very-high minimise ABC's AIG, the new-*
+# rungs blast through STP's own AIG and write the CNF from it directly, and
+# the gia-* rungs reach the same generator over a Gia the bit-blaster built
+# rather than one converted from an ABC AIG. Every rung here changes the CNF
+# on every file that emits one -- 16 of 30 QF_BV files; the simplifier
+# decides the rest before the SAT solver is reached.
+#
+# 'auto' and 'medium' are absent because they are what the empty entry
+# already tests: auto is the default, and a generated file is always under
+# --cnf-auto-threshold, so it picks medium.
 declare -a g_cnf=(
 ""
 "--cnf-generation-effort=very-low"
+"--cnf-generation-effort=low"
+"--cnf-generation-effort=high"
 "--cnf-generation-effort=very-high"
+"--cnf-generation-effort=new-very-low"
+"--cnf-generation-effort=new-low"
+"--cnf-generation-effort=new-medium"
+"--cnf-generation-effort=gia-low"
+"--cnf-generation-effort=gia-high"
+"--cnf-generation-effort=gia-very-high"
+# The other way to reach very-low: the threshold auto drops to it above.
+"--cnf-auto-threshold=0"
 )
 
 declare -a g_solver=(
@@ -447,6 +588,9 @@ declare -a g_solver=(
 # On an older one these are dropped at startup; see the probe further down.
 "--cadical --cadical-factor on"
 "--cadical --cadical-factor off"
+# 'auto' turns it on only for problems with array operations, so what this
+# entry means depends on the logic the iteration drew.
+"--cadical --cadical-factor auto"
 "--cryptominisat"
 "--cryptominisat --threads=4"
 "--simplifying-minisat"
@@ -464,7 +608,6 @@ declare -a g_bias=(
 
 declare -a g_misc=(
 ""
-"--ackermanize"
 "--interactive=1"
 )
 
@@ -487,6 +630,15 @@ fi
 # Drop entries this binary doesn't understand, rather than have the option
 # parser reject them and count every iteration as a mismatch. Catches both a stale build and
 # typos in the arrays above. ($supported was read from --help further up.)
+#
+# The name check is not enough on its own: an entry can name an option this
+# binary has and still give it a value it does not know -- a
+# --cnf-generation-effort rung added after the binary was built, say -- which
+# is refused at runtime with every iteration saved as a mismatch. So each
+# entry that survives the name check is offered to the binary once, on a
+# query small enough that answering it costs nothing.
+echo '(set-logic QF_BV)(declare-fun x () (_ BitVec 4))(assert (= x x))(check-sat)' \
+  > entry-probe.smt2
 declare -a dropped=()
 offered=0
 for gname in "${OPTION_GROUPS[@]}"; do
@@ -507,11 +659,17 @@ for gname in "${OPTION_GROUPS[@]}"; do
           break
         fi
       done
+      # $e is deliberately unquoted, some entries are two options.
+      if [ $keep -eq 1 ] && ! "$STP" $e -d entry-probe.smt2 > /dev/null 2>&1; then
+        dropped+=("$gname: $e  (the binary refused it)")
+        keep=0
+      fi
       if [ $keep -eq 1 ]; then checked+=("$e"); fi
   done
   group=("${checked[@]}")
   unset -n group
 done
+rm -f entry-probe.smt2
 
 # Worth being loud about: a dropped entry is a code path that silently stops
 # being fuzzed, and the run otherwise looks perfectly healthy for hours.
