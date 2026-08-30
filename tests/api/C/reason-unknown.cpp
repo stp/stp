@@ -43,6 +43,13 @@ namespace
 {
 // A real factorisation, zero-extended so the product cannot wrap: modular
 // multiplication would make it trivially satisfiable and no budget would bind.
+// The number is (2^31 - 69)^2. It has to be chosen with care: products with a
+// Mersenne factor -- the previous constant had 2^31 - 1 in it -- fell to the
+// solver's preprocessing with zero conflicts once the multiplier circuit
+// shrank, and a conflict budget that is never consulted never binds, while a
+// generic semiprime takes minutes. This square is decided in under a second
+// and costs a few thousand conflicts, so every budget here has something to
+// stop.
 void assertFactoring(VC vc)
 {
   Type bv = vc_bvType(vc, 32);
@@ -52,7 +59,7 @@ void assertFactoring(VC vc)
   Expr wide_y = vc_bvConcatExpr(vc, vc_bvConstExprFromInt(vc, 32, 0), y);
   vc_assertFormula(
       vc, vc_eqExpr(vc, vc_bvMultExpr(vc, 64, wide_x, wide_y),
-                    vc_bvConstExprFromLL(vc, 64, 0x7ffffffc80000005ULL)));
+                    vc_bvConstExprFromLL(vc, 64, 0x3fffffbb00001299ULL)));
   vc_assertFormula(vc, vc_bvGtExpr(vc, x, vc_bvConstExprFromInt(vc, 32, 1)));
   vc_assertFormula(vc, vc_bvGtExpr(vc, y, vc_bvConstExprFromInt(vc, 32, 1)));
 }

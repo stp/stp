@@ -198,6 +198,9 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
   void buildAdditionNetworkResult(list<BBNode>& from, list<BBNode>& to,
                                   BBNodeSet& support, const bool top,
                                   const bool empty);
+  // x * x: half the partial products of the general multiplier.
+  BBNodeVec BBSquare(const BBNodeVec& x, BBNodeSet& support, const ASTNode& n);
+
   BBNodeVec buildAdditionNetworkResult(vector<list<BBNode>>& products,
                                             BBNodeSet& support,
                                             const ASTNode& n);
@@ -232,6 +235,19 @@ template <class BBNode, class BBNodeManagerT> class BitBlaster
 
   // Return formula for majority function of three formulas.
   BBNode Majority(const BBNode& a, const BBNode& b, const BBNode& c);
+
+  // Exclusive-or spelled so that its pieces are shared: the conjunction it
+  // builds is the carry of the corresponding half adder, and the
+  // structural hash hands it back to whoever asks. CreateNode(XOR, ..)
+  // lowers to the two-conjunction form whose internals nothing else uses.
+  BBNode xorWithSharing(const BBNode& a, const BBNode& b);
+
+  // One full adder, as two half adders whose carries are combined: seven
+  // gates a bit against the eleven of a majority carry beside a
+  // three-input exclusive-or, because each half adder's carry is a
+  // conjunction its sum already built.
+  void fullAdder(const BBNode& a, const BBNode& b, const BBNode& cin,
+                 BBNode& sum, BBNode& carry);
 
   // Internal bit blasting routines.
   BBNode BBBVLE(const BBNodeVec& x, const BBNodeVec& y,

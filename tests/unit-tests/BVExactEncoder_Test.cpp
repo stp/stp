@@ -415,17 +415,25 @@ TEST_F(BVExactEncoderTest, TheOperandsReachTheCircuitInOrder)
 // ABC picks this decade: the escalated encoding costs fewer clauses than
 // writing the gates out did. The comparison is computed from the shape of
 // the array rather than hard-coded, so it stays meaningful at any width.
+//
+// The constants moved once, when the bit-blaster's full adder became two
+// half adders sharing their carries: written out per gate, the seven
+// conjunctions of that adder cost more clauses than the sixteen-clause
+// truth-table row the old count modelled, while the mapped CNF of the new
+// circuits shifted only a few per cent. 22 a multiplier pair and 31 a
+// division step are those write-outs re-counted, and the mapped encoding
+// clears them by seven to sixteen per cent at these widths.
 static uint64_t writtenOutGateClauses(Kind kind, uint64_t w)
 {
   if (kind == BVMULT)
   {
     // A row of ANDs, then one pinned carry per row and an AND plus a full
     // adder per pair, then an equivalence per result bit.
-    return 3 * w + (w - 1) + 19 * (w * (w - 1) / 2) + 2 * w;
+    return 3 * w + (w - 1) + 22 * (w * (w - 1) / 2) + 2 * w;
   }
   // Restoring division: per step a comparison chain, a subtractor and a
   // row of muxes, plus one equivalence per result bit.
-  return 1 + w * (2 + 26 * w) + 2 * w;
+  return 1 + w * (2 + 31 * w) + 2 * w;
 }
 
 TEST_F(BVExactEncoderTest, TheMappedEncodingCostsFewerClausesThanWrittenOutGates)

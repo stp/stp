@@ -48,7 +48,10 @@
 (set-logic QF_BV)
 (declare-fun a () (_ BitVec 32))
 (declare-fun b () (_ BitVec 32))
-(assert (= (bvmul ((_ zero_extend 32) a) ((_ zero_extend 32) b)) #x7ffffffc80000005))
+; (2^31 - 69)^2: a Mersenne-factor product falls to preprocessing with zero
+; conflicts under the shared-adder multiplier, and a budget that is never
+; consulted never binds; this square costs a few thousand conflicts.
+(assert (= (bvmul ((_ zero_extend 32) a) ((_ zero_extend 32) b)) #x3fffffbb00001299))
 (assert (bvugt a #x00000001))
 (assert (bvugt b #x00000001))
 (check-sat)

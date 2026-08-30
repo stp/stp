@@ -553,6 +553,14 @@ void ExtraMain::create_options()
   bool_arg("--bb.div-v3", bm->UserFlags.division_variant_3,
            "unsigned division encoding variant 3", bb_group);
 
+  bool_arg("--bb.div-v4", bm->UserFlags.division_variant_4,
+           "unsigned division encoding variant 4: a two-stage shift/subtract "
+           "circuit at half the recursive one's size. Off by default -- "
+           "smaller measured slightly worse over a floating-point corpus and "
+           "much worse on whole-division refutations -- and variants 1 to 3 "
+           "modify the recursive circuit that runs instead",
+           bb_group);
+
   bool_arg("--bb.add-v1", bm->UserFlags.adder_variant,
            "addition encoding variant 1", bb_group);
 

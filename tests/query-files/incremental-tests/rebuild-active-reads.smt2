@@ -10,12 +10,12 @@
 (set-logic QF_ABV)
 (declare-fun A () (Array (_ BitVec 4) (_ BitVec 8)))
 (declare-fun i () (_ BitVec 4))
-(declare-fun y0 () (_ BitVec 8))
-(declare-fun y1 () (_ BitVec 8))
-(declare-fun y2 () (_ BitVec 8))
-(declare-fun y3 () (_ BitVec 8))
-(declare-fun y4 () (_ BitVec 8))
-(declare-fun y5 () (_ BitVec 8))
+(declare-fun y0 () (_ BitVec 12))
+(declare-fun y1 () (_ BitVec 12))
+(declare-fun y2 () (_ BitVec 12))
+(declare-fun y3 () (_ BitVec 12))
+(declare-fun y4 () (_ BitVec 12))
+(declare-fun y5 () (_ BitVec 12))
 
 (assert (= (select A (bvadd i #x1)) #x01))
 ; CHECK: ^sat
@@ -26,37 +26,37 @@
 (assert (= i #x0))
 
 (push 1)
-(assert (bvugt (bvmul y0 y0) #x03))
+(assert (bvugt (bvmul y0 y0) #x003))
 ; CHECK: ^sat
 (check-sat)
 (pop 1)
 
 (push 1)
-(assert (bvugt (bvmul y1 y1) #x03))
+(assert (bvugt (bvmul y1 y1) #x003))
 ; CHECK: ^sat
 (check-sat)
 (pop 1)
 
 (push 1)
-(assert (bvugt (bvmul y2 y2) #x03))
+(assert (bvugt (bvmul y2 y2) #x003))
 ; CHECK: ^sat
 (check-sat)
 (pop 1)
 
 (push 1)
-(assert (bvugt (bvmul y3 y3) #x03))
+(assert (bvugt (bvmul y3 y3) #x003))
 ; CHECK: ^sat
 (check-sat)
 (pop 1)
 
 (push 1)
-(assert (bvugt (bvmul y4 y4) #x03))
+(assert (bvugt (bvmul y4 y4) #x003))
 ; CHECK: ^sat
 (check-sat)
 (pop 1)
 
 (push 1)
-(assert (bvugt (bvmul y5 y5) #x03))
+(assert (bvugt (bvmul y5 y5) #x003))
 ; CHECK: re-encoded from scratch
 ; CHECK: ^sat
 (check-sat)

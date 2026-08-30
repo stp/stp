@@ -789,9 +789,24 @@ public:
   bool bv_term_abstraction_schema_groups_explicit = false;
 
   // You can select these with any combination you want of true & false.
+  // Variants 1-3 modify the recursive divider. Variant 4 replaces it with a
+  // two-stage shift/subtract circuit that per step computes the borrow
+  // chain once and reuses those carries for the conditional subtraction,
+  // where the recursive circuit pays a full subtractor, a comparison and
+  // up to three multiplexer layers per unrolled level: at 226 bits the
+  // same division falls from 1,015,894 AIG nodes to 458,106, which is what
+  // Bitwuzla's divider costs, and the two-copy fp.div micro query solves
+  // three times faster. It is nonetheless off by default: over 311 KLEE
+  // binary128 queries the smaller circuit solved 287 against 289 with the
+  // recursive one, and on an escalated 256-bit refutation it turns a 39 s
+  // proof into minutes -- the borrow chain hides the word-level slices a
+  // CDCL refutation of a whole division leans on. Fewer gates is not
+  // always an easier formula; the circuit stays selectable for the
+  // workloads it does win.
   bool division_variant_1 = true;
   bool division_variant_2 = true;
   bool division_variant_3 = false;
+  bool division_variant_4 = false;
   bool adder_variant = true;
   bool bbbvle_variant =true;
   bool upper_multiplication_bound = false;
