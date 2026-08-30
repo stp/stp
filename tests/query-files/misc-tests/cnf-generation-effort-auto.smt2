@@ -31,25 +31,25 @@
 ;
 ; RUN: not %solver --SMTLIB2 --cnf-generation-effort nonsense %s 2>&1 | %OutputCheck --check-prefix=BADLEVEL %s
 ;
-; BADLEVEL: Unknown --cnf-generation-effort value 'nonsense'\. Expected one of: auto, very-low, low, medium, high, very-high, new_very_low, new_low, new_medium, gia-low, gia-high, gia-very-high\.
+; BADLEVEL: Unknown --cnf-generation-effort value 'nonsense'\. Expected one of: auto, very-low, low, medium, high, very-high, new-very-low, new-low, new-medium, gia-low, gia-high, gia-very-high\.
 ;
-; The new_* rungs are a different generator over a different AIG, so they
-; says so rather than printing one of the ABC lines, and auto never reaches it:
+; The new-* rungs are a different generator over a different AIG, so they
+; say so rather than printing one of the ABC lines, and auto never reaches it:
 ; auto decides from ABC's node count, which means blasting through ABC first.
 ;
-; RUN: %solver --SMTLIB2 -s --cnf-generation-effort new_very_low %s 2>&1 | %OutputCheck --check-prefix=NEWVERYLOW %s
-; RUN: %solver --SMTLIB2 -s --cnf-generation-effort new_low %s 2>&1 | %OutputCheck --check-prefix=NEWLOW %s
-; RUN: %solver --SMTLIB2 -s --cnf-generation-effort new_medium %s 2>&1 | %OutputCheck --check-prefix=NEWMEDIUM %s
+; RUN: %solver --SMTLIB2 -s --cnf-generation-effort new-very-low %s 2>&1 | %OutputCheck --check-prefix=NEWVERYLOW %s
+; RUN: %solver --SMTLIB2 -s --cnf-generation-effort new-low %s 2>&1 | %OutputCheck --check-prefix=NEWLOW %s
+; RUN: %solver --SMTLIB2 -s --cnf-generation-effort new-medium %s 2>&1 | %OutputCheck --check-prefix=NEWMEDIUM %s
 ;
 ; NEWVERYLOW-NOT: cnf-auto:
 ; NEWVERYLOW-NOT: advanced CNF
-; NEWVERYLOW: ^new_very_low CNF$
+; NEWVERYLOW: ^new-very-low CNF$
 ; NEWVERYLOW: sat
 ;
-; NEWLOW: ^new_low CNF$
+; NEWLOW: ^new-low CNF$
 ; NEWLOW: sat
 ;
-; NEWMEDIUM: ^new_medium CNF$
+; NEWMEDIUM: ^new-medium CNF$
 ; NEWMEDIUM: sat
 ;
 ; The gia-* rungs reach Mf_ManGenerateCnf, the same generator low, high and
