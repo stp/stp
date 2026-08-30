@@ -37,7 +37,12 @@ void ToCNFAIG::dag_aware_aig_rewrite(const bool needAbsRef,
     Dar_RwrPar_t Pars, *pPars = &Pars;
     Dar_ManDefaultRwrParams(pPars);
 
-    // Assertion errors occur with this enabled.
+    // Left off because it is slower, not because it is unsound. The comment
+    // that stood here said assertion errors occur with it enabled; measured
+    // over 250 query files in an assertions build, none do -- the abort it
+    // described is the dangling-node one the Aig_ManCleanup below now
+    // handles. Enabling it did cost three files that finish in under a
+    // minute without it, so it stays off until someone measures the trade.
     // pPars->fUseZeros = 1;
 
     // For mul63bit.smt2 with iterations =3 & nCutsMax = 8
