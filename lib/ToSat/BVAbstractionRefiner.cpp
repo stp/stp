@@ -1834,13 +1834,15 @@ void BVAbstractionRefiner::reportRecords(std::ostream& out) const
     else if (abs.blastedBits != 0)
       state = "partial";
 
-    // Each value-pair block emits W clauses containing both W-bit operands
-    // and one result bit. These derived counts expose the accumulated SAT
-    // payload without adding bookkeeping to the hot path.
+    // Each value-pair block emits one clause over both W-bit operands and
+    // the premise variable, then W binary clauses from the premise to the
+    // result bits. These derived counts expose the accumulated SAT payload
+    // without adding bookkeeping to the hot path.
     const uint64_t blockingClauses =
-        static_cast<uint64_t>(abs.blockedRounds) * abs.width;
+        static_cast<uint64_t>(abs.blockedRounds) * (abs.width + 1);
     const uint64_t blockingLiterals =
-        blockingClauses * (2 * static_cast<uint64_t>(abs.width) + 1);
+        static_cast<uint64_t>(abs.blockedRounds) *
+        (4 * static_cast<uint64_t>(abs.width) + 1);
     const bool hasValueAllowance =
         abs.opKind == BVMULT || abs.opKind == BVDIV || abs.opKind == BVMOD;
     const unsigned allowance =
@@ -3148,13 +3150,31 @@ AbstractionRefinementResult BVAbstractionRefiner::refineTerms(
     abs.blockedThisQuery++;
     bm->UserFlags.coverage.bv_blocking_lemmas++;
 
-    for (unsigned bit = 0; bit < W; ++bit)
+    // (a = va /\ b = vb) -> t = va op vb, through one fresh variable that
+    // stands for the premise: one clause of 2W+1 literals says the premise
+    // implies it, and W binary clauses carry it to the result bits. Writing
+    // the premise into every result clause instead -- W clauses of 2W+1
+    // literals -- is the same fact at W times the literals, and at the
+    // widths the significand arithmetic of a binary128 circuit has, 226 and
+    // more, a single such lemma was a hundred thousand literals. The SAT
+    // solver's propagation and watch maintenance were paying for that on
+    // every later call: a query whose refinement wrote a few hundred of them
+    // spent most of its time there. The premise variable is never asked for
+    // again, so it needs no freezing.
+    const unsigned premise = solver.newVar();
     {
       SATSolver::vec_literals cl;
       for (unsigned i = 0; i < W; ++i)
         cl.push(SATSolver::mkLit(aVars[i], inc.aBits[i]));
       for (unsigned i = 0; i < W; ++i)
         cl.push(SATSolver::mkLit(bVars[i], inc.bBits[i]));
+      cl.push(SATSolver::mkLit(premise, false));
+      solver.addClause(cl);
+    }
+    for (unsigned bit = 0; bit < W; ++bit)
+    {
+      SATSolver::vec_literals cl;
+      cl.push(SATSolver::mkLit(premise, true));
       cl.push(SATSolver::mkLit(resultVars[bit], !inc.expected[bit]));
       solver.addClause(cl);
     }

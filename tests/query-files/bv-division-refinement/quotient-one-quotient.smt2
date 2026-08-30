@@ -14,7 +14,7 @@
 ; CHECK: ^unsat$
 ;
 ; CAP: BV abstraction: encoding BVDIV exactly after 1 blocking lemmas
-; CAP: BV abstraction record: record=0 node=[0-9]+ kind=BVDIV width=256 state=exact blocking=1 schemas=0 exact=1 exact-bits=256 allowance=1 paired=0 pair-full=0 blocking-clauses=256 blocking-literals=131328 exact-clauses=[1-9][0-9]* exact-vars=[1-9][0-9]* exact-us=[0-9]+
+; CAP: BV abstraction record: record=0 node=[0-9]+ kind=BVDIV width=256 state=exact blocking=1 schemas=0 exact=1 exact-bits=256 allowance=1 paired=0 pair-full=0 blocking-clauses=257 blocking-literals=1025 exact-clauses=[1-9][0-9]* exact-vars=[1-9][0-9]* exact-us=[0-9]+
 ; CAP: Abstraction refinement: rounds=2 blocking=1 schema=0 exact=1 exact-mult=0 exact-divmod=1
 ; CAP: Abstraction circuit cost: clauses=[1-9][0-9]* variables=[1-9][0-9]* microseconds=[0-9]+
 ; CAP: ^unsat$

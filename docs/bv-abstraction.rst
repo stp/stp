@@ -95,8 +95,14 @@ refinement has three tiers:
    One such fact excludes a region of the candidate space.
 
 2. **A blocking lemma.** When no fact is contradicted, the one pair of
-   operand values the candidate holds is ruled out. This excludes one pair
-   out of 2^(2W), which is why there is a bound on how many are spent.
+   operand values the candidate holds is settled: ``a = va /\ b = vb ->
+   t = va op vb``. This excludes one pair out of 2^(2W), which is why there
+   is a bound on how many are spent. It is written through one fresh
+   variable standing for the premise -- a clause of 2W+1 literals and then
+   W binary clauses -- rather than repeating the premise in every result
+   clause, which at the widths of binary128 significand arithmetic made
+   each lemma a hundred thousand literals that every later SAT call paid
+   for.
 
 3. **The exact circuit.** Once the blocking allowance is gone, refinement
    stops enumerating and says what the operation is, using the same
