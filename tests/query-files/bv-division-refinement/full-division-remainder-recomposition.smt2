@@ -4,8 +4,10 @@
 ; across the complete 256-bit relation.
 ;
 ; q=2 and r=1 require a=2b+1, which the final assertion denies.
-; RUN: %solver --incremental=off -s --bv-term-abstraction=1 --bv-term-abstraction-plus=0 --bv-term-abstraction-compare=0 --bv-term-abstraction-schema-groups=divrem-full %s 2>&1 | %OutputCheck %s
-; RUN: %solver --incremental=off -s --bv-term-abstraction=1 --bv-term-abstraction-plus=0 --bv-term-abstraction-compare=0 --bv-term-abstraction-profile=aggressive %s 2>&1 | %OutputCheck %s
+; The schema below is chosen off the first candidate model, which rides on
+; the CNF: the rung is pinned so a backend or compiler change cannot move it.
+; RUN: %solver --incremental=off -s --cnf-generation-effort=medium --bv-term-abstraction=1 --bv-term-abstraction-plus=0 --bv-term-abstraction-compare=0 --bv-term-abstraction-schema-groups=divrem-full %s 2>&1 | %OutputCheck %s
+; RUN: %solver --incremental=off -s --cnf-generation-effort=medium --bv-term-abstraction=1 --bv-term-abstraction-plus=0 --bv-term-abstraction-compare=0 --bv-term-abstraction-profile=aggressive %s 2>&1 | %OutputCheck %s
 ; CHECK: BV abstraction: paired BVDIV/BVMOD recomposition lemma over 256 bits
 ; CHECK-NEXT: BV abstraction: refined 1 operations
 ; CHECK: ^unsat$
@@ -17,7 +19,7 @@
 ; cost line at all, would mean the instrumentation added to answer "equal
 ; escalation counts can hide very different trades" was blind to the largest
 ; trade the refinement makes.
-; RUN: %solver --incremental=off -s -t --bv-term-abstraction=1 --bv-term-abstraction-plus=0 --bv-term-abstraction-compare=0 --bv-term-abstraction-schema-groups=divrem-full %s 2>&1 | %OutputCheck --check-prefix=COST %s
+; RUN: %solver --incremental=off -s --cnf-generation-effort=medium -t --bv-term-abstraction=1 --bv-term-abstraction-plus=0 --bv-term-abstraction-compare=0 --bv-term-abstraction-schema-groups=divrem-full %s 2>&1 | %OutputCheck --check-prefix=COST %s
 ; COST: Abstraction refinement: rounds=1 blocking=0 schema=1 exact=0 exact-mult=0 exact-divmod=0
 ; COST-NEXT: Abstraction circuit cost: clauses=[1-9][0-9]* variables=[1-9][0-9]* microseconds=[0-9]+
 ; COST: ^unsat$

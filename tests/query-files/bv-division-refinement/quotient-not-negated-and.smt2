@@ -2,8 +2,10 @@
 ;
 ; The groups are disjoint: this fact belongs to udiv-observed, so selecting
 ; the unranked tail on its own must not reach it.
-; RUN: %solver --incremental=off -s --bv-term-abstraction=1 --bv-term-abstraction-plus=0 --bv-term-abstraction-compare=0 --bv-term-abstraction-schema-groups=udiv-observed %s 2>&1 | %OutputCheck %s
-; RUN: %solver --incremental=off -s --bv-term-abstraction=1 --bv-term-abstraction-plus=0 --bv-term-abstraction-compare=0 --bv-term-abstraction-schema-groups=udiv-tail %s 2>&1 | %OutputCheck %s --check-prefix=TAILONLY
+; The schema below is chosen off the first candidate model, which rides on
+; the CNF: the rung is pinned so a backend or compiler change cannot move it.
+; RUN: %solver --incremental=off -s --cnf-generation-effort=medium --bv-term-abstraction=1 --bv-term-abstraction-plus=0 --bv-term-abstraction-compare=0 --bv-term-abstraction-schema-groups=udiv-observed %s 2>&1 | %OutputCheck %s
+; RUN: %solver --incremental=off -s --cnf-generation-effort=medium --bv-term-abstraction=1 --bv-term-abstraction-plus=0 --bv-term-abstraction-compare=0 --bv-term-abstraction-schema-groups=udiv-tail %s 2>&1 | %OutputCheck %s --check-prefix=TAILONLY
 ; TAILONLY-NOT: quotient-not-negated-and
 ; CHECK: BV abstraction: BVDIV quotient-not-negated-and lemma
 ; CHECK-NEXT: BV abstraction: refined 1 operations
@@ -21,7 +23,7 @@
 ; reported and is not zero, and pinning ABC's cut choices would make this a
 ; test of the mapper.
 ;
-; RUN: %solver -t --incremental=off --bv-term-abstraction=1 --bv-term-abstraction-plus=0 --bv-term-abstraction-compare=0 --bv-term-abstraction-schema-groups=udiv-observed %s 2>&1 | %OutputCheck --check-prefix=COST %s
+; RUN: %solver --cnf-generation-effort=medium -t --incremental=off --bv-term-abstraction=1 --bv-term-abstraction-plus=0 --bv-term-abstraction-compare=0 --bv-term-abstraction-schema-groups=udiv-observed %s 2>&1 | %OutputCheck --check-prefix=COST %s
 ; COST: Abstraction refinement: rounds=1 blocking=0 schema=1 exact=0
 ; COST: Abstraction schema cost: clauses=[1-9][0-9]* variables=[1-9][0-9]* microseconds=[0-9]+
 ; COST: udiv-observed=1

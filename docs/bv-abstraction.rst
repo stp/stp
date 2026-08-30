@@ -236,6 +236,29 @@ solves, and regressed 162 queries while improving 15; ``low-prefix`` fired
 9,525 times and moved nothing. They stay selectable so those results stay
 reproducible.
 
+Which CNF generator
+-------------------
+
+The abstraction's search is many-solve: every refinement round is another
+call on a solver that keeps the whole CNF, and which CNF it keeps decides
+how that search goes far more than it decides one solve. With
+``--cnf-generation-effort`` at its default ``auto``, turning
+``--bv-term-abstraction`` on therefore selects the Gia backend at its lowest
+rung (``gia-low``) rather than the size-based choice between ``very-low``
+and ``medium``, and ``-s`` says so:
+
+.. code-block:: text
+
+    cnf-auto: BV term abstraction on, chose gia-low
+
+Over 311 KLEE binary128 queries with multiplication and division abstracted,
+the size-based rung solved 300 with PAR2 2024 and ``gia-low`` 306 with PAR2
+1356 (Bitwuzla: 308 and 1647); without the abstraction the same rung is
+worth far less there, 286 against 283 solved, which is why the size-based
+choice stays for everything else. On 329 SMT-LIB QF_BV files where the
+abstraction engages it costs nothing, 216 solved against 204 either way.
+An explicit level is always left alone.
+
 Reading what happened
 ---------------------
 
