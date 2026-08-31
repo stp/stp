@@ -913,6 +913,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   bm->TermsAlreadySeenMap_Clear();
 
   int64_t final_difficulty_score = difficulty.score(inputToSat, bm);
+  bm->expected_blast_ands = final_difficulty_score;
 
   // Simplification has to have taken a fifth off the score to count as having
   // helped. Written as an assignment now that the AIG node count is gone: it
@@ -946,6 +947,7 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
         keptConstants.insert(e);
 
     inputToSat = revert->toRevertTo;
+    bm->expected_blast_ands = initial_difficulty_score;
 
     // I do this to clear the substitution/solver map.
     // Not sure what would happen if it contained simplifications
