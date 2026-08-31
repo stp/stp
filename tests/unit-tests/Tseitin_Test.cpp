@@ -22,6 +22,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <random>
@@ -107,10 +108,9 @@ std::vector<int8_t> intendedValues(const aig::Manager& m,
   return want;
 }
 
-bool clauseSatisfied(const CNF& cnf, uint64_t i, const std::vector<int8_t>& a)
+bool clauseSatisfied(const CNF::ClauseCursor& c, const std::vector<int8_t>& a)
 {
-  for (const int *p = cnf.clauseBegin(i), *stop = cnf.clauseEnd(i); p < stop;
-       p++)
+  for (const int *p = c.begin(), *stop = c.end(); p < stop; p++)
   {
     const uint32_t v = static_cast<uint32_t>(*p) >> 1;
     const int8_t want = (*p & 1) ? 0 : 1;
@@ -129,12 +129,11 @@ bool propagate(const CNF& cnf, std::vector<int8_t>& a)
   while (changed)
   {
     changed = false;
-    for (uint64_t i = 0, n = cnf.clauseCount(); i < n; i++)
+    for (CNF::ClauseCursor c = cnf.clauses(); c.next();)
     {
       int unassigned = 0, lastLit = 0;
       bool sat = false;
-      for (const int *p = cnf.clauseBegin(i), *stop = cnf.clauseEnd(i);
-           p < stop; p++)
+      for (const int *p = c.begin(), *stop = c.end(); p < stop; p++)
       {
         const uint32_t v = static_cast<uint32_t>(*p) >> 1;
         const int8_t want = (*p & 1) ? 0 : 1;
@@ -226,9 +225,10 @@ void checkExact(const aig::Manager& m, unsigned namedOutputs,
 
     if (assertedHold)
     {
-      for (uint64_t c = 0, n = cnf.clauseCount(); c < n; c++)
-        ASSERT_TRUE(clauseSatisfied(cnf, c, want))
-            << "clause " << c << " unsatisfied by the circuit's own values";
+      uint64_t at = 0;
+      for (CNF::ClauseCursor c = cnf.clauses(); c.next(); at++)
+        ASSERT_TRUE(clauseSatisfied(c, want))
+            << "clause " << at << " unsatisfied by the circuit's own values";
     }
 
     std::vector<int8_t> a(cnf.varCount(), -1);
@@ -479,7 +479,9 @@ TEST(Tseitin, ConstantOutputs)
     EXPECT_FALSE(cnf.hasEmptyClause());
     const uint32_t v = cnf.varOfCo(0);
     EXPECT_EQ(v, 2u); // one CI, then the named output
-    EXPECT_EQ(*cnf.clauseBegin(0), static_cast<int>(2 * v));
+    CNF::ClauseCursor c = cnf.clauses();
+    ASSERT_TRUE(c.next());
+    EXPECT_EQ(*c.begin(), static_cast<int>(2 * v));
   }
   {
     aig::Manager m;
@@ -487,7 +489,9 @@ TEST(Tseitin, ConstantOutputs)
     m.createOutput(m.constFalse());
     const CNF cnf = aig::deriveTseitin(m, 1);
     ASSERT_EQ(cnf.clauseCount(), 1u);
-    EXPECT_EQ(*cnf.clauseBegin(0), static_cast<int>(2 * cnf.varOfCo(0) + 1));
+    CNF::ClauseCursor c = cnf.clauses();
+    ASSERT_TRUE(c.next());
+    EXPECT_EQ(*c.begin(), static_cast<int>(2 * cnf.varOfCo(0) + 1));
   }
 }
 
@@ -504,13 +508,46 @@ TEST(Tseitin, NoLiteralNamesVariableZero)
 
   const CNF cnf = aig::deriveTseitin(m, 1);
   ASSERT_GT(cnf.clauseCount(), 0u);
-  for (uint64_t i = 0, n = cnf.clauseCount(); i < n; i++)
-    for (const int *p = cnf.clauseBegin(i), *stop = cnf.clauseEnd(i); p < stop;
-         p++)
+  for (CNF::ClauseCursor c = cnf.clauses(); c.next();)
+    for (const int *p = c.begin(), *stop = c.end(); p < stop; p++)
     {
       ASSERT_GE(*p, 2) << "literal names variable 0";
       ASSERT_LT(static_cast<uint32_t>(*p) >> 1, cnf.varCount());
     }
+}
+
+// The clause index is one byte per clause, escaping through a side table at
+// 255, so a clause of exactly 255 literals is the case a one-byte length gets
+// wrong.  The n-ary AND is the only clause that reaches there: L leaves emit
+// one clause of L+1 literals, then L binary ones, and a named output adds two
+// more.
+TEST(Tseitin, ClauseLengthsRoundTripAcrossTheOneByteLimit)
+{
+  for (const unsigned leaves : {2u, 253u, 254u, 255u, 256u, 1000u})
+  {
+    aig::Manager m;
+    aig::Lit acc = m.createCi();
+    for (unsigned i = 1; i < leaves; i++)
+      acc = m.And(acc, m.createCi());
+    m.createOutput(acc);
+
+    const CNF cnf = aig::deriveTseitin(m, 1);
+    ASSERT_EQ(cnf.clauseCount(), leaves + 3u) << leaves;
+
+    std::vector<size_t> sizes;
+    for (CNF::ClauseCursor c = cnf.clauses(); c.next();)
+      sizes.push_back(c.size());
+
+    ASSERT_EQ(sizes.size(), cnf.clauseCount()) << leaves;
+    EXPECT_EQ(sizes[0], leaves + 1u) << leaves; // the conjunction itself
+    uint64_t total = sizes[0];
+    for (size_t i = 1; i < sizes.size(); i++)
+    {
+      EXPECT_EQ(sizes[i], 2u) << leaves << ", clause " << i;
+      total += sizes[i];
+    }
+    EXPECT_EQ(total, cnf.literalCount()) << leaves;
+  }
 }
 
 // Same circuit, two fresh managers, byte-identical arena.  Nothing in the
@@ -534,15 +571,16 @@ TEST(Tseitin, IsDeterministic)
   ASSERT_EQ(ca.clauseCount(), cb.clauseCount());
   ASSERT_EQ(ca.literalCount(), cb.literalCount());
   ASSERT_EQ(ca.varCount(), cb.varCount());
-  for (uint64_t i = 0, n = ca.clauseCount(); i < n; i++)
+  CNF::ClauseCursor x = ca.clauses(), y = cb.clauses();
+  while (x.next())
   {
-    ASSERT_EQ(ca.clauseEnd(i) - ca.clauseBegin(i),
-              cb.clauseEnd(i) - cb.clauseBegin(i));
-    for (const int *p = ca.clauseBegin(i), *q = cb.clauseBegin(i),
-                   *stop = ca.clauseEnd(i);
-         p < stop; p++, q++)
+    ASSERT_TRUE(y.next());
+    ASSERT_EQ(x.size(), y.size());
+    for (const int *p = x.begin(), *q = y.begin(), *stop = x.end(); p < stop;
+         p++, q++)
       ASSERT_EQ(*p, *q);
   }
+  ASSERT_FALSE(y.next());
 }
 
 // The DIMACS file is byte-compatible with the one Cnf_DataWriteIntoFile()

@@ -40,9 +40,10 @@ void CNF::begin(uint32_t nVars, uint64_t nClauses, uint64_t nLiterals,
 
   // Exact, from the counting pass, so neither vector ever reallocates and
   // neither ends up holding spare capacity for the life of the solve.
+  // longLens_ is not reserved: the counting pass does not say how many
+  // clauses are long, and on the formulas that have any there are a handful.
   lits_.reserve(nLiterals);
-  offsets_.reserve(nClauses + 1);
-  offsets_.push_back(0);
+  lens_.reserve(nClauses);
 
   ciVar_.assign(nCi, 0);
   coVar_.assign(nCo, 0);
@@ -82,7 +83,8 @@ void CNF::discard()
   // when it is about to hold a different formula, and the two must not be
   // resident at once.
   std::vector<int>().swap(lits_);
-  std::vector<uint64_t>().swap(offsets_);
+  std::vector<uint8_t>().swap(lens_);
+  std::vector<uint64_t>().swap(longLens_);
   ciVar_.clear();
   coVar_.clear();
 
@@ -97,7 +99,8 @@ void CNF::discard()
 void CNF::steal(CNF& o)
 {
   lits_ = std::move(o.lits_);
-  offsets_ = std::move(o.offsets_);
+  lens_ = std::move(o.lens_);
+  longLens_ = std::move(o.longLens_);
   adopted_ = o.adopted_;
   owner_ = o.owner_;
   release_ = o.release_;
@@ -135,9 +138,9 @@ void CNF::writeDimacs(std::ostream& out) const
 {
   out << "c Result of efficient AIG-to-CNF conversion using package CNF\n";
   out << "p cnf " << nVars_ << ' ' << clauseCount() << '\n';
-  for (uint64_t i = 0, n = clauseCount(); i < n; i++)
+  for (ClauseCursor c = clauses(); c.next();)
   {
-    for (const int *p = clauseBegin(i), *stop = clauseEnd(i); p < stop; p++)
+    for (const int *p = c.begin(), *stop = c.end(); p < stop; p++)
     {
       const int var = (*p >> 1) + 1;
       out << ((*p & 1) ? -var : var) << ' ';
