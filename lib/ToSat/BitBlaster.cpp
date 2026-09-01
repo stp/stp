@@ -2446,8 +2446,11 @@ BitBlaster<BBNode, BBNodeManagerT>::BBAddOneBit(const BBNodeVec& x, BBNode cin)
   const typename BBNodeVec::const_iterator itend = x.end();
   for (typename BBNodeVec::const_iterator it = x.begin(); it < itend; it++)
   {
+    // The shared-conjunction spelling: the sum's inner AND *is* the carry,
+    // as in fullAdder(), which is the structure the Tseitin writer's
+    // half-adder recovery keys on.
     BBNode nextcin = nf->CreateNode(AND, *it, cin);
-    result.push_back(nf->CreateNode(XOR, *it, cin));
+    result.push_back(xorWithSharing(*it, cin));
     cin = nextcin;
   }
   return result;

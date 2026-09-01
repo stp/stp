@@ -239,6 +239,20 @@ bool matchXorAnd(const Manager& m, Node n, Lit& g, Lit& h)
   return false;
 }
 
+bool matchHalfAdder(const Manager& m, Node n, bool carryQ, Lit& a, Lit& b,
+                    Node& carry)
+{
+  Node p, q;
+  if (!xorShape(m, n, p, q))
+    return false;
+  // n computes the exclusive-or of either interior's fanins; the carry is
+  // the interior the caller says is live, and it conjoins those fanins.
+  carry = carryQ ? q : p;
+  a = m.fanin0(carry);
+  b = m.fanin1(carry);
+  return true;
+}
+
 void collectAndLeaves(const Manager& m, Node n,
                       const std::vector<uint64_t>& absorbed,
                       std::vector<Lit>& into, std::vector<Lit>& stack)
@@ -388,6 +402,8 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
   pattern_.assign(words, 0);
   majority_.assign(words, 0);
   xorAnd_.assign(words, 0);
+  halfAdder_.assign(words, 0);
+  haCarryQ_.assign(words, 0);
   absorbed_.assign(words, 0);
   faSum_.assign(words, 0);
   faCarry_.assign(words, 0);
@@ -464,6 +480,17 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
     return refs[xn] == 1 && !faMember(xn);
   };
 
+  // An exclusive-or whose interior conjunction is itself read elsewhere is
+  // the blaster's shared half adder: sum and carry over the same operands.
+  // The increment chains bvneg and constant addends fold into are made of
+  // exactly this pair, and it is what the private-interior patterns decline.
+  const auto wouldHalfAdder = [&](Node x) {
+    Node p, q;
+    return matchPatterns && m.isAnd(x) && !faMember(x) &&
+           xorShape(m, x, p, q) &&
+           ((refs[p] > 1 && !faMember(p)) || (refs[q] > 1 && !faMember(q)));
+  };
+
   for (Node n = static_cast<Node>(nNodes); n-- > 1;)
   {
     if (!live(n) || !m.isAnd(n))
@@ -524,6 +551,27 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
       continue;
     }
 
+    if (!absorbed(n) && wouldHalfAdder(n))
+    {
+      Node p, q;
+      const bool shape = xorShape(m, n, p, q);
+      assert(shape);
+      (void)shape;
+      // The carry keeps its own gate for its consumers; the sum adds the
+      // four linking clauses that make the (a, b, sum, carry) window
+      // propagation-complete. The other interior dies unless someone else
+      // holds it.
+      const bool pShared = refs[p] > 1 && !faMember(p);
+      const Node carry = pShared ? p : q;
+      setHalfAdder(n);
+      if (!pShared)
+        setHaCarryQ(n);
+      setLive(nodeOf(m.fanin0(carry)));
+      setLive(nodeOf(m.fanin1(carry)));
+      setLive(carry);
+      continue;
+    }
+
     if (wouldXorAnd(n))
     {
       Lit g, h;
@@ -546,7 +594,8 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
       const Node x = nodeOf(f);
       setLive(x);
       if (collapseAnds && !isNeg(f) && m.isAnd(x) && refs[x] == 1 &&
-          !faMember(x) && !wouldPattern(x) && !wouldXorAnd(x))
+          !faMember(x) && !wouldPattern(x) && !wouldXorAnd(x) &&
+          !wouldHalfAdder(x))
         setAbsorbed(x);
     }
   }
@@ -578,6 +627,12 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
     {
       nClauses_ += 3;
       nLiterals_ += 7;
+      continue;
+    }
+    if (halfAdderSum(n))
+    {
+      nClauses_ += 4;
+      nLiterals_ += 11;
       continue;
     }
     if (patterned(n))
