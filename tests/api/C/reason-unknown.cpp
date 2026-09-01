@@ -50,8 +50,15 @@ namespace
 // generic semiprime takes minutes. This square is decided in under a second
 // and costs a few thousand conflicts, so every budget here has something to
 // stop.
-void assertFactoring(VC vc)
+//
+// Both of those timings are CaDiCaL's, so the backend is pinned rather than
+// left to the build's default: CryptoMiniSat, the default wherever it is
+// compiled in, takes minutes over this same square. Returns false on a build
+// without CaDiCaL, and the caller skips.
+bool assertFactoring(VC vc)
 {
+  if (!vc_useCadical(vc))
+    return false;
   Type bv = vc_bvType(vc, 32);
   Expr x = vc_varExpr(vc, "x", bv);
   Expr y = vc_varExpr(vc, "y", bv);
@@ -62,6 +69,7 @@ void assertFactoring(VC vc)
                     vc_bvConstExprFromLL(vc, 64, 0x3fffffbb00001299ULL)));
   vc_assertFormula(vc, vc_bvGtExpr(vc, x, vc_bvConstExprFromInt(vc, 32, 1)));
   vc_assertFormula(vc, vc_bvGtExpr(vc, y, vc_bvConstExprFromInt(vc, 32, 1)));
+  return true;
 }
 
 std::string detail(VC vc)
@@ -85,7 +93,11 @@ TEST(reason_unknown, AnAnsweredQueryHasNoReason)
   EXPECT_EQ(REASON_UNKNOWN_NONE, vc_getReasonUnknown(vc));
   EXPECT_EQ("", detail(vc));
 
-  assertFactoring(vc);
+  if (!assertFactoring(vc))
+  {
+    vc_Destroy(vc);
+    GTEST_SKIP() << "CaDiCaL backend not compiled in";
+  }
   ASSERT_EQ(0, vc_query_with_timeout(vc, vc_falseExpr(vc), -1, -1));
   EXPECT_EQ(REASON_UNKNOWN_NONE, vc_getReasonUnknown(vc));
   EXPECT_EQ("", detail(vc));
@@ -99,13 +111,17 @@ TEST(reason_unknown, AnAnsweredQueryHasNoReason)
 TEST(reason_unknown, TheClockAndTheConflictBudgetAreToldApartByTheReason)
 {
   VC clock = vc_createValidityChecker();
-  assertFactoring(clock);
+  if (!assertFactoring(clock))
+  {
+    vc_Destroy(clock);
+    GTEST_SKIP() << "CaDiCaL backend not compiled in";
+  }
   EXPECT_EQ(3, vc_query_with_timeout(clock, vc_falseExpr(clock), -1, 0));
   EXPECT_EQ(REASON_UNKNOWN_TIMEOUT, vc_getReasonUnknown(clock));
   vc_Destroy(clock);
 
   VC conflicts = vc_createValidityChecker();
-  assertFactoring(conflicts);
+  ASSERT_TRUE(assertFactoring(conflicts));
   EXPECT_EQ(3, vc_query_with_timeout(conflicts, vc_falseExpr(conflicts), 0, -1));
   EXPECT_EQ(REASON_UNKNOWN_CONFLICT_BUDGET, vc_getReasonUnknown(conflicts));
   vc_Destroy(conflicts);
@@ -118,7 +134,11 @@ TEST(reason_unknown, TheAigBudgetIsNotReportedAsAClock)
 {
   VC vc = vc_createValidityChecker();
   vc_setInterfaceFlags(vc, AIG_NODE_BUDGET, 50);
-  assertFactoring(vc);
+  if (!assertFactoring(vc))
+  {
+    vc_Destroy(vc);
+    GTEST_SKIP() << "CaDiCaL backend not compiled in";
+  }
   EXPECT_EQ(3, vc_query_with_timeout(vc, vc_falseExpr(vc), -1, -1));
   EXPECT_EQ(REASON_UNKNOWN_AIG_BUDGET, vc_getReasonUnknown(vc));
 
@@ -134,7 +154,11 @@ TEST(reason_unknown, WithoutTheBudgetTheSameQueryIsDecided)
 {
   VC vc = vc_createValidityChecker();
   vc_setInterfaceFlags(vc, AIG_NODE_BUDGET, -1);
-  assertFactoring(vc);
+  if (!assertFactoring(vc))
+  {
+    vc_Destroy(vc);
+    GTEST_SKIP() << "CaDiCaL backend not compiled in";
+  }
   EXPECT_EQ(0, vc_query_with_timeout(vc, vc_falseExpr(vc), -1, -1));
   EXPECT_EQ(REASON_UNKNOWN_NONE, vc_getReasonUnknown(vc));
   vc_Destroy(vc);

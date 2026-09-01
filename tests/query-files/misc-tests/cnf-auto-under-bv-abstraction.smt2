@@ -9,8 +9,8 @@
 ; REQUIRES: cadical
 ; RUN: %solver --cadical -s --bv-term-abstraction=1 %s 2>&1 | %OutputCheck --check-prefix=ABS %s
 ; RUN: %solver --cadical -s --bv-term-abstraction=1 --cnf-generation-effort auto %s 2>&1 | %OutputCheck --check-prefix=ABS %s
-; RUN: %solver -s --bv-term-abstraction=1 --cnf-generation-effort very-low %s 2>&1 | %OutputCheck --check-prefix=EXPLICIT %s
-; RUN: %solver -s %s 2>&1 | %OutputCheck --check-prefix=OFF %s
+; RUN: %solver --cadical -s --bv-term-abstraction=1 --cnf-generation-effort very-low %s 2>&1 | %OutputCheck --check-prefix=EXPLICIT %s
+; RUN: %solver --cadical -s %s 2>&1 | %OutputCheck --check-prefix=OFF %s
 ;
 ; ABS: ^cnf-auto: BV term abstraction on, chose gia-low$
 ; ABS: ^gia: [0-9]+ AND nodes, [0-9]+ inputs, LUT3$
