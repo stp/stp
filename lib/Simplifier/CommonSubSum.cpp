@@ -71,9 +71,9 @@ void CommonSubSum::markShareable()
 {
   ankerl::unordered_dense::map<uint64_t, uint32_t> holders;
 
-  for (const auto& sum : operands)
+  for (const auto& sum : sums)
   {
-    const ASTVec& v = sum.second;
+    const ASTVec& v = sum.ops;
 
     // A two-operand addition already *is* its own pair; extracting from it
     // would leave a one-child BVPLUS that rebuilds to itself. It is not a
@@ -121,20 +121,25 @@ void CommonSubSum::eligibleOf(const ASTVec& v, std::vector<uint64_t>& out) const
 
 bool CommonSubSum::bump(uint64_t a, uint64_t b)
 {
-  const NodePair key = (a < b) ? NodePair(a, b) : NodePair(b, a);
+  const NodePair key = (a < b) ? packPair(a, b) : packPair(b, a);
 
   // Checked only at the cap, so the ordinary path pays one lookup, not two.
   if (occurrences.size() >= PAIR_ENTRY_LIMIT &&
       occurrences.find(key) == occurrences.end())
     return false;
 
-  occurrences[key]++;
+  const uint32_t now = ++occurrences[key];
+
+  // A tally of one can't win, so its snapshot would only be heap churn.
+  // The initial build pushes nothing: it is heapified whole afterwards.
+  if (now >= 2 && !tallying)
+    candidates.push({now, key});
   return true;
 }
 
 void CommonSubSum::drop(uint64_t a, uint64_t b)
 {
-  const NodePair key = (a < b) ? NodePair(a, b) : NodePair(b, a);
+  const NodePair key = (a < b) ? packPair(a, b) : packPair(b, a);
   const auto it = occurrences.find(key);
 
   assert(it != occurrences.end() && it->second > 0);
@@ -211,9 +216,9 @@ bool CommonSubSum::promote(const ASTNode& n)
     return true;
 
   std::vector<uint64_t> eligible;
-  for (const auto& sum : operands)
+  for (const auto& sum : sums)
   {
-    const ASTVec& v = sum.second;
+    const ASTVec& v = sum.ops;
     if (!std::binary_search(v.begin(), v.end(), n, byNodeNum))
       continue;
 
@@ -229,9 +234,23 @@ bool CommonSubSum::promote(const ASTNode& n)
 // The tally over every addition, built once. Later rounds patch it.
 bool CommonSubSum::buildOccurrences()
 {
-  for (const auto& sum : operands)
-    if (!addPairs(sum.second))
+  tallying = true;
+  for (const auto& sum : sums)
+    if (!addPairs(sum.ops))
+    {
+      tallying = false;
       return false;
+    }
+  tallying = false;
+
+  // One live snapshot per pair. Heap layout doesn't reach the result: the
+  // comparator is a total order, so the sequence of pops is the same
+  // whatever order this vector arrives in.
+  std::vector<Candidate> live;
+  for (const auto& entry : occurrences)
+    if (entry.second >= 2)
+      live.push_back({entry.second, entry.first});
+  candidates = decltype(candidates)(CandidateOrder(), std::move(live));
 
   return true;
 }
@@ -240,26 +259,40 @@ bool CommonSubSum::buildOccurrences()
 // its own node. Returns false once no pair is shared, or a guard fires.
 bool CommonSubSum::extractOnePair()
 {
-  // Ties go to the lowest-numbered pair. The tally is a hash table, so
-  // without that the choice -- and with it the formula handed to the
-  // bit-blaster -- would depend on the table's layout.
+  // Ties go to the lowest-numbered pair -- the heap's order, not the hash
+  // table's layout, decides, so the formula handed to the bit-blaster is
+  // deterministic. Stale snapshots are discarded on sight; a pair whose
+  // live tally is >=2 always has a live snapshot, because the increment
+  // that set the tally pushed one and only a winning pop consumes it.
   uint32_t best = 0;
-  NodePair bestPair(0, 0);
-  for (const auto& entry : occurrences)
-    if (entry.second >= 2 &&
-        (entry.second > best ||
-         (entry.second == best && entry.first < bestPair)))
+  NodePair bestPair = 0;
+  while (!candidates.empty())
+  {
+    const Candidate top = candidates.top();
+    candidates.pop();
+    const auto live = occurrences.find(top.pair);
+    if (live == occurrences.end())
+      continue;
+    if (live->second == top.count)
     {
-      best = entry.second;
-      bestPair = entry.first;
+      best = top.count;
+      bestPair = top.pair;
+      break;
     }
+    // Stale, and the pair may hold no other snapshot: a tally that rose
+    // pushed one per step, but a tally that fell pushed nothing on the way
+    // down. Restore the live value or the pair goes invisible. Strictly
+    // smaller than what was discarded, so the loop makes progress.
+    if (live->second >= 2 && live->second < top.count)
+      candidates.push({live->second, top.pair});
+  }
 
   if (best < 2)
     return false;
 
   // Both operands sit in a common application, so they share its width.
-  const ASTNode first = byNum[bestPair.first];
-  const ASTNode second = byNum[bestPair.second];
+  const ASTNode first = byNum[bestPair >> 32];
+  const ASTNode second = byNum[bestPair & 0xffffffffu];
   const ASTNode shared =
       booleanKind() ? nf->CreateNode(kind, first, second)
                     : nf->CreateTerm(kind, first.GetValueWidth(), first,
@@ -273,20 +306,20 @@ bool CommonSubSum::extractOnePair()
     return false;
   }
 
-  std::vector<uint64_t> hits;
-  for (const auto& sum : operands)
+  std::vector<uint32_t> hits;
+  for (uint32_t i = 0; i < sums.size(); i++)
   {
-    const ASTVec& v = sum.second;
+    const ASTVec& v = sums[i].ops;
     if (v.size() >= 3 &&
         std::binary_search(v.begin(), v.end(), first, byNodeNum) &&
         std::binary_search(v.begin(), v.end(), second, byNodeNum))
-      hits.push_back(sum.first);
+      hits.push_back(i);
   }
 
   long applied = 0;
-  for (uint64_t sum : hits)
+  for (uint32_t sum : hits)
   {
-    ASTVec& v = operands[sum];
+    ASTVec& v = sums[sum].ops;
 
     // Locate both operands before removing either, so that a sum which
     // somehow lacks one of them is left untouched rather than rewritten
@@ -295,7 +328,8 @@ bool CommonSubSum::extractOnePair()
     ASTVec scratch = v;
     for (unsigned which = 0; which < 2 && found; which++)
     {
-      const uint64_t wanted = (which == 0) ? bestPair.first : bestPair.second;
+      const uint64_t wanted =
+          (which == 0) ? (bestPair >> 32) : (bestPair & 0xffffffffu);
       found = false;
       for (size_t i = 0; i < scratch.size(); i++)
         if (scratch[i].GetNodeNum() == wanted)
@@ -322,6 +356,13 @@ bool CommonSubSum::extractOnePair()
       break;
     }
   }
+
+  // The winner's own snapshot was consumed above. Should its tally still be
+  // live -- a hit skipped, or the pair also held by untouched additions --
+  // restore the snapshot so the invariant on the heap keeps holding.
+  const auto still = occurrences.find(bestPair);
+  if (still != occurrences.end() && still->second >= 2)
+    candidates.push({still->second, bestPair});
 
   if (applied < 2)
     return false;
@@ -389,10 +430,12 @@ ASTNode CommonSubSum::topLevel(const ASTNode& n)
 
   saved = 0;
   truncated = false;
-  operands.clear();
+  sums.clear();
+  sumIndex.clear();
   byNum.clear();
   occurrences.clear();
   shareable.clear();
+  candidates = decltype(candidates)();
 
   ASTNodeSet seen;
   ASTVec plusNodes;
@@ -401,31 +444,44 @@ ASTNode CommonSubSum::topLevel(const ASTNode& n)
   ASTNode result = n;
   if (plusNodes.size() >= 2)
   {
+    sums.reserve(plusNodes.size());
     for (const auto& p : plusNodes)
     {
       ASTVec v(p.GetChildren().begin(), p.GetChildren().end());
       std::sort(v.begin(), v.end(), byNodeNum);
-      operands[p.GetNodeNum()] = v;
       byNum[p.GetNodeNum()] = p;
       for (const auto& k : v)
         byNum[k.GetNodeNum()] = k;
+      sums.push_back({p.GetNodeNum(), std::move(v)});
     }
+
+    // Ascending node number, so iteration order -- and with it what lands
+    // in a capped tally -- doesn't depend on the walk.
+    std::sort(sums.begin(), sums.end(),
+              [](const SumEntry& a, const SumEntry& b) { return a.num < b.num; });
+    for (uint32_t i = 0; i < sums.size(); i++)
+      sumIndex[sums[i].num] = i;
 
     markShareable();
 
-    if (!buildOccurrences())
-      truncated = true;
-    else
+    // A pair needs two shareable operands, so fewer than two shareable
+    // operands means no round can fire.
+    if (shareable.size() >= 2)
     {
-      long round = 0;
-      for (; round < ROUND_LIMIT && extractOnePair(); round++)
-        ;
-
-      // Rounds are what bounds the greedy loop, not what it converges on:
-      // exhausting them leaves shared pairs behind just as the size guard
-      // does, so say so rather than report a fixed point.
-      if (round == ROUND_LIMIT)
+      if (!buildOccurrences())
         truncated = true;
+      else
+      {
+        long round = 0;
+        for (; round < ROUND_LIMIT && extractOnePair(); round++)
+          ;
+
+        // Rounds are what bounds the greedy loop, not what it converges on:
+        // exhausting them leaves shared pairs behind just as the size guard
+        // does, so say so rather than report a fixed point.
+        if (round == ROUND_LIMIT)
+          truncated = true;
+      }
     }
 
     if (saved > 0)
@@ -433,7 +489,7 @@ ASTNode CommonSubSum::topLevel(const ASTNode& n)
       std::map<uint64_t, ASTVec> changed;
       for (const auto& p : plusNodes)
       {
-        const ASTVec& v = operands[p.GetNodeNum()];
+        const ASTVec& v = sums[sumIndex[p.GetNodeNum()]].ops;
         if (v.size() != p.Degree())
           changed[p.GetNodeNum()] = v;
       }
@@ -451,10 +507,12 @@ ASTNode CommonSubSum::topLevel(const ASTNode& n)
               << " applications saved:" << saved
               << " Truncated:" << (truncated ? 1 : 0) << std::endl;
 
-  operands.clear();
+  sums.clear();
+  sumIndex.clear();
   byNum.clear();
   occurrences.clear();
   shareable.clear();
+  candidates = decltype(candidates)();
 
   stpMgr->GetRunTimes()->stop(RunTimes::CommonSubSum);
   return result;
