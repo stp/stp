@@ -247,6 +247,37 @@ bool ToSATAIG::bitblast(const ASTNode& input, bool needAbsRef, CNF& cnf)
       std::cerr << "cnf-auto: BV term abstraction on, chose gia-low"
                 << std::endl;
   }
+
+  // AUTO with an estimate in hand resolves before any backend is built,
+  // which is what lets it reach the rungs that never build an ABC Aig.
+  // Below the threshold, gia-low: the same Mf generation the old medium
+  // choice was paying for costs less than half medium's transient memory
+  // and no measurement across three campaigns has found the smaller cut
+  // enumeration buying solve time. At or above it, new-medium: there
+  // generation is most of the cost, and the in-house route generates in a
+  // fraction of the time at a quarter of the transient.
+  //
+  // Three fallthroughs keep today's behaviour where the evidence is thin.
+  // Array refinement still resolves from the ABC node count inside the ABC
+  // lowering, because the in-house rungs have not been measured under it.
+  // Solvers other than CaDiCaL keep the old scale -- MiniSat demonstrably
+  // cannot finish some proofs on gia-low CNF it finishes at the size-based
+  // rung. And with no estimate recorded (the incremental driver, direct
+  // API use) there is nothing to decide from. Written back rather than
+  // resolved locally so the abstraction splices convert at the same rung.
+  if (bm->UserFlags.cnf_effort == UserDefinedFlags::CNF_EFFORT_AUTO &&
+      !needAbsRef && bm->expected_blast_ands > 0 &&
+      bm->UserFlags.solver_to_use == UserDefinedFlags::CADICAL_SOLVER)
+  {
+    const bool large = (uint64_t)bm->expected_blast_ands >=
+                       bm->UserFlags.cnf_auto_threshold;
+    bm->UserFlags.cnf_effort = large ? UserDefinedFlags::CNF_EFFORT_NEW_MEDIUM
+                                     : UserDefinedFlags::CNF_EFFORT_GIA_LOW;
+    if (bm->UserFlags.stats_flag)
+      std::cerr << "cnf-auto: estimated " << bm->expected_blast_ands
+                << " AND nodes, chose " << (large ? "new-medium" : "gia-low")
+                << std::endl;
+  }
   const enum UserDefinedFlags::CNFEffort e = bm->UserFlags.cnf_effort;
   if (e == UserDefinedFlags::CNF_EFFORT_NEW_VERY_LOW ||
       e == UserDefinedFlags::CNF_EFFORT_NEW_LOW ||

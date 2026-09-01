@@ -737,18 +737,21 @@ void ExtraMain::create_options()
 
   const char* const misc_group = "Miscellaneous options";
   app.add_option("--cnf-auto-threshold", bm->UserFlags.cnf_auto_threshold,
-                 "AIG AND-node count at or above which --cnf-generation-effort "
-                 "auto drops from medium to very-low")
+                 "AND-node count at or above which --cnf-generation-effort "
+                 "auto stops minimising: it picks new-medium there and "
+                 "gia-low below, or on the estimate-less fallback drops "
+                 "medium to very-low")
       ->capture_default_str()
       ->group(misc_group);
   app.add_option("--cnf-generation-effort", cnf_effort,
                  "effort spent minimising the CNF: auto, very-low, low, "
                  "medium, high, very-high, new-very-low, new-low, new-medium. "
                  "Higher is slower to "
-                 "generate but yields a smaller CNF; auto picks between "
-                 "very-low and medium from the size of the AIG, since "
-                 "minimising a large one costs more than the solver saves, "
-                 "and gia-low when --bv-term-abstraction is on. "
+                 "generate but yields a smaller CNF; auto picks gia-low or, "
+                 "for large estimated blasts, new-medium, since minimising a "
+                 "large one costs more than the solver saves - falling back "
+                 "to the very-low/medium choice under array refinement, on "
+                 "solvers other than cadical, or with no estimate recorded. "
                  "The new-* rungs blast through STP's own AIG instead of "
                  "ABC's and write the CNF directly: new-very-low is plain "
                  "Tseitin, new-low recovers XOR and if-then-else, new-medium "
