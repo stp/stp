@@ -172,10 +172,10 @@ void expectSameFunction(STPMgr& mgr, const ASTNode& form,
 // Is `clauses` satisfied by `assignment`, a bitmask indexed by variable?
 bool satisfies(const CNF& cnf, uint32_t assignment)
 {
-  for (uint64_t c = 0; c < cnf.clauseCount(); c++)
+  for (CNF::ClauseCursor c = cnf.clauses(); c.next();)
   {
     bool ok = false;
-    for (const int* l = cnf.clauseBegin(c); l != cnf.clauseEnd(c) && !ok; ++l)
+    for (const int* l = c.begin(); l != c.end() && !ok; ++l)
     {
       // 2*variable + negated, which is both ABC's encoding and this class's.
       const uint32_t var = (uint32_t)(*l) >> 1;

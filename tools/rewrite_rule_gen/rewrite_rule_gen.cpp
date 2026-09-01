@@ -672,12 +672,10 @@ int getDifficulty(const ASTNode& n_)
       ss->newVar();
 
     SATSolver::vec_literals satSolverClause;
-    for (uint64_t i = 0; i < cnfData.clauseCount(); i++)
+    for (CNF::ClauseCursor c = cnfData.clauses(); c.next();)
     {
       satSolverClause.clear();
-      for (const int *pLit = cnfData.clauseBegin(i),
-                     *pStop = cnfData.clauseEnd(i);
-           pLit < pStop; pLit++)
+      for (const int *pLit = c.begin(), *pStop = c.end(); pLit < pStop; pLit++)
       {
         uint32_t var = (*pLit) >> 1;
         assert((var < ss->nVars()));

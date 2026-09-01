@@ -196,11 +196,10 @@ void encodeNaryLemma(
     }
 
   SATSolver::vec_literals cl;
-  for (uint64_t i = 0; i < cnf.clauseCount(); i++)
+  for (CNF::ClauseCursor c = cnf.clauses(); c.next();)
   {
     cl.clear();
-    for (const int *pLit = cnf.clauseBegin(i), *pStop = cnf.clauseEnd(i);
-         pLit < pStop; pLit++)
+    for (const int *pLit = c.begin(), *pStop = c.end(); pLit < pStop; pLit++)
     {
       assert(((*pLit) >> 1) != 0 && "a CNF generator numbered variables from 0");
       cl.push(SATSolver::mkLit(cnfToSolver[(*pLit) >> 1], ((*pLit) & 1) != 0));
@@ -446,11 +445,10 @@ void BVExactEncoder::encode(SATSolver& solver, const ASTNode& term,
     }
 
   SATSolver::vec_literals cl;
-  for (uint64_t i = 0; i < cnf.clauseCount(); i++)
+  for (CNF::ClauseCursor c = cnf.clauses(); c.next();)
   {
     cl.clear();
-    for (const int *pLit = cnf.clauseBegin(i), *pStop = cnf.clauseEnd(i);
-         pLit < pStop; pLit++)
+    for (const int *pLit = c.begin(), *pStop = c.end(); pLit < pStop; pLit++)
     {
       assert(((*pLit) >> 1) != 0 && "a CNF generator numbered variables from 0");
       cl.push(SATSolver::mkLit(cnfToSolver[(*pLit) >> 1], ((*pLit) & 1) != 0));
