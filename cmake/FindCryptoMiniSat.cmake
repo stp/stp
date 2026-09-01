@@ -131,6 +131,46 @@ if(NOT CryptoMiniSat_FOUND_SYSTEM)
     # check_auto_download() is fatal by construction, and is reached only when
     # this was asked for by name. Otherwise the answer is the one AUTO asks
     # for: say nothing and build without it.
+    # A package consulted above can define the cryptominisat5 imported target
+    # and still be unusable: a config whose Targets file references imported
+    # targets that no longer exist -- a system CryptoMiniSat built against a
+    # since-removed CaDiCaL -- defines the target and then reports NOT FOUND,
+    # and a package rejected for its version defined it too. An imported
+    # target cannot be redefined, so no copy can be built here under that
+    # name; without this check the add_library() below aborts naming the
+    # collision but not the package that caused it.
+    if(TARGET cryptominisat5)
+        if(cryptominisat5_DIR)
+            set(_cms_who "the unusable package in '${cryptominisat5_DIR}'")
+        else()
+            set(_cms_who "something outside this find module")
+        endif()
+        set(_cms_why "")
+        if(cryptominisat5_NOT_FOUND_MESSAGE)
+            string(CONCAT _cms_why " Its config file reports: "
+                   "${cryptominisat5_NOT_FOUND_MESSAGE}.")
+        elseif(CryptoMiniSat_VERSION)
+            set(_cms_why " It is version ${CryptoMiniSat_VERSION}.")
+        endif()
+        string(CONCAT _cms_msg
+            "the cryptominisat5 imported target is already defined, by "
+            "${_cms_who}, so a CryptoMiniSat cannot be built here."
+            "${_cms_why}")
+        if(CryptoMiniSat_FIND_REQUIRED)
+            message(FATAL_ERROR "CryptoMiniSat was asked for, but ${_cms_msg} "
+                    "Repair or remove that installation, point "
+                    "-Dcryptominisat5_DIR at a usable copy, or configure with "
+                    "-DUSE_CRYPTOMINISAT=OFF.")
+        endif()
+        message(STATUS "Building without CryptoMiniSat: ${_cms_msg}")
+        unset(_cms_who)
+        unset(_cms_why)
+        unset(_cms_msg)
+        set(CryptoMiniSat_FOUND FALSE)
+        set(STP_CMS_FROM_PACKAGE FALSE)
+        return()
+    endif()
+
     check_ep_downloaded("CryptoMiniSat-EP")
     if(NOT CryptoMiniSat-EP_DOWNLOADED AND NOT ENABLE_AUTO_DOWNLOAD)
         if(CryptoMiniSat_FIND_REQUIRED)
