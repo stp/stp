@@ -239,6 +239,155 @@ bool matchXorAnd(const Manager& m, Node n, Lit& g, Lit& h)
   return false;
 }
 
+namespace
+{
+
+// Evaluates a cell's cone from leaf nodes, refusing to step outside
+// `allowed` -- the discipline verifyFullAdder applies. A leaf that aliases
+// another leaf reads the first one's value, which makes the verification
+// fail closed on degenerate shapes.
+struct CellEval
+{
+  const Manager& m;
+  const Node* allowed;
+  unsigned nAllowed;
+  const Node* leaf;
+  const bool* val;
+  unsigned nLeaf;
+  int depth = 0;
+  bool ok = true;
+
+  bool node(Node x)
+  {
+    for (unsigned i = 0; i < nLeaf; i++)
+      if (x == leaf[i])
+        return val[i];
+    if (++depth > 16)
+    {
+      ok = false;
+      return false;
+    }
+    bool inCone = false;
+    for (unsigned i = 0; i < nAllowed && !inCone; i++)
+      inCone = allowed[i] == x;
+    if (!inCone || !m.isAnd(x))
+    {
+      ok = false;
+      return false;
+    }
+    const bool r = lit(m.fanin0(x)) && lit(m.fanin1(x));
+    --depth;
+    return r;
+  }
+  bool lit(Lit l) { return node(nodeOf(l)) != isNeg(l); }
+};
+
+} // namespace
+
+bool matchJointCell(const Manager& m, Node n, Lit& a, Lit& b, Lit& e,
+                    Lit& other, bool& tSide)
+{
+  Lit c, t, el;
+  if (!matchIte(m, n, c, t, el))
+    return false;
+  Node p, q;
+  if (!xorShape(m, nodeOf(c), p, q))
+    return false;
+  const Lit u = m.fanin0(p);
+  const Lit v = m.fanin1(p);
+
+  // The edge of the condition node that is true when u and v agree, and the
+  // arms as that edge selects them.
+  e = litOf(nodeOf(c), true);
+  Lit onEq = t, onNeq = el;
+  if (!isNeg(c))
+    std::swap(onEq, onNeq);
+
+  if (onNeq == v || onNeq == neg(v) || onNeq == u || onNeq == neg(u))
+  {
+    // out = e ? other : b -- the borrow-chain cell.
+    tSide = false;
+    b = onNeq;
+    a = (onNeq == v) ? u : (onNeq == neg(v)) ? neg(u)
+        : (onNeq == u) ? v : neg(v);
+    other = onEq;
+  }
+  else if (onEq == u || onEq == neg(u) || onEq == v || onEq == neg(v))
+  {
+    // out = e ? a : other -- the agreeing arm is an operand.
+    tSide = true;
+    a = onEq;
+    b = (onEq == u) ? v : (onEq == neg(u)) ? neg(v)
+        : (onEq == v) ? u : neg(u);
+    other = onNeq;
+  }
+  else
+    return false;
+
+  // The structural match proposes; the evaluation disposes, over every
+  // assignment of the three operand nodes.
+  const Node allowed[6] = {n, nodeOf(m.fanin0(n)), nodeOf(m.fanin1(n)),
+                           nodeOf(c), p, q};
+  const Node leaves[3] = {nodeOf(a), nodeOf(b), nodeOf(other)};
+  for (unsigned bits = 0; bits < 8; bits++)
+  {
+    const bool vals[3] = {(bits & 1) != 0, (bits & 2) != 0, (bits & 4) != 0};
+    CellEval ev{m, allowed, 6, leaves, vals, 3};
+    const bool A = vals[0] != isNeg(a);
+    const bool B = vals[1] != isNeg(b);
+    const bool O = vals[2] != isNeg(other);
+    const bool E = (A == B);
+    const bool want = tSide ? (E ? A : O) : (E ? O : B);
+    if (ev.node(n) != want || ev.lit(e) != E || !ev.ok)
+      return false;
+  }
+  return true;
+}
+
+bool matchXorAndJoint(const Manager& m, Node n, Lit& a, Lit& b, Lit& e)
+{
+  if (!m.isAnd(n))
+    return false;
+  for (int side = 0; side < 2; side++)
+  {
+    const Lit fx = side ? m.fanin1(n) : m.fanin0(n);
+    const Lit fg = side ? m.fanin0(n) : m.fanin1(n);
+    Node p, q;
+    if (!xorShape(m, nodeOf(fx), p, q))
+      continue;
+    const Lit u = m.fanin0(p);
+    const Lit v = m.fanin1(p);
+    const Node gn = nodeOf(fg);
+    if (gn != nodeOf(u) && gn != nodeOf(v))
+      continue;
+    // Template: out = !e & b with e == (a == b). A positive read of the
+    // exclusive-or is the disagreeing case, so e is its complement edge.
+    e = litOf(nodeOf(fx), !isNeg(fx));
+    b = fg;
+    const bool agree = !isNeg(fx); // e true <=> u == v
+    if (gn == nodeOf(u))
+      a = ((fg == u) == agree) ? v : neg(v);
+    else
+      a = ((fg == v) == agree) ? u : neg(u);
+
+    const Node allowed[4] = {n, nodeOf(fx), p, q};
+    const Node leaves[2] = {nodeOf(a), nodeOf(b)};
+    bool verified = true;
+    for (unsigned bits = 0; bits < 4 && verified; bits++)
+    {
+      const bool vals[2] = {(bits & 1) != 0, (bits & 2) != 0};
+      CellEval ev{m, allowed, 4, leaves, vals, 2};
+      const bool A = vals[0] != isNeg(a);
+      const bool B = vals[1] != isNeg(b);
+      const bool E = (A == B);
+      verified = ev.node(n) == (!E && B) && ev.lit(e) == E && ev.ok;
+    }
+    if (verified)
+      return true;
+  }
+  return false;
+}
+
 void collectAndLeaves(const Manager& m, Node n,
                       const std::vector<uint64_t>& absorbed,
                       std::vector<Lit>& into, std::vector<Lit>& stack)
@@ -387,7 +536,9 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
   live_.assign(words, 0);
   pattern_.assign(words, 0);
   majority_.assign(words, 0);
+  majorityLink_.assign(words, 0);
   xorAnd_.assign(words, 0);
+  xorAndLink_.assign(words, 0);
   absorbed_.assign(words, 0);
   faSum_.assign(words, 0);
   faCarry_.assign(words, 0);
@@ -450,18 +601,23 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
            matchIte(m, x, c, t, e);
   };
 
-  // An AND reading a private exclusive-or against one of the exclusive-or's
-  // own operands is a two-literal conjunction over the operands; the
-  // exclusive-or and its intermediates get no variables. The comparators'
-  // borrow chains bottom out in exactly this gate.
-  const auto wouldXorAnd = [&](Node x) {
-    Lit g, h;
+  // An AND reading an exclusive-or against one of the exclusive-or's own
+  // operands is a two-literal conjunction over the operands. The
+  // comparators' borrow chains bottom out in exactly this gate. A private
+  // exclusive-or dies with it; a shared one stays, and the gate emits the
+  // linking clauses instead.
+  const auto xorAndMatch = [&](Node x, Lit& g, Lit& h, Node& xn) {
     if (!matchPatterns || !m.isAnd(x) || faMember(x) ||
         !matchXorAnd(m, x, g, h))
       return false;
     const Lit f0 = m.fanin0(x);
-    const Node xn = nodeOf(g == f0 ? m.fanin1(x) : f0);
-    return refs[xn] == 1 && !faMember(xn);
+    xn = nodeOf(g == f0 ? m.fanin1(x) : f0);
+    return !faMember(xn);
+  };
+  const auto wouldXorAnd = [&](Node x) {
+    Lit g, h;
+    Node xn;
+    return xorAndMatch(x, g, h, xn);
   };
 
   for (Node n = static_cast<Node>(nNodes); n-- > 1;)
@@ -502,19 +658,34 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
       assert(matched);
       (void)matched;
 
-      // The majority upgrade needs the exclusive-or private to this cell:
-      // its two references are the cell's own, so it dies with the cell and
-      // the majority block replaces both gates.
       const Node cn = nodeOf(c);
-      Lit x, y, z;
-      if (m.isAnd(cn) && refs[cn] == 2 && !faMember(cn) &&
-          matchMajority(m, n, x, y, z))
+      if (m.isAnd(cn) && !faMember(cn))
       {
-        setMajority(n);
-        setLive(nodeOf(x));
-        setLive(nodeOf(y));
-        setLive(nodeOf(z));
-        continue;
+        // A private exclusive-or condition (its two references are the
+        // cell's own) dies with the cell: the majority block replaces both
+        // gates. A shared one keeps its variable and its own definition,
+        // and the cell instead adds the linking clauses that keep the
+        // window propagation-complete with the equality inside it.
+        Lit x, y, z;
+        if (refs[cn] == 2 && matchMajority(m, n, x, y, z))
+        {
+          setMajority(n);
+          setLive(nodeOf(x));
+          setLive(nodeOf(y));
+          setLive(nodeOf(z));
+          continue;
+        }
+        Lit a, b, e2, other;
+        bool tSide;
+        if (refs[cn] > 2 && matchJointCell(m, n, a, b, e2, other, tSide))
+        {
+          setMajorityLink(n);
+          setLive(nodeOf(a));
+          setLive(nodeOf(b));
+          setLive(cn);
+          setLive(nodeOf(other));
+          continue;
+        }
       }
 
       setPatterned(n);
@@ -524,16 +695,28 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
       continue;
     }
 
-    if (wouldXorAnd(n))
     {
       Lit g, h;
-      const bool matched = matchXorAnd(m, n, g, h);
-      assert(matched);
-      (void)matched;
-      setXorAnd(n);
-      setLive(nodeOf(g));
-      setLive(nodeOf(h));
-      continue;
+      Node xn;
+      if (xorAndMatch(n, g, h, xn))
+      {
+        if (refs[xn] == 1)
+        {
+          setXorAnd(n);
+          setLive(nodeOf(g));
+          setLive(nodeOf(h));
+          continue;
+        }
+        Lit a, b, e;
+        if (matchXorAndJoint(m, n, a, b, e))
+        {
+          setXorAndLink(n);
+          setLive(nodeOf(a));
+          setLive(nodeOf(b));
+          setLive(xn);
+          continue;
+        }
+      }
     }
 
     // Otherwise this is an AND, and each uncomplemented fanin that nothing
@@ -574,10 +757,22 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
       nLiterals_ += 18;
       continue;
     }
+    if (majorityLink(n))
+    {
+      nClauses_ += 10;
+      nLiterals_ += 30;
+      continue;
+    }
     if (xorAnd(n))
     {
       nClauses_ += 3;
       nLiterals_ += 7;
+      continue;
+    }
+    if (xorAndLink(n))
+    {
+      nClauses_ += 5;
+      nLiterals_ += 12;
       continue;
     }
     if (patterned(n))
