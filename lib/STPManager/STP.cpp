@@ -888,18 +888,21 @@ STP::TopLevelSTPAux(SATSolver& NewSolver, const ASTNode& original_input,
   if (simp->hasUnappliedSubstitutions())
     inputToSat = simp->applySubstitutionMap(inputToSat);
 
-  // Extract sub-terms shared between additions, and between multiplies,
-  // ahead of unconstrained-variable elimination: a pair of otherwise-unused
-  // variables occurring only inside the shared node makes that node
-  // collapsible there. This also keeps the extraction ahead of the
-  // ConstantBitPropagation object built below, whose fixed-point map must
-  // describe the exact tree handed to ToSATAIG.
+  // Extract sub-terms shared between same-kind applications of each
+  // associative-commutative operator, ahead of unconstrained-variable
+  // elimination: a pair of otherwise-unused variables occurring only inside
+  // the shared node makes that node collapsible there. This also keeps the
+  // extraction ahead of the ConstantBitPropagation object built below,
+  // whose fixed-point map must describe the exact tree handed to ToSATAIG.
+  // BVOR is absent because the node factory lowers it to BVNOT/BVAND at
+  // creation, so its sharing is BVAND sharing by the time this runs.
   if (bm->UserFlags.enable_common_subsum)
   {
-    CommonSubSum sums(bm, bm->defaultNodeFactory, BVPLUS);
-    inputToSat = sums.topLevel(inputToSat);
-    CommonSubSum products(bm, bm->defaultNodeFactory, BVMULT);
-    inputToSat = products.topLevel(inputToSat);
+    for (const Kind k : {BVPLUS, BVMULT, BVXOR, BVAND, XOR, AND, OR})
+    {
+      CommonSubSum cse(bm, bm->defaultNodeFactory, k);
+      inputToSat = cse.topLevel(inputToSat);
+    }
     bm->ASTNodeStats("After Common Sub-term Extraction: ", inputToSat);
   }
 

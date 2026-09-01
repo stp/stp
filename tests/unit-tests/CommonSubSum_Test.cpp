@@ -21,6 +21,7 @@ THE SOFTWARE.
 #include "stp/cpp_interface.h"
 #include "stp/Parser/parser.h"
 #include "stp/Simplifier/CommonSubSum.h"
+#include "stp/Simplifier/Flatten.h"
 #include <gtest/gtest.h>
 #include <set>
 
@@ -83,7 +84,31 @@ struct Context
       std::cerr << "Post common sub-product " << n;
       return n;
     }
+
+   ASTNode processKind(stp::Kind k, std::string input)
+   {
+      ASTNode n = parse(input);
+      stp::CommonSubSum pass(&mgr, &snf, k);
+      return pass.topLevel(n);
+    }
 };
+
+// How many of `nodes` appear as a child of exactly `wanted` of the others.
+static int nodesWithParents(const std::set<ASTNode>& nodes, int wanted)
+{
+  int matching = 0;
+  for (const ASTNode& s : nodes)
+  {
+    int parents = 0;
+    for (const ASTNode& p : nodes)
+      for (const ASTNode& child : p.GetChildren())
+        if (child == s)
+          parents++;
+    if (parents == wanted)
+      matching++;
+  }
+  return matching;
+}
 
 static void collectKindNodes(const ASTNode& n, stp::Kind kind,
                              std::set<ASTNode>& out,
@@ -198,6 +223,121 @@ TEST(CommonSubSum_Test, shared_pair_factored_into_one_product_node)
   ASSERT_EQ(shared, 1);
 }
 
+// A larger shared operand subset falls out of repeated pair extraction.
+// {v0,v1,v4,v6} is common to both sums, so two rounds pull out two shared
+// pairs; the smaller sum ends as exactly the sum of those pairs and the
+// larger one keeps them as operands:
+//   (v0+v1+v4+v6), (v0+v1+v2+v3+v4+v5+v6)
+//     -->  s1+s2, (s1+s2+v2+v3+v5)   with s1, s2 shared.
+TEST(CommonSubSum_Test, overlapping_operand_subset_cascades)
+{
+  const std::string input = R"(
+    (declare-fun v4 () (_ BitVec 20))
+    (declare-fun v5 () (_ BitVec 20))
+    (declare-fun v6 () (_ BitVec 20))
+    (assert (= (bvmul v2 (bvadd v0 v1 v4 v6)) (_ bv0 20)))
+    (assert (= (bvmul v3 (bvadd v0 v1 v2 v3 v4 v5 v6)) (_ bv33 20)))
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+
+  std::set<ASTNode> plusNodes, visited;
+  collectPlusNodes(n, plusNodes, visited);
+
+  // The two shared pairs, the two-operand rewrite of the small sum, and the
+  // five-operand rewrite of the wide one.
+  ASSERT_EQ(plusNodes.size(), 4u);
+
+  std::multiset<unsigned> degrees;
+  int sharedTwice = 0;
+  for (const ASTNode& s : plusNodes)
+  {
+    degrees.insert(s.Degree());
+    int parents = 0;
+    for (const ASTNode& p : plusNodes)
+      for (const ASTNode& child : p.GetChildren())
+        if (child == s)
+          parents++;
+    if (parents == 2)
+      sharedTwice++;
+  }
+  EXPECT_EQ(degrees, (std::multiset<unsigned>{2, 2, 2, 5}));
+  EXPECT_EQ(sharedTwice, 2);
+}
+
+// A pair held by three sums is built once and referenced from all three.
+TEST(CommonSubSum_Test, pair_shared_by_three_sums_extracted_once)
+{
+  const std::string input = R"(
+    (declare-fun v4 () (_ BitVec 20))
+    (assert (= (bvmul v2 (bvadd v0 v1 v2)) (_ bv0 20)))
+    (assert (= (bvmul v3 (bvadd v0 v1 v3)) (_ bv33 20)))
+    (assert (= (bvmul v4 (bvadd v0 v1 v4)) (_ bv7 20)))
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+
+  std::set<ASTNode> plusNodes, visited;
+  collectPlusNodes(n, plusNodes, visited);
+
+  ASSERT_EQ(plusNodes.size(), 4u);
+  int sharedByThree = 0;
+  for (const ASTNode& s : plusNodes)
+  {
+    ASSERT_EQ(s.Degree(), 2u);
+    int parents = 0;
+    for (const ASTNode& p : plusNodes)
+      for (const ASTNode& child : p.GetChildren())
+        if (child == s)
+          parents++;
+    if (parents == 3)
+      sharedByThree++;
+  }
+  EXPECT_EQ(sharedByThree, 1);
+}
+
+// Nesting hides the pair -- (v0 + (v1 + v2)) and (v1 + (v0 + v3)) share
+// {v0,v1} but no node, and two-operand sums are below the pass's reach --
+// so extraction only fires once Flatten has widened the sums. This is the
+// pipeline ordering the pass is written for.
+TEST(CommonSubSum_Test, flatten_exposes_pairs_hidden_by_nesting)
+{
+  const std::string input = R"(
+    (assert (= (bvmul v2 (bvadd v0 (bvadd v1 v2))) (_ bv0 20)))
+    (assert (= (bvmul v3 (bvadd v1 (bvadd v0 v3))) (_ bv33 20)))
+    )";
+
+  Context c;
+  ASTNode parsed = c.parse(input);
+
+  ASTNode untouched = c.subSum.topLevel(parsed);
+  EXPECT_EQ(untouched, parsed);
+
+  stp::Flatten flatten(&c.mgr, &c.snf);
+  ASTNode flat = flatten.topLevel(parsed);
+  ASTNode extracted = c.subSum.topLevel(flat);
+
+  std::set<ASTNode> plusNodes, visited;
+  collectPlusNodes(extracted, plusNodes, visited);
+
+  ASSERT_EQ(plusNodes.size(), 3u);
+  int shared = 0;
+  for (const ASTNode& s : plusNodes)
+  {
+    ASSERT_EQ(s.Degree(), 2u);
+    int parents = 0;
+    for (const ASTNode& p : plusNodes)
+      for (const ASTNode& child : p.GetChildren())
+        if (child == s)
+          parents++;
+    if (parents == 2)
+      shared++;
+  }
+  EXPECT_EQ(shared, 1);
+}
+
 // A pair shared between a sum and a product has no node both could use:
 // neither instance of the pass may pair across kinds.
 TEST(CommonSubSum_Test, sum_and_product_do_not_pair)
@@ -226,4 +366,165 @@ TEST(CommonSubSum_Test, sum_and_product_do_not_pair)
       wideMults++;
   ASSERT_EQ(wideSums, 1);
   ASSERT_EQ(wideMults, 1);
+}
+
+// The same extraction applies to each associative-commutative kind. The
+// multiplies again keep the equalities from being solved word-level at node
+// creation, so the applications genuinely reach the pass.
+TEST(CommonSubSum_Test, shared_pair_factored_for_bvxor)
+{
+  const std::string input = R"(
+    (assert (= (bvmul v2 (bvxor v0 v1 v2)) (_ bv0 20)))
+    (assert (= (bvmul v3 (bvxor v0 v1 v3)) (_ bv33 20)))
+    )";
+
+  Context c;
+  ASTNode n = c.processKind(stp::BVXOR, input);
+
+  std::set<ASTNode> nodes, visited;
+  collectKindNodes(n, stp::BVXOR, nodes, visited);
+
+  ASSERT_EQ(nodes.size(), 3u);
+  for (const ASTNode& p : nodes)
+    ASSERT_EQ(p.Degree(), 2u);
+  EXPECT_EQ(nodesWithParents(nodes, 2), 1);
+}
+
+TEST(CommonSubSum_Test, shared_pair_factored_for_bvand)
+{
+  const std::string input = R"(
+    (assert (= (bvmul v2 (bvand v0 v1 v2)) (_ bv0 20)))
+    (assert (= (bvmul v3 (bvand v0 v1 v3)) (_ bv33 20)))
+    )";
+
+  Context c;
+  ASTNode n = c.processKind(stp::BVAND, input);
+
+  std::set<ASTNode> nodes, visited;
+  collectKindNodes(n, stp::BVAND, nodes, visited);
+
+  ASSERT_EQ(nodes.size(), 3u);
+  for (const ASTNode& p : nodes)
+    ASSERT_EQ(p.Degree(), 2u);
+  EXPECT_EQ(nodesWithParents(nodes, 2), 1);
+}
+
+// bvor never reaches the pass as BVOR: the factory lowers it to
+// BVNOT/BVAND at creation, so its shared pair surfaces -- negated -- in
+// the BVAND run.
+TEST(CommonSubSum_Test, bvor_reaches_extraction_as_bvand)
+{
+  const std::string input = R"(
+    (assert (= (bvmul v2 (bvor v0 v1 v2)) (_ bv0 20)))
+    (assert (= (bvmul v3 (bvor v0 v1 v3)) (_ bv33 20)))
+    )";
+
+  Context c;
+  ASTNode n = c.processKind(stp::BVAND, input);
+
+  std::set<ASTNode> nodes, visited;
+  collectKindNodes(n, stp::BVAND, nodes, visited);
+
+  ASSERT_EQ(nodes.size(), 3u);
+  for (const ASTNode& p : nodes)
+    ASSERT_EQ(p.Degree(), 2u);
+  EXPECT_EQ(nodesWithParents(nodes, 2), 1);
+}
+
+TEST(CommonSubSum_Test, shared_pair_factored_for_boolean_xor)
+{
+  const std::string input = R"(
+    (declare-fun a () Bool)
+    (declare-fun b () Bool)
+    (declare-fun p () Bool)
+    (declare-fun q () Bool)
+    (assert (xor a b p))
+    (assert (xor a b q))
+    )";
+
+  Context c;
+  ASTNode n = c.processKind(stp::XOR, input);
+
+  std::set<ASTNode> nodes, visited;
+  collectKindNodes(n, stp::XOR, nodes, visited);
+
+  ASSERT_EQ(nodes.size(), 3u);
+  for (const ASTNode& p : nodes)
+    ASSERT_EQ(p.Degree(), 2u);
+  EXPECT_EQ(nodesWithParents(nodes, 2), 1);
+}
+
+// The shared conjunctions sit under ORs so that the top-level conjunction
+// -- itself an AND, and too narrow to enumerate -- stays out of the way.
+TEST(CommonSubSum_Test, shared_pair_factored_for_boolean_and)
+{
+  const std::string input = R"(
+    (declare-fun a () Bool)
+    (declare-fun b () Bool)
+    (declare-fun p () Bool)
+    (declare-fun q () Bool)
+    (declare-fun r () Bool)
+    (declare-fun s () Bool)
+    (assert (or r (and a b p)))
+    (assert (or s (and a b q)))
+    )";
+
+  Context c;
+  ASTNode n = c.processKind(stp::AND, input);
+
+  std::set<ASTNode> nodes, visited;
+  collectKindNodes(n, stp::AND, nodes, visited);
+
+  // The top-level conjunction of the two asserts, the shared pair, and the
+  // two rewritten conjunctions.
+  ASSERT_EQ(nodes.size(), 4u);
+  EXPECT_EQ(nodesWithParents(nodes, 2), 1);
+}
+
+TEST(CommonSubSum_Test, shared_pair_factored_for_boolean_or)
+{
+  const std::string input = R"(
+    (declare-fun a () Bool)
+    (declare-fun b () Bool)
+    (declare-fun p () Bool)
+    (declare-fun q () Bool)
+    (assert (or a b p))
+    (assert (or a b q))
+    )";
+
+  Context c;
+  ASTNode n = c.processKind(stp::OR, input);
+
+  std::set<ASTNode> nodes, visited;
+  collectKindNodes(n, stp::OR, nodes, visited);
+
+  ASSERT_EQ(nodes.size(), 3u);
+  for (const ASTNode& p : nodes)
+    ASSERT_EQ(p.Degree(), 2u);
+  EXPECT_EQ(nodesWithParents(nodes, 2), 1);
+}
+
+// A substitution can hand a self-inverse kind its own pair node twice:
+// extracting {v0,v1} from (v0 ^ v1 ^ (v0 ^ v1)) removes both operands and
+// inserts the hash-consed pair beside the copy already there. The factory
+// folds the rebuilt application to zero, and the enclosing assert to true.
+TEST(CommonSubSum_Test, duplicate_arrival_collapses_soundly)
+{
+  const std::string input = R"(
+    (assert (= (bvmul v2 (bvxor v0 v1 v2)) (_ bv33 20)))
+    (assert (= (bvmul v3 (bvxor v0 v1 (bvxor v0 v1))) (_ bv0 20)))
+    )";
+
+  Context c;
+  ASTNode n = c.processKind(stp::BVXOR, input);
+
+  std::set<ASTNode> nodes, visited;
+  collectKindNodes(n, stp::BVXOR, nodes, visited);
+
+  // The second assert folded away; the first keeps the shared pair nested
+  // in its rewritten application.
+  ASSERT_EQ(nodes.size(), 2u);
+  for (const ASTNode& p : nodes)
+    ASSERT_EQ(p.Degree(), 2u);
+  EXPECT_EQ(nodesWithParents(nodes, 1), 1);
 }

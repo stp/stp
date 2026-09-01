@@ -1,6 +1,6 @@
 ; RUN: %solver -s %s 2>&1 | %OutputCheck %s
 ; RUN: %solver -d %s | %OutputCheck --check-prefix=MODEL %s
-; CHECK: Multipliers saved:1
+; CHECK: BVMULT applications saved:1
 ; CHECK: ^sat
 ; MODEL: ^sat
 ; The pair {a, b} occurs only inside these two products. Sub-term
