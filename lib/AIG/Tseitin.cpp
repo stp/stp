@@ -160,6 +160,85 @@ bool verifyFullAdder(const Manager& m, Lit la, Lit lb, Lit lc, Node sum,
 
 } // namespace
 
+bool matchMajority(const Manager& m, Node n, Lit& x, Lit& y, Lit& z)
+{
+  Lit c, t, e;
+  if (!matchIte(m, n, c, t, e))
+    return false;
+  Node p, q;
+  if (!xorShape(m, nodeOf(c), p, q))
+    return false;
+
+  // The exclusive-or computes u xor v over its grandchild literals, so read
+  // through the edge `c` the condition is u == w.
+  const Lit u = m.fanin0(p);
+  const Lit v = m.fanin1(p);
+  const Lit w = isNeg(c) ? v : neg(v);
+
+  // n = (u == w) ? t : e. When an arm is a literal of u's or w's node the
+  // selection collapses: agreeing arms are the majority's two aligned
+  // inputs, the remaining arm is its third.
+  if (e == w || e == neg(u))
+  {
+    x = neg(u);
+    y = w;
+    z = t;
+  }
+  else if (e == u || e == neg(w))
+  {
+    x = u;
+    y = neg(w);
+    z = t;
+  }
+  else if (t == u || t == w)
+  {
+    x = u;
+    y = w;
+    z = e;
+  }
+  else if (t == neg(u) || t == neg(w))
+  {
+    x = neg(u);
+    y = neg(w);
+    z = e;
+  }
+  else
+    return false;
+  return true;
+}
+
+bool matchXorAnd(const Manager& m, Node n, Lit& g, Lit& h)
+{
+  if (!m.isAnd(n))
+    return false;
+  for (int side = 0; side < 2; side++)
+  {
+    const Lit fx = side ? m.fanin1(n) : m.fanin0(n);
+    const Lit fg = side ? m.fanin0(n) : m.fanin1(n);
+    Node p, q;
+    if (!xorShape(m, nodeOf(fx), p, q))
+      continue;
+    const Lit u = m.fanin0(p);
+    const Lit v = m.fanin1(p);
+    const Node gn = nodeOf(fg);
+    // n = (u xor v, read through fx) & fg. With fg on u's node the
+    // exclusive-or contributes only v's polarity, and symmetrically.
+    if (gn == nodeOf(u))
+    {
+      g = fg;
+      h = (!isNeg(fx) == (fg == u)) ? neg(v) : v;
+      return true;
+    }
+    if (gn == nodeOf(v))
+    {
+      g = fg;
+      h = (!isNeg(fx) == (fg == v)) ? neg(u) : u;
+      return true;
+    }
+  }
+  return false;
+}
+
 void collectAndLeaves(const Manager& m, Node n,
                       const std::vector<uint64_t>& absorbed,
                       std::vector<Lit>& into, std::vector<Lit>& stack)
@@ -307,6 +386,8 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
   const size_t words = static_cast<size_t>((nNodes + 63) / 64);
   live_.assign(words, 0);
   pattern_.assign(words, 0);
+  majority_.assign(words, 0);
+  xorAnd_.assign(words, 0);
   absorbed_.assign(words, 0);
   faSum_.assign(words, 0);
   faCarry_.assign(words, 0);
@@ -369,6 +450,20 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
            matchIte(m, x, c, t, e);
   };
 
+  // An AND reading a private exclusive-or against one of the exclusive-or's
+  // own operands is a two-literal conjunction over the operands; the
+  // exclusive-or and its intermediates get no variables. The comparators'
+  // borrow chains bottom out in exactly this gate.
+  const auto wouldXorAnd = [&](Node x) {
+    Lit g, h;
+    if (!matchPatterns || !m.isAnd(x) || faMember(x) ||
+        !matchXorAnd(m, x, g, h))
+      return false;
+    const Lit f0 = m.fanin0(x);
+    const Node xn = nodeOf(g == f0 ? m.fanin1(x) : f0);
+    return refs[xn] == 1 && !faMember(xn);
+  };
+
   for (Node n = static_cast<Node>(nNodes); n-- > 1;)
   {
     if (!live(n) || !m.isAnd(n))
@@ -406,10 +501,38 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
       const bool matched = matchIte(m, n, c, t, e);
       assert(matched);
       (void)matched;
+
+      // The majority upgrade needs the exclusive-or private to this cell:
+      // its two references are the cell's own, so it dies with the cell and
+      // the majority block replaces both gates.
+      const Node cn = nodeOf(c);
+      Lit x, y, z;
+      if (m.isAnd(cn) && refs[cn] == 2 && !faMember(cn) &&
+          matchMajority(m, n, x, y, z))
+      {
+        setMajority(n);
+        setLive(nodeOf(x));
+        setLive(nodeOf(y));
+        setLive(nodeOf(z));
+        continue;
+      }
+
       setPatterned(n);
       setLive(nodeOf(c));
       setLive(nodeOf(t));
       setLive(nodeOf(e));
+      continue;
+    }
+
+    if (wouldXorAnd(n))
+    {
+      Lit g, h;
+      const bool matched = matchXorAnd(m, n, g, h);
+      assert(matched);
+      (void)matched;
+      setXorAnd(n);
+      setLive(nodeOf(g));
+      setLive(nodeOf(h));
       continue;
     }
 
@@ -423,7 +546,7 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
       const Node x = nodeOf(f);
       setLive(x);
       if (collapseAnds && !isNeg(f) && m.isAnd(x) && refs[x] == 1 &&
-          !faMember(x) && !wouldPattern(x))
+          !faMember(x) && !wouldPattern(x) && !wouldXorAnd(x))
         setAbsorbed(x);
     }
   }
@@ -443,6 +566,18 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
     {
       nClauses_ += 14;
       nLiterals_ += 44;
+      continue;
+    }
+    if (majorityCell(n))
+    {
+      nClauses_ += 6;
+      nLiterals_ += 18;
+      continue;
+    }
+    if (xorAnd(n))
+    {
+      nClauses_ += 3;
+      nLiterals_ += 7;
       continue;
     }
     if (patterned(n))
