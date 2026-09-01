@@ -2372,7 +2372,22 @@ void BitBlaster<BBNode, BBNodeManagerT>::BBPlus2(BBNodeVec& sum,
   for (int i = 0; i < bitWidth; i++)
   {
     BBNode nextcin, s;
-    fullAdder(sum[i], y[i], cin, s, nextcin);
+    if (uf->adder_variant)
+      fullAdder(sum[i], y[i], cin, s, nextcin);
+    else
+    {
+      // The majority-carry form the addition network offers, selectable in
+      // the chain too so --bb.add-v1 compares the two full adders under
+      // either summation order. Named locals fix the node creation order,
+      // as in Majority().
+      const BBNode a = sum[i];
+      const BBNode b = y[i];
+      const BBNode ab = nf->CreateNode(AND, a, b);
+      const BBNode bc = nf->CreateNode(AND, b, cin);
+      const BBNode ac = nf->CreateNode(AND, a, cin);
+      nextcin = nf->CreateNode(OR, ab, bc, ac);
+      s = nf->CreateNode(XOR, nf->CreateNode(XOR, cin, b), a);
+    }
     sum[i] = s;
     cin = nextcin;
   }

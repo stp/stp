@@ -758,6 +758,14 @@ void runCbitp(STPMgr* mgr, const Config& cfg, vector<Row>& out)
       bcpEx = bcpExhaustiveCheck(mgr, op, cfg);
     }
 
+    ConsistencyCheck cons;
+    if (cfg.consistencyWidth > 0)
+    {
+      if (cfg.verbose)
+        std::cerr << "encoding consistency " << op.name << std::endl;
+      cons = consistencyCheck(mgr, op, cfg);
+    }
+
     const bool isBoolean =
         op.shape == Shape::BoolNary || op.shape == Shape::BoolUnary;
     vector<unsigned> widths = isBoolean ? vector<unsigned>{1} : cfg.widths;
@@ -807,6 +815,7 @@ void runCbitp(STPMgr* mgr, const Config& cfg, vector<Row>& out)
           row.witnessUnsound = t.unsound;
           row.precision = precision;
           row.bcpExhaustive = bcpEx;
+          row.consistency = cons;
 
           if (cfg.satCases > 0 && op.satCheckable)
           {

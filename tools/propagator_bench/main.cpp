@@ -98,11 +98,31 @@ void usage()
       << "  --bcp-exhaustive W  check the bit-blasted encoding for arc\n"
       << "                      consistency at width W: every combination of\n"
       << "                      fixed bits, contradictory ones included\n"
-      << "  --cnf HOW           how to generate the CNF --bcp-check\n"
-      << "                      propagates over: simple, very-low, low,\n"
-      << "                      medium (STP's default), high, very-high.\n"
-      << "                      Different encodings of the same circuit can\n"
-      << "                      propagate differently\n"
+      << "  --consistency W     grade the encoding at width W: URC (every\n"
+      << "                      contradiction refuted by unit propagation),\n"
+      << "                      GAC (and every implied input/output literal\n"
+      << "                      derived), PC (both, over every CNF variable,\n"
+      << "                      auxiliaries included), each with how close\n"
+      << "  --consistency-cap N most exhaustive cases per scope (default\n"
+      << "                      20000000); the PC scope samples past it\n"
+      << "  --pc-samples N      sampled PC cases when over the cap\n"
+      << "                      (default 1000000)\n"
+      << "  --dump-cnf FILE     write the encoding of the one op named by\n"
+      << "                      --ops as DIMACS, with a header mapping the\n"
+      << "                      input/output bits to variables, and exit\n"
+      << "  --dump-width W      at this width (default 64)\n"
+      << "  --cnf HOW           how to generate the CNF --bcp-check and\n"
+      << "                      --consistency propagate over: simple,\n"
+      << "                      very-low, low, medium, high, very-high,\n"
+      << "                      new-very-low, new-low, new-medium, gia-low,\n"
+      << "                      gia-high, gia-very-high. Different encodings\n"
+      << "                      of the same circuit propagate differently\n"
+      << "  --bb.add-v1 0|1     UserDefinedFlags::adder_variant: 1 the\n"
+      << "                      shared-half-adder full adder (default), 0\n"
+      << "                      the majority-carry form\n"
+      << "  --bb.add-v2 0|1     UserDefinedFlags::bvplus_variant: 1 pairwise\n"
+      << "                      ripple chains (default), 0 the addition\n"
+      << "                      network\n"
       << "  --no-shift-bias     draw shift amounts uniformly, instead of\n"
       << "                      half of them from [0, width)\n"
       << "  --seed N            random seed (default 42)\n"
@@ -218,6 +238,19 @@ int main(int argc, char** argv)
     { cfg.bcpBudgetSeconds = atof(value.c_str()); i++; }
     else if (arg == "--bcp-exhaustive")
     { cfg.bcpExhaustiveWidth = atoi(value.c_str()); i++; }
+    else if (arg == "--consistency")
+    { cfg.consistencyWidth = atoi(value.c_str()); i++; }
+    else if (arg == "--dump-cnf") { cfg.dumpCnf = value; i++; }
+    else if (arg == "--dump-width")
+    { cfg.dumpWidth = atoi(value.c_str()); i++; }
+    else if (arg == "--consistency-cap")
+    { cfg.consistencyCap = strtoull(value.c_str(), NULL, 10); i++; }
+    else if (arg == "--pc-samples")
+    { cfg.pcSamples = strtoull(value.c_str(), NULL, 10); i++; }
+    else if (arg == "--bb.add-v1")
+    { cfg.adderVariant = atoi(value.c_str()); i++; }
+    else if (arg == "--bb.add-v2")
+    { cfg.bvplusVariant = atoi(value.c_str()); i++; }
     else if (arg == "--cnf") { cfg.cnf = value; i++; }
     else if (arg == "--seed") { cfg.seed = atoi(value.c_str()); i++; }
     else if (arg == "--html") { cfg.html = value; i++; }
@@ -237,12 +270,15 @@ int main(int argc, char** argv)
     return 1;
   }
 
-  if ((cfg.bcpCases > 0 || cfg.bcpExhaustiveWidth > 0) && !bcpAvailable())
+  if ((cfg.bcpCases > 0 || cfg.bcpExhaustiveWidth > 0 ||
+       cfg.consistencyWidth > 0) &&
+      !bcpAvailable())
   {
     // Refuse rather than silently report nothing: the whole point of the
     // option is the comparison it makes.
-    std::cerr << "propagator_bench: --bcp-check/--bcp-exhaustive need a build with "
-                 "CryptoMiniSat (configure with -DNOCRYPTOMINISAT=OFF)\n";
+    std::cerr << "propagator_bench: --bcp-check/--bcp-exhaustive/--consistency "
+                 "need a build with CryptoMiniSat (configure with "
+                 "-DNOCRYPTOMINISAT=OFF)\n";
     return 1;
   }
 
@@ -267,12 +303,49 @@ int main(int argc, char** argv)
       uf.cnf_effort = UF::CNF_EFFORT_HIGH;
     else if (cfg.cnf == "very-high")
       uf.cnf_effort = UF::CNF_EFFORT_VERY_HIGH;
+    else if (cfg.cnf == "new-very-low")
+      uf.cnf_effort = UF::CNF_EFFORT_NEW_VERY_LOW;
+    else if (cfg.cnf == "new-low")
+      uf.cnf_effort = UF::CNF_EFFORT_NEW_LOW;
+    else if (cfg.cnf == "new-medium")
+      uf.cnf_effort = UF::CNF_EFFORT_NEW_MEDIUM;
+    else if (cfg.cnf == "gia-low")
+      uf.cnf_effort = UF::CNF_EFFORT_GIA_LOW;
+    else if (cfg.cnf == "gia-high")
+      uf.cnf_effort = UF::CNF_EFFORT_GIA_HIGH;
+    else if (cfg.cnf == "gia-very-high")
+      uf.cnf_effort = UF::CNF_EFFORT_GIA_VERY_HIGH;
     else
     {
       std::cerr << "propagator_bench: unknown --cnf value '" << cfg.cnf
-                << "' (simple, very-low, low, medium, high, very-high)\n";
+                << "' (simple, very-low, low, medium, high, very-high, "
+                   "new-very-low, new-low, new-medium, gia-low, gia-high, "
+                   "gia-very-high)\n";
       return 1;
     }
+  }
+
+  if (cfg.adderVariant >= 0)
+    mgr->UserFlags.adder_variant = cfg.adderVariant != 0;
+  if (cfg.bvplusVariant >= 0)
+    mgr->UserFlags.bvplus_variant = cfg.bvplusVariant != 0;
+
+  if (!cfg.dumpCnf.empty())
+  {
+    if (cfg.ops.size() != 1 || !bcpAvailable())
+    {
+      std::cerr << "propagator_bench: --dump-cnf needs exactly one --ops "
+                   "operation and a CryptoMiniSat build\n";
+      return 1;
+    }
+    if (!dumpEncoding(mgr, *findOp(cfg.ops[0]), cfg, cfg.dumpCnf))
+    {
+      std::cerr << "propagator_bench: could not encode " << cfg.ops[0]
+                << " at width " << cfg.dumpWidth << "\n";
+      return 1;
+    }
+    std::cout << "wrote " << cfg.dumpCnf << std::endl;
+    return 0;
   }
 
   vector<Row> rows;
