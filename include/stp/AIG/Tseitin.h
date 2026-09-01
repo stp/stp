@@ -30,6 +30,7 @@ THE SOFTWARE.
 
 #include <cassert>
 #include <cstdint>
+#include <unordered_map>
 #include <vector>
 
 namespace stp
@@ -78,7 +79,7 @@ void collectAndLeaves(const Manager& m, Node n, const std::vector<uint64_t>& abs
 enum class Recover
 {
   Nothing,        // plain Tseitin: three clauses for every AND node
-  Patterns,       // + XOR and if-then-else, four clauses instead of nine
+  Patterns,       // + XOR, if-then-else and full adders
   PatternsAndAnds // + maximal n-ary ANDs, and so n-ary ORs, collapsed
 };
 
@@ -113,6 +114,20 @@ public:
     return (pattern_[n >> 6] >> (n & 63)) & 1u;
   }
 
+  // A recovered full adder: sum and carry defined together by one fourteen-
+  // clause block over the operands -- the minimum propagation-complete
+  // clause set for the relation, which the per-gate encodings are not. The
+  // five interior nodes get no variables. Stored at the carry node, whose
+  // complement is the carry-out.
+  struct FullAdder
+  {
+    Lit a, b, c; // the operand literals
+    Node sum;
+  };
+  bool faSum(Node n) const { return (faSum_[n >> 6] >> (n & 63)) & 1u; }
+  bool faCarry(Node n) const { return (faCarry_[n >> 6] >> (n & 63)) & 1u; }
+  const FullAdder& faAt(Node carry) const { return fas_.at(carry); }
+
   uint32_t varCount() const { return nVars_; }
   uint64_t clauseCount() const { return nClauses_; }
   uint64_t literalCount() const { return nLiterals_; }
@@ -144,10 +159,18 @@ private:
   void setLive(Node n) { live_[n >> 6] |= 1ull << (n & 63); }
   void setPatterned(Node n) { pattern_[n >> 6] |= 1ull << (n & 63); }
   void setAbsorbed(Node n) { absorbed_[n >> 6] |= 1ull << (n & 63); }
+  void setFaSum(Node n) { faSum_[n >> 6] |= 1ull << (n & 63); }
+  void setFaCarry(Node n) { faCarry_[n >> 6] |= 1ull << (n & 63); }
+  void clearFa(Node carry);
+  void findFullAdders(const Manager& m, const std::vector<uint8_t>& refs);
 
   std::vector<uint64_t> live_;
   std::vector<uint64_t> pattern_;
   std::vector<uint64_t> absorbed_;
+  std::vector<uint64_t> faSum_;
+  std::vector<uint64_t> faCarry_;
+  std::unordered_map<Node, FullAdder> fas_;
+  std::unordered_map<Node, Node> carryOfSum_;
   uint64_t nClauses_ = 0;
   uint64_t nLiterals_ = 0;
   uint64_t nAnds_ = 0;
@@ -206,6 +229,39 @@ void writeTseitin(const Manager& m, const Cone& cone, Sink& sink)
     const uint32_t x = next++;
     var[n] = x;
     const int px = static_cast<int>(2 * x), nx = px | 1;
+
+    if (cone.faSum(n))
+      continue; // defined by its full adder's block, emitted at the carry
+
+    if (cone.faCarry(n))
+    {
+      // The fourteen-clause propagation-complete block for
+      //   s = a xor b xor c,  carry-out = majority(a, b, c)
+      // where the carry-out is the complement of this node. All twenty prime
+      // implicates minus the six parity clauses whose conflicts re-derive
+      // through the carry.
+      const Cone::FullAdder& fa = cone.faAt(n);
+      const int A = cnfLit(fa.a), B = cnfLit(fa.b), C = cnfLit(fa.c);
+      const int S = static_cast<int>(2 * var[fa.sum]);
+      const int T = nx, Tn = px; // t is the carry-out literal, so !node
+      sink.clause(C ^ 1, S, T);
+      sink.clause(B ^ 1, C ^ 1, T);
+      sink.clause(B ^ 1, S, T);
+      sink.clause(A ^ 1, C ^ 1, T);
+      sink.clause(A ^ 1, B ^ 1, T);
+      sink.clause(A ^ 1, S, T);
+      sink.clause(A, S ^ 1, Tn);
+      sink.clause(A, B, Tn);
+      sink.clause(A, C, Tn);
+      sink.clause(B, S ^ 1, Tn);
+      sink.clause(B, C, Tn);
+      sink.clause(C, S ^ 1, Tn);
+      const int q1[4] = {A ^ 1, B ^ 1, C ^ 1, S};
+      const int q2[4] = {A, B, C, S ^ 1};
+      sink.clause(q1, 4);
+      sink.clause(q2, 4);
+      continue;
+    }
 
     if (cone.patterned(n))
     {
