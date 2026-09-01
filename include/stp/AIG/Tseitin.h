@@ -132,8 +132,10 @@ public:
   // In the cone, so it gets a variable and its defining clauses.
   bool live(Node n) const { return (live_[n >> 6] >> (n & 63)) & 1u; }
 
-  // Encoded as one four-clause ITE over its grandchildren rather than as
-  // three ANDs. Its two fanin nodes are then not live at all.
+  // Encoded as one ITE block over its grandchildren rather than as three
+  // ANDs: the six prime implicates of the relation (four when the arms
+  // share a node and it is an exclusive-or). Its two fanin nodes are then
+  // not live at all.
   bool patterned(Node n) const
   {
     return (pattern_[n >> 6] >> (n & 63)) & 1u;
@@ -402,6 +404,14 @@ void writeTseitin(const Manager& m, const Cone& cone, Sink& sink)
       sink.clause(px, lc ^ 1, lt ^ 1);
       sink.clause(nx, lc, le);
       sink.clause(px, lc, le ^ 1);
+      if (nodeOf(t) != nodeOf(e))
+      {
+        // The two prime implicates that skip the condition: agreeing arms
+        // decide the output while `c` is still unset. For an exclusive-or
+        // the arms share a node and both clauses are tautologies.
+        sink.clause(nx, lt, le);
+        sink.clause(px, lt ^ 1, le ^ 1);
+      }
     }
     else
     {
