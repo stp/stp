@@ -22,6 +22,8 @@ THE SOFTWARE.
 #include "stp/Parser/parser.h"
 #include "stp/Simplifier/Flatten.h"
 #include <gtest/gtest.h>
+#include <algorithm>
+#include <random>
 #include <stdio.h>
 #include <unordered_set>
 
@@ -440,6 +442,91 @@ TEST(Flatten_Test, SharedChildExposedByBvnotStripStaysShared)
   ASSERT_TRUE(hasSameKindEdge(pre, stp::BVXOR));
   ASTNode post = c.flatten.topLevel(pre);
   EXPECT_EQ(post, pre);
+}
+
+// Random unshared xor trees with random negations sprinkled through them
+// must always come back completely flat: one xor over exactly the leaf
+// symbols, under at most one top negation whose presence matches the
+// parity of the negations inserted. The factory strips each negation at
+// creation and Flatten merges every unshared same-kind child, so any
+// survivor -- a nested xor, or a negation among the operands -- is a hole
+// in one of the two.
+//
+// Fixed seeds: the trees vary, the test does not.
+static void checkRandomXorTreesFlatten(bool boolean)
+{
+  const stp::Kind xorKind = boolean ? stp::XOR : stp::BVXOR;
+  const unsigned width = boolean ? 0 : 20;
+
+  for (uint32_t seed = 0; seed < 32; seed++)
+  {
+    SCOPED_TRACE(seed);
+    std::mt19937 rng(seed);
+    Context c;
+
+    auto negate = [&](const ASTNode& n) {
+      return boolean ? c.mgr.CreateNode(stp::NOT, n)
+                     : c.mgr.CreateTerm(stp::BVNOT, width, n);
+    };
+    auto join = [&](const ASTNode& a, const ASTNode& b) {
+      return boolean ? c.mgr.CreateNode(xorKind, a, b)
+                     : c.mgr.CreateTerm(xorKind, width, a, b);
+    };
+
+    const unsigned leaves = 2 + rng() % 12;
+    unsigned negations = 0;
+    ASTVec pool;
+    for (unsigned i = 0; i < leaves; i++)
+    {
+      const std::string name = "r" + std::to_string(i);
+      pool.push_back(c.mgr.CreateSymbol(name.c_str(), 0, width));
+    }
+
+    // Combine two random entries at a time, so every internal node is used
+    // exactly once: nothing is shared and everything may flatten.
+    while (pool.size() > 1)
+    {
+      ASTNode a = pool[rng() % pool.size()];
+      pool.erase(std::find(pool.begin(), pool.end(), a));
+      ASTNode b = pool[rng() % pool.size()];
+      pool.erase(std::find(pool.begin(), pool.end(), b));
+
+      if (rng() % 2)
+      {
+        a = negate(a);
+        negations++;
+      }
+      ASTNode combined = join(a, b);
+      if (rng() % 2)
+      {
+        combined = negate(combined);
+        negations++;
+      }
+      pool.push_back(combined);
+    }
+
+    ASTNode flat = c.flatten.topLevel(pool[0]);
+
+    if (negations % 2 == 1)
+    {
+      ASSERT_EQ(flat.GetKind(), boolean ? stp::NOT : stp::BVNOT);
+      flat = flat[0];
+    }
+    ASSERT_EQ(flat.GetKind(), xorKind);
+    ASSERT_EQ(flat.Degree(), leaves);
+    for (const ASTNode& child : flat.GetChildren())
+      EXPECT_EQ(child.GetKind(), stp::SYMBOL);
+  }
+}
+
+TEST(Flatten_Test, RandomXorTreesWithNotsFlattenCompletely)
+{
+  checkRandomXorTreesFlatten(true);
+}
+
+TEST(Flatten_Test, RandomBvxorTreesWithBvnotsFlattenCompletely)
+{
+  checkRandomXorTreesFlatten(false);
 }
 
 // FP arithmetic is commutative but not associative under rounding, so no
