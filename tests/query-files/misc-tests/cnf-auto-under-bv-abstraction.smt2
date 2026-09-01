@@ -1,6 +1,7 @@
 ; Under the BV term abstraction, `auto` resolves to the Gia backend at its
-; lowest rung before the size-based choice is made, and says so; an explicit
-; level is left alone, and so is a query the abstraction is not on for.
+; lowest rung before any other resolution, and says so; an explicit level is
+; left alone, and without the abstraction the estimate-based resolution
+; decides instead, printing its own line.
 ;
 ; The resolution below requires the CaDiCaL backend, so the test does too:
 ; a build without it keeps the size-based choice and has nothing to say, and
@@ -17,8 +18,8 @@
 ; EXPLICIT-NOT: cnf-auto:
 ; EXPLICIT-NOT: ^gia:
 ; EXPLICIT: ^sat$
-; OFF-NOT: chose gia-low
-; OFF: ^cnf-auto: [0-9]+ AIG nodes, chose medium$
+; OFF-NOT: BV term abstraction on
+; OFF: ^cnf-auto: estimated [0-9]+ AND nodes, chose gia-low$
 ; OFF: ^sat$
 (set-logic QF_BV)
 (declare-const x (_ BitVec 64))

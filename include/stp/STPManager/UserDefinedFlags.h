@@ -894,14 +894,13 @@ public:
   // 3, 6 and 8; its cost grows steeply with LUT size for little further gain
   // past 6.
   //
-  // AUTO picks between VERY_LOW and MEDIUM from the size of the AIG, because
-  // the trade the scale offers is only worth making when the SAT solver is
-  // what costs. Minimising the CNF is itself work, and on a large AIG it is
-  // most of the work: a floating-point query with three fp.div and two
-  // fp.sqrt blasts to 1.7M clauses, of which MEDIUM spends 1857ms generating
-  // and MiniSat then spends 137ms solving. VERY_LOW generates the same query
-  // in a fraction of that, and the larger CNF it leaves behind costs the
-  // solver almost nothing.
+  // AUTO resolves from the difficulty score when the top level recorded one
+  // (see ToSATAIG::bitblast): GIA_LOW below the threshold, NEW_MEDIUM at or
+  // above it, because minimising the CNF is itself work and on a large blast
+  // it is most of the work, while no measurement has found the smaller
+  // formula buying solve time. Where no estimate exists, under array
+  // refinement, or on a SAT backend other than CaDiCaL, it falls back to
+  // the older choice between VERY_LOW and MEDIUM from the built AIG's size.
   enum CNFEffort
   {
     CNF_EFFORT_VERY_LOW = 0,
@@ -913,9 +912,7 @@ public:
     // The in-house Tseitin writer, over the in-house AIG. Below very-low on
     // the scale and last in the enum, which are different facts: the ordinals
     // are the C interface's contract, so a new rung goes on the end however
-    // little effort it spends. AUTO never picks it -- AUTO chooses from the
-    // AIG's node count, which means blasting through ABC first, so reaching
-    // this rung has to be an explicit request.
+    // little effort it spends.
     CNF_EFFORT_NEW_VERY_LOW,
     CNF_EFFORT_NEW_LOW,
     CNF_EFFORT_NEW_MEDIUM,
@@ -924,10 +921,6 @@ public:
     // reach -- but over a Gia the blaster built itself rather than one
     // converted from an ABC Aig. Same LUT sizes, 3, 6 and 8, so gia-low
     // against low is a comparison of the two backends and nothing else.
-    //
-    // AUTO never picks these, for the reason it never picks the rungs above:
-    // it decides from ABC's Aig node count, which means blasting through ABC
-    // first, and the point of these is that no ABC Aig is built at all.
     CNF_EFFORT_GIA_LOW,
     CNF_EFFORT_GIA_HIGH,
     CNF_EFFORT_GIA_VERY_HIGH
@@ -942,7 +935,9 @@ public:
 
   enum CNFEffort cnf_effort = CNF_EFFORT_AUTO;
 
-  // AIG AND-node count at or above which AUTO drops to VERY_LOW.
+  // AND-node count at or above which AUTO stops paying for CNF
+  // minimisation: against the recorded estimate it selects NEW_MEDIUM
+  // there, and on the estimate-less fallback it drops MEDIUM to VERY_LOW.
   //
   // High on purpose. Over a floating-point corpus, timed net of the ~9.5ms a
   // process spends starting before it solves anything, VERY_LOW is the better

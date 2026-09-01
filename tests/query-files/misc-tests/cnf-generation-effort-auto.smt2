@@ -2,20 +2,26 @@
 ; UserFlags fields, and which way the decision goes on either side of the
 ; threshold.
 ;
-; The query is small -- a handful of AND gates -- so `auto` should leave it on
-; medium, where cut enumeration is cheap and the smaller CNF is worth having.
-; Moving the threshold down to one gate forces the other branch without needing
-; a query large enough to be slow, so this test says nothing about how many
-; gates a real query has and does not go stale when the default moves.
+; The query is small -- a handful of AND gates -- so `auto` resolves it to
+; gia-low from the recorded estimate. Moving the threshold down to one gate
+; forces the new-medium branch without needing a query large enough to be
+; slow, so this test says nothing about how many gates a real query has and
+; does not go stale when the default moves.
+;
+; The estimate-based resolution requires the CaDiCaL backend; other backends
+; keep the older size-based choice, which the array-fallback test covers.
+; REQUIRES: cadical
 ;
 ; RUN: %solver --SMTLIB2 -s %s 2>&1 | %OutputCheck --check-prefix=SMALL %s
 ; RUN: %solver --SMTLIB2 -s --cnf-generation-effort auto %s 2>&1 | %OutputCheck --check-prefix=SMALL %s
 ; RUN: %solver --SMTLIB2 -s --cnf-generation-effort auto --cnf-auto-threshold 1 %s 2>&1 | %OutputCheck --check-prefix=BIG %s
 ;
-; SMALL: ^cnf-auto: [0-9]+ AIG nodes, chose medium$
+; SMALL: ^cnf-auto: estimated [0-9]+ AND nodes, chose gia-low$
+; SMALL: ^gia: [0-9]+ AND nodes, [0-9]+ inputs, LUT3$
 ; SMALL: ^cnf: [0-9]+ clauses, [0-9]+ variables, [0-9]+ literals$
 ; SMALL: ^sat$
-; BIG: ^cnf-auto: [0-9]+ AIG nodes, chose very-low$
+; BIG: ^cnf-auto: estimated [0-9]+ AND nodes, chose new-medium$
+; BIG: ^new-medium CNF$
 ; BIG: ^sat$
 ;
 ; The fixed levels stay reachable and stay silent: nothing decides anything, so
@@ -34,8 +40,7 @@
 ; BADLEVEL: Unknown --cnf-generation-effort value 'nonsense'\. Expected one of: auto, very-low, low, medium, high, very-high, new-very-low, new-low, new-medium, gia-low, gia-high, gia-very-high\.
 ;
 ; The new-* rungs are a different generator over a different AIG, so they
-; say so rather than printing one of the ABC lines, and auto never reaches it:
-; auto decides from ABC's node count, which means blasting through ABC first.
+; say so rather than printing one of the ABC lines.
 ;
 ; RUN: %solver --SMTLIB2 -s --cnf-generation-effort new-very-low %s 2>&1 | %OutputCheck --check-prefix=NEWVERYLOW %s
 ; RUN: %solver --SMTLIB2 -s --cnf-generation-effort new-low %s 2>&1 | %OutputCheck --check-prefix=NEWLOW %s
