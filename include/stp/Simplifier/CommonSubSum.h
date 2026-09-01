@@ -160,8 +160,15 @@ class CommonSubSum
   // additions share nothing is all of them.
   ankerl::unordered_dense::set<uint64_t> shareable;
 
+  // Pairs an addition of exactly two operands already builds. Extracting
+  // such a pair out of a wider addition costs nothing -- the node it makes
+  // hash-conses to the two-operand addition, whose adder is being built
+  // anyway -- so one wider addition holding it is enough to be worth doing.
+  ankerl::unordered_dense::map<NodePair, uint32_t> realized;
+
   void collect(const ASTNode& n, ASTNodeSet& seen, ASTVec& plusNodes);
   void markShareable();
+  void markRealized(const ASTVec& v);
   void eligibleOf(const ASTVec& v, std::vector<uint64_t>& out) const;
   bool bump(uint64_t a, uint64_t b);
   void drop(uint64_t a, uint64_t b);

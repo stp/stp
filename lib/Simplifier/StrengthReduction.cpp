@@ -671,24 +671,66 @@ namespace stp
           // addition narrows to the width that can carry.
           const unsigned width = n.GetValueWidth();
 
+          // An operand with e possibly-one bits is at most 2^e - 1, so the
+          // sum is at most the sum of those, and the width that can carry
+          // it is that bound's bit length.
+          //
+          // Summing the bounds rather than taking the widest and allowing
+          // ceil(log2(m)) bits of carry is both tighter and, more usefully,
+          // stable: the loose form reads the operand *count*, so two
+          // additions over almost the same operands land on different
+          // widths whenever their counts straddle a power of two. Their
+          // operands are then extracted to different widths, share no node,
+          // and every later chance to build one adder instead of two --
+          // CommonSubSum's, and the bit-blaster's own structural sharing --
+          // is gone. See stp#444.
+          const unsigned limbs = width / 64 + 2;
+          std::vector<uint64_t> bound(limbs, 0);
           unsigned maxEffective = 0;
+
           for (unsigned i = 0; i < children.size(); i++)
           {
             unsigned nlz = 0;
             while (nlz < width && children[i]->isFixed(width - 1 - nlz) &&
                    !children[i]->getValue(width - 1 - nlz))
               nlz++;
-            if (width - nlz > maxEffective)
-              maxEffective = width - nlz;
+            const unsigned effective = width - nlz;
+            if (effective > maxEffective)
+              maxEffective = effective;
+
+            // 2^effective, taken back down to sum(2^e - 1) below. Adding
+            // the power is one bit and a carry walk; adding the mask is
+            // the same answer the long way round.
+            unsigned limb = effective / 64;
+            uint64_t addend = UINT64_C(1) << (effective % 64);
+            while (addend != 0 && limb < limbs)
+            {
+              bound[limb] += addend;
+              addend = (bound[limb] < addend) ? 1 : 0;
+              limb++;
+            }
           }
 
-          // Adding m terms can carry ceil(log2(m)) bits upwards.
-          unsigned carry = 0;
-          while ((1u << carry) < children.size())
-            carry++;
+          uint64_t borrow = children.size();
+          for (unsigned limb = 0; borrow != 0 && limb < limbs; limb++)
+          {
+            const uint64_t before = bound[limb];
+            bound[limb] -= borrow;
+            borrow = (bound[limb] > before) ? 1 : 0;
+          }
 
-          const unsigned rest = maxEffective + carry;
-          if (maxEffective > 0 && rest < width)
+          unsigned rest = 0;
+          for (unsigned limb = limbs; limb-- > 0;)
+            if (bound[limb] != 0)
+            {
+              unsigned bit = 63;
+              while ((bound[limb] & (UINT64_C(1) << bit)) == 0)
+                bit--;
+              rest = limb * 64 + bit + 1;
+              break;
+            }
+
+          if (maxEffective > 0 && rest > 0 && rest < width)
           {
             ASTVec narrowed;
             narrowed.reserve(n.Degree());

@@ -23,6 +23,7 @@ THE SOFTWARE.
 #include "stp/Simplifier/CommonSubSum.h"
 #include "stp/Simplifier/Flatten.h"
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <set>
 
   const std::string start_input = R"(
@@ -168,6 +169,50 @@ TEST(CommonSubSum_Test, shared_pair_factored_into_one_node)
   ASSERT_EQ(shared, 1);
 }
 
+// An addition whose operands are a sub-multiset of another's ends up being
+// the adder they have in common, rather than having it built twice:
+//   (v0 + v1 + v2), (v0 + v1 + v2 + v3)
+//     -->  s = (v0 + v1);  t = (s + v2);  t, (t + v3)
+// The greedy walks the smaller addition down to two operands and, at that
+// point, it *is* the pair the wider one still holds. Without counting a
+// two-operand addition as an adder others can reuse it votes for nothing
+// from there and stops one step short, leaving `t` built twice. This is the
+// shape stp#444 reduces to.
+TEST(CommonSubSum_Test, sub_multiset_sum_becomes_the_shared_node)
+{
+  const std::string input = R"(
+    (assert (= (bvmul v3 (bvadd v0 v1 v2)) (_ bv0 20)))
+    (assert (= (bvmul v0 (bvadd v0 v1 v2 v3)) (_ bv33 20)))
+    )";
+
+  Context c;
+  ASTNode n = c.process(input);
+
+  std::set<ASTNode> plusNodes, visited;
+  collectPlusNodes(n, plusNodes, visited);
+
+  // s, t, and the wider addition rewritten around t: three binary adders
+  // for what arrived as a three-operand and a four-operand addition.
+  ASSERT_EQ(plusNodes.size(), 3u);
+  for (const ASTNode& p : plusNodes)
+    ASSERT_EQ(p.Degree(), 2u);
+
+  // The smaller addition is now a child of the wider one. That is the last
+  // extraction, and it is the one that does not happen without the change.
+  const ASTNode& widest = *std::max_element(
+      plusNodes.begin(), plusNodes.end(),
+      [](const ASTNode& a, const ASTNode& b) {
+        return a.GetNodeNum() < b.GetNodeNum();
+      });
+
+  int shared = 0;
+  for (const ASTNode& s : plusNodes)
+    for (const ASTNode& child : widest.GetChildren())
+      if (child == s)
+        shared++;
+  ASSERT_EQ(shared, 1);
+}
+
 // An addition with no partner shares nothing and must come back unchanged.
 TEST(CommonSubSum_Test, lone_sum_unchanged)
 {
@@ -225,10 +270,11 @@ TEST(CommonSubSum_Test, shared_pair_factored_into_one_product_node)
 
 // A larger shared operand subset falls out of repeated pair extraction.
 // {v0,v1,v4,v6} is common to both sums, so two rounds pull out two shared
-// pairs; the smaller sum ends as exactly the sum of those pairs and the
-// larger one keeps them as operands:
+// pairs, and once the smaller sum has narrowed to exactly those pairs it
+// counts as an adder the wider one can reuse, so a third round finishes
+// the job:
 //   (v0+v1+v4+v6), (v0+v1+v2+v3+v4+v5+v6)
-//     -->  s1+s2, (s1+s2+v2+v3+v5)   with s1, s2 shared.
+//     -->  t = s1+s2;  t, (t+v2+v3+v5)   with s1, s2 under t alone.
 TEST(CommonSubSum_Test, overlapping_operand_subset_cascades)
 {
   const std::string input = R"(
@@ -245,12 +291,12 @@ TEST(CommonSubSum_Test, overlapping_operand_subset_cascades)
   std::set<ASTNode> plusNodes, visited;
   collectPlusNodes(n, plusNodes, visited);
 
-  // The two shared pairs, the two-operand rewrite of the small sum, and the
-  // five-operand rewrite of the wide one.
+  // The two pairs, the narrowed small sum over them, and the wide sum
+  // rewritten around the small one.
   ASSERT_EQ(plusNodes.size(), 4u);
 
   std::multiset<unsigned> degrees;
-  int sharedTwice = 0;
+  int sharedOnce = 0;
   for (const ASTNode& s : plusNodes)
   {
     degrees.insert(s.Degree());
@@ -259,11 +305,13 @@ TEST(CommonSubSum_Test, overlapping_operand_subset_cascades)
       for (const ASTNode& child : p.GetChildren())
         if (child == s)
           parents++;
-    if (parents == 2)
-      sharedTwice++;
+    if (parents == 1)
+      sharedOnce++;
   }
-  EXPECT_EQ(degrees, (std::multiset<unsigned>{2, 2, 2, 5}));
-  EXPECT_EQ(sharedTwice, 2);
+  EXPECT_EQ(degrees, (std::multiset<unsigned>{2, 2, 2, 4}));
+  // s1 and s2 sit under the small sum, and the small sum under the wide
+  // one: a chain, not two duplicated adders.
+  EXPECT_EQ(sharedOnce, 3);
 }
 
 // A pair held by three sums is built once and referenced from all three.
