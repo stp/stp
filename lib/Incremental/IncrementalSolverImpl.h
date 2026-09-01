@@ -1357,10 +1357,11 @@ struct IncrementalSolver::Impl
         }
         if (pieceFlags.enable_common_subsum)
         {
-          CommonSubSum sums(bm, bm->defaultNodeFactory, BVPLUS);
-          trialOut = sums.topLevel(trialOut);
-          CommonSubSum products(bm, bm->defaultNodeFactory, BVMULT);
-          trialOut = products.topLevel(trialOut);
+          for (const Kind k : {BVPLUS, BVMULT, BVXOR, BVAND, XOR, AND, OR})
+          {
+            CommonSubSum cse(bm, bm->defaultNodeFactory, k);
+            trialOut = cse.topLevel(trialOut);
+          }
         }
       }
       // Unconstrained-variable elimination is deliberately NOT run on

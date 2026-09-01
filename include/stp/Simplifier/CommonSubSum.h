@@ -49,6 +49,16 @@ THE SOFTWARE.
  otherwise-unused variables visible to unconstrained-variable elimination:
  in (a*b*c) and (a*b*d) the pair {a,b} is used nowhere else, and once
  (a*b) is a node of its own that pass collapses it to a fresh variable.
+
+ The other associative-commutative operators regroup just as freely:
+ BVXOR, BVAND, and the Boolean XOR, AND and OR run through the same
+ machinery, with the replacement built as a formula for the Boolean kinds.
+ BVOR never reaches the pass: the simplifying factory lowers it to
+ BVNOT/BVAND at creation, so its sharing is BVAND sharing by the time any
+ pass runs -- the kind is accepted for DAGs built without that factory.
+ A substitution can hand an idempotent or self-inverse kind a duplicate
+ operand -- extracting {a,b} from (a ^ b ^ (a ^ b)) arrives at the pair
+ node twice -- and the factory folds the rebuilt application soundly.
 */
 
 #ifndef COMMONSUBSUM_H_
@@ -67,10 +77,13 @@ class CommonSubSum
   STPMgr* stpMgr;
   NodeFactory* nf;
 
-  // The operator whose n-ary applications are rewritten: BVPLUS or BVMULT.
-  // Sums and products are tallied separately -- a pair shared between a sum
-  // and a product has no single node both could use.
+  // The operator whose n-ary applications are rewritten. Each kind is
+  // tallied separately -- a pair shared between a sum and a product has no
+  // single node both could use.
   const Kind kind;
+
+  // Boolean kinds build replacements as formulas, term kinds with a width.
+  bool booleanKind() const { return kind == XOR || kind == AND || kind == OR; }
 
   // Adders removed, counting the one spent building each shared sub-sum.
   long saved;
@@ -131,7 +144,9 @@ public:
   CommonSubSum(STPMgr* stp_, NodeFactory* nf_, Kind kind_)
       : stpMgr(stp_), nf(nf_), kind(kind_), saved(0), truncated(false)
   {
-    assert(kind == BVPLUS || kind == BVMULT);
+    assert(kind == BVPLUS || kind == BVMULT || kind == BVXOR ||
+           kind == BVAND || kind == BVOR || kind == XOR || kind == AND ||
+           kind == OR);
   }
 
   ASTNode topLevel(const ASTNode& n);

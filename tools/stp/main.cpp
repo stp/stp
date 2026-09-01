@@ -233,9 +233,10 @@ void ExtraMain::create_options()
            "Pure literals are replaced.", simp_group);
 
   bool_arg("--common-subsum", bm->UserFlags.enable_common_subsum,
-           "Factor sub-terms shared between n-ary bvadd nodes, and between "
-           "n-ary bvmul nodes, into a single shared node, so the adder or "
-           "multiplier is built once (needs --flattening)",
+           "Factor sub-terms shared between same-kind n-ary applications of "
+           "each associative-commutative operator (bvadd, bvmul, bvxor, "
+           "bvand, xor, and, or) into a single shared node, so the shared "
+           "circuit is built once (needs --flattening)",
            simp_group);
 
   bool_arg("--pair-extract", bm->UserFlags.enable_pair_extract,

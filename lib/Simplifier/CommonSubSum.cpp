@@ -261,7 +261,9 @@ bool CommonSubSum::extractOnePair()
   const ASTNode first = byNum[bestPair.first];
   const ASTNode second = byNum[bestPair.second];
   const ASTNode shared =
-      nf->CreateTerm(kind, first.GetValueWidth(), first, second);
+      booleanKind() ? nf->CreateNode(kind, first, second)
+                    : nf->CreateTerm(kind, first.GetValueWidth(), first,
+                                     second);
   byNum[shared.GetNodeNum()] = shared;
 
   // Before any operand list moves, so that the two stay in step.
@@ -350,7 +352,10 @@ ASTNode CommonSubSum::rebuild(const ASTNode& n,
     kids.reserve(replacement->second.size());
     for (const auto& k : replacement->second)
       kids.push_back(rebuild(k, changed, cache));
-    result = nf->CreateTerm(kind, n.GetValueWidth(), kids);
+    if (booleanKind())
+      result = nf->CreateNode(kind, kids);
+    else
+      result = nf->CreateTerm(kind, n.GetValueWidth(), kids);
   }
   else
   {
@@ -442,10 +447,9 @@ ASTNode CommonSubSum::topLevel(const ASTNode& n)
   }
 
   if (stpMgr->UserFlags.stats_flag)
-    std::cerr << "{CommonSubSum} "
-              << (kind == BVPLUS ? "Adders" : "Multipliers")
-              << " saved:" << saved << " Truncated:" << (truncated ? 1 : 0)
-              << std::endl;
+    std::cerr << "{CommonSubSum} " << _kind_names[kind]
+              << " applications saved:" << saved
+              << " Truncated:" << (truncated ? 1 : 0) << std::endl;
 
   operands.clear();
   byNum.clear();
