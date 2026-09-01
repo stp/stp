@@ -146,6 +146,13 @@ public:
 
   bool soft_timeout_expired;
 
+  // Fitted estimate of the AND nodes bit-blasting the formula will build,
+  // recorded by the top level from the difficulty score it computes anyway.
+  // The blasting managers use it to size their node and hash storage once
+  // instead of growing by doubling. 0 means no estimate; the score errs
+  // high, by up to about 2x on the hard set.
+  int64_t expected_blast_ands = 0;
+
   // One named element of a declared sort: the sort, the name the model gives
   // it, and the carrier pattern it stands for.
   struct UninterpretedElement

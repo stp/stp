@@ -63,6 +63,16 @@ public:
 
   int totalNumberOfNodes() { return static_cast<int>(mgr.andCount()); }
 
+  // Size the node array and strash table before anything is built. The
+  // estimate errs high, which the power-of-two table rounding mostly absorbs;
+  // the margin covers the CIs, which the estimate does not count.
+  void hintExpectedAnds(uint64_t n)
+  {
+    const uint64_t cap = 1ull << 26;
+    const uint64_t want = n + (n >> 4) + 1024;
+    mgr.reserveNodes(want < cap ? want : cap);
+  }
+
   BBNodeManagerLit() = default;
   BBNodeManagerLit(const BBNodeManagerLit&) = delete;
   BBNodeManagerLit& operator=(const BBNodeManagerLit&) = delete;

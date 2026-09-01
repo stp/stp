@@ -100,6 +100,24 @@ public:
     giaMgr->fAddStrash = 1;
   }
 
+  // Restart at a hinted size, before anything is built: Gia_ManStart's
+  // object array is calloc'd so untouched pages cost nothing, and
+  // Gia_ManHashAlloc sizes the hash from nObjsAlloc, so one hint removes
+  // both resize ladders. Objects are ANDs plus CIs, hence the margin.
+  void hintExpectedAnds(uint64_t n)
+  {
+    assert(Gia_ManObjNum(giaMgr) == 1);
+    const uint64_t cap = 1ull << 26;
+    const uint64_t want = n + (n >> 4) + 1024;
+    const int objs = (int)(want < cap ? want : cap);
+    if (objs <= giaMgr->nObjsAlloc)
+      return;
+    Gia_ManStop(giaMgr);
+    giaMgr = Gia_ManStart(objs);
+    Gia_ManHashAlloc(giaMgr);
+    giaMgr->fAddStrash = 1;
+  }
+
   BBNodeManagerGia(const BBNodeManagerGia&) = delete;
   BBNodeManagerGia& operator=(const BBNodeManagerGia&) = delete;
 

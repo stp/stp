@@ -262,6 +262,31 @@ public:
     aigMgr->fAddStrash = 1;
   }
 
+  // Swap in a strash table sized for the whole blast, before anything is
+  // built. Only the table: restarting the manager at the hinted size would
+  // also make its node-page chunk that large, which costs real memory --
+  // measured at +5-9% peak on large blasts -- while the table alone retires
+  // Aig_TableResize and runs at load factor <= 1 where the growth policy
+  // oscillates between 0.5 and 2. The table holds only AND nodes and none
+  // exist yet, so an empty replacement is the same table, larger.
+  void hintExpectedAnds(uint64_t n)
+  {
+    assert(Aig_ManNodeNum(aigMgr) == 0);
+    const uint64_t cap = 1ull << 26;
+    const uint64_t want = n + (n >> 4) + 1024;
+    // Half the expected count: the resize trigger is load factor 2, so this
+    // still never resizes, and it matches the table size the growth policy
+    // would have ended at (its jumps are 4x, landing near load 1.2) instead
+    // of paying ~60 MB over it for shorter chains.
+    const int slots = Abc_PrimeCudd((unsigned)((want < cap ? want : cap) / 2));
+    if (slots <= aigMgr->nTableSize)
+      return;
+    ABC_FREE(aigMgr->pTable);
+    aigMgr->nTableSize = slots;
+    aigMgr->pTable = ABC_ALLOC(Aig_Obj_t*, slots);
+    memset(aigMgr->pTable, 0, sizeof(Aig_Obj_t*) * slots);
+  }
+
   void stop()
   {
     if (aigMgr != NULL)

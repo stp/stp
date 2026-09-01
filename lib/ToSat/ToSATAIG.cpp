@@ -268,6 +268,13 @@ bool ToSATAIG::bitblastWith(const ASTNode& input, bool needAbsRef, CNF& cnf)
 
   ManagerT mgr;
   mgr.nodeBudget = bm->UserFlags.aig_node_budget;
+  if (bm->expected_blast_ands > 0)
+  {
+    mgr.hintExpectedAnds((uint64_t)bm->expected_blast_ands);
+    if (bm->UserFlags.stats_flag)
+      cerr << "blast-hint: " << bm->expected_blast_ands << " AND nodes"
+           << endl;
+  }
   BlasterT bb(&mgr, &simp, bm->defaultNodeFactory, &bm->UserFlags, cb,
                 allowAbstraction_);
 
