@@ -325,9 +325,10 @@ TEST(Tseitin, MixedAssertedAndNamedOutputs)
 }
 
 // The saving the matcher exists for, on the smallest circuit that has one.
-// A MUX is three AND nodes; encoded as an ITE it is one variable and four
-// clauses, and its two intermediates disappear entirely.
-TEST(Tseitin, MuxCostsFourClausesInsteadOfNine)
+// A MUX is three AND nodes; encoded as an ITE it is one variable and the
+// relation's six prime implicates, and its two intermediates disappear
+// entirely.
+TEST(Tseitin, MuxCostsSixClausesInsteadOfNine)
 {
   aig::Manager m;
   const aig::Lit c = m.createCi(), t = m.createCi(), e = m.createCi();
@@ -342,8 +343,8 @@ TEST(Tseitin, MuxCostsFourClausesInsteadOfNine)
   EXPECT_EQ(plain.literalCount(), 25u);
   EXPECT_EQ(plain.varCount(), 1u + 3u + 1u + 3u);
 
-  EXPECT_EQ(folded.clauseCount(), 6u);
-  EXPECT_EQ(folded.literalCount(), 16u);
+  EXPECT_EQ(folded.clauseCount(), 8u);
+  EXPECT_EQ(folded.literalCount(), 22u);
   EXPECT_EQ(folded.varCount(), 1u + 3u + 1u + 1u);
 }
 

@@ -777,8 +777,15 @@ Cone::Cone(const Manager& m, unsigned namedOutputs, Recover recover)
     }
     if (patterned(n))
     {
-      nClauses_ += 4;
-      nLiterals_ += 12;
+      Lit c, t, e;
+      const bool matched = matchIte(m, n, c, t, e);
+      assert(matched);
+      (void)matched;
+      // A genuine ITE carries the two condition-free prime implicates too;
+      // an exclusive-or's arms share a node, so for it they are tautologies.
+      const bool twoArms = nodeOf(t) != nodeOf(e);
+      nClauses_ += twoArms ? 6 : 4;
+      nLiterals_ += twoArms ? 18 : 12;
       continue;
     }
     leaves.clear();
