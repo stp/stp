@@ -38,11 +38,19 @@ namespace stp
 // A CNF formula and the projection back to the circuit it came from. The one
 // currency the CNF generators hand back, whichever of them ran.
 //
-// Clauses live in one flat literal arena, indexed a clause at a time. A
+// Clauses live in one flat literal arena, walked a clause at a time. A
 // literal is `2*variable + negated`, so `^1` negates and `>>1` recovers the
 // variable. That is Cnf_Dat_t's layout and encoding, and keeping it is what
 // lets an ABC-generated formula be adopted rather than copied -- see adopt()
 // below.
+//
+// The index into the arena is one *byte* per clause, not an offset. An
+// offsets array costs eight bytes a clause and on a 13M-clause formula that
+// was 100 MB of a 233 MB CNF -- more than the literals it indexed. Lengths
+// fit in a byte for every clause the Tseitin writer emits except the n-ary
+// ANDs, and those escape through longLens_. What that costs is random
+// access: a clause can only be reached by walking to it. Every consumer
+// already walked in order, so the API is a forward cursor -- see clauses().
 //
 // Variables number from 1. Variable 0 does not exist, and that is not a
 // convention worth trading away: SATSolver::newVar() hands out 0 first and
@@ -81,13 +89,68 @@ public:
   uint64_t clauseCount() const { return nClauses_; }
   uint64_t literalCount() const { return nLiterals_; }
 
-  const int* clauseBegin(uint64_t i) const
+  // One pass over the clauses, in the order they were emitted:
+  //
+  //   for (CNF::ClauseCursor c = cnf.clauses(); c.next(); )
+  //     for (const int* p = c.begin(); p < c.end(); p++) ...
+  //
+  // begin() and end() are the current clause and are only meaningful after
+  // next() has returned true. The cursor holds pointers into the CNF, so it
+  // does not outlive it, and it does not survive a further clause() either.
+  class ClauseCursor
   {
-    return adopted_ ? adopted_[i] : lits_.data() + offsets_[i];
-  }
-  const int* clauseEnd(uint64_t i) const
+  public:
+    bool next()
+    {
+      if (left_ == 0)
+        return false;
+      left_--;
+
+      if (adopted_ != nullptr)
+      {
+        // nClauses+1 pointers, so the next one is this clause's end.
+        begin_ = adopted_[0];
+        end_ = adopted_[1];
+        adopted_++;
+        return true;
+      }
+
+      begin_ = end_;
+      uint64_t len = *lens_++;
+      if (len == longMarker)
+        len = *longLens_++;
+      end_ = begin_ + len;
+      return true;
+    }
+
+    const int* begin() const { return begin_; }
+    const int* end() const { return end_; }
+    size_t size() const { return static_cast<size_t>(end_ - begin_); }
+
+  private:
+    friend class CNF;
+
+    const int* const* adopted_ = nullptr;
+    const uint8_t* lens_ = nullptr;
+    const uint64_t* longLens_ = nullptr;
+    const int* begin_ = nullptr;
+    const int* end_ = nullptr;
+    uint64_t left_ = 0;
+  };
+
+  ClauseCursor clauses() const
   {
-    return adopted_ ? adopted_[i + 1] : lits_.data() + offsets_[i + 1];
+    ClauseCursor c;
+    c.left_ = nClauses_;
+    if (adopted_ != nullptr)
+      c.adopted_ = adopted_;
+    else
+    {
+      c.lens_ = lens_.data();
+      c.longLens_ = longLens_.data();
+      c.begin_ = c.end_ = lits_.data();
+    }
+    return c;
   }
 
   // The variable holding the value of combinational input `ordinal`, or of
@@ -182,21 +245,39 @@ public:
              uint32_t nCi, uint32_t nCo);
 
 private:
+  // A lens_ entry of this value says the length is the next unread entry of
+  // longLens_ instead. 255 rather than 0, because 0 is a length a clause
+  // really has: the empty clause is the one that says "unsatisfiable".
+  //
+  // constexpr, not const: the cursor compares against it, which odr-uses a
+  // const member and then wants an out-of-line definition. A constexpr
+  // static member is implicitly inline in C++17.
+  static constexpr uint8_t longMarker = 255;
+
   void closeClause()
   {
-    offsets_.push_back(lits_.size());
+    const uint64_t len = lits_.size() - nLiterals_;
+    if (len < longMarker)
+      lens_.push_back(static_cast<uint8_t>(len));
+    else
+    {
+      lens_.push_back(longMarker);
+      longLens_.push_back(len);
+    }
     ++nClauses_;
     nLiterals_ = lits_.size();
   }
   void discard();
   void steal(CNF& o);
 
-  // Ours, when we built it.
+  // Ours, when we built it. One lens_ byte per clause; longLens_ holds, in
+  // clause order, the lengths of the clauses too long to fit in one.
   std::vector<int> lits_;
-  std::vector<uint64_t> offsets_;
+  std::vector<uint8_t> lens_;
+  std::vector<uint64_t> longLens_;
 
-  // Somebody else's, when we adopted it. Non-null selects it over the two
-  // vectors above; the two are never both populated.
+  // Somebody else's, when we adopted it. Non-null selects it over the
+  // vectors above; the two stores are never both populated.
   const int* const* adopted_ = nullptr;
   void* owner_ = nullptr;
   void (*release_)(void*) = nullptr;
