@@ -10,11 +10,13 @@
 ;
 ; The estimate-based resolution requires the CaDiCaL backend; other backends
 ; keep the older size-based choice, which the array-fallback test covers.
+; Compiled in -- what the gate below checks -- is not default: CryptoMiniSat
+; is the default wherever it is installed, so the auto runs say --cadical.
 ; REQUIRES: cadical
 ;
-; RUN: %solver --SMTLIB2 -s %s 2>&1 | %OutputCheck --check-prefix=SMALL %s
-; RUN: %solver --SMTLIB2 -s --cnf-generation-effort auto %s 2>&1 | %OutputCheck --check-prefix=SMALL %s
-; RUN: %solver --SMTLIB2 -s --cnf-generation-effort auto --cnf-auto-threshold 1 %s 2>&1 | %OutputCheck --check-prefix=BIG %s
+; RUN: %solver --SMTLIB2 -s --cadical %s 2>&1 | %OutputCheck --check-prefix=SMALL %s
+; RUN: %solver --SMTLIB2 -s --cadical --cnf-generation-effort auto %s 2>&1 | %OutputCheck --check-prefix=SMALL %s
+; RUN: %solver --SMTLIB2 -s --cadical --cnf-generation-effort auto --cnf-auto-threshold 1 %s 2>&1 | %OutputCheck --check-prefix=BIG %s
 ;
 ; SMALL: ^cnf-auto: estimated [0-9]+ AND nodes, chose gia-low$
 ; SMALL: ^gia: [0-9]+ AND nodes, [0-9]+ inputs, LUT3$
